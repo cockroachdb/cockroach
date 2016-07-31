@@ -245,8 +245,7 @@ func (node *AliasedTableExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
-func (QualifiedName) tableExpr() {}
-func (*Subquery) tableExpr()     {}
+func (*Subquery) tableExpr() {}
 
 // ParenTableExpr represents a parenthesized TableExpr.
 type ParenTableExpr struct {

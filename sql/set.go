@@ -69,10 +69,10 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		switch sqlbase.NormalizeName(s) {
-		case sqlbase.NormalizeName(parser.Modern.String()):
+		switch sqlbase.NormalizeName(parser.Name(s)) {
+		case sqlbase.ReNormalizeName(parser.Modern.String()):
 			p.session.Syntax = int32(parser.Modern)
-		case sqlbase.NormalizeName(parser.Traditional.String()):
+		case sqlbase.ReNormalizeName(parser.Traditional.String()):
 			p.session.Syntax = int32(parser.Traditional)
 		default:
 			return nil, fmt.Errorf("%s: \"%s\" is not in (%q, %q)", name, s, parser.Modern, parser.Traditional)

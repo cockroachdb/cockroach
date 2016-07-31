@@ -155,7 +155,7 @@ func (desc *IndexDescriptor) allocateName(tableDesc *TableDescriptor) {
 	name := baseName
 
 	exists := func(name string) bool {
-		_, _, err := tableDesc.FindIndexByName(name)
+		_, _, err := tableDesc.FindIndexByNormalizedName(name)
 		return err == nil
 	}
 	for i := 1; exists(name); i++ {
@@ -364,7 +364,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 			columnID = desc.NextColumnID
 			desc.NextColumnID++
 		}
-		columnNames[NormalizeName(c.Name)] = columnID
+		columnNames[ReNormalizeName(c.Name)] = columnID
 		c.ID = columnID
 	}
 	for i := range desc.Columns {
@@ -412,7 +412,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 				index.ColumnIDs = append(index.ColumnIDs, 0)
 			}
 			if index.ColumnIDs[j] == 0 {
-				index.ColumnIDs[j] = columnNames[NormalizeName(colName)]
+				index.ColumnIDs[j] = columnNames[ReNormalizeName(colName)]
 			}
 		}
 		if index != &desc.PrimaryIndex {
@@ -428,7 +428,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 			index.ImplicitColumnIDs = implicitColumnIDs
 
 			for _, colName := range index.StoreColumnNames {
-				status, i, err := desc.FindColumnByName(colName)
+				status, i, err := desc.FindColumnByNormalizedName(ReNormalizeName(colName))
 				if err != nil {
 					return err
 				}
@@ -466,7 +466,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 				family.ColumnIDs = append(family.ColumnIDs, 0)
 			}
 			if family.ColumnIDs[j] == 0 {
-				family.ColumnIDs[j] = columnNames[NormalizeName(colName)]
+				family.ColumnIDs[j] = columnNames[ReNormalizeName(colName)]
 			}
 			columnsInFamilies[family.ColumnIDs[j]] = struct{}{}
 		}
@@ -761,7 +761,7 @@ func (desc *TableDescriptor) ValidateTable() error {
 			return fmt.Errorf("invalid column ID %d", column.ID)
 		}
 
-		normName := NormalizeName(column.Name)
+		normName := ReNormalizeName(column.Name)
 		if _, ok := columnNames[normName]; ok {
 			return fmt.Errorf("duplicate column name: \"%s\"", column.Name)
 		}
@@ -821,7 +821,7 @@ func (desc *TableDescriptor) ValidateTable() error {
 			return err
 		}
 
-		normName := NormalizeName(family.Name)
+		normName := ReNormalizeName(family.Name)
 		if _, ok := familyNames[normName]; ok {
 			return fmt.Errorf("duplicate family name: \"%s\"", family.Name)
 		}
@@ -848,7 +848,7 @@ func (desc *TableDescriptor) ValidateTable() error {
 			if !ok {
 				return fmt.Errorf("family \"%s\" contains unknown column \"%d\"", family.Name, colID)
 			}
-			if NormalizeName(name) != NormalizeName(family.ColumnNames[i]) {
+			if ReNormalizeName(name) != ReNormalizeName(family.ColumnNames[i]) {
 				return fmt.Errorf("family \"%s\" column %d should have name %q, but found name %q",
 					family.Name, colID, name, family.ColumnNames[i])
 			}
@@ -883,7 +883,7 @@ func (desc *TableDescriptor) ValidateTable() error {
 			return fmt.Errorf("invalid index ID %d", index.ID)
 		}
 
-		normName := NormalizeName(index.Name)
+		normName := ReNormalizeName(index.Name)
 		if _, ok := indexNames[normName]; ok {
 			return fmt.Errorf("duplicate index name: \"%s\"", index.Name)
 		}
@@ -927,7 +927,7 @@ func (desc *TableDescriptor) ValidateTable() error {
 		}
 
 		for i, name := range index.ColumnNames {
-			colID, ok := columnNames[NormalizeName(name)]
+			colID, ok := columnNames[ReNormalizeName(name)]
 			if !ok {
 				return fmt.Errorf("index \"%s\" contains unknown column \"%s\"", index.Name, name)
 			}
@@ -1083,9 +1083,9 @@ func (desc *TableDescriptor) AddColumnToFamilyMaybeCreate(
 ) error {
 	idx := int(-1)
 	if len(family) > 0 {
-		normName := NormalizeName(family)
+		normName := ReNormalizeName(family)
 		for i := range desc.Families {
-			if NormalizeName(desc.Families[i].Name) == normName {
+			if ReNormalizeName(desc.Families[i].Name) == normName {
 				idx = i
 				break
 			}
@@ -1126,8 +1126,8 @@ func (desc *TableDescriptor) RemoveColumnFromFamily(colID ColumnID) {
 	}
 }
 
-// RenameColumn updates all references to a column name in indexes and families.
-func (desc *TableDescriptor) RenameColumn(colID ColumnID, newColName string) {
+// RenameColumnNormalized updates all references to a column name in indexes and families.
+func (desc *TableDescriptor) RenameColumnNormalized(colID ColumnID, newColName string) {
 	for i := range desc.Families {
 		for j := range desc.Families[i].ColumnIDs {
 			if desc.Families[i].ColumnIDs[j] == colID {
@@ -1167,35 +1167,43 @@ func (desc *TableDescriptor) FindActiveColumnsByNames(names parser.NameList) ([]
 	return cols, nil
 }
 
-// FindColumnByName finds the column with the specified name. It returns
+// FindColumnByNormalizedName finds the column with the specified name. It returns
 // DescriptorStatus for the column, and an index into either the columns
 // (status == DescriptorActive) or mutations (status == DescriptorIncomplete).
-func (desc *TableDescriptor) FindColumnByName(name string) (DescriptorStatus, int, error) {
-	normName := NormalizeName(name)
+func (desc *TableDescriptor) FindColumnByNormalizedName(normName string) (DescriptorStatus, int, error) {
 	for i, c := range desc.Columns {
-		if NormalizeName(c.Name) == normName {
+		if ReNormalizeName(c.Name) == normName {
 			return DescriptorActive, i, nil
 		}
 	}
 	for i, m := range desc.Mutations {
 		if c := m.GetColumn(); c != nil {
-			if NormalizeName(c.Name) == normName {
+			if ReNormalizeName(c.Name) == normName {
 				return DescriptorIncomplete, i, nil
 			}
 		}
 	}
-	return DescriptorAbsent, -1, fmt.Errorf("column %q does not exist", name)
+	return DescriptorAbsent, -1, fmt.Errorf("column %q does not exist", normName)
 }
 
-// FindActiveColumnByName finds an active column with the specified name.
-func (desc *TableDescriptor) FindActiveColumnByName(name string) (ColumnDescriptor, error) {
-	normName := NormalizeName(name)
+// FindColumnByName calls FindColumnByNormalizedName with a normalized argument.
+func (desc *TableDescriptor) FindColumnByName(name parser.Name) (DescriptorStatus, int, error) {
+	return desc.FindColumnByNormalizedName(NormalizeName(name))
+}
+
+// FindActiveColumnByNormalizedName finds an active column with the specified normalized name.
+func (desc *TableDescriptor) FindActiveColumnByNormalizedName(normName string) (ColumnDescriptor, error) {
 	for _, c := range desc.Columns {
-		if NormalizeName(c.Name) == normName {
+		if ReNormalizeName(c.Name) == normName {
 			return c, nil
 		}
 	}
-	return ColumnDescriptor{}, fmt.Errorf("column %q does not exist", name)
+	return ColumnDescriptor{}, fmt.Errorf("column %q does not exist", normName)
+}
+
+// FindActiveColumnByName calls FindActiveColumnByNormalizedName on a normalized argument.
+func (desc *TableDescriptor) FindActiveColumnByName(name parser.Name) (ColumnDescriptor, error) {
+	return desc.FindActiveColumnByNormalizedName(NormalizeName(name))
 }
 
 // FindColumnByID finds the column with specified ID.
@@ -1235,24 +1243,28 @@ func (desc *TableDescriptor) FindFamilyByID(id FamilyID) (*ColumnFamilyDescripto
 	return nil, fmt.Errorf("family-id \"%d\" does not exist", id)
 }
 
-// FindIndexByName finds the index with the specified name. It returns
+// FindIndexByNormalizedName finds the index with the specified name. It returns
 // DescriptorStatus for the index, and an index into either the indexes
 // (status == DescriptorActive) or mutations (status == DescriptorIncomplete).
-func (desc *TableDescriptor) FindIndexByName(name string) (DescriptorStatus, int, error) {
-	normName := NormalizeName(name)
+func (desc *TableDescriptor) FindIndexByNormalizedName(normName string) (DescriptorStatus, int, error) {
 	for i, idx := range desc.Indexes {
-		if NormalizeName(idx.Name) == normName {
+		if ReNormalizeName(idx.Name) == normName {
 			return DescriptorActive, i, nil
 		}
 	}
 	for i, m := range desc.Mutations {
 		if idx := m.GetIndex(); idx != nil {
-			if NormalizeName(idx.Name) == normName {
+			if ReNormalizeName(idx.Name) == normName {
 				return DescriptorIncomplete, i, nil
 			}
 		}
 	}
-	return DescriptorAbsent, -1, fmt.Errorf("index %q does not exist", name)
+	return DescriptorAbsent, -1, fmt.Errorf("index %q does not exist", normName)
+}
+
+// FindIndexByName calls FindIndexByNormalizedName on a normalized argument.
+func (desc *TableDescriptor) FindIndexByName(name parser.Name) (DescriptorStatus, int, error) {
+	return desc.FindIndexByNormalizedName(NormalizeName(name))
 }
 
 // FindIndexByID finds an index (active or inactive) with the specified ID.
@@ -1388,7 +1400,7 @@ func ColumnsSelectors(cols []ColumnDescriptor) parser.SelectExprs {
 	exprs := make(parser.SelectExprs, len(cols))
 	qnames := make([]parser.QualifiedName, len(cols))
 	for i, col := range cols {
-		qnames[i].Base = parser.Name(col.Name)
+		qnames[i].Target = &parser.ColumnItem{ColumnName: parser.Name(col.Name)}
 		exprs[i].Expr = &qnames[i]
 	}
 	return exprs

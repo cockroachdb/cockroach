@@ -32,10 +32,8 @@ func (n Name) Format(buf *bytes.Buffer, f FmtFlags) {
 	encodeSQLIdent(buf, string(n))
 }
 
-// A NameList is a list of identifier.
-// TODO(tschottdorf): would be nicer to have []Name here but unless we want
-// to introduce new types to the grammar, NameList([]string{...}) needs to work.
-type NameList []string
+// A NameList is a list of identifiers.
+type NameList []Name
 
 // Format implements the NodeFormatter interface.
 func (l NameList) Format(buf *bytes.Buffer, f FmtFlags) {
@@ -43,6 +41,18 @@ func (l NameList) Format(buf *bytes.Buffer, f FmtFlags) {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		FormatNode(buf, f, Name(n))
+		FormatNode(buf, f, n)
 	}
+}
+
+// ToStrings converts the name list to an array of regular strings.
+func (l NameList) ToStrings() []string {
+	if l == nil {
+		return nil
+	}
+	names := make([]string, len(l))
+	for i, n := range l {
+		names[i] = string(n)
+	}
+	return names
 }

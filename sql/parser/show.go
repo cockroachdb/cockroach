@@ -37,7 +37,7 @@ func (node *Show) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // ShowColumns represents a SHOW COLUMNS statement.
 type ShowColumns struct {
-	Table *QualifiedName
+	Table NormalizableTableName
 }
 
 // Format implements the NodeFormatter interface.
@@ -57,7 +57,7 @@ func (node *ShowDatabases) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // ShowIndex represents a SHOW INDEX statement.
 type ShowIndex struct {
-	Table *QualifiedName
+	Table NormalizableTableName
 }
 
 // Format implements the NodeFormatter interface.
@@ -68,18 +68,18 @@ func (node *ShowIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // ShowTables represents a SHOW TABLES statement.
 type ShowTables struct {
-	Name *QualifiedName
+	Database *DatabaseName
 }
 
 // ShowConstraints represents a SHOW CONSTRAINTS statement.
 type ShowConstraints struct {
-	Table *QualifiedName
+	Table NormalizableTableName
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowConstraints) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW CONSTRAINTS")
-	if node.Table != nil {
+	if node.Table.TableNameReference != nil {
 		buf.WriteString(" FROM ")
 		FormatNode(buf, f, node.Table)
 	}
@@ -88,9 +88,9 @@ func (node *ShowConstraints) Format(buf *bytes.Buffer, f FmtFlags) {
 // Format implements the NodeFormatter interface.
 func (node *ShowTables) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW TABLES")
-	if node.Name != nil {
+	if node.Database != nil {
 		buf.WriteString(" FROM ")
-		FormatNode(buf, f, node.Name)
+		FormatNode(buf, f, *node.Database)
 	}
 }
 
@@ -116,7 +116,7 @@ func (node *ShowGrants) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // ShowCreateTable represents a SHOW CREATE TABLE statement.
 type ShowCreateTable struct {
-	Table *QualifiedName
+	Table NormalizableTableName
 }
 
 // Format implements the NodeFormatter interface.

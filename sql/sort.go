@@ -82,14 +82,26 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 		expr := parser.StripParens(o.Expr)
 
 		if qname, ok := expr.(*parser.QualifiedName); ok {
-			if len(qname.Indirect) == 0 {
+			if err := qname.NormalizeNameInExpr(); err != nil {
+				return nil, err
+			}
+
+			var c *parser.ColumnItem
+			switch t := qname.Target.(type) {
+			case *parser.ColumnItem:
+				c = t
+			default:
+				return nil, fmt.Errorf("invalid syntax for ORDER BY: %s", qname)
+			}
+
+			if c.TableName.Table() == "" {
 				// Look for an output column that matches the qualified name. This
 				// handles cases like:
 				//
 				//   SELECT a AS b FROM t ORDER BY b
-				target := sqlbase.NormalizeName(string(qname.Base))
+				target := sqlbase.NormalizeName(c.ColumnName)
 				for j, col := range columns {
-					if sqlbase.NormalizeName(col.Name) == target {
+					if sqlbase.ReNormalizeName(col.Name) == target {
 						index = j
 						break
 					}
@@ -101,7 +113,7 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 				// render target that matches the column name. This handles cases like:
 				//
 				//   SELECT a AS b FROM t ORDER BY a
-				colIdx, err := s.source.findUnaliasedColumn(qname)
+				colIdx, err := s.source.findUnaliasedColumn(c)
 				if err != nil {
 					return nil, err
 				}

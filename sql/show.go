@@ -60,7 +60,12 @@ func (p *planner) Show(n *parser.Show) (planNode, error) {
 //   Notes: postgres does not have a SHOW COLUMNS statement.
 //          mysql only returns columns you have privileges on.
 func (p *planner) ShowColumns(n *parser.ShowColumns) (planNode, error) {
-	desc, err := p.mustGetTableDesc(n.Table)
+	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
+	if err != nil {
+		return nil, err
+	}
+
+	desc, err := p.mustGetTableDesc(tn)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +121,12 @@ func (p *planner) showCreateInterleave(idx *sqlbase.IndexDescriptor) (string, er
 // Traditional syntax.
 // Privileges: Any privilege on table.
 func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
-	desc, err := p.mustGetTableDesc(n.Table)
+	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
+	if err != nil {
+		return nil, err
+	}
+
+	desc, err := p.mustGetTableDesc(tn)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +229,14 @@ var isUnique = map[bool]string{true: "UNIQUE "}
 
 // quoteName quotes based on Traditional syntax and adds commas between names.
 func quoteNames(names ...string) string {
-	return parser.NameList(names).String()
+	var buf bytes.Buffer
+	for i, n := range names {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		parser.Name(n).Format(&buf, parser.FmtSimple)
+	}
+	return buf.String()
 }
 
 // ShowDatabases returns all the databases.
@@ -282,7 +299,7 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 		wantedUsers = make(map[string]struct{})
 	}
 	for _, u := range n.Grantees {
-		wantedUsers[u] = struct{}{}
+		wantedUsers[string(u)] = struct{}{}
 	}
 
 	for _, descriptor := range descriptors {
@@ -308,7 +325,12 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 //   Notes: postgres does not have a SHOW INDEXES statement.
 //          mysql requires some privilege for any column.
 func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
-	desc, err := p.mustGetTableDesc(n.Table)
+	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
+	if err != nil {
+		return nil, err
+	}
+
+	desc, err := p.mustGetTableDesc(tn)
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +353,7 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 	appendRow := func(index sqlbase.IndexDescriptor, colName string, sequence int,
 		direction string, isStored bool) {
 		v.rows = append(v.rows, []parser.Datum{
-			parser.NewDString(n.Table.Table()),
+			parser.NewDString(tn.Table()),
 			parser.NewDString(index.Name),
 			parser.MakeDBool(parser.DBool(index.Unique)),
 			parser.NewDInt(parser.DInt(sequence)),
@@ -360,7 +382,12 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 //   Notes: postgres does not have a SHOW CONSTRAINTS statement.
 //          mysql requires some privilege for any column.
 func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
-	desc, err := p.mustGetTableDesc(n.Table)
+	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
+	if err != nil {
+		return nil, err
+	}
+
+	desc, err := p.mustGetTableDesc(tn)
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +412,7 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 			columnsDatum = parser.NewDString(columns)
 		}
 		v.rows = append(v.rows, []parser.Datum{
-			parser.NewDString(n.Table.Table()),
+			parser.NewDString(tn.Table()),
 			parser.NewDString(name),
 			parser.NewDString(typ),
 			columnsDatum,
@@ -453,15 +480,15 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 	//   SELECT name FROM system.namespace
 	//     WHERE parentID = (SELECT id FROM system.namespace
 	//                       WHERE parentID = 0 AND name = <database>)
-
-	name := n.Name
-	if name == nil {
-		if p.session.Database == "" {
-			return nil, errNoDatabase
-		}
-		name = &parser.QualifiedName{Base: parser.Name(p.session.Database)}
+	name := p.session.Database
+	if n.Database != nil {
+		name = string(n.Database.Name)
 	}
-	dbDesc, err := p.mustGetDatabaseDesc(string(name.Base))
+	if name == "" {
+		return nil, errNoDatabase
+	}
+
+	dbDesc, err := p.mustGetDatabaseDesc(name)
 	if err != nil {
 		return nil, err
 	}
