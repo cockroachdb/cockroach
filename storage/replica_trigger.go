@@ -19,6 +19,7 @@ package storage
 import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 // postCommitSplit is emitted when a Replica commits a split trigger and
@@ -60,7 +61,11 @@ type PostCommitTrigger struct {
 	// intents stores any intents encountered but not conflicted with. They
 	// should be handed off to asynchronous intent processing so that an
 	// attempt to resolve them is made.
-	intents []intentsWithArg
+	intents        []intentsWithArg
+	gcThreshold    *hlc.Timestamp
+	truncatedState *roachpb.RaftTruncatedState
+	raftLogSize    *int64
+	frozen         *bool
 	// split contains a postCommitSplit trigger emitted on a split.
 	split *postCommitSplit
 	// whether to call r.maybeGossipSystemConfig after commit.

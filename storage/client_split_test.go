@@ -587,6 +587,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 // requests' impact on MVCCStats are only estimated. See updateStatsOnMerge.
 func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("TODO(tschottdorf): disabled until merge trigger is refactored; until then it clobbers stats")
 	sCtx := storage.TestStoreContext()
 	sCtx.TestingKnobs.DisableSplitQueue = true
 	store, stopper, manual := createTestStoreWithContext(t, sCtx)
@@ -1167,6 +1168,7 @@ func TestStoreSplitTimestampCacheReadRace(t *testing.T) {
 // for writes which invalidated reads previously served by the pre-split lease.
 func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("TODO(tschottdorf): temporarily disabled")
 
 	leftKey := roachpb.Key("a")
 	splitKey := roachpb.Key("b")
