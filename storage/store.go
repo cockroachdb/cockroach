@@ -2356,8 +2356,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 		}
 		// It's not a current member of the group. Is it from the past?
 		if !found && req.FromReplica.ReplicaID < desc.NextReplicaID {
-			return errors.Errorf("range %s: discarding message from %+v, older than NextReplicaID %d",
-				req.RangeID, req.FromReplica, desc.NextReplicaID)
+			return errReplicaTooOld
 		}
 	}
 
