@@ -31,16 +31,18 @@ import (
 	"github.com/cockroachdb/cockroach/util/decimal"
 	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/encoding"
+
 	"github.com/pkg/errors"
 )
 
 // MakeTableDesc creates a table descriptor from a CreateTable statement.
 func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) {
 	desc := TableDescriptor{}
-	if err := p.Table.NormalizeTableName(""); err != nil {
+	t, err := p.Table.NormalizeTableName()
+	if err != nil {
 		return desc, err
 	}
-	desc.Name = p.Table.Table()
+	desc.Name = string(t.TableName)
 	desc.ParentID = parentID
 	desc.FormatVersion = FamilyFormatVersion
 	// We don't use version 0.
@@ -121,16 +123,18 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 					return nil, true, expr
 				}
 
-				if err := qname.NormalizeColumnName(); err != nil {
+				if err := qname.NormalizeNameInExpr(); err != nil {
 					return err, false, nil
 				}
 
-				if qname.IsStar() {
-					return fmt.Errorf("* not allowed in constraint %q", d.Expr.String()), false, nil
+				c, ok := qname.Target.(*parser.ColumnItem)
+				if !ok {
+					return nil, true, expr
 				}
-				col, err := desc.FindActiveColumnByName(qname.Column())
+
+				col, err := desc.FindActiveColumnByName(string(c.ColumnName))
 				if err != nil {
-					return fmt.Errorf("column %q not found for constraint %q", qname.String(), d.Expr.String()), false, nil
+					return fmt.Errorf("column %q not found for constraint %q", c.ColumnName, d.Expr.String()), false, nil
 				}
 				// Convert to a dummy datum of the correct type.
 				return nil, false, col.Type.ToDatumType()
@@ -141,13 +145,13 @@ func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) 
 				return desc, err
 			}
 
-			if err := SanitizeVarFreeExpr(expr, parser.TypeBool, "CHECK"); err != nil {
-				return desc, err
-			}
-
 			var p parser.Parser
 			if p.AggregateInExpr(expr) {
-				return desc, fmt.Errorf("Aggregate functions are not allowed in CHECK expressions")
+				return desc, fmt.Errorf("aggregate functions are not allowed in CHECK expressions")
+			}
+
+			if err := SanitizeVarFreeExpr(expr, parser.TypeBool, "CHECK"); err != nil {
+				return desc, err
 			}
 
 			check := &TableDescriptor_CheckConstraint{Expr: d.Expr.String()}

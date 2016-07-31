@@ -10,10 +10,10 @@ CREATE TABLE products (sku STRING PRIMARY KEY, upc STRING UNIQUE, vendor STRING)
 statement ok
 INSERT INTO products VALUES ('VP-W9QH-W44L', '867072000006', 'Dave'), ('780', '885155001450', 'iRobot')
 
-statement error referenced table "productz" not found
+statement error referenced table "test.productz" not found
 CREATE TABLE missing (product STRING REFERENCES productz)
 
-statement error referenced table "customerz" not found
+statement error referenced table "test.customerz" not found
 CREATE TABLE missing_with_col (customer INT REFERENCES customerz (id))
 
 statement error column "idz" does not exist
@@ -22,7 +22,7 @@ CREATE TABLE missing_col (customer INT REFERENCES customers (idz))
 statement error foreign key columns \("customer"\) must be the prefix of an index
 CREATE TABLE unindexed (customer INT REFERENCES customers)
 
-statement error foreign key requires table "products" have a unique index on \("vendor"\)
+statement error foreign key requires table "test.products" have a unique index on \("vendor"\)
 CREATE TABLE non_unique (product STRING REFERENCES products (vendor))
 
 statement error type of "customer" \(INT\) does not match foreign key "customers"."email" \(STRING\)
@@ -314,3 +314,15 @@ UPDATE pairs SET dest = 'too' WHERE id = 2
 
 statement error foreign key violation: value\(s\) \[200 'two'\] in columns \[src dest\] referenced in table "refpairs"
 DELETE FROM pairs WHERE id = 2
+
+statement ok
+CREATE DATABASE test2
+
+statement ok
+CREATE TABLE test2.other(x INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE crossdb (y INT PRIMARY KEY, FOREIGN KEY (y) REFERENCES test2.other(x))
+
+statement error foreign key violation: value \[2\] not found in other@primary \[x\]
+INSERT INTO crossdb(y) VALUES (2)

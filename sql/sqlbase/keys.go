@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
@@ -76,6 +77,14 @@ func isASCII(s string) bool {
 		}
 	}
 	return true
+}
+
+// NormalizeTableName normalizes the TableName using NormalizeName().
+func NormalizeTableName(tn *parser.TableName) parser.TableName {
+	return parser.TableName{
+		DatabaseName: parser.Name(NormalizeName(string(tn.DatabaseName))),
+		TableName:    parser.Name(NormalizeName(string(tn.TableName))),
+	}
 }
 
 // MakeNameMetadataKey returns the key for the name. Pass name == "" in order

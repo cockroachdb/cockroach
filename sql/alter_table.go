@@ -35,7 +35,12 @@ type alterTableNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
-	tableDesc, err := p.getTableDesc(n.Table)
+	tn, err := n.Table.NormalizeTableNameWithDatabaseName(p.session.Database)
+	if err != nil {
+		return nil, err
+	}
+
+	tableDesc, err := p.getTableDesc(tn)
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +48,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 		if n.IfExists {
 			return &emptyNode{}, nil
 		}
-		return nil, sqlbase.NewUndefinedTableError(n.Table.String())
+		return nil, sqlbase.NewUndefinedTableError(tn.String())
 	}
 
 	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {

@@ -196,9 +196,10 @@ func (s *selectNode) ExplainPlan(v bool) (name, description string, children []p
 		if col.hidden {
 			buf.WriteByte('*')
 		}
-		parser.Name(s.source.info.findTableAlias(i)).Format(&buf, parser.FmtSimple)
+		alias := s.source.info.findTableAlias(i)
+		parser.FormatNode(&buf, parser.FmtSimple, &alias)
 		buf.WriteByte('.')
-		parser.Name(col.Name).Format(&buf, parser.FmtSimple)
+		parser.FormatNode(&buf, parser.FmtSimple, parser.Name(col.Name))
 	}
 	buf.WriteByte(')')
 
@@ -483,10 +484,12 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 	return nil
 }
 
-// checkRenderStar checks if the SelectExpr is a QualifiedName with a StarIndirection suffix. If so,
-// we match the prefix of the qualified name to one of the tables in the query and then expand the
-// "*" into a list of columns. The qvalMap is updated to include all the relevant columns. A
-// ResultColumns and Expr pair is returned for each column.
+// checkRenderStar checks if the SelectExpr is either an
+// UnqualifiedStar or an AllColumnsSelector. If so, we match the
+// prefix of the qualified name to one of the tables in the query and
+// then expand the "*" into a list of columns. The qvalMap is updated
+// to include all the relevant columns. A ResultColumns and Expr pair
+// is returned for each column.
 func checkRenderStar(
 	target parser.SelectExpr, src *dataSourceInfo, qvals qvalMap,
 ) (isStar bool, columns []ResultColumn, exprs []parser.TypedExpr, err error) {
@@ -494,10 +497,15 @@ func checkRenderStar(
 	if !ok {
 		return false, nil, nil, nil
 	}
-	if err := qname.NormalizeColumnName(); err != nil {
+
+	if err := qname.NormalizeNameInExpr(); err != nil {
 		return false, nil, nil, err
 	}
-	if !qname.IsStar() {
+
+	switch qname.Target.(type) {
+	case parser.UnqualifiedStar, *parser.AllColumnsSelector:
+		break
+	default:
 		return false, nil, nil, nil
 	}
 
@@ -516,7 +524,16 @@ func getRenderColName(target parser.SelectExpr) string {
 		return string(target.As)
 	}
 	if qname, ok := target.Expr.(*parser.QualifiedName); ok {
-		return qname.Column()
+		// The other candidate types for qname.Target, UnqualifiedStar and
+		// AllColumnsSelector, have been handled in checkRenderStar()
+		// already.
+		c := qname.ColumnItem()
+		// We only shorten the name of the result column to become the
+		// unqualified column part of this expr QualifiedName if there is
+		// no additional subscripting on the column.
+		if len(c.Selector) == 0 {
+			return c.Column()
+		}
 	}
 	return target.Expr.String()
 }
@@ -549,7 +566,7 @@ func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datu
 		case *parser.QualifiedName:
 			// If the expression is a qualified name, use the column name, not the
 			// full qualification as the column name to return.
-			outputName = t.Column()
+			outputName = t.ColumnItem().Column()
 		}
 	}
 	s.columns = append(s.columns, ResultColumn{Name: outputName, Typ: normalized.ReturnType()})

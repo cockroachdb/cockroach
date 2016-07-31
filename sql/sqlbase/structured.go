@@ -1391,7 +1391,7 @@ func ColumnsSelectors(cols []ColumnDescriptor) parser.SelectExprs {
 	exprs := make(parser.SelectExprs, len(cols))
 	qnames := make([]parser.QualifiedName, len(cols))
 	for i, col := range cols {
-		qnames[i].Base = parser.Name(col.Name)
+		qnames[i].Target = &parser.ColumnItem{ColumnName: parser.Name(col.Name)}
 		exprs[i].Expr = &qnames[i]
 	}
 	return exprs

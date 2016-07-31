@@ -27,7 +27,7 @@ import (
 // expressions to refer to the values that would be inserted for a row if it
 // didn't conflict.
 // Example: `INSERT INTO kv VALUES (1, 2) ON CONFLICT (k) DO UPDATE SET v = excluded.v`
-const upsertExcludedTable = "excluded"
+var upsertExcludedTable = parser.TableName{TableName: "excluded"}
 
 type upsertHelper struct {
 	p                  *planner
@@ -41,6 +41,7 @@ type upsertHelper struct {
 var _ tableUpsertEvaler = (*upsertHelper)(nil)
 
 func (p *planner) makeUpsertHelper(
+	tn *parser.TableName,
 	tableDesc *sqlbase.TableDescriptor,
 	insertCols []sqlbase.ColumnDescriptor,
 	updateCols []sqlbase.ColumnDescriptor,
@@ -79,17 +80,20 @@ func (p *planner) makeUpsertHelper(
 			allExprsIdentity = false
 			break
 		}
-		if err := qn.NormalizeColumnName(); err != nil {
+		if err := qn.NormalizeNameInExpr(); err != nil {
 			return nil, err
 		}
-		if qn.Base != upsertExcludedTable || qn.Column() != updateCols[i].Name {
+		// FIXME(knz) check other db name is OK here.
+		if c, ok := qn.Target.(*parser.ColumnItem); ok && (len(c.Selector) > 0 ||
+			!sqlbase.EqualName(c.TableName.Table(), upsertExcludedTable.Table()) ||
+			!sqlbase.EqualName(c.Column(), updateCols[i].Name)) {
 			allExprsIdentity = false
 			break
 		}
 	}
 
-	sourceInfo := newSourceInfoForSingleTable(tableDesc.Name, makeResultColumns(tableDesc.Columns))
-	excludedSourceInfo := newSourceInfoForSingleTable(upsertExcludedTable, makeResultColumns(insertCols))
+	sourceInfo := newSourceInfoForSingleTable(tn, makeResultColumns(tableDesc.Columns))
+	excludedSourceInfo := newSourceInfoForSingleTable(&upsertExcludedTable, makeResultColumns(insertCols))
 
 	var evalExprs []parser.TypedExpr
 	qvals := make(qvalMap)
@@ -176,13 +180,14 @@ func upsertExprsAndIndex(
 		updateExprs := make(parser.UpdateExprs, 0, len(insertCols))
 		for _, c := range insertCols {
 			if _, ok := indexColSet[c.ID]; !ok {
-				names := parser.QualifiedNames{&parser.QualifiedName{Base: parser.Name(c.Name)}}
+				names := parser.QualifiedNames{&parser.QualifiedName{
+					Target: &parser.ColumnItem{ColumnName: parser.Name(c.Name)},
+				}}
 				expr := &parser.QualifiedName{
-					Base:     upsertExcludedTable,
-					Indirect: parser.Indirection{parser.NameIndirection(c.Name)},
-				}
-				if err := expr.NormalizeColumnName(); err != nil {
-					return nil, nil, err
+					Target: &parser.ColumnItem{
+						TableName:  upsertExcludedTable,
+						ColumnName: parser.Name(c.Name),
+					},
 				}
 				updateExprs = append(updateExprs, &parser.UpdateExpr{Names: names, Expr: expr})
 			}

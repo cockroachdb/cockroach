@@ -23,7 +23,7 @@ import (
 	"go/constant"
 	"go/token"
 
-    "github.com/pkg/errors"
+  "github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
@@ -96,14 +96,14 @@ func (u *sqlSymUnion) tableWithIdx() *TableNameWithIndex {
 func (u *sqlSymUnion) tableWithIdxList() TableNameWithIndexList {
     return u.val.(TableNameWithIndexList)
 }
-func (u *sqlSymUnion) indirectElem() IndirectionElem {
-    if indirectElem, ok := u.val.(IndirectionElem); ok {
-        return indirectElem
+func (u *sqlSymUnion) namePart() NamePart {
+    if namePart, ok := u.val.(NamePart); ok {
+        return namePart
     }
     return nil
 }
-func (u *sqlSymUnion) indirect() Indirection {
-    return u.val.(Indirection)
+func (u *sqlSymUnion) unresolvedName() UnresolvedName {
+    return u.val.(UnresolvedName)
 }
 func (u *sqlSymUnion) indexHints() *IndexHints {
     return u.val.(*IndexHints)
@@ -385,11 +385,11 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %type <*QualifiedName> any_name
 %type <QualifiedNames> any_name_list
 %type <Exprs> expr_list
-%type <Indirection> attrs
+%type <UnresolvedName> attrs
 %type <SelectExprs> target_list
 %type <UpdateExprs> set_clause_list
 %type <*UpdateExpr> set_clause multiple_set_clause
-%type <Indirection> indirection
+%type <UnresolvedName> indirection
 %type <Exprs> ctext_expr_list ctext_row
 %type <GroupBy> group_clause
 %type <*Limit> select_limit
@@ -430,9 +430,9 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %type <*ColumnTableDef> column_def
 %type <TableDef> table_elem
 %type <Expr>  where_clause
-%type <IndirectionElem> glob_indirection
-%type <IndirectionElem> name_indirection
-%type <IndirectionElem> indirection_elem
+%type <NamePart> glob_indirection
+%type <NamePart> name_indirection
+%type <NamePart> indirection_elem
 %type <*IndexHints> opt_index_hints
 %type <*IndexHints> index_hints_param
 %type <*IndexHints> index_hints_param_list
@@ -479,7 +479,7 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %type <*NumVal>  signed_iconst
 %type <Expr>  opt_boolean_or_string
 %type <Exprs> var_list
-%type <*QualifiedName> opt_from_var_name_clause var_name
+%type <*QualifiedName> var_name
 %type <str>   col_label type_function_name
 %type <str>   non_reserved_word
 %type <Expr>  non_reserved_word_or_sconst
@@ -936,21 +936,21 @@ any_name_list:
 any_name:
   name
   {
-    $$.val = &QualifiedName{Base: Name($1)}
+		$$.val = NewUnresolvedName($1)
   }
 | name attrs
   {
-    $$.val = &QualifiedName{Base: Name($1), Indirect: $2.indirect()}
+		$$.val = NewUnresolvedNameWithSuffix($1, $2.unresolvedName())
   }
 
 attrs:
   '.' col_label
   {
-    $$.val = Indirection{NameIndirection($2)}
+    $$.val = UnresolvedName{Name($2)}
   }
 | attrs '.' col_label
   {
-    $$.val = append($1.indirect(), NameIndirection($3))
+    $$.val = append($1.unresolvedName(), Name($3))
   }
 
 // EXPLAIN (options) query
@@ -1409,9 +1409,13 @@ show_stmt:
   {
     $$.val = &ShowIndex{Table: $4.qname()}
   }
-| SHOW TABLES opt_from_var_name_clause
+| SHOW TABLES FROM name
   {
-    $$.val = &ShowTables{Name: $3.qname()}
+    $$.val = &ShowTables{Database: &DatabaseName{Name:Name($4)}}
+  }
+| SHOW TABLES
+  {
+    $$.val = &ShowTables{}
   }
 | SHOW TIME ZONE
   {
@@ -1432,16 +1436,6 @@ show_stmt:
 | SHOW CREATE TABLE var_name
   {
     $$.val = &ShowCreateTable{Table: $4.qname()}
-  }
-
-opt_from_var_name_clause:
-  FROM var_name
-  {
-    $$.val = $2.qname()
-  }
-| /* EMPTY */
-  {
-    $$.val = (*QualifiedName)(nil)
   }
 
 on_privilege_target_clause:
@@ -1510,9 +1504,9 @@ opt_interleave:
   {
     /* SKIP DOC */
     $$.val = &InterleaveDef{
-        Parent: &QualifiedName{Base: Name($4)},
-        Fields: $6.strs(),
-        DropBehavior: $8.dropBehavior(),
+			Parent: NewUnresolvedName($4),
+			Fields: $6.strs(),
+			DropBehavior: $8.dropBehavior(),
     }
   }
 | /* EMPTY */
@@ -3620,19 +3614,19 @@ func_expr_common_subexpr:
   COLLATION FOR '(' a_expr ')' { unimplemented() }
 | CURRENT_DATE
   {
-    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
+      $$.val = &FuncExpr{Name: NewQualifiedFunctionName($1)}
   }
 | CURRENT_DATE '(' ')'
   {
-    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
+    $$.val = &FuncExpr{Name: NewQualifiedFunctionName($1)}
   }
 | CURRENT_TIMESTAMP
   {
-    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
+    $$.val = &FuncExpr{Name: NewQualifiedFunctionName($1)}
   }
 | CURRENT_TIMESTAMP '(' ')'
   {
-    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
+    $$.val = &FuncExpr{Name: NewQualifiedFunctionName($1)}
   }
 | CURRENT_ROLE { unimplemented() }
 | CURRENT_USER { unimplemented() }
@@ -3648,36 +3642,36 @@ func_expr_common_subexpr:
   }
 | EXTRACT '(' extract_list ')'
   {
-    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Name: NewQualifiedFunctionName($1), Exprs: $3.exprs()}
   }
 | OVERLAY '(' overlay_list ')'
   {
-    $$.val = &OverlayExpr{FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3.exprs()}}
+    $$.val = &OverlayExpr{FuncExpr{Name: NewQualifiedFunctionName($1), Exprs: $3.exprs()}}
   }
 | POSITION '(' position_list ')'
   {
-    $$.val = &FuncExpr{Name: &QualifiedName{Base: "STRPOS"}, Exprs: $3.exprs()}
+      $$.val = &FuncExpr{Name: NewQualifiedFunctionName("STRPOS"), Exprs: $3.exprs()}
   }
 | SUBSTRING '(' substr_list ')'
   {
-    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Name: NewQualifiedFunctionName($1), Exprs: $3.exprs()}
   }
 | TREAT '(' a_expr AS typename ')' { unimplemented() }
 | TRIM '(' BOTH trim_list ')'
   {
-     $$.val = &FuncExpr{Name: &QualifiedName{Base: "BTRIM"}, Exprs: $4.exprs()}
+      $$.val = &FuncExpr{Name: NewQualifiedFunctionName("BTRIM"), Exprs: $4.exprs()}
   }
 | TRIM '(' LEADING trim_list ')'
   {
-     $$.val = &FuncExpr{Name: &QualifiedName{Base: "LTRIM"}, Exprs: $4.exprs()}
+      $$.val = &FuncExpr{Name: NewQualifiedFunctionName("LTRIM"), Exprs: $4.exprs()}
   }
 | TRIM '(' TRAILING trim_list ')'
   {
-     $$.val = &FuncExpr{Name: &QualifiedName{Base: "RTRIM"}, Exprs: $4.exprs()}
+      $$.val = &FuncExpr{Name: NewQualifiedFunctionName("RTRIM"), Exprs: $4.exprs()}
   }
 | TRIM '(' trim_list ')'
   {
-    $$.val = &FuncExpr{Name: &QualifiedName{Base: "BTRIM"}, Exprs: $3.exprs()}
+      $$.val = &FuncExpr{Name: NewQualifiedFunctionName("BTRIM"), Exprs: $3.exprs()}
   }
 | IF '(' a_expr ',' a_expr ',' a_expr ')'
   {
@@ -3697,11 +3691,11 @@ func_expr_common_subexpr:
   }
 | GREATEST '(' expr_list ')'
   {
-    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Name: NewQualifiedFunctionName($1), Exprs: $3.exprs()}
   }
 | LEAST '(' expr_list ')'
   {
-    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Name: NewQualifiedFunctionName($1), Exprs: $3.exprs()}
   }
 
 // Aggregate decoration clauses
@@ -4062,41 +4056,41 @@ case_arg:
 indirection_elem:
   name_indirection
   {
-    $$.val = $1.indirectElem()
+    $$.val = $1.namePart()
   }
 | glob_indirection
   {
-    $$.val = $1.indirectElem()
+    $$.val = $1.namePart()
   }
 | '[' a_expr ']'
   {
-    $$.val = &ArrayIndirection{Begin: $2.expr()}
+    $$.val = &ArraySubscript{Begin: $2.expr()}
   }
 | '[' a_expr ':' a_expr ']'
   {
-    $$.val = &ArrayIndirection{Begin: $2.expr(), End: $4.expr()}
+    $$.val = &ArraySubscript{Begin: $2.expr(), End: $4.expr()}
   }
 
 name_indirection:
   '.' col_label
   {
-    $$.val = NameIndirection($2)
+    $$.val = Name($2)
   }
 
 glob_indirection:
   '.' '*'
   {
-    $$.val = qualifiedStar
+    $$.val = UnqualifiedStar{}
   }
 
 indirection:
   indirection_elem
   {
-    $$.val = Indirection{$1.indirectElem()}
+    $$.val = UnresolvedName{$1.namePart()}
   }
 | indirection indirection_elem
   {
-    $$.val = append($1.indirect(), $2.indirectElem())
+    $$.val = append($1.unresolvedName(), $2.namePart())
   }
 
 opt_asymmetric:
@@ -4206,11 +4200,11 @@ indirect_name_or_glob_list:
 qualified_name:
   name
   {
-    $$.val = &QualifiedName{Base: Name($1)}
+		$$.val = NewUnresolvedName($1)
   }
 | name indirection
   {
-    $$.val = &QualifiedName{Base: Name($1), Indirect: $2.indirect()}
+    $$.val = NewUnresolvedNameWithSuffix($1, $2.unresolvedName())
   }
 
 table_name_with_index:
@@ -4227,19 +4221,19 @@ table_name_with_index:
 indirect_name_or_glob:
   name
   {
-    $$.val = &QualifiedName{Base: Name($1)}
+    $$.val = NewUnresolvedName($1)
   }
 | name name_indirection
   {
-    $$.val = &QualifiedName{Base: Name($1), Indirect: Indirection{$2.indirectElem()}}
+    $$.val = NewUnresolvedCompoundName($1, $2.namePart())
   }
 | name glob_indirection
   {
-    $$.val = &QualifiedName{Base: Name($1), Indirect: Indirection{$2.indirectElem()}}
+    $$.val = NewUnresolvedCompoundName($1, $2.namePart())
   }
 | '*'
   {
-    $$.val = &QualifiedName{Indirect: Indirection{unqualifiedStar}}
+    $$.val = &QualifiedName{Target:UnresolvedName{UnqualifiedStar{}}}
   }
 
 name_list:
@@ -4268,11 +4262,11 @@ opt_name_list:
 func_name:
   type_function_name
   {
-    $$.val = &QualifiedName{Base: Name($1)}
+		$$.val = NewUnresolvedName($1)
   }
 | name indirection
   {
-    $$.val = &QualifiedName{Base: Name($1), Indirect: $2.indirect()}
+		$$.val = NewUnresolvedNameWithSuffix($1, $2.unresolvedName())
   }
 
 // Constants

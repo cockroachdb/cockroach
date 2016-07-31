@@ -304,6 +304,7 @@ func (e *Executor) Prepare(
 	if log.V(2) {
 		log.Infof(context.TODO(), "preparing statement: %s", query)
 	}
+
 	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
 	if err != nil {
 		return nil, err
