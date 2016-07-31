@@ -30,6 +30,7 @@ void protobuf_AddDesc_cockroach_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto_imp
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
 #else
+void protobuf_AddDesc_cockroach_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto() GOOGLE_ATTRIBUTE_COLD;
 void protobuf_AddDesc_cockroach_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto() {
   static bool already_here = false;
   if (already_here) return;
@@ -70,16 +71,6 @@ bool IsolationType_IsValid(int value) {
       return false;
   }
 }
-
-
-namespace {
-
-static void MergeFromFail(int line) GOOGLE_ATTRIBUTE_COLD;
-static void MergeFromFail(int line) {
-  GOOGLE_CHECK(false) << __FILE__ << ":" << line;
-}
-
-}  // namespace
 
 
 // ===================================================================
@@ -506,7 +497,9 @@ void TxnMeta::CheckTypeAndMergeFrom(
 
 void TxnMeta::MergeFrom(const TxnMeta& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.storage.engine.enginepb.TxnMeta)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (GOOGLE_PREDICT_FALSE(&from == this)) {
+    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  }
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_id()) {
       set_has_id();
@@ -1258,7 +1251,9 @@ void MVCCMetadata::CheckTypeAndMergeFrom(
 
 void MVCCMetadata::MergeFrom(const MVCCMetadata& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.storage.engine.enginepb.MVCCMetadata)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (GOOGLE_PREDICT_FALSE(&from == this)) {
+    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  }
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_txn()) {
       mutable_txn()->::cockroach::storage::engine::enginepb::TxnMeta::MergeFrom(from.txn());
@@ -2150,7 +2145,9 @@ void MVCCStats::CheckTypeAndMergeFrom(
 
 void MVCCStats::MergeFrom(const MVCCStats& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.storage.engine.enginepb.MVCCStats)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (GOOGLE_PREDICT_FALSE(&from == this)) {
+    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  }
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_contains_estimates()) {
       set_contains_estimates(from.contains_estimates());

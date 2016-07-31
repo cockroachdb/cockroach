@@ -40,7 +40,7 @@ class Timestamp;
 
 // ===================================================================
 
-class Timestamp : public ::google::protobuf::MessageLite {
+class Timestamp : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.util.hlc.Timestamp) */ {
  public:
   Timestamp();
   virtual ~Timestamp();

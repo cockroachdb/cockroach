@@ -84,11 +84,11 @@ func benchmarkPostgres(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	// ```
 	// $ cat /usr/local/var/postgres/postgresql.conf | grep ssl
 	// ssl = on                            # (change requires restart)
-	// ssl_cert_file = '/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/resource/test_certs/node.server.crt'             # (change requires restart)
-	// ssl_key_file = '/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/resource/test_certs/node.server.key'              # (change requires restart)
-	// ssl_ca_file = '/Users/tamird/src/go/src/github.com/cockroachdb/cockroach/resource/test_certs/ca.crt'                        # (change requires restart)
+	// ssl_cert_file = '$GOATH/src/github.com/cockroachdb/cockroach/resource/test_certs/node.server.crt'             # (change requires restart)
+	// ssl_key_file = '$GOATH/src/github.com/cockroachdb/cockroach/resource/test_certs/node.server.key'              # (change requires restart)
+	// ssl_ca_file = '$GOATH/src/github.com/cockroachdb/cockroach/resource/test_certs/ca.crt'                        # (change requires restart)
 	// ```
-	// Where `/Users/tamird/src/go/src/github.com/cockroachdb/cockroach`
+	// Where `$GOATH/src/github.com/cockroachdb/cockroach`
 	// is replaced with your local Cockroach source directory.
 	// Be sure to restart Postgres for this to take effect.
 

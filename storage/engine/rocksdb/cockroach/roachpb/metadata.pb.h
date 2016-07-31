@@ -45,7 +45,7 @@ class StoreDescriptor;
 
 // ===================================================================
 
-class Attributes : public ::google::protobuf::MessageLite {
+class Attributes : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.Attributes) */ {
  public:
   Attributes();
   virtual ~Attributes();
@@ -157,7 +157,7 @@ class Attributes : public ::google::protobuf::MessageLite {
 };
 // -------------------------------------------------------------------
 
-class ReplicaDescriptor : public ::google::protobuf::MessageLite {
+class ReplicaDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.ReplicaDescriptor) */ {
  public:
   ReplicaDescriptor();
   virtual ~ReplicaDescriptor();
@@ -282,7 +282,7 @@ class ReplicaDescriptor : public ::google::protobuf::MessageLite {
 };
 // -------------------------------------------------------------------
 
-class RangeDescriptor : public ::google::protobuf::MessageLite {
+class RangeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.RangeDescriptor) */ {
  public:
   RangeDescriptor();
   virtual ~RangeDescriptor();
@@ -440,7 +440,7 @@ class RangeDescriptor : public ::google::protobuf::MessageLite {
 };
 // -------------------------------------------------------------------
 
-class StoreCapacity : public ::google::protobuf::MessageLite {
+class StoreCapacity : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.StoreCapacity) */ {
  public:
   StoreCapacity();
   virtual ~StoreCapacity();
@@ -565,7 +565,7 @@ class StoreCapacity : public ::google::protobuf::MessageLite {
 };
 // -------------------------------------------------------------------
 
-class NodeDescriptor : public ::google::protobuf::MessageLite {
+class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.NodeDescriptor) */ {
  public:
   NodeDescriptor();
   virtual ~NodeDescriptor();
@@ -694,7 +694,7 @@ class NodeDescriptor : public ::google::protobuf::MessageLite {
 };
 // -------------------------------------------------------------------
 
-class StoreDescriptor : public ::google::protobuf::MessageLite {
+class StoreDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.StoreDescriptor) */ {
  public:
   StoreDescriptor();
   virtual ~StoreDescriptor();
