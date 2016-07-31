@@ -47,7 +47,7 @@ func TestQualifiedNameString(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		q := &QualifiedName{Base: Name(tc.in)}
+		q := NewUnresolvedName(tc.in)
 		if q.String() != tc.out {
 			t.Errorf("expected q.String() == %q, got %q", tc.out, q.String())
 		}
@@ -86,7 +86,7 @@ func TestNormalizeTableName(t *testing.T) {
 			t.Fatalf("%s: %v", tc.in, err)
 		}
 		ate := stmt.(*Select).Select.(*SelectClause).From[0].(*AliasedTableExpr)
-		err = ate.Expr.(*QualifiedName).NormalizeTableName(tc.db)
+		_, err = ate.Expr.(*QualifiedName).NormalizeTableNameWithDatabaseName(tc.db)
 		if tc.err != "" {
 			if !testutils.IsError(err, tc.err) {
 				t.Fatalf("%s: expected %s, but found %s", tc.in, tc.err, err)
@@ -103,23 +103,68 @@ func TestNormalizeTableName(t *testing.T) {
 	}
 }
 
-func TestNormalizeColumnName(t *testing.T) {
+func TestNormalizeFunctionName(t *testing.T) {
 	testCases := []struct {
 		in, out string
 		err     string
 	}{
-		{`foo`, `"".foo`, ``},
-		{`"".foo`, `"".foo`, ``},
-		{`*`, `"".*`, ``},
-		{`"".*`, `"".*`, ``},
+		{`foo`, `foo`, ``},
+		{`foo.bar`, `foo.bar`, ``},
+		{`foo.*.baz`, `foo.*.baz`, ``},
+		{`foo[bar].baz`, `foo[bar].baz`, ``},
+
+		{`""`, ``, `empty function name`},
+		{`foo.*`, ``, `invalid function name: foo.*`},
+		{`foo[bar]`, ``, `invalid function name: foo\[bar\]`},
+	}
+
+	for _, tc := range testCases {
+		stmt, err := ParseOneTraditional("SELECT " + tc.in + "(1)")
+		if err != nil {
+			t.Fatalf("%s: %v", tc.in, err)
+		}
+		f, ok := stmt.(*Select).Select.(*SelectClause).Exprs[0].Expr.(*FuncExpr)
+		if !ok {
+			t.Fatalf("%s does not parse to a QualifiedName", tc.in)
+		}
+		q := f.Name
+		_, err = q.NormalizeFunctionName()
+		if tc.err != "" {
+			if !testutils.IsError(err, tc.err) {
+				t.Fatalf("%s: expected %s, but found %s", tc.in, tc.err, err)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("%s: expected success, but found %v", tc.in, err)
+		}
+		q.ClearString()
+		if out := q.String(); tc.out != out {
+			t.Errorf("%s: expected %s, but found %s", tc.in, tc.out, out)
+		}
+	}
+}
+
+func TestNormalizeNameInExpr(t *testing.T) {
+	testCases := []struct {
+		in, out string
+		err     string
+	}{
+		{`foo`, `foo`, ``},
+		{`*`, `*`, ``},
 		{`foo.bar`, `foo.bar`, ``},
 		{`foo.*`, `foo.*`, ``},
+		{`test.foo.*`, `test.foo.*`, ``},
 		{`foo.bar[blah]`, `foo.bar[blah]`, ``},
-		{`foo[bar]`, `"".foo[bar]`, ``},
+		{`foo[bar]`, `foo[bar]`, ``},
 
+		{`"".foo`, ``, `empty table name`},
+		{`"".*`, ``, `empty table name`},
 		{`""`, ``, `empty column name`},
-		{`test.foo.bar`, ``, `invalid column name: test.foo.bar`},
-		{`test.foo.*`, ``, `invalid column name: test.foo.*`},
+		{`foo.*.bar`, ``, `invalid table name: foo.*`},
+		{`foo.*.bar[baz]`, ``, `invalid table name: foo.*`},
+		{`test.*[foo]`, ``, `invalid column name: test.*`},
+		{`test.foo.*.bar[foo]`, ``, `invalid table name: test.foo.*`},
 	}
 
 	for _, tc := range testCases {
@@ -131,7 +176,7 @@ func TestNormalizeColumnName(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s does not parse to a QualifiedName", tc.in)
 		}
-		err = q.NormalizeColumnName()
+		err = q.NormalizeNameInExpr()
 		if tc.err != "" {
 			if !testutils.IsError(err, tc.err) {
 				t.Fatalf("%s: expected %s, but found %s", tc.in, tc.err, err)

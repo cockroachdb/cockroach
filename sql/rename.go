@@ -32,7 +32,6 @@ import (
 var (
 	errEmptyColumnName = errors.New("empty column name")
 	errEmptyIndexName  = errors.New("empty index name")
-	errEmptyTableName  = errors.New("empty table name")
 )
 
 // RenameDatabase renames the database.
@@ -40,6 +39,7 @@ var (
 //   Notes: postgres requires superuser, db owner, or "CREATEDB".
 //          mysql >= 5.1.23 does not allow database renames.
 func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
+	// FIXME(knz) Use DatabaseName here.
 	if n.Name == "" || n.NewName == "" {
 		return nil, errEmptyDatabaseName
 	}
@@ -70,25 +70,22 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 //          mysql requires ALTER, DROP on the original table, and CREATE, INSERT
 //          on the new table (and does not copy privileges over).
 func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
-	if err := n.NewName.NormalizeTableName(p.session.Database); err != nil {
+	oldTn, err := n.Name.NormalizeTableNameWithDatabaseName(p.session.Database)
+	if err != nil {
+		return nil, err
+	}
+	newTn, err := n.NewName.NormalizeTableNameWithDatabaseName(p.session.Database)
+	if err != nil {
 		return nil, err
 	}
 
-	if n.NewName.Table() == "" {
-		return nil, errEmptyTableName
-	}
-
-	if err := n.Name.NormalizeTableName(p.session.Database); err != nil {
-		return nil, err
-	}
-
-	dbDesc, err := p.mustGetDatabaseDesc(n.Name.Database())
+	dbDesc, err := p.mustGetDatabaseDesc(oldTn.Database())
 	if err != nil {
 		return nil, err
 	}
 
 	// Check if source table exists.
-	tableDesc, err := p.getTableDesc(n.Name)
+	tableDesc, err := p.getTableDesc(oldTn)
 	if err != nil {
 		return nil, err
 	}
@@ -98,10 +95,10 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 			return &emptyNode{}, nil
 		}
 		// Key does not exist, but we want it to: error out.
-		return nil, fmt.Errorf("table %q does not exist", n.Name.Table())
+		return nil, fmt.Errorf("table %q does not exist", oldTn.String())
 	}
 	if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
-		return nil, sqlbase.NewUndefinedTableError(n.Name.String())
+		return nil, sqlbase.NewUndefinedTableError(oldTn.String())
 	}
 
 	if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
@@ -109,7 +106,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	}
 
 	// Check if target database exists.
-	targetDbDesc, err := p.mustGetDatabaseDesc(n.NewName.Database())
+	targetDbDesc, err := p.mustGetDatabaseDesc(newTn.Database())
 	if err != nil {
 		return nil, err
 	}
@@ -118,16 +115,16 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		return nil, err
 	}
 
-	if n.Name.Database() == n.NewName.Database() && n.Name.Table() == n.NewName.Table() {
+	if oldTn.Database() == newTn.Database() && oldTn.Table() == newTn.Table() {
 		// Noop.
 		return &emptyNode{}, nil
 	}
 
-	tableDesc.SetName(n.NewName.Table())
+	tableDesc.SetName(newTn.Table())
 	tableDesc.ParentID = targetDbDesc.ID
 
 	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
-	newTbKey := tableKey{targetDbDesc.ID, n.NewName.Table()}.Key()
+	newTbKey := tableKey{targetDbDesc.ID, newTn.Table()}.Key()
 
 	if err := tableDesc.Validate(p.txn); err != nil {
 		return nil, err
@@ -141,7 +138,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	}
 	renameDetails := sqlbase.TableDescriptor_RenameInfo{
 		OldParentID: dbDesc.ID,
-		OldName:     n.Name.Table()}
+		OldName:     oldTn.Table()}
 	tableDesc.Renames = append(tableDesc.Renames, renameDetails)
 	if err := p.writeTableDesc(tableDesc); err != nil {
 		return nil, err
@@ -156,7 +153,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 
 	if err := p.txn.Run(&b); err != nil {
 		if _, ok := err.(*roachpb.ConditionFailedError); ok {
-			return nil, fmt.Errorf("table name %q already exists", n.NewName.Table())
+			return nil, fmt.Errorf("table name %q already exists", newTn.Table())
 		}
 		return nil, err
 	}
@@ -185,7 +182,12 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		return nil, errEmptyIndexName
 	}
 
-	tableDesc, err := p.mustGetTableDesc(n.Index.Table)
+	tn, err := n.Index.Table.NormalizeTableNameWithDatabaseName(p.session.Database)
+	if err != nil {
+		return nil, err
+	}
+
+	tableDesc, err := p.mustGetTableDesc(tn)
 	if err != nil {
 		return nil, err
 	}
@@ -245,7 +247,11 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 	}
 
 	// Check if table exists.
-	tableDesc, err := p.getTableDesc(n.Table)
+	tn, err := n.Table.NormalizeTableNameWithDatabaseName(p.session.Database)
+	if err != nil {
+		return nil, err
+	}
+	tableDesc, err := p.getTableDesc(tn)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +261,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 			return &emptyNode{}, nil
 		}
 		// Key does not exist, but we want it to: error out.
-		return nil, fmt.Errorf("table %q does not exist", n.Table.Table())
+		return nil, fmt.Errorf("table %q does not exist", tn.Table())
 	}
 
 	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
@@ -286,11 +292,13 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 
 	preFn := func(expr parser.Expr) (err error, recurse bool, newExpr parser.Expr) {
 		if qname, ok := expr.(*parser.QualifiedName); ok {
-			if err := qname.NormalizeColumnName(); err != nil {
+			if err := qname.NormalizeNameInExpr(); err != nil {
 				return err, false, nil
 			}
-			if qname.Column() == colName {
-				qname.Indirect[0] = parser.NameIndirection(newColName)
+			if c, ok := qname.Target.(*parser.ColumnItem); ok {
+				if c.ColumnName == n.Name {
+					c.ColumnName = n.NewName
+				}
 				qname.ClearString()
 			}
 			return nil, false, qname

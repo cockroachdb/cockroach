@@ -193,14 +193,15 @@ func parseZoneName(s string) ([]string, error) {
 	}
 	// This is a bit of a hack: "." is not a valid database name which we use as
 	// a placeholder in order to normalize the qualified name.
-	if err := qname.NormalizeTableName("."); err != nil {
+	tn, err := qname.NormalizeTableNameWithDatabaseName(".")
+	if err != nil {
 		return nil, err
 	}
 	var names []string
-	if n := qname.Database(); n != "." {
+	if n := tn.Database(); n != "." {
 		names = append(names, n)
 	}
-	names = append(names, qname.Table())
+	names = append(names, tn.Table())
 	return names, nil
 }
 

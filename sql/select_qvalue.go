@@ -25,7 +25,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/pkg/errors"
 )
 
 // columnRef is a reference to a resultColumn of a FROM node
@@ -68,8 +67,12 @@ func (*qvalue) Variable() {}
 func (q *qvalue) Format(buf *bytes.Buffer, f parser.FmtFlags) {
 	if f == parser.FmtQualify {
 		tableAlias := q.colRef.source.findTableAlias(q.colRef.colIdx)
-		if tableAlias != "" {
-			buf.WriteString(tableAlias)
+		if tableAlias.TableName != "" {
+			if tableAlias.DatabaseName != "" {
+				parser.FormatNode(buf, f, tableAlias.DatabaseName)
+				buf.WriteByte('.')
+			}
+			parser.FormatNode(buf, f, tableAlias.TableName)
 			buf.WriteByte('.')
 		}
 	}
@@ -160,21 +163,39 @@ func (v *qnameVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.
 		if !ok {
 			break
 		}
-		v.err = qname.NormalizeColumnName()
+		v.err = qname.NormalizeNameInExpr()
 		if v.err != nil {
 			return false, expr
 		}
-		if qname.IsStar() {
+		fn, err := t.Name.NormalizeFunctionName()
+		if err != nil {
+			v.err = err
+			return false, expr
+		}
+
+		if strings.EqualFold(fn.Function(), "count") {
 			// Special case handling for COUNT(*). This is a special construct to
 			// count the number of rows; in this case * does NOT refer to a set of
-			// columns. A * is invalid elsewhere.
-			if len(t.Name.Indirect) == 0 && strings.EqualFold(string(t.Name.Base), "count") {
-				// Replace the function argument with a special non-NULL VariableExpr.
-				t = t.CopyNode()
-				t.Exprs[0] = starDatumInstance
-			} else {
-				v.err = errors.Errorf("cannot use '*' with %s", t.Name)
+			// columns. A * is invalid elsewhere (and will be caught by findColumn()).
+			// Replace the function argument with a special non-NULL VariableExpr.
+			switch arg := qname.Target.(type) {
+			case parser.UnqualifiedStar:
+				// Replace, see below.
+			case *parser.AllColumnsSelector:
+				// Replace, see below.
+				// However we must first properly reject SELECT COUNT(foo.*) FROM bar.
+				if err := v.qt.sources.checkDatabaseName(&arg.TableName); err != nil {
+					v.err = err
+					return false, expr
+				}
+			default:
+				// Nothing to do.
+				return true, expr
 			}
+
+			t = t.CopyNode()
+			t.Exprs[0] = starDatumInstance
+			return false, t
 		}
 		return true, t
 

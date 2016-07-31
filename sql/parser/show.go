@@ -68,7 +68,7 @@ func (node *ShowIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // ShowTables represents a SHOW TABLES statement.
 type ShowTables struct {
-	Name *QualifiedName
+	Database *DatabaseName
 }
 
 // ShowConstraints represents a SHOW CONSTRAINTS statement.
@@ -88,9 +88,9 @@ func (node *ShowConstraints) Format(buf *bytes.Buffer, f FmtFlags) {
 // Format implements the NodeFormatter interface.
 func (node *ShowTables) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW TABLES")
-	if node.Name != nil {
+	if node.Database != nil {
 		buf.WriteString(" FROM ")
-		FormatNode(buf, f, node.Name)
+		FormatNode(buf, f, *node.Database)
 	}
 }
 

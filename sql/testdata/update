@@ -32,16 +32,16 @@ SELECT * FROM kv
 statement error column "m" does not exist
 UPDATE kv SET m = 9 WHERE k IN (1, 3)
 
-statement error column "kv" does not exist
+statement error syntax not supported here: "kv.k"
 UPDATE kv SET kv.k = 9
 
-statement error column name "k\.\*" cannot be assigned to
+statement error syntax not supported here: "k.\*"
 UPDATE kv SET k.* = 9
 
-statement error column name "k\[0\]" cannot be assigned to
+statement error syntax not supported here: "k\[0\]"
 UPDATE kv SET k[0] = 9
 
-statement error column name "k\.v" cannot be assigned to
+statement error syntax not supported here: "k\.v"
 UPDATE kv SET k.v = 9
 
 statement ok
@@ -147,7 +147,7 @@ SELECT * FROM kv3
 ----
 a   b
 
-statement error qualified name "nonexistent" not found
+statement error column name "nonexistent" not found
 UPDATE kv3 SET v = NULL WHERE nonexistent = 'a'
 
 statement ok
