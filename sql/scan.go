@@ -244,10 +244,10 @@ func (n *scanNode) ExplainTypes(regTypes func(string, string)) {
 // fully-qualified columns if an alias is not specified.
 func (n *scanNode) initTable(
 	p *planner,
-	tableName *parser.QualifiedName,
+	tableName *parser.TableName,
 	indexHints *parser.IndexHints,
 	scanVisibility scanVisibility,
-) (string, error) {
+) error {
 	descFunc := p.getTableLease
 	if p.asOf {
 		// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
@@ -258,15 +258,13 @@ func (n *scanNode) initTable(
 	}
 	desc, err := descFunc(tableName)
 	if err != nil {
-		return "", err
+		return err
 	}
 	n.desc = *desc
 
 	if err := p.checkPrivilege(&n.desc, privilege.SELECT); err != nil {
-		return "", err
+		return err
 	}
-
-	alias := n.desc.Name
 
 	if indexHints != nil && indexHints.Index != "" {
 		indexName := sqlbase.NormalizeName(string(indexHints.Index))
@@ -280,13 +278,13 @@ func (n *scanNode) initTable(
 				}
 			}
 			if n.specifiedIndex == nil {
-				return "", fmt.Errorf("index \"%s\" not found", indexName)
+				return fmt.Errorf("index \"%s\" not found", indexName)
 			}
 		}
 	}
 	n.noIndexJoin = (indexHints != nil && indexHints.NoIndexJoin)
 	n.initDescDefaults(scanVisibility)
-	return alias, nil
+	return nil
 }
 
 // setNeededColumns sets the flags indicating which columns are needed by the upper layer.

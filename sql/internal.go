@@ -51,11 +51,9 @@ func (ie InternalExecutor) GetTableSpan(user string, txn *client.Txn, dbName, ta
 	// Lookup the table ID.
 	p := makeInternalPlanner(txn, user)
 	p.leaseMgr = ie.LeaseManager
-	qname := &parser.QualifiedName{Base: parser.Name(tableName)}
-	if err := qname.NormalizeTableName(dbName); err != nil {
-		return roachpb.Span{}, err
-	}
-	tableID, err := getTableID(p, qname)
+
+	tn := parser.TableName{DatabaseName: parser.Name(dbName), TableName: parser.Name(tableName)}
+	tableID, err := getTableID(p, &tn)
 	if err != nil {
 		return roachpb.Span{}, err
 	}
@@ -68,24 +66,24 @@ func (ie InternalExecutor) GetTableSpan(user string, txn *client.Txn, dbName, ta
 }
 
 // getTableID retrieves the table ID for the specified table.
-func getTableID(p *planner, qname *parser.QualifiedName) (sqlbase.ID, error) {
-	if err := qname.NormalizeTableName(p.session.Database); err != nil {
+func getTableID(p *planner, tn *parser.TableName) (sqlbase.ID, error) {
+	if err := tn.QualifyWithDatabase(p.session.Database); err != nil {
 		return 0, err
 	}
 
-	dbID, err := p.getDatabaseID(qname.Database())
+	dbID, err := p.getDatabaseID(tn.Database())
 	if err != nil {
 		return 0, err
 	}
 
-	nameKey := tableKey{dbID, qname.Table()}
+	nameKey := tableKey{dbID, tn.Table()}
 	key := nameKey.Key()
 	gr, err := p.txn.Get(key)
 	if err != nil {
 		return 0, err
 	}
 	if !gr.Exists() {
-		return 0, sqlbase.NewUndefinedTableError(qname.String())
+		return 0, sqlbase.NewUndefinedTableError(parser.AsString(tn))
 	}
 	return sqlbase.ID(gr.ValueInt()), nil
 }

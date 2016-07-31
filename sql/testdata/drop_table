@@ -30,7 +30,7 @@ SHOW TABLES FROM test
 Table
 b
 
-statement error table "a" does not exist
+statement error table "test.a" does not exist
 SELECT * FROM a
 
 statement error table "a" does not exist
