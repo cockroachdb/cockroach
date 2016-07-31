@@ -189,8 +189,7 @@ var statusReportParams = map[string]string{
 }
 
 func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := c.session.Context()
 
 	if authenticationHook != nil {
 		if err := authenticationHook(c.session.User, true /* public */); err != nil {

@@ -302,7 +302,10 @@ func (e *Executor) Prepare(
 	pinfo parser.PlaceholderTypes,
 ) ([]ResultColumn, error) {
 	if log.V(2) {
-		log.Infof(context.TODO(), "preparing statement: %s", query)
+		log.Infof(context.TODO(), "preparing: %s", query)
+	}
+	if traceSQL {
+		log.Trace(session.Context(), fmt.Sprintf("preparing: %s", query))
 	}
 	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
 	if err != nil {
@@ -322,7 +325,7 @@ func (e *Executor) Prepare(
 
 	// Prepare needs a transaction because it needs to retrieve db/table
 	// descriptors for type checking.
-	txn := client.NewTxn(ctx, *e.ctx.DB)
+	txn := client.NewTxn(session.Context(), *e.ctx.DB)
 	txn.Proto.Isolation = session.DefaultIsolationLevel
 	session.planner.setTxn(txn)
 	defer session.planner.setTxn(nil)
@@ -658,6 +661,9 @@ func (e *Executor) execStmtsInCurrentTxn(
 		if log.V(2) {
 			log.Infof(context.TODO(), "about to execute sql statement (%d/%d): %s", i+1, len(stmts), stmt)
 		}
+		if traceSQL && txnState.txn != nil {
+			log.Trace(txnState.txn.Context, fmt.Sprintf("executing %d/%d: %s", i+1, len(stmts), stmt))
+		}
 		txnState.schemaChangers.curStatementIdx = i
 
 		var stmtStrBefore string
@@ -924,8 +930,12 @@ func (e *Executor) execStmtInOpenTxn(
 	if txnState.tr != nil {
 		txnState.tr.LazyLog(stmt, true /* sensitive */)
 	}
+
 	result, err := e.execStmt(stmt, planMaker, implicitTxn /* autoCommit */)
 	if err != nil {
+		if traceSQL {
+			log.Trace(txnState.txn.Context, fmt.Sprintf("ERROR: %v", err))
+		}
 		if txnState.tr != nil {
 			txnState.tr.LazyPrintf("ERROR: %v", err)
 		}
@@ -940,6 +950,9 @@ func (e *Executor) execStmtInOpenTxn(
 			tResult.count = len(result.Rows)
 		}
 		txnState.tr.LazyLog(tResult, false)
+		if traceSQL {
+			log.Trace(txnState.txn.Context, fmt.Sprintf("%s done", tResult.String()))
+		}
 	}
 	return result, err
 }
@@ -1014,6 +1027,7 @@ func commitSQLTransaction(
 			// We're done with this txn.
 			txnState.State = NoTxn
 		}
+		txnState.dumpTrace()
 		txnState.txn = nil
 	}
 	// Reset transaction to prevent running further commands on this planner.
