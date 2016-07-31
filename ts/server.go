@@ -68,21 +68,15 @@ func (s *Server) Query(ctx context.Context, request *tspb.TimeSeriesQueryRequest
 	response := tspb.TimeSeriesQueryResponse{
 		Results: make([]tspb.TimeSeriesQueryResponse_Result, 0, len(request.Queries)),
 	}
-	for _, q := range request.Queries {
-		datapoints, sources, err := s.db.Query(q, Resolution10s, request.StartNanos, request.EndNanos)
+	for _, query := range request.Queries {
+		datapoints, sources, err := s.db.Query(query, Resolution10s, request.StartNanos, request.EndNanos)
 		if err != nil {
 			return nil, grpc.Errorf(codes.Internal, err.Error())
 		}
 		result := tspb.TimeSeriesQueryResponse_Result{
-			Query:      q,
+			Query:      query,
 			Datapoints: datapoints,
 		}
-		// TODO(tamird): Remove this (and all other) explicit setting of defaults.
-		// It is currently required because the client side doesn't know about
-		// proto defaults.
-		result.SourceAggregator = q.GetSourceAggregator().Enum()
-		result.Downsampler = q.GetDownsampler().Enum()
-		result.Derivative = q.GetDerivative().Enum()
 
 		result.Sources = sources
 		response.Results = append(response.Results, result)
