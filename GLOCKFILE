@@ -45,7 +45,7 @@ github.com/coreos/etcd fb64c8ccfeb9408b80c3f657a52ec6cad2fdb3f8
 github.com/cpuguy83/go-md2man 2724a9c9051aa62e9cca11304e7dd518e9e41599
 github.com/davecgh/go-spew 5215b55f46b2b919f50a1df0eaa5886afe4e3b3d
 github.com/docker/distribution 87917f30529e6a7fca8eaff2932424915fb11225
-github.com/docker/engine-api 4eca04ae18f4f93f40196a17b9aa6e11262a7269
+github.com/docker/engine-api 228c7390a733320d48697cb41ae8cde4942cd3e5
 github.com/docker/go-connections 990a1a1a70b0da4c4cb70e117971a4f0babfbf1a
 github.com/docker/go-units f2d77a61e3c169b43402a0a1e84f06daf29b8190
 github.com/dustin/go-humanize 2fcb5204cdc65b4bec9fd0a87606bb0d0e3c54e8
