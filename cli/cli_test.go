@@ -485,43 +485,23 @@ func Example_zone() {
 	c := newCLITest()
 	defer c.stop()
 
-	ctx := context.Background()
-
-	defer func() {
-		if err := os.Remove("zone1.yaml"); err != nil {
-			log.Fatalf(ctx, "could not remove zone config file: %v", err)
-		}
-		if err := os.Remove("zone2.yaml"); err != nil {
-			log.Fatalf(ctx, "could not remove zone config file: %v", err)
-		}
-	}()
-
-	if err := ioutil.WriteFile("zone1.yaml", []byte("replicas:\n- attrs: [us-east-1a,ssd]\n"), 0777); err != nil {
-		log.Fatalf(ctx, "could not write string: %v", err)
-	}
-
-	if err := ioutil.WriteFile("zone2.yaml", []byte("range_max_bytes: 134217728\n"), 0777); err != nil {
-		log.Fatalf(ctx, "could not write string: %v", err)
-	}
-
 	c.Run("zone ls")
-	// Call RunWithArgs to bypass the "split-by-whitespace" arg builder.
-	c.RunWithArgs([]string{"zone", "set", "system", "--file=zone1.yaml"})
+	c.Run("zone set system --file=./fixtures/zone_attrs.yaml")
 	c.Run("zone ls")
 	c.Run("zone get system.nonexistent")
 	c.Run("zone get system.lease")
-	c.RunWithArgs([]string{"zone", "set", "system", "--file=zone2.yaml"})
+	c.Run("zone set system --file=./fixtures/zone_range_max_bytes.yaml")
 	c.Run("zone get system")
 	c.Run("zone rm system")
 	c.Run("zone ls")
 	c.Run("zone rm .default")
-	c.RunWithArgs([]string{"zone", "set", ".default", "--file=zone2.yaml"})
+	c.Run("zone set .default --file=./fixtures/zone_range_max_bytes.yaml")
 	c.Run("zone get system")
 
 	// Output:
 	// zone ls
 	// .default
-	// zone set system --file=zone1.yaml
+	// zone set system --file=./fixtures/zone_attrs.yaml
 	// INSERT 1
 	// replicas:
 	// - attrs: [us-east-1a, ssd]
@@ -542,7 +522,7 @@ func Example_zone() {
 	// range_max_bytes: 67108864
 	// gc:
 	//   ttlseconds: 86400
-	// zone set system --file=zone2.yaml
+	// zone set system --file=./fixtures/zone_range_max_bytes.yaml
 	// UPDATE 1
 	// replicas:
 	// - attrs: [us-east-1a, ssd]
@@ -564,7 +544,7 @@ func Example_zone() {
 	// .default
 	// zone rm .default
 	// unable to remove .default
-	// zone set .default --file=zone2.yaml
+	// zone set .default --file=./fixtures/zone_range_max_bytes.yaml
 	// UPDATE 1
 	// replicas:
 	// - attrs: []
