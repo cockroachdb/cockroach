@@ -613,6 +613,8 @@ type StoreTestingKnobs struct {
 	DisableSplitQueue bool
 	// DisableReplicateQueue disables the replication queue.
 	DisableReplicateQueue bool
+	// DisableScanner disables the replica scanner.
+	DisableScanner bool
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}
@@ -910,6 +912,9 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	}
 	if ctx.TestingKnobs.DisableReplicateQueue {
 		s.setReplicateQueueActive(false)
+	}
+	if ctx.TestingKnobs.DisableScanner {
+		s.setScannerActive(false)
 	}
 
 	return s
@@ -2356,8 +2361,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 		}
 		// It's not a current member of the group. Is it from the past?
 		if !found && req.FromReplica.ReplicaID < desc.NextReplicaID {
-			return errors.Errorf("range %s: discarding message from %+v, older than NextReplicaID %d",
-				req.RangeID, req.FromReplica, desc.NextReplicaID)
+			return errReplicaTooOld
 		}
 	}
 
@@ -2922,4 +2926,7 @@ func (s *Store) setReplicateQueueActive(active bool) {
 }
 func (s *Store) setSplitQueueActive(active bool) {
 	s.splitQueue.SetDisabled(!active)
+}
+func (s *Store) setScannerActive(active bool) {
+	s.scanner.SetDisabled(!active)
 }

@@ -30,6 +30,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/kr/pretty"
@@ -46,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
@@ -144,6 +148,8 @@ func updatesTimestampCache(r roachpb.Request) bool {
 	}
 	return updatesTimestampCacheMethods[m]
 }
+
+var errReplicaTooOld = grpc.Errorf(codes.Aborted, "sender replica too old, discarding message")
 
 // A pendingCmd holds a done channel for a command sent to Raft. Once
 // committed to the Raft log, the command is executed and the result returned
@@ -333,10 +339,32 @@ func NewReplica(desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.R
 		RangeID:    desc.RangeID,
 		store:      store,
 		abortCache: NewAbortCache(desc.RangeID),
-		raftSender: store.ctx.Transport.MakeSender(func(err error, toReplica roachpb.ReplicaDescriptor) {
-			log.Warningf(context.TODO(), "range %d: outgoing raft transport stream to %s closed by the remote: %v", desc.RangeID, toReplica, err)
-		}),
 	}
+
+	r.raftSender = store.ctx.Transport.MakeSender(
+		func(err error, toReplica roachpb.ReplicaDescriptor) {
+			ctx := context.TODO() // plumb the context from transport
+			if grpcutil.ErrorEqual(err, errReplicaTooOld) {
+				if err := r.store.Stopper().RunTask(func() {
+					r.mu.Lock()
+					repID := r.mu.replicaID
+					r.mu.Unlock()
+					log.Infof(ctx, "%s: replica %d too old, adding to replica GC queue", r, repID)
+
+					if err := r.store.replicaGCQueue.Add(r, 1.0); err != nil {
+						log.Errorf(ctx, "%s: unable to add replica %d to GC queue: %s", r, repID, err)
+					}
+				}); err != nil {
+					log.Errorf(ctx, "%s: %s", r, err)
+				}
+				return
+			}
+			if err != nil && !grpcutil.IsClosedConnection(err) {
+				log.Warningf(ctx,
+					"%s: outgoing raft transport stream to %s closed by the remote: %s",
+					r, toReplica, err)
+			}
+		})
 
 	if err := r.newReplicaInner(desc, store.Clock(), replicaID); err != nil {
 		return nil, err
