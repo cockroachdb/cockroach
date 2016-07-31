@@ -28,7 +28,6 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -1635,13 +1634,17 @@ func (r *Replica) TransferLease(
 	return r.applyNewLeaseLocked(ctx, batch, ms, args.Lease)
 }
 
-// applyNewLeaseLocked applies a new lease: the timestamp's cache low water mark
-// is updated if needed; Raft leadership is transferred if needed.
-//
+// applyNewLeaseLocked checks that the lease contains a valid interval and that
+// the new lease holder is still a member of the replica set, and then proceeds
+// to write the new lease to the batch, emitting an appropriate trigger.
+
 // The new lease might be a lease for a range that didn't previously have an
 // active lease, might be an extension or a lease transfer.
 //
 // r.mu needs to be locked.
+//
+// TODO(tschottdorf): refactoring what's returned from the trigger here makes
+// sense to minimize the amount of code intolerant of rolling updates.
 func (r *Replica) applyNewLeaseLocked(
 	ctx context.Context,
 	batch engine.ReadWriter,
@@ -1678,52 +1681,8 @@ func (r *Replica) applyNewLeaseLocked(
 
 	// TODO(tschottdorf) move everything below into trigger. In fact, this
 	// method shouldn't hold the lock throughout.
-	r.mu.state.Lease = &lease
-	if prevLease.Replica.StoreID != r.mu.state.Lease.Replica.StoreID {
-		// The lease is changing hands. Is this replica the new lease holder?
-		if r.mu.state.Lease.Replica.ReplicaID == r.mu.replicaID {
-			// If this replica is a new holder of the lease, update the low water
-			// mark of the timestamp cache. Note that clock offset scenarios are
-			// handled via a stasis period inherent in the lease which is documented
-			// in on the Lease struct.
-			//
-			// The introduction of lease transfers implies that the previous lease
-			// may have been shortened and we are now applying a formally overlapping
-			// lease (since the old lease holder has promised not to serve any more
-			// requests, this is kosher). This means that we don't use the old
-			// lease's expiration but instead use the new lease's start to initialize
-			// the timestamp cache low water.
-			log.Infof(ctx, "%s: new range lease %s following %s [physicalTime=%s]",
-				r, lease, prevLease, r.store.Clock().PhysicalTime())
-			r.mu.tsCache.SetLowWater(lease.Start)
-
-			// Gossip the first range whenever its lease is acquired. We check to
-			// make sure the lease is active so that a trailing replica won't process
-			// an old lease request and attempt to gossip the first range.
-			if r.IsFirstRange() && r.mu.state.Lease.Covers(r.store.Clock().Now()) {
-				r.gossipFirstRangeLocked(ctx)
-			}
-		} else if r.mu.state.Lease.Covers(r.store.Clock().Now()) {
-			if err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
-				if raftGroup.Status().RaftState == raft.StateLeader {
-					// If this replica is the raft leader but it is not the new lease
-					// holder, then try to transfer the raft leadership to match the
-					// lease.
-					log.Infof(ctx, "range %v: replicaID %v transfer raft leadership to replicaID %v",
-						r.RangeID, r.mu.replicaID, r.mu.state.Lease.Replica.ReplicaID)
-					raftGroup.TransferLeader(uint64(r.mu.state.Lease.Replica.ReplicaID))
-				}
-				return nil
-			}); err != nil {
-				// An error here indicates that this Replica has been destroyed
-				// while lacking the necessary synchronization (or even worse, it
-				// fails spuriously - could be a storage error), and so we avoid
-				// sweeping that under the rug.
-				return roachpb.RequestLeaseResponse{}, nil, newReplicaCorruptionError(err)
-			}
-		}
-	}
 	trigger := &PostCommitTrigger{
+		lease: &lease,
 		maybeGossipSystemConfig: true,
 	}
 

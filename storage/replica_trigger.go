@@ -76,6 +76,7 @@ type PostCommitTrigger struct {
 	// merge is emitted on merge.
 	merge *postCommitMerge
 	desc  *roachpb.RangeDescriptor
+	lease *roachpb.Lease
 
 	gossipFirstRange        bool
 	maybeGossipSystemConfig bool
@@ -123,6 +124,11 @@ func updateTrigger(old, new *PostCommitTrigger) *PostCommitTrigger {
 			old.desc = new.desc
 		} else if new.desc != nil {
 			panic("more than one descriptor update")
+		}
+		if old.lease == nil {
+			old.lease = new.lease
+		} else if new.lease != nil {
+			panic("more than one lease update")
 		}
 
 		if new.gossipFirstRange {
