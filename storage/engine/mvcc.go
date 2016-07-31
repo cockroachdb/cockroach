@@ -45,7 +45,7 @@ const (
 
 var (
 	// MVCCKeyMax is a maximum mvcc-encoded key value which sorts after
-	// all other keys.
+	// all other keys.`
 	MVCCKeyMax = MakeMVCCMetadataKey(roachpb.KeyMax)
 	// NilKey is the nil MVCCKey.
 	NilKey = MVCCKey{}
@@ -1326,7 +1326,6 @@ func MVCCDeleteRange(
 	returnKeys bool,
 ) ([]roachpb.Key, error) {
 	var keys []roachpb.Key
-	num := int64(0)
 	buf := newPutBuffer()
 	iter := engine.NewIterator(true)
 	f := func(kv roachpb.KeyValue) (bool, error) {
@@ -1336,18 +1335,13 @@ func MVCCDeleteRange(
 		if returnKeys {
 			keys = append(keys, kv.Key)
 		}
-		num++
-		// We check num rather than len(keys) since returnKeys could be false.
-		if max != 0 && max >= num {
-			return true, nil
-		}
 		return false, nil
 	}
 
 	// In order to detect the potential write intent by another
 	// concurrent transaction with a newer timestamp, we need
 	// to use the max timestamp for scan.
-	_, err := MVCCIterate(ctx, engine, key, endKey, hlc.MaxTimestamp, true, txn, false, f)
+	_, err := MVCCBoundedIterate(ctx, engine, key, endKey, max, hlc.MaxTimestamp, true, txn, false, f)
 
 	iter.Close()
 	buf.release()
@@ -1424,8 +1418,8 @@ func getReverseScanMeta(iter Iterator, encEndKey MVCCKey, meta *enginepb.MVCCMet
 }
 
 // mvccScanInternal scans the key range [start,end) up to some maximum number
-// of results. Specify max=0 for unbounded scans. Specify reverse=true to scan
-// in descending instead of ascending order.
+// of results. Specify reverse=true to scan in descending instead of ascending
+// order.
 func mvccScanInternal(
 	ctx context.Context,
 	engine Reader,
@@ -1438,12 +1432,9 @@ func mvccScanInternal(
 	reverse bool,
 ) ([]roachpb.KeyValue, []roachpb.Intent, error) {
 	var res []roachpb.KeyValue
-	intents, err := MVCCIterate(ctx, engine, key, endKey, timestamp, consistent, txn, reverse,
+	intents, err := MVCCBoundedIterate(ctx, engine, key, endKey, max, timestamp, consistent, txn, reverse,
 		func(kv roachpb.KeyValue) (bool, error) {
 			res = append(res, kv)
-			if max != 0 && max == int64(len(res)) {
-				return true, nil
-			}
 			return false, nil
 		})
 
@@ -1454,7 +1445,7 @@ func mvccScanInternal(
 }
 
 // MVCCScan scans the key range [start,end) key up to some maximum number of
-// results in ascending order. Specify max=0 for unbounded scans.
+// results in ascending order.
 func MVCCScan(
 	ctx context.Context,
 	engine Reader,
@@ -1470,7 +1461,7 @@ func MVCCScan(
 }
 
 // MVCCReverseScan scans the key range [start,end) key up to some maximum number of
-// results in descending order. Specify max=0 for unbounded scans.
+// results in descending order.
 func MVCCReverseScan(
 	ctx context.Context,
 	engine Reader,
@@ -1486,9 +1477,10 @@ func MVCCReverseScan(
 }
 
 // MVCCIterate iterates over the key range [start,end). At each step of the
-// iteration, f() is invoked with the current key/value pair. If f returns true
-// (done) or an error, the iteration stops and the error is propagated. If the
-// reverse is flag set the iterator will be moved in reverse order.
+// iteration, f() is invoked with the current key/value pair. If f returns
+// true (done) or an error, the iteration stops and the error is propagated.
+// If the reverse is flag set the iterator will be moved in reverse order. It
+// can run for a max number of iterations.
 func MVCCIterate(ctx context.Context,
 	engine Reader,
 	startKey,
@@ -1499,6 +1491,25 @@ func MVCCIterate(ctx context.Context,
 	reverse bool,
 	f func(roachpb.KeyValue) (bool, error),
 ) ([]roachpb.Intent, error) {
+	return MVCCBoundedIterate(ctx, engine, startKey, endKey, math.MaxInt64, timestamp, consistent, txn, reverse, f)
+}
+
+// MVCCBoundedIterate same as MVCCIterate with a max bound on the number of
+// keys.
+func MVCCBoundedIterate(ctx context.Context,
+	engine Reader,
+	startKey,
+	endKey roachpb.Key,
+	max int64,
+	timestamp hlc.Timestamp,
+	consistent bool,
+	txn *roachpb.Transaction,
+	reverse bool,
+	f func(roachpb.KeyValue) (bool, error),
+) ([]roachpb.Intent, error) {
+	if max == 0 {
+		return nil, nil
+	}
 	if !consistent && txn != nil {
 		return nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
 	}
@@ -1561,7 +1572,7 @@ func MVCCIterate(ctx context.Context,
 	var wiErr error
 	var alloc bufalloc.ByteAllocator
 
-	for {
+	for count := int64(0); ; {
 		metaKey, err := getMeta(iter, encEndKey, &buf.meta)
 		if err != nil {
 			return nil, err
@@ -1587,6 +1598,10 @@ func MVCCIterate(ctx context.Context,
 				return nil, err
 			}
 			if done {
+				break
+			}
+			count++
+			if count == max {
 				break
 			}
 		}
@@ -1917,7 +1932,7 @@ func (b IterAndBuf) Cleanup() {
 // MVCCResolveWriteIntentRange commits or aborts (rolls back) the
 // range of write intents specified by start and end keys for a given
 // txn. ResolveWriteIntentRange will skip write intents of other
-// txns. Specify max=0 for unbounded resolves.
+// txns.
 func MVCCResolveWriteIntentRange(
 	ctx context.Context, engine ReadWriter, ms *enginepb.MVCCStats, intent roachpb.Intent, max int64,
 ) (int64, error) {
@@ -1930,7 +1945,7 @@ func MVCCResolveWriteIntentRange(
 // MVCCResolveWriteIntentRangeUsingIter commits or aborts (rolls back) the
 // range of write intents specified by start and end keys for a given
 // txn. ResolveWriteIntentRange will skip write intents of other
-// txns. Specify max=0 for unbounded resolves.
+// txns.
 func MVCCResolveWriteIntentRangeUsingIter(
 	ctx context.Context,
 	engine ReadWriter,
@@ -1947,7 +1962,7 @@ func MVCCResolveWriteIntentRangeUsingIter(
 	num := int64(0)
 	intent.EndKey = nil
 
-	for {
+	for num < max {
 		iterAndBuf.iter.Seek(nextKey)
 		if !iterAndBuf.iter.Valid() || !iterAndBuf.iter.unsafeKey().Less(encEndKey) {
 			// No more keys exists in the given range.
@@ -1969,9 +1984,6 @@ func MVCCResolveWriteIntentRangeUsingIter(
 			log.Warningf(context.TODO(), "failed to resolve intent for key %q: %v", key.Key, err)
 		} else {
 			num++
-			if max != 0 && max == num {
-				break
-			}
 		}
 
 		// nextKey is already a metadata key.
