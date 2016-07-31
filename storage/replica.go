@@ -2025,6 +2025,14 @@ func (r *Replica) processRaftCommand(
 			r.mu.Unlock()
 		}
 
+		if trigger.desc != nil {
+			if err := r.setDesc(trigger.desc); err != nil {
+				// Log the error. There's not much we can do because the commit may have already occurred at this point.
+				log.Fatalf(ctx, "%s: failed to update range descriptor to %+v: %s",
+					r, trigger.desc, err)
+			}
+		}
+
 		if trigger.gossipFirstRange {
 			// We need to run the gossip in an async task because gossiping requires
 			// the range lease and we'll deadlock if we try to acquire it while

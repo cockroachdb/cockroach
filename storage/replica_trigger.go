@@ -69,6 +69,7 @@ type PostCommitTrigger struct {
 	intents []intentsWithArg
 	// split contains a postCommitSplit trigger emitted on a split.
 	split *postCommitSplit
+	desc  *roachpb.RangeDescriptor
 
 	gossipFirstRange        bool
 	maybeGossipSystemConfig bool
@@ -106,6 +107,11 @@ func updateTrigger(old, new *PostCommitTrigger) *PostCommitTrigger {
 			old.split = new.split
 		} else if new.split != nil {
 			panic("more than one split trigger")
+		}
+		if old.desc == nil {
+			old.desc = new.desc
+		} else if new.desc != nil {
+			panic("more than one descriptor update")
 		}
 
 		if new.gossipFirstRange {
