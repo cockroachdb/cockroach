@@ -26,6 +26,7 @@ void protobuf_AddDesc_cockroach_2futil_2funresolved_5faddr_2eproto_impl() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
 #else
+void protobuf_AddDesc_cockroach_2futil_2funresolved_5faddr_2eproto() GOOGLE_ATTRIBUTE_COLD;
 void protobuf_AddDesc_cockroach_2futil_2funresolved_5faddr_2eproto() {
   static bool already_here = false;
   if (already_here) return;
@@ -52,16 +53,6 @@ struct StaticDescriptorInitializer_cockroach_2futil_2funresolved_5faddr_2eproto 
   }
 } static_descriptor_initializer_cockroach_2futil_2funresolved_5faddr_2eproto_;
 #endif
-
-namespace {
-
-static void MergeFromFail(int line) GOOGLE_ATTRIBUTE_COLD;
-static void MergeFromFail(int line) {
-  GOOGLE_CHECK(false) << __FILE__ << ":" << line;
-}
-
-}  // namespace
-
 
 // ===================================================================
 
@@ -276,7 +267,9 @@ void UnresolvedAddr::CheckTypeAndMergeFrom(
 
 void UnresolvedAddr::MergeFrom(const UnresolvedAddr& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.util.UnresolvedAddr)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (GOOGLE_PREDICT_FALSE(&from == this)) {
+    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  }
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_network_field()) {
       set_has_network_field();

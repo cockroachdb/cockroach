@@ -39,7 +39,7 @@ class UnresolvedAddr;
 
 // ===================================================================
 
-class UnresolvedAddr : public ::google::protobuf::MessageLite {
+class UnresolvedAddr : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.util.UnresolvedAddr) */ {
  public:
   UnresolvedAddr();
   virtual ~UnresolvedAddr();

@@ -54,7 +54,7 @@ const int IsolationType_ARRAYSIZE = IsolationType_MAX + 1;
 
 // ===================================================================
 
-class TxnMeta : public ::google::protobuf::MessageLite {
+class TxnMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.TxnMeta) */ {
  public:
   TxnMeta();
   virtual ~TxnMeta();
@@ -241,7 +241,7 @@ class TxnMeta : public ::google::protobuf::MessageLite {
 };
 // -------------------------------------------------------------------
 
-class MVCCMetadata : public ::google::protobuf::MessageLite {
+class MVCCMetadata : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.MVCCMetadata) */ {
  public:
   MVCCMetadata();
   virtual ~MVCCMetadata();
@@ -417,7 +417,7 @@ class MVCCMetadata : public ::google::protobuf::MessageLite {
 };
 // -------------------------------------------------------------------
 
-class MVCCStats : public ::google::protobuf::MessageLite {
+class MVCCStats : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.MVCCStats) */ {
  public:
   MVCCStats();
   virtual ~MVCCStats();
