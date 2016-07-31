@@ -58,27 +58,47 @@ type proposalResult struct {
 // holder, or a Replica determined by other conditions present in the specific
 // trigger.
 type PostCommitTrigger struct {
-	// intents stores any intents encountered but not conflicted with. They
-	// should be handed off to asynchronous intent processing so that an
-	// attempt to resolve them is made.
-	intents        []intentsWithArg
 	gcThreshold    *hlc.Timestamp
 	truncatedState *roachpb.RaftTruncatedState
 	raftLogSize    *int64
 	frozen         *bool
+
+	// intents stores any intents encountered but not conflicted with. They
+	// should be handed off to asynchronous intent processing so that an
+	// attempt to resolve them is made.
+	intents []intentsWithArg
 	// split contains a postCommitSplit trigger emitted on a split.
 	split *postCommitSplit
-	// whether to call r.maybeGossipSystemConfig after commit.
+
+	gossipFirstRange        bool
 	maybeGossipSystemConfig bool
+	maybeAddToSplitQueue    bool
+	addToReplicaGCQueue     bool
 }
 
 // updateTrigger takes a previous and new commit trigger and combines their
 // contents into an updated trigger, consuming both inputs. It will panic on
 // illegal combinations (such as being asked to combine two split triggers).
+//
+// TODO(tschottdorf): refactor, in particular shell out transitions of
+// `r.mu.state`.
 func updateTrigger(old, new *PostCommitTrigger) *PostCommitTrigger {
 	if old == nil {
 		old = new
 	} else if new != nil {
+		if new.gcThreshold != nil {
+			old.gcThreshold = new.gcThreshold
+		}
+		if new.truncatedState != nil {
+			old.truncatedState = new.truncatedState
+		}
+		if new.raftLogSize != nil {
+			old.raftLogSize = new.raftLogSize
+		}
+		if new.frozen != nil {
+			old.frozen = new.frozen
+		}
+
 		if new.intents != nil {
 			old.intents = append(old.intents, new.intents...)
 		}
@@ -86,6 +106,19 @@ func updateTrigger(old, new *PostCommitTrigger) *PostCommitTrigger {
 			old.split = new.split
 		} else if new.split != nil {
 			panic("more than one split trigger")
+		}
+
+		if new.gossipFirstRange {
+			old.gossipFirstRange = true
+		}
+		if new.maybeGossipSystemConfig {
+			old.maybeGossipSystemConfig = true
+		}
+		if new.maybeAddToSplitQueue {
+			old.maybeAddToSplitQueue = true
+		}
+		if new.addToReplicaGCQueue {
+			old.addToReplicaGCQueue = true
 		}
 	}
 	return old
