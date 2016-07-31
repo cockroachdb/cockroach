@@ -155,13 +155,11 @@ message DeleteResponse {
 }
 
 // A DeleteRangeRequest is the argument to the DeleteRange() method. It
-// specifies the range of keys to delete and a maximum number of key-value
-// pairs to delete (zero for unlimited).
+// specifies the range of keys to delete.
 message DeleteRangeRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // If 0, *all* entries between key (inclusive) and end_key
-  // (exclusive) are deleted. Must be >= 0.
-  optional int64 max_entries_to_delete = 2 [(gogoproto.nullable) = false];
+  reserved 2;
+  // return the keys that are deleted in the response.
   optional bool return_keys = 3 [(gogoproto.nullable) = false];
 }
 
@@ -169,7 +167,7 @@ message DeleteRangeRequest {
 // method.
 message DeleteRangeResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // Number of entries removed.
+  // All the deleted keys if return_keys is set.
   repeated bytes keys = 2 [(gogoproto.casttype) = "Key"];
 }
 
