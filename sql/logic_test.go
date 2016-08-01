@@ -696,7 +696,6 @@ func (t *logicTest) processTestFile(path string) error {
 			t.success(path)
 
 		case "halt", "hash-threshold":
-			break
 
 		case "user":
 			if len(fields) < 2 {

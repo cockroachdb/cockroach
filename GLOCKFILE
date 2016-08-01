@@ -19,6 +19,7 @@ cmd github.com/wadey/gocovmerge
 cmd golang.org/x/tools/cmd/goimports
 cmd golang.org/x/tools/cmd/stringer
 cmd honnef.co/go/simple/cmd/gosimple
+cmd honnef.co/go/staticcheck/cmd/staticcheck
 cmd honnef.co/go/unused/cmd/unused
 github.com/Microsoft/go-winio ce2922f643c8fd76b46cadc7f404a06282678b34
 github.com/Sirupsen/logrus a283a10442df8dc09befd873fab202bf8a253d6a
@@ -116,4 +117,5 @@ gopkg.in/inf.v0 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de
 honnef.co/go/lint a730e73f0085f274d67b586a1d587fd6e42e6708
 honnef.co/go/simple 56d5bf64050e1bf7f8f7b628b62c96821a692937
+honnef.co/go/staticcheck 4e4406f161a1bf5c12e243190843989e462fa07b
 honnef.co/go/unused 9057d575b3bb51f1e1251088a8b8196f4226f936
