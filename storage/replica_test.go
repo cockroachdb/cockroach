@@ -5303,18 +5303,10 @@ func TestReplicaCancelRaft(t *testing.T) {
 func verifyChecksum(t *testing.T, rng *Replica) []byte {
 	ctx := context.Background()
 	id := uuid.MakeV4()
-	if _, err := rng.ComputeChecksum(
-		ctx,
-		nil,
-		nil,
-		roachpb.Header{},
-		roachpb.ComputeChecksumRequest{
-			ChecksumID: id,
-			Version:    replicaChecksumVersion,
-		},
-	); err != nil {
-		t.Fatal(err)
-	}
+	rng.computeChecksumTrigger(ctx, roachpb.ComputeChecksumRequest{
+		ChecksumID: id,
+		Version:    replicaChecksumVersion,
+	})
 	c, ok := rng.getChecksum(ctx, id)
 	if !ok {
 		t.Fatalf("checksum for id = %v not found", id)
@@ -5338,6 +5330,8 @@ func verifyChecksum(t *testing.T, rng *Replica) []byte {
 	return c.checksum
 }
 
+// TODO(tschottdorf): this test is really frail and unidiomatic. Consider
+// some better high-level check of this functionality.
 func TestComputeVerifyChecksum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
@@ -5419,18 +5413,12 @@ func TestComputeVerifyChecksum(t *testing.T) {
 
 	// Verify that a bad version/checksum sent will result in an error.
 	id1 := uuid.MakeV4()
-	if _, err := rng.ComputeChecksum(
+	rng.computeChecksumTrigger(
 		context.Background(),
-		nil,
-		nil,
-		roachpb.Header{},
 		roachpb.ComputeChecksumRequest{
 			ChecksumID: id1,
 			Version:    replicaChecksumVersion,
-		},
-	); err != nil {
-		t.Fatal(err)
-	}
+		})
 	// Set a callback for checksum mismatch panics.
 	badChecksumChan := make(chan []ReplicaSnapshotDiff, 1)
 	rng.store.ctx.TestingKnobs.BadChecksumPanic = func(diff []ReplicaSnapshotDiff) {
@@ -5506,7 +5494,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 	id2 := uuid.MakeV4()
 	// Sending a ComputeChecksum with a bad version doesn't result in a
 	// computed checksum.
-	if _, err := rng.ComputeChecksum(
+	if _, _, err := rng.ComputeChecksum(
 		context.Background(),
 		nil,
 		nil,
