@@ -330,8 +330,8 @@ func (n *Node) start(
 			if err != nil {
 				return err
 			}
-			log.Infof(context.TODO(), "**** cluster %s has been created", clusterID)
-			log.Infof(context.TODO(), "**** add additional nodes by specifying --join=%s", addr)
+			log.Infof(ctx, "**** cluster %s has been created", clusterID)
+			log.Infof(ctx, "**** add additional nodes by specifying --join=%s", addr)
 			// After bootstrapping, try again to initialize the stores.
 			if err := n.initStores(ctx, engines, n.stopper); err != nil {
 				return err
@@ -400,7 +400,7 @@ func (n *Node) initStores(
 		// adding the store to the bootstraps list.
 		if err := s.Start(stopper); err != nil {
 			if _, ok := err.(*storage.NotBootstrappedError); ok {
-				log.Infof(context.TODO(), "store %s not bootstrapped", s)
+				log.Infof(ctx, "store %s not bootstrapped", s)
 				bootstraps = append(bootstraps, s)
 				continue
 			}
@@ -413,7 +413,7 @@ func (n *Node) initStores(
 		if err != nil {
 			return errors.Errorf("could not query store capacity: %s", err)
 		}
-		log.Infof(context.TODO(), "initialized store %s: %+v", s, capacity)
+		log.Infof(ctx, "initialized store %s: %+v", s, capacity)
 		n.addStore(s)
 	}
 
@@ -791,7 +791,7 @@ func (n *Node) Batch(
 			if sp, err = tracing.JoinOrNewSnowball(opName, args.Trace, func(rawSpan basictracer.RawSpan) {
 				encSp, err := tracing.EncodeRawSpan(&rawSpan, nil)
 				if err != nil {
-					log.Warning(context.TODO(), err)
+					log.Warning(ctx, err)
 				}
 				br.CollectedSpans = append(br.CollectedSpans, encSp)
 			}); err != nil {

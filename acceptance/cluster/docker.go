@@ -325,13 +325,13 @@ func (cli resilientDockerClient) ContainerCreate(
 ) (types.ContainerCreateResponse, error) {
 	response, err := cli.APIClient.ContainerCreate(ctx, config, hostConfig, networkingConfig, containerName)
 	if err != nil && strings.Contains(err.Error(), "already in use") {
-		log.Infof(context.TODO(), "unable to create container %s: %v", containerName, err)
+		log.Infof(ctx, "unable to create container %s: %v", containerName, err)
 		containers, cerr := cli.ContainerList(ctx, types.ContainerListOptions{
 			All:   true,
 			Limit: -1, // no limit, see docker/engine-api/client/container_list.go
 		})
 		if cerr != nil {
-			log.Infof(context.TODO(), "unable to list containers: %v", cerr)
+			log.Infof(ctx, "unable to list containers: %v", cerr)
 			return types.ContainerCreateResponse{}, err
 		}
 		for _, c := range containers {
@@ -341,19 +341,19 @@ func (cli resilientDockerClient) ContainerCreate(
 				if n != containerName {
 					continue
 				}
-				log.Infof(context.TODO(), "trying to remove %s", c.ID)
+				log.Infof(ctx, "trying to remove %s", c.ID)
 				options := types.ContainerRemoveOptions{
 					RemoveVolumes: true,
 					Force:         true,
 				}
 				if rerr := cli.ContainerRemove(ctx, c.ID, options); rerr != nil {
-					log.Infof(context.TODO(), "unable to remove container: %v", rerr)
+					log.Infof(ctx, "unable to remove container: %v", rerr)
 					return types.ContainerCreateResponse{}, err
 				}
 				return cli.ContainerCreate(ctx, config, hostConfig, networkingConfig, containerName)
 			}
 		}
-		log.Warningf(context.TODO(), "error indicated existing container %s, "+
+		log.Warningf(ctx, "error indicated existing container %s, "+
 			"but none found:\nerror: %s\ncontainers: %+v",
 			containerName, err, containers)
 		// We likely raced with a previous (late) removal of the container.
@@ -415,7 +415,7 @@ func retry(
 				continue
 			} else if i > 0 && retryErrorsRE != matchNone {
 				if regexp.MustCompile(retryErrorsRE).MatchString(err.Error()) {
-					log.Infof(context.TODO(), "%s: swallowing expected error after retry: %v",
+					log.Infof(ctx, "%s: swallowing expected error after retry: %v",
 						name, err)
 					return nil
 				}
