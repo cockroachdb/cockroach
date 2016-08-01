@@ -2526,27 +2526,11 @@ func (r *Replica) splitTrigger(
 	rightDeltaMS := bothDeltaMS
 	rightDeltaMS.Subtract(leftDeltaMS)
 
-	// TODO(tschottdorf): We want to let the usual MVCCStats-delta
-	// machinery update our stats for the left-hand side. But there is no
-	// way to pass up an MVCCStats object that will clear out the
-	// ContainsEstimates flag. We should introduce one, but the migration
-	// makes this worth a separate effort (ContainsEstimates would need to
-	// have three possible values, 'UNCHANGED', 'NO', and 'YES').
-	{
-		origCopy := origBothMS
-		origCopy.ContainsEstimates = false
-		if err := setMVCCStats(batch, r.RangeID, origCopy); err != nil {
-			return enginepb.MVCCStats{}, nil, errors.Wrap(err, "unable to write MVCC stats")
-		}
-		r.mu.Lock()
-		r.mu.state.Stats.ContainsEstimates = false
-		r.mu.Unlock()
-	}
-
 	trigger := &PostCommitTrigger{
 		split: &postCommitSplit{
-			SplitTrigger: *split,
-			RightDeltaMS: rightDeltaMS,
+			SplitTrigger:           *split,
+			RightDeltaMS:           rightDeltaMS,
+			ResetContainsEstimates: true,
 		},
 	}
 	return leftDeltaMS, trigger, nil
