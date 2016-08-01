@@ -2064,6 +2064,10 @@ func (r *Replica) processRaftCommand(
 			r.computeChecksumTrigger(context.TODO(), *trigger.computeChecksum)
 		}
 
+		if trigger.verifyChecksum != nil {
+			r.verifyChecksumTrigger(context.TODO(), *trigger.verifyChecksum)
+		}
+
 		// Assert that the on-disk state doesn't diverge from the in-memory
 		// state as a result of the trigger.
 		r.assertState(r.store.Engine())
