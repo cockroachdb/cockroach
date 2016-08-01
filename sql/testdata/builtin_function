@@ -189,6 +189,9 @@ SELECT repeat('Pg', -1) || 'empty'
 ----
 empty
 
+statement error pq: repeat: runtime error: makeslice: len out of range
+SELECT repeat('s', 9223372036854775807)
+
 query I
 SELECT ascii('x')
 ----

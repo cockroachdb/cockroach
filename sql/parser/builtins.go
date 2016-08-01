@@ -216,12 +216,20 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      ArgTypes{TypeString, TypeInt},
 			ReturnType: TypeString,
-			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+			fn: func(_ *EvalContext, args DTuple) (_ Datum, err error) {
 				s := string(*args[0].(*DString))
 				count := int(*args[1].(*DInt))
 				if count < 0 {
 					count = 0
 				}
+				// Repeat can overflow if len(s) * count is very large. The computation
+				// for the limit about what make can allocate is not trivial, so it's most
+				// accurate to detect it with a recover.
+				defer func() {
+					if r := recover(); r != nil {
+						err = fmt.Errorf("%s", r)
+					}
+				}()
 				return NewDString(strings.Repeat(s, count)), nil
 			},
 		},
