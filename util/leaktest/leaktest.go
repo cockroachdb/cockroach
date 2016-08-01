@@ -47,9 +47,6 @@ func interestingGoroutines() (gs []string) {
 			// above. See https://github.com/grpc/grpc-go/pull/796 for a
 			// possible solution to the cancellation problem in GRPC.
 			ignorestdlibleaks && strings.Contains(stack, "google.golang.org/grpc/credentials.(*tlsCreds).ClientHandshake") ||
-			// TODO(tamird): remove this when https://github.com/grpc/grpc-
-			// go/issues/804 is fixed.
-			strings.Contains(stack, "google.golang.org/grpc/transport.(*http2Client).controller") ||
 			// Go1.7 added a goroutine to network dialing that doesn't shut down
 			// quickly.
 			strings.Contains(stack, "created by net.(*netFD).connect") ||
