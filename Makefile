@@ -91,32 +91,12 @@ install:
 # eg: to statically build the sql tests, run:
 #   make STATIC=1 testbuild PKG=./sql
 .PHONY: testbuild
-testbuild: GOFLAGS += -c
 testbuild:
-	for p in $(shell $(GO) list -tags '$(TAGS)' $(PKG)); do \
-	  NAME=$$(basename "$$p"); \
-	  OUT="$$NAME.test"; \
-	  DIR=$$($(GO) list -f {{.Dir}} -tags '$(TAGS)' $$p); \
-	  $(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -o "$$DIR"/"$$OUT" -ldflags '$(LDFLAGS)' "$$p" $(TESTFLAGS) || exit 1; \
-	done
-
-# Build all tests into DIR and strips each.
-# DIR is required.
-.PHONY: testbuildall
-testbuildall: GOFLAGS += -c
-testbuildall:
-ifndef DIR
-	$(error DIR is undefined)
-endif
-	for p in $(shell $(GO) list $(PKG)); do \
-	  NAME=$$(basename "$$p"); \
-	  PKGDIR=$$($(GO) list -f {{.ImportPath}} $$p); \
-	  OUTPUT_FILE="$(DIR)/$${PKGDIR}/$${NAME}.test"; \
-	  $(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -o $${OUTPUT_FILE} -ldflags '$(LDFLAGS)' "$$p" $(TESTFLAGS) || exit 1; \
-	  if [ -s $${OUTPUT_FILE} ]; then strip -S $${OUTPUT_FILE}; fi; \
-	  if [ $${NAME} = "sql" ]; then \
-	     cp -r sql/testdata sql/partestdata "$(DIR)/$${PKGDIR}/" || exit 1; \
-	  fi \
+	for golist in $(shell $(GO) list -f '{{.Name}}?{{.ImportPath}}?{{.Dir}}' -tags '$(TAGS)' $(PKG)); do \
+	  name=$$(echo $$golist | cut -d'?' -f1); \
+	  import_path=$$(echo $$golist | cut -d'?' -f2); \
+	  dir=$$(echo $$golist | cut -d'?' -f3); \
+	  $(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -c -o "$$dir/$$name.test" -ldflags '$(LDFLAGS)' "$$import_path" $(TESTFLAGS) || exit 1; \
 	done
 
 # Similar to "testrace", we want to cache the build before running the
