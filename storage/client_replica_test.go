@@ -189,7 +189,6 @@ func TestRejectFutureCommand(t *testing.T) {
 //    again at a new epoch timestamp T+200, which will finally succeed.
 func TestTxnPutOutOfOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(tschottdorf): temporarily disabled")
 
 	key := "key"
 	// Set up a filter to so that the get operation at Step 3 will return an error.
