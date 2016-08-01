@@ -375,7 +375,6 @@ func (r *Replica) GetSnapshot(ctx context.Context) (raftpb.Snapshot, error) {
 			return snap, err
 		}
 	}
-	panic("unreachable") // due to infinite retries
 }
 
 func snapshot(
