@@ -130,6 +130,11 @@ statement error SUBSTR: negative substring length -1 not allowed
 SELECT SUBSTR('12345', 2, -1)
 
 query T
+SELECT SUBSTR('string', 4827075662841736053, 5123273972570225659) || 'empty'
+----
+empty
+
+query T
 SELECT SUBSTRING('12345' for 3)
 ----
 123
