@@ -38,9 +38,9 @@ func BenchmarkReplicaSnapshot(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	const snapSize = 1 << 25 // 32 MiB
-
-	fillTestRange(b, rep, snapSize)
+	snapSize := rep.GetMaxBytes()
+	fillTestRange(b, rep, int(snapSize))
+	b.SetBytes(snapSize)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
