@@ -42,6 +42,8 @@ type postCommitSplit struct {
 	// The on-disk state of the right-hand side is already correct, but the
 	// Store must learn about this delta to update its counters appropriately.
 	RightDeltaMS enginepb.MVCCStats
+	// See TODO in the one use of this field.
+	ResetContainsEstimates bool
 }
 
 type postCommitMerge struct {
@@ -284,6 +286,24 @@ func (r *Replica) handleTrigger(
 	trigger PostCommitTrigger,
 ) {
 	if trigger.split != nil {
+
+		// TODO(tschottdorf): We want to let the usual MVCCStats-delta
+		// machinery update our stats for the left-hand side. But there is no
+		// way to pass up an MVCCStats object that will clear out the
+		// ContainsEstimates flag. We should introduce one, but the migration
+		// makes this worth a separate effort (ContainsEstimates would need to
+		// have three possible values, 'UNCHANGED', 'NO', and 'YES').
+		// Until then, we're left with this rather crude hack.
+		{
+			r.mu.Lock()
+			r.mu.state.Stats.ContainsEstimates = false
+			stats := r.mu.state.Stats
+			r.mu.Unlock()
+			if err := setMVCCStats(r.store.Engine(), r.RangeID, stats); err != nil {
+				log.Fatal(context.Background(), errors.Wrap(err, "unable to write MVCC stats"))
+			}
+		}
+
 		splitTriggerPostCommit(
 			context.Background(),
 			trigger.split.RightDeltaMS,
