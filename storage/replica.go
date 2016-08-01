@@ -2702,6 +2702,8 @@ func newReplicaCorruptionError(errs ...error) *roachpb.ReplicaCorruptionError {
 // r.store.metrics. Errors which happen between committing a batch and sending
 // a stats delta from the store are going to be particularly tricky and the
 // best bet is to not have any of those.
+// @bdarnell remarks: Corruption errors should be rare so we may want the store
+// to just recompute its stats in the background when one occurs.
 func (r *Replica) maybeSetCorrupt(pErr *roachpb.Error) *roachpb.Error {
 	if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
 		log.Errorf(context.TODO(), "%s: stalling replica due to: %s", r, cErr.ErrorMsg)
