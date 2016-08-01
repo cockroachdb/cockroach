@@ -2112,6 +2112,9 @@ func (r *Replica) applyRaftCommand(
 		r.mu.state.LeaseAppliedIndex = leaseIndex
 		r.mu.state.Stats = newMS
 		if forcedError != nil {
+			// We only assert when there's a forced error since it might be
+			// a little expensive to do on *every* Raft command, seeing that
+			// disk i/o could be involved.
 			r.assertStateLocked(r.store.Engine())
 		}
 		r.mu.Unlock()
