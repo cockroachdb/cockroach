@@ -57,19 +57,18 @@ message SnapshotRequest {
     optional bytes snapshot_id = 3 [(gogoproto.customtype = "github.com/cockroachdb/cockroach/util/uuid.UUID")];
     optional raftpb.Message raft_message = 4;
   }
-  message KeyValue {
-    optional bytes key = 1;
-    optional bytes value = 2;
-    optional util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
-  }
 
   optional Header header = 1;
 
-  repeated KeyValue KV = 2 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "KV"];
+  // A RocksDB BatchRepr. Multiple kv_batches may be sent across multiple request messages.
+  optional bytes kv_batch = 2 [(gogoproto.customname) = "KVBatch"];
+
   // These are really raftpb.Entry, but we model them as raw bytes to avoid
-  // roundtripping through memory.
+  // roundtripping through memory. They are separate from the kv_batch to
+  // allow flexibility in log implementations.
   repeated bytes log_entries = 3;
+
+  optional bool final = 4 [(gogoproto.nullable) = false]
 }
 
 message SnapshotResponse {
@@ -80,7 +79,6 @@ message SnapshotResponse {
   }
   optional Status status = 1 [(gogoproto.nullable) = false];
   optional string message = 2 [(gogoproto.nullable) = false];
-  optional bool final = 3 [(gogoproto.nullable) = false]
 }
 
 service MultiRaft {
@@ -97,11 +95,13 @@ reject the snapshot permanently (for example, if it has a conflicting
 range) by sending a response with `status=ERROR` and closing the
 stream, or stall the snapshot temporarily (for example, if it is
 currently processing too many other snapshots) by doing nothing and
-keeping the stream open.
+keeping the stream open. The recipient may make this decision either
+using the reservation system or by a separate store-wide counter of
+pending snapshots.
 
 When the snapshot has been accepted, the sender sends one or more
-additional `SnapshotRequests`, each containing KV pairs and/or log
-entries (no log entries are sent before the last KV pair). The last
+additional `SnapshotRequests`, each containing KV data and/or log
+entries (no log entries are sent before the last KV batch). The last
 request will have the `final` flag set. After receiving a `final`
 message, the recipient will apply the snapshot. When it is done, it
 sends a second response, with `status=APPLIED` or `status=ERROR` and
@@ -121,11 +121,11 @@ some indirection is necessary.
 snapshot. The UUID is returned to raft as the contents of the snapshot
 (along with the metadata required by raft). The UUID and RocksDB
 snapshot are saved in attributes of the `Replica`. In
-`sendRaftMessage`, we inspect and all outgoing `MsgSnap` messages. If
+`sendRaftMessage`, we inspect all outgoing `MsgSnap` messages. If
 it doesn't match our saved UUID, we discard the message (this
 shouldn't happen). If it matches, we begin to send SnapshotRequests as
 described above; the `MsgSnap` is held to be sent in the snapshot's
-`Footer`.
+`Header`.
 
 ## Recipient implementation
 
@@ -135,11 +135,11 @@ snapshots will continue to apply the snapshot as one unit.
 
 ### Phase 1
 
-The recipient will accumulate all `SnapshotRequests` in memory, keyed
-by the UUID from the header. It sends the header's `MsgSnap` into
-raft, and if `raft.Ready` returns a snapshot to be applied with the
-given UUID (this is not guaranteed), the buffered snapshot will be
-applied.
+The recipient will accumulate all `SnapshotRequests` in memory, into a
+rocksdb `Batch`, keyed by the UUID from the header. It sends the
+header's `MsgSnap` into raft, and if `raft.Ready` returns a snapshot
+to be applied with the given UUID (this is not guaranteed), the
+buffered snapshot will be committed.
 
 ### Phase 2
 
