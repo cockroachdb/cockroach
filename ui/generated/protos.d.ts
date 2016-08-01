@@ -201,6 +201,7 @@ export interface roachpbBuilder {
 	decode64(buffer: string) : roachpbMessage;
 	Attributes: roachpb.AttributesBuilder;
 	ReplicaDescriptor: roachpb.ReplicaDescriptorBuilder;
+	ReplicaIdent: roachpb.ReplicaIdentBuilder;
 	RangeDescriptor: roachpb.RangeDescriptorBuilder;
 	StoreCapacity: roachpb.StoreCapacityBuilder;
 	NodeDescriptor: roachpb.NodeDescriptorBuilder;
@@ -313,6 +314,51 @@ export interface ReplicaDescriptorBuilder {
 	decode(buffer: ArrayBuffer) : ReplicaDescriptorMessage;
 	decode(buffer: ByteBuffer) : ReplicaDescriptorMessage;
 	decode64(buffer: string) : ReplicaDescriptorMessage;
+	
+}
+
+}
+
+
+declare module cockroach.roachpb {
+
+	export interface ReplicaIdent {
+
+		
+
+range_id?: Long;
+		
+
+getRangeId?() : Long;
+		setRangeId?(rangeId : Long): void;
+		
+
+
+
+replica?: ReplicaDescriptor;
+		
+
+getReplica?() : ReplicaDescriptor;
+		setReplica?(replica : ReplicaDescriptor): void;
+		
+
+
+
+}
+
+	export interface ReplicaIdentMessage extends ReplicaIdent {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ReplicaIdentBuilder {
+	new(data?: ReplicaIdent): ReplicaIdentMessage;
+	decode(buffer: ArrayBuffer) : ReplicaIdentMessage;
+	decode(buffer: ByteBuffer) : ReplicaIdentMessage;
+	decode64(buffer: string) : ReplicaIdentMessage;
 	
 }
 

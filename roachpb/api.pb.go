@@ -125,6 +125,7 @@
 		RaftSnapshotData
 		Attributes
 		ReplicaDescriptor
+		ReplicaIdent
 		RangeDescriptor
 		StoreCapacity
 		NodeDescriptor
