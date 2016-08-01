@@ -39,7 +39,7 @@ func BenchmarkReplicaSnapshot(b *testing.B) {
 	}
 
 	snapSize := rep.GetMaxBytes()
-	fillTestRange(b, rep, int(snapSize))
+	fillTestRange(b, rep, snapSize)
 	b.SetBytes(snapSize)
 
 	b.ResetTimer()

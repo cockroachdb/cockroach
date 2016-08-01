@@ -35,9 +35,9 @@ const keySize = 1 << 7   // 128 B
 const valSize = 1 << 10  // 1 KiB
 const snapSize = 1 << 25 // 32 MiB
 
-func fillTestRange(t testing.TB, rep *Replica, size int) {
+func fillTestRange(t testing.TB, rep *Replica, size int64) {
 	src := rand.New(rand.NewSource(0))
-	for i := 0; i < snapSize/(keySize+valSize); i++ {
+	for i := int64(0); i < size/int64(keySize+valSize); i++ {
 		key := keys.MakeRowSentinelKey(randutil.RandBytes(src, keySize))
 		val := randutil.RandBytes(src, valSize)
 		pArgs := putArgs(key, val)
@@ -46,6 +46,12 @@ func fillTestRange(t testing.TB, rep *Replica, size int) {
 		}, &pArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
+	}
+	rep.mu.Lock()
+	after := rep.mu.state.Stats.Total()
+	rep.mu.Unlock()
+	if after < size {
+		t.Fatalf("range not full after filling: wrote %d, but range at %d", size, after)
 	}
 }
 
