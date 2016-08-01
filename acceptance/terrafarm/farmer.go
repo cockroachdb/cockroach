@@ -273,23 +273,29 @@ func (f *Farmer) WaitReady(d time.Duration) error {
 // restarts or node deaths occurred). Tests can call this periodically to
 // ascertain cluster health.
 // TODO(tschottdorf): unimplemented when nodes are expected down.
+// TODO(cuongdo): doesn't handle load generators (photos, block_writer)
 func (f *Farmer) Assert(t *testing.T) {
 	for _, item := range []struct {
 		typ   string
 		hosts []string
 	}{
 		{"cockroach", f.Nodes()},
-		{"block_writer", f.Writers()},
 	} {
-		for i, host := range item.hosts {
-			out, _, err := f.execSupervisor(host, "status "+item.typ)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !strings.Contains(out, "RUNNING") {
-				t.Fatalf("%s %d (%s) is down:\n%s", item.typ, i, host, out)
-			}
+		for _, host := range item.hosts {
+			f.AssertState(t, host, item.typ, "RUNNING")
 		}
+	}
+}
+
+// AssertState verifies that on the specified host, the given process (managed
+// by supervisord) is in the expected state.
+func (f *Farmer) AssertState(t *testing.T, host, proc, expState string) {
+	out, _, err := f.execSupervisor(host, "status "+proc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, expState) {
+		t.Fatalf("%s (%s) is not in expected state %s:\n%s", proc, host, expState, out)
 	}
 }
 
