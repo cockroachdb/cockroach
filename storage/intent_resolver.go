@@ -18,7 +18,6 @@
 package storage
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -374,7 +373,7 @@ func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
 	// We're doing async stuff below; those need new traces.
 	ctx, cleanup := tracing.EnsureContext(ctx, ir.store.Tracer())
 	defer cleanup()
-	log.Trace(ctx, fmt.Sprintf("resolving intents [wait=%t]", wait))
+	log.Tracef(ctx, "resolving intents [wait=%t]", wait)
 
 	var reqsRemote []roachpb.Request
 	baLocal := roachpb.BatchRequest{}

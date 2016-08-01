@@ -352,7 +352,7 @@ func (r *Replica) GetSnapshot(ctx context.Context) (raftpb.Snapshot, error) {
 		Closer:         r.store.Stopper().ShouldQuiesce(),
 	}
 	for retry := retry.Start(retryOptions); retry.Next(); {
-		log.Trace(ctx, fmt.Sprintf("snapshot retry loop pass %d", retry.CurrentAttempt()))
+		log.Tracef(ctx, "snapshot retry loop pass %d", retry.CurrentAttempt())
 		r.mu.Lock()
 		snap, err := r.SnapshotWithContext(ctx)
 		snapshotChan := r.mu.snapshotChan
