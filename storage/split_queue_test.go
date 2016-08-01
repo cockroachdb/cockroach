@@ -38,8 +38,8 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	defer tc.Stop()
 
 	// Set zone configs.
-	config.TestingSetZoneConfig(2000, &config.ZoneConfig{RangeMaxBytes: 32 << 20})
-	config.TestingSetZoneConfig(2002, &config.ZoneConfig{RangeMaxBytes: 32 << 20})
+	config.TestingSetZoneConfig(2000, config.ZoneConfig{RangeMaxBytes: 32 << 20})
+	config.TestingSetZoneConfig(2002, config.ZoneConfig{RangeMaxBytes: 32 << 20})
 
 	// Despite faking the zone configs, we still need to have a gossip entry.
 	if err := tc.gossip.AddInfoProto(gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {

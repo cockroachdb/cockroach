@@ -76,40 +76,37 @@ func queryZones(conn *sqlConn) (map[sqlbase.ID]config.ZoneConfig, error) {
 	return zones, nil
 }
 
-func queryZone(conn *sqlConn, id sqlbase.ID) (*config.ZoneConfig, error) {
+func queryZone(conn *sqlConn, id sqlbase.ID) (config.ZoneConfig, bool, error) {
 	rows, err := makeQuery(`SELECT config FROM system.zones WHERE id = $1`, id)(conn)
 	if err != nil {
-		return nil, err
+		return config.ZoneConfig{}, false, err
 	}
 	defer func() { _ = rows.Close() }()
 
 	if len(rows.Columns()) != 1 {
-		return nil, fmt.Errorf("unexpected result columns: %d", len(rows.Columns()))
+		return config.ZoneConfig{}, false, fmt.Errorf("unexpected result columns: %d", len(rows.Columns()))
 	}
 
 	vals := make([]driver.Value, 1)
 	if err := rows.Next(vals); err != nil {
 		if err == io.EOF {
-			return nil, nil
+			return config.ZoneConfig{}, false, nil
 		}
-		return nil, err
+		return config.ZoneConfig{}, false, err
 	}
 
-	zone := &config.ZoneConfig{}
-	if err := unmarshalProto(vals[0], zone); err != nil {
-		return nil, err
-	}
-	return zone, nil
+	var zone config.ZoneConfig
+	return zone, true, unmarshalProto(vals[0], &zone)
 }
 
-func queryZonePath(conn *sqlConn, path []sqlbase.ID) (sqlbase.ID, *config.ZoneConfig, error) {
+func queryZonePath(conn *sqlConn, path []sqlbase.ID) (sqlbase.ID, config.ZoneConfig, error) {
 	for i := len(path) - 1; i >= 0; i-- {
-		zone, err := queryZone(conn, path[i])
-		if err != nil || zone != nil {
+		zone, found, err := queryZone(conn, path[i])
+		if err != nil || found {
 			return path[i], zone, err
 		}
 	}
-	return 0, nil, nil
+	return 0, config.ZoneConfig{}, nil
 }
 
 func queryDescriptors(conn *sqlConn) (map[sqlbase.ID]*sqlbase.Descriptor, error) {
@@ -477,7 +474,7 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("error reading zone config: %s", err)
 	}
-	if err := yaml.Unmarshal(conf, zone); err != nil {
+	if err := yaml.Unmarshal(conf, &zone); err != nil {
 		return fmt.Errorf("unable to parse zoneConfig file: %s", err)
 	}
 	if zone.ReplicaAttrs == nil {
@@ -488,7 +485,7 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	buf, err := protoutil.Marshal(zone)
+	buf, err := protoutil.Marshal(&zone)
 	if err != nil {
 		return fmt.Errorf("unable to parse zone config file %q: %s", args[1], err)
 	}

@@ -370,7 +370,7 @@ func TestClientGetAndPutProto(t *testing.T) {
 	defer s.Stopper().Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
-	zoneConfig := &config.ZoneConfig{
+	zoneConfig := config.ZoneConfig{
 		ReplicaAttrs: []roachpb.Attributes{
 			{Attrs: []string{"dc1", "mem"}},
 			{Attrs: []string{"dc2", "mem"}},
@@ -380,15 +380,15 @@ func TestClientGetAndPutProto(t *testing.T) {
 	}
 
 	key := roachpb.Key(testUser + "/zone-config")
-	if err := db.Put(key, zoneConfig); err != nil {
+	if err := db.Put(key, &zoneConfig); err != nil {
 		t.Fatalf("unable to put proto: %s", err)
 	}
 
-	readZoneConfig := &config.ZoneConfig{}
-	if err := db.GetProto(key, readZoneConfig); err != nil {
+	var readZoneConfig config.ZoneConfig
+	if err := db.GetProto(key, &readZoneConfig); err != nil {
 		t.Fatalf("unable to get proto: %s", err)
 	}
-	if !proto.Equal(zoneConfig, readZoneConfig) {
+	if !proto.Equal(&zoneConfig, &readZoneConfig) {
 		t.Errorf("expected %+v, but found %+v", zoneConfig, readZoneConfig)
 	}
 }
