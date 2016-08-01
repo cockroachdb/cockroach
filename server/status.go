@@ -480,14 +480,14 @@ func (s *statusServer) handleStacks(w http.ResponseWriter, r *http.Request, ps h
 }
 
 // Nodes returns all node statuses.
-func (s *statusServer) Nodes(_ context.Context, req *serverpb.NodesRequest) (*serverpb.NodesResponse, error) {
+func (s *statusServer) Nodes(ctx context.Context, req *serverpb.NodesRequest) (*serverpb.NodesResponse, error) {
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
 	b := inconsistentBatch()
 	b.Scan(startKey, endKey)
 	if err := s.db.Run(b); err != nil {
-		log.Error(context.TODO(), err)
+		log.Error(ctx, err)
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
 	rows := b.Results[0].Rows
@@ -497,7 +497,7 @@ func (s *statusServer) Nodes(_ context.Context, req *serverpb.NodesRequest) (*se
 	}
 	for i, row := range rows {
 		if err := row.ValueProto(&resp.Nodes[i]); err != nil {
-			log.Error(context.TODO(), err)
+			log.Error(ctx, err)
 			return nil, grpc.Errorf(codes.Internal, err.Error())
 		}
 	}
@@ -515,14 +515,14 @@ func (s *statusServer) Node(ctx context.Context, req *serverpb.NodeRequest) (*st
 	b := inconsistentBatch()
 	b.Get(key)
 	if err := s.db.Run(b); err != nil {
-		log.Error(context.TODO(), err)
+		log.Error(ctx, err)
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
 
 	var nodeStatus status.NodeStatus
 	if err := b.Results[0].Rows[0].ValueProto(&nodeStatus); err != nil {
 		err = errors.Errorf("could not unmarshal NodeStatus from %s: %s", key, err)
-		log.Error(context.TODO(), err)
+		log.Error(ctx, err)
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
 	return &nodeStatus, nil
@@ -570,7 +570,7 @@ func (s *statusServer) RaftDebug(ctx context.Context, _ *serverpb.RaftDebugReque
 		nodeID := node.Desc.NodeID
 		ranges, err := s.Ranges(ctx, &serverpb.RangesRequest{NodeId: nodeID.String()})
 		if err != nil {
-			log.Infof(context.TODO(), "Failed to get ranges from %d: %q", node.Desc.NodeID, err)
+			log.Infof(ctx, "Failed to get ranges from %d: %q", node.Desc.NodeID, err)
 			continue
 		}
 		for _, rng := range ranges.Ranges {

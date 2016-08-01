@@ -110,6 +110,9 @@ func (s *DBServer) Batch(
 
 	err = s.stopper.RunTask(func() {
 		var pErr *roachpb.Error
+		// TODO(wiz): This is required to be a different context from the one
+		// provided by grpc since it has to last for the entire transaction and not
+		// just this one RPC call. See comment for (*TxnCoordSender).hearbeatLoop.
 		br, pErr = s.sender.Send(context.TODO(), *args)
 		if pErr != nil {
 			br = &roachpb.BatchResponse{}

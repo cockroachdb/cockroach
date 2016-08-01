@@ -470,7 +470,7 @@ func snapshot(
 		return raftpb.Snapshot{}, errors.Errorf("failed to fetch term of %d: %s", appliedIndex, err)
 	}
 
-	log.Infof(context.TODO(), "generated snapshot for range %s at index %d in %s. encoded size=%d, %d KV pairs, %d log entries",
+	log.Infof(ctx, "generated snapshot for range %s at index %d in %s. encoded size=%d, %d KV pairs, %d log entries",
 		rangeID, appliedIndex, timeutil.Since(start), len(data), len(snapData.KV), len(snapData.LogEntries))
 
 	return raftpb.Snapshot{

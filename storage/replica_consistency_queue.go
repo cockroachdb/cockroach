@@ -54,7 +54,7 @@ func (*replicaConsistencyQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
 
 // process() is called on every range for which this node is a lease holder.
 func (q *replicaConsistencyQueue) process(
-	_ context.Context,
+	ctx context.Context,
 	_ hlc.Timestamp,
 	rng *Replica,
 	_ config.SystemConfig,
@@ -62,7 +62,7 @@ func (q *replicaConsistencyQueue) process(
 	req := roachpb.CheckConsistencyRequest{}
 	_, pErr := rng.CheckConsistency(req, rng.Desc())
 	if pErr != nil {
-		log.Error(context.TODO(), pErr.GoError())
+		log.Error(ctx, pErr.GoError())
 	}
 	return nil
 }
