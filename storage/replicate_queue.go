@@ -17,7 +17,6 @@
 package storage
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/pkg/errors"
@@ -150,10 +149,7 @@ func (rq *replicateQueue) process(
 			StoreID: newStore.StoreID,
 		}
 
-		if log.V(1) {
-			log.Infof(ctx, "%s: adding replica to %+v due to under-replication", repl, newReplica)
-		}
-		log.Trace(ctx, fmt.Sprintf("adding replica to %+v due to under-replication", newReplica))
+		log.VTracef(1, ctx, "%s: adding replica to %+v due to under-replication", repl, newReplica)
 		if err = repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, newReplica, desc); err != nil {
 			return err
 		}
@@ -165,10 +161,7 @@ func (rq *replicateQueue) process(
 		if err != nil {
 			return err
 		}
-		if log.V(1) {
-			log.Infof(ctx, "%s: removing replica %+v due to over-replication", repl, removeReplica)
-		}
-		log.Trace(ctx, fmt.Sprintf("removing replica %+v due to over-replication", removeReplica))
+		log.VTracef(1, ctx, "%s: removing replica %+v due to over-replication", repl, removeReplica)
 		if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, removeReplica, desc); err != nil {
 			return err
 		}
@@ -185,10 +178,7 @@ func (rq *replicateQueue) process(
 			break
 		}
 		deadReplica := deadReplicas[0]
-		if log.V(1) {
-			log.Infof(ctx, "%s: removing replica %+v from dead store", repl, deadReplica)
-		}
-		log.Trace(ctx, fmt.Sprintf("removing replica %+v from dead store", deadReplica))
+		log.VTracef(1, ctx, "%s: removing replica %+v from dead store", repl, deadReplica)
 		if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, deadReplica, desc); err != nil {
 			return err
 		}
@@ -202,10 +192,7 @@ func (rq *replicateQueue) process(
 		rebalanceStore := rq.allocator.RebalanceTarget(
 			zone.ReplicaAttrs[0], desc.Replicas, repl.store.StoreID())
 		if rebalanceStore == nil {
-			if log.V(1) {
-				log.Infof(ctx, "%s: no suitable rebalance target", repl)
-			}
-			log.Trace(ctx, "no suitable rebalance target")
+			log.VTracef(1, ctx, "%s: no suitable rebalance target", repl)
 			// No action was necessary and no rebalance target was found. Return
 			// without re-queuing this replica.
 			return nil
@@ -214,10 +201,7 @@ func (rq *replicateQueue) process(
 			NodeID:  rebalanceStore.Node.NodeID,
 			StoreID: rebalanceStore.StoreID,
 		}
-		if log.V(1) {
-			log.Infof(ctx, "%s: rebalancing to %+v", repl, rebalanceReplica)
-		}
-		log.Trace(ctx, fmt.Sprintf("rebalancing to %+v", rebalanceReplica))
+		log.VTracef(1, ctx, "%s: rebalancing to %+v", repl, rebalanceReplica)
 		if err = repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, rebalanceReplica, desc); err != nil {
 			return err
 		}
