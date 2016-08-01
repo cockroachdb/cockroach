@@ -60,6 +60,9 @@ type DescriptorAccessor interface {
 	// `getTableDesc`.
 	getDescriptor(plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto) (bool, error)
 
+	// getAllDescriptors looks up and returns all available descriptors.
+	getAllDescriptors() ([]sqlbase.DescriptorProto, error)
+
 	// getDescriptorsFromTargetList examines a TargetList and fetches the
 	// appropriate descriptors.
 	getDescriptorsFromTargetList(targets parser.TargetList) ([]sqlbase.DescriptorProto, error)
@@ -194,6 +197,32 @@ func (p *planner) getDescriptor(plainKey sqlbase.DescriptorKey, descriptor sqlba
 		*t = *database
 	}
 	return true, nil
+}
+
+// getAllDescriptors implements the DescriptorAccessor interface.
+func (p *planner) getAllDescriptors() ([]sqlbase.DescriptorProto, error) {
+	descsKey := sqlbase.MakeAllDescsMetadataKey()
+	kvs, err := p.txn.Scan(descsKey, descsKey.PrefixEnd(), 0)
+	if err != nil {
+		return nil, err
+	}
+
+	var descs []sqlbase.DescriptorProto
+	for _, kv := range kvs {
+		desc := &sqlbase.Descriptor{}
+		if err := kv.ValueProto(desc); err != nil {
+			return nil, err
+		}
+		switch t := desc.Union.(type) {
+		case *sqlbase.Descriptor_Table:
+			descs = append(descs, desc.GetTable())
+		case *sqlbase.Descriptor_Database:
+			descs = append(descs, desc.GetDatabase())
+		default:
+			return nil, errors.Errorf("Descriptor.Union has unexpected type %T", t)
+		}
+	}
+	return descs, nil
 }
 
 // getDescriptorsFromTargetList implements the DescriptorAccessor interface.

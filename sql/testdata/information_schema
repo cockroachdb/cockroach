@@ -115,23 +115,7 @@ information_schema.tables  CREATE TABLE "information_schema.tables" (
                                TABLE_SCHEMA STRING NOT NULL DEFAULT '',
                                TABLE_NAME STRING NOT NULL DEFAULT '',
                                TABLE_TYPE STRING NOT NULL DEFAULT '',
-                               ENGINE STRING NULL,
-                               VERSION INT NULL,
-                               ROW_FORMAT STRING NULL,
-                               TABLE_ROWS INT NULL,
-                               AVG_ROW_LENGTH INT NULL,
-                               DATA_LENGTH INT NULL,
-                               MAX_DATA_LENGTH INT NULL,
-                               INDEX_LENGTH INT NULL,
-                               DATA_FREE INT NULL,
-                               AUTO_INCREMENT INT NULL,
-                               CREATE_TIME TIMESTAMP NULL,
-                               UPDATE_TIME TIMESTAMP NULL,
-                               CHECK_TIME TIMESTAMP NULL,
-                               TABLE_COLLATION STRING NULL,
-                               CHECKSUM INT NULL,
-                               CREATE_OPTIONS STRING NULL,
-                               TABLE_COMMENT STRING NOT NULL DEFAULT ''
+                               VERSION INT NULL
                            )
 
 query TTBT colnames
@@ -142,23 +126,7 @@ TABLE_CATALOG    STRING     false  ''
 TABLE_SCHEMA     STRING     false  ''
 TABLE_NAME       STRING     false  ''
 TABLE_TYPE       STRING     false  ''
-ENGINE           STRING     true   NULL
 VERSION          INT        true   NULL
-ROW_FORMAT       STRING     true   NULL
-TABLE_ROWS       INT        true   NULL
-AVG_ROW_LENGTH   INT        true   NULL
-DATA_LENGTH      INT        true   NULL
-MAX_DATA_LENGTH  INT        true   NULL
-INDEX_LENGTH     INT        true   NULL
-DATA_FREE        INT        true   NULL
-AUTO_INCREMENT   INT        true   NULL
-CREATE_TIME      TIMESTAMP  true   NULL
-UPDATE_TIME      TIMESTAMP  true   NULL
-CHECK_TIME       TIMESTAMP  true   NULL
-TABLE_COLLATION  STRING     true   NULL
-CHECKSUM         INT        true   NULL
-CREATE_OPTIONS   STRING     true   NULL
-TABLE_COMMENT    STRING     false  ''
 
 query TTTTTTT colnames
 SHOW INDEXES FROM information_schema.tables
@@ -179,12 +147,19 @@ Table  User  Privileges
 
 # Verify selecting from information_schema.
 
+## information_schema.tables
+
 statement ok
-SET DATABASE = system
+CREATE DATABASE other_db
+
+statement ok
+CREATE TABLE other_db.xyz (i INT)
 
 query T
-SELECT table_name FROM information_schema.tables;
+SELECT table_name FROM information_schema.tables
 ----
+tables
+xyz
 descriptor
 eventlog
 lease
@@ -195,10 +170,39 @@ users
 zones
 
 query T
-SELECT table_name FROM information_schema.tables WHERE table_name > 'n' ORDER BY 1 DESC;
+SELECT table_name FROM information_schema.tables WHERE table_name > 'n' ORDER BY 1 DESC
 ----
 zones
+xyz
 users
 ui
+tables
 rangelog
 namespace
+
+query TTTTI colnames
+SELECT * FROM information_schema.tables
+----
+TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME  TABLE_TYPE   VERSION
+def            information_schema  tables      SYSTEM VIEW  1
+def            other_db            xyz         BASE TABLE   1
+def            system              descriptor  BASE TABLE   1
+def            system              eventlog    BASE TABLE   1
+def            system              lease       BASE TABLE   1
+def            system              namespace   BASE TABLE   1
+def            system              rangelog    BASE TABLE   1
+def            system              ui          BASE TABLE   1
+def            system              users       BASE TABLE   1
+def            system              zones       BASE TABLE   1
+
+statement ok
+ALTER TABLE other_db.xyz ADD COLUMN j INT
+
+query TTI colnames
+SELECT TABLE_SCHEMA, TABLE_NAME, VERSION FROM information_schema.tables WHERE version > 1
+----
+TABLE_SCHEMA  TABLE_NAME  VERSION
+other_db      xyz         4
+
+statement ok
+DROP DATABASE other_db
