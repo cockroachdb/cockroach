@@ -17,15 +17,28 @@
 package log
 
 import (
+	"fmt"
+
 	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 )
+
+var noopTracer opentracing.NoopTracer
 
 // Trace looks for an opentracing.Trace in the context and logs the given
 // message to it on success.
 func Trace(ctx context.Context, msg string) {
 	sp := opentracing.SpanFromContext(ctx)
-	if sp != nil {
+	if sp != nil && sp.Tracer() != noopTracer {
 		sp.LogEvent(msg)
+	}
+}
+
+// Tracef looks for an opentracing.Trace in the context and formats and logs
+// the given message to it on success.
+func Tracef(ctx context.Context, format string, args ...interface{}) {
+	sp := opentracing.SpanFromContext(ctx)
+	if sp != nil && sp.Tracer() != noopTracer {
+		sp.LogEvent(fmt.Sprintf(format, args...))
 	}
 }
