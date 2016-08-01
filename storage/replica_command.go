@@ -165,7 +165,7 @@ func (r *Replica) executeCmd(
 		r.store.metrics.leaseRequestComplete(err)
 	case *roachpb.ComputeChecksumRequest:
 		resp := reply.(*roachpb.ComputeChecksumResponse)
-		*resp, err = r.ComputeChecksum(ctx, batch, ms, h, *tArgs)
+		*resp, trigger, err = r.ComputeChecksum(ctx, batch, ms, h, *tArgs)
 	case *roachpb.VerifyChecksumRequest:
 		resp := reply.(*roachpb.VerifyChecksumResponse)
 		*resp, err = r.VerifyChecksum(ctx, batch, ms, h, *tArgs)
@@ -1824,58 +1824,12 @@ func (r *Replica) ComputeChecksum(
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
 	args roachpb.ComputeChecksumRequest,
-) (roachpb.ComputeChecksumResponse, error) {
+) (roachpb.ComputeChecksumResponse, *PostCommitTrigger, error) {
 	if args.Version != replicaChecksumVersion {
 		log.Errorf(ctx, "%s: Incompatible versions: e=%d, v=%d", r, replicaChecksumVersion, args.Version)
-		return roachpb.ComputeChecksumResponse{}, nil
+		return roachpb.ComputeChecksumResponse{}, nil, nil
 	}
-	stopper := r.store.Stopper()
-	id := args.ChecksumID
-	now := timeutil.Now()
-	r.mu.Lock()
-	if _, ok := r.mu.checksums[id]; ok {
-		// A previous attempt was made to compute the checksum.
-		r.mu.Unlock()
-		return roachpb.ComputeChecksumResponse{}, nil
-	}
-
-	// GC old entries.
-	var oldEntries []uuid.UUID
-	for id, val := range r.mu.checksums {
-		// The timestamp is only valid when the checksum is set.
-		if val.checksum != nil && now.After(val.gcTimestamp) {
-			oldEntries = append(oldEntries, id)
-		}
-	}
-	for _, id := range oldEntries {
-		delete(r.mu.checksums, id)
-	}
-
-	// Create an entry with checksum == nil and gcTimestamp unset.
-	r.mu.checksums[id] = replicaChecksum{notify: make(chan struct{})}
-	desc := *r.mu.state.Desc
-	r.mu.Unlock()
-	snap := r.store.NewSnapshot()
-
-	// Compute SHA asynchronously and store it in a map by UUID.
-	if err := stopper.RunAsyncTask(func() {
-		defer snap.Close()
-		var snapshot *roachpb.RaftSnapshotData
-		if args.Snapshot {
-			snapshot = &roachpb.RaftSnapshotData{}
-		}
-		sha, err := r.sha512(desc, snap, snapshot)
-		if err != nil {
-			log.Errorf(ctx, "%s: %v", r, err)
-			sha = nil
-		}
-		r.computeChecksumDone(context.Background(), id, sha, snapshot)
-	}); err != nil {
-		defer snap.Close()
-		// Set checksum to nil.
-		r.computeChecksumDone(ctx, id, nil, nil)
-	}
-	return roachpb.ComputeChecksumResponse{}, nil
+	return roachpb.ComputeChecksumResponse{}, &PostCommitTrigger{computeChecksum: &args}, nil
 }
 
 // sha512 computes the SHA512 hash of all the replica data at the snapshot.
