@@ -76,8 +76,7 @@ func (r *Replica) executeCmd(
 	}
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
-	if filter := r.store.ctx.TestingKnobs.TestingCommandFilter; filter != nil &&
-		raftCmdID != storagebase.CmdIDKey(hackIgnore) {
+	if filter := r.store.ctx.TestingKnobs.TestingCommandFilter; filter != nil {
 		filterArgs := storagebase.FilterArgs{Ctx: ctx, CmdID: raftCmdID, Index: index,
 			Sid: r.store.StoreID(), Req: args, Hdr: h}
 		if pErr := filter(filterArgs); pErr != nil {
@@ -2527,6 +2526,7 @@ func (r *Replica) splitTrigger(
 	rightDeltaMS.Subtract(leftDeltaMS)
 
 	trigger := &PostCommitTrigger{
+		noConcurrentReads: true,
 		split: &postCommitSplit{
 			SplitTrigger:           *split,
 			RightDeltaMS:           rightDeltaMS,
@@ -2732,6 +2732,7 @@ func (r *Replica) mergeTrigger(
 	r.mu.Unlock()
 
 	trigger := &PostCommitTrigger{
+		noConcurrentReads: true,
 		merge: &postCommitMerge{
 			MergeTrigger: *merge,
 		},

@@ -22,6 +22,8 @@
 package storage
 
 import (
+	"sync/atomic"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"

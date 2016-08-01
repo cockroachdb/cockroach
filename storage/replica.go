@@ -2012,8 +2012,6 @@ func (r *Replica) processRaftCommand(
 	return pErr
 }
 
-const hackIgnore = "hack-ignore"
-
 // applyRaftCommand applies a raft command from the replicated log to the
 // underlying state machine (i.e. the engine).
 // When certain critical operations fail, a replicaCorruptionError may be
@@ -2060,19 +2058,8 @@ func (r *Replica) applyRaftCommand(
 		batch = r.store.Engine().NewBatch()
 		br, rErr = nil, forcedError
 	} else {
-		batch, propResult.delta, br, propResult.PostCommitTrigger, rErr = r.applyRaftCommandInBatch(ctx, idKey,
-			originReplica, ba)
-		if propResult.PostCommitTrigger != nil {
-			// Provisionally double-execute the command, but only applying it
-			// once. This is a preliminary step towards proposer-eval'ed KV
-			// for side effects which need to be known before executing.
-
-			r.readOnlyCmdMu.Lock()
-			defer r.readOnlyCmdMu.Unlock()
-			batch, propResult.delta, br, propResult.PostCommitTrigger, rErr = r.applyRaftCommandInBatch(ctx, storagebase.CmdIDKey(hackIgnore),
-				originReplica, ba)
-		}
-
+		batch, propResult.delta, br, propResult.PostCommitTrigger, rErr =
+			r.applyRaftCommandInBatch(ctx, idKey, originReplica, ba)
 	}
 
 	// TODO(tschottdorf): remove when #7224 is cleared.
