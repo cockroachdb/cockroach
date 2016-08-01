@@ -1679,8 +1679,6 @@ func (r *Replica) applyNewLeaseLocked(
 		return reply, nil, err
 	}
 
-	// TODO(tschottdorf) move everything below into trigger. In fact, this
-	// method shouldn't hold the lock throughout.
 	trigger := &PostCommitTrigger{
 		lease: &lease,
 		maybeGossipSystemConfig: true,
