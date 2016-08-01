@@ -259,9 +259,7 @@ func (z *zeroSum) chaosFlappy() {
 	for i := 1; true; i++ {
 		time.Sleep(d)
 
-		// TODO(peter): For now, we're always flapping the first node.
-		// nodeIdx := z.randNode(r.Intn)
-		nodeIdx := 0
+		nodeIdx := z.randNode(r.Intn)
 		node := z.nodes[nodeIdx]
 		d = time.Duration(15+r.Intn(30)) * time.Second
 		fmt.Printf("chaos %d: killing node %d for %s\n", i, nodeIdx+1, d)
