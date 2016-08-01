@@ -162,13 +162,13 @@ coverage:
 # given all tests in the package will be run).
 .PHONY: stress
 stress:
-	$(GO) test -v $(GOFLAGS) -i -c $(PKG) -o stress.test
-	cd $(PKG) && stress $(STRESSFLAGS) $(CURRENTDIR)/stress.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
+	$(GO) test -v $(GOFLAGS) -i -c $(PKG) -o $(PKG)/stress.test
+	cd $(PKG) && stress $(STRESSFLAGS) ./stress.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 .PHONY: stressrace
 stressrace:
-	$(GO) test $(GOFLAGS) -race -v -i -c $(PKG) -o stress.test
-	cd $(PKG) && stress $(STRESSFLAGS) $(CURRENTDIR)/stress.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
+	$(GO) test -v $(GOFLAGS) -i -c $(PKG) -o $(PKG)/stress.test -race
+	cd $(PKG) && stress $(STRESSFLAGS) ./stress.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 .PHONY: acceptance
 acceptance:
