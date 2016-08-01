@@ -100,7 +100,7 @@ func (rq *replicateQueue) shouldQueue(
 		return
 	}
 
-	action, priority := rq.allocator.ComputeAction(*zone, desc)
+	action, priority := rq.allocator.ComputeAction(zone, desc)
 	if action != AllocatorNoop {
 		return true, priority
 	}
@@ -126,7 +126,7 @@ func (rq *replicateQueue) process(
 	if err != nil {
 		return err
 	}
-	action, _ := rq.allocator.ComputeAction(*zone, desc)
+	action, _ := rq.allocator.ComputeAction(zone, desc)
 
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.

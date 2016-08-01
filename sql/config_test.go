@@ -17,7 +17,6 @@
 package sql_test
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/config"
@@ -30,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -148,33 +148,35 @@ func TestGetZoneConfig(t *testing.T) {
 	}
 	expectedCounter++
 
-	cfg := forceNewConfig(t, s)
+	{
+		cfg := forceNewConfig(t, s)
 
-	// We have no custom zone configs.
-	testCases := []struct {
-		key     roachpb.RKey
-		zoneCfg *config.ZoneConfig
-	}{
-		{roachpb.RKeyMin, &defaultZoneConfig},
-		{keys.MakeTablePrefix(0), &defaultZoneConfig},
-		{keys.MakeTablePrefix(1), &defaultZoneConfig},
-		{keys.MakeTablePrefix(keys.MaxReservedDescID), &defaultZoneConfig},
-		{keys.MakeTablePrefix(db1), &defaultZoneConfig},
-		{keys.MakeTablePrefix(db2), &defaultZoneConfig},
-		{keys.MakeTablePrefix(tb11), &defaultZoneConfig},
-		{keys.MakeTablePrefix(tb12), &defaultZoneConfig},
-		{keys.MakeTablePrefix(tb21), &defaultZoneConfig},
-		{keys.MakeTablePrefix(tb22), &defaultZoneConfig},
-	}
-
-	for tcNum, tc := range testCases {
-		zoneCfg, err := cfg.GetZoneConfigForKey(tc.key)
-		if err != nil {
-			t.Fatalf("#%d: err=%s", tcNum, err)
+		// We have no custom zone configs.
+		testCases := []struct {
+			key     roachpb.RKey
+			zoneCfg config.ZoneConfig
+		}{
+			{roachpb.RKeyMin, defaultZoneConfig},
+			{keys.MakeTablePrefix(0), defaultZoneConfig},
+			{keys.MakeTablePrefix(1), defaultZoneConfig},
+			{keys.MakeTablePrefix(keys.MaxReservedDescID), defaultZoneConfig},
+			{keys.MakeTablePrefix(db1), defaultZoneConfig},
+			{keys.MakeTablePrefix(db2), defaultZoneConfig},
+			{keys.MakeTablePrefix(tb11), defaultZoneConfig},
+			{keys.MakeTablePrefix(tb12), defaultZoneConfig},
+			{keys.MakeTablePrefix(tb21), defaultZoneConfig},
+			{keys.MakeTablePrefix(tb22), defaultZoneConfig},
 		}
 
-		if !reflect.DeepEqual(zoneCfg, tc.zoneCfg) {
-			t.Errorf("#%d: bad zone config.\nexpected: %+v\ngot: %+v", tcNum, tc.zoneCfg, zoneCfg)
+		for tcNum, tc := range testCases {
+			zoneCfg, err := cfg.GetZoneConfigForKey(tc.key)
+			if err != nil {
+				t.Fatalf("#%d: err=%s", tcNum, err)
+			}
+
+			if !proto.Equal(&zoneCfg, &tc.zoneCfg) {
+				t.Errorf("#%d: bad zone config.\nexpected: %+v\ngot: %+v", tcNum, tc.zoneCfg, zoneCfg)
+			}
 		}
 	}
 
@@ -210,32 +212,34 @@ func TestGetZoneConfig(t *testing.T) {
 		}
 	}
 
-	cfg = forceNewConfig(t, s)
+	{
+		cfg := forceNewConfig(t, s)
 
-	testCases = []struct {
-		key     roachpb.RKey
-		zoneCfg *config.ZoneConfig
-	}{
-		{roachpb.RKeyMin, &defaultZoneConfig},
-		{keys.MakeTablePrefix(0), &defaultZoneConfig},
-		{keys.MakeTablePrefix(1), &defaultZoneConfig},
-		{keys.MakeTablePrefix(keys.MaxReservedDescID), &defaultZoneConfig},
-		{keys.MakeTablePrefix(db1), &db1Cfg},
-		{keys.MakeTablePrefix(db2), &defaultZoneConfig},
-		{keys.MakeTablePrefix(tb11), &tb11Cfg},
-		{keys.MakeTablePrefix(tb12), &db1Cfg},
-		{keys.MakeTablePrefix(tb21), &tb21Cfg},
-		{keys.MakeTablePrefix(tb22), &defaultZoneConfig},
-	}
-
-	for tcNum, tc := range testCases {
-		zoneCfg, err := cfg.GetZoneConfigForKey(tc.key)
-		if err != nil {
-			t.Fatalf("#%d: err=%s", tcNum, err)
+		testCases := []struct {
+			key     roachpb.RKey
+			zoneCfg config.ZoneConfig
+		}{
+			{roachpb.RKeyMin, defaultZoneConfig},
+			{keys.MakeTablePrefix(0), defaultZoneConfig},
+			{keys.MakeTablePrefix(1), defaultZoneConfig},
+			{keys.MakeTablePrefix(keys.MaxReservedDescID), defaultZoneConfig},
+			{keys.MakeTablePrefix(db1), db1Cfg},
+			{keys.MakeTablePrefix(db2), defaultZoneConfig},
+			{keys.MakeTablePrefix(tb11), tb11Cfg},
+			{keys.MakeTablePrefix(tb12), db1Cfg},
+			{keys.MakeTablePrefix(tb21), tb21Cfg},
+			{keys.MakeTablePrefix(tb22), defaultZoneConfig},
 		}
 
-		if !reflect.DeepEqual(zoneCfg, tc.zoneCfg) {
-			t.Errorf("#%d: bad zone config.\nexpected: %+v\ngot: %+v", tcNum, tc.zoneCfg, zoneCfg)
+		for tcNum, tc := range testCases {
+			zoneCfg, err := cfg.GetZoneConfigForKey(tc.key)
+			if err != nil {
+				t.Fatalf("#%d: err=%s", tcNum, err)
+			}
+
+			if !proto.Equal(&zoneCfg, &tc.zoneCfg) {
+				t.Errorf("#%d: bad zone config.\nexpected: %+v\ngot: %+v", tcNum, tc.zoneCfg, zoneCfg)
+			}
 		}
 	}
 }

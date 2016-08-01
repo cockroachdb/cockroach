@@ -1114,8 +1114,8 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	}
 
 	// Set zone configs.
-	config.TestingSetZoneConfig(baseID, &config.ZoneConfig{RangeMaxBytes: 1 << 20})
-	config.TestingSetZoneConfig(baseID+2, &config.ZoneConfig{RangeMaxBytes: 2 << 20})
+	config.TestingSetZoneConfig(baseID, config.ZoneConfig{RangeMaxBytes: 1 << 20})
+	config.TestingSetZoneConfig(baseID+2, config.ZoneConfig{RangeMaxBytes: 2 << 20})
 
 	// Despite faking the zone configs, we still need to have a gossip entry.
 	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {
