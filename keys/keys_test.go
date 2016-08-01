@@ -40,7 +40,7 @@ func TestKeySorting(t *testing.T) {
 	if bytes.Compare(localPrefix, Meta1Prefix) >= 0 {
 		t.Fatalf("local key spilling into replicated ranges")
 	}
-	if !bytes.Equal(roachpb.Key(""), roachpb.Key(nil)) || !bytes.Equal(roachpb.Key(""), roachpb.Key(nil)) {
+	if !bytes.Equal(roachpb.Key(""), roachpb.Key(nil)) {
 		t.Fatalf("equality between keys failed")
 	}
 }

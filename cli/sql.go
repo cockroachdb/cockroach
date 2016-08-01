@@ -190,7 +190,7 @@ func runSyscmd(line string) int {
 		return cliNextLine
 	}
 
-	fmt.Printf(cmdOut)
+	fmt.Print(cmdOut)
 	return cliNextLine
 }
 
