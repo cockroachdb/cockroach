@@ -23,6 +23,7 @@ import (
 	"github.com/coreos/etcd/raft"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -31,13 +32,12 @@ import (
 )
 
 const rangeID = 1
-const keySize = 1 << 7   // 128 B
-const valSize = 1 << 10  // 1 KiB
-const snapSize = 1 << 25 // 32 MiB
+const keySize = 1 << 7  // 128 B
+const valSize = 1 << 10 // 1 KiB
 
-func fillTestRange(t testing.TB, rep *Replica, size int) {
+func fillTestRange(t testing.TB, rep *Replica, size int64) {
 	src := rand.New(rand.NewSource(0))
-	for i := 0; i < snapSize/(keySize+valSize); i++ {
+	for i := int64(0); i < size/int64(keySize+valSize); i++ {
 		key := keys.MakeRowSentinelKey(randutil.RandBytes(src, keySize))
 		val := randutil.RandBytes(src, valSize)
 		pArgs := putArgs(key, val)
@@ -47,19 +47,31 @@ func fillTestRange(t testing.TB, rep *Replica, size int) {
 			t.Fatal(pErr)
 		}
 	}
+	rep.mu.Lock()
+	after := rep.mu.state.Stats.Total()
+	rep.mu.Unlock()
+	if after < size {
+		t.Fatalf("range not full after filling: wrote %d, but range at %d", size, after)
+	}
 }
 
 func TestSkipLargeReplicaSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	store, _, stopper := createTestStore(t)
-	store.ctx.TestingKnobs.DisableSplitQueue = true
-	// We want to manually control the size of the raft log.
+	sCtx := TestStoreContext()
+	sCtx.TestingKnobs.DisableSplitQueue = true
+	store, _, stopper := createTestStoreWithContext(t, &sCtx)
 	defer stopper.Stop()
+
+	const snapSize = 1 << 20 // 1 MiB
+	cfg := config.DefaultZoneConfig()
+	cfg.RangeMaxBytes = snapSize
+	defer config.TestingSetDefaultZoneConfig(cfg)()
 
 	rep, err := store.GetReplica(rangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
+	rep.SetMaxBytes(snapSize)
 
 	if pErr := rep.redirectOnOrAcquireLease(context.Background()); pErr != nil {
 		t.Fatal(pErr)
@@ -74,6 +86,13 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 	fillTestRange(t, rep, snapSize*2)
 
 	if _, err := rep.Snapshot(); err != raft.ErrSnapshotTemporarilyUnavailable {
-		t.Fatalf("snapshot of a very large range should fail but got %v", err)
+		rep.mu.Lock()
+		after := rep.mu.state.Stats.Total()
+		rep.mu.Unlock()
+		t.Fatalf(
+			"snapshot of a very large range (%d / %d, needsSplit: %v, exceeds snap limit: %v) should fail but got %v",
+			after, rep.GetMaxBytes(),
+			rep.needsSplitBySize(), rep.exceedsDoubleSplitSizeLocked(), err,
+		)
 	}
 }
