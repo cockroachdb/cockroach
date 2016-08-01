@@ -146,15 +146,9 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		return meta.conn, nil
 	}
 
-	var dialOpt grpc.DialOption
-	if ctx.Insecure {
-		dialOpt = grpc.WithInsecure()
-	} else {
-		tlsConfig, err := ctx.GetClientTLSConfig()
-		if err != nil {
-			return nil, err
-		}
-		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
+	dialOpt, err := ctx.GRPCDialOption()
+	if err != nil {
+		return nil, err
 	}
 
 	dialOpts := make([]grpc.DialOption, 0, 1+len(opts))
@@ -182,6 +176,21 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		}
 	}
 	return conn, err
+}
+
+// GRPCDialOption returns the GRPC dialing option appropriate for the context.
+func (ctx *Context) GRPCDialOption() (grpc.DialOption, error) {
+	var dialOpt grpc.DialOption
+	if ctx.Insecure {
+		dialOpt = grpc.WithInsecure()
+	} else {
+		tlsConfig, err := ctx.GetClientTLSConfig()
+		if err != nil {
+			return dialOpt, err
+		}
+		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
+	}
+	return dialOpt, nil
 }
 
 // setConnHealthy sets the health status of the connection.
@@ -268,5 +277,7 @@ func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
 func (ctx *Context) heartbeat(heartbeatClient HeartbeatClient, request PingRequest) (*PingResponse, error) {
 	goCtx, cancel := context.WithTimeout(context.Background(), ctx.HeartbeatTimeout)
 	defer cancel()
-	return heartbeatClient.Ping(goCtx, &request, grpc.FailFast(false))
+	// NB: We want the request to fail-fast (the default), otherwise we won't be
+	// notified of transport failures.
+	return heartbeatClient.Ping(goCtx, &request)
 }

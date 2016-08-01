@@ -318,13 +318,6 @@ func (s RaftSender) SendAsync(req *RaftMessageRequest) bool {
 	}
 	isSnap := req.Message.Type == raftpb.MsgSnap
 	toReplica := req.ToReplica
-	// Get a connection to the node specified by the replica's node
-	// ID. If no connection can be made, return false to indicate caller
-	// should drop the Raft message.
-	conn := s.transport.getNodeConn(toReplica.NodeID)
-	if conn == nil {
-		return false
-	}
 
 	s.transport.mu.Lock()
 	// We use two queues; one will be used for snapshots, the other for all other
@@ -342,6 +335,17 @@ func (s RaftSender) SendAsync(req *RaftMessageRequest) bool {
 	s.transport.mu.Unlock()
 
 	if !ok {
+		// Get a connection to the node specified by the replica's node
+		// ID. If no connection can be made, return false to indicate caller
+		// should drop the Raft message.
+		conn := s.transport.getNodeConn(toReplica.NodeID)
+		if conn == nil {
+			s.transport.mu.Lock()
+			delete(queues, toReplica)
+			s.transport.mu.Unlock()
+			return false
+		}
+
 		// Starting workers in a task prevents data races during shutdown.
 		if err := s.transport.rpcContext.Stopper.RunTask(func() {
 			s.transport.rpcContext.Stopper.RunWorker(func() {
