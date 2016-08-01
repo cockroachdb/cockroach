@@ -73,6 +73,8 @@ type proposalResult struct {
 // holder, or a Replica determined by other conditions present in the specific
 // trigger.
 type PostCommitTrigger struct {
+	noConcurrentReads bool
+
 	gcThreshold    *hlc.Timestamp
 	truncatedState *roachpb.RaftTruncatedState
 	raftLogSize    *int64
@@ -285,8 +287,11 @@ func (r *Replica) handleTrigger(
 	originReplica roachpb.ReplicaDescriptor,
 	trigger PostCommitTrigger,
 ) {
+	if trigger.noConcurrentReads {
+		r.readOnlyCmdMu.Lock()
+		defer r.readOnlyCmdMu.Unlock()
+	}
 	if trigger.split != nil {
-
 		// TODO(tschottdorf): We want to let the usual MVCCStats-delta
 		// machinery update our stats for the left-hand side. But there is no
 		// way to pass up an MVCCStats object that will clear out the
