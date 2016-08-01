@@ -80,11 +80,15 @@ func (p *planner) checkPrivilege(descriptor sqlbase.DescriptorProto, privilege p
 
 // anyPrivilege implements the DescriptorAccessor interface.
 func (p *planner) anyPrivilege(descriptor sqlbase.DescriptorProto) error {
-	if descriptor.GetPrivileges().AnyPrivilege(p.session.User) || isVirtualDescriptor(descriptor) {
+	if userCanSeeDescriptor(descriptor, p.session.User) {
 		return nil
 	}
 	return fmt.Errorf("user %s has no privileges on %s %s",
 		p.session.User, descriptor.TypeName(), descriptor.GetName())
+}
+
+func userCanSeeDescriptor(descriptor sqlbase.DescriptorProto, user string) bool {
+	return descriptor.GetPrivileges().AnyPrivilege(user) || isVirtualDescriptor(descriptor)
 }
 
 type descriptorAlreadyExistsErr struct {
@@ -228,17 +232,17 @@ func (p *planner) getAllDescriptors() ([]sqlbase.DescriptorProto, error) {
 		return nil, err
 	}
 
-	var descs []sqlbase.DescriptorProto
-	for _, kv := range kvs {
+	descs := make([]sqlbase.DescriptorProto, len(kvs))
+	for i, kv := range kvs {
 		desc := &sqlbase.Descriptor{}
 		if err := kv.ValueProto(desc); err != nil {
 			return nil, err
 		}
 		switch t := desc.Union.(type) {
 		case *sqlbase.Descriptor_Table:
-			descs = append(descs, desc.GetTable())
+			descs[i] = desc.GetTable()
 		case *sqlbase.Descriptor_Database:
-			descs = append(descs, desc.GetDatabase())
+			descs[i] = desc.GetDatabase()
 		default:
 			return nil, errors.Errorf("Descriptor.Union has unexpected type %T", t)
 		}
