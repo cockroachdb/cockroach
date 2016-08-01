@@ -38,6 +38,8 @@ func BenchmarkReplicaSnapshot(b *testing.B) {
 		b.Fatal(err)
 	}
 
+	const snapSize = 1 << 25 // 32 MiB
+
 	fillTestRange(b, rep, snapSize)
 
 	b.ResetTimer()

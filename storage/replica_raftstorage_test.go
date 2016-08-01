@@ -31,13 +31,12 @@ import (
 )
 
 const rangeID = 1
-const keySize = 1 << 7   // 128 B
-const valSize = 1 << 10  // 1 KiB
-const snapSize = 1 << 25 // 32 MiB
+const keySize = 1 << 7  // 128 B
+const valSize = 1 << 10 // 1 KiB
 
 func fillTestRange(t testing.TB, rep *Replica, size int) {
 	src := rand.New(rand.NewSource(0))
-	for i := 0; i < snapSize/(keySize+valSize); i++ {
+	for i := 0; i < size/(keySize+valSize); i++ {
 		key := keys.MakeRowSentinelKey(randutil.RandBytes(src, keySize))
 		val := randutil.RandBytes(src, valSize)
 		pArgs := putArgs(key, val)
@@ -60,6 +59,9 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	const snapSize = 1 << 20 // 1 MiB
+	rep.SetMaxBytes(snapSize)
 
 	if pErr := rep.redirectOnOrAcquireLease(context.Background()); pErr != nil {
 		t.Fatal(pErr)
