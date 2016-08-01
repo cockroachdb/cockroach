@@ -96,8 +96,7 @@ func (sq *splitQueue) process(
 	desc := rng.Desc()
 	splitKeys := sysCfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)
 	if len(splitKeys) > 0 {
-		log.Infof(context.TODO(), "splitting %s at keys %v", rng, splitKeys)
-		log.Tracef(ctx, "splitting at keys %v", splitKeys)
+		log.Infof(ctx, "splitting %s at keys %v", rng, splitKeys)
 		for _, splitKey := range splitKeys {
 			if err := sq.db.AdminSplit(splitKey.AsRawKey()); err != nil {
 				return errors.Errorf("unable to split %s at key %q: %s", rng, splitKey, err)
@@ -114,8 +113,7 @@ func (sq *splitQueue) process(
 	size := rng.GetMVCCStats().Total()
 	// FIXME: why is this implementation not the same as the one above?
 	if float64(size)/float64(zone.RangeMaxBytes) > 1 {
-		log.Infof(context.TODO(), "splitting %s size=%d max=%d", rng, size, zone.RangeMaxBytes)
-		log.Tracef(ctx, "splitting size=%d max=%d", size, zone.RangeMaxBytes)
+		log.Infof(ctx, "splitting %s size=%d max=%d", rng, size, zone.RangeMaxBytes)
 		if _, pErr := client.SendWrappedWith(rng, ctx, roachpb.Header{
 			Timestamp: now,
 		}, &roachpb.AdminSplitRequest{

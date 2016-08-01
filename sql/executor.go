@@ -302,9 +302,8 @@ func (e *Executor) Prepare(
 	pinfo parser.PlaceholderTypes,
 ) ([]ResultColumn, error) {
 	if log.V(2) {
-		log.Infof(context.TODO(), "preparing: %s", query)
-	}
-	if traceSQL {
+		log.Infof(session.Context(), "preparing: %s", query)
+	} else if traceSQL {
 		log.Tracef(session.Context(), "preparing: %s", query)
 	}
 	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
@@ -658,11 +657,11 @@ func (e *Executor) execStmtsInCurrentTxn(
 	}
 
 	for i, stmt := range stmts {
+		ctx := planMaker.session.Context()
 		if log.V(2) {
-			log.Infof(context.TODO(), "about to execute sql statement (%d/%d): %s", i+1, len(stmts), stmt)
-		}
-		if traceSQL && txnState.txn != nil {
-			log.Tracef(txnState.txn.Context, "executing %d/%d: %s", i+1, len(stmts), stmt)
+			log.Infof(ctx, "executing %d/%d: %s", i+1, len(stmts), stmt)
+		} else if traceSQL {
+			log.Tracef(ctx, "executing %d/%d: %s", i+1, len(stmts), stmt)
 		}
 		txnState.schemaChangers.curStatementIdx = i
 

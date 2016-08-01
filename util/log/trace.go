@@ -42,3 +42,27 @@ func Tracef(ctx context.Context, format string, args ...interface{}) {
 		sp.LogEvent(fmt.Sprintf(format, args...))
 	}
 }
+
+// VTrace either logs a message to the log files (which also outputs to the
+// active trace) or logs to the trace alone depending on whether the specified
+// verbosity level is active.
+func VTrace(level level, ctx context.Context, msg string) {
+	if V(level) {
+		Info(ctx, msg)
+	} else {
+		Trace(ctx, msg)
+	}
+}
+
+var _ = VTrace // TODO(peter): silence unused error, remove when used
+
+// VTracef either logs a message to the log files (which also outputs to the
+// active trace) or logs to the trace alone depending on whether the specified
+// verbosity level is active.
+func VTracef(level level, ctx context.Context, format string, args ...interface{}) {
+	if V(level) {
+		Infof(ctx, format, args...)
+	} else {
+		Tracef(ctx, format, args...)
+	}
+}
