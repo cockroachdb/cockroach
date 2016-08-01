@@ -5,15 +5,16 @@ set -euo pipefail
 
 source $(dirname $0)/build-common.sh
 
-test_build_dir=$(mktemp -d test-binaries.XXXX)
-time make STATIC=1 build TAGS="stdmalloc"
-time make STATIC=1 testbuildall DIR=${test_build_dir} TAGS="stdmalloc"
+time make STATIC=1 build TAGS=stdmalloc
+time make STATIC=1 testbuild PKG=./... TAGS=stdmalloc
 
 # We don't check all test binaries, but one from each invocation.
 check_static cockroach
-check_static ${test_build_dir}/github.com/cockroachdb/cockroach/sql/sql.test
+check_static cli/cli.test
 
+# Strip the binary and all the tests.
 strip -S cockroach
+find . -name '*.test' | xargs strip -S
 
 rm -f static-tests.stdmalloc.tar.gz
-time tar cfz static-tests.stdmalloc.tar.gz -C ${test_build_dir}/github.com/cockroachdb/ cockroach/
+time tar cfz static-tests.stdmalloc.tar.gz -C ../ cockroach/ --exclude '.git'
