@@ -744,10 +744,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				break
 			}
 
-			if log.V(1) {
-				log.Warningf(ctx, "failed to invoke %s: %s", ba, pErr)
-			}
-			log.Tracef(ctx, "reply error: %s", pErr)
+			log.VTracef(1, ctx, "reply error %s: %s", ba, pErr)
 
 			// Error handling: If the error indicates that our range
 			// descriptor is out of date, evict it from the cache and try
