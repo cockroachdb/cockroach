@@ -110,7 +110,7 @@ func (s *DBServer) Batch(
 
 	err = s.stopper.RunTask(func() {
 		var pErr *roachpb.Error
-		br, pErr = s.sender.Send(context.TODO(), *args)
+		br, pErr = s.sender.Send(ctx, *args)
 		if pErr != nil {
 			br = &roachpb.BatchResponse{}
 		}

@@ -407,7 +407,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 	if tc.linearizable && sleepNS > 0 {
 		defer func() {
 			if log.V(1) {
-				log.Infof(context.TODO(), "%v: waiting %s on EndTransaction for linearizability", br.Txn.ID.Short(), util.TruncateDuration(sleepNS, time.Millisecond))
+				log.Infof(ctx, "%v: waiting %s on EndTransaction for linearizability", br.Txn.ID.Short(), util.TruncateDuration(sleepNS, time.Millisecond))
 			}
 			time.Sleep(sleepNS)
 		}()
@@ -689,7 +689,7 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 	// instead of a timeout.
 	if ctx.Done() == nil && hasAbandoned {
 		if log.V(1) {
-			log.Infof(context.TODO(), "transaction %s abandoned; stopping heartbeat", txnMeta.txn)
+			log.Infof(ctx, "transaction %s abandoned; stopping heartbeat", txnMeta.txn)
 		}
 		tc.tryAsyncAbort(txnID)
 		return false
@@ -713,7 +713,7 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 	// transaction record at all, we're going to have to assume we're aborted
 	// as well.
 	if pErr != nil {
-		log.Warningf(context.TODO(), "heartbeat to %s failed: %s", txn, pErr)
+		log.Warningf(ctx, "heartbeat to %s failed: %s", txn, pErr)
 		// We're not going to let the client carry out additional requests, so
 		// try to clean up.
 		tc.tryAsyncAbort(*txn.ID)

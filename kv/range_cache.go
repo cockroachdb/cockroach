@@ -318,9 +318,9 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 	}
 
 	if log.V(3) {
-		log.Infof(context.TODO(), "lookup range descriptor: key=%s\n%s", key, rdc.stringLocked())
+		log.Infof(ctx, "lookup range descriptor: key=%s\n%s", key, rdc.stringLocked())
 	} else if log.V(2) {
-		log.Infof(context.TODO(), "lookup range descriptor: key=%s", key)
+		log.Infof(ctx, "lookup range descriptor: key=%s", key)
 	}
 
 	var res lookupResult
@@ -385,7 +385,7 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 			// append could cause a copy, which would change the address of rs[0]. We insert
 			// the prefetched descriptors first to avoid any unintended overwriting.
 			if err := rdc.insertRangeDescriptorsLocked(preRs...); err != nil {
-				log.Warningf(context.TODO(), "range cache inserting prefetched descriptors failed: %v", err)
+				log.Warningf(ctx, "range cache inserting prefetched descriptors failed: %v", err)
 			}
 			if err := rdc.insertRangeDescriptorsLocked(rs...); err != nil {
 				res = lookupResult{err: err}

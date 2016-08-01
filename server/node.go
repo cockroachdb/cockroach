@@ -778,7 +778,7 @@ func (n *Node) Batch(
 			if sp, err = tracing.JoinOrNewSnowball(opName, args.Trace, func(rawSpan basictracer.RawSpan) {
 				encSp, err := tracing.EncodeRawSpan(&rawSpan, nil)
 				if err != nil {
-					log.Warning(context.TODO(), err)
+					log.Warning(ctx, err)
 				}
 				br.CollectedSpans = append(br.CollectedSpans, encSp)
 			}); err != nil {

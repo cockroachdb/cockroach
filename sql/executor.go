@@ -302,7 +302,7 @@ func (e *Executor) Prepare(
 	pinfo parser.PlaceholderTypes,
 ) ([]ResultColumn, error) {
 	if log.V(2) {
-		log.Infof(context.TODO(), "preparing statement: %s", query)
+		log.Infof(ctx, "preparing statement: %s", query)
 	}
 	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
 	if err != nil {
@@ -503,14 +503,14 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 			if aErr, ok := err.(*client.AutoCommitError); ok {
 				// Until #7881 fixed.
 				if txn == nil {
-					log.Errorf(context.TODO(), "AutoCommitError on nil txn: %+v, txnState %+v, execOpt %+v, stmts %+v, remaining %+v", err, txnState, execOpt, stmts, remainingStmts)
+					log.Errorf(ctx, "AutoCommitError on nil txn: %+v, txnState %+v, execOpt %+v, stmts %+v, remaining %+v", err, txnState, execOpt, stmts, remainingStmts)
 				}
 				lastResult.Err = aErr
 				e.txnAbortCount.Inc(1)
 				txn.CleanupOnError(err)
 			}
 			if lastResult.Err == nil {
-				log.Fatalf(context.TODO(), "error (%s) was returned, but it was not set in the last result (%v)", err, lastResult)
+				log.Fatalf(ctx, "error (%s) was returned, but it was not set in the last result (%v)", err, lastResult)
 			}
 		}
 

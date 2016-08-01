@@ -1981,7 +1981,7 @@ func MVCCResolveWriteIntentRangeUsingIter(
 			err = mvccResolveWriteIntent(ctx, engine, iterAndBuf.iter, ms, intent, iterAndBuf.buf)
 		}
 		if err != nil {
-			log.Warningf(context.TODO(), "failed to resolve intent for key %q: %v", key.Key, err)
+			log.Warningf(ctx, "failed to resolve intent for key %q: %v", key.Key, err)
 		} else {
 			num++
 		}
@@ -2122,7 +2122,7 @@ func MVCCFindSplitKey(
 		if debugFn != nil {
 			debugFn(msg, args...)
 		} else if log.V(2) {
-			log.Infof(context.TODO(), "FindSplitKey["+rangeID.String()+"] "+msg, args...)
+			log.Infof(ctx, "FindSplitKey["+rangeID.String()+"] "+msg, args...)
 		}
 	}
 

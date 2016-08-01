@@ -98,7 +98,7 @@ func (ir *intentResolver) processWriteIntentError(ctx context.Context,
 		// usually be returned here, although there are some cases
 		// when they may be (especially when a test cluster is in
 		// the process of shutting down).
-		log.Warningf(context.TODO(), "asynchronous resolveIntents failed: %s", resErr)
+		log.Warningf(ctx, "asynchronous resolveIntents failed: %s", resErr)
 	}
 
 	if pushErr != nil {
@@ -195,7 +195,7 @@ func (ir *intentResolver) maybePushTransactions(
 			// Another goroutine is working on this transaction so we can
 			// skip it.
 			if log.V(1) {
-				log.Infof(context.TODO(), "skipping PushTxn for %s; attempt already in flight", intent.Txn.ID)
+				log.Infof(ctx, "skipping PushTxn for %s; attempt already in flight", intent.Txn.ID)
 			}
 			continue
 		} else {
@@ -432,7 +432,7 @@ func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
 		wg.Add(1)
 		if wait || r.store.Stopper().RunLimitedAsyncTask(ir.sem, func() {
 			if err := action(); err != nil {
-				log.Warningf(context.TODO(), "unable to resolve local intents; %s", err)
+				log.Warningf(ctx, "unable to resolve local intents; %s", err)
 			}
 		}) != nil {
 			// Still run the task when draining. Our caller already has a task and
@@ -456,7 +456,7 @@ func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
 		}
 		if wait || r.store.Stopper().RunLimitedAsyncTask(ir.sem, func() {
 			if err := action(); err != nil {
-				log.Warningf(context.TODO(), "unable to resolve external intents: %s", err)
+				log.Warningf(ctx, "unable to resolve external intents: %s", err)
 			}
 		}) != nil {
 			// As with local intents, try async to not keep the caller waiting, but
