@@ -632,7 +632,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 				// Return a nil chan to signal that we have a valid lease.
 				return nil, nil
 			}
-			log.Trace(ctx, fmt.Sprintf("request range lease (attempt #%d)", attempt))
+			log.Tracef(ctx, "request range lease (attempt #%d)", attempt)
 
 			// No active lease: Request renewal if a renewal is not already pending.
 			return r.requestLeaseLocked(timestamp), nil
@@ -924,7 +924,7 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		pErr = roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
 	}
 	if pErr != nil {
-		log.Trace(ctx, fmt.Sprintf("error: %s", pErr))
+		log.Tracef(ctx, "error: %s", pErr)
 	}
 	return br, pErr
 }

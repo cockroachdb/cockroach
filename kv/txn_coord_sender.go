@@ -360,8 +360,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 
 		if hasET && log.V(1) {
 			for _, intent := range et.IntentSpans {
-				log.Trace(ctx, fmt.Sprintf("intent: [%s,%s)",
-					intent.Key, intent.EndKey))
+				log.Tracef(ctx, "intent: [%s,%s)", intent.Key, intent.EndKey)
 			}
 		}
 	}
@@ -379,7 +378,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		}
 
 		if pErr = tc.updateState(startNS, ctx, ba, br, pErr); pErr != nil {
-			log.Trace(ctx, fmt.Sprintf("error: %s", pErr))
+			log.Tracef(ctx, "error: %s", pErr)
 			return nil, pErr
 		}
 	}

@@ -305,7 +305,7 @@ func (e *Executor) Prepare(
 		log.Infof(context.TODO(), "preparing: %s", query)
 	}
 	if traceSQL {
-		log.Trace(session.Context(), fmt.Sprintf("preparing: %s", query))
+		log.Tracef(session.Context(), "preparing: %s", query)
 	}
 	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
 	if err != nil {
@@ -662,7 +662,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 			log.Infof(context.TODO(), "about to execute sql statement (%d/%d): %s", i+1, len(stmts), stmt)
 		}
 		if traceSQL && txnState.txn != nil {
-			log.Trace(txnState.txn.Context, fmt.Sprintf("executing %d/%d: %s", i+1, len(stmts), stmt))
+			log.Tracef(txnState.txn.Context, "executing %d/%d: %s", i+1, len(stmts), stmt)
 		}
 		txnState.schemaChangers.curStatementIdx = i
 
@@ -934,7 +934,7 @@ func (e *Executor) execStmtInOpenTxn(
 	result, err := e.execStmt(stmt, planMaker, implicitTxn /* autoCommit */)
 	if err != nil {
 		if traceSQL {
-			log.Trace(txnState.txn.Context, fmt.Sprintf("ERROR: %v", err))
+			log.Tracef(txnState.txn.Context, "ERROR: %v", err)
 		}
 		if txnState.tr != nil {
 			txnState.tr.LazyPrintf("ERROR: %v", err)
@@ -951,7 +951,7 @@ func (e *Executor) execStmtInOpenTxn(
 		}
 		txnState.tr.LazyLog(tResult, false)
 		if traceSQL {
-			log.Trace(txnState.txn.Context, fmt.Sprintf("%s done", tResult.String()))
+			log.Tracef(txnState.txn.Context, "%s done", tResult)
 		}
 	}
 	return result, err

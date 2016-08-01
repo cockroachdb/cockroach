@@ -17,7 +17,6 @@
 package storage
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/pkg/errors"
@@ -153,7 +152,7 @@ func (rq *replicateQueue) process(
 		if log.V(1) {
 			log.Infof(ctx, "%s: adding replica to %+v due to under-replication", repl, newReplica)
 		}
-		log.Trace(ctx, fmt.Sprintf("adding replica to %+v due to under-replication", newReplica))
+		log.Tracef(ctx, "adding replica to %+v due to under-replication", newReplica)
 		if err = repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, newReplica, desc); err != nil {
 			return err
 		}
@@ -168,7 +167,7 @@ func (rq *replicateQueue) process(
 		if log.V(1) {
 			log.Infof(ctx, "%s: removing replica %+v due to over-replication", repl, removeReplica)
 		}
-		log.Trace(ctx, fmt.Sprintf("removing replica %+v due to over-replication", removeReplica))
+		log.Tracef(ctx, "removing replica %+v due to over-replication", removeReplica)
 		if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, removeReplica, desc); err != nil {
 			return err
 		}
@@ -188,7 +187,7 @@ func (rq *replicateQueue) process(
 		if log.V(1) {
 			log.Infof(ctx, "%s: removing replica %+v from dead store", repl, deadReplica)
 		}
-		log.Trace(ctx, fmt.Sprintf("removing replica %+v from dead store", deadReplica))
+		log.Tracef(ctx, "removing replica %+v from dead store", deadReplica)
 		if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, deadReplica, desc); err != nil {
 			return err
 		}
@@ -217,7 +216,7 @@ func (rq *replicateQueue) process(
 		if log.V(1) {
 			log.Infof(ctx, "%s: rebalancing to %+v", repl, rebalanceReplica)
 		}
-		log.Trace(ctx, fmt.Sprintf("rebalancing to %+v", rebalanceReplica))
+		log.Tracef(ctx, "rebalancing to %+v", rebalanceReplica)
 		if err = repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, rebalanceReplica, desc); err != nil {
 			return err
 		}
