@@ -803,9 +803,13 @@ func (r *Replica) runCommitTrigger(
 	if err := func() error {
 		if ct.GetSplitTrigger() != nil {
 			var err error
-			if *ms, trigger, err = r.splitTrigger(ctx, batch, *ms, ct.SplitTrigger, txn.Timestamp); err != nil {
+			var postSplit *PostCommitTrigger
+			if *ms, postSplit, err = r.splitTrigger(
+				ctx, batch, *ms, ct.SplitTrigger, txn.Timestamp,
+			); err != nil {
 				return err
 			}
+			trigger = updateTrigger(trigger, postSplit)
 		}
 		if ct.GetMergeTrigger() != nil {
 			postMerge, err := r.mergeTrigger(ctx, batch, ms, ct.MergeTrigger, txn.Timestamp)
@@ -2528,9 +2532,8 @@ func (r *Replica) splitTrigger(
 	trigger := &PostCommitTrigger{
 		noConcurrentReads: true,
 		split: &postCommitSplit{
-			SplitTrigger:           *split,
-			RightDeltaMS:           rightDeltaMS,
-			ResetContainsEstimates: true,
+			SplitTrigger: *split,
+			RightDeltaMS: rightDeltaMS,
 		},
 	}
 	return leftDeltaMS, trigger, nil
