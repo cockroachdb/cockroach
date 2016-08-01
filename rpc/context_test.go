@@ -61,18 +61,18 @@ func TestHeartbeatCB(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	serverClock := hlc.NewClock(time.Unix(0, 20).UnixNano)
-	serverCtx := newNodeTestContext(serverClock, stopper)
+	clock := hlc.NewClock(time.Unix(0, 20).UnixNano)
+	serverCtx := newNodeTestContext(clock, stopper)
 	s, ln := newTestServer(t, serverCtx, true)
 	remoteAddr := ln.Addr().String()
 
 	RegisterHeartbeatServer(s, &HeartbeatService{
-		clock:              serverClock,
+		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
 	})
 
 	// Clocks don't matter in this test.
-	clientCtx := newNodeTestContext(serverClock, stopper)
+	clientCtx := newNodeTestContext(clock, stopper)
 
 	var once sync.Once
 	ch := make(chan struct{})
@@ -91,8 +91,8 @@ func TestHeartbeatCB(t *testing.T) {
 	<-ch
 }
 
-// TestHeartbeatHealth verifies that the health status changes after heartbeats
-// succeed or fail.
+// TestHeartbeatHealth verifies that the health status changes after
+// heartbeats succeed or fail.
 func TestHeartbeatHealth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -122,8 +122,8 @@ func TestHeartbeatHealth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// This code is inherently racy so when we need to verify heartbeats we want
-	// them to always succeed.
+	// This code is inherently racy so when we need to verify heartbeats we
+	// want them to always succeed.
 	sendHeartbeats := func() func() {
 		done := make(chan struct{})
 		go func() {
@@ -140,17 +140,24 @@ func TestHeartbeatHealth(t *testing.T) {
 		}
 	}
 
-	// Should be healthy after the first successful heartbeat.
-	stopHeartbeats := sendHeartbeats()
-	util.SucceedsSoon(t, func() error {
-		if !clientCtx.IsConnHealthy(remoteAddr) {
-			return errors.Errorf("expected %s to be healthy", remoteAddr)
-		}
-		return nil
-	})
-	stopHeartbeats()
+	// Should be unhealthy in the absence of heartbeats.
+	if clientCtx.IsConnHealthy(remoteAddr) {
+		t.Fatalf("expected %s to be unhealthy", remoteAddr)
+	}
 
-	// Should no longer be healthy after heartbeating stops.
+	func() {
+		defer sendHeartbeats()()
+
+		// Should become healthy in the presence of heartbeats.
+		util.SucceedsSoon(t, func() error {
+			if !clientCtx.IsConnHealthy(remoteAddr) {
+				return errors.Errorf("expected %s to be healthy", remoteAddr)
+			}
+			return nil
+		})
+	}()
+
+	// Should become unhealthy again in the absence of heartbeats.
 	util.SucceedsSoon(t, func() error {
 		if clientCtx.IsConnHealthy(remoteAddr) {
 			return errors.Errorf("expected %s to be unhealthy", remoteAddr)
@@ -158,15 +165,17 @@ func TestHeartbeatHealth(t *testing.T) {
 		return nil
 	})
 
-	// Should return to healthy after another successful heartbeat.
-	stopHeartbeats = sendHeartbeats()
-	util.SucceedsSoon(t, func() error {
-		if !clientCtx.IsConnHealthy(remoteAddr) {
-			return errors.Errorf("expected %s to be healthy", remoteAddr)
-		}
-		return nil
-	})
-	stopHeartbeats()
+	func() {
+		defer sendHeartbeats()()
+
+		// Should become healthy again in the presence of heartbeats.
+		util.SucceedsSoon(t, func() error {
+			if !clientCtx.IsConnHealthy(remoteAddr) {
+				return errors.Errorf("expected %s to be healthy", remoteAddr)
+			}
+			return nil
+		})
+	}()
 
 	if clientCtx.IsConnHealthy("non-existent connection") {
 		t.Errorf("non-existent connection is reported as healthy")
