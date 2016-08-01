@@ -43,6 +43,9 @@ type DescriptorAccessor interface {
 	// checkPrivilege verifies that p.session.User has `privilege` on `descriptor`.
 	checkPrivilege(descriptor sqlbase.DescriptorProto, privilege privilege.Kind) error
 
+	// anyPrivilege verifies that p.session.User has any privilege on `descriptor`.
+	anyPrivilege(descriptor sqlbase.DescriptorProto) error
+
 	// createDescriptor takes a Table or Database descriptor and creates it if
 	// needed, incrementing the descriptor counter. Returns true if the descriptor
 	// is actually created, false if it already existed, or an error if one was encountered.
@@ -71,6 +74,15 @@ func (p *planner) checkPrivilege(descriptor sqlbase.DescriptorProto, privilege p
 	}
 	return fmt.Errorf("user %s does not have %s privilege on %s %s",
 		p.session.User, privilege, descriptor.TypeName(), descriptor.GetName())
+}
+
+// anyPrivilege implements the DescriptorAccessor interface.
+func (p *planner) anyPrivilege(descriptor sqlbase.DescriptorProto) error {
+	if descriptor.GetPrivileges().AnyPrivilege(p.session.User) {
+		return nil
+	}
+	return fmt.Errorf("user %s has no privileges on %s %s",
+		p.session.User, descriptor.TypeName(), descriptor.GetName())
 }
 
 // createDescriptor implements the DescriptorAccessor interface.
