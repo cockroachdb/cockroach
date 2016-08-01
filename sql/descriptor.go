@@ -80,11 +80,15 @@ func (p *planner) checkPrivilege(descriptor sqlbase.DescriptorProto, privilege p
 
 // anyPrivilege implements the DescriptorAccessor interface.
 func (p *planner) anyPrivilege(descriptor sqlbase.DescriptorProto) error {
-	if descriptor.GetPrivileges().AnyPrivilege(p.session.User) || isVirtualDescriptor(descriptor) {
+	if userCanSeeDescriptor(descriptor, p.session.User) {
 		return nil
 	}
 	return fmt.Errorf("user %s has no privileges on %s %s",
 		p.session.User, descriptor.TypeName(), descriptor.GetName())
+}
+
+func userCanSeeDescriptor(descriptor sqlbase.DescriptorProto, user string) bool {
+	return descriptor.GetPrivileges().AnyPrivilege(user) || isVirtualDescriptor(descriptor)
 }
 
 type descriptorAlreadyExistsErr struct {
@@ -228,7 +232,7 @@ func (p *planner) getAllDescriptors() ([]sqlbase.DescriptorProto, error) {
 		return nil, err
 	}
 
-	var descs []sqlbase.DescriptorProto
+	descs := make([]sqlbase.DescriptorProto, 0, len(kvs))
 	for _, kv := range kvs {
 		desc := &sqlbase.Descriptor{}
 		if err := kv.ValueProto(desc); err != nil {
