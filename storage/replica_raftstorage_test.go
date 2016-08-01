@@ -57,9 +57,9 @@ func fillTestRange(t testing.TB, rep *Replica, size int64) {
 
 func TestSkipLargeReplicaSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	store, _, stopper := createTestStore(t)
-	store.ctx.TestingKnobs.DisableSplitQueue = true
-	// We want to manually control the size of the raft log.
+	sCtx := TestStoreContext()
+	sCtx.TestingKnobs.DisableSplitQueue = true
+	store, _, stopper := createTestStoreWithContext(t, &sCtx)
 	defer stopper.Stop()
 
 	const snapSize = 1 << 20 // 1 MiB
