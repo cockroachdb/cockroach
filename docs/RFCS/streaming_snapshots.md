@@ -54,8 +54,14 @@ message SnapshotRequest {
   message Header {
     optional roachpb.RangeDescriptor range_descriptor = 1 [(gogoproto.nullable) = false)];
     optional int64 range_size = 2 [(gogoproto.nullable) = false];
-    optional bytes snapshot_id = 3 [(gogoproto.customtype = "github.com/cockroachdb/cockroach/util/uuid.UUID")];
+
+    // A raft message of type MsgSnap. The raft snapshot data contains a UUID.
     optional raftpb.Message raft_message = 4;
+
+    // can_decline is set on preemptive snapshots, but not those generated
+    // by raft because at that point it is better to queue up the stream
+    // than to cancel it.
+    optional bool can_decline = 5 [(gogoproto.nullable) = false];
   }
 
   optional Header header = 1;
@@ -76,6 +82,7 @@ message SnapshotResponse {
     ACCEPTED = 1;
     APPLIED = 2;
     ERROR = 3;
+    DECLINED = 4;
   }
   optional Status status = 1 [(gogoproto.nullable) = false];
   optional string message = 2 [(gogoproto.nullable) = false];
@@ -89,15 +96,15 @@ service MultiRaft {
 
 The protocol is inspired by HTTP's `Expect: 100-continue` mechanism.
 The sender creates a `RaftSnapshot` stream and sends a
-`SnapshotRequest` containing only a `Header`. The recipient may either
-accept the snapshot by sending a response with `status=ACCEPTED`,
-reject the snapshot permanently (for example, if it has a conflicting
-range) by sending a response with `status=ERROR` and closing the
-stream, or stall the snapshot temporarily (for example, if it is
-currently processing too many other snapshots) by doing nothing and
-keeping the stream open. The recipient may make this decision either
-using the reservation system or by a separate store-wide counter of
-pending snapshots.
+`SnapshotRequest` containing only a `Header` (no other message
+includes a `Header`). The recipient may either accept the snapshot by
+sending a response with `status=ACCEPTED`, reject the snapshot
+permanently (for example, if it has a conflicting range) by sending a
+response with `status=ERROR` and closing the stream, or stall the
+snapshot temporarily (for example, if it is currently processing too
+many other snapshots) by doing nothing and keeping the stream open.
+The recipient may make this decision either using the reservation
+system or by a separate store-wide counter of pending snapshots.
 
 When the snapshot has been accepted, the sender sends one or more
 additional `SnapshotRequests`, each containing KV data and/or log
@@ -136,10 +143,10 @@ snapshots will continue to apply the snapshot as one unit.
 ### Phase 1
 
 The recipient will accumulate all `SnapshotRequests` in memory, into a
-rocksdb `Batch`, keyed by the UUID from the header. It sends the
-header's `MsgSnap` into raft, and if `raft.Ready` returns a snapshot
-to be applied with the given UUID (this is not guaranteed), the
-buffered snapshot will be committed.
+rocksdb `Batch`, keyed by the UUID from the header `raftpb.Message`.
+It sends the header's `MsgSnap` into raft, and if `raft.Ready` returns
+a snapshot to be applied with the given UUID (this is not guaranteed),
+the buffered snapshot will be committed.
 
 ### Phase 2
 
@@ -175,7 +182,12 @@ replica as corrupt.
 
 # Unresolved questions
 
-- Can this replace the reservation system, or do we need both?
+- Can this replace the reservation system, or do we need both? It
+  should probably be integrated, but they're not quite the same - for
+  preemptive snapshots we want to return `DECLINED` so the replication
+  queue can pick another target, but raft-generated snapshots cannot
+  be declined (since they cannot be retried elsewhere) and instead
+  should be queued up until space is available.
 - It should be possible to recover from a failed snapshot by receiving
   a new snapshot without marking the replica as corrupt. What would be
   required to make this work?
