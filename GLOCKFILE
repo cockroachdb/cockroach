@@ -78,7 +78,7 @@ github.com/matttproud/golang_protobuf_extensions c12348ce28de40eed0136aa2b644d0e
 github.com/mibk/dupl 415e882ea21ca7012cc49906cb338f34d2d4b4d6
 github.com/montanaflynn/stats 60dcacf48f43d6dd654d0ed94120ff5806c5ca5c
 github.com/olekukonko/tablewriter daf2955e742cf123959884fdff4685aa79b63135
-github.com/opencontainers/runc 1a81e9ab1f138c091fe5c86d0883f87716088527
+github.com/opencontainers/runc 56fc0ac9ce92781239541477d4bf6fd65178cd8c
 github.com/opennota/check 5b00aacd5639507d2b039245a278ec9f5505509f
 github.com/opentracing/basictracer-go a39552bda9584ab9ab465f6462f23f7ed1aa0d15
 github.com/opentracing/opentracing-go 67bc0a342a73f8ce1e4514fe1ae68609554dc05e
@@ -104,13 +104,13 @@ github.com/termie/go-shutil bcacb06fecaeec8dc42af03c87c6949f4a05c74c
 github.com/wadey/gocovmerge b5bfa59ec0adc420475f97f89b58045c721d761c
 golang.org/x/crypto bc89c496413265e715159bdc8478ee9a92fdc265
 golang.org/x/net 35028a49ca5a73b486af60cd20ac21cd6b67bfdb
-golang.org/x/oauth2 1364adb2c63445016c5ed4518fc71f6a3cda6169
+golang.org/x/oauth2 0aec23fa6269cbce14cd407234f04213227a7917
 golang.org/x/sys a646d33e2ee3172a661fc09bca23bb4889a41bc8
 golang.org/x/text 2910a502d2bf9e43193af9d68ca516529614eed3
 golang.org/x/tools 9e7459099f9afd6a15464d69d93c6eed49bb545d
 google.golang.org/appengine 267c27e7492265b84fc6719503b14a1e17975d79
 google.golang.org/cloud 99f477c06cc984512025c41cc94173fc0d84f470
-google.golang.org/grpc a2e43287ddc3255801a1bc5886055de460b2b158
+google.golang.org/grpc 3de685a0edf1265c461206e48fb2bd18ae4c2eda
 gopkg.in/check.v1 4f90aeace3a26ad7021961c297b22c42160c7b25
 gopkg.in/inf.v0 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de
