@@ -375,7 +375,9 @@ func (r *Replica) handleTrigger(
 				// the timestamp cache low water.
 				log.Infof(ctx, "%s: new range lease %s following %s [physicalTime=%s]",
 					r, trigger.lease, prevLease, r.store.Clock().PhysicalTime())
+				r.mu.Lock()
 				r.mu.tsCache.SetLowWater(trigger.lease.Start)
+				r.mu.Unlock()
 
 				// Gossip the first range whenever its lease is acquired. We check to
 				// make sure the lease is active so that a trailing replica won't process
