@@ -733,7 +733,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 	mtc.expireLeases()
 }
 
-// TestChangeReplicasDuplicateError tests that a replica change aborts if
+// TestChangeReplicasDescriptorInvariant tests that a replica change aborts if
 // another change has been made to the RangeDescriptor since it was initiated.
 func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -781,10 +781,12 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 	// Both addReplica calls attempted to use origDesc.NextReplicaID.
 	// The failed second call should not have overwritten the cached
 	// replica descriptor from the successful first call.
-	if rd, err := mtc.stores[0].ReplicaDescriptor(origDesc.RangeID, origDesc.NextReplicaID); err != nil {
-		t.Fatalf("failed to look up replica %s", origDesc.NextReplicaID)
-	} else if a, e := rd.StoreID, mtc.stores[1].Ident.StoreID; a != e {
-		t.Fatalf("expected replica %s to point to store %s, but got %s", origDesc.NextReplicaID, a, e)
+	rep, err := mtc.stores[0].GetReplica(origDesc.RangeID)
+	if err != nil {
+		t.Fatalf("failed to look up replica %s: %s", origDesc.RangeID, err)
+	}
+	if a, e := rep.GetLastFromReplicaDesc().StoreID, mtc.stores[1].Ident.StoreID; a != e {
+		t.Fatalf("expected replica %s to point to store %s, but got %s", rep, a, e)
 	}
 
 	// Add to third store with fresh descriptor.
