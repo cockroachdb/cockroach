@@ -2074,9 +2074,7 @@ func (r *Replica) applyRaftCommand(
 	// have not been previously written within this batch. Currently the only
 	// remaining writes are the raft applied index and the updated MVCC stats.
 	//
-	// TODO(tschottdorf): Considered too dangerous for now.
-	// writer := batch.Distinct()
-	writer := batch
+	writer := batch.Distinct()
 
 	// Advance the last applied index.
 	if err := setAppliedIndex(writer, &propResult.delta, r.RangeID, index, leaseIndex); err != nil {
@@ -2097,9 +2095,7 @@ func (r *Replica) applyRaftCommand(
 	// the code, which went undetected even though we used the batch after
 	// (though only to commit it). We should add an assertion to prevent that in
 	// the future.
-	//
-	// TODO(tschottdorf): disabled for now.
-	// writer.Close()
+	writer.Close()
 
 	// TODO(tschottdorf): with proposer-eval'ed KV, the batch would not be
 	// committed at this point. Instead, it would be added to propResult.
