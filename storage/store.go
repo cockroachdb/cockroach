@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/cache"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -69,14 +68,6 @@ const (
 	// preemptiveSnapshotRaftGroupID is a bogus ID for which a Raft group is
 	// temporarily created during the application of a preemptive snapshot.
 	preemptiveSnapshotRaftGroupID = math.MaxUint64
-
-	// TODO(bdarnell): Determine the right size for this cache. Should
-	// the cache be partitioned so that replica descriptors from the
-	// range descriptors (which are the bulk of the data and can be
-	// reloaded from disk as needed) don't crowd out the
-	// message/snapshot descriptors (whose necessity is short-lived but
-	// cannot be recovered through other means if evicted)?
-	maxReplicaDescCacheSize = 10000
 
 	// rangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the leader
 	// lease active duration should be of the raft election timeout.
@@ -297,11 +288,6 @@ func (rs *storeRangeSet) EstimatedCount() int {
 	return len(rs.rangeIDs) - rs.visited
 }
 
-type replicaDescCacheKey struct {
-	rangeID   roachpb.RangeID
-	replicaID roachpb.ReplicaID
-}
-
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
 type Store struct {
@@ -447,52 +433,6 @@ type Store struct {
 		replicas       map[roachpb.RangeID]*Replica // Map of replicas by Range ID
 		replicasByKey  *btree.BTree                 // btree keyed by ranges end keys.
 		uninitReplicas map[roachpb.RangeID]*Replica // Map of uninitialized replicas by Range ID
-
-		// The replica descriptor cache maps <rangeID, replicaID> to
-		// ReplicaDescriptor. Normally, a replica knows about the other replica
-		// descriptors for a range via the RangeDescriptor stored in
-		// Replica.mu.state.Desc. But that descriptor is only updated during a
-		// Split or ChangeReplicas operation. There are periods during a Replica's
-		// lifetime when that information is out of date:
-		//
-		// 1. When a replica is being newly created as the result of an incoming
-		// Raft message for it. This is the common case for ChangeReplicas and an
-		// uncommon case for Splits. The leader will be sending the replica
-		// messages and the replica needs to be able to respond before it can
-		// receive an updated range descriptor (via a snapshot,
-		// changeReplicasTrigger, or splitTrigger).
-		//
-		// 2. If the node containing a replica is partitioned or down while the
-		// replicas for the range are updated. When the node comes back up, other
-		// replicas may begin communicating with it and it needs to be able to
-		// respond. Unlike 1 where there is no range descriptor, in this situation
-		// the replica has a range descriptor but it is out of date. Note that a
-		// replica being removed from a node and then quickly re-added before the
-		// replica has been GC'd will also utilize the replica descriptor cache. In
-		// effect, this is another path for which the replica's local range
-		// descriptor is out of date.
-		//
-		// The replica descriptor cache is updated on receipt of every raft message
-		// (see Store.handleRaftMessage). Cached descriptors are retrieved when
-		// sending raft messages in order to have the most up to date descriptor
-		// for a replica (see Replica.sendRaftMessage).
-		//
-		// TODO(peter): The replica descriptor cache is a historical artifact from
-		// the multiraft era. It might be preferrable to move this cache to Replica
-		// and change it to a map keyed by replicaID. The question then becomes
-		// how/when to expire old entries from the cache. Presumably we could hook
-		// into Replica.setDesc to notice when a replicaID has been removed. It is
-		// possible we could get away with a single entry cache as we only need to
-		// be able to respond to the last replica that talked to us.
-		//
-		// There is a potential downside to this move: removing a replica from
-		// Store.mu.replicas will remove cached replica descriptor
-		// information. @bdarnell Thinks this won't be a problem: When a replica is
-		// completely removed, it won't be recreated until there is another event
-		// that will repopulate the cache. When it is temporarily dropped and
-		// recreated, the newly recreated replica will have a complete range
-		// descriptor so it won't need to rely on this cache.
-		replicaDescCache *cache.UnorderedCache
 	}
 
 	// pendingRaftGroups contains the ranges that should be checked for
@@ -878,12 +818,6 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	s.mu.replicas = map[roachpb.RangeID]*Replica{}
 	s.mu.replicasByKey = btree.New(64 /* degree */)
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
-	s.mu.replicaDescCache = cache.NewUnorderedCache(cache.Config{
-		Policy: cache.CacheLRU,
-		ShouldEvict: func(size int, _, _ interface{}) bool {
-			return size > maxReplicaDescCacheSize
-		},
-	})
 	s.pendingRaftGroups.value = map[roachpb.RangeID]struct{}{}
 
 	s.mu.Unlock()
@@ -2375,8 +2309,6 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 	}
 
 	s.mu.Lock()
-	s.cacheReplicaDescriptorLocked(req.RangeID, req.FromReplica)
-	s.cacheReplicaDescriptorLocked(req.RangeID, req.ToReplica)
 	// Lazily create the replica.
 	r, err := s.getOrCreateReplicaLocked(req.RangeID, req.ToReplica.ReplicaID,
 		req.FromReplica)
@@ -2386,6 +2318,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 	if err != nil {
 		return err
 	}
+	r.setLastReplicaDescriptors(req)
 
 	if req.ToReplica.ReplicaID == 0 {
 		if req.Message.Type == raftpb.MsgSnap {
@@ -2658,60 +2591,6 @@ func (s *Store) getOrCreateReplicaLocked(rangeID roachpb.RangeID, replicaID roac
 	s.mu.uninitReplicas[r.RangeID] = r
 
 	return r, nil
-}
-
-// ReplicaDescriptor returns the replica descriptor for the given
-// range and replica, if known.
-func (s *Store) ReplicaDescriptor(rangeID roachpb.RangeID, replicaID roachpb.ReplicaID) (roachpb.ReplicaDescriptor, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.replicaDescriptorLocked(rangeID, replicaID)
-}
-
-// replicaDescriptorLocked returns the replica descriptor for the given
-// range and replica, if known.
-func (s *Store) replicaDescriptorLocked(
-	rangeID roachpb.RangeID,
-	replicaID roachpb.ReplicaID,
-) (roachpb.ReplicaDescriptor, error) {
-	if repDesc, ok := s.mu.replicaDescCache.Get(replicaDescCacheKey{
-		rangeID, replicaID,
-	}); ok {
-		return repDesc.(roachpb.ReplicaDescriptor), nil
-	}
-	replica, err := s.getReplicaLocked(rangeID)
-	if err != nil {
-		return roachpb.ReplicaDescriptor{}, err
-	}
-	for _, repDesc := range replica.Desc().Replicas {
-		if repDesc.ReplicaID == replicaID {
-			s.cacheReplicaDescriptorLocked(rangeID, repDesc)
-			return repDesc, nil
-		}
-	}
-	return roachpb.ReplicaDescriptor{}, errors.Errorf(
-		"replica %d not found in range %d",
-		replicaID,
-		rangeID,
-	)
-}
-
-// cacheReplicaDescriptorLocked adds the given replica descriptor to a cache
-// to be used by replicaDescriptorLocked.
-// cacheReplicaDescriptorLocked requires that the store lock is held.
-func (s *Store) cacheReplicaDescriptorLocked(
-	rangeID roachpb.RangeID, replicaDesc roachpb.ReplicaDescriptor,
-) {
-	if old, ok := s.mu.replicaDescCache.Get(replicaDescCacheKey{rangeID, replicaDesc.ReplicaID}); ok {
-		if old != replicaDesc {
-			rpl, _ := s.getReplicaLocked(rangeID)
-			log.Fatalf(context.TODO(), "store %+v, range %d: clobbering %+v with %+v "+
-				"in replicaDescCache; have replica %+v", s.Ident,
-				rangeID, old, replicaDesc, rpl)
-		}
-		return
-	}
-	s.mu.replicaDescCache.Add(replicaDescCacheKey{rangeID, replicaDesc.ReplicaID}, replicaDesc)
 }
 
 // canApplySnapshot returns true if the snapshot can be applied to

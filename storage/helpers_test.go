@@ -130,7 +130,11 @@ func (s *Store) SetSplitQueueActive(active bool) {
 // SetReplicaScannerDisabled turns replica scanning off or on as directed. Note
 // that while disabled, removals are still processed.
 func (s *Store) SetReplicaScannerDisabled(disabled bool) {
-	s.scanner.SetDisabled(disabled)
+	if disabled {
+		atomic.StoreInt32(&s.scanner.disabled, 1)
+	} else {
+		atomic.StoreInt32(&s.scanner.disabled, 0)
+	}
 }
 
 // GetLastIndex is the same function as LastIndex but it does not require
@@ -139,16 +143,6 @@ func (r *Replica) GetLastIndex() (uint64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.LastIndex()
-}
-
-// SetDisabled turns replica scanning off or on as directed. Note that while
-// disabled, removals are still processed.
-func (rs *replicaScanner) SetDisabled(disabled bool) {
-	if disabled {
-		atomic.StoreInt32(&rs.disabled, 1)
-	} else {
-		atomic.StoreInt32(&rs.disabled, 0)
-	}
 }
 
 // GetLease exposes replica.getLease for tests.
@@ -161,4 +155,10 @@ func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.mu.tsCache.lowWater
+}
+
+func (r *Replica) GetLastFromReplicaDesc() roachpb.ReplicaDescriptor {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.lastFromReplica
 }

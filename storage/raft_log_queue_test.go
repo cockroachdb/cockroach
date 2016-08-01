@@ -204,7 +204,7 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	store.scanner.SetDisabled(true)
+	store.SetReplicaScannerDisabled(true)
 
 	r, err := store.GetReplica(1)
 	if err != nil {

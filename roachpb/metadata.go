@@ -130,6 +130,17 @@ func (r RangeDescriptor) GetReplicaDescriptor(storeID StoreID) (ReplicaDescripto
 	return ReplicaDescriptor{}, false
 }
 
+// GetReplicaDescriptorByID returns the replica which matches the specified store
+// ID.
+func (r RangeDescriptor) GetReplicaDescriptorByID(replicaID ReplicaID) (ReplicaDescriptor, bool) {
+	for _, repDesc := range r.Replicas {
+		if repDesc.ReplicaID == replicaID {
+			return repDesc, true
+		}
+	}
+	return ReplicaDescriptor{}, false
+}
+
 // IsInitialized returns false if this descriptor represents an
 // uninitialized range.
 // TODO(bdarnell): unify this with Validate().
