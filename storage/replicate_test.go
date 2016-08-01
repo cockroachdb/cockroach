@@ -32,7 +32,7 @@ func TestEagerReplication(t *testing.T) {
 
 	// Disable the replica scanner so that we rely on the eager replication code
 	// path that occurs after splits.
-	store.SetReplicaScannerDisabled(true)
+	store.SetReplicaScannerActive(false)
 
 	if err := server.WaitForInitialSplits(store.DB()); err != nil {
 		t.Fatal(err)
