@@ -16,7 +16,13 @@
 
 package sql
 
-import "github.com/cockroachdb/cockroach/sql/parser"
+import (
+	"sort"
+
+	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/pkg/errors"
+)
 
 var informationSchema = virtualSchema{
 	name: "information_schema",
@@ -25,6 +31,16 @@ var informationSchema = virtualSchema{
 	},
 }
 
+// defString is used as the value for columns included in the sql standard
+// of information_schema that don't make sense for CockroachDB. This is
+// identical to the behavior of MySQL.
+var defString = parser.NewDString("def")
+
+var (
+	tableTypeSystemView = parser.NewDString("SYSTEM VIEW")
+	tableTypeBaseTable  = parser.NewDString("BASE TABLE")
+)
+
 var informationSchemaTablesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.tables (
@@ -32,63 +48,68 @@ CREATE TABLE information_schema.tables (
   TABLE_SCHEMA STRING NOT NULL DEFAULT '',
   TABLE_NAME STRING NOT NULL DEFAULT '',
   TABLE_TYPE STRING NOT NULL DEFAULT '',
-  ENGINE STRING,
-  VERSION INT,
-  ROW_FORMAT STRING,
-  TABLE_ROWS INT,
-  AVG_ROW_LENGTH INT,
-  DATA_LENGTH INT,
-  MAX_DATA_LENGTH INT,
-  INDEX_LENGTH INT,
-  DATA_FREE INT,
-  AUTO_INCREMENT INT,
-  CREATE_TIME TIMESTAMP,
-  UPDATE_TIME TIMESTAMP,
-  CHECK_TIME TIMESTAMP,
-  TABLE_COLLATION STRING,
-  CHECKSUM INT,
-  CREATE_OPTIONS STRING,
-  TABLE_COMMENT STRING NOT NULL DEFAULT ''
+  VERSION INT
 );`,
 	populate: func(p *planner, addRow func(...parser.Datum)) error {
-		// TODO(nvanbenschoten) This isn't actually the correct implementation
-		// for this table. Fixing this will come later.
-		if p.session.Database == "" {
-			return errNoDatabase
-		}
-		dbDesc, err := p.mustGetDatabaseDesc(p.session.Database)
-		if err != nil {
-			return err
+		var dbNames []string
+		dbNamesToTables := make(map[string]map[string]*sqlbase.TableDescriptor)
+
+		// Handle virtual schemas.
+		for dbName, schema := range virtualSchemaMap {
+			dbNames = append(dbNames, dbName)
+			dbTables := make(map[string]*sqlbase.TableDescriptor)
+			for tableName, entry := range schema.tables {
+				dbTables[tableName] = entry.desc
+			}
+			dbNamesToTables[dbName] = dbTables
 		}
 
-		tableNames, err := p.getTableNames(dbDesc)
+		// Handle real schemas.
+		descs, err := p.getAllDescriptors()
 		if err != nil {
 			return err
 		}
-		for _, name := range tableNames {
-			addRow(
-				parser.DNull,
-				parser.DNull,
-				parser.NewDString(name.Table()),
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-			)
+		dbIDsToName := make(map[sqlbase.ID]string)
+		for _, desc := range descs {
+			if db, ok := desc.(*sqlbase.DatabaseDescriptor); ok {
+				dbNames = append(dbNames, db.GetName())
+				dbIDsToName[db.GetID()] = db.GetName()
+				dbNamesToTables[db.GetName()] = make(map[string]*sqlbase.TableDescriptor)
+			}
+		}
+		for _, desc := range descs {
+			if table, ok := desc.(*sqlbase.TableDescriptor); ok {
+				dbName, ok := dbIDsToName[table.GetParentID()]
+				if !ok {
+					return errors.Errorf("no database with ID %d found", table.GetParentID())
+				}
+				dbTables := dbNamesToTables[dbName]
+				dbTables[table.GetName()] = table
+			}
+		}
+
+		sort.Strings(dbNames)
+		for _, dbName := range dbNames {
+			var dbTableNames []string
+			dbTables := dbNamesToTables[dbName]
+			for tableName := range dbTables {
+				dbTableNames = append(dbTableNames, tableName)
+			}
+			sort.Strings(dbTableNames)
+			for _, tableName := range dbTableNames {
+				table := dbTables[tableName]
+				tableType := tableTypeBaseTable
+				if isVirtualDescriptor(table) {
+					tableType = tableTypeSystemView
+				}
+				addRow(
+					defString,
+					parser.NewDString(dbName),
+					parser.NewDString(tableName),
+					tableType,
+					parser.NewDInt(parser.DInt(table.GetVersion())),
+				)
+			}
 		}
 		return nil
 	},
