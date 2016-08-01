@@ -302,7 +302,9 @@ func (e *Executor) Prepare(
 	pinfo parser.PlaceholderTypes,
 ) ([]ResultColumn, error) {
 	if log.V(2) {
-		log.Infof(context.TODO(), "preparing statement: %s", query)
+		log.Infof(session.Context(), "preparing: %s", query)
+	} else if traceSQL {
+		log.Tracef(session.Context(), "preparing: %s", query)
 	}
 	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
 	if err != nil {
@@ -322,7 +324,7 @@ func (e *Executor) Prepare(
 
 	// Prepare needs a transaction because it needs to retrieve db/table
 	// descriptors for type checking.
-	txn := client.NewTxn(ctx, *e.ctx.DB)
+	txn := client.NewTxn(session.Context(), *e.ctx.DB)
 	txn.Proto.Isolation = session.DefaultIsolationLevel
 	session.planner.setTxn(txn)
 	defer session.planner.setTxn(nil)
@@ -655,8 +657,11 @@ func (e *Executor) execStmtsInCurrentTxn(
 	}
 
 	for i, stmt := range stmts {
+		ctx := planMaker.session.Context()
 		if log.V(2) {
-			log.Infof(context.TODO(), "about to execute sql statement (%d/%d): %s", i+1, len(stmts), stmt)
+			log.Infof(ctx, "executing %d/%d: %s", i+1, len(stmts), stmt)
+		} else if traceSQL {
+			log.Tracef(ctx, "executing %d/%d: %s", i+1, len(stmts), stmt)
 		}
 		txnState.schemaChangers.curStatementIdx = i
 
@@ -924,8 +929,12 @@ func (e *Executor) execStmtInOpenTxn(
 	if txnState.tr != nil {
 		txnState.tr.LazyLog(stmt, true /* sensitive */)
 	}
+
 	result, err := e.execStmt(stmt, planMaker, implicitTxn /* autoCommit */)
 	if err != nil {
+		if traceSQL {
+			log.Tracef(txnState.txn.Context, "ERROR: %v", err)
+		}
 		if txnState.tr != nil {
 			txnState.tr.LazyPrintf("ERROR: %v", err)
 		}
@@ -940,6 +949,9 @@ func (e *Executor) execStmtInOpenTxn(
 			tResult.count = len(result.Rows)
 		}
 		txnState.tr.LazyLog(tResult, false)
+		if traceSQL {
+			log.Tracef(txnState.txn.Context, "%s done", tResult)
+		}
 	}
 	return result, err
 }
@@ -1014,6 +1026,7 @@ func commitSQLTransaction(
 			// We're done with this txn.
 			txnState.State = NoTxn
 		}
+		txnState.dumpTrace()
 		txnState.txn = nil
 	}
 	// Reset transaction to prevent running further commands on this planner.

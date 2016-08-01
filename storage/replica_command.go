@@ -2569,7 +2569,7 @@ func (r *Replica) splitTrigger(
 		// TODO(tschottdorf): ReplicaCorruptionError.
 		return enginepb.MVCCStats{}, nil, errors.Wrap(err, "unable to copy abort cache to RHS split range")
 	}
-	log.Trace(ctx, fmt.Sprintf("copied abort cache (%d entries)", seqCount))
+	log.Tracef(ctx, "copied abort cache (%d entries)", seqCount)
 
 	// Initialize the right-hand lease to be the same as the left-hand lease.
 	// This looks like an innocuous performance improvement, but it's more than
