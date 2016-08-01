@@ -168,7 +168,7 @@ func (r *Replica) executeCmd(
 		*resp, trigger, err = r.ComputeChecksum(ctx, batch, ms, h, *tArgs)
 	case *roachpb.VerifyChecksumRequest:
 		resp := reply.(*roachpb.VerifyChecksumResponse)
-		*resp, err = r.VerifyChecksum(ctx, batch, ms, h, *tArgs)
+		*resp, trigger, err = r.VerifyChecksum(ctx, batch, ms, h, *tArgs)
 	case *roachpb.ChangeFrozenRequest:
 		resp := reply.(*roachpb.ChangeFrozenResponse)
 		*resp, trigger, err = r.ChangeFrozen(ctx, batch, ms, h, *tArgs)
@@ -1892,71 +1892,15 @@ func (r *Replica) VerifyChecksum(
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
 	args roachpb.VerifyChecksumRequest,
-) (roachpb.VerifyChecksumResponse, error) {
+) (roachpb.VerifyChecksumResponse, *PostCommitTrigger, error) {
 	if args.Version != replicaChecksumVersion {
 		log.Errorf(ctx, "%s: consistency check skipped: incompatible versions: e=%d, v=%d",
 			r, replicaChecksumVersion, args.Version)
 		// Return success because version incompatibility might only
 		// be seen on this replica.
-		return roachpb.VerifyChecksumResponse{}, nil
+		return roachpb.VerifyChecksumResponse{}, nil, nil
 	}
-	id := args.ChecksumID
-	c, ok := r.getChecksum(ctx, id)
-	if !ok {
-		log.Errorf(ctx, "%s: consistency check skipped: checksum for id = %v doesn't exist", r, id)
-		// Return success because a checksum might be missing only on
-		// this replica. A checksum might be missing because of a
-		// number of reasons: GC-ed, server restart, and ComputeChecksum
-		// version incompatibility.
-		return roachpb.VerifyChecksumResponse{}, nil
-	}
-	if c.checksum != nil && !bytes.Equal(c.checksum, args.Checksum) {
-		// Replication consistency problem!
-		logFunc := log.Errorf
-
-		// Collect some more debug information.
-		if args.Snapshot == nil {
-			// No debug information; run another consistency check to deliver
-			// more debug information.
-			if err := r.store.stopper.RunAsyncTask(func() {
-				log.Errorf(ctx, "%s: consistency check failed; fetching details", r)
-				desc := r.Desc()
-				startKey := desc.StartKey.AsRawKey()
-				// Can't use a start key less than LocalMax.
-				if bytes.Compare(startKey, keys.LocalMax) < 0 {
-					startKey = keys.LocalMax
-				}
-				if err := r.store.db.CheckConsistency(startKey, desc.EndKey.AsRawKey(), true /* withDiff */); err != nil {
-					log.Errorf(ctx, "couldn't rerun consistency check: %s", err)
-				}
-			}); err != nil {
-				log.Error(ctx, errors.Wrap(err, "could not rerun consistency check"))
-			}
-		} else {
-			// Compute diff.
-			diff := diffRange(args.Snapshot, c.snapshot)
-			if diff != nil {
-				for _, d := range diff {
-					l := "leader"
-					if d.LeaseHolder {
-						l = "replica"
-					}
-					log.Errorf(ctx, "%s: consistency check failed: k:v = (%s (%x), %s, %x) not present on %s",
-						r, d.Key, d.Key, d.Timestamp, d.Value, l)
-				}
-			}
-			if r.store.ctx.ConsistencyCheckPanicOnFailure {
-				if p := r.store.ctx.TestingKnobs.BadChecksumPanic; p != nil {
-					p(diff)
-				} else {
-					logFunc = log.Fatalf
-				}
-			}
-		}
-
-		logFunc(ctx, "consistency check failed on replica: %s, checksum mismatch: e = %x, v = %x", r, args.Checksum, c.checksum)
-	}
-	return roachpb.VerifyChecksumResponse{}, nil
+	return roachpb.VerifyChecksumResponse{}, &PostCommitTrigger{verifyChecksum: &args}, nil
 }
 
 // ChangeFrozen freezes or unfreezes the Replica idempotently.

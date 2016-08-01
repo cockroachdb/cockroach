@@ -17,12 +17,16 @@
 package storage
 
 import (
+	"bytes"
+
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -88,6 +92,7 @@ type PostCommitTrigger struct {
 	addToReplicaGCQueue     bool
 
 	computeChecksum *roachpb.ComputeChecksumRequest
+	verifyChecksum  *roachpb.VerifyChecksumRequest
 }
 
 // updateTrigger takes a previous and new commit trigger and combines their
@@ -153,6 +158,9 @@ func updateTrigger(old, new *PostCommitTrigger) *PostCommitTrigger {
 		if new.computeChecksum != nil {
 			old.computeChecksum = new.computeChecksum
 		}
+		if new.verifyChecksum != nil {
+			old.verifyChecksum = new.verifyChecksum
+		}
 	}
 	return old
 }
@@ -205,5 +213,66 @@ func (r *Replica) computeChecksumTrigger(
 		defer snap.Close()
 		// Set checksum to nil.
 		r.computeChecksumDone(ctx, id, nil, nil)
+	}
+}
+
+func (r *Replica) verifyChecksumTrigger(
+	ctx context.Context, args roachpb.VerifyChecksumRequest,
+) {
+	id := args.ChecksumID
+	c, ok := r.getChecksum(ctx, id)
+	if !ok {
+		log.Errorf(ctx, "%s: consistency check skipped: checksum for id = %v doesn't exist", r, id)
+		// Return success because a checksum might be missing only on
+		// this replica. A checksum might be missing because of a
+		// number of reasons: GC-ed, server restart, and ComputeChecksum
+		// version incompatibility.
+		return
+	}
+	if c.checksum != nil && !bytes.Equal(c.checksum, args.Checksum) {
+		// Replication consistency problem!
+		logFunc := log.Errorf
+
+		// Collect some more debug information.
+		if args.Snapshot == nil {
+			// No debug information; run another consistency check to deliver
+			// more debug information.
+			if err := r.store.stopper.RunAsyncTask(func() {
+				log.Errorf(ctx, "%s: consistency check failed; fetching details", r)
+				desc := r.Desc()
+				startKey := desc.StartKey.AsRawKey()
+				// Can't use a start key less than LocalMax.
+				if bytes.Compare(startKey, keys.LocalMax) < 0 {
+					startKey = keys.LocalMax
+				}
+				if err := r.store.db.CheckConsistency(startKey, desc.EndKey.AsRawKey(), true /* withDiff */); err != nil {
+					log.Errorf(ctx, "couldn't rerun consistency check: %s", err)
+				}
+			}); err != nil {
+				log.Error(ctx, errors.Wrap(err, "could not rerun consistency check"))
+			}
+		} else {
+			// Compute diff.
+			diff := diffRange(args.Snapshot, c.snapshot)
+			if diff != nil {
+				for _, d := range diff {
+					l := "leader"
+					if d.LeaseHolder {
+						l = "replica"
+					}
+					log.Errorf(ctx, "%s: consistency check failed: k:v = (%s (%x), %s, %x) not present on %s",
+						r, d.Key, d.Key, d.Timestamp, d.Value, l)
+				}
+			}
+			if r.store.ctx.ConsistencyCheckPanicOnFailure {
+				if p := r.store.ctx.TestingKnobs.BadChecksumPanic; p != nil {
+					p(diff)
+				} else {
+					logFunc = log.Fatalf
+				}
+			}
+		}
+
+		logFunc(ctx, "consistency check failed on replica: %s, checksum mismatch: e = %x, v = %x", r, args.Checksum, c.checksum)
 	}
 }
