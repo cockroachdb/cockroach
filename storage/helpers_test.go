@@ -125,14 +125,10 @@ func (s *Store) SetSplitQueueActive(active bool) {
 	s.setSplitQueueActive(active)
 }
 
-// SetReplicaScannerDisabled turns replica scanning off or on as directed. Note
-// that while disabled, removals are still processed.
-func (s *Store) SetReplicaScannerDisabled(disabled bool) {
-	if disabled {
-		atomic.StoreInt32(&s.scanner.disabled, 1)
-	} else {
-		atomic.StoreInt32(&s.scanner.disabled, 0)
-	}
+// SetReplicaScannerActive enables or disables the scanner. Note that while
+// inactive, removals are still processed.
+func (s *Store) SetReplicaScannerActive(active bool) {
+	s.setScannerActive(active)
 }
 
 // GetLastIndex is the same function as LastIndex but it does not require
