@@ -42,9 +42,14 @@ type TestClusterInterface interface {
 	// ServerConn returns a gosql.DB connection to a specific node.
 	ServerConn(idx int) *gosql.DB
 
-	Stopper() *stop.Stopper
-
 	WaitForFullReplication() error
+
+	// StopServer stops a single server.
+	StopServer(idx int)
+
+	// Stopper retrieves the stopper for this test cluster. Tests should call or
+	// defer the Stop() method on this stopper after starting a test cluster.
+	Stopper() *stop.Stopper
 }
 
 // TestClusterFactory encompasses the actual implementation of the shim
