@@ -917,7 +917,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 
 // String formats a store for debug output.
 func (s *Store) String() string {
-	return fmt.Sprintf("store=%d:%d (%s)", s.Ident.NodeID, s.Ident.StoreID, s.engine)
+	return fmt.Sprintf("store=%d:%d", s.Ident.NodeID, s.Ident.StoreID)
 }
 
 // DrainLeases (when called with 'true') prevents all of the Store's
