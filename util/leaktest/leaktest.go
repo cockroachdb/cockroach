@@ -42,6 +42,8 @@ func interestingGoroutines() (gs []string) {
 			// https://github.com/cockroachdb/cockroach/issues/8136.
 			ignorestdlibleaks && strings.Contains(stack, "crypto/tls.(*Conn).clientHandshake") ||
 			ignorestdlibleaks && strings.Contains(stack, "crypto/tls.(*Conn).serverHandshake") ||
+			ignorestdlibleaks && strings.Contains(stack, "net/http.(*Transport).getConn") ||
+			ignorestdlibleaks && strings.Contains(stack, "crypto/tls.(*block).readFromUntil") ||
 			// Go1.7 added a goroutine to network dialing that doesn't shut down
 			// quickly.
 			strings.Contains(stack, "created by net.(*netFD).connect") ||
