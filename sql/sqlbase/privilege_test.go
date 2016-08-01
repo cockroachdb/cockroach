@@ -130,6 +130,36 @@ func TestCheckPrivilege(t *testing.T) {
 	}
 }
 
+func TestAnyPrivilege(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		pd   *PrivilegeDescriptor
+		user string
+		exp  bool
+	}{
+		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}),
+			"foo", true},
+		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE}),
+			"bar", false},
+		{NewPrivilegeDescriptor("foo", privilege.List{privilege.ALL}),
+			"foo", true},
+		{NewPrivilegeDescriptor("foo", privilege.List{}),
+			"foo", false},
+		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE, privilege.DROP}),
+			"foo", true},
+		{NewPrivilegeDescriptor("foo", privilege.List{privilege.CREATE, privilege.DROP}),
+			"bar", false},
+	}
+
+	for tcNum, tc := range testCases {
+		if found := tc.pd.AnyPrivilege(tc.user); found != tc.exp {
+			t.Errorf("#%d: AnyPrivilege(%s) for descriptor %+v = %t, expected %t",
+				tcNum, tc.user, tc.pd, found, tc.exp)
+		}
+	}
+}
+
 // TestPrivilegeValidate exercises validation for non-system descriptors.
 func TestPrivilegeValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
