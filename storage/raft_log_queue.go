@@ -152,7 +152,7 @@ func (*raftLogQueue) shouldQueue(
 // leader and if the total number of the range's raft log's stale entries
 // exceeds RaftLogQueueStaleThreshold.
 func (rlq *raftLogQueue) process(
-	_ context.Context,
+	ctx context.Context,
 	now hlc.Timestamp,
 	r *Replica,
 	_ config.SystemConfig,
@@ -165,7 +165,7 @@ func (rlq *raftLogQueue) process(
 	// Can and should the raft logs be truncated?
 	if truncatableIndexes >= RaftLogQueueStaleThreshold {
 		if log.V(1) {
-			log.Infof(context.TODO(), "truncating the raft log of range %d to %d", r.RangeID, oldestIndex)
+			log.Infof(ctx, "truncating the raft log of range %d to %d", r.RangeID, oldestIndex)
 		}
 		b := &client.Batch{}
 		b.AddRawRequest(&roachpb.TruncateLogRequest{

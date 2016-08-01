@@ -629,7 +629,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 				if (r.mu.pendingLeaseRequest.RequestPending() == nil) &&
 					!timestamp.Less(lease.StartStasis.Add(-int64(r.store.ctx.rangeLeaseRenewalDuration), 0)) {
 					if log.V(2) {
-						log.Warningf(context.TODO(), "%s: extending lease %s at %s", r, lease, timestamp)
+						log.Warningf(ctx, "%s: extending lease %s at %s", r, lease, timestamp)
 					}
 					// We had an active lease to begin with, but we want to trigger
 					// a lease extension. We don't need to wait for that extension
@@ -1010,7 +1010,7 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func
 			case <-ctxDone:
 				err := ctx.Err()
 				errStr := fmt.Sprintf("%s while in command queue: %s", err, ba)
-				log.Warningf(context.TODO(), "%s: error %v", r, errStr)
+				log.Warningf(ctx, "%s: error %v", r, errStr)
 				log.Trace(ctx, errStr)
 				defer log.Trace(ctx, "removed from command queue")
 				// The command is moot, so we don't need to bother executing.
@@ -1386,7 +1386,7 @@ func (r *Replica) addWriteCmd(
 					// which can be interpreted appropriately upstream.
 					pErr = roachpb.NewError(ctx.Err())
 				} else {
-					log.Warningf(context.TODO(), "%s: unable to cancel expired Raft command %s", r, ba)
+					log.Warningf(ctx, "%s: unable to cancel expired Raft command %s", r, ba)
 				}
 			}
 		}
@@ -2072,7 +2072,7 @@ func (r *Replica) applyRaftCommand(
 
 	// TODO(tschottdorf): remove when #7224 is cleared.
 	if ba.Txn != nil && ba.Txn.Name == replicaChangeTxnName {
-		log.Infof(context.TODO(), "%s: applied part of replica change txn: %s, pErr=%v",
+		log.Infof(ctx, "%s: applied part of replica change txn: %s, pErr=%v",
 			r, ba, rErr)
 	}
 
@@ -2206,7 +2206,7 @@ func (r *Replica) checkIfTxnAborted(
 	if aborted {
 		// We hit the cache, so let the transaction restart.
 		if log.V(1) {
-			log.Infof(context.TODO(), "%s: found abort cache entry for %s with priority %d",
+			log.Infof(ctx, "%s: found abort cache entry for %s with priority %d",
 				r, txn.ID.Short(), entry.Priority)
 		}
 		newTxn := txn.Clone()

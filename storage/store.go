@@ -1600,7 +1600,7 @@ func splitTriggerPostCommit(
 	// to the store's replica map.
 	if err := r.store.SplitRange(r, rightRng); err != nil {
 		// Our in-memory state has diverged from the on-disk state.
-		log.Fatalf(context.TODO(), "%s: failed to update Store after split: %s", r, err)
+		log.Fatalf(ctx, "%s: failed to update Store after split: %s", r, err)
 	}
 
 	// Update store stats with difference in stats before and after split.
@@ -1654,10 +1654,10 @@ func splitTriggerPostCommit(
 			replica, err := r.store.GetReplica(rightRng.RangeID)
 			if err != nil {
 				if _, ok := err.(*roachpb.RangeNotFoundError); ok {
-					log.Infof(context.TODO(), "%s: RHS replica %d removed before campaigning",
+					log.Infof(ctx, "%s: RHS replica %d removed before campaigning",
 						r, r.mu.replicaID)
 				} else {
-					log.Infof(context.TODO(), "%s: RHS replica %d unable to campaign: %s",
+					log.Infof(ctx, "%s: RHS replica %d unable to campaign: %s",
 						r, r.mu.replicaID, err)
 				}
 				return
@@ -1665,14 +1665,14 @@ func splitTriggerPostCommit(
 
 			if err := replica.withRaftGroup(func(raftGroup *raft.RawNode) error {
 				if err := raftGroup.Campaign(); err != nil {
-					log.Warningf(context.TODO(), "%s: error %v", r, err)
+					log.Warningf(ctx, "%s: error %v", r, err)
 				}
 				return nil
 			}); err != nil {
 				panic(err)
 			}
 		}); err != nil {
-			log.Warningf(context.TODO(), "%s: error %v", r, err)
+			log.Warningf(ctx, "%s: error %v", r, err)
 			return
 		}
 	}
@@ -2183,12 +2183,12 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			if t.Resolved {
 				r.Reset()
 				if log.V(1) {
-					log.Warning(context.TODO(), pErr)
+					log.Warning(ctx, pErr)
 				}
 				continue
 			}
 			if log.V(1) {
-				log.Warning(context.TODO(), pErr)
+				log.Warning(ctx, pErr)
 			}
 			// Update the batch transaction, if applicable, in case it has
 			// been independently pushed and has more recent information.
