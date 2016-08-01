@@ -118,6 +118,16 @@ func (rs *replicaScanner) Count() int64 {
 	return rs.count
 }
 
+// SetDisabled turns replica scanning off or on as directed. Note that while
+// disabled, removals are still processed.
+func (rs *replicaScanner) SetDisabled(disabled bool) {
+	if disabled {
+		atomic.StoreInt32(&rs.disabled, 1)
+	} else {
+		atomic.StoreInt32(&rs.disabled, 0)
+	}
+}
+
 // avgScan returns the average scan time of each scan cycle. Used in unittests.
 func (rs *replicaScanner) avgScan() time.Duration {
 	rs.completedScan.L.Lock()
