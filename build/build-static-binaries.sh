@@ -15,8 +15,8 @@ time make STATIC=1 testbuild PKG=./... TAGS="$tags acceptance"
 check_static cockroach
 check_static cli/cli.test
 
-binaries=$(find . -type f -and \( -name '*.test' -or -name cockroach \))
-echo $binaries | xargs strip -S
+strip -S cockroach
+find . -type f -name '*.test' | xargs strip -S
 
 rm -f $archive
-time tar cfz $archive -C .. $(echo $binaries $(git ls-files) | sed -r 's,(\s+),\1cockroach/,g')
+time tar cfz $archive -C .. $(git ls-files | sed -r 's,^,cockroach/,') $(find . -type f -name '*.test' | sed 's,^\./,cockroach/,')
