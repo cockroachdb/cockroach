@@ -208,7 +208,8 @@ func TestQuit(t *testing.T) {
 	security.SetReadFileFn(securitytest.Asset)
 }
 
-func Example_basic() {
+// TODO(tamird): re-enable when #8215 closes (i.e. when go1.7 gets released).
+var DisabledExampleBasic = func() {
 	c := newCLITest()
 	defer c.stop()
 
@@ -265,6 +266,7 @@ func Example_basic() {
 	// debug kv inc c b
 	// invalid increment: b: strconv.ParseInt: parsing "b": invalid syntax
 }
+var _ = DisabledExampleBasic
 
 func Example_quoted() {
 	c := newCLITest()
