@@ -33,7 +33,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/kv"
@@ -322,12 +321,6 @@ func (n *Node) start(addr net.Addr, engines []engine.Engine, attrs roachpb.Attri
 			}
 			log.Infof(context.TODO(), "**** cluster %s has been created", clusterID)
 			log.Infof(context.TODO(), "**** add additional nodes by specifying --join=%s", addr)
-			// Make sure we add the node as a resolver.
-			selfResolver, err := resolver.NewResolverFromAddress(addr)
-			if err != nil {
-				return err
-			}
-			n.ctx.Gossip.SetResolvers([]resolver.Resolver{selfResolver})
 			// After bootstrapping, try again to initialize the stores.
 			if err := n.initStores(engines, n.stopper); err != nil {
 				return err
