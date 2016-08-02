@@ -77,7 +77,3 @@ func StartTestCluster(t testing.TB, numNodes int, args base.TestClusterArgs) Tes
 	}
 	return clusterFactoryImpl.StartTestCluster(t, numNodes, args)
 }
-
-// TODO(radu): Currently unused. Remove in follow-up change which uses
-// StartTestCluster
-var _ = StartTestCluster
