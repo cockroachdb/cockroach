@@ -204,5 +204,29 @@ SELECT TABLE_SCHEMA, TABLE_NAME, VERSION FROM information_schema.tables WHERE ve
 TABLE_SCHEMA  TABLE_NAME  VERSION
 other_db      xyz         4
 
+user testuser
+
+query TTTTI colnames
+SELECT * FROM information_schema.tables
+----
+TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME  TABLE_TYPE   VERSION
+def            information_schema  tables      SYSTEM VIEW  1
+
+user root
+
+statement ok
+GRANT SELECT ON other_db.xyz TO testuser
+
+user testuser
+
+query TTTTI colnames
+SELECT * FROM information_schema.tables
+----
+TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME  TABLE_TYPE   VERSION
+def            information_schema  tables      SYSTEM VIEW  1
+def            other_db            xyz         BASE TABLE   5
+
+user root
+
 statement ok
 DROP DATABASE other_db
