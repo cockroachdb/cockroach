@@ -333,7 +333,7 @@ func (g *Gossip) SetStorage(storage Storage) error {
 		if log.V(1) {
 			log.Infof(context.TODO(), "found new resolvers from storage; signalling bootstrap")
 		}
-		g.signalStalled()
+		g.signalStalledLocked()
 	}
 	return nil
 }
@@ -983,13 +983,15 @@ func (g *Gossip) maybeSignalStalledLocked() {
 		g.stalled = true
 		g.warnAboutStall()
 	}
-	g.signalStalled()
+	g.signalStalledLocked()
 }
 
-func (g *Gossip) signalStalled() {
-	select {
-	case g.stalledCh <- struct{}{}:
-	default:
+func (g *Gossip) signalStalledLocked() {
+	if len(g.resolvers) > 0 {
+		select {
+		case g.stalledCh <- struct{}{}:
+		default:
+		}
 	}
 }
 
