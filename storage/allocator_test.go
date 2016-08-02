@@ -431,7 +431,10 @@ func TestAllocatorRebalance(t *testing.T) {
 	// Verify shouldRebalance results.
 	a.options.Deterministic = true
 	for i, store := range stores {
-		desc := a.storePool.getStoreDescriptor(store.StoreID)
+		desc, ok := a.storePool.getStoreDescriptor(store.StoreID)
+		if !ok {
+			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
+		}
 		sl, _, _ := a.storePool.getStoreList(roachpb.Attributes{}, true)
 		result := a.shouldRebalance(desc, sl)
 		if expResult := (i >= 2); expResult != result {
@@ -485,7 +488,10 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 	// Verify shouldRebalance results.
 	a.options.Deterministic = true
 	for i, store := range stores {
-		desc := a.storePool.getStoreDescriptor(store.StoreID)
+		desc, ok := a.storePool.getStoreDescriptor(store.StoreID)
+		if !ok {
+			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
+		}
 		sl, _, _ := a.storePool.getStoreList(roachpb.Attributes{}, true)
 		result := a.shouldRebalance(desc, sl)
 		if expResult := (i < 3); expResult != result {
