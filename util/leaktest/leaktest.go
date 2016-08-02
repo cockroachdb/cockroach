@@ -14,11 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
-
-var ignorestdlibleaks = envutil.EnvOrDefaultBool("ignorestdlibleaks", true)
 
 // interestingGoroutines returns all goroutines we care about for the purpose
 // of leak checking. It excludes testing or runtime ones.
@@ -37,13 +34,6 @@ func interestingGoroutines() (gs []string) {
 
 		if stack == "" ||
 			strings.Contains(stack, "github.com/cockroachdb/cockroach/util/log.init") ||
-			// It appears that the standard library TLS handshake code
-			// contains a bug that can cause handshaking to deadlock. See
-			// https://github.com/cockroachdb/cockroach/issues/8136.
-			ignorestdlibleaks && strings.Contains(stack, "crypto/tls.(*Conn).clientHandshake") ||
-			ignorestdlibleaks && strings.Contains(stack, "crypto/tls.(*Conn).serverHandshake") ||
-			ignorestdlibleaks && strings.Contains(stack, "net/http.(*Transport).getConn") ||
-			ignorestdlibleaks && strings.Contains(stack, "crypto/tls.(*block).readFromUntil") ||
 			// Go1.7 added a goroutine to network dialing that doesn't shut down
 			// quickly.
 			strings.Contains(stack, "created by net.(*netFD).connect") ||
