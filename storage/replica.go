@@ -35,6 +35,7 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/google/btree"
 	"github.com/kr/pretty"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -306,6 +307,20 @@ type Replica struct {
 		// Counts Raft messages refused due to queue congestion.
 		droppedMessages int
 	}
+}
+
+// ReplicaPlaceholder is created by a Store in anticipation of replacing it at some point in the future with a Replica. It has a RangeDescriptor.
+type ReplicaPlaceholder struct {
+	RangeID   roachpb.RangeID
+	store     *Store
+	rangeDesc *roachpb.RangeDescriptor
+}
+
+// Replicable is an interface type for the replicasByKey BTree, to compare Replica and ReplicaPlaceholder
+type Replicable interface {
+	Desc() *roachpb.RangeDescriptor
+	Less(than btree.Item) bool
+	getKey() roachpb.RKey
 }
 
 // withRaftGroupLocked calls the supplied function with the (lazily
@@ -716,6 +731,11 @@ func (r *Replica) Desc() *roachpb.RangeDescriptor {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.mu.state.Desc
+}
+
+// Desc returns the range Placeholder's descriptor.
+func (r *ReplicaPlaceholder) Desc() *roachpb.RangeDescriptor {
+	return r.rangeDesc
 }
 
 // setDesc atomically sets the range's descriptor. This method calls
@@ -1582,6 +1602,10 @@ func (r *Replica) handleRaftReady() error {
 		if err := r.applySnapshot(ctx, rd.Snapshot, rd.HardState); err != nil {
 			return err
 		}
+		if err := r.store.processRangeDescriptorUpdate(r); err != nil {
+			return err
+		}
+
 		var err error
 		if lastIndex, err = loadLastIndex(ctx, r.store.Engine(), r.RangeID); err != nil {
 			return err
@@ -2821,6 +2845,28 @@ func (r *Replica) maybeAddToRaftLogQueue(appliedIndex uint64) {
 		r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
 }
+
+func (r *Replica) getKey() roachpb.RKey {
+	return r.Desc().EndKey
+}
+
+func (r *ReplicaPlaceholder) getKey() roachpb.RKey {
+	return r.Desc().EndKey
+}
+
+// Less returns true if the range's end key is less than the given item's key.
+func (r *Replica) Less(i btree.Item) bool {
+	return r.getKey().Less(i.(rangeKeyItem).getKey())
+}
+
+// Less returns true if the range's end key is less than the given item's key.
+func (r *ReplicaPlaceholder) Less(i btree.Item) bool {
+	return r.Desc().EndKey.Less(i.(rangeKeyItem).getKey())
+}
+
+var _ rangeKeyItem = &Replica{}
+
+var _ btree.Item = &Replica{}
 
 func (r *Replica) panic(err error) {
 	panic(r.String() + ": " + err.Error())

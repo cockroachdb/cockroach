@@ -2149,3 +2149,78 @@ func TestStoreGCThreshold(t *testing.T) {
 
 	assertThreshold(threshold)
 }
+
+func TestStoreRangePlaceholders(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+	s := tc.store
+
+	s.mu.Lock()
+	if len(s.mu.replicaPlaceholders) != 0 {
+		t.Fatal("new store should have zero replica placeholders")
+	}
+	s.mu.Unlock()
+
+	// Clobber the existing range so we can test nonoverlapping Placeholders.
+	rng1, err := s.GetReplica(1)
+	if err != nil {
+		t.Error(err)
+	}
+	if err := s.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+		t.Error(err)
+	}
+
+	rng := createRange(s, roachpb.RangeID(2), roachpb.RKeyMin, roachpb.RKey("c"))
+	if err := s.AddReplicaTest(rng); err != nil {
+		t.Fatal(err)
+	}
+
+	rid := roachpb.RangeID(7)
+	rsrv := &ReplicaPlaceholder{
+		RangeID: rid,
+		store:   s,
+		rangeDesc: &roachpb.RangeDescriptor{
+			RangeID:  rid,
+			StartKey: roachpb.RKey("c"),
+			EndKey:   roachpb.RKeyMax,
+		},
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Test insertion
+	if err := s.addPlaceholderToPlaceholderMapLocked(rsrv); err != nil {
+		t.Fatalf("could not add Placeholder to empty store, got %v", err)
+	}
+
+	// Test deletion
+	if err := s.removePlaceholderLocked(rid); err != nil {
+		t.Fatalf("could not remove Placeholder that was present, got %v", err)
+	}
+
+	// Test cannot double insert
+	if err := s.addPlaceholderToPlaceholderMapLocked(rsrv); err != nil {
+		t.Fatalf("could not re-add Placeholder after removal, got %v", err)
+	}
+	if err := s.addPlaceholderToPlaceholderMapLocked(rsrv); !testutils.IsError(err, "range for Range ID 7 already exists on store") {
+		t.Fatalf("should not be able to add Placeholder for the same key twice, got %v", err)
+	}
+
+	// Test cannot double delete
+	if err := s.removePlaceholderLocked(rid); err != nil {
+		t.Fatalf("could not remove Placeholder that was present, got %v", err)
+	}
+	if err := s.removePlaceholderLocked(rid); !testutils.IsError(err, "cannot remove Placeholder for RangeID 7; Placeholder doesn't exist") {
+		t.Fatalf("could not remove Placeholder that was present, got %v", err)
+	}
+
+	// Test that Placeholder cannot clobber existing replica
+	// TODO(arjun)
+
+	// Test that Placeholder deletion doesn't delete replicas
+	// TODO(arjun)
+
+}

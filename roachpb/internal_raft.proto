@@ -57,3 +57,7 @@ message RaftSnapshotData {
   // roundtripping through memory.
   repeated bytes log_entries = 3;
 }
+
+message PartialRaftSnapshotData {
+    optional RangeDescriptor range_descriptor = 1 [(gogoproto.nullable) = false];
+}
