@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -225,8 +226,11 @@ func TestComputeSplits(t *testing.T) {
 	userSql := append(schema.GetInitialValues(),
 		descriptor(start), descriptor(start+1), descriptor(start+5))
 	// Real SQL system with reserved non-system tables.
-	schema.AddTable(reservedStart+1, "CREATE TABLE system.test1 (i INT PRIMARY KEY)")
-	schema.AddTable(reservedStart+2, "CREATE TABLE system.test2 (i INT PRIMARY KEY)")
+	priv := sqlbase.NewDefaultPrivilegeDescriptor()
+	desc1 := sql.CreateTableDescriptor(reservedStart+1, keys.SystemDatabaseID, "CREATE TABLE system.test1 (i INT PRIMARY KEY)", priv)
+	schema.AddDescriptor(keys.SystemDatabaseID, &desc1)
+	desc2 := sql.CreateTableDescriptor(reservedStart+2, keys.SystemDatabaseID, "CREATE TABLE system.test2 (i INT PRIMARY KEY)", priv)
+	schema.AddDescriptor(keys.SystemDatabaseID, &desc2)
 	reservedSql := schema.GetInitialValues()
 	// Real SQL system with reserved non-system and user database.
 	allSql := append(schema.GetInitialValues(),
@@ -235,7 +239,7 @@ func TestComputeSplits(t *testing.T) {
 
 	allUserSplits := []uint32{start, start + 1, start + 2, start + 3, start + 4, start + 5}
 	var allReservedSplits []uint32
-	for i := 0; i < schema.TableCount(); i++ {
+	for i := 0; i < schema.DescriptorCount()-schema.ConfigDescriptorCount(); i++ {
 		allReservedSplits = append(allReservedSplits, reservedStart+uint32(i))
 	}
 	allSplits := append(allReservedSplits, allUserSplits...)

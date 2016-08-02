@@ -83,12 +83,12 @@ func isASCII(s string) bool {
 // specified parentID.
 func MakeNameMetadataKey(parentID ID, name string) roachpb.Key {
 	name = NormalizeName(name)
-	k := keys.MakeTablePrefix(uint32(namespaceTable.ID))
-	k = encoding.EncodeUvarintAscending(k, uint64(namespaceTable.PrimaryIndex.ID))
+	k := keys.MakeTablePrefix(uint32(NamespaceTable.ID))
+	k = encoding.EncodeUvarintAscending(k, uint64(NamespaceTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
 	if name != "" {
 		k = encoding.EncodeBytesAscending(k, []byte(name))
-		k = keys.MakeFamilyKey(k, uint32(namespaceTable.Columns[2].ID))
+		k = keys.MakeFamilyKey(k, uint32(NamespaceTable.Columns[2].ID))
 	}
 	return k
 }
@@ -108,8 +108,8 @@ func MakeDescMetadataKey(descID ID) roachpb.Key {
 
 // MakeZoneKey returns the key for 'id's entry in the system.zones table.
 func MakeZoneKey(id ID) roachpb.Key {
-	k := keys.MakeTablePrefix(uint32(zonesTable.ID))
-	k = encoding.EncodeUvarintAscending(k, uint64(zonesTable.PrimaryIndex.ID))
+	k := keys.MakeTablePrefix(uint32(ZonesTable.ID))
+	k = encoding.EncodeUvarintAscending(k, uint64(ZonesTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(id))
-	return keys.MakeFamilyKey(k, uint32(zonesTable.Columns[1].ID))
+	return keys.MakeFamilyKey(k, uint32(ZonesTable.Columns[1].ID))
 }
