@@ -98,19 +98,26 @@ CREATE TABLE information_schema.tables (
 			sort.Strings(dbTableNames)
 			for _, tableName := range dbTableNames {
 				table := dbTables[tableName]
-				tableType := tableTypeBaseTable
-				if isVirtualDescriptor(table) {
-					tableType = tableTypeSystemView
+				if userCanSeeTable(table, p.session.User) {
+					tableType := tableTypeBaseTable
+					if isVirtualDescriptor(table) {
+						tableType = tableTypeSystemView
+					}
+					addRow(
+						defString,
+						parser.NewDString(dbName),
+						parser.NewDString(tableName),
+						tableType,
+						parser.NewDInt(parser.DInt(table.GetVersion())),
+					)
 				}
-				addRow(
-					defString,
-					parser.NewDString(dbName),
-					parser.NewDString(tableName),
-					tableType,
-					parser.NewDInt(parser.DInt(table.GetVersion())),
-				)
 			}
 		}
 		return nil
 	},
+}
+
+func userCanSeeTable(table *sqlbase.TableDescriptor, user string) bool {
+	return table.State == sqlbase.TableDescriptor_PUBLIC &&
+		(table.Privileges.AnyPrivilege(user) || isVirtualDescriptor(table))
 }
