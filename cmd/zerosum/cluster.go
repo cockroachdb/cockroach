@@ -256,7 +256,7 @@ func (c *cluster) freeze(nodeIdx int, freeze bool) {
 	addr := c.rpcAddr(nodeIdx)
 	conn, err := c.rpcCtx.GRPCDial(addr)
 	if err != nil {
-		log.Fatal(context.Background(), "unable to dial: %s: %v", addr, err)
+		log.Fatalf(context.Background(), "unable to dial: %s: %v", addr, err)
 	}
 
 	adminClient := serverpb.NewAdminClient(conn)
