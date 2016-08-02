@@ -173,7 +173,7 @@ func (p PrivilegeDescriptor) Validate(id ID) error {
 	}
 	if IsSystemConfigID(id) {
 		// System databases and tables have custom maximum allowed privileges.
-		objectPrivileges, ok := systemConfigAllowedPrivileges[id]
+		objectPrivileges, ok := SystemConfigAllowedPrivileges[id]
 		if !ok {
 			return fmt.Errorf("no allowed privileges found for system object with ID=%d", id)
 		}
