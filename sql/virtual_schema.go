@@ -151,7 +151,7 @@ func initVirtualTableDesc(t virtualSchemaTable) *sqlbase.TableDescriptor {
 	if err != nil {
 		panic(err)
 	}
-	desc, err := sqlbase.MakeTableDesc(stmt.(*parser.CreateTable), 0)
+	desc, err := MakeTableDesc(stmt.(*parser.CreateTable), 0)
 	if err != nil {
 		panic(err)
 	}
