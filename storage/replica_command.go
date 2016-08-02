@@ -28,7 +28,6 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -139,7 +138,7 @@ func (r *Replica) executeCmd(
 		*resp, err = r.HeartbeatTxn(ctx, batch, ms, h, *tArgs)
 	case *roachpb.GCRequest:
 		resp := reply.(*roachpb.GCResponse)
-		*resp, err = r.GC(ctx, batch, ms, h, *tArgs)
+		*resp, trigger, err = r.GC(ctx, batch, ms, h, *tArgs)
 	case *roachpb.PushTxnRequest:
 		resp := reply.(*roachpb.PushTxnResponse)
 		*resp, err = r.PushTxn(ctx, batch, ms, h, *tArgs)
@@ -154,24 +153,22 @@ func (r *Replica) executeCmd(
 		*resp, err = r.Merge(ctx, batch, ms, h, *tArgs)
 	case *roachpb.TruncateLogRequest:
 		resp := reply.(*roachpb.TruncateLogResponse)
-		*resp, err = r.TruncateLog(ctx, batch, ms, h, *tArgs)
+		*resp, trigger, err = r.TruncateLog(ctx, batch, ms, h, *tArgs)
 	case *roachpb.RequestLeaseRequest:
 		resp := reply.(*roachpb.RequestLeaseResponse)
-		*resp, err = r.RequestLease(ctx, batch, ms, h, *tArgs)
-		r.store.metrics.leaseRequestComplete(err)
+		*resp, trigger, err = r.RequestLease(ctx, batch, ms, h, *tArgs)
 	case *roachpb.TransferLeaseRequest:
 		resp := reply.(*roachpb.RequestLeaseResponse)
-		*resp, err = r.TransferLease(ctx, batch, ms, h, *tArgs)
-		r.store.metrics.leaseRequestComplete(err)
+		*resp, trigger, err = r.TransferLease(ctx, batch, ms, h, *tArgs)
 	case *roachpb.ComputeChecksumRequest:
 		resp := reply.(*roachpb.ComputeChecksumResponse)
-		*resp, err = r.ComputeChecksum(ctx, batch, ms, h, *tArgs)
+		*resp, trigger, err = r.ComputeChecksum(ctx, batch, ms, h, *tArgs)
 	case *roachpb.VerifyChecksumRequest:
 		resp := reply.(*roachpb.VerifyChecksumResponse)
-		*resp, err = r.VerifyChecksum(ctx, batch, ms, h, *tArgs)
+		*resp, trigger, err = r.VerifyChecksum(ctx, batch, ms, h, *tArgs)
 	case *roachpb.ChangeFrozenRequest:
 		resp := reply.(*roachpb.ChangeFrozenResponse)
-		*resp, err = r.ChangeFrozen(ctx, batch, ms, h, *tArgs)
+		*resp, trigger, err = r.ChangeFrozen(ctx, batch, ms, h, *tArgs)
 	default:
 		err = errors.Errorf("unrecognized command %s", args.Method())
 	}
@@ -800,34 +797,27 @@ func (r *Replica) runCommitTrigger(
 ) (*PostCommitTrigger, error) {
 	var trigger *PostCommitTrigger
 	ct := args.InternalCommitTrigger
-	if ct != nil {
-		// Assert that the on-disk state doesn't diverge from the in-memory
-		// state as a result of the commit trigger.
-		batch.Defer(func() {
-			r.assertState(r.store.Engine())
-		})
-
-		// Hold readMu across the application of any commit trigger.
-		// This makes sure that no reads are happening in parallel;
-		// see #3148.
-		r.readOnlyCmdMu.Lock()
-		batch.Defer(r.readOnlyCmdMu.Unlock)
-	}
 
 	if err := func() error {
 		if ct.GetSplitTrigger() != nil {
 			var err error
-			if *ms, trigger, err = r.splitTrigger(ctx, batch, *ms, ct.SplitTrigger, txn.Timestamp); err != nil {
+			var postSplit *PostCommitTrigger
+			if *ms, postSplit, err = r.splitTrigger(
+				ctx, batch, *ms, ct.SplitTrigger, txn.Timestamp,
+			); err != nil {
 				return err
 			}
+			trigger = updateTrigger(trigger, postSplit)
 		}
 		if ct.GetMergeTrigger() != nil {
-			if err := r.mergeTrigger(ctx, batch, ms, ct.MergeTrigger, txn.Timestamp); err != nil {
+			postMerge, err := r.mergeTrigger(ctx, batch, ms, ct.MergeTrigger, txn.Timestamp)
+			if err != nil {
 				return err
 			}
+			trigger = updateTrigger(trigger, postMerge)
 		}
 		if crt := ct.GetChangeReplicasTrigger(); crt != nil {
-			r.changeReplicasTrigger(ctx, batch, crt)
+			trigger = updateTrigger(trigger, r.changeReplicasTrigger(ctx, batch, crt))
 		}
 		if ct.GetModifiedSpanTrigger() != nil {
 			if ct.ModifiedSpanTrigger.SystemConfigSpan {
@@ -844,13 +834,14 @@ func (r *Replica) runCommitTrigger(
 						"modification trigger is executing on a non-system range. "+
 						"Configuration changes will not be gossiped.")
 				} else {
-					batch.Defer(r.maybeGossipSystemConfig)
+					trigger = updateTrigger(trigger, &PostCommitTrigger{
+						maybeGossipSystemConfig: true,
+					})
 				}
 			}
 		}
 		return nil
 	}(); err != nil {
-		r.readOnlyCmdMu.Unlock() // since the batch.Defer above won't run
 		return nil, err
 	}
 	return trigger, nil
@@ -1149,7 +1140,7 @@ func (r *Replica) GC(
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
 	args roachpb.GCRequest,
-) (roachpb.GCResponse, error) {
+) (roachpb.GCResponse, *PostCommitTrigger, error) {
 	// All keys must be inside the current replica range. Keys outside
 	// of this range in the GC request are dropped silently, which is
 	// safe because they can simply be re-collected later on the correct
@@ -1166,7 +1157,7 @@ func (r *Replica) GC(
 	// Garbage collect the specified keys by expiration timestamps.
 	err := engine.MVCCGarbageCollect(ctx, batch, ms, keys, h.Timestamp)
 	if err != nil {
-		return reply, err
+		return reply, nil, err
 	}
 
 	r.mu.Lock()
@@ -1174,12 +1165,10 @@ func (r *Replica) GC(
 	newThreshold.Forward(args.Threshold)
 	r.mu.Unlock()
 
-	batch.(engine.Batch).Defer(func() {
-		r.mu.Lock()
-		r.mu.state.GCThreshold = newThreshold
-		r.mu.Unlock()
-	})
-	return reply, setGCThreshold(batch, ms, r.Desc().RangeID, &newThreshold)
+	trigger := &PostCommitTrigger{
+		gcThreshold: &newThreshold,
+	}
+	return reply, trigger, setGCThreshold(batch, ms, r.Desc().RangeID, &newThreshold)
 }
 
 // PushTxn resolves conflicts between concurrent txns (or
@@ -1494,7 +1483,7 @@ func (r *Replica) TruncateLog(
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
 	args roachpb.TruncateLogRequest,
-) (roachpb.TruncateLogResponse, error) {
+) (roachpb.TruncateLogResponse, *PostCommitTrigger, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var reply roachpb.TruncateLogResponse
@@ -1505,13 +1494,13 @@ func (r *Replica) TruncateLog(
 	if r.RangeID != args.RangeID {
 		log.Infof(ctx, "%s: attempting to truncate raft logs for another range %d. Normally this is due to a merge and can be ignored.",
 			r, args.RangeID)
-		return reply, nil
+		return reply, nil, nil
 	}
 
 	// Have we already truncated this log? If so, just return without an error.
 	firstIndex, err := r.FirstIndex()
 	if err != nil {
-		return reply, err
+		return reply, nil, err
 	}
 
 	if firstIndex >= args.Index {
@@ -1519,13 +1508,13 @@ func (r *Replica) TruncateLog(
 			log.Infof(ctx, "%s: attempting to truncate previously truncated raft log. FirstIndex:%d, TruncateFrom:%d",
 				r, firstIndex, args.Index)
 		}
-		return reply, nil
+		return reply, nil, nil
 	}
 
 	// args.Index is the first index to keep.
 	term, err := r.Term(args.Index - 1)
 	if err != nil {
-		return reply, err
+		return reply, nil, err
 	}
 	start := keys.RaftLogKey(r.RangeID, 0)
 	end := keys.RaftLogKey(r.RangeID, args.Index)
@@ -1534,7 +1523,7 @@ func (r *Replica) TruncateLog(
 	// but it also computes stats.
 	if _, err := engine.MVCCDeleteRange(ctx, batch, &diff, start, end, math.MaxInt64, /* max */
 		hlc.ZeroTimestamp, nil /* txn */, false /* returnKeys */); err != nil {
-		return reply, err
+		return reply, nil, err
 	}
 	raftLogSize := r.mu.raftLogSize + diff.SysBytes
 	// Check raftLogSize since it isn't persisted between server restarts.
@@ -1547,13 +1536,15 @@ func (r *Replica) TruncateLog(
 		Term:  term,
 	}
 
-	batch.(engine.Batch).Defer(func() {
-		r.mu.Lock()
-		r.mu.state.TruncatedState = tState
-		r.mu.raftLogSize = raftLogSize
-		r.mu.Unlock()
-	})
-	return reply, engine.MVCCPutProto(ctx, batch, ms, keys.RaftTruncatedStateKey(r.RangeID), hlc.ZeroTimestamp, nil, tState)
+	trigger := &PostCommitTrigger{
+		truncatedState: tState,
+		raftLogSize:    &raftLogSize,
+	}
+	return reply, trigger, engine.MVCCPutProto(ctx, batch, ms, keys.RaftTruncatedStateKey(r.RangeID), hlc.ZeroTimestamp, nil, tState)
+}
+
+func newFailedLeaseTrigger() *PostCommitTrigger {
+	return &PostCommitTrigger{leaseMetricsResult: new(bool)}
 }
 
 // RequestLease sets the range lease for this range. The command fails
@@ -1569,9 +1560,9 @@ func (r *Replica) RequestLease(
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
 	args roachpb.RequestLeaseRequest,
-) (roachpb.RequestLeaseResponse, error) {
-	// maybeGossipSystemConfig cannot be called while the replica is locked,
-	// so we defer it here so it is called once the replica lock is released.
+) (roachpb.RequestLeaseResponse, *PostCommitTrigger, error) {
+	// When returning an error from this method, must always return
+	// a newFailedLeaseTrigger() to satisfy stats.
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -1614,12 +1605,12 @@ func (r *Replica) RequestLease(
 	if isExtension {
 		if effectiveStart.Less(prevLease.Start) {
 			rErr.Message = "extension moved start timestamp backwards"
-			return roachpb.RequestLeaseResponse{}, rErr
+			return roachpb.RequestLeaseResponse{}, newFailedLeaseTrigger(), rErr
 		}
 		args.Lease.Expiration.Forward(prevLease.Expiration)
 	} else if effectiveStart.Less(prevLease.Expiration) {
 		rErr.Message = "requested lease overlaps previous lease"
-		return roachpb.RequestLeaseResponse{}, rErr
+		return roachpb.RequestLeaseResponse{}, newFailedLeaseTrigger(), rErr
 	}
 	args.Lease.Start = effectiveStart
 	return r.applyNewLeaseLocked(ctx, batch, ms, args.Lease)
@@ -1636,7 +1627,9 @@ func (r *Replica) TransferLease(
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
 	args roachpb.TransferLeaseRequest,
-) (roachpb.RequestLeaseResponse, error) {
+) (roachpb.RequestLeaseResponse, *PostCommitTrigger, error) {
+	// When returning an error from this method, must always return
+	// a newFailedLeaseTrigger() to satisfy stats.
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if log.V(2) {
@@ -1648,101 +1641,77 @@ func (r *Replica) TransferLease(
 	return r.applyNewLeaseLocked(ctx, batch, ms, args.Lease)
 }
 
-// applyNewLeaseLocked applies a new lease: the timestamp's cache low water mark
-// is updated if needed; Raft leadership is transferred if needed.
-//
+// applyNewLeaseLocked checks that the lease contains a valid interval and that
+// the new lease holder is still a member of the replica set, and then proceeds
+// to write the new lease to the batch, emitting an appropriate trigger.
+
 // The new lease might be a lease for a range that didn't previously have an
 // active lease, might be an extension or a lease transfer.
 //
 // r.mu needs to be locked.
+//
+// TODO(tschottdorf): refactoring what's returned from the trigger here makes
+// sense to minimize the amount of code intolerant of rolling updates.
 func (r *Replica) applyNewLeaseLocked(
 	ctx context.Context,
 	batch engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	lease roachpb.Lease,
-) (roachpb.RequestLeaseResponse, error) {
+) (roachpb.RequestLeaseResponse, *PostCommitTrigger, error) {
+	// When returning an error from this method, must always return
+	// a newFailedLeaseTrigger() to satisfy stats.
+
 	prevLease := r.mu.state.Lease
 	// Ensure Start < StartStasis <= Expiration.
 	if !lease.Start.Less(lease.StartStasis) ||
 		lease.Expiration.Less(lease.StartStasis) {
 		// This amounts to a bug.
-		return roachpb.RequestLeaseResponse{}, &roachpb.LeaseRejectedError{
-			Existing:  *prevLease,
-			Requested: lease,
-			Message: fmt.Sprintf("illegal lease interval: [%s, %s, %s]",
-				lease.Start, lease.StartStasis, lease.Expiration),
-		}
+		return roachpb.RequestLeaseResponse{}, newFailedLeaseTrigger(),
+			&roachpb.LeaseRejectedError{
+				Existing:  *prevLease,
+				Requested: lease,
+				Message: fmt.Sprintf("illegal lease interval: [%s, %s, %s]",
+					lease.Start, lease.StartStasis, lease.Expiration),
+			}
 	}
 
 	// Verify that requesting replica is part of the current replica set.
 	if _, ok := r.mu.state.Desc.GetReplicaDescriptor(lease.Replica.StoreID); !ok {
-		return roachpb.RequestLeaseResponse{}, &roachpb.LeaseRejectedError{
-			Existing:  *prevLease,
-			Requested: lease,
-			Message:   "replica not found",
-		}
+		return roachpb.RequestLeaseResponse{}, newFailedLeaseTrigger(),
+			&roachpb.LeaseRejectedError{
+				Existing:  *prevLease,
+				Requested: lease,
+				Message:   "replica not found",
+			}
 	}
 
 	var reply roachpb.RequestLeaseResponse
 	// Store the lease to disk & in-memory.
 	if err := setLease(batch, ms, r.RangeID, &lease); err != nil {
-		return reply, err
+		return reply, newFailedLeaseTrigger(), err
 	}
-	r.mu.state.Lease = &lease
 
-	// maybeGossipSystemConfig cannot be called while the replica is locked,
-	// so we defer it here so it is called once the replica lock is released.
-	//
-	// TODO(tschottdorf): this upcast is unidiomatic, but with #6286 (isolate
-	// Raft side effects) this will go away, and this is a good place to move
-	// it away from.
-	batch.(engine.Batch).Defer(r.maybeGossipSystemConfig)
-
-	if prevLease.Replica.StoreID != r.mu.state.Lease.Replica.StoreID {
-		// The lease is changing hands. Is this replica the new lease holder?
-		if r.mu.state.Lease.Replica.ReplicaID == r.mu.replicaID {
-			// If this replica is a new holder of the lease, update the low water
-			// mark of the timestamp cache. Note that clock offset scenarios are
-			// handled via a stasis period inherent in the lease which is documented
-			// in on the Lease struct.
-			//
-			// The introduction of lease transfers implies that the previous lease
-			// may have been shortened and we are now applying a formally overlapping
-			// lease (since the old lease holder has promised not to serve any more
-			// requests, this is kosher). This means that we don't use the old
-			// lease's expiration but instead use the new lease's start to initialize
-			// the timestamp cache low water.
-			log.Infof(ctx, "%s: new range lease %s following %s [physicalTime=%s]",
-				r, lease, prevLease, r.store.Clock().PhysicalTime())
-			r.mu.tsCache.SetLowWater(lease.Start)
-
-			// Gossip the first range whenever its lease is acquired. We check to
-			// make sure the lease is active so that a trailing replica won't process
-			// an old lease request and attempt to gossip the first range.
-			if r.IsFirstRange() && r.mu.state.Lease.Covers(r.store.Clock().Now()) {
-				r.gossipFirstRangeLocked(ctx)
-			}
-		} else if r.mu.state.Lease.Covers(r.store.Clock().Now()) {
-			if err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
-				if raftGroup.Status().RaftState == raft.StateLeader {
-					// If this replica is the raft leader but it is not the new lease
-					// holder, then try to transfer the raft leadership to match the
-					// lease.
-					log.Infof(ctx, "range %v: replicaID %v transfer raft leadership to replicaID %v",
-						r.RangeID, r.mu.replicaID, r.mu.state.Lease.Replica.ReplicaID)
-					raftGroup.TransferLeader(uint64(r.mu.state.Lease.Replica.ReplicaID))
-				}
-				return nil
-			}); err != nil {
-				// An error here indicates that this Replica has been destroyed
-				// while lacking the necessary synchronization (or even worse, it
-				// fails spuriously - could be a storage error), and so we avoid
-				// sweeping that under the rug.
-				return roachpb.RequestLeaseResponse{}, newReplicaCorruptionError(err)
-			}
-		}
+	t := true
+	trigger := &PostCommitTrigger{
+		// If we didn't block concurrent reads here, there'd be a chance that
+		// reads could sneak in on a new lease holder between setting the lease
+		// and updating the low water mark. This in itself isn't a consistency
+		// violation, but it's a bit suspicious and did make
+		// TestRangeTransferLease flaky. We err on the side of caution for now.
+		//
+		// TODO(tschottdorf): Could only do this on transfers, or not at all.
+		// Need to think through potential consequences.
+		noConcurrentReads:  true,
+		lease:              &lease,
+		leaseMetricsResult: &t,
+		// TODO(tschottdorf): having traced the origin of this call back to
+		// rev 6281926, it seems that we should only be doing this when the
+		// lease holder has changed. However, it's likely not a big deal to
+		// do it always.
+		maybeGossipSystemConfig: true,
 	}
-	return reply, nil
+
+	return reply, trigger, nil
 }
 
 // CheckConsistency runs a consistency check on the range. It first applies
@@ -1880,58 +1849,12 @@ func (r *Replica) ComputeChecksum(
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
 	args roachpb.ComputeChecksumRequest,
-) (roachpb.ComputeChecksumResponse, error) {
+) (roachpb.ComputeChecksumResponse, *PostCommitTrigger, error) {
 	if args.Version != replicaChecksumVersion {
 		log.Errorf(ctx, "%s: Incompatible versions: e=%d, v=%d", r, replicaChecksumVersion, args.Version)
-		return roachpb.ComputeChecksumResponse{}, nil
+		return roachpb.ComputeChecksumResponse{}, nil, nil
 	}
-	stopper := r.store.Stopper()
-	id := args.ChecksumID
-	now := timeutil.Now()
-	r.mu.Lock()
-	if _, ok := r.mu.checksums[id]; ok {
-		// A previous attempt was made to compute the checksum.
-		r.mu.Unlock()
-		return roachpb.ComputeChecksumResponse{}, nil
-	}
-
-	// GC old entries.
-	var oldEntries []uuid.UUID
-	for id, val := range r.mu.checksums {
-		// The timestamp is only valid when the checksum is set.
-		if val.checksum != nil && now.After(val.gcTimestamp) {
-			oldEntries = append(oldEntries, id)
-		}
-	}
-	for _, id := range oldEntries {
-		delete(r.mu.checksums, id)
-	}
-
-	// Create an entry with checksum == nil and gcTimestamp unset.
-	r.mu.checksums[id] = replicaChecksum{notify: make(chan struct{})}
-	desc := *r.mu.state.Desc
-	r.mu.Unlock()
-	snap := r.store.NewSnapshot()
-
-	// Compute SHA asynchronously and store it in a map by UUID.
-	if err := stopper.RunAsyncTask(func() {
-		defer snap.Close()
-		var snapshot *roachpb.RaftSnapshotData
-		if args.Snapshot {
-			snapshot = &roachpb.RaftSnapshotData{}
-		}
-		sha, err := r.sha512(desc, snap, snapshot)
-		if err != nil {
-			log.Errorf(ctx, "%s: %v", r, err)
-			sha = nil
-		}
-		r.computeChecksumDone(context.Background(), id, sha, snapshot)
-	}); err != nil {
-		defer snap.Close()
-		// Set checksum to nil.
-		r.computeChecksumDone(ctx, id, nil, nil)
-	}
-	return roachpb.ComputeChecksumResponse{}, nil
+	return roachpb.ComputeChecksumResponse{}, &PostCommitTrigger{computeChecksum: &args}, nil
 }
 
 // sha512 computes the SHA512 hash of all the replica data at the snapshot.
@@ -1994,71 +1917,15 @@ func (r *Replica) VerifyChecksum(
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
 	args roachpb.VerifyChecksumRequest,
-) (roachpb.VerifyChecksumResponse, error) {
+) (roachpb.VerifyChecksumResponse, *PostCommitTrigger, error) {
 	if args.Version != replicaChecksumVersion {
 		log.Errorf(ctx, "%s: consistency check skipped: incompatible versions: e=%d, v=%d",
 			r, replicaChecksumVersion, args.Version)
 		// Return success because version incompatibility might only
 		// be seen on this replica.
-		return roachpb.VerifyChecksumResponse{}, nil
+		return roachpb.VerifyChecksumResponse{}, nil, nil
 	}
-	id := args.ChecksumID
-	c, ok := r.getChecksum(ctx, id)
-	if !ok {
-		log.Errorf(ctx, "%s: consistency check skipped: checksum for id = %v doesn't exist", r, id)
-		// Return success because a checksum might be missing only on
-		// this replica. A checksum might be missing because of a
-		// number of reasons: GC-ed, server restart, and ComputeChecksum
-		// version incompatibility.
-		return roachpb.VerifyChecksumResponse{}, nil
-	}
-	if c.checksum != nil && !bytes.Equal(c.checksum, args.Checksum) {
-		// Replication consistency problem!
-		logFunc := log.Errorf
-
-		// Collect some more debug information.
-		if args.Snapshot == nil {
-			// No debug information; run another consistency check to deliver
-			// more debug information.
-			if err := r.store.stopper.RunAsyncTask(func() {
-				log.Errorf(ctx, "%s: consistency check failed; fetching details", r)
-				desc := r.Desc()
-				startKey := desc.StartKey.AsRawKey()
-				// Can't use a start key less than LocalMax.
-				if bytes.Compare(startKey, keys.LocalMax) < 0 {
-					startKey = keys.LocalMax
-				}
-				if err := r.store.db.CheckConsistency(startKey, desc.EndKey.AsRawKey(), true /* withDiff */); err != nil {
-					log.Errorf(ctx, "couldn't rerun consistency check: %s", err)
-				}
-			}); err != nil {
-				log.Error(ctx, errors.Wrap(err, "could not rerun consistency check"))
-			}
-		} else {
-			// Compute diff.
-			diff := diffRange(args.Snapshot, c.snapshot)
-			if diff != nil {
-				for _, d := range diff {
-					l := "leader"
-					if d.LeaseHolder {
-						l = "replica"
-					}
-					log.Errorf(ctx, "%s: consistency check failed: k:v = (%s (%x), %s, %x) not present on %s",
-						r, d.Key, d.Key, d.Timestamp, d.Value, l)
-				}
-			}
-			if r.store.ctx.ConsistencyCheckPanicOnFailure {
-				if p := r.store.ctx.TestingKnobs.BadChecksumPanic; p != nil {
-					p(diff)
-				} else {
-					logFunc = log.Fatalf
-				}
-			}
-		}
-
-		logFunc(ctx, "consistency check failed on replica: %s, checksum mismatch: e = %x, v = %x", r, args.Checksum, c.checksum)
-	}
-	return roachpb.VerifyChecksumResponse{}, nil
+	return roachpb.VerifyChecksumResponse{}, &PostCommitTrigger{verifyChecksum: &args}, nil
 }
 
 // ChangeFrozen freezes or unfreezes the Replica idempotently.
@@ -2068,15 +1935,15 @@ func (r *Replica) ChangeFrozen(
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
 	args roachpb.ChangeFrozenRequest,
-) (roachpb.ChangeFrozenResponse, error) {
+) (roachpb.ChangeFrozenResponse, *PostCommitTrigger, error) {
 	var resp roachpb.ChangeFrozenResponse
 	resp.MinStartKey = roachpb.RKeyMax
 	curStart, err := keys.Addr(args.Key)
 	if err != nil {
-		return resp, err
+		return resp, nil, err
 	}
 	if !bytes.Equal(curStart, args.Key) {
-		return resp, errors.Errorf("unsupported range-local key")
+		return resp, nil, errors.Errorf("unsupported range-local key")
 	}
 
 	desc := r.Desc()
@@ -2088,11 +1955,11 @@ func (r *Replica) ChangeFrozen(
 		// might actually not be the same version of the code (picture a couple
 		// of freeze requests lined up, but not all of them applied between
 		// version changes).
-		return resp, err
+		return resp, nil, err
 	}
 
 	if args.MustVersion == "" {
-		return resp, errors.Errorf("empty version tag")
+		return resp, nil, errors.Errorf("empty version tag")
 	} else if bi := build.GetInfo(); !frozen && args.Frozen && args.MustVersion != bi.Tag {
 		// Some earlier version tried to freeze but we never applied it until
 		// someone restarted this node with another version. No bueno - have to
@@ -2114,7 +1981,7 @@ func (r *Replica) ChangeFrozen(
 	if !desc.StartKey.Less(curStart) {
 		resp.RangesAffected++
 	} else if locMax, err := keys.Addr(keys.LocalMax); err != nil {
-		return resp, err
+		return resp, nil, err
 	} else if !locMax.Less(curStart) {
 		resp.RangesAffected++
 	}
@@ -2127,17 +1994,19 @@ func (r *Replica) ChangeFrozen(
 	}
 
 	if resp.RangesAffected == 0 {
-		return resp, nil
+		return resp, nil, nil
 	}
 
 	resp.MinStartKey = desc.StartKey
 
-	batch.(engine.Batch).Defer(func() {
-		r.mu.Lock()
-		r.mu.state.Frozen = args.Frozen
-		r.mu.Unlock()
-	})
-	return resp, setFrozenStatus(batch, ms, r.Desc().RangeID, args.Frozen)
+	if err := setFrozenStatus(batch, ms, r.Desc().RangeID, args.Frozen); err != nil {
+		return roachpb.ChangeFrozenResponse{}, nil, err
+	}
+
+	trigger := &PostCommitTrigger{
+		frozen: &args.Frozen,
+	}
+	return resp, trigger, nil
 }
 
 // ReplicaSnapshotDiff is a part of a []ReplicaSnapshotDiff which represents a diff between
@@ -2688,24 +2557,9 @@ func (r *Replica) splitTrigger(
 	rightDeltaMS := bothDeltaMS
 	rightDeltaMS.Subtract(leftDeltaMS)
 
-	// TODO(tschottdorf): We want to let the usual MVCCStats-delta
-	// machinery update our stats for the left-hand side. But there is no
-	// way to pass up an MVCCStats object that will clear out the
-	// ContainsEstimates flag. We should introduce one, but the migration
-	// makes this worth a separate effort (ContainsEstimates would need to
-	// have three possible values, 'UNCHANGED', 'NO', and 'YES').
-	{
-		origCopy := origBothMS
-		origCopy.ContainsEstimates = false
-		if err := setMVCCStats(batch, r.RangeID, origCopy); err != nil {
-			return enginepb.MVCCStats{}, nil, errors.Wrap(err, "unable to write MVCC stats")
-		}
-		r.mu.Lock()
-		r.mu.state.Stats.ContainsEstimates = false
-		r.mu.Unlock()
-	}
-
 	trigger := &PostCommitTrigger{
+		// This makes sure that no reads are happening in parallel; see #3148.
+		noConcurrentReads: true,
 		split: &postCommitSplit{
 			SplitTrigger: *split,
 			RightDeltaMS: rightDeltaMS,
@@ -2833,21 +2687,21 @@ func (r *Replica) mergeTrigger(
 	ms *enginepb.MVCCStats,
 	merge *roachpb.MergeTrigger,
 	ts hlc.Timestamp,
-) error {
+) (*PostCommitTrigger, error) {
 	desc := r.Desc()
 	if !bytes.Equal(desc.StartKey, merge.LeftDesc.StartKey) {
-		return errors.Errorf("LHS range start keys do not match: %s != %s",
+		return nil, errors.Errorf("LHS range start keys do not match: %s != %s",
 			desc.StartKey, merge.LeftDesc.StartKey)
 	}
 
 	if !desc.EndKey.Less(merge.LeftDesc.EndKey) {
-		return errors.Errorf("original LHS end key is not less than the post merge end key: %s >= %s",
+		return nil, errors.Errorf("original LHS end key is not less than the post merge end key: %s >= %s",
 			desc.EndKey, merge.LeftDesc.EndKey)
 	}
 
 	rightRangeID := merge.RightDesc.RangeID
 	if rightRangeID <= 0 {
-		return errors.Errorf("RHS range ID must be provided: %d", rightRangeID)
+		return nil, errors.Errorf("RHS range ID must be provided: %d", rightRangeID)
 	}
 
 	// Compute stats for premerged range, including current transaction.
@@ -2861,7 +2715,7 @@ func (r *Replica) mergeTrigger(
 	// stats, which will need to be recomputed.
 	var rightMS enginepb.MVCCStats
 	if err := engine.MVCCGetRangeStats(ctx, batch, rightRangeID, &rightMS); err != nil {
-		return err
+		return nil, err
 	}
 	rightMS.SysBytes, rightMS.SysCount = 0, 0
 	mergedMS.Add(rightMS)
@@ -2869,7 +2723,7 @@ func (r *Replica) mergeTrigger(
 	// Copy the RHS range's abort cache to the new LHS one.
 	_, err := r.abortCache.CopyFrom(ctx, batch, &mergedMS, rightRangeID)
 	if err != nil {
-		return errors.Errorf("unable to copy abort cache to new split range: %s", err)
+		return nil, errors.Errorf("unable to copy abort cache to new split range: %s", err)
 	}
 
 	// Remove the RHS range's metadata. Note that we don't need to
@@ -2877,7 +2731,7 @@ func (r *Replica) mergeTrigger(
 	// system-local stats contribution to 0.
 	localRangeIDKeyPrefix := keys.MakeRangeIDPrefix(rightRangeID)
 	if _, err := engine.MVCCDeleteRange(ctx, batch, nil, localRangeIDKeyPrefix, localRangeIDKeyPrefix.PrefixEnd(), math.MaxInt64, hlc.ZeroTimestamp, nil, false); err != nil {
-		return errors.Errorf("cannot remove range metadata %s", err)
+		return nil, errors.Errorf("cannot remove range metadata %s", err)
 	}
 
 	// Add in the stats for the RHS range's range keys.
@@ -2887,60 +2741,62 @@ func (r *Replica) mergeTrigger(
 	localRangeKeyEnd := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.RightDesc.EndKey))
 	msRange, err := iter.ComputeStats(localRangeKeyStart, localRangeKeyEnd, ts.WallTime)
 	if err != nil {
-		return errors.Errorf("unable to compute RHS range's local stats: %s", err)
+		return nil, errors.Errorf("unable to compute RHS range's local stats: %s", err)
 	}
 	mergedMS.Add(msRange)
 
-	// Set stats for updated range (in-memory updated under lock below).
+	// Set stats for updated range.
 	if err := setMVCCStats(batch, r.RangeID, mergedMS); err != nil {
-		return errors.Errorf("unable to write MVCC stats: %s", err)
+		return nil, errors.Errorf("unable to write MVCC stats: %s", err)
 	}
 
 	// Clear the timestamp cache. In case both the LHS and RHS replicas
 	// held their respective range leases, we could merge the timestamp
 	// caches for efficiency. But it's unlikely and not worth the extra
 	// logic and potential for error.
+
+	*ms = r.GetMVCCStats()
+	mergedMS.Subtract(r.GetMVCCStats())
+	*ms = mergedMS
+
 	r.mu.Lock()
-	r.mu.state.Stats = mergedMS
 	r.mu.tsCache.Clear(r.store.Clock())
 	r.mu.Unlock()
 
-	batch.Defer(func() {
-		if err := r.store.MergeRange(r, merge.LeftDesc.EndKey, rightRangeID); err != nil {
-			// Our in-memory state has diverged from the on-disk state.
-			log.Fatalf(ctx, "%s: failed to update store after merging range: %s", r, err)
-		}
-	})
-	return nil
+	trigger := &PostCommitTrigger{
+		// This makes sure that no reads are happening in parallel; see #3148.
+		noConcurrentReads: true,
+		merge: &postCommitMerge{
+			MergeTrigger: *merge,
+		},
+	}
+	return trigger, nil
 }
 
 func (r *Replica) changeReplicasTrigger(
 	ctx context.Context,
 	batch engine.Batch,
 	change *roachpb.ChangeReplicasTrigger,
-) {
+) *PostCommitTrigger {
+	var trigger *PostCommitTrigger
 	// If we're removing the current replica, add it to the range GC queue.
 	if change.ChangeType == roachpb.REMOVE_REPLICA && r.store.StoreID() == change.Replica.StoreID {
-		// Defer this to make it run as late as possible, maximizing the chances
+		// This wants to run as late as possible, maximizing the chances
 		// that the other nodes have finished this command as well (since
 		// processing the removal from the queue looks up the Range at the
 		// lease holder, being too early here turns this into a no-op).
-		batch.Defer(func() {
-			if err := r.store.replicaGCQueue.Add(r, 1.0); err != nil {
-				// Log the error; this shouldn't prevent the commit; the range
-				// will be GC'd eventually.
-				log.Errorf(ctx, "%s: unable to add to GC queue: %s", r, err)
-			}
+		trigger = updateTrigger(trigger, &PostCommitTrigger{
+			addToReplicaGCQueue: true,
 		})
 	} else {
-		// After a successful replica addition or removal check to see if the range
-		// needs to be split. Splitting usually takes precedence over replication
-		// via configuration of the split and replicate queues, but if the split
-		// occurs concurrently with the replicas change the split can fail and
-		// won't retry until the next scanner cycle. Re-queuing the replica here
-		// removes that latency.
-		batch.Defer(func() {
-			r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
+		// After a successful replica addition or removal check to see if the
+		// range needs to be split. Splitting usually takes precedence over
+		// replication via configuration of the split and replicate queues, but
+		// if the split occurs concurrently with the replicas change the split
+		// can fail and won't retry until the next scanner cycle. Re-queuing
+		// the replica here removes that latency.
+		trigger = updateTrigger(trigger, &PostCommitTrigger{
+			maybeAddToSplitQueue: true,
 		})
 	}
 
@@ -2951,39 +2807,19 @@ func (r *Replica) changeReplicasTrigger(
 	// the removed replica in case it was the lease-holder and it is still
 	// holding the lease.
 	if r.IsFirstRange() {
-		batch.Defer(func() {
-			// We need to run the gossip in an async task because gossiping requires
-			// the range lease and we'll deadlock if we try to acquire it while
-			// holding processRaftMu. Specifically, Replica.redirectOnOrAcquireLease
-			// blocks waiting for the lease acquisition to finish but it can't finish
-			// because we're not processing raft messages due to holding
-			// processRaftMu (and running on the processRaft goroutine).
-			if err := r.store.Stopper().RunAsyncTask(func() {
-				// Create a new context because this is an asynchronous task and we
-				// don't want to share the trace.
-				ctxInner := context.Background()
-				if hasLease, pErr := r.getLeaseForGossip(ctxInner); hasLease {
-					r.mu.Lock()
-					defer r.mu.Unlock()
-					r.gossipFirstRangeLocked(ctxInner)
-				} else {
-					log.Infof(ctxInner, "unable to gossip first range; hasLease=%t, err=%v", hasLease, pErr)
-				}
-			}); err != nil {
-				log.Errorf(ctx, "unable to gossip first range: %v", err)
-			}
+		trigger = updateTrigger(trigger, &PostCommitTrigger{
+			gossipFirstRange: true,
 		})
 	}
 
-	batch.Defer(func() {
-		cpy := *r.Desc()
-		cpy.Replicas = change.UpdatedReplicas
-		cpy.NextReplicaID = change.NextReplicaID
-		if err := r.setDesc(&cpy); err != nil {
-			// Log the error. There's not much we can do because the commit may have already occurred at this point.
-			log.Fatalf(ctx, "%s: failed to update range descriptor to %+v: %s", r, cpy, err)
-		}
+	cpy := *r.Desc()
+	cpy.Replicas = change.UpdatedReplicas
+	cpy.NextReplicaID = change.NextReplicaID
+	trigger = updateTrigger(trigger, &PostCommitTrigger{
+		desc: &cpy,
 	})
+
+	return trigger
 }
 
 // ChangeReplicas adds or removes a replica of a range. The change is performed

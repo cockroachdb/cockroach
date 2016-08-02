@@ -559,10 +559,10 @@ func TestRangeTransferLease(t *testing.T) {
 		mtc.senders[0], nil, roachpb.Header{Replica: replica0Desc}, &gArgs)
 	nlhe, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
 	if !ok {
-		t.Fatalf("Expected %T, got %s", &roachpb.NotLeaseHolderError{}, pErr)
+		t.Fatalf("expected %T, got %s", &roachpb.NotLeaseHolderError{}, pErr)
 	}
 	if *(nlhe.LeaseHolder) != newHolderDesc {
-		t.Fatalf("Expected lease holder %+v, got %+v",
+		t.Fatalf("expected lease holder %+v, got %+v",
 			newHolderDesc, nlhe.LeaseHolder)
 	}
 
