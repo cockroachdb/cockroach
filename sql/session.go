@@ -67,8 +67,9 @@ type SessionArgs struct {
 }
 
 // NewSession creates and initializes new Session object.
+// ctx can be nil (in which case the Executor's context will be used).
 // remote can be nil.
-func NewSession(args SessionArgs, e *Executor, remote net.Addr) *Session {
+func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.Addr) *Session {
 	s := &Session{
 		Database: args.Database,
 		User:     args.User,
@@ -90,7 +91,7 @@ func NewSession(args SessionArgs, e *Executor, remote net.Addr) *Session {
 	}
 	s.Trace = trace.New("sql."+args.User, remoteStr)
 	s.Trace.SetMaxEvents(100)
-	s.context, s.cancel = context.WithCancel(context.Background())
+	s.context, s.cancel = context.WithCancel(ctx)
 	return s
 }
 
@@ -107,10 +108,10 @@ func (s *Session) Finish() {
 	s.cancel()
 }
 
-// Context returns the current context for the session. If there is an active
+// Ctx returns the current context for the session. If there is an active
 // transaction it returns the transaction context, otherwise it returns the
 // session context.
-func (s *Session) Context() context.Context {
+func (s *Session) Ctx() context.Context {
 	if s.TxnState.txn != nil {
 		return s.TxnState.txn.Context
 	}
@@ -293,7 +294,8 @@ func (scc *schemaChangerCollection) queueSchemaChanger(
 //    schema changes we're about to execute. Results corresponding to the
 //    schema change statements will be changed in case an error occurs.
 func (scc *schemaChangerCollection) execSchemaChanges(
-	e *Executor, planMaker *planner, results ResultList) {
+	e *Executor, planMaker *planner, results ResultList,
+) {
 	if planMaker.txn != nil {
 		panic("trying to execute schema changes while still in a transaction")
 	}
@@ -309,7 +311,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		sc.db = *e.ctx.DB
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 			if done, err := sc.IsDone(); err != nil {
-				log.Warning(context.TODO(), err)
+				log.Warning(e.ctx.Context, err)
 				break
 			} else if done {
 				break
@@ -333,7 +335,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 				if scEntry.epoch == scc.curGroupNum {
 					results[scEntry.idx] = Result{Err: err}
 				}
-				log.Warningf(context.TODO(), "Error executing schema change: %s", err)
+				log.Warningf(e.ctx.Context, "Error executing schema change: %s", err)
 			}
 			break
 		}
