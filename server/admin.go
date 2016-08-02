@@ -163,9 +163,12 @@ func (s *adminServer) firstNotFoundError(results []sql.Result) error {
 }
 
 // Databases is an endpoint that returns a list of databases.
-func (s *adminServer) Databases(ctx context.Context, req *serverpb.DatabasesRequest) (*serverpb.DatabasesResponse, error) {
-	session := sql.NewSession(sql.SessionArgs{User: s.getUser(req)}, s.server.sqlExecutor, nil)
-	r := s.server.sqlExecutor.ExecuteStatements(ctx, session, "SHOW DATABASES;", nil)
+func (s *adminServer) Databases(
+	ctx context.Context, req *serverpb.DatabasesRequest,
+) (*serverpb.DatabasesResponse, error) {
+	args := sql.SessionArgs{User: s.getUser(req)}
+	session := sql.NewSession(args, s.server.sqlExecutor, ctx, nil)
+	r := s.server.sqlExecutor.ExecuteStatements(session, "SHOW DATABASES;", nil)
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return nil, s.serverError(err)
 	}
@@ -184,8 +187,11 @@ func (s *adminServer) Databases(ctx context.Context, req *serverpb.DatabasesRequ
 
 // DatabaseDetails is an endpoint that returns grants and a list of table names
 // for the specified database.
-func (s *adminServer) DatabaseDetails(ctx context.Context, req *serverpb.DatabaseDetailsRequest) (*serverpb.DatabaseDetailsResponse, error) {
-	session := sql.NewSession(sql.SessionArgs{User: s.getUser(req)}, s.server.sqlExecutor, nil)
+func (s *adminServer) DatabaseDetails(
+	ctx context.Context, req *serverpb.DatabaseDetailsRequest,
+) (*serverpb.DatabaseDetailsResponse, error) {
+	args := sql.SessionArgs{User: s.getUser(req)}
+	session := sql.NewSession(args, s.server.sqlExecutor, ctx, nil)
 
 	// Placeholders don't work with SHOW statements, so we need to manually
 	// escape the database name.
@@ -193,7 +199,7 @@ func (s *adminServer) DatabaseDetails(ctx context.Context, req *serverpb.Databas
 	// TODO(cdo): Use placeholders when they're supported by SHOW.
 	escDBName := parser.Name(req.Database).String()
 	query := fmt.Sprintf("SHOW GRANTS ON DATABASE %s; SHOW TABLES FROM %s;", escDBName, escDBName)
-	r := s.server.sqlExecutor.ExecuteStatements(ctx, session, query, nil)
+	r := s.server.sqlExecutor.ExecuteStatements(session, query, nil)
 	if err := s.firstNotFoundError(r.ResultList); err != nil {
 		return nil, grpc.Errorf(codes.NotFound, "%s", err)
 	}
@@ -246,9 +252,11 @@ func (s *adminServer) DatabaseDetails(ctx context.Context, req *serverpb.Databas
 
 // TableDetails is an endpoint that returns columns, indices, and other
 // relevant details for the specified table.
-func (s *adminServer) TableDetails(ctx context.Context, req *serverpb.TableDetailsRequest) (
-	*serverpb.TableDetailsResponse, error) {
-	session := sql.NewSession(sql.SessionArgs{User: s.getUser(req)}, s.server.sqlExecutor, nil)
+func (s *adminServer) TableDetails(
+	ctx context.Context, req *serverpb.TableDetailsRequest,
+) (*serverpb.TableDetailsResponse, error) {
+	args := sql.SessionArgs{User: s.getUser(req)}
+	session := sql.NewSession(args, s.server.sqlExecutor, ctx, nil)
 
 	// TODO(cdo): Use real placeholders for the table and database names when we've extended our SQL
 	// grammar to allow that.
@@ -257,7 +265,7 @@ func (s *adminServer) TableDetails(ctx context.Context, req *serverpb.TableDetai
 	escQualTable := fmt.Sprintf("%s.%s", escDbName, escTableName)
 	query := fmt.Sprintf("SHOW COLUMNS FROM %s; SHOW INDEX FROM %s; SHOW GRANTS ON TABLE %s; SHOW CREATE TABLE %s;",
 		escQualTable, escQualTable, escQualTable, escQualTable)
-	r := s.server.sqlExecutor.ExecuteStatements(ctx, session, query, nil)
+	r := s.server.sqlExecutor.ExecuteStatements(session, query, nil)
 	if err := s.firstNotFoundError(r.ResultList); err != nil {
 		return nil, grpc.Errorf(codes.NotFound, "%s", err)
 	}
@@ -411,12 +419,12 @@ func (s *adminServer) TableDetails(ctx context.Context, req *serverpb.TableDetai
 
 	// Query the zone configuration for this table.
 	{
-		path, err := s.queryDescriptorIDPath(ctx, session, []string{escDbName, escTableName})
+		path, err := s.queryDescriptorIDPath(session, []string{escDbName, escTableName})
 		if err != nil {
 			return nil, s.serverError(err)
 		}
 
-		id, zone, zoneExists, err := s.queryZonePath(ctx, session, path)
+		id, zone, zoneExists, err := s.queryZonePath(session, path)
 		if err != nil {
 			return nil, s.serverError(err)
 		}
@@ -441,9 +449,10 @@ func (s *adminServer) TableDetails(ctx context.Context, req *serverpb.TableDetai
 
 // Users returns a list of users, stripped of any passwords.
 func (s *adminServer) Users(ctx context.Context, req *serverpb.UsersRequest) (*serverpb.UsersResponse, error) {
-	session := sql.NewSession(sql.SessionArgs{User: s.getUser(req)}, s.server.sqlExecutor, nil)
+	args := sql.SessionArgs{User: s.getUser(req)}
+	session := sql.NewSession(args, s.server.sqlExecutor, ctx, nil)
 	query := "SELECT username FROM system.users"
-	r := s.server.sqlExecutor.ExecuteStatements(ctx, session, query, nil)
+	r := s.server.sqlExecutor.ExecuteStatements(session, query, nil)
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return nil, s.serverError(err)
 	}
@@ -461,7 +470,8 @@ func (s *adminServer) Users(ctx context.Context, req *serverpb.UsersRequest) (*s
 // type=STRING  returns events with this type (e.g. "create_table")
 // targetID=INT returns events for that have this targetID
 func (s *adminServer) Events(ctx context.Context, req *serverpb.EventsRequest) (*serverpb.EventsResponse, error) {
-	session := sql.NewSession(sql.SessionArgs{User: s.getUser(req)}, s.server.sqlExecutor, nil)
+	args := sql.SessionArgs{User: s.getUser(req)}
+	session := sql.NewSession(args, s.server.sqlExecutor, ctx, nil)
 
 	// Execute the query.
 	q := makeSQLQuery()
@@ -479,7 +489,7 @@ func (s *adminServer) Events(ctx context.Context, req *serverpb.EventsRequest) (
 	if len(q.Errors()) > 0 {
 		return nil, s.serverErrors(q.Errors())
 	}
-	r := s.server.sqlExecutor.ExecuteStatements(ctx, session, q.String(), q.QueryArguments())
+	r := s.server.sqlExecutor.ExecuteStatements(session, q.String(), q.QueryArguments())
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return nil, s.serverError(err)
 	}
@@ -535,8 +545,7 @@ func (s *adminServer) getUIData(session *sql.Session, user string, keys []string
 	if err := query.Errors(); err != nil {
 		return nil, s.serverErrorf("error constructing query: %v", err)
 	}
-	r := s.server.sqlExecutor.ExecuteStatements(context.Background(),
-		session, query.String(), query.QueryArguments())
+	r := s.server.sqlExecutor.ExecuteStatements(session, query.String(), query.QueryArguments())
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return nil, s.serverError(err)
 	}
@@ -572,12 +581,13 @@ func (s *adminServer) SetUIData(ctx context.Context, req *serverpb.SetUIDataRequ
 		return nil, grpc.Errorf(codes.InvalidArgument, "KeyValues cannot be empty")
 	}
 
-	session := sql.NewSession(sql.SessionArgs{User: s.getUser(req)}, s.server.sqlExecutor, nil)
+	args := sql.SessionArgs{User: s.getUser(req)}
+	session := sql.NewSession(args, s.server.sqlExecutor, ctx, nil)
 
 	for key, val := range req.KeyValues {
 		// Do an upsert of the key. We update each key in a separate transaction to
 		// avoid long-running transactions and possible deadlocks.
-		br := s.server.sqlExecutor.ExecuteStatements(ctx, session, "BEGIN;", nil)
+		br := s.server.sqlExecutor.ExecuteStatements(session, "BEGIN;", nil)
 		if err := s.checkQueryResults(br.ResultList, 1); err != nil {
 			return nil, s.serverError(err)
 		}
@@ -595,7 +605,7 @@ func (s *adminServer) SetUIData(ctx context.Context, req *serverpb.SetUIDataRequ
 			qargs := parser.NewPlaceholderInfo()
 			qargs.SetValue(`1`, parser.NewDString(string(val)))
 			qargs.SetValue(`2`, parser.NewDString(key))
-			r := s.server.sqlExecutor.ExecuteStatements(ctx, session, query, qargs)
+			r := s.server.sqlExecutor.ExecuteStatements(session, query, qargs)
 			if err := s.checkQueryResults(r.ResultList, 2); err != nil {
 				return nil, s.serverError(err)
 			}
@@ -607,7 +617,7 @@ func (s *adminServer) SetUIData(ctx context.Context, req *serverpb.SetUIDataRequ
 			qargs := parser.NewPlaceholderInfo()
 			qargs.SetValue(`1`, parser.NewDString(key))
 			qargs.SetValue(`2`, parser.NewDBytes(parser.DBytes(val)))
-			r := s.server.sqlExecutor.ExecuteStatements(ctx, session, query, qargs)
+			r := s.server.sqlExecutor.ExecuteStatements(session, query, qargs)
 			if err := s.checkQueryResults(r.ResultList, 2); err != nil {
 				return nil, s.serverError(err)
 			}
@@ -626,8 +636,9 @@ func (s *adminServer) SetUIData(ctx context.Context, req *serverpb.SetUIDataRequ
 // The stored values are meant to be opaque to the server. In the rare case that
 // the server code needs to call this method, it should only read from keys that
 // have the prefix `serverUIDataKeyPrefix`.
-func (s *adminServer) GetUIData(_ context.Context, req *serverpb.GetUIDataRequest) (*serverpb.GetUIDataResponse, error) {
-	session := sql.NewSession(sql.SessionArgs{User: s.getUser(req)}, s.server.sqlExecutor, nil)
+func (s *adminServer) GetUIData(ctx context.Context, req *serverpb.GetUIDataRequest) (*serverpb.GetUIDataResponse, error) {
+	args := sql.SessionArgs{User: s.getUser(req)}
+	session := sql.NewSession(args, s.server.sqlExecutor, ctx, nil)
 
 	if len(req.Keys) == 0 {
 		return nil, grpc.Errorf(codes.InvalidArgument, "keys cannot be empty")
@@ -1091,12 +1102,12 @@ func (rs resultScanner) Scan(row sql.ResultRow, colName string, dst interface{})
 // queryZone retrieves the specific ZoneConfig associated with the supplied ID,
 // if it exists.
 func (s *adminServer) queryZone(
-	ctx context.Context, session *sql.Session, id sqlbase.ID,
+	session *sql.Session, id sqlbase.ID,
 ) (config.ZoneConfig, bool, error) {
 	const query = `SELECT config FROM system.zones WHERE id = $1`
 	params := parser.NewPlaceholderInfo()
 	params.SetValue(`1`, parser.NewDInt(parser.DInt(id)))
-	r := s.server.sqlExecutor.ExecuteStatements(ctx, session, query, params)
+	r := s.server.sqlExecutor.ExecuteStatements(session, query, params)
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return config.ZoneConfig{}, false, err
 	}
@@ -1124,10 +1135,10 @@ func (s *adminServer) queryZone(
 // queryDescriptorIDPath(), for a ZoneConfig. It returns the most specific
 // ZoneConfig specified for the object IDs in the path.
 func (s *adminServer) queryZonePath(
-	ctx context.Context, session *sql.Session, path []sqlbase.ID,
+	session *sql.Session, path []sqlbase.ID,
 ) (sqlbase.ID, config.ZoneConfig, bool, error) {
 	for i := len(path) - 1; i >= 0; i-- {
-		zone, zoneExists, err := s.queryZone(ctx, session, path[i])
+		zone, zoneExists, err := s.queryZone(session, path[i])
 		if err != nil || zoneExists {
 			return path[i], zone, true, err
 		}
@@ -1138,13 +1149,13 @@ func (s *adminServer) queryZonePath(
 // queryNamespaceID queries for the ID of the namespace with the given name and
 // parent ID.
 func (s *adminServer) queryNamespaceID(
-	ctx context.Context, session *sql.Session, parentID sqlbase.ID, name string,
+	session *sql.Session, parentID sqlbase.ID, name string,
 ) (sqlbase.ID, error) {
 	const query = `SELECT id FROM system.namespace WHERE parentID = $1 AND name = $2`
 	params := parser.NewPlaceholderInfo()
 	params.SetValue(`1`, parser.NewDInt(parser.DInt(parentID)))
 	params.SetValue(`2`, parser.NewDString(name))
-	r := s.server.sqlExecutor.ExecuteStatements(ctx, session, query, params)
+	r := s.server.sqlExecutor.ExecuteStatements(session, query, params)
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return 0, err
 	}
@@ -1169,11 +1180,11 @@ func (s *adminServer) queryNamespaceID(
 // it will return a list of IDs consisting of the root namespace ID, the
 // databases ID, and the table ID (in that order).
 func (s *adminServer) queryDescriptorIDPath(
-	ctx context.Context, session *sql.Session, names []string,
+	session *sql.Session, names []string,
 ) ([]sqlbase.ID, error) {
 	path := []sqlbase.ID{keys.RootNamespaceID}
 	for _, name := range names {
-		id, err := s.queryNamespaceID(ctx, session, path[len(path)-1], name)
+		id, err := s.queryNamespaceID(session, path[len(path)-1], name)
 		if err != nil {
 			return nil, err
 		}

@@ -133,7 +133,7 @@ func makeV3Conn(
 		executor: executor,
 		writeBuf: writeBuffer{bytecount: metrics.bytesOutCount},
 		metrics:  metrics,
-		session:  sql.NewSession(sessionArgs, executor, conn.RemoteAddr()),
+		session:  sql.NewSession(sessionArgs, executor, nil, conn.RemoteAddr()),
 	}
 }
 
@@ -189,7 +189,7 @@ var statusReportParams = map[string]string{
 }
 
 func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
-	ctx := c.session.Context()
+	ctx := c.session.Ctx()
 
 	if authenticationHook != nil {
 		if err := authenticationHook(c.session.User, true /* public */); err != nil {
@@ -636,7 +636,7 @@ func (c *v3Conn) executeStatements(
 	limit int,
 ) error {
 	tracing.AnnotateTrace()
-	results := c.executor.ExecuteStatements(ctx, c.session, stmts, pinfo)
+	results := c.executor.ExecuteStatements(c.session, stmts, pinfo)
 
 	tracing.AnnotateTrace()
 	if results.Empty {

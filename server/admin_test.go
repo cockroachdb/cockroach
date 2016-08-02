@@ -32,7 +32,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
@@ -238,9 +237,9 @@ func TestAdminAPIDatabases(t *testing.T) {
 	// Test databases endpoint.
 	const testdb = "test"
 	session := sql.NewSession(
-		sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+		sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil, nil)
 	query := "CREATE DATABASE " + testdb
-	createRes := ts.sqlExecutor.ExecuteStatements(context.Background(), session, query, nil)
+	createRes := ts.sqlExecutor.ExecuteStatements(session, query, nil)
 	if createRes.ResultList[0].Err != nil {
 		t.Fatal(createRes.ResultList[0].Err)
 	}
@@ -267,7 +266,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	privileges := []string{"SELECT", "UPDATE"}
 	testuser := "testuser"
 	grantQuery := "GRANT " + strings.Join(privileges, ", ") + " ON DATABASE " + testdb + " TO " + testuser
-	grantRes := s.(*TestServer).sqlExecutor.ExecuteStatements(context.Background(), session, grantQuery, nil)
+	grantRes := s.(*TestServer).sqlExecutor.ExecuteStatements(session, grantQuery, nil)
 	if grantRes.ResultList[0].Err != nil {
 		t.Fatal(grantRes.ResultList[0].Err)
 	}
@@ -359,7 +358,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
 
-	session := sql.NewSession(sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+	session := sql.NewSession(sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil, nil)
 	setupQueries := []string{
 		"CREATE DATABASE test",
 		`
@@ -375,7 +374,7 @@ CREATE TABLE test.tbl (
 	}
 
 	for _, q := range setupQueries {
-		res := ts.sqlExecutor.ExecuteStatements(context.Background(), session, q, nil)
+		res := ts.sqlExecutor.ExecuteStatements(session, q, nil)
 		if res.ResultList[0].Err != nil {
 			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].Err)
 		}
@@ -452,7 +451,7 @@ CREATE TABLE test.tbl (
 			createTableCol       = "CreateTable"
 		)
 
-		resSet := ts.sqlExecutor.ExecuteStatements(context.Background(), session, showCreateTableQuery, nil)
+		resSet := ts.sqlExecutor.ExecuteStatements(session, showCreateTableQuery, nil)
 		res := resSet.ResultList[0]
 		if res.Err != nil {
 			t.Fatalf("error executing '%s': %s", showCreateTableQuery, res.Err)
@@ -477,13 +476,13 @@ func TestAdminAPITableDetailsZone(t *testing.T) {
 	ts := s.(*TestServer)
 
 	// Create database and table.
-	session := sql.NewSession(sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+	session := sql.NewSession(sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil, nil)
 	setupQueries := []string{
 		"CREATE DATABASE test",
 		"CREATE TABLE test.tbl (val STRING)",
 	}
 	for _, q := range setupQueries {
-		res := ts.sqlExecutor.ExecuteStatements(context.Background(), session, q, nil)
+		res := ts.sqlExecutor.ExecuteStatements(session, q, nil)
 		if res.ResultList[0].Err != nil {
 			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].Err)
 		}
@@ -516,7 +515,7 @@ func TestAdminAPITableDetailsZone(t *testing.T) {
 		params := parser.NewPlaceholderInfo()
 		params.SetValue(`1`, parser.NewDInt(parser.DInt(id)))
 		params.SetValue(`2`, parser.NewDBytes(parser.DBytes(zoneBytes)))
-		res := ts.sqlExecutor.ExecuteStatements(context.Background(), session, query, params)
+		res := ts.sqlExecutor.ExecuteStatements(session, query, params)
 		if res.ResultList[0].Err != nil {
 			t.Fatalf("error executing '%s': %s", query, res.ResultList[0].Err)
 		}
@@ -527,7 +526,7 @@ func TestAdminAPITableDetailsZone(t *testing.T) {
 
 	// Get ID path for table. This will be an array of three IDs, containing the ID of the root namespace,
 	// the database, and the table (in that order).
-	idPath, err := ts.admin.queryDescriptorIDPath(context.Background(), session, []string{"test", "tbl"})
+	idPath, err := ts.admin.queryDescriptorIDPath(session, []string{"test", "tbl"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -554,11 +553,11 @@ func TestAdminAPIUsers(t *testing.T) {
 	ts := s.(*TestServer)
 
 	// Create sample users.
-	session := sql.NewSession(sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+	session := sql.NewSession(sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil, nil)
 	query := `
 INSERT INTO system.users (username, hashedPassword)
 VALUES ('admin', 'abc'), ('bob', 'xyz')`
-	res := ts.sqlExecutor.ExecuteStatements(context.Background(), session, query, nil)
+	res := ts.sqlExecutor.ExecuteStatements(session, query, nil)
 	if a, e := len(res.ResultList), 1; a != e {
 		t.Fatalf("len(results) %d != %d", a, e)
 	} else if res.ResultList[0].Err != nil {
@@ -592,7 +591,7 @@ func TestAdminAPIEvents(t *testing.T) {
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
 
-	session := sql.NewSession(sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+	session := sql.NewSession(sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil, nil)
 	setupQueries := []string{
 		"CREATE DATABASE api_test",
 		"CREATE TABLE api_test.tbl1 (a INT)",
@@ -602,7 +601,7 @@ func TestAdminAPIEvents(t *testing.T) {
 		"DROP TABLE api_test.tbl2",
 	}
 	for _, q := range setupQueries {
-		res := ts.sqlExecutor.ExecuteStatements(context.Background(), session, q, nil)
+		res := ts.sqlExecutor.ExecuteStatements(session, q, nil)
 		if res.ResultList[0].Err != nil {
 			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].Err)
 		}

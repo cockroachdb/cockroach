@@ -156,6 +156,7 @@ type Executor struct {
 // All fields holding a pointer or an interface are required to create
 // a Executor; the rest will have sane defaults set if omitted.
 type ExecutorContext struct {
+	Context      context.Context
 	DB           *client.DB
 	Gossip       *gossip.Gossip
 	LeaseManager *LeaseManager
@@ -296,15 +297,14 @@ func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 // populate the missing types. The column result types are returned (or
 // nil if there are no results).
 func (e *Executor) Prepare(
-	ctx context.Context,
 	query string,
 	session *Session,
 	pinfo parser.PlaceholderTypes,
 ) ([]ResultColumn, error) {
 	if log.V(2) {
-		log.Infof(session.Context(), "preparing: %s", query)
+		log.Infof(session.Ctx(), "preparing: %s", query)
 	} else if traceSQL {
-		log.Tracef(session.Context(), "preparing: %s", query)
+		log.Tracef(session.Ctx(), "preparing: %s", query)
 	}
 	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
 	if err != nil {
@@ -324,7 +324,7 @@ func (e *Executor) Prepare(
 
 	// Prepare needs a transaction because it needs to retrieve db/table
 	// descriptors for type checking.
-	txn := client.NewTxn(session.Context(), *e.ctx.DB)
+	txn := client.NewTxn(session.Ctx(), *e.ctx.DB)
 	txn.Proto.Isolation = session.DefaultIsolationLevel
 	session.planner.setTxn(txn)
 	defer session.planner.setTxn(nil)
@@ -356,7 +356,7 @@ func (e *Executor) Prepare(
 
 // ExecuteStatements executes the given statement(s) and returns a response.
 func (e *Executor) ExecuteStatements(
-	ctx context.Context, session *Session, stmts string, pinfo *parser.PlaceholderInfo,
+	session *Session, stmts string, pinfo *parser.PlaceholderInfo,
 ) StatementResults {
 
 	session.planner.resetForBatch(e)
@@ -364,7 +364,7 @@ func (e *Executor) ExecuteStatements(
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	return e.execRequest(ctx, session, stmts)
+	return e.execRequest(session, stmts)
 }
 
 // blockConfigUpdates blocks any gossip updates to the system config
@@ -399,7 +399,7 @@ func (e *Executor) waitForConfigUpdate() {
 // Args:
 //  txnState: State about about ongoing transaction (if any). The state will be
 //   updated.
-func (e *Executor) execRequest(ctx context.Context, session *Session, sql string) StatementResults {
+func (e *Executor) execRequest(session *Session, sql string) StatementResults {
 	var res StatementResults
 	txnState := &session.TxnState
 	planMaker := &session.planner
@@ -457,7 +457,7 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 					}()
 				}
 			}
-			txnState.reset(ctx, e, session)
+			txnState.reset(session.Ctx(), e, session)
 			txnState.State = Open
 			txnState.autoRetry = true
 			txnState.sqlTimestamp = e.ctx.Clock.PhysicalTime()
@@ -505,14 +505,18 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 			if aErr, ok := err.(*client.AutoCommitError); ok {
 				// Until #7881 fixed.
 				if txn == nil {
-					log.Errorf(context.TODO(), "AutoCommitError on nil txn: %+v, txnState %+v, execOpt %+v, stmts %+v, remaining %+v", err, txnState, execOpt, stmts, remainingStmts)
+					log.Errorf(session.Ctx(), "AutoCommitError on nil txn: %+v, "+
+						"txnState %+v, execOpt %+v, stmts %+v, remaining %+v",
+						err, txnState, execOpt, stmts, remainingStmts)
 				}
 				lastResult.Err = aErr
 				e.txnAbortCount.Inc(1)
 				txn.CleanupOnError(err)
 			}
 			if lastResult.Err == nil {
-				log.Fatalf(context.TODO(), "error (%s) was returned, but it was not set in the last result (%v)", err, lastResult)
+				log.Fatalf(session.Ctx(),
+					"error (%s) was returned, but it was not set in the last result (%v)",
+					err, lastResult)
 			}
 		}
 
@@ -657,7 +661,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 	}
 
 	for i, stmt := range stmts {
-		ctx := planMaker.session.Context()
+		ctx := planMaker.session.Ctx()
 		if log.V(2) {
 			log.Infof(ctx, "executing %d/%d: %s", i+1, len(stmts), stmt)
 		} else if traceSQL {
@@ -976,7 +980,7 @@ func rollbackSQLTransaction(txnState *txnState, p *planner) Result {
 	err := p.txn.Rollback()
 	result := Result{PGTag: (*parser.RollbackTransaction)(nil).StatementTag()}
 	if err != nil {
-		log.Warningf(context.TODO(), "txn rollback failed. The error was swallowed: %s", err)
+		log.Warningf(p.ctx(), "txn rollback failed. The error was swallowed: %s", err)
 		result.Err = err
 	}
 	// We're done with this txn.
