@@ -279,7 +279,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	}
 }
 
-func createRange(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *Replica {
+func createReplica(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *Replica {
 	desc := &roachpb.RangeDescriptor{
 		RangeID:  rangeID,
 		StartKey: start,
@@ -315,7 +315,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 		t.Error(err)
 	}
 	// Create a new range (id=2).
-	rng2 := createRange(store, 2, roachpb.RKey("a"), roachpb.RKey("b"))
+	rng2 := createReplica(store, 2, roachpb.RKey("a"), roachpb.RKey("b"))
 	if err := store.AddReplicaTest(rng2); err != nil {
 		t.Fatal(err)
 	}
@@ -332,12 +332,12 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 		t.Fatal("expected error re-removing same range")
 	}
 	// Try to add a range with previously-used (but now removed) ID.
-	rng2Dup := createRange(store, 1, roachpb.RKey("a"), roachpb.RKey("b"))
+	rng2Dup := createReplica(store, 1, roachpb.RKey("a"), roachpb.RKey("b"))
 	if err := store.AddReplicaTest(rng2Dup); err == nil {
 		t.Fatal("expected error inserting a duplicated range")
 	}
 	// Add another range with different key range and then test lookup.
-	rng3 := createRange(store, 3, roachpb.RKey("c"), roachpb.RKey("d"))
+	rng3 := createReplica(store, 3, roachpb.RKey("c"), roachpb.RKey("d"))
 	if err := store.AddReplicaTest(rng3); err != nil {
 		t.Fatal(err)
 	}
@@ -446,7 +446,7 @@ func TestStoreRangeSet(t *testing.T) {
 	// Add 10 new ranges.
 	const newCount = 10
 	for i := 0; i < newCount; i++ {
-		rng := createRange(store, roachpb.RangeID(i+1), roachpb.RKey(fmt.Sprintf("a%02d", i)), roachpb.RKey(fmt.Sprintf("a%02d", i+1)))
+		rng := createReplica(store, roachpb.RangeID(i+1), roachpb.RKey(fmt.Sprintf("a%02d", i)), roachpb.RKey(fmt.Sprintf("a%02d", i+1)))
 		if err := store.AddReplicaTest(rng); err != nil {
 			t.Fatal(err)
 		}
@@ -509,7 +509,7 @@ func TestStoreRangeSet(t *testing.T) {
 
 	// Split the first range to insert a new range as second range.
 	// The range is never visited with this iteration.
-	rng := createRange(store, 11, roachpb.RKey("a000"), roachpb.RKey("a01"))
+	rng := createReplica(store, 11, roachpb.RKey("a000"), roachpb.RKey("a01"))
 	if err = store.SplitRange(store.LookupReplica(roachpb.RKey("a00"), nil), rng); err != nil {
 		t.Fatal(err)
 	}
@@ -562,7 +562,7 @@ func TestHasOverlappingReplica(t *testing.T) {
 	}
 
 	for _, desc := range rngDescs {
-		rng := createRange(store, roachpb.RangeID(desc.id), desc.start, desc.end)
+		rng := createReplica(store, roachpb.RangeID(desc.id), desc.start, desc.end)
 		if err := store.AddReplicaTest(rng); err != nil {
 			t.Fatal(err)
 		}
@@ -605,7 +605,7 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 		t.Error(err)
 	}
 
-	rng := createRange(store, roachpb.RangeID(2), roachpb.RKey("a"), roachpb.RKey("c"))
+	rng := createReplica(store, roachpb.RangeID(2), roachpb.RKey("a"), roachpb.RKey("c"))
 	if err := store.AddReplicaTest(rng); err != nil {
 		t.Fatal(err)
 	}
@@ -650,7 +650,7 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 	store.mu.uninitReplicas[newRangeID] = r
 	store.mu.Unlock()
 
-	expectedResult = rangeAlreadyExists{r}.Error()
+	expectedResult = ".*cannot processRangeDescriptorUpdate.*"
 	if err := store.processRangeDescriptorUpdate(r); !testutils.IsError(err, expectedResult) {
 		t.Errorf("expected processRangeDescriptorUpdate with overlapping keys to fail, got %v", err)
 	}
@@ -2149,3 +2149,82 @@ func TestStoreGCThreshold(t *testing.T) {
 
 	assertThreshold(threshold)
 }
+
+// TODO(arjun): Now that we've removed addPlaceholder, find an alternate way to test behavior.
+/*
+func TestStoreRangePlaceholders(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+	s := tc.store
+
+	s.mu.Lock()
+	numPlaceholders := len(s.mu.replicaPlaceholders)
+	s.mu.Unlock()
+
+	if numPlaceholders != 0 {
+		t.Fatal("new store should have zero replica placeholders")
+	}
+
+	// Clobber the existing range so we can test nonoverlapping Placeholders.
+	rng1, err := s.GetReplica(1)
+	if err != nil {
+		t.Error(err)
+	}
+	if err := s.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+		t.Error(err)
+	}
+
+	rep := createReplica(s, roachpb.RangeID(2), roachpb.RKeyMin, roachpb.RKey("c"))
+	if err := s.AddReplicaTest(rep); err != nil {
+		t.Fatal(err)
+	}
+
+	rid := roachpb.RangeID(7)
+	rsrv := &ReplicaPlaceholder{
+		RangeID: rid,
+		store:   s,
+		rangeDesc: &roachpb.RangeDescriptor{
+			RangeID:  rid,
+			StartKey: roachpb.RKey("c"),
+			EndKey:   roachpb.RKeyMax,
+		},
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+		// Test insertion
+		if err := s.addPlaceholderLocked(rsrv); err != nil {
+			t.Fatalf("could not add Placeholder to empty store, got %v", err)
+		}
+
+		// Test deletion
+		if err := s.removePlaceholderLocked(rid); err != nil {
+			t.Fatalf("could not remove Placeholder that was present, got %v", err)
+		}
+
+		// Test cannot double insert
+		if err := s.addPlaceholderLocked(rsrv); err != nil {
+			t.Fatalf("could not re-add Placeholder after removal, got %v", err)
+		}
+		if err := s.addPlaceholderLocked(rsrv); !testutils.IsError(err, "range for Range ID 7 already exists on store") {
+			t.Fatalf("should not be able to add Placeholder for the same key twice, got %v", err)
+		}
+
+		// Test cannot double delete
+		if err := s.removePlaceholderLocked(rid); err != nil {
+			t.Fatalf("could not remove Placeholder that was present, got %v", err)
+		}
+		if err := s.removePlaceholderLocked(rid); !testutils.IsError(err, "cannot remove Placeholder for RangeID 7; Placeholder doesn't exist") {
+			t.Fatalf("could not remove Placeholder that was present, got %v", err)
+		}
+
+		// Test that Placeholder cannot clobber existing replica
+		// TODO(arjun)
+
+		// Test that Placeholder deletion doesn't delete replicas
+		// TODO(arjun)
+}
+*/

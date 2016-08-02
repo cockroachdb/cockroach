@@ -34,6 +34,7 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/google/btree"
 	"github.com/kr/pretty"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -309,6 +310,17 @@ type Replica struct {
 		droppedMessages int
 	}
 }
+
+// KeyRange is an interface type for the replicasByKey BTree, to compare
+// Replica and ReplicaPlaceholder.
+type KeyRange interface {
+	Desc() *roachpb.RangeDescriptor
+	rangeKeyItem
+	btree.Item
+	fmt.Stringer
+}
+
+var _ KeyRange = &Replica{}
 
 // withRaftGroupLocked calls the supplied function with the (lazily
 // initialized) Raft group. It assumes that the Replica lock is held.
@@ -1591,6 +1603,21 @@ func (r *Replica) handleRaftReady() error {
 		if err := r.applySnapshot(ctx, rd.Snapshot, rd.HardState); err != nil {
 			return err
 		}
+
+		// handleRaftReady is called under the processRaftMu lock, so it is
+		// safe to lock the store here.
+		r.store.mu.Lock()
+		if _, exists := r.store.mu.replicaPlaceholders[r.RangeID]; exists {
+			if err := r.store.removePlaceholderLocked(r.RangeID); err != nil {
+				return errors.Errorf("Could not remove placeholder before applySnapshot: %s", err)
+			}
+		}
+		if err := r.store.processRangeDescriptorUpdateLocked(r); err != nil {
+			r.store.mu.Unlock()
+			return errors.Errorf("Could not processRangeDescriptorUpdate after applySnapshot: %s", err)
+		}
+		r.store.mu.Unlock()
+
 		var err error
 		if lastIndex, err = loadLastIndex(ctx, r.store.Engine(), r.RangeID); err != nil {
 			return err
@@ -2842,6 +2869,15 @@ func (r *Replica) maybeAddToRaftLogQueue(appliedIndex uint64) {
 	if appliedIndex%raftLogCheckFrequency == 0 {
 		r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
+}
+
+func (r *Replica) endKey() roachpb.RKey {
+	return r.Desc().EndKey
+}
+
+// Less returns true if the range's end key is less than the given item's key.
+func (r *Replica) Less(i btree.Item) bool {
+	return r.endKey().Less(i.(rangeKeyItem).endKey())
 }
 
 func (r *Replica) panic(err error) {
