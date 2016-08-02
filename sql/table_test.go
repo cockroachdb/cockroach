@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -256,7 +258,7 @@ func TestRemoveLeaseIfExpiring(t *testing.T) {
 	mc := hlc.NewManualClock(0)
 	p.leaseMgr = &LeaseManager{LeaseStore: LeaseStore{clock: hlc.NewClock(mc.UnixNano)}}
 	p.leases = make([]*LeaseState, 0)
-	txn := client.Txn{}
+	txn := client.Txn{Context: context.Background()}
 	p.setTxn(&txn)
 
 	if p.removeLeaseIfExpiring(nil) {
