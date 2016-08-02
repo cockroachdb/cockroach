@@ -933,19 +933,20 @@ func IterateRangeDescriptors(
 	return err
 }
 
-func (s *Store) migrate(desc roachpb.RangeDescriptor) {
+func (s *Store) migrate(ctx context.Context, desc roachpb.RangeDescriptor) {
 	batch := s.engine.NewBatch()
-	if err := migrate7310And6991(batch, desc); err != nil {
-		log.Fatal(context.TODO(), errors.Wrap(err, "during migration"))
+	if err := migrate7310And6991(ctx, batch, desc); err != nil {
+		log.Fatal(ctx, errors.Wrap(err, "during migration"))
 	}
 	if err := batch.Commit(); err != nil {
-		log.Fatal(context.TODO(), errors.Wrap(err, "could not migrate Raft state"))
+		log.Fatal(ctx, errors.Wrap(err, "could not migrate Raft state"))
 	}
 }
 
 // Start the engine, set the GC and read the StoreIdent.
 func (s *Store) Start(stopper *stop.Stopper) error {
 	s.stopper = stopper
+	ctx := s.context(context.TODO())
 
 	// Add a closer for the various scanner queues, needed to properly clean up
 	// the event logs.
@@ -989,7 +990,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		}
 
 		// Read store ident and return a not-bootstrapped error if necessary.
-		ok, err := engine.MVCCGetProto(context.Background(), s.engine, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil, &s.Ident)
+		ok, err := engine.MVCCGetProto(ctx, s.engine, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil, &s.Ident)
 		if err != nil {
 			return err
 		} else if !ok {
@@ -1032,7 +1033,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		if !desc.IsInitialized() {
 			return false, errors.Errorf("found uninitialized RangeDescriptor: %+v", desc)
 		}
-		s.migrate(desc)
+		s.migrate(ctx, desc)
 
 		rng, err := NewReplica(&desc, s, 0)
 		if err != nil {
@@ -1090,8 +1091,8 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 					MustVersion: build.GetInfo().Tag,
 				}
 				ba.Add(&fReq)
-				if _, pErr := r.Send(context.TODO(), ba); pErr != nil {
-					log.Errorf(context.TODO(), "could not unfreeze Range %s on startup: %s", r, pErr)
+				if _, pErr := r.Send(ctx, ba); pErr != nil {
+					log.Errorf(ctx, "could not unfreeze Range %s on startup: %s", r, pErr)
 				} else {
 					// We don't use the returned RangesAffected (0 or 1) for
 					// counting. One of the other Replicas may have beaten us
@@ -1144,7 +1145,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		// sentinel and first range metadata if we have a first range.
 		// This may wake up ranges and requires everything to be set up and
 		// running.
-		s.startGossip()
+		s.startGossip(ctx)
 
 		// Start the scanner. The construction here makes sure that the scanner
 		// only starts after Gossip has connected, and that it does not block Start
@@ -1191,8 +1192,7 @@ func (s *Store) WaitForInit() {
 // startGossip runs an infinite loop in a goroutine which regularly checks
 // whether the store has a first range or config replica and asks those ranges
 // to gossip accordingly.
-func (s *Store) startGossip() {
-	ctx := s.context(context.TODO())
+func (s *Store) startGossip(ctx context.Context) {
 	// Periodic updates run in a goroutine and signal a WaitGroup upon completion
 	// of their first iteration.
 	s.initComplete.Add(2)
@@ -1292,20 +1292,28 @@ func (s *Store) systemGossipUpdate(cfg config.SystemConfig) {
 }
 
 // GossipStore broadcasts the store on the gossip network.
-func (s *Store) GossipStore() {
-	ctx := s.context(context.TODO())
-
+func (s *Store) GossipStore(ctx context.Context) error {
 	storeDesc, err := s.Descriptor()
 	if err != nil {
-		log.Warningf(ctx, "problem getting store descriptor for store %+v: %v", s.Ident, err)
-		return
+		return errors.Wrapf(err, "problem getting store descriptor for store %+v", s.Ident)
 	}
 	// Unique gossip key per store.
 	gossipStoreKey := gossip.MakeStoreKey(storeDesc.StoreID)
 	// Gossip store descriptor.
-	if err := s.ctx.Gossip.AddInfoProto(gossipStoreKey, storeDesc, ttlStoreGossip); err != nil {
-		log.Warningf(ctx, "%s", err)
+	return s.ctx.Gossip.AddInfoProto(gossipStoreKey, storeDesc, ttlStoreGossip)
+}
+
+// GossipDeadReplicas broadcasts the stores dead replicas on the gossip network.
+func (s *Store) GossipDeadReplicas(ctx context.Context) error {
+	deadReplicas := s.deadReplicas()
+	// Don't gossip if there's nothing to gossip.
+	if len(deadReplicas.Replicas) == 0 {
+		return nil
 	}
+	// Unique gossip key per store.
+	key := gossip.MakeDeadReplicasKey(s.StoreID())
+	// Gossip dead replicas.
+	return s.ctx.Gossip.AddInfoProto(key, &deadReplicas, ttlStoreGossip)
 }
 
 // Bootstrap writes a new store ident to the underlying engine. To
@@ -1503,7 +1511,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 
-	updatedMS, err := writeInitialState(batch, *ms, *desc)
+	updatedMS, err := writeInitialState(ctx, batch, *ms, *desc)
 	if err != nil {
 		return err
 	}
@@ -1985,6 +1993,35 @@ func (s *Store) Descriptor() (*roachpb.StoreDescriptor, error) {
 	}, nil
 }
 
+func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var deadReplicas []roachpb.ReplicaIdent
+	for rangeID, repl := range s.mu.replicas {
+		repl.mu.Lock()
+		destroyed := repl.mu.destroyed
+		replicaID := repl.mu.replicaID
+		repl.mu.Unlock()
+
+		if destroyed != nil {
+			deadReplicas = append(deadReplicas, roachpb.ReplicaIdent{
+				RangeID: rangeID,
+				Replica: roachpb.ReplicaDescriptor{
+					NodeID:    s.Ident.NodeID,
+					StoreID:   s.Ident.StoreID,
+					ReplicaID: replicaID,
+				},
+			})
+		}
+	}
+
+	return roachpb.StoreDeadReplicas{
+		StoreID:  s.StoreID(),
+		Replicas: deadReplicas,
+	}
+}
+
 // ReplicaCount returns the number of replicas contained by this store.
 func (s *Store) ReplicaCount() int {
 	s.mu.Lock()
@@ -2279,6 +2316,8 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 	s.processRaftMu.Lock()
 	defer s.processRaftMu.Unlock()
 
+	ctx := s.context(context.Background())
+
 	// Drop messages that come from a node that we believe was once
 	// a member of the group but has been removed.
 	s.mu.Lock()
@@ -2372,7 +2411,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 					r.RangeID,
 				)
 			}
-			appliedIndex, _, err := loadAppliedIndex(r.store.Engine(), r.RangeID)
+			appliedIndex, _, err := loadAppliedIndex(ctx, r.store.Engine(), r.RangeID)
 			if err != nil {
 				return err
 			}
@@ -2405,7 +2444,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 				return errors.Errorf("preemptive snapshot discarded by Raft")
 			}
 			// Apply the snapshot, as Raft told us to.
-			if err := r.applySnapshot(ready.Snapshot, ready.HardState); err != nil {
+			if err := r.applySnapshot(ctx, ready.Snapshot, ready.HardState); err != nil {
 				return err
 			}
 			// At this point, the Replica has data but no ReplicaID. We hope
@@ -2787,8 +2826,8 @@ func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDesc
 }
 
 // Reserve requests a reservation from the store's bookie.
-func (s *Store) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResponse {
-	return s.bookie.Reserve(req)
+func (s *Store) Reserve(ctx context.Context, req roachpb.ReservationRequest) roachpb.ReservationResponse {
+	return s.bookie.Reserve(ctx, req, s.deadReplicas().Replicas)
 }
 
 // The methods below can be used to control a store's queues. Stopping a queue

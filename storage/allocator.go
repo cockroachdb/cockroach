@@ -151,7 +151,7 @@ func (a *Allocator) ComputeAction(zone config.ZoneConfig, desc *roachpb.RangeDes
 		return AllocatorNoop, 0
 	}
 
-	deadReplicas := a.storePool.deadReplicas(desc.Replicas)
+	deadReplicas := a.storePool.deadReplicas(desc.RangeID, desc.Replicas)
 	if len(deadReplicas) > 0 {
 		// The range has dead replicas, which should be removed immediately.
 		// Adjust the priority by the number of dead replicas the range has.

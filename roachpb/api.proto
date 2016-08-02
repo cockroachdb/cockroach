@@ -921,10 +921,21 @@ message ReservationResponse {
 
 service Internal {
   rpc Batch (BatchRequest) returns (BatchResponse) {}
+
+  // TODO(wiz): These methods have been split out into the InternalStores
+  // service, but remain here until we determine that a breaking RPC change is
+  // acceptable.
   rpc PollFrozen (PollFrozenRequest) returns (PollFrozenResponse) {}
   rpc Reserve(ReservationRequest) returns (ReservationResponse) {}
 }
 
 service External {
   rpc Batch (BatchRequest) returns (BatchResponse) {}
+}
+
+// InternalStores is a wrapper for internal RPCs that operate only on the stores
+// of a node.
+service InternalStores {
+  rpc PollFrozen (PollFrozenRequest) returns (PollFrozenResponse) {}
+  rpc Reserve(ReservationRequest) returns (ReservationResponse) {}
 }

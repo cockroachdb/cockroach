@@ -788,7 +788,7 @@ func (s *adminServer) waitForStoreFrozen(
 				if err != nil {
 					return err
 				}
-				client := roachpb.NewInternalClient(conn)
+				client := roachpb.NewInternalStoresClient(conn)
 				resp, err = client.PollFrozen(context.Background(),
 					&roachpb.PollFrozenRequest{
 						StoreRequestHeader: roachpb.StoreRequestHeader{

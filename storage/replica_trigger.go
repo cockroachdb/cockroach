@@ -339,7 +339,7 @@ func (r *Replica) leasePostCommitTrigger(
 				//
 				// TODO(tschottdorf): this error is not handled any more
 				// at this level.
-				log.Fatal(context.Background(), newReplicaCorruptionError(err))
+				log.Fatal(ctx, NewReplicaCorruptionError(err))
 			}
 		}
 	}
@@ -368,8 +368,8 @@ func (r *Replica) handleTrigger(
 			r.mu.state.Stats.ContainsEstimates = false
 			stats := r.mu.state.Stats
 			r.mu.Unlock()
-			if err := setMVCCStats(r.store.Engine(), r.RangeID, stats); err != nil {
-				log.Fatal(context.Background(), errors.Wrap(err, "unable to write MVCC stats"))
+			if err := setMVCCStats(ctx, r.store.Engine(), r.RangeID, stats); err != nil {
+				log.Fatal(ctx, errors.Wrap(err, "unable to write MVCC stats"))
 			}
 		}
 
