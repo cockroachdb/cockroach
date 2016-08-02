@@ -423,9 +423,9 @@ func (tc *TestCluster) FindRangeLeaseHolder(
 		&getReq)
 	if pErr != nil {
 		if nle, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok {
-			if nle.Replica == nil {
+			if nle.LeaseHolder == nil {
 				return ReplicationTarget{}, errors.Errorf(
-					"unexpected NotLeaseHolderError with leader unknown")
+					"unexpected NotLeaseHolderError with lease holder unknown")
 			}
 			return ReplicationTarget{
 				NodeID: nle.LeaseHolder.NodeID, StoreID: nle.LeaseHolder.StoreID}, nil
