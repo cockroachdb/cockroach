@@ -45,7 +45,7 @@ var workers = flag.Int("w", 2*runtime.NumCPU(), "number of workers")
 var monkeys = flag.Int("m", 3, "number of monkeys")
 var numNodes = flag.Int("n", 4, "number of nodes")
 var numAccounts = flag.Int("a", 1e5, "number of accounts")
-var chaosType = flag.String("c", "simple", "chaos type [none|simple|flappy]")
+var chaosType = flag.String("c", "simple", "chaos type [none|simple|flappy|freeze]")
 
 func newRand() *rand.Rand {
 	return rand.New(rand.NewSource(timeutil.Now().UnixNano()))
@@ -149,6 +149,15 @@ func (z *zeroSum) accountsLen() int {
 	return len(z.accounts.m)
 }
 
+func (z *zeroSum) maybeLogError(err error) {
+	if strings.Contains(err.Error(), "range is frozen") {
+		time.Sleep(time.Second)
+		return
+	}
+	log.Error(context.Background(), err)
+	atomic.AddUint64(&z.stats.errors, 1)
+}
+
 func (z *zeroSum) worker() {
 	r := newRand()
 	zipf := z.accountDistribution(r)
@@ -189,8 +198,7 @@ func (z *zeroSum) worker() {
 			return err
 		})
 		if err != nil {
-			log.Error(context.Background(), err)
-			atomic.AddUint64(&z.stats.errors, 1)
+			z.maybeLogError(err)
 		} else {
 			atomic.AddUint64(&z.stats.ops, 1)
 			z.accounts.Lock()
@@ -219,15 +227,13 @@ func (z *zeroSum) monkey(tableID uint32, d time.Duration) {
 					strings.Contains(err.Error(), "conflict updating range descriptors") {
 					continue
 				}
-				log.Error(context.Background(), err)
-				atomic.AddUint64(&z.stats.errors, 1)
+				z.maybeLogError(err)
 			} else {
 				atomic.AddUint64(&z.stats.splits, 1)
 			}
 		case 1:
 			if transferred, err := z.transferLease(z.randNode(r.Intn), r, key); err != nil {
-				log.Error(context.Background(), err)
-				atomic.AddUint64(&z.stats.errors, 1)
+				z.maybeLogError(err)
 			} else if transferred {
 				atomic.AddUint64(&z.stats.transfers, 1)
 			}
@@ -273,6 +279,26 @@ func (z *zeroSum) chaosFlappy() {
 	}
 }
 
+func (z *zeroSum) chaosFreeze() {
+	r := newRand()
+	d := time.Duration(15+r.Intn(30)) * time.Second
+	fmt.Printf("chaos(freeze): first event in %s\n", d)
+
+	for i := 1; true; i++ {
+		time.Sleep(d)
+
+		d = time.Duration(15+r.Intn(30)) * time.Second
+		fmt.Printf("chaos %d: freezing cluster for %s\n", i, d)
+		z.freeze(z.randNode(rand.Intn), true)
+
+		time.Sleep(d)
+
+		d = time.Duration(15+r.Intn(30)) * time.Second
+		fmt.Printf("chaos %d: thawing cluster, next event in %s\n", i, d)
+		z.freeze(z.randNode(rand.Intn), false)
+	}
+}
+
 func (z *zeroSum) chaos() {
 	switch z.chaosType {
 	case "none":
@@ -281,6 +307,8 @@ func (z *zeroSum) chaos() {
 		go z.chaosSimple()
 	case "flappy":
 		go z.chaosFlappy()
+	case "freeze":
+		go z.chaosFreeze()
 	default:
 		log.Fatalf(context.Background(), "unknown chaos type: %s", z.chaosType)
 	}
@@ -292,7 +320,7 @@ func (z *zeroSum) check(d time.Duration) {
 
 		client := z.clients[z.randNode(rand.Intn)]
 		if err := client.CheckConsistency(keys.LocalMax, keys.MaxKey, false); err != nil {
-			log.Error(context.Background(), err)
+			z.maybeLogError(err)
 		}
 	}
 }
@@ -310,8 +338,7 @@ func (z *zeroSum) verify(d time.Duration) {
 		var total int64
 		db := z.db[z.randNode(rand.Intn)]
 		if err := db.QueryRow(q).Scan(&accounts, &total); err != nil {
-			log.Error(context.Background(), err)
-			atomic.AddUint64(&z.stats.errors, 1)
+			z.maybeLogError(err)
 			continue
 		}
 		if total != 0 {
@@ -329,8 +356,7 @@ func (z *zeroSum) rangeInfo() (int, []int) {
 	client := z.clients[z.randNode(rand.Intn)]
 	rows, err := client.Scan(keys.Meta2Prefix, keys.Meta2KeyMax, 0)
 	if err != nil {
-		log.Error(context.Background(), err)
-		atomic.AddUint64(&z.stats.errors, 1)
+		z.maybeLogError(err)
 		return -1, replicas
 	}
 	for _, row := range rows {
