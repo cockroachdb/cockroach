@@ -112,9 +112,10 @@ SELECT SUBSTR('RoacH', -2, 4)
 ----
 R
 
-# See #6601
+# See #6601 and #8210. We use three arguments to guarantee a very high
+# probability that at least one of the UUIDs is invalid UTF8.
 query error invalid utf8
-select cast(uuid_v4() as string)
+select cast(uuid_v4() as string), cast(uuid_v4() as string), cast(uuid_v4() as string)
 
 query T
 SELECT SUBSTR('12345', 2, 77)
