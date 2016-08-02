@@ -85,7 +85,7 @@ func TestNormalizeTableName(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", tc.in, err)
 		}
-		ate := stmt.(*Select).Select.(*SelectClause).From[0].(*AliasedTableExpr)
+		ate := stmt.(*Select).Select.(*SelectClause).From.Tables[0].(*AliasedTableExpr)
 		err = ate.Expr.(*QualifiedName).NormalizeTableName(tc.db)
 		if tc.err != "" {
 			if !testutils.IsError(err, tc.err) {
