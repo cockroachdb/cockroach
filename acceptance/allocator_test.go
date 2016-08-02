@@ -57,8 +57,8 @@ package acceptance
 
 import (
 	gosql "database/sql"
-	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"testing"
@@ -67,8 +67,10 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/montanaflynn/stats"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/acceptance/terrafarm"
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
@@ -80,6 +82,8 @@ import (
 const (
 	archivedStoreURL = "gs://cockroach-test/allocatortest"
 	StableInterval   = 3 * time.Minute
+	StableStdDev     = 10
+	adminPort        = base.DefaultHTTPPort
 )
 
 const (
@@ -194,9 +198,33 @@ func (at *allocatorTest) RunAndCleanup(t *testing.T) {
 	at.Run(t)
 }
 
+func (at *allocatorTest) stdDev() float64 {
+	host := at.f.Nodes()[0]
+	var client http.Client
+	var nodesResp serverpb.NodesResponse
+	url := fmt.Sprintf("http://%s:%s/_status/nodes", host, adminPort)
+	if err := util.GetJSON(client, url, &nodesResp); err != nil {
+		return math.MaxFloat64
+	}
+	var replicaCounts stats.Float64Data
+	for _, node := range nodesResp.Nodes {
+		for _, ss := range node.StoreStatuses {
+			replicaCounts = append(replicaCounts, float64(ss.Metrics["replicas"]))
+		}
+	}
+	stdDev, err := stats.StdDevP(replicaCounts)
+	if err != nil {
+		return math.MaxFloat64
+	}
+	return stdDev
+}
+
 // printStats prints the time it took for rebalancing to finish and the final
 // standard deviation of replica counts across stores.
-func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string, adminPort int) error {
+func (at *allocatorTest) printRebalanceStats(
+	db *gosql.DB,
+	host string,
+) error {
 	// TODO(cuongdo): Output these in a machine-friendly way and graph.
 
 	// Output time it took to rebalance.
@@ -231,33 +259,17 @@ func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string, adminPor
 	}
 
 	// Output standard deviation of the replica counts for all stores.
-	{
-		var client http.Client
-		var nodesResp serverpb.NodesResponse
-		url := fmt.Sprintf("http://%s:%d/_status/nodes", host, adminPort)
-		if err := util.GetJSON(client, url, &nodesResp); err != nil {
-			return err
-		}
-		var replicaCounts stats.Float64Data
-		for _, node := range nodesResp.Nodes {
-			for _, ss := range node.StoreStatuses {
-				replicaCounts = append(replicaCounts, float64(ss.Metrics["replicas"]))
-			}
-		}
-		stddev, err := stats.StdDevP(replicaCounts)
-		if err != nil {
-			return err
-		}
-		log.Infof(context.TODO(), "stddev(replica count) = %.2f", stddev)
-	}
+	log.Infof(context.TODO(), "stddev(replica count) = %.2f", at.stdDev())
 
 	return nil
 }
 
-// checkAllocatorStable returns whether the replica distribution within the
-// cluster has been stable for at least `StableInterval`. Only unrecoverable
+// checkAllocatorStable returns the duration of stability (i.e. no replication
+// changes) and the standard deviation in replica counts. Only unrecoverable
 // errors are returned.
-func (at *allocatorTest) checkAllocatorStable(db *gosql.DB) (bool, error) {
+func (at *allocatorTest) checkAllocatorStable(db *gosql.DB) (
+	time.Duration, float64, error,
+) {
 	q := `SELECT NOW()-timestamp, rangeID, storeID, eventType FROM rangelog WHERE ` +
 		`timestamp=(SELECT MAX(timestamp) FROM rangelog WHERE eventType IN ($1, $2, $3))`
 	eventTypes := []interface{}{
@@ -273,28 +285,29 @@ func (at *allocatorTest) checkAllocatorStable(db *gosql.DB) (bool, error) {
 	row := db.QueryRow(q, eventTypes...)
 	if row == nil {
 		log.Errorf(context.TODO(), "couldn't find any range events")
-		return false, nil
+		return 0, math.MaxFloat64, nil
 	}
 	if err := row.Scan(&elapsedStr, &rangeID, &storeID, &eventType); err != nil {
 		// Log but don't return errors, to increase resilience against transient
 		// errors.
 		log.Errorf(context.TODO(), "error checking rebalancer: %s", err)
-		return false, nil
+		return 0, math.MaxFloat64, nil
 	}
 	elapsedSinceLastRangeEvent, err := time.ParseDuration(elapsedStr)
 	if err != nil {
-		return false, err
+		return 0, math.MaxFloat64, err
 	}
 
 	log.Infof(context.TODO(), "last range event: %s for range %d/store %d (%s ago)",
 		eventType, rangeID, storeID, elapsedSinceLastRangeEvent)
-	return elapsedSinceLastRangeEvent >= StableInterval, nil
+
+	return elapsedSinceLastRangeEvent, at.stdDev(), nil
 }
 
 // WaitForRebalance waits until there's been no recent range adds, removes, and
 // splits. We wait until the cluster is balanced or until `StableInterval`
 // elapses, whichever comes first. Then, it prints stats about the rebalancing
-// process.
+// process. If the replica count appears unbalanced, an error is returned.
 //
 // This method is crude but necessary. If we were to wait until range counts
 // were just about even, we'd miss potential post-rebalance thrashing.
@@ -317,13 +330,19 @@ func (at *allocatorTest) WaitForRebalance(t *testing.T) error {
 		select {
 		case <-statsTimer.C:
 			statsTimer.Read = true
-			stable, err := at.checkAllocatorStable(db)
+			dStable, stdDev, err := at.checkAllocatorStable(db)
 			if err != nil {
 				return err
 			}
-			if stable {
+			if StableInterval <= dStable {
 				host := at.f.Nodes()[0]
-				return at.printRebalanceStats(db, host, 8080)
+				if stdDev > StableStdDev {
+					_ = at.printRebalanceStats(db, host)
+					return errors.Errorf(
+						"%s elapsed without changes, but replica count standard "+
+							"deviation is %.2f", dStable, stdDev)
+				}
+				return at.printRebalanceStats(db, host)
 			}
 			statsTimer.Reset(10 * time.Second)
 		case <-assertTimer.C:
