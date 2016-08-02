@@ -19,4 +19,4 @@ strip -S cockroach
 find . -type f -name '*.test' | xargs strip -S
 
 rm -f $archive
-time tar cfz $archive -C .. $(git ls-files | sed -r 's,^,cockroach/,') $(find . -type f -name '*.test' | sed 's,^\./,cockroach/,')
+time tar cfz $archive -C .. $(git ls-files | sed -r 's,^,cockroach/,') $(find . -type f -name '*.test' -and -not -name acceptance.test | sed 's,^\./,cockroach/,')
