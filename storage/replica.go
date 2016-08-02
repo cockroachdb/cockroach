@@ -1567,14 +1567,6 @@ func (r *Replica) handleRaftReady() error {
 		if lastIndex, raftLogSize, err = r.append(writer, lastIndex, raftLogSize, rd.Entries); err != nil {
 			return err
 		}
-		batch.Defer(func() {
-			// Update last index on commit.
-			r.mu.Lock()
-			r.mu.lastIndex = lastIndex
-			r.mu.raftLogSize = raftLogSize
-			r.mu.Unlock()
-		})
-
 	}
 	if !raft.IsEmptyHardState(rd.HardState) {
 		if err := setHardState(writer, r.RangeID, rd.HardState); err != nil {
@@ -1584,6 +1576,11 @@ func (r *Replica) handleRaftReady() error {
 	if err := batch.Commit(); err != nil {
 		return err
 	}
+	// Update last index.
+	r.mu.Lock()
+	r.mu.lastIndex = lastIndex
+	r.mu.raftLogSize = raftLogSize
+	r.mu.Unlock()
 
 	for _, msg := range rd.Messages {
 		r.sendRaftMessage(msg)
@@ -1977,34 +1974,27 @@ func (r *Replica) processRaftCommand(
 		log.Infof(context.TODO(), "%s: applying command with forced error: %v", r, forcedErr)
 	}
 
-	br, trigger, pErr := r.applyRaftCommand(idKey, ctx, index, leaseIndex,
+	br, propResult, pErr := r.applyRaftCommand(idKey, ctx, index, leaseIndex,
 		raftCmd.OriginReplica, raftCmd.Cmd, forcedErr)
 	pErr = r.maybeSetCorrupt(pErr)
 
 	// Handle all returned side effects. This must happen after commit but
 	// before returning to the client.
+
+	// Update store-level MVCC stats with merged range stats.
+	r.store.metrics.addMVCCStats(propResult.delta)
+
+	// Handle commit triggers.
 	//
 	// TODO(tschottdorf): we currently propagate *PostCommitTrigger. Consider
 	// using PostCommitTrigger instead.
-	if trigger != nil {
-		if trigger.split != nil {
-			if pErr != nil {
-				panic("split trigger emitted but error returned")
-			}
-			splitTriggerPostCommit(
-				context.Background(),
-				trigger.split.RightDeltaMS,
-				&trigger.split.SplitTrigger,
-				r,
-			)
-		}
-
-		// On the replica on which this command originated, resolve skipped intents
-		// asynchronously - even on failure.
-		if raftCmd.OriginReplica.StoreID == r.store.StoreID() {
-			r.store.intentResolver.processIntentsAsync(r, trigger.intents)
-		}
+	if trigger := propResult.PostCommitTrigger; trigger != nil {
+		r.handleTrigger(ctx, raftCmd.OriginReplica, *trigger)
+		// Assert that the on-disk state doesn't diverge from the in-memory
+		// state as a result of the trigger.
+		r.assertState(r.store.Engine())
 	}
+
 	// On successful write commands handle write-related triggers including
 	// splitting and raft log truncation.
 	if pErr == nil && raftCmd.Cmd.IsWrite() {
@@ -2033,13 +2023,11 @@ func (r *Replica) applyRaftCommand(
 	originReplica roachpb.ReplicaDescriptor,
 	ba roachpb.BatchRequest,
 	forcedError *roachpb.Error,
-) (*roachpb.BatchResponse, *PostCommitTrigger, *roachpb.Error) {
+) (*roachpb.BatchResponse, proposalResult, *roachpb.Error) {
 	if index <= 0 {
 		log.Fatalf(ctx, "raft command index is <= 0")
 	}
 
-	// If we have an out of order index, there's corruption. No sense in trying
-	// to update anything or run the command. Simply return a corruption error.
 	r.mu.Lock()
 	oldIndex := r.mu.state.RaftAppliedIndex
 	// When frozen, the Range only applies freeze-related requests. Overrides
@@ -2050,26 +2038,28 @@ func (r *Replica) applyRaftCommand(
 	r.mu.Unlock()
 
 	if index != oldIndex+1 {
-		return nil, nil, roachpb.NewError(newReplicaCorruptionError(errors.Errorf("applied index jumped from %d to %d", oldIndex, index)))
+		// If we have an out of order index, there's corruption. No sense in
+		// trying to update anything or running the command. Simply return
+		// a corruption error.
+		return nil, proposalResult{}, roachpb.NewError(newReplicaCorruptionError(errors.Errorf("applied index jumped from %d to %d", oldIndex, index)))
 	}
 
 	// Call the helper, which returns a batch containing data written
 	// during command execution and any associated error.
 	var batch engine.Batch
 	var br *roachpb.BatchResponse
-	var ms enginepb.MVCCStats
-	var trigger *PostCommitTrigger
+	// TODO(tschottdorf): With proposer-eval'ed KV, this will be returned
+	// along with the batch representation and, together with it, must
+	// contain everything necessary for Replicas to apply the command.
+	var propResult proposalResult
 	var rErr *roachpb.Error
 
 	if forcedError != nil {
 		batch = r.store.Engine().NewBatch()
-		batch.Defer(func() {
-			r.assertState(r.store.Engine())
-		})
 		br, rErr = nil, forcedError
 	} else {
-		batch, ms, br, trigger, rErr = r.applyRaftCommandInBatch(ctx, idKey,
-			originReplica, ba)
+		batch, propResult.delta, br, propResult.PostCommitTrigger, rErr =
+			r.applyRaftCommandInBatch(ctx, idKey, originReplica, ba)
 	}
 
 	// TODO(tschottdorf): remove when #7224 is cleared.
@@ -2083,10 +2073,11 @@ func (r *Replica) applyRaftCommand(
 	// The only remaining use of the batch is for range-local keys which we know
 	// have not been previously written within this batch. Currently the only
 	// remaining writes are the raft applied index and the updated MVCC stats.
+	//
 	writer := batch.Distinct()
 
 	// Advance the last applied index.
-	if err := setAppliedIndex(writer, &ms, r.RangeID, index, leaseIndex); err != nil {
+	if err := setAppliedIndex(writer, &propResult.delta, r.RangeID, index, leaseIndex); err != nil {
 		log.Fatalf(ctx, "setting applied index in a batch should never fail: %s", err)
 	}
 
@@ -2095,12 +2086,10 @@ func (r *Replica) applyRaftCommand(
 	// effects.
 	// TODO(tschottdorf): refactor that for clarity.
 	newMS := r.GetMVCCStats()
-	newMS.Add(ms)
+	newMS.Add(propResult.delta)
 	if err := setMVCCStats(writer, r.RangeID, newMS); err != nil {
 		log.Fatalf(ctx, "setting mvcc stats in a batch should never fail: %s", err)
 	}
-	// Update store-level MVCC stats with merged range stats.
-	r.store.metrics.addMVCCStats(ms)
 
 	// TODO(petermattis): We did not close the writer in an earlier version of
 	// the code, which went undetected even though we used the batch after
@@ -2108,20 +2097,30 @@ func (r *Replica) applyRaftCommand(
 	// the future.
 	writer.Close()
 
-	batch.Defer(func() {
+	// TODO(tschottdorf): with proposer-eval'ed KV, the batch would not be
+	// committed at this point. Instead, it would be added to propResult.
+	if err := batch.Commit(); err != nil {
+		rErr = roachpb.NewError(newReplicaCorruptionError(errors.Errorf("could not commit batch"), err, rErr.GoError()))
+	} else {
 		r.mu.Lock()
 		// Update cached appliedIndex if we were able to set the applied index
 		// on disk.
+		// TODO(tschottdorf): with proposer-eval'ed KV, the lease applied index
+		// can be read from the WriteBatch, but there may be reasons to pass
+		// it with propResult. We'll see.
 		r.mu.state.RaftAppliedIndex = index
 		r.mu.state.LeaseAppliedIndex = leaseIndex
 		r.mu.state.Stats = newMS
+		if forcedError != nil {
+			// We only assert when there's a forced error since it might be
+			// a little expensive to do on *every* Raft command, seeing that
+			// disk i/o could be involved.
+			r.assertStateLocked(r.store.Engine())
+		}
 		r.mu.Unlock()
-	})
-	if err := batch.Commit(); err != nil {
-		rErr = roachpb.NewError(newReplicaCorruptionError(errors.Errorf("could not commit batch"), err, rErr.GoError()))
 	}
 
-	return br, trigger, rErr
+	return br, propResult, rErr
 }
 
 // applyRaftCommandInBatch executes the command in a batch engine and
@@ -2152,9 +2151,8 @@ func (r *Replica) applyRaftCommandInBatch(
 	// reported with any error except TransactionRetryError.
 	wasWriting := ba.Txn != nil && ba.Txn.Writing
 
-	// Execute the commands. If this returns without an error, the batch must
-	// be committed (EndTransaction with a CommitTrigger may unlock
-	// readOnlyCmdMu via a batch.Defer).
+	// Execute the commands. If this returns without an error, the batch should
+	// be committed.
 	btch, ms, br, trigger, pErr := r.executeWriteBatch(ctx, idKey, ba)
 
 	if ba.IsWrite() {
@@ -2625,8 +2623,8 @@ func (r *Replica) gossipFirstRangeLocked(ctx context.Context) {
 }
 
 // maybeGossipSystemConfig scans the entire SystemConfig span and gossips it.
-// The first call is on NewReplica. Further calls come from the trigger on an
-// EndTransactionRequest or range lease acquisition.
+// The first call is on NewReplica. Further calls come from the trigger on
+// EndTransaction or range lease acquisition.
 //
 // Note that maybeGossipSystemConfig gossips information only when the
 // lease is actually held. The method does not request a range lease
@@ -2699,6 +2697,13 @@ func newReplicaCorruptionError(errs ...error) *roachpb.ReplicaCorruptionError {
 // range from participating in progress, trigger a rebalance operation and
 // decide on an error-by-error basis whether the corruption is limited to the
 // range, store, node or cluster with corresponding actions taken.
+//
+// TODO(d4l3k): when marking a Replica corrupt, must subtract its stats from
+// r.store.metrics. Errors which happen between committing a batch and sending
+// a stats delta from the store are going to be particularly tricky and the
+// best bet is to not have any of those.
+// @bdarnell remarks: Corruption errors should be rare so we may want the store
+// to just recompute its stats in the background when one occurs.
 func (r *Replica) maybeSetCorrupt(pErr *roachpb.Error) *roachpb.Error {
 	if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
 		log.Errorf(context.TODO(), "%s: stalling replica due to: %s", r, cErr.ErrorMsg)

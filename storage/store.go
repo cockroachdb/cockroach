@@ -751,8 +751,8 @@ func (sm *storeMetrics) updateRocksDBStats(stats engine.Stats) {
 	sm.rdbTableReadersMemEstimate.Update(stats.TableReadersMemEstimate)
 }
 
-func (sm *storeMetrics) leaseRequestComplete(err error) {
-	if err == nil {
+func (sm *storeMetrics) leaseRequestComplete(success bool) {
+	if success {
 		sm.leaseRequestSuccessCount.Inc(1)
 	} else {
 		sm.leaseRequestErrorCount.Inc(1)
