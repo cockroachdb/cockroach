@@ -115,14 +115,11 @@ TestVet() {
 }
 
 TestGolint() {
-  ! golint "$PKG" | \
-    grep -vE '(\.pb\.go|\.pb\.gw\.go|embedded\.go|_string\.go|LastInsertId|sql/parser/(yaccpar|sql\.y):)'
-  # https://golang.org/pkg/database/sql/driver/#Result :(
+  ! golint "$PKG" | grep -vE '((\.pb|\.pb\.gw|embedded|_string)\.go|sql/parser/(yaccpar|sql\.y):)'
 }
 
 TestGoSimple() {
-  # https://github.com/dominikh/go-simple/issues/18
-  ! gosimple "$PKG" | grep -vF 'embedded.go' | grep -vE 'sql/sqlbase/table\.go:[0-9]+:[0-9]+: should omit nil check; len\(\) for nil slices is defined as zero'
+  ! gosimple "$PKG" | grep -vF 'embedded.go'
 }
 
 TestVarcheck() {
