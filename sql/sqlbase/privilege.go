@@ -232,3 +232,12 @@ func (p PrivilegeDescriptor) CheckPrivilege(user string, priv privilege.Kind) bo
 	}
 	return isPrivilegeSet(userPriv.Privileges, priv)
 }
+
+// AnyPrivilege returns true if 'user' has any privilege on this descriptor.
+func (p PrivilegeDescriptor) AnyPrivilege(user string) bool {
+	userPriv, ok := p.findUser(user)
+	if !ok {
+		return false
+	}
+	return userPriv.Privileges != 0
+}
