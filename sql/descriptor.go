@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -108,37 +109,39 @@ func (p *planner) generateUniqueDescID() (sqlbase.ID, error) {
 func (p *planner) createDescriptor(
 	plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto, ifNotExists bool,
 ) (bool, error) {
-	return p.createDescriptorWithID(plainKey, 0, descriptor, ifNotExists)
-}
-
-// createDescriptorWithID uses the ID given if it is non-zero, otherwise it will
-// reserve a new ID.
-func (p *planner) createDescriptorWithID(
-	plainKey sqlbase.DescriptorKey, id sqlbase.ID, descriptor sqlbase.DescriptorProto, ifNotExists bool,
-) (bool, error) {
 	idKey := plainKey.Key()
-	// Check whether idKey exists.
-	gr, err := p.txn.Get(idKey)
-	if err != nil {
-		return false, err
-	}
 
-	if gr.Exists() {
+	if exists, err := p.descExists(idKey); err == nil && exists {
 		if ifNotExists {
 			// Noop.
 			return false, nil
 		}
 		// Key exists, but we don't want it to: error out.
 		return false, descriptorAlreadyExistsErr{descriptor, plainKey.Name()}
+	} else if err != nil {
+		return false, err
 	}
 
-	if id == 0 {
-		id, err = p.generateUniqueDescID()
-		if err != nil {
-			return false, err
-		}
+	id, err := p.generateUniqueDescID()
+	if err != nil {
+		return false, err
 	}
 
+	return p.createDescriptorWithID(idKey, id, descriptor)
+}
+
+func (p *planner) descExists(idKey roachpb.Key) (bool, error) {
+	// Check whether idKey exists.
+	gr, err := p.txn.Get(idKey)
+	if err != nil {
+		return false, err
+	}
+	return gr.Exists(), nil
+}
+
+func (p *planner) createDescriptorWithID(
+	idKey roachpb.Key, id sqlbase.ID, descriptor sqlbase.DescriptorProto,
+) (bool, error) {
 	descriptor.SetID(id)
 	// TODO(pmattis): The error currently returned below is likely going to be
 	// difficult to interpret.

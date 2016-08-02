@@ -23,7 +23,7 @@ statement error table "a" already exists
 CREATE TABLE a (id INT PRIMARY KEY)
 
 statement error duplicate column name: "id"
-CREATE TABLE a (id INT PRIMARY KEY, id INT)
+CREATE TABLE b (id INT PRIMARY KEY, id INT)
 
 statement error multiple primary keys for table "b" are not allowed
 CREATE TABLE b (id INT PRIMARY KEY, id2 INT PRIMARY KEY)
