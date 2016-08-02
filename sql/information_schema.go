@@ -51,71 +51,106 @@ CREATE TABLE information_schema.tables (
   VERSION INT
 );`,
 	populate: func(p *planner, addRow func(...parser.Datum)) error {
-		var dbNames []string
-		dbNamesToTables := make(map[string]map[string]*sqlbase.TableDescriptor)
-
-		// Handle virtual schemas.
-		for dbName, schema := range virtualSchemaMap {
-			dbNames = append(dbNames, dbName)
-			dbTables := make(map[string]*sqlbase.TableDescriptor)
-			for tableName, entry := range schema.tables {
-				dbTables[tableName] = entry.desc
-			}
-			dbNamesToTables[dbName] = dbTables
-		}
-
-		// Handle real schemas.
-		descs, err := p.getAllDescriptors()
-		if err != nil {
-			return err
-		}
-		dbIDsToName := make(map[sqlbase.ID]string)
-		for _, desc := range descs {
-			if db, ok := desc.(*sqlbase.DatabaseDescriptor); ok {
-				dbNames = append(dbNames, db.GetName())
-				dbIDsToName[db.GetID()] = db.GetName()
-				dbNamesToTables[db.GetName()] = make(map[string]*sqlbase.TableDescriptor)
-			}
-		}
-		for _, desc := range descs {
-			if table, ok := desc.(*sqlbase.TableDescriptor); ok {
-				dbName, ok := dbIDsToName[table.GetParentID()]
-				if !ok {
-					return errors.Errorf("no database with ID %d found", table.GetParentID())
-				}
-				dbTables := dbNamesToTables[dbName]
-				dbTables[table.GetName()] = table
-			}
-		}
-
-		sort.Strings(dbNames)
-		for _, dbName := range dbNames {
-			var dbTableNames []string
-			dbTables := dbNamesToTables[dbName]
-			for tableName := range dbTables {
-				dbTableNames = append(dbTableNames, tableName)
-			}
-			sort.Strings(dbTableNames)
-			for _, tableName := range dbTableNames {
-				table := dbTables[tableName]
-				if !userCanSeeTable(table, p.session.User) {
-					continue
-				}
+		return forEachTableDesc(p,
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) {
 				tableType := tableTypeBaseTable
 				if isVirtualDescriptor(table) {
 					tableType = tableTypeSystemView
 				}
 				addRow(
 					defString,
-					parser.NewDString(dbName),
-					parser.NewDString(tableName),
+					parser.NewDString(db.Name),
+					parser.NewDString(table.Name),
 					tableType,
 					parser.NewDInt(parser.DInt(table.GetVersion())),
 				)
+			},
+		)
+	},
+}
+
+// forEachTableDesc retrieves all table descriptors and iterates through them in
+// lexicographical order with respect primarily to database name and secondarily
+// to table name. For each table, the function will call fn with its respective
+// database and table descriptor.
+func forEachTableDesc(
+	p *planner,
+	fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor),
+) error {
+	type dbDescTables struct {
+		desc   *sqlbase.DatabaseDescriptor
+		tables map[string]*sqlbase.TableDescriptor
+	}
+	databases := make(map[string]dbDescTables)
+
+	// Handle virtual schemas.
+	for dbName, schema := range virtualSchemaMap {
+		dbTables := make(map[string]*sqlbase.TableDescriptor)
+		for tableName, entry := range schema.tables {
+			dbTables[tableName] = entry.desc
+		}
+		databases[dbName] = dbDescTables{
+			desc:   schema.desc,
+			tables: dbTables,
+		}
+	}
+
+	// Handle real schemas.
+	descs, err := p.getAllDescriptors()
+	if err != nil {
+		return err
+	}
+	dbIDsToName := make(map[sqlbase.ID]string)
+	// First, iterate through all database descriptors, constructing dbDescTables
+	// objects and populating a mapping from sqlbase.ID to database name.
+	for _, desc := range descs {
+		if db, ok := desc.(*sqlbase.DatabaseDescriptor); ok {
+			dbIDsToName[db.GetID()] = db.GetName()
+			databases[db.GetName()] = dbDescTables{
+				desc:   db,
+				tables: make(map[string]*sqlbase.TableDescriptor),
 			}
 		}
-		return nil
-	},
+	}
+	// Next, iterate through all table descriptors, using the mapping from sqlbase.ID
+	// to database name to add descriptors to a dbDescTables' tables map.
+	for _, desc := range descs {
+		if table, ok := desc.(*sqlbase.TableDescriptor); ok {
+			dbName, ok := dbIDsToName[table.GetParentID()]
+			if !ok {
+				return errors.Errorf("no database with ID %d found", table.GetParentID())
+			}
+			dbTables := databases[dbName]
+			dbTables.tables[table.GetName()] = table
+		}
+	}
+
+	// Below we use the same trick twice of sorting a slice of strings lexicographically
+	// and iterating through these strings to index into a map. Effectively, this allows
+	// us to iterate through a map in sorted order.
+	dbNames := make([]string, 0, len(databases))
+	for dbName := range databases {
+		dbNames = append(dbNames, dbName)
+	}
+	sort.Strings(dbNames)
+	for _, dbName := range dbNames {
+		db := databases[dbName]
+		dbDesc := db.desc
+		dbTables := db.tables
+		dbTableNames := make([]string, 0, len(dbTables))
+		for tableName := range dbTables {
+			dbTableNames = append(dbTableNames, tableName)
+		}
+		sort.Strings(dbTableNames)
+		for _, tableName := range dbTableNames {
+			tableDesc := dbTables[tableName]
+			if !userCanSeeTable(tableDesc, p.session.User) {
+				continue
+			}
+			fn(dbDesc, tableDesc)
+		}
+	}
+	return nil
 }
 
 func userCanSeeTable(table *sqlbase.TableDescriptor, user string) bool {
