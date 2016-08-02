@@ -2698,7 +2698,7 @@ func (s *Store) computeReplicationStatus(now int64) (
 				}
 			}
 
-			if action, _ := s.allocator.ComputeAction(*zoneConfig, desc); action != AllocatorNoop {
+			if action, _ := s.allocator.ComputeAction(zoneConfig, desc); action != AllocatorNoop {
 				replicationPendingRangeCount++
 			}
 		}

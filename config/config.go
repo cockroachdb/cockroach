@@ -38,6 +38,8 @@ const (
 	minRangeMaxBytes = 1 << 20
 )
 
+type zoneConfigHook func(SystemConfig, uint32) (ZoneConfig, bool, error)
+
 var (
 	// defaultZoneConfig is the default zone configuration used when no custom
 	// config has been specified.
@@ -57,7 +59,7 @@ var (
 	// ZoneConfigHook is a function used to lookup a zone config given a table
 	// or database ID.
 	// This is also used by testing to simplify fake configs.
-	ZoneConfigHook func(SystemConfig, uint32) (*ZoneConfig, error)
+	ZoneConfigHook zoneConfigHook
 
 	// testingLargestIDHook is a function used to bypass GetLargestObjectID
 	// in tests.
@@ -268,7 +270,7 @@ func (s SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
 
 // GetZoneConfigForKey looks up the zone config for the range containing 'key'.
 // It is the caller's responsibility to ensure that the range does not need to be split.
-func (s SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*ZoneConfig, error) {
+func (s SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (ZoneConfig, error) {
 	objectID, ok := ObjectIDForKey(key)
 	if !ok {
 		// Not in the structured data namespace.
@@ -282,17 +284,14 @@ func (s SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*ZoneConfig, error)
 
 // getZoneConfigForID looks up the zone config for the object (table or database)
 // with 'id'.
-func (s SystemConfig) getZoneConfigForID(id uint32) (*ZoneConfig, error) {
+func (s SystemConfig) getZoneConfigForID(id uint32) (ZoneConfig, error) {
 	testingLock.Lock()
 	hook := ZoneConfigHook
 	testingLock.Unlock()
-	if hook == nil {
-		return nil, errors.Errorf("ZoneConfigHook not set, unable to lookup zone config")
-	}
-	if cfg, err := hook(s, id); cfg != nil || err != nil {
+	if cfg, found, err := hook(s, id); err != nil || found {
 		return cfg, err
 	}
-	return &defaultZoneConfig, nil
+	return defaultZoneConfig, nil
 }
 
 // ComputeSplitKeys takes a start and end key and returns an array of keys
