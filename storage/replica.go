@@ -34,6 +34,7 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/google/btree"
 	"github.com/kr/pretty"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -309,6 +310,17 @@ type Replica struct {
 		droppedMessages int
 	}
 }
+
+// KeyRange is an interface type for the replicasByKey BTree, to compare
+// Replica and ReplicaPlaceholder.
+type KeyRange interface {
+	Desc() *roachpb.RangeDescriptor
+	rangeKeyItem
+	btree.Item
+	fmt.Stringer
+}
+
+var _ KeyRange = &Replica{}
 
 // withRaftGroupLocked calls the supplied function with the (lazily
 // initialized) Raft group. It assumes that the Replica lock is held.
@@ -1591,6 +1603,17 @@ func (r *Replica) handleRaftReady() error {
 		if err := r.applySnapshot(ctx, rd.Snapshot, rd.HardState); err != nil {
 			return err
 		}
+
+		r.store.mu.Lock()
+		if placeholder := r.store.mu.replicaPlaceholders[r.RangeID]; placeholder != nil {
+			r.store.removePlaceholderLocked(r.RangeID)
+		}
+		r.store.mu.Unlock()
+
+		if err := r.store.processRangeDescriptorUpdate(r); err != nil {
+			return err
+		}
+
 		var err error
 		if lastIndex, err = loadLastIndex(ctx, r.store.Engine(), r.RangeID); err != nil {
 			return err
@@ -2842,6 +2865,15 @@ func (r *Replica) maybeAddToRaftLogQueue(appliedIndex uint64) {
 	if appliedIndex%raftLogCheckFrequency == 0 {
 		r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
+}
+
+func (r *Replica) endKey() roachpb.RKey {
+	return r.Desc().EndKey
+}
+
+// Less returns true if the range's end key is less than the given item's key.
+func (r *Replica) Less(i btree.Item) bool {
+	return r.endKey().Less(i.(rangeKeyItem).endKey())
 }
 
 func (r *Replica) panic(err error) {

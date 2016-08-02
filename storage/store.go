@@ -184,17 +184,18 @@ func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
 }
 
 type rangeAlreadyExists struct {
-	rng *Replica
+	rng KeyRange
 }
 
 // Error implements the error interface.
 func (e rangeAlreadyExists) Error() string {
-	return fmt.Sprintf("range for Range ID %d already exists on store", e.rng.RangeID)
+	return fmt.Sprintf("range %v already exists on store", e.rng)
+
 }
 
 // rangeKeyItem is a common interface for roachpb.Key and Range.
 type rangeKeyItem interface {
-	getKey() roachpb.RKey
+	endKey() roachpb.RKey
 }
 
 // rangeBTreeKey is a type alias of roachpb.RKey that implements the
@@ -203,27 +204,14 @@ type rangeBTreeKey roachpb.RKey
 
 var _ rangeKeyItem = rangeBTreeKey{}
 
-func (k rangeBTreeKey) getKey() roachpb.RKey {
+func (k rangeBTreeKey) endKey() roachpb.RKey {
 	return (roachpb.RKey)(k)
 }
 
 var _ btree.Item = rangeBTreeKey{}
 
 func (k rangeBTreeKey) Less(i btree.Item) bool {
-	return k.getKey().Less(i.(rangeKeyItem).getKey())
-}
-
-var _ rangeKeyItem = &Replica{}
-
-func (r *Replica) getKey() roachpb.RKey {
-	return r.Desc().EndKey
-}
-
-var _ btree.Item = &Replica{}
-
-// Less returns true if the range's end key is less than the given item's key.
-func (r *Replica) Less(i btree.Item) bool {
-	return r.getKey().Less(i.(rangeKeyItem).getKey())
+	return k.endKey().Less(i.(rangeKeyItem).endKey())
 }
 
 // A NotBootstrappedError indicates that an engine has not yet been
@@ -256,12 +244,15 @@ func (rs *storeRangeSet) Visit(visitor func(*Replica) bool) {
 	// that we can safely (e.g., no race, no range skip) iterate
 	// over ranges regardless of how BTree is implemented.
 	rs.store.mu.Lock()
-	rs.rangeIDs = make([]roachpb.RangeID, rs.store.mu.replicasByKey.Len())
-	i := 0
+	rs.rangeIDs = make([]roachpb.RangeID, 0, rs.store.mu.replicasByKey.Len())
 	rs.store.mu.replicasByKey.Ascend(func(item btree.Item) bool {
-		rs.rangeIDs[i] = item.(*Replica).RangeID
-		i++
-		return true
+		switch item.(type) {
+		case *Replica:
+			rs.rangeIDs = append(rs.rangeIDs, item.(*Replica).RangeID)
+			return true
+		default:
+			return true
+		}
 	})
 	rs.store.mu.Unlock()
 
@@ -434,6 +425,9 @@ type Store struct {
 		replicas       map[roachpb.RangeID]*Replica // Map of replicas by Range ID
 		replicasByKey  *btree.BTree                 // btree keyed by ranges end keys.
 		uninitReplicas map[roachpb.RangeID]*Replica // Map of uninitialized replicas by Range ID
+		// replicaPlaceholders is a map to access all placeholders, so they can
+		// be directly accessed and cleared after stepping all raft groups.
+		replicaPlaceholders map[roachpb.RangeID]*ReplicaPlaceholder
 	}
 
 	// pendingRaftGroups contains the ranges that should be checked for
@@ -838,6 +832,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 
 	s.mu.Lock()
 	s.mu.replicas = map[roachpb.RangeID]*Replica{}
+	s.mu.replicaPlaceholders = map[roachpb.RangeID]*ReplicaPlaceholder{}
 	s.mu.replicasByKey = btree.New(64 /* degree */)
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
 	s.pendingRaftGroups.value = map[roachpb.RangeID]struct{}{}
@@ -1398,7 +1393,7 @@ func (s *Store) LookupReplica(start, end roachpb.RKey) *Replica {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	var rng *Replica
+	var rng KeyRange
 	s.visitReplicasLocked(start, roachpb.RKeyMax, func(repl *Replica) bool {
 		rng = repl
 		return false
@@ -1406,17 +1401,29 @@ func (s *Store) LookupReplica(start, end roachpb.RKey) *Replica {
 	if rng == nil || !rng.Desc().ContainsKeyRange(start, end) {
 		return nil
 	}
-	return rng
+	switch r := rng.(type) {
+	case *Replica:
+		return r
+	default:
+		return nil
+	}
 }
 
 // hasOverlappingReplicaLocked returns true if a Replica overlapping the given
 // descriptor is present on the Store.
 func (s *Store) hasOverlappingReplicaLocked(rngDesc *roachpb.RangeDescriptor) bool {
-	var rng *Replica
-	s.visitReplicasLocked(rngDesc.StartKey, roachpb.RKeyMax, func(repl *Replica) bool {
-		rng = repl
-		return false
-	})
+	var rng KeyRange
+
+	s.mu.replicasByKey.AscendGreaterOrEqual(rangeBTreeKey(rngDesc.StartKey.Next()),
+		func(item btree.Item) bool {
+			repl := item.(KeyRange)
+			if !repl.Desc().StartKey.Less(roachpb.RKeyMax) {
+				// This properly checks if this range contains any keys in the supplied span.
+				return false
+			}
+			rng = repl
+			return false
+		})
 
 	if rng != nil && rng.Desc().StartKey.Less(rngDesc.EndKey) {
 		return true
@@ -1829,11 +1836,30 @@ func (s *Store) addReplicaInternalLocked(rng *Replica) error {
 	if s.hasOverlappingReplicaLocked(rng.Desc()) {
 		return rangeAlreadyExists{rng}
 	}
+
 	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
 		return errors.Errorf("range for key %v already exists in replicasByKey btree",
-			(exRngItem.(*Replica)).getKey())
+			exRngItem.(KeyRange).endKey())
 	}
+
 	return nil
+}
+
+func (s *Store) removePlaceholderLocked(rngID roachpb.RangeID) error {
+	rng, ok := s.mu.replicaPlaceholders[rngID]
+	if !ok {
+		return errors.Errorf("%v: cannot remove Placeholder for RangeID %v; Placeholder doesn't exist", s, rngID)
+	}
+	if exRng := s.mu.replicasByKey.Delete(rng); exRng != nil {
+		switch exRng.(type) {
+		case *Replica:
+			return errors.Errorf("%v: expected Placeholder for RangeID: %v, got Replica", s, rngID)
+		case *ReplicaPlaceholder:
+			delete(s.mu.replicaPlaceholders, rngID)
+			return nil
+		}
+	}
+	return errors.Errorf("Placeholder %v was not in replicasByKey BTree", rngID)
 }
 
 // addReplicaToRangeMapLocked adds the replica to the replicas map.
@@ -1946,7 +1972,7 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 	}
 	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
 		return errors.Errorf("range for key %v already exists in replicasByKey btree",
-			(exRngItem.(*Replica)).getKey())
+			(exRngItem.(*Replica)).endKey())
 	}
 
 	// Add the range and its current stats into metrics.
@@ -2360,12 +2386,26 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 
 	switch req.Message.Type {
 	case raftpb.MsgSnap:
-		if !s.canApplySnapshot(req.RangeID, req.Message.Snapshot) {
+		s.mu.Lock()
+		// TODO(arjun): This lock/unlock is ugly. How should we best clean this up?
+		canApplySnapshot, placeholder := s.canApplySnapshotLocked(req.RangeID, req.Message.Snapshot)
+
+		if !canApplySnapshot {
 			// If the storage cannot accept the snapshot, drop it before
 			// passing it to RawNode.Step, since our error handling
 			// options past that point are limited.
+			s.mu.Unlock()
 			return nil
 		}
+
+		if exRng := s.mu.replicasByKey.ReplaceOrInsert(placeholder); exRng != nil {
+			delete(s.mu.replicaPlaceholders, placeholder.RangeID)
+			s.mu.Unlock()
+			return errors.Errorf("range for RangeID %v already exists in replicasByKey btree, when canApplySnapshotLocked returned true",
+				(exRng.(KeyRange)).endKey())
+		}
+
+		s.mu.Unlock()
 
 	case raftpb.MsgHeartbeat:
 		// TODO(bdarnell): handle coalesced heartbeats.
@@ -2410,7 +2450,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 			// 2. get an exclusive lock for operations on that key range from
 			//    the store (or discard the snapshot)
 			//    (at the time of writing, we have checked the key range in
-			//    canApplySnapshot above, but there are concerns about two
+			//    canApplySnapshotLocked above, but there are concerns about two
 			//    conflicting operations passing that check simultaneously,
 			//    see #7830)
 			// 3. do everything below (apply the snapshot through temp Raft group)
@@ -2463,15 +2503,24 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 			if raft.IsEmptySnap(ready.Snapshot) {
 				return errors.Errorf("preemptive snapshot discarded by Raft")
 			}
+
 			// Apply the snapshot, as Raft told us to.
 			if err := r.applySnapshot(ctx, ready.Snapshot, ready.HardState); err != nil {
 				return err
 			}
+
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			// Clear the replica placeholder; we are about to swap it with a real replica.
+			if err := s.removePlaceholderLocked(req.RangeID); err != nil {
+				return err
+			}
+			return s.processRangeDescriptorUpdateLocked(r)
+
 			// At this point, the Replica has data but no ReplicaID. We hope
 			// that it turns into a "real" Replica by means of receiving Raft
 			// messages addressed to it with a ReplicaID, but if that doesn't
 			// happen, at some point the Replica GC queue will have to grab it.
-			return nil
 		}
 		// We disallow non-snapshot messages to replica ID 0. Note that
 		// getOrCreateReplicaLocked disallows moving the replica ID backward, so
@@ -2485,6 +2534,12 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 	}
 
 	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
+		if req.Message.Type == raftpb.MsgSnap {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+
+			return raftGroup.Step(req.Message)
+		}
 		return raftGroup.Step(req.Message)
 	}); err != nil {
 		return err
@@ -2570,6 +2625,11 @@ func (s *Store) processRaft() {
 				}(r)
 			}
 			wg.Wait()
+			// After a round of readys, if a placeholder hasn't been removed
+			// by the handleRaftReady, this means that the Raft group rejected
+			// the snapshot. Now that we have called handleRaftReady on all
+			// replicas, clear all remaining placeholders.
+			s.clearAllPlaceholders()
 			s.processRaftMu.Unlock()
 			s.metrics.raftWorkingDurationNanos.Inc(timeutil.Since(workingStart).Nanoseconds())
 
@@ -2622,6 +2682,18 @@ func (s *Store) processRaft() {
 	})
 }
 
+func (s *Store) clearAllPlaceholders() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for rngID, res := range s.mu.replicaPlaceholders {
+		if s.mu.replicasByKey.Delete(res) == nil {
+			log.Fatalf(context.TODO(), "%v: expected to find Placeholder %s in replicasByKey", s, res)
+		}
+		delete(s.mu.replicaPlaceholders, rngID)
+	}
+}
+
 // getOrCreateReplicaLocked returns a replica for the given RangeID,
 // creating an uninitialized replica if necessary. The caller must
 // hold the store's lock.
@@ -2667,34 +2739,45 @@ func (s *Store) getOrCreateReplicaLocked(rangeID roachpb.RangeID, replicaID roac
 	return r, nil
 }
 
-// canApplySnapshot returns true if the snapshot can be applied to
-// this store's replica (i.e. it is not from an older incarnation of
-// the replica).
-func (s *Store) canApplySnapshot(rangeID roachpb.RangeID, snap raftpb.Snapshot) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// canApplySnapshotLocked returns true if the snapshot can be applied to
+// this store's replica (i.e. it is not from an older incarnation of the
+// replica) and it could successfully add a placeholder to the replicasByKey
+// map (if necessary).
+func (s *Store) canApplySnapshotLocked(rangeID roachpb.RangeID, snap raftpb.Snapshot) (bool, *ReplicaPlaceholder) {
 	if r, ok := s.mu.replicas[rangeID]; ok && r.IsInitialized() {
 		// We have the range and it's initialized, so let the snapshot
 		// through.
-		return true
+		return true, nil
 	}
 
 	// We don't have the range (or we have an uninitialized
 	// placeholder). Will we be able to create/initialize it?
 	// TODO(bdarnell): can we avoid parsing this twice?
-	var parsedSnap roachpb.RaftSnapshotData
+	var parsedSnap roachpb.PartialRaftSnapshotData
 	if err := parsedSnap.Unmarshal(snap.Data); err != nil {
-		return false
+		log.Infof(context.TODO(), "could not unmarshal snapshot: %v", err)
+		return false, nil
+	}
+
+	// Reserve the range.
+	placeholder := &ReplicaPlaceholder{
+		RangeID:   rangeID,
+		store:     s,
+		rangeDesc: &parsedSnap.RangeDescriptor,
+	}
+
+	if exRng, ok := s.mu.replicaPlaceholders[rangeID]; ok {
+		log.Infof(context.Background(), "%v: could not add ReplicaPlaceholder: %v", s, rangeAlreadyExists{exRng})
 	}
 
 	if s.hasOverlappingReplicaLocked(&parsedSnap.RangeDescriptor) {
 		// We have a conflicting range, so we must block the snapshot.
 		// When such a conflict exists, it will be resolved by one range
 		// either being split or garbage collected.
-		return false
+		log.Infof(context.Background(), "%v: cannot apply snapshot, received snapshot for an overlapping range", s)
 	}
 
-	return true
+	return true, placeholder
 }
 
 func raftEntryFormatter(data []byte) string {
@@ -2819,10 +2902,10 @@ func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (enginepb.
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.visitReplicasLocked(startKey, endKey, func(repl *Replica) bool {
-		repl.mu.Lock()
-		output.Add(repl.mu.state.Stats)
-		repl.mu.Unlock()
+	s.visitReplicasLocked(startKey, endKey, func(r *Replica) bool {
+		r.mu.Lock()
+		output.Add(r.mu.state.Stats)
+		r.mu.Unlock()
 		count++
 		return true
 	})
