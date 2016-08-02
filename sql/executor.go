@@ -1259,17 +1259,10 @@ func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.
 	if !ok {
 		return nil, nil
 	}
-	if len(sc.From) != 1 {
+	if sc.From == nil || sc.From.AsOf.Expr == nil {
 		return nil, nil
 	}
-	ate, ok := sc.From[0].(*parser.AliasedTableExpr)
-	if !ok {
-		return nil, nil
-	}
-	if ate.AsOf.Expr == nil {
-		return nil, nil
-	}
-	te, err := ate.AsOf.Expr.TypeCheck(nil, parser.TypeString)
+	te, err := sc.From.AsOf.Expr.TypeCheck(nil, parser.TypeString)
 	if err != nil {
 		return nil, err
 	}

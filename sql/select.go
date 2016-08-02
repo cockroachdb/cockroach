@@ -430,7 +430,11 @@ func (s *selectNode) expandPlan() error {
 
 // initFrom initializes the table node, given the parsed select expression
 func (s *selectNode) initFrom(parsed *parser.SelectClause, scanVisibility scanVisibility) error {
-	src, err := s.planner.getSources(parsed.From, scanVisibility)
+	// AS OF expressions should be handled by the executor.
+	if parsed.From.AsOf.Expr != nil && !s.planner.asOf {
+		return fmt.Errorf("unexpected AS OF SYSTEM TIME")
+	}
+	src, err := s.planner.getSources(parsed.From.Tables, scanVisibility)
 	if err != nil {
 		return err
 	}
