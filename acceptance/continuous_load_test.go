@@ -15,12 +15,17 @@
 package acceptance
 
 import (
+	"errors"
 	"flag"
+	"net/http"
 	"regexp"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/acceptance/terrafarm"
+	"github.com/cockroachdb/cockroach/server/status"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"golang.org/x/net/context"
@@ -49,6 +54,9 @@ type continuousLoadTest struct {
 	// Prefix is prepended to all resources created by Terraform. We also add the
 	// duration of the test to the prefix.
 	Prefix string
+	// BenchmarkPrefix is the prefix that's prepended to the benchmark name
+	// outputted upon termination of the load generators.
+	BenchmarkPrefix string
 	// NumNodes is the number of nodes in the test cluster.
 	NumNodes int
 	// Process must be one of the processes (e.g. block_writer) that's
@@ -59,6 +67,21 @@ type continuousLoadTest struct {
 	// Terraform configs. This must be in GB, because Terraform only accepts
 	// disk size for GCE in GB.
 	CockroachDiskSizeGB int
+}
+
+// queryCount returns the total SQL queries executed by the cluster.
+func (cl continuousLoadTest) queryCount(f *terrafarm.Farmer) (float64, error) {
+	var client http.Client
+	var resp status.NodeStatus
+	host := f.Nodes()[0]
+	if err := util.GetJSON(client, "http://"+host+":8080/_status/nodes/local", &resp); err != nil {
+		return 0, err
+	}
+	count, ok := resp.Metrics["sql.query.count"]
+	if !ok {
+		return 0, errors.New("couldn't find SQL query count metric")
+	}
+	return count, nil
 }
 
 // Run performs a continuous load test with the given parameters, checking the
@@ -85,7 +108,7 @@ func (cl continuousLoadTest) Run(t *testing.T) {
 		}
 		f.MustDestroy(t)
 	}()
-	f.AddVars["benchmark_name"] = "BenchmarkBlockWriter" + cl.shortTestTimeout()
+	f.AddVars["benchmark_name"] = cl.BenchmarkPrefix + cl.shortTestTimeout()
 	if cl.CockroachDiskSizeGB != 0 {
 		f.AddVars["cockroach_disk_size"] = strconv.Itoa(cl.CockroachDiskSizeGB)
 	}
@@ -97,22 +120,35 @@ func (cl continuousLoadTest) Run(t *testing.T) {
 	if err := f.StartWriter(0, cl.Process); err != nil {
 		t.Fatal(err)
 	}
-	f.Assert(t)
+	cl.assert(t, f)
 
 	// Run load, checking the health of the cluster periodically.
-	const healthCheckInterval = 1 * time.Minute
+	const healthCheckInterval = 2 * time.Minute
 	var healthCheckTimer timeutil.Timer
 	healthCheckTimer.Reset(healthCheckInterval)
+	lastQueryCount := 0.0
+	lastHealthCheck := timeutil.Now()
 	for {
 		select {
 		case <-healthCheckTimer.C:
+			// Check that all nodes are up and that queries are being processed.
 			healthCheckTimer.Read = true
-			f.Assert(t)
+			cl.assert(t, f)
+			queryCount, err := cl.queryCount(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if lastQueryCount == queryCount {
+				t.Fatalf("no queries in the last %s", healthCheckInterval)
+			}
+			qps := (queryCount - lastQueryCount) / timeutil.Now().Sub(lastHealthCheck).Seconds()
+			lastQueryCount = queryCount
+			lastHealthCheck = timeutil.Now()
 			healthCheckTimer.Reset(healthCheckInterval)
-			log.Infof(ctx, "health check ok: %s", timeutil.Now().Sub(start))
+			log.Infof(ctx, "health check ok %s (%.1f qps)", timeutil.Now().Sub(start), qps)
 		case <-ctx.Done():
 			log.Infof(ctx, "load test finished")
-			f.Assert(t)
+			cl.assert(t, f)
 			if err := f.StopWriter(0, cl.Process); err != nil {
 				t.Error(err)
 			}
@@ -139,11 +175,30 @@ func (cl continuousLoadTest) shortTestTimeout() string {
 	return regexp.MustCompile(`([a-z])0[0a-z]+`).ReplaceAllString(timeout.String(), `$1`)
 }
 
+// assert fails the test if CockroachDB or the load generators are down.
+func (cl continuousLoadTest) assert(t *testing.T, f *terrafarm.Farmer) {
+	f.Assert(t)
+	for _, host := range f.Writers() {
+		f.AssertState(t, host, cl.Process, "RUNNING")
+	}
+}
+
 func TestContinuousLoad_BlockWriter(t *testing.T) {
 	continuousLoadTest{
 		Prefix:              "bwriter",
+		BenchmarkPrefix:     "BenchmarkBlockWriter",
 		NumNodes:            *flagNodes,
 		Process:             "block_writer",
+		CockroachDiskSizeGB: 200,
+	}.Run(t)
+}
+
+func TestContinuousLoad_Photos(t *testing.T) {
+	continuousLoadTest{
+		Prefix:              "photos",
+		BenchmarkPrefix:     "BenchmarkPhotos",
+		NumNodes:            *flagNodes,
+		Process:             "photos",
 		CockroachDiskSizeGB: 200,
 	}.Run(t)
 }
