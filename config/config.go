@@ -291,7 +291,7 @@ func (s SystemConfig) getZoneConfigForID(id uint32) (ZoneConfig, error) {
 	if cfg, found, err := hook(s, id); err != nil || found {
 		return cfg, err
 	}
-	return defaultZoneConfig, nil
+	return DefaultZoneConfig(), nil
 }
 
 // ComputeSplitKeys takes a start and end key and returns an array of keys
