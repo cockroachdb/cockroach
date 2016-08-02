@@ -78,9 +78,8 @@ func TestComputeTruncatableIndex(t *testing.T) {
 		{[]uint64{1, 2}, 1, 100, 1, 1},
 		{[]uint64{1, 2, 3, 4}, 3, 100, 1, 1},
 		{[]uint64{1, 2, 3, 4}, 3, 100, 2, 2},
-		// If over targetSize, should truncate to next behind replica, or quorum
-		// committed index.
-		{[]uint64{1, 2, 3, 4}, 3, 2000, 1, 2},
+		// If over targetSize, should truncate to quorum committed index.
+		{[]uint64{1, 2, 3, 4}, 3, 2000, 1, 3},
 		{[]uint64{1, 2, 3, 4}, 3, 2000, 2, 3},
 		{[]uint64{1, 2, 3, 4}, 3, 2000, 3, 3},
 		// Never truncate past raftStatus.Commit.
