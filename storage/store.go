@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/syncutil"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -618,6 +619,11 @@ type storeMetrics struct {
 	rangeSnapshotsNormalApplied     *metric.Counter
 	rangeSnapshotsPreemptiveApplied *metric.Counter
 
+	// Raft processing metrics.
+	raftSelectDurationNanos  *metric.Counter
+	raftWorkingDurationNanos *metric.Counter
+	raftTickingDurationNanos *metric.Counter
+
 	// Stats for efficient merges.
 	// TODO(mrtracy): This should be removed as part of #4465. This is only
 	// maintained to keep the current structure of StatusSummaries; it would be
@@ -678,6 +684,11 @@ func newStoreMetrics() *storeMetrics {
 		rangeSnapshotsGenerated:         storeRegistry.Counter("range.snapshots.generated"),
 		rangeSnapshotsNormalApplied:     storeRegistry.Counter("range.snapshots.normal-applied"),
 		rangeSnapshotsPreemptiveApplied: storeRegistry.Counter("range.snapshots.preemptive-applied"),
+
+		// Raft processing metrics.
+		raftSelectDurationNanos:  storeRegistry.Counter("process-raft.waitingnanos"),
+		raftWorkingDurationNanos: storeRegistry.Counter("process-raft.workingnanos"),
+		raftTickingDurationNanos: storeRegistry.Counter("process-raft.tickingnanos"),
 	}
 }
 
@@ -2459,6 +2470,7 @@ func (s *Store) processRaft() {
 		ticker := time.NewTicker(s.ctx.RaftTickInterval)
 		defer ticker.Stop()
 		for {
+			workingStart := timeutil.Now()
 			s.processRaftMu.Lock()
 
 			// Copy the replicas tracked in pendingRaftGroups into local
@@ -2511,21 +2523,29 @@ func (s *Store) processRaft() {
 			}
 			wg.Wait()
 			s.processRaftMu.Unlock()
+			s.metrics.raftWorkingDurationNanos.Inc(timeutil.Since(workingStart).Nanoseconds())
+
+			selectStart := timeutil.Now()
 
 			select {
 			case <-s.wakeRaftLoop:
+				s.metrics.raftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
 
 			case st := <-s.ctx.Transport.SnapshotStatusChan:
+				s.metrics.raftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
 				s.processRaftMu.Lock()
 				s.mu.Lock()
 				if r, ok := s.mu.replicas[st.Req.RangeID]; ok {
 					r.reportSnapshotStatus(st.Req.Message.To, st.Err)
+
 				}
 				s.mu.Unlock()
 				s.processRaftMu.Unlock()
 
 			case <-ticker.C:
 				// TODO(bdarnell): rework raft ticker.
+				s.metrics.raftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
+				tickerStart := timeutil.Now()
 				s.processRaftMu.Lock()
 				s.mu.Lock()
 				for _, r := range s.mu.replicas {
@@ -2544,8 +2564,10 @@ func (s *Store) processRaft() {
 				s.pendingRaftGroups.Unlock()
 				s.mu.Unlock()
 				s.processRaftMu.Unlock()
+				s.metrics.raftTickingDurationNanos.Inc(timeutil.Since(tickerStart).Nanoseconds())
 
 			case <-s.stopper.ShouldStop():
+				s.metrics.raftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
 				return
 			}
 		}
