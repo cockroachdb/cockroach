@@ -86,7 +86,17 @@ func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
 
 	r.mu.Lock()
 	raftLogSize := r.mu.raftLogSize
-	targetSize := r.mu.maxBytes
+	// We target the raft log size at the size of the replicated data. When
+	// writing to a replica, it is common for the raft log to become larger than
+	// the replicated data as the raft log contains the overhead of the
+	// BatchRequest which includes the full transaction state as well as begin
+	// and end transaction operations. If the estimated raft log size becomes
+	// larger than the replica size, we're better off recovering the replica
+	// using a snapshot.
+	targetSize := r.mu.state.Stats.Total()
+	if targetSize > r.mu.maxBytes {
+		targetSize = r.mu.maxBytes
+	}
 	firstIndex, err := r.FirstIndex()
 	r.mu.Unlock()
 	if err != nil {
@@ -98,30 +108,34 @@ func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
 	return truncatableIndex - firstIndex, truncatableIndex, nil
 }
 
-// computeTruncatableIndex returns the oldest index that cannot be truncated. If
-// there is a behind node, we want to keep old raft logs so it can catch up
-// without having to send a full snapshot. However, if a node down is down long
-// enough, sending a snapshot is more efficient and we should truncate the log
-// to the next behind node or the quorum committed index. We currently truncate
-// when the raft log size is bigger than the range max bytes value (typically
-// 64MB). When there are no nodes behind, or we can't catch any of them up via
-// the raft log (due to a previous truncation) this returns the quorum committed
-// index.
-func computeTruncatableIndex(raftStatus *raft.Status, raftLogSize, targetSize int64, firstIndex uint64) uint64 {
+// computeTruncatableIndex returns the oldest index that cannot be
+// truncated. If there is a behind node, we want to keep old raft logs so it
+// can catch up without having to send a full snapshot. However, if a node down
+// is down long enough, sending a snapshot is more efficient and we should
+// truncate the log to the next behind node or the quorum committed index. We
+// currently truncate when the raft log size is bigger than the range
+// size. When there are no nodes behind, or we can't catch any of them up via
+// the raft log (due to a previous truncation) this returns the quorum
+// committed index.
+func computeTruncatableIndex(
+	raftStatus *raft.Status,
+	raftLogSize, targetSize int64,
+	firstIndex uint64,
+) uint64 {
 	truncatableIndex := raftStatus.Commit
 	behindIndexes := getBehindIndexes(raftStatus)
-	for _, behindIndex := range behindIndexes {
-		// If the behind index is beyond the first index, that means some node has
-		// caught up (or one is too far behind) and we should truncate the log to
-		// the behind index.
-		// If the behind index equals the first index and the raft log is within the
-		// target size, don't truncate it any further. However, if it's bigger than
-		// the target size, truncate to the next behind index. This allows for
-		// multiple nodes to be behind and not give up on the more recently behind
-		// nodes.
-		if behindIndex > firstIndex || (behindIndex == firstIndex && raftLogSize <= targetSize) {
-			truncatableIndex = behindIndex
-			break
+	if raftLogSize <= targetSize {
+		// Only truncate to one of the behind indexes if the raft log is less than
+		// the target size. If the raft log is greater than the target size we
+		// always truncate to the quorum commit index.
+		for _, behindIndex := range behindIndexes {
+			// If the behind index is at or beyond the first index, that means some
+			// node has caught up (or one is too far behind) and we should truncate
+			// the log to the behind index.
+			if behindIndex >= firstIndex {
+				truncatableIndex = behindIndex
+				break
+			}
 		}
 	}
 
@@ -129,7 +143,6 @@ func computeTruncatableIndex(raftStatus *raft.Status, raftLogSize, targetSize in
 	if truncatableIndex > raftStatus.Commit {
 		truncatableIndex = raftStatus.Commit
 	}
-
 	return truncatableIndex
 }
 
@@ -165,7 +178,8 @@ func (rlq *raftLogQueue) process(
 	// Can and should the raft logs be truncated?
 	if truncatableIndexes >= RaftLogQueueStaleThreshold {
 		if log.V(1) {
-			log.Infof(ctx, "truncating the raft log of range %d to %d", r.RangeID, oldestIndex)
+			log.Infof(ctx, "%s: truncating raft log %d-%d",
+				r, oldestIndex-truncatableIndexes, oldestIndex)
 		}
 		b := &client.Batch{}
 		b.AddRawRequest(&roachpb.TruncateLogRequest{

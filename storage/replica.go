@@ -681,6 +681,11 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 		case <-ctx.Done():
 		case <-r.store.Stopper().ShouldStop():
 		}
+		if log.V(2) {
+			if err := ctx.Err(); err != nil {
+				log.Infof(ctx, "%s: lease acquisition failed: %v", r, err)
+			}
+		}
 		return roachpb.NewError(newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc()))
 	}
 }
