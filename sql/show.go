@@ -154,7 +154,7 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 			}
 			fmt.Fprintf(&buf, " DEFAULT %s", *col.DefaultExpr)
 		}
-		if desc.PrimaryIndex.ColumnIDs[0] == col.ID {
+		if len(desc.PrimaryIndex.ColumnIDs) > 0 && desc.PrimaryIndex.ColumnIDs[0] == col.ID {
 			// Only set primary if the primary key is on a visible column (not rowid).
 			primary = fmt.Sprintf(",\n\tCONSTRAINT %s PRIMARY KEY (%s)",
 				quoteNames(desc.PrimaryIndex.Name),
@@ -237,6 +237,9 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 		return nil, err
 	}
 	v := &valuesNode{columns: []ResultColumn{{Name: "Database", Typ: parser.TypeString}}}
+	for db := range virtualSchemaMap {
+		v.rows = append(v.rows, []parser.Datum{parser.NewDString(db)})
+	}
 	for _, row := range sr {
 		_, name, err := encoding.DecodeUnsafeStringAscending(
 			bytes.TrimPrefix(row.Key, prefix), nil)
