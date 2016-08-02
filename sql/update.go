@@ -215,7 +215,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 
 	rows, err := p.SelectClause(&parser.SelectClause{
 		Exprs: targets,
-		From:  []parser.TableExpr{n.Table},
+		From:  &parser.From{Tables: []parser.TableExpr{n.Table}},
 		Where: n.Where,
 	}, nil, nil, desiredTypesFromSelect, publicAndNonPublicColumns)
 	if err != nil {

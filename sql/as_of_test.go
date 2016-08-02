@@ -45,7 +45,7 @@ func TestAsOfTime(t *testing.T) {
 	const val2 = 2
 	const query = "SELECT a FROM d.t AS OF SYSTEM TIME '%s' WHERE a > $1"
 
-	var i int
+	var i, j int
 	var tm, now time.Time
 
 	// Expect an error if table doesn't exist at specified time. This ensures
@@ -70,7 +70,10 @@ func TestAsOfTime(t *testing.T) {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if _, err := db.Exec("CREATE TABLE d.t (a INT, b INT)"); err != nil {
+	if _, err := db.Exec(`
+		CREATE TABLE d.t (a INT, b INT);
+		CREATE TABLE d.j (c INT);
+	`); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
 	if err := db.QueryRow("SELECT now()").Scan(&tm); err != nil {
@@ -84,6 +87,9 @@ func TestAsOfTime(t *testing.T) {
 	if _, err := db.Exec("INSERT INTO d.t (a) VALUES ($1)", val1); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
+	if _, err := db.Exec("INSERT INTO d.j (c) VALUES ($1)", val2); err != nil {
+		t.Fatal("unexpected error:", err)
+	}
 	if err := db.QueryRow("SELECT a, now() FROM d.t").Scan(&i, &tm); err != nil {
 		t.Fatal(err)
 	} else if i != val1 {
@@ -93,15 +99,20 @@ func TestAsOfTime(t *testing.T) {
 	if _, err := db.Exec("UPDATE d.t SET a = $1", val2); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := db.Exec("UPDATE d.j SET c = $1", val1); err != nil {
+		t.Fatal(err)
+	}
 	if err := db.QueryRow("SELECT a FROM d.t").Scan(&i); err != nil {
 		t.Fatal(err)
 	} else if i != val2 {
 		t.Fatalf("expected %v, got %v", val2, i)
 	}
-	if err := db.QueryRow(fmt.Sprintf("SELECT a, now() FROM d.t AS OF SYSTEM TIME '%s'", tsVal1)).Scan(&i, &now); err != nil {
+	if err := db.QueryRow(fmt.Sprintf("SELECT a, c, now() FROM d.t, d.j AS OF SYSTEM TIME '%s'", tsVal1)).Scan(&i, &j, &now); err != nil {
 		t.Fatal(err)
 	} else if i != val1 {
 		t.Fatalf("expected %v, got %v", val1, i)
+	} else if j != val2 {
+		t.Fatalf("expected %v, got %v", val2, j)
 	} else if !now.After(tm) {
 		t.Fatalf("expected now > ts1")
 	}
