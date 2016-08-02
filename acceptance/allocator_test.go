@@ -34,17 +34,18 @@ package acceptance
 //	 TESTTIMEOUT=48h \
 //	 PKG=./acceptance \
 //	 TESTS=Rebalance_3To5Small \
-//	 TESTFLAGS='-v -remote -key-name google_compute_engine -cwd allocator_terraform -tf.keep-cluster=failed'
+//	 TESTFLAGS='-v -remote -key-name google_compute_engine -cwd terraform -tf.keep-cluster=failed'
 //
 // Things to note:
 // - Your SSH key (-key-name) for Google Cloud Platform must be in
 //    ~/.ssh/google_compute_engine
+// - If you want to manually fiddle with a test cluster, start the test with
+//   `-tf.keep-cluster=failed". After the cluster has been created, press
+//   Control-C and the cluster will remain up.
 // - These tests rely on a specific Terraform config that's specified using the
 //   -cwd test flag.
 // - You *must* set the TESTTIMEOUT high enough for any of these tests to
 //   finish. To be safe, specify a timeout of at least 24 hours.
-// - The Google credentials you're using for Terraform must have access to the
-//   Google Cloud Storage bucket referenced by archivedStoreURL.
 // - Your Google Cloud credentials must be accessible by Terraform, as described
 //   here:
 //   https://www.terraform.io/docs/providers/google/
@@ -54,6 +55,11 @@ package acceptance
 //   binary. If omitted, your test will use the latest CircleCI Linux build.
 //   Note that the location has to be specified relative to the terraform
 //   working directory, so typically `-at.cockroach-binary=../../cockroach`.
+//
+// Troubleshooting:
+// - If you get strange Terraform errors, try upgrading your Terraform install.
+// - Adding `-tf.keep-cluster=failed` to your TESTFLAGS allows the cluster to
+//   stay around if the test fails.
 
 import (
 	gosql "database/sql"
@@ -140,7 +146,7 @@ func (at *allocatorTest) Run(t *testing.T) {
 	at.f.AddVars["cockroach_disk_type"] = *flagATDiskType
 
 	log.Infof(context.TODO(), "creating cluster with %d node(s)", at.StartNodes)
-	if err := at.f.Resize(at.StartNodes, 0 /*writers*/); err != nil {
+	if err := at.f.Resize(at.StartNodes); err != nil {
 		t.Fatal(err)
 	}
 	checkGossip(t, at.f, longWaitTime, hasPeers(at.StartNodes))
@@ -179,7 +185,7 @@ func (at *allocatorTest) Run(t *testing.T) {
 	at.f.Assert(t)
 
 	log.Infof(context.TODO(), "resizing cluster to %d nodes", at.EndNodes)
-	if err := at.f.Resize(at.EndNodes, 0 /*writers*/); err != nil {
+	if err := at.f.Resize(at.EndNodes); err != nil {
 		t.Fatal(err)
 	}
 	checkGossip(t, at.f, longWaitTime, hasPeers(at.EndNodes))

@@ -23,14 +23,14 @@ import (
 	"time"
 )
 
-// TestBuildBabyCluster resizes the cluster to one node, one writer.
-// It does not tear down the cluster after it's done and is mostly
-// useful for testing code changes in the `terrafarm` package.
+// TestBuildBabyCluster resizes the cluster to one node.  It does not tear down
+// the cluster after it's done and is mostly useful for testing code changes in
+// the `terrafarm` package.
 func TestBuildBabyCluster(t *testing.T) {
 	t.Skip("only enabled during testing")
 	f := farmer(t, "baby")
 	defer f.CollectLogs()
-	if err := f.Resize(1, 1); err != nil {
+	if err := f.Resize(1); err != nil {
 		t.Fatal(err)
 	}
 	f.Assert(t)
@@ -39,14 +39,34 @@ func TestBuildBabyCluster(t *testing.T) {
 // TestFiveNodesAndWriters runs a cluster and one writer per node.
 // The test runs until SIGINT is received or the specified duration
 // has passed.
+//
+// Run this as follows:
+// make test \
+//	 TESTTIMEOUT=30m \
+//	 PKG=./acceptance \
+//	 TESTS=FiveNodesAndWriters \
+//	 TESTFLAGS='-v -remote -key-name google_compute_engine -cwd terraform'
 func TestFiveNodesAndWriters(t *testing.T) {
 	deadline := time.After(*flagDuration)
 	f := farmer(t, "write-5n5w")
 	defer f.MustDestroy(t)
+	assertClusterUp := func() {
+		f.Assert(t)
+		for _, host := range f.Nodes() {
+			f.AssertState(t, host, "block_writer", "RUNNING")
+		}
+	}
+
 	const size = 5
-	if err := f.Resize(size, size); err != nil {
+	if err := f.Resize(size); err != nil {
 		t.Fatal(err)
 	}
+	for i := 0; i < size; i++ {
+		if err := f.Start(i, "block_writer"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	if err := f.WaitReady(3 * time.Minute); err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +74,7 @@ func TestFiveNodesAndWriters(t *testing.T) {
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
-	f.Assert(t)
+	assertClusterUp()
 	for {
 		select {
 		case <-deadline:
@@ -62,7 +82,7 @@ func TestFiveNodesAndWriters(t *testing.T) {
 		case <-c:
 			return
 		case <-time.After(time.Minute):
-			f.Assert(t)
+			assertClusterUp()
 		}
 	}
 }
