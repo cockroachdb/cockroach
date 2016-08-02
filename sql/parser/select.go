@@ -68,7 +68,7 @@ func (node *ParenSelect) Format(buf *bytes.Buffer, f FmtFlags) {
 type SelectClause struct {
 	Distinct    bool
 	Exprs       SelectExprs
-	From        TableExprs
+	From        *From
 	Where       *Where
 	GroupBy     GroupBy
 	Having      *Where
@@ -78,9 +78,9 @@ type SelectClause struct {
 
 // Format implements the NodeFormatter interface.
 func (node *SelectClause) Format(buf *bytes.Buffer, f FmtFlags) {
-	if node.tableSelect && len(node.From) == 1 {
+	if node.tableSelect {
 		buf.WriteString("TABLE ")
-		FormatNode(buf, f, node.From[0])
+		FormatNode(buf, f, node.From.Tables[0])
 	} else {
 		buf.WriteString("SELECT ")
 		if node.Distinct {
@@ -158,6 +158,21 @@ func (a AsOfClause) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, a.Expr)
 }
 
+// From represents a FROM clause.
+type From struct {
+	Tables TableExprs
+	AsOf   AsOfClause
+}
+
+// Format implements the NodeFormatter interface.
+func (node *From) Format(buf *bytes.Buffer, f FmtFlags) {
+	FormatNode(buf, f, node.Tables)
+	if node.AsOf.Expr != nil {
+		buf.WriteByte(' ')
+		FormatNode(buf, f, node.AsOf)
+	}
+}
+
 // TableExprs represents a list of table expressions.
 type TableExprs []TableExpr
 
@@ -216,7 +231,6 @@ type AliasedTableExpr struct {
 	Expr  TableExpr
 	Hints *IndexHints
 	As    AliasClause
-	AsOf  AsOfClause
 }
 
 // Format implements the NodeFormatter interface.
@@ -228,10 +242,6 @@ func (node *AliasedTableExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.As.Alias != "" {
 		buf.WriteString(" AS ")
 		FormatNode(buf, f, node.As)
-	}
-	if node.AsOf.Expr != nil {
-		buf.WriteByte(' ')
-		FormatNode(buf, f, node.AsOf)
 	}
 }
 

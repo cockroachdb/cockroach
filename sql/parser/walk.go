@@ -589,7 +589,10 @@ func (stmt *Select) WalkStmt(v Visitor) Statement {
 func (stmt *SelectClause) CopyNode() *SelectClause {
 	stmtCopy := *stmt
 	stmtCopy.Exprs = SelectExprs(append([]SelectExpr(nil), stmt.Exprs...))
-	stmtCopy.From = TableExprs(append([]TableExpr(nil), stmt.From...))
+	stmtCopy.From = &From{
+		Tables: TableExprs(append([]TableExpr(nil), stmt.From.Tables...)),
+		AsOf:   stmt.From.AsOf,
+	}
 	if stmt.Where != nil {
 		wCopy := *stmt.Where
 		stmtCopy.Where = &wCopy
@@ -613,6 +616,16 @@ func (stmt *SelectClause) WalkStmt(v Visitor) Statement {
 				ret = stmt.CopyNode()
 			}
 			ret.Exprs[i].Expr = e
+		}
+	}
+
+	if stmt.From != nil && stmt.From.AsOf.Expr != nil {
+		e, changed := WalkExpr(v, stmt.From.AsOf.Expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.From.AsOf.Expr = e
 		}
 	}
 
