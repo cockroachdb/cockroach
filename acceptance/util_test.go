@@ -103,6 +103,8 @@ var flagATCockroachEnv = flag.String("at.cockroach-env", "",
 	"supervisor-style environment variables to pass to cockroach")
 var flagATDiskType = flag.String("at.disk-type", "pd-standard",
 	"type of disk (either 'pd-standard' for spinny disk, or 'pd-ssd' for SSD)")
+var flagATMaxStdDev = flag.Float64("at.std-dev", 10,
+	"maximum standard deviation of replica counts")
 
 var testFuncRE = regexp.MustCompile("^(Test|Benchmark)")
 
