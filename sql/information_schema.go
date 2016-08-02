@@ -98,6 +98,9 @@ CREATE TABLE information_schema.tables (
 			sort.Strings(dbTableNames)
 			for _, tableName := range dbTableNames {
 				table := dbTables[tableName]
+				if !userCanSeeTable(table, p.session.User) {
+					continue
+				}
 				tableType := tableTypeBaseTable
 				if isVirtualDescriptor(table) {
 					tableType = tableTypeSystemView
@@ -113,4 +116,9 @@ CREATE TABLE information_schema.tables (
 		}
 		return nil
 	},
+}
+
+func userCanSeeTable(table *sqlbase.TableDescriptor, user string) bool {
+	return table.State == sqlbase.TableDescriptor_PUBLIC &&
+		(table.Privileges.AnyPrivilege(user) || isVirtualDescriptor(table))
 }
