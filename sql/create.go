@@ -653,11 +653,17 @@ func (n *createTableNode) finalizeFKs(desc *sqlbase.TableDescriptor, fkTargets [
 			srcIdx.ForeignKey.Table = desc.ID
 			continue
 		}
+	}
 
-		// TODO(dt): Only save each referenced table once.
+	saved := make(map[sqlbase.ID]struct{}, len(fkTargets))
+	for _, t := range fkTargets {
+		if _, ok := saved[t.target.ID]; ok {
+			continue
+		}
 		if err := n.p.saveNonmutationAndNotify(t.target); err != nil {
 			return err
 		}
+		saved[t.target.ID] = struct{}{}
 	}
 
 	if desc.State == sqlbase.TableDescriptor_ADD {
