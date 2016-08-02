@@ -243,8 +243,8 @@ func (a Allocator) RemoveTarget(existing []roachpb.ReplicaDescriptor, leaseStore
 		if exist.StoreID == leaseStoreID {
 			continue
 		}
-		desc := a.storePool.getStoreDescriptor(exist.StoreID)
-		if desc == nil {
+		desc, ok := a.storePool.getStoreDescriptor(exist.StoreID)
+		if !ok {
 			continue
 		}
 		sl.add(desc)
@@ -294,8 +294,8 @@ func (a Allocator) RebalanceTarget(
 		if leaseStoreID == repl.StoreID {
 			continue
 		}
-		storeDesc := a.storePool.getStoreDescriptor(repl.StoreID)
-		if storeDesc != nil && a.shouldRebalance(storeDesc, sl) {
+		storeDesc, ok := a.storePool.getStoreDescriptor(repl.StoreID)
+		if ok && a.shouldRebalance(storeDesc, sl) {
 			shouldRebalance = true
 			break
 		}
@@ -319,7 +319,10 @@ func (a *Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
 	if !a.options.AllowRebalance {
 		return false
 	}
-	desc := a.storePool.getStoreDescriptor(storeID)
+	desc, ok := a.storePool.getStoreDescriptor(storeID)
+	if !ok {
+		return false
+	}
 	sl, _, _ := a.storePool.getStoreList(roachpb.Attributes{}, true)
 	return a.shouldRebalance(desc, sl)
 }
@@ -355,7 +358,7 @@ func (a Allocator) improve(
 // shouldRebalance returns whether the specified store is a candidate for
 // having a replica removed from it given the candidate store list.
 func (a Allocator) shouldRebalance(
-	store *roachpb.StoreDescriptor, sl StoreList,
+	store roachpb.StoreDescriptor, sl StoreList,
 ) bool {
 	rcb := rangeCountBalancer{a.randGen}
 	return rcb.shouldRebalance(store, sl)
