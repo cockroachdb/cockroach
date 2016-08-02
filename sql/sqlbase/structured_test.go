@@ -979,3 +979,49 @@ func TestFitColumnToFamily(t *testing.T) {
 		}
 	}
 }
+
+func TestMaybeUpgradeFormatVersion(t *testing.T) {
+	tests := []struct {
+		shouldUpgrade bool
+		desc          TableDescriptor
+		verify        func(i int, desc *TableDescriptor) // nil means no extra verification.
+	}{
+		{
+			shouldUpgrade: true,
+			desc: TableDescriptor{
+				FormatVersion: BaseFormatVersion,
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "foo"},
+				},
+			},
+			verify: func(i int, desc *TableDescriptor) {
+				if len(desc.Families) == 0 {
+					t.Errorf("%d: expected families to be set, but it was empty", i)
+				}
+			},
+		},
+		// Test that a version from the future is left alone.
+		{
+			shouldUpgrade: false,
+			desc: TableDescriptor{
+				FormatVersion: InterleavedFormatVersion,
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "foo"},
+				},
+			},
+			verify: nil,
+		},
+	}
+	for i, test := range tests {
+		desc := test.desc
+		upgraded := desc.MaybeUpgradeFormatVersion()
+		if test.shouldUpgrade && !upgraded {
+			t.Fatalf("%d: expected the descriptor to be upgraded, but it wasn't", i)
+		} else if !test.shouldUpgrade && upgraded {
+			t.Fatalf("%d: expected the descriptor to left unchanged, but it wasn't", i)
+		}
+		if test.verify != nil {
+			test.verify(i, &desc)
+		}
+	}
+}
