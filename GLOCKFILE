@@ -117,6 +117,5 @@ gopkg.in/inf.v0 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de
 honnef.co/go/lint a730e73f0085f274d67b586a1d587fd6e42e6708
 honnef.co/go/simple aa6f9e72ec86009fdfc110b52e2c769d48d5a904
-honnef.co/go/simple 264f25f0dbb049dd9e46440044816cda39ba0343
 honnef.co/go/staticcheck 4e4406f161a1bf5c12e243190843989e462fa07b
 honnef.co/go/unused 9057d575b3bb51f1e1251088a8b8196f4226f936
