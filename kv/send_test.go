@@ -443,7 +443,7 @@ func TestClientNotReady(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := grpcConn.Close(); err != nil {
+			if err := grpcConn.Close(); err != nil && err != grpc.ErrClientConnClosing {
 				t.Fatal(err)
 			}
 
@@ -477,7 +477,7 @@ func TestClientNotReady(t *testing.T) {
 		_, err := sendBatch(SendOptions{
 			Context: context.Background(),
 		}, addrs, nodeContext)
-		if !testutils.IsError(err, "connection is closing") {
+		if !testutils.IsError(err, "connection is closing|failed fast due to transport failure") {
 			errCh <- errors.Wrap(err, "unexpected error")
 		} else {
 			close(errCh)
@@ -496,7 +496,7 @@ func TestClientNotReady(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := grpcConn.Close(); err != nil {
+	if err := grpcConn.Close(); err != nil && err != grpc.ErrClientConnClosing {
 		t.Fatal(err)
 	}
 	for err := range errCh {
