@@ -58,14 +58,13 @@ type Farmer struct {
 	// state.
 	StateFile string
 	// AddVars are additional Terraform variables to be set during calls to Add.
-	AddVars        map[string]string
-	KeepCluster    string
-	nodes, writers []string
+	AddVars     map[string]string
+	KeepCluster string
+	nodes       []string
 }
 
 func (f *Farmer) refresh() {
 	f.nodes = f.output("instances")
-	f.writers = f.output("example_block_writer")
 }
 
 // FirstInstance returns the address of the first instance.
@@ -84,45 +83,32 @@ func (f *Farmer) Nodes() (hosts []string) {
 	return append(hosts, f.nodes...)
 }
 
-// Writers returns a (copied) slice of provisioned block writers' host names.
-func (f *Farmer) Writers() (hosts []string) {
-	if len(f.writers)+len(f.nodes) == 0 {
-		f.refresh()
-	}
-	return append(hosts, f.writers...)
-}
-
 // NumNodes returns the number of nodes.
 func (f *Farmer) NumNodes() int {
 	return len(f.Nodes())
 }
 
-// NumWriters returns the number of block writers.
-func (f *Farmer) NumWriters() int {
-	return len(f.Writers())
-}
-
-// Add provisions the given number of nodes and block writers, respectively.
-func (f *Farmer) Add(nodes, writers int) error {
+// Add provisions the given number of nodes.
+func (f *Farmer) Add(nodes int) error {
 	nodes += f.NumNodes()
-	writers += f.NumWriters()
-	args := []string{fmt.Sprintf("-var=num_instances=%d", nodes),
+	args := []string{
+		fmt.Sprintf("-var=num_instances=%d", nodes),
 		fmt.Sprintf("-var=stores=%s", f.Stores),
-		fmt.Sprintf("-var=example_block_writer_instances=%d", writers)}
+	}
 	for v, val := range f.AddVars {
 		args = append(args, fmt.Sprintf("-var=%s=%s", v, val))
 	}
 
-	if nodes == 0 && writers == 0 {
+	if nodes == 0 {
 		return f.runErr("terraform", f.appendDefaults(append([]string{"destroy", "--force"}, args...))...)
 	}
 	return f.apply(args...)
 }
 
 // Resize is the counterpart to Add which resizes a cluster given
-// the desired number of nodes and writers.
-func (f *Farmer) Resize(nodes, writers int) error {
-	return f.Add(nodes-f.NumNodes(), writers-f.NumWriters())
+// the desired number of nodes.
+func (f *Farmer) Resize(nodes int) error {
+	return f.Add(nodes - f.NumNodes())
 }
 
 // AbsLogDir returns the absolute log dir to which logs are written.
@@ -143,7 +129,7 @@ func (f *Farmer) CollectLogs() {
 		fmt.Fprint(os.Stderr, err)
 		return
 	}
-	hosts := append(f.Nodes(), f.Writers()...)
+	hosts := append(f.Nodes())
 	const src = "logs"
 	for i, host := range hosts {
 		var dest string
@@ -181,7 +167,7 @@ func (f *Farmer) Destroy(t *testing.T) error {
 		return nil
 	}
 
-	if err := f.Resize(0, 0); err != nil {
+	if err := f.Resize(0); err != nil {
 		return err
 	}
 	return os.Remove(filepath.Join(baseDir, f.StateFile))
@@ -329,17 +315,16 @@ func (f *Farmer) Restart(i int) error {
 	return err
 }
 
-// StartWriter starts the given process on the ith writer instance.
-func (f *Farmer) StartWriter(i int, process string) error {
-	_, _, err := f.execSupervisor(f.Writers()[i], "start "+process)
+// Start starts the given process on the ith node.
+func (f *Farmer) Start(i int, process string) error {
+	_, _, err := f.execSupervisor(f.Nodes()[i], "start "+process)
 	return err
 }
 
-// StopWriter stop the given process on the ith writer instance. This is
-// useful for terminating a load generator cleanly to get stats outputted
-// upon process termination.
-func (f *Farmer) StopWriter(i int, process string) error {
-	_, _, err := f.execSupervisor(f.Writers()[i], "stop "+process)
+// Stop stops the given process on the ith node. This is useful for terminating
+// a load generator cleanly to get stats outputted upon process termination.
+func (f *Farmer) Stop(i int, process string) error {
+	_, _, err := f.execSupervisor(f.Nodes()[i], "stop "+process)
 	return err
 }
 

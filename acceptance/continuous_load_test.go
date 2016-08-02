@@ -15,7 +15,6 @@
 package acceptance
 
 import (
-	"errors"
 	"flag"
 	"net/http"
 	"regexp"
@@ -23,12 +22,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/acceptance/terrafarm"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
-	"golang.org/x/net/context"
 )
 
 // Run tests in this file as follows:
@@ -37,7 +38,7 @@ import (
 //   PKG=./acceptance \
 //   TESTTIMEOUT=6h \
 //   TESTS=ContinuousLoad_BlockWriter \
-//   TESTFLAGS='-v -remote -key-name google_compute_engine -cwd allocator_terraform -nodes 4 -tf.keep-cluster=failed'
+//   TESTFLAGS='-v -remote -key-name google_compute_engine -cwd terraform -nodes 4 -tf.keep-cluster=failed'
 //
 // Load is generated for the duration specified by TESTTIMEOUT, minus some time
 // required for the orderly teardown of resources created by the test.  Because
@@ -84,6 +85,26 @@ func (cl continuousLoadTest) queryCount(f *terrafarm.Farmer) (float64, error) {
 	return count, nil
 }
 
+func (cl continuousLoadTest) startLoad(f *terrafarm.Farmer) error {
+	if *flagCLTWriters > len(f.Nodes()) {
+		return errors.Errorf("writers (%d) > nodes (%d)", *flagCLTWriters, len(f.Nodes()))
+	}
+
+	// We may have to retry restarting the load generators, because CockroachDB
+	// might have been started too recently to start accepting connections.
+	started := make(map[int]bool)
+	return util.RetryForDuration(10*time.Second, func() error {
+		for i := 0; i < *flagCLTWriters; i++ {
+			if !started[i] {
+				if err := f.Start(i, cl.Process); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+}
+
 // Run performs a continuous load test with the given parameters, checking the
 // health of the cluster regularly. Any failure of a CockroachDB node or load
 // generator constitutes a test failure. The test runs for the duration given
@@ -101,7 +122,7 @@ func (cl continuousLoadTest) Run(t *testing.T) {
 		log.Infof(ctx, "load test will run indefinitely")
 	}
 
-	// Start cluster and load generator.
+	// Start cluster and load.
 	defer func() {
 		if r := recover(); r != nil {
 			t.Errorf("recovered from panic to destroy cluster: %v", r)
@@ -112,12 +133,12 @@ func (cl continuousLoadTest) Run(t *testing.T) {
 	if cl.CockroachDiskSizeGB != 0 {
 		f.AddVars["cockroach_disk_size"] = strconv.Itoa(cl.CockroachDiskSizeGB)
 	}
-	if err := f.Resize(cl.NumNodes, 1 /* writer */); err != nil {
+	if err := f.Resize(cl.NumNodes); err != nil {
 		t.Fatal(err)
 	}
 	checkGossip(t, f, longWaitTime, hasPeers(cl.NumNodes))
 	start := timeutil.Now()
-	if err := f.StartWriter(0, cl.Process); err != nil {
+	if err := cl.startLoad(f); err != nil {
 		t.Fatal(err)
 	}
 	cl.assert(t, f)
@@ -142,6 +163,9 @@ func (cl continuousLoadTest) Run(t *testing.T) {
 				t.Fatalf("no queries in the last %s", healthCheckInterval)
 			}
 			qps := (queryCount - lastQueryCount) / timeutil.Now().Sub(lastHealthCheck).Seconds()
+			if qps < *flagCLTMinQPS {
+				t.Fatalf("qps (%.1f) < min (%.1f)", qps, *flagCLTMinQPS)
+			}
 			lastQueryCount = queryCount
 			lastHealthCheck = timeutil.Now()
 			healthCheckTimer.Reset(healthCheckInterval)
@@ -149,7 +173,7 @@ func (cl continuousLoadTest) Run(t *testing.T) {
 		case <-ctx.Done():
 			log.Infof(ctx, "load test finished")
 			cl.assert(t, f)
-			if err := f.StopWriter(0, cl.Process); err != nil {
+			if err := f.Stop(0, cl.Process); err != nil {
 				t.Error(err)
 			}
 			return
@@ -178,7 +202,7 @@ func (cl continuousLoadTest) shortTestTimeout() string {
 // assert fails the test if CockroachDB or the load generators are down.
 func (cl continuousLoadTest) assert(t *testing.T, f *terrafarm.Farmer) {
 	f.Assert(t)
-	for _, host := range f.Writers() {
+	for _, host := range f.Nodes()[0:*flagCLTWriters] {
 		f.AssertState(t, host, cl.Process, "RUNNING")
 	}
 }
