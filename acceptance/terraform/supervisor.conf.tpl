@@ -36,7 +36,7 @@ environment=${cockroach_env}
 
 [program:block_writer]
 directory=%(here)s
-command=%(here)s/block_writer -concurrency 10 -min-block-bytes=16384 -max-block-bytes=65535 --tolerate-errors -benchmark-name ${benchmark_name} 'postgres://root@${node_address}:${cockroach_port}/?sslmode=disable'
+command=%(here)s/block_writer -concurrency 10 -min-block-bytes=16384 -max-block-bytes=65535 --tolerate-errors -benchmark-name ${benchmark_name} 'postgres://root@$localhost:${cockroach_port}/?sslmode=disable'
 process_name=%(program_name)s
 numprocs=1
 autostart=false
@@ -48,7 +48,7 @@ stdout_logfile=%(here)s/logs/%(program_name)s.stdout
 
 [program:photos]
 directory=%(here)s
-command=%(here)s/photos --users 3 --benchmark-name ${benchmark_name} --db postgres://root@${node_address}:${cockroach_port}/photos?sslmode=disable
+command=%(here)s/photos --users 3 --benchmark-name ${benchmark_name} --db postgres://root@localhost:${cockroach_port}/photos?sslmode=disable
 process_name=%(program_name)s
 numprocs=1
 autostart=false

@@ -106,3 +106,9 @@ variable "cockroach_root_disk_type" {
 variable "cockroach_env" {
   default = ""
 }
+
+# This is included in the benchmark results at the end of our load generators
+# to associate the results (for benchviz) with a specific test.
+variable "benchmark_name" {
+  default = "BenchmarkBlockWriter"
+}

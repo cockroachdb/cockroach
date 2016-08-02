@@ -66,6 +66,10 @@ func init() {
 		"keep the cluster after the test, either 'always', 'never', or 'failed'")
 
 	flag.Parse()
+
+	if *flagCLTWriters == -1 {
+		*flagCLTWriters = *flagNodes
+	}
 }
 
 var flagDuration = flag.Duration("d", cluster.DefaultDuration, "duration to run the test")
@@ -83,6 +87,7 @@ var flagConfig = flag.String("config", "", "a json TestConfig proto, see testcon
 var flagPrivileged = flag.Bool("privileged", os.Getenv("CIRCLECI") != "true",
 	"run containers in privileged mode (required for nemesis tests")
 
+// Terrafarm flags.
 var flagTFReuseCluster = flag.String("reuse", "",
 	`attempt to use the cluster with the given name.
 	  Tests which don't support this may behave unexpectedly.
@@ -92,6 +97,8 @@ var flagTFReuseCluster = flag.String("reuse", "",
 
 var flagTFKeepCluster = keepClusterVar(terrafarm.KeepClusterNever) // see init()
 
+// Allocator test flags.
+//
 // TODO(cuongdo): These should be refactored so that they're not allocator
 // test-specific when we have more than one kind of system test that uses these
 // flags.
@@ -105,6 +112,12 @@ var flagATDiskType = flag.String("at.disk-type", "pd-standard",
 	"type of disk (either 'pd-standard' for spinny disk, or 'pd-ssd' for SSD)")
 var flagATMaxStdDev = flag.Float64("at.std-dev", 10,
 	"maximum standard deviation of replica counts")
+
+// continuousLoadTest (CLT) flags.
+var flagCLTWriters = flag.Int("clt.writers", -1,
+	"# of load generators to spawn (defaults to # of nodes)")
+var flagCLTMinQPS = flag.Float64("clt.min-qps", 5.0,
+	"fail load tests when queries per second drops below this during a health check interval")
 
 var testFuncRE = regexp.MustCompile("^(Test|Benchmark)")
 
@@ -317,7 +330,7 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
 	}
 	f := farmer(t, "")
 	c = f
-	if err := f.Resize(*flagNodes, 0); err != nil {
+	if err := f.Resize(*flagNodes); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.WaitReady(5 * time.Minute); err != nil {
