@@ -359,6 +359,13 @@ func (e *Executor) ExecuteStatements(
 	session.planner.resetForBatch(e)
 	session.planner.semaCtx.Placeholders.Assign(pinfo)
 
+	defer func() {
+		if r := recover(); r != nil {
+			// On a panic, prepend the executed SQL.
+			panic(fmt.Errorf("%s: %s", stmts, r))
+		}
+	}()
+
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
 	return e.execRequest(ctx, session, stmts)
