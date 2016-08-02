@@ -54,6 +54,11 @@ type StreamEncoder struct {
 	msgTrl StreamTrailer
 }
 
+func (se *StreamEncoder) setHeaderFields(flowID FlowID, streamID StreamID) {
+	se.msgHdr.FlowID = flowID
+	se.msgHdr.StreamID = streamID
+}
+
 // AddRow encodes a row.
 func (se *StreamEncoder) AddRow(row sqlbase.EncDatumRow) error {
 	if se.infos == nil {

@@ -16,18 +16,20 @@
 
 package distsql
 
-import "github.com/pkg/errors"
+import (
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/util/encoding"
+)
 
-func makeRouter(typ OutputRouterSpec_Type, streams []RowReceiver) (
-	RowReceiver, error,
-) {
-	switch len(streams) {
-	case 0:
-		return nil, errors.Errorf("no streams in router")
-	case 1:
-		// Special passthrough case - no router.
-		return streams[0], nil
-	default:
-		return nil, errors.Errorf("router type %s not supported", typ)
+func convertColumnOrdering(specOrdering Ordering) sqlbase.ColumnOrdering {
+	ordering := make(sqlbase.ColumnOrdering, len(specOrdering.Columns))
+	for i, c := range specOrdering.Columns {
+		ordering[i].ColIdx = int(c.ColIdx)
+		if c.Direction == Ordering_Column_ASC {
+			ordering[i].Direction = encoding.Ascending
+		} else {
+			ordering[i].Direction = encoding.Descending
+		}
 	}
+	return ordering
 }

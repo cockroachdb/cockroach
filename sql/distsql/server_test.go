@@ -59,8 +59,8 @@ func TestServer(t *testing.T) {
 
 	txn := client.NewTxn(context.Background(), *kvDB)
 
-	req := &SetupFlowsRequest{Txn: txn.Proto}
-	req.Flows = []FlowSpec{{
+	req := &SetupFlowRequest{Txn: txn.Proto}
+	req.Flow = FlowSpec{
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &ts},
 			Output: []OutputRouterSpec{{
@@ -68,7 +68,7 @@ func TestServer(t *testing.T) {
 				Streams: []StreamEndpointSpec{{Mailbox: &MailboxSpec{SimpleResponse: true}}},
 			}},
 		}},
-	}}
+	}
 
 	distSQLClient := NewDistSQLClient(conn)
 	stream, err := distSQLClient.RunSimpleFlow(context.Background(), req)
