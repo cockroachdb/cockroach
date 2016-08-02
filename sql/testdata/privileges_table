@@ -247,3 +247,40 @@ INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO NOTHING
 
 statement ok
 INSERT INTO t VALUES (1, 2) ON CONFLICT (k) DO UPDATE SET v = excluded.v
+
+user root
+
+statement ok
+DROP TABLE t
+
+# SHOW privileges.
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v int)
+
+user testuser
+
+statement error user testuser has no privileges on table t
+SHOW COLUMNS FROM t
+
+statement error user testuser has no privileges on table t
+SHOW CREATE TABLE t
+
+statement error user testuser has no privileges on table t
+SHOW INDEX FROM t
+
+user root
+
+statement ok
+GRANT SELECT ON t TO testuser
+
+user testuser
+
+statement ok
+SHOW COLUMNS FROM t
+
+statement ok
+SHOW CREATE TABLE t
+
+statement ok
+SHOW INDEX FROM t
