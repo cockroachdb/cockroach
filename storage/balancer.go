@@ -33,11 +33,12 @@ type nodeIDSet map[roachpb.NodeID]struct{}
 
 func formatCandidates(
 	selected *roachpb.StoreDescriptor,
-	candidates []*roachpb.StoreDescriptor,
+	candidates []roachpb.StoreDescriptor,
 ) string {
 	var buf bytes.Buffer
 	_, _ = buf.WriteString("[")
-	for i, candidate := range candidates {
+	for i := range candidates {
+		candidate := &candidates[i]
 		if i > 0 {
 			_, _ = buf.WriteString(" ")
 		}
@@ -58,7 +59,8 @@ type rangeCountBalancer struct {
 
 func (rcb rangeCountBalancer) selectBest(sl StoreList) *roachpb.StoreDescriptor {
 	var best *roachpb.StoreDescriptor
-	for _, candidate := range sl.stores {
+	for i := range sl.stores {
+		candidate := &sl.stores[i]
 		if best == nil {
 			best = candidate
 			continue
@@ -89,7 +91,8 @@ func (rcb rangeCountBalancer) selectGood(
 
 func (rcb rangeCountBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
 	var worst *roachpb.StoreDescriptor
-	for _, candidate := range sl.stores {
+	for i := range sl.stores {
+		candidate := &sl.stores[i]
 		if worst == nil {
 			worst = candidate
 			continue
@@ -142,7 +145,7 @@ func (rcb rangeCountBalancer) improve(
 }
 
 func (rcb rangeCountBalancer) shouldRebalance(
-	store *roachpb.StoreDescriptor, sl StoreList,
+	store roachpb.StoreDescriptor, sl StoreList,
 ) bool {
 	// Moving a replica from the given store makes its range count converge on
 	// the mean range count.
@@ -162,8 +165,8 @@ func (rcb rangeCountBalancer) shouldRebalance(
 // store list, excluding any stores that are too full to accept more replicas.
 func selectRandom(
 	randGen allocatorRand, count int, sl StoreList, excluded nodeIDSet,
-) []*roachpb.StoreDescriptor {
-	var descs []*roachpb.StoreDescriptor
+) []roachpb.StoreDescriptor {
+	var descs []roachpb.StoreDescriptor
 	// Randomly permute available stores matching the required attributes.
 	randGen.Lock()
 	defer randGen.Unlock()
@@ -184,9 +187,6 @@ func selectRandom(
 		if len(descs) >= count {
 			break
 		}
-	}
-	if len(descs) == 0 {
-		return nil
 	}
 	return descs
 }
