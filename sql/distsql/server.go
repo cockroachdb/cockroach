@@ -76,22 +76,20 @@ func (ds *ServerImpl) setupTxn(
 // SetupSimpleFlow sets up a simple flow, connecting the simple response output
 // stream to the given RowReceiver. The flow is not started.
 func (ds *ServerImpl) SetupSimpleFlow(
-	ctx context.Context, req *SetupFlowsRequest, output RowReceiver,
+	ctx context.Context, req *SetupFlowRequest, output RowReceiver,
 ) (*Flow, error) {
-	flowSpec := &req.Flows[0]
-
 	txn := ds.setupTxn(ctx, &req.Txn)
 	// TODO(radu): "merge" information from ctx and the server context.
 	flowCtx := FlowCtx{
 		Context: ds.ServerContext.Context,
-		id:      flowSpec.FlowID,
+		id:      req.Flow.FlowID,
 		evalCtx: &ds.evalCtx,
 		rpcCtx:  ds.RPCContext,
 		txn:     txn,
 	}
 
 	f := newFlow(flowCtx, ds.flowRegistry, output)
-	err := f.setupFlow(flowSpec)
+	err := f.setupFlow(&req.Flow)
 	if err != nil {
 		log.Errorf(ds, err.Error(), "", err)
 		return nil, err
@@ -101,11 +99,8 @@ func (ds *ServerImpl) SetupSimpleFlow(
 
 // RunSimpleFlow is part of the DistSQLServer interface.
 func (ds *ServerImpl) RunSimpleFlow(
-	req *SetupFlowsRequest, stream DistSQL_RunSimpleFlowServer,
+	req *SetupFlowRequest, stream DistSQL_RunSimpleFlowServer,
 ) error {
-	if len(req.Flows) != 1 {
-		return errors.Errorf("expected exactly one flow, got %d", len(req.Flows))
-	}
 	// TODO(radu): merge context with server context.
 
 	// Set up the outgoing mailbox for the stream.
@@ -125,17 +120,10 @@ func (ds *ServerImpl) RunSimpleFlow(
 	return mbox.err
 }
 
-// SetupFlows is part of the DistSQLServer interface.
-func (ds *ServerImpl) SetupFlows(ctx context.Context, req *SetupFlowsRequest) (
+// SetupFlow is part of the DistSQLServer interface.
+func (ds *ServerImpl) SetupFlow(ctx context.Context, req *SetupFlowRequest) (
 	*SimpleResponse, error,
 ) {
-	// For now we don't support multiple flows. We should only need this if we
-	// want to start flows for multiple queries at the same time.
-	if len(req.Flows) != 1 {
-		return nil, errors.Errorf("expected exactly one flow, got %d", len(req.Flows))
-	}
-	flowSpec := &req.Flows[0]
-
 	// Note: ctx will be canceled when the RPC completes, so we can't associate
 	// it with the transaction.
 
@@ -143,13 +131,13 @@ func (ds *ServerImpl) SetupFlows(ctx context.Context, req *SetupFlowsRequest) (
 	txn := ds.setupTxn(ds.ServerContext.Context, &req.Txn)
 	flowCtx := FlowCtx{
 		Context: ds.ServerContext.Context,
-		id:      flowSpec.FlowID,
+		id:      req.Flow.FlowID,
 		evalCtx: &ds.evalCtx,
 		rpcCtx:  ds.RPCContext,
 		txn:     txn,
 	}
 	f := newFlow(flowCtx, ds.flowRegistry, nil)
-	err := f.setupFlow(flowSpec)
+	err := f.setupFlow(&req.Flow)
 	if err != nil {
 		log.Errorf(ds, err.Error(), "", err)
 		return nil, err

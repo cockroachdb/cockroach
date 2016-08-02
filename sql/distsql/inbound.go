@@ -23,8 +23,9 @@ import (
 )
 
 // ProcessInboundStream receives rows from a DistSQL_FlowStreamServer and sends
-// them to a RowReceiver. Optionally processes an initial StreamMessage that
-// was already received.
+// them to a RowReceiver. Optionally processes an initial StreamMessage that was
+// already received (because the first message contains the flow and stream IDs,
+// it needs to be received before we can get here).
 func ProcessInboundStream(
 	ctx *FlowCtx, stream DistSQL_FlowStreamServer, firstMsg *StreamMessage, dst RowReceiver,
 ) error {

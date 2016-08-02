@@ -71,6 +71,8 @@ type Flow struct {
 	processors         []processor
 	outboxes           []*outbox
 
+	// inboundStreams are streams that receive data from other hosts, through
+	// the FlowStream API.
 	inboundStreams map[StreamID]RowReceiver
 	localStreams   map[LocalStreamID]*RowChannel
 
@@ -91,16 +93,16 @@ func newFlow(
 	}
 }
 
-// setupInStream adds a stream to the stream map (inboundStreams or
+// setupInboundStream adds a stream to the stream map (inboundStreams or
 // localStreams).
-func (f *Flow) setupInStream(spec StreamEndpointSpec, rowChan *RowChannel) error {
+func (f *Flow) setupInboundStream(spec StreamEndpointSpec, rowChan *RowChannel) error {
 	if spec.Mailbox != nil {
 		if spec.Mailbox.SimpleResponse || spec.Mailbox.TargetAddr != "" {
 			return errors.Errorf("inbound stream has SimpleResponse or TargetAddr set")
 		}
 		sid := spec.Mailbox.StreamID
 		if _, found := f.inboundStreams[sid]; found {
-			return errors.Errorf("inbound stream %d has multiple connections", sid)
+			return errors.Errorf("inbound stream %d has multiple consumers", sid)
 		}
 		if f.inboundStreams == nil {
 			f.inboundStreams = make(map[StreamID]RowReceiver)
@@ -113,9 +115,9 @@ func (f *Flow) setupInStream(spec StreamEndpointSpec, rowChan *RowChannel) error
 	}
 	sid := spec.LocalStreamID
 	if _, found := f.localStreams[sid]; found {
-		return errors.Errorf("stream %d has multiple connections", sid)
+		return errors.Errorf("local stream %d has multiple consumers", sid)
 	}
-	if f.localStreams[sid] == nil {
+	if f.localStreams == nil {
 		f.localStreams = make(map[LocalStreamID]*RowChannel)
 	}
 	f.localStreams[sid] = rowChan
@@ -198,11 +200,6 @@ func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (processor, 
 
 func (f *Flow) setupFlow(spec *FlowSpec) error {
 	// First step: setup the input synchronizers for all processors.
-	//
-	// This needs to be done as a separate first stage because unordered input
-	// synchronizers work by having all sources push into the same RowChannel;
-	// so the association of RowChannels to streams depends on the input
-	// synchronizer configuration.
 	inputSyncs := make([][]RowSource, len(spec.Processors))
 	for pIdx, ps := range spec.Processors {
 		for _, is := range ps.Input {
@@ -215,7 +212,7 @@ func (f *Flow) setupFlow(spec *FlowSpec) error {
 				if len(is.Streams) == 1 {
 					rowChan := &RowChannel{}
 					rowChan.Init()
-					if err := f.setupInStream(is.Streams[0], rowChan); err != nil {
+					if err := f.setupInboundStream(is.Streams[0], rowChan); err != nil {
 						return err
 					}
 					sync = rowChan
@@ -229,7 +226,7 @@ func (f *Flow) setupFlow(spec *FlowSpec) error {
 				for i, s := range is.Streams {
 					rowChan := &RowChannel{}
 					rowChan.Init()
-					if err := f.setupInStream(s, rowChan); err != nil {
+					if err := f.setupInboundStream(s, rowChan); err != nil {
 						return err
 					}
 					streams[i] = rowChan

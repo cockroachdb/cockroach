@@ -106,8 +106,8 @@ func TestClusterFlow(t *testing.T) {
 	txn := client.NewTxn(context.Background(), *kvDB)
 	fid := FlowID{uuid.MakeV4()}
 
-	req1 := &SetupFlowsRequest{Txn: txn.Proto}
-	req1.Flows = []FlowSpec{{
+	req1 := &SetupFlowRequest{Txn: txn.Proto}
+	req1.Flow = FlowSpec{
 		FlowID: fid,
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &tr1},
@@ -118,10 +118,10 @@ func TestClusterFlow(t *testing.T) {
 				},
 			}},
 		}},
-	}}
+	}
 
-	req2 := &SetupFlowsRequest{Txn: txn.Proto}
-	req2.Flows = []FlowSpec{{
+	req2 := &SetupFlowRequest{Txn: txn.Proto}
+	req2.Flow = FlowSpec{
 		FlowID: fid,
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &tr2},
@@ -132,10 +132,10 @@ func TestClusterFlow(t *testing.T) {
 				},
 			}},
 		}},
-	}}
+	}
 
-	req3 := &SetupFlowsRequest{Txn: txn.Proto}
-	req3.Flows = []FlowSpec{{
+	req3 := &SetupFlowRequest{Txn: txn.Proto}
+	req3.Flow = FlowSpec{
 		FlowID: fid,
 		Processors: []ProcessorSpec{
 			{
@@ -163,7 +163,7 @@ func TestClusterFlow(t *testing.T) {
 					Streams: []StreamEndpointSpec{{Mailbox: &MailboxSpec{SimpleResponse: true}}},
 				}}},
 		},
-	}}
+	}
 
 	var clients []DistSQLClient
 	for i := 0; i < 3; i++ {
@@ -180,7 +180,7 @@ func TestClusterFlow(t *testing.T) {
 	if log.V(1) {
 		log.Infof(ctx, "Setting up flow on 0")
 	}
-	if resp, err := clients[0].SetupFlows(context.Background(), req1); err != nil {
+	if resp, err := clients[0].SetupFlow(context.Background(), req1); err != nil {
 		t.Fatal(err)
 	} else if resp.Error != nil {
 		t.Fatal(resp.Error)
@@ -189,7 +189,7 @@ func TestClusterFlow(t *testing.T) {
 	if log.V(1) {
 		log.Infof(ctx, "Setting up flow on 1")
 	}
-	if resp, err := clients[1].SetupFlows(context.Background(), req2); err != nil {
+	if resp, err := clients[1].SetupFlow(context.Background(), req2); err != nil {
 		t.Fatal(err)
 	} else if resp.Error != nil {
 		t.Fatal(resp.Error)
