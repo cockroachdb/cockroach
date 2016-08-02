@@ -145,7 +145,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 				}
 			case <-replica.store.Stopper().ShouldQuiesce():
 				execPErr = roachpb.NewError(
-					replica.newNotLeaseHolderError(nil, replica.store.StoreID(), replica.Desc()))
+					newNotLeaseHolderError(nil, replica.store.StoreID(), replica.Desc()))
 			}
 		}
 
@@ -170,7 +170,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		// back to indicate that we have no idea who the range lease holder might
 		// be; we've withdrawn from active duty.
 		llChan <- roachpb.NewError(
-			replica.newNotLeaseHolderError(nil, replica.store.StoreID(), replica.mu.state.Desc))
+			newNotLeaseHolderError(nil, replica.store.StoreID(), replica.mu.state.Desc))
 		return llChan
 	}
 	p.llChans = append(p.llChans, llChan)
@@ -232,13 +232,13 @@ func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Er
 	if transferLease != nil {
 		llChan := make(chan *roachpb.Error, 1)
 		llChan <- roachpb.NewError(
-			r.newNotLeaseHolderError(transferLease, r.store.StoreID(), r.mu.state.Desc))
+			newNotLeaseHolderError(transferLease, r.store.StoreID(), r.mu.state.Desc))
 		return llChan
 	}
 	if r.store.IsDrainingLeases() {
 		// We've retired from active duty.
 		llChan := make(chan *roachpb.Error, 1)
-		llChan <- roachpb.NewError(r.newNotLeaseHolderError(nil, r.store.StoreID(), r.mu.state.Desc))
+		llChan <- roachpb.NewError(newNotLeaseHolderError(nil, r.store.StoreID(), r.mu.state.Desc))
 		return llChan
 	}
 	return r.mu.pendingLeaseRequest.InitOrJoinRequest(
@@ -280,7 +280,7 @@ func (r *Replica) AdminTransferLease(target roachpb.StoreID) error {
 		}
 		desc := r.mu.state.Desc
 		if !lease.OwnedBy(r.store.StoreID()) {
-			return nil, nil, r.newNotLeaseHolderError(lease, r.store.StoreID(), desc)
+			return nil, nil, newNotLeaseHolderError(lease, r.store.StoreID(), desc)
 		}
 		// Verify the target is a replica of the range.
 		var ok bool
@@ -301,7 +301,7 @@ func (r *Replica) AdminTransferLease(target roachpb.StoreID) error {
 			}
 			// Another transfer is in progress, and it's not transferring to the
 			// same replica we'd like.
-			return nil, nil, r.newNotLeaseHolderError(nextLease, r.store.StoreID(), desc)
+			return nil, nil, newNotLeaseHolderError(nextLease, r.store.StoreID(), desc)
 		}
 		// No extension in progress; start a transfer.
 		nextLeaseBegin := r.store.Clock().Now()
