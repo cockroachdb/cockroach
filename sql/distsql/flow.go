@@ -19,8 +19,12 @@ package distsql
 import (
 	"sync"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/pkg/errors"
 )
@@ -39,38 +43,117 @@ type FlowID struct {
 	uuid.UUID
 }
 
+// FlowCtx encompasses the contexts needed for various flow components.
+type FlowCtx struct {
+	context.Context
+	id      FlowID
+	evalCtx *parser.EvalContext
+	rpcCtx  *rpc.Context
+	txn     *client.Txn
+}
+
+type flowStatus int
+
+// Flow status indicators.
+const (
+	FlowNotStarted flowStatus = iota
+	FlowRunning
+	FlowFinished
+)
+
 // Flow represents a flow which consists of processors and streams.
 type Flow struct {
-	evalCtx            *parser.EvalContext
-	txn                *client.Txn
+	FlowCtx
+
+	flowRegistry       *flowRegistry
 	simpleFlowConsumer RowReceiver
 	waitGroup          sync.WaitGroup
 	processors         []processor
+	outboxes           []*outbox
+
+	// inboundStreams are streams that receive data from other hosts, through
+	// the FlowStream API.
+	inboundStreams map[StreamID]RowReceiver
+	localStreams   map[LocalStreamID]*RowChannel
+
+	status flowStatus
 }
 
-func (f *Flow) setupMailbox(sp *MailboxSpec) (RowReceiver, error) {
-	// TODO(radu): for now we only support the simple flow mailbox.
-	if !sp.SimpleResponse {
-		return nil, errors.Errorf("mailbox spec %s not supported", sp)
+func newFlow(
+	flowCtx FlowCtx,
+	flowReg *flowRegistry,
+	simpleFlowConsumer RowReceiver,
+) *Flow {
+	// TODO(radu): add Flow ID to flowCtx.Context.
+	return &Flow{
+		FlowCtx:            flowCtx,
+		flowRegistry:       flowReg,
+		simpleFlowConsumer: simpleFlowConsumer,
+		status:             FlowNotStarted,
 	}
-	return f.simpleFlowConsumer, nil
 }
 
-func (f *Flow) setupStreamOut(spec StreamEndpointSpec) (RowReceiver, error) {
-	if spec.LocalStreamID != nil {
-		return nil, errors.Errorf("local endpoints not supported")
+// setupInboundStream adds a stream to the stream map (inboundStreams or
+// localStreams).
+func (f *Flow) setupInboundStream(spec StreamEndpointSpec, rowChan *RowChannel) error {
+	if spec.Mailbox != nil {
+		if spec.Mailbox.SimpleResponse || spec.Mailbox.TargetAddr != "" {
+			return errors.Errorf("inbound stream has SimpleResponse or TargetAddr set")
+		}
+		sid := spec.Mailbox.StreamID
+		if _, found := f.inboundStreams[sid]; found {
+			return errors.Errorf("inbound stream %d has multiple consumers", sid)
+		}
+		if f.inboundStreams == nil {
+			f.inboundStreams = make(map[StreamID]RowReceiver)
+		}
+		if log.V(2) {
+			log.Infof(f.FlowCtx, "Set up inbound stream %d", sid)
+		}
+		f.inboundStreams[sid] = rowChan
+		return nil
 	}
-	if spec.Mailbox == nil {
-		return nil, errors.Errorf("empty endpoint spec")
+	sid := spec.LocalStreamID
+	if _, found := f.localStreams[sid]; found {
+		return errors.Errorf("local stream %d has multiple consumers", sid)
 	}
-	return f.setupMailbox(spec.Mailbox)
+	if f.localStreams == nil {
+		f.localStreams = make(map[LocalStreamID]*RowChannel)
+	}
+	f.localStreams[sid] = rowChan
+	return nil
+}
+
+// setupOutStream sets up an output stream; if the stream is local, the
+// RowChannel is looked up in the localStreams map; otherwise an outgoing
+// mailbox is created.
+func (f *Flow) setupOutStream(spec StreamEndpointSpec) (RowReceiver, error) {
+	if spec.Mailbox != nil {
+		if spec.Mailbox.SimpleResponse {
+			return f.simpleFlowConsumer, nil
+		}
+		outbox := newOutbox(&f.FlowCtx, spec.Mailbox.TargetAddr, f.id, spec.Mailbox.StreamID)
+		f.outboxes = append(f.outboxes, outbox)
+		return outbox, nil
+	}
+	sid := spec.LocalStreamID
+	rowChan, found := f.localStreams[sid]
+	if !found {
+		return nil, errors.Errorf("unconnected inbound stream %d", sid)
+	}
+	// Once we "connect" a stream, we set the value in the map to nil.
+	if rowChan == nil {
+		return nil, errors.Errorf("stream %d has multiple connections", sid)
+	}
+	f.localStreams[sid] = nil
+	return rowChan, nil
 }
 
 func (f *Flow) setupRouter(spec OutputRouterSpec) (RowReceiver, error) {
 	streams := make([]RowReceiver, len(spec.Streams))
 	for i := range spec.Streams {
 		var err error
-		streams[i], err = f.setupStreamOut(spec.Streams[i])
+		streams[i], err = f.setupOutStream(spec.Streams[i])
 		if err != nil {
 			return nil, err
 		}
@@ -78,29 +161,117 @@ func (f *Flow) setupRouter(spec OutputRouterSpec) (RowReceiver, error) {
 	return makeRouter(spec.Type, streams)
 }
 
-// TODO(radu): this should return a general processor interface, not
-// a TableReader.
-func (f *Flow) setupProcessor(ps *ProcessorSpec) (*tableReader, error) {
-	if ps.Core.TableReader == nil {
-		return nil, errors.Errorf("unsupported processor %s", ps)
+func checkNumInOut(inputs []RowSource, outputs []RowReceiver, numIn, numOut int) error {
+	if len(inputs) != numIn {
+		return errors.Errorf("expected %d input(s), got %d", numIn, len(inputs))
 	}
+	if len(outputs) != numOut {
+		return errors.Errorf("expected %d output(s), got %d", numOut, len(outputs))
+	}
+	return nil
+}
+
+func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (processor, error) {
 	if len(ps.Output) != 1 {
 		return nil, errors.Errorf("only single-output processors supported")
 	}
-	out, err := f.setupRouter(ps.Output[0])
-	if err != nil {
-		return nil, err
+	outputs := make([]RowReceiver, len(ps.Output))
+	for i := range ps.Output {
+		var err error
+		outputs[i], err = f.setupRouter(ps.Output[0])
+		if err != nil {
+			return nil, err
+		}
 	}
-	tr, err := newTableReader(ps.Core.TableReader, f.txn, out, f.evalCtx)
-	if err != nil {
-		return nil, err
+	if ps.Core.TableReader != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		return newTableReader(&f.FlowCtx, ps.Core.TableReader, outputs[0])
 	}
-	f.processors = append(f.processors, tr)
-	return tr, nil
+	if ps.Core.JoinReader != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newJoinReader(&f.FlowCtx, ps.Core.JoinReader, inputs[0], outputs[0])
+	}
+	return nil, errors.Errorf("unsupported processor %s", ps)
+}
+
+func (f *Flow) setupFlow(spec *FlowSpec) error {
+	// First step: setup the input synchronizers for all processors.
+	inputSyncs := make([][]RowSource, len(spec.Processors))
+	for pIdx, ps := range spec.Processors {
+		for _, is := range ps.Input {
+			if len(is.Streams) == 0 {
+				return errors.Errorf("input sync with no streams")
+			}
+			var sync RowSource
+			switch is.Type {
+			case InputSyncSpec_UNORDERED:
+				if len(is.Streams) == 1 {
+					rowChan := &RowChannel{}
+					rowChan.Init()
+					if err := f.setupInboundStream(is.Streams[0], rowChan); err != nil {
+						return err
+					}
+					sync = rowChan
+				} else {
+					// TODO(radu): implement multi-input RowChannel "wrapper"
+					return errors.Errorf("unordered sync not implemented")
+				}
+			case InputSyncSpec_ORDERED:
+				// Ordered synchronizer: create a RowChannel for each input.
+				streams := make([]RowSource, len(is.Streams))
+				for i, s := range is.Streams {
+					rowChan := &RowChannel{}
+					rowChan.Init()
+					if err := f.setupInboundStream(s, rowChan); err != nil {
+						return err
+					}
+					streams[i] = rowChan
+				}
+				var err error
+				sync, err = makeOrderedSync(convertColumnOrdering(is.Ordering), streams)
+				if err != nil {
+					return err
+				}
+
+			default:
+				return errors.Errorf("unsupported input sync type %s", is.Type)
+			}
+			inputSyncs[pIdx] = append(inputSyncs[pIdx], sync)
+		}
+	}
+
+	f.processors = make([]processor, len(spec.Processors))
+
+	for i := range spec.Processors {
+		var err error
+		f.processors[i], err = f.makeProcessor(&spec.Processors[i], inputSyncs[i])
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (f *Flow) getInboundStream(sid StreamID) (RowReceiver, error) {
+	// TODO(radu): detect if we connect to a stream multiple times.
+	recv, ok := f.inboundStreams[sid]
+	if !ok {
+		return nil, errors.Errorf("no inbound stream %d for flow %s", sid, f.id)
+	}
+	return recv, nil
 }
 
 // Start starts the flow (each processor runs in their own goroutine).
 func (f *Flow) Start() {
+	f.status = FlowRunning
+	f.flowRegistry.RegisterFlow(f.id, f)
+	for _, o := range f.outboxes {
+		o.start(&f.waitGroup)
+	}
 	f.waitGroup.Add(len(f.processors))
 	for _, p := range f.processors {
 		go p.Run(&f.waitGroup)
@@ -112,10 +283,23 @@ func (f *Flow) Wait() {
 	f.waitGroup.Wait()
 }
 
+// Cleanup should be called when the flow completes (after all processors and
+// mailboxes exited).
+func (f *Flow) Cleanup() {
+	if f.status == FlowFinished {
+		panic("flow cleanup called twice")
+	}
+	if f.status != FlowNotStarted {
+		f.flowRegistry.UnregisterFlow(f.id)
+	}
+	f.status = FlowFinished
+}
+
 // RunSync runs the processors in the flow in order (serially), in the same
 // context (no goroutines are spawned).
 func (f *Flow) RunSync() {
 	for _, p := range f.processors {
 		p.Run(nil)
 	}
+	f.Cleanup()
 }
