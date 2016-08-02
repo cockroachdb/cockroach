@@ -65,9 +65,6 @@ const (
 	InterleavedFormatVersion
 )
 
-// Work around unused const linter.
-const _ = BaseFormatVersion
-
 // MutationID is custom type for TableDescriptor mutations.
 type MutationID uint32
 
