@@ -28,7 +28,7 @@ CREATE TABLE non_unique (product STRING REFERENCES products (vendor))
 statement error type of "customer" \(INT\) does not match foreign key "customers"."email" \(STRING\)
 CREATE TABLE mismatch (customer INT REFERENCES customers (email))
 
-statement error column "product" cannot be used by multiple foreign key constraints
+statement error column\(s\) cannot be used by multiple foreign key constraints
 CREATE TABLE orders (
   id INT PRIMARY KEY,
   product STRING REFERENCES products,
