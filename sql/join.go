@@ -19,8 +19,6 @@ package sql
 import (
 	"fmt"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -230,7 +228,7 @@ func (n *indexJoinNode) Next() (bool, error) {
 		}
 
 		if log.V(3) {
-			log.Infof(context.TODO(), "table scan: %s", sqlbase.PrettySpans(n.table.spans, 0))
+			log.Infof(n.index.p.ctx(), "table scan: %s", sqlbase.PrettySpans(n.table.spans, 0))
 		}
 	}
 	return false, nil

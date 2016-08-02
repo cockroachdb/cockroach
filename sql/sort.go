@@ -35,6 +35,7 @@ import (
 // sortNode represents a node that sorts the rows returned by its
 // sub-node.
 type sortNode struct {
+	ctx      context.Context
 	plan     planNode
 	columns  []ResultColumn
 	ordering sqlbase.ColumnOrdering
@@ -149,7 +150,7 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 		ordering = append(ordering, sqlbase.ColumnOrderInfo{ColIdx: index, Direction: direction})
 	}
 
-	return &sortNode{columns: columns, ordering: ordering}, nil
+	return &sortNode{ctx: p.ctx(), columns: columns, ordering: ordering}, nil
 }
 
 // colIndex takes an expression that refers to a column using an integer, verifies it refers to a
@@ -264,7 +265,7 @@ func (n *sortNode) wrap(plan planNode) (bool, planNode) {
 		// ordering.
 		existingOrdering := plan.Ordering()
 		if log.V(2) {
-			log.Infof(context.TODO(), "Sort: existing=%+v desired=%+v", existingOrdering, n.ordering)
+			log.Infof(n.ctx, "Sort: existing=%+v desired=%+v", existingOrdering, n.ordering)
 		}
 		match := computeOrderingMatch(n.ordering, existingOrdering, false)
 		if match < len(n.ordering) {
@@ -281,7 +282,7 @@ func (n *sortNode) wrap(plan planNode) (bool, planNode) {
 		}
 
 		if log.V(2) {
-			log.Infof(context.TODO(), "Sort: no sorting required")
+			log.Infof(n.ctx, "Sort: no sorting required")
 		}
 	}
 

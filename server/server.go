@@ -192,6 +192,7 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 
 	// Set up Executor
 	eCtx := sql.ExecutorContext{
+		Context:      context.Background(),
 		DB:           s.db,
 		Gossip:       s.gossip,
 		LeaseManager: s.leaseMgr,

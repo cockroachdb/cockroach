@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -142,6 +144,11 @@ type queryRunner interface {
 }
 
 var _ queryRunner = &planner{}
+
+// ctx returns the current session context (suitable for logging/tracing).
+func (p *planner) ctx() context.Context {
+	return p.session.Ctx()
+}
 
 // setTxn implements the queryRunner interface.
 func (p *planner) setTxn(txn *client.Txn) {

@@ -69,7 +69,7 @@ func (ps PreparedStatements) New(
 	placeholderHints parser.PlaceholderTypes,
 ) (*PreparedStatement, error) {
 	// Prepare the query. This completes the typing of placeholders.
-	cols, err := e.Prepare(ctx, query, ps.session, placeholderHints)
+	cols, err := e.Prepare(query, ps.session, placeholderHints)
 	if err != nil {
 		return nil, err
 	}

@@ -433,6 +433,7 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 
 	// Sort the results by constraint name.
 	sort := &sortNode{
+		ctx: p.ctx(),
 		ordering: sqlbase.ColumnOrdering{
 			{ColIdx: 0, Direction: encoding.Ascending},
 			{ColIdx: 1, Direction: encoding.Ascending},

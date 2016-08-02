@@ -29,7 +29,7 @@ import (
 
 func makeTestV3Conn(c net.Conn) v3Conn {
 	return makeV3Conn(c,
-		&sql.Executor{},
+		sql.NewDummyExecutor(),
 		newServerMetrics(metric.NewRegistry()),
 		sql.SessionArgs{},
 	)
