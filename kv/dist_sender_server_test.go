@@ -103,26 +103,23 @@ func setupMultipleRanges(
 
 var errInfo = testutils.MakeCaller(3, 2)
 
-// checkKeysInKVs verifies that a KeyValue slice contains the given keys.
-func checkKeysInKVs(t *testing.T, kvs []client.KeyValue, keys ...string) {
-	if len(keys) != len(kvs) {
-		t.Errorf("%s: expected %d scan results, got %d", errInfo(), len(keys), len(kvs))
-		return
-	}
-	for i, kv := range kvs {
-		expKey := keys[i]
-		if key := string(kv.Key); key != keys[i] {
-			t.Errorf("%s: expected scan key %d to be %q; got %q", errInfo(), i, expKey, key)
-		}
-	}
-}
-
-func checkScanResults(t *testing.T, results []client.Result, expResults [][]string) {
+func checkScanResults(t *testing.T, results []client.Result, expResults [][]string, bound int) {
 	if len(expResults) != len(results) {
 		t.Fatalf("only got %d results, wanted %d", len(expResults), len(results))
 	}
+	// Ensure all the keys returned align properly with what is expected.
+	count := 0
 	for i, res := range results {
-		checkKeysInKVs(t, res.Rows, expResults[i]...)
+		count += len(res.Rows)
+		for j, kv := range res.Rows {
+			if key, expKey := string(kv.Key), expResults[i][j]; key != expKey {
+				t.Errorf("%s: expected scan key (%d, %d) to be %q; got %q", errInfo(), i, j, expKey, key)
+			}
+		}
+	}
+	// The bound was respected.
+	if count != bound {
+		t.Errorf("count = %d, bound %d", count, bound)
 	}
 }
 
@@ -138,6 +135,18 @@ func TestMultiRangeBoundedBatch(t *testing.T) {
 		}
 	}
 
+	// These are the expected results if there is no bound.
+	expResults := [][]string{
+		{"a1", "a2", "a3", "b1", "b2"},
+		{"b1", "b2", "c1"},
+		{"c1", "c2", "d1", "f1", "f2", "f3"},
+		{"f2"},
+	}
+	maxExpCount := 0
+	for _, res := range expResults {
+		maxExpCount += len(res)
+	}
+
 	for bound := 1; bound <= 20; bound++ {
 		b := db.NewBatch()
 		b.Header.MaxSpanRequestKeys = int64(bound)
@@ -150,21 +159,55 @@ func TestMultiRangeBoundedBatch(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// These are the expected results if there is no bound; we trim them below.
-		expResults := [][]string{
-			{"a1", "a2", "a3", "b1", "b2"},
-			{"b1", "b2", "c1"},
-			{"c1", "c2", "d1", "f1", "f2", "f3"},
-			{"f2"},
+		expCount := maxExpCount
+		if bound < maxExpCount {
+			expCount = bound
 		}
-		rem := bound
-		for i := range expResults {
-			if rem < len(expResults[i]) {
-				expResults[i] = expResults[i][:rem]
-			}
-			rem -= len(expResults[i])
+		checkScanResults(t, b.Results, expResults, expCount)
+	}
+}
+
+func TestMultiRangeBoundedBatchReverse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+
+	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
+	for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "c1", "c2", "d1", "f1", "f2", "f3"} {
+		if err := db.Put(key, "value"); err != nil {
+			t.Fatal(err)
 		}
-		checkScanResults(t, b.Results, expResults)
+	}
+
+	// These are the expected results if there is no bound
+	expResults := [][]string{
+		{"b2", "b1", "a3", "a2", "a1"},
+		{"c1", "b2", "b1"},
+		{"f3", "f2", "f1", "d1", "c2", "c1"},
+		{"f2"},
+	}
+	maxExpCount := 0
+	for _, res := range expResults {
+		maxExpCount += len(res)
+	}
+
+	for bound := 1; bound <= 20; bound++ {
+		b := db.NewBatch()
+		b.Header.MaxSpanRequestKeys = int64(bound)
+
+		b.ReverseScan("a", "c")
+		b.ReverseScan("b", "c2")
+		b.ReverseScan("c", "g")
+		b.ReverseScan("f1a", "f2a")
+		if err := db.Run(b); err != nil {
+			t.Fatal(err)
+		}
+
+		expCount := maxExpCount
+		if bound < maxExpCount {
+			expCount = bound
+		}
+		checkScanResults(t, b.Results, expResults, expCount)
 	}
 }
 
