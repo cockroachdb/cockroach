@@ -40,7 +40,7 @@ github.com/cockroachdb/c-snappy d4e7b428fe7fc09e93573df3448567a62df8c9fa
 github.com/cockroachdb/cmux b64f5908f4945f4b11ed4a0a9d3cc1e23350866d
 github.com/cockroachdb/cockroach-go 2e4a60d41697eebb308b1def89f0abaf1c056137
 github.com/cockroachdb/pq 40c6b2414c76cdb84aacc955f79dc844e48ad0c0
-github.com/cockroachdb/stress aa7690c22fd0abd6168ed0e6c361e4f4c5f7ab25
+github.com/cockroachdb/stress 029c9348806514969d1109a6ae36e521af411ca7
 github.com/codahale/hdrhistogram f8ad88b59a584afeee9d334eff879b104439117b
 github.com/coreos/etcd fb64c8ccfeb9408b80c3f657a52ec6cad2fdb3f8
 github.com/cpuguy83/go-md2man 2724a9c9051aa62e9cca11304e7dd518e9e41599
@@ -117,6 +117,5 @@ gopkg.in/inf.v0 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de
 honnef.co/go/lint a730e73f0085f274d67b586a1d587fd6e42e6708
 honnef.co/go/simple aa6f9e72ec86009fdfc110b52e2c769d48d5a904
-honnef.co/go/simple 264f25f0dbb049dd9e46440044816cda39ba0343
 honnef.co/go/staticcheck 4e4406f161a1bf5c12e243190843989e462fa07b
 honnef.co/go/unused 9057d575b3bb51f1e1251088a8b8196f4226f936
