@@ -2008,7 +2008,7 @@ func TestStoreChangeFrozen(t *testing.T) {
 		b := tc.store.Engine().NewBatch()
 		defer b.Close()
 		var h roachpb.Header
-		if _, err := tc.rng.ChangeFrozen(context.Background(), b, nil, h, *fReqVersMismatch); err != nil {
+		if _, _, err := tc.rng.ChangeFrozen(context.Background(), b, nil, h, *fReqVersMismatch); err != nil {
 			t.Fatal(err)
 		}
 		assertFrozen(false) // since we do not commit the above batch
@@ -2138,18 +2138,12 @@ func TestStoreGCThreshold(t *testing.T) {
 		WallTime: 2E9,
 	}
 
-	b := tc.store.Engine().NewBatch()
-	var h roachpb.Header
 	gcr := roachpb.GCRequest{
 		Threshold: threshold,
 	}
-	if _, err := tc.rng.GC(context.Background(), b, nil, h, gcr); err != nil {
-		t.Fatal(err)
+	if _, pErr := tc.SendWrapped(&gcr); pErr != nil {
+		t.Fatal(pErr)
 	}
-	if err := b.Commit(); err != nil {
-		t.Fatal(err)
-	}
-	b.Close()
 
 	assertThreshold(threshold)
 }
