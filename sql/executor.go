@@ -297,7 +297,6 @@ func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 // populate the missing types. The column result types are returned (or
 // nil if there are no results).
 func (e *Executor) Prepare(
-	ctx context.Context,
 	query string,
 	session *Session,
 	pinfo parser.PlaceholderTypes,
@@ -357,7 +356,7 @@ func (e *Executor) Prepare(
 
 // ExecuteStatements executes the given statement(s) and returns a response.
 func (e *Executor) ExecuteStatements(
-	ctx context.Context, session *Session, stmts string, pinfo *parser.PlaceholderInfo,
+	session *Session, stmts string, pinfo *parser.PlaceholderInfo,
 ) StatementResults {
 
 	session.planner.resetForBatch(e)
@@ -365,7 +364,7 @@ func (e *Executor) ExecuteStatements(
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	return e.execRequest(ctx, session, stmts)
+	return e.execRequest(session, stmts)
 }
 
 // blockConfigUpdates blocks any gossip updates to the system config
@@ -400,7 +399,7 @@ func (e *Executor) waitForConfigUpdate() {
 // Args:
 //  txnState: State about about ongoing transaction (if any). The state will be
 //   updated.
-func (e *Executor) execRequest(ctx context.Context, session *Session, sql string) StatementResults {
+func (e *Executor) execRequest(session *Session, sql string) StatementResults {
 	var res StatementResults
 	txnState := &session.TxnState
 	planMaker := &session.planner
@@ -458,7 +457,7 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 					}()
 				}
 			}
-			txnState.reset(ctx, e, session)
+			txnState.reset(session.Context(), e, session)
 			txnState.State = Open
 			txnState.autoRetry = true
 			txnState.sqlTimestamp = e.ctx.Clock.PhysicalTime()
@@ -506,14 +505,18 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 			if aErr, ok := err.(*client.AutoCommitError); ok {
 				// Until #7881 fixed.
 				if txn == nil {
-					log.Errorf(ctx, "AutoCommitError on nil txn: %+v, txnState %+v, execOpt %+v, stmts %+v, remaining %+v", err, txnState, execOpt, stmts, remainingStmts)
+					log.Errorf(session.Context(), "AutoCommitError on nil txn: %+v, "+
+						"txnState %+v, execOpt %+v, stmts %+v, remaining %+v",
+						err, txnState, execOpt, stmts, remainingStmts)
 				}
 				lastResult.Err = aErr
 				e.txnAbortCount.Inc(1)
 				txn.CleanupOnError(err)
 			}
 			if lastResult.Err == nil {
-				log.Fatalf(ctx, "error (%s) was returned, but it was not set in the last result (%v)", err, lastResult)
+				log.Fatalf(session.Context(),
+					"error (%s) was returned, but it was not set in the last result (%v)",
+					err, lastResult)
 			}
 		}
 
@@ -655,10 +658,6 @@ func (e *Executor) execStmtsInCurrentTxn(
 	}
 	if txnState.State == Open && planMaker.txn == nil {
 		panic(fmt.Sprintf("inconsistent planMaker txn state. txnState: %+v", txnState))
-	}
-	ctx := e.ctx.Context
-	if txnState.txn != nil {
-		ctx = txnState.txn.Context
 	}
 
 	for i, stmt := range stmts {

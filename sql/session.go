@@ -64,6 +64,9 @@ type Session struct {
 type SessionArgs struct {
 	Database string
 	User     string
+	// BaseCtx is the context from which the session context is derived. If it
+	// is nil, the Executor context will be used.
+	BaseCtx context.Context
 }
 
 // NewSession creates and initializes new Session object.
@@ -90,7 +93,15 @@ func NewSession(args SessionArgs, e *Executor, remote net.Addr) *Session {
 	}
 	s.Trace = trace.New("sql."+args.User, remoteStr)
 	s.Trace.SetMaxEvents(100)
-	s.context, s.cancel = context.WithCancel(context.Background())
+	baseCtx := args.BaseCtx
+	if baseCtx == nil {
+		// Use the Executor's context.
+		baseCtx = e.ctx.Context
+	}
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	s.context, s.cancel = context.WithCancel(baseCtx)
 	return s
 }
 
