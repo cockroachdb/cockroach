@@ -115,9 +115,7 @@ TestVet() {
 }
 
 TestGolint() {
-  ! golint "$PKG" | \
-    grep -vE '(\.pb\.go|\.pb\.gw\.go|embedded\.go|_string\.go|LastInsertId|sql/parser/(yaccpar|sql\.y):)'
-  # https://golang.org/pkg/database/sql/driver/#Result :(
+  ! golint "$PKG" | grep -vE '((\.pb|\.pb\.gw|embedded|_string)\.go|sql/parser/(yaccpar|sql\.y):)'
 }
 
 TestGoSimple() {
