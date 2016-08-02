@@ -36,7 +36,7 @@ var (
 )
 
 // RenameDatabase renames the database.
-// Privileges: security.RootUser user.
+// Privileges: security.RootUser user, DROP on source database.
 //   Notes: postgres requires superuser, db owner, or "CREATEDB".
 //          mysql >= 5.1.23 does not allow database renames.
 func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
@@ -50,6 +50,10 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 
 	dbDesc, err := p.mustGetDatabaseDesc(string(n.Name))
 	if err != nil {
+		return nil, err
+	}
+
+	if err := p.checkPrivilege(dbDesc, privilege.DROP); err != nil {
 		return nil, err
 	}
 

@@ -158,6 +158,12 @@ SHOW GRANTS ON system.rangelog
 ----
 rangelog root ALL
 
+statement error user root does not have DROP privilege on database system
+ALTER DATABASE system RENAME TO not_system
+
+statement error user root does not have DROP privilege on database system
+DROP DATABASE system
+
 # Non-root users can have privileges on system objects, but limited to GRANT, SELECT.
 statement error user testuser must not have ALL privileges on system objects
 GRANT ALL ON DATABASE system TO testuser
