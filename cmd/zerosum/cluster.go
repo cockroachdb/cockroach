@@ -20,6 +20,7 @@ import (
 	"bytes"
 	gosql "database/sql"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/syncutil"
@@ -58,6 +60,7 @@ var cockroachBin = func() string {
 }()
 
 type cluster struct {
+	rpcCtx  *rpc.Context
 	nodes   []*node
 	clients []*client.DB
 	db      []*gosql.DB
@@ -76,6 +79,12 @@ func newCluster(size int) *cluster {
 
 func (c *cluster) start(db string, args []string) {
 	c.started = timeutil.Now()
+
+	baseCtx := &base.Context{
+		User:     security.NodeUser,
+		Insecure: true,
+	}
+	c.rpcCtx = rpc.NewContext(baseCtx, nil, c.stopper)
 
 	for i := range c.nodes {
 		c.nodes[i] = c.makeNode(i, args)
@@ -137,11 +146,7 @@ func (c *cluster) makeNode(nodeIdx int, extraArgs []string) *node {
 }
 
 func (c *cluster) makeClient(nodeIdx int) *client.DB {
-	ctx := &base.Context{
-		User:     security.NodeUser,
-		Insecure: true,
-	}
-	sender, err := client.NewSender(rpc.NewContext(ctx, nil, c.stopper), c.rpcAddr(nodeIdx))
+	sender, err := client.NewSender(c.rpcCtx, c.rpcAddr(nodeIdx))
 	if err != nil {
 		log.Fatalf(context.Background(), "failed to initialize KV client: %s", err)
 	}
@@ -245,6 +250,32 @@ func (c *cluster) lookupRange(nodeIdx int, key roachpb.Key) (*roachpb.RangeDescr
 		return nil, errors.Errorf("%s: lookup range: %s", key, pErr)
 	}
 	return &resp.(*roachpb.RangeLookupResponse).Ranges[0], nil
+}
+
+func (c *cluster) freeze(nodeIdx int, freeze bool) {
+	addr := c.rpcAddr(nodeIdx)
+	conn, err := c.rpcCtx.GRPCDial(addr)
+	if err != nil {
+		log.Fatal(context.Background(), "unable to dial: %s: %v", addr, err)
+	}
+
+	adminClient := serverpb.NewAdminClient(conn)
+	stream, err := adminClient.ClusterFreeze(
+		context.Background(), &serverpb.ClusterFreezeRequest{Freeze: freeze})
+	if err != nil {
+		log.Fatal(context.Background(), err)
+	}
+	for {
+		resp, err := stream.Recv()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			log.Fatal(context.Background(), err)
+		}
+		fmt.Println(resp.Message)
+	}
+	fmt.Println("ok")
 }
 
 func (c *cluster) randNode(f func(int) int) int {
