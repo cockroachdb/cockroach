@@ -76,7 +76,7 @@ func (p *planner) Delete(n *parser.Delete, desiredTypes []parser.Datum, autoComm
 	// properly until the placeholder values are known.
 	rows, err := p.SelectClause(&parser.SelectClause{
 		Exprs: sqlbase.ColumnsSelectors(rd.fetchCols),
-		From:  []parser.TableExpr{n.Table},
+		From:  &parser.From{Tables: []parser.TableExpr{n.Table}},
 		Where: n.Where,
 	}, nil, nil, nil, publicAndNonPublicColumns)
 	if err != nil {

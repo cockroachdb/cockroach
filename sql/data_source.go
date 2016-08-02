@@ -236,11 +236,6 @@ func (p *planner) getDataSource(
 		return p.getDataSource(t.Expr, hints, scanVisibility)
 
 	case *parser.AliasedTableExpr:
-		// AS OF expressions should be handled by the executor.
-		if t.AsOf.Expr != nil && !p.asOf {
-			return planDataSource{}, fmt.Errorf("unexpected AS OF SYSTEM TIME")
-		}
-
 		// Alias clause: source AS alias(cols...)
 		src, err := p.getDataSource(t.Expr, t.Hints, scanVisibility)
 		if err != nil {
