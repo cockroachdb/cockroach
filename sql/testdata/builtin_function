@@ -114,7 +114,7 @@ R
 
 # See #6601
 query error invalid utf8
-select cast(uuid_v4() as string)
+select cast(uuid_v4() as string), cast(uuid_v4() as string), cast(uuid_v4() as string)
 
 query T
 SELECT SUBSTR('12345', 2, 77)
