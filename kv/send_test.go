@@ -443,7 +443,7 @@ func TestClientNotReady(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := grpcConn.Close(); err != nil {
+			if err := grpcConn.Close(); err != nil && err != grpc.ErrClientConnClosing {
 				t.Fatal(err)
 			}
 
