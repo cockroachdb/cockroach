@@ -1,1 +1,1 @@
-GOVERS = (go1.6.2|go1.6.3|go1.7rc3)
+GOVERS = (go1.6.2|go1.6.3|go1.7rc3|go1.7rc4)
