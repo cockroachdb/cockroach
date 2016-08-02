@@ -109,8 +109,8 @@ func (ms MetadataSchema) DescriptorCount() int {
 	return len(ms.descs)
 }
 
-// DescriptorCount returns the number of descriptors that will be created by
-// this schema. This value is needed to automate certain tests.
+// ConfigDescriptorCount returns the number of config descriptors that will be
+// created by this schema. This value is needed to automate certain tests.
 func (ms MetadataSchema) ConfigDescriptorCount() int {
 	return ms.configs
 }
