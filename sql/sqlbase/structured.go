@@ -289,7 +289,7 @@ func generatedFamilyName(familyID FamilyID, columnNames []string) string {
 // FormatVersion (if it's not already there) and returns true if any changes
 // were made.
 func (desc *TableDescriptor) MaybeUpgradeFormatVersion() bool {
-	if desc.FormatVersion == FamilyFormatVersion {
+	if desc.FormatVersion >= FamilyFormatVersion {
 		return false
 	}
 
