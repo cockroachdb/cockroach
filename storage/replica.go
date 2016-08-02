@@ -554,20 +554,28 @@ func (r *Replica) getLease() (*roachpb.Lease, *roachpb.Lease) {
 
 // newNotLeaseHolderError returns a NotLeaseHolderError initialized with the
 // replica for the holder (if any) of the given lease.
-func (r *Replica) newNotLeaseHolderError(
-	l *roachpb.Lease, originStoreID roachpb.StoreID, rangeDesc *roachpb.RangeDescriptor,
+//
+// Note that this error can be generated on the Raft processing goroutine, so
+// its output should be completely determined by its parameters.
+func newNotLeaseHolderError(
+	l *roachpb.Lease,
+	originStoreID roachpb.StoreID,
+	rangeDesc *roachpb.RangeDescriptor,
 ) error {
 	err := &roachpb.NotLeaseHolderError{
-		RangeID: r.RangeID,
+		RangeID: rangeDesc.RangeID,
 	}
-	if repDesc, ok := rangeDesc.GetReplicaDescriptor(originStoreID); ok {
-		err.Replica = &repDesc
-	}
+	err.Replica, _ = rangeDesc.GetReplicaDescriptor(originStoreID)
 	if l != nil {
-		// TODO(tamird): why is this not the same as `err.Leader = &l.Replica`?
-		// Making that change causes tests to fail. See #3670.
-		if repDesc, ok := rangeDesc.GetReplicaDescriptor(l.Replica.StoreID); ok {
-			err.LeaseHolder = &repDesc
+		// Morally, we return the lease-holding Replica here. However, in the
+		// case in which a leader removes itself, we want the followers to
+		// avoid handing out a misleading clue (which in itself shouldn't be
+		// overly disruptive as the lease would expire and then this method
+		// shouldn't be called for it any more, but at the very least it
+		// could catch tests in a loop, presumably due to manual clocks).
+		_, stillMember := rangeDesc.GetReplicaDescriptor(l.Replica.StoreID)
+		if stillMember {
+			err.LeaseHolder = &l.Replica
 		}
 	}
 	return err
@@ -599,7 +607,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 				if !lease.OwnedBy(r.store.StoreID()) {
 					// If lease is currently held by another, redirect to holder.
 					return nil, roachpb.NewError(
-						r.newNotLeaseHolderError(lease, r.store.StoreID(), r.mu.state.Desc))
+						newNotLeaseHolderError(lease, r.store.StoreID(), r.mu.state.Desc))
 				}
 				// Check that we're not in the process of transferring the lease away.
 				// If we are transferring the lease away, we can't serve reads or
@@ -614,7 +622,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 				transferLease := r.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID)
 				if transferLease != nil {
 					return nil, roachpb.NewError(
-						r.newNotLeaseHolderError(transferLease, r.store.StoreID(), r.mu.state.Desc))
+						newNotLeaseHolderError(transferLease, r.store.StoreID(), r.mu.state.Desc))
 				}
 
 				// Should we extend the lease?
@@ -657,7 +665,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 					if !lease.Covers(r.store.Clock().Now()) {
 						lease = nil
 					}
-					return roachpb.NewError(r.newNotLeaseHolderError(lease, r.store.StoreID(), r.Desc()))
+					return roachpb.NewError(newNotLeaseHolderError(lease, r.store.StoreID(), r.Desc()))
 				}
 				return pErr
 			}
@@ -665,7 +673,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 		case <-ctx.Done():
 		case <-r.store.Stopper().ShouldStop():
 		}
-		return roachpb.NewError(r.newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc()))
+		return roachpb.NewError(newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc()))
 	}
 }
 
@@ -1898,7 +1906,7 @@ func (r *Replica) processRaftCommand(
 			log.Warningf(context.TODO(), "%s: command proposed from replica %+v (lease at %v): %s",
 				r, raftCmd.OriginReplica, r.mu.state.Lease.Replica, raftCmd.Cmd)
 		}
-		forcedErr = roachpb.NewError(r.newNotLeaseHolderError(
+		forcedErr = roachpb.NewError(newNotLeaseHolderError(
 			r.mu.state.Lease, raftCmd.OriginReplica.StoreID, r.mu.state.Desc))
 	} else if raftCmd.Cmd.IsLease() {
 		// Lease commands are ignored by the counter (and their MaxLeaseIndex
