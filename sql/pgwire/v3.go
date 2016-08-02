@@ -636,7 +636,7 @@ func (c *v3Conn) executeStatements(
 	limit int,
 ) error {
 	tracing.AnnotateTrace()
-	results := c.executor.ExecuteStatements(ctx, c.session, stmts, pinfo)
+	results := c.executor.ExecuteStatements(c.session, stmts, pinfo)
 
 	tracing.AnnotateTrace()
 	if results.Empty {
