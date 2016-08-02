@@ -586,7 +586,7 @@ func TestReplicaLease(t *testing.T) {
 		{Start: one, StartStasis: one},
 		{Start: one, StartStasis: one.Next(), Expiration: one},
 	} {
-		if _, err := tc.rng.RequestLease(context.Background(), tc.store.Engine(), nil,
+		if _, _, err := tc.rng.RequestLease(context.Background(), tc.store.Engine(), nil,
 			roachpb.Header{}, roachpb.RequestLeaseRequest{
 				Lease: lease,
 			}); !testutils.IsError(err, "illegal lease interval") {
@@ -5303,18 +5303,10 @@ func TestReplicaCancelRaft(t *testing.T) {
 func verifyChecksum(t *testing.T, rng *Replica) []byte {
 	ctx := context.Background()
 	id := uuid.MakeV4()
-	if _, err := rng.ComputeChecksum(
-		ctx,
-		nil,
-		nil,
-		roachpb.Header{},
-		roachpb.ComputeChecksumRequest{
-			ChecksumID: id,
-			Version:    replicaChecksumVersion,
-		},
-	); err != nil {
-		t.Fatal(err)
-	}
+	rng.computeChecksumTrigger(ctx, roachpb.ComputeChecksumRequest{
+		ChecksumID: id,
+		Version:    replicaChecksumVersion,
+	})
 	c, ok := rng.getChecksum(ctx, id)
 	if !ok {
 		t.Fatalf("checksum for id = %v not found", id)
@@ -5322,22 +5314,18 @@ func verifyChecksum(t *testing.T, rng *Replica) []byte {
 	if c.checksum == nil {
 		t.Fatal("couldn't compute checksum")
 	}
-	if _, err := rng.VerifyChecksum(
+	rng.verifyChecksumTrigger(
 		ctx,
-		nil,
-		nil,
-		roachpb.Header{},
 		roachpb.VerifyChecksumRequest{
 			ChecksumID: id,
 			Version:    replicaChecksumVersion,
 			Checksum:   c.checksum,
-		},
-	); err != nil {
-		t.Fatal(err)
-	}
+		})
 	return c.checksum
 }
 
+// TODO(tschottdorf): this test is really frail and unidiomatic. Consider
+// some better high-level check of this functionality.
 func TestComputeVerifyChecksum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
@@ -5419,18 +5407,12 @@ func TestComputeVerifyChecksum(t *testing.T) {
 
 	// Verify that a bad version/checksum sent will result in an error.
 	id1 := uuid.MakeV4()
-	if _, err := rng.ComputeChecksum(
+	rng.computeChecksumTrigger(
 		context.Background(),
-		nil,
-		nil,
-		roachpb.Header{},
 		roachpb.ComputeChecksumRequest{
 			ChecksumID: id1,
 			Version:    replicaChecksumVersion,
-		},
-	); err != nil {
-		t.Fatal(err)
-	}
+		})
 	// Set a callback for checksum mismatch panics.
 	badChecksumChan := make(chan []ReplicaSnapshotDiff, 1)
 	rng.store.ctx.TestingKnobs.BadChecksumPanic = func(diff []ReplicaSnapshotDiff) {
@@ -5439,19 +5421,13 @@ func TestComputeVerifyChecksum(t *testing.T) {
 
 	// First test that sending a Verification request with a bad version and
 	// bad checksum will return without panicking because of a bad checksum.
-	if _, err := rng.VerifyChecksum(
+	rng.verifyChecksumTrigger(
 		context.Background(),
-		nil,
-		nil,
-		roachpb.Header{},
 		roachpb.VerifyChecksumRequest{
 			ChecksumID: id1,
 			Version:    10000001,
 			Checksum:   []byte("bad checksum"),
-		},
-	); err != nil {
-		t.Fatal(err)
-	}
+		})
 	select {
 	case badChecksum := <-badChecksumChan:
 		t.Fatalf("bad checksum: %v", badChecksum)
@@ -5461,19 +5437,13 @@ func TestComputeVerifyChecksum(t *testing.T) {
 	// checksum mismatch and trigger a rerun of the consistency check,
 	// but the second consistency check will succeed because the checksum
 	// provided in the second consistency check is the correct one.
-	if _, err := rng.VerifyChecksum(
+	rng.verifyChecksumTrigger(
 		context.Background(),
-		nil,
-		nil,
-		roachpb.Header{},
 		roachpb.VerifyChecksumRequest{
 			ChecksumID: id1,
 			Version:    replicaChecksumVersion,
 			Checksum:   []byte("bad checksum"),
-		},
-	); err != nil {
-		t.Fatal(err)
-	}
+		})
 	select {
 	case badChecksum := <-badChecksumChan:
 		t.Fatalf("bad checksum: %v", badChecksum)
@@ -5483,20 +5453,14 @@ func TestComputeVerifyChecksum(t *testing.T) {
 	// Repeat the same but provide a snapshot this time. This will
 	// result in the checksum failure not running the second consistency
 	// check; it will panic.
-	if _, err := rng.VerifyChecksum(
+	rng.verifyChecksumTrigger(
 		context.Background(),
-		nil,
-		nil,
-		roachpb.Header{},
 		roachpb.VerifyChecksumRequest{
 			ChecksumID: id1,
 			Version:    replicaChecksumVersion,
 			Checksum:   []byte("bad checksum"),
 			Snapshot:   &roachpb.RaftSnapshotData{},
-		},
-	); err != nil {
-		t.Fatal(err)
-	}
+		})
 	select {
 	case <-badChecksumChan:
 	default:
@@ -5506,7 +5470,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 	id2 := uuid.MakeV4()
 	// Sending a ComputeChecksum with a bad version doesn't result in a
 	// computed checksum.
-	if _, err := rng.ComputeChecksum(
+	if _, _, err := rng.ComputeChecksum(
 		context.Background(),
 		nil,
 		nil,
@@ -5519,20 +5483,14 @@ func TestComputeVerifyChecksum(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Sending a VerifyChecksum with a bad checksum is a noop.
-	if _, err := rng.VerifyChecksum(
+	rng.verifyChecksumTrigger(
 		context.Background(),
-		nil,
-		nil,
-		roachpb.Header{},
 		roachpb.VerifyChecksumRequest{
 			ChecksumID: id2,
 			Version:    replicaChecksumVersion,
 			Checksum:   []byte("bad checksum"),
 			Snapshot:   &roachpb.RaftSnapshotData{},
-		},
-	); err != nil {
-		t.Fatal(err)
-	}
+		})
 	select {
 	case badChecksum := <-badChecksumChan:
 		t.Fatalf("bad checksum: %v", badChecksum)
@@ -6166,18 +6124,12 @@ func TestCommandTimeThreshold(t *testing.T) {
 	}
 
 	// Do a GC.
-	b := tc.store.Engine().NewBatch()
-	var h roachpb.Header
 	gcr := roachpb.GCRequest{
 		Threshold: ts2,
 	}
-	if _, err := tc.rng.GC(context.Background(), b, nil, h, gcr); err != nil {
+	if _, err := tc.SendWrapped(&gcr); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Commit(); err != nil {
-		t.Fatal(err)
-	}
-	b.Close()
 
 	// Do the same Get, which should now fail.
 	if _, err := tc.SendWrappedWith(roachpb.Header{
