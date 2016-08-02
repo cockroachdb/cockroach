@@ -1,0 +1,208 @@
+# Verify information_schema database handles mutation statements correctly.
+
+# TODO(nvanbenschoten) Blocked on #7998.
+#query error dsaodjassjdoiasjdio
+#ALTER DATABASE information_schema RENAME TO not_information_schema
+
+statement error user root does not have CREATE privilege on database information_schema
+CREATE TABLE information_schema.t (x INT)
+
+query error user root does not have DROP privilege on database information_schema
+DROP DATABASE information_schema
+
+
+# Verify other databases cant be called "information_schema".
+
+statement ok
+CREATE DATABASE other_db
+
+statement error the new database name "information_schema" already exists
+ALTER DATABASE other_db RENAME TO information_schema
+
+statement error database "information_schema" already exists
+CREATE DATABASE information_schema
+
+statement ok
+DROP DATABASE other_db
+
+
+# Verify information_schema tables handle mutation statements correctly.
+
+statement error user root does not have DROP privilege on table tables
+ALTER TABLE information_schema.tables RENAME TO information_schema.bad
+
+statement error user root does not have CREATE privilege on table tables
+ALTER TABLE information_schema.tables RENAME COLUMN x TO y
+
+statement error user root does not have CREATE privilege on table tables
+ALTER TABLE information_schema.tables ADD COLUMN x DECIMAL
+
+statement error user root does not have CREATE privilege on table tables
+ALTER TABLE information_schema.tables DROP COLUMN x
+
+statement error user root does not have CREATE privilege on table tables
+ALTER TABLE information_schema.tables ADD CONSTRAINT foo UNIQUE (b)
+
+statement error user root does not have CREATE privilege on table tables
+ALTER TABLE information_schema.tables DROP CONSTRAINT bar
+
+statement error user root does not have CREATE privilege on table tables
+ALTER TABLE information_schema.tables ALTER COLUMN x SET DEFAULT 'foo'
+
+statement error user root does not have CREATE privilege on table tables
+ALTER TABLE information_schema.tables ALTER x DROP NOT NULL
+
+statement error user root does not have CREATE privilege on table tables
+CREATE INDEX i on information_schema.tables (x)
+
+statement error user root does not have DROP privilege on table tables
+DROP TABLE information_schema.tables
+
+statement error user root does not have CREATE privilege on table tables
+DROP INDEX information_schema.tables@i
+
+statement error user root does not have GRANT privilege on table tables
+GRANT CREATE ON information_schema.tables TO root
+
+statement error user root does not have GRANT privilege on table tables
+REVOKE CREATE ON information_schema.tables FROM root
+
+
+# Verify information_schema tables handles read-only property correctly.
+
+query error user root does not have DELETE privilege on table tables
+DELETE FROM information_schema.tables
+
+query error user root does not have INSERT privilege on table tables
+INSERT INTO information_schema.tables VALUES ('abc')
+
+statement error user root does not have UPDATE privilege on table tables
+UPDATE information_schema.tables SET a = 'abc'
+
+statement error user root does not have DROP privilege on table tables
+TRUNCATE TABLE information_schema.tables
+
+
+# Verify information_schema can be used like a normal database.
+
+statement ok
+SET DATABASE = information_schema
+
+statement ok
+SET DATABASE = ''
+
+
+# Verify information_schema handles reflection correctly.
+
+query T
+SHOW DATABASES
+----
+information_schema
+system
+test
+
+query T
+SHOW TABLES FROM information_schema
+----
+tables
+
+query TT colnames
+SHOW CREATE TABLE information_schema.tables
+----
+Table                      CreateTable
+information_schema.tables  CREATE TABLE "information_schema.tables" (
+                               TABLE_CATALOG STRING NOT NULL DEFAULT '',
+                               TABLE_SCHEMA STRING NOT NULL DEFAULT '',
+                               TABLE_NAME STRING NOT NULL DEFAULT '',
+                               TABLE_TYPE STRING NOT NULL DEFAULT '',
+                               VERSION INT NULL
+                           )
+
+query TTBT colnames
+SHOW COLUMNS FROM information_schema.tables
+----
+Field            Type       Null   Default
+TABLE_CATALOG    STRING     false  ''
+TABLE_SCHEMA     STRING     false  ''
+TABLE_NAME       STRING     false  ''
+TABLE_TYPE       STRING     false  ''
+VERSION          INT        true   NULL
+
+query TTTTTTT colnames
+SHOW INDEXES FROM information_schema.tables
+----
+Table  Name  Unique  Seq  Column  Direction  Storing
+
+query TTTTT colnames
+SHOW CONSTRAINTS FROM information_schema.tables
+----
+Table   Name     Type  Column(s)  Details
+tables  PRIMARY  KEY   []         NULL
+
+query TTT colnames
+SHOW GRANTS ON information_schema.tables
+----
+Table  User  Privileges
+
+
+# Verify selecting from information_schema.
+
+## information_schema.tables
+
+statement ok
+CREATE DATABASE other_db
+
+statement ok
+CREATE TABLE other_db.xyz (i INT)
+
+query T
+SELECT table_name FROM information_schema.tables
+----
+tables
+xyz
+descriptor
+eventlog
+lease
+namespace
+rangelog
+ui
+users
+zones
+
+query T
+SELECT table_name FROM information_schema.tables WHERE table_name > 'n' ORDER BY 1 DESC
+----
+zones
+xyz
+users
+ui
+tables
+rangelog
+namespace
+
+query TTTTI colnames
+SELECT * FROM information_schema.tables
+----
+TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME  TABLE_TYPE   VERSION
+def            information_schema  tables      SYSTEM VIEW  1
+def            other_db            xyz         BASE TABLE   1
+def            system              descriptor  BASE TABLE   1
+def            system              eventlog    BASE TABLE   1
+def            system              lease       BASE TABLE   1
+def            system              namespace   BASE TABLE   1
+def            system              rangelog    BASE TABLE   1
+def            system              ui          BASE TABLE   1
+def            system              users       BASE TABLE   1
+def            system              zones       BASE TABLE   1
+
+statement ok
+ALTER TABLE other_db.xyz ADD COLUMN j INT
+
+query TTI colnames
+SELECT TABLE_SCHEMA, TABLE_NAME, VERSION FROM information_schema.tables WHERE version > 1
+----
+TABLE_SCHEMA  TABLE_NAME  VERSION
+other_db      xyz         4
+
+statement ok
+DROP DATABASE other_db

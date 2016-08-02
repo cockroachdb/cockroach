@@ -73,6 +73,14 @@ func getTableID(p *planner, qname *parser.QualifiedName) (sqlbase.ID, error) {
 		return 0, err
 	}
 
+	virtual, err := getVirtualTableDesc(qname)
+	if err != nil {
+		return 0, err
+	}
+	if virtual != nil {
+		return virtual.GetID(), nil
+	}
+
 	dbID, err := p.getDatabaseID(qname.Database())
 	if err != nil {
 		return 0, err

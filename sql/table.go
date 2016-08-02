@@ -123,6 +123,12 @@ func (p *planner) getTableDesc(qname *parser.QualifiedName) (*sqlbase.TableDescr
 	if err := qname.NormalizeTableName(p.session.Database); err != nil {
 		return nil, err
 	}
+
+	virtual, err := getVirtualTableDesc(qname)
+	if err != nil || virtual != nil {
+		return virtual, err
+	}
+
 	dbDesc, err := p.mustGetDatabaseDesc(qname.Database())
 	if err != nil {
 		return nil, err
@@ -160,11 +166,17 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (*sqlbase.TableDesc
 		return nil, err
 	}
 
-	if qname.Database() == sqlbase.SystemDB.Name || testDisableTableLeases {
-		// We don't go through the normal lease mechanism for system tables. The
-		// system.lease and system.descriptor table, in particular, are problematic
-		// because they are used for acquiring leases itself, creating a
-		// chicken&egg problem.
+	isSystemDB := qname.Database() == sqlbase.SystemDB.Name
+	isVirtualDB := isVirtualDatabase(qname.Database())
+	if isSystemDB || isVirtualDB || testDisableTableLeases {
+		// We don't go through the normal lease mechanism for:
+		// - system tables. The system.lease and system.descriptor table, in
+		//   particular, are problematic because they are used for acquiring
+		//   leases itself, creating a chicken&egg problem.
+		// - virtual tables. These tables' descriptors are not persisted,
+		//   so they cannot be leased. Instead, we simply return the static
+		//   descriptor and rely on the immutability privileges set on the
+		//   descriptors to cause upper layers to reject mutations statements.
 		return p.mustGetTableDesc(qname)
 	}
 
@@ -285,6 +297,10 @@ func (p *planner) removeLeaseIfExpiring(lease *LeaseState) bool {
 
 // getTableNames implements the SchemaAccessor interface.
 func (p *planner) getTableNames(dbDesc *sqlbase.DatabaseDescriptor) (parser.QualifiedNames, error) {
+	if e, ok := getVirtualSchemaEntry(dbDesc.Name); ok {
+		return e.tableNames()
+	}
+
 	prefix := sqlbase.MakeNameMetadataKey(dbDesc.ID, "")
 	sr, err := p.txn.Scan(prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
@@ -298,11 +314,8 @@ func (p *planner) getTableNames(dbDesc *sqlbase.DatabaseDescriptor) (parser.Qual
 		if err != nil {
 			return nil, err
 		}
-		qname := &parser.QualifiedName{
-			Base:     parser.Name(dbDesc.Name),
-			Indirect: parser.Indirection{parser.NameIndirection(tableName)},
-		}
-		if err := qname.NormalizeTableName(""); err != nil {
+		qname, err := parser.NewQualifiedNameFromDBAndTable(dbDesc.Name, tableName)
+		if err != nil {
 			return nil, err
 		}
 		qualifiedNames = append(qualifiedNames, qname)
@@ -355,6 +368,9 @@ func (p *planner) releaseLeases() {
 
 // writeTableDesc implements the SchemaAccessor interface.
 func (p *planner) writeTableDesc(tableDesc *sqlbase.TableDescriptor) error {
+	if isVirtualDescriptor(tableDesc) {
+		panic(fmt.Sprintf("Virtual Descriptors cannot be stored, found: %v", tableDesc))
+	}
 	return p.txn.Put(sqlbase.MakeDescMetadataKey(tableDesc.GetID()),
 		sqlbase.WrapDescriptor(tableDesc))
 }
