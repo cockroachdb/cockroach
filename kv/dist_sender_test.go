@@ -515,7 +515,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 		if first {
 			reply := &roachpb.BatchResponse{}
 			reply.Error = roachpb.NewError(
-				&roachpb.NotLeaseHolderError{LeaseHolder: &leaseHolder, Replica: &roachpb.ReplicaDescriptor{}})
+				&roachpb.NotLeaseHolderError{LeaseHolder: &leaseHolder})
 			first = false
 			return reply, nil
 		}
