@@ -206,6 +206,7 @@ export interface roachpbBuilder {
 	StoreCapacity: roachpb.StoreCapacityBuilder;
 	NodeDescriptor: roachpb.NodeDescriptorBuilder;
 	StoreDescriptor: roachpb.StoreDescriptorBuilder;
+	StoreDeadReplicas: roachpb.StoreDeadReplicasBuilder;
 	Span: roachpb.SpanBuilder;
 	Value: roachpb.ValueBuilder;
 	KeyValue: roachpb.KeyValueBuilder;
@@ -602,6 +603,51 @@ export interface StoreDescriptorBuilder {
 	decode(buffer: ArrayBuffer) : StoreDescriptorMessage;
 	decode(buffer: ByteBuffer) : StoreDescriptorMessage;
 	decode64(buffer: string) : StoreDescriptorMessage;
+	
+}
+
+}
+
+
+declare module cockroach.roachpb {
+
+	export interface StoreDeadReplicas {
+
+		
+
+store_id?: number;
+		
+
+getStoreId?() : number;
+		setStoreId?(storeId : number): void;
+		
+
+
+
+replicas?: ReplicaIdent[];
+		
+
+getReplicas?() : ReplicaIdent[];
+		setReplicas?(replicas : ReplicaIdent[]): void;
+		
+
+
+
+}
+
+	export interface StoreDeadReplicasMessage extends StoreDeadReplicas {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface StoreDeadReplicasBuilder {
+	new(data?: StoreDeadReplicas): StoreDeadReplicasMessage;
+	decode(buffer: ArrayBuffer) : StoreDeadReplicasMessage;
+	decode(buffer: ByteBuffer) : StoreDeadReplicasMessage;
+	decode64(buffer: string) : StoreDeadReplicasMessage;
 	
 }
 
