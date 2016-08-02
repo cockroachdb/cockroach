@@ -208,7 +208,8 @@ func TestQuit(t *testing.T) {
 	security.SetReadFileFn(securitytest.Asset)
 }
 
-func Example_basic() {
+// TODO(tamird): re-enable when #8215 closes (i.e. when go1.7 gets released).
+func DisabledExample_basic() {
 	c := newCLITest()
 	defer c.stop()
 
