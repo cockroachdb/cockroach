@@ -319,16 +319,14 @@ func (sp *StorePool) getStoreDetailLocked(storeID roachpb.StoreID) storeDetail {
 
 // getStoreDescriptor returns the latest store descriptor for the given
 // storeID.
-func (sp *StorePool) getStoreDescriptor(storeID roachpb.StoreID) *roachpb.StoreDescriptor {
+func (sp *StorePool) getStoreDescriptor(storeID roachpb.StoreID) (roachpb.StoreDescriptor, bool) {
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
 
-	detail, ok := sp.mu.stores[storeID]
-	if !ok {
-		return nil
+	if detail, ok := sp.mu.stores[storeID]; ok && detail.desc != nil {
+		return *detail.desc, true
 	}
-
-	return detail.desc
+	return roachpb.StoreDescriptor{}, false
 }
 
 // deadReplicas returns any replicas from the supplied slice that are
@@ -365,7 +363,7 @@ func (s *stat) update(x float64) {
 // StoreList holds a list of store descriptors and associated count and used
 // stats for those stores.
 type StoreList struct {
-	stores      []*roachpb.StoreDescriptor
+	stores      []roachpb.StoreDescriptor
 	count, used stat
 
 	// candidateCount tracks range count stats for stores that are eligible to
@@ -376,7 +374,7 @@ type StoreList struct {
 
 // add includes the store descriptor to the list of stores and updates
 // maintained statistics.
-func (sl *StoreList) add(s *roachpb.StoreDescriptor) {
+func (sl *StoreList) add(s roachpb.StoreDescriptor) {
 	sl.stores = append(sl.stores, s)
 	sl.count.update(float64(s.Capacity.RangeCount))
 	sl.used.update(s.Capacity.FractionUsed())
@@ -419,7 +417,7 @@ func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic boo
 			throttledStoreCount++
 		case storeMatchAvailable:
 			aliveStoreCount++
-			sl.add(detail.desc)
+			sl.add(*detail.desc)
 		}
 	}
 	return sl, aliveStoreCount, throttledStoreCount
