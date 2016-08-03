@@ -49,7 +49,7 @@ func ListenAndServeGRPC(
 
 	stopper.RunWorker(func() {
 		<-stopper.ShouldQuiesce()
-		server.GracefulStop()
+		FatalIfUnexpected(ln.Close())
 		<-stopper.ShouldStop()
 		server.Stop()
 	})
