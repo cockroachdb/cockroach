@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
+	circuit "github.com/rubyist/circuitbreaker"
 )
 
 const (
@@ -84,7 +85,8 @@ type Context struct {
 
 	conns struct {
 		syncutil.Mutex
-		cache map[string]connMeta
+		cache    map[string]connMeta
+		breakers map[string]*circuit.Breaker
 	}
 }
 
@@ -102,6 +104,8 @@ func NewContext(baseCtx *base.Context, clock *hlc.Clock, stopper *stop.Stopper) 
 	ctx.RemoteClocks = newRemoteClockMonitor(clock, 10*defaultHeartbeatInterval)
 	ctx.HeartbeatInterval = defaultHeartbeatInterval
 	ctx.HeartbeatTimeout = 2 * defaultHeartbeatInterval
+	ctx.conns.cache = make(map[string]connMeta)
+	ctx.conns.breakers = make(map[string]*circuit.Breaker)
 
 	stopper.RunWorker(func() {
 		<-stopper.ShouldQuiesce()
@@ -131,6 +135,9 @@ func (ctx *Context) SetLocalInternalServer(internalServer roachpb.InternalServer
 }
 
 func (ctx *Context) removeConn(key string, conn *grpc.ClientConn) {
+	if log.V(1) {
+		log.Infof(context.TODO(), "closing %s", key)
+	}
 	if err := conn.Close(); err != nil && !grpcutil.IsClosedConnection(err) {
 		if log.V(1) {
 			log.Errorf(context.TODO(), "failed to close client connection: %s", err)
@@ -157,16 +164,26 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 	dialOpts = append(dialOpts, dialOpt)
 	dialOpts = append(dialOpts, opts...)
 
+	breaker, ok := ctx.conns.breakers[target]
+	if !ok {
+		breaker = NewBreaker()
+		ctx.conns.breakers[target] = breaker
+	}
+	if !breaker.Ready() {
+		return nil, circuit.ErrBreakerOpen
+	}
+
+	if log.V(1) {
+		log.Infof(context.TODO(), "dialing %s", target)
+	}
 	conn, err := grpc.Dial(target, dialOpts...)
 	if err == nil {
-		if ctx.conns.cache == nil {
-			ctx.conns.cache = make(map[string]connMeta)
-		}
 		ctx.conns.cache[target] = connMeta{conn: conn}
 
 		if ctx.Stopper.RunTask(func() {
 			ctx.Stopper.RunWorker(func() {
-				if err := ctx.runHeartbeat(conn, target); err != nil && !grpcutil.IsClosedConnection(err) {
+				err := ctx.runHeartbeat(conn, breaker, target)
+				if err != nil && !grpcutil.IsClosedConnection(err) {
 					log.Error(context.TODO(), err)
 				}
 				ctx.conns.Lock()
@@ -217,7 +234,7 @@ func (ctx *Context) IsConnHealthy(remoteAddr string) bool {
 	return ctx.conns.cache[remoteAddr].healthy
 }
 
-func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
+func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, breaker *circuit.Breaker, remoteAddr string) error {
 	request := PingRequest{Addr: ctx.Addr}
 	heartbeatClient := NewHeartbeatClient(cc)
 
@@ -239,8 +256,10 @@ func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
 			if grpc.Code(err) == codes.DeadlineExceeded {
 				continue
 			}
+			breaker.Fail()
 			return err
 		}
+		breaker.Success()
 		receiveTime := ctx.localClock.PhysicalTime()
 
 		// Only update the clock offset measurement if we actually got a
