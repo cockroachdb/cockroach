@@ -69,7 +69,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	ctx.ScanInterval = 10 * time.Hour
 	ctx.ConsistencyCheckInterval = 10 * time.Hour
 	grpcServer := rpc.NewServer(nodeRPCContext)
-	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
+	ln, err := net.Listen(addr.Network(), addr.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,6 +87,16 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		g.SetResolvers([]resolver.Resolver{r})
 		g.Start(grpcServer, ln.Addr())
 	}
+	stopper.RunWorker(func() {
+		<-stopper.ShouldQuiesce()
+		netutil.FatalIfUnexpected(ln.Close())
+		<-stopper.ShouldStop()
+		grpcServer.Stop()
+	})
+
+	stopper.RunWorker(func() {
+		netutil.FatalIfUnexpected(grpcServer.Serve(ln))
+	})
 	ctx.Gossip = g
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
