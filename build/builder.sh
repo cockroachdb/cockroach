@@ -59,6 +59,13 @@ fi
 # Absolute path to the toplevel cockroach directory.
 cockroach_toplevel="$(dirname $(cd $(dirname $0); pwd))"
 
+# Make a fake passwd file for our user.
+# This setup is so that files created from inside the container in a mounted
+# volume end up being owned by our user and not by root.
+passwd_file=$(mktemp)
+user_group="$(id -u $USER):$(id -g $USER)"
+echo "$USER:x:$user_group::/root:/bin/bash" > "$passwd_file"
+
 # Run our build container with a set of volumes mounted that will
 # allow the container to store persistent build data on the host
 # computer.
@@ -85,6 +92,8 @@ vols="${vols} --volume=${gopath0}/bin/docker_amd64:/go/bin"
 vols="${vols} --volume=${HOME}/.jspm:/root/.jspm"
 vols="${vols} --volume=${HOME}/.npm:/root/.npm"
 vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach"
+vols="${vols} --volume=$(mktemp -d):/root"
+vols="${vols} --volume=${passwd_file}:/etc/passwd"
 
 backtrace_dir="${cockroach_toplevel}/../../cockroachlabs/backtrace"
 if test -d "${backtrace_dir}"; then
@@ -101,8 +110,10 @@ if test -e "${alternates_file}"; then
 fi
 
 docker run -i ${tty-} ${rm} \
+  -u "${user_group}" \
   ${vols} \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
+  --env="HOME=/root" \
   --env="PAGER=cat" \
   --env="SKIP_BOOTSTRAP=1" \
   --env="JSPM_GITHUB_AUTH_TOKEN=${JSPM_GITHUB_AUTH_TOKEN-763c42afb2d31eb7bc150da33402a24d0e081aef}" \
