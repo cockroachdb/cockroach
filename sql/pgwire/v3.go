@@ -57,6 +57,7 @@ const (
 	serverMsgAuth                 serverMessageType = 'R'
 	serverMsgBindComplete         serverMessageType = '2'
 	serverMsgCommandComplete      serverMessageType = 'C'
+	serverMsgCloseComplete        serverMessageType = '3'
 	serverMsgDataRow              serverMessageType = 'D'
 	serverMsgEmptyQuery           serverMessageType = 'I'
 	serverMsgErrorResponse        serverMessageType = 'E'
@@ -466,7 +467,8 @@ func (c *v3Conn) handleClose(buf *readBuffer) error {
 	default:
 		return errors.Errorf("unknown close type: %s", typ)
 	}
-	return nil
+	c.writeBuf.initMsg(serverMsgCloseComplete)
+	return c.writeBuf.finishMsg(c.wr)
 }
 
 func (c *v3Conn) handleBind(buf *readBuffer) error {
