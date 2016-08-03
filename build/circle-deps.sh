@@ -51,10 +51,7 @@ if [ "${1-}" = "docker" ]; then
   # same build order as the pre-parallel deps script.
 
   if is_shard 2; then
-    # Install JSPM packages as a non-root user to work around
-    # https://github.com/jspm/jspm-cli/issues/1902.
-    useradd -m jspm
-    time su jspm -c 'make -C ui jspm.installed'
+    make -C ui jspm.installed
 
     # TODO(pmattis): This works around the problem seen in
     # https://github.com/cockroachdb/cockroach/issues/4013 where
@@ -144,19 +141,12 @@ if is_shard 2; then
   # parallelism. Avoid deleting our build output in that case.
   if ! is_shard 0; then
     for dir in "${HOME}/.jspm" "${HOME}/.npm"; do
-      # A side-effect of using build/builder.sh is that files created by
-      # the builder are owned by root.root. This isn't normally a
-      # problem, except when trying to rsync onto these directories by a
-      # non-root user which runs into permissions problem. So before
-      # rsyncing, we chown all the files to the current user.
-      time ssh node0 sudo chown -R "${USER}.${USER}" "${dir}"
       time rsync -a --delete "${dir}/" node0:"${dir}"
     done
 
     cmds=$(grep '^cmd ' GLOCKFILE | grep -v glock | awk '{print $2}' | awk -F/ '{print $NF}')
     path="${gopath0}/bin/docker_amd64"
     time ssh node0 mkdir -p "$path"
-    time ssh node0 sudo chown "${USER}.${USER}" "$path"
     (time cd "$path" && rsync ${cmds} node0:"${path}")
   fi
 fi
@@ -166,7 +156,6 @@ if is_shard 1; then
   # parallelism. Avoid deleting our build output in that case.
   if ! is_shard 0; then
     dir="${gopath0}/pkg/docker_amd64_race"
-    time ssh node0 sudo chown -R "${USER}.${USER}" "${dir}"
     time rsync -a --delete "${dir}/" node0:"${dir}"
   fi
 fi
@@ -192,7 +181,6 @@ if is_shard 0; then
   if ! is_shard 2; then
     node=$((2 % $CIRCLE_NODE_TOTAL))
     dir="${gopath0}/pkg/docker_amd64"
-    time sudo chown -R "${USER}.${USER}" "${dir}"
     time rsync -au node${node}:"${dir}/" "${dir}"
   fi
 fi
