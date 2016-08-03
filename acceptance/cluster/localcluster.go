@@ -54,7 +54,7 @@ import (
 
 const (
 	builderImage     = "cockroachdb/builder"
-	builderTag       = "20160722-141607"
+	builderTag       = "20160802-150300"
 	builderImageFull = builderImage + ":" + builderTag
 	networkName      = "cockroachdb_acceptance"
 )
@@ -226,9 +226,7 @@ func (l *LocalCluster) OneShot(
 		return err
 	}
 	if err := l.oneshot.Wait(); err != nil {
-		var b bytes.Buffer
-		_ = l.oneshot.Logs(&b)
-		return errors.Wrap(err, b.String())
+		return err
 	}
 	return nil
 }
