@@ -45,14 +45,15 @@ const (
 // service.
 func NewServer(ctx *Context) *grpc.Server {
 	var s *grpc.Server
+	maxMsgSize := grpc.MaxMsgSize(128 << 20) // 128 MB
 	if ctx.Insecure {
-		s = grpc.NewServer()
+		s = grpc.NewServer(maxMsgSize)
 	} else {
 		tlsConfig, err := ctx.GetServerTLSConfig()
 		if err != nil {
 			panic(err)
 		}
-		s = grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)))
+		s = grpc.NewServer(maxMsgSize, grpc.Creds(credentials.NewTLS(tlsConfig)))
 	}
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              ctx.localClock,
