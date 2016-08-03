@@ -1268,24 +1268,31 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 		}
 	}
 
-	// Add the read to the command queue to gate subsequent
-	// overlapping commands until this command completes.
-	log.Trace(ctx, "command queue")
-	endCmdsFunc, err := r.beginCmds(ctx, &ba)
-	if err != nil {
-		return nil, roachpb.NewError(err)
+	isNonTemporal := ba.IsSingleRequest() && ba.SingleRequestIsNonTemporal()
+	var endCmdsFunc func(*roachpb.BatchResponse, *roachpb.Error) *roachpb.Error
+	if !isNonTemporal {
+		// Add the read to the command queue to gate subsequent
+		// overlapping commands until this command completes.
+		log.Trace(ctx, "command queue")
+		var err error
+		endCmdsFunc, err = r.beginCmds(ctx, &ba)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
 	}
 
 	r.readOnlyCmdMu.RLock()
 	defer r.readOnlyCmdMu.RUnlock()
 
-	// Guarantee we remove the commands from the command queue. It is
-	// important that this is inside the readOnlyCmdMu lock so that the
-	// timestamp cache update is synchronized. This is wrapped to delay
-	// pErr evaluation to its value when returning.
-	defer func() {
-		pErr = endCmdsFunc(br, pErr)
-	}()
+	if !isNonTemporal {
+		// Guarantee we remove the commands from the command queue. It is
+		// important that this is inside the readOnlyCmdMu lock so that the
+		// timestamp cache update is synchronized. This is wrapped to delay
+		// pErr evaluation to its value when returning.
+		defer func() {
+			pErr = endCmdsFunc(br, pErr)
+		}()
+	}
 
 	// Execute read-only batch command. It checks for matching key range; note
 	// that holding readMu throughout is important to avoid reads from the
@@ -1337,22 +1344,25 @@ func (r *Replica) addWriteCmd(
 	// early returns do not skip this.
 	defer signal()
 
-	// Add the write to the command queue to gate subsequent overlapping
-	// commands until this command completes. Note that this must be
-	// done before getting the max timestamp for the key(s), as
-	// timestamp cache is only updated after preceding commands have
-	// been run to successful completion.
-	log.Trace(ctx, "command queue")
-	endCmdsFunc, err := r.beginCmds(ctx, &ba)
-	if err != nil {
-		return nil, roachpb.NewError(err)
-	}
+	isNonTemporal := ba.IsSingleRequest() && ba.SingleRequestIsNonTemporal()
+	if !isNonTemporal {
+		// Add the write to the command queue to gate subsequent overlapping
+		// commands until this command completes. Note that this must be
+		// done before getting the max timestamp for the key(s), as
+		// timestamp cache is only updated after preceding commands have
+		// been run to successful completion.
+		log.Trace(ctx, "command queue")
+		endCmdsFunc, err := r.beginCmds(ctx, &ba)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
 
-	// Guarantee we remove the commands from the command queue. This is
-	// wrapped to delay pErr evaluation to its value when returning.
-	defer func() {
-		pErr = endCmdsFunc(br, pErr)
-	}()
+		// Guarantee we remove the commands from the command queue. This is
+		// wrapped to delay pErr evaluation to its value when returning.
+		defer func() {
+			pErr = endCmdsFunc(br, pErr)
+		}()
+	}
 
 	// This replica must have range lease to process a write, except when it's
 	// an attempt to unfreeze the Range. These are a special case in which any
@@ -1368,12 +1378,14 @@ func (r *Replica) addWriteCmd(
 		pErr = nil
 	}
 
-	// Examine the read and write timestamp caches for preceding
-	// commands which require this command to move its timestamp
-	// forward. Or, in the case of a transactional write, the txn
-	// timestamp and possible write-too-old bool.
-	if pErr := r.applyTimestampCache(&ba); pErr != nil {
-		return nil, pErr
+	if !isNonTemporal {
+		// Examine the read and write timestamp caches for preceding
+		// commands which require this command to move its timestamp
+		// forward. Or, in the case of a transactional write, the txn
+		// timestamp and possible write-too-old bool.
+		if pErr := r.applyTimestampCache(&ba); pErr != nil {
+			return nil, pErr
+		}
 	}
 
 	log.Trace(ctx, "raft")

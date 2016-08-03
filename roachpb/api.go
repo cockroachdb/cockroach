@@ -81,6 +81,9 @@ const (
 	isRange                // range commands may span multiple keys
 	isReverse              // reverse commands traverse ranges in descending direction
 	isAlone                // requests which must be alone in a batch
+	// Some commands can skip interacting with the command queue and the timestamp
+	// cache. For example, RequestLeaseRequest is sequenced exclusively by Raft.
+	isNonTemporal
 )
 
 // GetTxnID returns the transaction ID if the header has a transaction
@@ -818,10 +821,8 @@ func (*NoopRequest) flags() int               { return isRead } // slightly spec
 func (*MergeRequest) flags() int              { return isWrite }
 func (*TruncateLogRequest) flags() int        { return isWrite }
 
-// TODO(tschottdorf): consider setting isAlone on RequestLeaseRequest and
-// LeaseTransferRequest.
-func (*RequestLeaseRequest) flags() int     { return isWrite }
-func (*TransferLeaseRequest) flags() int    { return isWrite }
+func (*RequestLeaseRequest) flags() int     { return isWrite | isAlone | isNonTemporal }
+func (*TransferLeaseRequest) flags() int    { return isWrite | isAlone | isNonTemporal }
 func (*ComputeChecksumRequest) flags() int  { return isWrite }
 func (*VerifyChecksumRequest) flags() int   { return isWrite }
 func (*CheckConsistencyRequest) flags() int { return isAdmin | isRange }

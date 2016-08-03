@@ -659,8 +659,11 @@ func TestRangeTransferLease(t *testing.T) {
 
 // Test that a lease extension (a RequestLeaseRequest that doesn't change the
 // lease holder) is not blocked by ongoing reads.
-// Note that lease transfers are blocked by reads through their
+// The test relies on two things:
+// 1) Lease extensions, unlike lease transfers, are not blocked by reads through their
 // PostCommitTrigger.noConcurrentReads.
+// 2) Requests with the non-temporal flag, such as RequestLeaseRequest, do not
+// go through the command queue.
 func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	readBlocked := make(chan struct{})
@@ -705,12 +708,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		t.Fatal(err)
 	case <-readBlocked:
 		// Send the lease request.
-		// We change the key slightly, otherwise the lease request will be blocked
-		// by the read through the command queue.
-		// TODO(andrei): don't change the key anymore once lease requests don't go
-		// through the command queue any more.
-		leaseHdrKey := roachpb.Key(append(key, 0x00))
-		rKey, err := keys.Addr(leaseHdrKey)
+		rKey, err := keys.Addr(key)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -720,7 +718,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		}
 		leaseReq := roachpb.RequestLeaseRequest{
 			Span: roachpb.Span{
-				Key: leaseHdrKey,
+				Key: key,
 			},
 			Lease: roachpb.Lease{
 				Start:       s.Clock().Now(),
