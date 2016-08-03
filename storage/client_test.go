@@ -958,8 +958,8 @@ func putArgs(key roachpb.Key, value []byte) roachpb.PutRequest {
 	}
 }
 
-// incrementArgs returns an IncrementRequest and IncrementResponse pair
-// addressed to the default replica for the specified key / value.
+// incrementArgs returns an IncrementRequest addressed to the default replica
+// for the specified key.
 func incrementArgs(key roachpb.Key, inc int64) roachpb.IncrementRequest {
 	return roachpb.IncrementRequest{
 		Span: roachpb.Span{
