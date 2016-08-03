@@ -25,6 +25,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -61,8 +62,9 @@ func createTestStorePool(timeUntilStoreDead time.Duration) (*stop.Stopper, *goss
 	stopper := stop.NewStopper()
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	rpcContext := rpc.NewContext(nil, clock, stopper)
-	g := gossip.New(rpcContext, nil, stopper, metric.NewRegistry())
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
+	server := rpc.NewServer(rpcContext) // never started
+	g := gossip.New(rpcContext, server, nil, stopper, metric.NewRegistry())
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	storePool := NewStorePool(
@@ -488,7 +490,8 @@ func TestStorePoolReserve(t *testing.T) {
 	// Create a fake store pool.
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	g := gossip.New(ctx, nil, stopper, metric.NewRegistry())
+	server := rpc.NewServer(ctx) // never started
+	g := gossip.New(ctx, server, nil, stopper, metric.NewRegistry())
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	storePool := NewStorePool(

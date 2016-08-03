@@ -41,8 +41,8 @@ func TestGossipInfoStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rpcContext := rpc.NewContext(nil, nil, stopper)
-	g := New(rpcContext, nil, stopper, metric.NewRegistry())
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
+	g := New(rpcContext, rpc.NewServer(rpcContext), nil, stopper, metric.NewRegistry())
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	slice := []byte("b")
@@ -59,6 +59,8 @@ func TestGossipInfoStore(t *testing.T) {
 
 func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
 
 	resolverSpecs := []string{
 		"127.0.0.1:9000",
@@ -76,7 +78,8 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	if len(resolvers) != 3 {
 		t.Errorf("expected 3 resolvers; got %d", len(resolvers))
 	}
-	g := New(nil, resolvers, nil, metric.NewRegistry())
+	server := rpc.NewServer(rpc.NewContext(&base.Context{Insecure: true}, nil, stopper))
+	g := New(nil, server, resolvers, nil, metric.NewRegistry())
 
 	// Using specified resolvers, fetch bootstrap addresses 3 times
 	// and verify the results match expected addresses.

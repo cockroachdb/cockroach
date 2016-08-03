@@ -24,6 +24,7 @@ import (
 	"sort"
 	"text/tabwriter"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -74,8 +75,9 @@ func createCluster(
 	rand *rand.Rand,
 ) *Cluster {
 	clock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(nil, clock, stopper)
-	g := gossip.New(rpcContext, nil, stopper, metric.NewRegistry())
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
+	server := rpc.NewServer(rpcContext)
+	g := gossip.New(rpcContext, server, nil, stopper, metric.NewRegistry())
 	// NodeID is required for Gossip, so set it to -1 for the cluster Gossip
 	// instance to prevent conflicts with real NodeIDs.
 	g.SetNodeID(-1)
