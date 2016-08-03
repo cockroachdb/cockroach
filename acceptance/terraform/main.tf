@@ -126,7 +126,7 @@ FILE
       "supervisorctl -c supervisor.conf start cockroach",
       # Install load generators.
       "bash download_binary.sh examples-go/block_writer ${var.block_writer_sha}",
-      "bash download_binary.sh examples-go/photos ${var.block_writer_sha}",
+      "bash download_binary.sh examples-go/photos ${var.photos_sha}",
     ]
   }
 }
