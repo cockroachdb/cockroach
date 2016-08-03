@@ -97,7 +97,7 @@ func (ir *intentResolver) processWriteIntentError(ctx context.Context,
 		// usually be returned here, although there are some cases
 		// when they may be (especially when a test cluster is in
 		// the process of shutting down).
-		log.Warningf(context.TODO(), "asynchronous resolveIntents failed: %s", resErr)
+		log.Warningf(ctx, "asynchronous resolveIntents failed: %s", resErr)
 	}
 
 	if pushErr != nil {
@@ -194,7 +194,7 @@ func (ir *intentResolver) maybePushTransactions(
 			// Another goroutine is working on this transaction so we can
 			// skip it.
 			if log.V(1) {
-				log.Infof(context.TODO(), "skipping PushTxn for %s; attempt already in flight", intent.Txn.ID)
+				log.Infof(ctx, "skipping PushTxn for %s; attempt already in flight", intent.Txn.ID)
 			}
 			continue
 		} else {
@@ -414,13 +414,7 @@ func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
 	// The local batch goes directly to Raft.
 	var wg sync.WaitGroup
 	if len(baLocal.Requests) > 0 {
-		action := func() error {
-			// Trace this under the ID of the intent owner.
-			// Create a new span though, since we do not want to pass a span
-			// between goroutines or we risk use-after-finish.
-			sp := r.store.Tracer().StartSpan("resolve intents")
-			defer sp.Finish()
-			ctx = opentracing.ContextWithSpan(ctx, sp)
+		action := func(ctx context.Context) error {
 			// Always operate with a timeout when resolving intents: this
 			// prevents rare shutdown timeouts in tests.
 			ctxWithTimeout, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
@@ -430,8 +424,15 @@ func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
 		}
 		wg.Add(1)
 		if wait || r.store.Stopper().RunLimitedAsyncTask(ir.sem, func() {
-			if err := action(); err != nil {
-				log.Warningf(context.TODO(), "unable to resolve local intents; %s", err)
+			// Trace this under the ID of the intent owner.
+			// Create a new span though, since we do not want to pass a span
+			// between goroutines or we risk use-after-finish.
+			sp := r.store.Tracer().StartSpan("resolve intents")
+			defer sp.Finish()
+			spanCtx := opentracing.ContextWithSpan(ctx, sp)
+
+			if err := action(spanCtx); err != nil {
+				log.Warningf(spanCtx, "unable to resolve local intents; %s", err)
 			}
 		}) != nil {
 			// Still run the task when draining. Our caller already has a task and
@@ -439,7 +440,7 @@ func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
 			// need to be resolved because they might block other tasks. See #1684.
 			// Note that handleSkippedIntents has a TODO in case #1684 comes back.
 			// TODO(tschottdorf): This is ripe for removal.
-			if err := action(); err != nil {
+			if err := action(ctx); err != nil {
 				return err
 			}
 		}
@@ -455,7 +456,7 @@ func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
 		}
 		if wait || r.store.Stopper().RunLimitedAsyncTask(ir.sem, func() {
 			if err := action(); err != nil {
-				log.Warningf(context.TODO(), "unable to resolve external intents: %s", err)
+				log.Warningf(ctx, "unable to resolve external intents: %s", err)
 			}
 		}) != nil {
 			// As with local intents, try async to not keep the caller waiting, but
