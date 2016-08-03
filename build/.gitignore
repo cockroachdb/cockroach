@@ -1,6 +1,9 @@
 # Do not add environment-specific entries here (see the top-level .gitignore
 # for reasoning and alternatives).
 
+# builder container's home directory
+/builder_home
+
 # NPM
 node_modules
 npm.installed
