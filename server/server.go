@@ -36,7 +36,6 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/base"
@@ -458,26 +457,11 @@ func (s *Server) Start() error {
 	s.stopper.AddCloser(stop.CloserFn(gwCancel))
 
 	// Setup HTTP<->gRPC handlers.
-	var opts []grpc.DialOption
-	if s.ctx.Insecure {
-		opts = append(opts, grpc.WithInsecure())
-	} else {
-		tlsConfig, err := s.ctx.GetClientTLSConfig()
-		if err != nil {
-			return err
-		}
-		opts = append(
-			opts,
-			// TODO(tamird): remove this timeout. It is currently necessary because
-			// GRPC will not actually bail on a bad certificate error - it will just
-			// retry indefinitely. See https://github.com/grpc/grpc-go/issues/622.
-			grpc.WithTimeout(base.NetworkTimeout),
-			grpc.WithBlock(),
-			grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
-		)
+	dialOpt, err := s.rpcContext.GRPCDialOption()
+	if err != nil {
+		return err
 	}
-
-	conn, err := s.rpcContext.GRPCDial(s.ctx.Addr, opts...)
+	conn, err := s.rpcContext.GRPCDial(s.ctx.Addr, dialOpt)
 	if err != nil {
 		return errors.Errorf("error constructing grpc-gateway: %s; are your certificates valid?", err)
 	}
