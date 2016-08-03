@@ -2541,11 +2541,11 @@ func (s *Store) processRaft() {
 			for _, r := range initReplicas {
 				sem.acquire()
 				go func(r *Replica) {
+					defer sem.release()
+					defer wg.Done()
 					if err := r.handleRaftReady(); err != nil {
 						panic(err) // TODO(bdarnell)
 					}
-					wg.Done()
-					sem.release()
 				}(r)
 			}
 			wg.Wait()
