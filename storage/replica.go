@@ -2557,10 +2557,6 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 				if e.LeaseHolder != nil {
 					pErr = nil
 				}
-			case *roachpb.LeaseRejectedError:
-				// leaseRejectedError means we tried to get one but someone
-				// beat us to it.
-				pErr = nil
 			case *roachpb.RangeFrozenError:
 				storeID := r.store.StoreID()
 				// Let the replica with the smallest StoreID gossip.
