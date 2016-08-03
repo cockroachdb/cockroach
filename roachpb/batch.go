@@ -94,6 +94,17 @@ func (ba *BatchRequest) IsTransactionWrite() bool {
 	return ba.hasFlag(isTxnWrite)
 }
 
+// IsSingleRequest returns true iff the BatchRequest contains a single request.
+func (ba *BatchRequest) IsSingleRequest() bool {
+	return len(ba.Requests) == 1
+}
+
+// IsSingleNonTemporalRequest returns true iff the batch contains a single
+// request, and that request has the non-temporal flag set.
+func (ba *BatchRequest) IsSingleNonTemporalRequest() bool {
+	return ba.IsSingleRequest() && ba.hasFlag(isNonTemporal)
+}
+
 // hasFlag returns true iff one of the requests within the batch contains the
 // specified flag.
 func (ba *BatchRequest) hasFlag(flag int) bool {
