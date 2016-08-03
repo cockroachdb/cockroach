@@ -1879,8 +1879,6 @@ func (r *Replica) processRaftCommand(
 		log.Fatalf(context.TODO(), "%s: processRaftCommand requires a non-zero index", r)
 	}
 
-	var forcedErr *roachpb.Error
-	var ctx context.Context
 	r.mu.Lock()
 	cmd := r.mu.pendingCmds[idKey]
 
@@ -1908,6 +1906,8 @@ func (r *Replica) processRaftCommand(
 		return false
 	}
 
+	// TODO(tschottdorf): consider the Trace situation here.
+	ctx := context.Background()
 	if cmd != nil {
 		// We initiated this command, so use the caller-supplied context.
 		ctx = cmd.ctx
@@ -1915,6 +1915,7 @@ func (r *Replica) processRaftCommand(
 	}
 	leaseIndex := r.mu.state.LeaseAppliedIndex
 
+	var forcedErr *roachpb.Error
 	if idKey == "" {
 		// This is an empty Raft command (which is sent by Raft after elections
 		// to trigger reproposals or during concurrent configuration changes).
@@ -1990,10 +1991,6 @@ func (r *Replica) processRaftCommand(
 		}
 	}
 	r.mu.Unlock()
-	if ctx == nil {
-		// TODO(tschottdorf): consider the Trace situation here.
-		ctx = context.Background()
-	}
 
 	log.Trace(ctx, "applying batch")
 	// applyRaftCommand will return "expected" errors, but may also indicate
