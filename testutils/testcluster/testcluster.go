@@ -381,6 +381,11 @@ func (tc *TestCluster) RemoveReplicas(
 // TransferRangeLease transfers the lease for a range from whoever has it to
 // a particular store. That store must already have a replica of the range. If
 // that replica already has the (active) lease, this method is a no-op.
+//
+// When this method returns, it's guaranteed that the old lease holder has
+// applied the new lease, but that's about it. It's not guaranteed that the new
+// lease holder has applied it (so it might not know immediately that it is the
+// new lease holder).
 func (tc *TestCluster) TransferRangeLease(
 	rangeDesc *roachpb.RangeDescriptor, dest ReplicationTarget,
 ) error {
@@ -392,63 +397,68 @@ func (tc *TestCluster) TransferRangeLease(
 }
 
 // FindRangeLeaseHolder returns the current lease holder for the given range. If
-// there is no lease at the time of the call, a replica is gets one as a
+// there is no lease at the time of the call, a replica gets one as a
 // side-effect of calling this; if hint is not nil, that replica will be the
 // one.
 //
-// One of the Stores in the cluster is used as a Sender to send a dummy read
-// command, which will either result in success (if a replica on that Node has
-// the lease), in a NotLeaseHolderError pointing to the current lease holder (if
-// there is an active lease), or in the replica on that store acquiring the
-// lease (if there isn't an active lease).
+// One of the Stores in the cluster (namely, the hint, if one is passed) is used
+// as a Sender to send a dummy read command, which will either result in success
+// (if a replica on that Node has the lease), in a NotLeaseHolderError pointing
+// to the current lease holder (if there is an active lease), or in the replica
+// on that store acquiring the lease (if there isn't an active lease).
 // If an active lease existed for the range, it's extended as a side-effect.
+//
+// Note that not all nodes have necessarily applied the latest lease,
+// particularly immediately after a TransferRangeLease() call. So specifying
+// different hints can yield different results. The one server that's guaranteed
+// to have applied the transfer is the previous lease holder.
 func (tc *TestCluster) FindRangeLeaseHolder(
 	rangeDesc *roachpb.RangeDescriptor,
 	hint *ReplicationTarget,
 ) (ReplicationTarget, error) {
-	var hintReplicaDesc roachpb.ReplicaDescriptor
 	if hint != nil {
 		var ok bool
-		if hintReplicaDesc, ok = rangeDesc.GetReplicaDescriptor(hint.StoreID); !ok {
+		if _, ok = rangeDesc.GetReplicaDescriptor(hint.StoreID); !ok {
 			return ReplicationTarget{}, errors.Errorf(
-				"bad hint; store doesn't have a replica of the range")
+				"bad hint: %+v; store doesn't have a replica of the range", hint)
 		}
 	} else {
 		hint = &ReplicationTarget{
 			NodeID:  rangeDesc.Replicas[0].NodeID,
 			StoreID: rangeDesc.Replicas[0].StoreID}
-		hintReplicaDesc = rangeDesc.Replicas[0]
 	}
-	// TODO(andrei): Using a dummy GetRequest for the purpose of figuring out the
-	// lease holder is a hack. Instead, we should have a dedicate admin command.
-	getReq := roachpb.GetRequest{
+
+	// Find the server indicated by the hint and send a LeaseInfoRequest through
+	// it.
+	var hintServer *server.TestServer
+	for _, s := range tc.Servers {
+		if s.GetNode().Descriptor.NodeID == hint.NodeID {
+			hintServer = s
+			break
+		}
+	}
+	if hintServer == nil {
+		return ReplicationTarget{}, errors.Errorf("bad hint: %+v; no such node", hint)
+	}
+	leaseReq := roachpb.LeaseInfoRequest{
 		Span: roachpb.Span{
 			Key: rangeDesc.StartKey.AsRawKey(),
 		},
 	}
-
-	store, err := tc.findMemberStore(hint.StoreID)
-	if err != nil {
-		return ReplicationTarget{}, err
-	}
-	_, pErr := client.SendWrappedWith(
-		store, nil,
-		roachpb.Header{RangeID: rangeDesc.RangeID, Replica: hintReplicaDesc},
-		&getReq)
+	leaseResp, pErr := client.SendWrappedWith(
+		hintServer.DB().GetSender(), nil,
+		roachpb.Header{
+			// INCONSISTENT read, since we want to make sure that the node used to
+			// send this is the one that processes the command, for the hint to
+			// matter.
+			ReadConsistency: roachpb.INCONSISTENT,
+		},
+		&leaseReq)
 	if pErr != nil {
-		if nle, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok {
-			if nle.LeaseHolder == nil {
-				return ReplicationTarget{}, errors.Errorf(
-					"unexpected NotLeaseHolderError with lease holder unknown")
-			}
-			return ReplicationTarget{
-				NodeID: nle.LeaseHolder.NodeID, StoreID: nle.LeaseHolder.StoreID}, nil
-		}
 		return ReplicationTarget{}, pErr.GoError()
 	}
-	// The replica we sent the request to either was already or just became
-	// the lease holder.
-	return *hint, nil
+	replicaDesc := leaseResp.(*roachpb.LeaseInfoResponse).Lease.Replica
+	return ReplicationTarget{NodeID: replicaDesc.NodeID, StoreID: replicaDesc.StoreID}, nil
 }
 
 // findMemberStore returns the store containing a given replica.
