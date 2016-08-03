@@ -414,8 +414,12 @@ func (g *Gossip) EnableSimulationCycler(enable bool) {
 	if enable {
 		g.simulationCycler = sync.NewCond(&g.mu)
 	} else {
-		g.simulationCycler.Broadcast()
-		g.simulationCycler = nil
+		// TODO(spencer): remove this nil check when gossip/simulation is no
+		// longer used in kv tests.
+		if g.simulationCycler != nil {
+			g.simulationCycler.Broadcast()
+			g.simulationCycler = nil
+		}
 	}
 }
 
