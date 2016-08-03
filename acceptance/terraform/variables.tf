@@ -102,7 +102,7 @@ variable "cockroach_root_disk_type" {
 #
 # Relevant supervisor docs:
 #
-#   https://www.terraform.io/docs/configuration/variables.html
+#   http://supervisord.org/subprocess.html#subprocess-environment
 variable "cockroach_env" {
   default = ""
 }
