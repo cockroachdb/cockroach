@@ -92,10 +92,19 @@ if test -d "${backtrace_dir}"; then
   vols="${vols} --volume=${backtrace_dir}/cockroach.cf:/root/.coroner.cf"
 fi
 
+# If we're running in an environment that's using git alternates, like TeamCity,
+# we must mount the path to the real git objects for git to work in the container.
+alternates_file="${cockroach_toplevel}/.git/objects/info/alternates"
+if test -e ${alternates_file}; then
+  alternates_path=$(cat ${alternates_file})
+  vols="${vols} --volume=${alternates_path}:${alternates_path}"
+fi
+
 docker run -i ${tty-} ${rm} \
   ${vols} \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
   --env="PAGER=cat" \
+  --env="SKIP_BOOTSTRAP=1" \
   --env="JSPM_GITHUB_AUTH_TOKEN=${JSPM_GITHUB_AUTH_TOKEN-763c42afb2d31eb7bc150da33402a24d0e081aef}" \
   --env="CIRCLE_NODE_INDEX=${CIRCLE_NODE_INDEX-0}" \
   --env="CIRCLE_NODE_TOTAL=${CIRCLE_NODE_TOTAL-1}" \
