@@ -670,45 +670,42 @@ func (r *Replica) applySnapshot(
 		// which is identical to the current state?
 	}
 
-	batch.Defer(func() {
-		// As the last deferred action after committing the batch, update other
-		// fields which are uninitialized or need updating. This may not happen
-		// if the system config has not yet been loaded. While config update
-		// will correctly set the fields, there is no order guarantee in
-		// ApplySnapshot.
-		// TODO: should go through the standard store lock when adding a replica.
-		if err := r.updateRangeInfo(&desc); err != nil {
-			panic(err)
-		}
-		// Update the range descriptor. This is done last as this is the step that
-		// makes the Replica visible in the Store.
-		if err := r.setDesc(&desc); err != nil {
-			panic(err)
-		}
-	})
-
-	batch.Defer(func() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		// We set the persisted last index to the last applied index. This is
-		// not a correctness issue, but means that we may have just transferred
-		// some entries we're about to re-request from the leader and overwrite.
-		// However, raft.MultiNode currently expects this behaviour, and the
-		// performance implications are not likely to be drastic. If our
-		// feelings about this ever change, we can add a LastIndex field to
-		// raftpb.SnapshotMetadata.
-		r.mu.lastIndex = s.RaftAppliedIndex
-		r.mu.raftLogSize = raftLogSize
-		// Update the range and store stats.
-		r.store.metrics.subtractMVCCStats(r.mu.state.Stats)
-		r.store.metrics.addMVCCStats(s.Stats)
-		r.mu.state = s
-		r.assertStateLocked(r.store.Engine())
-	})
-
 	if err := batch.Commit(); err != nil {
 		return err
 	}
+
+	r.mu.Lock()
+	// We set the persisted last index to the last applied index. This is
+	// not a correctness issue, but means that we may have just transferred
+	// some entries we're about to re-request from the leader and overwrite.
+	// However, raft.MultiNode currently expects this behaviour, and the
+	// performance implications are not likely to be drastic. If our
+	// feelings about this ever change, we can add a LastIndex field to
+	// raftpb.SnapshotMetadata.
+	r.mu.lastIndex = s.RaftAppliedIndex
+	r.mu.raftLogSize = raftLogSize
+	// Update the range and store stats.
+	r.store.metrics.subtractMVCCStats(r.mu.state.Stats)
+	r.store.metrics.addMVCCStats(s.Stats)
+	r.mu.state = s
+	r.assertStateLocked(r.store.Engine())
+	r.mu.Unlock()
+
+	// As the last deferred action after committing the batch, update other
+	// fields which are uninitialized or need updating. This may not happen
+	// if the system config has not yet been loaded. While config update
+	// will correctly set the fields, there is no order guarantee in
+	// ApplySnapshot.
+	// TODO: should go through the standard store lock when adding a replica.
+	if err := r.updateRangeInfo(&desc); err != nil {
+		panic(err)
+	}
+	// Update the range descriptor. This is done last as this is the step that
+	// makes the Replica visible in the Store.
+	if err := r.setDesc(&desc); err != nil {
+		panic(err)
+	}
+
 	if !isPreemptive {
 		r.store.metrics.rangeSnapshotsNormalApplied.Inc(1)
 	} else {

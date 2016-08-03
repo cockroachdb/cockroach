@@ -191,10 +191,6 @@ type Batch interface {
 	// Commit atomically applies any batched updates to the underlying
 	// engine. This is a noop unless the engine was created via NewBatch().
 	Commit() error
-	// Defer adds a callback to be run after the batch commits successfully. If
-	// Commit() fails deferred callbacks are not called. As with the defer
-	// statement, the last callback to be deferred is the first to be executed.
-	Defer(fn func())
 	// Distinct returns a view of the existing batch which only sees writes that
 	// were performed before the Distinct batch was created. That is, the
 	// returned batch will not read its own writes, but it will read writes to
