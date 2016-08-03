@@ -35,6 +35,7 @@ import (
 	"github.com/docker/engine-api/types/container"
 	"github.com/docker/engine-api/types/network"
 	"github.com/docker/go-connections/nat"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/util/log"
@@ -241,16 +242,15 @@ var _ = (*Container).Stop
 // Wait waits for a running container to exit.
 func (c *Container) Wait() error {
 	exitCode, err := c.cluster.client.ContainerWait(context.Background(), c.id)
-	if err != nil {
-		return err
+	if err == nil && exitCode != 0 {
+		err = errors.Errorf("non-zero exit code: %d", exitCode)
 	}
-	if exitCode != 0 {
+	if err != nil {
 		if err := c.Logs(os.Stderr); err != nil {
 			log.Warning(context.TODO(), err)
 		}
-		return fmt.Errorf("non-zero exit code: %d", exitCode)
 	}
-	return nil
+	return err
 }
 
 // Logs outputs the containers logs to the given io.Writer.
