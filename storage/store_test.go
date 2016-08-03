@@ -293,7 +293,7 @@ func createRange(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *Re
 	}
 	r, err := NewReplica(desc, s, 0)
 	if err != nil {
-		log.Fatal(context.TODO(), err)
+		log.Fatal(context.Background(), err)
 	}
 	return r
 }
@@ -423,7 +423,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, err = rng1.proposeRaftCommand(context.TODO(), roachpb.BatchRequest{})
+	_, _, err = rng1.proposeRaftCommand(context.Background(), roachpb.BatchRequest{})
 	expected := "replica .* was garbage collected"
 	if !testutils.IsError(err, expected) {
 		t.Fatalf("expected error %s, but got %v", expected, err)

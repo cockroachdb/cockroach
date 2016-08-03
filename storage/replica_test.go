@@ -1628,7 +1628,7 @@ func TestLeaseConcurrent(t *testing.T) {
 					// Morally speaking, this is an error, but reproposals can
 					// happen and so we warn (in case this trips the test up
 					// in more unexpected ways).
-					log.Infof(context.TODO(), "reproposal of %+v", ll)
+					log.Infof(context.Background(), "reproposal of %+v", ll)
 				}
 				go func() {
 					wg.Wait()
@@ -5814,7 +5814,7 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 
 	wrongIndex := ai - 1 // will chose this as MaxLeaseIndex
 
-	log.Infof(context.TODO(), "test begins")
+	log.Infof(context.Background(), "test begins")
 
 	var ba roachpb.BatchRequest
 	ba.Timestamp = tc.clock.Now()
@@ -5937,7 +5937,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			// the command and it isn't reproposed due to the
 			// client abandoning it.
 			if rand.Intn(2) == 0 {
-				log.Infof(context.TODO(), "abandoning command %d", i)
+				log.Infof(context.Background(), "abandoning command %d", i)
 				delete(rng.mu.pendingCmds, cmd.idKey)
 			} else if err := rng.proposePendingCmdLocked(cmd); err != nil {
 				t.Fatal(err)

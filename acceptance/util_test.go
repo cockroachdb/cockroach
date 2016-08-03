@@ -225,7 +225,7 @@ func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 		AddVars:     make(map[string]string),
 		KeepCluster: flagTFKeepCluster.String(),
 	}
-	log.Infof(context.TODO(), "logging to %s", logDir)
+	log.Infof(context.Background(), "logging to %s", logDir)
 	return f
 }
 

@@ -99,7 +99,7 @@ INSERT INTO mono.mono VALUES(-1, '0', -1, -1)`); err != nil {
 	invoke := func(client mtClient) {
 		logPrefix := fmt.Sprintf("%03d.%03d: ", atomic.AddUint64(&idGen, 1), client.ID)
 		l := func(msg string, args ...interface{}) {
-			log.Infof(context.TODO(), logPrefix+msg, args...)
+			log.Infof(context.Background(), logPrefix+msg, args...)
 		}
 		l("begin")
 		defer l("done")
