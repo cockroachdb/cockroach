@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"fmt"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -585,6 +586,93 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	if len(pErrs) != 0 {
 		t.Fatalf("expected more descriptor lookups, leftover pErrs: %+v", pErrs)
 	}
+}
+
+// TestEvictOnFirstRangeGossip verifies that we evict the first range
+// descriptor from the descriptor cache when a gossip update is received for
+// the first range.
+func TestEvictOnFirstRangeGossip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	n := simulation.NewNetwork(1, true)
+	n.Start()
+	defer n.Stop()
+	g := n.Nodes[0].Gossip
+
+	var sender client.SenderFunc = func(_ context.Context, ba roachpb.BatchRequest) (
+		*roachpb.BatchResponse, *roachpb.Error,
+	) {
+		return ba.CreateReply(), nil
+	}
+
+	desc := roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKeyMax,
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+
+	var numFirstRange int32
+
+	rDB := MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) (
+		[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error,
+	) {
+		if len(key) == 0 {
+			fmt.Println("lookup")
+			atomic.AddInt32(&numFirstRange, 1)
+		}
+		return []roachpb.RangeDescriptor{desc}, nil, nil
+	})
+
+	ctx := &DistSenderContext{
+		TransportFactory:  SenderTransportFactory(tracing.NewTracer(), sender),
+		RangeDescriptorDB: rDB,
+	}
+
+	ds := NewDistSender(ctx, g)
+
+	anyKey := roachpb.Key("anything")
+
+	getArg := roachpb.NewIncrement(anyKey, 0)
+	if _, pErr := client.SendWrapped(ds, context.Background(), getArg); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	call := func() {
+		if _, _, err := ds.rangeCache.LookupRangeDescriptor(
+			context.Background(), keys.MustAddr(anyKey), nil, false, false,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	call()
+	call()
+	call()
+
+	if num := atomic.LoadInt32(&numFirstRange); num != 1 {
+		t.Fatalf("expected one first range lookup, got %d", num)
+	}
+
+	if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &desc, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	// Once Gossip fires the callbacks, we should see a cache eviction and thus,
+	// a new cache hit.
+	util.SucceedsSoon(t, func() error {
+		call()
+		if exp, act := int32(2), atomic.LoadInt32(&numFirstRange); exp != act {
+			return errors.Errorf("expected %d first range lookups, got %d", exp, act)
+		}
+		return nil
+	})
+
 }
 
 func TestEvictCacheOnError(t *testing.T) {
