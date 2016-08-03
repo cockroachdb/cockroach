@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
+	"github.com/rubyist/circuitbreaker"
 	"google.golang.org/grpc"
 )
 
@@ -118,6 +120,9 @@ func grpcTransportFactory(
 	for _, replica := range replicas {
 		conn, err := rpcContext.GRPCDial(replica.NodeDesc.Address.String())
 		if err != nil {
+			if errors.Cause(err) == circuit.ErrBreakerOpen {
+				continue
+			}
 			return nil, err
 		}
 		argsCopy := args
