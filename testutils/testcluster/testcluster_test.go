@@ -118,9 +118,9 @@ func TestManualReplication(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Check that the lease holder has changed. We'll use a bogus hint, which
-	// shouldn't matter (other than ensuring that it's not this call that moves
-	// the range holder, but that a holder already existed).
+	// Check that the lease holder has changed. We'll use the old lease holder as
+	// the hint, since it's guaranteed that the old lease holder has applied the
+	// new lease.
 	leaseHolder, err = tc.FindRangeLeaseHolder(
 		tableRangeDesc,
 		&ReplicationTarget{

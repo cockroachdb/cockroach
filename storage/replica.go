@@ -1013,7 +1013,7 @@ func (r *Replica) Send(
 		pErr = roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
 	}
 	if pErr != nil {
-		log.Tracef(ctx, "error: %s", pErr)
+		log.Tracef(ctx, "replica.Send got error: %s", pErr)
 	}
 	return br, pErr
 }

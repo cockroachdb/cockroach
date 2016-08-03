@@ -37,6 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -733,4 +735,123 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		// Unblock the read.
 		readBlocked <- struct{}{}
 	}
+}
+
+// LeaseInfo runs a LeaseInfoRequest using the specified server.
+func LeaseInfo(
+	t *testing.T,
+	db *client.DB,
+	rangeDesc roachpb.RangeDescriptor,
+	readConsistency roachpb.ReadConsistencyType,
+) roachpb.LeaseInfoResponse {
+	leaseInfoReq := &roachpb.LeaseInfoRequest{
+		Span: roachpb.Span{
+			Key: rangeDesc.StartKey.AsRawKey(),
+		},
+	}
+	reply, pErr := client.SendWrappedWith(db.GetSender(), nil, roachpb.Header{
+		ReadConsistency: readConsistency,
+	}, leaseInfoReq)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	return *(reply.(*roachpb.LeaseInfoResponse))
+}
+
+func TestLeaseInfoRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testcluster.StartTestCluster(t, 3,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: "t",
+			},
+		})
+	defer tc.Stopper().Stop()
+
+	s0 := sqlutils.MakeSQLRunner(t, tc.Conns[0])
+	s0.Exec(`CREATE DATABASE t`)
+	s0.Exec(`CREATE TABLE test (k INT PRIMARY KEY, v INT)`)
+	s0.Exec(`INSERT INTO test VALUES (5, 1), (4, 2), (1, 2)`)
+
+	kvDB0 := tc.Servers[0].DB()
+	kvDB1 := tc.Servers[1].DB()
+
+	tableStartKey := []byte("a")
+	var rangeDesc *roachpb.RangeDescriptor = new(roachpb.RangeDescriptor)
+	var err error
+	*rangeDesc, err = tc.LookupRange(tableStartKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rangeDesc, err = tc.AddReplicas(
+		rangeDesc.StartKey.AsRawKey(), tc.Target(1), tc.Target(2),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rangeDesc.Replicas) != 3 {
+		t.Fatalf("expected 3 replicas, got %+v", rangeDesc.Replicas)
+	}
+	replicas := make([]roachpb.ReplicaDescriptor, 3)
+	for i := 0; i < 3; i++ {
+		var ok bool
+		replicas[i], ok = rangeDesc.GetReplicaDescriptor(tc.Servers[i].GetFirstStoreID())
+		if !ok {
+			t.Fatalf("expected to find replica in server %d", i)
+		}
+	}
+
+	// Lease should start on Server 0, since nobody told it to move.
+	leaseHolderReplica := LeaseInfo(t, kvDB0, *rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+	if leaseHolderReplica != replicas[0] {
+		t.Fatalf("lease holder should be replica %+v, but is: %+v", replicas[0], leaseHolderReplica)
+	}
+
+	// Transfer the lease to Server 1 and check that LeaseInfoRequest gets the
+	// right answer.
+	err = tc.TransferRangeLease(rangeDesc, tc.Target(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An inconsistent LeaseInfoReqeust on the old lease holder should give us the
+	// right answer immediately, since the old holder has definitely applied the
+	// transfer before TransferRangeLease returned.
+	leaseHolderReplica = LeaseInfo(t, kvDB0, *rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+	if leaseHolderReplica != replicas[1] {
+		t.Fatalf("lease holder should be replica %+v, but is: %+v",
+			replicas[1], leaseHolderReplica)
+	}
+
+	// A read on the new lease holder does not necessarily succeed immediately,
+	// since it might take a while for it to apply the transfer.
+	util.SucceedsSoon(t, func() error {
+		// We can't reliably do a CONSISTENT read here, even though we're reading
+		// from the supposed lease holder, because this node might initially be
+		// unaware of the new lease and so the request might bounce around for a
+		// while (see #8816).
+		leaseHolderReplica = LeaseInfo(t, kvDB1, *rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+		if leaseHolderReplica != replicas[1] {
+			return errors.Errorf("lease holder should be replica %+v, but is: %+v",
+				replicas[1], leaseHolderReplica)
+		}
+		return nil
+	})
+
+	// Transfer the lease to Server 2 and check that LeaseInfoRequest gets the
+	// right answer.
+	err = tc.TransferRangeLease(rangeDesc, tc.Target(2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaseHolderReplica = LeaseInfo(t, kvDB1, *rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+	if leaseHolderReplica != replicas[2] {
+		t.Fatalf("lease holder should be replica %+v, but is: %+v", replicas[2], leaseHolderReplica)
+	}
+
+	// TODO(andrei): test the side-effect of LeaseInfoRequest when there's no
+	// active lease - the node getting the request is supposed to acquire the
+	// lease. This requires a way to expire leases; the TestCluster probably needs
+	// to use a mock clock.
 }
