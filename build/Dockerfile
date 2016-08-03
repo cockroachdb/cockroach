@@ -14,6 +14,4 @@ RUN \
 
 ENV PATH=/opt/backtrace/bin:/third_party/llvm-build/Release+Asserts/bin:$PATH
 
-ENV SKIP_BOOTSTRAP=1
-
 CMD ["/bin/bash"]
