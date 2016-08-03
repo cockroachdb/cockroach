@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/pkg/errors"
+	circuit "github.com/rubyist/circuitbreaker"
 )
 
 func newTestServer(t *testing.T, ctx *Context, manual bool) (*grpc.Server, net.Listener) {
@@ -387,5 +388,39 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 				t.Logf("max offset: %s - node %d with acceptable clock offset of %s did not return an error, as expected", maxOffset, i, nodeOffset)
 			}
 		}
+	}
+}
+
+func TestCircuitBreaker(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	clock := hlc.NewClock(time.Unix(0, 1).UnixNano)
+	serverCtx := newNodeTestContext(clock, stopper)
+	_, ln := newTestServer(t, serverCtx, true)
+	remoteAddr := ln.Addr().String()
+
+	clientCtx := newNodeTestContext(clock, stopper)
+	// The first dial will succeed because the breaker is closed.
+	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait until the breaker opens. This will occur when the heartbeat fails
+	// (because there is no heartbeat service).
+	util.SucceedsSoon(t, func() error {
+		_, err := clientCtx.GRPCDial(remoteAddr)
+		if err == circuit.ErrBreakerOpen {
+			return nil
+		}
+		return errors.Errorf("breaker not open")
+	})
+
+	// Reset the breaker. The next dial will succeed.
+	clientCtx.getBreaker(remoteAddr).Reset()
+	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
+		t.Fatal(err)
 	}
 }
