@@ -107,6 +107,8 @@ const (
 	RequestLease
 	// TransferLease transfers the range lease from a lease holder to a new one.
 	TransferLease
+	// LeaseInfo returns information about a range's lease.
+	LeaseInfo
 	// ComputeChecksum starts a checksum computation over a replica snapshot.
 	ComputeChecksum
 	// VerifyChecksum verifies the checksum computed through an earlier

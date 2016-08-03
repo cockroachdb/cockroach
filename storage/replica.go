@@ -945,7 +945,7 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 		pErr = roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
 	}
 	if pErr != nil {
-		log.Tracef(ctx, "error: %s", pErr)
+		log.Tracef(ctx, "replica.Send got error: %s", pErr)
 	}
 	return br, pErr
 }

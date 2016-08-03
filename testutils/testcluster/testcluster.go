@@ -401,10 +401,9 @@ func (tc *TestCluster) FindRangeLeaseHolder(
 	rangeDesc *roachpb.RangeDescriptor,
 	hint *ReplicationTarget,
 ) (ReplicationTarget, error) {
-	var hintReplicaDesc roachpb.ReplicaDescriptor
 	if hint != nil {
 		var ok bool
-		if hintReplicaDesc, ok = rangeDesc.GetReplicaDescriptor(hint.StoreID); !ok {
+		if _, ok = rangeDesc.GetReplicaDescriptor(hint.StoreID); !ok {
 			return ReplicationTarget{}, errors.Errorf(
 				"bad hint; store doesn't have a replica of the range")
 		}
@@ -412,38 +411,38 @@ func (tc *TestCluster) FindRangeLeaseHolder(
 		hint = &ReplicationTarget{
 			NodeID:  rangeDesc.Replicas[0].NodeID,
 			StoreID: rangeDesc.Replicas[0].StoreID}
-		hintReplicaDesc = rangeDesc.Replicas[0]
 	}
-	// TODO(andrei): Using a dummy GetRequest for the purpose of figuring out the
-	// lease holder is a hack. Instead, we should have a dedicate admin command.
-	getReq := roachpb.GetRequest{
+
+	// Find the server indicated by the hint and send a LeaseInfoRequest through
+	// it.
+	var hintServer *server.TestServer
+	for _, s := range tc.Servers {
+		if s.GetNode().Descriptor.NodeID == hint.NodeID {
+			hintServer = s
+			break
+		}
+	}
+	if hintServer == nil {
+		return ReplicationTarget{}, errors.Errorf("bad hint: no such node")
+	}
+	leaseReq := roachpb.LeaseInfoRequest{
 		Span: roachpb.Span{
 			Key: rangeDesc.StartKey.AsRawKey(),
 		},
 	}
-
-	store, err := tc.findMemberStore(hint.StoreID)
-	if err != nil {
-		return ReplicationTarget{}, err
-	}
-	_, pErr := client.SendWrappedWith(
-		store, nil,
-		roachpb.Header{RangeID: rangeDesc.RangeID, Replica: hintReplicaDesc},
-		&getReq)
+	leaseResp, pErr := client.SendWrappedWith(
+		hintServer.DB().GetSender(), nil,
+		roachpb.Header{RangeID: rangeDesc.RangeID},
+		&leaseReq)
 	if pErr != nil {
-		if nle, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok {
-			if nle.LeaseHolder == nil {
-				return ReplicationTarget{}, errors.Errorf(
-					"unexpected NotLeaseHolderError with lease holder unknown")
-			}
-			return ReplicationTarget{
-				NodeID: nle.LeaseHolder.NodeID, StoreID: nle.LeaseHolder.StoreID}, nil
-		}
 		return ReplicationTarget{}, pErr.GoError()
 	}
-	// The replica we sent the request to either was already or just became
-	// the lease holder.
-	return *hint, nil
+	replicaDesc := leaseResp.(*roachpb.LeaseInfoResponse).Replica
+	rt := ReplicationTarget{
+		NodeID:  replicaDesc.NodeID,
+		StoreID: replicaDesc.StoreID,
+	}
+	return rt, nil
 }
 
 // findMemberStore returns the store containing a given replica.

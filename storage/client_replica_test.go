@@ -32,11 +32,14 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -733,4 +736,101 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		// Unblock the read.
 		readBlocked <- struct{}{}
 	}
+}
+
+func TestLeaseInfoRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testcluster.StartTestCluster(t, 3,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: "t",
+			},
+		})
+	defer tc.Stopper().Stop()
+
+	s0 := sqlutils.MakeSQLRunner(t, tc.Conns[0])
+	s0.Exec(`CREATE DATABASE t`)
+	s0.Exec(`CREATE TABLE test (k INT PRIMARY KEY, v INT)`)
+	s0.Exec(`INSERT INTO test VALUES (5, 1), (4, 2), (1, 2)`)
+
+	// Split the table to a new range.
+	kvDB0 := tc.Servers[0].DB()
+	kvDB1 := tc.Servers[1].DB()
+	tableDesc := sqlbase.GetTableDescriptor(kvDB0, "t", "test")
+
+	tableStartKey := keys.MakeRowSentinelKey(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	_, tableRangeDesc, err := tc.SplitRange(tableStartKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tableRangeDesc, err = tc.AddReplicas(
+		tableRangeDesc.StartKey.AsRawKey(), tc.Target(1), tc.Target(2),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tableRangeDesc.Replicas) != 3 {
+		t.Fatalf("expected 3 replicas, got %+v", tableRangeDesc.Replicas)
+	}
+	replica1, ok := tableRangeDesc.GetReplicaDescriptor(tc.Servers[1].GetFirstStoreID())
+	if !ok {
+		t.Fatalf("expected to find replica in server 1")
+	}
+
+	err = tc.TransferRangeLease(tableRangeDesc, tc.Target(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	leaseInfoReq := &roachpb.LeaseInfoRequest{
+		Span: roachpb.Span{
+			Key: tableRangeDesc.StartKey.AsRawKey(),
+		},
+	}
+	reply, pErr := client.SendWrappedWith(kvDB1.GetSender(), nil, roachpb.Header{
+		ReadConsistency: roachpb.INCONSISTENT,
+	}, leaseInfoReq)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	leaseHolderReplica := reply.(*roachpb.LeaseInfoResponse).Replica
+	if leaseHolderReplica != replica1 {
+		t.Fatalf("lease holder should be replica %+v, but is: %+v", replica1, leaseHolderReplica)
+	}
+
+	// Transfer the lease to server 2 and check that LeaseInfoRequest gets the
+	// right answer.
+	err = tc.TransferRangeLease(tableRangeDesc, tc.Target(2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	replica2, ok := tableRangeDesc.GetReplicaDescriptor(tc.Servers[2].GetFirstStoreID())
+	if !ok {
+		t.Fatalf("expected to find replica in server 2")
+	}
+
+	leaseInfoReq = &roachpb.LeaseInfoRequest{
+		Span: roachpb.Span{
+			Key: tableRangeDesc.StartKey.AsRawKey(),
+		},
+	}
+	reply, pErr = client.SendWrappedWith(kvDB1.GetSender(), nil, roachpb.Header{
+		// The INCONSISTENT read here is relevant, since we're sending the request
+		// through server 1.
+		ReadConsistency: roachpb.INCONSISTENT,
+	}, leaseInfoReq)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	leaseHolderReplica = reply.(*roachpb.LeaseInfoResponse).Replica
+	if leaseHolderReplica != replica2 {
+		t.Fatalf("lease holder should be replica %+v, but is: %+v", replica2, leaseHolderReplica)
+	}
+
+	// TODO(andrei): test the side-effect of LeaseInfoRequest when there's no
+	// active lease - the node getting the request is supposed to acquire the
+	// lease. This requires a way to expire leases; the TestCluster probably needs
+	// to use a mock clock.
 }
