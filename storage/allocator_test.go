@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -168,8 +169,9 @@ func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator
 	stopper := stop.NewStopper()
 	manualClock := hlc.NewManualClock(hlc.UnixNano())
 	clock := hlc.NewClock(manualClock.UnixNano)
-	rpcContext := rpc.NewContext(nil, clock, stopper)
-	g := gossip.New(rpcContext, nil, stopper, metric.NewRegistry())
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
+	server := rpc.NewServer(rpcContext) // never started
+	g := gossip.New(rpcContext, server, nil, stopper, metric.NewRegistry())
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	storePool := NewStorePool(
@@ -1163,7 +1165,9 @@ func Example_rebalancing() {
 
 	// Model a set of stores in a cluster,
 	// randomly adding / removing stores and adding bytes.
-	g := gossip.New(nil, nil, stopper, metric.NewRegistry())
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
+	server := rpc.NewServer(rpcContext) // never started
+	g := gossip.New(rpcContext, server, nil, stopper, metric.NewRegistry())
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	sp := NewStorePool(
