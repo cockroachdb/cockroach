@@ -49,7 +49,7 @@ type ReplicaState struct {
 	// The pointer may change, but the referenced RangeDescriptor struct itself
 	// must be treated as immutable; it is leaked out of the lock.
 	//
-	// Changes of the descriptor should normally go through one of the
+	// Changes of the descriptor should always go through one of the
 	// (*Replica).setDesc* methods.
 	Desc *cockroach_roachpb.RangeDescriptor `protobuf:"bytes,3,opt,name=desc" json:"desc,omitempty"`
 	// The latest lease, if any.
