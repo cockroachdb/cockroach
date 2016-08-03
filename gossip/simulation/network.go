@@ -109,7 +109,7 @@ func (n *Network) CreateNode() (*Node, error) {
 		server.Stop()
 	})
 	node := &Node{Server: server, Listener: ln, Registry: metric.NewRegistry()}
-	node.Gossip = gossip.New(n.rpcContext, nil, n.Stopper, node.Registry)
+	node.Gossip = gossip.New(n.rpcContext, server, nil, n.Stopper, node.Registry)
 	n.Nodes = append(n.Nodes, node)
 	return node, nil
 }
@@ -117,7 +117,7 @@ func (n *Network) CreateNode() (*Node, error) {
 // StartNode initializes a gossip instance for the simulation node and
 // starts it.
 func (n *Network) StartNode(node *Node) error {
-	node.Gossip.Start(node.Server, node.Addr())
+	node.Gossip.Start(node.Addr())
 	node.Gossip.EnableSimulationCycler(true)
 	n.nodeIDAllocator++
 	node.Gossip.SetNodeID(n.nodeIDAllocator)

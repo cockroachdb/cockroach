@@ -133,9 +133,10 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 			log.Fatal(context.TODO(), err)
 		}
 	}
+	s.grpc = rpc.NewServer(s.rpcContext)
 
 	gossipRegistry := metric.NewRegistry()
-	s.gossip = gossip.New(s.rpcContext, s.ctx.GossipBootstrapResolvers, s.stopper, gossipRegistry)
+	s.gossip = gossip.New(s.rpcContext, s.grpc, s.ctx.GossipBootstrapResolvers, s.stopper, gossipRegistry)
 	s.storePool = storage.NewStorePool(
 		s.gossip,
 		s.clock,
@@ -169,7 +170,6 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 		s.stopper, txnMetrics)
 	s.db = client.NewDB(sender)
 
-	s.grpc = rpc.NewServer(s.rpcContext)
 	s.raftTransport = storage.NewRaftTransport(storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext)
 
 	s.kvDB = kv.NewDBServer(s.ctx.Context, sender, s.stopper)
@@ -401,7 +401,7 @@ func (s *Server) Start() error {
 		})
 	}
 
-	s.gossip.Start(s.grpc, unresolvedAddr)
+	s.gossip.Start(unresolvedAddr)
 
 	ctx := context.Background()
 	if err := s.node.start(ctx, unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {

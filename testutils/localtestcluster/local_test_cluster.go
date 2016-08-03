@@ -88,7 +88,8 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Context, initSen
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano)
 	ltc.Stopper = stop.NewStopper()
 	rpcContext := rpc.NewContext(baseCtx, ltc.Clock, ltc.Stopper)
-	ltc.Gossip = gossip.New(rpcContext, nil, ltc.Stopper, metric.NewRegistry())
+	server := rpc.NewServer(rpcContext) // never started
+	ltc.Gossip = gossip.New(rpcContext, server, nil, ltc.Stopper, metric.NewRegistry())
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20, ltc.Stopper)
 
 	ltc.Stores = storage.NewStores(ltc.Clock)

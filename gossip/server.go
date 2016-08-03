@@ -26,7 +26,6 @@ import (
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
-	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
@@ -303,11 +302,10 @@ func (s *server) maybeTighten() {
 // then begins processing connecting clients in an infinite select
 // loop via goroutine. Periodically, clients connected and awaiting
 // the next round of gossip are awoken via the conditional variable.
-func (s *server) start(grpcServer *grpc.Server, addr net.Addr) {
+func (s *server) start(addr net.Addr) {
 	s.mu.Lock()
 	s.is.NodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
 	s.mu.Unlock()
-	RegisterGossipServer(grpcServer, s)
 
 	broadcast := func() {
 		ready := make(chan struct{})

@@ -43,12 +43,12 @@ func startGossip(nodeID roachpb.NodeID, stopper *stop.Stopper, t *testing.T, reg
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
 	server := rpc.NewServer(rpcContext)
+	g := New(rpcContext, server, nil, stopper, registry)
 	ln, err := netutil.ListenAndServeGRPC(stopper, server, util.TestAddr)
 	if err != nil {
 		t.Fatal(err)
 	}
 	addr := ln.Addr()
-	g := New(rpcContext, nil, stopper, registry)
 	g.SetNodeID(nodeID)
 	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{
 		NodeID:  nodeID,
@@ -56,7 +56,7 @@ func startGossip(nodeID roachpb.NodeID, stopper *stop.Stopper, t *testing.T, reg
 	}); err != nil {
 		t.Fatal(err)
 	}
-	g.start(server, addr)
+	g.start(addr)
 	time.Sleep(time.Millisecond)
 	return g
 }
@@ -98,17 +98,17 @@ func (s *fakeGossipServer) Gossip(stream Gossip_GossipServer) error {
 // startFakeServerGossips creates local gossip instances and remote
 // faked gossip instance. The remote gossip instance launches its
 // faked gossip service just for check the client message.
-func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServer, stopper *stop.Stopper) {
-	stopper = stop.NewStopper()
+func startFakeServerGossips(t *testing.T) (*Gossip, *fakeGossipServer, *stop.Stopper) {
+	stopper := stop.NewStopper()
 	lRPCContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
 	lserver := rpc.NewServer(lRPCContext)
+	local := New(lRPCContext, lserver, nil, stopper, metric.NewRegistry())
 	lln, err := netutil.ListenAndServeGRPC(stopper, lserver, util.TestAddr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	local = New(lRPCContext, nil, stopper, metric.NewRegistry())
-	local.start(lserver, lln.Addr())
+	local.start(lln.Addr())
 
 	rRPCContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
@@ -117,11 +117,10 @@ func startFakeServerGossips(t *testing.T) (local *Gossip, remote *fakeGossipServ
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	remote = newFakeGossipServer(rserver, stopper)
+	remote := newFakeGossipServer(rserver, stopper)
 	addr := rln.Addr()
 	remote.nodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
-	return
+	return local, remote, stopper
 }
 
 func gossipSucceedsSoon(t *testing.T, stopper *stop.Stopper, disconnected chan *client, gossip map[*client]*Gossip, f func() error) {
@@ -409,13 +408,16 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		}
 
 		var resolvers []resolver.Resolver
-		resolver, _ := resolver.NewResolver(RPCContext.Context, gossipAddr)
+		resolver, err := resolver.NewResolver(RPCContext.Context, gossipAddr)
+		if err != nil {
+			t.Fatal(err)
+		}
 		resolvers = append(resolvers, resolver)
-		gnode := New(RPCContext, resolvers, stopper, metric.NewRegistry())
+		gnode := New(RPCContext, server, resolvers, stopper, metric.NewRegistry())
 		// node ID must be non-zero
 		gnode.SetNodeID(roachpb.NodeID(i + 1))
 		g = append(g, gnode)
-		gnode.Start(server, ln.Addr())
+		gnode.Start(ln.Addr())
 	}
 
 	util.SucceedsSoon(t, func() error {
