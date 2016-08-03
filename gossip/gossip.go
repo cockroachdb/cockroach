@@ -61,11 +61,12 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"golang.org/x/net/context"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
@@ -190,7 +191,7 @@ type Gossip struct {
 }
 
 // New creates an instance of a gossip node.
-func New(rpcContext *rpc.Context, resolvers []resolver.Resolver, stopper *stop.Stopper, registry *metric.Registry) *Gossip {
+func New(rpcContext *rpc.Context, grpcServer *grpc.Server, resolvers []resolver.Resolver, stopper *stop.Stopper, registry *metric.Registry) *Gossip {
 	g := &Gossip{
 		Connected:         make(chan struct{}),
 		rpcContext:        rpcContext,
@@ -212,6 +213,8 @@ func New(rpcContext *rpc.Context, resolvers []resolver.Resolver, stopper *stop.S
 	g.is.registerCallback(KeySystemConfig, g.updateSystemConfig)
 	// Add ourselves as a node descriptor watcher.
 	g.is.registerCallback(MakePrefixPattern(KeyNodeIDPrefix), g.updateNodeAddress)
+
+	RegisterGossipServer(grpcServer, g.server)
 
 	return g
 }
@@ -769,10 +772,10 @@ func (g *Gossip) MaxHops() uint32 {
 //
 // This method starts bootstrap loop, gossip server, and client
 // management in separate goroutines and returns.
-func (g *Gossip) Start(grpcServer *grpc.Server, addr net.Addr) {
-	g.server.start(grpcServer, addr) // serve gossip protocol
-	g.bootstrap()                    // bootstrap gossip client
-	g.manage()                       // manage gossip clients
+func (g *Gossip) Start(addr net.Addr) {
+	g.server.start(addr) // serve gossip protocol
+	g.bootstrap()        // bootstrap gossip client
+	g.manage()           // manage gossip clients
 }
 
 // hasIncoming returns whether the server has an incoming gossip

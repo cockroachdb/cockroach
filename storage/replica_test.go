@@ -152,8 +152,9 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(tc.stopper)
 	if tc.gossip == nil {
-		rpcContext := rpc.NewContext(nil, nil, tc.stopper)
-		tc.gossip = gossip.New(rpcContext, nil, tc.stopper, metric.NewRegistry())
+		rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, tc.stopper)
+		server := rpc.NewServer(rpcContext) // never started
+		tc.gossip = gossip.New(rpcContext, server, nil, tc.stopper, metric.NewRegistry())
 		tc.gossip.SetNodeID(1)
 	}
 	if tc.manualClock == nil {

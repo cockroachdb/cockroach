@@ -28,6 +28,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -130,8 +131,9 @@ func createTestStoreWithoutStart(t testing.TB, ctx *StoreContext) (*Store, *hlc.
 	stopper := stop.NewStopper()
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(stopper)
-	rpcContext := rpc.NewContext(nil, nil, stopper)
-	ctx.Gossip = gossip.New(rpcContext, nil, stopper, metric.NewRegistry())
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
+	server := rpc.NewServer(rpcContext) // never started
+	ctx.Gossip = gossip.New(rpcContext, server, nil, stopper, metric.NewRegistry())
 	ctx.Gossip.SetNodeID(1)
 	manual := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
