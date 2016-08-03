@@ -88,7 +88,7 @@ func setupMVCCData(emk engineMaker, numVersions, numKeys, valueBytes int, b *tes
 		return eng, loc, stopper
 	}
 
-	log.Infof(context.TODO(), "creating mvcc data: %s", loc)
+	log.Infof(context.Background(), "creating mvcc data: %s", loc)
 
 	// Generate the same data every time.
 	rng := rand.New(rand.NewSource(1449168817))
@@ -119,7 +119,7 @@ func setupMVCCData(emk engineMaker, numVersions, numKeys, valueBytes int, b *tes
 		// optimizations which change the data size result in the same number of
 		// sstables.
 		if scaled := len(order) / 20; i > 0 && (i%scaled) == 0 {
-			log.Infof(context.TODO(), "committing (%d/~%d)", i/scaled, 20)
+			log.Infof(context.Background(), "committing (%d/~%d)", i/scaled, 20)
 			if err := batch.Commit(); err != nil {
 				b.Fatal(err)
 			}
@@ -472,7 +472,7 @@ func runMVCCComputeStats(emk engineMaker, valueBytes int, b *testing.B) {
 	}
 
 	b.StopTimer()
-	log.Infof(context.TODO(), "live_bytes: %d", stats.LiveBytes)
+	log.Infof(context.Background(), "live_bytes: %d", stats.LiveBytes)
 }
 
 func BenchmarkMVCCPutDelete_RocksDB(b *testing.B) {

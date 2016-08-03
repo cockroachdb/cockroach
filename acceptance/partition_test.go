@@ -113,13 +113,13 @@ func (b *Bank) Verify() {
 }
 
 func (b *Bank) logFailed(i int, v interface{}) {
-	log.Warningf(context.TODO(), "%d: %v", i, v)
+	log.Warningf(context.Background(), "%d: %v", i, v)
 }
 func (b *Bank) logBegin(i int, from, to, amount int) {
-	log.Warningf(context.TODO(), "%d: %d trying to give $%d to %d", i, from, amount, to)
+	log.Warningf(context.Background(), "%d: %d trying to give $%d to %d", i, from, amount, to)
 }
 func (b *Bank) logSuccess(i int, from, to, amount int) {
-	log.Warningf(context.TODO(), "%d: %d gave $%d to %d", i, from, amount, to)
+	log.Warningf(context.Background(), "%d: %d gave $%d to %d", i, from, amount, to)
 }
 
 // Invoke transfers a random amount of money between random accounts.
@@ -200,7 +200,7 @@ func testBankWithNemesis(nemeses ...NemesisFn) configTestRunner {
 		case <-stopper:
 		case <-time.After(cfg.Duration):
 		}
-		log.Warningf(context.TODO(), "finishing test")
+		log.Warningf(context.Background(), "finishing test")
 		b.Verify()
 	}
 }

@@ -114,7 +114,7 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 		case <-time.After(1 * time.Second):
 			// Periodically print out progress so that we know the test is still
 			// running.
-			log.Infof(context.TODO(), "%d", atomic.LoadInt64(&expected))
+			log.Infof(context.Background(), "%d", atomic.LoadInt64(&expected))
 		}
 	}
 
@@ -131,5 +131,5 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 	for _, r := range results {
 		maxLatency = append(maxLatency, r.maxLatency)
 	}
-	log.Infof(context.TODO(), "%d increments: %s", v, maxLatency)
+	log.Infof(context.Background(), "%d increments: %s", v, maxLatency)
 }

@@ -64,7 +64,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 	desc := tc.rng.Desc()
 	zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		log.Errorf(context.TODO(), "could not find GC policy for range %s: %s, got zone %+v",
+		log.Errorf(context.Background(), "could not find GC policy for range %s: %s, got zone %+v",
 			tc.rng, err, zone)
 		return
 	}
@@ -312,7 +312,7 @@ func TestGCQueueProcess(t *testing.T) {
 	}
 	for i, kv := range kvs {
 		if log.V(1) {
-			log.Infof(context.TODO(), "%d: %s", i, kv.Key)
+			log.Infof(context.Background(), "%d: %s", i, kv.Key)
 		}
 	}
 	if len(kvs) != len(expKVs) {
@@ -326,7 +326,7 @@ func TestGCQueueProcess(t *testing.T) {
 			t.Errorf("%d: expected ts=%s; got %s", i, expKVs[i].ts, kv.Key.Timestamp)
 		}
 		if log.V(1) {
-			log.Infof(context.TODO(), "%d: %s", i, kv.Key)
+			log.Infof(context.Background(), "%d: %s", i, kv.Key)
 		}
 	}
 
