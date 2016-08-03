@@ -72,6 +72,10 @@ if [ "${1-}" = "docker" ]; then
 
   if is_shard 0; then
     time make install
+    # `go test -i` apparently tries to write to GOTOOLDIR. Make sure the
+    # `current user can write there.
+    user=$(id -un)
+    time chown -R "${user}.${user}" $(go env GOTOOLDIR)
     time go test -v -i ./...
     time go test -v -c -tags acceptance ./acceptance
   fi
