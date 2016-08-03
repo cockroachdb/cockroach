@@ -226,9 +226,7 @@ func (l *LocalCluster) OneShot(
 		return err
 	}
 	if err := l.oneshot.Wait(); err != nil {
-		var b bytes.Buffer
-		_ = l.oneshot.Logs(&b)
-		return errors.Wrap(err, b.String())
+		return err
 	}
 	return nil
 }
