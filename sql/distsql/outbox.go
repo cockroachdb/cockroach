@@ -59,14 +59,21 @@ type outbox struct {
 
 var _ RowReceiver = &outbox{}
 
-func newOutboxSimpleFlowStream(ctx context.Context, stream DistSQL_RunSimpleFlowServer) *outbox {
-	return &outbox{flowCtx: &FlowCtx{Context: ctx}, simpleFlowStream: stream}
-}
-
 func newOutbox(flowCtx *FlowCtx, addr string, flowID FlowID, streamID StreamID) *outbox {
 	m := &outbox{flowCtx: flowCtx, addr: addr}
 	m.encoder.setHeaderFields(flowID, streamID)
 	return m
+}
+
+// newOutboxSimpleFlowStream sets up an outbox for the special "sync flow"
+// stream. The flow context should be provided via setFlowCtx when it is
+// available.
+func newOutboxSimpleFlowStream(stream DistSQL_RunSimpleFlowServer) *outbox {
+	return &outbox{simpleFlowStream: stream}
+}
+
+func (m *outbox) setFlowCtx(flowCtx *FlowCtx) {
+	m.flowCtx = flowCtx
 }
 
 // addRow encodes a row into rowBuf. If enough rows were accumulated
@@ -91,7 +98,7 @@ func (m *outbox) flush(last bool, err error) error {
 	msg := m.encoder.FormMessage(last, err)
 
 	if log.V(3) {
-		log.Infof(m.flowCtx, "flushing outbox")
+		log.Infof(m.flowCtx.Context, "flushing outbox")
 	}
 	var sendErr error
 	if m.stream != nil {
@@ -101,10 +108,10 @@ func (m *outbox) flush(last bool, err error) error {
 	}
 	if sendErr != nil {
 		if log.V(1) {
-			log.Errorf(m.flowCtx, "outbox flush error: %s", sendErr)
+			log.Errorf(m.flowCtx.Context, "outbox flush error: %s", sendErr)
 		}
 	} else if log.V(3) {
-		log.Infof(m.flowCtx, "outbox flushed")
+		log.Infof(m.flowCtx.Context, "outbox flushed")
 	}
 	if sendErr != nil {
 		return sendErr
@@ -122,17 +129,17 @@ func (m *outbox) mainLoop() error {
 		}
 		client := NewDistSQLClient(conn)
 		if log.V(2) {
-			log.Infof(m.flowCtx, "outbox: calling FlowStream")
+			log.Infof(m.flowCtx.Context, "outbox: calling FlowStream")
 		}
 		m.stream, err = client.FlowStream(context.TODO())
 		if err != nil {
 			if log.V(1) {
-				log.Infof(m.flowCtx, "FlowStream error: %s", err)
+				log.Infof(m.flowCtx.Context, "FlowStream error: %s", err)
 			}
 			return err
 		}
 		if log.V(2) {
-			log.Infof(m.flowCtx, "outbox: FlowStream returned")
+			log.Infof(m.flowCtx.Context, "outbox: FlowStream returned")
 		}
 	}
 

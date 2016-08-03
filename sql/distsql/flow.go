@@ -45,7 +45,7 @@ type FlowID struct {
 
 // FlowCtx encompasses the contexts needed for various flow components.
 type FlowCtx struct {
-	context.Context
+	Context context.Context
 	id      FlowID
 	evalCtx *parser.EvalContext
 	rpcCtx  *rpc.Context
@@ -84,7 +84,7 @@ func newFlow(
 	flowReg *flowRegistry,
 	simpleFlowConsumer RowReceiver,
 ) *Flow {
-	// TODO(radu): add Flow ID to flowCtx.Context.
+	flowCtx.Context = log.WithLogTagStr(flowCtx.Context, "flow", flowCtx.id.Short())
 	return &Flow{
 		FlowCtx:            flowCtx,
 		flowRegistry:       flowReg,
@@ -108,7 +108,7 @@ func (f *Flow) setupInboundStream(spec StreamEndpointSpec, rowChan *RowChannel) 
 			f.inboundStreams = make(map[StreamID]RowReceiver)
 		}
 		if log.V(2) {
-			log.Infof(f.FlowCtx, "Set up inbound stream %d", sid)
+			log.Infof(f.FlowCtx.Context, "Set up inbound stream %d", sid)
 		}
 		f.inboundStreams[sid] = rowChan
 		return nil
