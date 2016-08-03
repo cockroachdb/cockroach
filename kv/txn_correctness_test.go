@@ -109,14 +109,14 @@ func (c *cmd) clone() *cmd {
 func (c *cmd) execute(txn *client.Txn, t *testing.T) (string, error) {
 	if c.prev != nil {
 		if log.V(2) {
-			log.Infof(context.TODO(), "%s waiting on %s", c, c.prev)
+			log.Infof(context.Background(), "%s waiting on %s", c, c.prev)
 		}
 		if err := <-c.prev.ch; err != nil {
 			return "", err
 		}
 	}
 	if log.V(2) {
-		log.Infof(context.TODO(), "executing %s", c)
+		log.Infof(context.Background(), "executing %s", c)
 	}
 	err := c.fn(c, txn, t)
 	if err == nil {
@@ -552,7 +552,7 @@ func TestEnumerateHistoriesAfterRetry(t *testing.T) {
 	enum := enumerateHistories(txns, false)
 	for i, e := range enum {
 		if log.V(1) {
-			log.Infof(context.TODO(), "enum(%d): %s", i, historyString(e))
+			log.Infof(context.Background(), "enum(%d): %s", i, historyString(e))
 		}
 	}
 	testCases := []struct {
@@ -651,7 +651,7 @@ func newHistoryVerifier(name string, txns []string, verify *verifier, t *testing
 }
 
 func (hv *historyVerifier) run(isolations []enginepb.IsolationType, db *client.DB, t *testing.T) {
-	log.Infof(context.TODO(), "verifying all possible histories for the %q anomaly", hv.name)
+	log.Infof(context.Background(), "verifying all possible histories for the %q anomaly", hv.name)
 	priorities := make([]int32, len(hv.txns))
 	for i := 0; i < len(hv.txns); i++ {
 		priorities[i] = int32(i + 1)
@@ -684,7 +684,7 @@ func (hv *historyVerifier) runHistoryWithRetry(priorities []int32,
 	isolations []enginepb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
 	if err := hv.runHistory(priorities, isolations, cmds, db, t); err != nil {
 		if log.V(1) {
-			log.Infof(context.TODO(), "got an error running history %s: %s", historyString(cmds), err)
+			log.Infof(context.Background(), "got an error running history %s: %s", historyString(cmds), err)
 		}
 		retry, ok := err.(*retryError)
 		if !ok {
@@ -693,7 +693,7 @@ func (hv *historyVerifier) runHistoryWithRetry(priorities []int32,
 
 		if _, hasRetried := hv.retriedTxns[retry.txnIdx]; hasRetried {
 			if log.V(1) {
-				log.Infof(context.TODO(), "retried txn %d twice; skipping history", retry.txnIdx+1)
+				log.Infof(context.Background(), "retried txn %d twice; skipping history", retry.txnIdx+1)
 			}
 			return nil
 		}
@@ -703,7 +703,7 @@ func (hv *historyVerifier) runHistoryWithRetry(priorities []int32,
 		enumHis := sampleHistories(enumerateHistoriesAfterRetry(retry, cmds), 0.05)
 		for i, h := range enumHis {
 			if log.V(1) {
-				log.Infof(context.TODO(), "after retry, running alternate history %d of %d", i, len(enumHis))
+				log.Infof(context.Background(), "after retry, running alternate history %d of %d", i, len(enumHis))
 			}
 			if err := hv.runHistoryWithRetry(priorities, isolations, h, db, t); err != nil {
 				return err
@@ -728,7 +728,7 @@ func (hv *historyVerifier) runHistory(priorities []int32,
 	}
 	plannedStr := historyString(cmds)
 	if log.V(1) {
-		log.Infof(context.TODO(), "iso=%d pri=%d history=%s", isolations, priorities, plannedStr)
+		log.Infof(context.Background(), "iso=%d pri=%d history=%s", isolations, priorities, plannedStr)
 	}
 
 	hv.mu.actual = []string{}
@@ -778,7 +778,7 @@ func (hv *historyVerifier) runHistory(priorities []int32,
 	err = hv.verify.checkFn(verifyEnv)
 	if err == nil {
 		if log.V(1) {
-			log.Infof(context.TODO(), "PASSED: iso=%d, pri=%d, history=%q", isolations, priorities, actualStr)
+			log.Infof(context.Background(), "PASSED: iso=%d, pri=%d, history=%q", isolations, priorities, actualStr)
 		}
 	}
 	if err != nil {
@@ -841,7 +841,7 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 			_, err := hv.runCmd(txn, txnIdx, retry, cmds[cmdIdx], t)
 			if err != nil {
 				if log.V(1) {
-					log.Infof(context.TODO(), "%s: failed running %s: %s", txnName, cmds[cmdIdx], err)
+					log.Infof(context.Background(), "%s: failed running %s: %s", txnName, cmds[cmdIdx], err)
 				}
 				return err
 			}

@@ -36,7 +36,7 @@ import (
 
 func TestMain(m *testing.M) {
 	if !*flagRemote {
-		log.Infof(context.TODO(), "not running with `acceptance` build tag or against remote cluster; skipping")
+		log.Infof(context.Background(), "not running with `acceptance` build tag or against remote cluster; skipping")
 		return
 	}
 	runTests(m)

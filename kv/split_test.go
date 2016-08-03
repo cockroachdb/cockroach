@@ -73,7 +73,7 @@ func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 					key := randutil.RandBytes(src, 10)
 					val := randutil.RandBytes(src, int(src.Int31n(valBytes)))
 					if err := txn.Put(key, val); err != nil {
-						log.Infof(context.TODO(), "experienced an error in routine %d: %s", i, err)
+						log.Infof(context.Background(), "experienced an error in routine %d: %s", i, err)
 						return err
 					}
 				}
@@ -101,11 +101,11 @@ func TestRangeSplitMeta(t *testing.T) {
 
 	// Execute the consecutive splits.
 	for _, splitKey := range splitKeys {
-		log.Infof(context.TODO(), "starting split at key %q...", splitKey)
+		log.Infof(context.Background(), "starting split at key %q...", splitKey)
 		if err := s.DB.AdminSplit(roachpb.Key(splitKey)); err != nil {
 			t.Fatal(err)
 		}
-		log.Infof(context.TODO(), "split at key %q complete", splitKey)
+		log.Infof(context.Background(), "split at key %q complete", splitKey)
 	}
 
 	util.SucceedsSoon(t, func() error {
@@ -146,11 +146,11 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 		for i := 0; i < concurrency; i++ {
 			<-txnChannel
 		}
-		log.Infof(context.TODO(), "starting split at key %q...", splitKey)
+		log.Infof(context.Background(), "starting split at key %q...", splitKey)
 		if pErr := s.DB.AdminSplit(splitKey); pErr != nil {
 			t.Error(pErr)
 		}
-		log.Infof(context.TODO(), "split at key %q complete", splitKey)
+		log.Infof(context.Background(), "split at key %q complete", splitKey)
 	}
 
 	close(done)
@@ -226,11 +226,11 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 	defer s.Stop()
 
 	splitKey := roachpb.Key("aa")
-	log.Infof(context.TODO(), "starting split at key %q...", splitKey)
+	log.Infof(context.Background(), "starting split at key %q...", splitKey)
 	if err := s.DB.AdminSplit(splitKey); err != nil {
 		t.Fatal(err)
 	}
-	log.Infof(context.TODO(), "split at key %q first time complete", splitKey)
+	log.Infof(context.Background(), "split at key %q first time complete", splitKey)
 	ch := make(chan error)
 	go func() {
 		// should return error other than infinite loop

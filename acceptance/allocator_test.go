@@ -150,25 +150,25 @@ func (at *allocatorTest) Run(t *testing.T) {
 	}
 	at.f.AddVars["cockroach_disk_type"] = *flagATDiskType
 
-	log.Infof(context.TODO(), "creating cluster with %d node(s)", at.StartNodes)
+	log.Infof(context.Background(), "creating cluster with %d node(s)", at.StartNodes)
 	if err := at.f.Resize(at.StartNodes); err != nil {
 		t.Fatal(err)
 	}
 	checkGossip(t, at.f, longWaitTime, hasPeers(at.StartNodes))
 	at.f.Assert(t)
-	log.Info(context.TODO(), "initial cluster is up")
+	log.Info(context.Background(), "initial cluster is up")
 
 	// We must stop the cluster because a) `nodectl` pokes at the data directory
 	// and, more importantly, b) we don't want the cluster above and the cluster
 	// below to ever talk to each other (see #7224).
-	log.Info(context.TODO(), "stopping cluster")
+	log.Info(context.Background(), "stopping cluster")
 	for i := 0; i < at.f.NumNodes(); i++ {
 		if err := at.f.Kill(i); err != nil {
 			t.Fatalf("error stopping node %d: %s", i, err)
 		}
 	}
 
-	log.Info(context.TODO(), "downloading archived stores from Google Cloud Storage in parallel")
+	log.Info(context.Background(), "downloading archived stores from Google Cloud Storage in parallel")
 	errors := make(chan error, at.f.NumNodes())
 	for i := 0; i < at.f.NumNodes(); i++ {
 		go func(nodeNum int) {
@@ -181,7 +181,7 @@ func (at *allocatorTest) Run(t *testing.T) {
 		}
 	}
 
-	log.Info(context.TODO(), "restarting cluster with archived store(s)")
+	log.Info(context.Background(), "restarting cluster with archived store(s)")
 	for i := 0; i < at.f.NumNodes(); i++ {
 		if err := at.f.Restart(i); err != nil {
 			t.Fatalf("error restarting node %d: %s", i, err)
@@ -189,14 +189,14 @@ func (at *allocatorTest) Run(t *testing.T) {
 	}
 	at.f.Assert(t)
 
-	log.Infof(context.TODO(), "resizing cluster to %d nodes", at.EndNodes)
+	log.Infof(context.Background(), "resizing cluster to %d nodes", at.EndNodes)
 	if err := at.f.Resize(at.EndNodes); err != nil {
 		t.Fatal(err)
 	}
 	checkGossip(t, at.f, longWaitTime, hasPeers(at.EndNodes))
 	at.f.Assert(t)
 
-	log.Info(context.TODO(), "waiting for rebalance to finish")
+	log.Info(context.Background(), "waiting for rebalance to finish")
 	if err := at.WaitForRebalance(t); err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +254,7 @@ func (at *allocatorTest) printRebalanceStats(
 			// This can happen with single-node clusters.
 			rebalanceInterval = time.Duration(0)
 		}
-		log.Infof(context.TODO(), "cluster took %s to rebalance", rebalanceInterval)
+		log.Infof(context.Background(), "cluster took %s to rebalance", rebalanceInterval)
 	}
 
 	// Output # of range events that occurred. All other things being equal,
@@ -265,7 +265,7 @@ func (at *allocatorTest) printRebalanceStats(
 		if err := db.QueryRow(q).Scan(&rangeEvents); err != nil {
 			return err
 		}
-		log.Infof(context.TODO(), "%d range events", rangeEvents)
+		log.Infof(context.Background(), "%d range events", rangeEvents)
 	}
 
 	// Output standard deviation of the replica counts for all stores.
@@ -273,7 +273,7 @@ func (at *allocatorTest) printRebalanceStats(
 	if err != nil {
 		return err
 	}
-	log.Infof(context.TODO(), "stddev(replica count) = %.2f", stdDev)
+	log.Infof(context.Background(), "stddev(replica count) = %.2f", stdDev)
 
 	return nil
 }
@@ -367,10 +367,10 @@ func (at *allocatorTest) WaitForRebalance(t *testing.T) error {
 				return err
 			}
 
-			log.Info(context.TODO(), stats)
+			log.Info(context.Background(), stats)
 			if StableInterval <= stats.ElapsedSinceLastEvent {
 				host := at.f.Nodes()[0]
-				log.Infof(context.TODO(), "replica count = %f, max = %f", stats.ReplicaCountStdDev, *flagATMaxStdDev)
+				log.Infof(context.Background(), "replica count = %f, max = %f", stats.ReplicaCountStdDev, *flagATMaxStdDev)
 				if stats.ReplicaCountStdDev > *flagATMaxStdDev {
 					_ = at.printRebalanceStats(db, host)
 					return errors.Errorf(
