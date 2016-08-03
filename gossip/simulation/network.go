@@ -104,7 +104,7 @@ func (n *Network) CreateNode() (*Node, error) {
 	}
 	n.Stopper.RunWorker(func() {
 		<-n.Stopper.ShouldQuiesce()
-		server.GracefulStop()
+		netutil.FatalIfUnexpected(ln.Close())
 		<-n.Stopper.ShouldStop()
 		server.Stop()
 	})
