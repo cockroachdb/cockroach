@@ -26,12 +26,19 @@ import "cockroach/sql/distsql/data.proto";
 import "cockroach/sql/distsql/processors.proto";
 import weak "gogoproto/gogo.proto";
 
-message SetupFlowsRequest {
+message SetupFlowRequest {
   optional roachpb.Transaction txn = 1 [(gogoproto.nullable) = false];
-  repeated FlowSpec flows = 2 [(gogoproto.nullable) = false];
+  optional FlowSpec flow = 2 [(gogoproto.nullable) = false];
 }
 
 message SimpleResponse {
+  // TODO(radu): we should be using our own error instead of roachpb.Error.
+  // One important error field for distsql is whether the error is
+  // "authoritative": if a query is distributed on multiple nodes and one node
+  // hits an error, the other nodes may hit errors as well as a consequence
+  // (e.g. streams can't connect to the failed flow). The node that started the
+  // flow needs to distinguish which errors are caused by non-availability of
+  // other nodes so they don't obscure the real error.
   optional roachpb.Error error = 1;
 }
 
@@ -39,11 +46,11 @@ service DistSQL {
   // RunSimpleFlow instantiates a flow and streams back results of that flow.
   // The request must contain one flow, and that flow must have a single mailbox
   // of the special simple response type.
-  rpc RunSimpleFlow(SetupFlowsRequest) returns (stream StreamMessage) {}
+  rpc RunSimpleFlow(SetupFlowRequest) returns (stream StreamMessage) {}
 
-  // SetupFlows instantiates a set of flows (subgraphs of a distributed SQL
+  // SetupFlow instantiates a flow (subgraps of a distributed SQL
   // computation) on the receiving node.
-  rpc SetupFlows(SetupFlowsRequest) returns (SimpleResponse) {}
+  rpc SetupFlow(SetupFlowRequest) returns (SimpleResponse) {}
 
   // FlowStream is used to push a stream of messages that is part of a flow. The
   // first message will have a StreamHeader which identifies the flow and the

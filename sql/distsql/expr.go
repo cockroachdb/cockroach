@@ -89,6 +89,13 @@ type exprHelper struct {
 	datumAlloc sqlbase.DatumAlloc
 }
 
+func (eh exprHelper) String() string {
+	if eh.expr == nil {
+		return "none"
+	}
+	return eh.expr.String()
+}
+
 // exprHelper implements parser.IndexedVarContainer.
 var _ parser.IndexedVarContainer = &exprHelper{}
 
