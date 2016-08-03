@@ -18,6 +18,7 @@ package sql
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -67,13 +68,14 @@ var virtualSchemas = []virtualSchema{
 var virtualSchemaMap map[string]virtualSchemaEntry
 
 type virtualSchemaEntry struct {
-	desc   *sqlbase.DatabaseDescriptor
-	tables map[string]virtualTableEntry
+	desc              *sqlbase.DatabaseDescriptor
+	tables            map[string]virtualTableEntry
+	orderedTableNames []string
 }
 
 func (e virtualSchemaEntry) tableNames() (parser.QualifiedNames, error) {
 	var qualifiedNames parser.QualifiedNames
-	for tableName := range e.tables {
+	for _, tableName := range e.orderedTableNames {
 		qname, err := parser.NewQualifiedNameFromDBAndTable(e.desc.Name, tableName)
 		if err != nil {
 			return nil, err
@@ -112,21 +114,25 @@ func (e virtualTableEntry) getValuesNode(p *planner) (*valuesNode, error) {
 }
 
 func init() {
-	virtualSchemaMap = make(map[string]virtualSchemaEntry)
+	virtualSchemaMap = make(map[string]virtualSchemaEntry, len(virtualSchemas))
 	for _, schema := range virtualSchemas {
 		dbName := schema.name
 		dbDesc := initVirtualDatabaseDesc(dbName)
-		tables := make(map[string]virtualTableEntry)
+		tables := make(map[string]virtualTableEntry, len(schema.tables))
+		orderedTableNames := make([]string, 0, len(schema.tables))
 		for _, table := range schema.tables {
 			tableDesc := initVirtualTableDesc(table)
 			tables[tableDesc.Name] = virtualTableEntry{
 				tableDef: table,
 				desc:     tableDesc,
 			}
+			orderedTableNames = append(orderedTableNames, tableDesc.Name)
 		}
+		sort.Strings(orderedTableNames)
 		virtualSchemaMap[dbName] = virtualSchemaEntry{
-			desc:   dbDesc,
-			tables: tables,
+			desc:              dbDesc,
+			tables:            tables,
+			orderedTableNames: orderedTableNames,
 		}
 	}
 }
