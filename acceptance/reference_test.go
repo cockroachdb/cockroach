@@ -44,11 +44,10 @@ set -xe
 mkdir /old
 cd /old
 
+touch oldout newout
 function finish() {
-  touch oldout newout
   cat oldout newout
 }
-
 trap finish EXIT
 
 export PGHOST=localhost
@@ -99,7 +98,13 @@ bin=/%s/cockroach
 
 func TestDockerReadWriteBidirectionalReferenceVersion(t *testing.T) {
 	backwardReferenceTest := `
-$bin start --background
+touch out
+function finish() {
+  cat out
+}
+trap finish EXIT
+
+$bin start --background --alsologtostderr &> out
 $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_old" > old.everything
 $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_new" >> old.everything
 # diff returns non-zero if different. With set -e above, that would exit here.
@@ -111,8 +116,8 @@ $bin quit && wait
 
 func TestDockerReadWriteForwardReferenceVersion(t *testing.T) {
 	backwardReferenceTest := `
+touch out
 function finish() {
-  touch out
   cat out
 }
 trap finish EXIT
@@ -132,11 +137,9 @@ set -eux
 bin=/cockroach
 
 touch out
-
-function finish {
+function finish() {
   cat out
 }
-
 trap finish EXIT
 
 $bin start --alsologtostderr=INFO --background --store=/cockroach-data-reference-7429 &> out
