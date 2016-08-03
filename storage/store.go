@@ -2425,7 +2425,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 					// crashing potential for any choice of dummy value below.
 					appliedIndex,
 					r.store.ctx,
-					&raftLogger{rangeID: r.RangeID},
+					&raftLogger{stringer: r},
 				), nil)
 			if err != nil {
 				return err

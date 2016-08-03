@@ -328,7 +328,7 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 			uint64(r.mu.replicaID),
 			r.mu.state.RaftAppliedIndex,
 			r.store.ctx,
-			&raftLogger{rangeID: r.RangeID},
+			&raftLogger{stringer: r},
 		), nil)
 		if err != nil {
 			return err
@@ -1572,7 +1572,7 @@ func (r *Replica) handleRaftReady() error {
 		return nil
 	}
 
-	logRaftReady(r.store.StoreID(), r.RangeID, rd)
+	logRaftReady(ctx, r, rd)
 
 	if !raft.IsEmptySnap(rd.Snapshot) {
 		if err := r.applySnapshot(ctx, rd.Snapshot, rd.HardState); err != nil {
