@@ -72,6 +72,7 @@ if [ "${1-}" = "docker" ]; then
 
   if is_shard 0; then
     time make install
+    time chown -R "${USER}.${USER}" $(go env GOTOOLDIR)
     time go test -v -i ./...
     time go test -v -c -tags acceptance ./acceptance
   fi
