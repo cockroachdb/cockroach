@@ -102,7 +102,7 @@ func createTestStoreWithContext(t testing.TB, sCtx storage.StoreContext) (
 // tests.
 func createTestStoreWithEngine(t testing.TB, eng engine.Engine, clock *hlc.Clock,
 	bootstrap bool, sCtx storage.StoreContext, stopper *stop.Stopper) *storage.Store {
-	rpcContext := rpc.NewContext(nil, clock, stopper)
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 	sCtx.Gossip = gossip.New(rpcContext, nil, stopper, metric.NewRegistry())
 	sCtx.Gossip.SetNodeID(nodeDesc.NodeID)

@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -168,7 +169,7 @@ func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator
 	stopper := stop.NewStopper()
 	manualClock := hlc.NewManualClock(hlc.UnixNano())
 	clock := hlc.NewClock(manualClock.UnixNano)
-	rpcContext := rpc.NewContext(nil, clock, stopper)
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
 	g := gossip.New(rpcContext, nil, stopper, metric.NewRegistry())
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))

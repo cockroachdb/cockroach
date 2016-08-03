@@ -69,12 +69,12 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	ctx.ScanInterval = 10 * time.Hour
 	ctx.ConsistencyCheckInterval = 10 * time.Hour
 	grpcServer := rpc.NewServer(nodeRPCContext)
+	serverCtx := makeTestContext()
+	g := gossip.New(nodeRPCContext, grpcServer, serverCtx.GossipBootstrapResolvers, stopper, metric.NewRegistry())
 	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	serverCtx := makeTestContext()
-	g := gossip.New(nodeRPCContext, serverCtx.GossipBootstrapResolvers, stopper, metric.NewRegistry())
 	if gossipBS != nil {
 		// Handle possibility of a :0 port specification.
 		if gossipBS.Network() == addr.Network() && gossipBS.String() == addr.String() {
@@ -85,7 +85,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 			t.Fatalf("bad gossip address %s: %s", gossipBS, err)
 		}
 		g.SetResolvers([]resolver.Resolver{r})
-		g.Start(grpcServer, ln.Addr())
+		g.Start(ln.Addr())
 	}
 	ctx.Gossip = g
 	retryOpts := base.DefaultRetryOptions()
