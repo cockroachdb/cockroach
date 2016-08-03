@@ -60,10 +60,7 @@ func teardownHeartbeats(tc *TxnCoordSender) {
 	}
 	tc.Lock()
 	for _, tm := range tc.txns {
-		if tm.txnEnd != nil {
-			close(tm.txnEnd)
-			tm.txnEnd = nil
-		}
+		tm.cancel()
 	}
 	defer tc.Unlock()
 }
