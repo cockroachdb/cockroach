@@ -298,7 +298,7 @@ func NewRangeKeyMismatchError(start, end Key, desc *RangeDescriptor) *RangeKeyMi
 	if desc != nil && !desc.IsInitialized() {
 		// We must never send uninitialized ranges back to the client (nil
 		// is fine) guard against regressions of #6027.
-		panic("descriptor is not initialized")
+		panic(fmt.Sprintf("descriptor is not initialized: %+v", desc))
 	}
 	return &RangeKeyMismatchError{
 		RequestStartKey: start,

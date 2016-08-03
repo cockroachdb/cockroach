@@ -466,7 +466,7 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 
 // String returns a string representation of the range.
 func (r *Replica) String() string {
-	desc := r.Desc()
+	desc := r.InformalDesc()
 	return fmt.Sprintf("%s range=%d [%s-%s)", r.store,
 		desc.RangeID, desc.StartKey, desc.EndKey)
 }
@@ -703,8 +703,19 @@ func (r *Replica) isInitializedLocked() bool {
 	return r.mu.state.Desc.IsInitialized()
 }
 
-// Desc returns the range's descriptor.
+// Desc returns the authoritative range descriptor, acquiring a replica lock in
+// the process.
 func (r *Replica) Desc() *roachpb.RangeDescriptor {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.state.Desc
+}
+
+// InformalDesc returns a cached copy of the authoritative desc which is kept
+// in sync with the authoritative desc, though not atomically. This method
+// does not acquire a lock and is to be used whenever a descriptor is needed
+// for informational purposes.
+func (r *Replica) InformalDesc() *roachpb.RangeDescriptor {
 	return r.rangeDesc.Load().(*roachpb.RangeDescriptor)
 }
 
@@ -737,8 +748,10 @@ func (r *Replica) setDescWithoutProcessUpdateLocked(desc *roachpb.RangeDescripto
 			desc.RangeID, r.RangeID)
 	}
 
-	r.mu.state.Desc = desc
+	// NB: If we used rangeDesc for anything but informational purposes, the
+	// order here would be crucial.
 	r.rangeDesc.Store(desc)
+	r.mu.state.Desc = desc
 }
 
 // GetReplicaDescriptor returns the replica for this range from the range
