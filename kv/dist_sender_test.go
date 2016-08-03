@@ -112,6 +112,8 @@ func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
 	n := simulation.NewNetwork(1, true)
 	n.Start()
 	g := n.Nodes[0].Gossip
+	// TODO(spencer): remove the use of gossip/simulation here.
+	g.EnableSimulationCycler(false)
 
 	if err := g.AddInfo(gossip.KeySentinel, nil, time.Hour); err != nil {
 		t.Fatal(err)
@@ -794,6 +796,10 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 func TestGetFirstRangeDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	n := simulation.NewNetwork(3, true)
+	for _, node := range n.Nodes {
+		// TODO(spencer): remove the use of gossip/simulation here.
+		node.Gossip.EnableSimulationCycler(false)
+	}
 	n.Start()
 	ds := NewDistSender(nil, n.Nodes[0].Gossip)
 	if _, err := ds.FirstRange(); err == nil {
