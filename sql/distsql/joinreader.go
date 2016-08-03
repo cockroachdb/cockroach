@@ -17,8 +17,9 @@
 package distsql
 
 import (
-	"context"
 	"sync"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
