@@ -44,28 +44,28 @@ type serverMessageType byte
 
 // http://www.postgresql.org/docs/9.4/static/protocol-message-formats.html
 const (
-	clientMsgSimpleQuery clientMessageType = 'Q'
-	clientMsgParse       clientMessageType = 'P'
-	clientMsgTerminate   clientMessageType = 'X'
-	clientMsgDescribe    clientMessageType = 'D'
-	clientMsgSync        clientMessageType = 'S'
-	clientMsgClose       clientMessageType = 'C'
 	clientMsgBind        clientMessageType = 'B'
+	clientMsgClose       clientMessageType = 'C'
+	clientMsgDescribe    clientMessageType = 'D'
 	clientMsgExecute     clientMessageType = 'E'
 	clientMsgFlush       clientMessageType = 'H'
+	clientMsgParse       clientMessageType = 'P'
+	clientMsgSimpleQuery clientMessageType = 'Q'
+	clientMsgSync        clientMessageType = 'S'
+	clientMsgTerminate   clientMessageType = 'X'
 
 	serverMsgAuth                 serverMessageType = 'R'
+	serverMsgBindComplete         serverMessageType = '2'
 	serverMsgCommandComplete      serverMessageType = 'C'
 	serverMsgDataRow              serverMessageType = 'D'
+	serverMsgEmptyQuery           serverMessageType = 'I'
 	serverMsgErrorResponse        serverMessageType = 'E'
+	serverMsgNoData               serverMessageType = 'n'
+	serverMsgParameterDescription serverMessageType = 't'
+	serverMsgParameterStatus      serverMessageType = 'S'
 	serverMsgParseComplete        serverMessageType = '1'
 	serverMsgReady                serverMessageType = 'Z'
 	serverMsgRowDescription       serverMessageType = 'T'
-	serverMsgEmptyQuery           serverMessageType = 'I'
-	serverMsgParameterDescription serverMessageType = 't'
-	serverMsgBindComplete         serverMessageType = '2'
-	serverMsgParameterStatus      serverMessageType = 'S'
-	serverMsgNoData               serverMessageType = 'n'
 )
 
 //go:generate stringer -type=serverErrFieldType
