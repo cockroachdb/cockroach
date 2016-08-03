@@ -35,6 +35,7 @@ import (
 	"github.com/docker/engine-api/types/container"
 	"github.com/docker/engine-api/types/network"
 	"github.com/docker/go-connections/nat"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/util/log"
@@ -241,16 +242,15 @@ var _ = (*Container).Stop
 // Wait waits for a running container to exit.
 func (c *Container) Wait() error {
 	exitCode, err := c.cluster.client.ContainerWait(context.Background(), c.id)
-	if err != nil {
-		return err
+	if err == nil && exitCode != 0 {
+		err = errors.Errorf("non-zero exit code: %d", exitCode)
 	}
-	if exitCode != 0 {
+	if err != nil {
 		if err := c.Logs(os.Stderr); err != nil {
 			log.Warning(context.TODO(), err)
 		}
-		return fmt.Errorf("non-zero exit code: %d", exitCode)
 	}
-	return nil
+	return err
 }
 
 // Logs outputs the containers logs to the given io.Writer.
@@ -408,12 +408,10 @@ func retry(
 		timeoutCtx, _ := context.WithTimeout(ctx, timeout)
 		err := f(timeoutCtx)
 		if err != nil {
-			// docker-engine/client wraps the context.DeadlineExceeded with its own
-			// error message, forcing us to detect deadline exceeded by string
-			// matching.
-			//
-			// TODO(pmattis): Perhaps use `timeoutCtx.Err()==context.DeadlineExceeded`.
-			if strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
+			// TODO(tamird):
+			// s/client.ErrConnectionFailed/context.DeadlineExceeded/ when
+			// https://github.com/docker/engine-api/issues/347 is fixed.
+			if err == client.ErrConnectionFailed {
 				continue
 			} else if i > 0 && retryErrorsRE != matchNone {
 				if regexp.MustCompile(retryErrorsRE).MatchString(err.Error()) {
