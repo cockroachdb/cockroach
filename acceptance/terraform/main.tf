@@ -58,8 +58,6 @@ resource "template_file" "supervisor" {
     # and a running node for all others. We built a list of addresses
     # shifted by one (first element is empty), then take the value at index "instance.index".
     join_address = "${element(concat(split(",", ""), google_compute_instance.cockroach.*.network_interface.0.access_config.0.assigned_nat_ip), count.index)}"
-    # We need to provide one node address for the block writer.
-    node_address = "${google_compute_instance.cockroach.0.network_interface.0.access_config.0.assigned_nat_ip}"
     cockroach_flags = "${var.cockroach_flags}"
     cockroach_env = "${var.cockroach_env}"
     benchmark_name = "${var.benchmark_name}"
@@ -109,7 +107,7 @@ FILE
       "sudo mkfs.ext4 -qF /dev/disk/by-id/google-local-ssd-0",
       "sudo mount -o discard,defaults /dev/disk/by-id/google-local-ssd-0 /mnt/data0",
       "sudo chown ubuntu:ubuntu /mnt/data0",
-      # Install software.
+      # Install test dependencies.
       "sudo apt-get -qqy update >/dev/null",
       "sudo apt-get -qqy install supervisor nethogs pv >/dev/null",
       "sudo service supervisor stop",
@@ -118,12 +116,16 @@ FILE
       "curl -sS https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -",
       "sudo apt-get -qqy update >/dev/null",
       "sudo apt-get -qqy install google-cloud-sdk >/dev/null",
+      # Install CockroachDB.
       "mkdir /mnt/data0/logs",
       "ln -sf /mnt/data0/logs logs",
       "chmod 755 cockroach nodectl",
       "[ $(stat --format=%s cockroach) -ne 0 ] || bash download_binary.sh cockroach/cockroach ${var.cockroach_sha}",
       "if [ ! -e supervisor.pid ]; then supervisord -c supervisor.conf; fi",
       "supervisorctl -c supervisor.conf start cockroach",
+      # Install load generators.
+      "bash download_binary.sh examples-go/block_writer ${var.block_writer_sha}",
+      "bash download_binary.sh examples-go/photos ${var.block_writer_sha}",
     ]
   }
 }
