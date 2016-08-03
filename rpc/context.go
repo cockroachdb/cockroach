@@ -17,6 +17,7 @@
 package rpc
 
 import (
+	"math"
 	"time"
 
 	"golang.org/x/net/context"
@@ -45,15 +46,17 @@ const (
 // service.
 func NewServer(ctx *Context) *grpc.Server {
 	var s *grpc.Server
-	if ctx.Insecure {
-		s = grpc.NewServer()
-	} else {
+	opts := []grpc.ServerOption{
+		grpc.MaxMsgSize(math.MaxInt32), // TODO(peter,tamird): need tests before lowering
+	}
+	if !ctx.Insecure {
 		tlsConfig, err := ctx.GetServerTLSConfig()
 		if err != nil {
 			panic(err)
 		}
-		s = grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)))
+		opts = append(opts, grpc.Creds(credentials.NewTLS(tlsConfig)))
 	}
+	s = grpc.NewServer(opts...)
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              ctx.localClock,
 		remoteClockMonitor: ctx.RemoteClocks,
