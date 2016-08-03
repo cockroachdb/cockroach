@@ -56,21 +56,24 @@ TestTabsInShellScripts() {
 TestForbiddenImports() {
   echo "checking for forbidden imports"
   go list -f '{{ $ip := .ImportPath }}{{ range .Imports}}{{ $ip }}: {{ println . }}{{end}}{{ range .TestImports}}{{ $ip }}: {{ println . }}{{end}}{{ range .XTestImports}}{{ $ip }}: {{ println . }}{{end}}' "$PKG" | \
-       grep -E ' (github.com/golang/protobuf/proto|github.com/satori/go\.uuid|log|path)$' | \
+       grep -E ' (github.com/golang/protobuf/proto|github.com/satori/go\.uuid|log|path|context)$' | \
        grep -vE 'cockroach/(base|security|util/(log|randutil|stop)): log$' | \
        grep -vE 'cockroach/(server/serverpb|ts/tspb): github.com/golang/protobuf/proto$' | \
        grep -vF 'util/uuid: github.com/satori/go.uuid' | tee forbidden.log; \
     if grep -E ' path$' forbidden.log > /dev/null; then \
-       echo; echo "Consider using 'path/filepath' instead of 'path'."; echo; \
+       echo; echo "Please use 'path/filepath' instead of 'path'."; echo; \
     fi; \
     if grep -E ' log$' forbidden.log > /dev/null; then \
-       echo; echo "Consider using 'util/log' instead of 'log'."; echo; \
+       echo; echo "Please use 'util/log' instead of 'log'."; echo; \
     fi; \
     if grep -E ' github.com/golang/protobuf/proto$' forbidden.log > /dev/null; then \
-       echo; echo "Consider using 'gogo/protobuf/proto' instead of 'golang/protobuf/proto'."; echo; \
+       echo; echo "Please use 'gogo/protobuf/proto' instead of 'golang/protobuf/proto'."; echo; \
     fi; \
     if grep -E ' github.com/satori/go\.uuid$' forbidden.log > /dev/null; then \
-       echo; echo "Consider using 'util/uuid' instead of 'satori/go.uuid'."; echo; \
+       echo; echo "Please use 'util/uuid' instead of 'satori/go.uuid'."; echo; \
+    fi; \
+    if grep -E ' context$' forbidden.log > /dev/null; then \
+       echo; echo "Please use 'golang.org/x/net/context' instead of 'context'."; echo; \
     fi; \
     test ! -s forbidden.log
   ret=$?
