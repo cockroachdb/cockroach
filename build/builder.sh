@@ -59,6 +59,19 @@ fi
 # Absolute path to the toplevel cockroach directory.
 cockroach_toplevel="$(dirname $(cd $(dirname $0); pwd))"
 
+# Make a fake passwd file for the invoking user.
+#
+# This setup is so that files created from inside the container in a mounted
+# volume end up being owned by the invoking user and not by root.
+# We'll mount a fresh directory owned by the invoking user as /root inside the
+# container because the container needs a $HOME (without one the default is /)
+# and because various utilities (e.g. bash writing to .bash_history) need to be
+# able to write to there.
+build_home="/root"
+passwd_file="$(mktemp)"
+user_group="$(id -u $USER):$(id -g $USER)"
+echo "$USER:x:$user_group::${build_home}:/bin/bash" > "$passwd_file"
+
 # Run our build container with a set of volumes mounted that will
 # allow the container to store persistent build data on the host
 # computer.
@@ -82,14 +95,17 @@ vols="${vols} --volume=${gopath0}/pkg/docker_amd64_race:/go/pkg/linux_amd64_race
 vols="${vols} --volume=${gopath0}/pkg/docker_amd64:/usr/local/go/pkg/linux_amd64"
 vols="${vols} --volume=${gopath0}/pkg/docker_amd64_race:/usr/local/go/pkg/linux_amd64_race"
 vols="${vols} --volume=${gopath0}/bin/docker_amd64:/go/bin"
-vols="${vols} --volume=${HOME}/.jspm:/root/.jspm"
-vols="${vols} --volume=${HOME}/.npm:/root/.npm"
+vols="${vols} --volume=${HOME}/.jspm:${build_home}/.jspm"
+vols="${vols} --volume=${HOME}/.npm:${build_home}/.npm"
 vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach"
+# TODO(jordan/tamird): make this home directory persistent on the host.
+vols="${vols} --volume=$(mktemp -d):${build_home}"
+vols="${vols} --volume=${passwd_file}:/etc/passwd"
 
 backtrace_dir="${cockroach_toplevel}/../../cockroachlabs/backtrace"
 if test -d "${backtrace_dir}"; then
   vols="${vols} --volume=${backtrace_dir}:/opt/backtrace"
-  vols="${vols} --volume=${backtrace_dir}/cockroach.cf:/root/.coroner.cf"
+  vols="${vols} --volume=${backtrace_dir}/cockroach.cf:${build_home}/.coroner.cf"
 fi
 
 # If we're running in an environment that's using git alternates, like TeamCity,
@@ -101,8 +117,10 @@ if test -e "${alternates_file}"; then
 fi
 
 docker run -i ${tty-} ${rm} \
+  -u "${user_group}" \
   ${vols} \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
+  --env="HOME=${build_home}" \
   --env="PAGER=cat" \
   --env="SKIP_BOOTSTRAP=1" \
   --env="JSPM_GITHUB_AUTH_TOKEN=${JSPM_GITHUB_AUTH_TOKEN-763c42afb2d31eb7bc150da33402a24d0e081aef}" \
