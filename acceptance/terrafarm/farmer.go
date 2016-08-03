@@ -95,6 +95,20 @@ func (f *Farmer) Add(nodes int) error {
 		fmt.Sprintf("-var=num_instances=%d", nodes),
 		fmt.Sprintf("-var=stores=%s", f.Stores),
 	}
+
+	// Disable update checks for test clusters by setting the required environment
+	// variable.
+	const skipCheck = "COCKROACH_SKIP_UPDATE_CHECK=1"
+	// This is a Terraform variable defined in acceptance/terraform/variables.tf
+	// and passed through to the supervisor.conf file through
+	// acceptance/terraform/main.tf.
+	const envVar = "cockroach_env"
+	if env := f.AddVars[envVar]; env == "" {
+		f.AddVars[envVar] = skipCheck
+	} else {
+		f.AddVars[envVar] += "," + skipCheck
+	}
+
 	for v, val := range f.AddVars {
 		args = append(args, fmt.Sprintf("-var=%s=%s", v, val))
 	}
