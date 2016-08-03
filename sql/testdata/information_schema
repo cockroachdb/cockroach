@@ -1,8 +1,7 @@
 # Verify information_schema database handles mutation statements correctly.
 
-# TODO(nvanbenschoten) Blocked on #7998.
-#query error dsaodjassjdoiasjdio
-#ALTER DATABASE information_schema RENAME TO not_information_schema
+query error user root does not have DROP privilege on database information_schema
+ALTER DATABASE information_schema RENAME TO not_information_schema
 
 statement error user root does not have CREATE privilege on database information_schema
 CREATE TABLE information_schema.t (x INT)
