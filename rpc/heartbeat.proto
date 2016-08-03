@@ -15,7 +15,7 @@
 // Author: Kathy Spradlin (kathyspradlin@gmail.com)
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-syntax = "proto2";
+syntax = "proto3";
 package cockroach.rpc;
 option go_package = "rpc";
 
@@ -33,29 +33,29 @@ message RemoteOffset {
   option (gogoproto.goproto_stringer) = false;
 
   // The estimated offset from the remote server, in nanoseconds.
-  optional int64 offset = 1 [(gogoproto.nullable) = false];
+  int64 offset = 1;
   // The maximum error of the measured offset, in nanoseconds.
-  optional int64 uncertainty = 2 [(gogoproto.nullable) = false];
+  int64 uncertainty = 2;
   // Measurement time, in nanoseconds from unix epoch.
-  optional int64 measured_at = 3 [(gogoproto.nullable) = false];
+  int64 measured_at = 3;
 }
 
 // A PingRequest specifies the string to echo in response.
 // Fields are exported so that they will be serialized in the rpc call.
 message PingRequest {
   // Echo this string with PingResponse.
-  optional string ping = 1 [(gogoproto.nullable) = false];
+  string ping = 1;
   // The last offset the client measured with the server.
-  optional RemoteOffset offset = 2 [(gogoproto.nullable) = false];
+  RemoteOffset offset = 2 [(gogoproto.nullable) = false];
   // The address of the client.
-  optional string addr = 3 [(gogoproto.nullable) = false];
+  string addr = 3;
 }
 
 // A PingResponse contains the echoed ping request string.
 message PingResponse {
   // An echo of value sent with PingRequest.
-  optional string pong = 1 [(gogoproto.nullable) = false];
-  optional int64 server_time = 2 [(gogoproto.nullable) = false];
+  string pong = 1;
+  int64 server_time = 2;
 }
 
 service Heartbeat {

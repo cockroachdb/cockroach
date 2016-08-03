@@ -18,7 +18,7 @@
 // docs/RFCS/distributed_sql.md.
 // All the concepts here are "physical plan" concepts.
 
-syntax = "proto2";
+syntax = "proto3";
 package cockroach.sql.distsql;
 option go_package = "distsql";
 
@@ -33,57 +33,57 @@ message TableReaderSpan {
   // TODO(radu): the dist_sql APIs should be agnostic to how we map tables to
   // KVs. The span should be described as starting and ending lists of values
   // for a prefix of the index columns, along with inclusive/exclusive flags.
-  optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
+  roachpb.Span span = 1 [(gogoproto.nullable) = false];
 }
 
 // TableReaderSpec is the specification for a table reader. A table reader
 // performs KV operations to retrieve rows for a table and outputs the desired
 // columns of the rows that pass a filter expression.
 message TableReaderSpec {
-  optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+  sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
   // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
   // i.e. table.indexes[index_idx-1]
-  optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
-  optional bool reverse = 3 [(gogoproto.nullable) = false];
+  uint32 index_idx = 2;
+  bool reverse = 3;
   repeated TableReaderSpan spans = 4 [(gogoproto.nullable) = false];
 
   // The filter expression references the columns in the table (table.columns)
   // via $0, $1, etc. If a secondary index is used, the columns that are not
   // available as part of the index cannot be referenced.
-  optional Expression filter = 5 [(gogoproto.nullable) = false];
+  Expression filter = 5 [(gogoproto.nullable) = false];
 
   // The table reader will only produce values for these columns, referenced by
   // their indices in table.columns.
-  repeated uint32 output_columns = 6 [packed = true];
+  repeated uint32 output_columns = 6;
 
   // If nonzero, the table reader only needs to return this many rows.
-  optional int64 hard_limit = 8 [(gogoproto.nullable) = false];
+  int64 hard_limit = 8;
   // The soft limit is a hint for how many rows the consumer of the table reader
   // output might need. If both the hard limit and the soft limit are set, the
   // soft limit must be lower than the hard limit.
-  optional int64 soft_limit = 7 [(gogoproto.nullable) = false];
+  int64 soft_limit = 7;
 }
 
 // JoinReaderSpec is the specification for a "join reader". A join reader
 // performs KV operations to retrieve specific rows that correspond to the
 // values in the input stream (join by lookup).
 message JoinReaderSpec {
-  optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+  sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
 
   // If 0, we use the primary index; each row in the input stream has a value
   // for each primary key.
   // TODO(radu): figure out the correct semantics when joining with an index.
-  optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
+  uint32 index_idx = 2;
 
   // The filter expression references the columns in the table (table.columns)
   // via $0, $1, etc. If a secondary index is used, the columns that are not
   // available as part of the index cannot be referenced.
-  optional Expression filter = 3 [(gogoproto.nullable) = false];
+  Expression filter = 3 [(gogoproto.nullable) = false];
 
   // The table reader will only produce values for these columns, referenced by
   // their indices in table.columns.
-  repeated uint32 output_columns = 4 [packed = true];
- 
+  repeated uint32 output_columns = 4;
+
   // TODO(radu): add field to describe the input columns and allow plumbing
   // through values that aren't used for the lookup.
 }
@@ -91,7 +91,7 @@ message JoinReaderSpec {
 message ProcessorCoreUnion {
   option (gogoproto.onlyone) = true;
 
-  optional TableReaderSpec tableReader = 1;
+  TableReaderSpec tableReader = 1;
   // TODO(radu): other "processor core" types will go here.
 }
 
@@ -99,7 +99,7 @@ message ProcessorSpec {
   // In most cases, there is one input.
   repeated InputSyncSpec input = 1 [(gogoproto.nullable) = false];
 
-  optional ProcessorCoreUnion core = 2 [(gogoproto.nullable) = false];
+  ProcessorCoreUnion core = 2 [(gogoproto.nullable) = false];
 
   // In most cases, there is one output.
   repeated OutputRouterSpec output = 3 [(gogoproto.nullable) = false];
@@ -108,8 +108,7 @@ message ProcessorSpec {
 // FlowSpec describes a "flow" which is a subgraph of a distributed SQL
 // computation consisting of processors and streams.
 message FlowSpec {
-  optional bytes flow_id = 1 [(gogoproto.nullable) = false,
-                              (gogoproto.customname) = "FlowID",
+  bytes flow_id = 1 [(gogoproto.customname) = "FlowID",
                               (gogoproto.customtype) = "FlowID"];
 
   repeated ProcessorSpec processors = 2 [(gogoproto.nullable) = false];

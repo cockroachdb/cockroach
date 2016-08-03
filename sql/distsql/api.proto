@@ -16,7 +16,7 @@
 //
 // APIs for distributed SQL; see docs/RFCS/distributed_sql.md
 
-syntax = "proto2";
+syntax = "proto3";
 package cockroach.sql.distsql;
 option go_package = "distsql";
 
@@ -27,12 +27,12 @@ import "cockroach/sql/distsql/processors.proto";
 import weak "gogoproto/gogo.proto";
 
 message SetupFlowsRequest {
-  optional roachpb.Transaction txn = 1 [(gogoproto.nullable) = false];
+  roachpb.Transaction txn = 1 [(gogoproto.nullable) = false];
   repeated FlowSpec flows = 2 [(gogoproto.nullable) = false];
 }
 
 message SimpleResponse {
-  optional roachpb.Error error = 1;
+  roachpb.Error error = 1;
 }
 
 service DistSQL {

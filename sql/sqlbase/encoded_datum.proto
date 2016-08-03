@@ -17,7 +17,7 @@
 // Data structures for distributed SQL APIs. See docs/RFCS/distributed_sql.md.
 // All the concepts here are "physical plan" concepts.
 
-syntax = "proto2";
+syntax = "proto3";
 package cockroach.sql.sqlbase;
 option go_package = "sqlbase";
 
