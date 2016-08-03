@@ -88,9 +88,9 @@ type RaftTransport struct {
 
 	mu struct {
 		syncutil.Mutex
-		handlers     map[roachpb.StoreID]raftMessageHandler
-		queues       map[bool]map[roachpb.ReplicaIdent]chan *RaftMessageRequest
-		connBreakers map[roachpb.NodeID]*circuit.Breaker
+		handlers map[roachpb.StoreID]raftMessageHandler
+		queues   map[bool]map[roachpb.ReplicaIdent]chan *RaftMessageRequest
+		breakers map[roachpb.NodeID]*circuit.Breaker
 	}
 }
 
@@ -110,7 +110,7 @@ func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpc
 	}
 	t.mu.handlers = make(map[roachpb.StoreID]raftMessageHandler)
 	t.mu.queues = make(map[bool]map[roachpb.ReplicaIdent]chan *RaftMessageRequest)
-	t.mu.connBreakers = make(map[roachpb.NodeID]*circuit.Breaker)
+	t.mu.breakers = make(map[roachpb.NodeID]*circuit.Breaker)
 
 	if grpcServer != nil {
 		RegisterMultiRaftServer(grpcServer, t)
@@ -181,7 +181,7 @@ func (t *RaftTransport) Stop(storeID roachpb.StoreID) {
 func (t *RaftTransport) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breaker {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.mu.connBreakers[nodeID]
+	return t.mu.breakers[nodeID]
 }
 
 // getNodeConn returns a shared instance of a GRPC connection to the
@@ -191,7 +191,7 @@ func (t *RaftTransport) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breake
 // partitioned, etc.).
 func (t *RaftTransport) getNodeConn(nodeID roachpb.NodeID) *grpc.ClientConn {
 	t.mu.Lock()
-	cb, ok := t.mu.connBreakers[nodeID]
+	breaker, ok := t.mu.breakers[nodeID]
 	if !ok {
 		// This exponential backoff limits the circuit breaker to 1 second
 		// intervals between successive attempts to resolve a node address
@@ -200,48 +200,46 @@ func (t *RaftTransport) getNodeConn(nodeID roachpb.NodeID) *grpc.ClientConn {
 		expBO.MaxInterval = 1 * time.Second
 		expBO.MaxElapsedTime = 0 * time.Second
 
-		cb = circuit.NewBreakerWithOptions(&circuit.Options{
+		breaker = circuit.NewBreakerWithOptions(&circuit.Options{
 			BackOff:    expBO,
 			ShouldTrip: circuit.ThresholdTripFunc(1),
 		})
-		t.mu.connBreakers[nodeID] = cb
+		t.mu.breakers[nodeID] = breaker
 	}
 	t.mu.Unlock()
 
-	// The number of consecutive failures suffered by the circuit breaker
-	// is used to log only state changes in our connection status to the
-	// remote node.
-	consecFailures := cb.ConsecFailures()
-	var conn *grpc.ClientConn
-	if err := cb.Call(func() error {
-		addr, err := t.resolver(nodeID)
-		if err != nil {
-			return err
-		}
-		conn, err = t.rpcContext.GRPCDial(addr.String())
-		if err != nil {
-			return err
-		}
-		if consecFailures > 0 {
-			log.Infof(context.TODO(), "connection succeeded to node %s", nodeID)
-		}
-		return nil
+	// The number of consecutive failures suffered by the circuit breaker is used
+	// to log only state changes in our node address resolution status.
+	consecFailures := breaker.ConsecFailures()
+	var addr net.Addr
+	if err := breaker.Call(func() error {
+		var err error
+		addr, err = t.resolver(nodeID)
+		return err
 	}, 0); err != nil {
 		if consecFailures == 0 {
-			log.Warningf(context.TODO(), "failed to connect to node %s: %s", nodeID, err)
+			log.Warningf(context.TODO(), "failed to resolve node %s: %s", nodeID, err)
 		}
+		return nil
+	}
+	if consecFailures > 0 {
+		log.Infof(context.TODO(), "resolved node %s to %s", nodeID, addr)
+	}
+
+	// GRPC connections are opened asynchronously and internally have a circuit
+	// breaking mechanism based on heartbeat successes and failures.
+	conn, err := t.rpcContext.GRPCDial(addr.String())
+	if err != nil {
 		return nil
 	}
 	return conn
 }
 
-// processQueue creates a client and sends messages from its designated queue
-// via that client, exiting when the client fails or when it idles out. All
-// messages remaining in the queue at that point are lost and a new instance of
-// processQueue should be started by the next message to be sent.
-// TODO(tschottdorf) should let raft know if the node is down;
-// need a feedback mechanism for that. Potentially easiest is to arrange for
-// the next call to Send() to fail appropriately.
+// processQueue opens a Raft client stream and sends messages from the
+// designated queue (ch) via that client, exiting when an error is received or
+// when it idles out. All messages remaining in the queue at that point are
+// lost and a new instance of processQueue will be started by the next message
+// to be sent.
 func (t *RaftTransport) processQueue(ch chan *RaftMessageRequest, conn *grpc.ClientConn) error {
 	client := NewMultiRaftClient(conn)
 	ctx, cancel := context.WithCancel(context.TODO())
