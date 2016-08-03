@@ -68,9 +68,11 @@ cockroach_toplevel="$(dirname $(cd $(dirname $0); pwd))"
 # and because various utilities (e.g. bash writing to .bash_history) need to be
 # able to write to there.
 build_home="/root"
-passwd_file="$(mktemp)"
-user_group="$(id -u $USER):$(id -g $USER)"
-echo "$USER:x:$user_group::${build_home}:/bin/bash" > "$passwd_file"
+builder_home="${cockroach_toplevel}/build/builder_home"
+passwd_file="${builder_home}/passwd"
+user_group="$(id -u ${USER}):$(id -g ${USER})"
+mkdir -p "${builder_home}"
+echo "${USER}:x:${user_group}::${build_home}:/bin/bash" > "${passwd_file}"
 
 # Run our build container with a set of volumes mounted that will
 # allow the container to store persistent build data on the host
@@ -98,8 +100,7 @@ vols="${vols} --volume=${gopath0}/bin/docker_amd64:/go/bin"
 vols="${vols} --volume=${HOME}/.jspm:${build_home}/.jspm"
 vols="${vols} --volume=${HOME}/.npm:${build_home}/.npm"
 vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach"
-# TODO(jordan/tamird): make this home directory persistent on the host.
-vols="${vols} --volume=$(mktemp -d):${build_home}"
+vols="${vols} --volume=${builder_home}:${build_home}"
 vols="${vols} --volume=${passwd_file}:/etc/passwd"
 
 backtrace_dir="${cockroach_toplevel}/../../cockroachlabs/backtrace"
