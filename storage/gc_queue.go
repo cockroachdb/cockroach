@@ -196,7 +196,7 @@ func processTransactionTable(
 				defer infoMu.Lock()
 				if err := resolveIntents(roachpb.AsIntents(txn.Intents, &txn),
 					true /* wait */, false /* !poison */); err != nil {
-					log.Warningf(context.TODO(), "failed to resolve intents of aborted txn on gc: %s", err)
+					log.Warningf(ctx, "failed to resolve intents of aborted txn on gc: %s", err)
 				}
 			}()
 		case roachpb.COMMITTED:
@@ -207,7 +207,7 @@ func processTransactionTable(
 				defer infoMu.Lock()
 				return resolveIntents(roachpb.AsIntents(txn.Intents, &txn), true /* wait */, false /* !poison */)
 			}(); err != nil {
-				log.Warningf(context.TODO(), "unable to resolve intents of committed txn on gc: %s", err)
+				log.Warningf(ctx, "unable to resolve intents of committed txn on gc: %s", err)
 				// Returning the error here would abort the whole GC run, and
 				// we don't want that. Instead, we simply don't GC this entry.
 				return nil
@@ -449,7 +449,7 @@ func RunGC(
 		if len(keys) > 1 {
 			meta := &enginepb.MVCCMetadata{}
 			if err := proto.Unmarshal(vals[0], meta); err != nil {
-				log.Errorf(context.TODO(), "unable to unmarshal MVCC metadata for key %q: %s", keys[0], err)
+				log.Errorf(ctx, "unable to unmarshal MVCC metadata for key %q: %s", keys[0], err)
 			} else {
 				// In the event that there's an active intent, send for
 				// intent resolution if older than the threshold.

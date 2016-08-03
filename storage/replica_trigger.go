@@ -486,11 +486,11 @@ func (r *Replica) handleTrigger(
 	}
 
 	if trigger.computeChecksum != nil {
-		r.computeChecksumTrigger(context.TODO(), *trigger.computeChecksum)
+		r.computeChecksumTrigger(ctx, *trigger.computeChecksum)
 	}
 
 	if trigger.verifyChecksum != nil {
-		r.verifyChecksumTrigger(context.TODO(), *trigger.verifyChecksum)
+		r.verifyChecksumTrigger(ctx, *trigger.verifyChecksum)
 	}
 
 }
