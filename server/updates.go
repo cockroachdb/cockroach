@@ -208,11 +208,11 @@ func (s *Server) checkForUpdates() {
 
 func (s *Server) usageReportingEnabled() bool {
 	// Grab the optin value from the database.
-	var ctx context.Context
+	ctx := context.TODO()
 	req := &serverpb.GetUIDataRequest{Keys: []string{optinKey}}
 	resp, err := s.admin.GetUIData(ctx, req)
 	if err != nil {
-		log.Warning(context.TODO(), err)
+		log.Warning(ctx, err)
 		return false
 	}
 
@@ -223,7 +223,7 @@ func (s *Server) usageReportingEnabled() bool {
 	}
 	optin, err := strconv.ParseBool(string(val.Value))
 	if err != nil {
-		log.Warningf(context.TODO(), "could not parse optin value (%q): %v", val.Value, err)
+		log.Warningf(ctx, "could not parse optin value (%q): %v", val.Value, err)
 		return false
 	}
 	return optin
