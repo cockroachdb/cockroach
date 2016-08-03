@@ -343,7 +343,9 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 			})
 			// TODO(peter): Populate DistinctSpans on all batches, not just batches
 			// which contain an EndTransactionRequest.
-			ba.Header.DistinctSpans = roachpb.MergeSpans(&et.IntentSpans) && distinctSpans
+			var distinct bool
+			et.IntentSpans, distinct = roachpb.MergeSpans(et.IntentSpans)
+			ba.Header.DistinctSpans = distinct && distinctSpans
 			if len(et.IntentSpans) == 0 {
 				// If there aren't any intents, then there's factually no
 				// transaction to end. Read-only txns have all of their state
@@ -627,9 +629,7 @@ func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
 	tc.Lock()
 	txnMeta := tc.txns[txnID]
 	// Clone the intents and the txn to avoid data races.
-	txnMeta.keys = append([]roachpb.Span(nil), txnMeta.keys...)
-	roachpb.MergeSpans(&txnMeta.keys)
-	intentSpans := txnMeta.keys
+	intentSpans, _ := roachpb.MergeSpans(append([]roachpb.Span(nil), txnMeta.keys...))
 	txnMeta.keys = nil
 	txn := txnMeta.txn.Clone()
 	tc.Unlock()

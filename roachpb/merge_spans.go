@@ -41,20 +41,20 @@ func (s sortedSpans) Len() int {
 
 // MergeSpans sorts the incoming spans and merges overlapping spans. Returns
 // true iff all of the spans are distinct.
-func MergeSpans(spans *[]Span) bool {
-	if len(*spans) == 0 {
-		return true
+func MergeSpans(spans []Span) ([]Span, bool) {
+	if len(spans) == 0 {
+		return spans, true
 	}
 
-	sort.Sort(sortedSpans(*spans))
+	sort.Sort(sortedSpans(spans))
 
 	// We build up the resulting slice of merged spans in place. This is safe
 	// because "r" grows by at most 1 element on each iteration, staying abreast
 	// or behind the iteration over "spans".
-	r := (*spans)[:1]
+	r := spans[:1]
 	distinct := true
 
-	for _, cur := range (*spans)[1:] {
+	for _, cur := range spans[1:] {
 		prev := &r[len(r)-1]
 		if len(cur.EndKey) == 0 && len(prev.EndKey) == 0 {
 			if cur.Key.Compare(prev.Key) != 0 {
@@ -100,6 +100,5 @@ func MergeSpans(spans *[]Span) bool {
 		}
 		r = append(r, cur)
 	}
-	*spans = r
-	return distinct
+	return r, distinct
 }
