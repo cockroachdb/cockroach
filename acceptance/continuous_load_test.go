@@ -192,7 +192,7 @@ func (cl continuousLoadTest) shortTestTimeout() string {
 	}
 	timeout, err := time.ParseDuration(fl.Value.String())
 	if err != nil {
-		log.Errorf(context.TODO(), "couldn't parse test timeout %s", fl.Value.String())
+		log.Errorf(context.Background(), "couldn't parse test timeout %s", fl.Value.String())
 		return ""
 	}
 	return regexp.MustCompile(`([a-z])0[0a-z]+`).ReplaceAllString(timeout.String(), `$1`)

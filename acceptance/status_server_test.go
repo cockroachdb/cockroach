@@ -48,21 +48,21 @@ func get(t *testing.T, base, rel string) []byte {
 	for r := retry.Start(retryOptions); r.Next(); {
 		resp, err := cluster.HTTPClient.Get(url)
 		if err != nil {
-			log.Infof(context.TODO(), "could not GET %s - %s", url, err)
+			log.Infof(context.Background(), "could not GET %s - %s", url, err)
 			continue
 		}
 		defer resp.Body.Close()
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			log.Infof(context.TODO(), "could not read body for %s - %s", url, err)
+			log.Infof(context.Background(), "could not read body for %s - %s", url, err)
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {
-			log.Infof(context.TODO(), "could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
+			log.Infof(context.Background(), "could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
 			continue
 		}
 		if log.V(1) {
-			log.Infof(context.TODO(), "OK response from %s", url)
+			log.Infof(context.Background(), "OK response from %s", url)
 		}
 		return body
 	}

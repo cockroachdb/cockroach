@@ -55,7 +55,7 @@ func checkRangeReplication(t *testing.T, c cluster.Cluster, d time.Duration) {
 		wantedReplicas = c.NumNodes()
 	}
 
-	log.Infof(context.TODO(), "waiting for first range to have %d replicas", wantedReplicas)
+	log.Infof(context.Background(), "waiting for first range to have %d replicas", wantedReplicas)
 
 	util.SucceedsSoon(t, func() error {
 		select {
@@ -71,7 +71,7 @@ func checkRangeReplication(t *testing.T, c cluster.Cluster, d time.Duration) {
 		}
 
 		if log.V(1) {
-			log.Infof(context.TODO(), "found %d replicas", foundReplicas)
+			log.Infof(context.Background(), "found %d replicas", foundReplicas)
 		}
 		if foundReplicas >= wantedReplicas {
 			return nil
@@ -79,5 +79,5 @@ func checkRangeReplication(t *testing.T, c cluster.Cluster, d time.Duration) {
 		return fmt.Errorf("expected %d replicas, only found %d", wantedReplicas, foundReplicas)
 	})
 
-	log.Infof(context.TODO(), "found %d replicas", wantedReplicas)
+	log.Infof(context.Background(), "found %d replicas", wantedReplicas)
 }

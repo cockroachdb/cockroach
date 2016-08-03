@@ -172,24 +172,24 @@ func getRequestReader(t *testing.T, ts serverutils.TestServerInterface, path str
 		req.Header.Set(util.AcceptHeader, util.JSONContentType)
 		resp, err := httpClient.Do(req)
 		if err != nil {
-			log.Infof(context.TODO(), "could not GET %s - %s", url, err)
+			log.Infof(context.Background(), "could not GET %s - %s", url, err)
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {
 			body, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
-				log.Infof(context.TODO(), "could not read body for %s - %s", url, err)
+				log.Infof(context.Background(), "could not read body for %s - %s", url, err)
 				continue
 			}
-			log.Infof(context.TODO(), "could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
+			log.Infof(context.Background(), "could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
 			continue
 		}
 		returnedContentType := resp.Header.Get(util.ContentTypeHeader)
 		if returnedContentType != util.JSONContentType {
-			log.Infof(context.TODO(), "unexpected content type: %v", returnedContentType)
+			log.Infof(context.Background(), "unexpected content type: %v", returnedContentType)
 			continue
 		}
-		log.Infof(context.TODO(), "OK response from %s", url)
+		log.Infof(context.Background(), "OK response from %s", url)
 		return resp.Body
 	}
 	t.Fatalf("There was an error retrieving %s", url)
@@ -203,7 +203,7 @@ func getRequest(t *testing.T, ts serverutils.TestServerInterface, path string) [
 	defer respBody.Close()
 	body, err := ioutil.ReadAll(respBody)
 	if err != nil {
-		log.Infof(context.TODO(), "could not read body for %s - %s", path, err)
+		log.Infof(context.Background(), "could not read body for %s - %s", path, err)
 		return nil
 	}
 	return body
@@ -268,11 +268,11 @@ func TestStatusLocalLogs(t *testing.T) {
 
 	// Log an error which we expect to show up on every log file.
 	timestamp := timeutil.Now().UnixNano()
-	log.Errorf(context.TODO(), "TestStatusLocalLogFile test message-Error")
+	log.Errorf(context.Background(), "TestStatusLocalLogFile test message-Error")
 	timestampE := timeutil.Now().UnixNano()
-	log.Warningf(context.TODO(), "TestStatusLocalLogFile test message-Warning")
+	log.Warningf(context.Background(), "TestStatusLocalLogFile test message-Warning")
 	timestampEW := timeutil.Now().UnixNano()
-	log.Infof(context.TODO(), "TestStatusLocalLogFile test message-Info")
+	log.Infof(context.Background(), "TestStatusLocalLogFile test message-Info")
 	timestampEWI := timeutil.Now().UnixNano()
 
 	type logsWrapper struct {
