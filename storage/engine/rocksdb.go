@@ -853,7 +853,6 @@ func (r *rocksDBBatchIterator) Less(key MVCCKey) bool {
 type rocksDBBatch struct {
 	parent             *RocksDB
 	batch              *C.DBEngine
-	defers             []func()
 	flushes            int
 	prefixIter         rocksDBBatchIterator
 	normalIter         rocksDBBatchIterator
@@ -998,22 +997,12 @@ func (r *rocksDBBatch) Commit() error {
 	C.DBClose(r.batch)
 	r.batch = nil
 
-	// On success, run the deferred functions in reverse order.
-	for i := len(r.defers) - 1; i >= 0; i-- {
-		r.defers[i]()
-	}
-	r.defers = nil
-
 	return nil
 }
 
 func (r *rocksDBBatch) Repr() []byte {
 	r.flushMutations()
 	return cSliceToGoBytes(C.DBBatchRepr(r.batch))
-}
-
-func (r *rocksDBBatch) Defer(fn func()) {
-	r.defers = append(r.defers, fn)
 }
 
 func (r *rocksDBBatch) Distinct() ReadWriter {
