@@ -26,7 +26,7 @@ import "bytes"
 
 // Set represents a SET statement.
 type Set struct {
-	Name   *QualifiedName
+	Name   VarName
 	Values Exprs
 }
 

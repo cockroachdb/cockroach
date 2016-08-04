@@ -784,7 +784,7 @@ func (node *UnaryExpr) TypedInnerExpr() TypedExpr {
 
 // FuncExpr represents a function call.
 type FuncExpr struct {
-	Name  *QualifiedName
+	Name  NormalizableFunctionName
 	Type  funcType
 	Exprs Exprs
 
@@ -817,7 +817,7 @@ func (node *FuncExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	// FormatNode. The reason it's a TypedExpr in the first place is for
 	// testing (I believe), but this doesn't seem like a good enough
 	// reason to justify the strangeness.
-	buf.WriteString(node.Name.String())
+	FormatNode(buf, f, node.Name)
 	buf.WriteByte('(')
 	buf.WriteString(typ)
 	FormatNode(buf, f, node.Exprs)
