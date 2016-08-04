@@ -40,7 +40,7 @@ type selectNode struct {
 	source planDataSource
 
 	// sourceInfo contains the reference to the dataSourceInfo in the
-	// source planDataSource that is needed for qname resolution.
+	// source planDataSource that is needed for name resolution.
 	// We keep one instance of multiSourceInfo cached here so as to avoid
 	// re-creating it every time analyzeExpr() is called in addRender().
 	sourceInfo multiSourceInfo
@@ -490,10 +490,10 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 
 // checkRenderStar checks if the SelectExpr is either an
 // UnqualifiedStar or an AllColumnsSelector. If so, we match the
-// prefix of the qualified name to one of the tables in the query and
-// then expand the "*" into a list of columns. The qvalMap is updated
-// to include all the relevant columns. A ResultColumns and Expr pair
-// is returned for each column.
+// prefix of the name to one of the tables in the query and then
+// expand the "*" into a list of columns. The qvalMap is updated to
+// include all the relevant columns. A ResultColumns and Expr pair is
+// returned for each column.
 func checkRenderStar(
 	target parser.SelectExpr, src *dataSourceInfo, qvals qvalMap,
 ) (isStar bool, columns []ResultColumn, exprs []parser.TypedExpr, err error) {

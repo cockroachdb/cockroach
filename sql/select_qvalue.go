@@ -122,16 +122,16 @@ func (q qvalMap) getQVal(colRef columnRef) *qvalue {
 	return qval
 }
 
-// qnameVisitor is a parser.Visitor implementation used to resolve the
-// column names in an expression.
-type qnameVisitor struct {
+// nameResolutionVisitor is a parser.Visitor implementation used to
+// resolve the column names in an expression.
+type nameResolutionVisitor struct {
 	qt  qvalResolver
 	err error
 }
 
-var _ parser.Visitor = &qnameVisitor{}
+var _ parser.Visitor = &nameResolutionVisitor{}
 
-func (v *qnameVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.Expr) {
+func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.Expr) {
 	if v.err != nil {
 		return false, expr
 	}
@@ -218,29 +218,30 @@ func (v *qnameVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.
 	return true, expr
 }
 
-func (*qnameVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
+func (*nameResolutionVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
 
-func (s *selectNode) resolveQNames(expr parser.Expr) (parser.Expr, error) {
-	var v *qnameVisitor
+func (s *selectNode) resolveNames(expr parser.Expr) (parser.Expr, error) {
+	var v *nameResolutionVisitor
 	if s.planner != nil {
-		v = &s.planner.qnameVisitor
+		v = &s.planner.nameResolutionVisitor
 	}
-	return resolveQNames(expr, s.sourceInfo, s.qvals, v)
+	return resolveNames(expr, s.sourceInfo, s.qvals, v)
 }
 
-// resolveQNames walks the provided expression and resolves all qualified
-// names using the tableInfo and qvalMap. The function takes an optional
-// qnameVisitor to provide the caller the option of avoiding an allocation.
-func resolveQNames(
-	expr parser.Expr, sources multiSourceInfo, qvals qvalMap, v *qnameVisitor,
+// resolveNames walks the provided expression and resolves all names
+// using the tableInfo and qvalMap. The function takes an optional
+// nameResolutionVisitor to provide the caller the option of avoiding an
+// allocation.
+func resolveNames(
+	expr parser.Expr, sources multiSourceInfo, qvals qvalMap, v *nameResolutionVisitor,
 ) (parser.Expr, error) {
 	if expr == nil {
 		return expr, nil
 	}
 	if v == nil {
-		v = new(qnameVisitor)
+		v = new(nameResolutionVisitor)
 	}
-	*v = qnameVisitor{
+	*v = nameResolutionVisitor{
 		qt: qvalResolver{
 			sources: sources,
 			qvals:   qvals,

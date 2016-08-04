@@ -26,7 +26,7 @@ import (
 )
 
 // To understand dataSourceInfo below it is crucial to understand the
-// meaning of a "data source" and its relationship to qnames/qvalues.
+// meaning of a "data source" and its relationship to names/qvalues.
 //
 // A data source is an object that can deliver rows of column data,
 // where each row is implemented in CockroachDB as an array of values.
@@ -49,12 +49,12 @@ import (
 //
 // Meanwhile, qvalues in CockroachDB provide the interface between
 // symbolic names in expressions (e.g. "f.x", called VarNames,
-// or qnames) and data sources. During evaluation, a qvalue must
-// resolve to a column value. For a given qname there are thus two
+// or names) and data sources. During evaluation, a qvalue must
+// resolve to a column value. For a given name there are thus two
 // subsequent questions that must be answered:
 //
-// - which data source is the qname referring to? (when there is more than 1 source)
-// - which 0-indexed column in that data source is the qname referring to?
+// - which data source is the name referring to? (when there is more than 1 source)
+// - which 0-indexed column in that data source is the name referring to?
 //
 // The qvalue must distinguish data sources because the same column index
 // may refer to different columns in different data sources. For
@@ -82,7 +82,7 @@ import (
 //   or the implicit data source corresponding to the rows in the original table
 //   that conflict with the new values.
 //
-//   When this happens, a qname of the form "excluded.x" must be
+//   When this happens, a name of the form "excluded.x" must be
 //   resolved by considering all the data sources; if there is more
 //   than one data source providing the table name "excluded" (as in
 //   this case), the query is rejected with an ambiguity error.
@@ -98,7 +98,7 @@ import (
 //   and JOINed sources only. Note that a FROM clause with a comma-separated
 //   list of sources is a CROSS JOIN in disguise.)
 //
-//   When this happens, qnames of the form "f.x" in either WHERE,
+//   When this happens, names of the form "f.x" in either WHERE,
 //   SELECT renders, or other expressions which can refer to the data
 //   source do not refer to the "internal" data sources of the JOIN;
 //   they always refer to the final result rows of the JOIN source as
@@ -324,8 +324,8 @@ func (p *planner) getDataSource(
 	}
 }
 
-// expandStar returns the array of column metadata and qname
-// expressions that correspond to the expansion of a qname star.
+// expandStar returns the array of column metadata and name
+// expressions that correspond to the expansion of a star.
 func (src *dataSourceInfo) expandStar(
 	v parser.VarName, qvals qvalMap,
 ) (columns []ResultColumn, exprs []parser.TypedExpr, err error) {

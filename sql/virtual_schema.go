@@ -187,9 +187,9 @@ func isVirtualDatabase(name string) bool {
 	return ok
 }
 
-// getVirtualTableEntry checks if the provided qname matches a virtual database/table
-// pair. The function will return the table's virtual table entry if the qname matches
-// a specific table. It will return an error if the qname references a virtual database
+// getVirtualTableEntry checks if the provided name matches a virtual database/table
+// pair. The function will return the table's virtual table entry if the name matches
+// a specific table. It will return an error if the name references a virtual database
 // but the table is non-existent.
 func getVirtualTableEntry(tn *parser.TableName) (virtualTableEntry, error) {
 	if db, ok := getVirtualSchemaEntry(tn.Database()); ok {
@@ -201,7 +201,7 @@ func getVirtualTableEntry(tn *parser.TableName) (virtualTableEntry, error) {
 	return virtualTableEntry{}, nil
 }
 
-// getVirtualTableDesc checks if the provided qname matches a virtual database/table
+// getVirtualTableDesc checks if the provided name matches a virtual database/table
 // pair, and returns its descriptor if it does.
 func getVirtualTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
 	t, err := getVirtualTableEntry(tn)
