@@ -326,8 +326,8 @@ func (p *planner) makeUsingPredicate(
 	columns := make([]ResultColumn, 0, len(left.sourceColumns)+len(right.sourceColumns)-len(colNames))
 
 	// Find out which columns are involved in the USING clause.
-	for i, colName := range colNames {
-		colName = sqlbase.NormalizeName(colName)
+	for i, unnormalizedColName := range colNames {
+		colName := sqlbase.NormalizeName(unnormalizedColName)
 
 		// Check for USING(x,x)
 		if _, ok := seenNames[colName]; ok {
@@ -418,8 +418,8 @@ func (p *planner) makeUsingPredicate(
 
 // commonColumns returns the names of columns common on the
 // right and left sides, for use by NATURAL JOIN.
-func commonColumns(left, right *dataSourceInfo) []string {
-	var res []string
+func commonColumns(left, right *dataSourceInfo) parser.NameList {
+	var res parser.NameList
 	for _, cLeft := range left.sourceColumns {
 		if cLeft.hidden {
 			continue
@@ -429,9 +429,8 @@ func commonColumns(left, right *dataSourceInfo) []string {
 				continue
 			}
 
-			lName := sqlbase.NormalizeName(cLeft.Name)
-			if lName == sqlbase.NormalizeName(cRight.Name) {
-				res = append(res, lName)
+			if sqlbase.ReNormalizeName(cLeft.Name) == sqlbase.ReNormalizeName(cRight.Name) {
+				res = append(res, parser.Name(cLeft.Name))
 			}
 		}
 	}

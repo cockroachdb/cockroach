@@ -56,10 +56,16 @@ func (p *planner) makeReturningHelper(
 	}
 
 	rh.columns = make([]ResultColumn, 0, len(r))
-	rh.source = newSourceInfoForSingleTable(alias, makeResultColumns(tablecols))
+	aliasTableName := parser.TableName{TableName: parser.Name(alias)}
+	rh.source = newSourceInfoForSingleTable(aliasTableName, makeResultColumns(tablecols))
 	rh.qvals = make(qvalMap)
 	rh.exprs = make([]parser.TypedExpr, 0, len(r))
 	for i, target := range r {
+		// Pre-normalize VarNames at the top level so that checkRenderStar can see stars.
+		if err := target.NormalizeTopLevelVarName(); err != nil {
+			return returningHelper{}, err
+		}
+
 		if isStar, cols, typedExprs, err := checkRenderStar(target, rh.source, rh.qvals); err != nil {
 			return returningHelper{}, err
 		} else if isStar {

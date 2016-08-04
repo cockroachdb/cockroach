@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 type insertNode struct {
@@ -55,7 +56,12 @@ type insertNode struct {
 func (p *planner) Insert(
 	n *parser.Insert, desiredTypes []parser.Datum, autoCommit bool,
 ) (planNode, error) {
-	en, err := p.makeEditNode(n.Table, autoCommit, privilege.INSERT)
+	tn, err := p.getAliasedTableName(n.Table)
+	if err != nil {
+		return nil, err
+	}
+
+	en, err := p.makeEditNode(tn, autoCommit, privilege.INSERT)
 	if err != nil {
 		return nil, err
 	}

@@ -27,7 +27,7 @@ import (
 // expressions to refer to the values that would be inserted for a row if it
 // didn't conflict.
 // Example: `INSERT INTO kv VALUES (1, 2) ON CONFLICT (k) DO UPDATE SET v = excluded.v`
-const upsertExcludedTable = "excluded"
+var upsertExcludedTable = parser.TableName{TableName: "excluded"}
 
 type upsertHelper struct {
 	p                  *planner
@@ -41,6 +41,7 @@ type upsertHelper struct {
 var _ tableUpsertEvaler = (*upsertHelper)(nil)
 
 func (p *planner) makeUpsertHelper(
+	tn *parser.TableName,
 	tableDesc *sqlbase.TableDescriptor,
 	insertCols []sqlbase.ColumnDescriptor,
 	updateCols []sqlbase.ColumnDescriptor,
@@ -72,23 +73,7 @@ func (p *planner) makeUpsertHelper(
 		}
 	}
 
-	allExprsIdentity := true
-	for i, expr := range untupledExprs {
-		qn, ok := expr.(*parser.QualifiedName)
-		if !ok {
-			allExprsIdentity = false
-			break
-		}
-		if err := qn.NormalizeColumnName(); err != nil {
-			return nil, err
-		}
-		if qn.Base != upsertExcludedTable || qn.Column() != updateCols[i].Name {
-			allExprsIdentity = false
-			break
-		}
-	}
-
-	sourceInfo := newSourceInfoForSingleTable(tableDesc.Name, makeResultColumns(tableDesc.Columns))
+	sourceInfo := newSourceInfoForSingleTable(*tn, makeResultColumns(tableDesc.Columns))
 	excludedSourceInfo := newSourceInfoForSingleTable(upsertExcludedTable, makeResultColumns(insertCols))
 
 	var evalExprs []parser.TypedExpr
@@ -100,6 +85,23 @@ func (p *planner) makeUpsertHelper(
 			return nil, err
 		}
 		evalExprs = append(evalExprs, normExpr)
+	}
+
+	allExprsIdentity := true
+	for i, expr := range evalExprs {
+		// analyzeExpr above has normalized all direct column names to ColumnItems.
+		c, ok := expr.(*parser.ColumnItem)
+		if !ok {
+			allExprsIdentity = false
+			break
+		}
+		// FIXME(knz) check other db name is OK here.
+		if len(c.Selector) > 0 ||
+			!sqlbase.EqualName(c.TableName.TableName, upsertExcludedTable.TableName) ||
+			sqlbase.NormalizeName(c.ColumnName) != sqlbase.ReNormalizeName(updateCols[i].Name) {
+			allExprsIdentity = false
+			break
+		}
 	}
 
 	helper := &upsertHelper{
@@ -176,13 +178,12 @@ func upsertExprsAndIndex(
 		updateExprs := make(parser.UpdateExprs, 0, len(insertCols))
 		for _, c := range insertCols {
 			if _, ok := indexColSet[c.ID]; !ok {
-				names := parser.QualifiedNames{&parser.QualifiedName{Base: parser.Name(c.Name)}}
-				expr := &parser.QualifiedName{
-					Base:     upsertExcludedTable,
-					Indirect: parser.Indirection{parser.NameIndirection(c.Name)},
+				names := parser.UnresolvedNames{
+					parser.UnresolvedName{parser.Name(c.Name)},
 				}
-				if err := expr.NormalizeColumnName(); err != nil {
-					return nil, nil, err
+				expr := &parser.ColumnItem{
+					TableName:  upsertExcludedTable,
+					ColumnName: parser.Name(c.Name),
 				}
 				updateExprs = append(updateExprs, &parser.UpdateExpr{Names: names, Expr: expr})
 			}
@@ -198,7 +199,7 @@ func upsertExprsAndIndex(
 			return false
 		}
 		for i, colName := range index.ColumnNames {
-			if colName != onConflict.Columns[i] {
+			if sqlbase.ReNormalizeName(colName) != sqlbase.NormalizeName(onConflict.Columns[i]) {
 				return false
 			}
 		}
