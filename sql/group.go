@@ -52,7 +52,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 		// We do not need to fully analyze the GROUP BY expression here
 		// (as per analyzeExpr) because this is taken care of by addRender
 		// below.
-		resolved, err := resolveQNames(groupBy[i], s.sourceInfo, s.qvals, &p.qnameVisitor)
+		resolved, err := resolveNames(groupBy[i], s.sourceInfo, s.qvals, &p.nameResolutionVisitor)
 		if err != nil {
 			return nil, err
 		}

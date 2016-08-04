@@ -96,7 +96,7 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 			}
 
 			if c.TableName.Table() == "" {
-				// Look for an output column that matches the qualified name. This
+				// Look for an output column that matches the name. This
 				// handles cases like:
 				//
 				//   SELECT a AS b FROM t ORDER BY b
@@ -110,7 +110,7 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 			}
 
 			if s, ok := n.(*selectNode); ok && index == -1 {
-				// No output column matched the qualified name, so look for an existing
+				// No output column matched the  name, so look for an existing
 				// render target that matches the column name. This handles cases like:
 				//
 				//   SELECT a AS b FROM t ORDER BY a
@@ -142,9 +142,9 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 				// TODO(dan): Once we support VALUES (1), (2) ORDER BY 3*4, this type
 				// check goes away.
 
-				// Add a new render expression to use for ordering. This handles cases
-				// were the expression is either not a qualified name or is a qualified
-				// name that is otherwise not referenced by the query:
+				// Add a new render expression to use for ordering. This
+				// handles cases were the expression is either not a name or
+				// is a name that is otherwise not referenced by the query:
 				//
 				//   SELECT a FROM t ORDER by b
 				//   SELECT a, b FROM t ORDER by a+b
