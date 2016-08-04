@@ -1302,9 +1302,9 @@ func UnmarshalColumnValue(
 	}
 }
 
-// CheckValueWidth checks that the width (for strings/byte arrays) and
-// scale (for decimals) of the value fits the specified column type.
-// Used by INSERT and UPDATE.
+// CheckValueWidth checks that the width (for strings, byte arrays, and
+// bit string) and scale (for decimals) of the value fits the specified
+// column type. Used by INSERT and UPDATE.
 func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
 	switch col.Type.Kind {
 	case ColumnType_STRING:
@@ -1312,6 +1312,28 @@ func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
 			if col.Type.Width > 0 && utf8.RuneCountInString(string(*v)) > int(col.Type.Width) {
 				return fmt.Errorf("value too long for type %s (column %q)",
 					col.Type.SQLString(), col.Name)
+			}
+		}
+	case ColumnType_INT:
+		if v, ok := val.(*parser.DInt); ok {
+			if col.Type.Width > 0 {
+				// https://www.postgresql.org/docs/9.5/static/datatype-bit.html
+				// "bit type data must match the length n exactly; it is an error
+				// to attempt to store shorter or longer bit strings. bit varying
+				// data is of variable length up to the maximum length n; longer
+				// strings will be rejected."
+				//
+				// TODO(nvanbenschoten) Because we do not propagate the "varying"
+				// flag on the column type, the best we can do here is conservatively
+				// assume the varying bit type and error only on longer bit strings.
+				mostSignificantBit := int32(0)
+				for bits := uint64(*v); bits != 0; mostSignificantBit++ {
+					bits >>= 1
+				}
+				if mostSignificantBit > col.Type.Width {
+					return fmt.Errorf("bit string too long for type %s (column %q)",
+						col.Type.SQLString(), col.Name)
+				}
 			}
 		}
 	case ColumnType_DECIMAL:
