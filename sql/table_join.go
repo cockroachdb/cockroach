@@ -296,7 +296,7 @@ func pickUsingColumn(cols []ResultColumn, colName string, context string) (int, 
 		if col.hidden {
 			continue
 		}
-		if sqlbase.NormalizeName(col.Name) == colName {
+		if sqlbase.ReNormalizeName(col.Name) == colName {
 			idx = j
 		}
 	}

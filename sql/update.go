@@ -39,8 +39,8 @@ type editNodeBase struct {
 	autoCommit bool
 }
 
-func (p *planner) makeEditNode(t parser.TableExpr, autoCommit bool, priv privilege.Kind) (editNodeBase, error) {
-	tableDesc, err := p.getAliasedTableLease(t)
+func (p *planner) makeEditNode(tn *parser.TableName, autoCommit bool, priv privilege.Kind) (editNodeBase, error) {
+	tableDesc, err := p.getTableLease(tn)
 	if err != nil {
 		return editNodeBase{}, err
 	}
@@ -259,7 +259,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		updateColsIdx: updateColsIdx,
 		tw:            tw,
 	}
-	if err := un.checkHelper.init(p, en.tableDesc); err != nil {
+	if err := un.checkHelper.init(p, tn, en.tableDesc); err != nil {
 		return nil, err
 	}
 	if err := un.run.initEditNode(&un.editNodeBase, rows, n.Returning, desiredTypes); err != nil {
