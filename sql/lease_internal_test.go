@@ -478,20 +478,20 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	wg.Add(numRoutines)
 	for i := 0; i < numRoutines; i++ {
 		go func() {
+			defer wg.Done()
 			err := kvDB.Txn(func(txn *client.Txn) error {
 				lease, err := leaseManager.acquireFreshestFromStore(txn, tableDesc.ID)
 				if err != nil {
-					t.Fatal(err)
+					return err
 				}
 				if err := leaseManager.Release(lease); err != nil {
-					t.Fatal(err)
+					return err
 				}
 				return nil
 			})
 			if err != nil {
-				t.Fatal(err)
+				t.Error(err)
 			}
-			wg.Done()
 		}()
 	}
 	wg.Wait()
