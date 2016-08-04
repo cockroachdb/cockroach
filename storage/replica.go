@@ -466,7 +466,7 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 
 // String returns a string representation of the range.
 func (r *Replica) String() string {
-	desc := r.InformalDesc()
+	desc := r.InconsistentDesc()
 	return fmt.Sprintf("%s range=%d [%s-%s)", r.store,
 		desc.RangeID, desc.StartKey, desc.EndKey)
 }
@@ -711,11 +711,11 @@ func (r *Replica) Desc() *roachpb.RangeDescriptor {
 	return r.mu.state.Desc
 }
 
-// InformalDesc returns a cached copy of the authoritative desc which is kept
-// in sync with the authoritative desc, though not atomically. This method
-// does not acquire a lock and is to be used whenever a descriptor is needed
-// for informational purposes.
-func (r *Replica) InformalDesc() *roachpb.RangeDescriptor {
+// InconsistentDesc returns a cached copy of the authoritative desc which is
+// kept in sync with the authoritative desc, though not atomically. This
+// method does not acquire a lock and is to be used whenever a descriptor is
+// needed for informational purposes.
+func (r *Replica) InconsistentDesc() *roachpb.RangeDescriptor {
 	return r.rangeDesc.Load().(*roachpb.RangeDescriptor)
 }
 
