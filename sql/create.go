@@ -773,16 +773,17 @@ func CreateTableDescriptor(
 // MakeTableDesc creates a table descriptor from a CreateTable statement.
 func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDescriptor, error) {
 	desc := sqlbase.TableDescriptor{}
-	if err := p.Table.NormalizeTableName(""); err != nil {
+	t, err := p.Table.Normalize()
+	if err != nil {
 		return desc, err
 	}
-	desc.Name = p.Table.Table()
+	desc.Name = string(t.TableName)
 	desc.ParentID = parentID
 	desc.FormatVersion = sqlbase.FamilyFormatVersion
 	// We don't use version 0.
 	desc.Version = 1
 
-	var primaryIndexColumnSet map[parser.Name]struct{}
+	var primaryIndexColumnSet map[string]struct{}
 	for _, def := range p.Defs {
 		switch d := def.(type) {
 		case *parser.ColumnTableDef:
@@ -809,7 +810,7 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 		case *parser.IndexTableDef:
 			idx := sqlbase.IndexDescriptor{
 				Name:             string(d.Name),
-				StoreColumnNames: d.Storing,
+				StoreColumnNames: d.Storing.ToStrings(),
 			}
 			if err := idx.FillColumns(d.Columns); err != nil {
 				return desc, err
@@ -824,7 +825,7 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 			idx := sqlbase.IndexDescriptor{
 				Name:             string(d.Name),
 				Unique:           true,
-				StoreColumnNames: d.Storing,
+				StoreColumnNames: d.Storing.ToStrings(),
 			}
 			if err := idx.FillColumns(d.Columns); err != nil {
 				return desc, err
@@ -833,9 +834,9 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 				return desc, err
 			}
 			if d.PrimaryKey {
-				primaryIndexColumnSet = make(map[parser.Name]struct{})
+				primaryIndexColumnSet = make(map[string]struct{})
 				for _, c := range d.Columns {
-					primaryIndexColumnSet[c.Column] = struct{}{}
+					primaryIndexColumnSet[sqlbase.NormalizeName(c.Column)] = struct{}{}
 				}
 			}
 			if d.Interleave != nil {
@@ -851,22 +852,26 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 			// will adhere to the stricter definition.
 
 			preFn := func(expr parser.Expr) (err error, recurse bool, newExpr parser.Expr) {
-				qname, ok := expr.(*parser.QualifiedName)
+				vBase, ok := expr.(parser.VarName)
 				if !ok {
-					// Not a qname, don't do anything to this node.
+					// Not a VarName, don't do anything to this node.
 					return nil, true, expr
 				}
 
-				if err := qname.NormalizeColumnName(); err != nil {
+				v, err := vBase.NormalizeVarName()
+				if err != nil {
 					return err, false, nil
 				}
 
-				if qname.IsStar() {
-					return fmt.Errorf("* not allowed in constraint %q", d.Expr.String()), false, nil
+				c, ok := v.(*parser.ColumnItem)
+				if !ok {
+					return nil, true, expr
 				}
-				col, err := desc.FindActiveColumnByName(qname.Column())
+
+				col, err := desc.FindActiveColumnByName(c.ColumnName)
 				if err != nil {
-					return fmt.Errorf("column %q not found for constraint %q", qname.String(), d.Expr.String()), false, nil
+					return fmt.Errorf("column %q not found for constraint %q",
+						c.ColumnName, d.Expr.String()), false, nil
 				}
 				// Convert to a dummy datum of the correct type.
 				return nil, false, col.Type.ToDatumType()
@@ -877,13 +882,13 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 				return desc, err
 			}
 
-			if err := sqlbase.SanitizeVarFreeExpr(expr, parser.TypeBool, "CHECK"); err != nil {
-				return desc, err
-			}
-
 			var p parser.Parser
 			if p.AggregateInExpr(expr) {
-				return desc, fmt.Errorf("Aggregate functions are not allowed in CHECK expressions")
+				return desc, fmt.Errorf("aggregate functions are not allowed in CHECK expressions")
+			}
+
+			if err := sqlbase.SanitizeVarFreeExpr(expr, parser.TypeBool, "CHECK"); err != nil {
+				return desc, err
 			}
 
 			check := &sqlbase.TableDescriptor_CheckConstraint{Expr: d.Expr.String()}
@@ -893,13 +898,9 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 			desc.Checks = append(desc.Checks, check)
 
 		case *parser.FamilyTableDef:
-			names := make([]string, len(d.Columns))
-			for i, col := range d.Columns {
-				names[i] = string(col.Column)
-			}
 			fam := sqlbase.ColumnFamilyDescriptor{
 				Name:        string(d.Name),
-				ColumnNames: names,
+				ColumnNames: d.Columns.ToStrings(),
 			}
 			desc.AddFamily(fam)
 
@@ -915,7 +916,7 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 	if primaryIndexColumnSet != nil {
 		// Primary index columns are not nullable.
 		for i := range desc.Columns {
-			if _, ok := primaryIndexColumnSet[parser.Name(desc.Columns[i].Name)]; ok {
+			if _, ok := primaryIndexColumnSet[sqlbase.ReNormalizeName(desc.Columns[i].Name)]; ok {
 				desc.Columns[i].Nullable = false
 			}
 		}

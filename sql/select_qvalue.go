@@ -25,7 +25,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/pkg/errors"
 )
 
 // columnRef is a reference to a resultColumn of a FROM node
@@ -68,8 +67,12 @@ func (*qvalue) Variable() {}
 func (q *qvalue) Format(buf *bytes.Buffer, f parser.FmtFlags) {
 	if f == parser.FmtQualify {
 		tableAlias := q.colRef.source.findTableAlias(q.colRef.colIdx)
-		if tableAlias != "" {
-			buf.WriteString(tableAlias)
+		if tableAlias.TableName != "" {
+			if tableAlias.DatabaseName != "" {
+				parser.FormatNode(buf, f, tableAlias.DatabaseName)
+				buf.WriteByte('.')
+			}
+			parser.FormatNode(buf, f, tableAlias.TableName)
 			buf.WriteByte('.')
 		}
 	}
@@ -142,7 +145,15 @@ func (v *qnameVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.
 		}
 		return true, expr
 
-	case *parser.QualifiedName:
+	case parser.UnresolvedName:
+		vn, err := t.NormalizeVarName()
+		if err != nil {
+			v.err = err
+			return false, expr
+		}
+		return v.VisitPre(vn)
+
+	case *parser.ColumnItem:
 		var colRef columnRef
 
 		colRef.source, colRef.colIdx, v.err = v.qt.sources.findColumn(t)
@@ -156,25 +167,46 @@ func (v *qnameVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.
 		if len(t.Exprs) != 1 {
 			break
 		}
-		qname, ok := t.Exprs[0].(*parser.QualifiedName)
+		vn, ok := t.Exprs[0].(parser.VarName)
 		if !ok {
 			break
 		}
-		v.err = qname.NormalizeColumnName()
+		vn, v.err = vn.NormalizeVarName()
 		if v.err != nil {
 			return false, expr
 		}
-		if qname.IsStar() {
+		// Save back to avoid re-doing the work later.
+		t.Exprs[0] = vn
+
+		fn, err := t.Name.Normalize()
+		if err != nil {
+			v.err = err
+			return false, expr
+		}
+
+		if strings.EqualFold(fn.Function(), "count") {
 			// Special case handling for COUNT(*). This is a special construct to
 			// count the number of rows; in this case * does NOT refer to a set of
-			// columns. A * is invalid elsewhere.
-			if len(t.Name.Indirect) == 0 && strings.EqualFold(string(t.Name.Base), "count") {
-				// Replace the function argument with a special non-NULL VariableExpr.
-				t = t.CopyNode()
-				t.Exprs[0] = starDatumInstance
-			} else {
-				v.err = errors.Errorf("cannot use '*' with %s", t.Name)
+			// columns. A * is invalid elsewhere (and will be caught by TypeCheck()).
+			// Replace the function argument with a special non-NULL VariableExpr.
+			switch arg := vn.(type) {
+			case parser.UnqualifiedStar:
+				// Replace, see below.
+			case *parser.AllColumnsSelector:
+				// Replace, see below.
+				// However we must first properly reject SELECT COUNT(foo.*) FROM bar.
+				if _, err := v.qt.sources.checkDatabaseName(arg.TableName); err != nil {
+					v.err = err
+					return false, expr
+				}
+			default:
+				// Nothing to do, recurse.
+				return true, expr
 			}
+
+			t = t.CopyNode()
+			t.Exprs[0] = starDatumInstance
+			return false, t
 		}
 		return true, t
 

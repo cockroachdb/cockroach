@@ -33,7 +33,7 @@ func (v *countVarsVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr par
 	switch expr.(type) {
 	case *qvalue:
 		v.numQValues++
-	case *parser.QualifiedName:
+	case *parser.ColumnItem:
 		v.numQNames++
 	}
 
@@ -42,7 +42,7 @@ func (v *countVarsVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr par
 
 func (*countVarsVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
 
-// countVars counts how many *QualifiedName and *qvalue nodes are in an expression.
+// countVars counts how many *ColumnItems and *qvalue nodes are in an expression.
 func countVars(expr parser.Expr) (numQNames, numQValues int) {
 	v := countVarsVisitor{}
 	if expr != nil {

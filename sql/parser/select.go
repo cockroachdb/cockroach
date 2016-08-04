@@ -114,6 +114,21 @@ type SelectExpr struct {
 	As   Name
 }
 
+// NormalizeTopLevelVarName preemptively expands any UnresolvedName at
+// the top level of the expression into a VarName. This is meant
+// to catch stars so that sql.checkRenderStar() can see it prior to
+// other expression transformations.
+func (node *SelectExpr) NormalizeTopLevelVarName() error {
+	if vBase, ok := node.Expr.(VarName); ok {
+		v, err := vBase.NormalizeVarName()
+		if err != nil {
+			return err
+		}
+		node.Expr = v
+	}
+	return nil
+}
+
 // starSelectExpr is a convenience function that represents an unqualified "*"
 // in a select expression.
 func starSelectExpr() SelectExpr {
