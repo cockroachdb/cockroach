@@ -5841,7 +5841,7 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 		cmd.raftCmd.MaxLeaseIndex = wrongIndex
 		tc.rng.insertRaftCommandLocked(cmd)
 		if repropose {
-			if err := tc.rng.refreshPendingCmdsLocked(noReason); err != nil {
+			if err := tc.rng.refreshPendingCmdsLocked(noReason, 0); err != nil {
 				fatalf("%s", err)
 			}
 		} else if err := tc.rng.proposePendingCmdLocked(cmd); err != nil {
@@ -6017,7 +6017,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			t.Fatalf("wanted required indexes %v, got %v", expIndexes, origIndexes)
 		}
 
-		if err := tc.rng.refreshPendingCmdsLocked(noReason); err != nil {
+		if err := tc.rng.refreshPendingCmdsLocked(noReason, 0); err != nil {
 			t.Fatal(err)
 		}
 		return chs

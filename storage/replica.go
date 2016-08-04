@@ -159,9 +159,10 @@ type pendingCmd struct {
 	// TODO(tschottdorf): idKey is legacy at this point: We could easily key
 	// commands by their MaxLeaseIndex, and doing so should be ok with a stop-
 	// the-world migration. However, requires adapting tryAbandon.
-	idKey   storagebase.CmdIDKey
-	raftCmd roachpb.RaftCommand
-	done    chan roachpb.ResponseWithError // Used to signal waiting RPC handler
+	idKey           storagebase.CmdIDKey
+	proposedAtTicks int
+	raftCmd         roachpb.RaftCommand
+	done            chan roachpb.ResponseWithError // Used to signal waiting RPC handler
 }
 
 type replicaChecksum struct {
@@ -523,7 +524,7 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	// this new incarnation.
 	if previousReplicaID != 0 {
 		// propose pending commands under new replicaID
-		if err := r.refreshPendingCmdsLocked(reasonReplicaIDChanged); err != nil {
+		if err := r.refreshPendingCmdsLocked(reasonReplicaIDChanged, 0); err != nil {
 			return err
 		}
 	}
@@ -1428,10 +1429,15 @@ func (r *Replica) prepareRaftCommandLocked(
 	if !ba.IsLease() {
 		r.mu.lastAssignedLeaseIndex++
 	}
+	if log.V(4) {
+		log.Infof(ctx, "%s: prepared command: maxLeaseIndex=%d leaseAppliedIndex=%d",
+			r, r.mu.lastAssignedLeaseIndex, r.mu.state.LeaseAppliedIndex)
+	}
 	return &pendingCmd{
-		ctx:   ctx,
-		idKey: idKey,
-		done:  make(chan roachpb.ResponseWithError, 1),
+		ctx:             ctx,
+		idKey:           idKey,
+		done:            make(chan roachpb.ResponseWithError, 1),
+		proposedAtTicks: r.mu.ticks,
 		raftCmd: roachpb.RaftCommand{
 			RangeID:       r.RangeID,
 			OriginReplica: replica,
@@ -1679,7 +1685,7 @@ func (r *Replica) handleRaftReady() error {
 	}
 	if shouldReproposeCmds {
 		r.mu.Lock()
-		err := r.refreshPendingCmdsLocked(reasonEmptyEntry)
+		err := r.refreshPendingCmdsLocked(reasonEmptyEntry, 0)
 		r.mu.Unlock()
 		if err != nil {
 			return err
@@ -1713,7 +1719,8 @@ func (r *Replica) tick() error {
 		// didn't go through.
 		//
 		// TODO(tamird/bdarnell): Add unit tests.
-		if err := r.refreshPendingCmdsLocked(reasonTicks); err != nil {
+		if err := r.refreshPendingCmdsLocked(
+			reasonTicks, r.store.ctx.RaftElectionTimeoutTicks); err != nil {
 			return err
 		}
 	}
@@ -1739,17 +1746,20 @@ const (
 	reasonTicks
 )
 
-func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason) error {
+func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason, olderThanDelta int) error {
 	// Note that we can't use the commit index here (which is typically a
 	// little ahead), because a pending command is removed only as it applies.
 	// Thus we'd risk reproposing a command that has been committed but not yet
 	// applied.
 	maxWillRefurbish := r.mu.state.LeaseAppliedIndex // indexes <= will be refurbished
+	olderThanTicks := r.mu.ticks - olderThanDelta
 	origNum := len(r.mu.pendingCmds)
 	var reproposals pendingCmdSlice
 	for idKey, p := range r.mu.pendingCmds {
 		if p.raftCmd.MaxLeaseIndex > maxWillRefurbish {
-			reproposals = append(reproposals, p)
+			if p.proposedAtTicks <= olderThanTicks {
+				reproposals = append(reproposals, p)
+			}
 			continue
 		}
 		delete(r.mu.pendingCmds, idKey)
@@ -1877,6 +1887,11 @@ func (r *Replica) processRaftCommand(
 ) *roachpb.Error {
 	if index == 0 {
 		log.Fatalf(context.TODO(), "%s: processRaftCommand requires a non-zero index", r)
+	}
+
+	if log.V(4) {
+		log.Infof(context.TODO(), "%s: processing command: maxLeaseIndex=%d",
+			r, raftCmd.MaxLeaseIndex)
 	}
 
 	r.mu.Lock()
