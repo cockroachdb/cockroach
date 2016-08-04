@@ -313,6 +313,12 @@ func setOpenFileLimit(physicalStoreCount int) (int, error) {
 	return int(rLimit.Cur-minimumNetworkFileDescriptors) / physicalStoreCount, nil
 }
 
+// SetOpenFileLimitForOneStore sets the soft limit for open file descriptors
+// when there is only one store.
+func SetOpenFileLimitForOneStore() (int, error) {
+	return setOpenFileLimit(1)
+}
+
 // MakeContext returns a Context with default values.
 func MakeContext() Context {
 	ctx := Context{
