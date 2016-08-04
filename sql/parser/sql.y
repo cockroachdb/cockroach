@@ -3025,7 +3025,12 @@ bit_with_length:
       sqllex.Error(err.Error())
       return 1
     }
-    $$.val = newIntBitType(int(n))
+    bit, err := newIntBitType(int(n))
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = bit
   }
 
 bit_without_length:

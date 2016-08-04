@@ -27,7 +27,7 @@ func TestParseColumnType(t *testing.T) {
 		str          string
 		expectedType ColumnType
 	}{
-		{"BIT", &IntColType{Name: "BIT"}},
+		{"BIT", &IntColType{Name: "BIT", N: 1, ImplicitWidth: true}},
 		{"BIT(2)", &IntColType{Name: "BIT", N: 2}},
 		{"BOOL", &BoolColType{Name: "BOOL"}},
 		{"BOOLEAN", &BoolColType{Name: "BOOLEAN"}},
