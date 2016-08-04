@@ -23,7 +23,7 @@ import (
 	"go/constant"
 	"go/token"
 
-    "github.com/pkg/errors"
+  "github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
@@ -84,26 +84,44 @@ func (u *sqlSymUnion) bool() bool {
 func (u *sqlSymUnion) strs() []string {
     return u.val.([]string)
 }
-func (u *sqlSymUnion) qname() *QualifiedName {
-    return u.val.(*QualifiedName)
-}
-func (u *sqlSymUnion) qnames() QualifiedNames {
-    return u.val.(QualifiedNames)
-}
 func (u *sqlSymUnion) tableWithIdx() *TableNameWithIndex {
     return u.val.(*TableNameWithIndex)
 }
 func (u *sqlSymUnion) tableWithIdxList() TableNameWithIndexList {
     return u.val.(TableNameWithIndexList)
 }
-func (u *sqlSymUnion) indirectElem() IndirectionElem {
-    if indirectElem, ok := u.val.(IndirectionElem); ok {
-        return indirectElem
+func (u *sqlSymUnion) namePart() NamePart {
+    if namePart, ok := u.val.(NamePart); ok {
+        return namePart
     }
     return nil
 }
-func (u *sqlSymUnion) indirect() Indirection {
-    return u.val.(Indirection)
+func (u *sqlSymUnion) nameList() NameList {
+    return u.val.(NameList)
+}
+func (u *sqlSymUnion) unresolvedName() UnresolvedName {
+    return u.val.(UnresolvedName)
+}
+func (u *sqlSymUnion) unresolvedNames() UnresolvedNames {
+    return u.val.(UnresolvedNames)
+}
+func (u *sqlSymUnion) functionName() FunctionName {
+    return u.val.(FunctionName)
+}
+func (u *sqlSymUnion) normalizableFunctionName() NormalizableFunctionName {
+    return NormalizableFunctionName{u.val.(FunctionName)}
+}
+func (u *sqlSymUnion) normalizableTableName() NormalizableTableName {
+    return NormalizableTableName{u.val.(TableNameReference)}
+}
+func (u *sqlSymUnion) newNormalizableTableName() *NormalizableTableName {
+    return &NormalizableTableName{u.val.(TableNameReference)}
+}
+func (u *sqlSymUnion) tablePatterns() TablePatterns {
+    return u.val.(TablePatterns)
+}
+func (u *sqlSymUnion) tableNameReferences() TableNameReferences {
+    return u.val.(TableNameReferences)
 }
 func (u *sqlSymUnion) indexHints() *IndexHints {
     return u.val.(*IndexHints)
@@ -279,12 +297,6 @@ func (u *sqlSymUnion) idxElem() IndexElem {
 func (u *sqlSymUnion) idxElems() IndexElemList {
     return u.val.(IndexElemList)
 }
-func (u *sqlSymUnion) famElem() FamilyElem {
-    return u.val.(FamilyElem)
-}
-func (u *sqlSymUnion) famElems() FamilyElemList {
-    return u.val.(FamilyElemList)
-}
 func (u *sqlSymUnion) dropBehavior() DropBehavior {
     return u.val.(DropBehavior)
 }
@@ -355,11 +367,11 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %type <str>   savepoint_name
 
 // %type <empty> subquery_op
-%type <*QualifiedName> func_name
+%type <FunctionName> func_name
 %type <empty> opt_collate
 
-%type <*QualifiedName> qualified_name
-%type <*QualifiedName> indirect_name_or_glob
+%type <UnresolvedName> qualified_name
+%type <UnresolvedName> table_pattern
 %type <TableExpr> insert_target
 
 %type <*TableNameWithIndex> table_name_with_index
@@ -375,29 +387,28 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %type <*InterleaveDef> opt_interleave
 %type <empty> opt_all_clause
 %type <bool> distinct_clause
-%type <[]string> opt_column_list
+%type <NameList> opt_column_list
 %type <OrderBy> sort_clause opt_sort_clause
 %type <[]*Order> sortby_list
 %type <IndexElemList> index_params
-%type <FamilyElemList> family_params
-%type <[]string> name_list opt_name_list
+%type <NameList> name_list opt_name_list
 %type <empty> opt_array_bounds
 %type <*From> from_clause update_from_clause
 %type <TableExprs> from_list
-%type <QualifiedNames> qualified_name_list
-%type <QualifiedNames> indirect_name_or_glob_list
-%type <*QualifiedName> any_name
-%type <QualifiedNames> any_name_list
+%type <UnresolvedNames> qualified_name_list
+%type <TablePatterns> table_pattern_list
+%type <UnresolvedName> any_name
+%type <TableNameReferences> table_name_list
 %type <Exprs> expr_list
-%type <Indirection> attrs
+%type <UnresolvedName> attrs
 %type <SelectExprs> target_list
 %type <UpdateExprs> set_clause_list
 %type <*UpdateExpr> set_clause multiple_set_clause
-%type <Indirection> indirection
+%type <UnresolvedName> indirection
 %type <Exprs> ctext_expr_list ctext_row
 %type <GroupBy> group_clause
 %type <*Limit> select_limit
-%type <QualifiedNames> relation_expr_list
+%type <TableNameReferences> relation_expr_list
 %type <ReturningExprs> returning_clause
 
 %type <bool> all_or_distinct
@@ -425,18 +436,18 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 // %type <empty> first_or_next
 
 %type <Statement>  insert_rest
-%type <[]string> opt_conf_expr
+%type <NameList> opt_conf_expr
 %type <*OnConflict> on_conflict
 
 %type <Statement>  generic_set set_rest set_rest_more transaction_mode_list opt_transaction_mode_list set_exprs_internal
 
-%type <[]string> opt_storing
+%type <NameList> opt_storing
 %type <*ColumnTableDef> column_def
 %type <TableDef> table_elem
 %type <Expr>  where_clause
-%type <IndirectionElem> glob_indirection
-%type <IndirectionElem> name_indirection
-%type <IndirectionElem> indirection_elem
+%type <NamePart> glob_indirection
+%type <NamePart> name_indirection
+%type <NamePart> indirection_elem
 %type <*IndexHints> opt_index_hints
 %type <*IndexHints> index_hints_param
 %type <*IndexHints> index_hints_param_list
@@ -457,10 +468,9 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %type <AliasClause> alias_clause opt_alias_clause
 %type <*Order> sortby
 %type <IndexElem> index_elem
-%type <FamilyElem> family_elem
 %type <TableExpr> table_ref
 %type <TableExpr> joined_table
-%type <*QualifiedName> relation_expr
+%type <UnresolvedName> relation_expr
 %type <TableExpr> relation_expr_opt_alias
 %type <SelectExpr> target_elem
 %type <*UpdateExpr> single_set_clause
@@ -483,7 +493,7 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %type <*NumVal>  signed_iconst
 %type <Expr>  opt_boolean_or_string
 %type <Exprs> var_list
-%type <*QualifiedName> opt_from_var_name_clause var_name
+%type <UnresolvedName> var_name
 %type <str>   col_label type_function_name
 %type <str>   non_reserved_word
 %type <Expr>  non_reserved_word_or_sconst
@@ -516,7 +526,7 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 
 %type <TargetList>    privilege_target
 %type <*TargetList> on_privilege_target_clause
-%type <[]string>          grantee_list for_grantee_clause
+%type <NameList>       grantee_list for_grantee_clause
 %type <privilege.List> privileges privilege_list
 %type <privilege.Kind> privilege
 
@@ -751,11 +761,11 @@ stmt:
 alter_table_stmt:
   ALTER TABLE relation_expr alter_table_cmds
   {
-    $$.val = &AlterTable{Table: $3.qname(), IfExists: false, Cmds: $4.alterTableCmds()}
+    $$.val = &AlterTable{Table: $3.normalizableTableName(), IfExists: false, Cmds: $4.alterTableCmds()}
   }
 | ALTER TABLE IF EXISTS relation_expr alter_table_cmds
   {
-    $$.val = &AlterTable{Table: $5.qname(), IfExists: true, Cmds: $6.alterTableCmds()}
+    $$.val = &AlterTable{Table: $5.normalizableTableName(), IfExists: true, Cmds: $6.alterTableCmds()}
   }
 
 alter_table_cmds:
@@ -792,19 +802,19 @@ alter_table_cmd:
   // ALTER TABLE <name> ALTER [COLUMN] <colname> {SET DEFAULT <expr>|DROP DEFAULT}
 | ALTER opt_column name alter_column_default
   {
-    $$.val = &AlterTableSetDefault{columnKeyword: $2.bool(), Column: $3, Default: $4.expr()}
+    $$.val = &AlterTableSetDefault{columnKeyword: $2.bool(), Column: Name($3), Default: $4.expr()}
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> DROP NOT NULL
 | ALTER opt_column name DROP NOT NULL
   {
-    $$.val = &AlterTableDropNotNull{columnKeyword: $2.bool(), Column: $3}
+    $$.val = &AlterTableDropNotNull{columnKeyword: $2.bool(), Column: Name($3)}
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> SET NOT NULL
 | ALTER opt_column name SET NOT NULL { unimplemented() }
   // ALTER TABLE <name> DROP [COLUMN] IF EXISTS <colname> [RESTRICT|CASCADE]
 | DROP opt_column IF EXISTS name opt_drop_behavior
   {
-    $$.val = &AlterTableDropColumn{columnKeyword: $2.bool(), IfExists: true, Column: $5}
+    $$.val = &AlterTableDropColumn{columnKeyword: $2.bool(), IfExists: true, Column: Name($5)}
   }
   // ALTER TABLE <name> DROP [COLUMN] <colname> [RESTRICT|CASCADE]
 | DROP opt_column name opt_drop_behavior
@@ -812,7 +822,7 @@ alter_table_cmd:
     $$.val = &AlterTableDropColumn{
       columnKeyword: $2.bool(),
       IfExists: false,
-      Column: $3,
+      Column: Name($3),
       DropBehavior: $4.dropBehavior(),
     }
   }
@@ -833,7 +843,7 @@ alter_table_cmd:
   {
     $$.val = &AlterTableDropConstraint{
       IfExists: true,
-      Constraint: $5,
+      Constraint: Name($5),
       DropBehavior: $6.dropBehavior(),
     }
   }
@@ -842,7 +852,7 @@ alter_table_cmd:
   {
     $$.val = &AlterTableDropConstraint{
       IfExists: false,
-      Constraint: $3,
+      Constraint: Name($3),
       DropBehavior: $4.dropBehavior(),
     }
   }
@@ -918,43 +928,43 @@ drop_stmt:
       DropBehavior: $6.dropBehavior(),
     }
   }
-| DROP TABLE any_name_list opt_drop_behavior
+| DROP TABLE table_name_list opt_drop_behavior
   {
-    $$.val = &DropTable{Names: $3.qnames(), IfExists: false, DropBehavior: $4.dropBehavior()}
+    $$.val = &DropTable{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
   }
-| DROP TABLE IF EXISTS any_name_list opt_drop_behavior
+| DROP TABLE IF EXISTS table_name_list opt_drop_behavior
   {
-    $$.val = &DropTable{Names: $5.qnames(), IfExists: true, DropBehavior: $6.dropBehavior()}
+    $$.val = &DropTable{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
 
-any_name_list:
+table_name_list:
   any_name
   {
-    $$.val = QualifiedNames{$1.qname()}
+    $$.val = TableNameReferences{$1.unresolvedName()}
   }
-| any_name_list ',' any_name
+| table_name_list ',' any_name
   {
-    $$.val = append($1.qnames(), $3.qname())
+    $$.val = append($1.tableNameReferences(), $3.unresolvedName())
   }
 
 any_name:
   name
   {
-    $$.val = &QualifiedName{Base: Name($1)}
+    $$.val = UnresolvedName{Name($1)}
   }
 | name attrs
   {
-    $$.val = &QualifiedName{Base: Name($1), Indirect: $2.indirect()}
+    $$.val = append(UnresolvedName{Name($1)}, $2.unresolvedName()...)
   }
 
 attrs:
   '.' col_label
   {
-    $$.val = Indirection{NameIndirection($2)}
+    $$.val = UnresolvedName{Name($2)}
   }
 | attrs '.' col_label
   {
-    $$.val = append($1.indirect(), NameIndirection($3))
+    $$.val = append($1.unresolvedName(), Name($3))
   }
 
 // EXPLAIN (options) query
@@ -1073,29 +1083,29 @@ deallocate_stmt:
 grant_stmt:
   GRANT privileges ON privilege_target TO grantee_list
   {
-    $$.val = &Grant{Privileges: $2.privilegeList(), Grantees: NameList($6.strs()), Targets: $4.targetList()}
+    $$.val = &Grant{Privileges: $2.privilegeList(), Grantees: $6.nameList(), Targets: $4.targetList()}
   }
 
 // REVOKE privileges ON privilege_target FROM grantee_list
 revoke_stmt:
   REVOKE privileges ON privilege_target FROM grantee_list
   {
-    $$.val = &Revoke{Privileges: $2.privilegeList(), Grantees: NameList($6.strs()), Targets: $4.targetList()}
+    $$.val = &Revoke{Privileges: $2.privilegeList(), Grantees: $6.nameList(), Targets: $4.targetList()}
   }
 
 
 privilege_target:
-  indirect_name_or_glob_list
+  table_pattern_list
   {
-    $$.val = TargetList{Tables: $1.qnames()}
+	  $$.val = TargetList{Tables: $1.tablePatterns()}
   }
-| TABLE indirect_name_or_glob_list
+| TABLE table_pattern_list
   {
-    $$.val = TargetList{Tables: $2.qnames()}
+    $$.val = TargetList{Tables: $2.tablePatterns()}
   }
 |  DATABASE name_list
   {
-    $$.val = TargetList{Databases: NameList($2.strs())}
+    $$.val = TargetList{Databases: $2.nameList()}
   }
 
 // ALL is always by itself.
@@ -1152,11 +1162,11 @@ privilege:
 grantee_list:
   name
   {
-    $$.val = []string{$1}
+    $$.val = NameList{Name($1)}
   }
 | grantee_list ',' name
   {
-    $$.val = append($1.strs(), $3)
+    $$.val = append($1.nameList(), Name($3))
   }
 
 // SET name TO 'var_value'
@@ -1223,19 +1233,19 @@ transaction_user_priority:
 generic_set:
   var_name TO var_list
   {
-    $$.val = &Set{Name: $1.qname(), Values: $3.exprs()}
+    $$.val = &Set{Name: $1.unresolvedName(), Values: $3.exprs()}
   }
 | var_name '=' var_list
   {
-    $$.val = &Set{Name: $1.qname(), Values: $3.exprs()}
+    $$.val = &Set{Name: $1.unresolvedName(), Values: $3.exprs()}
   }
 | var_name TO DEFAULT
   {
-    $$.val = &Set{Name: $1.qname()}
+    $$.val = &Set{Name: $1.unresolvedName()}
   }
 | var_name '=' DEFAULT
   {
-    $$.val = &Set{Name: $1.qname()}
+    $$.val = &Set{Name: $1.unresolvedName()}
   }
 
 set_rest_more:
@@ -1383,7 +1393,7 @@ show_stmt:
   }
 | SHOW COLUMNS FROM var_name
   {
-    $$.val = &ShowColumns{Table: $4.qname()}
+    $$.val = &ShowColumns{Table: $4.normalizableTableName()}
   }
 | SHOW DATABASES
   {
@@ -1391,31 +1401,35 @@ show_stmt:
   }
 | SHOW GRANTS on_privilege_target_clause for_grantee_clause
   {
-    $$.val = &ShowGrants{Targets: $3.targetListPtr(), Grantees: $4.strs()}
+    $$.val = &ShowGrants{Targets: $3.targetListPtr(), Grantees: $4.nameList()}
   }
 | SHOW INDEX FROM var_name
   {
-    $$.val = &ShowIndex{Table: $4.qname()}
+    $$.val = &ShowIndex{Table: $4.normalizableTableName()}
   }
 | SHOW INDEXES FROM var_name
   {
-    $$.val = &ShowIndex{Table: $4.qname()}
+    $$.val = &ShowIndex{Table: $4.normalizableTableName()}
   }
 | SHOW CONSTRAINT FROM var_name
   {
-    $$.val = &ShowConstraints{Table: $4.qname()}
+    $$.val = &ShowConstraints{Table: $4.normalizableTableName()}
   }
 | SHOW CONSTRAINTS FROM var_name
   {
-    $$.val = &ShowConstraints{Table: $4.qname()}
+    $$.val = &ShowConstraints{Table: $4.normalizableTableName()}
   }
 | SHOW KEYS FROM var_name
   {
-    $$.val = &ShowIndex{Table: $4.qname()}
+    $$.val = &ShowIndex{Table: $4.normalizableTableName()}
   }
-| SHOW TABLES opt_from_var_name_clause
+| SHOW TABLES FROM name
   {
-    $$.val = &ShowTables{Name: $3.qname()}
+    $$.val = &ShowTables{Database: Name($4)}
+  }
+| SHOW TABLES
+  {
+    $$.val = &ShowTables{}
   }
 | SHOW TIME ZONE
   {
@@ -1435,17 +1449,7 @@ show_stmt:
   }
 | SHOW CREATE TABLE var_name
   {
-    $$.val = &ShowCreateTable{Table: $4.qname()}
-  }
-
-opt_from_var_name_clause:
-  FROM var_name
-  {
-    $$.val = $2.qname()
-  }
-| /* EMPTY */
-  {
-    $$.val = (*QualifiedName)(nil)
+    $$.val = &ShowCreateTable{Table: $4.normalizableTableName()}
   }
 
 on_privilege_target_clause:
@@ -1462,22 +1466,22 @@ on_privilege_target_clause:
 for_grantee_clause:
   FOR grantee_list
   {
-    $$.val = $2.strs()
+    $$.val = $2.nameList()
   }
 | /* EMPTY */
   {
-    $$.val = []string(nil)
+		$$.val = NameList(nil)
   }
 
 // CREATE TABLE relname
 create_table_stmt:
   CREATE TABLE any_name '(' opt_table_elem_list ')' opt_interleave
   {
-    $$.val = &CreateTable{Table: $3.qname(), IfNotExists: false, Interleave: $7.interleave(), Defs: $5.tblDefs()}
+    $$.val = &CreateTable{Table: $3.normalizableTableName(), IfNotExists: false, Interleave: $7.interleave(), Defs: $5.tblDefs()}
   }
 | CREATE TABLE IF NOT EXISTS any_name '(' opt_table_elem_list ')' opt_interleave
   {
-    $$.val = &CreateTable{Table: $6.qname(), IfNotExists: true, Interleave: $10.interleave(), Defs: $8.tblDefs()}
+    $$.val = &CreateTable{Table: $6.normalizableTableName(), IfNotExists: true, Interleave: $10.interleave(), Defs: $8.tblDefs()}
   }
 
 opt_table_elem_list:
@@ -1514,9 +1518,9 @@ opt_interleave:
   {
     /* SKIP DOC */
     $$.val = &InterleaveDef{
-        Parent: &QualifiedName{Base: Name($4)},
-        Fields: $6.strs(),
-        DropBehavior: $8.dropBehavior(),
+			Parent: NormalizableTableName{UnresolvedName{Name($4)}},
+			Fields: $6.nameList(),
+			DropBehavior: $8.dropBehavior(),
     }
   }
 | /* EMPTY */
@@ -1603,7 +1607,7 @@ col_qualification_elem:
 | REFERENCES qualified_name opt_name_parens key_match key_actions
  {
     $$.val = &ColumnFKConstraint{
-      Table: $2.qname(),
+      Table: $2.normalizableTableName(),
       Col: Name($3),
     }
  }
@@ -1614,7 +1618,7 @@ index_def:
     $$.val = &IndexTableDef{
       Name:    Name($2),
       Columns: $4.idxElems(),
-      Storing: $6.strs(),
+      Storing: $6.nameList(),
       Interleave: $7.interleave(),
     }
   }
@@ -1624,18 +1628,18 @@ index_def:
       IndexTableDef: IndexTableDef {
         Name:    Name($3),
         Columns: $5.idxElems(),
-        Storing: $7.strs(),
+        Storing: $7.nameList(),
         Interleave: $8.interleave(),
       },
     }
   }
 
 family_def:
-  FAMILY opt_name '(' family_params ')'
+  FAMILY opt_name '(' name_list ')'
   {
     $$.val = &FamilyTableDef{
       Name: Name($2),
-      Columns: $4.famElems(),
+      Columns: $4.nameList(),
     }
   }
 
@@ -1664,8 +1668,8 @@ constraint_elem:
   {
     $$.val = &UniqueConstraintTableDef{
       IndexTableDef: IndexTableDef{
-        Columns: NameListToIndexElems($3.strs()),
-        Storing: $5.strs(),
+        Columns: NameListToIndexElems($3.nameList()),
+        Storing: $5.nameList(),
         Interleave: $6.interleave(),
       },
     }
@@ -1674,7 +1678,7 @@ constraint_elem:
   {
     $$.val = &UniqueConstraintTableDef{
       IndexTableDef: IndexTableDef{
-        Columns: NameListToIndexElems($4.strs()),
+        Columns: NameListToIndexElems($4.nameList()),
       },
       PrimaryKey:    true,
     }
@@ -1683,9 +1687,9 @@ constraint_elem:
     opt_column_list key_match key_actions
   {
     $$.val = &ForeignKeyConstraintTableDef{
-      Table: $7.qname(),
-      FromCols: $4.strs(),
-      ToCols: $8.strs(),
+      Table: $7.normalizableTableName(),
+      FromCols: $4.nameList(),
+      ToCols: $8.nameList(),
     }
   }
 
@@ -1705,21 +1709,21 @@ storing:
 opt_storing:
   storing '(' name_list ')'
   {
-    $$.val = $3.strs()
+    $$.val = $3.nameList()
   }
 | /* EMPTY */
   {
-    $$.val = []string(nil)
+	  $$.val = NameList(nil)
   }
 
 opt_column_list:
   '(' name_list ')'
   {
-    $$.val = $2.strs()
+    $$.val = $2.nameList()
   }
 | /* EMPTY */
   {
-    $$.val = []string(nil)
+	  $$.val = NameList(nil)
   }
 
 key_match:
@@ -1770,7 +1774,7 @@ numeric_only:
 truncate_stmt:
   TRUNCATE opt_table relation_expr_list opt_drop_behavior
   {
-    $$.val = &Truncate{Tables: $3.qnames(), DropBehavior: $4.dropBehavior()}
+    $$.val = &Truncate{Tables: $3.tableNameReferences(), DropBehavior: $4.dropBehavior()}
   }
 
 // CREATE INDEX
@@ -1779,10 +1783,10 @@ create_index_stmt:
   {
     $$.val = &CreateIndex{
       Name:    Name($4),
-      Table:   $6.qname(),
+      Table:   $6.normalizableTableName(),
       Unique:  $2.bool(),
       Columns: $8.idxElems(),
-      Storing: $10.strs(),
+      Storing: $10.nameList(),
       Interleave: $11.interleave(),
     }
   }
@@ -1790,11 +1794,11 @@ create_index_stmt:
   {
     $$.val = &CreateIndex{
       Name:        Name($7),
-      Table:       $9.qname(),
+      Table:       $9.normalizableTableName(),
       Unique:      $2.bool(),
       IfNotExists: true,
       Columns:     $11.idxElems(),
-      Storing:     $13.strs(),
+      Storing:     $13.nameList(),
       Interleave: $14.interleave(),
     }
   }
@@ -1830,22 +1834,6 @@ index_elem:
 | func_expr_windowless opt_collate opt_asc_desc { unimplemented() }
 | '(' a_expr ')' opt_collate opt_asc_desc { unimplemented() }
 
-family_params:
-  family_elem
-  {
-    $$.val = FamilyElemList{$1.famElem()}
-  }
-| family_params ',' family_elem
-  {
-    $$.val = append($1.famElems(), $3.famElem())
-  }
-
-family_elem:
-  name
-  {
-    $$.val = FamilyElem{Column: Name($1)}
-  }
-
 opt_collate:
   COLLATE any_name { unimplemented() }
 | /* EMPTY */ {}
@@ -1872,11 +1860,11 @@ rename_stmt:
   }
 | ALTER TABLE relation_expr RENAME TO qualified_name
   {
-    $$.val = &RenameTable{Name: $3.qname(), NewName: $6.qname(), IfExists: false}
+    $$.val = &RenameTable{Name: $3.normalizableTableName(), NewName: $6.normalizableTableName(), IfExists: false}
   }
 | ALTER TABLE IF EXISTS relation_expr RENAME TO qualified_name
   {
-    $$.val = &RenameTable{Name: $5.qname(), NewName: $8.qname(), IfExists: true}
+    $$.val = &RenameTable{Name: $5.normalizableTableName(), NewName: $8.normalizableTableName(), IfExists: true}
   }
 | ALTER INDEX table_name_with_index RENAME TO name
   {
@@ -1888,11 +1876,11 @@ rename_stmt:
   }
 | ALTER TABLE relation_expr RENAME opt_column name TO name
   {
-    $$.val = &RenameColumn{Table: $3.qname(), Name: Name($6), NewName: Name($8), IfExists: false}
+    $$.val = &RenameColumn{Table: $3.normalizableTableName(), Name: Name($6), NewName: Name($8), IfExists: false}
   }
 | ALTER TABLE IF EXISTS relation_expr RENAME opt_column name TO name
   {
-    $$.val = &RenameColumn{Table: $5.qname(), Name: Name($8), NewName: Name($10), IfExists: true}
+    $$.val = &RenameColumn{Table: $5.normalizableTableName(), Name: Name($8), NewName: Name($10), IfExists: true}
   }
 | ALTER TABLE relation_expr RENAME CONSTRAINT name TO name
   {
@@ -2068,11 +2056,11 @@ insert_stmt:
 insert_target:
   qualified_name
   {
-      $$.val = &AliasedTableExpr{Expr: $1.qname()}
+    $$.val = $1.newNormalizableTableName()
   }
 | qualified_name AS name
   {
-      $$.val = &AliasedTableExpr{Expr: $1.qname(), As: AliasClause{Alias: Name($3)}}
+    $$.val = &AliasedTableExpr{Expr: $1.newNormalizableTableName(), As: AliasClause{Alias: Name($3)}}
   }
 
 insert_rest:
@@ -2082,7 +2070,7 @@ insert_rest:
   }
 | '(' qualified_name_list ')' select_stmt
   {
-    $$.val = &Insert{Columns: $2.qnames(), Rows: $4.slct()}
+    $$.val = &Insert{Columns: $2.unresolvedNames(), Rows: $4.slct()}
   }
 | DEFAULT VALUES
   {
@@ -2092,23 +2080,23 @@ insert_rest:
 on_conflict:
   ON CONFLICT opt_conf_expr DO UPDATE SET set_clause_list where_clause
   {
-    $$.val = &OnConflict{Columns: NameList($3.strs()), Exprs: $7.updateExprs(), Where: newWhere(astWhere, $8.expr())}
+    $$.val = &OnConflict{Columns: $3.nameList(), Exprs: $7.updateExprs(), Where: newWhere(astWhere, $8.expr())}
   }
 | ON CONFLICT opt_conf_expr DO NOTHING
   {
-    $$.val = &OnConflict{Columns: NameList($3.strs()), DoNothing: true}
+    $$.val = &OnConflict{Columns: $3.nameList(), DoNothing: true}
   }
 
 opt_conf_expr:
   '(' name_list ')' where_clause
   {
     // TODO(dan): Support the where_clause.
-    $$.val = $2.strs()
+    $$.val = $2.nameList()
   }
 | ON CONSTRAINT name { unimplemented() }
 | /* EMPTY */
   {
-    $$.val = []string(nil)
+		$$.val = NameList(nil)
   }
 
 returning_clause:
@@ -2150,7 +2138,7 @@ set_clause:
 single_set_clause:
   qualified_name '=' ctext_expr
   {
-    $$.val = &UpdateExpr{Names: QualifiedNames{$1.qname()}, Expr: $3.expr()}
+    $$.val = &UpdateExpr{Names: UnresolvedNames{$1.unresolvedName()}, Expr: $3.expr()}
   }
 
 // Ideally, we'd accept any row-valued a_expr as RHS of a multiple_set_clause.
@@ -2162,11 +2150,11 @@ single_set_clause:
 multiple_set_clause:
   '(' qualified_name_list ')' '=' ctext_row
   {
-    $$.val = &UpdateExpr{Tuple: true, Names: $2.qnames(), Expr: &Tuple{Exprs: $5.exprs()}}
+    $$.val = &UpdateExpr{Tuple: true, Names: $2.unresolvedNames(), Expr: &Tuple{Exprs: $5.exprs()}}
   }
 | '(' qualified_name_list ')' '=' select_with_parens
   {
-    $$.val = &UpdateExpr{Tuple: true, Names: $2.qnames(), Expr: &Subquery{Select: $5.selectStmt()}}
+    $$.val = &UpdateExpr{Tuple: true, Names: $2.unresolvedNames(), Expr: &Subquery{Select: $5.selectStmt()}}
   }
 
 // A complete SELECT statement looks like this.
@@ -2315,7 +2303,7 @@ simple_select:
   {
     $$.val = &SelectClause{
       Exprs:       SelectExprs{starSelectExpr()},
-      From:        &From{Tables: TableExprs{&AliasedTableExpr{Expr: $2.qname()}}},
+      From:        &From{Tables: TableExprs{$2.newNormalizableTableName()}},
       tableSelect: true,
     }
   }
@@ -2631,7 +2619,7 @@ opt_index_hints:
 table_ref:
   relation_expr opt_index_hints opt_alias_clause
   {
-    $$.val = &AliasedTableExpr{Expr: $1.qname(), Hints: $2.indexHints(), As: $3.aliasClause()}
+    $$.val = &AliasedTableExpr{Expr: $1.newNormalizableTableName(), Hints: $2.indexHints(), As: $3.aliasClause()}
   }
 | select_with_parens opt_alias_clause
   {
@@ -2689,7 +2677,7 @@ joined_table:
 alias_clause:
   AS name '(' name_list ')'
   {
-    $$.val = AliasClause{Alias: Name($2), Cols: NameList($4.strs())}
+    $$.val = AliasClause{Alias: Name($2), Cols: $4.nameList()}
   }
 | AS name
   {
@@ -2697,7 +2685,7 @@ alias_clause:
   }
 | name '(' name_list ')'
   {
-    $$.val = AliasClause{Alias: Name($1), Cols: NameList($3.strs())}
+    $$.val = AliasClause{Alias: Name($1), Cols: $3.nameList()}
   }
 | name
   {
@@ -2754,7 +2742,7 @@ join_outer:
 join_qual:
   USING '(' name_list ')'
   {
-    $$.val = &UsingJoinCond{Cols: NameList($3.strs())}
+    $$.val = &UsingJoinCond{Cols: $3.nameList()}
   }
 | ON a_expr
   {
@@ -2764,29 +2752,29 @@ join_qual:
 relation_expr:
   qualified_name
   {
-    $$.val = $1.qname()
+    $$.val = $1.unresolvedName()
   }
 | qualified_name '*'
   {
-    $$.val = $1.qname()
+    $$.val = $1.unresolvedName()
   }
 | ONLY qualified_name
   {
-    $$.val = $2.qname()
+    $$.val = $2.unresolvedName()
   }
 | ONLY '(' qualified_name ')'
   {
-    $$.val = $3.qname()
+    $$.val = $3.unresolvedName()
   }
 
 relation_expr_list:
   relation_expr
   {
-    $$.val = QualifiedNames{$1.qname()}
+    $$.val = TableNameReferences{$1.unresolvedName()}
   }
 | relation_expr_list ',' relation_expr
   {
-    $$.val = append($1.qnames(), $3.qname())
+    $$.val = append($1.tableNameReferences(), $3.unresolvedName())
   }
 
 // Given "UPDATE foo set set ...", we have to decide without looking any
@@ -2799,15 +2787,15 @@ relation_expr_list:
 relation_expr_opt_alias:
   relation_expr %prec UMINUS
   {
-    $$.val = &AliasedTableExpr{Expr: $1.qname()}
+    $$.val = $1.newNormalizableTableName()
   }
 | relation_expr name
   {
-    $$.val = &AliasedTableExpr{Expr: $1.qname(), As: AliasClause{Alias: Name($2)}}
+    $$.val = &AliasedTableExpr{Expr: $1.newNormalizableTableName(), As: AliasClause{Alias: Name($2)}}
   }
 | relation_expr AS name
   {
-    $$.val = &AliasedTableExpr{Expr: $1.qname(), As: AliasClause{Alias: Name($3)}}
+    $$.val = &AliasedTableExpr{Expr: $1.newNormalizableTableName(), As: AliasClause{Alias: Name($3)}}
   }
 
 where_clause:
@@ -3533,7 +3521,7 @@ b_expr:
 c_expr:
   qualified_name
   {
-    $$.val = $1.qname()
+    $$.val = $1.unresolvedName()
   }
 | a_expr_const
 | PLACEHOLDER
@@ -3578,25 +3566,25 @@ c_expr:
 func_application:
   func_name '(' ')'
   {
-    $$.val = &FuncExpr{Name: $1.qname()}
+    $$.val = &FuncExpr{Name: $1.normalizableFunctionName()}
   }
 | func_name '(' expr_list opt_sort_clause ')'
   {
-    $$.val = &FuncExpr{Name: $1.qname(), Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Name: $1.normalizableFunctionName(), Exprs: $3.exprs()}
   }
 | func_name '(' VARIADIC a_expr opt_sort_clause ')' { unimplemented() }
 | func_name '(' expr_list ',' VARIADIC a_expr opt_sort_clause ')' { unimplemented() }
 | func_name '(' ALL expr_list opt_sort_clause ')'
   {
-    $$.val = &FuncExpr{Name: $1.qname(), Type: All, Exprs: $4.exprs()}
+    $$.val = &FuncExpr{Name: $1.normalizableFunctionName(), Type: All, Exprs: $4.exprs()}
   }
 | func_name '(' DISTINCT expr_list opt_sort_clause ')'
   {
-    $$.val = &FuncExpr{Name: $1.qname(), Type: Distinct, Exprs: $4.exprs()}
+    $$.val = &FuncExpr{Name: $1.normalizableFunctionName(), Type: Distinct, Exprs: $4.exprs()}
   }
 | func_name '(' '*' ')'
   {
-    $$.val = &FuncExpr{Name: $1.qname(), Exprs: Exprs{StarExpr()}}
+    $$.val = &FuncExpr{Name: $1.normalizableFunctionName(), Exprs: Exprs{StarExpr()}}
   }
 
 // func_expr and its cousin func_expr_windowless are split out from c_expr just
@@ -3629,19 +3617,19 @@ func_expr_common_subexpr:
   COLLATION FOR '(' a_expr ')' { unimplemented() }
 | CURRENT_DATE
   {
-    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
+      $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1)}
   }
 | CURRENT_DATE '(' ')'
   {
-    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
+    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1)}
   }
 | CURRENT_TIMESTAMP
   {
-    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
+    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1)}
   }
 | CURRENT_TIMESTAMP '(' ')'
   {
-    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}}
+    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1)}
   }
 | CURRENT_ROLE { unimplemented() }
 | CURRENT_USER { unimplemented() }
@@ -3657,36 +3645,36 @@ func_expr_common_subexpr:
   }
 | EXTRACT '(' extract_list ')'
   {
-    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1), Exprs: $3.exprs()}
   }
 | OVERLAY '(' overlay_list ')'
   {
-    $$.val = &OverlayExpr{FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3.exprs()}}
+    $$.val = &OverlayExpr{FuncExpr{Name: WrapQualifiedFunctionName($1), Exprs: $3.exprs()}}
   }
 | POSITION '(' position_list ')'
   {
-    $$.val = &FuncExpr{Name: &QualifiedName{Base: "STRPOS"}, Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName("STRPOS"), Exprs: $3.exprs()}
   }
 | SUBSTRING '(' substr_list ')'
   {
-    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1), Exprs: $3.exprs()}
   }
 | TREAT '(' a_expr AS typename ')' { unimplemented() }
 | TRIM '(' BOTH trim_list ')'
   {
-     $$.val = &FuncExpr{Name: &QualifiedName{Base: "BTRIM"}, Exprs: $4.exprs()}
+    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName("BTRIM"), Exprs: $4.exprs()}
   }
 | TRIM '(' LEADING trim_list ')'
   {
-     $$.val = &FuncExpr{Name: &QualifiedName{Base: "LTRIM"}, Exprs: $4.exprs()}
+    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName("LTRIM"), Exprs: $4.exprs()}
   }
 | TRIM '(' TRAILING trim_list ')'
   {
-     $$.val = &FuncExpr{Name: &QualifiedName{Base: "RTRIM"}, Exprs: $4.exprs()}
+    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName("RTRIM"), Exprs: $4.exprs()}
   }
 | TRIM '(' trim_list ')'
   {
-    $$.val = &FuncExpr{Name: &QualifiedName{Base: "BTRIM"}, Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName("BTRIM"), Exprs: $3.exprs()}
   }
 | IF '(' a_expr ',' a_expr ',' a_expr ')'
   {
@@ -3706,11 +3694,11 @@ func_expr_common_subexpr:
   }
 | GREATEST '(' expr_list ')'
   {
-    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1), Exprs: $3.exprs()}
   }
 | LEAST '(' expr_list ')'
   {
-    $$.val = &FuncExpr{Name: &QualifiedName{Base: Name($1)}, Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1), Exprs: $3.exprs()}
   }
 
 // Aggregate decoration clauses
@@ -4071,41 +4059,41 @@ case_arg:
 indirection_elem:
   name_indirection
   {
-    $$.val = $1.indirectElem()
+    $$.val = $1.namePart()
   }
 | glob_indirection
   {
-    $$.val = $1.indirectElem()
+    $$.val = $1.namePart()
   }
 | '[' a_expr ']'
   {
-    $$.val = &ArrayIndirection{Begin: $2.expr()}
+    $$.val = &ArraySubscript{Begin: $2.expr()}
   }
 | '[' a_expr ':' a_expr ']'
   {
-    $$.val = &ArrayIndirection{Begin: $2.expr(), End: $4.expr()}
+    $$.val = &ArraySubscript{Begin: $2.expr(), End: $4.expr()}
   }
 
 name_indirection:
   '.' col_label
   {
-    $$.val = NameIndirection($2)
+    $$.val = Name($2)
   }
 
 glob_indirection:
   '.' '*'
   {
-    $$.val = qualifiedStar
+    $$.val = UnqualifiedStar{}
   }
 
 indirection:
   indirection_elem
   {
-    $$.val = Indirection{$1.indirectElem()}
+    $$.val = UnresolvedName{$1.namePart()}
   }
 | indirection indirection_elem
   {
-    $$.val = append($1.indirect(), $2.indirectElem())
+    $$.val = append($1.unresolvedName(), $2.namePart())
   }
 
 opt_asymmetric:
@@ -4180,11 +4168,11 @@ target_elem:
 qualified_name_list:
   qualified_name
   {
-    $$.val = QualifiedNames{$1.qname()}
+    $$.val = UnresolvedNames{$1.unresolvedName()}
   }
 | qualified_name_list ',' qualified_name
   {
-    $$.val = append($1.qnames(), $3.qname())
+    $$.val = append($1.unresolvedNames(), $3.unresolvedName())
   }
 
 table_name_with_index_list:
@@ -4197,14 +4185,14 @@ table_name_with_index_list:
     $$.val = append($1.tableWithIdxList(), $3.tableWithIdx())
   }
 
-indirect_name_or_glob_list:
-  indirect_name_or_glob
+table_pattern_list:
+  table_pattern
   {
-    $$.val = QualifiedNames{$1.qname()}
+      $$.val = TablePatterns{$1.unresolvedName()}
   }
-| indirect_name_or_glob_list ',' indirect_name_or_glob
+| table_pattern_list ',' table_pattern
   {
-    $$.val = append($1.qnames(), $3.qname())
+    $$.val = append($1.tablePatterns(), $3.unresolvedName())
   }
 
 // The production for a qualified relation name has to exactly match the
@@ -4215,56 +4203,56 @@ indirect_name_or_glob_list:
 qualified_name:
   name
   {
-    $$.val = &QualifiedName{Base: Name($1)}
+    $$.val = UnresolvedName{Name($1)}
   }
 | name indirection
   {
-    $$.val = &QualifiedName{Base: Name($1), Indirect: $2.indirect()}
+    $$.val = append(UnresolvedName{Name($1)}, $2.unresolvedName()...)
   }
 
 table_name_with_index:
   qualified_name '@' name
   {
-    $$.val = &TableNameWithIndex{Table: $1.qname(), Index: Name($3)}
+    $$.val = &TableNameWithIndex{Table: $1.normalizableTableName(), Index: Name($3)}
   }
 
-// indirect_name_or_glob is a subset of `qualified_name` accepting only:
-// <database> / <table>
+// table_pattern accepts:
 // <database>.<table>
 // <database>.*
+// <table>
 // *
-indirect_name_or_glob:
+table_pattern:
   name
   {
-    $$.val = &QualifiedName{Base: Name($1)}
-  }
-| name name_indirection
-  {
-    $$.val = &QualifiedName{Base: Name($1), Indirect: Indirection{$2.indirectElem()}}
-  }
-| name glob_indirection
-  {
-    $$.val = &QualifiedName{Base: Name($1), Indirect: Indirection{$2.indirectElem()}}
+    $$.val = UnresolvedName{Name($1)}
   }
 | '*'
   {
-    $$.val = &QualifiedName{Indirect: Indirection{unqualifiedStar}}
+    $$.val = UnresolvedName{UnqualifiedStar{}}
+  }
+| name name_indirection
+  {
+    $$.val = UnresolvedName{Name($1), $2.namePart()}
+  }
+| name glob_indirection
+  {
+    $$.val = UnresolvedName{Name($1), $2.namePart()}
   }
 
 name_list:
   name
   {
-    $$.val = []string{$1}
+    $$.val = NameList{Name($1)}
   }
 | name_list ',' name
   {
-    $$.val = append($1.strs(), $3)
+    $$.val = append($1.nameList(), Name($3))
   }
 
 opt_name_list:
   '(' name_list ')'
   {
-    $$.val = $2.strs()
+    $$.val = $2.nameList()
   }
 | /* EMPTY */ {}
 
@@ -4277,11 +4265,11 @@ opt_name_list:
 func_name:
   type_function_name
   {
-    $$.val = &QualifiedName{Base: Name($1)}
+    $$.val = UnresolvedName{Name($1)}
   }
 | name indirection
   {
-    $$.val = &QualifiedName{Base: Name($1), Indirect: $2.indirect()}
+    $$.val = append(UnresolvedName{Name($1)}, $2.unresolvedName()...)
   }
 
 // Constants

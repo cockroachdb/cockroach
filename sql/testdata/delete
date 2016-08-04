@@ -57,7 +57,7 @@ query TTTT
 EXPLAIN (DEBUG) SELECT * FROM kv@bar
 ----
 
-statement error qualified name "nonexistent" not found
+statement error column name "nonexistent" not found
 DELETE FROM kv WHERE nonexistent = 1
 
 statement ok

@@ -378,7 +378,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(3, "4").Results(6, 7),
 			baseTest.SetArgs(0, "a").Error(`pq: error in argument for $2: strconv.ParseInt: parsing "a": invalid syntax`),
 		},
-		// Check for QualifiedName resolution.
+		// Check for name resolution.
 		"SELECT COUNT(*)": {
 			baseTest.Results(1),
 		},

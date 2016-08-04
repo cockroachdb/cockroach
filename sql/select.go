@@ -40,7 +40,7 @@ type selectNode struct {
 	source planDataSource
 
 	// sourceInfo contains the reference to the dataSourceInfo in the
-	// source planDataSource that is needed for qname resolution.
+	// source planDataSource that is needed for name resolution.
 	// We keep one instance of multiSourceInfo cached here so as to avoid
 	// re-creating it every time analyzeExpr() is called in addRender().
 	sourceInfo multiSourceInfo
@@ -196,9 +196,10 @@ func (s *selectNode) ExplainPlan(v bool) (name, description string, children []p
 		if col.hidden {
 			buf.WriteByte('*')
 		}
-		parser.Name(s.source.info.findTableAlias(i)).Format(&buf, parser.FmtSimple)
+		alias := s.source.info.findTableAlias(i)
+		parser.FormatNode(&buf, parser.FmtSimple, &alias)
 		buf.WriteByte('.')
-		parser.Name(col.Name).Format(&buf, parser.FmtSimple)
+		parser.FormatNode(&buf, parser.FmtSimple, parser.Name(col.Name))
 	}
 	buf.WriteByte(')')
 
@@ -487,47 +488,57 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 	return nil
 }
 
-// checkRenderStar checks if the SelectExpr is a QualifiedName with a StarIndirection suffix. If so,
-// we match the prefix of the qualified name to one of the tables in the query and then expand the
-// "*" into a list of columns. The qvalMap is updated to include all the relevant columns. A
-// ResultColumns and Expr pair is returned for each column.
+// checkRenderStar checks if the SelectExpr is either an
+// UnqualifiedStar or an AllColumnsSelector. If so, we match the
+// prefix of the name to one of the tables in the query and then
+// expand the "*" into a list of columns. The qvalMap is updated to
+// include all the relevant columns. A ResultColumns and Expr pair is
+// returned for each column.
 func checkRenderStar(
 	target parser.SelectExpr, src *dataSourceInfo, qvals qvalMap,
 ) (isStar bool, columns []ResultColumn, exprs []parser.TypedExpr, err error) {
-	qname, ok := target.Expr.(*parser.QualifiedName)
+	v, ok := target.Expr.(parser.VarName)
 	if !ok {
 		return false, nil, nil, nil
 	}
-	if err := qname.NormalizeColumnName(); err != nil {
-		return false, nil, nil, err
-	}
-	if !qname.IsStar() {
+	switch v.(type) {
+	case parser.UnqualifiedStar, *parser.AllColumnsSelector:
+	default:
 		return false, nil, nil, nil
 	}
 
 	if target.As != "" {
-		return false, nil, nil, fmt.Errorf("\"%s\" cannot be aliased", qname)
+		return false, nil, nil, fmt.Errorf("\"%s\" cannot be aliased", v)
 	}
 
-	columns, exprs, err = src.expandStar(qname, qvals)
+	columns, exprs, err = src.expandStar(v, qvals)
 	return true, columns, exprs, err
 }
 
 // getRenderColName returns the output column name for a render expression.
-// The expression cannot be a star.
 func getRenderColName(target parser.SelectExpr) string {
 	if target.As != "" {
 		return string(target.As)
 	}
-	if qname, ok := target.Expr.(*parser.QualifiedName); ok {
-		return qname.Column()
+
+	// If the expression designates a column, try to reuse that column's name
+	// as render name.
+	if c, ok := target.Expr.(*parser.ColumnItem); ok {
+		// We only shorten the name of the result column to become the
+		// unqualified column part of this expr name if there is
+		// no additional subscripting on the column.
+		if len(c.Selector) == 0 {
+			return c.Column()
+		}
 	}
 	return target.Expr.String()
 }
 
 func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datum) error {
-	// outputName will be empty if the target is not aliased.
-	outputName := string(target.As)
+	// Pre-normalize any VarName so the work is not done twice below.
+	if err := target.NormalizeTopLevelVarName(); err != nil {
+		return err
+	}
 
 	if isStar, cols, typedExprs, err := checkRenderStar(target, s.source.info, s.qvals); err != nil {
 		return err
@@ -540,7 +551,7 @@ func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datu
 	// When generating an output column name it should exactly match the original
 	// expression, so determine the output column name before we perform any
 	// manipulations to the expression.
-	outputName = getRenderColName(target)
+	outputName := getRenderColName(target)
 
 	normalized, err := s.planner.analyzeExpr(target.Expr, s.sourceInfo, s.qvals, desiredType, false, "")
 	if err != nil {
@@ -548,14 +559,6 @@ func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datu
 	}
 	s.render = append(s.render, normalized)
 
-	if target.As == "" {
-		switch t := target.Expr.(type) {
-		case *parser.QualifiedName:
-			// If the expression is a qualified name, use the column name, not the
-			// full qualification as the column name to return.
-			outputName = t.Column()
-		}
-	}
 	s.columns = append(s.columns, ResultColumn{Name: outputName, Typ: normalized.ReturnType()})
 	return nil
 }
