@@ -38,7 +38,7 @@ func (p *planner) changePrivileges(
 		}
 		privileges := descriptor.GetPrivileges()
 		for _, grantee := range grantees {
-			changePrivilege(privileges, grantee)
+			changePrivilege(privileges, string(grantee))
 		}
 
 		switch d := descriptor.(type) {

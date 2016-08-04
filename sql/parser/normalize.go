@@ -226,7 +226,7 @@ func (expr *AndExpr) normalize(v *normalizeVisitor) TypedExpr {
 func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 	switch expr.Operator {
 	case EQ, GE, GT, LE, LT:
-		// We want var nodes (VariableExpr, QualifiedName, etc) to be immediate
+		// We want var nodes (VariableExpr, VarName, etc) to be immediate
 		// children of the comparison expression and not second or third
 		// children. That is, we want trees that look like:
 		//

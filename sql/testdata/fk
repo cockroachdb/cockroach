@@ -314,3 +314,16 @@ UPDATE pairs SET dest = 'too' WHERE id = 2
 
 statement error foreign key violation: value\(s\) \[200 'two'\] in columns \[src dest\] referenced in table "refpairs"
 DELETE FROM pairs WHERE id = 2
+
+# Disabled due to issue #8392.
+# statement ok
+# CREATE DATABASE test2
+#
+# statement ok
+# CREATE TABLE test2.other(x INT PRIMARY KEY)
+#
+# statement ok
+# CREATE TABLE crossdb (y INT PRIMARY KEY, FOREIGN KEY (y) REFERENCES test2.other(x))
+#
+# statement error foreign key violation: value \[2\] not found in other@primary \[x\]
+# INSERT INTO crossdb(y) VALUES (2)

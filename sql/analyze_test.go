@@ -57,14 +57,14 @@ func parseAndNormalizeExpr(t *testing.T, sql string) (parser.TypedExpr, qvalMap)
 		t.Fatalf("%s: %v", sql, err)
 	}
 
-	// Perform qualified name resolution because {analyze,simplify}Expr want
+	// Perform name resolution because {analyze,simplify}Expr want
 	// expressions containing qvalues.
 	desc := testTableDesc()
 	sel := testInitDummySelectNode(desc)
 	if err = desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
 	}
-	if expr, err = sel.resolveQNames(expr); err != nil {
+	if expr, err = sel.resolveNames(expr); err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
 	typedExpr, err := parser.TypeCheck(expr, nil, parser.NoTypePreference)
@@ -539,7 +539,7 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		}
 
 		if _, ok := expr2.(*parser.AndExpr); !ok {
-			// The result was not an AND expression. Re-parse to re-resolve QNames
+			// The result was not an AND expression. Re-parse to re-resolve names
 			// and verify that the analysis is commutative.
 			expr1, _ = parseAndNormalizeExpr(t, d.expr)
 			andExpr := expr1.(*parser.AndExpr)
@@ -753,7 +753,7 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		}
 
 		if _, ok := expr2.(*parser.OrExpr); !ok {
-			// The result was not an OR expression. Re-parse to re-resolve QNames
+			// The result was not an OR expression. Re-parse to re-resolve names
 			// and verify that the analysis is commutative.
 			expr1, _ = parseAndNormalizeExpr(t, d.expr)
 			orExpr := expr1.(*parser.OrExpr)

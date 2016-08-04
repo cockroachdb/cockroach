@@ -32,15 +32,16 @@ func testInitDummySelectNode(desc *sqlbase.TableDescriptor) *selectNode {
 	sel := &selectNode{}
 	sel.qvals = make(qvalMap)
 	sel.source.plan = scan
-	sel.source.info = newSourceInfoForSingleTable(desc.Name, scan.Columns())
+	testName := parser.TableName{TableName: parser.Name(desc.Name), DatabaseName: parser.Name("test")}
+	sel.source.info = newSourceInfoForSingleTable(testName, scan.Columns())
 	sel.sourceInfo = multiSourceInfo{sel.source.info}
 
 	return sel
 }
 
-// Test that we can resolve the qnames in an expression that has already been
+// Test that we can resolve the names in an expression that has already been
 // resolved.
-func TestRetryResolveQNames(t *testing.T) {
+func TestRetryResolveNames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	expr, err := parser.ParseExprTraditional(`COUNT(a)`)
@@ -55,7 +56,7 @@ func TestRetryResolveQNames(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, err := s.resolveQNames(expr)
+		_, err := s.resolveNames(expr)
 		if err != nil {
 			t.Fatal(err)
 		}

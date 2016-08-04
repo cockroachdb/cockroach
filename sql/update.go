@@ -39,8 +39,8 @@ type editNodeBase struct {
 	autoCommit bool
 }
 
-func (p *planner) makeEditNode(t parser.TableExpr, autoCommit bool, priv privilege.Kind) (editNodeBase, error) {
-	tableDesc, err := p.getAliasedTableLease(t)
+func (p *planner) makeEditNode(tn *parser.TableName, autoCommit bool, priv privilege.Kind) (editNodeBase, error) {
+	tableDesc, err := p.getTableLease(tn)
 	if err != nil {
 		return editNodeBase{}, err
 	}
@@ -127,7 +127,12 @@ type updateNode struct {
 func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoCommit bool) (planNode, error) {
 	tracing.AnnotateTrace()
 
-	en, err := p.makeEditNode(n.Table, autoCommit, privilege.UPDATE)
+	tn, err := p.getAliasedTableName(n.Table)
+	if err != nil {
+		return nil, err
+	}
+
+	en, err := p.makeEditNode(tn, autoCommit, privilege.UPDATE)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +259,7 @@ func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoComm
 		updateColsIdx: updateColsIdx,
 		tw:            tw,
 	}
-	if err := un.checkHelper.init(p, en.tableDesc); err != nil {
+	if err := un.checkHelper.init(p, tn, en.tableDesc); err != nil {
 		return nil, err
 	}
 	if err := un.run.initEditNode(&un.editNodeBase, rows, n.Returning, desiredTypes); err != nil {
@@ -338,8 +343,8 @@ func (u *updateNode) Next() (bool, error) {
 }
 
 // namesForExprs expands names in the tuples and subqueries in exprs.
-func (p *planner) namesForExprs(exprs parser.UpdateExprs) (parser.QualifiedNames, error) {
-	var names parser.QualifiedNames
+func (p *planner) namesForExprs(exprs parser.UpdateExprs) (parser.UnresolvedNames, error) {
+	var names parser.UnresolvedNames
 	for _, expr := range exprs {
 		newExpr := expr.Expr
 

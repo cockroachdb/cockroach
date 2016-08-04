@@ -35,29 +35,11 @@ type Grant struct {
 	Grantees   NameList
 }
 
-// TargetType represents the type of target.
-type TargetType int
-
-func (tt TargetType) String() string {
-	return targetNames[tt]
-}
-
-// Enums for target and privilege types.
-const (
-	TargetDatabase TargetType = iota
-)
-
-var (
-	targetNames = [...]string{
-		TargetDatabase: "DATABASE",
-	}
-)
-
 // TargetList represents a list of targets.
 // Only one field may be non-nil.
 type TargetList struct {
 	Databases NameList
-	Tables    QualifiedNames
+	Tables    TablePatterns
 }
 
 // Format implements the NodeFormatter interface.

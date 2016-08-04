@@ -29,8 +29,16 @@ import (
 //   Notes: postgres requires TRUNCATE.
 //          mysql requires DROP (for mysql >= 5.1.16, DELETE before that).
 func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
-	for _, tableQualifiedName := range n.Tables {
-		tableDesc, err := p.getTableLease(tableQualifiedName)
+	for _, name := range n.Tables {
+		tn, err := name.NormalizeTableName()
+		if err != nil {
+			return nil, err
+		}
+		if err := tn.QualifyWithDatabase(p.session.Database); err != nil {
+			return nil, err
+		}
+
+		tableDesc, err := p.getTableLease(tn)
 		if err != nil {
 			return nil, err
 		}

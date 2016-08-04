@@ -159,7 +159,6 @@ func TestParse(t *testing.T) {
 		{`SHOW DATABASES`},
 		{`SHOW TABLES`},
 		{`SHOW TABLES FROM a`},
-		{`SHOW TABLES FROM a.b.c`},
 		{`SHOW COLUMNS FROM a`},
 		{`SHOW COLUMNS FROM a.b.c`},
 		{`SHOW INDEXES FROM a`},

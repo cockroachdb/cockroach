@@ -275,8 +275,8 @@ query ITT
 EXPLAIN SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) LIMIT 1
 ----
 0  limit  count: 1
-1  join   INNER ON (a.b = c.d) AND (c.d = onecolumn.x)
-2  join   INNER ON a.b = twocolumn.x
+1  join   INNER ON (a.b = c.d) AND (c.d = test.onecolumn.x)
+2  join   INNER ON a.b = test.twocolumn.x
 3  join   CROSS
 4  scan   onecolumn@primary
 4  scan   twocolumn@primary
@@ -338,5 +338,5 @@ SELECT * FROM (onecolumn JOIN twocolumn USING(x) JOIN onecolumn USING(x))
 query error column reference.*is ambiguous
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON x > 32)
 
-query error qualified name.*not found
+query error column name.*not found
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON a.y > y)
