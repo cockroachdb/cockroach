@@ -88,7 +88,7 @@ statement ok
 SET DATABASE = information_schema
 
 statement ok
-SET DATABASE = ''
+SET DATABASE = test
 
 
 # Verify information_schema handles reflection correctly.
@@ -103,6 +103,7 @@ test
 query T
 SHOW TABLES FROM information_schema
 ----
+columns
 tables
 
 query TT colnames
@@ -146,6 +147,137 @@ Table  User  Privileges
 
 # Verify selecting from information_schema.
 
+## information_schema.columns
+
+query TTTTI colnames
+SELECT table_catalog, table_schema, table_name, column_name, ordinal_position
+FROM information_schema.columns
+WHERE table_schema != 'information_schema'
+----
+table_catalog  table_schema        table_name  column_name               ordinal_position
+def            system              descriptor  id                        1
+def            system              descriptor  descriptor                2
+def            system              eventlog    timestamp                 1
+def            system              eventlog    eventType                 2
+def            system              eventlog    targetID                  3
+def            system              eventlog    reportingID               4
+def            system              eventlog    info                      5
+def            system              eventlog    uniqueID                  6
+def            system              lease       descID                    1
+def            system              lease       version                   2
+def            system              lease       nodeID                    3
+def            system              lease       expiration                4
+def            system              namespace   parentID                  1
+def            system              namespace   name                      2
+def            system              namespace   id                        3
+def            system              rangelog    timestamp                 1
+def            system              rangelog    rangeID                   2
+def            system              rangelog    storeID                   3
+def            system              rangelog    eventType                 4
+def            system              rangelog    otherRangeID              5
+def            system              rangelog    info                      6
+def            system              rangelog    uniqueID                  7
+def            system              ui          key                       1
+def            system              ui          value                     2
+def            system              ui          lastUpdated               3
+def            system              users       username                  1
+def            system              users       hashedPassword            2
+def            system              zones       id                        1
+def            system              zones       config                    2
+
+statement ok
+CREATE TABLE with_defaults (a INT DEFAULT 9, b STRING DEFAULT 'default', c INT, d STRING)
+
+query TTT colnames
+SELECT table_name, column_name, column_default
+FROM information_schema.columns
+WHERE table_schema = 'test' AND table_name = 'with_defaults'
+----
+table_name     column_name  column_default
+with_defaults  a            9
+with_defaults  b            'default'
+with_defaults  c            NULL
+with_defaults  d            NULL
+
+statement ok
+DROP TABLE with_defaults
+
+statement ok
+CREATE TABLE nullability (a INT NOT NULL, b STRING NOT NULL, c INT, d STRING)
+
+query TTT colnames
+SELECT table_name, column_name, is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'test' AND table_name = 'nullability'
+----
+table_name   column_name  is_nullable
+nullability  a            NO
+nullability  b            NO
+nullability  c            YES
+nullability  d            YES
+
+statement ok
+DROP TABLE nullability
+
+statement ok
+CREATE TABLE data_types (a INT, b FLOAT, c DECIMAL, d STRING, e BYTES, f TIMESTAMP, g TIMESTAMPTZ)
+
+query TTT colnames
+SELECT table_name, column_name, data_type
+FROM information_schema.columns
+WHERE table_schema = 'test' AND table_name = 'data_types'
+----
+table_name  column_name  data_type
+data_types  a            INT
+data_types  b            FLOAT
+data_types  c            DECIMAL
+data_types  d            STRING
+data_types  e            BYTES
+data_types  f            TIMESTAMP
+data_types  g            TIMESTAMPTZ
+
+statement ok
+DROP TABLE data_types
+
+statement ok
+CREATE TABLE char_len (a INT, b BIT, c BIT(12), d STRING, e STRING(12), f FLOAT)
+
+query TTII colnames
+SELECT table_name, column_name, character_maximum_length, character_octet_length
+FROM information_schema.columns
+WHERE table_schema = 'test' AND table_name = 'char_len'
+----
+table_name  column_name  character_maximum_length  character_octet_length
+char_len    a            NULL                      NULL
+char_len    b            NULL                      NULL
+char_len    c            12                        NULL
+char_len    d            NULL                      NULL
+char_len    e            12                        48
+char_len    f            NULL                      NULL
+
+statement ok
+DROP TABLE char_len
+
+statement ok
+CREATE TABLE num_prec (a INT, b FLOAT, c FLOAT(23), d DECIMAL, e DECIMAL(12), f DECIMAL(12, 6), g BOOLEAN)
+
+query TTIII colnames
+SELECT table_name, column_name, numeric_precision, numeric_scale, datetime_precision
+FROM information_schema.columns
+WHERE table_schema = 'test' AND table_name = 'num_prec'
+----
+table_name  column_name  numeric_precision  numeric_scale  datetime_precision
+num_prec    a            64                 0              NULL
+num_prec    b            53                 NULL           NULL
+num_prec    c            23                 NULL           NULL
+num_prec    d            NULL               NULL           NULL
+num_prec    e            12                 0              NULL
+num_prec    f            12                 6              NULL
+num_prec    g            NULL               NULL           NULL
+
+statement ok
+DROP TABLE num_prec
+
 ## information_schema.tables
 
 statement ok
@@ -157,6 +289,7 @@ CREATE TABLE other_db.xyz (i INT)
 query T
 SELECT table_name FROM information_schema.tables
 ----
+columns
 tables
 xyz
 descriptor
@@ -183,6 +316,7 @@ query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
 TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME  TABLE_TYPE   VERSION
+def            information_schema  columns      SYSTEM VIEW  1
 def            information_schema  tables      SYSTEM VIEW  1
 def            other_db            xyz         BASE TABLE   1
 def            system              descriptor  BASE TABLE   1
@@ -209,6 +343,7 @@ query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
 TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME  TABLE_TYPE   VERSION
+def            information_schema  columns     SYSTEM VIEW  1
 def            information_schema  tables      SYSTEM VIEW  1
 
 user root
@@ -222,6 +357,7 @@ query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
 TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME  TABLE_TYPE   VERSION
+def            information_schema  columns     SYSTEM VIEW  1
 def            information_schema  tables      SYSTEM VIEW  1
 def            other_db            xyz         BASE TABLE   5
 

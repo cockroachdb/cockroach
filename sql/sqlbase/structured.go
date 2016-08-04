@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
@@ -1422,6 +1423,67 @@ func (c *ColumnType) SQLString() string {
 		return "TIMESTAMP WITH TIME ZONE"
 	}
 	return c.Kind.String()
+}
+
+// MaxCharacterLength returns the declared maximum length of characters if the
+// ColumnType is a character or bit string data type. Returns false if the data
+// type is not a character or bit string, or if the string's length is not bounded.
+func (c *ColumnType) MaxCharacterLength() (int32, bool) {
+	switch c.Kind {
+	case ColumnType_INT, ColumnType_STRING:
+		if c.Width > 0 {
+			return c.Width, true
+		}
+	}
+	return 0, false
+}
+
+// MaxOctetLength returns the maximum the maximum possible length in octets of a
+// datum if the ColumnType is a character string. Returns false if the data type
+// is not a character string, or if the string's length is not bounded.
+func (c *ColumnType) MaxOctetLength() (int32, bool) {
+	switch c.Kind {
+	case ColumnType_STRING:
+		if c.Width > 0 {
+			return c.Width * utf8.UTFMax, true
+		}
+	}
+	return 0, false
+}
+
+// NumericPrecision returns the declared or implicit precision of numeric
+// data types. Returns false if the data type is not numeric, or if the precision
+// of the numeric type is not bounded.
+func (c *ColumnType) NumericPrecision() (int32, bool) {
+	switch c.Kind {
+	case ColumnType_INT:
+		return 64, true
+	case ColumnType_FLOAT:
+		if c.Precision > 0 {
+			return c.Precision, true
+		}
+		return 53, true
+	case ColumnType_DECIMAL:
+		if c.Precision > 0 {
+			return c.Precision, true
+		}
+	}
+	return 0, false
+}
+
+// NumericScale returns the declared or implicit precision of exact numeric
+// data types. Returns false if the data type is not an exact numeric, or if the
+// scale of the exact numeric type is not bounded.
+func (c *ColumnType) NumericScale() (int32, bool) {
+	switch c.Kind {
+	case ColumnType_INT:
+		return 0, true
+	case ColumnType_DECIMAL:
+		if c.Precision > 0 {
+			return c.Width, true
+		}
+	}
+	return 0, false
 }
 
 // ToDatumType converts the ColumnType_Kind to the correct type Datum, or
