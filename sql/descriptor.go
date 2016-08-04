@@ -95,8 +95,31 @@ func (d descriptorAlreadyExistsErr) Error() string {
 	return fmt.Sprintf("%s %q already exists", d.desc.TypeName(), d.name)
 }
 
+func (p *planner) incDescID() (sqlbase.ID, error) {
+	// Increment unique descriptor counter.
+	ir, err := p.txn.Inc(keys.DescIDGenerator, 1)
+	if err != nil {
+		return 0, err
+	}
+	return sqlbase.ID(ir.ValueInt() - 1), nil
+}
+
 // createDescriptor implements the DescriptorAccessor interface.
-func (p *planner) createDescriptor(plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto, ifNotExists bool) (bool, error) {
+func (p *planner) createDescriptor(
+	plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto, ifNotExists bool,
+) (bool, error) {
+	id, err := p.incDescID()
+	if err != nil {
+		return false, err
+	}
+	return p.createDescriptorWithID(plainKey, id, descriptor, ifNotExists)
+}
+
+// createDescriptor implements the DescriptorAccessor interface.
+func (p *planner) createDescriptorWithID(
+	plainKey sqlbase.DescriptorKey, id sqlbase.ID, descriptor sqlbase.DescriptorProto, ifNotExists bool,
+) (bool, error) {
+	descriptor.SetID(id)
 	idKey := plainKey.Key()
 	// Check whether idKey exists.
 	gr, err := p.txn.Get(idKey)
@@ -111,13 +134,6 @@ func (p *planner) createDescriptor(plainKey sqlbase.DescriptorKey, descriptor sq
 		}
 		// Key exists, but we don't want it to: error out.
 		return false, descriptorAlreadyExistsErr{descriptor, plainKey.Name()}
-	}
-
-	// Increment unique descriptor counter.
-	if ir, err := p.txn.Inc(keys.DescIDGenerator, 1); err == nil {
-		descriptor.SetID(sqlbase.ID(ir.ValueInt() - 1))
-	} else {
-		return false, err
 	}
 
 	// TODO(pmattis): The error currently returned below is likely going to be
