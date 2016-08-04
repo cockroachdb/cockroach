@@ -25,17 +25,17 @@ import (
 	"math/big"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/cockroachdb/pq"
+	"github.com/cockroachdb/pq/oid"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
-
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/pq"
-	"github.com/cockroachdb/pq/oid"
-	"github.com/pkg/errors"
 )
 
 //go:generate stringer -type=formatCode
@@ -234,25 +234,41 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum) {
 			alloc.pgNum.sign = pgNumericNeg
 		}
 
-		// Much of this logic is cribbed from libpqtypes' str2num, but padding is
-		// managed manually instead of actually padding the string, for reasons of
-		// performance.
-		decDigits := alloc.bigI.Abs(v.UnscaledBig()).String()
-
-		// Convert pure-decimal representation to base NBASE. First we need to
-		// determine the converted weight and ndigits.
-		ddigits := int16(len(decDigits))
-		dweight := ddigits - alloc.pgNum.dscale - 1
-		if dweight >= 0 {
-			alloc.pgNum.weight = (dweight+1+pgDecDigits-1)/pgDecDigits - 1
-		} else {
-			alloc.pgNum.weight = -((-dweight-1)/pgDecDigits + 1)
+		isZero := func(r rune) bool {
+			return r == '0'
 		}
 
-		// The number of decimal zeroes to insert before the first given digit to
-		// have a correctly aligned first NBASE digit.
-		offset := (alloc.pgNum.weight+1)*pgDecDigits - (dweight + 1)
-		alloc.pgNum.ndigits = (ddigits + offset + pgDecDigits - 1) / pgDecDigits
+		// Mostly cribbed from libpqtypes' str2num.
+		digits := strings.TrimLeftFunc(alloc.bigI.Abs(v.UnscaledBig()).String(), isZero)
+		dweight := len(digits) - int(alloc.pgNum.dscale) - 1
+		digits = strings.TrimRightFunc(digits, isZero)
+
+		if dweight >= 0 {
+			alloc.pgNum.weight = int16((dweight+1+pgDecDigits-1)/pgDecDigits - 1)
+		} else {
+			alloc.pgNum.weight = int16(-((-dweight-1)/pgDecDigits + 1))
+		}
+		offset := (int(alloc.pgNum.weight)+1)*pgDecDigits - (dweight + 1)
+		alloc.pgNum.ndigits = int16((len(digits) + offset + pgDecDigits - 1) / pgDecDigits)
+
+		if len(digits) == 0 {
+			offset = 0
+			alloc.pgNum.ndigits = 0
+			alloc.pgNum.weight = 0
+		}
+
+		digitIdx := -offset
+
+		nextDigit := func() int16 {
+			var ndigit int16
+			for nextDigitIdx := digitIdx + pgDecDigits; digitIdx < nextDigitIdx; digitIdx++ {
+				ndigit *= 10
+				if digitIdx >= 0 && digitIdx < len(digits) {
+					ndigit += int16(digits[digitIdx] - '0')
+				}
+			}
+			return ndigit
+		}
 
 		b.putInt32(int32(2 * (4 + alloc.pgNum.ndigits)))
 		b.putInt16(alloc.pgNum.ndigits)
@@ -260,40 +276,8 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum) {
 		b.putInt16(int16(alloc.pgNum.sign))
 		b.putInt16(alloc.pgNum.dscale)
 
-		{
-			// Emulate leading padding.
-			digitLength := pgDecDigits - offset
-			var digit int16
-			for _, decDigit := range decDigits[:digitLength] {
-				digit *= 10
-				digit += int16(decDigit - '0')
-			}
-			b.putInt16(digit)
-			decDigits = decDigits[digitLength:]
-		}
-
-		// No padding for the middle digits.
-		for n := int16(0); n < alloc.pgNum.ndigits-2; n++ {
-			var digit int16
-			for _, decDigit := range decDigits[:pgDecDigits] {
-				digit *= 10
-				digit += int16(decDigit - '0')
-			}
-			b.putInt16(digit)
-			decDigits = decDigits[pgDecDigits:]
-		}
-
-		{
-			var digit int16
-			for _, decDigit := range decDigits {
-				digit *= 10
-				digit += int16(decDigit - '0')
-			}
-			// Emulate trailing padding.
-			for i := 0; i < pgDecDigits-len(decDigits); i++ {
-				digit *= 10
-			}
-			b.putInt16(digit)
+		for digitIdx < len(digits) {
+			b.putInt16(nextDigit())
 		}
 
 	case *parser.DBytes:
@@ -536,28 +520,49 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				}
 			}
 
-			decDigits := make([]byte, 0, alloc.pgNum.ndigits*pgDecDigits)
-			for i := int16(0); i < alloc.pgNum.ndigits-1; i++ {
-				if err := binary.Read(r, binary.BigEndian, &alloc.i16); err != nil {
+			if alloc.pgNum.ndigits > 0 {
+				decDigits := make([]byte, 0, alloc.pgNum.ndigits*pgDecDigits)
+				nextDigit := func() error {
+					if err := binary.Read(r, binary.BigEndian, &alloc.i16); err != nil {
+						return err
+					}
+					numZeroes := pgDecDigits
+					for i16 := alloc.i16; i16 > 0; i16 /= 10 {
+						numZeroes--
+					}
+					for ; numZeroes > 0; numZeroes-- {
+						decDigits = append(decDigits, '0')
+					}
+					return nil
+				}
+
+				for i := int16(0); i < alloc.pgNum.ndigits-1; i++ {
+					if err := nextDigit(); err != nil {
+						return d, err
+					}
+					if alloc.i16 > 0 {
+						decDigits = strconv.AppendUint(decDigits, uint64(alloc.i16), 10)
+					}
+				}
+
+				// The last digit may contain padding, which we need to deal with.
+				if err := nextDigit(); err != nil {
 					return d, err
 				}
-				decDigits = strconv.AppendUint(decDigits, uint64(alloc.i16), 10)
-			}
-
-			// The last digit may contain padding, which we need to deal with.
-			if err := binary.Read(r, binary.BigEndian, &alloc.i16); err != nil {
-				return d, err
-			}
-			dscale := (alloc.pgNum.ndigits - 1 - alloc.pgNum.weight) * pgDecDigits
-			if overScale := dscale - alloc.pgNum.dscale; overScale > 0 {
-				dscale -= overScale
-				for i := int16(0); i < overScale; i++ {
-					alloc.i16 /= 10
+				dscale := (alloc.pgNum.ndigits - (alloc.pgNum.weight + 1)) * pgDecDigits
+				if overScale := dscale - alloc.pgNum.dscale; overScale > 0 {
+					dscale -= overScale
+					for i := int16(0); i < overScale; i++ {
+						alloc.i16 /= 10
+					}
 				}
+				decDigits = strconv.AppendUint(decDigits, uint64(alloc.i16), 10)
+				decString := string(decDigits)
+				if _, ok := alloc.dd.UnscaledBig().SetString(decString, 10); !ok {
+					return nil, errors.Errorf("could not parse string %q as decimal", decString)
+				}
+				alloc.dd.SetScale(inf.Scale(dscale))
 			}
-			decDigits = strconv.AppendUint(decDigits, uint64(alloc.i16), 10)
-			alloc.dd.UnscaledBig().SetString(string(decDigits), 10)
-			alloc.dd.SetScale(inf.Scale(dscale))
 
 			switch alloc.pgNum.sign {
 			case pgNumericPos:
