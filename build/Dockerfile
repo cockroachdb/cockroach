@@ -1,4 +1,4 @@
-FROM golang:1.7rc3
+FROM golang:1.7rc4
 
 MAINTAINER Peter Mattis <peter@cockroachlabs.com>
 
@@ -13,5 +13,7 @@ RUN \
  rm -rf /tmp/*
 
 ENV PATH=/opt/backtrace/bin:/third_party/llvm-build/Release+Asserts/bin:$PATH
+
+RUN chmod -R a+w $(go env GOROOT)
 
 CMD ["/bin/bash"]

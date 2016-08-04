@@ -72,6 +72,12 @@ passwd_file="$(mktemp)"
 user_group="$(id -u $USER):$(id -g $USER)"
 echo "$USER:x:$user_group::${build_home}:/bin/bash" > "$passwd_file"
 
+# Ensure that all directories to which the container must be able to write are
+# created as the invoking user. Docker would otherwise create them when
+# mounting, but that would that deny write access to the invoking user since
+# docker runs as root.
+mkdir -p "${HOME}"/.{jspm,npm} "${gopath0}"/pkg/docker_amd64{,_race} "${gopath0}/bin/docker_amd64"
+
 # Run our build container with a set of volumes mounted that will
 # allow the container to store persistent build data on the host
 # computer.
