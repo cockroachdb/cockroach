@@ -94,6 +94,8 @@ func TestTypeCheckError(t *testing.T) {
 		{`~0.1`, `unsupported unary operator:`},
 		{`'10' > 2`, `unsupported comparison operator:`},
 		{`a`, `qualified name "a" not found`},
+		{`COS(*)`, `cannot use "*" in this context`},
+		{`a.*`, `cannot use "a.*" in this context`},
 		{`1 AND true`, `incompatible AND argument type: int`},
 		{`1.0 AND true`, `incompatible AND argument type: decimal`},
 		{`'a' OR true`, `incompatible OR argument type: string`},
