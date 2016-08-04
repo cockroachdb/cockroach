@@ -121,7 +121,12 @@ type createIndexNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires INDEX on the table.
 func (p *planner) CreateIndex(n *parser.CreateIndex) (planNode, error) {
-	tableDesc, err := p.mustGetTableDesc(n.Table)
+	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
+	if err != nil {
+		return nil, err
+	}
+
+	tableDesc, err := p.mustGetTableDesc(tn)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +143,7 @@ func (n *createIndexNode) expandPlan() error {
 }
 
 func (n *createIndexNode) Start() error {
-	status, i, err := n.tableDesc.FindIndexByName(string(n.n.Name))
+	status, i, err := n.tableDesc.FindIndexByName(n.n.Name)
 	if err == nil {
 		if status == sqlbase.DescriptorIncomplete {
 			switch n.tableDesc.Mutations[i].Direction {
@@ -157,7 +162,7 @@ func (n *createIndexNode) Start() error {
 	indexDesc := sqlbase.IndexDescriptor{
 		Name:             string(n.n.Name),
 		Unique:           n.n.Unique,
-		StoreColumnNames: n.n.Storing,
+		StoreColumnNames: n.n.Storing.ToStrings(),
 	}
 	if err := indexDesc.FillColumns(n.n.Columns); err != nil {
 		return err
@@ -233,17 +238,33 @@ type createTableNode struct {
 // Privileges: CREATE on database.
 //   Notes: postgres/mysql require CREATE on database.
 func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
-	if err := n.Table.NormalizeTableName(p.session.Database); err != nil {
+	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
+	if err != nil {
 		return nil, err
 	}
 
-	dbDesc, err := p.mustGetDatabaseDesc(n.Table.Database())
+	dbDesc, err := p.mustGetDatabaseDesc(tn.Database())
 	if err != nil {
 		return nil, err
 	}
 
 	if err := p.checkPrivilege(dbDesc, privilege.CREATE); err != nil {
 		return nil, err
+	}
+
+	for _, def := range n.Defs {
+		switch t := def.(type) {
+		case *parser.ColumnTableDef:
+			if t.References.Table.TableNameReference != nil {
+				if _, err := t.References.Table.NormalizeWithDatabaseName(p.session.Database); err != nil {
+					return nil, err
+				}
+			}
+		case *parser.ForeignKeyConstraintTableDef:
+			if _, err := t.Table.NormalizeWithDatabaseName(p.session.Database); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	return &createTableNode{p: p, n: n, dbDesc: dbDesc}, nil
@@ -316,19 +337,23 @@ func (n *createTableNode) Start() error {
 	for _, def := range n.n.Defs {
 		switch d := def.(type) {
 		case *parser.ColumnTableDef:
-			if d.References.Table != nil {
+			if d.References.Table.TableNameReference != nil {
 				var targetCol parser.NameList
 				if d.References.Col != "" {
-					targetCol = append(targetCol, string(d.References.Col))
+					targetCol = append(targetCol, d.References.Col)
 				}
-				modified, err := n.resolveFK(&desc, parser.NameList{string(d.Name)}, d.References.Table, targetCol, d.References.ConstraintName)
+				modified, err := n.resolveFK(&desc,
+					parser.NameList{d.Name}, d.References.Table.TableName(),
+					targetCol, d.References.ConstraintName)
 				if err != nil {
 					return err
 				}
 				fkTargets = append(fkTargets, modified)
 			}
 		case *parser.ForeignKeyConstraintTableDef:
-			modified, err := n.resolveFK(&desc, d.FromCols, d.Table, d.ToCols, d.Name)
+			modified, err := n.resolveFK(&desc,
+				d.FromCols, d.Table.TableName(),
+				d.ToCols, d.Name)
 			if err != nil {
 				return err
 			}
@@ -367,7 +392,7 @@ func (n *createTableNode) Start() error {
 	}
 
 	created, err := n.p.createDescriptor(
-		tableKey{n.dbDesc.ID, n.n.Table.Table()}, &desc, n.n.IfNotExists)
+		tableKey{n.dbDesc.ID, n.n.Table.TableName().Table()}, &desc, n.n.IfNotExists)
 	if err != nil {
 		return err
 	}
@@ -433,7 +458,7 @@ type fkTargetUpdate struct {
 func (n *createTableNode) resolveFK(
 	tbl *sqlbase.TableDescriptor,
 	fromCols parser.NameList,
-	targetTable *parser.QualifiedName,
+	targetTable *parser.TableName,
 	targetColNames parser.NameList,
 	constraintName parser.Name,
 ) (fkTargetUpdate, error) {
@@ -448,7 +473,7 @@ func (n *createTableNode) resolveFK(
 		return ret, err
 	}
 	if target == nil {
-		if targetTable.String() == tbl.Name {
+		if targetTable.Table() == tbl.Name {
 			target = tbl
 		} else {
 			return ret, fmt.Errorf("referenced table %q not found", targetTable.String())
@@ -458,7 +483,10 @@ func (n *createTableNode) resolveFK(
 
 	// If no columns are specified, attempt to default to PK.
 	if len(targetColNames) == 0 {
-		targetColNames = target.PrimaryIndex.ColumnNames
+		targetColNames = make(parser.NameList, len(target.PrimaryIndex.ColumnNames))
+		for i, n := range target.PrimaryIndex.ColumnNames {
+			targetColNames[i] = parser.Name(n)
+		}
 	}
 
 	targetCols, err := target.FindActiveColumnsByNames(targetColNames)
@@ -587,7 +615,12 @@ func (p *planner) addInterleave(
 			7854, "unsupported shorthand %s", interleave.DropBehavior)
 	}
 
-	parentTable, err := p.mustGetTableDesc(interleave.Parent)
+	tn, err := interleave.Parent.NormalizeWithDatabaseName(p.session.Database)
+	if err != nil {
+		return err
+	}
+
+	parentTable, err := p.mustGetTableDesc(tn)
 	if err != nil {
 		return err
 	}
@@ -608,7 +641,7 @@ func (p *planner) addInterleave(
 		if err != nil {
 			return err
 		}
-		if sqlbase.NormalizeName(interleave.Fields[i]) != sqlbase.NormalizeName(col.Name) {
+		if sqlbase.NormalizeName(interleave.Fields[i]) != sqlbase.ReNormalizeName(col.Name) {
 			return fmt.Errorf("declared columns must match index being interleaved")
 		}
 		if col.Type != targetCol.Type ||

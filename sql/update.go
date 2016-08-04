@@ -127,7 +127,12 @@ type updateNode struct {
 func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoCommit bool) (planNode, error) {
 	tracing.AnnotateTrace()
 
-	en, err := p.makeEditNode(n.Table, autoCommit, privilege.UPDATE)
+	tn, err := p.getAliasedTableName(n.Table)
+	if err != nil {
+		return nil, err
+	}
+
+	en, err := p.makeEditNode(tn, autoCommit, privilege.UPDATE)
 	if err != nil {
 		return nil, err
 	}
@@ -338,8 +343,8 @@ func (u *updateNode) Next() (bool, error) {
 }
 
 // namesForExprs expands names in the tuples and subqueries in exprs.
-func (p *planner) namesForExprs(exprs parser.UpdateExprs) (parser.QualifiedNames, error) {
-	var names parser.QualifiedNames
+func (p *planner) namesForExprs(exprs parser.UpdateExprs) (parser.UnresolvedNames, error) {
+	var names parser.UnresolvedNames
 	for _, expr := range exprs {
 		newExpr := expr.Expr
 

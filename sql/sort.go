@@ -81,15 +81,28 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 		// Unwrap parenthesized expressions like "((a))" to "a".
 		expr := parser.StripParens(o.Expr)
 
-		if qname, ok := expr.(*parser.QualifiedName); ok {
-			if len(qname.Indirect) == 0 {
+		if vBase, ok := expr.(parser.VarName); ok {
+			v, err := vBase.NormalizeVarName()
+			if err != nil {
+				return nil, err
+			}
+
+			var c *parser.ColumnItem
+			switch t := v.(type) {
+			case *parser.ColumnItem:
+				c = t
+			default:
+				return nil, fmt.Errorf("invalid syntax for ORDER BY: %s", v)
+			}
+
+			if c.TableName.Table() == "" {
 				// Look for an output column that matches the qualified name. This
 				// handles cases like:
 				//
 				//   SELECT a AS b FROM t ORDER BY b
-				target := sqlbase.NormalizeName(string(qname.Base))
+				target := sqlbase.NormalizeName(c.ColumnName)
 				for j, col := range columns {
-					if sqlbase.NormalizeName(col.Name) == target {
+					if sqlbase.ReNormalizeName(col.Name) == target {
 						index = j
 						break
 					}
@@ -101,7 +114,7 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 				// render target that matches the column name. This handles cases like:
 				//
 				//   SELECT a AS b FROM t ORDER BY a
-				colIdx, err := s.source.findUnaliasedColumn(qname)
+				colIdx, err := s.source.findUnaliasedColumn(c)
 				if err != nil {
 					return nil, err
 				}
