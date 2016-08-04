@@ -652,23 +652,24 @@ func (m *multiTestContext) gossipNodeDesc(g *gossip.Gossip, nodeID roachpb.NodeI
 // StopStore stops a store but leaves the engine intact.
 // All stopped stores must be restarted before multiTestContext.Stop is called.
 func (m *multiTestContext) stopStore(i int) {
-	m.mu.Lock()
+	// If we acquired a write lock here, we could already deadlock. #8170.
+	m.mu.RLock()
 	// Stopping with multiple stoppers (which are not aware of each other) is
 	// messy.
 	// multiTestContextKVTransport needs a read lock to access its stopper and
 	// it's already in a task, so if we simply grabbed a write lock here while
 	// stopping we could deadlock (see #7678).
-	// So we initiate quiescing under a write lock, and then release the lock
+	// So we initiate quiescing under a read lock, and then release the lock
 	// during stopping.
 	stopper := m.stoppers[i]
-	m.stoppers[i] = nil
 	go stopper.Quiesce()
 	<-stopper.ShouldQuiesce()
-	m.mu.Unlock()
+	m.mu.RUnlock()
 	stopper.Stop()
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.stoppers[i] = nil
 	m.senders[i].RemoveStore(m.stores[i])
 	m.stores[i] = nil
 }
