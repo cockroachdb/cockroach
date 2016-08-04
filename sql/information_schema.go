@@ -27,14 +27,114 @@ import (
 var informationSchema = virtualSchema{
 	name: "information_schema",
 	tables: []virtualSchemaTable{
+		informationSchemaColumnsTable,
 		informationSchemaTablesTable,
 	},
 }
 
-// defString is used as the value for columns included in the sql standard
-// of information_schema that don't make sense for CockroachDB. This is
-// identical to the behavior of MySQL.
-var defString = parser.NewDString("def")
+var (
+	// defString is used as the value for columns included in the sql standard
+	// of information_schema that don't make sense for CockroachDB. This is
+	// identical to the behavior of MySQL.
+	defString = parser.NewDString("def")
+
+	// information_schema was defined before the BOOLEAN data type was added to
+	// the SQL specification. Because of this, boolean values are represented
+	// as strings.
+	yesString = parser.NewDString("YES")
+	noString  = parser.NewDString("NO")
+)
+
+func yesOrNoDatum(b bool) parser.Datum {
+	if b {
+		return yesString
+	}
+	return noString
+}
+
+func dStringOrNull(s *string) parser.Datum {
+	if s == nil {
+		return parser.DNull
+	}
+	return parser.NewDString(*s)
+}
+
+func dIntFnOrNull(fn func() (int32, bool)) parser.Datum {
+	if n, ok := fn(); ok {
+		return parser.NewDInt(parser.DInt(n))
+	}
+	return parser.DNull
+}
+
+var informationSchemaColumnsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.columns (
+  TABLE_CATALOG STRING NOT NULL DEFAULT '',
+  TABLE_SCHEMA STRING NOT NULL DEFAULT '',
+  TABLE_NAME STRING NOT NULL DEFAULT '',
+  COLUMN_NAME STRING NOT NULL DEFAULT '',
+  ORDINAL_POSITION INT NOT NULL DEFAULT 0,
+  COLUMN_DEFAULT STRING,
+  IS_NULLABLE STRING NOT NULL DEFAULT '',
+  DATA_TYPE STRING NOT NULL DEFAULT '',
+  CHARACTER_MAXIMUM_LENGTH INT,
+  CHARACTER_OCTET_LENGTH INT,
+  NUMERIC_PRECISION INT,
+  NUMERIC_SCALE INT,
+  DATETIME_PRECISION INT
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum)) error {
+		return forEachTableDesc(p,
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) {
+				// Table descriptors already holds columns in-order.
+				visible := 0
+				for _, column := range table.Columns {
+					if column.Hidden {
+						continue
+					}
+					visible++
+					addRow(
+						defString,                                    // table_catalog
+						parser.NewDString(db.Name),                   // table_schema
+						parser.NewDString(table.Name),                // table_name
+						parser.NewDString(column.Name),               // column_name
+						parser.NewDInt(parser.DInt(visible)),         // ordinal_position, 1-indexed
+						dStringOrNull(column.DefaultExpr),            // column_default
+						yesOrNoDatum(column.Nullable),                // is_nullable
+						parser.NewDString(column.Type.Kind.String()), // data_type
+						characterMaximumLength(column.Type),          // character_maximum_length
+						characterOctetLength(column.Type),            // character_octet_length
+						numericPrecision(column.Type),                // numeric_precision
+						numericScale(column.Type),                    // numeric_scale
+						datetimePrecision(column.Type),               // datetime_precision
+					)
+				}
+			},
+		)
+	},
+}
+
+func characterMaximumLength(colType sqlbase.ColumnType) parser.Datum {
+	return dIntFnOrNull(colType.MaxCharacterLength)
+}
+
+func characterOctetLength(colType sqlbase.ColumnType) parser.Datum {
+	return dIntFnOrNull(colType.MaxOctetLength)
+}
+
+func numericPrecision(colType sqlbase.ColumnType) parser.Datum {
+	return dIntFnOrNull(colType.NumericPrecision)
+}
+
+func numericScale(colType sqlbase.ColumnType) parser.Datum {
+	return dIntFnOrNull(colType.NumericScale)
+}
+
+func datetimePrecision(colType sqlbase.ColumnType) parser.Datum {
+	// We currently do not support a datetime precision.
+	return parser.DNull
+}
 
 var (
 	tableTypeSystemView = parser.NewDString("SYSTEM VIEW")
@@ -58,11 +158,11 @@ CREATE TABLE information_schema.tables (
 					tableType = tableTypeSystemView
 				}
 				addRow(
-					defString,
-					parser.NewDString(db.Name),
-					parser.NewDString(table.Name),
-					tableType,
-					parser.NewDInt(parser.DInt(table.GetVersion())),
+					defString,                     // table_catalog
+					parser.NewDString(db.Name),    // table_schema
+					parser.NewDString(table.Name), // table_name
+					tableType,                     // table_type
+					parser.NewDInt(parser.DInt(table.Version)), // version
 				)
 			},
 		)
