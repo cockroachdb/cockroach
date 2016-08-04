@@ -497,7 +497,7 @@ func (expr *RangeCond) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, er
 
 // TypeCheck implements the Expr interface.
 func (expr *Subquery) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) {
-	panic("Subquery nodes must be replaced before type checking")
+	panic("subquery nodes must be replaced before type checking")
 }
 
 // TypeCheck implements the Expr interface.
