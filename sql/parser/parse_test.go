@@ -816,6 +816,13 @@ CREATE TABLE test (
   CONSTRAINT foo INDEX (bar)
                  ^
 `},
+		{`CREATE TABLE test (
+  foo BIT(0)
+)`, `length for type bit must be at least 1 at or near ")"
+CREATE TABLE test (
+  foo BIT(0)
+           ^
+`},
 		{`CREATE DATABASE a b`,
 			`syntax error at or near "b"
 CREATE DATABASE a b
