@@ -6003,6 +6003,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
 			cmd := tc.rng.prepareRaftCommandLocked(ctx, makeIDKey(), repDesc, ba)
 			tc.rng.insertRaftCommandLocked(cmd)
+			chs = append(chs, cmd.done)
 		}
 
 		for _, p := range tc.rng.mu.pendingCmds {
