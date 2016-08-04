@@ -1685,7 +1685,7 @@ func (r *Replica) handleRaftReady() error {
 	}
 	if shouldReproposeCmds {
 		r.mu.Lock()
-		err := r.refreshPendingCmdsLocked(reasonEmptyEntry, 0)
+		err := r.refreshPendingCmdsLocked(reasonNewLeaderOrConfigChange, 0)
 		r.mu.Unlock()
 		if err != nil {
 			return err
@@ -1744,7 +1744,7 @@ type refreshRaftReason int
 
 const (
 	noReason refreshRaftReason = iota
-	reasonEmptyEntry
+	reasonNewLeaderOrConfigChange
 	reasonReplicaIDChanged
 	reasonTicks
 )
