@@ -399,6 +399,12 @@ INSERT INTO return AS r VALUES (5, 6)
 # statement ok
 # INSERT INTO return AS r VALUES (5, 6) RETURNING r.a
 
+statement error invalid column name: "x.*"
+INSERT INTO return VALUES (1, 2) RETURNING x.*[1]
+
+statement error compound types not supported yet: "x\[1\]"
+INSERT INTO return VALUES (1, 2) RETURNING x[1]
+
 statement ok
 CREATE TABLE abc (
   a INT,
@@ -444,14 +450,14 @@ CREATE TABLE nocols()
 statement error INSERT error: table nocols has \d+ columns but \d+ values were supplied
 INSERT INTO nocols VALUES (true, default)
 
-statement error column "kv" does not exist
+statement error compound types not supported yet: "kv.k"
 INSERT INTO kv (kv.k) VALUES ('hello')
 
-statement error column name "k\.\*" cannot be assigned to
+statement error compound types not supported yet: "k.\*"
 INSERT INTO kv (k.*) VALUES ('hello')
 
-statement error column name "k\[0\]" cannot be assigned to
+statement error compound types not supported yet: "k\[0\]"
 INSERT INTO kv (k[0]) VALUES ('hello')
 
-statement error column name "k\.v" cannot be assigned to
+statement error compound types not supported yet: "k.v"
 INSERT INTO kv (k.v) VALUES ('hello')
