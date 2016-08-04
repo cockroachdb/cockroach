@@ -692,7 +692,7 @@ func (s *statusServer) Ranges(ctx context.Context, req *serverpb.RangesRequest) 
 func (s *statusServer) SpanStats(ctx context.Context, req *serverpb.SpanStatsRequest) (
 	*serverpb.SpanStatsResponse, error,
 ) {
-	nodeID, local, err := s.parseNodeID(req.NodeId)
+	nodeID, local, err := s.parseNodeID(req.NodeID)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
 	}
@@ -715,6 +715,7 @@ func (s *statusServer) SpanStats(ctx context.Context, req *serverpb.SpanStatsReq
 	if err != nil {
 		return nil, err
 	}
+
 	return output, nil
 }
 
