@@ -23,7 +23,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -300,6 +299,12 @@ func (n *createTableNode) Start() error {
 		}
 	}
 
+	id, err := n.p.incDescID()
+	if err != nil {
+		return nil
+	}
+	desc.SetID(id)
+
 	if err := desc.AllocateIDs(); err != nil {
 		return err
 	}
@@ -312,7 +317,6 @@ func (n *createTableNode) Start() error {
 
 	// FKs are resolved after the descriptor is otherwise complete and IDs have
 	// been allocated since the FKs will reference those IDs.
-	var fkTargets []fkTargetUpdate
 	for _, def := range n.n.Defs {
 		switch d := def.(type) {
 		case *parser.ColumnTableDef:
@@ -321,59 +325,47 @@ func (n *createTableNode) Start() error {
 				if d.References.Col != "" {
 					targetCol = append(targetCol, string(d.References.Col))
 				}
-				modified, err := n.resolveFK(&desc, parser.NameList{string(d.Name)}, d.References.Table, targetCol, d.References.ConstraintName)
-				if err != nil {
+				if err := n.resolveFK(&desc, parser.NameList{string(d.Name)}, d.References.Table, targetCol, d.References.ConstraintName); err != nil {
 					return err
 				}
-				fkTargets = append(fkTargets, modified)
 			}
 		case *parser.ForeignKeyConstraintTableDef:
-			modified, err := n.resolveFK(&desc, d.FromCols, d.Table, d.ToCols, d.Name)
-			if err != nil {
+			if err := n.resolveFK(&desc, d.FromCols, d.Table, d.ToCols, d.Name); err != nil {
 				return err
 			}
-			fkTargets = append(fkTargets, modified)
 		}
 	}
 
 	// Multiple FKs from the same column would potentially result in ambiguous or
 	// unexpected behavior with conflicting CASCADE/RESTRICT/etc behaviors.
 	colsInFKs := make(map[sqlbase.ColumnID]struct{})
-	for _, t := range fkTargets {
-		i, err := desc.FindIndexByID(t.srcIdx)
-		if err != nil {
-			return errors.Wrap(err, "could not resolve FK index to check for columns overlaps")
-		}
-		for x := range i.ColumnIDs {
-			if _, ok := colsInFKs[i.ColumnIDs[x]]; ok {
-				return errors.Errorf("column %q cannot be used by multiple foreign key constraints", i.ColumnNames[x])
+	for _, idx := range desc.Indexes {
+		if idx.ForeignKey.IsSet() {
+			for i := range idx.ColumnIDs {
+				if _, ok := colsInFKs[idx.ColumnIDs[i]]; ok {
+					return errors.Errorf("column %q cannot be used by multiple foreign key constraints", idx.ColumnNames[i])
+				}
+				colsInFKs[idx.ColumnIDs[i]] = struct{}{}
 			}
-			colsInFKs[i.ColumnIDs[x]] = struct{}{}
 		}
 	}
 
-	// We need to validate again after adding the FKs, but the desc still doesn't
-	// have a valid ID, so we briefly set it to something to get past validation.
-	savedID := desc.ID
-	if desc.ID == 0 {
-		desc.ID = keys.MaxReservedDescID + 1
-	}
+	// We need to validate again after adding the FKs.
 	// Only validate the table because backreferences aren't created yet.
 	// Everything is validated below.
 	err = desc.ValidateTable()
-	desc.ID = savedID
 	if err != nil {
 		return err
 	}
 
-	created, err := n.p.createDescriptor(
-		tableKey{n.dbDesc.ID, n.n.Table.Table()}, &desc, n.n.IfNotExists)
+	created, err := n.p.createDescriptorWithID(
+		tableKey{n.dbDesc.ID, n.n.Table.Table()}, id, &desc, n.n.IfNotExists)
 	if err != nil {
 		return err
 	}
 
 	if created {
-		if err := n.finalizeFKs(&desc, fkTargets); err != nil {
+		if err := n.finalizeFKs(&desc); err != nil {
 			return err
 		}
 
@@ -420,41 +412,29 @@ func (n *createTableNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "create table", "", nil
 }
 
-// FK resolution runs before the referencing (child) table is created, meaning
-// its ID, which needs to be noted on the referenced tables, is not yet
-// determined. This struct accumulates the information needed to edit a
-// referenced table after the referencing table is created and has an ID.
-type fkTargetUpdate struct {
-	srcIdx    sqlbase.IndexID          // ID of source (referencing) index
-	target    *sqlbase.TableDescriptor // Table to update
-	targetIdx sqlbase.IndexID          // ID of target (referenced) index
-}
-
 func (n *createTableNode) resolveFK(
 	tbl *sqlbase.TableDescriptor,
 	fromCols parser.NameList,
 	targetTable *parser.QualifiedName,
 	targetColNames parser.NameList,
 	constraintName parser.Name,
-) (fkTargetUpdate, error) {
-	var ret fkTargetUpdate
+) error {
 	srcCols, err := tbl.FindActiveColumnsByNames(fromCols)
 	if err != nil {
-		return ret, err
+		return err
 	}
 
 	target, err := n.p.getTableDesc(targetTable)
 	if err != nil {
-		return ret, err
+		return err
 	}
 	if target == nil {
 		if targetTable.String() == tbl.Name {
 			target = tbl
 		} else {
-			return ret, fmt.Errorf("referenced table %q not found", targetTable.String())
+			return fmt.Errorf("referenced table %q not found", targetTable.String())
 		}
 	}
-	ret.target = target
 
 	// If no columns are specified, attempt to default to PK.
 	if len(targetColNames) == 0 {
@@ -463,17 +443,17 @@ func (n *createTableNode) resolveFK(
 
 	targetCols, err := target.FindActiveColumnsByNames(targetColNames)
 	if err != nil {
-		return ret, err
+		return err
 	}
 
 	if len(targetCols) != len(srcCols) {
-		return ret, errors.Errorf("%d columns must reference exactly %d columns in referenced table (found %d)",
+		return errors.Errorf("%d columns must reference exactly %d columns in referenced table (found %d)",
 			len(srcCols), len(srcCols), len(targetCols))
 	}
 
 	for i := range srcCols {
 		if s, t := srcCols[i], targetCols[i]; s.Type.Kind != t.Type.Kind {
-			return ret, fmt.Errorf("type of %q (%s) does not match foreign key %q.%q (%s)",
+			return fmt.Errorf("type of %q (%s) does not match foreign key %q.%q (%s)",
 				s.Name, s.Type.Kind, target.Name, t.Name, t.Type.Kind)
 		}
 	}
@@ -485,8 +465,8 @@ func (n *createTableNode) resolveFK(
 	)
 
 	// Referenced cols must be unique, thus referenced indexes must match exactly.
-	// Referencing cols have no uniqueness requirement and thus may match a
-	// strict prefix of an index.
+	// Referencing cols have no uniqueness requirement and thus may match a strict
+	// prefix of an index.
 	matchesIndex := func(
 		cols []sqlbase.ColumnDescriptor, idx sqlbase.IndexDescriptor, exact indexMatch,
 	) bool {
@@ -502,51 +482,71 @@ func (n *createTableNode) resolveFK(
 		return true
 	}
 
+	if constraintName == "" {
+		constraintName = parser.Name(fmt.Sprintf("fk_%s_ref_%s", fromCols[0], target.Name))
+	}
+
+	var targetIdx sqlbase.IndexID
 	if matchesIndex(targetCols, target.PrimaryIndex, matchExact) {
-		ret.targetIdx = target.PrimaryIndex.ID
+		targetIdx = target.PrimaryIndex.ID
 	} else {
 		found := false
 		// Find the index corresponding to the referenced column.
 		for _, idx := range target.Indexes {
 			if idx.Unique && matchesIndex(targetCols, idx, matchExact) {
-				ret.targetIdx = idx.ID
+				targetIdx = idx.ID
 				found = true
 				break
 			}
 		}
 		if !found {
-			return ret, fmt.Errorf("foreign key requires table %q have a unique index on %s", targetTable.String(), colNames(targetCols))
+			return fmt.Errorf("foreign key requires table %q have a unique index on %s", targetTable.String(), colNames(targetCols))
 		}
 	}
 
-	if constraintName == "" {
-		constraintName = parser.Name(fmt.Sprintf("fk_%s_ref_%s", fromCols[0], target.Name))
-	}
+	ref := sqlbase.ForeignKeyReference{Table: target.ID, Index: targetIdx, Name: string(constraintName)}
 
-	ref := sqlbase.ForeignKeyReference{Table: target.ID, Index: ret.targetIdx, Name: string(constraintName)}
-
+	var srcIdx sqlbase.IndexID
 	if matchesIndex(srcCols, tbl.PrimaryIndex, matchPrefix) {
+		if tbl.PrimaryIndex.ForeignKey.IsSet() {
+			return fmt.Errorf("column(s) cannot be used by multiple foreign key constraints")
+		}
 		tbl.PrimaryIndex.ForeignKey = ref
-		ret.srcIdx = tbl.PrimaryIndex.ID
+		srcIdx = tbl.PrimaryIndex.ID
 	} else {
 		found := false
 		for i := range tbl.Indexes {
 			if matchesIndex(srcCols, tbl.Indexes[i], matchPrefix) {
+				if tbl.Indexes[i].ForeignKey.IsSet() {
+					return fmt.Errorf("column(s) cannot be used by multiple foreign key constraints")
+				}
 				tbl.Indexes[i].ForeignKey = ref
-				ret.srcIdx = tbl.Indexes[i].ID
+				srcIdx = tbl.Indexes[i].ID
 				found = true
 				break
 			}
 		}
 		if !found {
-			return ret, fmt.Errorf("foreign key columns %s must be the prefix of an index", colNames(srcCols))
+			return fmt.Errorf("foreign key columns %s must be the prefix of an index", colNames(srcCols))
 		}
 	}
 
-	// Create the table non-public, since we'll need to ensure the FK back-refs
-	// are in place before we can allow writes.
-	tbl.State = sqlbase.TableDescriptor_ADD
-	return ret, nil
+	// self-reference FKs can setup their back-references at creation without
+	// waiting for the finalize step, and do not need to use the ADD table state.
+	if target == tbl {
+		ref.Name = ""
+		ref.Index = srcIdx
+		if idx, err := tbl.FindIndexByID(targetIdx); err == nil {
+			idx.ReferencedBy = append(idx.ReferencedBy, ref)
+		} else {
+			return err
+		}
+	} else {
+		// Create the table non-public, since we'll need to ensure the FK back-refs
+		// are in place before we can allow writes.
+		tbl.State = sqlbase.TableDescriptor_ADD
+	}
+	return nil
 }
 
 // colNames converts a []colDesc to a human-readable string for use in error messages.
@@ -634,36 +634,35 @@ func (p *planner) addInterleave(
 	return nil
 }
 
-func (n *createTableNode) finalizeFKs(desc *sqlbase.TableDescriptor, fkTargets []fkTargetUpdate) error {
-	for _, t := range fkTargets {
-		targetIdx, err := t.target.FindIndexByID(t.targetIdx)
-		if err != nil {
-			return err
-		}
-		backref := sqlbase.ForeignKeyReference{Table: desc.ID, Index: t.srcIdx}
-		targetIdx.ReferencedBy = append(targetIdx.ReferencedBy, backref)
-
-		// For self-referencing FKs, the ref was added before the table had an ID
-		// assigned so we need to update it now to the assigned value.
-		if t.target == desc {
-			srcIdx, err := desc.FindIndexByID(t.srcIdx)
+func (n *createTableNode) finalizeFKs(desc *sqlbase.TableDescriptor) error {
+	save := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+	for _, idx := range desc.Indexes {
+		if idx.ForeignKey.IsSet() {
+			if idx.ForeignKey.Table == desc.ID {
+				// self-ref FKs include back-references at creation.
+				continue
+			}
+			targetTable, ok := save[idx.ForeignKey.Table]
+			if !ok {
+				var err error
+				targetTable, err = sqlbase.GetTableDescFromID(n.p.txn, idx.ForeignKey.Table)
+				if err != nil {
+					return err
+				}
+			}
+			targetIdx, err := targetTable.FindIndexByID(idx.ForeignKey.Index)
 			if err != nil {
 				return err
 			}
-			srcIdx.ForeignKey.Table = desc.ID
-			continue
+			backref := sqlbase.ForeignKeyReference{Table: desc.ID, Index: idx.ID}
+			targetIdx.ReferencedBy = append(targetIdx.ReferencedBy, backref)
+			save[targetTable.ID] = targetTable
 		}
 	}
-
-	saved := make(map[sqlbase.ID]struct{}, len(fkTargets))
-	for _, t := range fkTargets {
-		if _, ok := saved[t.target.ID]; ok {
-			continue
-		}
-		if err := n.p.saveNonmutationAndNotify(t.target); err != nil {
+	for _, t := range save {
+		if err := n.p.saveNonmutationAndNotify(t); err != nil {
 			return err
 		}
-		saved[t.target.ID] = struct{}{}
 	}
 
 	if desc.State == sqlbase.TableDescriptor_ADD {
