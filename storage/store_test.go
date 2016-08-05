@@ -1064,31 +1064,31 @@ func TestStoreReplicasByKey(t *testing.T) {
 	r4 := splitTestRange(store, roachpb.RKey("X"), roachpb.RKey("ZZ"), t)
 
 	if r := store.LookupReplica(roachpb.RKey("0"), nil); r != r0 {
-		t.Errorf("mismatched range %+v != %+v", r.Desc(), r0.Desc())
+		t.Errorf("mismatched replica %s != %s", r, r0)
 	}
 	if r := store.LookupReplica(roachpb.RKey("B"), nil); r != r1 {
-		t.Errorf("mismatched range %+v != %+v", r.Desc(), r1.Desc())
+		t.Errorf("mismatched replica %s != %s", r, r1)
 	}
 	if r := store.LookupReplica(roachpb.RKey("C"), nil); r != r2 {
-		t.Errorf("mismatched range %+v != %+v", r.Desc(), r2.Desc())
+		t.Errorf("mismatched replica %s != %s", r, r2)
 	}
 	if r := store.LookupReplica(roachpb.RKey("M"), nil); r != r2 {
-		t.Errorf("mismatched range %+v != %+v", r.Desc(), r2.Desc())
+		t.Errorf("mismatched replica %s != %s", r, r2)
 	}
 	if r := store.LookupReplica(roachpb.RKey("X"), nil); r != r3 {
-		t.Errorf("mismatched range %+v != %+v", r.Desc(), r3.Desc())
+		t.Errorf("mismatched replica %s != %s", r, r3)
 	}
 	if r := store.LookupReplica(roachpb.RKey("Z"), nil); r != r3 {
-		t.Errorf("mismatched range %+v != %+v", r.Desc(), r3.Desc())
+		t.Errorf("mismatched replica %s != %s", r, r3)
 	}
 	if r := store.LookupReplica(roachpb.RKey("ZZ"), nil); r != r4 {
-		t.Errorf("mismatched range %+v != %+v", r.Desc(), r4.Desc())
+		t.Errorf("mismatched replica %s != %s", r, r4)
 	}
 	if r := store.LookupReplica(roachpb.RKey("\xff\x00"), nil); r != r4 {
-		t.Errorf("mismatched range %+v != %+v", r.Desc(), r4.Desc())
+		t.Errorf("mismatched replica %s != %s", r, r4)
 	}
 	if store.LookupReplica(roachpb.RKeyMax, nil) != nil {
-		t.Errorf("expected roachpb.KeyMax to not have an associated range")
+		t.Errorf("expected roachpb.KeyMax to not have an associated replica")
 	}
 }
 

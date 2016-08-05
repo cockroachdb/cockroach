@@ -428,8 +428,8 @@ func TestFailedReplicaChange(t *testing.T) {
 
 	// After the aborted transaction, r.Desc was not updated.
 	// TODO(bdarnell): expose and inspect raft's internal state.
-	if len(rng.Desc().Replicas) != 1 {
-		t.Fatalf("expected 1 replica, found %d", len(rng.Desc().Replicas))
+	if replicas := rng.Desc().Replicas; len(replicas) != 1 {
+		t.Fatalf("expected 1 replica, found %v", replicas)
 	}
 
 	// The pending config change flag was cleared, so a subsequent attempt
@@ -460,8 +460,8 @@ func TestFailedReplicaChange(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if lr := len(rang.Desc().Replicas); lr <= 1 {
-				return errors.Errorf("expected > 1 replicas; got %d", lr)
+			if replicas := rang.Desc().Replicas; len(replicas) <= 1 {
+				return errors.Errorf("expected > 1 replicas; got %v", replicas)
 			}
 		}
 		return nil
