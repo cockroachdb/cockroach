@@ -36,6 +36,10 @@ import (
 	circuit "github.com/rubyist/circuitbreaker"
 )
 
+func init() {
+	grpc.EnableTracing = false
+}
+
 const (
 	defaultHeartbeatInterval = 3 * time.Second
 	// The coefficient by which the maximum offset is multiplied to determine the
