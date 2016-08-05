@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -857,7 +858,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 
 	verifySplitsAtTablePrefixes(userTableMax)
 
-	numTotalValues := keys.MaxSystemConfigDescID + 5
+	numTotalValues := keys.MaxSystemConfigDescID + server.ExpectedInitialRangeCount()
 
 	// Write another, disjoint descriptor for a user table.
 	if err := store.DB().Txn(func(txn *client.Txn) error {

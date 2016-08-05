@@ -48,16 +48,6 @@ CREATE TABLE system.descriptor (
   descriptor BYTES
 );`
 
-	// LeaseTableSchema is checked in TestSystemTables.
-	LeaseTableSchema = `
-CREATE TABLE system.lease (
-  descID     INT,
-  version    INT,
-  nodeID     INT,
-  expiration TIMESTAMP,
-  PRIMARY KEY (descID, version, expiration, nodeID)
-);`
-
 	// UsersTableSchema is checked in TestSystemTables.
 	UsersTableSchema = `
 CREATE TABLE system.users (
@@ -71,6 +61,19 @@ CREATE TABLE system.users (
 CREATE TABLE system.zones (
   id     INT PRIMARY KEY,
   config BYTES
+);`
+)
+
+// These system tables are not part of the system config.
+const (
+	// LeaseTableSchema is checked in TestSystemTables.
+	LeaseTableSchema = `
+CREATE TABLE system.lease (
+  descID     INT,
+  version    INT,
+  nodeID     INT,
+  expiration TIMESTAMP,
+  PRIMARY KEY (descID, version, expiration, nodeID)
 );`
 
 	// UITableSchema is checked in TestSystemTables.
@@ -103,10 +106,10 @@ var (
 	singleID1     = []ColumnID{1}
 )
 
-// These TableDescriptor literals should match the descriptor that would be
-// produced by evaluating one of the above `CREATE TABLE` statements. See the
-// `TestSystemTableLiterals` which checks that they do indeed match, and has
-// suggestions on writing and maintaining them.
+// These system config TableDescriptor literals should match the descriptor
+// that would be produced by evaluating one of the above `CREATE TABLE`
+// statements. See the `TestSystemTableLiterals` which checks that they do
+// indeed match, and has suggestions on writing and maintaining them.
 var (
 	// SystemDB is the descriptor for the system database.
 	SystemDB = DatabaseDescriptor{
@@ -217,6 +220,25 @@ var (
 		NextMutationID: 1,
 	}
 
+	// SystemConfigAllowedPrivileges describes the privileges allowed for each
+	// system config object. No user may have more than those privileges, and
+	// the root user must have exactly those privileges. CREATE|DROP|ALL
+	// should always be denied.
+	SystemConfigAllowedPrivileges = map[ID]privilege.List{
+		keys.SystemDatabaseID:  privilege.ReadData,
+		keys.NamespaceTableID:  privilege.ReadData,
+		keys.DescriptorTableID: privilege.ReadData,
+		keys.UsersTableID:      privilege.ReadWriteData,
+		keys.ZonesTableID:      privilege.ReadWriteData,
+	}
+)
+
+// These system TableDescriptor literals should match the descriptor that
+// would be produced by evaluating one of the above `CREATE TABLE` statements
+// for system tables that are not system config tables. See the
+// `TestSystemTableLiterals` which checks that they do indeed match, and has
+// suggestions on writing and maintaining them.
+var (
 	// LeaseTable is the descriptor for the leases table.
 	LeaseTable = TableDescriptor{
 		Name:     "lease",
@@ -272,25 +294,6 @@ var (
 		FormatVersion:  FamilyFormatVersion,
 		NextMutationID: 1,
 	}
-
-	// SystemConfigAllowedPrivileges describes the privileges allowed for each
-	// system config object. No user may have more than those privileges, and
-	// the root user must have exactly those privileges. CREATE|DROP|ALL
-	// should always be denied.
-	SystemConfigAllowedPrivileges = map[ID]privilege.List{
-		keys.SystemDatabaseID:  privilege.ReadData,
-		keys.NamespaceTableID:  privilege.ReadData,
-		keys.DescriptorTableID: privilege.ReadData,
-		keys.UsersTableID:      privilege.ReadWriteData,
-		keys.ZonesTableID:      privilege.ReadWriteData,
-	}
-
-	// NumSystemDescriptors should be set to the number of system descriptors
-	// above (SystemDB and each system table). This is used by tests which need
-	// to know the number of system descriptors intended for installation; it starts at
-	// 1 for the SystemDB descriptor created above, and is incremented by every
-	// call to createSystemTable().
-	NumSystemDescriptors = 5
 )
 
 // Create the key/value pairs for the default zone config entry.
