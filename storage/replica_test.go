@@ -6054,26 +6054,38 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	r := tc.rng
-	repDesc, err := r.GetReplicaDescriptor()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if pErr := r.redirectOnOrAcquireLease(context.Background()); pErr != nil {
-		t.Fatal(pErr)
-	}
-
 	// Grab processRaftMu in order to block normal raft replica processing. This
 	// test is ticking the replicas manually and doesn't want the store to be
 	// doing so concurrently.
 	tc.store.processRaftMu.Lock()
 	defer tc.store.processRaftMu.Unlock()
 
+	r := tc.rng
+	repDesc, err := r.GetReplicaDescriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	electionTicks := tc.store.ctx.RaftElectionTimeoutTicks
+
+	{
+		// The verifications of the reproposal counts below rely on r.mu.ticks
+		// starting with a value of 0 (modulo electionTicks). Move the replica into
+		// that state in case the replica was ticked before we grabbed
+		// processRaftMu.
+		r.mu.Lock()
+		ticks := r.mu.ticks
+		r.mu.Unlock()
+		for ; (ticks % electionTicks) != 0; ticks++ {
+			if err := r.tick(); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
 	// We tick the replica 2*RaftElectionTimeoutTicks. RaftElectionTimeoutTicks
 	// is special in that it controls how often pending commands are reproposed
 	// or refurbished.
-	electionTicks := tc.store.ctx.RaftElectionTimeoutTicks
 	for i := 0; i < 2*electionTicks; i++ {
 		// Add another pending command on each iteration.
 		r.mu.Lock()
