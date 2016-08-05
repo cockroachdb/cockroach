@@ -59,6 +59,7 @@ resource "template_file" "supervisor" {
     # shifted by one (first element is empty), then take the value at index "instance.index".
     join_address = "${element(concat(split(",", ""), google_compute_instance.cockroach.*.network_interface.0.access_config.0.assigned_nat_ip), count.index)}"
     cockroach_flags = "${var.cockroach_flags}"
+    # If the following changes, (*terrafarm.Farmer).Add() must change too.
     cockroach_env = "${var.cockroach_env}"
     benchmark_name = "${var.benchmark_name}"
   }
@@ -125,7 +126,7 @@ FILE
       "supervisorctl -c supervisor.conf start cockroach",
       # Install load generators.
       "bash download_binary.sh examples-go/block_writer ${var.block_writer_sha}",
-      "bash download_binary.sh examples-go/photos ${var.block_writer_sha}",
+      "bash download_binary.sh examples-go/photos ${var.photos_sha}",
     ]
   }
 }
