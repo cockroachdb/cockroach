@@ -30,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -179,6 +180,40 @@ func TestHeartbeatHealth(t *testing.T) {
 
 	if clientCtx.IsConnHealthy("non-existent connection") {
 		t.Errorf("non-existent connection is reported as healthy")
+	}
+}
+
+// TestHeartbeatHealth verifies that the health status changes after
+// heartbeats succeed or fail due to transport failures.
+func TestHeartbeatHealthTransport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	// Can't be zero because that'd be an empty offset.
+	clock := hlc.NewClock(time.Unix(0, 1).UnixNano)
+
+	remoteAddr := "not.a.real.addr:1234"
+
+	clientCtx := newNodeTestContext(clock, stopper)
+
+	clientCtx.HeartbeatCB = func() {
+		log.Infof(context.TODO(), "heartbeat!")
+	}
+
+	conn, err := clientCtx.GRPCDial(remoteAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	heartbeatClient := NewHeartbeatClient(conn)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// If our heartbeats were not fail-fast, this RPC would hang indefinitely.
+	if _, err := heartbeatClient.Ping(ctx, &PingRequest{Addr: clientCtx.Addr}, grpc.FailFast(false)); !grpcutil.IsClosedConnection(err) {
+		t.Fatalf("expected grpc connection closure; got: %v", err)
 	}
 }
 
