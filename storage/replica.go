@@ -159,9 +159,10 @@ type pendingCmd struct {
 	// TODO(tschottdorf): idKey is legacy at this point: We could easily key
 	// commands by their MaxLeaseIndex, and doing so should be ok with a stop-
 	// the-world migration. However, requires adapting tryAbandon.
-	idKey   storagebase.CmdIDKey
-	raftCmd roachpb.RaftCommand
-	done    chan roachpb.ResponseWithError // Used to signal waiting RPC handler
+	idKey           storagebase.CmdIDKey
+	proposedAtTicks int
+	raftCmd         roachpb.RaftCommand
+	done            chan roachpb.ResponseWithError // Used to signal waiting RPC handler
 }
 
 type replicaChecksum struct {
@@ -523,7 +524,7 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	// this new incarnation.
 	if previousReplicaID != 0 {
 		// propose pending commands under new replicaID
-		if err := r.refreshPendingCmdsLocked(reasonReplicaIDChanged); err != nil {
+		if err := r.refreshPendingCmdsLocked(reasonReplicaIDChanged, 0); err != nil {
 			return err
 		}
 	}
@@ -1428,6 +1429,10 @@ func (r *Replica) prepareRaftCommandLocked(
 	if !ba.IsLease() {
 		r.mu.lastAssignedLeaseIndex++
 	}
+	if log.V(4) {
+		log.Infof(ctx, "%s: prepared command: maxLeaseIndex=%d leaseAppliedIndex=%d",
+			r, r.mu.lastAssignedLeaseIndex, r.mu.state.LeaseAppliedIndex)
+	}
 	return &pendingCmd{
 		ctx:   ctx,
 		idKey: idKey,
@@ -1499,6 +1504,7 @@ func (r *Replica) proposeRaftCommand(
 // proposePendingCmdLocked proposes or re-proposes a command in r.mu.pendingCmds.
 // The replica lock must be held.
 func (r *Replica) proposePendingCmdLocked(p *pendingCmd) error {
+	p.proposedAtTicks = r.mu.ticks
 	if r.mu.proposeRaftCommandFn != nil {
 		return r.mu.proposeRaftCommandFn(p)
 	}
@@ -1679,7 +1685,7 @@ func (r *Replica) handleRaftReady() error {
 	}
 	if shouldReproposeCmds {
 		r.mu.Lock()
-		err := r.refreshPendingCmdsLocked(reasonEmptyEntry)
+		err := r.refreshPendingCmdsLocked(reasonNewLeaderOrConfigChange, 0)
 		r.mu.Unlock()
 		if err != nil {
 			return err
@@ -1708,12 +1714,16 @@ func (r *Replica) tick() error {
 	r.mu.ticks++
 	r.mu.internalRaftGroup.Tick()
 	if r.mu.ticks%r.store.ctx.RaftElectionTimeoutTicks == 0 {
-		// RaftElectionTimeoutTicks is a reasonable approximation of how
-		// long we should wait before deciding that our previous proposal
-		// didn't go through.
+		// RaftElectionTimeoutTicks is a reasonable approximation of how long we
+		// should wait before deciding that our previous proposal didn't go
+		// through. Note that the combination of the above condition and passing
+		// RaftElectionTimeoutTicks to refreshPendingCmdsLocked means that commands
+		// will be refreshed when they have been pending for 1 to 2 electionc
+		// cycles.
 		//
 		// TODO(tamird/bdarnell): Add unit tests.
-		if err := r.refreshPendingCmdsLocked(reasonTicks); err != nil {
+		if err := r.refreshPendingCmdsLocked(
+			reasonTicks, r.store.ctx.RaftElectionTimeoutTicks); err != nil {
 			return err
 		}
 	}
@@ -1734,20 +1744,31 @@ type refreshRaftReason int
 
 const (
 	noReason refreshRaftReason = iota
-	reasonEmptyEntry
+	reasonNewLeaderOrConfigChange
 	reasonReplicaIDChanged
 	reasonTicks
 )
 
-func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason) error {
+func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason, refreshAtDelta int) error {
+	if len(r.mu.pendingCmds) == 0 {
+		return nil
+	}
+
 	// Note that we can't use the commit index here (which is typically a
 	// little ahead), because a pending command is removed only as it applies.
 	// Thus we'd risk reproposing a command that has been committed but not yet
 	// applied.
 	maxWillRefurbish := r.mu.state.LeaseAppliedIndex // indexes <= will be refurbished
-	origNum := len(r.mu.pendingCmds)
+	refreshAtTicks := r.mu.ticks - refreshAtDelta
+	refurbished := 0
 	var reproposals pendingCmdSlice
 	for idKey, p := range r.mu.pendingCmds {
+		if p.proposedAtTicks > refreshAtTicks {
+			// The command was proposed too recently, don't bother reproprosing or
+			// refurbishing it yet. Note that if refreshAtDelta is 0, refreshAtTicks
+			// will be r.mu.ticks making the above condition impossible.
+			continue
+		}
 		if p.raftCmd.MaxLeaseIndex > maxWillRefurbish {
 			reproposals = append(reproposals, p)
 			continue
@@ -1757,11 +1778,12 @@ func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason) error {
 		if pErr := r.refurbishPendingCmdLocked(p); pErr != nil {
 			p.done <- roachpb.ResponseWithError{Err: pErr}
 		}
+		refurbished++
 	}
-	if log.V(1) && origNum > 0 {
-		log.Infof(context.TODO(), "%s: pending commands: refurbished %d, reproposing %d (at %d.%d); %s",
-			r, origNum-len(reproposals),
-			len(reproposals), r.mu.state.RaftAppliedIndex,
+	if log.V(1) && (refurbished > 0 || len(reproposals) > 0) {
+		log.Infof(context.TODO(),
+			"%s: pending commands: refurbished %d, reproposing %d (at %d.%d); %s",
+			r, refurbished, len(reproposals), r.mu.state.RaftAppliedIndex,
 			r.mu.state.LeaseAppliedIndex, reason)
 	}
 
@@ -1877,6 +1899,11 @@ func (r *Replica) processRaftCommand(
 ) *roachpb.Error {
 	if index == 0 {
 		log.Fatalf(context.TODO(), "%s: processRaftCommand requires a non-zero index", r)
+	}
+
+	if log.V(4) {
+		log.Infof(context.TODO(), "%s: processing command: maxLeaseIndex=%d",
+			r, raftCmd.MaxLeaseIndex)
 	}
 
 	r.mu.Lock()
