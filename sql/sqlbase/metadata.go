@@ -104,15 +104,16 @@ func (ms *MetadataSchema) AddConfigDescriptor(parentID ID, desc DescriptorProto)
 	ms.configs++
 }
 
-// DescriptorCount returns the number of descriptors that will be created by
+// SystemDescriptorCount returns the number of descriptors that will be created by
 // this schema. This value is needed to automate certain tests.
-func (ms MetadataSchema) DescriptorCount() int {
+func (ms MetadataSchema) SystemDescriptorCount() int {
 	return len(ms.descs)
 }
 
-// ConfigDescriptorCount returns the number of config descriptors that will be
-// created by this schema. This value is needed to automate certain tests.
-func (ms MetadataSchema) ConfigDescriptorCount() int {
+// SystemConfigDescriptorCount returns the number of config descriptors that
+// will be created by this schema. This value is needed to automate certain
+// tests.
+func (ms MetadataSchema) SystemConfigDescriptorCount() int {
 	return ms.configs
 }
 
