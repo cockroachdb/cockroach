@@ -21,7 +21,7 @@ cmd golang.org/x/tools/cmd/stringer
 cmd honnef.co/go/simple/cmd/gosimple
 cmd honnef.co/go/staticcheck/cmd/staticcheck
 cmd honnef.co/go/unused/cmd/unused
-cloud.google.com/go f9495dc7d5d062d1b04f594f06347c9a38be96bb
+cloud.google.com/go 3261f00d16e92932f49a39672dfd540896ed30d0
 github.com/Microsoft/go-winio ce2922f643c8fd76b46cadc7f404a06282678b34
 github.com/Sirupsen/logrus a283a10442df8dc09befd873fab202bf8a253d6a
 github.com/StackExchange/wmi 771c736650b4aabf956d9103ba5bf439414f79f9
@@ -33,7 +33,7 @@ github.com/cenk/backoff cdf48bbc1eb78d1349cbda326a4a037f7ba565c6
 github.com/chzyer/logex 96a4d311aa9ba1c5f9f2abda8039671de20f6aa5
 github.com/chzyer/readline c144c8dde4996a05f596bd5acb730d172968e26c
 github.com/chzyer/test bea8f082b6fd8382588bf6fdc6af9217078af151
-github.com/client9/misspell 27d60a551dac4a162a4f4b39cb911b41005efecf
+github.com/client9/misspell d47606c1a5867a6e2de520b6b0670fe0d8c25055
 github.com/cockroachdb/c-jemalloc 42e6a32cd7a4dff9c70d80323681d46d046181ef
 github.com/cockroachdb/c-protobuf 951f3e665896e7ba939fd1f2db9aeaae6ca988f8
 github.com/cockroachdb/c-rocksdb ab57b321a358f4c93fb639331ac3e10911649492
@@ -48,7 +48,7 @@ github.com/cpuguy83/go-md2man 2724a9c9051aa62e9cca11304e7dd518e9e41599
 github.com/davecgh/go-spew 5215b55f46b2b919f50a1df0eaa5886afe4e3b3d
 github.com/docker/distribution bfa0a9c0973b5026d2e942dec29115c120e7f731
 github.com/docker/engine-api 16c66e864c3c2f2dc8c35276232aafe9828c88bc
-github.com/docker/go-connections 990a1a1a70b0da4c4cb70e117971a4f0babfbf1a
+github.com/docker/go-connections 0bad1a3951398f88ef4dd75fdb42af374430be89
 github.com/docker/go-units eb879ae3e2b84e2a142af415b679ddeda47ec71c
 github.com/dustin/go-humanize 2fcb5204cdc65b4bec9fd0a87606bb0d0e3c54e8
 github.com/elastic/gosigar 1d5bcdfbb4e5b8b5982f1e87ee6f13a806dd9aa0
@@ -81,7 +81,7 @@ github.com/mdempsky/unconvert beb68d938016d2dec1d1b078054f4d3db25f97be
 github.com/mibk/dupl 415e882ea21ca7012cc49906cb338f34d2d4b4d6
 github.com/montanaflynn/stats 60dcacf48f43d6dd654d0ed94120ff5806c5ca5c
 github.com/olekukonko/tablewriter daf2955e742cf123959884fdff4685aa79b63135
-github.com/opencontainers/runc 142df3836b740af53dc6da59eed8dbc92f62917c
+github.com/opencontainers/runc 946d3b7c9dc8b15f04278aba6cb0b22c1a5f6533
 github.com/opennota/check 5b00aacd5639507d2b039245a278ec9f5505509f
 github.com/opentracing/basictracer-go c7c0202a8a77f658aeb2193a27b6c0cfcc821038
 github.com/opentracing/opentracing-go 855519783f479520497c6b3445611b05fc42f009
