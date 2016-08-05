@@ -26,6 +26,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -112,7 +113,8 @@ func SucceedsSoon(t Tester, fn func() error) {
 // stack depth offset.
 func SucceedsSoonDepth(depth int, t Tester, fn func() error) {
 	if err := RetryForDuration(defaultSucceedsSoonDuration, fn); err != nil {
-		t.Fatalf("condition failed to evaluate within %s: %s", defaultSucceedsSoonDuration, err)
+		file, line, _ := caller.Lookup(depth + 1)
+		t.Fatalf("%s:%d, condition failed to evaluate within %s: %s", file, line, defaultSucceedsSoonDuration, err)
 	}
 }
 
