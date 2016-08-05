@@ -55,6 +55,7 @@ func (ba *BatchRequest) IsFreeze() bool {
 }
 
 // IsLease returns whether the batch consists of a single RequestLease request.
+// Note that TransferLease requests return false.
 func (ba *BatchRequest) IsLease() bool {
 	if len(ba.Requests) != 1 {
 		return false
@@ -107,6 +108,13 @@ func (ba *BatchRequest) SingleRequestIsNonTemporal() bool {
 		panic(fmt.Sprintf("SingleRequestIsNonTemporal called on batch with multiple requests: %s", ba))
 	}
 	return ba.hasFlag(isNonTemporal)
+}
+
+func (ba *BatchRequest) SingleRequestSkipsLeaseCheck() bool {
+	if !ba.IsSingleRequest() {
+		panic(fmt.Sprintf("SingleRequestSkipsLeaseCheck called on batch with multiple requests: %s", ba))
+	}
+	return ba.hasFlag(skipLeaseCheck)
 }
 
 // hasFlag returns true iff one of the requests within the batch contains the

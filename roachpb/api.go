@@ -84,6 +84,9 @@ const (
 	// Some commands can skip interacting with the command queue and the timestamp
 	// cache. For example, RequestLeaseRequest is sequenced exclusively by Raft.
 	isNonTemporal
+	// Requests for acquiring a lease skip the check that the proposing replica
+	// has a valid lease.
+	skipLeaseCheck
 )
 
 // GetTxnID returns the transaction ID if the header has a transaction
@@ -821,8 +824,12 @@ func (*NoopRequest) flags() int               { return isRead } // slightly spec
 func (*MergeRequest) flags() int              { return isWrite }
 func (*TruncateLogRequest) flags() int        { return isWrite }
 
-func (*RequestLeaseRequest) flags() int     { return isWrite | isAlone | isNonTemporal }
-func (*TransferLeaseRequest) flags() int    { return isWrite | isAlone | isNonTemporal }
+func (*RequestLeaseRequest) flags() int {
+	return isWrite | isAlone | isNonTemporal | skipLeaseCheck
+}
+func (*TransferLeaseRequest) flags() int {
+	return isWrite | isAlone | isNonTemporal | skipLeaseCheck
+}
 func (*ComputeChecksumRequest) flags() int  { return isWrite }
 func (*VerifyChecksumRequest) flags() int   { return isWrite }
 func (*CheckConsistencyRequest) flags() int { return isAdmin | isRange }
