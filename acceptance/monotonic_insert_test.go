@@ -66,10 +66,10 @@ func (r mtRows) String() string {
 	var buf bytes.Buffer
 	for i, row := range r {
 		prefix := "ok"
-		if ok := i == 0 || r.Less(i-1, i); !ok {
+		if i > 0 && r.Less(i, i-1) {
 			prefix = "!!"
 		}
-		_, _ = buf.WriteString(fmt.Sprintf("%s %+v\n", prefix, row))
+		fmt.Fprintf(&buf, "%s %+v\n", prefix, row)
 	}
 	return buf.String()
 }
@@ -174,15 +174,13 @@ RETURNING val, sts, node, tb`,
 		}
 
 		if !sort.IsSorted(results) {
-			t.Error("results are not sorted")
+			t.Errorf("results are not sorted:\n%s", results)
 		}
 
 		if numDistinct != len(results) {
-			t.Errorf("'val' column is not unique: %d results, but %d distinct",
-				len(results), numDistinct)
+			t.Errorf("'val' column is not unique: %d results, but %d distinct:\n%s",
+				len(results), numDistinct, results)
 		}
-
-		fmt.Println(results)
 	}
 
 	concurrency := 2 * c.NumNodes()
