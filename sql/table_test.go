@@ -40,8 +40,13 @@ func TestMakeTableDescColumns(t *testing.T) {
 		nullable bool
 	}{
 		{
-			"BIT(1)",
+			"BIT",
 			sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT, Width: 1},
+			true,
+		},
+		{
+			"BIT(3)",
+			sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT, Width: 3},
 			true,
 		},
 		{

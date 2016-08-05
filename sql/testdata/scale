@@ -29,9 +29,33 @@ statement error value too long
 UPDATE test SET t = 'cdefg' WHERE t = 'ab'
 
 statement ok
+CREATE TABLE tb (
+  b BIT(3),
+  UNIQUE INDEX a (b)
+)
+
+statement ok
+INSERT INTO tb VALUES (1)
+
+statement ok
+INSERT INTO tb VALUES (3)
+
+statement ok
+INSERT INTO tb VALUES (7)
+
+statement error bit string too long for type INT\(3\) \(column "b"\)
+INSERT INTO tb VALUES (15)
+
+statement ok
+UPDATE tb SET b = 2 WHERE b = 7
+
+statement error bit string too long for type INT\(3\) \(column "b"\)
+UPDATE tb SET b = 16 WHERE b = 2
+
+statement ok
 CREATE TABLE td (
-   d DECIMAL(3, 2),
-   UNIQUE INDEX b (d)
+  d DECIMAL(3, 2),
+  UNIQUE INDEX b (d)
 )
 
 statement ok
