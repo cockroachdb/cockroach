@@ -5841,7 +5841,7 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 		cmd.raftCmd.MaxLeaseIndex = wrongIndex
 		tc.rng.insertRaftCommandLocked(cmd)
 		if repropose {
-			if err := tc.rng.refreshPendingCmdsLocked(noReason); err != nil {
+			if err := tc.rng.refreshPendingCmdsLocked(noReason, 0); err != nil {
 				fatalf("%s", err)
 			}
 		} else if err := tc.rng.proposePendingCmdLocked(cmd); err != nil {
@@ -6003,6 +6003,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
 			cmd := tc.rng.prepareRaftCommandLocked(ctx, makeIDKey(), repDesc, ba)
 			tc.rng.insertRaftCommandLocked(cmd)
+			chs = append(chs, cmd.done)
 		}
 
 		for _, p := range tc.rng.mu.pendingCmds {
@@ -6017,7 +6018,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			t.Fatalf("wanted required indexes %v, got %v", expIndexes, origIndexes)
 		}
 
-		if err := tc.rng.refreshPendingCmdsLocked(noReason); err != nil {
+		if err := tc.rng.refreshPendingCmdsLocked(noReason, 0); err != nil {
 			t.Fatal(err)
 		}
 		return chs
@@ -6045,6 +6046,76 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		}
 		return errors.New("still pending commands")
 	})
+}
+
+func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var tc testContext
+	tc.Start(t)
+	defer tc.Stop()
+
+	r := tc.rng
+	repDesc, err := r.GetReplicaDescriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if pErr := r.redirectOnOrAcquireLease(context.Background()); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// We tick the replica 2*RaftElectionTimeoutTicks. RaftElectionTimeoutTicks
+	// is special in that it controls how often pending commands are reproposed
+	// or refurbished.
+	electionTicks := tc.store.ctx.RaftElectionTimeoutTicks
+	for i := 0; i < 2*electionTicks; i++ {
+		// Add another pending command on each iteration.
+		r.mu.Lock()
+		id := fmt.Sprintf("%08d", i)
+		var ba roachpb.BatchRequest
+		ba.Timestamp = tc.clock.Now()
+		ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: roachpb.Key(id)}})
+		cmd := r.prepareRaftCommandLocked(context.Background(),
+			storagebase.CmdIDKey(id), repDesc, ba)
+		r.insertRaftCommandLocked(cmd)
+		if err := r.proposePendingCmdLocked(cmd); err != nil {
+			t.Fatal(err)
+		}
+		// Build a map from command key to proposed-at-ticks.
+		m := map[storagebase.CmdIDKey]int{}
+		for id, p := range r.mu.pendingCmds {
+			m[id] = p.proposedAtTicks
+		}
+		r.mu.Unlock()
+
+		// Tick raft.
+		if err := r.tick(); err != nil {
+			t.Fatal(err)
+		}
+
+		// Gather up the reproprosed commands.
+		r.mu.Lock()
+		var reproposed []*pendingCmd
+		for id, p := range r.mu.pendingCmds {
+			if m[id] != p.proposedAtTicks {
+				reproposed = append(reproposed, p)
+			}
+		}
+		ticks := r.mu.ticks
+		r.mu.Unlock()
+
+		// Reproposals are only performed every electionTicks. We'll need to fix
+		// this test if that changes.
+		if (ticks % electionTicks) == 0 {
+			if len(reproposed) != i-1 {
+				t.Fatalf("%d: expected %d reproprosed commands, but found %+v", i, i-1, reproposed)
+			}
+		} else {
+			if len(reproposed) != 0 {
+				t.Fatalf("%d: expected no reproprosed commands, but found %+v", i, reproposed)
+			}
+		}
+	}
 }
 
 // TestReplicaDoubleRefurbish exercises a code path in which a command is seen
