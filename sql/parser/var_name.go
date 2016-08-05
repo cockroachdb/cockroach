@@ -141,7 +141,7 @@ func (*AllColumnsSelector) ReturnType() Datum {
 // of a column in an expression.
 type ColumnItem struct {
 	// TableName holds the table prefix, if the name refers to a column.
-	TableName
+	TableName TableName
 	// ColumnName names the designated column.
 	ColumnName Name
 	// Selector defines which sub-part of the variable is being

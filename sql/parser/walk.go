@@ -38,19 +38,6 @@ type Visitor interface {
 	VisitPost(expr Expr) (newNode Expr)
 }
 
-// FIXME(knz) Is this really necessary? It seems that unresolved name
-// arrays are treated as immutable, so copying is not necessary.
-func copyUnresolvedNames(u UnresolvedNames) UnresolvedNames {
-	if u == nil {
-		return nil
-	}
-	copy := make(UnresolvedNames, len(u))
-	for i, n := range u {
-		copy[i] = n
-	}
-	return copy
-}
-
 // Walk implements the Expr interface.
 func (expr *AndExpr) Walk(v Visitor) Expr {
 	left, changedL := WalkExpr(v, expr.Left)
@@ -506,7 +493,6 @@ func (stmt *Explain) WalkStmt(v Visitor) Statement {
 // CopyNode makes a copy of this Expr without recursing in any child Exprs.
 func (stmt *Insert) CopyNode() *Insert {
 	stmtCopy := *stmt
-	stmtCopy.Columns = copyUnresolvedNames(stmt.Columns)
 	stmtCopy.Returning = ReturningExprs(append([]SelectExpr(nil), stmt.Returning...))
 	return &stmtCopy
 }
@@ -703,7 +689,6 @@ func (stmt *Update) CopyNode() *Update {
 	stmtCopy.Exprs = UpdateExprs(make([]*UpdateExpr, len(stmt.Exprs)))
 	for i, e := range stmt.Exprs {
 		eCopy := *e
-		eCopy.Names = copyUnresolvedNames(e.Names)
 		stmtCopy.Exprs[i] = &eCopy
 	}
 	if stmt.Where != nil {

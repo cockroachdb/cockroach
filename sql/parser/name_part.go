@@ -114,7 +114,10 @@ type UnresolvedName NameParts
 func (u UnresolvedName) Format(buf *bytes.Buffer, f FmtFlags) { NameParts(u).Format(buf, f) }
 func (u UnresolvedName) String() string                       { return AsString(u) }
 
-// UnresolvedNames corresponds to a comma-separate list of unresolved names.
+// UnresolvedNames corresponds to a comma-separate list of unresolved
+// names.  Note: this should be treated as immutable when embedded in
+// an Expr context, otherwise the Walk code must be updated to
+// duplicate the array an Expr node is duplicated.
 type UnresolvedNames []UnresolvedName
 
 // Format implements the NodeFormatter interface.

@@ -186,18 +186,18 @@ func (t *TableName) QualifyWithDatabase(database string) error {
 
 // TableNames represents a comma separated list (see the Format method)
 // of table names.
-type TableNames []*TableName
+type TableNames []TableName
 
 // Format implements the NodeFormatter interface.
-func (t TableNames) Format(buf *bytes.Buffer, f FmtFlags) {
-	for i, t := range t {
+func (ts TableNames) Format(buf *bytes.Buffer, f FmtFlags) {
+	for i := range ts {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		FormatNode(buf, f, t)
+		FormatNode(buf, f, &ts[i])
 	}
 }
-func (t TableNames) String() string { return AsString(t) }
+func (ts TableNames) String() string { return AsString(ts) }
 
 // TableNameReferences corresponds to a comma-delimited
 // list of table name references.

@@ -33,7 +33,9 @@ import (
 // NormalizableFunctionName implements the editable name cell of a
 // FuncExpr. The FunctionName reference is updated by the Normalize()
 // method.
-type NormalizableFunctionName struct{ FunctionName }
+type NormalizableFunctionName struct {
+	FunctionName FunctionName
+}
 
 // Format implements the NodeFormatter interface.
 func (fn NormalizableFunctionName) Format(buf *bytes.Buffer, f FmtFlags) {

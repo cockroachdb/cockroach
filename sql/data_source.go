@@ -463,7 +463,7 @@ func (sources multiSourceInfo) checkDatabaseName(tn parser.TableName) (parser.Ta
 	for _, src := range sources {
 		if _, ok := src.sourceAliases[tn]; ok {
 			if found {
-				return parser.TableName{}, fmt.Errorf("ambiguous source name: %q (relative to database %q)",
+				return parser.TableName{}, fmt.Errorf("ambiguous source name: %q (within database %q)",
 					tn.TableName, tn.DatabaseName)
 			}
 			found = true
@@ -499,7 +499,7 @@ func (src *dataSourceInfo) checkDatabaseName(tn parser.TableName) (parser.TableN
 	// Database given. Check that the name is unambiguous.
 	if _, ok := src.sourceAliases[tn]; ok {
 		if found {
-			return parser.TableName{}, fmt.Errorf("ambiguous source name: %q (relative to database %q)",
+			return parser.TableName{}, fmt.Errorf("ambiguous source name: %q (within database %q)",
 				tn.TableName, tn.DatabaseName)
 		}
 		found = true
@@ -533,7 +533,7 @@ func (sources multiSourceInfo) findColumn(
 
 		// Propagate the discovered database name back to the original VarName.
 		// (to clarify the output of e.g. EXPLAIN)
-		c.DatabaseName = tableName.DatabaseName
+		c.TableName.DatabaseName = tableName.DatabaseName
 	}
 
 	colIdx = invalidColIdx

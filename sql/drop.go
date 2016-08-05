@@ -73,15 +73,15 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 	}
 
 	td := make([]*sqlbase.TableDescriptor, len(tbNames))
-	for i, tbName := range tbNames {
-		tbDesc, err := p.dropTablePrepare(tbName)
+	for i := range tbNames {
+		tbDesc, err := p.dropTablePrepare(&tbNames[i])
 		if err != nil {
 			return nil, err
 		}
 		if tbDesc == nil {
 			// Database claims to have this table, but it does not exist.
 			return nil, errors.Errorf("table %q was described by database %q, but does not exist",
-				tbName.String(), n.Name)
+				tbNames[i].String(), n.Name)
 		}
 		td[i] = tbDesc
 	}

@@ -296,7 +296,7 @@ func (p *planner) getTableNames(dbDesc *sqlbase.DatabaseDescriptor) (parser.Tabl
 		if err != nil {
 			return nil, err
 		}
-		tn := &parser.TableName{
+		tn := parser.TableName{
 			DatabaseName: parser.Name(dbDesc.Name),
 			TableName:    parser.Name(tableName),
 		}
@@ -358,7 +358,7 @@ func (p *planner) expandTableGlob(pattern parser.TablePattern) (parser.TableName
 		if err := t.QualifyWithDatabase(p.session.Database); err != nil {
 			return nil, err
 		}
-		return parser.TableNames{t}, nil
+		return parser.TableNames{*t}, nil
 	}
 
 	glob := pattern.(*parser.AllTablesSelector)

@@ -76,7 +76,7 @@ type virtualSchemaEntry struct {
 func (e virtualSchemaEntry) tableNames() parser.TableNames {
 	var res parser.TableNames
 	for _, tableName := range e.orderedTableNames {
-		tn := &parser.TableName{
+		tn := parser.TableName{
 			DatabaseName: parser.Name(e.desc.Name),
 			TableName:    parser.Name(tableName),
 		}

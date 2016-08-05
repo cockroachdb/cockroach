@@ -95,7 +95,6 @@ func (p *planner) makeUpsertHelper(
 			allExprsIdentity = false
 			break
 		}
-		// FIXME(knz) check other db name is OK here.
 		if len(c.Selector) > 0 ||
 			!sqlbase.EqualName(c.TableName.TableName, upsertExcludedTable.TableName) ||
 			sqlbase.NormalizeName(c.ColumnName) != sqlbase.ReNormalizeName(updateCols[i].Name) {

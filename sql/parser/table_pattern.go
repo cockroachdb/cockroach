@@ -62,18 +62,17 @@ func (n UnresolvedName) NormalizeTablePattern() (TablePattern, error) {
 		db = dbName
 	}
 
-	var res TablePattern
 	switch t := n[len(n)-1].(type) {
 	case UnqualifiedStar:
-		res = &AllTablesSelector{Database: db}
+		return &AllTablesSelector{Database: db}, nil
 	case Name:
 		if len(t) == 0 {
 			return nil, fmt.Errorf("empty table name: %q", n)
 		}
-		res = &TableName{DatabaseName: db, TableName: t}
+		return &TableName{DatabaseName: db, TableName: t}, nil
+	default:
+		return nil, fmt.Errorf("invalid table pattern: %q", n)
 	}
-
-	return res, nil
 }
 
 // NormalizeTablePattern implements the TablePattern interface.
