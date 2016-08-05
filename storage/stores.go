@@ -202,9 +202,9 @@ func (ls *Stores) LookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeI
 		rng = store.LookupReplica(start, end)
 		if rng == nil {
 			if tmpRng := store.LookupReplica(start, nil); tmpRng != nil {
-				log.Warningf(context.TODO(), "range not contained in one range: [%s,%s), but have [%s,%s)",
-					start, end, tmpRng.Desc().StartKey, tmpRng.Desc().EndKey)
 				partialDesc = tmpRng.Desc()
+				log.Warningf(context.TODO(), "range not contained in one range: [%s,%s), but have [%s,%s)",
+					start, end, partialDesc.StartKey, partialDesc.EndKey)
 				break
 			}
 			continue

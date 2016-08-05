@@ -62,8 +62,7 @@ func createSplitRanges(store *storage.Store) (*roachpb.RangeDescriptor, *roachpb
 	return rangeADesc, rangeBDesc, nil
 }
 
-// TestStoreRangeMergeTwoEmptyRanges tries to merge two empty ranges
-// together.
+// TestStoreRangeMergeTwoEmptyRanges tries to merge two empty ranges together.
 func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sCtx := storage.TestStoreContext()
@@ -83,11 +82,11 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	}
 
 	// Verify the merge by looking up keys from both ranges.
-	rangeA := store.LookupReplica([]byte("a"), nil)
-	rangeB := store.LookupReplica([]byte("c"), nil)
+	replicaA := store.LookupReplica([]byte("a"), nil)
+	replicaB := store.LookupReplica([]byte("c"), nil)
 
-	if !reflect.DeepEqual(rangeA, rangeB) {
-		t.Fatalf("ranges were not merged %+v=%+v", rangeA.Desc(), rangeB.Desc())
+	if !reflect.DeepEqual(replicaA, replicaB) {
+		t.Fatalf("ranges were not merged %s!=%s", replicaA, replicaB)
 	}
 }
 
