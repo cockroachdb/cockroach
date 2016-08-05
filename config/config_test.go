@@ -239,7 +239,7 @@ func TestComputeSplits(t *testing.T) {
 
 	allUserSplits := []uint32{start, start + 1, start + 2, start + 3, start + 4, start + 5}
 	var allReservedSplits []uint32
-	for i := 0; i < schema.DescriptorCount()-schema.ConfigDescriptorCount(); i++ {
+	for i := 0; i < schema.SystemDescriptorCount()-schema.SystemConfigDescriptorCount(); i++ {
 		allReservedSplits = append(allReservedSplits, reservedStart+uint32(i))
 	}
 	allSplits := append(allReservedSplits, allUserSplits...)

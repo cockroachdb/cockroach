@@ -37,7 +37,7 @@ func TestInitialKeys(t *testing.T) {
 
 	ms := sqlbase.MakeMetadataSchema()
 	kv := ms.GetInitialValues()
-	expected := nonDescKeys + keysPerDesc*(nonSystemDesc+sqlbase.NumSystemDescriptors)
+	expected := nonDescKeys + keysPerDesc*(nonSystemDesc+ms.SystemConfigDescriptorCount())
 	if actual := len(kv); actual != expected {
 		t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)
 	}
@@ -46,7 +46,7 @@ func TestInitialKeys(t *testing.T) {
 	desc := sql.CreateTableDescriptor(keys.MaxSystemConfigDescID+1, keys.SystemDatabaseID, "CREATE TABLE testdb.x (val INTEGER PRIMARY KEY)", sqlbase.NewDefaultPrivilegeDescriptor())
 	ms.AddDescriptor(keys.SystemDatabaseID, &desc)
 	kv = ms.GetInitialValues()
-	expected = nonDescKeys + keysPerDesc*ms.DescriptorCount()
+	expected = nonDescKeys + keysPerDesc*ms.SystemDescriptorCount()
 	if actual := len(kv); actual != expected {
 		t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)
 	}
