@@ -86,6 +86,9 @@ const (
 	// These requests still have keys in their header, but those keys are used
 	// exclusively for routing the request to the right range.
 	isNonKV
+	// Requests for acquiring a lease skip the (proposal-time) check that the
+	// proposing replica has a valid lease.
+	skipLeaseCheck
 )
 
 // GetTxnID returns the transaction ID if the header has a transaction
@@ -824,10 +827,18 @@ func (*MergeRequest) flags() int              { return isWrite }
 func (*TruncateLogRequest) flags() int        { return isWrite | isNonKV }
 
 func (*RequestLeaseRequest) flags() int {
-	return isWrite | isAlone | isNonKV
+	return isWrite | isAlone | isNonKV | skipLeaseCheck
 }
 func (*TransferLeaseRequest) flags() int {
-	return isWrite | isAlone | isNonKV
+	// TransferLeaseRequest requires the lease, which is checked in
+	// `AdminTransferLease()` at proposal time and in the usual way for write
+	// commands at apply time.
+	// But it can't be checked at propose time through the
+	// `redirectOnOrAcquireLease` call because, by the time that call is made, the
+	// replica has registered that a transfer is in progress and
+	// `redirectOrAcquire` already tentatively redirects to the future lease
+	// holder.
+	return isWrite | isAlone | isNonKV | skipLeaseCheck
 }
 func (*ComputeChecksumRequest) flags() int  { return isWrite | isNonKV }
 func (*VerifyChecksumRequest) flags() int   { return isWrite | isNonKV }

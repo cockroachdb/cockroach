@@ -1351,18 +1351,20 @@ func (r *Replica) addWriteCmd(
 		}()
 	}
 
-	// This replica must have range lease to process a write, except when it's
-	// an attempt to unfreeze the Range. These are a special case in which any
-	// replica will propose it to get back to an active state.
-	if pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
-		if _, frozen := pErr.GetDetail().(*roachpb.RangeFrozenError); !frozen {
-			return nil, pErr
+	if !ba.IsSingleSkipLeaseCheckRequest() {
+		// This replica must have range lease to process a write, except when it's
+		// an attempt to unfreeze the Range. These are a special case in which any
+		// replica will propose it to get back to an active state.
+		if pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
+			if _, frozen := pErr.GetDetail().(*roachpb.RangeFrozenError); !frozen {
+				return nil, pErr
+			}
+			// Only continue if the batch appears freezing-related.
+			if !ba.IsFreeze() {
+				return nil, pErr
+			}
+			pErr = nil
 		}
-		// Only continue if the batch appears freezing-related.
-		if !ba.IsFreeze() {
-			return nil, pErr
-		}
-		pErr = nil
 	}
 
 	if !isNonKV {
