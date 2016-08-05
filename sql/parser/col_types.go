@@ -59,7 +59,7 @@ func (node *BoolColType) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // Pre-allocated immutable integer column types.
 var (
-	intColTypeBit         = &IntColType{Name: "BIT"}
+	intColTypeBit         = &IntColType{Name: "BIT", N: 1, ImplicitWidth: true}
 	intColTypeInt         = &IntColType{Name: "INT"}
 	intColTypeInt64       = &IntColType{Name: "INT64"}
 	intColTypeInteger     = &IntColType{Name: "INTEGER"}
@@ -70,23 +70,26 @@ var (
 	intColTypeBigSerial   = &IntColType{Name: "BIGSERIAL"}
 )
 
-func newIntBitType(n int) *IntColType {
-	if n == 0 {
-		return intColTypeBit
+var errBitLengthNotPositive = errors.New("length for type bit must be at least 1")
+
+func newIntBitType(n int) (*IntColType, error) {
+	if n < 1 {
+		return nil, errBitLengthNotPositive
 	}
-	return &IntColType{Name: "BIT", N: n}
+	return &IntColType{Name: "BIT", N: n}, nil
 }
 
 // IntColType represents an INT, INTEGER, SMALLINT or BIGINT type.
 type IntColType struct {
-	Name string
-	N    int
+	Name          string
+	N             int
+	ImplicitWidth bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *IntColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
-	if node.N > 0 {
+	if node.N > 0 && !node.ImplicitWidth {
 		fmt.Fprintf(buf, "(%d)", node.N)
 	}
 }

@@ -18,11 +18,10 @@ package parser
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util/duration"
-
-	"fmt"
 )
 
 type intervalLexer struct {
