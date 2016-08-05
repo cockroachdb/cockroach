@@ -108,6 +108,12 @@ func (ba *BatchRequest) IsSingleNonKVRequest() bool {
 	return ba.IsSingleRequest() && ba.hasFlag(isNonKV)
 }
 
+// IsSingleSkipLeaseCheckRequest returns true iff the batch contains a single
+// request, and that request has the skipLeaseCheck flag set.
+func (ba *BatchRequest) IsSingleSkipLeaseCheckRequest() bool {
+	return ba.IsSingleRequest() && ba.hasFlag(skipLeaseCheck)
+}
+
 // hasFlag returns true iff one of the requests within the batch contains the
 // specified flag.
 func (ba *BatchRequest) hasFlag(flag int) bool {
