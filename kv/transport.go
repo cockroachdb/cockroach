@@ -166,7 +166,7 @@ func (gt *grpcTransport) SendNext(done chan BatchCall) {
 
 	addr := client.remoteAddr
 	if log.V(2) {
-		log.Infof(context.TODO(), "sending request to %s: %+v", addr, client.args)
+		log.Infof(gt.opts.Context, "sending request to %s: %+v", addr, client.args)
 	}
 
 	if localServer := gt.rpcContext.GetLocalInternalServerForAddr(addr); enableLocalCalls && localServer != nil {
