@@ -46,9 +46,6 @@ func checkRangeReplication(t *testing.T, c cluster.Cluster, d time.Duration) {
 		t.Log("replication test is a no-op for empty cluster")
 		return
 	}
-	// Always talk to node 0.
-	client, dbStopper := c.NewClient(t, 0)
-	defer dbStopper.Stop()
 
 	wantedReplicas := 3
 	if c.NumNodes() < 3 {
@@ -58,6 +55,12 @@ func checkRangeReplication(t *testing.T, c cluster.Cluster, d time.Duration) {
 	log.Infof(context.Background(), "waiting for first range to have %d replicas", wantedReplicas)
 
 	util.SucceedsSoon(t, func() error {
+		// Reconnect on every iteration; gRPC will eagerly tank the connection
+		// on transport errors. Always talk to node 0 because it's guaranteed
+		// to exist.
+		client, dbStopper := c.NewClient(t, 0)
+		defer dbStopper.Stop()
+
 		select {
 		case <-stopper:
 			t.Fatalf("interrupted")

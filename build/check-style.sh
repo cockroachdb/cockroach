@@ -135,10 +135,7 @@ TestGoimports() {
 }
 
 TestUnconvert() {
-  # TODO(tamird): use upstream when
-  # https://github.com/mdempsky/unconvert/issues/3 is fixed. See
-  # https://github.com/mdempsky/unconvert/pull/12.
-  ! unconvert "$PKG" | grep -vF '.pb.go:' | grep -vF 'github.com/cockroachdb/cockroach/storage/engine/rocksdb'
+  ! unconvert "$PKG" | grep -vF '.pb.go:'
 }
 
 TestUnused() {
