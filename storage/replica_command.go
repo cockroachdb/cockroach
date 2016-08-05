@@ -1613,7 +1613,7 @@ func (r *Replica) RequestLease(
 		return roachpb.RequestLeaseResponse{}, newFailedLeaseTrigger(), rErr
 	}
 	args.Lease.Start = effectiveStart
-	return r.applyNewLeaseLocked(ctx, batch, ms, args.Lease)
+	return r.applyNewLeaseLocked(ctx, batch, ms, args.Lease, isExtension)
 }
 
 // TransferLease sets the lease holder for the range.
@@ -1638,15 +1638,19 @@ func (r *Replica) TransferLease(
 			"old expiration: %s, new start: %s",
 			r, prevLease, args.Lease, prevLease.Expiration, args.Lease.Start)
 	}
-	return r.applyNewLeaseLocked(ctx, batch, ms, args.Lease)
+	return r.applyNewLeaseLocked(ctx, batch, ms, args.Lease, false /* isExtension */)
 }
 
 // applyNewLeaseLocked checks that the lease contains a valid interval and that
 // the new lease holder is still a member of the replica set, and then proceeds
 // to write the new lease to the batch, emitting an appropriate trigger.
-
+//
 // The new lease might be a lease for a range that didn't previously have an
 // active lease, might be an extension or a lease transfer.
+//
+// isExtension should be set if the lease holder does not change with this
+// lease. If it doesn't change, we don't need a PostCommitTrigger that
+// synchronizes with reads.
 //
 // r.mu needs to be locked.
 //
@@ -1657,6 +1661,7 @@ func (r *Replica) applyNewLeaseLocked(
 	batch engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	lease roachpb.Lease,
+	isExtension bool,
 ) (roachpb.RequestLeaseResponse, *PostCommitTrigger, error) {
 	// When returning an error from this method, must always return
 	// a newFailedLeaseTrigger() to satisfy stats.
@@ -1697,11 +1702,12 @@ func (r *Replica) applyNewLeaseLocked(
 		// reads could sneak in on a new lease holder between setting the lease
 		// and updating the low water mark. This in itself isn't a consistency
 		// violation, but it's a bit suspicious and did make
-		// TestRangeTransferLease flaky. We err on the side of caution for now.
+		// TestRangeTransferLease flaky. We err on the side of caution for now, but
+		// at least we don't do it in case of an extension.
 		//
-		// TODO(tschottdorf): Could only do this on transfers, or not at all.
-		// Need to think through potential consequences.
-		noConcurrentReads:  true,
+		// TODO(tschottdorf): Maybe we shouldn't do this at all. Need to think
+		// through potential consequences.
+		noConcurrentReads:  !isExtension,
 		lease:              &lease,
 		leaseMetricsResult: &t,
 		// TODO(tschottdorf): having traced the origin of this call back to

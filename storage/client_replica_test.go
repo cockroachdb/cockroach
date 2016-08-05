@@ -27,13 +27,16 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -652,4 +655,84 @@ func TestRangeTransferLease(t *testing.T) {
 	filter = nil
 	filterMu.Unlock()
 	wg.Wait()
+}
+
+// Test that a lease extension (a RequestLeaseRequest that doesn't change the
+// lease holder) is not blocked by ongoing reads.
+// Note that lease transfers are blocked by reads through their
+// PostCommitTrigger.noConcurrentReads.
+func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	readBlocked := make(chan struct{})
+	cmdFilter := func(fArgs storagebase.FilterArgs) *roachpb.Error {
+		if fArgs.Hdr.UserPriority == 42 {
+			// Signal that the read is blocked.
+			readBlocked <- struct{}{}
+			// Wait for read to be unblocked.
+			<-readBlocked
+		}
+		return nil
+	}
+	srv, _, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &storage.StoreTestingKnobs{
+					TestingCommandFilter: cmdFilter,
+				},
+			},
+		})
+	s := srv.(*server.TestServer)
+	defer s.Stopper().Stop()
+
+	// Start a read and wait for it to block.
+	key := roachpb.Key("a")
+	errChan := make(chan error)
+	go func() {
+		getReq := roachpb.GetRequest{
+			Span: roachpb.Span{
+				Key: key,
+			},
+		}
+		if _, pErr := client.SendWrappedWith(s.GetDistSender(), nil,
+			roachpb.Header{UserPriority: 42},
+			&getReq); pErr != nil {
+			errChan <- pErr.GoError()
+		}
+	}()
+
+	select {
+	case err := <-errChan:
+		t.Fatal(err)
+	case <-readBlocked:
+		// Send the lease request.
+		// We change the key slightly, otherwise the lease request will be blocked
+		// by the read through the command queue.
+		// TODO(andrei): don't change the key anymore once lease requests don't go
+		// through the command queue any more.
+		leaseHdrKey := roachpb.Key(append(key, 0x00))
+		rKey, err := keys.Addr(leaseHdrKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, repDesc, err := s.Stores().LookupReplica(rKey, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		leaseReq := roachpb.RequestLeaseRequest{
+			Span: roachpb.Span{
+				Key: leaseHdrKey,
+			},
+			Lease: roachpb.Lease{
+				Start:       s.Clock().Now(),
+				StartStasis: s.Clock().Now().Add(time.Second.Nanoseconds(), 0),
+				Expiration:  s.Clock().Now().Add(2*time.Second.Nanoseconds(), 0),
+				Replica:     repDesc,
+			},
+		}
+		if _, pErr := client.SendWrapped(s.GetDistSender(), nil, &leaseReq); pErr != nil {
+			t.Fatal(pErr)
+		}
+		// Unblock the read.
+		readBlocked <- struct{}{}
+	}
 }
