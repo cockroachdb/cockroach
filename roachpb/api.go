@@ -84,6 +84,9 @@ const (
 	// Some commands can skip interacting with the command queue and the timestamp
 	// cache. For example, RequestLeaseRequest is sequenced exclusively by Raft.
 	isNonTemporal
+	// Requests for acquiring a lease skip the check that the proposing replica
+	// has a valid lease.
+	skipLeaseCheck
 )
 
 // GetTxnID returns the transaction ID if the header has a transaction
