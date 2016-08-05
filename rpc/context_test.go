@@ -30,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -179,6 +180,49 @@ func TestHeartbeatHealth(t *testing.T) {
 
 	if clientCtx.IsConnHealthy("non-existent connection") {
 		t.Errorf("non-existent connection is reported as healthy")
+	}
+}
+
+// TestHeartbeatHealth verifies that the health status changes after
+// heartbeats succeed or fail due to transport failures.
+func TestHeartbeatHealthTransport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	// Can't be zero because that'd be an empty offset.
+	clock := hlc.NewClock(time.Unix(0, 1).UnixNano)
+
+	clientCtx := newNodeTestContext(clock, stopper)
+	// Make the intervals and timeouts shorter to speed up the tests.
+	clientCtx.HeartbeatInterval = 1 * time.Millisecond
+	clientCtx.HeartbeatTimeout = 1 * time.Millisecond
+
+	// Bind to a kernel-generated port and then close the listener to guarantee
+	// a connection refused error.
+	ln, err := net.Listen("tcp", util.TestAddr.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	remoteAddr := ln.Addr().String()
+	if err := ln.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	conn, err := clientCtx.GRPCDial(remoteAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	heartbeatClient := NewHeartbeatClient(conn)
+
+	// Use a `FailFast(false)` RPC to confirm that this RPC fails due to the
+	// context's heartbeat loop failing and closing the connection, and not due
+	// to the induced transport failure. The use of the heartbeat RPC here is
+	// done for convenience, and has nothing to do with the heartbeats performed
+	// by the context.
+	if _, err := heartbeatClient.Ping(context.Background(), &PingRequest{}, grpc.FailFast(false)); !grpcutil.IsClosedConnection(err) {
+		t.Fatalf("expected grpc connection closure; got: %v", err)
 	}
 }
 

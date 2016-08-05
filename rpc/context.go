@@ -22,7 +22,6 @@ import (
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -267,9 +266,6 @@ func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, breaker *circuit.Breaker, 
 		response, err := ctx.heartbeat(heartbeatClient, request)
 		ctx.setConnHealthy(remoteAddr, err == nil)
 		if err != nil {
-			if grpc.Code(err) == codes.DeadlineExceeded {
-				continue
-			}
 			breaker.Fail()
 			return err
 		}
@@ -312,7 +308,5 @@ func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, breaker *circuit.Breaker, 
 func (ctx *Context) heartbeat(heartbeatClient HeartbeatClient, request PingRequest) (*PingResponse, error) {
 	goCtx, cancel := context.WithTimeout(context.Background(), ctx.HeartbeatTimeout)
 	defer cancel()
-	// NB: We want the request to fail-fast (the default), otherwise we won't be
-	// notified of transport failures.
-	return heartbeatClient.Ping(goCtx, &request)
+	return heartbeatClient.Ping(goCtx, &request, grpc.FailFast(false))
 }
