@@ -6064,6 +6064,12 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
+	// Grab processRaftMu in order to block normal raft replica processing. This
+	// test is ticking the replicas manually and doesn't want the store to be
+	// doing so concurrently.
+	tc.store.processRaftMu.Lock()
+	defer tc.store.processRaftMu.Unlock()
+
 	// We tick the replica 2*RaftElectionTimeoutTicks. RaftElectionTimeoutTicks
 	// is special in that it controls how often pending commands are reproposed
 	// or refurbished.
