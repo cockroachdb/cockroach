@@ -161,8 +161,8 @@ func (n UnresolvedName) normalizeTableNameAsValue() (TableName, error) {
 }
 
 // NormalizeTableName implements the TableNameReference interface.
-func (u UnresolvedName) NormalizeTableName() (*TableName, error) {
-	tn, err := u.normalizeTableNameAsValue()
+func (n UnresolvedName) NormalizeTableName() (*TableName, error) {
+	tn, err := n.normalizeTableNameAsValue()
 	if err != nil {
 		return nil, err
 	}

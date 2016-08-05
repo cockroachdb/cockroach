@@ -525,7 +525,7 @@ func getRenderColName(target parser.SelectExpr) string {
 	// as render name.
 	if c, ok := target.Expr.(*parser.ColumnItem); ok {
 		// We only shorten the name of the result column to become the
-		// unqualified column part of this expr QualifiedName if there is
+		// unqualified column part of this expr name if there is
 		// no additional subscripting on the column.
 		if len(c.Selector) == 0 {
 			return c.Column()

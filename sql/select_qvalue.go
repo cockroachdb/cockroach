@@ -48,7 +48,7 @@ type qvalResolver struct {
 }
 
 // qvalue implements the parser.VariableExpr interface and is used as a
-// replacement node for QualifiedNames in expressions that can change their
+// replacement node for VarNames in expressions that can change their
 // values for each row. Since it is a reference, expression walking can
 // discover the qvalues and the columns they refer to.
 type qvalue struct {

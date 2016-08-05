@@ -189,10 +189,10 @@ CREATE TABLE xyzw (
 statement ok
 INSERT INTO xyzw VALUES (4, 5, 6, 7), (1, 2, 3, 4);
 
-query error qualified name \"x\" not found
+query error name \"x\" is not defined
 SELECT * FROM xyzw LIMIT x
 
-query error qualified name \"y\" not found
+query error name \"y\" is not defined
 SELECT * FROM xyzw OFFSET 1 + y
 
 query error argument of LIMIT must be type int, not type string

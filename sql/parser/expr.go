@@ -44,14 +44,16 @@ type Expr interface {
 // TypedExpr represents a well-typed expression.
 type TypedExpr interface {
 	Expr
-	// Eval evaluates an SQL expression. Expression evaluation is a mostly
-	// straightforward walk over the parse tree. The only significant complexity is
-	// the handling of types and implicit conversions. See binOps and cmpOps for
-	// more details. Note that expression evaluation returns an error if certain
-	// node types are encountered: Placeholder, QualifiedName or Subquery. These nodes
-	// should be replaced prior to expression evaluation by an appropriate
-	// WalkExpr. For example, Placeholder should be replace by the argument passed from
-	// the client.
+	// Eval evaluates an SQL expression. Expression evaluation is a
+	// mostly straightforward walk over the parse tree. The only
+	// significant complexity is the handling of types and implicit
+	// conversions. See binOps and cmpOps for more details. Note that
+	// expression evaluation returns an error if certain node types are
+	// encountered: Placeholder, VarName (and related UnqualifiedStar,
+	// UnresolvedName and AllColumnsSelector) or Subquery. These nodes
+	// should be replaced prior to expression evaluation by an
+	// appropriate WalkExpr. For example, Placeholder should be replace
+	// by the argument passed from the client.
 	Eval(*EvalContext) (Datum, error)
 	// ReturnType provides the type of the TypedExpr, which is the type of Datum that
 	// the TypedExpr will return when evaluated.
@@ -812,11 +814,6 @@ func (node *FuncExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.Type != 0 {
 		typ = funcTypeName[node.Type] + " "
 	}
-	// TODO(nvanbenschoten) We should probably either remove
-	// *QualifiedName as a TypedExpr or special case it in
-	// FormatNode. The reason it's a TypedExpr in the first place is for
-	// testing (I believe), but this doesn't seem like a good enough
-	// reason to justify the strangeness.
 	FormatNode(buf, f, node.Name)
 	buf.WriteByte('(')
 	buf.WriteString(typ)

@@ -44,7 +44,7 @@ func TestNormalizeFunctionName(t *testing.T) {
 		}
 		f, ok := stmt.(*Select).Select.(*SelectClause).Exprs[0].Expr.(*FuncExpr)
 		if !ok {
-			t.Fatalf("%s does not parse to a QualifiedName", tc.in)
+			t.Fatalf("%s does not parse to a FuncExpr", tc.in)
 		}
 		q := f.Name
 		_, err = q.Normalize()

@@ -184,10 +184,10 @@ func (c *ColumnItem) Variable() {}
 
 // ReturnType implements the TypedExpr interface.
 func (c *ColumnItem) ReturnType() Datum {
-	if qualifiedNameTypes == nil {
+	if presetTypesForTesting == nil {
 		return nil
 	}
-	return qualifiedNameTypes[c.String()]
+	return presetTypesForTesting[c.String()]
 }
 
 // NormalizeVarName normalizes a UnresolvedName for all the forms it can have

@@ -441,14 +441,14 @@ func (expr *ParenExpr) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, er
 	return expr, nil
 }
 
-// qualifiedNameTypes is a mapping of qualified names to types that can be mocked out
+// presetTypesForTesting is a mapping of qualified names to types that can be mocked out
 // for tests to allow the qualified names to be type checked without throwing an error.
-var qualifiedNameTypes map[string]Datum
+var presetTypesForTesting map[string]Datum
 
-func mockQualifiedNameTypes(types map[string]Datum) func() {
-	qualifiedNameTypes = types
+func mockNameTypes(types map[string]Datum) func() {
+	presetTypesForTesting = types
 	return func() {
-		qualifiedNameTypes = nil
+		presetTypesForTesting = nil
 	}
 }
 
@@ -458,10 +458,10 @@ func mockQualifiedNameTypes(types map[string]Datum) func() {
 // checking.
 func (expr *ColumnItem) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) {
 	name := expr.String()
-	if _, ok := qualifiedNameTypes[name]; ok {
+	if _, ok := presetTypesForTesting[name]; ok {
 		return expr, nil
 	}
-	return nil, fmt.Errorf("qualified name \"%s\" not found", name)
+	return nil, fmt.Errorf("name \"%s\" is not defined", name)
 }
 
 // TypeCheck implements the Expr interface.
