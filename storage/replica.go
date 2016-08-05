@@ -465,11 +465,14 @@ func (r *Replica) newReplicaInner(desc *roachpb.RangeDescriptor, clock *hlc.Cloc
 	return nil
 }
 
-// String returns a string representation of the range.
+// String returns the string representation of the replica using an
+// inconsistent copy of the range descriptor. Therefore, String does not
+// require a lock and its output may not be atomic with other ongoing work in
+// the replica. This is done to prevent deadlocks in logging sites.
 func (r *Replica) String() string {
-	desc := r.InconsistentDesc()
+	inconsistentDesc := r.rangeDesc.Load().(*roachpb.RangeDescriptor)
 	return fmt.Sprintf("%s range=%d [%s-%s)", r.store,
-		desc.RangeID, desc.StartKey, desc.EndKey)
+		inconsistentDesc.RangeID, inconsistentDesc.StartKey, inconsistentDesc.EndKey)
 }
 
 // Destroy clears pending command queue by sending each pending
@@ -710,14 +713,6 @@ func (r *Replica) Desc() *roachpb.RangeDescriptor {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.mu.state.Desc
-}
-
-// InconsistentDesc returns a cached copy of the authoritative desc which is
-// kept in sync with the authoritative desc, though not atomically. This
-// method does not acquire a lock and is to be used whenever a descriptor is
-// needed for informational purposes.
-func (r *Replica) InconsistentDesc() *roachpb.RangeDescriptor {
-	return r.rangeDesc.Load().(*roachpb.RangeDescriptor)
 }
 
 // setDesc atomically sets the range's descriptor. This method calls
