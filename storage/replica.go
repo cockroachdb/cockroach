@@ -1554,6 +1554,30 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 	})
 }
 
+func (r *Replica) handleRaftMessage(req *RaftMessageRequest) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
+		// RaftStatus.Lead only changes within calls to RawNode.Step(). We watch
+		// for changes and refresh (repropose or refurbish) pending commands if the
+		// raft leader changes.
+		oldLead := raftGroup.Status().Lead
+		if err := raftGroup.Step(req.Message); err != nil {
+			return err
+		}
+		newLead := raftGroup.Status().Lead
+		if oldLead != newLead {
+			if log.V(3) {
+				log.Infof(context.TODO(), "%s: raft leader changed: %d -> %d", r, oldLead, newLead)
+			}
+			if newLead != 0 {
+				return r.refreshPendingCmdsLocked(reasonNewLeader, 0)
+			}
+		}
+		return nil
+	})
+}
+
 func (r *Replica) handleRaftReady() error {
 	ctx := context.TODO()
 	var hasReady bool
@@ -1578,6 +1602,7 @@ func (r *Replica) handleRaftReady() error {
 
 	logRaftReady(ctx, r, rd)
 
+	refreshReason := noReason
 	if !raft.IsEmptySnap(rd.Snapshot) {
 		if err := r.applySnapshot(ctx, rd.Snapshot, rd.HardState); err != nil {
 			return err
@@ -1586,6 +1611,13 @@ func (r *Replica) handleRaftReady() error {
 		if lastIndex, err = loadLastIndex(ctx, r.store.Engine(), r.RangeID); err != nil {
 			return err
 		}
+		// We refresh pending commands after applying a snapshot because this
+		// replica may have been temporarily partitioned from the Raft group and
+		// missed leadership changes that occurred. Suppose node A is the leader,
+		// and then node C gets partitioned away from the others. Leadership passes
+		// back and forth between A and B during the partition, but when the
+		// partition is healed node A is leader again.
+		refreshReason = reasonSnapshotApplied
 		// TODO(bdarnell): update coalesced heartbeat mapping with snapshot info.
 	}
 	batch := r.store.Engine().NewBatch()
@@ -1619,18 +1651,6 @@ func (r *Replica) handleRaftReady() error {
 		r.sendRaftMessage(msg)
 	}
 
-	// Process committed entries. etcd raft occasionally adds a nil
-	// entry (our own commands are never empty). This happens in two
-	// situations: When a new leader is elected, and when a config
-	// change is dropped due to the "one at a time" rule. In both
-	// cases we may need to resubmit our pending proposals (In the
-	// former case we resubmit everything because we proposed them to
-	// a former leader that is no longer able to commit them. In the
-	// latter case we only need to resubmit pending config changes,
-	// but it's hard to distinguish so we resubmit everything
-	// anyway). We delay resubmission until after we have processed
-	// the entire batch of entries.
-	shouldReproposeCmds := false
 	for _, e := range rd.CommittedEntries {
 		switch e.Type {
 		case raftpb.EntryNormal:
@@ -1638,8 +1658,20 @@ func (r *Replica) handleRaftReady() error {
 			var commandID string
 			var command roachpb.RaftCommand
 
+			// Process committed entries. etcd raft occasionally adds a nil entry
+			// (our own commands are never empty). This happens in two situations:
+			// When a new leader is elected, and when a config change is dropped due
+			// to the "one at a time" rule. In both cases we may need to resubmit our
+			// pending proposals (In the former case we resubmit everything because
+			// we proposed them to a former leader that is no longer able to commit
+			// them. In the latter case we only need to resubmit pending config
+			// changes, but it's hard to distinguish so we resubmit everything
+			// anyway). We delay resubmission until after we have processed the
+			// entire batch of entries.
 			if len(e.Data) == 0 {
-				shouldReproposeCmds = true
+				if refreshReason == noReason {
+					refreshReason = reasonNewLeaderOrConfigChange
+				}
 				commandID = "" // special-cased value, command isn't used
 			} else {
 				var encodedCommand []byte
@@ -1681,9 +1713,9 @@ func (r *Replica) handleRaftReady() error {
 			log.Fatalf(context.TODO(), "%s: unexpected Raft entry: %v", r, e)
 		}
 	}
-	if shouldReproposeCmds {
+	if refreshReason != noReason {
 		r.mu.Lock()
-		err := r.refreshPendingCmdsLocked(reasonNewLeaderOrConfigChange, 0)
+		err := r.refreshPendingCmdsLocked(refreshReason, 0)
 		r.mu.Unlock()
 		if err != nil {
 			return err
@@ -1742,7 +1774,9 @@ type refreshRaftReason int
 
 const (
 	noReason refreshRaftReason = iota
+	reasonNewLeader
 	reasonNewLeaderOrConfigChange
+	reasonSnapshotApplied
 	reasonReplicaIDChanged
 	reasonTicks
 )
