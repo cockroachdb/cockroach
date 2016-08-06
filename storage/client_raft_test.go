@@ -493,7 +493,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 
 	// Truncate the log at index+1 (log entries < N are removed, so this includes
 	// the increment).
-	truncArgs := truncateLogArgs(index + 1)
+	truncArgs := truncateLogArgs(index+1, 1)
 	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &truncArgs); err != nil {
 		t.Fatal(err)
 	}
@@ -560,6 +560,79 @@ func TestReplicateAfterTruncation(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// Test various mechanism for refreshing pending commands.
+func TestRefreshPendingCommands(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []storage.StoreTestingKnobs{
+		{DisableRefreshReasonNewLeader: true, DisableRefreshReasonTicks: true},
+		{DisableRefreshReasonSnapshotApplied: true, DisableRefreshReasonTicks: true},
+		{DisableRefreshReasonNewLeader: true, DisableRefreshReasonSnapshotApplied: true},
+	}
+	for _, c := range testCases {
+		func() {
+			ctx := storage.TestStoreContext()
+			ctx.TestingKnobs = c
+			mtc := &multiTestContext{storeContext: &ctx}
+			mtc.Start(t, 3)
+			defer mtc.Stop()
+
+			rangeID := roachpb.RangeID(1)
+			mtc.replicateRange(rangeID, 1, 2)
+
+			// Put some data in the range so we'll have something to test for.
+			incArgs := incrementArgs([]byte("a"), 5)
+			if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+				t.Fatal(err)
+			}
+
+			// Wait for all nodes to catch up.
+			mtc.waitForValues(roachpb.Key("a"), []int64{5, 5, 5})
+
+			// Stop node 2; while it is down write some more data.
+			mtc.stopStore(2)
+
+			if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+				t.Fatal(err)
+			}
+
+			// Get the last increment's log index.
+			rng, err := mtc.stores[0].GetReplica(1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			index, err := rng.GetLastIndex()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Truncate the log at index+1 (log entries < N are removed, so this includes
+			// the increment).
+			truncArgs := truncateLogArgs(index+1, rangeID)
+			if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &truncArgs); err != nil {
+				t.Fatal(err)
+			}
+
+			// Expire existing leases (i.e. move the clock forward).
+			mtc.expireLeases()
+
+			// Restart node 2 and wait for the snapshot to be applied. Note that
+			// waitForValues reads directly from the engine.
+			mtc.restartStore(2)
+			mtc.waitForValues(roachpb.Key("a"), []int64{10, 10, 10})
+
+			// Send an increment to the restarted node. If we don't refresh pending
+			// commands appropriately, the range lease command will not get
+			// re-proposed when we discover the new leader.
+			if _, err := client.SendWrapped(rg1(mtc.stores[2]), nil, &incArgs); err != nil {
+				t.Fatal(err)
+			}
+
+			mtc.waitForValues(roachpb.Key("a"), []int64{15, 15, 15})
+		}()
+	}
 }
 
 // TestStoreRangeUpReplicate verifies that the replication queue will notice
