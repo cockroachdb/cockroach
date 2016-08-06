@@ -2464,9 +2464,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 			r.store.StoreID(), req.RangeID)
 	}
 
-	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
-		return raftGroup.Step(req.Message)
-	}); err != nil {
+	if err := r.handleRaftMessage(req); err != nil {
 		return err
 	}
 

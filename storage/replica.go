@@ -1551,6 +1551,30 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 	})
 }
 
+func (r *Replica) handleRaftMessage(req *RaftMessageRequest) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
+		// RaftStatus.Lead only changes within calls to RawNode.Step(). We watch
+		// for changes and refresh (repropose or refurbish) pending commands if the
+		// raft leader changes.
+		oldLead := raftGroup.Status().Lead
+		if err := raftGroup.Step(req.Message); err != nil {
+			return err
+		}
+		newLead := raftGroup.Status().Lead
+		if oldLead != newLead {
+			if log.V(3) {
+				log.Infof(context.TODO(), "%s: raft leader changed: %d -> %d", r, oldLead, newLead)
+			}
+			if newLead != 0 {
+				return r.refreshPendingCmdsLocked(reasonNewLeader, 0)
+			}
+		}
+		return nil
+	})
+}
+
 func (r *Replica) handleRaftReady() error {
 	ctx := context.TODO()
 	var hasReady bool
@@ -1739,6 +1763,7 @@ type refreshRaftReason int
 
 const (
 	noReason refreshRaftReason = iota
+	reasonNewLeader
 	reasonNewLeaderOrConfigChange
 	reasonReplicaIDChanged
 	reasonTicks
