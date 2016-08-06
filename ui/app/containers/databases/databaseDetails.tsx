@@ -8,7 +8,7 @@ import { databaseName } from "../../util/constants";
 
 import { AdminUIState } from "../../redux/state";
 import { setUISetting } from "../../redux/ui";
-import { refreshDatabaseDetails } from "../../redux/databaseInfo";
+import { refreshDatabaseDetails } from "../../redux/apiReducers";
 
 import { SortableTable, SortableColumn, SortSetting } from "../../components/sortabletable";
 
@@ -213,7 +213,7 @@ class DatabaseMain extends React.Component<DatabaseMainProps, {}> {
 
   // refresh when the component is mounted
   componentWillMount() {
-    this.props.refreshDatabaseDetails(this.props.params[databaseName]);
+    this.props.refreshDatabaseDetails({ database: this.props.params[databaseName] });
   }
 
   render() {
@@ -245,7 +245,7 @@ class DatabaseMain extends React.Component<DatabaseMainProps, {}> {
 
 // Helper function that gets a DatabaseDetailsResponseMessage given a state and props
 function getDatabaseDetails(state: AdminUIState, props: IInjectedProps): DatabaseDetailsResponseMessage {
-  let details = state.databaseInfo.databaseDetails[props.params[databaseName]];
+  let details = state.cachedData.databaseDetails[props.params[databaseName]];
   return details && details.data;
 }
 

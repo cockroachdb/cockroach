@@ -8,7 +8,6 @@ import uiReducer, * as ui from "./ui";
 import uiDataReducer, * as uiData from "./uiData";
 import metricsReducer, * as metrics from "./metrics";
 import timeWindowReducer, * as timewindow from "./timewindow";
-import databaseInfoReducer, * as databaseInfo from "./databaseInfo";
 import apiReducersReducer, * as apiReducers from "./apiReducers";
 
 export interface AdminUIState {
@@ -17,7 +16,6 @@ export interface AdminUIState {
     uiData: uiData.UIDataSet;
     metrics: metrics.MetricQueryState;
     timewindow: timewindow.TimeWindowState;
-    databaseInfo: databaseInfo.DatabaseInfoState;
     cachedData: apiReducers.APIReducersState;
 }
 
@@ -28,7 +26,6 @@ export const store = createStore<AdminUIState>(
     uiData: uiDataReducer,
     metrics: metricsReducer,
     timewindow: timeWindowReducer,
-    databaseInfo: databaseInfoReducer,
     cachedData: apiReducersReducer,
   }),
   compose(
