@@ -331,9 +331,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 
 				// We successfully resolved the intents, so we're able to GC from
 				// the txn span directly.
-				var ba roachpb.BatchRequest
-				ba.Timestamp = now
-
+				b := &client.Batch{}
 				txn := item.intents[0].Txn
 				gcArgs := roachpb.GCRequest{
 					Span: roachpb.Span{
@@ -344,9 +342,9 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				gcArgs.Keys = append(gcArgs.Keys, roachpb.GCRequest_GCKey{
 					Key: keys.TransactionKey(txn.Key, txn.ID),
 				})
-				ba.Add(&gcArgs)
-				if _, pErr := r.addWriteCmd(ctxWithTimeout, ba, nil /* nil */); pErr != nil {
-					log.Warningf(context.TODO(), "could not GC completed transaction: %s", pErr)
+				b.AddRawRequest(&gcArgs)
+				if err := ir.store.db.Run(b); err != nil {
+					log.Warningf(context.TODO(), "could not GC completed transaction: %s", err)
 				}
 			}); err != nil {
 				log.Warningf(context.TODO(), "failed to resolve intents: %s", err)
