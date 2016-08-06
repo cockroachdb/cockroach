@@ -13,3 +13,12 @@ export interface Action {
 export interface PayloadAction<T> extends Action {
   payload: T;
 }
+
+/**
+ * WithRequest implements the very common case of an action payload that has an
+ * associated Request.
+ */
+interface WithRequest<T, R> {
+  data?: T;
+  request: R;
+}
