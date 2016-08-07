@@ -2263,7 +2263,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 // "query" push if possible.
 func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now hlc.Timestamp) (*roachpb.Transaction, *roachpb.Error) {
 	// Attempt to push the transaction which created the intent.
-	b := client.Batch{}
+	b := &client.Batch{}
 	b.AddRawRequest(&roachpb.PushTxnRequest{
 		Span: roachpb.Span{
 			Key: txn.Key,
@@ -2272,7 +2272,7 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now hlc.Timesta
 		PusheeTxn: txn.TxnMeta,
 		PushType:  roachpb.PUSH_QUERY,
 	})
-	if err := s.db.Run(&b); err != nil {
+	if err := s.db.Run(b); err != nil {
 		// TODO(tschottdorf):
 		// We shouldn't catch an error here (unless it's from the abort cache, in
 		// which case we would not get the crucial information that we've been

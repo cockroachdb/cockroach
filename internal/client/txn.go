@@ -205,7 +205,7 @@ func (txn *Txn) SystemConfigTrigger() bool {
 
 // NewBatch creates and returns a new empty batch object for use with the Txn.
 func (txn *Txn) NewBatch() *Batch {
-	return &Batch{DB: &txn.db, txn: txn}
+	return &Batch{txn: txn}
 }
 
 // Get retrieves the value for a key, returning the retrieved key/value or an

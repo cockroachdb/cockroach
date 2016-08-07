@@ -590,12 +590,12 @@ func truncateAndDropTable(tableDesc *sqlbase.TableDescriptor, db *client.DB) err
 		}
 		zoneKey, nameKey, descKey := getKeysForTableDescriptor(tableDesc)
 		// Delete table descriptor
-		b := client.Batch{}
+		b := &client.Batch{}
 		b.Del(descKey)
 		b.Del(nameKey)
 		// Delete the zone config entry for this table.
 		b.Del(zoneKey)
 		txn.SetSystemConfigTrigger()
-		return txn.Run(&b)
+		return txn.Run(b)
 	})
 }

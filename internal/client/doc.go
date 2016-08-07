@@ -100,7 +100,7 @@ necessary. An example of using transactions with parallel writes:
 	}
 
 	err := db.Txn(func(txn *client.Txn) error {
-		b := db.NewBatch()
+		b := txn.NewBatch()
 		for i := 0; i < 100; i++ {
 			key := fmt.Sprintf("testkey-%02d", i)
 			b.Put(key, "test value")

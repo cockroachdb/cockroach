@@ -811,7 +811,7 @@ func TestBatchMixRawRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	db := NewDB(newTestSender(nil, nil))
 
-	b := db.NewBatch()
+	b := &Batch{}
 	b.AddRawRequest(&roachpb.EndTransactionRequest{})
 	b.Put("x", "y")
 	if err := db.Run(b); !testutils.IsError(err, "non-raw operations") {
