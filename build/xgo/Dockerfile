@@ -1,6 +1,4 @@
-# TODO(tamird): update to 1.6.3 or 1.7 when
-# https://github.com/karalabe/xgo/pull/60/files is merged.
-FROM karalabe/xgo-1.6.2
+FROM karalabe/xgo-1.7rc5
 
 MAINTAINER Tamir Duberstein <tamird@gmail.com>
 
