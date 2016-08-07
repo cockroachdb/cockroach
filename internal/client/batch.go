@@ -34,9 +34,6 @@ const (
 // TODO(pmattis): Allow a timestamp to be specified which is applied to all
 // operations within the batch.
 type Batch struct {
-	// The DB the batch is associated with. This field may be nil if the batch
-	// was not created via DB.NewBatch or Txn.NewBatch.
-	DB *DB
 	// The Txn the batch is associated with. This field may be nil if the batch
 	// was not created via Txn.NewBatch.
 	txn *Txn

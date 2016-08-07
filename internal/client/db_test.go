@@ -365,7 +365,6 @@ func TestCommonMethods(t *testing.T) {
 		key{dbType, "AdminSplit"}:              {},
 		key{dbType, "AdminTransferLease"}:      {},
 		key{dbType, "CheckConsistency"}:        {},
-		key{dbType, "NewBatch"}:                {},
 		key{dbType, "Run"}:                     {},
 		key{dbType, "Txn"}:                     {},
 		key{dbType, "GetSender"}:               {},

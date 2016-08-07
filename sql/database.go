@@ -248,12 +248,12 @@ func (p *planner) renameDatabase(oldDesc *sqlbase.DatabaseDescriptor, newName st
 	descKey := sqlbase.MakeDescMetadataKey(descID)
 	descDesc := sqlbase.WrapDescriptor(oldDesc)
 
-	b := client.Batch{}
+	b := &client.Batch{}
 	b.CPut(newKey, descID, nil)
 	b.Put(descKey, descDesc)
 	b.Del(oldKey)
 
-	if err := p.txn.Run(&b); err != nil {
+	if err := p.txn.Run(b); err != nil {
 		if _, ok := err.(*roachpb.ConditionFailedError); ok {
 			return onAlreadyExists()
 		}

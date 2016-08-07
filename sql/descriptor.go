@@ -131,7 +131,7 @@ func (p *planner) createDescriptor(plainKey sqlbase.DescriptorKey, descriptor sq
 	// perfect mimicry would involve writing a sentinel key for each row as well.
 	descKey := sqlbase.MakeDescMetadataKey(descriptor.GetID())
 
-	b := client.Batch{}
+	b := &client.Batch{}
 	descID := descriptor.GetID()
 	descDesc := sqlbase.WrapDescriptor(descriptor)
 	if log.V(2) {
@@ -148,7 +148,7 @@ func (p *planner) createDescriptor(plainKey sqlbase.DescriptorKey, descriptor sq
 		return expectDescriptor(systemConfig, descKey, descDesc)
 	})
 
-	return true, p.txn.Run(&b)
+	return true, p.txn.Run(b)
 }
 
 // getDescriptor implements the DescriptorAccessor interface.

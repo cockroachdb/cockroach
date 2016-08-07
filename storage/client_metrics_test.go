@@ -215,7 +215,7 @@ func TestStoreMetrics(t *testing.T) {
 	// Create a transaction statement that fails, but will add an entry to the
 	// sequence cache. Regression test for #4969.
 	if err := mtc.dbs[0].Txn(func(txn *client.Txn) error {
-		b := &client.Batch{}
+		b := txn.NewBatch()
 		b.CPut(dataKey, 7, 6)
 		return txn.Run(b)
 	}); err == nil {
