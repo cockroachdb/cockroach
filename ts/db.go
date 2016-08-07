@@ -130,7 +130,7 @@ func (db *DB) StoreData(r Resolution, data []tspb.TimeSeriesData) error {
 	}
 
 	// Send the individual internal merge requests.
-	b := client.Batch{}
+	b := &client.Batch{}
 	for _, kv := range kvs {
 		b.AddRawRequest(&roachpb.MergeRequest{
 			Span: roachpb.Span{
@@ -140,5 +140,5 @@ func (db *DB) StoreData(r Resolution, data []tspb.TimeSeriesData) error {
 		})
 	}
 
-	return db.db.Run(&b)
+	return db.db.Run(b)
 }

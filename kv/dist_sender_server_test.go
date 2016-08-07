@@ -148,7 +148,7 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 	}
 
 	for bound := 1; bound <= 20; bound++ {
-		b := db.NewBatch()
+		b := &client.Batch{}
 		b.Header.MaxSpanRequestKeys = int64(bound)
 
 		b.Scan("a", "e")
@@ -192,7 +192,7 @@ func TestMultiRangeBoundedBatchReverseScan(t *testing.T) {
 	}
 
 	for bound := 1; bound <= 20; bound++ {
-		b := db.NewBatch()
+		b := &client.Batch{}
 		b.Header.MaxSpanRequestKeys = int64(bound)
 
 		b.ReverseScan("a", "c")
@@ -227,7 +227,7 @@ func TestMultiRangeBoundedBatchScanUnsortedOrder(t *testing.T) {
 	}
 
 	bound := 6
-	b := db.NewBatch()
+	b := &client.Batch{}
 	b.Header.MaxSpanRequestKeys = int64(bound)
 	// Two non-overlapping requests out of order.
 	b.Scan("b3", "c2")
@@ -259,7 +259,7 @@ func TestMultiRangeBoundedBatchScanSortedOverlapping(t *testing.T) {
 	}
 
 	bound := 6
-	b := db.NewBatch()
+	b := &client.Batch{}
 	b.Header.MaxSpanRequestKeys = int64(bound)
 	// Two ordered overlapping requests.
 	b.Scan("a", "d")

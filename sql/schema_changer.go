@@ -260,12 +260,12 @@ func (sc SchemaChanger) exec(
 		}
 		// Free up the old name(s).
 		err := sc.db.Txn(func(txn *client.Txn) error {
-			b := client.Batch{}
+			b := txn.NewBatch()
 			for _, renameDetails := range desc.GetTable().Renames {
 				tbKey := tableKey{renameDetails.OldParentID, renameDetails.OldName}.Key()
 				b.Del(tbKey)
 			}
-			return txn.Run(&b)
+			return txn.Run(b)
 		})
 		if err != nil {
 			return err

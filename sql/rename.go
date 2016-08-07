@@ -154,11 +154,11 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	// We update the descriptor to the new name, but also leave the mapping of the
 	// old name to the id, so that the name is not reused until the schema changer
 	// has made sure it's not in use any more.
-	b := client.Batch{}
+	b := &client.Batch{}
 	b.Put(descKey, descDesc)
 	b.CPut(newTbKey, descID, nil)
 
-	if err := p.txn.Run(&b); err != nil {
+	if err := p.txn.Run(b); err != nil {
 		if _, ok := err.(*roachpb.ConditionFailedError); ok {
 			return nil, fmt.Errorf("table name %q already exists", n.NewName.Table())
 		}
