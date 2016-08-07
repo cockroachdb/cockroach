@@ -113,7 +113,7 @@ func runPut(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	var b client.Batch
+	b := &client.Batch{}
 	for i := 0; i < len(args); i += 2 {
 		b.Put(
 			unquoteArg(args[i], true /* disallow system keys */),
@@ -124,7 +124,7 @@ func runPut(cmd *cobra.Command, args []string) {
 	kvDB, stopper := makeDBClient()
 	defer stopper.Stop()
 
-	if err := kvDB.Run(&b); err != nil {
+	if err := kvDB.Run(b); err != nil {
 		panicf("put failed: %s", err)
 	}
 }
@@ -227,7 +227,7 @@ func runDel(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	var b client.Batch
+	b := &client.Batch{}
 	for _, arg := range args {
 		b.Del(unquoteArg(arg, true /* disallow system keys */))
 	}
@@ -235,7 +235,7 @@ func runDel(cmd *cobra.Command, args []string) {
 	kvDB, stopper := makeDBClient()
 	defer stopper.Stop()
 
-	if err := kvDB.Run(&b); err != nil {
+	if err := kvDB.Run(b); err != nil {
 		panicf("delete failed: %s", err)
 	}
 }

@@ -810,9 +810,9 @@ func TestInconsistentReads(t *testing.T) {
 	db := client.NewDB(senderFn)
 
 	prepInconsistent := func() *client.Batch {
-		var b client.Batch
+		b := &client.Batch{}
 		b.Header.ReadConsistency = roachpb.INCONSISTENT
-		return &b
+		return b
 	}
 
 	// Perform inconsistent reads through the mocked sender function.
@@ -837,7 +837,7 @@ func TestInconsistentReads(t *testing.T) {
 
 	{
 		key := roachpb.Key([]byte("key"))
-		b := db.NewBatch()
+		b := &client.Batch{}
 		b.Header.ReadConsistency = roachpb.INCONSISTENT
 		b.Get(key)
 		if err := db.Run(b); err != nil {
