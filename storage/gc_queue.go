@@ -304,10 +304,10 @@ func (gcq *gcQueue) process(
 
 	gcKeys, info, err := RunGC(ctx, desc, snap, now, zone.GC,
 		func(now hlc.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
-			pushTxn(repl, now, txn, typ)
+			pushTxn(gcq.store.DB(), now, txn, typ)
 		},
 		func(intents []roachpb.Intent, poison bool, wait bool) error {
-			return repl.store.intentResolver.resolveIntents(ctx, repl, intents, poison, wait)
+			return repl.store.intentResolver.resolveIntents(ctx, intents, poison, wait)
 		})
 
 	if err != nil {
@@ -577,7 +577,7 @@ func (*gcQueue) purgatoryChan() <-chan struct{} {
 
 // pushTxn attempts to abort the txn via push. The wait group is signaled on
 // completion.
-func pushTxn(repl *Replica, now hlc.Timestamp, txn *roachpb.Transaction,
+func pushTxn(db *client.DB, now hlc.Timestamp, txn *roachpb.Transaction,
 	typ roachpb.PushTxnType) {
 
 	// Attempt to push the transaction which created the intent.
@@ -592,7 +592,7 @@ func pushTxn(repl *Replica, now hlc.Timestamp, txn *roachpb.Transaction,
 	}
 	b := &client.Batch{}
 	b.AddRawRequest(pushArgs)
-	if err := repl.store.DB().Run(b); err != nil {
+	if err := db.Run(b); err != nil {
 		log.Warningf(context.TODO(), "push of txn %s failed: %s", txn, err)
 		return
 	}

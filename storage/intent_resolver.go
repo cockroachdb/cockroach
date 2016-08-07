@@ -72,7 +72,7 @@ func newIntentResolver(store *Store) *intentResolver {
 // set to tell the client to retry immediately; otherwise it is false
 // to cause the client to back off).
 func (ir *intentResolver) processWriteIntentError(ctx context.Context,
-	wiPErr *roachpb.Error, r *Replica, args roachpb.Request, h roachpb.Header,
+	wiPErr *roachpb.Error, args roachpb.Request, h roachpb.Header,
 	pushType roachpb.PushTxnType) *roachpb.Error {
 	wiErr, ok := wiPErr.GetDetail().(*roachpb.WriteIntentError)
 	if !ok {
@@ -88,7 +88,7 @@ func (ir *intentResolver) processWriteIntentError(ctx context.Context,
 
 	resolveIntents, pushErr := ir.maybePushTransactions(ctx, wiErr.Intents, h, pushType, false)
 
-	if resErr := ir.resolveIntents(ctx, r, resolveIntents,
+	if resErr := ir.resolveIntents(ctx, resolveIntents,
 		false /* !wait */, pushType == roachpb.PUSH_ABORT /* poison */); resErr != nil {
 		// When resolving without waiting, errors should not
 		// usually be returned here, although there are some cases
@@ -294,7 +294,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				// transaction already having been aborted by someone else, in
 				// which case the client may still be running. Thus, we must
 				// poison.
-				if err := ir.resolveIntents(ctxWithTimeout, r, resolveIntents,
+				if err := ir.resolveIntents(ctxWithTimeout, resolveIntents,
 					true /* wait */, true /* poison */); err != nil {
 					log.Warningf(context.TODO(), "%s: failed to resolve intents: %s", r, err)
 					return
@@ -320,7 +320,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				// example, an attempt to explicitly rollback the transaction
 				// may succeed (triggering this code path), but the result may
 				// not make it back to the client.
-				if err := ir.resolveIntents(ctxWithTimeout, r, item.intents,
+				if err := ir.resolveIntents(ctxWithTimeout, item.intents,
 					true /* wait */, false /* !poison */); err != nil {
 					log.Warningf(context.TODO(), "%s: failed to resolve intents: %s", r, err)
 					return
@@ -362,7 +362,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 // the same intents again (in the absence of #8360, we provide this
 // guarantee by resolving the intents synchronously regardless of the
 // `wait` argument).
-func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
+func (ir *intentResolver) resolveIntents(ctx context.Context,
 	intents []roachpb.Intent, wait bool, poison bool) error {
 	// Force synchronous operation; see above TODO.
 	wait = true
@@ -405,9 +405,9 @@ func (ir *intentResolver) resolveIntents(ctx context.Context, r *Replica,
 		b.AddRawRequest(reqs...)
 		action := func() error {
 			// TODO(tschottdorf): no tracing here yet.
-			return r.store.DB().Run(b)
+			return ir.store.DB().Run(b)
 		}
-		if wait || r.store.Stopper().RunLimitedAsyncTask(ir.sem, func() {
+		if wait || ir.store.Stopper().RunLimitedAsyncTask(ir.sem, func() {
 			if err := action(); err != nil {
 				log.Warningf(ctx, "unable to resolve external intents: %s", err)
 			}
