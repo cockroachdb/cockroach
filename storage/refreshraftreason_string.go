@@ -4,9 +4,9 @@ package storage
 
 import "fmt"
 
-const _refreshRaftReason_name = "noReasonreasonNewLeaderOrConfigChangereasonReplicaIDChangedreasonTicks"
+const _refreshRaftReason_name = "noReasonreasonNewLeaderreasonNewLeaderOrConfigChangereasonSnapshotAppliedreasonReplicaIDChangedreasonTicks"
 
-var _refreshRaftReason_index = [...]uint8{0, 8, 37, 59, 70}
+var _refreshRaftReason_index = [...]uint8{0, 8, 23, 52, 73, 95, 106}
 
 func (i refreshRaftReason) String() string {
 	if i < 0 || i >= refreshRaftReason(len(_refreshRaftReason_index)-1) {

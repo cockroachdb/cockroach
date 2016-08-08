@@ -931,10 +931,10 @@ func incrementArgs(key roachpb.Key, inc int64) roachpb.IncrementRequest {
 	}
 }
 
-func truncateLogArgs(index uint64) roachpb.TruncateLogRequest {
+func truncateLogArgs(index uint64, rangeID roachpb.RangeID) roachpb.TruncateLogRequest {
 	return roachpb.TruncateLogRequest{
-		Span:  roachpb.Span{},
-		Index: index,
+		Index:   index,
+		RangeID: rangeID,
 	}
 }
 

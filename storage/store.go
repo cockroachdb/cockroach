@@ -556,6 +556,15 @@ type StoreTestingKnobs struct {
 	DisableReplicateQueue bool
 	// DisableScanner disables the replica scanner.
 	DisableScanner bool
+	// DisableRefreshReasonTicks disables refreshing pending commands when a new
+	// leader is discovered.
+	DisableRefreshReasonNewLeader bool
+	// DisableRefreshReasonTicks disables refreshing pending commands when a
+	// snapshot is applied.
+	DisableRefreshReasonSnapshotApplied bool
+	// DisableRefreshReasonTicks disables refreshing pending commands
+	// periodically.
+	DisableRefreshReasonTicks bool
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}
