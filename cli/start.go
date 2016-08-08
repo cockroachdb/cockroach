@@ -253,7 +253,7 @@ func initBlockProfile() {
 	// The block profile can be viewed with `go tool pprof
 	// http://HOST:PORT/debug/pprof/block`
 	d := envutil.EnvOrDefaultInt64("block_profile_rate",
-		1000000 /* 1 sample per millisecond spent blocking */)
+		10000000 /* 1 sample per 10 milliseconds spent blocking */)
 	runtime.SetBlockProfileRate(int(d))
 }
 
