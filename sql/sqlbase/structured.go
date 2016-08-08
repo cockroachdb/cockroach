@@ -1366,6 +1366,11 @@ func (desc *TableDescriptor) Deleted() bool {
 	return desc.State == TableDescriptor_DROP
 }
 
+// Adding returns true if the table is being added.
+func (desc *TableDescriptor) Adding() bool {
+	return desc.State == TableDescriptor_ADD
+}
+
 // Renamed returns true if the table is being renamed.
 func (desc *TableDescriptor) Renamed() bool {
 	return len(desc.Renames) > 0
