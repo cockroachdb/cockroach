@@ -948,3 +948,66 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		}
 	}
 }
+
+// TestAddingFKs checks the behavior of a table in the non-public `ADD` state.
+// Being non-public, it should not be visible to clients, and is therefore
+// assumed to be empty (e.g. by foreign key checks), since no one could have
+// wriiten to it yet.
+func TestAddingFKs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := createTestServerParams()
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+
+	if _, err := sqlDB.Exec(`CREATE DATABASE t`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`CREATE TABLE t.products (id INT PRIMARY KEY);`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(
+		`CREATE TABLE t.orders (id INT PRIMARY KEY, product INT REFERENCES t.products, INDEX (product));`,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO t.products VALUES (1), (2)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO t.orders VALUES (1, 2), (2, 2)`); err != nil {
+		t.Fatal(err)
+	}
+
+	// As expected, this delete fails due to an FK error. It will however succeed
+	// below when the referencing table is instead in the ADD state.
+	if _, err := sqlDB.Exec(`DELETE FROM t.products`); !testutils.IsError(err, "foreign key") {
+		t.Fatalf("expected fk error but got %v", err)
+	}
+
+	// Step the referencing back to the ADD state.
+	ordersDesc := sqlbase.GetTableDescriptor(kvDB, "t", "orders")
+	ordersDesc.State = sqlbase.TableDescriptor_ADD
+	ordersDesc.Version++
+	if err := kvDB.Put(
+		sqlbase.MakeDescMetadataKey(ordersDesc.ID),
+		sqlbase.WrapDescriptor(ordersDesc),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// The descriptor changes made must have an immediate effect
+	// so disable leases on tables.
+	defer csql.TestDisableTableLeases()()
+
+	// We now assume the non-public orders table is empty, so this now succeeds.
+	if _, err := sqlDB.Exec(`DELETE FROM t.products`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Client should not see the orders table.
+	if _, err := sqlDB.Exec(
+		`INSERT INTO t.orders VALUES (1, 2), (2, 2)`,
+	); !testutils.IsError(err, "table is being added") {
+		t.Fatal(err)
+	}
+}
