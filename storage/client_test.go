@@ -371,11 +371,12 @@ func (t *multiTestContextKVTransport) SendNext(done chan kv.BatchCall) {
 	// Run the send in a Task on the destination store to simulate what
 	// would happen with real RPCs.
 	t.mtc.mu.RLock()
-	defer t.mtc.mu.RUnlock()
-	if s := t.mtc.stoppers[nodeIndex]; s == nil || s.RunAsyncTask(func() {
+	s := t.mtc.stoppers[nodeIndex]
+	t.mtc.mu.RUnlock()
+	if s == nil || s.RunAsyncTask(func() {
 		t.mtc.mu.RLock()
-		defer t.mtc.mu.RUnlock()
 		sender := t.mtc.senders[nodeIndex]
+		t.mtc.mu.RUnlock()
 		// Make a copy and clone txn of batch args for sending.
 		baCopy := t.args
 		if txn := baCopy.Txn; txn != nil {
@@ -395,14 +396,19 @@ func (t *multiTestContextKVTransport) SendNext(done chan kv.BatchCall) {
 		// that the next attempt has a chance of succeeding.
 		switch tErr := pErr.GetDetail().(type) {
 		case *roachpb.NotLeaseHolderError:
-			if tErr.LeaseHolder == nil {
+			if leaseHolder := tErr.LeaseHolder; leaseHolder != nil {
+				t.mtc.mu.RLock()
+				leaseHolderStore := t.mtc.stores[leaseHolder.NodeID-1]
+				t.mtc.mu.RUnlock()
+				if leaseHolderStore == nil {
+					// The lease holder is known but down, so expire its lease.
+					t.mtc.expireLeases()
+				}
+			} else {
 				// stores has the range, is *not* the lease holder, but the
 				// lease holder is not known; this can happen if the lease
 				// holder is removed from the group. Move the manual clock
 				// forward in an attempt to expire the lease.
-				t.mtc.expireLeases()
-			} else if t.mtc.stores[tErr.LeaseHolder.NodeID-1] == nil {
-				// The lease holder is known but down, so expire its lease.
 				t.mtc.expireLeases()
 			}
 		}
