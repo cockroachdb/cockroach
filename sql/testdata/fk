@@ -66,6 +66,9 @@ CREATE TABLE reviews (
 statement ok
 INSERT INTO orders VALUES (1, '780', 2);
 
+statement error foreign key violation: value\(s\) \['780'\] in columns \[sku\] referenced in table "orders"
+DELETE FROM products
+
 statement ok
 INSERT INTO reviews VALUES (1, '780', 2, 1, NULL)
 
@@ -344,3 +347,24 @@ INSERT INTO bar VALUES (2)
 
 statement error foreign key violation: value\(s\) \[2] in columns \[id\] referenced in table "bar"
 DELETE FROM foo
+
+statement ok
+CREATE DATABASE otherdb
+
+statement ok
+CREATE TABLE otherdb.othertable (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE crossdb (id INT PRIMARY KEY, FOREIGN KEY (id) REFERENCES otherdb.othertable)
+
+statement error foreign key violation: value \[2\] not found in othertable@primary \[id\]
+INSERT INTO crossdb VALUES (2)
+
+statement ok
+INSERT INTO otherdb.othertable VALUES (1), (2)
+
+statement ok
+INSERT INTO crossdb VALUES (2)
+
+statement error foreign key violation: value\(s\) \[2] in columns \[id\] referenced in table "crossdb"
+DELETE FROM otherdb.othertable WHERE id = 2
