@@ -52,12 +52,13 @@ We introduce a new streaming RPC in the `MultiRaft` GRPC service:
 ``` protocol-buffer
 message SnapshotRequest {
   message Header {
-    optional roachpb.RangeDescriptor range_descriptor = 1 [(gogoproto.nullable) = false)];
-    // The estimated size of the range, to be used in reservation decisions.
-    optional int64 range_size = 2 [(gogoproto.nullable) = false];
+    optional roachpb.RangeDescriptor range_descriptor = 1 [(gogoproto.nullable) = false];
 
-    // A raft message of type MsgSnap. The raft snapshot data contains a UUID.
-    optional raftpb.Message raft_message = 3;
+    // The inner raft message is of type MsgSnap, and its snapshot data contains a UUID.
+    optional RaftMessageRequest raft_message_request = 2 [(gogoproto.nullable) = false];
+
+    // The estimated size of the range, to be used in reservation decisions.
+    optional int64 range_size = 3 [(gogoproto.nullable) = false];
 
     // can_decline is set on preemptive snapshots, but not those generated
     // by raft because at that point it is better to queue up the stream
@@ -75,7 +76,7 @@ message SnapshotRequest {
   // allow flexibility in log implementations.
   repeated bytes log_entries = 3;
 
-  optional bool final = 4 [(gogoproto.nullable) = false]
+  optional bool final = 4 [(gogoproto.nullable) = false];
 }
 
 message SnapshotResponse {

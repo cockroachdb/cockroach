@@ -1064,20 +1064,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             ]
                         }
                     ]
-                },
-                {
-                    "name": "PartialRaftSnapshotData",
-                    "fields": [
-                        {
-                            "rule": "optional",
-                            "type": "RangeDescriptor",
-                            "name": "range_descriptor",
-                            "id": 1,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        }
-                    ]
                 }
             ],
             "enums": [
