@@ -137,10 +137,14 @@ func TestReplicaDataIteratorEmptyRange(t *testing.T) {
 // it verifies the pre and post ranges still contain the expected data.
 func TestReplicaDataIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := TestStoreContext()
+	// Disable Raft processing for this test as it mucks with low-level details
+	// of replica storage in an unsafe way.
+	ctx.TestingKnobs.DisableProcessRaft = true
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
 	}
-	tc.Start(t)
+	tc.StartWithStoreContext(t, ctx)
 	defer tc.Stop()
 
 	// See notes in EmptyRange test method for adjustment to descriptor.
@@ -196,7 +200,7 @@ func TestReplicaDataIterator(t *testing.T) {
 			t.Fatal(err)
 		}
 		if bytes.HasPrefix(iter.Key().Key, unreplicatedPrefix) {
-
+			t.Fatalf("unexpected unreplicated key: %s", iter.Key().Key)
 		}
 	}
 
