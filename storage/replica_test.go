@@ -3332,7 +3332,7 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 	setupResolutionTest(t, tc, roachpb.Key("a") /* irrelevant */, splitKey, true /* commit */)
 	txn := newTransaction("name", key, 1, enginepb.SERIALIZABLE, tc.clock)
 	txn.Status = roachpb.COMMITTED
-	if pErr := tc.store.intentResolver.resolveIntents(context.Background(), tc.rng,
+	if pErr := tc.store.intentResolver.resolveIntents(context.Background(),
 		[]roachpb.Intent{{
 			Span:   roachpb.Span{Key: key},
 			Txn:    txn.TxnMeta,
@@ -5305,7 +5305,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			if err := ba.SetActiveTimestamp(tc.clock.Now); err != nil {
 				t.Fatal(err)
 			}
-			br, pErr := tc.rng.addWriteCmd(ctx, ba, nil /* wg */)
+			br, pErr := tc.rng.addWriteCmd(ctx, ba)
 			if pErr == nil {
 				if !cancelEarly {
 					// We cancelled the context while the command was already
