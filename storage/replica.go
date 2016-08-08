@@ -559,7 +559,10 @@ func (r *Replica) IsFirstRange() bool {
 func (r *Replica) getLease() (*roachpb.Lease, *roachpb.Lease) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.mu.state.Lease, r.mu.pendingLeaseRequest.RequestPending()
+	if nextLease, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {
+		return r.mu.state.Lease, &nextLease
+	}
+	return r.mu.state.Lease, nil
 }
 
 // newNotLeaseHolderError returns a NotLeaseHolderError initialized with the
@@ -629,14 +632,14 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 				if err != nil {
 					return nil, roachpb.NewError(err)
 				}
-				transferLease := r.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID)
-				if transferLease != nil {
+				if transferLease, ok := r.mu.pendingLeaseRequest.TransferInProgress(
+					repDesc.ReplicaID); ok {
 					return nil, roachpb.NewError(
-						newNotLeaseHolderError(transferLease, r.store.StoreID(), r.mu.state.Desc))
+						newNotLeaseHolderError(&transferLease, r.store.StoreID(), r.mu.state.Desc))
 				}
 
 				// Should we extend the lease?
-				if (r.mu.pendingLeaseRequest.RequestPending() == nil) &&
+				if _, ok := r.mu.pendingLeaseRequest.RequestPending(); !ok &&
 					!timestamp.Less(lease.StartStasis.Add(-int64(r.store.ctx.rangeLeaseRenewalDuration), 0)) {
 					if log.V(2) {
 						log.Warningf(ctx, "%s: extending lease %s at %s", r, lease, timestamp)
