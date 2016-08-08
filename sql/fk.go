@@ -24,8 +24,16 @@ import (
 	"github.com/pkg/errors"
 )
 
-// TablesByID maps table IDs to looked up descriptors.
-type TablesByID map[sqlbase.ID]*sqlbase.TableDescriptor
+type tableLookup struct {
+	table    *sqlbase.TableDescriptor
+	isAdding bool
+}
+
+// tableLookupsByID maps table IDs to looked up descriptors.
+//
+// Special-case: tables that exists but are not yet public/leasable should have
+// entries with the isAdding flag set.
+type tableLookupsByID map[sqlbase.ID]tableLookup
 
 // FKCheck indicates a kind of FK check (delete, insert, or both).
 type FKCheck int
@@ -46,22 +54,22 @@ const (
 // in planner, should fill the map's values by acquiring leases. This function
 // is essentially just returning a slice of IDs, but the empty map can be filled
 // in place and reused, avoiding a second allocation.
-func TablesNeededForFKs(table sqlbase.TableDescriptor, usage FKCheck) TablesByID {
-	var ret TablesByID
+func TablesNeededForFKs(table sqlbase.TableDescriptor, usage FKCheck) tableLookupsByID {
+	var ret tableLookupsByID
 	for _, idx := range table.AllNonDropIndexes() {
 		if usage != CheckDeletes && idx.ForeignKey.IsSet() {
 			if ret == nil {
-				ret = make(TablesByID)
+				ret = make(tableLookupsByID)
 			}
-			ret[idx.ForeignKey.Table] = nil
+			ret[idx.ForeignKey.Table] = tableLookup{}
 		}
 		if usage != CheckInserts {
 			for _, idx := range table.AllNonDropIndexes() {
 				for _, ref := range idx.ReferencedBy {
 					if ret == nil {
-						ret = make(TablesByID)
+						ret = make(tableLookupsByID)
 					}
-					ret[ref.Table] = nil
+					ret[ref.Table] = tableLookup{}
 				}
 			}
 		}
@@ -74,7 +82,7 @@ type fkInsertHelper map[sqlbase.IndexID][]baseFKHelper
 var errSkipUnsedFK = errors.New("no columns involved in FK included in writer")
 
 func makeFKInsertHelper(
-	txn *client.Txn, table sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
+	txn *client.Txn, table sqlbase.TableDescriptor, otherTables tableLookupsByID, colMap map[sqlbase.ColumnID]int,
 ) (fkInsertHelper, error) {
 	var fks fkInsertHelper
 	for _, idx := range table.AllNonDropIndexes() {
@@ -136,11 +144,14 @@ func (fks fkInsertHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error
 type fkDeleteHelper map[sqlbase.IndexID][]baseFKHelper
 
 func makeFKDeleteHelper(
-	txn *client.Txn, table sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
+	txn *client.Txn, table sqlbase.TableDescriptor, otherTables tableLookupsByID, colMap map[sqlbase.ColumnID]int,
 ) (fkDeleteHelper, error) {
 	var fks fkDeleteHelper
 	for _, idx := range table.AllNonDropIndexes() {
 		for _, ref := range idx.ReferencedBy {
+			if otherTables[ref.Table].isAdding {
+				continue
+			}
 			fk, err := makeBaseFKHelper(txn, otherTables, idx, ref, colMap)
 			if err == errSkipUnsedFK {
 				continue
@@ -195,7 +206,7 @@ type fkUpdateHelper struct {
 }
 
 func makeFKUpdateHelper(
-	txn *client.Txn, table sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
+	txn *client.Txn, table sqlbase.TableDescriptor, otherTables tableLookupsByID, colMap map[sqlbase.ColumnID]int,
 ) (fkUpdateHelper, error) {
 	ret := fkUpdateHelper{}
 	var err error
@@ -226,19 +237,19 @@ type baseFKHelper struct {
 
 func makeBaseFKHelper(
 	txn *client.Txn,
-	otherTables TablesByID,
+	otherTables tableLookupsByID,
 	writeIdx sqlbase.IndexDescriptor,
 	ref sqlbase.ForeignKeyReference,
 	colMap map[sqlbase.ColumnID]int, // col ids (for idx being written) to row offset.
 ) (baseFKHelper, error) {
 	b := baseFKHelper{txn: txn, writeIdx: writeIdx}
-	searchTable, ok := otherTables[ref.Table]
-	if !ok {
+	searchTableLookup := otherTables[ref.Table]
+	if searchTableLookup.table == nil {
 		return b, errors.Errorf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
 	}
-	b.searchTable = searchTable
+	b.searchTable = searchTableLookup.table
 	b.searchPrefix = sqlbase.MakeIndexKeyPrefix(b.searchTable, ref.Index)
-	searchIdx, err := searchTable.FindIndexByID(ref.Index)
+	searchIdx, err := b.searchTable.FindIndexByID(ref.Index)
 	if err != nil {
 		return b, err
 	}
@@ -247,13 +258,13 @@ func makeBaseFKHelper(
 		b.prefixLen = len(writeIdx.ColumnIDs)
 	}
 	b.searchIdx = searchIdx
-	ids := colIDtoRowIndexFromCols(searchTable.Columns)
+	ids := colIDtoRowIndexFromCols(b.searchTable.Columns)
 	needed := make([]bool, len(ids))
 	for _, i := range searchIdx.ColumnIDs {
 		needed[ids[i]] = true
 	}
-	isSecondary := searchTable.PrimaryIndex.ID != searchIdx.ID
-	err = b.rf.Init(searchTable, ids, searchIdx, false, isSecondary, searchTable.Columns, needed)
+	isSecondary := b.searchTable.PrimaryIndex.ID != searchIdx.ID
+	err = b.rf.Init(b.searchTable, ids, searchIdx, false, isSecondary, b.searchTable.Columns, needed)
 	if err != nil {
 		return b, err
 	}

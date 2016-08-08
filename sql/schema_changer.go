@@ -244,6 +244,27 @@ func (sc SchemaChanger) exec(
 		return nil
 	}
 
+	if table.Adding() {
+		for _, idx := range table.AllNonDropIndexes() {
+			if idx.ForeignKey.IsSet() {
+				if err := sc.waitToUpdateLeases(idx.ForeignKey.Table); err != nil {
+					return err
+				}
+			}
+		}
+
+		if _, err := sc.leaseMgr.Publish(
+			table.ID,
+			func(tbl *sqlbase.TableDescriptor) error {
+				tbl.State = sqlbase.TableDescriptor_PUBLIC
+				return nil
+			},
+			func(txn *client.Txn) error { return nil },
+		); err != nil {
+			return err
+		}
+	}
+
 	if table.Renamed() {
 		lease, err = sc.ExtendLease(lease)
 		if err != nil {
@@ -724,7 +745,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						// A schema change execution might fail soon after
 						// unsetting UpVersion, and we still want to process
 						// outstanding mutations. Similar with a table marked for deletion.
-						if table.UpVersion || table.Deleted() ||
+						if table.UpVersion || table.Deleted() || table.Adding() ||
 							table.Renamed() || len(table.Mutations) > 0 {
 							if log.V(2) {
 								log.Infof(context.TODO(), "%s: queue up pending schema change; table: %d, version: %d",

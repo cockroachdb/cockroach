@@ -212,7 +212,7 @@ type tableUpserter struct {
 	// Set by init.
 	txn                   *client.Txn
 	tableDesc             *sqlbase.TableDescriptor
-	fkTables              TablesByID // for fk checks in update case
+	fkTables              tableLookupsByID // for fk checks in update case
 	ru                    rowUpdater
 	updateColIDtoRowIndex map[sqlbase.ColumnID]int
 	a                     sqlbase.DatumAlloc
