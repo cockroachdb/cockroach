@@ -52,7 +52,7 @@ We introduce a new streaming RPC in the `MultiRaft` GRPC service:
 ``` protocol-buffer
 message SnapshotRequest {
   message Header {
-    optional roachpb.RangeDescriptor range_descriptor = 1 [(gogoproto.nullable) = false)];
+    optional roachpb.RangeDescriptor range_descriptor = 1 [(gogoproto.nullable) = false];
     // The estimated size of the range, to be used in reservation decisions.
     optional int64 range_size = 2 [(gogoproto.nullable) = false];
 
@@ -75,15 +75,15 @@ message SnapshotRequest {
   // allow flexibility in log implementations.
   repeated bytes log_entries = 3;
 
-  optional bool final = 4 [(gogoproto.nullable) = false]
+  optional bool final = 4 [(gogoproto.nullable) = false];
 }
 
 message SnapshotResponse {
   enum Status {
-    ACCEPTED = 1;
-    APPLIED = 2;
-    ERROR = 3;
-    DECLINED = 4;
+    ACCEPTED = 0;
+    APPLIED = 1;
+    ERROR = 2;
+    DECLINED = 3;
   }
   optional Status status = 1 [(gogoproto.nullable) = false];
   optional string message = 2 [(gogoproto.nullable) = false];

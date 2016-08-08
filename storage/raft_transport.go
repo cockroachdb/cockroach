@@ -318,6 +318,11 @@ func (t *RaftTransport) RaftMessageSync(ctx context.Context, req *RaftMessageReq
 	return newRaftMessageResponse(req, pErr), nil
 }
 
+// RaftSnapshot handles incoming streaming snapshot requests.
+func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) (err error) {
+	return nil
+}
+
 // Listen registers a raftMessageHandler to receive proxied messages.
 func (t *RaftTransport) Listen(storeID roachpb.StoreID, handler RaftMessageHandler) {
 	t.mu.Lock()
