@@ -300,12 +300,17 @@ func (p *planner) checkTestingVerifyMetadataOrDie(
 	p.testingVerifyMetadataFn = nil
 }
 
-func (p *planner) fillFKTableMap(m TablesByID) error {
-	var err error
+func (p *planner) fillFKTableMap(m tableLookupsByID) error {
 	for tableID := range m {
-		if m[tableID], err = p.getTableLeaseByID(tableID); err != nil {
+		table, err := p.getTableLeaseByID(tableID)
+		if err == errTableAdding {
+			m[tableID] = tableLookup{isAdding: true}
+			continue
+		}
+		if err != nil {
 			return err
 		}
+		m[tableID] = tableLookup{table: table}
 	}
 	return nil
 }
