@@ -46,13 +46,13 @@ type pendingLeaseRequest struct {
 }
 
 // RequestPending returns the pending Lease, if one is in progress.
-// Otherwise, nil.
-func (p *pendingLeaseRequest) RequestPending() *roachpb.Lease {
+// The second return val is true if a lease request is pending.
+func (p *pendingLeaseRequest) RequestPending() (roachpb.Lease, bool) {
 	pending := len(p.llChans) > 0
 	if pending {
-		return &p.nextLease
+		return p.nextLease, true
 	}
-	return nil
+	return roachpb.Lease{}, false
 }
 
 // InitOrJoinRequest executes a RequestLease command asynchronously and returns a
@@ -79,7 +79,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 	startKey roachpb.Key,
 	transfer bool,
 ) <-chan *roachpb.Error {
-	if nextLease := p.RequestPending(); nextLease != nil {
+	if nextLease, ok := p.RequestPending(); ok {
 		if nextLease.Replica.ReplicaID == nextLeaseHolder.ReplicaID {
 			// Join a pending request asking for the same replica to become lease
 			// holder.
@@ -195,7 +195,7 @@ func (p *pendingLeaseRequest) JoinRequest() <-chan *roachpb.Error {
 
 // TransferInProgress returns the next lease, if the replica is in the process
 // of transferring aways its range lease. This next lease indicates the next
-// lease holder. Returns nil if no lease transfer is in progress.
+// lease holder. The second return val is true if a transfer is in progress.
 //
 // It is assumed that the replica owning this pendingLeaseRequest owns the
 // LeaderLease.
@@ -203,14 +203,14 @@ func (p *pendingLeaseRequest) JoinRequest() <-chan *roachpb.Error {
 // replicaID is the ID of the parent replica.
 func (p *pendingLeaseRequest) TransferInProgress(
 	replicaID roachpb.ReplicaID,
-) *roachpb.Lease {
-	if nextLease := p.RequestPending(); nextLease != nil {
+) (roachpb.Lease, bool) {
+	if nextLease, ok := p.RequestPending(); ok {
 		// Is the lease being transferred? (as opposed to just extended)
 		if replicaID != nextLease.Replica.ReplicaID {
-			return nextLease
+			return nextLease, true
 		}
 	}
-	return nil
+	return roachpb.Lease{}, false
 }
 
 // requestLeaseLocked executes a request to obtain or extend a lease
@@ -228,11 +228,11 @@ func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Er
 		llChan <- roachpb.NewError(err)
 		return llChan
 	}
-	transferLease := r.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID)
-	if transferLease != nil {
+	if transferLease, ok := r.mu.pendingLeaseRequest.TransferInProgress(
+		repDesc.ReplicaID); ok {
 		llChan := make(chan *roachpb.Error, 1)
 		llChan <- roachpb.NewError(
-			newNotLeaseHolderError(transferLease, r.store.StoreID(), r.mu.state.Desc))
+			newNotLeaseHolderError(&transferLease, r.store.StoreID(), r.mu.state.Desc))
 		return llChan
 	}
 	if r.store.IsDrainingLeases() {
@@ -288,8 +288,8 @@ func (r *Replica) AdminTransferLease(target roachpb.StoreID) error {
 			return nil, nil, errors.Errorf("unable to find store %d in range %+v", target, desc)
 		}
 
-		nextLease := r.mu.pendingLeaseRequest.RequestPending()
-		if nextLease != nil && nextLease.Replica != nextLeaseHolder {
+		if nextLease, ok := r.mu.pendingLeaseRequest.RequestPending(); ok &&
+			nextLease.Replica != nextLeaseHolder {
 			repDesc, err := r.getReplicaDescriptorLocked()
 			if err != nil {
 				return nil, nil, err
@@ -301,7 +301,7 @@ func (r *Replica) AdminTransferLease(target roachpb.StoreID) error {
 			}
 			// Another transfer is in progress, and it's not transferring to the
 			// same replica we'd like.
-			return nil, nil, newNotLeaseHolderError(nextLease, r.store.StoreID(), desc)
+			return nil, nil, newNotLeaseHolderError(&nextLease, r.store.StoreID(), desc)
 		}
 		// No extension in progress; start a transfer.
 		nextLeaseBegin := r.store.Clock().Now()
