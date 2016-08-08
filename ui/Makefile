@@ -87,7 +87,7 @@ npm.installed: package.json npm-shrinkwrap.json
 	npm install --no-progress
 	touch $@
 
-typings.installed: typings.json npm.installed
+typings.installed: typings.json npm.installed generated/protos.d.ts
 	typings install
 	typings prune
 	touch $@
