@@ -167,25 +167,34 @@ func (tc *TestCluster) waitForStores(t testing.TB) {
 	var storesMu syncutil.Mutex
 	stores := map[roachpb.StoreID]struct{}{}
 	storesDone := make(chan error)
+	storesDoneOnce := storesDone
 	unregister := g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix),
 		func(_ string, content roachpb.Value) {
-			var desc roachpb.StoreDescriptor
-			if err := content.GetProto(&desc); err != nil {
-				storesDone <- err
+			storesMu.Lock()
+			defer storesMu.Unlock()
+			if storesDoneOnce == nil {
 				return
 			}
-			storesMu.Lock()
+
+			var desc roachpb.StoreDescriptor
+			if err := content.GetProto(&desc); err != nil {
+				storesDoneOnce <- err
+				return
+			}
+
 			stores[desc.StoreID] = struct{}{}
 			if len(stores) == len(tc.Servers) {
-				close(storesDone)
+				close(storesDoneOnce)
+				storesDoneOnce = nil
 			}
-			storesMu.Unlock()
 		})
 	defer unregister()
 
 	// Wait for the store descriptors to be gossiped.
-	if err := <-storesDone; err != nil {
-		t.Fatal(err)
+	for err := range storesDone {
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
