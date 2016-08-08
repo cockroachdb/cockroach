@@ -210,6 +210,14 @@ export default class extends React.Component<IInjectedProps, {}> {
                 <Metric name="cr.store.rocksdb.read-amplification" title="Read Amplification" />
               </Axis>
             </LineGraph>
+
+            <StackedAreaGraph title="Raft Time" sources={sources}>
+              <Axis label="Milliseconds" format={ (n) => d3.format(".1f")(NanoToMilli(n)) }>
+                <Metric name="cr.store.process-raft.waitingnanos" title="Waiting" nonNegativeRate />
+                <Metric name="cr.store.process-raft.workingnanos" title="Working" nonNegativeRate />
+                <Metric name="cr.store.process-raft.tickingnanos" title="Ticking" nonNegativeRate />
+              </Axis>
+            </StackedAreaGraph>
           </GraphGroup>
       </div>
     </div>;
