@@ -280,10 +280,8 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (raftpb.Snapshot, err
 	}
 
 	if r.exceedsDoubleSplitSizeLocked() {
-		r.mu.Lock()
 		maxBytes := r.mu.maxBytes
 		size := r.mu.state.Stats.Total()
-		r.mu.Unlock()
 		log.Infof(ctx,
 			"%s: not generating snapshot because replica is too large: %d > 2 * %d",
 			r, size, maxBytes)
@@ -295,6 +293,8 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (raftpb.Snapshot, err
 		log.Trace(ctx, "snapshot already running")
 		return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
 	}
+
+	startKey := r.mu.state.Desc.StartKey
 
 	// Use an unbuffered channel so the worker stays alive until someone
 	// reads from the channel, and can abandon the snapshot if it gets stale.
@@ -312,7 +312,7 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (raftpb.Snapshot, err
 		// Delegate to a static function to make sure that we do not depend
 		// on any indirect calls to r.store.Engine() (or other in-memory
 		// state of the Replica). Everything must come from the snapshot.
-		snapData, err := snapshot(context.Background(), snap, rangeID, r.mu.state.Desc.StartKey)
+		snapData, err := snapshot(context.Background(), snap, rangeID, startKey)
 		if err != nil {
 			log.Errorf(ctxInner, "%s: error generating snapshot: %s", r, err)
 		} else {
