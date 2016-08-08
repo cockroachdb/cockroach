@@ -298,13 +298,16 @@ type Replica struct {
 		// When no snapshot is in progress, this field may either be nil
 		// or a closed channel. If an error occurs during generation,
 		// this channel may be closed without producing a result.
-		snapshotChan chan raftpb.Snapshot
+		snapshotChan chan OutgoingSnapshot
 
 		// Counts calls to Replica.tick()
 		ticks int
 
 		// Counts Raft messages refused due to queue congestion.
 		droppedMessages int
+
+		// The pending outgoing snapshot if there is one.
+		outSnap OutgoingSnapshot
 	}
 }
 
@@ -765,8 +768,9 @@ func (r *Replica) getReplicaDescriptorLocked() (roachpb.ReplicaDescriptor, error
 	return roachpb.ReplicaDescriptor{}, roachpb.NewRangeNotFoundError(r.RangeID)
 }
 
-// setLastReplicaDescriptors sets the the most recently seen replica descriptors to those
-// contained in the *RaftMessageRequest, acquiring r.mu to do so.
+// setLastReplicaDescriptors sets the the most recently seen replica
+// descriptors to those contained in the *RaftMessageRequest, acquiring r.mu to
+// do so.
 func (r *Replica) setLastReplicaDescriptors(req *RaftMessageRequest) {
 	r.mu.Lock()
 	r.mu.lastFromReplica = req.FromReplica
@@ -1553,7 +1557,9 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 	})
 }
 
-func (r *Replica) handleRaftReady() error {
+// handleRaftReady processes the Ready() messages on the replica if there are any. It takes a
+// non-nil IncomingSnapshot pointer to indicate that it is about to process a snapshot.
+func (r *Replica) handleRaftReady(inSnap *IncomingSnapshot) error {
 	ctx := context.TODO()
 	var hasReady bool
 	var rd raft.Ready
@@ -1598,7 +1604,15 @@ func (r *Replica) handleRaftReady() error {
 	}
 
 	if !raft.IsEmptySnap(rd.Snapshot) {
-		if err := r.applySnapshot(ctx, rd.Snapshot, rd.HardState); err != nil {
+		snapUUID, err := uuid.FromBytes(rd.Snapshot.Data)
+		if err != nil {
+			return errors.Wrap(err, "invalid snapshot id")
+		}
+		if inSnap == nil || *snapUUID != inSnap.SnapUUID {
+			log.Fatalf(ctx, "programming error: a snapshot application was attempted outside of the streaming snapshot codepath")
+		}
+
+		if err := r.applySnapshot(ctx, *inSnap, rd.Snapshot, rd.HardState); err != nil {
 			return err
 		}
 
@@ -1621,7 +1635,6 @@ func (r *Replica) handleRaftReady() error {
 			return err
 		}
 
-		var err error
 		if lastIndex, err = loadLastIndex(ctx, r.store.Engine(), r.RangeID); err != nil {
 			return err
 		}
@@ -1871,21 +1884,60 @@ func (r *Replica) getReplicaDescriptorByIDLocked(
 }
 
 func (r *Replica) sendRaftMessage(msg raftpb.Message) {
+	ctx := context.TODO()
 	rangeID := r.RangeID
 
 	r.mu.Lock()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
+	snap := r.mu.outSnap
 	r.mu.Unlock()
 
 	if fromErr != nil {
-		log.Warningf(context.TODO(),
+		log.Warningf(ctx,
 			"failed to look up sender replica %d in range %d while sending %s: %s", msg.From, rangeID, msg.Type, fromErr)
 		return
 	}
 	if toErr != nil {
-		log.Warningf(context.TODO(),
+		log.Warningf(ctx,
 			"failed to look up recipient replica %d in range %d while sending %s: %s", msg.To, rangeID, msg.Type, toErr)
+		return
+	}
+
+	if !raft.IsEmptySnap(msg.Snapshot) {
+		msgUUID, err := uuid.FromBytes(msg.Snapshot.Data)
+		if err != nil {
+			log.Fatalf(ctx, "invalid snapshot: couldn't parse UUID from data: %s", err)
+		}
+		if *msgUUID != snap.SnapUUID {
+			log.Fatalf(ctx, "programming error: snapshot message from Raft.Ready %s doesn't match outgoing snapshot UUID %s.",
+				*msgUUID, snap.SnapUUID)
+		}
+		// Asynchronously stream the snapshot to the recipient.
+		if err := r.store.Stopper().RunTask(func() {
+			r.store.Stopper().RunWorker(func() {
+				defer snap.Close()
+				if err := r.store.ctx.Transport.SendSnapshot(
+					context.Background(),
+					SnapshotRequest_Header{
+						RangeDescriptor: *r.Desc(),
+						RaftMessageRequest: RaftMessageRequest{
+							RangeID:     r.RangeID,
+							FromReplica: fromReplica,
+							ToReplica:   toReplica,
+							Message:     msg,
+						},
+						// TODO(jordan) set this size accurately
+						RangeSize:  0,
+						CanDecline: false,
+					}, snap, r.store.Engine().NewBatch); err != nil {
+					log.Warningf(ctx, "range=%d: failed to send snapshot: %s", r.Desc().RangeID, err)
+				}
+			})
+		}); err != nil {
+			snap.Close()
+			log.Warningf(ctx, "range=%d: failed to send snapshot: %s", r.Desc().RangeID, err)
+		}
 		return
 	}
 
