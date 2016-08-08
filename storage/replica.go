@@ -26,7 +26,6 @@ import (
 	"math/rand"
 	"reflect"
 	"sort"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -930,7 +929,7 @@ func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 	var pErr *roachpb.Error
 	if ba.IsWrite() {
 		log.Trace(ctx, "read-write path")
-		br, pErr = r.addWriteCmd(ctx, ba, nil)
+		br, pErr = r.addWriteCmd(ctx, ba)
 	} else if ba.IsReadOnly() {
 		log.Trace(ctx, "read-only path")
 		br, pErr = r.addReadOnlyCmd(ctx, ba)
@@ -1318,23 +1317,10 @@ func (r *Replica) assert5725(ba roachpb.BatchRequest) {
 // any newer accesses to this command's affected keys have been made. If so,
 // the command's timestamp is moved forward. Finally, the command is submitted
 // to Raft. Upon completion, the write is removed from the command queue and any
-// error returned. If a WaitGroup is supplied, it is signaled when the command
-// enters Raft or the function returns with a preprocessing error, whichever
-// happens earlier.
+// error returned.
 func (r *Replica) addWriteCmd(
-	ctx context.Context, ba roachpb.BatchRequest, wg *sync.WaitGroup,
+	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	signal := func() {
-		if wg != nil {
-			wg.Done()
-			wg = nil
-		}
-	}
-
-	// This happens more eagerly below, but it's important to guarantee that
-	// early returns do not skip this.
-	defer signal()
-
 	// Add the write to the command queue to gate subsequent overlapping
 	// commands until this command completes. Note that this must be
 	// done before getting the max timestamp for the key(s), as
@@ -1377,8 +1363,6 @@ func (r *Replica) addWriteCmd(
 	log.Trace(ctx, "raft")
 
 	ch, tryAbandon, err := r.proposeRaftCommand(ctx, ba)
-
-	signal()
 
 	if err == nil {
 		// If the command was accepted by raft, wait for the range to apply it.
