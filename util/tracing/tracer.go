@@ -70,7 +70,7 @@ func JoinOrNewSnowball(opName string, carrier *Span, callback func(sp basictrace
 		// We definitely want to sample a Snowball trace.
 		// This must be set *before* SetBaggageItem, as that will otherwise be ignored.
 		ext.SamplingPriority.Set(sp, 1)
-		sp.Context().SetBaggageItem(Snowball, "1")
+		sp.SetBaggageItem(Snowball, "1")
 	}
 	return sp, err
 }
