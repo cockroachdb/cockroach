@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -eu
+set -eux
 
 image="cockroachdb/builder"
 
@@ -124,6 +124,7 @@ if test -e "${alternates_file}"; then
   vols="${vols} --volume=${alternates_path}:${alternates_path}"
 fi
 
+exit
 docker run -i ${tty-} ${rm} \
   -u "${uid_gid}" \
   ${vols} \
