@@ -785,7 +785,7 @@ func (n *Node) Batch(
 		// regular tracing machinery, and we instead send the collected spans
 		// back with the response. This is more expensive, but then again,
 		// those are individual requests traced by users, so they can be.
-		if sp.Context().BaggageItem(tracing.Snowball) != "" {
+		if sp.BaggageItem(tracing.Snowball) != "" {
 			sp.LogEvent("delegating to snowball tracing")
 			sp.Finish()
 			if sp, err = tracing.JoinOrNewSnowball(opName, args.Trace, func(rawSpan basictracer.RawSpan) {
