@@ -169,23 +169,31 @@ func (tc *TestCluster) waitForStores(t testing.TB) {
 	storesDone := make(chan error)
 	unregister := g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix),
 		func(_ string, content roachpb.Value) {
+			storesMu.Lock()
+			defer storesMu.Unlock()
+			if storesDone == nil {
+				return
+			}
+
 			var desc roachpb.StoreDescriptor
 			if err := content.GetProto(&desc); err != nil {
 				storesDone <- err
 				return
 			}
-			storesMu.Lock()
+
 			stores[desc.StoreID] = struct{}{}
 			if len(stores) == len(tc.Servers) {
 				close(storesDone)
+				storesDone = nil
 			}
-			storesMu.Unlock()
 		})
 	defer unregister()
 
 	// Wait for the store descriptors to be gossiped.
-	if err := <-storesDone; err != nil {
-		t.Fatal(err)
+	for err := range storesDone {
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
