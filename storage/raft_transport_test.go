@@ -78,6 +78,18 @@ func (s channelServer) HandleRaftResponse(ctx context.Context, resp *storage.Raf
 	log.Fatalf(ctx, "unexpected raft response: %s", resp)
 }
 
+func (s channelServer) PrepareForSnapshotIfPossible(
+	ctx context.Context, rangeDescriptor *roachpb.RangeDescriptor,
+) (bool, func(), error) {
+	panic("unexpected PrepareForSnapshotIfPossible")
+}
+
+func (s channelServer) HandleSnapshot(
+	ctx context.Context, req *storage.SnapshotRequest, batches [][]byte, logEntries [][]byte, addedPlaceholder bool,
+) *roachpb.Error {
+	panic("unexpected HandleSnapshot")
+}
+
 // raftTransportTestContext contains objects needed to test RaftTransport.
 // Typical usage will add multiple nodes with AddNode, attach channels
 // to at least one store with ListenStore, and send messages with Send.
@@ -152,7 +164,7 @@ func (rttc *raftTransportTestContext) ListenStore(
 	nodeID roachpb.NodeID, storeID roachpb.StoreID,
 ) channelServer {
 	ch := newChannelServer(100, 10*time.Millisecond)
-	rttc.transports[nodeID].Listen(storeID, ch)
+	rttc.transports[nodeID].Listen(storeID, ch, nil)
 	return ch
 }
 
@@ -473,7 +485,7 @@ func TestRaftTransportIndependentRanges(t *testing.T) {
 	const numMessages = 50
 	channelServer := newChannelServer(numMessages*2, 10*time.Millisecond)
 	channelServer.brokenRange = 13
-	serverTransport.Listen(server.StoreID, channelServer)
+	serverTransport.Listen(server.StoreID, channelServer, nil)
 
 	for i := 0; i < numMessages; i++ {
 		for _, rangeID := range []roachpb.RangeID{1, 13} {
@@ -492,4 +504,24 @@ func TestRaftTransportIndependentRanges(t *testing.T) {
 			t.Fatalf("timeout waiting for message %d", i)
 		}
 	}
+}
+
+func TestSendSyncAvoidUnused(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// This test just exists to avoid unused warnings for SendSync, which is unused since
+	// streaming snapshots was introduced.
+
+	rttc := newRaftTransportTestContext(t)
+	defer rttc.Stop()
+
+	server := roachpb.ReplicaDescriptor{
+		NodeID:    1,
+		StoreID:   1,
+		ReplicaID: 1,
+	}
+	serverTransport := rttc.AddNode(server.NodeID)
+
+	err := serverTransport.SendSync(context.TODO(), &storage.RaftMessageRequest{})
+	t.Log(err.Error())
 }
