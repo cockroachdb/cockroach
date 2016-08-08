@@ -356,7 +356,6 @@ func TestBaseQueueAddRemove(t *testing.T) {
 // rejected when the queue has 'acceptsUnsplitRanges = false'.
 func TestAcceptsUnsplitRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#8001")
 	s, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
@@ -399,10 +398,15 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	bq.Start(s.ctx.Clock, stopper)
 
 	// Check our config.
-	sysCfg, ok := s.ctx.Gossip.GetSystemConfig()
-	if !ok {
-		t.Fatal("config not set")
-	}
+	var sysCfg config.SystemConfig
+	util.SucceedsSoon(t, func() error {
+		var ok bool
+		sysCfg, ok = s.ctx.Gossip.GetSystemConfig()
+		if !ok {
+			return errors.New("system config not yet present")
+		}
+		return nil
+	})
 	neverSplitsDesc := neverSplits.Desc()
 	if sysCfg.NeedsSplit(neverSplitsDesc.StartKey, neverSplitsDesc.EndKey) {
 		t.Fatal("System config says range needs to be split")
