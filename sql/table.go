@@ -152,7 +152,23 @@ func (p *planner) mustGetTableDesc(qname *parser.QualifiedName) (*sqlbase.TableD
 	if desc == nil {
 		return nil, sqlbase.NewUndefinedTableError(qname.String())
 	}
+	if err := filterTableState(desc); err != nil {
+		return nil, err
+	}
 	return desc, nil
+}
+
+var errTableDeleted = errors.New("table is being deleted")
+
+func filterTableState(tableDesc *sqlbase.TableDescriptor) error {
+	if tableDesc.Deleted() {
+		return errTableDeleted
+	}
+
+	if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
+		return errors.Errorf("table in unknown state: %s", tableDesc.State.String())
+	}
+	return nil
 }
 
 // getTableLease implements the SchemaAccessor interface.
@@ -175,7 +191,14 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (*sqlbase.TableDesc
 		//   so they cannot be leased. Instead, we simply return the static
 		//   descriptor and rely on the immutability privileges set on the
 		//   descriptors to cause upper layers to reject mutations statements.
-		return p.mustGetTableDesc(qname)
+		tbl, err := p.mustGetTableDesc(qname)
+		if err != nil {
+			return nil, err
+		}
+		if err := filterTableState(tbl); err != nil {
+			return nil, err
+		}
+		return tbl, nil
 	}
 
 	dbID, err := p.getDatabaseID(qname.Database())
@@ -223,6 +246,17 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (*sqlbase.TableDesc
 func (p *planner) getTableLeaseByID(tableID sqlbase.ID) (*sqlbase.TableDescriptor, error) {
 	if log.V(2) {
 		log.Infof(p.ctx(), "planner acquiring lease on table ID %d", tableID)
+	}
+
+	if testDisableTableLeases {
+		table, err := sqlbase.GetTableDescFromID(p.txn, tableID)
+		if err != nil {
+			return nil, err
+		}
+		if err := filterTableState(table); err != nil {
+			return nil, err
+		}
+		return table, nil
 	}
 
 	// First, look to see if we already have a lease for this table -- including
