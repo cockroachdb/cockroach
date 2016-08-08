@@ -222,8 +222,9 @@ func (sc SchemaChanger) exec(
 	if err != nil {
 		return err
 	}
+	table := desc.GetTable()
 
-	if desc.GetTable().Deleted() {
+	if table.Deleted() {
 		lease, err = sc.ExtendLease(lease)
 		if err != nil {
 			return err
@@ -231,19 +232,19 @@ func (sc SchemaChanger) exec(
 		// Wait for everybody to see the version with the deleted bit set. When
 		// this returns, nobody has any leases on the table, nor can get new leases,
 		// so the table will no longer be modified.
-		if err := sc.waitToUpdateLeases(); err != nil {
+		if err := sc.waitToUpdateLeases(sc.tableID); err != nil {
 			return err
 		}
 
 		// Truncate the table and delete the descriptor.
-		if err := sc.truncateAndDropTable(&lease, desc.GetTable()); err != nil {
+		if err := sc.truncateAndDropTable(&lease, table); err != nil {
 			return err
 		}
 		needRelease = false
 		return nil
 	}
 
-	if desc.GetTable().Renamed() {
+	if table.Renamed() {
 		lease, err = sc.ExtendLease(lease)
 		if err != nil {
 			return err
@@ -251,7 +252,7 @@ func (sc SchemaChanger) exec(
 		// Wait for everyone to see the version with the new name. When this
 		// returns, no new transactions will be using the old name for the table, so
 		// the old name can now be re-used (by CREATE).
-		if err := sc.waitToUpdateLeases(); err != nil {
+		if err := sc.waitToUpdateLeases(sc.tableID); err != nil {
 			return err
 		}
 
@@ -261,7 +262,7 @@ func (sc SchemaChanger) exec(
 		// Free up the old name(s).
 		err := sc.db.Txn(func(txn *client.Txn) error {
 			b := txn.NewBatch()
-			for _, renameDetails := range desc.GetTable().Renames {
+			for _, renameDetails := range table.Renames {
 				tbKey := tableKey{renameDetails.OldParentID, renameDetails.OldName}.Key()
 				b.Del(tbKey)
 			}
@@ -285,7 +286,7 @@ func (sc SchemaChanger) exec(
 	// returns, so that the new schema is live everywhere. This is not needed for
 	// correctness but is done to make the UI experience/tests predictable.
 	defer func() {
-		if err := sc.waitToUpdateLeases(); err != nil {
+		if err := sc.waitToUpdateLeases(sc.tableID); err != nil {
 			log.Warning(context.TODO(), err)
 		}
 	}()
@@ -396,12 +397,12 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill() error {
 		return err
 	}
 	// wait for the state change to propagate to all leases.
-	return sc.waitToUpdateLeases()
+	return sc.waitToUpdateLeases(sc.tableID)
 }
 
 // Wait until the entire cluster has been updated to the latest version
 // of the table descriptor.
-func (sc *SchemaChanger) waitToUpdateLeases() error {
+func (sc *SchemaChanger) waitToUpdateLeases(tableID sqlbase.ID) error {
 	// Aggressively retry because there might be a user waiting for the
 	// schema change to complete.
 	retryOpts := retry.Options{
@@ -410,11 +411,11 @@ func (sc *SchemaChanger) waitToUpdateLeases() error {
 		Multiplier:     2,
 	}
 	if log.V(2) {
-		log.Infof(context.TODO(), "waiting for a single version of table %d...", sc.tableID)
+		log.Infof(context.TODO(), "waiting for a single version of table %d...", tableID)
 	}
-	_, err := sc.leaseMgr.waitForOneVersion(sc.tableID, retryOpts)
+	_, err := sc.leaseMgr.waitForOneVersion(tableID, retryOpts)
 	if log.V(2) {
-		log.Infof(context.TODO(), "waiting for a single version of table %d... done", sc.tableID)
+		log.Infof(context.TODO(), "waiting for a single version of table %d... done", tableID)
 	}
 	return err
 }
