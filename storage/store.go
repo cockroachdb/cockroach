@@ -556,6 +556,8 @@ type StoreTestingKnobs struct {
 	DisableReplicateQueue bool
 	// DisableScanner disables the replica scanner.
 	DisableScanner bool
+	// DisableProcessRaft disables the process raft loop.
+	DisableProcessRaft bool
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}
@@ -2502,6 +2504,9 @@ func (s *Store) enqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 // appropriate range. This method starts a goroutine to process Raft
 // commands indefinitely or until the stopper signals.
 func (s *Store) processRaft() {
+	if s.ctx.TestingKnobs.DisableProcessRaft {
+		return
+	}
 	sem := makeSemaphore(storeReplicaRaftReadyConcurrency)
 
 	s.stopper.RunWorker(func() {
