@@ -40,18 +40,38 @@ declare module cockroach {
 }
 
 	export interface utilMessage extends util {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): utilMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): utilMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface utilBuilder {
 	new(data?: util): utilMessage;
-	decode(buffer: ArrayBuffer) : utilMessage;
-	decode(buffer: ByteBuffer) : utilMessage;
-	decode64(buffer: string) : utilMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : utilMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : utilMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : utilMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : utilMessage;
+	decode64(str: string) : utilMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): utilMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): utilMessage;
+	decodeDelimited(buffer: Buffer, enc: string): utilMessage;
+	decodeDelimited(buffer: string, enc: string): utilMessage;
+	decodeHex(str: string): utilMessage;
+	decodeJSON(str: string): utilMessage;
 	UnresolvedAddr: util.UnresolvedAddrBuilder;
 	hlc: util.hlcBuilder;
 	
@@ -86,18 +106,38 @@ getAddressField?() : string;
 }
 
 	export interface UnresolvedAddrMessage extends UnresolvedAddr {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): UnresolvedAddrMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): UnresolvedAddrMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface UnresolvedAddrBuilder {
 	new(data?: UnresolvedAddr): UnresolvedAddrMessage;
-	decode(buffer: ArrayBuffer) : UnresolvedAddrMessage;
-	decode(buffer: ByteBuffer) : UnresolvedAddrMessage;
-	decode64(buffer: string) : UnresolvedAddrMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : UnresolvedAddrMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : UnresolvedAddrMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : UnresolvedAddrMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : UnresolvedAddrMessage;
+	decode64(str: string) : UnresolvedAddrMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): UnresolvedAddrMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): UnresolvedAddrMessage;
+	decodeDelimited(buffer: Buffer, enc: string): UnresolvedAddrMessage;
+	decodeDelimited(buffer: string, enc: string): UnresolvedAddrMessage;
+	decodeHex(str: string): UnresolvedAddrMessage;
+	decodeJSON(str: string): UnresolvedAddrMessage;
 	
 }
 
@@ -113,18 +153,38 @@ declare module cockroach.util {
 }
 
 	export interface hlcMessage extends hlc {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): hlcMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): hlcMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface hlcBuilder {
 	new(data?: hlc): hlcMessage;
-	decode(buffer: ArrayBuffer) : hlcMessage;
-	decode(buffer: ByteBuffer) : hlcMessage;
-	decode64(buffer: string) : hlcMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : hlcMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : hlcMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : hlcMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : hlcMessage;
+	decode64(str: string) : hlcMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): hlcMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): hlcMessage;
+	decodeDelimited(buffer: Buffer, enc: string): hlcMessage;
+	decodeDelimited(buffer: string, enc: string): hlcMessage;
+	decodeHex(str: string): hlcMessage;
+	decodeJSON(str: string): hlcMessage;
 	Timestamp: hlc.TimestampBuilder;
 	
 }
@@ -158,18 +218,38 @@ getLogical?() : number;
 }
 
 	export interface TimestampMessage extends Timestamp {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): TimestampMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): TimestampMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface TimestampBuilder {
 	new(data?: Timestamp): TimestampMessage;
-	decode(buffer: ArrayBuffer) : TimestampMessage;
-	decode(buffer: ByteBuffer) : TimestampMessage;
-	decode64(buffer: string) : TimestampMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : TimestampMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : TimestampMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : TimestampMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : TimestampMessage;
+	decode64(str: string) : TimestampMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): TimestampMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): TimestampMessage;
+	decodeDelimited(buffer: Buffer, enc: string): TimestampMessage;
+	decodeDelimited(buffer: string, enc: string): TimestampMessage;
+	decodeHex(str: string): TimestampMessage;
+	decodeJSON(str: string): TimestampMessage;
 	
 }
 
@@ -187,18 +267,38 @@ declare module cockroach {
 }
 
 	export interface roachpbMessage extends roachpb {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): roachpbMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): roachpbMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface roachpbBuilder {
 	new(data?: roachpb): roachpbMessage;
-	decode(buffer: ArrayBuffer) : roachpbMessage;
-	decode(buffer: ByteBuffer) : roachpbMessage;
-	decode64(buffer: string) : roachpbMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : roachpbMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : roachpbMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : roachpbMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : roachpbMessage;
+	decode64(str: string) : roachpbMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): roachpbMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): roachpbMessage;
+	decodeDelimited(buffer: Buffer, enc: string): roachpbMessage;
+	decodeDelimited(buffer: string, enc: string): roachpbMessage;
+	decodeHex(str: string): roachpbMessage;
+	decodeJSON(str: string): roachpbMessage;
 	Attributes: roachpb.AttributesBuilder;
 	ReplicaDescriptor: roachpb.ReplicaDescriptorBuilder;
 	ReplicaIdent: roachpb.ReplicaIdentBuilder;
@@ -249,18 +349,38 @@ getAttrs?() : string[];
 }
 
 	export interface AttributesMessage extends Attributes {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): AttributesMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): AttributesMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface AttributesBuilder {
 	new(data?: Attributes): AttributesMessage;
-	decode(buffer: ArrayBuffer) : AttributesMessage;
-	decode(buffer: ByteBuffer) : AttributesMessage;
-	decode64(buffer: string) : AttributesMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : AttributesMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : AttributesMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : AttributesMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : AttributesMessage;
+	decode64(str: string) : AttributesMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): AttributesMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): AttributesMessage;
+	decodeDelimited(buffer: Buffer, enc: string): AttributesMessage;
+	decodeDelimited(buffer: string, enc: string): AttributesMessage;
+	decodeHex(str: string): AttributesMessage;
+	decodeJSON(str: string): AttributesMessage;
 	
 }
 
@@ -303,18 +423,38 @@ getReplicaId?() : number;
 }
 
 	export interface ReplicaDescriptorMessage extends ReplicaDescriptor {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): ReplicaDescriptorMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): ReplicaDescriptorMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface ReplicaDescriptorBuilder {
 	new(data?: ReplicaDescriptor): ReplicaDescriptorMessage;
-	decode(buffer: ArrayBuffer) : ReplicaDescriptorMessage;
-	decode(buffer: ByteBuffer) : ReplicaDescriptorMessage;
-	decode64(buffer: string) : ReplicaDescriptorMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : ReplicaDescriptorMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : ReplicaDescriptorMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : ReplicaDescriptorMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : ReplicaDescriptorMessage;
+	decode64(str: string) : ReplicaDescriptorMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): ReplicaDescriptorMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): ReplicaDescriptorMessage;
+	decodeDelimited(buffer: Buffer, enc: string): ReplicaDescriptorMessage;
+	decodeDelimited(buffer: string, enc: string): ReplicaDescriptorMessage;
+	decodeHex(str: string): ReplicaDescriptorMessage;
+	decodeJSON(str: string): ReplicaDescriptorMessage;
 	
 }
 
@@ -348,18 +488,38 @@ getReplica?() : ReplicaDescriptor;
 }
 
 	export interface ReplicaIdentMessage extends ReplicaIdent {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): ReplicaIdentMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): ReplicaIdentMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface ReplicaIdentBuilder {
 	new(data?: ReplicaIdent): ReplicaIdentMessage;
-	decode(buffer: ArrayBuffer) : ReplicaIdentMessage;
-	decode(buffer: ByteBuffer) : ReplicaIdentMessage;
-	decode64(buffer: string) : ReplicaIdentMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : ReplicaIdentMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : ReplicaIdentMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : ReplicaIdentMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : ReplicaIdentMessage;
+	decode64(str: string) : ReplicaIdentMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): ReplicaIdentMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): ReplicaIdentMessage;
+	decodeDelimited(buffer: Buffer, enc: string): ReplicaIdentMessage;
+	decodeDelimited(buffer: string, enc: string): ReplicaIdentMessage;
+	decodeHex(str: string): ReplicaIdentMessage;
+	decodeJSON(str: string): ReplicaIdentMessage;
 	
 }
 
@@ -420,18 +580,38 @@ getNextReplicaId?() : number;
 }
 
 	export interface RangeDescriptorMessage extends RangeDescriptor {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): RangeDescriptorMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): RangeDescriptorMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface RangeDescriptorBuilder {
 	new(data?: RangeDescriptor): RangeDescriptorMessage;
-	decode(buffer: ArrayBuffer) : RangeDescriptorMessage;
-	decode(buffer: ByteBuffer) : RangeDescriptorMessage;
-	decode64(buffer: string) : RangeDescriptorMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : RangeDescriptorMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : RangeDescriptorMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : RangeDescriptorMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : RangeDescriptorMessage;
+	decode64(str: string) : RangeDescriptorMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): RangeDescriptorMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): RangeDescriptorMessage;
+	decodeDelimited(buffer: Buffer, enc: string): RangeDescriptorMessage;
+	decodeDelimited(buffer: string, enc: string): RangeDescriptorMessage;
+	decodeHex(str: string): RangeDescriptorMessage;
+	decodeJSON(str: string): RangeDescriptorMessage;
 	
 }
 
@@ -474,18 +654,38 @@ getRangeCount?() : number;
 }
 
 	export interface StoreCapacityMessage extends StoreCapacity {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): StoreCapacityMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): StoreCapacityMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface StoreCapacityBuilder {
 	new(data?: StoreCapacity): StoreCapacityMessage;
-	decode(buffer: ArrayBuffer) : StoreCapacityMessage;
-	decode(buffer: ByteBuffer) : StoreCapacityMessage;
-	decode64(buffer: string) : StoreCapacityMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : StoreCapacityMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : StoreCapacityMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : StoreCapacityMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : StoreCapacityMessage;
+	decode64(str: string) : StoreCapacityMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): StoreCapacityMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): StoreCapacityMessage;
+	decodeDelimited(buffer: Buffer, enc: string): StoreCapacityMessage;
+	decodeDelimited(buffer: string, enc: string): StoreCapacityMessage;
+	decodeHex(str: string): StoreCapacityMessage;
+	decodeJSON(str: string): StoreCapacityMessage;
 	
 }
 
@@ -528,18 +728,38 @@ getAttrs?() : Attributes;
 }
 
 	export interface NodeDescriptorMessage extends NodeDescriptor {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): NodeDescriptorMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): NodeDescriptorMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface NodeDescriptorBuilder {
 	new(data?: NodeDescriptor): NodeDescriptorMessage;
-	decode(buffer: ArrayBuffer) : NodeDescriptorMessage;
-	decode(buffer: ByteBuffer) : NodeDescriptorMessage;
-	decode64(buffer: string) : NodeDescriptorMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : NodeDescriptorMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : NodeDescriptorMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : NodeDescriptorMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : NodeDescriptorMessage;
+	decode64(str: string) : NodeDescriptorMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): NodeDescriptorMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): NodeDescriptorMessage;
+	decodeDelimited(buffer: Buffer, enc: string): NodeDescriptorMessage;
+	decodeDelimited(buffer: string, enc: string): NodeDescriptorMessage;
+	decodeHex(str: string): NodeDescriptorMessage;
+	decodeJSON(str: string): NodeDescriptorMessage;
 	
 }
 
@@ -591,18 +811,38 @@ getCapacity?() : StoreCapacity;
 }
 
 	export interface StoreDescriptorMessage extends StoreDescriptor {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): StoreDescriptorMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): StoreDescriptorMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface StoreDescriptorBuilder {
 	new(data?: StoreDescriptor): StoreDescriptorMessage;
-	decode(buffer: ArrayBuffer) : StoreDescriptorMessage;
-	decode(buffer: ByteBuffer) : StoreDescriptorMessage;
-	decode64(buffer: string) : StoreDescriptorMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : StoreDescriptorMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : StoreDescriptorMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : StoreDescriptorMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : StoreDescriptorMessage;
+	decode64(str: string) : StoreDescriptorMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): StoreDescriptorMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): StoreDescriptorMessage;
+	decodeDelimited(buffer: Buffer, enc: string): StoreDescriptorMessage;
+	decodeDelimited(buffer: string, enc: string): StoreDescriptorMessage;
+	decodeHex(str: string): StoreDescriptorMessage;
+	decodeJSON(str: string): StoreDescriptorMessage;
 	
 }
 
@@ -636,18 +876,38 @@ getReplicas?() : ReplicaIdent[];
 }
 
 	export interface StoreDeadReplicasMessage extends StoreDeadReplicas {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): StoreDeadReplicasMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): StoreDeadReplicasMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface StoreDeadReplicasBuilder {
 	new(data?: StoreDeadReplicas): StoreDeadReplicasMessage;
-	decode(buffer: ArrayBuffer) : StoreDeadReplicasMessage;
-	decode(buffer: ByteBuffer) : StoreDeadReplicasMessage;
-	decode64(buffer: string) : StoreDeadReplicasMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : StoreDeadReplicasMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : StoreDeadReplicasMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : StoreDeadReplicasMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : StoreDeadReplicasMessage;
+	decode64(str: string) : StoreDeadReplicasMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): StoreDeadReplicasMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): StoreDeadReplicasMessage;
+	decodeDelimited(buffer: Buffer, enc: string): StoreDeadReplicasMessage;
+	decodeDelimited(buffer: string, enc: string): StoreDeadReplicasMessage;
+	decodeHex(str: string): StoreDeadReplicasMessage;
+	decodeJSON(str: string): StoreDeadReplicasMessage;
 	
 }
 
@@ -681,18 +941,38 @@ getEndKey?() : ByteBuffer;
 }
 
 	export interface SpanMessage extends Span {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): SpanMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): SpanMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface SpanBuilder {
 	new(data?: Span): SpanMessage;
-	decode(buffer: ArrayBuffer) : SpanMessage;
-	decode(buffer: ByteBuffer) : SpanMessage;
-	decode64(buffer: string) : SpanMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : SpanMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : SpanMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : SpanMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : SpanMessage;
+	decode64(str: string) : SpanMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): SpanMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): SpanMessage;
+	decodeDelimited(buffer: Buffer, enc: string): SpanMessage;
+	decodeDelimited(buffer: string, enc: string): SpanMessage;
+	decodeHex(str: string): SpanMessage;
+	decodeJSON(str: string): SpanMessage;
 	
 }
 
@@ -726,18 +1006,38 @@ getTimestamp?() : util.hlc.Timestamp;
 }
 
 	export interface ValueMessage extends Value {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): ValueMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): ValueMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface ValueBuilder {
 	new(data?: Value): ValueMessage;
-	decode(buffer: ArrayBuffer) : ValueMessage;
-	decode(buffer: ByteBuffer) : ValueMessage;
-	decode64(buffer: string) : ValueMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : ValueMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : ValueMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : ValueMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : ValueMessage;
+	decode64(str: string) : ValueMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): ValueMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): ValueMessage;
+	decodeDelimited(buffer: Buffer, enc: string): ValueMessage;
+	decodeDelimited(buffer: string, enc: string): ValueMessage;
+	decodeHex(str: string): ValueMessage;
+	decodeJSON(str: string): ValueMessage;
 	
 }
 
@@ -771,18 +1071,38 @@ getValue?() : Value;
 }
 
 	export interface KeyValueMessage extends KeyValue {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): KeyValueMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): KeyValueMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface KeyValueBuilder {
 	new(data?: KeyValue): KeyValueMessage;
-	decode(buffer: ArrayBuffer) : KeyValueMessage;
-	decode(buffer: ByteBuffer) : KeyValueMessage;
-	decode64(buffer: string) : KeyValueMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : KeyValueMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : KeyValueMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : KeyValueMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : KeyValueMessage;
+	decode64(str: string) : KeyValueMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): KeyValueMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): KeyValueMessage;
+	decodeDelimited(buffer: Buffer, enc: string): KeyValueMessage;
+	decodeDelimited(buffer: string, enc: string): KeyValueMessage;
+	decodeHex(str: string): KeyValueMessage;
+	decodeJSON(str: string): KeyValueMessage;
 	
 }
 
@@ -825,18 +1145,38 @@ getStoreId?() : number;
 }
 
 	export interface StoreIdentMessage extends StoreIdent {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): StoreIdentMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): StoreIdentMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface StoreIdentBuilder {
 	new(data?: StoreIdent): StoreIdentMessage;
-	decode(buffer: ArrayBuffer) : StoreIdentMessage;
-	decode(buffer: ByteBuffer) : StoreIdentMessage;
-	decode64(buffer: string) : StoreIdentMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : StoreIdentMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : StoreIdentMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : StoreIdentMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : StoreIdentMessage;
+	decode64(str: string) : StoreIdentMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): StoreIdentMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): StoreIdentMessage;
+	decodeDelimited(buffer: Buffer, enc: string): StoreIdentMessage;
+	decodeDelimited(buffer: string, enc: string): StoreIdentMessage;
+	decodeHex(str: string): StoreIdentMessage;
+	decodeJSON(str: string): StoreIdentMessage;
 	
 }
 
@@ -870,18 +1210,38 @@ getRightDesc?() : RangeDescriptor;
 }
 
 	export interface SplitTriggerMessage extends SplitTrigger {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): SplitTriggerMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): SplitTriggerMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface SplitTriggerBuilder {
 	new(data?: SplitTrigger): SplitTriggerMessage;
-	decode(buffer: ArrayBuffer) : SplitTriggerMessage;
-	decode(buffer: ByteBuffer) : SplitTriggerMessage;
-	decode64(buffer: string) : SplitTriggerMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : SplitTriggerMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : SplitTriggerMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : SplitTriggerMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : SplitTriggerMessage;
+	decode64(str: string) : SplitTriggerMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): SplitTriggerMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): SplitTriggerMessage;
+	decodeDelimited(buffer: Buffer, enc: string): SplitTriggerMessage;
+	decodeDelimited(buffer: string, enc: string): SplitTriggerMessage;
+	decodeHex(str: string): SplitTriggerMessage;
+	decodeJSON(str: string): SplitTriggerMessage;
 	
 }
 
@@ -915,18 +1275,38 @@ getRightDesc?() : RangeDescriptor;
 }
 
 	export interface MergeTriggerMessage extends MergeTrigger {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): MergeTriggerMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): MergeTriggerMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface MergeTriggerBuilder {
 	new(data?: MergeTrigger): MergeTriggerMessage;
-	decode(buffer: ArrayBuffer) : MergeTriggerMessage;
-	decode(buffer: ByteBuffer) : MergeTriggerMessage;
-	decode64(buffer: string) : MergeTriggerMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : MergeTriggerMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : MergeTriggerMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : MergeTriggerMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : MergeTriggerMessage;
+	decode64(str: string) : MergeTriggerMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): MergeTriggerMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): MergeTriggerMessage;
+	decodeDelimited(buffer: Buffer, enc: string): MergeTriggerMessage;
+	decodeDelimited(buffer: string, enc: string): MergeTriggerMessage;
+	decodeHex(str: string): MergeTriggerMessage;
+	decodeJSON(str: string): MergeTriggerMessage;
 	
 }
 
@@ -978,18 +1358,38 @@ getNextReplicaId?() : number;
 }
 
 	export interface ChangeReplicasTriggerMessage extends ChangeReplicasTrigger {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): ChangeReplicasTriggerMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): ChangeReplicasTriggerMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface ChangeReplicasTriggerBuilder {
 	new(data?: ChangeReplicasTrigger): ChangeReplicasTriggerMessage;
-	decode(buffer: ArrayBuffer) : ChangeReplicasTriggerMessage;
-	decode(buffer: ByteBuffer) : ChangeReplicasTriggerMessage;
-	decode64(buffer: string) : ChangeReplicasTriggerMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : ChangeReplicasTriggerMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : ChangeReplicasTriggerMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : ChangeReplicasTriggerMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : ChangeReplicasTriggerMessage;
+	decode64(str: string) : ChangeReplicasTriggerMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): ChangeReplicasTriggerMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): ChangeReplicasTriggerMessage;
+	decodeDelimited(buffer: Buffer, enc: string): ChangeReplicasTriggerMessage;
+	decodeDelimited(buffer: string, enc: string): ChangeReplicasTriggerMessage;
+	decodeHex(str: string): ChangeReplicasTriggerMessage;
+	decodeJSON(str: string): ChangeReplicasTriggerMessage;
 	
 }
 
@@ -1014,18 +1414,38 @@ getSystemConfigSpan?() : boolean;
 }
 
 	export interface ModifiedSpanTriggerMessage extends ModifiedSpanTrigger {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): ModifiedSpanTriggerMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): ModifiedSpanTriggerMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface ModifiedSpanTriggerBuilder {
 	new(data?: ModifiedSpanTrigger): ModifiedSpanTriggerMessage;
-	decode(buffer: ArrayBuffer) : ModifiedSpanTriggerMessage;
-	decode(buffer: ByteBuffer) : ModifiedSpanTriggerMessage;
-	decode64(buffer: string) : ModifiedSpanTriggerMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : ModifiedSpanTriggerMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : ModifiedSpanTriggerMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : ModifiedSpanTriggerMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : ModifiedSpanTriggerMessage;
+	decode64(str: string) : ModifiedSpanTriggerMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): ModifiedSpanTriggerMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): ModifiedSpanTriggerMessage;
+	decodeDelimited(buffer: Buffer, enc: string): ModifiedSpanTriggerMessage;
+	decodeDelimited(buffer: string, enc: string): ModifiedSpanTriggerMessage;
+	decodeHex(str: string): ModifiedSpanTriggerMessage;
+	decodeJSON(str: string): ModifiedSpanTriggerMessage;
 	
 }
 
@@ -1077,18 +1497,38 @@ getModifiedSpanTrigger?() : ModifiedSpanTrigger;
 }
 
 	export interface InternalCommitTriggerMessage extends InternalCommitTrigger {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): InternalCommitTriggerMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): InternalCommitTriggerMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface InternalCommitTriggerBuilder {
 	new(data?: InternalCommitTrigger): InternalCommitTriggerMessage;
-	decode(buffer: ArrayBuffer) : InternalCommitTriggerMessage;
-	decode(buffer: ByteBuffer) : InternalCommitTriggerMessage;
-	decode64(buffer: string) : InternalCommitTriggerMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : InternalCommitTriggerMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : InternalCommitTriggerMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : InternalCommitTriggerMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : InternalCommitTriggerMessage;
+	decode64(str: string) : InternalCommitTriggerMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): InternalCommitTriggerMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): InternalCommitTriggerMessage;
+	decodeDelimited(buffer: Buffer, enc: string): InternalCommitTriggerMessage;
+	decodeDelimited(buffer: string, enc: string): InternalCommitTriggerMessage;
+	decodeHex(str: string): InternalCommitTriggerMessage;
+	decodeJSON(str: string): InternalCommitTriggerMessage;
 	
 }
 
@@ -1203,18 +1643,38 @@ getIntents?() : Span[];
 }
 
 	export interface TransactionMessage extends Transaction {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): TransactionMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): TransactionMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface TransactionBuilder {
 	new(data?: Transaction): TransactionMessage;
-	decode(buffer: ArrayBuffer) : TransactionMessage;
-	decode(buffer: ByteBuffer) : TransactionMessage;
-	decode64(buffer: string) : TransactionMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : TransactionMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : TransactionMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : TransactionMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : TransactionMessage;
+	decode64(str: string) : TransactionMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): TransactionMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): TransactionMessage;
+	decodeDelimited(buffer: Buffer, enc: string): TransactionMessage;
+	decodeDelimited(buffer: string, enc: string): TransactionMessage;
+	decodeHex(str: string): TransactionMessage;
+	decodeJSON(str: string): TransactionMessage;
 	
 }
 
@@ -1257,18 +1717,38 @@ getStatus?() : TransactionStatus;
 }
 
 	export interface IntentMessage extends Intent {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): IntentMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): IntentMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface IntentBuilder {
 	new(data?: Intent): IntentMessage;
-	decode(buffer: ArrayBuffer) : IntentMessage;
-	decode(buffer: ByteBuffer) : IntentMessage;
-	decode64(buffer: string) : IntentMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : IntentMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : IntentMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : IntentMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : IntentMessage;
+	decode64(str: string) : IntentMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): IntentMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): IntentMessage;
+	decodeDelimited(buffer: Buffer, enc: string): IntentMessage;
+	decodeDelimited(buffer: string, enc: string): IntentMessage;
+	decodeHex(str: string): IntentMessage;
+	decodeJSON(str: string): IntentMessage;
 	
 }
 
@@ -1320,18 +1800,38 @@ getReplica?() : ReplicaDescriptor;
 }
 
 	export interface LeaseMessage extends Lease {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): LeaseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): LeaseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface LeaseBuilder {
 	new(data?: Lease): LeaseMessage;
-	decode(buffer: ArrayBuffer) : LeaseMessage;
-	decode(buffer: ByteBuffer) : LeaseMessage;
-	decode64(buffer: string) : LeaseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : LeaseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : LeaseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : LeaseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : LeaseMessage;
+	decode64(str: string) : LeaseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): LeaseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): LeaseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): LeaseMessage;
+	decodeDelimited(buffer: string, enc: string): LeaseMessage;
+	decodeHex(str: string): LeaseMessage;
+	decodeJSON(str: string): LeaseMessage;
 	
 }
 
@@ -1374,18 +1874,38 @@ getPriority?() : number;
 }
 
 	export interface AbortCacheEntryMessage extends AbortCacheEntry {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): AbortCacheEntryMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): AbortCacheEntryMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface AbortCacheEntryBuilder {
 	new(data?: AbortCacheEntry): AbortCacheEntryMessage;
-	decode(buffer: ArrayBuffer) : AbortCacheEntryMessage;
-	decode(buffer: ByteBuffer) : AbortCacheEntryMessage;
-	decode64(buffer: string) : AbortCacheEntryMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : AbortCacheEntryMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : AbortCacheEntryMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : AbortCacheEntryMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : AbortCacheEntryMessage;
+	decode64(str: string) : AbortCacheEntryMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): AbortCacheEntryMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): AbortCacheEntryMessage;
+	decodeDelimited(buffer: Buffer, enc: string): AbortCacheEntryMessage;
+	decodeDelimited(buffer: string, enc: string): AbortCacheEntryMessage;
+	decodeHex(str: string): AbortCacheEntryMessage;
+	decodeJSON(str: string): AbortCacheEntryMessage;
 	
 }
 
@@ -1419,18 +1939,38 @@ getTerm?() : Long;
 }
 
 	export interface RaftTruncatedStateMessage extends RaftTruncatedState {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): RaftTruncatedStateMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): RaftTruncatedStateMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface RaftTruncatedStateBuilder {
 	new(data?: RaftTruncatedState): RaftTruncatedStateMessage;
-	decode(buffer: ArrayBuffer) : RaftTruncatedStateMessage;
-	decode(buffer: ByteBuffer) : RaftTruncatedStateMessage;
-	decode64(buffer: string) : RaftTruncatedStateMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : RaftTruncatedStateMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : RaftTruncatedStateMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : RaftTruncatedStateMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : RaftTruncatedStateMessage;
+	decode64(str: string) : RaftTruncatedStateMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): RaftTruncatedStateMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): RaftTruncatedStateMessage;
+	decodeDelimited(buffer: Buffer, enc: string): RaftTruncatedStateMessage;
+	decodeDelimited(buffer: string, enc: string): RaftTruncatedStateMessage;
+	decodeHex(str: string): RaftTruncatedStateMessage;
+	decodeJSON(str: string): RaftTruncatedStateMessage;
 	
 }
 
@@ -1455,18 +1995,38 @@ getNextReplicaId?() : number;
 }
 
 	export interface RaftTombstoneMessage extends RaftTombstone {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): RaftTombstoneMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): RaftTombstoneMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface RaftTombstoneBuilder {
 	new(data?: RaftTombstone): RaftTombstoneMessage;
-	decode(buffer: ArrayBuffer) : RaftTombstoneMessage;
-	decode(buffer: ByteBuffer) : RaftTombstoneMessage;
-	decode64(buffer: string) : RaftTombstoneMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : RaftTombstoneMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : RaftTombstoneMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : RaftTombstoneMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : RaftTombstoneMessage;
+	decode64(str: string) : RaftTombstoneMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): RaftTombstoneMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): RaftTombstoneMessage;
+	decodeDelimited(buffer: Buffer, enc: string): RaftTombstoneMessage;
+	decodeDelimited(buffer: string, enc: string): RaftTombstoneMessage;
+	decodeHex(str: string): RaftTombstoneMessage;
+	decodeJSON(str: string): RaftTombstoneMessage;
 	
 }
 
@@ -1509,18 +2069,38 @@ getLogEntries?() : ByteBuffer[];
 }
 
 	export interface RaftSnapshotDataMessage extends RaftSnapshotData {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): RaftSnapshotDataMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): RaftSnapshotDataMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface RaftSnapshotDataBuilder {
 	new(data?: RaftSnapshotData): RaftSnapshotDataMessage;
-	decode(buffer: ArrayBuffer) : RaftSnapshotDataMessage;
-	decode(buffer: ByteBuffer) : RaftSnapshotDataMessage;
-	decode64(buffer: string) : RaftSnapshotDataMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : RaftSnapshotDataMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : RaftSnapshotDataMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : RaftSnapshotDataMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : RaftSnapshotDataMessage;
+	decode64(str: string) : RaftSnapshotDataMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): RaftSnapshotDataMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): RaftSnapshotDataMessage;
+	decodeDelimited(buffer: Buffer, enc: string): RaftSnapshotDataMessage;
+	decodeDelimited(buffer: string, enc: string): RaftSnapshotDataMessage;
+	decodeHex(str: string): RaftSnapshotDataMessage;
+	decodeJSON(str: string): RaftSnapshotDataMessage;
 	KeyValue: RaftSnapshotData.KeyValueBuilder;
 	
 }
@@ -1563,18 +2143,38 @@ getTimestamp?() : util.hlc.Timestamp;
 }
 
 	export interface KeyValueMessage extends KeyValue {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): KeyValueMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): KeyValueMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface KeyValueBuilder {
 	new(data?: KeyValue): KeyValueMessage;
-	decode(buffer: ArrayBuffer) : KeyValueMessage;
-	decode(buffer: ByteBuffer) : KeyValueMessage;
-	decode64(buffer: string) : KeyValueMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : KeyValueMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : KeyValueMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : KeyValueMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : KeyValueMessage;
+	decode64(str: string) : KeyValueMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): KeyValueMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): KeyValueMessage;
+	decodeDelimited(buffer: Buffer, enc: string): KeyValueMessage;
+	decodeDelimited(buffer: string, enc: string): KeyValueMessage;
+	decodeHex(str: string): KeyValueMessage;
+	decodeJSON(str: string): KeyValueMessage;
 	
 }
 
@@ -1627,18 +2227,38 @@ declare module cockroach {
 }
 
 	export interface storageMessage extends storage {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): storageMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): storageMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface storageBuilder {
 	new(data?: storage): storageMessage;
-	decode(buffer: ArrayBuffer) : storageMessage;
-	decode(buffer: ByteBuffer) : storageMessage;
-	decode64(buffer: string) : storageMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : storageMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : storageMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : storageMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : storageMessage;
+	decode64(str: string) : storageMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): storageMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): storageMessage;
+	decodeDelimited(buffer: Buffer, enc: string): storageMessage;
+	decodeDelimited(buffer: string, enc: string): storageMessage;
+	decodeHex(str: string): storageMessage;
+	decodeJSON(str: string): storageMessage;
 	engine: storage.engineBuilder;
 	storagebase: storage.storagebaseBuilder;
 	
@@ -1655,18 +2275,38 @@ declare module cockroach.storage {
 }
 
 	export interface engineMessage extends engine {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): engineMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): engineMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface engineBuilder {
 	new(data?: engine): engineMessage;
-	decode(buffer: ArrayBuffer) : engineMessage;
-	decode(buffer: ByteBuffer) : engineMessage;
-	decode64(buffer: string) : engineMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : engineMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : engineMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : engineMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : engineMessage;
+	decode64(str: string) : engineMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): engineMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): engineMessage;
+	decodeDelimited(buffer: Buffer, enc: string): engineMessage;
+	decodeDelimited(buffer: string, enc: string): engineMessage;
+	decodeHex(str: string): engineMessage;
+	decodeJSON(str: string): engineMessage;
 	enginepb: engine.enginepbBuilder;
 	
 }
@@ -1682,18 +2322,38 @@ declare module cockroach.storage.engine {
 }
 
 	export interface enginepbMessage extends enginepb {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): enginepbMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): enginepbMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface enginepbBuilder {
 	new(data?: enginepb): enginepbMessage;
-	decode(buffer: ArrayBuffer) : enginepbMessage;
-	decode(buffer: ByteBuffer) : enginepbMessage;
-	decode64(buffer: string) : enginepbMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : enginepbMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : enginepbMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : enginepbMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : enginepbMessage;
+	decode64(str: string) : enginepbMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): enginepbMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): enginepbMessage;
+	decodeDelimited(buffer: Buffer, enc: string): enginepbMessage;
+	decodeDelimited(buffer: string, enc: string): enginepbMessage;
+	decodeHex(str: string): enginepbMessage;
+	decodeJSON(str: string): enginepbMessage;
 	TxnMeta: enginepb.TxnMetaBuilder;
 	MVCCMetadata: enginepb.MVCCMetadataBuilder;
 	MVCCStats: enginepb.MVCCStatsBuilder;
@@ -1784,18 +2444,38 @@ getBatchIndex?() : number;
 }
 
 	export interface TxnMetaMessage extends TxnMeta {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): TxnMetaMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): TxnMetaMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface TxnMetaBuilder {
 	new(data?: TxnMeta): TxnMetaMessage;
-	decode(buffer: ArrayBuffer) : TxnMetaMessage;
-	decode(buffer: ByteBuffer) : TxnMetaMessage;
-	decode64(buffer: string) : TxnMetaMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : TxnMetaMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : TxnMetaMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : TxnMetaMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : TxnMetaMessage;
+	decode64(str: string) : TxnMetaMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): TxnMetaMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): TxnMetaMessage;
+	decodeDelimited(buffer: Buffer, enc: string): TxnMetaMessage;
+	decodeDelimited(buffer: string, enc: string): TxnMetaMessage;
+	decodeHex(str: string): TxnMetaMessage;
+	decodeJSON(str: string): TxnMetaMessage;
 	
 }
 
@@ -1874,18 +2554,38 @@ getMergeTimestamp?() : util.hlc.Timestamp;
 }
 
 	export interface MVCCMetadataMessage extends MVCCMetadata {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): MVCCMetadataMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): MVCCMetadataMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface MVCCMetadataBuilder {
 	new(data?: MVCCMetadata): MVCCMetadataMessage;
-	decode(buffer: ArrayBuffer) : MVCCMetadataMessage;
-	decode(buffer: ByteBuffer) : MVCCMetadataMessage;
-	decode64(buffer: string) : MVCCMetadataMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : MVCCMetadataMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : MVCCMetadataMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : MVCCMetadataMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : MVCCMetadataMessage;
+	decode64(str: string) : MVCCMetadataMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): MVCCMetadataMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): MVCCMetadataMessage;
+	decodeDelimited(buffer: Buffer, enc: string): MVCCMetadataMessage;
+	decodeDelimited(buffer: string, enc: string): MVCCMetadataMessage;
+	decodeHex(str: string): MVCCMetadataMessage;
+	decodeJSON(str: string): MVCCMetadataMessage;
 	
 }
 
@@ -2027,18 +2727,38 @@ getSysCount?() : Long;
 }
 
 	export interface MVCCStatsMessage extends MVCCStats {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): MVCCStatsMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): MVCCStatsMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface MVCCStatsBuilder {
 	new(data?: MVCCStats): MVCCStatsMessage;
-	decode(buffer: ArrayBuffer) : MVCCStatsMessage;
-	decode(buffer: ByteBuffer) : MVCCStatsMessage;
-	decode64(buffer: string) : MVCCStatsMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : MVCCStatsMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : MVCCStatsMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : MVCCStatsMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : MVCCStatsMessage;
+	decode64(str: string) : MVCCStatsMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): MVCCStatsMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): MVCCStatsMessage;
+	decodeDelimited(buffer: Buffer, enc: string): MVCCStatsMessage;
+	decodeDelimited(buffer: string, enc: string): MVCCStatsMessage;
+	decodeHex(str: string): MVCCStatsMessage;
+	decodeJSON(str: string): MVCCStatsMessage;
 	
 }
 
@@ -2064,18 +2784,38 @@ declare module cockroach.storage {
 }
 
 	export interface storagebaseMessage extends storagebase {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): storagebaseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): storagebaseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface storagebaseBuilder {
 	new(data?: storagebase): storagebaseMessage;
-	decode(buffer: ArrayBuffer) : storagebaseMessage;
-	decode(buffer: ByteBuffer) : storagebaseMessage;
-	decode64(buffer: string) : storagebaseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : storagebaseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : storagebaseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : storagebaseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : storagebaseMessage;
+	decode64(str: string) : storagebaseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): storagebaseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): storagebaseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): storagebaseMessage;
+	decodeDelimited(buffer: string, enc: string): storagebaseMessage;
+	decodeHex(str: string): storagebaseMessage;
+	decodeJSON(str: string): storagebaseMessage;
 	ReplicaState: storagebase.ReplicaStateBuilder;
 	RangeInfo: storagebase.RangeInfoBuilder;
 	
@@ -2164,18 +2904,38 @@ getFrozen?() : boolean;
 }
 
 	export interface ReplicaStateMessage extends ReplicaState {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): ReplicaStateMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): ReplicaStateMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface ReplicaStateBuilder {
 	new(data?: ReplicaState): ReplicaStateMessage;
-	decode(buffer: ArrayBuffer) : ReplicaStateMessage;
-	decode(buffer: ByteBuffer) : ReplicaStateMessage;
-	decode64(buffer: string) : ReplicaStateMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : ReplicaStateMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : ReplicaStateMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : ReplicaStateMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : ReplicaStateMessage;
+	decode64(str: string) : ReplicaStateMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): ReplicaStateMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): ReplicaStateMessage;
+	decodeDelimited(buffer: Buffer, enc: string): ReplicaStateMessage;
+	decodeDelimited(buffer: string, enc: string): ReplicaStateMessage;
+	decodeHex(str: string): ReplicaStateMessage;
+	decodeJSON(str: string): ReplicaStateMessage;
 	
 }
 
@@ -2245,18 +3005,38 @@ getRaftLogSize?() : Long;
 }
 
 	export interface RangeInfoMessage extends RangeInfo {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): RangeInfoMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): RangeInfoMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface RangeInfoBuilder {
 	new(data?: RangeInfo): RangeInfoMessage;
-	decode(buffer: ArrayBuffer) : RangeInfoMessage;
-	decode(buffer: ByteBuffer) : RangeInfoMessage;
-	decode64(buffer: string) : RangeInfoMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : RangeInfoMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : RangeInfoMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : RangeInfoMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : RangeInfoMessage;
+	decode64(str: string) : RangeInfoMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): RangeInfoMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): RangeInfoMessage;
+	decodeDelimited(buffer: Buffer, enc: string): RangeInfoMessage;
+	decodeDelimited(buffer: string, enc: string): RangeInfoMessage;
+	decodeHex(str: string): RangeInfoMessage;
+	decodeJSON(str: string): RangeInfoMessage;
 	
 }
 
@@ -2274,18 +3054,38 @@ declare module cockroach {
 }
 
 	export interface configMessage extends config {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): configMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): configMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface configBuilder {
 	new(data?: config): configMessage;
-	decode(buffer: ArrayBuffer) : configMessage;
-	decode(buffer: ByteBuffer) : configMessage;
-	decode64(buffer: string) : configMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : configMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : configMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : configMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : configMessage;
+	decode64(str: string) : configMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): configMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): configMessage;
+	decodeDelimited(buffer: Buffer, enc: string): configMessage;
+	decodeDelimited(buffer: string, enc: string): configMessage;
+	decodeHex(str: string): configMessage;
+	decodeJSON(str: string): configMessage;
 	GCPolicy: config.GCPolicyBuilder;
 	ZoneConfig: config.ZoneConfigBuilder;
 	SystemConfig: config.SystemConfigBuilder;
@@ -2312,18 +3112,38 @@ getTtlSeconds?() : number;
 }
 
 	export interface GCPolicyMessage extends GCPolicy {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): GCPolicyMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): GCPolicyMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface GCPolicyBuilder {
 	new(data?: GCPolicy): GCPolicyMessage;
-	decode(buffer: ArrayBuffer) : GCPolicyMessage;
-	decode(buffer: ByteBuffer) : GCPolicyMessage;
-	decode64(buffer: string) : GCPolicyMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : GCPolicyMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : GCPolicyMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : GCPolicyMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : GCPolicyMessage;
+	decode64(str: string) : GCPolicyMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): GCPolicyMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): GCPolicyMessage;
+	decodeDelimited(buffer: Buffer, enc: string): GCPolicyMessage;
+	decodeDelimited(buffer: string, enc: string): GCPolicyMessage;
+	decodeHex(str: string): GCPolicyMessage;
+	decodeJSON(str: string): GCPolicyMessage;
 	
 }
 
@@ -2375,18 +3195,38 @@ getGc?() : GCPolicy;
 }
 
 	export interface ZoneConfigMessage extends ZoneConfig {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): ZoneConfigMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): ZoneConfigMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface ZoneConfigBuilder {
 	new(data?: ZoneConfig): ZoneConfigMessage;
-	decode(buffer: ArrayBuffer) : ZoneConfigMessage;
-	decode(buffer: ByteBuffer) : ZoneConfigMessage;
-	decode64(buffer: string) : ZoneConfigMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : ZoneConfigMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : ZoneConfigMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : ZoneConfigMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : ZoneConfigMessage;
+	decode64(str: string) : ZoneConfigMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): ZoneConfigMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): ZoneConfigMessage;
+	decodeDelimited(buffer: Buffer, enc: string): ZoneConfigMessage;
+	decodeDelimited(buffer: string, enc: string): ZoneConfigMessage;
+	decodeHex(str: string): ZoneConfigMessage;
+	decodeJSON(str: string): ZoneConfigMessage;
 	
 }
 
@@ -2411,18 +3251,38 @@ getValues?() : roachpb.KeyValue[];
 }
 
 	export interface SystemConfigMessage extends SystemConfig {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): SystemConfigMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): SystemConfigMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface SystemConfigBuilder {
 	new(data?: SystemConfig): SystemConfigMessage;
-	decode(buffer: ArrayBuffer) : SystemConfigMessage;
-	decode(buffer: ByteBuffer) : SystemConfigMessage;
-	decode64(buffer: string) : SystemConfigMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : SystemConfigMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : SystemConfigMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : SystemConfigMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : SystemConfigMessage;
+	decode64(str: string) : SystemConfigMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): SystemConfigMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): SystemConfigMessage;
+	decodeDelimited(buffer: Buffer, enc: string): SystemConfigMessage;
+	decodeDelimited(buffer: string, enc: string): SystemConfigMessage;
+	decodeHex(str: string): SystemConfigMessage;
+	decodeJSON(str: string): SystemConfigMessage;
 	
 }
 
@@ -2439,18 +3299,38 @@ declare module cockroach {
 }
 
 	export interface serverMessage extends server {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): serverMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): serverMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface serverBuilder {
 	new(data?: server): serverMessage;
-	decode(buffer: ArrayBuffer) : serverMessage;
-	decode(buffer: ByteBuffer) : serverMessage;
-	decode64(buffer: string) : serverMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : serverMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : serverMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : serverMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : serverMessage;
+	decode64(str: string) : serverMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): serverMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): serverMessage;
+	decodeDelimited(buffer: Buffer, enc: string): serverMessage;
+	decodeDelimited(buffer: string, enc: string): serverMessage;
+	decodeHex(str: string): serverMessage;
+	decodeJSON(str: string): serverMessage;
 	serverpb: server.serverpbBuilder;
 	status: server.statusBuilder;
 	
@@ -2467,18 +3347,38 @@ declare module cockroach.server {
 }
 
 	export interface serverpbMessage extends serverpb {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): serverpbMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): serverpbMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface serverpbBuilder {
 	new(data?: serverpb): serverpbMessage;
-	decode(buffer: ArrayBuffer) : serverpbMessage;
-	decode(buffer: ByteBuffer) : serverpbMessage;
-	decode64(buffer: string) : serverpbMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : serverpbMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : serverpbMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : serverpbMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : serverpbMessage;
+	decode64(str: string) : serverpbMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): serverpbMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): serverpbMessage;
+	decodeDelimited(buffer: Buffer, enc: string): serverpbMessage;
+	decodeDelimited(buffer: string, enc: string): serverpbMessage;
+	decodeHex(str: string): serverpbMessage;
+	decodeJSON(str: string): serverpbMessage;
 	DatabasesRequest: serverpb.DatabasesRequestBuilder;
 	DatabasesResponse: serverpb.DatabasesResponseBuilder;
 	DatabaseDetailsRequest: serverpb.DatabaseDetailsRequestBuilder;
@@ -2542,18 +3442,38 @@ declare module cockroach.server.serverpb {
 }
 
 	export interface DatabasesRequestMessage extends DatabasesRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): DatabasesRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): DatabasesRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface DatabasesRequestBuilder {
 	new(data?: DatabasesRequest): DatabasesRequestMessage;
-	decode(buffer: ArrayBuffer) : DatabasesRequestMessage;
-	decode(buffer: ByteBuffer) : DatabasesRequestMessage;
-	decode64(buffer: string) : DatabasesRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : DatabasesRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : DatabasesRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : DatabasesRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : DatabasesRequestMessage;
+	decode64(str: string) : DatabasesRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): DatabasesRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): DatabasesRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): DatabasesRequestMessage;
+	decodeDelimited(buffer: string, enc: string): DatabasesRequestMessage;
+	decodeHex(str: string): DatabasesRequestMessage;
+	decodeJSON(str: string): DatabasesRequestMessage;
 	
 }
 
@@ -2578,18 +3498,38 @@ getDatabases?() : string[];
 }
 
 	export interface DatabasesResponseMessage extends DatabasesResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): DatabasesResponseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): DatabasesResponseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface DatabasesResponseBuilder {
 	new(data?: DatabasesResponse): DatabasesResponseMessage;
-	decode(buffer: ArrayBuffer) : DatabasesResponseMessage;
-	decode(buffer: ByteBuffer) : DatabasesResponseMessage;
-	decode64(buffer: string) : DatabasesResponseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : DatabasesResponseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : DatabasesResponseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : DatabasesResponseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : DatabasesResponseMessage;
+	decode64(str: string) : DatabasesResponseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): DatabasesResponseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): DatabasesResponseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): DatabasesResponseMessage;
+	decodeDelimited(buffer: string, enc: string): DatabasesResponseMessage;
+	decodeHex(str: string): DatabasesResponseMessage;
+	decodeJSON(str: string): DatabasesResponseMessage;
 	
 }
 
@@ -2614,18 +3554,38 @@ getDatabase?() : string;
 }
 
 	export interface DatabaseDetailsRequestMessage extends DatabaseDetailsRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): DatabaseDetailsRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): DatabaseDetailsRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface DatabaseDetailsRequestBuilder {
 	new(data?: DatabaseDetailsRequest): DatabaseDetailsRequestMessage;
-	decode(buffer: ArrayBuffer) : DatabaseDetailsRequestMessage;
-	decode(buffer: ByteBuffer) : DatabaseDetailsRequestMessage;
-	decode64(buffer: string) : DatabaseDetailsRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : DatabaseDetailsRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : DatabaseDetailsRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : DatabaseDetailsRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : DatabaseDetailsRequestMessage;
+	decode64(str: string) : DatabaseDetailsRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): DatabaseDetailsRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): DatabaseDetailsRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): DatabaseDetailsRequestMessage;
+	decodeDelimited(buffer: string, enc: string): DatabaseDetailsRequestMessage;
+	decodeHex(str: string): DatabaseDetailsRequestMessage;
+	decodeJSON(str: string): DatabaseDetailsRequestMessage;
 	
 }
 
@@ -2659,18 +3619,38 @@ getTableNames?() : string[];
 }
 
 	export interface DatabaseDetailsResponseMessage extends DatabaseDetailsResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): DatabaseDetailsResponseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): DatabaseDetailsResponseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface DatabaseDetailsResponseBuilder {
 	new(data?: DatabaseDetailsResponse): DatabaseDetailsResponseMessage;
-	decode(buffer: ArrayBuffer) : DatabaseDetailsResponseMessage;
-	decode(buffer: ByteBuffer) : DatabaseDetailsResponseMessage;
-	decode64(buffer: string) : DatabaseDetailsResponseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : DatabaseDetailsResponseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : DatabaseDetailsResponseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : DatabaseDetailsResponseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : DatabaseDetailsResponseMessage;
+	decode64(str: string) : DatabaseDetailsResponseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): DatabaseDetailsResponseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): DatabaseDetailsResponseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): DatabaseDetailsResponseMessage;
+	decodeDelimited(buffer: string, enc: string): DatabaseDetailsResponseMessage;
+	decodeHex(str: string): DatabaseDetailsResponseMessage;
+	decodeJSON(str: string): DatabaseDetailsResponseMessage;
 	Grant: DatabaseDetailsResponse.GrantBuilder;
 	
 }
@@ -2704,18 +3684,38 @@ getPrivileges?() : string[];
 }
 
 	export interface GrantMessage extends Grant {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): GrantMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): GrantMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface GrantBuilder {
 	new(data?: Grant): GrantMessage;
-	decode(buffer: ArrayBuffer) : GrantMessage;
-	decode(buffer: ByteBuffer) : GrantMessage;
-	decode64(buffer: string) : GrantMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : GrantMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : GrantMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : GrantMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : GrantMessage;
+	decode64(str: string) : GrantMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): GrantMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): GrantMessage;
+	decodeDelimited(buffer: Buffer, enc: string): GrantMessage;
+	decodeDelimited(buffer: string, enc: string): GrantMessage;
+	decodeHex(str: string): GrantMessage;
+	decodeJSON(str: string): GrantMessage;
 	
 }
 
@@ -2750,18 +3750,38 @@ getTable?() : string;
 }
 
 	export interface TableDetailsRequestMessage extends TableDetailsRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): TableDetailsRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): TableDetailsRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface TableDetailsRequestBuilder {
 	new(data?: TableDetailsRequest): TableDetailsRequestMessage;
-	decode(buffer: ArrayBuffer) : TableDetailsRequestMessage;
-	decode(buffer: ByteBuffer) : TableDetailsRequestMessage;
-	decode64(buffer: string) : TableDetailsRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : TableDetailsRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : TableDetailsRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : TableDetailsRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : TableDetailsRequestMessage;
+	decode64(str: string) : TableDetailsRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): TableDetailsRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): TableDetailsRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): TableDetailsRequestMessage;
+	decodeDelimited(buffer: string, enc: string): TableDetailsRequestMessage;
+	decodeHex(str: string): TableDetailsRequestMessage;
+	decodeJSON(str: string): TableDetailsRequestMessage;
 	
 }
 
@@ -2840,18 +3860,38 @@ getZoneConfigLevel?() : ZoneConfigurationLevel;
 }
 
 	export interface TableDetailsResponseMessage extends TableDetailsResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): TableDetailsResponseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): TableDetailsResponseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface TableDetailsResponseBuilder {
 	new(data?: TableDetailsResponse): TableDetailsResponseMessage;
-	decode(buffer: ArrayBuffer) : TableDetailsResponseMessage;
-	decode(buffer: ByteBuffer) : TableDetailsResponseMessage;
-	decode64(buffer: string) : TableDetailsResponseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : TableDetailsResponseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : TableDetailsResponseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : TableDetailsResponseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : TableDetailsResponseMessage;
+	decode64(str: string) : TableDetailsResponseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): TableDetailsResponseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): TableDetailsResponseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): TableDetailsResponseMessage;
+	decodeDelimited(buffer: string, enc: string): TableDetailsResponseMessage;
+	decodeHex(str: string): TableDetailsResponseMessage;
+	decodeJSON(str: string): TableDetailsResponseMessage;
 	Grant: TableDetailsResponse.GrantBuilder;
 	Column: TableDetailsResponse.ColumnBuilder;
 	Index: TableDetailsResponse.IndexBuilder;
@@ -2887,18 +3927,38 @@ getPrivileges?() : string[];
 }
 
 	export interface GrantMessage extends Grant {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): GrantMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): GrantMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface GrantBuilder {
 	new(data?: Grant): GrantMessage;
-	decode(buffer: ArrayBuffer) : GrantMessage;
-	decode(buffer: ByteBuffer) : GrantMessage;
-	decode64(buffer: string) : GrantMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : GrantMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : GrantMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : GrantMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : GrantMessage;
+	decode64(str: string) : GrantMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): GrantMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): GrantMessage;
+	decodeDelimited(buffer: Buffer, enc: string): GrantMessage;
+	decodeDelimited(buffer: string, enc: string): GrantMessage;
+	decodeHex(str: string): GrantMessage;
+	decodeJSON(str: string): GrantMessage;
 	
 }
 
@@ -2950,18 +4010,38 @@ getDefaultValue?() : string;
 }
 
 	export interface ColumnMessage extends Column {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): ColumnMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): ColumnMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface ColumnBuilder {
 	new(data?: Column): ColumnMessage;
-	decode(buffer: ArrayBuffer) : ColumnMessage;
-	decode(buffer: ByteBuffer) : ColumnMessage;
-	decode64(buffer: string) : ColumnMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : ColumnMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : ColumnMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : ColumnMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : ColumnMessage;
+	decode64(str: string) : ColumnMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): ColumnMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): ColumnMessage;
+	decodeDelimited(buffer: Buffer, enc: string): ColumnMessage;
+	decodeDelimited(buffer: string, enc: string): ColumnMessage;
+	decodeHex(str: string): ColumnMessage;
+	decodeJSON(str: string): ColumnMessage;
 	
 }
 
@@ -3031,18 +4111,38 @@ getStoring?() : boolean;
 }
 
 	export interface IndexMessage extends Index {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): IndexMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): IndexMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface IndexBuilder {
 	new(data?: Index): IndexMessage;
-	decode(buffer: ArrayBuffer) : IndexMessage;
-	decode(buffer: ByteBuffer) : IndexMessage;
-	decode64(buffer: string) : IndexMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : IndexMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : IndexMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : IndexMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : IndexMessage;
+	decode64(str: string) : IndexMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): IndexMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): IndexMessage;
+	decodeDelimited(buffer: Buffer, enc: string): IndexMessage;
+	decodeDelimited(buffer: string, enc: string): IndexMessage;
+	decodeHex(str: string): IndexMessage;
+	decodeJSON(str: string): IndexMessage;
 	
 }
 
@@ -3077,18 +4177,38 @@ getTable?() : string;
 }
 
 	export interface TableStatsRequestMessage extends TableStatsRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): TableStatsRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): TableStatsRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface TableStatsRequestBuilder {
 	new(data?: TableStatsRequest): TableStatsRequestMessage;
-	decode(buffer: ArrayBuffer) : TableStatsRequestMessage;
-	decode(buffer: ByteBuffer) : TableStatsRequestMessage;
-	decode64(buffer: string) : TableStatsRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : TableStatsRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : TableStatsRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : TableStatsRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : TableStatsRequestMessage;
+	decode64(str: string) : TableStatsRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): TableStatsRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): TableStatsRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): TableStatsRequestMessage;
+	decodeDelimited(buffer: string, enc: string): TableStatsRequestMessage;
+	decodeHex(str: string): TableStatsRequestMessage;
+	decodeJSON(str: string): TableStatsRequestMessage;
 	
 }
 
@@ -3149,18 +4269,38 @@ getMissingNodes?() : TableStatsResponse.MissingNode[];
 }
 
 	export interface TableStatsResponseMessage extends TableStatsResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): TableStatsResponseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): TableStatsResponseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface TableStatsResponseBuilder {
 	new(data?: TableStatsResponse): TableStatsResponseMessage;
-	decode(buffer: ArrayBuffer) : TableStatsResponseMessage;
-	decode(buffer: ByteBuffer) : TableStatsResponseMessage;
-	decode64(buffer: string) : TableStatsResponseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : TableStatsResponseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : TableStatsResponseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : TableStatsResponseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : TableStatsResponseMessage;
+	decode64(str: string) : TableStatsResponseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): TableStatsResponseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): TableStatsResponseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): TableStatsResponseMessage;
+	decodeDelimited(buffer: string, enc: string): TableStatsResponseMessage;
+	decodeHex(str: string): TableStatsResponseMessage;
+	decodeJSON(str: string): TableStatsResponseMessage;
 	MissingNode: TableStatsResponse.MissingNodeBuilder;
 	
 }
@@ -3194,18 +4334,38 @@ getErrorMessage?() : string;
 }
 
 	export interface MissingNodeMessage extends MissingNode {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): MissingNodeMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): MissingNodeMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface MissingNodeBuilder {
 	new(data?: MissingNode): MissingNodeMessage;
-	decode(buffer: ArrayBuffer) : MissingNodeMessage;
-	decode(buffer: ByteBuffer) : MissingNodeMessage;
-	decode64(buffer: string) : MissingNodeMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : MissingNodeMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : MissingNodeMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : MissingNodeMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : MissingNodeMessage;
+	decode64(str: string) : MissingNodeMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): MissingNodeMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): MissingNodeMessage;
+	decodeDelimited(buffer: Buffer, enc: string): MissingNodeMessage;
+	decodeDelimited(buffer: string, enc: string): MissingNodeMessage;
+	decodeHex(str: string): MissingNodeMessage;
+	decodeJSON(str: string): MissingNodeMessage;
 	
 }
 
@@ -3222,18 +4382,38 @@ declare module cockroach.server.serverpb {
 }
 
 	export interface UsersRequestMessage extends UsersRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): UsersRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): UsersRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface UsersRequestBuilder {
 	new(data?: UsersRequest): UsersRequestMessage;
-	decode(buffer: ArrayBuffer) : UsersRequestMessage;
-	decode(buffer: ByteBuffer) : UsersRequestMessage;
-	decode64(buffer: string) : UsersRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : UsersRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : UsersRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : UsersRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : UsersRequestMessage;
+	decode64(str: string) : UsersRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): UsersRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): UsersRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): UsersRequestMessage;
+	decodeDelimited(buffer: string, enc: string): UsersRequestMessage;
+	decodeHex(str: string): UsersRequestMessage;
+	decodeJSON(str: string): UsersRequestMessage;
 	
 }
 
@@ -3258,18 +4438,38 @@ getUsers?() : UsersResponse.User[];
 }
 
 	export interface UsersResponseMessage extends UsersResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): UsersResponseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): UsersResponseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface UsersResponseBuilder {
 	new(data?: UsersResponse): UsersResponseMessage;
-	decode(buffer: ArrayBuffer) : UsersResponseMessage;
-	decode(buffer: ByteBuffer) : UsersResponseMessage;
-	decode64(buffer: string) : UsersResponseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : UsersResponseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : UsersResponseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : UsersResponseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : UsersResponseMessage;
+	decode64(str: string) : UsersResponseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): UsersResponseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): UsersResponseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): UsersResponseMessage;
+	decodeDelimited(buffer: string, enc: string): UsersResponseMessage;
+	decodeHex(str: string): UsersResponseMessage;
+	decodeJSON(str: string): UsersResponseMessage;
 	User: UsersResponse.UserBuilder;
 	
 }
@@ -3294,18 +4494,38 @@ getUsername?() : string;
 }
 
 	export interface UserMessage extends User {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): UserMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): UserMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface UserBuilder {
 	new(data?: User): UserMessage;
-	decode(buffer: ArrayBuffer) : UserMessage;
-	decode(buffer: ByteBuffer) : UserMessage;
-	decode64(buffer: string) : UserMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : UserMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : UserMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : UserMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : UserMessage;
+	decode64(str: string) : UserMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): UserMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): UserMessage;
+	decodeDelimited(buffer: Buffer, enc: string): UserMessage;
+	decodeDelimited(buffer: string, enc: string): UserMessage;
+	decodeHex(str: string): UserMessage;
+	decodeJSON(str: string): UserMessage;
 	
 }
 
@@ -3340,18 +4560,38 @@ getTargetId?() : Long;
 }
 
 	export interface EventsRequestMessage extends EventsRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): EventsRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): EventsRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface EventsRequestBuilder {
 	new(data?: EventsRequest): EventsRequestMessage;
-	decode(buffer: ArrayBuffer) : EventsRequestMessage;
-	decode(buffer: ByteBuffer) : EventsRequestMessage;
-	decode64(buffer: string) : EventsRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : EventsRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : EventsRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : EventsRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : EventsRequestMessage;
+	decode64(str: string) : EventsRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): EventsRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): EventsRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): EventsRequestMessage;
+	decodeDelimited(buffer: string, enc: string): EventsRequestMessage;
+	decodeHex(str: string): EventsRequestMessage;
+	decodeJSON(str: string): EventsRequestMessage;
 	
 }
 
@@ -3376,18 +4616,38 @@ getEvents?() : EventsResponse.Event[];
 }
 
 	export interface EventsResponseMessage extends EventsResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): EventsResponseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): EventsResponseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface EventsResponseBuilder {
 	new(data?: EventsResponse): EventsResponseMessage;
-	decode(buffer: ArrayBuffer) : EventsResponseMessage;
-	decode(buffer: ByteBuffer) : EventsResponseMessage;
-	decode64(buffer: string) : EventsResponseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : EventsResponseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : EventsResponseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : EventsResponseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : EventsResponseMessage;
+	decode64(str: string) : EventsResponseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): EventsResponseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): EventsResponseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): EventsResponseMessage;
+	decodeDelimited(buffer: string, enc: string): EventsResponseMessage;
+	decodeHex(str: string): EventsResponseMessage;
+	decodeJSON(str: string): EventsResponseMessage;
 	Event: EventsResponse.EventBuilder;
 	
 }
@@ -3457,18 +4717,38 @@ getUniqueId?() : ByteBuffer;
 }
 
 	export interface EventMessage extends Event {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): EventMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): EventMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface EventBuilder {
 	new(data?: Event): EventMessage;
-	decode(buffer: ArrayBuffer) : EventMessage;
-	decode(buffer: ByteBuffer) : EventMessage;
-	decode64(buffer: string) : EventMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : EventMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : EventMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : EventMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : EventMessage;
+	decode64(str: string) : EventMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): EventMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): EventMessage;
+	decodeDelimited(buffer: Buffer, enc: string): EventMessage;
+	decodeDelimited(buffer: string, enc: string): EventMessage;
+	decodeHex(str: string): EventMessage;
+	decodeJSON(str: string): EventMessage;
 	Timestamp: Event.TimestampBuilder;
 	
 }
@@ -3502,18 +4782,38 @@ getNsec?() : number;
 }
 
 	export interface TimestampMessage extends Timestamp {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): TimestampMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): TimestampMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface TimestampBuilder {
 	new(data?: Timestamp): TimestampMessage;
-	decode(buffer: ArrayBuffer) : TimestampMessage;
-	decode(buffer: ByteBuffer) : TimestampMessage;
-	decode64(buffer: string) : TimestampMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : TimestampMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : TimestampMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : TimestampMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : TimestampMessage;
+	decode64(str: string) : TimestampMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): TimestampMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): TimestampMessage;
+	decodeDelimited(buffer: Buffer, enc: string): TimestampMessage;
+	decodeDelimited(buffer: string, enc: string): TimestampMessage;
+	decodeHex(str: string): TimestampMessage;
+	decodeJSON(str: string): TimestampMessage;
 	
 }
 
@@ -3540,18 +4840,38 @@ getKeyValues?() : ProtoBufMap<string, ByteBuffer>;
 }
 
 	export interface SetUIDataRequestMessage extends SetUIDataRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): SetUIDataRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): SetUIDataRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface SetUIDataRequestBuilder {
 	new(data?: SetUIDataRequest): SetUIDataRequestMessage;
-	decode(buffer: ArrayBuffer) : SetUIDataRequestMessage;
-	decode(buffer: ByteBuffer) : SetUIDataRequestMessage;
-	decode64(buffer: string) : SetUIDataRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : SetUIDataRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : SetUIDataRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : SetUIDataRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : SetUIDataRequestMessage;
+	decode64(str: string) : SetUIDataRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): SetUIDataRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): SetUIDataRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): SetUIDataRequestMessage;
+	decodeDelimited(buffer: string, enc: string): SetUIDataRequestMessage;
+	decodeHex(str: string): SetUIDataRequestMessage;
+	decodeJSON(str: string): SetUIDataRequestMessage;
 	
 }
 
@@ -3567,18 +4887,38 @@ declare module cockroach.server.serverpb {
 }
 
 	export interface SetUIDataResponseMessage extends SetUIDataResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): SetUIDataResponseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): SetUIDataResponseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface SetUIDataResponseBuilder {
 	new(data?: SetUIDataResponse): SetUIDataResponseMessage;
-	decode(buffer: ArrayBuffer) : SetUIDataResponseMessage;
-	decode(buffer: ByteBuffer) : SetUIDataResponseMessage;
-	decode64(buffer: string) : SetUIDataResponseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : SetUIDataResponseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : SetUIDataResponseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : SetUIDataResponseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : SetUIDataResponseMessage;
+	decode64(str: string) : SetUIDataResponseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): SetUIDataResponseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): SetUIDataResponseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): SetUIDataResponseMessage;
+	decodeDelimited(buffer: string, enc: string): SetUIDataResponseMessage;
+	decodeHex(str: string): SetUIDataResponseMessage;
+	decodeJSON(str: string): SetUIDataResponseMessage;
 	
 }
 
@@ -3603,18 +4943,38 @@ getKeys?() : string[];
 }
 
 	export interface GetUIDataRequestMessage extends GetUIDataRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): GetUIDataRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): GetUIDataRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface GetUIDataRequestBuilder {
 	new(data?: GetUIDataRequest): GetUIDataRequestMessage;
-	decode(buffer: ArrayBuffer) : GetUIDataRequestMessage;
-	decode(buffer: ByteBuffer) : GetUIDataRequestMessage;
-	decode64(buffer: string) : GetUIDataRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : GetUIDataRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : GetUIDataRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : GetUIDataRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : GetUIDataRequestMessage;
+	decode64(str: string) : GetUIDataRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): GetUIDataRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): GetUIDataRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): GetUIDataRequestMessage;
+	decodeDelimited(buffer: string, enc: string): GetUIDataRequestMessage;
+	decodeHex(str: string): GetUIDataRequestMessage;
+	decodeJSON(str: string): GetUIDataRequestMessage;
 	
 }
 
@@ -3639,18 +4999,38 @@ getKeyValues?() : ProtoBufMap<string, GetUIDataResponse.Value>;
 }
 
 	export interface GetUIDataResponseMessage extends GetUIDataResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): GetUIDataResponseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): GetUIDataResponseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface GetUIDataResponseBuilder {
 	new(data?: GetUIDataResponse): GetUIDataResponseMessage;
-	decode(buffer: ArrayBuffer) : GetUIDataResponseMessage;
-	decode(buffer: ByteBuffer) : GetUIDataResponseMessage;
-	decode64(buffer: string) : GetUIDataResponseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : GetUIDataResponseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : GetUIDataResponseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : GetUIDataResponseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : GetUIDataResponseMessage;
+	decode64(str: string) : GetUIDataResponseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): GetUIDataResponseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): GetUIDataResponseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): GetUIDataResponseMessage;
+	decodeDelimited(buffer: string, enc: string): GetUIDataResponseMessage;
+	decodeHex(str: string): GetUIDataResponseMessage;
+	decodeJSON(str: string): GetUIDataResponseMessage;
 	Timestamp: GetUIDataResponse.TimestampBuilder;
 	Value: GetUIDataResponse.ValueBuilder;
 	
@@ -3685,18 +5065,38 @@ getNsec?() : number;
 }
 
 	export interface TimestampMessage extends Timestamp {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): TimestampMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): TimestampMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface TimestampBuilder {
 	new(data?: Timestamp): TimestampMessage;
-	decode(buffer: ArrayBuffer) : TimestampMessage;
-	decode(buffer: ByteBuffer) : TimestampMessage;
-	decode64(buffer: string) : TimestampMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : TimestampMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : TimestampMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : TimestampMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : TimestampMessage;
+	decode64(str: string) : TimestampMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): TimestampMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): TimestampMessage;
+	decodeDelimited(buffer: Buffer, enc: string): TimestampMessage;
+	decodeDelimited(buffer: string, enc: string): TimestampMessage;
+	decodeHex(str: string): TimestampMessage;
+	decodeJSON(str: string): TimestampMessage;
 	
 }
 
@@ -3730,18 +5130,38 @@ getLastUpdated?() : Timestamp;
 }
 
 	export interface ValueMessage extends Value {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): ValueMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): ValueMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface ValueBuilder {
 	new(data?: Value): ValueMessage;
-	decode(buffer: ArrayBuffer) : ValueMessage;
-	decode(buffer: ByteBuffer) : ValueMessage;
-	decode64(buffer: string) : ValueMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : ValueMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : ValueMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : ValueMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : ValueMessage;
+	decode64(str: string) : ValueMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): ValueMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): ValueMessage;
+	decodeDelimited(buffer: Buffer, enc: string): ValueMessage;
+	decodeDelimited(buffer: string, enc: string): ValueMessage;
+	decodeHex(str: string): ValueMessage;
+	decodeJSON(str: string): ValueMessage;
 	
 }
 
@@ -3758,18 +5178,38 @@ declare module cockroach.server.serverpb {
 }
 
 	export interface ClusterRequestMessage extends ClusterRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): ClusterRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): ClusterRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface ClusterRequestBuilder {
 	new(data?: ClusterRequest): ClusterRequestMessage;
-	decode(buffer: ArrayBuffer) : ClusterRequestMessage;
-	decode(buffer: ByteBuffer) : ClusterRequestMessage;
-	decode64(buffer: string) : ClusterRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : ClusterRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : ClusterRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : ClusterRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : ClusterRequestMessage;
+	decode64(str: string) : ClusterRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): ClusterRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): ClusterRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): ClusterRequestMessage;
+	decodeDelimited(buffer: string, enc: string): ClusterRequestMessage;
+	decodeHex(str: string): ClusterRequestMessage;
+	decodeJSON(str: string): ClusterRequestMessage;
 	
 }
 
@@ -3794,18 +5234,38 @@ getClusterId?() : string;
 }
 
 	export interface ClusterResponseMessage extends ClusterResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): ClusterResponseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): ClusterResponseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface ClusterResponseBuilder {
 	new(data?: ClusterResponse): ClusterResponseMessage;
-	decode(buffer: ArrayBuffer) : ClusterResponseMessage;
-	decode(buffer: ByteBuffer) : ClusterResponseMessage;
-	decode64(buffer: string) : ClusterResponseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : ClusterResponseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : ClusterResponseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : ClusterResponseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : ClusterResponseMessage;
+	decode64(str: string) : ClusterResponseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): ClusterResponseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): ClusterResponseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): ClusterResponseMessage;
+	decodeDelimited(buffer: string, enc: string): ClusterResponseMessage;
+	decodeHex(str: string): ClusterResponseMessage;
+	decodeJSON(str: string): ClusterResponseMessage;
 	
 }
 
@@ -3848,18 +5308,38 @@ getShutdown?() : boolean;
 }
 
 	export interface DrainRequestMessage extends DrainRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): DrainRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): DrainRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface DrainRequestBuilder {
 	new(data?: DrainRequest): DrainRequestMessage;
-	decode(buffer: ArrayBuffer) : DrainRequestMessage;
-	decode(buffer: ByteBuffer) : DrainRequestMessage;
-	decode64(buffer: string) : DrainRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : DrainRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : DrainRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : DrainRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : DrainRequestMessage;
+	decode64(str: string) : DrainRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): DrainRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): DrainRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): DrainRequestMessage;
+	decodeDelimited(buffer: string, enc: string): DrainRequestMessage;
+	decodeHex(str: string): DrainRequestMessage;
+	decodeJSON(str: string): DrainRequestMessage;
 	
 }
 
@@ -3884,18 +5364,38 @@ getOn?() : number[];
 }
 
 	export interface DrainResponseMessage extends DrainResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): DrainResponseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): DrainResponseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface DrainResponseBuilder {
 	new(data?: DrainResponse): DrainResponseMessage;
-	decode(buffer: ArrayBuffer) : DrainResponseMessage;
-	decode(buffer: ByteBuffer) : DrainResponseMessage;
-	decode64(buffer: string) : DrainResponseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : DrainResponseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : DrainResponseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : DrainResponseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : DrainResponseMessage;
+	decode64(str: string) : DrainResponseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): DrainResponseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): DrainResponseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): DrainResponseMessage;
+	decodeDelimited(buffer: string, enc: string): DrainResponseMessage;
+	decodeHex(str: string): DrainResponseMessage;
+	decodeJSON(str: string): DrainResponseMessage;
 	
 }
 
@@ -3911,18 +5411,38 @@ declare module cockroach.server.serverpb {
 }
 
 	export interface HealthRequestMessage extends HealthRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): HealthRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): HealthRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface HealthRequestBuilder {
 	new(data?: HealthRequest): HealthRequestMessage;
-	decode(buffer: ArrayBuffer) : HealthRequestMessage;
-	decode(buffer: ByteBuffer) : HealthRequestMessage;
-	decode64(buffer: string) : HealthRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : HealthRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : HealthRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : HealthRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : HealthRequestMessage;
+	decode64(str: string) : HealthRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): HealthRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): HealthRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): HealthRequestMessage;
+	decodeDelimited(buffer: string, enc: string): HealthRequestMessage;
+	decodeHex(str: string): HealthRequestMessage;
+	decodeJSON(str: string): HealthRequestMessage;
 	
 }
 
@@ -3938,18 +5458,38 @@ declare module cockroach.server.serverpb {
 }
 
 	export interface HealthResponseMessage extends HealthResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): HealthResponseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): HealthResponseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface HealthResponseBuilder {
 	new(data?: HealthResponse): HealthResponseMessage;
-	decode(buffer: ArrayBuffer) : HealthResponseMessage;
-	decode(buffer: ByteBuffer) : HealthResponseMessage;
-	decode64(buffer: string) : HealthResponseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : HealthResponseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : HealthResponseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : HealthResponseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : HealthResponseMessage;
+	decode64(str: string) : HealthResponseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): HealthResponseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): HealthResponseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): HealthResponseMessage;
+	decodeDelimited(buffer: string, enc: string): HealthResponseMessage;
+	decodeHex(str: string): HealthResponseMessage;
+	decodeJSON(str: string): HealthResponseMessage;
 	
 }
 
@@ -3974,18 +5514,38 @@ getFreeze?() : boolean;
 }
 
 	export interface ClusterFreezeRequestMessage extends ClusterFreezeRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): ClusterFreezeRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): ClusterFreezeRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface ClusterFreezeRequestBuilder {
 	new(data?: ClusterFreezeRequest): ClusterFreezeRequestMessage;
-	decode(buffer: ArrayBuffer) : ClusterFreezeRequestMessage;
-	decode(buffer: ByteBuffer) : ClusterFreezeRequestMessage;
-	decode64(buffer: string) : ClusterFreezeRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : ClusterFreezeRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : ClusterFreezeRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : ClusterFreezeRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : ClusterFreezeRequestMessage;
+	decode64(str: string) : ClusterFreezeRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): ClusterFreezeRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): ClusterFreezeRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): ClusterFreezeRequestMessage;
+	decodeDelimited(buffer: string, enc: string): ClusterFreezeRequestMessage;
+	decodeHex(str: string): ClusterFreezeRequestMessage;
+	decodeJSON(str: string): ClusterFreezeRequestMessage;
 	
 }
 
@@ -4019,18 +5579,38 @@ getMessage?() : string;
 }
 
 	export interface ClusterFreezeResponseMessage extends ClusterFreezeResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): ClusterFreezeResponseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): ClusterFreezeResponseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface ClusterFreezeResponseBuilder {
 	new(data?: ClusterFreezeResponse): ClusterFreezeResponseMessage;
-	decode(buffer: ArrayBuffer) : ClusterFreezeResponseMessage;
-	decode(buffer: ByteBuffer) : ClusterFreezeResponseMessage;
-	decode64(buffer: string) : ClusterFreezeResponseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : ClusterFreezeResponseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : ClusterFreezeResponseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : ClusterFreezeResponseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : ClusterFreezeResponseMessage;
+	decode64(str: string) : ClusterFreezeResponseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): ClusterFreezeResponseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): ClusterFreezeResponseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): ClusterFreezeResponseMessage;
+	decodeDelimited(buffer: string, enc: string): ClusterFreezeResponseMessage;
+	decodeHex(str: string): ClusterFreezeResponseMessage;
+	decodeJSON(str: string): ClusterFreezeResponseMessage;
 	
 }
 
@@ -4055,18 +5635,38 @@ getNodeId?() : string;
 }
 
 	export interface DetailsRequestMessage extends DetailsRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): DetailsRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): DetailsRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface DetailsRequestBuilder {
 	new(data?: DetailsRequest): DetailsRequestMessage;
-	decode(buffer: ArrayBuffer) : DetailsRequestMessage;
-	decode(buffer: ByteBuffer) : DetailsRequestMessage;
-	decode64(buffer: string) : DetailsRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : DetailsRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : DetailsRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : DetailsRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : DetailsRequestMessage;
+	decode64(str: string) : DetailsRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): DetailsRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): DetailsRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): DetailsRequestMessage;
+	decodeDelimited(buffer: string, enc: string): DetailsRequestMessage;
+	decodeHex(str: string): DetailsRequestMessage;
+	decodeJSON(str: string): DetailsRequestMessage;
 	
 }
 
@@ -4109,18 +5709,38 @@ getBuildInfo?() : build.Info;
 }
 
 	export interface DetailsResponseMessage extends DetailsResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): DetailsResponseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): DetailsResponseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface DetailsResponseBuilder {
 	new(data?: DetailsResponse): DetailsResponseMessage;
-	decode(buffer: ArrayBuffer) : DetailsResponseMessage;
-	decode(buffer: ByteBuffer) : DetailsResponseMessage;
-	decode64(buffer: string) : DetailsResponseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : DetailsResponseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : DetailsResponseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : DetailsResponseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : DetailsResponseMessage;
+	decode64(str: string) : DetailsResponseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): DetailsResponseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): DetailsResponseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): DetailsResponseMessage;
+	decodeDelimited(buffer: string, enc: string): DetailsResponseMessage;
+	decodeHex(str: string): DetailsResponseMessage;
+	decodeJSON(str: string): DetailsResponseMessage;
 	
 }
 
@@ -4136,18 +5756,38 @@ declare module cockroach.server.serverpb {
 }
 
 	export interface NodesRequestMessage extends NodesRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): NodesRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): NodesRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface NodesRequestBuilder {
 	new(data?: NodesRequest): NodesRequestMessage;
-	decode(buffer: ArrayBuffer) : NodesRequestMessage;
-	decode(buffer: ByteBuffer) : NodesRequestMessage;
-	decode64(buffer: string) : NodesRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : NodesRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : NodesRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : NodesRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : NodesRequestMessage;
+	decode64(str: string) : NodesRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): NodesRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): NodesRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): NodesRequestMessage;
+	decodeDelimited(buffer: string, enc: string): NodesRequestMessage;
+	decodeHex(str: string): NodesRequestMessage;
+	decodeJSON(str: string): NodesRequestMessage;
 	
 }
 
@@ -4172,18 +5812,38 @@ getNodes?() : status.NodeStatus[];
 }
 
 	export interface NodesResponseMessage extends NodesResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): NodesResponseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): NodesResponseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface NodesResponseBuilder {
 	new(data?: NodesResponse): NodesResponseMessage;
-	decode(buffer: ArrayBuffer) : NodesResponseMessage;
-	decode(buffer: ByteBuffer) : NodesResponseMessage;
-	decode64(buffer: string) : NodesResponseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : NodesResponseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : NodesResponseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : NodesResponseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : NodesResponseMessage;
+	decode64(str: string) : NodesResponseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): NodesResponseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): NodesResponseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): NodesResponseMessage;
+	decodeDelimited(buffer: string, enc: string): NodesResponseMessage;
+	decodeHex(str: string): NodesResponseMessage;
+	decodeJSON(str: string): NodesResponseMessage;
 	
 }
 
@@ -4208,18 +5868,38 @@ getNodeId?() : string;
 }
 
 	export interface NodeRequestMessage extends NodeRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): NodeRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): NodeRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface NodeRequestBuilder {
 	new(data?: NodeRequest): NodeRequestMessage;
-	decode(buffer: ArrayBuffer) : NodeRequestMessage;
-	decode(buffer: ByteBuffer) : NodeRequestMessage;
-	decode64(buffer: string) : NodeRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : NodeRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : NodeRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : NodeRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : NodeRequestMessage;
+	decode64(str: string) : NodeRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): NodeRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): NodeRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): NodeRequestMessage;
+	decodeDelimited(buffer: string, enc: string): NodeRequestMessage;
+	decodeHex(str: string): NodeRequestMessage;
+	decodeJSON(str: string): NodeRequestMessage;
 	
 }
 
@@ -4262,18 +5942,38 @@ getState?() : storage.storagebase.RangeInfo;
 }
 
 	export interface RangeInfoMessage extends RangeInfo {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): RangeInfoMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): RangeInfoMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface RangeInfoBuilder {
 	new(data?: RangeInfo): RangeInfoMessage;
-	decode(buffer: ArrayBuffer) : RangeInfoMessage;
-	decode(buffer: ByteBuffer) : RangeInfoMessage;
-	decode64(buffer: string) : RangeInfoMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : RangeInfoMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : RangeInfoMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : RangeInfoMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : RangeInfoMessage;
+	decode64(str: string) : RangeInfoMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): RangeInfoMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): RangeInfoMessage;
+	decodeDelimited(buffer: Buffer, enc: string): RangeInfoMessage;
+	decodeDelimited(buffer: string, enc: string): RangeInfoMessage;
+	decodeHex(str: string): RangeInfoMessage;
+	decodeJSON(str: string): RangeInfoMessage;
 	
 }
 
@@ -4298,18 +5998,38 @@ getNodeId?() : string;
 }
 
 	export interface RangesRequestMessage extends RangesRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): RangesRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): RangesRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface RangesRequestBuilder {
 	new(data?: RangesRequest): RangesRequestMessage;
-	decode(buffer: ArrayBuffer) : RangesRequestMessage;
-	decode(buffer: ByteBuffer) : RangesRequestMessage;
-	decode64(buffer: string) : RangesRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : RangesRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : RangesRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : RangesRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : RangesRequestMessage;
+	decode64(str: string) : RangesRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): RangesRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): RangesRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): RangesRequestMessage;
+	decodeDelimited(buffer: string, enc: string): RangesRequestMessage;
+	decodeHex(str: string): RangesRequestMessage;
+	decodeJSON(str: string): RangesRequestMessage;
 	
 }
 
@@ -4334,18 +6054,38 @@ getRanges?() : RangeInfo[];
 }
 
 	export interface RangesResponseMessage extends RangesResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): RangesResponseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): RangesResponseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface RangesResponseBuilder {
 	new(data?: RangesResponse): RangesResponseMessage;
-	decode(buffer: ArrayBuffer) : RangesResponseMessage;
-	decode(buffer: ByteBuffer) : RangesResponseMessage;
-	decode64(buffer: string) : RangesResponseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : RangesResponseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : RangesResponseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : RangesResponseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : RangesResponseMessage;
+	decode64(str: string) : RangesResponseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): RangesResponseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): RangesResponseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): RangesResponseMessage;
+	decodeDelimited(buffer: string, enc: string): RangesResponseMessage;
+	decodeHex(str: string): RangesResponseMessage;
+	decodeJSON(str: string): RangesResponseMessage;
 	
 }
 
@@ -4370,18 +6110,38 @@ getNodeId?() : string;
 }
 
 	export interface GossipRequestMessage extends GossipRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): GossipRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): GossipRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface GossipRequestBuilder {
 	new(data?: GossipRequest): GossipRequestMessage;
-	decode(buffer: ArrayBuffer) : GossipRequestMessage;
-	decode(buffer: ByteBuffer) : GossipRequestMessage;
-	decode64(buffer: string) : GossipRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : GossipRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : GossipRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : GossipRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : GossipRequestMessage;
+	decode64(str: string) : GossipRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): GossipRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): GossipRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): GossipRequestMessage;
+	decodeDelimited(buffer: string, enc: string): GossipRequestMessage;
+	decodeHex(str: string): GossipRequestMessage;
+	decodeJSON(str: string): GossipRequestMessage;
 	
 }
 
@@ -4406,18 +6166,38 @@ getData?() : ByteBuffer;
 }
 
 	export interface JSONResponseMessage extends JSONResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): JSONResponseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): JSONResponseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface JSONResponseBuilder {
 	new(data?: JSONResponse): JSONResponseMessage;
-	decode(buffer: ArrayBuffer) : JSONResponseMessage;
-	decode(buffer: ByteBuffer) : JSONResponseMessage;
-	decode64(buffer: string) : JSONResponseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : JSONResponseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : JSONResponseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : JSONResponseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : JSONResponseMessage;
+	decode64(str: string) : JSONResponseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): JSONResponseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): JSONResponseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): JSONResponseMessage;
+	decodeDelimited(buffer: string, enc: string): JSONResponseMessage;
+	decodeHex(str: string): JSONResponseMessage;
+	decodeJSON(str: string): JSONResponseMessage;
 	
 }
 
@@ -4487,18 +6267,38 @@ getPattern?() : string;
 }
 
 	export interface LogsRequestMessage extends LogsRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): LogsRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): LogsRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface LogsRequestBuilder {
 	new(data?: LogsRequest): LogsRequestMessage;
-	decode(buffer: ArrayBuffer) : LogsRequestMessage;
-	decode(buffer: ByteBuffer) : LogsRequestMessage;
-	decode64(buffer: string) : LogsRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : LogsRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : LogsRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : LogsRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : LogsRequestMessage;
+	decode64(str: string) : LogsRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): LogsRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): LogsRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): LogsRequestMessage;
+	decodeDelimited(buffer: string, enc: string): LogsRequestMessage;
+	decodeHex(str: string): LogsRequestMessage;
+	decodeJSON(str: string): LogsRequestMessage;
 	
 }
 
@@ -4523,18 +6323,38 @@ getNodeId?() : string;
 }
 
 	export interface LogFilesListRequestMessage extends LogFilesListRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): LogFilesListRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): LogFilesListRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface LogFilesListRequestBuilder {
 	new(data?: LogFilesListRequest): LogFilesListRequestMessage;
-	decode(buffer: ArrayBuffer) : LogFilesListRequestMessage;
-	decode(buffer: ByteBuffer) : LogFilesListRequestMessage;
-	decode64(buffer: string) : LogFilesListRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : LogFilesListRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : LogFilesListRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : LogFilesListRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : LogFilesListRequestMessage;
+	decode64(str: string) : LogFilesListRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): LogFilesListRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): LogFilesListRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): LogFilesListRequestMessage;
+	decodeDelimited(buffer: string, enc: string): LogFilesListRequestMessage;
+	decodeHex(str: string): LogFilesListRequestMessage;
+	decodeJSON(str: string): LogFilesListRequestMessage;
 	
 }
 
@@ -4568,18 +6388,38 @@ getFile?() : string;
 }
 
 	export interface LogFileRequestMessage extends LogFileRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): LogFileRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): LogFileRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface LogFileRequestBuilder {
 	new(data?: LogFileRequest): LogFileRequestMessage;
-	decode(buffer: ArrayBuffer) : LogFileRequestMessage;
-	decode(buffer: ByteBuffer) : LogFileRequestMessage;
-	decode64(buffer: string) : LogFileRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : LogFileRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : LogFileRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : LogFileRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : LogFileRequestMessage;
+	decode64(str: string) : LogFileRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): LogFileRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): LogFileRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): LogFileRequestMessage;
+	decodeDelimited(buffer: string, enc: string): LogFileRequestMessage;
+	decodeHex(str: string): LogFileRequestMessage;
+	decodeJSON(str: string): LogFileRequestMessage;
 	
 }
 
@@ -4604,18 +6444,38 @@ getNodeId?() : string;
 }
 
 	export interface StacksRequestMessage extends StacksRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): StacksRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): StacksRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface StacksRequestBuilder {
 	new(data?: StacksRequest): StacksRequestMessage;
-	decode(buffer: ArrayBuffer) : StacksRequestMessage;
-	decode(buffer: ByteBuffer) : StacksRequestMessage;
-	decode64(buffer: string) : StacksRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : StacksRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : StacksRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : StacksRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : StacksRequestMessage;
+	decode64(str: string) : StacksRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): StacksRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): StacksRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): StacksRequestMessage;
+	decodeDelimited(buffer: string, enc: string): StacksRequestMessage;
+	decodeHex(str: string): StacksRequestMessage;
+	decodeJSON(str: string): StacksRequestMessage;
 	
 }
 
@@ -4640,18 +6500,38 @@ getNodeId?() : string;
 }
 
 	export interface MetricsRequestMessage extends MetricsRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): MetricsRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): MetricsRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface MetricsRequestBuilder {
 	new(data?: MetricsRequest): MetricsRequestMessage;
-	decode(buffer: ArrayBuffer) : MetricsRequestMessage;
-	decode(buffer: ByteBuffer) : MetricsRequestMessage;
-	decode64(buffer: string) : MetricsRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : MetricsRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : MetricsRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : MetricsRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : MetricsRequestMessage;
+	decode64(str: string) : MetricsRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): MetricsRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): MetricsRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): MetricsRequestMessage;
+	decodeDelimited(buffer: string, enc: string): MetricsRequestMessage;
+	decodeHex(str: string): MetricsRequestMessage;
+	decodeJSON(str: string): MetricsRequestMessage;
 	
 }
 
@@ -4685,18 +6565,38 @@ getRange?() : RangeInfo;
 }
 
 	export interface RaftRangeNodeMessage extends RaftRangeNode {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): RaftRangeNodeMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): RaftRangeNodeMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface RaftRangeNodeBuilder {
 	new(data?: RaftRangeNode): RaftRangeNodeMessage;
-	decode(buffer: ArrayBuffer) : RaftRangeNodeMessage;
-	decode(buffer: ByteBuffer) : RaftRangeNodeMessage;
-	decode64(buffer: string) : RaftRangeNodeMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : RaftRangeNodeMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : RaftRangeNodeMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : RaftRangeNodeMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : RaftRangeNodeMessage;
+	decode64(str: string) : RaftRangeNodeMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): RaftRangeNodeMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): RaftRangeNodeMessage;
+	decodeDelimited(buffer: Buffer, enc: string): RaftRangeNodeMessage;
+	decodeDelimited(buffer: string, enc: string): RaftRangeNodeMessage;
+	decodeHex(str: string): RaftRangeNodeMessage;
+	decodeJSON(str: string): RaftRangeNodeMessage;
 	
 }
 
@@ -4721,18 +6621,38 @@ getMessage?() : string;
 }
 
 	export interface RaftRangeErrorMessage extends RaftRangeError {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): RaftRangeErrorMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): RaftRangeErrorMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface RaftRangeErrorBuilder {
 	new(data?: RaftRangeError): RaftRangeErrorMessage;
-	decode(buffer: ArrayBuffer) : RaftRangeErrorMessage;
-	decode(buffer: ByteBuffer) : RaftRangeErrorMessage;
-	decode64(buffer: string) : RaftRangeErrorMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : RaftRangeErrorMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : RaftRangeErrorMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : RaftRangeErrorMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : RaftRangeErrorMessage;
+	decode64(str: string) : RaftRangeErrorMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): RaftRangeErrorMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): RaftRangeErrorMessage;
+	decodeDelimited(buffer: Buffer, enc: string): RaftRangeErrorMessage;
+	decodeDelimited(buffer: string, enc: string): RaftRangeErrorMessage;
+	decodeHex(str: string): RaftRangeErrorMessage;
+	decodeJSON(str: string): RaftRangeErrorMessage;
 	
 }
 
@@ -4775,18 +6695,38 @@ getNodes?() : RaftRangeNode[];
 }
 
 	export interface RaftRangeStatusMessage extends RaftRangeStatus {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): RaftRangeStatusMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): RaftRangeStatusMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface RaftRangeStatusBuilder {
 	new(data?: RaftRangeStatus): RaftRangeStatusMessage;
-	decode(buffer: ArrayBuffer) : RaftRangeStatusMessage;
-	decode(buffer: ByteBuffer) : RaftRangeStatusMessage;
-	decode64(buffer: string) : RaftRangeStatusMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : RaftRangeStatusMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : RaftRangeStatusMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : RaftRangeStatusMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : RaftRangeStatusMessage;
+	decode64(str: string) : RaftRangeStatusMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): RaftRangeStatusMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): RaftRangeStatusMessage;
+	decodeDelimited(buffer: Buffer, enc: string): RaftRangeStatusMessage;
+	decodeDelimited(buffer: string, enc: string): RaftRangeStatusMessage;
+	decodeHex(str: string): RaftRangeStatusMessage;
+	decodeJSON(str: string): RaftRangeStatusMessage;
 	
 }
 
@@ -4802,18 +6742,38 @@ declare module cockroach.server.serverpb {
 }
 
 	export interface RaftDebugRequestMessage extends RaftDebugRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): RaftDebugRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): RaftDebugRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface RaftDebugRequestBuilder {
 	new(data?: RaftDebugRequest): RaftDebugRequestMessage;
-	decode(buffer: ArrayBuffer) : RaftDebugRequestMessage;
-	decode(buffer: ByteBuffer) : RaftDebugRequestMessage;
-	decode64(buffer: string) : RaftDebugRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : RaftDebugRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : RaftDebugRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : RaftDebugRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : RaftDebugRequestMessage;
+	decode64(str: string) : RaftDebugRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): RaftDebugRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): RaftDebugRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): RaftDebugRequestMessage;
+	decodeDelimited(buffer: string, enc: string): RaftDebugRequestMessage;
+	decodeHex(str: string): RaftDebugRequestMessage;
+	decodeJSON(str: string): RaftDebugRequestMessage;
 	
 }
 
@@ -4838,18 +6798,38 @@ getRanges?() : ProtoBufMap<Long, RaftRangeStatus>;
 }
 
 	export interface RaftDebugResponseMessage extends RaftDebugResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): RaftDebugResponseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): RaftDebugResponseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface RaftDebugResponseBuilder {
 	new(data?: RaftDebugResponse): RaftDebugResponseMessage;
-	decode(buffer: ArrayBuffer) : RaftDebugResponseMessage;
-	decode(buffer: ByteBuffer) : RaftDebugResponseMessage;
-	decode64(buffer: string) : RaftDebugResponseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : RaftDebugResponseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : RaftDebugResponseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : RaftDebugResponseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : RaftDebugResponseMessage;
+	decode64(str: string) : RaftDebugResponseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): RaftDebugResponseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): RaftDebugResponseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): RaftDebugResponseMessage;
+	decodeDelimited(buffer: string, enc: string): RaftDebugResponseMessage;
+	decodeHex(str: string): RaftDebugResponseMessage;
+	decodeJSON(str: string): RaftDebugResponseMessage;
 	
 }
 
@@ -4892,18 +6872,38 @@ getEndKey?() : ByteBuffer;
 }
 
 	export interface SpanStatsRequestMessage extends SpanStatsRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): SpanStatsRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): SpanStatsRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface SpanStatsRequestBuilder {
 	new(data?: SpanStatsRequest): SpanStatsRequestMessage;
-	decode(buffer: ArrayBuffer) : SpanStatsRequestMessage;
-	decode(buffer: ByteBuffer) : SpanStatsRequestMessage;
-	decode64(buffer: string) : SpanStatsRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : SpanStatsRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : SpanStatsRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : SpanStatsRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : SpanStatsRequestMessage;
+	decode64(str: string) : SpanStatsRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): SpanStatsRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): SpanStatsRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): SpanStatsRequestMessage;
+	decodeDelimited(buffer: string, enc: string): SpanStatsRequestMessage;
+	decodeHex(str: string): SpanStatsRequestMessage;
+	decodeJSON(str: string): SpanStatsRequestMessage;
 	
 }
 
@@ -4937,18 +6937,38 @@ getTotalStats?() : storage.engine.enginepb.MVCCStats;
 }
 
 	export interface SpanStatsResponseMessage extends SpanStatsResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): SpanStatsResponseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): SpanStatsResponseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface SpanStatsResponseBuilder {
 	new(data?: SpanStatsResponse): SpanStatsResponseMessage;
-	decode(buffer: ArrayBuffer) : SpanStatsResponseMessage;
-	decode(buffer: ByteBuffer) : SpanStatsResponseMessage;
-	decode64(buffer: string) : SpanStatsResponseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : SpanStatsResponseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : SpanStatsResponseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : SpanStatsResponseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : SpanStatsResponseMessage;
+	decode64(str: string) : SpanStatsResponseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): SpanStatsResponseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): SpanStatsResponseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): SpanStatsResponseMessage;
+	decodeDelimited(buffer: string, enc: string): SpanStatsResponseMessage;
+	decodeHex(str: string): SpanStatsResponseMessage;
+	decodeJSON(str: string): SpanStatsResponseMessage;
 	
 }
 
@@ -4982,18 +7002,38 @@ getEndKey?() : string;
 }
 
 	export interface PrettySpanMessage extends PrettySpan {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): PrettySpanMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): PrettySpanMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface PrettySpanBuilder {
 	new(data?: PrettySpan): PrettySpanMessage;
-	decode(buffer: ArrayBuffer) : PrettySpanMessage;
-	decode(buffer: ByteBuffer) : PrettySpanMessage;
-	decode64(buffer: string) : PrettySpanMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : PrettySpanMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : PrettySpanMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : PrettySpanMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : PrettySpanMessage;
+	decode64(str: string) : PrettySpanMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): PrettySpanMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): PrettySpanMessage;
+	decodeDelimited(buffer: Buffer, enc: string): PrettySpanMessage;
+	decodeDelimited(buffer: string, enc: string): PrettySpanMessage;
+	decodeHex(str: string): PrettySpanMessage;
+	decodeJSON(str: string): PrettySpanMessage;
 	
 }
 
@@ -5028,18 +7068,38 @@ declare module cockroach.server {
 }
 
 	export interface statusMessage extends status {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): statusMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): statusMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface statusBuilder {
 	new(data?: status): statusMessage;
-	decode(buffer: ArrayBuffer) : statusMessage;
-	decode(buffer: ByteBuffer) : statusMessage;
-	decode64(buffer: string) : statusMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : statusMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : statusMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : statusMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : statusMessage;
+	decode64(str: string) : statusMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): statusMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): statusMessage;
+	decodeDelimited(buffer: Buffer, enc: string): statusMessage;
+	decodeDelimited(buffer: string, enc: string): statusMessage;
+	decodeHex(str: string): statusMessage;
+	decodeJSON(str: string): statusMessage;
 	StoreStatus: status.StoreStatusBuilder;
 	NodeStatus: status.NodeStatusBuilder;
 	
@@ -5074,18 +7134,38 @@ getMetrics?() : ProtoBufMap<string, number>;
 }
 
 	export interface StoreStatusMessage extends StoreStatus {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): StoreStatusMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): StoreStatusMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface StoreStatusBuilder {
 	new(data?: StoreStatus): StoreStatusMessage;
-	decode(buffer: ArrayBuffer) : StoreStatusMessage;
-	decode(buffer: ByteBuffer) : StoreStatusMessage;
-	decode64(buffer: string) : StoreStatusMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : StoreStatusMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : StoreStatusMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : StoreStatusMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : StoreStatusMessage;
+	decode64(str: string) : StoreStatusMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): StoreStatusMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): StoreStatusMessage;
+	decodeDelimited(buffer: Buffer, enc: string): StoreStatusMessage;
+	decodeDelimited(buffer: string, enc: string): StoreStatusMessage;
+	decodeHex(str: string): StoreStatusMessage;
+	decodeJSON(str: string): StoreStatusMessage;
 	
 }
 
@@ -5155,18 +7235,38 @@ getStoreStatuses?() : StoreStatus[];
 }
 
 	export interface NodeStatusMessage extends NodeStatus {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): NodeStatusMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): NodeStatusMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface NodeStatusBuilder {
 	new(data?: NodeStatus): NodeStatusMessage;
-	decode(buffer: ArrayBuffer) : NodeStatusMessage;
-	decode(buffer: ByteBuffer) : NodeStatusMessage;
-	decode64(buffer: string) : NodeStatusMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : NodeStatusMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : NodeStatusMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : NodeStatusMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : NodeStatusMessage;
+	decode64(str: string) : NodeStatusMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): NodeStatusMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): NodeStatusMessage;
+	decodeDelimited(buffer: Buffer, enc: string): NodeStatusMessage;
+	decodeDelimited(buffer: string, enc: string): NodeStatusMessage;
+	decodeHex(str: string): NodeStatusMessage;
+	decodeJSON(str: string): NodeStatusMessage;
 	
 }
 
@@ -5184,18 +7284,38 @@ declare module cockroach {
 }
 
 	export interface buildMessage extends build {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): buildMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): buildMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface buildBuilder {
 	new(data?: build): buildMessage;
-	decode(buffer: ArrayBuffer) : buildMessage;
-	decode(buffer: ByteBuffer) : buildMessage;
-	decode64(buffer: string) : buildMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : buildMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : buildMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : buildMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : buildMessage;
+	decode64(str: string) : buildMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): buildMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): buildMessage;
+	decodeDelimited(buffer: Buffer, enc: string): buildMessage;
+	decodeDelimited(buffer: string, enc: string): buildMessage;
+	decodeHex(str: string): buildMessage;
+	decodeJSON(str: string): buildMessage;
 	Info: build.InfoBuilder;
 	
 }
@@ -5265,18 +7385,38 @@ getPlatform?() : string;
 }
 
 	export interface InfoMessage extends Info {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): InfoMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): InfoMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface InfoBuilder {
 	new(data?: Info): InfoMessage;
-	decode(buffer: ArrayBuffer) : InfoMessage;
-	decode(buffer: ByteBuffer) : InfoMessage;
-	decode64(buffer: string) : InfoMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : InfoMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : InfoMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : InfoMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : InfoMessage;
+	decode64(str: string) : InfoMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): InfoMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): InfoMessage;
+	decodeDelimited(buffer: Buffer, enc: string): InfoMessage;
+	decodeDelimited(buffer: string, enc: string): InfoMessage;
+	decodeHex(str: string): InfoMessage;
+	decodeJSON(str: string): InfoMessage;
 	
 }
 
@@ -5293,18 +7433,38 @@ declare module cockroach {
 }
 
 	export interface gossipMessage extends gossip {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): gossipMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): gossipMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface gossipBuilder {
 	new(data?: gossip): gossipMessage;
-	decode(buffer: ArrayBuffer) : gossipMessage;
-	decode(buffer: ByteBuffer) : gossipMessage;
-	decode64(buffer: string) : gossipMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : gossipMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : gossipMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : gossipMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : gossipMessage;
+	decode64(str: string) : gossipMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): gossipMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): gossipMessage;
+	decodeDelimited(buffer: Buffer, enc: string): gossipMessage;
+	decodeDelimited(buffer: string, enc: string): gossipMessage;
+	decodeHex(str: string): gossipMessage;
+	decodeJSON(str: string): gossipMessage;
 	BootstrapInfo: gossip.BootstrapInfoBuilder;
 	Request: gossip.RequestBuilder;
 	Response: gossip.ResponseBuilder;
@@ -5342,18 +7502,38 @@ getTimestamp?() : util.hlc.Timestamp;
 }
 
 	export interface BootstrapInfoMessage extends BootstrapInfo {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): BootstrapInfoMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): BootstrapInfoMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface BootstrapInfoBuilder {
 	new(data?: BootstrapInfo): BootstrapInfoMessage;
-	decode(buffer: ArrayBuffer) : BootstrapInfoMessage;
-	decode(buffer: ByteBuffer) : BootstrapInfoMessage;
-	decode64(buffer: string) : BootstrapInfoMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : BootstrapInfoMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : BootstrapInfoMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : BootstrapInfoMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : BootstrapInfoMessage;
+	decode64(str: string) : BootstrapInfoMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): BootstrapInfoMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): BootstrapInfoMessage;
+	decodeDelimited(buffer: Buffer, enc: string): BootstrapInfoMessage;
+	decodeDelimited(buffer: string, enc: string): BootstrapInfoMessage;
+	decodeHex(str: string): BootstrapInfoMessage;
+	decodeJSON(str: string): BootstrapInfoMessage;
 	
 }
 
@@ -5405,18 +7585,38 @@ getDelta?() : ProtoBufMap<string, Info>;
 }
 
 	export interface RequestMessage extends Request {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): RequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): RequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface RequestBuilder {
 	new(data?: Request): RequestMessage;
-	decode(buffer: ArrayBuffer) : RequestMessage;
-	decode(buffer: ByteBuffer) : RequestMessage;
-	decode64(buffer: string) : RequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : RequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : RequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : RequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : RequestMessage;
+	decode64(str: string) : RequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): RequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): RequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): RequestMessage;
+	decodeDelimited(buffer: string, enc: string): RequestMessage;
+	decodeHex(str: string): RequestMessage;
+	decodeJSON(str: string): RequestMessage;
 	
 }
 
@@ -5486,18 +7686,38 @@ getHighWaterStamps?() : ProtoBufMap<number, Long>;
 }
 
 	export interface ResponseMessage extends Response {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): ResponseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): ResponseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface ResponseBuilder {
 	new(data?: Response): ResponseMessage;
-	decode(buffer: ArrayBuffer) : ResponseMessage;
-	decode(buffer: ByteBuffer) : ResponseMessage;
-	decode64(buffer: string) : ResponseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : ResponseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : ResponseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : ResponseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : ResponseMessage;
+	decode64(str: string) : ResponseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): ResponseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): ResponseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): ResponseMessage;
+	decodeDelimited(buffer: string, enc: string): ResponseMessage;
+	decodeHex(str: string): ResponseMessage;
+	decodeJSON(str: string): ResponseMessage;
 	
 }
 
@@ -5522,18 +7742,38 @@ getInfos?() : ProtoBufMap<string, Info>;
 }
 
 	export interface InfoStatusMessage extends InfoStatus {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): InfoStatusMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): InfoStatusMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface InfoStatusBuilder {
 	new(data?: InfoStatus): InfoStatusMessage;
-	decode(buffer: ArrayBuffer) : InfoStatusMessage;
-	decode(buffer: ByteBuffer) : InfoStatusMessage;
-	decode64(buffer: string) : InfoStatusMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : InfoStatusMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : InfoStatusMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : InfoStatusMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : InfoStatusMessage;
+	decode64(str: string) : InfoStatusMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): InfoStatusMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): InfoStatusMessage;
+	decodeDelimited(buffer: Buffer, enc: string): InfoStatusMessage;
+	decodeDelimited(buffer: string, enc: string): InfoStatusMessage;
+	decodeHex(str: string): InfoStatusMessage;
+	decodeJSON(str: string): InfoStatusMessage;
 	
 }
 
@@ -5603,18 +7843,38 @@ getPeerId?() : number;
 }
 
 	export interface InfoMessage extends Info {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): InfoMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): InfoMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface InfoBuilder {
 	new(data?: Info): InfoMessage;
-	decode(buffer: ArrayBuffer) : InfoMessage;
-	decode(buffer: ByteBuffer) : InfoMessage;
-	decode64(buffer: string) : InfoMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : InfoMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : InfoMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : InfoMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : InfoMessage;
+	decode64(str: string) : InfoMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): InfoMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): InfoMessage;
+	decodeDelimited(buffer: Buffer, enc: string): InfoMessage;
+	decodeDelimited(buffer: string, enc: string): InfoMessage;
+	decodeHex(str: string): InfoMessage;
+	decodeJSON(str: string): InfoMessage;
 	
 }
 
@@ -5631,18 +7891,38 @@ declare module cockroach {
 }
 
 	export interface tsMessage extends ts {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): tsMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): tsMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface tsBuilder {
 	new(data?: ts): tsMessage;
-	decode(buffer: ArrayBuffer) : tsMessage;
-	decode(buffer: ByteBuffer) : tsMessage;
-	decode64(buffer: string) : tsMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : tsMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : tsMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : tsMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : tsMessage;
+	decode64(str: string) : tsMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): tsMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): tsMessage;
+	decodeDelimited(buffer: Buffer, enc: string): tsMessage;
+	decodeDelimited(buffer: string, enc: string): tsMessage;
+	decodeHex(str: string): tsMessage;
+	decodeJSON(str: string): tsMessage;
 	tspb: ts.tspbBuilder;
 	
 }
@@ -5658,18 +7938,38 @@ declare module cockroach.ts {
 }
 
 	export interface tspbMessage extends tspb {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): tspbMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): tspbMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface tspbBuilder {
 	new(data?: tspb): tspbMessage;
-	decode(buffer: ArrayBuffer) : tspbMessage;
-	decode(buffer: ByteBuffer) : tspbMessage;
-	decode64(buffer: string) : tspbMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : tspbMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : tspbMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : tspbMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : tspbMessage;
+	decode64(str: string) : tspbMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): tspbMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): tspbMessage;
+	decodeDelimited(buffer: Buffer, enc: string): tspbMessage;
+	decodeDelimited(buffer: string, enc: string): tspbMessage;
+	decodeHex(str: string): tspbMessage;
+	decodeJSON(str: string): tspbMessage;
 	TimeSeriesDatapoint: tspb.TimeSeriesDatapointBuilder;
 	TimeSeriesData: tspb.TimeSeriesDataBuilder;
 	Query: tspb.QueryBuilder;
@@ -5709,18 +8009,38 @@ getValue?() : number;
 }
 
 	export interface TimeSeriesDatapointMessage extends TimeSeriesDatapoint {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): TimeSeriesDatapointMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): TimeSeriesDatapointMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface TimeSeriesDatapointBuilder {
 	new(data?: TimeSeriesDatapoint): TimeSeriesDatapointMessage;
-	decode(buffer: ArrayBuffer) : TimeSeriesDatapointMessage;
-	decode(buffer: ByteBuffer) : TimeSeriesDatapointMessage;
-	decode64(buffer: string) : TimeSeriesDatapointMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : TimeSeriesDatapointMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : TimeSeriesDatapointMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : TimeSeriesDatapointMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : TimeSeriesDatapointMessage;
+	decode64(str: string) : TimeSeriesDatapointMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): TimeSeriesDatapointMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): TimeSeriesDatapointMessage;
+	decodeDelimited(buffer: Buffer, enc: string): TimeSeriesDatapointMessage;
+	decodeDelimited(buffer: string, enc: string): TimeSeriesDatapointMessage;
+	decodeHex(str: string): TimeSeriesDatapointMessage;
+	decodeJSON(str: string): TimeSeriesDatapointMessage;
 	
 }
 
@@ -5763,18 +8083,38 @@ getDatapoints?() : TimeSeriesDatapoint[];
 }
 
 	export interface TimeSeriesDataMessage extends TimeSeriesData {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): TimeSeriesDataMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): TimeSeriesDataMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface TimeSeriesDataBuilder {
 	new(data?: TimeSeriesData): TimeSeriesDataMessage;
-	decode(buffer: ArrayBuffer) : TimeSeriesDataMessage;
-	decode(buffer: ByteBuffer) : TimeSeriesDataMessage;
-	decode64(buffer: string) : TimeSeriesDataMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : TimeSeriesDataMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : TimeSeriesDataMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : TimeSeriesDataMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : TimeSeriesDataMessage;
+	decode64(str: string) : TimeSeriesDataMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): TimeSeriesDataMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): TimeSeriesDataMessage;
+	decodeDelimited(buffer: Buffer, enc: string): TimeSeriesDataMessage;
+	decodeDelimited(buffer: string, enc: string): TimeSeriesDataMessage;
+	decodeHex(str: string): TimeSeriesDataMessage;
+	decodeJSON(str: string): TimeSeriesDataMessage;
 	
 }
 
@@ -5835,18 +8175,38 @@ getSources?() : string[];
 }
 
 	export interface QueryMessage extends Query {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): QueryMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): QueryMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface QueryBuilder {
 	new(data?: Query): QueryMessage;
-	decode(buffer: ArrayBuffer) : QueryMessage;
-	decode(buffer: ByteBuffer) : QueryMessage;
-	decode64(buffer: string) : QueryMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : QueryMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : QueryMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : QueryMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : QueryMessage;
+	decode64(str: string) : QueryMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): QueryMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): QueryMessage;
+	decodeDelimited(buffer: Buffer, enc: string): QueryMessage;
+	decodeDelimited(buffer: string, enc: string): QueryMessage;
+	decodeHex(str: string): QueryMessage;
+	decodeJSON(str: string): QueryMessage;
 	
 }
 
@@ -5889,18 +8249,38 @@ getQueries?() : Query[];
 }
 
 	export interface TimeSeriesQueryRequestMessage extends TimeSeriesQueryRequest {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): TimeSeriesQueryRequestMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): TimeSeriesQueryRequestMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface TimeSeriesQueryRequestBuilder {
 	new(data?: TimeSeriesQueryRequest): TimeSeriesQueryRequestMessage;
-	decode(buffer: ArrayBuffer) : TimeSeriesQueryRequestMessage;
-	decode(buffer: ByteBuffer) : TimeSeriesQueryRequestMessage;
-	decode64(buffer: string) : TimeSeriesQueryRequestMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : TimeSeriesQueryRequestMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : TimeSeriesQueryRequestMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : TimeSeriesQueryRequestMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : TimeSeriesQueryRequestMessage;
+	decode64(str: string) : TimeSeriesQueryRequestMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): TimeSeriesQueryRequestMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): TimeSeriesQueryRequestMessage;
+	decodeDelimited(buffer: Buffer, enc: string): TimeSeriesQueryRequestMessage;
+	decodeDelimited(buffer: string, enc: string): TimeSeriesQueryRequestMessage;
+	decodeHex(str: string): TimeSeriesQueryRequestMessage;
+	decodeJSON(str: string): TimeSeriesQueryRequestMessage;
 	
 }
 
@@ -5925,18 +8305,38 @@ getResults?() : TimeSeriesQueryResponse.Result[];
 }
 
 	export interface TimeSeriesQueryResponseMessage extends TimeSeriesQueryResponse {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): TimeSeriesQueryResponseMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): TimeSeriesQueryResponseMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface TimeSeriesQueryResponseBuilder {
 	new(data?: TimeSeriesQueryResponse): TimeSeriesQueryResponseMessage;
-	decode(buffer: ArrayBuffer) : TimeSeriesQueryResponseMessage;
-	decode(buffer: ByteBuffer) : TimeSeriesQueryResponseMessage;
-	decode64(buffer: string) : TimeSeriesQueryResponseMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : TimeSeriesQueryResponseMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : TimeSeriesQueryResponseMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : TimeSeriesQueryResponseMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : TimeSeriesQueryResponseMessage;
+	decode64(str: string) : TimeSeriesQueryResponseMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): TimeSeriesQueryResponseMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): TimeSeriesQueryResponseMessage;
+	decodeDelimited(buffer: Buffer, enc: string): TimeSeriesQueryResponseMessage;
+	decodeDelimited(buffer: string, enc: string): TimeSeriesQueryResponseMessage;
+	decodeHex(str: string): TimeSeriesQueryResponseMessage;
+	decodeJSON(str: string): TimeSeriesQueryResponseMessage;
 	Result: TimeSeriesQueryResponse.ResultBuilder;
 	
 }
@@ -5970,18 +8370,38 @@ getDatapoints?() : TimeSeriesDatapoint[];
 }
 
 	export interface ResultMessage extends Result {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
+	add(key: string, value: any, noAssert?: boolean): ResultMessage;
+	calculate(): number;
+	encode64(): string;
+	encodeAB(): ArrayBuffer;
+	encodeDelimited(buffer?: ByteBuffer, noVerify?: boolean): ByteBuffer;
+	encodeDelimited(buffer?: boolean, noVerify?: boolean): ByteBuffer;
+	encodeHex(): string;
 	encodeJSON(): string;
+	encodeNB(): Buffer;
+	get(key: string, noAssert: boolean): any;
+	set(keyOrObj: string, value: any | boolean, noAssert: boolean): ResultMessage;
+	toArrayBuffer(): ArrayBuffer;
 	toBase64(): string;
+	toBuffer(): Buffer;
+	toHex(): string;
+	toRaw(): any;
 	toString(): string;
 }
 
 export interface ResultBuilder {
 	new(data?: Result): ResultMessage;
-	decode(buffer: ArrayBuffer) : ResultMessage;
-	decode(buffer: ByteBuffer) : ResultMessage;
-	decode64(buffer: string) : ResultMessage;
+	decode(buffer: ArrayBuffer, length?: number | string, enc?: string) : ResultMessage;
+	decode(buffer: ByteBuffer, length?: number | string, enc?: string) : ResultMessage;
+	decode(buffer: Buffer, length?: number | string, enc?: string) : ResultMessage;
+	decode(buffer: string, length?: number | string, enc?: string) : ResultMessage;
+	decode64(str: string) : ResultMessage;
+	decodeDelimited(buffer: ArrayBuffer, enc: string): ResultMessage;
+	decodeDelimited(buffer: ByteBuffer, enc: string): ResultMessage;
+	decodeDelimited(buffer: Buffer, enc: string): ResultMessage;
+	decodeDelimited(buffer: string, enc: string): ResultMessage;
+	decodeHex(str: string): ResultMessage;
+	decodeJSON(str: string): ResultMessage;
 	
 }
 
