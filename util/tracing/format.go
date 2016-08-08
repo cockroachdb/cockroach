@@ -52,7 +52,7 @@ func (l traceLogs) Swap(i, j int) {
 func FormatRawSpans(spans []basictracer.RawSpan) string {
 	m := make(map[uint64]*basictracer.RawSpan)
 	for i, sp := range spans {
-		m[sp.SpanID] = &spans[i]
+		m[sp.Context.SpanID] = &spans[i]
 	}
 
 	var depth func(uint64) int
