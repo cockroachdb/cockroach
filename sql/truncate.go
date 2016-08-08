@@ -51,7 +51,7 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 			return nil, err
 		}
 
-		fkTables := TablesNeededForFKs(*tableDesc, CheckDeletes)
+		fkTables := tablesNeededForFKs(*tableDesc, CheckDeletes)
 		if err := p.fillFKTableMap(fkTables); err != nil {
 			return nil, err
 		}

@@ -146,13 +146,15 @@ func (p *planner) mustGetTableDesc(tn *parser.TableName) (*sqlbase.TableDescript
 }
 
 var errTableDeleted = errors.New("table is being deleted")
+var errTableAdding = errors.New("table is being added")
 
 func filterTableState(tableDesc *sqlbase.TableDescriptor) error {
-	if tableDesc.Deleted() {
+	switch {
+	case tableDesc.Deleted():
 		return errTableDeleted
-	}
-
-	if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
+	case tableDesc.Adding():
+		return errTableAdding
+	case tableDesc.State != sqlbase.TableDescriptor_PUBLIC:
 		return errors.Errorf("table in unknown state: %s", tableDesc.State.String())
 	}
 	return nil

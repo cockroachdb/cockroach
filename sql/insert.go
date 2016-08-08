@@ -150,7 +150,7 @@ func (p *planner) Insert(
 		return nil, fmt.Errorf("INSERT error: table %s has %d columns but %d values were supplied", n.Table, numInputColumns, expressions)
 	}
 
-	fkTables := TablesNeededForFKs(*en.tableDesc, CheckInserts)
+	fkTables := tablesNeededForFKs(*en.tableDesc, CheckInserts)
 	if err := p.fillFKTableMap(fkTables); err != nil {
 		return nil, err
 	}
@@ -188,7 +188,7 @@ func (p *planner) Insert(
 				return nil, err
 			}
 
-			fkTables := TablesNeededForFKs(*en.tableDesc, CheckUpdates)
+			fkTables := tablesNeededForFKs(*en.tableDesc, CheckUpdates)
 			if err := p.fillFKTableMap(fkTables); err != nil {
 				return nil, err
 			}

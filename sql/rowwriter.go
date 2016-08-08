@@ -150,7 +150,7 @@ type rowInserter struct {
 func makeRowInserter(
 	txn *client.Txn,
 	tableDesc *sqlbase.TableDescriptor,
-	fkTables TablesByID,
+	fkTables tableLookupsByID,
 	insertCols []sqlbase.ColumnDescriptor,
 	checkFKs bool,
 ) (rowInserter, error) {
@@ -372,7 +372,7 @@ const (
 func makeRowUpdater(
 	txn *client.Txn,
 	tableDesc *sqlbase.TableDescriptor,
-	fkTables TablesByID,
+	fkTables tableLookupsByID,
 	updateCols []sqlbase.ColumnDescriptor,
 	requestedCols []sqlbase.ColumnDescriptor,
 	updateType rowUpdaterType,
@@ -754,7 +754,7 @@ type rowDeleter struct {
 func makeRowDeleter(
 	txn *client.Txn,
 	tableDesc *sqlbase.TableDescriptor,
-	fkTables TablesByID,
+	fkTables tableLookupsByID,
 	requestedCols []sqlbase.ColumnDescriptor,
 	checkFKs bool,
 ) (rowDeleter, error) {
@@ -800,7 +800,7 @@ func makeRowDeleter(
 	if checkFKs {
 		var err error
 		if rd.fks, err = makeFKDeleteHelper(txn, *tableDesc, fkTables, fetchColIDtoRowIndex); err != nil {
-			return rowDeleter{}, nil
+			return rowDeleter{}, err
 		}
 	}
 

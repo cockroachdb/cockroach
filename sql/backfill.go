@@ -270,11 +270,13 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		}
 
 		updateCols := append(added, dropped...)
-		fkTables := TablesNeededForFKs(*tableDesc, CheckUpdates)
+		fkTables := tablesNeededForFKs(*tableDesc, CheckUpdates)
 		for k := range fkTables {
-			if fkTables[k], err = sqlbase.GetTableDescFromID(txn, k); err != nil {
+			table, err := sqlbase.GetTableDescFromID(txn, k)
+			if err != nil {
 				return err
 			}
+			fkTables[k] = tableLookup{table: table}
 		}
 		// TODO(dan): Tighten up the bound on the requestedCols parameter to
 		// makeRowUpdater.
