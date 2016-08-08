@@ -25,6 +25,10 @@ import (
 )
 
 // TablesByID maps table IDs to looked up descriptors.
+//
+// Special-case: an entry with value nil (vs lack of entry) indicates a table
+// exists but is not yet public/leasable (though it can be assumed to be empty
+// e.g. for the purposes of FK checks).
 type TablesByID map[sqlbase.ID]*sqlbase.TableDescriptor
 
 // FKCheck indicates a kind of FK check (delete, insert, or both).
@@ -141,6 +145,11 @@ func makeFKDeleteHelper(
 	var fks fkDeleteHelper
 	for _, idx := range table.AllNonDropIndexes() {
 		for _, ref := range idx.ReferencedBy {
+			if found, ok := otherTables[ref.Table]; ok && found == nil {
+				// Adding table table special case: it exists but is not leasable yet --
+				// can skip checking since not leasable implies empty.
+				continue
+			}
 			fk, err := makeBaseFKHelper(txn, otherTables, idx, ref, colMap)
 			if err == errSkipUnsedFK {
 				continue
@@ -233,7 +242,7 @@ func makeBaseFKHelper(
 ) (baseFKHelper, error) {
 	b := baseFKHelper{txn: txn, writeIdx: writeIdx}
 	searchTable, ok := otherTables[ref.Table]
-	if !ok {
+	if !ok || searchTable == nil {
 		return b, errors.Errorf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
 	}
 	b.searchTable = searchTable

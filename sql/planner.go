@@ -304,6 +304,10 @@ func (p *planner) fillFKTableMap(m TablesByID) error {
 	var err error
 	for tableID := range m {
 		if m[tableID], err = p.getTableLeaseByID(tableID); err != nil {
+			if err == errTableAdding {
+				m[tableID] = nil
+				continue
+			}
 			return err
 		}
 	}
