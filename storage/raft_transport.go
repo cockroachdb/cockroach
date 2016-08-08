@@ -31,8 +31,11 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/bufalloc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -69,6 +72,17 @@ type RaftMessageHandler interface {
 	// HandleRaftResponse is called for each raft response. Note that
 	// not all messages receive a response.
 	HandleRaftResponse(context.Context, *RaftMessageResponse)
+
+	// PrepareForSnapshotIfPossible is called for each incoming snapshot request. If it returns an
+	// error the snapshot will be rejected as un-applyable. It returns a boolean to indicate whether
+	// a replica placeholder was added to the store, which should be passed into HandleSnapshot, and a
+	// cleanup function that must be called if HandleSnapshot wasn't called or returned an error.
+	PrepareForSnapshotIfPossible(context.Context, *roachpb.RangeDescriptor) (addedPlaceholder bool, cleanup func(), err error)
+
+	// HandleSnapshot is called for each complete incoming snapshot if PrepareForSnapshotIfPossible
+	// didn't return an error.
+	HandleSnapshot(ctx context.Context, req *SnapshotRequest, batches [][]byte, logEntries [][]byte,
+		addedPlaceholder bool) *roachpb.Error
 }
 
 // NodeAddressResolver is the function used by RaftTransport to map node IDs to
@@ -318,8 +332,86 @@ func (t *RaftTransport) RaftMessageSync(ctx context.Context, req *RaftMessageReq
 	return newRaftMessageResponse(req, pErr), nil
 }
 
+// RaftSnapshot handles incoming streaming snapshot requests.
+func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error {
+	var taskErr error
+	if err := t.rpcContext.Stopper.RunTask(func() {
+		taskErr = func() error {
+			firstReq, err := stream.Recv()
+			if err != nil {
+				return err
+			}
+			if firstReq.Header == nil {
+				return stream.Send(&SnapshotResponse{
+					Status:  SnapshotResponse_ERROR,
+					Message: "client error: no header in first snapshot request message"})
+			}
+			rmr := firstReq.Header.RaftMessageRequest
+			t.mu.Lock()
+			handler, ok := t.mu.handlers[rmr.ToReplica.StoreID]
+			t.mu.Unlock()
+			if !ok {
+				return errors.Errorf(
+					"unable to accept Raft message from %+v: no handler registered for %+v",
+					rmr.ToReplica, rmr.FromReplica)
+			}
+			var addedPlaceholder, appliedSnapshot bool
+			addedPlaceholder, cleanup, err := handler.PrepareForSnapshotIfPossible(
+				stream.Context(), &firstReq.Header.RangeDescriptor)
+			if err != nil {
+				return stream.Send(&SnapshotResponse{
+					Status:  SnapshotResponse_ERROR,
+					Message: errors.Wrap(err, "permanently rejected snapshot").Error()})
+			}
+			defer func() {
+				if !appliedSnapshot {
+					cleanup()
+				}
+			}()
+
+			if err := stream.Send(&SnapshotResponse{Status: SnapshotResponse_ACCEPTED}); err != nil {
+				return err
+			}
+
+			var batches [][]byte
+			var logEntries [][]byte
+			for {
+				req, err := stream.Recv()
+				if err != nil {
+					return err
+				}
+				if req.Header != nil {
+					return stream.Send(&SnapshotResponse{
+						Status:  SnapshotResponse_ERROR,
+						Message: "client error: provided a header mid-stream"})
+				}
+
+				if req.KVBatch != nil {
+					batches = append(batches, req.KVBatch)
+				}
+				if req.LogEntries != nil {
+					logEntries = append(logEntries, req.LogEntries...)
+				}
+				if req.Final {
+					if err := handler.HandleSnapshot(
+						stream.Context(), firstReq, batches, logEntries, addedPlaceholder); err != nil {
+						return stream.Send(&SnapshotResponse{
+							Status:  SnapshotResponse_ERROR,
+							Message: errors.Wrap(err.GoError(), "failed to apply snapshot").Error()})
+					}
+					appliedSnapshot = true
+					return stream.Send(&SnapshotResponse{Status: SnapshotResponse_APPLIED})
+				}
+			}
+		}()
+	}); err != nil {
+		return err
+	}
+	return taskErr
+}
+
 // Listen registers a raftMessageHandler to receive proxied messages.
-func (t *RaftTransport) Listen(storeID roachpb.StoreID, handler RaftMessageHandler) {
+func (t *RaftTransport) Listen(storeID roachpb.StoreID, handler RaftMessageHandler, store *Store) {
 	t.mu.Lock()
 	t.mu.handlers[storeID] = handler
 	t.mu.Unlock()
@@ -562,4 +654,105 @@ func (t *RaftTransport) SendSync(ctx context.Context, req *RaftMessageRequest) e
 	default:
 		return errors.Errorf("unexpected response value %T %s", val, val)
 	}
+}
+
+// batchFactory is a factory for fresh Batches that can be used to create BatchReprs. The resultant
+// Batches are not expected to be committed.
+type batchFactory func() engine.Batch
+
+// SendSnapshot streams the given outgoing snapshot. The caller is responsible for closing the
+// OutgoingSnapshot with snap.Close.
+func (t *RaftTransport) SendSnapshot(
+	ctx context.Context,
+	header *SnapshotRequest_Header,
+	snap OutgoingSnapshot,
+	batchFactory batchFactory,
+) error {
+	nodeID := header.RaftMessageRequest.ToReplica.NodeID
+	breaker := t.GetCircuitBreaker(nodeID)
+	return breaker.Call(func() error {
+		addr, err := t.resolver(nodeID)
+		if err != nil {
+			return err
+		}
+		conn, err := t.rpcContext.GRPCDial(addr.String(), grpc.WithBlock())
+		if err != nil {
+			return err
+		}
+		client := NewMultiRaftClient(conn)
+		stream, err := client.RaftSnapshot(ctx)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if err := stream.CloseSend(); err != nil {
+				log.Warningf(stream.Context(), "Failed to close snapshot stream: %s", err)
+			}
+		}()
+
+		if err := stream.Send(&SnapshotRequest{Header: header}); err != nil {
+			return err
+		}
+		// Wait until we get a response from the server.
+		resp, err := stream.Recv()
+		if resp.Status == SnapshotResponse_DECLINED {
+			if header.CanDecline {
+				return errors.Errorf("range=%s: remote declined snapshot: %s",
+					header.RangeDescriptor.RangeID, resp.Message)
+			}
+			return errors.Errorf("range=%s: programming error: remote declined required snapshot: %s",
+				header.RangeDescriptor.RangeID, resp.Message)
+		} else if resp.Status != SnapshotResponse_ACCEPTED {
+			return errors.Errorf("range=%s: server sent an invalid status during negotiation",
+				header.RangeDescriptor.RangeID)
+		}
+
+		// Send our snapshot.
+		// For now, just send one giant batch.
+		// TODO(jordan) decide batch size and send while iterating.
+
+		b := batchFactory()
+		// Determine the unreplicated key prefix so we can drop any
+		// unreplicated keys from the snapshot.
+		unreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(header.RangeDescriptor.RangeID)
+		var alloc bufalloc.ByteAllocator
+		n := 0
+		for ; snap.Iter.Valid(); snap.Iter.Next() {
+			var key engine.MVCCKey
+			var value []byte
+			alloc, key, value = snap.Iter.allocIterKeyValue(alloc)
+			if bytes.HasPrefix(key.Key, unreplicatedPrefix) {
+				continue
+			}
+			n++
+			mvccKey := engine.MVCCKey{
+				Key:       key.Key,
+				Timestamp: key.Timestamp,
+			}
+			if err := b.Put(mvccKey, value); err != nil {
+				return err
+			}
+		}
+		repr := b.Repr()
+
+		if err := stream.Send(&SnapshotRequest{
+			KVBatch: repr, LogEntries: snap.LogEntries, Final: true}); err != nil {
+			return err
+		}
+		log.Infof(stream.Context(), "streamed snapshot: kv pairs: %d, log entries: %d",
+			n, len(snap.LogEntries))
+
+		resp, err = stream.Recv()
+		if err != nil {
+			return errors.Wrapf(err, "range=%s: remote failed to apply snapshot", header.RangeDescriptor.RangeID)
+		}
+		if resp.Status == SnapshotResponse_ERROR {
+			return errors.Errorf("range=%s: remote failed to apply snapshot for reason %s",
+				header.RangeDescriptor.RangeID, resp.Message)
+		} else if resp.Status != SnapshotResponse_APPLIED {
+			return errors.Errorf("range=%s: server sent an invalid status during finalization",
+				header.RangeDescriptor.RangeID)
+		}
+		return nil
+	}, 0)
 }
