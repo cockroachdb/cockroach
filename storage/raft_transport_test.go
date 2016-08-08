@@ -78,6 +78,12 @@ func (s channelServer) HandleRaftResponse(ctx context.Context, resp *storage.Raf
 	log.Fatalf(ctx, "unexpected raft response: %s", resp)
 }
 
+func (s channelServer) HandleSnapshot(
+	header *storage.SnapshotRequest_Header, stream storage.MultiRaft_RaftSnapshotServer,
+) error {
+	panic("unexpected HandleSnapshot")
+}
+
 // raftTransportTestContext contains objects needed to test RaftTransport.
 // Typical usage will add multiple nodes with AddNode, attach channels
 // to at least one store with ListenStore, and send messages with Send.
@@ -492,4 +498,24 @@ func TestRaftTransportIndependentRanges(t *testing.T) {
 			t.Fatalf("timeout waiting for message %d", i)
 		}
 	}
+}
+
+func TestSendSyncAvoidUnused(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// This test just exists to avoid unused warnings for SendSync, which is unused since
+	// streaming snapshots was introduced.
+
+	rttc := newRaftTransportTestContext(t)
+	defer rttc.Stop()
+
+	server := roachpb.ReplicaDescriptor{
+		NodeID:    1,
+		StoreID:   1,
+		ReplicaID: 1,
+	}
+	serverTransport := rttc.AddNode(server.NodeID)
+
+	err := serverTransport.SendSync(context.TODO(), &storage.RaftMessageRequest{})
+	t.Log(err.Error())
 }
