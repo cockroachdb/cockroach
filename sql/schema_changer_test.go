@@ -20,6 +20,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -310,6 +311,70 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 		t.Fatalf("table expected to have an outstanding schema change: %v", tableDesc)
 	}
 
+}
+
+func TestSchemaChangeFKs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// The descriptor changes made must have an immediate effect
+	// so disable leases on tables.
+	defer csql.TestDisableTableLeases()()
+
+	params, _ := createTestServerParams()
+	// Disable external processing of mutations.
+	params.Knobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
+		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+
+	if _, err := sqlDB.Exec(`CREATE DATABASE t`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`CREATE TABLE t.products (id INT PRIMARY KEY);`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(
+		`CREATE TABLE t.orders (id INT PRIMARY KEY, product INT REFERENCES t.products, INDEX (product));`,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO t.products VALUES (1), (2)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`DELETE FROM t.products WHERE TRUE`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO t.products VALUES (1), (2)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO t.orders VALUES (1, 2), (2, 2)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`DELETE FROM t.products`); err == nil {
+		t.Fatal("expected fk error but got success")
+	} else if !strings.HasPrefix(err.Error(), "pq: foreign key violation") {
+		t.Fatal("expected fk error but got", err)
+	}
+
+	// Read table descriptor for version.
+	// productsDesc := sqlbase.GetTableDescriptor(kvDB, "t", "products")
+	ordersDesc := sqlbase.GetTableDescriptor(kvDB, "t", "orders")
+
+	// Step it back to non-public.
+	ordersDesc.State = sqlbase.TableDescriptor_ADD
+	ordersDesc.Version++
+
+	if err := kvDB.Put(
+		sqlbase.MakeDescMetadataKey(ordersDesc.ID),
+		sqlbase.WrapDescriptor(ordersDesc),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// With the orders table non-public, we (falsely in this case) that it is empty.
+	if _, err := sqlDB.Exec(`DELETE FROM t.products`); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestAsyncSchemaChanger(t *testing.T) {
