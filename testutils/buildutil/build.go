@@ -20,10 +20,49 @@ import (
 	"go/build"
 	"strings"
 	"testing"
-
-	"github.com/pkg/errors"
-	"golang.org/x/tools/refactor/importgraph"
 )
+
+// TransitiveImports returns a set containing all of importpath's
+// transitive dependencies.
+func TransitiveImports(importpath string, cgo bool) (map[string]struct{}, error) {
+	buildContext := build.Default
+	buildContext.CgoEnabled = cgo
+
+	imports := make(map[string]struct{})
+
+	var addImports func(string) error
+	addImports = func(root string) error {
+		// Skip runtime packages (i.e. packages which don't contain a ".")
+		//
+		// TODO(peter): This is necessary because we're not handling vendoring
+		// correctly. The upstream code this was borrowed from
+		// (golang/tools/refactor) has changed significantly.
+		if strings.IndexByte(root, '.') == -1 {
+			return nil
+		}
+
+		pkg, err := buildContext.Import(root, buildContext.GOPATH, 0)
+		if err != nil {
+			return err
+		}
+
+		for _, imp := range pkg.Imports {
+			// https://github.com/golang/tools/blob/master/refactor/importgraph/graph.go#L115
+			if imp == "C" {
+				continue // "C" is fake
+			}
+			if _, ok := imports[imp]; !ok {
+				imports[imp] = struct{}{}
+				if err := addImports(imp); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	return imports, addImports(importpath)
+}
 
 // VerifyNoImports verifies that a package doesn't depend (directly or
 // indirectly) on forbidden packages. The forbidden packages are specified as
@@ -41,14 +80,10 @@ func VerifyNoImports(
 		t.Skip("GOPATH isn't set")
 	}
 
-	buildContext := build.Default
-	buildContext.CgoEnabled = cgo
-
-	forward, _, errs := importgraph.Build(&buildContext)
-	for pkg, err := range errs {
-		t.Error(errors.Wrapf(err, "error loading package %s", pkg))
+	imports, err := TransitiveImports(pkgPath, true)
+	if err != nil {
+		t.Fatal(err)
 	}
-	imports := forward.Search(pkgPath)
 
 	for _, forbidden := range forbiddenPkgs {
 		if _, ok := imports[forbidden]; ok {
