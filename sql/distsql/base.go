@@ -129,6 +129,50 @@ func (rc *RowChannel) NoMoreRows() {
 	atomic.StoreUint32(&rc.noMoreRows, 1)
 }
 
+// MultiplexedRowChannel is a RowChannel wrapper which allows multiple row
+// producers to push rows on the same channel.
+type MultiplexedRowChannel struct {
+	rowChan RowChannel
+	// numSenders is an atomic counter that keeps track of how many senders have
+	// yet to call Close().
+	numSenders int32
+	firstErr   error
+}
+
+var _ RowReceiver = &MultiplexedRowChannel{}
+var _ RowSource = &MultiplexedRowChannel{}
+
+// Init initializes the MultiplexedRowChannel with the default buffer size.
+func (mrc *MultiplexedRowChannel) Init(numSenders int) {
+	mrc.rowChan.Init()
+	atomic.StoreInt32(&mrc.numSenders, int32(numSenders))
+	mrc.firstErr = nil
+}
+
+// PushRow is part of the RowReceiver interface.
+func (mrc *MultiplexedRowChannel) PushRow(row sqlbase.EncDatumRow) bool {
+	return mrc.rowChan.PushRow(row)
+}
+
+// Close is part of the RowReceiver interface.
+func (mrc *MultiplexedRowChannel) Close(err error) {
+	if err != nil {
+		mrc.firstErr = err
+	}
+	newVal := atomic.AddInt32(&mrc.numSenders, -1)
+	if newVal < 0 {
+		panic("too many Close() calls")
+	}
+	if newVal == 0 {
+		mrc.rowChan.Close(mrc.firstErr)
+	}
+}
+
+// NextRow is part of the RowSource interface.
+func (mrc *MultiplexedRowChannel) NextRow() (sqlbase.EncDatumRow, error) {
+	return mrc.rowChan.NextRow()
+}
+
 // RowBuffer is an implementation of RowReceiver that buffers (accumulates)
 // results in memory, as well as an implementation of rowSender that returns
 // rows from a row buffer.

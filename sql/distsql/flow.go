@@ -74,7 +74,7 @@ type Flow struct {
 	// inboundStreams are streams that receive data from other hosts, through
 	// the FlowStream API.
 	inboundStreams map[StreamID]RowReceiver
-	localStreams   map[LocalStreamID]*RowChannel
+	localStreams   map[LocalStreamID]RowReceiver
 
 	status flowStatus
 }
@@ -95,7 +95,7 @@ func newFlow(
 
 // setupInboundStream adds a stream to the stream map (inboundStreams or
 // localStreams).
-func (f *Flow) setupInboundStream(spec StreamEndpointSpec, rowChan *RowChannel) error {
+func (f *Flow) setupInboundStream(spec StreamEndpointSpec, receiver RowReceiver) error {
 	if spec.Mailbox != nil {
 		if spec.Mailbox.SimpleResponse || spec.Mailbox.TargetAddr != "" {
 			return errors.Errorf("inbound stream has SimpleResponse or TargetAddr set")
@@ -110,7 +110,7 @@ func (f *Flow) setupInboundStream(spec StreamEndpointSpec, rowChan *RowChannel) 
 		if log.V(2) {
 			log.Infof(f.FlowCtx.Context, "Set up inbound stream %d", sid)
 		}
-		f.inboundStreams[sid] = rowChan
+		f.inboundStreams[sid] = receiver
 		return nil
 	}
 	sid := spec.LocalStreamID
@@ -118,9 +118,9 @@ func (f *Flow) setupInboundStream(spec StreamEndpointSpec, rowChan *RowChannel) 
 		return errors.Errorf("local stream %d has multiple consumers", sid)
 	}
 	if f.localStreams == nil {
-		f.localStreams = make(map[LocalStreamID]*RowChannel)
+		f.localStreams = make(map[LocalStreamID]RowReceiver)
 	}
-	f.localStreams[sid] = rowChan
+	f.localStreams[sid] = receiver
 	return nil
 }
 
@@ -217,8 +217,14 @@ func (f *Flow) setupFlow(spec *FlowSpec) error {
 					}
 					sync = rowChan
 				} else {
-					// TODO(radu): implement multi-input RowChannel "wrapper"
-					return errors.Errorf("unordered sync not implemented")
+					mrc := &MultiplexedRowChannel{}
+					mrc.Init(len(is.Streams))
+					for _, s := range is.Streams {
+						if err := f.setupInboundStream(s, mrc); err != nil {
+							return err
+						}
+					}
+					sync = mrc
 				}
 			case InputSyncSpec_ORDERED:
 				// Ordered synchronizer: create a RowChannel for each input.
