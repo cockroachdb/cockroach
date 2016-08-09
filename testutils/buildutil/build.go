@@ -32,28 +32,24 @@ func TransitiveImports(importpath string, cgo bool) (map[string]struct{}, error)
 
 	var addImports func(string) error
 	addImports = func(root string) error {
-		// Skip runtime packages (i.e. packages which don't contain a ".")
-		//
-		// TODO(peter): This is necessary because we're not handling vendoring
-		// correctly. The upstream code this was borrowed from
-		// (golang/tools/refactor) has changed significantly.
-		if strings.IndexByte(root, '.') == -1 {
-			return nil
-		}
-
-		pkg, err := buildContext.Import(root, buildContext.GOPATH, 0)
+		pkg, err := buildContext.Import(root, "", 0)
 		if err != nil {
 			return err
 		}
 
-		for _, imp := range pkg.Imports {
+		for _, importPath := range pkg.Imports {
 			// https://github.com/golang/tools/blob/master/refactor/importgraph/graph.go#L115
-			if imp == "C" {
+			if importPath == "C" {
 				continue // "C" is fake
 			}
-			if _, ok := imports[imp]; !ok {
-				imports[imp] = struct{}{}
-				if err := addImports(imp); err != nil {
+			importPkg, err := buildContext.Import(importPath, pkg.Dir, build.FindOnly)
+			if err != nil {
+				return err
+			}
+			importPath = importPkg.ImportPath
+			if _, ok := imports[importPath]; !ok {
+				imports[importPath] = struct{}{}
+				if err := addImports(importPath); err != nil {
 					return err
 				}
 			}
