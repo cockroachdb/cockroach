@@ -110,12 +110,6 @@ const (
 // Pattern for local used when determining the node ID.
 var localRE = regexp.MustCompile(`(?i)local`)
 
-func inconsistentBatch() *client.Batch {
-	b := &client.Batch{}
-	b.Header.ReadConsistency = roachpb.INCONSISTENT
-	return b
-}
-
 type metricMarshaler interface {
 	json.Marshaler
 	PrintAsText(io.Writer) error
@@ -484,7 +478,7 @@ func (s *statusServer) Nodes(ctx context.Context, req *serverpb.NodesRequest) (*
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
-	b := inconsistentBatch()
+	b := &client.Batch{}
 	b.Scan(startKey, endKey)
 	if err := s.db.Run(b); err != nil {
 		log.Error(ctx, err)
@@ -512,7 +506,7 @@ func (s *statusServer) Node(ctx context.Context, req *serverpb.NodeRequest) (*st
 	}
 
 	key := keys.NodeStatusKey(int32(nodeID))
-	b := inconsistentBatch()
+	b := &client.Batch{}
 	b.Get(key)
 	if err := s.db.Run(b); err != nil {
 		log.Error(ctx, err)
