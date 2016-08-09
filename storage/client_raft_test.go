@@ -1918,9 +1918,11 @@ func TestLeaderRemoveSelf(t *testing.T) {
 
 	// Force the read command request a new lease.
 	clock := mtc.clocks[0]
-	header := roachpb.Header{}
-	header.Timestamp = clock.Update(clock.Now().Add(
-		storage.LeaseExpiration(mtc.stores[0], clock), 0))
+	header := roachpb.Header{
+		Timestamp: clock.Update(
+			clock.Now().Add(mtc.stores[0].LeaseExpiration(clock), 0),
+		),
+	}
 
 	// Expect get a RangeNotFoundError.
 	_, pErr := client.SendWrappedWith(rg1(mtc.stores[0]), nil, header, &getArgs)
