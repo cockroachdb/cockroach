@@ -155,22 +155,36 @@ runcheck() {
   local name="$1"
   shift
   echo "=== RUN $name"
-  local output
-  if output=$(eval "$name"); then
-    echo "--- PASS: $name (0.00s)"
+  start=$(date +%s)
+  output=$(eval "$name")
+  end=$(date +%s)
+  runtime=$((end-start))
+  if [ $? -eq 0 ]; then
+    echo "--- PASS: $name ($runtime.00s)"
   else
-    echo "--- FAIL: $name (0.00s)"
+    echo "--- FAIL: $name ($runtime.00s)"
     echo "$output"
-    failed=1
+    return 1
   fi
 }
 
 # "declare -F" lists all the defined functions, in the form
 # declare -f runcheck
 # declare -f TestUnused
-for i in $(declare -F|cut -d' ' -f3|grep '^Test'|grep "${TESTS-.}"); do
-  runcheck $i
-done
+tests=$(declare -F|cut -d' ' -f3|grep '^Test'|grep "${TESTS-.}")
+export -f runcheck
+export -f $tests
+if hash parallel 2>/dev/null; then
+    if ! parallel runcheck {} ::: $tests; then
+        failed=1
+    fi
+else
+    for i in $tests; do
+        if ! runcheck $i; then
+            failed=1
+        fi
+    done
+fi
 
 if [ "$failed" = "0" ]; then
   echo "ok check-style 0.000s"
