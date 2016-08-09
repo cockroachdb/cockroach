@@ -327,3 +327,20 @@ DELETE FROM pairs WHERE id = 2
 #
 # statement error foreign key violation: value \[2\] not found in other@primary \[x\]
 # INSERT INTO crossdb(y) VALUES (2)
+
+
+# since PKs are handled differently than other indexes, check pk<->pk ref with no other indexes in play.
+statement ok
+CREATE TABLE foo (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE bar (id INT PRIMARY KEY REFERENCES foo)
+
+statement ok
+INSERT INTO foo VALUES (2)
+
+statement ok
+INSERT INTO bar VALUES (2)
+
+statement error foreign key violation: value\(s\) \[2] in columns \[id\] referenced in table "bar"
+DELETE FROM foo
