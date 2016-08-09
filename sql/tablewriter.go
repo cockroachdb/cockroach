@@ -527,6 +527,12 @@ func (td *tableDeleter) fastPathAvailable(ctx context.Context) bool {
 		}
 		return false
 	}
+	if len(td.rd.helper.tableDesc.PrimaryIndex.ReferencedBy) > 0 {
+		if log.V(2) {
+			log.Info(ctx, "delete forced to scan: table is referenced by foreign keys")
+		}
+		return false
+	}
 	return true
 }
 
