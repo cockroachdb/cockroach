@@ -18,6 +18,7 @@ package storage_test
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -44,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -566,6 +568,11 @@ func TestReplicateAfterTruncation(t *testing.T) {
 func TestRefreshPendingCommands(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// TODO(peter): Debugging to track down #8397. Remove when fixed.
+	if err := flag.Lookup("vmodule").Value.Set("raft=5,store=5,replica=5,replica_command=5,replica_range_lease=5"); err != nil {
+		t.Fatal(err)
+	}
+
 	// In this scenario, three different mechanisms detect the need to repropose
 	// commands. Test that each one is sufficient individually. We have this
 	// redundancy because some mechanisms respond with lower latency than others,
@@ -578,7 +585,9 @@ func TestRefreshPendingCommands(t *testing.T) {
 		{DisableRefreshReasonSnapshotApplied: true, DisableRefreshReasonTicks: true},
 		{DisableRefreshReasonNewLeader: true, DisableRefreshReasonSnapshotApplied: true},
 	}
-	for _, c := range testCases {
+	for i, c := range testCases {
+		// TODO(peter): Debugging to track down #8397. Remove when fixed.
+		log.Infof(context.TODO(), "test case %d", i)
 		func() {
 			ctx := storage.TestStoreContext()
 			ctx.TestingKnobs = c
@@ -627,6 +636,9 @@ func TestRefreshPendingCommands(t *testing.T) {
 
 			// Restart node 2 and wait for the snapshot to be applied. Note that
 			// waitForValues reads directly from the engine.
+			//
+			// TODO(peter): Debugging to track down #8397. Remove when fixed.
+			log.Infof(context.TODO(), "restarting node")
 			mtc.restartStore(2)
 			mtc.waitForValues(roachpb.Key("a"), []int64{10, 10, 10})
 
