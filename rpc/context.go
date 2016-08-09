@@ -78,6 +78,7 @@ type Context struct {
 	*base.Context
 
 	localClock   *hlc.Clock
+	breakerClock *breakerClock
 	Stopper      *stop.Stopper
 	RemoteClocks *RemoteClockMonitor
 
@@ -95,17 +96,20 @@ type Context struct {
 }
 
 // NewContext creates an rpc Context with the supplied values.
-func NewContext(baseCtx *base.Context, clock *hlc.Clock, stopper *stop.Stopper) *Context {
+func NewContext(baseCtx *base.Context, hlcClock *hlc.Clock, stopper *stop.Stopper) *Context {
 	ctx := &Context{
 		Context: baseCtx,
 	}
-	if clock != nil {
-		ctx.localClock = clock
+	if hlcClock != nil {
+		ctx.localClock = hlcClock
 	} else {
 		ctx.localClock = hlc.NewClock(hlc.UnixNano)
 	}
+	ctx.breakerClock = &breakerClock{
+		clock: ctx.localClock,
+	}
 	ctx.Stopper = stopper
-	ctx.RemoteClocks = newRemoteClockMonitor(clock, 10*defaultHeartbeatInterval)
+	ctx.RemoteClocks = newRemoteClockMonitor(ctx.localClock, 10*defaultHeartbeatInterval)
 	ctx.HeartbeatInterval = defaultHeartbeatInterval
 	ctx.HeartbeatTimeout = 2 * defaultHeartbeatInterval
 	ctx.conns.cache = make(map[string]connMeta)
@@ -170,7 +174,7 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 
 	breaker, ok := ctx.conns.breakers[target]
 	if !ok {
-		breaker = NewBreaker()
+		breaker = ctx.NewBreaker()
 		ctx.conns.breakers[target] = breaker
 	}
 	if !breaker.Ready() {
@@ -214,6 +218,12 @@ func (ctx *Context) GRPCDialOption() (grpc.DialOption, error) {
 		dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
 	}
 	return dialOpt, nil
+}
+
+// NewBreaker creates a new circuit breaker properly configured for RPC
+// connections.
+func (ctx *Context) NewBreaker() *circuit.Breaker {
+	return newBreaker(ctx.breakerClock)
 }
 
 // setConnHealthy sets the health status of the connection.
