@@ -32,20 +32,20 @@ import (
 )
 
 const (
-	nameCgoCalls       = "cgocalls"
-	nameGoroutines     = "goroutines"
-	nameGoAllocBytes   = "go.allocbytes"
-	nameGoTotalBytes   = "go.totalbytes"
-	nameCgoAllocBytes  = "cgo.allocbytes"
-	nameCgoTotalBytes  = "cgo.totalbytes"
-	nameGCCount        = "gc.count"
-	nameGCPauseNS      = "gc.pause.ns"
-	nameGCPausePercent = "gc.pause.percent"
-	nameCPUUserNS      = "cpu.user.ns"
-	nameCPUUserPercent = "cpu.user.percent"
-	nameCPUSysNS       = "cpu.sys.ns"
-	nameCPUSysPercent  = "cpu.sys.percent"
-	nameRSS            = "rss"
+	nameCgoCalls       = "sys.cgocalls"
+	nameGoroutines     = "sys.goroutines"
+	nameGoAllocBytes   = "sys.go.allocbytes"
+	nameGoTotalBytes   = "sys.go.totalbytes"
+	nameCgoAllocBytes  = "sys.cgo.allocbytes"
+	nameCgoTotalBytes  = "sys.cgo.totalbytes"
+	nameGCCount        = "sys.gc.count"
+	nameGCPauseNS      = "sys.gc.pause.ns"
+	nameGCPausePercent = "sys.gc.pause.percent"
+	nameCPUUserNS      = "sys.cpu.user.ns"
+	nameCPUUserPercent = "sys.cpu.user.percent"
+	nameCPUSysNS       = "sys.cpu.sys.ns"
+	nameCPUSysPercent  = "sys.cpu.sys.percent"
+	nameRSS            = "sys.rss"
 )
 
 // getCgoMemStats is a function that fetches stats for the C++ portion of the code.
@@ -91,8 +91,7 @@ type RuntimeStatSampler struct {
 }
 
 // MakeRuntimeStatSampler constructs a new RuntimeStatSampler object.
-func MakeRuntimeStatSampler(clock *hlc.Clock) RuntimeStatSampler {
-	reg := metric.NewRegistry()
+func MakeRuntimeStatSampler(clock *hlc.Clock, reg *metric.Registry) RuntimeStatSampler {
 	return RuntimeStatSampler{
 		registry:       reg,
 		clock:          clock,
@@ -111,12 +110,6 @@ func MakeRuntimeStatSampler(clock *hlc.Clock) RuntimeStatSampler {
 		cpuSysPercent:  reg.GaugeFloat64(nameCPUSysPercent),
 		rss:            reg.Gauge(nameRSS),
 	}
-}
-
-// Registry returns the metric.Registry object in which the runtime recorder
-// stores its metric gauges.
-func (rsr RuntimeStatSampler) Registry() *metric.Registry {
-	return rsr.registry
 }
 
 // SampleEnvironment queries the runtime system for various interesting metrics,
