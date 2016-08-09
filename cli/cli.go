@@ -87,6 +87,7 @@ func init() {
 		versionCmd,
 		debugCmd,
 	)
+	cockroachCmd.AddCommand(backupCmds...)
 }
 
 // Run ...
