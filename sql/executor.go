@@ -52,6 +52,22 @@ var errNotRetriable = errors.New("the transaction is not in a retriable state")
 const sqlTxnName string = "sql txn"
 const sqlImplicitTxnName string = "sql txn implicit"
 
+// Fully-qualified names for metrics.
+const (
+	MetricLatencyName     = "sql.latency"
+	MetricTxnBeginName    = "sql.txn.begin.count"
+	MetricTxnCommitName   = "sql.txn.commit.count"
+	MetricTxnAbortName    = "sql.txn.abort.count"
+	MetricTxnRollbackName = "sql.txn.rollback.count"
+	MetricSelectName      = "sql.select.count"
+	MetricUpdateName      = "sql.update.count"
+	MetricInsertName      = "sql.insert.count"
+	MetricDeleteName      = "sql.delete.count"
+	MetricDdlName         = "sql.ddl.count"
+	MetricMiscName        = "sql.misc.count"
+	MetricQueryName       = "sql.query.count"
+)
+
 // TODO(radu): experimental code for testing distSQL flows.
 //    0 : disabled
 //    1 : enabled, sync mode
@@ -234,18 +250,18 @@ func NewExecutor(ctx ExecutorContext, stopper *stop.Stopper, registry *metric.Re
 		reCache: parser.NewRegexpCache(512),
 
 		registry:         registry,
-		latency:          registry.Latency("latency"),
-		txnBeginCount:    registry.Counter("txn.begin.count"),
-		txnCommitCount:   registry.Counter("txn.commit.count"),
-		txnAbortCount:    registry.Counter("txn.abort.count"),
-		txnRollbackCount: registry.Counter("txn.rollback.count"),
-		selectCount:      registry.Counter("select.count"),
-		updateCount:      registry.Counter("update.count"),
-		insertCount:      registry.Counter("insert.count"),
-		deleteCount:      registry.Counter("delete.count"),
-		ddlCount:         registry.Counter("ddl.count"),
-		miscCount:        registry.Counter("misc.count"),
-		queryCount:       registry.Counter("query.count"),
+		latency:          registry.Latency(MetricLatencyName),
+		txnBeginCount:    registry.Counter(MetricTxnBeginName),
+		txnCommitCount:   registry.Counter(MetricTxnCommitName),
+		txnAbortCount:    registry.Counter(MetricTxnAbortName),
+		txnRollbackCount: registry.Counter(MetricTxnRollbackName),
+		selectCount:      registry.Counter(MetricSelectName),
+		updateCount:      registry.Counter(MetricUpdateName),
+		insertCount:      registry.Counter(MetricInsertName),
+		deleteCount:      registry.Counter(MetricDeleteName),
+		ddlCount:         registry.Counter(MetricDdlName),
+		miscCount:        registry.Counter(MetricMiscName),
+		queryCount:       registry.Counter(MetricQueryName),
 	}
 	exec.systemConfigCond = sync.NewCond(exec.systemConfigMu.RLocker())
 

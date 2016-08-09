@@ -63,6 +63,11 @@ const (
 	// publishStatusInterval is the interval for publishing periodic statistics
 	// from stores to the internal event feed.
 	publishStatusInterval = 10 * time.Second
+
+	// Metric names.
+	execLatencyName = "exec.latency"
+	execSuccessName = "exec.success"
+	execErrorName   = "exec.error"
 )
 
 // errNeedsBootstrap indicates the node should be used as the seed of
@@ -81,13 +86,12 @@ type nodeMetrics struct {
 	err      metric.Rates
 }
 
-func makeNodeMetrics() nodeMetrics {
-	reg := metric.NewRegistry()
+func makeNodeMetrics(reg *metric.Registry) nodeMetrics {
 	return nodeMetrics{
 		registry: reg,
-		latency:  reg.Latency("latency"),
-		success:  reg.Rates("success"),
-		err:      reg.Rates("error"),
+		latency:  reg.Latency(execLatencyName),
+		success:  reg.Rates(execSuccessName),
+		err:      reg.Rates(execErrorName),
 	}
 }
 
@@ -243,6 +247,7 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics *kv.TxnMetrics) (uuid.
 func NewNode(
 	ctx storage.StoreContext,
 	recorder *status.MetricsRecorder,
+	reg *metric.Registry,
 	stopper *stop.Stopper,
 	txnMetrics *kv.TxnMetrics,
 	eventLogger sql.EventLogger,
@@ -251,13 +256,12 @@ func NewNode(
 		ctx:         ctx,
 		stopper:     stopper,
 		recorder:    recorder,
-		metrics:     makeNodeMetrics(),
+		metrics:     makeNodeMetrics(reg),
 		stores:      storage.NewStores(ctx.Clock),
 		txnMetrics:  txnMetrics,
 		eventLogger: eventLogger,
 	}
 	n.InternalStoresServer = storage.MakeInternalStoresServer(&n.Descriptor, n.stores)
-	n.recorder.AddNodeRegistry("exec.%s", n.metrics.registry)
 	return n
 }
 
@@ -342,9 +346,6 @@ func (n *Node) start(
 	}
 
 	n.startedAt = n.ctx.Clock.Now().WallTime
-
-	// Initialize the recorder with the NodeID, which is initialized by initStores().
-	n.recorder.NodeStarted(n.Descriptor, n.startedAt)
 
 	n.startComputePeriodicMetrics(n.stopper)
 	n.startGossip(ctx, n.stopper)

@@ -118,12 +118,12 @@ const (
 
 // Gossip metrics counter names.
 const (
-	ConnectionsIncomingGaugeName = "connections.incoming"
-	ConnectionsOutgoingGaugeName = "connections.outgoing"
-	InfosSentRatesName           = "infos.sent"
-	InfosReceivedRatesName       = "infos.received"
-	BytesSentRatesName           = "bytes.sent"
-	BytesReceivedRatesName       = "bytes.received"
+	ConnectionsIncomingGaugeName = "gossip.connections.incoming"
+	ConnectionsOutgoingGaugeName = "gossip.connections.outgoing"
+	InfosSentRatesName           = "gossip.infos.sent"
+	InfosReceivedRatesName       = "gossip.infos.received"
+	BytesSentRatesName           = "gossip.bytes.sent"
+	BytesReceivedRatesName       = "gossip.bytes.received"
 )
 
 // Storage is an interface which allows the gossip instance
