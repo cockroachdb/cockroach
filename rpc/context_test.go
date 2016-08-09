@@ -26,10 +26,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/syncutil"
@@ -397,7 +400,7 @@ func TestCircuitBreaker(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	clock := hlc.NewClock(time.Unix(0, 1).UnixNano)
+	clock := hlc.NewClock(hlc.NewManualClock(1).UnixNano)
 	serverCtx := newNodeTestContext(clock, stopper)
 	_, ln := newTestServer(t, serverCtx, true)
 	remoteAddr := ln.Addr().String()
@@ -408,6 +411,34 @@ func TestCircuitBreaker(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	clientCtx.conns.Lock()
+	events := make(chan circuit.ListenerEvent, 10)
+	clientCtx.conns.breakers[remoteAddr].AddListener(events)
+	clientCtx.conns.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case e := <-events:
+				switch e.Event {
+				case circuit.BreakerTripped:
+					log.Infof(context.TODO(), "BreakerTripped")
+				case circuit.BreakerReset:
+					log.Infof(context.TODO(), "BreakerReset")
+				case circuit.BreakerFail:
+					log.Infof(context.TODO(), "BreakerFail")
+				case circuit.BreakerReady:
+					log.Infof(context.TODO(), "BreakerReady")
+				default:
+					log.Infof(context.TODO(), "%d", e.Event)
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+
 	// Wait until the breaker opens. This will occur when the heartbeat fails
 	// (because there is no heartbeat service).
 	util.SucceedsSoon(t, func() error {
@@ -415,10 +446,19 @@ func TestCircuitBreaker(t *testing.T) {
 		if err == circuit.ErrBreakerOpen {
 			return nil
 		}
+		clientCtx.conns.Lock()
+		breaker := clientCtx.conns.breakers[remoteAddr]
+		log.Infof(context.TODO(), "breaker not open: ready=%t tripped=%t failures=%d/%d successes=%d",
+			breaker.Ready(), breaker.Tripped(), breaker.Failures(),
+			breaker.ConsecFailures(), breaker.Successes())
+		clientCtx.conns.Unlock()
 		return errors.Errorf("breaker not open: %v", err)
 	})
 
+	close(done)
+
 	// Reset the breaker. The next dial will succeed.
+	log.Infof(context.TODO(), "resetting breaker")
 	clientCtx.conns.Lock()
 	clientCtx.conns.breakers[remoteAddr].Reset()
 	clientCtx.conns.Unlock()

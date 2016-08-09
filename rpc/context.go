@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
+	"github.com/facebookgo/clock"
 	circuit "github.com/rubyist/circuitbreaker"
 )
 
@@ -73,11 +74,48 @@ type connMeta struct {
 	healthy bool
 }
 
+// breakerClock is an implementation of clock.Clock that internally uses an
+// hlc.Clock. It is used to bridge the hlc clock to the circuit breaker
+// clocks. Note that it only implements the After) and Now() methods needed by
+// circuit breakers and backoffs.
+type breakerClock struct {
+	clock *hlc.Clock
+}
+
+func (c *breakerClock) After(d time.Duration) <-chan time.Time {
+	return time.After(d)
+}
+
+func (c *breakerClock) AfterFunc(d time.Duration, f func()) *clock.Timer {
+	panic("unimplemented")
+}
+
+func (c *breakerClock) Now() time.Time {
+	return c.clock.PhysicalTime()
+}
+
+func (c *breakerClock) Sleep(d time.Duration) {
+	panic("unimplemented")
+}
+
+func (c *breakerClock) Tick(d time.Duration) <-chan time.Time {
+	panic("unimplemented")
+}
+
+func (c *breakerClock) Ticker(d time.Duration) *clock.Ticker {
+	panic("unimplemented")
+}
+
+func (c *breakerClock) Timer(d time.Duration) *clock.Timer {
+	panic("unimplemented")
+}
+
 // Context contains the fields required by the rpc framework.
 type Context struct {
 	*base.Context
 
 	localClock   *hlc.Clock
+	breakerClock clock.Clock
 	Stopper      *stop.Stopper
 	RemoteClocks *RemoteClockMonitor
 
@@ -95,17 +133,20 @@ type Context struct {
 }
 
 // NewContext creates an rpc Context with the supplied values.
-func NewContext(baseCtx *base.Context, clock *hlc.Clock, stopper *stop.Stopper) *Context {
+func NewContext(baseCtx *base.Context, hlcClock *hlc.Clock, stopper *stop.Stopper) *Context {
 	ctx := &Context{
 		Context: baseCtx,
 	}
-	if clock != nil {
-		ctx.localClock = clock
+	if hlcClock != nil {
+		ctx.localClock = hlcClock
 	} else {
 		ctx.localClock = hlc.NewClock(hlc.UnixNano)
 	}
+	ctx.breakerClock = &breakerClock{
+		clock: ctx.localClock,
+	}
 	ctx.Stopper = stopper
-	ctx.RemoteClocks = newRemoteClockMonitor(clock, 10*defaultHeartbeatInterval)
+	ctx.RemoteClocks = newRemoteClockMonitor(ctx.localClock, 10*defaultHeartbeatInterval)
 	ctx.HeartbeatInterval = defaultHeartbeatInterval
 	ctx.HeartbeatTimeout = 2 * defaultHeartbeatInterval
 	ctx.conns.cache = make(map[string]connMeta)
@@ -170,7 +211,7 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 
 	breaker, ok := ctx.conns.breakers[target]
 	if !ok {
-		breaker = NewBreaker()
+		breaker = newBreaker(ctx.breakerClock)
 		ctx.conns.breakers[target] = breaker
 	}
 	if !breaker.Ready() {

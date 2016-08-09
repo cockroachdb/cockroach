@@ -20,12 +20,13 @@ import (
 	"time"
 
 	"github.com/cenk/backoff"
+	"github.com/facebookgo/clock"
 	circuit "github.com/rubyist/circuitbreaker"
 )
 
 // newBackOff creates a new exponential backoff properly configured for RPC
 // connection backoff.
-func newBackOff() backoff.BackOff {
+func newBackOff(clock backoff.Clock) backoff.BackOff {
 	// This exponential backoff limits the circuit breaker to 1 second
 	// intervals between successive attempts to resolve a node address
 	// and connect via GRPC.
@@ -43,17 +44,28 @@ func newBackOff() backoff.BackOff {
 		Multiplier:          1.5,
 		MaxInterval:         1 * time.Second,
 		MaxElapsedTime:      0,
-		Clock:               backoff.SystemClock,
+		Clock:               clock,
 	}
 	b.Reset()
 	return b
 }
 
+func newBreaker(clock clock.Clock) *circuit.Breaker {
+	return circuit.NewBreakerWithOptions(&circuit.Options{
+		BackOff:    newBackOff(clock),
+		Clock:      clock,
+		ShouldTrip: circuit.ThresholdTripFunc(1),
+	})
+}
+
+var systemClock = clock.New()
+
 // NewBreaker creates a new circuit breaker properly configured for RPC
 // connections.
 func NewBreaker() *circuit.Breaker {
 	return circuit.NewBreakerWithOptions(&circuit.Options{
-		BackOff:    newBackOff(),
+		BackOff:    newBackOff(systemClock),
+		Clock:      systemClock,
 		ShouldTrip: circuit.ThresholdTripFunc(1),
 	})
 }
