@@ -874,7 +874,14 @@ func (m *multiTestContext) waitForValues(key roachpb.Key, expected []int64) {
 // future that current range leases are expired. Useful for tests which modify
 // replica sets.
 func (m *multiTestContext) expireLeases() {
-	m.manualClock.Increment(m.stores[0].LeaseExpiration(m.clock))
+	m.mu.RLock()
+	for _, store := range m.stores {
+		if store != nil {
+			m.manualClock.Increment(store.LeaseExpiration(m.clock))
+			break
+		}
+	}
+	m.mu.RUnlock()
 }
 
 // getRaftLeader returns the replica that is the current raft leader for the
