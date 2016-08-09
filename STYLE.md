@@ -11,7 +11,7 @@ tabs).
 ### Line Length
 Format your code assuming it will be read in a window 100 columns wide.
 Wrap code at 100 characters and comments at 80 unless doing so makes the
-code less legible.
+code less legible. These values assume tab width is 4 characters.
 
 ### Wrapping Function Signatures
 When wrapping function signatures that do not fit on one line,
