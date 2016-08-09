@@ -20,12 +20,52 @@ import (
 	"time"
 
 	"github.com/cenk/backoff"
+	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/facebookgo/clock"
 	circuit "github.com/rubyist/circuitbreaker"
 )
 
+// breakerClock is an implementation of clock.Clock that internally uses an
+// hlc.Clock. It is used to bridge the hlc clock to the circuit breaker
+// clocks. Note that it only implements the After() and Now() methods needed by
+// circuit breakers and backoffs.
+type breakerClock struct {
+	clock *hlc.Clock
+}
+
+func (c *breakerClock) After(d time.Duration) <-chan time.Time {
+	return time.After(d)
+}
+
+func (c *breakerClock) AfterFunc(d time.Duration, f func()) *clock.Timer {
+	panic("unimplemented")
+}
+
+func (c *breakerClock) Now() time.Time {
+	return c.clock.PhysicalTime()
+}
+
+func (c *breakerClock) Sleep(d time.Duration) {
+	panic("unimplemented")
+}
+
+func (c *breakerClock) Tick(d time.Duration) <-chan time.Time {
+	panic("unimplemented")
+}
+
+func (c *breakerClock) Ticker(d time.Duration) *clock.Ticker {
+	panic("unimplemented")
+}
+
+func (c *breakerClock) Timer(d time.Duration) *clock.Timer {
+	panic("unimplemented")
+}
+
+var _ clock.Clock = &breakerClock{}
+
 // newBackOff creates a new exponential backoff properly configured for RPC
 // connection backoff.
-func newBackOff() backoff.BackOff {
+func newBackOff(clock backoff.Clock) backoff.BackOff {
 	// This exponential backoff limits the circuit breaker to 1 second
 	// intervals between successive attempts to resolve a node address
 	// and connect via GRPC.
@@ -43,17 +83,16 @@ func newBackOff() backoff.BackOff {
 		Multiplier:          1.5,
 		MaxInterval:         1 * time.Second,
 		MaxElapsedTime:      0,
-		Clock:               backoff.SystemClock,
+		Clock:               clock,
 	}
 	b.Reset()
 	return b
 }
 
-// NewBreaker creates a new circuit breaker properly configured for RPC
-// connections.
-func NewBreaker() *circuit.Breaker {
+func newBreaker(clock clock.Clock) *circuit.Breaker {
 	return circuit.NewBreakerWithOptions(&circuit.Options{
-		BackOff:    newBackOff(),
+		BackOff:    newBackOff(clock),
+		Clock:      clock,
 		ShouldTrip: circuit.ThresholdTripFunc(1),
 	})
 }
