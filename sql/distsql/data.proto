@@ -118,6 +118,10 @@ message OutputRouterSpec {
   }
   optional Type type = 1 [(gogoproto.nullable) = false];
   repeated StreamEndpointSpec streams = 2 [(gogoproto.nullable) = false];
+
+  // Only used for the BY_HASH type; these are the indexes of the columns we are
+  // hashing.
+  repeated uint32 hash_columns = 3 [(gogoproto.nullable) = false];
 }
 
 message DatumInfo {
