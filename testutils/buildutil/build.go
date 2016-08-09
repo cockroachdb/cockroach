@@ -22,9 +22,9 @@ import (
 	"testing"
 )
 
-// TransitiveImports returns a set containing all of importpath's
-// transitive dependencies.
-func TransitiveImports(importpath string, cgo bool) (map[string]struct{}, error) {
+// TransitiveImports returns a set containing all of importPath's transitive
+// dependencies.
+func TransitiveImports(importPath string, cgo bool) (map[string]struct{}, error) {
 	buildContext := build.Default
 	buildContext.CgoEnabled = cgo
 
@@ -57,7 +57,7 @@ func TransitiveImports(importpath string, cgo bool) (map[string]struct{}, error)
 		return nil
 	}
 
-	return imports, addImports(importpath)
+	return imports, addImports(importPath)
 }
 
 // VerifyNoImports verifies that a package doesn't depend (directly or
