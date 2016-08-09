@@ -5953,7 +5953,13 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var tc testContext
-	tc.Start(t)
+	sc := TestStoreContext()
+	// Ensure that the refresh call in this test is the only reason
+	// commands will get reproposed.
+	// TODO(bdarnell): why is this single-node test seeing a "new
+	// leader" (on rare occasions)?
+	sc.TestingKnobs.DisableRefreshReasonNewLeader = true
+	tc.StartWithStoreContext(t, sc)
 	defer tc.Stop()
 
 	const num = 10
