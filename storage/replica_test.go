@@ -98,15 +98,6 @@ const (
 	bootstrapRangeOnly
 )
 
-// LeaseExpiration returns an int64 to increment a manual clock with to
-// make sure that all active range leases expire.
-func LeaseExpiration(s *Store, clock *hlc.Clock) int64 {
-	// Due to lease extensions, the remaining interval can be longer than just
-	// the sum of the offset (=length of stasis period) and the active
-	// duration, but definitely not by 2x.
-	return 2 * int64(s.ctx.rangeLeaseActiveDuration+clock.MaxOffset())
-}
-
 // leaseExpiry returns a duration in nanos after which any range lease the
 // Replica may hold is expired. It is more precise than LeaseExpiration
 // in that it returns the minimal duration necessary.
