@@ -27,7 +27,7 @@ import "bytes"
 // Insert represents an INSERT statement.
 type Insert struct {
 	Table      TableExpr
-	Columns    QualifiedNames
+	Columns    UnresolvedNames
 	Rows       *Select
 	OnConflict *OnConflict
 	Returning  ReturningExprs

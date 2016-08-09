@@ -40,8 +40,8 @@ func (node *RenameDatabase) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // RenameTable represents a RENAME TABLE statement.
 type RenameTable struct {
-	Name     *QualifiedName
-	NewName  *QualifiedName
+	Name     NormalizableTableName
+	NewName  NormalizableTableName
 	IfExists bool
 }
 
@@ -76,7 +76,7 @@ func (node *RenameIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // RenameColumn represents a RENAME COLUMN statement.
 type RenameColumn struct {
-	Table   *QualifiedName
+	Table   NormalizableTableName
 	Name    Name
 	NewName Name
 	// IfExists refers to the table, not the column.

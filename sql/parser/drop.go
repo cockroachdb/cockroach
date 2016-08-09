@@ -81,7 +81,7 @@ func (node *DropIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // DropTable represents a DROP TABLE statement.
 type DropTable struct {
-	Names        QualifiedNames
+	Names        TableNameReferences
 	IfExists     bool
 	DropBehavior DropBehavior
 }

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/decimal"
 	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/encoding"
+
 	"github.com/pkg/errors"
 )
 

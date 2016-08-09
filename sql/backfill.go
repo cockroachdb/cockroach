@@ -36,7 +36,7 @@ func makeColIDtoRowIndex(row planNode, desc *sqlbase.TableDescriptor) (
 	columns := row.Columns()
 	colIDtoRowIndex := make(map[sqlbase.ColumnID]int, len(columns))
 	for i, column := range columns {
-		s, idx, err := desc.FindColumnByName(column.Name)
+		s, idx, err := desc.FindColumnByNormalizedName(sqlbase.ReNormalizeName(column.Name))
 		if err != nil {
 			return nil, err
 		}
@@ -467,13 +467,13 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		// Get the next set of rows.
 		// TODO(tamird): Support partial indexes?
 		//
-		// Use a scanNode with SELECT to pass in a sqlbase.TableDescriptor to the
-		// SELECT without needing to use a parser.QualifiedName, because we
-		// want to run schema changes from a gossip feed of table IDs. Running
-		// the scan and applying the changes in many transactions is fine
-		// because the schema change is in the correct state to handle
-		// intermediate OLTP commands which delete and add values during the
-		// scan.
+		// Use a scanNode with SELECT to pass in a sqlbase.TableDescriptor
+		// to the SELECT without needing to go through table name
+		// resolution, because we want to run schema changes from a gossip
+		// feed of table IDs. Running the scan and applying the changes in
+		// many transactions is fine because the schema change is in the
+		// correct state to handle intermediate OLTP commands which delete
+		// and add values during the scan.
 		planner := makePlanner()
 		planner.setTxn(txn)
 		scan := planner.Scan()

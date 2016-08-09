@@ -25,7 +25,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/pkg/errors"
 )
 
 // columnRef is a reference to a resultColumn of a FROM node
@@ -49,7 +48,7 @@ type qvalResolver struct {
 }
 
 // qvalue implements the parser.VariableExpr interface and is used as a
-// replacement node for QualifiedNames in expressions that can change their
+// replacement node for VarNames in expressions that can change their
 // values for each row. Since it is a reference, expression walking can
 // discover the qvalues and the columns they refer to.
 type qvalue struct {
@@ -68,8 +67,12 @@ func (*qvalue) Variable() {}
 func (q *qvalue) Format(buf *bytes.Buffer, f parser.FmtFlags) {
 	if f == parser.FmtQualify {
 		tableAlias := q.colRef.source.findTableAlias(q.colRef.colIdx)
-		if tableAlias != "" {
-			buf.WriteString(tableAlias)
+		if tableAlias.TableName != "" {
+			if tableAlias.DatabaseName != "" {
+				parser.FormatNode(buf, f, tableAlias.DatabaseName)
+				buf.WriteByte('.')
+			}
+			parser.FormatNode(buf, f, tableAlias.TableName)
 			buf.WriteByte('.')
 		}
 	}
@@ -119,16 +122,16 @@ func (q qvalMap) getQVal(colRef columnRef) *qvalue {
 	return qval
 }
 
-// qnameVisitor is a parser.Visitor implementation used to resolve the
-// column names in an expression.
-type qnameVisitor struct {
+// nameResolutionVisitor is a parser.Visitor implementation used to
+// resolve the column names in an expression.
+type nameResolutionVisitor struct {
 	qt  qvalResolver
 	err error
 }
 
-var _ parser.Visitor = &qnameVisitor{}
+var _ parser.Visitor = &nameResolutionVisitor{}
 
-func (v *qnameVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.Expr) {
+func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.Expr) {
 	if v.err != nil {
 		return false, expr
 	}
@@ -142,7 +145,15 @@ func (v *qnameVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.
 		}
 		return true, expr
 
-	case *parser.QualifiedName:
+	case parser.UnresolvedName:
+		vn, err := t.NormalizeVarName()
+		if err != nil {
+			v.err = err
+			return false, expr
+		}
+		return v.VisitPre(vn)
+
+	case *parser.ColumnItem:
 		var colRef columnRef
 
 		colRef.source, colRef.colIdx, v.err = v.qt.sources.findColumn(t)
@@ -156,25 +167,46 @@ func (v *qnameVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.
 		if len(t.Exprs) != 1 {
 			break
 		}
-		qname, ok := t.Exprs[0].(*parser.QualifiedName)
+		vn, ok := t.Exprs[0].(parser.VarName)
 		if !ok {
 			break
 		}
-		v.err = qname.NormalizeColumnName()
+		vn, v.err = vn.NormalizeVarName()
 		if v.err != nil {
 			return false, expr
 		}
-		if qname.IsStar() {
+		// Save back to avoid re-doing the work later.
+		t.Exprs[0] = vn
+
+		fn, err := t.Name.Normalize()
+		if err != nil {
+			v.err = err
+			return false, expr
+		}
+
+		if strings.EqualFold(fn.Function(), "count") {
 			// Special case handling for COUNT(*). This is a special construct to
 			// count the number of rows; in this case * does NOT refer to a set of
-			// columns. A * is invalid elsewhere.
-			if len(t.Name.Indirect) == 0 && strings.EqualFold(string(t.Name.Base), "count") {
-				// Replace the function argument with a special non-NULL VariableExpr.
-				t = t.CopyNode()
-				t.Exprs[0] = starDatumInstance
-			} else {
-				v.err = errors.Errorf("cannot use '*' with %s", t.Name)
+			// columns. A * is invalid elsewhere (and will be caught by TypeCheck()).
+			// Replace the function argument with a special non-NULL VariableExpr.
+			switch arg := vn.(type) {
+			case parser.UnqualifiedStar:
+				// Replace, see below.
+			case *parser.AllColumnsSelector:
+				// Replace, see below.
+				// However we must first properly reject SELECT COUNT(foo.*) FROM bar.
+				if _, err := v.qt.sources.checkDatabaseName(arg.TableName); err != nil {
+					v.err = err
+					return false, expr
+				}
+			default:
+				// Nothing to do, recurse.
+				return true, expr
 			}
+
+			t = t.CopyNode()
+			t.Exprs[0] = starDatumInstance
+			return false, t
 		}
 		return true, t
 
@@ -186,29 +218,30 @@ func (v *qnameVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.
 	return true, expr
 }
 
-func (*qnameVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
+func (*nameResolutionVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
 
-func (s *selectNode) resolveQNames(expr parser.Expr) (parser.Expr, error) {
-	var v *qnameVisitor
+func (s *selectNode) resolveNames(expr parser.Expr) (parser.Expr, error) {
+	var v *nameResolutionVisitor
 	if s.planner != nil {
-		v = &s.planner.qnameVisitor
+		v = &s.planner.nameResolutionVisitor
 	}
-	return resolveQNames(expr, s.sourceInfo, s.qvals, v)
+	return resolveNames(expr, s.sourceInfo, s.qvals, v)
 }
 
-// resolveQNames walks the provided expression and resolves all qualified
-// names using the tableInfo and qvalMap. The function takes an optional
-// qnameVisitor to provide the caller the option of avoiding an allocation.
-func resolveQNames(
-	expr parser.Expr, sources multiSourceInfo, qvals qvalMap, v *qnameVisitor,
+// resolveNames walks the provided expression and resolves all names
+// using the tableInfo and qvalMap. The function takes an optional
+// nameResolutionVisitor to provide the caller the option of avoiding an
+// allocation.
+func resolveNames(
+	expr parser.Expr, sources multiSourceInfo, qvals qvalMap, v *nameResolutionVisitor,
 ) (parser.Expr, error) {
 	if expr == nil {
 		return expr, nil
 	}
 	if v == nil {
-		v = new(qnameVisitor)
+		v = new(nameResolutionVisitor)
 	}
-	*v = qnameVisitor{
+	*v = nameResolutionVisitor{
 		qt: qvalResolver{
 			sources: sources,
 			qvals:   qvals,

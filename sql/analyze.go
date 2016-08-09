@@ -1599,15 +1599,15 @@ func makeIsNotNull(left parser.TypedExpr) parser.TypedExpr {
 
 // analyzeExpr performs semantic analysis of an axpression, including:
 // - replacing sub-queries by a sql.subquery node;
-// - resolving qnames (optional);
+// - resolving names (optional);
 // - type checking (with optional type enforcement);
 // - normalization.
 // The parameters sources and qvals, if both are non-nil, indicate
-// qname resolution should be performed. The qvals map will be filled
+// name resolution should be performed. The qvals map will be filled
 // as a result.
 func (p *planner) analyzeExpr(
 	raw parser.Expr,
-	/* arguments for qname resolution */
+	/* arguments for name resolution */
 	sources multiSourceInfo,
 	qvals qvalMap,
 	/* arguments for type checking */
@@ -1625,12 +1625,12 @@ func (p *planner) analyzeExpr(
 		return nil, err
 	}
 
-	// Perform optional qname resolution.
+	// Perform optional name resolution.
 	var resolved parser.Expr
 	if sources == nil || qvals == nil {
 		resolved = replaced
 	} else {
-		resolved, err = resolveQNames(replaced, sources, qvals, &p.qnameVisitor)
+		resolved, err = resolveNames(replaced, sources, qvals, &p.nameResolutionVisitor)
 		if err != nil {
 			return nil, err
 		}

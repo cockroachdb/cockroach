@@ -75,19 +75,19 @@ foo1 foo2 c
 
 # Verify we can't resolve columns using overridden table or colum names.
 
-query error qualified name "abc.foo1" not found
+query error source name "abc" not found in FROM clause
 SELECT abc.foo1 FROM abc AS foo (foo1)
 
-query error qualified name "abc.b" not found
+query error source name "abc" not found in FROM clause
 SELECT abc.b FROM abc AS foo (foo1)
 
-query error qualified name "foo.a" not found
+query error column name "foo.a" not found
 SELECT foo.a FROM abc AS foo (foo1)
 
 
 # Verify error for too many column aliases.
 
-query error table "foo" has 3 columns available but 4 columns specified
+query error source "foo" has 3 columns available but 4 columns specified
 SELECT * FROM abc AS foo (foo1, foo2, foo3, foo4)
 
 
@@ -110,8 +110,8 @@ foo1 foo2
 statement ok
 SELECT rowid, foo.rowid FROM ab AS foo (foo1, foo2)
 
-query error qualified name "ab.rowid" not found
+query error source name "ab" not found in FROM clause
 SELECT ab.rowid FROM ab AS foo (foo1)
 
-query error table "foo" has 2 columns available but 3 columns specified
+query error source "foo" has 2 columns available but 3 columns specified
 SELECT * FROM ab AS foo (foo1, foo2, foo3)

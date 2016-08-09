@@ -79,7 +79,7 @@ func (l IndexElemList) Format(buf *bytes.Buffer, f FmtFlags) {
 // CreateIndex represents a CREATE INDEX statement.
 type CreateIndex struct {
 	Name        Name
-	Table       *QualifiedName
+	Table       NormalizableTableName
 	Unique      bool
 	IfNotExists bool
 	Columns     IndexElemList
@@ -106,7 +106,9 @@ func (node *CreateIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, node.Columns)
 	buf.WriteByte(')')
 	if node.Storing != nil {
-		fmt.Fprintf(buf, " STORING (%s)", node.Storing)
+		buf.WriteString(" STORING (")
+		FormatNode(buf, f, node.Storing)
+		buf.WriteByte(')')
 	}
 	if node.Interleave != nil {
 		FormatNode(buf, f, node.Interleave)
@@ -172,7 +174,7 @@ type ColumnTableDef struct {
 		ConstraintName Name
 	}
 	References struct {
-		Table          *QualifiedName
+		Table          NormalizableTableName
 		Col            Name
 		ConstraintName Name
 	}
@@ -277,7 +279,7 @@ func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 		FormatNode(buf, f, node.CheckExpr.Expr)
 		buf.WriteByte(')')
 	}
-	if node.References.Table != nil {
+	if node.References.Table.TableNameReference != nil {
 		if node.References.ConstraintName != "" {
 			fmt.Fprintf(buf, " CONSTRAINT %s", node.References.ConstraintName)
 		}
@@ -348,7 +350,7 @@ type ColumnCheckConstraint struct {
 
 // ColumnFKConstraint represents a FK-constaint on a column.
 type ColumnFKConstraint struct {
-	Table *QualifiedName
+	Table NormalizableTableName
 	Col   Name // empty-string means use PK
 }
 
@@ -364,7 +366,7 @@ type ColumnFamilyConstraint struct {
 func NameListToIndexElems(lst NameList) IndexElemList {
 	elems := make(IndexElemList, 0, len(lst))
 	for _, n := range lst {
-		elems = append(elems, IndexElem{Column: Name(n), Direction: DefaultDirection})
+		elems = append(elems, IndexElem{Column: n, Direction: DefaultDirection})
 	}
 	return elems
 }
@@ -446,7 +448,7 @@ func (node *UniqueConstraintTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 // ForeignKeyConstraintTableDef represents a FOREIGN KEY constraint in the AST.
 type ForeignKeyConstraintTableDef struct {
 	Name     Name
-	Table    *QualifiedName
+	Table    NormalizableTableName
 	FromCols NameList
 	ToCols   NameList
 }
@@ -500,35 +502,11 @@ func (node *CheckConstraintTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte(')')
 }
 
-// FamilyElem represents a column in a FAMILY constraint.
-type FamilyElem struct {
-	Column Name
-}
-
-// Format implements the NodeFormatter interface.
-func (node FamilyElem) Format(buf *bytes.Buffer, f FmtFlags) {
-	FormatNode(buf, f, node.Column)
-}
-
-// FamilyElemList is list of FamilyElem.
-type FamilyElemList []FamilyElem
-
-// Format pretty-prints the contained names separated by commas.
-// Format implements the NodeFormatter interface.
-func (l FamilyElemList) Format(buf *bytes.Buffer, f FmtFlags) {
-	for i, FamilyElem := range l {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		FormatNode(buf, f, FamilyElem)
-	}
-}
-
 // FamilyTableDef represents a family definition within a CREATE TABLE
 // statement.
 type FamilyTableDef struct {
 	Name    Name
-	Columns FamilyElemList
+	Columns NameList
 }
 
 func (node *FamilyTableDef) setName(name Name) {
@@ -550,8 +528,8 @@ func (node *FamilyTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 // InterleaveDef represents an interleave definition within a CREATE TABLE
 // or CREATE INDEX statement.
 type InterleaveDef struct {
-	Parent       *QualifiedName
-	Fields       []string
+	Parent       NormalizableTableName
+	Fields       NameList
 	DropBehavior DropBehavior
 }
 
@@ -564,7 +542,7 @@ func (node *InterleaveDef) Format(buf *bytes.Buffer, f FmtFlags) {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(field)
+		FormatNode(buf, f, field)
 	}
 	buf.WriteString(")")
 	if node.DropBehavior != DropDefault {
@@ -576,7 +554,7 @@ func (node *InterleaveDef) Format(buf *bytes.Buffer, f FmtFlags) {
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
 	IfNotExists bool
-	Table       *QualifiedName
+	Table       NormalizableTableName
 	Interleave  *InterleaveDef
 	Defs        TableDefs
 }

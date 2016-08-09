@@ -50,7 +50,7 @@ the future.
 # Detailed design
 
 The grammar will be extended to allow an `@index` suffix to
-`QualifiedNames`. `planner.Select` will be enhanced to select the index to use
+table names. `planner.Select` will be enhanced to select the index to use
 (if specified). `scanNode` will be enhanced to understand scanning from
 secondary indexes. This latter work is required to support secondary index
 scans.

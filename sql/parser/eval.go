@@ -2045,7 +2045,25 @@ func (expr DefaultVal) Eval(_ *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
-func (expr *QualifiedName) Eval(ctx *EvalContext) (Datum, error) {
+func (expr UnqualifiedStar) Eval(ctx *EvalContext) (Datum, error) {
+	log.Errorf(context.TODO(), "unhandled type %T passed to Eval", expr)
+	return nil, errors.Errorf("unhandled type %T", expr)
+}
+
+// Eval implements the TypedExpr interface.
+func (expr UnresolvedName) Eval(ctx *EvalContext) (Datum, error) {
+	log.Errorf(context.TODO(), "unhandled type %T passed to Eval", expr)
+	return nil, errors.Errorf("unhandled type %T", expr)
+}
+
+// Eval implements the TypedExpr interface.
+func (expr *AllColumnsSelector) Eval(ctx *EvalContext) (Datum, error) {
+	log.Errorf(context.TODO(), "unhandled type %T passed to Eval", expr)
+	return nil, errors.Errorf("unhandled type %T", expr)
+}
+
+// Eval implements the TypedExpr interface.
+func (expr *ColumnItem) Eval(ctx *EvalContext) (Datum, error) {
 	log.Errorf(context.TODO(), "unhandled type %T passed to Eval", expr)
 	return nil, errors.Errorf("unhandled type %T", expr)
 }

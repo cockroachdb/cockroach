@@ -63,7 +63,7 @@ type planner struct {
 	subqueryVisitor             subqueryVisitor
 	subqueryPlanVisitor         subqueryPlanVisitor
 	collectSubqueryPlansVisitor collectSubqueryPlansVisitor
-	qnameVisitor                qnameVisitor
+	nameResolutionVisitor       nameResolutionVisitor
 
 	execCtx *ExecutorContext
 }

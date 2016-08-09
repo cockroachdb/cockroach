@@ -33,7 +33,7 @@ func (v *countVarsVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr par
 	switch expr.(type) {
 	case *qvalue:
 		v.numQValues++
-	case *parser.QualifiedName:
+	case *parser.ColumnItem:
 		v.numQNames++
 	}
 
@@ -42,7 +42,7 @@ func (v *countVarsVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr par
 
 func (*countVarsVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
 
-// countVars counts how many *QualifiedName and *qvalue nodes are in an expression.
+// countVars counts how many *ColumnItems and *qvalue nodes are in an expression.
 func countVars(expr parser.Expr) (numQNames, numQValues int) {
 	v := countVarsVisitor{}
 	if expr != nil {
@@ -124,9 +124,9 @@ func TestSplitFilter(t *testing.T) {
 			colName := q.colRef.get().Name
 			for _, col := range d.vars {
 				if colName == col {
-					// Convert to a QualifiedName (to check that conversion happens correctly). It
+					// Convert to a VarName (to check that conversion happens correctly). It
 					// will print the same.
-					return true, &parser.QualifiedName{Base: parser.Name(colName)}
+					return true, parser.UnresolvedName{parser.Name(colName)}
 				}
 			}
 			return false, nil
