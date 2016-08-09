@@ -58,7 +58,7 @@ func (node UpdateExprs) Format(buf *bytes.Buffer, f FmtFlags) {
 // UpdateExpr represents an update expression.
 type UpdateExpr struct {
 	Tuple bool
-	Names QualifiedNames
+	Names UnresolvedNames
 	Expr  Expr
 }
 

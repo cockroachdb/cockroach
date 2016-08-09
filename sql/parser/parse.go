@@ -161,6 +161,19 @@ func ParseOneTraditional(sql string) (Statement, error) {
 	return ParseOne(sql, Traditional)
 }
 
+// ParseTableNameTraditional parses a table name.
+func ParseTableNameTraditional(sql string) (*TableName, error) {
+	stmt, err := ParseOneTraditional(fmt.Sprintf("ALTER TABLE %s RENAME TO x", sql))
+	if err != nil {
+		return nil, err
+	}
+	rename, ok := stmt.(*RenameTable)
+	if !ok {
+		return nil, errors.Errorf("expected an ALTER TABLE statement, but found %T", stmt)
+	}
+	return rename.Name.Normalize()
+}
+
 // parseExprs parses one or more sql expression.
 func parseExprs(exprs []string, syntax Syntax) (Exprs, error) {
 	stmt, err := ParseOne(fmt.Sprintf("SET ROW (%s)", strings.Join(exprs, ",")), syntax)

@@ -81,15 +81,28 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 		// Unwrap parenthesized expressions like "((a))" to "a".
 		expr := parser.StripParens(o.Expr)
 
-		if qname, ok := expr.(*parser.QualifiedName); ok {
-			if len(qname.Indirect) == 0 {
-				// Look for an output column that matches the qualified name. This
+		if vBase, ok := expr.(parser.VarName); ok {
+			v, err := vBase.NormalizeVarName()
+			if err != nil {
+				return nil, err
+			}
+
+			var c *parser.ColumnItem
+			switch t := v.(type) {
+			case *parser.ColumnItem:
+				c = t
+			default:
+				return nil, fmt.Errorf("invalid syntax for ORDER BY: %s", v)
+			}
+
+			if c.TableName.Table() == "" {
+				// Look for an output column that matches the name. This
 				// handles cases like:
 				//
 				//   SELECT a AS b FROM t ORDER BY b
-				target := sqlbase.NormalizeName(string(qname.Base))
+				target := sqlbase.NormalizeName(c.ColumnName)
 				for j, col := range columns {
-					if sqlbase.NormalizeName(col.Name) == target {
+					if sqlbase.ReNormalizeName(col.Name) == target {
 						index = j
 						break
 					}
@@ -97,11 +110,11 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 			}
 
 			if s, ok := n.(*selectNode); ok && index == -1 {
-				// No output column matched the qualified name, so look for an existing
+				// No output column matched the  name, so look for an existing
 				// render target that matches the column name. This handles cases like:
 				//
 				//   SELECT a AS b FROM t ORDER BY a
-				colIdx, err := s.source.findUnaliasedColumn(qname)
+				colIdx, err := s.source.findUnaliasedColumn(c)
 				if err != nil {
 					return nil, err
 				}
@@ -129,9 +142,9 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 				// TODO(dan): Once we support VALUES (1), (2) ORDER BY 3*4, this type
 				// check goes away.
 
-				// Add a new render expression to use for ordering. This handles cases
-				// were the expression is either not a qualified name or is a qualified
-				// name that is otherwise not referenced by the query:
+				// Add a new render expression to use for ordering. This
+				// handles cases were the expression is either not a name or
+				// is a name that is otherwise not referenced by the query:
 				//
 				//   SELECT a FROM t ORDER by b
 				//   SELECT a, b FROM t ORDER by a+b
