@@ -85,23 +85,32 @@ func createTestStore(t testing.TB) (*storage.Store, *stop.Stopper, *hlc.ManualCl
 	return createTestStoreWithContext(t, storage.TestStoreContext())
 }
 
-func createTestStoreWithContext(t testing.TB, sCtx storage.StoreContext) (
-	*storage.Store, *stop.Stopper, *hlc.ManualClock) {
-
+func createTestStoreWithContext(
+	t testing.TB, sCtx storage.StoreContext,
+) (*storage.Store, *stop.Stopper, *hlc.ManualClock) {
 	stopper := stop.NewStopper()
 	manual := hlc.NewManualClock(123)
 	store := createTestStoreWithEngine(t,
 		engine.NewInMem(roachpb.Attributes{}, 10<<20, stopper),
 		hlc.NewClock(manual.UnixNano),
-		true, sCtx, stopper)
+		true,
+		sCtx,
+		stopper,
+	)
 	return store, stopper, manual
 }
 
 // createTestStoreWithEngine creates a test store using the given engine and clock.
 // TestStoreContext() can be used for creating a context suitable for most
 // tests.
-func createTestStoreWithEngine(t testing.TB, eng engine.Engine, clock *hlc.Clock,
-	bootstrap bool, sCtx storage.StoreContext, stopper *stop.Stopper) *storage.Store {
+func createTestStoreWithEngine(
+	t testing.TB,
+	eng engine.Engine,
+	clock *hlc.Clock,
+	bootstrap bool,
+	sCtx storage.StoreContext,
+	stopper *stop.Stopper,
+) *storage.Store {
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 	server := rpc.NewServer(rpcContext) // never started
@@ -865,7 +874,7 @@ func (m *multiTestContext) waitForValues(key roachpb.Key, expected []int64) {
 // future that current range leases are expired. Useful for tests which modify
 // replica sets.
 func (m *multiTestContext) expireLeases() {
-	m.manualClock.Increment(storage.LeaseExpiration(m.stores[0], m.clock))
+	m.manualClock.Increment(m.stores[0].LeaseExpiration(m.clock))
 }
 
 // getRaftLeader returns the replica that is the current raft leader for the
