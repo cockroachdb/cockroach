@@ -192,7 +192,7 @@ func (t *RaftTransport) getNodeConn(nodeID roachpb.NodeID) *grpc.ClientConn {
 	t.mu.Lock()
 	breaker, ok := t.mu.breakers[nodeID]
 	if !ok {
-		breaker = rpc.NewBreaker()
+		breaker = t.rpcContext.NewBreaker()
 		t.mu.breakers[nodeID] = breaker
 	}
 	t.mu.Unlock()

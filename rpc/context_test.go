@@ -26,10 +26,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/syncutil"
@@ -397,7 +400,9 @@ func TestCircuitBreaker(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	clock := hlc.NewClock(time.Unix(0, 1).UnixNano)
+	// We use a manual clock that we never increment so the circuit breakers do
+	// not move from open to half-open due to timeout.
+	clock := hlc.NewClock(hlc.NewManualClock(1).UnixNano)
 	serverCtx := newNodeTestContext(clock, stopper)
 	_, ln := newTestServer(t, serverCtx, true)
 	remoteAddr := ln.Addr().String()
@@ -408,6 +413,35 @@ func TestCircuitBreaker(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	clientCtx.conns.Lock()
+	events := make(chan circuit.ListenerEvent, 10)
+	clientCtx.conns.breakers[remoteAddr].AddListener(events)
+	clientCtx.conns.Unlock()
+
+	ctx := context.Background()
+	done := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case e := <-events:
+				switch e.Event {
+				case circuit.BreakerTripped:
+					log.Infof(ctx, "BreakerTripped")
+				case circuit.BreakerReset:
+					log.Infof(ctx, "BreakerReset")
+				case circuit.BreakerFail:
+					log.Infof(ctx, "BreakerFail")
+				case circuit.BreakerReady:
+					log.Infof(ctx, "BreakerReady")
+				default:
+					log.Infof(ctx, "%d", e.Event)
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+
 	// Wait until the breaker opens. This will occur when the heartbeat fails
 	// (because there is no heartbeat service).
 	util.SucceedsSoon(t, func() error {
@@ -415,11 +449,21 @@ func TestCircuitBreaker(t *testing.T) {
 		if err == circuit.ErrBreakerOpen {
 			return nil
 		}
-		return errors.Errorf("breaker not open: %v", err)
+		clientCtx.conns.Lock()
+		breaker := clientCtx.conns.breakers[remoteAddr]
+		err = errors.Errorf("breaker not open: %v: ready=%t tripped=%t failures=%d/%d successes=%d",
+			err, breaker.Ready(), breaker.Tripped(), breaker.Failures(),
+			breaker.ConsecFailures(), breaker.Successes())
+		log.Infof(ctx, "%s", err)
+		clientCtx.conns.Unlock()
+		return err
 	})
+
+	close(done)
 
 	// Reset the breaker. The next dial will succeed.
 	clientCtx.conns.Lock()
+	log.Infof(ctx, "resetting breaker")
 	clientCtx.conns.breakers[remoteAddr].Reset()
 	clientCtx.conns.Unlock()
 	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
