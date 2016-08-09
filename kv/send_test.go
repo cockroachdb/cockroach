@@ -20,6 +20,7 @@ import (
 	"net"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -477,7 +478,12 @@ func TestClientNotReady(t *testing.T) {
 		_, err := sendBatch(SendOptions{
 			Context: context.Background(),
 		}, addrs, nodeContext)
-		if !testutils.IsError(err, "connection is closing|failed fast due to transport failure") {
+		expected := strings.Join([]string{
+			"context canceled",
+			"connection is closing",
+			"failed fast due to transport failure",
+		}, "|")
+		if !testutils.IsError(err, expected) {
 			errCh <- errors.Wrap(err, "unexpected error")
 		} else {
 			close(errCh)
