@@ -371,9 +371,13 @@ func (t *multiTestContextKVTransport) SendNext(done chan kv.BatchCall) {
 	// Run the send in a Task on the destination store to simulate what
 	// would happen with real RPCs.
 	t.mtc.mu.RLock()
-	s := t.mtc.stoppers[nodeIndex]
+	stopper := t.mtc.stoppers[nodeIndex]
+	store := t.mtc.stores[nodeIndex]
 	t.mtc.mu.RUnlock()
-	if s == nil || s.RunAsyncTask(func() {
+	expireLeases := func() {
+		t.mtc.manualClock.Increment(storage.LeaseExpiration(store, t.mtc.clock))
+	}
+	if stopper == nil || stopper.RunAsyncTask(func() {
 		t.mtc.mu.RLock()
 		sender := t.mtc.senders[nodeIndex]
 		t.mtc.mu.RUnlock()
@@ -402,20 +406,20 @@ func (t *multiTestContextKVTransport) SendNext(done chan kv.BatchCall) {
 				t.mtc.mu.RUnlock()
 				if leaseHolderStore == nil {
 					// The lease holder is known but down, so expire its lease.
-					t.mtc.expireLeases()
+					expireLeases()
 				}
 			} else {
 				// stores has the range, is *not* the lease holder, but the
 				// lease holder is not known; this can happen if the lease
 				// holder is removed from the group. Move the manual clock
 				// forward in an attempt to expire the lease.
-				t.mtc.expireLeases()
+				expireLeases()
 			}
 		}
 		done <- kv.BatchCall{Reply: br, Err: nil}
 	}) != nil {
 		done <- kv.BatchCall{Err: roachpb.NewSendError("store is stopped")}
-		t.mtc.expireLeases()
+		expireLeases()
 	}
 }
 
