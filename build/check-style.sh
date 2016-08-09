@@ -90,10 +90,6 @@ TestImportNames() {
     return 0
 }
 
-TestSafeSQL() {
-  safesql .
-}
-
 TestIneffassign() {
   ! ineffassign . | grep -vF '.pb.go' # https://github.com/gogo/protobuf/issues/149
 }
