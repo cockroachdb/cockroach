@@ -459,6 +459,7 @@ func init() {
 	clientCmds = append(clientCmds, userCmds...)
 	clientCmds = append(clientCmds, zoneCmds...)
 	clientCmds = append(clientCmds, nodeCmds...)
+	clientCmds = append(clientCmds, backupCmds()...)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
 		f.StringVar(&connHost, cliflags.HostName, envutil.EnvOrDefaultString(cliflags.HostName, ""), usageEnv(forClient(cliflags.HostName)))

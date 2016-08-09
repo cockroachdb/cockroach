@@ -755,6 +755,7 @@ func runDebugSSTables(cmd *cobra.Command, args []string) error {
 
 func init() {
 	debugCmd.AddCommand(debugCmds...)
+	debugCmd.AddCommand(backupCmds()...)
 }
 
 var debugCmds = []*cobra.Command{
