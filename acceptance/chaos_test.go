@@ -246,7 +246,9 @@ func chaosMonkey(state *testState, c cluster.Cluster, stopClients bool, pickNode
 			time.Sleep(time.Second)
 		}
 		c.Assert(state.t)
-		cluster.Consistent(state.t, c)
+		// TODO(peter): Disabled until https://github.com/grpc/grpc-go/pull/818 (or
+		// similar) goes in.
+		// cluster.Consistent(state.t, c)
 		log.Warningf(context.Background(), "round %d: cluster recovered", curRound)
 	}
 }
