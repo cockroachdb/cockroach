@@ -101,7 +101,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	ctx.DB = client.NewDB(sender)
 	ctx.Transport = storage.NewDummyRaftTransport()
 	ctx.Tracer = tracer
-	node := NewNode(ctx, status.NewMetricsRecorder(ctx.Clock), stopper,
+	node := NewNode(ctx, status.NewMetricsRecorder(ctx.Clock), metric.NewRegistry(), stopper,
 		kv.NewTxnMetrics(metric.NewRegistry()), sql.MakeEventLogger(nil))
 	roachpb.RegisterInternalServer(grpcServer, node)
 	return grpcServer, ln.Addr(), ctx.Clock, node, stopper

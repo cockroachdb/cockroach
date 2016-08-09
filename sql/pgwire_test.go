@@ -1052,8 +1052,8 @@ func checkSQLNetworkMetrics(
 		return -1, -1, err
 	}
 
-	bytesIn := s.MustGetSQLNetworkCounter("bytesin")
-	bytesOut := s.MustGetSQLNetworkCounter("bytesout")
+	bytesIn := s.MustGetSQLNetworkCounter(pgwire.MetricBytesInName)
+	bytesOut := s.MustGetSQLNetworkCounter(pgwire.MetricBytesOutName)
 	if a, min := bytesIn, minBytesIn; a < min {
 		return bytesIn, bytesOut, errors.Errorf("bytesin %d < expected min %d", a, min)
 	}
@@ -1108,7 +1108,7 @@ func TestSQLNetworkMetrics(t *testing.T) {
 	// Verify connection counter.
 	expectConns := func(n int) {
 		util.SucceedsSoon(t, func() error {
-			if conns := s.MustGetSQLNetworkCounter("conns"); conns != int64(n) {
+			if conns := s.MustGetSQLNetworkCounter(pgwire.MetricConnsName); conns != int64(n) {
 				return errors.Errorf("connections %d != expected %d", conns, n)
 			}
 			return nil

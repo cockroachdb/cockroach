@@ -115,24 +115,24 @@ type TxnMetrics struct {
 }
 
 const (
-	abortsPrefix     = "aborts"
-	commitsPrefix    = "commits"
-	commits1PCPrefix = "commits1PC"
-	abandonsPrefix   = "abandons"
-	durationsPrefix  = "durations"
-	restartsKey      = "restarts"
+	abortsPrefix     = "txn.aborts"
+	commitsPrefix    = "txn.commits"
+	commits1PCPrefix = "txn.commits1PC"
+	abandonsPrefix   = "txn.abandons"
+	durationsPrefix  = "txn.durations"
+	restartsKey      = "txn.restarts"
 )
 
 // NewTxnMetrics returns a new instance of txnMetrics that contains metrics which have
 // been registered with the provided Registry.
-func NewTxnMetrics(txnRegistry *metric.Registry) *TxnMetrics {
+func NewTxnMetrics(registry *metric.Registry) *TxnMetrics {
 	return &TxnMetrics{
-		Aborts:     txnRegistry.Rates(abortsPrefix),
-		Commits:    txnRegistry.Rates(commitsPrefix),
-		Commits1PC: txnRegistry.Rates(commits1PCPrefix),
-		Abandons:   txnRegistry.Rates(abandonsPrefix),
-		Durations:  txnRegistry.Latency(durationsPrefix),
-		Restarts:   txnRegistry.Histogram(restartsKey, 60*time.Second, 100, 3),
+		Aborts:     registry.Rates(abortsPrefix),
+		Commits:    registry.Rates(commitsPrefix),
+		Commits1PC: registry.Rates(commits1PCPrefix),
+		Abandons:   registry.Rates(abandonsPrefix),
+		Durations:  registry.Latency(durationsPrefix),
+		Restarts:   registry.Histogram(restartsKey, 60*time.Second, 100, 3),
 	}
 }
 

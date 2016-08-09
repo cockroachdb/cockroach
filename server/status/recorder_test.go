@@ -136,7 +136,6 @@ func TestMetricsRecorder(t *testing.T) {
 	// store-level).
 	// ========================================
 	reg1 := metric.NewRegistry()
-	reg2 := metric.NewRegistry()
 	store1 := fakeStore{
 		storeID:  roachpb.StoreID(1),
 		desc:     storeDesc1,
@@ -149,11 +148,9 @@ func TestMetricsRecorder(t *testing.T) {
 	}
 	manual := hlc.NewManualClock(100)
 	recorder := NewMetricsRecorder(hlc.NewClock(manual.UnixNano))
-	recorder.AddNodeRegistry("one.%s", reg1)
-	recorder.AddNodeRegistry("two.%s", reg1)
 	recorder.AddStore(store1)
 	recorder.AddStore(store2)
-	recorder.NodeStarted(nodeDesc, 50)
+	recorder.AddNode(reg1, nodeDesc, 50)
 
 	// Ensure the metric system's view of time does not advance during this test
 	// as the test expects time to not advance too far which would age the actual
@@ -180,7 +177,7 @@ func TestMetricsRecorder(t *testing.T) {
 			isNode: true,
 		},
 		{
-			reg:    reg2,
+			reg:    reg1,
 			prefix: "two.",
 			source: 1,
 			isNode: true,
@@ -260,16 +257,16 @@ func TestMetricsRecorder(t *testing.T) {
 		for _, data := range metricNames {
 			switch data.typ {
 			case "gauge":
-				reg.reg.Gauge(data.name).Update(data.val)
+				reg.reg.Gauge(reg.prefix + data.name).Update(data.val)
 				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
 			case "floatgauge":
-				reg.reg.GaugeFloat64(data.name).Update(float64(data.val))
+				reg.reg.GaugeFloat64(reg.prefix + data.name).Update(float64(data.val))
 				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
 			case "counter":
-				reg.reg.Counter(data.name).Inc(data.val)
+				reg.reg.Counter(reg.prefix + data.name).Inc(data.val)
 				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
 			case "rate":
-				reg.reg.Rates(data.name).Add(data.val)
+				reg.reg.Rates(reg.prefix + data.name).Add(data.val)
 				addExpected(reg.prefix, data.name+"-count", reg.source, 100, data.val, reg.isNode)
 				for _, scale := range metric.DefaultTimeScales {
 					// Rate data is subject to timing errors in tests. Zero out
@@ -277,12 +274,12 @@ func TestMetricsRecorder(t *testing.T) {
 					addExpected(reg.prefix, data.name+sep+scale.Name(), reg.source, 100, 0, reg.isNode)
 				}
 			case "histogram":
-				reg.reg.Histogram(data.name, time.Second, 1000, 2).RecordValue(data.val)
+				reg.reg.Histogram(reg.prefix+data.name, time.Second, 1000, 2).RecordValue(data.val)
 				for _, q := range recordHistogramQuantiles {
 					addExpected(reg.prefix, data.name+q.suffix, reg.source, 100, data.val, reg.isNode)
 				}
 			case "latency":
-				reg.reg.Latency(data.name).RecordValue(data.val)
+				reg.reg.Latency(reg.prefix + data.name).RecordValue(data.val)
 				// Latency is simply three histograms (at different resolution
 				// time scales).
 				for _, scale := range metric.DefaultTimeScales {
