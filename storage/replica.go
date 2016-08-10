@@ -1738,7 +1738,7 @@ func (r *Replica) tick() error {
 		// should wait before deciding that our previous proposal didn't go
 		// through. Note that the combination of the above condition and passing
 		// RaftElectionTimeoutTicks to refreshPendingCmdsLocked means that commands
-		// will be refreshed when they have been pending for 1 to 2 electionc
+		// will be refreshed when they have been pending for 1 to 2 election
 		// cycles.
 		if err := r.refreshPendingCmdsLocked(
 			reasonTicks, r.store.ctx.RaftElectionTimeoutTicks); err != nil {
