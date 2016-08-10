@@ -153,12 +153,18 @@ func (rcb rangeCountBalancer) shouldRebalance(
 	// TODO(peter,bram,cuong): The FractionUsed check seems suspicious. When a
 	// node becomes fuller than maxFractionUsedThreshold we will always select it
 	// for rebalancing. This is currently utilized by tests.
-	if store.Capacity.FractionUsed() <= maxFractionUsedThreshold &&
+	rebalanceNotNeeded := store.Capacity.FractionUsed() <= maxFractionUsedThreshold &&
 		(math.Abs(float64(store.Capacity.RangeCount-1)-sl.candidateCount.mean) >
-			math.Abs(float64(store.Capacity.RangeCount)-sl.candidateCount.mean)) {
-		return false
+			math.Abs(float64(store.Capacity.RangeCount)-sl.candidateCount.mean))
+	shouldRebalance := !rebalanceNotNeeded
+
+	if log.V(2) {
+		log.Infof(context.TODO(),
+			"%d: should-rebalance=%t: fraction-used=%.2f range-count=%d (mean=%.1f)",
+			store.StoreID, shouldRebalance, store.Capacity.FractionUsed(),
+			store.Capacity.RangeCount, sl.candidateCount.mean)
 	}
-	return true
+	return shouldRebalance
 }
 
 // selectRandom chooses up to count random store descriptors from the given
