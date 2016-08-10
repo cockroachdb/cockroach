@@ -16,7 +16,9 @@ package acceptance
 
 import "testing"
 
+// This runs the `finagle-postgres` tests from the upstream project.
 func TestDockerFinagle(t *testing.T) {
+	t.Skip("#8332. Upstream has a 2s timeout, disabled until we run tests somewhere more consistent.")
 	testDockerSuccess(t, "finagle", []string{"/bin/sh", "-c", finagle})
 }
 
