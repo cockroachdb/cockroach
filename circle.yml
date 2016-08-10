@@ -33,6 +33,7 @@ dependencies:
     - ~/.jspm
     - ~/.npm
     - ~/builder
+    - ~/cockroach/acceptance/.reference-binary-cache
 
 test:
   override:

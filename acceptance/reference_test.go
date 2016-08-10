@@ -17,14 +17,75 @@
 package acceptance
 
 import (
+	"archive/tar"
+	"compress/gzip"
+	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func runReferenceTestWithScript(
-	t *testing.T,
-	script string,
-) {
+const (
+	forwardReferenceVersion       = `beta-20160414`
+	bidirectionalReferenceVersion = `beta-20160629`
+)
+
+func maybeDownloadBinary(url string, outdir string, version string) error {
+	outfile := filepath.Join(outdir, fmt.Sprintf("cockroach-%s", version))
+	if _, err := os.Stat(outfile); err == nil {
+		// Something already exists there, assume it's a cockroach binary. We'll
+		// fail pretty quickly if it's not.
+		return nil
+	}
+
+	log.Infof(context.Background(), "Downloading %s", url)
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	unzipped, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		return err
+	}
+	defer unzipped.Close()
+
+	untarred := tar.NewReader(unzipped)
+	for {
+		header, err := untarred.Next()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+		if filepath.Base(header.Name) == "cockroach" {
+			if err := os.MkdirAll(filepath.Dir(outfile), 0755); err != nil {
+				return err
+			}
+			out, err := os.OpenFile(outfile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, os.FileMode(header.Mode))
+			if err != nil {
+				return err
+			}
+			defer out.Close()
+
+			if _, err := io.Copy(out, untarred); err != io.EOF {
+				return err
+			}
+			// We found what we wanted, return early.
+			return nil
+		}
+	}
+	return fmt.Errorf("no tarred and gzipped cockroach binary found at %q", url)
+}
+
+func runReferenceTestWithScript(t *testing.T, script string) {
 	if err := testDockerOneShot(t, "reference", []string{"/cockroach", "version"}); err != nil {
 		t.Skipf(`TODO(dt): No /cockroach binary in one-shot container, see #6086: %s`, err)
 	}
@@ -36,9 +97,14 @@ func runReferenceTestWithScript(
 
 func runReadWriteReferenceTest(
 	t *testing.T,
-	referenceBinPath string,
+	version string,
 	backwardReferenceTest string,
 ) {
+	binaryURL := fmt.Sprintf("https://binaries.cockroachdb.com/cockroach-%s.linux-amd64.tgz", version)
+	if err := maybeDownloadBinary(binaryURL, ".reference-binary-cache", version); err != nil {
+		t.Fatal(err)
+	}
+
 	referenceTestScript := fmt.Sprintf(`
 set -xe
 mkdir /old
@@ -54,7 +120,7 @@ export PGHOST=localhost
 export PGPORT=""
 export COCKROACH_SKIP_UPDATE_CHECK=1
 
-bin=/%s/cockroach
+bin=/.reference-binary-cache/cockroach-%s
 # TODO(bdarnell): when --background is in referenceBinPath, use it here and below.
 # The until loop will also be unnecessary at that point.
 $bin start --alsologtostderr & &> oldout
@@ -91,9 +157,9 @@ $bin quit
 sleep 1
 
 echo "Read the modified data using the reference binary again."
-bin=/%s/cockroach
+bin=/.reference-binary-cache/cockroach-%s
 %s
-`, referenceBinPath, referenceBinPath, backwardReferenceTest)
+`, version, version, backwardReferenceTest)
 	runReferenceTestWithScript(t, referenceTestScript)
 }
 
@@ -112,7 +178,7 @@ $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_
 diff new.everything old.everything
 $bin quit && wait
 `
-	runReadWriteReferenceTest(t, `bidirectional-reference-version`, backwardReferenceTest)
+	runReadWriteReferenceTest(t, bidirectionalReferenceVersion, backwardReferenceTest)
 }
 
 func TestDockerReadWriteForwardReferenceVersion(t *testing.T) {
@@ -129,7 +195,7 @@ until $bin sql -e "SELECT 1"; do sleep 1; done
 $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_new" 2>&1 | grep "is encoded using using version 2, but this client only supports version 1"
 $bin quit && wait
 `
-	runReadWriteReferenceTest(t, `forward-reference-version`, backwardReferenceTest)
+	runReadWriteReferenceTest(t, forwardReferenceVersion, backwardReferenceTest)
 }
 
 func TestDockerMigration_7429(t *testing.T) {

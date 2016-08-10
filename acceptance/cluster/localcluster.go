@@ -194,10 +194,15 @@ func (l *LocalCluster) expectEvent(c *Container, msgs ...string) {
 	}
 }
 
-// OneShot runs a container, expecting it to successfully run to completion
-// and die, after which it is removed. Not goroutine safe: only one OneShot
-// can be running at once.
-// Adds the same binds as the cluster containers (certs, binary, etc).
+// OneShot runs a container, expecting it to successfully run to completion and
+// die, after which it is removed. Not goroutine safe: only one OneShot can be
+// running at once. Adds the same binds as the cluster containers (certs,
+// binary, etc).
+//
+// TODO(tamird): This should only need the certs bind. Decoupling that will
+// require changing `l.vols` to a slice, so that we can have a volume container
+// for the certs and another for everything else needed to run a cluster node
+// (logs, binary).
 func (l *LocalCluster) OneShot(
 	ref string,
 	ipo types.ImagePullOptions,
@@ -310,6 +315,7 @@ func (l *LocalCluster) initCluster() {
 	binds := []string{
 		l.CertsDir + ":/certs",
 		filepath.Join(pwd, "..") + ":/go/src/github.com/cockroachdb/cockroach",
+		filepath.Join(pwd, ".reference-binary-cache") + ":/.reference-binary-cache",
 	}
 
 	if l.logDir != "" {
