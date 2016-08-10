@@ -991,17 +991,6 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 		t.Fatalf("got unexpected error: %v", err)
 	}
 
-	// Both addReplica calls attempted to use origDesc.NextReplicaID.
-	// The failed second call should not have overwritten the cached
-	// replica descriptor from the successful first call.
-	rep, err := mtc.stores[0].GetReplica(origDesc.RangeID)
-	if err != nil {
-		t.Fatalf("failed to look up replica %s: %s", origDesc.RangeID, err)
-	}
-	if a, e := rep.GetLastFromReplicaDesc().StoreID, mtc.stores[1].Ident.StoreID; a != e {
-		t.Fatalf("expected replica %s to point to store %s, but got %s", rep, a, e)
-	}
-
 	// Add to third store with fresh descriptor.
 	if err := addReplica(2, repl.Desc()); err != nil {
 		t.Fatal(err)
