@@ -2551,14 +2551,11 @@ func (r *Replica) executeBatch(
 		}
 
 		if maxKeys != math.MaxInt64 {
-			if cReply, ok := reply.(roachpb.Countable); ok {
-				retResults := cReply.Count()
-				if retResults > maxKeys {
-					r.panicf("received %d results, limit was %d",
-						retResults, maxKeys)
-				}
-				maxKeys -= retResults
+			retResults := reply.Header().NumKeys
+			if retResults > maxKeys {
+				r.panicf("received %d results, limit was %d", retResults, maxKeys)
 			}
+			maxKeys -= retResults
 		}
 
 		// If transactional, we use ba.Txn for each individual command and
