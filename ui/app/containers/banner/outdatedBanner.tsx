@@ -106,7 +106,7 @@ let versionCheckDismissed = (state: AdminUIState): number => versionCheckDismiss
 
 let versions = createSelector(
   nodeStatuses,
-  (statuses: NodeStatus[]): string[] => statuses && _.uniq(_.map(statuses, (s: NodeStatus) => s.build_info.tag))
+  (statuses: NodeStatus[]): string[] => statuses && _.uniq(_.map(statuses, (s: NodeStatus) => s.build_info && s.build_info.tag))
 );
 
 let nodeCount = createSelector(
