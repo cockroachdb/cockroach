@@ -22,9 +22,12 @@ import (
 	"fmt"
 	"math/rand"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/pkg/errors"
 )
@@ -288,6 +291,9 @@ func (a Allocator) RebalanceTarget(
 	}
 
 	sl, _, _ := a.storePool.getStoreList(required, a.options.Deterministic)
+	if log.V(3) {
+		log.Infof(context.TODO(), "rebalance-target (lease-holder=%d):\n%s", leaseStoreID, sl)
+	}
 
 	var shouldRebalance bool
 	for _, repl := range existing {

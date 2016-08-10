@@ -1503,7 +1503,6 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 // rebalancing opportunities and add a new replica on another store.
 func TestStoreRangeRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#7940")
 
 	// Start multiTestContext with replica rebalancing enabled.
 	mtc := &multiTestContext{
@@ -1566,8 +1565,10 @@ func TestStoreRangeRebalance(t *testing.T) {
 				break
 			}
 
-			mtc.expireLeases()
-			mtc.stores[1].ForceReplicationScanAndProcess()
+			// NB: The store that we ask to perform rebalancing needs to be different
+			// than the one we've configured to rebalance away from above
+			// (i.e. store[1]) because we won't rebalance away from the lease holder.
+			mtc.stores[0].ForceReplicationScanAndProcess()
 		}
 	}
 
