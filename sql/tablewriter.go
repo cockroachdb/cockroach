@@ -212,7 +212,7 @@ type tableUpserter struct {
 	// Set by init.
 	txn                   *client.Txn
 	tableDesc             *sqlbase.TableDescriptor
-	fkTables              TablesByID // for fk checks in update case
+	fkTables              tableLookupsByID // for fk checks in update case
 	ru                    rowUpdater
 	updateColIDtoRowIndex map[sqlbase.ColumnID]int
 	a                     sqlbase.DatumAlloc
@@ -524,6 +524,12 @@ func (td *tableDeleter) fastPathAvailable(ctx context.Context) bool {
 	if td.rd.helper.tableDesc.IsInterleaved() {
 		if log.V(2) {
 			log.Info(ctx, "delete forced to scan: table is interleaved")
+		}
+		return false
+	}
+	if len(td.rd.helper.tableDesc.PrimaryIndex.ReferencedBy) > 0 {
+		if log.V(2) {
+			log.Info(ctx, "delete forced to scan: table is referenced by foreign keys")
 		}
 		return false
 	}

@@ -66,6 +66,9 @@ CREATE TABLE reviews (
 statement ok
 INSERT INTO orders VALUES (1, '780', 2);
 
+statement error foreign key violation: value\(s\) \['780'\] in columns \[sku\] referenced in table "orders"
+DELETE FROM products
+
 statement ok
 INSERT INTO reviews VALUES (1, '780', 2, 1, NULL)
 
@@ -315,15 +318,39 @@ UPDATE pairs SET dest = 'too' WHERE id = 2
 statement error foreign key violation: value\(s\) \[200 'two'\] in columns \[src dest\] referenced in table "refpairs"
 DELETE FROM pairs WHERE id = 2
 
-# Disabled due to issue #8392.
-# statement ok
-# CREATE DATABASE test2
-#
-# statement ok
-# CREATE TABLE test2.other(x INT PRIMARY KEY)
-#
-# statement ok
-# CREATE TABLE crossdb (y INT PRIMARY KEY, FOREIGN KEY (y) REFERENCES test2.other(x))
-#
-# statement error foreign key violation: value \[2\] not found in other@primary \[x\]
-# INSERT INTO crossdb(y) VALUES (2)
+# since PKs are handled differently than other indexes, check pk<->pk ref with no other indexes in play.
+statement ok
+CREATE TABLE foo (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE bar (id INT PRIMARY KEY REFERENCES foo)
+
+statement ok
+INSERT INTO foo VALUES (2)
+
+statement ok
+INSERT INTO bar VALUES (2)
+
+statement error foreign key violation: value\(s\) \[2] in columns \[id\] referenced in table "bar"
+DELETE FROM foo
+
+statement ok
+CREATE DATABASE otherdb
+
+statement ok
+CREATE TABLE otherdb.othertable (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE crossdb (id INT PRIMARY KEY, FOREIGN KEY (id) REFERENCES otherdb.othertable)
+
+statement error foreign key violation: value \[2\] not found in othertable@primary \[id\]
+INSERT INTO crossdb VALUES (2)
+
+statement ok
+INSERT INTO otherdb.othertable VALUES (1), (2)
+
+statement ok
+INSERT INTO crossdb VALUES (2)
+
+statement error foreign key violation: value\(s\) \[2] in columns \[id\] referenced in table "crossdb"
+DELETE FROM otherdb.othertable WHERE id = 2
