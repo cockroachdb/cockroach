@@ -1418,8 +1418,8 @@ func (r *Replica) prepareRaftCommandLocked(
 		r.mu.lastAssignedLeaseIndex++
 	}
 	if log.V(4) {
-		log.Infof(ctx, "%s: prepared command: maxLeaseIndex=%d leaseAppliedIndex=%d",
-			r, r.mu.lastAssignedLeaseIndex, r.mu.state.LeaseAppliedIndex)
+		log.Infof(ctx, "%s: prepared command %x: maxLeaseIndex=%d leaseAppliedIndex=%d",
+			r, idKey, r.mu.lastAssignedLeaseIndex, r.mu.state.LeaseAppliedIndex)
 	}
 	return &pendingCmd{
 		ctx:   ctx,
@@ -1540,6 +1540,9 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 	}
 
 	return r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
+		if log.V(4) {
+			log.Infof(context.TODO(), "%s: proposing command %x", r, p.idKey)
+		}
 		return raftGroup.Propose(encodeRaftCommand(string(p.idKey), data))
 	})
 }
@@ -1922,8 +1925,8 @@ func (r *Replica) processRaftCommand(
 	}
 
 	if log.V(4) {
-		log.Infof(context.TODO(), "%s: processing command: maxLeaseIndex=%d",
-			r, raftCmd.MaxLeaseIndex)
+		log.Infof(context.TODO(), "%s: processing command %x: maxLeaseIndex=%d",
+			r, idKey, raftCmd.MaxLeaseIndex)
 	}
 
 	r.mu.Lock()
