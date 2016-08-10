@@ -2729,7 +2729,7 @@ func (s *Store) computeReplicationStatus(now int64) (
 	// Load the system config.
 	cfg, ok := s.Gossip().GetSystemConfig()
 	if !ok {
-		log.Infof(context.TODO(), "system config not yet available")
+		log.Infof(context.TODO(), "%s: system config not yet available", s)
 		return
 	}
 

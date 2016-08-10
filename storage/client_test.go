@@ -563,18 +563,21 @@ func (m *multiTestContext) addStore(idx int) {
 
 	stopper := stop.NewStopper()
 
-	// Give this store all previous stores as gossip bootstraps.
-	var resolvers []resolver.Resolver
-	func() {
+	// Give this store the first store as a resolver. We don't provide all of the
+	// previous stores as resolvers as doing so can cause delays in bringing the
+	// gossip network up.
+	resolvers := func() []resolver.Resolver {
 		m.mu.Lock()
 		defer m.mu.Unlock()
-		for _, addr := range m.nodeIDtoAddr {
-			r, err := resolver.NewResolverFromAddress(addr)
-			if err != nil {
-				m.t.Fatal(err)
-			}
-			resolvers = append(resolvers, r)
+		addr := m.nodeIDtoAddr[1]
+		if addr == nil {
+			return nil
 		}
+		r, err := resolver.NewResolverFromAddress(addr)
+		if err != nil {
+			m.t.Fatal(err)
+		}
+		return []resolver.Resolver{r}
 	}()
 	m.gossips[idx] = gossip.New(m.rpcContext, grpcServer, resolvers, m.transportStopper, metric.NewRegistry())
 	m.gossips[idx].SetNodeID(roachpb.NodeID(idx + 1))
@@ -606,14 +609,14 @@ func (m *multiTestContext) addStore(idx int) {
 		}
 	}
 
-	if m.nodeIDtoAddr == nil {
-		m.nodeIDtoAddr = make(map[roachpb.NodeID]net.Addr)
-	}
 	ln, err := netutil.ListenAndServeGRPC(m.transportStopper, grpcServer, util.TestAddr)
 	if err != nil {
 		m.t.Fatal(err)
 	}
 	m.mu.Lock()
+	if m.nodeIDtoAddr == nil {
+		m.nodeIDtoAddr = make(map[roachpb.NodeID]net.Addr)
+	}
 	_, ok := m.nodeIDtoAddr[nodeID]
 	if !ok {
 		m.nodeIDtoAddr[nodeID] = ln.Addr()
