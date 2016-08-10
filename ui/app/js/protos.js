@@ -70,6 +70,132 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             ]
                         }
                     ]
+                },
+                {
+                    "name": "log",
+                    "fields": [],
+                    "options": {
+                        "go_package": "log"
+                    },
+                    "messages": [
+                        {
+                            "name": "Entry",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "severity",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.casttype)": "Severity"
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "time",
+                                    "id": 2
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "file",
+                                    "id": 3
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "line",
+                                    "id": 4
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "message",
+                                    "id": 5
+                                }
+                            ]
+                        },
+                        {
+                            "name": "FileDetails",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "program",
+                                    "id": 1
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "host",
+                                    "id": 2
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "user_name",
+                                    "id": 3
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "severity",
+                                    "id": 4,
+                                    "options": {
+                                        "(gogoproto.casttype)": "Severity"
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "time",
+                                    "id": 5
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "pid",
+                                    "id": 6,
+                                    "options": {
+                                        "(gogoproto.customname)": "PID"
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "FileInfo",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "name",
+                                    "id": 1
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "size_bytes",
+                                    "id": 2
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "mod_time_nanos",
+                                    "id": 3
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "FileDetails",
+                                    "name": "details",
+                                    "id": 4,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ]
+                        }
+                    ]
                 }
             ]
         },
@@ -2338,6 +2464,20 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             ]
                         },
                         {
+                            "name": "LogEntriesResponse",
+                            "fields": [
+                                {
+                                    "rule": "repeated",
+                                    "type": "util.log.Entry",
+                                    "name": "entries",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ]
+                        },
+                        {
                             "name": "LogFilesListRequest",
                             "fields": [
                                 {
@@ -2345,6 +2485,20 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "type": "string",
                                     "name": "node_id",
                                     "id": 1
+                                }
+                            ]
+                        },
+                        {
+                            "name": "LogFilesListResponse",
+                            "fields": [
+                                {
+                                    "rule": "repeated",
+                                    "type": "util.log.FileInfo",
+                                    "name": "files",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
                                 }
                             ]
                         },
@@ -2740,19 +2894,19 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "response": "JSONResponse",
                                     "options": {}
                                 },
-                                "Logs": {
-                                    "request": "LogsRequest",
-                                    "response": "JSONResponse",
-                                    "options": {}
-                                },
                                 "LogFilesList": {
                                     "request": "LogFilesListRequest",
-                                    "response": "JSONResponse",
+                                    "response": "LogFilesListResponse",
                                     "options": {}
                                 },
                                 "LogFile": {
                                     "request": "LogFileRequest",
-                                    "response": "JSONResponse",
+                                    "response": "LogEntriesResponse",
+                                    "options": {}
+                                },
+                                "Logs": {
+                                    "request": "LogsRequest",
+                                    "response": "LogEntriesResponse",
                                     "options": {}
                                 }
                             }

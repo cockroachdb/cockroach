@@ -54,6 +54,7 @@ export interface utilBuilder {
 	decode64(buffer: string) : utilMessage;
 	UnresolvedAddr: util.UnresolvedAddrBuilder;
 	hlc: util.hlcBuilder;
+	log: util.logBuilder;
 	
 }
 
@@ -170,6 +171,252 @@ export interface TimestampBuilder {
 	decode(buffer: ArrayBuffer) : TimestampMessage;
 	decode(buffer: ByteBuffer) : TimestampMessage;
 	decode64(buffer: string) : TimestampMessage;
+	
+}
+
+}
+
+
+
+declare module cockroach.util {
+
+	export interface log {
+
+		
+
+}
+
+	export interface logMessage extends log {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface logBuilder {
+	new(data?: log): logMessage;
+	decode(buffer: ArrayBuffer) : logMessage;
+	decode(buffer: ByteBuffer) : logMessage;
+	decode64(buffer: string) : logMessage;
+	Entry: log.EntryBuilder;
+	FileDetails: log.FileDetailsBuilder;
+	FileInfo: log.FileInfoBuilder;
+	
+}
+
+}
+
+declare module cockroach.util.log {
+
+	export interface Entry {
+
+		
+
+severity?: Long;
+		
+
+getSeverity?() : Long;
+		setSeverity?(severity : Long): void;
+		
+
+
+
+time?: Long;
+		
+
+getTime?() : Long;
+		setTime?(time : Long): void;
+		
+
+
+
+file?: string;
+		
+
+getFile?() : string;
+		setFile?(file : string): void;
+		
+
+
+
+line?: Long;
+		
+
+getLine?() : Long;
+		setLine?(line : Long): void;
+		
+
+
+
+message?: string;
+		
+
+getMessage?() : string;
+		setMessage?(message : string): void;
+		
+
+
+
+}
+
+	export interface EntryMessage extends Entry {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface EntryBuilder {
+	new(data?: Entry): EntryMessage;
+	decode(buffer: ArrayBuffer) : EntryMessage;
+	decode(buffer: ByteBuffer) : EntryMessage;
+	decode64(buffer: string) : EntryMessage;
+	
+}
+
+}
+
+
+declare module cockroach.util.log {
+
+	export interface FileDetails {
+
+		
+
+program?: string;
+		
+
+getProgram?() : string;
+		setProgram?(program : string): void;
+		
+
+
+
+host?: string;
+		
+
+getHost?() : string;
+		setHost?(host : string): void;
+		
+
+
+
+user_name?: string;
+		
+
+getUserName?() : string;
+		setUserName?(userName : string): void;
+		
+
+
+
+severity?: Long;
+		
+
+getSeverity?() : Long;
+		setSeverity?(severity : Long): void;
+		
+
+
+
+time?: Long;
+		
+
+getTime?() : Long;
+		setTime?(time : Long): void;
+		
+
+
+
+pid?: Long;
+		
+
+getPid?() : Long;
+		setPid?(pid : Long): void;
+		
+
+
+
+}
+
+	export interface FileDetailsMessage extends FileDetails {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface FileDetailsBuilder {
+	new(data?: FileDetails): FileDetailsMessage;
+	decode(buffer: ArrayBuffer) : FileDetailsMessage;
+	decode(buffer: ByteBuffer) : FileDetailsMessage;
+	decode64(buffer: string) : FileDetailsMessage;
+	
+}
+
+}
+
+
+declare module cockroach.util.log {
+
+	export interface FileInfo {
+
+		
+
+name?: string;
+		
+
+getName?() : string;
+		setName?(name : string): void;
+		
+
+
+
+size_bytes?: Long;
+		
+
+getSizeBytes?() : Long;
+		setSizeBytes?(sizeBytes : Long): void;
+		
+
+
+
+mod_time_nanos?: Long;
+		
+
+getModTimeNanos?() : Long;
+		setModTimeNanos?(modTimeNanos : Long): void;
+		
+
+
+
+details?: FileDetails;
+		
+
+getDetails?() : FileDetails;
+		setDetails?(details : FileDetails): void;
+		
+
+
+
+}
+
+	export interface FileInfoMessage extends FileInfo {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface FileInfoBuilder {
+	new(data?: FileInfo): FileInfoMessage;
+	decode(buffer: ArrayBuffer) : FileInfoMessage;
+	decode(buffer: ByteBuffer) : FileInfoMessage;
+	decode64(buffer: string) : FileInfoMessage;
 	
 }
 
@@ -2514,7 +2761,9 @@ export interface serverpbBuilder {
 	GossipRequest: serverpb.GossipRequestBuilder;
 	JSONResponse: serverpb.JSONResponseBuilder;
 	LogsRequest: serverpb.LogsRequestBuilder;
+	LogEntriesResponse: serverpb.LogEntriesResponseBuilder;
 	LogFilesListRequest: serverpb.LogFilesListRequestBuilder;
+	LogFilesListResponse: serverpb.LogFilesListResponseBuilder;
 	LogFileRequest: serverpb.LogFileRequestBuilder;
 	StacksRequest: serverpb.StacksRequestBuilder;
 	MetricsRequest: serverpb.MetricsRequestBuilder;
@@ -4507,6 +4756,42 @@ export interface LogsRequestBuilder {
 
 declare module cockroach.server.serverpb {
 
+	export interface LogEntriesResponse {
+
+		
+
+entries?: util.log.Entry[];
+		
+
+getEntries?() : util.log.Entry[];
+		setEntries?(entries : util.log.Entry[]): void;
+		
+
+
+
+}
+
+	export interface LogEntriesResponseMessage extends LogEntriesResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface LogEntriesResponseBuilder {
+	new(data?: LogEntriesResponse): LogEntriesResponseMessage;
+	decode(buffer: ArrayBuffer) : LogEntriesResponseMessage;
+	decode(buffer: ByteBuffer) : LogEntriesResponseMessage;
+	decode64(buffer: string) : LogEntriesResponseMessage;
+	
+}
+
+}
+
+
+declare module cockroach.server.serverpb {
+
 	export interface LogFilesListRequest {
 
 		
@@ -4535,6 +4820,42 @@ export interface LogFilesListRequestBuilder {
 	decode(buffer: ArrayBuffer) : LogFilesListRequestMessage;
 	decode(buffer: ByteBuffer) : LogFilesListRequestMessage;
 	decode64(buffer: string) : LogFilesListRequestMessage;
+	
+}
+
+}
+
+
+declare module cockroach.server.serverpb {
+
+	export interface LogFilesListResponse {
+
+		
+
+files?: util.log.FileInfo[];
+		
+
+getFiles?() : util.log.FileInfo[];
+		setFiles?(files : util.log.FileInfo[]): void;
+		
+
+
+
+}
+
+	export interface LogFilesListResponseMessage extends LogFilesListResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface LogFilesListResponseBuilder {
+	new(data?: LogFilesListResponse): LogFilesListResponseMessage;
+	decode(buffer: ArrayBuffer) : LogFilesListResponseMessage;
+	decode(buffer: ByteBuffer) : LogFilesListResponseMessage;
+	decode64(buffer: string) : LogFilesListResponseMessage;
 	
 }
 
