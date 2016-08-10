@@ -135,7 +135,8 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 
 		if infoCount := len(delta); infoCount > 0 {
 			if log.V(1) {
-				log.Infof(context.TODO(), "node %d returned %d info(s) to node %d", s.is.NodeID, infoCount, args.NodeID)
+				log.Infof(context.TODO(), "node %d: returning %d info(s) to node %d: %s",
+					s.is.NodeID, infoCount, args.NodeID, extractKeys(delta))
 			}
 
 			*reply = Response{
@@ -175,14 +176,29 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 	for {
 		args := *argsPtr
 		if args.NodeID != 0 {
+			log.Infof(context.TODO(), "node %d: received gossip from node %d",
+				s.is.NodeID, args.NodeID)
 			// Decide whether or not we can accept the incoming connection
 			// as a permanent peer.
 			if args.NodeID == s.is.NodeID {
 				// This is an incoming loopback connection which should be closed by
 				// the client.
+				if log.V(2) {
+					log.Infof(context.TODO(), "node %d: ignoring gossip from node %d (loopback)",
+						s.is.NodeID, args.NodeID)
+				}
 			} else if s.incoming.hasNode(args.NodeID) {
 				// Do nothing.
+				if log.V(2) {
+					log.Infof(context.TODO(), "node %d: ignoring gossip from node %d (already in incoming set)",
+						s.is.NodeID, args.NodeID)
+				}
 			} else if s.incoming.hasSpace() {
+				if log.V(2) {
+					log.Infof(context.TODO(), "node %d: adding node %d to incoming set",
+						s.is.NodeID, args.NodeID)
+				}
+
 				s.incoming.addNode(args.NodeID)
 				s.nodeMap[args.Addr] = serverInfo{
 					peerID:    args.NodeID,
@@ -190,6 +206,11 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 				}
 
 				defer func(nodeID roachpb.NodeID, addr util.UnresolvedAddr) {
+					if log.V(2) {
+						log.Infof(context.TODO(), "node %d: removing node %d from incoming set",
+							s.is.NodeID, args.NodeID)
+					}
+
 					s.incoming.removeNode(nodeID)
 					delete(s.nodeMap, addr)
 				}(args.NodeID, args.Addr)
@@ -207,8 +228,8 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 					altIdx--
 				}
 
-				log.Infof(context.TODO(), "refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
-					args.NodeID, s.incoming.maxSize, alternateNodeID, alternateAddr)
+				log.Infof(context.TODO(), "node %d: refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
+					s.is.NodeID, args.NodeID, s.incoming.maxSize, alternateNodeID, alternateAddr)
 
 				*reply = Response{
 					NodeID:          s.is.NodeID,
@@ -229,6 +250,8 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 					return err
 				}
 			}
+		} else {
+			log.Infof(context.TODO(), "node %d: received gossip from unknown node", s.is.NodeID)
 		}
 
 		bytesReceived := int64(args.Size())
@@ -240,10 +263,10 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 
 		freshCount, err := s.is.combine(args.Delta, args.NodeID)
 		if err != nil {
-			log.Warningf(context.TODO(), "node %d failed to fully combine gossip delta from node %d: %s", s.is.NodeID, args.NodeID, err)
+			log.Warningf(context.TODO(), "node %d: failed to fully combine gossip delta from node %d: %s", s.is.NodeID, args.NodeID, err)
 		}
 		if log.V(1) {
-			log.Infof(context.TODO(), "node %d received %s from node %d (%d fresh)", s.is.NodeID, extractKeys(args.Delta), args.NodeID, freshCount)
+			log.Infof(context.TODO(), "node %d: received %s from node %d (%d fresh)", s.is.NodeID, extractKeys(args.Delta), args.NodeID, freshCount)
 		}
 		s.maybeTighten()
 
@@ -251,6 +274,8 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 			NodeID:          s.is.NodeID,
 			HighWaterStamps: s.is.getHighWaterStamps(),
 		}
+
+		log.Infof(context.TODO(), "node %d: replying to %d ", s.is.NodeID, args.NodeID)
 
 		s.mu.Unlock()
 		err = senderFn(reply)
@@ -284,13 +309,14 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 func (s *server) maybeTighten() {
 	distantNodeID, distantHops := s.is.mostDistant()
 	if log.V(2) {
-		log.Infof(context.TODO(), "@%d: distantHops: %d from %d", s.is.NodeID, distantHops, distantNodeID)
+		log.Infof(context.TODO(), "node %d: distantHops: %d from %d", s.is.NodeID, distantHops, distantNodeID)
 	}
 	if distantHops > MaxHops {
 		select {
 		case s.tighten <- distantNodeID:
 			if log.V(1) {
-				log.Infof(context.TODO(), "if possible, tightening network to node %d (%d > %d)", distantNodeID, distantHops, MaxHops)
+				log.Infof(context.TODO(), "node %d: if possible, tightening network to node %d (%d > %d)",
+					s.is.NodeID, distantNodeID, distantHops, MaxHops)
 			}
 		default:
 			// Do nothing.

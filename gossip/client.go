@@ -72,7 +72,8 @@ func newClient(addr net.Addr, nodeMetrics metrics) *client {
 // processing in a goroutine and returns immediately.
 func (c *client) start(g *Gossip, disconnected chan *client, rpcCtx *rpc.Context, stopper *stop.Stopper) {
 	ctx := context.TODO()
-	log.Infof(ctx, "starting client to %s", c.addr)
+	nodeID := g.is.NodeID
+	log.Infof(ctx, "node %d: starting client to %s", nodeID, c.addr)
 
 	stopper.RunWorker(func() {
 		defer func() {
@@ -85,7 +86,7 @@ func (c *client) start(g *Gossip, disconnected chan *client, rpcCtx *rpc.Context
 		// that ends ups up making `kv` tests take twice as long.
 		conn, err := rpcCtx.GRPCDial(c.addr.String())
 		if err != nil {
-			log.Errorf(ctx, "failed to dial: %s", err)
+			log.Errorf(ctx, "node %d: failed to dial: %s", nodeID, err)
 			return
 		}
 
@@ -96,9 +97,9 @@ func (c *client) start(g *Gossip, disconnected chan *client, rpcCtx *rpc.Context
 				peerID := c.peerID
 				g.mu.Unlock()
 				if peerID != 0 {
-					log.Infof(ctx, "closing client to node %d (%s): %s", peerID, c.addr, err)
+					log.Infof(ctx, "node %d: closing client to node %d (%s): %s", nodeID, peerID, c.addr, err)
 				} else {
-					log.Infof(ctx, "closing client to %s: %s", c.addr, err)
+					log.Infof(ctx, "node %d: closing client to %s: %s", nodeID, c.addr, err)
 				}
 			}
 		}
@@ -153,7 +154,7 @@ func (c *client) sendGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossip_G
 		c.nodeMetrics.infosSent.Add(infosSent)
 
 		if log.V(1) {
-			log.Infof(context.TODO(), "node %d sending %s", g.is.NodeID, extractKeys(args.Delta))
+			log.Infof(context.TODO(), "node %d: sending %s", g.is.NodeID, extractKeys(args.Delta))
 		}
 
 		g.mu.Unlock()
@@ -180,11 +181,11 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 	if reply.Delta != nil {
 		freshCount, err := g.is.combine(reply.Delta, reply.NodeID)
 		if err != nil {
-			log.Warningf(context.TODO(), "node %d failed to fully combine delta from node %d: %s", g.is.NodeID, reply.NodeID, err)
+			log.Warningf(context.TODO(), "node %d: failed to fully combine delta from node %d: %s", g.is.NodeID, reply.NodeID, err)
 		}
 		if infoCount := len(reply.Delta); infoCount > 0 {
 			if log.V(1) {
-				log.Infof(context.TODO(), "node %d received %s from node %d (%d fresh)", g.is.NodeID, extractKeys(reply.Delta), reply.NodeID, freshCount)
+				log.Infof(context.TODO(), "node %d: received %s from node %d (%d fresh)", g.is.NodeID, extractKeys(reply.Delta), reply.NodeID, freshCount)
 			}
 		}
 		g.maybeTighten()
