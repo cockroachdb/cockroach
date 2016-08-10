@@ -191,7 +191,7 @@ func (fks fkDeleteHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error
 			for i, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 				fkValues[i] = row[fk.ids[colID]]
 			}
-			return fmt.Errorf("foreign key violation: value(s) %v in columns %s referenced in table %q",
+			return fmt.Errorf("foreign key violation: values %v in columns %s referenced in table %q",
 				fkValues, fk.writeIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
 		}
 
