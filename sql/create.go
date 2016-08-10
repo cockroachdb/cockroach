@@ -349,7 +349,10 @@ func (n *createTableNode) Start() error {
 	}
 
 	// FKs are resolved after the descriptor is otherwise complete and IDs have
-	// been allocated since the FKs will reference those IDs.
+	// been allocated since the FKs will reference those IDs. Resolution also
+	// accumulated updates to other tables (adding backreferences) in the passed
+	// map -- anything in that map should be saved when the table is created.
+	affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 	for _, def := range n.n.Defs {
 		switch d := def.(type) {
 		case *parser.ColumnTableDef:
@@ -359,13 +362,13 @@ func (n *createTableNode) Start() error {
 					targetCol = append(targetCol, d.References.Col)
 				}
 				err := n.resolveFK(&desc, parser.NameList{d.Name},
-					d.References.Table.TableName(), targetCol, d.References.ConstraintName)
+					d.References.Table.TableName(), targetCol, d.References.ConstraintName, affected)
 				if err != nil {
 					return err
 				}
 			}
 		case *parser.ForeignKeyConstraintTableDef:
-			err := n.resolveFK(&desc, d.FromCols, d.Table.TableName(), d.ToCols, d.Name)
+			err := n.resolveFK(&desc, d.FromCols, d.Table.TableName(), d.ToCols, d.Name, affected)
 			if err != nil {
 				return err
 			}
@@ -400,8 +403,13 @@ func (n *createTableNode) Start() error {
 	}
 
 	if created {
-		if err := n.finalizeFKs(&desc); err != nil {
-			return err
+		for _, updated := range affected {
+			if err := n.p.saveNonmutationAndNotify(updated); err != nil {
+				return err
+			}
+		}
+		if desc.Adding() {
+			n.p.notifySchemaChange(desc.ID, sqlbase.InvalidMutationID)
 		}
 
 		for _, index := range desc.AllNonDropIndexes() {
@@ -447,28 +455,52 @@ func (n *createTableNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "create table", "", nil
 }
 
+// resolveFK looks up the tables and columns mentioned in a `REFERENCES`
+// constraint and adds metadata representing that constraint to the descriptor.
+// It may, in doing so, add to or alter descriptors in the passed in `backrefs`
+// map of other tables that need to be updated when this table is created.
 func (n *createTableNode) resolveFK(
 	tbl *sqlbase.TableDescriptor,
-	fromCols parser.NameList,
+	fromColNames parser.NameList,
 	targetTable *parser.TableName,
 	targetColNames parser.NameList,
 	constraintName parser.Name,
+	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
 ) error {
-	srcCols, err := tbl.FindActiveColumnsByNames(fromCols)
-	if err != nil {
-		return err
-	}
-
 	target, err := n.p.getTableDesc(targetTable)
 	if err != nil {
 		return err
 	}
+	// Special-case: self-referencing FKs (i.e. referencing another col in the
+	// same table) will reference a table name that doesn't exist yet (since we
+	// are creating it).
 	if target == nil {
 		if targetTable.Table() == tbl.Name {
 			target = tbl
 		} else {
 			return fmt.Errorf("referenced table %q not found", targetTable.String())
 		}
+	} else {
+		// Since this FK is referencing another table, this table must be created in
+		// a non-public "ADD" state and made public only after all leases on the
+		// other table are updated to include the backref.
+		tbl.State = sqlbase.TableDescriptor_ADD
+		if err := tbl.SetUpVersion(); err != nil {
+			return err
+		}
+
+		// If we resolve the same table more than once, we only want to edit a
+		// single instance of it, so replace target with previously resolved table.
+		if prev, ok := backrefs[target.ID]; ok {
+			target = prev
+		} else {
+			backrefs[target.ID] = target
+		}
+	}
+
+	srcCols, err := tbl.FindActiveColumnsByNames(fromColNames)
+	if err != nil {
+		return err
 	}
 
 	// If no columns are specified, attempt to default to PK.
@@ -521,18 +553,18 @@ func (n *createTableNode) resolveFK(
 	}
 
 	if constraintName == "" {
-		constraintName = parser.Name(fmt.Sprintf("fk_%s_ref_%s", fromCols[0], target.Name))
+		constraintName = parser.Name(fmt.Sprintf("fk_%s_ref_%s", fromColNames[0], target.Name))
 	}
 
-	var targetIdx sqlbase.IndexID
+	var targetIdx *sqlbase.IndexDescriptor
 	if matchesIndex(targetCols, target.PrimaryIndex, matchExact) {
-		targetIdx = target.PrimaryIndex.ID
+		targetIdx = &target.PrimaryIndex
 	} else {
 		found := false
 		// Find the index corresponding to the referenced column.
-		for _, idx := range target.Indexes {
+		for i, idx := range target.Indexes {
 			if idx.Unique && matchesIndex(targetCols, idx, matchExact) {
-				targetIdx = idx.ID
+				targetIdx = &target.Indexes[i]
 				found = true
 				break
 			}
@@ -542,49 +574,30 @@ func (n *createTableNode) resolveFK(
 		}
 	}
 
-	ref := sqlbase.ForeignKeyReference{Table: target.ID, Index: targetIdx, Name: string(constraintName)}
+	ref := sqlbase.ForeignKeyReference{Table: target.ID, Index: targetIdx.ID, Name: string(constraintName)}
+	backref := sqlbase.ForeignKeyReference{Table: tbl.ID}
 
-	var srcIdx sqlbase.IndexID
 	if matchesIndex(srcCols, tbl.PrimaryIndex, matchPrefix) {
 		if tbl.PrimaryIndex.ForeignKey.IsSet() {
 			return fmt.Errorf("column(s) cannot be used by multiple foreign key constraints")
 		}
 		tbl.PrimaryIndex.ForeignKey = ref
-		srcIdx = tbl.PrimaryIndex.ID
-	} else {
-		found := false
-		for i := range tbl.Indexes {
-			if matchesIndex(srcCols, tbl.Indexes[i], matchPrefix) {
-				if tbl.Indexes[i].ForeignKey.IsSet() {
-					return fmt.Errorf("column(s) cannot be used by multiple foreign key constraints")
-				}
-				tbl.Indexes[i].ForeignKey = ref
-				srcIdx = tbl.Indexes[i].ID
-				found = true
-				break
+		backref.Index = tbl.PrimaryIndex.ID
+		targetIdx.ReferencedBy = append(targetIdx.ReferencedBy, backref)
+		return nil
+	}
+	for i := range tbl.Indexes {
+		if matchesIndex(srcCols, tbl.Indexes[i], matchPrefix) {
+			if tbl.Indexes[i].ForeignKey.IsSet() {
+				return fmt.Errorf("column(s) cannot be used by multiple foreign key constraints")
 			}
-		}
-		if !found {
-			return fmt.Errorf("foreign key columns %s must be the prefix of an index", colNames(srcCols))
+			tbl.Indexes[i].ForeignKey = ref
+			backref.Index = tbl.Indexes[i].ID
+			targetIdx.ReferencedBy = append(targetIdx.ReferencedBy, backref)
+			return nil
 		}
 	}
-
-	// self-reference FKs can setup their back-references at creation without
-	// waiting for the finalize step, and do not need to use the ADD table state.
-	if target == tbl {
-		ref.Name = ""
-		ref.Index = srcIdx
-		if idx, err := tbl.FindIndexByID(targetIdx); err == nil {
-			idx.ReferencedBy = append(idx.ReferencedBy, ref)
-		} else {
-			return err
-		}
-	} else {
-		// Create the table non-public, since we'll need to ensure the FK back-refs
-		// are in place before we can allow writes.
-		tbl.State = sqlbase.TableDescriptor_ADD
-	}
-	return nil
+	return fmt.Errorf("foreign key columns %s must be the prefix of an index", colNames(srcCols))
 }
 
 // colNames converts a []colDesc to a human-readable string for use in error messages.
@@ -674,47 +687,6 @@ func (p *planner) addInterleave(
 	index.Interleave = sqlbase.InterleaveDescriptor{Ancestors: append(ancestorPrefix, intl)}
 
 	desc.State = sqlbase.TableDescriptor_ADD
-	return nil
-}
-
-func (n *createTableNode) finalizeFKs(desc *sqlbase.TableDescriptor) error {
-	save := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
-	for _, idx := range desc.Indexes {
-		if idx.ForeignKey.IsSet() {
-			if idx.ForeignKey.Table == desc.ID {
-				// self-ref FKs include back-references at creation.
-				continue
-			}
-			targetTable, ok := save[idx.ForeignKey.Table]
-			if !ok {
-				var err error
-				targetTable, err = sqlbase.GetTableDescFromID(n.p.txn, idx.ForeignKey.Table)
-				if err != nil {
-					return err
-				}
-				save[targetTable.ID] = targetTable
-			}
-			targetIdx, err := targetTable.FindIndexByID(idx.ForeignKey.Index)
-			if err != nil {
-				return err
-			}
-			backref := sqlbase.ForeignKeyReference{Table: desc.ID, Index: idx.ID}
-			targetIdx.ReferencedBy = append(targetIdx.ReferencedBy, backref)
-		}
-	}
-	for _, t := range save {
-		if err := n.p.saveNonmutationAndNotify(t); err != nil {
-			return err
-		}
-	}
-
-	if desc.State == sqlbase.TableDescriptor_ADD {
-		desc.State = sqlbase.TableDescriptor_PUBLIC
-
-		if err := n.p.saveNonmutationAndNotify(desc); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 

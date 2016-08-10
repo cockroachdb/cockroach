@@ -124,8 +124,6 @@ func jitteredLeaseDuration() time.Duration {
 	return time.Duration(float64(LeaseDuration) * (0.75 + 0.5*rand.Float64()))
 }
 
-var errTableDeleted = errors.New("table is being deleted")
-
 // Acquire a lease on the most recent version of a table descriptor.
 // If the lease cannot be obtained because the descriptor is in the process of
 // being deleted, the error will be errTableDeleted.
@@ -160,13 +158,12 @@ func (s LeaseStore) Acquire(
 	}
 
 	tableDesc := desc.GetTable()
-	if tableDesc != nil && tableDesc.Deleted() {
-		return nil, errTableDeleted
-	}
-	if tableDesc == nil || tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
+	if tableDesc == nil {
 		return nil, errors.Errorf("ID %d is not a table", tableID)
 	}
-
+	if err := filterTableState(tableDesc); err != nil {
+		return nil, err
+	}
 	tableDesc.MaybeUpgradeFormatVersion()
 	lease.TableDescriptor = *tableDesc
 

@@ -948,3 +948,49 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		}
 	}
 }
+
+// TestAddingFKs checks the behavior of a table in the non-public `ADD` state.
+// Being non-public, it should not be visible to clients, and is therefore
+// assumed to be empty (e.g. by foreign key checks), since no one could have
+// written to it yet.
+func TestAddingFKs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := createTestServerParams()
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+
+	if _, err := sqlDB.Exec(`
+		CREATE DATABASE t;
+		CREATE TABLE t.products (id INT PRIMARY KEY);
+		INSERT INTO t.products VALUES (1), (2);
+		CREATE TABLE t.orders (id INT PRIMARY KEY, product INT REFERENCES t.products, INDEX (product));
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Step the referencing table back to the ADD state.
+	ordersDesc := sqlbase.GetTableDescriptor(kvDB, "t", "orders")
+	ordersDesc.State = sqlbase.TableDescriptor_ADD
+	ordersDesc.Version++
+	if err := kvDB.Put(
+		sqlbase.MakeDescMetadataKey(ordersDesc.ID),
+		sqlbase.WrapDescriptor(ordersDesc),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Generally a referenced table needs to lookup referencing tables to check
+	// FKs during delete operations, but referencing tables in the ADD state are
+	// given special treatment.
+	if _, err := sqlDB.Exec(`DELETE FROM t.products`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Client should not see the orders table.
+	if _, err := sqlDB.Exec(
+		`SELECT * FROM t.orders`,
+	); !testutils.IsError(err, "table is being added") {
+		t.Fatal(err)
+	}
+}
