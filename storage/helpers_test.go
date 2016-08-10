@@ -164,9 +164,3 @@ func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
 	defer r.mu.Unlock()
 	return r.mu.tsCache.lowWater
 }
-
-func (r *Replica) GetLastFromReplicaDesc() roachpb.ReplicaDescriptor {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.mu.lastFromReplica
-}
