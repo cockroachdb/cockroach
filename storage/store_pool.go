@@ -17,7 +17,9 @@
 package storage
 
 import (
+	"bytes"
 	"container/heap"
+	"fmt"
 	"sort"
 	"time"
 
@@ -240,6 +242,36 @@ func NewStorePool(
 	return sp
 }
 
+func (sp *StorePool) String() string {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+
+	ids := make(roachpb.StoreIDSlice, 0, len(sp.mu.stores))
+	for id := range sp.mu.stores {
+		ids = append(ids, id)
+	}
+	sort.Sort(ids)
+
+	var buf bytes.Buffer
+	now := time.Now()
+
+	for _, id := range ids {
+		detail := sp.mu.stores[id]
+		fmt.Fprintf(&buf, "%d", id)
+		if detail.dead {
+			_, _ = buf.WriteString("*")
+		}
+		fmt.Fprintf(&buf, ": range-count=%d fraction-used=%.2f",
+			detail.desc.Capacity.RangeCount, detail.desc.Capacity.FractionUsed())
+		throttled := detail.throttledUntil.Sub(now)
+		if throttled > 0 {
+			fmt.Fprintf(&buf, " [throttled=%.1fs]", throttled.Seconds())
+		}
+		_, _ = buf.WriteString("\n")
+	}
+	return buf.String()
+}
+
 // storeGossipUpdate is the gossip callback used to keep the StorePool up to date.
 func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	var storeDesc roachpb.StoreDescriptor
@@ -408,6 +440,16 @@ type StoreList struct {
 	// be rebalance targets (their used capacity percentage must be lower than
 	// maxFractionUsedThreshold).
 	candidateCount stat
+}
+
+func (sl StoreList) String() string {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "  candidate-count: mean=%v\n", sl.candidateCount.mean)
+	for _, desc := range sl.stores {
+		fmt.Fprintf(&buf, "  %d: range-count=%d fraction-used=%.2f\n",
+			desc.StoreID, desc.Capacity.RangeCount, desc.Capacity.FractionUsed())
+	}
+	return buf.String()
 }
 
 // add includes the store descriptor to the list of stores and updates
