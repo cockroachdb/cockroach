@@ -327,17 +327,11 @@ func (r *Replica) DeleteRange(
 	args roachpb.DeleteRangeRequest,
 ) (roachpb.DeleteRangeResponse, *roachpb.Span, int64, error) {
 	var reply roachpb.DeleteRangeResponse
-	deleted, resumeKey, num, err := engine.MVCCDeleteRange(
+	deleted, resumeSpan, num, err := engine.MVCCDeleteRange(
 		ctx, batch, ms, args.Key, args.EndKey, maxKeys, h.Timestamp, h.Txn, args.ReturnKeys,
 	)
-	var retSpan *roachpb.Span
 	if err == nil {
 		reply.Keys = deleted
-		if resumeKey != nil {
-			span := args.Span
-			span.Key = resumeKey
-			retSpan = &span
-		}
 		// DeleteRange requires that we retry on push to avoid the lost delete range anomaly.
 		if h.Txn != nil {
 			clonedTxn := h.Txn.Clone()
@@ -345,7 +339,7 @@ func (r *Replica) DeleteRange(
 			reply.Txn = &clonedTxn
 		}
 	}
-	return reply, retSpan, num, err
+	return reply, resumeSpan, num, err
 }
 
 // Scan scans the key range specified by start key through end key in ascending order up to some
@@ -358,19 +352,9 @@ func (r *Replica) Scan(
 	maxKeys int64,
 	args roachpb.ScanRequest,
 ) (roachpb.ScanResponse, *roachpb.Span, int64, *PostCommitTrigger, error) {
-	span := args.Span
-	if maxKeys == 0 {
-		return roachpb.ScanResponse{}, &span, 0, nil, nil
-	}
-	rows, intents, err := engine.MVCCScan(ctx, batch, args.Key, args.EndKey, maxKeys, h.Timestamp,
+	rows, resumeSpan, intents, err := engine.MVCCScan(ctx, batch, args.Key, args.EndKey, maxKeys, h.Timestamp,
 		h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
-	numKeys := int64(len(rows))
-	var retSpan *roachpb.Span
-	if numKeys == maxKeys {
-		span.Key = rows[numKeys-1].Key.Next()
-		retSpan = &span
-	}
-	return roachpb.ScanResponse{Rows: rows}, retSpan, numKeys, intentsToTrigger(intents, &args), err
+	return roachpb.ScanResponse{Rows: rows}, resumeSpan, int64(len(rows)), intentsToTrigger(intents, &args), err
 }
 
 // ReverseScan scans the key range specified by start key through end key in descending order up to
@@ -383,19 +367,9 @@ func (r *Replica) ReverseScan(
 	maxKeys int64,
 	args roachpb.ReverseScanRequest,
 ) (roachpb.ReverseScanResponse, *roachpb.Span, int64, *PostCommitTrigger, error) {
-	span := args.Span
-	if maxKeys == 0 {
-		return roachpb.ReverseScanResponse{}, &span, 0, nil, nil
-	}
-	rows, intents, err := engine.MVCCReverseScan(ctx, batch, args.Key, args.EndKey, maxKeys,
+	rows, resumeSpan, intents, err := engine.MVCCReverseScan(ctx, batch, args.Key, args.EndKey, maxKeys,
 		h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
-	numKeys := int64(len(rows))
-	var retSpan *roachpb.Span
-	if numKeys == maxKeys {
-		span.EndKey = rows[numKeys-1].Key
-		retSpan = &span
-	}
-	return roachpb.ReverseScanResponse{Rows: rows}, retSpan, numKeys, intentsToTrigger(intents, &args), err
+	return roachpb.ReverseScanResponse{Rows: rows}, resumeSpan, int64(len(rows)), intentsToTrigger(intents, &args), err
 }
 
 func verifyTransaction(h roachpb.Header, args roachpb.Request) error {
@@ -970,7 +944,7 @@ func (r *Replica) RangeLookup(
 		}
 
 		// Scan for descriptors.
-		kvs, intents, err = engine.MVCCScan(ctx, batch, startKey, endKey, rangeCount,
+		kvs, _, intents, err = engine.MVCCScan(ctx, batch, startKey, endKey, rangeCount,
 			ts, consistent, h.Txn)
 		if err != nil {
 			// An error here is likely a WriteIntentError when reading consistently.
@@ -1022,7 +996,7 @@ func (r *Replica) RangeLookup(
 				return reply, nil, err
 			}
 
-			kvs, intents, err = engine.MVCCScan(ctx, batch, startKey, endKey, 1,
+			kvs, _, intents, err = engine.MVCCScan(ctx, batch, startKey, endKey, 1,
 				ts, consistent, h.Txn)
 			if err != nil {
 				return reply, nil, err
@@ -1037,7 +1011,7 @@ func (r *Replica) RangeLookup(
 			return reply, nil, err
 		}
 		// Reverse scan for descriptors.
-		revKvs, revIntents, err := engine.MVCCReverseScan(ctx, batch, startKey, endKey, rangeCount,
+		revKvs, _, revIntents, err := engine.MVCCReverseScan(ctx, batch, startKey, endKey, rangeCount,
 			ts, consistent, h.Txn)
 		if err != nil {
 			// An error here is likely a WriteIntentError when reading consistently.
