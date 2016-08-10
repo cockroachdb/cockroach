@@ -407,17 +407,18 @@ func (d *EntryDecoder) Decode(entry *Entry) error {
 		if m == nil {
 			continue
 		}
-		entry.Severity = strings.IndexByte(severityChar, m[1][0])
+		entry.Severity = Severity(strings.IndexByte(severityChar, m[1][0]))
 		t, err := time.ParseInLocation("060102 15:04:05.999999", string(m[2]), time.Local)
 		if err != nil {
 			return err
 		}
 		entry.Time = t.UnixNano()
 		entry.File = string(m[3])
-		entry.Line, err = strconv.Atoi(string(m[4]))
+		line, err := strconv.Atoi(string(m[4]))
 		if err != nil {
 			return err
 		}
+		entry.Line = int64(line)
 		entry.Message = string(m[5])
 		return nil
 	}
@@ -577,7 +578,7 @@ func (buf *buffer) someDigits(i, d int) int {
 
 func formatLogEntry(entry Entry, stacks []byte, colors *colorProfile) *buffer {
 	buf := formatHeader(Severity(entry.Severity), time.Unix(0, entry.Time),
-		entry.File, entry.Line, colors)
+		entry.File, int(entry.Line), colors)
 	_, _ = buf.WriteString(entry.Message)
 	if buf.Bytes()[buf.Len()-1] != '\n' {
 		_ = buf.WriteByte('\n')
@@ -713,10 +714,10 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 	// Set additional details in log entry.
 	now := time.Now()
 	entry := Entry{
-		Severity: int(s),
+		Severity: s,
 		Time:     now.UnixNano(),
 		File:     file,
-		Line:     line,
+		Line:     int64(line),
 		Message:  msg,
 	}
 	// On fatal log, set all stacks.
@@ -951,10 +952,10 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 		fmt.Sprintf("line format: [IWEF]yymmdd hh:mm:ss.uuuuuu file:line msg\n"),
 	} {
 		buf := formatLogEntry(Entry{
-			Severity: int(sb.sev),
+			Severity: sb.sev,
 			Time:     now.UnixNano(),
 			File:     f,
-			Line:     l,
+			Line:     int64(l),
 			Message:  msg,
 		}, nil, nil)
 		var n int

@@ -1,0 +1,49 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Author: Tamir Duberstein (tamird@gmail.com)
+
+syntax = "proto3";
+package cockroach.util.log;
+option go_package = "log";
+
+import weak "gogoproto/gogo.proto";
+
+// Entry represents a cockroach structured log entry.
+message Entry {
+  int64 severity = 1 [(gogoproto.casttype) = "Severity"];
+  // Nanoseconds since the epoch.
+  int64 time = 2;
+  string file = 3;
+  int64 line = 4;
+  string message = 5;
+}
+
+// A FileDetails holds all of the particulars that can be parsed by the name of
+// a log file.
+message FileDetails {
+  string program = 1;
+  string host = 2;
+  string user_name = 3;
+  int64 severity = 4 [(gogoproto.casttype) = "Severity"];
+  int64 time = 5;
+  int64 pid = 6 [(gogoproto.customname) = "PID"];
+}
+
+message FileInfo {
+  string name = 1;
+  int64 size_bytes = 2;
+  int64 mod_time_nanos = 3;
+  FileDetails details = 4 [(gogoproto.nullable) = false];
+}
