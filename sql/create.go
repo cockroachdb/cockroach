@@ -579,7 +579,7 @@ func (n *createTableNode) resolveFK(
 
 	if matchesIndex(srcCols, tbl.PrimaryIndex, matchPrefix) {
 		if tbl.PrimaryIndex.ForeignKey.IsSet() {
-			return fmt.Errorf("column(s) cannot be used by multiple foreign key constraints")
+			return fmt.Errorf("columns cannot be used by multiple foreign key constraints")
 		}
 		tbl.PrimaryIndex.ForeignKey = ref
 		backref.Index = tbl.PrimaryIndex.ID
@@ -589,7 +589,7 @@ func (n *createTableNode) resolveFK(
 	for i := range tbl.Indexes {
 		if matchesIndex(srcCols, tbl.Indexes[i], matchPrefix) {
 			if tbl.Indexes[i].ForeignKey.IsSet() {
-				return fmt.Errorf("column(s) cannot be used by multiple foreign key constraints")
+				return fmt.Errorf("columns cannot be used by multiple foreign key constraints")
 			}
 			tbl.Indexes[i].ForeignKey = ref
 			backref.Index = tbl.Indexes[i].ID
