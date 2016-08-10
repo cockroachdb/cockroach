@@ -19,7 +19,6 @@ package server
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -277,35 +276,27 @@ func TestStatusLocalLogs(t *testing.T) {
 	log.Infof(context.Background(), "TestStatusLocalLogFile test message-Info")
 	timestampEWI := timeutil.Now().UnixNano()
 
-	type logsWrapper struct {
-		Data []log.FileInfo `json:"d"`
-	}
-	var logs logsWrapper
-	if err := json.Unmarshal(getRequest(t, ts, "/_status/logfiles/local"), &logs); err != nil {
+	var wrapper serverpb.LogFilesListResponse
+	if err := getRequestProto(t, ts, "/_status/logfiles/local", &wrapper); err != nil {
 		t.Fatal(err)
 	}
-	if a, e := len(logs.Data), 3; a != e {
+	if a, e := len(wrapper.Files), 3; a != e {
 		t.Fatalf("expected %d log files; got %d", e, a)
 	}
 	for i, name := range []string{"log.ERROR", "log.INFO", "log.WARNING"} {
-		if !strings.Contains(logs.Data[i].Name, name) {
-			t.Errorf("expected log file name %s to contain %q", logs.Data[i].Name, name)
+		if !strings.Contains(wrapper.Files[i].Name, name) {
+			t.Errorf("expected log file name %s to contain %q", wrapper.Files[i].Name, name)
 		}
-	}
-
-	// Fetch the full list of log entries.
-	type logWrapper struct {
-		Data []log.Entry `json:"d"`
 	}
 
 	// Check each individual log can be fetched and is non-empty.
 	var foundInfo, foundWarning, foundError bool
-	for _, file := range logs.Data {
-		var log logWrapper
-		if err := json.Unmarshal(getRequest(t, ts, fmt.Sprintf("/_status/logfiles/local/%s", file.Name)), &log); err != nil {
+	for _, file := range wrapper.Files {
+		var wrapper serverpb.LogEntriesResponse
+		if err := getRequestProto(t, ts, fmt.Sprintf("/_status/logfiles/local/%s", file.Name), &wrapper); err != nil {
 			t.Fatal(err)
 		}
-		for _, entry := range log.Data {
+		for _, entry := range wrapper.Entries {
 			switch entry.Message {
 			case "TestStatusLocalLogFile test message-Error":
 				foundError = true
@@ -318,7 +309,7 @@ func TestStatusLocalLogs(t *testing.T) {
 	}
 
 	if !(foundInfo && foundWarning && foundError) {
-		t.Errorf("expected to find test messages in %v", logs.Data)
+		t.Errorf("expected to find test messages in %v", wrapper.Files)
 	}
 
 	testCases := []struct {
@@ -371,20 +362,20 @@ func TestStatusLocalLogs(t *testing.T) {
 			fmt.Fprintf(&url, "&pattern=%s", testCase.Pattern)
 		}
 
-		var log logWrapper
+		var wrapper serverpb.LogEntriesResponse
 		path := url.String()
-		if err := json.Unmarshal(getRequest(t, ts, path), &log); err != nil {
+		if err := getRequestProto(t, ts, path, &wrapper); err != nil {
 			t.Fatal(err)
 		}
 
 		if testCase.MaxEntities > 0 {
-			if a, e := len(log.Data), testCase.MaxEntities; a != e {
-				t.Errorf("%d expected %d entries, got %d: \n%+v", i, e, a, log.Data)
+			if a, e := len(wrapper.Entries), testCase.MaxEntities; a != e {
+				t.Errorf("%d expected %d entries, got %d: \n%+v", i, e, a, wrapper.Entries)
 			}
 		} else {
 			var actualInfo, actualWarning, actualError bool
 			var formats bytes.Buffer
-			for _, entry := range log.Data {
+			for _, entry := range wrapper.Entries {
 				fmt.Fprintf(&formats, "%s\n", entry.Message)
 
 				switch entry.Message {
