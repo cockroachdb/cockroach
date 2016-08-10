@@ -88,6 +88,7 @@ type Server struct {
 	pgServer      *pgwire.Server
 	distSQLServer *distsql.ServerImpl
 	node          *Node
+	registry      *metric.Registry
 	recorder      *status.MetricsRecorder
 	runtime       status.RuntimeStatSampler
 	admin         adminServer
@@ -134,8 +135,8 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 	}
 	s.grpc = rpc.NewServer(s.rpcContext)
 
-	gossipRegistry := metric.NewRegistry()
-	s.gossip = gossip.New(s.rpcContext, s.grpc, s.ctx.GossipBootstrapResolvers, s.stopper, gossipRegistry)
+	s.registry = metric.NewRegistry()
+	s.gossip = gossip.New(s.rpcContext, s.grpc, s.ctx.GossipBootstrapResolvers, s.stopper, s.registry)
 	s.storePool = storage.NewStorePool(
 		s.gossip,
 		s.clock,
@@ -163,8 +164,7 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 		RPCContext:      s.rpcContext,
 		RPCRetryOptions: &retryOpts,
 	}, s.gossip)
-	txnRegistry := metric.NewRegistry()
-	txnMetrics := kv.NewTxnMetrics(txnRegistry)
+	txnMetrics := kv.NewTxnMetrics(s.registry)
 	sender := kv.NewTxnCoordSender(s.distSender, s.clock, ctx.Linearizable, s.Tracer,
 		s.stopper, txnMetrics)
 	s.db = client.NewDB(sender)
@@ -206,10 +206,9 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 		eCtx.TestingKnobs = &sql.ExecutorTestingKnobs{}
 	}
 
-	sqlRegistry := metric.NewRegistry()
-	s.sqlExecutor = sql.NewExecutor(eCtx, s.stopper, sqlRegistry)
+	s.sqlExecutor = sql.NewExecutor(eCtx, s.stopper, s.registry)
 
-	s.pgServer = pgwire.MakeServer(s.ctx.Context, s.sqlExecutor, sqlRegistry)
+	s.pgServer = pgwire.MakeServer(s.ctx.Context, s.sqlExecutor, s.registry)
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
@@ -237,15 +236,10 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	s.recorder = status.NewMetricsRecorder(s.clock)
-	s.recorder.AddNodeRegistry("sql.%s", sqlRegistry)
-	s.recorder.AddNodeRegistry("txn.%s", txnRegistry)
-	s.recorder.AddNodeRegistry("clock-offset.%s", s.rpcContext.RemoteClocks.Registry())
-	s.recorder.AddNodeRegistry("gossip.%s", gossipRegistry)
+	s.rpcContext.RemoteClocks.RegisterMetrics(s.registry)
+	s.runtime = status.MakeRuntimeStatSampler(s.clock, s.registry)
 
-	s.runtime = status.MakeRuntimeStatSampler(s.clock)
-	s.recorder.AddNodeRegistry("sys.%s", s.runtime.Registry())
-
-	s.node = NewNode(nCtx, s.recorder, s.stopper, txnMetrics, sql.MakeEventLogger(s.leaseMgr))
+	s.node = NewNode(nCtx, s.recorder, s.registry, s.stopper, txnMetrics, sql.MakeEventLogger(s.leaseMgr))
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 	roachpb.RegisterInternalStoresServer(s.grpc, s.node.InternalStoresServer)
 
@@ -408,6 +402,9 @@ func (s *Server) Start() error {
 	if err := s.node.start(ctx, unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
 		return err
 	}
+
+	// We can now add the node registry.
+	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt)
 
 	// Begin recording runtime statistics.
 	s.startSampleEnvironment(s.ctx.MetricsSampleInterval)

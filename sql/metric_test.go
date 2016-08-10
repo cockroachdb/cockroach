@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
@@ -73,16 +74,16 @@ func TestQueryCounts(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		checkCounterEQ(t, s, "txn.begin.count", tc.txnBeginCount)
-		checkCounterEQ(t, s, "select.count", tc.selectCount)
-		checkCounterEQ(t, s, "update.count", tc.updateCount)
-		checkCounterEQ(t, s, "insert.count", tc.insertCount)
-		checkCounterEQ(t, s, "delete.count", tc.deleteCount)
-		checkCounterEQ(t, s, "ddl.count", tc.ddlCount)
-		checkCounterEQ(t, s, "misc.count", tc.miscCount)
-		checkCounterEQ(t, s, "txn.commit.count", tc.txnCommitCount)
-		checkCounterEQ(t, s, "txn.rollback.count", tc.txnRollbackCount)
-		checkCounterEQ(t, s, "txn.abort.count", 0)
+		checkCounterEQ(t, s, sql.MetricTxnBeginName, tc.txnBeginCount)
+		checkCounterEQ(t, s, sql.MetricTxnCommitName, tc.txnCommitCount)
+		checkCounterEQ(t, s, sql.MetricTxnRollbackName, tc.txnRollbackCount)
+		checkCounterEQ(t, s, sql.MetricTxnAbortName, 0)
+		checkCounterEQ(t, s, sql.MetricSelectName, tc.selectCount)
+		checkCounterEQ(t, s, sql.MetricUpdateName, tc.updateCount)
+		checkCounterEQ(t, s, sql.MetricInsertName, tc.insertCount)
+		checkCounterEQ(t, s, sql.MetricDeleteName, tc.deleteCount)
+		checkCounterEQ(t, s, sql.MetricDdlName, tc.ddlCount)
+		checkCounterEQ(t, s, sql.MetricMiscName, tc.miscCount)
 
 		// Everything after this query will also fail, so quit now to avoid deluge of errors.
 		if t.Failed() {
@@ -133,11 +134,11 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	checkCounterEQ(t, s, "txn.abort.count", 1)
-	checkCounterEQ(t, s, "txn.begin.count", 1)
-	checkCounterEQ(t, s, "txn.rollback.count", 0)
-	checkCounterEQ(t, s, "txn.commit.count", 0)
-	checkCounterEQ(t, s, "insert.count", 1)
+	checkCounterEQ(t, s, sql.MetricTxnAbortName, 1)
+	checkCounterEQ(t, s, sql.MetricTxnBeginName, 1)
+	checkCounterEQ(t, s, sql.MetricTxnRollbackName, 0)
+	checkCounterEQ(t, s, sql.MetricTxnCommitName, 0)
+	checkCounterEQ(t, s, sql.MetricInsertName, 1)
 }
 
 // TestErrorDuringTransaction tests that the transaction abort count goes up when a query
@@ -157,7 +158,7 @@ func TestAbortCountErrorDuringTransaction(t *testing.T) {
 		t.Fatal("Expected an error but didn't get one")
 	}
 
-	checkCounterEQ(t, s, "txn.abort.count", 1)
-	checkCounterEQ(t, s, "txn.begin.count", 1)
-	checkCounterEQ(t, s, "select.count", 1)
+	checkCounterEQ(t, s, sql.MetricTxnAbortName, 1)
+	checkCounterEQ(t, s, sql.MetricTxnBeginName, 1)
+	checkCounterEQ(t, s, sql.MetricSelectName, 1)
 }

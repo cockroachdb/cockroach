@@ -42,6 +42,13 @@ const (
 	ErrDraining = "server is not accepting clients"
 )
 
+// Fully-qualified names for metrics.
+const (
+	MetricConnsName    = "sql.conns"
+	MetricBytesInName  = "sql.bytesin"
+	MetricBytesOutName = "sql.bytesout"
+)
+
 const (
 	version30  = 196608
 	versionSSL = 80877103
@@ -76,9 +83,9 @@ type serverMetrics struct {
 
 func newServerMetrics(reg *metric.Registry) *serverMetrics {
 	return &serverMetrics{
-		conns:         reg.Counter("conns"),
-		bytesInCount:  reg.Counter("bytesin"),
-		bytesOutCount: reg.Counter("bytesout"),
+		conns:         reg.Counter(MetricConnsName),
+		bytesInCount:  reg.Counter(MetricBytesInName),
+		bytesOutCount: reg.Counter(MetricBytesOutName),
 	}
 }
 
