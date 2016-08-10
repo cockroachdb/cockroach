@@ -10,6 +10,8 @@ import metricsReducer, * as metrics from "./metrics";
 import timeWindowReducer, * as timewindow from "./timewindow";
 import apiReducersReducer, * as apiReducers from "./apiReducers";
 
+import { PayloadAction } from "../interfaces/action";
+
 export interface AdminUIState {
     routing: IRouterState;
     ui: ui.UISettingsDict;
@@ -32,7 +34,19 @@ export const store = createStore<AdminUIState>(
     applyMiddleware(thunk),
     // Support for redux dev tools
     // https://chrome.google.com/webstore/detail/redux-devtools/lmhkpmbekcpmknklioeibfkpmmfibljd
-    (window as any).devToolsExtension ? (window as any).devToolsExtension() : _.identity
+    (window as any).devToolsExtension ? (window as any).devToolsExtension({
+      // The nodes state had a circular reference in it which was breaking redux devtools
+      // TODO (maxlang): file issues upstream
+      actionsFilter: (action: PayloadAction<any>): PayloadAction<any> => (/nodes/).test(action.type) ? {type: action.type, payload: "<<NODE_DATA>>"} : action,
+      statesFilter: (state: AdminUIState): AdminUIState => {
+        if (state.cachedData.nodes.data) {
+          let clone = _.clone(state);
+          clone.cachedData.nodes.data = <any>"<<NODE_DATA>>";
+          return clone;
+        }
+        return state;
+      },
+    }) : _.identity
   ) as StoreEnhancer<AdminUIState>
 );
 
