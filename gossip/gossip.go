@@ -248,7 +248,7 @@ func (g *Gossip) ResetNodeID(nodeID roachpb.NodeID) {
 // and sets the infostore's node ID.
 func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
 	if err := g.AddInfoProto(MakeNodeIDKey(desc.NodeID), desc, ttlNodeDescriptorGossip); err != nil {
-		return errors.Errorf("couldn't gossip descriptor for node %d: %v", desc.NodeID, err)
+		return errors.Errorf("node %d: couldn't gossip descriptor: %v", desc.NodeID, err)
 	}
 	return nil
 }
@@ -953,9 +953,10 @@ func (g *Gossip) tightenNetwork(distantNodeID roachpb.NodeID) {
 	defer g.mu.Unlock()
 	if g.outgoing.hasSpace() {
 		if nodeAddr, err := g.getNodeIDAddressLocked(distantNodeID); err != nil {
-			log.Errorf(context.TODO(), "node %d: %s", distantNodeID, err)
+			log.Errorf(context.TODO(), "node %d: unable to get address for node %d: %s", g.is.NodeID, distantNodeID, err)
 		} else {
-			log.Infof(context.TODO(), "starting client to distant node %d to tighten network graph", distantNodeID)
+			log.Infof(context.TODO(), "node %d: starting client to distant node %d to tighten network graph",
+				g.is.NodeID, distantNodeID)
 			g.startClient(nodeAddr)
 		}
 	}
