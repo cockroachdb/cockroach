@@ -13,7 +13,6 @@ cmd github.com/mdempsky/unconvert
 cmd github.com/mibk/dupl
 cmd github.com/opennota/check/cmd/varcheck
 cmd github.com/robfig/glock
-cmd github.com/stripe/safesql
 cmd github.com/tebeka/go2xunit
 cmd github.com/wadey/gocovmerge
 cmd golang.org/x/tools/cmd/goimports
@@ -100,7 +99,6 @@ github.com/shurcooL/sanitized_anchor_name 10ef21a441db47d8b13ebcc5fd2310f636973c
 github.com/spf13/cobra 7c674d9e72017ed25f6d2b5e497a1368086b6a6f
 github.com/spf13/pflag f676131e2660dc8cd88de99f7486d34aa8172635
 github.com/stretchr/testify d77da356e56a7428ad25149ca77381849a6a5232
-github.com/stripe/safesql 452e37ed794488bd0d99676532f346e03cc6cd2c
 github.com/tebeka/go2xunit aeab35ab3263fc37dc7664e8ea1b3aea87f98205
 github.com/termie/go-shutil bcacb06fecaeec8dc42af03c87c6949f4a05c74c
 github.com/wadey/gocovmerge b5bfa59ec0adc420475f97f89b58045c721d761c
