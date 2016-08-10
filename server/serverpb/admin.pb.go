@@ -45,7 +45,9 @@
 		GossipRequest
 		JSONResponse
 		LogsRequest
+		LogEntriesResponse
 		LogFilesListRequest
+		LogFilesListResponse
 		LogFileRequest
 		StacksRequest
 		MetricsRequest

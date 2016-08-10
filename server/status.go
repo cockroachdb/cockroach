@@ -31,6 +31,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/gogo/protobuf/proto"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/julienschmidt/httprouter"
 	"github.com/pkg/errors"
@@ -246,7 +247,7 @@ func (s *statusServer) Details(ctx context.Context, req *serverpb.DetailsRequest
 }
 
 // LogFilesList returns a list of available log files.
-func (s *statusServer) LogFilesList(ctx context.Context, req *serverpb.LogFilesListRequest) (*serverpb.JSONResponse, error) {
+func (s *statusServer) LogFilesList(ctx context.Context, req *serverpb.LogFilesListRequest) (*serverpb.LogFilesListResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -263,7 +264,7 @@ func (s *statusServer) LogFilesList(ctx context.Context, req *serverpb.LogFilesL
 	if err != nil {
 		return nil, err
 	}
-	return marshalJSONResponse(logFiles)
+	return &serverpb.LogFilesListResponse{Files: logFiles}, err
 }
 
 // handleLogFilesList handles GET requests for a list of available log files.
@@ -274,11 +275,11 @@ func (s *statusServer) handleLogFilesList(w http.ResponseWriter, r *http.Request
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSONResponse(w, resp)
+	writeJSONProtoMessage(w, resp)
 }
 
 // LogFile returns a single log file.
-func (s *statusServer) LogFile(ctx context.Context, req *serverpb.LogFileRequest) (*serverpb.JSONResponse, error) {
+func (s *statusServer) LogFile(ctx context.Context, req *serverpb.LogFileRequest) (*serverpb.LogEntriesResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -298,8 +299,8 @@ func (s *statusServer) LogFile(ctx context.Context, req *serverpb.LogFileRequest
 	}
 	defer reader.Close()
 
-	entry := log.Entry{}
-	var entries []log.Entry
+	var entry log.Entry
+	var resp serverpb.LogEntriesResponse
 	decoder := log.NewEntryDecoder(reader)
 	for {
 		if err := decoder.Decode(&entry); err != nil {
@@ -308,10 +309,10 @@ func (s *statusServer) LogFile(ctx context.Context, req *serverpb.LogFileRequest
 			}
 			return nil, err
 		}
-		entries = append(entries, entry)
+		resp.Entries = append(resp.Entries, entry)
 	}
 
-	return marshalJSONResponse(entries)
+	return &resp, nil
 }
 
 // handleLogFile handles GET requests for a single log file.
@@ -326,7 +327,7 @@ func (s *statusServer) handleLogFile(w http.ResponseWriter, r *http.Request, ps 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSONResponse(w, resp)
+	writeJSONProtoMessage(w, resp)
 }
 
 // parseInt64WithDefault attempts to parse the passed in string. If an empty
@@ -357,7 +358,7 @@ func parseInt64WithDefault(s string, defaultValue int64) (int64, error) {
 //   entries. Defaults to defaultMaxLogEntries.
 // * "level" query parameter filters the log entries to be those of the
 //   corresponding severity level or worse. Defaults to "info".
-func (s *statusServer) Logs(ctx context.Context, req *serverpb.LogsRequest) (*serverpb.JSONResponse, error) {
+func (s *statusServer) Logs(ctx context.Context, req *serverpb.LogsRequest) (*serverpb.LogEntriesResponse, error) {
 	log.Flush()
 
 	var sev log.Severity
@@ -407,7 +408,7 @@ func (s *statusServer) Logs(ctx context.Context, req *serverpb.LogsRequest) (*se
 		return nil, err
 	}
 
-	return marshalJSONResponse(entries)
+	return &serverpb.LogEntriesResponse{Entries: entries}, nil
 }
 
 // handleLogs handles GET requests for log entires.
@@ -427,7 +428,7 @@ func (s *statusServer) handleLogs(w http.ResponseWriter, r *http.Request, ps htt
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSONResponse(w, resp)
+	writeJSONProtoMessage(w, resp)
 }
 
 // Stacks handles returns goroutine stack traces.
@@ -752,6 +753,17 @@ func marshalJSONResponse(value interface{}) (*serverpb.JSONResponse, error) {
 func writeJSONResponse(w http.ResponseWriter, resp *serverpb.JSONResponse) {
 	w.Header().Set(util.ContentTypeHeader, util.JSONContentType)
 	if _, err := w.Write(resp.Data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func writeJSONProtoMessage(w http.ResponseWriter, resp proto.Message) {
+	w.Header().Set(util.ContentTypeHeader, util.JSONContentType)
+	if err := (&util.JSONPb{
+		EnumsAsInts:  true,
+		EmitDefaults: true,
+		Indent:       "  ",
+	}).NewEncoder(w).Encode(resp); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
