@@ -16,6 +16,7 @@
 /cockroach-data
 /cockroach-darwin*
 /certs
+/bin
 # make stress
 stress.test
 # Various `sed -i~` invocations in our scripts.

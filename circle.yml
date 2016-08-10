@@ -33,6 +33,7 @@ dependencies:
     - ~/.jspm
     - ~/.npm
     - ~/builder
+    - bin
 
 test:
   override:
