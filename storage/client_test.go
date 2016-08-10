@@ -625,7 +625,6 @@ func (m *multiTestContext) addStore(idx int) {
 	if ok {
 		m.t.Fatalf("node %d already listening", nodeID)
 	}
-	m.gossips[idx].Start(ln.Addr())
 
 	stores := storage.NewStores(clock)
 	stores.AddStore(store)
@@ -644,6 +643,18 @@ func (m *multiTestContext) addStore(idx int) {
 	// replication operations even while the store is stopped.
 	m.idents[idx] = store.Ident
 	m.mu.Unlock()
+
+	// NB: On Mac OS X, we sporadically see excessively long dialing times (~15s)
+	// which cause various trickle down badness in tests. To avoid every test
+	// having to worry about such conditions we pre-warm the connection
+	// cache. See #8440 for an example of the headaches the long dial times
+	// cause.
+	if _, err := m.rpcContext.GRPCDial(ln.Addr().String(), grpc.WithBlock()); err != nil {
+		m.t.Fatal(err)
+	}
+
+	m.gossips[idx].Start(ln.Addr())
+
 	if err := store.Start(stopper); err != nil {
 		m.t.Fatal(err)
 	}
