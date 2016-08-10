@@ -613,6 +613,16 @@ func (m *multiTestContext) addStore(idx int) {
 	if err != nil {
 		m.t.Fatal(err)
 	}
+
+	// NB: On Mac OS X, we sporadically see excessively long dialing times (~15s)
+	// which cause various trickle down badness in tests. To avoid every test
+	// having to worry about such conditions we pre-warm the connection
+	// cache. See #8440 for an example of the headaches the long dial times
+	// cause.
+	if _, err := m.rpcContext.GRPCDial(ln.Addr().String(), grpc.WithBlock()); err != nil {
+		m.t.Fatal(err)
+	}
+
 	m.mu.Lock()
 	if m.nodeIDtoAddr == nil {
 		m.nodeIDtoAddr = make(map[roachpb.NodeID]net.Addr)
