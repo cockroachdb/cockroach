@@ -268,9 +268,9 @@ func (s *statusServer) LogFilesList(ctx context.Context, req *serverpb.LogFilesL
 
 // handleLogFilesList handles GET requests for a list of available log files.
 func (s *statusServer) handleLogFilesList(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	resp, err := s.LogFilesList(context.TODO(), &serverpb.LogFilesListRequest{NodeId: ps.ByName("node_id")})
+	resp, err := s.LogFilesList(r.Context(), &serverpb.LogFilesListRequest{NodeId: ps.ByName("node_id")})
 	if err != nil {
-		log.Error(context.TODO(), err)
+		log.Error(r.Context(), err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -320,9 +320,9 @@ func (s *statusServer) handleLogFile(w http.ResponseWriter, r *http.Request, ps 
 		NodeId: ps.ByName("node_id"),
 		File:   ps.ByName("file"),
 	}
-	resp, err := s.LogFile(context.TODO(), &req)
+	resp, err := s.LogFile(r.Context(), &req)
 	if err != nil {
-		log.Error(context.TODO(), err)
+		log.Error(r.Context(), err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -421,9 +421,9 @@ func (s *statusServer) handleLogs(w http.ResponseWriter, r *http.Request, ps htt
 		Max:       q.Get("max"),
 		Pattern:   q.Get("pattern"),
 	}
-	resp, err := s.Logs(context.TODO(), &req)
+	resp, err := s.Logs(r.Context(), &req)
 	if err != nil {
-		log.Error(context.TODO(), err)
+		log.Error(r.Context(), err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -461,7 +461,7 @@ func (s *statusServer) Stacks(ctx context.Context, req *serverpb.StacksRequest) 
 
 // handleStacksLocal handles GET requests for goroutine stack traces.
 func (s *statusServer) handleStacks(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	resp, err := s.Stacks(context.TODO(), &serverpb.StacksRequest{NodeId: ps.ByName("node_id")})
+	resp, err := s.Stacks(r.Context(), &serverpb.StacksRequest{NodeId: ps.ByName("node_id")})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -540,9 +540,9 @@ func (s *statusServer) Metrics(ctx context.Context, req *serverpb.MetricsRequest
 }
 
 func (s *statusServer) handleMetrics(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	resp, err := s.Metrics(context.TODO(), &serverpb.MetricsRequest{NodeId: ps.ByName("node_id")})
+	resp, err := s.Metrics(r.Context(), &serverpb.MetricsRequest{NodeId: ps.ByName("node_id")})
 	if err != nil {
-		log.Error(context.TODO(), err)
+		log.Error(r.Context(), err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -620,7 +620,7 @@ func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request, ps htt
 	w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
 	err := s.metricSource.PrintAsText(w)
 	if err != nil {
-		log.Error(context.TODO(), err)
+		log.Error(r.Context(), err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
