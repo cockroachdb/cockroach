@@ -98,7 +98,7 @@ func CleanupDir(dir string) {
 	_ = os.RemoveAll(dir)
 }
 
-const defaultSucceedsSoonDuration = 15 * time.Second
+const defaultSucceedsSoonDuration = 45 * time.Second
 
 // SucceedsSoon fails the test (with t.Fatal) unless the supplied
 // function runs without error within a preset maximum duration. The
