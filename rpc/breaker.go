@@ -20,9 +20,10 @@ import (
 	"time"
 
 	"github.com/cenk/backoff"
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/facebookgo/clock"
-	circuit "github.com/rubyist/circuitbreaker"
+	"github.com/rubyist/circuitbreaker"
+
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 // breakerClock is an implementation of clock.Clock that internally uses an
