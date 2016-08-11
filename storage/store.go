@@ -1083,7 +1083,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	}
 
 	// Start Raft processing goroutines.
-	s.ctx.Transport.Listen(s.StoreID(), s.handleRaftMessage)
+	s.ctx.Transport.Listen(s.StoreID(), s)
 	s.processRaft()
 
 	doneUnfreezing := make(chan struct{})
@@ -2332,9 +2332,9 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now hlc.Timesta
 	return txn, nil
 }
 
-// handleRaftMessage dispatches a raft message to the appropriate Replica. It
+// HandleRaftRequest dispatches a raft message to the appropriate Replica. It
 // requires that s.processRaftMu and s.mu are not held.
-func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
+func (s *Store) HandleRaftRequest(req *RaftMessageRequest) error {
 	s.processRaftMu.Lock()
 	defer s.processRaftMu.Unlock()
 
@@ -2493,6 +2493,37 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 	}
 
 	s.enqueueRaftUpdateCheck(req.RangeID)
+	return nil
+}
+
+// HandleRaftResponse handles responses messagaes from the raft
+// transport. It requires that s.processRaftMu and s.mu are not held.
+func (s *Store) HandleRaftResponse(resp *RaftMessageResponse) error {
+	ctx := context.TODO()
+	switch val := resp.Union.GetValue().(type) {
+	case *roachpb.Error:
+		if val.GoError().Error() == errReplicaTooOld.Error() {
+			if err := s.stopper.RunTask(func() {
+				s.mu.Lock()
+				rep, ok := s.mu.replicas[resp.RangeID]
+				s.mu.Unlock()
+				if ok {
+					log.Infof(ctx, "%s: replica %s too old, adding to replica GC queue", rep, resp.ToReplica)
+
+					if err := s.replicaGCQueue.Add(rep, 1.0); err != nil {
+						log.Errorf(ctx, "%s: unable to add replica %d to GC queue: %s", rep, resp.ToReplica, err)
+					}
+				}
+			}); err != nil {
+				log.Errorf(ctx, "%s: %s", s, err)
+			}
+		} else {
+			log.Warningf(ctx, "%s: got unknown raft error: %s", s, val)
+		}
+
+	default:
+		log.Infof(ctx, "%s: got unknown raft response type %T: %s", s, val, val)
+	}
 	return nil
 }
 

@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
@@ -32,8 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -56,7 +58,7 @@ func newChannelServer(bufSize int, maxSleep time.Duration) channelServer {
 	}
 }
 
-func (s channelServer) RaftMessage(req *storage.RaftMessageRequest) error {
+func (s channelServer) HandleRaftRequest(req *storage.RaftMessageRequest) error {
 	if s.maxSleep != 0 {
 		// maxSleep simulates goroutine scheduling delays that could
 		// result in messages being processed out of order (in previous
@@ -67,6 +69,11 @@ func (s channelServer) RaftMessage(req *storage.RaftMessageRequest) error {
 		return errors.Errorf(channelServerBrokenRangeMessage)
 	}
 	s.ch <- req
+	return nil
+}
+
+func (s channelServer) HandleRaftResponse(resp *storage.RaftMessageResponse) error {
+	log.Fatalf(context.Background(), "unexpected raft response: %s", resp)
 	return nil
 }
 
@@ -144,7 +151,7 @@ func (rttc *raftTransportTestContext) ListenStore(
 	nodeID roachpb.NodeID, storeID roachpb.StoreID,
 ) channelServer {
 	ch := newChannelServer(100, 10*time.Millisecond)
-	rttc.transports[nodeID].Listen(storeID, ch.RaftMessage)
+	rttc.transports[nodeID].Listen(storeID, ch)
 	return ch
 }
 
@@ -160,14 +167,7 @@ func (rttc *raftTransportTestContext) Send(
 		ToReplica:   to,
 		FromReplica: from,
 	}
-	sender := rttc.transports[from.NodeID].MakeSender(
-		func(err error, _ roachpb.ReplicaDescriptor) {
-			if err != nil && !grpcutil.IsClosedConnection(err) &&
-				!testutils.IsError(err, channelServerBrokenRangeMessage) {
-				rttc.t.Fatal(err)
-			}
-		})
-	return sender.SendAsync(req)
+	return rttc.transports[from.NodeID].SendAsync(req)
 }
 
 func TestSendAndReceive(t *testing.T) {
@@ -260,11 +260,7 @@ func TestSendAndReceive(t *testing.T) {
 				req := baseReq
 				req.Message.Type = messageType
 
-				if !transports[fromNodeID].MakeSender(func(err error, _ roachpb.ReplicaDescriptor) {
-					if err != nil && !grpcutil.IsClosedConnection(err) {
-						panic(err)
-					}
-				}).SendAsync(&req) {
+				if !transports[fromNodeID].SendAsync(&req) {
 					t.Errorf("unable to send %s from %d to %d", req.Message.Type, fromNodeID, toNodeID)
 				}
 				messageTypeCounts[toStoreID][req.Message.Type]++
@@ -343,11 +339,7 @@ func TestSendAndReceive(t *testing.T) {
 			ReplicaID: replicaIDs[toStoreID],
 		},
 	}
-	if !transports[storeNodes[fromStoreID]].MakeSender(func(err error, _ roachpb.ReplicaDescriptor) {
-		if err != nil && !grpcutil.IsClosedConnection(err) {
-			panic(err)
-		}
-	}).SendAsync(expReq) {
+	if !transports[storeNodes[fromStoreID]].SendAsync(expReq) {
 		t.Errorf("unable to send message from %d to %d", fromStoreID, toStoreID)
 	}
 	if req := <-channels[toStoreID].ch; !proto.Equal(req, expReq) {
@@ -477,7 +469,7 @@ func TestRaftTransportIndependentRanges(t *testing.T) {
 	const numMessages = 50
 	channelServer := newChannelServer(numMessages*2, 10*time.Millisecond)
 	channelServer.brokenRange = 13
-	serverTransport.Listen(server.StoreID, channelServer.RaftMessage)
+	serverTransport.Listen(server.StoreID, channelServer)
 
 	for i := 0; i < numMessages; i++ {
 		for _, rangeID := range []roachpb.RangeID{1, 13} {

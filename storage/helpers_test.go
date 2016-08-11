@@ -98,11 +98,6 @@ func (s *Store) GetDeadReplicas() roachpb.StoreDeadReplicas {
 	return s.deadReplicas()
 }
 
-// HandleRaftMessage delegates to handleRaftMessage.
-func (s *Store) HandleRaftMessage(req *RaftMessageRequest) error {
-	return s.handleRaftMessage(req)
-}
-
 // LeaseExpiration returns an int64 to increment a manual clock with to
 // make sure that all active range leases expire.
 func (s *Store) LeaseExpiration(clock *hlc.Clock) int64 {
