@@ -711,7 +711,7 @@ func (n *Node) recordJoinEvent() {
 		retryOpts := base.DefaultRetryOptions()
 		retryOpts.Closer = n.stopper.ShouldStop()
 		for r := retry.Start(retryOpts); r.Next(); {
-			if err := n.ctx.DB.Txn(func(txn *client.Txn) error {
+			if err := n.ctx.DB.Txn(context.TODO(), func(txn *client.Txn) error {
 				return n.eventLogger.InsertEventRecord(txn,
 					logEventType,
 					int32(n.Descriptor.NodeID),

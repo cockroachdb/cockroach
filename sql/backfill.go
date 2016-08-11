@@ -112,7 +112,7 @@ func (sc *SchemaChanger) runBackfill(lease *sqlbase.TableDescriptor_SchemaChange
 	var droppedIndexDescs []sqlbase.IndexDescriptor
 	var addedColumnDescs []sqlbase.ColumnDescriptor
 	var addedIndexDescs []sqlbase.IndexDescriptor
-	if err := sc.db.Txn(func(txn *client.Txn) error {
+	if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
 		tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
 		if err != nil {
 			return err
@@ -174,7 +174,7 @@ func (sc *SchemaChanger) runBackfill(lease *sqlbase.TableDescriptor_SchemaChange
 // getTableSpan returns a span containing the start and end key for a table.
 func (sc *SchemaChanger) getTableSpan() (sqlbase.Span, error) {
 	var tableDesc *sqlbase.TableDescriptor
-	if err := sc.db.Txn(func(txn *client.Txn) error {
+	if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
 		var err error
 		tableDesc, err = sqlbase.GetTableDescFromID(txn, sc.tableID)
 		return err
@@ -258,7 +258,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 ) (roachpb.Key, bool, error) {
 	var curIndexKey roachpb.Key
 	done := false
-	err := sc.db.Txn(func(txn *client.Txn) error {
+	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
 		tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
 		if err != nil {
 			return err
@@ -384,7 +384,7 @@ func (sc *SchemaChanger) truncateIndexes(
 			return err
 		}
 		*lease = l
-		if err := sc.db.Txn(func(txn *client.Txn) error {
+		if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
 			tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
 			if err != nil {
 				return err
@@ -455,7 +455,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 ) (roachpb.Key, bool, error) {
 	var nextKey roachpb.Key
 	done := false
-	err := sc.db.Txn(func(txn *client.Txn) error {
+	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
 		tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
 		if err != nil {
 			return err

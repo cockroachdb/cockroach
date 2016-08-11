@@ -22,6 +22,8 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
@@ -283,7 +285,7 @@ func TestTxn_Commit(t *testing.T) {
 	s, db := setup(t)
 	defer s.Stopper().Stop()
 
-	err := db.Txn(func(txn *client.Txn) error {
+	err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		b := txn.NewBatch()
 		b.Put("aa", "1")
 		b.Put("ab", "2")
@@ -327,7 +329,7 @@ func TestDebugName(t *testing.T) {
 	defer s.Stopper().Stop()
 
 	file, _, _ := caller.Lookup(0)
-	if err := db.Txn(func(txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		if !strings.HasPrefix(txn.DebugName(), file+":") {
 			t.Fatalf("expected \"%s\" to have the prefix \"%s:\"", txn.DebugName(), file)
 		}

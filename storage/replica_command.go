@@ -2215,7 +2215,7 @@ func (r *Replica) AdminSplit(
 
 	log.Infof(ctx, "%s: initiating a split of this range at key %s", r, splitKey)
 
-	if err := r.store.DB().Txn(func(txn *client.Txn) error {
+	if err := r.store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
 		log.Trace(ctx, "split closure begins")
 		defer log.Trace(ctx, "split closure ends")
 		// Update existing range descriptor for left hand side of
@@ -2652,7 +2652,7 @@ func (r *Replica) AdminMerge(
 		log.Infof(ctx, "%s: initiating a merge of %s into this range", r, rightRng)
 	}
 
-	if err := r.store.DB().Txn(func(txn *client.Txn) error {
+	if err := r.store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
 		log.Trace(ctx, "merge closure begins")
 		// Update the range descriptor for the receiving range.
 		{
@@ -3044,7 +3044,7 @@ func (r *Replica) ChangeReplicas(
 
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
 
-	if err := r.store.DB().Txn(func(txn *client.Txn) error {
+	if err := r.store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
 		log.Trace(ctx, "attempting txn")
 		txn.Proto.Name = replicaChangeTxnName
 		// TODO(tschottdorf): oldDesc is used for sanity checks related to #7224.

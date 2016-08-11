@@ -19,6 +19,8 @@ package sql
 import (
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -597,7 +599,7 @@ func (p *planner) removeInterleaveBackReference(
 // table descriptor.
 // It is called from a mutation, async wrt the DROP statement.
 func truncateAndDropTable(tableDesc *sqlbase.TableDescriptor, db *client.DB) error {
-	return db.Txn(func(txn *client.Txn) error {
+	return db.Txn(context.TODO(), func(txn *client.Txn) error {
 		if err := truncateTable(tableDesc, txn); err != nil {
 			return err
 		}

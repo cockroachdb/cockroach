@@ -933,7 +933,7 @@ func (tc *TxnCoordSender) resendWithTxn(ba roachpb.BatchRequest) (*roachpb.Batch
 	dbCtx.UserPriority = ba.UserPriority
 	tmpDB := client.NewDBWithContext(tc, dbCtx)
 	var br *roachpb.BatchResponse
-	err := tmpDB.Txn(func(txn *client.Txn) error {
+	err := tmpDB.Txn(context.TODO(), func(txn *client.Txn) error {
 		txn.SetDebugName("auto-wrap", 0)
 		b := txn.NewBatch()
 		b.Header = ba.Header

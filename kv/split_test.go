@@ -59,7 +59,7 @@ func startTestWriter(db *client.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 			return
 		default:
 			first := true
-			err := db.Txn(func(txn *client.Txn) error {
+			err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 				if first && txnChannel != nil {
 					select {
 					case txnChannel <- struct{}{}:

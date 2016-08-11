@@ -243,7 +243,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		// Start a txn that does read-after-write.
 		// The txn will be restarted twice, and the out-of-order put
 		// will happen in the second epoch.
-		if err := store.DB().Txn(func(txn *client.Txn) error {
+		if err := store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
 			epoch++
 
 			if epoch == 1 {
