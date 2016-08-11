@@ -90,7 +90,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	ctx.Gossip = g
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
-	distSender := kv.NewDistSender(&kv.DistSenderContext{
+	distSender := kv.NewDistSender(&kv.DistSenderConfig{
 		Clock:           ctx.Clock,
 		RPCContext:      nodeRPCContext,
 		RPCRetryOptions: &retryOpts,
