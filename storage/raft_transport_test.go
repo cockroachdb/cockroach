@@ -26,7 +26,6 @@ import (
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -58,7 +57,7 @@ func newChannelServer(bufSize int, maxSleep time.Duration) channelServer {
 	}
 }
 
-func (s channelServer) HandleRaftRequest(req *storage.RaftMessageRequest) error {
+func (s channelServer) HandleRaftRequest(req *storage.RaftMessageRequest) *roachpb.Error {
 	if s.maxSleep != 0 {
 		// maxSleep simulates goroutine scheduling delays that could
 		// result in messages being processed out of order (in previous
@@ -66,13 +65,13 @@ func (s channelServer) HandleRaftRequest(req *storage.RaftMessageRequest) error 
 		time.Sleep(time.Duration(rand.Int63n(int64(s.maxSleep))))
 	}
 	if s.brokenRange != 0 && s.brokenRange == req.RangeID {
-		return errors.Errorf(channelServerBrokenRangeMessage)
+		return roachpb.NewErrorf(channelServerBrokenRangeMessage)
 	}
 	s.ch <- req
 	return nil
 }
 
-func (s channelServer) HandleRaftResponse(resp *storage.RaftMessageResponse) error {
+func (s channelServer) HandleRaftResponse(resp *storage.RaftMessageResponse) *roachpb.Error {
 	log.Fatalf(context.Background(), "unexpected raft response: %s", resp)
 	return nil
 }
