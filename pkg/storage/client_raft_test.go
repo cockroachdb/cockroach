@@ -18,7 +18,6 @@ package storage_test
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -44,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -684,12 +682,6 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 // Test various mechanism for refreshing pending commands.
 func TestRefreshPendingCommands(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(peter): #8397")
-
-	// TODO(peter): Debugging to track down #8397. Remove when fixed.
-	if err := flag.Lookup("vmodule").Value.Set("raft=5,store=5,replica=5,replica_command=5,replica_range_lease=5"); err != nil {
-		t.Fatal(err)
-	}
 
 	// In this scenario, three different mechanisms detect the need to repropose
 	// commands. Test that each one is sufficient individually. We have this
@@ -703,12 +695,13 @@ func TestRefreshPendingCommands(t *testing.T) {
 		{DisableRefreshReasonSnapshotApplied: true, DisableRefreshReasonTicks: true},
 		{DisableRefreshReasonNewLeader: true, DisableRefreshReasonSnapshotApplied: true},
 	}
-	for i, c := range testCases {
-		// TODO(peter): Debugging to track down #8397. Remove when fixed.
-		log.Infof(context.TODO(), "test case %d", i)
+	for _, c := range testCases {
 		func() {
 			sc := storage.TestStoreConfig()
 			sc.TestingKnobs = c
+			// Disable periodic gossip tasks which can move the range 1 lease
+			// unexpectedly.
+			sc.TestingKnobs.DisablePeriodicGossips = true
 			mtc := &multiTestContext{storeConfig: &sc}
 			mtc.Start(t, 3)
 			defer mtc.Stop()
@@ -749,14 +742,25 @@ func TestRefreshPendingCommands(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Expire existing leases (i.e. move the clock forward).
+			// Stop and restart node 0 in order to make sure that any in-flight Raft
+			// messages have been sent.
+			mtc.stopStore(0)
+			mtc.restartStore(0)
+
+			// Expire existing leases (i.e. move the clock forward). This allows node
+			// 3 to grab the lease later in the test.
 			mtc.expireLeases()
+			// Drain leases from nodes 0 and 1 to prevent them from grabbing any new
+			// leases.
+			for i := 0; i < 2; i++ {
+				if err := mtc.stores[i].DrainLeases(true); err != nil {
+					t.Fatal(err)
+				}
+			}
 
 			// Restart node 2 and wait for the snapshot to be applied. Note that
-			// waitForValues reads directly from the engine.
-			//
-			// TODO(peter): Debugging to track down #8397. Remove when fixed.
-			log.Infof(context.TODO(), "restarting node")
+			// waitForValues reads directly from the engine and thus isn't executing
+			// a Raft command.
 			mtc.restartStore(2)
 			mtc.waitForValues(roachpb.Key("a"), []int64{10, 10, 10})
 
