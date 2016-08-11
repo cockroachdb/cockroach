@@ -135,20 +135,9 @@ func (at *allocatorTest) Cleanup(t *testing.T) {
 func (at *allocatorTest) Run(t *testing.T) {
 	at.f = farmer(t, at.Prefix)
 
-	// Pass on overrides to Terraform input variables.
-	if *flagATCockroachBinary != "" {
-		at.f.AddVars["cockroach_binary"] = *flagATCockroachBinary
-	}
-	if *flagATCockroachFlags != "" {
-		at.f.AddVars["cockroach_flags"] = *flagATCockroachFlags
-	}
-	if *flagATCockroachEnv != "" {
-		at.f.AddVars["cockroach_env"] = *flagATCockroachEnv
-	}
 	if at.CockroachDiskSizeGB != 0 {
 		at.f.AddVars["cockroach_disk_size"] = strconv.Itoa(at.CockroachDiskSizeGB)
 	}
-	at.f.AddVars["cockroach_disk_type"] = *flagATDiskType
 
 	log.Infof(context.Background(), "creating cluster with %d node(s)", at.StartNodes)
 	if err := at.f.Resize(at.StartNodes); err != nil {
