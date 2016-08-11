@@ -41,11 +41,3 @@ func IsClosedConnection(err error) bool {
 	}
 	return netutil.IsClosedConnection(err)
 }
-
-// ErrorEqual checks two grpc errors for equality. We check structural
-// equality, not pointer equality as you would get by comparing the error
-// interface.
-func ErrorEqual(err1, err2 error) bool {
-	return grpc.Code(err1) == grpc.Code(err2) &&
-		grpc.ErrorDesc(err1) == grpc.ErrorDesc(err2)
-}

@@ -1392,7 +1392,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 			// side in the split trigger was racing with the uninitialized
 			// version for the same group, resulting in clobbered HardState).
 			for term := uint64(1); ; term++ {
-				if err := mtc.stores[0].HandleRaftMessage(&storage.RaftMessageRequest{
+				if err := mtc.stores[0].HandleRaftRequest(&storage.RaftMessageRequest{
 					RangeID:     trigger.RightDesc.RangeID,
 					ToReplica:   replicas[0],
 					FromReplica: replicas[1],
