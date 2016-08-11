@@ -570,6 +570,51 @@ BEGIN;
 	}
 }
 
+// Test that aborted txn are only retried once.
+// Prevents regressions of #8456.
+func TestAbortedTxnOnlyRetriedOnce(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	aborter := MakeTxnAborter()
+	defer aborter.Close(t)
+	params, _ := createTestServerParams()
+	executorKnobs := sql.ExecutorTestingKnobs{
+		FixTxnPriority: true,
+		// We're going to abort txns using a TxnAborter, and that's incompatible
+		// with AutoCommit.
+		DisableAutoCommit: true,
+	}
+	params.Knobs.SQLExecutor = aborter.HookupToExecutor(executorKnobs)
+	// Disable one phase commits because they cannot be restarted.
+	params.Knobs.Store.(*storage.StoreTestingKnobs).DisableOnePhaseCommits = true
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+	aborter.InitConn(t, s)
+
+	insertStmt := "INSERT INTO t.test(k, v) VALUES (1, 'boulanger')"
+	aborter.QueueStmtForAbortion(t, insertStmt,
+		1 /* restartCount */, true /* willBeRetriedIbid */)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(insertStmt); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	execCount, ok := aborter.GetExecCount(insertStmt)
+	if !ok {
+		t.Fatalf("aborter has no state on %q", insertStmt)
+	}
+	if execCount != 2 {
+		t.Fatalf("expected %q to be executed 2 times, but got %d", insertStmt, execCount)
+	}
+}
+
 // rollbackStrategy is the type of statement which a client can use to
 // rollback aborted txns from retryable errors. We accept two statements
 // for rolling back to the cockroach_restart savepoint. See

@@ -559,15 +559,17 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 	}
 }
 
-// TestAbortedRetryPreservesTimestamp verifies that the minimum timestamp
-// set by the client is preserved across retries of aborted transactions.
-func TestAbortedRetryPreservesTimestamp(t *testing.T) {
+// Test that the a txn gets a fresh OrigTimestamp with every retry.
+func TestAbortedRetryRenewsTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Create a TestSender that aborts a transaction 2 times before succeeding.
+	mc := hlc.NewManualClock(0)
+	clock := hlc.NewClock(mc.UnixNano)
 	count := 0
 	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		if _, ok := ba.GetArg(roachpb.Put); ok {
+			mc.Increment(1)
 			count++
 			if count < 3 {
 				return nil, roachpb.NewError(&roachpb.TransactionAbortedError{})
@@ -584,9 +586,12 @@ func TestAbortedRetryPreservesTimestamp(t *testing.T) {
 	txn := NewTxn(context.Background(), *db)
 
 	// Request a client-defined timestamp.
-	refTimestamp := hlc.Timestamp{WallTime: 42, Logical: 69}
-	execOpt := TxnExecOptions{AutoRetry: true, AutoCommit: true}
-	execOpt.MinInitialTimestamp = refTimestamp
+	refTimestamp := clock.Now()
+	execOpt := TxnExecOptions{
+		AutoRetry:  true,
+		AutoCommit: true,
+		Clock:      clock,
+	}
 
 	// Perform the transaction.
 	if err := txn.Exec(execOpt, txnClosure); err != nil {
@@ -594,8 +599,8 @@ func TestAbortedRetryPreservesTimestamp(t *testing.T) {
 	}
 
 	// Check the timestamp was preserved.
-	if txn.Proto.OrigTimestamp != refTimestamp {
-		t.Errorf("expected txn orig ts to be %s; got %s", refTimestamp, txn.Proto.OrigTimestamp)
+	if txn.Proto.OrigTimestamp.WallTime == refTimestamp.WallTime {
+		t.Errorf("expected txn orig ts to be different than %s", refTimestamp)
 	}
 }
 
@@ -711,9 +716,11 @@ func TestTimestampSelectionInOptions(t *testing.T) {
 	db := NewDB(newTestSender(nil, nil))
 	txn := NewTxn(context.Background(), *db)
 
+	mc := hlc.NewManualClock(100)
+	clock := hlc.NewClock(mc.UnixNano)
 	var execOpt TxnExecOptions
-	refTimestamp := hlc.Timestamp{WallTime: 42, Logical: 69}
-	execOpt.MinInitialTimestamp = refTimestamp
+	refTimestamp := clock.Now()
+	execOpt.Clock = clock
 
 	txnClosure := func(txn *Txn, opt *TxnExecOptions) error {
 		// Ensure the KV transaction is created.
@@ -724,8 +731,8 @@ func TestTimestampSelectionInOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Check the timestamp was preserved.
-	if txn.Proto.OrigTimestamp != refTimestamp {
+	// Check the timestamp was initialized.
+	if txn.Proto.OrigTimestamp.WallTime != refTimestamp.WallTime {
 		t.Errorf("expected txn orig ts to be %s; got %s", refTimestamp, txn.Proto.OrigTimestamp)
 	}
 }
