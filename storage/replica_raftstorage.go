@@ -557,7 +557,8 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 // HardState (which may be empty, as Raft may apply some snapshots which don't
 // require an update to the HardState). All snapshots must pass through Raft
 // for correctness, i.e. the parameters to this method must be taken from
-// a raft.Ready.
+// a raft.Ready. It is the caller's responsibility to call
+// r.store.processRangeDescriptorUpdate(r) after a successful applySnapshot.
 func (r *Replica) applySnapshot(
 	ctx context.Context, snap raftpb.Snapshot, hs raftpb.HardState,
 ) error {
@@ -700,11 +701,8 @@ func (r *Replica) applySnapshot(
 	if err := r.updateRangeInfo(&desc); err != nil {
 		panic(err)
 	}
-	// Update the range descriptor. This is done last as this is the step that
-	// makes the Replica visible in the Store.
-	if err := r.setDesc(&desc); err != nil {
-		panic(err)
-	}
+
+	r.setDescWithoutProcessUpdate(&desc)
 
 	if !isPreemptive {
 		r.store.metrics.rangeSnapshotsNormalApplied.Inc(1)
