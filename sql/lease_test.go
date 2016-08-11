@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
@@ -106,7 +108,7 @@ func (t *leaseTest) expectLeases(descID sqlbase.ID, expected string) {
 
 func (t *leaseTest) acquire(nodeID uint32, descID sqlbase.ID, version sqlbase.DescriptorVersion) (*csql.LeaseState, error) {
 	var lease *csql.LeaseState
-	err := t.kvDB.Txn(func(txn *client.Txn) error {
+	err := t.kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
 		var err error
 		lease, err = t.node(nodeID).Acquire(txn, descID, version)
 		return err
@@ -470,7 +472,7 @@ func isDeleted(tableID sqlbase.ID, cfg config.SystemConfig) bool {
 
 func acquire(s *server.TestServer, descID sqlbase.ID, version sqlbase.DescriptorVersion) (*csql.LeaseState, error) {
 	var lease *csql.LeaseState
-	err := s.DB().Txn(func(txn *client.Txn) error {
+	err := s.DB().Txn(context.TODO(), func(txn *client.Txn) error {
 		var err error
 		lease, err = s.LeaseManager().(*csql.LeaseManager).Acquire(txn, descID, version)
 		return err

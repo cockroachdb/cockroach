@@ -393,7 +393,7 @@ func (s *adminServer) TableDetails(
 	{
 		var iexecutor sql.InternalExecutor
 		var tableSpan roachpb.Span
-		if err := s.server.db.Txn(func(txn *client.Txn) error {
+		if err := s.server.db.Txn(context.TODO(), func(txn *client.Txn) error {
 			var err error
 			tableSpan, err = iexecutor.GetTableSpan(s.getUser(req), txn, escDBName, escTableName)
 			return err
@@ -455,7 +455,7 @@ func (s *adminServer) TableStats(ctx context.Context, req *serverpb.TableStatsRe
 	// Get table span.
 	var tableSpan roachpb.Span
 	var iexecutor sql.InternalExecutor
-	if err := s.server.db.Txn(func(txn *client.Txn) error {
+	if err := s.server.db.Txn(context.TODO(), func(txn *client.Txn) error {
 		var err error
 		tableSpan, err = iexecutor.GetTableSpan(s.getUser(req), txn, req.Database, req.Table)
 		return err

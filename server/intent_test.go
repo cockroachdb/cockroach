@@ -123,7 +123,7 @@ func TestIntentResolution(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := kvDB.Txn(func(txn *client.Txn) error {
+			if err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
 				b := txn.NewBatch()
 				if tc.keys[0] >= string(splitKey) {
 					t.Fatalf("first key %s must be < split key %s", tc.keys[0], splitKey)

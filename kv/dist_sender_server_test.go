@@ -624,7 +624,7 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 
 	// Delete the keys within a transaction. The range [c,d) doesn't have
 	// any active requests.
-	if err := db.Txn(func(txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		b := txn.NewBatch()
 		b.DelRange("a", "b", false)
 		b.DelRange("e", "f", false)
@@ -681,7 +681,7 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 
 	// Delete the keys within a transaction. Implicitly, the intents are
 	// resolved via ResolveIntentRange upon completion.
-	if err := db.Txn(func(txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		b := txn.NewBatch()
 		b.DelRange("a", "d", false)
 		return txn.CommitInBatch(b)
@@ -952,7 +952,7 @@ func TestNoSequenceCachePutOnRangeMismatchError(t *testing.T) {
 	//    same replica.
 	// 5) The command succeeds since the sequence cache has not yet been updated.
 	epoch := 0
-	if err := db.Txn(func(txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		epoch++
 		b := txn.NewBatch()
 		b.Put("a", "val")
@@ -1008,7 +1008,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 	// get a ReadWithinUncertaintyIntervalError and the txn will be
 	// retried.
 	epoch := 0
-	if err := db.Txn(func(txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		epoch++
 		if epoch >= 2 {
 			// Writing must be true since we ran the BeginTransaction command.
@@ -1082,7 +1082,7 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 	// Create a goroutine that creates a write intent and waits until
 	// another txn created in this test is restarted.
 	go func() {
-		if err := db.Txn(func(txn *client.Txn) error {
+		if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 			// Set high priority so that the intent will not be pushed.
 			txn.InternalSetPriority(highPriority)
 			log.Infof(context.TODO(), "Creating a write intent with high priority")
@@ -1111,7 +1111,7 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 	// iteration.
 	epoch := 0
 	var txnID *uuid.UUID
-	if err := db.Txn(func(txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		// Set low priority so that a write from this txn will not push others.
 		txn.InternalSetPriority(lowPriority)
 

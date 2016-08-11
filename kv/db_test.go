@@ -22,6 +22,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -213,7 +215,7 @@ func TestKVDBTransaction(t *testing.T) {
 
 	key := roachpb.Key("db-txn-test")
 	value := []byte("value")
-	err := db.Txn(func(txn *client.Txn) error {
+	err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		// Use snapshot isolation so non-transactional read can always push.
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			return err
