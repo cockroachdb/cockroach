@@ -192,7 +192,7 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 	distsql.RegisterDistSQLServer(s.grpc, s.distSQLServer)
 
 	// Set up Executor
-	eCtx := sql.ExecutorContext{
+	execCfg := sql.ExecutorConfig{
 		Context:      context.Background(),
 		DB:           s.db,
 		Gossip:       s.gossip,
@@ -201,12 +201,12 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 		DistSQLSrv:   s.distSQLServer,
 	}
 	if ctx.TestingKnobs.SQLExecutor != nil {
-		eCtx.TestingKnobs = ctx.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
+		execCfg.TestingKnobs = ctx.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
 	} else {
-		eCtx.TestingKnobs = &sql.ExecutorTestingKnobs{}
+		execCfg.TestingKnobs = &sql.ExecutorTestingKnobs{}
 	}
 
-	s.sqlExecutor = sql.NewExecutor(eCtx, s.stopper, s.registry)
+	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper, s.registry)
 
 	s.pgServer = pgwire.MakeServer(s.ctx.Context, s.sqlExecutor, s.registry)
 

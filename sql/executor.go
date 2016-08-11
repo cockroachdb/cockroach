@@ -136,7 +136,7 @@ type ResultRow struct {
 // Executor is thread-safe.
 type Executor struct {
 	nodeID  roachpb.NodeID
-	ctx     ExecutorContext
+	cfg     ExecutorConfig
 	reCache *parser.RegexpCache
 
 	// Transient stats.
@@ -167,11 +167,11 @@ type Executor struct {
 	systemConfigCond *sync.Cond
 }
 
-// An ExecutorContext encompasses the auxiliary objects and configuration
+// An ExecutorConfig encompasses the auxiliary objects and configuration
 // required to create an executor.
 // All fields holding a pointer or an interface are required to create
 // a Executor; the rest will have sane defaults set if omitted.
-type ExecutorContext struct {
+type ExecutorConfig struct {
 	Context      context.Context
 	DB           *client.DB
 	Gossip       *gossip.Gossip
@@ -244,9 +244,9 @@ type ExecutorTestingKnobs struct {
 
 // NewExecutor creates an Executor and registers a callback on the
 // system config.
-func NewExecutor(ctx ExecutorContext, stopper *stop.Stopper, registry *metric.Registry) *Executor {
+func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper, registry *metric.Registry) *Executor {
 	exec := &Executor{
-		ctx:     ctx,
+		cfg:     cfg,
 		reCache: parser.NewRegexpCache(512),
 
 		registry:         registry,
@@ -265,13 +265,13 @@ func NewExecutor(ctx ExecutorContext, stopper *stop.Stopper, registry *metric.Re
 	}
 	exec.systemConfigCond = sync.NewCond(exec.systemConfigMu.RLocker())
 
-	gossipUpdateC := ctx.Gossip.RegisterSystemConfigChannel()
+	gossipUpdateC := cfg.Gossip.RegisterSystemConfigChannel()
 	stopper.RunWorker(func() {
 		for {
 			select {
 			case <-gossipUpdateC:
-				cfg, _ := ctx.Gossip.GetSystemConfig()
-				exec.updateSystemConfig(cfg)
+				sysCfg, _ := cfg.Gossip.GetSystemConfig()
+				exec.updateSystemConfig(sysCfg)
 			case <-stopper.ShouldStop():
 				return
 			}
@@ -283,19 +283,19 @@ func NewExecutor(ctx ExecutorContext, stopper *stop.Stopper, registry *metric.Re
 
 // NewDummyExecutor creates an empty Executor that is used for certain tests.
 func NewDummyExecutor() *Executor {
-	return &Executor{ctx: ExecutorContext{Context: context.Background()}}
+	return &Executor{cfg: ExecutorConfig{Context: context.Background()}}
 }
 
 // Ctx returns the Context associated with this Executor.
 func (e *Executor) Ctx() context.Context {
-	return e.ctx.Context
+	return e.cfg.Context
 }
 
 // SetNodeID sets the node ID for the SQL server. This method must be called
 // before actually using the Executor.
 func (e *Executor) SetNodeID(nodeID roachpb.NodeID) {
 	e.nodeID = nodeID
-	e.ctx.LeaseManager.nodeID = uint32(nodeID)
+	e.cfg.LeaseManager.nodeID = uint32(nodeID)
 }
 
 // updateSystemConfig is called whenever the system config gossip entry is updated.
@@ -339,7 +339,7 @@ func (e *Executor) Prepare(
 	if err = pinfo.ProcessPlaceholderAnnotations(stmt); err != nil {
 		return nil, err
 	}
-	protoTS, err := isAsOf(&session.planner, stmt, e.ctx.Clock.Now())
+	protoTS, err := isAsOf(&session.planner, stmt, e.cfg.Clock.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +350,7 @@ func (e *Executor) Prepare(
 
 	// Prepare needs a transaction because it needs to retrieve db/table
 	// descriptors for type checking.
-	txn := client.NewTxn(session.Ctx(), *e.ctx.DB)
+	txn := client.NewTxn(session.Ctx(), *e.cfg.DB)
 	txn.Proto.Isolation = session.DefaultIsolationLevel
 	session.planner.setTxn(txn)
 	defer session.planner.setTxn(nil)
@@ -464,7 +464,7 @@ func (e *Executor) execRequest(session *Session, sql string) StatementResults {
 		// (i.e. the next statements we're going to see are the first statements in
 		// a transaction).
 		if !inTxn {
-			execOpt.MinInitialTimestamp = e.ctx.Clock.Now()
+			execOpt.MinInitialTimestamp = e.cfg.Clock.Now()
 			// Detect implicit transactions.
 			if _, isBegin := stmts[0].(*parser.BeginTransaction); !isBegin {
 				execOpt.AutoCommit = true
@@ -486,7 +486,7 @@ func (e *Executor) execRequest(session *Session, sql string) StatementResults {
 			txnState.reset(session.Ctx(), e, session)
 			txnState.State = Open
 			txnState.autoRetry = true
-			txnState.sqlTimestamp = e.ctx.Clock.PhysicalTime()
+			txnState.sqlTimestamp = e.cfg.Clock.PhysicalTime()
 			if execOpt.AutoCommit {
 				txnState.txn.SetDebugName(sqlImplicitTxnName, 0)
 			} else {
@@ -698,7 +698,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 		var stmtStrBefore string
 		// TODO(nvanbenschoten) Constant literals can change their representation (1.0000 -> 1) when type checking,
 		// so we need to reconsider how this works.
-		if e.ctx.TestingKnobs.CheckStmtStringChange && false {
+		if e.cfg.TestingKnobs.CheckStmtStringChange && false {
 			stmtStrBefore = stmt.String()
 		}
 		var res Result
@@ -715,7 +715,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 		default:
 			panic(fmt.Sprintf("unexpected txn state: %s", txnState.State))
 		}
-		if e.ctx.TestingKnobs.CheckStmtStringChange && false {
+		if e.cfg.TestingKnobs.CheckStmtStringChange && false {
 			if after := stmt.String(); after != stmtStrBefore {
 				panic(fmt.Sprintf("statement changed after exec; before:\n    %s\nafter:\n    %s",
 					stmtStrBefore, after))
@@ -855,7 +855,7 @@ func (e *Executor) execStmtInOpenTxn(
 	}
 
 	planMaker.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
-	planMaker.evalCtx.SetStmtTimestamp(e.ctx.Clock.PhysicalTime())
+	planMaker.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
 
 	// TODO(cdo): Figure out how to not double count on retries.
 	e.updateStmtCounts(stmt)
