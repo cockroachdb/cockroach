@@ -402,6 +402,9 @@ func (r *Replica) handleTrigger(
 		r.mu.Lock()
 		r.mu.state.TruncatedState = trigger.truncatedState
 		r.mu.Unlock()
+		// Clear any entries in the Raft log entry cache for this range up
+		// to and including the most recently truncated index.
+		r.store.raftEntryCache.clearTo(r.RangeID, trigger.truncatedState.Index+1)
 	}
 	if trigger.raftLogSize != nil {
 		r.mu.Lock()
