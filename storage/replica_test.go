@@ -5002,71 +5002,113 @@ func TestEntries(t *testing.T) {
 	defer tc.Stop()
 	tc.rng.store.SetRaftLogQueueActive(false)
 
-	// Populate the log with 10 entries. Save the LastIndex after each write.
-	var indexes []uint64
-	for i := 0; i < 10; i++ {
-		args := incrementArgs([]byte("a"), int64(i))
-
-		if _, pErr := tc.SendWrapped(&args); pErr != nil {
-			t.Fatal(pErr)
-		}
-		idx, err := tc.rng.GetLastIndex()
-		if err != nil {
-			t.Fatal(err)
-		}
-		indexes = append(indexes, idx)
-	}
-
 	rng := tc.rng
 	rangeID := rng.RangeID
+	var indexes []uint64
 
-	// Discard the first half of the log.
-	truncateArgs := truncateLogArgs(indexes[5], rangeID)
-	if _, pErr := tc.SendWrapped(&truncateArgs); pErr != nil {
-		t.Fatal(pErr)
+	populateLogs := func(from, to int) []uint64 {
+		var newIndexes []uint64
+		for i := from; i < to; i++ {
+			args := incrementArgs([]byte("a"), int64(i))
+			if _, pErr := tc.SendWrapped(&args); pErr != nil {
+				t.Fatal(pErr)
+			}
+			idx, err := rng.GetLastIndex()
+			if err != nil {
+				t.Fatal(err)
+			}
+			newIndexes = append(newIndexes, idx)
+		}
+		return newIndexes
 	}
+
+	truncateLogs := func(index int) {
+		truncateArgs := truncateLogArgs(indexes[index], rangeID)
+		if _, err := client.SendWrapped(tc.Sender(), context.Background(), &truncateArgs); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Populate the log with 10 entries. Save the LastIndex after each write.
+	indexes = append(indexes, populateLogs(0, 10)...)
 
 	for i, tc := range []struct {
 		lo             uint64
 		hi             uint64
 		maxBytes       uint64
 		expResultCount int
+		expCacheCount  int
 		expError       error
+		// Setup, if not nil, is called before running the test case.
+		setup func()
 	}{
-		// Case 0: Just most of the entries.
-		{lo: indexes[5], hi: indexes[9], expResultCount: 4},
-		// Case 1: Get a single entry.
-		{lo: indexes[5], hi: indexes[6], expResultCount: 1},
-		// Case 2: Use MaxUint64 instead of 0 for maxBytes.
-		{lo: indexes[5], hi: indexes[9], maxBytes: math.MaxUint64, expResultCount: 4},
-		// Case 3: maxBytes is set low so only a single value should be
+		// Case 0: All of the entries from cache.
+		{lo: indexes[0], hi: indexes[9] + 1, expResultCount: 10, expCacheCount: 10, setup: nil},
+		// Case 1: Get the first entry from cache.
+		{lo: indexes[0], hi: indexes[1], expResultCount: 1, expCacheCount: 1, setup: nil},
+		// Case 2: Get the last entry from cache.
+		{lo: indexes[9], hi: indexes[9] + 1, expResultCount: 1, expCacheCount: 1, setup: nil},
+		// Case 3: lo is available, but hi is not, cache miss.
+		{lo: indexes[9], hi: indexes[9] + 2, expCacheCount: 1, expError: raft.ErrUnavailable, setup: nil},
+
+		// Case 4: Just most of the entries from cache.
+		{lo: indexes[5], hi: indexes[9], expResultCount: 4, expCacheCount: 4, setup: func() {
+			// Discard the first half of the log.
+			truncateLogs(5)
+		}},
+		// Case 5: Get a single entry from cache.
+		{lo: indexes[5], hi: indexes[6], expResultCount: 1, expCacheCount: 1, setup: nil},
+		// Case 6: Use MaxUint64 instead of 0 for maxBytes.
+		{lo: indexes[5], hi: indexes[9], maxBytes: math.MaxUint64, expResultCount: 4, expCacheCount: 4, setup: nil},
+		// Case 7: maxBytes is set low so only a single value should be
 		// returned.
-		{lo: indexes[5], hi: indexes[9], maxBytes: 1, expResultCount: 1},
-		// Case 4: hi value is past the last index, should return all available
-		// entries
-		{lo: indexes[5], hi: indexes[9] + 1, expResultCount: 5},
-		// Case 5: all values have been truncated.
-		{lo: indexes[1], hi: indexes[2], expError: raft.ErrCompacted},
-		// Case 6: hi has just been truncated.
-		{lo: indexes[1], hi: indexes[4], expError: raft.ErrCompacted},
-		// Case 7: another case where hi has just been truncated.
-		{lo: indexes[3], hi: indexes[4], expError: raft.ErrCompacted},
-		// Case 8: lo has been truncated and hi is the truncation point.
-		{lo: indexes[4], hi: indexes[5], expError: raft.ErrCompacted},
-		// Case 9: lo has been truncated but hi is available.
-		{lo: indexes[4], hi: indexes[9], expError: raft.ErrCompacted},
-		// Case 10: lo has been truncated and hi is not available.
-		{lo: indexes[4], hi: indexes[9] + 100, expError: raft.ErrCompacted},
-		// Case 11: lo has been truncated but hi is available, and maxBytes is
+		{lo: indexes[5], hi: indexes[9], maxBytes: 1, expResultCount: 1, expCacheCount: 1, setup: nil},
+		// Case 8: hi value is just past the last index, should return all
+		// available entries.
+		{lo: indexes[5], hi: indexes[9] + 1, expResultCount: 5, expCacheCount: 5, setup: nil},
+		// Case 9: all values have been truncated from cache and storage.
+		{lo: indexes[1], hi: indexes[2], expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
+		// Case 10: hi has just been truncated from cache and storage.
+		{lo: indexes[1], hi: indexes[4], expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
+		// Case 11: another case where hi has just been truncated from
+		// cache and storage.
+		{lo: indexes[3], hi: indexes[4], expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
+		// Case 12: lo has been truncated and hi is the truncation point.
+		{lo: indexes[4], hi: indexes[5], expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
+		// Case 13: lo has been truncated but hi is available.
+		{lo: indexes[4], hi: indexes[9], expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
+		// Case 14: lo has been truncated and hi is not available.
+		{lo: indexes[4], hi: indexes[9] + 100, expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
+		// Case 15: lo has been truncated but hi is available, and maxBytes is
 		// set low.
-		{lo: indexes[4], hi: indexes[9], maxBytes: 1, expError: raft.ErrCompacted},
-		// Case 12: lo is available but hi isn't.
-		{lo: indexes[5], hi: indexes[9] + 100, expError: raft.ErrUnavailable},
-		// Case 13: both lo and hi are not available.
-		{lo: indexes[9] + 100, hi: indexes[9] + 1000, expError: raft.ErrUnavailable},
-		// Case 14: lo is available, hi is not, but it was cut off by maxBytes.
-		{lo: indexes[5], hi: indexes[9] + 1000, maxBytes: 1, expResultCount: 1},
+		{lo: indexes[4], hi: indexes[9], maxBytes: 1, expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
+		// Case 16: lo is available but hi is not.
+		{lo: indexes[5], hi: indexes[9] + 100, expCacheCount: 6, expError: raft.ErrUnavailable, setup: nil},
+		// Case 17: both lo and hi are not available, cache miss.
+		{lo: indexes[9] + 100, hi: indexes[9] + 1000, expCacheCount: 0, expError: raft.ErrUnavailable, setup: nil},
+		// Case 18: lo is available, hi is not, but it was cut off by maxBytes.
+		{lo: indexes[5], hi: indexes[9] + 1000, maxBytes: 1, expResultCount: 1, expCacheCount: 1, setup: nil},
+
+		// Case 19: lo and hi are available, but entry cache evicted.
+		{lo: indexes[5], hi: indexes[9], expResultCount: 4, expCacheCount: 0, setup: func() {
+			// Manually evict cache for the first 10 log entries.
+			rng.store.raftEntryCache.delEntries(rangeID, indexes[0], indexes[9]+1)
+			indexes = append(indexes, populateLogs(10, 40)...)
+		}},
+		// Case 20: lo and hi are available, entry cache evicted and hi available in cache.
+		{lo: indexes[5], hi: indexes[9] + 5, expResultCount: 9, expCacheCount: 4, setup: nil},
+		// Case 21: lo and hi are available and in entry cache.
+		{lo: indexes[9] + 2, hi: indexes[9] + 32, expResultCount: 30, expCacheCount: 30, setup: nil},
+		// Case 22: lo is available and hi is not.
+		{lo: indexes[9] + 2, hi: indexes[9] + 33, expCacheCount: 30, expError: raft.ErrUnavailable, setup: nil},
 	} {
+		if tc.setup != nil {
+			tc.setup()
+		}
+		cacheEntries, _, _ := rng.store.raftEntryCache.getEntries(rangeID, tc.lo, tc.hi, tc.maxBytes)
+		if len(cacheEntries) != tc.expCacheCount {
+			t.Errorf("%d: expected cache count %d, got %d", i, tc.expCacheCount, len(cacheEntries))
+		}
 		rng.mu.Lock()
 		ents, err := rng.Entries(tc.lo, tc.hi, tc.maxBytes)
 		rng.mu.Unlock()
@@ -5082,37 +5124,37 @@ func TestEntries(t *testing.T) {
 		}
 	}
 
-	// Case 15: Lo must be less than or equal to hi.
+	// Case 23: Lo must be less than or equal to hi.
 	rng.mu.Lock()
 	if _, err := rng.Entries(indexes[9], indexes[5], 0); err == nil {
-		t.Errorf("15: error expected, got none")
+		t.Errorf("23: error expected, got none")
 	}
 	rng.mu.Unlock()
 
-	// Case 16: add a gap to the indexes.
-	if err := engine.MVCCDelete(context.Background(), tc.store.Engine(), nil, keys.RaftLogKey(rangeID, indexes[6]), hlc.ZeroTimestamp,
-		nil); err != nil {
+	// Case 24: add a gap to the indexes.
+	if err := engine.MVCCDelete(context.Background(), tc.store.Engine(), nil, keys.RaftLogKey(rangeID, indexes[6]), hlc.ZeroTimestamp, nil); err != nil {
 		t.Fatal(err)
 	}
+	rng.store.raftEntryCache.delEntries(rangeID, indexes[6], indexes[6]+1)
 
 	rng.mu.Lock()
 	defer rng.mu.Unlock()
 	if _, err := rng.Entries(indexes[5], indexes[9], 0); err == nil {
-		t.Errorf("16: error expected, got none")
+		t.Errorf("24: error expected, got none")
 	}
 
-	// Case 17: don't hit the gap due to maxBytes.
+	// Case 25: don't hit the gap due to maxBytes.
 	ents, err := rng.Entries(indexes[5], indexes[9], 1)
 	if err != nil {
-		t.Errorf("17: expected no error, got %s", err)
+		t.Errorf("25: expected no error, got %s", err)
 	}
 	if len(ents) != 1 {
-		t.Errorf("17: expected 1 entry, got %d", len(ents))
+		t.Errorf("25: expected 1 entry, got %d", len(ents))
 	}
 
-	// Case 18: don't hit the gap due to truncation.
+	// Case 26: don't hit the gap due to truncation.
 	if _, err := rng.Entries(indexes[4], indexes[9], 0); err != raft.ErrCompacted {
-		t.Errorf("18: expected error %s , got %s", raft.ErrCompacted, err)
+		t.Errorf("26: expected error %s , got %s", raft.ErrCompacted, err)
 	}
 }
 

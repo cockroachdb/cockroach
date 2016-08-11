@@ -624,6 +624,10 @@ func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(desc *ro
 	// going to cache. This could happen on a merge (and also happens
 	// when there's a lot of concurrency). Iterate from the range meta key
 	// after RangeMetaKey(desc.StartKey) to the range meta key for desc.EndKey.
+	//
+	// TODO(spencer): uh oh, deleting while within DoRange looks like it
+	// doesn't do the right thing. Need to change this to accumulate keys
+	// to delete and delete those in pass 2.
 	rdc.rangeCache.cache.DoRange(func(k, v interface{}) bool {
 		if log.V(2) {
 			log.Infof(context.TODO(), "clearing subsumed descriptor: key=%s desc=%s", k, v.(*roachpb.RangeDescriptor))
