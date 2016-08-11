@@ -54,11 +54,11 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 func (s *Store) ForceReplicationScanAndProcess() {
 	s.mu.Lock()
 	for _, r := range s.mu.replicas {
-		s.replicateQueue.MaybeAdd(r, s.ctx.Clock.Now())
+		s.replicateQueue.MaybeAdd(r, s.cfg.Clock.Now())
 	}
 	s.mu.Unlock()
 
-	s.replicateQueue.DrainQueue(s.ctx.Clock)
+	s.replicateQueue.DrainQueue(s.cfg.Clock)
 }
 
 // ForceReplicaGCScanAndProcess iterates over all ranges and enqueues any that
@@ -66,11 +66,11 @@ func (s *Store) ForceReplicationScanAndProcess() {
 func (s *Store) ForceReplicaGCScanAndProcess() {
 	s.mu.Lock()
 	for _, r := range s.mu.replicas {
-		s.replicaGCQueue.MaybeAdd(r, s.ctx.Clock.Now())
+		s.replicaGCQueue.MaybeAdd(r, s.cfg.Clock.Now())
 	}
 	s.mu.Unlock()
 
-	s.replicaGCQueue.DrainQueue(s.ctx.Clock)
+	s.replicaGCQueue.DrainQueue(s.cfg.Clock)
 }
 
 // ForceRaftLogScanAndProcess iterates over all ranges and enqueues any that
@@ -87,10 +87,10 @@ func (s *Store) ForceRaftLogScanAndProcess() {
 
 	// Add each replica to the queue.
 	for _, r := range replicas {
-		s.raftLogQueue.MaybeAdd(r, s.ctx.Clock.Now())
+		s.raftLogQueue.MaybeAdd(r, s.cfg.Clock.Now())
 	}
 
-	s.raftLogQueue.DrainQueue(s.ctx.Clock)
+	s.raftLogQueue.DrainQueue(s.cfg.Clock)
 }
 
 // GetDeadReplicas exports s.deadReplicas for tests.
@@ -109,7 +109,7 @@ func (s *Store) LeaseExpiration(clock *hlc.Clock) int64 {
 	// Due to lease extensions, the remaining interval can be longer than just
 	// the sum of the offset (=length of stasis period) and the active
 	// duration, but definitely not by 2x.
-	return 2 * int64(s.ctx.rangeLeaseActiveDuration+clock.MaxOffset())
+	return 2 * int64(s.cfg.rangeLeaseActiveDuration+clock.MaxOffset())
 }
 
 // LogReplicaChangeTest adds a fake replica change event to the log for the

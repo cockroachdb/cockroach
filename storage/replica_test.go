@@ -129,13 +129,13 @@ type testContext struct {
 // Start initializes the test context with a single range covering the
 // entire keyspace.
 func (tc *testContext) Start(t testing.TB) {
-	ctx := TestStoreContext()
-	tc.StartWithStoreContext(t, ctx)
+	ctx := TestStoreConfig()
+	tc.StartWithStoreConfig(t, ctx)
 }
 
-// StartWithStoreContext initializes the test context with a single
+// StartWithStoreConfig initializes the test context with a single
 // range covering the entire keyspace.
-func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
+func (tc *testContext) StartWithStoreConfig(t testing.TB, cfg StoreConfig) {
 	tc.TB = t
 	if tc.stopper == nil {
 		tc.stopper = stop.NewStopper()
@@ -162,15 +162,15 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 	}
 
 	if tc.store == nil {
-		ctx.Clock = tc.clock
-		ctx.Gossip = tc.gossip
-		ctx.Transport = tc.transport
+		cfg.Clock = tc.clock
+		cfg.Gossip = tc.gossip
+		cfg.Transport = tc.transport
 		// Create a test sender without setting a store. This is to deal with the
 		// circular dependency between the test sender and the store. The actual
 		// store will be passed to the sender after it is created and bootstrapped.
 		sender := &testSender{}
-		ctx.DB = client.NewDB(sender)
-		tc.store = NewStore(ctx, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
+		cfg.DB = client.NewDB(sender)
+		tc.store = NewStore(cfg, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
 		if err := tc.store.Bootstrap(roachpb.StoreIdent{
 			ClusterID: uuid.MakeV4(),
 			NodeID:    1,
@@ -1754,7 +1754,7 @@ func TestReplicaCommandQueue(t *testing.T) {
 	blockingDone := make(chan struct{})
 
 	tc := testContext{}
-	tsc := TestStoreContext()
+	tsc := TestStoreConfig()
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Hdr.UserPriority == 42 {
@@ -1763,7 +1763,7 @@ func TestReplicaCommandQueue(t *testing.T) {
 			}
 			return nil
 		}
-	tc.StartWithStoreContext(t, tsc)
+	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()
 
 	defer close(blockingDone) // make sure teardown can happen
@@ -1877,7 +1877,7 @@ func TestReplicaCommandQueueInconsistent(t *testing.T) {
 	blockingDone := make(chan struct{})
 
 	tc := testContext{}
-	tsc := TestStoreContext()
+	tsc := TestStoreConfig()
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if put, ok := filterArgs.Req.(*roachpb.PutRequest); ok {
@@ -1898,7 +1898,7 @@ func TestReplicaCommandQueueInconsistent(t *testing.T) {
 
 			return nil
 		}
-	tc.StartWithStoreContext(t, tsc)
+	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()
 	cmd1Done := make(chan struct{})
 	go func() {
@@ -2864,9 +2864,9 @@ func TestRaftReplayProtection(t *testing.T) {
 func TestRaftReplayProtectionInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer setTxnAutoGC(true)()
-	ctx := TestStoreContext()
+	ctx := TestStoreConfig()
 	tc := testContext{}
-	tc.StartWithStoreContext(t, ctx)
+	tc.StartWithStoreConfig(t, ctx)
 	defer tc.Stop()
 
 	key := roachpb.Key("a")
@@ -3040,7 +3040,7 @@ func TestEndTransactionLocalGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer setTxnAutoGC(true)()
 	tc := testContext{}
-	tsc := TestStoreContext()
+	tsc := TestStoreConfig()
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			// Make sure the direct GC path doesn't interfere with this test.
@@ -3049,7 +3049,7 @@ func TestEndTransactionLocalGC(t *testing.T) {
 			}
 			return nil
 		}
-	tc.StartWithStoreContext(t, tsc)
+	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()
 
 	splitKey := roachpb.RKey("c")
@@ -3142,7 +3142,7 @@ func setupResolutionTest(t *testing.T, tc testContext, key roachpb.Key,
 func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
-	tsc := TestStoreContext()
+	tsc := TestStoreConfig()
 	key := roachpb.Key("a")
 	splitKey := roachpb.RKey(key).Next()
 	tsc.TestingKnobs.TestingCommandFilter =
@@ -3154,7 +3154,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 			return nil
 		}
 
-	tc.StartWithStoreContext(t, tsc)
+	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()
 
 	newRng, txn := setupResolutionTest(t, tc, key, splitKey, true /* commit */)
@@ -3231,7 +3231,7 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 	key := roachpb.Key("a")
 	splitKey := roachpb.RKey(key).Next()
 	var count int64
-	tsc := TestStoreContext()
+	tsc := TestStoreConfig()
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Method() == roachpb.ResolveIntentRange &&
@@ -3243,7 +3243,7 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 			}
 			return nil
 		}
-	tc.StartWithStoreContext(t, tsc)
+	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()
 
 	setupResolutionTest(t, tc, key, splitKey, true /* commit */)
@@ -3306,7 +3306,7 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var seen int32
 	key := roachpb.Key("zresolveme")
-	tsc := TestStoreContext()
+	tsc := TestStoreConfig()
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Method() == roachpb.ResolveIntent &&
@@ -3317,7 +3317,7 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 		}
 
 	tc := testContext{}
-	tc.StartWithStoreContext(t, tsc)
+	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()
 	splitKey := roachpb.RKey("aa")
 	setupResolutionTest(t, tc, roachpb.Key("a") /* irrelevant */, splitKey, true /* commit */)
@@ -4403,7 +4403,7 @@ func TestAppliedIndex(t *testing.T) {
 func TestReplicaCorruption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	tsc := TestStoreContext()
+	tsc := TestStoreConfig()
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Header().Key.Equal(roachpb.Key("boom")) {
@@ -4413,7 +4413,7 @@ func TestReplicaCorruption(t *testing.T) {
 		}
 
 	tc := testContext{}
-	tc.StartWithStoreContext(t, tsc)
+	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()
 
 	// First send a regular command.
@@ -5266,7 +5266,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			// Pick a key unlikely to be used by background processes.
 			key := []byte("acdfg")
 			ctx, cancel := context.WithCancel(context.Background())
-			tsc := TestStoreContext()
+			tsc := TestStoreConfig()
 			if !cancelEarly {
 				tsc.TestingKnobs.TestingCommandFilter =
 					func(filterArgs storagebase.FilterArgs) *roachpb.Error {
@@ -5279,7 +5279,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 
 			}
 			tc := testContext{}
-			tc.StartWithStoreContext(t, tsc)
+			tc.StartWithStoreConfig(t, tsc)
 			defer tc.Stop()
 			if cancelEarly {
 				cancel()
@@ -5431,7 +5431,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 		})
 	// Set a callback for checksum mismatch panics.
 	badChecksumChan := make(chan []ReplicaSnapshotDiff, 1)
-	rng.store.ctx.TestingKnobs.BadChecksumPanic = func(diff []ReplicaSnapshotDiff) {
+	rng.store.cfg.TestingKnobs.BadChecksumPanic = func(diff []ReplicaSnapshotDiff) {
 		badChecksumChan <- diff
 	}
 
@@ -5610,10 +5610,10 @@ func TestDiffRange(t *testing.T) {
 func TestAsyncSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	tsc := TestStoreContext()
+	tsc := TestStoreConfig()
 	tsc.BlockingSnapshotDuration = 0
 	tc := testContext{}
-	tc.StartWithStoreContext(t, tsc)
+	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()
 
 	// Lock the replica manually instead of going through GetSnapshot()
@@ -5645,11 +5645,11 @@ func TestAsyncSnapshot(t *testing.T) {
 func TestAsyncSnapshotMaxAge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	tsc := TestStoreContext()
+	tsc := TestStoreConfig()
 	tsc.BlockingSnapshotDuration = 0
 	tsc.AsyncSnapshotMaxAge = time.Millisecond
 	tc := testContext{}
-	tc.StartWithStoreContext(t, tsc)
+	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()
 
 	// Lock the replica manually instead of going through GetSnapshot()
@@ -5677,10 +5677,10 @@ func TestAsyncSnapshotMaxAge(t *testing.T) {
 func TestSyncSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	tsc := TestStoreContext()
+	tsc := TestStoreConfig()
 	tsc.BlockingSnapshotDuration = time.Second
 	tc := testContext{}
-	tc.StartWithStoreContext(t, tsc)
+	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()
 
 	// With enough time in BlockingSnapshotDuration, we succeed on the
@@ -6057,7 +6057,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	electionTicks := tc.store.ctx.RaftElectionTimeoutTicks
+	electionTicks := tc.store.cfg.RaftElectionTimeoutTicks
 
 	{
 		// The verifications of the reproposal counts below rely on r.mu.ticks
@@ -6275,9 +6275,9 @@ func TestCommandTimeThreshold(t *testing.T) {
 func TestReserveAndApplySnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	tsc := TestStoreContext()
+	tsc := TestStoreConfig()
 	tc := testContext{}
-	tc.StartWithStoreContext(t, tsc)
+	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()
 
 	checkReservations := func(t *testing.T, expected int) {

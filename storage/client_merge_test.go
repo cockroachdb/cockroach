@@ -65,7 +65,7 @@ func createSplitRanges(store *storage.Store) (*roachpb.RangeDescriptor, *roachpb
 // TestStoreRangeMergeTwoEmptyRanges tries to merge two empty ranges together.
 func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sCtx := storage.TestStoreContext()
+	sCtx := storage.TestStoreConfig()
 	sCtx.TestingKnobs.DisableSplitQueue = true
 	store, stopper, _ := createTestStoreWithContext(t, sCtx)
 	defer stopper.Stop()
@@ -94,7 +94,7 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 // subsumed range is cleaned up on merge.
 func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sCtx := storage.TestStoreContext()
+	sCtx := storage.TestStoreConfig()
 	sCtx.TestingKnobs.DisableSplitQueue = true
 	store, stopper, _ := createTestStoreWithContext(t, sCtx)
 	defer stopper.Stop()
@@ -173,7 +173,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 // each containing data.
 func TestStoreRangeMergeWithData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sCtx := storage.TestStoreContext()
+	sCtx := storage.TestStoreConfig()
 	sCtx.TestingKnobs.DisableSplitQueue = true
 	store, stopper, _ := createTestStoreWithContext(t, sCtx)
 	defer stopper.Stop()
@@ -301,7 +301,7 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 // fails.
 func TestStoreRangeMergeLastRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sCtx := storage.TestStoreContext()
+	sCtx := storage.TestStoreConfig()
 	sCtx.TestingKnobs.DisableSplitQueue = true
 	store, stopper, _ := createTestStoreWithContext(t, sCtx)
 	defer stopper.Stop()
@@ -368,7 +368,7 @@ func TestStoreRangeMergeNonCollocated(t *testing.T) {
 // range has stats consistent with recomputations.
 func TestStoreRangeMergeStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sCtx := storage.TestStoreContext()
+	sCtx := storage.TestStoreConfig()
 	sCtx.TestingKnobs.DisableSplitQueue = true
 	store, stopper, manual := createTestStoreWithContext(t, sCtx)
 	defer stopper.Stop()
@@ -427,7 +427,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 
 func BenchmarkStoreRangeMerge(b *testing.B) {
 	defer tracing.Disable()()
-	sCtx := storage.TestStoreContext()
+	sCtx := storage.TestStoreConfig()
 	sCtx.TestingKnobs.DisableSplitQueue = true
 	store, stopper, _ := createTestStoreWithContext(b, sCtx)
 	defer stopper.Stop()

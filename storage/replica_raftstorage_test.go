@@ -57,7 +57,7 @@ func fillTestRange(t testing.TB, rep *Replica, size int64) {
 
 func TestSkipLargeReplicaSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sCtx := TestStoreContext()
+	sCtx := TestStoreConfig()
 	sCtx.TestingKnobs.DisableSplitQueue = true
 	store, _, stopper := createTestStoreWithContext(t, &sCtx)
 	defer stopper.Stop()

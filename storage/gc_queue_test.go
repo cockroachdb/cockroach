@@ -437,7 +437,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	resolved := map[string][]roachpb.Span{}
 
 	tc := testContext{}
-	tsc := TestStoreContext()
+	tsc := TestStoreConfig()
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if resArgs, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest); ok {
@@ -454,7 +454,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			}
 			return nil
 		}
-	tc.StartWithStoreContext(t, tsc)
+	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()
 	tc.manualClock.Set(int64(now))
 

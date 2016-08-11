@@ -201,7 +201,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	clock := hlc.NewClock(manualClock.UnixNano)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	ctx := storage.TestStoreContext()
+	ctx := storage.TestStoreConfig()
 	ctx.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.GetRequest); ok &&
@@ -331,7 +331,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 // are correct when scanning in reverse order.
 func TestRangeLookupUseReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sCtx := storage.TestStoreContext()
+	sCtx := storage.TestStoreConfig()
 	sCtx.TestingKnobs.DisableSplitQueue = true
 	store, stopper, _ := createTestStoreWithContext(t, sCtx)
 	defer stopper.Stop()
@@ -466,7 +466,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 
 func TestRangeTransferLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := storage.TestStoreContext()
+	ctx := storage.TestStoreConfig()
 	var filterMu syncutil.Mutex
 	var filter func(filterArgs storagebase.FilterArgs) *roachpb.Error
 	ctx.TestingKnobs.TestingCommandFilter =
@@ -490,7 +490,7 @@ func TestRangeTransferLease(t *testing.T) {
 		}
 	}
 	mtc := &multiTestContext{}
-	mtc.storeContext = &ctx
+	mtc.storeConfig = &ctx
 	mtc.Start(t, 2)
 	defer mtc.Stop()
 

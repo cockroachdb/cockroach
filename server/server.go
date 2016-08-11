@@ -115,10 +115,8 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		srvCtx.Ctx = tracing.WithTracer(srvCtx.Ctx, tracer)
 	}
 
-	ctx := srvCtx.Ctx
-
 	if srvCtx.Insecure {
-		log.Warning(ctx, "running in insecure mode, this is strongly discouraged. See --insecure.")
+		log.Warning(srvCtx.Ctx, "running in insecure mode, this is strongly discouraged. See --insecure.")
 	}
 	// Try loading the TLS configs before anything else.
 	if _, err := srvCtx.GetServerTLSConfig(); err != nil {
@@ -139,7 +137,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	s.rpcContext = rpc.NewContext(srvCtx.Context, s.clock, s.stopper)
 	s.rpcContext.HeartbeatCB = func() {
 		if err := s.rpcContext.RemoteClocks.VerifyClockOffset(); err != nil {
-			log.Fatal(ctx, err)
+			log.Fatal(srvCtx.Ctx, err)
 		}
 	}
 	s.grpc = rpc.NewServer(s.rpcContext)
@@ -193,7 +191,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 
 	// Set up the DistSQL server
 	distSQLCtx := distsql.ServerContext{
-		Context:    ctx,
+		Context:    srvCtx.Ctx,
 		DB:         s.db,
 		RPCContext: s.rpcContext,
 	}
@@ -202,7 +200,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 
 	// Set up Executor
 	eCtx := sql.ExecutorContext{
-		Context:      ctx,
+		Context:      srvCtx.Ctx,
 		DB:           s.db,
 		Gossip:       s.gossip,
 		LeaseManager: s.leaseMgr,
@@ -220,7 +218,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	s.pgServer = pgwire.MakeServer(s.ctx.Context, s.sqlExecutor, s.registry)
 
 	// TODO(bdarnell): make StoreConfig configurable.
-	nCtx := storage.StoreContext{
+	nCtx := storage.StoreConfig{
 		Clock:                          s.clock,
 		DB:                             s.db,
 		Gossip:                         s.gossip,

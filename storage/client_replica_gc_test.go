@@ -44,9 +44,9 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	// no GC will take place since the consistent RangeLookup hits the first
 	// Node. We use the TestingCommandFilter to make sure that the second Node
 	// waits for the first.
-	ctx := storage.TestStoreContext()
-	mtc.storeContext = &ctx
-	mtc.storeContext.TestingKnobs.TestingCommandFilter =
+	ctx := storage.TestStoreConfig()
+	mtc.storeConfig = &ctx
+	mtc.storeConfig.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest)
 			if !ok || filterArgs.Sid != 2 {

@@ -68,7 +68,7 @@ func mustGetInt(v *roachpb.Value) int64 {
 // after being stopped and recreated.
 func TestStoreRecoverFromEngine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sCtx := storage.TestStoreContext()
+	sCtx := storage.TestStoreConfig()
 	sCtx.TestingKnobs.DisableSplitQueue = true
 
 	rangeID := roachpb.RangeID(1)
@@ -177,7 +177,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	func() {
 		stopper := stop.NewStopper()
 		defer stopper.Stop()
-		sCtx := storage.TestStoreContext()
+		sCtx := storage.TestStoreConfig()
 		sCtx.TestingKnobs.TestingCommandFilter =
 			func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 				_, ok := filterArgs.Req.(*roachpb.IncrementRequest)
@@ -208,7 +208,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 
 	// Recover from the engine.
 	store := createTestStoreWithEngine(
-		t, eng, clock, false, storage.TestStoreContext(), engineStopper)
+		t, eng, clock, false, storage.TestStoreConfig(), engineStopper)
 
 	// Issue a no-op write to lazily initialize raft on the range.
 	incArgs := incrementArgs(roachpb.Key("b"), 0)
@@ -396,10 +396,10 @@ func TestFailedReplicaChange(t *testing.T) {
 	var runFilter atomic.Value
 	runFilter.Store(true)
 
-	ctx := storage.TestStoreContext()
+	ctx := storage.TestStoreConfig()
 	mtc := &multiTestContext{}
-	mtc.storeContext = &ctx
-	mtc.storeContext.TestingKnobs.TestingCommandFilter =
+	mtc.storeConfig = &ctx
+	mtc.storeConfig.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if runFilter.Load().(bool) {
 				if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok && et.Commit {
@@ -589,9 +589,9 @@ func TestRefreshPendingCommands(t *testing.T) {
 		// TODO(peter): Debugging to track down #8397. Remove when fixed.
 		log.Infof(context.TODO(), "test case %d", i)
 		func() {
-			ctx := storage.TestStoreContext()
+			ctx := storage.TestStoreConfig()
 			ctx.TestingKnobs = c
-			mtc := &multiTestContext{storeContext: &ctx}
+			mtc := &multiTestContext{storeConfig: &ctx}
 			mtc.Start(t, 3)
 			defer mtc.Stop()
 
@@ -697,7 +697,7 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	const numReplicas = 3
 	const extraStores = 3
 
-	ctx := storage.TestStoreContext()
+	ctx := storage.TestStoreConfig()
 	var corrupt struct {
 		syncutil.Mutex
 		store *storage.Store
@@ -721,7 +721,7 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	ctx.RaftElectionTimeoutTicks = 1000000
 	mtc := &multiTestContext{
 		reservationsEnabled: true,
-		storeContext:        &ctx,
+		storeConfig:         &ctx,
 	}
 	mtc.Start(t, numReplicas+extraStores)
 	defer mtc.Stop()
@@ -1172,7 +1172,7 @@ func TestRaftHeartbeats(t *testing.T) {
 	}
 
 	// Wait for several ticks to elapse.
-	time.Sleep(5 * mtc.makeContext(0).RaftTickInterval)
+	time.Sleep(5 * mtc.makeStoreConfig(0).RaftTickInterval)
 	status = mtc.stores[0].RaftStatus(1)
 	if status.SoftState.RaftState != raft.StateLeader {
 		t.Errorf("expected node 0 to be leader after sleeping but was %s", status.SoftState.RaftState)
@@ -1518,10 +1518,10 @@ func TestStoreRangeRebalance(t *testing.T) {
 
 	// Start multiTestContext with replica rebalancing enabled.
 	mtc := &multiTestContext{
-		storeContext: &storage.StoreContext{},
+		storeConfig: &storage.StoreConfig{},
 	}
-	*mtc.storeContext = storage.TestStoreContext()
-	mtc.storeContext.AllocatorOptions = storage.AllocatorOptions{
+	*mtc.storeConfig = storage.TestStoreConfig()
+	mtc.storeConfig.AllocatorOptions = storage.AllocatorOptions{
 		AllowRebalance: true,
 		Deterministic:  true,
 	}
@@ -1803,9 +1803,9 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 func TestReplicaTooOldGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc := storage.TestStoreContext()
+	sc := storage.TestStoreConfig()
 	sc.TestingKnobs.DisableScanner = true
-	mtc := multiTestContext{storeContext: &sc}
+	mtc := multiTestContext{storeConfig: &sc}
 	mtc.Start(t, 4)
 	defer mtc.Stop()
 

@@ -271,8 +271,8 @@ func (r *Replica) verifyChecksumTrigger(
 						r, d.Key, d.Key, d.Timestamp, d.Value, l)
 				}
 			}
-			if r.store.ctx.ConsistencyCheckPanicOnFailure {
-				if p := r.store.ctx.TestingKnobs.BadChecksumPanic; p != nil {
+			if r.store.cfg.ConsistencyCheckPanicOnFailure {
+				if p := r.store.cfg.TestingKnobs.BadChecksumPanic; p != nil {
 					p(diff)
 				} else {
 					logFunc = log.Fatalf

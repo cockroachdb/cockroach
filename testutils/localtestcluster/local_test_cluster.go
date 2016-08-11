@@ -102,7 +102,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Context, initSen
 	}
 	ltc.DB = client.NewDBWithContext(ltc.Sender, *ltc.DBContext)
 	transport := storage.NewDummyRaftTransport()
-	ctx := storage.TestStoreContext()
+	ctx := storage.TestStoreConfig()
 	if ltc.RangeRetryOptions != nil {
 		ctx.RangeRetryOptions = *ltc.RangeRetryOptions
 	}

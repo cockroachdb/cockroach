@@ -26,7 +26,7 @@ import (
 
 func BenchmarkReplicaSnapshot(b *testing.B) {
 	defer tracing.Disable()()
-	sCtx := TestStoreContext()
+	sCtx := TestStoreConfig()
 	sCtx.TestingKnobs.DisableSplitQueue = true
 	store, _, stopper := createTestStoreWithContext(b, &sCtx)
 	defer stopper.Stop()

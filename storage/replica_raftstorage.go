@@ -321,10 +321,10 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (raftpb.Snapshot, err
 			select {
 			case ch <- snapData:
 				log.Trace(ctxInner, "snapshot accepted")
-			case <-time.After(r.store.ctx.AsyncSnapshotMaxAge):
+			case <-time.After(r.store.cfg.AsyncSnapshotMaxAge):
 				// If raft decides it doesn't need this snapshot any more (or
 				// just takes too long to use it), abandon it to save memory.
-				log.Infof(ctxInner, "%s: abandoning snapshot after %s", r, r.store.ctx.AsyncSnapshotMaxAge)
+				log.Infof(ctxInner, "%s: abandoning snapshot after %s", r, r.store.cfg.AsyncSnapshotMaxAge)
 			case <-r.store.Stopper().ShouldQuiesce():
 			}
 		}
@@ -334,13 +334,13 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (raftpb.Snapshot, err
 		r.store.ReleaseRaftSnapshot()
 	}
 
-	if r.store.ctx.BlockingSnapshotDuration > 0 {
+	if r.store.cfg.BlockingSnapshotDuration > 0 {
 		select {
 		case snap, ok := <-r.mu.snapshotChan:
 			if ok {
 				return snap, nil
 			}
-		case <-time.After(r.store.ctx.BlockingSnapshotDuration):
+		case <-time.After(r.store.cfg.BlockingSnapshotDuration):
 			log.Trace(ctx, "snapshot blocking duration exceeded")
 		}
 	}

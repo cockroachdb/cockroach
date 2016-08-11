@@ -129,7 +129,7 @@ func TestStoresLookupReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	ctx := TestStoreContext()
+	ctx := TestStoreConfig()
 	manualClock := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manualClock.UnixNano)
 	ls := NewStores(ctx.Clock)
@@ -203,7 +203,7 @@ var storeIDAlloc roachpb.StoreID
 // createStores creates a slice of count stores.
 func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores, *stop.Stopper) {
 	stopper := stop.NewStopper()
-	ctx := TestStoreContext()
+	ctx := TestStoreConfig()
 	manualClock := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manualClock.UnixNano)
 	ls := NewStores(ctx.Clock)
