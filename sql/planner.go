@@ -65,7 +65,7 @@ type planner struct {
 	collectSubqueryPlansVisitor collectSubqueryPlansVisitor
 	nameResolutionVisitor       nameResolutionVisitor
 
-	execCtx *ExecutorContext
+	execCfg *ExecutorConfig
 }
 
 // makePlanner creates a new planner instances, referencing a dummy Session.
@@ -258,7 +258,7 @@ func (p *planner) setTestingVerifyMetadata(fn func(config.SystemConfig) error) {
 
 // blockConfigUpdatesMaybe implements the queryRunner interface.
 func (p *planner) blockConfigUpdatesMaybe(e *Executor) func() {
-	if !e.ctx.TestingKnobs.WaitForGossipUpdate {
+	if !e.cfg.TestingKnobs.WaitForGossipUpdate {
 		return func() {}
 	}
 	return e.blockConfigUpdates()
@@ -267,7 +267,7 @@ func (p *planner) blockConfigUpdatesMaybe(e *Executor) func() {
 // checkTestingVerifyMetadataInitialOrDie implements the queryRunner interface.
 func (p *planner) checkTestingVerifyMetadataInitialOrDie(
 	e *Executor, stmts parser.StatementList) {
-	if !p.execCtx.TestingKnobs.WaitForGossipUpdate {
+	if !p.execCfg.TestingKnobs.WaitForGossipUpdate {
 		return
 	}
 	// If there's nothinging to verify, or we've already verified the initial
@@ -286,7 +286,7 @@ func (p *planner) checkTestingVerifyMetadataInitialOrDie(
 // checkTestingVerifyMetadataOrDie implements the queryRunner interface.
 func (p *planner) checkTestingVerifyMetadataOrDie(
 	e *Executor, stmts parser.StatementList) {
-	if !p.execCtx.TestingKnobs.WaitForGossipUpdate ||
+	if !p.execCfg.TestingKnobs.WaitForGossipUpdate ||
 		p.testingVerifyMetadataFn == nil {
 		return
 	}
