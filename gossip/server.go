@@ -61,16 +61,24 @@ type server struct {
 
 // newServer creates and returns a server struct.
 func newServer(stopper *stop.Stopper, registry *metric.Registry) *server {
-	return &server{
+	s := &server{
 		stopper:       stopper,
 		is:            newInfoStore(0, util.UnresolvedAddr{}, stopper),
-		incoming:      makeNodeSet(minPeers, registry.Gauge(ConnectionsIncomingGaugeName)),
+		incoming:      makeNodeSet(minPeers, metric.NewGauge(MetaConnectionsIncomingGauge)),
 		nodeMap:       make(map[util.UnresolvedAddr]serverInfo),
 		tighten:       make(chan roachpb.NodeID, 1),
 		ready:         make(chan struct{}),
-		nodeMetrics:   makeMetrics(registry),
-		serverMetrics: makeMetrics(metric.NewRegistry()),
+		nodeMetrics:   makeMetrics(),
+		serverMetrics: makeMetrics(),
 	}
+
+	registry.AddMetric(s.incoming.gauge)
+	registry.AddMetricGroup(s.nodeMetrics.bytesReceived)
+	registry.AddMetricGroup(s.nodeMetrics.bytesSent)
+	registry.AddMetricGroup(s.nodeMetrics.infosReceived)
+	registry.AddMetricGroup(s.nodeMetrics.infosSent)
+
+	return s
 }
 
 // Gossip receives gossiped information from a peer node.

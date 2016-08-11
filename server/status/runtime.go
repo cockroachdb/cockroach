@@ -31,21 +31,21 @@ import (
 	"github.com/elastic/gosigar"
 )
 
-const (
-	nameCgoCalls       = "sys.cgocalls"
-	nameGoroutines     = "sys.goroutines"
-	nameGoAllocBytes   = "sys.go.allocbytes"
-	nameGoTotalBytes   = "sys.go.totalbytes"
-	nameCgoAllocBytes  = "sys.cgo.allocbytes"
-	nameCgoTotalBytes  = "sys.cgo.totalbytes"
-	nameGCCount        = "sys.gc.count"
-	nameGCPauseNS      = "sys.gc.pause.ns"
-	nameGCPausePercent = "sys.gc.pause.percent"
-	nameCPUUserNS      = "sys.cpu.user.ns"
-	nameCPUUserPercent = "sys.cpu.user.percent"
-	nameCPUSysNS       = "sys.cpu.sys.ns"
-	nameCPUSysPercent  = "sys.cpu.sys.percent"
-	nameRSS            = "sys.rss"
+var (
+	metaCgoCalls       = metric.MetricMetadata{"sys.cgocalls", "Number of cgo calls"}
+	metaGoroutines     = metric.MetricMetadata{"sys.goroutines", "Number of goroutines"}
+	metaGoAllocBytes   = metric.MetricMetadata{"sys.go.allocbytes", ""}
+	metaGoTotalBytes   = metric.MetricMetadata{"sys.go.totalbytes", ""}
+	metaCgoAllocBytes  = metric.MetricMetadata{"sys.cgo.allocbytes", ""}
+	metaCgoTotalBytes  = metric.MetricMetadata{"sys.cgo.totalbytes", ""}
+	metaGCCount        = metric.MetricMetadata{"sys.gc.count", ""}
+	metaGCPauseNS      = metric.MetricMetadata{"sys.gc.pause.ns", ""}
+	metaGCPausePercent = metric.MetricMetadata{"sys.gc.pause.percent", ""}
+	metaCPUUserNS      = metric.MetricMetadata{"sys.cpu.user.ns", ""}
+	metaCPUUserPercent = metric.MetricMetadata{"sys.cpu.user.percent", ""}
+	metaCPUSysNS       = metric.MetricMetadata{"sys.cpu.sys.ns", ""}
+	metaCPUSysPercent  = metric.MetricMetadata{"sys.cpu.sys.percent", ""}
+	metaRSS            = metric.MetricMetadata{"sys.rss", ""}
 )
 
 // getCgoMemStats is a function that fetches stats for the C++ portion of the code.
@@ -61,8 +61,7 @@ var getCgoMemStats func() (uint64, uint64, error)
 // the resulting information in a format that can be easily consumed by status
 // logging systems.
 type RuntimeStatSampler struct {
-	clock    *hlc.Clock
-	registry *metric.Registry
+	clock *hlc.Clock
 
 	// The last sampled values of some statistics are kept only to compute
 	// derivative statistics.
@@ -92,24 +91,40 @@ type RuntimeStatSampler struct {
 
 // MakeRuntimeStatSampler constructs a new RuntimeStatSampler object.
 func MakeRuntimeStatSampler(clock *hlc.Clock, reg *metric.Registry) RuntimeStatSampler {
-	return RuntimeStatSampler{
-		registry:       reg,
+	r := RuntimeStatSampler{
 		clock:          clock,
-		cgoCalls:       reg.Gauge(nameCgoCalls),
-		goroutines:     reg.Gauge(nameGoroutines),
-		goAllocBytes:   reg.Gauge(nameGoAllocBytes),
-		goTotalBytes:   reg.Gauge(nameGoTotalBytes),
-		cgoAllocBytes:  reg.Gauge(nameCgoAllocBytes),
-		cgoTotalBytes:  reg.Gauge(nameCgoTotalBytes),
-		gcCount:        reg.Gauge(nameGCCount),
-		gcPauseNS:      reg.Gauge(nameGCPauseNS),
-		gcPausePercent: reg.GaugeFloat64(nameGCPausePercent),
-		cpuUserNS:      reg.Gauge(nameCPUUserNS),
-		cpuUserPercent: reg.GaugeFloat64(nameCPUUserPercent),
-		cpuSysNS:       reg.Gauge(nameCPUSysNS),
-		cpuSysPercent:  reg.GaugeFloat64(nameCPUSysPercent),
-		rss:            reg.Gauge(nameRSS),
+		cgoCalls:       metric.NewGauge(metaCgoCalls),
+		goroutines:     metric.NewGauge(metaGoroutines),
+		goAllocBytes:   metric.NewGauge(metaGoAllocBytes),
+		goTotalBytes:   metric.NewGauge(metaGoTotalBytes),
+		cgoAllocBytes:  metric.NewGauge(metaCgoAllocBytes),
+		cgoTotalBytes:  metric.NewGauge(metaCgoTotalBytes),
+		gcCount:        metric.NewGauge(metaGCCount),
+		gcPauseNS:      metric.NewGauge(metaGCPauseNS),
+		gcPausePercent: metric.NewGaugeFloat64(metaGCPausePercent),
+		cpuUserNS:      metric.NewGauge(metaCPUUserNS),
+		cpuUserPercent: metric.NewGaugeFloat64(metaCPUUserPercent),
+		cpuSysNS:       metric.NewGauge(metaCPUSysNS),
+		cpuSysPercent:  metric.NewGaugeFloat64(metaCPUSysPercent),
+		rss:            metric.NewGauge(metaRSS),
 	}
+
+	reg.AddMetric(r.cgoCalls)
+	reg.AddMetric(r.goroutines)
+	reg.AddMetric(r.goAllocBytes)
+	reg.AddMetric(r.goTotalBytes)
+	reg.AddMetric(r.cgoAllocBytes)
+	reg.AddMetric(r.cgoTotalBytes)
+	reg.AddMetric(r.gcCount)
+	reg.AddMetric(r.gcPauseNS)
+	reg.AddMetric(r.gcPausePercent)
+	reg.AddMetric(r.cpuUserNS)
+	reg.AddMetric(r.cpuUserPercent)
+	reg.AddMetric(r.cpuSysNS)
+	reg.AddMetric(r.cpuSysPercent)
+	reg.AddMetric(r.rss)
+
+	return r
 }
 
 // SampleEnvironment queries the runtime system for various interesting metrics,

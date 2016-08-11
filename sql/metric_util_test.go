@@ -22,21 +22,22 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/pkg/errors"
 )
 
 func checkCounterEQ(
-	t *testing.T, s serverutils.TestServerInterface, key string, e int64,
+	t *testing.T, s serverutils.TestServerInterface, meta metric.MetricMetadata, e int64,
 ) {
-	if a := s.MustGetSQLCounter(key); a != e {
-		t.Error(errors.Errorf("stat %s: actual %d != expected %d", key, a, e))
+	if a := s.MustGetSQLCounter(meta.Name); a != e {
+		t.Error(errors.Errorf("stat %s: actual %d != expected %d", meta.Name, a, e))
 	}
 }
 
 func checkCounterGE(
-	t *testing.T, s serverutils.TestServerInterface, key string, e int64,
+	t *testing.T, s serverutils.TestServerInterface, meta metric.MetricMetadata, e int64,
 ) {
-	if a := s.MustGetSQLCounter(key); a < e {
-		t.Error(errors.Errorf("stat %s: expected: actual %d >= %d", key, a, e))
+	if a := s.MustGetSQLCounter(meta.Name); a < e {
+		t.Error(errors.Errorf("stat %s: expected: actual %d >= %d", meta.Name, a, e))
 	}
 }
