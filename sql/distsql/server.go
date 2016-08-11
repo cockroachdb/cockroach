@@ -30,9 +30,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ServerContext encompasses the configuration required to create a
+// ServerConfig encompasses the configuration required to create a
 // DistSQLServer.
-type ServerContext struct {
+type ServerConfig struct {
 	Context    context.Context
 	DB         *client.DB
 	RPCContext *rpc.Context
@@ -40,7 +40,7 @@ type ServerContext struct {
 
 // ServerImpl implements the server for the distributed SQL APIs.
 type ServerImpl struct {
-	ServerContext
+	ServerConfig
 	evalCtx      parser.EvalContext
 	flowRegistry *flowRegistry
 }
@@ -52,9 +52,9 @@ const flowStreamTimeout time.Duration = 2000 * time.Millisecond
 var _ DistSQLServer = &ServerImpl{}
 
 // NewServer instantiates a DistSQLServer.
-func NewServer(ctx ServerContext) *ServerImpl {
+func NewServer(cfg ServerConfig) *ServerImpl {
 	ds := &ServerImpl{
-		ServerContext: ctx,
+		ServerConfig: cfg,
 		evalCtx: parser.EvalContext{
 			ReCache: parser.NewRegexpCache(512),
 		},
@@ -65,7 +65,7 @@ func NewServer(ctx ServerContext) *ServerImpl {
 
 // SetNodeID sets the NodeID for the server.
 func (ds *ServerImpl) SetNodeID(nodeID roachpb.NodeID) {
-	ds.ServerContext.Context = log.WithLogTagInt(ds.ServerContext.Context, "node", int(nodeID))
+	ds.ServerConfig.Context = log.WithLogTagInt(ds.ServerConfig.Context, "node", int(nodeID))
 }
 
 func (ds *ServerImpl) setupTxn(
@@ -85,7 +85,7 @@ func (ds *ServerImpl) SetupSimpleFlow(
 ) (*Flow, error) {
 	txn := ds.setupTxn(ctx, &req.Txn)
 	flowCtx := FlowCtx{
-		Context: ds.ServerContext.Context,
+		Context: ds.ServerConfig.Context,
 		id:      req.Flow.FlowID,
 		evalCtx: &ds.evalCtx,
 		rpcCtx:  ds.RPCContext,
@@ -105,12 +105,12 @@ func (ds *ServerImpl) SetupSimpleFlow(
 func (ds *ServerImpl) RunSimpleFlow(
 	req *SetupFlowRequest, stream DistSQL_RunSimpleFlowServer,
 ) error {
-	ctx := ds.ServerContext.Context
+	cfg := ds.ServerConfig.Context
 
 	// Set up the outgoing mailbox for the stream.
 	mbox := newOutboxSimpleFlowStream(stream)
 
-	f, err := ds.SetupSimpleFlow(ctx, req, mbox)
+	f, err := ds.SetupSimpleFlow(cfg, req, mbox)
 	if err != nil {
 		log.Errorf(ds.Context, err.Error(), "", err)
 		return err
@@ -132,9 +132,9 @@ func (ds *ServerImpl) SetupFlow(ctx context.Context, req *SetupFlowRequest) (
 	// Note: ctx will be canceled when the RPC completes, so we can't associate
 	// it with the transaction.
 
-	txn := ds.setupTxn(ds.ServerContext.Context, &req.Txn)
+	txn := ds.setupTxn(ds.ServerConfig.Context, &req.Txn)
 	flowCtx := FlowCtx{
-		Context: ds.ServerContext.Context,
+		Context: ds.ServerConfig.Context,
 		id:      req.Flow.FlowID,
 		evalCtx: &ds.evalCtx,
 		rpcCtx:  ds.RPCContext,
