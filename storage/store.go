@@ -2687,7 +2687,7 @@ func (s *Store) canApplySnapshot(rangeID roachpb.RangeID, snap raftpb.Snapshot) 
 	// We don't have the range (or we have an uninitialized
 	// placeholder). Will we be able to create/initialize it?
 	// TODO(bdarnell): can we avoid parsing this twice?
-	var parsedSnap roachpb.RaftSnapshotData
+	var parsedSnap roachpb.PartialRaftSnapshotData
 	if err := parsedSnap.Unmarshal(snap.Data); err != nil {
 		return false
 	}

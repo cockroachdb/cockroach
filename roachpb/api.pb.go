@@ -123,6 +123,7 @@
 		RaftTruncatedState
 		RaftTombstone
 		RaftSnapshotData
+		PartialRaftSnapshotData
 		Attributes
 		ReplicaDescriptor
 		ReplicaIdent
