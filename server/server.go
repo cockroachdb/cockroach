@@ -194,7 +194,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 
 	// Set up the DistSQL server
 	distSQLCfg := distsql.ServerConfig{
-		Context:    context.Background(),
+		Context:    ctx,
 		DB:         s.db,
 		RPCContext: s.rpcContext,
 	}
@@ -203,7 +203,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 
 	// Set up Executor
 	execCfg := sql.ExecutorConfig{
-		Context:      context.Background(),
+		Context:      ctx,
 		DB:           s.db,
 		Gossip:       s.gossip,
 		LeaseManager: s.leaseMgr,
@@ -417,8 +417,7 @@ func (s *Server) Start() error {
 
 	s.gossip.Start(unresolvedAddr)
 
-	ctx := context.Background()
-	if err := s.node.start(ctx, unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
+	if err := s.node.start(s.Ctx(), unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
 		return err
 	}
 
@@ -469,7 +468,7 @@ func (s *Server) Start() error {
 		gwruntime.WithMarshalerOption(util.ProtoContentType, protopb),
 		gwruntime.WithMarshalerOption(util.AltProtoContentType, protopb),
 	)
-	gwCtx, gwCancel := context.WithCancel(ctx)
+	gwCtx, gwCancel := context.WithCancel(s.Ctx())
 	s.stopper.AddCloser(stop.CloserFn(gwCancel))
 
 	// Setup HTTP<->gRPC handlers.
