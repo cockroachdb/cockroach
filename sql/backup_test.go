@@ -84,7 +84,7 @@ func TestBackupRestore(t *testing.T) {
 	cleanupFn, sqlDB, kvDB, dir := setupBackupRestoreDB(t, count)
 	defer cleanupFn()
 
-	if err := sql.Backup(context.Background(), *kvDB, dir); err != nil {
+	if _, err := sql.Backup(context.Background(), *kvDB, dir); err != nil {
 		t.Fatal(err)
 	}
 
@@ -126,7 +126,7 @@ func runBenchmarkBackup(b *testing.B, count int) {
 			b.Fatal(err)
 		}
 		b.StartTimer()
-		if err := sql.Backup(context.Background(), *kvDB, dir); err != nil {
+		if _, err := sql.Backup(context.Background(), *kvDB, dir); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -139,7 +139,7 @@ func runBenchmarkRestore(b *testing.B, count int) {
 	cleanupFn, sqlDB, kvDB, dir := setupBackupRestoreDB(b, count)
 	defer cleanupFn()
 
-	if err := sql.Backup(context.Background(), *kvDB, dir); err != nil {
+	if _, err := sql.Backup(context.Background(), *kvDB, dir); err != nil {
 		b.Fatal(err)
 	}
 

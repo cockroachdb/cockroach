@@ -53,11 +53,12 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	kvDB, stopper := makeDBClient()
 	defer stopper.Stop()
 
-	if err := sql.Backup(ctx, *kvDB, base); err != nil {
+	desc, err := sql.Backup(ctx, *kvDB, base)
+	if err != nil {
 		return err
 	}
 
-	fmt.Printf("Backed up to %s\n", base)
+	fmt.Printf("Backed up %d ranges to %s\n", len(desc.Ranges), base)
 	return nil
 }
 
