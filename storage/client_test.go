@@ -126,7 +126,7 @@ func createTestStoreWithEngine(
 
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
-	distSender := kv.NewDistSender(&kv.DistSenderContext{
+	distSender := kv.NewDistSender(&kv.DistSenderConfig{
 		Clock:             clock,
 		TransportFactory:  kv.SenderTransportFactory(sCtx.Tracer, stores),
 		RPCRetryOptions:   &retryOpts,
@@ -515,7 +515,7 @@ func (m *multiTestContext) makeContext(i int) storage.StoreContext {
 func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
-	m.distSenders[idx] = kv.NewDistSender(&kv.DistSenderContext{
+	m.distSenders[idx] = kv.NewDistSender(&kv.DistSenderConfig{
 		Clock:             m.clock,
 		RangeDescriptorDB: m,
 		TransportFactory:  m.kvTransportFactory,
