@@ -70,6 +70,10 @@ const (
 	// temporarily created during the application of a preemptive snapshot.
 	preemptiveSnapshotRaftGroupID = math.MaxUint64
 
+	// defaultRaftEntryCacheSize is the default size in bytes for a
+	// store's Raft log entry cache.
+	defaultRaftEntryCacheSize = 1 << 24 // 16M
+
 	// rangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the leader
 	// lease active duration should be of the raft election timeout.
 	rangeLeaseRaftElectionTimeoutMultiplier = 3
@@ -309,6 +313,7 @@ type Store struct {
 	consistencyScanner      *replicaScanner          // Consistency checker scanner
 	metrics                 *StoreMetrics
 	intentResolver          *intentResolver
+	raftEntryCache          *raftEntryCache
 	wakeRaftLoop            chan struct{}
 	// 1 if the store was started, 0 if it wasn't. To be accessed using atomic
 	// ops.
@@ -518,6 +523,10 @@ type StoreContext struct {
 	// it up (counted from when the snapshot generation is completed).
 	AsyncSnapshotMaxAge time.Duration
 
+	// RaftEntryCacheSize is the size in bytes of the Raft log entry cache
+	// shared by all Raft groups managed by the store.
+	RaftEntryCacheSize uint64
+
 	TestingKnobs StoreTestingKnobs
 
 	// rangeLeaseActiveDuration is the duration of the active period of leader
@@ -604,6 +613,9 @@ func (sc *StoreContext) setDefaults() {
 	if sc.AsyncSnapshotMaxAge == 0 {
 		sc.AsyncSnapshotMaxAge = defaultAsyncSnapshotMaxAge
 	}
+	if sc.RaftEntryCacheSize == 0 {
+		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
+	}
 
 	raftElectionTimeout := time.Duration(sc.RaftElectionTimeoutTicks) * sc.RaftTickInterval
 	sc.rangeLeaseActiveDuration = rangeLeaseRaftElectionTimeoutMultiplier * raftElectionTimeout
@@ -629,6 +641,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 		metrics:      newStoreMetrics(),
 	}
 	s.intentResolver = newIntentResolver(s)
+	s.raftEntryCache = newRaftEntryCache(ctx.RaftEntryCacheSize)
 	s.drainLeases.Store(false)
 
 	s.mu.Lock()
@@ -636,7 +649,6 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	s.mu.replicasByKey = btree.New(64 /* degree */)
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
 	s.pendingRaftGroups.value = map[roachpb.RangeID]struct{}{}
-
 	s.mu.Unlock()
 
 	if s.ctx.Gossip != nil {
