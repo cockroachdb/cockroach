@@ -192,7 +192,7 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 	distsql.RegisterDistSQLServer(s.grpc, s.distSQLServer)
 
 	// Set up Executor
-	eCtx := sql.ExecutorContext{
+	eCtx := sql.ExecutorConfig{
 		Context:      context.Background(),
 		DB:           s.db,
 		Gossip:       s.gossip,

@@ -65,7 +65,7 @@ type planner struct {
 	collectSubqueryPlansVisitor collectSubqueryPlansVisitor
 	nameResolutionVisitor       nameResolutionVisitor
 
-	execCtx *ExecutorContext
+	execCtx *ExecutorConfig
 }
 
 // makePlanner creates a new planner instances, referencing a dummy Session.
@@ -258,7 +258,7 @@ func (p *planner) setTestingVerifyMetadata(fn func(config.SystemConfig) error) {
 
 // blockConfigUpdatesMaybe implements the queryRunner interface.
 func (p *planner) blockConfigUpdatesMaybe(e *Executor) func() {
-	if !e.ctx.TestingKnobs.WaitForGossipUpdate {
+	if !e.cfg.TestingKnobs.WaitForGossipUpdate {
 		return func() {}
 	}
 	return e.blockConfigUpdates()
