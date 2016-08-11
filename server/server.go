@@ -120,6 +120,8 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		srvCtx.Ctx = tracing.WithTracer(srvCtx.Ctx, tracer)
 	}
 
+	ctx := srvCtx.Ctx
+
 	if srvCtx.Insecure {
 		log.Warning(srvCtx.Ctx, "running in insecure mode, this is strongly discouraged. See --insecure.")
 	}
@@ -272,6 +274,11 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	return s, nil
 }
 
+// Ctx returns the base context for the server.
+func (s *Server) Ctx() context.Context {
+	return s.ctx.Ctx
+}
+
 // grpcGatewayServer represents a grpc service with HTTP endpoints through GRPC
 // gateway.
 type grpcGatewayServer interface {
@@ -346,7 +353,7 @@ func (s *Server) Start() error {
 	s.stopper.RunWorker(func() {
 		<-s.stopper.ShouldQuiesce()
 		if err := httpLn.Close(); err != nil {
-			log.Fatal(context.TODO(), err)
+			log.Fatal(s.Ctx(), err)
 		}
 	})
 
@@ -384,7 +391,7 @@ func (s *Server) Start() error {
 	s.stopper.RunWorker(func() {
 		netutil.FatalIfUnexpected(httpServer.ServeWith(s.stopper, pgL, func(conn net.Conn) {
 			if err := s.pgServer.ServeConn(conn); err != nil && !netutil.IsClosedConnection(err) {
-				log.Error(context.TODO(), err)
+				log.Error(s.Ctx(), err)
 			}
 		}))
 	})
@@ -399,7 +406,7 @@ func (s *Server) Start() error {
 		s.stopper.RunWorker(func() {
 			<-s.stopper.ShouldQuiesce()
 			if err := unixLn.Close(); err != nil {
-				log.Fatal(context.TODO(), err)
+				log.Fatal(s.Ctx(), err)
 			}
 		})
 
@@ -407,7 +414,7 @@ func (s *Server) Start() error {
 			netutil.FatalIfUnexpected(httpServer.ServeWith(s.stopper, unixLn, func(conn net.Conn) {
 				if err := s.pgServer.ServeConn(conn); err != nil &&
 					!netutil.IsClosedConnection(err) {
-					log.Error(context.TODO(), err)
+					log.Error(s.Ctx(), err)
 				}
 			}))
 		})
@@ -442,10 +449,10 @@ func (s *Server) Start() error {
 	}
 	sql.NewSchemaChangeManager(testingKnobs, *s.db, s.gossip, s.leaseMgr).Start(s.stopper)
 
-	log.Infof(context.TODO(), "starting %s server at %s", s.ctx.HTTPRequestScheme(), unresolvedHTTPAddr)
-	log.Infof(context.TODO(), "starting grpc/postgres server at %s", unresolvedAddr)
+	log.Infof(s.Ctx(), "starting %s server at %s", s.ctx.HTTPRequestScheme(), unresolvedHTTPAddr)
+	log.Infof(s.Ctx(), "starting grpc/postgres server at %s", unresolvedAddr)
 	if len(s.ctx.SocketFile) != 0 {
-		log.Infof(context.TODO(), "starting postgres server at unix:%s", s.ctx.SocketFile)
+		log.Infof(s.Ctx(), "starting postgres server at unix:%s", s.ctx.SocketFile)
 	}
 
 	s.stopper.RunWorker(func() {
@@ -514,7 +521,7 @@ func (s *Server) Start() error {
 	s.mux.Handle(healthEndpoint, s.status)
 
 	if err := sdnotify.Ready(); err != nil {
-		log.Errorf(context.TODO(), "failed to signal readiness using systemd protocol: %s", err)
+		log.Errorf(s.Ctx(), "failed to signal readiness using systemd protocol: %s", err)
 	}
 
 	return nil
