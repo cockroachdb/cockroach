@@ -13,6 +13,9 @@
 // permissions and limitations under the License.
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
+//
+// Input synchronizers are used by processors to merge incoming rows from
+// (potentially) multiple streams; see docs/RFCS/distributed_sql.md
 
 package distsql
 
