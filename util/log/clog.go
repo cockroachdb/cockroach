@@ -577,7 +577,7 @@ func (buf *buffer) someDigits(i, d int) int {
 }
 
 func formatLogEntry(entry Entry, stacks []byte, colors *colorProfile) *buffer {
-	buf := formatHeader(Severity(entry.Severity), time.Unix(0, entry.Time),
+	buf := formatHeader(entry.Severity, time.Unix(0, entry.Time),
 		entry.File, int(entry.Line), colors)
 	_, _ = buf.WriteString(entry.Message)
 	if buf.Bytes()[buf.Len()-1] != '\n' {

@@ -880,8 +880,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 
 		log.Trace(ctx, "querying next range")
 	}
-
-	return br, nil, false
 }
 
 // fillSkippedResponses after meeting the batch key max limit for range

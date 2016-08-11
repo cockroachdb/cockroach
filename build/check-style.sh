@@ -153,9 +153,10 @@ runcheck() {
   echo "=== RUN $name"
   start=$(date +%s)
   output=$(eval "$name")
+  status=$?
   end=$(date +%s)
   runtime=$((end-start))
-  if [ $? -eq 0 ]; then
+  if [ $status -eq 0 ]; then
     echo "--- PASS: $name ($runtime.00s)"
   else
     echo "--- FAIL: $name ($runtime.00s)"
