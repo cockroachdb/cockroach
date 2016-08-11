@@ -183,7 +183,7 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
 
 	// Set up the DistSQL server
-	distSQLCtx := distsql.ServerContext{
+	distSQLCtx := distsql.ServerConfig{
 		Context:    context.Background(),
 		DB:         s.db,
 		RPCContext: s.rpcContext,
