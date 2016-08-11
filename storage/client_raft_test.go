@@ -997,17 +997,38 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 		return nil
 	})
 
+	before := mtc.stores[2].Registry().GetCounter("range.snapshots.preemptive-applied").Count()
 	// Attempt to add replica to the third store with the original descriptor.
 	// This should fail because the descriptor is stale.
 	if err := addReplica(2, origDesc); !testutils.IsError(err, `change replicas of range \d+ failed`) {
 		t.Fatalf("got unexpected error: %v", err)
 	}
 
+	util.SucceedsSoon(t, func() error {
+		after := mtc.stores[2].Registry().GetCounter("range.snapshots.preemptive-applied").Count()
+		// The failed ChangeReplicas call should have applied a preemptive snapshot.
+		if after != before+1 {
+			return errors.Errorf(
+				"ChangeReplicas call should have applied a preemptive snapshot, before %d after %d",
+				before, after)
+		}
+		return nil
+	})
+
+	before = mtc.stores[2].Registry().GetCounter("range.snapshots.preemptive-applied").Count()
 	// Add to third store with fresh descriptor.
 	if err := addReplica(2, repl.Desc()); err != nil {
 		t.Fatal(err)
 	}
+
 	util.SucceedsSoon(t, func() error {
+		after := mtc.stores[2].Registry().GetCounter("range.snapshots.preemptive-applied").Count()
+		// The failed ChangeReplicas call should have applied a preemptive snapshot.
+		if after != before+1 {
+			return errors.Errorf(
+				"ChangeReplicas call should have applied a preemptive snapshot, before %d after %d",
+				before, after)
+		}
 		r := mtc.stores[2].LookupReplica(roachpb.RKey("a"), roachpb.RKey("b"))
 		if r == nil {
 			return errors.Errorf("expected replica for keys \"a\" - \"b\"")
