@@ -135,7 +135,10 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 
 	for {
 		s.mu.Lock()
-
+		// Store the old ready so that if it gets replaced with a new one
+		// (once the lock is released) and is closed, we still trigger the
+		// select below.
+		ready := s.ready
 		delta := s.is.delta(args.HighWaterStamps)
 
 		if infoCount := len(delta); infoCount > 0 {
@@ -157,7 +160,6 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 			s.mu.Lock()
 		}
 
-		ready := s.ready
 		s.mu.Unlock()
 
 		select {
