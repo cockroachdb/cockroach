@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -62,7 +61,7 @@ func newClient(addr net.Addr, nodeMetrics metrics) *client {
 		addr:      addr,
 		remoteHighWaterStamps: map[roachpb.NodeID]int64{},
 		closer:                make(chan struct{}),
-		clientMetrics:         makeMetrics(metric.NewRegistry()),
+		clientMetrics:         makeMetrics(),
 		nodeMetrics:           nodeMetrics,
 	}
 }

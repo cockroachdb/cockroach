@@ -43,10 +43,10 @@ const (
 )
 
 // Fully-qualified names for metrics.
-const (
-	MetricConnsName    = "sql.conns"
-	MetricBytesInName  = "sql.bytesin"
-	MetricBytesOutName = "sql.bytesout"
+var (
+	MetaConns    = metric.MetricMetadata{"sql.conns", ""}
+	MetaBytesIn  = metric.MetricMetadata{"sql.bytesin", ""}
+	MetaBytesOut = metric.MetricMetadata{"sql.bytesout", ""}
 )
 
 const (
@@ -82,11 +82,15 @@ type serverMetrics struct {
 }
 
 func newServerMetrics(reg *metric.Registry) *serverMetrics {
-	return &serverMetrics{
-		conns:         reg.Counter(MetricConnsName),
-		bytesInCount:  reg.Counter(MetricBytesInName),
-		bytesOutCount: reg.Counter(MetricBytesOutName),
+	sm := &serverMetrics{
+		conns:         metric.NewCounter(MetaConns),
+		bytesInCount:  metric.NewCounter(MetaBytesIn),
+		bytesOutCount: metric.NewCounter(MetaBytesOut),
 	}
+	reg.AddMetric(sm.conns)
+	reg.AddMetric(sm.bytesInCount)
+	reg.AddMetric(sm.bytesOutCount)
+	return sm
 }
 
 // MakeServer creates a Server, adding network stats to the given Registry.

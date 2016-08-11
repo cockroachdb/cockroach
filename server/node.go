@@ -63,11 +63,13 @@ const (
 	// publishStatusInterval is the interval for publishing periodic statistics
 	// from stores to the internal event feed.
 	publishStatusInterval = 10 * time.Second
+)
 
-	// Metric names.
-	execLatencyName = "exec.latency"
-	execSuccessName = "exec.success"
-	execErrorName   = "exec.error"
+// Metric names.
+var (
+	metaExecLatency = metric.MetricMetadata{"exec.latency", ""}
+	metaExecSuccess = metric.MetricMetadata{"exec.success", ""}
+	metaExecError   = metric.MetricMetadata{"exec.error", ""}
 )
 
 // errNeedsBootstrap indicates the node should be used as the seed of
@@ -80,19 +82,21 @@ var errNeedsBootstrap = errors.New("node has no initialized stores and no instru
 var errCannotJoinSelf = errors.New("an uninitialized node cannot specify its own address to join a cluster")
 
 type nodeMetrics struct {
-	registry *metric.Registry
-	latency  metric.Histograms
-	success  metric.Rates
-	err      metric.Rates
+	latency metric.Histograms
+	success metric.Rates
+	err     metric.Rates
 }
 
 func makeNodeMetrics(reg *metric.Registry) nodeMetrics {
-	return nodeMetrics{
-		registry: reg,
-		latency:  reg.Latency(execLatencyName),
-		success:  reg.Rates(execSuccessName),
-		err:      reg.Rates(execErrorName),
+	nm := nodeMetrics{
+		latency: metric.NewLatency(metaExecLatency),
+		success: metric.NewRates(metaExecSuccess),
+		err:     metric.NewRates(metaExecError),
 	}
+	reg.AddMetricGroup(nm.latency)
+	reg.AddMetricGroup(nm.success)
+	reg.AddMetricGroup(nm.err)
+	return nm
 }
 
 // callComplete records very high-level metrics about the number of completed

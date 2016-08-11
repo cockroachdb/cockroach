@@ -250,7 +250,7 @@ func (n *Network) isNetworkConnected() bool {
 func (n *Network) infosSent() int {
 	var count int64
 	for _, node := range n.Nodes {
-		count += node.Registry.GetCounter(gossip.InfosSentRatesName + "-count").Count()
+		count += node.Registry.GetCounter(gossip.MetaInfosSentRates.Name + "-count").Count()
 	}
 	return int(count)
 }
@@ -260,7 +260,7 @@ func (n *Network) infosSent() int {
 func (n *Network) infosReceived() int {
 	var count int64
 	for _, node := range n.Nodes {
-		count += node.Registry.GetCounter(gossip.InfosReceivedRatesName + "-count").Count()
+		count += node.Registry.GetCounter(gossip.MetaInfosReceivedRates.Name + "-count").Count()
 	}
 	return int(count)
 }

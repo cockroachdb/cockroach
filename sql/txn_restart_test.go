@@ -485,7 +485,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 			// Also inject an error at RELEASE time, besides the error injected by magicVals.
 			injectReleaseError := true
 
-			commitCount := s.MustGetSQLCounter(sql.MetricTxnCommitName)
+			commitCount := s.MustGetSQLCounter(sql.MetaTxnCommit.Name)
 			// This is the magic. Run the txn closure until all the retries are exhausted.
 			exec(t, sqlDB, rs, func(tx *gosql.Tx) bool {
 				return runTestTxn(t, tc.magicVals, tc.expectedErr, &injectReleaseError, sqlDB, tx)
@@ -511,7 +511,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 			// Check that the commit counter was incremented. It could have been
 			// incremented by more than 1 because of the transactions we use to force
 			// aborts, plus who knows what else the server is doing in the background.
-			checkCounterGE(t, s, sql.MetricTxnCommitName, commitCount+1)
+			checkCounterGE(t, s, sql.MetaTxnCommit, commitCount+1)
 			// Clean up the table for the next test iteration.
 			_, err = sqlDB.Exec("DELETE FROM t.test WHERE true")
 			if err != nil {

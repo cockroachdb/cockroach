@@ -83,7 +83,7 @@ func TestTimestampRoundtrip(t *testing.T) {
 }
 
 func BenchmarkWriteBinaryDecimal(b *testing.B) {
-	buf := writeBuffer{bytecount: metric.NewCounter()}
+	buf := writeBuffer{bytecount: metric.NewCounter(metric.MetricMetadata{"", ""})}
 
 	dec := new(parser.DDecimal)
 	dec.SetString("-1728718718271827121233.1212121212")
@@ -102,7 +102,7 @@ func BenchmarkWriteBinaryDecimal(b *testing.B) {
 }
 
 func BenchmarkDecodeBinaryDecimal(b *testing.B) {
-	wbuf := writeBuffer{bytecount: metric.NewCounter()}
+	wbuf := writeBuffer{bytecount: metric.NewCounter(metric.MetricMetadata{"", ""})}
 
 	expected := new(parser.DDecimal)
 	expected.SetString("-1728718718271827121233.1212121212")

@@ -296,7 +296,7 @@ func TestLeastUseful(t *testing.T) {
 	defer stopper.Stop()
 	is := newInfoStore(1, emptyAddr, stopper)
 
-	set := makeNodeSet(3, metric.NewGauge())
+	set := makeNodeSet(3, metric.NewGauge(metric.MetricMetadata{"", ""}))
 	if is.leastUseful(set) != 0 {
 		t.Error("not expecting a node from an empty set")
 	}

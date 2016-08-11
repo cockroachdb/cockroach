@@ -150,7 +150,7 @@ func TestClientGossip(t *testing.T) {
 	local := startGossip(1, stopper, t, metric.NewRegistry())
 	remote := startGossip(2, stopper, t, metric.NewRegistry())
 	disconnected := make(chan *client, 1)
-	c := newClient(&remote.is.NodeAddr, makeMetrics(metric.NewRegistry()))
+	c := newClient(&remote.is.NodeAddr, makeMetrics())
 
 	defer func() {
 		stopper.Stop()
@@ -184,16 +184,14 @@ func TestClientGossipMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	localRegistry := metric.NewRegistry()
-	local := startGossip(1, stopper, t, localRegistry)
-	remoteRegistry := metric.NewRegistry()
-	remote := startGossip(2, stopper, t, remoteRegistry)
+	local := startGossip(1, stopper, t, metric.NewRegistry())
+	remote := startGossip(2, stopper, t, metric.NewRegistry())
 
 	gossipSucceedsSoon(
 		t, stopper, make(chan *client, 2),
 		map[*client]*Gossip{
-			newClient(&local.is.NodeAddr, makeMetrics(metric.NewRegistry())):  remote,
-			newClient(&remote.is.NodeAddr, makeMetrics(metric.NewRegistry())): local,
+			newClient(&local.is.NodeAddr, makeMetrics()):  remote,
+			newClient(&remote.is.NodeAddr, makeMetrics()): local,
 		},
 		func() error {
 			if err := local.AddInfo("local-key", nil, time.Hour); err != nil {
@@ -204,35 +202,29 @@ func TestClientGossipMetrics(t *testing.T) {
 			}
 
 			// Infos/Bytes Sent/Received should not be zero.
-			for i, reg := range []*metric.Registry{localRegistry, remoteRegistry} {
-				for _, ratesName := range []string{
-					InfosSentRatesName,
-					InfosReceivedRatesName,
-					BytesSentRatesName,
-					BytesReceivedRatesName,
+			for i, s := range []*server{local.server, remote.server} {
+				for _, rate := range []metric.Rates{
+					s.nodeMetrics.infosSent,
+					s.nodeMetrics.infosReceived,
+					s.nodeMetrics.bytesSent,
+					s.nodeMetrics.bytesReceived,
 				} {
-					counterName := ratesName + "-count"
-					counter := reg.GetCounter(counterName)
-					if counter == nil {
-						return errors.Errorf("%d: missing counter %q", i, counterName)
-					}
+					counter := rate.Counter
 					if count := counter.Count(); count <= 0 {
-						return errors.Errorf("%d: expected metrics counter %q > 0; = %d", i, counterName, count)
+						return errors.Errorf("%d: expected metrics counter %q > 0; = %d", i, counter.GetName(), count)
 					}
 				}
 			}
 
 			// Since there are two gossip nodes, there should be at least one incoming
 			// and outgoing connection.
-			for i, reg := range []*metric.Registry{localRegistry, remoteRegistry} {
-				for _, name := range []string{} {
-					gauge := reg.GetGauge(name)
-					if gauge == nil {
-						return errors.Errorf("%d: missing gauge %q", i, name)
-					}
-					if count := gauge.Value(); count <= 0 {
-						return errors.Errorf("%d: expected metrics gauge %q > 0; = %d", i, name, count)
-					}
+			for i, s := range []*server{local.server, remote.server} {
+				gauge := s.incoming.gauge
+				if gauge == nil {
+					return errors.Errorf("%d: missing gauge \"incoming\"", i)
+				}
+				if count := gauge.Value(); count <= 0 {
+					return errors.Errorf("%d: expected metrics gauge %q > 0; = %d", i, gauge.GetName(), count)
 				}
 			}
 			return nil
@@ -249,7 +241,7 @@ func TestClientNodeID(t *testing.T) {
 
 	// Use an insecure context. We're talking to tcp socket which are not in the certs.
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
-	c := newClient(&remote.nodeAddr, makeMetrics(metric.NewRegistry()))
+	c := newClient(&remote.nodeAddr, makeMetrics())
 	disconnected := make(chan *client, 1)
 	disconnected <- c
 
@@ -494,7 +486,7 @@ func TestClientForwardUnresolved(t *testing.T) {
 	addr := local.is.NodeAddr
 	local.mu.Unlock()
 
-	client := newClient(&addr, makeMetrics(metric.NewRegistry())) // never started
+	client := newClient(&addr, makeMetrics()) // never started
 
 	newAddr := util.UnresolvedAddr{
 		NetworkField: "tcp",

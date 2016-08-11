@@ -31,8 +31,10 @@ func testMarshal(t *testing.T, m json.Marshaler, exp string) {
 	}
 }
 
+var emptyMetadata = MetricMetadata{"", ""}
+
 func TestGauge(t *testing.T) {
-	g := NewGauge()
+	g := NewGauge(emptyMetadata)
 	g.Update(10)
 	if v := g.Value(); v != 10 {
 		t.Fatalf("unexpected value: %d", v)
@@ -41,7 +43,7 @@ func TestGauge(t *testing.T) {
 }
 
 func TestGaugeFloat64(t *testing.T) {
-	g := NewGaugeFloat64()
+	g := NewGaugeFloat64(emptyMetadata)
 	g.Update(10.4)
 	if v := g.Value(); v != 10.4 {
 		t.Fatalf("unexpected value: %f", v)
@@ -50,7 +52,7 @@ func TestGaugeFloat64(t *testing.T) {
 }
 
 func TestCounter(t *testing.T) {
-	c := NewCounter()
+	c := NewCounter(emptyMetadata)
 	c.Inc(100)
 	c.Dec(10)
 	if v := c.Count(); v != 90 {
@@ -69,7 +71,7 @@ func setNow(d time.Duration) {
 func TestHistogramRotate(t *testing.T) {
 	defer TestingSetNow(nil)()
 	setNow(0)
-	h := NewHistogram(histWrapNum*time.Second, 1000+10*histWrapNum, 3)
+	h := NewHistogram(emptyMetadata, histWrapNum*time.Second, 1000+10*histWrapNum, 3)
 	var cur time.Duration
 	for i := 0; i < 3*histWrapNum; i++ {
 		v := int64(10 * i)
@@ -98,7 +100,7 @@ func TestHistogramRotate(t *testing.T) {
 func TestHistogramJSON(t *testing.T) {
 	defer TestingSetNow(nil)()
 	setNow(0)
-	h := NewHistogram(0, 1, 3)
+	h := NewHistogram(emptyMetadata, 0, 1, 3)
 	testMarshal(t, h, `[{"Quantile":100,"Count":0,"ValueAt":0}]`)
 	h.RecordValue(1)
 	testMarshal(t, h, `[{"Quantile":0,"Count":1,"ValueAt":1},{"Quantile":100,"Count":1,"ValueAt":1}]`)
@@ -108,7 +110,7 @@ func TestRateRotate(t *testing.T) {
 	defer TestingSetNow(nil)()
 	setNow(0)
 	const interval = 10 * time.Second
-	r := NewRate(interval)
+	r := NewRate(emptyMetadata, interval)
 
 	// Skip the warmup phase of the wrapped EWMA for this test.
 	for i := 0; i < 100; i++ {
