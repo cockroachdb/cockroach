@@ -220,7 +220,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	s.pgServer = pgwire.MakeServer(s.ctx.Context, s.sqlExecutor, s.registry)
 
 	// TODO(bdarnell): make StoreConfig configurable.
-	nCtx := storage.StoreContext{
+	nCtx := storage.StoreConfig{
 		Clock:                          s.clock,
 		DB:                             s.db,
 		Gossip:                         s.gossip,

@@ -394,14 +394,14 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		},
 	}
 
-	bq := makeBaseQueue("test", testQueue, s, s.ctx.Gossip, queueConfig{maxSize: 2})
-	bq.Start(s.ctx.Clock, stopper)
+	bq := makeBaseQueue("test", testQueue, s, s.cfg.Gossip, queueConfig{maxSize: 2})
+	bq.Start(s.cfg.Clock, stopper)
 
 	// Check our config.
 	var sysCfg config.SystemConfig
 	util.SucceedsSoon(t, func() error {
 		var ok bool
-		sysCfg, ok = s.ctx.Gossip.GetSystemConfig()
+		sysCfg, ok = s.cfg.Gossip.GetSystemConfig()
 		if !ok {
 			return errors.New("system config not yet present")
 		}

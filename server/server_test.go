@@ -234,7 +234,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	tds := kv.NewTxnCoordSender(ds, s.Clock(), ts.Ctx.Linearizable, tracing.NewTracer(),
 		ts.stopper, kv.NewTxnMetrics(metric.NewRegistry()))
 
-	if err := ts.node.ctx.DB.AdminSplit("m"); err != nil {
+	if err := ts.node.cfg.DB.AdminSplit("m"); err != nil {
 		t.Fatal(err)
 	}
 	writes := []roachpb.Key{roachpb.Key("a"), roachpb.Key("z")}
@@ -332,7 +332,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 			ts.stopper, kv.NewTxnMetrics(metric.NewRegistry()))
 
 		for _, sk := range tc.splitKeys {
-			if err := ts.node.ctx.DB.AdminSplit(sk); err != nil {
+			if err := ts.node.cfg.DB.AdminSplit(sk); err != nil {
 				t.Fatal(err)
 			}
 		}

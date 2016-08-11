@@ -330,7 +330,7 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 			raft.Storage(r),
 			uint64(r.mu.replicaID),
 			r.mu.state.RaftAppliedIndex,
-			r.store.ctx,
+			r.store.cfg,
 			&raftLogger{stringer: r},
 		), nil)
 		if err != nil {
@@ -386,7 +386,7 @@ func NewReplica(desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.R
 		abortCache: NewAbortCache(desc.RangeID),
 	}
 
-	r.raftSender = store.ctx.Transport.MakeSender(
+	r.raftSender = store.cfg.Transport.MakeSender(
 		func(err error, toReplica roachpb.ReplicaDescriptor) {
 			ctx := context.TODO() // plumb the context from transport
 			if grpcutil.ErrorEqual(err, errReplicaTooOld) {
@@ -643,7 +643,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 
 				// Should we extend the lease?
 				if _, ok := r.mu.pendingLeaseRequest.RequestPending(); !ok &&
-					!timestamp.Less(lease.StartStasis.Add(-int64(r.store.ctx.rangeLeaseRenewalDuration), 0)) {
+					!timestamp.Less(lease.StartStasis.Add(-int64(r.store.cfg.rangeLeaseRenewalDuration), 0)) {
 					if log.V(2) {
 						log.Warningf(ctx, "%s: extending lease %s at %s", r, lease, timestamp)
 					}
@@ -1736,7 +1736,7 @@ func (r *Replica) tick() error {
 	r.mu.ticks++
 	r.mu.internalRaftGroup.Tick()
 	if !r.store.TestingKnobs().DisableRefreshReasonTicks &&
-		r.mu.ticks%r.store.ctx.RaftElectionTimeoutTicks == 0 {
+		r.mu.ticks%r.store.cfg.RaftElectionTimeoutTicks == 0 {
 		// RaftElectionTimeoutTicks is a reasonable approximation of how long we
 		// should wait before deciding that our previous proposal didn't go
 		// through. Note that the combination of the above condition and passing
@@ -1744,7 +1744,7 @@ func (r *Replica) tick() error {
 		// will be refreshed when they have been pending for 1 to 2 election
 		// cycles.
 		if err := r.refreshPendingCmdsLocked(
-			reasonTicks, r.store.ctx.RaftElectionTimeoutTicks); err != nil {
+			reasonTicks, r.store.cfg.RaftElectionTimeoutTicks); err != nil {
 			return err
 		}
 	}
