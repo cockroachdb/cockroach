@@ -17,6 +17,7 @@
 package distsql
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -127,6 +128,81 @@ func TestOrderedSync(t *testing.T) {
 		if expStr != retStr {
 			t.Errorf("invalid results for case %d; expected:\n   %s\ngot:\n   %s",
 				testIdx, expStr, retStr)
+		}
+	}
+}
+
+func TestUnorderedSync(t *testing.T) {
+	mrc := &MultiplexedRowChannel{}
+	mrc.Init(5)
+	for i := 1; i <= 5; i++ {
+		go func(i int) {
+			for j := 1; j <= 100; j++ {
+				var a, b sqlbase.EncDatum
+				a.SetDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
+				b.SetDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(j)))
+				row := sqlbase.EncDatumRow{a, b}
+				mrc.PushRow(row)
+			}
+			mrc.Close(nil)
+		}(i)
+	}
+	var retRows sqlbase.EncDatumRows
+	for {
+		row, err := mrc.NextRow()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if row == nil {
+			break
+		}
+		retRows = append(retRows, row)
+	}
+	// Verify all elements.
+	for i := 1; i <= 5; i++ {
+		j := 1
+		for _, row := range retRows {
+			if int(*(row[0].Datum.(*parser.DInt))) == i {
+				if int(*(row[1].Datum.(*parser.DInt))) != j {
+					t.Errorf("Expected [%d %d], got %s", i, j, row)
+				}
+				j++
+			}
+		}
+		if j != 101 {
+			t.Errorf("Missing [%d %d]", i, j)
+		}
+	}
+
+	// Test case when one source closes with an error.
+	mrc = &MultiplexedRowChannel{}
+	mrc.Init(5)
+	for i := 1; i <= 5; i++ {
+		go func(i int) {
+			for j := 1; j <= 100; j++ {
+				var a, b sqlbase.EncDatum
+				a.SetDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
+				b.SetDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(j)))
+				row := sqlbase.EncDatumRow{a, b}
+				mrc.PushRow(row)
+			}
+			var err error
+			if i == 3 {
+				err = fmt.Errorf("Test error")
+			}
+			mrc.Close(err)
+		}(i)
+	}
+	for {
+		row, err := mrc.NextRow()
+		if err != nil {
+			if err.Error() != "Test error" {
+				t.Error(err)
+			}
+			break
+		}
+		if row == nil {
+			t.Error("Did not receive expected error")
 		}
 	}
 }
