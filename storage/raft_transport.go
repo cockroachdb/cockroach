@@ -95,7 +95,7 @@ type RaftTransport struct {
 	mu struct {
 		syncutil.Mutex
 		handlers map[roachpb.StoreID]RaftMessageHandler
-		queues   map[bool]map[roachpb.ReplicaIdent]chan *RaftMessageRequest
+		queues   map[bool]map[roachpb.NodeID]chan *RaftMessageRequest
 		breakers map[roachpb.NodeID]*circuit.Breaker
 	}
 }
@@ -115,7 +115,7 @@ func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpc
 		SnapshotStatusChan: make(chan RaftSnapshotStatus),
 	}
 	t.mu.handlers = make(map[roachpb.StoreID]RaftMessageHandler)
-	t.mu.queues = make(map[bool]map[roachpb.ReplicaIdent]chan *RaftMessageRequest)
+	t.mu.queues = make(map[bool]map[roachpb.NodeID]chan *RaftMessageRequest)
 	t.mu.breakers = make(map[roachpb.NodeID]*circuit.Breaker)
 
 	if grpcServer != nil {
@@ -330,24 +330,20 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 		panic("only heartbeat messages may be sent to range ID 0")
 	}
 	isSnap := req.Message.Type == raftpb.MsgSnap
-	toReplica := req.ToReplica
-	toReplicaIdent := roachpb.ReplicaIdent{
-		RangeID: req.RangeID,
-		Replica: toReplica,
-	}
+	toNodeID := req.ToReplica.NodeID
 
 	t.mu.Lock()
 	// We use two queues; one will be used for snapshots, the other for all other
 	// traffic. This is done to prevent snapshots from blocking other traffic.
 	queues, ok := t.mu.queues[isSnap]
 	if !ok {
-		queues = make(map[roachpb.ReplicaIdent]chan *RaftMessageRequest)
+		queues = make(map[roachpb.NodeID]chan *RaftMessageRequest)
 		t.mu.queues[isSnap] = queues
 	}
-	ch, ok := queues[toReplicaIdent]
+	ch, ok := queues[toNodeID]
 	if !ok {
 		ch = make(chan *RaftMessageRequest, raftSendBufferSize)
-		queues[toReplicaIdent] = ch
+		queues[toNodeID] = ch
 	}
 	t.mu.Unlock()
 
@@ -355,10 +351,10 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 		// Get a connection to the node specified by the replica's node
 		// ID. If no connection can be made, return false to indicate caller
 		// should drop the Raft message.
-		conn := t.getNodeConn(toReplica.NodeID)
+		conn := t.getNodeConn(toNodeID)
 		if conn == nil {
 			t.mu.Lock()
-			delete(queues, toReplicaIdent)
+			delete(queues, toNodeID)
 			t.mu.Unlock()
 			return false
 		}
@@ -369,10 +365,10 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 				if err := t.processQueue(ch, conn); err != nil && !grpcutil.IsClosedConnection(err) {
 					log.Warningf(context.TODO(),
 						"range %s: outgoing raft transport stream to %s closed by the remote: %s",
-						req.RangeID, toReplica, err)
+						req.RangeID, toNodeID, err)
 				}
 				t.mu.Lock()
-				delete(queues, toReplicaIdent)
+				delete(queues, toNodeID)
 				t.mu.Unlock()
 			})
 		}); err != nil {
