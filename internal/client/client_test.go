@@ -220,7 +220,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 		// doneCall signals when the non-txn read or write has completed.
 		doneCall := make(chan error)
 		count := 0 // keeps track of retries
-		err := db.Txn(func(txn *client.Txn) error {
+		err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 			if test.isolation == enginepb.SNAPSHOT {
 				if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 					return err
@@ -315,7 +315,7 @@ func TestClientRunTransaction(t *testing.T) {
 		key := []byte(fmt.Sprintf("%s/key-%t", testUser, commit))
 
 		// Use snapshot isolation so non-transactional read can always push.
-		err := db.Txn(func(txn *client.Txn) error {
+		err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 				return err
 			}
@@ -635,7 +635,7 @@ func TestClientBatch(t *testing.T) {
 
 		b := &client.Batch{}
 		b.CPut(key, "goodbyte", nil) // should fail
-		if err := db.Txn(func(txn *client.Txn) error {
+		if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 			return txn.Run(b)
 		}); err == nil {
 			t.Error("unexpected success")
@@ -675,7 +675,7 @@ func concurrentIncrements(db *client.DB, t *testing.T) {
 			// Wait until the other goroutines are running.
 			wgStart.Wait()
 
-			if err := db.Txn(func(txn *client.Txn) error {
+			if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 				txn.SetDebugName(fmt.Sprintf("test-%d", i), 0)
 
 				// Retrieve the other key.
@@ -888,7 +888,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 		t.Error(err)
 	}
 
-	err := db.Txn(func(txn *client.Txn) error {
+	err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		// Try reverse scans for all keys.
 		{
 			rows, err := txn.ReverseScan(testUser+"/key/00", testUser+"/key/10", 100)

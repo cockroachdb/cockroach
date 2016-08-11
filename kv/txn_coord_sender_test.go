@@ -1170,7 +1170,7 @@ func TestTxnCommit(t *testing.T) {
 	db := client.NewDB(sender)
 
 	// Test normal commit.
-	if err := db.Txn(func(txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		key := []byte("key-commit")
 
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
@@ -1201,7 +1201,7 @@ func TestTxnOnePhaseCommit(t *testing.T) {
 	value := []byte("value")
 	db := client.NewDB(sender)
 
-	if err := db.Txn(func(txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		key := []byte("key-commit")
 		b := txn.NewBatch()
 		b.Put(key, value)
@@ -1225,7 +1225,7 @@ func TestTxnAbandonCount(t *testing.T) {
 	// abandoned transactions.
 	sender.heartbeatInterval = 2 * time.Millisecond
 	sender.clientTimeout = 1 * time.Millisecond
-	if err := db.Txn(func(txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		key := []byte("key-abandon")
 
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
@@ -1262,7 +1262,7 @@ func TestTxnReadAfterAbandon(t *testing.T) {
 	sender.heartbeatInterval = 2 * time.Millisecond
 	sender.clientTimeout = 1 * time.Millisecond
 
-	err := db.Txn(func(txn *client.Txn) error {
+	err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		key := []byte("key-abandon")
 
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
@@ -1301,7 +1301,7 @@ func TestTxnAbortCount(t *testing.T) {
 
 	intentionalErrText := "intentional error to cause abort"
 	// Test aborted transaction.
-	if err := db.Txn(func(txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		key := []byte("key-abort")
 
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
@@ -1368,7 +1368,7 @@ func TestTxnDurations(t *testing.T) {
 	const incr int64 = 1000
 	for i := 0; i < puts; i++ {
 		key := roachpb.Key(fmt.Sprintf("key-txn-durations-%d", i))
-		if err := db.Txn(func(txn *client.Txn) error {
+		if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 				return err
 			}

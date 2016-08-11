@@ -99,7 +99,7 @@ var errExistingSchemaChangeLease = errors.New(
 // an unexpired lease doesn't exist. It returns the lease.
 func (sc *SchemaChanger) AcquireLease() (sqlbase.TableDescriptor_SchemaChangeLease, error) {
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
-	err := sc.db.Txn(func(txn *client.Txn) error {
+	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
 		tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
 		if err != nil {
@@ -145,7 +145,7 @@ func (sc *SchemaChanger) findTableWithLease(
 // ReleaseLease the table lease if it is the one registered with
 // the table descriptor.
 func (sc *SchemaChanger) ReleaseLease(lease sqlbase.TableDescriptor_SchemaChangeLease) error {
-	err := sc.db.Txn(func(txn *client.Txn) error {
+	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
 		tableDesc, err := sc.findTableWithLease(txn, lease)
 		if err != nil {
 			return err
@@ -170,7 +170,7 @@ func (sc *SchemaChanger) ExtendLease(
 	}
 	// Update lease.
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
-	err := sc.db.Txn(func(txn *client.Txn) error {
+	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
 		tableDesc, err := sc.findTableWithLease(txn, existingLease)
 		if err != nil {
 			return err
@@ -281,7 +281,7 @@ func (sc SchemaChanger) exec(
 			oldNameNotInUseNotification()
 		}
 		// Free up the old name(s).
-		err := sc.db.Txn(func(txn *client.Txn) error {
+		err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
 			b := txn.NewBatch()
 			for _, renameDetails := range table.Renames {
 				tbKey := tableKey{renameDetails.OldParentID, renameDetails.OldName}.Key()
@@ -603,7 +603,7 @@ func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 // is complete.
 func (sc *SchemaChanger) IsDone() (bool, error) {
 	var done bool
-	err := sc.db.Txn(func(txn *client.Txn) error {
+	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
 		done = true
 		tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
 		if err != nil {

@@ -791,7 +791,7 @@ func (hv *historyVerifier) runHistory(priorities []int32,
 func (hv *historyVerifier) runCmds(cmds []*cmd, db *client.DB, t *testing.T) (string, map[string]int64, error) {
 	var strs []string
 	env := map[string]int64{}
-	err := db.Txn(func(txn *client.Txn) error {
+	err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		for _, c := range cmds {
 			c.historyIdx = hv.idx
 			c.env = env
@@ -813,7 +813,7 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 	txnName := fmt.Sprintf("txn %d", txnIdx+1)
 	cmdIdx := -1
 
-	err := db.Txn(func(txn *client.Txn) error {
+	err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		// If this is 2nd attempt, and a retry wasn't expected, return a
 		// retry error which results in further histories being enumerated.
 		if retry++; retry > 1 {

@@ -28,6 +28,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/gogo/protobuf/jsonpb"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -392,7 +394,7 @@ func TestSystemConfigGossip(t *testing.T) {
 	}
 
 	// Now do it as part of a transaction, but without the trigger set.
-	if err := kvDB.Txn(func(txn *client.Txn) error {
+	if err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
 		return txn.Put(key, valAt(1))
 	}); err != nil {
 		t.Fatal(err)
@@ -413,7 +415,7 @@ func TestSystemConfigGossip(t *testing.T) {
 	}
 
 	// This time mark the transaction as having a Gossip trigger.
-	if err := kvDB.Txn(func(txn *client.Txn) error {
+	if err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
 		return txn.Put(key, valAt(2))
 	}); err != nil {

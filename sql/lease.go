@@ -189,7 +189,7 @@ func (s LeaseStore) Acquire(
 	// modify the descriptor and even if the descriptor is never created we'll
 	// just have a dangling lease entry which will eventually get GC'd.
 	ctx := txn.Context // propagate context/trace to new transaction
-	err = s.db.Txn(func(txn *client.Txn) error {
+	err = s.db.Txn(context.TODO(), func(txn *client.Txn) error {
 		txn.Context = ctx
 		p := makeInternalPlanner(txn, security.RootUser)
 		const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
@@ -208,7 +208,7 @@ func (s LeaseStore) Acquire(
 
 // Release a previously acquired table descriptor lease.
 func (s LeaseStore) Release(lease *LeaseState) error {
-	err := s.db.Txn(func(txn *client.Txn) error {
+	err := s.db.Txn(context.TODO(), func(txn *client.Txn) error {
 		if log.V(2) {
 			log.Infof(context.TODO(), "LeaseStore releasing lease %s", lease)
 		}
@@ -300,7 +300,7 @@ func (s LeaseStore) Publish(
 		desc := &sqlbase.Descriptor{}
 		// There should be only one version of the descriptor, but it's
 		// a race now to update to the next version.
-		err = s.db.Txn(func(txn *client.Txn) error {
+		err = s.db.Txn(context.TODO(), func(txn *client.Txn) error {
 			descKey := sqlbase.MakeDescMetadataKey(tableID)
 
 			// Re-read the current version of the table descriptor, this time
@@ -380,7 +380,7 @@ func (s LeaseStore) countLeases(
 	descID sqlbase.ID, version sqlbase.DescriptorVersion, expiration time.Time,
 ) (int, error) {
 	var count int
-	err := s.db.Txn(func(txn *client.Txn) error {
+	err := s.db.Txn(context.TODO(), func(txn *client.Txn) error {
 		p := makeInternalPlanner(txn, security.RootUser)
 		const countLeases = `SELECT COUNT(version) FROM system.lease ` +
 			`WHERE descID = $1 AND version = $2 AND expiration > $3`
@@ -767,7 +767,7 @@ func (t *tableState) purgeOldLeases(
 
 	// Acquire and release a lease on the table at a version >= minVersion.
 	var lease *LeaseState
-	err := db.Txn(func(txn *client.Txn) error {
+	err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		var err error
 		if !deleted {
 			lease, err = t.acquire(txn, minVersion, store)

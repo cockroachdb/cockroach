@@ -442,10 +442,12 @@ func (db *DB) Run(b *Batch) error {
 // cause problems in the event it must be run more than once.
 //
 // If you need more control over how the txn is executed, check out txn.Exec().
-func (db *DB) Txn(retryable func(txn *Txn) error) error {
+func (db *DB) Txn(ctx context.Context, retryable func(txn *Txn) error) error {
+	// TODO(radu): we should open a tracing Span here (we need to figure out how
+	// to use the correct tracer).
 	// TODO(dan): This context should, at longest, live for the lifetime of this
 	// method. Add a defered cancel.
-	txn := NewTxn(context.TODO(), *db)
+	txn := NewTxn(ctx, *db)
 	txn.SetDebugName("", 1)
 	err := txn.Exec(TxnExecOptions{AutoRetry: true, AutoCommit: true},
 		func(txn *Txn, _ *TxnExecOptions) error {
