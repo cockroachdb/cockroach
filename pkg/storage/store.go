@@ -2573,8 +2573,9 @@ func (s *Store) processRaftRequest(
 		}
 		status := r.RaftStatus()
 		if status != nil && status.Term == req.Message.Term && status.Commit == req.Message.Commit {
-			r.quiesce()
-			return
+			if r.quiesce() {
+				return
+			}
 		}
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: local raft status is %+v, incoming quiesce message is %+v", status, req.Message)
