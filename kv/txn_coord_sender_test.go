@@ -60,10 +60,7 @@ func teardownHeartbeats(tc *TxnCoordSender) {
 	}
 	tc.Lock()
 	for _, tm := range tc.txns {
-		if tm.txnEnd != nil {
-			close(tm.txnEnd)
-			tm.txnEnd = nil
-		}
+		tm.cancel()
 	}
 	defer tc.Unlock()
 }
@@ -327,16 +324,14 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	}
 
 	// Sneakily send an ABORT right to DistSender (bypassing TxnCoordSender).
-	{
-		var ba roachpb.BatchRequest
-		ba.Add(&roachpb.EndTransactionRequest{
-			Commit: false,
-			Span:   roachpb.Span{Key: initialTxn.Proto.Key},
-		})
-		ba.Txn = &initialTxn.Proto
-		if _, pErr := sender.wrapped.Send(context.Background(), ba); pErr != nil {
-			t.Fatal(pErr)
-		}
+	var ba roachpb.BatchRequest
+	ba.Add(&roachpb.EndTransactionRequest{
+		Commit: false,
+		Span:   roachpb.Span{Key: initialTxn.Proto.Key},
+	})
+	ba.Txn = &initialTxn.Proto
+	if _, pErr := sender.wrapped.Send(context.Background(), ba); pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	util.SucceedsSoon(t, func() error {
@@ -679,8 +674,8 @@ func TestTxnCoordSenderGCWithCancel(t *testing.T) {
 		if !ok {
 			return nil
 		}
-		meta := &enginepb.MVCCMetadata{}
-		ok, _, _, err := s.Eng.GetProto(engine.MakeMVCCMetadataKey(key), meta)
+		meta := enginepb.MVCCMetadata{}
+		ok, _, _, err := s.Eng.GetProto(engine.MakeMVCCMetadataKey(key), &meta)
 		if err != nil {
 			t.Fatalf("error getting MVCC metadata: %s", err)
 		}
@@ -976,15 +971,15 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 			}})), "failed to push"},
 		{*roachpb.NewErrorf("testError"), "testError"},
 	}
-	for i, test := range testCases {
+	for i := range testCases {
+		test := testCases[i]
 		func() {
 			ts := NewTxnCoordSender(senderFn(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 				txn := ba.Txn.Clone()
 				txn.Writing = true
-				pErr := &roachpb.Error{}
-				*pErr = test.Error
+				pErr := test.Error
 				pErr.SetTxn(&txn)
-				return nil, pErr
+				return nil, &pErr
 			}), clock, false, tracing.NewTracer(), stopper, NewTxnMetrics(metric.NewRegistry()))
 
 			var ba roachpb.BatchRequest

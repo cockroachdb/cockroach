@@ -77,9 +77,17 @@ type txnMetadata struct {
 	// current_timestamp > lastUpdateTS + timeoutDuration.
 	timeoutDuration time.Duration
 
-	// txnEnd is closed when the transaction is aborted or committed,
-	// terminating the associated heartbeat instance.
-	txnEnd chan struct{}
+	// ctx signals when the transaction's heartbeat loop should be shut down,
+	// either because the transaction is aborted or committed, or because it
+	// has been abandoned by the client.
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	// hasClientCancel is true if the transaction's heartbeat loop is running
+	// on behalf of a client that implements cancellation. If true, it will
+	// prevent the transaction from being considered abandoned until ctx is
+	// cancelled.
+	hasClientCancel bool
 }
 
 // setLastUpdate updates the wall time (in nanoseconds) since the most
@@ -98,6 +106,9 @@ func (tm *txnMetadata) getLastUpdate() int64 {
 // been updated by the client adding a request within the allowed
 // timeout.
 func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
+	if tm.hasClientCancel {
+		return false
+	}
 	timeout := nowNanos - tm.timeoutDuration.Nanoseconds()
 	return tm.getLastUpdate() < timeout
 }
@@ -518,20 +529,15 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 // is updated and the heartbeat goroutine signaled to clean up the transaction
 // gracefully.
 func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context, txn roachpb.Transaction) {
-	log.Trace(ctx, "coordinator stops")
-	txnMeta, ok := tc.txns[*txn.ID]
-	// The heartbeat might've already removed the record. Or we may have already
-	// closed txnEnd but we are racing with the heartbeat cleanup.
-	if !ok || txnMeta.txnEnd == nil {
-		return
+	// The heartbeat might've already removed the record.
+	if txnMeta, ok := tc.txns[*txn.ID]; ok {
+		log.Trace(ctx, "coordinator stops")
+		// The supplied txn may be newer than the one in txnMeta, which is relevant
+		// for stats.
+		txnMeta.txn = txn
+		// Trigger heartbeat shutdown.
+		txnMeta.cancel()
 	}
-
-	// The supplied txn may be newer than the one in txnMeta, which is relevant
-	// for stats.
-	txnMeta.txn = txn
-	// Trigger heartbeat shutdown.
-	close(txnMeta.txnEnd)
-	txnMeta.txnEnd = nil
 }
 
 // unregisterTxn deletes a txnMetadata object from the sender
@@ -540,8 +546,8 @@ func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context, txn roachpb.Tran
 // transaction committed on the 1PC fast path.
 func (tc *TxnCoordSender) unregisterTxnLocked(txnID uuid.UUID) (
 	duration, restarts int64, status roachpb.TransactionStatus) {
-	txnMeta := tc.txns[txnID] // guaranteed to exist
-	if txnMeta == nil {
+	txnMeta, ok := tc.txns[txnID]
+	if !ok {
 		panic(fmt.Sprintf("attempt to unregister non-existent transaction: %s", txnID))
 	}
 	duration = tc.clock.PhysicalNow() - txnMeta.firstUpdateNanos
@@ -559,62 +565,49 @@ func (tc *TxnCoordSender) unregisterTxnLocked(txnID uuid.UUID) (
 // stopping in the event the transaction is aborted or committed after
 // attempting to resolve the intents. When the heartbeat stops, the transaction
 // is unregistered from the coordinator.
-//
-// TODO(dan): The Context we use for this is currently the one from the first
-// request in a Txn, but the semantics of this aren't good. Each context has its
-// own associated lifetime and we're ignoring all but the first. It happens now
-// that we pass the same one in every request, but it's brittle to rely on this
-// forever.
-// TODO(wiz): Update (*DBServer).Batch to not use context.TODO().
-func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context, txnID uuid.UUID) {
-	var tickChan <-chan time.Time
-	{
-		ticker := time.NewTicker(tc.heartbeatInterval)
-		tickChan = ticker.C
-		defer ticker.Stop()
-	}
+func (tc *TxnCoordSender) heartbeatLoop(txnID uuid.UUID) {
 	defer func() {
 		tc.Lock()
+		txnMeta := tc.txns[txnID]
+		// Clone the intents and the txn to avoid data races.
+		intentSpans := append([]roachpb.Span(nil), txnMeta.keys...)
+		txn := txnMeta.txn.Clone()
 		duration, restarts, status := tc.unregisterTxnLocked(txnID)
 		tc.Unlock()
+
 		tc.updateStats(duration, restarts, status, false)
+
+		// Since we don't hold the lock continuously, it's possible that two aborts
+		// raced here. That's fine (and probably better than the alternative, which
+		// is missing new intents sometimes).
+		if status == roachpb.PENDING {
+			mergedSpans, _ := roachpb.MergeSpans(intentSpans)
+			tc.tryAsyncAbort(txn, mergedSpans)
+		}
 	}()
 
-	var closer <-chan struct{}
+	tc.Lock()
+	txnMeta := tc.txns[txnID]
+	ctx := txnMeta.ctx
+	tc.Unlock()
+
 	// TODO(tschottdorf): this should join to the trace of the request
 	// which starts this goroutine.
 	sp := tc.tracer.StartSpan(opHeartbeatLoop)
 	defer sp.Finish()
 	ctx = opentracing.ContextWithSpan(ctx, sp)
 
-	{
-		tc.Lock()
-		txnMeta := tc.txns[txnID] // do not leak to outer scope
-		closer = txnMeta.txnEnd
-		tc.Unlock()
-	}
-	if closer == nil {
-		// Avoid race in which a Txn is cleaned up before the heartbeat
-		// goroutine gets a chance to start.
-		return
-	}
 	// Loop with ticker for periodic heartbeats.
+	ticker := time.NewTicker(tc.heartbeatInterval)
+	tickChan := ticker.C
+	defer ticker.Stop()
 	for {
 		select {
 		case <-tickChan:
 			if !tc.heartbeat(ctx, txnID) {
 				return
 			}
-		case <-closer:
-			// Transaction finished normally.
-			return
 		case <-ctx.Done():
-			// Note that if ctx is not cancellable, then ctx.Done() returns a nil
-			// channel, which blocks forever. In this case, the heartbeat loop is
-			// responsible for timing out transactions. If ctx.Done() is not nil, then
-			// then heartbeat loop ignores the timeout check and this case is
-			// responsible for client timeouts.
-			tc.tryAsyncAbort(txnID)
 			return
 		case <-tc.stopper.ShouldQuiesce():
 			return
@@ -622,25 +615,8 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context, txnID uuid.UUID) {
 	}
 }
 
-// tryAsyncAbort (synchronously) grabs a copy of the txn proto and the intents
-// (which it then clears from txnMeta), and asynchronously tries to abort the
-// transaction.
-func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
-	tc.Lock()
-	txnMeta := tc.txns[txnID]
-	// Clone the intents and the txn to avoid data races.
-	intentSpans, _ := roachpb.MergeSpans(append([]roachpb.Span(nil), txnMeta.keys...))
-	txnMeta.keys = nil
-	txn := txnMeta.txn.Clone()
-	tc.Unlock()
-
-	// Since we don't hold the lock continuously, it's possible that two aborts
-	// raced here. That's fine (and probably better than the alternative, which
-	// is missing new intents sometimes).
-	if txn.Status != roachpb.PENDING {
-		return
-	}
-
+// tryAsyncAbort asynchronously tries to abort the transaction.
+func (tc *TxnCoordSender) tryAsyncAbort(txn roachpb.Transaction, intentSpans []roachpb.Span) {
 	ba := roachpb.BatchRequest{}
 	ba.Txn = &txn
 
@@ -652,19 +628,20 @@ func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
 		IntentSpans: intentSpans,
 	}
 	ba.Add(et)
+	ctx := context.TODO()
 	if err := tc.stopper.RunAsyncTask(func() {
 		// Use the wrapped sender since the normal Sender does not allow
 		// clients to specify intents.
-		// TODO(tschottdorf): not using the existing context here since that
-		// leads to use-after-finish of the contained trace. Should fork off
-		// before the goroutine.
-		if _, pErr := tc.wrapped.Send(context.Background(), ba); pErr != nil {
+		//
+		// This doesn't use the transaction's context because it is alreaddy
+		// canceled at this point.
+		if _, pErr := tc.wrapped.Send(ctx, ba); pErr != nil {
 			if log.V(1) {
-				log.Warningf(context.TODO(), "abort due to inactivity failed for %s: %s ", txn, pErr)
+				log.Warningf(ctx, "abort of %s failed: %s ", txn, pErr)
 			}
 		}
 	}); err != nil {
-		log.Warning(context.TODO(), err)
+		log.Warning(ctx, err)
 	}
 }
 
@@ -684,14 +661,11 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 	}
 
 	// Before we send a heartbeat, determine whether this transaction should be
-	// considered abandoned. If so, exit heartbeat. If ctx.Done() is not nil, then
-	// it is a cancellable Context and we skip this check and use the ctx lifetime
-	// instead of a timeout.
-	if ctx.Done() == nil && hasAbandoned {
+	// considered abandoned. If so, exit heartbeat.
+	if hasAbandoned {
 		if log.V(1) {
 			log.Infof(ctx, "transaction %s abandoned; stopping heartbeat", txnMeta.txn)
 		}
-		tc.tryAsyncAbort(txnID)
 		return false
 	}
 
@@ -714,10 +688,6 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 	// as well.
 	if pErr != nil {
 		log.Warningf(ctx, "heartbeat to %s failed: %s", txn, pErr)
-		// We're not going to let the client carry out additional requests, so
-		// try to clean up.
-		tc.tryAsyncAbort(*txn.ID)
-		txn.Status = roachpb.ABORTED
 	} else {
 		txn.Update(br.Responses[0].GetInner().(*roachpb.HeartbeatTxnResponse).Txn)
 	}
@@ -730,7 +700,8 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 	tc.txns[txnID].txn.Update(&txn)
 	tc.Unlock()
 
-	return true
+	// Abort heartbeatLoop on error.
+	return pErr == nil
 }
 
 // updateState updates the transaction state in both the success and
@@ -864,12 +835,22 @@ func (tc *TxnCoordSender) updateState(
 					firstUpdateNanos: startNS,
 					lastUpdateNanos:  tc.clock.PhysicalNow(),
 					timeoutDuration:  tc.clientTimeout,
-					txnEnd:           make(chan struct{}),
+					hasClientCancel:  ctx.Done() != nil,
 				}
+				// TODO(dan): The Context we use for this is currently the one
+				// from the first request in a Txn, but the semantics of this
+				// aren't good. Each context has its own associated lifetime
+				// and we're ignoring all but the first. It happens now that
+				// we pass the same one in every request, but it's brittle to
+				// rely on this forever.
+				//
+				// TODO(wiz): Update (*DBServer).Batch to not use
+				// context.TODO() when the above TODO is fixed.
+				txnMeta.ctx, txnMeta.cancel = context.WithCancel(ctx)
 				tc.txns[txnID] = txnMeta
 
 				if err := tc.stopper.RunAsyncTask(func() {
-					tc.heartbeatLoop(ctx, txnID)
+					tc.heartbeatLoop(txnID)
 				}); err != nil {
 					// The system is already draining and we can't start the
 					// heartbeat. We refuse new transactions for now because
