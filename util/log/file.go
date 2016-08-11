@@ -143,17 +143,6 @@ func logName(severity Severity, t time.Time) (name, link string) {
 	return name, removePeriods(program) + "." + severity.Name()
 }
 
-// A FileDetails holds all of the particulars that can be parsed by the name of
-// a log file.
-type FileDetails struct {
-	Program  string
-	Host     string
-	UserName string
-	Severity Severity
-	Time     time.Time
-	PID      uint
-}
-
 var errMalformedName = errors.New("malformed log filename")
 var errMalformedSev = errors.New("malformed severity")
 
@@ -185,8 +174,8 @@ func parseLogFilename(filename string) (FileDetails, error) {
 		Host:     matches[2],
 		UserName: matches[3],
 		Severity: sev,
-		Time:     time,
-		PID:      uint(pid),
+		Time:     time.UnixNano(),
+		PID:      pid,
 	}, nil
 }
 
@@ -242,14 +231,6 @@ func verifyFile(filename string) error {
 	}
 	_, err = getFileDetails(info)
 	return err
-}
-
-// A FileInfo holds the filename and size of a log file.
-type FileInfo struct {
-	Name         string // base name
-	SizeBytes    int64
-	ModTimeNanos int64 // most recent mode time in unix nanos
-	Details      FileDetails
 }
 
 // ListLogFiles returns a slice of FileInfo structs for each log file
@@ -318,7 +299,7 @@ type sortableFileInfoSlice []FileInfo
 func (a sortableFileInfoSlice) Len() int      { return len(a) }
 func (a sortableFileInfoSlice) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
 func (a sortableFileInfoSlice) Less(i, j int) bool {
-	return a[i].Details.Time.UnixNano() < a[j].Details.Time.UnixNano()
+	return a[i].Details.Time < a[j].Details.Time
 }
 
 // selectFiles selects all log files that have an timestamp before the endTime and
@@ -327,7 +308,7 @@ func (a sortableFileInfoSlice) Less(i, j int) bool {
 func selectFiles(logFiles []FileInfo, severity Severity, endTimestamp int64) []FileInfo {
 	files := sortableFileInfoSlice{}
 	for _, logFile := range logFiles {
-		if logFile.Details.Severity == severity && logFile.Details.Time.UnixNano() <= endTimestamp {
+		if logFile.Details.Severity == severity && logFile.Details.Time <= endTimestamp {
 			files = append(files, logFile)
 		}
 	}
