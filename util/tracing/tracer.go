@@ -141,3 +141,22 @@ func EncodeRawSpan(rawSpan *basictracer.RawSpan, dest []byte) ([]byte, error) {
 func DecodeRawSpan(enc []byte, dest *basictracer.RawSpan) error {
 	return gob.NewDecoder(bytes.NewBuffer(enc)).Decode(dest)
 }
+
+// contextTracerKeyType is an empty type for the handle associated with the
+// tracer value (see context.Value).
+type contextTracerKeyType struct{}
+
+// WithTracer returns a context derived from the given context, for which
+// TracerFromCtx returns the given tracer.
+func WithTracer(ctx context.Context, tracer opentracing.Tracer) context.Context {
+	return context.WithValue(ctx, contextTracerKeyType{}, tracer)
+}
+
+// TracerFromCtx returns the tracer set on the context (or a parent context) via
+// WithTracer.
+func TracerFromCtx(ctx context.Context) opentracing.Tracer {
+	if tracerVal := ctx.Value(contextTracerKeyType{}); tracerVal != nil {
+		return tracerVal.(opentracing.Tracer)
+	}
+	return nil
+}
