@@ -408,10 +408,7 @@ func retry(
 		timeoutCtx, _ := context.WithTimeout(ctx, timeout)
 		err := f(timeoutCtx)
 		if err != nil {
-			// TODO(tamird):
-			// s/client.ErrConnectionFailed/context.DeadlineExceeded/ when
-			// https://github.com/docker/engine-api/issues/347 is fixed.
-			if err == client.ErrConnectionFailed {
+			if err == context.DeadlineExceeded {
 				continue
 			} else if i > 0 && retryErrorsRE != matchNone {
 				if regexp.MustCompile(retryErrorsRE).MatchString(err.Error()) {
