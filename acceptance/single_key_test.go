@@ -68,7 +68,7 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 			var r result
 			for timeutil.Now().Before(deadline) {
 				start := timeutil.Now()
-				err := db.Txn(func(txn *client.Txn) error {
+				err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 					minExp := atomic.LoadInt64(&expected)
 					r, err := txn.Get(key)
 					if err != nil {

@@ -20,6 +20,8 @@ import (
 	"sync"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
@@ -214,7 +216,7 @@ func TestStoreMetrics(t *testing.T) {
 
 	// Create a transaction statement that fails, but will add an entry to the
 	// sequence cache. Regression test for #4969.
-	if err := mtc.dbs[0].Txn(func(txn *client.Txn) error {
+	if err := mtc.dbs[0].Txn(context.TODO(), func(txn *client.Txn) error {
 		b := txn.NewBatch()
 		b.CPut(dataKey, 7, 6)
 		return txn.Run(b)

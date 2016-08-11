@@ -19,6 +19,8 @@ package sql_test
 import (
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
@@ -52,7 +54,7 @@ func forceNewConfig(t *testing.T, s *server.TestServer) config.SystemConfig {
 	}
 
 	// This needs to be done in a transaction with the system trigger set.
-	if err := s.DB().Txn(func(txn *client.Txn) error {
+	if err := s.DB().Txn(context.TODO(), func(txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
 		return txn.Put(configDescKey, configDesc)
 	}); err != nil {

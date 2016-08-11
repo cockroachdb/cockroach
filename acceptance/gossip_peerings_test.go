@@ -196,7 +196,7 @@ func testGossipRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCon
 				}
 			}
 			var kv client.KeyValue
-			if err := db.Txn(func(txn *client.Txn) error {
+			if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 				var err error
 				kv, err = txn.Inc("count", 1)
 				return err
