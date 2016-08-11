@@ -145,25 +145,25 @@ TestStaticcheck() {
 # Run all the tests, wrapped in a similar output format to "go test"
 # so we can use go2xunit to generate reports in CI.
 
-failed=0
-
 runcheck() {
   local name="$1"
   shift
   echo "=== RUN $name"
-  start=$(date +%s)
+  local start=$(date +%s)
   output=$(eval "$name")
-  status=$?
-  end=$(date +%s)
-  runtime=$((end-start))
+  local status=$?
+  local end=$(date +%s)
+  local runtime=$((end-start))
   if [ $status -eq 0 ]; then
     echo "--- PASS: $name ($runtime.00s)"
   else
     echo "--- FAIL: $name ($runtime.00s)"
     echo "$output"
-    return 1
   fi
+  return $status
 }
+
+exit_status=0
 
 # "declare -F" lists all the defined functions, in the form
 # declare -f runcheck
@@ -172,20 +172,20 @@ tests=$(declare -F|cut -d' ' -f3|grep '^Test'|grep "${TESTS-.}")
 export -f runcheck
 export -f $tests
 if hash parallel 2>/dev/null; then
-    if ! parallel runcheck {} ::: $tests; then
-        failed=1
-    fi
+  parallel runcheck {} ::: $tests || exit_status=$?
 else
-    for i in $tests; do
-        if ! runcheck $i; then
-            failed=1
-        fi
-    done
+  for i in $tests; do
+    check_status=0
+    runcheck $i || check_status=$?
+    if [ $exit_status -eq 0 ]; then
+      exit_status=$check_status
+    fi
+  done
 fi
 
-if [ "$failed" = "0" ]; then
+if [ $exit_status -eq 0 ]; then
   echo "ok check-style 0.000s"
 else
   echo "FAIL check-style 0.000s"
-  exit 1
 fi
+exit $exit_status
