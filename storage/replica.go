@@ -1629,8 +1629,12 @@ func (r *Replica) handleRaftReady() error {
 		return err
 	}
 
-	// Update protected state (last index, raft log size and raft leader ID).
+	// Update protected state (last index, raft log size and raft leader
+	// ID) and set raft log entry cache. We clear any older, uncommitted
+	// log entries and cache the latest ones.
 	r.mu.Lock()
+	r.store.raftEntryCache.delEntries(r.RangeID, lastIndex+1, r.mu.lastIndex)
+	r.store.raftEntryCache.addEntries(r.RangeID, rd.Entries)
 	r.mu.lastIndex = lastIndex
 	r.mu.raftLogSize = raftLogSize
 	r.mu.leaderID = leaderID

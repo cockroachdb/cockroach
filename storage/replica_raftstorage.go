@@ -74,19 +74,17 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 // Entries implements the raft.Storage interface. Note that maxBytes is advisory
 // and this method will always return at least one entry even if it exceeds
 // maxBytes. Passing maxBytes equal to zero disables size checking.
-// TODO(bdarnell): consider caching for recent entries, if rocksdb's built in
-// caching is insufficient.
 // Entries requires that the replica lock is held.
 func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
-	return entries(context.Background(), snap, r.RangeID, lo, hi, maxBytes)
+	return entries(context.Background(), r, snap, lo, hi, maxBytes)
 }
 
 func entries(
 	ctx context.Context,
+	r *Replica,
 	e engine.Reader,
-	rangeID roachpb.RangeID,
 	lo, hi, maxBytes uint64,
 ) ([]raftpb.Entry, error) {
 	if lo > hi {
@@ -96,8 +94,20 @@ func entries(
 	// stopping once we have enough.
 	ents := make([]raftpb.Entry, 0, hi-lo)
 	size := uint64(0)
+
+	hitEnts, hitSize, hitIndex := r.store.raftEntryCache.getEntries(r.RangeID, lo, hi, maxBytes)
+	// Return results if the correct number of results came back or if
+	// we ran into the max bytes limit.
+	if uint64(len(hitEnts)) == hi-lo || (maxBytes > 0 && hitSize > maxBytes) {
+		return hitEnts, nil
+	}
+
+	ents = append(ents, hitEnts...)
+	size += hitSize
+	newLo := hitIndex
+
 	var ent raftpb.Entry
-	expectedIndex := lo
+	expectedIndex := newLo
 	exceededMaxBytes := false
 	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
 		if err := kv.Value.GetProto(&ent); err != nil {
@@ -114,9 +124,11 @@ func entries(
 		return exceededMaxBytes, nil
 	}
 
-	if err := iterateEntries(ctx, e, rangeID, lo, hi, scanFunc); err != nil {
+	if err := iterateEntries(ctx, r, e, newLo, hi, scanFunc); err != nil {
 		return nil, err
 	}
+	// Cache the fetched entries.
+	r.store.raftEntryCache.addEntries(r.RangeID, ents)
 
 	// Did the correct number of results come back? If so, we're all good.
 	if uint64(len(ents)) == hi-lo {
@@ -136,7 +148,7 @@ func entries(
 		}
 
 		// Was the missing index after the last index?
-		lastIndex, err := loadLastIndex(ctx, e, rangeID)
+		lastIndex, err := loadLastIndex(ctx, e, r.RangeID)
 		if err != nil {
 			return nil, err
 		}
@@ -149,7 +161,7 @@ func entries(
 	}
 
 	// No results, was it due to unavailability or truncation?
-	ts, err := loadTruncatedState(ctx, e, rangeID)
+	ts, err := loadTruncatedState(ctx, e, r.RangeID)
 	if err != nil {
 		return nil, err
 	}
@@ -163,16 +175,16 @@ func entries(
 
 func iterateEntries(
 	ctx context.Context,
+	r *Replica,
 	e engine.Reader,
-	rangeID roachpb.RangeID,
 	lo,
 	hi uint64,
 	scanFunc func(roachpb.KeyValue) (bool, error),
 ) error {
 	_, err := engine.MVCCIterate(
 		ctx, e,
-		keys.RaftLogKey(rangeID, lo),
-		keys.RaftLogKey(rangeID, hi),
+		keys.RaftLogKey(r.RangeID, lo),
+		keys.RaftLogKey(r.RangeID, hi),
 		hlc.ZeroTimestamp,
 		true,  /* consistent */
 		nil,   /* txn */
@@ -185,15 +197,13 @@ func iterateEntries(
 // Term implements the raft.Storage interface.
 // Term requires that the replica lock is held.
 func (r *Replica) Term(i uint64) (uint64, error) {
-	snap := r.store.NewSnapshot()
-	defer snap.Close()
-	return term(context.Background(), snap, r.RangeID, i)
+	return term(context.Background(), r, r.store.Engine(), i)
 }
 
-func term(ctx context.Context, eng engine.Reader, rangeID roachpb.RangeID, i uint64) (uint64, error) {
-	ents, err := entries(ctx, eng, rangeID, i, i+1, 0)
+func term(ctx context.Context, r *Replica, eng engine.Reader, i uint64) (uint64, error) {
+	ents, err := entries(ctx, r, eng, i, i+1, 0)
 	if err == raft.ErrCompacted {
-		ts, err := loadTruncatedState(ctx, eng, rangeID)
+		ts, err := loadTruncatedState(ctx, eng, r.RangeID)
 		if err != nil {
 			return 0, err
 		}
@@ -261,8 +271,6 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 // SnapshotWithContext is main implementation for Snapshot() but it takes a
 // context to allow tracing.
 func (r *Replica) SnapshotWithContext(ctx context.Context) (raftpb.Snapshot, error) {
-	rangeID := r.RangeID
-
 	// If a snapshot is in progress, see if it's ready.
 	if r.mu.snapshotChan != nil {
 		select {
@@ -312,7 +320,7 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (raftpb.Snapshot, err
 		// Delegate to a static function to make sure that we do not depend
 		// on any indirect calls to r.store.Engine() (or other in-memory
 		// state of the Replica). Everything must come from the snapshot.
-		snapData, err := snapshot(context.Background(), snap, rangeID, startKey)
+		snapData, err := snapshot(context.Background(), r, snap, startKey)
 		if err != nil {
 			log.Errorf(ctxInner, "%s: error generating snapshot: %s", r, err)
 		} else {
@@ -386,14 +394,14 @@ func (r *Replica) GetSnapshot(ctx context.Context) (raftpb.Snapshot, error) {
 
 func snapshot(
 	ctx context.Context,
+	r *Replica,
 	snap engine.Reader,
-	rangeID roachpb.RangeID,
 	startKey roachpb.RKey,
 ) (raftpb.Snapshot, error) {
 	start := timeutil.Now()
 	var snapData roachpb.RaftSnapshotData
 
-	truncState, err := loadTruncatedState(ctx, snap, rangeID)
+	truncState, err := loadTruncatedState(ctx, snap, r.RangeID)
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
@@ -401,7 +409,7 @@ func snapshot(
 
 	// Read the range metadata from the snapshot instead of the members
 	// of the Range struct because they might be changed concurrently.
-	appliedIndex, _, err := loadAppliedIndex(ctx, snap, rangeID)
+	appliedIndex, _, err := loadAppliedIndex(ctx, snap, r.RangeID)
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
@@ -450,7 +458,7 @@ func snapshot(
 		return false, err
 	}
 
-	if err := iterateEntries(ctx, snap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
+	if err := iterateEntries(ctx, r, snap, firstIndex, endIndex, scanFunc); err != nil {
 		return raftpb.Snapshot{}, err
 	}
 
@@ -465,13 +473,13 @@ func snapshot(
 		cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
 	}
 
-	term, err := term(ctx, snap, rangeID, appliedIndex)
+	term, err := term(ctx, r, snap, appliedIndex)
 	if err != nil {
 		return raftpb.Snapshot{}, errors.Errorf("failed to fetch term of %d: %s", appliedIndex, err)
 	}
 
 	log.Infof(ctx, "generated snapshot for range %s at index %d in %s. encoded size=%d, %d KV pairs, %d log entries",
-		rangeID, appliedIndex, timeutil.Since(start), len(data), len(snapData.KV), len(snapData.LogEntries))
+		r.RangeID, appliedIndex, timeutil.Since(start), len(data), len(snapData.KV), len(snapData.LogEntries))
 
 	return raftpb.Snapshot{
 		Data: data,
