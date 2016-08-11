@@ -114,26 +114,34 @@ type TxnMetrics struct {
 	Restarts *metric.Histogram
 }
 
-const (
-	abortsPrefix     = "txn.aborts"
-	commitsPrefix    = "txn.commits"
-	commits1PCPrefix = "txn.commits1PC"
-	abandonsPrefix   = "txn.abandons"
-	durationsPrefix  = "txn.durations"
-	restartsKey      = "txn.restarts"
+var (
+	metaAbortsPrefix     = metric.MetricMetadata{"txn.aborts", ""}
+	metaCommitsPrefix    = metric.MetricMetadata{"txn.commits", ""}
+	metaCommits1PCPrefix = metric.MetricMetadata{"txn.commits1PC", ""}
+	metaAbandonsPrefix   = metric.MetricMetadata{"txn.abandons", ""}
+	metaDurationsPrefix  = metric.MetricMetadata{"txn.durations", ""}
+	metaRestartsKey      = metric.MetricMetadata{"txn.restarts", ""}
 )
 
 // NewTxnMetrics returns a new instance of txnMetrics that contains metrics which have
 // been registered with the provided Registry.
 func NewTxnMetrics(registry *metric.Registry) *TxnMetrics {
-	return &TxnMetrics{
-		Aborts:     registry.Rates(abortsPrefix),
-		Commits:    registry.Rates(commitsPrefix),
-		Commits1PC: registry.Rates(commits1PCPrefix),
-		Abandons:   registry.Rates(abandonsPrefix),
-		Durations:  registry.Latency(durationsPrefix),
-		Restarts:   registry.Histogram(restartsKey, 60*time.Second, 100, 3),
+	tm := &TxnMetrics{
+		Aborts:     metric.NewRates(metaAbortsPrefix),
+		Commits:    metric.NewRates(metaCommitsPrefix),
+		Commits1PC: metric.NewRates(metaCommits1PCPrefix),
+		Abandons:   metric.NewRates(metaAbandonsPrefix),
+		Durations:  metric.NewLatency(metaDurationsPrefix),
+		Restarts:   metric.NewHistogram(metaRestartsKey, 60*time.Second, 100, 3),
 	}
+	registry.AddMetricGroup(tm.Aborts)
+	registry.AddMetricGroup(tm.Commits)
+	registry.AddMetricGroup(tm.Commits1PC)
+	registry.AddMetricGroup(tm.Abandons)
+	registry.AddMetricGroup(tm.Durations)
+	registry.AddMetric(tm.Restarts)
+
+	return tm
 }
 
 // A TxnCoordSender is an implementation of client.Sender which

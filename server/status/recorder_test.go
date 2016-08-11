@@ -257,16 +257,24 @@ func TestMetricsRecorder(t *testing.T) {
 		for _, data := range metricNames {
 			switch data.typ {
 			case "gauge":
-				reg.reg.Gauge(reg.prefix + data.name).Update(data.val)
+				g := metric.NewGauge(metric.MetricMetadata{reg.prefix + data.name, ""})
+				reg.reg.AddMetric(g)
+				g.Update(data.val)
 				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
 			case "floatgauge":
-				reg.reg.GaugeFloat64(reg.prefix + data.name).Update(float64(data.val))
+				g := metric.NewGaugeFloat64(metric.MetricMetadata{reg.prefix + data.name, ""})
+				reg.reg.AddMetric(g)
+				g.Update(float64(data.val))
 				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
 			case "counter":
-				reg.reg.Counter(reg.prefix + data.name).Inc(data.val)
+				c := metric.NewCounter(metric.MetricMetadata{reg.prefix + data.name, ""})
+				reg.reg.AddMetric(c)
+				c.Inc((data.val))
 				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
 			case "rate":
-				reg.reg.Rates(reg.prefix + data.name).Add(data.val)
+				r := metric.NewRates(metric.MetricMetadata{reg.prefix + data.name, ""})
+				reg.reg.AddMetricGroup(r)
+				r.Add(data.val)
 				addExpected(reg.prefix, data.name+"-count", reg.source, 100, data.val, reg.isNode)
 				for _, scale := range metric.DefaultTimeScales {
 					// Rate data is subject to timing errors in tests. Zero out
@@ -274,12 +282,16 @@ func TestMetricsRecorder(t *testing.T) {
 					addExpected(reg.prefix, data.name+sep+scale.Name(), reg.source, 100, 0, reg.isNode)
 				}
 			case "histogram":
-				reg.reg.Histogram(reg.prefix+data.name, time.Second, 1000, 2).RecordValue(data.val)
+				h := metric.NewHistogram(metric.MetricMetadata{reg.prefix + data.name, ""}, time.Second, 1000, 2)
+				reg.reg.AddMetric(h)
+				h.RecordValue(data.val)
 				for _, q := range recordHistogramQuantiles {
 					addExpected(reg.prefix, data.name+q.suffix, reg.source, 100, data.val, reg.isNode)
 				}
 			case "latency":
-				reg.reg.Latency(reg.prefix + data.name).RecordValue(data.val)
+				l := metric.NewLatency(metric.MetricMetadata{reg.prefix + data.name, ""})
+				reg.reg.AddMetricGroup(l)
+				l.RecordValue(data.val)
 				// Latency is simply three histograms (at different resolution
 				// time scales).
 				for _, scale := range metric.DefaultTimeScales {

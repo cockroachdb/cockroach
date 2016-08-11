@@ -117,13 +117,13 @@ const (
 )
 
 // Gossip metrics counter names.
-const (
-	ConnectionsIncomingGaugeName = "gossip.connections.incoming"
-	ConnectionsOutgoingGaugeName = "gossip.connections.outgoing"
-	InfosSentRatesName           = "gossip.infos.sent"
-	InfosReceivedRatesName       = "gossip.infos.received"
-	BytesSentRatesName           = "gossip.bytes.sent"
-	BytesReceivedRatesName       = "gossip.bytes.received"
+var (
+	MetaConnectionsIncomingGauge = metric.MetricMetadata{"gossip.connections.incoming", ""}
+	MetaConnectionsOutgoingGauge = metric.MetricMetadata{"gossip.connections.outgoing", ""}
+	MetaInfosSentRates           = metric.MetricMetadata{"gossip.infos.sent", ""}
+	MetaInfosReceivedRates       = metric.MetricMetadata{"gossip.infos.received", ""}
+	MetaBytesSentRates           = metric.MetricMetadata{"gossip.bytes.sent", ""}
+	MetaBytesReceivedRates       = metric.MetricMetadata{"gossip.bytes.received", ""}
 )
 
 // Storage is an interface which allows the gossip instance
@@ -196,7 +196,7 @@ func New(rpcContext *rpc.Context, grpcServer *grpc.Server, resolvers []resolver.
 		Connected:         make(chan struct{}),
 		rpcContext:        rpcContext,
 		server:            newServer(stopper, registry),
-		outgoing:          makeNodeSet(minPeers, registry.Gauge(ConnectionsOutgoingGaugeName)),
+		outgoing:          makeNodeSet(minPeers, metric.NewGauge(MetaConnectionsOutgoingGauge)),
 		bootstrapping:     map[string]struct{}{},
 		disconnected:      make(chan *client, 10),
 		stalledCh:         make(chan struct{}, 1),
@@ -207,6 +207,7 @@ func New(rpcContext *rpc.Context, grpcServer *grpc.Server, resolvers []resolver.
 		resolverAddrs:     map[util.UnresolvedAddr]resolver.Resolver{},
 		bootstrapAddrs:    map[util.UnresolvedAddr]struct{}{},
 	}
+	registry.AddMetric(g.outgoing.gauge)
 	g.SetResolvers(resolvers)
 
 	// Add ourselves as a SystemConfig watcher.
@@ -1092,13 +1093,12 @@ func (m metrics) String() string {
 		m.infosSent.Count(), m.infosReceived.Count(), m.bytesSent.Count(), m.bytesReceived.Count())
 }
 
-// makeMetrics makes a new metrics object with rates set on the provided
-// registry.
-func makeMetrics(registry *metric.Registry) metrics {
+// makeMetrics makes a new metrics object with rates.
+func makeMetrics() metrics {
 	return metrics{
-		bytesReceived: registry.Rates(BytesReceivedRatesName),
-		bytesSent:     registry.Rates(BytesSentRatesName),
-		infosReceived: registry.Rates(InfosReceivedRatesName),
-		infosSent:     registry.Rates(InfosSentRatesName),
+		bytesReceived: metric.NewRates(MetaBytesReceivedRates),
+		bytesSent:     metric.NewRates(MetaBytesSentRates),
+		infosReceived: metric.NewRates(MetaInfosReceivedRates),
+		infosSent:     metric.NewRates(MetaInfosSentRates),
 	}
 }

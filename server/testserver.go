@@ -326,7 +326,7 @@ func (ts *TestServer) MustGetSQLCounter(name string) int64 {
 	var c int64
 	var found bool
 
-	ts.sqlExecutor.Registry().Each(func(n string, v interface{}) {
+	ts.registry.Each(func(n string, v interface{}) {
 		if name == n {
 			c = v.(*metric.Counter).Count()
 			found = true

@@ -18,11 +18,8 @@ package metric
 
 import (
 	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"regexp"
-	"time"
 
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/gogo/protobuf/proto"
@@ -32,62 +29,66 @@ import (
 
 const sep = "-"
 
-// DefaultTimeScales are the durations used for helpers which create windowed
-// metrics in bulk (such as Latency or Rates).
-var DefaultTimeScales = []TimeScale{Scale1M, Scale10M, Scale1H}
-
-// A Registry bundles up various iterables (i.e. typically metrics or other
-// registries) to provide a single point of access to them.
+// A Registry is a list of metrics. It provides a simple way of iterating over
+// them, can marshal into JSON, and generate a prometheus format.
 //
-// A Registry can be added to another Registry through the Add/MustAdd methods. This allows a
-// hierarchy of Registry instances to be created.
+// A registry can have label pairs that will be applied to all its metrics
+// when exported to prometheus.
 type Registry struct {
 	syncutil.Mutex
+	labels  []*prometheusgo.LabelPair
 	tracked map[string]Iterable
 }
 
 // NewRegistry creates a new Registry.
 func NewRegistry() *Registry {
 	return &Registry{
+		labels:  []*prometheusgo.LabelPair{},
 		tracked: map[string]Iterable{},
 	}
 }
 
-// Add links the given Iterable into this registry using the given format
-// string. The individual items in the registry will be formatted via
-// fmt.Sprintf(format, <name>). As a special case, *Registry implements
-// Iterable and can thus be added.
-// Metric types in this package have helpers that allow them to be created
-// and registered in a single step. Add is called manually only when adding
-// a registry to another, or when integrating metrics defined elsewhere.
-func (r *Registry) Add(format string, item Iterable) error {
+// AddLabel adds a label/value pair for this registry.
+func (r *Registry) AddLabel(name, value string) {
 	r.Lock()
 	defer r.Unlock()
-	if _, ok := r.tracked[format]; ok {
-		return errors.New("format string already in use")
-	}
-	r.tracked[format] = item
-	return nil
+	r.labels = append(r.labels,
+		&prometheusgo.LabelPair{
+			Name:  proto.String(name),
+			Value: proto.String(value),
+		})
 }
 
-// MustAdd calls Add and panics on error.
-func (r *Registry) MustAdd(format string, item Iterable) {
-	if err := r.Add(format, item); err != nil {
-		panic(fmt.Sprintf("error adding %s: %s", format, err))
-	}
+func (r *Registry) getLabels() []*prometheusgo.LabelPair {
+	r.Lock()
+	defer r.Unlock()
+	return r.labels
+}
+
+// AddMetric adds the passed-in metric to the registry.
+func (r *Registry) AddMetric(metric Iterable) {
+	r.Lock()
+	defer r.Unlock()
+	r.tracked[metric.GetName()] = metric
+}
+
+// AddMetricGroup expands the metric group and adds all of them
+// as individual metrics to the registry.
+func (r *Registry) AddMetricGroup(group metricGroup) {
+	r.Lock()
+	defer r.Unlock()
+	group.iterate(func(metric Iterable) {
+		r.tracked[metric.GetName()] = metric
+	})
 }
 
 // Each calls the given closure for all metrics.
 func (r *Registry) Each(f func(name string, val interface{})) {
 	r.Lock()
 	defer r.Unlock()
-	for format, registry := range r.tracked {
-		registry.Each(func(name string, v interface{}) {
-			if name == "" {
-				f(format, v)
-			} else {
-				f(fmt.Sprintf(format, name), v)
-			}
+	for _, metric := range r.tracked {
+		metric.Inspect(func(v interface{}) {
+			f(metric.GetName(), v)
 		})
 	}
 }
@@ -95,9 +96,11 @@ func (r *Registry) Each(f func(name string, val interface{})) {
 // MarshalJSON marshals to JSON.
 func (r *Registry) MarshalJSON() ([]byte, error) {
 	m := make(map[string]interface{})
-	r.Each(func(name string, v interface{}) {
-		m[name] = v
-	})
+	for _, metric := range r.tracked {
+		metric.Inspect(func(v interface{}) {
+			m[metric.GetName()] = v
+		})
+	}
 	return json.Marshal(m)
 }
 
@@ -115,53 +118,30 @@ func exportedName(name string) string {
 func (r *Registry) PrintAsText(w io.Writer) error {
 	var metricFamily prometheusgo.MetricFamily
 	var ret error
-	r.Each(func(name string, v interface{}) {
-		if ret != nil {
-			return
-		}
-		if metric, ok := v.(PrometheusExportable); ok {
-			metricFamily.Reset()
-			metricFamily.Name = proto.String(exportedName(name))
-			metric.FillPrometheusMetric(&metricFamily)
-			if _, err := expfmt.MetricFamilyToText(w, &metricFamily); err != nil {
-				ret = err
+	labels := r.getLabels()
+	for _, metric := range r.tracked {
+		metric.Inspect(func(v interface{}) {
+			if ret != nil {
+				return
 			}
-		}
-	})
-	return ret
-}
-
-// Histogram registers a new windowed HDRHistogram with the given parameters.
-// Data is kept in the active window for approximately the given duration.
-func (r *Registry) Histogram(name string, duration time.Duration, maxVal int64,
-	sigFigs int) *Histogram {
-	h := NewHistogram(duration, maxVal, sigFigs)
-	r.MustAdd(name, h)
-	return h
-}
-
-// Latency is a convenience function which registers histograms with
-// suitable defaults for latency tracking. Values are expressed in ns,
-// are truncated into the interval [0, time.Minute] and are recorded
-// with two digits of precision (i.e. errors of <1ms at 100ms, <.6s at 1m).
-// The generated names of the metric will begin with the given prefix.
-//
-// TODO(mrtracy,tschottdorf): need to discuss roll-ups and generally how (and
-// which) information flows between metrics and time series.
-func (r *Registry) Latency(prefix string) Histograms {
-	windows := DefaultTimeScales
-	hs := make(Histograms)
-	for _, w := range windows {
-		hs[w] = r.Histogram(prefix+sep+w.name, w.d, int64(time.Minute), 2)
+			if prom, ok := v.(PrometheusExportable); ok {
+				metricFamily.Reset()
+				metricFamily.Name = proto.String(exportedName(metric.GetName()))
+				metricFamily.Help = proto.String(exportedName(metric.GetHelp()))
+				prom.FillPrometheusMetric(&metricFamily)
+				if len(labels) != 0 {
+					// Set labels. We only set one metric in the slice, but loop anyway.
+					for _, m := range metricFamily.Metric {
+						m.Label = labels
+					}
+				}
+				if _, err := expfmt.MetricFamilyToText(w, &metricFamily); err != nil {
+					ret = err
+				}
+			}
+		})
 	}
-	return hs
-}
-
-// Counter registers new counter to the registry.
-func (r *Registry) Counter(name string) *Counter {
-	c := NewCounter()
-	r.MustAdd(name, c)
-	return c
+	return ret
 }
 
 // GetCounter returns the Counter in this registry with the given name. If a
@@ -181,13 +161,6 @@ func (r *Registry) GetCounter(name string) *Counter {
 	return counter
 }
 
-// Gauge registers a new Gauge with the given name.
-func (r *Registry) Gauge(name string) *Gauge {
-	g := NewGauge()
-	r.MustAdd(name, g)
-	return g
-}
-
 // GetGauge returns the Gauge in this registry with the given name. If a Gauge
 // with this name is not present (including if a non-Gauge Iterable is
 // registered with the name), nil is returned.
@@ -205,21 +178,6 @@ func (r *Registry) GetGauge(name string) *Gauge {
 	return gauge
 }
 
-// GaugeFloat64 registers a new GaugeFloat64 with the given name.
-func (r *Registry) GaugeFloat64(name string) *GaugeFloat64 {
-	g := NewGaugeFloat64()
-	r.MustAdd(name, g)
-	return g
-}
-
-// Rate creates an EWMA rate over the given timescale. The comments on NewRate
-// apply.
-func (r *Registry) Rate(name string, timescale time.Duration) *Rate {
-	e := NewRate(timescale)
-	r.MustAdd(name, e)
-	return e
-}
-
 // GetRate returns the Rate in this registry with the given name. If a Rate with
 // this name is not present (including if a non-Rate Iterable is registered with
 // the name), nil is returned.
@@ -235,16 +193,4 @@ func (r *Registry) GetRate(name string) *Rate {
 		return nil
 	}
 	return rate
-}
-
-// Rates registers and returns a new Rates instance, which contains a set of EWMA-based rates
-// with generally useful time scales and a cumulative counter.
-func (r *Registry) Rates(prefix string) Rates {
-	scales := DefaultTimeScales
-	es := make(map[TimeScale]*Rate)
-	for _, scale := range scales {
-		es[scale] = r.Rate(prefix+sep+scale.name, scale.d)
-	}
-	c := r.Counter(prefix + sep + "count")
-	return Rates{Counter: c, Rates: es}
 }
