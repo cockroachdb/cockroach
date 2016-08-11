@@ -77,11 +77,11 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 	}
 	cfg, cache := e.getSystemConfig()
 	s.planner = planner{
-		leaseMgr:      e.ctx.LeaseManager,
+		leaseMgr:      e.cfg.LeaseManager,
 		systemConfig:  cfg,
 		databaseCache: cache,
 		session:       s,
-		execCtx:       &e.ctx,
+		execCfg:       &e.cfg,
 	}
 	s.PreparedStatements = makePreparedStatements(s)
 	s.PreparedPortals = makePreparedPortals(s)
@@ -181,7 +181,7 @@ type txnState struct {
 // reset creates a new Txn and initializes it using the session defaults.
 func (ts *txnState) reset(ctx context.Context, e *Executor, s *Session) {
 	*ts = txnState{}
-	ts.txn = client.NewTxn(ctx, *e.ctx.DB)
+	ts.txn = client.NewTxn(ctx, *e.cfg.DB)
 	ts.txn.Context = s.context
 	ts.txn.Proto.Isolation = s.DefaultIsolationLevel
 	ts.tr = s.Trace
@@ -301,24 +301,24 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 	}
 	// Release the leases once a transaction is complete.
 	planMaker.releaseLeases()
-	if e.ctx.TestingKnobs.SyncSchemaChangersFilter != nil {
-		e.ctx.TestingKnobs.SyncSchemaChangersFilter(TestingSchemaChangerCollection{scc})
+	if e.cfg.TestingKnobs.SyncSchemaChangersFilter != nil {
+		e.cfg.TestingKnobs.SyncSchemaChangersFilter(TestingSchemaChangerCollection{scc})
 	}
 	// Execute any schema changes that were scheduled, in the order of the
 	// statements that scheduled them.
 	for _, scEntry := range scc.schemaChangers {
 		sc := &scEntry.sc
-		sc.db = *e.ctx.DB
+		sc.db = *e.cfg.DB
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 			if done, err := sc.IsDone(); err != nil {
-				log.Warning(e.ctx.Context, err)
+				log.Warning(e.cfg.Context, err)
 				break
 			} else if done {
 				break
 			}
 			if err := sc.exec(
-				e.ctx.TestingKnobs.SchemaChangersStartBackfillNotification,
-				e.ctx.TestingKnobs.SyncSchemaChangersRenameOldNameNotInUseNotification,
+				e.cfg.TestingKnobs.SchemaChangersStartBackfillNotification,
+				e.cfg.TestingKnobs.SyncSchemaChangersRenameOldNameNotInUseNotification,
 			); err != nil {
 				if isSchemaChangeRetryError(err) {
 					// Try again
@@ -335,7 +335,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 				if scEntry.epoch == scc.curGroupNum {
 					results[scEntry.idx] = Result{Err: err}
 				}
-				log.Warningf(e.ctx.Context, "Error executing schema change: %s", err)
+				log.Warningf(e.cfg.Context, "Error executing schema change: %s", err)
 			}
 			break
 		}

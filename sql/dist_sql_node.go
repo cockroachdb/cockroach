@@ -216,7 +216,7 @@ func scanNodeToDistSQL(n *scanNode, syncMode bool) (*distSQLNode, error) {
 	}
 
 	return newDistSQLNode(
-		n.resultColumns, tr.OutputColumns, n.ordering, n.p.execCtx.DistSQLSrv, &req, syncMode)
+		n.resultColumns, tr.OutputColumns, n.ordering, n.p.execCfg.DistSQLSrv, &req, syncMode)
 }
 
 // hackPlanToUseDistSQL goes through a planNode tree and replaces each scanNode with
