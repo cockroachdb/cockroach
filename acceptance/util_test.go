@@ -96,20 +96,16 @@ var flagTFReuseCluster = flag.String("reuse", "",
 )
 
 var flagTFKeepCluster = keepClusterVar(terrafarm.KeepClusterNever) // see init()
+var flagTFCockroachBinary = flag.String("tf.cockroach-binary", "",
+	"path to custom CockroachDB binary to use for allocator tests")
+var flagTFCockroachFlags = flag.String("tf.cockroach-flags", "",
+	"command-line flags to pass to cockroach for allocator tests")
+var flagTFCockroachEnv = flag.String("tf.cockroach-env", "",
+	"supervisor-style environment variables to pass to cockroach")
+var flagTFDiskType = flag.String("tf.disk-type", "pd-standard",
+	"type of disk (either 'pd-standard' for spinny disk, or 'pd-ssd' for SSD)")
 
 // Allocator test flags.
-//
-// TODO(cuongdo): These should be refactored so that they're not allocator
-// test-specific when we have more than one kind of system test that uses these
-// flags.
-var flagATCockroachBinary = flag.String("at.cockroach-binary", "",
-	"path to custom CockroachDB binary to use for allocator tests")
-var flagATCockroachFlags = flag.String("at.cockroach-flags", "",
-	"command-line flags to pass to cockroach for allocator tests")
-var flagATCockroachEnv = flag.String("at.cockroach-env", "",
-	"supervisor-style environment variables to pass to cockroach")
-var flagATDiskType = flag.String("at.disk-type", "pd-standard",
-	"type of disk (either 'pd-standard' for spinny disk, or 'pd-ssd' for SSD)")
 var flagATMaxStdDev = flag.Float64("at.std-dev", 10,
 	"maximum standard deviation of replica counts")
 
@@ -181,6 +177,19 @@ func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 		stores += " --store=/mnt/data" + strconv.Itoa(j)
 	}
 
+	// Pass variables to be passed to the Terraform config.
+	terraformVars := make(map[string]string)
+	if *flagTFCockroachBinary != "" {
+		terraformVars["cockroach_binary"] = *flagTFCockroachBinary
+	}
+	if *flagTFCockroachFlags != "" {
+		terraformVars["cockroach_flags"] = *flagTFCockroachFlags
+	}
+	if *flagTFCockroachEnv != "" {
+		terraformVars["cockroach_env"] = *flagTFCockroachEnv
+	}
+	terraformVars["cockroach_disk_type"] = *flagTFDiskType
+
 	var name string
 	if *flagTFReuseCluster == "" {
 		// We concatenate a random name to the prefix (for Terraform resource
@@ -222,7 +231,7 @@ func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 		Stores:      stores,
 		Prefix:      name,
 		StateFile:   name + ".tfstate",
-		AddVars:     make(map[string]string),
+		AddVars:     terraformVars,
 		KeepCluster: flagTFKeepCluster.String(),
 	}
 	log.Infof(context.Background(), "logging to %s", logDir)
