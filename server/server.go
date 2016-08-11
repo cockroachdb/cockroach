@@ -33,7 +33,6 @@ import (
 
 	"github.com/elazarl/go-bindata-assetfs"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 
@@ -74,7 +73,6 @@ var (
 
 // Server is the cockroach server node.
 type Server struct {
-	Tracer        opentracing.Tracer
 	ctx           Context
 	mux           *http.ServeMux
 	clock         *hlc.Clock
@@ -102,32 +100,41 @@ type Server struct {
 }
 
 // NewServer creates a Server from a server.Context.
-func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
-	if _, err := net.ResolveTCPAddr("tcp", ctx.Addr); err != nil {
-		return nil, errors.Errorf("unable to resolve RPC address %q: %v", ctx.Addr, err)
+func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
+	if _, err := net.ResolveTCPAddr("tcp", srvCtx.Addr); err != nil {
+		return nil, errors.Errorf("unable to resolve RPC address %q: %v", srvCtx.Addr, err)
 	}
 
-	if ctx.Insecure {
+	if srvCtx.Ctx == nil {
+		// TODO(radu): we should make sure the callers set this explicitly instead.
+		srvCtx.Ctx = context.Background()
+	}
+	tracer := tracing.TracerFromCtx(srvCtx.Ctx)
+	if tracer == nil {
+		tracer = tracing.NewTracer()
+		srvCtx.Ctx = tracing.WithTracer(srvCtx.Ctx, tracer)
+	}
+
+	if srvCtx.Insecure {
 		log.Warning(context.TODO(), "running in insecure mode, this is strongly discouraged. See --insecure.")
 	}
 	// Try loading the TLS configs before anything else.
-	if _, err := ctx.GetServerTLSConfig(); err != nil {
+	if _, err := srvCtx.GetServerTLSConfig(); err != nil {
 		return nil, err
 	}
-	if _, err := ctx.GetClientTLSConfig(); err != nil {
+	if _, err := srvCtx.GetClientTLSConfig(); err != nil {
 		return nil, err
 	}
 
 	s := &Server{
-		Tracer:  tracing.NewTracer(),
-		ctx:     ctx,
+		ctx:     srvCtx,
 		mux:     http.NewServeMux(),
 		clock:   hlc.NewClock(hlc.UnixNano),
 		stopper: stopper,
 	}
-	s.clock.SetMaxOffset(ctx.MaxOffset)
+	s.clock.SetMaxOffset(srvCtx.MaxOffset)
 
-	s.rpcContext = rpc.NewContext(ctx.Context, s.clock, s.stopper)
+	s.rpcContext = rpc.NewContext(srvCtx.Context, s.clock, s.stopper)
 	s.rpcContext.HeartbeatCB = func() {
 		if err := s.rpcContext.RemoteClocks.VerifyClockOffset(); err != nil {
 			log.Fatal(context.TODO(), err)
@@ -141,8 +148,8 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 		s.gossip,
 		s.clock,
 		s.rpcContext,
-		ctx.ReservationsEnabled,
-		ctx.TimeUntilStoreDead,
+		srvCtx.ReservationsEnabled,
+		srvCtx.TimeUntilStoreDead,
 		s.stopper,
 	)
 
@@ -166,7 +173,7 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 	}, s.gossip)
 	txnMetrics := kv.MakeTxnMetrics()
 	s.registry.AddMetricStruct(txnMetrics)
-	sender := kv.NewTxnCoordSender(s.distSender, s.clock, ctx.Linearizable, s.Tracer,
+	sender := kv.NewTxnCoordSender(s.distSender, s.clock, srvCtx.Linearizable, tracer,
 		s.stopper, txnMetrics)
 	s.db = client.NewDB(sender)
 
@@ -177,8 +184,8 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 
 	// Set up Lease Manager
 	var lmKnobs sql.LeaseManagerTestingKnobs
-	if ctx.TestingKnobs.SQLLeaseManager != nil {
-		lmKnobs = *ctx.TestingKnobs.SQLLeaseManager.(*sql.LeaseManagerTestingKnobs)
+	if srvCtx.TestingKnobs.SQLLeaseManager != nil {
+		lmKnobs = *srvCtx.TestingKnobs.SQLLeaseManager.(*sql.LeaseManagerTestingKnobs)
 	}
 	s.leaseMgr = sql.NewLeaseManager(0, *s.db, s.clock, lmKnobs, s.stopper)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
@@ -201,8 +208,8 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 		Clock:        s.clock,
 		DistSQLSrv:   s.distSQLServer,
 	}
-	if ctx.TestingKnobs.SQLExecutor != nil {
-		execCfg.TestingKnobs = ctx.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
+	if srvCtx.TestingKnobs.SQLExecutor != nil {
+		execCfg.TestingKnobs = srvCtx.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
 	} else {
 		execCfg.TestingKnobs = &sql.ExecutorTestingKnobs{}
 	}
@@ -224,7 +231,7 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 		ScanMaxIdleTime:                s.ctx.ScanMaxIdleTime,
 		ConsistencyCheckInterval:       s.ctx.ConsistencyCheckInterval,
 		ConsistencyCheckPanicOnFailure: s.ctx.ConsistencyCheckPanicOnFailure,
-		Tracer:    s.Tracer,
+		Tracer:    tracer,
 		StorePool: s.storePool,
 		SQLExecutor: sql.InternalExecutor{
 			LeaseManager: s.leaseMgr,
@@ -234,8 +241,8 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 			AllowRebalance: true,
 		},
 	}
-	if ctx.TestingKnobs.Store != nil {
-		nCtx.TestingKnobs = *ctx.TestingKnobs.Store.(*storage.StoreTestingKnobs)
+	if srvCtx.TestingKnobs.Store != nil {
+		nCtx.TestingKnobs = *srvCtx.TestingKnobs.Store.(*storage.StoreTestingKnobs)
 	}
 
 	s.recorder = status.NewMetricsRecorder(s.clock)

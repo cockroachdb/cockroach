@@ -160,6 +160,9 @@ type Context struct {
 
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
+
+	// Ctx is the base context.Context for the server.
+	Ctx context.Context
 }
 
 // GetTotalMemory returns either the total system memory or if possible the
