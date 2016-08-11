@@ -113,9 +113,9 @@ var _ client.Sender = &DistSender{}
 type rpcSendFn func(SendOptions, ReplicaSlice,
 	roachpb.BatchRequest, *rpc.Context) (*roachpb.BatchResponse, error)
 
-// DistSenderContext holds auxiliary objects that can be passed to
-// NewDistSender.
-type DistSenderContext struct {
+// DistSenderConfig holds configuration and auxiliary objects that can be passed
+// to NewDistSender.
+type DistSenderConfig struct {
 	Clock                    *hlc.Clock
 	RangeDescriptorCacheSize int32
 	// RangeLookupMaxRanges sets how many ranges will be prefetched into the
@@ -140,11 +140,11 @@ type DistSenderContext struct {
 // Cockroach cluster via the supplied gossip instance. Supplying a
 // DistSenderContext or the fields within is optional. For omitted values, sane
 // defaults will be used.
-func NewDistSender(ctx *DistSenderContext, g *gossip.Gossip) *DistSender {
-	if ctx == nil {
-		ctx = &DistSenderContext{}
+func NewDistSender(cfg *DistSenderConfig, g *gossip.Gossip) *DistSender {
+	if cfg == nil {
+		cfg = &DistSenderConfig{}
 	}
-	clock := ctx.Clock
+	clock := cfg.Clock
 	if clock == nil {
 		clock = hlc.NewClock(hlc.UnixNano)
 	}
@@ -152,46 +152,46 @@ func NewDistSender(ctx *DistSenderContext, g *gossip.Gossip) *DistSender {
 		clock:  clock,
 		gossip: g,
 	}
-	if ctx.nodeDescriptor != nil {
-		atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(ctx.nodeDescriptor))
+	if cfg.nodeDescriptor != nil {
+		atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(cfg.nodeDescriptor))
 	}
-	rcSize := ctx.RangeDescriptorCacheSize
+	rcSize := cfg.RangeDescriptorCacheSize
 	if rcSize <= 0 {
 		rcSize = defaultRangeDescriptorCacheSize
 	}
-	rdb := ctx.RangeDescriptorDB
+	rdb := cfg.RangeDescriptorDB
 	if rdb == nil {
 		rdb = ds
 	}
 	ds.rangeCache = newRangeDescriptorCache(rdb, int(rcSize))
-	lcSize := ctx.LeaseHolderCacheSize
+	lcSize := cfg.LeaseHolderCacheSize
 	if lcSize <= 0 {
 		lcSize = defaultLeaseHolderCacheSize
 	}
 	ds.leaseHolderCache = newLeaseHolderCache(int(lcSize))
-	if ctx.RangeLookupMaxRanges <= 0 {
+	if cfg.RangeLookupMaxRanges <= 0 {
 		ds.rangeLookupMaxRanges = defaultRangeLookupMaxRanges
 	}
-	if ctx.TransportFactory != nil {
-		ds.transportFactory = ctx.TransportFactory
+	if cfg.TransportFactory != nil {
+		ds.transportFactory = cfg.TransportFactory
 	}
 	ds.rpcRetryOptions = base.DefaultRetryOptions()
-	if ctx.RPCRetryOptions != nil {
-		ds.rpcRetryOptions = *ctx.RPCRetryOptions
+	if cfg.RPCRetryOptions != nil {
+		ds.rpcRetryOptions = *cfg.RPCRetryOptions
 	}
-	if ctx.RPCContext != nil {
-		ds.rpcContext = ctx.RPCContext
+	if cfg.RPCContext != nil {
+		ds.rpcContext = cfg.RPCContext
 		if ds.rpcRetryOptions.Closer == nil {
 			ds.rpcRetryOptions.Closer = ds.rpcContext.Stopper.ShouldQuiesce()
 		}
 	}
-	if ctx.Tracer != nil {
-		ds.Tracer = ctx.Tracer
+	if cfg.Tracer != nil {
+		ds.Tracer = cfg.Tracer
 	} else {
 		ds.Tracer = tracing.NewTracer()
 	}
-	if ctx.SendNextTimeout != 0 {
-		ds.sendNextTimeout = ctx.SendNextTimeout
+	if cfg.SendNextTimeout != 0 {
+		ds.sendNextTimeout = cfg.SendNextTimeout
 	} else {
 		ds.sendNextTimeout = defaultSendNextTimeout
 	}
