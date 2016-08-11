@@ -108,8 +108,7 @@ message OutputRouterSpec {
     // single output stream).
     MIRROR = 0;
     // Each row is sent to one stream, chosen by hashing certain columns of
-    // the row. TODO(radu): an extra optional structure below for the hashing
-    // details.
+    // the row (specified by the hash_columns field).
     BY_HASH = 1;
     // Each row is sent to one stream, chosen according to preset boundaries
     // for the values of certain columns of the row. TODO(radu): an extra
@@ -118,6 +117,10 @@ message OutputRouterSpec {
   }
   optional Type type = 1 [(gogoproto.nullable) = false];
   repeated StreamEndpointSpec streams = 2 [(gogoproto.nullable) = false];
+
+  // Only used for the BY_HASH type; these are the indexes of the columns we are
+  // hashing.
+  repeated uint32 hash_columns = 3 [(gogoproto.nullable) = false];
 }
 
 message DatumInfo {
