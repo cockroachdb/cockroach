@@ -22,7 +22,7 @@ serverurl=http://127.0.0.1:9001 ; use an http:// url to specify an inet socket
 
 [program:cockroach]
 directory=%(here)s
-command=%(here)s/cockroach start --alsologtostderr=true ${stores} --insecure --join=${join_address} --verbosity=1 ${cockroach_flags}
+command=%(here)s/cockroach start --logtostderr=true ${stores} --insecure --join=${join_address} --cache=2GiB ${cockroach_flags}
 process_name=%(program_name)s
 numprocs=1
 autostart=false
@@ -36,7 +36,7 @@ environment=${cockroach_env}
 
 [program:block_writer]
 directory=%(here)s
-command=%(here)s/block_writer -concurrency 10 -min-block-bytes=16384 -max-block-bytes=65535 --tolerate-errors -benchmark-name ${benchmark_name} 'postgres://root@$localhost:${cockroach_port}/?sslmode=disable'
+command=%(here)s/block_writer --concurrency 5 --tolerate-errors -benchmark-name ${benchmark_name} 'postgres://root@$localhost:${cockroach_port}/?sslmode=disable'
 process_name=%(program_name)s
 numprocs=1
 autostart=false
@@ -48,7 +48,7 @@ stdout_logfile=%(here)s/logs/%(program_name)s.stdout
 
 [program:photos]
 directory=%(here)s
-command=%(here)s/photos --users 3 --benchmark-name ${benchmark_name} --db postgres://root@localhost:${cockroach_port}/photos?sslmode=disable
+command=%(here)s/photos --users 1 --benchmark-name ${benchmark_name} --db postgres://root@localhost:${cockroach_port}/photos?sslmode=disable
 process_name=%(program_name)s
 numprocs=1
 autostart=false
