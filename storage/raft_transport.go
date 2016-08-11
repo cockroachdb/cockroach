@@ -52,8 +52,8 @@ const (
 // arguments to RaftTransport.Listen. If either method returns an
 // error the stream will be shut down.
 type RaftMessageHandler interface {
-	HandleRaftRequest(*RaftMessageRequest) error
-	HandleRaftResponse(*RaftMessageResponse) error
+	HandleRaftRequest(*RaftMessageRequest) *roachpb.Error
+	HandleRaftResponse(*RaftMessageResponse) *roachpb.Error
 }
 
 // NodeAddressResolver is the function used by RaftTransport to map node IDs to
@@ -149,7 +149,7 @@ func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err err
 							req.ToReplica, req.FromReplica)
 					}
 
-					if err := handler.HandleRaftRequest(req); err != nil {
+					if pErr := handler.HandleRaftRequest(req); pErr != nil {
 						resp := &RaftMessageResponse{
 							RangeID: req.RangeID,
 							// From and To are reversed in the response.
@@ -157,11 +157,11 @@ func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err err
 							FromReplica: req.ToReplica,
 
 							Union: RaftMessageResponseUnion{
-								Error: roachpb.NewError(err),
+								Error: pErr,
 							},
 						}
-						if sendErr := stream.Send(resp); sendErr != nil {
-							return sendErr
+						if err := stream.Send(resp); err != nil {
+							return err
 						}
 					}
 				}
@@ -279,8 +279,8 @@ func (t *RaftTransport) processQueue(ch chan *RaftMessageRequest, conn *grpc.Cli
 							resp.ToReplica.StoreID, resp)
 						continue
 					}
-					if err := handler.HandleRaftResponse(&resp); err != nil {
-						return err
+					if pErr := handler.HandleRaftResponse(&resp); pErr != nil {
+						return pErr.GoError()
 					}
 				}
 			}()

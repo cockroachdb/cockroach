@@ -29,9 +29,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/kr/pretty"
@@ -146,8 +143,6 @@ func updatesTimestampCache(r roachpb.Request) bool {
 	}
 	return updatesTimestampCacheMethods[m]
 }
-
-var errReplicaTooOld = grpc.Errorf(codes.Aborted, "sender replica too old, discarding message")
 
 // A pendingCmd holds a done channel for a command sent to Raft. Once
 // committed to the Raft log, the command is executed and the result returned
