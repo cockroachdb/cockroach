@@ -585,7 +585,7 @@ func TestHasOverlappingReplica(t *testing.T) {
 
 	for i, test := range testCases {
 		rngDesc := &roachpb.RangeDescriptor{StartKey: test.start, EndKey: test.end}
-		if r := store.hasOverlappingReplicaLocked(rngDesc); r != test.exp {
+		if r := store.hasOverlappingKeyRangeLocked(rngDesc); r != test.exp {
 			t.Errorf("%d: expected range %v; got %v", i, test.exp, r)
 		}
 	}
@@ -650,7 +650,7 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 	store.mu.uninitReplicas[newRangeID] = r
 	store.mu.Unlock()
 
-	expectedResult = rangeAlreadyExists{r}.Error()
+	expectedResult = ".*cannot processRangeDescriptorUpdate.*"
 	if err := store.processRangeDescriptorUpdate(r); !testutils.IsError(err, expectedResult) {
 		t.Errorf("expected processRangeDescriptorUpdate with overlapping keys to fail, got %v", err)
 	}
