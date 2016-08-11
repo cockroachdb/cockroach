@@ -459,18 +459,18 @@ func (e *Executor) execRequest(session *Session, sql string) StatementResults {
 		// If protoTS is set, the transaction proto sets its Orig and Max timestamps
 		// to it each retry.
 		var protoTS *hlc.Timestamp
+		execOpt.Clock = e.cfg.Clock
 		// We can AutoRetry the next batch of statements if we're in a clean state
 		// (i.e. the next statements we're going to see are the first statements in
 		// a transaction).
 		if !inTxn {
-			execOpt.MinInitialTimestamp = e.cfg.Clock.Now()
 			// Detect implicit transactions.
 			if _, isBegin := stmts[0].(*parser.BeginTransaction); !isBegin {
 				execOpt.AutoCommit = true
 				stmtsToExec = stmtsToExec[:1]
 				// Check for AS OF SYSTEM TIME. If it is present but not detected here,
 				// it will raise an error later on.
-				protoTS, err = isAsOf(planMaker, stmtsToExec[0], execOpt.MinInitialTimestamp)
+				protoTS, err = isAsOf(planMaker, stmtsToExec[0], e.cfg.Clock.Now())
 				if err != nil {
 					res.ResultList = append(res.ResultList, Result{Err: err})
 					return res
@@ -1273,6 +1273,9 @@ func makeResultColumns(colDescs []sqlbase.ColumnDescriptor) []ResultColumn {
 // since that requires the transaction to be started already. If the returned
 // timestamp is not nil, it is the timestamp to which a transaction should
 // be set.
+//
+// max is a lower bound on what the transaction's timestamp will be. Used to
+// check that the user didn't specify a timestamp in the future.
 func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.Timestamp, error) {
 	s, ok := stmt.(*parser.Select)
 	if !ok {
