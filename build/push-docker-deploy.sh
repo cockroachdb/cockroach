@@ -5,10 +5,7 @@ set -eux
 $(dirname $0)/build-docker-deploy.sh
 
 cd $(dirname $0)/../acceptance
-if [ -f ./acceptance.test ]; then
-  time ./acceptance.test -i cockroachdb/cockroach -b /cockroach/cockroach -nodes 3 \
-    -test.v -test.timeout -5m
-fi
+time ./acceptance.test -i cockroachdb/cockroach -b /cockroach/cockroach -nodes 3 -test.v -test.timeout -5m
 
 docker tag cockroachdb/cockroach cockroachdb/cockroach:${VERSION}
 
