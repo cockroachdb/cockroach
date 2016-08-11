@@ -53,7 +53,7 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	kvDB, stopper := makeDBClient()
 	defer stopper.Stop()
 
-	if err := sql.Backup(ctx, *kvDB, base); err != nil {
+	if _, err := sql.Backup(ctx, *kvDB, base); err != nil {
 		return err
 	}
 
