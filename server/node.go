@@ -120,7 +120,7 @@ type Node struct {
 	stopper     *stop.Stopper
 	ClusterID   uuid.UUID              // UUID for Cockroach cluster
 	Descriptor  roachpb.NodeDescriptor // Node ID, network/physical topology
-	ctx         storage.StoreContext   // Context to use and pass to stores
+	cfg         storage.StoreConfig    // Config to use and pass to stores
 	eventLogger sql.EventLogger
 	stores      *storage.Stores // Access to node-local stores
 	metrics     nodeMetrics
@@ -183,16 +183,16 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics *kv.TxnMetrics) (uuid.
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	ctx := storage.StoreContext{}
-	ctx.ScanInterval = 10 * time.Minute
-	ctx.ConsistencyCheckInterval = 10 * time.Minute
-	ctx.Clock = hlc.NewClock(hlc.UnixNano)
-	ctx.Tracer = tracing.NewTracer()
+	cfg := storage.StoreConfig{}
+	cfg.ScanInterval = 10 * time.Minute
+	cfg.ConsistencyCheckInterval = 10 * time.Minute
+	cfg.Clock = hlc.NewClock(hlc.UnixNano)
+	cfg.Tracer = tracing.NewTracer()
 	// Create a KV DB with a local sender.
-	stores := storage.NewStores(ctx.Clock)
-	sender := kv.NewTxnCoordSender(stores, ctx.Clock, false, ctx.Tracer, stopper, txnMetrics)
-	ctx.DB = client.NewDB(sender)
-	ctx.Transport = storage.NewDummyRaftTransport()
+	stores := storage.NewStores(cfg.Clock)
+	sender := kv.NewTxnCoordSender(stores, cfg.Clock, false, cfg.Tracer, stopper, txnMetrics)
+	cfg.DB = client.NewDB(sender)
+	cfg.Transport = storage.NewDummyRaftTransport()
 	for i, eng := range engines {
 		sIdent := roachpb.StoreIdent{
 			ClusterID: clusterID,
@@ -202,7 +202,7 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics *kv.TxnMetrics) (uuid.
 
 		// The bootstrapping store will not connect to other nodes so its
 		// StoreConfig doesn't really matter.
-		s := storage.NewStore(ctx, eng, &roachpb.NodeDescriptor{NodeID: 1})
+		s := storage.NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
 		// Verify the store isn't already part of a cluster.
 		if s.Ident.ClusterID != *uuid.EmptyUUID {
@@ -230,12 +230,12 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics *kv.TxnMetrics) (uuid.
 
 		// Initialize node and store ids.  Only initialize the node once.
 		if i == 0 {
-			if nodeID, err := allocateNodeID(ctx.DB); nodeID != sIdent.NodeID || err != nil {
+			if nodeID, err := allocateNodeID(cfg.DB); nodeID != sIdent.NodeID || err != nil {
 				return uuid.UUID{}, errors.Errorf("expected to initialize node id allocator to %d, got %d: %s",
 					sIdent.NodeID, nodeID, err)
 			}
 		}
-		if storeID, err := allocateStoreIDs(sIdent.NodeID, 1, ctx.DB); storeID != sIdent.StoreID || err != nil {
+		if storeID, err := allocateStoreIDs(sIdent.NodeID, 1, cfg.DB); storeID != sIdent.StoreID || err != nil {
 			return uuid.UUID{}, errors.Errorf("expected to initialize store id allocator to %d, got %d: %s",
 				sIdent.StoreID, storeID, err)
 		}
@@ -245,7 +245,7 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics *kv.TxnMetrics) (uuid.
 
 // NewNode returns a new instance of Node.
 func NewNode(
-	ctx storage.StoreContext,
+	cfg storage.StoreConfig,
 	recorder *status.MetricsRecorder,
 	reg *metric.Registry,
 	stopper *stop.Stopper,
@@ -253,11 +253,11 @@ func NewNode(
 	eventLogger sql.EventLogger,
 ) *Node {
 	n := &Node{
-		ctx:         ctx,
+		cfg:         cfg,
 		stopper:     stopper,
 		recorder:    recorder,
 		metrics:     makeNodeMetrics(reg),
-		stores:      storage.NewStores(ctx.Clock),
+		stores:      storage.NewStores(cfg.Clock),
 		txnMetrics:  txnMetrics,
 		eventLogger: eventLogger,
 	}
@@ -297,7 +297,7 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 	}
 	var err error
 	if id == 0 {
-		id, err = allocateNodeID(n.ctx.DB)
+		id, err = allocateNodeID(n.cfg.DB)
 		if err != nil {
 			log.Fatal(context.TODO(), err)
 		}
@@ -305,13 +305,13 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 		if id == 0 {
 			log.Fatal(context.TODO(), "new node allocated illegal ID 0")
 		}
-		n.ctx.Gossip.SetNodeID(id)
+		n.cfg.Gossip.SetNodeID(id)
 	} else {
 		log.Infof(context.TODO(), "node ID %d initialized", id)
 	}
 	// Gossip the node descriptor to make this node addressable by node ID.
 	n.Descriptor.NodeID = id
-	if err = n.ctx.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
+	if err = n.cfg.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
 		log.Fatalf(context.TODO(), "couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
 	}
 }
@@ -345,7 +345,7 @@ func (n *Node) start(
 		}
 	}
 
-	n.startedAt = n.ctx.Clock.Now().WallTime
+	n.startedAt = n.cfg.Clock.Now().WallTime
 
 	n.startComputePeriodicMetrics(n.stopper)
 	n.startGossip(ctx, n.stopper)
@@ -396,7 +396,7 @@ func (n *Node) initStores(
 		return errors.Errorf("no engines")
 	}
 	for _, e := range engines {
-		s := storage.NewStore(n.ctx, e, &n.Descriptor)
+		s := storage.NewStore(n.cfg, e, &n.Descriptor)
 		// Initialize each store in turn, handling un-bootstrapped errors by
 		// adding the store to the bootstraps list.
 		if err := s.Start(stopper); err != nil {
@@ -421,7 +421,7 @@ func (n *Node) initStores(
 	// If there are no initialized stores and no gossip resolvers,
 	// bootstrap this node as the seed of a new cluster.
 	if n.stores.GetStoreCount() == 0 {
-		resolvers := n.ctx.Gossip.GetResolvers()
+		resolvers := n.cfg.Gossip.GetResolvers()
 		// Check for the case of uninitialized node having only itself specified as join host.
 		switch len(resolvers) {
 		case 0:
@@ -441,7 +441,7 @@ func (n *Node) initStores(
 	// Set the stores map as the gossip persistent storage, so that
 	// gossip can bootstrap using the most recently persisted set of
 	// node addresses.
-	if err := n.ctx.Gossip.SetStorage(n.stores); err != nil {
+	if err := n.cfg.Gossip.SetStorage(n.stores); err != nil {
 		return fmt.Errorf("failed to initialize the gossip interface: %s", err)
 	}
 
@@ -502,7 +502,7 @@ func (n *Node) bootstrapStores(ctx context.Context, bootstraps []*storage.Store,
 	// Bootstrap all waiting stores by allocating a new store id for
 	// each and invoking store.Bootstrap() to persist.
 	inc := int64(len(bootstraps))
-	firstID, err := allocateStoreIDs(n.Descriptor.NodeID, inc, n.ctx.DB)
+	firstID, err := allocateStoreIDs(n.Descriptor.NodeID, inc, n.cfg.DB)
 	if err != nil {
 		log.Fatal(ctx, err)
 	}
@@ -542,9 +542,9 @@ func (n *Node) connectGossip() {
 	log.Infof(context.TODO(), "connecting to gossip network to verify cluster ID...")
 	// No timeout or stop condition is needed here. Log statements should be
 	// sufficient for diagnosing this type of condition.
-	<-n.ctx.Gossip.Connected
+	<-n.cfg.Gossip.Connected
 
-	uuidBytes, err := n.ctx.Gossip.GetInfo(gossip.KeyClusterID)
+	uuidBytes, err := n.cfg.Gossip.GetInfo(gossip.KeyClusterID)
 	if err != nil {
 		log.Fatalf(context.TODO(), "unable to ascertain cluster ID from gossip network: %s", err)
 	}
@@ -578,11 +578,11 @@ func (n *Node) startGossip(ctx context.Context, stopper *stop.Stopper) {
 		for {
 			select {
 			case <-statusTicker.C:
-				n.ctx.Gossip.LogStatus()
+				n.cfg.Gossip.LogStatus()
 			case <-storesTicker.C:
 				n.gossipStores(ctx)
 			case <-nodeTicker.C:
-				if err := n.ctx.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
+				if err := n.cfg.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
 					log.Warningf(ctx, "couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
 				}
 			case <-stopper.ShouldStop():
@@ -677,7 +677,7 @@ func (n *Node) writeSummaries() error {
 			// node status, writing one of these every 10s will generate
 			// more versions than will easily fit into a range over the
 			// course of a day.
-			if err = n.ctx.DB.PutInline(key, nodeStatus); err != nil {
+			if err = n.cfg.DB.PutInline(key, nodeStatus); err != nil {
 				return
 			}
 			if log.V(2) {
@@ -698,7 +698,7 @@ func (n *Node) writeSummaries() error {
 // join" or "node restart" event. This query will retry until it succeeds or the
 // server stops.
 func (n *Node) recordJoinEvent() {
-	if !n.ctx.LogRangeEvents {
+	if !n.cfg.LogRangeEvents {
 		return
 	}
 
@@ -711,7 +711,7 @@ func (n *Node) recordJoinEvent() {
 		retryOpts := base.DefaultRetryOptions()
 		retryOpts.Closer = n.stopper.ShouldStop()
 		for r := retry.Start(retryOpts); r.Next(); {
-			if err := n.ctx.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+			if err := n.cfg.DB.Txn(context.TODO(), func(txn *client.Txn) error {
 				return n.eventLogger.InsertEventRecord(txn,
 					logEventType,
 					int32(n.Descriptor.NodeID),
@@ -777,7 +777,7 @@ func (n *Node) Batch(
 	}
 
 	f := func() {
-		sp, err := tracing.JoinOrNew(n.ctx.Tracer, args.Trace, opName)
+		sp, err := tracing.JoinOrNew(n.cfg.Tracer, args.Trace, opName)
 		if err != nil {
 			fail(err)
 			return

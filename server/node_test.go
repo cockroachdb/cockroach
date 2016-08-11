@@ -61,13 +61,13 @@ import (
 // not nil, the gossip bootstrap address is set to gossipBS.
 func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
 	*grpc.Server, net.Addr, *hlc.Clock, *Node, *stop.Stopper) {
-	ctx := storage.StoreContext{}
+	cfg := storage.StoreConfig{}
 
 	stopper := stop.NewStopper()
-	ctx.Clock = hlc.NewClock(hlc.UnixNano)
-	nodeRPCContext := rpc.NewContext(nodeTestBaseContext, ctx.Clock, stopper)
-	ctx.ScanInterval = 10 * time.Hour
-	ctx.ConsistencyCheckInterval = 10 * time.Hour
+	cfg.Clock = hlc.NewClock(hlc.UnixNano)
+	nodeRPCContext := rpc.NewContext(nodeTestBaseContext, cfg.Clock, stopper)
+	cfg.ScanInterval = 10 * time.Hour
+	cfg.ConsistencyCheckInterval = 10 * time.Hour
 	grpcServer := rpc.NewServer(nodeRPCContext)
 	serverCtx := makeTestContext()
 	g := gossip.New(nodeRPCContext, grpcServer, serverCtx.GossipBootstrapResolvers, stopper, metric.NewRegistry())
@@ -87,24 +87,24 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		g.SetResolvers([]resolver.Resolver{r})
 		g.Start(ln.Addr())
 	}
-	ctx.Gossip = g
+	cfg.Gossip = g
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	distSender := kv.NewDistSender(&kv.DistSenderContext{
-		Clock:           ctx.Clock,
+		Clock:           cfg.Clock,
 		RPCContext:      nodeRPCContext,
 		RPCRetryOptions: &retryOpts,
 	}, g)
 	tracer := tracing.NewTracer()
-	sender := kv.NewTxnCoordSender(distSender, ctx.Clock, false, tracer, stopper,
+	sender := kv.NewTxnCoordSender(distSender, cfg.Clock, false, tracer, stopper,
 		kv.NewTxnMetrics(metric.NewRegistry()))
-	ctx.DB = client.NewDB(sender)
-	ctx.Transport = storage.NewDummyRaftTransport()
-	ctx.Tracer = tracer
-	node := NewNode(ctx, status.NewMetricsRecorder(ctx.Clock), metric.NewRegistry(), stopper,
+	cfg.DB = client.NewDB(sender)
+	cfg.Transport = storage.NewDummyRaftTransport()
+	cfg.Tracer = tracer
+	node := NewNode(cfg, status.NewMetricsRecorder(cfg.Clock), metric.NewRegistry(), stopper,
 		kv.NewTxnMetrics(metric.NewRegistry()), sql.MakeEventLogger(nil))
 	roachpb.RegisterInternalServer(grpcServer, node)
-	return grpcServer, ln.Addr(), ctx.Clock, node, stopper
+	return grpcServer, ln.Addr(), cfg.Clock, node, stopper
 }
 
 // createAndStartTestNode creates a new test node and starts it. The server and node are returned.
@@ -114,7 +114,7 @@ func createAndStartTestNode(addr net.Addr, engines []engine.Engine, gossipBS net
 	if err := node.start(context.Background(), addr, engines, roachpb.Attributes{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := WaitForInitialSplits(node.ctx.DB); err != nil {
+	if err := WaitForInitialSplits(node.cfg.DB); err != nil {
 		t.Fatal(err)
 	}
 	return grpcServer, addr, node, stopper
@@ -252,14 +252,14 @@ func TestNodeJoin(t *testing.T) {
 	node2Key := gossip.MakeNodeIDKey(node2.Descriptor.NodeID)
 	util.SucceedsSoon(t, func() error {
 		var nodeDesc1 roachpb.NodeDescriptor
-		if err := node1.ctx.Gossip.GetInfoProto(node2Key, &nodeDesc1); err != nil {
+		if err := node1.cfg.Gossip.GetInfoProto(node2Key, &nodeDesc1); err != nil {
 			return err
 		}
 		if addr2Str, server2AddrStr := nodeDesc1.Address.String(), server2Addr.String(); addr2Str != server2AddrStr {
 			return errors.Errorf("addr2 gossip %s doesn't match addr2 address %s", addr2Str, server2AddrStr)
 		}
 		var nodeDesc2 roachpb.NodeDescriptor
-		if err := node2.ctx.Gossip.GetInfoProto(node1Key, &nodeDesc2); err != nil {
+		if err := node2.cfg.Gossip.GetInfoProto(node1Key, &nodeDesc2); err != nil {
 			return err
 		}
 		if addr1Str, server1AddrStr := nodeDesc2.Address.String(), server1Addr.String(); addr1Str != server1AddrStr {

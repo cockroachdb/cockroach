@@ -86,7 +86,7 @@ func createTestStore(t testing.TB) (*storage.Store, *stop.Stopper, *hlc.ManualCl
 }
 
 func createTestStoreWithContext(
-	t testing.TB, sCtx storage.StoreContext,
+	t testing.TB, sCtx storage.StoreConfig,
 ) (*storage.Store, *stop.Stopper, *hlc.ManualClock) {
 	stopper := stop.NewStopper()
 	manual := hlc.NewManualClock(123)
@@ -108,7 +108,7 @@ func createTestStoreWithEngine(
 	eng engine.Engine,
 	clock *hlc.Clock,
 	bootstrap bool,
-	sCtx storage.StoreContext,
+	sCtx storage.StoreConfig,
 	stopper *stop.Stopper,
 ) *storage.Store {
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
@@ -168,7 +168,7 @@ func createTestStoreWithEngine(
 
 type multiTestContext struct {
 	t            *testing.T
-	storeContext *storage.StoreContext
+	storeContext *storage.StoreConfig
 	manualClock  *hlc.ManualClock
 	clock        *hlc.Clock
 	rpcContext   *rpc.Context
@@ -496,20 +496,20 @@ func (m *multiTestContext) RangeLookup(
 	return m.distSenders[0].RangeLookup(key, desc, considerIntents, useReverseScan)
 }
 
-func (m *multiTestContext) makeContext(i int) storage.StoreContext {
-	var ctx storage.StoreContext
+func (m *multiTestContext) makeStoreConfig(i int) storage.StoreConfig {
+	var cfg storage.StoreConfig
 	if m.storeContext != nil {
-		ctx = *m.storeContext
+		cfg = *m.storeContext
 	} else {
-		ctx = storage.TestStoreContext()
+		cfg = storage.TestStoreContext()
 	}
-	ctx.Clock = m.clocks[i]
-	ctx.Transport = m.transports[i]
-	ctx.DB = m.dbs[i]
-	ctx.Gossip = m.gossips[i]
-	ctx.StorePool = m.storePools[i]
-	ctx.TestingKnobs.DisableSplitQueue = true
-	return ctx
+	cfg.Clock = m.clocks[i]
+	cfg.Transport = m.transports[i]
+	cfg.DB = m.dbs[i]
+	cfg.Gossip = m.gossips[i]
+	cfg.StorePool = m.storePools[i]
+	cfg.TestingKnobs.DisableSplitQueue = true
+	return cfg
 }
 
 func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
@@ -588,9 +588,9 @@ func (m *multiTestContext) addStore(idx int) {
 	m.populateStorePool(idx, stopper)
 	m.populateDB(idx, stopper)
 
-	ctx := m.makeContext(idx)
+	cfg := m.makeStoreConfig(idx)
 	nodeID := roachpb.NodeID(idx + 1)
-	store := storage.NewStore(ctx, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
+	store := storage.NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
 	if needBootstrap {
 		err := store.Bootstrap(roachpb.StoreIdent{
 			NodeID:  roachpb.NodeID(idx + 1),
@@ -715,8 +715,8 @@ func (m *multiTestContext) restartStore(i int) {
 	m.populateDB(i, m.stoppers[i])
 	m.populateStorePool(i, m.stoppers[i])
 
-	ctx := m.makeContext(i)
-	m.stores[i] = storage.NewStore(ctx, m.engines[i], &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)})
+	cfg := m.makeStoreConfig(i)
+	m.stores[i] = storage.NewStore(cfg, m.engines[i], &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)})
 	if err := m.stores[i].Start(m.stoppers[i]); err != nil {
 		m.t.Fatal(err)
 	}

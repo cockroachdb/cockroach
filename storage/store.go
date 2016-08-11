@@ -87,8 +87,8 @@ var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeTy
 var storeReplicaRaftReadyConcurrency = 2 * runtime.NumCPU()
 
 // TestStoreContext has some fields initialized with values relevant in tests.
-func TestStoreContext() StoreContext {
-	return StoreContext{
+func TestStoreContext() StoreConfig {
+	return StoreConfig{
 		Tracer:                         tracing.NewTracer(),
 		RaftTickInterval:               100 * time.Millisecond,
 		RaftHeartbeatIntervalTicks:     1,
@@ -104,7 +104,7 @@ func newRaftConfig(
 	strg raft.Storage,
 	id uint64,
 	appliedIndex uint64,
-	storeCtx StoreContext,
+	storeCtx StoreConfig,
 	logger raft.Logger,
 ) *raft.Config {
 	return &raft.Config{
@@ -293,7 +293,7 @@ func (rs *storeRangeSet) EstimatedCount() int {
 // to one physical device.
 type Store struct {
 	Ident                   roachpb.StoreIdent
-	ctx                     StoreContext
+	cfg                     StoreConfig
 	db                      *client.DB
 	engine                  engine.Engine            // The underlying key-value store
 	allocator               Allocator                // Makes allocation decisions
@@ -451,7 +451,7 @@ var _ client.Sender = &Store{}
 // required to create a store.
 // All fields holding a pointer or an interface are required to create
 // a store; the rest will have sane defaults set if omitted.
-type StoreContext struct {
+type StoreConfig struct {
 	Clock     *hlc.Clock
 	DB        *client.DB
 	Gossip    *gossip.Gossip
@@ -784,7 +784,7 @@ func (sm *storeMetrics) leaseRequestComplete(success bool) {
 // Valid returns true if the StoreContext is populated correctly.
 // We don't check for Gossip and DB since some of our tests pass
 // that as nil.
-func (sc *StoreContext) Valid() bool {
+func (sc *StoreConfig) Valid() bool {
 	return sc.Clock != nil && sc.Transport != nil &&
 		sc.RaftTickInterval != 0 && sc.RaftHeartbeatIntervalTicks > 0 &&
 		sc.RaftElectionTimeoutTicks > 0 && sc.ScanInterval > 0 &&
@@ -794,7 +794,7 @@ func (sc *StoreContext) Valid() bool {
 // setDefaults initializes unset fields in StoreConfig to values
 // suitable for use on a local network.
 // TODO(tschottdorf) see if this ought to be configurable via flags.
-func (sc *StoreContext) setDefaults() {
+func (sc *StoreConfig) setDefaults() {
 	if (sc.RangeRetryOptions == retry.Options{}) {
 		sc.RangeRetryOptions = base.DefaultRetryOptions()
 	}
@@ -818,19 +818,19 @@ func (sc *StoreContext) setDefaults() {
 }
 
 // NewStore returns a new instance of a store.
-func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescriptor) *Store {
+func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescriptor) *Store {
 	// TODO(tschottdorf) find better place to set these defaults.
-	ctx.setDefaults()
+	cfg.setDefaults()
 
-	if !ctx.Valid() {
-		panic(fmt.Sprintf("invalid store configuration: %+v", &ctx))
+	if !cfg.Valid() {
+		panic(fmt.Sprintf("invalid store configuration: %+v", &cfg))
 	}
 
 	s := &Store{
-		ctx:          ctx,
-		db:           ctx.DB, // TODO(tschottdorf) remove redundancy.
+		cfg:          cfg,
+		db:           cfg.DB, // TODO(tschottdorf) remove redundancy.
 		engine:       eng,
-		allocator:    MakeAllocator(ctx.StorePool, ctx.AllocatorOptions),
+		allocator:    MakeAllocator(cfg.StorePool, cfg.AllocatorOptions),
 		nodeDesc:     nodeDesc,
 		wakeRaftLoop: make(chan struct{}, 1),
 		metrics:      newStoreMetrics(),
@@ -846,30 +846,30 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 
 	s.mu.Unlock()
 
-	if s.ctx.Gossip != nil {
+	if s.cfg.Gossip != nil {
 		// Add range scanner and configure with queues.
-		s.scanner = newReplicaScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s))
-		s.gcQueue = newGCQueue(s, s.ctx.Gossip)
-		s.splitQueue = newSplitQueue(s, s.db, s.ctx.Gossip)
-		s.verifyQueue = newVerifyQueue(s, s.ctx.Gossip, s.ReplicaCount)
-		s.replicateQueue = newReplicateQueue(s, s.ctx.Gossip, s.allocator, s.ctx.Clock, s.ctx.AllocatorOptions)
-		s.replicaGCQueue = newReplicaGCQueue(s, s.db, s.ctx.Gossip)
-		s.raftLogQueue = newRaftLogQueue(s, s.db, s.ctx.Gossip)
+		s.scanner = newReplicaScanner(cfg.ScanInterval, cfg.ScanMaxIdleTime, newStoreRangeSet(s))
+		s.gcQueue = newGCQueue(s, s.cfg.Gossip)
+		s.splitQueue = newSplitQueue(s, s.db, s.cfg.Gossip)
+		s.verifyQueue = newVerifyQueue(s, s.cfg.Gossip, s.ReplicaCount)
+		s.replicateQueue = newReplicateQueue(s, s.cfg.Gossip, s.allocator, s.cfg.Clock, s.cfg.AllocatorOptions)
+		s.replicaGCQueue = newReplicaGCQueue(s, s.db, s.cfg.Gossip)
+		s.raftLogQueue = newRaftLogQueue(s, s.db, s.cfg.Gossip)
 		s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)
 
 		// Add consistency check scanner.
-		s.consistencyScanner = newReplicaScanner(ctx.ConsistencyCheckInterval, 0, newStoreRangeSet(s))
-		s.replicaConsistencyQueue = newReplicaConsistencyQueue(s, s.ctx.Gossip)
+		s.consistencyScanner = newReplicaScanner(cfg.ConsistencyCheckInterval, 0, newStoreRangeSet(s))
+		s.replicaConsistencyQueue = newReplicaConsistencyQueue(s, s.cfg.Gossip)
 		s.consistencyScanner.AddQueues(s.replicaConsistencyQueue)
 	}
 
-	if ctx.TestingKnobs.DisableSplitQueue {
+	if cfg.TestingKnobs.DisableSplitQueue {
 		s.setSplitQueueActive(false)
 	}
-	if ctx.TestingKnobs.DisableReplicateQueue {
+	if cfg.TestingKnobs.DisableReplicateQueue {
 		s.setReplicateQueueActive(false)
 	}
-	if ctx.TestingKnobs.DisableScanner {
+	if cfg.TestingKnobs.DisableScanner {
 		s.setScannerActive(false)
 	}
 
@@ -892,7 +892,7 @@ func (s *Store) DrainLeases(drain bool) error {
 		return nil
 	}
 
-	return util.RetryForDuration(10*s.ctx.rangeLeaseActiveDuration, func() error {
+	return util.RetryForDuration(10*s.cfg.rangeLeaseActiveDuration, func() error {
 		var err error
 		now := s.Clock().Now()
 		newStoreRangeSet(s).Visit(func(r *Replica) bool {
@@ -998,7 +998,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 
 	// Add the bookie to the store.
 	s.bookie = newBookie(
-		s.ctx.Clock,
+		s.cfg.Clock,
 		s.stopper,
 		s.metrics,
 		envutil.EnvOrDefaultDuration("reservation_timeout", ttlStoreGossip),
@@ -1025,8 +1025,8 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		return errors.Errorf("node id:%d does not equal the one in node descriptor:%d", s.Ident.NodeID, s.nodeDesc.NodeID)
 	}
 	// Always set gossip NodeID before gossiping any info.
-	if s.ctx.Gossip != nil {
-		s.ctx.Gossip.SetNodeID(s.Ident.NodeID)
+	if s.cfg.Gossip != nil {
+		s.cfg.Gossip.SetNodeID(s.Ident.NodeID)
 	}
 
 	// Create ID allocators.
@@ -1036,7 +1036,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	}
 	s.rangeIDAlloc = idAlloc
 
-	now := s.ctx.Clock.Now()
+	now := s.cfg.Clock.Now()
 	s.startedAt = now.WallTime
 
 	// Iterate over all range descriptors, ignoring uncommitted versions
@@ -1083,7 +1083,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	}
 
 	// Start Raft processing goroutines.
-	s.ctx.Transport.Listen(s.StoreID(), s.handleRaftMessage)
+	s.cfg.Transport.Listen(s.StoreID(), s.handleRaftMessage)
 	s.processRaft()
 
 	doneUnfreezing := make(chan struct{})
@@ -1146,16 +1146,16 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 
 	// Gossip is only ever nil while bootstrapping a cluster and
 	// in unittests.
-	if s.ctx.Gossip != nil {
+	if s.cfg.Gossip != nil {
 		// Register update channel for any changes to the system config.
 		// This may trigger splits along structured boundaries,
 		// and update max range bytes.
-		gossipUpdateC := s.ctx.Gossip.RegisterSystemConfigChannel()
+		gossipUpdateC := s.cfg.Gossip.RegisterSystemConfigChannel()
 		s.stopper.RunWorker(func() {
 			for {
 				select {
 				case <-gossipUpdateC:
-					cfg, _ := s.ctx.Gossip.GetSystemConfig()
+					cfg, _ := s.cfg.Gossip.GetSystemConfig()
 					s.systemGossipUpdate(cfg)
 				case <-s.stopper.ShouldStop():
 					return
@@ -1174,8 +1174,8 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		// from returning (as doing so might prevent Gossip from ever connecting).
 		s.stopper.RunWorker(func() {
 			select {
-			case <-s.ctx.Gossip.Connected:
-				s.scanner.Start(s.ctx.Clock, s.stopper)
+			case <-s.cfg.Gossip.Connected:
+				s.scanner.Start(s.cfg.Clock, s.stopper)
 			case <-s.stopper.ShouldStop():
 				return
 			}
@@ -1184,8 +1184,8 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		// Start the consistency scanner.
 		s.stopper.RunWorker(func() {
 			select {
-			case <-s.ctx.Gossip.Connected:
-				s.consistencyScanner.Start(s.ctx.Clock, s.stopper)
+			case <-s.cfg.Gossip.Connected:
+				s.consistencyScanner.Start(s.cfg.Clock, s.stopper)
 			case <-s.stopper.ShouldStop():
 				return
 			}
@@ -1309,7 +1309,7 @@ func (s *Store) systemGossipUpdate(cfg config.SystemConfig) {
 		if zone, err := cfg.GetZoneConfigForKey(rng.Desc().StartKey); err == nil {
 			rng.SetMaxBytes(zone.RangeMaxBytes)
 		}
-		s.splitQueue.MaybeAdd(rng, s.ctx.Clock.Now())
+		s.splitQueue.MaybeAdd(rng, s.cfg.Clock.Now())
 	}
 }
 
@@ -1322,7 +1322,7 @@ func (s *Store) GossipStore(ctx context.Context) error {
 	// Unique gossip key per store.
 	gossipStoreKey := gossip.MakeStoreKey(storeDesc.StoreID)
 	// Gossip store descriptor.
-	return s.ctx.Gossip.AddInfoProto(gossipStoreKey, storeDesc, ttlStoreGossip)
+	return s.cfg.Gossip.AddInfoProto(gossipStoreKey, storeDesc, ttlStoreGossip)
 }
 
 // GossipDeadReplicas broadcasts the stores dead replicas on the gossip network.
@@ -1335,7 +1335,7 @@ func (s *Store) GossipDeadReplicas(ctx context.Context) error {
 	// Unique gossip key per store.
 	key := gossip.MakeDeadReplicasKey(s.StoreID())
 	// Gossip dead replicas.
-	return s.ctx.Gossip.AddInfoProto(key, &deadReplicas, ttlStoreGossip)
+	return s.cfg.Gossip.AddInfoProto(key, &deadReplicas, ttlStoreGossip)
 }
 
 // Bootstrap writes a new store ident to the underlying engine. To
@@ -1491,7 +1491,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	}
 	batch := s.engine.NewBatch()
 	ms := &enginepb.MVCCStats{}
-	now := s.ctx.Clock.Now()
+	now := s.cfg.Clock.Now()
 	ctx := context.Background()
 
 	// Range descriptor.
@@ -1549,25 +1549,25 @@ func (s *Store) ClusterID() uuid.UUID { return s.Ident.ClusterID }
 func (s *Store) StoreID() roachpb.StoreID { return s.Ident.StoreID }
 
 // Clock accessor.
-func (s *Store) Clock() *hlc.Clock { return s.ctx.Clock }
+func (s *Store) Clock() *hlc.Clock { return s.cfg.Clock }
 
 // Engine accessor.
 func (s *Store) Engine() engine.Engine { return s.engine }
 
 // DB accessor.
-func (s *Store) DB() *client.DB { return s.ctx.DB }
+func (s *Store) DB() *client.DB { return s.cfg.DB }
 
 // Gossip accessor.
-func (s *Store) Gossip() *gossip.Gossip { return s.ctx.Gossip }
+func (s *Store) Gossip() *gossip.Gossip { return s.cfg.Gossip }
 
 // Stopper accessor.
 func (s *Store) Stopper() *stop.Stopper { return s.stopper }
 
 // Tracer accessor.
-func (s *Store) Tracer() opentracing.Tracer { return s.ctx.Tracer }
+func (s *Store) Tracer() opentracing.Tracer { return s.cfg.Tracer }
 
 // TestingKnobs accessor.
-func (s *Store) TestingKnobs() *StoreTestingKnobs { return &s.ctx.TestingKnobs }
+func (s *Store) TestingKnobs() *StoreTestingKnobs { return &s.cfg.TestingKnobs }
 
 // IsDrainingLeases accessor.
 func (s *Store) IsDrainingLeases() bool {
@@ -2081,8 +2081,8 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 		return nil, roachpb.NewError(err)
 	}
 
-	if s.ctx.TestingKnobs.ClockBeforeSend != nil {
-		s.ctx.TestingKnobs.ClockBeforeSend(s.ctx.Clock, ba)
+	if s.cfg.TestingKnobs.ClockBeforeSend != nil {
+		s.cfg.TestingKnobs.ClockBeforeSend(s.cfg.Clock, ba)
 	}
 
 	if s.Clock().MaxOffset() > 0 {
@@ -2101,7 +2101,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 	// interacted. We hold on to the resulting timestamp - we know that any
 	// write with a higher timestamp we run into later must have started after
 	// this point in (absolute) time.
-	now := s.ctx.Clock.Update(ba.Timestamp)
+	now := s.cfg.Clock.Update(ba.Timestamp)
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -2128,12 +2128,12 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 				}
 				br.Txn.UpdateObservedTimestamp(ba.Replica.NodeID, now)
 				// Update our clock with the outgoing response txn timestamp.
-				s.ctx.Clock.Update(br.Txn.Timestamp)
+				s.cfg.Clock.Update(br.Txn.Timestamp)
 			}
 		} else {
 			if pErr == nil {
 				// Update our clock with the outgoing response timestamp.
-				s.ctx.Clock.Update(br.Timestamp)
+				s.cfg.Clock.Update(br.Timestamp)
 			}
 		}
 
@@ -2178,7 +2178,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 
 	// Add the command to the range for execution; exit retry loop on success.
 	s.mu.Lock()
-	retryOpts := s.ctx.RangeRetryOptions
+	retryOpts := s.cfg.RangeRetryOptions
 	s.mu.Unlock()
 	for r := retry.Start(retryOpts); next(&r); {
 		// Get range and add command to the range for execution.
@@ -2446,7 +2446,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 					// It would instruct us to apply entries, which would have
 					// crashing potential for any choice of dummy value below.
 					appliedIndex,
-					r.store.ctx,
+					r.store.cfg,
 					&raftLogger{stringer: r},
 				), nil)
 			if err != nil {
@@ -2513,14 +2513,14 @@ func (s *Store) enqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 // appropriate range. This method starts a goroutine to process Raft
 // commands indefinitely or until the stopper signals.
 func (s *Store) processRaft() {
-	if s.ctx.TestingKnobs.DisableProcessRaft {
+	if s.cfg.TestingKnobs.DisableProcessRaft {
 		return
 	}
 	sem := makeSemaphore(storeReplicaRaftReadyConcurrency)
 
 	s.stopper.RunWorker(func() {
-		defer s.ctx.Transport.Stop(s.StoreID())
-		ticker := time.NewTicker(s.ctx.RaftTickInterval)
+		defer s.cfg.Transport.Stop(s.StoreID())
+		ticker := time.NewTicker(s.cfg.RaftTickInterval)
 		defer ticker.Stop()
 		for {
 			workingStart := timeutil.Now()
@@ -2584,7 +2584,7 @@ func (s *Store) processRaft() {
 			case <-s.wakeRaftLoop:
 				s.metrics.raftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
 
-			case st := <-s.ctx.Transport.SnapshotStatusChan:
+			case st := <-s.cfg.Transport.SnapshotStatusChan:
 				s.metrics.raftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
 				s.processRaftMu.Lock()
 				s.mu.Lock()
@@ -2793,7 +2793,7 @@ func (s *Store) ComputeMetrics() error {
 	s.metrics.updateCapacityGauges(desc.Capacity)
 
 	// broadcast replication status.
-	now := s.ctx.Clock.Now().WallTime
+	now := s.cfg.Clock.Now().WallTime
 	leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount :=
 		s.computeReplicationStatus(now)
 	s.metrics.updateReplicationGauges(

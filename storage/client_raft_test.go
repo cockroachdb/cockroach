@@ -1172,7 +1172,7 @@ func TestRaftHeartbeats(t *testing.T) {
 	}
 
 	// Wait for several ticks to elapse.
-	time.Sleep(5 * mtc.makeContext(0).RaftTickInterval)
+	time.Sleep(5 * mtc.makeStoreConfig(0).RaftTickInterval)
 	status = mtc.stores[0].RaftStatus(1)
 	if status.SoftState.RaftState != raft.StateLeader {
 		t.Errorf("expected node 0 to be leader after sleeping but was %s", status.SoftState.RaftState)
@@ -1518,7 +1518,7 @@ func TestStoreRangeRebalance(t *testing.T) {
 
 	// Start multiTestContext with replica rebalancing enabled.
 	mtc := &multiTestContext{
-		storeContext: &storage.StoreContext{},
+		storeContext: &storage.StoreConfig{},
 	}
 	*mtc.storeContext = storage.TestStoreContext()
 	mtc.storeContext.AllocatorOptions = storage.AllocatorOptions{

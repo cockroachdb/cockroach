@@ -135,7 +135,7 @@ func (tc *testContext) Start(t testing.TB) {
 
 // StartWithStoreContext initializes the test context with a single
 // range covering the entire keyspace.
-func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
+func (tc *testContext) StartWithStoreContext(t testing.TB, cfg StoreConfig) {
 	tc.TB = t
 	if tc.stopper == nil {
 		tc.stopper = stop.NewStopper()
@@ -162,15 +162,15 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 	}
 
 	if tc.store == nil {
-		ctx.Clock = tc.clock
-		ctx.Gossip = tc.gossip
-		ctx.Transport = tc.transport
+		cfg.Clock = tc.clock
+		cfg.Gossip = tc.gossip
+		cfg.Transport = tc.transport
 		// Create a test sender without setting a store. This is to deal with the
 		// circular dependency between the test sender and the store. The actual
 		// store will be passed to the sender after it is created and bootstrapped.
 		sender := &testSender{}
-		ctx.DB = client.NewDB(sender)
-		tc.store = NewStore(ctx, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
+		cfg.DB = client.NewDB(sender)
+		tc.store = NewStore(cfg, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
 		if err := tc.store.Bootstrap(roachpb.StoreIdent{
 			ClusterID: uuid.MakeV4(),
 			NodeID:    1,
@@ -5431,7 +5431,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 		})
 	// Set a callback for checksum mismatch panics.
 	badChecksumChan := make(chan []ReplicaSnapshotDiff, 1)
-	rng.store.ctx.TestingKnobs.BadChecksumPanic = func(diff []ReplicaSnapshotDiff) {
+	rng.store.cfg.TestingKnobs.BadChecksumPanic = func(diff []ReplicaSnapshotDiff) {
 		badChecksumChan <- diff
 	}
 
@@ -6057,7 +6057,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	electionTicks := tc.store.ctx.RaftElectionTimeoutTicks
+	electionTicks := tc.store.cfg.RaftElectionTimeoutTicks
 
 	{
 		// The verifications of the reproposal counts below rely on r.mu.ticks
