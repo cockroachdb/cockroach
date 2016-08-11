@@ -37,7 +37,8 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
-var traceSQL = envutil.EnvOrDefaultBool("trace_sql", false)
+var traceSQLDuration = envutil.EnvOrDefaultDuration("trace_sql", 0)
+var traceSQL = traceSQLDuration > 0
 
 // Session contains the state of a SQL client connection.
 // Create instances using NewSession().
@@ -223,9 +224,11 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 func (ts *txnState) dumpTrace() {
 	if traceSQL && ts.txn != nil {
 		ts.sp.Finish()
-		dump := tracing.FormatRawSpans(ts.txn.CollectedSpans)
-		if len(dump) > 0 {
-			log.Infof(context.Background(), "%s\n%s", ts.txn.Proto.ID, dump)
+		if time.Since(ts.sqlTimestamp) >= traceSQLDuration {
+			dump := tracing.FormatRawSpans(ts.txn.CollectedSpans)
+			if len(dump) > 0 {
+				log.Infof(context.Background(), "%s\n%s", ts.txn.Proto.ID, dump)
+			}
 		}
 	}
 	ts.sp = nil
