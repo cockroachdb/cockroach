@@ -149,7 +149,7 @@ func (f *Flow) setupOutStream(spec StreamEndpointSpec) (RowReceiver, error) {
 	return rowChan, nil
 }
 
-func (f *Flow) setupRouter(spec OutputRouterSpec) (RowReceiver, error) {
+func (f *Flow) setupRouter(spec *OutputRouterSpec) (RowReceiver, error) {
 	streams := make([]RowReceiver, len(spec.Streams))
 	for i := range spec.Streams {
 		var err error
@@ -158,7 +158,7 @@ func (f *Flow) setupRouter(spec OutputRouterSpec) (RowReceiver, error) {
 			return nil, err
 		}
 	}
-	return makeRouter(spec.Type, streams)
+	return makeRouter(spec, streams)
 }
 
 func checkNumInOut(inputs []RowSource, outputs []RowReceiver, numIn, numOut int) error {
@@ -178,7 +178,7 @@ func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (processor, 
 	outputs := make([]RowReceiver, len(ps.Output))
 	for i := range ps.Output {
 		var err error
-		outputs[i], err = f.setupRouter(ps.Output[0])
+		outputs[i], err = f.setupRouter(&ps.Output[i])
 		if err != nil {
 			return nil, err
 		}
