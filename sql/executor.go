@@ -140,21 +140,21 @@ type Executor struct {
 	reCache *parser.RegexpCache
 
 	// Transient stats.
-	latency       metric.Histograms
-	selectCount   *metric.Counter
-	txnBeginCount *metric.Counter
+	Latency       metric.Histograms
+	SelectCount   *metric.Counter
+	TxnBeginCount *metric.Counter
 
 	// txnCommitCount counts the number of times a COMMIT was attempted.
-	txnCommitCount *metric.Counter
+	TxnCommitCount *metric.Counter
 
-	txnAbortCount    *metric.Counter
-	txnRollbackCount *metric.Counter
-	updateCount      *metric.Counter
-	insertCount      *metric.Counter
-	deleteCount      *metric.Counter
-	ddlCount         *metric.Counter
-	miscCount        *metric.Counter
-	queryCount       *metric.Counter
+	TxnAbortCount    *metric.Counter
+	TxnRollbackCount *metric.Counter
+	UpdateCount      *metric.Counter
+	InsertCount      *metric.Counter
+	DeleteCount      *metric.Counter
+	DdlCount         *metric.Counter
+	MiscCount        *metric.Counter
+	QueryCount       *metric.Counter
 
 	// System Config and mutex.
 	systemConfig   config.SystemConfig
@@ -248,32 +248,21 @@ func NewExecutor(ctx ExecutorContext, stopper *stop.Stopper, registry *metric.Re
 		ctx:     ctx,
 		reCache: parser.NewRegexpCache(512),
 
-		latency:          metric.NewLatency(MetaLatency),
-		txnBeginCount:    metric.NewCounter(MetaTxnBegin),
-		txnCommitCount:   metric.NewCounter(MetaTxnCommit),
-		txnAbortCount:    metric.NewCounter(MetaTxnAbort),
-		txnRollbackCount: metric.NewCounter(MetaTxnRollback),
-		selectCount:      metric.NewCounter(MetaSelect),
-		updateCount:      metric.NewCounter(MetaUpdate),
-		insertCount:      metric.NewCounter(MetaInsert),
-		deleteCount:      metric.NewCounter(MetaDelete),
-		ddlCount:         metric.NewCounter(MetaDdl),
-		miscCount:        metric.NewCounter(MetaMisc),
-		queryCount:       metric.NewCounter(MetaQuery),
+		Latency:          metric.NewLatency(MetaLatency),
+		TxnBeginCount:    metric.NewCounter(MetaTxnBegin),
+		TxnCommitCount:   metric.NewCounter(MetaTxnCommit),
+		TxnAbortCount:    metric.NewCounter(MetaTxnAbort),
+		TxnRollbackCount: metric.NewCounter(MetaTxnRollback),
+		SelectCount:      metric.NewCounter(MetaSelect),
+		UpdateCount:      metric.NewCounter(MetaUpdate),
+		InsertCount:      metric.NewCounter(MetaInsert),
+		DeleteCount:      metric.NewCounter(MetaDelete),
+		DdlCount:         metric.NewCounter(MetaDdl),
+		MiscCount:        metric.NewCounter(MetaMisc),
+		QueryCount:       metric.NewCounter(MetaQuery),
 	}
 
-	registry.AddMetricGroup(exec.latency)
-	registry.AddMetric(exec.txnBeginCount)
-	registry.AddMetric(exec.txnCommitCount)
-	registry.AddMetric(exec.txnAbortCount)
-	registry.AddMetric(exec.txnRollbackCount)
-	registry.AddMetric(exec.selectCount)
-	registry.AddMetric(exec.updateCount)
-	registry.AddMetric(exec.insertCount)
-	registry.AddMetric(exec.deleteCount)
-	registry.AddMetric(exec.ddlCount)
-	registry.AddMetric(exec.miscCount)
-	registry.AddMetric(exec.queryCount)
+	registry.AddMetricStruct(exec)
 
 	exec.systemConfigCond = sync.NewCond(exec.systemConfigMu.RLocker())
 
@@ -548,7 +537,7 @@ func (e *Executor) execRequest(session *Session, sql string) StatementResults {
 						err, txnState, execOpt, stmts, remainingStmts)
 				}
 				lastResult.Err = aErr
-				e.txnAbortCount.Inc(1)
+				e.TxnAbortCount.Inc(1)
 				txn.CleanupOnError(err)
 			}
 			if lastResult.Err == nil {
@@ -565,7 +554,7 @@ func (e *Executor) execRequest(session *Session, sql string) StatementResults {
 			// A COMMIT got an error (retryable or not). Too bad, this txn is toast.
 			// After we return a result for COMMIT (with the COMMIT pgwire tag), the
 			// user can't send any more commands.
-			e.txnAbortCount.Inc(1)
+			e.TxnAbortCount.Inc(1)
 			txn.CleanupOnError(err)
 			txnState.resetStateAndTxn(NoTxn)
 		}
@@ -1154,27 +1143,27 @@ func (e *Executor) execStmt(
 // updateStmtCounts updates metrics for the number of times the different types of SQL
 // statements have been received by this node.
 func (e *Executor) updateStmtCounts(stmt parser.Statement) {
-	e.queryCount.Inc(1)
+	e.QueryCount.Inc(1)
 	switch stmt.(type) {
 	case *parser.BeginTransaction:
-		e.txnBeginCount.Inc(1)
+		e.TxnBeginCount.Inc(1)
 	case *parser.Select:
-		e.selectCount.Inc(1)
+		e.SelectCount.Inc(1)
 	case *parser.Update:
-		e.updateCount.Inc(1)
+		e.UpdateCount.Inc(1)
 	case *parser.Insert:
-		e.insertCount.Inc(1)
+		e.InsertCount.Inc(1)
 	case *parser.Delete:
-		e.deleteCount.Inc(1)
+		e.DeleteCount.Inc(1)
 	case *parser.CommitTransaction:
-		e.txnCommitCount.Inc(1)
+		e.TxnCommitCount.Inc(1)
 	case *parser.RollbackTransaction:
-		e.txnRollbackCount.Inc(1)
+		e.TxnRollbackCount.Inc(1)
 	default:
 		if stmt.StatementType() == parser.DDL {
-			e.ddlCount.Inc(1)
+			e.DdlCount.Inc(1)
 		} else {
-			e.miscCount.Inc(1)
+			e.MiscCount.Inc(1)
 		}
 	}
 }

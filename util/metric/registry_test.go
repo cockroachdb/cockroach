@@ -41,6 +41,30 @@ func TestRegistry(t *testing.T) {
 
 	r.AddMetric(NewGauge(MetricMetadata{"bottom.gauge", ""}))
 	r.AddMetricGroup(NewRates(MetricMetadata{"bottom.rates", ""}))
+	ms := &struct {
+		StructGauge     *Gauge
+		StructGauge64   *GaugeFloat64
+		StructCounter   *Counter
+		StructHistogram *Histogram
+		StructRate      *Rate
+		StructLatency   Histograms
+		StructRates     Rates
+		// A few extra ones: either not exported, or not metric objects.
+		privateStructGauge   *Gauge
+		privateStructGauge64 *GaugeFloat64
+		NotAMetric           int
+		AlsoNotAMetric       string
+		ReallyNotAMetric     *Registry
+	}{
+		StructGauge:     NewGauge(MetricMetadata{"struct.gauge", ""}),
+		StructGauge64:   NewGaugeFloat64(MetricMetadata{"struct.gauge64", ""}),
+		StructCounter:   NewCounter(MetricMetadata{"struct.counter", ""}),
+		StructHistogram: NewHistogram(MetricMetadata{"struct.histogram", ""}, time.Minute, 1000, 3),
+		StructRate:      NewRate(MetricMetadata{"struct.rate", ""}, time.Minute),
+		StructLatency:   NewLatency(MetricMetadata{"struct.latency", ""}),
+		StructRates:     NewRates(MetricMetadata{"struct.rates", ""}),
+	}
+	r.AddMetricStruct(ms)
 
 	expNames := map[string]struct{}{
 		"top.rate":           {},
@@ -60,6 +84,18 @@ func TestRegistry(t *testing.T) {
 		"bottom.rates-1m":    {},
 		"bottom.rates-10m":   {},
 		"bottom.rates-1h":    {},
+		"struct.gauge":       {},
+		"struct.gauge64":     {},
+		"struct.counter":     {},
+		"struct.histogram":   {},
+		"struct.rate":        {},
+		"struct.latency-1m":  {},
+		"struct.latency-10m": {},
+		"struct.latency-1h":  {},
+		"struct.rates-count": {},
+		"struct.rates-1m":    {},
+		"struct.rates-10m":   {},
+		"struct.rates-1h":    {},
 	}
 
 	r.Each(func(name string, _ interface{}) {

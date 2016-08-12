@@ -73,10 +73,7 @@ func newServer(stopper *stop.Stopper, registry *metric.Registry) *server {
 	}
 
 	registry.AddMetric(s.incoming.gauge)
-	registry.AddMetricGroup(s.nodeMetrics.bytesReceived)
-	registry.AddMetricGroup(s.nodeMetrics.bytesSent)
-	registry.AddMetricGroup(s.nodeMetrics.infosReceived)
-	registry.AddMetricGroup(s.nodeMetrics.infosSent)
+	registry.AddMetricStruct(s.nodeMetrics)
 
 	return s
 }
@@ -102,10 +99,10 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 
 			bytesSent := int64(reply.Size())
 			infoCount := int64(len(reply.Delta))
-			s.nodeMetrics.bytesSent.Add(bytesSent)
-			s.nodeMetrics.infosSent.Add(infoCount)
-			s.serverMetrics.bytesSent.Add(bytesSent)
-			s.serverMetrics.infosSent.Add(infoCount)
+			s.nodeMetrics.BytesSent.Add(bytesSent)
+			s.nodeMetrics.InfosSent.Add(infoCount)
+			s.serverMetrics.BytesSent.Add(bytesSent)
+			s.serverMetrics.InfosSent.Add(infoCount)
 
 			return stream.Send(reply)
 		}
@@ -264,10 +261,10 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 
 		bytesReceived := int64(args.Size())
 		infosReceived := int64(len(args.Delta))
-		s.nodeMetrics.bytesReceived.Add(bytesReceived)
-		s.nodeMetrics.infosReceived.Add(infosReceived)
-		s.serverMetrics.bytesReceived.Add(bytesReceived)
-		s.serverMetrics.infosReceived.Add(infosReceived)
+		s.nodeMetrics.BytesReceived.Add(bytesReceived)
+		s.nodeMetrics.InfosReceived.Add(infosReceived)
+		s.serverMetrics.BytesReceived.Add(bytesReceived)
+		s.serverMetrics.InfosReceived.Add(infosReceived)
 
 		freshCount, err := s.is.combine(args.Delta, args.NodeID)
 		if err != nil {

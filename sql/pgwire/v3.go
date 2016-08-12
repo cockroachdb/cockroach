@@ -132,7 +132,7 @@ func makeV3Conn(
 		rd:       bufio.NewReader(conn),
 		wr:       bufio.NewWriter(conn),
 		executor: executor,
-		writeBuf: writeBuffer{bytecount: metrics.bytesOutCount},
+		writeBuf: writeBuffer{bytecount: metrics.BytesOutCount},
 		metrics:  metrics,
 		session:  sql.NewSession(executor.Ctx(), sessionArgs, executor, conn.RemoteAddr()),
 	}
@@ -250,7 +250,7 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 			}
 		}
 		typ, n, err := c.readBuf.readTypedMsg(c.rd)
-		c.metrics.bytesInCount.Inc(int64(n))
+		c.metrics.BytesInCount.Inc(int64(n))
 		if err != nil {
 			return err
 		}

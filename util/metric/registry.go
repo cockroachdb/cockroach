@@ -17,10 +17,13 @@
 package metric
 
 import (
+	"context"
 	"encoding/json"
 	"io"
+	"reflect"
 	"regexp"
 
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/gogo/protobuf/proto"
 	prometheusgo "github.com/prometheus/client_model/go"
@@ -70,6 +73,9 @@ func (r *Registry) AddMetric(metric Iterable) {
 	r.Lock()
 	defer r.Unlock()
 	r.tracked[metric.GetName()] = metric
+	if log.V(2) {
+		log.Infof(context.TODO(), "Added metric: %s (%T)", metric.GetName(), metric)
+	}
 }
 
 // AddMetricGroup expands the metric group and adds all of them
@@ -79,7 +85,41 @@ func (r *Registry) AddMetricGroup(group metricGroup) {
 	defer r.Unlock()
 	group.iterate(func(metric Iterable) {
 		r.tracked[metric.GetName()] = metric
+		if log.V(2) {
+			log.Infof(context.TODO(), "Added metric: %s (%T)", metric.GetName(), metric)
+		}
 	})
+}
+
+// AddMetricStruct examines all fields of metricStruct and adds
+// all Iterable or metricGroup objects to the registry.
+func (r *Registry) AddMetricStruct(metricStruct interface{}) {
+	v := reflect.ValueOf(metricStruct)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	t := v.Type()
+
+	for i := 0; i < v.NumField(); i++ {
+		vfield, tfield := v.Field(i), t.Field(i)
+		if !vfield.CanInterface() {
+			if log.V(2) {
+				log.Infof(context.TODO(), "Skipping unexported field %s", tfield.Name)
+			}
+			continue
+		}
+		val := vfield.Interface()
+		switch typ := val.(type) {
+		case metricGroup:
+			r.AddMetricGroup(typ)
+		case Iterable:
+			r.AddMetric(typ)
+		default:
+			if log.V(2) {
+				log.Infof(context.TODO(), "Skipping non-metric field %s", tfield.Name)
+			}
+		}
+	}
 }
 
 // Each calls the given closure for all metrics.

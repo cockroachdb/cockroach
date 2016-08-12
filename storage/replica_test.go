@@ -716,8 +716,8 @@ func TestReplicaLeaseCounters(t *testing.T) {
 		}
 	}
 	metrics := tc.rng.store.metrics
-	assert(metrics.leaseRequestSuccessCount.Count(), 1, 1000)
-	assert(metrics.leaseRequestErrorCount.Count(), 0, 0)
+	assert(metrics.LeaseRequestSuccessCount.Count(), 1, 1000)
+	assert(metrics.LeaseRequestErrorCount.Count(), 0, 0)
 
 	now := tc.clock.Now()
 	if err := sendLeaseRequest(tc.rng, &roachpb.Lease{
@@ -732,8 +732,8 @@ func TestReplicaLeaseCounters(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	assert(metrics.leaseRequestSuccessCount.Count(), 2, 1000)
-	assert(metrics.leaseRequestErrorCount.Count(), 0, 0)
+	assert(metrics.LeaseRequestSuccessCount.Count(), 2, 1000)
+	assert(metrics.LeaseRequestErrorCount.Count(), 0, 0)
 
 	// Make lease request fail by providing an invalid ReplicaDescriptor.
 	if err := sendLeaseRequest(tc.rng, &roachpb.Lease{
@@ -749,8 +749,8 @@ func TestReplicaLeaseCounters(t *testing.T) {
 		t.Fatal("lease request did not fail on invalid ReplicaDescriptor")
 	}
 
-	assert(metrics.leaseRequestSuccessCount.Count(), 2, 1000)
-	assert(metrics.leaseRequestErrorCount.Count(), 1, 1000)
+	assert(metrics.LeaseRequestSuccessCount.Count(), 2, 1000)
+	assert(metrics.LeaseRequestErrorCount.Count(), 1, 1000)
 }
 
 // TestReplicaGossipConfigsOnLease verifies that config info is gossiped
@@ -6295,7 +6295,7 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tc.store.metrics.available.Update(tc.store.bookie.maxReservedBytes)
+	tc.store.metrics.Available.Update(tc.store.bookie.maxReservedBytes)
 
 	// Note that this is an artificial scenario in which we're adding a
 	// reservation for a replica that is already on the range. This test is

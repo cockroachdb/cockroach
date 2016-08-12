@@ -204,10 +204,10 @@ func TestClientGossipMetrics(t *testing.T) {
 			// Infos/Bytes Sent/Received should not be zero.
 			for i, s := range []*server{local.server, remote.server} {
 				for _, rate := range []metric.Rates{
-					s.nodeMetrics.infosSent,
-					s.nodeMetrics.infosReceived,
-					s.nodeMetrics.bytesSent,
-					s.nodeMetrics.bytesReceived,
+					s.nodeMetrics.InfosSent,
+					s.nodeMetrics.InfosReceived,
+					s.nodeMetrics.BytesSent,
+					s.nodeMetrics.BytesReceived,
 				} {
 					counter := rate.Counter
 					if count := counter.Count(); count <= 0 {
