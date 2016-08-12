@@ -41,6 +41,7 @@ if [ "${1-}" = "docker" ]; then
   # glock has updated itself, "go get -u" no longer works because
   # the clone's head is detached).
   go get github.com/robfig/glock
+  git submodule update --init
   glock sync -n < GLOCKFILE
 
   # Be careful to keep the dependencies built for each shard in sync
@@ -65,14 +66,14 @@ if [ "${1-}" = "docker" ]; then
   fi
 
   if is_shard 1; then
-    time go test -race -v -i ./...
+    time go test -race -v -i $(go list ./... | grep -v /vendor/)
     # We need go2xunit on both shards that run go tests.
-    time go install -v github.com/tebeka/go2xunit
+    time go install -v ./vendor/github.com/tebeka/go2xunit
   fi
 
   if is_shard 0; then
     time make install
-    time go test -v -i ./...
+    time go test -v -i $(go list ./... | grep -v /vendor/)
     time go test -v -c -tags acceptance ./acceptance
   fi
 

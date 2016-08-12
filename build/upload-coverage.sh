@@ -46,7 +46,7 @@ rm -rf "$coverage_dir"
 mkdir -p "$coverage_dir"
 
 # Run "make coverage" on each package.
-for pkg in $(go list ./...); do
+for pkg in $(go list ./...| grep -v vendor/); do
   echo "Processing $pkg..."
   # Verify package has test files.
   if [ -z "$(go list -f '{{join .TestGoFiles ""}}{{join .XTestGoFiles ""}}' $pkg)" ]; then

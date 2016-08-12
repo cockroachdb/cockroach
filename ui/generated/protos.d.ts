@@ -7040,6 +7040,15 @@ declare module Proto2TypeScript.raftpb {
 
 		
 
+Type?: EntryType;
+		
+
+getType?() : EntryType;
+		setType?(type : EntryType): void;
+		
+
+
+
 Term?: Long;
 		
 
@@ -7054,15 +7063,6 @@ Index?: Long;
 
 getIndex?() : Long;
 		setIndex?(index : Long): void;
-		
-
-
-
-Type?: EntryType;
-		
-
-getType?() : EntryType;
-		setType?(type : EntryType): void;
 		
 
 
@@ -7301,15 +7301,6 @@ getRejectHint?() : Long;
 
 
 
-context?: ByteBuffer;
-		
-
-getContext?() : ByteBuffer;
-		setContext?(context : ByteBuffer): void;
-		
-
-
-
 }
 
 	export interface MessageMessage extends Message {
@@ -7509,8 +7500,6 @@ declare module Proto2TypeScript.raftpb {
 		MsgCheckQuorum = 12,
 		MsgTransferLeader = 13,
 		MsgTimeoutNow = 14,
-		MsgReadIndex = 15,
-		MsgReadIndexResp = 16,
 		
 }
 }

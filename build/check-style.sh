@@ -2,7 +2,9 @@
 
 set -euo pipefail
 
-export PKG=${PKG:-./...}
+export PKG=${PKG:-$(go list ./... | grep -v vendor| tr '\n' ' ')}
+export GODIRS=$(find . -type f -name '*.go' -not -path "./vendor/*" -exec dirname {} \; | sort | uniq | grep -v "\.$")
+export GOFILES=$(find . -type f -name '*.go' -not -path "./vendor/*")
 
 TestCopyrightHeaders() {
   echo "checking for missing license headers"
@@ -58,7 +60,7 @@ TestForbiddenImports() {
   local log=$(mktemp -t test-forbidden-imports.XXXXXX)
   trap "rm -f ${log}" EXIT
 
-  go list -f '{{ $ip := .ImportPath }}{{ range .Imports}}{{ $ip }}: {{ println . }}{{end}}{{ range .TestImports}}{{ $ip }}: {{ println . }}{{end}}{{ range .XTestImports}}{{ $ip }}: {{ println . }}{{end}}' "$PKG" | \
+  go list -f '{{ $ip := .ImportPath }}{{ range .Imports}}{{ $ip }}: {{ println . }}{{end}}{{ range .TestImports}}{{ $ip }}: {{ println . }}{{end}}{{ range .XTestImports}}{{ $ip }}: {{ println . }}{{end}}' $PKG | \
        grep -E ' (github.com/golang/protobuf/proto|github.com/satori/go\.uuid|log|path|context)$' | \
        grep -vE 'cockroach/(base|security|util/(log|randutil|stop)): log$' | \
        grep -vE 'cockroach/(server/serverpb|ts/tspb): github.com/golang/protobuf/proto$' | \
@@ -97,51 +99,55 @@ TestIneffassign() {
 }
 
 TestErrcheck() {
-  errcheck -ignore 'bytes:Write.*,io:Close,net:Close,net/http:Close,net/rpc:Close,os:Close,database/sql:Close' "$PKG"
+  errcheck -ignore 'bytes:Write.*,io:Close,net:Close,net/http:Close,net/rpc:Close,os:Close,database/sql:Close' $PKG
 }
 
 TestReturnCheck() {
-  returncheck "$PKG"
+  returncheck $PKG
 }
 
 TestVet() {
-  ! go tool vet -all -shadow -printfuncs Info:0,Infof:0,Warning:0,Warningf:0,UnimplementedWithIssueErrorf:1 . 2>&1 | \
+  ! go tool vet -all -shadow -printfuncs Info:0,Infof:0,Warning:0,Warningf:0,UnimplementedWithIssueErrorf:1 $GODIRS 2>&1 | \
     grep -vE 'declaration of "?(pE|e)rr"? shadows' | \
     grep -vE '\.pb\.gw\.go:[0-9]+: declaration of "?ctx"? shadows' | \
     grep -vE '^vet: cannot process directory \.git'
 }
 
 TestGolint() {
-  ! golint "$PKG" | grep -vE '((\.pb|\.pb\.gw|embedded|_string)\.go|sql/parser/(yaccpar|sql\.y):)'
+  for d in $GODIRS; do
+    if golint $d | grep -vE '((\.pb|\.pb\.gw|embedded|_string)\.go|sql/parser/(yaccpar|sql\.y):)'; then
+      return 1
+    fi
+  done
 }
 
 TestGoSimple() {
-  ! gosimple "$PKG" | grep -vF 'embedded.go'
+  ! gosimple $PKG | grep -vF 'embedded.go'
 }
 
 TestVarcheck() {
-  ! varcheck -e "$PKG" | \
+  ! varcheck -e $PKG | \
     grep -vE '(_string.go|sql/parser/(yacctab|sql\.y)|\.pb\.go|pgerror/codes.go)'
 }
 
 TestGofmtSimplify() {
-  ! gofmt -s -d -l . 2>&1 | grep -vE '^\.git/'
+  ! gofmt -s -d -l $GOFILES 2>&1 | grep -vE '^\.git/'
 }
 
 TestGoimports() {
-  ! goimports -l . | read
+  ! goimports -l $GOFILES | read
 }
 
 TestUnconvert() {
-  ! unconvert "$PKG" | grep -vF '.pb.go:'
+  ! unconvert $PKG | grep -vF '.pb.go:'
 }
 
 TestUnused() {
-  ! unused -exported ./... | grep -vE '(\.pb\.go:|/C:|_string.go:|embedded.go:|parser/(yacc|sql.y)|util/interval/interval.go:|_cgo|Mutex|pgerror/codes.go)'
+  ! unused -exported $PKG | grep -vE '(\.pb\.go:|/C:|_string.go:|embedded.go:|parser/(yacc|sql.y)|util/interval/interval.go:|_cgo|Mutex|pgerror/codes.go)'
 }
 
 TestStaticcheck() {
-  staticcheck ./...
+  staticcheck $PKG
 }
 
 # Run all the tests, wrapped in a similar output format to "go test"
