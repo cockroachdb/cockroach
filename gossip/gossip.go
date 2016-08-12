@@ -58,6 +58,7 @@ import (
 	"math"
 	"math/rand"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -151,7 +152,7 @@ type Gossip struct {
 	storage       Storage             // Persistent storage interface
 	bootstrapInfo BootstrapInfo       // BootstrapInfo proto for persistent storage
 	bootstrapping map[string]struct{} // Set of active bootstrap clients
-	needBSCleanup bool                // Set if there are invalid bootstrap addresses
+	hasCleanedBS  bool
 
 	// Note that access to each client's internal state is serialized by the
 	// embedded server's mutex. This is surprising!
@@ -463,29 +464,42 @@ func (g *Gossip) maybeAddBootstrapAddress(addr util.UnresolvedAddr) bool {
 	return false
 }
 
-// maybeCleanupBootstrapAddresses removes any addresses from the
-// bootstrap info which fail to resolve successfully.
+// maybeCleanupBootstrapAddresses cleans up the stored bootstrap
+// addresses to include only those currently available via gossip.
 func (g *Gossip) maybeCleanupBootstrapAddresses(ctx context.Context) {
-	if !g.needBSCleanup || g.storage == nil {
+	if g.storage == nil || g.hasCleanedBS {
 		return
 	}
-	var newAddrs []util.UnresolvedAddr
-	for _, addr := range g.bootstrapInfo.Addresses {
-		if r, ok := g.resolverAddrs[addr]; ok {
-			if _, err := r.GetAddress(); err == nil {
-				newAddrs = append(newAddrs, addr)
-			} else {
-				log.Infof(ctx, "purging invalid bootstrap address %s", addr)
+	defer func() { g.hasCleanedBS = true }()
+
+	g.resolvers = g.resolvers[:0]
+	g.resolverIdx = 0
+	g.bootstrapInfo.Addresses = g.bootstrapInfo.Addresses[:0]
+	g.bootstrapAddrs = map[util.UnresolvedAddr]struct{}{}
+	g.resolverAddrs = map[util.UnresolvedAddr]resolver.Resolver{}
+	g.resolversTried = map[int]struct{}{}
+
+	var desc roachpb.NodeDescriptor
+	if err := g.is.visitInfos(func(key string, i *Info) error {
+		if strings.HasPrefix(key, KeyNodeIDPrefix) {
+			if err := i.Value.GetProto(&desc); err != nil {
+				return err
 			}
+			if desc.Address == g.is.NodeAddr {
+				return nil
+			}
+			g.maybeAddResolver(desc.Address)
+			g.maybeAddBootstrapAddress(desc.Address)
 		}
+		return nil
+	}); err != nil {
+		log.Error(ctx, err)
+		return
 	}
-	if len(newAddrs) != len(g.bootstrapInfo.Addresses) {
-		g.bootstrapInfo.Addresses = newAddrs
-		if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
-			log.Error(ctx, err)
-		}
+
+	if err := g.storage.WriteBootstrapInfo(&g.bootstrapInfo); err != nil {
+		log.Error(ctx, err)
 	}
-	g.needBSCleanup = false
 }
 
 // maxPeers returns the maximum number of peers each gossip node
@@ -797,22 +811,14 @@ func (g *Gossip) hasOutgoing(nodeID roachpb.NodeID) bool {
 // slice supplied to the constructor or set using setBootstrap().
 // The lock is assumed held.
 func (g *Gossip) getNextBootstrapAddress() net.Addr {
-	needBSCleanup := false
-	defer func() {
-		g.needBSCleanup = needBSCleanup
-	}()
-
 	// Run through resolvers round robin starting at last resolved index.
 	for i := 0; i < len(g.resolvers); i++ {
 		g.resolverIdx++
 		g.resolverIdx %= len(g.resolvers)
-		g.resolversTried[g.resolverIdx] = struct{}{}
+		defer func(idx int) { g.resolversTried[idx] = struct{}{} }(g.resolverIdx)
 		resolver := g.resolvers[g.resolverIdx]
 		if addr, err := resolver.GetAddress(); err != nil {
-			// Resolver has an invalid address. Set needBSCleanup to purge invalid
-			// bootstrap addresses once gossip cluster is joined successfully.
-			needBSCleanup = true
-			if !g.needBSCleanup {
+			if _, ok := g.resolversTried[g.resolverIdx]; !ok {
 				log.Warningf(context.TODO(), "invalid bootstrap address: %+v, %v", resolver, err)
 			}
 			continue
@@ -979,6 +985,9 @@ func (g *Gossip) doDisconnected(c *client) {
 func (g *Gossip) maybeSignalStalledLocked() {
 	ctx := context.TODO()
 	if g.is.getInfo(KeySentinel) != nil && g.outgoing.len()+g.incoming.len() > 0 {
+		// When gossip is connected, the set of bootstrap addresses is
+		// potentially cleaned up to remove ones which haven't yet been
+		// gossiped, and may no longer be valid.
 		g.maybeCleanupBootstrapAddresses(ctx)
 		if g.stalled {
 			log.Infof(ctx, "node has connected to cluster via gossip")
@@ -989,7 +998,7 @@ func (g *Gossip) maybeSignalStalledLocked() {
 	// We employ the stalled boolean to avoid filling logs with warnings.
 	if !g.stalled {
 		g.stalled = true
-		g.warnAboutStall()
+		g.warnAboutStall(ctx)
 	}
 	g.signalStalledLocked()
 }
@@ -1011,13 +1020,13 @@ func (g *Gossip) signalStalledLocked() {
 // connected, and all resolvers have been tried, we warn about either
 // the first range not being available or else possible the cluster
 // never having been initialized.
-func (g *Gossip) warnAboutStall() {
+func (g *Gossip) warnAboutStall(ctx context.Context) {
 	if g.outgoing.len()+g.incoming.len() == 0 {
-		log.Warningf(context.TODO(), "not connected to cluster; use --join to specify a connected node")
+		log.Warningf(ctx, "not connected to cluster; use --join to specify a connected node")
 	} else if len(g.resolversTried) == len(g.resolvers) {
-		log.Warningf(context.TODO(), "first range unavailable or cluster not initialized")
+		log.Warningf(ctx, "first range unavailable or cluster not initialized")
 	} else {
-		log.Warningf(context.TODO(), "partition in gossip network; attempting new connection")
+		log.Warningf(ctx, "partition in gossip network; attempting new connection")
 	}
 }
 

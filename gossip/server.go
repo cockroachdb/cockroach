@@ -176,8 +176,6 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 	for {
 		args := *argsPtr
 		if args.NodeID != 0 {
-			log.Infof(context.TODO(), "node %d: received gossip from node %d",
-				s.is.NodeID, args.NodeID)
 			// Decide whether or not we can accept the incoming connection
 			// as a permanent peer.
 			if args.NodeID == s.is.NodeID {
@@ -274,8 +272,6 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 			NodeID:          s.is.NodeID,
 			HighWaterStamps: s.is.getHighWaterStamps(),
 		}
-
-		log.Infof(context.TODO(), "node %d: replying to %d ", s.is.NodeID, args.NodeID)
 
 		s.mu.Unlock()
 		err = senderFn(reply)
