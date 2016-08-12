@@ -25,7 +25,7 @@ STATIC :=
 
 # Variables to be overridden on the command line, e.g.
 #   make test PKG=./storage TESTFLAGS=--vmodule=raft=1
-PKG          := ./...
+PKG          := $(shell go list ./... | grep -v /vendor/ | tr '\n' ' ')
 TAGS         :=
 TESTS        := .
 TESTTIMEOUT  := 2m
@@ -165,7 +165,7 @@ dupl:
 check:
 	# compile everything; go vet sometimes reports incorrect errors if
 	# the build artifacts are stale.
-	$(GO) test -i ./...
+	$(GO) test -i $(go list ./... | grep -v /vendor/)
 	@build/check-style.sh
 
 .PHONY: clean
@@ -209,6 +209,7 @@ $(GLOCK):
 # Update the git hooks and run the bootstrap script whenever any
 # of them (or their dependencies) change.
 .bootstrap: $(GITHOOKS) $(GLOCK) GLOCKFILE
+	git submodule update --init
 	@unset GIT_WORK_TREE; $(GLOCK) sync github.com/cockroachdb/cockroach
 	touch $@
 
