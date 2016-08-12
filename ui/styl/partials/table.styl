@@ -20,7 +20,7 @@ Author: Matt Tracy (matt@cockroachlabs.com)
 
 $stats-table-cell--border = 1px solid $secondary-gray-8
 
-$stats-table-th--fg = $secondary-gray-6
+$stats-table-th--fg = $secondary-light-gray
 $stats-table-td--fg = $main-navy
 
 $stats-table-th--bg     = white
@@ -62,9 +62,10 @@ $stats-table-tr--bg-alt = $secondary-gray-7
 
   th
     color $stats-table-th--fg
-    font-family Lato-Bold
-    font-size 12px
-    letter-spacing .27px
+    font-family Lato
+    font-size 10px
+    letter-spacing 1.5px
+    text-transform uppercase
     font-weight normal
     text-align left
     background-color $stats-table-th--bg
@@ -99,7 +100,7 @@ $stats-table-tr--bg-alt = $secondary-gray-7
   td
     color $stats-table-td--fg
     font-family Lato-Regular
-    font-size 13px
+    font-size 12px
     letter-spacing .33px
     white-space nowrap
     .units
@@ -135,6 +136,7 @@ table
   table
     thead
       border-left $stats-table-cell--border
+      border-top $stats-table-cell--border
     tr
       border-left $stats-table-cell--border
 
