@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -230,7 +231,7 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 func (ts *txnState) dumpTrace() {
 	if traceSQL && ts.txn != nil {
 		ts.sp.Finish()
-		if time.Since(ts.sqlTimestamp) >= traceSQLDuration {
+		if timeutil.Since(ts.sqlTimestamp) >= traceSQLDuration {
 			dump := tracing.FormatRawSpans(ts.txn.CollectedSpans)
 			if len(dump) > 0 {
 				log.Infof(context.Background(), "%s\n%s", ts.txn.Proto.ID, dump)
