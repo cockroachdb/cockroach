@@ -82,20 +82,18 @@ var errNeedsBootstrap = errors.New("node has no initialized stores and no instru
 var errCannotJoinSelf = errors.New("an uninitialized node cannot specify its own address to join a cluster")
 
 type nodeMetrics struct {
-	latency metric.Histograms
-	success metric.Rates
-	err     metric.Rates
+	Latency metric.Histograms
+	Success metric.Rates
+	Err     metric.Rates
 }
 
 func makeNodeMetrics(reg *metric.Registry) nodeMetrics {
 	nm := nodeMetrics{
-		latency: metric.NewLatency(metaExecLatency),
-		success: metric.NewRates(metaExecSuccess),
-		err:     metric.NewRates(metaExecError),
+		Latency: metric.NewLatency(metaExecLatency),
+		Success: metric.NewRates(metaExecSuccess),
+		Err:     metric.NewRates(metaExecError),
 	}
-	reg.AddMetricGroup(nm.latency)
-	reg.AddMetricGroup(nm.success)
-	reg.AddMetricGroup(nm.err)
+	reg.AddMetricStruct(nm)
 	return nm
 }
 
@@ -104,11 +102,11 @@ func makeNodeMetrics(reg *metric.Registry) nodeMetrics {
 // level; stats on specific lower-level kv operations are not recorded.
 func (nm nodeMetrics) callComplete(d time.Duration, pErr *roachpb.Error) {
 	if pErr != nil && pErr.TransactionRestart == roachpb.TransactionRestart_NONE {
-		nm.err.Add(1)
+		nm.Err.Add(1)
 	} else {
-		nm.success.Add(1)
+		nm.Success.Add(1)
 	}
-	nm.latency.RecordValue(d.Nanoseconds())
+	nm.Latency.RecordValue(d.Nanoseconds())
 }
 
 // A Node manages a map of stores (by store ID) for which it serves

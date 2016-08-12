@@ -73,56 +73,43 @@ type RuntimeStatSampler struct {
 	lastNumGC     uint32
 
 	// Metric gauges maintained by the sampler.
-	cgoCalls       *metric.Gauge
-	goroutines     *metric.Gauge
-	goAllocBytes   *metric.Gauge
-	goTotalBytes   *metric.Gauge
-	cgoAllocBytes  *metric.Gauge
-	cgoTotalBytes  *metric.Gauge
-	gcCount        *metric.Gauge
-	gcPauseNS      *metric.Gauge
-	gcPausePercent *metric.GaugeFloat64
-	cpuUserNS      *metric.Gauge
-	cpuUserPercent *metric.GaugeFloat64
-	cpuSysNS       *metric.Gauge
-	cpuSysPercent  *metric.GaugeFloat64
-	rss            *metric.Gauge
+	CgoCalls       *metric.Gauge
+	Goroutines     *metric.Gauge
+	GoAllocBytes   *metric.Gauge
+	GoTotalBytes   *metric.Gauge
+	CgoAllocBytes  *metric.Gauge
+	CgoTotalBytes  *metric.Gauge
+	GcCount        *metric.Gauge
+	GcPauseNS      *metric.Gauge
+	GcPausePercent *metric.GaugeFloat64
+	CpuUserNS      *metric.Gauge
+	CpuUserPercent *metric.GaugeFloat64
+	CpuSysNS       *metric.Gauge
+	CpuSysPercent  *metric.GaugeFloat64
+	Rss            *metric.Gauge
 }
 
 // MakeRuntimeStatSampler constructs a new RuntimeStatSampler object.
 func MakeRuntimeStatSampler(clock *hlc.Clock, reg *metric.Registry) RuntimeStatSampler {
 	r := RuntimeStatSampler{
 		clock:          clock,
-		cgoCalls:       metric.NewGauge(metaCgoCalls),
-		goroutines:     metric.NewGauge(metaGoroutines),
-		goAllocBytes:   metric.NewGauge(metaGoAllocBytes),
-		goTotalBytes:   metric.NewGauge(metaGoTotalBytes),
-		cgoAllocBytes:  metric.NewGauge(metaCgoAllocBytes),
-		cgoTotalBytes:  metric.NewGauge(metaCgoTotalBytes),
-		gcCount:        metric.NewGauge(metaGCCount),
-		gcPauseNS:      metric.NewGauge(metaGCPauseNS),
-		gcPausePercent: metric.NewGaugeFloat64(metaGCPausePercent),
-		cpuUserNS:      metric.NewGauge(metaCPUUserNS),
-		cpuUserPercent: metric.NewGaugeFloat64(metaCPUUserPercent),
-		cpuSysNS:       metric.NewGauge(metaCPUSysNS),
-		cpuSysPercent:  metric.NewGaugeFloat64(metaCPUSysPercent),
-		rss:            metric.NewGauge(metaRSS),
+		CgoCalls:       metric.NewGauge(metaCgoCalls),
+		Goroutines:     metric.NewGauge(metaGoroutines),
+		GoAllocBytes:   metric.NewGauge(metaGoAllocBytes),
+		GoTotalBytes:   metric.NewGauge(metaGoTotalBytes),
+		CgoAllocBytes:  metric.NewGauge(metaCgoAllocBytes),
+		CgoTotalBytes:  metric.NewGauge(metaCgoTotalBytes),
+		GcCount:        metric.NewGauge(metaGCCount),
+		GcPauseNS:      metric.NewGauge(metaGCPauseNS),
+		GcPausePercent: metric.NewGaugeFloat64(metaGCPausePercent),
+		CpuUserNS:      metric.NewGauge(metaCPUUserNS),
+		CpuUserPercent: metric.NewGaugeFloat64(metaCPUUserPercent),
+		CpuSysNS:       metric.NewGauge(metaCPUSysNS),
+		CpuSysPercent:  metric.NewGaugeFloat64(metaCPUSysPercent),
+		Rss:            metric.NewGauge(metaRSS),
 	}
 
-	reg.AddMetric(r.cgoCalls)
-	reg.AddMetric(r.goroutines)
-	reg.AddMetric(r.goAllocBytes)
-	reg.AddMetric(r.goTotalBytes)
-	reg.AddMetric(r.cgoAllocBytes)
-	reg.AddMetric(r.cgoTotalBytes)
-	reg.AddMetric(r.gcCount)
-	reg.AddMetric(r.gcPauseNS)
-	reg.AddMetric(r.gcPausePercent)
-	reg.AddMetric(r.cpuUserNS)
-	reg.AddMetric(r.cpuUserPercent)
-	reg.AddMetric(r.cpuSysNS)
-	reg.AddMetric(r.cpuSysPercent)
-	reg.AddMetric(r.rss)
+	reg.AddMetricStruct(r)
 
 	return r
 }
@@ -201,18 +188,18 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 	rsr.lastCgoCall = numCgoCall
 	rsr.lastNumGC = ms.NumGC
 
-	rsr.cgoCalls.Update(numCgoCall)
-	rsr.goroutines.Update(int64(numGoroutine))
-	rsr.goAllocBytes.Update(int64(goAllocated))
-	rsr.goTotalBytes.Update(int64(goTotal))
-	rsr.cgoAllocBytes.Update(int64(cgoAllocated))
-	rsr.cgoTotalBytes.Update(int64(cgoTotal))
-	rsr.gcCount.Update(int64(ms.NumGC))
-	rsr.gcPauseNS.Update(int64(ms.PauseTotalNs))
-	rsr.gcPausePercent.Update(pausePerc)
-	rsr.cpuUserNS.Update(newUtime)
-	rsr.cpuUserPercent.Update(uPerc)
-	rsr.cpuSysNS.Update(newStime)
-	rsr.cpuSysPercent.Update(sPerc)
-	rsr.rss.Update(int64(mem.Resident))
+	rsr.CgoCalls.Update(numCgoCall)
+	rsr.Goroutines.Update(int64(numGoroutine))
+	rsr.GoAllocBytes.Update(int64(goAllocated))
+	rsr.GoTotalBytes.Update(int64(goTotal))
+	rsr.CgoAllocBytes.Update(int64(cgoAllocated))
+	rsr.CgoTotalBytes.Update(int64(cgoTotal))
+	rsr.GcCount.Update(int64(ms.NumGC))
+	rsr.GcPauseNS.Update(int64(ms.PauseTotalNs))
+	rsr.GcPausePercent.Update(pausePerc)
+	rsr.CpuUserNS.Update(newUtime)
+	rsr.CpuUserPercent.Update(uPerc)
+	rsr.CpuSysNS.Update(newStime)
+	rsr.CpuSysPercent.Update(sPerc)
+	rsr.Rss.Update(int64(mem.Resident))
 }

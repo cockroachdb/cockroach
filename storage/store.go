@@ -858,7 +858,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 			return false, err
 		}
 		// Add this range and its stats to our counter.
-		s.metrics.replicaCount.Inc(1)
+		s.metrics.ReplicaCount.Inc(1)
 		s.metrics.addMVCCStats(rng.GetMVCCStats())
 		// Note that we do not create raft groups at this time; they will be created
 		// on-demand the first time they are needed. This helps reduce the amount of
@@ -1555,7 +1555,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 		return err
 	}
 
-	s.metrics.replicaCount.Inc(1)
+	s.metrics.ReplicaCount.Inc(1)
 	return s.processRangeDescriptorUpdateLocked(origRng)
 }
 
@@ -1602,7 +1602,7 @@ func (s *Store) AddReplicaTest(rng *Replica) error {
 	if err := s.addReplicaInternalLocked(rng); err != nil {
 		return err
 	}
-	s.metrics.replicaCount.Inc(1)
+	s.metrics.ReplicaCount.Inc(1)
 	return nil
 }
 
@@ -1676,7 +1676,7 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 	// Destroy, but this configuration helps avoid races in stat verification
 	// tests.
 	s.metrics.subtractMVCCStats(rep.GetMVCCStats())
-	s.metrics.replicaCount.Dec(1)
+	s.metrics.ReplicaCount.Dec(1)
 
 	// TODO(bdarnell): This is fairly expensive to do under store.Mutex, but
 	// doing it outside the lock is tricky due to the risk that a replica gets
@@ -1745,7 +1745,7 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 	}
 
 	// Add the range and its current stats into metrics.
-	s.metrics.replicaCount.Inc(1)
+	s.metrics.ReplicaCount.Inc(1)
 
 	return nil
 }
@@ -2369,16 +2369,16 @@ func (s *Store) processRaft() {
 			}
 			wg.Wait()
 			s.processRaftMu.Unlock()
-			s.metrics.raftWorkingDurationNanos.Inc(timeutil.Since(workingStart).Nanoseconds())
+			s.metrics.RaftWorkingDurationNanos.Inc(timeutil.Since(workingStart).Nanoseconds())
 
 			selectStart := timeutil.Now()
 
 			select {
 			case <-s.wakeRaftLoop:
-				s.metrics.raftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
+				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
 
 			case st := <-s.ctx.Transport.SnapshotStatusChan:
-				s.metrics.raftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
+				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
 				s.processRaftMu.Lock()
 				s.mu.Lock()
 				if r, ok := s.mu.replicas[st.Req.RangeID]; ok {
@@ -2390,7 +2390,7 @@ func (s *Store) processRaft() {
 
 			case <-ticker.C:
 				// TODO(bdarnell): rework raft ticker.
-				s.metrics.raftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
+				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
 				tickerStart := timeutil.Now()
 				s.processRaftMu.Lock()
 				s.mu.Lock()
@@ -2410,10 +2410,10 @@ func (s *Store) processRaft() {
 				s.pendingRaftGroups.Unlock()
 				s.mu.Unlock()
 				s.processRaftMu.Unlock()
-				s.metrics.raftTickingDurationNanos.Inc(timeutil.Since(tickerStart).Nanoseconds())
+				s.metrics.RaftTickingDurationNanos.Inc(timeutil.Since(tickerStart).Nanoseconds())
 
 			case <-s.stopper.ShouldStop():
-				s.metrics.raftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
+				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
 				return
 			}
 		}
@@ -2604,7 +2604,7 @@ func (s *Store) ComputeMetrics() error {
 		sstables := rocksdb.GetSSTables()
 		readAmp := sstables.ReadAmplification()
 		log.Infof(context.TODO(), "store %d sstables (read amplification = %d):\n%s", s.StoreID(), readAmp, sstables)
-		s.metrics.rdbReadAmplification.Update(int64(readAmp))
+		s.metrics.RdbReadAmplification.Update(int64(readAmp))
 	}
 	return nil
 }

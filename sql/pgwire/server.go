@@ -76,20 +76,18 @@ type Server struct {
 }
 
 type serverMetrics struct {
-	bytesInCount  *metric.Counter
-	bytesOutCount *metric.Counter
-	conns         *metric.Counter
+	BytesInCount  *metric.Counter
+	BytesOutCount *metric.Counter
+	Conns         *metric.Counter
 }
 
 func newServerMetrics(reg *metric.Registry) *serverMetrics {
 	sm := &serverMetrics{
-		conns:         metric.NewCounter(MetaConns),
-		bytesInCount:  metric.NewCounter(MetaBytesIn),
-		bytesOutCount: metric.NewCounter(MetaBytesOut),
+		Conns:         metric.NewCounter(MetaConns),
+		BytesInCount:  metric.NewCounter(MetaBytesIn),
+		BytesOutCount: metric.NewCounter(MetaBytesOut),
 	}
-	reg.AddMetric(sm.conns)
-	reg.AddMetric(sm.bytesInCount)
-	reg.AddMetric(sm.bytesOutCount)
+	reg.AddMetricStruct(sm)
 	return sm
 }
 
@@ -139,7 +137,7 @@ func (s *Server) SetDraining(drain bool) error {
 		return nil
 	}
 	return util.RetryForDuration(drainMaxWait, func() error {
-		if c := s.metrics.conns.Count(); c != 0 {
+		if c := s.metrics.Conns.Count(); c != 0 {
 			// TODO(tschottdorf): Do more plumbing to actively disrupt
 			// connections; see #6283. There isn't much of a point until
 			// we know what load-balanced clients like to see (#6295).
@@ -164,8 +162,8 @@ func (s *Server) ServeConn(conn net.Conn) error {
 	// DrainClient() waits for that number to drop to zero,
 	// so we don't want it to oscillate unnecessarily.
 	if !draining {
-		s.metrics.conns.Inc(1)
-		defer s.metrics.conns.Dec(1)
+		s.metrics.Conns.Inc(1)
+		defer s.metrics.Conns.Dec(1)
 	}
 
 	var buf readBuffer
@@ -173,7 +171,7 @@ func (s *Server) ServeConn(conn net.Conn) error {
 	if err != nil {
 		return err
 	}
-	s.metrics.bytesInCount.Inc(int64(n))
+	s.metrics.BytesInCount.Inc(int64(n))
 	version, err := buf.getUint32()
 	if err != nil {
 		return err
@@ -203,7 +201,7 @@ func (s *Server) ServeConn(conn net.Conn) error {
 		if err != nil {
 			return err
 		}
-		s.metrics.bytesInCount.Inc(int64(n))
+		s.metrics.BytesInCount.Inc(int64(n))
 		version, err = buf.getUint32()
 		if err != nil {
 			return err

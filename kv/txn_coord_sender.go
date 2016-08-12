@@ -134,12 +134,7 @@ func NewTxnMetrics(registry *metric.Registry) *TxnMetrics {
 		Durations:  metric.NewLatency(metaDurationsHistograms),
 		Restarts:   metric.NewHistogram(metaRestartsHistogram, 60*time.Second, 100, 3),
 	}
-	registry.AddMetricGroup(tm.Aborts)
-	registry.AddMetricGroup(tm.Commits)
-	registry.AddMetricGroup(tm.Commits1PC)
-	registry.AddMetricGroup(tm.Abandons)
-	registry.AddMetricGroup(tm.Durations)
-	registry.AddMetric(tm.Restarts)
+	registry.AddMetricStruct(tm)
 
 	return tm
 }

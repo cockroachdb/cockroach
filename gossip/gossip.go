@@ -1082,23 +1082,23 @@ func (*Request) GetUser() string {
 }
 
 type metrics struct {
-	bytesReceived metric.Rates
-	bytesSent     metric.Rates
-	infosReceived metric.Rates
-	infosSent     metric.Rates
+	BytesReceived metric.Rates
+	BytesSent     metric.Rates
+	InfosReceived metric.Rates
+	InfosSent     metric.Rates
 }
 
 func (m metrics) String() string {
 	return fmt.Sprintf("infos %d/%d sent/received, bytes %dB/%dB sent/received",
-		m.infosSent.Count(), m.infosReceived.Count(), m.bytesSent.Count(), m.bytesReceived.Count())
+		m.InfosSent.Count(), m.InfosReceived.Count(), m.BytesSent.Count(), m.BytesReceived.Count())
 }
 
 // makeMetrics makes a new metrics object with rates.
 func makeMetrics() metrics {
 	return metrics{
-		bytesReceived: metric.NewRates(MetaBytesReceivedRates),
-		bytesSent:     metric.NewRates(MetaBytesSentRates),
-		infosReceived: metric.NewRates(MetaInfosReceivedRates),
-		infosSent:     metric.NewRates(MetaInfosSentRates),
+		BytesReceived: metric.NewRates(MetaBytesReceivedRates),
+		BytesSent:     metric.NewRates(MetaBytesSentRates),
+		InfosReceived: metric.NewRates(MetaInfosReceivedRates),
+		InfosSent:     metric.NewRates(MetaInfosSentRates),
 	}
 }

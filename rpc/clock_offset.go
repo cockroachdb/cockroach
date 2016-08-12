@@ -29,8 +29,8 @@ import (
 )
 
 type remoteClockMetrics struct {
-	clusterOffsetLowerBound *metric.Gauge
-	clusterOffsetUpperBound *metric.Gauge
+	ClusterOffsetLowerBound *metric.Gauge
+	ClusterOffsetUpperBound *metric.Gauge
 }
 
 var (
@@ -60,8 +60,8 @@ func newRemoteClockMonitor(clock *hlc.Clock, offsetTTL time.Duration) *RemoteClo
 	}
 	r.mu.offsets = make(map[string]RemoteOffset)
 	r.metrics = remoteClockMetrics{
-		clusterOffsetLowerBound: metric.NewGauge(metaClusterOffsetLowerBound),
-		clusterOffsetUpperBound: metric.NewGauge(metaClusterOffsetUpperBound),
+		ClusterOffsetLowerBound: metric.NewGauge(metaClusterOffsetLowerBound),
+		ClusterOffsetUpperBound: metric.NewGauge(metaClusterOffsetUpperBound),
 	}
 	return &r
 }
@@ -180,6 +180,5 @@ func (r RemoteOffset) isStale(ttl time.Duration, now time.Time) bool {
 // TODO(marc): this pattern deviates from other users of the registry
 // that take it as an argument at metric construction time.
 func (r *RemoteClockMonitor) RegisterMetrics(reg *metric.Registry) {
-	reg.AddMetric(r.metrics.clusterOffsetLowerBound)
-	reg.AddMetric(r.metrics.clusterOffsetUpperBound)
+	reg.AddMetricStruct(r.metrics)
 }
