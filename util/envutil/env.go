@@ -47,10 +47,19 @@ func init() {
 	ClearEnvCache()
 }
 
-// VarName returns the name of the environment variable
-// corresponding to a configuration key or command-line flag name.
-func VarName(name string) string {
-	return "COCKROACH_" + strings.ToUpper(strings.Replace(name, "-", "_", -1))
+func checkVarName(name string) {
+	// Env vars must:
+	//  - start with COCKROACH_
+	//  - be uppercase
+	//  - only contain letters, digits, and _
+	valid := strings.HasPrefix(name, "COCKROACH_")
+	for i := 0; valid && i < len(name); i++ {
+		c := name[i]
+		valid = ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_')
+	}
+	if !valid {
+		panic("invalid env var name " + name)
+	}
 }
 
 // getEnv retrieves an environment variable, keeps track of where
@@ -59,9 +68,9 @@ func VarName(name string) string {
 // The bookkeeping enables a report of all influential environment
 // variables with "cockroach debug env". To keep this report useful,
 // all relevant environment variables should be read during start up.
-func getEnv(name string, depth int) (string, bool) {
+func getEnv(varName string, depth int) (string, bool) {
 	_, consumer, _, _ := runtime.Caller(depth + 1)
-	varName := VarName(name)
+	checkVarName(varName)
 
 	envVarRegistry.mu.Lock()
 	defer envVarRegistry.mu.Unlock()
@@ -142,7 +151,7 @@ func EnvOrDefaultBool(name string, value bool) bool {
 	if str, present := getEnv(name, 1); present {
 		v, err := strconv.ParseBool(str)
 		if err != nil {
-			log.Errorf(context.TODO(), "error parsing %s: %s", VarName(name), err)
+			log.Errorf(context.Background(), "error parsing %s: %s", name, err)
 			return value
 		}
 		return v
@@ -156,7 +165,7 @@ func EnvOrDefaultInt(name string, value int) int {
 	if str, present := getEnv(name, 1); present {
 		v, err := strconv.ParseInt(str, 0, 0)
 		if err != nil {
-			log.Errorf(context.TODO(), "error parsing %s: %s", VarName(name), err)
+			log.Errorf(context.Background(), "error parsing %s: %s", name, err)
 			return value
 		}
 		return int(v)
@@ -170,7 +179,7 @@ func EnvOrDefaultInt64(name string, value int64) int64 {
 	if str, present := getEnv(name, 1); present {
 		v, err := strconv.ParseInt(str, 0, 64)
 		if err != nil {
-			log.Errorf(context.TODO(), "error parsing %s: %s", VarName(name), err)
+			log.Errorf(context.Background(), "error parsing %s: %s", name, err)
 			return value
 		}
 		return v
@@ -184,7 +193,7 @@ func EnvOrDefaultBytes(name string, value int64) int64 {
 	if str, present := getEnv(name, 1); present {
 		v, err := humanizeutil.ParseBytes(str)
 		if err != nil {
-			log.Errorf(context.TODO(), "error parsing %s: %s", VarName(name), err)
+			log.Errorf(context.Background(), "error parsing %s: %s", name, err)
 			return value
 		}
 		return v
@@ -198,7 +207,7 @@ func EnvOrDefaultDuration(name string, value time.Duration) time.Duration {
 	if str, present := getEnv(name, 1); present {
 		v, err := time.ParseDuration(str)
 		if err != nil {
-			log.Errorf(context.TODO(), "error parsing %s: %s", VarName(name), err)
+			log.Errorf(context.Background(), "error parsing %s: %s", name, err)
 			return value
 		}
 		return v

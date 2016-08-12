@@ -569,7 +569,7 @@ func (n *Node) connectGossip() {
 // information. Starts a goroutine to loop until the node is closed.
 func (n *Node) startGossip(ctx context.Context, stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
-		gossipStoresInterval := envutil.EnvOrDefaultDuration("gossip_stores_interval",
+		gossipStoresInterval := envutil.EnvOrDefaultDuration("COCKROACH_GOSSIP_STORES_INTERVAL",
 			gossip.DefaultGossipStoresInterval)
 		statusTicker := time.NewTicker(gossipStatusInterval)
 		storesTicker := time.NewTicker(gossipStoresInterval)

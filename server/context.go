@@ -431,17 +431,17 @@ func (ctx *Context) InitNode() error {
 // when NewContext is called.
 func (ctx *Context) readEnvironmentVariables() {
 	// cockroach-linearizable
-	ctx.Linearizable = envutil.EnvOrDefaultBool("linearizable", ctx.Linearizable)
-	ctx.ConsistencyCheckPanicOnFailure = envutil.EnvOrDefaultBool("consistency_check_panic_on_failure", ctx.ConsistencyCheckPanicOnFailure)
-	ctx.MaxOffset = envutil.EnvOrDefaultDuration("max_offset", ctx.MaxOffset)
-	ctx.MetricsSampleInterval = envutil.EnvOrDefaultDuration("metrics_sample_interval", ctx.MetricsSampleInterval)
-	ctx.ScanInterval = envutil.EnvOrDefaultDuration("scan_interval", ctx.ScanInterval)
-	ctx.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("scan_max_idle_time", ctx.ScanMaxIdleTime)
-	ctx.TimeUntilStoreDead = envutil.EnvOrDefaultDuration("time_until_store_dead", ctx.TimeUntilStoreDead)
-	ctx.ConsistencyCheckInterval = envutil.EnvOrDefaultDuration("consistency_check_interval", ctx.ConsistencyCheckInterval)
+	ctx.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_LINEARIZABLE", ctx.Linearizable)
+	ctx.ConsistencyCheckPanicOnFailure = envutil.EnvOrDefaultBool("COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE", ctx.ConsistencyCheckPanicOnFailure)
+	ctx.MaxOffset = envutil.EnvOrDefaultDuration("COCKROACH_MAX_OFFSET", ctx.MaxOffset)
+	ctx.MetricsSampleInterval = envutil.EnvOrDefaultDuration("COCKROACH_METRICS_SAMPLE_INTERVAL", ctx.MetricsSampleInterval)
+	ctx.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", ctx.ScanInterval)
+	ctx.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", ctx.ScanMaxIdleTime)
+	ctx.TimeUntilStoreDead = envutil.EnvOrDefaultDuration("COCKROACH_TIME_UNTIL_STORE_DEAD", ctx.TimeUntilStoreDead)
+	ctx.ConsistencyCheckInterval = envutil.EnvOrDefaultDuration("COCKROACH_CONSISTENCY_CHECK_INTERVAL", ctx.ConsistencyCheckInterval)
 	// TODO(bram): remove ReservationsEnabled once we've completed testing the
 	// feature.
-	ctx.ReservationsEnabled = envutil.EnvOrDefaultBool("reservations_enabled", ctx.ReservationsEnabled)
+	ctx.ReservationsEnabled = envutil.EnvOrDefaultBool("COCKROACH_RESERVATIONS_ENABLED", ctx.ReservationsEnabled)
 }
 
 // parseGossipBootstrapResolvers parses list of gossip bootstrap resolvers.

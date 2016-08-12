@@ -466,7 +466,7 @@ func (s *Server) Start() error {
 	}
 
 	var uiFileSystem http.FileSystem
-	uiDebug := envutil.EnvOrDefaultBool("debug_ui", false)
+	uiDebug := envutil.EnvOrDefaultBool("COCKROACH_DEBUG_UI", false)
 	if uiDebug {
 		uiFileSystem = http.Dir("ui")
 	} else {

@@ -357,12 +357,15 @@ func (r *RocksDB) Open() error {
 		ver = versionCurrent
 	}
 
+	blockSize := envutil.EnvOrDefaultBytes("COCKROACH_ROCKSDB_BLOCK_SIZE", defaultBlockSize)
+	walTTL := envutil.EnvOrDefaultDuration("COCKROACH_ROCKSDB_WAL_TTL", 0).Seconds()
+
 	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.dir)),
 		C.DBOptions{
 			cache:           r.cache.cache,
 			memtable_budget: C.uint64_t(r.memtableBudget),
-			block_size:      C.uint64_t(envutil.EnvOrDefaultBytes("rocksdb_block_size", defaultBlockSize)),
-			wal_ttl_seconds: C.uint64_t(envutil.EnvOrDefaultDuration("rocksdb_wal_ttl", 0).Seconds()),
+			block_size:      C.uint64_t(blockSize),
+			wal_ttl_seconds: C.uint64_t(walTTL),
 			allow_os_buffer: C.bool(true),
 			logging_enabled: C.bool(log.V(3)),
 			num_cpu:         C.int(runtime.NumCPU()),
