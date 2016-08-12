@@ -101,14 +101,14 @@ func TestHttpAddrFlagValue(t *testing.T) {
 		args     []string
 		expected string
 	}{
-		{[]string{"start", "--" + cliflags.HTTPAddrName, "127.0.0.1"}, "127.0.0.1:" + base.DefaultHTTPPort},
-		{[]string{"start", "--" + cliflags.HTTPAddrName, "192.168.0.111"}, "192.168.0.111:" + base.DefaultHTTPPort},
+		{[]string{"start", "--" + cliflags.ServerHTTPAddr.Name, "127.0.0.1"}, "127.0.0.1:" + base.DefaultHTTPPort},
+		{[]string{"start", "--" + cliflags.ServerHTTPAddr.Name, "192.168.0.111"}, "192.168.0.111:" + base.DefaultHTTPPort},
 		// confirm hostnames will work
-		{[]string{"start", "--" + cliflags.HTTPAddrName, "my.host.name"}, "my.host.name:" + base.DefaultHTTPPort},
-		{[]string{"start", "--" + cliflags.HTTPAddrName, "myhostname"}, "myhostname:" + base.DefaultHTTPPort},
+		{[]string{"start", "--" + cliflags.ServerHTTPAddr.Name, "my.host.name"}, "my.host.name:" + base.DefaultHTTPPort},
+		{[]string{"start", "--" + cliflags.ServerHTTPAddr.Name, "myhostname"}, "myhostname:" + base.DefaultHTTPPort},
 		// confirm IPv6 works too
-		{[]string{"start", "--" + cliflags.HTTPAddrName, "::1"}, "[::1]:" + base.DefaultHTTPPort},
-		{[]string{"start", "--" + cliflags.HTTPAddrName, "2622:6221:e663:4922:fc2b:788b:fadd:7b48"}, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultHTTPPort},
+		{[]string{"start", "--" + cliflags.ServerHTTPAddr.Name, "::1"}, "[::1]:" + base.DefaultHTTPPort},
+		{[]string{"start", "--" + cliflags.ServerHTTPAddr.Name, "2622:6221:e663:4922:fc2b:788b:fadd:7b48"}, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultHTTPPort},
 	}
 
 	for i, td := range testData {
