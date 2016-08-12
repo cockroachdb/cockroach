@@ -22,7 +22,7 @@ import "C"
 
 import "github.com/cockroachdb/cockroach/util/envutil"
 
-var annotationEnabled = envutil.EnvOrDefaultBool("annotate_traces", false)
+var annotationEnabled = envutil.EnvOrDefaultBool("COCKROACH_ANNOTATE_TRACES", false)
 
 // AnnotateTrace adds an annotation to the golang executation tracer by calling
 // a no-op cgo function.

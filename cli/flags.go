@@ -97,11 +97,13 @@ func wrapDescription(s string) string {
 func makeUsageString(flagInfo cliflags.FlagInfo) string {
 	s := "\n" + wrapDescription(flagInfo.Description) + "\n"
 	if flagInfo.EnvVar != "" {
-		// Check the environment variable name matches the flag name. Note: we don't
-		// want to automatically generate the name so that grepping for a flag name
-		// in the code yields the flag definition.
-		if flagInfo.EnvVar != envutil.VarName(flagInfo.Name) {
-			panic(fmt.Sprintf("incorrect EnvVar %s for flag %s", flagInfo.EnvVar, flagInfo.Name))
+		// Check that the environment variable name matches the flag name. Note: we
+		// don't want to automatically generate the name so that grepping for a flag
+		// name in the code yields the flag definition.
+		correctName := "COCKROACH_" + strings.ToUpper(strings.Replace(flagInfo.Name, "-", "_", -1))
+		if flagInfo.EnvVar != correctName {
+			panic(fmt.Sprintf("incorrect EnvVar %s for flag %s (should be %s)",
+				flagInfo.EnvVar, flagInfo.Name, correctName))
 		}
 		s = s + "Environment variable: " + flagInfo.EnvVar + "\n"
 	}
@@ -183,8 +185,7 @@ func (b *insecureValue) String() string {
 
 func setFlagFromEnv(f *pflag.FlagSet, flagInfo cliflags.FlagInfo) {
 	if flagInfo.EnvVar != "" {
-		// TODO(radu): we should pass the EnvVar once envutil accepts that.
-		if value, set := envutil.EnvString(flagInfo.Name, 2); set {
+		if value, set := envutil.EnvString(flagInfo.EnvVar, 2); set {
 			if err := f.Set(flagInfo.Name, value); err != nil {
 				panic(err)
 			}

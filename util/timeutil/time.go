@@ -27,7 +27,7 @@ var (
 )
 
 func initFakeTime() {
-	if offset := envutil.EnvOrDefaultDuration("simulated_offset", 0); offset == 0 {
+	if offset := envutil.EnvOrDefaultDuration("COCKROACH_SIMULATED_OFFSET", 0); offset == 0 {
 		nowFunc = time.Now
 	} else {
 		nowFunc = func() time.Time {

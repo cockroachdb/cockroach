@@ -36,7 +36,7 @@ import (
 
 // Allow local calls to be dispatched directly to the local server without
 // sending an RPC.
-var enableLocalCalls = envutil.EnvOrDefaultBool("enable_local_calls", true)
+var enableLocalCalls = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_LOCAL_CALLS", true)
 
 // A SendOptions structure describes the algorithm for sending RPCs to one or
 // more replicas, depending on error conditions and how many successful

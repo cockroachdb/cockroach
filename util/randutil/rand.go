@@ -71,7 +71,7 @@ func RandBytes(r *rand.Rand, size int) []byte {
 // be called from TestMain; individual tests should not touch the seed
 // of the global random number generator.
 func SeedForTests() {
-	seed := envutil.EnvOrDefaultInt64("random_seed", NewPseudoSeed())
+	seed := envutil.EnvOrDefaultInt64("COCKROACH_RANDOM_SEED", NewPseudoSeed())
 	rand.Seed(seed)
 	log.Printf("Random seed: %v", seed)
 }
