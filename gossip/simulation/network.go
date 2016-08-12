@@ -237,7 +237,7 @@ func (n *Network) RunUntilFullyConnected() int {
 func (n *Network) isNetworkConnected() bool {
 	for _, leftNode := range n.Nodes {
 		for _, rightNode := range n.Nodes {
-			if _, err := leftNode.Gossip.GetInfo(rightNode.Addr().String()); err != nil {
+			if _, err := leftNode.Gossip.GetInfo(gossip.MakeNodeIDKey(rightNode.Gossip.GetNodeID())); err != nil {
 				return false
 			}
 		}
