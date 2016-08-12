@@ -100,8 +100,8 @@ func newBookie(
 		clock:              clock,
 		metrics:            metrics,
 		reservationTimeout: reservationTimeout,
-		maxReservations:    envutil.EnvOrDefaultInt("max_reservations", defaultMaxReservations),
-		maxReservedBytes:   envutil.EnvOrDefaultBytes("max_reserved_bytes", defaultMaxReservedBytes),
+		maxReservations:    envutil.EnvOrDefaultInt("COCKROACH_MAX_RESERVATIONS", defaultMaxReservations),
+		maxReservedBytes:   envutil.EnvOrDefaultBytes("COCKROACH_MAX_RESERVED_BYTES", defaultMaxReservedBytes),
 	}
 	b.mu.reservationsByRangeID = make(map[roachpb.RangeID]*reservation)
 	b.start(stopper)

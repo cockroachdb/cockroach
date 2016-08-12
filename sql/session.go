@@ -44,7 +44,7 @@ import (
 // all transactions use COCKROACH_TRACE_SQL=1ns. Note that any positive
 // duration will enable tracing and will slow down all execution because traces
 // are gathered for all transactions even if they are not output.
-var traceSQLDuration = envutil.EnvOrDefaultDuration("trace_sql", 0)
+var traceSQLDuration = envutil.EnvOrDefaultDuration("COCKROACH_TRACE_SQL", 0)
 var traceSQL = traceSQLDuration > 0
 
 // Session contains the state of a SQL client connection.

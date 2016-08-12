@@ -1001,7 +1001,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		s.ctx.Clock,
 		s.stopper,
 		s.metrics,
-		envutil.EnvOrDefaultDuration("reservation_timeout", ttlStoreGossip),
+		envutil.EnvOrDefaultDuration("COCKROACH_RESERVATION_TIMEOUT", ttlStoreGossip),
 	)
 
 	if s.Ident.NodeID == 0 {
