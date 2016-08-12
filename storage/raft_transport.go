@@ -49,11 +49,16 @@ const (
 )
 
 // RaftMessageHandler is the interface that must be implemented by
-// arguments to RaftTransport.Listen. If either method returns an
-// error the stream will be shut down.
+// arguments to RaftTransport.Listen.
 type RaftMessageHandler interface {
-	HandleRaftRequest(*RaftMessageRequest) *roachpb.Error
-	HandleRaftResponse(*RaftMessageResponse) *roachpb.Error
+	// HandleRaftRequest is called for each incoming message. If it
+	// returns an error it will be streamed back to the sender of the
+	// message as a RaftMessageResponse.
+	HandleRaftRequest(context.Context, *RaftMessageRequest) *roachpb.Error
+
+	// HandleRaftResponse is called for each raft response. Note that
+	// not all messages receive a response.
+	HandleRaftResponse(context.Context, *RaftMessageResponse)
 }
 
 // NodeAddressResolver is the function used by RaftTransport to map node IDs to
@@ -149,7 +154,7 @@ func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err err
 							req.ToReplica, req.FromReplica)
 					}
 
-					if pErr := handler.HandleRaftRequest(req); pErr != nil {
+					if pErr := handler.HandleRaftRequest(stream.Context(), req); pErr != nil {
 						resp := &RaftMessageResponse{
 							RangeID: req.RangeID,
 							// From and To are reversed in the response.
@@ -267,8 +272,8 @@ func (t *RaftTransport) processQueue(ch chan *RaftMessageRequest, conn *grpc.Cli
 		t.rpcContext.Stopper.RunWorker(func() {
 			errCh <- func() error {
 				for {
-					var resp RaftMessageResponse
-					if err := stream.RecvMsg(&resp); err != nil {
+					resp, err := stream.Recv()
+					if err != nil {
 						return err
 					}
 					t.mu.Lock()
@@ -279,9 +284,7 @@ func (t *RaftTransport) processQueue(ch chan *RaftMessageRequest, conn *grpc.Cli
 							resp.ToReplica.StoreID, resp)
 						continue
 					}
-					if pErr := handler.HandleRaftResponse(&resp); pErr != nil {
-						return pErr.GoError()
-					}
+					handler.HandleRaftResponse(stream.Context(), resp)
 				}
 			}()
 		})
@@ -364,7 +367,7 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 			t.rpcContext.Stopper.RunWorker(func() {
 				if err := t.processQueue(ch, conn); err != nil && !grpcutil.IsClosedConnection(err) {
 					log.Warningf(context.TODO(),
-						"range %s: outgoing raft transport stream to %s closed by the remote: %s",
+						"range=%s: outgoing raft transport stream to %s closed by the remote: %s",
 						req.RangeID, toNodeID, err)
 				}
 				t.mu.Lock()

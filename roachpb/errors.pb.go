@@ -326,8 +326,9 @@ func (m *ReplicaCorruptionError) String() string            { return proto.Compa
 func (*ReplicaCorruptionError) ProtoMessage()               {}
 func (*ReplicaCorruptionError) Descriptor() ([]byte, []int) { return fileDescriptorErrors, []int{18} }
 
-// A ReplicaTooOldError indicates a replica that has been removed from
-// the range has attempted to send raft messages to current members.
+// ReplicaTooOldError is sent in response to a raft message when the
+// recipient of the raft message believes the sender of the raft
+// message to have been removed from the raft group
 type ReplicaTooOldError struct {
 }
 

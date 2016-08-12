@@ -57,7 +57,9 @@ func newChannelServer(bufSize int, maxSleep time.Duration) channelServer {
 	}
 }
 
-func (s channelServer) HandleRaftRequest(req *storage.RaftMessageRequest) *roachpb.Error {
+func (s channelServer) HandleRaftRequest(
+	ctx context.Context, req *storage.RaftMessageRequest,
+) *roachpb.Error {
 	if s.maxSleep != 0 {
 		// maxSleep simulates goroutine scheduling delays that could
 		// result in messages being processed out of order (in previous
@@ -71,9 +73,8 @@ func (s channelServer) HandleRaftRequest(req *storage.RaftMessageRequest) *roach
 	return nil
 }
 
-func (s channelServer) HandleRaftResponse(resp *storage.RaftMessageResponse) *roachpb.Error {
-	log.Fatalf(context.Background(), "unexpected raft response: %s", resp)
-	return nil
+func (s channelServer) HandleRaftResponse(ctx context.Context, resp *storage.RaftMessageResponse) {
+	log.Fatalf(ctx, "unexpected raft response: %s", resp)
 }
 
 // raftTransportTestContext contains objects needed to test RaftTransport.

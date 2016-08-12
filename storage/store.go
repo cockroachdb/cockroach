@@ -2334,11 +2334,11 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now hlc.Timesta
 
 // HandleRaftRequest dispatches a raft message to the appropriate Replica. It
 // requires that s.processRaftMu and s.mu are not held.
-func (s *Store) HandleRaftRequest(req *RaftMessageRequest) *roachpb.Error {
+func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) *roachpb.Error {
 	s.processRaftMu.Lock()
 	defer s.processRaftMu.Unlock()
 
-	ctx := s.context(context.Background())
+	ctx = s.context(ctx)
 
 	// Drop messages that come from a node that we believe was once
 	// a member of the group but has been removed.
@@ -2496,10 +2496,9 @@ func (s *Store) HandleRaftRequest(req *RaftMessageRequest) *roachpb.Error {
 	return nil
 }
 
-// HandleRaftResponse handles responses messagaes from the raft
+// HandleRaftResponse handles response messages from the raft
 // transport. It requires that s.processRaftMu and s.mu are not held.
-func (s *Store) HandleRaftResponse(resp *RaftMessageResponse) *roachpb.Error {
-	ctx := context.TODO()
+func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageResponse) {
 	switch val := resp.Union.GetValue().(type) {
 	case *roachpb.Error:
 		switch val.GetDetail().(type) {
@@ -2526,7 +2525,6 @@ func (s *Store) HandleRaftResponse(resp *RaftMessageResponse) *roachpb.Error {
 	default:
 		log.Infof(ctx, "%s: got unknown raft response type %T: %s", s, val, val)
 	}
-	return nil
 }
 
 // enqueueRaftUpdateCheck asynchronously registers the given range ID to be
