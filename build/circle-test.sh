@@ -128,7 +128,7 @@ if is_shard 2; then
 
   # Verify that "go generate" was run.
   echo "verifying generated files"
-  time ${builder} go generate ./...
+  time ${builder} go generate $(go list ./... | grep -v /vendor/)
   time ${builder} /bin/bash -c '! git status --porcelain | read || (git status; git diff -a; exit 1)' | tee "${outdir}"/generate.log
 fi
 
