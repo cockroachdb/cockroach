@@ -228,6 +228,7 @@ func TestGossipStorageCleanup(t *testing.T) {
 		if err := stores[i].WriteBootstrapInfo(&gossip.BootstrapInfo{
 			Addresses: []util.UnresolvedAddr{
 				util.MakeUnresolvedAddr("tcp", network.Nodes[(i+1)%numNodes].Addr().String()), // node i+1 address
+				util.MakeUnresolvedAddr("tcp", "127.0.0.1:80"),                                // valid but unused address
 				util.MakeUnresolvedAddr("tcp", invalidAddr),                                   // invalid address
 			},
 		}); err != nil {
