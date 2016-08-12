@@ -227,6 +227,11 @@ func (desc *IndexDescriptor) FullColumnIDs() ([]ColumnID, []encoding.Direction) 
 	return columnIDs, dirs
 }
 
+// IsSet returns whether or not the index actually references a column.
+func (desc *IndexDescriptor) IsSet() bool {
+	return len(desc.ColumnIDs) > 0
+}
+
 // SetID implements the DescriptorProto interface.
 func (desc *TableDescriptor) SetID(id ID) {
 	desc.ID = id

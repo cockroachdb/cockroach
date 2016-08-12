@@ -28,6 +28,7 @@ var informationSchema = virtualSchema{
 	name: "information_schema",
 	tables: []virtualSchemaTable{
 		informationSchemaColumnsTable,
+		informationSchemaTableConstraintTable,
 		informationSchemaTablesTable,
 	},
 }
@@ -52,7 +53,14 @@ func yesOrNoDatum(b bool) parser.Datum {
 	return noString
 }
 
-func dStringOrNull(s *string) parser.Datum {
+func dStringOrNull(s string) parser.Datum {
+	if s == "" {
+		return parser.DNull
+	}
+	return parser.NewDString(s)
+}
+
+func dStringPtrOrNull(s *string) parser.Datum {
 	if s == nil {
 		return parser.DNull
 	}
@@ -100,7 +108,7 @@ CREATE TABLE information_schema.columns (
 						parser.NewDString(table.Name),                // table_name
 						parser.NewDString(column.Name),               // column_name
 						parser.NewDInt(parser.DInt(visible)),         // ordinal_position, 1-indexed
-						dStringOrNull(column.DefaultExpr),            // column_default
+						dStringPtrOrNull(column.DefaultExpr),         // column_default
 						yesOrNoDatum(column.Nullable),                // is_nullable
 						parser.NewDString(column.Type.Kind.String()), // data_type
 						characterMaximumLength(column.Type),          // character_maximum_length
@@ -134,6 +142,69 @@ func numericScale(colType sqlbase.ColumnType) parser.Datum {
 func datetimePrecision(colType sqlbase.ColumnType) parser.Datum {
 	// We currently do not support a datetime precision.
 	return parser.DNull
+}
+
+var (
+	constraintTypeCheck      = parser.NewDString("CHECK")
+	constraintTypeForeignKey = parser.NewDString("FOREIGN KEY")
+	constraintTypePrimaryKey = parser.NewDString("PRIMARY KEY")
+	constraintTypeUnique     = parser.NewDString("UNIQUE")
+)
+
+var informationSchemaTableConstraintTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.table_constraints (
+  CONSTRAINT_CATALOG STRING NOT NULL DEFAULT '',
+  CONSTRAINT_SCHEMA STRING NOT NULL DEFAULT '',
+  CONSTRAINT_NAME STRING NOT NULL DEFAULT '',
+  TABLE_SCHEMA STRING NOT NULL DEFAULT '',
+  TABLE_NAME STRING NOT NULL DEFAULT '',
+  CONSTRAINT_TYPE STRING NOT NULL DEFAULT ''
+);`,
+	populate: func(p *planner, addRow func(...parser.Datum)) error {
+		return forEachTableDesc(p,
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) {
+				type constraint struct {
+					name string
+					typ  parser.Datum
+				}
+				var constraints []constraint
+				if table.PrimaryIndex.IsSet() {
+					constraints = append(constraints, constraint{
+						name: table.PrimaryIndex.Name,
+						typ:  constraintTypePrimaryKey,
+					})
+				}
+				for _, index := range table.Indexes {
+					constraint := constraint{name: index.Name}
+					switch {
+					case index.Unique:
+						constraint.typ = constraintTypeUnique
+						constraints = append(constraints, constraint)
+					case index.ForeignKey.IsSet():
+						constraint.typ = constraintTypeForeignKey
+						constraints = append(constraints, constraint)
+					}
+				}
+				for _, check := range table.Checks {
+					constraints = append(constraints, constraint{
+						name: check.Name,
+						typ:  constraintTypeCheck,
+					})
+				}
+				for _, constraint := range constraints {
+					addRow(
+						defString,                      // constraint_catalog
+						parser.NewDString(db.Name),     // constraint_schema
+						dStringOrNull(constraint.name), // constraint_name
+						parser.NewDString(db.Name),     // table_schema
+						parser.NewDString(table.Name),  // table_name
+						constraint.typ,                 // constraint_type
+					)
+				}
+			},
+		)
+	},
 }
 
 var (
