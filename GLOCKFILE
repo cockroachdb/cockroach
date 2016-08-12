@@ -30,7 +30,7 @@ github.com/backtrace-labs/go-bcd c5383e2df7004f8b2fb2f10a33167d757bb0fbfb
 github.com/biogo/store 913427a1d5e89604e50ea1db0f28f34966d61602
 github.com/cenk/backoff cdf48bbc1eb78d1349cbda326a4a037f7ba565c6
 github.com/chzyer/logex 96a4d311aa9ba1c5f9f2abda8039671de20f6aa5
-github.com/chzyer/readline c144c8dde4996a05f596bd5acb730d172968e26c
+github.com/chzyer/readline a193146c91dea4b6cf30f355e99fb85f73d20f07
 github.com/chzyer/test bea8f082b6fd8382588bf6fdc6af9217078af151
 github.com/client9/misspell 5ef03ca0094f3b6c11fb926bc5ad9265234b56a1
 github.com/cockroachdb/c-jemalloc 42e6a32cd7a4dff9c70d80323681d46d046181ef
