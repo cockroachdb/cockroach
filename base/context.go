@@ -152,9 +152,9 @@ func (ctx *Context) PGURL(user string) (*url.URL, error) {
 			value    string
 			flagName string
 		}{
-			{"sslcert", ctx.SSLCert, cliflags.CertName},
-			{"sslkey", ctx.SSLCertKey, cliflags.KeyName},
-			{"sslrootcert", ctx.SSLCA, cliflags.CACertName},
+			{"sslcert", ctx.SSLCert, cliflags.Cert.Name},
+			{"sslkey", ctx.SSLCertKey, cliflags.Key.Name},
+			{"sslrootcert", ctx.SSLCA, cliflags.CACert.Name},
 		}
 		for _, c := range requiredFlags {
 			if c.value == "" {
@@ -219,7 +219,7 @@ func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 			}
 		} else {
 			ctx.serverTLSConfig.err = errors.Errorf("--%s=false, but --%s is empty. Certificates must be specified.",
-				cliflags.InsecureName, cliflags.CertName)
+				cliflags.Insecure.Name, cliflags.Cert.Name)
 		}
 	})
 
