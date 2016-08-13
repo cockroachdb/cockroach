@@ -1605,10 +1605,10 @@ func TestStoreRangeRebalance(t *testing.T) {
 	var normalApplied int64
 	var preemptiveApplied int64
 	for _, s := range mtc.stores {
-		r := s.Registry()
-		generated += r.GetCounter("range.snapshots.generated").Count()
-		normalApplied += r.GetCounter("range.snapshots.normal-applied").Count()
-		preemptiveApplied += r.GetCounter("range.snapshots.preemptive-applied").Count()
+		m := s.Metrics()
+		generated += m.RangeSnapshotsGenerated.Count()
+		normalApplied += m.RangeSnapshotsNormalApplied.Count()
+		preemptiveApplied += m.RangeSnapshotsPreemptiveApplied.Count()
 	}
 	if generated == 0 {
 		t.Fatalf("expected at least 1 snapshot, but found 0")

@@ -307,7 +307,7 @@ type Store struct {
 	scanner                 *replicaScanner          // Replica scanner
 	replicaConsistencyQueue *replicaConsistencyQueue // Replica consistency check queue
 	consistencyScanner      *replicaScanner          // Consistency checker scanner
-	metrics                 *storeMetrics
+	metrics                 *StoreMetrics
 	intentResolver          *intentResolver
 	wakeRaftLoop            chan struct{}
 	// 1 if the store was started, 0 if it wasn't. To be accessed using atomic
@@ -1777,9 +1777,14 @@ func (s *Store) Capacity() (roachpb.StoreCapacity, error) {
 	return s.engine.Capacity()
 }
 
-// Registry returns the metric registry used by this store.
+// Registry returns the store registry.
 func (s *Store) Registry() *metric.Registry {
 	return s.metrics.registry
+}
+
+// Metrics returns the store's metric struct.
+func (s *Store) Metrics() *StoreMetrics {
+	return s.metrics
 }
 
 // MVCCStats returns the current MVCCStats accumulated for this store.
