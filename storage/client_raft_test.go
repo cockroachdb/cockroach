@@ -567,6 +567,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 // Test various mechanism for refreshing pending commands.
 func TestRefreshPendingCommands(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("TODO(peter): #8397")
 
 	// TODO(peter): Debugging to track down #8397. Remove when fixed.
 	if err := flag.Lookup("vmodule").Value.Set("raft=5,store=5,replica=5,replica_command=5,replica_range_lease=5"); err != nil {
