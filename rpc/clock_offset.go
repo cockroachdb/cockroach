@@ -28,7 +28,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-type remoteClockMetrics struct {
+// RemoteClockMetrics is the collection of metrics for the clock monitor.
+type RemoteClockMetrics struct {
 	ClusterOffsetLowerBound *metric.Gauge
 	ClusterOffsetUpperBound *metric.Gauge
 }
@@ -49,7 +50,7 @@ type RemoteClockMonitor struct {
 		offsets map[string]RemoteOffset
 	}
 
-	metrics remoteClockMetrics
+	metrics RemoteClockMetrics
 }
 
 // newRemoteClockMonitor returns a monitor with the given server clock.
@@ -59,11 +60,17 @@ func newRemoteClockMonitor(clock *hlc.Clock, offsetTTL time.Duration) *RemoteClo
 		offsetTTL: offsetTTL,
 	}
 	r.mu.offsets = make(map[string]RemoteOffset)
-	r.metrics = remoteClockMetrics{
+	r.metrics = RemoteClockMetrics{
 		ClusterOffsetLowerBound: metric.NewGauge(metaClusterOffsetLowerBound),
 		ClusterOffsetUpperBound: metric.NewGauge(metaClusterOffsetUpperBound),
 	}
 	return &r
+}
+
+// Metrics returns the metrics struct. Useful to examine individual metrics,
+// or to add to the registry.
+func (r *RemoteClockMonitor) Metrics() *RemoteClockMetrics {
+	return &r.metrics
 }
 
 // UpdateOffset is a thread-safe way to update the remote clock measurements.
@@ -174,11 +181,4 @@ func (r RemoteOffset) isHealthy(maxOffset time.Duration) bool {
 
 func (r RemoteOffset) isStale(ttl time.Duration, now time.Time) bool {
 	return r.measuredAt().Add(ttl).Before(now)
-}
-
-// RegisterMetrics adds the local metrics to a registry.
-// TODO(marc): this pattern deviates from other users of the registry
-// that take it as an argument at metric construction time.
-func (r *RemoteClockMonitor) RegisterMetrics(reg *metric.Registry) {
-	reg.AddMetricStruct(r.metrics)
 }

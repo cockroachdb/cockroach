@@ -243,7 +243,7 @@ type ExecutorTestingKnobs struct {
 
 // NewExecutor creates an Executor and registers a callback on the
 // system config.
-func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper, registry *metric.Registry) *Executor {
+func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 	exec := &Executor{
 		cfg:     cfg,
 		reCache: parser.NewRegexpCache(512),
@@ -261,8 +261,6 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper, registry *metric.Reg
 		MiscCount:        metric.NewCounter(MetaMisc),
 		QueryCount:       metric.NewCounter(MetaQuery),
 	}
-
-	registry.AddMetricStruct(exec)
 
 	exec.systemConfigCond = sync.NewCond(exec.systemConfigMu.RLocker())
 

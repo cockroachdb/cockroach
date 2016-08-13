@@ -26,34 +26,19 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/pkg/errors"
 )
 
-func getGauge(t *testing.T, s *storage.Store, key string) int64 {
-	gauge := s.Registry().GetGauge(key)
-	if gauge == nil {
-		t.Fatal(errors.Errorf("store did not contain gauge %s", key))
-	}
-	return gauge.Value()
-}
-
-func getCounter(t *testing.T, s *storage.Store, key string) int64 {
-	counter := s.Registry().GetCounter(key)
-	if counter == nil {
-		t.Fatal(errors.Errorf("store did not contain counter %s", key))
-	}
-	return counter.Count()
-}
-
-func checkGauge(t *testing.T, s *storage.Store, key string, e int64) {
-	if a := getGauge(t, s, key); a != e {
-		t.Error(errors.Errorf("%s for store: actual %d != expected %d", key, a, e))
+func checkGauge(t *testing.T, g *metric.Gauge, e int64) {
+	if a := g.Value(); a != e {
+		t.Error(errors.Errorf("%s for store: actual %d != expected %d", g.GetName(), a, e))
 	}
 }
 
-func checkCounter(t *testing.T, s *storage.Store, key string, e int64) {
-	if a := getCounter(t, s, key); a != e {
-		t.Error(errors.Errorf("%s for store: actual %d != expected %d", key, a, e))
+func checkCounter(t *testing.T, c *metric.Counter, e int64) {
+	if a := c.Count(); a != e {
+		t.Error(errors.Errorf("%s for store: actual %d != expected %d", c.GetName(), a, e))
 	}
 }
 
@@ -104,23 +89,24 @@ func verifyStats(t *testing.T, mtc *multiTestContext, storeIdxSlice ...int) {
 			fatalf("expected intent count to be zero, was %d", a)
 		}
 
+		m := s.Metrics()
 		// Sanity check: LiveBytes is not zero (ensures we don't have
 		// zeroed out structures.)
-		if liveBytes := getGauge(t, s, "livebytes"); liveBytes == 0 {
+		if liveBytes := m.LiveBytes.Value(); liveBytes == 0 {
 			fatalf("expected livebytes to be non-zero, was zero")
 		}
 
 		// Ensure that real MVCC stats match computed stats.
-		checkGauge(t, s, "livebytes", realStats.LiveBytes)
-		checkGauge(t, s, "keybytes", realStats.KeyBytes)
-		checkGauge(t, s, "valbytes", realStats.ValBytes)
-		checkGauge(t, s, "intentbytes", realStats.IntentBytes)
-		checkGauge(t, s, "livecount", realStats.LiveCount)
-		checkGauge(t, s, "keycount", realStats.KeyCount)
-		checkGauge(t, s, "valcount", realStats.ValCount)
-		checkGauge(t, s, "intentcount", realStats.IntentCount)
-		checkGauge(t, s, "sysbytes", realStats.SysBytes)
-		checkGauge(t, s, "syscount", realStats.SysCount)
+		checkGauge(t, m.LiveBytes, realStats.LiveBytes)
+		checkGauge(t, m.KeyBytes, realStats.KeyBytes)
+		checkGauge(t, m.ValBytes, realStats.ValBytes)
+		checkGauge(t, m.IntentBytes, realStats.IntentBytes)
+		checkGauge(t, m.LiveCount, realStats.LiveCount)
+		checkGauge(t, m.KeyCount, realStats.KeyCount)
+		checkGauge(t, m.ValCount, realStats.ValCount)
+		checkGauge(t, m.IntentCount, realStats.IntentCount)
+		checkGauge(t, m.SysBytes, realStats.SysBytes)
+		checkGauge(t, m.SysCount, realStats.SysCount)
 		// "Ages" will be different depending on how much time has passed. Even with
 		// a manual clock, this can be an issue in tests. Therefore, we do not
 		// verify them in this test.
@@ -141,26 +127,27 @@ func verifyRocksDBStats(t *testing.T, s *storage.Store) {
 		t.Fatal(err)
 	}
 
+	m := s.Metrics()
 	testcases := []struct {
-		gaugeName string
-		min       int64
+		gauge *metric.Gauge
+		min   int64
 	}{
-		{"rocksdb.block.cache.hits", 10},
-		{"rocksdb.block.cache.misses", 0},
-		{"rocksdb.block.cache.usage", 0},
-		{"rocksdb.block.cache.pinned-usage", 0},
-		{"rocksdb.bloom.filter.prefix.checked", 20},
-		{"rocksdb.bloom.filter.prefix.useful", 20},
-		{"rocksdb.memtable.hits", 0},
-		{"rocksdb.memtable.misses", 0},
-		{"rocksdb.memtable.total-size", 5000},
-		{"rocksdb.flushes", 1},
-		{"rocksdb.compactions", 0},
-		{"rocksdb.table-readers-mem-estimate", 50},
+		{m.RdbBlockCacheHits, 10},
+		{m.RdbBlockCacheMisses, 0},
+		{m.RdbBlockCacheUsage, 0},
+		{m.RdbBlockCachePinnedUsage, 0},
+		{m.RdbBloomFilterPrefixChecked, 20},
+		{m.RdbBloomFilterPrefixUseful, 20},
+		{m.RdbMemtableHits, 0},
+		{m.RdbMemtableMisses, 0},
+		{m.RdbMemtableTotalSize, 5000},
+		{m.RdbFlushes, 1},
+		{m.RdbCompactions, 0},
+		{m.RdbTableReadersMemEstimate, 50},
 	}
 	for _, tc := range testcases {
-		if a := getGauge(t, s, tc.gaugeName); a < tc.min {
-			t.Errorf("gauge %s = %d < min %d", tc.gaugeName, a, tc.min)
+		if a := tc.gauge.Value(); a < tc.min {
+			t.Errorf("gauge %s = %d < min %d", tc.gauge.GetName(), a, tc.min)
 		}
 	}
 }
@@ -193,7 +180,7 @@ func TestStoreMetrics(t *testing.T) {
 	}
 
 	// Verify range count is as expected
-	checkCounter(t, mtc.stores[0], "replicas", 2)
+	checkCounter(t, mtc.stores[0].Metrics().ReplicaCount, 2)
 
 	// Verify all stats on store0 after split.
 	verifyStats(t, mtc, 0)
@@ -227,7 +214,7 @@ func TestStoreMetrics(t *testing.T) {
 
 	// Verify stats after sequence cache addition.
 	verifyStats(t, mtc, 0)
-	checkCounter(t, mtc.stores[0], "replicas", 2)
+	checkCounter(t, mtc.stores[0].Metrics().ReplicaCount, 2)
 
 	// Unreplicate range from the first store.
 	mtc.unreplicateRange(replica.RangeID, 0)
@@ -237,8 +224,8 @@ func TestStoreMetrics(t *testing.T) {
 	mtc.waitForValues(roachpb.Key("z"), []int64{0, 5, 5})
 
 	// Verify range count is as expected.
-	checkCounter(t, mtc.stores[0], "replicas", 1)
-	checkCounter(t, mtc.stores[1], "replicas", 1)
+	checkCounter(t, mtc.stores[0].Metrics().ReplicaCount, 1)
+	checkCounter(t, mtc.stores[1].Metrics().ReplicaCount, 1)
 
 	// Verify all stats on store0 and store1 after range is removed.
 	verifyStats(t, mtc, 0, 1)
