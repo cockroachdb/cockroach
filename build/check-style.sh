@@ -55,29 +55,31 @@ TestTabsInShellScripts() {
 
 TestForbiddenImports() {
   echo "checking for forbidden imports"
+  local log=$(mktemp -t test-forbidden-imports.XXXXXX)
+  trap "rm -f ${log}" EXIT
+  
   go list -f '{{ $ip := .ImportPath }}{{ range .Imports}}{{ $ip }}: {{ println . }}{{end}}{{ range .TestImports}}{{ $ip }}: {{ println . }}{{end}}{{ range .XTestImports}}{{ $ip }}: {{ println . }}{{end}}' "$PKG" | \
        grep -E ' (github.com/golang/protobuf/proto|github.com/satori/go\.uuid|log|path|context)$' | \
        grep -vE 'cockroach/(base|security|util/(log|randutil|stop)): log$' | \
        grep -vE 'cockroach/(server/serverpb|ts/tspb): github.com/golang/protobuf/proto$' | \
-       grep -vF 'util/uuid: github.com/satori/go.uuid' | tee forbidden.log; \
-    if grep -E ' path$' forbidden.log > /dev/null; then \
+       grep -vF 'util/uuid: github.com/satori/go.uuid' | tee ${log}; \
+    if grep -E ' path$' ${log} > /dev/null; then \
        echo; echo "Please use 'path/filepath' instead of 'path'."; echo; \
     fi; \
-    if grep -E ' log$' forbidden.log > /dev/null; then \
+    if grep -E ' log$' ${log} > /dev/null; then \
        echo; echo "Please use 'util/log' instead of 'log'."; echo; \
     fi; \
-    if grep -E ' github.com/golang/protobuf/proto$' forbidden.log > /dev/null; then \
+    if grep -E ' github.com/golang/protobuf/proto$' ${log} > /dev/null; then \
        echo; echo "Please use 'gogo/protobuf/proto' instead of 'golang/protobuf/proto'."; echo; \
     fi; \
-    if grep -E ' github.com/satori/go\.uuid$' forbidden.log > /dev/null; then \
+    if grep -E ' github.com/satori/go\.uuid$' ${log} > /dev/null; then \
        echo; echo "Please use 'util/uuid' instead of 'satori/go.uuid'."; echo; \
     fi; \
-    if grep -E ' context$' forbidden.log > /dev/null; then \
+    if grep -E ' context$' ${log} > /dev/null; then \
        echo; echo "Please use 'golang.org/x/net/context' instead of 'context'."; echo; \
     fi; \
-    test ! -s forbidden.log
+    test ! -s ${log}
   ret=$?
-  rm -f forbidden.log
   return $ret
 }
 
