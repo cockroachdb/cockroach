@@ -115,12 +115,12 @@ type TxnMetrics struct {
 }
 
 var (
-	metaAbortsRates         = metric.MetricMetadata{"txn.aborts", ""}
-	metaCommitsRates        = metric.MetricMetadata{"txn.commits", ""}
-	metaCommits1PCRates     = metric.MetricMetadata{"txn.commits1PC", ""}
-	metaAbandonsRates       = metric.MetricMetadata{"txn.abandons", ""}
-	metaDurationsHistograms = metric.MetricMetadata{"txn.durations", ""}
-	metaRestartsHistogram   = metric.MetricMetadata{"txn.restarts", ""}
+	metaAbortsRates         = metric.Metadata{Name: "txn.aborts"}
+	metaCommitsRates        = metric.Metadata{Name: "txn.commits"}
+	metaCommits1PCRates     = metric.Metadata{Name: "txn.commits1PC"}
+	metaAbandonsRates       = metric.Metadata{Name: "txn.abandons"}
+	metaDurationsHistograms = metric.Metadata{Name: "txn.durations"}
+	metaRestartsHistogram   = metric.Metadata{Name: "txn.restarts"}
 )
 
 // NewTxnMetrics returns a new instance of txnMetrics that contains metrics which have

@@ -44,9 +44,9 @@ const (
 
 // Fully-qualified names for metrics.
 var (
-	MetaConns    = metric.MetricMetadata{"sql.conns", ""}
-	MetaBytesIn  = metric.MetricMetadata{"sql.bytesin", ""}
-	MetaBytesOut = metric.MetricMetadata{"sql.bytesout", ""}
+	MetaConns    = metric.Metadata{Name: "sql.conns"}
+	MetaBytesIn  = metric.Metadata{Name: "sql.bytesin"}
+	MetaBytesOut = metric.Metadata{Name: "sql.bytesout"}
 )
 
 const (

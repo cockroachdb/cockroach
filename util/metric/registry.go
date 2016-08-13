@@ -17,11 +17,12 @@
 package metric
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"reflect"
 	"regexp"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/syncutil"

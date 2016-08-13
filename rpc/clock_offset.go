@@ -34,8 +34,8 @@ type remoteClockMetrics struct {
 }
 
 var (
-	metaClusterOffsetLowerBound = metric.MetricMetadata{"clock-offset.lower-bound-nanos", ""}
-	metaClusterOffsetUpperBound = metric.MetricMetadata{"clock-offset.upper-bound-nanos", ""}
+	metaClusterOffsetLowerBound = metric.Metadata{Name: "clock-offset.lower-bound-nanos"}
+	metaClusterOffsetUpperBound = metric.Metadata{Name: "clock-offset.upper-bound-nanos"}
 )
 
 // RemoteClockMonitor keeps track of the most recent measurements of remote
