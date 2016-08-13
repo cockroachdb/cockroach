@@ -35,9 +35,9 @@ const histWrapNum = 4 // number of histograms to keep in rolling window
 
 // Iterable provides a method for synchronized access to interior objects.
 type Iterable interface {
-	// Name returns the fully-qualified name of the metric.
+	// GetName returns the fully-qualified name of the metric.
 	GetName() string
-	// Help returns the help text for the metric.
+	// GetHelp returns the help text for the metric.
 	GetHelp() string
 	// Inspect calls the given closure with each contained item.
 	Inspect(func(interface{}))
@@ -51,17 +51,19 @@ type PrometheusExportable interface {
 	FillPrometheusMetric(promMetric *prometheusgo.MetricFamily)
 }
 
-// MetricMetadata holds metadata about a metric. It must be embedded in
+// Metadata holds metadata about a metric. It must be embedded in
 // each metric object.
-type MetricMetadata struct {
+type Metadata struct {
 	Name, Help string
 }
 
-func (m *MetricMetadata) GetName() string {
+// GetName returns the metric's name.
+func (m *Metadata) GetName() string {
 	return m.Name
 }
 
-func (m *MetricMetadata) GetHelp() string {
+// GetHelp returns the metric's help string.
+func (m *Metadata) GetHelp() string {
 	return m.Help
 }
 
@@ -111,7 +113,7 @@ func maybeTick(m periodic) {
 
 // A Histogram is a wrapper around an hdrhistogram.WindowedHistogram.
 type Histogram struct {
-	MetricMetadata
+	Metadata
 	maxVal int64
 
 	mu       syncutil.Mutex
@@ -123,14 +125,14 @@ type Histogram struct {
 // NewHistogram creates a new windowed HDRHistogram with the given parameters.
 // Data is kept in the active window for approximately the given duration.
 // See the documentation for hdrhistogram.WindowedHistogram for details.
-func NewHistogram(metadata MetricMetadata, duration time.Duration,
+func NewHistogram(metadata Metadata, duration time.Duration,
 	maxVal int64, sigFigs int) *Histogram {
 	return &Histogram{
-		MetricMetadata: metadata,
-		maxVal:         maxVal,
-		nextT:          now(),
-		duration:       duration,
-		windowed:       hdrhistogram.NewWindowed(histWrapNum, 0, maxVal, sigFigs),
+		Metadata: metadata,
+		maxVal:   maxVal,
+		nextT:    now(),
+		duration: duration,
+		windowed: hdrhistogram.NewWindowed(histWrapNum, 0, maxVal, sigFigs),
 	}
 }
 
@@ -206,12 +208,12 @@ func (h *Histogram) FillPrometheusMetric(promMetric *prometheusgo.MetricFamily) 
 
 // A Counter holds a single mutable atomic value.
 type Counter struct {
-	MetricMetadata
+	Metadata
 	metrics.Counter
 }
 
 // NewCounter creates a counter.
-func NewCounter(metadata MetricMetadata) *Counter {
+func NewCounter(metadata Metadata) *Counter {
 	return &Counter{metadata, metrics.NewCounter()}
 }
 
@@ -233,12 +235,12 @@ func (c *Counter) FillPrometheusMetric(promMetric *prometheusgo.MetricFamily) {
 
 // A Gauge atomically stores a single integer value.
 type Gauge struct {
-	MetricMetadata
+	Metadata
 	metrics.Gauge
 }
 
 // NewGauge creates a Gauge.
-func NewGauge(metadata MetricMetadata) *Gauge {
+func NewGauge(metadata Metadata) *Gauge {
 	return &Gauge{metadata, metrics.NewGauge()}
 }
 
@@ -260,12 +262,12 @@ func (g *Gauge) FillPrometheusMetric(promMetric *prometheusgo.MetricFamily) {
 
 // A GaugeFloat64 atomically stores a single float64 value.
 type GaugeFloat64 struct {
-	MetricMetadata
+	Metadata
 	metrics.GaugeFloat64
 }
 
 // NewGaugeFloat64 creates a GaugeFloat64.
-func NewGaugeFloat64(metadata MetricMetadata) *GaugeFloat64 {
+func NewGaugeFloat64(metadata Metadata) *GaugeFloat64 {
 	return &GaugeFloat64{metadata, metrics.NewGaugeFloat64()}
 }
 
@@ -287,7 +289,7 @@ func (g *GaugeFloat64) FillPrometheusMetric(promMetric *prometheusgo.MetricFamil
 
 // A Rate is a exponential weighted moving average.
 type Rate struct {
-	MetricMetadata
+	Metadata
 	mu       syncutil.Mutex // protects fields below
 	curSum   float64
 	wrapped  ewma.MovingAverage
@@ -297,7 +299,7 @@ type Rate struct {
 
 // NewRate creates an EWMA rate on the given timescale. Timescales at
 // or below 2s are illegal and will cause a panic.
-func NewRate(metadata MetricMetadata, timescale time.Duration) *Rate {
+func NewRate(metadata Metadata, timescale time.Duration) *Rate {
 	const tickInterval = time.Second
 	if timescale <= 2*time.Second {
 		panic(fmt.Sprintf("EWMA with per-second ticks makes no sense on timescale %s", timescale))
@@ -305,10 +307,10 @@ func NewRate(metadata MetricMetadata, timescale time.Duration) *Rate {
 	avgAge := float64(timescale) / float64(2*tickInterval)
 
 	return &Rate{
-		MetricMetadata: metadata,
-		interval:       tickInterval,
-		nextT:          now(),
-		wrapped:        ewma.NewMovingAverage(avgAge),
+		Metadata: metadata,
+		interval: tickInterval,
+		nextT:    now(),
+		wrapped:  ewma.NewMovingAverage(avgAge),
 	}
 }
 

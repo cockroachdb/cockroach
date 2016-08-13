@@ -31,7 +31,7 @@ func testMarshal(t *testing.T, m json.Marshaler, exp string) {
 	}
 }
 
-var emptyMetadata = MetricMetadata{"", ""}
+var emptyMetadata = Metadata{Name: ""}
 
 func TestGauge(t *testing.T) {
 	g := NewGauge(emptyMetadata)

@@ -67,9 +67,9 @@ const (
 
 // Metric names.
 var (
-	metaExecLatency = metric.MetricMetadata{"exec.latency", ""}
-	metaExecSuccess = metric.MetricMetadata{"exec.success", ""}
-	metaExecError   = metric.MetricMetadata{"exec.error", ""}
+	metaExecLatency = metric.Metadata{Name: "exec.latency"}
+	metaExecSuccess = metric.Metadata{Name: "exec.success"}
+	metaExecError   = metric.Metadata{Name: "exec.error"}
 )
 
 // errNeedsBootstrap indicates the node should be used as the seed of

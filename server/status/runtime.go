@@ -32,20 +32,20 @@ import (
 )
 
 var (
-	metaCgoCalls       = metric.MetricMetadata{"sys.cgocalls", "Number of cgo calls"}
-	metaGoroutines     = metric.MetricMetadata{"sys.goroutines", "Number of goroutines"}
-	metaGoAllocBytes   = metric.MetricMetadata{"sys.go.allocbytes", ""}
-	metaGoTotalBytes   = metric.MetricMetadata{"sys.go.totalbytes", ""}
-	metaCgoAllocBytes  = metric.MetricMetadata{"sys.cgo.allocbytes", ""}
-	metaCgoTotalBytes  = metric.MetricMetadata{"sys.cgo.totalbytes", ""}
-	metaGCCount        = metric.MetricMetadata{"sys.gc.count", ""}
-	metaGCPauseNS      = metric.MetricMetadata{"sys.gc.pause.ns", ""}
-	metaGCPausePercent = metric.MetricMetadata{"sys.gc.pause.percent", ""}
-	metaCPUUserNS      = metric.MetricMetadata{"sys.cpu.user.ns", ""}
-	metaCPUUserPercent = metric.MetricMetadata{"sys.cpu.user.percent", ""}
-	metaCPUSysNS       = metric.MetricMetadata{"sys.cpu.sys.ns", ""}
-	metaCPUSysPercent  = metric.MetricMetadata{"sys.cpu.sys.percent", ""}
-	metaRSS            = metric.MetricMetadata{"sys.rss", ""}
+	metaCgoCalls       = metric.Metadata{Name: "sys.cgocalls", Help: "Number of cgo calls"}
+	metaGoroutines     = metric.Metadata{Name: "sys.goroutines", Help: "Number of goroutines"}
+	metaGoAllocBytes   = metric.Metadata{Name: "sys.go.allocbytes"}
+	metaGoTotalBytes   = metric.Metadata{Name: "sys.go.totalbytes"}
+	metaCgoAllocBytes  = metric.Metadata{Name: "sys.cgo.allocbytes"}
+	metaCgoTotalBytes  = metric.Metadata{Name: "sys.cgo.totalbytes"}
+	metaGCCount        = metric.Metadata{Name: "sys.gc.count"}
+	metaGCPauseNS      = metric.Metadata{Name: "sys.gc.pause.ns"}
+	metaGCPausePercent = metric.Metadata{Name: "sys.gc.pause.percent"}
+	metaCPUUserNS      = metric.Metadata{Name: "sys.cpu.user.ns"}
+	metaCPUUserPercent = metric.Metadata{Name: "sys.cpu.user.percent"}
+	metaCPUSysNS       = metric.Metadata{Name: "sys.cpu.sys.ns"}
+	metaCPUSysPercent  = metric.Metadata{Name: "sys.cpu.sys.percent"}
+	metaRSS            = metric.Metadata{Name: "sys.rss"}
 )
 
 // getCgoMemStats is a function that fetches stats for the C++ portion of the code.
@@ -82,10 +82,10 @@ type RuntimeStatSampler struct {
 	GcCount        *metric.Gauge
 	GcPauseNS      *metric.Gauge
 	GcPausePercent *metric.GaugeFloat64
-	CpuUserNS      *metric.Gauge
-	CpuUserPercent *metric.GaugeFloat64
-	CpuSysNS       *metric.Gauge
-	CpuSysPercent  *metric.GaugeFloat64
+	CPUUserNS      *metric.Gauge
+	CPUUserPercent *metric.GaugeFloat64
+	CPUSysNS       *metric.Gauge
+	CPUSysPercent  *metric.GaugeFloat64
 	Rss            *metric.Gauge
 }
 
@@ -102,10 +102,10 @@ func MakeRuntimeStatSampler(clock *hlc.Clock, reg *metric.Registry) RuntimeStatS
 		GcCount:        metric.NewGauge(metaGCCount),
 		GcPauseNS:      metric.NewGauge(metaGCPauseNS),
 		GcPausePercent: metric.NewGaugeFloat64(metaGCPausePercent),
-		CpuUserNS:      metric.NewGauge(metaCPUUserNS),
-		CpuUserPercent: metric.NewGaugeFloat64(metaCPUUserPercent),
-		CpuSysNS:       metric.NewGauge(metaCPUSysNS),
-		CpuSysPercent:  metric.NewGaugeFloat64(metaCPUSysPercent),
+		CPUUserNS:      metric.NewGauge(metaCPUUserNS),
+		CPUUserPercent: metric.NewGaugeFloat64(metaCPUUserPercent),
+		CPUSysNS:       metric.NewGauge(metaCPUSysNS),
+		CPUSysPercent:  metric.NewGaugeFloat64(metaCPUSysPercent),
 		Rss:            metric.NewGauge(metaRSS),
 	}
 
@@ -197,9 +197,9 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 	rsr.GcCount.Update(int64(ms.NumGC))
 	rsr.GcPauseNS.Update(int64(ms.PauseTotalNs))
 	rsr.GcPausePercent.Update(pausePerc)
-	rsr.CpuUserNS.Update(newUtime)
-	rsr.CpuUserPercent.Update(uPerc)
-	rsr.CpuSysNS.Update(newStime)
-	rsr.CpuSysPercent.Update(sPerc)
+	rsr.CPUUserNS.Update(newUtime)
+	rsr.CPUUserPercent.Update(uPerc)
+	rsr.CPUSysNS.Update(newStime)
+	rsr.CPUSysPercent.Update(sPerc)
 	rsr.Rss.Update(int64(mem.Resident))
 }
