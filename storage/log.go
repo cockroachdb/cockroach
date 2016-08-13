@@ -111,11 +111,11 @@ VALUES(
 	// range log.
 	switch event.eventType {
 	case RangeEventLogSplit:
-		s.metrics.rangeSplits.Inc(1)
+		s.metrics.RangeSplits.Inc(1)
 	case RangeEventLogAdd:
-		s.metrics.rangeAdds.Inc(1)
+		s.metrics.RangeAdds.Inc(1)
 	case RangeEventLogRemove:
-		s.metrics.rangeRemoves.Inc(1)
+		s.metrics.RangeRemoves.Inc(1)
 	}
 
 	rows, err := s.ctx.SQLExecutor.ExecuteStatementInTransaction(txn, insertEventTableStmt, args...)

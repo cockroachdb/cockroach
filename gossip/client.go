@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -62,7 +61,7 @@ func newClient(addr net.Addr, nodeMetrics metrics) *client {
 		addr:      addr,
 		remoteHighWaterStamps: map[roachpb.NodeID]int64{},
 		closer:                make(chan struct{}),
-		clientMetrics:         makeMetrics(metric.NewRegistry()),
+		clientMetrics:         makeMetrics(),
 		nodeMetrics:           nodeMetrics,
 	}
 }
@@ -128,8 +127,8 @@ func (c *client) requestGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossi
 	g.mu.Unlock()
 
 	bytesSent := int64(args.Size())
-	c.clientMetrics.bytesSent.Add(bytesSent)
-	c.nodeMetrics.bytesSent.Add(bytesSent)
+	c.clientMetrics.BytesSent.Add(bytesSent)
+	c.nodeMetrics.BytesSent.Add(bytesSent)
 
 	return stream.Send(args)
 }
@@ -148,10 +147,10 @@ func (c *client) sendGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossip_G
 
 		bytesSent := int64(args.Size())
 		infosSent := int64(len(delta))
-		c.clientMetrics.bytesSent.Add(bytesSent)
-		c.clientMetrics.infosSent.Add(infosSent)
-		c.nodeMetrics.bytesSent.Add(bytesSent)
-		c.nodeMetrics.infosSent.Add(infosSent)
+		c.clientMetrics.BytesSent.Add(bytesSent)
+		c.clientMetrics.InfosSent.Add(infosSent)
+		c.nodeMetrics.BytesSent.Add(bytesSent)
+		c.nodeMetrics.InfosSent.Add(infosSent)
 
 		if log.V(1) {
 			log.Infof(context.TODO(), "node %d: sending %s", g.is.NodeID, extractKeys(args.Delta))
@@ -172,10 +171,10 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 
 	bytesReceived := int64(reply.Size())
 	infosReceived := int64(len(reply.Delta))
-	c.clientMetrics.bytesReceived.Add(bytesReceived)
-	c.clientMetrics.infosReceived.Add(infosReceived)
-	c.nodeMetrics.bytesReceived.Add(bytesReceived)
-	c.nodeMetrics.infosReceived.Add(infosReceived)
+	c.clientMetrics.BytesReceived.Add(bytesReceived)
+	c.clientMetrics.InfosReceived.Add(infosReceived)
+	c.nodeMetrics.BytesReceived.Add(bytesReceived)
+	c.nodeMetrics.InfosReceived.Add(infosReceived)
 
 	// Combine remote node's infostore delta with ours.
 	if reply.Delta != nil {

@@ -61,16 +61,21 @@ type server struct {
 
 // newServer creates and returns a server struct.
 func newServer(stopper *stop.Stopper, registry *metric.Registry) *server {
-	return &server{
+	s := &server{
 		stopper:       stopper,
 		is:            newInfoStore(0, util.UnresolvedAddr{}, stopper),
-		incoming:      makeNodeSet(minPeers, registry.Gauge(ConnectionsIncomingGaugeName)),
+		incoming:      makeNodeSet(minPeers, metric.NewGauge(MetaConnectionsIncomingGauge)),
 		nodeMap:       make(map[util.UnresolvedAddr]serverInfo),
 		tighten:       make(chan roachpb.NodeID, 1),
 		ready:         make(chan struct{}),
-		nodeMetrics:   makeMetrics(registry),
-		serverMetrics: makeMetrics(metric.NewRegistry()),
+		nodeMetrics:   makeMetrics(),
+		serverMetrics: makeMetrics(),
 	}
+
+	registry.AddMetric(s.incoming.gauge)
+	registry.AddMetricStruct(s.nodeMetrics)
+
+	return s
 }
 
 // Gossip receives gossiped information from a peer node.
@@ -94,10 +99,10 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 
 			bytesSent := int64(reply.Size())
 			infoCount := int64(len(reply.Delta))
-			s.nodeMetrics.bytesSent.Add(bytesSent)
-			s.nodeMetrics.infosSent.Add(infoCount)
-			s.serverMetrics.bytesSent.Add(bytesSent)
-			s.serverMetrics.infosSent.Add(infoCount)
+			s.nodeMetrics.BytesSent.Add(bytesSent)
+			s.nodeMetrics.InfosSent.Add(infoCount)
+			s.serverMetrics.BytesSent.Add(bytesSent)
+			s.serverMetrics.InfosSent.Add(infoCount)
 
 			return stream.Send(reply)
 		}
@@ -256,10 +261,10 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 
 		bytesReceived := int64(args.Size())
 		infosReceived := int64(len(args.Delta))
-		s.nodeMetrics.bytesReceived.Add(bytesReceived)
-		s.nodeMetrics.infosReceived.Add(infosReceived)
-		s.serverMetrics.bytesReceived.Add(bytesReceived)
-		s.serverMetrics.infosReceived.Add(infosReceived)
+		s.nodeMetrics.BytesReceived.Add(bytesReceived)
+		s.nodeMetrics.InfosReceived.Add(infosReceived)
+		s.serverMetrics.BytesReceived.Add(bytesReceived)
+		s.serverMetrics.InfosReceived.Add(infosReceived)
 
 		freshCount, err := s.is.combine(args.Delta, args.NodeID)
 		if err != nil {

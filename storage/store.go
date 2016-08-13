@@ -574,213 +574,6 @@ var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*StoreTestingKnobs) ModuleTestingKnobs() {}
 
-type storeMetrics struct {
-	registry *metric.Registry
-
-	// Range data metrics.
-	replicaCount                 *metric.Counter // Does not include reserved replicas.
-	reservedReplicaCount         *metric.Counter
-	leaderRangeCount             *metric.Gauge
-	replicatedRangeCount         *metric.Gauge
-	replicationPendingRangeCount *metric.Gauge
-	availableRangeCount          *metric.Gauge
-
-	// Lease data metrics.
-	leaseRequestSuccessCount *metric.Counter
-	leaseRequestErrorCount   *metric.Counter
-
-	// Storage metrics.
-	liveBytes       *metric.Gauge
-	keyBytes        *metric.Gauge
-	valBytes        *metric.Gauge
-	intentBytes     *metric.Gauge
-	liveCount       *metric.Gauge
-	keyCount        *metric.Gauge
-	valCount        *metric.Gauge
-	intentCount     *metric.Gauge
-	intentAge       *metric.Gauge
-	gcBytesAge      *metric.Gauge
-	lastUpdateNanos *metric.Gauge
-	capacity        *metric.Gauge
-	available       *metric.Gauge
-	reserved        *metric.Counter
-	sysBytes        *metric.Gauge
-	sysCount        *metric.Gauge
-
-	// RocksDB metrics.
-	rdbBlockCacheHits           *metric.Gauge
-	rdbBlockCacheMisses         *metric.Gauge
-	rdbBlockCacheUsage          *metric.Gauge
-	rdbBlockCachePinnedUsage    *metric.Gauge
-	rdbBloomFilterPrefixChecked *metric.Gauge
-	rdbBloomFilterPrefixUseful  *metric.Gauge
-	rdbMemtableHits             *metric.Gauge
-	rdbMemtableMisses           *metric.Gauge
-	rdbMemtableTotalSize        *metric.Gauge
-	rdbFlushes                  *metric.Gauge
-	rdbCompactions              *metric.Gauge
-	rdbTableReadersMemEstimate  *metric.Gauge
-	rdbReadAmplification        *metric.Gauge
-
-	// Range event metrics.
-	rangeSplits                     *metric.Counter
-	rangeAdds                       *metric.Counter
-	rangeRemoves                    *metric.Counter
-	rangeSnapshotsGenerated         *metric.Counter
-	rangeSnapshotsNormalApplied     *metric.Counter
-	rangeSnapshotsPreemptiveApplied *metric.Counter
-
-	// Raft processing metrics.
-	raftSelectDurationNanos  *metric.Counter
-	raftWorkingDurationNanos *metric.Counter
-	raftTickingDurationNanos *metric.Counter
-
-	// Stats for efficient merges.
-	// TODO(mrtracy): This should be removed as part of #4465. This is only
-	// maintained to keep the current structure of StatusSummaries; it would be
-	// better to convert the Gauges above into counters which are adjusted
-	// accordingly.
-	mu    syncutil.Mutex
-	stats enginepb.MVCCStats
-}
-
-func newStoreMetrics() *storeMetrics {
-	storeRegistry := metric.NewRegistry()
-	return &storeMetrics{
-		registry:                     storeRegistry,
-		replicaCount:                 storeRegistry.Counter("replicas"),
-		reservedReplicaCount:         storeRegistry.Counter("replicas.reserved"),
-		leaderRangeCount:             storeRegistry.Gauge("ranges.leader"),
-		replicatedRangeCount:         storeRegistry.Gauge("ranges.replicated"),
-		replicationPendingRangeCount: storeRegistry.Gauge("ranges.replication-pending"),
-		availableRangeCount:          storeRegistry.Gauge("ranges.available"),
-		leaseRequestSuccessCount:     storeRegistry.Counter("leases.success"),
-		leaseRequestErrorCount:       storeRegistry.Counter("leases.error"),
-		liveBytes:                    storeRegistry.Gauge("livebytes"),
-		keyBytes:                     storeRegistry.Gauge("keybytes"),
-		valBytes:                     storeRegistry.Gauge("valbytes"),
-		intentBytes:                  storeRegistry.Gauge("intentbytes"),
-		liveCount:                    storeRegistry.Gauge("livecount"),
-		keyCount:                     storeRegistry.Gauge("keycount"),
-		valCount:                     storeRegistry.Gauge("valcount"),
-		intentCount:                  storeRegistry.Gauge("intentcount"),
-		intentAge:                    storeRegistry.Gauge("intentage"),
-		gcBytesAge:                   storeRegistry.Gauge("gcbytesage"),
-		lastUpdateNanos:              storeRegistry.Gauge("lastupdatenanos"),
-		capacity:                     storeRegistry.Gauge("capacity"),
-		available:                    storeRegistry.Gauge("capacity.available"),
-		reserved:                     storeRegistry.Counter("capacity.reserved"),
-		sysBytes:                     storeRegistry.Gauge("sysbytes"),
-		sysCount:                     storeRegistry.Gauge("syscount"),
-
-		// RocksDB metrics.
-		rdbBlockCacheHits:           storeRegistry.Gauge("rocksdb.block.cache.hits"),
-		rdbBlockCacheMisses:         storeRegistry.Gauge("rocksdb.block.cache.misses"),
-		rdbBlockCacheUsage:          storeRegistry.Gauge("rocksdb.block.cache.usage"),
-		rdbBlockCachePinnedUsage:    storeRegistry.Gauge("rocksdb.block.cache.pinned-usage"),
-		rdbBloomFilterPrefixChecked: storeRegistry.Gauge("rocksdb.bloom.filter.prefix.checked"),
-		rdbBloomFilterPrefixUseful:  storeRegistry.Gauge("rocksdb.bloom.filter.prefix.useful"),
-		rdbMemtableHits:             storeRegistry.Gauge("rocksdb.memtable.hits"),
-		rdbMemtableMisses:           storeRegistry.Gauge("rocksdb.memtable.misses"),
-		rdbMemtableTotalSize:        storeRegistry.Gauge("rocksdb.memtable.total-size"),
-		rdbFlushes:                  storeRegistry.Gauge("rocksdb.flushes"),
-		rdbCompactions:              storeRegistry.Gauge("rocksdb.compactions"),
-		rdbTableReadersMemEstimate:  storeRegistry.Gauge("rocksdb.table-readers-mem-estimate"),
-		rdbReadAmplification:        storeRegistry.Gauge("rocksdb.read-amplification"),
-
-		// Range event metrics.
-		rangeSplits:                     storeRegistry.Counter("range.splits"),
-		rangeAdds:                       storeRegistry.Counter("range.adds"),
-		rangeRemoves:                    storeRegistry.Counter("range.removes"),
-		rangeSnapshotsGenerated:         storeRegistry.Counter("range.snapshots.generated"),
-		rangeSnapshotsNormalApplied:     storeRegistry.Counter("range.snapshots.normal-applied"),
-		rangeSnapshotsPreemptiveApplied: storeRegistry.Counter("range.snapshots.preemptive-applied"),
-
-		// Raft processing metrics.
-		raftSelectDurationNanos:  storeRegistry.Counter("process-raft.waitingnanos"),
-		raftWorkingDurationNanos: storeRegistry.Counter("process-raft.workingnanos"),
-		raftTickingDurationNanos: storeRegistry.Counter("process-raft.tickingnanos"),
-	}
-}
-
-// updateGaugesLocked breaks out individual metrics from the MVCCStats object.
-// This process should be locked with each stat application to ensure that all
-// gauges increase/decrease in step with the application of updates. However,
-// this locking is not exposed to the registry level, and therefore a single
-// snapshot of these gauges in the registry might mix the values of two
-// subsequent updates.
-func (sm *storeMetrics) updateMVCCGaugesLocked() {
-	sm.liveBytes.Update(sm.stats.LiveBytes)
-	sm.keyBytes.Update(sm.stats.KeyBytes)
-	sm.valBytes.Update(sm.stats.ValBytes)
-	sm.intentBytes.Update(sm.stats.IntentBytes)
-	sm.liveCount.Update(sm.stats.LiveCount)
-	sm.keyCount.Update(sm.stats.KeyCount)
-	sm.valCount.Update(sm.stats.ValCount)
-	sm.intentCount.Update(sm.stats.IntentCount)
-	sm.intentAge.Update(sm.stats.IntentAge)
-	sm.gcBytesAge.Update(sm.stats.GCBytesAge)
-	sm.lastUpdateNanos.Update(sm.stats.LastUpdateNanos)
-	sm.sysBytes.Update(sm.stats.SysBytes)
-	sm.sysCount.Update(sm.stats.SysCount)
-}
-
-func (sm *storeMetrics) updateCapacityGauges(capacity roachpb.StoreCapacity) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	sm.capacity.Update(capacity.Capacity)
-	sm.available.Update(capacity.Available)
-}
-
-func (sm *storeMetrics) updateReplicationGauges(leaders, replicated, pending, available int64) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	sm.leaderRangeCount.Update(leaders)
-	sm.replicatedRangeCount.Update(replicated)
-	sm.replicationPendingRangeCount.Update(pending)
-	sm.availableRangeCount.Update(available)
-}
-
-func (sm *storeMetrics) addMVCCStats(stats enginepb.MVCCStats) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	sm.stats.Add(stats)
-	sm.updateMVCCGaugesLocked()
-}
-
-func (sm *storeMetrics) subtractMVCCStats(stats enginepb.MVCCStats) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	sm.stats.Subtract(stats)
-	sm.updateMVCCGaugesLocked()
-}
-
-func (sm *storeMetrics) updateRocksDBStats(stats engine.Stats) {
-	// We do not grab a lock here, because it's not possible to get a point-in-
-	// time snapshot of RocksDB stats. Retrieving RocksDB stats doesn't grab any
-	// locks, and there's no way to retrieve multiple stats in a single operation.
-	sm.rdbBlockCacheHits.Update(stats.BlockCacheHits)
-	sm.rdbBlockCacheMisses.Update(stats.BlockCacheMisses)
-	sm.rdbBlockCacheUsage.Update(stats.BlockCacheUsage)
-	sm.rdbBlockCachePinnedUsage.Update(stats.BlockCachePinnedUsage)
-	sm.rdbBloomFilterPrefixUseful.Update(stats.BloomFilterPrefixUseful)
-	sm.rdbBloomFilterPrefixChecked.Update(stats.BloomFilterPrefixChecked)
-	sm.rdbMemtableHits.Update(stats.MemtableHits)
-	sm.rdbMemtableMisses.Update(stats.MemtableMisses)
-	sm.rdbMemtableTotalSize.Update(stats.MemtableTotalSize)
-	sm.rdbFlushes.Update(stats.Flushes)
-	sm.rdbCompactions.Update(stats.Compactions)
-	sm.rdbTableReadersMemEstimate.Update(stats.TableReadersMemEstimate)
-}
-
-func (sm *storeMetrics) leaseRequestComplete(success bool) {
-	if success {
-		sm.leaseRequestSuccessCount.Inc(1)
-	} else {
-		sm.leaseRequestErrorCount.Inc(1)
-	}
-}
-
 // Valid returns true if the StoreContext is populated correctly.
 // We don't check for Gossip and DB since some of our tests pass
 // that as nil.
@@ -1065,7 +858,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 			return false, err
 		}
 		// Add this range and its stats to our counter.
-		s.metrics.replicaCount.Inc(1)
+		s.metrics.ReplicaCount.Inc(1)
 		s.metrics.addMVCCStats(rng.GetMVCCStats())
 		// Note that we do not create raft groups at this time; they will be created
 		// on-demand the first time they are needed. This helps reduce the amount of
@@ -1762,7 +1555,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 		return err
 	}
 
-	s.metrics.replicaCount.Inc(1)
+	s.metrics.ReplicaCount.Inc(1)
 	return s.processRangeDescriptorUpdateLocked(origRng)
 }
 
@@ -1809,7 +1602,7 @@ func (s *Store) AddReplicaTest(rng *Replica) error {
 	if err := s.addReplicaInternalLocked(rng); err != nil {
 		return err
 	}
-	s.metrics.replicaCount.Inc(1)
+	s.metrics.ReplicaCount.Inc(1)
 	return nil
 }
 
@@ -1883,7 +1676,7 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 	// Destroy, but this configuration helps avoid races in stat verification
 	// tests.
 	s.metrics.subtractMVCCStats(rep.GetMVCCStats())
-	s.metrics.replicaCount.Dec(1)
+	s.metrics.ReplicaCount.Dec(1)
 
 	// TODO(bdarnell): This is fairly expensive to do under store.Mutex, but
 	// doing it outside the lock is tricky due to the risk that a replica gets
@@ -1952,7 +1745,7 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 	}
 
 	// Add the range and its current stats into metrics.
-	s.metrics.replicaCount.Inc(1)
+	s.metrics.ReplicaCount.Inc(1)
 
 	return nil
 }
@@ -2576,16 +2369,16 @@ func (s *Store) processRaft() {
 			}
 			wg.Wait()
 			s.processRaftMu.Unlock()
-			s.metrics.raftWorkingDurationNanos.Inc(timeutil.Since(workingStart).Nanoseconds())
+			s.metrics.RaftWorkingDurationNanos.Inc(timeutil.Since(workingStart).Nanoseconds())
 
 			selectStart := timeutil.Now()
 
 			select {
 			case <-s.wakeRaftLoop:
-				s.metrics.raftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
+				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
 
 			case st := <-s.ctx.Transport.SnapshotStatusChan:
-				s.metrics.raftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
+				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
 				s.processRaftMu.Lock()
 				s.mu.Lock()
 				if r, ok := s.mu.replicas[st.Req.RangeID]; ok {
@@ -2597,7 +2390,7 @@ func (s *Store) processRaft() {
 
 			case <-ticker.C:
 				// TODO(bdarnell): rework raft ticker.
-				s.metrics.raftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
+				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
 				tickerStart := timeutil.Now()
 				s.processRaftMu.Lock()
 				s.mu.Lock()
@@ -2617,10 +2410,10 @@ func (s *Store) processRaft() {
 				s.pendingRaftGroups.Unlock()
 				s.mu.Unlock()
 				s.processRaftMu.Unlock()
-				s.metrics.raftTickingDurationNanos.Inc(timeutil.Since(tickerStart).Nanoseconds())
+				s.metrics.RaftTickingDurationNanos.Inc(timeutil.Since(tickerStart).Nanoseconds())
 
 			case <-s.stopper.ShouldStop():
-				s.metrics.raftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
+				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
 				return
 			}
 		}
@@ -2811,7 +2604,7 @@ func (s *Store) ComputeMetrics() error {
 		sstables := rocksdb.GetSSTables()
 		readAmp := sstables.ReadAmplification()
 		log.Infof(context.TODO(), "store %d sstables (read amplification = %d):\n%s", s.StoreID(), readAmp, sstables)
-		s.metrics.rdbReadAmplification.Update(int64(readAmp))
+		s.metrics.RdbReadAmplification.Update(int64(readAmp))
 	}
 	return nil
 }

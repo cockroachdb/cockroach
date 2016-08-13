@@ -23,41 +23,79 @@ import (
 
 func TestRegistry(t *testing.T) {
 	r := NewRegistry()
-	sub := NewRegistry()
 
-	topGauge := r.Gauge("top.gauge")
-	_ = r.GaugeFloat64("top.floatgauge")
-	topCounter := r.Counter("top.counter")
-	topRate := r.Rate("top.rate", time.Minute)
-	_ = r.Rates("top.rates")
-	_ = r.Histogram("top.hist", time.Minute, 1000, 3)
-	_ = r.Latency("top.latency")
+	topGauge := NewGauge(MetricMetadata{"top.gauge", ""})
+	r.AddMetric(topGauge)
 
-	_ = sub.Gauge("gauge")
-	r.MustAdd("bottom.%s#1", sub)
-	if err := r.Add("bottom.%s#1", sub); err == nil {
-		t.Fatalf("expected failure on double-add")
+	r.AddMetric(NewGaugeFloat64(MetricMetadata{"top.floatgauge", ""}))
+
+	topCounter := NewCounter(MetricMetadata{"top.counter", ""})
+	r.AddMetric(topCounter)
+
+	topRate := NewRate(MetricMetadata{"top.rate", ""}, time.Minute)
+	r.AddMetric(topRate)
+
+	r.AddMetricGroup(NewRates(MetricMetadata{"top.rates", ""}))
+	r.AddMetric(NewHistogram(MetricMetadata{"top.hist", ""}, time.Minute, 1000, 3))
+	r.AddMetricGroup(NewLatency(MetricMetadata{"top.latency", ""}))
+
+	r.AddMetric(NewGauge(MetricMetadata{"bottom.gauge", ""}))
+	r.AddMetricGroup(NewRates(MetricMetadata{"bottom.rates", ""}))
+	ms := &struct {
+		StructGauge     *Gauge
+		StructGauge64   *GaugeFloat64
+		StructCounter   *Counter
+		StructHistogram *Histogram
+		StructRate      *Rate
+		StructLatency   Histograms
+		StructRates     Rates
+		// A few extra ones: either not exported, or not metric objects.
+		privateStructGauge   *Gauge
+		privateStructGauge64 *GaugeFloat64
+		NotAMetric           int
+		AlsoNotAMetric       string
+		ReallyNotAMetric     *Registry
+	}{
+		StructGauge:     NewGauge(MetricMetadata{"struct.gauge", ""}),
+		StructGauge64:   NewGaugeFloat64(MetricMetadata{"struct.gauge64", ""}),
+		StructCounter:   NewCounter(MetricMetadata{"struct.counter", ""}),
+		StructHistogram: NewHistogram(MetricMetadata{"struct.histogram", ""}, time.Minute, 1000, 3),
+		StructRate:      NewRate(MetricMetadata{"struct.rate", ""}, time.Minute),
+		StructLatency:   NewLatency(MetricMetadata{"struct.latency", ""}),
+		StructRates:     NewRates(MetricMetadata{"struct.rates", ""}),
 	}
-	_ = sub.Rates("rates")
+	r.AddMetricStruct(ms)
 
 	expNames := map[string]struct{}{
-		"top.rate":             {},
-		"top.rates-count":      {},
-		"top.rates-1m":         {},
-		"top.rates-10m":        {},
-		"top.rates-1h":         {},
-		"top.hist":             {},
-		"top.latency-1m":       {},
-		"top.latency-10m":      {},
-		"top.latency-1h":       {},
-		"top.gauge":            {},
-		"top.floatgauge":       {},
-		"top.counter":          {},
-		"bottom.gauge#1":       {},
-		"bottom.rates-count#1": {},
-		"bottom.rates-1m#1":    {},
-		"bottom.rates-10m#1":   {},
-		"bottom.rates-1h#1":    {},
+		"top.rate":           {},
+		"top.rates-count":    {},
+		"top.rates-1m":       {},
+		"top.rates-10m":      {},
+		"top.rates-1h":       {},
+		"top.hist":           {},
+		"top.latency-1m":     {},
+		"top.latency-10m":    {},
+		"top.latency-1h":     {},
+		"top.gauge":          {},
+		"top.floatgauge":     {},
+		"top.counter":        {},
+		"bottom.gauge":       {},
+		"bottom.rates-count": {},
+		"bottom.rates-1m":    {},
+		"bottom.rates-10m":   {},
+		"bottom.rates-1h":    {},
+		"struct.gauge":       {},
+		"struct.gauge64":     {},
+		"struct.counter":     {},
+		"struct.histogram":   {},
+		"struct.rate":        {},
+		"struct.latency-1m":  {},
+		"struct.latency-10m": {},
+		"struct.latency-1h":  {},
+		"struct.rates-count": {},
+		"struct.rates-1m":    {},
+		"struct.rates-10m":   {},
+		"struct.rates-1h":    {},
 	}
 
 	r.Each(func(name string, _ interface{}) {
