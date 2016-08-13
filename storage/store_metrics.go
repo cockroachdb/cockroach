@@ -25,58 +25,58 @@ import (
 )
 
 var (
-	metaReplicaCount                 = metric.MetricMetadata{"replicas", ""}
-	metaReservedReplicaCount         = metric.MetricMetadata{"replicas.reserved", ""}
-	metaLeaderRangeCount             = metric.MetricMetadata{"ranges.leader", ""}
-	metaReplicatedRangeCount         = metric.MetricMetadata{"ranges.replicated", ""}
-	metaReplicationPendingRangeCount = metric.MetricMetadata{"ranges.replication-pending", ""}
-	metaAvailableRangeCount          = metric.MetricMetadata{"ranges.available", ""}
-	metaLeaseRequestSuccessCount     = metric.MetricMetadata{"leases.success", ""}
-	metaLeaseRequestErrorCount       = metric.MetricMetadata{"leases.error", ""}
-	metaLiveBytes                    = metric.MetricMetadata{"livebytes", ""}
-	metaKeyBytes                     = metric.MetricMetadata{"keybytes", ""}
-	metaValBytes                     = metric.MetricMetadata{"valbytes", ""}
-	metaIntentBytes                  = metric.MetricMetadata{"intentbytes", ""}
-	metaLiveCount                    = metric.MetricMetadata{"livecount", ""}
-	metaKeyCount                     = metric.MetricMetadata{"keycount", ""}
-	metaValCount                     = metric.MetricMetadata{"valcount", ""}
-	metaIntentCount                  = metric.MetricMetadata{"intentcount", ""}
-	metaIntentAge                    = metric.MetricMetadata{"intentage", ""}
-	metaGcBytesAge                   = metric.MetricMetadata{"gcbytesage", ""}
-	metaLastUpdateNanos              = metric.MetricMetadata{"lastupdatenanos", ""}
-	metaCapacity                     = metric.MetricMetadata{"capacity", ""}
-	metaAvailable                    = metric.MetricMetadata{"capacity.available", ""}
-	metaReserved                     = metric.MetricMetadata{"capacity.reserved", ""}
-	metaSysBytes                     = metric.MetricMetadata{"sysbytes", ""}
-	metaSysCount                     = metric.MetricMetadata{"syscount", ""}
+	metaReplicaCount                 = metric.Metadata{Name: "replicas"}
+	metaReservedReplicaCount         = metric.Metadata{Name: "replicas.reserved"}
+	metaLeaderRangeCount             = metric.Metadata{Name: "ranges.leader"}
+	metaReplicatedRangeCount         = metric.Metadata{Name: "ranges.replicated"}
+	metaReplicationPendingRangeCount = metric.Metadata{Name: "ranges.replication-pending"}
+	metaAvailableRangeCount          = metric.Metadata{Name: "ranges.available"}
+	metaLeaseRequestSuccessCount     = metric.Metadata{Name: "leases.success"}
+	metaLeaseRequestErrorCount       = metric.Metadata{Name: "leases.error"}
+	metaLiveBytes                    = metric.Metadata{Name: "livebytes"}
+	metaKeyBytes                     = metric.Metadata{Name: "keybytes"}
+	metaValBytes                     = metric.Metadata{Name: "valbytes"}
+	metaIntentBytes                  = metric.Metadata{Name: "intentbytes"}
+	metaLiveCount                    = metric.Metadata{Name: "livecount"}
+	metaKeyCount                     = metric.Metadata{Name: "keycount"}
+	metaValCount                     = metric.Metadata{Name: "valcount"}
+	metaIntentCount                  = metric.Metadata{Name: "intentcount"}
+	metaIntentAge                    = metric.Metadata{Name: "intentage"}
+	metaGcBytesAge                   = metric.Metadata{Name: "gcbytesage"}
+	metaLastUpdateNanos              = metric.Metadata{Name: "lastupdatenanos"}
+	metaCapacity                     = metric.Metadata{Name: "capacity"}
+	metaAvailable                    = metric.Metadata{Name: "capacity.available"}
+	metaReserved                     = metric.Metadata{Name: "capacity.reserved"}
+	metaSysBytes                     = metric.Metadata{Name: "sysbytes"}
+	metaSysCount                     = metric.Metadata{Name: "syscount"}
 
 	// RocksDB metrics.
-	metaRdbBlockCacheHits           = metric.MetricMetadata{"rocksdb.block.cache.hits", ""}
-	metaRdbBlockCacheMisses         = metric.MetricMetadata{"rocksdb.block.cache.misses", ""}
-	metaRdbBlockCacheUsage          = metric.MetricMetadata{"rocksdb.block.cache.usage", ""}
-	metaRdbBlockCachePinnedUsage    = metric.MetricMetadata{"rocksdb.block.cache.pinned-usage", ""}
-	metaRdbBloomFilterPrefixChecked = metric.MetricMetadata{"rocksdb.bloom.filter.prefix.checked", ""}
-	metaRdbBloomFilterPrefixUseful  = metric.MetricMetadata{"rocksdb.bloom.filter.prefix.useful", ""}
-	metaRdbMemtableHits             = metric.MetricMetadata{"rocksdb.memtable.hits", ""}
-	metaRdbMemtableMisses           = metric.MetricMetadata{"rocksdb.memtable.misses", ""}
-	metaRdbMemtableTotalSize        = metric.MetricMetadata{"rocksdb.memtable.total-size", ""}
-	metaRdbFlushes                  = metric.MetricMetadata{"rocksdb.flushes", ""}
-	metaRdbCompactions              = metric.MetricMetadata{"rocksdb.compactions", ""}
-	metaRdbTableReadersMemEstimate  = metric.MetricMetadata{"rocksdb.table-readers-mem-estimate", ""}
-	metaRdbReadAmplification        = metric.MetricMetadata{"rocksdb.read-amplification", ""}
+	metaRdbBlockCacheHits           = metric.Metadata{Name: "rocksdb.block.cache.hits"}
+	metaRdbBlockCacheMisses         = metric.Metadata{Name: "rocksdb.block.cache.misses"}
+	metaRdbBlockCacheUsage          = metric.Metadata{Name: "rocksdb.block.cache.usage"}
+	metaRdbBlockCachePinnedUsage    = metric.Metadata{Name: "rocksdb.block.cache.pinned-usage"}
+	metaRdbBloomFilterPrefixChecked = metric.Metadata{Name: "rocksdb.bloom.filter.prefix.checked"}
+	metaRdbBloomFilterPrefixUseful  = metric.Metadata{Name: "rocksdb.bloom.filter.prefix.useful"}
+	metaRdbMemtableHits             = metric.Metadata{Name: "rocksdb.memtable.hits"}
+	metaRdbMemtableMisses           = metric.Metadata{Name: "rocksdb.memtable.misses"}
+	metaRdbMemtableTotalSize        = metric.Metadata{Name: "rocksdb.memtable.total-size"}
+	metaRdbFlushes                  = metric.Metadata{Name: "rocksdb.flushes"}
+	metaRdbCompactions              = metric.Metadata{Name: "rocksdb.compactions"}
+	metaRdbTableReadersMemEstimate  = metric.Metadata{Name: "rocksdb.table-readers-mem-estimate"}
+	metaRdbReadAmplification        = metric.Metadata{Name: "rocksdb.read-amplification"}
 
 	// Range event metrics.
-	metaRangeSplits                     = metric.MetricMetadata{"range.splits", ""}
-	metaRangeAdds                       = metric.MetricMetadata{"range.adds", ""}
-	metaRangeRemoves                    = metric.MetricMetadata{"range.removes", ""}
-	metaRangeSnapshotsGenerated         = metric.MetricMetadata{"range.snapshots.generated", ""}
-	metaRangeSnapshotsNormalApplied     = metric.MetricMetadata{"range.snapshots.normal-applied", ""}
-	metaRangeSnapshotsPreemptiveApplied = metric.MetricMetadata{"range.snapshots.preemptive-applied", ""}
+	metaRangeSplits                     = metric.Metadata{Name: "range.splits"}
+	metaRangeAdds                       = metric.Metadata{Name: "range.adds"}
+	metaRangeRemoves                    = metric.Metadata{Name: "range.removes"}
+	metaRangeSnapshotsGenerated         = metric.Metadata{Name: "range.snapshots.generated"}
+	metaRangeSnapshotsNormalApplied     = metric.Metadata{Name: "range.snapshots.normal-applied"}
+	metaRangeSnapshotsPreemptiveApplied = metric.Metadata{Name: "range.snapshots.preemptive-applied"}
 
 	// Raft processing metrics.
-	metaRaftSelectDurationNanos  = metric.MetricMetadata{"process-raft.waitingnanos", ""}
-	metaRaftWorkingDurationNanos = metric.MetricMetadata{"process-raft.workingnanos", ""}
-	metaRaftTickingDurationNanos = metric.MetricMetadata{"process-raft.tickingnanos", ""}
+	metaRaftSelectDurationNanos  = metric.Metadata{Name: "process-raft.waitingnanos"}
+	metaRaftWorkingDurationNanos = metric.Metadata{Name: "process-raft.workingnanos"}
+	metaRaftTickingDurationNanos = metric.Metadata{Name: "process-raft.tickingnanos"}
 )
 
 type storeMetrics struct {

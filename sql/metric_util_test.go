@@ -27,7 +27,7 @@ import (
 )
 
 func checkCounterEQ(
-	t *testing.T, s serverutils.TestServerInterface, meta metric.MetricMetadata, e int64,
+	t *testing.T, s serverutils.TestServerInterface, meta metric.Metadata, e int64,
 ) {
 	if a := s.MustGetSQLCounter(meta.Name); a != e {
 		t.Error(errors.Errorf("stat %s: actual %d != expected %d", meta.Name, a, e))
@@ -35,7 +35,7 @@ func checkCounterEQ(
 }
 
 func checkCounterGE(
-	t *testing.T, s serverutils.TestServerInterface, meta metric.MetricMetadata, e int64,
+	t *testing.T, s serverutils.TestServerInterface, meta metric.Metadata, e int64,
 ) {
 	if a := s.MustGetSQLCounter(meta.Name); a < e {
 		t.Error(errors.Errorf("stat %s: expected: actual %d >= %d", meta.Name, a, e))

@@ -118,12 +118,12 @@ const (
 
 // Gossip metrics counter names.
 var (
-	MetaConnectionsIncomingGauge = metric.MetricMetadata{"gossip.connections.incoming", ""}
-	MetaConnectionsOutgoingGauge = metric.MetricMetadata{"gossip.connections.outgoing", ""}
-	MetaInfosSentRates           = metric.MetricMetadata{"gossip.infos.sent", ""}
-	MetaInfosReceivedRates       = metric.MetricMetadata{"gossip.infos.received", ""}
-	MetaBytesSentRates           = metric.MetricMetadata{"gossip.bytes.sent", ""}
-	MetaBytesReceivedRates       = metric.MetricMetadata{"gossip.bytes.received", ""}
+	MetaConnectionsIncomingGauge = metric.Metadata{Name: "gossip.connections.incoming"}
+	MetaConnectionsOutgoingGauge = metric.Metadata{Name: "gossip.connections.outgoing"}
+	MetaInfosSentRates           = metric.Metadata{Name: "gossip.infos.sent"}
+	MetaInfosReceivedRates       = metric.Metadata{Name: "gossip.infos.received"}
+	MetaBytesSentRates           = metric.Metadata{Name: "gossip.bytes.sent"}
+	MetaBytesReceivedRates       = metric.Metadata{Name: "gossip.bytes.received"}
 )
 
 // Storage is an interface which allows the gossip instance
