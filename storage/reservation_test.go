@@ -47,17 +47,17 @@ func createTestBookie(
 	b.maxReservations = maxReservations
 	b.maxReservedBytes = maxReservedBytes
 	// Set a high number for a mocked total available space.
-	b.metrics.available.Update(defaultMaxReservedBytes * 10)
+	b.metrics.Available.Update(defaultMaxReservedBytes * 10)
 	return stopper, mc, b
 }
 
 // verifyBookie ensures that the correct number of reservations, reserved bytes,
 // and that the expirationQueue's length are correct.
 func verifyBookie(t *testing.T, b *bookie, reservations, queueLen int, reservedBytes int64) {
-	if e, a := reservedBytes, b.metrics.reserved.Count(); e != a {
+	if e, a := reservedBytes, b.metrics.Reserved.Count(); e != a {
 		t.Error(errors.Errorf("expected total bytes reserved to be %d, got %d", e, a))
 	}
-	if e, a := reservations, int(b.metrics.reservedReplicaCount.Count()); e != a {
+	if e, a := reservations, int(b.metrics.ReservedReplicaCount.Count()); e != a {
 		t.Error(errors.Errorf("expected total reservations to be %d, got %d", e, a))
 	}
 	if e, a := queueLen, bookieQueueLen(b); e != a {
@@ -170,7 +170,7 @@ func TestBookieReserve(t *testing.T) {
 
 	b.mu.Lock()
 	// Set the bytes have 1 less byte free than needed by the reservation.
-	b.metrics.available.Update(b.mu.size + (2 * overfilledReq.RangeSize) - 1)
+	b.metrics.Available.Update(b.mu.size + (2 * overfilledReq.RangeSize) - 1)
 	b.mu.Unlock()
 
 	if b.Reserve(context.Background(), overfilledReq, nil).Reserved {

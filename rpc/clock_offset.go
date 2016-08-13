@@ -29,13 +29,13 @@ import (
 )
 
 type remoteClockMetrics struct {
-	clusterOffsetLowerBound *metric.Gauge
-	clusterOffsetUpperBound *metric.Gauge
+	ClusterOffsetLowerBound *metric.Gauge
+	ClusterOffsetUpperBound *metric.Gauge
 }
 
-const (
-	clusterOffsetLowerBoundName = "clock-offset.lower-bound-nanos"
-	clusterOffsetUpperBoundName = "clock-offset.upper-bound-nanos"
+var (
+	metaClusterOffsetLowerBound = metric.MetricMetadata{"clock-offset.lower-bound-nanos", ""}
+	metaClusterOffsetUpperBound = metric.MetricMetadata{"clock-offset.upper-bound-nanos", ""}
 )
 
 // RemoteClockMonitor keeps track of the most recent measurements of remote
@@ -49,8 +49,7 @@ type RemoteClockMonitor struct {
 		offsets map[string]RemoteOffset
 	}
 
-	metrics  remoteClockMetrics
-	registry *metric.Registry
+	metrics remoteClockMetrics
 }
 
 // newRemoteClockMonitor returns a monitor with the given server clock.
@@ -58,12 +57,11 @@ func newRemoteClockMonitor(clock *hlc.Clock, offsetTTL time.Duration) *RemoteClo
 	r := RemoteClockMonitor{
 		clock:     clock,
 		offsetTTL: offsetTTL,
-		registry:  metric.NewRegistry(),
 	}
 	r.mu.offsets = make(map[string]RemoteOffset)
 	r.metrics = remoteClockMetrics{
-		clusterOffsetLowerBound: r.registry.Gauge(clusterOffsetLowerBoundName),
-		clusterOffsetUpperBound: r.registry.Gauge(clusterOffsetUpperBoundName),
+		ClusterOffsetLowerBound: metric.NewGauge(metaClusterOffsetLowerBound),
+		ClusterOffsetUpperBound: metric.NewGauge(metaClusterOffsetUpperBound),
 	}
 	return &r
 }
@@ -178,16 +176,9 @@ func (r RemoteOffset) isStale(ttl time.Duration, now time.Time) bool {
 	return r.measuredAt().Add(ttl).Before(now)
 }
 
-// Registry returns a registry with the metrics tracked by this server, which can be used to
-// access its stats or be added to another registry.
-func (r *RemoteClockMonitor) Registry() *metric.Registry {
-	return r.registry
-}
-
 // RegisterMetrics adds the local metrics to a registry.
 // TODO(marc): this pattern deviates from other users of the registry
 // that take it as an argument at metric construction time.
 func (r *RemoteClockMonitor) RegisterMetrics(reg *metric.Registry) {
-	reg.MustAdd(clusterOffsetLowerBoundName, r.metrics.clusterOffsetLowerBound)
-	reg.MustAdd(clusterOffsetUpperBoundName, r.metrics.clusterOffsetUpperBound)
+	reg.AddMetricStruct(r.metrics)
 }

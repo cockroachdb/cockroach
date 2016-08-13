@@ -63,11 +63,13 @@ const (
 	// publishStatusInterval is the interval for publishing periodic statistics
 	// from stores to the internal event feed.
 	publishStatusInterval = 10 * time.Second
+)
 
-	// Metric names.
-	execLatencyName = "exec.latency"
-	execSuccessName = "exec.success"
-	execErrorName   = "exec.error"
+// Metric names.
+var (
+	metaExecLatency = metric.MetricMetadata{"exec.latency", ""}
+	metaExecSuccess = metric.MetricMetadata{"exec.success", ""}
+	metaExecError   = metric.MetricMetadata{"exec.error", ""}
 )
 
 // errNeedsBootstrap indicates the node should be used as the seed of
@@ -80,19 +82,19 @@ var errNeedsBootstrap = errors.New("node has no initialized stores and no instru
 var errCannotJoinSelf = errors.New("an uninitialized node cannot specify its own address to join a cluster")
 
 type nodeMetrics struct {
-	registry *metric.Registry
-	latency  metric.Histograms
-	success  metric.Rates
-	err      metric.Rates
+	Latency metric.Histograms
+	Success metric.Rates
+	Err     metric.Rates
 }
 
 func makeNodeMetrics(reg *metric.Registry) nodeMetrics {
-	return nodeMetrics{
-		registry: reg,
-		latency:  reg.Latency(execLatencyName),
-		success:  reg.Rates(execSuccessName),
-		err:      reg.Rates(execErrorName),
+	nm := nodeMetrics{
+		Latency: metric.NewLatency(metaExecLatency),
+		Success: metric.NewRates(metaExecSuccess),
+		Err:     metric.NewRates(metaExecError),
 	}
+	reg.AddMetricStruct(nm)
+	return nm
 }
 
 // callComplete records very high-level metrics about the number of completed
@@ -100,11 +102,11 @@ func makeNodeMetrics(reg *metric.Registry) nodeMetrics {
 // level; stats on specific lower-level kv operations are not recorded.
 func (nm nodeMetrics) callComplete(d time.Duration, pErr *roachpb.Error) {
 	if pErr != nil && pErr.TransactionRestart == roachpb.TransactionRestart_NONE {
-		nm.err.Add(1)
+		nm.Err.Add(1)
 	} else {
-		nm.success.Add(1)
+		nm.Success.Add(1)
 	}
-	nm.latency.RecordValue(d.Nanoseconds())
+	nm.Latency.RecordValue(d.Nanoseconds())
 }
 
 // A Node manages a map of stores (by store ID) for which it serves

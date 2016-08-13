@@ -74,16 +74,16 @@ func TestQueryCounts(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		checkCounterEQ(t, s, sql.MetricTxnBeginName, tc.txnBeginCount)
-		checkCounterEQ(t, s, sql.MetricTxnCommitName, tc.txnCommitCount)
-		checkCounterEQ(t, s, sql.MetricTxnRollbackName, tc.txnRollbackCount)
-		checkCounterEQ(t, s, sql.MetricTxnAbortName, 0)
-		checkCounterEQ(t, s, sql.MetricSelectName, tc.selectCount)
-		checkCounterEQ(t, s, sql.MetricUpdateName, tc.updateCount)
-		checkCounterEQ(t, s, sql.MetricInsertName, tc.insertCount)
-		checkCounterEQ(t, s, sql.MetricDeleteName, tc.deleteCount)
-		checkCounterEQ(t, s, sql.MetricDdlName, tc.ddlCount)
-		checkCounterEQ(t, s, sql.MetricMiscName, tc.miscCount)
+		checkCounterEQ(t, s, sql.MetaTxnBegin, tc.txnBeginCount)
+		checkCounterEQ(t, s, sql.MetaTxnCommit, tc.txnCommitCount)
+		checkCounterEQ(t, s, sql.MetaTxnRollback, tc.txnRollbackCount)
+		checkCounterEQ(t, s, sql.MetaTxnAbort, 0)
+		checkCounterEQ(t, s, sql.MetaSelect, tc.selectCount)
+		checkCounterEQ(t, s, sql.MetaUpdate, tc.updateCount)
+		checkCounterEQ(t, s, sql.MetaInsert, tc.insertCount)
+		checkCounterEQ(t, s, sql.MetaDelete, tc.deleteCount)
+		checkCounterEQ(t, s, sql.MetaDdl, tc.ddlCount)
+		checkCounterEQ(t, s, sql.MetaMisc, tc.miscCount)
 
 		// Everything after this query will also fail, so quit now to avoid deluge of errors.
 		if t.Failed() {
@@ -134,11 +134,11 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	checkCounterEQ(t, s, sql.MetricTxnAbortName, 1)
-	checkCounterEQ(t, s, sql.MetricTxnBeginName, 1)
-	checkCounterEQ(t, s, sql.MetricTxnRollbackName, 0)
-	checkCounterEQ(t, s, sql.MetricTxnCommitName, 0)
-	checkCounterEQ(t, s, sql.MetricInsertName, 1)
+	checkCounterEQ(t, s, sql.MetaTxnAbort, 1)
+	checkCounterEQ(t, s, sql.MetaTxnBegin, 1)
+	checkCounterEQ(t, s, sql.MetaTxnRollback, 0)
+	checkCounterEQ(t, s, sql.MetaTxnCommit, 0)
+	checkCounterEQ(t, s, sql.MetaInsert, 1)
 }
 
 // TestErrorDuringTransaction tests that the transaction abort count goes up when a query
@@ -158,7 +158,7 @@ func TestAbortCountErrorDuringTransaction(t *testing.T) {
 		t.Fatal("Expected an error but didn't get one")
 	}
 
-	checkCounterEQ(t, s, sql.MetricTxnAbortName, 1)
-	checkCounterEQ(t, s, sql.MetricTxnBeginName, 1)
-	checkCounterEQ(t, s, sql.MetricSelectName, 1)
+	checkCounterEQ(t, s, sql.MetaTxnAbort, 1)
+	checkCounterEQ(t, s, sql.MetaTxnBegin, 1)
+	checkCounterEQ(t, s, sql.MetaSelect, 1)
 }

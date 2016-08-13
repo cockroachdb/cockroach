@@ -53,19 +53,19 @@ const sqlTxnName string = "sql txn"
 const sqlImplicitTxnName string = "sql txn implicit"
 
 // Fully-qualified names for metrics.
-const (
-	MetricLatencyName     = "sql.latency"
-	MetricTxnBeginName    = "sql.txn.begin.count"
-	MetricTxnCommitName   = "sql.txn.commit.count"
-	MetricTxnAbortName    = "sql.txn.abort.count"
-	MetricTxnRollbackName = "sql.txn.rollback.count"
-	MetricSelectName      = "sql.select.count"
-	MetricUpdateName      = "sql.update.count"
-	MetricInsertName      = "sql.insert.count"
-	MetricDeleteName      = "sql.delete.count"
-	MetricDdlName         = "sql.ddl.count"
-	MetricMiscName        = "sql.misc.count"
-	MetricQueryName       = "sql.query.count"
+var (
+	MetaLatency     = metric.MetricMetadata{"sql.latency", ""}
+	MetaTxnBegin    = metric.MetricMetadata{"sql.txn.begin.count", ""}
+	MetaTxnCommit   = metric.MetricMetadata{"sql.txn.commit.count", ""}
+	MetaTxnAbort    = metric.MetricMetadata{"sql.txn.abort.count", ""}
+	MetaTxnRollback = metric.MetricMetadata{"sql.txn.rollback.count", ""}
+	MetaSelect      = metric.MetricMetadata{"sql.select.count", ""}
+	MetaUpdate      = metric.MetricMetadata{"sql.update.count", ""}
+	MetaInsert      = metric.MetricMetadata{"sql.insert.count", ""}
+	MetaDelete      = metric.MetricMetadata{"sql.delete.count", ""}
+	MetaDdl         = metric.MetricMetadata{"sql.ddl.count", ""}
+	MetaMisc        = metric.MetricMetadata{"sql.misc.count", ""}
+	MetaQuery       = metric.MetricMetadata{"sql.query.count", ""}
 )
 
 // TODO(radu): experimental code for testing distSQL flows.
@@ -140,22 +140,21 @@ type Executor struct {
 	reCache *parser.RegexpCache
 
 	// Transient stats.
-	registry      *metric.Registry
-	latency       metric.Histograms
-	selectCount   *metric.Counter
-	txnBeginCount *metric.Counter
+	Latency       metric.Histograms
+	SelectCount   *metric.Counter
+	TxnBeginCount *metric.Counter
 
 	// txnCommitCount counts the number of times a COMMIT was attempted.
-	txnCommitCount *metric.Counter
+	TxnCommitCount *metric.Counter
 
-	txnAbortCount    *metric.Counter
-	txnRollbackCount *metric.Counter
-	updateCount      *metric.Counter
-	insertCount      *metric.Counter
-	deleteCount      *metric.Counter
-	ddlCount         *metric.Counter
-	miscCount        *metric.Counter
-	queryCount       *metric.Counter
+	TxnAbortCount    *metric.Counter
+	TxnRollbackCount *metric.Counter
+	UpdateCount      *metric.Counter
+	InsertCount      *metric.Counter
+	DeleteCount      *metric.Counter
+	DdlCount         *metric.Counter
+	MiscCount        *metric.Counter
+	QueryCount       *metric.Counter
 
 	// System Config and mutex.
 	systemConfig   config.SystemConfig
@@ -249,20 +248,22 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper, registry *metric.Reg
 		cfg:     cfg,
 		reCache: parser.NewRegexpCache(512),
 
-		registry:         registry,
-		latency:          registry.Latency(MetricLatencyName),
-		txnBeginCount:    registry.Counter(MetricTxnBeginName),
-		txnCommitCount:   registry.Counter(MetricTxnCommitName),
-		txnAbortCount:    registry.Counter(MetricTxnAbortName),
-		txnRollbackCount: registry.Counter(MetricTxnRollbackName),
-		selectCount:      registry.Counter(MetricSelectName),
-		updateCount:      registry.Counter(MetricUpdateName),
-		insertCount:      registry.Counter(MetricInsertName),
-		deleteCount:      registry.Counter(MetricDeleteName),
-		ddlCount:         registry.Counter(MetricDdlName),
-		miscCount:        registry.Counter(MetricMiscName),
-		queryCount:       registry.Counter(MetricQueryName),
+		Latency:          metric.NewLatency(MetaLatency),
+		TxnBeginCount:    metric.NewCounter(MetaTxnBegin),
+		TxnCommitCount:   metric.NewCounter(MetaTxnCommit),
+		TxnAbortCount:    metric.NewCounter(MetaTxnAbort),
+		TxnRollbackCount: metric.NewCounter(MetaTxnRollback),
+		SelectCount:      metric.NewCounter(MetaSelect),
+		UpdateCount:      metric.NewCounter(MetaUpdate),
+		InsertCount:      metric.NewCounter(MetaInsert),
+		DeleteCount:      metric.NewCounter(MetaDelete),
+		DdlCount:         metric.NewCounter(MetaDdl),
+		MiscCount:        metric.NewCounter(MetaMisc),
+		QueryCount:       metric.NewCounter(MetaQuery),
 	}
+
+	registry.AddMetricStruct(exec)
+
 	exec.systemConfigCond = sync.NewCond(exec.systemConfigMu.RLocker())
 
 	gossipUpdateC := cfg.Gossip.RegisterSystemConfigChannel()
@@ -536,7 +537,7 @@ func (e *Executor) execRequest(session *Session, sql string) StatementResults {
 						err, txnState, execOpt, stmts, remainingStmts)
 				}
 				lastResult.Err = aErr
-				e.txnAbortCount.Inc(1)
+				e.TxnAbortCount.Inc(1)
 				txn.CleanupOnError(err)
 			}
 			if lastResult.Err == nil {
@@ -553,7 +554,7 @@ func (e *Executor) execRequest(session *Session, sql string) StatementResults {
 			// A COMMIT got an error (retryable or not). Too bad, this txn is toast.
 			// After we return a result for COMMIT (with the COMMIT pgwire tag), the
 			// user can't send any more commands.
-			e.txnAbortCount.Inc(1)
+			e.TxnAbortCount.Inc(1)
 			txn.CleanupOnError(err)
 			txnState.resetStateAndTxn(NoTxn)
 		}
@@ -1142,35 +1143,29 @@ func (e *Executor) execStmt(
 // updateStmtCounts updates metrics for the number of times the different types of SQL
 // statements have been received by this node.
 func (e *Executor) updateStmtCounts(stmt parser.Statement) {
-	e.queryCount.Inc(1)
+	e.QueryCount.Inc(1)
 	switch stmt.(type) {
 	case *parser.BeginTransaction:
-		e.txnBeginCount.Inc(1)
+		e.TxnBeginCount.Inc(1)
 	case *parser.Select:
-		e.selectCount.Inc(1)
+		e.SelectCount.Inc(1)
 	case *parser.Update:
-		e.updateCount.Inc(1)
+		e.UpdateCount.Inc(1)
 	case *parser.Insert:
-		e.insertCount.Inc(1)
+		e.InsertCount.Inc(1)
 	case *parser.Delete:
-		e.deleteCount.Inc(1)
+		e.DeleteCount.Inc(1)
 	case *parser.CommitTransaction:
-		e.txnCommitCount.Inc(1)
+		e.TxnCommitCount.Inc(1)
 	case *parser.RollbackTransaction:
-		e.txnRollbackCount.Inc(1)
+		e.TxnRollbackCount.Inc(1)
 	default:
 		if stmt.StatementType() == parser.DDL {
-			e.ddlCount.Inc(1)
+			e.DdlCount.Inc(1)
 		} else {
-			e.miscCount.Inc(1)
+			e.MiscCount.Inc(1)
 		}
 	}
-}
-
-// Registry returns a registry with the metrics tracked by this executor, which can be used to
-// access its stats or be added to another registry.
-func (e *Executor) Registry() *metric.Registry {
-	return e.registry
 }
 
 // golangFillQueryArguments populates the placeholder map with

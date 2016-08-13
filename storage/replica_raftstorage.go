@@ -317,7 +317,7 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (raftpb.Snapshot, err
 			log.Errorf(ctxInner, "%s: error generating snapshot: %s", r, err)
 		} else {
 			log.Trace(ctxInner, "snapshot generated")
-			r.store.metrics.rangeSnapshotsGenerated.Inc(1)
+			r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 			select {
 			case ch <- snapData:
 				log.Trace(ctxInner, "snapshot accepted")
@@ -707,9 +707,9 @@ func (r *Replica) applySnapshot(
 	}
 
 	if !isPreemptive {
-		r.store.metrics.rangeSnapshotsNormalApplied.Inc(1)
+		r.store.metrics.RangeSnapshotsNormalApplied.Inc(1)
 	} else {
-		r.store.metrics.rangeSnapshotsPreemptiveApplied.Inc(1)
+		r.store.metrics.RangeSnapshotsPreemptiveApplied.Inc(1)
 	}
 	return nil
 }

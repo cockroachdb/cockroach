@@ -119,7 +119,7 @@ func (b *bookie) Reserve(
 
 	resp := roachpb.ReservationResponse{
 		Reserved: false,
-		RangeCount: proto.Int32(int32(b.metrics.replicaCount.Count()) +
+		RangeCount: proto.Int32(int32(b.metrics.ReplicaCount.Count()) +
 			int32(len(b.mu.reservationsByRangeID))),
 	}
 
@@ -156,7 +156,7 @@ func (b *bookie) Reserve(
 	// the hard drive?
 	// TODO(bram): Explore if doubling the requested size enough?
 	// Store `available` in case it changes between if and log.
-	available := b.metrics.available.Value()
+	available := b.metrics.Available.Value()
 	if b.mu.size+(req.RangeSize*2) > available {
 		if log.V(1) {
 			log.Infof(ctx, "could not book reservation %+v, not enough available disk space (requested:%d*2, reserved:%d, available:%d)",
@@ -191,8 +191,8 @@ func (b *bookie) Reserve(
 	b.mu.size += req.RangeSize
 
 	// Update the store metrics.
-	b.metrics.reservedReplicaCount.Inc(1)
-	b.metrics.reserved.Inc(req.RangeSize)
+	b.metrics.ReservedReplicaCount.Inc(1)
+	b.metrics.Reserved.Inc(req.RangeSize)
 
 	if log.V(1) {
 		log.Infof(ctx, "new reservation added: %+v", newReservation)
@@ -236,8 +236,8 @@ func (b *bookie) fillReservationLocked(res *reservation) {
 	b.mu.size -= res.RangeSize
 
 	// Update the store metrics.
-	b.metrics.reservedReplicaCount.Dec(1)
-	b.metrics.reserved.Dec(res.RangeSize)
+	b.metrics.ReservedReplicaCount.Dec(1)
+	b.metrics.Reserved.Dec(res.RangeSize)
 }
 
 // start will run continuously and expire old reservations.

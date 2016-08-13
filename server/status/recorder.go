@@ -131,6 +131,7 @@ func (mr *MetricsRecorder) AddStore(store storeMetrics) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	storeID := store.StoreID()
+	store.Registry().AddLabel("store", strconv.Itoa(int(storeID)))
 	mr.mu.storeRegistries[storeID] = store.Registry()
 	mr.mu.stores[storeID] = store
 }
