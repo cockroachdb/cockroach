@@ -173,7 +173,7 @@ tests=$(declare -F|cut -d' ' -f3|grep '^Test'|grep "${TESTS-.}")
 export -f runcheck
 export -f $tests
 if hash parallel 2>/dev/null; then
-  parallel runcheck {} ::: $tests || exit_status=$?
+  parallel -j4 runcheck {} ::: $tests || exit_status=$?
 else
   for i in $tests; do
     check_status=0
