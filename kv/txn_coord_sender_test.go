@@ -798,7 +798,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				reply = ba.CreateReply()
 			}
 			return reply, test.pErr
-		}), clock, false, tracing.NewTracer(), stopper, NewTxnMetrics(metric.NewRegistry()))
+		}), clock, false, tracing.NewTracer(), stopper, NewTxnMetrics())
 		db := client.NewDB(ts)
 		txn := client.NewTxn(context.Background(), *db)
 		txn.InternalSetPriority(1)
@@ -935,7 +935,7 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 		br.Txn = &txnClone
 		br.Txn.Writing = true
 		return br, nil
-	}), clock, false, tracing.NewTracer(), stopper, NewTxnMetrics(metric.NewRegistry()))
+	}), clock, false, tracing.NewTracer(), stopper, NewTxnMetrics())
 
 	// Stop the stopper manually, prior to trying the transaction. This has the
 	// effect of returning a NodeUnavailableError for any attempts at launching
@@ -985,7 +985,7 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 				*pErr = test.Error
 				pErr.SetTxn(&txn)
 				return nil, pErr
-			}), clock, false, tracing.NewTracer(), stopper, NewTxnMetrics(metric.NewRegistry()))
+			}), clock, false, tracing.NewTracer(), stopper, NewTxnMetrics())
 
 			var ba roachpb.BatchRequest
 			key := roachpb.Key("test")
@@ -1056,7 +1056,7 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 		return br, nil
 	}
 	ts := NewTxnCoordSender(senderFn(senderFunc), clock, false, tracing.NewTracer(), stopper,
-		NewTxnMetrics(metric.NewRegistry()))
+		NewTxnMetrics())
 
 	defer stopper.Stop()
 	defer teardownHeartbeats(ts)
@@ -1149,8 +1149,7 @@ func checkTxnMetrics(t *testing.T, sender *TxnCoordSender, name string,
 // test.
 func setupMetricsTest(t *testing.T) (*hlc.ManualClock, *TxnCoordSender, func()) {
 	s, testSender := createTestDB(t)
-	reg := metric.NewRegistry()
-	txnMetrics := NewTxnMetrics(reg)
+	txnMetrics := NewTxnMetrics()
 	sender := NewTxnCoordSender(testSender.wrapped, s.Clock, false, tracing.NewTracer(), s.Stopper, txnMetrics)
 
 	return s.Manual, sender, func() {

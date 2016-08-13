@@ -97,12 +97,12 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	}, g)
 	tracer := tracing.NewTracer()
 	sender := kv.NewTxnCoordSender(distSender, ctx.Clock, false, tracer, stopper,
-		kv.NewTxnMetrics(metric.NewRegistry()))
+		kv.NewTxnMetrics())
 	ctx.DB = client.NewDB(sender)
 	ctx.Transport = storage.NewDummyRaftTransport()
 	ctx.Tracer = tracer
 	node := NewNode(ctx, status.NewMetricsRecorder(ctx.Clock), metric.NewRegistry(), stopper,
-		kv.NewTxnMetrics(metric.NewRegistry()), sql.MakeEventLogger(nil))
+		kv.NewTxnMetrics(), sql.MakeEventLogger(nil))
 	roachpb.RegisterInternalServer(grpcServer, node)
 	return grpcServer, ln.Addr(), ctx.Clock, node, stopper
 }
@@ -142,7 +142,7 @@ func TestBootstrapCluster(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.NewTxnMetrics(metric.NewRegistry())); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.NewTxnMetrics()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -183,7 +183,7 @@ func TestBootstrapNewStore(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.NewTxnMetrics(metric.NewRegistry())); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.NewTxnMetrics()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -225,7 +225,7 @@ func TestNodeJoin(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.NewTxnMetrics(metric.NewRegistry())); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.NewTxnMetrics()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -292,7 +292,7 @@ func TestCorruptedClusterID(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
 	defer engineStopper.Stop()
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.NewTxnMetrics(metric.NewRegistry())); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.NewTxnMetrics()); err != nil {
 		t.Fatal(err)
 	}
 

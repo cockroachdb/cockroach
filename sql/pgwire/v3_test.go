@@ -24,13 +24,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/metric"
 )
 
 func makeTestV3Conn(c net.Conn) v3Conn {
 	return makeV3Conn(c,
 		sql.NewDummyExecutor(),
-		newServerMetrics(metric.NewRegistry()),
+		newServerMetrics(),
 		sql.SessionArgs{},
 	)
 }

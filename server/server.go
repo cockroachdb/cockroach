@@ -164,7 +164,8 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 		RPCContext:      s.rpcContext,
 		RPCRetryOptions: &retryOpts,
 	}, s.gossip)
-	txnMetrics := kv.NewTxnMetrics(s.registry)
+	txnMetrics := kv.NewTxnMetrics()
+	s.registry.AddMetricStruct(txnMetrics)
 	sender := kv.NewTxnCoordSender(s.distSender, s.clock, ctx.Linearizable, s.Tracer,
 		s.stopper, txnMetrics)
 	s.db = client.NewDB(sender)
@@ -206,9 +207,11 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 		execCfg.TestingKnobs = &sql.ExecutorTestingKnobs{}
 	}
 
-	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper, s.registry)
+	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper)
+	s.registry.AddMetricStruct(s.sqlExecutor)
 
-	s.pgServer = pgwire.MakeServer(s.ctx.Context, s.sqlExecutor, s.registry)
+	s.pgServer = pgwire.MakeServer(s.ctx.Context, s.sqlExecutor)
+	s.registry.AddMetricStruct(s.pgServer.Metrics())
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
@@ -236,8 +239,10 @@ func NewServer(ctx Context, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	s.recorder = status.NewMetricsRecorder(s.clock)
-	s.rpcContext.RemoteClocks.RegisterMetrics(s.registry)
-	s.runtime = status.MakeRuntimeStatSampler(s.clock, s.registry)
+	s.registry.AddMetricStruct(s.rpcContext.RemoteClocks.Metrics())
+
+	s.runtime = status.MakeRuntimeStatSampler(s.clock)
+	s.registry.AddMetricStruct(s.runtime)
 
 	s.node = NewNode(nCtx, s.recorder, s.registry, s.stopper, txnMetrics, sql.MakeEventLogger(s.leaseMgr))
 	roachpb.RegisterInternalServer(s.grpc, s.node)
