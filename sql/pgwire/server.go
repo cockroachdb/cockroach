@@ -66,8 +66,7 @@ type Server struct {
 	context  *base.Context
 	executor *sql.Executor
 
-	registry *metric.Registry
-	metrics  *serverMetrics
+	metrics *ServerMetrics
 
 	mu struct {
 		syncutil.Mutex
@@ -75,29 +74,27 @@ type Server struct {
 	}
 }
 
-type serverMetrics struct {
+// ServerMetrics is the set of metrics for the pgwire server.
+type ServerMetrics struct {
 	BytesInCount  *metric.Counter
 	BytesOutCount *metric.Counter
 	Conns         *metric.Counter
 }
 
-func newServerMetrics(reg *metric.Registry) *serverMetrics {
-	sm := &serverMetrics{
+func newServerMetrics() *ServerMetrics {
+	return &ServerMetrics{
 		Conns:         metric.NewCounter(MetaConns),
 		BytesInCount:  metric.NewCounter(MetaBytesIn),
 		BytesOutCount: metric.NewCounter(MetaBytesOut),
 	}
-	reg.AddMetricStruct(sm)
-	return sm
 }
 
-// MakeServer creates a Server, adding network stats to the given Registry.
-func MakeServer(context *base.Context, executor *sql.Executor, reg *metric.Registry) *Server {
+// MakeServer creates a Server.
+func MakeServer(context *base.Context, executor *sql.Executor) *Server {
 	return &Server{
 		context:  context,
 		executor: executor,
-		registry: reg,
-		metrics:  newServerMetrics(reg),
+		metrics:  newServerMetrics(),
 	}
 }
 
@@ -121,6 +118,11 @@ func (s *Server) IsDraining() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.mu.draining
+}
+
+// Metrics returns the metrics struct.
+func (s *Server) Metrics() *ServerMetrics {
+	return s.metrics
 }
 
 // SetDraining (when called with 'true') prevents new connections from being
@@ -241,10 +243,4 @@ func (s *Server) ServeConn(conn net.Conn) error {
 	}
 
 	return errors.Errorf("unknown protocol version %d", version)
-}
-
-// Registry returns a registry with the metrics tracked by this server, which can be used to
-// access its stats or be added to another registry.
-func (s *Server) Registry() *metric.Registry {
-	return s.registry
 }

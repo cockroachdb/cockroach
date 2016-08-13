@@ -479,7 +479,7 @@ func (tc *TestCluster) WaitForFullReplication() error {
 				if err := s.ComputeMetrics(); err != nil {
 					return err
 				}
-				if s.Registry().GetGauge("ranges.replication-pending").Value() > 0 {
+				if s.Metrics().ReplicationPendingRangeCount.Value() > 0 {
 					notReplicated = true
 				}
 				return nil

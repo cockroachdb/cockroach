@@ -121,11 +121,11 @@ type v3Conn struct {
 	// https://github.com/postgres/postgres/blob/master/src/backend/tcop/postgres.c
 	doingExtendedQueryMessage, ignoreTillSync bool
 
-	metrics *serverMetrics
+	metrics *ServerMetrics
 }
 
 func makeV3Conn(
-	conn net.Conn, executor *sql.Executor, metrics *serverMetrics, sessionArgs sql.SessionArgs,
+	conn net.Conn, executor *sql.Executor, metrics *ServerMetrics, sessionArgs sql.SessionArgs,
 ) v3Conn {
 	return v3Conn{
 		conn:     conn,

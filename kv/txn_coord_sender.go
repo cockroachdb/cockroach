@@ -123,10 +123,9 @@ var (
 	metaRestartsHistogram   = metric.Metadata{Name: "txn.restarts"}
 )
 
-// NewTxnMetrics returns a new instance of txnMetrics that contains metrics which have
-// been registered with the provided Registry.
-func NewTxnMetrics(registry *metric.Registry) *TxnMetrics {
-	tm := &TxnMetrics{
+// NewTxnMetrics returns a new instance of TxnMetrics that contains metrics.
+func NewTxnMetrics() *TxnMetrics {
+	return &TxnMetrics{
 		Aborts:     metric.NewRates(metaAbortsRates),
 		Commits:    metric.NewRates(metaCommitsRates),
 		Commits1PC: metric.NewRates(metaCommits1PCRates),
@@ -134,9 +133,6 @@ func NewTxnMetrics(registry *metric.Registry) *TxnMetrics {
 		Durations:  metric.NewLatency(metaDurationsHistograms),
 		Restarts:   metric.NewHistogram(metaRestartsHistogram, 60*time.Second, 100, 3),
 	}
-	registry.AddMetricStruct(tm)
-
-	return tm
 }
 
 // A TxnCoordSender is an implementation of client.Sender which
