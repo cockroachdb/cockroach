@@ -24,23 +24,23 @@ import (
 func TestRegistry(t *testing.T) {
 	r := NewRegistry()
 
-	topGauge := NewGauge(MetricMetadata{"top.gauge", ""})
+	topGauge := NewGauge(Metadata{Name: "top.gauge"})
 	r.AddMetric(topGauge)
 
-	r.AddMetric(NewGaugeFloat64(MetricMetadata{"top.floatgauge", ""}))
+	r.AddMetric(NewGaugeFloat64(Metadata{Name: "top.floatgauge"}))
 
-	topCounter := NewCounter(MetricMetadata{"top.counter", ""})
+	topCounter := NewCounter(Metadata{Name: "top.counter"})
 	r.AddMetric(topCounter)
 
-	topRate := NewRate(MetricMetadata{"top.rate", ""}, time.Minute)
+	topRate := NewRate(Metadata{Name: "top.rate"}, time.Minute)
 	r.AddMetric(topRate)
 
-	r.AddMetricGroup(NewRates(MetricMetadata{"top.rates", ""}))
-	r.AddMetric(NewHistogram(MetricMetadata{"top.hist", ""}, time.Minute, 1000, 3))
-	r.AddMetricGroup(NewLatency(MetricMetadata{"top.latency", ""}))
+	r.AddMetricGroup(NewRates(Metadata{Name: "top.rates"}))
+	r.AddMetric(NewHistogram(Metadata{Name: "top.hist"}, time.Minute, 1000, 3))
+	r.AddMetricGroup(NewLatency(Metadata{Name: "top.latency"}))
 
-	r.AddMetric(NewGauge(MetricMetadata{"bottom.gauge", ""}))
-	r.AddMetricGroup(NewRates(MetricMetadata{"bottom.rates", ""}))
+	r.AddMetric(NewGauge(Metadata{Name: "bottom.gauge"}))
+	r.AddMetricGroup(NewRates(Metadata{Name: "bottom.rates"}))
 	ms := &struct {
 		StructGauge     *Gauge
 		StructGauge64   *GaugeFloat64
@@ -56,13 +56,18 @@ func TestRegistry(t *testing.T) {
 		AlsoNotAMetric       string
 		ReallyNotAMetric     *Registry
 	}{
-		StructGauge:     NewGauge(MetricMetadata{"struct.gauge", ""}),
-		StructGauge64:   NewGaugeFloat64(MetricMetadata{"struct.gauge64", ""}),
-		StructCounter:   NewCounter(MetricMetadata{"struct.counter", ""}),
-		StructHistogram: NewHistogram(MetricMetadata{"struct.histogram", ""}, time.Minute, 1000, 3),
-		StructRate:      NewRate(MetricMetadata{"struct.rate", ""}, time.Minute),
-		StructLatency:   NewLatency(MetricMetadata{"struct.latency", ""}),
-		StructRates:     NewRates(MetricMetadata{"struct.rates", ""}),
+		StructGauge:          NewGauge(Metadata{Name: "struct.gauge"}),
+		StructGauge64:        NewGaugeFloat64(Metadata{Name: "struct.gauge64"}),
+		StructCounter:        NewCounter(Metadata{Name: "struct.counter"}),
+		StructHistogram:      NewHistogram(Metadata{Name: "struct.histogram"}, time.Minute, 1000, 3),
+		StructRate:           NewRate(Metadata{Name: "struct.rate"}, time.Minute),
+		StructLatency:        NewLatency(Metadata{Name: "struct.latency"}),
+		StructRates:          NewRates(Metadata{Name: "struct.rates"}),
+		privateStructGauge:   NewGauge(Metadata{Name: "struct.private-gauge"}),
+		privateStructGauge64: NewGaugeFloat64(Metadata{Name: "struct.private-gauge64"}),
+		NotAMetric:           0,
+		AlsoNotAMetric:       "foo",
+		ReallyNotAMetric:     NewRegistry(),
 	}
 	r.AddMetricStruct(ms)
 

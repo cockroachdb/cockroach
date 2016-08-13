@@ -54,18 +54,18 @@ const sqlImplicitTxnName string = "sql txn implicit"
 
 // Fully-qualified names for metrics.
 var (
-	MetaLatency     = metric.MetricMetadata{"sql.latency", ""}
-	MetaTxnBegin    = metric.MetricMetadata{"sql.txn.begin.count", ""}
-	MetaTxnCommit   = metric.MetricMetadata{"sql.txn.commit.count", ""}
-	MetaTxnAbort    = metric.MetricMetadata{"sql.txn.abort.count", ""}
-	MetaTxnRollback = metric.MetricMetadata{"sql.txn.rollback.count", ""}
-	MetaSelect      = metric.MetricMetadata{"sql.select.count", ""}
-	MetaUpdate      = metric.MetricMetadata{"sql.update.count", ""}
-	MetaInsert      = metric.MetricMetadata{"sql.insert.count", ""}
-	MetaDelete      = metric.MetricMetadata{"sql.delete.count", ""}
-	MetaDdl         = metric.MetricMetadata{"sql.ddl.count", ""}
-	MetaMisc        = metric.MetricMetadata{"sql.misc.count", ""}
-	MetaQuery       = metric.MetricMetadata{"sql.query.count", ""}
+	MetaLatency     = metric.Metadata{Name: "sql.latency"}
+	MetaTxnBegin    = metric.Metadata{Name: "sql.txn.begin.count"}
+	MetaTxnCommit   = metric.Metadata{Name: "sql.txn.commit.count"}
+	MetaTxnAbort    = metric.Metadata{Name: "sql.txn.abort.count"}
+	MetaTxnRollback = metric.Metadata{Name: "sql.txn.rollback.count"}
+	MetaSelect      = metric.Metadata{Name: "sql.select.count"}
+	MetaUpdate      = metric.Metadata{Name: "sql.update.count"}
+	MetaInsert      = metric.Metadata{Name: "sql.insert.count"}
+	MetaDelete      = metric.Metadata{Name: "sql.delete.count"}
+	MetaDdl         = metric.Metadata{Name: "sql.ddl.count"}
+	MetaMisc        = metric.Metadata{Name: "sql.misc.count"}
+	MetaQuery       = metric.Metadata{Name: "sql.query.count"}
 )
 
 // TODO(radu): experimental code for testing distSQL flows.

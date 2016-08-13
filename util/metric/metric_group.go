@@ -63,11 +63,11 @@ type metricGroup interface {
 //
 // TODO(mrtracy,tschottdorf): need to discuss roll-ups and generally how (and
 // which) information flows between metrics and time series.
-func NewLatency(metadata MetricMetadata) Histograms {
+func NewLatency(metadata Metadata) Histograms {
 	windows := DefaultTimeScales
 	hs := make(Histograms)
 	for _, w := range windows {
-		hs[w] = NewHistogram(MetricMetadata{metadata.Name + sep + w.name, metadata.Help},
+		hs[w] = NewHistogram(Metadata{metadata.Name + sep + w.name, metadata.Help},
 			w.d, int64(time.Minute), 2)
 	}
 	return hs
@@ -95,13 +95,13 @@ type Rates struct {
 
 // NewRates registers and returns a new Rates instance, which contains a set of EWMA-based rates
 // with generally useful time scales and a cumulative counter.
-func NewRates(metadata MetricMetadata) Rates {
+func NewRates(metadata Metadata) Rates {
 	scales := DefaultTimeScales
 	es := make(map[TimeScale]*Rate)
 	for _, scale := range scales {
-		es[scale] = NewRate(MetricMetadata{metadata.Name + sep + scale.name, metadata.Help}, scale.d)
+		es[scale] = NewRate(Metadata{metadata.Name + sep + scale.name, metadata.Help}, scale.d)
 	}
-	c := NewCounter(MetricMetadata{metadata.Name + sep + "count", metadata.Help})
+	c := NewCounter(Metadata{metadata.Name + sep + "count", metadata.Help})
 	return Rates{Counter: c, Rates: es}
 }
 
