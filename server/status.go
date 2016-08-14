@@ -411,7 +411,7 @@ func (s *statusServer) Logs(ctx context.Context, req *serverpb.LogsRequest) (*se
 	return &serverpb.LogEntriesResponse{Entries: entries}, nil
 }
 
-// handleLogs handles GET requests for log entires.
+// handleLogs handles GET requests for log entries.
 func (s *statusServer) handleLogs(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	q := r.URL.Query()
 	req := serverpb.LogsRequest{

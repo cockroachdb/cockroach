@@ -104,7 +104,7 @@ the primary key columns would be encoded as:
 [Note that "/" is being used to disambiguate the components of the key. The
 actual encodings do not use "/"].
 
-Before being stored in the monolothic key-value space, the encoded primary key
+Before being stored in the monolithic key-value space, the encoded primary key
 columns are prefixed with the table ID and an ID indicating that the key
 corresponds to the primary index:
 

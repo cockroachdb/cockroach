@@ -45,7 +45,9 @@ TestMissingLeakTest() {
 }
 
 TestMisspell() {
-  ! git ls-files | xargs misspell | grep -vF 'No Exceptions'
+  # https://github.com/client9/misspell/issues/62
+  # https://github.com/client9/misspell/issues/63
+  ! git ls-files | xargs misspell | grep -vE 'found "(computable|duplicative)" a misspelling of'
 }
 
 TestTabsInShellScripts() {
@@ -57,7 +59,7 @@ TestForbiddenImports() {
   echo "checking for forbidden imports"
   local log=$(mktemp -t test-forbidden-imports.XXXXXX)
   trap "rm -f ${log}" EXIT
-  
+
   go list -f '{{ $ip := .ImportPath }}{{ range .Imports}}{{ $ip }}: {{ println . }}{{end}}{{ range .TestImports}}{{ $ip }}: {{ println . }}{{end}}{{ range .XTestImports}}{{ $ip }}: {{ println . }}{{end}}' "$PKG" | \
        grep -E ' (github.com/golang/protobuf/proto|github.com/satori/go\.uuid|log|path|context)$' | \
        grep -vE 'cockroach/(base|security|util/(log|randutil|stop)): log$' | \
@@ -129,7 +131,7 @@ TestGofmtSimplify() {
 }
 
 TestGoimports() {
-  ! goimports -l . | grep -vF 'No Exceptions'
+  ! goimports -l . | read
 }
 
 TestUnconvert() {
