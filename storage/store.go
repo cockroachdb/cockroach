@@ -907,7 +907,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 				}
 				ba.Add(&fReq)
 				if _, pErr := r.Send(ctx, ba); pErr != nil {
-					log.Errorf(ctx, "could not unfreeze Range %s on startup: %s", r, pErr)
+					log.Errorf(ctx, "%s: could not unfreeze Range %s on startup: %s", s, r, pErr)
 				} else {
 					// We don't use the returned RangesAffected (0 or 1) for
 					// counting. One of the other Replicas may have beaten us
@@ -923,7 +923,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		})
 		wg.Wait()
 		if unfrozen > 0 {
-			log.Infof(context.TODO(), "reactivated %d frozen Ranges", unfrozen)
+			log.Infof(ctx, "%s: reactivated %d frozen Ranges", s, unfrozen)
 		}
 	}) != nil {
 		close(doneUnfreezing)
@@ -985,8 +985,8 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		})
 
 		// Run metrics computation up front to populate initial statistics.
-		if err := s.ComputeMetrics(); err != nil {
-			return err
+		if err = s.ComputeMetrics(-1); err != nil {
+			log.Infof(ctx, "%s: failed initial metrics computation: %s", s, err)
 		}
 	}
 
@@ -2559,11 +2559,11 @@ func raftEntryFormatter(data []byte) string {
 // scanning ranges. An ideal solution would be to create incremental events
 // whenever availability changes.
 func (s *Store) computeReplicationStatus(now int64) (
-	leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount int64) {
+	leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount int64, err error) {
 	// Load the system config.
 	cfg, ok := s.Gossip().GetSystemConfig()
 	if !ok {
-		log.Infof(context.TODO(), "%s: system config not yet available", s)
+		err = errors.Errorf("%s: system config not yet available", s)
 		return
 	}
 
@@ -2618,18 +2618,21 @@ func (s *Store) computeReplicationStatus(now int64) (
 // ComputeMetrics immediately computes the current value of store metrics which
 // cannot be computed incrementally. This method should be invoked periodically
 // by a higher-level system which records store metrics.
-func (s *Store) ComputeMetrics() error {
-	// broadcast store descriptor.
+func (s *Store) ComputeMetrics(tick int) error {
+	// Broadcast store descriptor.
 	desc, err := s.Descriptor()
 	if err != nil {
 		return err
 	}
 	s.metrics.updateCapacityGauges(desc.Capacity)
 
-	// broadcast replication status.
+	// Broadcast replication status.
 	now := s.ctx.Clock.Now().WallTime
-	leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount :=
+	leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount, err :=
 		s.computeReplicationStatus(now)
+	if err != nil {
+		return err
+	}
 	s.metrics.updateReplicationGauges(
 		leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount)
 
@@ -2644,8 +2647,11 @@ func (s *Store) ComputeMetrics() error {
 	if rocksdb, ok := s.engine.(*engine.RocksDB); ok {
 		sstables := rocksdb.GetSSTables()
 		readAmp := sstables.ReadAmplification()
-		log.Infof(context.TODO(), "store %d sstables (read amplification = %d):\n%s", s.StoreID(), readAmp, sstables)
 		s.metrics.RdbReadAmplification.Update(int64(readAmp))
+		// Log this metric infrequently.
+		if tick%100 == 0 {
+			log.Infof(context.TODO(), "store %d sstables (read amplification = %d):\n%s", s.StoreID(), readAmp, sstables)
+		}
 	}
 	return nil
 }
