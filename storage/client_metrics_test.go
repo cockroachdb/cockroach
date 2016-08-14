@@ -167,6 +167,7 @@ func verifyRocksDBStats(t *testing.T, s *storage.Store) {
 
 func TestStoreMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("TODO(mrtracy): #8437")
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
