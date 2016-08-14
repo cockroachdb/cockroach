@@ -123,7 +123,7 @@ distribute the processing on multiple nodes (parallelization for performance).
     employed e.g. by F1.
 
 
-    Distributed joins and remote-side filtering can be needed together: 
+    Distributed joins and remote-side filtering can be needed together:
     ```sql
     -- find all orders placed around the customer's birthday. Notice the
     -- filtering needs to happen on the results. I've complicated the filtering
@@ -132,8 +132,8 @@ distribute the processing on multiple nodes (parallelization for performance).
     SELECT * FROM Customers c INNER JOIN Orders o ON c.ID = i.CustomerID
       WHERE DayOfYear(c.birthday) - DayOfYear(o.date) < 7
     ```
-    
-  2. Distributed aggregation 
+
+  2. Distributed aggregation
 
     When using `GROUP BY` we aggregate results according to a set of columns or
     expressions and compute a function on each group of results. A strategy
@@ -389,7 +389,7 @@ Let's take two cases:
    and put the sorting aggregator before `summer`:
    ```
    src -> sort(Age) -> summer -> final
-   ```   
+   ```
    We would choose between these two logical plans.
 
 There is also the possibility that `summer` uses an ordered map, in which case
@@ -620,7 +620,7 @@ Processors are generally made up of three components:
    * unsynchronized: passes rows from all input streams, arbitrarily
      interleaved.
    * ordered: the input physical streams have an ordering guarantee (namely the
-     guarantee of the correspondig locical stream); the synchronizer is careful
+     guarantee of the corresponding locical stream); the synchronizer is careful
      to interleave the streams so that the merged stream has the same guarantee.
 
 2. The *data processor* core implements the data transformation or aggregation
@@ -796,12 +796,12 @@ routers:
    be more efficient:
 
    ![Physical plan for dup join](distributed_sql_join_physical2.png?raw=true "Physical plan for dup join")
-   
+
    The difference in this case is that the streams for the first table stay on
    the same node, and the routers after the `src2` table readers are configured
-   to mirror the results (instead of distributing by hash in the previos case).
+   to mirror the results (instead of distributing by hash in the previous case).
 
-  
+
 ## Inter-stream ordering
 
 **This is a feature that relates to implementing certain optimizations, but does
@@ -926,14 +926,14 @@ allow the producer and the consumer to start at different times,
 `ScheduleFlows` creates named mailboxes for all the input and output streams.
 These message boxes will hold some number of tuples in an internal queue until
 a GRPC stream is established for transporting them. From that moment on, GRPC
-flow control is used to synchronize the producer and consumer.  
+flow control is used to synchronize the producer and consumer.
 A GRPC stream is established by the consumer using the `StreamMailbox` RPC,
 taking a mailbox id (the same one that's been already used in the flows passed
 to `ScheduleFlows`). This call might arrive to a node even before the
 corresponding `ScheduleFlows` arrives. In this case, the mailbox is created on
 the fly, in the hope that the `ScheduleFlows` will follow soon. If that doesn't
 happen within a timeout, the mailbox is retired.
-Mailboxes present a channel interface to the local processors.  
+Mailboxes present a channel interface to the local processors.
 If we move to a multiple `TableReader`s/flows per node, we'd still want one
 single output mailbox for all the homogeneous flows (if a node has 1mil ranges,
 we don't want 1mil mailboxes/streams). At that point we might want to add
@@ -986,10 +986,10 @@ under a number of circumstances:
 
 At least initially, the plan is to have no error recovery (anything goes wrong
 during execution, the query fails and the transaction is rolled back).
-The only concern is releasing all resources taken by the plan nodes. 
-This can be done by propagating an error signal when any GRPC stream is 
-closed abruptly.  
-Similarly, cancelling a running query can be done by asking the `FINAL` processor 
+The only concern is releasing all resources taken by the plan nodes.
+This can be done by propagating an error signal when any GRPC stream is
+closed abruptly.
+Similarly, cancelling a running query can be done by asking the `FINAL` processor
 to close its input channel. This close will propagate backwards to all plan nodes.
 
 
@@ -1010,16 +1010,16 @@ TABLE DailyPromotion (
 
 TABLE Customers (
   CustomerID INT PRIMARY KEY,
-  Email TEXT, 
+  Email TEXT,
   Name TEXT
 )
 
 TABLE Orders (
-  CustomerID INT,   
+  CustomerID INT,
   Date DATETIME,
   Value INT,
 
-  PRIMARY KEY (CustomerID, Date), 
+  PRIMARY KEY (CustomerID, Date),
   INDEX date (Date)
 )
 
@@ -1037,7 +1037,7 @@ Logical plan:
 
 ```
 TABLE-READER orders-by-date
-  Table: Orders@OrderByDate /2015-01-01 - 
+  Table: Orders@OrderByDate /2015-01-01 -
   Input schema: Date: Datetime, OrderID: INT
   Output schema: Cid:INT, Value:DECIMAL
   Output filter: None (the filter has been turned into a scan range)
@@ -1053,7 +1053,7 @@ JOIN-READER orders
   // and we might get better performance if we remove it and let the aggregator
   // emit results out of order. Update after the  section on backpropagation of
   // ordering requirements.
-  Intra-stream ordering characterization: same as input 
+  Intra-stream ordering characterization: same as input
   Inter-stream ordering characterization: Oid
 
 AGGREGATOR count-and-sum
@@ -1075,7 +1075,7 @@ JOIN-READER customers
   // and we might get better performance if we remove it and let the aggregator
   // emit results out of order. Update after the section on backpropagation of
   // ordering requirements.
-  Intra-stream ordering characterization: same as input 
+  Intra-stream ordering characterization: same as input
   Inter-stream ordering characterization: same as input
 
 INSERT inserter
@@ -1088,11 +1088,11 @@ INTENT-COLLECTOR intent-collector
   Input schema: k: TEXT, v: TEXT
 
 AGGREGATOR final:
-  Input schema: rows-inserted:INT 
+  Input schema: rows-inserted:INT
   Aggregation: SUM(rows-inserted) as rows-inserted:INT
   Group Key: []
 
-Composition: 
+Composition:
 order-by-date -> orders -> count-and-sum -> customers -> inserter -> intent-collector
                                                                   \-> final (sum)
 ```
@@ -1136,7 +1136,7 @@ example. Fortunately there is a simple strategy we can start with - use as many
 buckets as input flows and distribute them among the same nodes. This strategy
 scales well with the query size: if a query draws data from a single node, we
 will do all the aggregation on that node; if a query draws data from many nodes,
-we will distribute the aggregation among those nodes. 
+we will distribute the aggregation among those nodes.
 
 We will also support configuring things to minimize the distribution - gettting
 everything back on the single gateway node as quickly as possible. This will be
@@ -1362,7 +1362,7 @@ The idea here is to introduce a new system - an execution environment for
 distributed computation. The computations use a programming model like M/R, or
 more pipeline stuff - Spark, or Google's [Dataflow][1] (parts of it are an
 Apache project that can run on top of other execution environments - e.g.
-Spark). 
+Spark).
 
 In these models, you think about arrays of data, or maps on which you can
 operate in parallel. The storage for these is distributed. And all you do is
@@ -1440,7 +1440,7 @@ func runQuery() {
   // Now build something resembling SQL rows. Since m1 is sorted, ReduceByKey is
   // a simple sequential scan of m1.
   // m2 => Map<(int, string), Map<colId, val>>. These are the rows.
-  m2 = ReduceByKey(m1, buildColMap)  
+  m2 = ReduceByKey(m1, buildColMap)
 
   // afterFilter => Map<(int, string), Map<colId, val>>. Like m2, but only the rows that passed the filter
   afterFilter = Map(m2, filter)
@@ -1501,7 +1501,7 @@ func deletePK(k, v) {
 func deleteIndexFoo(k, v) {
   id1, id2 = k
   b = v.getWithDefault('b', NULL)
-  
+
   builtIn::delete(makeIndex(id1, b))
 }
 ```

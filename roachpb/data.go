@@ -929,7 +929,7 @@ func (l Lease) String() string {
 
 // Covers returns true if the given timestamp can be served by the Lease.
 // This is the case if the timestamp precedes the Lease's stasis period.
-// Note that the fact that a lease convers a timestamp is not enough for the
+// Note that the fact that a lease covers a timestamp is not enough for the
 // holder of the lease to be able to serve a read with that timestamp;
 // pendingLeaderLeaseRequest.TransferInProgress() should also be consulted to
 // account for possible lease transfers.

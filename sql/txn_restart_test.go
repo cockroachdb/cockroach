@@ -942,7 +942,7 @@ INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
 		t.Fatal(err)
 	}
 	// Acquire the lease and enable the auto-retry. The first read attempt will trigger ReadWithinUncertaintyIntervalError
-	// and advance the transaction timestmap. The transaction timestamp will exceed the lease expiration
+	// and advance the transaction timestamp. The transaction timestamp will exceed the lease expiration
 	// time, and the second read attempt will re-acquire the lease.
 	if _, err := sqlDB.Exec(`
 SELECT * from t.test WHERE k = 'test_key';
