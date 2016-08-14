@@ -318,7 +318,7 @@ func selectFiles(logFiles []FileInfo, severity Severity, endTimestamp int64) []F
 	return files
 }
 
-// FetchEntriesFromFiles fetches all available log entires on disk that match
+// FetchEntriesFromFiles fetches all available log entries on disk that match
 // the log 'severity' (or worse) and are between the 'startTimestamp' and
 // 'endTimestamp'. It will stop reading new files if the number of entries
 // exceeds 'maxEntries'. Log entries are further filtered by the regexp

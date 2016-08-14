@@ -5078,7 +5078,7 @@ func TestEntries(t *testing.T) {
 			continue
 		}
 		if len(ents) != tc.expResultCount {
-			t.Errorf("%d: expected %d entires, got %d", i, tc.expResultCount, len(ents))
+			t.Errorf("%d: expected %d entries, got %d", i, tc.expResultCount, len(ents))
 		}
 	}
 

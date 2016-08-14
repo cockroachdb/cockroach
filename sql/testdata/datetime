@@ -489,7 +489,7 @@ SELECT '2015-08-24 23:45:45.53453 PST'::timestamp
 ----
 2015-08-24 23:45:45.53453 +0000 +0000
 
-# A missing time zome is interpretted in the same way as EDT
+# A missing time zome is interpreted in the same way as EDT
 query T
 SELECT '2015-08-24 23:45:45.53453'::timestamp
 ----
