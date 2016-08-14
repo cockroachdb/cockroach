@@ -26,6 +26,7 @@ import (
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -412,8 +413,9 @@ func TestRaftTransportCircuitBreaker(t *testing.T) {
 	}
 	clientTransport := rttc.AddNode(clientReplica.NodeID)
 
-	if rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 1}) {
-		t.Errorf("succeeded in sending when message should be dropped")
+	// The transport is set up asynchronously, so we expect Send to return true here.
+	if !rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 1}) {
+		t.Errorf("unexpectedly failed sending while connection is being asynchronously established")
 	}
 
 	// None should go through as the receiving node's address has not been gossiped.
@@ -423,10 +425,20 @@ func TestRaftTransportCircuitBreaker(t *testing.T) {
 	default:
 	}
 
+	// However, sending repeated messages should begin dropping once
+	// the circuit breaker does trip.
+	util.SucceedsSoon(t, func() error {
+		if rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 1}) {
+			return errors.Errorf("expected circuit breaker to trip")
+		}
+		return nil
+	})
+
 	// Now, gossip address of server.
 	rttc.GossipNode(serverReplica.NodeID, serverAddr)
 
-	// Message was dropped, not queued, so still shouldn't just appear.
+	// When the circuit breaker tripped, the queue would have been deleted.
+	// So gossiping the server address won't magically make the request appear.
 	select {
 	case req := <-serverChannel.ch:
 		t.Fatalf("should not have received any Raft messages from client: %s", req)
@@ -435,13 +447,13 @@ func TestRaftTransportCircuitBreaker(t *testing.T) {
 
 	// Reset the circuit breaker & resend and verify message arrives at server.
 	clientTransport.GetCircuitBreaker(serverReplica.NodeID).Reset()
-	if !rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 1}) {
+	if !rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 2}) {
 		t.Errorf("sent raft message was unexpectedly dropped")
 	}
 
 	req := <-serverChannel.ch
-	if req.Message.Commit != 1 {
-		t.Errorf("expected message 1; got %s", req)
+	if req.Message.Commit != 2 {
+		t.Errorf("expected message 2; got %s", req)
 	}
 }
 

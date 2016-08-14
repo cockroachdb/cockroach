@@ -177,7 +177,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 				return err
 			}
 
-			if err := c.requestGossip(peer, *peer.GetNodeAddr(), stream); err != nil {
+			if err := c.requestGossip(peer, stream); err != nil {
 				return err
 			}
 
@@ -201,7 +201,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 		for {
 			localAddr := local.GetNodeAddr()
 			c := newClient(localAddr, makeMetrics())
-			c.start(peer, disconnectedCh, peer.rpcContext, stopper, peer.GetNodeID())
+			c.start(peer, disconnectedCh, peer.rpcContext, stopper, peer.GetNodeID(), peer.rpcContext.NewBreaker())
 
 			disconnectedClient := <-disconnectedCh
 			if disconnectedClient != c {

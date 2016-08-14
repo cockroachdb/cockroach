@@ -123,7 +123,7 @@ func verifyStats(t *testing.T, mtc *multiTestContext, storeIdxSlice ...int) {
 }
 
 func verifyRocksDBStats(t *testing.T, s *storage.Store) {
-	if err := s.ComputeMetrics(); err != nil {
+	if err := s.ComputeMetrics(0); err != nil {
 		t.Fatal(err)
 	}
 

@@ -1115,7 +1115,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 
 	key := roachpb.Key("a")
 
-	// Replicate the initial range to three of the four nodes.
+	// Replicate the initial range to all three nodes.
 	rangeID := roachpb.RangeID(1)
 	mtc.replicateRange(rangeID, 1, 2)
 
@@ -1167,6 +1167,15 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 	// impossible after streaming snapshots.
 	mtc.restartStore(1)
 	if removeBeforeTruncateAndReAdd {
+		// Verify old replica is GC'd.
+		util.SucceedsSoon(t, func() error {
+			_, err := mtc.stores[1].GetReplica(rangeID)
+			if _, ok := err.(*roachpb.RangeNotFoundError); !ok {
+				return errors.Errorf("expected replica to be garbage collected")
+			}
+			return nil
+		})
+
 		mtc.replicateRange(rangeID, 1)
 	}
 
