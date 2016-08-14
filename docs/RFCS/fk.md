@@ -138,7 +138,7 @@ are using a particular version of one descriptor before initiating a change to
 another.
 
 Transactional modification of multiple table descriptors makes modifying FK
-relationships much more difficuly, since it needs to be denormalized to both
+relationships much more difficult, since it needs to be denormalized to both
 of the referencing and referenced table. Managing updates to a single record
 per-database, e.g. a list of all the FK relationships or even just a single
 record with all the table descriptors embedded in it, might be easier to reason

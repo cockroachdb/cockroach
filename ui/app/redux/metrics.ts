@@ -197,7 +197,7 @@ export function receiveMetrics(id: string, request: TSRequestMessage,
 }
 
 /**
- * errorMetrics indicates that a pervious request from this component could not
+ * errorMetrics indicates that a previous request from this component could not
  * be fulfilled due to an error.
  */
 export function errorMetrics(id: string, error: Error): PayloadAction<WithID<Error>> {
