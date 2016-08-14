@@ -38,6 +38,8 @@ export interface SortSetting {
 interface TableProps {
   // Number of rows in the table.
   count: number;
+  // Array of SortableColumns to render.
+  columns: SortableColumn[];
   // Current sortSetting that was used to sort incoming data.
   sortSetting?: SortSetting;
   // Callback that should be invoked when the user want to change the sort
@@ -53,12 +55,11 @@ interface TableProps {
  * user to indicate how data should be sorted by clicking on column headers.
  * SortableTable can indicate this to higher-level components through the
  * 'onChangeSortSetting' callback property.
- *
- * SortableColumns should be passed to SortableTable as children.
  */
 export class SortableTable extends React.Component<TableProps, {}> {
   static defaultProps: TableProps = {
       count: 0,
+      columns: [],
       sortSetting: {
         sortKey: null,
         ascending: false,
@@ -88,8 +89,7 @@ export class SortableTable extends React.Component<TableProps, {}> {
   }
 
   render() {
-    let columns = this.props.children as SortableColumn[];
-    let { sortSetting } = this.props;
+    let { sortSetting, columns } = this.props;
 
     return <table>
      <thead>
