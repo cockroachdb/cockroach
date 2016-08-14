@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"math"
+	"sync"
 	"time"
 
 	"github.com/rubyist/circuitbreaker"
@@ -65,7 +66,9 @@ func NewServer(ctx *Context) *grpc.Server {
 }
 
 type connMeta struct {
+	sync.Once
 	conn    *grpc.ClientConn
+	err     error
 	healthy bool
 }
 
@@ -77,6 +80,8 @@ type Context struct {
 	breakerClock breakerClock
 	Stopper      *stop.Stopper
 	RemoteClocks *RemoteClockMonitor
+	masterCtx    context.Context
+	cancel       context.CancelFunc
 
 	HeartbeatInterval time.Duration
 	HeartbeatTimeout  time.Duration
@@ -86,7 +91,7 @@ type Context struct {
 
 	conns struct {
 		syncutil.Mutex
-		cache map[string]connMeta
+		cache map[string]*connMeta
 	}
 }
 
@@ -103,18 +108,20 @@ func NewContext(baseCtx *base.Context, hlcClock *hlc.Clock, stopper *stop.Stoppe
 	ctx.breakerClock = breakerClock{
 		clock: ctx.localClock,
 	}
+	ctx.masterCtx, ctx.cancel = context.WithCancel(context.Background())
 	ctx.Stopper = stopper
 	ctx.RemoteClocks = newRemoteClockMonitor(ctx.localClock, 10*defaultHeartbeatInterval)
 	ctx.HeartbeatInterval = defaultHeartbeatInterval
 	ctx.HeartbeatTimeout = 2 * defaultHeartbeatInterval
-	ctx.conns.cache = make(map[string]connMeta)
+	ctx.conns.cache = make(map[string]*connMeta)
 
 	stopper.RunWorker(func() {
 		<-stopper.ShouldQuiesce()
 
+		ctx.cancel()
 		ctx.conns.Lock()
 		for key, meta := range ctx.conns.cache {
-			ctx.removeConn(key, meta.conn)
+			ctx.removeConnLocked(key, meta.conn)
 		}
 		ctx.conns.Unlock()
 	})
@@ -137,12 +144,20 @@ func (ctx *Context) SetLocalInternalServer(internalServer roachpb.InternalServer
 }
 
 func (ctx *Context) removeConn(key string, conn *grpc.ClientConn) {
+	ctx.conns.Lock()
+	defer ctx.conns.Unlock()
+	ctx.removeConnLocked(key, conn)
+}
+
+func (ctx *Context) removeConnLocked(key string, conn *grpc.ClientConn) {
 	if log.V(1) {
-		log.Infof(context.TODO(), "closing %s", key)
+		log.Infof(ctx.masterCtx, "closing %s", key)
 	}
-	if err := conn.Close(); err != nil && !grpcutil.IsClosedConnection(err) {
-		if log.V(1) {
-			log.Errorf(context.TODO(), "failed to close client connection: %s", err)
+	if conn != nil {
+		if err := conn.Close(); err != nil && !grpcutil.IsClosedConnection(err) {
+			if log.V(1) {
+				log.Errorf(ctx.masterCtx, "failed to close client connection: %s", err)
+			}
 		}
 	}
 	delete(ctx.conns.cache, key)
@@ -151,43 +166,44 @@ func (ctx *Context) removeConn(key string, conn *grpc.ClientConn) {
 // GRPCDial calls grpc.Dial with the options appropriate for the context.
 func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	ctx.conns.Lock()
-	defer ctx.conns.Unlock()
-
-	if meta, ok := ctx.conns.cache[target]; ok {
-		return meta.conn, nil
+	meta, ok := ctx.conns.cache[target]
+	if !ok {
+		meta = &connMeta{}
+		ctx.conns.cache[target] = meta
 	}
+	ctx.conns.Unlock()
 
-	dialOpt, err := ctx.GRPCDialOption()
-	if err != nil {
-		return nil, err
-	}
-
-	dialOpts := make([]grpc.DialOption, 0, 1+len(opts))
-	dialOpts = append(dialOpts, dialOpt)
-	dialOpts = append(dialOpts, opts...)
-
-	if log.V(1) {
-		log.Infof(context.TODO(), "dialing %s", target)
-	}
-	conn, err := grpc.Dial(target, dialOpts...)
-	if err == nil {
-		ctx.conns.cache[target] = connMeta{conn: conn}
-
-		if ctx.Stopper.RunTask(func() {
-			ctx.Stopper.RunWorker(func() {
-				err := ctx.runHeartbeat(conn, target)
-				if err != nil && !grpcutil.IsClosedConnection(err) {
-					log.Error(context.TODO(), err)
-				}
-				ctx.conns.Lock()
-				ctx.removeConn(target, conn)
-				ctx.conns.Unlock()
-			})
-		}) != nil {
-			ctx.removeConn(target, conn)
+	meta.Do(func() {
+		dialOpt, err := ctx.GRPCDialOption()
+		if err != nil {
+			meta.err = err
+			return
 		}
-	}
-	return conn, err
+
+		dialOpts := make([]grpc.DialOption, 0, 1+len(opts))
+		dialOpts = append(dialOpts, dialOpt)
+		dialOpts = append(dialOpts, opts...)
+
+		if log.V(1) {
+			log.Infof(ctx.masterCtx, "dialing %s", target)
+		}
+		meta.conn, meta.err = grpc.DialContext(ctx.masterCtx, target, dialOpts...)
+		if meta.err == nil {
+			if ctx.Stopper.RunTask(func() {
+				ctx.Stopper.RunWorker(func() {
+					err := ctx.runHeartbeat(meta.conn, target)
+					if err != nil && !grpcutil.IsClosedConnection(err) {
+						log.Error(ctx.masterCtx, err)
+					}
+					ctx.removeConn(target, meta.conn)
+				})
+			}) != nil {
+				ctx.removeConn(target, meta.conn)
+			}
+		}
+	})
+
+	return meta.conn, meta.err
 }
 
 // GRPCDialOption returns the GRPC dialing option appropriate for the context.
@@ -229,8 +245,8 @@ func (ctx *Context) setConnHealthy(remoteAddr string, healthy bool) {
 func (ctx *Context) IsConnHealthy(remoteAddr string) bool {
 	ctx.conns.Lock()
 	defer ctx.conns.Unlock()
-
-	return ctx.conns.cache[remoteAddr].healthy
+	meta, ok := ctx.conns.cache[remoteAddr]
+	return ok && meta.healthy
 }
 
 func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {

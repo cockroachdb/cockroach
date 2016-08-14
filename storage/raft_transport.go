@@ -223,31 +223,27 @@ func (t *RaftTransport) getNodeConn(nodeID roachpb.NodeID) *grpc.ClientConn {
 
 	// The number of consecutive failures suffered by the circuit breaker is used
 	// to log only state changes in our node address resolution status.
-	consecFailures := breaker.ConsecFailures()
+	var conn *grpc.ClientConn
 	var addr net.Addr
+	consecFailures := breaker.ConsecFailures()
 	if err := breaker.Call(func() error {
 		var err error
 		addr, err = t.resolver(nodeID)
+		if err != nil {
+			return err
+		}
+		conn, err = t.rpcContext.GRPCDial(addr.String())
 		return err
 	}, 0); err != nil {
 		if consecFailures == 0 {
-			log.Warningf(context.TODO(), "failed to resolve node %s: %s", nodeID, err)
+			log.Warning(context.TODO(), "failed to connect to node %d: %s", nodeID, err)
 		}
 		return nil
 	}
 	if consecFailures > 0 {
-		log.Infof(context.TODO(), "resolved node %s to %s", nodeID, addr)
+		log.Infof(context.TODO(), "connected to node %s via %s", nodeID, addr)
 	}
 
-	// GRPC connections are opened asynchronously and internally have a circuit
-	// breaking mechanism based on heartbeat successes and failures.
-	conn, err := t.rpcContext.GRPCDial(addr.String())
-	if err != nil {
-		if errors.Cause(err) != circuit.ErrBreakerOpen {
-			log.Infof(context.TODO(), "failed to connect to %s", addr)
-		}
-		return nil
-	}
 	return conn
 }
 
@@ -366,9 +362,7 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 		if err := t.rpcContext.Stopper.RunTask(func() {
 			t.rpcContext.Stopper.RunWorker(func() {
 				if err := t.processQueue(ch, conn); err != nil && !grpcutil.IsClosedConnection(err) {
-					log.Warningf(context.TODO(),
-						"range=%s: outgoing raft transport stream to %s closed by the remote: %s",
-						req.RangeID, toNodeID, err)
+					log.Warningf(context.TODO(), "range=%s: raft transport stream to node %d failed: %s", req.RangeID, toNodeID, err)
 				}
 				t.mu.Lock()
 				delete(queues, toNodeID)
