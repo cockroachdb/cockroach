@@ -99,9 +99,10 @@ type RaftTransport struct {
 
 	mu struct {
 		syncutil.Mutex
-		handlers map[roachpb.StoreID]RaftMessageHandler
-		queues   map[bool]map[roachpb.NodeID]chan *RaftMessageRequest
-		breakers map[roachpb.NodeID]*circuit.Breaker
+		handlers       map[roachpb.StoreID]RaftMessageHandler
+		queues         map[bool]map[roachpb.NodeID]chan *RaftMessageRequest
+		breakers       map[roachpb.NodeID]*circuit.Breaker
+		consecFailures map[roachpb.NodeID]int
 	}
 }
 
@@ -122,6 +123,7 @@ func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpc
 	t.mu.handlers = make(map[roachpb.StoreID]RaftMessageHandler)
 	t.mu.queues = make(map[bool]map[roachpb.NodeID]chan *RaftMessageRequest)
 	t.mu.breakers = make(map[roachpb.NodeID]*circuit.Breaker)
+	t.mu.consecFailures = make(map[roachpb.NodeID]int)
 
 	if grpcServer != nil {
 		RegisterMultiRaftServer(grpcServer, t)
@@ -200,11 +202,15 @@ func (t *RaftTransport) Stop(storeID roachpb.StoreID) {
 
 // GetCircuitBreaker returns the circuit breaker controlling
 // connection attempts to the specified node.
-// NOTE: For unittesting.
 func (t *RaftTransport) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breaker {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.mu.breakers[nodeID]
+	breaker, ok := t.mu.breakers[nodeID]
+	if !ok {
+		breaker = t.rpcContext.NewBreaker()
+		t.mu.breakers[nodeID] = breaker
+	}
+	return breaker
 }
 
 // getNodeConn returns a shared instance of a GRPC connection to the
@@ -213,41 +219,30 @@ func (t *RaftTransport) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breake
 // node is not responding or is timing out, or the network is
 // partitioned, etc.).
 func (t *RaftTransport) getNodeConn(nodeID roachpb.NodeID) *grpc.ClientConn {
-	t.mu.Lock()
-	breaker, ok := t.mu.breakers[nodeID]
-	if !ok {
-		breaker = t.rpcContext.NewBreaker()
-		t.mu.breakers[nodeID] = breaker
-	}
-	t.mu.Unlock()
-
+	breaker := t.GetCircuitBreaker(nodeID)
 	// The number of consecutive failures suffered by the circuit breaker is used
 	// to log only state changes in our node address resolution status.
-	consecFailures := breaker.ConsecFailures()
+	var conn *grpc.ClientConn
 	var addr net.Addr
+	consecFailures := breaker.ConsecFailures()
 	if err := breaker.Call(func() error {
 		var err error
 		addr, err = t.resolver(nodeID)
+		if err != nil {
+			return err
+		}
+		conn, err = t.rpcContext.GRPCDial(addr.String())
 		return err
 	}, 0); err != nil {
 		if consecFailures == 0 {
-			log.Warningf(context.TODO(), "failed to resolve node %s: %s", nodeID, err)
+			log.Warningf(context.TODO(), "failed to connect: %s", err)
 		}
 		return nil
 	}
 	if consecFailures > 0 {
-		log.Infof(context.TODO(), "resolved node %s to %s", nodeID, addr)
+		log.Infof(context.TODO(), "connected to node %s via %s", nodeID, addr)
 	}
 
-	// GRPC connections are opened asynchronously and internally have a circuit
-	// breaking mechanism based on heartbeat successes and failures.
-	conn, err := t.rpcContext.GRPCDial(addr.String())
-	if err != nil {
-		if errors.Cause(err) != circuit.ErrBreakerOpen {
-			log.Infof(context.TODO(), "failed to connect to %s", addr)
-		}
-		return nil
-	}
 	return conn
 }
 
@@ -256,11 +251,19 @@ func (t *RaftTransport) getNodeConn(nodeID roachpb.NodeID) *grpc.ClientConn {
 // when it idles out. All messages remaining in the queue at that point are
 // lost and a new instance of processQueue will be started by the next message
 // to be sent.
-func (t *RaftTransport) processQueue(ch chan *RaftMessageRequest, conn *grpc.ClientConn) error {
+func (t *RaftTransport) processQueue(nodeID roachpb.NodeID, ch chan *RaftMessageRequest, conn *grpc.ClientConn) error {
 	client := NewMultiRaftClient(conn)
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 	stream, err := client.RaftMessage(ctx)
+	t.mu.Lock()
+	if err == nil {
+		// We've created a connected stream, so reset the consecutive failures count.
+		t.mu.consecFailures[nodeID] = 0
+	} else {
+		t.mu.consecFailures[nodeID]++
+	}
+	t.mu.Unlock()
 	if err != nil {
 		return err
 	}
@@ -348,6 +351,7 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 		ch = make(chan *RaftMessageRequest, raftSendBufferSize)
 		queues[toNodeID] = ch
 	}
+	consecFailures := t.mu.consecFailures[toNodeID]
 	t.mu.Unlock()
 
 	if !ok {
@@ -365,10 +369,10 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 		// Starting workers in a task prevents data races during shutdown.
 		if err := t.rpcContext.Stopper.RunTask(func() {
 			t.rpcContext.Stopper.RunWorker(func() {
-				if err := t.processQueue(ch, conn); err != nil && !grpcutil.IsClosedConnection(err) {
-					log.Warningf(context.TODO(),
-						"range=%s: outgoing raft transport stream to %s closed by the remote: %s",
-						req.RangeID, toNodeID, err)
+				if err := t.processQueue(toNodeID, ch, conn); err != nil && !grpcutil.IsClosedConnection(err) {
+					if consecFailures == 0 { // Log only on first state change to failure
+						log.Warningf(context.TODO(), "raft transport stream to node %d failed: %s", toNodeID, err)
+					}
 				}
 				t.mu.Lock()
 				delete(queues, toNodeID)
