@@ -187,6 +187,7 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 			ctx.removeConn(target, conn)
 		}
 	}
+
 	return conn, err
 }
 
@@ -236,7 +237,6 @@ func (ctx *Context) IsConnHealthy(remoteAddr string) bool {
 func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
 	request := PingRequest{Addr: ctx.Addr}
 	heartbeatClient := NewHeartbeatClient(cc)
-
 	var heartbeatTimer timeutil.Timer
 	defer heartbeatTimer.Stop()
 

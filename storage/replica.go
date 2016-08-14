@@ -394,7 +394,9 @@ func NewReplica(desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.R
 					r.mu.Lock()
 					repID := r.mu.replicaID
 					r.mu.Unlock()
-					log.Infof(ctx, "%s: replica %d too old, adding to replica GC queue", r, repID)
+					if log.V(1) {
+						log.Infof(ctx, "%s: replica %d too old, adding to replica GC queue", r, repID)
+					}
 
 					if err := r.store.replicaGCQueue.Add(r, 1.0); err != nil {
 						log.Errorf(ctx, "%s: unable to add replica %d to GC queue: %s", r, repID, err)
@@ -405,9 +407,9 @@ func NewReplica(desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.R
 				return
 			}
 			if err != nil && !grpcutil.IsClosedConnection(err) {
-				log.Warningf(ctx,
-					"%s: outgoing raft transport stream to %s closed by the remote: %s",
-					r, toReplica, err)
+				if log.V(1) {
+					log.Warningf(ctx, "%s: outgoing raft transport stream to %s: %s", r, toReplica, err)
+				}
 			}
 		})
 

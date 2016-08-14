@@ -33,7 +33,8 @@ func IsClosedConnection(err error) bool {
 	if err == context.Canceled ||
 		grpc.Code(err) == codes.Canceled ||
 		grpc.ErrorDesc(err) == grpc.ErrClientConnClosing.Error() ||
-		strings.Contains(err.Error(), "is closing") {
+		strings.Contains(err.Error(), "is closing") ||
+		strings.Contains(err.Error(), "node unavailable") {
 		return true
 	}
 	if streamErr, ok := err.(transport.StreamError); ok && streamErr.Code == codes.Canceled {

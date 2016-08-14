@@ -476,7 +476,7 @@ func (tc *TestCluster) WaitForFullReplication() error {
 		notReplicated = false
 		for _, s := range tc.Servers {
 			err := s.Stores().VisitStores(func(s *storage.Store) error {
-				if err := s.ComputeMetrics(); err != nil {
+				if err := s.ComputeMetrics(0); err != nil {
 					return err
 				}
 				if s.Registry().GetGauge("ranges.replication-pending").Value() > 0 {
