@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	circuit "github.com/rubyist/circuitbreaker"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -69,28 +70,44 @@ func newClient(addr net.Addr, nodeMetrics Metrics) *client {
 // start dials the remote addr and commences gossip once connected. Upon exit,
 // the client is sent on the disconnected channel. This method starts client
 // processing in a goroutine and returns immediately.
-func (c *client) start(g *Gossip, disconnected chan *client, rpcCtx *rpc.Context, stopper *stop.Stopper) {
-	ctx := context.TODO()
+func (c *client) start(g *Gossip, disconnected chan *client, rpcCtx *rpc.Context, stopper *stop.Stopper, breaker *circuit.Breaker) {
+	ctx, cancel := context.WithCancel(context.TODO())
 	nodeID := g.is.NodeID
-	log.Infof(ctx, "node %d: starting client to %s", nodeID, c.addr)
+	if breaker == nil {
+		breaker = rpcCtx.NewBreaker()
+	}
 
 	stopper.RunWorker(func() {
+		defer cancel()
 		defer func() {
 			disconnected <- c
 		}()
 
-		// Note: avoid using `grpc.WithBlock` here. This code is already
-		// asynchronous from the caller's perspective, so the only effect of
-		// `WithBlock` here is blocking shutdown - at the time of this writing,
-		// that ends ups up making `kv` tests take twice as long.
-		conn, err := rpcCtx.GRPCDial(c.addr.String())
-		if err != nil {
-			log.Errorf(ctx, "node %d: failed to dial: %s", nodeID, err)
+		consecFailures := breaker.ConsecFailures()
+		var stream Gossip_GossipClient
+		if err := breaker.Call(func() error {
+			// Note: avoid using `grpc.WithBlock` here. This code is already
+			// asynchronous from the caller's perspective, so the only effect of
+			// `WithBlock` here is blocking shutdown - at the time of this writing,
+			// that ends ups up making `kv` tests take twice as long.
+			conn, err := rpcCtx.GRPCDial(c.addr.String())
+			if err != nil {
+				return err
+			}
+			if stream, err = NewGossipClient(conn).Gossip(ctx); err != nil {
+				return err
+			}
+			return c.requestGossip(g, stream)
+		}, 0); err != nil {
+			if consecFailures == 0 {
+				log.Warningf(ctx, "node %d: failed to start gossip client: %s", nodeID, err)
+			}
 			return
 		}
 
 		// Start gossiping.
-		if err := c.gossip(ctx, g, NewGossipClient(conn), stopper); err != nil {
+		log.Infof(ctx, "node %d: started gossip client to %s", nodeID, c.addr)
+		if err := c.gossip(ctx, g, stream, stopper); err != nil {
 			if !grpcutil.IsClosedConnection(err) {
 				g.mu.Lock()
 				peerID := c.peerID
@@ -117,11 +134,11 @@ func (c *client) close() {
 // requestGossip requests the latest gossip from the remote server by
 // supplying a map of this node's knowledge of other nodes' high water
 // timestamps.
-func (c *client) requestGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossip_GossipClient) error {
+func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
 	g.mu.Lock()
 	args := &Request{
 		NodeID:          g.is.NodeID,
-		Addr:            addr,
+		Addr:            g.is.NodeAddr,
 		HighWaterStamps: g.is.getHighWaterStamps(),
 	}
 	g.mu.Unlock()
@@ -135,12 +152,12 @@ func (c *client) requestGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossi
 
 // sendGossip sends the latest gossip to the remote server, based on
 // the remote server's notion of other nodes' high water timestamps.
-func (c *client) sendGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossip_GossipClient) error {
+func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient) error {
 	g.mu.Lock()
 	if delta := g.is.delta(c.remoteHighWaterStamps); len(delta) > 0 {
 		args := Request{
 			NodeID:          g.is.NodeID,
-			Addr:            addr,
+			Addr:            g.is.NodeAddr,
 			Delta:           delta,
 			HighWaterStamps: g.is.getHighWaterStamps(),
 		}
@@ -229,24 +246,7 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 // gossip loops, sending deltas of the infostore and receiving deltas
 // in turn. If an alternate is proposed on response, the client addr
 // is modified and method returns for forwarding by caller.
-func (c *client) gossip(ctx context.Context, g *Gossip, gossipClient GossipClient, stopper *stop.Stopper) error {
-	// For un-bootstrapped node, g.is.NodeID is 0 when client start gossip,
-	// so it's better to get nodeID from g.is every time.
-	g.mu.Lock()
-	addr := g.is.NodeAddr
-	g.mu.Unlock()
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	stream, err := gossipClient.Gossip(ctx)
-	if err != nil {
-		return err
-	}
-
-	if err := c.requestGossip(g, addr, stream); err != nil {
-		return err
-	}
-
+func (c *client) gossip(ctx context.Context, g *Gossip, stream Gossip_GossipClient, stopper *stop.Stopper) error {
 	sendGossipChan := make(chan struct{}, 1)
 
 	// Register a callback for gossip updates.
@@ -283,7 +283,7 @@ func (c *client) gossip(ctx context.Context, g *Gossip, gossipClient GossipClien
 		case err := <-errCh:
 			return err
 		case <-sendGossipChan:
-			if err := c.sendGossip(g, addr, stream); err != nil {
+			if err := c.sendGossip(g, stream); err != nil {
 				return err
 			}
 		}

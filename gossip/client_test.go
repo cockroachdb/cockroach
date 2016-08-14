@@ -135,7 +135,7 @@ func gossipSucceedsSoon(t *testing.T, stopper *stop.Stopper, disconnected chan *
 		select {
 		case client := <-disconnected:
 			// If the client wasn't able to connect, restart it.
-			client.start(gossip[client], disconnected, rpcContext, stopper)
+			client.start(gossip[client], disconnected, rpcContext, stopper, nil)
 		default:
 		}
 
@@ -265,7 +265,7 @@ func TestClientNodeID(t *testing.T) {
 			return
 		case <-disconnected:
 			// The client hasn't been started or failed to start, loop and try again.
-			c.start(local, disconnected, rpcContext, stopper)
+			c.start(local, disconnected, rpcContext, stopper, nil)
 		}
 	}
 }
