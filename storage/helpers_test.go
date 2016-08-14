@@ -159,3 +159,10 @@ func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
 	defer r.mu.Unlock()
 	return r.mu.tsCache.lowWater
 }
+
+// GetDestroyed returns the replica destroyed error, if set.
+func (r *Replica) GetDestroyed() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.destroyed
+}

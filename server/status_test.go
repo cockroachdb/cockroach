@@ -233,7 +233,7 @@ func startServer(t *testing.T) serverutils.TestServerInterface {
 	// Make sure the node status is available. This is done by forcing stores to
 	// publish their status, synchronizing to the event feed with a canary
 	// event, and then forcing the server to write summaries immediately.
-	if err := ts.(*TestServer).node.computePeriodicMetrics(); err != nil {
+	if err := ts.(*TestServer).node.computePeriodicMetrics(0); err != nil {
 		t.Fatalf("error publishing store statuses: %s", err)
 	}
 
