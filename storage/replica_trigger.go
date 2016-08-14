@@ -458,7 +458,7 @@ func (r *Replica) handleTrigger(
 	}
 
 	if trigger.addToReplicaGCQueue {
-		if err := r.store.replicaGCQueue.Add(r, 1.0); err != nil {
+		if _, err := r.store.replicaGCQueue.Add(r, 1.0); err != nil {
 			// Log the error; the range should still be GC'd eventually.
 			log.Errorf(ctx, "%s: unable to add to GC queue: %s", r, err)
 		}
