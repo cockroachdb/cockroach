@@ -161,7 +161,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 	}
 
 	for _, peer := range peers {
-		c := newClient(&local.is.NodeAddr, makeMetrics())
+		c := newClient(&local.is.NodeAddr, makeMetrics(), nil)
 
 		util.SucceedsSoon(t, func() error {
 			conn, err := peer.rpcContext.GRPCDial(c.addr.String(), grpc.WithBlock())
@@ -174,7 +174,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 				return err
 			}
 
-			if err := c.requestGossip(peer, peer.is.NodeAddr, stream); err != nil {
+			if err := c.requestGossip(peer, stream); err != nil {
 				return err
 			}
 
@@ -193,7 +193,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 		peer := startGossip(roachpb.NodeID(i+local.server.incoming.maxSize+2), stopper, t, metric.NewRegistry())
 
 		for {
-			c := newClient(&local.is.NodeAddr, makeMetrics())
+			c := newClient(&local.is.NodeAddr, makeMetrics(), nil)
 			c.start(peer, disconnectedCh, peer.rpcContext, stopper)
 
 			disconnectedClient := <-disconnectedCh

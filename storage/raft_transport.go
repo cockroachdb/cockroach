@@ -199,31 +199,28 @@ func (t *RaftTransport) getNodeConn(nodeID roachpb.NodeID) *grpc.ClientConn {
 
 	// The number of consecutive failures suffered by the circuit breaker is used
 	// to log only state changes in our node address resolution status.
-	consecFailures := breaker.ConsecFailures()
 	var addr net.Addr
+	var conn *grpc.ClientConn
+	var consecFailures int64
 	if err := breaker.Call(func() error {
+		defer func() { consecFailures = breaker.ConsecFailures() }()
 		var err error
 		addr, err = t.resolver(nodeID)
+		if err != nil {
+			return err
+		}
+		conn, err = t.rpcContext.GRPCDial(addr.String())
 		return err
 	}, 0); err != nil {
 		if consecFailures == 0 {
-			log.Warningf(context.TODO(), "failed to resolve node %s: %s", nodeID, err)
+			log.Warningf(context.TODO(), "failed to connect node %s: %s", nodeID, err)
 		}
 		return nil
 	}
 	if consecFailures > 0 {
-		log.Infof(context.TODO(), "resolved node %s to %s", nodeID, addr)
+		log.Infof(context.TODO(), "connected node %s via %s", nodeID, addr)
 	}
 
-	// GRPC connections are opened asynchronously and internally have a circuit
-	// breaking mechanism based on heartbeat successes and failures.
-	conn, err := t.rpcContext.GRPCDial(addr.String())
-	if err != nil {
-		if errors.Cause(err) != circuit.ErrBreakerOpen {
-			log.Infof(context.TODO(), "failed to connect to %s", addr)
-		}
-		return nil
-	}
 	return conn
 }
 

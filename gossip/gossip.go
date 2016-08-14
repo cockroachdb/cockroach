@@ -67,6 +67,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	circuit "github.com/rubyist/circuitbreaker"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
@@ -157,7 +158,8 @@ type Gossip struct {
 	// embedded server's mutex. This is surprising!
 	clientsMu struct {
 		syncutil.Mutex
-		clients []*client
+		clients  []*client
+		breakers map[string]*circuit.Breaker
 	}
 
 	disconnected chan *client  // Channel of disconnected clients
@@ -208,6 +210,7 @@ func New(rpcContext *rpc.Context, grpcServer *grpc.Server, resolvers []resolver.
 		bootstrapAddrs:    map[util.UnresolvedAddr]struct{}{},
 	}
 	registry.AddMetric(g.outgoing.gauge)
+	g.clientsMu.breakers = map[string]*circuit.Breaker{}
 	g.SetResolvers(resolvers)
 
 	// Add ourselves as a SystemConfig watcher.
@@ -1040,8 +1043,13 @@ func (g *Gossip) checkHasConnected() {
 // The client is added to the outgoing address set and launched in
 // a goroutine.
 func (g *Gossip) startClient(addr net.Addr) {
-	c := newClient(addr, g.serverMetrics)
 	g.clientsMu.Lock()
+	breaker, ok := g.clientsMu.breakers[addr.String()]
+	if !ok {
+		breaker = g.rpcContext.NewBreaker()
+		g.clientsMu.breakers[addr.String()] = breaker
+	}
+	c := newClient(addr, g.serverMetrics, breaker)
 	g.clientsMu.clients = append(g.clientsMu.clients, c)
 	g.clientsMu.Unlock()
 	c.start(g, g.disconnected, g.rpcContext, g.server.stopper)

@@ -114,7 +114,8 @@ func TestHeartbeatHealth(t *testing.T) {
 	// Make the intervals and timeouts shorter to speed up the tests.
 	clientCtx.HeartbeatInterval = 1 * time.Millisecond
 	clientCtx.HeartbeatTimeout = 1 * time.Millisecond
-	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
+	// Expect a failure on the initial dial as no heartbeat is available.
+	if _, err := clientCtx.GRPCDial(remoteAddr); !testutils.IsError(err, "context deadline exceeded") {
 		t.Fatal(err)
 	}
 
@@ -245,9 +246,10 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	})
 
 	clientCtx := newNodeTestContext(clock, stopper)
-	// Make the intervals shorter to speed up the tests.
+	// Make the intervals and timeouts shorter to speed up the tests.
 	clientCtx.HeartbeatInterval = 1 * time.Millisecond
-	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
+	clientCtx.HeartbeatTimeout = 1 * time.Millisecond
+	if _, err := clientCtx.GRPCDial(remoteAddr); !testutils.IsError(err, "context deadline exceeded") {
 		t.Fatal(err)
 	}
 	// Allow the connection to go through.
@@ -400,9 +402,11 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	// Increase the timeout so that failure arises from exceeding the maximum
 	// clock reading delay, not the timeout.
 	clientCtx.HeartbeatTimeout = 20 * clientCtx.HeartbeatInterval
-	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
-		t.Fatal(err)
-	}
+	stopper.RunWorker(func() {
+		if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
+			t.Fatal(err)
+		}
+	})
 	heartbeat.ready <- struct{}{} // Allow one heartbeat for initialization.
 
 	util.SucceedsSoon(t, func() error {
