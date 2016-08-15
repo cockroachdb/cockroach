@@ -220,6 +220,11 @@ func New(rpcContext *rpc.Context, grpcServer *grpc.Server, resolvers []resolver.
 	return g
 }
 
+// GetNodeMetrics returns the gossip node metrics.
+func (g *Gossip) GetNodeMetrics() *Metrics {
+	return g.server.GetNodeMetrics()
+}
+
 // GetNodeID returns the instance's saved node ID.
 func (g *Gossip) GetNodeID() roachpb.NodeID {
 	g.mu.Lock()
@@ -1081,21 +1086,22 @@ func (*Request) GetUser() string {
 	return security.NodeUser
 }
 
-type metrics struct {
+// Metrics contains gossip metrics used per node and server.
+type Metrics struct {
 	BytesReceived metric.Rates
 	BytesSent     metric.Rates
 	InfosReceived metric.Rates
 	InfosSent     metric.Rates
 }
 
-func (m metrics) String() string {
+func (m Metrics) String() string {
 	return fmt.Sprintf("infos %d/%d sent/received, bytes %dB/%dB sent/received",
 		m.InfosSent.Count(), m.InfosReceived.Count(), m.BytesSent.Count(), m.BytesReceived.Count())
 }
 
 // makeMetrics makes a new metrics object with rates.
-func makeMetrics() metrics {
-	return metrics{
+func makeMetrics() Metrics {
+	return Metrics{
 		BytesReceived: metric.NewRates(MetaBytesReceivedRates),
 		BytesSent:     metric.NewRates(MetaBytesSentRates),
 		InfosReceived: metric.NewRates(MetaInfosReceivedRates),
