@@ -250,11 +250,7 @@ func (n *Network) isNetworkConnected() bool {
 func (n *Network) infosSent() int {
 	var count int64
 	for _, node := range n.Nodes {
-		c := node.Registry.GetCounter(gossip.MetaInfosSentRates.Name + "-count")
-		if c == nil {
-			log.Fatalf(context.TODO(), "counter not found: %s", gossip.MetaInfosSentRates.Name+"-count")
-		}
-		count += c.Count()
+		count += node.Gossip.GetNodeMetrics().InfosSent.Counter.Count()
 	}
 	return int(count)
 }
@@ -264,11 +260,7 @@ func (n *Network) infosSent() int {
 func (n *Network) infosReceived() int {
 	var count int64
 	for _, node := range n.Nodes {
-		c := node.Registry.GetCounter(gossip.MetaInfosReceivedRates.Name + "-count")
-		if c == nil {
-			log.Fatalf(context.TODO(), "counter not found: %s", gossip.MetaInfosReceivedRates.Name+"-count")
-		}
-		count += c.Count()
+		count += node.Gossip.GetNodeMetrics().InfosReceived.Counter.Count()
 	}
 	return int(count)
 }

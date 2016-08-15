@@ -129,7 +129,7 @@ type Node struct {
 	recorder    *status.MetricsRecorder
 	startedAt   int64
 	initialBoot bool // True if this is the first time this node has started.
-	txnMetrics  *kv.TxnMetrics
+	txnMetrics  kv.TxnMetrics
 
 	storesServer storage.StoresServer
 }
@@ -180,7 +180,7 @@ func AddEventLogToMetadataSchema(schema *sqlbase.MetadataSchema) {
 // engines and cluster ID. The first bootstrapped store contains a
 // single range spanning all keys. Initial range lookup metadata is
 // populated for the range. Returns the cluster ID.
-func bootstrapCluster(engines []engine.Engine, txnMetrics *kv.TxnMetrics) (uuid.UUID, error) {
+func bootstrapCluster(engines []engine.Engine, txnMetrics kv.TxnMetrics) (uuid.UUID, error) {
 	clusterID := uuid.MakeV4()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
@@ -251,7 +251,7 @@ func NewNode(
 	recorder *status.MetricsRecorder,
 	reg *metric.Registry,
 	stopper *stop.Stopper,
-	txnMetrics *kv.TxnMetrics,
+	txnMetrics kv.TxnMetrics,
 	eventLogger sql.EventLogger,
 ) *Node {
 	n := &Node{

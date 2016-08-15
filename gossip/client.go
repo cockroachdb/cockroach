@@ -41,8 +41,8 @@ type client struct {
 	forwardAddr           *util.UnresolvedAddr     // Set if disconnected with an alternate addr
 	remoteHighWaterStamps map[roachpb.NodeID]int64 // Remote server's high water timestamps
 	closer                chan struct{}            // Client shutdown channel
-	clientMetrics         metrics
-	nodeMetrics           metrics
+	clientMetrics         Metrics
+	nodeMetrics           Metrics
 }
 
 // extractKeys returns a string representation of a gossip delta's keys.
@@ -55,7 +55,7 @@ func extractKeys(delta map[string]*Info) string {
 }
 
 // newClient creates and returns a client struct.
-func newClient(addr net.Addr, nodeMetrics metrics) *client {
+func newClient(addr net.Addr, nodeMetrics Metrics) *client {
 	return &client{
 		createdAt: timeutil.Now(),
 		addr:      addr,

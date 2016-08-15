@@ -21,6 +21,57 @@ import (
 	"time"
 )
 
+// getCounter returns the Counter in this registry with the given name. If a
+// Counter with this name is not present (including if a non-Counter Iterable is
+// registered with the name), nil is returned.
+func (r *Registry) getCounter(name string) *Counter {
+	r.Lock()
+	defer r.Unlock()
+	iterable, ok := r.tracked[name]
+	if !ok {
+		return nil
+	}
+	counter, ok := iterable.(*Counter)
+	if !ok {
+		return nil
+	}
+	return counter
+}
+
+// getGauge returns the Gauge in this registry with the given name. If a Gauge
+// with this name is not present (including if a non-Gauge Iterable is
+// registered with the name), nil is returned.
+func (r *Registry) getGauge(name string) *Gauge {
+	r.Lock()
+	defer r.Unlock()
+	iterable, ok := r.tracked[name]
+	if !ok {
+		return nil
+	}
+	gauge, ok := iterable.(*Gauge)
+	if !ok {
+		return nil
+	}
+	return gauge
+}
+
+// getRate returns the Rate in this registry with the given name. If a Rate with
+// this name is not present (including if a non-Rate Iterable is registered with
+// the name), nil is returned.
+func (r *Registry) getRate(name string) *Rate {
+	r.Lock()
+	defer r.Unlock()
+	iterable, ok := r.tracked[name]
+	if !ok {
+		return nil
+	}
+	rate, ok := iterable.(*Rate)
+	if !ok {
+		return nil
+	}
+	return rate
+}
+
 func TestRegistry(t *testing.T) {
 	r := NewRegistry()
 
@@ -114,33 +165,33 @@ func TestRegistry(t *testing.T) {
 	}
 
 	// Test get functions
-	if g := r.GetGauge("top.gauge"); g != topGauge {
-		t.Errorf("GetGauge returned %v, expected %v", g, topGauge)
+	if g := r.getGauge("top.gauge"); g != topGauge {
+		t.Errorf("getGauge returned %v, expected %v", g, topGauge)
 	}
-	if g := r.GetGauge("bad"); g != nil {
-		t.Errorf("GetGauge returned non-nil %v, expected nil", g)
+	if g := r.getGauge("bad"); g != nil {
+		t.Errorf("getGauge returned non-nil %v, expected nil", g)
 	}
-	if g := r.GetGauge("top.hist"); g != nil {
-		t.Errorf("GetGauge returned non-nil %v of type %T when requesting non-gauge, expected nil", g, g)
-	}
-
-	if c := r.GetCounter("top.counter"); c != topCounter {
-		t.Errorf("GetCounter returned %v, expected %v", c, topCounter)
-	}
-	if c := r.GetCounter("bad"); c != nil {
-		t.Errorf("GetCounter returned non-nil %v, expected nil", c)
-	}
-	if c := r.GetCounter("top.hist"); c != nil {
-		t.Errorf("GetCounter returned non-nil %v of type %T when requesting non-counter, expected nil", c, c)
+	if g := r.getGauge("top.hist"); g != nil {
+		t.Errorf("getGauge returned non-nil %v of type %T when requesting non-gauge, expected nil", g, g)
 	}
 
-	if r := r.GetRate("top.rate"); r != topRate {
-		t.Errorf("GetRate returned %v, expected %v", r, topRate)
+	if c := r.getCounter("top.counter"); c != topCounter {
+		t.Errorf("getCounter returned %v, expected %v", c, topCounter)
 	}
-	if r := r.GetRate("bad"); r != nil {
-		t.Errorf("GetRate returned non-nil %v, expected nil", r)
+	if c := r.getCounter("bad"); c != nil {
+		t.Errorf("getCounter returned non-nil %v, expected nil", c)
 	}
-	if r := r.GetRate("top.hist"); r != nil {
-		t.Errorf("GetRate returned non-nil %v of type %T when requesting non-rate, expected nil", r, r)
+	if c := r.getCounter("top.hist"); c != nil {
+		t.Errorf("getCounter returned non-nil %v of type %T when requesting non-counter, expected nil", c, c)
+	}
+
+	if r := r.getRate("top.rate"); r != topRate {
+		t.Errorf("getRate returned %v, expected %v", r, topRate)
+	}
+	if r := r.getRate("bad"); r != nil {
+		t.Errorf("getRate returned non-nil %v, expected nil", r)
+	}
+	if r := r.getRate("top.hist"); r != nil {
+		t.Errorf("getRate returned non-nil %v of type %T when requesting non-rate, expected nil", r, r)
 	}
 }

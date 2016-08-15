@@ -76,7 +76,7 @@ func (pq *reservationQ) dequeue() *reservation {
 // bookie contains a store's replica reservations.
 type bookie struct {
 	clock              *hlc.Clock
-	metrics            *storeMetrics
+	metrics            *StoreMetrics
 	reservationTimeout time.Duration // How long each reservation is held.
 	maxReservations    int           // Maximum number of allowed reservations.
 	maxReservedBytes   int64         // Maximum bytes allowed for all reservations combined.
@@ -92,7 +92,7 @@ type bookie struct {
 func newBookie(
 	clock *hlc.Clock,
 	stopper *stop.Stopper,
-	metrics *storeMetrics,
+	metrics *StoreMetrics,
 	reservationTimeout time.Duration,
 ) *bookie {
 	b := &bookie{

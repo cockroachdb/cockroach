@@ -123,10 +123,9 @@ var (
 	metaRestartsHistogram   = metric.Metadata{Name: "txn.restarts"}
 )
 
-// NewTxnMetrics returns a new instance of txnMetrics that contains metrics which have
-// been registered with the provided Registry.
-func NewTxnMetrics(registry *metric.Registry) *TxnMetrics {
-	tm := &TxnMetrics{
+// MakeTxnMetrics returns a TxnMetrics struct that contains metrics.
+func MakeTxnMetrics() TxnMetrics {
+	return TxnMetrics{
 		Aborts:     metric.NewRates(metaAbortsRates),
 		Commits:    metric.NewRates(metaCommitsRates),
 		Commits1PC: metric.NewRates(metaCommits1PCRates),
@@ -134,9 +133,6 @@ func NewTxnMetrics(registry *metric.Registry) *TxnMetrics {
 		Durations:  metric.NewLatency(metaDurationsHistograms),
 		Restarts:   metric.NewHistogram(metaRestartsHistogram, 60*time.Second, 100, 3),
 	}
-	registry.AddMetricStruct(tm)
-
-	return tm
 }
 
 // A TxnCoordSender is an implementation of client.Sender which
@@ -158,7 +154,7 @@ type TxnCoordSender struct {
 	linearizable      bool                       // enables linearizable behaviour
 	tracer            opentracing.Tracer
 	stopper           *stop.Stopper
-	metrics           *TxnMetrics
+	metrics           TxnMetrics
 }
 
 var _ client.Sender = &TxnCoordSender{}
@@ -171,7 +167,7 @@ func NewTxnCoordSender(
 	linearizable bool,
 	tracer opentracing.Tracer,
 	stopper *stop.Stopper,
-	txnMetrics *TxnMetrics,
+	txnMetrics TxnMetrics,
 ) *TxnCoordSender {
 	if tracer == nil {
 		panic("nil tracer supplied")
