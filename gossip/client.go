@@ -239,7 +239,7 @@ func (c *client) gossip(ctx context.Context, g *Gossip, gossipClient GossipClien
 		return err
 	}
 
-	if err := c.requestGossip(g, addr, stream); err != nil {
+	if err := c.requestGossip(g, *addr, stream); err != nil {
 		return err
 	}
 
@@ -279,7 +279,7 @@ func (c *client) gossip(ctx context.Context, g *Gossip, gossipClient GossipClien
 		case err := <-errCh:
 			return err
 		case <-sendGossipChan:
-			if err := c.sendGossip(g, addr, stream); err != nil {
+			if err := c.sendGossip(g, *addr, stream); err != nil {
 				return err
 			}
 		}

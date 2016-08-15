@@ -164,8 +164,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 	}
 
 	for _, peer := range peers {
-		localAddr := local.GetNodeAddr()
-		c := newClient(&localAddr, makeMetrics())
+		c := newClient(local.GetNodeAddr(), makeMetrics())
 
 		util.SucceedsSoon(t, func() error {
 			conn, err := peer.rpcContext.GRPCDial(c.addr.String(), grpc.WithBlock())
@@ -178,8 +177,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 				return err
 			}
 
-			peerAddr := peer.GetNodeAddr()
-			if err := c.requestGossip(peer, peerAddr, stream); err != nil {
+			if err := c.requestGossip(peer, *peer.GetNodeAddr(), stream); err != nil {
 				return err
 			}
 
@@ -202,7 +200,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 
 		for {
 			localAddr := local.GetNodeAddr()
-			c := newClient(&localAddr, makeMetrics())
+			c := newClient(localAddr, makeMetrics())
 			c.start(peer, disconnectedCh, peer.rpcContext, stopper, peer.GetNodeID())
 
 			disconnectedClient := <-disconnectedCh
@@ -213,7 +211,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 				// unrelated to the test, so we need to permit some.
 				t.Logf("node #%d: got nil forwarding address", peer.GetNodeID())
 				continue
-			} else if *c.forwardAddr == localAddr {
+			} else if *c.forwardAddr == *localAddr {
 				t.Errorf("node #%d: got local's forwarding address", peer.GetNodeID())
 			}
 			break
@@ -234,8 +232,7 @@ func TestGossipCullNetwork(t *testing.T) {
 	local.mu.Lock()
 	for i := 0; i < minPeers; i++ {
 		peer := startGossip(roachpb.NodeID(i+2), stopper, t, metric.NewRegistry())
-		peerAddr := peer.GetNodeAddr()
-		local.startClient(&peerAddr, peer.GetNodeID())
+		local.startClient(peer.GetNodeAddr(), peer.GetNodeID())
 	}
 	local.mu.Unlock()
 
