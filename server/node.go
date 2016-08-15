@@ -131,7 +131,7 @@ type Node struct {
 	initialBoot bool // True if this is the first time this node has started.
 	txnMetrics  *kv.TxnMetrics
 
-	storage.InternalStoresServer
+	storesServer storage.StoresServer
 }
 
 // allocateNodeID increments the node id generator key to allocate
@@ -263,7 +263,7 @@ func NewNode(
 		txnMetrics:  txnMetrics,
 		eventLogger: eventLogger,
 	}
-	n.InternalStoresServer = storage.MakeInternalStoresServer(&n.Descriptor, n.stores)
+	n.storesServer = storage.MakeServer(&n.Descriptor, n.stores)
 	return n
 }
 

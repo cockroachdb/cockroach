@@ -17,7 +17,6 @@ package storage
 import (
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -40,7 +39,7 @@ const (
 // reservation is an item in both the reservationQ and the used in bookie's
 // reservation map.
 type reservation struct {
-	roachpb.ReservationRequest
+	ReservationRequest
 	expireAt hlc.Timestamp
 }
 
@@ -112,15 +111,15 @@ func newBookie(
 // outstanding reservations already or not having enough free disk space.
 // Accepted reservations return a ReservationResponse with Reserved set to true.
 func (b *bookie) Reserve(
-	ctx context.Context, req roachpb.ReservationRequest, deadReplicas []roachpb.ReplicaIdent,
-) roachpb.ReservationResponse {
+	ctx context.Context, req ReservationRequest, deadReplicas []roachpb.ReplicaIdent,
+) ReservationResponse {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	resp := roachpb.ReservationResponse{
+	resp := ReservationResponse{
 		Reserved: false,
-		RangeCount: proto.Int32(int32(b.metrics.ReplicaCount.Count()) +
-			int32(len(b.mu.reservationsByRangeID))),
+		RangeCount: int32(b.metrics.ReplicaCount.Count()) +
+			int32(len(b.mu.reservationsByRangeID)),
 	}
 
 	if olderReservation, ok := b.mu.reservationsByRangeID[req.RangeID]; ok {
@@ -177,7 +176,7 @@ func (b *bookie) Reserve(
 	// Make sure that we don't add back a destroyed replica.
 	for _, rep := range deadReplicas {
 		if req.RangeID == rep.RangeID {
-			return roachpb.ReservationResponse{Reserved: false}
+			return ReservationResponse{Reserved: false}
 		}
 	}
 

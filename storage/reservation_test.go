@@ -110,8 +110,8 @@ func TestBookieReserve(t *testing.T) {
 	for i, testCase := range testCases {
 		if testCase.reserve {
 			// Try to reserve the range.
-			req := roachpb.ReservationRequest{
-				StoreRequestHeader: roachpb.StoreRequestHeader{
+			req := ReservationRequest{
+				StoreRequestHeader: StoreRequestHeader{
 					StoreID: roachpb.StoreID(i),
 					NodeID:  roachpb.NodeID(i),
 				},
@@ -141,8 +141,8 @@ func TestBookieReserve(t *testing.T) {
 
 	// Test that repeated requests with the same store and node number extend
 	// the timeout of the pre-existing reservation.
-	repeatReq := roachpb.ReservationRequest{
-		StoreRequestHeader: roachpb.StoreRequestHeader{
+	repeatReq := ReservationRequest{
+		StoreRequestHeader: StoreRequestHeader{
 			StoreID: 100,
 			NodeID:  100,
 		},
@@ -159,8 +159,8 @@ func TestBookieReserve(t *testing.T) {
 	queueLen = bookieQueueLen(b)
 
 	// Test rejecting a reservation due to disk space constraints.
-	overfilledReq := roachpb.ReservationRequest{
-		StoreRequestHeader: roachpb.StoreRequestHeader{
+	overfilledReq := ReservationRequest{
+		StoreRequestHeader: StoreRequestHeader{
 			StoreID: 200,
 			NodeID:  200,
 		},
@@ -191,8 +191,8 @@ func TestBookieReserveMaxRanges(t *testing.T) {
 
 	// Load up reservations.
 	for i := 1; i <= previousReserved; i++ {
-		req := roachpb.ReservationRequest{
-			StoreRequestHeader: roachpb.StoreRequestHeader{
+		req := ReservationRequest{
+			StoreRequestHeader: StoreRequestHeader{
 				StoreID: roachpb.StoreID(i),
 				NodeID:  roachpb.NodeID(i),
 			},
@@ -205,8 +205,8 @@ func TestBookieReserveMaxRanges(t *testing.T) {
 		verifyBookie(t, b, i, i, int64(i))
 	}
 
-	overbookedReq := roachpb.ReservationRequest{
-		StoreRequestHeader: roachpb.StoreRequestHeader{
+	overbookedReq := ReservationRequest{
+		StoreRequestHeader: StoreRequestHeader{
 			StoreID: roachpb.StoreID(previousReserved + 1),
 			NodeID:  roachpb.NodeID(previousReserved + 1),
 		},
@@ -232,8 +232,8 @@ func TestBookieReserveMaxBytes(t *testing.T) {
 
 	// Load up reservations with a size of 1 each.
 	for i := 1; i <= previousReservedBytes; i++ {
-		req := roachpb.ReservationRequest{
-			StoreRequestHeader: roachpb.StoreRequestHeader{
+		req := ReservationRequest{
+			StoreRequestHeader: StoreRequestHeader{
 				StoreID: roachpb.StoreID(i),
 				NodeID:  roachpb.NodeID(i),
 			},
@@ -246,8 +246,8 @@ func TestBookieReserveMaxBytes(t *testing.T) {
 		verifyBookie(t, b, i, i, int64(i))
 	}
 
-	overbookedReq := roachpb.ReservationRequest{
-		StoreRequestHeader: roachpb.StoreRequestHeader{
+	overbookedReq := ReservationRequest{
+		StoreRequestHeader: StoreRequestHeader{
 			StoreID: roachpb.StoreID(previousReservedBytes + 1),
 			NodeID:  roachpb.NodeID(previousReservedBytes + 1),
 		},
@@ -301,8 +301,8 @@ func TestReservationQueue(t *testing.T) {
 	for i := 1; i <= 10; i++ {
 		// Ensure all the reservations expire 100 nanoseconds apart.
 		mc.Increment(100)
-		if !b.Reserve(context.Background(), roachpb.ReservationRequest{
-			StoreRequestHeader: roachpb.StoreRequestHeader{
+		if !b.Reserve(context.Background(), ReservationRequest{
+			StoreRequestHeader: StoreRequestHeader{
 				StoreID: roachpb.StoreID(i),
 				NodeID:  roachpb.NodeID(i),
 			},
@@ -346,8 +346,8 @@ func TestReservationQueue(t *testing.T) {
 	// timed out, and 6, which has been filled by not timed out. Only increment
 	// by 10 here to ensure we don't expire any of the other reservations.
 	mc.Increment(10)
-	if !b.Reserve(context.Background(), roachpb.ReservationRequest{
-		StoreRequestHeader: roachpb.StoreRequestHeader{
+	if !b.Reserve(context.Background(), ReservationRequest{
+		StoreRequestHeader: StoreRequestHeader{
 			StoreID: roachpb.StoreID(11),
 			NodeID:  roachpb.NodeID(11),
 		},
@@ -359,8 +359,8 @@ func TestReservationQueue(t *testing.T) {
 	verifyBookie(t, b, 6 /*reservations*/, 7 /*queue*/, 6*bytesPerReservation /*bytes*/)
 
 	mc.Increment(10)
-	if !b.Reserve(context.Background(), roachpb.ReservationRequest{
-		StoreRequestHeader: roachpb.StoreRequestHeader{
+	if !b.Reserve(context.Background(), ReservationRequest{
+		StoreRequestHeader: StoreRequestHeader{
 			StoreID: roachpb.StoreID(12),
 			NodeID:  roachpb.NodeID(12),
 		},
@@ -372,8 +372,8 @@ func TestReservationQueue(t *testing.T) {
 	verifyBookie(t, b, 7 /*reservations*/, 8 /*queue*/, 7*bytesPerReservation /*bytes*/)
 
 	mc.Increment(10)
-	if !b.Reserve(context.Background(), roachpb.ReservationRequest{
-		StoreRequestHeader: roachpb.StoreRequestHeader{
+	if !b.Reserve(context.Background(), ReservationRequest{
+		StoreRequestHeader: StoreRequestHeader{
 			StoreID: roachpb.StoreID(13),
 			NodeID:  roachpb.NodeID(13),
 		},

@@ -534,9 +534,9 @@ func (sp *StorePool) reserve(
 		return errors.Wrapf(err, "failed to dial store %+v, addr %q, node %+v", toStoreID, addr, detail.desc.Node)
 	}
 
-	client := roachpb.NewInternalStoresClient(conn)
-	req := &roachpb.ReservationRequest{
-		StoreRequestHeader: roachpb.StoreRequestHeader{
+	client := NewStoresClient(conn)
+	req := &ReservationRequest{
+		StoreRequestHeader: StoreRequestHeader{
 			NodeID:  detail.desc.Node.NodeID,
 			StoreID: toStoreID,
 		},
@@ -567,9 +567,7 @@ func (sp *StorePool) reserve(
 		return errors.Wrapf(err, "reservation failed:%+v", req)
 	}
 
-	if resp.RangeCount != nil {
-		detail.desc.Capacity.RangeCount = *resp.RangeCount
-	}
+	detail.desc.Capacity.RangeCount = resp.RangeCount
 	if !resp.Reserved {
 		detail.throttledUntil = sp.clock.Now().GoTime().Add(sp.declinedReservationsTimeout)
 		if log.V(2) {
