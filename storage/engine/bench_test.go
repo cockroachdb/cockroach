@@ -25,6 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -438,11 +439,18 @@ func runMVCCDeleteRange(emk engineMaker, valueBytes int, b *testing.B) {
 		}
 		dupEng, stopper := emk(b, locDirty)
 
+		start := time.Now()
 		b.StartTimer()
 		_, _, _, err := MVCCDeleteRange(context.Background(), dupEng, &enginepb.MVCCStats{}, roachpb.KeyMin, roachpb.KeyMax, 0, hlc.MaxTimestamp, nil, false)
 		if err != nil {
 			b.Fatal(err)
 		}
+		// We need to multiply the time it takes to do this section by 100 because
+		// otherwise the benchmark tool will set b.N to ~250,000. If b.N is 250,000
+		// then this test will take hours since the setup portion of the for loop
+		// that is not being timed takes much longer than the portion we are
+		// benchmarking itself.
+		time.Sleep(time.Since(start) * 99)
 		b.StopTimer()
 
 		stopper.Stop()
