@@ -65,10 +65,7 @@ message ReservationResponse {
   optional bool reserved = 1 [(gogoproto.nullable) = false];
   // The current number of ranges and reservations on the target
   // store. This is returned even if the reservation isn't filled.
-  //
-  // NB: Nullable so we can detect if the field isn't set as will be
-  // the case when talking to older servers.
-  optional int32 range_count = 2;
+  optional int32 range_count = 2 [(gogoproto.nullable) = false];
 }
 
 // Stores is a wrapper for internal RPCs that operate only on the stores of a

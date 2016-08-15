@@ -567,9 +567,7 @@ func (sp *StorePool) reserve(
 		return errors.Wrapf(err, "reservation failed:%+v", req)
 	}
 
-	if resp.RangeCount != nil {
-		detail.desc.Capacity.RangeCount = *resp.RangeCount
-	}
+	detail.desc.Capacity.RangeCount = resp.RangeCount
 	if !resp.Reserved {
 		detail.throttledUntil = sp.clock.Now().GoTime().Add(sp.declinedReservationsTimeout)
 		if log.V(2) {

@@ -17,7 +17,6 @@ package storage
 import (
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -119,8 +118,8 @@ func (b *bookie) Reserve(
 
 	resp := ReservationResponse{
 		Reserved: false,
-		RangeCount: proto.Int32(int32(b.metrics.ReplicaCount.Count()) +
-			int32(len(b.mu.reservationsByRangeID))),
+		RangeCount: int32(b.metrics.ReplicaCount.Count()) +
+			int32(len(b.mu.reservationsByRangeID)),
 	}
 
 	if olderReservation, ok := b.mu.reservationsByRangeID[req.RangeID]; ok {
