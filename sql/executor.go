@@ -458,6 +458,18 @@ func (e *Executor) execRequest(session *Session, sql string) StatementResults {
 		// this iteration. If we need to create an implicit txn, only one statement
 		// can be consumed.
 		stmtsToExec := stmts
+
+		// If the lower level hasn't initialized the KV txn object yet,
+		// ensure there's a minimum timestamp ready to use for it.  This
+		// is to ensure that cluster_logical_timestamp() sees the same
+		// timestamp throughout each SQL transaction. (More specifically,
+		// each SQL transaction retry. The value can change across
+		// retries.)
+		now := e.cfg.Clock.Now()
+		if txnState.txn == nil || !txnState.txn.Proto.IsInitialized() {
+			execOpt.MinInitialTimestamp = now
+		}
+
 		// If protoTS is set, the transaction proto sets its Orig and Max timestamps
 		// to it each retry.
 		var protoTS *hlc.Timestamp
@@ -465,14 +477,13 @@ func (e *Executor) execRequest(session *Session, sql string) StatementResults {
 		// (i.e. the next statements we're going to see are the first statements in
 		// a transaction).
 		if !inTxn {
-			execOpt.MinInitialTimestamp = e.cfg.Clock.Now()
 			// Detect implicit transactions.
 			if _, isBegin := stmts[0].(*parser.BeginTransaction); !isBegin {
 				execOpt.AutoCommit = true
 				stmtsToExec = stmtsToExec[:1]
 				// Check for AS OF SYSTEM TIME. If it is present but not detected here,
 				// it will raise an error later on.
-				protoTS, err = isAsOf(planMaker, stmtsToExec[0], execOpt.MinInitialTimestamp)
+				protoTS, err = isAsOf(planMaker, stmtsToExec[0], now)
 				if err != nil {
 					res.ResultList = append(res.ResultList, Result{Err: err})
 					return res
