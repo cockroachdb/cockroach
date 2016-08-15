@@ -136,7 +136,7 @@ func initInsecure() error {
 }
 
 func initMemProfile(dir string) {
-	memProfileInterval := envutil.EnvOrDefaultDuration("memprof_interval", -1)
+	memProfileInterval := envutil.EnvOrDefaultDuration("COCKROACH_MEMPROF_INTERVAL", -1)
 	if memProfileInterval < 0 {
 		return
 	}
@@ -190,7 +190,7 @@ func initMemProfile(dir string) {
 }
 
 func initCPUProfile(dir string) {
-	cpuProfileInterval := envutil.EnvOrDefaultDuration("cpuprof_interval", -1)
+	cpuProfileInterval := envutil.EnvOrDefaultDuration("COCKROACH_CPUPROF_INTERVAL", -1)
 	if cpuProfileInterval < 0 {
 		return
 	}
@@ -252,13 +252,13 @@ func initBlockProfile() {
 	//
 	// The block profile can be viewed with `go tool pprof
 	// http://HOST:PORT/debug/pprof/block`
-	d := envutil.EnvOrDefaultInt64("block_profile_rate",
+	d := envutil.EnvOrDefaultInt64("COCKROACH_BLOCK_PROFILE_RATE",
 		10000000 /* 1 sample per 10 milliseconds spent blocking */)
 	runtime.SetBlockProfileRate(int(d))
 }
 
 func initCheckpointing(engines []engine.Engine) {
-	checkpointInterval := envutil.EnvOrDefaultDuration("checkpoint_interval", -1)
+	checkpointInterval := envutil.EnvOrDefaultDuration("COCKROACH_CHECKPOINT_INTERVAL", -1)
 	if checkpointInterval < 0 {
 		return
 	}
@@ -361,7 +361,7 @@ func runStart(_ *cobra.Command, args []string) error {
 
 	// We don't do this in (*server.Server).Start() because we don't want it
 	// in tests.
-	if !envutil.EnvOrDefaultBool("skip_update_check", false) {
+	if !envutil.EnvOrDefaultBool("COCKROACH_SKIP_UPDATE_CHECK", false) {
 		s.PeriodicallyCheckForUpdates()
 	}
 

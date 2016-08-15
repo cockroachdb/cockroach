@@ -26,10 +26,10 @@ func TestEnvOrDefault(t *testing.T) {
 	os.Clearenv()
 	// These tests are mostly an excuse to exercise otherwise unused code.
 	// TODO(knz): Test everything.
-	if act := EnvOrDefaultBytes("x", def); act != def {
+	if act := EnvOrDefaultBytes("COCKROACH_X", def); act != def {
 		t.Errorf("expected %d, got %d", def, act)
 	}
-	if act := EnvOrDefaultInt("x", def); act != def {
+	if act := EnvOrDefaultInt("COCKROACH_X", def); act != def {
 		t.Errorf("expected %d, got %d", def, act)
 	}
 }
