@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -1413,11 +1412,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		NodeID:    roachpb.NodeID(mtc.stores[2].StoreID()),
 		StoreID:   mtc.stores[2].StoreID(),
 	}
-	mtc.transports[2].MakeSender(func(err error, _ roachpb.ReplicaDescriptor) {
-		if err != nil && !grpcutil.IsClosedConnection(err) {
-			panic(err)
-		}
-	}).SendAsync(&storage.RaftMessageRequest{
+	mtc.transports[2].SendAsync(&storage.RaftMessageRequest{
 		RangeID:     0, // TODO(bdarnell): wtf is this testing?
 		ToReplica:   replica1,
 		FromReplica: replica2,
@@ -1730,6 +1725,10 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 
 func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	// The change to error reporting means that we can no longer trap
+	// transport errors separately from error messages and send them to
+	// errChan.
+	t.Skip("TODO(bdarnell): flaky (#8308), and needs update for change to raft transport error reporting")
 
 	mtc := startMultiTestContext(t, 4)
 	defer mtc.Stop()
@@ -1775,9 +1774,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	}
 	// Simulate an election triggered by the removed node.
 	errChan := make(chan error)
-	mtc.transports[0].MakeSender(func(err error, _ roachpb.ReplicaDescriptor) {
-		errChan <- err
-	}).SendAsync(&storage.RaftMessageRequest{
+	mtc.transports[0].SendAsync(&storage.RaftMessageRequest{
 		RangeID:     rangeID,
 		ToReplica:   replica1,
 		FromReplica: replica0,

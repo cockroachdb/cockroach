@@ -876,7 +876,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	}
 
 	// Start Raft processing goroutines.
-	s.ctx.Transport.Listen(s.StoreID(), s.handleRaftMessage)
+	s.ctx.Transport.Listen(s.StoreID(), s)
 	s.processRaft()
 
 	doneUnfreezing := make(chan struct{})
@@ -2125,13 +2125,13 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now hlc.Timesta
 	return txn, nil
 }
 
-// handleRaftMessage dispatches a raft message to the appropriate Replica. It
+// HandleRaftRequest dispatches a raft message to the appropriate Replica. It
 // requires that s.processRaftMu and s.mu are not held.
-func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
+func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) *roachpb.Error {
 	s.processRaftMu.Lock()
 	defer s.processRaftMu.Unlock()
 
-	ctx := s.context(context.Background())
+	ctx = s.context(ctx)
 
 	// Drop messages that come from a node that we believe was once
 	// a member of the group but has been removed.
@@ -2149,7 +2149,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 		}
 		// It's not a current member of the group. Is it from the past?
 		if !found && req.FromReplica.ReplicaID < desc.NextReplicaID {
-			return errReplicaTooOld
+			return roachpb.NewError(&roachpb.ReplicaTooOldError{})
 		}
 	}
 
@@ -2174,7 +2174,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 	// It deadlocks to hold s.Mutex while calling raftGroup.Step.
 	s.mu.Unlock()
 	if err != nil {
-		return err
+		return roachpb.NewError(err)
 	}
 	r.setLastReplicaDescriptors(req)
 
@@ -2190,7 +2190,7 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 			// at term zero for internal messages). The sending side uses the
 			// term from the snapshot itself, but we'll just check nonzero.
 			if req.Message.Term == 0 {
-				return errors.Errorf(
+				return roachpb.NewErrorf(
 					"preemptive snapshot from term %d received with zero term",
 					req.Message.Snapshot.Metadata.Term,
 				)
@@ -2221,14 +2221,14 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 			groupExists := r.mu.internalRaftGroup != nil
 			r.mu.Unlock()
 			if groupExists {
-				return errors.Errorf(
+				return roachpb.NewErrorf(
 					"cannot apply preemptive snapshot, Raft group for %d already active",
 					r.RangeID,
 				)
 			}
 			appliedIndex, _, err := loadAppliedIndex(ctx, r.store.Engine(), r.RangeID)
 			if err != nil {
-				return err
+				return roachpb.NewError(err)
 			}
 			raftGroup, err := raft.NewRawNode(
 				newRaftConfig(
@@ -2243,11 +2243,11 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 					&raftLogger{stringer: r},
 				), nil)
 			if err != nil {
-				return err
+				return roachpb.NewError(err)
 			}
 			// We have a Raft group; feed it the message.
 			if err := raftGroup.Step(req.Message); err != nil {
-				return errors.Wrap(err, "unable to process preemptive snapshot")
+				return roachpb.NewError(errors.Wrap(err, "unable to process preemptive snapshot"))
 			}
 			// In the normal case, the group should ask us to apply a snapshot.
 			// If it doesn't, our snapshot was probably stale.
@@ -2256,11 +2256,11 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 				ready = raftGroup.Ready()
 			}
 			if raft.IsEmptySnap(ready.Snapshot) {
-				return errors.Errorf("preemptive snapshot discarded by Raft")
+				return roachpb.NewErrorf("preemptive snapshot discarded by Raft")
 			}
 			// Apply the snapshot, as Raft told us to.
 			if err := r.applySnapshot(ctx, ready.Snapshot, ready.HardState); err != nil {
-				return err
+				return roachpb.NewError(err)
 			}
 			// At this point, the Replica has data but no ReplicaID. We hope
 			// that it turns into a "real" Replica by means of receiving Raft
@@ -2275,18 +2275,49 @@ func (s *Store) handleRaftMessage(req *RaftMessageRequest) error {
 			log.Infof(context.TODO(), "refusing incoming Raft message %s for range %d from %+v to %+v",
 				req.Message.Type, req.RangeID, req.FromReplica, req.ToReplica)
 		}
-		return errors.Errorf("cannot recreate replica that is not a member of its range (StoreID %s not found in range %d)",
+		return roachpb.NewErrorf("cannot recreate replica that is not a member of its range (StoreID %s not found in range %d)",
 			r.store.StoreID(), req.RangeID)
 	}
 
 	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
 		return raftGroup.Step(req.Message)
 	}); err != nil {
-		return err
+		return roachpb.NewError(err)
 	}
 
 	s.enqueueRaftUpdateCheck(req.RangeID)
 	return nil
+}
+
+// HandleRaftResponse handles response messages from the raft
+// transport. It requires that s.processRaftMu and s.mu are not held.
+func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageResponse) {
+	switch val := resp.Union.GetValue().(type) {
+	case *roachpb.Error:
+		switch val.GetDetail().(type) {
+		case *roachpb.ReplicaTooOldError:
+			if err := s.stopper.RunTask(func() {
+				s.mu.Lock()
+				rep, ok := s.mu.replicas[resp.RangeID]
+				s.mu.Unlock()
+				if ok {
+					log.Infof(ctx, "%s: replica %s too old, adding to replica GC queue", rep, resp.ToReplica)
+
+					if err := s.replicaGCQueue.Add(rep, 1.0); err != nil {
+						log.Errorf(ctx, "%s: unable to add replica %d to GC queue: %s", rep, resp.ToReplica, err)
+					}
+				}
+			}); err != nil {
+				log.Errorf(ctx, "%s: %s", s, err)
+			}
+
+		default:
+			log.Warningf(ctx, "%s: got unknown raft error: %s", s, val)
+		}
+
+	default:
+		log.Infof(ctx, "%s: got unknown raft response type %T: %s", s, val, val)
+	}
 }
 
 // enqueueRaftUpdateCheck asynchronously registers the given range ID to be

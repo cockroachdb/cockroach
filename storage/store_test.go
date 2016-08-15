@@ -625,7 +625,6 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 		RangeID:    desc.RangeID,
 		store:      store,
 		abortCache: NewAbortCache(desc.RangeID),
-		raftSender: store.ctx.Transport.MakeSender(func(err error, toReplica roachpb.ReplicaDescriptor) {}),
 	}
 	if err := r.newReplicaInner(desc, store.Clock(), 0); err != nil {
 		t.Fatal(err)

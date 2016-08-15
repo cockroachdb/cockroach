@@ -532,3 +532,13 @@ func (e *ReplicaCorruptionError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &ReplicaCorruptionError{}
+
+func (e *ReplicaTooOldError) Error() string {
+	return e.message(nil)
+}
+
+func (*ReplicaTooOldError) message(_ *Error) string {
+	return "sender replica too old, discarding message"
+}
+
+var _ ErrorDetailInterface = &ReplicaTooOldError{}
