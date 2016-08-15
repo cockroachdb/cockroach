@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
@@ -865,7 +866,7 @@ func (s *adminServer) waitForStoreFrozen(
 			}
 			mu.oks[storeID] = false // mark as inflight
 			action := func() (err error) {
-				var resp *roachpb.PollFrozenResponse
+				var resp *storage.PollFrozenResponse
 				defer func() {
 					message := fmt.Sprintf("node %d, store %d: ", nodeID, storeID)
 
@@ -902,10 +903,10 @@ func (s *adminServer) waitForStoreFrozen(
 				if err != nil {
 					return err
 				}
-				client := roachpb.NewInternalStoresClient(conn)
+				client := storage.NewStoresClient(conn)
 				resp, err = client.PollFrozen(context.Background(),
-					&roachpb.PollFrozenRequest{
-						StoreRequestHeader: roachpb.StoreRequestHeader{
+					&storage.PollFrozenRequest{
+						StoreRequestHeader: storage.StoreRequestHeader{
 							NodeID:  nodeID,
 							StoreID: storeID,
 						},

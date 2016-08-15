@@ -2682,7 +2682,7 @@ func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDesc
 }
 
 // Reserve requests a reservation from the store's bookie.
-func (s *Store) Reserve(ctx context.Context, req roachpb.ReservationRequest) roachpb.ReservationResponse {
+func (s *Store) Reserve(ctx context.Context, req ReservationRequest) ReservationResponse {
 	return s.bookie.Reserve(ctx, req, s.deadReplicas().Replicas)
 }
 

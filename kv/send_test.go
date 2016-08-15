@@ -30,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -66,11 +67,11 @@ func (n Node) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.B
 	}
 	return &roachpb.BatchResponse{}, nil
 }
-func (n Node) PollFrozen(_ context.Context, _ *roachpb.PollFrozenRequest) (*roachpb.PollFrozenResponse, error) {
+func (n Node) PollFrozen(_ context.Context, _ *storage.PollFrozenRequest) (*storage.PollFrozenResponse, error) {
 	panic("unimplemented")
 }
 
-func (n Node) Reserve(_ context.Context, _ *roachpb.ReservationRequest) (*roachpb.ReservationResponse, error) {
+func (n Node) Reserve(_ context.Context, _ *storage.ReservationRequest) (*storage.ReservationResponse, error) {
 	panic("unimplemented")
 }
 

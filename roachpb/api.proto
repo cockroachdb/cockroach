@@ -878,51 +878,6 @@ message RaftCommand {
   optional uint64 max_lease_index = 4 [(gogoproto.nullable) = false];
 }
 
-// StoreRequestHeader locates a Store on a Node.
-message StoreRequestHeader {
-  optional int32 node_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
-  optional int32 store_id = 2 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
-}
-
-// A PollFrozenRequest asks the addressed Store for its frozen or thawed
-// Replicas.
-message PollFrozenRequest {
-  optional StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // When true, collect the frozen Replicas, and the thawed ones otherwise.
-  optional bool collect_frozen = 2 [(gogoproto.nullable) = false];
-}
-
-// A PollFrozenResponse is the response returned from a PollFrozenRequest.
-message PollFrozenResponse {
-  repeated ReplicaDescriptor results = 1 [(gogoproto.nullable) = false];
-}
-
-// A ReservationRequest asks the addressed Store to reserve the space for a new
-// replica for the Range of RangeID reserving RangeSize bytes.
-message ReservationRequest {
-  optional StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional int32 from_node_id = 2 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "FromNodeID", (gogoproto.casttype) = "NodeID"];
-  optional int32 from_store_id = 3 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "FromStoreID", (gogoproto.casttype) = "StoreID"];
-  optional int64 range_id = 4 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
-  optional int64 range_size = 5 [(gogoproto.nullable) = false];
-}
-
-// A ReservationResponse is the repoonse returned from a ReservationRequest.
-message ReservationResponse {
-  optional bool reserved = 1 [(gogoproto.nullable) = false];
-  // The current number of ranges and reservations on the target
-  // store. This is returned even if the reservation isn't filled.
-  //
-  // NB: Nullable so we can detect if the field isn't set as will be
-  // the case when talking to older servers.
-  optional int32 range_count = 2;
-}
-
 // The two Batch services below are identical, except that some internal
 // Request types are not permitted in batches processed by External.Batch. This
 // distinction exists e.g. to prevent command-line tools from accessing
@@ -930,21 +885,8 @@ message ReservationResponse {
 
 service Internal {
   rpc Batch (BatchRequest) returns (BatchResponse) {}
-
-  // TODO(wiz): These methods have been split out into the InternalStores
-  // service, but remain here until we determine that a breaking RPC change is
-  // acceptable.
-  rpc PollFrozen (PollFrozenRequest) returns (PollFrozenResponse) {}
-  rpc Reserve(ReservationRequest) returns (ReservationResponse) {}
 }
 
 service External {
   rpc Batch (BatchRequest) returns (BatchResponse) {}
-}
-
-// InternalStores is a wrapper for internal RPCs that operate only on the stores
-// of a node.
-service InternalStores {
-  rpc PollFrozen (PollFrozenRequest) returns (PollFrozenResponse) {}
-  rpc Reserve(ReservationRequest) returns (ReservationResponse) {}
 }
