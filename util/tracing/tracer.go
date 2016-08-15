@@ -85,7 +85,7 @@ func defaultOptions(recorder func(basictracer.RawSpan)) basictracer.Options {
 	return opts
 }
 
-var lightstepToken = envutil.EnvOrDefaultString("lightstep_token", "")
+var lightstepToken = envutil.EnvOrDefaultString("COCKROACH_LIGHTSTEP_TOKEN", "")
 
 // newTracer implements NewTracer and allows that function to be mocked out via Disable().
 var newTracer = func() opentracing.Tracer {
