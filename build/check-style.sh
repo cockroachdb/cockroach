@@ -3,6 +3,7 @@
 set -eu
 
 PKG=${PKG:-./...}
+export PKG
 
 TestCopyrightHeaders() {
   echo "checking for missing license headers"
