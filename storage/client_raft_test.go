@@ -2090,7 +2090,16 @@ func TestTransferRaftLeadership(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numStores = 3
-	mtc := startMultiTestContext(t, numStores)
+	sc := storage.TestStoreContext()
+	// Suppress timeout-based elections (which also includes a previous
+	// leader stepping down due to a quorum check). Running tests on a
+	// heavily loaded CPU is enough to reach the raft election timeout
+	// and cause leadership to change hands in ways this test doesn't
+	// expect.
+	sc.RaftElectionTimeoutTicks = 100000
+	mtc := &multiTestContext{}
+	mtc.storeContext = &sc
+	mtc.Start(t, numStores)
 	defer mtc.Stop()
 
 	key := roachpb.Key("a")
