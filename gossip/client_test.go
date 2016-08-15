@@ -151,7 +151,7 @@ func TestClientGossip(t *testing.T) {
 	remote := startGossip(2, stopper, t, metric.NewRegistry())
 	disconnected := make(chan *client, 1)
 	remoteAddr := remote.GetNodeAddr()
-	c := newClient(&remoteAddr, makeMetrics())
+	c := newClient(remoteAddr, makeMetrics())
 
 	defer func() {
 		stopper.Stop()
@@ -193,8 +193,8 @@ func TestClientGossipMetrics(t *testing.T) {
 	gossipSucceedsSoon(
 		t, stopper, make(chan *client, 2),
 		map[*client]*Gossip{
-			newClient(&localAddr, makeMetrics()):  remote,
-			newClient(&remoteAddr, makeMetrics()): local,
+			newClient(localAddr, makeMetrics()):  remote,
+			newClient(remoteAddr, makeMetrics()): local,
 		},
 		func() error {
 			if err := local.AddInfo("local-key", nil, time.Hour); err != nil {
@@ -486,7 +486,7 @@ func TestClientForwardUnresolved(t *testing.T) {
 	local := startGossip(nodeID, stopper, t, metric.NewRegistry())
 	addr := local.GetNodeAddr()
 
-	client := newClient(&addr, makeMetrics()) // never started
+	client := newClient(addr, makeMetrics()) // never started
 
 	newAddr := util.UnresolvedAddr{
 		NetworkField: "tcp",
@@ -494,7 +494,7 @@ func TestClientForwardUnresolved(t *testing.T) {
 	}
 	reply := &Response{
 		NodeID:          nodeID,
-		Addr:            addr,
+		Addr:            *addr,
 		AlternateNodeID: nodeID + 1,
 		AlternateAddr:   &newAddr,
 	}

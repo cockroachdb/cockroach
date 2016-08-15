@@ -383,8 +383,8 @@ func roundSecs(d time.Duration) time.Duration {
 }
 
 // GetNodeAddr returns the node's address stored in the Infostore.
-func (s *server) GetNodeAddr() util.UnresolvedAddr {
+func (s *server) GetNodeAddr() *util.UnresolvedAddr {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.mu.is.NodeAddr
+	return &s.mu.is.NodeAddr
 }
