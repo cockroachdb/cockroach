@@ -14,7 +14,7 @@
 //
 // Author: Tobias Schottdorf (tobias@cockroachlabs.com)
 
-syntax = "proto2";
+syntax = "proto3";
 package cockroach.storage;
 option go_package = "storage";
 
@@ -23,20 +23,18 @@ import weak "gogoproto/gogo.proto";
 
 // StoreRequestHeader locates a Store on a Node.
 message StoreRequestHeader {
-  optional int32 node_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "NodeID",
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.NodeID"];
-  optional int32 store_id = 2 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "StoreID",
+  int32 store_id = 2 [(gogoproto.customname) = "StoreID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.StoreID"];
 }
 
 // A PollFrozenRequest asks the addressed Store for its frozen or thawed
 // Replicas.
 message PollFrozenRequest {
-  optional StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // When true, collect the frozen Replicas, and the thawed ones otherwise.
-  optional bool collect_frozen = 2 [(gogoproto.nullable) = false];
+  bool collect_frozen = 2;
 }
 
 // A PollFrozenResponse is the response returned from a PollFrozenRequest.
@@ -47,25 +45,22 @@ message PollFrozenResponse {
 // A ReservationRequest asks the addressed Store to reserve the space for a new
 // replica for the Range of RangeID reserving RangeSize bytes.
 message ReservationRequest {
-  optional StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional int32 from_node_id = 2 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "FromNodeID",
+  StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  int32 from_node_id = 2 [(gogoproto.customname) = "FromNodeID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.NodeID"];
-  optional int32 from_store_id = 3 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "FromStoreID",
+  int32 from_store_id = 3 [(gogoproto.customname) = "FromStoreID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.StoreID"];
-  optional int64 range_id = 4 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "RangeID",
+  int64 range_id = 4 [(gogoproto.customname) = "RangeID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
-  optional int64 range_size = 5 [(gogoproto.nullable) = false];
+  int64 range_size = 5;
 }
 
 // A ReservationResponse is the repoonse returned from a ReservationRequest.
 message ReservationResponse {
-  optional bool reserved = 1 [(gogoproto.nullable) = false];
+  bool reserved = 1;
   // The current number of ranges and reservations on the target
   // store. This is returned even if the reservation isn't filled.
-  optional int32 range_count = 2 [(gogoproto.nullable) = false];
+  int32 range_count = 2;
 }
 
 // Stores is a wrapper for internal RPCs that operate only on the stores of a
