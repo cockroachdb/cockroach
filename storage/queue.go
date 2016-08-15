@@ -127,25 +127,38 @@ type queueImpl interface {
 }
 
 type queueLog struct {
-	traceLog trace.EventLog
-	prefix   string
+	mu struct {
+		sync.Locker
+		traceLog trace.EventLog
+		finished bool
+	}
+	prefix string
 }
 
 func (l queueLog) VInfof(logv bool, format string, a ...interface{}) {
 	if logv {
 		log.InfofDepth(context.TODO(), 1, l.prefix+format, a...)
 	}
-	l.traceLog.Printf(format, a...)
+	l.mu.Lock()
+	if !l.mu.finished {
+		l.mu.traceLog.Printf(format, a...)
+	}
+	l.mu.Unlock()
 }
 
 func (l queueLog) Error(err error) {
 	const format = "%s"
 	log.ErrorfDepth(context.TODO(), 1, l.prefix+format, err)
-	l.traceLog.Errorf(format, err)
+	if !l.mu.finished {
+		l.mu.traceLog.Errorf(format, err)
+	}
 }
 
 func (l queueLog) Finish() {
-	l.traceLog.Finish()
+	l.mu.Lock()
+	l.mu.finished = true
+	l.mu.traceLog.Finish()
+	l.mu.Unlock()
 }
 
 type queueConfig struct {
@@ -224,10 +237,11 @@ func makeBaseQueue(
 		queueConfig: cfg,
 		incoming:    make(chan struct{}, 1),
 		eventLog: queueLog{
-			traceLog: trace.NewEventLog("queue", name),
-			prefix:   fmt.Sprintf("[%s] ", name),
+			prefix: fmt.Sprintf("[%s] ", name),
 		},
 	}
+	bq.eventLog.mu.Locker = new(syncutil.Mutex)
+	bq.eventLog.mu.traceLog = trace.NewEventLog("queue", name)
 	bq.mu.Locker = new(syncutil.Mutex)
 	bq.mu.replicas = map[roachpb.RangeID]*replicaItem{}
 	return bq
