@@ -247,7 +247,6 @@ func TestClientRetryNonTxn(t *testing.T) {
 				// the event we can push.
 				go func() {
 					var err error
-					//for {
 					if _, ok := test.args.(*roachpb.GetRequest); ok {
 						_, err = db.Get(key)
 					} else {
@@ -267,6 +266,9 @@ func TestClientRetryNonTxn(t *testing.T) {
 					}
 					return errors.New("non-transactional client has not pushed txn yet")
 				})
+				if test.canPush {
+					<-notify
+				}
 			}
 			return nil
 		})
