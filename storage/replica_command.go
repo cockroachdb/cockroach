@@ -3016,7 +3016,7 @@ func (r *Replica) ChangeReplicas(
 				repDesc.ReplicaID,
 			)
 		}
-		r.raftSender.SendAsync(&RaftMessageRequest{
+		r.store.ctx.Transport.SendAsync(&RaftMessageRequest{
 			RangeID:     r.RangeID,
 			FromReplica: fromRepDesc,
 			ToReplica:   repDesc,

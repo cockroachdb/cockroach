@@ -195,6 +195,12 @@ message ReplicaCorruptionError {
   optional bool processed = 2 [(gogoproto.nullable) = false];;
 }
 
+// ReplicaTooOldError is sent in response to a raft message when the
+// recipient of the raft message believes the sender of the raft
+// message to have been removed from the raft group
+message ReplicaTooOldError {
+}
+
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.onlyone) = true;
@@ -221,6 +227,7 @@ message ErrorDetail {
   // converting Go errors from/to proto Errors. Revisit this design.
   optional RaftGroupDeletedError raft_group_deleted = 16;
   optional ReplicaCorruptionError replica_corruption = 17;
+  optional ReplicaTooOldError replica_too_old = 18;
 }
 
 // TransactionRestart indicates how an error should be handled in a

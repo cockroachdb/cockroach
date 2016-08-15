@@ -115,6 +115,7 @@
 		SendError
 		RaftGroupDeletedError
 		ReplicaCorruptionError
+		ReplicaTooOldError
 		ErrorDetail
 		ErrPosition
 		Error
