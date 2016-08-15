@@ -2301,15 +2301,22 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 	case *roachpb.Error:
 		switch val.GetDetail().(type) {
 		case *roachpb.ReplicaTooOldError:
-			s.mu.Lock()
-			rep, ok := s.mu.replicas[resp.RangeID]
-			s.mu.Unlock()
-			if ok {
-				log.Infof(ctx, "%s: replica %s too old, adding to replica GC queue", rep, resp.ToReplica)
+			// NB: This RunTask is used to prevent a race on the queue's event log,
+			// where it events to it are emitted at the same time that it is being
+			// closed by the stopper. This protection should be more focused.
+			if err := s.stopper.RunTask(func() {
+				s.mu.Lock()
+				rep, ok := s.mu.replicas[resp.RangeID]
+				s.mu.Unlock()
+				if ok {
+					log.Infof(ctx, "%s: replica %s too old, adding to replica GC queue", rep, resp.ToReplica)
 
-				if err := s.replicaGCQueue.Add(rep, 1.0); err != nil {
-					log.Errorf(ctx, "%s: unable to add replica %d to GC queue: %s", rep, resp.ToReplica, err)
+					if err := s.replicaGCQueue.Add(rep, 1.0); err != nil {
+						log.Errorf(ctx, "%s: unable to add replica %d to GC queue: %s", rep, resp.ToReplica, err)
+					}
 				}
+			}); err != nil {
+				log.Errorf(ctx, "%s: %s", s, err)
 			}
 
 		default:
