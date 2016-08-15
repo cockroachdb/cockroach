@@ -324,9 +324,6 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error re-adding same range")
 	}
-	if _, ok := err.(rangeAlreadyExists); !ok {
-		t.Fatalf("expected rangeAlreadyExists error; got %s", err)
-	}
 	// Try to remove range 1 again.
 	if err := store.RemoveReplica(rng1, *rng1.Desc(), true); err == nil {
 		t.Fatal("expected error re-removing same range")
@@ -585,7 +582,7 @@ func TestHasOverlappingReplica(t *testing.T) {
 
 	for i, test := range testCases {
 		rngDesc := &roachpb.RangeDescriptor{StartKey: test.start, EndKey: test.end}
-		if r := store.hasOverlappingReplicaLocked(rngDesc); r != test.exp {
+		if r := store.hasOverlappingKeyRangeLocked(rngDesc); r != test.exp {
 			t.Errorf("%d: expected range %v; got %v", i, test.exp, r)
 		}
 	}
@@ -649,7 +646,7 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 	store.mu.uninitReplicas[newRangeID] = r
 	store.mu.Unlock()
 
-	expectedResult = rangeAlreadyExists{r}.Error()
+	expectedResult = ".*cannot processRangeDescriptorUpdate.*"
 	if err := store.processRangeDescriptorUpdate(r); !testutils.IsError(err, expectedResult) {
 		t.Errorf("expected processRangeDescriptorUpdate with overlapping keys to fail, got %v", err)
 	}
