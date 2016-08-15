@@ -5156,6 +5156,15 @@ getRanges?() : ProtoBufMap<Long, RaftRangeStatus>;
 
 
 
+errors?: RaftRangeError[];
+		
+
+getErrors?() : RaftRangeError[];
+		setErrors?(errors : RaftRangeError[]): void;
+		
+
+
+
 }
 
 	export interface RaftDebugResponseMessage extends RaftDebugResponse {
