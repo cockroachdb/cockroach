@@ -534,9 +534,9 @@ func (sp *StorePool) reserve(
 		return errors.Wrapf(err, "failed to dial store %+v, addr %q, node %+v", toStoreID, addr, detail.desc.Node)
 	}
 
-	client := roachpb.NewInternalStoresClient(conn)
-	req := &roachpb.ReservationRequest{
-		StoreRequestHeader: roachpb.StoreRequestHeader{
+	client := NewStoresClient(conn)
+	req := &ReservationRequest{
+		StoreRequestHeader: StoreRequestHeader{
 			NodeID:  detail.desc.Node.NodeID,
 			StoreID: toStoreID,
 		},

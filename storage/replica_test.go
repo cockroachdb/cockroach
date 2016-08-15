@@ -6308,8 +6308,8 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 	// designed to test the filling of the reservation specifically and in
 	// normal operation there should not be a reservation for an existing
 	// replica.
-	req := roachpb.ReservationRequest{
-		StoreRequestHeader: roachpb.StoreRequestHeader{
+	req := ReservationRequest{
+		StoreRequestHeader: StoreRequestHeader{
 			StoreID: tc.store.StoreID(),
 			NodeID:  tc.store.nodeDesc.NodeID,
 		},

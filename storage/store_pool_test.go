@@ -447,14 +447,14 @@ type fakeStoresServer struct {
 	reservationErr      error
 }
 
-var _ roachpb.InternalStoresServer = fakeStoresServer{}
+var _ StoresServer = fakeStoresServer{}
 
-func (f fakeStoresServer) PollFrozen(_ context.Context, _ *roachpb.PollFrozenRequest) (*roachpb.PollFrozenResponse, error) {
+func (f fakeStoresServer) PollFrozen(_ context.Context, _ *PollFrozenRequest) (*PollFrozenResponse, error) {
 	panic("unimplemented")
 }
 
-func (f fakeStoresServer) Reserve(_ context.Context, _ *roachpb.ReservationRequest) (*roachpb.ReservationResponse, error) {
-	return &roachpb.ReservationResponse{Reserved: f.reservationResponse}, f.reservationErr
+func (f fakeStoresServer) Reserve(_ context.Context, _ *ReservationRequest) (*ReservationResponse, error) {
+	return &ReservationResponse{Reserved: f.reservationResponse}, f.reservationErr
 }
 
 // newFakeNodeServer returns a fakeStoresServer designed to handle internal
@@ -469,7 +469,7 @@ func newFakeNodeServer(stopper *stop.Stopper) (*fakeStoresServer, *rpc.Context, 
 	}
 	stopper.AddCloser(stop.CloserFn(func() { _ = ln.Close() }))
 	f := &fakeStoresServer{}
-	roachpb.RegisterInternalStoresServer(s, f)
+	RegisterStoresServer(s, f)
 	return f, ctx, ln.Addr().String(), nil
 }
 

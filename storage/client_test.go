@@ -628,7 +628,7 @@ func (m *multiTestContext) addStore(idx int) {
 
 	stores := storage.NewStores(clock)
 	stores.AddStore(store)
-	roachpb.RegisterInternalStoresServer(grpcServer, storage.MakeInternalStoresServer(m.nodeDesc(nodeID), stores))
+	storage.RegisterStoresServer(grpcServer, storage.MakeServer(m.nodeDesc(nodeID), stores))
 
 	// Add newly created objects to the multiTestContext's collections.
 	// (these must be populated before the store is started so that
