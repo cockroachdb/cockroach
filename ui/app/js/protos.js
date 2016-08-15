@@ -2626,6 +2626,15 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                         "(gogoproto.nullable)": false,
                                         "(gogoproto.castkey)": "github.com/cockroachdb/cockroach/roachpb.RangeID"
                                     }
+                                },
+                                {
+                                    "rule": "repeated",
+                                    "type": "RaftRangeError",
+                                    "name": "errors",
+                                    "id": 2,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
                                 }
                             ]
                         },
