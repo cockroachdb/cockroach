@@ -53,8 +53,8 @@ type server struct {
 	tighten  chan roachpb.NodeID                // Channel of too-distant node IDs
 	ready    chan struct{}                      // Broadcasts wakeup to waiting gossip requests
 
-	nodeMetrics   metrics
-	serverMetrics metrics
+	nodeMetrics   Metrics
+	serverMetrics Metrics
 
 	simulationCycler *sync.Cond // Used when simulating the network to signal next cycle
 }
@@ -76,6 +76,11 @@ func newServer(stopper *stop.Stopper, registry *metric.Registry) *server {
 	registry.AddMetricStruct(s.nodeMetrics)
 
 	return s
+}
+
+// GetNodeMetrics returns this server's node metrics struct.
+func (s *server) GetNodeMetrics() *Metrics {
+	return &s.nodeMetrics
 }
 
 // Gossip receives gossiped information from a peer node.
