@@ -17,30 +17,29 @@
 package storage
 
 import (
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/roachpb"
 )
 
-// InternalStoresServer implements the storage parts of the
-// roachpb.InternalStoresServer
-// interface.
-type InternalStoresServer struct {
+// Server implements the storage parts of the StoresServer interface.
+type Server struct {
 	descriptor *roachpb.NodeDescriptor
 	stores     *Stores
 }
 
-var _ roachpb.InternalStoresServer = InternalStoresServer{}
+var _ StoresServer = Server{}
 
-// MakeInternalStoresServer returns a new instance of InternalStoresServer.
-func MakeInternalStoresServer(
+// MakeServer returns a new instance of Server.
+func MakeServer(
 	descriptor *roachpb.NodeDescriptor, stores *Stores,
-) InternalStoresServer {
-	return InternalStoresServer{descriptor, stores}
+) Server {
+	return Server{descriptor, stores}
 }
 
-func (is InternalStoresServer) execStoreCommand(
-	h roachpb.StoreRequestHeader, f func(*Store) error,
+func (is Server) execStoreCommand(
+	h StoreRequestHeader, f func(*Store) error,
 ) error {
 	if h.NodeID != is.descriptor.NodeID {
 		return errors.Errorf("request for NodeID %d cannot be served by NodeID %d",
@@ -53,11 +52,11 @@ func (is InternalStoresServer) execStoreCommand(
 	return f(store)
 }
 
-// PollFrozen implements the roachpb.InternalStoresServer interface.
-func (is InternalStoresServer) PollFrozen(
-	ctx context.Context, args *roachpb.PollFrozenRequest,
-) (*roachpb.PollFrozenResponse, error) {
-	resp := &roachpb.PollFrozenResponse{}
+// PollFrozen implements the StoresServer interface.
+func (is Server) PollFrozen(
+	ctx context.Context, args *PollFrozenRequest,
+) (*PollFrozenResponse, error) {
+	resp := &PollFrozenResponse{}
 	err := is.execStoreCommand(args.StoreRequestHeader,
 		func(s *Store) error {
 			resp.Results = s.FrozenStatus(args.CollectFrozen)
@@ -66,11 +65,11 @@ func (is InternalStoresServer) PollFrozen(
 	return resp, err
 }
 
-// Reserve implements the roachpb.InternalStoresServer interface.
-func (is InternalStoresServer) Reserve(
-	ctx context.Context, req *roachpb.ReservationRequest,
-) (*roachpb.ReservationResponse, error) {
-	resp := &roachpb.ReservationResponse{}
+// Reserve implements the StoresServer interface.
+func (is Server) Reserve(
+	ctx context.Context, req *ReservationRequest,
+) (*ReservationResponse, error) {
+	resp := &ReservationResponse{}
 	err := is.execStoreCommand(req.StoreRequestHeader,
 		func(s *Store) error {
 			*resp = s.Reserve(ctx, *req)
