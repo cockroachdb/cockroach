@@ -69,9 +69,8 @@ func newClient(addr net.Addr, nodeMetrics Metrics) *client {
 // start dials the remote addr and commences gossip once connected. Upon exit,
 // the client is sent on the disconnected channel. This method starts client
 // processing in a goroutine and returns immediately.
-func (c *client) start(g *Gossip, disconnected chan *client, rpcCtx *rpc.Context, stopper *stop.Stopper) {
+func (c *client) start(g *Gossip, disconnected chan *client, rpcCtx *rpc.Context, stopper *stop.Stopper, nodeID roachpb.NodeID) {
 	ctx := context.TODO()
-	nodeID := g.is.NodeID
 	log.Infof(ctx, "node %d: starting client to %s", nodeID, c.addr)
 
 	stopper.RunWorker(func() {
@@ -120,9 +119,9 @@ func (c *client) close() {
 func (c *client) requestGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossip_GossipClient) error {
 	g.mu.Lock()
 	args := &Request{
-		NodeID:          g.is.NodeID,
+		NodeID:          g.mu.is.NodeID,
 		Addr:            addr,
-		HighWaterStamps: g.is.getHighWaterStamps(),
+		HighWaterStamps: g.mu.is.getHighWaterStamps(),
 	}
 	g.mu.Unlock()
 
@@ -137,12 +136,12 @@ func (c *client) requestGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossi
 // the remote server's notion of other nodes' high water timestamps.
 func (c *client) sendGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossip_GossipClient) error {
 	g.mu.Lock()
-	if delta := g.is.delta(c.remoteHighWaterStamps); len(delta) > 0 {
+	if delta := g.mu.is.delta(c.remoteHighWaterStamps); len(delta) > 0 {
 		args := Request{
-			NodeID:          g.is.NodeID,
+			NodeID:          g.mu.is.NodeID,
 			Addr:            addr,
 			Delta:           delta,
-			HighWaterStamps: g.is.getHighWaterStamps(),
+			HighWaterStamps: g.mu.is.getHighWaterStamps(),
 		}
 
 		bytesSent := int64(args.Size())
@@ -153,7 +152,7 @@ func (c *client) sendGossip(g *Gossip, addr util.UnresolvedAddr, stream Gossip_G
 		c.nodeMetrics.InfosSent.Add(infosSent)
 
 		if log.V(1) {
-			log.Infof(context.TODO(), "node %d: sending %s", g.is.NodeID, extractKeys(args.Delta))
+			log.Infof(context.TODO(), "node %d: sending %s", g.mu.is.NodeID, extractKeys(args.Delta))
 		}
 
 		g.mu.Unlock()
@@ -178,16 +177,16 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 
 	// Combine remote node's infostore delta with ours.
 	if reply.Delta != nil {
-		freshCount, err := g.is.combine(reply.Delta, reply.NodeID)
+		freshCount, err := g.mu.is.combine(reply.Delta, reply.NodeID)
 		if err != nil {
-			log.Warningf(context.TODO(), "node %d: failed to fully combine delta from node %d: %s", g.is.NodeID, reply.NodeID, err)
+			log.Warningf(context.TODO(), "node %d: failed to fully combine delta from node %d: %s", g.mu.is.NodeID, reply.NodeID, err)
 		}
 		if infoCount := len(reply.Delta); infoCount > 0 {
 			if log.V(1) {
-				log.Infof(context.TODO(), "node %d: received %s from node %d (%d fresh)", g.is.NodeID, extractKeys(reply.Delta), reply.NodeID, freshCount)
+				log.Infof(context.TODO(), "node %d: received %s from node %d (%d fresh)", g.mu.is.NodeID, extractKeys(reply.Delta), reply.NodeID, freshCount)
 			}
 		}
-		g.maybeTighten()
+		g.maybeTightenLocked()
 	}
 	c.peerID = reply.NodeID
 	g.outgoing.addNode(c.peerID)
@@ -195,7 +194,7 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 
 	// Handle remote forwarding.
 	if reply.AlternateAddr != nil {
-		if g.hasIncoming(reply.AlternateNodeID) || g.hasOutgoing(reply.AlternateNodeID) {
+		if g.hasIncomingLocked(reply.AlternateNodeID) || g.hasOutgoingLocked(reply.AlternateNodeID) {
 			return errors.Errorf("received forward from node %d to %d (%s); already have active connection, skipping",
 				reply.NodeID, reply.AlternateNodeID, reply.AlternateAddr)
 		}
@@ -210,14 +209,14 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 	}
 
 	// If we have the sentinel gossip we're considered connected.
-	g.checkHasConnected()
+	g.checkHasConnectedLocked()
 
 	// Check whether this outgoing client is duplicating work already
 	// being done by an incoming client, either because an outgoing
 	// matches an incoming or the client is connecting to itself.
-	if g.is.NodeID == c.peerID {
+	if g.mu.is.NodeID == c.peerID {
 		return errors.Errorf("stopping outgoing client to node %d (%s); loopback connection", c.peerID, c.addr)
-	} else if g.hasIncoming(c.peerID) && g.is.NodeID < c.peerID {
+	} else if g.hasIncomingLocked(c.peerID) && g.mu.is.NodeID < c.peerID {
 		// To avoid mutual shutdown, we only shutdown our client if our
 		// node ID is less than the peer's.
 		return errors.Errorf("stopping outgoing client to node %d (%s); already have incoming", c.peerID, c.addr)
@@ -232,10 +231,7 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 func (c *client) gossip(ctx context.Context, g *Gossip, gossipClient GossipClient, stopper *stop.Stopper) error {
 	// For un-bootstrapped node, g.is.NodeID is 0 when client start gossip,
 	// so it's better to get nodeID from g.is every time.
-	g.mu.Lock()
-	addr := g.is.NodeAddr
-	g.mu.Unlock()
-
+	addr := g.GetNodeAddr()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stream, err := gossipClient.Gossip(ctx)
