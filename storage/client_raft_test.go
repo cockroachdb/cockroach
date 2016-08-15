@@ -1086,6 +1086,103 @@ func TestProgressWithDownNode(t *testing.T) {
 	verify([]int64{16, 16, 16})
 }
 
+/*
+TestReplicateAddAndRemoveRestart is motivated by issue #8111, which suggests the
+following test (which verifies the ability of a snapshot with a new replica ID
+to overwrite existing data):
+  - replicate a range to three stores
+  - stop a store
+  - remove the stopped store from the range
+  - truncate the logs
+  - re-add the store and restart it (in both orders, if possible. i'm not sure
+    if it's possible to re-add the store before restarting it; it probably won't
+    be after streaming snapshots)
+  - ensure that store can catch up with the rest of the group
+And another, as above, but without the remove and re-add. Just stop, truncate,
+and restart. This verifies that a snapshot without a new replica ID works
+correctly.
+*/
+func TestReplicateAddAndRemoveRestart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testFunc := func(removeAndReAdd bool) {
+		mtc := startMultiTestContext(t, 4)
+		defer mtc.Stop()
+
+		// Verify that the first increment propagates to all the engines.
+		verify := func(expected []int64) {
+			util.SucceedsSoon(t, func() error {
+				values := []int64{}
+				for _, eng := range mtc.engines {
+					val, _, err := engine.MVCCGet(context.Background(), eng, roachpb.Key("a"), mtc.clock.Now(), true, nil)
+					if err != nil {
+						return err
+					}
+					values = append(values, mustGetInt(val))
+				}
+				if !reflect.DeepEqual(expected, values) {
+					return errors.Errorf("expected %v, got %v", expected, values)
+				}
+				return nil
+			})
+		}
+
+		// Replicate the initial range to three of the four nodes.
+		rangeID := roachpb.RangeID(1)
+		mtc.replicateRange(rangeID, 3, 1)
+
+		// Verify that the first increment propagates to all the engines.
+		incArgs := incrementArgs([]byte("a"), 2)
+		if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+			t.Fatal(err)
+		}
+		verify([]int64{2, 2, 0, 2})
+
+		// stop a store
+		mtc.stopStore(1)
+		if removeAndReAdd {
+			// remove the stopped store from the range
+			mtc.unreplicateRange(rangeID, 1)
+		}
+
+		// runcate the logs
+		{
+			// Get the last increment's log index.
+			rng, err := mtc.stores[0].GetReplica(rangeID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			index, err := rng.GetLastIndex()
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Truncate the log at index+1 (log entries < N are removed, so this includes
+			// the increment).
+			truncArgs := truncateLogArgs(index+1, rangeID)
+			if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &truncArgs); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// re-add the store and restart it
+		mtc.restartStore(1)
+		if removeAndReAdd {
+			mtc.replicateRange(rangeID, 1)
+		}
+
+		// ensure that store can catch up with the rest of the group
+		incArgs = incrementArgs([]byte("a"), 3)
+		if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+			t.Fatal(err)
+		}
+		verify([]int64{5, 5, 0, 5})
+
+	}
+	// Run the test twice, once with and once without the remove and re-add.
+	testFunc(true)
+	testFunc(false)
+}
+
 func TestReplicateAddAndRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
