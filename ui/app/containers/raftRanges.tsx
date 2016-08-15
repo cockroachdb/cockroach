@@ -189,22 +189,26 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
       });
 
       // Build the final display table
-      content = <div>
-        {this.renderFilterSettings()}
-        <table>
-          <thead><tr>{columns}</tr></thead>
-          <tbody>
-            {_.values(rows).map((row: React.ReactNode[], i: number) => {
-              return <tr key={i}>{row}</tr>;
-            })}
-          </tbody>
-        </table>
-        <div className="section">
-          {this.renderPagination(Math.ceil(filteredRanges.length / RANGES_PER_PAGE))}
-        </div>
-      </div>;
+      if (columns.length > 1) {
+        content = <div>
+          {this.renderFilterSettings()}
+          <table>
+            <thead><tr>{columns}</tr></thead>
+            <tbody>
+              {_.values(rows).map((row: React.ReactNode[], i: number) => {
+                return <tr key={i}>{row}</tr>;
+              })}
+            </tbody>
+          </table>
+          <div className="section">
+            {this.renderPagination(Math.ceil(filteredRanges.length / RANGES_PER_PAGE))}
+          </div>
+        </div>;
+      } else {
+        content = <div className="section">No results.</div>;
+      }
     } else {
-      content = <div className="section">No results.</div>;
+      content = <div className="section">Loading...</div>;
     }
     return <div className="section table">
       { this.props.children }

@@ -25,6 +25,7 @@ import (
 	"regexp"
 	"runtime"
 	"strconv"
+	"sync"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -48,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -557,35 +559,53 @@ func (s *statusServer) RaftDebug(ctx context.Context, _ *serverpb.RaftDebugReque
 		return nil, err
 	}
 
-	resp := serverpb.RaftDebugResponse{
-		Ranges: make(map[roachpb.RangeID]serverpb.RaftRangeStatus),
+	mu := struct {
+		syncutil.Mutex
+		resp serverpb.RaftDebugResponse
+	}{
+		resp: serverpb.RaftDebugResponse{
+			Ranges: make(map[roachpb.RangeID]serverpb.RaftRangeStatus),
+		},
 	}
 
+	// Parallelize fetching of ranges to minimize total time.
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
+	defer cancel()
 	for _, node := range nodes.Nodes {
+		wg.Add(1)
 		nodeID := node.Desc.NodeID
-		ranges, err := s.Ranges(ctx, &serverpb.RangesRequest{NodeId: nodeID.String()})
-		if err != nil {
-			log.Infof(ctx, "Failed to get ranges from %d: %q", node.Desc.NodeID, err)
-			continue
-		}
-		for _, rng := range ranges.Ranges {
-			rangeID := rng.State.Desc.RangeID
-			status, ok := resp.Ranges[rangeID]
-			if !ok {
-				status = serverpb.RaftRangeStatus{
-					RangeID: rangeID,
-				}
+		go func() {
+			defer wg.Done()
+			ranges, err := s.Ranges(ctx, &serverpb.RangesRequest{NodeId: nodeID.String()})
+			if err != nil {
+				log.Infof(ctx, "Failed to get ranges from %d: %q", nodeID, err)
+				return
 			}
-			status.Nodes = append(status.Nodes, serverpb.RaftRangeNode{
-				NodeID: nodeID,
-				Range:  rng,
-			})
-			resp.Ranges[rangeID] = status
-		}
+
+			mu.Lock()
+			defer mu.Unlock()
+			for _, rng := range ranges.Ranges {
+				rangeID := rng.State.Desc.RangeID
+				status, ok := mu.resp.Ranges[rangeID]
+				if !ok {
+					status = serverpb.RaftRangeStatus{
+						RangeID: rangeID,
+					}
+				}
+				status.Nodes = append(status.Nodes, serverpb.RaftRangeNode{
+					NodeID: nodeID,
+					Range:  rng,
+				})
+				mu.resp.Ranges[rangeID] = status
+			}
+		}()
 	}
+	// After this wait there is only this goroutine accessing mu.resp.
+	wg.Wait()
 
 	// Check for errors.
-	for i, rng := range resp.Ranges {
+	for i, rng := range mu.resp.Ranges {
 		for j, node := range rng.Nodes {
 			desc := node.Range.State.Desc
 			// Check for whether replica should be GCed.
@@ -611,10 +631,10 @@ func (s *statusServer) RaftDebug(ctx context.Context, _ *serverpb.RaftDebugReque
 					})
 				}
 			}
-			resp.Ranges[i] = rng
+			mu.resp.Ranges[i] = rng
 		}
 	}
-	return &resp, nil
+	return &mu.resp, nil
 }
 
 func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
