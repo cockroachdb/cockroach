@@ -150,7 +150,8 @@ func TestClientGossip(t *testing.T) {
 	local := startGossip(1, stopper, t, metric.NewRegistry())
 	remote := startGossip(2, stopper, t, metric.NewRegistry())
 	disconnected := make(chan *client, 1)
-	c := newClient(&remote.is.NodeAddr, makeMetrics())
+	remoteAddr := remote.GetNodeAddr()
+	c := newClient(&remoteAddr, makeMetrics())
 
 	defer func() {
 		stopper.Stop()
@@ -185,13 +186,15 @@ func TestClientGossipMetrics(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	local := startGossip(1, stopper, t, metric.NewRegistry())
+	localAddr := local.GetNodeAddr()
 	remote := startGossip(2, stopper, t, metric.NewRegistry())
+	remoteAddr := remote.GetNodeAddr()
 
 	gossipSucceedsSoon(
 		t, stopper, make(chan *client, 2),
 		map[*client]*Gossip{
-			newClient(&local.is.NodeAddr, makeMetrics()):  remote,
-			newClient(&remote.is.NodeAddr, makeMetrics()): local,
+			newClient(&localAddr, makeMetrics()):  remote,
+			newClient(&remoteAddr, makeMetrics()): local,
 		},
 		func() error {
 			if err := local.AddInfo("local-key", nil, time.Hour); err != nil {
@@ -219,7 +222,9 @@ func TestClientGossipMetrics(t *testing.T) {
 			// Since there are two gossip nodes, there should be at least one incoming
 			// and outgoing connection.
 			for i, s := range []*server{local.server, remote.server} {
-				gauge := s.incoming.gauge
+				s.mu.Lock()
+				gauge := s.mu.incoming.gauge
+				s.mu.Unlock()
 				if gauge == nil {
 					return errors.Errorf("%d: missing gauge \"incoming\"", i)
 				}
@@ -273,7 +278,7 @@ func TestClientNodeID(t *testing.T) {
 func verifyServerMaps(g *Gossip, expCount int) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return len(g.nodeMap) == expCount
+	return len(g.mu.nodeMap) == expCount
 }
 
 // TestClientDisconnectLoopback verifies that the gossip server
@@ -286,7 +291,7 @@ func TestClientDisconnectLoopback(t *testing.T) {
 	local := startGossip(1, stopper, t, metric.NewRegistry())
 	// startClient requires locks are held, so acquire here.
 	local.mu.Lock()
-	lAddr := local.is.NodeAddr
+	lAddr := local.mu.is.NodeAddr
 	local.startClient(&lAddr)
 	local.mu.Unlock()
 	local.manage()
@@ -312,8 +317,8 @@ func TestClientDisconnectRedundant(t *testing.T) {
 	local.mu.Lock()
 	remote.mu.Lock()
 
-	rAddr := remote.is.NodeAddr
-	lAddr := local.is.NodeAddr
+	rAddr := remote.mu.is.NodeAddr
+	lAddr := local.mu.is.NodeAddr
 	local.startClient(&rAddr)
 	remote.startClient(&lAddr)
 	local.mu.Unlock()
@@ -349,7 +354,7 @@ func TestClientDisallowMultipleConns(t *testing.T) {
 	remote := startGossip(2, stopper, t, metric.NewRegistry())
 	local.mu.Lock()
 	remote.mu.Lock()
-	rAddr := remote.is.NodeAddr
+	rAddr := remote.mu.is.NodeAddr
 	// Start two clients from local to remote. RPC client cache is
 	// disabled via the context, so we'll start two different outgoing
 	// connections.
@@ -366,7 +371,7 @@ func TestClientDisallowMultipleConns(t *testing.T) {
 		local.mu.Lock()
 		remote.mu.Lock()
 		outgoing := local.outgoing.len()
-		incoming := remote.incoming.len()
+		incoming := remote.mu.incoming.len()
 		local.mu.Unlock()
 		remote.mu.Unlock()
 		if outgoing == 1 && incoming == 1 && verifyServerMaps(local, 0) && verifyServerMaps(remote, 1) {
@@ -417,8 +422,8 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		// in nodeMap if these three gossip nodes registered success.
 		g[0].mu.Lock()
 		defer g[0].mu.Unlock()
-		if a, e := len(g[0].nodeMap), 2; a != e {
-			return errors.Errorf("expected %s to contain %d nodes, got %d", g[0].nodeMap, e, a)
+		if a, e := len(g[0].mu.nodeMap), 2; a != e {
+			return errors.Errorf("expected %s to contain %d nodes, got %d", g[0].mu.nodeMap, e, a)
 		}
 		return nil
 	})
@@ -453,9 +458,7 @@ func TestClientRetryBootstrap(t *testing.T) {
 	defer stopper.Stop()
 	local := startGossip(1, stopper, t, metric.NewRegistry())
 	remote := startGossip(2, stopper, t, metric.NewRegistry())
-	remote.mu.Lock()
-	rAddr := remote.is.NodeAddr
-	remote.mu.Unlock()
+	rAddr := remote.GetNodeAddr()
 
 	if err := local.AddInfo("local-key", []byte("hello"), 0*time.Second); err != nil {
 		t.Fatal(err)
@@ -482,9 +485,7 @@ func TestClientForwardUnresolved(t *testing.T) {
 	defer stopper.Stop()
 	const nodeID = 1
 	local := startGossip(nodeID, stopper, t, metric.NewRegistry())
-	local.mu.Lock()
-	addr := local.is.NodeAddr
-	local.mu.Unlock()
+	addr := local.GetNodeAddr()
 
 	client := newClient(&addr, makeMetrics()) // never started
 

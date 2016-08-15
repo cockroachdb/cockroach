@@ -46,12 +46,14 @@ type serverInfo struct {
 type server struct {
 	stopper *stop.Stopper
 
-	mu       syncutil.Mutex                     // Protects the fields below
-	is       *infoStore                         // The backing infostore
-	incoming nodeSet                            // Incoming client node IDs
-	nodeMap  map[util.UnresolvedAddr]serverInfo // Incoming client's local address -> serverInfo
-	tighten  chan roachpb.NodeID                // Channel of too-distant node IDs
-	ready    chan struct{}                      // Broadcasts wakeup to waiting gossip requests
+	mu struct {
+		syncutil.Mutex
+		is       *infoStore                         // The backing infostore
+		incoming nodeSet                            // Incoming client node IDs
+		nodeMap  map[util.UnresolvedAddr]serverInfo // Incoming client's local address -> serverInfo
+		ready    chan struct{}                      // Broadcasts wakeup to waiting gossip requests
+	}
+	tighten chan roachpb.NodeID // Channel of too-distant node IDs
 
 	nodeMetrics   metrics
 	serverMetrics metrics
@@ -62,17 +64,20 @@ type server struct {
 // newServer creates and returns a server struct.
 func newServer(stopper *stop.Stopper, registry *metric.Registry) *server {
 	s := &server{
-		stopper:       stopper,
-		is:            newInfoStore(0, util.UnresolvedAddr{}, stopper),
-		incoming:      makeNodeSet(minPeers, metric.NewGauge(MetaConnectionsIncomingGauge)),
-		nodeMap:       make(map[util.UnresolvedAddr]serverInfo),
-		tighten:       make(chan roachpb.NodeID, 1),
-		ready:         make(chan struct{}),
+		stopper: stopper,
+
+		tighten: make(chan roachpb.NodeID, 1),
+
 		nodeMetrics:   makeMetrics(),
 		serverMetrics: makeMetrics(),
 	}
 
-	registry.AddMetric(s.incoming.gauge)
+	s.mu.is = newInfoStore(0, util.UnresolvedAddr{}, stopper)
+	s.mu.incoming = makeNodeSet(minPeers, metric.NewGauge(MetaConnectionsIncomingGauge))
+	s.mu.nodeMap = make(map[util.UnresolvedAddr]serverInfo)
+	s.mu.ready = make(chan struct{})
+
+	registry.AddMetric(s.mu.incoming.gauge)
 	registry.AddMetricStruct(s.nodeMetrics)
 
 	return s
@@ -114,7 +119,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 	// node. This can happen when bootstrap connections are initiated through
 	// a load balancer.
 	s.mu.Lock()
-	_, ok := s.nodeMap[args.Addr]
+	_, ok := s.mu.nodeMap[args.Addr]
 	s.mu.Unlock()
 	if ok {
 		return errors.Errorf("duplicate connection from node at %s", args.Addr)
@@ -138,18 +143,18 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 		// Store the old ready so that if it gets replaced with a new one
 		// (once the lock is released) and is closed, we still trigger the
 		// select below.
-		ready := s.ready
-		delta := s.is.delta(args.HighWaterStamps)
+		ready := s.mu.ready
+		delta := s.mu.is.delta(args.HighWaterStamps)
 
 		if infoCount := len(delta); infoCount > 0 {
 			if log.V(1) {
 				log.Infof(context.TODO(), "node %d: returning %d info(s) to node %d: %s",
-					s.is.NodeID, infoCount, args.NodeID, extractKeys(delta))
+					s.mu.is.NodeID, infoCount, args.NodeID, extractKeys(delta))
 			}
 
 			*reply = Response{
-				NodeID:          s.is.NodeID,
-				HighWaterStamps: s.is.getHighWaterStamps(),
+				NodeID:          s.mu.is.NodeID,
+				HighWaterStamps: s.mu.is.getHighWaterStamps(),
 				Delta:           delta,
 			}
 
@@ -184,30 +189,30 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 		args := *argsPtr
 		if args.NodeID != 0 {
 			log.Infof(context.TODO(), "node %d: received gossip from node %d",
-				s.is.NodeID, args.NodeID)
+				s.mu.is.NodeID, args.NodeID)
 			// Decide whether or not we can accept the incoming connection
 			// as a permanent peer.
-			if args.NodeID == s.is.NodeID {
+			if args.NodeID == s.mu.is.NodeID {
 				// This is an incoming loopback connection which should be closed by
 				// the client.
 				if log.V(2) {
 					log.Infof(context.TODO(), "node %d: ignoring gossip from node %d (loopback)",
-						s.is.NodeID, args.NodeID)
+						s.mu.is.NodeID, args.NodeID)
 				}
-			} else if s.incoming.hasNode(args.NodeID) {
+			} else if s.mu.incoming.hasNode(args.NodeID) {
 				// Do nothing.
 				if log.V(2) {
 					log.Infof(context.TODO(), "node %d: ignoring gossip from node %d (already in incoming set)",
-						s.is.NodeID, args.NodeID)
+						s.mu.is.NodeID, args.NodeID)
 				}
-			} else if s.incoming.hasSpace() {
+			} else if s.mu.incoming.hasSpace() {
 				if log.V(2) {
 					log.Infof(context.TODO(), "node %d: adding node %d to incoming set",
-						s.is.NodeID, args.NodeID)
+						s.mu.is.NodeID, args.NodeID)
 				}
 
-				s.incoming.addNode(args.NodeID)
-				s.nodeMap[args.Addr] = serverInfo{
+				s.mu.incoming.addNode(args.NodeID)
+				s.mu.nodeMap[args.Addr] = serverInfo{
 					peerID:    args.NodeID,
 					createdAt: timeutil.Now(),
 				}
@@ -215,18 +220,18 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 				defer func(nodeID roachpb.NodeID, addr util.UnresolvedAddr) {
 					if log.V(2) {
 						log.Infof(context.TODO(), "node %d: removing node %d from incoming set",
-							s.is.NodeID, args.NodeID)
+							s.mu.is.NodeID, args.NodeID)
 					}
 
-					s.incoming.removeNode(nodeID)
-					delete(s.nodeMap, addr)
+					s.mu.incoming.removeNode(nodeID)
+					delete(s.mu.nodeMap, addr)
 				}(args.NodeID, args.Addr)
 			} else {
 				var alternateAddr util.UnresolvedAddr
 				var alternateNodeID roachpb.NodeID
 				// Choose a random peer for forwarding.
-				altIdx := rand.Intn(len(s.nodeMap))
-				for addr, info := range s.nodeMap {
+				altIdx := rand.Intn(len(s.mu.nodeMap))
+				for addr, info := range s.mu.nodeMap {
 					if altIdx == 0 {
 						alternateAddr = addr
 						alternateNodeID = info.peerID
@@ -236,10 +241,10 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 				}
 
 				log.Infof(context.TODO(), "node %d: refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
-					s.is.NodeID, args.NodeID, s.incoming.maxSize, alternateNodeID, alternateAddr)
+					s.mu.is.NodeID, args.NodeID, s.mu.incoming.maxSize, alternateNodeID, alternateAddr)
 
 				*reply = Response{
-					NodeID:          s.is.NodeID,
+					NodeID:          s.mu.is.NodeID,
 					AlternateAddr:   &alternateAddr,
 					AlternateNodeID: alternateNodeID,
 				}
@@ -258,7 +263,7 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 				}
 			}
 		} else {
-			log.Infof(context.TODO(), "node %d: received gossip from unknown node", s.is.NodeID)
+			log.Infof(context.TODO(), "node %d: received gossip from unknown node", s.mu.is.NodeID)
 		}
 
 		bytesReceived := int64(args.Size())
@@ -268,21 +273,21 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 		s.serverMetrics.BytesReceived.Add(bytesReceived)
 		s.serverMetrics.InfosReceived.Add(infosReceived)
 
-		freshCount, err := s.is.combine(args.Delta, args.NodeID)
+		freshCount, err := s.mu.is.combine(args.Delta, args.NodeID)
 		if err != nil {
-			log.Warningf(context.TODO(), "node %d: failed to fully combine gossip delta from node %d: %s", s.is.NodeID, args.NodeID, err)
+			log.Warningf(context.TODO(), "node %d: failed to fully combine gossip delta from node %d: %s", s.mu.is.NodeID, args.NodeID, err)
 		}
 		if log.V(1) {
-			log.Infof(context.TODO(), "node %d: received %s from node %d (%d fresh)", s.is.NodeID, extractKeys(args.Delta), args.NodeID, freshCount)
+			log.Infof(context.TODO(), "node %d: received %s from node %d (%d fresh)", s.mu.is.NodeID, extractKeys(args.Delta), args.NodeID, freshCount)
 		}
-		s.maybeTighten()
+		s.maybeTightenLocked()
 
 		*reply = Response{
-			NodeID:          s.is.NodeID,
-			HighWaterStamps: s.is.getHighWaterStamps(),
+			NodeID:          s.mu.is.NodeID,
+			HighWaterStamps: s.mu.is.getHighWaterStamps(),
 		}
 
-		log.Infof(context.TODO(), "node %d: replying to %d ", s.is.NodeID, args.NodeID)
+		log.Infof(context.TODO(), "node %d: replying to %d ", s.mu.is.NodeID, args.NodeID)
 
 		s.mu.Unlock()
 		err = senderFn(reply)
@@ -310,20 +315,21 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 	}
 }
 
-// maybeTighten examines the infostore for the most distant node and
+// maybeTightenLocked examines the infostore for the most distant node and
 // if more distant than MaxHops, sends on the tightenNetwork channel
-// to start a new client connection.
-func (s *server) maybeTighten() {
-	distantNodeID, distantHops := s.is.mostDistant()
+// to start a new client connection. The mutex must be held by the caller.
+func (s *server) maybeTightenLocked() {
+	distantNodeID, distantHops := s.mu.is.mostDistant()
 	if log.V(2) {
-		log.Infof(context.TODO(), "node %d: distantHops: %d from %d", s.is.NodeID, distantHops, distantNodeID)
+		log.Infof(context.TODO(), "node %d: distantHops: %d from %d",
+			s.mu.is.NodeID, distantHops, distantNodeID)
 	}
 	if distantHops > MaxHops {
 		select {
 		case s.tighten <- distantNodeID:
 			if log.V(1) {
 				log.Infof(context.TODO(), "node %d: if possible, tightening network to node %d (%d > %d)",
-					s.is.NodeID, distantNodeID, distantHops, MaxHops)
+					s.mu.is.NodeID, distantNodeID, distantHops, MaxHops)
 			}
 		default:
 			// Do nothing.
@@ -337,20 +343,22 @@ func (s *server) maybeTighten() {
 // the next round of gossip are awoken via the conditional variable.
 func (s *server) start(addr net.Addr) {
 	s.mu.Lock()
-	s.is.NodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
+	s.mu.is.NodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
 	s.mu.Unlock()
 
 	broadcast := func() {
 		ready := make(chan struct{})
 
 		s.mu.Lock()
-		close(s.ready)
-		s.ready = ready
+		close(s.mu.ready)
+		s.mu.ready = ready
 		s.mu.Unlock()
 	}
-	unregister := s.is.registerCallback(".*", func(_ string, _ roachpb.Value) {
+	s.mu.Lock()
+	unregister := s.mu.is.registerCallback(".*", func(_ string, _ roachpb.Value) {
 		broadcast()
 	})
+	s.mu.Unlock()
 
 	s.stopper.RunWorker(func() {
 		<-s.stopper.ShouldQuiesce()
@@ -368,8 +376,8 @@ func (s *server) status() string {
 	defer s.mu.Unlock()
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "gossip server (%d/%d cur/max conns, %s)\n",
-		s.incoming.gauge.Value(), s.incoming.maxSize, s.serverMetrics)
-	for addr, info := range s.nodeMap {
+		s.mu.incoming.gauge.Value(), s.mu.incoming.maxSize, s.serverMetrics)
+	for addr, info := range s.mu.nodeMap {
 		// TODO(peter): Report per connection sent/received statistics. The
 		// structure of server.Gossip and server.gossipReceiver makes this
 		// irritating to track.
@@ -381,4 +389,11 @@ func (s *server) status() string {
 
 func roundSecs(d time.Duration) time.Duration {
 	return time.Duration(d.Seconds()+0.5) * time.Second
+}
+
+// GetNodeAddr returns the node's address stored in the Infostore.
+func (s *server) GetNodeAddr() util.UnresolvedAddr {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.is.NodeAddr
 }
