@@ -150,8 +150,7 @@ func TestClientGossip(t *testing.T) {
 	local := startGossip(1, stopper, t, metric.NewRegistry())
 	remote := startGossip(2, stopper, t, metric.NewRegistry())
 	disconnected := make(chan *client, 1)
-	remoteAddr := remote.GetNodeAddr()
-	c := newClient(&remoteAddr, makeMetrics())
+	c := newClient(remote.GetNodeAddr(), makeMetrics())
 
 	defer func() {
 		stopper.Stop()
@@ -186,15 +185,13 @@ func TestClientGossipMetrics(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	local := startGossip(1, stopper, t, metric.NewRegistry())
-	localAddr := local.GetNodeAddr()
 	remote := startGossip(2, stopper, t, metric.NewRegistry())
-	remoteAddr := remote.GetNodeAddr()
 
 	gossipSucceedsSoon(
 		t, stopper, make(chan *client, 2),
 		map[*client]*Gossip{
-			newClient(&localAddr, makeMetrics()):  remote,
-			newClient(&remoteAddr, makeMetrics()): local,
+			newClient(local.GetNodeAddr(), makeMetrics()):  remote,
+			newClient(remote.GetNodeAddr(), makeMetrics()): local,
 		},
 		func() error {
 			if err := local.AddInfo("local-key", nil, time.Hour); err != nil {
@@ -457,7 +454,6 @@ func TestClientRetryBootstrap(t *testing.T) {
 	defer stopper.Stop()
 	local := startGossip(1, stopper, t, metric.NewRegistry())
 	remote := startGossip(2, stopper, t, metric.NewRegistry())
-	rAddr := remote.GetNodeAddr()
 
 	if err := local.AddInfo("local-key", []byte("hello"), 0*time.Second); err != nil {
 		t.Fatal(err)
@@ -465,7 +461,7 @@ func TestClientRetryBootstrap(t *testing.T) {
 
 	local.SetBootstrapInterval(10 * time.Millisecond)
 	local.SetResolvers([]resolver.Resolver{
-		&testResolver{addr: rAddr.String(), numFails: 3, numSuccesses: 1},
+		&testResolver{addr: remote.GetNodeAddr().String(), numFails: 3, numSuccesses: 1},
 	})
 	local.bootstrap()
 	local.manage()
@@ -486,7 +482,7 @@ func TestClientForwardUnresolved(t *testing.T) {
 	local := startGossip(nodeID, stopper, t, metric.NewRegistry())
 	addr := local.GetNodeAddr()
 
-	client := newClient(&addr, makeMetrics()) // never started
+	client := newClient(addr, makeMetrics()) // never started
 
 	newAddr := util.UnresolvedAddr{
 		NetworkField: "tcp",
@@ -494,7 +490,7 @@ func TestClientForwardUnresolved(t *testing.T) {
 	}
 	reply := &Response{
 		NodeID:          nodeID,
-		Addr:            addr,
+		Addr:            *addr,
 		AlternateNodeID: nodeID + 1,
 		AlternateAddr:   &newAddr,
 	}
