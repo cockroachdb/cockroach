@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -439,7 +440,9 @@ func runMVCCDeleteRange(emk engineMaker, valueBytes int, b *testing.B) {
 		dupEng, stopper := emk(b, locDirty)
 
 		b.StartTimer()
-		_, _, _, err := MVCCDeleteRange(context.Background(), dupEng, &enginepb.MVCCStats{}, roachpb.KeyMin, roachpb.KeyMax, 0, hlc.MaxTimestamp, nil, false)
+		_, _, _, err := MVCCDeleteRange(context.Background(), dupEng,
+			&enginepb.MVCCStats{}, roachpb.KeyMin, roachpb.KeyMax, math.MaxInt64,
+			hlc.MaxTimestamp, nil, false)
 		if err != nil {
 			b.Fatal(err)
 		}
