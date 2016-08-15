@@ -42,7 +42,7 @@ export type TableStatsRequest = cockroach.server.serverpb.TableStatsRequest;
 export type TableStatsResponseMessage = cockroach.server.serverpb.TableStatsResponseMessage;
 
 export const API_PREFIX = "/_admin/v1";
-let TIMEOUT = 10000; // 10 seconds
+let TIMEOUT = 30000; // 30 seconds in milliseconds.
 
 export function setFetchTimeout(v: number) {
   TIMEOUT = v;
@@ -84,6 +84,7 @@ function Fetch<TRequestMessage extends {
     headers: {
       "Accept": "application/x-protobuf",
       "Content-Type": "application/x-protobuf",
+      "Grpc-Timeout": TIMEOUT + "m", // m is milliseconds
     },
     body: req ? req.toArrayBuffer() : undefined,
   })).then((res) => {

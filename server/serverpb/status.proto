@@ -131,6 +131,7 @@ message RaftDebugRequest {
 message RaftDebugResponse {
   map<int64, RaftRangeStatus> ranges = 1 [(gogoproto.nullable) = false,
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
+  repeated RaftRangeError errors = 2 [(gogoproto.nullable) = false];
 }
 
 message SpanStatsRequest {
