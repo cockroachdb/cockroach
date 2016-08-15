@@ -90,8 +90,8 @@ type RuntimeStatSampler struct {
 }
 
 // MakeRuntimeStatSampler constructs a new RuntimeStatSampler object.
-func MakeRuntimeStatSampler(clock *hlc.Clock, reg *metric.Registry) RuntimeStatSampler {
-	r := RuntimeStatSampler{
+func MakeRuntimeStatSampler(clock *hlc.Clock) RuntimeStatSampler {
+	return RuntimeStatSampler{
 		clock:          clock,
 		CgoCalls:       metric.NewGauge(metaCgoCalls),
 		Goroutines:     metric.NewGauge(metaGoroutines),
@@ -108,10 +108,6 @@ func MakeRuntimeStatSampler(clock *hlc.Clock, reg *metric.Registry) RuntimeStatS
 		CPUSysPercent:  metric.NewGaugeFloat64(metaCPUSysPercent),
 		Rss:            metric.NewGauge(metaRSS),
 	}
-
-	reg.AddMetricStruct(r)
-
-	return r
 }
 
 // SampleEnvironment queries the runtime system for various interesting metrics,

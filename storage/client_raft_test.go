@@ -997,7 +997,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 		return nil
 	})
 
-	before := mtc.stores[2].Registry().GetCounter("range.snapshots.preemptive-applied").Count()
+	before := mtc.stores[2].Metrics().RangeSnapshotsPreemptiveApplied.Count()
 	// Attempt to add replica to the third store with the original descriptor.
 	// This should fail because the descriptor is stale.
 	if err := addReplica(2, origDesc); !testutils.IsError(err, `change replicas of range \d+ failed`) {
@@ -1005,7 +1005,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 	}
 
 	util.SucceedsSoon(t, func() error {
-		after := mtc.stores[2].Registry().GetCounter("range.snapshots.preemptive-applied").Count()
+		after := mtc.stores[2].Metrics().RangeSnapshotsPreemptiveApplied.Count()
 		// The failed ChangeReplicas call should have applied a preemptive snapshot.
 		if after != before+1 {
 			return errors.Errorf(
@@ -1015,14 +1015,14 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 		return nil
 	})
 
-	before = mtc.stores[2].Registry().GetCounter("range.snapshots.preemptive-applied").Count()
+	before = mtc.stores[2].Metrics().RangeSnapshotsPreemptiveApplied.Count()
 	// Add to third store with fresh descriptor.
 	if err := addReplica(2, repl.Desc()); err != nil {
 		t.Fatal(err)
 	}
 
 	util.SucceedsSoon(t, func() error {
-		after := mtc.stores[2].Registry().GetCounter("range.snapshots.preemptive-applied").Count()
+		after := mtc.stores[2].Metrics().RangeSnapshotsPreemptiveApplied.Count()
 		// The failed ChangeReplicas call should have applied a preemptive snapshot.
 		if after != before+1 {
 			return errors.Errorf(
@@ -1605,10 +1605,10 @@ func TestStoreRangeRebalance(t *testing.T) {
 	var normalApplied int64
 	var preemptiveApplied int64
 	for _, s := range mtc.stores {
-		r := s.Registry()
-		generated += r.GetCounter("range.snapshots.generated").Count()
-		normalApplied += r.GetCounter("range.snapshots.normal-applied").Count()
-		preemptiveApplied += r.GetCounter("range.snapshots.preemptive-applied").Count()
+		m := s.Metrics()
+		generated += m.RangeSnapshotsGenerated.Count()
+		normalApplied += m.RangeSnapshotsNormalApplied.Count()
+		preemptiveApplied += m.RangeSnapshotsPreemptiveApplied.Count()
 	}
 	if generated == 0 {
 		t.Fatalf("expected at least 1 snapshot, but found 0")

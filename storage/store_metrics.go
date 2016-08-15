@@ -79,7 +79,8 @@ var (
 	metaRaftTickingDurationNanos = metric.Metadata{Name: "process-raft.tickingnanos"}
 )
 
-type storeMetrics struct {
+// StoreMetrics is the set of metrics for a given store.
+type StoreMetrics struct {
 	registry *metric.Registry
 
 	// Range data metrics.
@@ -149,9 +150,9 @@ type storeMetrics struct {
 	stats enginepb.MVCCStats
 }
 
-func newStoreMetrics() *storeMetrics {
+func newStoreMetrics() *StoreMetrics {
 	storeRegistry := metric.NewRegistry()
-	sm := &storeMetrics{
+	sm := &StoreMetrics{
 		registry:                     storeRegistry,
 		ReplicaCount:                 metric.NewCounter(metaReplicaCount),
 		ReservedReplicaCount:         metric.NewCounter(metaReservedReplicaCount),
@@ -218,7 +219,7 @@ func newStoreMetrics() *storeMetrics {
 // this locking is not exposed to the registry level, and therefore a single
 // snapshot of these gauges in the registry might mix the values of two
 // subsequent updates.
-func (sm *storeMetrics) updateMVCCGaugesLocked() {
+func (sm *StoreMetrics) updateMVCCGaugesLocked() {
 	sm.LiveBytes.Update(sm.stats.LiveBytes)
 	sm.KeyBytes.Update(sm.stats.KeyBytes)
 	sm.ValBytes.Update(sm.stats.ValBytes)
@@ -234,14 +235,14 @@ func (sm *storeMetrics) updateMVCCGaugesLocked() {
 	sm.SysCount.Update(sm.stats.SysCount)
 }
 
-func (sm *storeMetrics) updateCapacityGauges(capacity roachpb.StoreCapacity) {
+func (sm *StoreMetrics) updateCapacityGauges(capacity roachpb.StoreCapacity) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.Capacity.Update(capacity.Capacity)
 	sm.Available.Update(capacity.Available)
 }
 
-func (sm *storeMetrics) updateReplicationGauges(leaders, replicated, pending, available int64) {
+func (sm *StoreMetrics) updateReplicationGauges(leaders, replicated, pending, available int64) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.LeaderRangeCount.Update(leaders)
@@ -250,21 +251,21 @@ func (sm *storeMetrics) updateReplicationGauges(leaders, replicated, pending, av
 	sm.AvailableRangeCount.Update(available)
 }
 
-func (sm *storeMetrics) addMVCCStats(stats enginepb.MVCCStats) {
+func (sm *StoreMetrics) addMVCCStats(stats enginepb.MVCCStats) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.stats.Add(stats)
 	sm.updateMVCCGaugesLocked()
 }
 
-func (sm *storeMetrics) subtractMVCCStats(stats enginepb.MVCCStats) {
+func (sm *StoreMetrics) subtractMVCCStats(stats enginepb.MVCCStats) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.stats.Subtract(stats)
 	sm.updateMVCCGaugesLocked()
 }
 
-func (sm *storeMetrics) updateRocksDBStats(stats engine.Stats) {
+func (sm *StoreMetrics) updateRocksDBStats(stats engine.Stats) {
 	// We do not grab a lock here, because it's not possible to get a point-in-
 	// time snapshot of RocksDB stats. Retrieving RocksDB stats doesn't grab any
 	// locks, and there's no way to retrieve multiple stats in a single operation.
@@ -282,7 +283,7 @@ func (sm *storeMetrics) updateRocksDBStats(stats engine.Stats) {
 	sm.RdbTableReadersMemEstimate.Update(stats.TableReadersMemEstimate)
 }
 
-func (sm *storeMetrics) leaseRequestComplete(success bool) {
+func (sm *StoreMetrics) leaseRequestComplete(success bool) {
 	if success {
 		sm.LeaseRequestSuccessCount.Inc(1)
 	} else {

@@ -343,7 +343,9 @@ func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
 	var c int64
 	var found bool
 
-	ts.pgServer.Registry().Each(func(n string, v interface{}) {
+	reg := metric.NewRegistry()
+	reg.AddMetricStruct(ts.pgServer.Metrics())
+	reg.Each(func(n string, v interface{}) {
 		if name == n {
 			c = v.(*metric.Counter).Count()
 			found = true
