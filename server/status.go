@@ -32,9 +32,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/gogo/protobuf/proto"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"github.com/julienschmidt/httprouter"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -54,60 +52,17 @@ import (
 )
 
 const (
-	/*
-	   Note that :node_id can always be replaced by the value "local" to see
-	   the local nodes response.
+	// Default Maximum number of log entries returned.
+	defaultMaxLogEntries = 1000
 
-	   /_status/details/:node_id        - specific node's details
-	   /_status/gossip/:node_id         - specific node's gossip
-	   /_status/logfiles/:node_id       - list log files
-	   /_status/logfiles/:node_id/:file - returns the contents of the specific
-	                                      log files on specific node
-	   /_status/logs/:node_id           - log entries from a specific node
-	   /_status/stacks/:node_id         - exposes stack traces of running goroutines
-	   /_status/nodes                   - all nodes' status
-	   /_status/nodes/:node_id          - a specific node's status
-	   /_status/metrics/:node_id        - a specific node's metrics
-	   /_status/ranges/:node_id         - a specific node's range metadata
-	*/
+	// stackTraceApproxSize is the approximate size of a goroutine stack trace.
+	stackTraceApproxSize = 1024
 
 	// statusPrefix is the root of the cluster statistics and metrics API.
 	statusPrefix = "/_status/"
 
-	// statusLogFilesListPattern exposes a list of log files.
-	statusLogFilesListPattern = statusPrefix + "logfiles/:node_id"
-	// statusLogFilePattern exposes a specific file on a node.
-	statusLogFilePattern = statusPrefix + "logfiles/:node_id/:file"
-
-	// statusLogKeyPrefix exposes the logs for each node.
-	statusLogsPattern = statusPrefix + "logs/:node_id"
-	// Default Maximum number of log entries returned.
-	defaultMaxLogEntries = 1000
-
-	// statusStacksPattern exposes the stack traces of running goroutines.
-	statusStacksPattern = statusPrefix + "stacks/:node_id"
-	// stackTraceApproxSize is the approximate size of a goroutine stack trace.
-	stackTraceApproxSize = 1024
-
-	// statusNodesPrefix exposes status for all nodes in the cluster.
-	statusNodesPrefix = statusPrefix + "nodes"
-
-	// statusMetricsPrefix exposes transient stats.
-	statusMetricsPrefix = statusPrefix + "metrics/"
-	// statusMetricsPattern exposes transient stats for a node.
-	statusMetricsPattern = statusPrefix + "metrics/:node_id"
 	// statusVars exposes prometheus metrics for monitoring consumption.
 	statusVars = statusPrefix + "vars"
-
-	// statusRangesPrefix exposes range information.
-	statusRangesPrefix = statusPrefix + "ranges/"
-
-	// statusRaftEndpoint exposes raft debug information.
-	statusRaftEndpoint = statusPrefix + "raft"
-
-	// healthEndpoint is a shortcut for local details, intended for use by
-	// monitoring processes to verify that the server is up.
-	healthEndpoint = "/health"
 )
 
 // Pattern for local used when determining the node ID.
@@ -123,7 +78,6 @@ type statusServer struct {
 	db           *client.DB
 	gossip       *gossip.Gossip
 	metricSource metricMarshaler
-	router       *httprouter.Router
 	rpcCtx       *rpc.Context
 	stores       *storage.Stores
 }
@@ -141,19 +95,9 @@ func newStatusServer(
 		db:           db,
 		gossip:       gossip,
 		metricSource: metricSource,
-		router:       httprouter.New(),
 		rpcCtx:       rpcCtx,
 		stores:       stores,
 	}
-
-	server.router.GET(statusLogFilesListPattern, server.handleLogFilesList)
-	server.router.GET(statusLogFilePattern, server.handleLogFile)
-	server.router.GET(statusLogsPattern, server.handleLogs)
-	// TODO(tschottdorf): significant overlap with /debug/pprof/goroutine,
-	// except that this one allows querying by NodeID.
-	server.router.GET(statusStacksPattern, server.handleStacks)
-	server.router.GET(statusMetricsPattern, server.handleMetrics)
-	server.router.GET(statusVars, server.handleVars)
 
 	return server
 }
@@ -170,15 +114,7 @@ func (s *statusServer) RegisterGateway(
 	mux *gwruntime.ServeMux,
 	conn *grpc.ClientConn,
 ) error {
-	// Pass all requests for gRPC-based API endpoints to the gateway mux.
-	s.router.NotFound = mux
-
 	return serverpb.RegisterStatusHandler(ctx, mux, conn)
-}
-
-// ServeHTTP implements the http.Handler interface.
-func (s *statusServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.router.ServeHTTP(w, r)
 }
 
 func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, error) {
@@ -269,17 +205,6 @@ func (s *statusServer) LogFilesList(ctx context.Context, req *serverpb.LogFilesL
 	return &serverpb.LogFilesListResponse{Files: logFiles}, err
 }
 
-// handleLogFilesList handles GET requests for a list of available log files.
-func (s *statusServer) handleLogFilesList(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	resp, err := s.LogFilesList(r.Context(), &serverpb.LogFilesListRequest{NodeId: ps.ByName("node_id")})
-	if err != nil {
-		log.Error(r.Context(), err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	writeJSONProtoMessage(w, resp)
-}
-
 // LogFile returns a single log file.
 func (s *statusServer) LogFile(ctx context.Context, req *serverpb.LogFileRequest) (*serverpb.LogEntriesResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
@@ -315,21 +240,6 @@ func (s *statusServer) LogFile(ctx context.Context, req *serverpb.LogFileRequest
 	}
 
 	return &resp, nil
-}
-
-// handleLogFile handles GET requests for a single log file.
-func (s *statusServer) handleLogFile(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	req := serverpb.LogFileRequest{
-		NodeId: ps.ByName("node_id"),
-		File:   ps.ByName("file"),
-	}
-	resp, err := s.LogFile(r.Context(), &req)
-	if err != nil {
-		log.Error(r.Context(), err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	writeJSONProtoMessage(w, resp)
 }
 
 // parseInt64WithDefault attempts to parse the passed in string. If an empty
@@ -413,26 +323,9 @@ func (s *statusServer) Logs(ctx context.Context, req *serverpb.LogsRequest) (*se
 	return &serverpb.LogEntriesResponse{Entries: entries}, nil
 }
 
-// handleLogs handles GET requests for log entries.
-func (s *statusServer) handleLogs(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	q := r.URL.Query()
-	req := serverpb.LogsRequest{
-		NodeId:    ps.ByName("node_id"),
-		Level:     q.Get("level"),
-		StartTime: q.Get("starttime"),
-		EndTime:   q.Get("endtime"),
-		Max:       q.Get("max"),
-		Pattern:   q.Get("pattern"),
-	}
-	resp, err := s.Logs(r.Context(), &req)
-	if err != nil {
-		log.Error(r.Context(), err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	writeJSONProtoMessage(w, resp)
-}
-
+// TODO(tschottdorf): significant overlap with /debug/pprof/goroutine, except
+// that this one allows querying by NodeID.
+//
 // Stacks handles returns goroutine stack traces.
 func (s *statusServer) Stacks(ctx context.Context, req *serverpb.StacksRequest) (*serverpb.JSONResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
@@ -459,20 +352,6 @@ func (s *statusServer) Stacks(ctx context.Context, req *serverpb.StacksRequest) 
 			continue
 		}
 		return &serverpb.JSONResponse{Data: buf[:length]}, nil
-	}
-}
-
-// handleStacksLocal handles GET requests for goroutine stack traces.
-func (s *statusServer) handleStacks(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	resp, err := s.Stacks(r.Context(), &serverpb.StacksRequest{NodeId: ps.ByName("node_id")})
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
-	if _, err := w.Write(resp.Data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -540,16 +419,6 @@ func (s *statusServer) Metrics(ctx context.Context, req *serverpb.MetricsRequest
 		return status.Metrics(ctx, req)
 	}
 	return marshalJSONResponse(s.metricSource)
-}
-
-func (s *statusServer) handleMetrics(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	resp, err := s.Metrics(r.Context(), &serverpb.MetricsRequest{NodeId: ps.ByName("node_id")})
-	if err != nil {
-		log.Error(r.Context(), err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	writeJSONResponse(w, resp)
 }
 
 // RaftDebug returns raft debug information for all known nodes.
@@ -646,7 +515,7 @@ func (s *statusServer) RaftDebug(ctx context.Context, _ *serverpb.RaftDebugReque
 	return &mu.resp, nil
 }
 
-func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
 	err := s.metricSource.PrintAsText(w)
 	if err != nil {
@@ -776,32 +645,4 @@ func marshalJSONResponse(value interface{}) (*serverpb.JSONResponse, error) {
 		return nil, err
 	}
 	return &serverpb.JSONResponse{Data: data}, nil
-}
-
-// writeJSONResponse writes a JSONResponse to a http.ResponseWriter.
-func writeJSONResponse(w http.ResponseWriter, resp *serverpb.JSONResponse) {
-	w.Header().Set(util.ContentTypeHeader, util.JSONContentType)
-	if _, err := w.Write(resp.Data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
-func writeJSONProtoMessage(w http.ResponseWriter, resp proto.Message) {
-	w.Header().Set(util.ContentTypeHeader, util.JSONContentType)
-	if err := (&util.JSONPb{
-		EnumsAsInts:  true,
-		EmitDefaults: true,
-		Indent:       "  ",
-	}).NewEncoder(w).Encode(resp); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
-// PathForNodeStatus returns the path needed to issue a GET request for node status. If passed
-// an empty nodeID, this returns the path to GET status for all nodes.
-func PathForNodeStatus(nodeID string) string {
-	if len(nodeID) == 0 {
-		return statusNodesPrefix
-	}
-	return fmt.Sprintf("%s/%s", statusNodesPrefix, nodeID)
 }

@@ -64,7 +64,6 @@ github.com/gordonklaus/ineffassign cb7fbaf18166b1f12a02c381e89ab5ce538a02ec
 github.com/grpc-ecosystem/grpc-gateway ccd4e6b091a44f9f6b32848ffc63b3e8f8e26092
 github.com/inconshreveable/mousetrap 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 github.com/jteeuwen/go-bindata a0ff2567cfb70903282db057e799fd826784d41d
-github.com/julienschmidt/httprouter d8ff598a019f2c7bad0980917a588193cf26666e
 github.com/kisielk/errcheck 50ffcb6f3595daac70aff9e63afe8b8b277b1a1a
 github.com/kisielk/gotool 94d5dba705240ba73ce5d65d83ce44adc749b440
 github.com/kkaneda/returncheck bf081fa7155e3a27df1f056a49d50685edfa5b1b
