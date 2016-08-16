@@ -121,20 +121,6 @@ func newRaftConfig(
 	}
 }
 
-type semaphore chan struct{}
-
-func makeSemaphore(n int) semaphore {
-	return make(semaphore, n)
-}
-
-func (s semaphore) acquire() {
-	s <- struct{}{}
-}
-
-func (s semaphore) release() {
-	<-s
-}
-
 // verifyKeys verifies keys. If checkEndKey is true, then the end key
 // is verified to be non-nil and greater than start key. If
 // checkEndKey is false, end key is verified to be nil. Additionally,
@@ -2350,12 +2336,29 @@ func (s *Store) processRaft() {
 	if s.ctx.TestingKnobs.DisableProcessRaft {
 		return
 	}
-	sem := makeSemaphore(storeReplicaRaftReadyConcurrency)
+
+	workQueue := make(chan func(), storeReplicaRaftReadyConcurrency)
+	for i := 0; i < cap(workQueue); i++ {
+		// We don't use stopper.RunWorker because these goroutines need to continue
+		// processing even when the stopper has been stopped. Specifically, if we
+		// were to select on stopper.ShouldStop() here, the worker goroutines would
+		// exit as soon as the stopper was stopped even when there was work pending
+		// in workQueue.
+		go func() {
+			for w := range workQueue {
+				w()
+			}
+		}()
+	}
 
 	s.stopper.RunWorker(func() {
-		defer s.ctx.Transport.Stop(s.StoreID())
 		ticker := time.NewTicker(s.ctx.RaftTickInterval)
-		defer ticker.Stop()
+		defer func() {
+			ticker.Stop()
+			s.ctx.Transport.Stop(s.StoreID())
+			close(workQueue)
+		}()
+
 		for {
 			workingStart := timeutil.Now()
 			s.processRaftMu.Lock()
@@ -2399,14 +2402,13 @@ func (s *Store) processRaft() {
 			var wg sync.WaitGroup
 			wg.Add(len(initReplicas))
 			for _, r := range initReplicas {
-				sem.acquire()
-				go func(r *Replica) {
-					defer sem.release()
+				r := r // per-iteration copy
+				workQueue <- func() {
 					defer wg.Done()
 					if err := r.handleRaftReady(); err != nil {
 						panic(err) // TODO(bdarnell)
 					}
-				}(r)
+				}
 			}
 			wg.Wait()
 			s.processRaftMu.Unlock()
@@ -2435,11 +2437,18 @@ func (s *Store) processRaft() {
 				tickerStart := timeutil.Now()
 				s.processRaftMu.Lock()
 				s.mu.Lock()
+				var wg sync.WaitGroup
+				wg.Add(len(s.mu.replicas))
 				for _, r := range s.mu.replicas {
-					if err := r.tick(); err != nil {
-						log.Error(context.TODO(), err)
+					r := r // per-iteration copy
+					workQueue <- func() {
+						defer wg.Done()
+						if err := r.tick(); err != nil {
+							log.Error(context.TODO(), err)
+						}
 					}
 				}
+				wg.Wait()
 				// Enqueue all ranges for readiness checks. Note that we
 				// could not hold the pendingRaftGroups lock during the
 				// previous loop because of lock ordering constraints with
