@@ -64,16 +64,14 @@ func TestStatusLocalStacks(t *testing.T) {
 	// Verify match with at least two goroutine stacks.
 	re := regexp.MustCompile("(?s)goroutine [0-9]+.*goroutine [0-9]+.*")
 
-	if body, err := getText(s.AdminURL() + "/_status/stacks/local"); err != nil {
-		t.Fatal(err)
-	} else if !re.Match(body) {
-		t.Errorf("expected %s to match %s", body, re)
-	}
-
-	if body, err := getText(s.AdminURL() + "/_status/stacks/1"); err != nil {
-		t.Fatal(err)
-	} else if !re.Match(body) {
-		t.Errorf("expected %s to match %s", body, re)
+	var stacks serverpb.JSONResponse
+	for _, nodeID := range []string{"local", "1"} {
+		if err := getRequestProto(t, s, "/_status/stacks/"+nodeID, &stacks); err != nil {
+			t.Fatal(err)
+		}
+		if !re.Match(stacks.Data) {
+			t.Errorf("expected %s to match %s", stacks.Data, re)
+		}
 	}
 }
 
@@ -93,7 +91,7 @@ func TestStatusJson(t *testing.T) {
 
 	var nodes serverpb.NodesResponse
 	util.SucceedsSoon(t, func() error {
-		if err := getRequestProto(t, s, statusNodesPrefix, &nodes); err != nil {
+		if err := getRequestProto(t, s, "/_status/nodes", &nodes); err != nil {
 			t.Fatal(err)
 		}
 
@@ -221,8 +219,10 @@ func getRequestProto(t *testing.T, ts serverutils.TestServerInterface, path stri
 // startServer will start a server with a short scan interval, wait for
 // the scan to complete, and return the server. The caller is
 // responsible for stopping the server.
-func startServer(t *testing.T) serverutils.TestServerInterface {
-	ts, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{StoresPerNode: 3})
+func startServer(t *testing.T) *TestServer {
+	tsI, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{StoresPerNode: 3})
+
+	ts := tsI.(*TestServer)
 
 	// Make sure the range is spun up with an arbitrary read command. We do not
 	// expect a specific response.
@@ -233,7 +233,7 @@ func startServer(t *testing.T) serverutils.TestServerInterface {
 	// Make sure the node status is available. This is done by forcing stores to
 	// publish their status, synchronizing to the event feed with a canary
 	// event, and then forcing the server to write summaries immediately.
-	if err := ts.(*TestServer).node.computePeriodicMetrics(); err != nil {
+	if err := ts.node.computePeriodicMetrics(); err != nil {
 		t.Fatalf("error publishing store statuses: %s", err)
 	}
 
@@ -312,38 +312,40 @@ func TestStatusLocalLogs(t *testing.T) {
 		t.Errorf("expected to find test messages in %v", wrapper.Files)
 	}
 
+	type levelPresence struct {
+		Error, Warning, Info bool
+	}
+
 	testCases := []struct {
-		Level           log.Severity
-		MaxEntities     int
-		StartTimestamp  int64
-		EndTimestamp    int64
-		Pattern         string
-		ExpectedError   bool
-		ExpectedWarning bool
-		ExpectedInfo    bool
+		Level          log.Severity
+		MaxEntities    int
+		StartTimestamp int64
+		EndTimestamp   int64
+		Pattern        string
+		levelPresence
 	}{
 		// Test filtering by log severity.
-		{log.InfoLog, 0, 0, 0, "", true, true, true},
-		{log.WarningLog, 0, 0, 0, "", true, true, false},
-		{log.ErrorLog, 0, 0, 0, "", true, false, false},
-		// Test entry limit. Ignore Info/Warning/Error filters.
-		{log.InfoLog, 1, timestamp, timestampEWI, "", false, false, false},
-		{log.InfoLog, 2, timestamp, timestampEWI, "", false, false, false},
-		{log.InfoLog, 3, timestamp, timestampEWI, "", false, false, false},
+		{log.InfoLog, 0, 0, 0, "", levelPresence{true, true, true}},
+		{log.WarningLog, 0, 0, 0, "", levelPresence{true, true, false}},
+		{log.ErrorLog, 0, 0, 0, "", levelPresence{true, false, false}},
+		// // Test entry limit. Ignore Info/Warning/Error filters.
+		{log.InfoLog, 1, timestamp, timestampEWI, "", levelPresence{false, false, false}},
+		{log.InfoLog, 2, timestamp, timestampEWI, "", levelPresence{false, false, false}},
+		{log.InfoLog, 3, timestamp, timestampEWI, "", levelPresence{false, false, false}},
 		// Test filtering in different timestamp windows.
-		{log.InfoLog, 0, timestamp, timestamp, "", false, false, false},
-		{log.InfoLog, 0, timestamp, timestampE, "", true, false, false},
-		{log.InfoLog, 0, timestampE, timestampEW, "", false, true, false},
-		{log.InfoLog, 0, timestampEW, timestampEWI, "", false, false, true},
-		{log.InfoLog, 0, timestamp, timestampEW, "", true, true, false},
-		{log.InfoLog, 0, timestampE, timestampEWI, "", false, true, true},
-		{log.InfoLog, 0, timestamp, timestampEWI, "", true, true, true},
+		{log.InfoLog, 0, timestamp, timestamp, "", levelPresence{false, false, false}},
+		{log.InfoLog, 0, timestamp, timestampE, "", levelPresence{true, false, false}},
+		{log.InfoLog, 0, timestampE, timestampEW, "", levelPresence{false, true, false}},
+		{log.InfoLog, 0, timestampEW, timestampEWI, "", levelPresence{false, false, true}},
+		{log.InfoLog, 0, timestamp, timestampEW, "", levelPresence{true, true, false}},
+		{log.InfoLog, 0, timestampE, timestampEWI, "", levelPresence{false, true, true}},
+		{log.InfoLog, 0, timestamp, timestampEWI, "", levelPresence{true, true, true}},
 		// Test filtering by regexp pattern.
-		{log.InfoLog, 0, 0, 0, "Info", false, false, true},
-		{log.InfoLog, 0, 0, 0, "Warning", false, true, false},
-		{log.InfoLog, 0, 0, 0, "Error", true, false, false},
-		{log.InfoLog, 0, 0, 0, "Info|Error|Warning", true, true, true},
-		{log.InfoLog, 0, 0, 0, "Nothing", false, false, false},
+		{log.InfoLog, 0, 0, 0, "Info", levelPresence{false, false, true}},
+		{log.InfoLog, 0, 0, 0, "Warning", levelPresence{false, true, false}},
+		{log.InfoLog, 0, 0, 0, "Error", levelPresence{true, false, false}},
+		{log.InfoLog, 0, 0, 0, "Info|Error|Warning", levelPresence{true, true, true}},
+		{log.InfoLog, 0, 0, 0, "Nothing", levelPresence{false, false, false}},
 	}
 
 	for i, testCase := range testCases {
@@ -353,10 +355,10 @@ func TestStatusLocalLogs(t *testing.T) {
 			fmt.Fprintf(&url, "&max=%d", testCase.MaxEntities)
 		}
 		if testCase.StartTimestamp > 0 {
-			fmt.Fprintf(&url, "&starttime=%d", testCase.StartTimestamp)
+			fmt.Fprintf(&url, "&start_time=%d", testCase.StartTimestamp)
 		}
 		if testCase.StartTimestamp > 0 {
-			fmt.Fprintf(&url, "&endtime=%d", testCase.EndTimestamp)
+			fmt.Fprintf(&url, "&end_time=%d", testCase.EndTimestamp)
 		}
 		if len(testCase.Pattern) > 0 {
 			fmt.Fprintf(&url, "&pattern=%s", testCase.Pattern)
@@ -373,34 +375,23 @@ func TestStatusLocalLogs(t *testing.T) {
 				t.Errorf("%d expected %d entries, got %d: \n%+v", i, e, a, wrapper.Entries)
 			}
 		} else {
-			var actualInfo, actualWarning, actualError bool
-			var formats bytes.Buffer
+			var actual levelPresence
+			var logsBuf bytes.Buffer
 			for _, entry := range wrapper.Entries {
-				fmt.Fprintf(&formats, "%s\n", entry.Message)
+				fmt.Fprintln(&logsBuf, entry.Message)
 
 				switch entry.Message {
 				case "TestStatusLocalLogFile test message-Error":
-					actualError = true
+					actual.Error = true
 				case "TestStatusLocalLogFile test message-Warning":
-					actualWarning = true
+					actual.Warning = true
 				case "TestStatusLocalLogFile test message-Info":
-					actualInfo = true
+					actual.Info = true
 				}
 			}
 
-			if !(testCase.ExpectedInfo == actualInfo &&
-				testCase.ExpectedWarning == actualWarning &&
-				testCase.ExpectedError == actualError) {
-
-				t.Errorf(
-					"%d: expected info, warning, error: (%t, %t, %t) from %s, got:\n%s",
-					i,
-					testCase.ExpectedInfo,
-					testCase.ExpectedWarning,
-					testCase.ExpectedError,
-					path,
-					formats.String(),
-				)
+			if testCase.levelPresence != actual {
+				t.Errorf("%d: expected %+v at %s, got:\n%s", i, testCase, path, logsBuf.String())
 			}
 		}
 	}
@@ -412,11 +403,10 @@ func TestNodeStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := startServer(t)
 	defer s.Stopper().Stop()
-	ts := s.(*TestServer)
 
 	// First fetch all the node statuses.
 	wrapper := serverpb.NodesResponse{}
-	if err := getRequestProto(t, s, statusNodesPrefix, &wrapper); err != nil {
+	if err := getRequestProto(t, s, "/_status/nodes", &wrapper); err != nil {
 		t.Fatal(err)
 	}
 	nodeStatuses := wrapper.Nodes
@@ -424,19 +414,19 @@ func TestNodeStatusResponse(t *testing.T) {
 	if len(nodeStatuses) != 1 {
 		t.Errorf("too many node statuses returned - expected:1 actual:%d", len(nodeStatuses))
 	}
-	if !reflect.DeepEqual(ts.node.Descriptor, nodeStatuses[0].Desc) {
-		t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", ts.node.Descriptor, nodeStatuses[0].Desc)
+	if !reflect.DeepEqual(s.node.Descriptor, nodeStatuses[0].Desc) {
+		t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", s.node.Descriptor, nodeStatuses[0].Desc)
 	}
 
 	// Now fetch each one individually. Loop through the nodeStatuses to use the
 	// ids only.
 	for _, oldNodeStatus := range nodeStatuses {
 		nodeStatus := status.NodeStatus{}
-		if err := getRequestProto(t, s, PathForNodeStatus(oldNodeStatus.Desc.NodeID.String()), &nodeStatus); err != nil {
+		if err := getRequestProto(t, s, "/_status/nodes/"+oldNodeStatus.Desc.NodeID.String(), &nodeStatus); err != nil {
 			t.Fatal(err)
 		}
-		if !reflect.DeepEqual(ts.node.Descriptor, nodeStatus.Desc) {
-			t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", ts.node.Descriptor, nodeStatus.Desc)
+		if !reflect.DeepEqual(s.node.Descriptor, nodeStatus.Desc) {
+			t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", s.node.Descriptor, nodeStatus.Desc)
 		}
 	}
 }
@@ -477,8 +467,7 @@ func TestMetricsEndpoint(t *testing.T) {
 	s := startServer(t)
 	defer s.Stopper().Stop()
 
-	nodeID := s.(*TestServer).Gossip().GetNodeID()
-	url := fmt.Sprintf("%s/%s", statusMetricsPrefix, nodeID)
+	url := "/_status/metrics/" + s.Gossip().GetNodeID().String()
 	getRequest(t, s, url)
 }
 
@@ -488,12 +477,12 @@ func TestRangesResponse(t *testing.T) {
 	defer ts.Stopper().Stop()
 
 	// Perform a scan to ensure that all the raft groups are initialized.
-	if _, err := ts.(*TestServer).db.Scan(keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+	if _, err := ts.db.Scan(keys.LocalMax, roachpb.KeyMax, 0); err != nil {
 		t.Fatal(err)
 	}
 
 	var response serverpb.RangesResponse
-	if err := getRequestProto(t, ts, statusRangesPrefix+"local", &response); err != nil {
+	if err := getRequestProto(t, ts, "/_status/ranges/local", &response); err != nil {
 		t.Fatal(err)
 	}
 	if len(response.Ranges) == 0 {
@@ -528,7 +517,7 @@ func TestRaftDebug(t *testing.T) {
 	defer s.Stopper().Stop()
 
 	var resp serverpb.RaftDebugResponse
-	if err := getRequestProto(t, s, statusRaftEndpoint, &resp); err != nil {
+	if err := getRequestProto(t, s, "/_status/raft", &resp); err != nil {
 		t.Fatal(err)
 	}
 	if len(resp.Ranges) == 0 {
