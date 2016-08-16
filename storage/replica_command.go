@@ -2357,7 +2357,7 @@ func (r *Replica) AdminSplit(
 // it isn't until C receives a snapshot of range 2 from the leader that it
 // discovers the span of keys it covers. In order to prevent C from fully
 // initializing range 2 in this instance, we prohibit applying a snapshot to a
-// range if the snapshot overlaps another range. See Store.canApplySnapshot.
+// range if the snapshot overlaps another range. See Store.canApplySnapshotLocked.
 //
 // But while a snapshot may not have been applied at C, an uninitialized
 // Replica was created. An uninitialized Replica is one which belongs to a Raft

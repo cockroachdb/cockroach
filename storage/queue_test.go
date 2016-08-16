@@ -131,11 +131,11 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 		t.Error(err)
 	}
 
-	r1 := createRange(tc.store, 1001, roachpb.RKey("1001"), roachpb.RKey("1001/end"))
+	r1 := createReplica(tc.store, 1001, roachpb.RKey("1001"), roachpb.RKey("1001/end"))
 	if err := tc.store.AddReplicaTest(r1); err != nil {
 		t.Fatal(err)
 	}
-	r2 := createRange(tc.store, 1002, roachpb.RKey("1002"), roachpb.RKey("1002/end"))
+	r2 := createReplica(tc.store, 1002, roachpb.RKey("1002"), roachpb.RKey("1002/end"))
 	if err := tc.store.AddReplicaTest(r2); err != nil {
 		t.Fatal(err)
 	}
@@ -263,11 +263,11 @@ func TestBaseQueueProcess(t *testing.T) {
 		t.Error(err)
 	}
 
-	r1 := createRange(tc.store, 1001, roachpb.RKey("1001"), roachpb.RKey("1001/end"))
+	r1 := createReplica(tc.store, 1001, roachpb.RKey("1001"), roachpb.RKey("1001/end"))
 	if err := tc.store.AddReplicaTest(r1); err != nil {
 		t.Fatal(err)
 	}
-	r2 := createRange(tc.store, 1002, roachpb.RKey("1002"), roachpb.RKey("1002/end"))
+	r2 := createReplica(tc.store, 1002, roachpb.RKey("1002"), roachpb.RKey("1002/end"))
 	if err := tc.store.AddReplicaTest(r2); err != nil {
 		t.Fatal(err)
 	}
@@ -374,13 +374,13 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	}
 
 	// This range can never be split due to zone configs boundaries.
-	neverSplits := createRange(s, 2, roachpb.RKeyMin, dataMaxAddr)
+	neverSplits := createReplica(s, 2, roachpb.RKeyMin, dataMaxAddr)
 	if err := s.AddReplicaTest(neverSplits); err != nil {
 		t.Fatal(err)
 	}
 
 	// This range will need to be split after user db/table entries are created.
-	willSplit := createRange(s, 3, dataMaxAddr, roachpb.RKeyMax)
+	willSplit := createReplica(s, 3, dataMaxAddr, roachpb.RKeyMax)
 	if err := s.AddReplicaTest(willSplit); err != nil {
 		t.Fatal(err)
 	}
@@ -506,7 +506,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	bq.Start(tc.clock, tc.stopper)
 
 	for i := 1; i <= replicaCount; i++ {
-		r := createRange(tc.store, roachpb.RangeID(i+1000),
+		r := createReplica(tc.store, roachpb.RangeID(i+1000),
 			roachpb.RKey(fmt.Sprintf("%d", i)), roachpb.RKey(fmt.Sprintf("%d/end", i)))
 		if err := tc.store.AddReplicaTest(r); err != nil {
 			t.Fatal(err)
