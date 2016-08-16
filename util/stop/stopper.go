@@ -101,7 +101,7 @@ func (k taskKey) String() string {
 // through RunTask() and RunAsyncTask().
 //
 // Stopping occurs in two phases: the first is the request to stop, which moves
-// the stopper into a quiesceing phase. While quiesceing, calls to RunTask() &
+// the stopper into a quiescing phase. While quiescing, calls to RunTask() &
 // RunAsyncTask() don't execute the function passed in and return errUnavailable.
 // When all outstanding tasks have been completed, the stopper
 // closes its stopper channel, which signals all live workers that it's safe to
@@ -111,7 +111,7 @@ func (k taskKey) String() string {
 // be added to the stopper via AddCloser(), to be closed after the
 // stopper has stopped.
 type Stopper struct {
-	quiescer  chan struct{}     // Closed when quiesceing
+	quiescer  chan struct{}     // Closed when quiescing
 	stopper   chan struct{}     // Closed when stopping
 	stopped   chan struct{}     // Closed when stopped completely
 	onPanic   func(interface{}) // called with recover() on panic on any goroutine
@@ -371,7 +371,7 @@ func (s *Stopper) ShouldQuiesce() <-chan struct{} {
 }
 
 // ShouldStop returns a channel which will be closed when Stop() has been
-// invoked and outstanding tasks have quiesceed.
+// invoked and outstanding tasks have quiesced.
 func (s *Stopper) ShouldStop() <-chan struct{} {
 	if s == nil {
 		// A nil stopper will never signal ShouldStop, but will also never panic.
@@ -390,7 +390,7 @@ func (s *Stopper) IsStopped() <-chan struct{} {
 	return s.stopped
 }
 
-// Quiesce moves the stopper to state quiesceing and waits until all
+// Quiesce moves the stopper to state quiescing and waits until all
 // tasks complete. This is used from Stop() and unittests.
 func (s *Stopper) Quiesce() {
 	defer s.Recover()
