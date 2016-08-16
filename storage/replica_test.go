@@ -5952,14 +5952,9 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 // in these commands applying at the computed indexes.
 func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("TODO(bdarnell): https://github.com/cockroachdb/cockroach/issues/8422")
 	var tc testContext
-	sc := TestStoreContext()
-	// Ensure that the refresh call in this test is the only reason
-	// commands will get reproposed.
-	// TODO(bdarnell): why is this single-node test seeing a "new
-	// leader" (on rare occasions)? #8422
-	sc.TestingKnobs.DisableRefreshReasonNewLeader = true
-	tc.StartWithStoreContext(t, sc)
+	tc.Start(t)
 	defer tc.Stop()
 
 	const num = 10
