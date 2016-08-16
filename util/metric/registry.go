@@ -41,14 +41,14 @@ const sep = "-"
 type Registry struct {
 	syncutil.Mutex
 	labels  []*prometheusgo.LabelPair
-	tracked map[string]Iterable
+	tracked []Iterable
 }
 
 // NewRegistry creates a new Registry.
 func NewRegistry() *Registry {
 	return &Registry{
 		labels:  []*prometheusgo.LabelPair{},
-		tracked: map[string]Iterable{},
+		tracked: []Iterable{},
 	}
 }
 
@@ -73,7 +73,7 @@ func (r *Registry) getLabels() []*prometheusgo.LabelPair {
 func (r *Registry) AddMetric(metric Iterable) {
 	r.Lock()
 	defer r.Unlock()
-	r.tracked[metric.GetName()] = metric
+	r.tracked = append(r.tracked, metric)
 	if log.V(2) {
 		log.Infof(context.TODO(), "Added metric: %s (%T)", metric.GetName(), metric)
 	}
@@ -85,7 +85,7 @@ func (r *Registry) AddMetricGroup(group metricGroup) {
 	r.Lock()
 	defer r.Unlock()
 	group.iterate(func(metric Iterable) {
-		r.tracked[metric.GetName()] = metric
+		r.tracked = append(r.tracked, metric)
 		if log.V(2) {
 			log.Infof(context.TODO(), "Added metric: %s (%T)", metric.GetName(), metric)
 		}
