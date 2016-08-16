@@ -105,6 +105,10 @@ type DatabaseAccessor interface {
 	// TODO(nvanbenschoten) This method doesn't belong in the interface.
 	getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error)
 
+	// getAllDatabaseDescs looks up and returns all available database
+	// descriptors.
+	getAllDatabaseDescs() ([]*sqlbase.DatabaseDescriptor, error)
+
 	// getDatabaseID returns the ID of a database given its name.  It
 	// uses the descriptor cache if possible, otherwise falls back to KV
 	// operations.
@@ -183,6 +187,22 @@ func (p *planner) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescripto
 	}
 
 	return database, database.Validate()
+}
+
+// getAllDatabaseDescs implements the DatabaseAccessor interface.
+func (p *planner) getAllDatabaseDescs() ([]*sqlbase.DatabaseDescriptor, error) {
+	descs, err := p.getAllDescriptors()
+	if err != nil {
+		return nil, err
+	}
+
+	var dbDescs []*sqlbase.DatabaseDescriptor
+	for _, desc := range descs {
+		if dbDesc, ok := desc.(*sqlbase.DatabaseDescriptor); ok {
+			dbDescs = append(dbDescs, dbDesc)
+		}
+	}
+	return dbDescs, nil
 }
 
 // getDatabaseID implements the DatabaseAccessor interface.
