@@ -401,6 +401,13 @@ func (s *Server) Start() error {
 		})
 	}
 
+	// Enable the debug endpoints first to provide an earlier window
+	// into what's going on with the node in advance of exporting node
+	// functionality.
+	// TODO(marc): when cookie-based authentication exists,
+	// apply it for all web endpoints.
+	s.mux.HandleFunc(debugEndpoint, http.HandlerFunc(handleDebug))
+
 	s.gossip.Start(unresolvedAddr)
 
 	ctx := context.Background()
@@ -496,7 +503,6 @@ func (s *Server) Start() error {
 
 	// TODO(marc): when cookie-based authentication exists,
 	// apply it for all web endpoints.
-	s.mux.HandleFunc(debugEndpoint, http.HandlerFunc(handleDebug))
 	s.mux.Handle(adminEndpoint, gwMux)
 	s.mux.Handle(ts.URLPrefix, gwMux)
 	s.mux.Handle(statusPrefix, s.status)

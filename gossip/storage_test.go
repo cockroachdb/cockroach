@@ -17,6 +17,7 @@
 package gossip_test
 
 import (
+	"net"
 	"reflect"
 	"sort"
 	"strings"
@@ -218,7 +219,15 @@ func TestGossipStorageCleanup(t *testing.T) {
 	network := simulation.NewNetwork(numNodes, false)
 	defer network.Stop()
 
-	const invalidAddr = "10.10.10.10.10:3333333"
+	// Create a definitely closed address.
+	ln, err := net.Listen("tcp", util.TestAddr.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	closedAddr := ln.Addr()
+	ln.Close()
+
+	const invalidAddr = "10.0.0.1000:3333333"
 	// Set storage for each of the nodes.
 	addresses := make(unresolvedAddrSlice, len(network.Nodes))
 	stores := make([]testStorage, len(network.Nodes))
@@ -228,6 +237,7 @@ func TestGossipStorageCleanup(t *testing.T) {
 		if err := stores[i].WriteBootstrapInfo(&gossip.BootstrapInfo{
 			Addresses: []util.UnresolvedAddr{
 				util.MakeUnresolvedAddr("tcp", network.Nodes[(i+1)%numNodes].Addr().String()), // node i+1 address
+				util.MakeUnresolvedAddr(closedAddr.Network(), closedAddr.String()),            // valid but closed address
 				util.MakeUnresolvedAddr("tcp", invalidAddr),                                   // invalid address
 			},
 		}); err != nil {
