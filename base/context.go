@@ -51,12 +51,6 @@ const (
 	// NB: net.JoinHostPort is not a constant.
 	defaultAddr     = ":" + DefaultPort
 	defaultHTTPAddr = ":" + DefaultHTTPPort
-
-	// NetworkTimeout is the timeout used for network operations.
-	NetworkTimeout = 3 * time.Second
-
-	// DefaultRaftTickInterval is the default resolution of the Raft timer.
-	DefaultRaftTickInterval = 100 * time.Millisecond
 )
 
 type lazyTLSConfig struct {

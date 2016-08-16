@@ -14,7 +14,9 @@
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
 
-// +build !race
+// +build race
+// Version of constants.go used when the race detector is enabled (with more
+// lenient timeouts).
 
 package base
 
@@ -29,7 +31,7 @@ const (
 	DefaultHeartbeatInterval = 5 * time.Second
 
 	// NetworkTimeout is the timeout used for network operations.
-	NetworkTimeout = 3 * time.Second
+	NetworkTimeout = 10 * time.Second
 
 	// DefaultRaftTickInterval is the default resolution of the Raft timer.
 	DefaultRaftTickInterval = 100 * time.Millisecond
