@@ -331,7 +331,7 @@ func (p *planner) makeUsingPredicate(
 
 		// Check for USING(x,x)
 		if _, ok := seenNames[colName]; ok {
-			return nil, nil, fmt.Errorf("column \"%s\" appears more than once in USING clause", colName)
+			return nil, nil, fmt.Errorf("column %q appears more than once in USING clause", colName)
 		}
 		seenNames[colName] = struct{}{}
 
@@ -468,7 +468,11 @@ func (p *planner) makeJoin(
 	// Check that the same table name is not used on both sides.
 	for alias := range right.info.sourceAliases {
 		if _, ok := left.info.sourceAliases[alias]; ok {
-			return planDataSource{}, fmt.Errorf("table name \"%s\" specified more than once", alias)
+			t := alias.Table()
+			if t == "" {
+				return planDataSource{}, errors.New("cannot join columns from multiple anonymous sources (missing AS clause)")
+			}
+			return planDataSource{}, fmt.Errorf("cannot join columns from the same source name %q (missing AS clause)", t)
 		}
 	}
 
