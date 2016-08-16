@@ -45,7 +45,7 @@ JSPM_TARGET      = build/app.js
 GOBINDATA_TARGET = embedded.go
 
 .PHONY: all
-all: protobuf lint test $(GOBINDATA_TARGET)
+all: lint test $(GOBINDATA_TARGET)
 
 .PHONY: protobuf
 protobuf:
@@ -57,7 +57,7 @@ lint: npm.installed typings.installed
 	tslint -c tslint.json $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts')
 
 .PHONY: test
-test: protobuf npm.installed typings.installed jspm.installed
+test: npm.installed typings.installed jspm.installed
 	karma start
 
 GOBINDATA_SOURCES = $(JSPM_TARGET) assets fonts favicon.ico apple-touch-icon.png release.html
@@ -87,7 +87,7 @@ npm.installed: package.json npm-shrinkwrap.json
 	npm install --no-progress
 	touch $@
 
-typings.installed: typings.json npm.installed
+typings.installed: protobuf typings.json npm.installed
 	typings install
 	typings prune
 	touch $@
