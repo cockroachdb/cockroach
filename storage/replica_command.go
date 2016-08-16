@@ -3029,6 +3029,18 @@ func (r *Replica) ChangeReplicas(
 			},
 		})
 
+		// TODO(peter): Wait for the preemptive snapshot to be received and
+		// applied. We estimate that a 64 MB snapshot can be sent/applied in
+		// 20s. These numbers were pulled out of the air. Remove this hack.
+		waitTime := time.Duration(len(snap.Data)) * 20 * time.Second / (64 << 20)
+		const minWaitTime = 200 * time.Millisecond
+		if waitTime < minWaitTime {
+			waitTime = minWaitTime
+		}
+		log.Infof(ctx, "%s: waiting for preemptive snapshot: %d %.1fs",
+			r, len(snap.Data), waitTime.Seconds())
+		time.Sleep(waitTime)
+
 		repDesc.ReplicaID = updatedDesc.NextReplicaID
 		updatedDesc.NextReplicaID++
 		updatedDesc.Replicas = append(updatedDesc.Replicas, repDesc)
