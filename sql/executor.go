@@ -206,6 +206,10 @@ func (tscc TestingSchemaChangerCollection) ClearSchemaChangers() {
 // through the sync schema changers path.
 type SyncSchemaChangersFilter func(TestingSchemaChangerCollection)
 
+// StatementFilter is the type of callback that
+// ExecutorTestingKnobs.StatementFilter takes.
+type StatementFilter func(stms string, res *Result)
+
 // ExecutorTestingKnobs is part of the context used to control parts of the
 // system during testing.
 type ExecutorTestingKnobs struct {
@@ -239,6 +243,20 @@ type ExecutorTestingKnobs struct {
 	//old name are gone, and just before the mapping of the old name to the
 	//descriptor id is about to be deleted.
 	SyncSchemaChangersRenameOldNameNotInUseNotification func()
+
+	// StatementFilter can be used to trap execution of SQL statements and
+	// optionally change their results. The filter function is invoked after each
+	// statement has been executed.
+	StatementFilter StatementFilter
+
+	// DisableAutoCommit, if set, disable the auto-commit functionality of some
+	// SQL statements. That functionality allows some statements to commit
+	// directly when they're executed outside of an explicit txn, without waiting
+	// for the Executor's auto-commit.
+	// This has to be set in tests that need to abort such statements using a
+	// StatementFilter; otherwise, the statement commits immediately after
+	// execution.
+	DisableAutoCommit bool
 }
 
 // NewExecutor creates an Executor and registers a callback on the
@@ -721,6 +739,9 @@ func (e *Executor) execStmtsInCurrentTxn(
 			}
 		}
 		res.Err = convertToErrWithPGCode(res.Err)
+		if e.cfg.TestingKnobs.StatementFilter != nil {
+			e.cfg.TestingKnobs.StatementFilter(stmt.String(), &res)
+		}
 		results = append(results, res)
 		if err != nil {
 			// After an error happened, skip executing all the remaining statements
@@ -959,7 +980,8 @@ func (e *Executor) execStmtInOpenTxn(
 		txnState.tr.LazyLog(stmt, true /* sensitive */)
 	}
 
-	result, err := e.execStmt(stmt, planMaker, implicitTxn /* autoCommit */)
+	result, err := e.execStmt(stmt, planMaker,
+		implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit /* autoCommit */)
 	if err != nil {
 		if traceSQL {
 			log.Tracef(txnState.txn.Context, "ERROR: %v", err)
