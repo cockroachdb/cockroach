@@ -206,6 +206,10 @@ func (tscc TestingSchemaChangerCollection) ClearSchemaChangers() {
 // through the sync schema changers path.
 type SyncSchemaChangersFilter func(TestingSchemaChangerCollection)
 
+// StatementFilter is the type of callback that
+// ExecutorTestingKnobs.StatementFilter takes.
+type StatementFilter func(stms string, res *Result)
+
 // ExecutorTestingKnobs is part of the context used to control parts of the
 // system during testing.
 type ExecutorTestingKnobs struct {
@@ -239,6 +243,20 @@ type ExecutorTestingKnobs struct {
 	//old name are gone, and just before the mapping of the old name to the
 	//descriptor id is about to be deleted.
 	SyncSchemaChangersRenameOldNameNotInUseNotification func()
+
+	// StatementFilter can be used to trap execution of SQL statements and
+	// optionally change their results. The filter function is invoked after each
+	// statement has been executed.
+	StatementFilter StatementFilter
+
+	// DisableAutoCommit, if set, disables the auto-commit functionality of some
+	// SQL statements. That functionality allows some statements to commit
+	// directly when they're executed in an implicit SQL txn, without waiting for
+	// the Executor to commit the implicit txn.
+	// This has to be set in tests that need to abort such statements using a
+	// StatementFilter; otherwise, the statement commits immediately after
+	// execution so there'll be nothing left to abort by the time the filter runs.
+	DisableAutoCommit bool
 }
 
 // NewExecutor creates an Executor and registers a callback on the
@@ -697,7 +715,11 @@ func (e *Executor) execStmtsInCurrentTxn(
 		var stmtStrBefore string
 		// TODO(nvanbenschoten) Constant literals can change their representation (1.0000 -> 1) when type checking,
 		// so we need to reconsider how this works.
-		if e.cfg.TestingKnobs.CheckStmtStringChange && false {
+		if (e.cfg.TestingKnobs.CheckStmtStringChange && false) ||
+			(e.cfg.TestingKnobs.StatementFilter != nil) {
+			// We do "statement string change" if a StatementFilter is installed,
+			// because the StatementFilter relies on the textual representation of
+			// statements to not change from what the client sends.
 			stmtStrBefore = stmt.String()
 		}
 		var res Result
@@ -714,13 +736,17 @@ func (e *Executor) execStmtsInCurrentTxn(
 		default:
 			panic(fmt.Sprintf("unexpected txn state: %s", txnState.State))
 		}
-		if e.cfg.TestingKnobs.CheckStmtStringChange && false {
+		if (e.cfg.TestingKnobs.CheckStmtStringChange && false) ||
+			(e.cfg.TestingKnobs.StatementFilter != nil) {
 			if after := stmt.String(); after != stmtStrBefore {
 				panic(fmt.Sprintf("statement changed after exec; before:\n    %s\nafter:\n    %s",
 					stmtStrBefore, after))
 			}
 		}
 		res.Err = convertToErrWithPGCode(res.Err)
+		if e.cfg.TestingKnobs.StatementFilter != nil {
+			e.cfg.TestingKnobs.StatementFilter(stmt.String(), &res)
+		}
 		results = append(results, res)
 		if err != nil {
 			// After an error happened, skip executing all the remaining statements
@@ -959,7 +985,8 @@ func (e *Executor) execStmtInOpenTxn(
 		txnState.tr.LazyLog(stmt, true /* sensitive */)
 	}
 
-	result, err := e.execStmt(stmt, planMaker, implicitTxn /* autoCommit */)
+	autoCommit := implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
+	result, err := e.execStmt(stmt, planMaker, autoCommit)
 	if err != nil {
 		if traceSQL {
 			log.Tracef(txnState.txn.Context, "ERROR: %v", err)
