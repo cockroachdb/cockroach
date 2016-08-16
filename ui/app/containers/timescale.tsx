@@ -16,9 +16,14 @@ interface TimeScaleSelectorState {
   // This setting should not persist if the current route is changed, and thus
   // it is not stored in the redux state.
   controlsVisible: boolean;
+  // The eventListener is used to track the body event listener which closes
+  // the
 }
 
 class TimeScaleSelector extends React.Component<TimeScaleSelectorProps, TimeScaleSelectorState> {
+
+  timescaleBtn: Element;
+
   constructor() {
     super();
     this.state = {
@@ -26,10 +31,16 @@ class TimeScaleSelector extends React.Component<TimeScaleSelectorProps, TimeScal
     };
   }
 
-  toggleControls = () => {
+  setVisible = (visible: boolean) => {
     this.setState({
-      controlsVisible: !this.state.controlsVisible,
+      controlsVisible: visible,
     });
+  };
+
+  hide = (e: Event) => {
+    if (e.target !== this.timescaleBtn) {
+      this.setVisible(false);
+    }
   };
 
   changeSettings(newSettings: timewindow.TimeScale) {
@@ -40,13 +51,26 @@ class TimeScaleSelector extends React.Component<TimeScaleSelectorProps, TimeScal
     return scale === this.props.currentScale;
   }
 
+  componentWillMount() {
+    document.body.addEventListener("click", this.hide);
+  }
+
+  componentWillUnmount() {
+    document.body.removeEventListener("click", this.hide);
+  }
+
   render() {
     let selectorClass = classNames({
       "timescale-selector": true,
       "show": this.state.controlsVisible,
     });
     return <div className="timescale-selector-container">
-      <button className="timescale" onClick={this.toggleControls}>Select Timescale</button>
+      <button
+        className="timescale"
+        ref={(timescaleBtn) => this.timescaleBtn = timescaleBtn}
+        onClick={() => this.setVisible(!this.state.controlsVisible)}>
+          Select Timescale
+      </button>
       <div className={selectorClass}>
         <div className="text">View Last: </div>
         {
@@ -54,7 +78,7 @@ class TimeScaleSelector extends React.Component<TimeScaleSelectorProps, TimeScal
             let theseSettings = scale;
             return <button key={key}
                            className={classNames({selected: this.isSelected(scale)})}
-                           onClick={() => this.changeSettings(theseSettings)}>
+                           onClick={(e) => { this.changeSettings(theseSettings); this.setVisible(false); } }>
                            { key }
             </button>;
           })

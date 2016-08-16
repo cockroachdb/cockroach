@@ -86,6 +86,8 @@ describe("<TimeWindowManager>", function() {
     });
   });
 
+  // TODO (maxlang): Fix this test to actually change the state to catch the
+  // issue that caused #7590. Tracked in #8595.
   it("has only a single timeout at a time.", function() {
     state.currentWindow = {
       start: now().subtract(state.scale.windowSize),
