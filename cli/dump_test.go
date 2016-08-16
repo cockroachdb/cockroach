@@ -19,13 +19,13 @@ package cli
 import (
 	"bytes"
 	"database/sql/driver"
-	"flag"
 	"fmt"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/spf13/pflag"
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -175,7 +175,13 @@ func TestDumpBytes(t *testing.T) {
 	}
 }
 
-var randomTestTime = flag.Duration("duration-random", time.Second, "duration for randomized dump test to run")
+const durationRandom = "duration-random"
+
+var randomTestTime = pflag.Duration(durationRandom, time.Second, "duration for randomized dump test to run")
+
+func init() {
+	pflag.Lookup(durationRandom).Hidden = true
+}
 
 // TestDumpRandom generates a random number of random rows with all data
 // types. This data is dumped, inserted, and dumped again. The two dumps
