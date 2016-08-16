@@ -89,7 +89,7 @@ github.com/pkg/errors a22138067af1c4942683050411a841ade67fe1eb
 github.com/prometheus/client_model fa8ad6fec33561be4280a8f0514318c79d7f6cb6
 github.com/prometheus/common ebdfc6da46522d58825777cf1f90490a5b1ef1d8
 github.com/rcrowley/go-metrics bdb33529eca3e55eac7328e07c57012a797af602
-github.com/robfig/glock 62a8f79e21b6fe6d3e39436132596fd7a26c6518
+github.com/robfig/glock b8c84ff5ade15a6238ca61c20d3afc70d2e41276
 github.com/rubyist/circuitbreaker 7e3e7fbe9c62b943d487af023566a79d9eb22d3b
 github.com/russross/blackfriday 93622da34e54fb6529bfb7c57e710f37a8d9cbd8
 github.com/sasha-s/go-deadlock 09aefc0ac06ad74d91ca31acdb11fc981c159149
