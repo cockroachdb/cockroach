@@ -45,9 +45,7 @@ TestMissingLeakTest() {
 }
 
 TestMisspell() {
-  # https://github.com/client9/misspell/issues/62
-  # https://github.com/client9/misspell/issues/63
-  ! git ls-files | xargs misspell | grep -vE 'found "(computable|duplicative)" a misspelling of'
+  ! git ls-files | xargs misspell | read
 }
 
 TestTabsInShellScripts() {
