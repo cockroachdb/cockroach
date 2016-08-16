@@ -121,20 +121,6 @@ func newRaftConfig(
 	}
 }
 
-type semaphore chan struct{}
-
-func makeSemaphore(n int) semaphore {
-	return make(semaphore, n)
-}
-
-func (s semaphore) acquire() {
-	s <- struct{}{}
-}
-
-func (s semaphore) release() {
-	<-s
-}
-
 // verifyKeys verifies keys. If checkEndKey is true, then the end key
 // is verified to be non-nil and greater than start key. If
 // checkEndKey is false, end key is verified to be nil. Additionally,
@@ -2350,12 +2336,31 @@ func (s *Store) processRaft() {
 	if s.ctx.TestingKnobs.DisableProcessRaft {
 		return
 	}
-	sem := makeSemaphore(storeReplicaRaftReadyConcurrency)
 
 	s.stopper.RunWorker(func() {
-		defer s.ctx.Transport.Stop(s.StoreID())
+		// Start a pool of worker goroutines. These worker goroutines need to
+		// continue processing even when the stopper has been stopped in order to
+		// finish any queued work. We are using a pool instead of creating a new
+		// goroutine for each operation because Replica.handleRaftReady currently
+		// grows the goroutine stack from the default of 2K up to 8K, 16K or
+		// 32K. It's cheaper to reuse a goroutine with a large stack than to start
+		// a new goroutine from scratch.
+		workQueue := make(chan func(), storeReplicaRaftReadyConcurrency)
+		for i := 0; i < cap(workQueue); i++ {
+			go func() {
+				for w := range workQueue {
+					w()
+				}
+			}()
+		}
+
 		ticker := time.NewTicker(s.ctx.RaftTickInterval)
-		defer ticker.Stop()
+		defer func() {
+			ticker.Stop()
+			s.ctx.Transport.Stop(s.StoreID())
+			close(workQueue)
+		}()
+
 		for {
 			workingStart := timeutil.Now()
 			s.processRaftMu.Lock()
@@ -2399,14 +2404,13 @@ func (s *Store) processRaft() {
 			var wg sync.WaitGroup
 			wg.Add(len(initReplicas))
 			for _, r := range initReplicas {
-				sem.acquire()
-				go func(r *Replica) {
-					defer sem.release()
+				r := r // per-iteration copy
+				workQueue <- func() {
 					defer wg.Done()
 					if err := r.handleRaftReady(); err != nil {
 						panic(err) // TODO(bdarnell)
 					}
-				}(r)
+				}
 			}
 			wg.Wait()
 			s.processRaftMu.Unlock()
