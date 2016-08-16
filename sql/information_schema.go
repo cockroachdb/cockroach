@@ -28,6 +28,7 @@ var informationSchema = virtualSchema{
 	name: "information_schema",
 	tables: []virtualSchemaTable{
 		informationSchemaColumnsTable,
+		informationSchemaSchemataTable,
 		informationSchemaTablesTable,
 	},
 }
@@ -136,6 +137,26 @@ func datetimePrecision(colType sqlbase.ColumnType) parser.Datum {
 	return parser.DNull
 }
 
+var informationSchemaSchemataTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.schemata (
+  CATALOG_NAME STRING NOT NULL DEFAULT '',
+  SCHEMA_NAME STRING NOT NULL DEFAULT '',
+  DEFAULT_CHARACTER_SET_NAME STRING NOT NULL DEFAULT '',
+  SQL_PATH STRING
+);`,
+	populate: func(p *planner, addRow func(...parser.Datum)) error {
+		return forEachDatabaseDesc(p, func(db *sqlbase.DatabaseDescriptor) {
+			addRow(
+				defString,                  // catalog_name
+				parser.NewDString(db.Name), // schema_name
+				parser.DNull,               // default_character_set_name
+				parser.DNull,               // sql_path
+			)
+		})
+	},
+}
+
 var (
 	tableTypeSystemView = parser.NewDString("SYSTEM VIEW")
 	tableTypeBaseTable  = parser.NewDString("BASE TABLE")
@@ -169,6 +190,41 @@ CREATE TABLE information_schema.tables (
 	},
 }
 
+type sortedDBDescs []*sqlbase.DatabaseDescriptor
+
+// sortedDBDescs implements sort.Interface. It sorts a slice of DatabaseDescriptors
+// by the database name.
+func (dbs sortedDBDescs) Len() int           { return len(dbs) }
+func (dbs sortedDBDescs) Swap(i, j int)      { dbs[i], dbs[j] = dbs[j], dbs[i] }
+func (dbs sortedDBDescs) Less(i, j int) bool { return dbs[i].Name < dbs[j].Name }
+
+// forEachTableDesc retrieves all database descriptors and iterates through them in
+// lexicographical order with respect to their name. For each database, the function
+// will call fn with its descriptor.
+func forEachDatabaseDesc(
+	p *planner,
+	fn func(*sqlbase.DatabaseDescriptor),
+) error {
+	// Handle real schemas
+	dbDescs, err := p.getAllDatabaseDescs()
+	if err != nil {
+		return err
+	}
+
+	// Handle virtual schemas.
+	for _, schema := range virtualSchemaMap {
+		dbDescs = append(dbDescs, schema.desc)
+	}
+
+	sort.Sort(sortedDBDescs(dbDescs))
+	for _, db := range dbDescs {
+		if userCanSeeDatabase(db, p.session.User) {
+			fn(db)
+		}
+	}
+	return nil
+}
+
 // forEachTableDesc retrieves all table descriptors and iterates through them in
 // lexicographical order with respect primarily to database name and secondarily
 // to table name. For each table, the function will call fn with its respective
@@ -182,18 +238,6 @@ func forEachTableDesc(
 		tables map[string]*sqlbase.TableDescriptor
 	}
 	databases := make(map[string]dbDescTables)
-
-	// Handle virtual schemas.
-	for dbName, schema := range virtualSchemaMap {
-		dbTables := make(map[string]*sqlbase.TableDescriptor, len(schema.tables))
-		for tableName, entry := range schema.tables {
-			dbTables[tableName] = entry.desc
-		}
-		databases[dbName] = dbDescTables{
-			desc:   schema.desc,
-			tables: dbTables,
-		}
-	}
 
 	// Handle real schemas.
 	descs, err := p.getAllDescriptors()
@@ -225,6 +269,18 @@ func forEachTableDesc(
 		}
 	}
 
+	// Handle virtual schemas.
+	for dbName, schema := range virtualSchemaMap {
+		dbTables := make(map[string]*sqlbase.TableDescriptor, len(schema.tables))
+		for tableName, entry := range schema.tables {
+			dbTables[tableName] = entry.desc
+		}
+		databases[dbName] = dbDescTables{
+			desc:   schema.desc,
+			tables: dbTables,
+		}
+	}
+
 	// Below we use the same trick twice of sorting a slice of strings lexicographically
 	// and iterating through these strings to index into a map. Effectively, this allows
 	// us to iterate through a map in sorted order.
@@ -242,16 +298,18 @@ func forEachTableDesc(
 		sort.Strings(dbTableNames)
 		for _, tableName := range dbTableNames {
 			tableDesc := db.tables[tableName]
-			if !userCanSeeTable(tableDesc, p.session.User) {
-				continue
+			if userCanSeeTable(tableDesc, p.session.User) {
+				fn(db.desc, tableDesc)
 			}
-			fn(db.desc, tableDesc)
 		}
 	}
 	return nil
 }
 
+func userCanSeeDatabase(db *sqlbase.DatabaseDescriptor, user string) bool {
+	return userCanSeeDescriptor(db, user)
+}
+
 func userCanSeeTable(table *sqlbase.TableDescriptor, user string) bool {
-	return table.State == sqlbase.TableDescriptor_PUBLIC &&
-		(table.Privileges.AnyPrivilege(user) || isVirtualDescriptor(table))
+	return userCanSeeDescriptor(table, user) && table.State == sqlbase.TableDescriptor_PUBLIC
 }

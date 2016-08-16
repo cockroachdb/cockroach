@@ -104,6 +104,7 @@ query T
 SHOW TABLES FROM information_schema
 ----
 columns
+schemata
 tables
 
 query TT colnames
@@ -278,6 +279,31 @@ num_prec    g            NULL               NULL           NULL
 statement ok
 DROP TABLE num_prec
 
+## information_schema.schemata
+
+query TTTT colnames
+SELECT * FROM information_schema.schemata
+----
+CATALOG_NAME  SCHEMA_NAME         DEFAULT_CHARACTER_SET_NAME  SQL_PATH
+def           information_schema  NULL                        NULL
+def           system              NULL                        NULL
+def           test                NULL                        NULL
+
+statement ok
+CREATE DATABASE other_db
+
+query TTTT colnames
+SELECT * FROM information_schema.schemata
+----
+CATALOG_NAME  SCHEMA_NAME         DEFAULT_CHARACTER_SET_NAME  SQL_PATH
+def           information_schema  NULL                        NULL
+def           other_db            NULL                        NULL
+def           system              NULL                        NULL
+def           test                NULL                        NULL
+
+statement ok
+DROP DATABASE other_db
+
 ## information_schema.tables
 
 statement ok
@@ -290,6 +316,7 @@ query T
 SELECT table_name FROM information_schema.tables
 ----
 columns
+schemata
 tables
 xyz
 descriptor
@@ -309,6 +336,7 @@ xyz
 users
 ui
 tables
+schemata
 rangelog
 namespace
 
@@ -316,7 +344,8 @@ query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
 TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME  TABLE_TYPE   VERSION
-def            information_schema  columns      SYSTEM VIEW  1
+def            information_schema  columns     SYSTEM VIEW  1
+def            information_schema  schemata    SYSTEM VIEW  1
 def            information_schema  tables      SYSTEM VIEW  1
 def            other_db            xyz         BASE TABLE   1
 def            system              descriptor  BASE TABLE   1
@@ -344,6 +373,7 @@ SELECT * FROM information_schema.tables
 ----
 TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME  TABLE_TYPE   VERSION
 def            information_schema  columns     SYSTEM VIEW  1
+def            information_schema  schemata    SYSTEM VIEW  1
 def            information_schema  tables      SYSTEM VIEW  1
 
 user root
@@ -358,6 +388,7 @@ SELECT * FROM information_schema.tables
 ----
 TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME  TABLE_TYPE   VERSION
 def            information_schema  columns     SYSTEM VIEW  1
+def            information_schema  schemata    SYSTEM VIEW  1
 def            information_schema  tables      SYSTEM VIEW  1
 def            other_db            xyz         BASE TABLE   5
 
