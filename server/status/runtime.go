@@ -32,20 +32,21 @@ import (
 )
 
 var (
-	metaCgoCalls       = metric.Metadata{Name: "sys.cgocalls", Help: "Number of cgo calls"}
-	metaGoroutines     = metric.Metadata{Name: "sys.goroutines", Help: "Number of goroutines"}
-	metaGoAllocBytes   = metric.Metadata{Name: "sys.go.allocbytes"}
-	metaGoTotalBytes   = metric.Metadata{Name: "sys.go.totalbytes"}
-	metaCgoAllocBytes  = metric.Metadata{Name: "sys.cgo.allocbytes"}
-	metaCgoTotalBytes  = metric.Metadata{Name: "sys.cgo.totalbytes"}
-	metaGCCount        = metric.Metadata{Name: "sys.gc.count"}
-	metaGCPauseNS      = metric.Metadata{Name: "sys.gc.pause.ns"}
-	metaGCPausePercent = metric.Metadata{Name: "sys.gc.pause.percent"}
-	metaCPUUserNS      = metric.Metadata{Name: "sys.cpu.user.ns"}
-	metaCPUUserPercent = metric.Metadata{Name: "sys.cpu.user.percent"}
-	metaCPUSysNS       = metric.Metadata{Name: "sys.cpu.sys.ns"}
-	metaCPUSysPercent  = metric.Metadata{Name: "sys.cpu.sys.percent"}
-	metaRSS            = metric.Metadata{Name: "sys.rss"}
+	metaCgoCalls       = metric.Metadata{Name: "sys.cgocalls", Help: "Total number of cgo calls"}
+	metaGoroutines     = metric.Metadata{Name: "sys.goroutines", Help: "Current number of goroutines"}
+	metaGoAllocBytes   = metric.Metadata{Name: "sys.go.allocbytes", Help: "Current bytes allocated by go"}
+	metaGoTotalBytes   = metric.Metadata{Name: "sys.go.totalbytes", Help: "Total bytes allocated by go, but not released"}
+	metaCgoAllocBytes  = metric.Metadata{Name: "sys.cgo.allocbytes", Help: "Current bytes allocated by cgo"}
+	metaCgoTotalBytes  = metric.Metadata{Name: "sys.cgo.totalbytes", Help: "Total bytes allocated by cgo, but not released"}
+	metaGCCount        = metric.Metadata{Name: "sys.gc.count", Help: "Total number of GC runs"}
+	metaGCPauseNS      = metric.Metadata{Name: "sys.gc.pause.ns", Help: "Total GC pause in nanoseconds"}
+	metaGCPausePercent = metric.Metadata{Name: "sys.gc.pause.percent", Help: "Current GC pause percentage"}
+	metaCPUUserNS      = metric.Metadata{Name: "sys.cpu.user.ns", Help: "Total user cpu time in nanoseconds"}
+	metaCPUUserPercent = metric.Metadata{Name: "sys.cpu.user.percent", Help: "Current user cpu percentage"}
+	metaCPUSysNS       = metric.Metadata{Name: "sys.cpu.sys.ns", Help: "Total system cpu time in nanoseconds"}
+	metaCPUSysPercent  = metric.Metadata{Name: "sys.cpu.sys.percent", Help: "Current system cpu percentage"}
+	metaRSS            = metric.Metadata{Name: "sys.rss", Help: "Current process RSS"}
+	metaUptime         = metric.Metadata{Name: "sys.uptime", Help: "Process uptime in seconds"}
 )
 
 // getCgoMemStats is a function that fetches stats for the C++ portion of the code.
@@ -63,6 +64,7 @@ var getCgoMemStats func() (uint64, uint64, error)
 type RuntimeStatSampler struct {
 	clock *hlc.Clock
 
+	startTimeNanos int64
 	// The last sampled values of some statistics are kept only to compute
 	// derivative statistics.
 	lastNow       int64
@@ -87,12 +89,14 @@ type RuntimeStatSampler struct {
 	CPUSysNS       *metric.Gauge
 	CPUSysPercent  *metric.GaugeFloat64
 	Rss            *metric.Gauge
+	Uptime         *metric.Gauge // We use a gauge to be able to call Update.
 }
 
 // MakeRuntimeStatSampler constructs a new RuntimeStatSampler object.
 func MakeRuntimeStatSampler(clock *hlc.Clock) RuntimeStatSampler {
 	return RuntimeStatSampler{
 		clock:          clock,
+		startTimeNanos: clock.PhysicalNow(),
 		CgoCalls:       metric.NewGauge(metaCgoCalls),
 		Goroutines:     metric.NewGauge(metaGoroutines),
 		GoAllocBytes:   metric.NewGauge(metaGoAllocBytes),
@@ -107,6 +111,7 @@ func MakeRuntimeStatSampler(clock *hlc.Clock) RuntimeStatSampler {
 		CPUSysNS:       metric.NewGauge(metaCPUSysNS),
 		CPUSysPercent:  metric.NewGaugeFloat64(metaCPUSysPercent),
 		Rss:            metric.NewGauge(metaRSS),
+		Uptime:         metric.NewGauge(metaUptime),
 	}
 }
 
@@ -198,4 +203,5 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 	rsr.CPUSysNS.Update(newStime)
 	rsr.CPUSysPercent.Update(sPerc)
 	rsr.Rss.Update(int64(mem.Resident))
+	rsr.Uptime.Update((now - rsr.startTimeNanos) / 1e9)
 }

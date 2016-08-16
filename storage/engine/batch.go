@@ -56,7 +56,7 @@ const (
 // write-ahead-log, the sequence number is 0. The "fixed32" format is little
 // endian.
 //
-// The keys encoded into the batch or MVCC keys: a string key with a timestamp
+// The keys encoded into the batch are MVCC keys: a string key with a timestamp
 // suffix. MVCC keys are encoded as:
 //
 //   <key>[<wall_time>[<logical>]]<#timestamp-bytes>
