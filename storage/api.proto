@@ -18,6 +18,7 @@ syntax = "proto3";
 package cockroach.storage;
 option go_package = "storage";
 
+import "cockroach/roachpb/internal_raft.proto";
 import "cockroach/roachpb/metadata.proto";
 import weak "gogoproto/gogo.proto";
 
@@ -68,4 +69,37 @@ message ReservationResponse {
 service Stores {
   rpc PollFrozen (PollFrozenRequest) returns (PollFrozenResponse) {}
   rpc Reserve(ReservationRequest) returns (ReservationResponse) {}
+}
+
+// A ReportChecksumRequest sends the result of a ComputeChecksum operation (see
+// cockroach/roachpb/api.proto) to the initiator of the consistency check. The
+// request blocks until the initiator's checksum is ready.
+message ReportChecksumRequest {
+  roachpb.ReplicaDescriptor to_replica = 1 [(gogoproto.nullable) = false];
+  roachpb.ReplicaDescriptor from_replica = 2 [(gogoproto.nullable) = false];
+
+  // checksum_id identifies the corresponding ComputeChecksumRequest.
+  bytes checksum_id = 3 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ChecksumID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
+
+  // The requester's checksum. The algorithm is identified by the version field
+  // of the corresponding ComputeChecksumRequest.
+  bytes checksum = 4;
+}
+
+message ReportChecksumResponse {
+  // The initiator's checksum.
+  bytes checksum = 1;
+
+  // The initiator's snapshot, set if the ComputeChecksumRequest had snapshot =
+  // true and the requester reported a different checksum. In this case, the
+  // requester, which is inconsistent, logs a diff and commits suicide.
+  roachpb.RaftSnapshotData snapshot = 2;
+}
+
+// Replicas is a wrapper for internal RPCs that operate only on the replicas of
+// a node.
+service Replicas {
+  rpc ReportChecksum(ReportChecksumRequest) returns (ReportChecksumResponse) {}
 }
