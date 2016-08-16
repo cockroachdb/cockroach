@@ -1948,6 +1948,10 @@ func TestReplicaTooOldGC(t *testing.T) {
 	// replicas and determine it needs to be GC'd.
 	mtc.restartStore(3)
 
+	// Because we lazily initialize Raft groups, we have to force the Raft group
+	// to get created in order to get the replica talking to the other replicas.
+	mtc.stores[3].EnqueueRaftUpdateCheck(rangeID)
+
 	util.SucceedsSoon(t, func() error {
 		replica, err := mtc.stores[3].GetReplica(rangeID)
 		if err != nil {
@@ -1958,6 +1962,42 @@ func TestReplicaTooOldGC(t *testing.T) {
 		}
 		return errors.Errorf("found %s, waiting for it to be GC'd", replica)
 	})
+}
+
+func TestReplicaLazyLoad(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sc := storage.TestStoreContext()
+	sc.RaftTickInterval = time.Millisecond
+	sc.TestingKnobs.DisableScanner = true
+	mtc := multiTestContext{storeContext: &sc}
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+
+	mtc.stopStore(0)
+	mtc.restartStore(0)
+
+	// Wait for a bunch of raft ticks.
+	tickNanos := mtc.stores[0].Metrics().RaftTickingDurationNanos.Count
+	var oldNanos int64
+	for i := 0; i < 10; i++ {
+		for {
+			nanos := tickNanos()
+			if oldNanos != nanos {
+				oldNanos = nanos
+				break
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
+
+	replica, err := mtc.stores[0].GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replica.RaftStatus() != nil {
+		t.Fatalf("expected replica Raft group to be uninitialized")
+	}
 }
 
 func TestReplicateReAddAfterDown(t *testing.T) {
