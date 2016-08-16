@@ -190,11 +190,31 @@ service Status {
       body: "*"
     };
   }
-  rpc Stacks(StacksRequest) returns (JSONResponse) {}
-  rpc Metrics(MetricsRequest) returns (JSONResponse) {}
-  rpc LogFilesList(LogFilesListRequest) returns (LogFilesListResponse) {}
-  rpc LogFile(LogFileRequest) returns (LogEntriesResponse) {}
-  rpc Logs(LogsRequest) returns (LogEntriesResponse) {}
+  rpc Stacks(StacksRequest) returns (JSONResponse) {
+    option (google.api.http) = {
+      get: "/_status/stacks/{node_id}"
+    };
+  }
+  rpc Metrics(MetricsRequest) returns (JSONResponse) {
+    option (google.api.http) = {
+      get: "/_status/metrics/{node_id}"
+    };
+  }
+  rpc LogFilesList(LogFilesListRequest) returns (LogFilesListResponse) {
+    option (google.api.http) = {
+      get: "/_status/logfiles/{node_id}"
+    };
+  }
+  rpc LogFile(LogFileRequest) returns (LogEntriesResponse) {
+    option (google.api.http) = {
+      get: "/_status/logfiles/{node_id}/{file}"
+    };
+  }
+  rpc Logs(LogsRequest) returns (LogEntriesResponse) {
+    option (google.api.http) = {
+      get: "/_status/logs/{node_id}"
+    };
+  }
 }
 
 // PrettySpan holds a pretty-printed key range.
