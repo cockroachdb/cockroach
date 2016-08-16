@@ -1437,6 +1437,11 @@ func splitTriggerPostCommit(
 	r.store.replicateQueue.MaybeAdd(r, now)
 	r.store.replicateQueue.MaybeAdd(rightRng, now)
 
+	// After a split, the newly created right-hand side range needs to be
+	// enqueued for a Raft update check which will cause the creation of the
+	// Replica's Raft group.
+	r.store.enqueueRaftUpdateCheck(rightRng.RangeID)
+
 	// To avoid leaving the RHS range unavailable as it waits to elect
 	// its leader, one (and only one) of the nodes should start an
 	// election as soon as the split is processed.
@@ -2435,21 +2440,23 @@ func (s *Store) processRaft() {
 				tickerStart := timeutil.Now()
 				s.processRaftMu.Lock()
 				s.mu.Lock()
-				for _, r := range s.mu.replicas {
-					if err := r.tick(); err != nil {
+				pending := make([]roachpb.RangeID, 0, len(s.mu.replicas))
+				for id, r := range s.mu.replicas {
+					if exists, err := r.tick(); err != nil {
 						log.Error(context.TODO(), err)
+					} else if exists {
+						pending = append(pending, id)
 					}
 				}
-				// Enqueue all ranges for readiness checks. Note that we
-				// could not hold the pendingRaftGroups lock during the
-				// previous loop because of lock ordering constraints with
-				// r.tick().
+				s.mu.Unlock()
+				// Enqueue all pending ranges for readiness checks. Note that we could
+				// not hold the pendingRaftGroups lock during the previous loop because
+				// of lock ordering constraints with r.tick().
 				s.pendingRaftGroups.Lock()
-				for rangeID := range s.mu.replicas {
+				for _, rangeID := range pending {
 					s.pendingRaftGroups.value[rangeID] = struct{}{}
 				}
 				s.pendingRaftGroups.Unlock()
-				s.mu.Unlock()
 				s.processRaftMu.Unlock()
 				s.metrics.RaftTickingDurationNanos.Inc(timeutil.Since(tickerStart).Nanoseconds())
 
