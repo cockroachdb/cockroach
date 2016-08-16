@@ -263,29 +263,30 @@ func Restore(ctx context.Context, db client.DB, base string, table string, overw
 
 	// TODO(dan): This uses one giant transaction for the entire restore, which
 	// works for small datasets, but not for big ones.
-	txn := client.NewTxn(ctx, db)
-	if len(table) > 0 {
-		found := false
-		for _, desc := range backupDesc.SQL {
-			if t := desc.GetTable(); t != nil && t.Name == table {
-				if err := restoreTable(ctx, sst, txn, t, overwrite); err != nil {
-					return err
-				}
-				found = true
-				break
-			}
-		}
-		if !found {
-			return errors.Errorf("table not found: %s", table)
-		}
-	} else {
-		for _, desc := range backupDesc.SQL {
-			if t := desc.GetTable(); t != nil && t.ParentID != keys.SystemDatabaseID {
-				if err := restoreTable(ctx, sst, txn, t, overwrite); err != nil {
-					return err
+	return db.Txn(ctx, func(txn *client.Txn) error {
+		if len(table) > 0 {
+			found := false
+			for _, desc := range backupDesc.SQL {
+				if t := desc.GetTable(); t != nil && t.Name == table {
+					if err := restoreTable(ctx, sst, txn, t, overwrite); err != nil {
+						return err
+					}
+					found = true
+					break
 				}
 			}
+			if !found {
+				return errors.Errorf("table not found: %s", table)
+			}
+		} else {
+			for _, desc := range backupDesc.SQL {
+				if t := desc.GetTable(); t != nil && t.ParentID != keys.SystemDatabaseID {
+					if err := restoreTable(ctx, sst, txn, t, overwrite); err != nil {
+						return err
+					}
+				}
+			}
 		}
-	}
-	return txn.CommitOrCleanup()
+		return nil
+	})
 }
