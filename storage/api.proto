@@ -19,6 +19,7 @@ package cockroach.storage;
 option go_package = "storage";
 
 import "cockroach/roachpb/metadata.proto";
+import weak "cockroach/roachpb/internal_raft.proto";
 import weak "gogoproto/gogo.proto";
 
 // StoreRequestHeader locates a Store on a Node.
@@ -68,4 +69,42 @@ message ReservationResponse {
 service Stores {
   rpc PollFrozen (PollFrozenRequest) returns (PollFrozenResponse) {}
   rpc Reserve(ReservationRequest) returns (ReservationResponse) {}
+}
+
+// A CollectChecksumRequest asks the addressed Replica for the result of a
+// ComputeChecksum() operation (see cockroach/roachpb/api.proto). The request
+// blocks until the checksum is ready.
+message CollectChecksumRequest {
+  roachpb.ReplicaDescriptor replica = 1 [ (gogoproto.nullable = false) ];
+
+  // checksum_id identifies the corresponding ComputeChecksumRequest.
+  bytes checksum_id = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "ChecksumID",
+    (gogoproto.customtype) =
+        "github.com/cockroachdb/cockroach/util/uuid.UUID"
+  ];
+
+  // The requester's checksum, so that the respondent can log an inconsistency.
+  // The checksum algorithm is specified in the corresponding
+  // ComputeChecksumRequest (version).
+  bytes checksum = 3 [ (gogoproto.nullable) = false ];
+
+  // The requester's snapshot, so that the respondent can log a diff. Set if the
+  // ComputeChecksumRequest had snapshot = true. In this mode, inconsistent
+  // respondents commit suicide.
+  RaftSnapshotData snapshot = 4;
+}
+
+message CollectChecksumResponse {
+  // The respondent's checksum, so that the requester can log an inconsistency.
+  bytes checksum = 1 [ (gogoproto.nullable) = false ];
+
+  // The respondent's snapshot, so that the requester can log a diff. Set if the
+  // ComputeChecksumRequest had snapshot = true.
+  RaftSnapshotData snapshot = 2;
+}
+
+service Replicas {
+  rpc CollectChecksum(CollectChecksumRequest) returns (CheckChecksumResponse) {}
 }
