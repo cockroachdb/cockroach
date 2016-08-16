@@ -499,8 +499,9 @@ func (s *Server) Start() error {
 	s.mux.HandleFunc(debugEndpoint, http.HandlerFunc(handleDebug))
 	s.mux.Handle(adminEndpoint, gwMux)
 	s.mux.Handle(ts.URLPrefix, gwMux)
-	s.mux.Handle(statusPrefix, s.status)
-	s.mux.Handle(healthEndpoint, s.status)
+	s.mux.Handle(statusPrefix, gwMux)
+	s.mux.Handle("/health", gwMux)
+	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 
 	if err := sdnotify.Ready(); err != nil {
 		log.Errorf(context.TODO(), "failed to signal readiness using systemd protocol: %s", err)

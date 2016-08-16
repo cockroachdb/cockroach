@@ -2886,27 +2886,37 @@
                                 "Stacks": {
                                     "request": "StacksRequest",
                                     "response": "JSONResponse",
-                                    "options": {}
+                                    "options": {
+                                        "(google.api.http).get": "/_status/stacks/{node_id}"
+                                    }
                                 },
                                 "Metrics": {
                                     "request": "MetricsRequest",
                                     "response": "JSONResponse",
-                                    "options": {}
+                                    "options": {
+                                        "(google.api.http).get": "/_status/metrics/{node_id}"
+                                    }
                                 },
                                 "LogFilesList": {
                                     "request": "LogFilesListRequest",
                                     "response": "LogFilesListResponse",
-                                    "options": {}
+                                    "options": {
+                                        "(google.api.http).get": "/_status/logfiles/{node_id}"
+                                    }
                                 },
                                 "LogFile": {
                                     "request": "LogFileRequest",
                                     "response": "LogEntriesResponse",
-                                    "options": {}
+                                    "options": {
+                                        "(google.api.http).get": "/_status/logfiles/{node_id}/{file}"
+                                    }
                                 },
                                 "Logs": {
                                     "request": "LogsRequest",
                                     "response": "LogEntriesResponse",
-                                    "options": {}
+                                    "options": {
+                                        "(google.api.http).get": "/_status/logs/{node_id}"
+                                    }
                                 }
                             }
                         }

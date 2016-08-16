@@ -109,12 +109,12 @@ func TestSSLEnforcement(t *testing.T) {
 		{"GET", debugEndpoint + "vars", nil, insecureContext, true, 308},
 
 		// /_status/nodes: server.statusServer: no auth.
-		{"GET", statusNodesPrefix, nil, rootCertsContext, true, http.StatusOK},
-		{"GET", statusNodesPrefix, nil, nodeCertsContext, true, http.StatusOK},
-		{"GET", statusNodesPrefix, nil, testCertsContext, true, http.StatusOK},
-		{"GET", statusNodesPrefix, nil, noCertsContext, true, http.StatusOK},
+		{"GET", "/_status/nodes", nil, rootCertsContext, true, http.StatusOK},
+		{"GET", "/_status/nodes", nil, nodeCertsContext, true, http.StatusOK},
+		{"GET", "/_status/nodes", nil, testCertsContext, true, http.StatusOK},
+		{"GET", "/_status/nodes", nil, noCertsContext, true, http.StatusOK},
 		// TODO(tamird): s/308/http.StatusPermanentRedirect/ when it exists.
-		{"GET", statusNodesPrefix, nil, insecureContext, true, 308},
+		{"GET", "/_status/nodes", nil, insecureContext, true, 308},
 
 		// /ts/: ts.Server: no auth.
 		{"GET", ts.URLPrefix, nil, rootCertsContext, true, http.StatusNotFound},
