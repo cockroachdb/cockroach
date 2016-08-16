@@ -330,7 +330,7 @@ func (src *dataSourceInfo) expandStar(
 	v parser.VarName, qvals qvalMap,
 ) (columns []ResultColumn, exprs []parser.TypedExpr, err error) {
 	if len(src.sourceColumns) == 0 {
-		return nil, nil, fmt.Errorf("cannot use \"%s\" without a FROM clause", v)
+		return nil, nil, fmt.Errorf("cannot use %q without a FROM clause", v)
 	}
 
 	colSel := func(idx int) {
@@ -402,7 +402,7 @@ func (p *planDataSource) findUnaliasedColumn(
 		col := planColumns[idx]
 		if sqlbase.ReNormalizeName(col.Name) == colName {
 			if colIdx != invalidColIdx {
-				return invalidColIdx, fmt.Errorf("column reference \"%s\" is ambiguous", parser.AsString(c))
+				return invalidColIdx, fmt.Errorf("column reference %q is ambiguous", c)
 			}
 			colIdx = idx
 		}
