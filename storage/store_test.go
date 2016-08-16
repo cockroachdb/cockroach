@@ -324,9 +324,6 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error re-adding same range")
 	}
-	if _, ok := err.(rangeAlreadyExists); !ok {
-		t.Fatalf("expected rangeAlreadyExists error; got %s", err)
-	}
 	// Try to remove range 1 again.
 	if err := store.RemoveReplica(rng1, *rng1.Desc(), true); err == nil {
 		t.Fatal("expected error re-removing same range")
@@ -585,7 +582,7 @@ func TestHasOverlappingReplica(t *testing.T) {
 
 	for i, test := range testCases {
 		rngDesc := &roachpb.RangeDescriptor{StartKey: test.start, EndKey: test.end}
-		if r := store.hasOverlappingReplicaLocked(rngDesc); r != test.exp {
+		if r := store.hasOverlappingKeyRangeLocked(rngDesc); r != test.exp {
 			t.Errorf("%d: expected range %v; got %v", i, test.exp, r)
 		}
 	}
@@ -649,7 +646,7 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 	store.mu.uninitReplicas[newRangeID] = r
 	store.mu.Unlock()
 
-	expectedResult = rangeAlreadyExists{r}.Error()
+	expectedResult = ".*cannot processRangeDescriptorUpdate.*"
 	if err := store.processRangeDescriptorUpdate(r); !testutils.IsError(err, expectedResult) {
 		t.Errorf("expected processRangeDescriptorUpdate with overlapping keys to fail, got %v", err)
 	}
@@ -2147,4 +2144,101 @@ func TestStoreGCThreshold(t *testing.T) {
 	}
 
 	assertThreshold(threshold)
+}
+
+func TestStoreRangePlaceholders(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+	s := tc.store
+
+	s.mu.Lock()
+	numPlaceholders := len(s.mu.replicaPlaceholders)
+	s.mu.Unlock()
+
+	if numPlaceholders != 0 {
+		t.Fatal("new store should have zero replica placeholders")
+	}
+
+	// Clobber the existing range so we can test nonoverlapping placeholders.
+	rng1, err := s.GetReplica(1)
+	if err != nil {
+		t.Error(err)
+	}
+	if err := s.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+		t.Error(err)
+	}
+
+	repID := roachpb.RangeID(2)
+	rep := createReplica(s, repID, roachpb.RKeyMin, roachpb.RKey("c"))
+	if err := s.AddReplicaTest(rep); err != nil {
+		t.Fatal(err)
+	}
+
+	placeholder1 := &ReplicaPlaceholder{
+		rangeDesc: roachpb.RangeDescriptor{
+			RangeID:  roachpb.RangeID(7),
+			StartKey: roachpb.RKey("c"),
+			EndKey:   roachpb.RKey("d"),
+		},
+	}
+	placeholder2 := &ReplicaPlaceholder{
+		rangeDesc: roachpb.RangeDescriptor{
+			RangeID:  roachpb.RangeID(8),
+			StartKey: roachpb.RKey("d"),
+			EndKey:   roachpb.RKeyMax,
+		},
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Test that simple insertion works.
+	if err := s.addPlaceholderLocked(placeholder1); err != nil {
+		t.Fatalf("could not add placeholder to empty store, got %s", err)
+	}
+	if err := s.addPlaceholderLocked(placeholder2); err != nil {
+		t.Fatalf("could not add non-overlapping placeholder, got %s", err)
+	}
+
+	// Test that simple deletion works.
+	if err := s.removePlaceholderLocked(placeholder1.rangeDesc.RangeID); err != nil {
+		t.Fatalf("could not remove placeholder that was present, got %s", err)
+	}
+
+	// Test cannot double insert the same placeholder.
+	if err := s.addPlaceholderLocked(placeholder1); err != nil {
+		t.Fatalf("could not re-add placeholder after removal, got %s", err)
+	}
+	if err := s.addPlaceholderLocked(placeholder1); !testutils.IsError(err, ".*overlaps with existing KeyRange.*") {
+		t.Fatalf("should not be able to add ReplicaPlaceholder for the same key twice, got: %s", err)
+	}
+
+	// Test cannot double delete a placeholder.
+	if err := s.removePlaceholderLocked(placeholder1.rangeDesc.RangeID); err != nil {
+		t.Fatalf("could not remove placeholder that was present, got %s", err)
+	}
+	if err := s.removePlaceholderLocked(placeholder1.rangeDesc.RangeID); !testutils.IsError(err, "cannot remove placeholder for RangeID \\d+; Placeholder doesn't exist") {
+		t.Fatalf("could not remove placeholder that was present, got %s", err)
+	}
+
+	// This placeholder overlaps with an existing replica.
+	placeholder1 = &ReplicaPlaceholder{
+		rangeDesc: roachpb.RangeDescriptor{
+			RangeID:  repID,
+			StartKey: roachpb.RKeyMin,
+			EndKey:   roachpb.RKey("c"),
+		},
+	}
+
+	// Test that placeholder cannot clobber existing replica.
+	if err := s.addPlaceholderLocked(placeholder1); !testutils.IsError(err, ".*overlaps with existing KeyRange.*") {
+		t.Fatalf("should not be able to add ReplicaPlaceholder when Replica already exists, got: %s", err)
+	}
+
+	// Test that Placeholder deletion doesn't delete replicas.
+	if err := s.removePlaceholderLocked(repID); !testutils.IsError(err, "cannot remove placeholder for RangeID \\d+; Placeholder doesn't exist") {
+		t.Fatalf("should not be able to process removeReplicaPlaceholder for a RangeID where a Replica exists, got: %s", err)
+	}
 }
