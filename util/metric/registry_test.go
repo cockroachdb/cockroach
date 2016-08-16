@@ -21,14 +21,23 @@ import (
 	"time"
 )
 
+func (r *Registry) findMetricByName(name string) Iterable {
+	for _, metric := range r.tracked {
+		if metric.GetName() == name {
+			return metric
+		}
+	}
+	return nil
+}
+
 // getCounter returns the Counter in this registry with the given name. If a
 // Counter with this name is not present (including if a non-Counter Iterable is
 // registered with the name), nil is returned.
 func (r *Registry) getCounter(name string) *Counter {
 	r.Lock()
 	defer r.Unlock()
-	iterable, ok := r.tracked[name]
-	if !ok {
+	iterable := r.findMetricByName(name)
+	if iterable == nil {
 		return nil
 	}
 	counter, ok := iterable.(*Counter)
@@ -44,8 +53,8 @@ func (r *Registry) getCounter(name string) *Counter {
 func (r *Registry) getGauge(name string) *Gauge {
 	r.Lock()
 	defer r.Unlock()
-	iterable, ok := r.tracked[name]
-	if !ok {
+	iterable := r.findMetricByName(name)
+	if iterable == nil {
 		return nil
 	}
 	gauge, ok := iterable.(*Gauge)
@@ -61,8 +70,8 @@ func (r *Registry) getGauge(name string) *Gauge {
 func (r *Registry) getRate(name string) *Rate {
 	r.Lock()
 	defer r.Unlock()
-	iterable, ok := r.tracked[name]
-	if !ok {
+	iterable := r.findMetricByName(name)
+	if iterable == nil {
 		return nil
 	}
 	rate, ok := iterable.(*Rate)
