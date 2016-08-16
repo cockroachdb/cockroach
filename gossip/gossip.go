@@ -211,10 +211,12 @@ func New(rpcContext *rpc.Context, grpcServer *grpc.Server, resolvers []resolver.
 	registry.AddMetric(g.outgoing.gauge)
 	g.SetResolvers(resolvers)
 
+	g.mu.Lock()
 	// Add ourselves as a SystemConfig watcher.
-	g.is.registerCallback(KeySystemConfig, g.updateSystemConfig)
+	g.mu.is.registerCallback(KeySystemConfig, g.updateSystemConfig)
 	// Add ourselves as a node descriptor watcher.
-	g.is.registerCallback(MakePrefixPattern(KeyNodeIDPrefix), g.updateNodeAddress)
+	g.mu.is.registerCallback(MakePrefixPattern(KeyNodeIDPrefix), g.updateNodeAddress)
+	g.mu.Unlock()
 
 	RegisterGossipServer(grpcServer, g.server)
 
@@ -230,17 +232,17 @@ func (g *Gossip) GetNodeMetrics() *Metrics {
 func (g *Gossip) GetNodeID() roachpb.NodeID {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return g.is.NodeID
+	return g.mu.is.NodeID
 }
 
 // SetNodeID sets the infostore's node ID.
 func (g *Gossip) SetNodeID(nodeID roachpb.NodeID) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if g.is.NodeID != 0 && g.is.NodeID != nodeID {
-		panic(fmt.Sprintf("different node IDs were set for the same gossip instance (%d, %d)", g.is.NodeID, nodeID))
+	if g.mu.is.NodeID != 0 && g.mu.is.NodeID != nodeID {
+		panic(fmt.Sprintf("different node IDs were set for the same gossip instance (%d, %d)", g.mu.is.NodeID, nodeID))
 	}
-	g.is.NodeID = nodeID
+	g.mu.is.NodeID = nodeID
 }
 
 // ResetNodeID resets the infostore's node ID.
@@ -248,7 +250,7 @@ func (g *Gossip) SetNodeID(nodeID roachpb.NodeID) {
 func (g *Gossip) ResetNodeID(nodeID roachpb.NodeID) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.is.NodeID = nodeID
+	g.mu.is.NodeID = nodeID
 }
 
 // SetNodeDescriptor adds the node descriptor to the gossip network
@@ -312,7 +314,7 @@ func (g *Gossip) SetStorage(storage Storage) error {
 	}
 	for _, addr := range storedBI.Addresses {
 		// If the address is new, and isn't our own address, add it.
-		if _, ok := existing[makeKey(addr)]; !ok && addr != g.is.NodeAddr {
+		if _, ok := existing[makeKey(addr)]; !ok && addr != g.mu.is.NodeAddr {
 			g.maybeAddBootstrapAddress(addr)
 		}
 	}
@@ -388,7 +390,7 @@ func (g *Gossip) LogStatus() {
 	g.mu.Lock()
 	n := len(g.nodeDescs)
 	status := "ok"
-	if g.is.getInfo(KeySentinel) == nil {
+	if g.mu.is.getInfo(KeySentinel) == nil {
 		status = "stalled"
 	}
 	g.mu.Unlock()
@@ -470,9 +472,10 @@ func (g *Gossip) maybeAddBootstrapAddress(addr util.UnresolvedAddr) bool {
 	return false
 }
 
-// maybeCleanupBootstrapAddresses cleans up the stored bootstrap
-// addresses to include only those currently available via gossip.
-func (g *Gossip) maybeCleanupBootstrapAddresses(ctx context.Context) {
+// maybeCleanupBootstrapAddresses cleans up the stored bootstrap addresses to
+// include only those currently available via gossip. The gossip mutex must
+// be held by the caller.
+func (g *Gossip) maybeCleanupBootstrapAddressesLocked(ctx context.Context) {
 	if g.storage == nil || g.hasCleanedBS {
 		return
 	}
@@ -486,12 +489,12 @@ func (g *Gossip) maybeCleanupBootstrapAddresses(ctx context.Context) {
 	g.resolversTried = map[int]struct{}{}
 
 	var desc roachpb.NodeDescriptor
-	if err := g.is.visitInfos(func(key string, i *Info) error {
+	if err := g.mu.is.visitInfos(func(key string, i *Info) error {
 		if strings.HasPrefix(key, KeyNodeIDPrefix) {
 			if err := i.Value.GetProto(&desc); err != nil {
 				return err
 			}
-			if desc.Address == g.is.NodeAddr {
+			if desc.Address == g.mu.is.NodeAddr {
 				return nil
 			}
 			g.maybeAddResolver(desc.Address)
@@ -551,11 +554,11 @@ func (g *Gossip) updateNodeAddress(_ string, content roachpb.Value) {
 	// Recompute max peers based on size of network and set the max
 	// sizes for incoming and outgoing node sets.
 	maxPeers := g.maxPeers(len(g.nodeDescs))
-	g.incoming.setMaxSize(maxPeers)
+	g.mu.incoming.setMaxSize(maxPeers)
 	g.outgoing.setMaxSize(maxPeers)
 
 	// Skip if it's our own address.
-	if desc.Address == g.is.NodeAddr {
+	if desc.Address == g.mu.is.NodeAddr {
 		return
 	}
 
@@ -587,7 +590,7 @@ func (g *Gossip) getNodeDescriptorLocked(nodeID roachpb.NodeID) (*roachpb.NodeDe
 	nodeIDKey := MakeNodeIDKey(nodeID)
 
 	// We can't use GetInfoProto here because that method grabs the lock.
-	if i := g.is.getInfo(nodeIDKey); i != nil {
+	if i := g.mu.is.getInfo(nodeIDKey); i != nil {
 		if err := i.Value.Verify([]byte(nodeIDKey)); err != nil {
 			return nil, err
 		}
@@ -618,9 +621,9 @@ func (g *Gossip) getNodeIDAddressLocked(nodeID roachpb.NodeID) (*util.Unresolved
 func (g *Gossip) AddInfo(key string, val []byte, ttl time.Duration) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	err := g.is.addInfo(key, g.is.newInfo(val, ttl))
+	err := g.mu.is.addInfo(key, g.mu.is.newInfo(val, ttl))
 	if err == nil {
-		g.checkHasConnected()
+		g.checkHasConnectedLocked()
 	}
 	return err
 }
@@ -639,7 +642,7 @@ func (g *Gossip) AddInfoProto(key string, msg proto.Message, ttl time.Duration) 
 // key does not exist or has expired.
 func (g *Gossip) GetInfo(key string) ([]byte, error) {
 	g.mu.Lock()
-	i := g.is.getInfo(key)
+	i := g.mu.is.getInfo(key)
 	g.mu.Unlock()
 
 	if i != nil {
@@ -668,7 +671,7 @@ func (g *Gossip) GetInfoStatus() InfoStatus {
 	is := InfoStatus{
 		Infos: make(map[string]Info),
 	}
-	for k, v := range g.is.Infos {
+	for k, v := range g.mu.is.Infos {
 		is.Infos[k] = *protoutil.Clone(v).(*Info)
 	}
 	return is
@@ -689,7 +692,7 @@ func (g *Gossip) RegisterCallback(pattern string, method Callback) func() {
 	}
 
 	g.mu.Lock()
-	unregister := g.is.registerCallback(pattern, method)
+	unregister := g.mu.is.registerCallback(pattern, method)
 	g.mu.Unlock()
 	return func() {
 		g.mu.Lock()
@@ -757,7 +760,7 @@ func (g *Gossip) updateSystemConfig(key string, content roachpb.Value) {
 func (g *Gossip) Incoming() []roachpb.NodeID {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return g.incoming.asSlice()
+	return g.mu.incoming.asSlice()
 }
 
 // Outgoing returns a slice of outgoing gossip client connection
@@ -777,7 +780,7 @@ func (g *Gossip) Outgoing() []roachpb.NodeID {
 func (g *Gossip) MaxHops() uint32 {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	_, maxHops := g.is.mostDistant()
+	_, maxHops := g.mu.is.mostDistant()
 	return maxHops
 }
 
@@ -798,17 +801,17 @@ func (g *Gossip) Start(addr net.Addr) {
 	g.manage()           // manage gossip clients
 }
 
-// hasIncoming returns whether the server has an incoming gossip
+// hasIncomingLocked returns whether the server has an incoming gossip
 // client matching the provided node ID. Mutex should be held by
 // caller.
-func (g *Gossip) hasIncoming(nodeID roachpb.NodeID) bool {
-	return g.incoming.hasNode(nodeID)
+func (g *Gossip) hasIncomingLocked(nodeID roachpb.NodeID) bool {
+	return g.mu.incoming.hasNode(nodeID)
 }
 
-// hasOutgoing returns whether the server has an outgoing gossip
+// hasOutgoingLocked returns whether the server has an outgoing gossip
 // client matching the provided node ID. Mutex should be held by
 // caller.
-func (g *Gossip) hasOutgoing(nodeID roachpb.NodeID) bool {
+func (g *Gossip) hasOutgoingLocked(nodeID roachpb.NodeID) bool {
 	return g.outgoing.hasNode(nodeID)
 }
 
@@ -855,11 +858,11 @@ func (g *Gossip) bootstrap() {
 				g.mu.Lock()
 				defer g.mu.Unlock()
 				haveClients := g.outgoing.len() > 0
-				haveSentinel := g.is.getInfo(KeySentinel) != nil
+				haveSentinel := g.mu.is.getInfo(KeySentinel) != nil
 				if !haveClients || !haveSentinel {
 					// Try to get another bootstrap address from the resolvers.
 					if addr := g.getNextBootstrapAddress(); addr != nil {
-						g.startClient(addr)
+						g.startClient(addr, g.mu.is.NodeID)
 					} else {
 						// We couldn't start a client, signal that we're stalled so that
 						// we'll retry.
@@ -918,7 +921,7 @@ func (g *Gossip) manage() {
 				func() {
 					g.mu.Lock()
 					if !g.outgoing.hasSpace() {
-						leastUsefulID := g.is.leastUseful(g.outgoing)
+						leastUsefulID := g.mu.is.leastUseful(g.outgoing)
 
 						if c := g.findClient(func(c *client) bool {
 							return c.peerID == leastUsefulID
@@ -965,11 +968,12 @@ func (g *Gossip) tightenNetwork(distantNodeID roachpb.NodeID) {
 	defer g.mu.Unlock()
 	if g.outgoing.hasSpace() {
 		if nodeAddr, err := g.getNodeIDAddressLocked(distantNodeID); err != nil {
-			log.Errorf(context.TODO(), "node %d: unable to get address for node %d: %s", g.is.NodeID, distantNodeID, err)
+			log.Errorf(context.TODO(), "node %d: unable to get address for node %d: %s",
+				g.mu.is.NodeID, distantNodeID, err)
 		} else {
 			log.Infof(context.TODO(), "node %d: starting client to distant node %d to tighten network graph",
-				g.is.NodeID, distantNodeID)
-			g.startClient(nodeAddr)
+				g.mu.is.NodeID, distantNodeID)
+			g.startClient(nodeAddr, g.mu.is.NodeID)
 		}
 	}
 }
@@ -981,7 +985,7 @@ func (g *Gossip) doDisconnected(c *client) {
 
 	// If the client was disconnected with a forwarding address, connect now.
 	if c.forwardAddr != nil {
-		g.startClient(c.forwardAddr)
+		g.startClient(c.forwardAddr, g.mu.is.NodeID)
 	}
 	g.maybeSignalStalledLocked()
 }
@@ -990,11 +994,11 @@ func (g *Gossip) doDisconnected(c *client) {
 // try another resolver.
 func (g *Gossip) maybeSignalStalledLocked() {
 	ctx := context.TODO()
-	if g.is.getInfo(KeySentinel) != nil && g.outgoing.len()+g.incoming.len() > 0 {
+	if g.mu.is.getInfo(KeySentinel) != nil && g.outgoing.len()+g.mu.incoming.len() > 0 {
 		// When gossip is connected, the set of bootstrap addresses is
 		// potentially cleaned up to remove ones which haven't yet been
 		// gossiped, and may no longer be valid.
-		g.maybeCleanupBootstrapAddresses(ctx)
+		g.maybeCleanupBootstrapAddressesLocked(ctx)
 		if g.stalled {
 			log.Infof(ctx, "node has connected to cluster via gossip")
 			g.stalled = false
@@ -1004,7 +1008,7 @@ func (g *Gossip) maybeSignalStalledLocked() {
 	// We employ the stalled boolean to avoid filling logs with warnings.
 	if !g.stalled {
 		g.stalled = true
-		g.warnAboutStall(ctx)
+		g.warnAboutStallLocked(ctx)
 	}
 	g.signalStalledLocked()
 }
@@ -1018,16 +1022,16 @@ func (g *Gossip) signalStalledLocked() {
 	}
 }
 
-// warnAboutStall attempts to diagnose the cause of a gossip network
+// warnAboutStallLocked attempts to diagnose the cause of a gossip network
 // not being connected to the sentinel. This could happen in a network
 // partition, or because of misconfiguration. It's impossible to tell,
 // but we can warn appropriately. If there are no incoming or outgoing
 // connections, we warn about the --join flag being set. If we've
 // connected, and all resolvers have been tried, we warn about either
 // the first range not being available or else possible the cluster
-// never having been initialized.
-func (g *Gossip) warnAboutStall(ctx context.Context) {
-	if g.outgoing.len()+g.incoming.len() == 0 {
+// never having been initialized. Mutex must be held by the caller.
+func (g *Gossip) warnAboutStallLocked(ctx context.Context) {
+	if g.outgoing.len()+g.mu.incoming.len() == 0 {
 		log.Warningf(ctx, "not connected to cluster; use --join to specify a connected node")
 	} else if len(g.resolversTried) == len(g.resolvers) {
 		log.Warningf(ctx, "first range unavailable or cluster not initialized")
@@ -1036,15 +1040,15 @@ func (g *Gossip) warnAboutStall(ctx context.Context) {
 	}
 }
 
-// checkHasConnected checks whether this gossip instance is connected
+// checkHasConnectedLocked checks whether this gossip instance is connected
 // to enough of the gossip network that it has received the cluster ID
 // gossip info. Once connected, the "Connected" channel is closed to
 // signal to any waiters that the gossip instance is ready. The gossip
 // mutex should be held by caller.
-func (g *Gossip) checkHasConnected() {
+func (g *Gossip) checkHasConnectedLocked() {
 	// Check if we have the cluster ID gossip to start.
 	// If so, then mark ourselves as trivially connected to the gossip network.
-	if !g.hasConnected && g.is.getInfo(KeyClusterID) != nil {
+	if !g.hasConnected && g.mu.is.getInfo(KeyClusterID) != nil {
 		g.hasConnected = true
 		close(g.Connected)
 	}
@@ -1053,12 +1057,12 @@ func (g *Gossip) checkHasConnected() {
 // startClient launches a new client connected to remote address.
 // The client is added to the outgoing address set and launched in
 // a goroutine.
-func (g *Gossip) startClient(addr net.Addr) {
+func (g *Gossip) startClient(addr net.Addr, nodeID roachpb.NodeID) {
 	c := newClient(addr, g.serverMetrics)
 	g.clientsMu.Lock()
 	g.clientsMu.clients = append(g.clientsMu.clients, c)
+	c.start(g, g.disconnected, g.rpcContext, g.server.stopper, nodeID)
 	g.clientsMu.Unlock()
-	c.start(g, g.disconnected, g.rpcContext, g.server.stopper)
 }
 
 // removeClient removes the specified client. Called when a client
