@@ -1947,6 +1947,7 @@ func TestReplicaTooOldGC(t *testing.T) {
 	// Restart node 3. The removed replica will start talking to the other
 	// replicas and determine it needs to be GC'd.
 	mtc.restartStore(3)
+	mtc.stores[3].EnqueueRaftUpdateCheck(rangeID)
 
 	util.SucceedsSoon(t, func() error {
 		replica, err := mtc.stores[3].GetReplica(rangeID)
