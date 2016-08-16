@@ -18,7 +18,6 @@ package stop
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"sort"
 	"strings"
@@ -28,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/caller"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
@@ -249,7 +249,7 @@ func (s *Stopper) RunLimitedAsyncTask(sem chan struct{}, f func()) error {
 	case <-s.ShouldQuiesce():
 		return errUnavailable
 	default:
-		log.Printf("stopper throttling task from %s:%d due to semaphore", file, line)
+		log.Infof(context.Background(), "stopper throttling task from %s:%d due to semaphore", file, line)
 		// Retry the select without the default.
 		select {
 		case sem <- struct{}{}:
@@ -335,6 +335,7 @@ func (s *Stopper) runningTasksLocked() TaskMap {
 func (s *Stopper) Stop() {
 	defer s.Recover()
 	defer unregister(s)
+	log.Info(context.Background(), "stop has been called, stopping or quiescing all running tasks")
 	// Don't bother doing stuff cleanly if we're panicking, that would likely
 	// block. Instead, best effort only. This cleans up the stack traces,
 	// avoids stalls and helps some tests in `./cli` finish cleanly (where
@@ -404,8 +405,7 @@ func (s *Stopper) Quiesce() {
 		close(s.quiescer)
 	}
 	for s.numTasks > 0 {
-		// Use stdlib "log" instead of "cockroach/util/log" due to import cycles.
-		log.Print("quiesceing; tasks left:\n", s.runningTasksLocked())
+		log.Infof(context.Background(), "quiescing; tasks left:\n%s", s.runningTasksLocked())
 		// Unlock s.mu, wait for the signal, and lock s.mu.
 		s.quiesce.Wait()
 	}
