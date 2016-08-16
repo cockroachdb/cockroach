@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/pq/oid"
 
@@ -70,7 +71,7 @@ func TestBinaryDecimal(t *testing.T) {
 					panic(r)
 				}
 			}()
-			buf.writeBinaryDatum(dec)
+			buf.writeBinaryDatum(dec, time.UTC)
 			if buf.err != nil {
 				t.Fatal(buf.err)
 			}
@@ -138,7 +139,7 @@ func TestRandomBinaryDecimal(t *testing.T) {
 		if _, ok := dec.SetString(test.In); !ok {
 			t.Fatalf("could not set %q on decimal", test.In)
 		}
-		buf.writeBinaryDatum(dec)
+		buf.writeBinaryDatum(dec, time.UTC)
 		if buf.err != nil {
 			t.Fatal(buf.err)
 		}

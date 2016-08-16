@@ -35,6 +35,7 @@ import (
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -191,7 +192,7 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 	}
 }
 
-func (b *writeBuffer) writeBinaryDatum(d parser.Datum) {
+func (b *writeBuffer) writeBinaryDatum(d parser.Datum, sessionLoc *time.Location) {
 	if log.V(2) {
 		log.Infof(context.TODO(), "pgwire writing BINARY datum of type: %T, %#v", d, d)
 	}
@@ -287,6 +288,14 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum) {
 	case *parser.DString:
 		b.writeLengthPrefixedString(string(*v))
 
+	case *parser.DTimestamp:
+		b.putInt32(8)
+		b.putInt64(timeToPgBinary(v.Time, nil))
+
+	case *parser.DTimestampTZ:
+		b.putInt32(8)
+		b.putInt64(timeToPgBinary(v.Time, sessionLoc))
+
 	default:
 		b.setError(errors.Errorf("unsupported type %T", d))
 	}
@@ -342,6 +351,27 @@ func parseTs(str string) (time.Time, error) {
 	// CockroachDB send in responses, so this allows roundtripping of the encoded
 	// timestamps that we send.
 	return pq.ParseTimestamp(nil, str)
+}
+
+var pgEpochJDate = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+
+// timeToPgBinary calculates the Postgres binary format for a timestamp. The timestamp
+// is represented as the number of microseconds between the given time and Jan 1, 2000
+// (dubbed the pgEpochJDate), stored within an int64.
+func timeToPgBinary(t time.Time, offset *time.Location) int64 {
+	if offset != nil {
+		t = t.In(offset)
+	} else {
+		t = t.UTC()
+	}
+	return duration.DiffMicros(t, pgEpochJDate)
+}
+
+// pgBinaryToTime takes an int64 and interprets it as the Postgres binary format
+// for a timestamp. To create a timestamp from this value, it takes the microseconds
+// delta and adds it to pgEpochJDate.
+func pgBinaryToTime(i int64) time.Time {
+	return duration.AddMicros(pgEpochJDate, i)
 }
 
 var (
@@ -614,6 +644,13 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				return d, errors.Errorf("could not parse string %q as timestamp", b)
 			}
 			d = parser.MakeDTimestamp(ts, time.Microsecond)
+		case formatBinary:
+			var i int64
+			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &i)
+			if err != nil {
+				return d, err
+			}
+			d = parser.MakeDTimestamp(pgBinaryToTime(i), time.Microsecond)
 		default:
 			return d, errors.Errorf("unsupported timestamp format code: %s", code)
 		}
@@ -625,6 +662,13 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				return d, errors.Errorf("could not parse string %q as timestamp", b)
 			}
 			d = parser.MakeDTimestampTZ(ts, time.Microsecond)
+		case formatBinary:
+			var i int64
+			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &i)
+			if err != nil {
+				return d, err
+			}
+			d = parser.MakeDTimestampTZ(pgBinaryToTime(i), time.Microsecond)
 		default:
 			return d, errors.Errorf("unsupported timestamptz format code: %s", code)
 		}
