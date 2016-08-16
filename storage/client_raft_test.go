@@ -1948,6 +1948,10 @@ func TestReplicaTooOldGC(t *testing.T) {
 	// replicas and determine it needs to be GC'd.
 	mtc.restartStore(3)
 
+	// Because we lazily initialize Raft groups, we have to force the Raft group
+	// to get created in order to get the replica talking to the other replicas.
+	mtc.stores[3].EnqueueRaftUpdateCheck(rangeID)
+
 	util.SucceedsSoon(t, func() error {
 		replica, err := mtc.stores[3].GetReplica(rangeID)
 		if err != nil {
