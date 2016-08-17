@@ -230,7 +230,7 @@ func TestClientGossipMetrics(t *testing.T) {
 				}
 				const expected = 1
 				if count != expected {
-					return errors.Errorf("%d: expected metrics incomig + outgoing connection count == %d; = %d", i, expected, count)
+					return errors.Errorf("%d: expected metrics incoming + outgoing connection count == %d; = %d", i, expected, count)
 				}
 			}
 			return nil
