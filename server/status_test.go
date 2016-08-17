@@ -325,27 +325,27 @@ func TestStatusLocalLogs(t *testing.T) {
 		levelPresence
 	}{
 		// Test filtering by log severity.
-		{log.InfoLog, 0, 0, 0, "", levelPresence{true, true, true}},
-		{log.WarningLog, 0, 0, 0, "", levelPresence{true, true, false}},
-		{log.ErrorLog, 0, 0, 0, "", levelPresence{true, false, false}},
+		{log.Severity_INFO, 0, 0, 0, "", levelPresence{true, true, true}},
+		{log.Severity_WARNING, 0, 0, 0, "", levelPresence{true, true, false}},
+		{log.Severity_ERROR, 0, 0, 0, "", levelPresence{true, false, false}},
 		// // Test entry limit. Ignore Info/Warning/Error filters.
-		{log.InfoLog, 1, timestamp, timestampEWI, "", levelPresence{false, false, false}},
-		{log.InfoLog, 2, timestamp, timestampEWI, "", levelPresence{false, false, false}},
-		{log.InfoLog, 3, timestamp, timestampEWI, "", levelPresence{false, false, false}},
+		{log.Severity_INFO, 1, timestamp, timestampEWI, "", levelPresence{false, false, false}},
+		{log.Severity_INFO, 2, timestamp, timestampEWI, "", levelPresence{false, false, false}},
+		{log.Severity_INFO, 3, timestamp, timestampEWI, "", levelPresence{false, false, false}},
 		// Test filtering in different timestamp windows.
-		{log.InfoLog, 0, timestamp, timestamp, "", levelPresence{false, false, false}},
-		{log.InfoLog, 0, timestamp, timestampE, "", levelPresence{true, false, false}},
-		{log.InfoLog, 0, timestampE, timestampEW, "", levelPresence{false, true, false}},
-		{log.InfoLog, 0, timestampEW, timestampEWI, "", levelPresence{false, false, true}},
-		{log.InfoLog, 0, timestamp, timestampEW, "", levelPresence{true, true, false}},
-		{log.InfoLog, 0, timestampE, timestampEWI, "", levelPresence{false, true, true}},
-		{log.InfoLog, 0, timestamp, timestampEWI, "", levelPresence{true, true, true}},
+		{log.Severity_INFO, 0, timestamp, timestamp, "", levelPresence{false, false, false}},
+		{log.Severity_INFO, 0, timestamp, timestampE, "", levelPresence{true, false, false}},
+		{log.Severity_INFO, 0, timestampE, timestampEW, "", levelPresence{false, true, false}},
+		{log.Severity_INFO, 0, timestampEW, timestampEWI, "", levelPresence{false, false, true}},
+		{log.Severity_INFO, 0, timestamp, timestampEW, "", levelPresence{true, true, false}},
+		{log.Severity_INFO, 0, timestampE, timestampEWI, "", levelPresence{false, true, true}},
+		{log.Severity_INFO, 0, timestamp, timestampEWI, "", levelPresence{true, true, true}},
 		// Test filtering by regexp pattern.
-		{log.InfoLog, 0, 0, 0, "Info", levelPresence{false, false, true}},
-		{log.InfoLog, 0, 0, 0, "Warning", levelPresence{false, true, false}},
-		{log.InfoLog, 0, 0, 0, "Error", levelPresence{true, false, false}},
-		{log.InfoLog, 0, 0, 0, "Info|Error|Warning", levelPresence{true, true, true}},
-		{log.InfoLog, 0, 0, 0, "Nothing", levelPresence{false, false, false}},
+		{log.Severity_INFO, 0, 0, 0, "Info", levelPresence{false, false, true}},
+		{log.Severity_INFO, 0, 0, 0, "Warning", levelPresence{false, true, false}},
+		{log.Severity_INFO, 0, 0, 0, "Error", levelPresence{true, false, false}},
+		{log.Severity_INFO, 0, 0, 0, "Info|Error|Warning", levelPresence{true, true, true}},
+		{log.Severity_INFO, 0, 0, 0, "Nothing", levelPresence{false, false, false}},
 	}
 
 	for i, testCase := range testCases {

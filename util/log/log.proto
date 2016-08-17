@@ -20,9 +20,20 @@ option go_package = "log";
 
 import weak "gogoproto/gogo.proto";
 
+enum Severity {
+  UNKNOWN = 0;
+  INFO = 1;
+  WARNING = 2;
+  ERROR = 3;
+  FATAL = 4;
+  // NONE is the end sentinel. It is never used in pracice, and must be
+  // renumbered to remain at the end if new variants are added.
+  NONE = 5;
+}
+
 // Entry represents a cockroach structured log entry.
 message Entry {
-  int64 severity = 1 [(gogoproto.casttype) = "Severity"];
+  Severity severity = 1;
   // Nanoseconds since the epoch.
   int64 time = 2;
   string file = 3;
@@ -36,7 +47,7 @@ message FileDetails {
   string program = 1;
   string host = 2;
   string user_name = 3;
-  int64 severity = 4 [(gogoproto.casttype) = "Severity"];
+  Severity severity = 4;
   int64 time = 5;
   int64 pid = 6 [(gogoproto.customname) = "PID"];
 }

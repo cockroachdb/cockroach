@@ -44,18 +44,3 @@ export function Percentage(numerator: number, denominator: number): string {
   return Math.floor(numerator / denominator * 100).toString() + "%";
 }
 
-// TODO: generate this automatically from the protos - #8567
-enum Severities {
-  INFO = 0,
-  WARNING = 1,
-  ERROR = 2,
-  FATAL = 3
-};
-
-/**
- * FormatSeverity formats a numerical severity into its string
- * representation.
- */
-export function FormatSeverity(severity: number): string {
-  return Severities[severity];
-};
