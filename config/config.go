@@ -21,6 +21,9 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"sort"
+	"strings"
+
+	yaml "gopkg.in/yaml.v2"
 
 	"golang.org/x/net/context"
 
@@ -44,11 +47,7 @@ var (
 	// defaultZoneConfig is the default zone configuration used when no custom
 	// config has been specified.
 	defaultZoneConfig = ZoneConfig{
-		ReplicaAttrs: []roachpb.Attributes{
-			{},
-			{},
-			{},
-		},
+		NumReplicas:   3,
 		RangeMinBytes: 1 << 20,
 		RangeMaxBytes: 64 << 20,
 		GC: GCPolicy{
@@ -65,6 +64,73 @@ var (
 	// in tests.
 	testingLargestIDHook func(uint32) uint32
 )
+
+func (c Constraint) String() string {
+	var str string
+	switch c.Type {
+	case Constraint_REQUIRED:
+		str += "+"
+	case Constraint_PROHIBITED:
+		str += "-"
+	}
+	if len(c.Key) > 0 {
+		str += c.Key + "="
+	}
+	str += c.Value
+	return str
+}
+
+// FromString populates the constraint from the constraint shorthand notation.
+func (c *Constraint) FromString(short string) error {
+	switch short[0] {
+	case '+':
+		c.Type = Constraint_REQUIRED
+		short = short[1:]
+	case '-':
+		c.Type = Constraint_PROHIBITED
+		short = short[1:]
+	default:
+		c.Type = Constraint_POSITIVE
+	}
+	parts := strings.Split(short, "=")
+	if len(parts) == 1 {
+		c.Value = parts[0]
+	} else if len(parts) == 2 {
+		c.Key = parts[0]
+		c.Value = parts[1]
+	} else {
+		return errors.Errorf("constraint needs to be in the form \"(key=)value\", not %q", short)
+	}
+	return nil
+}
+
+var _ yaml.Marshaler = Constraints{}
+var _ yaml.Unmarshaler = &Constraints{}
+
+// MarshalYAML implements yaml.Marshaler.
+func (c Constraints) MarshalYAML() (interface{}, error) {
+	short := make([]string, len(c.Constraints))
+	for i, c := range c.Constraints {
+		short[i] = c.String()
+	}
+	return short, nil
+}
+
+// UnmarshalYAML implements yaml.Unmarshaler.
+func (c *Constraints) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var shortConstraints []string
+	if err := unmarshal(&shortConstraints); err != nil {
+		return err
+	}
+	constraints := make([]Constraint, len(shortConstraints))
+	for i, short := range shortConstraints {
+		if err := constraints[i].FromString(short); err != nil {
+			return err
+		}
+	}
+	c.Constraints = constraints
+	return nil
+}
 
 // DefaultZoneConfig is the default zone configuration used when no custom
 // config has been specified.
@@ -92,7 +158,7 @@ func TestingSetDefaultZoneConfig(cfg ZoneConfig) func() {
 // Validate verifies some ZoneConfig fields.
 // This should be used to validate user input when setting a new zone config.
 func (z ZoneConfig) Validate() error {
-	switch len(z.ReplicaAttrs) {
+	switch z.NumReplicas {
 	case 0:
 		return fmt.Errorf("attributes for at least one replica must be specified in zone config")
 	case 2:
