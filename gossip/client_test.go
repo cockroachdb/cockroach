@@ -187,20 +187,19 @@ func TestClientGossipMetrics(t *testing.T) {
 	local := startGossip(1, stopper, t, metric.NewRegistry())
 	remote := startGossip(2, stopper, t, metric.NewRegistry())
 
+	if err := local.AddInfo("local-key", nil, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if err := remote.AddInfo("remote-key", nil, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
 	gossipSucceedsSoon(
 		t, stopper, make(chan *client, 2),
 		map[*client]*Gossip{
-			newClient(local.GetNodeAddr(), makeMetrics()):  remote,
-			newClient(remote.GetNodeAddr(), makeMetrics()): local,
+			newClient(local.GetNodeAddr(), remote.nodeMetrics): remote,
 		},
 		func() error {
-			if err := local.AddInfo("local-key", nil, time.Hour); err != nil {
-				t.Fatal(err)
-			}
-			if err := remote.AddInfo("remote-key", nil, time.Hour); err != nil {
-				t.Fatal(err)
-			}
-
 			// Infos/Bytes Sent/Received should not be zero.
 			for i, s := range []*server{local.server, remote.server} {
 				for _, rate := range []metric.Rates{
@@ -216,17 +215,21 @@ func TestClientGossipMetrics(t *testing.T) {
 				}
 			}
 
-			// Since there are two gossip nodes, there should be at least one incoming
-			// and outgoing connection.
-			for i, s := range []*server{local.server, remote.server} {
-				s.mu.Lock()
-				gauge := s.mu.incoming.gauge
-				s.mu.Unlock()
-				if gauge == nil {
-					return errors.Errorf("%d: missing gauge \"incoming\"", i)
+			// Since there are two gossip nodes, there should be exactly one incoming
+			// or outgoing connection.
+			for i, g := range []*Gossip{local, remote} {
+				g.mu.Lock()
+				defer g.mu.Unlock()
+
+				count := int64(0)
+				for _, gauge := range []*metric.Gauge{g.mu.incoming.gauge, g.outgoing.gauge} {
+					if gauge == nil {
+						return errors.Errorf("%d: missing gauge", i)
+					}
+					count += gauge.Value()
 				}
-				if count := gauge.Value(); count <= 0 {
-					return errors.Errorf("%d: expected metrics gauge %q > 0; = %d", i, gauge.GetName(), count)
+				if count != 1 {
+					return errors.Errorf("%d: expected metrics incoming + outgoing connection count == 1; = %d", i, count)
 				}
 			}
 			return nil
