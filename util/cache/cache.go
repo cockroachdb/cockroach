@@ -419,6 +419,9 @@ func (oc *OrderedCache) Do(f func(k, v interface{})) {
 }
 
 // DoRange invokes f on all cache entries in the range of from -> to.
+// f returns a boolean indicating the traversal is done. If f returns
+// true, the DoRange loop will exit; false, it will continue. DoRange
+// returns whether the iteration exited early.
 func (oc *OrderedCache) DoRange(f func(k, v interface{}) bool, from, to interface{}) bool {
 	return oc.llrb.DoRange(func(e llrb.Comparable) bool {
 		return f(e.(*Entry).Key, e.(*Entry).Value)
