@@ -27,7 +27,7 @@ class TableInfo {
     public name: string,
     public numColumns: number,
     public numIndices: number,
-    public size: number,
+    public size: number
   ) { };
 }
 
@@ -238,9 +238,8 @@ class DatabaseMain extends React.Component<DatabaseMainProps, {}> {
         </div>
           <SortableTable count={sortedTables.length}
             sortSetting={tablesSortSetting}
-            onChangeSortSetting={(setting) => this.changeTableSortSetting(setting) }>
-            { this.tableColumns(this.props) }
-          </SortableTable>
+            onChangeSortSetting={(setting) => this.changeTableSortSetting(setting) }
+            columns={ this.tableColumns(this.props) }/>
         </div>;
     }
     return <div>No results.</div>;
