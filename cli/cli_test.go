@@ -503,12 +503,12 @@ func Example_zone() {
 	// .default
 	// zone set system --file=./testdata/zone_attrs.yaml
 	// INSERT 1
-	// replicas:
-	// - attrs: [us-east-1a, ssd]
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
 	// gc:
 	//   ttlseconds: 86400
+	// num_replicas: 1
+	// constraints: [us-east-1a, ssd]
 	// zone ls
 	// .default
 	// system
@@ -516,28 +516,28 @@ func Example_zone() {
 	// system.nonexistent not found
 	// zone get system.lease
 	// system
-	// replicas:
-	// - attrs: [us-east-1a, ssd]
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
 	// gc:
 	//   ttlseconds: 86400
+	// num_replicas: 1
+	// constraints: [us-east-1a, ssd]
 	// zone set system --file=./testdata/zone_range_max_bytes.yaml
 	// UPDATE 1
-	// replicas:
-	// - attrs: [us-east-1a, ssd]
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 86400
+	// num_replicas: 1
+	// constraints: [us-east-1a, ssd]
 	// zone get system
 	// system
-	// replicas:
-	// - attrs: [us-east-1a, ssd]
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 86400
+	// num_replicas: 1
+	// constraints: [us-east-1a, ssd]
 	// zone rm system
 	// DELETE 1
 	// zone ls
@@ -546,20 +546,20 @@ func Example_zone() {
 	// unable to remove .default
 	// zone set .default --file=./testdata/zone_range_max_bytes.yaml
 	// UPDATE 1
-	// replicas:
-	// - attrs: []
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 86400
+	// num_replicas: 1
+	// constraints: []
 	// zone get system
 	// .default
-	// replicas:
-	// - attrs: []
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 86400
+	// num_replicas: 1
+	// constraints: []
 }
 
 func Example_sql() {
