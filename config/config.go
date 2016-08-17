@@ -21,6 +21,7 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"sort"
+	"strings"
 
 	"golang.org/x/net/context"
 
@@ -44,11 +45,7 @@ var (
 	// defaultZoneConfig is the default zone configuration used when no custom
 	// config has been specified.
 	defaultZoneConfig = ZoneConfig{
-		ReplicaAttrs: []roachpb.Attributes{
-			{},
-			{},
-			{},
-		},
+		NumReplicas:   3,
 		RangeMinBytes: 1 << 20,
 		RangeMaxBytes: 64 << 20,
 		GC: GCPolicy{
@@ -65,6 +62,91 @@ var (
 	// in tests.
 	testingLargestIDHook func(uint32) uint32
 )
+
+func (c Constraint) String() string {
+	var str string
+	switch c.Type {
+	case Constraint_REQUIRED:
+		str += "+"
+	case Constraint_PROHIBITED:
+		str += "-"
+	}
+	if len(c.Key) > 0 {
+		str += c.Key + "="
+	}
+	str += c.Value
+	return str
+}
+
+// FromString populates the constraint from the constraint shorthand notation.
+func (c *Constraint) FromString(short string) error {
+	switch short[0] {
+	case '+':
+		c.Type = Constraint_REQUIRED
+		short = short[1:]
+	case '-':
+		c.Type = Constraint_PROHIBITED
+		short = short[1:]
+	default:
+		c.Type = Constraint_POSITIVE
+	}
+	parts := strings.Split(short, "=")
+	if len(parts) == 1 {
+		c.Value = parts[0]
+	} else if len(parts) == 2 {
+		c.Key = parts[0]
+		c.Value = parts[1]
+	} else {
+		return errors.Errorf("constraint needs to be in the form \"(key=)value\", not %q", short)
+	}
+	return nil
+}
+
+// ParseConstraints parses the shorthand constraint notation.
+func ParseConstraints(shortConstraints []string) ([]Constraint, error) {
+	constraints := make([]Constraint, len(shortConstraints))
+	for i, short := range shortConstraints {
+		if err := constraints[i].FromString(short); err != nil {
+			return nil, err
+		}
+	}
+	return constraints, nil
+}
+
+// DumpConstraints converts the list of constraints to the shorthand notation.
+func DumpConstraints(constraints []Constraint) []string {
+	short := make([]string, len(constraints))
+	for i, c := range constraints {
+		short[i] = c.String()
+	}
+	return short
+}
+
+// ToHuman converts a ZoneConfig to the human readable shorthand form.
+func (z ZoneConfig) ToHuman() ZoneConfigHuman {
+	return ZoneConfigHuman{
+		RangeMinBytes: z.RangeMinBytes,
+		RangeMaxBytes: z.RangeMaxBytes,
+		GC:            z.GC,
+		NumReplicas:   z.NumReplicas,
+		Constraints:   DumpConstraints(z.Constraints),
+	}
+}
+
+// ToMachine converts a ZoneConfig to the machine usable form.
+func (z ZoneConfigHuman) ToMachine() (ZoneConfig, error) {
+	constraints, err := ParseConstraints(z.Constraints)
+	if err != nil {
+		return ZoneConfig{}, err
+	}
+	return ZoneConfig{
+		RangeMinBytes: z.RangeMinBytes,
+		RangeMaxBytes: z.RangeMaxBytes,
+		GC:            z.GC,
+		NumReplicas:   z.NumReplicas,
+		Constraints:   constraints,
+	}, nil
+}
 
 // DefaultZoneConfig is the default zone configuration used when no custom
 // config has been specified.
@@ -92,7 +174,7 @@ func TestingSetDefaultZoneConfig(cfg ZoneConfig) func() {
 // Validate verifies some ZoneConfig fields.
 // This should be used to validate user input when setting a new zone config.
 func (z ZoneConfig) Validate() error {
-	switch len(z.ReplicaAttrs) {
+	switch z.NumReplicas {
 	case 0:
 		return fmt.Errorf("attributes for at least one replica must be specified in zone config")
 	case 2:

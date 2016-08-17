@@ -63,7 +63,7 @@ const (
 // can be retried quickly as soon as new stores come online, or additional
 // space frees up.
 type allocatorError struct {
-	required         roachpb.Attributes
+	required         []config.Constraint
 	relaxConstraints bool
 	aliveStoreCount  int
 }
@@ -76,10 +76,10 @@ func (ae *allocatorError) Error() string {
 	var auxInfo string
 	// Whenever the likely problem is not having enough nodes up, make the
 	// message really clear.
-	if ae.relaxConstraints || len(ae.required.Attrs) == 0 {
+	if ae.relaxConstraints || len(ae.required) == 0 {
 		auxInfo = "; likely not enough nodes in cluster"
 	}
-	return fmt.Sprintf("0 of %d store%s with %s matching [%s]%s",
+	return fmt.Sprintf("0 of %d store%s with %s matching %s%s",
 		ae.aliveStoreCount, util.Pluralize(int64(ae.aliveStoreCount)),
 		anyAll, ae.required, auxInfo)
 }
@@ -164,7 +164,7 @@ func (a *Allocator) ComputeAction(zone config.ZoneConfig, desc *roachpb.RangeDes
 	}
 
 	// TODO(mrtracy): Handle non-homogeneous and mismatched attribute sets.
-	need := len(zone.ReplicaAttrs)
+	need := int(zone.NumReplicas)
 	have := len(desc.Replicas)
 	if have < need {
 		// Range is under-replicated, and should add an additional replica.
@@ -190,7 +190,7 @@ func (a *Allocator) ComputeAction(zone config.ZoneConfig, desc *roachpb.RangeDes
 // will be relaxed as necessary, from least specific to most specific, in order
 // to allocate a target.
 func (a *Allocator) AllocateTarget(
-	required roachpb.Attributes,
+	required []config.Constraint,
 	existing []roachpb.ReplicaDescriptor,
 	relaxConstraints bool,
 ) (*roachpb.StoreDescriptor, error) {
@@ -202,9 +202,9 @@ func (a *Allocator) AllocateTarget(
 	// Because more redundancy is better than less, if relaxConstraints, the
 	// matching here is lenient, and tries to find a target by relaxing an
 	// attribute constraint, from last attribute to first.
-	for attrs := append([]string(nil), required.Attrs...); ; attrs = attrs[:len(attrs)-1] {
+	for attrs := append([]config.Constraint(nil), required...); ; attrs = attrs[:len(attrs)-1] {
 		sl, aliveStoreCount, throttledStoreCount := a.storePool.getStoreList(
-			roachpb.Attributes{Attrs: attrs},
+			attrs,
 			a.options.Deterministic,
 		)
 		if target := a.selectGood(sl, existingNodes); target != nil {
@@ -282,7 +282,7 @@ func (a Allocator) RemoveTarget(existing []roachpb.ReplicaDescriptor, leaseStore
 // rebalance. This helps prevent a stampeding herd targeting an abnormally
 // under-utilized store.
 func (a Allocator) RebalanceTarget(
-	required roachpb.Attributes,
+	required []config.Constraint,
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
 ) *roachpb.StoreDescriptor {
@@ -329,7 +329,7 @@ func (a *Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
 	if !ok {
 		return false
 	}
-	sl, _, _ := a.storePool.getStoreList(roachpb.Attributes{}, true)
+	sl, _, _ := a.storePool.getStoreList(nil, true)
 	return a.shouldRebalance(desc, sl)
 }
 

@@ -204,7 +204,7 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 		// Change the replication requirements so we don't get log spam about ranges
 		// not being replicated enough.
 		cfg := config.DefaultZoneConfig()
-		cfg.ReplicaAttrs = []roachpb.Attributes{{}}
+		cfg.NumReplicas = 1
 		fn := config.TestingSetDefaultZoneConfig(cfg)
 		params.Stopper.AddCloser(stop.CloserFn(fn))
 	}

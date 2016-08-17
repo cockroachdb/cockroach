@@ -26,6 +26,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -104,7 +105,7 @@ const (
 )
 
 // match checks the store against the attributes and returns a storeMatch.
-func (sd *storeDetail) match(now time.Time, required roachpb.Attributes) storeMatch {
+func (sd *storeDetail) match(now time.Time, constraints []config.Constraint) storeMatch {
 	// The store must be alive and it must have a descriptor to be considered
 	// alive.
 	if sd.dead || sd.desc == nil {
@@ -112,8 +113,15 @@ func (sd *storeDetail) match(now time.Time, required roachpb.Attributes) storeMa
 	}
 
 	// Does the store match the attributes?
-	if !required.IsSubset(*sd.desc.CombinedAttrs()) {
-		return storeMatchAlive
+	m := map[string]struct{}{}
+	for _, s := range sd.desc.CombinedAttrs().Attrs {
+		m[s] = struct{}{}
+	}
+	for _, c := range constraints {
+		// TODO(d4l3k): Locality constraints, number of matches.
+		if _, ok := m[c.Value]; !ok {
+			return storeMatchAlive
+		}
 	}
 
 	// The store must not have a recent declined reservation to be available.
@@ -469,7 +477,7 @@ func (sl *StoreList) add(s roachpb.StoreDescriptor) {
 // TODO(embark, spencer): consider using a reverse index map from
 // Attr->stores, for efficiency. Ensure that entries in this map still
 // have an opportunity to be garbage collected.
-func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic bool) (StoreList, int, int) {
+func (sp *StorePool) getStoreList(required []config.Constraint, deterministic bool) (StoreList, int, int) {
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
 
@@ -488,6 +496,7 @@ func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic boo
 	var throttledStoreCount int
 	for _, storeID := range storeIDs {
 		detail := sp.mu.stores[storeID]
+		// TODO(d4l3k): Sort by number of matches.
 		matched := detail.match(now, required)
 		switch matched {
 		case storeMatchAlive:
