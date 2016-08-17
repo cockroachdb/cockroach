@@ -44,7 +44,7 @@ export function Percentage(numerator: number, denominator: number): string {
   return Math.floor(numerator / denominator * 100).toString() + "%";
 }
 
-// TODO: generate this automatically from the protos - #8567
+// TODO: generate this automatically from the protos
 enum Severities {
   INFO = 0,
   WARNING = 1,
