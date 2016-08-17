@@ -332,26 +332,26 @@ func TestZoneConfigValidate(t *testing.T) {
 		},
 		{
 			config.ZoneConfig{
-				ReplicaAttrs: make([]roachpb.Attributes, 2),
+				NumReplicas: 2,
 			},
 			"at least 3 replicas are required for multi-replica configurations",
 		},
 		{
 			config.ZoneConfig{
-				ReplicaAttrs: make([]roachpb.Attributes, 1),
+				NumReplicas: 1,
 			},
 			"RangeMaxBytes 0 less than minimum allowed",
 		},
 		{
 			config.ZoneConfig{
-				ReplicaAttrs:  make([]roachpb.Attributes, 1),
+				NumReplicas:   1,
 				RangeMaxBytes: config.DefaultZoneConfig().RangeMaxBytes,
 			},
 			"",
 		},
 		{
 			config.ZoneConfig{
-				ReplicaAttrs:  make([]roachpb.Attributes, 1),
+				NumReplicas:   1,
 				RangeMinBytes: config.DefaultZoneConfig().RangeMaxBytes,
 				RangeMaxBytes: config.DefaultZoneConfig().RangeMaxBytes,
 			},
@@ -366,6 +366,134 @@ func TestZoneConfigValidate(t *testing.T) {
 			}
 		} else if !testutils.IsError(err, c.expected) {
 			t.Fatalf("%d: expected %s, but got %v", i, c.expected, err)
+		}
+	}
+}
+
+// TestParseDumpConstraints verifies that ParseConstraints and DumpConstraints
+// are inverses of each other.
+func TestParseDumpConstraints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		short    []string
+		expected []config.Constraint
+	}{
+		{
+			[]string{},
+			[]config.Constraint{},
+		},
+		{
+			[]string{"a", "+b", "-c"},
+			[]config.Constraint{
+				{
+					Type:  config.Constraint_POSITIVE,
+					Value: "a",
+				},
+				{
+					Type:  config.Constraint_REQUIRED,
+					Value: "b",
+				},
+				{
+					Type:  config.Constraint_PROHIBITED,
+					Value: "c",
+				},
+			},
+		},
+		{
+			[]string{"country=a", "+dc=b", "-rack=c"},
+			[]config.Constraint{
+				{
+					Type:  config.Constraint_POSITIVE,
+					Key:   "country",
+					Value: "a",
+				},
+				{
+					Type:  config.Constraint_REQUIRED,
+					Key:   "dc",
+					Value: "b",
+				},
+				{
+					Type:  config.Constraint_PROHIBITED,
+					Key:   "rack",
+					Value: "c",
+				},
+			},
+		},
+	}
+
+	for i, tc := range testCases {
+		out, err := config.ParseConstraints(tc.short)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(out, tc.expected) {
+			t.Errorf("%d: ParseConstraints(%+v) = %+v; not %+v", i, tc.short, out, tc.expected)
+		}
+		if out2 := config.DumpConstraints(out); !reflect.DeepEqual(out2, tc.short) {
+			t.Errorf("%d: DumpConstraints(%+v) = %+v; not %+v", i, out, out2, tc.short)
+		}
+	}
+}
+
+// TestZoneConfigHumanConversions makes sure that the ToHuman and ToMachine
+// methods are inverses of each other.
+func TestZoneConfigHumanConversions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	original := config.ZoneConfig{
+		RangeMinBytes: 1,
+		RangeMaxBytes: 1,
+		GC: config.GCPolicy{
+			TTLSeconds: 1,
+		},
+		NumReplicas: 1,
+		Constraints: []config.Constraint{
+			{
+				Type:  config.Constraint_POSITIVE,
+				Value: "foo",
+			},
+			{
+				Type:  config.Constraint_REQUIRED,
+				Key:   "duck",
+				Value: "foo",
+			},
+			{
+				Type:  config.Constraint_PROHIBITED,
+				Key:   "duck",
+				Value: "foo",
+			},
+		},
+	}
+
+	// Test converting and back.
+	human := original.ToHuman()
+	machine, err := human.ToMachine()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(machine, original) {
+		t.Errorf("expected %+v.ToHuman().ToMachine() = %+v; not %+v; human %+v", original, original, machine, human)
+	}
+}
+
+// TestZoneConfigHumanFields makes sure that ZoneConfig and ZoneConfigHuman are
+// in sync.
+func TestZoneConfigHumanFields(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	zoneConfig := reflect.TypeOf(config.ZoneConfig{})
+	zoneConfigHuman := reflect.TypeOf(config.ZoneConfigHuman{})
+
+	if zoneConfig.NumField() != zoneConfigHuman.NumField() {
+		t.Errorf("ZoneConfig and ZoneConfigHuman don't have the same number of fields.")
+	}
+
+	for i := 0; i < zoneConfig.NumField(); i++ {
+		machine := zoneConfig.Field(i).Name
+		human := zoneConfig.Field(i).Name
+		if machine != human {
+			t.Errorf("field %d: ZoneConfig.%s != ZoneConfigHuman.%s", i, machine, human)
 		}
 	}
 }

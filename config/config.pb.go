@@ -10,7 +10,10 @@
 
 	It has these top-level messages:
 		GCPolicy
+		Constraint
 		ZoneConfig
+		ZoneConfigHuman
+		ZoneConfigLegacy
 		SystemConfig
 */
 package config
@@ -36,6 +39,47 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
+type Constraint_Type int32
+
+const (
+	// POSITIVE will attempt to ensure all stores the replicas are on has this
+	// constraint.
+	Constraint_POSITIVE Constraint_Type = 0
+	// REQUIRED is like POSITIVE except replication will fail if not satisfied.
+	Constraint_REQUIRED Constraint_Type = 1
+	// PROHIBITED will prevent replicas from having this key, value.
+	Constraint_PROHIBITED Constraint_Type = 2
+)
+
+var Constraint_Type_name = map[int32]string{
+	0: "POSITIVE",
+	1: "REQUIRED",
+	2: "PROHIBITED",
+}
+var Constraint_Type_value = map[string]int32{
+	"POSITIVE":   0,
+	"REQUIRED":   1,
+	"PROHIBITED": 2,
+}
+
+func (x Constraint_Type) Enum() *Constraint_Type {
+	p := new(Constraint_Type)
+	*p = x
+	return p
+}
+func (x Constraint_Type) String() string {
+	return proto.EnumName(Constraint_Type_name, int32(x))
+}
+func (x *Constraint_Type) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(Constraint_Type_value, data, "Constraint_Type")
+	if err != nil {
+		return err
+	}
+	*x = Constraint_Type(value)
+	return nil
+}
+func (Constraint_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorConfig, []int{1, 0} }
+
 // GCPolicy defines garbage collection policies which apply to MVCC
 // values within a zone.
 //
@@ -54,23 +98,65 @@ func (m *GCPolicy) String() string            { return proto.CompactTextString(m
 func (*GCPolicy) ProtoMessage()               {}
 func (*GCPolicy) Descriptor() ([]byte, []int) { return fileDescriptorConfig, []int{0} }
 
-// ZoneConfig holds configuration that is needed for a range of KV pairs.
+// Constraint constrains the stores a replica can be stored on.
+type Constraint struct {
+	Type Constraint_Type `protobuf:"varint,1,opt,name=type,enum=cockroach.config.Constraint_Type" json:"type"`
+	// Key is only set if this is a constraint on locality.
+	Key string `protobuf:"bytes,2,opt,name=key" json:"key"`
+	// Value to constrain to.
+	Value string `protobuf:"bytes,3,opt,name=value" json:"value"`
+}
+
+func (m *Constraint) Reset()                    { *m = Constraint{} }
+func (*Constraint) ProtoMessage()               {}
+func (*Constraint) Descriptor() ([]byte, []int) { return fileDescriptorConfig, []int{1} }
+
+// ZoneConfig holds configuration that is needed for a range of KV pairs. This
+// and the conversion methods must stay in sync with ZoneConfigHuman.
 type ZoneConfig struct {
-	// ReplicaAttrs is a slice of Attributes, each describing required attributes
-	// for each replica in the zone. The order in which the attributes are stored
-	// in ReplicaAttrs is arbitrary and may change.
-	ReplicaAttrs  []cockroach_roachpb.Attributes `protobuf:"bytes,1,rep,name=replica_attrs,json=replicaAttrs" json:"replica_attrs" yaml:"replicas,omitempty"`
-	RangeMinBytes int64                          `protobuf:"varint,2,opt,name=range_min_bytes,json=rangeMinBytes" json:"range_min_bytes" yaml:"range_min_bytes"`
-	RangeMaxBytes int64                          `protobuf:"varint,3,opt,name=range_max_bytes,json=rangeMaxBytes" json:"range_max_bytes" yaml:"range_max_bytes"`
+	RangeMinBytes int64 `protobuf:"varint,2,opt,name=range_min_bytes,json=rangeMinBytes" json:"range_min_bytes"`
+	RangeMaxBytes int64 `protobuf:"varint,3,opt,name=range_max_bytes,json=rangeMaxBytes" json:"range_max_bytes"`
 	// If GC policy is not set, uses the next highest, non-null policy
 	// in the zone config hierarchy, up to the default policy if necessary.
 	GC GCPolicy `protobuf:"bytes,4,opt,name=gc" json:"gc"`
+	// NumReplicas specifies the desired number of replicas
+	NumReplicas int32 `protobuf:"varint,5,opt,name=num_replicas,json=numReplicas" json:"num_replicas"`
+	// Constraints constrains which stores the replicas can be stored on. The
+	// order in which the constraints are stored is arbitrary and may change.
+	// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/expressive_zone_config.md#constraint-system
+	Constraints []Constraint `protobuf:"bytes,6,rep,name=constraints" json:"constraints"`
 }
 
 func (m *ZoneConfig) Reset()                    { *m = ZoneConfig{} }
 func (m *ZoneConfig) String() string            { return proto.CompactTextString(m) }
 func (*ZoneConfig) ProtoMessage()               {}
-func (*ZoneConfig) Descriptor() ([]byte, []int) { return fileDescriptorConfig, []int{1} }
+func (*ZoneConfig) Descriptor() ([]byte, []int) { return fileDescriptorConfig, []int{2} }
+
+// ZoneConfigHuman is the human readable shorthand form of ZoneConfig. This and
+// the conversion methods must stay in sync with ZoneConfig.
+type ZoneConfigHuman struct {
+	RangeMinBytes int64    `protobuf:"varint,2,opt,name=range_min_bytes,json=rangeMinBytes" json:"range_min_bytes" yaml:"range_min_bytes"`
+	RangeMaxBytes int64    `protobuf:"varint,3,opt,name=range_max_bytes,json=rangeMaxBytes" json:"range_max_bytes" yaml:"range_max_bytes"`
+	GC            GCPolicy `protobuf:"bytes,4,opt,name=gc" json:"gc"`
+	NumReplicas   int32    `protobuf:"varint,5,opt,name=num_replicas,json=numReplicas" json:"num_replicas" yaml:"num_replicas"`
+	Constraints   []string `protobuf:"bytes,6,rep,name=constraints" json:"constraints,omitempty" yaml:"constraints,flow"`
+}
+
+func (m *ZoneConfigHuman) Reset()                    { *m = ZoneConfigHuman{} }
+func (m *ZoneConfigHuman) String() string            { return proto.CompactTextString(m) }
+func (*ZoneConfigHuman) ProtoMessage()               {}
+func (*ZoneConfigHuman) Descriptor() ([]byte, []int) { return fileDescriptorConfig, []int{3} }
+
+// ZoneConfigLegacy is the old version of ZoneConfig and is used for upgrades.
+// TODO(d4l3k): Remove after a sufficient amount of time has passed.
+type ZoneConfigLegacy struct {
+	ReplicaAttrs []cockroach_roachpb.Attributes `protobuf:"bytes,1,rep,name=replica_attrs,json=replicaAttrs" json:"replica_attrs" yaml:"replicas,omitempty"`
+}
+
+func (m *ZoneConfigLegacy) Reset()                    { *m = ZoneConfigLegacy{} }
+func (m *ZoneConfigLegacy) String() string            { return proto.CompactTextString(m) }
+func (*ZoneConfigLegacy) ProtoMessage()               {}
+func (*ZoneConfigLegacy) Descriptor() ([]byte, []int) { return fileDescriptorConfig, []int{4} }
 
 type SystemConfig struct {
 	Values []cockroach_roachpb1.KeyValue `protobuf:"bytes,1,rep,name=values" json:"values"`
@@ -79,12 +165,16 @@ type SystemConfig struct {
 func (m *SystemConfig) Reset()                    { *m = SystemConfig{} }
 func (m *SystemConfig) String() string            { return proto.CompactTextString(m) }
 func (*SystemConfig) ProtoMessage()               {}
-func (*SystemConfig) Descriptor() ([]byte, []int) { return fileDescriptorConfig, []int{2} }
+func (*SystemConfig) Descriptor() ([]byte, []int) { return fileDescriptorConfig, []int{5} }
 
 func init() {
 	proto.RegisterType((*GCPolicy)(nil), "cockroach.config.GCPolicy")
+	proto.RegisterType((*Constraint)(nil), "cockroach.config.Constraint")
 	proto.RegisterType((*ZoneConfig)(nil), "cockroach.config.ZoneConfig")
+	proto.RegisterType((*ZoneConfigHuman)(nil), "cockroach.config.ZoneConfigHuman")
+	proto.RegisterType((*ZoneConfigLegacy)(nil), "cockroach.config.ZoneConfigLegacy")
 	proto.RegisterType((*SystemConfig)(nil), "cockroach.config.SystemConfig")
+	proto.RegisterEnum("cockroach.config.Constraint_Type", Constraint_Type_name, Constraint_Type_value)
 }
 func (m *GCPolicy) Marshal() (data []byte, err error) {
 	size := m.Size()
@@ -107,6 +197,35 @@ func (m *GCPolicy) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
+func (m *Constraint) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *Constraint) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.Type))
+	data[i] = 0x12
+	i++
+	i = encodeVarintConfig(data, i, uint64(len(m.Key)))
+	i += copy(data[i:], m.Key)
+	data[i] = 0x1a
+	i++
+	i = encodeVarintConfig(data, i, uint64(len(m.Value)))
+	i += copy(data[i:], m.Value)
+	return i, nil
+}
+
 func (m *ZoneConfig) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -118,6 +237,103 @@ func (m *ZoneConfig) Marshal() (data []byte, err error) {
 }
 
 func (m *ZoneConfig) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x10
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.RangeMinBytes))
+	data[i] = 0x18
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.RangeMaxBytes))
+	data[i] = 0x22
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.GC.Size()))
+	n1, err := m.GC.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n1
+	data[i] = 0x28
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.NumReplicas))
+	if len(m.Constraints) > 0 {
+		for _, msg := range m.Constraints {
+			data[i] = 0x32
+			i++
+			i = encodeVarintConfig(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func (m *ZoneConfigHuman) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ZoneConfigHuman) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x10
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.RangeMinBytes))
+	data[i] = 0x18
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.RangeMaxBytes))
+	data[i] = 0x22
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.GC.Size()))
+	n2, err := m.GC.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n2
+	data[i] = 0x28
+	i++
+	i = encodeVarintConfig(data, i, uint64(m.NumReplicas))
+	if len(m.Constraints) > 0 {
+		for _, s := range m.Constraints {
+			data[i] = 0x32
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			data[i] = uint8(l)
+			i++
+			i += copy(data[i:], s)
+		}
+	}
+	return i, nil
+}
+
+func (m *ZoneConfigLegacy) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ZoneConfigLegacy) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -134,20 +350,6 @@ func (m *ZoneConfig) MarshalTo(data []byte) (int, error) {
 			i += n
 		}
 	}
-	data[i] = 0x10
-	i++
-	i = encodeVarintConfig(data, i, uint64(m.RangeMinBytes))
-	data[i] = 0x18
-	i++
-	i = encodeVarintConfig(data, i, uint64(m.RangeMaxBytes))
-	data[i] = 0x22
-	i++
-	i = encodeVarintConfig(data, i, uint64(m.GC.Size()))
-	n1, err := m.GC.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n1
 	return i, nil
 }
 
@@ -215,7 +417,52 @@ func (m *GCPolicy) Size() (n int) {
 	return n
 }
 
+func (m *Constraint) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovConfig(uint64(m.Type))
+	l = len(m.Key)
+	n += 1 + l + sovConfig(uint64(l))
+	l = len(m.Value)
+	n += 1 + l + sovConfig(uint64(l))
+	return n
+}
+
 func (m *ZoneConfig) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovConfig(uint64(m.RangeMinBytes))
+	n += 1 + sovConfig(uint64(m.RangeMaxBytes))
+	l = m.GC.Size()
+	n += 1 + l + sovConfig(uint64(l))
+	n += 1 + sovConfig(uint64(m.NumReplicas))
+	if len(m.Constraints) > 0 {
+		for _, e := range m.Constraints {
+			l = e.Size()
+			n += 1 + l + sovConfig(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *ZoneConfigHuman) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovConfig(uint64(m.RangeMinBytes))
+	n += 1 + sovConfig(uint64(m.RangeMaxBytes))
+	l = m.GC.Size()
+	n += 1 + l + sovConfig(uint64(l))
+	n += 1 + sovConfig(uint64(m.NumReplicas))
+	if len(m.Constraints) > 0 {
+		for _, s := range m.Constraints {
+			l = len(s)
+			n += 1 + l + sovConfig(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *ZoneConfigLegacy) Size() (n int) {
 	var l int
 	_ = l
 	if len(m.ReplicaAttrs) > 0 {
@@ -224,10 +471,6 @@ func (m *ZoneConfig) Size() (n int) {
 			n += 1 + l + sovConfig(uint64(l))
 		}
 	}
-	n += 1 + sovConfig(uint64(m.RangeMinBytes))
-	n += 1 + sovConfig(uint64(m.RangeMaxBytes))
-	l = m.GC.Size()
-	n += 1 + l + sovConfig(uint64(l))
 	return n
 }
 
@@ -325,6 +568,133 @@ func (m *GCPolicy) Unmarshal(data []byte) error {
 	}
 	return nil
 }
+func (m *Constraint) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowConfig
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Constraint: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Constraint: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
+			}
+			m.Type = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Type |= (Constraint_Type(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Key = string(data[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Value", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Value = string(data[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipConfig(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *ZoneConfig) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -354,37 +724,6 @@ func (m *ZoneConfig) Unmarshal(data []byte) error {
 			return fmt.Errorf("proto: ZoneConfig: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ReplicaAttrs", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowConfig
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthConfig
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.ReplicaAttrs = append(m.ReplicaAttrs, cockroach_roachpb.Attributes{})
-			if err := m.ReplicaAttrs[len(m.ReplicaAttrs)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
 		case 2:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field RangeMinBytes", wireType)
@@ -450,6 +789,303 @@ func (m *ZoneConfig) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if err := m.GC.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NumReplicas", wireType)
+			}
+			m.NumReplicas = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.NumReplicas |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Constraints", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Constraints = append(m.Constraints, Constraint{})
+			if err := m.Constraints[len(m.Constraints)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipConfig(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ZoneConfigHuman) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowConfig
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ZoneConfigHuman: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ZoneConfigHuman: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeMinBytes", wireType)
+			}
+			m.RangeMinBytes = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.RangeMinBytes |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeMaxBytes", wireType)
+			}
+			m.RangeMaxBytes = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.RangeMaxBytes |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GC", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.GC.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NumReplicas", wireType)
+			}
+			m.NumReplicas = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.NumReplicas |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Constraints", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Constraints = append(m.Constraints, string(data[iNdEx:postIndex]))
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipConfig(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ZoneConfigLegacy) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowConfig
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ZoneConfigLegacy: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ZoneConfigLegacy: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReplicaAttrs", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ReplicaAttrs = append(m.ReplicaAttrs, cockroach_roachpb.Attributes{})
+			if err := m.ReplicaAttrs[len(m.ReplicaAttrs)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -663,30 +1299,44 @@ var (
 func init() { proto.RegisterFile("cockroach/config/config.proto", fileDescriptorConfig) }
 
 var fileDescriptorConfig = []byte{
-	// 400 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x7c, 0x91, 0xcd, 0x6a, 0xdb, 0x40,
-	0x14, 0x85, 0x3d, 0xb2, 0x6b, 0xca, 0xd8, 0xa6, 0x45, 0x94, 0xe2, 0xba, 0xb5, 0xac, 0x6a, 0xa5,
-	0x45, 0x91, 0xc1, 0x85, 0x42, 0xb3, 0x09, 0x91, 0x21, 0x26, 0x24, 0x81, 0x20, 0x9b, 0x10, 0xbc,
-	0x11, 0xe3, 0xf1, 0x44, 0x11, 0x91, 0x34, 0x42, 0xba, 0x0e, 0xd6, 0x5b, 0xe4, 0x7d, 0xf2, 0x02,
-	0x5e, 0x66, 0x99, 0x95, 0x49, 0x94, 0x37, 0xc8, 0x13, 0x04, 0x49, 0xe3, 0x9f, 0xfc, 0x90, 0x8d,
-	0x74, 0x75, 0xef, 0x39, 0x9f, 0xee, 0x9c, 0xc1, 0x6d, 0xca, 0xe9, 0x65, 0xc4, 0x09, 0xbd, 0xe8,
-	0x52, 0x1e, 0x9c, 0xbb, 0x8e, 0x78, 0x19, 0x61, 0xc4, 0x81, 0xcb, 0x5f, 0xd7, 0x63, 0xa3, 0xe8,
-	0xb7, 0xd4, 0x8d, 0x21, 0x7f, 0x86, 0x93, 0xae, 0xcf, 0x80, 0x4c, 0x09, 0x90, 0xc2, 0xd3, 0xfa,
-	0xf5, 0x56, 0xb1, 0x35, 0xfd, 0xe6, 0x70, 0x87, 0xe7, 0x65, 0x37, 0xab, 0x8a, 0xae, 0xb6, 0x8b,
-	0x3f, 0x0f, 0xfa, 0x27, 0xdc, 0x73, 0x69, 0x22, 0xff, 0xc5, 0x35, 0x00, 0xcf, 0x8e, 0x19, 0xe5,
-	0xc1, 0x34, 0x6e, 0x22, 0x15, 0xe9, 0x9f, 0x4c, 0x79, 0xb1, 0xec, 0x94, 0xd2, 0x65, 0x07, 0x8f,
-	0x46, 0x47, 0xc3, 0x62, 0x62, 0x61, 0x00, 0x4f, 0xd4, 0xda, 0x8d, 0x84, 0xf1, 0x98, 0x07, 0xac,
-	0x9f, 0x6f, 0x29, 0x33, 0xdc, 0x88, 0x58, 0xe8, 0xb9, 0x94, 0xd8, 0x04, 0x20, 0xca, 0x28, 0x65,
-	0xbd, 0xd6, 0x6b, 0x1b, 0x9b, 0xf3, 0x88, 0xdd, 0x8c, 0x3d, 0x80, 0xc8, 0x9d, 0xcc, 0x80, 0xc5,
-	0xe6, 0xef, 0xec, 0x27, 0x4f, 0xcb, 0xce, 0x8f, 0x84, 0xf8, 0xde, 0x8e, 0x26, 0x08, 0xf1, 0x1f,
-	0xee, 0xbb, 0xc0, 0xfc, 0x10, 0x12, 0xcd, 0xaa, 0x8b, 0x66, 0xe6, 0x8a, 0xe5, 0x7d, 0xfc, 0x25,
-	0x22, 0x81, 0xc3, 0x6c, 0xdf, 0x0d, 0xec, 0x49, 0x02, 0x2c, 0x6e, 0x4a, 0x2a, 0xd2, 0xcb, 0xa6,
-	0x22, 0x48, 0xdf, 0x05, 0xe9, 0xa5, 0x48, 0xb3, 0x1a, 0x79, 0xe7, 0xd8, 0x0d, 0xcc, 0xec, 0x7b,
-	0x8b, 0x43, 0xe6, 0x82, 0x53, 0xfe, 0x80, 0xb3, 0x12, 0xad, 0x39, 0x64, 0x5e, 0x70, 0xfe, 0x61,
-	0xc9, 0xa1, 0xcd, 0x8a, 0x8a, 0xf4, 0x5a, 0xaf, 0x65, 0xbc, 0xbe, 0x3b, 0x63, 0x15, 0xb1, 0x89,
-	0x45, 0x9a, 0xd2, 0xa0, 0x6f, 0x49, 0x0e, 0xd5, 0x0e, 0x70, 0x7d, 0x98, 0xc4, 0xc0, 0x7c, 0x11,
-	0xdf, 0x7f, 0x5c, 0xbd, 0x22, 0xde, 0x8c, 0xad, 0x72, 0xfb, 0xf9, 0x4e, 0x6e, 0x87, 0x2c, 0x39,
-	0xcd, 0x34, 0x66, 0x25, 0x83, 0x59, 0xc2, 0x60, 0xaa, 0x8b, 0x07, 0xa5, 0xb4, 0x48, 0x15, 0x74,
-	0x9b, 0x2a, 0xe8, 0x2e, 0x55, 0xd0, 0x7d, 0xaa, 0xa0, 0xeb, 0x47, 0xa5, 0x34, 0xae, 0x16, 0x5b,
-	0x9c, 0x49, 0xcf, 0x01, 0x00, 0x00, 0xff, 0xff, 0xf8, 0x48, 0xc2, 0x84, 0x75, 0x02, 0x00, 0x00,
+	// 619 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xac, 0x93, 0xc1, 0x4e, 0xdb, 0x4c,
+	0x14, 0x85, 0x63, 0x27, 0x20, 0xb8, 0x09, 0x10, 0xcd, 0xff, 0x8b, 0xa6, 0x01, 0x1c, 0x33, 0x9b,
+	0x66, 0x81, 0x8c, 0x94, 0x4a, 0x95, 0x4a, 0xd5, 0x56, 0x75, 0x08, 0x60, 0x95, 0x0a, 0x6a, 0x52,
+	0x54, 0xb1, 0x89, 0x06, 0x33, 0xb8, 0x16, 0xb6, 0xc7, 0xb2, 0x27, 0x2d, 0x7e, 0x8a, 0x76, 0xd9,
+	0x65, 0xdf, 0xa2, 0xaf, 0xc0, 0xb2, 0x4b, 0x56, 0x51, 0x9b, 0xbe, 0x01, 0x4f, 0x50, 0xd9, 0x9e,
+	0x10, 0x43, 0xa0, 0xab, 0x6e, 0x92, 0xf1, 0x3d, 0xe7, 0xcc, 0xbd, 0xfe, 0xc6, 0x03, 0x2b, 0x16,
+	0xb3, 0xce, 0x42, 0x46, 0xac, 0x0f, 0xeb, 0x16, 0xf3, 0x4f, 0x1d, 0x5b, 0xfc, 0x69, 0x41, 0xc8,
+	0x38, 0x43, 0xd5, 0x6b, 0x59, 0xcb, 0xea, 0x75, 0x75, 0x1c, 0x48, 0x7f, 0x83, 0xe3, 0x75, 0x8f,
+	0x72, 0x72, 0x42, 0x38, 0xc9, 0x32, 0xf5, 0xe5, 0x49, 0x47, 0x4e, 0xfd, 0xdf, 0x66, 0x36, 0x4b,
+	0x97, 0xeb, 0xc9, 0x2a, 0xab, 0xe2, 0x97, 0x30, 0xb3, 0xdd, 0xde, 0x67, 0xae, 0x63, 0xc5, 0xe8,
+	0x31, 0x94, 0x39, 0x77, 0x7b, 0x11, 0xb5, 0x98, 0x7f, 0x12, 0xd5, 0x24, 0x55, 0x6a, 0x4e, 0xe9,
+	0xe8, 0x62, 0xd0, 0x28, 0x0c, 0x07, 0x0d, 0xe8, 0x76, 0x77, 0x0f, 0x32, 0xc5, 0x04, 0xce, 0x5d,
+	0xb1, 0xc6, 0xdf, 0x25, 0x80, 0x36, 0xf3, 0x23, 0x1e, 0x12, 0xc7, 0xe7, 0xe8, 0x19, 0x94, 0x78,
+	0x1c, 0xd0, 0x34, 0x3c, 0xdf, 0x5a, 0xd5, 0x6e, 0xbf, 0x86, 0x36, 0xf6, 0x6a, 0xdd, 0x38, 0xa0,
+	0x7a, 0x29, 0xd9, 0xdf, 0x4c, 0x43, 0x68, 0x11, 0x8a, 0x67, 0x34, 0xae, 0xc9, 0xaa, 0xd4, 0x9c,
+	0x15, 0x42, 0x52, 0x40, 0x75, 0x98, 0xfa, 0x48, 0xdc, 0x3e, 0xad, 0x15, 0x73, 0x4a, 0x56, 0xc2,
+	0x2d, 0x28, 0x25, 0xfb, 0xa0, 0x0a, 0xcc, 0xec, 0xef, 0x1d, 0x18, 0x5d, 0xe3, 0xb0, 0x53, 0x2d,
+	0x24, 0x4f, 0x66, 0xe7, 0xed, 0x3b, 0xc3, 0xec, 0x6c, 0x56, 0x25, 0x34, 0x0f, 0xb0, 0x6f, 0xee,
+	0xed, 0x18, 0xba, 0xd1, 0xed, 0x6c, 0x56, 0xe5, 0x8d, 0xd2, 0xd7, 0x6f, 0x8d, 0x02, 0xfe, 0x2c,
+	0x03, 0x1c, 0x31, 0x9f, 0xb6, 0xd3, 0xc1, 0xd0, 0x1a, 0x2c, 0x84, 0xc4, 0xb7, 0x69, 0xcf, 0x73,
+	0xfc, 0xde, 0x71, 0xcc, 0x69, 0x94, 0x0e, 0x52, 0x14, 0xed, 0xe6, 0x52, 0xf1, 0x8d, 0xe3, 0xeb,
+	0x89, 0x94, 0x73, 0x93, 0x73, 0xe1, 0x2e, 0x4e, 0xba, 0xc9, 0x79, 0xe6, 0x7e, 0x02, 0xb2, 0x6d,
+	0xd5, 0x4a, 0xaa, 0xd4, 0x2c, 0xb7, 0xea, 0x93, 0x4c, 0x46, 0x27, 0xa0, 0x83, 0x80, 0x2d, 0x6f,
+	0xb7, 0x4d, 0xd9, 0xb6, 0xd0, 0x23, 0xa8, 0xf8, 0x7d, 0xaf, 0x17, 0xd2, 0xc0, 0x75, 0x2c, 0x12,
+	0xd5, 0xa6, 0xd2, 0x23, 0xc9, 0x5a, 0x94, 0xfd, 0xbe, 0x67, 0x0a, 0x01, 0x6d, 0x42, 0xd9, 0xba,
+	0x06, 0x1b, 0xd5, 0xa6, 0xd5, 0x62, 0xb3, 0xdc, 0x5a, 0xfe, 0x1b, 0xfd, 0xd1, 0x2e, 0xb9, 0x18,
+	0xbe, 0x94, 0x61, 0x61, 0x4c, 0x64, 0xa7, 0xef, 0x11, 0x1f, 0x6d, 0xdd, 0x87, 0x45, 0x49, 0xf2,
+	0x57, 0x83, 0xc6, 0x62, 0x4c, 0x3c, 0x77, 0x03, 0xdf, 0x32, 0xe1, 0xdb, 0xc0, 0xb6, 0xee, 0x03,
+	0x76, 0xf7, 0x3e, 0x23, 0x13, 0xfe, 0x57, 0x28, 0x5f, 0xdc, 0x89, 0x72, 0x49, 0x34, 0xff, 0x2f,
+	0x6b, 0x9e, 0x77, 0xe0, 0x9b, 0x84, 0x9f, 0x4f, 0x12, 0x9e, 0xd5, 0x97, 0xae, 0x06, 0x8d, 0x07,
+	0x59, 0x34, 0x27, 0xae, 0x9d, 0xba, 0xec, 0x13, 0xbe, 0x89, 0x36, 0x86, 0xea, 0x98, 0xec, 0x2e,
+	0xb5, 0x89, 0x15, 0x23, 0x0a, 0x73, 0xa2, 0x59, 0x8f, 0x70, 0x1e, 0x26, 0x37, 0x2e, 0x39, 0xb6,
+	0x95, 0xdc, 0x5b, 0x89, 0x7b, 0xac, 0xbd, 0xe2, 0x3c, 0x74, 0x8e, 0xfb, 0x9c, 0x46, 0xfa, 0xaa,
+	0x18, 0xf9, 0xa1, 0xe0, 0x25, 0x06, 0x5c, 0x63, 0x9e, 0xc3, 0xa9, 0x17, 0xf0, 0x18, 0x9b, 0x15,
+	0x51, 0x4c, 0x52, 0x11, 0x36, 0xa0, 0x72, 0x10, 0x47, 0x9c, 0x7a, 0xe2, 0x43, 0x7f, 0x0a, 0xd3,
+	0xe9, 0xd5, 0x19, 0xf5, 0x5b, 0xba, 0xa3, 0xdf, 0x6b, 0x1a, 0x1f, 0x26, 0x1e, 0xf1, 0x95, 0x88,
+	0x80, 0xae, 0x5e, 0xfc, 0x52, 0x0a, 0x17, 0x43, 0x45, 0xfa, 0x31, 0x54, 0xa4, 0xcb, 0xa1, 0x22,
+	0xfd, 0x1c, 0x2a, 0xd2, 0x97, 0xdf, 0x4a, 0xe1, 0x68, 0x3a, 0xe3, 0xff, 0x5e, 0xfe, 0x13, 0x00,
+	0x00, 0xff, 0xff, 0xa5, 0xa0, 0x82, 0xe8, 0xd9, 0x04, 0x00, 0x00,
 }

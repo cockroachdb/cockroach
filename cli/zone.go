@@ -256,7 +256,7 @@ func runGetZone(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	res, err := yaml.Marshal(zone)
+	res, err := yaml.Marshal(zone.ToHuman())
 	if err != nil {
 		return err
 	}
@@ -461,9 +461,9 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 	// Convert it to proto and marshal it again to put into the table. This is a
 	// bit more tedious than taking protos directly, but yaml is a more widely
 	// understood format.
-	origReplicaAttrs := zone.ReplicaAttrs
-	zone.ReplicaAttrs = nil
 	// Read zoneConfig file to conf.
+
+	humanZone := zone.ToHuman()
 	var conf []byte
 	if zoneConfig == "-" {
 		conf, err = ioutil.ReadAll(os.Stdin)
@@ -473,13 +473,14 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("error reading zone config: %s", err)
 	}
-	if err := yaml.Unmarshal(conf, &zone); err != nil {
+	if err := yaml.Unmarshal(conf, &humanZone); err != nil {
 		return fmt.Errorf("unable to parse zoneConfig file: %s", err)
 	}
-	if zone.ReplicaAttrs == nil {
-		zone.ReplicaAttrs = origReplicaAttrs
-	}
 
+	zone, err = humanZone.ToMachine()
+	if err != nil {
+		return err
+	}
 	if err := zone.Validate(); err != nil {
 		return err
 	}
@@ -504,7 +505,7 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	res, err := yaml.Marshal(zone)
+	res, err := yaml.Marshal(zone.ToHuman())
 	if err != nil {
 		return err
 	}

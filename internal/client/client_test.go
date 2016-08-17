@@ -376,10 +376,8 @@ func TestClientGetAndPutProto(t *testing.T) {
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	zoneConfig := config.ZoneConfig{
-		ReplicaAttrs: []roachpb.Attributes{
-			{Attrs: []string{"dc1", "mem"}},
-			{Attrs: []string{"dc2", "mem"}},
-		},
+		NumReplicas:   2,
+		Constraints:   []config.Constraint{{Value: "mem"}},
 		RangeMinBytes: 1 << 10, // 1k
 		RangeMaxBytes: 1 << 18, // 256k
 	}

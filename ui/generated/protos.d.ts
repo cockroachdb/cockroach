@@ -2584,7 +2584,10 @@ export interface configBuilder {
 	decode(buffer: ByteBuffer) : configMessage;
 	decode64(buffer: string) : configMessage;
 	GCPolicy: config.GCPolicyBuilder;
+	Constraint: config.ConstraintBuilder;
 	ZoneConfig: config.ZoneConfigBuilder;
+	ZoneConfigHuman: config.ZoneConfigHumanBuilder;
+	ZoneConfigLegacy: config.ZoneConfigLegacyBuilder;
 	SystemConfig: config.SystemConfigBuilder;
 	
 }
@@ -2629,18 +2632,73 @@ export interface GCPolicyBuilder {
 
 declare module cockroach.config {
 
+	export interface Constraint {
+
+		
+
+type?: Constraint.Type;
+		
+
+getType?() : Constraint.Type;
+		setType?(type : Constraint.Type): void;
+		
+
+
+
+key?: string;
+		
+
+getKey?() : string;
+		setKey?(key : string): void;
+		
+
+
+
+value?: string;
+		
+
+getValue?() : string;
+		setValue?(value : string): void;
+		
+
+
+
+}
+
+	export interface ConstraintMessage extends Constraint {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ConstraintBuilder {
+	new(data?: Constraint): ConstraintMessage;
+	decode(buffer: ArrayBuffer) : ConstraintMessage;
+	decode(buffer: ByteBuffer) : ConstraintMessage;
+	decode64(buffer: string) : ConstraintMessage;
+	Type: Constraint.Type;
+	
+}
+
+}
+
+declare module cockroach.config.Constraint {
+	export const enum Type {
+		POSITIVE = 0,
+		REQUIRED = 1,
+		PROHIBITED = 2,
+		
+}
+}
+
+
+declare module cockroach.config {
+
 	export interface ZoneConfig {
 
 		
-
-replica_attrs?: roachpb.Attributes[];
-		
-
-getReplicaAttrs?() : roachpb.Attributes[];
-		setReplicaAttrs?(replicaAttrs : roachpb.Attributes[]): void;
-		
-
-
 
 range_min_bytes?: Long;
 		
@@ -2669,6 +2727,24 @@ getGc?() : GCPolicy;
 
 
 
+num_replicas?: number;
+		
+
+getNumReplicas?() : number;
+		setNumReplicas?(numReplicas : number): void;
+		
+
+
+
+constraints?: Constraint[];
+		
+
+getConstraints?() : Constraint[];
+		setConstraints?(constraints : Constraint[]): void;
+		
+
+
+
 }
 
 	export interface ZoneConfigMessage extends ZoneConfig {
@@ -2684,6 +2760,114 @@ export interface ZoneConfigBuilder {
 	decode(buffer: ArrayBuffer) : ZoneConfigMessage;
 	decode(buffer: ByteBuffer) : ZoneConfigMessage;
 	decode64(buffer: string) : ZoneConfigMessage;
+	
+}
+
+}
+
+
+declare module cockroach.config {
+
+	export interface ZoneConfigHuman {
+
+		
+
+range_min_bytes?: Long;
+		
+
+getRangeMinBytes?() : Long;
+		setRangeMinBytes?(rangeMinBytes : Long): void;
+		
+
+
+
+range_max_bytes?: Long;
+		
+
+getRangeMaxBytes?() : Long;
+		setRangeMaxBytes?(rangeMaxBytes : Long): void;
+		
+
+
+
+gc?: GCPolicy;
+		
+
+getGc?() : GCPolicy;
+		setGc?(gc : GCPolicy): void;
+		
+
+
+
+num_replicas?: number;
+		
+
+getNumReplicas?() : number;
+		setNumReplicas?(numReplicas : number): void;
+		
+
+
+
+constraints?: string[];
+		
+
+getConstraints?() : string[];
+		setConstraints?(constraints : string[]): void;
+		
+
+
+
+}
+
+	export interface ZoneConfigHumanMessage extends ZoneConfigHuman {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ZoneConfigHumanBuilder {
+	new(data?: ZoneConfigHuman): ZoneConfigHumanMessage;
+	decode(buffer: ArrayBuffer) : ZoneConfigHumanMessage;
+	decode(buffer: ByteBuffer) : ZoneConfigHumanMessage;
+	decode64(buffer: string) : ZoneConfigHumanMessage;
+	
+}
+
+}
+
+
+declare module cockroach.config {
+
+	export interface ZoneConfigLegacy {
+
+		
+
+replica_attrs?: roachpb.Attributes[];
+		
+
+getReplicaAttrs?() : roachpb.Attributes[];
+		setReplicaAttrs?(replicaAttrs : roachpb.Attributes[]): void;
+		
+
+
+
+}
+
+	export interface ZoneConfigLegacyMessage extends ZoneConfigLegacy {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ZoneConfigLegacyBuilder {
+	new(data?: ZoneConfigLegacy): ZoneConfigLegacyMessage;
+	decode(buffer: ArrayBuffer) : ZoneConfigLegacyMessage;
+	decode(buffer: ByteBuffer) : ZoneConfigLegacyMessage;
+	decode64(buffer: string) : ZoneConfigLegacyMessage;
 	
 }
 

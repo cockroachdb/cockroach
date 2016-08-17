@@ -26,6 +26,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -215,13 +216,13 @@ func TestStorePoolDies(t *testing.T) {
 // verifyStoreList ensures that the returned list of stores is correct.
 func verifyStoreList(
 	sp *StorePool,
-	requiredAttrs []string,
+	constraints []config.Constraint,
 	expected []int,
 	expectedAliveStoreCount int,
 	expectedThrottledStoreCount int,
 ) error {
 	var actual []int
-	sl, aliveStoreCount, throttledStoreCount := sp.getStoreList(roachpb.Attributes{Attrs: requiredAttrs}, false)
+	sl, aliveStoreCount, throttledStoreCount := sp.getStoreList(constraints, false)
 	if aliveStoreCount != expectedAliveStoreCount {
 		return errors.Errorf("expected AliveStoreCount %d does not match actual %d",
 			expectedAliveStoreCount, aliveStoreCount)
@@ -249,9 +250,10 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	stopper, g, _, sp := createTestStorePool(TestTimeUntilStoreDeadOff)
 	defer stopper.Stop()
 	sg := gossiputil.NewStoreGossiper(g)
+	constraints := []config.Constraint{{Value: "ssd"}, {Value: "dc"}}
 	required := []string{"ssd", "dc"}
 	// Nothing yet.
-	if sl, _, _ := sp.getStoreList(roachpb.Attributes{Attrs: required}, false); len(sl.stores) != 0 {
+	if sl, _, _ := sp.getStoreList(constraints, false); len(sl.stores) != 0 {
 		t.Errorf("expected no stores, instead %+v", sl.stores)
 	}
 
@@ -296,7 +298,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		&declinedStore,
 	}, t)
 
-	if err := verifyStoreList(sp, required, []int{
+	if err := verifyStoreList(sp, constraints, []int{
 		int(matchingStore.StoreID),
 		int(supersetStore.StoreID),
 		int(deadStore.StoreID),
@@ -311,7 +313,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	sp.mu.stores[declinedStore.StoreID].throttledUntil = sp.clock.Now().GoTime().Add(time.Hour)
 	sp.mu.Unlock()
 
-	if err := verifyStoreList(sp, required, []int{
+	if err := verifyStoreList(sp, constraints, []int{
 		int(matchingStore.StoreID),
 		int(supersetStore.StoreID),
 	}, 5, 1); err != nil {
@@ -428,7 +430,7 @@ func TestStorePoolDefaultState(t *testing.T) {
 		t.Errorf("expected 0 dead replicas; got %v", dead)
 	}
 
-	sl, alive, throttled := sp.getStoreList(roachpb.Attributes{}, true)
+	sl, alive, throttled := sp.getStoreList(nil, true)
 	if len(sl.stores) > 0 {
 		t.Errorf("expected no live stores; got list of %v", sl)
 	}
