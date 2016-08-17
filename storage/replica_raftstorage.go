@@ -517,15 +517,27 @@ func (r *Replica) append(
 		return prevLastIndex, prevRaftLogSize, nil
 	}
 	var diff enginepb.MVCCStats
+	var value roachpb.Value
 	for i := range entries {
 		ent := &entries[i]
 		key := keys.RaftLogKey(r.RangeID, ent.Index)
-		if err := engine.MVCCPutProto(ctx, batch, &diff, key, hlc.ZeroTimestamp, nil /* txn */, ent); err != nil {
+		if err := value.SetProto(ent); err != nil {
+			return 0, 0, err
+		}
+		value.InitChecksum(key)
+		var err error
+		if ent.Index > prevLastIndex {
+			err = engine.MVCCBlindPut(ctx, batch, &diff, key, hlc.ZeroTimestamp, value, nil /* txn */)
+		} else {
+			err = engine.MVCCPut(ctx, batch, &diff, key, hlc.ZeroTimestamp, value, nil /* txn */)
+		}
+		if err != nil {
 			return 0, 0, err
 		}
 	}
-	lastIndex := entries[len(entries)-1].Index
+
 	// Delete any previously appended log entries which never committed.
+	lastIndex := entries[len(entries)-1].Index
 	for i := lastIndex + 1; i <= prevLastIndex; i++ {
 		err := engine.MVCCDelete(ctx, batch, &diff, keys.RaftLogKey(r.RangeID, i),
 			hlc.ZeroTimestamp, nil /* txn */)
@@ -626,10 +638,17 @@ func (r *Replica) applySnapshot(
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
 	// that predate the snapshot will be orphaned and never truncated or GC'd.
-	iter := NewReplicaDataIterator(&desc, batch, false /* !replicatedOnly */)
+	//
+	// The KVs and log entries are all written to distinct keys so we can use a
+	// distinct batch. Note that we clear keys here that are potentially
+	// overwritten below, which violates the spirit of the distinct batch. This
+	// is safe because we don't do any reads until after the distinct batch is
+	// closed (the raft log writes are "blind").
+	distinctBatch := batch.Distinct()
+	iter := NewReplicaDataIterator(&desc, distinctBatch, false /* !replicatedOnly */)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
-		if err := batch.Clear(iter.Key()); err != nil {
+		if err := distinctBatch.Clear(iter.Key()); err != nil {
 			return err
 		}
 	}
@@ -647,7 +666,7 @@ func (r *Replica) applySnapshot(
 			Key:       kv.Key,
 			Timestamp: kv.Timestamp,
 		}
-		if err := batch.Put(mvccKey, kv.Value); err != nil {
+		if err := distinctBatch.Put(mvccKey, kv.Value); err != nil {
 			return err
 		}
 	}
@@ -660,25 +679,13 @@ func (r *Replica) applySnapshot(
 	}
 
 	// Write the snapshot's Raft log into the range.
-	_, raftLogSize, err = r.append(ctx, batch, 0, raftLogSize, logEntries)
+	_, raftLogSize, err = r.append(ctx, distinctBatch, 0, raftLogSize, logEntries)
 	if err != nil {
 		return err
-	}
-
-	s, err := loadState(ctx, batch, &desc)
-	if err != nil {
-		return err
-	}
-
-	// As outlined above, last and applied index are the same after applying
-	// the snapshot (i.e. the snapshot has no uncommitted tail).
-	if s.RaftAppliedIndex != snap.Metadata.Index {
-		log.Fatalf(ctx, "%s with state loaded from %d: snapshot resulted in appliedIndex=%d, metadataIndex=%d",
-			r, s.Desc.RangeID, s.RaftAppliedIndex, snap.Metadata.Index)
 	}
 
 	if !raft.IsEmptyHardState(hs) {
-		if err := setHardState(ctx, batch, s.Desc.RangeID, hs); err != nil {
+		if err := setHardState(ctx, distinctBatch, r.RangeID, hs); err != nil {
 			return errors.Wrapf(err, "unable to persist HardState %+v", &hs)
 		}
 	} else {
@@ -688,6 +695,26 @@ func (r *Replica) applySnapshot(
 		// a HardState when it increases the committed index as a result of the
 		// snapshot, but who is to say it isn't going to accept a snapshot
 		// which is identical to the current state?
+	}
+
+	// We need to close the distinct batch and start using the normal batch for
+	// the read below.
+	distinctBatch.Close()
+
+	s, err := loadState(ctx, batch, &desc)
+	if err != nil {
+		return err
+	}
+
+	if s.Desc.RangeID != r.RangeID {
+		log.Fatalf(ctx, "%s: unexpected range ID %d", r, s.Desc.RangeID)
+	}
+
+	// As outlined above, last and applied index are the same after applying
+	// the snapshot (i.e. the snapshot has no uncommitted tail).
+	if s.RaftAppliedIndex != snap.Metadata.Index {
+		log.Fatalf(ctx, "%s: with state loaded from %d: snapshot resulted in appliedIndex=%d, metadataIndex=%d",
+			r, s.Desc.RangeID, s.RaftAppliedIndex, snap.Metadata.Index)
 	}
 
 	if err := batch.Commit(); err != nil {
