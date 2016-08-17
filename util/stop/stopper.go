@@ -63,7 +63,7 @@ func handleDebug(w http.ResponseWriter, r *http.Request) {
 	defer trackedStoppers.Unlock()
 	for _, s := range trackedStoppers.stoppers {
 		s.mu.Lock()
-		fmt.Fprintf(w, "%p: %d tasks\n%s", s, s.numTasks, s.runningTasksLocked())
+		fmt.Fprintf(w, "%p: %d tasks\n%s", s, s.mu.numTasks, s.runningTasksLocked())
 		s.mu.Unlock()
 	}
 }
@@ -111,18 +111,20 @@ func (k taskKey) String() string {
 // be added to the stopper via AddCloser(), to be closed after the
 // stopper has stopped.
 type Stopper struct {
-	quiescer  chan struct{}     // Closed when quiescing
-	stopper   chan struct{}     // Closed when stopping
-	stopped   chan struct{}     // Closed when stopped completely
-	onPanic   func(interface{}) // called with recover() on panic on any goroutine
-	stop      sync.WaitGroup    // Incremented for outstanding workers
-	mu        syncutil.Mutex    // Protects the fields below
-	quiesce   *sync.Cond        // Conditional variable to wait for outstanding tasks
-	quiescing bool              // true when Stop() has been called
-	numTasks  int               // number of outstanding tasks
-	tasks     map[taskKey]int
-	closers   []Closer
-	cancels   []func()
+	quiescer chan struct{}     // Closed when quiescing
+	stopper  chan struct{}     // Closed when stopping
+	stopped  chan struct{}     // Closed when stopped completely
+	onPanic  func(interface{}) // called with recover() on panic on any goroutine
+	stop     sync.WaitGroup    // Incremented for outstanding workers
+	mu       struct {
+		syncutil.Mutex
+		quiesce   *sync.Cond // Conditional variable to wait for outstanding tasks
+		quiescing bool       // true when Stop() has been called
+		numTasks  int        // number of outstanding tasks
+		tasks     map[taskKey]int
+		closers   []Closer
+		cancels   []func()
+	}
 }
 
 // An Option can be passed to NewStopper.
@@ -151,14 +153,15 @@ func NewStopper(options ...Option) *Stopper {
 		quiescer: make(chan struct{}),
 		stopper:  make(chan struct{}),
 		stopped:  make(chan struct{}),
-		tasks:    map[taskKey]int{},
 	}
+
+	s.mu.tasks = map[taskKey]int{}
 
 	for _, opt := range options {
 		opt.apply(s)
 	}
 
-	s.quiesce = sync.NewCond(&s.mu)
+	s.mu.quiesce = sync.NewCond(&s.mu)
 	register(s)
 	return s
 }
@@ -192,7 +195,7 @@ func (s *Stopper) RunWorker(f func()) {
 func (s *Stopper) AddCloser(c Closer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.closers = append(s.closers, c)
+	s.mu.closers = append(s.mu.closers, c)
 }
 
 // RunTask adds one to the count of tasks left to quiesce in the system. Any
@@ -274,27 +277,27 @@ func (s *Stopper) RunLimitedAsyncTask(sem chan struct{}, f func()) error {
 func (s *Stopper) runPrelude(key taskKey) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.quiescing {
+	if s.mu.quiescing {
 		return false
 	}
-	s.numTasks++
-	s.tasks[key]++
+	s.mu.numTasks++
+	s.mu.tasks[key]++
 	return true
 }
 
 func (s *Stopper) runPostlude(key taskKey) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.numTasks--
-	s.tasks[key]--
-	s.quiesce.Broadcast()
+	s.mu.numTasks--
+	s.mu.tasks[key]--
+	s.mu.quiesce.Broadcast()
 }
 
 // NumTasks returns the number of active tasks.
 func (s *Stopper) NumTasks() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.numTasks
+	return s.mu.numTasks
 }
 
 // A TaskMap is returned by RunningTasks().
@@ -321,11 +324,11 @@ func (s *Stopper) RunningTasks() TaskMap {
 
 func (s *Stopper) runningTasksLocked() TaskMap {
 	m := map[string]int{}
-	for k := range s.tasks {
-		if s.tasks[k] == 0 {
+	for k := range s.mu.tasks {
+		if s.mu.tasks[k] == 0 {
 			continue
 		}
-		m[k.String()] = s.tasks[k]
+		m[k.String()] = s.mu.tasks[k]
 	}
 	return m
 }
@@ -335,6 +338,7 @@ func (s *Stopper) runningTasksLocked() TaskMap {
 func (s *Stopper) Stop() {
 	defer s.Recover()
 	defer unregister(s)
+
 	log.Info(context.Background(), "stop has been called, stopping or quiescing all running tasks")
 	// Don't bother doing stuff cleanly if we're panicking, that would likely
 	// block. Instead, best effort only. This cleans up the stack traces,
@@ -344,9 +348,11 @@ func (s *Stopper) Stop() {
 		go s.Quiesce()
 		close(s.stopper)
 		close(s.stopped)
-		for _, c := range s.closers {
+		s.mu.Lock()
+		for _, c := range s.mu.closers {
 			go c.Close()
 		}
+		s.mu.Unlock()
 		panic(r)
 	}
 
@@ -355,7 +361,7 @@ func (s *Stopper) Stop() {
 	s.stop.Wait()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, c := range s.closers {
+	for _, c := range s.mu.closers {
 		c.Close()
 	}
 	close(s.stopped)
@@ -397,17 +403,17 @@ func (s *Stopper) Quiesce() {
 	defer s.Recover()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, cancel := range s.cancels {
+	for _, cancel := range s.mu.cancels {
 		cancel()
 	}
-	if !s.quiescing {
-		s.quiescing = true
+	if !s.mu.quiescing {
+		s.mu.quiescing = true
 		close(s.quiescer)
 	}
-	for s.numTasks > 0 {
+	for s.mu.numTasks > 0 {
 		log.Infof(context.Background(), "quiescing; tasks left:\n%s", s.runningTasksLocked())
 		// Unlock s.mu, wait for the signal, and lock s.mu.
-		s.quiesce.Wait()
+		s.mu.quiesce.Wait()
 	}
 }
 
@@ -418,6 +424,6 @@ func (s *Stopper) WithCancel(ctx context.Context) context.Context {
 	ctx, cancel = context.WithCancel(ctx)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.cancels = append(s.cancels, cancel)
+	s.mu.cancels = append(s.mu.cancels, cancel)
 	return ctx
 }
