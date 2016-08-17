@@ -1040,7 +1040,9 @@ func (g *Gossip) maybeSignalStatusChangeLocked() {
 				log.Warningf(ctx, "first range unavailable; trying remaining resolvers")
 			}
 		}
-		g.signalStalledLocked()
+		if len(g.resolvers) > 0 {
+			g.signalStalledLocked()
+		}
 	} else {
 		if g.stalled {
 			g.events.Printf("connected")
@@ -1053,11 +1055,9 @@ func (g *Gossip) maybeSignalStatusChangeLocked() {
 }
 
 func (g *Gossip) signalStalledLocked() {
-	if len(g.resolvers) > 0 {
-		select {
-		case g.stalledCh <- struct{}{}:
-		default:
-		}
+	select {
+	case g.stalledCh <- struct{}{}:
+	default:
 	}
 }
 
