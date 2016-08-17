@@ -187,9 +187,8 @@ class DatabasesMain extends React.Component<DatabasesMainProps, {}> {
       return <div className="sql-table">
         <SortableTable count={databases.length}
           sortSetting={sortSetting}
-          onChangeSortSetting={(setting) => this.changeSortSetting(setting) }>
-          {this.columns(this.props) }
-        </SortableTable>
+          onChangeSortSetting={(setting) => this.changeSortSetting(setting)}
+          columns={this.columns(this.props) } />
       </div>;
     }
     return <div>No results.</div>;
