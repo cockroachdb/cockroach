@@ -1700,15 +1700,12 @@ func TestStoreRangeRebalance(t *testing.T) {
 	if generated == 0 {
 		t.Fatalf("expected at least 1 snapshot, but found 0")
 	}
-	// TODO(peter): We're sometimes generating normal snapshots immediately after
-	// the preemptive ones. Need to figure out why and fix.
-	if false {
-		if normalApplied != 0 {
-			t.Fatalf("expected 0 normal snapshots, but found %d", normalApplied)
-		}
-		if generated != preemptiveApplied {
-			t.Fatalf("expected %d preemptive snapshots, but found %d", generated, preemptiveApplied)
-		}
+
+	if normalApplied != 0 {
+		t.Fatalf("expected 0 normal snapshots, but found %d", normalApplied)
+	}
+	if generated != preemptiveApplied {
+		t.Fatalf("expected %d preemptive snapshots, but found %d", generated, preemptiveApplied)
 	}
 }
 
@@ -2302,4 +2299,31 @@ func TestTransferRaftLeadership(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestFailedPreemptiveSnapshot verifies that ChangeReplicas is
+// aborted if we are unable to send a preemptive snapshot.
+func TestFailedPreemptiveSnapshot(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	mtc := startMultiTestContext(t, 2)
+	defer mtc.Stop()
+
+	// Replicate a range onto the two stores. This replication is
+	// important because if there was only one node to begin with, the
+	// ChangeReplicas would fail because it was unable to achieve quorum
+	// even if the preemptive snapshot failure were ignored.
+	mtc.replicateRange(1, 1)
+
+	// Now try to add a third. It should fail because we cannot send a
+	// preemptive snapshot to it.
+	rep, err := mtc.stores[0].GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rep.ChangeReplicas(context.Background(), roachpb.ADD_REPLICA,
+		roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3},
+		rep.Desc()); !testutils.IsError(err, "aborted due to failed preemptive snapshot: unable to get connection for node 3") {
+		t.Fatalf("got %s instead of expected error", err)
+	}
 }
