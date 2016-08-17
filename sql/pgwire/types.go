@@ -440,11 +440,10 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.NewDInt(parser.DInt(i))
 		case formatBinary:
-			var i int16
-			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &i)
-			if err != nil {
-				return d, err
+			if len(b) < 2 {
+				return d, errors.Errorf("int2 requires 2 bytes for binary format")
 			}
+			i := int16(binary.BigEndian.Uint16(b))
 			d = parser.NewDInt(parser.DInt(i))
 		default:
 			return d, errors.Errorf("unsupported int2 format code: %s", code)
@@ -458,11 +457,10 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.NewDInt(parser.DInt(i))
 		case formatBinary:
-			var i int32
-			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &i)
-			if err != nil {
-				return d, err
+			if len(b) < 4 {
+				return d, errors.Errorf("int4 requires 4 bytes for binary format")
 			}
+			i := int32(binary.BigEndian.Uint32(b))
 			d = parser.NewDInt(parser.DInt(i))
 		default:
 			return d, errors.Errorf("unsupported int4 format code: %s", code)
@@ -476,11 +474,10 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.NewDInt(parser.DInt(i))
 		case formatBinary:
-			var i int64
-			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &i)
-			if err != nil {
-				return d, err
+			if len(b) < 8 {
+				return d, errors.Errorf("int8 requires 8 bytes for binary format")
 			}
+			i := int64(binary.BigEndian.Uint64(b))
 			d = parser.NewDInt(parser.DInt(i))
 		default:
 			return d, errors.Errorf("unsupported int8 format code: %s", code)
@@ -494,11 +491,10 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.NewDFloat(parser.DFloat(f))
 		case formatBinary:
-			var f float32
-			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &f)
-			if err != nil {
-				return d, err
+			if len(b) < 4 {
+				return d, errors.Errorf("float4 requires 4 bytes for binary format")
 			}
+			f := math.Float32frombits(binary.BigEndian.Uint32(b))
 			d = parser.NewDFloat(parser.DFloat(f))
 		default:
 			return d, errors.Errorf("unsupported float4 format code: %s", code)
@@ -512,11 +508,10 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.NewDFloat(parser.DFloat(f))
 		case formatBinary:
-			var f float64
-			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &f)
-			if err != nil {
-				return d, err
+			if len(b) < 8 {
+				return d, errors.Errorf("float8 requires 8 bytes for binary format")
 			}
+			f := math.Float64frombits(binary.BigEndian.Uint64(b))
 			d = parser.NewDFloat(parser.DFloat(f))
 		default:
 			return d, errors.Errorf("unsupported float8 format code: %s", code)
@@ -645,11 +640,10 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.MakeDTimestamp(ts, time.Microsecond)
 		case formatBinary:
-			var i int64
-			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &i)
-			if err != nil {
-				return d, err
+			if len(b) < 8 {
+				return d, errors.Errorf("timestamp requires 8 bytes for binary format")
 			}
+			i := int64(binary.BigEndian.Uint64(b))
 			d = parser.MakeDTimestamp(pgBinaryToTime(i), time.Microsecond)
 		default:
 			return d, errors.Errorf("unsupported timestamp format code: %s", code)
@@ -663,11 +657,10 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.MakeDTimestampTZ(ts, time.Microsecond)
 		case formatBinary:
-			var i int64
-			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &i)
-			if err != nil {
-				return d, err
+			if len(b) < 8 {
+				return d, errors.Errorf("timestamptz requires 8 bytes for binary format")
 			}
+			i := int64(binary.BigEndian.Uint64(b))
 			d = parser.MakeDTimestampTZ(pgBinaryToTime(i), time.Microsecond)
 		default:
 			return d, errors.Errorf("unsupported timestamptz format code: %s", code)
