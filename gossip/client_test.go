@@ -216,17 +216,22 @@ func TestClientGossipMetrics(t *testing.T) {
 				}
 			}
 
-			// Since there are two gossip nodes, there should be at least one incoming
-			// and outgoing connection.
-			for i, s := range []*server{local.server, remote.server} {
+			// Since there are two gossip nodes, there should be either one incoming
+			// or outgoing connection.
+			for i, g := range []*Gossip{local, remote} {
+				s := g.server
 				s.mu.Lock()
-				gauge := s.mu.incoming.gauge
-				s.mu.Unlock()
-				if gauge == nil {
-					return errors.Errorf("%d: missing gauge \"incoming\"", i)
+				defer s.mu.Unlock()
+
+				count := int64(0)
+				for _, gauge := range []*metric.Gauge{s.mu.incoming.gauge, g.outgoing.gauge} {
+					if gauge == nil {
+						return errors.Errorf("%d: missing gauge \"incoming\"", i)
+					}
+					count += gauge.Value()
 				}
-				if count := gauge.Value(); count <= 0 {
-					return errors.Errorf("%d: expected metrics gauge %q > 0; = %d", i, gauge.GetName(), count)
+				if count <= 0 {
+					return errors.Errorf("%d: expected metrics incoming + outgoing connection count > 0; = %d", i, count)
 				}
 			}
 			return nil
