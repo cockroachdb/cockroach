@@ -16,8 +16,6 @@ interface TimeScaleSelectorState {
   // This setting should not persist if the current route is changed, and thus
   // it is not stored in the redux state.
   controlsVisible: boolean;
-  // The eventListener is used to track the body event listener which closes
-  // the
 }
 
 class TimeScaleSelector extends React.Component<TimeScaleSelectorProps, TimeScaleSelectorState> {
@@ -52,10 +50,12 @@ class TimeScaleSelector extends React.Component<TimeScaleSelectorProps, TimeScal
   }
 
   componentWillMount() {
+    // Hide the popup when you click anywhere on the page
     document.body.addEventListener("click", this.hide);
   }
 
   componentWillUnmount() {
+    // Remove popup hiding event listener on unmount
     document.body.removeEventListener("click", this.hide);
   }
 
