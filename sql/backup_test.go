@@ -155,6 +155,9 @@ func TestClusterBackupRestore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
+	dir, cleanupFn := testingTempDir(t, 2)
+	defer cleanupFn()
+
 	// TODO(dan): Increase this clusterSize to 3. It works if the test timeout
 	// is raised and with a util.SucceedsSoon wrapped around Backup, Restore,
 	// and every sql Exec, but it seems like we should be fixing the underlying
@@ -162,50 +165,63 @@ func TestClusterBackupRestore(t *testing.T) {
 	const clusterSize = 1
 	const count = 1000
 
-	tc := testcluster.StartTestCluster(t, clusterSize, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationAuto,
-	})
-	defer tc.Stopper().Stop()
-	sqlDB := tc.Conns[0]
-	kvDB := tc.Server(0).KVClient().(*client.DB)
+	{
+		tc := testcluster.StartTestCluster(t, clusterSize, base.TestClusterArgs{
+			ReplicationMode: base.ReplicationAuto,
+			ServerArgs:      base.TestServerArgs{},
+		})
+		defer tc.Stopper().Stop()
+		sqlDB := tc.Conns[0]
+		kvDB := tc.Server(0).KVClient().(*client.DB)
 
-	_ = setupBackupRestoreDB(t, ctx, tc, count, backupRestoreDefaultRanges)
-	dir, cleanupFn := testingTempDir(t, 2)
-	defer cleanupFn()
+		_ = setupBackupRestoreDB(t, ctx, tc, count, backupRestoreDefaultRanges)
 
-	if desc, err := sql.Backup(context.Background(), *kvDB, dir); err != nil {
-		t.Fatal(err)
-	} else {
-		approxDataSize := int64(backupRestoreApproxRowSize) * count
-		if max := approxDataSize * 2; desc.DataSize > approxDataSize || desc.DataSize < 2*max {
-			t.Errorf("expected data size in [%d,%d] but was %d", approxDataSize, max, desc.DataSize)
+		if desc, err := sql.Backup(context.Background(), *kvDB, dir); err != nil {
+			t.Fatal(err)
+		} else {
+			approxDataSize := int64(backupRestoreRowPayloadSize) * count
+			if max := approxDataSize * 2; desc.DataSize < approxDataSize || desc.DataSize > 2*max {
+				t.Errorf("expected data size in [%d,%d] but was %d", approxDataSize, max, desc.DataSize)
+			}
+		}
+
+		if _, err := sqlDB.Exec(`TRUNCATE bench.bank`); err != nil {
+			t.Fatal(err)
+		}
+
+		var rowCount int
+		if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount); err != nil {
+			t.Fatal(err)
+		}
+
+		if rowCount != 0 {
+			t.Fatalf("expected 0 rows but found %d", rowCount)
 		}
 	}
 
-	if _, err := sqlDB.Exec(`TRUNCATE bench.bank`); err != nil {
-		t.Fatal(err)
-	}
+	// Start a new cluster to restore into.
+	{
+		tc := testcluster.StartTestCluster(t, clusterSize, base.TestClusterArgs{
+			ReplicationMode: base.ReplicationAuto,
+			ServerArgs:      base.TestServerArgs{},
+		})
+		defer tc.Stopper().Stop()
+		sqlDB := tc.Conns[0]
+		kvDB := tc.Server(0).KVClient().(*client.DB)
 
-	var rowCount int
-	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount); err != nil {
-		t.Fatal(err)
-	}
+		table := parser.TableName{DatabaseName: "bench", TableName: "bank"}
+		if _, err := sql.Restore(ctx, *kvDB, dir, table, true); err != nil {
+			t.Fatal(err)
+		}
 
-	if rowCount != 0 {
-		t.Fatalf("expected 0 rows but found %d", rowCount)
-	}
+		var rowCount int
+		if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount); err != nil {
+			t.Fatal(err)
+		}
 
-	// TODO(dan): Shut down the cluster and restore into a fresh one.
-	if err := sql.Restore(ctx, *kvDB, dir, "bank", true); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount); err != nil {
-		t.Fatal(err)
-	}
-
-	if rowCount != count {
-		t.Fatalf("expected %d rows but found %d", count, rowCount)
+		if rowCount != count {
+			t.Fatalf("expected %d rows but found %d", count, rowCount)
+		}
 	}
 }
 
@@ -267,8 +283,9 @@ func runBenchmarkClusterRestore(b *testing.B, clusterSize int, count int) {
 	setupReplicationAndLeases(b, tc, ranges, clusterSize)
 
 	b.ResetTimer()
+	table := parser.TableName{DatabaseName: "bench", TableName: "bank"}
 	for i := 0; i < b.N; i++ {
-		if err := sql.Restore(ctx, *kvDB, dir, "bank", true); err != nil {
+		if _, err := sql.Restore(ctx, *kvDB, dir, table, true); err != nil {
 			b.Fatal(err)
 		}
 	}
