@@ -8,7 +8,7 @@ import * as sinon from "sinon";
 import * as protos from  "../js/protos";
 import { TextGraph, Axis, Metric } from "../components/graphs";
 import { MetricsDataProviderUnconnected as MetricsDataProvider } from "./metricsDataProvider";
-import { TimeSeriesQueryAggregator, TimeSeriesQueryDerivative } from "./metricsDataProvider";
+import { TimeSeriesQueryAggregator, TimeSeriesQueryDerivative } from "../util/protoEnums";
 import { MetricsQuery } from "../redux/metrics";
 
 type TSRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
