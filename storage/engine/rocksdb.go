@@ -1495,12 +1495,14 @@ func (fr *RocksDBSstFileReader) Close() {
 // RocksDBSstFileReader.
 type RocksDBSstFileWriter struct {
 	fw *C.DBSstFileWriter
+	// DataSize tracks the total key and value bytes added so far.
+	DataSize int64
 }
 
 // MakeRocksDBSstFileWriter creates a new RocksDBSstFileWriter with the default
 // configuration.
 func MakeRocksDBSstFileWriter() RocksDBSstFileWriter {
-	return RocksDBSstFileWriter{C.DBSstFileWriterNew()}
+	return RocksDBSstFileWriter{C.DBSstFileWriterNew(), 0}
 }
 
 // Open creates a file at the given path for output of an sstable.
@@ -1519,6 +1521,7 @@ func (fw *RocksDBSstFileWriter) Add(kv MVCCKeyValue) error {
 	if fw == nil {
 		return errors.New("cannot call Open on a closed writer")
 	}
+	fw.DataSize += int64(len(kv.Key.Key)) + int64(len(kv.Value))
 	return statusToError(C.DBSstFileWriterAdd(fw.fw, goToCKey(kv.Key), goToCSlice(kv.Value)))
 }
 

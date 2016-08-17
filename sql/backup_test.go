@@ -173,8 +173,13 @@ func TestClusterBackupRestore(t *testing.T) {
 	dir, cleanupFn := testingTempDir(t, 2)
 	defer cleanupFn()
 
-	if _, err := sql.Backup(context.Background(), *kvDB, dir); err != nil {
+	if desc, err := sql.Backup(context.Background(), *kvDB, dir); err != nil {
 		t.Fatal(err)
+	} else {
+		approxDataSize := int64(backupRestoreApproxRowSize) * count
+		if max := approxDataSize * 2; desc.DataSize > approxDataSize || desc.DataSize < 2*max {
+			t.Errorf("expected data size in [%d,%d] but was %d", approxDataSize, max, desc.DataSize)
+		}
 	}
 
 	if _, err := sqlDB.Exec(`TRUNCATE bench.bank`); err != nil {
@@ -224,12 +229,12 @@ func runBenchmarkClusterBackup(b *testing.B, clusterSize int, count int) {
 	dir, cleanupFn := testingTempDir(b, 2)
 	defer cleanupFn()
 
-	// TODO(dan): Return the actual sizes from Backup.
-	b.SetBytes(int64(count) * backupRestoreRowPayloadSize)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := sql.Backup(ctx, *kvDB, dir); err != nil {
+		if desc, err := sql.Backup(ctx, *kvDB, dir); err != nil {
 			b.Fatal(err)
+		} else {
+			b.SetBytes(desc.DataSize)
 		}
 	}
 }
@@ -253,13 +258,14 @@ func runBenchmarkClusterRestore(b *testing.B, clusterSize int, count int) {
 	dir, cleanupFn := testingTempDir(b, 1)
 	defer cleanupFn()
 
-	if _, err := sql.Backup(ctx, *kvDB, dir); err != nil {
+	if desc, err := sql.Backup(ctx, *kvDB, dir); err != nil {
 		b.Fatal(err)
+	} else {
+		b.SetBytes(desc.DataSize)
 	}
 
 	setupReplicationAndLeases(b, tc, ranges, clusterSize)
 
-	b.SetBytes(int64(count) * backupRestoreRowPayloadSize)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if err := sql.Restore(ctx, *kvDB, dir, "bank", true); err != nil {
