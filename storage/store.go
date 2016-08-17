@@ -1486,6 +1486,12 @@ func splitTriggerPostCommit(
 			log.Warningf(ctx, "%s: error %v", r, err)
 			return
 		}
+	} else if len(split.RightDesc.Replicas) == 1 {
+		// TODO(peter): In single-node clusters, we enqueue the right-hand side of
+		// the split (the new range) for Raft processing so that the corresponding
+		// Raft group is created. This shouldn't be necessary for correctness, but
+		// some tests rely on this (e.g. server.TestStatusSummaries).
+		r.store.enqueueRaftUpdateCheck(rightRng.RangeID)
 	}
 }
 
@@ -2427,6 +2433,8 @@ func (s *Store) processRaft() {
 			close(workQueue)
 		}()
 
+		var pendingReplicas []roachpb.RangeID
+
 		for {
 			workingStart := timeutil.Now()
 			s.processRaftMu.Lock()
@@ -2510,21 +2518,23 @@ func (s *Store) processRaft() {
 				tickerStart := timeutil.Now()
 				s.processRaftMu.Lock()
 				s.mu.Lock()
-				for _, r := range s.mu.replicas {
-					if err := r.tick(); err != nil {
+				pendingReplicas = pendingReplicas[:0]
+				for id, r := range s.mu.replicas {
+					if exists, err := r.tick(); err != nil {
 						log.Error(context.TODO(), err)
+					} else if exists {
+						pendingReplicas = append(pendingReplicas, id)
 					}
 				}
-				// Enqueue all ranges for readiness checks. Note that we
-				// could not hold the pendingRaftGroups lock during the
-				// previous loop because of lock ordering constraints with
-				// r.tick().
+				s.mu.Unlock()
+				// Enqueue all pending ranges for readiness checks. Note that we could
+				// not hold the pendingRaftGroups lock during the previous loop because
+				// of lock ordering constraints with r.tick().
 				s.pendingRaftGroups.Lock()
-				for rangeID := range s.mu.replicas {
+				for _, rangeID := range pendingReplicas {
 					s.pendingRaftGroups.value[rangeID] = struct{}{}
 				}
 				s.pendingRaftGroups.Unlock()
-				s.mu.Unlock()
 				s.processRaftMu.Unlock()
 				s.metrics.RaftTickingDurationNanos.Inc(timeutil.Since(tickerStart).Nanoseconds())
 

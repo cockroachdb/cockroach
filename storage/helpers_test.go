@@ -140,6 +140,12 @@ func (s *Store) SetReplicaScannerActive(active bool) {
 	s.setScannerActive(active)
 }
 
+// EnqueueRaftUpdateCheck enqueues the replica for a Raft update check, forcing
+// the replica's Raft group into existence.
+func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
+	s.enqueueRaftUpdateCheck(rangeID)
+}
+
 // GetLastIndex is the same function as LastIndex but it does not require
 // that the replica lock is held.
 func (r *Replica) GetLastIndex() (uint64, error) {
