@@ -76,7 +76,6 @@ class TimeWindowManager extends React.Component<TimeWindowManagerProps, TimeWind
       start: now.clone().subtract(props.timeWindow.scale.windowSize),
       end: now,
     });
-    this.setState({ timeout: null });
   }
 
   componentWillMount() {
