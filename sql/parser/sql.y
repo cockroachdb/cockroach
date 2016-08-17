@@ -494,7 +494,7 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %type <Expr>  opt_boolean_or_string
 %type <Exprs> var_list
 %type <UnresolvedName> var_name
-%type <str>   col_label type_function_name
+%type <str>   unrestricted_name type_function_name
 %type <str>   non_reserved_word
 %type <Expr>  non_reserved_word_or_sconst
 %type <Expr>  var_value
@@ -958,11 +958,11 @@ any_name:
   }
 
 attrs:
-  '.' col_label
+  '.' unrestricted_name
   {
     $$.val = UnresolvedName{Name($2)}
   }
-| attrs '.' col_label
+| attrs '.' unrestricted_name
   {
     $$.val = append($1.unresolvedName(), Name($3))
   }
@@ -2566,7 +2566,7 @@ from_list:
   }
 
 index_hints_param:
-  FORCE_INDEX '=' col_label
+  FORCE_INDEX '=' unrestricted_name
   {
      $$.val = &IndexHints{Index: Name($3)}
   }
@@ -2602,7 +2602,7 @@ index_hints_param_list:
   }
 
 opt_index_hints:
-  '@' col_label
+  '@' unrestricted_name
   {
     $$.val = &IndexHints{Index: Name($2)}
   }
@@ -4075,7 +4075,7 @@ indirection_elem:
   }
 
 name_indirection:
-  '.' col_label
+  '.' unrestricted_name
   {
     $$.val = Name($2)
   }
@@ -4141,7 +4141,7 @@ target_list:
   }
 
 target_elem:
-  a_expr AS col_label
+  a_expr AS unrestricted_name
   {
     $$.val = SelectExpr{Expr: $1.expr(), As: Name($3)}
   }
@@ -4372,9 +4372,9 @@ non_reserved_word:
 | col_name_keyword
 | type_func_name_keyword
 
-// Column label --- allowed labels in "AS" clauses. This presently includes
-// *all* Postgres keywords.
-col_label:
+// Unrestricted name --- allowed labels in "AS" clauses. This presently
+// includes *all* Postgres keywords.
+unrestricted_name:
   IDENT
 | unreserved_keyword
 | col_name_keyword
@@ -4588,7 +4588,7 @@ type_func_name_keyword:
 | RIGHT
 | SIMILAR
 
-// Reserved keyword --- these keywords are usable only as a col_label.
+// Reserved keyword --- these keywords are usable only as a unrestricted_name.
 //
 // Keywords appear here if they could not be distinguished from variable, type,
 // or function names in some contexts. Don't put things here unless forced to.
