@@ -20,6 +20,8 @@ package storage
 
 import (
 	"fmt"
+	"reflect"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -38,24 +40,18 @@ import (
 )
 
 var simpleZoneConfig = config.ZoneConfig{
-	ReplicaAttrs: []roachpb.Attributes{
-		{Attrs: []string{"a", "ssd"}},
-	},
-}
-
-var multiDisksConfig = config.ZoneConfig{
-	ReplicaAttrs: []roachpb.Attributes{
-		{Attrs: []string{"a", "ssd"}},
-		{Attrs: []string{"a", "hdd"}},
-		{Attrs: []string{"a", "mem"}},
+	NumReplicas: 1,
+	Constraints: config.Constraints{
+		Constraints: []config.Constraint{
+			{Value: "a"},
+			{Value: "ssd"},
+		},
 	},
 }
 
 var multiDCConfig = config.ZoneConfig{
-	ReplicaAttrs: []roachpb.Attributes{
-		{Attrs: []string{"a", "ssd"}},
-		{Attrs: []string{"b", "ssd"}},
-	},
+	NumReplicas: 2,
+	Constraints: config.Constraints{Constraints: []config.Constraint{{Value: "ssd"}}},
 }
 
 var singleStore = []*roachpb.StoreDescriptor{
@@ -220,7 +216,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
-	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false)
+	result, err := a.AllocateTarget(simpleZoneConfig.Constraints, []roachpb.ReplicaDescriptor{}, false)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -233,7 +229,7 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, _, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
-	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false)
+	result, err := a.AllocateTarget(simpleZoneConfig.Constraints, []roachpb.ReplicaDescriptor{}, false)
 	if result != nil {
 		t.Errorf("expected nil result: %+v", result)
 	}
@@ -242,68 +238,40 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 	}
 }
 
-func TestAllocatorThreeDisksSameDC(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	stopper, g, _, a, _ := createTestAllocator()
-	defer stopper.Stop()
-	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
-	result1, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false)
-	if err != nil {
-		t.Fatalf("Unable to perform allocation: %v", err)
-	}
-	if result1.StoreID != 1 && result1.StoreID != 2 {
-		t.Errorf("Expected store 1 or 2; got %+v", result1)
-	}
-	exReplicas := []roachpb.ReplicaDescriptor{
-		{
-			NodeID:  result1.Node.NodeID,
-			StoreID: result1.StoreID,
-		},
-	}
-	result2, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[1], exReplicas, false)
-	if err != nil {
-		t.Errorf("Unable to perform allocation: %v", err)
-	}
-	if result2.StoreID != 3 && result2.StoreID != 4 {
-		t.Errorf("Expected store 3 or 4; got %+v", result2)
-	}
-	if result1.Node.NodeID == result2.Node.NodeID {
-		t.Errorf("Expected node ids to be different %+v vs %+v", result1, result2)
-	}
-	result3, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[2], []roachpb.ReplicaDescriptor{}, false)
-	if err != nil {
-		t.Errorf("Unable to perform allocation: %v", err)
-	}
-	if result3.Node.NodeID != 4 || result3.StoreID != 5 {
-		t.Errorf("Expected node 4, store 5; got %+v", result3)
-	}
-}
-
 func TestAllocatorTwoDatacenters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, g, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
-	result1, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false)
+	result1, err := a.AllocateTarget(multiDCConfig.Constraints, []roachpb.ReplicaDescriptor{}, false)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
-	result2, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[1], []roachpb.ReplicaDescriptor{}, false)
+	result2, err := a.AllocateTarget(multiDCConfig.Constraints, []roachpb.ReplicaDescriptor{{
+		NodeID:  result1.Node.NodeID,
+		StoreID: result1.StoreID,
+	}}, false)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
-	if result1.Node.NodeID != 1 || result2.Node.NodeID != 2 {
-		t.Errorf("Expected nodes 1 & 2: %+v vs %+v", result1.Node, result2.Node)
+	ids := []int{int(result1.Node.NodeID), int(result2.Node.NodeID)}
+	sort.Ints(ids)
+	if expected := []int{1, 2}; !reflect.DeepEqual(ids, expected) {
+		t.Errorf("Expected nodes %+v: %+v vs %+v", expected, result1.Node, result2.Node)
 	}
 	// Verify that no result is forthcoming if we already have a replica.
-	_, err = a.AllocateTarget(multiDCConfig.ReplicaAttrs[1], []roachpb.ReplicaDescriptor{
+	result3, err := a.AllocateTarget(multiDCConfig.Constraints, []roachpb.ReplicaDescriptor{
+		{
+			NodeID:  result1.Node.NodeID,
+			StoreID: result1.StoreID,
+		},
 		{
 			NodeID:  result2.Node.NodeID,
 			StoreID: result2.StoreID,
 		},
 	}, false)
 	if err == nil {
-		t.Errorf("expected error on allocation without available stores")
+		t.Errorf("expected error on allocation without available stores: %+v", result3)
 	}
 }
 
@@ -312,12 +280,19 @@ func TestAllocatorExistingReplica(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
-	result, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[1], []roachpb.ReplicaDescriptor{
-		{
-			NodeID:  2,
-			StoreID: 2,
+	result, err := a.AllocateTarget(
+		config.Constraints{
+			Constraints: []config.Constraint{
+				{Value: "a"},
+				{Value: "hdd"},
+			},
 		},
-	}, false)
+		[]roachpb.ReplicaDescriptor{
+			{
+				NodeID:  2,
+				StoreID: 2,
+			},
+		}, false)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -336,37 +311,38 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
 
 	testCases := []struct {
-		required         []string // attribute strings
-		existing         []int    // existing store/node ID
-		relaxConstraints bool     // allow constraints to be relaxed?
-		expID            int      // expected store/node ID on allocate
+		required         []config.Constraint // attribute strings
+		existing         []int               // existing store/node ID
+		relaxConstraints bool                // allow constraints to be relaxed?
+		expID            int                 // expected store/node ID on allocate
 		expErr           bool
 	}{
 		// The two stores in the system have attributes:
 		//  storeID=1 {"a", "ssd"}
 		//  storeID=2 {"b", "ssd"}
-		{[]string{"a", "ssd"}, []int{}, true, 1, false},
-		{[]string{"a", "ssd"}, []int{1}, true, 2, false},
-		{[]string{"a", "ssd"}, []int{1}, false, 0, true},
-		{[]string{"a", "ssd"}, []int{1, 2}, true, 0, true},
-		{[]string{"b", "ssd"}, []int{}, true, 2, false},
-		{[]string{"b", "ssd"}, []int{1}, true, 2, false},
-		{[]string{"b", "ssd"}, []int{2}, false, 0, true},
-		{[]string{"b", "ssd"}, []int{2}, true, 1, false},
-		{[]string{"b", "ssd"}, []int{1, 2}, true, 0, true},
-		{[]string{"b", "hdd"}, []int{}, true, 2, false},
-		{[]string{"b", "hdd"}, []int{2}, true, 1, false},
-		{[]string{"b", "hdd"}, []int{2}, false, 0, true},
-		{[]string{"b", "hdd"}, []int{1, 2}, true, 0, true},
-		{[]string{"b", "ssd", "gpu"}, []int{}, true, 2, false},
-		{[]string{"b", "hdd", "gpu"}, []int{}, true, 2, false},
+		{[]config.Constraint{{Value: "a"}, {Value: "ssd"}}, []int{}, true, 1, false},
+		{[]config.Constraint{{Value: "a"}, {Value: "ssd"}}, []int{1}, true, 2, false},
+		{[]config.Constraint{{Value: "a"}, {Value: "ssd"}}, []int{1}, false, 0, true},
+		{[]config.Constraint{{Value: "a"}, {Value: "ssd"}}, []int{1, 2}, true, 0, true},
+		{[]config.Constraint{{Value: "b"}, {Value: "ssd"}}, []int{}, true, 2, false},
+		{[]config.Constraint{{Value: "b"}, {Value: "ssd"}}, []int{1}, true, 2, false},
+		{[]config.Constraint{{Value: "b"}, {Value: "ssd"}}, []int{2}, false, 0, true},
+		{[]config.Constraint{{Value: "b"}, {Value: "ssd"}}, []int{2}, true, 1, false},
+		{[]config.Constraint{{Value: "b"}, {Value: "ssd"}}, []int{1, 2}, true, 0, true},
+		{[]config.Constraint{{Value: "b"}, {Value: "hdd"}}, []int{}, true, 2, false},
+		{[]config.Constraint{{Value: "b"}, {Value: "hdd"}}, []int{2}, true, 1, false},
+		{[]config.Constraint{{Value: "b"}, {Value: "hdd"}}, []int{2}, false, 0, true},
+		{[]config.Constraint{{Value: "b"}, {Value: "hdd"}}, []int{1, 2}, true, 0, true},
+		{[]config.Constraint{{Value: "b"}, {Value: "ssd"}, {Value: "gpu"}}, []int{}, true, 2, false},
+		{[]config.Constraint{{Value: "b"}, {Value: "hdd"}, {Value: "gpu"}}, []int{}, true, 2, false},
 	}
 	for i, test := range testCases {
 		var existing []roachpb.ReplicaDescriptor
 		for _, id := range test.existing {
 			existing = append(existing, roachpb.ReplicaDescriptor{NodeID: roachpb.NodeID(id), StoreID: roachpb.StoreID(id)})
 		}
-		result, err := a.AllocateTarget(roachpb.Attributes{Attrs: test.required}, existing, test.relaxConstraints)
+		constraints := config.Constraints{Constraints: test.required}
+		result, err := a.AllocateTarget(constraints, existing, test.relaxConstraints)
 		if haveErr := (err != nil); haveErr != test.expErr {
 			t.Errorf("%d: expected error %t; got %t: %s", i, test.expErr, haveErr, err)
 		} else if err == nil && roachpb.StoreID(test.expID) != result.StoreID {
@@ -428,8 +404,7 @@ func TestAllocatorRebalance(t *testing.T) {
 
 	// Every rebalance target must be either stores 1 or 2.
 	for i := 0; i < 10; i++ {
-		result := a.RebalanceTarget(roachpb.Attributes{},
-			[]roachpb.ReplicaDescriptor{{StoreID: 3}}, 0)
+		result := a.RebalanceTarget(config.Constraints{}, []roachpb.ReplicaDescriptor{{StoreID: 3}}, 0)
 		if result == nil {
 			t.Fatal("nil result")
 		}
@@ -445,7 +420,7 @@ func TestAllocatorRebalance(t *testing.T) {
 		if !ok {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
-		sl, _, _ := a.storePool.getStoreList(roachpb.Attributes{}, true)
+		sl, _, _ := a.storePool.getStoreList(config.Constraints{}, true)
 		result := a.shouldRebalance(desc, sl)
 		if expResult := (i >= 2); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
@@ -488,8 +463,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 
 	// Every rebalance target must be store 4 (or nil for case of missing the only option).
 	for i := 0; i < 10; i++ {
-		result := a.RebalanceTarget(roachpb.Attributes{},
-			[]roachpb.ReplicaDescriptor{{StoreID: 1}}, 0)
+		result := a.RebalanceTarget(config.Constraints{}, []roachpb.ReplicaDescriptor{{StoreID: 1}}, 0)
 		if result != nil && result.StoreID != 4 {
 			t.Errorf("expected store 4; got %d", result.StoreID)
 		}
@@ -502,7 +476,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 		if !ok {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
-		sl, _, _ := a.storePool.getStoreList(roachpb.Attributes{}, true)
+		sl, _, _ := a.storePool.getStoreList(config.Constraints{}, true)
 		result := a.shouldRebalance(desc, sl)
 		if expResult := (i < 3); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
@@ -616,17 +590,8 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Needs three replicas, two are on dead stores.
 		{
 			zone: config.ZoneConfig{
-				ReplicaAttrs: []roachpb.Attributes{
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-				},
+				NumReplicas:   3,
+				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -654,17 +619,8 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Needs three replicas, one is on a dead store.
 		{
 			zone: config.ZoneConfig{
-				ReplicaAttrs: []roachpb.Attributes{
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-				},
+				NumReplicas:   3,
+				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -692,17 +648,8 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Needs three replicas, one is dead.
 		{
 			zone: config.ZoneConfig{
-				ReplicaAttrs: []roachpb.Attributes{
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-				},
+				NumReplicas:   3,
+				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -730,17 +677,8 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Needs five replicas, one is on a dead store.
 		{
 			zone: config.ZoneConfig{
-				ReplicaAttrs: []roachpb.Attributes{
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-				},
+				NumReplicas:   3,
+				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -778,17 +716,8 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Needs Three replicas, have two
 		{
 			zone: config.ZoneConfig{
-				ReplicaAttrs: []roachpb.Attributes{
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-				},
+				NumReplicas:   3,
+				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -811,23 +740,8 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Needs Five replicas, have four.
 		{
 			zone: config.ZoneConfig{
-				ReplicaAttrs: []roachpb.Attributes{
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-				},
+				NumReplicas:   5,
+				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -860,17 +774,8 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Need three replicas, have four.
 		{
 			zone: config.ZoneConfig{
-				ReplicaAttrs: []roachpb.Attributes{
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-				},
+				NumReplicas:   3,
+				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -903,17 +808,8 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Need three replicas, have five.
 		{
 			zone: config.ZoneConfig{
-				ReplicaAttrs: []roachpb.Attributes{
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-				},
+				NumReplicas:   3,
+				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -951,17 +847,8 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Three replicas have three, none of the replicas in the store pool.
 		{
 			zone: config.ZoneConfig{
-				ReplicaAttrs: []roachpb.Attributes{
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-				},
+				NumReplicas:   3,
+				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -989,17 +876,8 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Three replicas have three.
 		{
 			zone: config.ZoneConfig{
-				ReplicaAttrs: []roachpb.Attributes{
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-					{
-						Attrs: []string{"us-east"},
-					},
-				},
+				NumReplicas:   3,
+				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -1059,31 +937,31 @@ func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 func TestAllocatorError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	attribute := roachpb.Attributes{Attrs: []string{"one"}}
-	attributes := roachpb.Attributes{Attrs: []string{"one", "two"}}
+	constraint := []config.Constraint{{Value: "one"}}
+	constraints := []config.Constraint{{Value: "one"}, {Value: "two"}}
 
 	testCases := []struct {
 		ae       allocatorError
 		expected string
 	}{
-		{allocatorError{roachpb.Attributes{}, false, 1},
+		{allocatorError{nil, false, 1},
 			"0 of 1 store with all attributes matching []; likely not enough nodes in cluster"},
-		{allocatorError{attribute, false, 1},
+		{allocatorError{constraint, false, 1},
 			"0 of 1 store with all attributes matching [one]"},
-		{allocatorError{attribute, true, 1},
+		{allocatorError{constraint, true, 1},
 			"0 of 1 store with an attribute matching [one]; likely not enough nodes in cluster"},
-		{allocatorError{attribute, false, 2},
+		{allocatorError{constraint, false, 2},
 			"0 of 2 stores with all attributes matching [one]"},
-		{allocatorError{attribute, true, 2},
+		{allocatorError{constraint, true, 2},
 			"0 of 2 stores with an attribute matching [one]; likely not enough nodes in cluster"},
-		{allocatorError{attributes, false, 1},
-			"0 of 1 store with all attributes matching [one,two]"},
-		{allocatorError{attributes, true, 1},
-			"0 of 1 store with an attribute matching [one,two]; likely not enough nodes in cluster"},
-		{allocatorError{attributes, false, 2},
-			"0 of 2 stores with all attributes matching [one,two]"},
-		{allocatorError{attributes, true, 2},
-			"0 of 2 stores with an attribute matching [one,two]; likely not enough nodes in cluster"},
+		{allocatorError{constraints, false, 1},
+			"0 of 1 store with all attributes matching [one two]"},
+		{allocatorError{constraints, true, 1},
+			"0 of 1 store with an attribute matching [one two]; likely not enough nodes in cluster"},
+		{allocatorError{constraints, false, 2},
+			"0 of 2 stores with all attributes matching [one two]"},
+		{allocatorError{constraints, true, 2},
+			"0 of 2 stores with an attribute matching [one two]; likely not enough nodes in cluster"},
 	}
 
 	for i, testCase := range testCases {
@@ -1102,7 +980,7 @@ func TestAllocatorThrottled(t *testing.T) {
 
 	// First test to make sure we would send the replica to purgatory.
 	_, err := a.AllocateTarget(
-		simpleZoneConfig.ReplicaAttrs[0],
+		simpleZoneConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{},
 		false)
 	if _, ok := err.(purgatoryError); !ok {
@@ -1112,7 +990,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	// Second, test the normal case in which we can allocate to the store.
 	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
 	result, err := a.AllocateTarget(
-		simpleZoneConfig.ReplicaAttrs[0],
+		simpleZoneConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{},
 		false)
 	if err != nil {
@@ -1132,7 +1010,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	storeDetail.throttledUntil = timeutil.Now().Add(24 * time.Hour)
 	a.storePool.mu.Unlock()
 	_, err = a.AllocateTarget(
-		simpleZoneConfig.ReplicaAttrs[0],
+		simpleZoneConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{},
 		false)
 	if _, ok := err.(purgatoryError); ok {
@@ -1214,7 +1092,7 @@ func Example_rebalancing() {
 		for j := 0; j < len(testStores); j++ {
 			ts := &testStores[j]
 			target := alloc.RebalanceTarget(
-				roachpb.Attributes{},
+				config.Constraints{},
 				[]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}},
 				-1)
 			if target != nil {
