@@ -103,6 +103,7 @@ func Backup(
 		return sqlbase.BackupDescriptor{}, err
 	}
 
+	var dataSize int64
 	backupDescs := make([]sqlbase.BackupRangeDescriptor, len(rangeDescs))
 	for i, rangeDesc := range rangeDescs {
 		backupDescs[i] = sqlbase.BackupRangeDescriptor{
@@ -152,15 +153,17 @@ func Backup(
 				return sqlbase.BackupDescriptor{}, err
 			}
 		}
+		dataSize += sst.DataSize
 	}
 	if err := txn.CommitOrCleanup(); err != nil {
 		return sqlbase.BackupDescriptor{}, err
 	}
 
 	desc = sqlbase.BackupDescriptor{
-		EndTime: txn.Proto.MaxTimestamp,
-		Ranges:  backupDescs,
-		SQL:     sqlDescs,
+		EndTime:  txn.Proto.MaxTimestamp,
+		Ranges:   backupDescs,
+		SQL:      sqlDescs,
+		DataSize: dataSize,
 	}
 
 	descBuf, err := desc.Marshal()

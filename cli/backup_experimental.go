@@ -58,7 +58,7 @@ func runBackup(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Printf("Backed up %d ranges to %s\n", len(desc.Ranges), base)
+	fmt.Printf("Backed up %d data bytes in %d ranges to %s\n", desc.DataSize, len(desc.Ranges), base)
 	return nil
 }
 
