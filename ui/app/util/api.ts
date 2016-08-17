@@ -178,13 +178,7 @@ export function getTableStats(req: TableStatsRequest): Promise<TableStatsRespons
 }
 
 // TODO (maxlang): add filtering
-// TODO: switch to using Fetch once #8569 is fixed
 // getLogs gets the logs for a specific node
 export function getLogs(req: LogsRequest): Promise<LogEntriesResponseMessage> {
-  return timeout(fetch(`${STATUS_PREFIX}/logs/${req.node_id}`, {
-    headers: {
-      "Accept": "application/json",
-      "Content-Type": "application/json",
-    },
-  })).then((res) => res.json().then((json) => new protos.cockroach.server.serverpb.LogEntriesResponse(json)));
+  return Fetch(serverpb.LogEntriesResponse, `${STATUS_PREFIX}/logs/${req.node_id}`);
 }
