@@ -5,6 +5,6 @@
 # We insert a large filler string in the second column to generate range splits
 # quicker.
 
-repeat 2
+repeat 50
 statement ok
-INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T), REPEAT('x', 1000))
+INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T), REPEAT('x', 500))

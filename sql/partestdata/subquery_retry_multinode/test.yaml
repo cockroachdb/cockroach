@@ -1,6 +1,3 @@
-# Test is temporarily disabled.
-skip_reason: "#8057"
-
 cluster_size: 5
 
 range_split_size: 32768
