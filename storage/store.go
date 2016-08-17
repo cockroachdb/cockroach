@@ -70,6 +70,10 @@ const (
 	// temporarily created during the application of a preemptive snapshot.
 	preemptiveSnapshotRaftGroupID = math.MaxUint64
 
+	// defaultRaftEntryCacheSize is the default size in bytes for a
+	// store's Raft log entry cache.
+	defaultRaftEntryCacheSize = 1 << 24 // 16M
+
 	// rangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the leader
 	// lease active duration should be of the raft election timeout.
 	rangeLeaseRaftElectionTimeoutMultiplier = 3
@@ -121,20 +125,6 @@ func newRaftConfig(
 	}
 }
 
-type semaphore chan struct{}
-
-func makeSemaphore(n int) semaphore {
-	return make(semaphore, n)
-}
-
-func (s semaphore) acquire() {
-	s <- struct{}{}
-}
-
-func (s semaphore) release() {
-	<-s
-}
-
 // verifyKeys verifies keys. If checkEndKey is true, then the end key
 // is verified to be non-nil and greater than start key. If
 // checkEndKey is false, end key is verified to be nil. Additionally,
@@ -183,18 +173,9 @@ func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
 	return nil
 }
 
-type rangeAlreadyExists struct {
-	rng *Replica
-}
-
-// Error implements the error interface.
-func (e rangeAlreadyExists) Error() string {
-	return fmt.Sprintf("range for Range ID %d already exists on store", e.rng.RangeID)
-}
-
 // rangeKeyItem is a common interface for roachpb.Key and Range.
 type rangeKeyItem interface {
-	getKey() roachpb.RKey
+	endKey() roachpb.RKey
 }
 
 // rangeBTreeKey is a type alias of roachpb.RKey that implements the
@@ -203,27 +184,14 @@ type rangeBTreeKey roachpb.RKey
 
 var _ rangeKeyItem = rangeBTreeKey{}
 
-func (k rangeBTreeKey) getKey() roachpb.RKey {
+func (k rangeBTreeKey) endKey() roachpb.RKey {
 	return (roachpb.RKey)(k)
 }
 
 var _ btree.Item = rangeBTreeKey{}
 
 func (k rangeBTreeKey) Less(i btree.Item) bool {
-	return k.getKey().Less(i.(rangeKeyItem).getKey())
-}
-
-var _ rangeKeyItem = &Replica{}
-
-func (r *Replica) getKey() roachpb.RKey {
-	return r.Desc().EndKey
-}
-
-var _ btree.Item = &Replica{}
-
-// Less returns true if the range's end key is less than the given item's key.
-func (r *Replica) Less(i btree.Item) bool {
-	return r.getKey().Less(i.(rangeKeyItem).getKey())
+	return k.endKey().Less(i.(rangeKeyItem).endKey())
 }
 
 // A NotBootstrappedError indicates that an engine has not yet been
@@ -256,11 +224,11 @@ func (rs *storeRangeSet) Visit(visitor func(*Replica) bool) {
 	// that we can safely (e.g., no race, no range skip) iterate
 	// over ranges regardless of how BTree is implemented.
 	rs.store.mu.Lock()
-	rs.rangeIDs = make([]roachpb.RangeID, rs.store.mu.replicasByKey.Len())
-	i := 0
+	rs.rangeIDs = make([]roachpb.RangeID, 0, rs.store.mu.replicasByKey.Len())
 	rs.store.mu.replicasByKey.Ascend(func(item btree.Item) bool {
-		rs.rangeIDs[i] = item.(*Replica).RangeID
-		i++
+		if _, ok := item.(*Replica); ok {
+			rs.rangeIDs = append(rs.rangeIDs, item.(*Replica).RangeID)
+		}
 		return true
 	})
 	rs.store.mu.Unlock()
@@ -309,6 +277,7 @@ type Store struct {
 	consistencyScanner      *replicaScanner          // Consistency checker scanner
 	metrics                 *StoreMetrics
 	intentResolver          *intentResolver
+	raftEntryCache          *raftEntryCache
 	wakeRaftLoop            chan struct{}
 	// 1 if the store was started, 0 if it wasn't. To be accessed using atomic
 	// ops.
@@ -434,6 +403,9 @@ type Store struct {
 		replicas       map[roachpb.RangeID]*Replica // Map of replicas by Range ID
 		replicasByKey  *btree.BTree                 // btree keyed by ranges end keys.
 		uninitReplicas map[roachpb.RangeID]*Replica // Map of uninitialized replicas by Range ID
+		// replicaPlaceholders is a map to access all placeholders, so they can
+		// be directly accessed and cleared after stepping all raft groups.
+		replicaPlaceholders map[roachpb.RangeID]*ReplicaPlaceholder
 	}
 
 	// pendingRaftGroups contains the ranges that should be checked for
@@ -517,6 +489,10 @@ type StoreContext struct {
 	// asynchronous snapshot will be held while waiting for raft to pick
 	// it up (counted from when the snapshot generation is completed).
 	AsyncSnapshotMaxAge time.Duration
+
+	// RaftEntryCacheSize is the size in bytes of the Raft log entry cache
+	// shared by all Raft groups managed by the store.
+	RaftEntryCacheSize uint64
 
 	TestingKnobs StoreTestingKnobs
 
@@ -604,6 +580,9 @@ func (sc *StoreContext) setDefaults() {
 	if sc.AsyncSnapshotMaxAge == 0 {
 		sc.AsyncSnapshotMaxAge = defaultAsyncSnapshotMaxAge
 	}
+	if sc.RaftEntryCacheSize == 0 {
+		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
+	}
 
 	raftElectionTimeout := time.Duration(sc.RaftElectionTimeoutTicks) * sc.RaftTickInterval
 	sc.rangeLeaseActiveDuration = rangeLeaseRaftElectionTimeoutMultiplier * raftElectionTimeout
@@ -629,14 +608,15 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 		metrics:      newStoreMetrics(),
 	}
 	s.intentResolver = newIntentResolver(s)
+	s.raftEntryCache = newRaftEntryCache(ctx.RaftEntryCacheSize)
 	s.drainLeases.Store(false)
 
 	s.mu.Lock()
 	s.mu.replicas = map[roachpb.RangeID]*Replica{}
+	s.mu.replicaPlaceholders = map[roachpb.RangeID]*ReplicaPlaceholder{}
 	s.mu.replicasByKey = btree.New(64 /* degree */)
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
 	s.pendingRaftGroups.value = map[roachpb.RangeID]struct{}{}
-
 	s.mu.Unlock()
 
 	if s.ctx.Gossip != nil {
@@ -1204,16 +1184,18 @@ func (s *Store) LookupReplica(start, end roachpb.RKey) *Replica {
 	return rng
 }
 
-// hasOverlappingReplicaLocked returns true if a Replica overlapping the given
+// hasOverlappingKeyRangeLocked returns true if a KeyRange overlapping the given
 // descriptor is present on the Store.
-func (s *Store) hasOverlappingReplicaLocked(rngDesc *roachpb.RangeDescriptor) bool {
-	var rng *Replica
-	s.visitReplicasLocked(rngDesc.StartKey, roachpb.RKeyMax, func(repl *Replica) bool {
-		rng = repl
-		return false
-	})
+func (s *Store) hasOverlappingKeyRangeLocked(rngDesc *roachpb.RangeDescriptor) bool {
+	var kr KeyRange
 
-	if rng != nil && rng.Desc().StartKey.Less(rngDesc.EndKey) {
+	s.mu.replicasByKey.AscendGreaterOrEqual(rangeBTreeKey(rngDesc.StartKey.Next()),
+		func(item btree.Item) bool {
+			kr = item.(KeyRange)
+			return false
+		})
+
+	if kr != nil && kr.Desc().StartKey.Less(rngDesc.EndKey) {
 		return true
 	}
 
@@ -1236,12 +1218,18 @@ func (s *Store) visitReplicasLocked(startKey, endKey roachpb.RKey, iterator func
 	// the next range contains no keys in the supplied span.
 	s.mu.replicasByKey.AscendGreaterOrEqual(rangeBTreeKey(startKey.Next()),
 		func(item btree.Item) bool {
-			repl := item.(*Replica)
-			if !repl.Desc().StartKey.Less(endKey) {
+			kr := item.(KeyRange)
+			if !kr.Desc().StartKey.Less(endKey) {
 				// This properly checks if this range contains any keys in the supplied span.
 				return false
 			}
-			return iterator(repl)
+
+			switch rep := item.(type) {
+			case *Replica:
+				return iterator(rep)
+			default:
+				return true
+			}
 		})
 }
 
@@ -1498,6 +1486,12 @@ func splitTriggerPostCommit(
 			log.Warningf(ctx, "%s: error %v", r, err)
 			return
 		}
+	} else if len(split.RightDesc.Replicas) == 1 {
+		// TODO(peter): In single-node clusters, we enqueue the right-hand side of
+		// the split (the new range) for Raft processing so that the corresponding
+		// Raft group is created. This shouldn't be necessary for correctness, but
+		// some tests rely on this (e.g. server.TestStatusSummaries).
+		r.store.enqueueRaftUpdateCheck(rightRng.RangeID)
 	}
 }
 
@@ -1561,7 +1555,8 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 
 // MergeRange expands the subsuming range to absorb the subsumed range. This
 // merge operation will fail if the two ranges are not collocated on the same
-// store. Must be called (perhaps indirectly) from the processRaft goroutine.
+// store. Must be called (perhaps indirectly) from the processRaft goroutine,
+// which holds the processRaftMu lock.
 func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, subsumedRangeID roachpb.RangeID) error {
 	subsumingDesc := subsumingRng.Desc()
 
@@ -1607,9 +1602,9 @@ func (s *Store) AddReplicaTest(rng *Replica) error {
 }
 
 // addReplicaInternalLocked adds the replica to the replicas map and the
-// replicasByKey btree. Returns a rangeAlreadyExists error if a replica with
-// the same Range ID has already been added to this store.
-// addReplicaInternalLocked requires that the store lock is held.
+// replicasByKey btree. Returns an error if a replica with
+// the same Range ID or a KeyRange that overlaps has already been added to
+// this store. addReplicaInternalLocked requires that the store lock is held.
 func (s *Store) addReplicaInternalLocked(rng *Replica) error {
 	if !rng.IsInitialized() {
 		return errors.Errorf("attempted to add uninitialized range %s", rng)
@@ -1621,21 +1616,53 @@ func (s *Store) addReplicaInternalLocked(rng *Replica) error {
 		return err
 	}
 
-	if s.hasOverlappingReplicaLocked(rng.Desc()) {
-		return rangeAlreadyExists{rng}
+	if s.hasOverlappingKeyRangeLocked(rng.Desc()) {
+		return errors.Errorf("%s: cannot addReplicaInternalLocked; range %s has overlapping range", s, rng)
 	}
+
 	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
-		return errors.Errorf("range for key %v already exists in replicasByKey btree",
-			(exRngItem.(*Replica)).getKey())
+		return errors.Errorf("%s: cannot addReplicaInternalLocked; range for key %v already exists in replicasByKey btree", s,
+			exRngItem.(KeyRange).endKey())
 	}
+
 	return nil
+}
+
+func (s *Store) addPlaceholderLocked(placeholder *ReplicaPlaceholder) error {
+	rangeID := placeholder.Desc().RangeID
+	if exRng := s.mu.replicasByKey.ReplaceOrInsert(placeholder); exRng != nil {
+		return errors.Errorf("%s overlaps with existing KeyRange %s in replicasByKey btree", placeholder, exRng)
+	}
+	if exRng, ok := s.mu.replicaPlaceholders[rangeID]; ok {
+		return errors.Errorf("%s has ID collision with existing KeyRange %s", placeholder, exRng)
+	}
+	s.mu.replicaPlaceholders[rangeID] = placeholder
+	return nil
+}
+
+func (s *Store) removePlaceholderLocked(rngID roachpb.RangeID) error {
+	rng, ok := s.mu.replicaPlaceholders[rngID]
+	if !ok {
+		return errors.Errorf("%v: cannot remove placeholder for RangeID %v; Placeholder doesn't exist", s, rngID)
+	}
+	if exRng := s.mu.replicasByKey.Delete(rng); exRng != nil {
+		switch exRng.(type) {
+		case *Replica:
+			return errors.Errorf("%v: expected placeholder for RangeID: %v, got Replica", s, rngID)
+		case *ReplicaPlaceholder:
+			delete(s.mu.replicaPlaceholders, rngID)
+			return nil
+		}
+	}
+	return errors.Errorf("placeholder %v was not in replicasByKey BTree", rngID)
 }
 
 // addReplicaToRangeMapLocked adds the replica to the replicas map.
 // addReplicaToRangeMapLocked requires that the store lock is held.
 func (s *Store) addReplicaToRangeMapLocked(rng *Replica) error {
-	if exRng, ok := s.mu.replicas[rng.RangeID]; ok {
-		return rangeAlreadyExists{exRng}
+	if _, ok := s.mu.replicas[rng.RangeID]; ok {
+		return errors.Errorf("%s: range for ID %d already exists in replicasByKey btree", s,
+			rng.RangeID)
 	}
 	s.mu.replicas[rng.RangeID] = rng
 	return nil
@@ -1736,12 +1763,12 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 	}
 	delete(s.mu.uninitReplicas, rangeID)
 
-	if s.hasOverlappingReplicaLocked(rng.Desc()) {
-		return rangeAlreadyExists{rng}
+	if s.hasOverlappingKeyRangeLocked(rng.Desc()) {
+		return errors.Errorf("%s: cannot processRangeDescriptorUpdate; range %s has overlapping range", s, rng)
 	}
 	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
 		return errors.Errorf("range for key %v already exists in replicasByKey btree",
-			(exRngItem.(*Replica)).getKey())
+			(exRngItem.(*Replica)).endKey())
 	}
 
 	// Add the range and its current stats into metrics.
@@ -2160,10 +2187,27 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 
 	switch req.Message.Type {
 	case raftpb.MsgSnap:
-		if !s.canApplySnapshot(req.RangeID, req.Message.Snapshot) {
-			// If the storage cannot accept the snapshot, drop it before
-			// passing it to RawNode.Step, since our error handling
-			// options past that point are limited.
+		if earlyReturn := func() bool {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			placeholder, err := s.canApplySnapshotLocked(req.RangeID, req.Message.Snapshot)
+			if err != nil {
+				// If the storage cannot accept the snapshot, drop it before
+				// passing it to RawNode.Step, since our error handling
+				// options past that point are limited.
+				// TODO(arjun): Now that we have better raft transport error
+				// handling, consider if this error should be returned and
+				// handled by the sending store.
+				return true
+			}
+
+			if placeholder != nil {
+				if err := s.addPlaceholderLocked(placeholder); err != nil {
+					log.Fatalf(ctx, "%s: could not add placeholder %s although canApplySnapshotLocked returned true", s, placeholder)
+				}
+			}
+			return false
+		}(); earlyReturn {
 			return nil
 		}
 
@@ -2210,7 +2254,7 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 			// 2. get an exclusive lock for operations on that key range from
 			//    the store (or discard the snapshot)
 			//    (at the time of writing, we have checked the key range in
-			//    canApplySnapshot above, but there are concerns about two
+			//    canApplySnapshotLocked above, but there are concerns about two
 			//    conflicting operations passing that check simultaneously,
 			//    see #7830)
 			// 3. do everything below (apply the snapshot through temp Raft group)
@@ -2263,15 +2307,29 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 			if raft.IsEmptySnap(ready.Snapshot) {
 				return roachpb.NewErrorf("preemptive snapshot discarded by Raft")
 			}
+
 			// Apply the snapshot, as Raft told us to.
 			if err := r.applySnapshot(ctx, ready.Snapshot, ready.HardState); err != nil {
 				return roachpb.NewError(err)
 			}
+
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			// Clear the replica placeholder; we are about to swap it with a real replica.
+			if err := s.removePlaceholderLocked(req.RangeID); err != nil {
+				return roachpb.NewError(err)
+			}
+
+			if err := s.processRangeDescriptorUpdateLocked(r); err != nil {
+				return roachpb.NewError(err)
+			}
+
+			return nil
+
 			// At this point, the Replica has data but no ReplicaID. We hope
 			// that it turns into a "real" Replica by means of receiving Raft
 			// messages addressed to it with a ReplicaID, but if that doesn't
 			// happen, at some point the Replica GC queue will have to grab it.
-			return nil
 		}
 		// We disallow non-snapshot messages to replica ID 0. Note that
 		// getOrCreateReplicaLocked disallows moving the replica ID backward, so
@@ -2350,12 +2408,33 @@ func (s *Store) processRaft() {
 	if s.ctx.TestingKnobs.DisableProcessRaft {
 		return
 	}
-	sem := makeSemaphore(storeReplicaRaftReadyConcurrency)
 
 	s.stopper.RunWorker(func() {
-		defer s.ctx.Transport.Stop(s.StoreID())
+		// Start a pool of worker goroutines. These worker goroutines need to
+		// continue processing even when the stopper has been stopped in order to
+		// finish any queued work. We are using a pool instead of creating a new
+		// goroutine for each operation because Replica.handleRaftReady currently
+		// grows the goroutine stack from the default of 2K up to 8K, 16K or
+		// 32K. It's cheaper to reuse a goroutine with a large stack than to start
+		// a new goroutine from scratch.
+		workQueue := make(chan func(), storeReplicaRaftReadyConcurrency)
+		for i := 0; i < cap(workQueue); i++ {
+			go func() {
+				for w := range workQueue {
+					w()
+				}
+			}()
+		}
+
 		ticker := time.NewTicker(s.ctx.RaftTickInterval)
-		defer ticker.Stop()
+		defer func() {
+			ticker.Stop()
+			s.ctx.Transport.Stop(s.StoreID())
+			close(workQueue)
+		}()
+
+		var pendingReplicas []roachpb.RangeID
+
 		for {
 			workingStart := timeutil.Now()
 			s.processRaftMu.Lock()
@@ -2399,16 +2478,20 @@ func (s *Store) processRaft() {
 			var wg sync.WaitGroup
 			wg.Add(len(initReplicas))
 			for _, r := range initReplicas {
-				sem.acquire()
-				go func(r *Replica) {
-					defer sem.release()
+				r := r // per-iteration copy
+				workQueue <- func() {
 					defer wg.Done()
 					if err := r.handleRaftReady(); err != nil {
 						panic(err) // TODO(bdarnell)
 					}
-				}(r)
+				}
 			}
 			wg.Wait()
+			// After a round of readys, if a placeholder hasn't been removed
+			// by the handleRaftReady, this means that the Raft group rejected
+			// the snapshot. Now that we have called handleRaftReady on all
+			// replicas, clear all remaining placeholders.
+			s.clearAllPlaceholders()
 			s.processRaftMu.Unlock()
 			s.metrics.RaftWorkingDurationNanos.Inc(timeutil.Since(workingStart).Nanoseconds())
 
@@ -2435,21 +2518,23 @@ func (s *Store) processRaft() {
 				tickerStart := timeutil.Now()
 				s.processRaftMu.Lock()
 				s.mu.Lock()
-				for _, r := range s.mu.replicas {
-					if err := r.tick(); err != nil {
+				pendingReplicas = pendingReplicas[:0]
+				for id, r := range s.mu.replicas {
+					if exists, err := r.tick(); err != nil {
 						log.Error(context.TODO(), err)
+					} else if exists {
+						pendingReplicas = append(pendingReplicas, id)
 					}
 				}
-				// Enqueue all ranges for readiness checks. Note that we
-				// could not hold the pendingRaftGroups lock during the
-				// previous loop because of lock ordering constraints with
-				// r.tick().
+				s.mu.Unlock()
+				// Enqueue all pending ranges for readiness checks. Note that we could
+				// not hold the pendingRaftGroups lock during the previous loop because
+				// of lock ordering constraints with r.tick().
 				s.pendingRaftGroups.Lock()
-				for rangeID := range s.mu.replicas {
+				for _, rangeID := range pendingReplicas {
 					s.pendingRaftGroups.value[rangeID] = struct{}{}
 				}
 				s.pendingRaftGroups.Unlock()
-				s.mu.Unlock()
 				s.processRaftMu.Unlock()
 				s.metrics.RaftTickingDurationNanos.Inc(timeutil.Since(tickerStart).Nanoseconds())
 
@@ -2459,6 +2544,18 @@ func (s *Store) processRaft() {
 			}
 		}
 	})
+}
+
+func (s *Store) clearAllPlaceholders() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for rngID, res := range s.mu.replicaPlaceholders {
+		if s.mu.replicasByKey.Delete(res) == nil {
+			log.Fatalf(context.TODO(), "%s: expected to find placeholder %s in replicasByKey", s, res)
+		}
+		delete(s.mu.replicaPlaceholders, rngID)
+	}
 }
 
 // getOrCreateReplicaLocked returns a replica for the given RangeID,
@@ -2506,34 +2603,38 @@ func (s *Store) getOrCreateReplicaLocked(rangeID roachpb.RangeID, replicaID roac
 	return r, nil
 }
 
-// canApplySnapshot returns true if the snapshot can be applied to
-// this store's replica (i.e. it is not from an older incarnation of
-// the replica).
-func (s *Store) canApplySnapshot(rangeID roachpb.RangeID, snap raftpb.Snapshot) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// canApplySnapshotLocked returns (_, nil) if the snapshot can be applied to
+// this store's replica (i.e. the snapshot is not from an older incarnation of
+// the replica) and a placeholder can be added to the replicasByKey map (if
+// necessary). If a placeholder is required, it is returned as the first value.
+func (s *Store) canApplySnapshotLocked(rangeID roachpb.RangeID, snap raftpb.Snapshot) (*ReplicaPlaceholder, error) {
 	if r, ok := s.mu.replicas[rangeID]; ok && r.IsInitialized() {
-		// We have the range and it's initialized, so let the snapshot
-		// through.
-		return true
+		// We have the range and it's initialized, so let the snapshot through.
+		return nil, nil
 	}
 
 	// We don't have the range (or we have an uninitialized
 	// placeholder). Will we be able to create/initialize it?
-	// TODO(bdarnell): can we avoid parsing this twice?
-	var parsedSnap roachpb.RaftSnapshotData
+	var parsedSnap roachpb.PartialRaftSnapshotData
 	if err := parsedSnap.Unmarshal(snap.Data); err != nil {
-		return false
+		return nil, errors.Wrapf(err, "%s: canApplySnapshotLocked: could not unmarshal snapshot", s)
 	}
 
-	if s.hasOverlappingReplicaLocked(&parsedSnap.RangeDescriptor) {
+	if exRng, ok := s.mu.replicaPlaceholders[rangeID]; ok {
+		return nil, errors.Errorf("%s: canApplySnapshotLocked: cannot add placeholder, have an existing placeholder %s", s, exRng)
+	}
+
+	if s.hasOverlappingKeyRangeLocked(&parsedSnap.RangeDescriptor) {
 		// We have a conflicting range, so we must block the snapshot.
 		// When such a conflict exists, it will be resolved by one range
 		// either being split or garbage collected.
-		return false
+		return nil, errors.Errorf("%s: canApplySnapshotLocked: cannot apply snapshot, received snapshot for an overlapping range", s)
 	}
 
-	return true
+	placeholder := &ReplicaPlaceholder{
+		rangeDesc: parsedSnap.RangeDescriptor,
+	}
+	return placeholder, nil
 }
 
 func raftEntryFormatter(data []byte) string {
