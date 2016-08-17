@@ -1626,6 +1626,74 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                     ]
                 },
                 {
+                    "name": "Constraint",
+                    "options": {
+                        "(gogoproto.goproto_stringer)": false
+                    },
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "Type",
+                            "name": "type",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "key",
+                            "id": 2,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "value",
+                            "id": 3,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        }
+                    ],
+                    "enums": [
+                        {
+                            "name": "Type",
+                            "values": [
+                                {
+                                    "name": "POSITIVE",
+                                    "id": 0
+                                },
+                                {
+                                    "name": "REQUIRED",
+                                    "id": 1
+                                },
+                                {
+                                    "name": "PROHIBITED",
+                                    "id": 2
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "Constraints",
+                    "fields": [
+                        {
+                            "rule": "repeated",
+                            "type": "Constraint",
+                            "name": "constraints",
+                            "id": 6,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        }
+                    ]
+                },
+                {
                     "name": "ZoneConfig",
                     "fields": [
                         {
@@ -1634,8 +1702,9 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "name": "replica_attrs",
                             "id": 1,
                             "options": {
+                                "deprecated": true,
                                 "(gogoproto.nullable)": false,
-                                "(gogoproto.moretags)": "yaml:\\\"replicas,omitempty\\\""
+                                "(gogoproto.moretags)": "yaml:\\\",omitempty\\\""
                             }
                         },
                         {
@@ -1666,6 +1735,26 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "options": {
                                 "(gogoproto.nullable)": false,
                                 "(gogoproto.customname)": "GC"
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "int32",
+                            "name": "num_replicas",
+                            "id": 5,
+                            "options": {
+                                "(gogoproto.nullable)": false,
+                                "(gogoproto.moretags)": "yaml:\\\"num_replicas\\\""
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "Constraints",
+                            "name": "constraints",
+                            "id": 6,
+                            "options": {
+                                "(gogoproto.nullable)": false,
+                                "(gogoproto.moretags)": "yaml:\\\"constraints,flow\\\""
                             }
                         }
                     ]
