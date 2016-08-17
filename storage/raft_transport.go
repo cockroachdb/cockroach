@@ -130,7 +130,38 @@ func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpc
 	return t
 }
 
-// RaftMessage proxies the incoming request to the listening server interface.
+// handleRaftRequest proxies a request to the listening server interface.
+func (t *RaftTransport) handleRaftRequest(ctx context.Context, req *RaftMessageRequest,
+) *roachpb.Error {
+	t.mu.Lock()
+	handler, ok := t.mu.handlers[req.ToReplica.StoreID]
+	t.mu.Unlock()
+
+	if !ok {
+		return roachpb.NewErrorf(
+			"unable to accept Raft message from %+v: no store registered for %+v",
+			req.ToReplica, req.FromReplica)
+	}
+
+	return handler.HandleRaftRequest(ctx, req)
+}
+
+// newRaftMessageResponse constructs a RaftMessageResponse from the
+// given request and error.
+func newRaftMessageResponse(req *RaftMessageRequest, pErr *roachpb.Error) *RaftMessageResponse {
+	resp := &RaftMessageResponse{
+		RangeID: req.RangeID,
+		// From and To are reversed in the response.
+		ToReplica:   req.FromReplica,
+		FromReplica: req.ToReplica,
+	}
+	if pErr != nil {
+		resp.Union.SetValue(pErr)
+	}
+	return resp
+}
+
+// RaftMessage proxies the incoming requests to the listening server interface.
 func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err error) {
 	errCh := make(chan error, 1)
 
@@ -144,28 +175,8 @@ func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err err
 						return err
 					}
 
-					t.mu.Lock()
-					handler, ok := t.mu.handlers[req.ToReplica.StoreID]
-					t.mu.Unlock()
-
-					if !ok {
-						return errors.Errorf(
-							"unable to accept Raft message from %+v: no store registered for %+v",
-							req.ToReplica, req.FromReplica)
-					}
-
-					if pErr := handler.HandleRaftRequest(stream.Context(), req); pErr != nil {
-						resp := &RaftMessageResponse{
-							RangeID: req.RangeID,
-							// From and To are reversed in the response.
-							ToReplica:   req.FromReplica,
-							FromReplica: req.ToReplica,
-
-							Union: RaftMessageResponseUnion{
-								Error: pErr,
-							},
-						}
-						if err := stream.Send(resp); err != nil {
+					if pErr := t.handleRaftRequest(stream.Context(), req); pErr != nil {
+						if err := stream.Send(newRaftMessageResponse(req, pErr)); err != nil {
 							return err
 						}
 					}
@@ -182,6 +193,18 @@ func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err err
 	case <-t.rpcContext.Stopper.ShouldQuiesce():
 		return nil
 	}
+}
+
+// RaftMessageSync proxies the incoming request to the listening server interface.
+func (t *RaftTransport) RaftMessageSync(ctx context.Context, req *RaftMessageRequest,
+) (*RaftMessageResponse, error) {
+	var pErr *roachpb.Error
+	if err := t.rpcContext.Stopper.RunTask(func() {
+		pErr = t.handleRaftRequest(ctx, req)
+	}); err != nil {
+		return nil, err
+	}
+	return newRaftMessageResponse(req, pErr), nil
 }
 
 // Listen registers a raftMessageHandler to receive proxied messages.
@@ -385,4 +408,24 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 	default:
 		return false
 	}
+}
+
+// SendSync sends a raft message and waits for an acknowledgement.
+func (t *RaftTransport) SendSync(ctx context.Context, req *RaftMessageRequest) error {
+	conn := t.getNodeConn(req.ToReplica.NodeID)
+	if conn == nil {
+		return errors.Errorf("unable to get connection for node %s", req.ToReplica.NodeID)
+	}
+	client := NewMultiRaftClient(conn)
+	resp, err := client.RaftMessageSync(ctx, req)
+	if err != nil {
+		return err
+	}
+	switch val := resp.Union.GetValue().(type) {
+	case *roachpb.Error:
+		return val.GoError()
+	default:
+		log.Infof(ctx, "unexpected response value %T %s", val, val)
+	}
+	return nil
 }

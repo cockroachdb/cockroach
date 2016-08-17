@@ -492,6 +492,11 @@ func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
 
 // setReplicaIDLocked requires that the replica lock is held.
 func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
+	if replicaID == 0 {
+		// If the incoming message didn't give us a new replica ID,
+		// there's nothing to do.
+		return nil
+	}
 	if r.mu.replicaID == replicaID {
 		return nil
 	} else if r.mu.replicaID > replicaID {
