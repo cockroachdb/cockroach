@@ -86,7 +86,10 @@ func BenchmarkWriteBinaryDecimal(b *testing.B) {
 	buf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{Name: ""})}
 
 	dec := new(parser.DDecimal)
-	dec.SetString("-1728718718271827121233.1212121212")
+	s := "-1728718718271827121233.1212121212"
+	if _, ok := dec.SetString(s); !ok {
+		b.Fatalf("could not set %q on decimal", s)
+	}
 
 	// Warm up the buffer.
 	buf.writeBinaryDatum(dec)
@@ -105,7 +108,10 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 	wbuf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{Name: ""})}
 
 	expected := new(parser.DDecimal)
-	expected.SetString("-1728718718271827121233.1212121212")
+	s := "-1728718718271827121233.1212121212"
+	if _, ok := expected.SetString(s); !ok {
+		b.Fatalf("could not set %q on decimal", s)
+	}
 	wbuf.writeBinaryDatum(expected)
 
 	rbuf := readBuffer{msg: wbuf.wrapped.Bytes()}
