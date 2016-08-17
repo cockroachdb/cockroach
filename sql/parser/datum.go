@@ -1006,14 +1006,53 @@ func ParseDInterval(s string) (*DInterval, error) {
 			return nil, makeParseError(s, TypeInterval.Type(), err)
 		}
 		return &DInterval{Duration: dur}, nil
-	} else {
-		// Fallback to golang durations.
-		dur, err := time.ParseDuration(s)
+	} else if strings.ContainsRune(s, ':') {
+		// Colon-separated intervals in Postgres are odd. They have day, hour,
+		// minute, or second parts depending on number of fields and if the field
+		// is an int or float.
+		parts := strings.Split(s, ":")
+		var err error
+		var dur time.Duration
+		switch len(parts) {
+		case 2:
+			if strings.Contains(parts[1], ".") {
+				dur, err = time.ParseDuration(parts[0] + "m" + parts[1] + "s")
+			} else {
+				dur, err = time.ParseDuration(parts[0] + "h" + parts[1] + "m")
+			}
+		case 3:
+			if strings.Contains(parts[0], ".") {
+				f, err := strconv.ParseFloat(parts[0], 64)
+				if err != nil {
+					return nil, makeParseError(s, TypeInterval.Type(), err)
+				}
+				dur, err = time.ParseDuration(parts[1] + "m" + parts[2] + "s")
+				if err != nil {
+					return nil, makeParseError(s, TypeInterval.Type(), err)
+				}
+				dur += time.Duration(float64(time.Hour*24) * f)
+			} else {
+				dur, err = time.ParseDuration(parts[0] + "h" + parts[1] + "m" + parts[2] + "s")
+			}
+		default:
+			return nil, makeParseError(s, TypeInterval.Type(), fmt.Errorf("unknown format"))
+		}
 		if err != nil {
 			return nil, makeParseError(s, TypeInterval.Type(), err)
 		}
 		return &DInterval{Duration: duration.Duration{Nanos: dur.Nanoseconds()}}, nil
 	}
+
+	// An interval that's just a number is seconds.
+	if _, err := strconv.ParseFloat(s, 64); err == nil {
+		s += "s"
+	}
+	// Fallback to golang durations.
+	dur, err := time.ParseDuration(s)
+	if err != nil {
+		return nil, makeParseError(s, TypeInterval.Type(), err)
+	}
+	return &DInterval{Duration: duration.Duration{Nanos: dur.Nanoseconds()}}, nil
 }
 
 // ReturnType implements the TypedExpr interface.
