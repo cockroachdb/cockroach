@@ -2434,6 +2434,14 @@ func (s *Store) processRaft() {
 
 		var pendingReplicas []roachpb.RangeID
 		var warnDuration = 10 * s.ctx.RaftTickInterval
+		maybeWarnDuration := func(start time.Time, msg string) {
+			// If Raft processing took longer than a second something bad is going
+			// on. Such long processing time means we'll have starved local replicas
+			// of ticks and remote replicas will likely start campaigning.
+			if elapsed := timeutil.Since(start); elapsed >= warnDuration {
+				log.Warningf(context.TODO(), "%s: %s: %.1fs", s, msg, elapsed.Seconds())
+			}
+		}
 
 		for {
 			workingStart := timeutil.Now()
@@ -2495,12 +2503,7 @@ func (s *Store) processRaft() {
 			s.processRaftMu.Unlock()
 			s.metrics.RaftWorkingDurationNanos.Inc(timeutil.Since(workingStart).Nanoseconds())
 
-			// If Raft ready processing took longer than a second something bad is
-			// going on. Such long processing time means we'll have starved local
-			// replicas of ticks and remote replicas will likely start campaigning.
-			if elapsed := timeutil.Since(workingStart); elapsed >= warnDuration {
-				log.Warningf(context.TODO(), "%s: raft ready processing: %.1fs", s, elapsed.Seconds())
-			}
+			maybeWarnDuration(workingStart, "raft ready processing")
 
 			selectStart := timeutil.Now()
 
@@ -2545,12 +2548,7 @@ func (s *Store) processRaft() {
 				s.processRaftMu.Unlock()
 				s.metrics.RaftTickingDurationNanos.Inc(timeutil.Since(tickerStart).Nanoseconds())
 
-				// If Raft ticking took longer than a second something bad is going
-				// on. Such long processing time means we'll have starved local
-				// replicas of ticks and remote replicas will likely start campaigning.
-				if elapsed := timeutil.Since(tickerStart); elapsed >= warnDuration {
-					log.Warningf(context.TODO(), "%s: raft ticking: %.1fs", s, elapsed.Seconds())
-				}
+				maybeWarnDuration(tickerStart, "raft ticking")
 
 			case <-s.stopper.ShouldStop():
 				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
