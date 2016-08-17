@@ -202,6 +202,7 @@ export interface logBuilder {
 	Entry: log.EntryBuilder;
 	FileDetails: log.FileDetailsBuilder;
 	FileInfo: log.FileInfoBuilder;
+	Severity: log.Severity;
 	
 }
 
@@ -213,11 +214,11 @@ declare module cockroach.util.log {
 
 		
 
-severity?: Long;
+severity?: Severity;
 		
 
-getSeverity?() : Long;
-		setSeverity?(severity : Long): void;
+getSeverity?() : Severity;
+		setSeverity?(severity : Severity): void;
 		
 
 
@@ -312,11 +313,11 @@ getUserName?() : string;
 
 
 
-severity?: Long;
+severity?: Severity;
 		
 
-getSeverity?() : Long;
-		setSeverity?(severity : Long): void;
+getSeverity?() : Severity;
+		setSeverity?(severity : Severity): void;
 		
 
 
@@ -422,6 +423,18 @@ export interface FileInfoBuilder {
 
 }
 
+
+declare module cockroach.util.log {
+	export const enum Severity {
+		UNKNOWN = 0,
+		INFO = 1,
+		WARNING = 2,
+		ERROR = 3,
+		FATAL = 4,
+		NONE = 5,
+		
+}
+}
 
 
 
