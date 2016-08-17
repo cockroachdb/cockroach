@@ -51,9 +51,9 @@ type server struct {
 		is       *infoStore                         // The backing infostore
 		incoming nodeSet                            // Incoming client node IDs
 		nodeMap  map[util.UnresolvedAddr]serverInfo // Incoming client's local address -> serverInfo
+		ready    chan struct{}                      // Broadcasts wakeup to waiting gossip requests
 	}
 	tighten chan roachpb.NodeID // Channel of too-distant node IDs
-	ready   chan struct{}       // Broadcasts wakeup to waiting gossip requests
 
 	nodeMetrics   Metrics
 	serverMetrics Metrics
@@ -66,7 +66,6 @@ func newServer(stopper *stop.Stopper, registry *metric.Registry) *server {
 	s := &server{
 		stopper:       stopper,
 		tighten:       make(chan roachpb.NodeID, 1),
-		ready:         make(chan struct{}, 1),
 		nodeMetrics:   makeMetrics(),
 		serverMetrics: makeMetrics(),
 	}
@@ -74,6 +73,7 @@ func newServer(stopper *stop.Stopper, registry *metric.Registry) *server {
 	s.mu.is = newInfoStore(0, util.UnresolvedAddr{}, stopper)
 	s.mu.incoming = makeNodeSet(minPeers, metric.NewGauge(MetaConnectionsIncomingGauge))
 	s.mu.nodeMap = make(map[util.UnresolvedAddr]serverInfo)
+	s.mu.ready = make(chan struct{})
 
 	registry.AddMetric(s.mu.incoming.gauge)
 	registry.AddMetricStruct(s.nodeMetrics)
@@ -143,6 +143,10 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 
 	for {
 		s.mu.Lock()
+		// Store the old ready so that if it gets replaced with a new one
+		// (once the lock is released) and is closed, we still trigger the
+		// select below.
+		ready := s.mu.ready
 		delta := s.mu.is.delta(args.HighWaterStamps)
 
 		if infoCount := len(delta); infoCount > 0 {
@@ -171,7 +175,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 			return nil
 		case err := <-errCh:
 			return err
-		case <-s.ready:
+		case <-ready:
 		}
 	}
 }
@@ -342,10 +346,11 @@ func (s *server) start(addr net.Addr) {
 	s.mu.is.NodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
 
 	broadcast := func() {
-		select {
-		case s.ready <- struct{}{}:
-		default:
-		}
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		ready := make(chan struct{})
+		close(s.mu.ready)
+		s.mu.ready = ready
 	}
 
 	unregister := s.mu.is.registerCallback(".*", func(_ string, _ roachpb.Value) {
