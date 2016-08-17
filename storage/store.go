@@ -2925,7 +2925,7 @@ func (s *Store) computeReplicationStatus(now int64) (
 			// TODO(bram): #4564 Compare attributes of the stores so we can
 			// track ranges that have enough replicas but still need to be
 			// migrated onto nodes with the desired attributes.
-			if len(raftStatus.Progress) >= len(zoneConfig.ReplicaAttrs) {
+			if len(raftStatus.Progress) >= int(zoneConfig.NumReplicas) {
 				replicatedRangeCount++
 			}
 
