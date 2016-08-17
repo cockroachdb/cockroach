@@ -74,7 +74,7 @@ Additionally, you can manually verify that your metric is updating by using the
 metrics endpoint.  For example, if you're running the Cockroach DB server with
 the "--insecure" flag, you can use access the endpoint as follows:
 
-	$ curl http://localhost:26257/_status/metrics/1
+	$ curl http://localhost:8080/_status/nodes/1
 
 	(some other output)
 	"cr.node.sql.select.count.1": 5,
