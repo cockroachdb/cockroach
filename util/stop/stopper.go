@@ -18,7 +18,6 @@ package stop
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"sort"
 	"strings"
@@ -28,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/caller"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
@@ -101,7 +101,7 @@ func (k taskKey) String() string {
 // through RunTask() and RunAsyncTask().
 //
 // Stopping occurs in two phases: the first is the request to stop, which moves
-// the stopper into a quiesceing phase. While quiesceing, calls to RunTask() &
+// the stopper into a quiescing phase. While quiescing, calls to RunTask() &
 // RunAsyncTask() don't execute the function passed in and return errUnavailable.
 // When all outstanding tasks have been completed, the stopper
 // closes its stopper channel, which signals all live workers that it's safe to
@@ -111,7 +111,7 @@ func (k taskKey) String() string {
 // be added to the stopper via AddCloser(), to be closed after the
 // stopper has stopped.
 type Stopper struct {
-	quiescer  chan struct{}     // Closed when quiesceing
+	quiescer  chan struct{}     // Closed when quiescing
 	stopper   chan struct{}     // Closed when stopping
 	stopped   chan struct{}     // Closed when stopped completely
 	onPanic   func(interface{}) // called with recover() on panic on any goroutine
@@ -249,7 +249,7 @@ func (s *Stopper) RunLimitedAsyncTask(sem chan struct{}, f func()) error {
 	case <-s.ShouldQuiesce():
 		return errUnavailable
 	default:
-		log.Printf("stopper throttling task from %s:%d due to semaphore", file, line)
+		log.Infof(context.Background(), "stopper throttling task from %s:%d due to semaphore", file, line)
 		// Retry the select without the default.
 		select {
 		case sem <- struct{}{}:
@@ -335,6 +335,7 @@ func (s *Stopper) runningTasksLocked() TaskMap {
 func (s *Stopper) Stop() {
 	defer s.Recover()
 	defer unregister(s)
+	log.Info(context.Background(), "stop has been called, stopping or quiescing all running tasks")
 	// Don't bother doing stuff cleanly if we're panicking, that would likely
 	// block. Instead, best effort only. This cleans up the stack traces,
 	// avoids stalls and helps some tests in `./cli` finish cleanly (where
@@ -371,7 +372,7 @@ func (s *Stopper) ShouldQuiesce() <-chan struct{} {
 }
 
 // ShouldStop returns a channel which will be closed when Stop() has been
-// invoked and outstanding tasks have quiesceed.
+// invoked and outstanding tasks have quiesced.
 func (s *Stopper) ShouldStop() <-chan struct{} {
 	if s == nil {
 		// A nil stopper will never signal ShouldStop, but will also never panic.
@@ -390,7 +391,7 @@ func (s *Stopper) IsStopped() <-chan struct{} {
 	return s.stopped
 }
 
-// Quiesce moves the stopper to state quiesceing and waits until all
+// Quiesce moves the stopper to state quiescing and waits until all
 // tasks complete. This is used from Stop() and unittests.
 func (s *Stopper) Quiesce() {
 	defer s.Recover()
@@ -404,8 +405,7 @@ func (s *Stopper) Quiesce() {
 		close(s.quiescer)
 	}
 	for s.numTasks > 0 {
-		// Use stdlib "log" instead of "cockroach/util/log" due to import cycles.
-		log.Print("quiesceing; tasks left:\n", s.runningTasksLocked())
+		log.Infof(context.Background(), "quiescing; tasks left:\n%s", s.runningTasksLocked())
 		// Unlock s.mu, wait for the signal, and lock s.mu.
 		s.quiesce.Wait()
 	}
