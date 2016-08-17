@@ -27,7 +27,6 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/gogo/protobuf/proto"
 	"github.com/google/btree"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -2495,6 +2494,13 @@ func (s *Store) processRaft() {
 			s.processRaftMu.Unlock()
 			s.metrics.RaftWorkingDurationNanos.Inc(timeutil.Since(workingStart).Nanoseconds())
 
+			// If Raft ready processing took longer than a second something bad is
+			// going on. Such long processing time means we'll have starved local
+			// replicas of ticks and remote replicas will likely start campaigning.
+			if elapsed := timeutil.Since(workingStart); elapsed >= time.Second {
+				log.Warningf(context.TODO(), "%s: raft ready processing: %.1fs", s, elapsed.Seconds())
+			}
+
 			selectStart := timeutil.Now()
 
 			select {
@@ -2537,6 +2543,13 @@ func (s *Store) processRaft() {
 				s.pendingRaftGroups.Unlock()
 				s.processRaftMu.Unlock()
 				s.metrics.RaftTickingDurationNanos.Inc(timeutil.Since(tickerStart).Nanoseconds())
+
+				// If Raft ticking took longer than a second something bad is going
+				// on. Such long processing time means we'll have starved local
+				// replicas of ticks and remote replicas will likely start campaigning.
+				if elapsed := timeutil.Since(tickerStart); elapsed >= time.Second {
+					log.Warningf(context.TODO(), "%s: raft ticking: %.1fs", s, elapsed.Seconds())
+				}
 
 			case <-s.stopper.ShouldStop():
 				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
@@ -2635,23 +2648,6 @@ func (s *Store) canApplySnapshotLocked(rangeID roachpb.RangeID, snap raftpb.Snap
 		rangeDesc: parsedSnap.RangeDescriptor,
 	}
 	return placeholder, nil
-}
-
-func raftEntryFormatter(data []byte) string {
-	if len(data) == 0 {
-		return "[empty]"
-	}
-	_, encodedCmd := DecodeRaftCommand(data)
-	var cmd roachpb.RaftCommand
-	if err := proto.Unmarshal(encodedCmd, &cmd); err != nil {
-		return fmt.Sprintf("[error parsing entry: %s]", err)
-	}
-	s := cmd.Cmd.String()
-	maxLen := 300
-	if len(s) > maxLen {
-		s = s[:maxLen]
-	}
-	return s
 }
 
 // computeReplicationStatus counts a number of simple replication statistics for

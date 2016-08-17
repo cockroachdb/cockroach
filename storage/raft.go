@@ -23,9 +23,13 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/gogo/protobuf/proto"
 )
 
 // init installs an adapter to use clog for log messages from raft which
@@ -120,6 +124,7 @@ func (r *raftLogger) Panicf(format string, v ...interface{}) {
 
 func logRaftReady(ctx context.Context, prefix fmt.Stringer, ready raft.Ready) {
 	if log.V(5) {
+		now := timeutil.Now()
 		var buf bytes.Buffer
 		if ready.SoftState != nil {
 			fmt.Fprintf(&buf, "  SoftState updated: %+v\n", *ready.SoftState)
@@ -136,14 +141,71 @@ func logRaftReady(ctx context.Context, prefix fmt.Stringer, ready raft.Ready) {
 				i, raft.DescribeEntry(e, raftEntryFormatter))
 		}
 		if !raft.IsEmptySnap(ready.Snapshot) {
-			fmt.Fprintf(&buf, "  Snapshot updated: %.200s\n", ready.Snapshot.String())
+			snap := ready.Snapshot
+			snap.Data = nil
+			fmt.Fprintf(&buf, "  Snapshot updated: %v\n", snap)
 		}
 		for i, m := range ready.Messages {
 			fmt.Fprintf(&buf, "  Outgoing Message[%d]: %.200s\n",
-				i, raft.DescribeMessage(m, raftEntryFormatter))
+				i, raftDescribeMessage(m, raftEntryFormatter))
 		}
-		log.Infof(ctx, "%s raft ready\n%s", prefix, buf.String())
+		log.Infof(ctx, "%s raft ready %.1fs\n%s", prefix, timeutil.Since(now).Seconds(), buf.String())
 	}
+}
+
+// This is a fork of raft.DescribeMessage with a tweak to avoid logging
+// snapshot data.
+func raftDescribeMessage(m raftpb.Message, f raft.EntryFormatter) string {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "%x->%x %v Term:%d Log:%d/%d", m.From, m.To, m.Type, m.Term, m.LogTerm, m.Index)
+	if m.Reject {
+		fmt.Fprintf(&buf, " Rejected")
+		if m.RejectHint != 0 {
+			fmt.Fprintf(&buf, "(Hint:%d)", m.RejectHint)
+		}
+	}
+	if m.Commit != 0 {
+		fmt.Fprintf(&buf, " Commit:%d", m.Commit)
+	}
+	if len(m.Entries) > 0 {
+		fmt.Fprintf(&buf, " Entries:[")
+		for i, e := range m.Entries {
+			if i != 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(raft.DescribeEntry(e, f))
+		}
+		fmt.Fprintf(&buf, "]")
+	}
+	if !raft.IsEmptySnap(m.Snapshot) {
+		snap := m.Snapshot
+		snap.Data = nil
+		fmt.Fprintf(&buf, " Snapshot:%v", snap)
+	}
+	return buf.String()
+}
+
+func raftEntryFormatter(data []byte) string {
+	if len(data) == 0 {
+		return "[empty]"
+	}
+	if len(data) >= 1024 {
+		// Don't try to unmarshal and stringify the command if it is large. Doing
+		// so is super expensive (multiple seconds for the call to String()) for
+		// large snapshot entries.
+		return fmt.Sprintf("[%d]", len(data))
+	}
+	_, encodedCmd := DecodeRaftCommand(data)
+	var cmd roachpb.RaftCommand
+	if err := proto.Unmarshal(encodedCmd, &cmd); err != nil {
+		return fmt.Sprintf("[error parsing entry: %s]", err)
+	}
+	s := cmd.Cmd.String()
+	maxLen := 300
+	if len(s) > maxLen {
+		s = s[:maxLen]
+	}
+	return s
 }
 
 var _ security.RequestWithUser = &RaftMessageRequest{}
