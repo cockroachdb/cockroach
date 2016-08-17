@@ -1532,6 +1532,7 @@ func (r *Replica) handleRaftReady() error {
 	var hasReady bool
 	var rd raft.Ready
 	r.mu.Lock()
+
 	lastIndex := r.mu.lastIndex // used for append below
 	raftLogSize := r.mu.raftLogSize
 	leaderID := r.mu.leaderID
@@ -1726,14 +1727,16 @@ func (r *Replica) handleRaftReady() error {
 	})
 }
 
-func (r *Replica) tick() error {
+// tick the Raft group, returning any error and true if the raft group exists
+// and false otherwise.
+func (r *Replica) tick() (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	// If the raft group is uninitialized, do not initialize raft groups on
 	// tick.
 	if r.mu.internalRaftGroup == nil {
-		return nil
+		return false, nil
 	}
 
 	r.mu.ticks++
@@ -1748,10 +1751,10 @@ func (r *Replica) tick() error {
 		// cycles.
 		if err := r.refreshPendingCmdsLocked(
 			reasonTicks, r.store.ctx.RaftElectionTimeoutTicks); err != nil {
-			return err
+			return true, err
 		}
 	}
-	return nil
+	return true, nil
 }
 
 // pendingCmdSlice sorts by increasing MaxLeaseIndex.
