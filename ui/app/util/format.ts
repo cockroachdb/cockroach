@@ -1,3 +1,5 @@
+import { Severity } from "../util/protoEnums";
+
 const kibi = 1024;
 const units: string[] = ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
 
@@ -43,3 +45,11 @@ export function Percentage(numerator: number, denominator: number): string {
   }
   return Math.floor(numerator / denominator * 100).toString() + "%";
 }
+
+/**
+ * FormatSeverity formats a numerical severity into its string
+ * representation.
+ */
+export function FormatSeverity(severity: number): string {
+  return Severity[severity];
+};
