@@ -22,7 +22,7 @@ import (
 )
 
 func TestDockerC(t *testing.T) {
-	testDockerSuccess(t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT $1, $2, $3, $4, $5, $6", 1)})
+	testDockerSuccess(t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT $1, $2, $3, $4, $5, $6, $7", 1)})
 	testDockerFail(t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT 1", 1)})
 }
 
@@ -75,8 +75,14 @@ int main(int argc, char const *argv[]) {
   // 	return 1;
   // }
 
-	PGnumeric numeric = "-1728718718271827121233.1212121212";
-	if (!PQputf(param, "%numeric", numeric)) {
+	PGnumeric numeric1 = "42";
+	if (!PQputf(param, "%numeric", numeric1)) {
+		fprintf(stderr, "ERROR: %s\n", PQgeterror());
+		return 1;
+	}
+
+	PGnumeric numeric2 = "-1728718718271827121233.1212121212";
+	if (!PQputf(param, "%numeric", numeric2)) {
 		fprintf(stderr, "ERROR: %s\n", PQgeterror());
 		return 1;
 	}
@@ -180,18 +186,28 @@ int main(int argc, char const *argv[]) {
 				return 1;
 			}
 
-			PGnumeric recvnumeric;
-			if (!PQgetf(result, 0, "%numeric", 2, &recvnumeric)) {
+			PGnumeric recvnumeric1;
+			if (!PQgetf(result, 0, "%numeric", 2, &recvnumeric1)) {
 				fprintf(stderr, "ERROR: %s\n", PQgeterror());
 				return 1;
 			}
-			if (strcmp(recvnumeric, numeric)) {
-				fprintf(stderr, "expected: %s, got: %s\n", numeric, recvnumeric);
+			if (strcmp(recvnumeric1, numeric1)) {
+				fprintf(stderr, "expected: %s, got: %s\n", numeric1, recvnumeric1);
+				return 1;
+			}
+
+			PGnumeric recvnumeric2;
+			if (!PQgetf(result, 0, "%numeric", 3, &recvnumeric2)) {
+				fprintf(stderr, "ERROR: %s\n", PQgeterror());
+				return 1;
+			}
+			if (strcmp(recvnumeric2, numeric2)) {
+				fprintf(stderr, "expected: %s, got: %s\n", numeric2, recvnumeric2);
 				return 1;
 			}
 
 			PGfloat8 recvf8;
-			if (!PQgetf(result, 0, "%float8", 3, &recvf8)) {
+			if (!PQgetf(result, 0, "%float8", 4, &recvf8)) {
 				fprintf(stderr, "ERROR: %s\n", PQgeterror());
 				return 1;
 			}
@@ -201,7 +217,7 @@ int main(int argc, char const *argv[]) {
 			}
 
 			PGint8 recvi8;
-			if (!PQgetf(result, 0, "%int8", 4, &recvi8)) {
+			if (!PQgetf(result, 0, "%int8", 5, &recvi8)) {
 				fprintf(stderr, "ERROR: %s\n", PQgeterror());
 				return 1;
 			}
@@ -211,7 +227,7 @@ int main(int argc, char const *argv[]) {
 			}
 
 			PGtext recvtext;
-			if (!PQgetf(result, 0, "%text", 5, &recvtext)) {
+			if (!PQgetf(result, 0, "%text", 6, &recvtext)) {
 				fprintf(stderr, "ERROR: %s\n", PQgeterror());
 				return 1;
 			}

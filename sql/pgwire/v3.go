@@ -24,6 +24,8 @@ import (
 	"reflect"
 	"strconv"
 
+	"github.com/cockroachdb/pq/oid"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/sql"
@@ -32,8 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracing"
-	"github.com/cockroachdb/pq/oid"
-	"github.com/pkg/errors"
 )
 
 //go:generate stringer -type=clientMessageType
