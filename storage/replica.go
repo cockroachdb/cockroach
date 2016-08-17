@@ -31,6 +31,7 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/google/btree"
 	"github.com/kr/pretty"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -302,6 +303,17 @@ type Replica struct {
 		droppedMessages int
 	}
 }
+
+// KeyRange is an interface type for the replicasByKey BTree, to compare
+// Replica and ReplicaPlaceholder.
+type KeyRange interface {
+	Desc() *roachpb.RangeDescriptor
+	rangeKeyItem
+	btree.Item
+	fmt.Stringer
+}
+
+var _ KeyRange = &Replica{}
 
 // withRaftGroupLocked calls the supplied function with the (lazily
 // initialized) Raft group. It assumes that the Replica lock is held.
@@ -1520,6 +1532,7 @@ func (r *Replica) handleRaftReady() error {
 	var hasReady bool
 	var rd raft.Ready
 	r.mu.Lock()
+
 	lastIndex := r.mu.lastIndex // used for append below
 	raftLogSize := r.mu.raftLogSize
 	leaderID := r.mu.leaderID
@@ -1562,6 +1575,26 @@ func (r *Replica) handleRaftReady() error {
 		if err := r.applySnapshot(ctx, rd.Snapshot, rd.HardState); err != nil {
 			return err
 		}
+
+		// handleRaftReady is called under the processRaftMu lock, so it is
+		// safe to lock the store here.
+		if err := func() error {
+			r.store.mu.Lock()
+			defer r.store.mu.Unlock()
+
+			if _, exists := r.store.mu.replicaPlaceholders[r.RangeID]; exists {
+				if err := r.store.removePlaceholderLocked(r.RangeID); err != nil {
+					return errors.Wrapf(err, "could not remove placeholder before applySnapshot")
+				}
+			}
+			if err := r.store.processRangeDescriptorUpdateLocked(r); err != nil {
+				return errors.Wrapf(err, "could not processRangeDescriptorUpdate after applySnapshot")
+			}
+			return nil
+		}(); err != nil {
+			return err
+		}
+
 		var err error
 		if lastIndex, err = loadLastIndex(ctx, r.store.Engine(), r.RangeID); err != nil {
 			return err
@@ -1600,8 +1633,11 @@ func (r *Replica) handleRaftReady() error {
 		return err
 	}
 
-	// Update protected state (last index, raft log size and raft leader ID).
+	// Update protected state (last index, raft log size and raft leader
+	// ID) and set raft log entry cache. We clear any older, uncommitted
+	// log entries and cache the latest ones.
 	r.mu.Lock()
+	r.store.raftEntryCache.addEntries(r.RangeID, rd.Entries)
 	r.mu.lastIndex = lastIndex
 	r.mu.raftLogSize = raftLogSize
 	r.mu.leaderID = leaderID
@@ -1691,14 +1727,16 @@ func (r *Replica) handleRaftReady() error {
 	})
 }
 
-func (r *Replica) tick() error {
+// tick the Raft group, returning any error and true if the raft group exists
+// and false otherwise.
+func (r *Replica) tick() (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	// If the raft group is uninitialized, do not initialize raft groups on
 	// tick.
 	if r.mu.internalRaftGroup == nil {
-		return nil
+		return false, nil
 	}
 
 	r.mu.ticks++
@@ -1713,10 +1751,10 @@ func (r *Replica) tick() error {
 		// cycles.
 		if err := r.refreshPendingCmdsLocked(
 			reasonTicks, r.store.ctx.RaftElectionTimeoutTicks); err != nil {
-			return err
+			return true, err
 		}
 	}
-	return nil
+	return true, nil
 }
 
 // pendingCmdSlice sorts by increasing MaxLeaseIndex.
@@ -2810,6 +2848,15 @@ func (r *Replica) maybeAddToRaftLogQueue(appliedIndex uint64) {
 	if appliedIndex%raftLogCheckFrequency == 0 {
 		r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
+}
+
+func (r *Replica) endKey() roachpb.RKey {
+	return r.Desc().EndKey
+}
+
+// Less implements the btree.Item interface.
+func (r *Replica) Less(i btree.Item) bool {
+	return r.endKey().Less(i.(rangeKeyItem).endKey())
 }
 
 func (r *Replica) panic(err error) {

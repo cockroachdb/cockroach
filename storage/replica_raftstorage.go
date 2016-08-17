@@ -74,19 +74,18 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 // Entries implements the raft.Storage interface. Note that maxBytes is advisory
 // and this method will always return at least one entry even if it exceeds
 // maxBytes. Passing maxBytes equal to zero disables size checking.
-// TODO(bdarnell): consider caching for recent entries, if rocksdb's built in
-// caching is insufficient.
 // Entries requires that the replica lock is held.
 func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
-	return entries(context.Background(), snap, r.RangeID, lo, hi, maxBytes)
+	return entries(context.Background(), snap, r.RangeID, r.store.raftEntryCache, lo, hi, maxBytes)
 }
 
 func entries(
 	ctx context.Context,
 	e engine.Reader,
 	rangeID roachpb.RangeID,
+	eCache *raftEntryCache,
 	lo, hi, maxBytes uint64,
 ) ([]raftpb.Entry, error) {
 	if lo > hi {
@@ -96,8 +95,19 @@ func entries(
 	// stopping once we have enough.
 	ents := make([]raftpb.Entry, 0, hi-lo)
 	size := uint64(0)
+
+	hitEnts, hitSize, hitIndex := eCache.getEntries(rangeID, lo, hi, maxBytes)
+	// Return results if the correct number of results came back or if
+	// we ran into the max bytes limit.
+	if uint64(len(hitEnts)) == hi-lo || (maxBytes > 0 && hitSize > maxBytes) {
+		return hitEnts, nil
+	}
+
+	ents = append(ents, hitEnts...)
+	size += hitSize
+	expectedIndex := hitIndex
+
 	var ent raftpb.Entry
-	expectedIndex := lo
 	exceededMaxBytes := false
 	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
 		if err := kv.Value.GetProto(&ent); err != nil {
@@ -114,9 +124,11 @@ func entries(
 		return exceededMaxBytes, nil
 	}
 
-	if err := iterateEntries(ctx, e, rangeID, lo, hi, scanFunc); err != nil {
+	if err := iterateEntries(ctx, e, rangeID, expectedIndex, hi, scanFunc); err != nil {
 		return nil, err
 	}
+	// Cache the fetched entries.
+	eCache.addEntries(rangeID, ents)
 
 	// Did the correct number of results come back? If so, we're all good.
 	if uint64(len(ents)) == hi-lo {
@@ -187,11 +199,17 @@ func iterateEntries(
 func (r *Replica) Term(i uint64) (uint64, error) {
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
-	return term(context.Background(), snap, r.RangeID, i)
+	return term(context.Background(), snap, r.RangeID, r.store.raftEntryCache, i)
 }
 
-func term(ctx context.Context, eng engine.Reader, rangeID roachpb.RangeID, i uint64) (uint64, error) {
-	ents, err := entries(ctx, eng, rangeID, i, i+1, 0)
+func term(
+	ctx context.Context,
+	eng engine.Reader,
+	rangeID roachpb.RangeID,
+	eCache *raftEntryCache,
+	i uint64,
+) (uint64, error) {
+	ents, err := entries(ctx, eng, rangeID, eCache, i, i+1, 0)
 	if err == raft.ErrCompacted {
 		ts, err := loadTruncatedState(ctx, eng, rangeID)
 		if err != nil {
@@ -312,7 +330,7 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (raftpb.Snapshot, err
 		// Delegate to a static function to make sure that we do not depend
 		// on any indirect calls to r.store.Engine() (or other in-memory
 		// state of the Replica). Everything must come from the snapshot.
-		snapData, err := snapshot(context.Background(), snap, rangeID, startKey)
+		snapData, err := snapshot(context.Background(), snap, rangeID, r.store.raftEntryCache, startKey)
 		if err != nil {
 			log.Errorf(ctxInner, "%s: error generating snapshot: %s", r, err)
 		} else {
@@ -388,6 +406,7 @@ func snapshot(
 	ctx context.Context,
 	snap engine.Reader,
 	rangeID roachpb.RangeID,
+	eCache *raftEntryCache,
 	startKey roachpb.RKey,
 ) (raftpb.Snapshot, error) {
 	start := timeutil.Now()
@@ -465,7 +484,7 @@ func snapshot(
 		cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
 	}
 
-	term, err := term(ctx, snap, rangeID, appliedIndex)
+	term, err := term(ctx, snap, rangeID, eCache, appliedIndex)
 	if err != nil {
 		return raftpb.Snapshot{}, errors.Errorf("failed to fetch term of %d: %s", appliedIndex, err)
 	}
@@ -557,7 +576,8 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 // HardState (which may be empty, as Raft may apply some snapshots which don't
 // require an update to the HardState). All snapshots must pass through Raft
 // for correctness, i.e. the parameters to this method must be taken from
-// a raft.Ready.
+// a raft.Ready. It is the caller's responsibility to call
+// r.store.processRangeDescriptorUpdate(r) after a successful applySnapshot.
 func (r *Replica) applySnapshot(
 	ctx context.Context, snap raftpb.Snapshot, hs raftpb.HardState,
 ) error {
@@ -700,11 +720,8 @@ func (r *Replica) applySnapshot(
 	if err := r.updateRangeInfo(&desc); err != nil {
 		panic(err)
 	}
-	// Update the range descriptor. This is done last as this is the step that
-	// makes the Replica visible in the Store.
-	if err := r.setDesc(&desc); err != nil {
-		panic(err)
-	}
+
+	r.setDescWithoutProcessUpdate(&desc)
 
 	if !isPreemptive {
 		r.store.metrics.RangeSnapshotsNormalApplied.Inc(1)

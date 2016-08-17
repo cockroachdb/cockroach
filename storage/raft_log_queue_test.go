@@ -113,7 +113,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	store.SetRaftLogQueueActive(false)
 
 	// Test on a new range which should not have a raft group yet.
-	rngNew := createRange(store, 100, roachpb.RKey("a"), roachpb.RKey("c"))
+	rngNew := createReplica(store, 100, roachpb.RKey("a"), roachpb.RKey("c"))
 	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(rngNew)
 	if err != nil {
 		t.Errorf("expected no error, got %s", err)
