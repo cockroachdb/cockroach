@@ -34,7 +34,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"gopkg.in/yaml.v1"
+	"gopkg.in/yaml.v2"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
