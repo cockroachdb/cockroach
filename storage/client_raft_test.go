@@ -2330,9 +2330,11 @@ func TestFailedPreemptiveSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	const expErr = "aborted due to failed preemptive snapshot: unknown peer 3"
 	if err := rep.ChangeReplicas(context.Background(), roachpb.ADD_REPLICA,
 		roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3},
-		rep.Desc()); !testutils.IsError(err, "aborted due to failed preemptive snapshot: unable to get connection for node 3") {
-		t.Fatalf("got %s instead of expected error", err)
+		rep.Desc(),
+	); !testutils.IsError(err, expErr) {
+		t.Fatalf("expected %s, got %v", expErr, err)
 	}
 }

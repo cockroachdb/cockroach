@@ -394,9 +394,13 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 
 // SendSync sends a raft message and waits for an acknowledgement.
 func (t *RaftTransport) SendSync(ctx context.Context, req *RaftMessageRequest) error {
-	conn := t.getNodeConn(req.ToReplica.NodeID)
-	if conn == nil {
-		return errors.Errorf("unable to get connection for node %s", req.ToReplica.NodeID)
+	addr, err := t.resolver(req.ToReplica.NodeID)
+	if err != nil {
+		return err
+	}
+	conn, err := t.rpcContext.GRPCDial(addr.String(), grpc.WithBlock())
+	if err != nil {
+		return err
 	}
 	client := NewMultiRaftClient(conn)
 	resp, err := client.RaftMessageSync(ctx, req)
