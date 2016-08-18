@@ -58,26 +58,24 @@ func runBenchmarkAggregate(b *testing.B, aggFunc func() AggregateFunc, vals []Da
 	for i := 0; i < b.N; i++ {
 		aggImpl := aggFunc()
 		for i := range vals {
-			if err := aggImpl.Add(vals[i]); err != nil {
-				b.Errorf("adding value to aggregate implementation %T failed: %v", aggImpl, err)
-			}
+			aggImpl.Add(vals[i])
 		}
-		if _, err := aggImpl.Result(); err != nil {
-			b.Errorf("taking result of aggregate implementation %T failed: %v", aggImpl, err)
+		if aggImpl.Result() == nil {
+			b.Errorf("taking result of aggregate implementation %T failed", aggImpl)
 		}
 	}
 }
 
 func BenchmarkAvgAggregateInt1K(b *testing.B) {
-	runBenchmarkAggregate(b, newAvgAggregate, makeIntTestDatum(1000))
+	runBenchmarkAggregate(b, newIntAvgAggregate, makeIntTestDatum(1000))
 }
 
 func BenchmarkAvgAggregateFloat1K(b *testing.B) {
-	runBenchmarkAggregate(b, newAvgAggregate, makeFloatTestDatum(1000))
+	runBenchmarkAggregate(b, newFloatAvgAggregate, makeFloatTestDatum(1000))
 }
 
 func BenchmarkAvgAggregateDecimal1K(b *testing.B) {
-	runBenchmarkAggregate(b, newAvgAggregate, makeDecimalTestDatum(1000))
+	runBenchmarkAggregate(b, newDecimalAvgAggregate, makeDecimalTestDatum(1000))
 }
 
 func BenchmarkCountAggregate1K(b *testing.B) {
@@ -85,15 +83,15 @@ func BenchmarkCountAggregate1K(b *testing.B) {
 }
 
 func BenchmarkSumAggregateInt1K(b *testing.B) {
-	runBenchmarkAggregate(b, newSumAggregate, makeIntTestDatum(1000))
+	runBenchmarkAggregate(b, newIntSumAggregate, makeIntTestDatum(1000))
 }
 
 func BenchmarkSumAggregateFloat1K(b *testing.B) {
-	runBenchmarkAggregate(b, newSumAggregate, makeFloatTestDatum(1000))
+	runBenchmarkAggregate(b, newFloatSumAggregate, makeFloatTestDatum(1000))
 }
 
 func BenchmarkSumAggregateDecimal1K(b *testing.B) {
-	runBenchmarkAggregate(b, newSumAggregate, makeDecimalTestDatum(1000))
+	runBenchmarkAggregate(b, newDecimalSumAggregate, makeDecimalTestDatum(1000))
 }
 
 func BenchmarkMaxAggregateInt1K(b *testing.B) {
@@ -121,25 +119,25 @@ func BenchmarkMinAggregateDecimal1K(b *testing.B) {
 }
 
 func BenchmarkVarianceAggregateInt1K(b *testing.B) {
-	runBenchmarkAggregate(b, newVarianceAggregate, makeIntTestDatum(1000))
+	runBenchmarkAggregate(b, newIntVarianceAggregate, makeIntTestDatum(1000))
 }
 
 func BenchmarkVarianceAggregateFloat1K(b *testing.B) {
-	runBenchmarkAggregate(b, newVarianceAggregate, makeFloatTestDatum(1000))
+	runBenchmarkAggregate(b, newFloatVarianceAggregate, makeFloatTestDatum(1000))
 }
 
 func BenchmarkVarianceAggregateDecimal1K(b *testing.B) {
-	runBenchmarkAggregate(b, newVarianceAggregate, makeDecimalTestDatum(1000))
+	runBenchmarkAggregate(b, newDecimalVarianceAggregate, makeDecimalTestDatum(1000))
 }
 
 func BenchmarkStddevAggregateInt1K(b *testing.B) {
-	runBenchmarkAggregate(b, newStddevAggregate, makeIntTestDatum(1000))
+	runBenchmarkAggregate(b, newIntStddevAggregate, makeIntTestDatum(1000))
 }
 
 func BenchmarkStddevAggregateFloat1K(b *testing.B) {
-	runBenchmarkAggregate(b, newStddevAggregate, makeFloatTestDatum(1000))
+	runBenchmarkAggregate(b, newFloatStddevAggregate, makeFloatTestDatum(1000))
 }
 
 func BenchmarkStddevAggregateDecimal1K(b *testing.B) {
-	runBenchmarkAggregate(b, newStddevAggregate, makeDecimalTestDatum(1000))
+	runBenchmarkAggregate(b, newDecimalStddevAggregate, makeDecimalTestDatum(1000))
 }
