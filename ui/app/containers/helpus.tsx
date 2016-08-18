@@ -1,5 +1,5 @@
 import * as React from "react";
-import _ = require("lodash");
+import _ from "lodash";
 import { connect } from "react-redux";
 
 import { AdminUIState } from "../redux/state";

@@ -2,8 +2,8 @@ import * as React from "react";
 import { assert } from "chai";
 import { shallow } from "enzyme";
 import * as sinon from "sinon";
-import moment = require("moment");
-import _ = require("lodash");
+import moment from "moment";
+import _ from "lodash";
 
 import { TimeWindowManagerUnconnected as TimeWindowManager } from "./timewindow";
 import * as timewindow from "../redux/timewindow";

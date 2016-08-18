@@ -1,10 +1,11 @@
 import { assert } from "chai";
-import _ = require("lodash");
-import Long = require("long");
-import * as fetchMock from "../util/fetch-mock";
+import _ from "lodash";
+import Long from "long";
+import fetchMock from "../util/fetch-mock";
 
 import * as protos from "../js/protos";
-import reducer, * as metrics from "./metrics";
+import * as metrics from "./metrics";
+import reducer from "./metrics";
 import { Action } from "../interfaces/action";
 
 type TSRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
