@@ -452,7 +452,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	// already had.
 	_, err = t.acquire(1, tableDesc.ID, tableDesc.Version+1)
 	if !testutils.IsError(err, "table is being deleted") {
-		t.Fatalf("got a different error than expected: %s", err)
+		t.Fatalf("got a different error than expected: %v", err)
 	}
 }
 
@@ -578,7 +578,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	// Now we shouldn't be able to acquire any more.
 	_, err = acquire(s.(*server.TestServer), tableDesc.ID, 0)
 	if !testutils.IsError(err, "table is being deleted") {
-		t.Fatalf("got a different error than expected: %s", err)
+		t.Fatalf("got a different error than expected: %v", err)
 	}
 }
 
@@ -645,6 +645,6 @@ func runCommandAndExpireLease(t *testing.T, clock *hlc.Clock, sqlDB *gosql.DB, s
 
 	// Commit and see the aborted txn.
 	if err := txn.Commit(); !testutils.IsError(err, "pq: restart transaction: txn aborted") {
-		t.Fatalf("%s, err = %s", sql, err)
+		t.Fatalf("%s, err = %v", sql, err)
 	}
 }

@@ -799,7 +799,7 @@ func TestMVCCInlineWithTxn(t *testing.T) {
 
 	// Verify inline put with txn is an error.
 	if err = MVCCPut(context.Background(), engine, nil, testKey2, hlc.ZeroTimestamp, value2, txn2); !testutils.IsError(err, "writes not allowed within transactions") {
-		t.Errorf("unexpected success")
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -3571,7 +3571,7 @@ func TestMVCCComputeStatsError(t *testing.T) {
 		mvccKey(roachpb.KeyMax), 100)
 	iter.Close()
 	if e := "unable to decode MVCCMetadata"; !testutils.IsError(err, e) {
-		t.Fatalf("expected %s", e)
+		t.Fatalf("expected %s, got %v", e, err)
 	}
 }
 

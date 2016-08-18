@@ -777,12 +777,8 @@ func (t *logicTest) verifyError(
 	if expectErr == "" && expectErrCode == "" && err != nil {
 		return t.unexpectedError(sql, pos, err)
 	}
-	if expectErr != "" && !testutils.IsError(err, expectErr) {
-		if err != nil {
-			t.Errorf("%s: expected %q, but found\n%s", pos, expectErr, err)
-		} else {
-			t.Errorf("%s: expected %q, but found success", pos, expectErr)
-		}
+	if !(expectErr == "" && err == nil || testutils.IsError(err, expectErr)) {
+		t.Errorf("%s: expected %q, but found %v", pos, expectErr, err)
 		return false
 	}
 	if expectErrCode != "" {

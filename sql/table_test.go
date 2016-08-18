@@ -243,7 +243,7 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	}
 	err = desc.AllocateIDs()
 	if !testutils.IsError(err, sqlbase.ErrMissingPrimaryKey.Error()) {
-		t.Fatalf("unexpected error: %s", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
