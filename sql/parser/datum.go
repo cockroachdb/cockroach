@@ -769,7 +769,8 @@ func MakeDTimestamp(t time.Time, precision time.Duration) *DTimestamp {
 // time.Time formats.
 const (
 	timestampFormat                       = "2006-01-02 15:04:05"
-	timestampWithOffsetZoneFormat         = timestampFormat + "-07:00"
+	timestampWithOffsetZoneFormat         = timestampFormat + "-07"
+	timestampWithOffsetSecondsZoneFormat  = timestampWithOffsetZoneFormat + ":00"
 	timestampWithNamedZoneFormat          = timestampFormat + " MST"
 	timestampRFC3339NanoWithoutZoneFormat = "2006-01-02T15:04:05"
 
@@ -781,6 +782,7 @@ var timeFormats = []string{
 	dateFormat,
 	time.RFC3339Nano,
 	timestampWithOffsetZoneFormat,
+	timestampWithOffsetSecondsZoneFormat,
 	timestampFormat,
 	timestampWithNamedZoneFormat,
 	timestampRFC3339NanoWithoutZoneFormat,
