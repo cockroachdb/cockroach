@@ -138,9 +138,8 @@ func (t *RaftTransport) handleRaftRequest(
 	t.mu.Unlock()
 
 	if !ok {
-		return roachpb.NewErrorf(
-			"unable to accept Raft message from %+v: no store registered for %+v",
-			req.ToReplica, req.FromReplica)
+		return roachpb.NewErrorf("unable to accept Raft message from %+v: no handler registered for %+v",
+			req.FromReplica, req.ToReplica)
 	}
 
 	return handler.HandleRaftRequest(ctx, req)
@@ -394,15 +393,28 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 
 // SendSync sends a raft message and waits for an acknowledgement.
 func (t *RaftTransport) SendSync(ctx context.Context, req *RaftMessageRequest) error {
-	conn := t.getNodeConn(req.ToReplica.NodeID)
-	if conn == nil {
-		return errors.Errorf("unable to get connection for node %s", req.ToReplica.NodeID)
-	}
-	client := NewMultiRaftClient(conn)
-	resp, err := client.RaftMessageSync(ctx, req)
-	if err != nil {
+	// Use the circuit breaker to fail fast if the breaker is open.
+	// The same underlying connection is shared between sync and
+	// async raft transports, so we use the same breaker.
+	var resp *RaftMessageResponse
+	nodeID := req.ToReplica.NodeID
+	breaker := t.GetCircuitBreaker(nodeID)
+	if err := breaker.Call(func() error {
+		addr, err := t.resolver(nodeID)
+		if err != nil {
+			return err
+		}
+		conn, err := t.rpcContext.GRPCDial(addr.String(), grpc.WithBlock())
+		if err != nil {
+			return err
+		}
+		client := NewMultiRaftClient(conn)
+		resp, err = client.RaftMessageSync(ctx, req)
+		return err
+	}, 0); err != nil {
 		return err
 	}
+
 	switch val := resp.Union.GetValue().(type) {
 	case *roachpb.Error:
 		return val.GoError()
