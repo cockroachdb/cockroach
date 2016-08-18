@@ -124,7 +124,8 @@ func NewContext(baseCtx *base.Context, hlcClock *hlc.Clock, stopper *stop.Stoppe
 		ctx.cancel()
 		ctx.conns.Lock()
 		for key, meta := range ctx.conns.cache {
-			ctx.removeConnLocked(key, meta.conn)
+			meta.Do(func() {}) // Make sure initialization is not in-progress.
+			ctx.removeConnLocked(key, meta)
 		}
 		ctx.conns.Unlock()
 	})
@@ -146,17 +147,17 @@ func (ctx *Context) SetLocalInternalServer(internalServer roachpb.InternalServer
 	ctx.localInternalServer = internalServer
 }
 
-func (ctx *Context) removeConn(key string, conn *grpc.ClientConn) {
+func (ctx *Context) removeConn(key string, meta *connMeta) {
 	ctx.conns.Lock()
 	defer ctx.conns.Unlock()
-	ctx.removeConnLocked(key, conn)
+	ctx.removeConnLocked(key, meta)
 }
 
-func (ctx *Context) removeConnLocked(key string, conn *grpc.ClientConn) {
+func (ctx *Context) removeConnLocked(key string, meta *connMeta) {
 	if log.V(1) {
 		log.Infof(ctx.masterCtx, "closing %s", key)
 	}
-	if conn != nil {
+	if conn := meta.conn; conn != nil {
 		if err := conn.Close(); err != nil && !grpcutil.IsClosedConnection(err) {
 			if log.V(1) {
 				log.Errorf(ctx.masterCtx, "failed to close client connection: %s", err)
@@ -190,28 +191,27 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		if log.V(1) {
 			log.Infof(ctx.masterCtx, "dialing %s", target)
 		}
-		conn, err := grpc.DialContext(ctx.masterCtx, target, dialOpts...)
-		ctx.conns.Lock()
-		meta.conn = conn
-		meta.err = err
-		ctx.conns.Unlock()
-		if err == nil {
-			if ctx.Stopper.RunTask(func() {
+		meta.conn, meta.err = grpc.DialContext(ctx.masterCtx, target, dialOpts...)
+		if meta.err == nil {
+			if err := ctx.Stopper.RunTask(func() {
 				ctx.Stopper.RunWorker(func() {
-					err := ctx.runHeartbeat(conn, target)
+					err := ctx.runHeartbeat(meta.conn, target)
 					if err != nil && !grpcutil.IsClosedConnection(err) {
 						log.Error(ctx.masterCtx, err)
 					}
-					ctx.removeConn(target, conn)
+					ctx.removeConn(target, meta)
 				})
-			}) != nil {
-				ctx.removeConn(target, conn)
+			}); err != nil {
+				meta.err = err
+				// removeConn and ctx's cleanup worker both lock ctx.conns. However,
+				// to avoid racing with meta's initialization, the cleanup worker
+				// blocks on meta.Do while holding ctx.conns. Invoke removeConn
+				// asynchronously to avoid deadlock.
+				go ctx.removeConn(target, meta)
 			}
 		}
 	})
 
-	ctx.conns.Lock()
-	defer ctx.conns.Unlock()
 	return meta.conn, meta.err
 }
 
