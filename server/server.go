@@ -111,13 +111,11 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	if srvCtx.Ctx.Done() != nil {
 		panic("context with cancel or deadline")
 	}
-	tracer := tracing.TracerFromCtx(srvCtx.Ctx)
-	if tracer == nil {
-		tracer = tracing.NewTracer()
+	if tracing.TracerFromCtx(srvCtx.Ctx) == nil {
 		// TODO(radu): instead of modifying srvCtx.Ctx, we should have a separate
 		// context.Context inside Server. We will need to rename server.Context
 		// though.
-		srvCtx.Ctx = tracing.WithTracer(srvCtx.Ctx, tracer)
+		srvCtx.Ctx = tracing.WithTracer(srvCtx.Ctx, tracing.NewTracer())
 	}
 
 	if srvCtx.Insecure {
@@ -181,7 +179,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 
 	txnMetrics := kv.MakeTxnMetrics()
 	s.registry.AddMetricStruct(txnMetrics)
-	sender := kv.NewTxnCoordSender(s.distSender, s.clock, srvCtx.Linearizable, tracer,
+	sender := kv.NewTxnCoordSender(s.Ctx(), s.distSender, s.clock, srvCtx.Linearizable,
 		s.stopper, txnMetrics)
 	s.db = client.NewDB(sender)
 
