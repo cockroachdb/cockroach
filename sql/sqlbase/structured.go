@@ -1418,6 +1418,13 @@ func (desc *TableDescriptor) IsEmpty() bool {
 	return desc.ID == 0
 }
 
+// HasPrimaryKey checks if the table descriptor has a primary key. It is
+// safe to assume that all table descriptors have primary keys except for
+// virtual schema tables, which are not persisted.
+func (desc *TableDescriptor) HasPrimaryKey() bool {
+	return desc.ID != keys.VirtualDescriptorID
+}
+
 // SQLString returns the SQL string corresponding to the type.
 func (c *ColumnType) SQLString() string {
 	switch c.Kind {
