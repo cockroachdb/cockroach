@@ -28,7 +28,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v1"
+	"gopkg.in/yaml.v2"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
