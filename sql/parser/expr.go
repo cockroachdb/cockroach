@@ -794,6 +794,12 @@ type FuncExpr struct {
 	fn Builtin
 }
 
+// GetAggregateConstructor exposes the AggregateFunc field for use by
+// the group node in package sql.
+func (node *FuncExpr) GetAggregateConstructor() func() AggregateFunc {
+	return node.fn.AggregateFunc
+}
+
 type funcType int
 
 // FuncExpr.Type
