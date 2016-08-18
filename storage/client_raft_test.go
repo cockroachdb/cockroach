@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -661,18 +660,7 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
-	// Initialize the gossip network.
-	storeDescs := make([]*roachpb.StoreDescriptor, 0, len(mtc.stores))
-	for _, s := range mtc.stores {
-		desc, err := s.Descriptor()
-		if err != nil {
-			t.Fatal(err)
-		}
-		storeDescs = append(storeDescs, desc)
-	}
-	for _, g := range mtc.gossips {
-		gossiputil.NewStoreGossiper(g).GossipStores(storeDescs, t)
-	}
+	mtc.initGossipNetwork()
 
 	// Once we know our peers, trigger a scan.
 	mtc.stores[0].ForceReplicationScanAndProcess()
@@ -691,6 +679,7 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 
 // TestStoreRangeCorruptionChangeReplicas verifies that the replication queue
 // will notice corrupted replicas and replace them.
+// TODO(bram): #8664 There's some flakiness in this test when stressed.
 func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	t.Skipf("#8664: flaky")
@@ -726,21 +715,9 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	}
 	mtc.Start(t, numReplicas+extraStores)
 	defer mtc.Stop()
+	mtc.initGossipNetwork()
 
 	store0 := mtc.stores[0]
-
-	// Initialize the gossip network.
-	storeDescs := make([]*roachpb.StoreDescriptor, 0, len(mtc.stores))
-	for _, s := range mtc.stores {
-		desc, err := s.Descriptor()
-		if err != nil {
-			t.Fatal(err)
-		}
-		storeDescs = append(storeDescs, desc)
-	}
-	for _, g := range mtc.gossips {
-		gossiputil.NewStoreGossiper(g).GossipStores(storeDescs, t)
-	}
 
 	for i := 0; i < extraStores; i++ {
 		util.SucceedsSoon(t, func() error {
@@ -875,6 +852,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	mtc := startMultiTestContext(t, 5)
 	defer mtc.Stop()
+	mtc.initGossipNetwork()
 	store0 := mtc.stores[0]
 
 	// Split off a range from the initial range for testing; there are
@@ -899,19 +877,6 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 	replica := store0.LookupReplica(rightKeyAddr, nil)
 	desc := replica.Desc()
 	mtc.replicateRange(desc.RangeID, 3, 4)
-
-	// Initialize the gossip network.
-	storeDescs := make([]*roachpb.StoreDescriptor, 0, len(mtc.stores))
-	for _, s := range mtc.stores {
-		desc, err := s.Descriptor()
-		if err != nil {
-			t.Fatal(err)
-		}
-		storeDescs = append(storeDescs, desc)
-	}
-	for _, g := range mtc.gossips {
-		gossiputil.NewStoreGossiper(g).GossipStores(storeDescs, t)
-	}
 
 	maxTimeout := time.After(10 * time.Second)
 	succeeded := false
@@ -1643,63 +1608,81 @@ func TestStoreRangeRebalance(t *testing.T) {
 		Deterministic:  true,
 	}
 
-	// Four stores.
-	mtc.Start(t, 4)
+	mtc.Start(t, 6)
 	defer mtc.Stop()
 
-	// Replicate the first range to the first three stores.
-	store0 := mtc.stores[0]
-	replica := store0.LookupReplica(roachpb.RKeyMin, nil)
-	desc := replica.Desc()
-	mtc.replicateRange(desc.RangeID, 1, 2)
+	// Split the first range.
+	splitArgs := adminSplitArgs(roachpb.KeyMin, []byte("b"))
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &splitArgs); err != nil {
+		t.Fatal(err)
+	}
 
-	// Initialize the gossip network with fake capacity data.
-	storeDescs := make([]*roachpb.StoreDescriptor, 0, len(mtc.stores))
-	for _, s := range mtc.stores {
-		desc, err := s.Descriptor()
-		if err != nil {
+	// Replicate the 1st range to the stores 2 and 3.
+	replica1 := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
+	mtc.replicateRange(replica1.Desc().RangeID, 1, 2)
+
+	// Replicate the 2nd range to stores 2, 4 and 5 and remove it from store 1.
+	replica2 := mtc.stores[0].LookupReplica(roachpb.RKey("b"), nil)
+	mtc.replicateRange(replica2.Desc().RangeID, 1, 3, 4)
+	mtc.unreplicateRange(replica2.Desc().RangeID, 0)
+
+	countReplicas := func() map[roachpb.StoreID]int {
+		counts := make(map[roachpb.StoreID]int)
+		rangeDescA := getRangeMetadata(roachpb.RKeyMin, mtc, t)
+		for _, repl := range rangeDescA.Replicas {
+			counts[repl.StoreID]++
+		}
+		rangeDescB := getRangeMetadata(roachpb.RKey("b"), mtc, t)
+		for _, repl := range rangeDescB.Replicas {
+			counts[repl.StoreID]++
+		}
+		return counts
+	}
+
+	// Check the initial conditions.
+	startCounts := countReplicas()
+	if e, a := 1, startCounts[roachpb.StoreID(1)]; e != a {
+		t.Fatalf("expected store 1 to have %d replicas, actual %d", e, a)
+	}
+	if e, a := 2, startCounts[roachpb.StoreID(2)]; e != a {
+		t.Fatalf("expected store 2 to have %d replicas, actual %d", e, a)
+	}
+	if e, a := 1, startCounts[roachpb.StoreID(3)]; e != a {
+		t.Fatalf("expected store 3 to have %d replicas, actual %d", e, a)
+	}
+	if e, a := 1, startCounts[roachpb.StoreID(4)]; e != a {
+		t.Fatalf("expected store 4 to have %d replicas, actual %d", e, a)
+	}
+	if e, a := 1, startCounts[roachpb.StoreID(5)]; e != a {
+		t.Fatalf("expected store 5 to have %d replicas, actual %d", e, a)
+	}
+	if e, a := 0, startCounts[roachpb.StoreID(6)]; e != a {
+		t.Fatalf("expected store 6 to have %d replicas, actual %d", e, a)
+	}
+
+	mtc.initGossipNetwork()
+
+	util.SucceedsSoon(t, func() error {
+		// The leases tend to enjoy moving their way onto range 2, which
+		// stops this test from rebalancing. So force the lease for the
+		// first replica back to store 1.
+		if err := mtc.transferLease(replica1.RangeID, mtc.stores[0]); err != nil {
 			t.Fatal(err)
 		}
-		desc.Capacity.RangeCount = 1
-		// Make sure store[1] is chosen as removal target.
-		if desc.StoreID == mtc.stores[1].StoreID() {
-			desc.Capacity.RangeCount = 4
-		}
-		storeDescs = append(storeDescs, desc)
-	}
-	for _, g := range mtc.gossips {
-		gossiputil.NewStoreGossiper(g).GossipStores(storeDescs, t)
-	}
 
-	// This can't use SucceedsSoon as using the exponential backoff mechanic
-	// won't work well with the forced replication scans.
-	maxTimeout := time.After(5 * time.Second)
-	succeeded := false
-	for !succeeded {
-		select {
-		case <-maxTimeout:
-			t.Fatal("Failed to rebalance replica within 5 seconds")
-		case <-time.After(10 * time.Millisecond):
-			// Look up the official range descriptor, make sure fourth store is on it.
-			rangeDesc := getRangeMetadata(roachpb.RKeyMin, mtc, t)
+		mtc.gossipStores()
+		mtc.stores[0].ForceReplicationScanAndProcess()
 
-			// Test if we have already succeeded.
-			for _, repl := range rangeDesc.Replicas {
-				if repl.StoreID == mtc.stores[3].StoreID() {
-					succeeded = true
-				}
+		// Exit when all stores have a single replica.
+		replicaCounts := countReplicas()
+		for _, store := range mtc.stores {
+			if e, a := 1, replicaCounts[store.Ident.StoreID]; e != a {
+				return errors.Errorf("store %d has %d replicas, expected %d", store.Ident.StoreID, a, e)
 			}
-
-			if succeeded {
-				break
-			}
-
-			// NB: The store that we ask to perform rebalancing needs to be different
-			// than the one we've configured to rebalance away from above
-			// (i.e. store[1]) because we won't rebalance away from the lease holder.
-			mtc.stores[0].ForceReplicationScanAndProcess()
 		}
-	}
+
+		return nil
+	})
 
 	var generated int64
 	var normalApplied int64
