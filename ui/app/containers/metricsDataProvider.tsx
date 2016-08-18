@@ -1,8 +1,8 @@
 import * as React from "react";
 import { createSelector } from "reselect";
 import { connect } from "react-redux";
-import _ = require("lodash");
-import Long = require("long");
+import _ from "lodash";
+import Long from "long";
 
 import * as protos from  "../js/protos";
 import { AdminUIState } from "../redux/state";

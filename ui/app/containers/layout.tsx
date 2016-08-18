@@ -1,5 +1,5 @@
 import * as React from "react";
-import _ = require("lodash");
+import _ from "lodash";
 import { IInjectedProps } from "react-router";
 
 import { TitledComponent } from "../interfaces/layout";

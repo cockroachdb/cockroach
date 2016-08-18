@@ -1,6 +1,6 @@
 /// <reference path="../../typings/index.d.ts" />
 import * as React from "react";
-import _ = require("lodash");
+import _ from "lodash";
 import { assert } from "chai";
 import { mount } from "enzyme";
 import * as sinon from "sinon";
@@ -26,7 +26,7 @@ const columns: ColumnDescriptor<TestRow>[] = [
   },
 ];
 
-// Specialization of generic SortedTable component: 
+// Specialization of generic SortedTable component:
 //   https://github.com/Microsoft/TypeScript/issues/3960
 //
 // The variable name must start with a capital letter or TSX will not recognize

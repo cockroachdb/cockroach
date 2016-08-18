@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as d3 from "d3";
-import _ = require("lodash");
+import _ from "lodash";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 

@@ -1,5 +1,5 @@
 import * as React from "react";
-import classNames = require("classnames");
+import classNames from "classnames";
 import { ToolTip } from "./toolTip";
 
 interface VisualizationProps {

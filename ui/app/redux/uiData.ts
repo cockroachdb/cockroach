@@ -1,6 +1,6 @@
-import _ = require("lodash");
+import _ from "lodash";
 import { Dispatch } from "redux";
-import ByteBuffer = require("bytebuffer");
+import ByteBuffer from "bytebuffer";
 
 import * as protos from  "../js/protos";
 import { Action, PayloadAction } from "../interfaces/action";

@@ -1,4 +1,4 @@
-import * as _ from "lodash";
+import _ from "lodash";
 import * as React from "react";
 import * as d3 from "d3";
 import { Link, IInjectedProps } from "react-router";

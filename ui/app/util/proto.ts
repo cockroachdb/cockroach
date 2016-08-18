@@ -1,4 +1,4 @@
-import _ = require("lodash");
+import _ from "lodash";
 
 type NodeStatus = cockroach.server.status.NodeStatus;
 type StatusMetrics = cockroach.ProtoBufMap<string, number>;

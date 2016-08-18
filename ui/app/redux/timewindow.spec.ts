@@ -1,6 +1,7 @@
 import { assert } from "chai";
-import reducer, * as timewindow from "./timewindow";
-import moment = require("moment");
+import reducer from "./timewindow";
+import  * as timewindow from "./timewindow";
+import moment from "moment";
 
 describe("time window reducer", function() {
   describe("actions", function() {

@@ -1,6 +1,6 @@
 import * as React from "react";
 import { connect } from "react-redux";
-import moment = require("moment");
+import moment from "moment";
 
 import { AdminUIState } from "../redux/state";
 import * as timewindow from "../redux/timewindow";
