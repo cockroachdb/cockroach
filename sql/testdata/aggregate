@@ -385,6 +385,11 @@ SELECT COUNT(k)+COUNT(kv.v) FROM kv
 ----
 11
 
+query II
+SELECT COUNT(NULL::int), COUNT((NULL, NULL))
+----
+0 1
+
 query IIII
 SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM kv
 ----
