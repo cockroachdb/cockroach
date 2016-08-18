@@ -64,8 +64,10 @@ type Session struct {
 	Location              *time.Location
 	DefaultIsolationLevel enginepb.IsolationType
 	Trace                 trace.Trace
-	context               context.Context
-	cancel                context.CancelFunc
+	// context is the Session's base context. You probably don't want to use it
+	// directly; see Ctx().
+	context context.Context
+	cancel  context.CancelFunc
 }
 
 // SessionArgs contains arguments for creating a new Session with NewSession().
@@ -75,9 +77,11 @@ type SessionArgs struct {
 }
 
 // NewSession creates and initializes new Session object.
-// ctx can be nil (in which case the Executor's context will be used).
 // remote can be nil.
 func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.Addr) *Session {
+	if tracing.TracerFromCtx(ctx) == nil {
+		panic("Session's context must have a tracer in it")
+	}
 	s := &Session{
 		Database: args.Database,
 		User:     args.User,
@@ -116,12 +120,13 @@ func (s *Session) Finish() {
 	s.cancel()
 }
 
-// Ctx returns the current context for the session. If there is an active
+// Ctx returns the current context for the session. If there is an active SQL
 // transaction it returns the transaction context, otherwise it returns the
-// session context.
+// session context (transactions executed during the PREPARE phase don't
+// necessarily have an active TxnState).
 func (s *Session) Ctx() context.Context {
-	if s.TxnState.txn != nil {
-		return s.TxnState.txn.Context
+	if s.TxnState.State != NoTxn {
+		return s.TxnState.Ctx
 	}
 	return s.context
 }
@@ -154,6 +159,10 @@ type txnState struct {
 	txn   *client.Txn
 	State TxnStateEnum
 
+	// Ctx is used to init the contexts for every SQL txn, as this txnState is
+	// reset for every txn.
+	Ctx context.Context
+
 	// retrying is used to work around the non-idempotence of SAVEPOINT
 	// queries.
 	//
@@ -179,42 +188,71 @@ type txnState struct {
 	// TODO(andrei): this is the same as Session.Trace. Consider removing this and
 	// passing the Session along everywhere the trace is needed.
 	tr trace.Trace
+
 	sp opentracing.Span
+	// When "SQL tracing" is enabled, CollectedSpans accumulates spans as they're
+	// closed. All the spans pertain to the current txn.
+	CollectedSpans []basictracer.RawSpan
 
 	// The timestamp to report for current_timestamp(), now() etc.
 	// This must be constant for the lifetime of a SQL transaction.
 	sqlTimestamp time.Time
 }
 
-// reset creates a new Txn and initializes it using the session defaults.
-func (ts *txnState) reset(ctx context.Context, e *Executor, s *Session) {
-	*ts = txnState{}
-	ts.txn = client.NewTxn(ctx, *e.cfg.DB)
-	ts.txn.Context = s.context
-	ts.txn.Proto.Isolation = s.DefaultIsolationLevel
-	ts.tr = s.Trace
-	// Discard the old schemaChangers, if any.
-	ts.schemaChangers = schemaChangerCollection{}
+// resetForNewSQLTxn (re)initializes the txnState for a new transaction.
+// It creates a new client.Txn and initializes it using the session defaults.
+// txnState.State will be set to Open.
+func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
+	if ts.sp != nil {
+		panic(fmt.Sprintf("txnState.reset() called on ts with active span. How come "+
+			"finishSQLTxn() wasn't called previously? ts: %+v", ts))
+	}
 
+	*ts = txnState{}
+
+	// Create a context for this transaction. It will include a
+	// root span that will contain everything executed as part of the
+	// upcoming SQL txn, including (automatic or user-directed) retries.
+	// The span is closed by finishSQLTxn().
+	// TODO(andrei): figure out how to close these spans on server shutdown?
+	ctx := s.context
 	if traceSQL {
 		sp, err := tracing.JoinOrNewSnowball("coordinator", nil, func(sp basictracer.RawSpan) {
-			ts.txn.CollectedSpans = append(ts.txn.CollectedSpans, sp)
+			ts.CollectedSpans = append(ts.CollectedSpans, sp)
 		})
 		if err != nil {
 			log.Warningf(ctx, "unable to create snowball tracer: %s", err)
 			return
 		}
-		ts.txn.Context = opentracing.ContextWithSpan(ts.txn.Context, sp)
+		// sp is using a new tracer, so put it in the context.
+		ctx = tracing.WithTracer(
+			opentracing.ContextWithSpan(ctx, sp), sp.Tracer())
 		ts.sp = sp
+	} else {
+		// Create a root span for this SQL txn.
+		tracer := tracing.TracerFromCtx(ctx)
+		ts.sp = tracer.StartSpan(fmt.Sprintf("sql txn for user: %q", s.User))
+		ctx = opentracing.ContextWithSpan(ctx, ts.sp)
 	}
+	ts.Ctx = ctx
+
+	ts.txn = client.NewTxn(ts.Ctx, *e.cfg.DB)
+	ts.txn.Proto.Isolation = s.DefaultIsolationLevel
+	ts.State = Open
+
+	ts.tr = s.Trace
+	// Discard the old schemaChangers, if any.
+	ts.schemaChangers = schemaChangerCollection{}
 }
 
 func (ts *txnState) willBeRetried() bool {
 	return ts.autoRetry || ts.retryIntent
 }
 
+// resetStateAndTxn moves the txnState into a specified state, as a result of
+// the client.Txn being done.
 func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
-	if state != NoTxn && state != Aborted {
+	if state != NoTxn && state != Aborted && state != CommitWait {
 		panic(fmt.Sprintf("resetStateAndTxn called with unsupported state: %s", state))
 	}
 	if ts.txn != nil && !ts.txn.IsFinalized() {
@@ -223,14 +261,26 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 				"(finalized: %t)", state, ts.txn.Proto.Status, ts.txn.IsFinalized()))
 	}
 
-	ts.dumpTrace()
+	if ts.txn != nil {
+		if len(ts.CollectedSpans) == 0 {
+			ts.CollectedSpans = ts.txn.CollectedSpans
+		} else {
+			ts.CollectedSpans = append(ts.CollectedSpans, ts.txn.CollectedSpans...)
+		}
+	}
 	ts.State = state
 	ts.txn = nil
 }
 
-func (ts *txnState) dumpTrace() {
+// finishSQLTxn closes the root span for the current SQL txn.
+// This needs to be called before reset() is called for starting another SQL
+// txn.
+func (ts *txnState) finishSQLTxn() {
+	if ts.sp == nil {
+		panic("no ts.sp? Was resetForNewSQLTxn() called previously?")
+	}
+	ts.sp.Finish()
 	if traceSQL && ts.txn != nil {
-		ts.sp.Finish()
 		if timeutil.Since(ts.sqlTimestamp) >= traceSQLDuration {
 			dump := tracing.FormatRawSpans(ts.txn.CollectedSpans)
 			if len(dump) > 0 {
