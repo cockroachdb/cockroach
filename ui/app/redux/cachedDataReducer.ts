@@ -6,8 +6,11 @@
 
 import * as _ from "lodash";
 import { Dispatch } from "redux";
-import { Action, PayloadAction, WithRequest } from "../interfaces/action";
 import { assert } from "chai";
+
+import { APIRequestFn } from "../util/api.ts";
+
+import { Action, PayloadAction, WithRequest } from "../interfaces/action";
 
 // CachedDataReducerState is used to track the state of the cached data.
 export class CachedDataReducerState<TResponseMessage> {
@@ -47,7 +50,7 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
    *  invalidationPeriodMillis (optional) - The number of milliseconds after
    *    data is received after which it will be invalidated.
    */
-  constructor(protected apiEndpoint: (req: TRequest) => Promise<TResponseMessage>, public actionNamespace: string, protected invalidationPeriodMillis?: number) {
+  constructor(protected apiEndpoint: APIRequestFn<TRequest, TResponseMessage>, public actionNamespace: string, protected invalidationPeriodMillis?: number) {
     // check actionNamespace
     assert.notProperty(CachedDataReducer.namespaces, actionNamespace, "Expected actionNamespace to be unique.");
     CachedDataReducer.namespaces[actionNamespace] = true;

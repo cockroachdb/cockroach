@@ -1,16 +1,14 @@
 import { assert } from "chai";
 import _ = require("lodash");
-import * as fetchMock from "../util/fetch-mock";
+import moment = require("moment");
 import Long = require("long");
+
+import * as fetchMock from "../util/fetch-mock";
 
 import * as protos from "../js/protos";
 import * as api from "./api";
 
 describe("rest api", function() {
-  afterEach(function () {
-    api.setFetchTimeout(10000);
-  });
-
   describe("propsToQueryString", function () {
     interface PropBag {
       [k: string]: string;
@@ -144,7 +142,6 @@ describe("rest api", function() {
 
     it("correctly times out", function (done) {
       this.timeout(1000);
-      api.setFetchTimeout(0);
       // Mock out the fetch query to /databases, but return a promise that's never resolved to test the timeout
       fetchMock.mock({
         matcher: api.API_PREFIX + "/databases",
@@ -155,14 +152,13 @@ describe("rest api", function() {
         },
       });
 
-      api.getDatabaseList().then((result) => {
+      api.getDatabaseList(moment.duration(0)).then((result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.startsWith(e.message, "Promise timed out"), "Error is a timeout error.");
         done();
       });
     });
-
   });
 
   describe("database details request", function () {
@@ -219,7 +215,6 @@ describe("rest api", function() {
 
     it("correctly times out", function (done) {
       this.timeout(1000);
-      api.setFetchTimeout(0);
       // Mock out the fetch query, but return a promise that's never resolved to test the timeout
       fetchMock.mock({
         matcher: `${api.API_PREFIX}/databases/${dbName}`,
@@ -230,14 +225,13 @@ describe("rest api", function() {
         },
       });
 
-      api.getDatabaseDetails({ database: dbName }).then((result) => {
+      api.getDatabaseDetails({ database: dbName }, moment.duration(0)).then((result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.startsWith(e.message, "Promise timed out"), "Error is a timeout error.");
         done();
       });
     });
-
   });
 
   describe("table details request", function () {
@@ -290,7 +284,6 @@ describe("rest api", function() {
 
     it("correctly times out", function (done) {
       this.timeout(1000);
-      api.setFetchTimeout(0);
       // Mock out the fetch query, but return a promise that's never resolved to test the timeout
       fetchMock.mock({
         matcher: `${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`,
@@ -301,14 +294,13 @@ describe("rest api", function() {
         },
       });
 
-      api.getTableDetails({ database: dbName, table: tableName }).then((result) => {
+      api.getTableDetails({ database: dbName, table: tableName }, moment.duration(0)).then((result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.startsWith(e.message, "Promise timed out"), "Error is a timeout error.");
         done();
       });
     });
-
   });
 
   describe("events request", function() {
@@ -430,7 +422,6 @@ describe("rest api", function() {
 
     it("correctly times out", function (done) {
       this.timeout(1000);
-      api.setFetchTimeout(0);
       // Mock out the fetch query, but return a promise that's never resolved to test the timeout
       fetchMock.mock({
         matcher: eventsUrl,
@@ -441,7 +432,7 @@ describe("rest api", function() {
         },
       });
 
-      api.getEvents().then((result) => {
+      api.getEvents({}, moment.duration(0)).then((result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.startsWith(e.message, "Promise timed out"), "Error is a timeout error.");
@@ -498,7 +489,6 @@ describe("rest api", function() {
 
     it("correctly times out", function (done) {
       this.timeout(1000);
-      api.setFetchTimeout(0);
       // Mock out the fetch query, but return a promise that's never resolved to test the timeout
       fetchMock.mock({
         matcher: healthUrl,
@@ -509,7 +499,7 @@ describe("rest api", function() {
         },
       });
 
-      api.getHealth().then((result) => {
+      api.getHealth(moment.duration(0)).then((result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.startsWith(e.message, "Promise timed out"), "Error is a timeout error.");
@@ -566,7 +556,6 @@ describe("rest api", function() {
 
     it("correctly times out", function (done) {
       this.timeout(1000);
-      api.setFetchTimeout(0);
       // Mock out the fetch query, but return a promise that's never resolved to test the timeout
       fetchMock.mock({
         matcher: clusterUrl,
@@ -577,7 +566,7 @@ describe("rest api", function() {
         },
       });
 
-      api.getCluster().then((result) => {
+      api.getCluster(moment.duration(0)).then((result) => {
         done(new Error("Request unexpectedly succeeded."));
       }).catch(function (e) {
         assert(_.startsWith(e.message, "Promise timed out"), "Error is a timeout error.");

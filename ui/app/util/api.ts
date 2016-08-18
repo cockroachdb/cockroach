@@ -4,6 +4,7 @@
 
 import * as _ from "lodash";
 import "whatwg-fetch";
+import moment = require("moment");
 
 import * as protos from "../js/protos";
 
@@ -42,27 +43,27 @@ export type TableStatsRequest = cockroach.server.serverpb.TableStatsRequest;
 export type TableStatsResponseMessage = cockroach.server.serverpb.TableStatsResponseMessage;
 
 export const API_PREFIX = "/_admin/v1";
-let TIMEOUT = 10000; // 10 seconds
-
-export function setFetchTimeout(v: number) {
-  TIMEOUT = v;
-};
 
 /**
  * HELPER FUNCTIONS
  */
 
 // Inspired by https://github.com/github/fetch/issues/175
-// wraps a promise in a timeout
-export function timeout<T>(promise: Promise<T>): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    setTimeout(() => reject(new Error(`Promise timed out after ${TIMEOUT} ms`)), TIMEOUT);
-    promise.then(resolve, reject);
-  });
+//
+// withTimeout wraps a promise in a timeout.
+export function withTimeout<T>(promise: Promise<T>, timeout?: moment.Duration): Promise<T> {
+  if (timeout) {
+    return new Promise<T>((resolve, reject) => {
+      setTimeout(() => reject(new Error(`Promise timed out after ${timeout.asMilliseconds()} ms`)), timeout.asMilliseconds());
+      promise.then(resolve, reject);
+    });
+  } else {
+    return promise;
+  }
 }
 
-// Fetch is a wrapped around fetch that provides timeout and protocol buffer
-// marshalling and unmarshalling.
+// timeoutFetch is a wrapper around fetch that provides timeout and protocol
+// buffer marshalling and unmarshalling.
 //
 // This function is intended for use with generated protocol buffers. In
 // particular, TResponse is a generated interface that describes the JSON
@@ -70,7 +71,7 @@ export function timeout<T>(promise: Promise<T>): Promise<T> {
 // are generated interfaces which are implemented by the protocol buffer
 // objects themselves. TResponseMessageBuilder is an interface implemented by
 // the builder objects provided at runtime by protobuf.js.
-function Fetch<TRequestMessage extends {
+function timeoutFetch<TRequestMessage extends {
   encodeJSON(): string
   toArrayBuffer(): ArrayBuffer
 }, TResponse, TResponseMessage, TResponseMessageBuilder extends {
@@ -78,21 +79,27 @@ function Fetch<TRequestMessage extends {
   decode(buffer: ArrayBuffer): TResponseMessage
   decode(buffer: ByteBuffer): TResponseMessage
   decode64(buffer: string): TResponseMessage
-}>(builder: TResponseMessageBuilder, url: string, req: TRequestMessage = null): Promise<TResponseMessage> {
-  return timeout(fetch(url, {
-    method: req ? "POST" : "GET",
-    headers: {
-      "Accept": "application/x-protobuf",
-      "Content-Type": "application/x-protobuf",
-    },
-    body: req ? req.toArrayBuffer() : undefined,
-  })).then((res) => {
+}>(builder: TResponseMessageBuilder, url: string, req: TRequestMessage = null, timeout: moment.Duration = moment.duration(30000)): Promise<TResponseMessage> {
+  return withTimeout(
+    fetch(url, {
+      method: req ? "POST" : "GET",
+      headers: {
+        "Accept": "application/x-protobuf",
+        "Content-Type": "application/x-protobuf",
+        "Grpc-Timeout": timeout ? timeout.asMilliseconds() + "m" : undefined,
+      },
+      body: req ? req.toArrayBuffer() : undefined,
+    }),
+    timeout
+   ).then((res) => {
     if (!res.ok) {
       throw Error(res.statusText);
     }
     return res.arrayBuffer().then((buffer) => builder.decode(buffer));
   });
 }
+
+export type APIRequestFn<TRequest, TResponseMessage> = (req: TRequest, timeout?: moment.Duration) => Promise<TResponseMessage>
 
 // propsToQueryString is a helper function that converts a set of object
 // properties to a query string
@@ -106,63 +113,64 @@ export function propsToQueryString(props: any) {
  */
 
 // getDatabaseList gets a list of all database names
-export function getDatabaseList(): Promise<DatabasesResponseMessage> {
-  return Fetch(serverpb.DatabasesResponse, `${API_PREFIX}/databases`);
+export function getDatabaseList(timeout?: moment.Duration): Promise<DatabasesResponseMessage> {
+  return timeoutFetch(serverpb.DatabasesResponse, `${API_PREFIX}/databases`, null, timeout);
 }
 
 // getDatabaseDetails gets details for a specific database
-export function getDatabaseDetails(req: DatabaseDetailsRequest): Promise<DatabaseDetailsResponseMessage> {
-  return Fetch(serverpb.DatabaseDetailsResponse, `${API_PREFIX}/databases/${req.database}`);
+export function getDatabaseDetails(req: DatabaseDetailsRequest, timeout?: moment.Duration): Promise<DatabaseDetailsResponseMessage> {
+  return timeoutFetch(serverpb.DatabaseDetailsResponse, `${API_PREFIX}/databases/${req.database}`, null, timeout);
 }
 
 // getTableDetails gets details for a specific table
-export function getTableDetails(req: TableDetailsRequest): Promise<TableDetailsResponseMessage> {
-  return Fetch(serverpb.TableDetailsResponse, `${API_PREFIX}/databases/${req.database}/tables/${req.table}`);
+export function getTableDetails(req: TableDetailsRequest, timeout?: moment.Duration): Promise<TableDetailsResponseMessage> {
+  return timeoutFetch(serverpb.TableDetailsResponse, `${API_PREFIX}/databases/${req.database}/tables/${req.table}`, null, timeout);
 }
 
 // getUIData gets UI data
-export function getUIData(req: GetUIDataRequest): Promise<GetUIDataResponseMessage> {
+export function getUIData(req: GetUIDataRequest, timeout?: moment.Duration): Promise<GetUIDataResponseMessage> {
   let queryString = _.map(req.keys, (key) => "keys=" + encodeURIComponent(key)).join("&");
-  return Fetch(serverpb.GetUIDataResponse, `${API_PREFIX}/uidata?${queryString}`);
+  return timeoutFetch(serverpb.GetUIDataResponse, `${API_PREFIX}/uidata?${queryString}`, null, timeout);
 }
 
 // setUIData sets UI data
-export function setUIData(req: SetUIDataRequestMessage): Promise<SetUIDataResponseMessage> {
-  return Fetch(serverpb.SetUIDataResponse, `${API_PREFIX}/uidata`, req);
+export function setUIData(req: SetUIDataRequestMessage, timeout?: moment.Duration): Promise<SetUIDataResponseMessage> {
+  return timeoutFetch(serverpb.SetUIDataResponse, `${API_PREFIX}/uidata`, req, timeout);
 }
 
 // getEvents gets event data
-export function getEvents(req: EventsRequest = {}): Promise<EventsResponseMessage> {
+export function getEvents(req: EventsRequest = {}, timeout?: moment.Duration): Promise<EventsResponseMessage> {
   let queryString = propsToQueryString(_.pick(req, ["type", "target_id"]));
-  return Fetch(serverpb.EventsResponse, `${API_PREFIX}/events?${queryString}`);
+  return timeoutFetch(serverpb.EventsResponse, `${API_PREFIX}/events?${queryString}`, null, timeout);
 }
 
 // getNodes gets node data
-export function getNodes(): Promise<NodesResponseMessage> {
-  return Fetch(serverpb.NodesResponse, `/_status/nodes`);
+export function getNodes(timeout?: moment.Duration): Promise<NodesResponseMessage> {
+  return timeoutFetch(serverpb.NodesResponse, `/_status/nodes`, null, timeout);
 }
 
 // raftDebug returns raft debug information.
 export function raftDebug(): Promise<RaftDebugResponseMessage> {
-  return Fetch(serverpb.RaftDebugResponse, `/_status/raft`);
+  // NB: raftDebug intentionally does not pass a timeout through.
+  return timeoutFetch(serverpb.RaftDebugResponse, `/_status/raft`);
 }
 
 // queryTimeSeries queries for time series data
-export function queryTimeSeries(req: TimeSeriesQueryRequestMessage): Promise<TimeSeriesQueryResponseMessage> {
-  return Fetch(ts.TimeSeriesQueryResponse, `/ts/query`, req);
+export function queryTimeSeries(req: TimeSeriesQueryRequestMessage, timeout?: moment.Duration): Promise<TimeSeriesQueryResponseMessage> {
+  return timeoutFetch(ts.TimeSeriesQueryResponse, `/ts/query`, req, timeout);
 }
 
 // getHealth gets health data
-export function getHealth(): Promise<HealthResponseMessage> {
-  return Fetch(serverpb.HealthResponse, `${API_PREFIX}/health`);
+export function getHealth(timeout?: moment.Duration): Promise<HealthResponseMessage> {
+  return timeoutFetch(serverpb.HealthResponse, `${API_PREFIX}/health`, null, timeout);
 }
 
 // getCluster gets info about the cluster
-export function getCluster(): Promise<ClusterResponseMessage> {
-  return Fetch(serverpb.ClusterResponse, `${API_PREFIX}/cluster`);
+export function getCluster(timeout?: moment.Duration): Promise<ClusterResponseMessage> {
+  return timeoutFetch(serverpb.ClusterResponse, `${API_PREFIX}/cluster`, null, timeout);
 }
 
 // getTableStats gets details stats about the current table
-export function getTableStats(req: TableStatsRequest): Promise<TableStatsResponseMessage> {
-  return Fetch(serverpb.TableStatsResponse, `${API_PREFIX}/databases/${req.database}/tables/${req.table}/stats`);
+export function getTableStats(req: TableStatsRequest, timeout?: moment.Duration): Promise<TableStatsResponseMessage> {
+  return timeoutFetch(serverpb.TableStatsResponse, `${API_PREFIX}/databases/${req.database}/tables/${req.table}/stats`, null, timeout);
 }
