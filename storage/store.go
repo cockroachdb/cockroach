@@ -555,8 +555,8 @@ func (*StoreTestingKnobs) ModuleTestingKnobs() {}
 func (sc *StoreContext) Valid() bool {
 	return sc.Clock != nil && sc.Transport != nil &&
 		sc.RaftTickInterval != 0 && sc.RaftHeartbeatIntervalTicks > 0 &&
-		sc.RaftElectionTimeoutTicks > 0 && sc.ScanInterval > 0 &&
-		sc.ConsistencyCheckInterval > 0 && sc.Tracer != nil
+		sc.RaftElectionTimeoutTicks > 0 && sc.ScanInterval >= 0 &&
+		sc.ConsistencyCheckInterval >= 0 && sc.Tracer != nil
 }
 
 // setDefaults initializes unset fields in StoreConfig to values
