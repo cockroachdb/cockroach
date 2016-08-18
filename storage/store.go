@@ -92,7 +92,7 @@ var storeReplicaRaftReadyConcurrency = 2 * runtime.NumCPU()
 // TestStoreContext has some fields initialized with values relevant in tests.
 func TestStoreContext() StoreContext {
 	return StoreContext{
-		Tracer:                         tracing.NewTracer(),
+		Ctx:                            tracing.WithTracer(context.Background(), tracing.NewTracer()),
 		RaftTickInterval:               100 * time.Millisecond,
 		RaftHeartbeatIntervalTicks:     1,
 		RaftElectionTimeoutTicks:       3,
@@ -422,7 +422,12 @@ var _ client.Sender = &Store{}
 // required to create a store.
 // All fields holding a pointer or an interface are required to create
 // a store; the rest will have sane defaults set if omitted.
+// TODO(radu): rename this to StoreConfig
 type StoreContext struct {
+	// Base context to be used for logs and traces inside the node or store; must
+	// have a Tracer set.
+	Ctx context.Context
+
 	Clock     *hlc.Clock
 	DB        *client.DB
 	Gossip    *gossip.Gossip
@@ -469,9 +474,6 @@ type StoreContext struct {
 	// AllocatorOptions configures how the store will attempt to rebalance its
 	// replicas to other stores.
 	AllocatorOptions AllocatorOptions
-
-	// Tracer is a request tracer.
-	Tracer opentracing.Tracer
 
 	// If LogRangeEvents is true, major changes to ranges will be logged into
 	// the range event log.
@@ -558,7 +560,8 @@ func (sc *StoreContext) Valid() bool {
 	return sc.Clock != nil && sc.Transport != nil &&
 		sc.RaftTickInterval != 0 && sc.RaftHeartbeatIntervalTicks > 0 &&
 		sc.RaftElectionTimeoutTicks > 0 && sc.ScanInterval >= 0 &&
-		sc.ConsistencyCheckInterval >= 0 && sc.Tracer != nil
+		sc.ConsistencyCheckInterval >= 0 &&
+		sc.Ctx != nil && sc.Ctx.Done() == nil && tracing.TracerFromCtx(sc.Ctx) != nil
 }
 
 // setDefaults initializes unset fields in StoreConfig to values
@@ -656,6 +659,11 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 // String formats a store for debug output.
 func (s *Store) String() string {
 	return fmt.Sprintf("store=%d:%d", s.Ident.NodeID, s.Ident.StoreID)
+}
+
+// Ctx returns the base context for the store.
+func (s *Store) Ctx() context.Context {
+	return s.ctx.Ctx
 }
 
 // DrainLeases (when called with 'true') prevents all of the Store's
@@ -877,7 +885,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	doneUnfreezing := make(chan struct{})
 	if s.stopper.RunAsyncTask(func() {
-		taskCtx := context.TODO()
 		defer close(doneUnfreezing)
 		sem := make(chan struct{}, 512)
 		var wg sync.WaitGroup // wait for unfreeze goroutines
@@ -903,8 +910,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 					MustVersion: build.GetInfo().Tag,
 				}
 				ba.Add(&fReq)
-				if _, pErr := r.Send(taskCtx, ba); pErr != nil {
-					log.Errorf(taskCtx, "%s: could not unfreeze Range %s on startup: %s", s, r, pErr)
+				if _, pErr := r.Send(s.Ctx(), ba); pErr != nil {
+					log.Errorf(s.Ctx(), "%s: could not unfreeze Range %s on startup: %s", s, r, pErr)
 				} else {
 					// We don't use the returned RangesAffected (0 or 1) for
 					// counting. One of the other Replicas may have beaten us
@@ -920,7 +927,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		})
 		wg.Wait()
 		if unfrozen > 0 {
-			log.Infof(taskCtx, "%s: reactivated %d frozen Ranges", s, unfrozen)
+			log.Infof(s.Ctx(), "reactivated %d frozen Ranges", unfrozen)
 		}
 	}) != nil {
 		close(doneUnfreezing)
@@ -1090,7 +1097,7 @@ func (s *Store) maybeGossipSystemConfig() error {
 	// gossip. If an unexpected error occurs (i.e. nobody else seems to
 	// have an active lease but we still failed to obtain it), return
 	// that error.
-	_, pErr := rng.getLeaseForGossip(s.context(context.TODO()))
+	_, pErr := rng.getLeaseForGossip(s.Ctx())
 	return pErr.GoError()
 }
 
@@ -1367,7 +1374,7 @@ func (s *Store) Gossip() *gossip.Gossip { return s.ctx.Gossip }
 func (s *Store) Stopper() *stop.Stopper { return s.stopper }
 
 // Tracer accessor.
-func (s *Store) Tracer() opentracing.Tracer { return s.ctx.Tracer }
+func (s *Store) Tracer() opentracing.Tracer { return tracing.TracerFromCtx(s.Ctx()) }
 
 // TestingKnobs accessor.
 func (s *Store) TestingKnobs() *StoreTestingKnobs { return &s.ctx.TestingKnobs }
@@ -2377,7 +2384,7 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 		// getOrCreateReplicaLocked disallows moving the replica ID backward, so
 		// the only way we can get here is if the replica did not previously exist.
 		if log.V(1) {
-			log.Infof(context.TODO(), "refusing incoming Raft message %s for range %d from %+v to %+v",
+			log.Infof(s.Ctx(), "refusing incoming Raft message %s for range %d from %+v to %+v",
 				req.Message.Type, req.RangeID, req.FromReplica, req.ToReplica)
 		}
 		return roachpb.NewErrorf("cannot recreate replica that is not a member of its range (StoreID %s not found in range %d)",
@@ -2483,7 +2490,7 @@ func (s *Store) processRaft() {
 			// on. Such long processing time means we'll have starved local replicas
 			// of ticks and remote replicas will likely start campaigning.
 			if elapsed := timeutil.Since(start); elapsed >= warnDuration {
-				log.Warningf(context.TODO(), "%s: %s: %.1fs", prefix, msg, elapsed.Seconds())
+				log.Warningf(s.Ctx(), "%s: %s: %.1fs", prefix, msg, elapsed.Seconds())
 			}
 		}
 
@@ -2583,7 +2590,7 @@ func (s *Store) processRaft() {
 				var info tickInfo
 				for id, r := range s.mu.replicas {
 					if err := r.tick(&info); err != nil {
-						log.Error(context.TODO(), err)
+						log.Error(s.Ctx(), err)
 					} else if info.Exists {
 						pendingReplicas = append(pendingReplicas, id)
 					}
@@ -2632,7 +2639,7 @@ func (s *Store) clearAllPlaceholders() {
 
 	for rngID, res := range s.mu.replicaPlaceholders {
 		if s.mu.replicasByKey.Delete(res) == nil {
-			log.Fatalf(context.TODO(), "%s: expected to find placeholder %s in replicasByKey", s, res)
+			log.Fatalf(s.Ctx(), "%s: expected to find placeholder %s in replicasByKey", s, res)
 		}
 		delete(s.mu.replicaPlaceholders, rngID)
 	}
@@ -2710,7 +2717,7 @@ func (s *Store) canApplySnapshotLocked(rangeID roachpb.RangeID, snap raftpb.Snap
 		// either being split or garbage collected.
 		exReplica, err := s.getReplicaLocked(exRange.Desc().RangeID)
 		if err != nil {
-			log.Warning(context.TODO(), errors.Wrapf(
+			log.Warning(s.Ctx(), errors.Wrapf(
 				err, "unable to look up overlapping replica on %s", exReplica))
 		}
 		return nil, errors.Errorf("snapshot intersects existing range %s", exReplica)
@@ -2743,7 +2750,7 @@ func (s *Store) computeReplicationStatus(now int64) (
 		desc := rng.Desc()
 		zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey)
 		if err != nil {
-			log.Error(context.TODO(), err)
+			log.Error(s.Ctx(), err)
 			continue
 		}
 		raftStatus := rng.RaftStatus()
@@ -2819,7 +2826,7 @@ func (s *Store) ComputeMetrics(tick int) error {
 		s.metrics.RdbReadAmplification.Update(int64(readAmp))
 		// Log this metric infrequently.
 		if tick%100 == 0 {
-			log.Infof(context.TODO(), "%s: sstables (read amplification = %d):\n%s", s, readAmp, sstables)
+			log.Infof(s.Ctx(), "sstables (read amplification = %d):\n%s", readAmp, sstables)
 		}
 	}
 	return nil
@@ -2858,7 +2865,7 @@ func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDesc
 			if _, ok := err.(*roachpb.RangeNotFoundError); ok {
 				return true
 			}
-			log.Fatalf(context.TODO(), "unexpected error: %s", err)
+			log.Fatalf(s.Ctx(), "unexpected error: %s", err)
 		}
 		r.mu.Lock()
 		if r.mu.state.Frozen == collectFrozen {
