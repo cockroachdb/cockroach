@@ -17,7 +17,6 @@
 package storage
 
 import (
-	"sort"
 	"time"
 
 	"github.com/coreos/etcd/raft"
@@ -114,28 +113,30 @@ func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
 // is down long enough, sending a snapshot is more efficient and we should
 // truncate the log to the next behind node or the quorum committed index. We
 // currently truncate when the raft log size is bigger than the range
-// size. When there are no nodes behind, or we can't catch any of them up via
-// the raft log (due to a previous truncation) this returns the quorum
-// committed index.
+// size.
+//
+// Note that when a node is behind we continue to let the raft log build up
+// instead of truncating to the commit index. Consider what would happen if we
+// truncated to the commit index whenever a node is behind and thus needs to be
+// caught up via a snapshot. While we're generating the snapshot, sending it to
+// the behind node and waiting for it to be applied we would continue to
+// truncate the log. If the snapshot generation and application takes too long
+// the behind node will be caught up to a point behind the current first index
+// and thus require another snapshot, likely entering a never ending loop of
+// snapshots. See #8629.
 func computeTruncatableIndex(
 	raftStatus *raft.Status,
 	raftLogSize, targetSize int64,
 	firstIndex uint64,
 ) uint64 {
 	truncatableIndex := raftStatus.Commit
-	behindIndexes := getBehindIndexes(raftStatus)
 	if raftLogSize <= targetSize {
 		// Only truncate to one of the behind indexes if the raft log is less than
 		// the target size. If the raft log is greater than the target size we
 		// always truncate to the quorum commit index.
-		for _, behindIndex := range behindIndexes {
-			// If the behind index is at or beyond the first index, that means some
-			// node has caught up (or one is too far behind) and we should truncate
-			// the log to the behind index.
-			if behindIndex >= firstIndex {
-				truncatableIndex = behindIndex
-				break
-			}
+		truncatableIndex = getBehindIndex(raftStatus)
+		if truncatableIndex < firstIndex {
+			truncatableIndex = firstIndex
 		}
 	}
 
@@ -144,6 +145,19 @@ func computeTruncatableIndex(
 		truncatableIndex = raftStatus.Commit
 	}
 	return truncatableIndex
+}
+
+// getBehindIndex returns the raft log index of the oldest node or the quorum
+// commit index if all nodes are caught up.
+func getBehindIndex(raftStatus *raft.Status) uint64 {
+	behind := raftStatus.Commit
+	for _, progress := range raftStatus.Progress {
+		index := progress.Match
+		if index < raftStatus.Commit && behind > index {
+			behind = index
+		}
+	}
+	return behind
 }
 
 // shouldQueue determines whether a range should be queued for truncating. This
@@ -201,36 +215,3 @@ func (*raftLogQueue) timer() time.Duration {
 func (*raftLogQueue) purgatoryChan() <-chan struct{} {
 	return nil
 }
-
-// getBehindIndexes returns the indexes of nodes that are behind the quorum
-// commit index without duplicates and sorted from most behind to most recent.
-func getBehindIndexes(raftStatus *raft.Status) []uint64 {
-	var behind []uint64
-	behindUniq := make(map[uint64]struct{})
-	for _, progress := range raftStatus.Progress {
-		index := progress.Match
-		if index < raftStatus.Commit {
-			if _, ok := behindUniq[index]; ok {
-				continue
-			}
-			behindUniq[index] = struct{}{}
-			behind = append(behind, index)
-		}
-	}
-	sort.Sort(uint64Slice(behind))
-	return behind
-}
-
-var _ sort.Interface = uint64Slice(nil)
-
-// uint64Slice implements sort.Interface
-type uint64Slice []uint64
-
-// Len implements sort.Interface
-func (a uint64Slice) Len() int { return len(a) }
-
-// Swap implements sort.Interface
-func (a uint64Slice) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
-
-// Less implements sort.Interface
-func (a uint64Slice) Less(i, j int) bool { return a[i] < a[j] }
