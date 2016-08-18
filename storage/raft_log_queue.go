@@ -114,9 +114,17 @@ func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
 // is down long enough, sending a snapshot is more efficient and we should
 // truncate the log to the next behind node or the quorum committed index. We
 // currently truncate when the raft log size is bigger than the range
-// size. When there are no nodes behind, or we can't catch any of them up via
-// the raft log (due to a previous truncation) this returns the quorum
-// committed index.
+// size.
+//
+// Note that when a node is behind we continue to let the raft log build up
+// instead of truncating to the commit index. Consider what would happen if we
+// truncated to the commit index whenever a node is behind and thus needs to be
+// caught up via a snapshot. While we're generating the snapshot, sending it to
+// the behind node and waiting for it to be applied we would continue to
+// truncate the log. If the snapshot generation and application takes too long
+// the behind node will be caught up to a point behind the current first index
+// and thus require another snapshot, likely entering a never ending loop of
+// snapshots. See #8629.
 func computeTruncatableIndex(
 	raftStatus *raft.Status,
 	raftLogSize, targetSize int64,
@@ -124,18 +132,13 @@ func computeTruncatableIndex(
 ) uint64 {
 	truncatableIndex := raftStatus.Commit
 	behindIndexes := getBehindIndexes(raftStatus)
-	if raftLogSize <= targetSize {
+	if raftLogSize <= targetSize && len(behindIndexes) > 0 {
 		// Only truncate to one of the behind indexes if the raft log is less than
 		// the target size. If the raft log is greater than the target size we
 		// always truncate to the quorum commit index.
-		for _, behindIndex := range behindIndexes {
-			// If the behind index is at or beyond the first index, that means some
-			// node has caught up (or one is too far behind) and we should truncate
-			// the log to the behind index.
-			if behindIndex >= firstIndex {
-				truncatableIndex = behindIndex
-				break
-			}
+		truncatableIndex = behindIndexes[0]
+		if truncatableIndex < firstIndex {
+			truncatableIndex = firstIndex
 		}
 	}
 

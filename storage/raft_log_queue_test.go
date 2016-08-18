@@ -76,6 +76,8 @@ func TestComputeTruncatableIndex(t *testing.T) {
 		expected    uint64
 	}{
 		{[]uint64{1, 2}, 1, 100, 1, 1},
+		{[]uint64{1, 5, 5}, 5, 100, 1, 1},
+		{[]uint64{1, 5, 5}, 5, 100, 2, 2},
 		{[]uint64{1, 2, 3, 4}, 3, 100, 1, 1},
 		{[]uint64{1, 2, 3, 4}, 3, 100, 2, 2},
 		// If over targetSize, should truncate to quorum committed index.
