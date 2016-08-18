@@ -1010,30 +1010,21 @@ func ParseDInterval(s string) (*DInterval, error) {
 		// Colon-separated intervals in Postgres are odd. They have day, hour,
 		// minute, or second parts depending on number of fields and if the field
 		// is an int or float.
+		//
+		// Instead of supporting unit changing based on int or float, use the
+		// following rules:
+		// - One field is S.
+		// - Two fields is H:M.
+		// - Three fields is H:M:S.
+		// - All fields support both int and float.
 		parts := strings.Split(s, ":")
 		var err error
 		var dur time.Duration
 		switch len(parts) {
 		case 2:
-			if strings.Contains(parts[1], ".") {
-				dur, err = time.ParseDuration(parts[0] + "m" + parts[1] + "s")
-			} else {
-				dur, err = time.ParseDuration(parts[0] + "h" + parts[1] + "m")
-			}
+			dur, err = time.ParseDuration(parts[0] + "h" + parts[1] + "m")
 		case 3:
-			if strings.Contains(parts[0], ".") {
-				f, err := strconv.ParseFloat(parts[0], 64)
-				if err != nil {
-					return nil, makeParseError(s, TypeInterval.Type(), err)
-				}
-				dur, err = time.ParseDuration(parts[1] + "m" + parts[2] + "s")
-				if err != nil {
-					return nil, makeParseError(s, TypeInterval.Type(), err)
-				}
-				dur += time.Duration(float64(time.Hour*24) * f)
-			} else {
-				dur, err = time.ParseDuration(parts[0] + "h" + parts[1] + "m" + parts[2] + "s")
-			}
+			dur, err = time.ParseDuration(parts[0] + "h" + parts[1] + "m" + parts[2] + "s")
 		default:
 			return nil, makeParseError(s, TypeInterval.Type(), fmt.Errorf("unknown format"))
 		}
