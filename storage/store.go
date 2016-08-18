@@ -2766,7 +2766,7 @@ func (s *Store) ComputeMetrics(tick int) error {
 		s.metrics.RdbReadAmplification.Update(int64(readAmp))
 		// Log this metric infrequently.
 		if tick%100 == 0 {
-			log.Infof(context.TODO(), "store %d sstables (read amplification = %d):\n%s", s.StoreID(), readAmp, sstables)
+			log.Infof(context.TODO(), "%s: sstables (read amplification = %d):\n%s", s, readAmp, sstables)
 		}
 	}
 	return nil
