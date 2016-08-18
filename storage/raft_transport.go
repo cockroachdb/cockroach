@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/util/grpcutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -224,55 +223,44 @@ func (t *RaftTransport) Stop(storeID roachpb.StoreID) {
 
 // GetCircuitBreaker returns the circuit breaker controlling
 // connection attempts to the specified node.
-// NOTE: For unittesting.
 func (t *RaftTransport) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breaker {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.mu.breakers[nodeID]
-}
-
-// getNodeConn returns a shared instance of a GRPC connection to the
-// node specified by nodeID. Returns null if the remote node is not
-// available (e.g. because the node ID can't be resolved or the remote
-// node is not responding or is timing out, or the network is
-// partitioned, etc.).
-func (t *RaftTransport) getNodeConn(nodeID roachpb.NodeID) *grpc.ClientConn {
-	t.mu.Lock()
 	breaker, ok := t.mu.breakers[nodeID]
 	if !ok {
 		breaker = t.rpcContext.NewBreaker()
 		t.mu.breakers[nodeID] = breaker
 	}
-	t.mu.Unlock()
+	return breaker
+}
 
-	// The number of consecutive failures suffered by the circuit breaker is used
-	// to log only state changes in our node address resolution status.
+// connectAndProcess connects to the node and then processes the
+// provided channel containing a queue of raft messages until there is
+// an unrecoverable error with the underlying connection. A circuit
+// breaker is used to allow fast failures in SendAsync which will drop
+// incoming raft messages and report unreachable status to the raft group.
+func (t *RaftTransport) connectAndProcess(nodeID roachpb.NodeID, ch chan *RaftMessageRequest) {
+	breaker := t.GetCircuitBreaker(nodeID)
 	consecFailures := breaker.ConsecFailures()
-	var addr net.Addr
 	if err := breaker.Call(func() error {
-		var err error
-		addr, err = t.resolver(nodeID)
-		return err
+		addr, err := t.resolver(nodeID)
+		if err != nil {
+			return err
+		}
+		conn, err := t.rpcContext.GRPCDial(addr.String(), grpc.WithBlock())
+		if err != nil {
+			return err
+		}
+		return t.processQueue(nodeID, ch, conn)
 	}, 0); err != nil {
 		if consecFailures == 0 {
-			log.Warningf(context.TODO(), "failed to resolve node %s: %s", nodeID, err)
+			log.Warningf(context.TODO(), "raft transport stream to node %d failed: %s", nodeID, err)
 		}
-		return nil
+		return
 	}
 	if consecFailures > 0 {
-		log.Infof(context.TODO(), "resolved node %s to %s", nodeID, addr)
+		log.Infof(context.TODO(), "raft transport stream to node %d established", nodeID)
 	}
-
-	// GRPC connections are opened asynchronously and internally have a circuit
-	// breaking mechanism based on heartbeat successes and failures.
-	conn, err := t.rpcContext.GRPCDial(addr.String())
-	if err != nil {
-		if errors.Cause(err) != circuit.ErrBreakerOpen {
-			log.Infof(context.TODO(), "failed to connect to %s", addr)
-		}
-		return nil
-	}
-	return conn
 }
 
 // processQueue opens a Raft client stream and sends messages from the
@@ -280,7 +268,7 @@ func (t *RaftTransport) getNodeConn(nodeID roachpb.NodeID) *grpc.ClientConn {
 // when it idles out. All messages remaining in the queue at that point are
 // lost and a new instance of processQueue will be started by the next message
 // to be sent.
-func (t *RaftTransport) processQueue(ch chan *RaftMessageRequest, conn *grpc.ClientConn) error {
+func (t *RaftTransport) processQueue(nodeID roachpb.NodeID, ch chan *RaftMessageRequest, conn *grpc.ClientConn) error {
 	client := NewMultiRaftClient(conn)
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
@@ -359,6 +347,14 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 	isSnap := req.Message.Type == raftpb.MsgSnap
 	toNodeID := req.ToReplica.NodeID
 
+	// First, check the circuit breaker for connections to the outgoing
+	// node. We fail fast if the breaker is open to drop the raft
+	// message and have the caller mark the raft group as unreachable.
+	breaker := t.GetCircuitBreaker(toNodeID)
+	if !breaker.Ready() {
+		return false
+	}
+
 	t.mu.Lock()
 	// We use two queues; one will be used for snapshots, the other for all other
 	// traffic. This is done to prevent snapshots from blocking other traffic.
@@ -375,25 +371,10 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 	t.mu.Unlock()
 
 	if !ok {
-		// Get a connection to the node specified by the replica's node
-		// ID. If no connection can be made, return false to indicate caller
-		// should drop the Raft message.
-		conn := t.getNodeConn(toNodeID)
-		if conn == nil {
-			t.mu.Lock()
-			delete(queues, toNodeID)
-			t.mu.Unlock()
-			return false
-		}
-
 		// Starting workers in a task prevents data races during shutdown.
 		if err := t.rpcContext.Stopper.RunTask(func() {
 			t.rpcContext.Stopper.RunWorker(func() {
-				if err := t.processQueue(ch, conn); err != nil && !grpcutil.IsClosedConnection(err) {
-					log.Warningf(context.TODO(),
-						"range=%s: outgoing raft transport stream to %s closed by the remote: %s",
-						req.RangeID, toNodeID, err)
-				}
+				t.connectAndProcess(toNodeID, ch)
 				t.mu.Lock()
 				delete(queues, toNodeID)
 				t.mu.Unlock()
