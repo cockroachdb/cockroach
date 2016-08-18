@@ -53,7 +53,7 @@ func TestNormalizeTableName(t *testing.T) {
 		}
 		if tc.err != "" {
 			if !testutils.IsError(err, tc.err) {
-				t.Fatalf("%s: expected %s, but found %s", tc.in, tc.err, err)
+				t.Fatalf("%s: expected %s, but found %v", tc.in, tc.err, err)
 			}
 			continue
 		}

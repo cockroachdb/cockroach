@@ -389,7 +389,7 @@ func TestStoreRemoveReplicaOldDescriptor(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := store.RemoveReplica(rep, *origDesc, true); !testutils.IsError(err, "replica ID has changed") {
-		t.Fatalf("expected error 'replica ID has changed' but got %s", err)
+		t.Fatalf("expected error 'replica ID has changed' but got %v", err)
 	}
 
 	// Now try a fresh descriptor and succeed.
@@ -413,16 +413,14 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 
 	// Verify that removal of a replica marks it as destroyed so that future raft
 	// commands on the Replica will silently be dropped.
-	err = rng1.withRaftGroup(func(r *raft.RawNode) error {
+	if err := rng1.withRaftGroup(func(r *raft.RawNode) error {
 		return errors.Errorf("unexpectedly created a raft group")
-	})
-	if err != nil {
+	}); err != nil {
 		t.Fatal(err)
 	}
 
-	_, _, err = rng1.proposeRaftCommand(context.Background(), roachpb.BatchRequest{})
-	expected := "replica .* was garbage collected"
-	if !testutils.IsError(err, expected) {
+	const expected = "replica .* was garbage collected"
+	if _, _, err := rng1.proposeRaftCommand(context.Background(), roachpb.BatchRequest{}); !testutils.IsError(err, expected) {
 		t.Fatalf("expected error %s, but got %v", expected, err)
 	}
 }
@@ -2212,7 +2210,7 @@ func TestStoreRangePlaceholders(t *testing.T) {
 		t.Fatalf("could not re-add placeholder after removal, got %s", err)
 	}
 	if err := s.addPlaceholderLocked(placeholder1); !testutils.IsError(err, ".*overlaps with existing KeyRange") {
-		t.Fatalf("should not be able to add ReplicaPlaceholder for the same key twice, got: %s", err)
+		t.Fatalf("should not be able to add ReplicaPlaceholder for the same key twice, got: %v", err)
 	}
 
 	// Test cannot double delete a placeholder.
@@ -2220,7 +2218,7 @@ func TestStoreRangePlaceholders(t *testing.T) {
 		t.Fatalf("could not remove placeholder that was present, got %s", err)
 	}
 	if err := s.removePlaceholderLocked(placeholder1.rangeDesc.RangeID); !testutils.IsError(err, "cannot remove placeholder for RangeID \\d+; Placeholder doesn't exist") {
-		t.Fatalf("could not remove placeholder that was present, got %s", err)
+		t.Fatalf("could not remove placeholder that was present, got %v", err)
 	}
 
 	// This placeholder overlaps with an existing replica.
@@ -2234,11 +2232,11 @@ func TestStoreRangePlaceholders(t *testing.T) {
 
 	// Test that placeholder cannot clobber existing replica.
 	if err := s.addPlaceholderLocked(placeholder1); !testutils.IsError(err, ".*overlaps with existing KeyRange") {
-		t.Fatalf("should not be able to add ReplicaPlaceholder when Replica already exists, got: %s", err)
+		t.Fatalf("should not be able to add ReplicaPlaceholder when Replica already exists, got: %v", err)
 	}
 
 	// Test that Placeholder deletion doesn't delete replicas.
 	if err := s.removePlaceholderLocked(repID); !testutils.IsError(err, "cannot remove placeholder for RangeID \\d+; Placeholder doesn't exist") {
-		t.Fatalf("should not be able to process removeReplicaPlaceholder for a RangeID where a Replica exists, got: %s", err)
+		t.Fatalf("should not be able to process removeReplicaPlaceholder for a RangeID where a Replica exists, got: %v", err)
 	}
 }
