@@ -47,6 +47,13 @@ import (
 var traceSQLDuration = envutil.EnvOrDefaultDuration("COCKROACH_TRACE_SQL", 0)
 var traceSQL = traceSQLDuration > 0
 
+// COCKROACH_TRACE_7881 can be used to trace all SQL transactions, in the hope
+// that we'll catch #7881 and dump the current trace for debugging.
+var traceSQLFor7881 = envutil.EnvOrDefaultBool("COCKROACH_TRACE_7881", false)
+
+// span baggage key used for marking a span
+var keyFor7881Sample = "found#7881"
+
 // Session contains the state of a SQL client connection.
 // Create instances using NewSession().
 type Session struct {
@@ -224,6 +231,18 @@ func (ts *txnState) reset(e *Executor, s *Session) {
 		// TODO(andrei): figure out how to close these spans on server shutdown?
 		ctx = opentracing.ContextWithSpan(ctx, sp)
 		ts.sp = sp
+	} else if traceSQLFor7881 {
+		sp, tr, err := tracing.NewTracerAndSpanFor7881(func(sp basictracer.RawSpan) {
+			ts.CollectedSpans = append(ts.CollectedSpans, sp)
+		})
+		if err != nil {
+			panic(fmt.Sprintf("couldn't create a tracer for debugging #7881: %s", err))
+		}
+		// Put both the tracer and the span in the txn's context.
+		ctx = tracing.WithTracer(
+			opentracing.ContextWithSpan(ctx, sp), tr)
+		// The new span will be Finish()ed by FinishSpan().
+		ts.sp = sp
 	}
 	ts.Ctx = ctx
 
@@ -260,15 +279,16 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 // This needs to be called before reset() is called for starting another SQL
 // txn.
 func (ts *txnState) finishSpan() {
+	sampledFor7881 := false
 	if ts.sp != nil {
+		sampledFor7881 = (ts.sp.BaggageItem(keyFor7881Sample) != "")
 		ts.sp.Finish()
 	}
-	if traceSQL && ts.txn != nil {
-		if timeutil.Since(ts.sqlTimestamp) >= traceSQLDuration {
-			dump := tracing.FormatRawSpans(ts.txn.CollectedSpans)
-			if len(dump) > 0 {
-				log.Infof(context.Background(), "%s\n%s", ts.txn.Proto.ID, dump)
-			}
+	if (traceSQL && timeutil.Since(ts.sqlTimestamp) >= traceSQLDuration) ||
+		(traceSQLFor7881 && sampledFor7881) {
+		dump := tracing.FormatRawSpans(ts.CollectedSpans)
+		if len(dump) > 0 {
+			log.Infof(context.Background(), "SQL trace:\n%s", dump)
 		}
 	}
 	ts.sp = nil
