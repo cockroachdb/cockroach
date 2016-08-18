@@ -463,7 +463,7 @@ func (sl *StoreList) add(s roachpb.StoreDescriptor) {
 	}
 }
 
-// GetStoreList returns a storeList that contains all active stores that
+// getStoreList returns a storeList that contains all active stores that
 // contain the required attributes and their associated stats. It also returns
 // the total number of alive and throttled stores.
 // TODO(embark, spencer): consider using a reverse index map from
