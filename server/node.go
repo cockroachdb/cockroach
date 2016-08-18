@@ -189,10 +189,11 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics kv.TxnMetrics) (uuid.U
 	ctx.ScanInterval = 10 * time.Minute
 	ctx.ConsistencyCheckInterval = 10 * time.Minute
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)
-	ctx.Tracer = tracing.NewTracer()
+	tracer := tracing.NewTracer()
+	ctx.Ctx = tracing.WithTracer(context.Background(), tracer)
 	// Create a KV DB with a local sender.
 	stores := storage.NewStores(ctx.Clock)
-	sender := kv.NewTxnCoordSender(stores, ctx.Clock, false, ctx.Tracer, stopper, txnMetrics)
+	sender := kv.NewTxnCoordSender(stores, ctx.Clock, false, tracer, stopper, txnMetrics)
 	ctx.DB = client.NewDB(sender)
 	ctx.Transport = storage.NewDummyRaftTransport()
 	for i, eng := range engines {
@@ -272,6 +273,11 @@ func (n *Node) String() string {
 	return fmt.Sprintf("node=%d", n.Descriptor.NodeID)
 }
 
+// Ctx returns the base context for the node.
+func (n *Node) Ctx() context.Context {
+	return n.ctx.Ctx
+}
+
 // initDescriptor initializes the node descriptor with the server
 // address and the node attributes.
 func (n *Node) initDescriptor(addr net.Addr, attrs roachpb.Attributes) {
@@ -288,33 +294,33 @@ func (n *Node) initDescriptor(addr net.Addr, attrs roachpb.Attributes) {
 // stored into the gossip instance.
 func (n *Node) initNodeID(id roachpb.NodeID) {
 	if id < 0 {
-		log.Fatalf(context.TODO(), "NodeID must not be negative")
+		log.Fatalf(n.Ctx(), "NodeID must not be negative")
 	}
 
 	if o := n.Descriptor.NodeID; o > 0 {
 		if id == 0 {
 			return
 		}
-		log.Fatalf(context.TODO(), "cannot initialize NodeID to %d, already have %d", id, o)
+		log.Fatalf(n.Ctx(), "cannot initialize NodeID to %d, already have %d", id, o)
 	}
 	var err error
 	if id == 0 {
 		id, err = allocateNodeID(n.ctx.DB)
 		if err != nil {
-			log.Fatal(context.TODO(), err)
+			log.Fatal(n.Ctx(), err)
 		}
-		log.Infof(context.TODO(), "new node allocated ID %d", id)
+		log.Infof(n.Ctx(), "new node allocated ID %d", id)
 		if id == 0 {
-			log.Fatal(context.TODO(), "new node allocated illegal ID 0")
+			log.Fatal(n.Ctx(), "new node allocated illegal ID 0")
 		}
 		n.ctx.Gossip.SetNodeID(id)
 	} else {
-		log.Infof(context.TODO(), "node ID %d initialized", id)
+		log.Infof(n.Ctx(), "node ID %d initialized", id)
 	}
 	// Gossip the node descriptor to make this node addressable by node ID.
 	n.Descriptor.NodeID = id
 	if err = n.ctx.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
-		log.Fatalf(context.TODO(), "couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
+		log.Fatalf(n.Ctx(), "couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
 	}
 }
 
@@ -541,28 +547,28 @@ func (n *Node) bootstrapStores(ctx context.Context, bootstraps []*storage.Store,
 // for a match. If not part of a cluster, the cluster ID is set. The
 // node's address is gossiped with node ID as the gossip key.
 func (n *Node) connectGossip() {
-	log.Infof(context.TODO(), "connecting to gossip network to verify cluster ID...")
+	log.Infof(n.Ctx(), "connecting to gossip network to verify cluster ID...")
 	// No timeout or stop condition is needed here. Log statements should be
 	// sufficient for diagnosing this type of condition.
 	<-n.ctx.Gossip.Connected
 
 	uuidBytes, err := n.ctx.Gossip.GetInfo(gossip.KeyClusterID)
 	if err != nil {
-		log.Fatalf(context.TODO(), "unable to ascertain cluster ID from gossip network: %s", err)
+		log.Fatalf(n.Ctx(), "unable to ascertain cluster ID from gossip network: %s", err)
 	}
 	gossipClusterIDPtr, err := uuid.FromBytes(uuidBytes)
 	if err != nil {
-		log.Fatalf(context.TODO(), "unable to ascertain cluster ID from gossip network: %s", err)
+		log.Fatalf(n.Ctx(), "unable to ascertain cluster ID from gossip network: %s", err)
 	}
 	gossipClusterID := *gossipClusterIDPtr
 
 	if n.ClusterID == *uuid.EmptyUUID {
 		n.ClusterID = gossipClusterID
 	} else if n.ClusterID != gossipClusterID {
-		log.Fatalf(context.TODO(), "node %d belongs to cluster %q but is attempting to connect to a gossip network for cluster %q",
+		log.Fatalf(n.Ctx(), "node %d belongs to cluster %q but is attempting to connect to a gossip network for cluster %q",
 			n.Descriptor.NodeID, n.ClusterID, gossipClusterID)
 	}
-	log.Infof(context.TODO(), "node connected via gossip and verified as part of cluster %q", gossipClusterID)
+	log.Infof(n.Ctx(), "node connected via gossip and verified as part of cluster %q", gossipClusterID)
 }
 
 // startGossip loops on a periodic ticker to gossip node-related
@@ -622,7 +628,7 @@ func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper) {
 			case <-ticker.C:
 				err := n.computePeriodicMetrics()
 				if err != nil {
-					log.Error(context.TODO(), err)
+					log.Error(n.Ctx(), err)
 				}
 			case <-stopper.ShouldStop():
 				return
@@ -647,7 +653,7 @@ func (n *Node) startWriteSummaries(frequency time.Duration) {
 		// Write a status summary immediately; this helps the UI remain
 		// responsive when new nodes are added.
 		if err := n.writeSummaries(); err != nil {
-			log.Warningf(context.TODO(), "error recording initial status summaries: %s", err)
+			log.Warningf(n.Ctx(), "error recording initial status summaries: %s", err)
 		}
 		ticker := time.NewTicker(frequency)
 		defer ticker.Stop()
@@ -655,7 +661,7 @@ func (n *Node) startWriteSummaries(frequency time.Duration) {
 			select {
 			case <-ticker.C:
 				if err := n.writeSummaries(); err != nil {
-					log.Warningf(context.TODO(), "error recording status summaries: %s", err)
+					log.Warningf(n.Ctx(), "error recording status summaries: %s", err)
 				}
 			case <-n.stopper.ShouldStop():
 				return
@@ -685,9 +691,9 @@ func (n *Node) writeSummaries() error {
 			if log.V(2) {
 				statusJSON, err := json.Marshal(nodeStatus)
 				if err != nil {
-					log.Errorf(context.TODO(), "error marshaling nodeStatus to json: %s", err)
+					log.Errorf(n.Ctx(), "error marshaling nodeStatus to json: %s", err)
 				}
-				log.Infof(context.TODO(), "node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
+				log.Infof(n.Ctx(), "node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
 			}
 		}
 	}); runErr != nil {
@@ -713,7 +719,7 @@ func (n *Node) recordJoinEvent() {
 		retryOpts := base.DefaultRetryOptions()
 		retryOpts.Closer = n.stopper.ShouldStop()
 		for r := retry.Start(retryOpts); r.Next(); {
-			if err := n.ctx.DB.Txn(context.TODO(), func(txn *client.Txn) error {
+			if err := n.ctx.DB.Txn(n.Ctx(), func(txn *client.Txn) error {
 				return n.eventLogger.InsertEventRecord(txn,
 					logEventType,
 					int32(n.Descriptor.NodeID),
@@ -725,7 +731,7 @@ func (n *Node) recordJoinEvent() {
 					}{n.Descriptor, n.ClusterID, n.startedAt},
 				)
 			}); err != nil {
-				log.Warningf(context.TODO(), "%s: unable to log %s event: %s", n, logEventType, err)
+				log.Warningf(n.Ctx(), "%s: unable to log %s event: %s", n, logEventType, err)
 			} else {
 				return
 			}
@@ -779,7 +785,7 @@ func (n *Node) Batch(
 	}
 
 	f := func() {
-		sp, err := tracing.JoinOrNew(n.ctx.Tracer, args.Trace, opName)
+		sp, err := tracing.JoinOrNew(tracing.TracerFromCtx(n.Ctx()), args.Trace, opName)
 		if err != nil {
 			fail(err)
 			return
