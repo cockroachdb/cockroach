@@ -105,6 +105,7 @@ SHOW TABLES FROM information_schema
 ----
 columns
 schemata
+table_constraints
 tables
 
 query TT colnames
@@ -317,6 +318,7 @@ SELECT table_name FROM information_schema.tables
 ----
 columns
 schemata
+table_constraints
 tables
 xyz
 descriptor
@@ -336,6 +338,7 @@ xyz
 users
 ui
 tables
+table_constraints
 schemata
 rangelog
 namespace
@@ -343,19 +346,20 @@ namespace
 query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
-TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME  TABLE_TYPE   VERSION
-def            information_schema  columns     SYSTEM VIEW  1
-def            information_schema  schemata    SYSTEM VIEW  1
-def            information_schema  tables      SYSTEM VIEW  1
-def            other_db            xyz         BASE TABLE   1
-def            system              descriptor  BASE TABLE   1
-def            system              eventlog    BASE TABLE   1
-def            system              lease       BASE TABLE   1
-def            system              namespace   BASE TABLE   1
-def            system              rangelog    BASE TABLE   1
-def            system              ui          BASE TABLE   1
-def            system              users       BASE TABLE   1
-def            system              zones       BASE TABLE   1
+TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME         TABLE_TYPE   VERSION
+def            information_schema  columns            SYSTEM VIEW  1
+def            information_schema  schemata           SYSTEM VIEW  1
+def            information_schema  table_constraints  SYSTEM VIEW  1
+def            information_schema  tables             SYSTEM VIEW  1
+def            other_db            xyz                BASE TABLE   1
+def            system              descriptor         BASE TABLE   1
+def            system              eventlog           BASE TABLE   1
+def            system              lease              BASE TABLE   1
+def            system              namespace          BASE TABLE   1
+def            system              rangelog           BASE TABLE   1
+def            system              ui                 BASE TABLE   1
+def            system              users              BASE TABLE   1
+def            system              zones              BASE TABLE   1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -371,10 +375,11 @@ user testuser
 query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
-TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME  TABLE_TYPE   VERSION
-def            information_schema  columns     SYSTEM VIEW  1
-def            information_schema  schemata    SYSTEM VIEW  1
-def            information_schema  tables      SYSTEM VIEW  1
+TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME         TABLE_TYPE   VERSION
+def            information_schema  columns            SYSTEM VIEW  1
+def            information_schema  schemata           SYSTEM VIEW  1
+def            information_schema  table_constraints  SYSTEM VIEW  1
+def            information_schema  tables             SYSTEM VIEW  1
 
 user root
 
@@ -386,13 +391,63 @@ user testuser
 query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
-TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME  TABLE_TYPE   VERSION
-def            information_schema  columns     SYSTEM VIEW  1
-def            information_schema  schemata    SYSTEM VIEW  1
-def            information_schema  tables      SYSTEM VIEW  1
-def            other_db            xyz         BASE TABLE   5
+TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME         TABLE_TYPE   VERSION
+def            information_schema  columns            SYSTEM VIEW  1
+def            information_schema  schemata           SYSTEM VIEW  1
+def            information_schema  table_constraints  SYSTEM VIEW  1
+def            information_schema  tables             SYSTEM VIEW  1
+def            other_db            xyz                BASE TABLE   5
 
 user root
 
 statement ok
 DROP DATABASE other_db
+
+
+## information_schema.table_constraints
+## This test case will be moved up into the correct order when #8497 is fixed.
+
+query TTTTTT colnames
+SELECT * FROM information_schema.table_constraints
+----
+CONSTRAINT_CATALOG  CONSTRAINT_SCHEMA  CONSTRAINT_NAME  TABLE_SCHEMA  TABLE_NAME  CONSTRAINT_TYPE
+def                 system             primary          system        descriptor  PRIMARY KEY
+def                 system             primary          system        eventlog    PRIMARY KEY
+def                 system             primary          system        lease       PRIMARY KEY
+def                 system             primary          system        namespace   PRIMARY KEY
+def                 system             primary          system        rangelog    PRIMARY KEY
+def                 system             primary          system        ui          PRIMARY KEY
+def                 system             primary          system        users       PRIMARY KEY
+def                 system             primary          system        zones       PRIMARY KEY
+
+statement ok
+CREATE DATABASE constraint_db
+
+statement ok
+CREATE TABLE constraint_db.t1 (
+  p FLOAT PRIMARY KEY,
+  a INT UNIQUE CHECK (a > 4),
+  CONSTRAINT c2 CHECK (a < 99)
+)
+
+statement ok
+CREATE TABLE constraint_db.t2 (
+    t1_ID INT,
+    CONSTRAINT fk FOREIGN KEY (t1_ID) REFERENCES constraint_db.t1(a),
+    INDEX (t1_ID)
+)
+
+query TTTTTT colnames
+SELECT * FROM information_schema.table_constraints WHERE constraint_schema = 'constraint_db'
+----
+CONSTRAINT_CATALOG  CONSTRAINT_SCHEMA  CONSTRAINT_NAME  TABLE_SCHEMA   TABLE_NAME  CONSTRAINT_TYPE
+def                 constraint_db      primary          constraint_db  t1          PRIMARY KEY
+def                 constraint_db      t1_a_key         constraint_db  t1          UNIQUE
+def                 constraint_db      c2               constraint_db  t1          CHECK
+def                 constraint_db      NULL             constraint_db  t1          CHECK
+def                 constraint_db      primary          constraint_db  t2          PRIMARY KEY
+def                 constraint_db      t2_t1_ID_idx     constraint_db  t2          FOREIGN KEY
+
+# TODO(nvanbenschoten) blocked on #8497.
+#statement ok
+#DROP DATABASE constraint_db
