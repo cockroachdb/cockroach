@@ -192,13 +192,19 @@ func mockStorePool(storePool *StorePool, aliveStoreIDs, deadStoreIDs []roachpb.S
 	storePool.mu.stores = make(map[roachpb.StoreID]*storeDetail)
 	for _, storeID := range aliveStoreIDs {
 		detail := newStoreDetail()
-		detail.desc = &roachpb.StoreDescriptor{StoreID: storeID}
+		detail.desc = &roachpb.StoreDescriptor{
+			StoreID: storeID,
+			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
+		}
 		storePool.mu.stores[storeID] = detail
 	}
 	for _, storeID := range deadStoreIDs {
 		detail := newStoreDetail()
 		detail.dead = true
-		detail.desc = &roachpb.StoreDescriptor{StoreID: storeID}
+		detail.desc = &roachpb.StoreDescriptor{
+			StoreID: storeID,
+			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
+		}
 		storePool.mu.stores[storeID] = detail
 	}
 	for storeID, detail := range storePool.mu.stores {
