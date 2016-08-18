@@ -3016,7 +3016,7 @@ func (r *Replica) ChangeReplicas(
 				repDesc.ReplicaID,
 			)
 		}
-		r.store.ctx.Transport.SendAsync(&RaftMessageRequest{
+		req := &RaftMessageRequest{
 			RangeID:     r.RangeID,
 			FromReplica: fromRepDesc,
 			ToReplica:   repDesc,
@@ -3027,7 +3027,10 @@ func (r *Replica) ChangeReplicas(
 				Term:     snap.Metadata.Term,
 				Snapshot: snap,
 			},
-		})
+		}
+		if err := r.store.ctx.Transport.SendSync(ctx, req); err != nil {
+			return errors.Wrapf(err, "change replicas of range %d aborted due to failed preemptive snapshot", rangeID)
+		}
 
 		repDesc.ReplicaID = updatedDesc.NextReplicaID
 		updatedDesc.NextReplicaID++
