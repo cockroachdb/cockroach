@@ -66,23 +66,27 @@ func TestComputeTruncatableIndex(t *testing.T) {
 	const targetSize = 1000
 
 	testCases := []struct {
-		progress    []uint64
-		commit      uint64
-		raftLogSize int64
-		firstIndex  uint64
-		expected    uint64
+		progress        []uint64
+		commit          uint64
+		raftLogSize     int64
+		firstIndex      uint64
+		pendingSnapshot uint64
+		expected        uint64
 	}{
-		{[]uint64{1, 2}, 1, 100, 1, 1},
-		{[]uint64{1, 5, 5}, 5, 100, 1, 1},
-		{[]uint64{1, 5, 5}, 5, 100, 2, 2},
-		{[]uint64{1, 2, 3, 4}, 3, 100, 1, 1},
-		{[]uint64{1, 2, 3, 4}, 3, 100, 2, 2},
+		{[]uint64{1, 2}, 1, 100, 1, 0, 1},
+		{[]uint64{1, 5, 5}, 5, 100, 1, 0, 1},
+		{[]uint64{1, 5, 5}, 5, 100, 2, 0, 2},
+		{[]uint64{5, 5, 5}, 5, 100, 2, 0, 5},
+		{[]uint64{5, 5, 5}, 5, 100, 2, 1, 2},
+		{[]uint64{5, 5, 5}, 5, 100, 2, 3, 3},
+		{[]uint64{1, 2, 3, 4}, 3, 100, 1, 0, 1},
+		{[]uint64{1, 2, 3, 4}, 3, 100, 2, 0, 2},
 		// If over targetSize, should truncate to quorum committed index.
-		{[]uint64{1, 2, 3, 4}, 3, 2000, 1, 3},
-		{[]uint64{1, 2, 3, 4}, 3, 2000, 2, 3},
-		{[]uint64{1, 2, 3, 4}, 3, 2000, 3, 3},
+		{[]uint64{1, 2, 3, 4}, 3, 2000, 1, 0, 3},
+		{[]uint64{1, 2, 3, 4}, 3, 2000, 2, 0, 3},
+		{[]uint64{1, 2, 3, 4}, 3, 2000, 3, 0, 3},
 		// Never truncate past raftStatus.Commit.
-		{[]uint64{4, 5, 6}, 3, 100, 4, 3},
+		{[]uint64{4, 5, 6}, 3, 100, 4, 0, 3},
 	}
 	for i, c := range testCases {
 		status := &raft.Status{
@@ -92,7 +96,7 @@ func TestComputeTruncatableIndex(t *testing.T) {
 		for j, v := range c.progress {
 			status.Progress[uint64(j)] = raft.Progress{Match: v}
 		}
-		out := computeTruncatableIndex(status, c.raftLogSize, targetSize, c.firstIndex)
+		out := computeTruncatableIndex(status, c.raftLogSize, targetSize, c.firstIndex, c.pendingSnapshot)
 		if !reflect.DeepEqual(c.expected, out) {
 			t.Errorf("%d: computeTruncatableIndex(...) expected %d, but got %d", i, c.expected, out)
 		}
