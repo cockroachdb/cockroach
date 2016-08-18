@@ -73,18 +73,18 @@ To add or update a go dependency:
   make test PKG=./kv TESTS='^TestFoo' TESTTIMEOUT=10s
   ```
 
-  When you're ready to commit, do just that with a succinct title and
-  informative message. For example,
-
-  ```bash
-  $ git commit
-  > 'update CONTRIBUTING.md
-  >
-  > Added details on running specific tests via `make`, and
-  > the CircleCI-equivalent test suite.
-  >
-  > Fixed some formatting.'
-  ```
+  When you're ready to commit, be sure to write a Good Commit Message™. Consult
+  https://github.com/erlang/otp/wiki/Writing-good-commit-messages if you're
+  not sure what constitutes a Good Commit Message™.
+  In addition to the general rules referenced above, please also prefix your
+  commit subject line with the affected package, if one can easily be chosen.
+  For example, the subject line of a commit mostly affecting the
+  `server/serverpb` package might read: "server/serverpb: made great again".
+  Commits which affect many packages as a result of a shared dependency change
+  should probably begin their subjects with the name of the shared dependency.
+  Finally, some commits may need to affect many packages in a way which does
+  not point to a specific package; those commits may begin with "*:" or "all:"
+  to indicate their reach.
 
 + Run the whole CI test suite locally: `./build/circle-local.sh`. This requires
   the Docker setup; if you don't have/want that,
@@ -100,18 +100,25 @@ To add or update a go dependency:
   `git push -u <yourfork> update-readme`
 
 + Then [create a pull request using GitHub’s UI]
-  (https://help.github.com/articles/creating-a-pull-request).
+  (https://help.github.com/articles/creating-a-pull-request). If you know of
+  another GitHub user particularly suited to reviewing your pull request, be
+  sure to mention them in the pull request body. If you possess the necessary
+  GitHub privileges, please also [assign them to the pull request using
+  GitHub's UI] (https://help.github.com/articles/assigning-issues-and-pull-requests-to-other-github-users/).
+  This will help focus and expedite the code review process.
 
 + If you get a test failure in CircleCI, check the Test Failure tab to see why
   the test failed. When the failure is logged in `excerpt.txt`, you can find
   the file from the Artifacts tab and see log messages. (You need to sign in to
   see the Artifacts tab.)
 
-+ Address feedback in new commits. Wait (or ask) for new feedback on those
++ Address feedback by amending your commits. If your change contains multiple
+  commits, address each piece of feedback by amending that commit to which the
+  particular feedback is aimed. Wait (or ask) for new feedback on those
   commits if they are not straightforward. An `LGTM` ("looks good to me") by
   someone qualified is usually posted when you're free to go ahead and merge.
   Most new contributors aren't allowed to merge themselves; in that case, we'll
-  do it for you. You may also be asked to re-groom your commits.
+  do it for you.
 
 ### Debugging
 
