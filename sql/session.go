@@ -48,6 +48,13 @@ import (
 var traceSQLDuration = envutil.EnvOrDefaultDuration("COCKROACH_TRACE_SQL", 0)
 var traceSQL = traceSQLDuration > 0
 
+// COCKROACH_TRACE_7881 can be used to trace all SQL transactions, in the hope
+// that we'll catch #7881 and dump the current trace for debugging.
+var traceSQLFor7881 = envutil.EnvOrDefaultBool("COCKROACH_TRACE_7881", false)
+
+// span baggage key used for marking a span
+const keyFor7881Sample = "found#7881"
+
 // Session contains the state of a SQL client connection.
 // Create instances using NewSession().
 type Session struct {
@@ -246,6 +253,16 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 		// sp is using a new tracer, so put it in the context.
 		ctx = tracing.WithTracer(
 			opentracing.ContextWithSpan(ctx, sp), sp.Tracer())
+	} else if traceSQLFor7881 {
+		sp, tr, err := tracing.NewTracerAndSpanFor7881(func(sp basictracer.RawSpan) {
+			ts.CollectedSpans = append(ts.CollectedSpans, sp)
+		})
+		if err != nil {
+			panic(fmt.Sprintf("couldn't create a tracer for debugging #7881: %s", err))
+		}
+		// Put both the new tracer and the span in the txn's context.
+		ctx = tracing.WithTracer(
+			opentracing.ContextWithSpan(ctx, sp), tr)
 	} else {
 		// Create a root span for this SQL txn.
 		tracer := tracing.TracerFromCtx(ctx)
@@ -297,13 +314,13 @@ func (ts *txnState) finishSQLTxn() {
 	if span == nil {
 		panic("No span in context? Was resetForNewSQLTxn() called previously?")
 	}
+	sampledFor7881 := (span.BaggageItem(keyFor7881Sample) != "")
 	span.Finish()
-	if traceSQL && ts.txn != nil {
-		if timeutil.Since(ts.sqlTimestamp) >= traceSQLDuration {
-			dump := tracing.FormatRawSpans(ts.txn.CollectedSpans)
-			if len(dump) > 0 {
-				log.Infof(context.Background(), "%s\n%s", ts.txn.Proto.ID, dump)
-			}
+	if (traceSQL && timeutil.Since(ts.sqlTimestamp) >= traceSQLDuration) ||
+		(traceSQLFor7881 && sampledFor7881) {
+		dump := tracing.FormatRawSpans(ts.CollectedSpans)
+		if len(dump) > 0 {
+			log.Infof(context.Background(), "SQL trace:\n%s", dump)
 		}
 	}
 }
