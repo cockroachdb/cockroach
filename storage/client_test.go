@@ -120,7 +120,8 @@ func createTestStoreWithEngine(
 	sCtx.Gossip = gossip.New(rpcContext, server, nil, stopper, metric.NewRegistry())
 	sCtx.Gossip.SetNodeID(nodeDesc.NodeID)
 	sCtx.ScanMaxIdleTime = 1 * time.Second
-	sCtx.Tracer = tracing.NewTracer()
+	tracer := tracing.NewTracer()
+	sCtx.Ctx = tracing.WithTracer(context.Background(), tracer)
 	stores := storage.NewStores(clock)
 
 	if err := sCtx.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
@@ -131,12 +132,12 @@ func createTestStoreWithEngine(
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	distSender := kv.NewDistSender(&kv.DistSenderConfig{
 		Clock:             clock,
-		TransportFactory:  kv.SenderTransportFactory(sCtx.Tracer, stores),
+		TransportFactory:  kv.SenderTransportFactory(tracer, stores),
 		RPCRetryOptions:   &retryOpts,
 		RangeDescriptorDB: stores, // for descriptor lookup
 	}, sCtx.Gossip)
 
-	sender := kv.NewTxnCoordSender(distSender, clock, false, tracing.NewTracer(), stopper,
+	sender := kv.NewTxnCoordSender(distSender, clock, false, tracer, stopper,
 		kv.MakeTxnMetrics())
 	sCtx.Clock = clock
 	sCtx.DB = client.NewDB(sender)
