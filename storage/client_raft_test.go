@@ -661,18 +661,7 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
-	// Initialize the gossip network.
-	storeDescs := make([]*roachpb.StoreDescriptor, 0, len(mtc.stores))
-	for _, s := range mtc.stores {
-		desc, err := s.Descriptor()
-		if err != nil {
-			t.Fatal(err)
-		}
-		storeDescs = append(storeDescs, desc)
-	}
-	for _, g := range mtc.gossips {
-		gossiputil.NewStoreGossiper(g).GossipStores(storeDescs, t)
-	}
+	mtc.initGossipNetwork()
 
 	// Once we know our peers, trigger a scan.
 	mtc.stores[0].ForceReplicationScanAndProcess()
@@ -691,6 +680,7 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 
 // TestStoreRangeCorruptionChangeReplicas verifies that the replication queue
 // will notice corrupted replicas and replace them.
+// TODO(bram): #8664 There's some flakiness in this test when stressed.
 func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -725,21 +715,9 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	}
 	mtc.Start(t, numReplicas+extraStores)
 	defer mtc.Stop()
+	mtc.initGossipNetwork()
 
 	store0 := mtc.stores[0]
-
-	// Initialize the gossip network.
-	storeDescs := make([]*roachpb.StoreDescriptor, 0, len(mtc.stores))
-	for _, s := range mtc.stores {
-		desc, err := s.Descriptor()
-		if err != nil {
-			t.Fatal(err)
-		}
-		storeDescs = append(storeDescs, desc)
-	}
-	for _, g := range mtc.gossips {
-		gossiputil.NewStoreGossiper(g).GossipStores(storeDescs, t)
-	}
 
 	for i := 0; i < extraStores; i++ {
 		util.SucceedsSoon(t, func() error {
@@ -874,6 +852,7 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	mtc := startMultiTestContext(t, 5)
 	defer mtc.Stop()
+	mtc.initGossipNetwork()
 	store0 := mtc.stores[0]
 
 	// Split off a range from the initial range for testing; there are
@@ -898,19 +877,6 @@ func TestStoreRangeDownReplicate(t *testing.T) {
 	replica := store0.LookupReplica(rightKeyAddr, nil)
 	desc := replica.Desc()
 	mtc.replicateRange(desc.RangeID, 3, 4)
-
-	// Initialize the gossip network.
-	storeDescs := make([]*roachpb.StoreDescriptor, 0, len(mtc.stores))
-	for _, s := range mtc.stores {
-		desc, err := s.Descriptor()
-		if err != nil {
-			t.Fatal(err)
-		}
-		storeDescs = append(storeDescs, desc)
-	}
-	for _, g := range mtc.gossips {
-		gossiputil.NewStoreGossiper(g).GossipStores(storeDescs, t)
-	}
 
 	maxTimeout := time.After(10 * time.Second)
 	succeeded := false
