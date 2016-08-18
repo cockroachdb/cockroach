@@ -523,6 +523,15 @@ func (e *Executor) execRequest(session *Session, sql string) StatementResults {
 
 			var err error
 			results, remainingStmts, err = runTxnAttempt(e, planMaker, origState, txnState, opt, stmtsToExec)
+
+			// TODO(andrei): Until #7881 fixed.
+			if err == nil && txnState.State == Aborted {
+				log.Errorf(session.Ctx(),
+					"7881: txnState is Aborted without an error propagating. stmtsToExec: %s, "+
+						"results: %+v, remainingStmts: %s, txnState: %+v", stmtsToExec, results,
+					remainingStmts, txnState)
+			}
+
 			return err
 		}
 		// This is where the magic happens - we ask db to run a KV txn and possibly retry it.
@@ -536,10 +545,17 @@ func (e *Executor) execRequest(session *Session, sql string) StatementResults {
 			lastResult := &results[len(results)-1]
 			if aErr, ok := err.(*client.AutoCommitError); ok {
 				// TODO(andrei): Until #7881 fixed.
-				if txn == nil {
-					log.Errorf(session.Ctx(), "AutoCommitError on nil txn: %+v, "+
-						"txnState %+v, execOpt %+v, stmts %+v, remaining %+v",
-						err, txnState, execOpt, stmts, remainingStmts)
+				{
+					log.Tracef(session.Ctx(), "executor got AutoCommitError: %s\n"+
+						"txn: %+v\nexecOpt.AutoRetry %t, execOpt.AutoCommit:%t, stmts %+v, remaining %+v",
+						aErr, txnState.txn.Proto, execOpt.AutoRetry, execOpt.AutoCommit, stmts,
+						remainingStmts)
+					if txnState.txn == nil {
+						log.Errorf(session.Ctx(), "7881: AutoCommitError on nil txn: %s, "+
+							"txnState %+v, execOpt %+v, stmts %+v, remaining %+v",
+							aErr, txnState, execOpt, stmts, remainingStmts)
+						txnState.sp.SetBaggageItem(keyFor7881Sample, "sample me please")
+					}
 				}
 				lastResult.Err = aErr
 				e.TxnAbortCount.Inc(1)
@@ -700,11 +716,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 
 	for i, stmt := range stmts {
 		ctx := planMaker.session.Ctx()
-		if log.V(2) {
-			log.Infof(ctx, "executing %d/%d: %s", i+1, len(stmts), stmt)
-		} else if traceSQL {
-			log.Tracef(ctx, "executing %d/%d: %s", i+1, len(stmts), stmt)
-		}
+		log.VTracef(2, ctx, "executing %d/%d: %s", i+1, len(stmts), stmt)
 		txnState.schemaChangers.curStatementIdx = i
 
 		var stmtStrBefore string

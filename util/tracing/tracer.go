@@ -77,6 +77,22 @@ func JoinOrNewSnowball(opName string, carrier *Span, callback func(sp basictrace
 	return sp, err
 }
 
+// NewTracerAndSpanFor7881 creates a new tracer and a root span. The tracer is
+// to be used for tracking down #7881; it runs a callback for each finished span
+// (and the callback used accumulates the spans in a SQL txn).
+func NewTracerAndSpanFor7881(
+	callback func(sp basictracer.RawSpan),
+) (opentracing.Span, opentracing.Tracer, error) {
+	opts := defaultOptions(callback)
+	// Don't trim the logs in "unsampled" spans". Note that this tracer does not
+	// use sampling; instead it uses an ad-hoc mechanism for marking spans of
+	// interest.
+	opts.TrimUnsampledSpans = false
+	tr := basictracer.NewWithOptions(opts)
+	sp, err := JoinOrNew(tr, nil, "sql txn")
+	return sp, tr, err
+}
+
 func defaultOptions(recorder func(basictracer.RawSpan)) basictracer.Options {
 	opts := basictracer.DefaultOptions()
 	opts.ShouldSample = func(traceID uint64) bool { return false }
