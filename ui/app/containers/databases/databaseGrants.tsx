@@ -4,6 +4,7 @@ import { IInjectedProps } from "react-router";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 
+import * as protos from "../../js/protos";
 import { databaseNameAttr, tableNameAttr } from "../../util/constants";
 
 import { AdminUIState } from "../../redux/state";
@@ -132,9 +133,9 @@ class DatabaseMain extends React.Component<DatabaseMainProps, {}> {
   // Refresh when the component is mounted.
   componentWillMount() {
     if (this.props.params[tableNameAttr]) {
-      this.props.refreshTableDetails({ database: this.props.params[databaseNameAttr], table: this.props.params[tableNameAttr] });
+      this.props.refreshTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({ database: this.props.params[databaseNameAttr], table: this.props.params[tableNameAttr] }));
     } else {
-      this.props.refreshDatabaseDetails({ database: this.props.params[databaseNameAttr] });
+      this.props.refreshDatabaseDetails(new protos.cockroach.server.serverpb.DatabaseDetailsRequest({ database: this.props.params[databaseNameAttr] }));
     }
   }
 

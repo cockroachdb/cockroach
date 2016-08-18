@@ -195,7 +195,7 @@ class DatabaseMain extends React.Component<DatabaseMainProps, {}> {
 
   // Refresh when the component is mounted.
   componentWillMount() {
-    this.props.refreshDatabaseDetails({ database: this.props.params[databaseNameAttr] });
+    this.props.refreshDatabaseDetails(new protos.cockroach.server.serverpb.DatabaseDetailsRequest({ database: this.props.params[databaseNameAttr] }));
     this.loadTableDetails();
   }
 
