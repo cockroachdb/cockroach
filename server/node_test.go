@@ -95,10 +95,9 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		RPCContext:      nodeRPCContext,
 		RPCRetryOptions: &retryOpts,
 	}, g)
-	tracer := tracing.NewTracer()
-	sender := kv.NewTxnCoordSender(distSender, ctx.Clock, false, tracer, stopper,
+	ctx.Ctx = tracing.WithTracer(context.Background(), tracing.NewTracer())
+	sender := kv.NewTxnCoordSender(ctx.Ctx, distSender, ctx.Clock, false, stopper,
 		kv.MakeTxnMetrics())
-	ctx.Ctx = tracing.WithTracer(context.Background(), tracer)
 	ctx.DB = client.NewDB(sender)
 	ctx.Transport = storage.NewDummyRaftTransport()
 	node := NewNode(ctx, status.NewMetricsRecorder(ctx.Clock), metric.NewRegistry(), stopper,
