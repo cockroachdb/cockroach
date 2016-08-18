@@ -164,6 +164,9 @@ type Context struct {
 	// Ctx is the base context.Context for the server. If nil,
 	// context.Background() will be used.
 	Ctx context.Context
+
+	// Locality is a description of the topography of the server.
+	Locality roachpb.Locality
 }
 
 // GetTotalMemory returns either the total system memory or if possible the

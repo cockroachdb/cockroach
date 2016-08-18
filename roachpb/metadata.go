@@ -18,6 +18,7 @@
 package roachpb
 
 import (
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -199,4 +200,57 @@ func (s StoreDescriptor) CombinedAttrs() *Attributes {
 	a = append(a, s.Node.Attrs.Attrs...)
 	a = append(a, s.Attrs.Attrs...)
 	return &Attributes{Attrs: a}
+}
+
+// String returns a string representation of the Tier.
+func (t Tier) String() string {
+	return fmt.Sprintf("%s=%s", t.Key, t.Value)
+}
+
+// FromString parses the string representation into the Tier.
+func (t *Tier) FromString(tier string) error {
+	parts := strings.Split(tier, "=")
+	if len(parts) != 2 || len(parts[0]) == 0 || len(parts[1]) == 0 {
+		return errors.Errorf("tier must be in the form \"key=value\" not %q", tier)
+	}
+	t.Key = parts[0]
+	t.Value = parts[1]
+	return nil
+}
+
+// String returns a string representation of all the Tiers. This is part
+// of pflag's value interface.
+func (l Locality) String() string {
+	tiers := make([]string, len(l.Tiers))
+	for i, tier := range l.Tiers {
+		tiers[i] = tier.String()
+	}
+	return strings.Join(tiers, ",")
+}
+
+// Type returns the underlying type in string form. This is part of pflag's
+// value interface.
+func (l Locality) Type() string {
+	return "Locality"
+}
+
+// Set sets the value of the Locality. It is the important part of
+// pflag's value interface.
+func (l *Locality) Set(value string) error {
+	if len(l.Tiers) > 0 {
+		return errors.New("can't set locality more than once")
+	}
+	if len(value) == 0 {
+		return errors.New("can't have empty locality")
+	}
+
+	tiersStr := strings.Split(value, ",")
+	tiers := make([]Tier, len(tiersStr))
+	for i, tier := range tiersStr {
+		if err := tiers[i].FromString(tier); err != nil {
+			return err
+		}
+	}
+	l.Tiers = tiers
+	return nil
 }

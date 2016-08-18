@@ -292,6 +292,7 @@ func init() {
 		stringFlag(f, &httpPort, cliflags.ServerHTTPPort, base.DefaultHTTPPort)
 		stringFlag(f, &httpAddr, cliflags.ServerHTTPAddr, "")
 		stringFlag(f, &serverCtx.Attrs, cliflags.Attrs, serverCtx.Attrs)
+		varFlag(f, &serverCtx.Locality, cliflags.Locality)
 
 		varFlag(f, &serverCtx.Stores, cliflags.Store)
 		durationFlag(f, &serverCtx.RaftTickInterval, cliflags.RaftTickInterval, base.DefaultRaftTickInterval)

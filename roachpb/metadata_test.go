@@ -17,7 +17,11 @@
 package roachpb
 
 import (
+	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/pkg/errors"
 )
 
 func TestAttributesIsSubset(t *testing.T) {
@@ -85,5 +89,54 @@ func TestRangeDescriptorMissingReplica(t *testing.T) {
 	}
 	if (r != ReplicaDescriptor{}) {
 		t.Fatalf("unexpectedly got nontrivial return: %s", r)
+	}
+}
+
+// TestLocalityConversions verifies that setting the value from the CLI short
+// hand format works correctly.
+func TestLocalityConversions(t *testing.T) {
+	testCases := []struct {
+		in       string
+		expected Locality
+		err      string
+	}{
+		{
+			in: "a=b,c=d,e=f",
+			expected: Locality{
+				Tiers: []Tier{
+					{Key: "a", Value: "b"},
+					{Key: "c", Value: "d"},
+					{Key: "e", Value: "f"},
+				},
+			},
+		},
+		{
+			in:       "",
+			expected: Locality{},
+			err:      "empty locality",
+		},
+		{
+			in:       "c=d=e",
+			expected: Locality{},
+			err:      "tier must be in the form",
+		},
+		{
+			in:       "a",
+			expected: Locality{},
+			err:      "tier must be in the form",
+		},
+	}
+
+	for i, tc := range testCases {
+		var l Locality
+		if err := l.Set(tc.in); tc.err == "" && err != nil {
+			t.Error(err)
+		} else if tc.err != "" && !strings.Contains(err.Error(), tc.err) {
+			t.Error(errors.Wrapf(err, "%d: expected %q", i, tc.err))
+		}
+
+		if !reflect.DeepEqual(l, tc.expected) {
+			t.Errorf("%d: Locality.Set(%q) = %+v; not %+v", i, tc.in, l, tc.expected)
+		}
 	}
 }
