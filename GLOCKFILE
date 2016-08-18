@@ -111,7 +111,7 @@ google.golang.org/appengine e951d3868b377b14f4e60efa3a301532ee3c1ebf
 google.golang.org/grpc c2c110d5cf950aef5e2af86b2f5d0a53400ff90b
 gopkg.in/check.v1 4f90aeace3a26ad7021961c297b22c42160c7b25
 gopkg.in/inf.v0 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
-gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de
+gopkg.in/yaml.v2 e4d366fc3c7938e2958e662b4258c7a89e1f0e3e
 honnef.co/go/lint a730e73f0085f274d67b586a1d587fd6e42e6708
 honnef.co/go/simple aa6f9e72ec86009fdfc110b52e2c769d48d5a904
 honnef.co/go/staticcheck 02337b3080e043d43781e1a0d129df14848f9507
