@@ -27,7 +27,6 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/gogo/protobuf/proto"
 	"github.com/google/btree"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -2185,6 +2184,7 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 		}
 	}
 
+	addedPlaceholder := false
 	switch req.Message.Type {
 	case raftpb.MsgSnap:
 		if earlyReturn := func() bool {
@@ -2205,6 +2205,7 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 				if err := s.addPlaceholderLocked(placeholder); err != nil {
 					log.Fatalf(ctx, "%s: could not add placeholder %s although canApplySnapshotLocked returned true", s, placeholder)
 				}
+				addedPlaceholder = true
 			}
 			return false
 		}(); earlyReturn {
@@ -2267,14 +2268,25 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 			// preemptive snapshot was sent has likely failed and removes both
 			// in-memory and on-disk state.
 			r.mu.Lock()
-			groupExists := r.mu.internalRaftGroup != nil
+			// We are paranoid about applying preemptive snapshots (which
+			// were constructed via our code rather than raft) to the "real"
+			// raft group. Instead, we destroy the "real" raft group if one
+			// exists (this is rare in production, although it occurs in
+			// tests), apply the preemptive snapshot to a temporary raft
+			// group, then discard that one as well to be replaced by a real
+			// raft group when we get a new replica ID.
+			//
+			// It might be OK instead to apply preemptive snapshots just
+			// like normal ones (essentially switching between regular and
+			// preemptive mode based on whether or not we have a raft group,
+			// instead of based on the replica ID of the snapshot message).
+			// However, this is a risk that we're not yet willing to take.
+			// Additionally, without some additional plumbing work, doing so
+			// would limit the effectiveness of RaftTransport.SendSync for
+			// preemptive snapshots.
+			r.mu.internalRaftGroup = nil
 			r.mu.Unlock()
-			if groupExists {
-				return roachpb.NewErrorf(
-					"cannot apply preemptive snapshot, Raft group for %d already active",
-					r.RangeID,
-				)
-			}
+
 			appliedIndex, _, err := loadAppliedIndex(ctx, r.store.Engine(), r.RangeID)
 			if err != nil {
 				return roachpb.NewError(err)
@@ -2305,7 +2317,9 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 				ready = raftGroup.Ready()
 			}
 			if raft.IsEmptySnap(ready.Snapshot) {
-				return roachpb.NewErrorf("preemptive snapshot discarded by Raft")
+				// Raft discarded the snapshot, indicating that our local
+				// state is already ahead of what the snapshot provides.
+				return nil
 			}
 
 			// Apply the snapshot, as Raft told us to.
@@ -2315,9 +2329,11 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 
 			s.mu.Lock()
 			defer s.mu.Unlock()
-			// Clear the replica placeholder; we are about to swap it with a real replica.
-			if err := s.removePlaceholderLocked(req.RangeID); err != nil {
-				return roachpb.NewError(err)
+			if addedPlaceholder {
+				// Clear the replica placeholder; we are about to swap it with a real replica.
+				if err := s.removePlaceholderLocked(req.RangeID); err != nil {
+					return roachpb.NewError(err)
+				}
 			}
 
 			if err := s.processRangeDescriptorUpdateLocked(r); err != nil {
@@ -2434,6 +2450,15 @@ func (s *Store) processRaft() {
 		}()
 
 		var pendingReplicas []roachpb.RangeID
+		var warnDuration = 10 * s.ctx.RaftTickInterval
+		maybeWarnDuration := func(start time.Time, prefix fmt.Stringer, msg string) {
+			// If Raft processing took longer than a second something bad is going
+			// on. Such long processing time means we'll have starved local replicas
+			// of ticks and remote replicas will likely start campaigning.
+			if elapsed := timeutil.Since(start); elapsed >= warnDuration {
+				log.Warningf(context.TODO(), "%s: %s: %.1fs", prefix, msg, elapsed.Seconds())
+			}
+		}
 
 		for {
 			workingStart := timeutil.Now()
@@ -2470,9 +2495,11 @@ func (s *Store) processRaft() {
 			// replicas serially, before starting initialized replicas in
 			// parallel.
 			for _, r := range uninitReplicas {
+				start := timeutil.Now()
 				if err := r.handleRaftReady(); err != nil {
 					panic(err) // TODO(bdarnell)
 				}
+				maybeWarnDuration(start, r, "handle raft ready")
 			}
 
 			var wg sync.WaitGroup
@@ -2481,9 +2508,11 @@ func (s *Store) processRaft() {
 				r := r // per-iteration copy
 				workQueue <- func() {
 					defer wg.Done()
+					start := timeutil.Now()
 					if err := r.handleRaftReady(); err != nil {
 						panic(err) // TODO(bdarnell)
 					}
+					maybeWarnDuration(start, r, "handle raft ready")
 				}
 			}
 			wg.Wait()
@@ -2494,6 +2523,8 @@ func (s *Store) processRaft() {
 			s.clearAllPlaceholders()
 			s.processRaftMu.Unlock()
 			s.metrics.RaftWorkingDurationNanos.Inc(timeutil.Since(workingStart).Nanoseconds())
+
+			maybeWarnDuration(workingStart, s, "raft ready processing")
 
 			selectStart := timeutil.Now()
 
@@ -2537,6 +2568,8 @@ func (s *Store) processRaft() {
 				s.pendingRaftGroups.Unlock()
 				s.processRaftMu.Unlock()
 				s.metrics.RaftTickingDurationNanos.Inc(timeutil.Since(tickerStart).Nanoseconds())
+
+				maybeWarnDuration(tickerStart, s, "raft ticking")
 
 			case <-s.stopper.ShouldStop():
 				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
@@ -2635,23 +2668,6 @@ func (s *Store) canApplySnapshotLocked(rangeID roachpb.RangeID, snap raftpb.Snap
 		rangeDesc: parsedSnap.RangeDescriptor,
 	}
 	return placeholder, nil
-}
-
-func raftEntryFormatter(data []byte) string {
-	if len(data) == 0 {
-		return "[empty]"
-	}
-	_, encodedCmd := DecodeRaftCommand(data)
-	var cmd roachpb.RaftCommand
-	if err := proto.Unmarshal(encodedCmd, &cmd); err != nil {
-		return fmt.Sprintf("[error parsing entry: %s]", err)
-	}
-	s := cmd.Cmd.String()
-	maxLen := 300
-	if len(s) > maxLen {
-		s = s[:maxLen]
-	}
-	return s
 }
 
 // computeReplicationStatus counts a number of simple replication statistics for

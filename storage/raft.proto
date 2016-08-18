@@ -75,4 +75,5 @@ message ConfChangeContext {
 
 service MultiRaft {
   rpc RaftMessage (stream RaftMessageRequest) returns (stream RaftMessageResponse) {}
+  rpc RaftMessageSync (RaftMessageRequest) returns (RaftMessageResponse) {}
 }
