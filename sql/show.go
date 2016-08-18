@@ -164,7 +164,7 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 			}
 			fmt.Fprintf(&buf, " DEFAULT %s", *col.DefaultExpr)
 		}
-		if len(desc.PrimaryIndex.ColumnIDs) > 0 && desc.PrimaryIndex.ColumnIDs[0] == col.ID {
+		if desc.HasPrimaryKey() && desc.PrimaryIndex.ColumnIDs[0] == col.ID {
 			// Only set primary if the primary key is on a visible column (not rowid).
 			primary = fmt.Sprintf(",\n\tCONSTRAINT %s PRIMARY KEY (%s)",
 				quoteNames(desc.PrimaryIndex.Name),
