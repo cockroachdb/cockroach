@@ -165,3 +165,8 @@ func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
 	defer r.mu.Unlock()
 	return r.mu.tsCache.lowWater
 }
+
+// GetStoreList is the same function as GetStoreList exposed for tests only.
+func (sp *StorePool) GetStoreList(required roachpb.Attributes, deterministic bool) (StoreList, int, int) {
+	return sp.getStoreList(required, deterministic)
+}
