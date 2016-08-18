@@ -614,13 +614,13 @@ func (r *Replica) applySnapshot(
 		snapType = "Raft"
 	}
 
-	log.Infof(ctx, "%s: with replicaID %s, applying %s snapshot for range %d at index %d "+
+	log.Infof(ctx, "%s: with replicaID %s, applying %s snapshot at index %d "+
 		"(encoded size=%d, %d KV pairs, %d log entries)",
-		r, replicaIDStr, snapType, desc.RangeID, snap.Metadata.Index,
+		r, replicaIDStr, snapType, snap.Metadata.Index,
 		len(snap.Data), len(snapData.KV), len(snapData.LogEntries))
 	defer func(start time.Time) {
-		log.Infof(ctx, "%s: with replicaID %s, applied %s snapshot for range %d in %s",
-			r, replicaIDStr, snapType, desc.RangeID, timeutil.Since(start))
+		log.Infof(ctx, "%s: with replicaID %s, applied %s snapshot in %.3fs",
+			r, replicaIDStr, snapType, timeutil.Since(start).Seconds())
 	}(timeutil.Now())
 
 	// Delete everything in the range and recreate it from the snapshot.

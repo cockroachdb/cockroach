@@ -2451,12 +2451,12 @@ func (s *Store) processRaft() {
 
 		var pendingReplicas []roachpb.RangeID
 		var warnDuration = 10 * s.ctx.RaftTickInterval
-		maybeWarnDuration := func(start time.Time, msg string) {
+		maybeWarnDuration := func(start time.Time, prefix fmt.Stringer, msg string) {
 			// If Raft processing took longer than a second something bad is going
 			// on. Such long processing time means we'll have starved local replicas
 			// of ticks and remote replicas will likely start campaigning.
 			if elapsed := timeutil.Since(start); elapsed >= warnDuration {
-				log.Warningf(context.TODO(), "%s: %s: %.1fs", s, msg, elapsed.Seconds())
+				log.Warningf(context.TODO(), "%s: %s: %.1fs", prefix, msg, elapsed.Seconds())
 			}
 		}
 
@@ -2495,9 +2495,11 @@ func (s *Store) processRaft() {
 			// replicas serially, before starting initialized replicas in
 			// parallel.
 			for _, r := range uninitReplicas {
+				start := timeutil.Now()
 				if err := r.handleRaftReady(); err != nil {
 					panic(err) // TODO(bdarnell)
 				}
+				maybeWarnDuration(start, r, "handle raft ready")
 			}
 
 			var wg sync.WaitGroup
@@ -2506,9 +2508,11 @@ func (s *Store) processRaft() {
 				r := r // per-iteration copy
 				workQueue <- func() {
 					defer wg.Done()
+					start := timeutil.Now()
 					if err := r.handleRaftReady(); err != nil {
 						panic(err) // TODO(bdarnell)
 					}
+					maybeWarnDuration(start, r, "handle raft ready")
 				}
 			}
 			wg.Wait()
@@ -2520,7 +2524,7 @@ func (s *Store) processRaft() {
 			s.processRaftMu.Unlock()
 			s.metrics.RaftWorkingDurationNanos.Inc(timeutil.Since(workingStart).Nanoseconds())
 
-			maybeWarnDuration(workingStart, "raft ready processing")
+			maybeWarnDuration(workingStart, s, "raft ready processing")
 
 			selectStart := timeutil.Now()
 
@@ -2565,7 +2569,7 @@ func (s *Store) processRaft() {
 				s.processRaftMu.Unlock()
 				s.metrics.RaftTickingDurationNanos.Inc(timeutil.Since(tickerStart).Nanoseconds())
 
-				maybeWarnDuration(tickerStart, "raft ticking")
+				maybeWarnDuration(tickerStart, s, "raft ticking")
 
 			case <-s.stopper.ShouldStop():
 				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
