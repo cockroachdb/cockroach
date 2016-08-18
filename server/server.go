@@ -230,6 +230,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
+		Ctx:                            s.Ctx(),
 		Clock:                          s.clock,
 		DB:                             s.db,
 		Gossip:                         s.gossip,
@@ -239,8 +240,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		ScanMaxIdleTime:                s.ctx.ScanMaxIdleTime,
 		ConsistencyCheckInterval:       s.ctx.ConsistencyCheckInterval,
 		ConsistencyCheckPanicOnFailure: s.ctx.ConsistencyCheckPanicOnFailure,
-		Tracer:    tracer,
-		StorePool: s.storePool,
+		StorePool:                      s.storePool,
 		SQLExecutor: sql.InternalExecutor{
 			LeaseManager: s.leaseMgr,
 		},
