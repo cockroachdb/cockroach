@@ -1,9 +1,9 @@
 import * as React from "react";
-import _ = require("lodash");
+import _ from "lodash";
 import { Link } from "react-router";
 import { connect } from "react-redux";
 import * as d3 from "d3";
-import * as moment from "moment";
+import moment from "moment";
 
 import { AdminUIState } from "../redux/state";
 import { refreshNodes } from "../redux/apiReducers";
@@ -17,7 +17,7 @@ import { NodeStatus, MetricConstants, TotalCpu, BytesUsed } from  "../util/proto
 // Constant used to store sort settings in the redux UI store.
 const UI_NODES_SORT_SETTING_KEY = "nodes/sort_setting";
 
-// Specialization of generic SortedTable component: 
+// Specialization of generic SortedTable component:
 //   https://github.com/Microsoft/TypeScript/issues/3960
 //
 // The variable name must start with a capital letter or TSX will not recognize

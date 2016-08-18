@@ -1,4 +1,4 @@
-import _ = require("lodash");
+import _ from "lodash";
 import { combineReducers } from "redux";
 import moment = require("moment");
 
