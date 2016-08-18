@@ -270,7 +270,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		m.rpcContext = rpc.NewContext(&base.Context{Insecure: true}, m.clock, m.transportStopper)
 		// Create breaker options which retry very quickly and use a "real"
 		// clock so breakers retry without requiring the manual clock to be
-		// incremented manually to untrip breaker.
+		// incremented manually to untrip the breaker.
 		m.rpcContext.BreakerFactory = func() *circuit.Breaker {
 			b := &backoff.ExponentialBackOff{
 				InitialInterval:     1 * time.Millisecond,
