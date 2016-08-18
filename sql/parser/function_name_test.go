@@ -50,7 +50,7 @@ func TestNormalizeFunctionName(t *testing.T) {
 		_, err = q.Normalize()
 		if tc.err != "" {
 			if !testutils.IsError(err, tc.err) {
-				t.Fatalf("%s: expected %s, but found %s", tc.in, tc.err, err)
+				t.Fatalf("%s: expected %s, but found %v", tc.in, tc.err, err)
 			}
 			continue
 		}

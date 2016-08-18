@@ -1241,7 +1241,7 @@ func TestTxnAbandonCount(t *testing.T) {
 
 		return nil
 	}); !testutils.IsError(err, "writing transaction timed out") {
-		t.Fatalf("unexpected error: %s", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -1277,12 +1277,10 @@ func TestTxnReadAfterAbandon(t *testing.T) {
 		checkTxnMetrics(t, sender, "abandon txn", 0, 0, 1, 0, 0)
 
 		_, err := txn.Get(key)
-		if err == nil {
-			t.Fatalf("Get succeeded on abandoned txn")
-		} else if !testutils.IsError(err, "writing transaction timed out") {
-			t.Fatalf("unexpected error from Get on abandoned txn: %s", err)
+		if !testutils.IsError(err, "writing transaction timed out") {
+			t.Fatalf("unexpected error from Get on abandoned txn: %v", err)
 		}
-		return err
+		return err // appease compiler
 	})
 
 	if err == nil {
@@ -1313,7 +1311,7 @@ func TestTxnAbortCount(t *testing.T) {
 
 		return errors.New(intentionalErrText)
 	}); !testutils.IsError(err, intentionalErrText) {
-		t.Fatalf("unexpected error: %s", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	teardownHeartbeats(sender)
 	checkTxnMetrics(t, sender, "abort txn", 0, 0, 0, 1, 0)

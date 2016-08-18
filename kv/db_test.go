@@ -196,10 +196,8 @@ func TestKVDBInternalMethods(t *testing.T) {
 		b := &client.Batch{}
 		b.AddRawRequest(args)
 		err := db.Run(b)
-		if err == nil {
-			t.Errorf("%d: unexpected success calling %s", i, args.Method())
-		} else if !testutils.IsError(err, "contains an internal request|contains commit trigger") {
-			t.Errorf("%d: unexpected error for %s: %s", i, args.Method(), err)
+		if !testutils.IsError(err, "contains an internal request|contains commit trigger") {
+			t.Errorf("%d: unexpected error for %s: %v", i, args.Method(), err)
 		}
 	}
 }

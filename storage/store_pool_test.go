@@ -553,16 +553,8 @@ func TestStorePoolReserve(t *testing.T) {
 			roachpb.RangeID(2),
 			100000,
 		)
-		if len(testCase.expErr) == 0 {
-			if err != nil {
-				t.Errorf("%d: expected no error, got %s", i, err)
-			}
-			continue
-		}
-		if err == nil {
-			t.Errorf("%d: expected an error:%s, got none", i, testCase.expErr)
-		} else if !testutils.IsError(err, testCase.expErr) {
-			t.Errorf("%d: expected error:%s, actual:%s", i, testCase.expErr, err)
+		if !(testCase.expErr == "" && err == nil || testutils.IsError(err, testCase.expErr)) {
+			t.Errorf("%d: expected error:%s, actual:%v", i, testCase.expErr, err)
 		}
 	}
 }
