@@ -1167,7 +1167,10 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 	// impossible after streaming snapshots.
 	mtc.restartStore(1)
 	if removeBeforeTruncateAndReAdd {
-		// Verify old replica is GC'd.
+		// Verify old replica is GC'd. Wait out the replica gc queue
+		// inactivity threshold and force a gc scan.
+		mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold + 1))
+		mtc.stores[1].ForceReplicaGCScanAndProcess()
 		util.SucceedsSoon(t, func() error {
 			_, err := mtc.stores[1].GetReplica(rangeID)
 			if _, ok := err.(*roachpb.RangeNotFoundError); !ok {
@@ -2330,9 +2333,10 @@ func TestFailedPreemptiveSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	const expErr = "aborted due to failed preemptive snapshot: unknown peer 3"
 	if err := rep.ChangeReplicas(context.Background(), roachpb.ADD_REPLICA,
 		roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3},
-		rep.Desc()); !testutils.IsError(err, "aborted due to failed preemptive snapshot: unable to get connection for node 3") {
-		t.Fatalf("got %s instead of expected error", err)
+		rep.Desc()); !testutils.IsError(err, expErr) {
+		t.Fatalf("expected %s; got %s", expErr, err)
 	}
 }
