@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+YACC="../../../../../../bin/yacc"
+
 # This step runs sql.y through the YACC compiler directly without
 # performing any type/token declaration modifications, throwing out
 # the result on a successful compilation. This allows the YACC compiler
@@ -10,7 +12,7 @@ set -euo pipefail
 # to union type accessors in the Go code within rules, as the YACC
 # compiler does not type check Go code.
 function type_check() {
-    ret=$(go tool yacc -o /dev/null -p sql sql.y)
+    ret=$($YACC -o /dev/null -p sql sql.y)
     ! echo "$ret" | grep -F 'conflicts'
 }
 
@@ -43,7 +45,7 @@ function compile() {
 
     # Compile this new "unionized" syntax file through YACC, this time writing
     # the output to sql.go.
-    ret=$(go tool yacc -o sql.go -p sql sql.y)
+    ret=$($YACC -o sql.go -p sql sql.y)
     ! echo "$ret" | grep -F 'conflicts'
 
     # Overwrite the migrated syntax file with the original syntax file.
