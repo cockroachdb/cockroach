@@ -171,11 +171,14 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	// DistSender needs to know that it should not retry in this situation.
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = s.stopper.ShouldQuiesce()
-	s.distSender = kv.NewDistSender(&kv.DistSenderConfig{
+	distSenderCfg := kv.DistSenderConfig{
+		Ctx:             s.Ctx(),
 		Clock:           s.clock,
 		RPCContext:      s.rpcContext,
 		RPCRetryOptions: &retryOpts,
-	}, s.gossip)
+	}
+	s.distSender = kv.NewDistSender(&distSenderCfg, s.gossip)
+
 	txnMetrics := kv.MakeTxnMetrics()
 	s.registry.AddMetricStruct(txnMetrics)
 	sender := kv.NewTxnCoordSender(s.distSender, s.clock, srvCtx.Linearizable, tracer,
