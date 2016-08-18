@@ -203,7 +203,7 @@ func (a *Allocator) AllocateTarget(
 	// matching here is lenient, and tries to find a target by relaxing an
 	// attribute constraint, from last attribute to first.
 	for attrs := append([]string(nil), required.Attrs...); ; attrs = attrs[:len(attrs)-1] {
-		sl, aliveStoreCount, throttledStoreCount := a.storePool.getStoreList(
+		sl, aliveStoreCount, throttledStoreCount := a.storePool.GetStoreList(
 			roachpb.Attributes{Attrs: attrs},
 			a.options.Deterministic,
 		)
@@ -290,7 +290,7 @@ func (a Allocator) RebalanceTarget(
 		return nil
 	}
 
-	sl, _, _ := a.storePool.getStoreList(required, a.options.Deterministic)
+	sl, _, _ := a.storePool.GetStoreList(required, a.options.Deterministic)
 	if log.V(3) {
 		log.Infof(context.TODO(), "rebalance-target (lease-holder=%d):\n%s", leaseStoreID, sl)
 	}
@@ -329,7 +329,7 @@ func (a *Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
 	if !ok {
 		return false
 	}
-	sl, _, _ := a.storePool.getStoreList(roachpb.Attributes{}, true)
+	sl, _, _ := a.storePool.GetStoreList(roachpb.Attributes{}, true)
 	return a.shouldRebalance(desc, sl)
 }
 

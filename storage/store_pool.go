@@ -469,7 +469,7 @@ func (sl *StoreList) add(s roachpb.StoreDescriptor) {
 // TODO(embark, spencer): consider using a reverse index map from
 // Attr->stores, for efficiency. Ensure that entries in this map still
 // have an opportunity to be garbage collected.
-func (sp *StorePool) getStoreList(required roachpb.Attributes, deterministic bool) (StoreList, int, int) {
+func (sp *StorePool) GetStoreList(required roachpb.Attributes, deterministic bool) (StoreList, int, int) {
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
 
