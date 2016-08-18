@@ -76,6 +76,15 @@ To add or update a go dependency:
   When you're ready to commit, be sure to write a Good Commit Message™. Consult
   https://github.com/erlang/otp/wiki/Writing-good-commit-messages if you're
   not sure what constitutes a Good Commit Message™.
+  In addition to the general rules referenced above, please also prefix your
+  commit subject line with the affected package, if one can easily be chosen.
+  For example, the subject line of a commit mostly affecting the
+  `server/serverpb` package might read: "server/serverpb: made great again".
+  Commits which affect many packages as a result of a shared dependency change
+  should probably begin their subjects with the name of the shared dependency.
+  Finally, some commits may need to affect many packages in a way which does
+  not point to a specific package; those commits may begin with "*:" or "all:"
+  to indicate their reach.
 
 + Run the whole CI test suite locally: `./build/circle-local.sh`. This requires
   the Docker setup; if you don't have/want that,
