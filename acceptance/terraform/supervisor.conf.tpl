@@ -33,6 +33,8 @@ stopwaitsecs=90
 stderr_logfile=%(here)s/logs/%(program_name)s.stderr
 stdout_logfile=%(here)s/logs/%(program_name)s.stdout
 environment=${cockroach_env}
+stderr_logfile_maxbytes=500MB
+stderr_logfile_backups=10
 
 [program:block_writer]
 directory=%(here)s
