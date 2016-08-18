@@ -137,7 +137,7 @@ func createTestStoreWithEngine(
 		RangeDescriptorDB: stores, // for descriptor lookup
 	}, sCtx.Gossip)
 
-	sender := kv.NewTxnCoordSender(distSender, clock, false, tracer, stopper,
+	sender := kv.NewTxnCoordSender(sCtx.Ctx, distSender, clock, false, stopper,
 		kv.MakeTxnMetrics())
 	sCtx.Clock = clock
 	sCtx.DB = client.NewDB(sender)
@@ -545,7 +545,8 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 		TransportFactory:  m.kvTransportFactory,
 		RPCRetryOptions:   &retryOpts,
 	}, m.gossips[idx])
-	sender := kv.NewTxnCoordSender(m.distSenders[idx], m.clock, false, tracing.NewTracer(),
+	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
+	sender := kv.NewTxnCoordSender(ctx, m.distSenders[idx], m.clock, false,
 		stopper, kv.MakeTxnMetrics())
 	m.dbs[idx] = client.NewDB(sender)
 }

@@ -792,13 +792,15 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		clock := hlc.NewClock(manual.UnixNano)
 		clock.SetMaxOffset(20)
 
-		ts := NewTxnCoordSender(senderFn(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
+		senderFunc := func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			var reply *roachpb.BatchResponse
 			if test.pErr == nil {
 				reply = ba.CreateReply()
 			}
 			return reply, test.pErr
-		}), clock, false, tracing.NewTracer(), stopper, MakeTxnMetrics())
+		}
+		ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics())
 		db := client.NewDB(ts)
 		txn := client.NewTxn(context.Background(), *db)
 		txn.InternalSetPriority(1)
@@ -929,13 +931,15 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(20)
 
-	ts := NewTxnCoordSender(senderFn(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	senderFunc := func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		br := ba.CreateReply()
 		txnClone := ba.Txn.Clone()
 		br.Txn = &txnClone
 		br.Txn.Writing = true
 		return br, nil
-	}), clock, false, tracing.NewTracer(), stopper, MakeTxnMetrics())
+	}
+	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
+	ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics())
 
 	// Stop the stopper manually, prior to trying the transaction. This has the
 	// effect of returning a NodeUnavailableError for any attempts at launching
@@ -978,14 +982,16 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 	}
 	for i, test := range testCases {
 		func() {
-			ts := NewTxnCoordSender(senderFn(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			senderFunc := func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 				txn := ba.Txn.Clone()
 				txn.Writing = true
 				pErr := &roachpb.Error{}
 				*pErr = test.Error
 				pErr.SetTxn(&txn)
 				return nil, pErr
-			}), clock, false, tracing.NewTracer(), stopper, MakeTxnMetrics())
+			}
+			ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
+			ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics())
 
 			var ba roachpb.BatchRequest
 			key := roachpb.Key("test")
@@ -1055,8 +1061,8 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 		br.Txn.Writing = true
 		return br, nil
 	}
-	ts := NewTxnCoordSender(senderFn(senderFunc), clock, false, tracing.NewTracer(), stopper,
-		MakeTxnMetrics())
+	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
+	ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics())
 
 	defer stopper.Stop()
 	defer teardownHeartbeats(ts)
@@ -1150,7 +1156,8 @@ func checkTxnMetrics(t *testing.T, sender *TxnCoordSender, name string,
 func setupMetricsTest(t *testing.T) (*hlc.ManualClock, *TxnCoordSender, func()) {
 	s, testSender := createTestDB(t)
 	txnMetrics := MakeTxnMetrics()
-	sender := NewTxnCoordSender(testSender.wrapped, s.Clock, false, tracing.NewTracer(), s.Stopper, txnMetrics)
+	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
+	sender := NewTxnCoordSender(ctx, testSender.wrapped, s.Clock, false, s.Stopper, txnMetrics)
 
 	return s.Manual, sender, func() {
 		teardownHeartbeats(sender)
