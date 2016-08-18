@@ -216,6 +216,10 @@ type Replica struct {
 		cmdQ *CommandQueue
 		// Last index persisted to the raft log (not necessarily committed).
 		lastIndex uint64
+		// The raft log index of a pending preemptive snapshot. Used to prohibit
+		// raft log truncation while a preemptive snapshot is in flight. A value of
+		// 0 indicates that there is no pending snapshot.
+		pendingSnapshotIndex uint64
 		// raftLogSize is the approximate size in bytes of the persisted raft log.
 		// On server restart, this value is assumed to be zero to avoid costly scans
 		// of the raft log. This will be correct when all log entries predating this
@@ -2853,6 +2857,12 @@ func (r *Replica) maybeAddToRaftLogQueue(appliedIndex uint64) {
 	if appliedIndex%raftLogCheckFrequency == 0 {
 		r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
+}
+
+func (r *Replica) setPendingSnapshotIndex(index uint64) {
+	r.mu.Lock()
+	r.mu.pendingSnapshotIndex = index
+	r.mu.Unlock()
 }
 
 func (r *Replica) endKey() roachpb.RKey {
