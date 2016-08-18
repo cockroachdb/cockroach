@@ -269,6 +269,9 @@ SHOW CREATE TABLE t
 statement error user testuser has no privileges on table t
 SHOW INDEX FROM t
 
+statement error user testuser has no privileges on table t
+SHOW CONSTRAINTS FROM t
+
 user root
 
 statement ok
@@ -284,3 +287,6 @@ SHOW CREATE TABLE t
 
 statement ok
 SHOW INDEX FROM t
+
+statement ok
+SHOW CONSTRAINTS FROM t

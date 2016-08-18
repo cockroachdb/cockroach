@@ -375,7 +375,7 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 }
 
 // ShowConstraints returns all the constraints for a table.
-// Privileges: None.
+// Privileges: Any privilege on table.
 //   Notes: postgres does not have a SHOW CONSTRAINTS statement.
 //          mysql requires some privilege for any column.
 func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
@@ -386,6 +386,9 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 
 	desc, err := p.mustGetTableDesc(tn)
 	if err != nil {
+		return nil, err
+	}
+	if err := p.anyPrivilege(desc); err != nil {
 		return nil, err
 	}
 
