@@ -36,10 +36,15 @@ import (
 // Txn is an in-progress distributed database transaction. A Txn is not safe for
 // concurrent use by multiple goroutines.
 type Txn struct {
-	db             DB
-	Proto          roachpb.Transaction
-	UserPriority   roachpb.UserPriority
-	Context        context.Context // must not be nil
+	db           DB
+	Proto        roachpb.Transaction
+	UserPriority roachpb.UserPriority
+	Context      context.Context // must not be nil
+	// CollectedSpans receives spans from remote hosts for "snowball" traces
+	// initiated on this host.
+	// It's also used by "EXPLAIN TRACE".
+	// Note that in SQL land there's also TxnState.CollectedSpans which
+	// should be used when we want to accumulate everything for a SQL txn.
 	CollectedSpans []basictracer.RawSpan
 	// systemConfigTrigger is set to true when modifying keys from the SystemConfig
 	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
