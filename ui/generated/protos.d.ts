@@ -467,6 +467,8 @@ export interface roachpbBuilder {
 	NodeDescriptor: roachpb.NodeDescriptorBuilder;
 	StoreDescriptor: roachpb.StoreDescriptorBuilder;
 	StoreDeadReplicas: roachpb.StoreDeadReplicasBuilder;
+	Locality: roachpb.LocalityBuilder;
+	Tier: roachpb.TierBuilder;
 	Span: roachpb.SpanBuilder;
 	Value: roachpb.ValueBuilder;
 	KeyValue: roachpb.KeyValueBuilder;
@@ -848,6 +850,15 @@ getCapacity?() : StoreCapacity;
 
 
 
+locality?: Locality;
+		
+
+getLocality?() : Locality;
+		setLocality?(locality : Locality): void;
+		
+
+
+
 }
 
 	export interface StoreDescriptorMessage extends StoreDescriptor {
@@ -908,6 +919,87 @@ export interface StoreDeadReplicasBuilder {
 	decode(buffer: ArrayBuffer) : StoreDeadReplicasMessage;
 	decode(buffer: ByteBuffer) : StoreDeadReplicasMessage;
 	decode64(buffer: string) : StoreDeadReplicasMessage;
+	
+}
+
+}
+
+
+declare module cockroach.roachpb {
+
+	export interface Locality {
+
+		
+
+tiers?: Tier[];
+		
+
+getTiers?() : Tier[];
+		setTiers?(tiers : Tier[]): void;
+		
+
+
+
+}
+
+	export interface LocalityMessage extends Locality {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface LocalityBuilder {
+	new(data?: Locality): LocalityMessage;
+	decode(buffer: ArrayBuffer) : LocalityMessage;
+	decode(buffer: ByteBuffer) : LocalityMessage;
+	decode64(buffer: string) : LocalityMessage;
+	
+}
+
+}
+
+
+declare module cockroach.roachpb {
+
+	export interface Tier {
+
+		
+
+key?: string;
+		
+
+getKey?() : string;
+		setKey?(key : string): void;
+		
+
+
+
+value?: string;
+		
+
+getValue?() : string;
+		setValue?(value : string): void;
+		
+
+
+
+}
+
+	export interface TierMessage extends Tier {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface TierBuilder {
+	new(data?: Tier): TierMessage;
+	decode(buffer: ArrayBuffer) : TierMessage;
+	decode(buffer: ByteBuffer) : TierMessage;
+	decode64(buffer: string) : TierMessage;
 	
 }
 
