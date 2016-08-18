@@ -482,7 +482,7 @@ func (e *Executor) execRequest(session *Session, sql string) StatementResults {
 					}()
 				}
 			}
-			txnState.reset(session.Ctx(), e, session)
+			txnState.reset(e, session)
 			txnState.State = Open
 			txnState.autoRetry = true
 			txnState.sqlTimestamp = e.cfg.Clock.PhysicalTime()
@@ -561,6 +561,12 @@ func (e *Executor) execRequest(session *Session, sql string) StatementResults {
 			// If execOpt.AutoCommit was set, then the txn no longer exists at this point.
 			txnState.resetStateAndTxn(NoTxn)
 		}
+
+		// If we're no longer in a transaction, finish the trace.
+		if txnState.State == NoTxn {
+			txnState.finishSpan()
+		}
+
 		// If the txn is in any state but Open, exec the schema changes. They'll
 		// short-circuit themselves if the mutation that queued them has been
 		// rolled back from the table descriptor.
@@ -1050,13 +1056,11 @@ func commitSQLTransaction(
 		switch commitType {
 		case release:
 			// We'll now be waiting for a COMMIT.
-			txnState.State = CommitWait
+			txnState.resetStateAndTxn(CommitWait)
 		case commit:
 			// We're done with this txn.
-			txnState.State = NoTxn
+			txnState.resetStateAndTxn(NoTxn)
 		}
-		txnState.dumpTrace()
-		txnState.txn = nil
 	}
 	// Reset transaction to prevent running further commands on this planner.
 	p.resetTxn()
