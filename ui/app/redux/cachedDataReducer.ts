@@ -6,8 +6,12 @@
 
 import * as _ from "lodash";
 import { Dispatch } from "redux";
-import { Action, PayloadAction, WithRequest } from "../interfaces/action";
 import { assert } from "chai";
+import moment = require("moment");
+
+import { APIRequestFn } from "../util/api.ts";
+
+import { Action, PayloadAction, WithRequest } from "../interfaces/action";
 
 // CachedDataReducerState is used to track the state of the cached data.
 export class CachedDataReducerState<TResponseMessage> {
@@ -42,12 +46,12 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
   INVALIDATE: string; // invalidate data
 
   /**
-   *  apiEndpoint - The API endpoint used to refresh data.
-   *  actionNamespace - A unique namespace for the redux actions.
-   *  invalidationPeriodMillis (optional) - The number of milliseconds after
-   *    data is received after which it will be invalidated.
+   * apiEndpoint - The API endpoint used to refresh data.
+   * actionNamespace - A unique namespace for the redux actions.
+   * invalidationPeriod (optional) - The duration after
+   *   data is received after which it will be invalidated.
    */
-  constructor(protected apiEndpoint: (req: TRequest) => Promise<TResponseMessage>, public actionNamespace: string, protected invalidationPeriodMillis?: number) {
+  constructor(protected apiEndpoint: APIRequestFn<TRequest, TResponseMessage>, public actionNamespace: string, protected invalidationPeriod?: moment.Duration) {
     // check actionNamespace
     assert.notProperty(CachedDataReducer.namespaces, actionNamespace, "Expected actionNamespace to be unique.");
     CachedDataReducer.namespaces[actionNamespace] = true;
@@ -144,14 +148,14 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
     return (dispatch: Dispatch<S>, getState: () => any) => {
       let state: CachedDataReducerState<TResponseMessage> = stateAccessor(getState(), req);
 
-      if (state && (state.inFlight || (_.isNumber(this.invalidationPeriodMillis) && state.valid))) {
+      if (state && (state.inFlight || (this.invalidationPeriod && state.valid))) {
         return;
       }
 
       // Note that after dispatching requestData, state.inFlight is true
       dispatch(this.requestData(req));
       // Fetch data from the servers. Return the promise for use in tests.
-      return this.apiEndpoint(req).then((data) => {
+      return this.apiEndpoint(req, this.invalidationPeriod).then((data) => {
         // Dispatch the results to the store.
         dispatch(this.receiveData(data, req));
       }).catch((error: Error) => {
@@ -159,8 +163,8 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
         dispatch(this.errorData(error, req));
       }).then(() => {
         // Invalidate data after the invalidation period if one exists.
-        if (_.isNumber(this.invalidationPeriodMillis)) {
-          setTimeout(() => dispatch(this.invalidateData(req)), this.invalidationPeriodMillis);
+        if (this.invalidationPeriod) {
+          setTimeout(() => dispatch(this.invalidateData(req)), this.invalidationPeriod.asMilliseconds());
         }
       });
     };
@@ -185,14 +189,14 @@ export class KeyedCachedDataReducer<TRequest, TResponseMessage> {
    * actionNamespace - A unique namespace for the redux actions.
    * requestToID - A function that takes a TRequest and returns a string. Used
    *   as a key to store data returned from that request
-   * invalidationPeriodMillis (optional) - The number of milliseconds after data
-   *   is received after which it will be invalidated.
+   * invalidationPeriod (optional) - The duration after
+   *   data is received after which it will be invalidated.
    *
-   * apiEndpoint, actionNamespace, and invalidationPeriodMillis are all passed
+   * apiEndpoint, actionNamespace, and invalidationPeriod are all passed
    * to the CachedDataReducer constructor
    */
-  constructor(protected apiEndpoint: (req: TRequest) => Promise<TResponseMessage>, public actionNamespace: string, private requestToID: (req: TRequest) => string, protected invalidationPeriodMillis?: number) {
-    this.cachedDataReducer = new CachedDataReducer<TRequest, TResponseMessage>(apiEndpoint, actionNamespace, invalidationPeriodMillis);
+  constructor(protected apiEndpoint: (req: TRequest) => Promise<TResponseMessage>, public actionNamespace: string, private requestToID: (req: TRequest) => string, protected invalidationPeriod?: moment.Duration) {
+    this.cachedDataReducer = new CachedDataReducer<TRequest, TResponseMessage>(apiEndpoint, actionNamespace, invalidationPeriod);
   }
 
   /**
