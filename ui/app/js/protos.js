@@ -474,6 +474,15 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "options": {
                                 "(gogoproto.nullable)": false
                             }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "Locality",
+                            "name": "locality",
+                            "id": 5,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
                         }
                     ]
                 },
@@ -495,6 +504,49 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "rule": "repeated",
                             "type": "ReplicaIdent",
                             "name": "replicas",
+                            "id": 2,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Locality",
+                    "options": {
+                        "(gogoproto.goproto_stringer)": false
+                    },
+                    "fields": [
+                        {
+                            "rule": "repeated",
+                            "type": "Tier",
+                            "name": "tiers",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Tier",
+                    "options": {
+                        "(gogoproto.goproto_stringer)": false
+                    },
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "key",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "string",
+                            "name": "value",
                             "id": 2,
                             "options": {
                                 "(gogoproto.nullable)": false

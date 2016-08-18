@@ -507,6 +507,9 @@ type StoreContext struct {
 	// period) during which operations will trigger an asynchronous renewal of the
 	// lease.
 	rangeLeaseRenewalDuration time.Duration
+
+	// Locality is a description of the topography of the store.
+	Locality roachpb.Locality
 }
 
 // StoreTestingKnobs is a part of the context used to control parts of the system.
@@ -1837,6 +1840,7 @@ func (s *Store) Descriptor() (*roachpb.StoreDescriptor, error) {
 		Attrs:    s.Attrs(),
 		Node:     *s.nodeDesc,
 		Capacity: capacity,
+		Locality: s.ctx.Locality,
 	}, nil
 }
 

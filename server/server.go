@@ -264,6 +264,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		AllocatorOptions: storage.AllocatorOptions{
 			AllowRebalance: true,
 		},
+		Locality: srvCtx.Locality,
 	}
 	if srvCtx.TestingKnobs.Store != nil {
 		nCtx.TestingKnobs = *srvCtx.TestingKnobs.Store.(*storage.StoreTestingKnobs)
