@@ -275,7 +275,7 @@ func (s *statusServer) Logs(ctx context.Context, req *serverpb.LogsRequest) (*se
 
 	var sev log.Severity
 	if len(req.Level) == 0 {
-		sev = log.InfoLog
+		sev = log.Severity_INFO
 	} else {
 		var sevFound bool
 		sev, sevFound = log.SeverityByName(req.Level)

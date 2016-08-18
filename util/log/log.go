@@ -39,7 +39,7 @@ func EnableLogFileOutput(dir string) {
 	defer logging.mu.Unlock()
 	logDir = dir
 	logging.toStderr = false
-	logging.stderrThreshold = InfoLog
+	logging.stderrThreshold = Severity_INFO
 }
 
 // DisableLogFileOutput turns off logging. For unittesting only.
@@ -51,7 +51,7 @@ func DisableLogFileOutput() {
 	}
 	logDir = ""
 	logging.toStderr = true
-	logging.stderrThreshold = NumSeverity
+	logging.stderrThreshold = Severity_NONE
 }
 
 // SetExitFunc allows setting a function that will be called to exit the
@@ -75,7 +75,7 @@ func logDepth(ctx context.Context, depth int, sev Severity, format string, args 
 // message. Arguments are handled in the manner of fmt.Printf; a newline is
 // appended.
 func Infof(ctx context.Context, format string, args ...interface{}) {
-	logDepth(ctx, 1, InfoLog, format, args)
+	logDepth(ctx, 1, Severity_INFO, format, args)
 }
 
 // Info logs to the INFO log.
@@ -83,7 +83,7 @@ func Infof(ctx context.Context, format string, args ...interface{}) {
 // message. Arguments are handled in the manner of fmt.Print; a newline is
 // appended.
 func Info(ctx context.Context, args ...interface{}) {
-	logDepth(ctx, 1, InfoLog, "", args)
+	logDepth(ctx, 1, Severity_INFO, "", args)
 }
 
 // InfofDepth logs to the INFO log, offsetting the caller's stack frame by
@@ -92,7 +92,7 @@ func Info(ctx context.Context, args ...interface{}) {
 // message. Arguments are handled in the manner of fmt.Printf; a newline is
 // appended.
 func InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
-	logDepth(ctx, depth+1, InfoLog, format, args)
+	logDepth(ctx, depth+1, Severity_INFO, format, args)
 }
 
 // Warningf logs to the WARNING and INFO logs.
@@ -100,7 +100,7 @@ func InfofDepth(ctx context.Context, depth int, format string, args ...interface
 // message. Arguments are handled in the manner of fmt.Printf; a newline is
 // appended.
 func Warningf(ctx context.Context, format string, args ...interface{}) {
-	logDepth(ctx, 1, WarningLog, format, args)
+	logDepth(ctx, 1, Severity_WARNING, format, args)
 }
 
 // Warning logs to the WARNING and INFO logs.
@@ -108,7 +108,7 @@ func Warningf(ctx context.Context, format string, args ...interface{}) {
 // message. Arguments are handled in the manner of fmt.Print; a newline is
 // appended.
 func Warning(ctx context.Context, args ...interface{}) {
-	logDepth(ctx, 1, WarningLog, "", args)
+	logDepth(ctx, 1, Severity_WARNING, "", args)
 }
 
 // WarningfDepth logs to the WARNING and INFO logs, offsetting the caller's
@@ -117,7 +117,7 @@ func Warning(ctx context.Context, args ...interface{}) {
 // message. Arguments are handled in the manner of fmt.Printf; a newline is
 // appended.
 func WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
-	logDepth(ctx, depth+1, WarningLog, format, args)
+	logDepth(ctx, depth+1, Severity_WARNING, format, args)
 }
 
 // Errorf logs to the ERROR, WARNING, and INFO logs.
@@ -125,7 +125,7 @@ func WarningfDepth(ctx context.Context, depth int, format string, args ...interf
 // message. Arguments are handled in the manner of fmt.Printf; a newline is
 // appended.
 func Errorf(ctx context.Context, format string, args ...interface{}) {
-	logDepth(ctx, 1, ErrorLog, format, args)
+	logDepth(ctx, 1, Severity_ERROR, format, args)
 }
 
 // Error logs to the ERROR, WARNING, and INFO logs.
@@ -133,7 +133,7 @@ func Errorf(ctx context.Context, format string, args ...interface{}) {
 // message. Arguments are handled in the manner of fmt.Print; a newline is
 // appended.
 func Error(ctx context.Context, args ...interface{}) {
-	logDepth(ctx, 1, ErrorLog, "", args)
+	logDepth(ctx, 1, Severity_ERROR, "", args)
 }
 
 // ErrorfDepth logs to the ERROR, WARNING, and INFO logs, offsetting the
@@ -142,7 +142,7 @@ func Error(ctx context.Context, args ...interface{}) {
 // message. Arguments are handled in the manner of fmt.Printf; a newline is
 // appended.
 func ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
-	logDepth(ctx, depth+1, ErrorLog, format, args)
+	logDepth(ctx, depth+1, Severity_ERROR, format, args)
 }
 
 // Fatalf logs to the INFO, WARNING, ERROR, and FATAL logs, including a stack
@@ -151,7 +151,7 @@ func ErrorfDepth(ctx context.Context, depth int, format string, args ...interfac
 // message. Arguments are handled in the manner of fmt.Printf; a newline is
 // appended.
 func Fatalf(ctx context.Context, format string, args ...interface{}) {
-	logDepth(ctx, 1, FatalLog, format, args)
+	logDepth(ctx, 1, Severity_FATAL, format, args)
 }
 
 // Fatal logs to the INFO, WARNING, ERROR, and FATAL logs, including a stack
@@ -160,7 +160,7 @@ func Fatalf(ctx context.Context, format string, args ...interface{}) {
 // message. Arguments are handled in the manner of fmt.Print; a newline is
 // appended.
 func Fatal(ctx context.Context, args ...interface{}) {
-	logDepth(ctx, 1, FatalLog, "", args)
+	logDepth(ctx, 1, Severity_FATAL, "", args)
 }
 
 // FatalfDepth logs to the INFO, WARNING, ERROR, and FATAL logs (offsetting the
@@ -170,7 +170,7 @@ func Fatal(ctx context.Context, args ...interface{}) {
 // message. Arguments are handled in the manner of fmt.Printf; a newline is
 // appended.
 func FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
-	logDepth(ctx, depth+1, FatalLog, format, args)
+	logDepth(ctx, depth+1, Severity_FATAL, format, args)
 }
 
 // V returns true if the logging verbosity is set to the specified level or

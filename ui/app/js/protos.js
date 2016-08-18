@@ -83,12 +83,9 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "fields": [
                                 {
                                     "rule": "optional",
-                                    "type": "int64",
+                                    "type": "Severity",
                                     "name": "severity",
-                                    "id": 1,
-                                    "options": {
-                                        "(gogoproto.casttype)": "Severity"
-                                    }
+                                    "id": 1
                                 },
                                 {
                                     "rule": "optional",
@@ -139,12 +136,9 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                 },
                                 {
                                     "rule": "optional",
-                                    "type": "int64",
+                                    "type": "Severity",
                                     "name": "severity",
-                                    "id": 4,
-                                    "options": {
-                                        "(gogoproto.casttype)": "Severity"
-                                    }
+                                    "id": 4
                                 },
                                 {
                                     "rule": "optional",
@@ -192,6 +186,37 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "options": {
                                         "(gogoproto.nullable)": false
                                     }
+                                }
+                            ]
+                        }
+                    ],
+                    "enums": [
+                        {
+                            "name": "Severity",
+                            "values": [
+                                {
+                                    "name": "UNKNOWN",
+                                    "id": 0
+                                },
+                                {
+                                    "name": "INFO",
+                                    "id": 1
+                                },
+                                {
+                                    "name": "WARNING",
+                                    "id": 2
+                                },
+                                {
+                                    "name": "ERROR",
+                                    "id": 3
+                                },
+                                {
+                                    "name": "FATAL",
+                                    "id": 4
+                                },
+                                {
+                                    "name": "NONE",
+                                    "id": 5
                                 }
                             ]
                         }

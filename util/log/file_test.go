@@ -30,9 +30,9 @@ func TestLogFilenameParsing(t *testing.T) {
 		Severity Severity
 		Time     time.Time
 	}{
-		{InfoLog, time.Now()},
-		{WarningLog, time.Now().AddDate(-10, 0, 0)},
-		{ErrorLog, time.Now().AddDate(0, 0, -1)},
+		{Severity_INFO, time.Now()},
+		{Severity_WARNING, time.Now().AddDate(-10, 0, 0)},
+		{Severity_ERROR, time.Now().AddDate(0, 0, -1)},
 	}
 
 	for i, testCase := range testCases {
@@ -58,7 +58,7 @@ func TestSelectFiles(t *testing.T) {
 	year2050 := time.Date(2050, time.January, 1, 1, 0, 0, 0, time.UTC)
 	year2200 := time.Date(2200, time.January, 1, 1, 0, 0, 0, time.UTC)
 	for i := 0; i < 100; i++ {
-		sev := Severity(i % 3)
+		sev := Severity_INFO + Severity(i)%(Severity_FATAL-Severity_INFO)
 		fileTime := year2000.AddDate(i, 0, 0)
 		name, _ := logName(sev, fileTime)
 		testfile := FileInfo{
@@ -76,32 +76,32 @@ func TestSelectFiles(t *testing.T) {
 		EndTimestamp  int64
 		ExpectedCount int
 	}{
-		{InfoLog, year2200.UnixNano(), 34},
-		{WarningLog, year2200.UnixNano(), 33},
-		{ErrorLog, year2200.UnixNano(), 33},
-		{InfoLog, year2050.UnixNano(), 17},
-		{WarningLog, year2050.UnixNano(), 17},
-		{ErrorLog, year2050.UnixNano(), 17},
-		{InfoLog, year2000.UnixNano(), 1},
-		{WarningLog, year2000.UnixNano(), 0},
-		{ErrorLog, year2000.UnixNano(), 0},
+		{Severity_INFO, year2200.UnixNano(), 34},
+		{Severity_WARNING, year2200.UnixNano(), 33},
+		{Severity_ERROR, year2200.UnixNano(), 33},
+		{Severity_INFO, year2050.UnixNano(), 17},
+		{Severity_WARNING, year2050.UnixNano(), 17},
+		{Severity_ERROR, year2050.UnixNano(), 17},
+		{Severity_INFO, year2000.UnixNano(), 1},
+		{Severity_WARNING, year2000.UnixNano(), 0},
+		{Severity_ERROR, year2000.UnixNano(), 0},
 	}
 
 	for i, testCase := range testCases {
 		actualFiles := selectFiles(testFiles, testCase.Severity, testCase.EndTimestamp)
 		previousTimestamp := year2200.UnixNano()
 		if len(actualFiles) != testCase.ExpectedCount {
-			t.Fatalf("%d: expected %d files, actual %d", i, testCase.ExpectedCount, len(actualFiles))
+			t.Errorf("%d: expected %d files, actual %d", i, testCase.ExpectedCount, len(actualFiles))
 		}
 		for _, file := range actualFiles {
 			if file.Details.Time > previousTimestamp {
-				t.Fatalf("%d: returned files are not in the correct order", i)
+				t.Errorf("%d: returned files are not in the correct order", i)
 			}
 			if file.Details.Severity != testCase.Severity {
-				t.Fatalf("%d: did not filter by severity", i)
+				t.Errorf("%d: did not filter by severity", i)
 			}
 			if file.Details.Time > testCase.EndTimestamp {
-				t.Fatalf("%d: did not filter by endTime", i)
+				t.Errorf("%d: did not filter by endTime", i)
 			}
 			previousTimestamp = file.Details.Time
 		}
