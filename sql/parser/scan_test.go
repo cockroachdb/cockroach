@@ -420,7 +420,7 @@ func TestScanError(t *testing.T) {
 			t.Errorf("%s: expected ERROR, but found %d", d.sql, id)
 		}
 		if !testutils.IsError(errors.New(lval.str), d.err) {
-			t.Errorf("%s: expected %s, but found %s", d.sql, d.err, lval.str)
+			t.Errorf("%s: expected %s, but found %v", d.sql, d.err, lval.str)
 		}
 	}
 }

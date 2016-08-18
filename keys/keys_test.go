@@ -123,7 +123,7 @@ func TestKeyAddressError(t *testing.T) {
 				t.Errorf("expected addressing key %q to throw error, but it returned address %q",
 					key, addr)
 			} else if !testutils.IsError(err, regexp) {
-				t.Errorf("expected addressing key %q to throw error matching %s, but got error %s",
+				t.Errorf("expected addressing key %q to throw error matching %s, but got error %v",
 					key, regexp, err)
 			}
 		}
@@ -229,7 +229,7 @@ func TestMetaScanBounds(t *testing.T) {
 		resStart, resEnd, err := MetaScanBounds(test.key)
 
 		if err != nil && !testutils.IsError(err, test.expError) {
-			t.Errorf("expected error: %s ; got %s", test.expError, err)
+			t.Errorf("expected error: %s ; got %v", test.expError, err)
 		} else if err == nil && test.expError != "" {
 			t.Errorf("expected error: %s", test.expError)
 		}
@@ -299,7 +299,7 @@ func TestMetaReverseScanBounds(t *testing.T) {
 		resStart, resEnd, err := MetaReverseScanBounds(roachpb.RKey(test.key))
 
 		if err != nil && !testutils.IsError(err, test.expError) {
-			t.Errorf("expected error: %s ; got %s", test.expError, err)
+			t.Errorf("expected error: %s ; got %v", test.expError, err)
 		} else if err == nil && test.expError != "" {
 			t.Errorf("expected error: %s", test.expError)
 		}

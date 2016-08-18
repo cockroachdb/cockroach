@@ -562,7 +562,7 @@ func TestStorePoolReserve(t *testing.T) {
 		if err == nil {
 			t.Errorf("%d: expected an error:%s, got none", i, testCase.expErr)
 		} else if !testutils.IsError(err, testCase.expErr) {
-			t.Errorf("%d: expected error:%s, actual:%s", i, testCase.expErr, err)
+			t.Errorf("%d: expected error:%s, actual:%v", i, testCase.expErr, err)
 		}
 	}
 }
