@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/syncutil"
+	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -163,12 +164,23 @@ func (s *adminServer) firstNotFoundError(results []sql.Result) error {
 	return nil
 }
 
+// NewSessionForRPC creates a SQL session on behalf of an RPC request.
+// It copies the Server's tracer into the Session's context.
+func (s *adminServer) NewSessionForRPC(
+	ctx context.Context, args sql.SessionArgs,
+) *sql.Session {
+	// TODO(radu): figure out a general way to merge the RPC context with the
+	// server's context.
+	ctx = tracing.WithTracer(ctx, tracing.TracerFromCtx(s.server.ctx.Ctx))
+	return sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+}
+
 // Databases is an endpoint that returns a list of databases.
 func (s *adminServer) Databases(
 	ctx context.Context, req *serverpb.DatabasesRequest,
 ) (*serverpb.DatabasesResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := s.NewSessionForRPC(ctx, args)
 	r := s.server.sqlExecutor.ExecuteStatements(session, "SHOW DATABASES;", nil)
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return nil, s.serverError(err)
@@ -192,7 +204,7 @@ func (s *adminServer) DatabaseDetails(
 	ctx context.Context, req *serverpb.DatabaseDetailsRequest,
 ) (*serverpb.DatabaseDetailsResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := s.NewSessionForRPC(ctx, args)
 
 	// Placeholders don't work with SHOW statements, so we need to manually
 	// escape the database name.
@@ -257,7 +269,7 @@ func (s *adminServer) TableDetails(
 	ctx context.Context, req *serverpb.TableDetailsRequest,
 ) (*serverpb.TableDetailsResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := s.NewSessionForRPC(ctx, args)
 
 	// TODO(cdo): Use real placeholders for the table and database names when we've extended our SQL
 	// grammar to allow that.
@@ -565,7 +577,7 @@ func (s *adminServer) TableStats(ctx context.Context, req *serverpb.TableStatsRe
 // Users returns a list of users, stripped of any passwords.
 func (s *adminServer) Users(ctx context.Context, req *serverpb.UsersRequest) (*serverpb.UsersResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := s.NewSessionForRPC(ctx, args)
 	query := "SELECT username FROM system.users"
 	r := s.server.sqlExecutor.ExecuteStatements(session, query, nil)
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
@@ -586,7 +598,7 @@ func (s *adminServer) Users(ctx context.Context, req *serverpb.UsersRequest) (*s
 // targetID=INT returns events for that have this targetID
 func (s *adminServer) Events(ctx context.Context, req *serverpb.EventsRequest) (*serverpb.EventsResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := s.NewSessionForRPC(ctx, args)
 
 	// Execute the query.
 	q := makeSQLQuery()
@@ -697,7 +709,7 @@ func (s *adminServer) SetUIData(ctx context.Context, req *serverpb.SetUIDataRequ
 	}
 
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := s.NewSessionForRPC(ctx, args)
 
 	for key, val := range req.KeyValues {
 		// Do an upsert of the key. We update each key in a separate transaction to
@@ -753,7 +765,7 @@ func (s *adminServer) SetUIData(ctx context.Context, req *serverpb.SetUIDataRequ
 // have the prefix `serverUIDataKeyPrefix`.
 func (s *adminServer) GetUIData(ctx context.Context, req *serverpb.GetUIDataRequest) (*serverpb.GetUIDataResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := s.NewSessionForRPC(ctx, args)
 
 	if len(req.Keys) == 0 {
 		return nil, grpc.Errorf(codes.InvalidArgument, "keys cannot be empty")
