@@ -1384,12 +1384,22 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 		}
 	}
 
-	// Add the read to the command queue to gate subsequent
-	// overlapping commands until this command completes.
-	log.Trace(ctx, "command queue")
-	endCmdsFunc, err := r.beginCmds(ctx, &ba)
-	if err != nil {
-		return nil, roachpb.NewError(err)
+	var endCmdsFunc func(*roachpb.BatchResponse, *roachpb.Error) *roachpb.Error
+	if !ba.IsSingleNonKVRequest() {
+		// Add the read to the command queue to gate subsequent
+		// overlapping commands until this command completes.
+		log.Trace(ctx, "command queue")
+		var err error
+		endCmdsFunc, err = r.beginCmds(ctx, &ba)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
+	} else {
+		endCmdsFunc = func(
+			*roachpb.BatchResponse, *roachpb.Error,
+		) *roachpb.Error {
+			return nil
+		}
 	}
 
 	r.readOnlyCmdMu.RLock()
@@ -1440,43 +1450,50 @@ func (r *Replica) assert5725(ba roachpb.BatchRequest) {
 func (r *Replica) addWriteCmd(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	// Add the write to the command queue to gate subsequent overlapping
-	// commands until this command completes. Note that this must be
-	// done before getting the max timestamp for the key(s), as
-	// timestamp cache is only updated after preceding commands have
-	// been run to successful completion.
-	log.Trace(ctx, "command queue")
-	endCmdsFunc, err := r.beginCmds(ctx, &ba)
-	if err != nil {
-		return nil, roachpb.NewError(err)
+	isNonKV := ba.IsSingleNonKVRequest()
+	if !isNonKV {
+		// Add the write to the command queue to gate subsequent overlapping
+		// commands until this command completes. Note that this must be
+		// done before getting the max timestamp for the key(s), as
+		// timestamp cache is only updated after preceding commands have
+		// been run to successful completion.
+		log.Trace(ctx, "command queue")
+		endCmdsFunc, err := r.beginCmds(ctx, &ba)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
+
+		// Guarantee we remove the commands from the command queue. This is
+		// wrapped to delay pErr evaluation to its value when returning.
+		defer func() {
+			pErr = endCmdsFunc(br, pErr)
+		}()
 	}
 
-	// Guarantee we remove the commands from the command queue. This is
-	// wrapped to delay pErr evaluation to its value when returning.
-	defer func() {
-		pErr = endCmdsFunc(br, pErr)
-	}()
-
-	// This replica must have range lease to process a write, except when it's
-	// an attempt to unfreeze the Range. These are a special case in which any
-	// replica will propose it to get back to an active state.
-	if pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
-		if _, frozen := pErr.GetDetail().(*roachpb.RangeFrozenError); !frozen {
-			return nil, pErr
+	if !ba.IsSingleSkipLeaseCheckRequest() {
+		// This replica must have range lease to process a write, except when it's
+		// an attempt to unfreeze the Range. These are a special case in which any
+		// replica will propose it to get back to an active state.
+		if pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
+			if _, frozen := pErr.GetDetail().(*roachpb.RangeFrozenError); !frozen {
+				return nil, pErr
+			}
+			// Only continue if the batch appears freezing-related.
+			if !ba.IsFreeze() {
+				return nil, pErr
+			}
+			pErr = nil
 		}
-		// Only continue if the batch appears freezing-related.
-		if !ba.IsFreeze() {
-			return nil, pErr
-		}
-		pErr = nil
 	}
 
-	// Examine the read and write timestamp caches for preceding
-	// commands which require this command to move its timestamp
-	// forward. Or, in the case of a transactional write, the txn
-	// timestamp and possible write-too-old bool.
-	if pErr := r.applyTimestampCache(&ba); pErr != nil {
-		return nil, pErr
+	if !isNonKV {
+		// Examine the read and write timestamp caches for preceding
+		// commands which require this command to move its timestamp
+		// forward. Or, in the case of a transactional write, the txn
+		// timestamp and possible write-too-old bool.
+		if pErr := r.applyTimestampCache(&ba); pErr != nil {
+			return nil, pErr
+		}
 	}
 
 	log.Trace(ctx, "raft")
@@ -1527,7 +1544,7 @@ func (r *Replica) prepareRaftCommandLocked(
 	if r.mu.lastAssignedLeaseIndex < r.mu.state.LeaseAppliedIndex {
 		r.mu.lastAssignedLeaseIndex = r.mu.state.LeaseAppliedIndex
 	}
-	if !ba.IsLease() {
+	if !ba.IsLeaseRequest() {
 		r.mu.lastAssignedLeaseIndex++
 	}
 	if log.V(4) {
@@ -2142,11 +2159,11 @@ func (r *Replica) processRaftCommand(
 
 	isLeaseError := func() bool {
 		l, ba, origin := r.mu.state.Lease, raftCmd.Cmd, raftCmd.OriginReplica
-		if l.Replica != origin && !ba.IsLease() {
+		if l.Replica != origin && !ba.IsLeaseRequest() {
 			return true
 		}
 		notCovered := !l.OwnedBy(origin.StoreID) || !l.Covers(ba.Timestamp)
-		if notCovered && !ba.IsFreeze() && !ba.IsLease() {
+		if notCovered && !ba.IsFreeze() && !ba.IsLeaseRequest() {
 			// Verify the range lease is held, unless this command is trying
 			// to obtain it or is a freeze change (which can be proposed by any
 			// Replica). Any other Raft command has had the range lease held
@@ -2188,7 +2205,7 @@ func (r *Replica) processRaftCommand(
 		}
 		forcedErr = roachpb.NewError(newNotLeaseHolderError(
 			r.mu.state.Lease, raftCmd.OriginReplica.StoreID, r.mu.state.Desc))
-	} else if raftCmd.Cmd.IsLease() {
+	} else if raftCmd.Cmd.IsLeaseRequest() {
 		// Lease commands are ignored by the counter (and their MaxLeaseIndex
 		// is ignored). This makes sense since lease commands are proposed by
 		// anyone, so we can't expect a coherent MaxLeaseIndex. Also, lease
