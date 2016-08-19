@@ -155,7 +155,7 @@ export function loadUIData<S>(...keys: string[]) {
   return (dispatch: Dispatch<S>, getState: () => S): Promise<void> => {
     dispatch(fetchUIData());
 
-    return getUIData({ keys }).then((response) => {
+    return getUIData(new protos.cockroach.server.serverpb.GetUIDataRequest({ keys })).then((response) => {
       let keyValues = response.getKeyValues();
 
       _.each(keys, (key) => {

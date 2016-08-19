@@ -131,7 +131,7 @@ type Context struct {
 	MetricsSampleInterval time.Duration
 
 	// ScanInterval determines a duration during which each range should be
-	// visited approximately once by the range scanner.
+	// visited approximately once by the range scanner. Set to 0 to disable.
 	// Environment Variable: COCKROACH_SCAN_INTERVAL
 	ScanInterval time.Duration
 
@@ -142,6 +142,7 @@ type Context struct {
 	ScanMaxIdleTime time.Duration
 
 	// ConsistencyCheckInterval determines the time between range consistency checks.
+	// Set to 0 to disable.
 	// Environment Variable: COCKROACH_CONSISTENCY_CHECK_INTERVAL
 	ConsistencyCheckInterval time.Duration
 

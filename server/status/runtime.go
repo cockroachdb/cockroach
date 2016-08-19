@@ -23,6 +23,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -47,6 +48,10 @@ var (
 	metaCPUSysPercent  = metric.Metadata{Name: "sys.cpu.sys.percent", Help: "Current system cpu percentage"}
 	metaRSS            = metric.Metadata{Name: "sys.rss", Help: "Current process RSS"}
 	metaUptime         = metric.Metadata{Name: "sys.uptime", Help: "Process uptime in seconds"}
+
+	// Build information. Placed here for lack of a better location.
+	// Labels for this metric get populated in MakeRuntimeStatSampler
+	metaBuildTimestamp = metric.Metadata{Name: "build.timestamp", Help: "Build information"}
 )
 
 // getCgoMemStats is a function that fetches stats for the C++ portion of the code.
@@ -90,10 +95,26 @@ type RuntimeStatSampler struct {
 	CPUSysPercent  *metric.GaugeFloat64
 	Rss            *metric.Gauge
 	Uptime         *metric.Gauge // We use a gauge to be able to call Update.
+	BuildTimestamp *metric.Gauge
 }
 
 // MakeRuntimeStatSampler constructs a new RuntimeStatSampler object.
 func MakeRuntimeStatSampler(clock *hlc.Clock) RuntimeStatSampler {
+	// Construct the build info metric. It is constant.
+	// We first build set the labels on the metadata.
+	info := build.GetInfo()
+	timestamp, err := info.Timestamp()
+	if err != nil {
+		// We can't panic here, tests don't have a build timestamp.
+		log.Warningf(context.TODO(), "Could not parse build timestamp: %v", err)
+	}
+
+	metaBuildTimestamp.AddLabel("tag", info.Tag)
+	metaBuildTimestamp.AddLabel("go_version", info.GoVersion)
+
+	buildTimestamp := metric.NewGauge(metaBuildTimestamp)
+	buildTimestamp.Update(timestamp)
+
 	return RuntimeStatSampler{
 		clock:          clock,
 		startTimeNanos: clock.PhysicalNow(),
@@ -112,6 +133,7 @@ func MakeRuntimeStatSampler(clock *hlc.Clock) RuntimeStatSampler {
 		CPUSysPercent:  metric.NewGaugeFloat64(metaCPUSysPercent),
 		Rss:            metric.NewGauge(metaRSS),
 		Uptime:         metric.NewGauge(metaUptime),
+		BuildTimestamp: buildTimestamp,
 	}
 }
 

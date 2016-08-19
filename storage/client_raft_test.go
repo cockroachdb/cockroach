@@ -693,6 +693,7 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 // will notice corrupted replicas and replace them.
 func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skipf("#8664: flaky")
 
 	const numReplicas = 3
 	const extraStores = 3
@@ -1115,7 +1116,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 
 	key := roachpb.Key("a")
 
-	// Replicate the initial range to three of the four nodes.
+	// Replicate the initial range to all three nodes.
 	rangeID := roachpb.RangeID(1)
 	mtc.replicateRange(rangeID, 1, 2)
 
@@ -1167,6 +1168,18 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 	// impossible after streaming snapshots.
 	mtc.restartStore(1)
 	if removeBeforeTruncateAndReAdd {
+		// Verify old replica is GC'd. Wait out the replica gc queue
+		// inactivity threshold and force a gc scan.
+		mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold + 1))
+		mtc.stores[1].ForceReplicaGCScanAndProcess()
+		util.SucceedsSoon(t, func() error {
+			_, err := mtc.stores[1].GetReplica(rangeID)
+			if _, ok := err.(*roachpb.RangeNotFoundError); !ok {
+				return errors.Errorf("expected replica to be garbage collected")
+			}
+			return nil
+		})
+
 		mtc.replicateRange(rangeID, 1)
 	}
 
@@ -2321,9 +2334,10 @@ func TestFailedPreemptiveSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	const expErr = "aborted due to failed preemptive snapshot: unknown peer 3"
 	if err := rep.ChangeReplicas(context.Background(), roachpb.ADD_REPLICA,
 		roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3},
-		rep.Desc()); !testutils.IsError(err, "aborted due to failed preemptive snapshot: unable to get connection for node 3") {
-		t.Fatalf("got %s instead of expected error", err)
+		rep.Desc()); !testutils.IsError(err, expErr) {
+		t.Fatalf("expected %s; got %s", expErr, err)
 	}
 }
