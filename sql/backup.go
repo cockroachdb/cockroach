@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/pkg/errors"
@@ -178,14 +179,19 @@ func Backup(
 	return desc, nil
 }
 
-// Import loads some data in sstables into the database. Only the keys between
-// startKey and endKey are loaded.
+// Import loads some data in sstables into an empty range. Only the keys between
+// startKey and endKey are loaded. If newTableID is non-zero, every row's key is
+// rewritten to be for that table.
 func Import(
 	ctx context.Context,
 	sst engine.RocksDBSstFileReader,
 	txn *client.Txn,
 	startKey, endKey engine.MVCCKey,
+	newTableID sqlbase.ID,
 ) error {
+	// TODO(dan): Check if the range being imported into is empty. If newTableID
+	// is non-zero, it'll have to be derived from startKey and endKey.
+
 	var v roachpb.Value
 	importFunc := func(kv engine.MVCCKeyValue) (bool, error) {
 		v = roachpb.Value{RawBytes: kv.Value}
@@ -198,92 +204,95 @@ func Import(
 		}
 		return false, nil
 	}
+	if newTableID != 0 {
+		// MakeRekeyMVCCKeyValFunc modifies the keys, but this is safe because
+		// the one we get back from rocksDBIterator.Key is a copy (not a
+		// reference to the mmaped file.)
+		importFunc = MakeRekeyMVCCKeyValFunc(newTableID, importFunc)
+	}
 	return sst.Iterate(startKey, endKey, importFunc)
 }
 
-func restoreDatabase(
-	ctx context.Context,
-	txn *client.Txn,
-	db *sqlbase.DatabaseDescriptor,
-	overwrite bool,
-) error {
-	dbIDKey := databaseKey{db.Name}.Key()
-	dbDescKey := sqlbase.MakeDescMetadataKey(db.GetID())
-
-	existingID, err := txn.Get(dbIDKey)
-	if err != nil {
-		return err
-	}
-	if existingID.Value != nil && !overwrite {
-		return errors.Errorf("database %q already exists", db.Name)
-	}
-
-	existingDesc, err := txn.Get(dbDescKey)
-	if err != nil {
-		return err
-	}
-	if existingDesc.Value != nil && !overwrite {
-		return errors.Errorf("database %q already exists", db.Name)
-	}
-
-	b := &client.Batch{}
-	b.Put(dbIDKey, db.ID)
-	b.Put(dbDescKey, sqlbase.WrapDescriptor(db))
-	return txn.Run(b)
-}
-
+// restoreTable inserts the given DatabaseDescriptor. If the name conflicts with
+// an existing table, the one being restored is rekeyed with a new ID and the
+// old data is deleted.
 func restoreTable(
 	ctx context.Context,
 	sst engine.RocksDBSstFileReader,
 	txn *client.Txn,
+	database *sqlbase.DatabaseDescriptor,
 	table *sqlbase.TableDescriptor,
-	overwrite bool,
 ) error {
 	log.Infof(ctx, "Restoring Table %q", table.Name)
 
+	// Make sure there's a database with a name that matches the original.
+	existingDatabaseID, err := txn.Get(tableKey{name: database.Name}.Key())
+	if err != nil {
+		return err
+	}
+	if existingDatabaseID.Value == nil {
+		// TODO(dan): Add the ability to restore the database from backups.
+		return errors.Errorf("a database named %q needs to exist to restore table %q",
+			database.Name, table.Name)
+	}
+	newParentID, err := existingDatabaseID.Value.GetInt()
+	if err != nil {
+		return err
+	}
+	table.ParentID = sqlbase.ID(newParentID)
+
+	// Create the iteration keys before we give the table its new ID.
+	tableStartKeyOld := engine.MVCCKey{
+		Key: roachpb.Key(sqlbase.MakeIndexKeyPrefix(table, table.PrimaryIndex.ID)),
+	}
+	tableEndKeyOld := engine.MVCCKey{Key: tableStartKeyOld.Key.PrefixEnd()}
+
+	// Assign a new ID for the table.
+	table.ID, err = generateUniqueDescID(txn)
+	if err != nil {
+		return err
+	}
 	tableIDKey := tableKey{parentID: table.ParentID, name: table.Name}.Key()
-	tableDescKey := sqlbase.MakeDescMetadataKey(table.GetID())
+	tableDescKey := sqlbase.MakeDescMetadataKey(table.ID)
 
-	tableStartKey := roachpb.Key(sqlbase.MakeIndexKeyPrefix(table, table.PrimaryIndex.ID))
-	tableEndKey := tableStartKey.PrefixEnd()
-
-	b := &client.Batch{}
-
-	existingID, err := txn.Get(tableIDKey)
+	// Check for an existing table.
+	var existingDesc sqlbase.Descriptor
+	existingIDKV, err := txn.Get(tableIDKey)
 	if err != nil {
 		return err
 	}
-	if existingID.Value != nil && !overwrite {
-		return errors.Errorf("table %q already exists", table.Name)
-	}
-	b.Put(tableIDKey, table.ID)
-
-	existingDesc, err := txn.Get(tableDescKey)
-	if err != nil {
-		return err
-	}
-	if existingDesc.Value != nil && !overwrite {
-		return errors.Errorf("table %q already exists", table.Name)
-	}
-	b.Put(tableDescKey, sqlbase.WrapDescriptor(table))
-
-	existingData, err := txn.Scan(tableStartKey, tableEndKey, 1)
-	if err != nil {
-		return err
-	}
-	if len(existingData) > 0 {
-		if overwrite {
-			b.DelRange(tableStartKey, tableEndKey, false)
-		} else {
-			return errors.Errorf("table %q already exists", table.Name)
+	if existingIDKV.Value != nil {
+		existingID, err := existingIDKV.Value.GetInt()
+		if err != nil {
+			return err
+		}
+		existingDescKV, err := txn.Get(sqlbase.MakeDescMetadataKey(sqlbase.ID(existingID)))
+		if err != nil {
+			return err
+		}
+		if err := existingDescKV.Value.GetProto(&existingDesc); err != nil {
+			return err
 		}
 	}
 
-	if err := txn.Run(b); err != nil {
+	if err := Import(ctx, sst, txn, tableStartKeyOld, tableEndKeyOld, table.ID); err != nil {
 		return err
 	}
 
-	return Import(ctx, sst, txn, engine.MVCCKey{Key: tableStartKey}, engine.MVCCKey{Key: tableEndKey})
+	b := &client.Batch{}
+	b.CPut(tableDescKey, sqlbase.WrapDescriptor(table), nil)
+	if existingTable := existingDesc.GetTable(); existingTable == nil {
+		b.CPut(tableIDKey, table.ID, nil)
+	} else {
+		existingIDKV.Value.ClearChecksum()
+		b.CPut(tableIDKey, table.ID, existingIDKV.Value)
+		// TODO(dan): This doesn't work for interleaved tables. Fix it when we
+		// fix the empty range interleaved table TODO below.
+		existingDataPrefix := roachpb.Key(keys.MakeTablePrefix(uint32(existingTable.ID)))
+		b.DelRange(existingDataPrefix, existingDataPrefix.PrefixEnd(), false)
+		b.Del(sqlbase.MakeDescMetadataKey(existingTable.ID))
+	}
+	return txn.Run(b)
 }
 
 func userTablesAndDBsMatchingName(
@@ -326,8 +335,10 @@ func Restore(
 	db client.DB,
 	base string,
 	table parser.TableName,
-	overwrite bool,
-) ([]sqlbase.Descriptor, error) {
+) ([]*sqlbase.TableDescriptor, error) {
+	// TODO(dan): It's currently impossible to restore two interleaved tables
+	// because one of them won't be to an empty range.
+
 	sst, err := engine.MakeRocksDBSstFileReader()
 	if err != nil {
 		return nil, err
@@ -358,22 +369,53 @@ func Restore(
 	if len(matches) == 0 {
 		return nil, errors.Errorf("no tables found: %q", table)
 	}
+	databasesByID := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
+	for _, desc := range matches {
+		if db := desc.GetDatabase(); db != nil {
+			databasesByID[db.ID] = db
+		}
+	}
 
 	// TODO(dan): This uses one giant transaction for the entire restore, which
 	// works for small datasets, but not for big ones.
-	return matches, db.Txn(ctx, func(txn *client.Txn) error {
+	var restored []*sqlbase.TableDescriptor
+	return restored, db.Txn(ctx, func(txn *client.Txn) error {
 		for _, desc := range matches {
-			if db := desc.GetDatabase(); db != nil {
-				if err := restoreDatabase(ctx, txn, db, overwrite); err != nil {
-					return err
+			if table := desc.GetTable(); table != nil {
+				database, ok := databasesByID[table.ParentID]
+				if !ok {
+					return errors.Wrapf(err, "no database with ID %d", table.ParentID)
 				}
-				continue
-			}
-			table := desc.GetTable()
-			if err := restoreTable(ctx, sst, txn, table, overwrite); err != nil {
-				return err
+				if err := restoreTable(ctx, sst, txn, database, table); err != nil {
+					return errors.Wrapf(err, "restoring table %q", table.Name)
+				}
+				restored = append(restored, table)
 			}
 		}
 		return nil
 	})
+}
+
+// MakeRekeyMVCCKeyValFunc takes an iterator function for MVCCKeyValues and
+// returns a new iterator function where the keys are rewritten inline to the
+// have the given table ID.
+func MakeRekeyMVCCKeyValFunc(
+	newTableID sqlbase.ID, f func(kv engine.MVCCKeyValue) (bool, error),
+) func(engine.MVCCKeyValue) (bool, error) {
+	encodedNewTableID := encoding.EncodeUvarintAscending(nil, uint64(newTableID))
+	return func(kv engine.MVCCKeyValue) (bool, error) {
+		if encoding.PeekType(kv.Key.Key) != encoding.Int {
+			return false, errors.Errorf("unable to decode table key: %s", kv.Key.Key)
+		}
+		existingTableIDLen, err := encoding.PeekLength(kv.Key.Key)
+		if err != nil {
+			return false, err
+		}
+		if existingTableIDLen == len(encodedNewTableID) {
+			copy(kv.Key.Key, encodedNewTableID)
+		} else {
+			kv.Key.Key = append(encodedNewTableID, kv.Key.Key[existingTableIDLen:]...)
+		}
+		return f(kv)
+	}
 }
