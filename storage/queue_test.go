@@ -237,8 +237,12 @@ func TestBaseQueueAdd(t *testing.T) {
 	if bq.Length() != 0 {
 		t.Fatalf("expected length 0; got %d", bq.Length())
 	}
-	if err := bq.Add(r, 1.0); err != nil {
-		t.Fatalf("expected Add to succeed: %s", err)
+	if added, err := bq.Add(r, 1.0); err != nil || !added {
+		t.Fatalf("expected Add to succeed: %t, %s", added, err)
+	}
+	// Add again and verify it's not actually added (it's already there).
+	if added, err := bq.Add(r, 1.0); err != nil || added {
+		t.Fatalf("expected Add to succeed: %t, %s", added, err)
 	}
 	if bq.Length() != 1 {
 		t.Fatalf("expected length 1; got %d", bq.Length())

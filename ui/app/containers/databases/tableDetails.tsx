@@ -3,6 +3,7 @@ import * as d3 from "d3";
 import { IInjectedProps } from "react-router";
 import { connect } from "react-redux";
 
+import * as protos from "../../js/protos";
 import { databaseNameAttr, tableNameAttr } from "../../util/constants";
 import { Bytes } from "../../util/format";
 import { AdminUIState } from "../../redux/state";
@@ -51,8 +52,8 @@ class TableMain extends React.Component<TableMainProps, {}> {
 
   componentWillMount() {
     // Refresh databases when mounting.
-    this.props.refreshTableDetails({ database: this.props.params[databaseNameAttr], table: this.props.params[tableNameAttr] });
-    this.props.refreshTableStats({ database: this.props.params[databaseNameAttr], table: this.props.params[tableNameAttr] });
+    this.props.refreshTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({ database: this.props.params[databaseNameAttr], table: this.props.params[tableNameAttr] }));
+    this.props.refreshTableStats(new protos.cockroach.server.serverpb.TableStatsRequest({ database: this.props.params[databaseNameAttr], table: this.props.params[tableNameAttr] }));
 
   }
 

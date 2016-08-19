@@ -19,6 +19,7 @@ package build
 import (
 	"fmt"
 	"runtime"
+	"time"
 )
 
 // const char* compilerVersion() {
@@ -32,11 +33,15 @@ import (
 // }
 import "C"
 
+// TimeFormat is the reference format for build.Time.
+// Make sure it stays in sync with the string passed by the linker in ldflags.sh.
+const TimeFormat = "2006/01/02 15:04:05"
+
 var (
 	// These variables are initialized via the linker -X flag in the
 	// top-level Makefile when compiling release binaries.
 	tag         = "unknown" // Tag of this build (git describe)
-	time        string      // Build time in UTC (year/month/day hour:min:sec)
+	utcTime     string      // Build time in UTC (year/month/day hour:min:sec)
 	deps        string      // Git SHAs of dependencies
 	cgoCompiler = C.GoString(C.compilerVersion())
 	platform    = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
@@ -47,12 +52,21 @@ func (b Info) Short() string {
 	return fmt.Sprintf("CockroachDB %s (%s, built %s, %s)", b.Tag, b.Platform, b.Time, b.GoVersion)
 }
 
+// Timestamp parses the utcTime string and returns the number of seconds since epoch.
+func (b Info) Timestamp() (int64, error) {
+	val, err := time.Parse(TimeFormat, b.Time)
+	if err != nil {
+		return 0, err
+	}
+	return val.Unix(), nil
+}
+
 // GetInfo returns an Info struct populated with the build information.
 func GetInfo() Info {
 	return Info{
 		GoVersion:    runtime.Version(),
 		Tag:          tag,
-		Time:         time,
+		Time:         utcTime,
 		Dependencies: deps,
 		CgoCompiler:  cgoCompiler,
 		Platform:     platform,
