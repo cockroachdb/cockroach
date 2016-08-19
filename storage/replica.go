@@ -2154,7 +2154,7 @@ func (r *Replica) applyRaftCommand(
 	}
 
 	// TODO(tschottdorf): remove when #7224 is cleared.
-	if ba.Txn != nil && ba.Txn.Name == replicaChangeTxnName {
+	if ba.Txn != nil && ba.Txn.Name == replicaChangeTxnName && log.V(1) {
 		log.Infof(ctx, "%s: applied part of replica change txn: %s, pErr=%v",
 			r, ba, rErr)
 	}
