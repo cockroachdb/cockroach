@@ -199,7 +199,7 @@ func TestScannerAddToQueues(t *testing.T) {
 	clock := hlc.NewClock(mc.UnixNano)
 	stopper := stop.NewStopper()
 
-	// Start queue and verify that all ranges are added to both queues.
+	// Start scanner and verify that all ranges are added to both queues.
 	s.Start(clock, stopper)
 	util.SucceedsSoon(t, func() error {
 		if q1.count() != count || q2.count() != count {
@@ -298,6 +298,70 @@ func TestScannerPaceInterval(t *testing.T) {
 		// Move the present to duration time into the future
 		interval = s.paceInterval(startTime, startTime.Add(duration))
 		logErrorWhenNotCloseTo(0, interval)
+	}
+}
+
+// TestScannerDisabled verifies that disabling a scanner prevents
+// replicas from being added to queues.
+func TestScannerDisabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const count = 3
+	ranges := newTestRangeSet(count, t)
+	q := &testQueue{}
+	s := newReplicaScanner(1*time.Millisecond, 0, ranges)
+	s.AddQueues(q)
+	mc := hlc.NewManualClock(0)
+	clock := hlc.NewClock(mc.UnixNano)
+	stopper := stop.NewStopper()
+	s.Start(clock, stopper)
+	defer stopper.Stop()
+
+	// Verify queue gets all ranges.
+	util.SucceedsSoon(t, func() error {
+		if q.count() != count {
+			return errors.Errorf("expected %d replicas; have %d", count, q.count())
+		}
+		if s.Count() == 0 {
+			return errors.Errorf("expected scanner count to increment")
+		}
+		return nil
+	})
+
+	// Now, disable the scanner.
+	s.SetDisabled(true)
+	lastScannerCount := s.Count()
+	util.SucceedsSoon(t, func() error {
+		time.Sleep(2 * time.Millisecond)
+		if sc := s.Count(); sc != lastScannerCount {
+			lastScannerCount = sc
+			return errors.Errorf("expected scanner to stop when disabled")
+		}
+		return nil
+	})
+
+	// Remove the replicas and verify the scanner still removes them while disabled.
+	ranges.Visit(func(repl *Replica) bool {
+		s.RemoveReplica(repl)
+		return true
+	})
+
+	util.SucceedsSoon(t, func() error {
+		if qc := q.count(); qc != 0 {
+			return errors.Errorf("expected queue to be empty after replicas removed from scanner; got %d", qc)
+		}
+		return nil
+	})
+	if sc := s.Count(); sc != lastScannerCount {
+		t.Errorf("expected scanner count to not increment: %d != %d", sc, lastScannerCount)
+	}
+}
+
+func TestScannerDisabledWithZeroInterval(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ranges := newTestRangeSet(1, t)
+	s := newReplicaScanner(0*time.Millisecond, 0, ranges)
+	if !s.GetDisabled() {
+		t.Errorf("expected scanner to be disabled")
 	}
 }
 
