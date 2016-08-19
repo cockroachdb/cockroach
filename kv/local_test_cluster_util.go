@@ -19,6 +19,8 @@ package kv
 import (
 	"time"
 
+	"golang.org/x/net/context"
+
 	opentracing "github.com/opentracing/opentracing-go"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -28,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 // localTestClusterTransport augments senderTransport with an optional
@@ -81,6 +84,7 @@ func InitSenderForLocalTestCluster(
 		RangeDescriptorDB: stores.(RangeDescriptorDB), // for descriptor lookup
 	}, gossip)
 
-	return NewTxnCoordSender(distSender, clock, false /* !linearizable */, tracer,
+	ctx := tracing.WithTracer(context.Background(), tracer)
+	return NewTxnCoordSender(ctx, distSender, clock, false, /* !linearizable */
 		stopper, MakeTxnMetrics())
 }

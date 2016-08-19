@@ -111,13 +111,11 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	if srvCtx.Ctx.Done() != nil {
 		panic("context with cancel or deadline")
 	}
-	tracer := tracing.TracerFromCtx(srvCtx.Ctx)
-	if tracer == nil {
-		tracer = tracing.NewTracer()
+	if tracing.TracerFromCtx(srvCtx.Ctx) == nil {
 		// TODO(radu): instead of modifying srvCtx.Ctx, we should have a separate
 		// context.Context inside Server. We will need to rename server.Context
 		// though.
-		srvCtx.Ctx = tracing.WithTracer(srvCtx.Ctx, tracer)
+		srvCtx.Ctx = tracing.WithTracer(srvCtx.Ctx, tracing.NewTracer())
 	}
 
 	if srvCtx.Insecure {
@@ -171,14 +169,17 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	// DistSender needs to know that it should not retry in this situation.
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = s.stopper.ShouldQuiesce()
-	s.distSender = kv.NewDistSender(&kv.DistSenderConfig{
+	distSenderCfg := kv.DistSenderConfig{
+		Ctx:             s.Ctx(),
 		Clock:           s.clock,
 		RPCContext:      s.rpcContext,
 		RPCRetryOptions: &retryOpts,
-	}, s.gossip)
+	}
+	s.distSender = kv.NewDistSender(&distSenderCfg, s.gossip)
+
 	txnMetrics := kv.MakeTxnMetrics()
 	s.registry.AddMetricStruct(txnMetrics)
-	sender := kv.NewTxnCoordSender(s.distSender, s.clock, srvCtx.Linearizable, tracer,
+	sender := kv.NewTxnCoordSender(s.Ctx(), s.distSender, s.clock, srvCtx.Linearizable,
 		s.stopper, txnMetrics)
 	s.db = client.NewDB(sender)
 
@@ -227,6 +228,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
+		Ctx:                            s.Ctx(),
 		Clock:                          s.clock,
 		DB:                             s.db,
 		Gossip:                         s.gossip,
@@ -236,8 +238,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		ScanMaxIdleTime:                s.ctx.ScanMaxIdleTime,
 		ConsistencyCheckInterval:       s.ctx.ConsistencyCheckInterval,
 		ConsistencyCheckPanicOnFailure: s.ctx.ConsistencyCheckPanicOnFailure,
-		Tracer:    tracer,
-		StorePool: s.storePool,
+		StorePool:                      s.storePool,
 		SQLExecutor: sql.InternalExecutor{
 			LeaseManager: s.leaseMgr,
 		},
