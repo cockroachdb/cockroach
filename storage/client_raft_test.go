@@ -693,6 +693,7 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 // will notice corrupted replicas and replace them.
 func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skipf("#8664: flaky")
 
 	const numReplicas = 3
 	const extraStores = 3
