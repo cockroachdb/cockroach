@@ -19,6 +19,7 @@ package log
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 
 	"golang.org/x/net/context"
 
@@ -59,6 +60,6 @@ func addStructured(ctx context.Context, s Severity, depth int, format string, ar
 	}
 	file, line, _ := caller.Lookup(depth + 1)
 	msg := makeMessage(ctx, format, args)
-	Trace(ctx, msg)
+	Trace(ctx, file+":"+strconv.Itoa(line)+" "+msg)
 	logging.outputLogEntry(s, file, line, msg)
 }
