@@ -46,6 +46,12 @@ type Iterable interface {
 // PrometheusExportable is the standard interface for an individual metric
 // that can be exported to prometheus.
 type PrometheusExportable interface {
+	// GetName is a method on Metadata
+	GetName() string
+	// GetHelp is a method on Metadata
+	GetHelp() string
+	// GetLabels is a method on Metadata
+	GetLabels() []*prometheusgo.LabelPair
 	// FillPrometheusMetric takes an initialized prometheus metric object and
 	// fills the appropriate fields for the metric type.
 	FillPrometheusMetric(promMetric *prometheusgo.MetricFamily)
@@ -55,6 +61,7 @@ type PrometheusExportable interface {
 // each metric object.
 type Metadata struct {
 	Name, Help string
+	labels     []*prometheusgo.LabelPair
 }
 
 // GetName returns the metric's name.
@@ -65,6 +72,20 @@ func (m *Metadata) GetName() string {
 // GetHelp returns the metric's help string.
 func (m *Metadata) GetHelp() string {
 	return m.Help
+}
+
+// GetLabels returns the metric's labels.
+func (m *Metadata) GetLabels() []*prometheusgo.LabelPair {
+	return m.labels
+}
+
+// AddLabel adds a label/value pair for this metric.
+func (m *Metadata) AddLabel(name, value string) {
+	m.labels = append(m.labels,
+		&prometheusgo.LabelPair{
+			Name:  proto.String(exportedLabel(name)),
+			Value: proto.String(value),
+		})
 }
 
 var _ Iterable = &Gauge{}

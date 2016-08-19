@@ -68,6 +68,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	circuit "github.com/rubyist/circuitbreaker"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
@@ -159,6 +160,8 @@ type Gossip struct {
 	clientsMu struct {
 		syncutil.Mutex
 		clients []*client
+		// One breaker per client for the life of the process.
+		breakers map[string]*circuit.Breaker
 	}
 
 	disconnected chan *client  // Channel of disconnected clients
@@ -209,6 +212,7 @@ func New(rpcContext *rpc.Context, grpcServer *grpc.Server, resolvers []resolver.
 		bootstrapAddrs:    map[util.UnresolvedAddr]struct{}{},
 	}
 	registry.AddMetric(g.outgoing.gauge)
+	g.clientsMu.breakers = map[string]*circuit.Breaker{}
 	g.SetResolvers(resolvers)
 
 	g.mu.Lock()
@@ -1058,11 +1062,16 @@ func (g *Gossip) checkHasConnectedLocked() {
 // The client is added to the outgoing address set and launched in
 // a goroutine.
 func (g *Gossip) startClient(addr net.Addr, nodeID roachpb.NodeID) {
-	c := newClient(addr, g.serverMetrics)
 	g.clientsMu.Lock()
+	defer g.clientsMu.Unlock()
+	breaker, ok := g.clientsMu.breakers[addr.String()]
+	if !ok {
+		breaker = g.rpcContext.NewBreaker()
+		g.clientsMu.breakers[addr.String()] = breaker
+	}
+	c := newClient(addr, g.serverMetrics)
 	g.clientsMu.clients = append(g.clientsMu.clients, c)
-	c.start(g, g.disconnected, g.rpcContext, g.server.stopper, nodeID)
-	g.clientsMu.Unlock()
+	c.start(g, g.disconnected, g.rpcContext, g.server.stopper, nodeID, breaker)
 }
 
 // removeClient removes the specified client. Called when a client

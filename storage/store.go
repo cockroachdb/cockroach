@@ -557,8 +557,8 @@ func (*StoreTestingKnobs) ModuleTestingKnobs() {}
 func (sc *StoreContext) Valid() bool {
 	return sc.Clock != nil && sc.Transport != nil &&
 		sc.RaftTickInterval != 0 && sc.RaftHeartbeatIntervalTicks > 0 &&
-		sc.RaftElectionTimeoutTicks > 0 && sc.ScanInterval > 0 &&
-		sc.ConsistencyCheckInterval > 0 &&
+		sc.RaftElectionTimeoutTicks > 0 && sc.ScanInterval >= 0 &&
+		sc.ConsistencyCheckInterval >= 0 &&
 		sc.Ctx != nil && sc.Ctx.Done() == nil && tracing.TracerFromCtx(sc.Ctx) != nil
 }
 
@@ -690,15 +690,6 @@ func (s *Store) DrainLeases(drain bool) error {
 	})
 }
 
-// context returns a base context to pass along with commands being executed,
-// derived from the supplied context (which is not allowed to be nil).
-func (s *Store) context(ctx context.Context) context.Context {
-	if ctx == nil {
-		panic("ctx cannot be nil")
-	}
-	return ctx // TODO(tschottdorf): see #1779
-}
-
 // IsStarted returns true if the Store has been started.
 func (s *Store) IsStarted() bool {
 	return atomic.LoadInt32(&s.started) == 1
@@ -748,7 +739,7 @@ func (s *Store) migrate(ctx context.Context, desc roachpb.RangeDescriptor) {
 // Start the engine, set the GC and read the StoreIdent.
 func (s *Store) Start(stopper *stop.Stopper) error {
 	s.stopper = stopper
-	ctx := s.context(context.TODO())
+	ctx := s.Ctx()
 
 	// Add a closer for the various scanner queues, needed to properly clean up
 	// the event logs.
@@ -894,7 +885,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 				}
 				ba.Add(&fReq)
 				if _, pErr := r.Send(ctx, ba); pErr != nil {
-					log.Errorf(ctx, "could not unfreeze Range %s on startup: %s", r, pErr)
+					log.Errorf(ctx, "%s: could not unfreeze Range %s on startup: %s", s, r, pErr)
 				} else {
 					// We don't use the returned RangesAffected (0 or 1) for
 					// counting. One of the other Replicas may have beaten us
@@ -910,7 +901,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		})
 		wg.Wait()
 		if unfrozen > 0 {
-			log.Infof(s.Ctx(), "reactivated %d frozen Ranges", unfrozen)
+			log.Infof(ctx, "%s: reactivated %d frozen Ranges", s, unfrozen)
 		}
 	}) != nil {
 		close(doneUnfreezing)
@@ -972,8 +963,8 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		})
 
 		// Run metrics computation up front to populate initial statistics.
-		if err := s.ComputeMetrics(); err != nil {
-			return err
+		if err = s.ComputeMetrics(-1); err != nil {
+			log.Infof(ctx, "%s: failed initial metrics computation: %s", s, err)
 		}
 	}
 
@@ -1075,7 +1066,7 @@ func (s *Store) maybeGossipSystemConfig() error {
 	// gossip. If an unexpected error occurs (i.e. nobody else seems to
 	// have an active lease but we still failed to obtain it), return
 	// that error.
-	_, pErr := rng.getLeaseForGossip(s.context(context.TODO()))
+	_, pErr := rng.getLeaseForGossip(s.Ctx())
 	return pErr.GoError()
 }
 
@@ -1899,8 +1890,6 @@ func (s *Store) ReplicaCount() int {
 // of one of its writes), the response will have a transaction set which should
 // be used to update the client transaction.
 func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	ctx = s.context(ctx)
-
 	for _, union := range ba.Requests {
 		arg := union.GetInner()
 		header := arg.Header()
@@ -2170,8 +2159,6 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 	s.processRaftMu.Lock()
 	defer s.processRaftMu.Unlock()
 
-	ctx = s.context(ctx)
-
 	// Drop messages that come from a node that we believe was once
 	// a member of the group but has been removed.
 	s.mu.Lock()
@@ -2226,8 +2213,7 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 
 	s.mu.Lock()
 	// Lazily create the replica.
-	r, err := s.getOrCreateReplicaLocked(req.RangeID, req.ToReplica.ReplicaID,
-		req.FromReplica)
+	r, err := s.getOrCreateReplicaLocked(req.RangeID, req.ToReplica.ReplicaID, req.FromReplica)
 	// TODO(bdarnell): is it safe to release the store lock here?
 	// It deadlocks to hold s.Mutex while calling raftGroup.Step.
 	s.mu.Unlock()
@@ -2359,7 +2345,7 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 		// getOrCreateReplicaLocked disallows moving the replica ID backward, so
 		// the only way we can get here is if the replica did not previously exist.
 		if log.V(1) {
-			log.Infof(s.Ctx(), "refusing incoming Raft message %s for range %d from %+v to %+v",
+			log.Infof(ctx, "refusing incoming Raft message %s for range %d from %+v to %+v",
 				req.Message.Type, req.RangeID, req.FromReplica, req.ToReplica)
 		}
 		return roachpb.NewErrorf("cannot recreate replica that is not a member of its range (StoreID %s not found in range %d)",
@@ -2393,10 +2379,10 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 				rep, ok := s.mu.replicas[resp.RangeID]
 				s.mu.Unlock()
 				if ok {
-					log.Infof(ctx, "%s: replica %s too old, adding to replica GC queue", rep, resp.ToReplica)
-
-					if err := s.replicaGCQueue.Add(rep, 1.0); err != nil {
+					if added, err := s.replicaGCQueue.Add(rep, 1.0); err != nil {
 						log.Errorf(ctx, "%s: unable to add replica %d to GC queue: %s", rep, resp.ToReplica, err)
+					} else if added {
+						log.Infof(ctx, "%s: replica %s too old, added to replica GC queue", rep, resp.ToReplica)
 					}
 				}
 			}); err != nil {
@@ -2404,11 +2390,11 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 			}
 
 		default:
-			log.Warningf(ctx, "%s: got unknown raft error: %s", s, val)
+			log.Warningf(ctx, "%s: got error from replica %s: %s", s, resp.FromReplica, val)
 		}
 
 	default:
-		log.Infof(ctx, "%s: got unknown raft response type %T: %s", s, val, val)
+		log.Infof(ctx, "%s: got unknown raft response type %T from replica %s: %s", s, val, resp.FromReplica, val)
 	}
 }
 
@@ -2684,11 +2670,11 @@ func (s *Store) canApplySnapshotLocked(rangeID roachpb.RangeID, snap raftpb.Snap
 // scanning ranges. An ideal solution would be to create incremental events
 // whenever availability changes.
 func (s *Store) computeReplicationStatus(now int64) (
-	leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount int64) {
+	leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount int64, err error) {
 	// Load the system config.
 	cfg, ok := s.Gossip().GetSystemConfig()
 	if !ok {
-		log.Infof(s.Ctx(), "%s: system config not yet available", s)
+		err = errors.Errorf("%s: system config not yet available", s)
 		return
 	}
 
@@ -2743,18 +2729,21 @@ func (s *Store) computeReplicationStatus(now int64) (
 // ComputeMetrics immediately computes the current value of store metrics which
 // cannot be computed incrementally. This method should be invoked periodically
 // by a higher-level system which records store metrics.
-func (s *Store) ComputeMetrics() error {
-	// broadcast store descriptor.
+func (s *Store) ComputeMetrics(tick int) error {
+	// Broadcast store descriptor.
 	desc, err := s.Descriptor()
 	if err != nil {
 		return err
 	}
 	s.metrics.updateCapacityGauges(desc.Capacity)
 
-	// broadcast replication status.
+	// Broadcast replication status.
 	now := s.ctx.Clock.Now().WallTime
-	leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount :=
+	leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount, err :=
 		s.computeReplicationStatus(now)
+	if err != nil {
+		return err
+	}
 	s.metrics.updateReplicationGauges(
 		leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount)
 
@@ -2769,8 +2758,11 @@ func (s *Store) ComputeMetrics() error {
 	if rocksdb, ok := s.engine.(*engine.RocksDB); ok {
 		sstables := rocksdb.GetSSTables()
 		readAmp := sstables.ReadAmplification()
-		log.Infof(s.Ctx(), "store %d sstables (read amplification = %d):\n%s", s.StoreID(), readAmp, sstables)
 		s.metrics.RdbReadAmplification.Update(int64(readAmp))
+		// Log this metric infrequently.
+		if tick%100 == 0 {
+			log.Infof(s.Ctx(), "store %d sstables (read amplification = %d):\n%s", s.StoreID(), readAmp, sstables)
+		}
 	}
 	return nil
 }
