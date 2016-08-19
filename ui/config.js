@@ -93,10 +93,16 @@ System.config({
     "redux-thunk": "npm:redux-thunk@2.1.0",
     "reselect": "npm:reselect@2.5.3",
     "sinon": "npm:sinon@1.17.5",
+    "systemjs-hot-reloader": "github:capaj/systemjs-hot-reloader@0.6.0",
     "ts": "github:frankwallis/plugin-typescript@5.0.9",
     "ts-runtime": "npm:babel-runtime@6.11.6",
     "typescript": "npm:typescript@1.8.10",
     "whatwg-fetch": "github:tamird/fetch@support-arraybuffer",
+    "github:capaj/systemjs-hot-reloader@0.6.0": {
+      "debug": "npm:debug@2.2.0",
+      "socket.io-client": "github:socketio/socket.io-client@1.4.8",
+      "weakee": "npm:weakee@1.0.0"
+    },
     "github:dcodeIO/bytebuffer.js@5.0.1": {
       "long": "github:dcodeIO/long.js@3.2.0"
     },
@@ -348,6 +354,9 @@ System.config({
       "process": "github:jspm/nodelibs-process@0.1.2",
       "systemjs-json": "github:systemjs/plugin-json@0.1.2"
     },
+    "npm:caseless@0.11.0": {
+      "systemjs-json": "github:systemjs/plugin-json@0.1.2"
+    },
     "npm:chai@3.5.0": {
       "assertion-error": "npm:assertion-error@1.0.2",
       "buffer": "github:jspm/nodelibs-buffer@0.1.0",
@@ -479,6 +488,9 @@ System.config({
       "path": "github:jspm/nodelibs-path@0.1.0",
       "process": "github:jspm/nodelibs-process@0.1.2",
       "util": "github:jspm/nodelibs-util@0.1.0"
+    },
+    "npm:debug@2.2.0": {
+      "ms": "npm:ms@0.7.1"
     },
     "npm:deep-eql@0.1.3": {
       "buffer": "github:jspm/nodelibs-buffer@0.1.0",
@@ -722,6 +734,9 @@ System.config({
       "string_decoder": "github:jspm/nodelibs-string_decoder@0.1.0",
       "systemjs-json": "github:systemjs/plugin-json@0.1.2"
     },
+    "npm:immutable@3.8.1": {
+      "systemjs-json": "github:systemjs/plugin-json@0.1.2"
+    },
     "npm:inflight@1.0.5": {
       "once": "npm:once@1.3.3",
       "process": "github:jspm/nodelibs-process@0.1.2",
@@ -734,6 +749,12 @@ System.config({
       "loose-envify": "npm:loose-envify@1.2.0",
       "process": "github:jspm/nodelibs-process@0.1.2"
     },
+    "npm:is-callable@1.1.3": {
+      "systemjs-json": "github:systemjs/plugin-json@0.1.2"
+    },
+    "npm:is-date-object@1.0.1": {
+      "systemjs-json": "github:systemjs/plugin-json@0.1.2"
+    },
     "npm:is-fullwidth-code-point@1.0.0": {
       "number-is-nan": "npm:number-is-nan@1.0.0"
     },
@@ -744,6 +765,15 @@ System.config({
       "jsonpointer": "npm:jsonpointer@2.0.0",
       "path": "github:jspm/nodelibs-path@0.1.0",
       "xtend": "npm:xtend@4.0.1"
+    },
+    "npm:is-regex@1.0.3": {
+      "systemjs-json": "github:systemjs/plugin-json@0.1.2"
+    },
+    "npm:is-typedarray@1.0.0": {
+      "systemjs-json": "github:systemjs/plugin-json@0.1.2"
+    },
+    "npm:isarray@1.0.0": {
+      "systemjs-json": "github:systemjs/plugin-json@0.1.2"
     },
     "npm:isomorphic-fetch@2.2.1": {
       "node-fetch": "npm:node-fetch@1.6.0",
@@ -758,6 +788,9 @@ System.config({
       "buffer": "github:jspm/nodelibs-buffer@0.1.0",
       "crypto": "github:jspm/nodelibs-crypto@0.1.0",
       "jsbn": "npm:jsbn@0.1.0"
+    },
+    "npm:jsbn@0.1.0": {
+      "systemjs-json": "github:systemjs/plugin-json@0.1.2"
     },
     "npm:jsdom@7.2.2": {
       "abab": "npm:abab@1.0.3",
@@ -862,6 +895,9 @@ System.config({
     "npm:oauth-sign@0.8.2": {
       "crypto": "github:jspm/nodelibs-crypto@0.1.0",
       "querystring": "github:jspm/nodelibs-querystring@0.1.0"
+    },
+    "npm:object-is@1.0.1": {
+      "systemjs-json": "github:systemjs/plugin-json@0.1.2"
     },
     "npm:object.assign@4.0.4": {
       "define-properties": "npm:define-properties@1.1.2",
@@ -1240,6 +1276,9 @@ System.config({
     },
     "npm:wrap-ansi@2.0.0": {
       "string-width": "npm:string-width@1.0.1"
+    },
+    "npm:xtend@4.0.1": {
+      "systemjs-json": "github:systemjs/plugin-json@0.1.2"
     },
     "npm:y18n@3.2.1": {
       "fs": "github:jspm/nodelibs-fs@0.1.2",

@@ -32,6 +32,10 @@ Author: Matt Tracy (matt@cockroachlabs.com)
   <script src="jspm_packages/system.js"></script>
   <script src="config.js"></script>
   <script>
+    // livereload support. See https://github.com/capaj/systemjs-hot-reloader.
+    System.trace = true;
+    System.import("systemjs-hot-reloader/default-listener.js");
+
     System.import("app");
   </script>
 </html>

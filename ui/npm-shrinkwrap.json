@@ -253,6 +253,37 @@
     "chokidar": {
       "version": "1.6.0"
     },
+    "chokidar-socket-emitter": {
+      "version": "0.5.4",
+      "dependencies": {
+        "component-emitter": {
+          "version": "1.2.0"
+        },
+        "engine.io": {
+          "version": "1.6.11"
+        },
+        "engine.io-client": {
+          "version": "1.6.11",
+          "dependencies": {
+            "component-emitter": {
+              "version": "1.1.2"
+            },
+            "ws": {
+              "version": "1.0.1"
+            }
+          }
+        },
+        "socket.io": {
+          "version": "1.4.8"
+        },
+        "socket.io-client": {
+          "version": "1.4.8"
+        },
+        "ws": {
+          "version": "1.1.0"
+        }
+      }
+    },
     "circular-json": {
       "version": "0.3.1"
     },
