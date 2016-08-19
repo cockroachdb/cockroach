@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -37,17 +38,15 @@ import (
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
-type binaryDecimalTest struct {
+type binaryTest struct {
 	In     string
 	Expect []byte
 }
 
-func TestBinaryDecimal(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+func testBinaryDatumType(t *testing.T, typ string, datumConstructor func(val string) parser.Datum) {
+	var tests []binaryTest
 
-	var tests []binaryDecimalTest
-
-	f, err := os.Open(filepath.Join("testdata", "decimal_test.json"))
+	f, err := os.Open(filepath.Join("testdata", fmt.Sprintf("%s_test.json", typ)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,13 +56,11 @@ func TestBinaryDecimal(t *testing.T) {
 	f.Close()
 
 	buf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{})}
-	dec := new(parser.DDecimal)
 	for _, test := range tests {
 		buf.wrapped.Reset()
 
-		if _, ok := dec.SetString(test.In); !ok {
-			t.Fatalf("could not set %q on decimal", test.In)
-		}
+		d := datumConstructor(test.In)
+		oid := datumToOid[reflect.TypeOf(d)]
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
@@ -71,36 +68,69 @@ func TestBinaryDecimal(t *testing.T) {
 					panic(r)
 				}
 			}()
-			buf.writeBinaryDatum(dec, time.UTC)
+			buf.writeBinaryDatum(d, time.UTC)
 			if buf.err != nil {
 				t.Fatal(buf.err)
 			}
 			if got := buf.wrapped.Bytes(); !bytes.Equal(got, test.Expect) {
 				t.Errorf("%q:\n\t%v found,\n\t%v expected", test.In, got, test.Expect)
-			} else if datum, err := decodeOidDatum(oid.T_numeric, formatBinary, got[4:]); err != nil {
+			} else if datum, err := decodeOidDatum(oid, formatBinary, got[4:]); err != nil {
 				t.Fatalf("unable to decode %v: %s", got[4:], err)
-			} else if dec.Compare(datum) != 0 {
-				t.Errorf("expected %s, got %s", dec, datum)
+			} else if d.Compare(datum) != 0 {
+				t.Errorf("expected %s, got %s", d, datum)
 			}
 		}()
 	}
 }
 
-var generateDecimalCmd = flag.String("generate-decimal", "", "generate-decimal command invocation")
+func TestBinaryDecimal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testBinaryDatumType(t, "decimal", func(val string) parser.Datum {
+		dec := new(parser.DDecimal)
+		if _, ok := dec.SetString(val); !ok {
+			t.Fatalf("could not set %q on decimal", val)
+		}
+		return dec
+	})
+}
+
+func TestBinaryTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testBinaryDatumType(t, "timestamp", func(val string) parser.Datum {
+		ts, err := parser.ParseDTimestamp(val, time.UTC, time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ts
+	})
+}
+
+func TestBinaryTimestampTZ(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testBinaryDatumType(t, "timestamptz", func(val string) parser.Datum {
+		tstz, err := parser.ParseDTimestampTZ(val, time.UTC, time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tstz
+	})
+}
+
+var generateBinaryCmd = flag.String("generate-binary", "", "generate-binary command invocation")
 
 func TestRandomBinaryDecimal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	if *generateDecimalCmd == "" {
+	if *generateBinaryCmd == "" {
 		t.Skip("disabled")
 	}
 
-	fields := strings.Fields(*generateDecimalCmd)
+	fields := strings.Fields(*generateBinaryCmd)
 	if len(fields) < 1 {
-		t.Fatal("expected generate-decimal arguments")
+		t.Fatal("expected generate-binary arguments")
 	}
 	name, args := fields[0], fields[1:]
-	var tests []binaryDecimalTest
+	var tests []binaryTest
 
 	randutil.SeedForTests()
 
