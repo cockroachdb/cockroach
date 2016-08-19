@@ -81,6 +81,14 @@ const (
 	isRange                // range commands may span multiple keys
 	isReverse              // reverse commands traverse ranges in descending direction
 	isAlone                // requests which must be alone in a batch
+	// Some commands can skip interacting with the command queue and the timestamp
+	// cache. For example, RequestLeaseRequest is sequenced exclusively by Raft.
+	// These requests still have keys in their header, but those keys are used
+	// exclusively for routing the request to the right range.
+	isNonKV
+	// Requests for acquiring a lease skip the (proposal-time) check that the
+	// proposing replica has a valid lease.
+	skipLeaseCheck
 )
 
 // GetTxnID returns the transaction ID if the header has a transaction
@@ -806,13 +814,23 @@ func (*ResolveIntentRequest) flags() int      { return isWrite }
 func (*ResolveIntentRangeRequest) flags() int { return isWrite | isRange }
 func (*NoopRequest) flags() int               { return isRead } // slightly special
 func (*MergeRequest) flags() int              { return isWrite }
-func (*TruncateLogRequest) flags() int        { return isWrite }
+func (*TruncateLogRequest) flags() int        { return isWrite | isNonKV }
 
-// TODO(tschottdorf): consider setting isAlone on RequestLeaseRequest and
-// LeaseTransferRequest.
-func (*RequestLeaseRequest) flags() int     { return isWrite }
-func (*TransferLeaseRequest) flags() int    { return isWrite }
-func (*ComputeChecksumRequest) flags() int  { return isWrite }
-func (*VerifyChecksumRequest) flags() int   { return isWrite }
+func (*RequestLeaseRequest) flags() int {
+	return isWrite | isAlone | isNonKV | skipLeaseCheck
+}
+func (*TransferLeaseRequest) flags() int {
+	// TransferLeaseRequest requires the lease, which is checked in
+	// `AdminTransferLease()` at proposal time and in the usual way for write
+	// commands at apply time.
+	// But it can't be checked at propose time through the
+	// `redirectOnOrAcquireLease` call because, by the time that call is made, the
+	// replica has registered that a transfer is in progress and
+	// `redirectOrAcquire` already tentatively redirects to the future lease
+	// holder.
+	return isWrite | isAlone | isNonKV | skipLeaseCheck
+}
+func (*ComputeChecksumRequest) flags() int  { return isWrite | isNonKV }
+func (*VerifyChecksumRequest) flags() int   { return isWrite | isNonKV }
 func (*CheckConsistencyRequest) flags() int { return isAdmin | isRange }
-func (*ChangeFrozenRequest) flags() int     { return isWrite | isRange }
+func (*ChangeFrozenRequest) flags() int     { return isWrite | isRange | isNonKV }
