@@ -67,7 +67,12 @@ func NewLatency(metadata Metadata) Histograms {
 	windows := DefaultTimeScales
 	hs := make(Histograms)
 	for _, w := range windows {
-		hs[w] = NewHistogram(Metadata{metadata.Name + sep + w.name, metadata.Help},
+		hs[w] = NewHistogram(
+			Metadata{
+				Name:   metadata.Name + sep + w.name,
+				Help:   metadata.Help,
+				labels: metadata.labels,
+			},
 			w.d, int64(time.Minute), 2)
 	}
 	return hs
@@ -99,9 +104,19 @@ func NewRates(metadata Metadata) Rates {
 	scales := DefaultTimeScales
 	es := make(map[TimeScale]*Rate)
 	for _, scale := range scales {
-		es[scale] = NewRate(Metadata{metadata.Name + sep + scale.name, metadata.Help}, scale.d)
+		es[scale] = NewRate(
+			Metadata{
+				Name:   metadata.Name + sep + scale.name,
+				Help:   metadata.Help,
+				labels: metadata.labels,
+			}, scale.d)
 	}
-	c := NewCounter(Metadata{metadata.Name + sep + "count", metadata.Help})
+	c := NewCounter(
+		Metadata{
+			Name:   metadata.Name + sep + "count",
+			Help:   metadata.Help,
+			labels: metadata.labels,
+		})
 	return Rates{Counter: c, Rates: es}
 }
 
