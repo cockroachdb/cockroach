@@ -230,7 +230,8 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		RPCContext:      s.RPCContext(),
 		RPCRetryOptions: &retryOpts,
 	}, ts.Gossip())
-	tds := kv.NewTxnCoordSender(ds, s.Clock(), ts.Ctx.Linearizable, tracing.NewTracer(),
+	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
+	tds := kv.NewTxnCoordSender(ctx, ds, s.Clock(), ts.Ctx.Linearizable,
 		ts.stopper, kv.MakeTxnMetrics())
 
 	if err := ts.node.ctx.DB.AdminSplit("m"); err != nil {
@@ -327,7 +328,8 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 			RPCContext:      s.RPCContext(),
 			RPCRetryOptions: &retryOpts,
 		}, ts.Gossip())
-		tds := kv.NewTxnCoordSender(ds, ts.Clock(), ts.Ctx.Linearizable, tracing.NewTracer(),
+		ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
+		tds := kv.NewTxnCoordSender(ctx, ds, ts.Clock(), ts.Ctx.Linearizable,
 			ts.stopper, kv.MakeTxnMetrics())
 
 		for _, sk := range tc.splitKeys {
