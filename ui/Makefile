@@ -72,6 +72,10 @@ $(GOBINDATA_TARGET): $(GO_BINDATA) $(GOBINDATA_SOURCES)
 $(JSPM_TARGET): jspm.installed typings.installed $(CSS_TARGET) $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts' -or -name '*.js')
 	jspm bundle-sfx app/app build/app.js
 
+.PHONY: livereload
+livereload:
+	chokidar-socket-emitter
+
 # TODO(tamird/matt/max): write a systemjs stylus plugin.
 .PHONY: watch
 watch: STYLFLAGS += --watch

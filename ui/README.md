@@ -40,6 +40,12 @@ do this will result in wasted time waiting for the build.
 We commit the generated file so that CockroachDB can be compiled with minimal
 [non-go dependencies](#dependencies).
 
+## Live Reload
+
+The UI also supports live reload in debug mode. To take advantage of this, run
+`make livereload` from this directory - the UI will automatically reload files
+as you modify them, taking advantage of TypeScript's incremental compilation.
+
 ## Dependencies
 
 Our web console is compiled using a collection of tools that depends on

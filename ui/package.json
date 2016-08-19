@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "chokidar-socket-emitter": "^0.5.4",
     "jspm": "^0.16.33",
     "karma": "^1.1.2",
     "karma-jspm": "^2.1.1",
@@ -43,6 +44,7 @@
       "fetch-mock": "npm:fetch-mock@^5.0.3",
       "react-addons-test-utils": "npm:react-addons-test-utils@^15.2.1",
       "sinon": "npm:sinon@^1.17.4",
+      "systemjs-hot-reloader": "github:capaj/systemjs-hot-reloader@^0.6.0",
       "ts": "github:frankwallis/plugin-typescript@^5.0.8",
       "ts-runtime": "npm:babel-runtime@^6.9.2"
     },
