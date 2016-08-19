@@ -1024,6 +1024,7 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 // so it still has a conflicting range.
 func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#8416")
 	mtc, leftKey, rightKey := setupSplitSnapshotRace(t)
 	defer mtc.Stop()
 
