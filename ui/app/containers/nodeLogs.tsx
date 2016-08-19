@@ -8,6 +8,7 @@ import { connect } from "react-redux";
 import { nodeIDAttr } from "../util/constants";
 import { LogEntriesResponseMessage } from "../util/api";
 import { LongToMoment } from "../util/convert";
+import { Severity } from "../util/protoEnums";
 
 import { SortableTable } from "../components/sortabletable";
 
@@ -35,7 +36,7 @@ class Logs extends React.Component<LogProps & IInjectedProps, {}> {
         },
         {
           title: "Severity",
-          cell: (index: number) => logEntries[index].severity,
+          cell: (index: number) => Severity[logEntries[index].severity],
         },
         {
           title: "Message",
