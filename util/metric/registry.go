@@ -58,7 +58,7 @@ func (r *Registry) AddLabel(name, value string) {
 	defer r.Unlock()
 	r.labels = append(r.labels,
 		&prometheusgo.LabelPair{
-			Name:  proto.String(name),
+			Name:  proto.String(exportedLabel(name)),
 			Value: proto.String(value),
 		})
 }
@@ -146,13 +146,21 @@ func (r *Registry) MarshalJSON() ([]byte, error) {
 }
 
 var (
-	nameReplaceRE = regexp.MustCompile("[.-]")
+	// Prometheus metric names and labels have fairly strict rules, they
+	// must match the regexp [a-zA-Z_:][a-zA-Z0-9_:]*
+	// See: https://prometheus.io/docs/concepts/data_model/
+	prometheusNameReplaceRE  = regexp.MustCompile("^[^a-zA-Z_:]|[^a-zA-Z0-9_:]")
+	prometheusLabelReplaceRE = regexp.MustCompile("^[^a-zA-Z_]|[^a-zA-Z0-9_]")
 )
 
 // exportedName takes a metric name and generates a valid prometheus name.
-// see nameReplaceRE for characters to be replaces with '_'.
 func exportedName(name string) string {
-	return nameReplaceRE.ReplaceAllString(name, "_")
+	return prometheusNameReplaceRE.ReplaceAllString(name, "_")
+}
+
+// exportedLabel takes a metric name and generates a valid prometheus name.
+func exportedLabel(name string) string {
+	return prometheusLabelReplaceRE.ReplaceAllString(name, "_")
 }
 
 // PrintAsText outputs all metrics in text format.
@@ -168,12 +176,18 @@ func (r *Registry) PrintAsText(w io.Writer) error {
 			if prom, ok := v.(PrometheusExportable); ok {
 				metricFamily.Reset()
 				metricFamily.Name = proto.String(exportedName(metric.GetName()))
-				metricFamily.Help = proto.String(exportedName(metric.GetHelp()))
+				metricFamily.Help = proto.String(metric.GetHelp())
 				prom.FillPrometheusMetric(&metricFamily)
 				if len(labels) != 0 {
-					// Set labels. We only set one metric in the slice, but loop anyway.
+					// Set labels from registry. We only set one metric in the slice, but loop anyway.
 					for _, m := range metricFamily.Metric {
 						m.Label = labels
+					}
+				}
+				if l := prom.GetLabels(); len(l) != 0 {
+					// Append per-metric labels.
+					for _, m := range metricFamily.Metric {
+						m.Label = append(m.Label, l...)
 					}
 				}
 				if _, err := expfmt.MetricFamilyToText(w, &metricFamily); err != nil {
