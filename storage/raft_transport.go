@@ -240,6 +240,7 @@ func (t *RaftTransport) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breake
 // incoming raft messages and report unreachable status to the raft group.
 func (t *RaftTransport) connectAndProcess(nodeID roachpb.NodeID, ch chan *RaftMessageRequest) {
 	breaker := t.GetCircuitBreaker(nodeID)
+	successes := breaker.Successes()
 	consecFailures := breaker.ConsecFailures()
 	if err := breaker.Call(func() error {
 		addr, err := t.resolver(nodeID)
@@ -250,15 +251,22 @@ func (t *RaftTransport) connectAndProcess(nodeID roachpb.NodeID, ch chan *RaftMe
 		if err != nil {
 			return err
 		}
-		return t.processQueue(nodeID, ch, conn)
+		client := NewMultiRaftClient(conn)
+		ctx, cancel := context.WithCancel(context.TODO())
+		defer cancel()
+		stream, err := client.RaftMessage(ctx)
+		if err != nil {
+			return err
+		}
+		if successes == 0 || consecFailures > 0 {
+			log.Infof(context.TODO(), "raft transport stream to node %d established", nodeID)
+		}
+		return t.processQueue(nodeID, ch, stream)
 	}, 0); err != nil {
 		if consecFailures == 0 {
 			log.Warningf(context.TODO(), "raft transport stream to node %d failed: %s", nodeID, err)
 		}
 		return
-	}
-	if consecFailures > 0 {
-		log.Infof(context.TODO(), "raft transport stream to node %d established", nodeID)
 	}
 }
 
@@ -267,15 +275,7 @@ func (t *RaftTransport) connectAndProcess(nodeID roachpb.NodeID, ch chan *RaftMe
 // when it idles out. All messages remaining in the queue at that point are
 // lost and a new instance of processQueue will be started by the next message
 // to be sent.
-func (t *RaftTransport) processQueue(nodeID roachpb.NodeID, ch chan *RaftMessageRequest, conn *grpc.ClientConn) error {
-	client := NewMultiRaftClient(conn)
-	ctx, cancel := context.WithCancel(context.TODO())
-	defer cancel()
-	stream, err := client.RaftMessage(ctx)
-	if err != nil {
-		return err
-	}
-
+func (t *RaftTransport) processQueue(nodeID roachpb.NodeID, ch chan *RaftMessageRequest, stream MultiRaft_RaftMessageClient) error {
 	errCh := make(chan error, 1)
 
 	// Starting workers in a task prevents data races during shutdown.
@@ -349,8 +349,7 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 	// First, check the circuit breaker for connections to the outgoing
 	// node. We fail fast if the breaker is open to drop the raft
 	// message and have the caller mark the raft group as unreachable.
-	breaker := t.GetCircuitBreaker(toNodeID)
-	if !breaker.Ready() {
+	if !t.GetCircuitBreaker(toNodeID).Ready() {
 		return false
 	}
 
@@ -370,15 +369,19 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 	t.mu.Unlock()
 
 	if !ok {
+		deleteQueue := func() {
+			t.mu.Lock()
+			delete(queues, toNodeID)
+			t.mu.Unlock()
+		}
 		// Starting workers in a task prevents data races during shutdown.
 		if err := t.rpcContext.Stopper.RunTask(func() {
 			t.rpcContext.Stopper.RunWorker(func() {
 				t.connectAndProcess(toNodeID, ch)
-				t.mu.Lock()
-				delete(queues, toNodeID)
-				t.mu.Unlock()
+				deleteQueue()
 			})
 		}); err != nil {
+			deleteQueue()
 			return false
 		}
 	}
