@@ -69,7 +69,9 @@ func (s *Server) Query(ctx context.Context, request *tspb.TimeSeriesQueryRequest
 		Results: make([]tspb.TimeSeriesQueryResponse_Result, 0, len(request.Queries)),
 	}
 	for _, query := range request.Queries {
-		datapoints, sources, err := s.db.Query(query, Resolution10s, request.StartNanos, request.EndNanos)
+		datapoints, sources, err := s.db.Query(
+			query, Resolution10s, Resolution10s, request.StartNanos, request.EndNanos,
+		)
 		if err != nil {
 			return nil, grpc.Errorf(codes.Internal, err.Error())
 		}
