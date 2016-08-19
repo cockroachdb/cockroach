@@ -47,16 +47,19 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 
 // IsFreeze returns whether the batch consists of a single ChangeFrozen request.
 func (ba *BatchRequest) IsFreeze() bool {
-	if len(ba.Requests) != 1 {
+	if !ba.IsSingleRequest() {
 		return false
 	}
 	_, ok := ba.GetArg(ChangeFrozen)
 	return ok
 }
 
-// IsLease returns whether the batch consists of a single RequestLease request.
-func (ba *BatchRequest) IsLease() bool {
-	if len(ba.Requests) != 1 {
+// IsLeaseRequest returns whether the batch consists of a single RequestLease
+// request. Note that TransferLease requests return false.
+// RequestLease requests are special because they're the only type of requests a
+// non-lease-holder can propose.
+func (ba *BatchRequest) IsLeaseRequest() bool {
+	if !ba.IsSingleRequest() {
 		return false
 	}
 	_, ok := ba.GetArg(RequestLease)
@@ -92,6 +95,23 @@ func (ba *BatchRequest) IsPossibleTransaction() bool {
 // IsTransactionWrite returns true iff the BatchRequest contains a txn write.
 func (ba *BatchRequest) IsTransactionWrite() bool {
 	return ba.hasFlag(isTxnWrite)
+}
+
+// IsSingleRequest returns true iff the BatchRequest contains a single request.
+func (ba *BatchRequest) IsSingleRequest() bool {
+	return len(ba.Requests) == 1
+}
+
+// IsSingleNonKVRequest returns true iff the batch contains a single
+// request, and that request has the non-KV flag set.
+func (ba *BatchRequest) IsSingleNonKVRequest() bool {
+	return ba.IsSingleRequest() && ba.hasFlag(isNonKV)
+}
+
+// IsSingleSkipLeaseCheckRequest returns true iff the batch contains a single
+// request, and that request has the skipLeaseCheck flag set.
+func (ba *BatchRequest) IsSingleSkipLeaseCheckRequest() bool {
+	return ba.IsSingleRequest() && ba.hasFlag(skipLeaseCheck)
 }
 
 // hasFlag returns true iff one of the requests within the batch contains the
