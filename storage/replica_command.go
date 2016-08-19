@@ -2983,6 +2983,15 @@ func (r *Replica) ChangeReplicas(
 		}
 		log.Trace(ctx, "reservation granted")
 
+		// Prohibit premature raft log truncation. We set the pending index to 1
+		// here until we determine what it is below. This removes a small window of
+		// opportunity for the raft log to get truncated after the snapshot is
+		// generated.
+		if err := r.setPendingSnapshotIndex(1); err != nil {
+			return err
+		}
+		defer r.clearPendingSnapshotIndex()
+
 		// Send a pre-emptive snapshot. Note that the replica to which this
 		// snapshot is addressed has not yet had its replica ID initialized; this
 		// is intentional, and serves to avoid the following race with the replica
@@ -3016,6 +3025,11 @@ func (r *Replica) ChangeReplicas(
 				repDesc.ReplicaID,
 			)
 		}
+
+		if err := r.setPendingSnapshotIndex(snap.Metadata.Index); err != nil {
+			return err
+		}
+
 		req := &RaftMessageRequest{
 			RangeID:     r.RangeID,
 			FromReplica: fromRepDesc,

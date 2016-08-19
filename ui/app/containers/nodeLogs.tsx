@@ -5,6 +5,7 @@ import { AdminUIState } from "../redux/state";
 import { refreshLogs } from "../redux/apiReducers";
 import { connect } from "react-redux";
 
+import * as protos from "../js/protos";
 import { nodeIDAttr } from "../util/constants";
 import { LogEntriesResponseMessage } from "../util/api";
 import { LongToMoment } from "../util/convert";
@@ -23,7 +24,7 @@ interface LogProps {
 class Logs extends React.Component<LogProps & IInjectedProps, {}> {
 
   componentWillMount() {
-    this.props.refreshLogs({ node_id: this.props.params[nodeIDAttr] });
+    this.props.refreshLogs(new protos.cockroach.server.serverpb.LogsRequest({ node_id: this.props.params[nodeIDAttr] }));
   }
 
   render() {

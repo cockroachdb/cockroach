@@ -71,7 +71,7 @@ func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
 	rangeID := r.RangeID
 	raftStatus := r.RaftStatus()
 	if raftStatus == nil {
-		if log.V(1) {
+		if log.V(6) {
 			log.Infof(context.TODO(), "the raft group doesn't exist for range %d", rangeID)
 		}
 		return 0, 0, nil
@@ -97,12 +97,14 @@ func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
 		targetSize = r.mu.maxBytes
 	}
 	firstIndex, err := r.FirstIndex()
+	pendingSnapshotIndex := r.mu.pendingSnapshotIndex
 	r.mu.Unlock()
 	if err != nil {
 		return 0, 0, errors.Errorf("error retrieving first index for range %d: %s", rangeID, err)
 	}
 
-	truncatableIndex := computeTruncatableIndex(raftStatus, raftLogSize, targetSize, firstIndex)
+	truncatableIndex := computeTruncatableIndex(
+		raftStatus, raftLogSize, targetSize, firstIndex, pendingSnapshotIndex)
 	// Return the number of truncatable indexes.
 	return truncatableIndex - firstIndex, truncatableIndex, nil
 }
@@ -127,7 +129,7 @@ func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
 func computeTruncatableIndex(
 	raftStatus *raft.Status,
 	raftLogSize, targetSize int64,
-	firstIndex uint64,
+	firstIndex, pendingSnapshotIndex uint64,
 ) uint64 {
 	truncatableIndex := raftStatus.Commit
 	if raftLogSize <= targetSize {
@@ -135,6 +137,13 @@ func computeTruncatableIndex(
 		// the target size. If the raft log is greater than the target size we
 		// always truncate to the quorum commit index.
 		truncatableIndex = getBehindIndex(raftStatus)
+		// The pending snapshot index acts as a placeholder for a replica that is
+		// about to be added to the range. We don't want to truncate the log in a
+		// way that will require that new replica to be caught up via a Raft
+		// snapshot.
+		if pendingSnapshotIndex > 0 && truncatableIndex > pendingSnapshotIndex {
+			truncatableIndex = pendingSnapshotIndex
+		}
 		if truncatableIndex < firstIndex {
 			truncatableIndex = firstIndex
 		}
