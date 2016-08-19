@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -33,12 +34,16 @@ import (
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/caller"
+	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
@@ -154,6 +159,8 @@ func setupReplicationAndLeases(
 func TestClusterBackupRestore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
+	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
+	defer sql.TestDisableTableLeases()()
 
 	dir, cleanupFn := testingTempDir(t, 2)
 	defer cleanupFn()
@@ -209,8 +216,13 @@ func TestClusterBackupRestore(t *testing.T) {
 		sqlDB := tc.Conns[0]
 		kvDB := tc.Server(0).KVClient().(*client.DB)
 
+		// Force the Restore to rekey.
+		if _, err := sqlDB.Exec(`CREATE DATABASE bench; CREATE TABLE bench.bank (a INT);`); err != nil {
+			t.Fatal(err)
+		}
+
 		table := parser.TableName{DatabaseName: "bench", TableName: "bank"}
-		if _, err := sql.Restore(ctx, *kvDB, dir, table, true); err != nil {
+		if _, err := sql.Restore(ctx, *kvDB, dir, table); err != nil {
 			t.Fatal(err)
 		}
 
@@ -285,8 +297,81 @@ func runBenchmarkClusterRestore(b *testing.B, clusterSize int, count int) {
 	b.ResetTimer()
 	table := parser.TableName{DatabaseName: "bench", TableName: "bank"}
 	for i := 0; i < b.N; i++ {
-		if _, err := sql.Restore(ctx, *kvDB, dir, table, true); err != nil {
+		if _, err := sql.Restore(ctx, *kvDB, dir, table); err != nil {
 			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkSstRekey(b *testing.B) {
+	// TODO(dan): DRY this with BenchmarkRocksDBSstFileReader.
+
+	dir, cleanupFn := testingTempDir(b, 1)
+	defer cleanupFn()
+
+	sstPath := filepath.Join(dir, "sst")
+	{
+		const maxEntries = 100000
+		const keyLen = 10
+		const valLen = 100
+		b.SetBytes(keyLen + valLen)
+
+		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+		kv := engine.MVCCKeyValue{
+			Key:   engine.MVCCKey{Key: roachpb.Key(make([]byte, keyLen)), Timestamp: ts},
+			Value: make([]byte, valLen),
+		}
+
+		sst := engine.MakeRocksDBSstFileWriter()
+		if err := sst.Open(sstPath); err != nil {
+			b.Fatal(sst)
+		}
+		var entries = b.N
+		if entries > maxEntries {
+			entries = maxEntries
+		}
+		for i := 0; i < entries; i++ {
+			payload := []byte(fmt.Sprintf("%09d", i))
+			kv.Key.Key = kv.Key.Key[:0]
+			kv.Key.Key = encoding.EncodeUvarintAscending(kv.Key.Key, uint64(i)) // tableID
+			kv.Key.Key = encoding.EncodeUvarintAscending(kv.Key.Key, 0)         // indexID
+			kv.Key.Key = encoding.EncodeBytesAscending(kv.Key.Key, payload)
+			kv.Key.Key = keys.MakeRowSentinelKey(kv.Key.Key)
+			copy(kv.Value, payload)
+			if err := sst.Add(kv); err != nil {
+				b.Fatal(err)
+			}
+		}
+		if err := sst.Close(); err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	const newTableID = 100
+
+	b.ResetTimer()
+	sst, err := engine.MakeRocksDBSstFileReader()
+	if err != nil {
+		b.Fatal(err)
+	}
+	if err := sst.AddFile(sstPath); err != nil {
+		b.Fatal(err)
+	}
+	defer sst.Close()
+	count := 0
+	iterateFn := sql.MakeRekeyMVCCKeyValFunc(newTableID, func(kv engine.MVCCKeyValue) (bool, error) {
+		count++
+		if count >= b.N {
+			return true, nil
+		}
+		return false, nil
+	})
+	for {
+		if err := sst.Iterate(engine.MVCCKey{Key: keys.MinKey}, engine.MVCCKey{Key: keys.MaxKey}, iterateFn); err != nil {
+			b.Fatal(err)
+		}
+		if count >= b.N {
+			break
 		}
 	}
 }
