@@ -59,7 +59,7 @@ import (
 const (
 	// rangeIDAllocCount is the number of Range IDs to allocate per allocation.
 	rangeIDAllocCount               = 10
-	defaultHeartbeatIntervalTicks   = 3
+	defaultHeartbeatIntervalTicks   = 5
 	defaultRaftElectionTimeoutTicks = 15
 	defaultAsyncSnapshotMaxAge      = time.Minute
 	// ttlStoreGossip is time-to-live for store-related info.
@@ -2761,7 +2761,7 @@ func (s *Store) ComputeMetrics(tick int) error {
 		s.metrics.RdbReadAmplification.Update(int64(readAmp))
 		// Log this metric infrequently.
 		if tick%100 == 0 {
-			log.Infof(s.Ctx(), "store %d sstables (read amplification = %d):\n%s", s.StoreID(), readAmp, sstables)
+			log.Infof(s.Ctx(), "%s: sstables (read amplification = %d):\n%s", s, readAmp, sstables)
 		}
 	}
 	return nil
