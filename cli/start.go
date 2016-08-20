@@ -51,6 +51,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/sdnotify"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
+	"github.com/cockroachdb/cockroach/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
 
 	"github.com/spf13/cobra"
 )
@@ -299,6 +301,11 @@ func runStart(_ *cobra.Command, args []string) error {
 		return rerunBackground()
 	}
 
+	tracer := tracing.NewTracer()
+	startCtx := tracing.WithTracer(context.Background(), tracer)
+	sp := tracer.StartSpan("server start")
+	startCtx = opentracing.ContextWithSpan(startCtx, sp)
+
 	if err := initInsecure(); err != nil {
 		return err
 	}
@@ -327,11 +334,12 @@ func runStart(_ *cobra.Command, args []string) error {
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		return err
 	}
+	log.Tracef(startCtx, "created log directory %s", logDir)
 
 	// We log build information to stdout (for the short summary), but also
 	// to stderr to coincide with the full logs.
 	info := build.GetInfo()
-	log.Infof(context.TODO(), info.Short())
+	log.Infof(startCtx, info.Short())
 
 	initMemProfile(f.Value.String())
 	initCPUProfile(f.Value.String())
@@ -341,6 +349,8 @@ func runStart(_ *cobra.Command, args []string) error {
 	serverCtx.User = security.NodeUser
 
 	stopper := initBacktrace(logDir)
+	log.Trace(startCtx, "initialized profilers")
+
 	if err := serverCtx.InitStores(stopper); err != nil {
 		return fmt.Errorf("failed to initialize stores: %s", err)
 	}
@@ -349,15 +359,16 @@ func runStart(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize node: %s", err)
 	}
 
-	log.Info(context.TODO(), "starting cockroach node")
+	log.Info(startCtx, "starting cockroach node")
 	s, err := server.NewServer(serverCtx, stopper)
 	if err != nil {
 		return fmt.Errorf("failed to start Cockroach server: %s", err)
 	}
 
-	if err := s.Start(); err != nil {
+	if err := s.Start(startCtx); err != nil {
 		return fmt.Errorf("cockroach server exited with error: %s", err)
 	}
+	sp.Finish()
 
 	// We don't do this in (*server.Server).Start() because we don't want it
 	// in tests.

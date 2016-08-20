@@ -699,19 +699,25 @@ func (s *Store) IsStarted() bool {
 // IterateRangeDescriptors calls the provided function with each descriptor
 // from the provided Engine. The return values of this method and fn have
 // semantics similar to engine.MVCCIterate.
-func IterateRangeDescriptors(
+func IterateRangeDescriptors(ctx context.Context,
 	eng engine.Reader, fn func(desc roachpb.RangeDescriptor) (bool, error),
 ) error {
+	log.Trace(ctx, "beginning range descriptor iteration")
 	// Iterator over all range-local key-based data.
 	start := keys.RangeDescriptorKey(roachpb.RKeyMin)
 	end := keys.RangeDescriptorKey(roachpb.RKeyMax)
 
+	allCount := 0
+	matchCount := 0
+	bySuffix := make(map[string]int)
 	kvToDesc := func(kv roachpb.KeyValue) (bool, error) {
+		allCount++
 		// Only consider range metadata entries; ignore others.
 		_, suffix, _, err := keys.DecodeRangeKey(kv.Key)
 		if err != nil {
 			return false, err
 		}
+		bySuffix[string(suffix)]++
 		if !bytes.Equal(suffix, keys.LocalRangeDescriptorSuffix) {
 			return false, nil
 		}
@@ -719,11 +725,14 @@ func IterateRangeDescriptors(
 		if err := kv.Value.GetProto(&desc); err != nil {
 			return false, err
 		}
+		matchCount++
 		return fn(desc)
 	}
 
 	_, err := engine.MVCCIterate(context.Background(), eng, start, end, hlc.MaxTimestamp, false /* !consistent */, nil, /* txn */
 		false /* !reverse */, kvToDesc)
+	log.Tracef(ctx, "iterated over %d keys to find %d range descriptors (by suffix: %v)",
+		allCount, matchCount, bySuffix)
 	return err
 }
 
@@ -738,9 +747,9 @@ func (s *Store) migrate(ctx context.Context, desc roachpb.RangeDescriptor) {
 }
 
 // Start the engine, set the GC and read the StoreIdent.
-func (s *Store) Start(stopper *stop.Stopper) error {
+func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	s.stopper = stopper
-	ctx := s.context(context.TODO())
+	ctx = s.context(ctx)
 
 	// Add a closer for the various scanner queues, needed to properly clean up
 	// the event logs.
@@ -791,6 +800,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 			return &NotBootstrappedError{}
 		}
 	}
+	log.Trace(ctx, "read store identity")
 
 	// If the nodeID is 0, it has not be assigned yet.
 	if s.nodeDesc.NodeID != 0 && s.Ident.NodeID != s.nodeDesc.NodeID {
@@ -816,39 +826,40 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	// due to a split crashing halfway will simply be resolved on the
 	// next split attempt. They can otherwise be ignored.
 	s.mu.Lock()
-	err = IterateRangeDescriptors(s.engine, func(desc roachpb.RangeDescriptor) (bool, error) {
-		if _, ok := desc.GetReplicaDescriptor(s.StoreID()); !ok {
-			// We are no longer a member of the range, but we didn't GC
-			// the replica before shutting down. Destroy the replica now
-			// to avoid creating a new replica without a valid replica ID
-			// (which is necessary to have a non-nil raft group)
-			return false, s.destroyReplicaData(&desc)
-		}
-		if !desc.IsInitialized() {
-			return false, errors.Errorf("found uninitialized RangeDescriptor: %+v", desc)
-		}
-		s.migrate(ctx, desc)
+	err = IterateRangeDescriptors(ctx, s.engine,
+		func(desc roachpb.RangeDescriptor) (bool, error) {
+			if _, ok := desc.GetReplicaDescriptor(s.StoreID()); !ok {
+				// We are no longer a member of the range, but we didn't GC
+				// the replica before shutting down. Destroy the replica now
+				// to avoid creating a new replica without a valid replica ID
+				// (which is necessary to have a non-nil raft group)
+				return false, s.destroyReplicaData(&desc)
+			}
+			if !desc.IsInitialized() {
+				return false, errors.Errorf("found uninitialized RangeDescriptor: %+v", desc)
+			}
+			s.migrate(ctx, desc)
 
-		rng, err := NewReplica(&desc, s, 0)
-		if err != nil {
-			return false, err
-		}
-		if err = s.addReplicaInternalLocked(rng); err != nil {
-			return false, err
-		}
-		// Add this range and its stats to our counter.
-		s.metrics.ReplicaCount.Inc(1)
-		s.metrics.addMVCCStats(rng.GetMVCCStats())
-		// Note that we do not create raft groups at this time; they will be created
-		// on-demand the first time they are needed. This helps reduce the amount of
-		// election-related traffic in a cold start.
-		// Raft initialization occurs when we propose a command on this range or
-		// receive a raft message addressed to it.
-		// TODO(bdarnell): Also initialize raft groups when read leases are needed.
-		// TODO(bdarnell): Scan all ranges at startup for unapplied log entries
-		// and initialize those groups.
-		return false, nil
-	})
+			rng, err := NewReplica(&desc, s, 0)
+			if err != nil {
+				return false, err
+			}
+			if err = s.addReplicaInternalLocked(rng); err != nil {
+				return false, err
+			}
+			// Add this range and its stats to our counter.
+			s.metrics.ReplicaCount.Inc(1)
+			s.metrics.addMVCCStats(rng.GetMVCCStats())
+			// Note that we do not create raft groups at this time; they will be created
+			// on-demand the first time they are needed. This helps reduce the amount of
+			// election-related traffic in a cold start.
+			// Raft initialization occurs when we propose a command on this range or
+			// receive a raft message addressed to it.
+			// TODO(bdarnell): Also initialize raft groups when read leases are needed.
+			// TODO(bdarnell): Scan all ranges at startup for unapplied log entries
+			// and initialize those groups.
+			return false, nil
+		})
 	s.mu.Unlock()
 	if err != nil {
 		return err
@@ -860,6 +871,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 
 	doneUnfreezing := make(chan struct{})
 	if s.stopper.RunAsyncTask(func() {
+		ctx := context.TODO()
 		defer close(doneUnfreezing)
 		sem := make(chan struct{}, 512)
 		var wg sync.WaitGroup // wait for unfreeze goroutines
@@ -913,7 +925,9 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	// loop figure it out.
 	select {
 	case <-doneUnfreezing:
+		log.Trace(ctx, "finished unfreezing")
 	case <-time.After(10 * time.Second):
+		log.Trace(ctx, "gave up waiting for unfreezing; continuing in background")
 	}
 
 	// Gossip is only ever nil while bootstrapping a cluster and
@@ -967,6 +981,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		if err = s.ComputeMetrics(-1); err != nil {
 			log.Infof(ctx, "%s: failed initial metrics computation: %s", s, err)
 		}
+		log.Trace(ctx, "computed initial metrics")
 	}
 
 	// Set the started flag (for unittests).

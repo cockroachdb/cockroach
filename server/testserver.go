@@ -17,6 +17,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -231,7 +232,7 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	// Our context must be shared with our server.
 	ts.Ctx = &ts.Server.ctx
 
-	if err := ts.Server.Start(); err != nil {
+	if err := ts.Server.Start(context.Background()); err != nil {
 		return err
 	}
 
