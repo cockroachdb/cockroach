@@ -56,7 +56,7 @@ const (
 	NetworkTimeout = 3 * time.Second
 
 	// DefaultRaftTickInterval is the default resolution of the Raft timer.
-	DefaultRaftTickInterval = 100 * time.Millisecond
+	DefaultRaftTickInterval = 200 * time.Millisecond
 )
 
 type lazyTLSConfig struct {
