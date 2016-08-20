@@ -853,6 +853,9 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 		return err
 	}
 
+	s.ctx.Ctx = log.WithLogTagInt(s.ctx.Ctx, "node", int(s.Ident.NodeID))
+	s.ctx.Ctx = log.WithLogTagInt(s.ctx.Ctx, "store", int(s.Ident.StoreID))
+
 	// Start Raft processing goroutines.
 	s.ctx.Transport.Listen(s.StoreID(), s)
 	s.processRaft()
@@ -1890,6 +1893,10 @@ func (s *Store) ReplicaCount() int {
 // of one of its writes), the response will have a transaction set which should
 // be used to update the client transaction.
 func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
+	// Attach any log tags from the store to the context (which normally
+	// comes from gRPC).
+	ctx = log.WithLogTagsFromCtx(ctx, s.Ctx())
+
 	for _, union := range ba.Requests {
 		arg := union.GetInner()
 		header := arg.Header()

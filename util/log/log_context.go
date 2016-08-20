@@ -100,3 +100,36 @@ func WithLogTagInt64(ctx context.Context, name string, value int64) context.Cont
 func WithLogTagStr(ctx context.Context, name string, value string) context.Context {
 	return withLogTag(ctx, &logTag{name: name, valType: stringType, strVal: value})
 }
+
+// WithLogTagsFromCtx returns a context based on ctx with fromCtx's log tags
+// added on.
+func WithLogTagsFromCtx(ctx, fromCtx context.Context) context.Context {
+	fromLastTag := contextLastTag(fromCtx)
+	if fromLastTag == nil {
+		// Nothing to do.
+		return ctx
+	}
+
+	toLastTag := contextLastTag(ctx)
+	if toLastTag == nil {
+		// Easy case: we reuse the same log tag list directly.
+		return context.WithValue(ctx, contextTagKeyType{}, fromLastTag)
+	}
+
+	// Make a copy of the logTag list.
+
+	newTag := &logTag{}
+	*newTag = *fromLastTag
+	// The prev link will be set below via prevPtr.
+	prevPtr := &newTag.prev
+
+	for t := fromLastTag.prev; t != nil; t = t.prev {
+		tCopy := &logTag{}
+		*tCopy = *t
+
+		*prevPtr = tCopy
+		prevPtr = &tCopy.prev
+	}
+	*prevPtr = toLastTag
+	return context.WithValue(ctx, contextTagKeyType{}, newTag)
+}
