@@ -18,7 +18,11 @@
 package storage
 
 import (
+	"bytes"
+	"fmt"
 	"net"
+	"sort"
+	"sync/atomic"
 	"time"
 
 	"github.com/coreos/etcd/raft/raftpb"
@@ -36,8 +40,15 @@ import (
 )
 
 const (
-	// Outgoing messages are queued per-replica on a channel of this size.
-	raftSendBufferSize = 100
+	// Outgoing messages are queued per-node on a channel of this size.
+	//
+	// TODO(peter): The normal send buffer size is larger than we would like. It
+	// is a temporary patch for the issue discussed in #8630 where
+	// Store.HandleRaftMessage can block applying a preemptive snapshot for a
+	// long enough period of time that grpc flow control kicks in and messages
+	// are dropped on the sending side.
+	raftNormalSendBufferSize   = 10000
+	raftSnapshotSendBufferSize = 10
 
 	// When no message has been queued for this duration, the corresponding
 	// instance of processQueue will shut down.
@@ -79,6 +90,23 @@ type RaftSnapshotStatus struct {
 	Err error
 }
 
+type raftTransportStats struct {
+	nodeID        roachpb.NodeID
+	queue         int
+	queueMax      int32
+	clientSent    int64
+	clientRecv    int64
+	clientDropped int64
+	serverSent    int64
+	serverRecv    int64
+}
+
+type raftTransportStatsSlice []*raftTransportStats
+
+func (s raftTransportStatsSlice) Len() int           { return len(s) }
+func (s raftTransportStatsSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s raftTransportStatsSlice) Less(i, j int) bool { return s[i].nodeID < s[j].nodeID }
+
 // RaftTransport handles the rpc messages for raft.
 //
 // The raft transport is asynchronous with respect to the caller, and
@@ -100,6 +128,7 @@ type RaftTransport struct {
 		syncutil.Mutex
 		handlers map[roachpb.StoreID]RaftMessageHandler
 		queues   map[bool]map[roachpb.NodeID]chan *RaftMessageRequest
+		stats    map[roachpb.NodeID]*raftTransportStats
 		breakers map[roachpb.NodeID]*circuit.Breaker
 	}
 }
@@ -120,10 +149,72 @@ func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpc
 	}
 	t.mu.handlers = make(map[roachpb.StoreID]RaftMessageHandler)
 	t.mu.queues = make(map[bool]map[roachpb.NodeID]chan *RaftMessageRequest)
+	t.mu.stats = make(map[roachpb.NodeID]*raftTransportStats)
 	t.mu.breakers = make(map[roachpb.NodeID]*circuit.Breaker)
 
 	if grpcServer != nil {
 		RegisterMultiRaftServer(grpcServer, t)
+	}
+
+	if t.rpcContext != nil && log.V(1) {
+		t.rpcContext.Stopper.RunWorker(func() {
+			ticker := time.NewTicker(10 * time.Second)
+			defer ticker.Stop()
+			lastStats := make(map[roachpb.NodeID]raftTransportStats)
+			lastTime := timeutil.Now()
+			var stats raftTransportStatsSlice
+			for {
+				select {
+				case <-ticker.C:
+					t.mu.Lock()
+					stats = stats[:0]
+					for _, s := range t.mu.stats {
+						stats = append(stats, s)
+						s.queue = 0
+					}
+					for _, isSnap := range []bool{false, true} {
+						for nodeID, ch := range t.mu.queues[isSnap] {
+							t.mu.stats[nodeID].queue += len(ch)
+						}
+					}
+					t.mu.Unlock()
+
+					now := timeutil.Now()
+					elapsed := now.Sub(lastTime).Seconds()
+					sort.Sort(stats)
+
+					var buf bytes.Buffer
+					// NB: The header is 80 characters which should display in a single
+					// line on most terminals.
+					fmt.Fprintf(&buf,
+						"         qlen   qmax   qdropped client-sent client-recv server-sent server-recv\n")
+					for _, s := range stats {
+						last := lastStats[s.nodeID]
+						cur := raftTransportStats{
+							nodeID:        s.nodeID,
+							queue:         s.queue,
+							queueMax:      atomic.LoadInt32(&s.queueMax),
+							clientDropped: atomic.LoadInt64(&s.clientDropped),
+							clientSent:    atomic.LoadInt64(&s.clientSent),
+							clientRecv:    atomic.LoadInt64(&s.clientRecv),
+							serverSent:    atomic.LoadInt64(&s.serverSent),
+							serverRecv:    atomic.LoadInt64(&s.serverRecv),
+						}
+						fmt.Fprintf(&buf, "  %3d: %6d %6d %10d %11.1f %11.1f %11.1f %11.1f\n",
+							cur.nodeID, cur.queue, cur.queueMax, cur.clientDropped,
+							float64(cur.clientSent-last.clientSent)/elapsed,
+							float64(cur.clientRecv-last.clientRecv)/elapsed,
+							float64(cur.serverSent-last.serverSent)/elapsed,
+							float64(cur.serverRecv-last.serverRecv)/elapsed)
+						lastStats[s.nodeID] = cur
+					}
+					lastTime = now
+					log.Infof(context.TODO(), "stats:\n%s", buf.String())
+				case <-t.rpcContext.Stopper.ShouldStop():
+					return
+				}
+			}
+		})
 	}
 
 	return t
@@ -160,6 +251,17 @@ func newRaftMessageResponse(req *RaftMessageRequest, pErr *roachpb.Error) *RaftM
 	return resp
 }
 
+func (t *RaftTransport) getStats(nodeID roachpb.NodeID) *raftTransportStats {
+	t.mu.Lock()
+	stats, ok := t.mu.stats[nodeID]
+	if !ok {
+		stats = &raftTransportStats{nodeID: nodeID}
+		t.mu.stats[nodeID] = stats
+	}
+	t.mu.Unlock()
+	return stats
+}
+
 // RaftMessage proxies the incoming requests to the listening server interface.
 func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err error) {
 	errCh := make(chan error, 1)
@@ -168,13 +270,20 @@ func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err err
 	if err := t.rpcContext.Stopper.RunTask(func() {
 		t.rpcContext.Stopper.RunWorker(func() {
 			errCh <- func() error {
+				var stats *raftTransportStats
 				for {
 					req, err := stream.Recv()
 					if err != nil {
 						return err
 					}
 
+					if stats == nil {
+						stats = t.getStats(req.FromReplica.NodeID)
+					}
+					atomic.AddInt64(&stats.serverRecv, 1)
+
 					if pErr := t.handleRaftRequest(stream.Context(), req); pErr != nil {
+						atomic.AddInt64(&stats.serverSent, 1)
 						if err := stream.Send(newRaftMessageResponse(req, pErr)); err != nil {
 							return err
 						}
@@ -199,7 +308,10 @@ func (t *RaftTransport) RaftMessageSync(ctx context.Context, req *RaftMessageReq
 ) (*RaftMessageResponse, error) {
 	var pErr *roachpb.Error
 	if err := t.rpcContext.Stopper.RunTask(func() {
+		stats := t.getStats(req.FromReplica.NodeID)
+		atomic.AddInt64(&stats.serverRecv, 1)
 		pErr = t.handleRaftRequest(ctx, req)
+		atomic.AddInt64(&stats.serverSent, 1)
 	}); err != nil {
 		return nil, err
 	}
@@ -238,7 +350,11 @@ func (t *RaftTransport) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breake
 // an unrecoverable error with the underlying connection. A circuit
 // breaker is used to allow fast failures in SendAsync which will drop
 // incoming raft messages and report unreachable status to the raft group.
-func (t *RaftTransport) connectAndProcess(nodeID roachpb.NodeID, ch chan *RaftMessageRequest) {
+func (t *RaftTransport) connectAndProcess(
+	nodeID roachpb.NodeID,
+	ch chan *RaftMessageRequest,
+	stats *raftTransportStats,
+) {
 	breaker := t.GetCircuitBreaker(nodeID)
 	successes := breaker.Successes()
 	consecFailures := breaker.ConsecFailures()
@@ -261,7 +377,7 @@ func (t *RaftTransport) connectAndProcess(nodeID roachpb.NodeID, ch chan *RaftMe
 		if successes == 0 || consecFailures > 0 {
 			log.Infof(context.TODO(), "raft transport stream to node %d established", nodeID)
 		}
-		return t.processQueue(nodeID, ch, stream)
+		return t.processQueue(nodeID, ch, stats, stream)
 	}, 0); err != nil {
 		if consecFailures == 0 {
 			log.Warningf(context.TODO(), "raft transport stream to node %d failed: %s", nodeID, err)
@@ -275,7 +391,12 @@ func (t *RaftTransport) connectAndProcess(nodeID roachpb.NodeID, ch chan *RaftMe
 // when it idles out. All messages remaining in the queue at that point are
 // lost and a new instance of processQueue will be started by the next message
 // to be sent.
-func (t *RaftTransport) processQueue(nodeID roachpb.NodeID, ch chan *RaftMessageRequest, stream MultiRaft_RaftMessageClient) error {
+func (t *RaftTransport) processQueue(
+	nodeID roachpb.NodeID,
+	ch chan *RaftMessageRequest,
+	stats *raftTransportStats,
+	stream MultiRaft_RaftMessageClient,
+) error {
 	errCh := make(chan error, 1)
 
 	// Starting workers in a task prevents data races during shutdown.
@@ -287,6 +408,7 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID, ch chan *RaftMessage
 					if err != nil {
 						return err
 					}
+					atomic.AddInt64(&stats.clientRecv, 1)
 					t.mu.Lock()
 					handler, ok := t.mu.handlers[resp.ToReplica.StoreID]
 					t.mu.Unlock()
@@ -317,13 +439,13 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID, ch chan *RaftMessage
 			return err
 		case req := <-ch:
 			err := stream.Send(req)
+			atomic.AddInt64(&stats.clientSent, 1)
 			if req.Message.Type == raftpb.MsgSnap {
 				select {
 				case <-t.rpcContext.Stopper.ShouldStop():
 					return nil
 				case t.SnapshotStatusChan <- RaftSnapshotStatus{req, err}:
 				}
-
 			}
 			if err != nil {
 				return err
@@ -354,6 +476,11 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 	}
 
 	t.mu.Lock()
+	stats, ok := t.mu.stats[toNodeID]
+	if !ok {
+		stats = &raftTransportStats{nodeID: toNodeID}
+		t.mu.stats[toNodeID] = stats
+	}
 	// We use two queues; one will be used for snapshots, the other for all other
 	// traffic. This is done to prevent snapshots from blocking other traffic.
 	queues, ok := t.mu.queues[isSnap]
@@ -363,7 +490,11 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 	}
 	ch, ok := queues[toNodeID]
 	if !ok {
-		ch = make(chan *RaftMessageRequest, raftSendBufferSize)
+		size := raftNormalSendBufferSize
+		if isSnap {
+			size = raftSnapshotSendBufferSize
+		}
+		ch = make(chan *RaftMessageRequest, size)
 		queues[toNodeID] = ch
 	}
 	t.mu.Unlock()
@@ -377,7 +508,7 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 		// Starting workers in a task prevents data races during shutdown.
 		if err := t.rpcContext.Stopper.RunTask(func() {
 			t.rpcContext.Stopper.RunWorker(func() {
-				t.connectAndProcess(toNodeID, ch)
+				t.connectAndProcess(toNodeID, ch, stats)
 				deleteQueue()
 			})
 		}); err != nil {
@@ -388,8 +519,13 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 
 	select {
 	case ch <- req:
+		l := int32(len(ch))
+		if v := atomic.LoadInt32(&stats.queueMax); v < l {
+			atomic.CompareAndSwapInt32(&stats.queueMax, v, l)
+		}
 		return true
 	default:
+		atomic.AddInt64(&stats.clientDropped, 1)
 		return false
 	}
 }
