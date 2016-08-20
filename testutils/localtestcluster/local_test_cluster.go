@@ -19,6 +19,8 @@ package localtestcluster
 import (
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/internal/client"
@@ -119,7 +121,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Context, initSen
 	if err := ltc.Store.BootstrapRange(nil); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
-	if err := ltc.Store.Start(ltc.Stopper); err != nil {
+	if err := ltc.Store.Start(context.Background(), ltc.Stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
 	ltc.Gossip.SetNodeID(nodeDesc.NodeID)
