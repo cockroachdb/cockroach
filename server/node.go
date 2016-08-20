@@ -322,6 +322,8 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 	if err = n.ctx.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
 		log.Fatalf(n.Ctx(), "couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
 	}
+	// Add log tags to context.
+	n.ctx.Ctx = log.WithLogTagInt(n.ctx.Ctx, "node", int(id))
 }
 
 // start starts the node by registering the storage instance for the
