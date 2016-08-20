@@ -31,6 +31,25 @@ func makeIntTestDatum(count int) []Datum {
 	return vals
 }
 
+// makeSmallIntTestDatum creates integers that are sufficiently
+// smaller than 2^64-1 that they can be added to each other for a
+// significant part of the test without overflow. This is meant to
+// test the implementation of aggregates that can use an int64 to
+// optimize computations small decimal values.
+func makeSmallIntTestDatum(count int) []Datum {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([]Datum, count)
+	for i := range vals {
+		sign := int32(1)
+		if 0 == rng.Int31()&1 {
+			sign = -1
+		}
+		vals[i] = NewDInt(DInt(rng.Int31() * sign))
+	}
+	return vals
+}
+
 func makeFloatTestDatum(count int) []Datum {
 	rng, _ := randutil.NewPseudoRand()
 
@@ -72,6 +91,10 @@ func BenchmarkAvgAggregateInt1K(b *testing.B) {
 	runBenchmarkAggregate(b, newAvgAggregate, makeIntTestDatum(1000))
 }
 
+func BenchmarkAvgAggregateSmallInt1K(b *testing.B) {
+	runBenchmarkAggregate(b, newAvgAggregate, makeSmallIntTestDatum(1000))
+}
+
 func BenchmarkAvgAggregateFloat1K(b *testing.B) {
 	runBenchmarkAggregate(b, newAvgAggregate, makeFloatTestDatum(1000))
 }
@@ -86,6 +109,10 @@ func BenchmarkCountAggregate1K(b *testing.B) {
 
 func BenchmarkSumAggregateInt1K(b *testing.B) {
 	runBenchmarkAggregate(b, newSumAggregate, makeIntTestDatum(1000))
+}
+
+func BenchmarkSumAggregateSmallInt1K(b *testing.B) {
+	runBenchmarkAggregate(b, newSumAggregate, makeSmallIntTestDatum(1000))
 }
 
 func BenchmarkSumAggregateFloat1K(b *testing.B) {
