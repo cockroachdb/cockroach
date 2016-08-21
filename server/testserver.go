@@ -23,6 +23,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -231,7 +233,7 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	// Our context must be shared with our server.
 	ts.Ctx = &ts.Server.ctx
 
-	if err := ts.Server.Start(); err != nil {
+	if err := ts.Server.Start(context.Background()); err != nil {
 		return err
 	}
 

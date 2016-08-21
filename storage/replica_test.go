@@ -188,7 +188,7 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 				t.Fatal(err)
 			}
 		}
-		if err := tc.store.Start(tc.stopper); err != nil {
+		if err := tc.store.Start(context.Background(), tc.stopper); err != nil {
 			t.Fatal(err)
 		}
 		tc.store.WaitForInit()
