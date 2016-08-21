@@ -299,8 +299,7 @@ func (s *Server) Start() error {
 
 	httpServer := netutil.MakeServer(s.stopper, tlsConfig, s)
 	plainRedirectServer := netutil.MakeServer(s.stopper, tlsConfig, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// TODO(tamird): s/308/http.StatusPermanentRedirect/ when it exists.
-		http.Redirect(w, r, "https://"+r.Host+r.RequestURI, 308)
+		http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusPermanentRedirect)
 	}))
 
 	// The following code is a specialization of util/net.go's ListenAndServe
