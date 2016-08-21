@@ -124,7 +124,14 @@ func NewContext(baseCtx *base.Context, hlcClock *hlc.Clock, stopper *stop.Stoppe
 		ctx.cancel()
 		ctx.conns.Lock()
 		for key, meta := range ctx.conns.cache {
-			meta.Do(func() {}) // Make sure initialization is not in-progress.
+			meta.Do(func() {
+				// Make sure initialization is not in progress when we're removing the
+				// conn. We need to set the error in case we win the race against the
+				// real initialization code.
+				if meta.err == nil {
+					meta.err = &roachpb.NodeUnavailableError{}
+				}
+			})
 			ctx.removeConnLocked(key, meta)
 		}
 		ctx.conns.Unlock()
