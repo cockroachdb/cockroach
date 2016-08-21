@@ -134,9 +134,8 @@ func TestSecureHTTPRedirect(t *testing.T) {
 		t.Fatal(err)
 	} else {
 		resp.Body.Close()
-		// TODO(tamird): s/308/http.StatusPermanentRedirect/ when it exists.
-		if resp.StatusCode != 308 {
-			t.Errorf("expected status code %d; got %d", 308, resp.StatusCode)
+		if resp.StatusCode != http.StatusPermanentRedirect {
+			t.Errorf("expected status code %d; got %d", http.StatusPermanentRedirect, resp.StatusCode)
 		}
 		if redirectURL, err := resp.Location(); err != nil {
 			t.Error(err)
@@ -149,9 +148,8 @@ func TestSecureHTTPRedirect(t *testing.T) {
 		t.Fatal(err)
 	} else {
 		resp.Body.Close()
-		// TODO(tamird): s/308/http.StatusPermanentRedirect/ when it exists.
-		if resp.StatusCode != 308 {
-			t.Errorf("expected status code %d; got %d", 308, resp.StatusCode)
+		if resp.StatusCode != http.StatusPermanentRedirect {
+			t.Errorf("expected status code %d; got %d", http.StatusPermanentRedirect, resp.StatusCode)
 		}
 		if redirectURL, err := resp.Location(); err != nil {
 			t.Error(err)
