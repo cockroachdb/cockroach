@@ -4,8 +4,8 @@
  */
 
 import { Action, PayloadAction } from "../interfaces/action";
-import _ = require("lodash");
-import moment = require("moment");
+import _ from "lodash";
+import moment from "moment";
 
 export const SET_WINDOW = "cockroachui/timewindow/SET_WINDOW";
 export const SET_SCALE = "cockroachui/timewindow/SET_SCALE";

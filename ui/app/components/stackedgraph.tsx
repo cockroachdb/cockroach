@@ -2,7 +2,7 @@ import * as React from "react";
 import * as nvd3 from "nvd3";
 import * as d3 from "d3";
 import { createSelector } from "reselect";
-import _ = require("lodash");
+import _ from "lodash";
 
 import { findChildrenOfType } from "../util/find";
 import { NanoToMilli } from "../util/convert";

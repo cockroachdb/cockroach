@@ -1,14 +1,19 @@
-import _ = require("lodash");
+import _ from "lodash";
 import { createStore, combineReducers, applyMiddleware, compose, StoreEnhancer } from "redux";
 import { hashHistory } from "react-router";
 import { syncHistoryWithStore, routerReducer, IRouterState } from "react-router-redux";
 import thunk from "redux-thunk";
 
-import uiReducer, * as ui from "./ui";
-import uiDataReducer, * as uiData from "./uiData";
-import metricsReducer, * as metrics from "./metrics";
-import timeWindowReducer, * as timewindow from "./timewindow";
-import apiReducersReducer, * as apiReducers from "./apiReducers";
+import uiReducer from "./ui";
+import * as ui from "./ui";
+import uiDataReducer from "./uiData";
+import * as uiData from "./uiData";
+import metricsReducer from "./metrics";
+import * as metrics from "./metrics";
+import timeWindowReducer from "./timewindow";
+import * as timewindow from "./timewindow";
+import apiReducersReducer from "./apiReducers";
+import * as apiReducers from "./apiReducers";
 
 import { PayloadAction } from "../interfaces/action";
 

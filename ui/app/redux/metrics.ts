@@ -5,7 +5,7 @@
  * in the reducer by a unique ID.
  */
 
-import _ = require("lodash");
+import _ from "lodash";
 import { Dispatch } from "redux";
 
 import * as protos from  "../js/protos";

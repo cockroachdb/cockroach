@@ -1,10 +1,12 @@
 import { assert } from "chai";
-import _ = require("lodash");
-import ByteBuffer = require("bytebuffer");
-import * as fetchMock from "../util/fetch-mock";
+import _ from "lodash";
+import ByteBuffer from "bytebuffer";
+import fetchMock from "../util/fetch-mock";
 
 import * as protos from "../js/protos";
-import reducer, * as uidata from "./uiData";
+import reducer from "./uiData";
+import * as uidata from "./uiData";
+
 import { Action } from "../interfaces/action";
 
 describe("UIData reducer", function() {

@@ -1,8 +1,8 @@
 import * as React from "react";
 import { assert } from "chai";
 import { shallow } from "enzyme";
-import _ = require("lodash");
-import Long = require("long");
+import _ from "lodash";
+import Long from "long";
 import * as sinon from "sinon";
 
 import * as protos from  "../js/protos";

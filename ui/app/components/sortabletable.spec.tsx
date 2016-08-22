@@ -1,5 +1,5 @@
 import * as React from "react";
-import _ = require("lodash");
+import _ from "lodash";
 import { assert } from "chai";
 import { shallow } from "enzyme";
 import * as sinon from "sinon";

@@ -93,10 +93,16 @@ System.config({
     "redux-thunk": "npm:redux-thunk@2.1.0",
     "reselect": "npm:reselect@2.5.3",
     "sinon": "npm:sinon@1.17.5",
+    "systemjs-hot-reloader": "github:capaj/systemjs-hot-reloader@0.6.0",
     "ts": "github:frankwallis/plugin-typescript@5.0.9",
     "ts-runtime": "npm:babel-runtime@6.11.6",
     "typescript": "npm:typescript@1.8.10",
     "whatwg-fetch": "github:tamird/fetch@support-arraybuffer",
+    "github:capaj/systemjs-hot-reloader@0.6.0": {
+      "debug": "npm:debug@2.2.0",
+      "socket.io-client": "github:socketio/socket.io-client@1.4.8",
+      "weakee": "npm:weakee@1.0.0"
+    },
     "github:dcodeIO/bytebuffer.js@5.0.1": {
       "long": "github:dcodeIO/long.js@3.2.0"
     },
@@ -479,6 +485,9 @@ System.config({
       "path": "github:jspm/nodelibs-path@0.1.0",
       "process": "github:jspm/nodelibs-process@0.1.2",
       "util": "github:jspm/nodelibs-util@0.1.0"
+    },
+    "npm:debug@2.2.0": {
+      "ms": "npm:ms@0.7.1"
     },
     "npm:deep-eql@0.1.3": {
       "buffer": "github:jspm/nodelibs-buffer@0.1.0",

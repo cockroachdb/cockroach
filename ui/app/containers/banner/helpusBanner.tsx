@@ -2,7 +2,7 @@ import * as React from "react";
 import { connect } from "react-redux";
 import { Link } from "react-router";
 import { createSelector } from "reselect";
-import _ = require("lodash");
+import _ from "lodash";
 
 import Banner from "./banner";
 import { AdminUIState } from "../../redux/state";

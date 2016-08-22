@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as d3 from "d3";
-import _ = require("lodash");
+import _ from "lodash";
 
 type TSResponseMessage = cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
 
