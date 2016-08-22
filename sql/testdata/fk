@@ -175,9 +175,9 @@ query TTTTT colnames
 SHOW CONSTRAINTS FROM orders
 ----
 Table   Name                        Type         Column(s)   Details
-orders  fk_product_ref_products     FOREIGN KEY  [product]   products.[sku]
-orders  primary                     PRIMARY KEY  [id]        NULL
-orders  valid_customer              FOREIGN KEY  [customer]  customers.[id]
+orders  fk_product_ref_products     FOREIGN KEY  product     products.[sku]
+orders  primary                     PRIMARY KEY  id          NULL
+orders  valid_customer              FOREIGN KEY  customer    customers.[id]
 
 statement error "products_upc_key" is referenced by foreign key from table "scans"
 DROP INDEX products@products_upc_key
