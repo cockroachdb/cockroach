@@ -773,16 +773,14 @@ func (t *logicTest) processTestFile(path string) error {
 // expected, or that an error was found when one was expected. Returns
 // "true" to indicate the behavior was as expected.
 func (t *logicTest) verifyError(
-	sql string, pos string, expectErr string, expectErrCode string, err error) bool {
+	sql, pos, expectErr, expectErrCode string,
+	err error,
+) bool {
 	if expectErr == "" && expectErrCode == "" && err != nil {
 		return t.unexpectedError(sql, pos, err)
 	}
 	if expectErr != "" && !testutils.IsError(err, expectErr) {
-		if err != nil {
-			t.Errorf("%s: expected %q, but found\n%s", pos, expectErr, err)
-		} else {
-			t.Errorf("%s: expected %q, but found success", pos, expectErr)
-		}
+		t.Errorf("%s: expected %q, but found %v", pos, expectErr, err)
 		return false
 	}
 	if expectErrCode != "" {
