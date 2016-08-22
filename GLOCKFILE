@@ -53,7 +53,7 @@ github.com/docker/go-connections 0bad1a3951398f88ef4dd75fdb42af374430be89
 github.com/docker/go-units eb879ae3e2b84e2a142af415b679ddeda47ec71c
 github.com/dustin/go-humanize 2fcb5204cdc65b4bec9fd0a87606bb0d0e3c54e8
 github.com/elastic/gosigar 7c0ce0d4814c8d4950d7e7f40ed3b6359e757875
-github.com/elazarl/go-bindata-assetfs e1a2a7ec64b07d04ac9ebb072404fe8b7b60de1b
+github.com/elazarl/go-bindata-assetfs 9a6736ed45b44bf3835afeebb3034b57ed329f3e
 github.com/facebookgo/clock 600d898af40aa09a7a93ecb9265d87b0504b6f03
 github.com/go-ole/go-ole 7dfdcf409020452e29b4babcbb22f984d2aa308a
 github.com/go-sql-driver/mysql 0b58b37b664c21f3010e836f1b931e1d0b0b0685
