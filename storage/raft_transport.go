@@ -331,35 +331,34 @@ func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error 
 	var taskErr error
 	if err := t.rpcContext.Stopper.RunTask(func() {
 		taskErr = func() error {
-			req, err := stream.Recv()
+			firstReq, err := stream.Recv()
 			if err != nil {
 				return err
 			}
-			if req.Header == nil {
+			if firstReq.Header == nil {
 				return stream.Send(&SnapshotResponse{
 					Status:  SnapshotResponse_ERROR,
-					Message: "Client error: no header in first snapshot request message"})
+					Message: "client error: no header in first snapshot request message"})
 			}
-			firstReq := req
 			t.mu.Lock()
-			store, ok := t.mu.stores[req.Header.ToReplica.StoreID]
+			store, ok := t.mu.stores[firstReq.Header.ToReplica.StoreID]
 			t.mu.Unlock()
 			if !ok {
 				return errors.Errorf(
 					"unable to accept Raft message from %+v: no store registered for %+v",
-					req.Header.ToReplica, req.Header.FromReplica)
+					firstReq.Header.ToReplica, firstReq.Header.FromReplica)
 			}
 			store.mu.Lock()
 			// Just check to see if we can even apply the snapshot now.
 			// We'll check again when we've got the whole message and actually add the placeholder
 			// that might be returned by this method at that point, if necessary.
-			_, canApplyErr := store.canApplySnapshotLocked(&req.Header.RangeDescriptor)
+			_, canApplyErr := store.canApplySnapshotLocked(&firstReq.Header.RangeDescriptor)
 			store.mu.Unlock()
 
 			if canApplyErr != nil {
 				return stream.Send(&SnapshotResponse{
 					Status:  SnapshotResponse_DECLINED,
-					Message: fmt.Sprintf("Declined snapshot: %+v", canApplyErr)})
+					Message: fmt.Sprintf("declined snapshot: %+v", canApplyErr)})
 			}
 
 			if err := stream.Send(&SnapshotResponse{Status: SnapshotResponse_ACCEPTED}); err != nil {
@@ -376,7 +375,7 @@ func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error 
 				if req.Header != nil {
 					return stream.Send(&SnapshotResponse{
 						Status:  SnapshotResponse_ERROR,
-						Message: "Client error: provided a header mid-stream"})
+						Message: "client error: provided a header mid-stream"})
 				}
 
 				if req.KVBatch != nil {
@@ -391,7 +390,7 @@ func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error 
 
 						return stream.Send(&SnapshotResponse{
 							Status:  SnapshotResponse_ERROR,
-							Message: fmt.Sprintf("Failed to apply snapshot: %+v", err)})
+							Message: errors.Wrap(err.GoError(), "failed to apply snapshot").Error()})
 					}
 					return stream.Send(&SnapshotResponse{Status: SnapshotResponse_APPLIED})
 				}
@@ -661,7 +660,8 @@ func (t *RaftTransport) SendSnapshot(
 	ctx context.Context,
 	header *SnapshotRequest_Header,
 	snap OutgoingSnapshot,
-	batchFactory batchFactory) error {
+	batchFactory batchFactory,
+) error {
 	nodeID := header.ToReplica.NodeID
 	breaker := t.GetCircuitBreaker(nodeID)
 	return breaker.Call(func() error {
@@ -733,6 +733,9 @@ func (t *RaftTransport) SendSnapshot(
 			n, len(snap.LogEntries))
 
 		resp, err = stream.Recv()
+		if err != nil {
+			return errors.Wrapf(err, "range=%s: remote failed to apply snapshot", header.RangeDescriptor.RangeID)
+		}
 		if resp.Status == SnapshotResponse_ERROR {
 			return errors.Errorf("range=%s: remote failed to apply snapshot for reason %s",
 				header.RangeDescriptor.RangeID, resp.Message)

@@ -83,10 +83,10 @@ message SnapshotRequest {
 
 message SnapshotResponse {
   enum Status {
-    ACCEPTED = 0;
-    APPLIED = 1;
-    ERROR = 2;
-    DECLINED = 3;
+    ACCEPTED = 1;
+    APPLIED = 2;
+    ERROR = 3;
+    DECLINED = 4;
   }
   optional Status status = 1 [(gogoproto.nullable) = false];
   optional string message = 2 [(gogoproto.nullable) = false];

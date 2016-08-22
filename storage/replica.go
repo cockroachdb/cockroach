@@ -1910,9 +1910,9 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	if !raft.IsEmptySnap(msg.Snapshot) {
 		msgUUID, err := uuid.FromBytes(msg.Snapshot.Data)
 		if err != nil || *msgUUID != snap.SnapUUID {
-			// Drop the message in this case.
-			log.Warningf(ctx, "snapshot message from Raft.Ready doesn't match our generated snapshot UUID.")
+			// This shouldn't happen.
 			snap.Close()
+			log.Fatalf(ctx, "programming error: snapshot message from Raft.Ready doesn't match outgoing snapshot UUID.")
 			return
 		}
 		// Asynchronously stream the snapshot to the recipient.
