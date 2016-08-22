@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link, IInjectedProps } from "react-router";
-import * as _ from "lodash";
+import _ from "lodash";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 

@@ -1,5 +1,5 @@
 import * as React from "react";
-import _ = require("lodash");
+import _ from "lodash";
 
 /**
  * SortableColumn describes the contents a single column of a

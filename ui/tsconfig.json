@@ -6,7 +6,6 @@
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
     "jsx": "react",
-    "module": "commonjs",
     "noEmit": true,
     "noErrorTruncation": true,
     "noFallthroughCasesInSwitch": true,

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { connect } from "react-redux";
-import classNames = require("classnames");
-import _ = require("lodash");
+import classNames from "classnames";
+import _ from "lodash";
 
 import { AdminUIState } from "../redux/state";
 import * as timewindow from "../redux/timewindow";
