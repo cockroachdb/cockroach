@@ -18,7 +18,6 @@ package storage
 
 import (
 	"bytes"
-	"fmt"
 	"strconv"
 	"time"
 
@@ -320,11 +319,11 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (raftpb.Snapshot, err
 
 	if r.store.Stopper().RunAsyncTask(func() {
 		defer close(ch)
-		sp := r.store.Tracer().StartSpan(fmt.Sprintf("snapshot async %s", r))
+		sp := r.store.Tracer().StartSpan("snapshot async")
 		ctxInner := opentracing.ContextWithSpan(context.Background(), sp)
 		defer sp.Finish()
 		snap := r.store.NewSnapshot()
-		log.Trace(ctxInner, "new engine snapshot")
+		log.Tracef(ctxInner, "new engine snapshot for replica %s", r)
 		defer snap.Close()
 		defer r.store.ReleaseRaftSnapshot()
 		// Delegate to a static function to make sure that we do not depend
