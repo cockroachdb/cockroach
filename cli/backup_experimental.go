@@ -28,9 +28,11 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
 type backupContext struct {
+	database  string
 	table     string
 	overwrite bool
 }
@@ -39,7 +41,8 @@ var backupCtx backupContext
 
 func init() {
 	f := restoreCmd.Flags()
-	f.StringVar(&backupCtx.table, "table", "", "table or restore (or empty for all user tables)")
+	f.StringVar(&backupCtx.database, "database", "*", "database to restore (or empty for all user databases)")
+	f.StringVar(&backupCtx.table, "table", "*", "table to restore (or empty for all user tables in database(s))")
 	f.BoolVar(&backupCtx.overwrite, "overwrite", false, "true to overwrite existing tables")
 }
 
@@ -58,7 +61,7 @@ func runBackup(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Printf("Backed up %d ranges to %s\n", len(desc.Ranges), base)
+	fmt.Printf("Backed up %d data bytes in %d ranges to %s\n", desc.DataSize, len(desc.Ranges), base)
 	return nil
 }
 
@@ -79,8 +82,20 @@ func runRestore(cmd *cobra.Command, args []string) error {
 	kvDB, stopper := makeDBClient()
 	defer stopper.Stop()
 
-	if err := sql.Restore(ctx, *kvDB, base, backupCtx.table, backupCtx.overwrite); err != nil {
+	tableName := parser.TableName{
+		DatabaseName: parser.Name(backupCtx.database),
+		TableName:    parser.Name(backupCtx.table),
+	}
+	restored, err := sql.Restore(ctx, *kvDB, base, tableName, backupCtx.overwrite)
+	if err != nil {
 		return err
+	}
+	for _, desc := range restored {
+		if db := desc.GetDatabase(); db != nil {
+			fmt.Printf("Restored database %q\n", db.Name)
+			continue
+		}
+		fmt.Printf("Restored table %q\n", desc.GetTable().Name)
 	}
 
 	fmt.Printf("Restored from %s\n", base)
