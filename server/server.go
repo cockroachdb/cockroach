@@ -291,7 +291,7 @@ type grpcGatewayServer interface {
 
 // Start starts the server on the specified port, starts gossip and
 // initializes the node using the engines from the server's context.
-func (s *Server) Start() error {
+func (s *Server) Start(ctx context.Context) error {
 	tlsConfig, err := s.ctx.GetServerTLSConfig()
 	if err != nil {
 		return err
@@ -327,6 +327,7 @@ func (s *Server) Start() error {
 	if err != nil {
 		return err
 	}
+	log.Tracef(ctx, "listening on port %s", s.ctx.Addr)
 	unresolvedAddr, err := officialAddr(s.ctx.Addr, ln.Addr())
 	if err != nil {
 		return err
@@ -426,10 +427,12 @@ func (s *Server) Start() error {
 	s.mux.HandleFunc(debugEndpoint, http.HandlerFunc(handleDebug))
 
 	s.gossip.Start(unresolvedAddr)
+	log.Trace(ctx, "started gossip")
 
-	if err := s.node.start(s.Ctx(), unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
+	if err := s.node.start(ctx, unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
 		return err
 	}
+	log.Trace(ctx, "started node")
 
 	// We can now add the node registry.
 	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt)
@@ -463,6 +466,7 @@ func (s *Server) Start() error {
 	s.stopper.RunWorker(func() {
 		netutil.FatalIfUnexpected(m.Serve())
 	})
+	log.Trace(ctx, "accepting connections")
 
 	// Initialize grpc-gateway mux and context.
 	jsonpb := &util.JSONPb{
@@ -524,10 +528,12 @@ func (s *Server) Start() error {
 	s.mux.Handle(statusPrefix, gwMux)
 	s.mux.Handle("/health", gwMux)
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
+	log.Trace(ctx, "added http endpoints")
 
 	if err := sdnotify.Ready(); err != nil {
 		log.Errorf(s.Ctx(), "failed to signal readiness using systemd protocol: %s", err)
 	}
+	log.Trace(ctx, "server ready")
 
 	return nil
 }

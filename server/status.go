@@ -545,7 +545,7 @@ func (s *statusServer) Ranges(ctx context.Context, req *serverpb.RangesRequest) 
 	err = s.stores.VisitStores(func(store *storage.Store) error {
 		// Use IterateRangeDescriptors to read from the engine only
 		// because it's already exported.
-		err := storage.IterateRangeDescriptors(store.Engine(),
+		err := storage.IterateRangeDescriptors(ctx, store.Engine(),
 			func(desc roachpb.RangeDescriptor) (bool, error) {
 				rep, err := store.GetReplica(desc.RangeID)
 				if err != nil {
