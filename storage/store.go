@@ -2169,6 +2169,24 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now hlc.Timesta
 	return txn, nil
 }
 
+// checkReplicaTooOld checks to see if the replica id of the sender of a Raft
+// message is too old and no longer exists.
+func checkReplicaTooOld(r *Replica, fromReplicaID roachpb.ReplicaID) *roachpb.Error {
+	found := false
+	desc := r.Desc()
+	for _, rep := range desc.Replicas {
+		if rep.ReplicaID == fromReplicaID {
+			found = true
+			break
+		}
+	}
+	// It's not a current member of the group. Is it from the past?
+	if !found && fromReplicaID < desc.NextReplicaID {
+		return roachpb.NewError(&roachpb.ReplicaTooOldError{})
+	}
+	return nil
+}
+
 // HandleRaftRequest dispatches a raft message to the appropriate Replica. It
 // requires that s.processRaftMu and s.mu are not held.
 func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) *roachpb.Error {
@@ -2181,17 +2199,8 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 	r, ok := s.mu.replicas[req.RangeID]
 	s.mu.Unlock()
 	if ok {
-		found := false
-		desc := r.Desc()
-		for _, rep := range desc.Replicas {
-			if rep.ReplicaID == req.FromReplica.ReplicaID {
-				found = true
-				break
-			}
-		}
-		// It's not a current member of the group. Is it from the past?
-		if !found && req.FromReplica.ReplicaID < desc.NextReplicaID {
-			return roachpb.NewError(&roachpb.ReplicaTooOldError{})
+		if err := checkReplicaTooOld(r, req.FromReplica.ReplicaID); err != nil {
+			return err
 		}
 	}
 
