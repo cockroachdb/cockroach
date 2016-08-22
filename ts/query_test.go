@@ -30,6 +30,8 @@ import (
 )
 
 var (
+	// testSeries1 has Data at timestamps [0, 50, 70, 90 and 140]. Data is split
+	// across two InternalTimeSeriesData collections.
 	testSeries1 = []roachpb.InternalTimeSeriesData{
 		{
 			StartTimestampNanos: 0,
@@ -73,6 +75,7 @@ var (
 			},
 		},
 	}
+	// testSeries2 has Data at timestamps [30, 60, 70, 90 and 180].
 	testSeries2 = []roachpb.InternalTimeSeriesData{
 		{
 			StartTimestampNanos: 30,
@@ -114,6 +117,241 @@ var (
 	}
 )
 
+// generateData generates an InternalTimeSeriesData object.
+func generateData(startTimestamp int64, timestamps ...int64) roachpb.InternalTimeSeriesData {
+	result := roachpb.InternalTimeSeriesData{
+		StartTimestampNanos: startTimestamp,
+		SampleDurationNanos: 10,
+		Samples:             make([]roachpb.InternalTimeSeriesSample, len(timestamps)),
+	}
+	for i, ts := range timestamps {
+		result.Samples[i] = roachpb.InternalTimeSeriesSample{
+			Offset: int32((ts - startTimestamp) / 10),
+			Count:  1,
+			Sum:    float64(ts),
+		}
+	}
+	return result
+}
+
+func TestDataSpanIterator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ds := dataSpan{
+		startNanos:  30,
+		sampleNanos: 10,
+	}
+	testData := []roachpb.InternalTimeSeriesData{
+		generateData(0, 0, 50, 70),
+		generateData(80, 90, 140),
+	}
+	for _, data := range testData {
+		if err := ds.addData(data); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var iter dataSpanIterator
+	checkNum := 0
+	verifyIter := func(expectedValid bool, expectedOffset int32, expectedTimestamp int64) {
+		checkNum++
+		if a, e := iter.isValid(), expectedValid; a != e {
+			t.Fatalf("check %d: expected iterator valid to be %t, was %t", checkNum, e, a)
+		}
+		if !expectedValid {
+			return
+		}
+		if a, e := iter.offset(), int32(expectedOffset); a != e {
+			t.Fatalf("check %d: expected iterator to have offset %d, was %d", checkNum, e, a)
+		}
+		if a, e := iter.timestamp(), int64(expectedTimestamp); a != e {
+			t.Fatalf(
+				"check %d: expected iterator to have timestamp %d, was %d", checkNum, e, a,
+			)
+		}
+		// Value should be equal to timestamp.
+		if a, e := iter.value(), float64(expectedTimestamp); a != e {
+			t.Fatalf(
+				"check %d: expected iterator to have value %f, was %f", checkNum, e, a,
+			)
+		}
+	}
+
+	// Corner cases we are looking to verify:
+	// + Create new Iterator:
+	//   - @offset with no real point (should be set to next point)
+	//   - @offset before first point (should be set to first point)
+	//   - @offset after last point (should be invalid)
+	//   - @offset with point in a data set other than the first
+	// + Advance iterator:
+	//   - Normally from one point to next
+	//   - Normally across data set boundary
+	//   - From invalid state before first point
+	//   - To invalid state at end of data
+	// + Retreat iterator:
+	//   - Normally from one point to previous
+	//   - Normally across data set boundary
+	//   - From invalid state after last point
+	//   - To valid state at beginning of data
+
+	// Create iterator at offset 0. Dataspan starts at 30, so this should
+	// be set to the real datapoint at 50.
+	iter = newDataSpanIterator(ds, 0, (roachpb.InternalTimeSeriesSample).Average)
+	verifyIter(true, 2, 50)
+
+	// Retreat iterator: should be at offset -3, real timestamp 0.
+	iter.retreat()
+	verifyIter(true, -3, 0)
+
+	// Retreat iterator: should be invalid.
+	iter.retreat()
+	verifyIter(false, 0, 0)
+
+	// Advance iterator: should be at first point again.
+	iter.advance()
+	verifyIter(true, -3, 0)
+
+	// Advance iterator: should be at original point again.
+	iter.advance()
+	verifyIter(true, 2, 50)
+
+	// Advance iterator twice; should be set to point in next data set.
+	iter.advance()
+	iter.advance()
+	verifyIter(true, 6, 90)
+
+	// Retreat iterator: should point to be set to point in previous span.
+	iter.retreat()
+	verifyIter(true, 4, 70)
+
+	// Advance iterator past last point.
+	iter.advance()
+	iter.advance()
+	iter.advance()
+	verifyIter(false, 0, 0)
+
+	// Retreat iterator: should be at the last data point in the set.
+	iter.retreat()
+	verifyIter(true, 11, 140)
+
+	// Create iterator at offset -100. Should be set to first point.
+	iter = newDataSpanIterator(ds, -100, (roachpb.InternalTimeSeriesSample).Average)
+	verifyIter(true, -3, 0)
+
+	// Create new iterator beyond the end of the scope: should be invalid.
+	iter = newDataSpanIterator(ds, 1000, (roachpb.InternalTimeSeriesSample).Average)
+	verifyIter(false, 0, 0)
+	iter.retreat()
+	verifyIter(true, 11, 140)
+
+	// Create new iterator directly into second span.
+	iter = newDataSpanIterator(ds, 6, (roachpb.InternalTimeSeriesSample).Average)
+	verifyIter(true, 6, 90)
+}
+
+func TestDownsamplingIterator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ds := dataSpan{
+		startNanos:  30,
+		sampleNanos: 10,
+	}
+	testData := []roachpb.InternalTimeSeriesData{
+		generateData(0, 0, 10, 20, 30, 50, 60),
+		generateData(70, 70, 90, 100, 150, 170),
+	}
+	for _, data := range testData {
+		if err := ds.addData(data); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var iter downsamplingIterator
+	checkNum := 0
+	verifyIter := func(
+		expectedValid bool, expectedOffset int32, expectedTimestamp int64, expectedValue float64,
+	) {
+		checkNum++
+		if a, e := iter.isValid(), expectedValid; a != e {
+			t.Fatalf("check %d: expected iterator valid to be %t, was %t", checkNum, e, a)
+		}
+		if !expectedValid {
+			return
+		}
+		if a, e := iter.offset(), int32(expectedOffset); a != e {
+			t.Fatalf("check %d: expected iterator to have offset %d, was %d", checkNum, e, a)
+		}
+		if a, e := iter.timestamp(), int64(expectedTimestamp); a != e {
+			t.Fatalf(
+				"check %d: expected iterator to have timestamp %d, was %d", checkNum, e, a,
+			)
+		}
+		if a, e := iter.value(), float64(expectedValue); a != e {
+			t.Fatalf(
+				"check %d: expected iterator to have value %f, was %f", checkNum, e, a,
+			)
+		}
+	}
+
+	// Initialize iterator to offset zero, which represents timestamp 30.
+	iter = newDownsamplingIterator(ds, 0, 30, (roachpb.InternalTimeSeriesSample).Average, downsampleAvg)
+	verifyIter(true, 0, 30, 40)
+
+	// Retreat iterator - should point to offset -1.
+	iter.retreat()
+	verifyIter(true, -1, 0, 10)
+
+	// Retreat iterator - should be invalid.
+	iter.retreat()
+	verifyIter(false, -1, 0, 10)
+
+	// Advance iterator - should be valid again.
+	iter.advance()
+	verifyIter(true, -1, 0, 10)
+
+	// Advance iterator twice - this offset straddles two datasets in the
+	// underlying data.
+	iter.advance()
+	iter.advance()
+	verifyIter(true, 1, 60, 65)
+
+	// Advance and retreat iterator, make sure it still straddles correctly.
+	iter.advance()
+	iter.retreat()
+	verifyIter(true, 1, 60, 65)
+
+	// Retreat to ensure that iterator can retreat from straddled position.
+	iter.retreat()
+	verifyIter(true, 0, 30, 40)
+
+	// Advance iterator thrice, should be at offset 4 (no points at 3)
+	iter.advance()
+	iter.advance()
+	iter.advance()
+	verifyIter(true, 4, 150, 160)
+
+	// Advance iterator; should be invalid.
+	iter.advance()
+	verifyIter(false, 0, 0, 0)
+
+	// Retreat iterator, should be valid again.
+	iter.retreat()
+	verifyIter(true, 4, 150, 160)
+
+	// Initialize iterator at high offset.
+	iter = newDownsamplingIterator(ds, 5, 30, (roachpb.InternalTimeSeriesSample).Average, downsampleAvg)
+	verifyIter(false, 0, 0, 0)
+	iter.retreat()
+	verifyIter(true, 4, 150, 160)
+
+	// Initialize iterator at low offset. Should be set to first point.
+	iter = newDownsamplingIterator(ds, -3, 30, (roachpb.InternalTimeSeriesSample).Average, downsampleAvg)
+	verifyIter(true, -1, 0, 10)
+
+	// Initialize iterator at staggered offset.
+	iter = newDownsamplingIterator(ds, 1, 30, (roachpb.InternalTimeSeriesSample).Average, downsampleAvg)
+	verifyIter(true, 1, 60, 65)
+
+}
+
 // TestInterpolation verifies the interpolated average values of a single interpolatingIterator.
 func TestInterpolation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -128,8 +366,8 @@ func TestInterpolation(t *testing.T) {
 	}
 
 	testCases := []struct {
-		expected     []float64
-		downsampleFn downsampleFn
+		expected  []float64
+		extractFn extractFn
 	}{
 		{
 			[]float64{3.4, 4.2, 5, 7.5, 10, 15, 20, 24, 28, 32, 36, 40, 0},
@@ -153,7 +391,7 @@ func TestInterpolation(t *testing.T) {
 
 	for i, tc := range testCases {
 		actual := make([]float64, 0, len(tc.expected))
-		iter := ds.newIterator(0, tc.downsampleFn)
+		iter := newInterpolatingIterator(ds, 0, 10, tc.extractFn, downsampleSum)
 		for i := 0; i < len(tc.expected); i++ {
 			iter.advanceTo(int32(i))
 			actual = append(actual, iter.value())
@@ -162,7 +400,6 @@ func TestInterpolation(t *testing.T) {
 			t.Fatalf("test %d, interpolated values: %v, expected values: %v", i, actual, tc.expected)
 		}
 	}
-
 }
 
 // TestAggregation verifies the behavior of an iteratorSet, which
@@ -218,14 +455,14 @@ func TestAggregation(t *testing.T) {
 		},
 	}
 
-	downsampleFn := func(s roachpb.InternalTimeSeriesSample) float64 {
+	extractFn := func(s roachpb.InternalTimeSeriesSample) float64 {
 		return s.Average()
 	}
 	for i, tc := range testCases {
 		actual := make([]float64, 0, len(tc.expected))
 		iters := unionIterator{
-			dataSpan1.newIterator(0, downsampleFn),
-			dataSpan2.newIterator(0, downsampleFn),
+			newInterpolatingIterator(dataSpan1, 0, 10, extractFn, downsampleSum),
+			newInterpolatingIterator(dataSpan2, 0, 10, extractFn, downsampleSum),
 		}
 		iters.init()
 		for iters.isValid() {
@@ -257,7 +494,7 @@ func (tm *testModel) assertQuery(
 		Derivative:       derivative,
 		Sources:          sources,
 	}
-	actualDatapoints, actualSources, err := tm.DB.Query(q, r, start, end)
+	actualDatapoints, actualSources, err := tm.DB.Query(q, r, r, start, end)
 	if err != nil {
 		tm.t.Fatal(err)
 	}
@@ -323,13 +560,13 @@ func (tm *testModel) assertQuery(
 	if isDerivative {
 		startOffset = -1
 	}
-	downsampleFn, err := getDownsampleFunction(q.GetDownsampler())
+	extractFn, err := getExtractionFunction(q.GetDownsampler())
 	if err != nil {
 		tm.t.Fatal(err)
 	}
 	var iters unionIterator
 	for _, ds := range dataSpans {
-		iters = append(iters, ds.newIterator(startOffset, downsampleFn))
+		iters = append(iters, newInterpolatingIterator(*ds, startOffset, r.SampleDuration(), extractFn, downsampleSum))
 	}
 
 	iters.init()
