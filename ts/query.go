@@ -116,6 +116,11 @@ type dataSpanIterator struct {
 // the last index in the dataSpan; calling retreat() on this iterator will place
 // it on the last datapoint.
 func newDataSpanIterator(ds dataSpan, offset int32, extractFn extractFn) dataSpanIterator {
+	// If there is no data at all, iterator is completely invalid.
+	if len(ds.datas) == 0 {
+		return dataSpanIterator{}
+	}
+
 	// Use a binary search to find the data span which should contain the offset.
 	dataIdx := sort.Search(len(ds.datas), func(i int) bool {
 		data := ds.datas[i]
@@ -155,6 +160,15 @@ func (dsi dataSpanIterator) value() float64 {
 		panic(fmt.Sprintf("value called on invalid dataSpanIterator: %v", dsi))
 	}
 	return dsi.extractFn(dsi.datas[dsi.dataIdx].Samples[dsi.sampleIdx])
+}
+
+// sample returns the InternalTimeSeriesSample which represents the current
+// sample.
+func (dsi dataSpanIterator) sample() roachpb.InternalTimeSeriesSample {
+	if !dsi.valid {
+		panic(fmt.Sprintf("sample called on invalid dataSpanIterator: %v", dsi))
+	}
+	return dsi.datas[dsi.dataIdx].Samples[dsi.sampleIdx]
 }
 
 // return the offset of the current sample, relative to the start of the
@@ -247,8 +261,8 @@ func (dsi *dataSpanIterator) isValid() bool {
 }
 
 // downsampleFn is a function which computes a single float64 value from a set
-// of other float64 values.
-type downsampleFn func(...float64) float64
+// of InternalTimeSeriesSample objects.
+type downsampleFn func(...roachpb.InternalTimeSeriesSample) float64
 
 // downsamplingIterator behaves like a dataSpanIterator, but converts data to a
 // longer sample period through downsampling. Each offset of the downsampling
@@ -362,11 +376,11 @@ func (dsi *downsamplingIterator) value() float64 {
 	}
 
 	end := dsi.end
-	floats := make([]float64, 0, dsi.sampleFactor)
+	samples := make([]roachpb.InternalTimeSeriesSample, 0, dsi.sampleFactor)
 	for iter := dsi.start; iter.valid && (!end.valid || iter.offset() != end.offset()); iter.advance() {
-		floats = append(floats, iter.value())
+		samples = append(samples, iter.sample())
 	}
-	return dsi.downsampleFn(floats...)
+	return dsi.downsampleFn(samples...)
 }
 
 func (dsi *downsamplingIterator) computeEnd() {
@@ -641,13 +655,13 @@ func (is unionIterator) min() float64 {
 // Query returns datapoints for the named time series during the supplied time
 // span.  Data is returned as a series of consecutive data points.
 //
-// Data is queried only at the queryResolution supplied: if data for the named time
-// series is not stored at the given resolution, an empty result will be
+// Data is queried only at the queryResolution supplied: if data for the named
+// time series is not stored at the given resolution, an empty result will be
 // returned.
 //
-// Data is returned at sampleResolution, which must have a sample period >= the
-// sample period of queryResolution. If the sampleResolution is different, the
-// queried data is downsampled.
+// Data is downsampled into intervals of the given sampleDuration, which must
+// have a length >= queryResolution.SampleDuration(), and must be an even
+// multiple of queryResolution.SampleDuration().
 //
 // All data stored on the server is downsampled to some degree; the data points
 // returned represent the average value within a sample period. Each datapoint's
@@ -658,10 +672,27 @@ func (is unionIterator) min() float64 {
 // the same time. The returned string slices contains a list of all sources for
 // the metric which were aggregated to produce the result.
 func (db *DB) Query(
-	query tspb.Query, sampleResolution, queryResolution Resolution, startNanos, endNanos int64,
+	query tspb.Query, queryResolution Resolution, sampleDuration, startNanos, endNanos int64,
 ) ([]tspb.TimeSeriesDatapoint, []string, error) {
-	// Normalize startNanos to a sampleResolution boundary.
-	startNanos -= startNanos % sampleResolution.SampleDuration()
+	// Verify that sampleDuration is a multiple of
+	// queryResolution.SampleDuration().
+	if sampleDuration < queryResolution.SampleDuration() {
+		return nil, nil, fmt.Errorf(
+			"sampleDuration %d was not less that queryResolution.SampleDuration %d",
+			sampleDuration,
+			queryResolution.SampleDuration(),
+		)
+	}
+	if sampleDuration%queryResolution.SampleDuration() != 0 {
+		return nil, nil, fmt.Errorf(
+			"sampleDuration %d is not a multiple of queryResolution.SampleDuration %d",
+			sampleDuration,
+			queryResolution.SampleDuration(),
+		)
+	}
+
+	// Normalize startNanos to a sampleDuration boundary.
+	startNanos -= startNanos % sampleDuration
 
 	var rows []client.KeyValue
 	if len(query.Sources) == 0 {
@@ -739,7 +770,7 @@ func (db *DB) Query(
 	for name, span := range sourceSpans {
 		sources = append(sources, name)
 		iters = append(iters, newInterpolatingIterator(
-			*span, startOffset, sampleResolution.SampleDuration(), extractor, downsampler,
+			*span, startOffset, sampleDuration, extractor, downsampler,
 		))
 	}
 
@@ -846,37 +877,42 @@ func getExtractionFunction(agg tspb.TimeSeriesQueryAggregator) (extractFn, error
 	return nil, errors.Errorf("query specified unknown time series aggregator %s", agg.String())
 }
 
-func downsampleSum(points ...float64) float64 {
+func downsampleSum(points ...roachpb.InternalTimeSeriesSample) float64 {
 	result := 0.0
 	for _, p := range points {
-		result += p
+		result += p.Sum
 	}
 	return result
 }
 
-func downsampleMax(points ...float64) float64 {
-	result := points[0]
+func downsampleMax(points ...roachpb.InternalTimeSeriesSample) float64 {
+	result := points[0].Maximum()
 	for _, p := range points[1:] {
-		if p > result {
-			result = p
+		if p.Maximum() > result {
+			result = p.Maximum()
 		}
 	}
 	return result
 }
 
-func downsampleMin(points ...float64) float64 {
-	result := points[0]
+func downsampleMin(points ...roachpb.InternalTimeSeriesSample) float64 {
+	result := points[0].Minimum()
 	for _, p := range points[1:] {
-		if p < result {
-			result = p
+		if p.Minimum() > result {
+			result = p.Minimum()
 		}
 	}
 	return result
 }
 
-func downsampleAvg(points ...float64) float64 {
-	result := downsampleSum(points...)
-	return result / float64(len(points))
+func downsampleAvg(points ...roachpb.InternalTimeSeriesSample) float64 {
+	total := 0.0
+	var count uint32
+	for _, p := range points {
+		total += p.Sum
+		count += p.Count
+	}
+	return total / float64(count)
 }
 
 // getDownsampleFunction returns
