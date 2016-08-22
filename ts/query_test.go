@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/ts/tspb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/gogo/protobuf/proto"
@@ -117,8 +118,11 @@ var (
 	}
 )
 
-// generateData generates an InternalTimeSeriesData object.
-func generateData(startTimestamp int64, timestamps ...int64) roachpb.InternalTimeSeriesData {
+// generateSimpleData generates an InternalTimeSeriesData object with multiple
+// datapoints. Each datapoint has a value equal to its timestamp in nanos.
+// Supplied timestamps are expected to be absolute, not relative to the given
+// startTimestamp.
+func generateSimpleData(startTimestamp int64, timestamps ...int64) roachpb.InternalTimeSeriesData {
 	result := roachpb.InternalTimeSeriesData{
 		StartTimestampNanos: startTimestamp,
 		SampleDurationNanos: 10,
@@ -134,6 +138,36 @@ func generateData(startTimestamp int64, timestamps ...int64) roachpb.InternalTim
 	return result
 }
 
+// completeDatapoint is a structure used by tests to quickly describe time
+// series data points.
+type completeDatapoint struct {
+	timestamp int64
+	sum       float64
+	count     uint32
+	min       float64
+	max       float64
+}
+
+// generateComplexData generates more complicated InternalTimeSeriesData, where
+// each contained point may have an explicit max and min.
+func generateComplexData(startTimestamp, sampleDuration int64, dps []completeDatapoint) roachpb.InternalTimeSeriesData {
+	result := roachpb.InternalTimeSeriesData{
+		StartTimestampNanos: startTimestamp,
+		SampleDurationNanos: sampleDuration,
+		Samples:             make([]roachpb.InternalTimeSeriesSample, len(dps)),
+	}
+	for i, dp := range dps {
+		result.Samples[i] = roachpb.InternalTimeSeriesSample{
+			Offset: int32((dp.timestamp - startTimestamp) / sampleDuration),
+			Count:  dp.count,
+			Sum:    dp.sum,
+			Max:    proto.Float64(dp.max),
+			Min:    proto.Float64(dp.min),
+		}
+	}
+	return result
+}
+
 func TestDataSpanIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ds := dataSpan{
@@ -141,8 +175,8 @@ func TestDataSpanIterator(t *testing.T) {
 		sampleNanos: 10,
 	}
 	testData := []roachpb.InternalTimeSeriesData{
-		generateData(0, 0, 50, 70),
-		generateData(80, 90, 140),
+		generateSimpleData(0, 0, 50, 70),
+		generateSimpleData(80, 90, 140),
 	}
 	for _, data := range testData {
 		if err := ds.addData(data); err != nil {
@@ -152,7 +186,9 @@ func TestDataSpanIterator(t *testing.T) {
 
 	var iter dataSpanIterator
 	checkNum := 0
-	verifyIter := func(expectedValid bool, expectedOffset int32, expectedTimestamp int64) {
+	verifyIter := func(
+		expectedValid bool, expectedOffset int32, expectedTimestamp int64, expectedValue float64,
+	) {
 		checkNum++
 		if a, e := iter.isValid(), expectedValid; a != e {
 			t.Fatalf("check %d: expected iterator valid to be %t, was %t", checkNum, e, a)
@@ -168,8 +204,7 @@ func TestDataSpanIterator(t *testing.T) {
 				"check %d: expected iterator to have timestamp %d, was %d", checkNum, e, a,
 			)
 		}
-		// Value should be equal to timestamp.
-		if a, e := iter.value(), float64(expectedTimestamp); a != e {
+		if a, e := iter.value(), expectedValue; a != e {
 			t.Fatalf(
 				"check %d: expected iterator to have value %f, was %f", checkNum, e, a,
 			)
@@ -196,56 +231,104 @@ func TestDataSpanIterator(t *testing.T) {
 	// Create iterator at offset 0. Dataspan starts at 30, so this should
 	// be set to the real datapoint at 50.
 	iter = newDataSpanIterator(ds, 0, (roachpb.InternalTimeSeriesSample).Average)
-	verifyIter(true, 2, 50)
+	verifyIter(true, 2, 50, 50)
 
 	// Retreat iterator: should be at offset -3, real timestamp 0.
 	iter.retreat()
-	verifyIter(true, -3, 0)
+	verifyIter(true, -3, 0, 0)
 
 	// Retreat iterator: should be invalid.
 	iter.retreat()
-	verifyIter(false, 0, 0)
+	verifyIter(false, 0, 0, 0)
 
 	// Advance iterator: should be at first point again.
 	iter.advance()
-	verifyIter(true, -3, 0)
+	verifyIter(true, -3, 0, 0)
 
 	// Advance iterator: should be at original point again.
 	iter.advance()
-	verifyIter(true, 2, 50)
+	verifyIter(true, 2, 50, 50)
 
 	// Advance iterator twice; should be set to point in next data set.
 	iter.advance()
 	iter.advance()
-	verifyIter(true, 6, 90)
+	verifyIter(true, 6, 90, 90)
 
 	// Retreat iterator: should point to be set to point in previous span.
 	iter.retreat()
-	verifyIter(true, 4, 70)
+	verifyIter(true, 4, 70, 70)
 
 	// Advance iterator past last point.
 	iter.advance()
 	iter.advance()
 	iter.advance()
-	verifyIter(false, 0, 0)
+	verifyIter(false, 0, 0, 0)
 
 	// Retreat iterator: should be at the last data point in the set.
 	iter.retreat()
-	verifyIter(true, 11, 140)
+	verifyIter(true, 11, 140, 140)
 
 	// Create iterator at offset -100. Should be set to first point.
 	iter = newDataSpanIterator(ds, -100, (roachpb.InternalTimeSeriesSample).Average)
-	verifyIter(true, -3, 0)
+	verifyIter(true, -3, 0, 0)
 
 	// Create new iterator beyond the end of the scope: should be invalid.
 	iter = newDataSpanIterator(ds, 1000, (roachpb.InternalTimeSeriesSample).Average)
-	verifyIter(false, 0, 0)
+	verifyIter(false, 0, 0, 0)
 	iter.retreat()
-	verifyIter(true, 11, 140)
+	verifyIter(true, 11, 140, 140)
 
 	// Create new iterator directly into second span.
 	iter = newDataSpanIterator(ds, 6, (roachpb.InternalTimeSeriesSample).Average)
-	verifyIter(true, 6, 90)
+	verifyIter(true, 6, 90, 90)
+
+	// Verify extraction functions on complex data: Avg, Sum, Min, Max
+	ds = dataSpan{
+		startNanos:  0,
+		sampleNanos: 1,
+	}
+	testData = []roachpb.InternalTimeSeriesData{
+		generateComplexData(0, 1, []completeDatapoint{
+			{
+				timestamp: 0,
+				count:     2,
+				sum:       10,
+				max:       8,
+				min:       2,
+			},
+			{
+				timestamp: 5,
+				count:     3,
+				sum:       30,
+				max:       15,
+				min:       2,
+			},
+		}),
+	}
+	for _, data := range testData {
+		if err := ds.addData(data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	iter = newDataSpanIterator(ds, 0, (roachpb.InternalTimeSeriesSample).Average)
+	verifyIter(true, 0, 0, 5)
+	iter.advance()
+	verifyIter(true, 5, 5, 10)
+
+	iter = newDataSpanIterator(ds, 0, (roachpb.InternalTimeSeriesSample).Summation)
+	verifyIter(true, 0, 0, 10)
+	iter.advance()
+	verifyIter(true, 5, 5, 30)
+
+	iter = newDataSpanIterator(ds, 0, (roachpb.InternalTimeSeriesSample).Maximum)
+	verifyIter(true, 0, 0, 8)
+	iter.advance()
+	verifyIter(true, 5, 5, 15)
+
+	iter = newDataSpanIterator(ds, 0, (roachpb.InternalTimeSeriesSample).Minimum)
+	verifyIter(true, 0, 0, 2)
+	iter.advance()
+	verifyIter(true, 5, 5, 2)
 }
 
 func TestDownsamplingIterator(t *testing.T) {
@@ -255,8 +338,8 @@ func TestDownsamplingIterator(t *testing.T) {
 		sampleNanos: 10,
 	}
 	testData := []roachpb.InternalTimeSeriesData{
-		generateData(0, 0, 10, 20, 30, 50, 60),
-		generateData(70, 70, 90, 100, 150, 170),
+		generateSimpleData(0, 0, 10, 20, 30, 50, 60),
+		generateSimpleData(70, 70, 90, 100, 150, 170),
 	}
 	for _, data := range testData {
 		if err := ds.addData(data); err != nil {
@@ -350,6 +433,68 @@ func TestDownsamplingIterator(t *testing.T) {
 	iter = newDownsamplingIterator(ds, 1, 30, (roachpb.InternalTimeSeriesSample).Average, downsampleAvg)
 	verifyIter(true, 1, 60, 65)
 
+	// Verify extraction and downsampling functions on complex data: Avg, Sum,
+	// Min, Max.
+	ds = dataSpan{
+		startNanos:  0,
+		sampleNanos: 1,
+	}
+	testData = []roachpb.InternalTimeSeriesData{
+		generateComplexData(0, 1, []completeDatapoint{
+			{
+				timestamp: 0,
+				count:     2,
+				sum:       10,
+				max:       8,
+				min:       2,
+			},
+			{
+				timestamp: 5,
+				count:     3,
+				sum:       30,
+				max:       15,
+				min:       2,
+			},
+			{
+				timestamp: 10,
+				count:     3,
+				sum:       30,
+				max:       15,
+				min:       2,
+			},
+			{
+				timestamp: 15,
+				count:     2,
+				sum:       100,
+				max:       55,
+				min:       45,
+			},
+		}),
+	}
+	for _, data := range testData {
+		if err := ds.addData(data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	iter = newDownsamplingIterator(ds, 0, 10, (roachpb.InternalTimeSeriesSample).Average, downsampleAvg)
+	verifyIter(true, 0, 0, 8)
+	iter.advance()
+	verifyIter(true, 1, 10, 26)
+
+	iter = newDownsamplingIterator(ds, 0, 10, (roachpb.InternalTimeSeriesSample).Summation, downsampleSum)
+	verifyIter(true, 0, 0, 40)
+	iter.advance()
+	verifyIter(true, 1, 10, 130)
+
+	iter = newDownsamplingIterator(ds, 0, 10, (roachpb.InternalTimeSeriesSample).Maximum, downsampleMax)
+	verifyIter(true, 0, 0, 15)
+	iter.advance()
+	verifyIter(true, 1, 10, 55)
+
+	iter = newDownsamplingIterator(ds, 0, 10, (roachpb.InternalTimeSeriesSample).Minimum, downsampleMin)
+	verifyIter(true, 0, 0, 2)
+	iter.advance()
+	verifyIter(true, 1, 10, 45)
 }
 
 // TestInterpolation verifies the interpolated average values of a single interpolatingIterator.
@@ -483,7 +628,7 @@ func (tm *testModel) assertQuery(
 	downsample, agg *tspb.TimeSeriesQueryAggregator,
 	derivative *tspb.TimeSeriesQueryDerivative,
 	r Resolution,
-	start, end int64,
+	sampleDuration, start, end int64,
 	expectedDatapointCount, expectedSourceCount int,
 ) {
 	// Query the actual server.
@@ -494,7 +639,7 @@ func (tm *testModel) assertQuery(
 		Derivative:       derivative,
 		Sources:          sources,
 	}
-	actualDatapoints, actualSources, err := tm.DB.Query(q, r, r, start, end)
+	actualDatapoints, actualSources, err := tm.DB.Query(q, r, sampleDuration, start, end)
 	if err != nil {
 		tm.t.Fatal(err)
 	}
@@ -564,9 +709,13 @@ func (tm *testModel) assertQuery(
 	if err != nil {
 		tm.t.Fatal(err)
 	}
+	downsampleFn, err := getDownsampleFunction(q.GetDownsampler())
+	if err != nil {
+		tm.t.Fatal(err)
+	}
 	var iters unionIterator
 	for _, ds := range dataSpans {
-		iters = append(iters, newInterpolatingIterator(*ds, startOffset, r.SampleDuration(), extractFn, downsampleSum))
+		iters = append(iters, newInterpolatingIterator(*ds, startOffset, sampleDuration, extractFn, downsampleFn))
 	}
 
 	iters.init()
@@ -651,7 +800,7 @@ func TestQuery(t *testing.T) {
 	})
 	tm.assertKeyCount(4)
 	tm.assertModelCorrect()
-	tm.assertQuery("test.metric", nil, nil, nil, nil, resolution1ns, 0, 60, 7, 1)
+	tm.assertQuery("test.metric", nil, nil, nil, nil, resolution1ns, 1, 0, 60, 7, 1)
 
 	// Verify across multiple sources
 	tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
@@ -681,21 +830,21 @@ func TestQuery(t *testing.T) {
 	tm.assertModelCorrect()
 
 	// Test default query: avg downsampler, sum aggregator, no derivative.
-	tm.assertQuery("test.multimetric", nil, nil, nil, nil, resolution1ns, 0, 90, 8, 2)
+	tm.assertQuery("test.multimetric", nil, nil, nil, nil, resolution1ns, 1, 0, 90, 8, 2)
 	// Test with aggregator specified.
 	tm.assertQuery("test.multimetric", nil, tspb.TimeSeriesQueryAggregator_MAX.Enum(), nil, nil,
-		resolution1ns, 0, 90, 8, 2)
+		resolution1ns, 1, 0, 90, 8, 2)
 	// Test with aggregator and downsampler.
 	tm.assertQuery("test.multimetric", nil, tspb.TimeSeriesQueryAggregator_MAX.Enum(), tspb.TimeSeriesQueryAggregator_AVG.Enum(), nil,
-		resolution1ns, 0, 90, 8, 2)
+		resolution1ns, 1, 0, 90, 8, 2)
 	// Test with derivative specified.
 	tm.assertQuery("test.multimetric", nil, tspb.TimeSeriesQueryAggregator_AVG.Enum(), nil,
-		tspb.TimeSeriesQueryDerivative_DERIVATIVE.Enum(), resolution1ns, 0, 90, 8, 2)
+		tspb.TimeSeriesQueryDerivative_DERIVATIVE.Enum(), resolution1ns, 1, 0, 90, 8, 2)
 	// Test with everything specified.
 	tm.assertQuery("test.multimetric", nil, tspb.TimeSeriesQueryAggregator_MIN.Enum(), tspb.TimeSeriesQueryAggregator_MAX.Enum(),
-		tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(), resolution1ns, 0, 90, 8, 2)
+		tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(), resolution1ns, 1, 0, 90, 8, 2)
 	// Test query that returns no data.
-	tm.assertQuery("nodata", nil, nil, nil, nil, resolution1ns, 0, 90, 0, 0)
+	tm.assertQuery("nodata", nil, nil, nil, nil, resolution1ns, 1, 0, 90, 0, 0)
 
 	// Verify querying specific sources, thus excluding other available sources
 	// in the same time period.
@@ -757,9 +906,79 @@ func TestQuery(t *testing.T) {
 
 	// Assert querying data from subset of sources. Includes source with no
 	// data.
-	tm.assertQuery("test.specificmetric", []string{"source2", "source4", "source6"}, nil, nil, nil, resolution1ns, 0, 90, 7, 2)
+	tm.assertQuery("test.specificmetric", []string{"source2", "source4", "source6"}, nil, nil, nil, resolution1ns, 1, 0, 90, 7, 2)
 
 	// Assert querying data over limited range for single source. Regression
 	// test for #4987.
-	tm.assertQuery("test.specificmetric", []string{"source4", "source5"}, nil, nil, nil, resolution1ns, 5, 24, 4, 2)
+	tm.assertQuery("test.specificmetric", []string{"source4", "source5"}, nil, nil, nil, resolution1ns, 1, 5, 24, 4, 2)
+}
+
+// TestQueryDownsampling validates that query results match the expectation of
+// the test model.
+func TestQueryDownsampling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tm := newTestModel(t)
+	tm.Start()
+	defer tm.Stop()
+
+	// Query with sampleDuration that is too small, expect error.
+	_, _, err := tm.DB.Query(tspb.Query{}, Resolution10s, 1, 0, 10000)
+	if err == nil {
+		t.Fatal("expected query to fail with sampleDuration less than resolution allows.")
+	}
+	errorStr := "was not less"
+	if !testutils.IsError(err, errorStr) {
+		t.Fatalf("expected error from bad query to match %q, got error %q", errorStr, err.Error())
+	}
+
+	// Query with sampleDuration which is not an even multiple of the resolution.
+	_, _, err = tm.DB.Query(
+		tspb.Query{}, Resolution10s, Resolution10s.SampleDuration()+1, 0, 10000,
+	)
+	if err == nil {
+		t.Fatal("expected query to fail with sampleDuration not an even multiple of the query resolution.")
+	}
+	errorStr = "not a multiple"
+	if !testutils.IsError(err, errorStr) {
+		t.Fatalf("expected error from bad query to match %q, got error %q", errorStr, err.Error())
+	}
+
+	tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
+		{
+			Name:   "test.metric",
+			Source: "source1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				datapoint(1, 100),
+				datapoint(5, 500),
+				datapoint(15, 500),
+				datapoint(16, 600),
+				datapoint(17, 700),
+				datapoint(22, 200),
+				datapoint(45, 500),
+				datapoint(46, 600),
+				datapoint(52, 200),
+			},
+		},
+		{
+			Name:   "test.metric",
+			Source: "source2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				datapoint(7, 0),
+				datapoint(7, 700),
+				datapoint(9, 900),
+				datapoint(14, 400),
+				datapoint(18, 800),
+				datapoint(33, 300),
+				datapoint(34, 400),
+				datapoint(56, 600),
+				datapoint(59, 900),
+			},
+		},
+	})
+	tm.assertKeyCount(9)
+	tm.assertModelCorrect()
+
+	tm.assertQuery("test.metric", nil, nil, nil, nil, resolution1ns, 10, 0, 60, 6, 2)
+	tm.assertQuery("test.metric", []string{"source1"}, nil, nil, nil, resolution1ns, 10, 0, 60, 5, 1)
+	tm.assertQuery("test.metric", []string{"source2"}, nil, nil, nil, resolution1ns, 10, 0, 60, 4, 1)
 }

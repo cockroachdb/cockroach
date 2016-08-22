@@ -60,9 +60,17 @@ func (s *Server) RegisterGateway(
 
 // Query is an endpoint that returns data for one or more metrics over a
 // specific time span.
-func (s *Server) Query(ctx context.Context, request *tspb.TimeSeriesQueryRequest) (*tspb.TimeSeriesQueryResponse, error) {
+func (s *Server) Query(
+	ctx context.Context, request *tspb.TimeSeriesQueryRequest,
+) (*tspb.TimeSeriesQueryResponse, error) {
 	if len(request.Queries) == 0 {
 		return nil, grpc.Errorf(codes.InvalidArgument, "Queries cannot be empty")
+	}
+
+	// if not set, sampleNanos should default to ten second resolution.
+	sampleNanos := request.SampleNanos
+	if sampleNanos == 0 {
+		sampleNanos = Resolution10s.SampleDuration()
 	}
 
 	response := tspb.TimeSeriesQueryResponse{
@@ -70,7 +78,11 @@ func (s *Server) Query(ctx context.Context, request *tspb.TimeSeriesQueryRequest
 	}
 	for _, query := range request.Queries {
 		datapoints, sources, err := s.db.Query(
-			query, Resolution10s, Resolution10s, request.StartNanos, request.EndNanos,
+			query,
+			Resolution10s,
+			sampleNanos,
+			request.StartNanos,
+			request.EndNanos,
 		)
 		if err != nil {
 			return nil, grpc.Errorf(codes.Internal, err.Error())
