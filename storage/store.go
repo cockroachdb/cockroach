@@ -1200,9 +1200,9 @@ func (s *Store) LookupReplica(start, end roachpb.RKey) *Replica {
 	return rng
 }
 
-// hasOverlappingKeyRangeLocked returns true if a KeyRange overlapping the given
-// descriptor is present on the Store.
-func (s *Store) hasOverlappingKeyRangeLocked(rngDesc *roachpb.RangeDescriptor) bool {
+// getOverlappingKeyRangeLocked returns a KeyRange from the Store overlapping the given
+// descriptor (or nil if no such KeyRange exists).
+func (s *Store) getOverlappingKeyRangeLocked(rngDesc *roachpb.RangeDescriptor) KeyRange {
 	var kr KeyRange
 
 	s.mu.replicasByKey.AscendGreaterOrEqual(rangeBTreeKey(rngDesc.StartKey.Next()),
@@ -1212,10 +1212,10 @@ func (s *Store) hasOverlappingKeyRangeLocked(rngDesc *roachpb.RangeDescriptor) b
 		})
 
 	if kr != nil && kr.Desc().StartKey.Less(rngDesc.EndKey) {
-		return true
+		return kr
 	}
 
-	return false
+	return nil
 }
 
 // visitReplicasLocked will call iterator for every replica on the store which
@@ -1632,8 +1632,8 @@ func (s *Store) addReplicaInternalLocked(rng *Replica) error {
 		return err
 	}
 
-	if s.hasOverlappingKeyRangeLocked(rng.Desc()) {
-		return errors.Errorf("%s: cannot addReplicaInternalLocked; range %s has overlapping range", s, rng)
+	if exRange := s.getOverlappingKeyRangeLocked(rng.Desc()); exRange != nil {
+		return errors.Errorf("%s: cannot addReplicaInternalLocked; range %s has overlapping range %s", s, rng, exRange.Desc())
 	}
 
 	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
@@ -1779,8 +1779,8 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 	}
 	delete(s.mu.uninitReplicas, rangeID)
 
-	if s.hasOverlappingKeyRangeLocked(rng.Desc()) {
-		return errors.Errorf("%s: cannot processRangeDescriptorUpdate; range %s has overlapping range", s, rng)
+	if exRange := s.getOverlappingKeyRangeLocked(rng.Desc()); exRange != nil {
+		return errors.Errorf("%s: cannot processRangeDescriptorUpdate; range %s has overlapping range %s", s, rng, exRange.Desc())
 	}
 	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(rng); exRngItem != nil {
 		return errors.Errorf("range for key %v already exists in replicasByKey btree",
@@ -2215,12 +2215,13 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 				// TODO(arjun): Now that we have better raft transport error
 				// handling, consider if this error should be returned and
 				// handled by the sending store.
+				log.Info(ctx, errors.Wrapf(err, "%s: cannot apply snapshot on range %d", s, req.RangeID))
 				return true
 			}
 
 			if placeholder != nil {
 				if err := s.addPlaceholderLocked(placeholder); err != nil {
-					log.Fatalf(ctx, "%s: could not add placeholder %s although canApplySnapshotLocked returned true", s, placeholder)
+					log.Fatal(ctx, errors.Wrapf(err, "%s: could not add vetted placeholder %s", s, placeholder))
 				}
 				addedPlaceholder = true
 			}
@@ -2666,18 +2667,23 @@ func (s *Store) canApplySnapshotLocked(rangeID roachpb.RangeID, snap raftpb.Snap
 	// placeholder). Will we be able to create/initialize it?
 	var parsedSnap roachpb.PartialRaftSnapshotData
 	if err := parsedSnap.Unmarshal(snap.Data); err != nil {
-		return nil, errors.Wrapf(err, "%s: canApplySnapshotLocked: could not unmarshal snapshot", s)
+		return nil, errors.Wrapf(err, "%s: failed to unmarshal snapshot", s)
 	}
 
 	if exRng, ok := s.mu.replicaPlaceholders[rangeID]; ok {
-		return nil, errors.Errorf("%s: canApplySnapshotLocked: cannot add placeholder, have an existing placeholder %s", s, exRng)
+		return nil, errors.Errorf("%s: cannot add placeholder, have an existing placeholder %s", s, exRng)
 	}
 
-	if s.hasOverlappingKeyRangeLocked(&parsedSnap.RangeDescriptor) {
+	if exRange := s.getOverlappingKeyRangeLocked(&parsedSnap.RangeDescriptor); exRange != nil {
 		// We have a conflicting range, so we must block the snapshot.
 		// When such a conflict exists, it will be resolved by one range
 		// either being split or garbage collected.
-		return nil, errors.Errorf("%s: canApplySnapshotLocked: cannot apply snapshot, received snapshot for an overlapping range", s)
+		exReplica, err := s.getReplicaLocked(exRange.Desc().RangeID)
+		if err != nil {
+			log.Warning(context.TODO(), errors.Wrapf(
+				err, "unable to look up overlapping replica on %s", exReplica))
+		}
+		return nil, errors.Errorf("snapshot intersects existing range %s", exReplica)
 	}
 
 	placeholder := &ReplicaPlaceholder{
