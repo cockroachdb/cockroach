@@ -51,13 +51,12 @@ import (
 
 // getText fetches the HTTP response body as text in the form of a
 // byte slice from the specified URL.
-func getText(url string) ([]byte, error) {
-	// There are no particular permissions on admin endpoints, TestUser is fine.
-	client, err := testutils.NewTestBaseContext(TestUser).GetHTTPClient()
+func getText(ts serverutils.TestServerInterface, url string) ([]byte, error) {
+	httpClient, err := ts.GetHTTPClient()
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -68,8 +67,8 @@ func getText(url string) ([]byte, error) {
 // getJSON fetches the JSON from the specified URL and returns
 // it as unmarshaled JSON. Returns an error on any failure to fetch
 // or unmarshal response body.
-func getJSON(url string) (interface{}, error) {
-	body, err := getText(url)
+func getJSON(ts serverutils.TestServerInterface, url string) (interface{}, error) {
+	body, err := getText(ts, url)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +91,7 @@ func TestAdminDebugExpVar(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	jI, err := getJSON(debugURL(s) + "vars")
+	jI, err := getJSON(s, debugURL(s)+"vars")
 	if err != nil {
 		t.Fatalf("failed to fetch JSON: %v", err)
 	}
@@ -112,7 +111,7 @@ func TestAdminDebugMetrics(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	jI, err := getJSON(debugURL(s) + "metrics")
+	jI, err := getJSON(s, debugURL(s)+"metrics")
 	if err != nil {
 		t.Fatalf("failed to fetch JSON: %v", err)
 	}
@@ -132,7 +131,7 @@ func TestAdminDebugPprof(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	body, err := getText(debugURL(s) + "pprof/block")
+	body, err := getText(s, debugURL(s)+"pprof/block")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +155,7 @@ func TestAdminDebugTrace(t *testing.T) {
 	}
 
 	for _, c := range tc {
-		body, err := getText(debugURL(s) + c.segment)
+		body, err := getText(s, debugURL(s)+c.segment)
 		if err != nil {
 			t.Fatal(err)
 		}
