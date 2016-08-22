@@ -86,7 +86,7 @@ func TestTxnDBBasics(t *testing.T) {
 		if commit != (err == nil) {
 			t.Errorf("expected success? %t; got %s", commit, err)
 		} else if !commit && !testutils.IsError(err, "purposefully failing transaction") {
-			t.Errorf("unexpected failure with !commit: %s", err)
+			t.Errorf("unexpected failure with !commit: %v", err)
 		}
 
 		// Verify the value is now visible on commit == true, and not visible otherwise.

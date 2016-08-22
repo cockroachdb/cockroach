@@ -2338,6 +2338,6 @@ func TestFailedPreemptiveSnapshot(t *testing.T) {
 	if err := rep.ChangeReplicas(context.Background(), roachpb.ADD_REPLICA,
 		roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3},
 		rep.Desc()); !testutils.IsError(err, expErr) {
-		t.Fatalf("expected %s; got %s", expErr, err)
+		t.Fatalf("expected %s; got %v", expErr, err)
 	}
 }
