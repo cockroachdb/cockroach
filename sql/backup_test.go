@@ -176,13 +176,13 @@ func TestClusterBackupRestore(t *testing.T) {
 
 		_ = setupBackupRestoreDB(t, ctx, tc, count, backupRestoreDefaultRanges)
 
-		if desc, err := sql.Backup(context.Background(), *kvDB, dir); err != nil {
+		desc, err := sql.Backup(context.Background(), *kvDB, dir)
+		if err != nil {
 			t.Fatal(err)
-		} else {
-			approxDataSize := int64(backupRestoreRowPayloadSize) * count
-			if max := approxDataSize * 2; desc.DataSize < approxDataSize || desc.DataSize > 2*max {
-				t.Errorf("expected data size in [%d,%d] but was %d", approxDataSize, max, desc.DataSize)
-			}
+		}
+		approxDataSize := int64(backupRestoreRowPayloadSize) * count
+		if max := approxDataSize * 2; desc.DataSize < approxDataSize || desc.DataSize > 2*max {
+			t.Errorf("expected data size in [%d,%d] but was %d", approxDataSize, max, desc.DataSize)
 		}
 
 		if _, err := sqlDB.Exec(`TRUNCATE bench.bank`); err != nil {
@@ -247,11 +247,11 @@ func runBenchmarkClusterBackup(b *testing.B, clusterSize int, count int) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if desc, err := sql.Backup(ctx, *kvDB, dir); err != nil {
+		desc, err := sql.Backup(ctx, *kvDB, dir)
+		if err != nil {
 			b.Fatal(err)
-		} else {
-			b.SetBytes(desc.DataSize)
 		}
+		b.SetBytes(desc.DataSize)
 	}
 }
 
@@ -274,11 +274,11 @@ func runBenchmarkClusterRestore(b *testing.B, clusterSize int, count int) {
 	dir, cleanupFn := testingTempDir(b, 1)
 	defer cleanupFn()
 
-	if desc, err := sql.Backup(ctx, *kvDB, dir); err != nil {
+	desc, err := sql.Backup(ctx, *kvDB, dir)
+	if err != nil {
 		b.Fatal(err)
-	} else {
-		b.SetBytes(desc.DataSize)
 	}
+	b.SetBytes(desc.DataSize)
 
 	setupReplicationAndLeases(b, tc, ranges, clusterSize)
 
