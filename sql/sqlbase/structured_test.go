@@ -491,14 +491,14 @@ func TestValidateTableDesc(t *testing.T) {
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 				},
 				Indexes: []IndexDescriptor{
-					{ID: 1, Name: "bar", ColumnIDs: []ColumnID{1},
+					{ID: 2, Name: "bar", ColumnIDs: []ColumnID{1},
 						ColumnNames:      []string{"bar"},
 						ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 					},
 				},
 				NextColumnID: 2,
 				NextFamilyID: 1,
-				NextIndexID:  2,
+				NextIndexID:  3,
 			}},
 		{`index "blah" duplicate ID of index "bar": 1`,
 			TableDescriptor{
@@ -590,7 +590,7 @@ func TestValidateTableDesc(t *testing.T) {
 		if err := d.desc.ValidateTable(); err == nil {
 			t.Errorf("%d: expected \"%s\", but found success: %+v", i, d.err, d.desc)
 		} else if d.err != err.Error() {
-			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, d.err, err.Error())
+			t.Errorf("%d: expected \"%s\", but found \"%+v\"", i, d.err, err)
 		}
 	}
 }

@@ -34,7 +34,7 @@ EXPLAIN (DEBUG) SELECT b FROM t@foo
 ----
 0 /t/foo/NULL /1 ROW
 
-statement error duplicate index name: "foo"
+statement error duplicate constraint name: "foo"
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 
 statement error multiple primary keys for table "t" are not allowed
