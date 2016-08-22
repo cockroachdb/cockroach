@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 type alterTableNode struct {
@@ -72,6 +73,12 @@ func (n *alterTableNode) Start() error {
 		switch t := cmd.(type) {
 		case *parser.AlterTableAddColumn:
 			d := t.ColumnDef
+			if d.CheckExpr.Expr != nil {
+				return errors.Errorf("adding a CHECK constraint via ALTER not supported")
+			}
+			if d.References.Table.TableNameReference != nil {
+				return errors.Errorf("adding a REFERENCES constraint via ALTER not supported")
+			}
 			col, idx, err := sqlbase.MakeColumnDefDescs(d)
 			if err != nil {
 				return err
@@ -162,27 +169,44 @@ func (n *alterTableNode) Start() error {
 			}
 
 		case *parser.AlterTableDropConstraint:
-			status, i, err := n.tableDesc.FindIndexByName(t.Constraint)
+			info, err := n.tableDesc.GetConstraintInfo(nil)
 			if err != nil {
-				if t.IfExists {
-					// Noop.
-					continue
-				}
 				return err
 			}
-			switch status {
-			case sqlbase.DescriptorActive:
-				n.tableDesc.AddIndexMutation(n.tableDesc.Indexes[i], sqlbase.DescriptorMutation_DROP)
-				n.tableDesc.Indexes = append(n.tableDesc.Indexes[:i], n.tableDesc.Indexes[i+1:]...)
-
-			case sqlbase.DescriptorIncomplete:
-				switch n.tableDesc.Mutations[i].Direction {
-				case sqlbase.DescriptorMutation_ADD:
-					return fmt.Errorf("constraint %q in the middle of being added, try again later", t.Constraint)
-
-				case sqlbase.DescriptorMutation_DROP:
-					// Noop.
+			name := string(t.Constraint)
+			details, ok := info[name]
+			if !ok {
+				if t.IfExists {
+					continue
 				}
+				return errors.Errorf("constraint %q does not exist", t.Constraint)
+			}
+			switch details.Kind {
+			case sqlbase.ConstraintTypePK:
+				return errors.Errorf("cannot drop primary key")
+			case sqlbase.ConstraintTypeUnique:
+				return errors.Errorf("UNIQUE constraint depends on index %q, use DROP INDEX if you really want to drop it", t.Constraint)
+			case sqlbase.ConstraintTypeCheck:
+				for i := range n.tableDesc.Checks {
+					if n.tableDesc.Checks[i].Name == name {
+						n.tableDesc.Checks = append(n.tableDesc.Checks[:i], n.tableDesc.Checks[i+1:]...)
+						descriptorChanged = true
+						break
+					}
+				}
+			case sqlbase.ConstraintTypeFK:
+				for i, idx := range n.tableDesc.Indexes {
+					if idx.ForeignKey.Name == name {
+						if err := n.p.removeFKBackReference(n.tableDesc, idx); err != nil {
+							return err
+						}
+						n.tableDesc.Indexes[i].ForeignKey = sqlbase.ForeignKeyReference{}
+						descriptorChanged = true
+						break
+					}
+				}
+			default:
+				return errors.Errorf("dropping %s constraint %q unsupported", details.Kind, t.Constraint)
 			}
 
 		case parser.ColumnMutationCmd:

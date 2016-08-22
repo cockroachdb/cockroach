@@ -565,7 +565,7 @@ func (p *planner) removeFKBackReference(
 		return err
 	}
 	for k, ref := range targetIdx.ReferencedBy {
-		if ref.Table == tableDesc.ID {
+		if ref.Table == tableDesc.ID && ref.Index == idx.ID {
 			targetIdx.ReferencedBy = append(targetIdx.ReferencedBy[:k], targetIdx.ReferencedBy[k+1:]...)
 		}
 	}

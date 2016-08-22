@@ -313,6 +313,19 @@ func hoistConstraints(n *parser.CreateTable) {
 				)
 				col.CheckExpr.Expr = nil
 			}
+			if col.References.Table.TableNameReference != nil {
+				var targetCol parser.NameList
+				if col.References.Col != "" {
+					targetCol = append(targetCol, col.References.Col)
+				}
+				n.Defs = append(n.Defs, &parser.ForeignKeyConstraintTableDef{
+					Table:    col.References.Table,
+					FromCols: parser.NameList{col.Name},
+					ToCols:   targetCol,
+					Name:     col.References.ConstraintName,
+				})
+				col.References.Table = parser.NormalizableTableName{}
+			}
 		}
 	}
 }
