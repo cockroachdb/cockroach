@@ -22,9 +22,9 @@ package parser
 import (
     "go/constant"
     "go/token"
-  
+
     "github.com/pkg/errors"
-  
+
     "github.com/cockroachdb/cockroach/sql/privilege"
     "github.com/cockroachdb/cockroach/util"
 )
@@ -828,7 +828,7 @@ alter_table_cmd:
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> [SET DATA] TYPE <typename>
   //     [ USING <expression> ]
-| ALTER opt_column name opt_set_data TYPE typename opt_collate_clause alter_using {}
+| ALTER opt_column name opt_set_data TYPE typename opt_collate_clause alter_using { unimplemented() }
   // ALTER TABLE <name> ADD CONSTRAINT ...
 | ADD table_constraint
   {

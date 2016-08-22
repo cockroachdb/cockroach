@@ -4963,6 +4963,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-8 : sqlpt+1]
 		//line sql.y:831
 		{
+			unimplemented()
 		}
 	case 39:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
