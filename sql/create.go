@@ -305,11 +305,12 @@ func hoistConstraints(n *parser.CreateTable) {
 	for _, d := range n.Defs {
 		if col, ok := d.(*parser.ColumnTableDef); ok {
 			if col.CheckExpr.Expr != nil {
-				def := &parser.CheckConstraintTableDef{Expr: col.CheckExpr.Expr}
-				if col.CheckExpr.ConstraintName != "" {
-					def.Name = col.CheckExpr.ConstraintName
-				}
-				n.Defs = append(n.Defs, def)
+				n.Defs = append(n.Defs,
+					&parser.CheckConstraintTableDef{
+						Expr: col.CheckExpr.Expr,
+						Name: col.CheckExpr.ConstraintName,
+					},
+				)
 				col.CheckExpr.Expr = nil
 			}
 		}
@@ -938,6 +939,14 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 			// the table level (i.e., columns never have a check constraint themselves). We
 			// will adhere to the stricter definition.
 
+			var nameBuf bytes.Buffer
+			name := string(d.Name)
+
+			generateName := name == ""
+			if generateName {
+				nameBuf.WriteString("check")
+			}
+
 			preFn := func(expr parser.Expr) (err error, recurse bool, newExpr parser.Expr) {
 				vBase, ok := expr.(parser.VarName)
 				if !ok {
@@ -960,6 +969,10 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 					return fmt.Errorf("column %q not found for constraint %q",
 						c.ColumnName, d.Expr.String()), false, nil
 				}
+				if generateName {
+					nameBuf.WriteByte('_')
+					nameBuf.WriteString(col.Name)
+				}
 				// Convert to a dummy datum of the correct type.
 				return nil, false, col.Type.ToDatumType()
 			}
@@ -977,12 +990,13 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 			if err := sqlbase.SanitizeVarFreeExpr(expr, parser.TypeBool, "CHECK"); err != nil {
 				return desc, err
 			}
-
-			check := &sqlbase.TableDescriptor_CheckConstraint{Expr: d.Expr.String()}
-			if len(d.Name) > 0 {
-				check.Name = string(d.Name)
+			if generateName {
+				name = nameBuf.String()
 			}
-			desc.Checks = append(desc.Checks, check)
+
+			desc.Checks = append(desc.Checks,
+				&sqlbase.TableDescriptor_CheckConstraint{Expr: d.Expr.String(), Name: name},
+			)
 
 		case *parser.FamilyTableDef:
 			fam := sqlbase.ColumnFamilyDescriptor{
