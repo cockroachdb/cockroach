@@ -60,7 +60,7 @@ for pkg in $(go list ./...); do
   # tests.
   f="${coverage_dir}/$(echo $pkg | tr / -).cover"
   touch $f
-  time ${builder} make coverage \
+  time make coverage \
     PKG="$pkg" \
     TESTFLAGS="-v -coverprofile=$f -covermode=$coverage_mode -coverpkg=$coverpkg" | \
     tee "${outdir}/coverage.log"
