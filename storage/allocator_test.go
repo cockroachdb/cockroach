@@ -166,22 +166,8 @@ var multiDCStores = []*roachpb.StoreDescriptor{
 // createTestAllocator creates a stopper, gossip, store pool and allocator for
 // use in tests. Stopper must be stopped by the caller.
 func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator, *hlc.ManualClock) {
-	stopper := stop.NewStopper()
-	manualClock := hlc.NewManualClock(hlc.UnixNano())
-	clock := hlc.NewClock(manualClock.UnixNano)
-	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
-	server := rpc.NewServer(rpcContext) // never started
-	g := gossip.New(rpcContext, server, nil, stopper, metric.NewRegistry())
-	// Have to call g.SetNodeID before call g.AddInfo
-	g.SetNodeID(roachpb.NodeID(1))
-	storePool := NewStorePool(
-		g,
-		clock,
-		rpcContext,
-		/* reservationsEnabled */ true,
-		TestTimeUntilStoreDeadOff,
-		stopper,
-	)
+	stopper, g, manualClock, storePool := createTestStorePool(TestTimeUntilStoreDeadOff)
+	manualClock.Set(hlc.UnixNano())
 	a := MakeAllocator(storePool, AllocatorOptions{AllowRebalance: true})
 	return stopper, g, storePool, a, manualClock
 }
