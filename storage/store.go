@@ -953,7 +953,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// sentinel and first range metadata if we have a first range.
 		// This may wake up ranges and requires everything to be set up and
 		// running.
-		s.startGossip(ctx)
+		s.startGossip()
 
 		// Start the scanner. The construction here makes sure that the scanner
 		// only starts after Gossip has connected, and that it does not block Start
@@ -1001,11 +1001,12 @@ func (s *Store) WaitForInit() {
 // startGossip runs an infinite loop in a goroutine which regularly checks
 // whether the store has a first range or config replica and asks those ranges
 // to gossip accordingly.
-func (s *Store) startGossip(ctx context.Context) {
+func (s *Store) startGossip() {
 	// Periodic updates run in a goroutine and signal a WaitGroup upon completion
 	// of their first iteration.
 	s.initComplete.Add(2)
 	s.stopper.RunWorker(func() {
+		ctx := s.context(context.Background())
 		// Run the first time without waiting for the Ticker and signal the WaitGroup.
 		if err := s.maybeGossipFirstRange(); err != nil {
 			log.Warningf(ctx, "error gossiping first range data: %s", err)
@@ -1026,6 +1027,7 @@ func (s *Store) startGossip(ctx context.Context) {
 	})
 
 	s.stopper.RunWorker(func() {
+		ctx := s.context(context.Background())
 		if err := s.maybeGossipSystemConfig(); err != nil {
 			log.Warningf(ctx, "error gossiping system config: %s", err)
 		}
