@@ -180,7 +180,7 @@ func createTestStoreWithContext(t testing.TB, ctx *StoreContext) (
 		&config.SystemConfig{}, 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Start(stopper); err != nil {
+	if err := store.Start(context.Background(), stopper); err != nil {
 		t.Fatal(err)
 	}
 	store.WaitForInit()
@@ -200,7 +200,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	store := NewStore(ctx, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
 	// Can't start as haven't bootstrapped.
-	if err := store.Start(stopper); err == nil {
+	if err := store.Start(context.Background(), stopper); err == nil {
 		t.Error("expected failure starting un-bootstrapped store")
 	}
 
@@ -231,7 +231,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 
 	// Now, attempt to initialize a store with a now-bootstrapped range.
 	store = NewStore(ctx, eng, &roachpb.NodeDescriptor{NodeID: 1})
-	if err := store.Start(stopper); err != nil {
+	if err := store.Start(context.Background(), stopper); err != nil {
 		t.Errorf("failure initializing bootstrapped store: %s", err)
 	}
 	// 1st range should be available.
@@ -269,7 +269,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	store := NewStore(ctx, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
 	// Can't init as haven't bootstrapped.
-	if err := store.Start(stopper); err == nil {
+	if err := store.Start(context.Background(), stopper); err == nil {
 		t.Error("expected failure init'ing un-bootstrapped store")
 	}
 
@@ -1943,7 +1943,7 @@ func TestMaybeRemove(t *testing.T) {
 	}
 	store.scanner.AddQueues(fq)
 
-	if err := store.Start(stopper); err != nil {
+	if err := store.Start(context.Background(), stopper); err != nil {
 		t.Fatal(err)
 	}
 	store.WaitForInit()
