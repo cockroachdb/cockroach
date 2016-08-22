@@ -854,7 +854,7 @@ func (s *Store) Start(stopper *stop.Stopper) error {
 	}
 
 	// Start Raft processing goroutines.
-	s.ctx.Transport.Listen(s.StoreID(), s)
+	s.ctx.Transport.Listen(s.StoreID(), s, s)
 	s.processRaft()
 
 	doneUnfreezing := make(chan struct{})
@@ -2171,6 +2171,186 @@ func checkReplicaTooOld(r *Replica, fromReplicaID roachpb.ReplicaID) *roachpb.Er
 	return nil
 }
 
+func (s *Store) handleStreamingSnapshotMessage(
+	ctx context.Context, req *SnapshotRequest, batches [][]byte, logEntries [][]byte) *roachpb.Error {
+	s.processRaftMu.Lock()
+	defer s.processRaftMu.Unlock()
+
+	s.mu.Lock()
+	r, ok := s.mu.replicas[req.Header.RangeDescriptor.RangeID]
+	s.mu.Unlock()
+	if ok {
+		if err := checkReplicaTooOld(r, req.Header.FromReplica.ReplicaID); err != nil {
+			return err
+		}
+	}
+
+	s.mu.Lock()
+	addedPlaceholder := false
+	placeholder, err := s.canApplySnapshotLocked(&req.Header.RangeDescriptor)
+	if err != nil {
+		return roachpb.NewErrorf("%s: could not apply snapshot: %s", s, err)
+	}
+	if placeholder != nil {
+		if err := s.addPlaceholderLocked(placeholder); err != nil {
+			log.Fatalf(ctx, "%s: could not add placeholder %s although canApplySnapshotLocked returned true", s, placeholder)
+		}
+		addedPlaceholder = true
+	}
+	// Lazily create the replica.
+	r, err = s.getOrCreateReplicaLocked(req.Header.RangeDescriptor.RangeID,
+		req.Header.ToReplica.ReplicaID, req.Header.FromReplica)
+	// TODO(bdarnell): is it safe to release the store lock here?
+	// It deadlocks to hold s.Mutex while calling raftGroup.Step.
+	s.mu.Unlock()
+	if err != nil {
+		return roachpb.NewError(err)
+	}
+	r.setLastReplicaDescriptors(req.Header.FromReplica, req.Header.ToReplica)
+	snapUUID, err := uuid.FromBytes(req.Header.RaftMessage.Snapshot.Data)
+	inSnap := IncomingSnapshot{
+		SnapUUID:        *snapUUID,
+		RangeDescriptor: req.Header.RangeDescriptor,
+		Batches:         batches,
+		LogEntries:      logEntries,
+	}
+	r.mu.Lock()
+	r.mu.inSnap = inSnap
+	r.mu.Unlock()
+	if req.Header.ToReplica.ReplicaID == 0 {
+		// Allow snapshots to be applied to replicas before they are
+		// members of the raft group (i.e. replicas with an ID of 0). This
+		// is the only operation that can be performed before it is part of
+		// the raft group.
+
+		// Requiring that the Term is set in a message makes sure that we
+		// get all of Raft's internal safety checks (it confuses messages
+		// at term zero for internal messages). The sending side uses the
+		// term from the snapshot itself, but we'll just check nonzero.
+		if req.Header.RaftMessage.Term == 0 {
+			return roachpb.NewErrorf(
+				"preemptive snapshot from term %d received with zero term",
+				req.Header.RaftMessage.Snapshot.Metadata.Term,
+			)
+		}
+		// TODO(tschottdorf): A lot of locking of the individual Replica
+		// going on below as well. I think that's more easily refactored
+		// away; what really matters is that the Store doesn't do anything
+		// else with that same Replica (or one that might conflict with us
+		// while we still run). In effect, we'd want something like:
+		//
+		// 1. look up the snapshot's key range
+		// 2. get an exclusive lock for operations on that key range from
+		//    the store (or discard the snapshot)
+		//    (at the time of writing, we have checked the key range in
+		//    canApplySnapshotLocked above, but there are concerns about two
+		//    conflicting operations passing that check simultaneously,
+		//    see #7830)
+		// 3. do everything below (apply the snapshot through temp Raft group)
+		// 4. release the exclusive lock on the snapshot's key range
+		//
+		// There are two future outcomes: Either we begin receiving
+		// legitimate Raft traffic for this Range (hence learning the
+		// ReplicaID and becoming a real Replica), or the Replica GC queue
+		// decides that the ChangeReplicas as a part of which the
+		// preemptive snapshot was sent has likely failed and removes both
+		// in-memory and on-disk state.
+		r.mu.Lock()
+		// We are paranoid about applying preemptive snapshots (which
+		// were constructed via our code rather than raft) to the "real"
+		// raft group. Instead, we destroy the "real" raft group if one
+		// exists (this is rare in production, although it occurs in
+		// tests), apply the preemptive snapshot to a temporary raft
+		// group, then discard that one as well to be replaced by a real
+		// raft group when we get a new replica ID.
+		//
+		// It might be OK instead to apply preemptive snapshots just
+		// like normal ones (essentially switching between regular and
+		// preemptive mode based on whether or not we have a raft group,
+		// instead of based on the replica ID of the snapshot message).
+		// However, this is a risk that we're not yet willing to take.
+		// Additionally, without some additional plumbing work, doing so
+		// would limit the effectiveness of RaftTransport.SendSync for
+		// preemptive snapshots.
+		r.mu.internalRaftGroup = nil
+		r.mu.Unlock()
+
+		appliedIndex, _, err := loadAppliedIndex(ctx, r.store.Engine(), r.RangeID)
+		if err != nil {
+			return roachpb.NewError(err)
+		}
+		raftGroup, err := raft.NewRawNode(
+			newRaftConfig(
+				raft.Storage(r),
+				preemptiveSnapshotRaftGroupID,
+				// We pass the "real" applied index here due to subtleties
+				// arising in the case in which Raft discards the snapshot:
+				// It would instruct us to apply entries, which would have
+				// crashing potential for any choice of dummy value below.
+				appliedIndex,
+				r.store.ctx,
+				&raftLogger{stringer: r},
+			), nil)
+		if err != nil {
+			return roachpb.NewError(err)
+		}
+		// We have a Raft group; feed it the message.
+		if err := raftGroup.Step(*req.Header.RaftMessage); err != nil {
+			return roachpb.NewError(errors.Wrap(err, "unable to process preemptive snapshot"))
+		}
+		// In the normal case, the group should ask us to apply a snapshot.
+		// If it doesn't, our snapshot was probably stale.
+		var ready raft.Ready
+		if raftGroup.HasReady() {
+			ready = raftGroup.Ready()
+		}
+		if raft.IsEmptySnap(ready.Snapshot) {
+			// Raft discarded the snapshot, indicating that our local
+			// state is already ahead of what the snapshot provides.
+			return nil
+		}
+
+		// Apply the snapshot, as Raft told us to.
+		if err := r.applySnapshot(ctx, inSnap, ready.Snapshot, ready.HardState); err != nil {
+			return roachpb.NewError(err)
+		}
+
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if addedPlaceholder {
+			// Clear the replica placeholder; we are about to swap it with a real replica.
+			if err := s.removePlaceholderLocked(req.Header.RangeDescriptor.RangeID); err != nil {
+				return roachpb.NewError(err)
+			}
+		}
+
+		if err := s.processRangeDescriptorUpdateLocked(r); err != nil {
+			return roachpb.NewError(err)
+		}
+
+		return nil
+
+		// At this point, the Replica has data but no ReplicaID. We hope
+		// that it turns into a "real" Replica by means of receiving Raft
+		// messages addressed to it with a ReplicaID, but if that doesn't
+		// happen, at some point the Replica GC queue will have to grab it.
+	}
+
+	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
+		return raftGroup.Step(*req.Header.RaftMessage)
+	}); err != nil {
+		return roachpb.NewError(err)
+	}
+	// Force the replica to deal with this snapshot right now.
+	if err := r.handleRaftReady(); err != nil {
+		return roachpb.NewError(err)
+	}
+	if r != nil {
+		return roachpb.NewError(errors.Wrap(err, "Didn't process snapshot."))
+	}
+	return nil
+}
+
 // HandleRaftRequest dispatches a raft message to the appropriate Replica. It
 // requires that s.processRaftMu and s.mu are not held.
 func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) *roachpb.Error {
@@ -2188,33 +2368,10 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 		}
 	}
 
-	addedPlaceholder := false
 	switch req.Message.Type {
 	case raftpb.MsgSnap:
-		if earlyReturn := func() bool {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			placeholder, err := s.canApplySnapshotLocked(req.RangeID, req.Message.Snapshot)
-			if err != nil {
-				// If the storage cannot accept the snapshot, drop it before
-				// passing it to RawNode.Step, since our error handling
-				// options past that point are limited.
-				// TODO(arjun): Now that we have better raft transport error
-				// handling, consider if this error should be returned and
-				// handled by the sending store.
-				return true
-			}
-
-			if placeholder != nil {
-				if err := s.addPlaceholderLocked(placeholder); err != nil {
-					log.Fatalf(ctx, "%s: could not add placeholder %s although canApplySnapshotLocked returned true", s, placeholder)
-				}
-				addedPlaceholder = true
-			}
-			return false
-		}(); earlyReturn {
-			return nil
-		}
+		// All snapshots should be handled by the streaming endpoint.
+		panic("Received a snapshot via the Raft endpoint: Programming Error")
 
 	case raftpb.MsgHeartbeat:
 		// TODO(bdarnell): handle coalesced heartbeats.
@@ -2229,127 +2386,9 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 	if err != nil {
 		return roachpb.NewError(err)
 	}
-	r.setLastReplicaDescriptors(req)
+	r.setLastReplicaDescriptors(req.FromReplica, req.ToReplica)
 
 	if req.ToReplica.ReplicaID == 0 {
-		if req.Message.Type == raftpb.MsgSnap {
-			// Allow snapshots to be applied to replicas before they are
-			// members of the raft group (i.e. replicas with an ID of 0). This
-			// is the only operation that can be performed before it is part of
-			// the raft group.
-
-			// Requiring that the Term is set in a message makes sure that we
-			// get all of Raft's internal safety checks (it confuses messages
-			// at term zero for internal messages). The sending side uses the
-			// term from the snapshot itself, but we'll just check nonzero.
-			if req.Message.Term == 0 {
-				return roachpb.NewErrorf(
-					"preemptive snapshot from term %d received with zero term",
-					req.Message.Snapshot.Metadata.Term,
-				)
-			}
-			// TODO(tschottdorf): A lot of locking of the individual Replica
-			// going on below as well. I think that's more easily refactored
-			// away; what really matters is that the Store doesn't do anything
-			// else with that same Replica (or one that might conflict with us
-			// while we still run). In effect, we'd want something like:
-			//
-			// 1. look up the snapshot's key range
-			// 2. get an exclusive lock for operations on that key range from
-			//    the store (or discard the snapshot)
-			//    (at the time of writing, we have checked the key range in
-			//    canApplySnapshotLocked above, but there are concerns about two
-			//    conflicting operations passing that check simultaneously,
-			//    see #7830)
-			// 3. do everything below (apply the snapshot through temp Raft group)
-			// 4. release the exclusive lock on the snapshot's key range
-			//
-			// There are two future outcomes: Either we begin receiving
-			// legitimate Raft traffic for this Range (hence learning the
-			// ReplicaID and becoming a real Replica), or the Replica GC queue
-			// decides that the ChangeReplicas as a part of which the
-			// preemptive snapshot was sent has likely failed and removes both
-			// in-memory and on-disk state.
-			r.mu.Lock()
-			// We are paranoid about applying preemptive snapshots (which
-			// were constructed via our code rather than raft) to the "real"
-			// raft group. Instead, we destroy the "real" raft group if one
-			// exists (this is rare in production, although it occurs in
-			// tests), apply the preemptive snapshot to a temporary raft
-			// group, then discard that one as well to be replaced by a real
-			// raft group when we get a new replica ID.
-			//
-			// It might be OK instead to apply preemptive snapshots just
-			// like normal ones (essentially switching between regular and
-			// preemptive mode based on whether or not we have a raft group,
-			// instead of based on the replica ID of the snapshot message).
-			// However, this is a risk that we're not yet willing to take.
-			// Additionally, without some additional plumbing work, doing so
-			// would limit the effectiveness of RaftTransport.SendSync for
-			// preemptive snapshots.
-			r.mu.internalRaftGroup = nil
-			r.mu.Unlock()
-
-			appliedIndex, _, err := loadAppliedIndex(ctx, r.store.Engine(), r.RangeID)
-			if err != nil {
-				return roachpb.NewError(err)
-			}
-			raftGroup, err := raft.NewRawNode(
-				newRaftConfig(
-					raft.Storage(r),
-					preemptiveSnapshotRaftGroupID,
-					// We pass the "real" applied index here due to subtleties
-					// arising in the case in which Raft discards the snapshot:
-					// It would instruct us to apply entries, which would have
-					// crashing potential for any choice of dummy value below.
-					appliedIndex,
-					r.store.ctx,
-					&raftLogger{stringer: r},
-				), nil)
-			if err != nil {
-				return roachpb.NewError(err)
-			}
-			// We have a Raft group; feed it the message.
-			if err := raftGroup.Step(req.Message); err != nil {
-				return roachpb.NewError(errors.Wrap(err, "unable to process preemptive snapshot"))
-			}
-			// In the normal case, the group should ask us to apply a snapshot.
-			// If it doesn't, our snapshot was probably stale.
-			var ready raft.Ready
-			if raftGroup.HasReady() {
-				ready = raftGroup.Ready()
-			}
-			if raft.IsEmptySnap(ready.Snapshot) {
-				// Raft discarded the snapshot, indicating that our local
-				// state is already ahead of what the snapshot provides.
-				return nil
-			}
-
-			// Apply the snapshot, as Raft told us to.
-			if err := r.applySnapshot(ctx, ready.Snapshot, ready.HardState); err != nil {
-				return roachpb.NewError(err)
-			}
-
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			if addedPlaceholder {
-				// Clear the replica placeholder; we are about to swap it with a real replica.
-				if err := s.removePlaceholderLocked(req.RangeID); err != nil {
-					return roachpb.NewError(err)
-				}
-			}
-
-			if err := s.processRangeDescriptorUpdateLocked(r); err != nil {
-				return roachpb.NewError(err)
-			}
-
-			return nil
-
-			// At this point, the Replica has data but no ReplicaID. We hope
-			// that it turns into a "real" Replica by means of receiving Raft
-			// messages addressed to it with a ReplicaID, but if that doesn't
-			// happen, at some point the Replica GC queue will have to grab it.
-		}
 		// We disallow non-snapshot messages to replica ID 0. Note that
 		// getOrCreateReplicaLocked disallows moving the replica ID backward, so
 		// the only way we can get here is if the replica did not previously exist.
@@ -2643,24 +2682,19 @@ func (s *Store) getOrCreateReplicaLocked(rangeID roachpb.RangeID, replicaID roac
 // this store's replica (i.e. the snapshot is not from an older incarnation of
 // the replica) and a placeholder can be added to the replicasByKey map (if
 // necessary). If a placeholder is required, it is returned as the first value.
-func (s *Store) canApplySnapshotLocked(rangeID roachpb.RangeID, snap raftpb.Snapshot) (*ReplicaPlaceholder, error) {
-	if r, ok := s.mu.replicas[rangeID]; ok && r.IsInitialized() {
+func (s *Store) canApplySnapshotLocked(rangeDescriptor *roachpb.RangeDescriptor) (*ReplicaPlaceholder, error) {
+	if r, ok := s.mu.replicas[rangeDescriptor.RangeID]; ok && r.IsInitialized() {
 		// We have the range and it's initialized, so let the snapshot through.
 		return nil, nil
 	}
 
 	// We don't have the range (or we have an uninitialized
 	// placeholder). Will we be able to create/initialize it?
-	var parsedSnap roachpb.PartialRaftSnapshotData
-	if err := parsedSnap.Unmarshal(snap.Data); err != nil {
-		return nil, errors.Wrapf(err, "%s: canApplySnapshotLocked: could not unmarshal snapshot", s)
-	}
-
-	if exRng, ok := s.mu.replicaPlaceholders[rangeID]; ok {
+	if exRng, ok := s.mu.replicaPlaceholders[rangeDescriptor.RangeID]; ok {
 		return nil, errors.Errorf("%s: canApplySnapshotLocked: cannot add placeholder, have an existing placeholder %s", s, exRng)
 	}
 
-	if s.hasOverlappingKeyRangeLocked(&parsedSnap.RangeDescriptor) {
+	if s.hasOverlappingKeyRangeLocked(rangeDescriptor) {
 		// We have a conflicting range, so we must block the snapshot.
 		// When such a conflict exists, it will be resolved by one range
 		// either being split or garbage collected.
@@ -2668,7 +2702,7 @@ func (s *Store) canApplySnapshotLocked(rangeID roachpb.RangeID, snap raftpb.Snap
 	}
 
 	placeholder := &ReplicaPlaceholder{
-		rangeDesc: parsedSnap.RangeDescriptor,
+		rangeDesc: *rangeDescriptor,
 	}
 	return placeholder, nil
 }

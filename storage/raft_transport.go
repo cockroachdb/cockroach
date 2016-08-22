@@ -31,8 +31,11 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/bufalloc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -127,6 +130,10 @@ type RaftTransport struct {
 	mu struct {
 		syncutil.Mutex
 		handlers map[roachpb.StoreID]RaftMessageHandler
+		// The snapshot streaming endpoint currently needs more than just a handler, so we keep the
+		// entire store available for now.
+		// TODO(jordan) replace this with a more restrictive set of entry points to the store.
+		stores   map[roachpb.StoreID]*Store
 		queues   map[bool]map[roachpb.NodeID]chan *RaftMessageRequest
 		stats    map[roachpb.NodeID]*raftTransportStats
 		breakers map[roachpb.NodeID]*circuit.Breaker
@@ -148,6 +155,7 @@ func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpc
 		SnapshotStatusChan: make(chan RaftSnapshotStatus),
 	}
 	t.mu.handlers = make(map[roachpb.StoreID]RaftMessageHandler)
+	t.mu.stores = make(map[roachpb.StoreID]*Store)
 	t.mu.queues = make(map[bool]map[roachpb.NodeID]chan *RaftMessageRequest)
 	t.mu.stats = make(map[roachpb.NodeID]*raftTransportStats)
 	t.mu.breakers = make(map[roachpb.NodeID]*circuit.Breaker)
@@ -319,21 +327,97 @@ func (t *RaftTransport) RaftMessageSync(ctx context.Context, req *RaftMessageReq
 }
 
 // RaftSnapshot handles incoming streaming snapshot requests.
-func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) (err error) {
-	return nil
+func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error {
+	var taskErr error
+	if err := t.rpcContext.Stopper.RunTask(func() {
+		taskErr = func() error {
+			req, err := stream.Recv()
+			if err != nil {
+				return err
+			}
+			if req.Header == nil {
+				stream.Send(&SnapshotResponse{
+					Status:  SnapshotResponse_ERROR,
+					Message: "Client error: no header in first snapshot request message"})
+				return nil
+			}
+			firstReq := req
+			t.mu.Lock()
+			store, ok := t.mu.stores[req.Header.ToReplica.StoreID]
+			t.mu.Unlock()
+			if !ok {
+				return errors.Errorf(
+					"unable to accept Raft message from %+v: no store registered for %+v",
+					req.Header.ToReplica, req.Header.FromReplica)
+			}
+			store.mu.Lock()
+			// Just check to see if we can even apply the snapshot now.
+			// We'll check again when we've got the whole message and actually add the placeholder
+			// that might be returned by this method at that point, if necessary.
+			_, canApplyErr := store.canApplySnapshotLocked(&req.Header.RangeDescriptor)
+			store.mu.Unlock()
+
+			if canApplyErr != nil {
+				stream.Send(&SnapshotResponse{
+					Status:  SnapshotResponse_DECLINED,
+					Message: fmt.Sprintf("Declined snapshot: %+v", canApplyErr)})
+				return nil
+			}
+
+			stream.Send(&SnapshotResponse{Status: SnapshotResponse_ACCEPTED})
+
+			batches := make([][]byte, 0)
+			logEntries := make([][]byte, 0)
+			for {
+				req, err := stream.Recv()
+				if err != nil {
+					return err
+				}
+				if req.Header != nil {
+					stream.Send(&SnapshotResponse{
+						Status:  SnapshotResponse_ERROR,
+						Message: "Client error: provided a header mid-stream"})
+					return nil
+				}
+
+				if req.KVBatch != nil {
+					batches = append(batches, req.KVBatch)
+				}
+				if req.LogEntries != nil {
+					logEntries = append(logEntries, req.LogEntries...)
+				}
+				if req.Final {
+					if err := store.handleStreamingSnapshotMessage(
+						stream.Context(), firstReq, batches, logEntries); err != nil {
+						stream.Send(&SnapshotResponse{
+							Status:  SnapshotResponse_ERROR,
+							Message: fmt.Sprintf("Failed to apply snapshot: %+v", err)})
+						return nil
+					}
+					stream.Send(&SnapshotResponse{Status: SnapshotResponse_APPLIED})
+					return nil
+				}
+			}
+		}()
+	}); err != nil {
+		return err
+	}
+	return taskErr
 }
 
-// Listen registers a raftMessageHandler to receive proxied messages.
-func (t *RaftTransport) Listen(storeID roachpb.StoreID, handler RaftMessageHandler) {
+// Listen registers a raftMessageHandler and store to receive proxied messages.
+func (t *RaftTransport) Listen(storeID roachpb.StoreID, handler RaftMessageHandler, store *Store) {
 	t.mu.Lock()
 	t.mu.handlers[storeID] = handler
+	t.mu.stores[storeID] = store
 	t.mu.Unlock()
 }
 
-// Stop unregisters a raftMessageHandler.
+// Stop unregisters a raftMessageHandler and store.
 func (t *RaftTransport) Stop(storeID roachpb.StoreID) {
 	t.mu.Lock()
 	delete(t.mu.handlers, storeID)
+	delete(t.mu.stores, storeID)
 	t.mu.Unlock()
 }
 
@@ -567,4 +651,96 @@ func (t *RaftTransport) SendSync(ctx context.Context, req *RaftMessageRequest) e
 	default:
 		return errors.Errorf("unexpected response value %T %s", val, val)
 	}
+}
+
+// batchFactory is a factory for fresh Batches that can be used to create BatchReprs. The resultant
+// Batches are not expected to be committed.
+type batchFactory func() engine.Batch
+
+// SendSnapshot streams the given outgoing snapshot. The caller is responsible for closing the
+// OutgoingSnapshot with snap.Close.
+func (t *RaftTransport) SendSnapshot(
+	ctx context.Context,
+	header *SnapshotRequest_Header,
+	snap OutgoingSnapshot,
+	batchFactory batchFactory) error {
+	nodeID := header.ToReplica.NodeID
+	breaker := t.GetCircuitBreaker(nodeID)
+	if err := breaker.Call(func() error {
+		addr, err := t.resolver(nodeID)
+		if err != nil {
+			return err
+		}
+		conn, err := t.rpcContext.GRPCDial(addr.String(), grpc.WithBlock())
+		if err != nil {
+			return err
+		}
+		client := NewMultiRaftClient(conn)
+		stream, err := client.RaftSnapshot(ctx)
+		if err != nil {
+			return err
+		}
+		defer stream.CloseSend()
+
+		if err := stream.Send(&SnapshotRequest{Header: header}); err != nil {
+			return err
+		}
+		// Wait until we get a response from the server.
+		resp, err := stream.Recv()
+		if resp.Status == SnapshotResponse_ERROR {
+			return errors.Errorf("range=%s: remote rejected snapshot for reason %s",
+				header.RangeDescriptor.RangeID, resp.Message)
+		} else if resp.Status != SnapshotResponse_ACCEPTED {
+			return errors.Errorf("range=%s: server sent an invalid status during negotiation",
+				header.RangeDescriptor.RangeID)
+		}
+
+		// Send our snapshot.
+		// For now, just send one giant batch.
+		// TODO(jordan) decide batch size and send while iterating.
+
+		b := batchFactory()
+		// Determine the unreplicated key prefix so we can drop any
+		// unreplicated keys from the snapshot.
+		unreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(header.RangeDescriptor.RangeID)
+		var alloc bufalloc.ByteAllocator
+		n := 0
+		for ; snap.Iter.Valid(); snap.Iter.Next() {
+			var key engine.MVCCKey
+			var value []byte
+			alloc, key, value = snap.Iter.allocIterKeyValue(alloc)
+			if bytes.HasPrefix(key.Key, unreplicatedPrefix) {
+				continue
+			}
+			n++
+			mvccKey := engine.MVCCKey{
+				Key:       key.Key,
+				Timestamp: key.Timestamp,
+			}
+			if err := b.Put(mvccKey, value); err != nil {
+				return err
+			}
+		}
+		repr := b.Repr()
+
+		if err := stream.Send(&SnapshotRequest{
+			KVBatch: repr, LogEntries: snap.LogEntries, Final: true}); err != nil {
+			return err
+		}
+		log.Infof(stream.Context(), "streamed snapshot: kv pairs: %d, log entries: %d",
+			n, len(snap.LogEntries))
+
+		resp, err = stream.Recv()
+		if resp.Status == SnapshotResponse_ERROR {
+			return errors.Errorf("range=%s: remote failed to apply snapshot for reason %s",
+				header.RangeDescriptor.RangeID, resp.Message)
+		} else if resp.Status != SnapshotResponse_APPLIED {
+			return errors.Errorf("range=%s: server sent an invalid status during finalization",
+				header.RangeDescriptor.RangeID)
+		}
+		return nil
+	}, 0); err != nil {
+		return err
+	}
+	return nil
 }

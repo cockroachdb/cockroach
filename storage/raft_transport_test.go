@@ -152,7 +152,7 @@ func (rttc *raftTransportTestContext) ListenStore(
 	nodeID roachpb.NodeID, storeID roachpb.StoreID,
 ) channelServer {
 	ch := newChannelServer(100, 10*time.Millisecond)
-	rttc.transports[nodeID].Listen(storeID, ch)
+	rttc.transports[nodeID].Listen(storeID, ch, nil)
 	return ch
 }
 
@@ -473,7 +473,7 @@ func TestRaftTransportIndependentRanges(t *testing.T) {
 	const numMessages = 50
 	channelServer := newChannelServer(numMessages*2, 10*time.Millisecond)
 	channelServer.brokenRange = 13
-	serverTransport.Listen(server.StoreID, channelServer)
+	serverTransport.Listen(server.StoreID, channelServer, nil)
 
 	for i := 0; i < numMessages; i++ {
 		for _, rangeID := range []roachpb.RangeID{1, 13} {
