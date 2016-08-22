@@ -225,7 +225,7 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics kv.TxnMetrics) (uuid.U
 				return uuid.UUID{}, err
 			}
 		}
-		if err := s.Start(stopper); err != nil {
+		if err := s.Start(context.Background(), stopper); err != nil {
 			return uuid.UUID{}, err
 		}
 
@@ -405,9 +405,10 @@ func (n *Node) initStores(
 	}
 	for _, e := range engines {
 		s := storage.NewStore(n.ctx, e, &n.Descriptor)
+		log.Tracef(ctx, "created store for engine: %s", e)
 		// Initialize each store in turn, handling un-bootstrapped errors by
 		// adding the store to the bootstraps list.
-		if err := s.Start(stopper); err != nil {
+		if err := s.Start(ctx, stopper); err != nil {
 			if _, ok := err.(*storage.NotBootstrappedError); ok {
 				log.Infof(ctx, "store %s not bootstrapped", s)
 				bootstraps = append(bootstraps, s)
@@ -445,6 +446,7 @@ func (n *Node) initStores(
 	if err := n.validateStores(); err != nil {
 		return err
 	}
+	log.Trace(ctx, "validated stores")
 
 	// Set the stores map as the gossip persistent storage, so that
 	// gossip can bootstrap using the most recently persisted set of
@@ -456,18 +458,21 @@ func (n *Node) initStores(
 	// Connect gossip before starting bootstrap. For new nodes, connecting
 	// to the gossip network is necessary to get the cluster ID.
 	n.connectGossip()
+	log.Trace(ctx, "connected to gossip")
 
 	// If no NodeID has been assigned yet, allocate a new node ID by
 	// supplying 0 to initNodeID.
 	if n.Descriptor.NodeID == 0 {
 		n.initNodeID(0)
 		n.initialBoot = true
+		log.Tracef(ctx, "allocated node ID %d", n.Descriptor.NodeID)
 	}
 
 	// Bootstrap any uninitialized stores asynchronously.
 	if len(bootstraps) > 0 {
 		if err := stopper.RunAsyncTask(func() {
-			n.bootstrapStores(ctx, bootstraps, stopper)
+			taskCtx := context.TODO()
+			n.bootstrapStores(taskCtx, bootstraps, stopper)
 		}); err != nil {
 			return err
 		}
@@ -523,7 +528,7 @@ func (n *Node) bootstrapStores(ctx context.Context, bootstraps []*storage.Store,
 		if err := s.Bootstrap(sIdent, stopper); err != nil {
 			log.Fatal(ctx, err)
 		}
-		if err := s.Start(stopper); err != nil {
+		if err := s.Start(ctx, stopper); err != nil {
 			log.Fatal(ctx, err)
 		}
 		n.addStore(s)
