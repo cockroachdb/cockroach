@@ -295,13 +295,13 @@ func (n *createTableNode) Start() error {
 		return err
 	}
 
-	tableKey := tableKey{parentID: n.dbDesc.ID, name: n.n.Table.TableName().Table()}
-	key := tableKey.Key()
+	tKey := tableKey{parentID: n.dbDesc.ID, name: n.n.Table.TableName().Table()}
+	key := tKey.Key()
 	if exists, err := n.p.descExists(key); err == nil && exists {
 		if n.n.IfNotExists {
 			return nil
 		}
-		return descriptorAlreadyExistsErr{&desc, tableKey.Name()}
+		return descriptorAlreadyExistsErr{&desc, tKey.Name()}
 	} else if err != nil {
 		return err
 	}

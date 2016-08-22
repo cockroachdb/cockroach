@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -103,6 +104,7 @@ func Backup(
 		return sqlbase.BackupDescriptor{}, err
 	}
 
+	var dataSize int64
 	backupDescs := make([]sqlbase.BackupRangeDescriptor, len(rangeDescs))
 	for i, rangeDesc := range rangeDescs {
 		backupDescs[i] = sqlbase.BackupRangeDescriptor{
@@ -152,15 +154,17 @@ func Backup(
 				return sqlbase.BackupDescriptor{}, err
 			}
 		}
+		dataSize += sst.DataSize
 	}
 	if err := txn.CommitOrCleanup(); err != nil {
 		return sqlbase.BackupDescriptor{}, err
 	}
 
 	desc = sqlbase.BackupDescriptor{
-		EndTime: txn.Proto.MaxTimestamp,
-		Ranges:  backupDescs,
-		SQL:     sqlDescs,
+		EndTime:  txn.Proto.MaxTimestamp,
+		Ranges:   backupDescs,
+		SQL:      sqlDescs,
+		DataSize: dataSize,
 	}
 
 	descBuf, err := desc.Marshal()
@@ -197,6 +201,37 @@ func Import(
 	return sst.Iterate(startKey, endKey, importFunc)
 }
 
+func restoreDatabase(
+	ctx context.Context,
+	txn *client.Txn,
+	db *sqlbase.DatabaseDescriptor,
+	overwrite bool,
+) error {
+	dbIDKey := databaseKey{db.Name}.Key()
+	dbDescKey := sqlbase.MakeDescMetadataKey(db.GetID())
+
+	existingID, err := txn.Get(dbIDKey)
+	if err != nil {
+		return err
+	}
+	if existingID.Value != nil && !overwrite {
+		return errors.Errorf("database %q already exists", db.Name)
+	}
+
+	existingDesc, err := txn.Get(dbDescKey)
+	if err != nil {
+		return err
+	}
+	if existingDesc.Value != nil && !overwrite {
+		return errors.Errorf("database %q already exists", db.Name)
+	}
+
+	b := &client.Batch{}
+	b.Put(dbIDKey, db.ID)
+	b.Put(dbDescKey, sqlbase.WrapDescriptor(db))
+	return txn.Run(b)
+}
+
 func restoreTable(
 	ctx context.Context,
 	sst engine.RocksDBSstFileReader,
@@ -206,85 +241,137 @@ func restoreTable(
 ) error {
 	log.Infof(ctx, "Restoring Table %q", table.Name)
 
+	tableIDKey := tableKey{parentID: table.ParentID, name: table.Name}.Key()
+	tableDescKey := sqlbase.MakeDescMetadataKey(table.GetID())
+
 	tableStartKey := roachpb.Key(sqlbase.MakeIndexKeyPrefix(table, table.PrimaryIndex.ID))
 	tableEndKey := tableStartKey.PrefixEnd()
 
-	existingDesc, err := txn.Get(sqlbase.MakeDescMetadataKey(table.GetID()))
+	b := &client.Batch{}
+
+	existingID, err := txn.Get(tableIDKey)
 	if err != nil {
 		return err
 	}
+	if existingID.Value != nil && !overwrite {
+		return errors.Errorf("table %q already exists", table.Name)
+	}
+	b.Put(tableIDKey, table.ID)
+
+	existingDesc, err := txn.Get(tableDescKey)
+	if err != nil {
+		return err
+	}
+	if existingDesc.Value != nil && !overwrite {
+		return errors.Errorf("table %q already exists", table.Name)
+	}
+	b.Put(tableDescKey, sqlbase.WrapDescriptor(table))
+
 	existingData, err := txn.Scan(tableStartKey, tableEndKey, 1)
 	if err != nil {
 		return err
 	}
-	if existingDesc.Value != nil || len(existingData) > 0 {
+	if len(existingData) > 0 {
 		if overwrite {
-			// We're about to Put the descriptor, so don't bother deleting it.
-			if err := txn.DelRange(tableStartKey, tableEndKey); err != nil {
-				return err
-			}
+			b.DelRange(tableStartKey, tableEndKey, false)
 		} else {
 			return errors.Errorf("table %q already exists", table.Name)
 		}
 	}
-	tableDescKey := sqlbase.MakeDescMetadataKey(table.GetID())
-	if err := txn.Put(tableDescKey, sqlbase.WrapDescriptor(table)); err != nil {
+
+	if err := txn.Run(b); err != nil {
 		return err
 	}
 
 	return Import(ctx, sst, txn, engine.MVCCKey{Key: tableStartKey}, engine.MVCCKey{Key: tableEndKey})
 }
 
-// Restore imports a SQL table (or all user SQL tables) from a set of
-// non-overlapping sstable files.
-func Restore(ctx context.Context, db client.DB, base string, table string, overwrite bool) error {
+func userTablesAndDBsMatchingName(
+	descs []sqlbase.Descriptor, name parser.TableName,
+) ([]sqlbase.Descriptor, error) {
+	tableName := sqlbase.NormalizeName(name.TableName)
+	dbName := sqlbase.NormalizeName(name.DatabaseName)
+
+	matches := make([]sqlbase.Descriptor, 0, len(descs))
+	dbIDsToName := make(map[sqlbase.ID]string)
+	for _, desc := range descs {
+		if db := desc.GetDatabase(); db != nil {
+			if db.ID == keys.SystemDatabaseID {
+				continue // Not a user database.
+			}
+			if n := sqlbase.NormalizeName(parser.Name(db.Name)); dbName == "*" || n == dbName {
+				matches = append(matches, desc)
+				dbIDsToName[db.ID] = n
+			}
+			continue
+		}
+	}
+	for _, desc := range descs {
+		if table := desc.GetTable(); table != nil {
+			if _, ok := dbIDsToName[table.ParentID]; !ok {
+				continue
+			}
+			if tableName == "*" || sqlbase.NormalizeName(parser.Name(table.Name)) == tableName {
+				matches = append(matches, desc)
+			}
+		}
+	}
+	return matches, nil
+}
+
+// Restore imports a SQL table (or tables) from a set of non-overlapping sstable
+// files.
+func Restore(
+	ctx context.Context,
+	db client.DB,
+	base string,
+	table parser.TableName,
+	overwrite bool,
+) ([]sqlbase.Descriptor, error) {
 	sst, err := engine.MakeRocksDBSstFileReader()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer sst.Close()
 
 	descBytes, err := ioutil.ReadFile(filepath.Join(base, backupDescriptorName))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var backupDesc sqlbase.BackupDescriptor
 	if err := backupDesc.Unmarshal(descBytes); err != nil {
-		return err
+		return nil, err
 	}
 	for _, r := range backupDesc.Ranges {
 		if len(r.Path) == 0 {
 			continue
 		}
 		if err := sst.AddFile(r.Path); err != nil {
-			return err
+			return nil, err
 		}
+	}
+
+	matches, err := userTablesAndDBsMatchingName(backupDesc.SQL, table)
+	if err != nil {
+		return nil, err
+	}
+	if len(matches) == 0 {
+		return nil, errors.Errorf("no tables found: %q", table)
 	}
 
 	// TODO(dan): This uses one giant transaction for the entire restore, which
 	// works for small datasets, but not for big ones.
-	return db.Txn(ctx, func(txn *client.Txn) error {
-		if len(table) > 0 {
-			found := false
-			for _, desc := range backupDesc.SQL {
-				if t := desc.GetTable(); t != nil && t.Name == table {
-					if err := restoreTable(ctx, sst, txn, t, overwrite); err != nil {
-						return err
-					}
-					found = true
-					break
+	return matches, db.Txn(ctx, func(txn *client.Txn) error {
+		for _, desc := range matches {
+			if db := desc.GetDatabase(); db != nil {
+				if err := restoreDatabase(ctx, txn, db, overwrite); err != nil {
+					return err
 				}
+				continue
 			}
-			if !found {
-				return errors.Errorf("table not found: %s", table)
-			}
-		} else {
-			for _, desc := range backupDesc.SQL {
-				if t := desc.GetTable(); t != nil && t.ParentID != keys.SystemDatabaseID {
-					if err := restoreTable(ctx, sst, txn, t, overwrite); err != nil {
-						return err
-					}
-				}
+			table := desc.GetTable()
+			if err := restoreTable(ctx, sst, txn, table, overwrite); err != nil {
+				return err
 			}
 		}
 		return nil
