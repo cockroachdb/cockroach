@@ -510,5 +510,6 @@ func TestSendSyncAvoidUnused(t *testing.T) {
 	}
 	serverTransport := rttc.AddNode(server.NodeID)
 
-	serverTransport.SendSync(context.TODO(), &storage.RaftMessageRequest{})
+	err := serverTransport.SendSync(context.TODO(), &storage.RaftMessageRequest{})
+	t.Log(err.Error())
 }
