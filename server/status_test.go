@@ -20,9 +20,7 @@ package server
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"reflect"
 	"regexp"
@@ -31,6 +29,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -46,12 +46,8 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
-	"github.com/gogo/protobuf/jsonpb"
-	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
 )
 
 // TestStatusLocalStacks verifies that goroutine stack traces are available
@@ -66,7 +62,7 @@ func TestStatusLocalStacks(t *testing.T) {
 
 	var stacks serverpb.JSONResponse
 	for _, nodeID := range []string{"local", "1"} {
-		if err := getRequestProto(t, s, "/_status/stacks/"+nodeID, &stacks); err != nil {
+		if err := getJSONProto(s, "/_status/stacks/"+nodeID, &stacks); err != nil {
 			t.Fatal(err)
 		}
 		if !re.Match(stacks.Data) {
@@ -91,7 +87,7 @@ func TestStatusJson(t *testing.T) {
 
 	var nodes serverpb.NodesResponse
 	util.SucceedsSoon(t, func() error {
-		if err := getRequestProto(t, s, "/_status/nodes", &nodes); err != nil {
+		if err := getJSONProto(s, "/_status/nodes", &nodes); err != nil {
 			t.Fatal(err)
 		}
 
@@ -107,7 +103,7 @@ func TestStatusJson(t *testing.T) {
 		"/_status/details/" + strconv.FormatUint(uint64(nodeID), 10),
 	} {
 		var details serverpb.DetailsResponse
-		if err := getRequestProto(t, s, path, &details); err != nil {
+		if err := getJSONProto(s, path, &details); err != nil {
 			t.Fatal(err)
 		}
 		if a, e := details.NodeID, nodeID; a != e {
@@ -130,7 +126,7 @@ func TestStatusGossipJson(t *testing.T) {
 	defer s.Stopper().Stop()
 
 	var data gossip.InfoStatus
-	if err := getRequestProto(t, s, "/_status/gossip/local", &data); err != nil {
+	if err := getJSONProto(s, "/_status/gossip/local", &data); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := data.Infos["first-range"]; !ok {
@@ -147,73 +143,12 @@ func TestStatusGossipJson(t *testing.T) {
 	}
 }
 
-var retryOptions = retry.Options{
-	InitialBackoff: 100 * time.Millisecond,
-	MaxRetries:     4,
-	Multiplier:     2,
-}
-
-// getRequestReader returns the io.ReadCloser from a get request to the test
-// server with the given path. The returned closer should be closed by the
-// caller.
-func getRequestReader(t *testing.T, ts serverutils.TestServerInterface, path string) io.ReadCloser {
+func getJSONProto(ts serverutils.TestServerInterface, path string, v proto.Message) error {
 	httpClient, err := ts.GetHTTPClient()
 	if err != nil {
-		t.Fatal(err)
+		return err
 	}
-
-	url := ts.AdminURL() + path
-	for r := retry.Start(retryOptions); r.Next(); {
-		req, err := http.NewRequest("GET", url, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		req.Header.Set(util.AcceptHeader, util.JSONContentType)
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			log.Infof(context.Background(), "could not GET %s - %s", url, err)
-			continue
-		}
-		if resp.StatusCode != http.StatusOK {
-			body, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				log.Infof(context.Background(), "could not read body for %s - %s", url, err)
-				continue
-			}
-			log.Infof(context.Background(), "could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
-			continue
-		}
-		returnedContentType := resp.Header.Get(util.ContentTypeHeader)
-		if returnedContentType != util.JSONContentType {
-			log.Infof(context.Background(), "unexpected content type: %v", returnedContentType)
-			continue
-		}
-		log.Infof(context.Background(), "OK response from %s", url)
-		return resp.Body
-	}
-	t.Fatalf("There was an error retrieving %s", url)
-	return nil
-}
-
-// getRequest returns the results of a get request to the test server with
-// the given path. It returns the contents of the body of the result.
-func getRequest(t *testing.T, ts serverutils.TestServerInterface, path string) []byte {
-	respBody := getRequestReader(t, ts, path)
-	defer respBody.Close()
-	body, err := ioutil.ReadAll(respBody)
-	if err != nil {
-		log.Infof(context.Background(), "could not read body for %s - %s", path, err)
-		return nil
-	}
-	return body
-}
-
-// getRequestProto unmarshals the result of a get request to the test server
-// with the given path.
-func getRequestProto(t *testing.T, ts serverutils.TestServerInterface, path string, v proto.Message) error {
-	respBody := getRequestReader(t, ts, path)
-	defer respBody.Close()
-	return jsonpb.Unmarshal(respBody, v)
+	return util.GetJSON(httpClient, ts.AdminURL()+path, v)
 }
 
 // startServer will start a server with a short scan interval, wait for
@@ -277,7 +212,7 @@ func TestStatusLocalLogs(t *testing.T) {
 	timestampEWI := timeutil.Now().UnixNano()
 
 	var wrapper serverpb.LogFilesListResponse
-	if err := getRequestProto(t, ts, "/_status/logfiles/local", &wrapper); err != nil {
+	if err := getJSONProto(ts, "/_status/logfiles/local", &wrapper); err != nil {
 		t.Fatal(err)
 	}
 	if a, e := len(wrapper.Files), 3; a != e {
@@ -293,7 +228,7 @@ func TestStatusLocalLogs(t *testing.T) {
 	var foundInfo, foundWarning, foundError bool
 	for _, file := range wrapper.Files {
 		var wrapper serverpb.LogEntriesResponse
-		if err := getRequestProto(t, ts, fmt.Sprintf("/_status/logfiles/local/%s", file.Name), &wrapper); err != nil {
+		if err := getJSONProto(ts, fmt.Sprintf("/_status/logfiles/local/%s", file.Name), &wrapper); err != nil {
 			t.Fatal(err)
 		}
 		for _, entry := range wrapper.Entries {
@@ -366,7 +301,7 @@ func TestStatusLocalLogs(t *testing.T) {
 
 		var wrapper serverpb.LogEntriesResponse
 		path := url.String()
-		if err := getRequestProto(t, ts, path, &wrapper); err != nil {
+		if err := getJSONProto(ts, path, &wrapper); err != nil {
 			t.Fatal(err)
 		}
 
@@ -406,7 +341,7 @@ func TestNodeStatusResponse(t *testing.T) {
 
 	// First fetch all the node statuses.
 	wrapper := serverpb.NodesResponse{}
-	if err := getRequestProto(t, s, "/_status/nodes", &wrapper); err != nil {
+	if err := getJSONProto(s, "/_status/nodes", &wrapper); err != nil {
 		t.Fatal(err)
 	}
 	nodeStatuses := wrapper.Nodes
@@ -422,7 +357,7 @@ func TestNodeStatusResponse(t *testing.T) {
 	// ids only.
 	for _, oldNodeStatus := range nodeStatuses {
 		nodeStatus := status.NodeStatus{}
-		if err := getRequestProto(t, s, "/_status/nodes/"+oldNodeStatus.Desc.NodeID.String(), &nodeStatus); err != nil {
+		if err := getJSONProto(s, "/_status/nodes/"+oldNodeStatus.Desc.NodeID.String(), &nodeStatus); err != nil {
 			t.Fatal(err)
 		}
 		if !reflect.DeepEqual(s.node.Descriptor, nodeStatus.Desc) {
@@ -467,8 +402,9 @@ func TestMetricsEndpoint(t *testing.T) {
 	s := startServer(t)
 	defer s.Stopper().Stop()
 
-	url := "/_status/metrics/" + s.Gossip().GetNodeID().String()
-	getRequest(t, s, url)
+	if _, err := getText(s, s.AdminURL()+"/_status/metrics/"+s.Gossip().GetNodeID().String()); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestRangesResponse(t *testing.T) {
@@ -482,7 +418,7 @@ func TestRangesResponse(t *testing.T) {
 	}
 
 	var response serverpb.RangesResponse
-	if err := getRequestProto(t, ts, "/_status/ranges/local", &response); err != nil {
+	if err := getJSONProto(ts, "/_status/ranges/local", &response); err != nil {
 		t.Fatal(err)
 	}
 	if len(response.Ranges) == 0 {
@@ -517,7 +453,7 @@ func TestRaftDebug(t *testing.T) {
 	defer s.Stopper().Stop()
 
 	var resp serverpb.RaftDebugResponse
-	if err := getRequestProto(t, s, "/_status/raft", &resp); err != nil {
+	if err := getJSONProto(s, "/_status/raft", &resp); err != nil {
 		t.Fatal(err)
 	}
 	if len(resp.Ranges) == 0 {
@@ -532,7 +468,7 @@ func TestStatusVars(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	if body, err := getText(s.AdminURL() + "/_status/vars"); err != nil {
+	if body, err := getText(s, s.AdminURL()+"/_status/vars"); err != nil {
 		t.Fatal(err)
 	} else if !bytes.Contains(body, []byte("# TYPE sql_bytesout counter\nsql_bytesout")) {
 		t.Errorf("expected sql_bytesout, got: %s", body)
