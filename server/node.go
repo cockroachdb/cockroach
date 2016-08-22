@@ -778,7 +778,7 @@ func (n *Node) Batch(
 		}
 	}
 
-	opName := "node " + strconv.Itoa(int(n.Descriptor.NodeID)) // could save allocs here
+	const opName = "node.Batch"
 
 	fail := func(err error) {
 		br = &roachpb.BatchResponse{}
@@ -811,6 +811,7 @@ func (n *Node) Batch(
 		}
 		defer sp.Finish()
 		traceCtx := opentracing.ContextWithSpan(ctx, sp)
+		log.Tracef(traceCtx, "node "+strconv.Itoa(int(n.Descriptor.NodeID))) // could save allocshere.
 
 		tStart := timeutil.Now()
 		var pErr *roachpb.Error
