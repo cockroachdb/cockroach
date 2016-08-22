@@ -444,7 +444,7 @@ CONSTRAINT_CATALOG  CONSTRAINT_SCHEMA  CONSTRAINT_NAME  TABLE_SCHEMA   TABLE_NAM
 def                 constraint_db      primary          constraint_db  t1          PRIMARY KEY
 def                 constraint_db      t1_a_key         constraint_db  t1          UNIQUE
 def                 constraint_db      c2               constraint_db  t1          CHECK
-def                 constraint_db      NULL             constraint_db  t1          CHECK
+def                 constraint_db      check_a          constraint_db  t1          CHECK
 def                 constraint_db      primary          constraint_db  t2          PRIMARY KEY
 def                 constraint_db      t2_t1_ID_idx     constraint_db  t2          FOREIGN KEY
 
