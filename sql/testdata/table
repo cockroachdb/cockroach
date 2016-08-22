@@ -190,8 +190,15 @@ test.users CREATE TABLE "test.users"
   FAMILY fam_1_title (title),
   FAMILY fam_2_nickname (nickname),
   FAMILY fam_3_username_email (username, email),
-  CHECK (LENGTH(nickname) < LENGTH(name)),
-  CHECK (LENGTH(nickname) < 10)
+  CONSTRAINT check_nickname_name CHECK (LENGTH(nickname) < LENGTH(name)),
+  CONSTRAINT check_nickname CHECK (LENGTH(nickname) < 10)
+)
+
+statement error duplicate constraint name: "check_foo"
+CREATE TABLE test.duple_generated (
+  foo INT CHECK (foo > 1),
+  bar INT CHECK (bar > 2),
+  CHECK (foo > 2)
 )
 
 statement ok
