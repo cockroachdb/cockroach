@@ -783,14 +783,14 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	// Add index mutation "foo""
 	mt.writeIndexMutation("foo", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_DROP})
 	// Noop.
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP CONSTRAINT foo`); err != nil {
+	if _, err := sqlDB.Exec(`DROP INDEX t.test@foo`); err != nil {
 		t.Fatal(err)
 	}
 	// Make "foo" live.
 	mt.makeMutationsActive()
 	// "foo" is being added.
 	mt.writeIndexMutation("foo", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_ADD})
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP CONSTRAINT foo`); !testutils.IsError(err, `constraint "foo" in the middle of being added, try again later`) {
+	if _, err := sqlDB.Exec(`DROP INDEX t.test@foo`); !testutils.IsError(err, `index "foo" in the middle of being added, try again later`) {
 		t.Fatal(err)
 	}
 	// Make "foo" live.
