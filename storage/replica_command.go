@@ -609,10 +609,7 @@ func (r *Replica) EndTransaction(
 	if reply.Txn.Status == roachpb.COMMITTED {
 		var err error
 		if trigger, err = r.runCommitTrigger(ctx, batch.(engine.Batch), ms, args, reply.Txn); err != nil {
-			// TODO(tschottdorf): should an error here always amount to a
-			// ReplicaCorruptionError?
-			log.Error(ctx, errors.Wrapf(err, "%s: commit trigger", r))
-			return reply, nil, err
+			return reply, nil, NewReplicaCorruptionError(err)
 		}
 	}
 
