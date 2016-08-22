@@ -220,10 +220,10 @@ SHOW CREATE TABLE test.named_constraints
 ----
 test.named_constraints  CREATE TABLE "test.named_constraints" (
                         id INT NOT NULL,
-                        name STRING CONSTRAINT notnull NOT NULL,
-                        title STRING NULL CONSTRAINT def DEFAULT 'VP of Something',
+                        name STRING NOT NULL,
+                        title STRING NULL DEFAULT 'VP of Something',
                         nickname STRING NULL,
-                        username STRING(10) CONSTRAINT nl NULL,
+                        username STRING(10) NULL,
                         email STRING(100) NULL,
                         CONSTRAINT pk PRIMARY KEY (id),
                         UNIQUE INDEX uq (email),
@@ -242,50 +242,32 @@ query TTTTT colnames
 SHOW CONSTRAINTS FROM test.named_constraints
 ----
 Table              Name     Type         Column(s)   Details
-named_constraints  bar      UNIQUE       [id name]   NULL
-named_constraints  ck1      CHECK        NULL        LENGTH(nickname) < 10
-named_constraints  ck2      CHECK        NULL        LENGTH(nickname) < LENGTH(name)
-named_constraints  def      DEFAULT      title       'VP of Something'
-named_constraints  nl       NULL         username    NULL
-named_constraints  notnull  NOT NULL     name        NULL
-named_constraints  pk       PRIMARY KEY  [id]        NULL
-named_constraints  uq       UNIQUE       [email]     NULL
-named_constraints  uq2      UNIQUE       [username]  NULL
+named_constraints  bar      UNIQUE       id, name   NULL
+named_constraints  ck1      CHECK        NULL       LENGTH(nickname) < 10
+named_constraints  ck2      CHECK        NULL       LENGTH(nickname) < LENGTH(name)
+named_constraints  pk       PRIMARY KEY  id         NULL
+named_constraints  uq       UNIQUE       email      NULL
+named_constraints  uq2      UNIQUE       username   NULL
 
 statement error duplicate constraint name: "pk"
 CREATE TABLE test.dupe_named_constraints (
   id        INT CONSTRAINT pk PRIMARY KEY,
-  title     VARCHAR CONSTRAINT def DEFAULT 'blah',
-  name      VARCHAR CONSTRAINT pk NOT NULL
+  title     VARCHAR CONSTRAINT one CHECK (1>1),
+  name      VARCHAR CONSTRAINT pk UNIQUE
 )
 
-statement error duplicate constraint name: "def"
+statement error duplicate constraint name: "one"
 CREATE TABLE test.dupe_named_constraints (
   id        INT CONSTRAINT pk PRIMARY KEY,
-  title     VARCHAR CONSTRAINT def DEFAULT 'blah',
-  name      VARCHAR CONSTRAINT def NOT NULL
+  title     VARCHAR CONSTRAINT one CHECK (1>1),
+  name      VARCHAR CONSTRAINT one UNIQUE
 )
 
-statement error duplicate constraint name: "def"
+statement error duplicate constraint name: "one"
 CREATE TABLE test.dupe_named_constraints (
   id        INT CONSTRAINT pk PRIMARY KEY,
-  title     VARCHAR CONSTRAINT def DEFAULT 'blah',
-  name      VARCHAR CONSTRAINT def CHECK (1>1)
-)
-
-statement error duplicate constraint name: "def"
-CREATE TABLE test.dupe_named_constraints (
-  id        INT CONSTRAINT pk PRIMARY KEY,
-  title     VARCHAR CONSTRAINT def DEFAULT 'blah',
-  name      VARCHAR CONSTRAINT def UNIQUE
-)
-
-
-statement error duplicate constraint name: "def"
-CREATE TABLE test.dupe_named_constraints (
-  id        INT CONSTRAINT pk PRIMARY KEY,
-  title     VARCHAR CONSTRAINT def DEFAULT 'blah',
-  name      VARCHAR CONSTRAINT def REFERENCES test.named_constraints (username),
+  title     VARCHAR CONSTRAINT one CHECK (1>1),
+  name      VARCHAR CONSTRAINT one REFERENCES test.named_constraints (username),
   INDEX (name)
 )
 

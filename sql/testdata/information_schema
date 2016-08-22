@@ -139,7 +139,7 @@ query TTTTT colnames
 SHOW CONSTRAINTS FROM information_schema.tables
 ----
 Table   Name     Type  Column(s)  Details
-tables  PRIMARY  KEY   []         NULL
+tables  PRIMARY  KEY   NULL         NULL
 
 query TTT colnames
 SHOW GRANTS ON information_schema.tables

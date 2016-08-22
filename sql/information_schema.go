@@ -172,6 +172,7 @@ var (
 	constraintTypeUnique     = parser.NewDString("UNIQUE")
 )
 
+// TODO(dt): switch using common GetConstraintInfo helper.
 var informationSchemaTableConstraintTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.table_constraints (
