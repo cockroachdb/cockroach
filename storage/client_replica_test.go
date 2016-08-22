@@ -834,3 +834,41 @@ func TestLeaseInfoRequest(t *testing.T) {
 	// lease. This requires a way to expire leases; the TestCluster probably needs
 	// to use a mock clock.
 }
+
+// Test that an error encountered by a read-only "NonKV" command is not
+// swallowed, and doesn't otherwise cause a panic.
+// We had a bug cause by the fact that errors for these commands aren't passed
+// through the epilogue returned by replica.beginCommands() and were getting
+// swallowed.
+func TestErrorHandlingForNonKVCommand(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	cmdFilter := func(fArgs storagebase.FilterArgs) *roachpb.Error {
+		if fArgs.Hdr.UserPriority == 42 {
+			return roachpb.NewErrorf("injected error")
+		}
+		return nil
+	}
+	srv, _, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &storage.StoreTestingKnobs{
+					TestingCommandFilter: cmdFilter,
+				},
+			},
+		})
+	s := srv.(*server.TestServer)
+	defer s.Stopper().Stop()
+
+	// Send the lease request.
+	key := roachpb.Key("a")
+	leaseReq := roachpb.LeaseInfoRequest{
+		Span: roachpb.Span{
+			Key: key,
+		},
+	}
+	_, pErr := client.SendWrappedWith(
+		s.GetDistSender(), nil, roachpb.Header{UserPriority: 42}, &leaseReq)
+	if !testutils.IsPError(pErr, "injected error") {
+		t.Fatalf("expected error %q, got: %s", "injected error", pErr)
+	}
+}
