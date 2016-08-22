@@ -242,15 +242,15 @@ query TTTTT colnames
 SHOW CONSTRAINTS FROM test.named_constraints
 ----
 Table              Name     Type         Column(s)   Details
-named_constraints  bar      UNIQUE       [id name]   NULL
-named_constraints  ck1      CHECK        NULL        LENGTH(nickname) < 10
-named_constraints  ck2      CHECK        NULL        LENGTH(nickname) < LENGTH(name)
-named_constraints  def      DEFAULT      title       'VP of Something'
-named_constraints  nl       NULL         username    NULL
-named_constraints  notnull  NOT NULL     name        NULL
-named_constraints  pk       PRIMARY KEY  [id]        NULL
-named_constraints  uq       UNIQUE       [email]     NULL
-named_constraints  uq2      UNIQUE       [username]  NULL
+named_constraints  bar      UNIQUE       id, name   NULL
+named_constraints  ck1      CHECK        NULL       LENGTH(nickname) < 10
+named_constraints  ck2      CHECK        NULL       LENGTH(nickname) < LENGTH(name)
+named_constraints  def      DEFAULT      title      'VP of Something'
+named_constraints  nl       NULL         username   NULL
+named_constraints  notnull  NOT NULL     name       NULL
+named_constraints  pk       PRIMARY KEY  id         NULL
+named_constraints  uq       UNIQUE       email      NULL
+named_constraints  uq2      UNIQUE       username   NULL
 
 statement error duplicate constraint name: "pk"
 CREATE TABLE test.dupe_named_constraints (

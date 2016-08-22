@@ -402,60 +402,26 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 		},
 	}
 
-	appendRow := func(name, typ, columns, details string) {
+	info, err := desc.GetConstraintInfo(p.txn)
+	if err != nil {
+		return nil, err
+	}
+	for name, c := range info {
 		detailsDatum := parser.DNull
-		if details != "" {
-			detailsDatum = parser.NewDString(details)
+		if c.Details != "" {
+			detailsDatum = parser.NewDString(c.Details)
 		}
 		columnsDatum := parser.DNull
-		if columns != "" {
-			columnsDatum = parser.NewDString(columns)
+		if c.Columns != nil {
+			columnsDatum = parser.NewDString(strings.Join(c.Columns, ", "))
 		}
 		v.rows = append(v.rows, []parser.Datum{
 			parser.NewDString(tn.Table()),
 			parser.NewDString(name),
-			parser.NewDString(typ),
+			parser.NewDString(c.Kind),
 			columnsDatum,
 			detailsDatum,
 		})
-	}
-
-	for _, index := range append([]sqlbase.IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...) {
-		if index.ID == desc.PrimaryIndex.ID {
-			appendRow(index.Name, "PRIMARY KEY", fmt.Sprintf("%+v", index.ColumnNames), "")
-		} else if index.Unique {
-			appendRow(index.Name, "UNIQUE", fmt.Sprintf("%+v", index.ColumnNames), "")
-		}
-		if index.ForeignKey.IsSet() {
-			other, err := p.getTableLeaseByID(index.ForeignKey.Table)
-			if err != nil {
-				return nil, errors.Errorf("error resolving table %d referenced in foreign key",
-					index.ForeignKey.Table)
-			}
-			otherIdx, err := other.FindIndexByID(index.ForeignKey.Index)
-			if err != nil {
-				return nil, errors.Errorf("error resolving index %d in table %s referenced in foreign key",
-					index.ForeignKey.Index, other.Name)
-			}
-			appendRow(index.ForeignKey.Name, "FOREIGN KEY", fmt.Sprintf("%v", index.ColumnNames),
-				fmt.Sprintf("%s.%v", other.Name, otherIdx.ColumnNames))
-		}
-	}
-	for _, c := range desc.Checks {
-		appendRow(c.Name, "CHECK", "", c.Expr)
-	}
-
-	for _, c := range desc.Columns {
-		if c.DefaultExprConstraintName != "" {
-			appendRow(c.DefaultExprConstraintName, "DEFAULT", c.Name, *c.DefaultExpr)
-		}
-		if c.NullableConstraintName != "" {
-			if c.Nullable {
-				appendRow(c.NullableConstraintName, "NULL", c.Name, "")
-			} else {
-				appendRow(c.NullableConstraintName, "NOT NULL", c.Name, "")
-			}
-		}
 	}
 
 	// Sort the results by constraint name.
