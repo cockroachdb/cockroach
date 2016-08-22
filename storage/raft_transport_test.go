@@ -493,3 +493,22 @@ func TestRaftTransportIndependentRanges(t *testing.T) {
 		}
 	}
 }
+
+func TestSendSyncAvoidUnused(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// This test just exists to avoid unused warnings for SendSync, which is unused since
+	// streaming snapshots was introduced.
+
+	rttc := newRaftTransportTestContext(t)
+	defer rttc.Stop()
+
+	server := roachpb.ReplicaDescriptor{
+		NodeID:    1,
+		StoreID:   1,
+		ReplicaID: 1,
+	}
+	serverTransport := rttc.AddNode(server.NodeID)
+
+	serverTransport.SendSync(context.TODO(), &storage.RaftMessageRequest{})
+}

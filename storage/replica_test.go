@@ -6317,8 +6317,9 @@ func TestCommandTimeThreshold(t *testing.T) {
 // TestReserveAndApplySnapshot checks to see if a snapshot is correctly applied
 // and that its reservation is removed.
 func TestReserveAndApplySnapshot(t *testing.T) {
-	t.Skip()
 	defer leaktest.AfterTest(t)()
+	// TODO(jordan) unskip this
+	t.Skip("Skipped temporarily because it's harder to apply a snapshot out-of-band in streaming snapshot land.")
 
 	tsc := TestStoreContext()
 	tc := testContext{}

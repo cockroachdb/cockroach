@@ -336,10 +336,9 @@ func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error 
 				return err
 			}
 			if req.Header == nil {
-				stream.Send(&SnapshotResponse{
+				return stream.Send(&SnapshotResponse{
 					Status:  SnapshotResponse_ERROR,
 					Message: "Client error: no header in first snapshot request message"})
-				return nil
 			}
 			firstReq := req
 			t.mu.Lock()
@@ -358,26 +357,26 @@ func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error 
 			store.mu.Unlock()
 
 			if canApplyErr != nil {
-				stream.Send(&SnapshotResponse{
+				return stream.Send(&SnapshotResponse{
 					Status:  SnapshotResponse_DECLINED,
 					Message: fmt.Sprintf("Declined snapshot: %+v", canApplyErr)})
-				return nil
 			}
 
-			stream.Send(&SnapshotResponse{Status: SnapshotResponse_ACCEPTED})
+			if err := stream.Send(&SnapshotResponse{Status: SnapshotResponse_ACCEPTED}); err != nil {
+				return err
+			}
 
-			batches := make([][]byte, 0)
-			logEntries := make([][]byte, 0)
+			var batches [][]byte
+			var logEntries [][]byte
 			for {
 				req, err := stream.Recv()
 				if err != nil {
 					return err
 				}
 				if req.Header != nil {
-					stream.Send(&SnapshotResponse{
+					return stream.Send(&SnapshotResponse{
 						Status:  SnapshotResponse_ERROR,
 						Message: "Client error: provided a header mid-stream"})
-					return nil
 				}
 
 				if req.KVBatch != nil {
@@ -389,13 +388,12 @@ func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error 
 				if req.Final {
 					if err := store.handleStreamingSnapshotMessage(
 						stream.Context(), firstReq, batches, logEntries); err != nil {
-						stream.Send(&SnapshotResponse{
+
+						return stream.Send(&SnapshotResponse{
 							Status:  SnapshotResponse_ERROR,
 							Message: fmt.Sprintf("Failed to apply snapshot: %+v", err)})
-						return nil
 					}
-					stream.Send(&SnapshotResponse{Status: SnapshotResponse_APPLIED})
-					return nil
+					return stream.Send(&SnapshotResponse{Status: SnapshotResponse_APPLIED})
 				}
 			}
 		}()
@@ -666,7 +664,7 @@ func (t *RaftTransport) SendSnapshot(
 	batchFactory batchFactory) error {
 	nodeID := header.ToReplica.NodeID
 	breaker := t.GetCircuitBreaker(nodeID)
-	if err := breaker.Call(func() error {
+	return breaker.Call(func() error {
 		addr, err := t.resolver(nodeID)
 		if err != nil {
 			return err
@@ -680,7 +678,11 @@ func (t *RaftTransport) SendSnapshot(
 		if err != nil {
 			return err
 		}
-		defer stream.CloseSend()
+		defer func() {
+			if err := stream.CloseSend(); err != nil {
+				log.Warningf(stream.Context(), "Failed to close snapshot stream: %s", err)
+			}
+		}()
 
 		if err := stream.Send(&SnapshotRequest{Header: header}); err != nil {
 			return err
@@ -739,8 +741,5 @@ func (t *RaftTransport) SendSnapshot(
 				header.RangeDescriptor.RangeID)
 		}
 		return nil
-	}, 0); err != nil {
-		return err
-	}
-	return nil
+	}, 0)
 }

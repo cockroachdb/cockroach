@@ -661,7 +661,9 @@ func (r *Replica) applySnapshot(
 
 	// Write the snapshot into the range.
 	for _, batchRepr := range inSnap.Batches {
-		batch.ApplyBatchRepr(batchRepr)
+		if err := batch.ApplyBatchRepr(batchRepr); err != nil {
+			return err
+		}
 	}
 
 	logEntries := make([]raftpb.Entry, len(inSnap.LogEntries))
