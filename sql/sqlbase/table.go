@@ -126,6 +126,15 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		}
 	}
 
+	if d.CheckExpr.Expr != nil {
+		// Should never happen since `hoistConstraints` moves these to table level
+		return nil, nil, errors.New("unexpected column CHECK constraint")
+	}
+	if d.References.Table.TableNameReference != nil {
+		// Should never happen since `hoistConstraints` moves these to table level
+		return nil, nil, errors.New("unexpected column REFERENCED constraint")
+	}
+
 	if d.DefaultExpr.Expr != nil {
 		// Verify the default expression type is compatible with the column type.
 		if err := SanitizeVarFreeExpr(d.DefaultExpr.Expr, colDatumType, "DEFAULT"); err != nil {
