@@ -164,7 +164,7 @@ func createTestStoreWithEngine(
 			t.Fatal(err)
 		}
 	}
-	if err := store.Start(stopper); err != nil {
+	if err := store.Start(context.Background(), stopper); err != nil {
 		t.Fatal(err)
 	}
 	return store
@@ -677,7 +677,7 @@ func (m *multiTestContext) addStore(idx int) {
 
 	m.gossips[idx].Start(ln.Addr())
 
-	if err := store.Start(stopper); err != nil {
+	if err := store.Start(context.Background(), stopper); err != nil {
 		m.t.Fatal(err)
 	}
 	if err := m.gossipNodeDesc(m.gossips[idx], nodeID); err != nil {
@@ -739,7 +739,7 @@ func (m *multiTestContext) restartStore(i int) {
 
 	ctx := m.makeContext(i)
 	m.stores[i] = storage.NewStore(ctx, m.engines[i], &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)})
-	if err := m.stores[i].Start(m.stoppers[i]); err != nil {
+	if err := m.stores[i].Start(context.Background(), m.stoppers[i]); err != nil {
 		m.t.Fatal(err)
 	}
 	// The sender is assumed to still exist.

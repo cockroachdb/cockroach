@@ -33,6 +33,7 @@ import (
 // TestEventLog verifies that "node joined" and "node restart" events are
 // recorded whenever a node starts and contacts the cluster.
 func TestEventLog(t *testing.T) {
+	t.Skip("flaky: #8562")
 	runTestOnConfigs(t, testEventLogInner)
 }
 
