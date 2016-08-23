@@ -73,30 +73,33 @@ var (
 
 // Server is the cockroach server node.
 type Server struct {
-	ctx           Context
-	mux           *http.ServeMux
-	clock         *hlc.Clock
-	rpcContext    *rpc.Context
-	grpc          *grpc.Server
-	gossip        *gossip.Gossip
-	storePool     *storage.StorePool
-	distSender    *kv.DistSender
-	db            *client.DB
-	kvDB          *kv.DBServer
-	pgServer      *pgwire.Server
-	distSQLServer *distsql.ServerImpl
-	node          *Node
-	registry      *metric.Registry
-	recorder      *status.MetricsRecorder
-	runtime       status.RuntimeStatSampler
-	admin         adminServer
-	status        *statusServer
-	tsDB          *ts.DB
-	tsServer      ts.Server
-	raftTransport *storage.RaftTransport
-	stopper       *stop.Stopper
-	sqlExecutor   *sql.Executor
-	leaseMgr      *sql.LeaseManager
+	ctx            Context
+	mux            *http.ServeMux
+	clock          *hlc.Clock
+	rpcContext     *rpc.Context
+	grpc           *grpc.Server
+	gossip         *gossip.Gossip
+	storePool      *storage.StorePool
+	txnCoordSender *kv.TxnCoordSender
+	distSender     *kv.DistSender
+	db             *client.DB
+	kvDB           *kv.DBServer
+	pgServer       *pgwire.Server
+	distSQLServer  *distsql.ServerImpl
+	node           *Node
+	registry       *metric.Registry
+	recorder       *status.MetricsRecorder
+	runtime        status.RuntimeStatSampler
+	admin          adminServer
+	status         *statusServer
+	tsDB           *ts.DB
+	tsServer       ts.Server
+	raftTransport  *storage.RaftTransport
+	stopper        *stop.Stopper
+	sqlExecutor    *sql.Executor
+	leaseMgr       *sql.LeaseManager
+
+	nodeLogTagVal log.DynamicIntValue
 }
 
 // NewServer creates a Server from a server.Context.
@@ -130,11 +133,25 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	s := &Server{
-		ctx:     srvCtx,
 		mux:     http.NewServeMux(),
 		clock:   hlc.NewClock(hlc.UnixNano),
 		stopper: stopper,
 	}
+	// Add a dynamic log tag value for the node ID.
+	//
+	// We need to pass the server's Ctx as a base context for the various server
+	// components, but we won't know the node ID until we Start(). At that point
+	// it's too late to change the contexts in the components (various background
+	// processes will have already started using the contexts).
+	//
+	// The dynamic value allows us to add the log tag to the context now and
+	// update the value asynchronously. It's not significantly more expensive than
+	// a regular tag since it's just doing an (atomic) load when a log/trace
+	// message is constructed.
+	s.nodeLogTagVal.Set(log.DynamicIntValueUnknown)
+	srvCtx.Ctx = log.WithLogTag(srvCtx.Ctx, "n", &s.nodeLogTagVal)
+	s.ctx = srvCtx
+
 	s.clock.SetMaxOffset(srvCtx.MaxOffset)
 
 	s.rpcContext = rpc.NewContext(srvCtx.Context, s.clock, s.stopper)
@@ -179,13 +196,13 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 
 	txnMetrics := kv.MakeTxnMetrics()
 	s.registry.AddMetricStruct(txnMetrics)
-	sender := kv.NewTxnCoordSender(s.Ctx(), s.distSender, s.clock, srvCtx.Linearizable,
+	s.txnCoordSender = kv.NewTxnCoordSender(s.Ctx(), s.distSender, s.clock, srvCtx.Linearizable,
 		s.stopper, txnMetrics)
-	s.db = client.NewDB(sender)
+	s.db = client.NewDB(s.txnCoordSender)
 
 	s.raftTransport = storage.NewRaftTransport(storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext)
 
-	s.kvDB = kv.NewDBServer(s.ctx.Context, sender, s.stopper)
+	s.kvDB = kv.NewDBServer(s.ctx.Context, s.txnCoordSender, s.stopper)
 	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
 
 	// Set up Lease Manager
@@ -289,9 +306,18 @@ type grpcGatewayServer interface {
 	) error
 }
 
-// Start starts the server on the specified port, starts gossip and
-// initializes the node using the engines from the server's context.
+// Start starts the server on the specified port, starts gossip and initializes
+// the node using the engines from the server's context.
+//
+// The passed context can be used to trace the server startup. The context
+// should represent the general startup operation, and is different from
+// contexts used at runtime for server's background work (like `s.Ctx()). The
+// intention is to allow a startup tracing span to be set up and used before the
+// Server is created.
 func (s *Server) Start(ctx context.Context) error {
+	// Copy log tags from s.Ctx()
+	ctx = log.WithLogTagsFromCtx(ctx, s.Ctx())
+
 	tlsConfig, err := s.ctx.GetServerTLSConfig()
 	if err != nil {
 		return err
@@ -434,6 +460,10 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	log.Trace(ctx, "started node")
 
+	// Set the NodeID in the base context (which was inherited by the
+	// various components of the server).
+	s.nodeLogTagVal.Set(int64(s.node.Descriptor.NodeID))
+
 	// We can now add the node registry.
 	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt)
 
@@ -447,7 +477,6 @@ func (s *Server) Start(ctx context.Context) error {
 	s.node.startWriteSummaries(s.ctx.MetricsSampleInterval)
 
 	s.sqlExecutor.SetNodeID(s.node.Descriptor.NodeID)
-	s.distSQLServer.SetNodeID(s.node.Descriptor.NodeID)
 
 	// Create and start the schema change manager only after a NodeID
 	// has been assigned.
