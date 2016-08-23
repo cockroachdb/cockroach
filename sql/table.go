@@ -167,7 +167,7 @@ func (p *planner) getTableLease(tn *parser.TableName) (*sqlbase.TableDescriptor,
 	}
 
 	isSystemDB := tn.Database() == sqlbase.SystemDB.Name
-	isVirtualDB := isVirtualDatabase(tn.Database())
+	isVirtualDB := IsVirtualDatabase(tn.Database())
 	if isSystemDB || isVirtualDB || testDisableTableLeases {
 		// We don't go through the normal lease mechanism for:
 		// - system tables. The system.lease and system.descriptor table, in
