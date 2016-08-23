@@ -306,9 +306,10 @@ func TestScannerPaceInterval(t *testing.T) {
 func TestScannerDisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const count = 3
+	const scanInterval = 1 * time.Millisecond
 	ranges := newTestRangeSet(count, t)
 	q := &testQueue{}
-	s := newReplicaScanner(1*time.Millisecond, 0, ranges)
+	s := newReplicaScanner(scanInterval, 0, ranges)
 	s.AddQueues(q)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
@@ -331,7 +332,11 @@ func TestScannerDisabled(t *testing.T) {
 	s.SetDisabled(true)
 	lastScannerCount := s.Count()
 	util.SucceedsSoon(t, func() error {
-		time.Sleep(2 * time.Millisecond)
+		// We want to make sure that a complete scanner loop has time to complete
+		// between every retry iteration, so twice the scan interval is a safe
+		// value. In addition, the internal timers used by the scanner can
+		// occasionally fire with delay, so we want to be extra patient (see #8709).
+		time.Sleep(2*scanInterval + 200*time.Millisecond)
 		if sc := s.Count(); sc != lastScannerCount {
 			lastScannerCount = sc
 			return errors.Errorf("expected scanner to stop when disabled")
