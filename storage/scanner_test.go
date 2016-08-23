@@ -306,10 +306,9 @@ func TestScannerPaceInterval(t *testing.T) {
 func TestScannerDisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const count = 3
-	const scanInterval = 1 * time.Millisecond
 	ranges := newTestRangeSet(count, t)
 	q := &testQueue{}
-	s := newReplicaScanner(scanInterval, 0, ranges)
+	s := newReplicaScanner(1*time.Millisecond, 0, ranges)
 	s.AddQueues(q)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
@@ -322,27 +321,24 @@ func TestScannerDisabled(t *testing.T) {
 		if q.count() != count {
 			return errors.Errorf("expected %d replicas; have %d", count, q.count())
 		}
-		if s.Count() == 0 {
+		if s.scanCount() == 0 {
 			return errors.Errorf("expected scanner count to increment")
 		}
 		return nil
 	})
 
+	lastWaitEnabledCount := s.waitEnabledCount()
+
 	// Now, disable the scanner.
 	s.SetDisabled(true)
-	lastScannerCount := s.Count()
 	util.SucceedsSoon(t, func() error {
-		// We want to make sure that a complete scanner loop has time to complete
-		// between every retry iteration, so twice the scan interval is a safe
-		// value. In addition, the internal timers used by the scanner can
-		// occasionally fire with delay, so we want to be extra patient (see #8709).
-		time.Sleep(2*scanInterval + 200*time.Millisecond)
-		if sc := s.Count(); sc != lastScannerCount {
-			lastScannerCount = sc
+		if s.waitEnabledCount() == lastWaitEnabledCount {
 			return errors.Errorf("expected scanner to stop when disabled")
 		}
 		return nil
 	})
+
+	lastScannerCount := s.scanCount()
 
 	// Remove the replicas and verify the scanner still removes them while disabled.
 	ranges.Visit(func(repl *Replica) bool {
@@ -356,7 +352,7 @@ func TestScannerDisabled(t *testing.T) {
 		}
 		return nil
 	})
-	if sc := s.Count(); sc != lastScannerCount {
+	if sc := s.scanCount(); sc != lastScannerCount {
 		t.Errorf("expected scanner count to not increment: %d != %d", sc, lastScannerCount)
 	}
 }
@@ -383,7 +379,7 @@ func TestScannerEmptyRangeSet(t *testing.T) {
 	defer stopper.Stop()
 	s.Start(clock, stopper)
 	time.Sleep(time.Millisecond) // give it some time to (not) busy loop
-	if count := s.Count(); count > 1 {
+	if count := s.scanCount(); count > 1 {
 		t.Errorf("expected at most one loop, but got %d", count)
 	}
 }
