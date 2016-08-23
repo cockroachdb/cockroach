@@ -70,7 +70,7 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 
 	resolvers := []resolver.Resolver{}
 	for _, rs := range resolverSpecs {
-		resolver, err := resolver.NewResolver(&base.Context{Insecure: true}, rs)
+		resolver, err := resolver.NewResolver(rs)
 		if err == nil {
 			resolvers = append(resolvers, resolver)
 		}

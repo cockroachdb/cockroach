@@ -62,15 +62,15 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 	if err := ctx.InitNode(); err != nil {
 		t.Fatalf("Failed to initialize node: %s", err)
 	}
-	r1, err := resolver.NewResolver(ctx.Context, "localhost:12345")
+	r1, err := resolver.NewResolver("localhost:12345")
 	if err != nil {
 		t.Fatal(err)
 	}
-	r2, err := resolver.NewResolver(ctx.Context, "localhost:23456")
+	r2, err := resolver.NewResolver("localhost:23456")
 	if err != nil {
 		t.Fatal(err)
 	}
-	r3, err := resolver.NewResolver(ctx.Context, "localhost:34567")
+	r3, err := resolver.NewResolver("localhost:34567")
 	if err != nil {
 		t.Fatal(err)
 	}

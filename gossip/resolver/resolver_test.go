@@ -20,10 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/testutils"
 )
-
-var nodeTestBaseContext = testutils.NewNodeTestBaseContext()
 
 func TestParseResolverAddress(t *testing.T) {
 	def := ensureHostPort(":", base.DefaultPort)
@@ -43,7 +40,7 @@ func TestParseResolverAddress(t *testing.T) {
 	}
 
 	for tcNum, tc := range testCases {
-		resolver, err := NewResolver(nodeTestBaseContext, tc.input)
+		resolver, err := NewResolver(tc.input)
 		if (err == nil) != tc.success {
 			t.Errorf("#%d: expected success=%t, got err=%v", tcNum, tc.success, err)
 		}
@@ -72,7 +69,7 @@ func TestGetAddress(t *testing.T) {
 	}
 
 	for tcNum, tc := range testCases {
-		resolver, err := NewResolver(nodeTestBaseContext, tc.address)
+		resolver, err := NewResolver(tc.address)
 		if err != nil {
 			t.Fatal(err)
 		}
