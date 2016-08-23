@@ -405,7 +405,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		}
 
 		var resolvers []resolver.Resolver
-		resolver, err := resolver.NewResolver(RPCContext.Context, gossipAddr)
+		resolver, err := resolver.NewResolver(gossipAddr)
 		if err != nil {
 			t.Fatal(err)
 		}

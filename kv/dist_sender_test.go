@@ -21,12 +21,14 @@ import (
 	"bytes"
 	"fmt"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/internal/client"
@@ -38,6 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/metric"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -587,6 +591,102 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	if len(pErrs) != 0 {
 		t.Fatalf("expected more descriptor lookups, leftover pErrs: %+v", pErrs)
 	}
+}
+
+func makeGossip(t *testing.T, stopper *stop.Stopper) *gossip.Gossip {
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
+	server := rpc.NewServer(rpcContext)
+
+	g := gossip.New(rpcContext, server, nil, stopper, metric.NewRegistry())
+	g.SetNodeID(-1)
+	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{
+		NodeID:  1,
+		Address: util.MakeUnresolvedAddr("tcp", "neverused:9999"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return g
+}
+
+// TestEvictOnFirstRangeGossip verifies that we evict the first range
+// descriptor from the descriptor cache when a gossip update is received for
+// the first range.
+func TestEvictOnFirstRangeGossip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	g := makeGossip(t, stopper)
+
+	sender := func(_ context.Context, ba roachpb.BatchRequest) (
+		*roachpb.BatchResponse, *roachpb.Error,
+	) {
+		return ba.CreateReply(), nil
+	}
+
+	desc := roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKeyMax,
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+
+	var numFirstRange int32
+	rDB := MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) (
+		[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error,
+	) {
+		if len(key) == 0 {
+			atomic.AddInt32(&numFirstRange, 1)
+		}
+		return []roachpb.RangeDescriptor{desc}, nil, nil
+	})
+
+	ctx := &DistSenderConfig{
+		TransportFactory: SenderTransportFactory(
+			tracing.NewTracer(), client.SenderFunc(sender),
+		),
+		RangeDescriptorDB: rDB,
+	}
+
+	ds := NewDistSender(ctx, g)
+
+	anyKey := roachpb.Key("anything")
+
+	call := func() {
+		if _, _, err := ds.rangeCache.LookupRangeDescriptor(
+			context.Background(), keys.MustAddr(anyKey), nil, false, false,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Perform multiple calls and check that the first range is only looked up
+	// once, with subsequent calls hitting the cache.
+	for i := 0; i < 3; i++ {
+		call()
+		if num := atomic.LoadInt32(&numFirstRange); num != 1 {
+			t.Fatalf("expected one first range lookup, got %d", num)
+		}
+	}
+	if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &desc, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	// Once Gossip fires the callbacks, we should see a cache eviction and thus,
+	// a new cache hit.
+	util.SucceedsSoon(t, func() error {
+		call()
+		if exp, act := int32(2), atomic.LoadInt32(&numFirstRange); exp != act {
+			return errors.Errorf("expected %d first range lookups, got %d", exp, act)
+		}
+		return nil
+	})
 }
 
 func TestEvictCacheOnError(t *testing.T) {
