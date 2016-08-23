@@ -92,13 +92,13 @@ func BenchmarkWriteBinaryDecimal(b *testing.B) {
 	}
 
 	// Warm up the buffer.
-	buf.writeBinaryDatum(dec)
+	buf.writeBinaryDatum(dec, nil)
 	buf.wrapped.Reset()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		b.StartTimer()
-		buf.writeBinaryDatum(dec)
+		buf.writeBinaryDatum(dec, nil)
 		b.StopTimer()
 		buf.wrapped.Reset()
 	}
@@ -112,7 +112,7 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 	if _, ok := expected.SetString(s); !ok {
 		b.Fatalf("could not set %q on decimal", s)
 	}
-	wbuf.writeBinaryDatum(expected)
+	wbuf.writeBinaryDatum(expected, nil)
 
 	rbuf := readBuffer{msg: wbuf.wrapped.Bytes()}
 
