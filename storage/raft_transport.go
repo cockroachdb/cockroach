@@ -44,7 +44,7 @@ const (
 	//
 	// TODO(peter): The normal send buffer size is larger than we would like. It
 	// is a temporary patch for the issue discussed in #8630 where
-	// Store.HandleRaftMessage can block applying a preemptive snapshot for a
+	// Store.HandleRaftRequest can block applying a preemptive snapshot for a
 	// long enough period of time that grpc flow control kicks in and messages
 	// are dropped on the sending side.
 	raftNormalSendBufferSize   = 10000
