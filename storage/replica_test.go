@@ -6145,7 +6145,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Gather up the reproprosed commands.
+		// Gather up the reproposed commands.
 		r.mu.Lock()
 		var reproposed []*pendingCmd
 		for id, p := range r.mu.pendingCmds {
@@ -6160,11 +6160,11 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		// this test if that changes.
 		if (ticks % electionTicks) == 0 {
 			if len(reproposed) != i-1 {
-				t.Fatalf("%d: expected %d reproprosed commands, but found %+v", i, i-1, reproposed)
+				t.Fatalf("%d: expected %d reproposed commands, but found %+v", i, i-1, reproposed)
 			}
 		} else {
 			if len(reproposed) != 0 {
-				t.Fatalf("%d: expected no reproprosed commands, but found %+v", i, reproposed)
+				t.Fatalf("%d: expected no reproposed commands, but found %+v", i, reproposed)
 			}
 		}
 	}

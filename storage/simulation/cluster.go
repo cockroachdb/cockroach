@@ -459,7 +459,7 @@ func (c *Cluster) OutputEpochHeader() {
 	fmt.Fprintf(c.epochWriter, "\n")
 }
 
-// OutputEpoch writes to the epochWRiter the current free capacity for all
+// OutputEpoch writes to the epochWriter the current free capacity for all
 // stores.
 func (c *Cluster) OutputEpoch() {
 	fmt.Fprintf(c.epochWriter, "%d:\t", c.epoch)
