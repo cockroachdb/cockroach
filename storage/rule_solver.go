@@ -95,7 +95,7 @@ type ruleSolver struct {
 func (rs *ruleSolver) Solve(
 	c config.Constraints, existing []roachpb.ReplicaDescriptor,
 ) ([]candidate, error) {
-	sl, _, throttledStoreCount := rs.storePool.getStoreList(config.Constraints{}, false)
+	sl, _, throttledStoreCount := rs.storePool.getStoreList()
 
 	// When there are throttled stores that do match, we shouldn't send
 	// the replica to purgatory or even consider relaxing the constraints.
