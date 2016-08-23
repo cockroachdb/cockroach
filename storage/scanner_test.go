@@ -331,7 +331,10 @@ func TestScannerDisabled(t *testing.T) {
 	s.SetDisabled(true)
 	lastScannerCount := s.Count()
 	util.SucceedsSoon(t, func() error {
-		time.Sleep(2 * time.Millisecond)
+		// We want to make sure that a scanner loop has time to complete. The
+		// internal timers used by the scanner can occasionally fire with delay, so
+		// we are very patient here.
+		time.Sleep(200 * time.Millisecond)
 		if sc := s.Count(); sc != lastScannerCount {
 			lastScannerCount = sc
 			return errors.Errorf("expected scanner to stop when disabled")
