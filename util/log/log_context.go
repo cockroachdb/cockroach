@@ -146,7 +146,7 @@ type DynamicIntValue struct {
 	value int64
 }
 
-// This value can be used to have the value show up as "?".
+// DynamicIntValueUnknown can be used with Set; it makes the value "?".
 const DynamicIntValueUnknown = math.MinInt64
 
 func (dv *DynamicIntValue) String() string {
