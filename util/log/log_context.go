@@ -16,7 +16,13 @@
 
 package log
 
-import "golang.org/x/net/context"
+import (
+	"math"
+	"strconv"
+	"sync/atomic"
+
+	"golang.org/x/net/context"
+)
 
 type valueType int
 
@@ -99,4 +105,59 @@ func WithLogTagInt64(ctx context.Context, name string, value int64) context.Cont
 // associated with boxing the value in an interface{}.
 func WithLogTagStr(ctx context.Context, name string, value string) context.Context {
 	return withLogTag(ctx, &logTag{name: name, valType: stringType, strVal: value})
+}
+
+// WithLogTagsFromCtx returns a context based on ctx with fromCtx's log tags
+// added on.
+func WithLogTagsFromCtx(ctx, fromCtx context.Context) context.Context {
+	fromLastTag := contextLastTag(fromCtx)
+	if fromLastTag == nil {
+		// Nothing to do.
+		return ctx
+	}
+
+	toLastTag := contextLastTag(ctx)
+	if toLastTag == nil {
+		// Easy case: we reuse the same log tag list directly.
+		return context.WithValue(ctx, contextTagKeyType{}, fromLastTag)
+	}
+
+	// Make a copy of the logTag list.
+
+	newTag := &logTag{}
+	*newTag = *fromLastTag
+	// The prev link will be set below via prevPtr.
+	prevPtr := &newTag.prev
+
+	for t := fromLastTag.prev; t != nil; t = t.prev {
+		tCopy := &logTag{}
+		*tCopy = *t
+
+		*prevPtr = tCopy
+		prevPtr = &tCopy.prev
+	}
+	*prevPtr = toLastTag
+	return context.WithValue(ctx, contextTagKeyType{}, newTag)
+}
+
+// DynamicIntValue is a helper type that allows using a "dynamic" int32 value
+// for a log tag.
+type DynamicIntValue struct {
+	value int64
+}
+
+// DynamicIntValueUnknown can be used with Set; it makes the value "?".
+const DynamicIntValueUnknown = math.MinInt64
+
+func (dv *DynamicIntValue) String() string {
+	val := atomic.LoadInt64(&dv.value)
+	if val == math.MinInt64 {
+		return "?"
+	}
+	return strconv.FormatInt(val, 10)
+}
+
+// Set changes the value returned by String().
+func (dv *DynamicIntValue) Set(newVal int64) {
+	atomic.StoreInt64(&dv.value, newVal)
 }
