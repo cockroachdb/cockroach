@@ -61,9 +61,10 @@ func (t *Timer) Reset(d time.Duration) {
 		t.Timer = time.NewTimer(d)
 		return
 	}
-	if !t.Timer.Reset(d) && !t.Read {
+	if !t.Timer.Stop() && !t.Read {
 		<-t.C
 	}
+	t.Timer.Reset(d)
 	t.Read = false
 }
 
