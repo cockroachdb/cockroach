@@ -181,8 +181,8 @@ func getVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
 	return nil
 }
 
-// isVirtualDatabase checks if the provided name corresponds to a virtual database.
-func isVirtualDatabase(name string) bool {
+// IsVirtualDatabase checks if the provided name corresponds to a virtual database.
+func IsVirtualDatabase(name string) bool {
 	_, ok := getVirtualSchemaEntry(name)
 	return ok
 }

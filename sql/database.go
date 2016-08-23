@@ -236,7 +236,7 @@ func (p *planner) getDatabaseID(name string) (sqlbase.ID, error) {
 
 // createDatabase implements the DatabaseAccessor interface.
 func (p *planner) createDatabase(desc *sqlbase.DatabaseDescriptor, ifNotExists bool) (bool, error) {
-	if isVirtualDatabase(desc.Name) {
+	if IsVirtualDatabase(desc.Name) {
 		if ifNotExists {
 			// Noop.
 			return false, nil
@@ -252,7 +252,7 @@ func (p *planner) renameDatabase(oldDesc *sqlbase.DatabaseDescriptor, newName st
 		return fmt.Errorf("the new database name %q already exists", newName)
 	}
 
-	if isVirtualDatabase(newName) {
+	if IsVirtualDatabase(newName) {
 		return onAlreadyExists()
 	}
 
