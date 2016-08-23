@@ -328,7 +328,7 @@ type Store struct {
 	// There are two major entry points to this stack of locks:
 	// Store.Send (which handles incoming RPCs) and raft-related message
 	// processing (including handleRaftReady on the processRaft
-	// goroutine and handleRaftMessage on GRPC goroutines). Reads are
+	// goroutine and HandleRaftRequest on GRPC goroutines). Reads are
 	// processed solely through Store.Send; writes start out on
 	// Store.Send until they propose their raft command and then they
 	// finish on the raft goroutines.
@@ -342,7 +342,7 @@ type Store struct {
 	//
 	// * processRaftMu: Named after the processRaft goroutine; held
 	//   while any raft messages are being processed (including
-	//   handleRaftReady and handleRaftMessage) or while the set of
+	//   handleRaftReady and HandleRaftRequest) or while the set of
 	//   Replicas in the Store is being changed (which may happen
 	//   outside of raft via the replica GC queue). Multiple Replicas
 	//   may be processed at a time.
@@ -394,7 +394,7 @@ type Store struct {
 	// don't change out from under us. In particular, handleRaftReady
 	// accesses the replicaID more than once, and we rely on
 	// processRaftMu to ensure that this is not modified by a concurrent
-	// handleRaftMessage. (#4476)
+	// HandleRaftRequest. (#4476)
 
 	processRaftMu syncutil.Mutex
 	mu            struct {

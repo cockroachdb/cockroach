@@ -276,7 +276,7 @@ type Replica struct {
 		//
 		// The last seen replica descriptors are updated on receipt of every raft
 		// message via Replica.setLastReplicaDescriptors (see
-		// Store.handleRaftMessage). These last seen descriptors are used when
+		// Store.HandleRaftRequest). These last seen descriptors are used when
 		// the replica's RangeDescriptor contains missing or out of date descriptors
 		// for a replica (see Replica.sendRaftMessage).
 		//
