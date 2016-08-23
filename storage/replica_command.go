@@ -80,7 +80,7 @@ func (r *Replica) executeCmd(
 		filterArgs := storagebase.FilterArgs{Ctx: ctx, CmdID: raftCmdID, Index: index,
 			Sid: r.store.StoreID(), Req: args, Hdr: h}
 		if pErr := filter(filterArgs); pErr != nil {
-			log.Infof(ctx, "%s: test injecting error: %s", r, pErr)
+			log.Infof(ctx, "test injecting error: %s", pErr)
 			return nil, pErr
 		}
 	}
@@ -182,7 +182,7 @@ func (r *Replica) executeCmd(
 	reply.SetHeader(header)
 
 	if log.V(2) {
-		log.Infof(ctx, "%s: executed %s command %+v: %+v, err=%s", r, args.Method(), args, reply, err)
+		log.Infof(ctx, "executed %s command %+v: %+v, err=%s", args.Method(), args, reply, err)
 	}
 
 	// Create a roachpb.Error by initializing txn from the request/response header.
@@ -1351,13 +1351,13 @@ func (r *Replica) PushTxn(
 		if !pusherWins {
 			s = "failed to push"
 		}
-		log.Infof(ctx, "%s: %s "+s+" %s: %s", r, args.PusherTxn.ID.Short(), reply.PusheeTxn.ID.Short(), reason)
+		log.Infof(ctx, "%s "+s+" %s: %s", args.PusherTxn.ID.Short(), reply.PusheeTxn.ID.Short(), reason)
 	}
 
 	if !pusherWins {
 		err := roachpb.NewTransactionPushError(reply.PusheeTxn)
 		if log.V(1) {
-			log.Infof(ctx, "%s: %v", r, err)
+			log.Infof(ctx, "%v", err)
 		}
 		return reply, err
 	}
@@ -1499,8 +1499,8 @@ func (r *Replica) TruncateLog(
 	// range based on the start key. This will cancel the request if this is not
 	// the range specified in the request body.
 	if r.RangeID != args.RangeID {
-		log.Infof(ctx, "%s: attempting to truncate raft logs for another range %d. Normally this is due to a merge and can be ignored.",
-			r, args.RangeID)
+		log.Infof(ctx, "attempting to truncate raft logs for another range %d. Normally this is due to a merge and can be ignored.",
+			args.RangeID)
 		return reply, nil, nil
 	}
 
@@ -1512,8 +1512,8 @@ func (r *Replica) TruncateLog(
 
 	if firstIndex >= args.Index {
 		if log.V(3) {
-			log.Infof(ctx, "%s: attempting to truncate previously truncated raft log. FirstIndex:%d, TruncateFrom:%d",
-				r, firstIndex, args.Index)
+			log.Infof(ctx, "attempting to truncate previously truncated raft log. FirstIndex:%d, TruncateFrom:%d",
+				firstIndex, args.Index)
 		}
 		return reply, nil, nil
 	}
@@ -1641,9 +1641,9 @@ func (r *Replica) TransferLease(
 	defer r.mu.Unlock()
 	if log.V(2) {
 		prevLease := r.mu.state.Lease
-		log.Infof(ctx, "[%s] lease transfer: prev lease: %+v, new lease: %+v "+
+		log.Infof(ctx, "lease transfer: prev lease: %+v, new lease: %+v "+
 			"old expiration: %s, new start: %s",
-			r, prevLease, args.Lease, prevLease.Expiration, args.Lease.Start)
+			prevLease, args.Lease, prevLease.Expiration, args.Lease.Start)
 	}
 	return r.applyNewLeaseLocked(ctx, batch, ms, args.Lease, false /* isExtension */)
 }
@@ -1820,7 +1820,7 @@ func (r *Replica) getChecksum(
 	now := timeutil.Now()
 	<-c.notify
 	if log.V(1) {
-		log.Infof(ctx, "%s: waited for compute checksum for %s", r, timeutil.Since(now))
+		log.Infof(ctx, "waited for compute checksum for %s", timeutil.Since(now))
 	}
 	r.mu.Lock()
 	c, ok = r.mu.checksums[id]
@@ -1849,7 +1849,7 @@ func (r *Replica) computeChecksumDone(
 		// ComputeChecksum adds an entry into the map, and the entry can
 		// only be GCed once the gcTimestamp is set above. Something
 		// really bad happened.
-		log.Errorf(ctx, "%s: no checksum for id = %v", r, id)
+		log.Errorf(ctx, "no checksum for id = %v", id)
 	}
 }
 
@@ -1864,7 +1864,7 @@ func (r *Replica) ComputeChecksum(
 	args roachpb.ComputeChecksumRequest,
 ) (roachpb.ComputeChecksumResponse, *PostCommitTrigger, error) {
 	if args.Version != replicaChecksumVersion {
-		log.Errorf(ctx, "%s: Incompatible versions: e=%d, v=%d", r, replicaChecksumVersion, args.Version)
+		log.Errorf(ctx, "Incompatible versions: e=%d, v=%d", replicaChecksumVersion, args.Version)
 		return roachpb.ComputeChecksumResponse{}, nil, nil
 	}
 	return roachpb.ComputeChecksumResponse{}, &PostCommitTrigger{computeChecksum: &args}, nil
@@ -1932,8 +1932,8 @@ func (r *Replica) VerifyChecksum(
 	args roachpb.VerifyChecksumRequest,
 ) (roachpb.VerifyChecksumResponse, *PostCommitTrigger, error) {
 	if args.Version != replicaChecksumVersion {
-		log.Errorf(ctx, "%s: consistency check skipped: incompatible versions: e=%d, v=%d",
-			r, replicaChecksumVersion, args.Version)
+		log.Errorf(ctx, "consistency check skipped: incompatible versions: e=%d, v=%d",
+			replicaChecksumVersion, args.Version)
 		// Return success because version incompatibility might only
 		// be seen on this replica.
 		return roachpb.VerifyChecksumResponse{}, nil, nil
@@ -1983,8 +1983,8 @@ func (r *Replica) ChangeFrozen(
 		// This is a classical candidate for returning replica corruption, but
 		// we don't do it (yet); for now we'll assume that the update steps
 		// are carried out in correct order.
-		log.Warningf(ctx, "%s: freeze %s issued from %s is applied by %s",
-			r, desc, args.MustVersion, bi)
+		log.Warningf(ctx, "freeze %s issued from %s is applied by %s",
+			desc, args.MustVersion, bi)
 	}
 
 	// Generally, we want to act only if the request hits the Range's StartKey.
@@ -2184,7 +2184,7 @@ func (r *Replica) AdminSplit(
 	leftDesc := *desc
 	leftDesc.EndKey = splitKey
 
-	log.Infof(ctx, "%s: initiating a split of this range at key %s", r, splitKey)
+	log.Infof(ctx, "initiating a split of this range at key %s", splitKey)
 
 	if err := r.store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
 		log.Trace(ctx, "split closure begins")
@@ -2620,7 +2620,7 @@ func (r *Replica) AdminMerge(
 		}
 
 		updatedLeftDesc.EndKey = rightRng.Desc().EndKey
-		log.Infof(ctx, "%s: initiating a merge of %s into this range", r, rightRng)
+		log.Infof(ctx, "initiating a merge of %s into this range", rightRng)
 	}
 
 	if err := r.store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
@@ -3052,7 +3052,7 @@ func (r *Replica) ChangeReplicas(
 		if err := txn.GetProto(descKey, oldDesc); err != nil {
 			return err
 		}
-		log.Infof(ctx, "%s: change replicas of %d: read existing descriptor %+v", r, rangeID, oldDesc)
+		log.Infof(ctx, "change replicas of %d: read existing descriptor %+v", rangeID, oldDesc)
 
 		{
 			b := txn.NewBatch()
