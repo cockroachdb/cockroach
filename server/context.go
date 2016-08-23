@@ -458,7 +458,7 @@ func (ctx *Context) parseGossipBootstrapResolvers() ([]resolver.Resolver, error)
 			if len(address) == 0 {
 				continue
 			}
-			resolver, err := resolver.NewResolver(ctx.Context, address)
+			resolver, err := resolver.NewResolver(address)
 			if err != nil {
 				return nil, err
 			}

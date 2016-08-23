@@ -35,7 +35,7 @@ type Resolver interface {
 }
 
 // NewResolver takes an address and returns a new resolver.
-func NewResolver(context *base.Context, address string) (Resolver, error) {
+func NewResolver(address string) (Resolver, error) {
 	if len(address) == 0 {
 		return nil, errors.Errorf("invalid address value: %q", address)
 	}
