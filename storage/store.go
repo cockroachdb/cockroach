@@ -842,6 +842,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	now := s.ctx.Clock.Now()
 	s.startedAt = now.WallTime
 
+	// Set the store ID for logging.
+	s.ctx.Ctx = log.WithLogTagInt(s.ctx.Ctx, "s", int(s.StoreID()))
+
 	// Iterate over all range descriptors, ignoring uncommitted versions
 	// (consistent=false). Uncommitted intents which have been abandoned
 	// due to a split crashing halfway will simply be resolved on the
@@ -886,9 +889,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	if err != nil {
 		return err
 	}
-
-	// Set the store ID for logging.
-	s.ctx.Ctx = log.WithLogTagInt(s.ctx.Ctx, "s", int(s.StoreID()))
 
 	// Start Raft processing goroutines.
 	s.ctx.Transport.Listen(s.StoreID(), s)
@@ -2416,6 +2416,7 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 // HandleRaftResponse handles response messages from the raft
 // transport. It requires that s.processRaftMu and s.mu are not held.
 func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageResponse) {
+	ctx = s.logContext(ctx)
 	switch val := resp.Union.GetValue().(type) {
 	case *roachpb.Error:
 		switch val.GetDetail().(type) {
@@ -2437,16 +2438,16 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 					}
 				}
 			}); err != nil {
-				log.Errorf(ctx, "%s: %s", s, err)
+				log.Errorf(ctx, "%s", err)
 			}
 
 		default:
-			log.Warningf(ctx, "%s: got error from range %d, replica %s: %s",
-				s, resp.RangeID, resp.FromReplica, val)
+			log.Warningf(ctx, "got error from range %d, replica %s: %s",
+				resp.RangeID, resp.FromReplica, val)
 		}
 
 	default:
-		log.Infof(ctx, "%s: got unknown raft response type %T from replica %s: %s", s, val, resp.FromReplica, val)
+		log.Infof(ctx, "got unknown raft response type %T from replica %s: %s", val, resp.FromReplica, val)
 	}
 }
 
