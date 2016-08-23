@@ -1164,7 +1164,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 	// Re-add the store and restart it.
 	// TODO(dt): ben originally suggested we also attempt this in the other order.
 	// This currently hits an NPE in mtc.replicateRange though when it tries to
-	// read the Iden.NodeID field in the specified store, and will become
+	// read the Ident.NodeID field in the specified store, and will become
 	// impossible after streaming snapshots.
 	mtc.restartStore(1)
 	if removeBeforeTruncateAndReAdd {

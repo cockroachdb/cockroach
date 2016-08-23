@@ -620,7 +620,7 @@ func (n *Node) gossipStores(ctx context.Context) {
 	}
 }
 
-// startComputePeriodidMetrics starts a loop which periodically instructs each
+// startComputePeriodicMetrics starts a loop which periodically instructs each
 // store to compute the value of metrics which cannot be incrementally
 // maintained.
 func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper) {
