@@ -296,6 +296,10 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum, sessionLoc *time.Location
 		b.putInt32(8)
 		b.putInt64(timeToPgBinary(v.Time, sessionLoc))
 
+	case *parser.DDate:
+		b.putInt32(4)
+		b.putInt32(dateToPgBinary(v))
+
 	default:
 		b.setError(errors.Errorf("unsupported type %T", d))
 	}
@@ -353,7 +357,10 @@ func parseTs(str string) (time.Time, error) {
 	return pq.ParseTimestamp(nil, str)
 }
 
-var pgEpochJDate = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+var (
+	pgEpochJDate         = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	pgEpochJDateFromUnix = int32(pgEpochJDate.Unix() / secondsInDay)
+)
 
 // timeToPgBinary calculates the Postgres binary format for a timestamp. The timestamp
 // is represented as the number of microseconds between the given time and Jan 1, 2000
@@ -372,6 +379,21 @@ func timeToPgBinary(t time.Time, offset *time.Location) int64 {
 // delta and adds it to pgEpochJDate.
 func pgBinaryToTime(i int64) time.Time {
 	return duration.AddMicros(pgEpochJDate, i)
+}
+
+// dateToPgBinary calculates the Postgres binary format for a date. The date is
+// represented as the number of days between the given date and Jan 1, 2000
+// (dubbed the pgEpochJDate), stored within an int32.
+func dateToPgBinary(d *parser.DDate) int32 {
+	return int32(*d) - pgEpochJDateFromUnix
+}
+
+// pgBinaryToDate takes an int32 and interprets it as the Postgres binary format
+// for a date. To create a date from this value, it takes the day delta and adds
+// it to pgEpochJDate.
+func pgBinaryToDate(i int32) *parser.DDate {
+	daysSinceEpoch := pgEpochJDateFromUnix + i
+	return parser.NewDDate(parser.DDate(daysSinceEpoch))
 }
 
 var (
@@ -678,6 +700,12 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			daysSinceEpoch := ts.Unix() / secondsInDay
 			d = parser.NewDDate(parser.DDate(daysSinceEpoch))
+		case formatBinary:
+			if len(b) < 4 {
+				return d, errors.Errorf("date requires 4 bytes for binary format")
+			}
+			i := int32(binary.BigEndian.Uint32(b))
+			d = pgBinaryToDate(i)
 		default:
 			return d, errors.Errorf("unsupported date format code: %s", code)
 		}
