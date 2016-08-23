@@ -13,12 +13,15 @@ import { APIRequestFn } from "../util/api.ts";
 
 import { Action, PayloadAction, WithRequest } from "../interfaces/action";
 
+const DEFAULT_RETRY_INTERVAL = moment.duration(1, "s");
+
 // CachedDataReducerState is used to track the state of the cached data.
 export class CachedDataReducerState<TResponseMessage> {
   data: TResponseMessage; // the latest data received
   inFlight = false; // true if a request is in flight
   valid = false; // true if data has been received and has not been invalidated
   lastError: Error; // populated with the most recent error, if the last request failed
+  retry = false; // true if the request should be retried
 }
 
 // KeyedCachedDataReducerState is used to track the state of the cached data
@@ -44,6 +47,7 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
   RECEIVE: string; // receive new data
   ERROR: string; // request encountered an error
   INVALIDATE: string; // invalidate data
+  RETRY: string; // retry a failed request
 
   /**
    * apiEndpoint - The API endpoint used to refresh data.
@@ -60,6 +64,7 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
     this.RECEIVE = `cockroachui/CachedDataReducer/${actionNamespace}/RECEIVE`;
     this.ERROR = `cockroachui/CachedDataReducer/${actionNamespace}/ERROR`;
     this.INVALIDATE = `cockroachui/CachedDataReducer/${actionNamespace}/INVALIDATE`;
+    this.RETRY = `cockroachui/CachedDataReducer/${actionNamespace}/RETRY`;
   }
 
   /**
@@ -88,11 +93,16 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
         state.inFlight = false;
         state.lastError = error.data;
         state.valid = false;
+        state.retry = false;
         return state;
       case this.INVALIDATE:
         // The data is invalidated.
         state = _.clone(state);
         state.valid = false;
+        return state;
+      case this.RETRY:
+        state = _.clone(state);
+        state.retry = true;
         return state;
       default:
         return state;
@@ -131,13 +141,21 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
     };
   }
 
+  // retryRequest is the RETRY action creator.
+  retryRequest = (request?: TRequest): PayloadAction<WithRequest<void, TRequest>> => {
+    return {
+      type: this.RETRY,
+      payload: { request },
+    };
+  }
+
   /**
    * refresh is the primary action creator that should be used to refresh the
    * cached data. Dispatching it will attempt to asynchronously refresh the
-   * cached data if and only if:
-   * - a request is not in flight AND
-   *   - its results are not considered valid OR
-   *   - it has no invalidation period
+   * cached data if and only if all the following are true:
+   * - a request is not in flight
+   * - it doesn't have an error OR it is retry-able
+   * - its results are not considered valid OR it has no invalidation period
    *
    * req - the request associated with this call to refresh. It includes any
    *   parameters passed to the API call.
@@ -148,7 +166,7 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
     return (dispatch: Dispatch<S>, getState: () => any) => {
       let state: CachedDataReducerState<TResponseMessage> = stateAccessor(getState(), req);
 
-      if (state && (state.inFlight || (this.invalidationPeriod && state.valid))) {
+      if (state && (state.inFlight || (this.invalidationPeriod && state.valid) || (state.lastError && !state.retry))) {
         return;
       }
 
@@ -158,14 +176,16 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
       return this.apiEndpoint(req, this.invalidationPeriod).then((data) => {
         // Dispatch the results to the store.
         dispatch(this.receiveData(data, req));
-      }).catch((error: Error) => {
-        // If an error occurred during the fetch, it to the store.
-        dispatch(this.errorData(error, req));
       }).then(() => {
-        // Invalidate data after the invalidation period if one exists.
+        // Invalidate data after the invalidation period if one exists,
         if (this.invalidationPeriod) {
           setTimeout(() => dispatch(this.invalidateData(req)), this.invalidationPeriod.asMilliseconds());
         }
+      }).catch((error: Error) => {
+        // If an error occurred during the fetch, add it to the store.
+        dispatch(this.errorData(error, req));
+        // Allow the request to be retried after the retry interval has passed.
+        setTimeout(() => dispatch(this.retryRequest(req)), DEFAULT_RETRY_INTERVAL.asMilliseconds());
       });
     };
   }
