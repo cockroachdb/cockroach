@@ -113,7 +113,8 @@ func (*legacyTransportAdapter) Close() {
 }
 
 func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
-	n := simulation.NewNetwork(1, true)
+	stopper := stop.NewStopper()
+	n := simulation.NewNetwork(stopper, 1, true)
 	n.Start()
 	g := n.Nodes[0].Gossip
 	// TODO(spencer): remove the use of gossip/simulation here.
@@ -133,7 +134,7 @@ func makeTestGossip(t *testing.T) (*gossip.Gossip, func()) {
 	}, time.Hour); err != nil {
 		t.Fatal(err)
 	}
-	return g, n.Stop
+	return g, stopper.Stop
 }
 
 // TestMoveLocalReplicaToFront verifies that optimizeReplicaOrder correctly
@@ -895,7 +896,10 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 
 func TestGetFirstRangeDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	n := simulation.NewNetwork(3, true)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	n := simulation.NewNetwork(stopper, 3, true)
 	for _, node := range n.Nodes {
 		// TODO(spencer): remove the use of gossip/simulation here.
 		node.Gossip.EnableSimulationCycler(false)
@@ -932,7 +936,6 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 		}
 		return false
 	})
-	n.Stop()
 }
 
 // TestSendRPCRetry verifies that sendRPC failed on first address but succeed on
