@@ -204,7 +204,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 	}
 	// Lay down a write intent using a txn and attempt to access the same
 	// key from our test client, with priorities set up so that the Push
-	// succeeds iff the test dicates that it do.
+	// succeeds iff the test dictates that it do.
 	for i, test := range testCases {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
 		var txnPri int32 = 1
