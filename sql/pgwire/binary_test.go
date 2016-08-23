@@ -116,6 +116,17 @@ func TestBinaryTimestampTZ(t *testing.T) {
 	})
 }
 
+func TestBinaryDate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testBinaryDatumType(t, "date", func(val string) parser.Datum {
+		d, err := parser.ParseDDate(val, time.UTC)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	})
+}
+
 var generateBinaryCmd = flag.String("generate-binary", "", "generate-binary command invocation")
 
 func TestRandomBinaryDecimal(t *testing.T) {
