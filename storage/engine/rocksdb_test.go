@@ -212,7 +212,7 @@ func TestRocksDBOpenWithVersions(t *testing.T) {
 			continue
 		}
 		if !testutils.IsError(err, testCase.expectedErr) {
-			t.Errorf("%d: expected error '%s', actual '%s'", i, testCase.expectedErr, err)
+			t.Errorf("%d: expected error '%s', actual '%v'", i, testCase.expectedErr, err)
 		}
 	}
 }

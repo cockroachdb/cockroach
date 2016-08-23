@@ -305,8 +305,9 @@ func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	if err := apiGet(s, "databases/I_DO_NOT_EXIST", nil); !testutils.IsError(err, "database.+does not exist") {
-		t.Fatalf("unexpected error: %s", err)
+	const errPattern = "database.+does not exist"
+	if err := apiGet(s, "databases/I_DO_NOT_EXIST", nil); !testutils.IsError(err, errPattern) {
+		t.Fatalf("unexpected error: %v\nexpected: %s", err, errPattern)
 	}
 }
 
@@ -319,7 +320,7 @@ func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
 	const path = "databases/" + fakedb
 	const errPattern = `database \\"` + fakedb + `\\" does not exist`
 	if err := apiGet(s, path, nil); !testutils.IsError(err, errPattern) {
-		t.Fatalf("unexpected error: %s", err)
+		t.Fatalf("unexpected error: %v\nexpected: %s", err, errPattern)
 	}
 }
 
@@ -332,13 +333,13 @@ func TestAdminAPITableDoesNotExist(t *testing.T) {
 	const badDBPath = "databases/" + fakename + "/tables/foo"
 	const dbErrPattern = `database \\"` + fakename + `\\" does not exist`
 	if err := apiGet(s, badDBPath, nil); !testutils.IsError(err, dbErrPattern) {
-		t.Fatalf("unexpected error: %s", err)
+		t.Fatalf("unexpected error: %v\nexpected: %s", err, dbErrPattern)
 	}
 
 	const badTablePath = "databases/system/tables/" + fakename
 	const tableErrPattern = `table \\"system.` + fakename + `\\" does not exist`
 	if err := apiGet(s, badTablePath, nil); !testutils.IsError(err, tableErrPattern) {
-		t.Fatalf("unexpected error: %s", err)
+		t.Fatalf("unexpected error: %v\nexpected: %s", err, tableErrPattern)
 	}
 }
 
@@ -351,7 +352,7 @@ func TestAdminAPITableSQLInjection(t *testing.T) {
 	const path = "databases/system/tables/" + fakeTable
 	const errPattern = `table \"system.\\\"` + fakeTable + `\\\"\" does not exist`
 	if err := apiGet(s, path, nil); !testutils.IsError(err, regexp.QuoteMeta(errPattern)) {
-		t.Fatalf("unexpected error: %s\nexpected: %s", err, errPattern)
+		t.Fatalf("unexpected error: %v\nexpected: %s", err, errPattern)
 	}
 }
 
@@ -744,8 +745,9 @@ func TestAdminAPIUIData(t *testing.T) {
 
 	// Basic tests.
 	var badResp serverpb.GetUIDataResponse
-	if err := apiGet(s, "uidata", &badResp); !testutils.IsError(err, "400 Bad Request") {
-		t.Fatalf("unexpected error: %v", err)
+	const errPattern = "400 Bad Request"
+	if err := apiGet(s, "uidata", &badResp); !testutils.IsError(err, errPattern) {
+		t.Fatalf("unexpected error: %v\nexpected: %s", err, errPattern)
 	}
 
 	mustSetUIData(map[string][]byte{"k1": []byte("v1")})

@@ -873,6 +873,8 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	tc.rng.mu.Lock()
 	baseRTS, _ := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil /* end */, nil /* txn */)
 	tc.rng.mu.Unlock()
+	// TODO(tschottdorf): this value is zero, which seems ripe for producing
+	// test cases that do not test anything.
 	baseLowWater := baseRTS.WallTime
 
 	newLowWater := now.Add(50, 0).WallTime + baseLowWater
@@ -886,28 +888,21 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	}{
 		// Grant the lease fresh.
 		{storeID: tc.store.StoreID(),
-			start: now, expiration: now.Add(10, 0),
-			expLowWater: baseLowWater},
+			start: now, expiration: now.Add(10, 0)},
 		// Renew the lease.
 		{storeID: tc.store.StoreID(),
-			start: now.Add(15, 0), expiration: now.Add(30, 0),
-			expLowWater: baseLowWater},
-		// Renew the lease but shorten expiration. This errors out.
+			start: now.Add(15, 0), expiration: now.Add(30, 0)},
+		// Renew the lease but shorten expiration. This is silently ignored.
 		{storeID: tc.store.StoreID(),
-			start: now.Add(16, 0), expiration: now.Add(25, 0),
-			expErr: "lease shortening currently unsupported",
-		},
+			start: now.Add(16, 0), expiration: now.Add(25, 0)},
 		// Another Store attempts to get the lease, but overlaps. If the
 		// previous lease expiration had worked, this would have too.
 		{storeID: tc.store.StoreID() + 1,
 			start: now.Add(29, 0), expiration: now.Add(50, 0),
-			expLowWater: baseLowWater,
-			expErr:      "overlaps previous",
-		},
+			expErr: "overlaps previous"},
 		// The other store tries again, this time without the overlap.
 		{storeID: tc.store.StoreID() + 1,
-			start: now.Add(31, 0), expiration: now.Add(50, 0),
-			expLowWater: baseLowWater},
+			start: now.Add(31, 0), expiration: now.Add(50, 0)},
 		// Lease is regranted to this replica. Store clock moves forward avoid
 		// influencing the result.
 		{storeID: tc.store.StoreID(),
@@ -929,18 +924,16 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 				NodeID:    roachpb.NodeID(test.storeID),
 				StoreID:   test.storeID,
 			},
-		}); err != nil {
-			if test.expErr == "" || !testutils.IsError(err, test.expErr) {
-				t.Fatalf("%d: unexpected error %s", i, err)
-			}
+		}); !(test.expErr == "" && err == nil || testutils.IsError(err, test.expErr)) {
+			t.Fatalf("%d: unexpected error %v", i, err)
 		}
 		// Verify expected low water mark.
 		tc.rng.mu.Lock()
-		rTS, rOK := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil, nil)
-		wTS, wOK := tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil, nil)
+		rTS, _ := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil, nil)
+		wTS, _ := tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil, nil)
 		tc.rng.mu.Unlock()
-		if rTS.WallTime != test.expLowWater || wTS.WallTime != test.expLowWater || rOK || wOK {
-			t.Errorf("%d: expected low water %d; got %d, %d; rOK=%t, wOK=%t", i, test.expLowWater, rTS.WallTime, wTS.WallTime, rOK, wOK)
+		if rTS.WallTime != test.expLowWater || wTS.WallTime != test.expLowWater {
+			t.Errorf("%d: expected low water %d; got maxRead=%d, maxWrite=%d", i, test.expLowWater, rTS.WallTime, wTS.WallTime)
 		}
 	}
 }
@@ -4986,7 +4979,7 @@ func TestReplicaDestroy(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := rep.Destroy(*origDesc); !testutils.IsError(err, "replica ID has changed") {
-		t.Fatalf("expected error 'replica ID has changed' but got %s", err)
+		t.Fatalf("expected error 'replica ID has changed' but got %v", err)
 	}
 
 	// Now try a fresh descriptor and succeed.

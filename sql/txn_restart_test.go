@@ -566,7 +566,7 @@ BEGIN;
 	_, err := sqlDB.Exec("INSERT INTO t.test(k, v, t) VALUES (4, 'hooly', cluster_logical_timestamp())")
 	if !testutils.IsError(
 		err, "encountered previous write with future timestamp") {
-		t.Errorf("didn't get expected injected error. Got: %s", err)
+		t.Errorf("didn't get expected injected error. Got: %v", err)
 	}
 }
 
@@ -683,7 +683,7 @@ func runTestTxn(
 	if retriesNeeded {
 		_, err = tx.Exec("INSERT INTO t.test(k, v) VALUES (1, 'boulanger')")
 		if !testutils.IsError(err, expectedErr) {
-			t.Fatalf("expected to fail here. err: %s", err)
+			t.Fatalf("expected to fail here. err: %v", err)
 		}
 		return isRetryableErr(err)
 	}
@@ -925,12 +925,12 @@ func TestRollbackToSavepointStatement(t *testing.T) {
 	// ROLLBACK TO SAVEPOINT without a transaction
 	_, err := sqlDB.Exec("ROLLBACK TO SAVEPOINT cockroach_restart")
 	if !testutils.IsError(err, "the transaction is not in a retriable state") {
-		t.Fatal("expected to fail here. err: ", err)
+		t.Fatalf("expected to fail here. err: %v", err)
 	}
 	// ROLLBACK TO SAVEPOINT with a wrong name
 	_, err = sqlDB.Exec("ROLLBACK TO SAVEPOINT foo")
 	if !testutils.IsError(err, "SAVEPOINT not supported except for COCKROACH_RESTART") {
-		t.Fatal("expected to fail here. err: ", err)
+		t.Fatalf("expected to fail here. err: %v", err)
 	}
 
 	// ROLLBACK TO SAVEPOINT in a non-retriable transaction
@@ -942,12 +942,12 @@ func TestRollbackToSavepointStatement(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err = tx.Exec("BOGUS SQL STATEMENT"); err == nil {
-		t.Fatalf("expected to fail here. err: %s", err)
+		t.Fatalf("expected to fail here. err: %v", err)
 	}
 	_, err = tx.Exec("ROLLBACK TO SAVEPOINT cockroach_restart")
 	if !testutils.IsError(err,
 		"SAVEPOINT COCKROACH_RESTART has not been used or a non-retriable error was encountered") {
-		t.Fatal("expected to fail here. err: ", err)
+		t.Fatalf("expected to fail here. err: %v", err)
 	}
 }
 
@@ -980,7 +980,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	}
 	_, err = tx.Exec("INSERT INTO t.test (k, v) VALUES (0, 'test');")
 	if !testutils.IsError(err, "duplicate key value") {
-		t.Errorf("expected duplicate key error. Got: %s", err)
+		t.Errorf("expected duplicate key error. Got: %v", err)
 	}
 	if _, err := tx.Exec("ROLLBACK TO SAVEPOINT cockroach_restart"); !testutils.IsError(
 		err, "current transaction is aborted, commands ignored until end of "+
@@ -1074,7 +1074,7 @@ CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
 INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
 SELECT * from t.test WHERE k = 'test_key';
 `); !testutils.IsError(err, "pq: testError") {
-		t.Errorf("unexpected error %s", err)
+		t.Errorf("unexpected error %v", err)
 	}
 	if !hitError {
 		t.Errorf("expected to hit error, but it didn't happen")
@@ -1104,7 +1104,7 @@ func TestNonRetryableErrorOnCommit(t *testing.T) {
 	defer cleanupFilter()
 
 	if _, err := sqlDB.Exec("CREATE DATABASE t;"); !testutils.IsError(err, "pq: testError") {
-		t.Errorf("unexpected error %s", err)
+		t.Errorf("unexpected error %v", err)
 	}
 	if !hitError {
 		t.Errorf("expected to hit error, but it didn't happen")
