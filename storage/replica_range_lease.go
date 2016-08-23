@@ -171,7 +171,7 @@ func (p *pendingLeaseRequest) JoinRequest() <-chan *roachpb.Error {
 }
 
 // TransferInProgress returns the next lease, if the replica is in the process
-// of transferring aways its range lease. This next lease indicates the next
+// of transferring away its range lease. This next lease indicates the next
 // lease holder. The second return val is true if a transfer is in progress.
 //
 // It is assumed that the replica owning this pendingLeaseRequest owns the
