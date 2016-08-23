@@ -208,7 +208,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
-	result, err := a.AllocateTarget(simpleZoneConfig.Constraints, []roachpb.ReplicaDescriptor{}, false)
+	result, err := a.AllocateTarget(simpleZoneConfig.Constraints, []roachpb.ReplicaDescriptor{})
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -221,7 +221,7 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, _, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
-	result, err := a.AllocateTarget(simpleZoneConfig.Constraints, []roachpb.ReplicaDescriptor{}, false)
+	result, err := a.AllocateTarget(simpleZoneConfig.Constraints, []roachpb.ReplicaDescriptor{})
 	if result != nil {
 		t.Errorf("expected nil result: %+v", result)
 	}
@@ -235,14 +235,14 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
-	result1, err := a.AllocateTarget(multiDCConfig.Constraints, []roachpb.ReplicaDescriptor{}, false)
+	result1, err := a.AllocateTarget(multiDCConfig.Constraints, []roachpb.ReplicaDescriptor{})
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
 	result2, err := a.AllocateTarget(multiDCConfig.Constraints, []roachpb.ReplicaDescriptor{{
 		NodeID:  result1.Node.NodeID,
 		StoreID: result1.StoreID,
-	}}, false)
+	}})
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -261,7 +261,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 			NodeID:  result2.Node.NodeID,
 			StoreID: result2.StoreID,
 		},
-	}, false)
+	})
 	if err == nil {
 		t.Errorf("expected error on allocation without available stores: %+v", result3)
 	}
@@ -284,7 +284,7 @@ func TestAllocatorExistingReplica(t *testing.T) {
 				NodeID:  2,
 				StoreID: 2,
 			},
-		}, false)
+		})
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -303,30 +303,121 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
 
 	testCases := []struct {
-		required         []config.Constraint // attribute strings
-		existing         []int               // existing store/node ID
-		relaxConstraints bool                // allow constraints to be relaxed?
-		expID            int                 // expected store/node ID on allocate
-		expErr           bool
+		required []config.Constraint // attribute strings
+		existing []int               // existing store/node ID
+		expID    int                 // expected store/node ID on allocate
+		expErr   bool
 	}{
 		// The two stores in the system have attributes:
 		//  storeID=1 {"a", "ssd"}
 		//  storeID=2 {"b", "ssd"}
-		{[]config.Constraint{{Value: "a"}, {Value: "ssd"}}, []int{}, true, 1, false},
-		{[]config.Constraint{{Value: "a"}, {Value: "ssd"}}, []int{1}, true, 2, false},
-		{[]config.Constraint{{Value: "a"}, {Value: "ssd"}}, []int{1}, false, 0, true},
-		{[]config.Constraint{{Value: "a"}, {Value: "ssd"}}, []int{1, 2}, true, 0, true},
-		{[]config.Constraint{{Value: "b"}, {Value: "ssd"}}, []int{}, true, 2, false},
-		{[]config.Constraint{{Value: "b"}, {Value: "ssd"}}, []int{1}, true, 2, false},
-		{[]config.Constraint{{Value: "b"}, {Value: "ssd"}}, []int{2}, false, 0, true},
-		{[]config.Constraint{{Value: "b"}, {Value: "ssd"}}, []int{2}, true, 1, false},
-		{[]config.Constraint{{Value: "b"}, {Value: "ssd"}}, []int{1, 2}, true, 0, true},
-		{[]config.Constraint{{Value: "b"}, {Value: "hdd"}}, []int{}, true, 2, false},
-		{[]config.Constraint{{Value: "b"}, {Value: "hdd"}}, []int{2}, true, 1, false},
-		{[]config.Constraint{{Value: "b"}, {Value: "hdd"}}, []int{2}, false, 0, true},
-		{[]config.Constraint{{Value: "b"}, {Value: "hdd"}}, []int{1, 2}, true, 0, true},
-		{[]config.Constraint{{Value: "b"}, {Value: "ssd"}, {Value: "gpu"}}, []int{}, true, 2, false},
-		{[]config.Constraint{{Value: "b"}, {Value: "hdd"}, {Value: "gpu"}}, []int{}, true, 2, false},
+		{
+			[]config.Constraint{
+				{Value: "a"},
+				{Value: "ssd"},
+			},
+			[]int{}, 1, false,
+		},
+		{
+			[]config.Constraint{
+				{Value: "a"},
+				{Value: "ssd"},
+			},
+			[]int{1}, 2, false,
+		},
+		{
+			[]config.Constraint{
+				{Value: "a", Type: config.Constraint_REQUIRED},
+				{Value: "ssd", Type: config.Constraint_REQUIRED},
+			},
+			[]int{1}, 0, true,
+		},
+		{
+			[]config.Constraint{
+				{Value: "a"},
+				{Value: "ssd"},
+			},
+			[]int{1, 2}, 0, true,
+		},
+		{
+			[]config.Constraint{
+				{Value: "b"},
+				{Value: "ssd"},
+			},
+			[]int{}, 2, false,
+		},
+		{
+			[]config.Constraint{
+				{Value: "b"},
+				{Value: "ssd"},
+			},
+			[]int{1}, 2, false,
+		},
+		{
+			[]config.Constraint{
+				{Value: "b", Type: config.Constraint_REQUIRED},
+				{Value: "ssd", Type: config.Constraint_REQUIRED},
+			},
+			[]int{2}, 0, true,
+		},
+		{
+			[]config.Constraint{
+				{Value: "b"},
+				{Value: "ssd"},
+			},
+			[]int{2}, 1, false,
+		},
+		{
+			[]config.Constraint{
+				{Value: "b"},
+				{Value: "ssd"},
+			},
+			[]int{1, 2}, 0, true,
+		},
+		{
+			[]config.Constraint{
+				{Value: "b"},
+				{Value: "hdd"},
+			},
+			[]int{}, 2, false,
+		},
+		{
+			[]config.Constraint{
+				{Value: "b"},
+				{Value: "hdd"},
+			},
+			[]int{2}, 1, false,
+		},
+		{
+			[]config.Constraint{
+				{Value: "b", Type: config.Constraint_REQUIRED},
+				{Value: "hdd", Type: config.Constraint_REQUIRED},
+			},
+			[]int{2}, 0, true,
+		},
+		{
+			[]config.Constraint{
+				{Value: "b"},
+				{Value: "hdd"},
+			},
+			[]int{1, 2}, 0, true,
+		},
+		{
+			[]config.Constraint{
+				{Value: "b"},
+				{Value: "ssd"},
+				{Value: "gpu"},
+			},
+			[]int{}, 2, false,
+		},
+		{
+			[]config.Constraint{
+				{Value: "b"},
+				{Value: "hdd"},
+				{Value: "gpu"},
+			},
+			[]int{}, 2, false,
+		},
 	}
 	for i, test := range testCases {
 		var existing []roachpb.ReplicaDescriptor
@@ -334,7 +425,7 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 			existing = append(existing, roachpb.ReplicaDescriptor{NodeID: roachpb.NodeID(id), StoreID: roachpb.StoreID(id)})
 		}
 		constraints := config.Constraints{Constraints: test.required}
-		result, err := a.AllocateTarget(constraints, existing, test.relaxConstraints)
+		result, err := a.AllocateTarget(constraints, existing)
 		if haveErr := (err != nil); haveErr != test.expErr {
 			t.Errorf("%d: expected error %t; got %t: %s", i, test.expErr, haveErr, err)
 		} else if err == nil && roachpb.StoreID(test.expID) != result.StoreID {
@@ -396,7 +487,10 @@ func TestAllocatorRebalance(t *testing.T) {
 
 	// Every rebalance target must be either stores 1 or 2.
 	for i := 0; i < 10; i++ {
-		result := a.RebalanceTarget(config.Constraints{}, []roachpb.ReplicaDescriptor{{StoreID: 3}}, 0)
+		result, err := a.RebalanceTarget(config.Constraints{}, []roachpb.ReplicaDescriptor{{StoreID: 3}}, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if result == nil {
 			t.Fatal("nil result")
 		}
@@ -412,7 +506,7 @@ func TestAllocatorRebalance(t *testing.T) {
 		if !ok {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
-		sl, _, _ := a.storePool.getStoreList(config.Constraints{}, true)
+		sl, _, _ := a.storePool.getStoreList()
 		result := a.shouldRebalance(desc, sl)
 		if expResult := (i >= 2); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
@@ -455,7 +549,10 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 
 	// Every rebalance target must be store 4 (or nil for case of missing the only option).
 	for i := 0; i < 10; i++ {
-		result := a.RebalanceTarget(config.Constraints{}, []roachpb.ReplicaDescriptor{{StoreID: 1}}, 0)
+		result, err := a.RebalanceTarget(config.Constraints{}, []roachpb.ReplicaDescriptor{{StoreID: 1}}, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if result != nil && result.StoreID != 4 {
 			t.Errorf("expected store 4; got %d", result.StoreID)
 		}
@@ -468,7 +565,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 		if !ok {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
-		sl, _, _ := a.storePool.getStoreList(config.Constraints{}, true)
+		sl, _, _ := a.storePool.getStoreList()
 		result := a.shouldRebalance(desc, sl)
 		if expResult := (i < 3); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
@@ -534,7 +631,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(stores, t)
 
-	targetRepl, err := a.RemoveTarget(replicas, stores[0].StoreID)
+	targetRepl, err := a.RemoveTarget(config.Constraints{}, replicas, stores[0].StoreID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -544,7 +641,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 
 	// Now perform the same test, but pass in the store ID of store 3 so it's
 	// excluded.
-	targetRepl, err = a.RemoveTarget(replicas, stores[2].StoreID)
+	targetRepl, err = a.RemoveTarget(config.Constraints{}, replicas, stores[2].StoreID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -974,7 +1071,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	_, err := a.AllocateTarget(
 		simpleZoneConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{},
-		false)
+	)
 	if _, ok := err.(purgatoryError); !ok {
 		t.Fatalf("expected a purgatory error, got: %v", err)
 	}
@@ -984,7 +1081,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	result, err := a.AllocateTarget(
 		simpleZoneConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{},
-		false)
+	)
 	if err != nil {
 		t.Fatalf("unable to perform allocation: %v", err)
 	}
@@ -1004,7 +1101,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	_, err = a.AllocateTarget(
 		simpleZoneConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{},
-		false)
+	)
 	if _, ok := err.(purgatoryError); ok {
 		t.Fatalf("expected a non purgatory error, got: %v", err)
 	}
@@ -1053,8 +1150,10 @@ func Example_rebalancing() {
 	var wg sync.WaitGroup
 	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ roachpb.Value) { wg.Done() })
 
-	const generations = 100
 	const nodes = 20
+	const generations = 100
+	const printGenerations = generations / 2
+	const generationToStopAdding = generations * 9 / 10
 
 	// Initialize testStores.
 	var testStores [nodes]testStore
@@ -1067,13 +1166,18 @@ func Example_rebalancing() {
 	testStores[0].add(alloc.randGen.Int63n(1 << 20))
 
 	for i := 0; i < generations; i++ {
-		// First loop through test stores and add data.
+		if i < generationToStopAdding {
+			// First loop through test stores and add data.
+			for j := 0; j < len(testStores); j++ {
+				// Add a pretend range to the testStore if there's already one.
+				if testStores[j].Capacity.RangeCount > 0 {
+					testStores[j].add(alloc.randGen.Int63n(1 << 20))
+				}
+			}
+		}
+		// Gossip the new store info.
 		wg.Add(len(testStores))
 		for j := 0; j < len(testStores); j++ {
-			// Add a pretend range to the testStore if there's already one.
-			if testStores[j].Capacity.RangeCount > 0 {
-				testStores[j].add(alloc.randGen.Int63n(1 << 20))
-			}
 			if err := g.AddInfoProto(gossip.MakeStoreKey(roachpb.StoreID(j)), &testStores[j].StoreDescriptor, 0); err != nil {
 				panic(err)
 			}
@@ -1083,35 +1187,33 @@ func Example_rebalancing() {
 		// Next loop through test stores and maybe rebalance.
 		for j := 0; j < len(testStores); j++ {
 			ts := &testStores[j]
-			target := alloc.RebalanceTarget(
+			target, err := alloc.RebalanceTarget(
 				config.Constraints{},
 				[]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}},
 				-1)
+			if err != nil {
+				panic(err)
+			}
 			if target != nil {
 				testStores[j].rebalance(&testStores[int(target.StoreID)], alloc.randGen.Int63n(1<<20))
 			}
 		}
 
-		// Output store capacities as hexadecimal 2-character values.
-		if i%(generations/50) == 0 {
-			var maxBytes int64
+		if i%(generations/printGenerations) == 0 {
+			var totalBytes int64
 			for j := 0; j < len(testStores); j++ {
-				bytes := testStores[j].Capacity.Capacity - testStores[j].Capacity.Available
-				if bytes > maxBytes {
-					maxBytes = bytes
-				}
+				totalBytes += testStores[j].Capacity.Capacity - testStores[j].Capacity.Available
 			}
-			if maxBytes > 0 {
-				for j := 0; j < len(testStores); j++ {
-					endStr := " "
-					if j == len(testStores)-1 {
-						endStr = ""
-					}
-					bytes := testStores[j].Capacity.Capacity - testStores[j].Capacity.Available
-					fmt.Printf("%03d%s", (999*bytes)/maxBytes, endStr)
+			fmt.Printf("generation %4d: ", i)
+			for j := 0; j < len(testStores); j++ {
+				if j != 0 && j != len(testStores)-1 {
+					fmt.Printf(",")
 				}
-				fmt.Printf("\n")
+				ts := testStores[j]
+				bytes := ts.Capacity.Capacity - ts.Capacity.Available
+				fmt.Printf("%3d %2d%%", ts.Capacity.RangeCount, (100*bytes)/totalBytes)
 			}
+			fmt.Printf("\n")
 		}
 	}
 
@@ -1124,55 +1226,55 @@ func Example_rebalancing() {
 	fmt.Printf("Total bytes=%d, ranges=%d\n", totBytes, totRanges)
 
 	// Output:
-	// 999 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000
-	// 999 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000
-	// 999 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000
-	// 999 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000
-	// 999 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000
-	// 999 000 000 000 014 000 000 118 000 000 000 000 111 000 000 000 000 000 000 000
-	// 999 113 095 000 073 064 000 221 003 000 020 178 182 000 057 000 027 000 055 000
-	// 999 398 222 000 299 366 000 525 239 135 263 385 424 261 261 000 260 194 207 322
-	// 999 307 170 335 380 357 336 539 233 373 218 444 539 336 258 479 267 352 384 387
-	// 999 558 318 587 623 602 453 719 409 506 414 617 638 411 359 486 502 507 454 673
-	// 999 588 404 854 616 642 559 705 482 622 505 554 673 489 410 390 524 607 535 671
-	// 999 651 498 922 668 696 612 809 619 691 682 674 682 584 533 449 619 724 646 702
-	// 999 710 505 832 645 732 719 867 605 794 743 693 717 645 602 503 683 733 686 776
-	// 999 773 688 810 658 761 812 957 663 875 856 797 871 670 733 602 839 781 736 909
-	// 959 778 750 879 685 797 786 999 751 944 870 786 882 670 828 611 880 817 714 883
-	// 946 843 781 892 726 887 876 993 717 999 940 802 879 672 842 634 862 818 736 906
-	// 924 826 754 859 742 878 836 927 721 999 893 762 874 672 882 684 918 818 745 897
-	// 910 872 789 858 752 878 824 976 715 999 860 739 848 684 890 699 968 846 751 833
-	// 938 892 789 879 754 916 861 997 774 983 887 805 827 690 912 751 999 927 800 893
-	// 895 887 792 845 784 920 800 999 770 961 890 747 871 701 907 733 970 893 811 858
-	// 887 843 742 839 792 938 826 999 778 971 859 792 857 731 889 777 979 900 779 833
-	// 891 861 802 819 802 966 826 999 776 946 843 792 836 769 914 792 968 879 775 874
-	// 923 840 830 842 778 969 820 999 791 950 843 820 838 767 893 794 995 915 789 885
-	// 932 816 783 830 805 926 783 999 790 977 824 856 838 789 866 787 992 892 760 896
-	// 917 799 781 813 800 901 759 999 776 983 795 861 813 799 852 776 944 891 739 883
-	// 895 759 757 827 799 894 741 999 772 955 779 864 823 812 835 785 956 882 746 865
-	// 906 762 773 867 848 874 747 999 763 992 766 866 831 812 839 820 973 906 765 885
-	// 915 795 781 884 854 899 782 983 756 999 744 890 840 791 848 806 992 934 774 904
-	// 935 768 813 893 859 881 788 948 758 999 748 892 828 803 857 834 989 940 798 900
-	// 953 752 816 919 852 882 806 966 771 976 733 877 804 802 854 822 999 957 800 898
-	// 909 732 804 882 874 885 814 956 758 937 703 877 805 783 849 833 999 955 796 903
-	// 885 744 788 859 851 881 802 929 732 905 702 843 801 774 847 810 999 936 778 880
-	// 856 741 790 827 842 897 771 922 732 873 719 849 771 789 845 828 999 914 764 859
-	// 880 787 825 841 867 941 782 962 752 918 749 886 797 819 899 862 999 935 792 891
-	// 902 829 841 857 903 979 786 979 760 935 767 903 816 839 907 880 999 963 827 927
-	// 873 809 831 837 906 964 786 952 772 928 780 904 810 817 914 878 999 974 827 914
-	// 879 810 855 843 936 977 806 956 799 930 801 931 823 835 928 895 997 999 864 935
-	// 885 806 858 825 921 971 791 965 784 930 809 936 813 829 904 893 999 974 858 902
-	// 865 776 855 811 903 966 771 958 770 906 809 923 810 825 896 901 999 964 841 895
-	// 880 789 876 816 918 987 772 972 776 912 814 935 836 833 913 901 999 978 863 903
-	// 866 779 861 824 926 986 773 958 776 920 810 936 836 855 894 899 999 989 859 904
-	// 880 798 862 826 910 997 795 948 767 910 798 923 838 835 872 911 999 975 856 894
-	// 885 785 845 807 906 973 783 943 782 918 789 920 832 838 861 894 999 965 849 877
-	// 889 793 855 802 918 985 786 948 793 920 800 941 818 849 846 899 999 982 851 886
-	// 866 796 854 801 911 969 782 958 791 907 788 940 800 844 843 890 999 977 851 873
-	// 849 794 855 815 912 970 790 942 792 898 789 938 794 850 843 884 999 964 854 886
-	// 856 806 867 837 930 980 787 944 789 903 804 947 800 863 840 891 999 977 860 874
-	// 847 796 852 849 925 980 777 948 786 905 792 922 798 853 835 887 999 968 868 866
-	// 851 801 866 846 936 999 795 945 774 909 793 931 794 860 846 908 985 976 882 854
-	// 861 815 861 845 934 999 808 958 784 913 780 924 800 860 844 912 986 974 897 844
-	// Total bytes=941960698, ranges=1750
+	// generation    0:   1 88%,  0  0%,  0  0%,  0  0%,  0  0%,  0  0%,  1 11%,  0  0%,  0  0%,  0  0%,  0  0%,  0  0%,  0  0%,  0  0%,  0  0%,  0  0%,  0  0%,  0  0%,  0  0%  0  0%
+	// generation    2:   1 19%,  0  0%,  1 24%,  0  0%,  0  0%,  0  0%,  1 18%,  0  0%,  1  7%,  1  1%,  0  0%,  0  0%,  0  0%,  0  0%,  0  0%,  0  0%,  0  0%,  1  5%,  1  9%  1 12%
+	// generation    4:   2  7%,  2  8%,  2  9%,  0  0%,  2  3%,  0  0%,  2 15%,  1  0%,  2  1%,  3  3%,  2  8%,  0  0%,  2  7%,  0  0%,  0  0%,  2  2%,  2  7%,  2 10%,  2  8%  2  5%
+	// generation    6:   4  6%,  4  5%,  4  7%,  0  0%,  4  5%,  0  0%,  4 11%,  3  3%,  4  3%,  4  2%,  4  6%,  0  0%,  4  8%,  2  2%,  0  0%,  4  4%,  4  7%,  4 10%,  4  6%  4  6%
+	// generation    8:   5  3%,  5  3%,  5  4%,  8  6%,  5  3%,  4  6%,  5  9%,  5  3%,  5  3%,  5  2%,  5  5%,  3  3%,  5  6%,  4  2%,  3  2%,  5  4%,  5  7%,  5  8%,  5  6%  5  5%
+	// generation   10:   7  4%,  7  3%,  7  4%,  8  4%,  7  4%,  6  6%,  7  7%,  7  4%,  7  3%,  7  3%,  7  5%,  6  4%,  7  7%,  6  2%,  6  3%,  7  3%,  7  6%,  7  7%,  7  5%  7  4%
+	// generation   12:   9  4%,  9  4%,  9  4%,  9  3%,  9  4%,  8  6%,  9  7%,  9  4%,  9  4%,  9  4%,  9  5%,  9  5%,  9  6%,  8  3%,  8  4%,  9  3%,  9  5%,  9  7%,  9  6%  9  4%
+	// generation   14:  11  4%, 11  3%, 11  4%, 11  3%, 11  4%, 10  5%, 11  6%, 11  4%, 11  4%, 11  4%, 11  5%, 11  5%, 11  6%, 10  3%, 10  5%, 11  3%, 11  5%, 11  7%, 11  5% 11  4%
+	// generation   16:  13  4%, 13  3%, 13  4%, 13  3%, 13  4%, 12  5%, 13  5%, 13  4%, 13  4%, 13  4%, 13  5%, 13  5%, 13  5%, 12  3%, 12  5%, 13  4%, 13  5%, 13  7%, 13  5% 13  5%
+	// generation   18:  15  5%, 15  3%, 15  4%, 15  4%, 15  4%, 14  5%, 15  6%, 15  5%, 15  4%, 15  4%, 15  5%, 15  4%, 15  5%, 14  3%, 14  5%, 15  4%, 15  5%, 15  7%, 15  5% 15  5%
+	// generation   20:  17  5%, 17  3%, 17  4%, 17  4%, 17  4%, 16  4%, 17  6%, 17  5%, 17  4%, 17  4%, 17  5%, 17  4%, 17  6%, 16  4%, 16  5%, 17  4%, 17  5%, 17  6%, 17  4% 17  5%
+	// generation   22:  19  4%, 19  3%, 19  4%, 19  4%, 19  4%, 18  5%, 19  5%, 19  5%, 19  4%, 19  4%, 19  5%, 19  4%, 19  6%, 18  3%, 18  5%, 19  4%, 19  6%, 19  6%, 19  4% 19  5%
+	// generation   24:  21  4%, 21  3%, 21  4%, 21  4%, 21  4%, 20  5%, 21  5%, 21  5%, 21  4%, 21  4%, 21  5%, 21  4%, 21  5%, 20  4%, 20  5%, 21  4%, 21  6%, 21  6%, 21  4% 21  5%
+	// generation   26:  23  4%, 23  4%, 23  3%, 23  4%, 23  5%, 22  5%, 23  5%, 23  5%, 23  4%, 23  4%, 23  5%, 23  4%, 23  5%, 22  4%, 22  5%, 23  4%, 23  6%, 23  6%, 23  5% 23  5%
+	// generation   28:  25  4%, 25  4%, 25  3%, 25  4%, 25  4%, 24  5%, 25  5%, 25  5%, 25  4%, 25  4%, 25  5%, 25  4%, 25  5%, 24  4%, 24  5%, 25  4%, 25  6%, 25  5%, 25  5% 25  5%
+	// generation   30:  27  4%, 27  4%, 27  4%, 27  4%, 27  4%, 26  5%, 27  5%, 27  5%, 27  4%, 27  4%, 27  5%, 27  4%, 27  5%, 26  4%, 26  5%, 27  4%, 27  6%, 27  5%, 27  5% 27  5%
+	// generation   32:  29  4%, 29  4%, 29  4%, 29  4%, 29  4%, 28  5%, 29  5%, 29  4%, 29  4%, 29  4%, 29  5%, 29  4%, 29  5%, 28  3%, 28  5%, 29  4%, 29  5%, 29  5%, 29  4% 29  5%
+	// generation   34:  31  4%, 31  4%, 31  4%, 31  5%, 31  4%, 30  5%, 31  5%, 31  4%, 31  4%, 31  4%, 31  5%, 31  4%, 31  5%, 30  3%, 30  5%, 31  4%, 31  6%, 31  5%, 31  5% 31  5%
+	// generation   36:  33  4%, 33  4%, 33  4%, 33  5%, 33  4%, 32  5%, 33  5%, 33  4%, 33  4%, 33  4%, 33  5%, 33  4%, 33  5%, 32  4%, 32  5%, 33  4%, 33  6%, 33  5%, 33  5% 33  5%
+	// generation   38:  35  4%, 35  4%, 35  4%, 35  5%, 35  4%, 34  5%, 35  5%, 35  4%, 35  4%, 35  4%, 35  5%, 35  4%, 35  5%, 34  4%, 34  5%, 35  4%, 35  6%, 35  5%, 35  4% 35  5%
+	// generation   40:  37  4%, 37  4%, 37  4%, 37  5%, 37  4%, 36  5%, 37  5%, 37  4%, 37  4%, 37  4%, 37  5%, 37  4%, 37  5%, 36  4%, 36  5%, 37  4%, 37  6%, 37  5%, 37  4% 37  5%
+	// generation   42:  39  4%, 39  4%, 39  4%, 39  5%, 39  4%, 38  5%, 39  5%, 39  4%, 39  4%, 39  4%, 39  5%, 39  4%, 39  5%, 38  4%, 38  5%, 39  4%, 39  6%, 39  5%, 39  5% 39  5%
+	// generation   44:  41  4%, 41  4%, 41  4%, 41  5%, 41  4%, 40  5%, 41  5%, 41  4%, 41  4%, 41  4%, 41  5%, 41  4%, 41  5%, 40  4%, 40  5%, 41  4%, 41  5%, 41  5%, 41  5% 41  5%
+	// generation   46:  43  4%, 43  4%, 43  4%, 43  5%, 43  4%, 42  5%, 43  5%, 43  4%, 43  4%, 43  4%, 43  5%, 43  4%, 43  5%, 42  4%, 42  5%, 43  4%, 43  5%, 43  5%, 43  4% 43  5%
+	// generation   48:  45  4%, 45  4%, 45  4%, 45  5%, 45  4%, 44  5%, 45  5%, 45  4%, 45  4%, 45  4%, 45  5%, 45  4%, 45  5%, 44  4%, 44  5%, 45  4%, 45  5%, 45  5%, 45  4% 45  5%
+	// generation   50:  47  4%, 47  4%, 47  4%, 47  5%, 47  4%, 46  5%, 47  5%, 47  4%, 47  4%, 47  4%, 47  5%, 47  4%, 47  5%, 46  4%, 46  5%, 47  5%, 47  5%, 47  5%, 47  5% 47  5%
+	// generation   52:  49  4%, 49  4%, 49  4%, 49  5%, 49  4%, 48  5%, 49  5%, 49  4%, 49  4%, 49  4%, 49  5%, 49  4%, 49  5%, 48  4%, 48  5%, 49  4%, 49  5%, 49  5%, 49  5% 49  5%
+	// generation   54:  51  4%, 51  4%, 51  4%, 51  5%, 51  4%, 50  5%, 51  5%, 51  4%, 51  4%, 51  4%, 51  5%, 51  4%, 51  5%, 50  4%, 50  5%, 51  5%, 51  5%, 51  5%, 51  5% 51  5%
+	// generation   56:  53  4%, 53  4%, 53  4%, 53  5%, 53  4%, 52  5%, 53  5%, 53  4%, 53  4%, 53  4%, 53  5%, 53  4%, 53  5%, 52  4%, 52  5%, 53  5%, 53  5%, 53  5%, 53  5% 53  5%
+	// generation   58:  55  4%, 55  4%, 55  4%, 55  5%, 55  4%, 54  5%, 55  5%, 55  4%, 55  4%, 55  4%, 55  5%, 55  4%, 55  5%, 54  4%, 54  5%, 55  5%, 55  5%, 55  5%, 55  5% 55  5%
+	// generation   60:  57  4%, 57  4%, 57  4%, 57  5%, 57  4%, 56  5%, 57  5%, 57  4%, 57  4%, 57  4%, 57  5%, 57  4%, 57  5%, 56  4%, 56  5%, 57  4%, 57  5%, 57  5%, 57  5% 57  5%
+	// generation   62:  59  4%, 59  4%, 59  4%, 59  5%, 59  4%, 58  5%, 59  5%, 59  4%, 59  4%, 59  4%, 59  5%, 59  4%, 59  5%, 58  4%, 58  5%, 59  4%, 59  5%, 59  5%, 59  5% 59  5%
+	// generation   64:  61  4%, 61  4%, 61  4%, 61  5%, 61  4%, 60  5%, 61  5%, 61  4%, 61  4%, 61  4%, 61  5%, 61  4%, 61  5%, 60  4%, 60  5%, 61  5%, 61  5%, 61  5%, 61  5% 61  5%
+	// generation   66:  63  4%, 63  4%, 63  4%, 63  5%, 63  4%, 62  5%, 63  5%, 63  4%, 63  4%, 63  4%, 63  5%, 63  4%, 63  5%, 62  4%, 62  5%, 63  5%, 63  5%, 63  5%, 63  4% 63  5%
+	// generation   68:  65  4%, 65  4%, 65  4%, 65  5%, 65  4%, 64  5%, 65  5%, 65  4%, 65  4%, 65  4%, 65  5%, 65  4%, 65  5%, 64  4%, 64  5%, 65  5%, 65  5%, 65  5%, 65  4% 65  5%
+	// generation   70:  67  4%, 67  4%, 67  4%, 67  5%, 67  4%, 66  5%, 67  5%, 67  4%, 67  4%, 67  4%, 67  5%, 67  4%, 67  5%, 66  4%, 66  5%, 67  5%, 67  5%, 67  5%, 67  4% 67  5%
+	// generation   72:  69  4%, 69  4%, 69  4%, 69  5%, 69  4%, 68  5%, 69  5%, 69  4%, 69  4%, 69  4%, 69  5%, 69  4%, 69  5%, 68  4%, 68  5%, 69  5%, 69  5%, 69  5%, 69  4% 69  5%
+	// generation   74:  71  4%, 71  4%, 71  4%, 71  5%, 71  4%, 70  5%, 71  5%, 71  4%, 71  4%, 71  4%, 71  5%, 71  4%, 71  5%, 70  4%, 70  5%, 71  5%, 71  5%, 71  5%, 71  4% 71  5%
+	// generation   76:  73  4%, 73  4%, 73  4%, 73  5%, 73  4%, 72  5%, 73  5%, 73  4%, 73  4%, 73  4%, 73  5%, 73  4%, 73  5%, 72  4%, 72  5%, 73  5%, 73  5%, 73  5%, 73  4% 73  5%
+	// generation   78:  75  4%, 75  4%, 75  4%, 75  5%, 75  4%, 74  5%, 75  5%, 75  4%, 75  4%, 75  4%, 75  5%, 75  4%, 75  5%, 74  4%, 74  5%, 75  5%, 75  5%, 75  5%, 75  4% 75  5%
+	// generation   80:  77  4%, 77  4%, 77  4%, 77  5%, 77  4%, 76  5%, 77  5%, 77  4%, 77  4%, 77  5%, 77  5%, 77  4%, 77  5%, 76  4%, 76  5%, 77  5%, 77  5%, 77  5%, 77  4% 77  5%
+	// generation   82:  79  4%, 79  4%, 79  4%, 79  5%, 79  4%, 78  5%, 79  5%, 79  4%, 79  4%, 79  5%, 79  5%, 79  4%, 79  5%, 78  4%, 78  5%, 79  5%, 79  5%, 79  5%, 79  4% 79  5%
+	// generation   84:  81  4%, 81  4%, 81  4%, 81  5%, 81  4%, 80  5%, 81  5%, 81  4%, 81  4%, 81  5%, 81  5%, 81  5%, 81  5%, 80  4%, 80  5%, 81  5%, 81  5%, 81  5%, 81  4% 81  5%
+	// generation   86:  83  4%, 83  4%, 83  4%, 83  5%, 83  4%, 82  5%, 83  5%, 83  4%, 83  4%, 83  5%, 83  5%, 83  5%, 83  5%, 82  4%, 82  5%, 83  5%, 83  5%, 83  5%, 83  4% 83  5%
+	// generation   88:  85  4%, 85  4%, 85  4%, 85  5%, 85  4%, 84  5%, 85  5%, 85  4%, 85  4%, 85  5%, 85  4%, 85  5%, 85  5%, 84  4%, 84  5%, 85  4%, 85  5%, 85  5%, 85  4% 85  5%
+	// generation   90:  86  4%, 86  4%, 86  4%, 86  5%, 86  4%, 85  5%, 86  5%, 86  4%, 86  4%, 86  5%, 86  5%, 86  4%, 86  5%, 85  4%, 85  5%, 86  4%, 86  5%, 86  5%, 86  4% 86  5%
+	// generation   92:  86  4%, 86  4%, 86  4%, 86  5%, 86  4%, 85  5%, 86  5%, 86  4%, 86  4%, 86  5%, 86  5%, 86  4%, 86  5%, 85  4%, 85  5%, 86  4%, 86  5%, 86  5%, 86  4% 86  5%
+	// generation   94:  86  4%, 86  4%, 86  4%, 86  5%, 86  4%, 85  5%, 86  5%, 86  4%, 86  4%, 86  5%, 86  5%, 86  4%, 86  5%, 85  4%, 85  5%, 86  4%, 86  5%, 86  5%, 86  4% 86  5%
+	// generation   96:  86  4%, 86  4%, 86  4%, 86  5%, 86  4%, 85  5%, 86  5%, 86  4%, 86  4%, 86  5%, 86  5%, 86  4%, 86  5%, 85  4%, 85  5%, 86  4%, 86  5%, 86  5%, 86  4% 86  5%
+	// generation   98:  86  4%, 86  4%, 86  4%, 86  5%, 86  4%, 85  5%, 86  5%, 86  4%, 86  4%, 86  5%, 86  5%, 86  4%, 86  5%, 85  4%, 85  5%, 86  4%, 86  5%, 86  5%, 86  4% 86  5%
+	// Total bytes=897074388, ranges=1717
 }

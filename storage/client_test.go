@@ -44,7 +44,6 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/internal/client"
@@ -397,10 +396,7 @@ func (m *multiTestContext) initGossipNetwork() {
 	m.gossipStores()
 	util.SucceedsSoon(m.t, func() error {
 		for i := 0; i < len(m.stores); i++ {
-			_, alive, _ := m.storePools[i].GetStoreList(
-				config.Constraints{},
-				/* deterministic */ false,
-			)
+			_, alive, _ := m.storePools[i].GetStoreList()
 			if alive != len(m.stores) {
 				return errors.Errorf("node %d's store pool only has %d alive stores, expected %d",
 					m.stores[i].Ident.NodeID, alive, len(m.stores))
