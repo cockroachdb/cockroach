@@ -20,8 +20,6 @@
 package storage
 
 import (
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/protoutil"
@@ -124,7 +122,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		ba.Timestamp = replica.store.Clock().Now()
 		ba.RangeID = replica.RangeID
 		ba.Add(leaseReq)
-		_, pErr := replica.Send(context.TODO(), ba)
+		_, pErr := replica.Send(replica.store.Ctx(), ba)
 
 		// Send result of lease to all waiter channels.
 		replica.mu.Lock()
