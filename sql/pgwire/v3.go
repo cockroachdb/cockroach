@@ -764,7 +764,7 @@ func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, 
 					case formatText:
 						c.writeBuf.writeTextDatum(col, c.session.Location)
 					case formatBinary:
-						c.writeBuf.writeBinaryDatum(col)
+						c.writeBuf.writeBinaryDatum(col, c.session.Location)
 					default:
 						c.writeBuf.setError(errors.Errorf("unsupported format code %s", fmtCode))
 					}
