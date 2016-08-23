@@ -212,7 +212,7 @@ func (r *Replica) computeChecksumTrigger(
 		}
 		sha, err := r.sha512(desc, snap, snapshot)
 		if err != nil {
-			log.Errorf(ctx, "%s: %v", r, err)
+			log.Errorf(ctx, "%v", err)
 			sha = nil
 		}
 		r.computeChecksumDone(context.Background(), id, sha, snapshot)
@@ -229,7 +229,7 @@ func (r *Replica) verifyChecksumTrigger(
 	id := args.ChecksumID
 	c, ok := r.getChecksum(ctx, id)
 	if !ok {
-		log.Errorf(ctx, "%s: consistency check skipped: checksum for id = %v doesn't exist", r, id)
+		log.Errorf(ctx, "consistency check skipped: checksum for id = %v doesn't exist", id)
 		// Return success because a checksum might be missing only on
 		// this replica. A checksum might be missing because of a
 		// number of reasons: GC-ed, server restart, and ComputeChecksum
@@ -267,8 +267,8 @@ func (r *Replica) verifyChecksumTrigger(
 					if d.LeaseHolder {
 						l = "replica"
 					}
-					log.Errorf(ctx, "%s: consistency check failed: k:v = (%s (%x), %s, %x) not present on %s",
-						r, d.Key, d.Key, d.Timestamp, d.Value, l)
+					log.Errorf(ctx, "consistency check failed: k:v = (%s (%x), %s, %x) not present on %s",
+						d.Key, d.Key, d.Timestamp, d.Value, l)
 				}
 			}
 			if r.store.ctx.ConsistencyCheckPanicOnFailure {
@@ -280,7 +280,7 @@ func (r *Replica) verifyChecksumTrigger(
 			}
 		}
 
-		logFunc(ctx, "consistency check failed on replica: %s, checksum mismatch: e = %x, v = %x", r, args.Checksum, c.checksum)
+		logFunc(ctx, "consistency check failed on replica: %s, checksum mismatch: e = %x, v = %x", args.Checksum, c.checksum)
 	}
 }
 
@@ -304,8 +304,8 @@ func (r *Replica) leasePostCommitTrigger(
 			// requests, this is kosher). This means that we don't use the old
 			// lease's expiration but instead use the new lease's start to initialize
 			// the timestamp cache low water.
-			log.Infof(ctx, "%s: new range lease %s following %s [physicalTime=%s]",
-				r, trigger.lease, prevLease, r.store.Clock().PhysicalTime())
+			log.Infof(ctx, "new range lease %s following %s [physicalTime=%s]",
+				trigger.lease, prevLease, r.store.Clock().PhysicalTime())
 			r.mu.Lock()
 			r.mu.tsCache.SetLowWater(trigger.lease.Start)
 			r.mu.Unlock()
@@ -373,6 +373,8 @@ func (r *Replica) handleTrigger(
 			}
 		}
 
+		// TODO(radu): we should provide a base context that contains the
+		// node and range IDs.
 		splitTriggerPostCommit(
 			context.Background(),
 			trigger.split.RightDeltaMS,
@@ -389,7 +391,7 @@ func (r *Replica) handleTrigger(
 			trigger.merge.RightDesc.RangeID,
 		); err != nil {
 			// Our in-memory state has diverged from the on-disk state.
-			log.Fatalf(ctx, "%s: failed to update store after merging range: %s", r, err)
+			log.Fatalf(ctx, "failed to update store after merging range: %s", err)
 		}
 	}
 
@@ -420,8 +422,8 @@ func (r *Replica) handleTrigger(
 	if trigger.desc != nil {
 		if err := r.setDesc(trigger.desc); err != nil {
 			// Log the error. There's not much we can do because the commit may have already occurred at this point.
-			log.Fatalf(ctx, "%s: failed to update range descriptor to %+v: %s",
-				r, trigger.desc, err)
+			log.Fatalf(ctx, "failed to update range descriptor to %+v: %s",
+				trigger.desc, err)
 		}
 	}
 	if trigger.lease != nil {
@@ -463,7 +465,7 @@ func (r *Replica) handleTrigger(
 	if trigger.addToReplicaGCQueue {
 		if _, err := r.store.replicaGCQueue.Add(r, 1.0); err != nil {
 			// Log the error; the range should still be GC'd eventually.
-			log.Errorf(ctx, "%s: unable to add to GC queue: %s", r, err)
+			log.Errorf(ctx, "unable to add to GC queue: %s", err)
 		}
 	}
 
