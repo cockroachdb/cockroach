@@ -69,7 +69,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 
 	// Database creation should fail, and nothing should have been written.
 	if _, err := sqlDB.Exec(`CREATE DATABASE test`); !testutils.IsError(err, "unexpected value") {
-		t.Fatalf("unexpected error %s", err)
+		t.Fatalf("unexpected error %v", err)
 	}
 
 	if ir, err := kvDB.Get(keys.DescIDGenerator); err != nil {

@@ -350,7 +350,7 @@ func TestClientRunTransaction(t *testing.T) {
 		if commit != (err == nil) {
 			t.Errorf("expected success? %t; got %s", commit, err)
 		} else if !commit && !testutils.IsError(err, "purposefully failing transaction") {
-			t.Errorf("unexpected failure with !commit: %s", err)
+			t.Errorf("unexpected failure with !commit: %v", err)
 		}
 
 		// Verify the value is now visible on commit == true, and not visible otherwise.
@@ -788,11 +788,11 @@ func TestClientPermissions(t *testing.T) {
 	for tcNum, tc := range testCases {
 		err := tc.client.Put(tc.path, value)
 		if (err == nil) != tc.allowed || (!tc.allowed && !testutils.IsError(err, matchErr)) {
-			t.Errorf("#%d: expected allowed=%t, got err=%s", tcNum, tc.allowed, err)
+			t.Errorf("#%d: expected allowed=%t, got err=%v", tcNum, tc.allowed, err)
 		}
 		_, err = tc.client.Get(tc.path)
 		if (err == nil) != tc.allowed || (!tc.allowed && !testutils.IsError(err, matchErr)) {
-			t.Errorf("#%d: expected allowed=%t, got err=%s", tcNum, tc.allowed, err)
+			t.Errorf("#%d: expected allowed=%t, got err=%v", tcNum, tc.allowed, err)
 		}
 	}
 }

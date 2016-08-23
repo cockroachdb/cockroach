@@ -527,7 +527,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 			if err := nodeCtx.ctx.RemoteClocks.VerifyClockOffset(); testutils.IsError(err, errOffsetGreaterThanMaxOffset) {
 				t.Logf("max offset: %s - node %d with excessive clock offset of %s returned expected error: %s", maxOffset, i, nodeOffset, err)
 			} else {
-				t.Errorf("max offset: %s - node %d with excessive clock offset of %s returned unexpected error: %s", maxOffset, i, nodeOffset, err)
+				t.Errorf("max offset: %s - node %d with excessive clock offset of %s returned unexpected error: %v", maxOffset, i, nodeOffset, err)
 			}
 		} else {
 			if err := nodeCtx.ctx.RemoteClocks.VerifyClockOffset(); err != nil {

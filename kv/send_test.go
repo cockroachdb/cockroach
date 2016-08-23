@@ -378,7 +378,7 @@ func TestSendNext_AllRetryableApplicationErrors(t *testing.T) {
 	} else if _, ok := bc.Err.(*roachpb.SendError); !ok {
 		t.Fatalf("expected SendError, got err=%s", bc.Err)
 	} else if exp := "range 1 was not found"; !testutils.IsError(bc.Err, exp) {
-		t.Errorf("expected SendError to contain %q, but got %s", exp, bc.Err)
+		t.Errorf("expected SendError to contain %q, but got %v", exp, bc.Err)
 	}
 }
 

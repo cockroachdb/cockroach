@@ -76,9 +76,8 @@ func TestSynthesizeHardState(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := synthesizeHardState(context.Background(), batch, testState, oldHS); ((err == nil) != (test.Err == "")) ||
-				(err != nil && !testutils.IsError(err, test.Err)) {
-				t.Fatalf("%d: %v (expected '%s')", i, err, test.Err)
+			if err := synthesizeHardState(context.Background(), batch, testState, oldHS); !(test.Err == "" && err == nil || testutils.IsError(err, test.Err)) {
+				t.Fatalf("%d: expected %s got %v", i, test.Err, err)
 			} else if err != nil {
 				// No further checking if we expected an error and got it.
 				return

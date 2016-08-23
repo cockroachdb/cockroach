@@ -180,16 +180,20 @@ func (rs *replicaScanner) paceInterval(start, now time.Time) time.Duration {
 // if repl is not nil. The method returns true when the scanner needs
 // to be stopped. The method also removes a replica from queues when it
 // is signaled via the removed channel.
-func (rs *replicaScanner) waitAndProcess(start time.Time, clock *hlc.Clock, stopper *stop.Stopper,
-	repl *Replica) bool {
+func (rs *replicaScanner) waitAndProcess(
+	start time.Time, clock *hlc.Clock, stopper *stop.Stopper, repl *Replica,
+) bool {
 	waitInterval := rs.paceInterval(start, timeutil.Now())
 	rs.waitTimer.Reset(waitInterval)
 	if log.V(6) {
-		log.Infof(context.TODO(), "Wait time interval set to %s", waitInterval)
+		log.Infof(context.TODO(), "wait timer interval set to %s", waitInterval)
 	}
 	for {
 		select {
 		case <-rs.waitTimer.C:
+			if log.V(6) {
+				log.Infof(context.TODO(), "wait timer fired")
+			}
 			rs.waitTimer.Read = true
 			if repl == nil {
 				return false

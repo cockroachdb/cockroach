@@ -68,6 +68,6 @@ func TestVersions(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := getVersion(dir); !testutils.IsError(err, "is not formatted correctly") {
-		t.Errorf("expected error contains '%s', got '%s'", "is not formatted correctly", err)
+		t.Errorf("expected error contains '%s', got '%v'", "is not formatted correctly", err)
 	}
 }
