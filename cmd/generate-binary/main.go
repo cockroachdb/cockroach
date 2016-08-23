@@ -106,6 +106,7 @@ var defaultVals = map[string][]string{
 	"decimal":     decimalInputs,
 	"timestamp":   timestampInputs,
 	"timestamptz": timestampInputs,
+	"date":        dateInputs,
 }
 
 var decimalInputs = []string{
@@ -169,6 +170,14 @@ var timestampInputs = []string{
 	"0004-10-19 10:23:54",
 	"4004-10-19 10:23:54",
 	"9004-10-19 10:23:54",
+}
+
+var dateInputs = []string{
+	"1999-01-08",
+	"0009-01-08",
+	"9999-01-08",
+	"1999-12-30",
+	"1996-02-29",
 }
 
 func makeEncodingFunc(typName string) generateEnc {
