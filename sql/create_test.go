@@ -146,3 +146,43 @@ func TestDatabaseDescriptor(t *testing.T) {
 		t.Fatal("key is missing")
 	}
 }
+
+func TestCreateTableAs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+	if _, err := sqlDB.Exec(`CREATE DATABASE testDB`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`SET DATABASE=testDB`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`CREATE TABLE stock (item string, quantity int)`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`INSERT INTO stock VALUES ('cups', 10), ('plates', 15), ('forks', 30)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`CREATE TABLE runningOut AS SELECT * FROM stock WHERE quantity < 12`); err != nil {
+		t.Fatal(err)
+	}
+
+	if rows, err := sqlDB.Query(`SELECT * FROM runningOut`); err != nil {
+		t.Fatal(err)
+	} else {
+		var item *string
+		var quantity *int
+		rows.Next()
+		err = rows.Scan(&item, &quantity)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if *item != "cups" || *quantity != 10 {
+			t.Fatal("Unexpected output")
+		}
+	}
+}
