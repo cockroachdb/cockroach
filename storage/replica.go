@@ -1312,9 +1312,9 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 		}
 	} else {
 		endCmdsFunc = func(
-			*roachpb.BatchResponse, *roachpb.Error,
+			br *roachpb.BatchResponse, pErr *roachpb.Error,
 		) *roachpb.Error {
-			return nil
+			return pErr
 		}
 	}
 
