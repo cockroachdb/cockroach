@@ -94,7 +94,7 @@ System.config({
     "reselect": "npm:reselect@2.5.3",
     "sinon": "npm:sinon@1.17.5",
     "systemjs-hot-reloader": "github:capaj/systemjs-hot-reloader@0.6.0",
-    "ts": "github:frankwallis/plugin-typescript@5.0.11",
+    "ts": "github:frankwallis/plugin-typescript@5.0.19",
     "ts-runtime": "npm:babel-runtime@6.11.6",
     "typescript": "npm:typescript@1.8.10",
     "whatwg-fetch": "github:tamird/fetch@support-arraybuffer",
@@ -106,7 +106,7 @@ System.config({
     "github:dcodeIO/bytebuffer.js@5.0.1": {
       "long": "github:dcodeIO/long.js@3.2.0"
     },
-    "github:frankwallis/plugin-typescript@5.0.11": {
+    "github:frankwallis/plugin-typescript@5.0.19": {
       "typescript": "npm:typescript@2.0.0"
     },
     "github:jspm/nodelibs-assert@0.1.0": {
@@ -574,7 +574,7 @@ System.config({
       "process": "github:jspm/nodelibs-process@0.1.2"
     },
     "npm:escodegen@1.8.1": {
-      "esprima": "npm:esprima@2.7.2",
+      "esprima": "npm:esprima@2.7.3",
       "estraverse": "npm:estraverse@1.9.3",
       "esutils": "npm:esutils@2.0.2",
       "fs": "github:jspm/nodelibs-fs@0.1.2",
