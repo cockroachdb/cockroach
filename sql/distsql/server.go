@@ -63,11 +63,6 @@ func NewServer(cfg ServerConfig) *ServerImpl {
 	return ds
 }
 
-// SetNodeID sets the NodeID for the server.
-func (ds *ServerImpl) SetNodeID(nodeID roachpb.NodeID) {
-	ds.ServerConfig.Context = log.WithLogTagInt(ds.ServerConfig.Context, "node", int(nodeID))
-}
-
 func (ds *ServerImpl) setupTxn(
 	ctx context.Context,
 	txnProto *roachpb.Transaction,

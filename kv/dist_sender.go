@@ -261,7 +261,8 @@ func (ds *DistSender) RangeLookup(
 	replicas.Shuffle()
 	// TODO(tschottdorf): Ideally we would use the trace of the request which
 	// caused this lookup.
-	br, err := ds.sendRPC(context.Background(), desc.RangeID, replicas, ba)
+	_ = context.TODO()
+	br, err := ds.sendRPC(ds.Ctx, desc.RangeID, replicas, ba)
 	if err != nil {
 		return nil, nil, roachpb.NewError(err)
 	}
