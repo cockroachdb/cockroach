@@ -37,7 +37,6 @@ func makeMessage(ctx context.Context, format string, args []interface{}) string 
 			}
 			buf.WriteString(t.name)
 			if value := t.value(); value != nil {
-				buf.WriteString("=")
 				fmt.Fprint(&buf, value)
 			}
 		}

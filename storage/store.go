@@ -666,6 +666,14 @@ func (s *Store) Ctx() context.Context {
 	return s.ctx.Ctx
 }
 
+// logContext adds the node and store log tags to a context. Used to
+// personalize an operation context with this Store's identity.
+func (s *Store) logContext(ctx context.Context) context.Context {
+	// Copy the log tags from the base context. This allows us to opaquely set the
+	// log tags that were passed by the upper layers.
+	return log.WithLogTagsFromCtx(ctx, s.Ctx())
+}
+
 // DrainLeases (when called with 'true') prevents all of the Store's
 // Replicas from acquiring or extending range leases and waits until all of
 // them have expired. If an error is returned, the draining state is still
@@ -878,6 +886,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	if err != nil {
 		return err
 	}
+
+	// Set the store ID for logging.
+	s.ctx.Ctx = log.WithLogTagInt(s.ctx.Ctx, "s", int(s.StoreID()))
 
 	// Start Raft processing goroutines.
 	s.ctx.Transport.Listen(s.StoreID(), s)
@@ -1921,8 +1932,9 @@ func (s *Store) ReplicaCount() int {
 // of one of its writes), the response will have a transaction set which should
 // be used to update the client transaction.
 func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	ctx = s.context(ctx)
-
+	// Attach any log tags from the store to the context (which normally
+	// comes from gRPC).
+	ctx = s.logContext(ctx)
 	for _, union := range ba.Requests {
 		arg := union.GetInner()
 		header := arg.Header()
