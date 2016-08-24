@@ -6229,6 +6229,15 @@ getQueries?() : Query[];
 
 
 
+sample_nanos?: Long;
+		
+
+getSampleNanos?() : Long;
+		setSampleNanos?(sampleNanos : Long): void;
+		
+
+
+
 }
 
 	export interface TimeSeriesQueryRequestMessage extends TimeSeriesQueryRequest {
