@@ -19,10 +19,13 @@ package sql_test
 
 import (
 	"bytes"
+	gosql "database/sql"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -45,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -156,13 +160,13 @@ func setupReplicationAndLeases(
 	}
 }
 
-func TestClusterBackupRestore(t *testing.T) {
+func TestBackupRestore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
 	defer sql.TestDisableTableLeases()()
 
-	dir, cleanupFn := testingTempDir(t, 2)
+	dir, cleanupFn := testingTempDir(t, 1)
 	defer cleanupFn()
 
 	// TODO(dan): Increase this clusterSize to 3. It works if the test timeout
@@ -183,7 +187,7 @@ func TestClusterBackupRestore(t *testing.T) {
 
 		_ = setupBackupRestoreDB(t, ctx, tc, count, backupRestoreDefaultRanges)
 
-		desc, err := sql.Backup(context.Background(), *kvDB, dir)
+		desc, err := sql.Backup(ctx, *kvDB, dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -233,6 +237,126 @@ func TestClusterBackupRestore(t *testing.T) {
 
 		if rowCount != count {
 			t.Fatalf("expected %d rows but found %d", count, rowCount)
+		}
+	}
+}
+
+func startBankTransfers(t testing.TB, ctx context.Context, sqlDB *gosql.DB, numAccounts int) {
+	const maxTransfer = 999
+	for {
+		select {
+		case <-ctx.Done():
+			return // All done.
+		default:
+			// Keep going.
+		}
+
+		from := rand.Intn(numAccounts)
+		to := rand.Intn(numAccounts - 1)
+		for from == to {
+			to = numAccounts - 1
+		}
+
+		amount := rand.Intn(maxTransfer)
+
+		const update = `UPDATE bench.bank
+				SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
+				WHERE id IN ($1, $2)`
+		util.SucceedsSoon(t, func() error {
+			select {
+			case <-ctx.Done():
+				return nil // All done.
+			default:
+				// Keep going.
+			}
+			_, err := sqlDB.Exec(update, from, to, amount)
+			return err
+		})
+	}
+}
+
+func TestBackupRestoreBank(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
+	defer sql.TestDisableTableLeases()()
+
+	baseDir, cleanupFn := testingTempDir(t, 1)
+	defer cleanupFn()
+
+	// TODO(dan): Increase this clusterSize to 3. It works if the test timeout
+	// is raised and with a util.SucceedsSoon wrapped around Backup, Restore,
+	// and every sql Exec, but it seems like we should be fixing the underlying
+	// issues.
+	const clusterSize = 1
+	const numAccounts = 10
+	const backupRestoreIterations = 10
+
+	tc := testcluster.StartTestCluster(t, clusterSize, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationAuto,
+		ServerArgs:      base.TestServerArgs{},
+	})
+	defer tc.Stopper().Stop()
+	sqlDB := tc.Conns[0]
+	kvDB := tc.Server(0).KVClient().(*client.DB)
+
+	_ = setupBackupRestoreDB(t, ctx, tc, numAccounts, backupRestoreDefaultRanges)
+
+	bankCtx, bankCancel := context.WithCancel(ctx)
+	defer bankCancel()
+	go startBankTransfers(t, bankCtx, sqlDB, numAccounts)
+
+	// Loop continually doing backup and restores while the bank transfers are
+	// running in a goroutine. After each iteration, check the invariant that
+	// all balances sum to zero. Make sure the data changes a bit between each
+	// backup and restore as well as after the restore before checking the
+	// invariant by checking the sum of squares of balances, which is chosen to
+	// be likely to change if any balances change.
+	var squaresSum int64
+	table := parser.TableName{DatabaseName: "bench", TableName: "bank"}
+	for i := 0; i < backupRestoreIterations; i++ {
+		dir := filepath.Join(baseDir, strconv.Itoa(i))
+
+		_, err := sql.Backup(ctx, *kvDB, dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var newSquaresSum int64
+		util.SucceedsSoon(t, func() error {
+			if err := sqlDB.QueryRow(`SELECT SUM(balance*balance) FROM bench.bank`).Scan(&newSquaresSum); err != nil {
+				return err
+			}
+
+			if squaresSum == newSquaresSum {
+				return errors.Errorf("squared deviation didn't change, still %d", newSquaresSum)
+			}
+			return nil
+		})
+		squaresSum = newSquaresSum
+
+		if _, err := sql.Restore(ctx, *kvDB, dir, table); err != nil {
+			t.Fatal(err)
+		}
+
+		util.SucceedsSoon(t, func() error {
+			if err := sqlDB.QueryRow(`SELECT SUM(balance*balance) FROM bench.bank`).Scan(&newSquaresSum); err != nil {
+				return err
+			}
+
+			if squaresSum == newSquaresSum {
+				return errors.Errorf("squared deviation didn't change, still %d", newSquaresSum)
+			}
+			return nil
+		})
+		squaresSum = newSquaresSum
+
+		var sum int64
+		if err := sqlDB.QueryRow(`SELECT SUM(balance) FROM bench.bank`).Scan(&sum); err != nil {
+			t.Fatal(err)
+		}
+		if sum != 0 {
+			t.Fatalf("The bank is not in good order. Total value: %d", sum)
 		}
 	}
 }
