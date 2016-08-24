@@ -60,19 +60,6 @@ deployment:
 
       - build/build-osx.sh
       - build/push-tagged-aws.sh
-  datarace:
-    branch: data-race
-    commands:
-      - aws configure set region us-east-1
-      - build/builder.sh build/build-race-binaries.sh
-      - build/push-one-binary.sh "${CIRCLE_SHA1-$(git rev-parse HEAD)}" cockroach cockroach.race
-  stdmalloc:
-    branch: stdmalloc
-    commands:
-      - aws configure set region us-east-1
-      - build/builder.sh build/build-static-binaries.sh static-tests.malloc.tar.gz stdmalloc
-      - build/push-one-binary.sh "${CIRCLE_SHA1-$(git rev-parse HEAD)}" cockroach cockroach.stdmalloc
-      - build/push-one-binary.sh "${CIRCLE_SHA1-$(git rev-parse HEAD)}" static-tests.stdmalloc.tar.gz
   beta:
     branch: /branch-beta-[0-9]+/
     commands:
