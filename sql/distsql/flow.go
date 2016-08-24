@@ -84,7 +84,7 @@ func newFlow(
 	flowReg *flowRegistry,
 	simpleFlowConsumer RowReceiver,
 ) *Flow {
-	flowCtx.Context = log.WithLogTagStr(flowCtx.Context, "flow", flowCtx.id.Short())
+	flowCtx.Context = log.WithLogTagStr(flowCtx.Context, "f", flowCtx.id.Short())
 	return &Flow{
 		FlowCtx:            flowCtx,
 		flowRegistry:       flowReg,
