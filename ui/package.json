@@ -21,7 +21,6 @@
       "classnames": "npm:classnames@^2.2.5",
       "css": "github:systemjs/plugin-css@^0.1.23",
       "d3": "npm:d3@^3.5.17",
-      "es6-promise": "npm:es6-promise@^3.2.1",
       "lodash": "npm:lodash@^4.14.0",
       "long": "npm:long@^3.2.0",
       "moment": "npm:moment@^2.14.1",
