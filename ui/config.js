@@ -3,8 +3,7 @@ System.config({
   transpiler: "ts",
   typescriptOptions: {
     "typeCheck": "strict",
-    "tsconfig": true,
-    "targetLib": "ES5"
+    "tsconfig": true
   },
   paths: {
     "github:*": "jspm_packages/github/*",
@@ -74,7 +73,6 @@ System.config({
     "css": "github:systemjs/plugin-css@0.1.27",
     "d3": "npm:d3@3.5.17",
     "enzyme": "npm:enzyme@2.4.1",
-    "es6-promise": "npm:es6-promise@3.2.1",
     "fetch-mock": "npm:fetch-mock@5.1.1",
     "lodash": "npm:lodash@4.15.0",
     "long": "npm:long@3.2.0",
@@ -569,9 +567,6 @@ System.config({
       "is-callable": "npm:is-callable@1.1.3",
       "is-date-object": "npm:is-date-object@1.0.1",
       "is-symbol": "npm:is-symbol@1.0.1"
-    },
-    "npm:es6-promise@3.2.1": {
-      "process": "github:jspm/nodelibs-process@0.1.2"
     },
     "npm:escodegen@1.8.1": {
       "esprima": "npm:esprima@2.7.3",
