@@ -616,6 +616,7 @@ func newNotLeaseHolderError(
 		_, stillMember := rangeDesc.GetReplicaDescriptor(l.Replica.StoreID)
 		if stillMember {
 			err.LeaseHolder = &l.Replica
+			err.Lease = l
 		}
 	}
 	return err
@@ -634,6 +635,7 @@ func newNotLeaseHolderErrorWithGuess(
 		RangeID:     rangeID,
 		Replica:     roachpb.ReplicaDescriptor{},
 		LeaseHolder: &leaseHolder,
+		Lease:       nil,
 	}
 }
 
