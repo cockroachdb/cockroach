@@ -662,6 +662,14 @@ func (s *Store) Ctx() context.Context {
 	return s.ctx.Ctx
 }
 
+// logContext adds the node and store log tags to a context. Used to
+// personalize an operation context with this Store's identity.
+func (s *Store) logContext(ctx context.Context) context.Context {
+	// Copy the log tags from the base context. This allows us to opaquely set the
+	// log tags that were passed by the upper layers.
+	return log.WithLogTagsFromCtx(ctx, s.Ctx())
+}
+
 // DrainLeases (when called with 'true') prevents all of the Store's
 // Replicas from acquiring or extending range leases and waits until all of
 // them have expired. If an error is returned, the draining state is still
@@ -820,6 +828,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	now := s.ctx.Clock.Now()
 	s.startedAt = now.WallTime
 
+	// Set the store ID for logging.
+	s.ctx.Ctx = log.WithLogTagInt(s.ctx.Ctx, "s", int(s.StoreID()))
+
 	// Iterate over all range descriptors, ignoring uncommitted versions
 	// (consistent=false). Uncommitted intents which have been abandoned
 	// due to a split crashing halfway will simply be resolved on the
@@ -870,7 +881,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	doneUnfreezing := make(chan struct{})
 	if s.stopper.RunAsyncTask(func() {
-		taskCtx := context.TODO()
+		taskCtx := s.Ctx()
 		defer close(doneUnfreezing)
 		sem := make(chan struct{}, 512)
 		var wg sync.WaitGroup // wait for unfreeze goroutines
@@ -1907,6 +1918,10 @@ func (s *Store) ReplicaCount() int {
 // of one of its writes), the response will have a transaction set which should
 // be used to update the client transaction.
 func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
+	// Attach any log tags from the store to the context (which normally
+	// comes from gRPC).
+	ctx = s.logContext(ctx)
+
 	for _, union := range ba.Requests {
 		arg := union.GetInner()
 		header := arg.Header()
@@ -2440,6 +2455,8 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 	s.processRaftMu.Lock()
 	defer s.processRaftMu.Unlock()
 
+	ctx = s.logContext(ctx)
+
 	// Drop messages that come from a node that we believe was once
 	// a member of the group but has been removed.
 	s.mu.Lock()
@@ -2494,6 +2511,7 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 // HandleRaftResponse handles response messages from the raft
 // transport. It requires that s.processRaftMu and s.mu are not held.
 func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageResponse) {
+	ctx = s.logContext(ctx)
 	switch val := resp.Union.GetValue().(type) {
 	case *roachpb.Error:
 		switch val.GetDetail().(type) {
@@ -2515,15 +2533,15 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 					}
 				}
 			}); err != nil {
-				log.Errorf(ctx, "%s: %s", s, err)
+				log.Errorf(ctx, "%s", err)
 			}
 
 		default:
-			log.Warningf(ctx, "%s: got error from replica %s: %s", s, resp.FromReplica, val)
+			log.Warningf(ctx, "got error from replica %s: %s", resp.FromReplica, val)
 		}
 
 	default:
-		log.Infof(ctx, "%s: got unknown raft response type %T from replica %s: %s", s, val, resp.FromReplica, val)
+		log.Infof(ctx, "got unknown raft response type %T from replica %s: %s", val, resp.FromReplica, val)
 	}
 }
 
@@ -2679,7 +2697,7 @@ func (s *Store) processRaft() {
 			// on. Such long processing time means we'll have starved local replicas
 			// of ticks and remote replicas will likely start campaigning.
 			if elapsed := timeutil.Since(start); elapsed >= warnDuration {
-				log.Warningf(context.TODO(), "%s: %s: %.1fs", prefix, msg, elapsed.Seconds())
+				log.Warningf(s.Ctx(), "%s: %s: %.1fs", prefix, msg, elapsed.Seconds())
 			}
 		}
 
@@ -2864,7 +2882,7 @@ func (s *Store) canApplySnapshotLocked(rangeDescriptor *roachpb.RangeDescriptor)
 		// either being split or garbage collected.
 		exReplica, err := s.getReplicaLocked(exRange.Desc().RangeID)
 		if err != nil {
-			log.Warning(context.TODO(), errors.Wrapf(
+			log.Warning(s.Ctx(), errors.Wrapf(
 				err, "unable to look up overlapping replica on %s", exReplica))
 		}
 		return nil, errors.Errorf("snapshot intersects existing range %s", exReplica)
