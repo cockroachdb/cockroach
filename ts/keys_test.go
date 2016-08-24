@@ -73,7 +73,7 @@ func TestDataKeys(t *testing.T) {
 		// Normalize timestamp of test case; we expect MakeDataKey to
 		// automatically truncate it to an exact multiple of the Resolution's
 		// KeyDuration
-		tc.timestamp = (tc.timestamp / tc.resolution.KeyDuration()) * tc.resolution.KeyDuration()
+		tc.timestamp = (tc.timestamp / tc.resolution.SlabDuration()) * tc.resolution.SlabDuration()
 
 		d := tc
 		var err error

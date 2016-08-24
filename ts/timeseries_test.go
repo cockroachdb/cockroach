@@ -158,7 +158,7 @@ func TestDiscardEarlierSamples(t *testing.T) {
 		tsdp(5*time.Hour+5*time.Minute, -1.0),
 		tsdp(5*time.Hour+5*time.Minute, -2.0),
 	)
-	internal, err := ts.ToInternal(Resolution10s.KeyDuration(), Resolution10s.SampleDuration())
+	internal, err := ts.ToInternal(Resolution10s.SlabDuration(), Resolution10s.SampleDuration())
 	if err != nil {
 		t.Fatal(err)
 	}
