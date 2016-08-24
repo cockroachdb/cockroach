@@ -2413,7 +2413,8 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 			}
 
 		default:
-			log.Warningf(ctx, "%s: got error from replica %s: %s", s, resp.FromReplica, val)
+			log.Warningf(ctx, "%s: got error from range %d, replica %s: %s",
+				s, resp.RangeID, resp.FromReplica, val)
 		}
 
 	default:
