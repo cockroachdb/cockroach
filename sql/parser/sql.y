@@ -319,6 +319,7 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %type <Statement> stmt
 
 %type <Statement> alter_table_stmt
+%type <Statement> copy_from_stmt
 %type <Statement> create_stmt
 %type <Statement> create_database_stmt
 %type <Statement> create_index_stmt
@@ -562,7 +563,7 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %token <str>   CHARACTER CHARACTERISTICS CHECK
 %token <str>   COALESCE COLLATE COLLATION COLUMN COLUMNS COMMIT
 %token <str>   COMMITTED CONCAT CONFLICT CONSTRAINT CONSTRAINTS
-%token <str>   COVERING CREATE
+%token <str>   COPY COVERING CREATE
 %token <str>   CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE
 %token <str>   CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str>   CURRENT_USER CYCLE
@@ -614,7 +615,7 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %token <str>   SAVEPOINT SEARCH SECOND SELECT
 %token <str>   SERIAL SERIALIZABLE SESSION SESSION_USER SET SHOW
 %token <str>   SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SQL
-%token <str>   START STRICT STRING STORING SUBSTRING
+%token <str>   START STDIN STRICT STRING STORING SUBSTRING
 %token <str>   SYMMETRIC SYSTEM
 
 %token <str>   TABLE TABLES TEXT THEN
@@ -731,6 +732,7 @@ stmt_list:
 
 stmt:
   alter_table_stmt
+| copy_from_stmt
 | create_stmt
 | delete_stmt
 | drop_stmt
@@ -888,6 +890,20 @@ opt_collate_clause:
 alter_using:
   USING a_expr { unimplemented() }
 | /* EMPTY */ {}
+
+copy_from_stmt:
+  COPY qualified_name FROM STDIN
+  {
+    $$.val = &CopyFrom{Table: $2.normalizableTableName(), Stdin: true}
+  }
+| COPY qualified_name '(' ')' FROM STDIN
+  {
+    $$.val = &CopyFrom{Table: $2.normalizableTableName(), Stdin: true}
+  }
+| COPY qualified_name '(' qualified_name_list ')' FROM STDIN
+  {
+    $$.val = &CopyFrom{Table: $2.normalizableTableName(), Columns: $4.unresolvedNames(), Stdin: true}
+  }
 
 // CREATE [DATABASE|INDEX|TABLE|TABLE AS]
 create_stmt:
@@ -4407,6 +4423,7 @@ unreserved_keyword:
 | COMMITTED
 | CONFLICT
 | CONSTRAINTS
+| COPY
 | COVERING
 | CUBE
 | CURRENT
@@ -4482,6 +4499,7 @@ unreserved_keyword:
 | SNAPSHOT
 | SQL
 | START
+| STDIN
 | STORING
 | STRICT
 | SYSTEM

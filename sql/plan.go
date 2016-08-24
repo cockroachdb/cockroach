@@ -238,6 +238,10 @@ func (p *planner) newPlan(stmt parser.Statement, desiredTypes []parser.Datum, au
 		return p.AlterTable(n)
 	case *parser.BeginTransaction:
 		return p.BeginTransaction(n)
+	case CopyDataBlock:
+		return p.CopyData(n, autoCommit)
+	case *parser.CopyFrom:
+		return p.CopyFrom(n, autoCommit)
 	case *parser.CreateDatabase:
 		return p.CreateDatabase(n)
 	case *parser.CreateIndex:
