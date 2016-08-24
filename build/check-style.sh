@@ -144,6 +144,10 @@ TestStaticcheck() {
   staticcheck ./...
 }
 
+TestCrlfmt() {
+  crlfmt -ignore "pb.go" .
+}
+
 # Run all the tests, wrapped in a similar output format to "go test"
 # so we can use go2xunit to generate reports in CI.
 
