@@ -3,7 +3,6 @@
     "bytebuffer": "registry:dt/bytebuffer#5.0.0+20160624071349",
     "classnames": "registry:dt/classnames#0.0.0+20160316155526",
     "cockroach-protos": "file:generated/protos.d.ts",
-    "es6-promise": "registry:dt/es6-promise#0.0.0+20160614011821",
     "fetch-mock": "registry:dt/fetch-mock#5.0.0+20160724065250",
     "long": "registry:dt/long#3.0.2+20160602144319",
     "mocha": "registry:dt/mocha#2.2.5+20160720003353",
