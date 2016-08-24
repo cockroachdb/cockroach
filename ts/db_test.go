@@ -165,7 +165,7 @@ func (tm *testModel) storeInModel(r Resolution, data tspb.TimeSeriesData) {
 	tm.seenSources[data.Source] = struct{}{}
 
 	// Process and store data in the model.
-	internalData, err := data.ToInternal(r.KeyDuration(), r.SampleDuration())
+	internalData, err := data.ToInternal(r.SlabDuration(), r.SampleDuration())
 	if err != nil {
 		tm.t.Fatalf("test could not convert time series to internal format: %s", err.Error())
 	}

@@ -1539,14 +1539,14 @@ func writeRandomTimeSeriesDataToRange(
 			}
 			for k := int64(0); k <= src.Int63n(10); k++ {
 				d.Datapoints = append(d.Datapoints, tspb.TimeSeriesDatapoint{
-					TimestampNanos: src.Int63n(200) * r.KeyDuration(),
+					TimestampNanos: src.Int63n(200) * r.SlabDuration(),
 					Value:          src.Float64(),
 				})
 			}
 			data = append(data, d)
 		}
 		for _, d := range data {
-			idatas, err := d.ToInternal(r.KeyDuration(), r.SampleDuration())
+			idatas, err := d.ToInternal(r.SlabDuration(), r.SampleDuration())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1571,6 +1571,6 @@ func writeRandomTimeSeriesDataToRange(
 	}
 	// Return approximate midway point (100 is midway between random timestamps in range [0,200)).
 	midKey := append([]byte(nil), keyPrefix...)
-	midKey = encoding.EncodeVarintAscending(midKey, 100*r.KeyDuration())
+	midKey = encoding.EncodeVarintAscending(midKey, 100*r.SlabDuration())
 	return keys.MakeRowSentinelKey(midKey)
 }
