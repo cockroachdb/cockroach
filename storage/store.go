@@ -399,8 +399,9 @@ type Store struct {
 
 	processRaftMu syncutil.Mutex
 	mu            struct {
-		syncutil.Mutex                              // Protects all variables in the mu struct.
-		replicas       map[roachpb.RangeID]*Replica // Map of replicas by Range ID
+		syncutil.Mutex // Protects all variables in the mu struct.
+		// Map of replicas by Range ID. This includes `uninitReplicas`.
+		replicas       map[roachpb.RangeID]*Replica
 		replicasByKey  *btree.BTree                 // btree keyed by ranges end keys.
 		uninitReplicas map[roachpb.RangeID]*Replica // Map of uninitialized replicas by Range ID
 		// replicaPlaceholders is a map to access all placeholders, so they can
@@ -2049,10 +2050,18 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			// but we can be smarter: the replica that caused our
 			// uninitialized replica to be created is most likely the
 			// leader.
-			return nil, roachpb.NewError(&roachpb.NotLeaseHolderError{
-				RangeID:     ba.RangeID,
-				LeaseHolder: rng.creatingReplica,
-			})
+			return nil, roachpb.NewError(newNotLeaseHolderErrorWithGuess(
+				ba.RangeID,
+				// The replica doesn't have a range descriptor yet, so we have to build
+				// a ReplicaDescriptor manually.
+				roachpb.ReplicaDescriptor{
+					NodeID:  rng.store.nodeDesc.NodeID,
+					StoreID: rng.store.StoreID(),
+					// The replica must have a ReplicaID, even though it's uninitialized.
+					// Otherwise, it would mean that it's not part of a Raft group which
+					// would mean that we wouldn't have routed a request to it.
+					ReplicaID: rng.mustGetReplicaID(),
+				}, *rng.creatingReplica))
 		}
 		rng.assert5725(ba)
 		br, pErr = rng.Send(ctx, ba)
