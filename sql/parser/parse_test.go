@@ -119,6 +119,9 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a.b (b INT)`},
 		{`CREATE TABLE IF NOT EXISTS a (b INT)`},
 
+		{`CREATE TABLE a AS SELECT * FROM b`},
+		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b`},
+
 		{`DELETE FROM a`},
 		{`DELETE FROM a.b`},
 		{`DELETE FROM a WHERE a = b`},
