@@ -53,11 +53,11 @@ var sampleDurationByResolution = map[Resolution]int64{
 	resolution1ns: 1, // 1ns resolution only for tests.
 }
 
-// keyDurationByResolution is a map used to retrieve the key duration
-// corresponding to a Resolution value; the key duration determines how many
-// samples are stored at a single Cockroach key. Sample durations are expressed
-// in nanoseconds.
-var keyDurationByResolution = map[Resolution]int64{
+// slabDurationByResolution is a map used to retrieve the slab duration
+// corresponding to a Resolution value; the slab duration determines how many
+// samples are stored at a single Cockroach key/value. Slab durations are
+// expressed in nanoseconds.
+var slabDurationByResolution = map[Resolution]int64{
 	Resolution10s: int64(time.Hour),
 	resolution1ns: 10, // 1ns resolution only for tests.
 }
@@ -72,11 +72,11 @@ func (r Resolution) SampleDuration() int64 {
 	return duration
 }
 
-// KeyDuration returns the sample duration corresponding to this resolution
-// value, expressed in nanoseconds. The key duration determines how many samples
-// are stored at a single Cockroach key.
-func (r Resolution) KeyDuration() int64 {
-	duration, ok := keyDurationByResolution[r]
+// SlabDuration returns the a duration corresponding to this resolution value,
+// expressed in nanoseconds. The slab duration determines how many consecutive
+// samples are stored in a single Cockroach key/value.
+func (r Resolution) SlabDuration() int64 {
+	duration, ok := slabDurationByResolution[r]
 	if !ok {
 		panic(fmt.Sprintf("no key duration found for resolution value %v", r))
 	}

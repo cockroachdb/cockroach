@@ -484,41 +484,41 @@ func (ii *interpolatingIterator) value() float64 {
 	return prevAvg + (nextAvg-prevAvg)*(off-prevOff)/(nextOff-prevOff)
 }
 
-// A unionIterator jointly advances multiple interpolatingIterators, visiting
-// precisely those offsets for which at least one of the underlying
+// An aggregatingIterator jointly advances multiple interpolatingIterators,
+// visiting precisely those offsets for which at least one of the underlying
 // interpolating iterators has a real (that is, non-interpolated) value.
 //
 // All valid iterators in the set will have the same offset at all times. During
 // advancement, the next offset is chosen by finding the individual iterator
-// with the lowest value of nextReal.offset; in other words, the iteratorSet
-// will visit each possible offset in sequence, skipping offsets for which *no*
-// iterators have real data.  If even a single iterator has real data at an
-// offset, that offset will eventually be visited.
+// with the lowest value of nextReal.offset; in other words, the
+// aggregatingIterator will visit each possible offset in sequence, skipping
+// offsets for which *no* interpolatingIterators have real data.  If even a
+// single iterator has real data at an offset, that offset will eventually be
+// visited.
 //
-// In order to facilitate finding the lowest value of nextReal.offset, the set is
-// organized as a min heap using Go's heap package.
-//
-// TODO(mrtracy): Rename to aggregatingIterator
-type unionIterator []interpolatingIterator
+// In order to facilitate finding the interpolatingIterator with the lowest
+// underlying real offset, the set is organized as a min heap using Go's heap
+// package.
+type aggregatingIterator []interpolatingIterator
 
-// Len returns the length of the iteratorSet; needed by heap.Interface.
-func (is unionIterator) Len() int {
-	return len(is)
+// Len returns the length of the aggregatingIterator; needed by heap.Interface.
+func (ai aggregatingIterator) Len() int {
+	return len(ai)
 }
 
 // Swap swaps the values at the two given indices; needed by heap.Interface.
-func (is unionIterator) Swap(i, j int) {
-	is[i], is[j] = is[j], is[i]
+func (ai aggregatingIterator) Swap(i, j int) {
+	ai[i], ai[j] = ai[j], ai[i]
 }
 
 // Less determines if the iterator at the first supplied index in the
-// iteratorSet is "Less" than the iterator at the second index; need by
+// aggregatingIterator is "Less" than the iterator at the second index; need by
 // heap.Interface.
 //
-// An iterator is less than another if its nextReal iterator points to an
-// earlier offset.
-func (is unionIterator) Less(i, j int) bool {
-	thisNext, otherNext := is[i].nextReal, is[j].nextReal
+// An interpolatingIterator is considered "less"" than another if its underlying
+// *real* offset points to an earlier offset.
+func (ai aggregatingIterator) Less(i, j int) bool {
+	thisNext, otherNext := ai[i].nextReal, ai[j].nextReal
 	if !(thisNext.isValid() || otherNext.isValid()) {
 		return false
 	}
@@ -531,108 +531,113 @@ func (is unionIterator) Less(i, j int) bool {
 	return thisNext.offset() < otherNext.offset()
 }
 
-// Push pushes an element into the iteratorSet heap; needed by heap.Interface
-func (is *unionIterator) Push(x interface{}) {
+// Push pushes an element into the aggregatingIterator heap; needed by
+// heap.Interface
+func (ai *aggregatingIterator) Push(x interface{}) {
 	// Push and Pop use pointer receivers because they modify the slice's length,
 	// not just its contents.
-	*is = append(*is, x.(interpolatingIterator))
+	*ai = append(*ai, x.(interpolatingIterator))
 }
 
-// Pop removes the minimum element from the iteratorSet heap; needed by
+// Pop removes the minimum element from the aggregatingIterator heap; needed by
 // heap.Interface.
-func (is *unionIterator) Pop() interface{} {
-	old := *is
+func (ai *aggregatingIterator) Pop() interface{} {
+	old := *ai
 	n := len(old)
 	x := old[n-1]
-	*is = old[0 : n-1]
+	*ai = old[0 : n-1]
 	return x
 }
 
 // isValid returns true if at least one iterator in the set is still valid. This
 // method only works if init() has already been called on the set.
-func (is unionIterator) isValid() bool {
-	return len(is) > 0 && is[0].isValid()
+func (ai aggregatingIterator) isValid() bool {
+	return len(ai) > 0 && ai[0].isValid()
 }
 
-// init initializes the iteratorSet. This method moves all iterators to the
-// first offset for which *any* iterator in the set has real data.
-func (is unionIterator) init() {
-	heap.Init(&is)
-	if !is.isValid() {
+// init initializes the aggregatingIterator. This method moves all component
+// iterators to the first offset for which *any* interpolatingIterator in the
+// set has *real* data.
+func (ai aggregatingIterator) init() {
+	heap.Init(&ai)
+	if !ai.isValid() {
 		return
 	}
-	if is[0].nextReal.offset() > 0 {
-		is.advance()
+	if ai[0].nextReal.offset() > 0 {
+		ai.advance()
 	}
 }
 
 // advance advances each iterator in the set to the next value for which *any*
 // interpolatingIterator has a real value.
-func (is unionIterator) advance() {
-	if !is.isValid() {
+func (ai aggregatingIterator) advance() {
+	if !ai.isValid() {
 		return
 	}
 
 	// All iterators in the set currently point to the same offset. Advancement
 	// begins by pre-advancing any iterators that have a real value for the
 	// current offset.
-	current := is[0].offset
-	for is[0].offset == current {
-		is[0].advanceTo(current + 1)
-		heap.Fix(&is, 0)
+	current := ai[0].offset
+	for ai[0].offset == current {
+		ai[0].advanceTo(current + 1)
+		heap.Fix(&ai, 0)
 	}
 
 	// It is possible that all iterators are now invalid.
-	if !is.isValid() {
+	if !ai.isValid() {
 		return
 	}
 
 	// The iterator in position zero now has the lowest value for
 	// nextReal.offset - advance all iterators to that offset.
-	min := is[0].nextReal.offset()
-	for i := range is {
-		is[i].advanceTo(min)
+	min := ai[0].nextReal.offset()
+	for i := range ai {
+		ai[i].advanceTo(min)
 	}
-	heap.Init(&is)
+	heap.Init(&ai)
 }
 
-// timestamp returns a timestamp for the current offset of the iterators in this
-// set. Offsets are converted into timestamps before returning them as part of a
-// query result.
-func (is unionIterator) timestamp() int64 {
-	if !is.isValid() {
+// timestamp returns a timestamp for the current offset of the
+// aggregatingIterator. Offsets should be converted into timestamps before
+// returning them as part of a query result.
+func (ai aggregatingIterator) timestamp() int64 {
+	if !ai.isValid() {
 		return 0
 	}
-	return is[0].midTimestamp()
+	return ai[0].midTimestamp()
 }
 
 // offset returns the current offset of the iterator.
-func (is unionIterator) offset() int32 {
-	if !is.isValid() {
+func (ai aggregatingIterator) offset() int32 {
+	if !ai.isValid() {
 		return 0
 	}
-	return is[0].offset
+	return ai[0].offset
 }
 
-// sum returns the sum of the current values in the iterator.
-func (is unionIterator) sum() float64 {
+// sum returns the sum of the current values of the interpolatingIterators being
+// aggregated.
+func (ai aggregatingIterator) sum() float64 {
 	var sum float64
-	for i := range is {
-		sum = sum + is[i].value()
+	for i := range ai {
+		sum = sum + ai[i].value()
 	}
 	return sum
 }
 
-// avg returns the average of the current values in the iterator.
-func (is unionIterator) avg() float64 {
-	return is.sum() / float64(len(is))
+// avg returns the average of the current values of the interpolatingIterators
+// being aggregated.
+func (ai aggregatingIterator) avg() float64 {
+	return ai.sum() / float64(len(ai))
 }
 
-// max return the maximum value of the current values in the iterator.
-func (is unionIterator) max() float64 {
-	max := is[0].value()
-	for i := range is[1:] {
-		val := is[i+1].value()
+// max return the maximum value of the current values of the
+// interpolatingIterators being aggregated.
+func (ai aggregatingIterator) max() float64 {
+	max := ai[0].value()
+	for i := range ai[1:] {
+		val := ai[i+1].value()
 		if val > max {
 			max = val
 		}
@@ -640,11 +645,12 @@ func (is unionIterator) max() float64 {
 	return max
 }
 
-// min return the minimum value of the current values in the iterator.
-func (is unionIterator) min() float64 {
-	min := is[0].value()
-	for i := range is[1:] {
-		val := is[i+1].value()
+// min return the minimum value of the current values of the
+// interpolatingIterators being aggregated.
+func (ai aggregatingIterator) min() float64 {
+	min := ai[0].value()
+	for i := range ai[1:] {
+		val := ai[i+1].value()
 		if val < min {
 			min = val
 		}
@@ -712,7 +718,7 @@ func (db *DB) Query(
 		b := &client.Batch{}
 		// Iterate over all key timestamps which may contain data for the given
 		// sources, based on the given start/end time and the resolution.
-		kd := queryResolution.KeyDuration()
+		kd := queryResolution.SlabDuration()
 		startKeyNanos := startNanos - (startNanos % kd)
 		endKeyNanos := endNanos - (endNanos % kd)
 		for currentTimestamp := startKeyNanos; currentTimestamp <= endKeyNanos; currentTimestamp += kd {
@@ -763,10 +769,10 @@ func (db *DB) Query(
 	}
 
 	// Create an interpolatingIterator for each dataSpan, adding each iterator
-	// into a unionIterator collection. This is also where we compute a list of
-	// all sources with data present in the query.
+	// into a aggregatingIterator collection. This is also where we compute a
+	// list of all sources with data present in the query.
 	sources := make([]string, 0, len(sourceSpans))
-	iters := make(unionIterator, 0, len(sourceSpans))
+	iters := make(aggregatingIterator, 0, len(sourceSpans))
 	for name, span := range sourceSpans {
 		sources = append(sources, name)
 		iters = append(iters, newInterpolatingIterator(
@@ -775,7 +781,7 @@ func (db *DB) Query(
 	}
 
 	// Choose an aggregation function to use when taking values from the
-	// unionIterator.
+	// aggregatingIterator.
 	var valueFn func() float64
 	switch query.GetSourceAggregator() {
 	case tspb.TimeSeriesQueryAggregator_SUM:
@@ -789,8 +795,9 @@ func (db *DB) Query(
 	}
 
 	// Iterate over all requested offsets, recording a value from the
-	// unionIterator at each offset encountered. If the query is requesting a
-	// derivative, a rate of change is recorded instead of the actual values.
+	// aggregatingIterator at each offset encountered. If the query is
+	// requesting a derivative, a rate of change is recorded instead of the
+	// actual values.
 	iters.init()
 	var last tspb.TimeSeriesDatapoint
 	if isDerivative {
