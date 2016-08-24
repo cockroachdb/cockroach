@@ -334,9 +334,15 @@ func (s *Server) Start(ctx context.Context) error {
 	s.ctx.Addr = unresolvedAddr.String()
 	s.rpcContext.SetLocalInternalServer(s.node)
 
-	m := cmux.New(ln)
-	pgL := m.Match(pgwire.Match)
-	anyL := m.Match(cmux.Any())
+	// This function opens the listener long before the grpc server is started.
+	// In secure clusters, this can cause TLS handshakes to time out, which grpc
+	// currently and incorrectly treats as permanent errors. To work around
+	// this, we close the listener here and do not reopen it until after the
+	// node has started.
+	//
+	// TODO(tamird): remove when https://github.com/grpc/grpc-go/pull/846 is
+	// merged.
+	_ = ln.Close()
 
 	httpLn, err := net.Listen("tcp", s.ctx.HTTPAddr)
 	if err != nil {
@@ -373,25 +379,6 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.stopper.RunWorker(func() {
 		netutil.FatalIfUnexpected(httpServer.Serve(httpLn))
-	})
-
-	s.stopper.RunWorker(func() {
-		<-s.stopper.ShouldQuiesce()
-		netutil.FatalIfUnexpected(anyL.Close())
-		<-s.stopper.ShouldStop()
-		s.grpc.Stop()
-	})
-
-	s.stopper.RunWorker(func() {
-		netutil.FatalIfUnexpected(s.grpc.Serve(anyL))
-	})
-
-	s.stopper.RunWorker(func() {
-		netutil.FatalIfUnexpected(httpServer.ServeWith(s.stopper, pgL, func(conn net.Conn) {
-			if err := s.pgServer.ServeConn(conn); err != nil && !netutil.IsClosedConnection(err) {
-				log.Error(s.Ctx(), err)
-			}
-		}))
 	})
 
 	if len(s.ctx.SocketFile) != 0 {
@@ -432,6 +419,36 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	log.Trace(ctx, "started node")
+
+	// TODO(tamird): remove when https://github.com/grpc/grpc-go/pull/846 is
+	// merged.
+	ln, err = net.Listen("tcp", s.ctx.Addr)
+	if err != nil {
+		return err
+	}
+
+	m := cmux.New(ln)
+	pgL := m.Match(pgwire.Match)
+	anyL := m.Match(cmux.Any())
+
+	s.stopper.RunWorker(func() {
+		<-s.stopper.ShouldQuiesce()
+		netutil.FatalIfUnexpected(anyL.Close())
+		<-s.stopper.ShouldStop()
+		s.grpc.Stop()
+	})
+
+	s.stopper.RunWorker(func() {
+		netutil.FatalIfUnexpected(s.grpc.Serve(anyL))
+	})
+
+	s.stopper.RunWorker(func() {
+		netutil.FatalIfUnexpected(httpServer.ServeWith(s.stopper, pgL, func(conn net.Conn) {
+			if err := s.pgServer.ServeConn(conn); err != nil && !netutil.IsClosedConnection(err) {
+				log.Error(s.Ctx(), err)
+			}
+		}))
+	})
 
 	// We can now add the node registry.
 	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt)
