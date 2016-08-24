@@ -232,6 +232,11 @@ func NewDistSender(cfg *DistSenderConfig, g *gossip.Gossip) *DistSender {
 	return ds
 }
 
+// SetNodeID sets the node ID (for logging contexts).
+func (ds *DistSender) SetNodeID(nodeID roachpb.NodeID) {
+	ds.Ctx = log.WithLogTagInt(ds.Ctx, "node", int(nodeID))
+}
+
 // RangeLookup implements the RangeDescriptorDB interface.
 // RangeLookup dispatches a RangeLookup request for the given metadata
 // key to the replicas of the given range. Note that we allow
@@ -261,7 +266,7 @@ func (ds *DistSender) RangeLookup(
 	replicas.Shuffle()
 	// TODO(tschottdorf): Ideally we would use the trace of the request which
 	// caused this lookup.
-	br, err := ds.sendRPC(context.Background(), desc.RangeID, replicas, ba)
+	br, err := ds.sendRPC(ds.Ctx, desc.RangeID, replicas, ba)
 	if err != nil {
 		return nil, nil, roachpb.NewError(err)
 	}

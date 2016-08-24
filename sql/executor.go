@@ -313,6 +313,7 @@ func (e *Executor) Ctx() context.Context {
 func (e *Executor) SetNodeID(nodeID roachpb.NodeID) {
 	e.nodeID = nodeID
 	e.cfg.LeaseManager.nodeID = uint32(nodeID)
+	e.cfg.Context = log.WithLogTagInt(e.cfg.Context, "node", int(nodeID))
 }
 
 // updateSystemConfig is called whenever the system config gossip entry is updated.

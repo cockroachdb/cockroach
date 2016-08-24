@@ -193,6 +193,11 @@ func NewTxnCoordSender(
 	return tc
 }
 
+// SetNodeID sets the node ID (for logging contexts).
+func (tc *TxnCoordSender) SetNodeID(nodeID roachpb.NodeID) {
+	tc.ctx = log.WithLogTagInt(tc.ctx, "node", int(nodeID))
+}
+
 // startStats blocks and periodically logs transaction statistics (throughput,
 // success rates, durations, ...). Note that this only captures write txns,
 // since read-only txns are stateless as far as TxnCoordSender is concerned.

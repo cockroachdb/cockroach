@@ -73,30 +73,31 @@ var (
 
 // Server is the cockroach server node.
 type Server struct {
-	ctx           Context
-	mux           *http.ServeMux
-	clock         *hlc.Clock
-	rpcContext    *rpc.Context
-	grpc          *grpc.Server
-	gossip        *gossip.Gossip
-	storePool     *storage.StorePool
-	distSender    *kv.DistSender
-	db            *client.DB
-	kvDB          *kv.DBServer
-	pgServer      *pgwire.Server
-	distSQLServer *distsql.ServerImpl
-	node          *Node
-	registry      *metric.Registry
-	recorder      *status.MetricsRecorder
-	runtime       status.RuntimeStatSampler
-	admin         adminServer
-	status        *statusServer
-	tsDB          *ts.DB
-	tsServer      ts.Server
-	raftTransport *storage.RaftTransport
-	stopper       *stop.Stopper
-	sqlExecutor   *sql.Executor
-	leaseMgr      *sql.LeaseManager
+	ctx            Context
+	mux            *http.ServeMux
+	clock          *hlc.Clock
+	rpcContext     *rpc.Context
+	grpc           *grpc.Server
+	gossip         *gossip.Gossip
+	storePool      *storage.StorePool
+	txnCoordSender *kv.TxnCoordSender
+	distSender     *kv.DistSender
+	db             *client.DB
+	kvDB           *kv.DBServer
+	pgServer       *pgwire.Server
+	distSQLServer  *distsql.ServerImpl
+	node           *Node
+	registry       *metric.Registry
+	recorder       *status.MetricsRecorder
+	runtime        status.RuntimeStatSampler
+	admin          adminServer
+	status         *statusServer
+	tsDB           *ts.DB
+	tsServer       ts.Server
+	raftTransport  *storage.RaftTransport
+	stopper        *stop.Stopper
+	sqlExecutor    *sql.Executor
+	leaseMgr       *sql.LeaseManager
 }
 
 // NewServer creates a Server from a server.Context.
@@ -179,13 +180,13 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 
 	txnMetrics := kv.MakeTxnMetrics()
 	s.registry.AddMetricStruct(txnMetrics)
-	sender := kv.NewTxnCoordSender(s.Ctx(), s.distSender, s.clock, srvCtx.Linearizable,
+	s.txnCoordSender = kv.NewTxnCoordSender(s.Ctx(), s.distSender, s.clock, srvCtx.Linearizable,
 		s.stopper, txnMetrics)
-	s.db = client.NewDB(sender)
+	s.db = client.NewDB(s.txnCoordSender)
 
 	s.raftTransport = storage.NewRaftTransport(storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext)
 
-	s.kvDB = kv.NewDBServer(s.ctx.Context, sender, s.stopper)
+	s.kvDB = kv.NewDBServer(s.ctx.Context, s.txnCoordSender, s.stopper)
 	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
 
 	// Set up Lease Manager
@@ -448,6 +449,8 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.sqlExecutor.SetNodeID(s.node.Descriptor.NodeID)
 	s.distSQLServer.SetNodeID(s.node.Descriptor.NodeID)
+	s.txnCoordSender.SetNodeID(s.node.Descriptor.NodeID)
+	s.distSender.SetNodeID(s.node.Descriptor.NodeID)
 
 	// Create and start the schema change manager only after a NodeID
 	// has been assigned.
