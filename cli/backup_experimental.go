@@ -32,9 +32,8 @@ import (
 )
 
 type backupContext struct {
-	database  string
-	table     string
-	overwrite bool
+	database string
+	table    string
 }
 
 var backupCtx backupContext
@@ -43,7 +42,6 @@ func init() {
 	f := restoreCmd.Flags()
 	f.StringVar(&backupCtx.database, "database", "*", "database to restore (or empty for all user databases)")
 	f.StringVar(&backupCtx.table, "table", "*", "table to restore (or empty for all user tables in database(s))")
-	f.BoolVar(&backupCtx.overwrite, "overwrite", false, "true to overwrite existing tables")
 }
 
 func runBackup(cmd *cobra.Command, args []string) error {
@@ -86,16 +84,12 @@ func runRestore(cmd *cobra.Command, args []string) error {
 		DatabaseName: parser.Name(backupCtx.database),
 		TableName:    parser.Name(backupCtx.table),
 	}
-	restored, err := sql.Restore(ctx, *kvDB, base, tableName, backupCtx.overwrite)
+	restored, err := sql.Restore(ctx, *kvDB, base, tableName)
 	if err != nil {
 		return err
 	}
-	for _, desc := range restored {
-		if db := desc.GetDatabase(); db != nil {
-			fmt.Printf("Restored database %q\n", db.Name)
-			continue
-		}
-		fmt.Printf("Restored table %q\n", desc.GetTable().Name)
+	for _, table := range restored {
+		fmt.Printf("Restored table %q\n", table.Name)
 	}
 
 	fmt.Printf("Restored from %s\n", base)

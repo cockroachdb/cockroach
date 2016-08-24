@@ -332,7 +332,7 @@ func (n *createTableNode) Start() error {
 		}
 	}
 
-	id, err := n.p.generateUniqueDescID()
+	id, err := generateUniqueDescID(n.p.txn)
 	if err != nil {
 		return nil
 	}
