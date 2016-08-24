@@ -1,0 +1,35 @@
+statement ok
+CREATE TABLE stock (item string, quantity int)
+
+statement ok
+INSERT INTO stock VALUES ('cups', 10), ('plates', 15), ('forks', 30)
+
+statement ok
+CREATE TABLE runningOut AS SELECT * FROM stock WHERE quantity < 12
+
+query TI
+SELECT * FROM runningOut
+----
+cups 10
+
+statement ok
+CREATE TABLE itemColors (color string)
+
+statement ok
+INSERT INTO itemColors VALUES ('blue'), ('red'), ('green')
+
+statement ok
+CREATE TABLE itemTypes AS SELECT item, color FROM stock, itemColors;
+
+query TT
+SELECT * FROM itemTypes;
+----
+cups blue
+cups red
+cups green
+plates blue
+plates red
+plates green
+forks blue
+forks red
+forks green

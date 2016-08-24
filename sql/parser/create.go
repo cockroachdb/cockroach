@@ -557,6 +557,13 @@ type CreateTable struct {
 	Table       NormalizableTableName
 	Interleave  *InterleaveDef
 	Defs        TableDefs
+	AsSource    *Select
+}
+
+// As returns true if this table represents a CREATE TABLE ... AS statement,
+// false otherwise.
+func (node *CreateTable) As() bool {
+	return node.AsSource != nil
 }
 
 // Format implements the NodeFormatter interface.
