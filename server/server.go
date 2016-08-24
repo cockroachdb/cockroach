@@ -327,6 +327,23 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	log.Tracef(ctx, "listening on port %s", s.ctx.Addr)
+	// TODO(tamird): remove this hack when we can update grpc
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				conn, err := ln.Accept()
+				if err != nil {
+					return
+				}
+				_ = conn.Close()
+			}
+		}
+	}()
 	unresolvedAddr, err := officialAddr(s.ctx.Addr, ln.Addr())
 	if err != nil {
 		return err
