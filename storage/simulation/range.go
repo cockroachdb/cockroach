@@ -153,16 +153,16 @@ func (r *Range) String() string {
 	sort.Sort(storeIDs)
 
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "Range:%d, Factor:%d, Stores:[", r.desc.RangeID, len(r.zone.ReplicaAttrs))
+	fmt.Fprintf(&buf, "Range: %3d, Factor: %d, Stores: [", r.desc.RangeID, len(r.zone.ReplicaAttrs))
 
 	first := true
 	for _, storeID := range storeIDs {
 		if first {
 			first = false
 		} else {
-			buf.WriteString(",")
+			buf.WriteString(", ")
 		}
-		fmt.Fprintf(&buf, "%d", storeID)
+		fmt.Fprintf(&buf, "%4d", storeID)
 	}
 	buf.WriteString("]")
 	return buf.String()

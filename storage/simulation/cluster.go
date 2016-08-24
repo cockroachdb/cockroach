@@ -290,10 +290,12 @@ func (c *Cluster) prepareActions() {
 		for storeID, rep := range r.replicas {
 			rep.action, rep.priority = r.allocator.ComputeAction(r.zone, &r.desc)
 			if rep.action == storage.AllocatorNoop {
-				rep.rebalance = r.allocator.ShouldRebalance(storeID)
-				// Set the priority to 1 so that rebalances will occur in
-				// performActions.
-				rep.priority = 1
+				if _, ok := r.getRebalanceTarget(storeID); ok {
+					rep.rebalance = true
+					// Set the priority to 1 so that rebalances will occur in
+					// performActions.
+					rep.priority = 1
+				}
 			} else {
 				rep.rebalance = false
 			}

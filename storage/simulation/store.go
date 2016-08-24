@@ -73,7 +73,7 @@ func (s *Store) getCapacity(rangeCount int) roachpb.StoreCapacity {
 // housed in the store.
 func (s *Store) String(rangeCount int) string {
 	desc := s.getDesc(rangeCount)
-	return fmt.Sprintf("Store %d - Node:%d, Replicas:%d, AvailableReplicas:%d, Capacity:%d, Available:%d",
+	return fmt.Sprintf("Store %4d - Node: %d, Replicas: %3d, AvailableReplicas: %3d, Capacity: %d, Available: %d",
 		desc.StoreID, desc.Node.NodeID, desc.Capacity.RangeCount, desc.Capacity.Available/bytesPerRange,
 		desc.Capacity.Capacity, desc.Capacity.Available)
 }
