@@ -317,22 +317,6 @@ func (a Allocator) RebalanceTarget(
 	return a.improve(sl, existingNodes)
 }
 
-// ShouldRebalance returns whether the specified store should attempt to
-// rebalance a replica to another store.
-//
-// TODO(bram): This is only used by the simulator and should be removed.
-func (a *Allocator) ShouldRebalance(storeID roachpb.StoreID) bool {
-	if !a.options.AllowRebalance {
-		return false
-	}
-	desc, ok := a.storePool.getStoreDescriptor(storeID)
-	if !ok {
-		return false
-	}
-	sl, _, _ := a.storePool.getStoreList(roachpb.Attributes{}, true)
-	return a.shouldRebalance(desc, sl)
-}
-
 // selectGood attempts to select a store from the supplied store list that it
 // considers to be 'Good' relative to the other stores in the list. Any nodes
 // in the supplied 'exclude' list will be disqualified from selection. Returns
