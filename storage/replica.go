@@ -1872,6 +1872,16 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 		return
 	}
 
+	r.store.ctx.Transport.mu.Lock()
+	transportQueues := r.store.ctx.Transport.mu.queues[false]
+	var queuedMsgs int64
+	for _, queue := range transportQueues {
+		queuedMsgs += int64(len(queue))
+	}
+	r.store.metrics.RaftTransportQueueSize.Update(queuedMsgs)
+	r.store.ctx.Transport.mu.Unlock()
+	r.store.metrics.RaftSentMessages.Inc(1)
+
 	if !r.store.ctx.Transport.SendAsync(&RaftMessageRequest{
 		RangeID:     rangeID,
 		ToReplica:   toReplica,
@@ -1880,6 +1890,7 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	}) {
 		r.mu.Lock()
 		r.mu.droppedMessages++
+		r.store.metrics.RaftDroppedMessages.Inc(1)
 		r.mu.Unlock()
 
 		if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
