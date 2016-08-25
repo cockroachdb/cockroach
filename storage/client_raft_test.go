@@ -563,6 +563,144 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	})
 }
 
+// TestSnapshotAfterTruncation tests that Raft will properly send a non-preemptive snapshot when
+// a node is brought up and the log has been truncated.
+func TestSnapshotAfterTruncation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+	ctx := context.Background()
+
+	rng, err := mtc.stores[0].GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Issue a command on the first node before replicating.
+	incArgs := incrementArgs([]byte("a"), 5)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now add the second two replicas.
+	if err := rng.ChangeReplicas(
+		ctx,
+		roachpb.ADD_REPLICA,
+		roachpb.ReplicaDescriptor{
+			NodeID:  mtc.stores[1].Ident.NodeID,
+			StoreID: mtc.stores[1].Ident.StoreID,
+		},
+		rng.Desc(),
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := rng.ChangeReplicas(
+		ctx,
+		roachpb.ADD_REPLICA,
+		roachpb.ReplicaDescriptor{
+			NodeID:  mtc.stores[2].Ident.NodeID,
+			StoreID: mtc.stores[2].Ident.StoreID,
+		},
+		rng.Desc(),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the same data is available on the replicas.
+	util.SucceedsSoon(t, func() error {
+		getArgs := getArgs([]byte("a"))
+		if reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, &getArgs); err != nil {
+			return errors.Errorf("failed to read data: %s", err)
+		} else if e, v := int64(5), mustGetInt(reply.(*roachpb.GetResponse).Value); v != e {
+			return errors.Errorf("failed to read correct data: expected %d, got %d", e, v)
+		}
+		return nil
+	})
+	util.SucceedsSoon(t, func() error {
+		getArgs := getArgs([]byte("a"))
+		if reply, err := client.SendWrappedWith(rg1(mtc.stores[2]), nil, roachpb.Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, &getArgs); err != nil {
+			return errors.Errorf("failed to read data: %s", err)
+		} else if e, v := int64(5), mustGetInt(reply.(*roachpb.GetResponse).Value); v != e {
+			return errors.Errorf("failed to read correct data: expected %d, got %d", e, v)
+		}
+		return nil
+	})
+
+	// Stop a store.
+	mtc.stopStore(1)
+
+	// Issue a command on the first node before bringing the second back up.
+	incArgs = incrementArgs([]byte("a"), 5)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the same data is available on the replica.
+	util.SucceedsSoon(t, func() error {
+		getArgs := getArgs([]byte("a"))
+		if reply, err := client.SendWrappedWith(rg1(mtc.stores[0]), nil, roachpb.Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, &getArgs); err != nil {
+			return errors.Errorf("failed to read data: %s", err)
+		} else if e, v := int64(10), mustGetInt(reply.(*roachpb.GetResponse).Value); v != e {
+			return errors.Errorf("failed to read correct data: expected %d, got %d", e, v)
+		}
+		return nil
+	})
+
+	// Get that command's log index.
+	index, err := rng.GetLastIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Truncate the log at index+1 (log entries < N are removed, so this includes
+	// the increment).
+	truncArgs := truncateLogArgs(index+1, 1)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &truncArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bring the second store back up.
+	mtc.restartStore(1)
+
+	// The snapshot should have been sent: make sure it's got the data we sent to the other nodes.
+	util.SucceedsSoon(t, func() error {
+		getArgs := getArgs([]byte("a"))
+		if reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, &getArgs); err != nil {
+			return errors.Errorf("failed to read data: %s", err)
+		} else if e, v := int64(10), mustGetInt(reply.(*roachpb.GetResponse).Value); v != e {
+			return errors.Errorf("failed to read correct data: expected %d, got %d", e, v)
+		}
+		return nil
+	})
+
+	// Send a third command to verify that the log states are synced up so the
+	// new node can accept new commands.
+	incArgs = incrementArgs([]byte("a"), 5)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	util.SucceedsSoon(t, func() error {
+		getArgs := getArgs([]byte("a"))
+		if reply, err := client.SendWrappedWith(rg1(mtc.stores[1]), nil, roachpb.Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		}, &getArgs); err != nil {
+			return errors.Errorf("failed to read data: %s", err)
+		} else if e, v := int64(15), mustGetInt(reply.(*roachpb.GetResponse).Value); v != e {
+			return errors.Errorf("failed to read correct data: expected %d, got %d", e, v)
+		}
+		return nil
+	})
+}
+
 // Test various mechanism for refreshing pending commands.
 func TestRefreshPendingCommands(t *testing.T) {
 	defer leaktest.AfterTest(t)()
