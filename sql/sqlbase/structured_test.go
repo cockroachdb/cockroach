@@ -827,7 +827,7 @@ func TestColumnTypeSQLString(t *testing.T) {
 		expectedSQL string
 	}{
 		{ColumnType{Kind: ColumnType_INT}, "INT"},
-		{ColumnType{Kind: ColumnType_INT, Width: 2}, "INT(2)"},
+		{ColumnType{Kind: ColumnType_INT, Width: 2}, "BIT(2)"},
 		{ColumnType{Kind: ColumnType_FLOAT}, "FLOAT"},
 		{ColumnType{Kind: ColumnType_FLOAT, Precision: 3}, "FLOAT(3)"},
 		{ColumnType{Kind: ColumnType_DECIMAL}, "DECIMAL"},
