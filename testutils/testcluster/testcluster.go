@@ -141,6 +141,7 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 		if i > 0 {
 			serverArgs.JoinAddr = tc.Servers[0].ServingAddr()
 		}
+		serverArgs.StoreSpecs = append(serverArgs.StoreSpecs, args.StoreSpecsPerNode[i]...)
 		s, conn, _ := serverutils.StartServer(t, serverArgs)
 		tc.Servers = append(tc.Servers, s.(*server.TestServer))
 		tc.Conns = append(tc.Conns, conn)

@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -41,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -218,11 +218,22 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 
 	// Ensure we have the correct number of engines. Add in-memory ones where
 	// needed. There must be at least one store/engine.
-	if params.StoresPerNode < 1 {
-		params.StoresPerNode = 1
+	if len(params.StoreSpecs) == 0 {
+		params.StoreSpecs = []base.StoreSpec{base.DefaultTestStoreSpec}
 	}
-	for i := len(ts.Ctx.Engines); i < params.StoresPerNode; i++ {
-		ts.Ctx.Engines = append(ts.Ctx.Engines, engine.NewInMem(roachpb.Attributes{}, 100<<20, params.Stopper))
+	for _, storeSpec := range params.StoreSpecs {
+		if storeSpec.InMemory {
+			if storeSpec.SizePercent > 0 {
+				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %s", storeSpec))
+			}
+			ts.Ctx.Engines = append(ts.Ctx.Engines, engine.NewInMem(
+				roachpb.Attributes{},
+				storeSpec.SizeInBytes,
+				params.Stopper,
+			))
+		} else {
+			panic(fmt.Sprintf("test server does not yet support in non-memory stores: %s", storeSpec))
+		}
 	}
 
 	var err error
