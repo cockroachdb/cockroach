@@ -241,16 +241,18 @@ func TestAdminAPIDatabases(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// We should have three databases:
-	// - system database
+	// We should have four databases:
 	// - information_schema
+	// - pg_catalog
+	// - system database
 	// - newly created test database
-	if a, e := len(resp.Databases), 3; a != e {
+	expectedDBs := []string{"information_schema", "pg_catalog", "system", testdb}
+	if a, e := len(resp.Databases), len(expectedDBs); a != e {
 		t.Fatalf("length of result %d != expected %d", a, e)
 	}
 
 	sort.Strings(resp.Databases)
-	for i, e := range []string{"information_schema", "system", testdb} {
+	for i, e := range expectedDBs {
 		if a := resp.Databases[i]; a != e {
 			t.Fatalf("database name %s != expected %s", a, e)
 		}

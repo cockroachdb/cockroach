@@ -63,6 +63,7 @@ type virtualSchemaTable struct {
 // add that object to this slice.
 var virtualSchemas = []virtualSchema{
 	informationSchema,
+	pgCatalog,
 }
 
 //
@@ -76,6 +77,8 @@ var virtualSchemas = []virtualSchema{
 // should not be created directly, but instead will be populated in the
 // init function below.
 var virtualSchemaMap map[string]virtualSchemaEntry
+
+var virtualSchemaOrderedNames []string
 
 type virtualSchemaEntry struct {
 	desc              *sqlbase.DatabaseDescriptor
@@ -127,7 +130,8 @@ func (e virtualTableEntry) getValuesNode(p *planner) (*valuesNode, error) {
 
 func init() {
 	virtualSchemaMap = make(map[string]virtualSchemaEntry, len(virtualSchemas))
-	for _, schema := range virtualSchemas {
+	virtualSchemaOrderedNames = make([]string, len(virtualSchemas))
+	for i, schema := range virtualSchemas {
 		dbName := schema.name
 		dbDesc := initVirtualDatabaseDesc(dbName)
 		tables := make(map[string]virtualTableEntry, len(schema.tables))
@@ -146,7 +150,9 @@ func init() {
 			tables:            tables,
 			orderedTableNames: orderedTableNames,
 		}
+		virtualSchemaOrderedNames[i] = dbName
 	}
+	sort.Strings(virtualSchemaOrderedNames)
 }
 
 // Virtual databases and tables each have an empty set of privileges. In practice,
