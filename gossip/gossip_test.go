@@ -79,7 +79,7 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 		t.Errorf("expected 3 resolvers; got %d", len(resolvers))
 	}
 	server := rpc.NewServer(rpc.NewContext(&base.Context{Insecure: true}, nil, stopper))
-	g := New(nil, server, resolvers, nil, metric.NewRegistry())
+	g := New(nil, server, resolvers, stop.NewStopper(), metric.NewRegistry())
 
 	// Using specified resolvers, fetch bootstrap addresses 3 times
 	// and verify the results match expected addresses.
