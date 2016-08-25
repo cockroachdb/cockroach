@@ -15,11 +15,88 @@
 //
 // Author: Daniel Harrison (daniel.harrison@gmail.com)
 
-// +build !experimental
-
 package cli
 
-import "github.com/spf13/cobra"
+import (
+	"fmt"
 
-// Backup is an experimental feature, this file is just a stub.
-var backupCmds []*cobra.Command
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/parser"
+)
+
+type backupContext struct {
+	database string
+	table    string
+}
+
+var backupCtx backupContext
+
+func init() {
+	f := restoreCmd.Flags()
+	f.StringVar(&backupCtx.database, "database", "*", "database to restore (or empty for all user databases)")
+	f.StringVar(&backupCtx.table, "table", "*", "table to restore (or empty for all user tables in database(s))")
+}
+
+func runBackup(cmd *cobra.Command, args []string) error {
+	if len(args) != 1 {
+		return errors.New("output basepath argument is required")
+	}
+	base := args[0]
+
+	ctx := context.Background()
+	kvDB, stopper := makeDBClient()
+	defer stopper.Stop()
+
+	desc, err := sql.Backup(ctx, *kvDB, base)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Backed up %d data bytes in %d ranges to %s\n", desc.DataSize, len(desc.Ranges), base)
+	return nil
+}
+
+var backupCmd = &cobra.Command{
+	Use:   "backup [options] <basepath>",
+	Short: "backup all SQL tables",
+	Long:  "Exports a consistent snapshot of all SQL tables to storage.",
+	RunE:  runBackup,
+}
+
+func runRestore(cmd *cobra.Command, args []string) error {
+	if len(args) != 1 {
+		return errors.New("input basepath argument is required")
+	}
+	base := args[0]
+
+	ctx := context.Background()
+	kvDB, stopper := makeDBClient()
+	defer stopper.Stop()
+
+	tableName := parser.TableName{
+		DatabaseName: parser.Name(backupCtx.database),
+		TableName:    parser.Name(backupCtx.table),
+	}
+	restored, err := sql.Restore(ctx, *kvDB, base, tableName)
+	if err != nil {
+		return err
+	}
+	for _, table := range restored {
+		fmt.Printf("Restored table %q\n", table.Name)
+	}
+
+	fmt.Printf("Restored from %s\n", base)
+	return nil
+}
+
+var restoreCmd = &cobra.Command{
+	Use:   "restore [options] <basepath>",
+	Short: "restore SQL tables from a backup",
+	Long:  "Imports one or all SQL tables, restoring them to a previously snapshotted state.",
+	RunE:  runRestore,
+}
