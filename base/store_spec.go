@@ -34,9 +34,9 @@ import (
 // -- 'Stores' and 'JoinList', which satisfies pflag's value interface
 
 // MinimumStoreSize is the smallest size in bytes that a store can have. This
-// number was originally based on config's defaultZoneConfig's RangeMaxBytes,
-// which is extremely stable and to avoid adding the dependency on config here,
-// it is just hard coded to 640MiB.
+// number is based on config's defaultZoneConfig's RangeMaxBytes, which is
+// extremely stable. To avoid adding the dependency on config here, it is just
+// hard coded to 640MiB.
 const MinimumStoreSize = 10 * 64 << 20
 
 // StoreSpec contains the details that can be specified in the cli pertaining

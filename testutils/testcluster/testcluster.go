@@ -154,7 +154,13 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 
 	args.ServerArgs.PartOfCluster = true
 	for i := 0; i < nodes; i++ {
-		serverArgs := args.ServerArgs
+		var serverArgs base.TestServerArgs
+		if perNodeServerArgs, ok := args.ServerArgsPerNode[i]; ok {
+			serverArgs = perNodeServerArgs
+			serverArgs.PartOfCluster = true
+		} else {
+			serverArgs = args.ServerArgs
+		}
 		serverArgs.Stopper = stop.NewStopper()
 		if i > 0 {
 			serverArgs.JoinAddr = tc.Servers[0].ServingAddr()
