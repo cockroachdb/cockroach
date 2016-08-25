@@ -1035,6 +1035,7 @@ func (g *Gossip) maybeSignalStatusChangeLocked() {
 			g.events.Printf("connected")
 			log.Infof(ctx, "node has connected to cluster via gossip")
 			g.stalled = false
+			g.signalConnectedLocked()
 		}
 		return
 	}
@@ -1079,6 +1080,10 @@ func (g *Gossip) warnAboutStallLocked(ctx context.Context) {
 // info. Once connected, the "Connected" channel is closed to signal to any
 // waiters that the gossip instance is ready. The gossip mutex should be held
 // by caller.
+//
+// TODO(tschottdorf): this is called from various locations which seem ad-hoc
+// (with the exception of the call bootstrap loop) yet necessary. Consolidate
+// and add commentary at each callsite.
 func (g *Gossip) signalConnectedLocked() {
 	// Check if we have the cluster ID gossip to start.
 	// If so, then mark ourselves as trivially connected to the gossip network.
