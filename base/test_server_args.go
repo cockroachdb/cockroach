@@ -41,7 +41,11 @@ type TestServerArgs struct {
 	// JoinAddr (if nonempty) is the address of a node we are joining.
 	JoinAddr string
 
-	StoresPerNode int
+	// StoreSpecs define the stores for this server. If you want more than one
+	// store per node, populate this array with StoreSpecs each representing a
+	// store. If no StoreSpecs are provided than a single DefaultTestStoreSpec
+	// will be used.
+	StoreSpecs []StoreSpec
 
 	// Fields copied to the server.Context.
 	Insecure              bool
@@ -74,6 +78,19 @@ type TestClusterArgs struct {
 	ServerArgs TestServerArgs
 	// ReplicationMode controls how replication is to be done in the cluster.
 	ReplicationMode TestClusterReplicationMode
+
+	// ServerArgsPerNode override the default ServerArgs with the value in this
+	// map. The map's key is an index within TestCluster.Servers. If there is
+	// no entry in the map for a particular server, the default ServerArgs are
+	// used.
+	ServerArgsPerNode map[int]TestServerArgs
+}
+
+// DefaultTestStoreSpec is just a single in memory store of 100 MiB with no
+// special attributes.
+var DefaultTestStoreSpec = StoreSpec{
+	SizeInBytes: 100 << 20,
+	InMemory:    true,
 }
 
 // TestClusterReplicationMode represents the replication settings for a TestCluster.
