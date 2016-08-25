@@ -92,11 +92,11 @@ func TestSSLEnforcement(t *testing.T) {
 		{"GET", "/index.html", nil, insecureContext, true, http.StatusPermanentRedirect},
 
 		// /_admin/: server.adminServer: no auth.
-		{"GET", healthPath, nil, rootCertsContext, true, http.StatusOK},
-		{"GET", healthPath, nil, nodeCertsContext, true, http.StatusOK},
-		{"GET", healthPath, nil, testCertsContext, true, http.StatusOK},
-		{"GET", healthPath, nil, noCertsContext, true, http.StatusOK},
-		{"GET", healthPath, nil, insecureContext, true, http.StatusPermanentRedirect},
+		{"GET", adminPrefix + "health", nil, rootCertsContext, true, http.StatusOK},
+		{"GET", adminPrefix + "health", nil, nodeCertsContext, true, http.StatusOK},
+		{"GET", adminPrefix + "health", nil, testCertsContext, true, http.StatusOK},
+		{"GET", adminPrefix + "health", nil, noCertsContext, true, http.StatusOK},
+		{"GET", adminPrefix + "health", nil, insecureContext, true, http.StatusPermanentRedirect},
 
 		// /debug/: server.adminServer: no auth.
 		{"GET", debugEndpoint + "vars", nil, rootCertsContext, true, http.StatusOK},
@@ -106,11 +106,11 @@ func TestSSLEnforcement(t *testing.T) {
 		{"GET", debugEndpoint + "vars", nil, insecureContext, true, http.StatusPermanentRedirect},
 
 		// /_status/nodes: server.statusServer: no auth.
-		{"GET", "/_status/nodes", nil, rootCertsContext, true, http.StatusOK},
-		{"GET", "/_status/nodes", nil, nodeCertsContext, true, http.StatusOK},
-		{"GET", "/_status/nodes", nil, testCertsContext, true, http.StatusOK},
-		{"GET", "/_status/nodes", nil, noCertsContext, true, http.StatusOK},
-		{"GET", "/_status/nodes", nil, insecureContext, true, http.StatusPermanentRedirect},
+		{"GET", statusPrefix + "nodes", nil, rootCertsContext, true, http.StatusOK},
+		{"GET", statusPrefix + "nodes", nil, nodeCertsContext, true, http.StatusOK},
+		{"GET", statusPrefix + "nodes", nil, testCertsContext, true, http.StatusOK},
+		{"GET", statusPrefix + "nodes", nil, noCertsContext, true, http.StatusOK},
+		{"GET", statusPrefix + "nodes", nil, insecureContext, true, http.StatusPermanentRedirect},
 
 		// /ts/: ts.Server: no auth.
 		{"GET", ts.URLPrefix, nil, rootCertsContext, true, http.StatusNotFound},

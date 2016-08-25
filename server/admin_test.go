@@ -19,7 +19,6 @@ package server
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -48,6 +47,14 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
+
+func getAdminJSONProto(ts serverutils.TestServerInterface, path string, response proto.Message) error {
+	return serverutils.GetJSONProto(ts, adminPrefix+path, response)
+}
+
+func postAdminJSONProto(ts serverutils.TestServerInterface, path string, request, response proto.Message) error {
+	return serverutils.PostJSONProto(ts, adminPrefix+path, request, response)
+}
 
 // getText fetches the HTTP response body as text in the form of a
 // byte slice from the specified URL.
@@ -207,28 +214,6 @@ func TestAdminDebugRedirect(t *testing.T) {
 	}
 }
 
-// apiGet issues a GET to the provided server using the given API path and
-// marshals the result into response.
-func apiGet(s serverutils.TestServerInterface, path string, response proto.Message) error {
-	apiPath := apiEndpoint + path
-	client, err := s.GetHTTPClient()
-	if err != nil {
-		return err
-	}
-	return util.GetJSON(client, s.AdminURL()+apiPath, response)
-}
-
-// apiPost issues a POST to the provided server using the given API path and
-// request, marshalling the result into response.
-func apiPost(s serverutils.TestServerInterface, path string, request, response proto.Message) error {
-	apiPath := apiEndpoint + path
-	client, err := s.GetHTTPClient()
-	if err != nil {
-		return err
-	}
-	return util.PostJSON(client, s.AdminURL()+apiPath, request, response)
-}
-
 func TestAdminAPIDatabases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -246,7 +231,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	}
 
 	var resp serverpb.DatabasesResponse
-	if err := apiGet(s, "databases", &resp); err != nil {
+	if err := getAdminJSONProto(s, "databases", &resp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -275,7 +260,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	}
 
 	var details serverpb.DatabaseDetailsResponse
-	if err := apiGet(s, "databases/"+testdb, &details); err != nil {
+	if err := getAdminJSONProto(s, "databases/"+testdb, &details); err != nil {
 		t.Fatal(err)
 	}
 
@@ -306,7 +291,7 @@ func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
 	defer s.Stopper().Stop()
 
 	const errPattern = "database.+does not exist"
-	if err := apiGet(s, "databases/I_DO_NOT_EXIST", nil); !testutils.IsError(err, errPattern) {
+	if err := getAdminJSONProto(s, "databases/I_DO_NOT_EXIST", nil); !testutils.IsError(err, errPattern) {
 		t.Fatalf("unexpected error: %v\nexpected: %s", err, errPattern)
 	}
 }
@@ -319,7 +304,7 @@ func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
 	const fakedb = "system;DROP DATABASE system;"
 	const path = "databases/" + fakedb
 	const errPattern = `database \\"` + fakedb + `\\" does not exist`
-	if err := apiGet(s, path, nil); !testutils.IsError(err, errPattern) {
+	if err := getAdminJSONProto(s, path, nil); !testutils.IsError(err, errPattern) {
 		t.Fatalf("unexpected error: %v\nexpected: %s", err, errPattern)
 	}
 }
@@ -332,13 +317,13 @@ func TestAdminAPITableDoesNotExist(t *testing.T) {
 	const fakename = "I_DO_NOT_EXIST"
 	const badDBPath = "databases/" + fakename + "/tables/foo"
 	const dbErrPattern = `database \\"` + fakename + `\\" does not exist`
-	if err := apiGet(s, badDBPath, nil); !testutils.IsError(err, dbErrPattern) {
+	if err := getAdminJSONProto(s, badDBPath, nil); !testutils.IsError(err, dbErrPattern) {
 		t.Fatalf("unexpected error: %v\nexpected: %s", err, dbErrPattern)
 	}
 
 	const badTablePath = "databases/system/tables/" + fakename
 	const tableErrPattern = `table \\"system.` + fakename + `\\" does not exist`
-	if err := apiGet(s, badTablePath, nil); !testutils.IsError(err, tableErrPattern) {
+	if err := getAdminJSONProto(s, badTablePath, nil); !testutils.IsError(err, tableErrPattern) {
 		t.Fatalf("unexpected error: %v\nexpected: %s", err, tableErrPattern)
 	}
 }
@@ -351,7 +336,7 @@ func TestAdminAPITableSQLInjection(t *testing.T) {
 	const fakeTable = "users;DROP DATABASE system;"
 	const path = "databases/system/tables/" + fakeTable
 	const errPattern = `table \"system.\\\"` + fakeTable + `\\\"\" does not exist`
-	if err := apiGet(s, path, nil); !testutils.IsError(err, regexp.QuoteMeta(errPattern)) {
+	if err := getAdminJSONProto(s, path, nil); !testutils.IsError(err, regexp.QuoteMeta(errPattern)) {
 		t.Fatalf("unexpected error: %v\nexpected: %s", err, errPattern)
 	}
 }
@@ -387,7 +372,7 @@ CREATE TABLE test.tbl (
 
 	// Perform API call.
 	var resp serverpb.TableDetailsResponse
-	if err := apiGet(s, "databases/test/tables/tbl", &resp); err != nil {
+	if err := getAdminJSONProto(s, "databases/test/tables/tbl", &resp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -483,7 +468,7 @@ func TestAdminAPITableDetailsForVirtualSchema(t *testing.T) {
 
 	// Perform API call.
 	var resp serverpb.TableDetailsResponse
-	if err := apiGet(s, "databases/information_schema/tables/schemata", &resp); err != nil {
+	if err := getAdminJSONProto(s, "databases/information_schema/tables/schemata", &resp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -571,7 +556,7 @@ func TestAdminAPITableDetailsZone(t *testing.T) {
 	// Function to verify the zone for test.tbl as returned by the Admin API.
 	verifyZone := func(expectedZone config.ZoneConfig, expectedLevel serverpb.ZoneConfigurationLevel) {
 		var resp serverpb.TableDetailsResponse
-		if err := apiGet(s, "databases/test/tables/tbl", &resp); err != nil {
+		if err := getAdminJSONProto(s, "databases/test/tables/tbl", &resp); err != nil {
 			t.Fatal(err)
 		}
 		if a, e := &resp.ZoneConfig, &expectedZone; !proto.Equal(a, e) {
@@ -647,7 +632,7 @@ VALUES ('admin', 'abc'), ('bob', 'xyz')`
 
 	// Query the API for users.
 	var resp serverpb.UsersResponse
-	if err := apiGet(s, "users", &resp); err != nil {
+	if err := getAdminJSONProto(s, "users", &resp); err != nil {
 		t.Fatal(err)
 	}
 	expResult := serverpb.UsersResponse{
@@ -704,14 +689,12 @@ func TestAdminAPIEvents(t *testing.T) {
 		{sql.EventLogCreateTable, 3},
 	}
 	for i, tc := range testcases {
-		var url string
+		url := "events"
 		if len(tc.eventType) > 0 {
-			url = fmt.Sprintf("events?type=%s", tc.eventType)
-		} else {
-			url = "events"
+			url += "?type=" + string(tc.eventType)
 		}
 		var resp serverpb.EventsResponse
-		if err := apiGet(s, url, &resp); err != nil {
+		if err := getAdminJSONProto(s, url, &resp); err != nil {
 			t.Fatal(err)
 		}
 
@@ -759,7 +742,7 @@ func TestAdminAPIUIData(t *testing.T) {
 	start := timeutil.Now()
 
 	mustSetUIData := func(keyValues map[string][]byte) {
-		if err := apiPost(s, "uidata", &serverpb.SetUIDataRequest{
+		if err := postAdminJSONProto(s, "uidata", &serverpb.SetUIDataRequest{
 			KeyValues: keyValues,
 		}, &serverpb.SetUIDataResponse{}); err != nil {
 			t.Fatal(err)
@@ -772,8 +755,8 @@ func TestAdminAPIUIData(t *testing.T) {
 		for key := range expKeyValues {
 			queryValues.Add("keys", key)
 		}
-		url := fmt.Sprintf("uidata?%s", queryValues.Encode())
-		if err := apiGet(s, url, &resp); err != nil {
+		url := "uidata?" + queryValues.Encode()
+		if err := getAdminJSONProto(s, url, &resp); err != nil {
 			t.Fatal(err)
 		}
 		// Do a two-way comparison. We can't use reflect.DeepEqual(), because
@@ -808,8 +791,8 @@ func TestAdminAPIUIData(t *testing.T) {
 
 	expectKeyNotFound := func(key string) {
 		var resp serverpb.GetUIDataResponse
-		url := fmt.Sprintf("uidata?keys=%s", key)
-		if err := apiGet(s, url, &resp); err != nil {
+		url := "uidata?keys=" + key
+		if err := getAdminJSONProto(s, url, &resp); err != nil {
 			t.Fatal(err)
 		}
 		if len(resp.KeyValues) != 0 {
@@ -820,7 +803,7 @@ func TestAdminAPIUIData(t *testing.T) {
 	// Basic tests.
 	var badResp serverpb.GetUIDataResponse
 	const errPattern = "400 Bad Request"
-	if err := apiGet(s, "uidata", &badResp); !testutils.IsError(err, errPattern) {
+	if err := getAdminJSONProto(s, "uidata", &badResp); !testutils.IsError(err, errPattern) {
 		t.Fatalf("unexpected error: %v\nexpected: %s", err, errPattern)
 	}
 
@@ -864,7 +847,7 @@ func TestClusterAPI(t *testing.T) {
 	// bootstrapping.
 	util.SucceedsSoon(t, func() error {
 		var resp serverpb.ClusterResponse
-		if err := apiGet(s, "cluster", &resp); err != nil {
+		if err := getAdminJSONProto(s, "cluster", &resp); err != nil {
 			return err
 		}
 		if a, e := resp.ClusterID, s.(*TestServer).node.ClusterID.String(); a != e {
@@ -897,7 +880,7 @@ func TestClusterFreeze(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		path := s.AdminURL() + apiEndpoint + "cluster/freeze"
+		path := s.AdminURL() + adminPrefix + "cluster/freeze"
 
 		if err := util.StreamJSON(cli, path, &req, &serverpb.ClusterFreezeResponse{}, cb); err != nil {
 			t.Fatal(err)
