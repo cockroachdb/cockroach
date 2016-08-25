@@ -53,13 +53,9 @@ import (
 )
 
 const (
-	// adminEndpoint is the prefix for RESTful endpoints used to
-	// provide an administrative interface to the cockroach cluster.
-	adminEndpoint = "/_admin/"
-	// apiEndpoint is the prefix for the RESTful API used by the admin UI.
-	apiEndpoint = adminEndpoint + "v1/"
-	// healthPath is the health endpoint.
-	healthPath = apiEndpoint + "health"
+	// adminPrefix is the prefix for RESTful endpoints used to provide an
+	// administrative interface to the cockroach cluster.
+	adminPrefix = "/_admin/v1/"
 
 	// eventLimit is the maximum number of events returned by any endpoints
 	// returning events.

@@ -550,7 +550,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// TODO(marc): when cookie-based authentication exists,
 	// apply it for all web endpoints.
-	s.mux.Handle(adminEndpoint, gwMux)
+	s.mux.Handle(adminPrefix, gwMux)
 	s.mux.Handle(ts.URLPrefix, gwMux)
 	s.mux.Handle(statusPrefix, gwMux)
 	s.mux.Handle("/health", gwMux)

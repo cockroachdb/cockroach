@@ -64,7 +64,7 @@ func GetJSON(httpClient http.Client, path string, response proto.Message) error 
 }
 
 // PostJSON uses the supplied client to POST request to the URL specified by
-// the parameters and unmarshals the result into response .
+// the parameters and unmarshals the result into response.
 func PostJSON(httpClient http.Client, path string, request, response proto.Message) error {
 	// Hack to avoid upsetting TestProtoMarshal().
 	marshalFn := (&jsonpb.Marshaler{}).Marshal

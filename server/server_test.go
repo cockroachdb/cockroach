@@ -67,18 +67,8 @@ func TestHealth(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	u := s.AdminURL() + healthPath
-	httpClient, err := s.GetHTTPClient()
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp, err := httpClient.Get(u)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
 	var data serverpb.HealthResponse
-	if err := jsonpb.Unmarshal(resp.Body, &data); err != nil {
+	if err := getAdminJSONProto(s, "health", &data); err != nil {
 		t.Error(err)
 	}
 }
@@ -92,27 +82,17 @@ func TestPlainHTTPServer(t *testing.T) {
 		Insecure: true,
 	})
 	defer s.Stopper().Stop()
-	ts := s.(*TestServer)
 
-	httpClient, err := s.GetHTTPClient()
-	if err != nil {
-		t.Fatal(err)
+	var data serverpb.HealthResponse
+
+	if err := getAdminJSONProto(s, "health", &data); err != nil {
+		t.Error(err)
 	}
 
-	httpURL := "http://" + ts.Ctx.HTTPAddr + healthPath
-	if resp, err := httpClient.Get(httpURL); err != nil {
-		t.Fatalf("error requesting health at %s: %s", httpURL, err)
-	} else {
-		defer resp.Body.Close()
-		var data serverpb.HealthResponse
-		if err := jsonpb.Unmarshal(resp.Body, &data); err != nil {
-			t.Error(err)
-		}
-	}
-
-	httpsURL := "https://" + ts.Ctx.HTTPAddr + healthPath
-	if _, err := httpClient.Get(httpsURL); err == nil {
-		t.Fatalf("unexpected success fetching %s", httpsURL)
+	ctx := s.RPCContext()
+	ctx.Insecure = false
+	if err := getAdminJSONProto(s, "health", &data); !testutils.IsError(err, "http: server gave HTTP response to HTTPS client") {
+		t.Fatalf("unexpected error %v", err)
 	}
 }
 
@@ -191,7 +171,7 @@ func TestAcceptEncoding(t *testing.T) {
 		},
 	}
 	for _, d := range testData {
-		req, err := http.NewRequest("GET", s.AdminURL()+healthPath, nil)
+		req, err := http.NewRequest("GET", s.AdminURL()+adminPrefix+"health", nil)
 		if err != nil {
 			t.Fatalf("could not create request: %s", err)
 		}
