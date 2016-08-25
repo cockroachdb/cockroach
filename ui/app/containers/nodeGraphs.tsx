@@ -218,6 +218,46 @@ export default class extends React.Component<IInjectedProps, {}> {
                 <Metric name="cr.store.process-raft.tickingnanos" title="Ticking" nonNegativeRate />
               </Axis>
             </StackedAreaGraph>
+
+            <StackedAreaGraph title="Raft Messages received" sources={sources}>
+              <Axis label="Count" format={ d3.format(".1f") }>
+                <Metric name="cr.store.raft.received.hup" title="MsgHup" nonNegativeRate />
+                <Metric name="cr.store.raft.received.beat" title="MsgBeat" nonNegativeRate />
+                <Metric name="cr.store.raft.received.prop" title="MsgProp" nonNegativeRate />
+                <Metric name="cr.store.raft.received.app" title="MsgApp" nonNegativeRate />
+                <Metric name="cr.store.raft.received.appresp" title="MsgAppResp" nonNegativeRate />
+                <Metric name="cr.store.raft.received.vote" title="MsgVote" nonNegativeRate />
+                <Metric name="cr.store.raft.received.voteresp" title="MsgVoteResp" nonNegativeRate />
+                <Metric name="cr.store.raft.received.snap" title="MsgSnap" nonNegativeRate />
+                <Metric name="cr.store.raft.received.heartbeat" title="MsgHeartbeat" nonNegativeRate />
+                <Metric name="cr.store.raft.received.heartbeatresp" title="MsgHeartbeatResp" nonNegativeRate />
+                <Metric name="cr.store.raft.received.unreachable" title="MsgUnreachable" nonNegativeRate />
+                <Metric name="cr.store.raft.received.snapstatus" title="MsgSnapStatus" nonNegativeRate />
+                <Metric name="cr.store.raft.received.checkquorum" title="MsgCheckQuorum" nonNegativeRate />
+                <Metric name="cr.store.raft.received.transferleader" title="MsgTransferLeader" nonNegativeRate />
+                <Metric name="cr.store.raft.received.timeoutnow" title="MsgTimeoutNow" nonNegativeRate />
+              </Axis>
+            </StackedAreaGraph>
+
+            <LineGraph title="Raft Transport Queue Pending Count" sources={sources}>
+              <Axis format={ d3.format(".1f") }>
+                <Metric name="cr.store.raft.sent.pending" title="Outstanding message count in the Raft Transport queue" nonNegativeRate />
+              </Axis>
+            </LineGraph>
+
+            <LineGraph title="Outgoing Raft Messages" sources={sources}>
+              <Axis format={ d3.format(".1f") }>
+                <Metric name="cr.store.raft.sent.total" title="Outgoing Raft Messages - Total" nonNegativeRate />
+                <Metric name="cr.store.raft.sent.dropped" title="Outgoing Raft Messages - Dropped" nonNegativeRate />
+              </Axis>
+            </LineGraph>
+
+            <LineGraph title="Raft Ticks" sources={sources}>
+              <Axis format={ d3.format(".1f") }>
+                <Metric name="cr.store.raft.ticks" title="Raft Ticks" nonNegativeRate />
+              </Axis>
+            </LineGraph>
+
           </GraphGroup>
       </div>
     </div>;

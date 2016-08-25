@@ -2202,6 +2202,9 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 	}
 
 	addedPlaceholder := false
+
+	s.metrics.raftRcvdMessages[req.Message.Type].Inc(1)
+
 	switch req.Message.Type {
 	case raftpb.MsgSnap:
 		if earlyReturn := func() bool {
@@ -2575,6 +2578,9 @@ func (s *Store) processRaft() {
 						pendingReplicas = append(pendingReplicas, id)
 					}
 				}
+
+				s.metrics.RaftTicks.Inc(1)
+
 				s.mu.Unlock()
 				// Enqueue all pending ranges for readiness checks. Note that we could
 				// not hold the pendingRaftGroups lock during the previous loop because

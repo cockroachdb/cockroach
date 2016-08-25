@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/syncutil"
+	"github.com/coreos/etcd/raft/raftpb"
 )
 
 var (
@@ -74,9 +75,91 @@ var (
 	metaRangeSnapshotsPreemptiveApplied = metric.Metadata{Name: "range.snapshots.preemptive-applied"}
 
 	// Raft processing metrics.
-	metaRaftSelectDurationNanos  = metric.Metadata{Name: "process-raft.waitingnanos"}
-	metaRaftWorkingDurationNanos = metric.Metadata{Name: "process-raft.workingnanos"}
-	metaRaftTickingDurationNanos = metric.Metadata{Name: "process-raft.tickingnanos"}
+	metaRaftSelectDurationNanos = metric.Metadata{Name: "process-raft.waitingnanos",
+		Help: "Nanoseconds spent in store.processRaft() waiting"}
+	metaRaftWorkingDurationNanos = metric.Metadata{Name: "process-raft.workingnanos",
+		Help: "Nanoseconds spent in store.processRaft() working"}
+	metaRaftTickingDurationNanos = metric.Metadata{Name: "process-raft.tickingnanos",
+		Help: "Nanoseconds spent in store.processRaft() processing replica.Tick()"}
+
+	// Raft message metrics.
+	metaRaftReceivedHup = metric.Metadata{
+		Name: "raft.received.hup",
+		Help: "Total number of MsgHup messages received by this store",
+	}
+	metaRaftReceivedBeat = metric.Metadata{
+		Name: "raft.received.beat",
+		Help: "Total number of MsgBeat messages received by this store",
+	}
+	metaRaftReceivedProp = metric.Metadata{
+		Name: "raft.received.prop",
+		Help: "Total number of MsgProp messages received by this store",
+	}
+	metaRaftReceivedApp = metric.Metadata{
+		Name: "raft.received.app",
+		Help: "Total number of MsgApp messages received by this store",
+	}
+	metaRaftReceivedAppResp = metric.Metadata{
+		Name: "raft.received.appresp",
+		Help: "Total number of MsgAppResp messages received by this store",
+	}
+	metaRaftReceivedVote = metric.Metadata{
+		Name: "raft.received.vote",
+		Help: "Total number of MsgVote messages received by this store",
+	}
+	metaRaftReceivedVoteResp = metric.Metadata{
+		Name: "raft.received.voteresp",
+		Help: "Total number of MsgVoteResp messages received by this store",
+	}
+	metaRaftReceivedSnap = metric.Metadata{
+		Name: "raft.received.snap",
+		Help: "Total number of MsgSnap messages received by this store",
+	}
+	metaRaftReceivedHeartbeat = metric.Metadata{
+		Name: "raft.received.heartbeat",
+		Help: "Total number of MsgHeartbeat messages received by this store",
+	}
+	metaRaftReceivedHeartbeatResp = metric.Metadata{
+		Name: "raft.received.heartbeatresp",
+		Help: "Total number of MsgHeartbeatResp messages received by this store",
+	}
+	metaRaftReceivedUnreachable = metric.Metadata{
+		Name: "raft.received.unreachable",
+		Help: "Total number of MsgUnreachable messages received by this store",
+	}
+	metaRaftReceivedSnapStatus = metric.Metadata{
+		Name: "raft.received.snapstatus",
+		Help: "Total number of MsgSnapStatus messages received by this store",
+	}
+	metaRaftReceivedCheckQuorum = metric.Metadata{
+		Name: "raft.received.checkquorum",
+		Help: "Total number of MsgCheckQuorum messages received by this store",
+	}
+	metaRaftReceivedTransferLeader = metric.Metadata{
+		Name: "raft.received.transferleader",
+		Help: "Total number of MsgTransferLeader messages received by this store",
+	}
+	metaRaftReceivedTimeoutNow = metric.Metadata{
+		Name: "raft.received.timeoutnow",
+		Help: "Total number of MsgTimeoutNow messages received by this store",
+	}
+
+	metaRaftSentMessages = metric.Metadata{
+		Name: "raft.sent.total",
+		Help: "Total number of outgoing messages queued from this store (including messages that were later dropped)",
+	}
+
+	metaRaftDroppedMessages = metric.Metadata{
+		Name: "raft.sent.dropped",
+		Help: "Total number of outgoing messages from this store that were dropped by the transport",
+	}
+
+	metaRaftTicks = metric.Metadata{
+		Name: "raft.ticks",
+		Help: "Total number of Raft ticks processed"}
+
+	metaRaftSentPending = metric.Metadata{Name: "raft.sent.pending",
+		Help: "Number of pending outgoing messages in the Raft Transport queue"}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -140,6 +223,33 @@ type StoreMetrics struct {
 	RaftSelectDurationNanos  *metric.Counter
 	RaftWorkingDurationNanos *metric.Counter
 	RaftTickingDurationNanos *metric.Counter
+
+	// Raft message metrics.
+	RaftRcvdMsgHup            *metric.Counter
+	RaftRcvdMsgBeat           *metric.Counter
+	RaftRcvdMsgProp           *metric.Counter
+	RaftRcvdMsgApp            *metric.Counter
+	RaftRcvdMsgAppResp        *metric.Counter
+	RaftRcvdMsgVote           *metric.Counter
+	RaftRcvdMsgVoteResp       *metric.Counter
+	RaftRcvdMsgSnap           *metric.Counter
+	RaftRcvdMsgHeartbeat      *metric.Counter
+	RaftRcvdMsgHeartbeatResp  *metric.Counter
+	RaftRcvdMsgUnreachable    *metric.Counter
+	RaftRcvdMsgSnapStatus     *metric.Counter
+	RaftRcvdMsgCheckQuorum    *metric.Counter
+	RaftRcvdMsgTransferLeader *metric.Counter
+	RaftRcvdMsgTimeoutNow     *metric.Counter
+
+	// A map for conveniently finding the appropriate metric. The individual
+	// metric references must exist as AddMetricStruct adds them by reflection
+	// on this struct and does not process map types.
+	// TODO(arjun): eliminate this duplication.
+	raftRcvdMessages    map[raftpb.MessageType]*metric.Counter
+	RaftDroppedMessages *metric.Counter
+	RaftSentMessages    *metric.Counter
+	RaftTicks           *metric.Counter
+	RaftSentPending     *metric.Gauge
 
 	// Stats for efficient merges.
 	// TODO(mrtracy): This should be removed as part of #4465. This is only
@@ -206,7 +316,46 @@ func newStoreMetrics() *StoreMetrics {
 		RaftSelectDurationNanos:  metric.NewCounter(metaRaftSelectDurationNanos),
 		RaftWorkingDurationNanos: metric.NewCounter(metaRaftWorkingDurationNanos),
 		RaftTickingDurationNanos: metric.NewCounter(metaRaftTickingDurationNanos),
+
+		// Raft message metrics.
+		RaftRcvdMsgHup:            metric.NewCounter(metaRaftReceivedHup),
+		RaftRcvdMsgBeat:           metric.NewCounter(metaRaftReceivedBeat),
+		RaftRcvdMsgProp:           metric.NewCounter(metaRaftReceivedProp),
+		RaftRcvdMsgApp:            metric.NewCounter(metaRaftReceivedApp),
+		RaftRcvdMsgAppResp:        metric.NewCounter(metaRaftReceivedAppResp),
+		RaftRcvdMsgVote:           metric.NewCounter(metaRaftReceivedVote),
+		RaftRcvdMsgVoteResp:       metric.NewCounter(metaRaftReceivedVoteResp),
+		RaftRcvdMsgSnap:           metric.NewCounter(metaRaftReceivedSnap),
+		RaftRcvdMsgHeartbeat:      metric.NewCounter(metaRaftReceivedHeartbeat),
+		RaftRcvdMsgHeartbeatResp:  metric.NewCounter(metaRaftReceivedHeartbeatResp),
+		RaftRcvdMsgUnreachable:    metric.NewCounter(metaRaftReceivedUnreachable),
+		RaftRcvdMsgSnapStatus:     metric.NewCounter(metaRaftReceivedSnapStatus),
+		RaftRcvdMsgCheckQuorum:    metric.NewCounter(metaRaftReceivedCheckQuorum),
+		RaftRcvdMsgTransferLeader: metric.NewCounter(metaRaftReceivedTransferLeader),
+		RaftRcvdMsgTimeoutNow:     metric.NewCounter(metaRaftReceivedTimeoutNow),
+		raftRcvdMessages:          make(map[raftpb.MessageType]*metric.Counter, len(raftpb.MessageType_name)),
+
+		RaftSentMessages:    metric.NewCounter(metaRaftSentMessages),
+		RaftDroppedMessages: metric.NewCounter(metaRaftDroppedMessages),
+		RaftTicks:           metric.NewCounter(metaRaftTicks),
+		RaftSentPending:     metric.NewGauge(metaRaftSentPending),
 	}
+
+	sm.raftRcvdMessages[raftpb.MsgHup] = sm.RaftRcvdMsgHup
+	sm.raftRcvdMessages[raftpb.MsgBeat] = sm.RaftRcvdMsgBeat
+	sm.raftRcvdMessages[raftpb.MsgProp] = sm.RaftRcvdMsgProp
+	sm.raftRcvdMessages[raftpb.MsgApp] = sm.RaftRcvdMsgApp
+	sm.raftRcvdMessages[raftpb.MsgAppResp] = sm.RaftRcvdMsgAppResp
+	sm.raftRcvdMessages[raftpb.MsgVote] = sm.RaftRcvdMsgVote
+	sm.raftRcvdMessages[raftpb.MsgVoteResp] = sm.RaftRcvdMsgVoteResp
+	sm.raftRcvdMessages[raftpb.MsgSnap] = sm.RaftRcvdMsgSnap
+	sm.raftRcvdMessages[raftpb.MsgHeartbeat] = sm.RaftRcvdMsgHeartbeat
+	sm.raftRcvdMessages[raftpb.MsgHeartbeatResp] = sm.RaftRcvdMsgHeartbeatResp
+	sm.raftRcvdMessages[raftpb.MsgUnreachable] = sm.RaftRcvdMsgUnreachable
+	sm.raftRcvdMessages[raftpb.MsgSnapStatus] = sm.RaftRcvdMsgSnapStatus
+	sm.raftRcvdMessages[raftpb.MsgCheckQuorum] = sm.RaftRcvdMsgCheckQuorum
+	sm.raftRcvdMessages[raftpb.MsgTransferLeader] = sm.RaftRcvdMsgTransferLeader
+	sm.raftRcvdMessages[raftpb.MsgTimeoutNow] = sm.RaftRcvdMsgTimeoutNow
 
 	storeRegistry.AddMetricStruct(sm)
 
