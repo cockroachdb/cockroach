@@ -55,7 +55,7 @@ message ReservationRequest {
   int64 range_size = 5;
 }
 
-// A ReservationResponse is the repoonse returned from a ReservationRequest.
+// A ReservationResponse is the response returned from a ReservationRequest.
 message ReservationResponse {
   bool reserved = 1;
   // The current number of ranges and reservations on the target
