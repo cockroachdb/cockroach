@@ -277,6 +277,8 @@ func startBankTransfers(t testing.TB, ctx context.Context, sqlDB *gosql.DB, numA
 
 func TestBackupRestoreBank(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("TODO(dan): #8813")
+
 	ctx := context.Background()
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
 	defer sql.TestDisableTableLeases()()
