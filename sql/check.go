@@ -27,7 +27,9 @@ type checkHelper struct {
 	cols  []sqlbase.ColumnDescriptor
 }
 
-func (c *checkHelper) init(p *planner, tn *parser.TableName, tableDesc *sqlbase.TableDescriptor) error {
+func (c *checkHelper) init(
+	p *planner, tn *parser.TableName, tableDesc *sqlbase.TableDescriptor,
+) error {
 	if len(tableDesc.Checks) == 0 {
 		return nil
 	}

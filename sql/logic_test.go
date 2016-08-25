@@ -772,10 +772,7 @@ func (t *logicTest) processTestFile(path string) error {
 // verifyError checks that either no error was found where none was
 // expected, or that an error was found when one was expected. Returns
 // "true" to indicate the behavior was as expected.
-func (t *logicTest) verifyError(
-	sql, pos, expectErr, expectErrCode string,
-	err error,
-) bool {
+func (t *logicTest) verifyError(sql, pos, expectErr, expectErrCode string, err error) bool {
 	if expectErr == "" && expectErrCode == "" && err != nil {
 		return t.unexpectedError(sql, pos, err)
 	}

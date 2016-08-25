@@ -27,7 +27,13 @@ var _ io.Reader
 var _ = runtime.String
 var _ = utilities.NewDoubleArray
 
-func request_TimeSeries_Query_0(ctx context.Context, marshaler runtime.Marshaler, client TimeSeriesClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_TimeSeries_Query_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client TimeSeriesClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq TimeSeriesQueryRequest
 	var metadata runtime.ServerMetadata
 
@@ -42,7 +48,9 @@ func request_TimeSeries_Query_0(ctx context.Context, marshaler runtime.Marshaler
 
 // RegisterTimeSeriesHandlerFromEndpoint is same as RegisterTimeSeriesHandler but
 // automatically dials to "endpoint" and closes the connection when "ctx" gets done.
-func RegisterTimeSeriesHandlerFromEndpoint(ctx context.Context, mux *runtime.ServeMux, endpoint string, opts []grpc.DialOption) (err error) {
+func RegisterTimeSeriesHandlerFromEndpoint(
+	ctx context.Context, mux *runtime.ServeMux, endpoint string, opts []grpc.DialOption,
+) (err error) {
 	conn, err := grpc.Dial(endpoint, opts...)
 	if err != nil {
 		return err
@@ -67,7 +75,9 @@ func RegisterTimeSeriesHandlerFromEndpoint(ctx context.Context, mux *runtime.Ser
 
 // RegisterTimeSeriesHandler registers the http handlers for service TimeSeries to "mux".
 // The handlers forward requests to the grpc endpoint over "conn".
-func RegisterTimeSeriesHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc.ClientConn) error {
+func RegisterTimeSeriesHandler(
+	ctx context.Context, mux *runtime.ServeMux, conn *grpc.ClientConn,
+) error {
 	client := NewTimeSeriesClient(conn)
 
 	mux.Handle("POST", pattern_TimeSeries_Query_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {

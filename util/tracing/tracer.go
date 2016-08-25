@@ -63,7 +63,9 @@ func JoinOrNew(tr opentracing.Tracer, carrier *Span, opName string) (opentracing
 // JoinOrNewSnowball returns a Span which records directly via the specified
 // callback. If the given DelegatingCarrier is nil, a new Span is created.
 // otherwise, the created Span is a child.
-func JoinOrNewSnowball(opName string, carrier *Span, callback func(sp basictracer.RawSpan)) (opentracing.Span, error) {
+func JoinOrNewSnowball(
+	opName string, carrier *Span, callback func(sp basictracer.RawSpan),
+) (opentracing.Span, error) {
 	tr := basictracer.NewWithOptions(defaultOptions(callback))
 	sp, err := JoinOrNew(tr, carrier, opName)
 	if err == nil {

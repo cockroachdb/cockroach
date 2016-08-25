@@ -139,7 +139,8 @@ func (pp PreparedPortals) Exists(name string) bool {
 
 // New creates a new PreparedPortal with the provided name and corresponding
 // PreparedStatement, binding the statement using the given QueryArguments.
-func (pp PreparedPortals) New(name string, stmt *PreparedStatement, qargs parser.QueryArguments,
+func (pp PreparedPortals) New(
+	name string, stmt *PreparedStatement, qargs parser.QueryArguments,
 ) *PreparedPortal {
 	stmt.portalNames[name] = struct{}{}
 	portal := &PreparedPortal{

@@ -631,7 +631,9 @@ func (p *planner) saveNonmutationAndNotify(td *sqlbase.TableDescriptor) error {
 // addInterleave marks an index as one that is interleaved in some parent data
 // according to the given definition.
 func (p *planner) addInterleave(
-	desc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor, interleave *parser.InterleaveDef,
+	desc *sqlbase.TableDescriptor,
+	index *sqlbase.IndexDescriptor,
+	interleave *parser.InterleaveDef,
 ) error {
 	if interleave.DropBehavior != parser.DropDefault {
 		return util.UnimplementedWithIssueErrorf(

@@ -27,7 +27,13 @@ var _ io.Reader
 var _ = runtime.String
 var _ = utilities.NewDoubleArray
 
-func request_Admin_Users_0(ctx context.Context, marshaler runtime.Marshaler, client AdminClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Admin_Users_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client AdminClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq UsersRequest
 	var metadata runtime.ServerMetadata
 
@@ -36,7 +42,13 @@ func request_Admin_Users_0(ctx context.Context, marshaler runtime.Marshaler, cli
 
 }
 
-func request_Admin_Databases_0(ctx context.Context, marshaler runtime.Marshaler, client AdminClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Admin_Databases_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client AdminClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq DatabasesRequest
 	var metadata runtime.ServerMetadata
 
@@ -45,7 +57,13 @@ func request_Admin_Databases_0(ctx context.Context, marshaler runtime.Marshaler,
 
 }
 
-func request_Admin_DatabaseDetails_0(ctx context.Context, marshaler runtime.Marshaler, client AdminClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Admin_DatabaseDetails_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client AdminClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq DatabaseDetailsRequest
 	var metadata runtime.ServerMetadata
 
@@ -72,7 +90,13 @@ func request_Admin_DatabaseDetails_0(ctx context.Context, marshaler runtime.Mars
 
 }
 
-func request_Admin_TableDetails_0(ctx context.Context, marshaler runtime.Marshaler, client AdminClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Admin_TableDetails_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client AdminClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq TableDetailsRequest
 	var metadata runtime.ServerMetadata
 
@@ -110,7 +134,13 @@ func request_Admin_TableDetails_0(ctx context.Context, marshaler runtime.Marshal
 
 }
 
-func request_Admin_TableStats_0(ctx context.Context, marshaler runtime.Marshaler, client AdminClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Admin_TableStats_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client AdminClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq TableStatsRequest
 	var metadata runtime.ServerMetadata
 
@@ -152,7 +182,13 @@ var (
 	filter_Admin_Events_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
 )
 
-func request_Admin_Events_0(ctx context.Context, marshaler runtime.Marshaler, client AdminClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Admin_Events_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client AdminClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq EventsRequest
 	var metadata runtime.ServerMetadata
 
@@ -165,7 +201,13 @@ func request_Admin_Events_0(ctx context.Context, marshaler runtime.Marshaler, cl
 
 }
 
-func request_Admin_SetUIData_0(ctx context.Context, marshaler runtime.Marshaler, client AdminClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Admin_SetUIData_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client AdminClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq SetUIDataRequest
 	var metadata runtime.ServerMetadata
 
@@ -182,7 +224,13 @@ var (
 	filter_Admin_GetUIData_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
 )
 
-func request_Admin_GetUIData_0(ctx context.Context, marshaler runtime.Marshaler, client AdminClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Admin_GetUIData_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client AdminClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq GetUIDataRequest
 	var metadata runtime.ServerMetadata
 
@@ -195,7 +243,13 @@ func request_Admin_GetUIData_0(ctx context.Context, marshaler runtime.Marshaler,
 
 }
 
-func request_Admin_Cluster_0(ctx context.Context, marshaler runtime.Marshaler, client AdminClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Admin_Cluster_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client AdminClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq ClusterRequest
 	var metadata runtime.ServerMetadata
 
@@ -204,7 +258,13 @@ func request_Admin_Cluster_0(ctx context.Context, marshaler runtime.Marshaler, c
 
 }
 
-func request_Admin_Health_0(ctx context.Context, marshaler runtime.Marshaler, client AdminClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Admin_Health_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client AdminClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq HealthRequest
 	var metadata runtime.ServerMetadata
 
@@ -213,7 +273,13 @@ func request_Admin_Health_0(ctx context.Context, marshaler runtime.Marshaler, cl
 
 }
 
-func request_Admin_Drain_0(ctx context.Context, marshaler runtime.Marshaler, client AdminClient, req *http.Request, pathParams map[string]string) (Admin_DrainClient, runtime.ServerMetadata, error) {
+func request_Admin_Drain_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client AdminClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (Admin_DrainClient, runtime.ServerMetadata, error) {
 	var protoReq DrainRequest
 	var metadata runtime.ServerMetadata
 
@@ -234,7 +300,13 @@ func request_Admin_Drain_0(ctx context.Context, marshaler runtime.Marshaler, cli
 
 }
 
-func request_Admin_ClusterFreeze_0(ctx context.Context, marshaler runtime.Marshaler, client AdminClient, req *http.Request, pathParams map[string]string) (Admin_ClusterFreezeClient, runtime.ServerMetadata, error) {
+func request_Admin_ClusterFreeze_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client AdminClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (Admin_ClusterFreezeClient, runtime.ServerMetadata, error) {
 	var protoReq ClusterFreezeRequest
 	var metadata runtime.ServerMetadata
 
@@ -257,7 +329,9 @@ func request_Admin_ClusterFreeze_0(ctx context.Context, marshaler runtime.Marsha
 
 // RegisterAdminHandlerFromEndpoint is same as RegisterAdminHandler but
 // automatically dials to "endpoint" and closes the connection when "ctx" gets done.
-func RegisterAdminHandlerFromEndpoint(ctx context.Context, mux *runtime.ServeMux, endpoint string, opts []grpc.DialOption) (err error) {
+func RegisterAdminHandlerFromEndpoint(
+	ctx context.Context, mux *runtime.ServeMux, endpoint string, opts []grpc.DialOption,
+) (err error) {
 	conn, err := grpc.Dial(endpoint, opts...)
 	if err != nil {
 		return err

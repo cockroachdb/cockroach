@@ -34,8 +34,7 @@ import (
 // RangeDescriptor under the convention that that is the latest committed
 // version.
 func loadState(
-	ctx context.Context,
-	reader engine.Reader, desc *roachpb.RangeDescriptor,
+	ctx context.Context, reader engine.Reader, desc *roachpb.RangeDescriptor,
 ) (storagebase.ReplicaState, error) {
 	var s storagebase.ReplicaState
 	// TODO(tschottdorf): figure out whether this is always synchronous with
@@ -130,7 +129,7 @@ func setLease(
 	eng engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	rangeID roachpb.RangeID,
-	lease *roachpb.Lease, // TODO(tschottdorf): better if this is never nil
+	lease *roachpb.Lease,
 ) error {
 	if lease == nil {
 		return nil
@@ -256,7 +255,10 @@ func loadMVCCStats(
 }
 
 func setMVCCStats(
-	ctx context.Context, eng engine.ReadWriter, rangeID roachpb.RangeID, newMS enginepb.MVCCStats,
+	ctx context.Context,
+	eng engine.ReadWriter,
+	rangeID roachpb.RangeID,
+	newMS enginepb.MVCCStats,
 ) error {
 	return engine.MVCCSetRangeStats(ctx, eng, rangeID, &newMS)
 }
@@ -390,7 +392,10 @@ func setHardState(
 // If there is an existing HardState, we must respect it and we must not apply
 // a snapshot that would move the state backwards.
 func synthesizeHardState(
-	ctx context.Context, eng engine.ReadWriter, s storagebase.ReplicaState, oldHS raftpb.HardState,
+	ctx context.Context,
+	eng engine.ReadWriter,
+	s storagebase.ReplicaState,
+	oldHS raftpb.HardState,
 ) error {
 	newHS := raftpb.HardState{
 		Term: s.TruncatedState.Term,
@@ -425,7 +430,10 @@ func synthesizeHardState(
 // The supplied MVCCStats are used for the Stats field after adjusting for
 // persisting the state itself, and the updated stats are returned.
 func writeInitialState(
-	ctx context.Context, eng engine.ReadWriter, ms enginepb.MVCCStats, desc roachpb.RangeDescriptor,
+	ctx context.Context,
+	eng engine.ReadWriter,
+	ms enginepb.MVCCStats,
+	desc roachpb.RangeDescriptor,
 ) (enginepb.MVCCStats, error) {
 	var s storagebase.ReplicaState
 

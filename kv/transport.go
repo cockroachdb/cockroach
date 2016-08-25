@@ -109,10 +109,7 @@ type Transport interface {
 
 // grpcTransportFactory is the default TransportFactory, using GRPC.
 func grpcTransportFactory(
-	opts SendOptions,
-	rpcContext *rpc.Context,
-	replicas ReplicaSlice,
-	args roachpb.BatchRequest,
+	opts SendOptions, rpcContext *rpc.Context, replicas ReplicaSlice, args roachpb.BatchRequest,
 ) (Transport, error) {
 	clients := make([]batchClient, 0, len(replicas))
 	for _, replica := range replicas {

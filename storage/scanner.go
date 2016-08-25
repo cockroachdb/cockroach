@@ -85,7 +85,9 @@ type replicaScanner struct {
 // loop intervals, replica set, and replica queues.  If scanFn is not
 // nil, after a complete loop that function will be called. If the
 // targetInterval is 0, the scanner is disabled.
-func newReplicaScanner(targetInterval, maxIdleTime time.Duration, replicas replicaSet) *replicaScanner {
+func newReplicaScanner(
+	targetInterval, maxIdleTime time.Duration, replicas replicaSet,
+) *replicaScanner {
 	if targetInterval < 0 {
 		log.Fatalf(context.TODO(), "scanner interval must be greater than or equal to zero")
 	}

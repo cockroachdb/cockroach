@@ -220,10 +220,7 @@ func (at *allocatorTest) stdDev() (float64, error) {
 
 // printStats prints the time it took for rebalancing to finish and the final
 // standard deviation of replica counts across stores.
-func (at *allocatorTest) printRebalanceStats(
-	db *gosql.DB,
-	host string,
-) error {
+func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string) error {
 	// TODO(cuongdo): Output these in a machine-friendly way and graph.
 
 	// Output time it took to rebalance.

@@ -175,7 +175,11 @@ func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator
 // mockStorePool sets up a collection of a alive and dead stores in the store
 // pool for testing purposes. It also adds dead replicas to the stores and
 // ranges in deadReplicas.
-func mockStorePool(storePool *StorePool, aliveStoreIDs, deadStoreIDs []roachpb.StoreID, deadReplicas []roachpb.ReplicaIdent) {
+func mockStorePool(
+	storePool *StorePool,
+	aliveStoreIDs, deadStoreIDs []roachpb.StoreID,
+	deadReplicas []roachpb.ReplicaIdent,
+) {
 	storePool.mu.Lock()
 	defer storePool.mu.Unlock()
 

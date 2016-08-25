@@ -370,8 +370,9 @@ func (v *indexInfo) analyzeExprs(exprs []parser.TypedExprs) {
 //
 // If preferOrderMatching is true, we prefer an index that matches the desired
 // ordering completely, even if it is not a covering index.
-func (v *indexInfo) analyzeOrdering(scan *scanNode, analyzeOrdering analyzeOrderingFn,
-	preferOrderMatching bool) {
+func (v *indexInfo) analyzeOrdering(
+	scan *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatching bool,
+) {
 	// Compute the prefix of the index for which we have exact constraints. This
 	// prefix is inconsequential for ordering because the values are identical.
 	v.exactPrefix = v.constraints.exactPrefix()
@@ -827,8 +828,7 @@ func encodeStartConstraintAscending(spans []sqlbase.Span, c *parser.ComparisonEx
 	}
 }
 
-func encodeStartConstraintDescending(
-	spans []sqlbase.Span, c *parser.ComparisonExpr) {
+func encodeStartConstraintDescending(spans []sqlbase.Span, c *parser.ComparisonExpr) {
 	switch c.Operator {
 	case parser.Is:
 		// An IS NULL expressions allows us to constrain the start of the range
@@ -947,8 +947,8 @@ func encodeEndConstraintDescending(
 // The key is a span end key, which is exclusive, but `val` needs to
 // be inclusive. So if datum is the last end constraint, we transform it accordingly.
 func encodeInclusiveEndValue(
-	key roachpb.Key, datum parser.Datum, dir encoding.Direction,
-	isLastEndConstraint bool) roachpb.Key {
+	key roachpb.Key, datum parser.Datum, dir encoding.Direction, isLastEndConstraint bool,
+) roachpb.Key {
 	// Since the end of a span is exclusive, if the last constraint is an
 	// inclusive one, we might need to make the key exclusive by applying a
 	// PrefixEnd().  We normally avoid doing this by transforming "a = x" to
@@ -1085,7 +1085,9 @@ func (a spanEvents) Less(i, j int) bool {
 // merging the spans for the disjunctions (top-level OR branches). The resulting
 // spans are non-overlapping and ordered.
 func makeSpans(
-	constraints orIndexConstraints, tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
+	constraints orIndexConstraints,
+	tableDesc *sqlbase.TableDescriptor,
+	index *sqlbase.IndexDescriptor,
 ) sqlbase.Spans {
 	if len(constraints) == 0 {
 		return makeSpansForIndexConstraints(nil, tableDesc, index)
@@ -1145,7 +1147,9 @@ func mergeAndSortSpans(s sqlbase.Spans) sqlbase.Spans {
 // instance of indexConstraints. The resulting spans are non-overlapping (by
 // virtue of the input constraints being disjunct).
 func makeSpansForIndexConstraints(
-	constraints indexConstraints, tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
+	constraints indexConstraints,
+	tableDesc *sqlbase.TableDescriptor,
+	index *sqlbase.IndexDescriptor,
 ) sqlbase.Spans {
 	prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tableDesc, index.ID))
 	// We have one constraint per column, so each contributes something
@@ -1343,7 +1347,9 @@ func (oic orIndexConstraints) exactPrefix() int {
 // constraint is "a = 1", the expression is simplified to "b > 2".
 //
 // Note that applyConstraints currently only handles simple cases.
-func applyIndexConstraints(typedExpr parser.TypedExpr, constraints orIndexConstraints) parser.TypedExpr {
+func applyIndexConstraints(
+	typedExpr parser.TypedExpr, constraints orIndexConstraints,
+) parser.TypedExpr {
 	if len(constraints) != 1 {
 		// We only support simplifying the expressions if there aren't multiple
 		// disjunctions (top-level OR branches).

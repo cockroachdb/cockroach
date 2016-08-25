@@ -611,10 +611,7 @@ func (r *Replica) EndTransaction(
 
 // isEndTransactionExceedingDeadline returns true if the transaction
 // exceeded its deadline.
-func isEndTransactionExceedingDeadline(
-	t hlc.Timestamp,
-	args roachpb.EndTransactionRequest,
-) bool {
+func isEndTransactionExceedingDeadline(t hlc.Timestamp, args roachpb.EndTransactionRequest) bool {
 	return args.Deadline != nil && args.Deadline.Less(t)
 }
 
@@ -752,8 +749,7 @@ func updateTxnWithExternalIntents(
 // TODO(tschottdorf) move to proto, make more gen-purpose - kv.truncate does
 // some similar things.
 func intersectSpan(
-	span roachpb.Span,
-	desc roachpb.RangeDescriptor,
+	span roachpb.Span, desc roachpb.RangeDescriptor,
 ) (middle *roachpb.Span, outside []roachpb.Span) {
 	start, end := desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey()
 	if len(span.EndKey) == 0 {
@@ -1731,8 +1727,7 @@ func (r *Replica) applyNewLeaseLocked(
 // a ComputeChecksum command on the range. It then applies a VerifyChecksum
 // command passing along a locally computed checksum for the range.
 func (r *Replica) CheckConsistency(
-	args roachpb.CheckConsistencyRequest,
-	desc *roachpb.RangeDescriptor,
+	args roachpb.CheckConsistencyRequest, desc *roachpb.RangeDescriptor,
 ) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
 	ctx := context.TODO()
 	key := desc.StartKey.AsRawKey()
@@ -1806,10 +1801,7 @@ const (
 // getChecksum waits for the result of ComputeChecksum and returns it.
 // It returns false if there is no checksum being computed for the id,
 // or it has already been GCed.
-func (r *Replica) getChecksum(
-	ctx context.Context,
-	id uuid.UUID,
-) (replicaChecksum, bool) {
+func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (replicaChecksum, bool) {
 	r.mu.Lock()
 	c, ok := r.mu.checksums[id]
 	r.mu.Unlock()
@@ -1831,10 +1823,7 @@ func (r *Replica) getChecksum(
 // computeChecksumDone adds the computed checksum, sets a deadline for GCing the
 // checksum, and sends out a notification.
 func (r *Replica) computeChecksumDone(
-	ctx context.Context,
-	id uuid.UUID,
-	sha []byte,
-	snapshot *roachpb.RaftSnapshotData,
+	ctx context.Context, id uuid.UUID, sha []byte, snapshot *roachpb.RaftSnapshotData,
 ) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1873,9 +1862,7 @@ func (r *Replica) ComputeChecksum(
 // sha512 computes the SHA512 hash of all the replica data at the snapshot.
 // It will dump all the k:v data into snapshot if it is provided.
 func (r *Replica) sha512(
-	desc roachpb.RangeDescriptor,
-	snap engine.Reader,
-	snapshot *roachpb.RaftSnapshotData,
+	desc roachpb.RangeDescriptor, snap engine.Reader, snapshot *roachpb.RaftSnapshotData,
 ) ([]byte, error) {
 	hasher := sha512.New()
 	// Iterate over all the data in the range.
@@ -2392,14 +2379,10 @@ func (r *Replica) AdminSplit(
 func (r *Replica) splitTrigger(
 	ctx context.Context,
 	batch engine.Batch,
-	bothDeltaMS enginepb.MVCCStats, // stats for batch so far
+	bothDeltaMS enginepb.MVCCStats,
 	split *roachpb.SplitTrigger,
 	ts hlc.Timestamp,
-) (
-	enginepb.MVCCStats,
-	*PostCommitTrigger,
-	error,
-) {
+) (enginepb.MVCCStats, *PostCommitTrigger, error) {
 	// TODO(tschottdorf): should have an incoming context from the corresponding
 	// EndTransaction, but the plumbing has not been done yet.
 	sp := r.store.Tracer().StartSpan("split")
@@ -2787,9 +2770,7 @@ func (r *Replica) mergeTrigger(
 }
 
 func (r *Replica) changeReplicasTrigger(
-	ctx context.Context,
-	batch engine.Batch,
-	change *roachpb.ChangeReplicasTrigger,
+	ctx context.Context, batch engine.Batch, change *roachpb.ChangeReplicasTrigger,
 ) *PostCommitTrigger {
 	var trigger *PostCommitTrigger
 	// If we're removing the current replica, add it to the range GC queue.
@@ -3155,9 +3136,7 @@ func replicaSetsEqual(a, b []roachpb.ReplicaDescriptor) bool {
 // and load it automatically instead of reconstructing individual
 // changes.
 func updateRangeDescriptor(
-	b *client.Batch,
-	descKey roachpb.Key,
-	oldDesc,
+	b *client.Batch, descKey roachpb.Key, oldDesc,
 	newDesc *roachpb.RangeDescriptor,
 ) error {
 	if err := newDesc.Validate(); err != nil {

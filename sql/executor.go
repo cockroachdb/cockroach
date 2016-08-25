@@ -340,9 +340,7 @@ func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 // populate the missing types. The column result types are returned (or
 // nil if there are no results).
 func (e *Executor) Prepare(
-	query string,
-	session *Session,
-	pinfo parser.PlaceholderTypes,
+	query string, session *Session, pinfo parser.PlaceholderTypes,
 ) ([]ResultColumn, error) {
 	if log.V(2) {
 		log.Infof(session.Ctx(), "preparing: %s", query)

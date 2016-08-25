@@ -162,8 +162,12 @@ func (s *Store) logSplit(txn *client.Txn, updatedDesc, newDesc roachpb.RangeDesc
 // to or removed from a range.
 // TODO(mrtracy): There are several different reasons that a replica change
 // could occur, and that information should be logged.
-func (s *Store) logChange(txn *client.Txn, changeType roachpb.ReplicaChangeType, replica roachpb.ReplicaDescriptor,
-	desc roachpb.RangeDescriptor) error {
+func (s *Store) logChange(
+	txn *client.Txn,
+	changeType roachpb.ReplicaChangeType,
+	replica roachpb.ReplicaDescriptor,
+	desc roachpb.RangeDescriptor,
+) error {
 	if !s.ctx.LogRangeEvents {
 		return nil
 	}

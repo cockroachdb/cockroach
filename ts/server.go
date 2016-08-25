@@ -51,9 +51,7 @@ func (s *Server) RegisterService(g *grpc.Server) {
 // RegisterGateway starts the gateway (i.e. reverse proxy) that proxies HTTP requests
 // to the appropriate gRPC endpoints.
 func (s *Server) RegisterGateway(
-	ctx context.Context,
-	mux *gwruntime.ServeMux,
-	conn *grpc.ClientConn,
+	ctx context.Context, mux *gwruntime.ServeMux, conn *grpc.ClientConn,
 ) error {
 	return tspb.RegisterTimeSeriesHandler(ctx, mux, conn)
 }

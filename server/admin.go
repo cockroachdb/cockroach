@@ -96,9 +96,7 @@ func (s *adminServer) RegisterService(g *grpc.Server) {
 // RegisterGateway starts the gateway (i.e. reverse proxy) that proxies HTTP requests
 // to the appropriate gRPC endpoints.
 func (s *adminServer) RegisterGateway(
-	ctx context.Context,
-	mux *gwruntime.ServeMux,
-	conn *grpc.ClientConn,
+	ctx context.Context, mux *gwruntime.ServeMux, conn *grpc.ClientConn,
 ) error {
 	return serverpb.RegisterAdminHandler(ctx, mux, conn)
 }
@@ -453,9 +451,9 @@ func (s *adminServer) TableDetails(
 
 // TableStats is an endpoint that returns columns, indices, and other
 // relevant details for the specified table.
-func (s *adminServer) TableStats(ctx context.Context, req *serverpb.TableStatsRequest) (
-	*serverpb.TableStatsResponse, error,
-) {
+func (s *adminServer) TableStats(
+	ctx context.Context, req *serverpb.TableStatsRequest,
+) (*serverpb.TableStatsResponse, error) {
 	// Get table span.
 	var tableSpan roachpb.Span
 	var iexecutor sql.InternalExecutor
@@ -566,7 +564,9 @@ func (s *adminServer) TableStats(ctx context.Context, req *serverpb.TableStatsRe
 }
 
 // Users returns a list of users, stripped of any passwords.
-func (s *adminServer) Users(ctx context.Context, req *serverpb.UsersRequest) (*serverpb.UsersResponse, error) {
+func (s *adminServer) Users(
+	ctx context.Context, req *serverpb.UsersRequest,
+) (*serverpb.UsersResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
 	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
 	query := "SELECT username FROM system.users"
@@ -587,7 +587,9 @@ func (s *adminServer) Users(ctx context.Context, req *serverpb.UsersRequest) (*s
 //
 // type=STRING  returns events with this type (e.g. "create_table")
 // targetID=INT returns events for that have this targetID
-func (s *adminServer) Events(ctx context.Context, req *serverpb.EventsRequest) (*serverpb.EventsResponse, error) {
+func (s *adminServer) Events(
+	ctx context.Context, req *serverpb.EventsRequest,
+) (*serverpb.EventsResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
 	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
 
@@ -645,7 +647,9 @@ func (s *adminServer) Events(ctx context.Context, req *serverpb.EventsRequest) (
 
 // getUIData returns the values and timestamps for the given UI keys. Keys
 // that are not found will not be returned.
-func (s *adminServer) getUIData(session *sql.Session, user string, keys []string) (*serverpb.GetUIDataResponse, error) {
+func (s *adminServer) getUIData(
+	session *sql.Session, user string, keys []string,
+) (*serverpb.GetUIDataResponse, error) {
 	if len(keys) == 0 {
 		return &serverpb.GetUIDataResponse{}, nil
 	}
@@ -694,7 +698,9 @@ func (s *adminServer) getUIData(session *sql.Session, user string, keys []string
 
 // SetUIData is an endpoint that stores the given key/value pairs in the
 // system.ui table. See GetUIData for more details on semantics.
-func (s *adminServer) SetUIData(ctx context.Context, req *serverpb.SetUIDataRequest) (*serverpb.SetUIDataResponse, error) {
+func (s *adminServer) SetUIData(
+	ctx context.Context, req *serverpb.SetUIDataRequest,
+) (*serverpb.SetUIDataResponse, error) {
 	if len(req.KeyValues) == 0 {
 		return nil, grpc.Errorf(codes.InvalidArgument, "KeyValues cannot be empty")
 	}
@@ -754,7 +760,9 @@ func (s *adminServer) SetUIData(ctx context.Context, req *serverpb.SetUIDataRequ
 // The stored values are meant to be opaque to the server. In the rare case that
 // the server code needs to call this method, it should only read from keys that
 // have the prefix `serverUIDataKeyPrefix`.
-func (s *adminServer) GetUIData(ctx context.Context, req *serverpb.GetUIDataRequest) (*serverpb.GetUIDataResponse, error) {
+func (s *adminServer) GetUIData(
+	ctx context.Context, req *serverpb.GetUIDataRequest,
+) (*serverpb.GetUIDataResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
 	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
 
@@ -771,7 +779,9 @@ func (s *adminServer) GetUIData(ctx context.Context, req *serverpb.GetUIDataRequ
 }
 
 // Cluster returns cluster metadata.
-func (s *adminServer) Cluster(_ context.Context, req *serverpb.ClusterRequest) (*serverpb.ClusterResponse, error) {
+func (s *adminServer) Cluster(
+	_ context.Context, req *serverpb.ClusterRequest,
+) (*serverpb.ClusterResponse, error) {
 	clusterID := s.server.node.ClusterID
 	if uuid.Equal(clusterID, *uuid.EmptyUUID) {
 		return nil, grpc.Errorf(codes.Unavailable, "cluster ID not yet available")
@@ -779,7 +789,9 @@ func (s *adminServer) Cluster(_ context.Context, req *serverpb.ClusterRequest) (
 	return &serverpb.ClusterResponse{ClusterID: clusterID.String()}, nil
 }
 
-func (s *adminServer) Health(ctx context.Context, req *serverpb.HealthRequest) (*serverpb.HealthResponse, error) {
+func (s *adminServer) Health(
+	ctx context.Context, req *serverpb.HealthRequest,
+) (*serverpb.HealthResponse, error) {
 	return &serverpb.HealthResponse{}, nil
 }
 
@@ -970,8 +982,7 @@ func (s *adminServer) waitForStoreFrozen(
 }
 
 func (s *adminServer) ClusterFreeze(
-	req *serverpb.ClusterFreezeRequest,
-	stream serverpb.Admin_ClusterFreezeServer,
+	req *serverpb.ClusterFreezeRequest, stream serverpb.Admin_ClusterFreezeServer,
 ) error {
 	var totalAffected int64
 	stores := make(map[roachpb.StoreID]roachpb.NodeID)

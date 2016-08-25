@@ -40,7 +40,9 @@ type txnSender Txn
 
 // Send updates the transaction on error. Depending on the error type, the
 // transaction might be replaced by a new one.
-func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+func (ts *txnSender) Send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Send call through wrapped sender.
 	ba.Txn = &ts.Proto
 	// For testing purposes, ts.UserPriority can be a negative value (see
@@ -514,10 +516,7 @@ func (e *AutoCommitError) Error() string {
 // to clean up the transaction before returning an error. In case of
 // TransactionAbortedError, txn is reset to a fresh transaction, ready to be
 // used.
-func (txn *Txn) Exec(
-	opt TxnExecOptions,
-	fn func(txn *Txn, opt *TxnExecOptions) error,
-) (err error) {
+func (txn *Txn) Exec(opt TxnExecOptions, fn func(txn *Txn, opt *TxnExecOptions) error) (err error) {
 	// Run fn in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
 	var retryOptions retry.Options

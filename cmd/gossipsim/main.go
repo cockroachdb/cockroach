@@ -144,7 +144,9 @@ func (em edgeMap) addEdge(nodeID roachpb.NodeID, e edge) {
 // Returns the name of the output file and a boolean for whether or not
 // the network has quiesced (that is, no new edges, and all nodes are
 // connected).
-func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet map[string]edge) (string, bool) {
+func outputDotFile(
+	dotFN string, cycle int, network *simulation.Network, edgeSet map[string]edge,
+) (string, bool) {
 	f, err := os.Create(dotFN)
 	if err != nil {
 		log.Fatalf(context.TODO(), "unable to create temp file: %s", err)

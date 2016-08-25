@@ -348,10 +348,7 @@ func userTablesAndDBsMatchingName(
 // Restore imports a SQL table (or tables) from a set of non-overlapping sstable
 // files.
 func Restore(
-	ctx context.Context,
-	db client.DB,
-	base string,
-	table parser.TableName,
+	ctx context.Context, db client.DB, base string, table parser.TableName,
 ) ([]sqlbase.TableDescriptor, error) {
 	// TODO(dan): It's currently impossible to restore two interleaved tables
 	// because one of them won't be to an empty range.

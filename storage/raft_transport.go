@@ -146,7 +146,9 @@ func NewDummyRaftTransport() *RaftTransport {
 
 // NewRaftTransport creates a new RaftTransport with specified resolver and grpc server.
 // Callers are responsible for monitoring RaftTransport.SnapshotStatusChan.
-func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpcContext *rpc.Context) *RaftTransport {
+func NewRaftTransport(
+	resolver NodeAddressResolver, grpcServer *grpc.Server, rpcContext *rpc.Context,
+) *RaftTransport {
 	t := &RaftTransport{
 		resolver:           resolver,
 		rpcContext:         rpcContext,
@@ -378,9 +380,7 @@ func (t *RaftTransport) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breake
 // breaker is used to allow fast failures in SendAsync which will drop
 // incoming raft messages and report unreachable status to the raft group.
 func (t *RaftTransport) connectAndProcess(
-	nodeID roachpb.NodeID,
-	ch chan *RaftMessageRequest,
-	stats *raftTransportStats,
+	nodeID roachpb.NodeID, ch chan *RaftMessageRequest, stats *raftTransportStats,
 ) {
 	breaker := t.GetCircuitBreaker(nodeID)
 	successes := breaker.Successes()

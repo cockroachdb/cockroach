@@ -39,7 +39,9 @@ type editNodeBase struct {
 	autoCommit bool
 }
 
-func (p *planner) makeEditNode(tn *parser.TableName, autoCommit bool, priv privilege.Kind) (editNodeBase, error) {
+func (p *planner) makeEditNode(
+	tn *parser.TableName, autoCommit bool, priv privilege.Kind,
+) (editNodeBase, error) {
 	tableDesc, err := p.getTableLease(tn)
 	if err != nil {
 		return editNodeBase{}, err
@@ -66,7 +68,9 @@ type editNodeRun struct {
 	explain explainMode
 }
 
-func (r *editNodeRun) initEditNode(en *editNodeBase, rows planNode, re parser.ReturningExprs, desiredTypes []parser.Datum) error {
+func (r *editNodeRun) initEditNode(
+	en *editNodeBase, rows planNode, re parser.ReturningExprs, desiredTypes []parser.Datum,
+) error {
 	r.rows = rows
 
 	rh, err := en.p.makeReturningHelper(re, desiredTypes, en.tableDesc.Name, en.tableDesc.Columns)
@@ -124,7 +128,9 @@ type updateNode struct {
 //   Notes: postgres requires UPDATE. Requires SELECT with WHERE clause with table.
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
 // TODO(guanqun): need to support CHECK in UPDATE
-func (p *planner) Update(n *parser.Update, desiredTypes []parser.Datum, autoCommit bool) (planNode, error) {
+func (p *planner) Update(
+	n *parser.Update, desiredTypes []parser.Datum, autoCommit bool,
+) (planNode, error) {
 	tracing.AnnotateTrace()
 
 	tn, err := p.getAliasedTableName(n.Table)

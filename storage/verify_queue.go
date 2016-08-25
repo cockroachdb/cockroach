@@ -62,8 +62,9 @@ func newVerifyQueue(store *Store, gossip *gossip.Gossip, countFn rangeCountFn) *
 // verification scanning, and if so, at what priority. Returns true
 // for shouldQ in the event that it's been longer since the last scan
 // than the verification interval.
-func (*verifyQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
-	_ config.SystemConfig) (shouldQ bool, priority float64) {
+func (*verifyQueue) shouldQueue(
+	now hlc.Timestamp, rng *Replica, _ config.SystemConfig,
+) (shouldQ bool, priority float64) {
 
 	// Get last verification timestamp.
 	lastVerify, err := rng.getLastVerificationTimestamp()
@@ -83,10 +84,7 @@ func (*verifyQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
 // act of scanning keys verifies on-disk checksums, as each block
 // checksum is checked on load.
 func (*verifyQueue) process(
-	ctx context.Context,
-	now hlc.Timestamp,
-	rng *Replica,
-	_ config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, rng *Replica, _ config.SystemConfig,
 ) error {
 
 	snap := rng.store.Engine().NewSnapshot()

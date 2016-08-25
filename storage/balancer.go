@@ -32,8 +32,7 @@ const allocatorRandomCount = 10
 type nodeIDSet map[roachpb.NodeID]struct{}
 
 func formatCandidates(
-	selected *roachpb.StoreDescriptor,
-	candidates []roachpb.StoreDescriptor,
+	selected *roachpb.StoreDescriptor, candidates []roachpb.StoreDescriptor,
 ) string {
 	var buf bytes.Buffer
 	_, _ = buf.WriteString("[")
@@ -75,9 +74,7 @@ func (rcb rangeCountBalancer) selectBest(sl StoreList) *roachpb.StoreDescriptor 
 	return best
 }
 
-func (rcb rangeCountBalancer) selectGood(
-	sl StoreList, excluded nodeIDSet,
-) *roachpb.StoreDescriptor {
+func (rcb rangeCountBalancer) selectGood(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
 	// Consider a random sample of stores from the store list.
 	sl.stores = selectRandom(rcb.rand, allocatorRandomCount, sl, excluded)
 	good := rcb.selectBest(sl)
@@ -112,9 +109,7 @@ func (rcb rangeCountBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
 // improve returns a candidate StoreDescriptor to rebalance a replica to. The
 // strategy is to always converge on the mean range count. If that isn't
 // possible, we don't return any candidate.
-func (rcb rangeCountBalancer) improve(
-	sl StoreList, excluded nodeIDSet,
-) *roachpb.StoreDescriptor {
+func (rcb rangeCountBalancer) improve(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
 	// Attempt to select a better candidate from the supplied list.
 	sl.stores = selectRandom(rcb.rand, allocatorRandomCount, sl, excluded)
 	candidate := rcb.selectBest(sl)
@@ -144,9 +139,7 @@ func (rcb rangeCountBalancer) improve(
 	return candidate
 }
 
-func (rcb rangeCountBalancer) shouldRebalance(
-	store roachpb.StoreDescriptor, sl StoreList,
-) bool {
+func (rcb rangeCountBalancer) shouldRebalance(store roachpb.StoreDescriptor, sl StoreList) bool {
 	// Moving a replica from the given store makes its range count converge on
 	// the mean range count.
 	//

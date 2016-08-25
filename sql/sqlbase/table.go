@@ -38,7 +38,9 @@ func exprContainsVarsError(context string, Expr parser.Expr) error {
 	return fmt.Errorf("%s expression '%s' may not contain variable sub-expressions", context, Expr)
 }
 
-func incompatibleExprTypeError(context string, expectedType parser.Datum, actualType parser.Datum) error {
+func incompatibleExprTypeError(
+	context string, expectedType parser.Datum, actualType parser.Datum,
+) error {
 	return fmt.Errorf("incompatible type for %s expression: %s vs %s",
 		context, expectedType.Type(), actualType.Type())
 }
@@ -443,9 +445,7 @@ func EncodeTableValue(appendTo []byte, colID ColumnID, val parser.Datum) ([]byte
 
 // MakeKeyVals returns a slice of Datums with the correct types for the given
 // columns.
-func MakeKeyVals(
-	desc *TableDescriptor, columnIDs []ColumnID,
-) ([]parser.Datum, error) {
+func MakeKeyVals(desc *TableDescriptor, columnIDs []ColumnID) ([]parser.Datum, error) {
 	vals := make([]parser.Datum, len(columnIDs))
 	for i, id := range columnIDs {
 		col, err := desc.FindActiveColumnByID(id)
@@ -482,9 +482,9 @@ func DecodeTableIDIndexID(key []byte) ([]byte, ID, IndexID, error) {
 // index id and a slice for the rest of the key.
 //
 // Don't use this function in the scan "hot path".
-func DecodeIndexKeyPrefix(a *DatumAlloc, desc *TableDescriptor, key []byte) (
-	indexID IndexID, remaining []byte, err error,
-) {
+func DecodeIndexKeyPrefix(
+	a *DatumAlloc, desc *TableDescriptor, key []byte,
+) (indexID IndexID, remaining []byte, err error) {
 	// TODO(dan): This whole operation is n^2 because of the interleaves
 	// bookkeeping. We could improve it to n with a prefix tree of components.
 
@@ -612,8 +612,9 @@ func DecodeIndexKey(
 // are returned. A slice of directions can be provided to enforce encoding
 // direction on each value in valTypes. If this slice is nil, the direction
 // used will default to encoding.Ascending.
-func DecodeKeyVals(a *DatumAlloc, valTypes, vals []parser.Datum,
-	directions []encoding.Direction, key []byte) ([]byte, error) {
+func DecodeKeyVals(
+	a *DatumAlloc, valTypes, vals []parser.Datum, directions []encoding.Direction, key []byte,
+) ([]byte, error) {
 	if directions != nil && len(directions) != len(valTypes) {
 		return nil, errors.Errorf("encoding directions doesn't parallel valTypes: %d vs %d.",
 			len(directions), len(valTypes))
@@ -637,9 +638,7 @@ func DecodeKeyVals(a *DatumAlloc, valTypes, vals []parser.Datum,
 //
 // Don't use this function in the scan "hot path".
 func ExtractIndexKey(
-	a *DatumAlloc,
-	tableDesc *TableDescriptor,
-	entry client.KeyValue,
+	a *DatumAlloc, tableDesc *TableDescriptor, entry client.KeyValue,
 ) (roachpb.Key, error) {
 	indexID, key, err := DecodeIndexKeyPrefix(a, tableDesc, entry.Key)
 	if err != nil {

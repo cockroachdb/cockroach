@@ -234,7 +234,10 @@ func boolFlag(f *pflag.FlagSet, valPtr *bool, flagInfo cliflags.FlagInfo, defaul
 }
 
 func durationFlag(
-	f *pflag.FlagSet, valPtr *time.Duration, flagInfo cliflags.FlagInfo, defaultVal time.Duration,
+	f *pflag.FlagSet,
+	valPtr *time.Duration,
+	flagInfo cliflags.FlagInfo,
+	defaultVal time.Duration,
 ) {
 	if flagInfo.Shorthand == "" {
 		f.DurationVar(valPtr, flagInfo.Name, defaultVal, makeUsageString(flagInfo))

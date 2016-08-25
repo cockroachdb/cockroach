@@ -176,9 +176,7 @@ func (p *pendingLeaseRequest) JoinRequest() <-chan *roachpb.Error {
 // LeaderLease.
 //
 // replicaID is the ID of the parent replica.
-func (p *pendingLeaseRequest) TransferInProgress(
-	replicaID roachpb.ReplicaID,
-) (roachpb.Lease, bool) {
+func (p *pendingLeaseRequest) TransferInProgress(replicaID roachpb.ReplicaID) (roachpb.Lease, bool) {
 	if nextLease, ok := p.RequestPending(); ok {
 		// Is the lease being transferred? (as opposed to just extended)
 		if replicaID != nextLease.Replica.ReplicaID {

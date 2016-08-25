@@ -400,8 +400,7 @@ func (db *DB) CheckConsistency(begin, end interface{}, withDiff bool) error {
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.
 func sendAndFill(
-	send func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error),
-	b *Batch,
+	send func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error), b *Batch,
 ) error {
 	// Errors here will be attached to the results, so we will get them from
 	// the call to fillResults in the regular case in which an individual call

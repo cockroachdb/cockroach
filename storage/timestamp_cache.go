@@ -182,10 +182,7 @@ func (tc *timestampCache) SetLowWater(lowWater hlc.Timestamp) {
 // whether the command adding this timestamp should update the read
 // timestamp; false to update the write timestamp cache.
 func (tc *timestampCache) add(
-	start, end roachpb.Key,
-	timestamp hlc.Timestamp,
-	txnID *uuid.UUID,
-	readTSCache bool,
+	start, end roachpb.Key, timestamp hlc.Timestamp, txnID *uuid.UUID, readTSCache bool,
 ) {
 	// This gives us a memory-efficient end key if end is empty.
 	if len(end) == 0 {
@@ -414,7 +411,9 @@ func (tc *timestampCache) ExpandRequests(timestamp hlc.Timestamp) {
 // the cache, the low water timestamp is returned for the read
 // timestamps. Also returns an "ok" bool, indicating whether an
 // explicit match of the interval was found in the cache.
-func (tc *timestampCache) GetMaxRead(start, end roachpb.Key, txnID *uuid.UUID) (hlc.Timestamp, bool) {
+func (tc *timestampCache) GetMaxRead(
+	start, end roachpb.Key, txnID *uuid.UUID,
+) (hlc.Timestamp, bool) {
 	return tc.getMax(start, end, txnID, true)
 }
 
@@ -432,11 +431,15 @@ func (tc *timestampCache) GetMaxRead(start, end roachpb.Key, txnID *uuid.UUID) (
 // forced to increment it. This allows timestamps from the same txn
 // to be ignored because the write would instead get the low water
 // timestamp.
-func (tc *timestampCache) GetMaxWrite(start, end roachpb.Key, txnID *uuid.UUID) (hlc.Timestamp, bool) {
+func (tc *timestampCache) GetMaxWrite(
+	start, end roachpb.Key, txnID *uuid.UUID,
+) (hlc.Timestamp, bool) {
 	return tc.getMax(start, end, txnID, false)
 }
 
-func (tc *timestampCache) getMax(start, end roachpb.Key, txnID *uuid.UUID, readTSCache bool) (hlc.Timestamp, bool) {
+func (tc *timestampCache) getMax(
+	start, end roachpb.Key, txnID *uuid.UUID, readTSCache bool,
+) (hlc.Timestamp, bool) {
 	if len(end) == 0 {
 		end = start.Next()
 	}

@@ -248,7 +248,9 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 // gossip loops, sending deltas of the infostore and receiving deltas
 // in turn. If an alternate is proposed on response, the client addr
 // is modified and method returns for forwarding by caller.
-func (c *client) gossip(ctx context.Context, g *Gossip, stream Gossip_GossipClient, stopper *stop.Stopper) error {
+func (c *client) gossip(
+	ctx context.Context, g *Gossip, stream Gossip_GossipClient, stopper *stop.Stopper,
+) error {
 	sendGossipChan := make(chan struct{}, 1)
 
 	// Register a callback for gossip updates.

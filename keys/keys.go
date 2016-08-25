@@ -104,7 +104,9 @@ func MakeRangeIDReplicatedKey(rangeID roachpb.RangeID, suffix, detail roachpb.RK
 
 // DecodeRangeIDKey parses a local range ID key into range ID, infix,
 // suffix, and detail.
-func DecodeRangeIDKey(key roachpb.Key) (rangeID roachpb.RangeID, infix, suffix, detail roachpb.Key, err error) {
+func DecodeRangeIDKey(
+	key roachpb.Key,
+) (rangeID roachpb.RangeID, infix, suffix, detail roachpb.Key, err error) {
 	if !bytes.HasPrefix(key, LocalRangeIDPrefix) {
 		return 0, nil, nil, nil, errors.Errorf("key %s does not have %s prefix", key, LocalRangeIDPrefix)
 	}
@@ -206,7 +208,9 @@ func MakeRangeIDUnreplicatedPrefix(rangeID roachpb.RangeID) roachpb.Key {
 
 // MakeRangeIDUnreplicatedKey creates a range-local unreplicated key based
 // on the range's Range ID, metadata key suffix, and optional detail.
-func MakeRangeIDUnreplicatedKey(rangeID roachpb.RangeID, suffix roachpb.RKey, detail roachpb.RKey) roachpb.Key {
+func MakeRangeIDUnreplicatedKey(
+	rangeID roachpb.RangeID, suffix roachpb.RKey, detail roachpb.RKey,
+) roachpb.Key {
 	if len(suffix) != localSuffixLength {
 		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, localSuffixLength))
 	}

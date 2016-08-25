@@ -51,7 +51,9 @@ func (a testDescriptorNode) Compare(b llrb.Comparable) int {
 	return bytes.Compare(aKey, bKey)
 }
 
-func (db *testDescriptorDB) getDescriptors(key roachpb.RKey, considerIntents bool, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+func (db *testDescriptorDB) getDescriptors(
+	key roachpb.RKey, considerIntents bool, useReverseScan bool,
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 	rs := make([]roachpb.RangeDescriptor, 0, 1)
 	preRs := make([]roachpb.RangeDescriptor, 0, 2)
 	for i := 0; i < 3; i++ {
@@ -101,7 +103,9 @@ func (db *testDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return nil, nil
 }
 
-func (db *testDescriptorDB) RangeLookup(key roachpb.RKey, _ *roachpb.RangeDescriptor, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+func (db *testDescriptorDB) RangeLookup(
+	key roachpb.RKey, _ *roachpb.RangeDescriptor, considerIntents, useReverseScan bool,
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 	<-db.pauseChan
 	atomic.AddInt64(&db.lookupCount, 1)
 	return db.getDescriptors(stripMeta(key), considerIntents, useReverseScan)
@@ -194,11 +198,15 @@ func (db *testDescriptorDB) assertLookupCount(t *testing.T, from, to int64, key 
 	db.lookupCount = 0
 }
 
-func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) (*roachpb.RangeDescriptor, *evictionToken) {
+func doLookup(
+	t *testing.T, rc *rangeDescriptorCache, key string,
+) (*roachpb.RangeDescriptor, *evictionToken) {
 	return doLookupWithToken(t, rc, key, nil, false, false, nil)
 }
 
-func doLookupConsideringIntents(t *testing.T, rc *rangeDescriptorCache, key string) (*roachpb.RangeDescriptor, *evictionToken) {
+func doLookupConsideringIntents(
+	t *testing.T, rc *rangeDescriptorCache, key string,
+) (*roachpb.RangeDescriptor, *evictionToken) {
 	return doLookupWithToken(t, rc, key, nil, true, false, nil)
 }
 

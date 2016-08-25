@@ -245,7 +245,9 @@ func (tc *testContext) Sender() client.Sender {
 
 // SendWrappedWith is a convenience function which wraps the request in a batch
 // and sends it
-func (tc *testContext) SendWrappedWith(h roachpb.Header, args roachpb.Request) (roachpb.Response, *roachpb.Error) {
+func (tc *testContext) SendWrappedWith(
+	h roachpb.Header, args roachpb.Request,
+) (roachpb.Response, *roachpb.Error) {
 	return client.SendWrappedWith(tc.Sender(), context.Background(), h, args)
 }
 
@@ -277,8 +279,13 @@ func (tc *testContext) initConfigs(realRange bool, t testing.TB) error {
 	return nil
 }
 
-func newTransaction(name string, baseKey roachpb.Key, userPriority roachpb.UserPriority,
-	isolation enginepb.IsolationType, clock *hlc.Clock) *roachpb.Transaction {
+func newTransaction(
+	name string,
+	baseKey roachpb.Key,
+	userPriority roachpb.UserPriority,
+	isolation enginepb.IsolationType,
+	clock *hlc.Clock,
+) *roachpb.Transaction {
 	var offset int64
 	var now hlc.Timestamp
 	if clock != nil {
@@ -1069,7 +1076,9 @@ func TestReplicaGossipAllConfigs(t *testing.T) {
 	}
 }
 
-func maybeWrapWithBeginTransaction(sender client.Sender, ctx context.Context, header roachpb.Header, req roachpb.Request) (roachpb.Response, *roachpb.Error) {
+func maybeWrapWithBeginTransaction(
+	sender client.Sender, ctx context.Context, header roachpb.Header, req roachpb.Request,
+) (roachpb.Response, *roachpb.Error) {
 	if header.Txn == nil || header.Txn.Writing {
 		return client.SendWrappedWith(sender, ctx, header, req)
 	}
@@ -1260,7 +1269,9 @@ func scanArgs(start, end []byte) roachpb.ScanRequest {
 	}
 }
 
-func beginTxnArgs(key []byte, txn *roachpb.Transaction) (_ roachpb.BeginTransactionRequest, h roachpb.Header) {
+func beginTxnArgs(
+	key []byte, txn *roachpb.Transaction,
+) (_ roachpb.BeginTransactionRequest, h roachpb.Header) {
 	h.Txn = txn
 	return roachpb.BeginTransactionRequest{
 		Span: roachpb.Span{
@@ -1269,7 +1280,9 @@ func beginTxnArgs(key []byte, txn *roachpb.Transaction) (_ roachpb.BeginTransact
 	}, h
 }
 
-func endTxnArgs(txn *roachpb.Transaction, commit bool) (_ roachpb.EndTransactionRequest, h roachpb.Header) {
+func endTxnArgs(
+	txn *roachpb.Transaction, commit bool,
+) (_ roachpb.EndTransactionRequest, h roachpb.Header) {
 	h.Txn = txn
 	return roachpb.EndTransactionRequest{
 		Span: roachpb.Span{
@@ -1279,7 +1292,9 @@ func endTxnArgs(txn *roachpb.Transaction, commit bool) (_ roachpb.EndTransaction
 	}, h
 }
 
-func pushTxnArgs(pusher, pushee *roachpb.Transaction, pushType roachpb.PushTxnType) roachpb.PushTxnRequest {
+func pushTxnArgs(
+	pusher, pushee *roachpb.Transaction, pushType roachpb.PushTxnType,
+) roachpb.PushTxnRequest {
 	return roachpb.PushTxnRequest{
 		Span: roachpb.Span{
 			Key: pushee.Key,
@@ -1935,7 +1950,9 @@ func TestReplicaCommandQueueInconsistent(t *testing.T) {
 	// Success.
 }
 
-func SendWrapped(sender client.Sender, ctx context.Context, header roachpb.Header, args roachpb.Request) (roachpb.Response, roachpb.BatchResponse_Header, *roachpb.Error) {
+func SendWrapped(
+	sender client.Sender, ctx context.Context, header roachpb.Header, args roachpb.Request,
+) (roachpb.Response, roachpb.BatchResponse_Header, *roachpb.Error) {
 	var ba roachpb.BatchRequest
 	ba.Add(args)
 	ba.Header = header
@@ -3091,8 +3108,9 @@ func TestEndTransactionLocalGC(t *testing.T) {
 	}
 }
 
-func setupResolutionTest(t *testing.T, tc testContext, key roachpb.Key,
-	splitKey roachpb.RKey, commit bool) (*Replica, *roachpb.Transaction) {
+func setupResolutionTest(
+	t *testing.T, tc testContext, key roachpb.Key, splitKey roachpb.RKey, commit bool,
+) (*Replica, *roachpb.Transaction) {
 	// Split the range and create an intent at splitKey and key.
 	newRng := splitTestRange(tc.store, splitKey, splitKey, t)
 
@@ -4006,7 +4024,9 @@ func TestReplicaResolveIntentRange(t *testing.T) {
 	}
 }
 
-func verifyRangeStats(eng engine.Engine, rangeID roachpb.RangeID, expMS enginepb.MVCCStats, t *testing.T) {
+func verifyRangeStats(
+	eng engine.Engine, rangeID roachpb.RangeID, expMS enginepb.MVCCStats, t *testing.T,
+) {
 	var ms enginepb.MVCCStats
 	if err := engine.MVCCGetRangeStats(context.Background(), eng, rangeID, &ms); err != nil {
 		t.Fatal(err)

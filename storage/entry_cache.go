@@ -102,8 +102,9 @@ func (rec *raftEntryCache) addEntries(rangeID roachpb.RangeID, ents []raftpb.Ent
 // start with index lo and proceed sequentially without gaps until
 // 1) all entries exclusive of hi are fetched, 2) > maxBytes of
 // entries data is fetched, or 3) a cache miss occurs.
-func (rec *raftEntryCache) getEntries(rangeID roachpb.RangeID, lo, hi, maxBytes uint64) (
-	[]raftpb.Entry, uint64 /* size in bytes */, uint64 /* next log index */) {
+func (rec *raftEntryCache) getEntries(
+	rangeID roachpb.RangeID, lo, hi, maxBytes uint64,
+) ([]raftpb.Entry, uint64, uint64) {
 	rec.Lock()
 	defer rec.Unlock()
 	var ents []raftpb.Entry

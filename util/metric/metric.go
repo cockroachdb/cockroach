@@ -146,8 +146,7 @@ type Histogram struct {
 // NewHistogram creates a new windowed HDRHistogram with the given parameters.
 // Data is kept in the active window for approximately the given duration.
 // See the documentation for hdrhistogram.WindowedHistogram for details.
-func NewHistogram(metadata Metadata, duration time.Duration,
-	maxVal int64, sigFigs int) *Histogram {
+func NewHistogram(metadata Metadata, duration time.Duration, maxVal int64, sigFigs int) *Histogram {
 	return &Histogram{
 		Metadata: metadata,
 		maxVal:   maxVal,

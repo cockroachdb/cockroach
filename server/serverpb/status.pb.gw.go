@@ -27,7 +27,13 @@ var _ io.Reader
 var _ = runtime.String
 var _ = utilities.NewDoubleArray
 
-func request_Status_Details_0(ctx context.Context, marshaler runtime.Marshaler, client StatusClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Status_Details_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client StatusClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq DetailsRequest
 	var metadata runtime.ServerMetadata
 
@@ -58,7 +64,13 @@ var (
 	filter_Status_Details_1 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
 )
 
-func request_Status_Details_1(ctx context.Context, marshaler runtime.Marshaler, client StatusClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Status_Details_1(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client StatusClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq DetailsRequest
 	var metadata runtime.ServerMetadata
 
@@ -71,7 +83,13 @@ func request_Status_Details_1(ctx context.Context, marshaler runtime.Marshaler, 
 
 }
 
-func request_Status_Nodes_0(ctx context.Context, marshaler runtime.Marshaler, client StatusClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Status_Nodes_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client StatusClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq NodesRequest
 	var metadata runtime.ServerMetadata
 
@@ -80,7 +98,13 @@ func request_Status_Nodes_0(ctx context.Context, marshaler runtime.Marshaler, cl
 
 }
 
-func request_Status_Node_0(ctx context.Context, marshaler runtime.Marshaler, client StatusClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Status_Node_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client StatusClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq NodeRequest
 	var metadata runtime.ServerMetadata
 
@@ -107,7 +131,13 @@ func request_Status_Node_0(ctx context.Context, marshaler runtime.Marshaler, cli
 
 }
 
-func request_Status_RaftDebug_0(ctx context.Context, marshaler runtime.Marshaler, client StatusClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Status_RaftDebug_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client StatusClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq RaftDebugRequest
 	var metadata runtime.ServerMetadata
 
@@ -116,7 +146,13 @@ func request_Status_RaftDebug_0(ctx context.Context, marshaler runtime.Marshaler
 
 }
 
-func request_Status_Ranges_0(ctx context.Context, marshaler runtime.Marshaler, client StatusClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Status_Ranges_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client StatusClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq RangesRequest
 	var metadata runtime.ServerMetadata
 
@@ -143,7 +179,13 @@ func request_Status_Ranges_0(ctx context.Context, marshaler runtime.Marshaler, c
 
 }
 
-func request_Status_Gossip_0(ctx context.Context, marshaler runtime.Marshaler, client StatusClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Status_Gossip_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client StatusClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq GossipRequest
 	var metadata runtime.ServerMetadata
 
@@ -170,7 +212,13 @@ func request_Status_Gossip_0(ctx context.Context, marshaler runtime.Marshaler, c
 
 }
 
-func request_Status_SpanStats_0(ctx context.Context, marshaler runtime.Marshaler, client StatusClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Status_SpanStats_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client StatusClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq SpanStatsRequest
 	var metadata runtime.ServerMetadata
 
@@ -183,7 +231,13 @@ func request_Status_SpanStats_0(ctx context.Context, marshaler runtime.Marshaler
 
 }
 
-func request_Status_Stacks_0(ctx context.Context, marshaler runtime.Marshaler, client StatusClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Status_Stacks_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client StatusClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq StacksRequest
 	var metadata runtime.ServerMetadata
 
@@ -210,7 +264,13 @@ func request_Status_Stacks_0(ctx context.Context, marshaler runtime.Marshaler, c
 
 }
 
-func request_Status_Metrics_0(ctx context.Context, marshaler runtime.Marshaler, client StatusClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Status_Metrics_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client StatusClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq MetricsRequest
 	var metadata runtime.ServerMetadata
 
@@ -237,7 +297,13 @@ func request_Status_Metrics_0(ctx context.Context, marshaler runtime.Marshaler, 
 
 }
 
-func request_Status_LogFilesList_0(ctx context.Context, marshaler runtime.Marshaler, client StatusClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Status_LogFilesList_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client StatusClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq LogFilesListRequest
 	var metadata runtime.ServerMetadata
 
@@ -264,7 +330,13 @@ func request_Status_LogFilesList_0(ctx context.Context, marshaler runtime.Marsha
 
 }
 
-func request_Status_LogFile_0(ctx context.Context, marshaler runtime.Marshaler, client StatusClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Status_LogFile_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client StatusClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq LogFileRequest
 	var metadata runtime.ServerMetadata
 
@@ -306,7 +378,13 @@ var (
 	filter_Status_Logs_0 = &utilities.DoubleArray{Encoding: map[string]int{"node_id": 0}, Base: []int{1, 1, 0}, Check: []int{0, 1, 2}}
 )
 
-func request_Status_Logs_0(ctx context.Context, marshaler runtime.Marshaler, client StatusClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+func request_Status_Logs_0(
+	ctx context.Context,
+	marshaler runtime.Marshaler,
+	client StatusClient,
+	req *http.Request,
+	pathParams map[string]string,
+) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq LogsRequest
 	var metadata runtime.ServerMetadata
 
@@ -339,7 +417,9 @@ func request_Status_Logs_0(ctx context.Context, marshaler runtime.Marshaler, cli
 
 // RegisterStatusHandlerFromEndpoint is same as RegisterStatusHandler but
 // automatically dials to "endpoint" and closes the connection when "ctx" gets done.
-func RegisterStatusHandlerFromEndpoint(ctx context.Context, mux *runtime.ServeMux, endpoint string, opts []grpc.DialOption) (err error) {
+func RegisterStatusHandlerFromEndpoint(
+	ctx context.Context, mux *runtime.ServeMux, endpoint string, opts []grpc.DialOption,
+) (err error) {
 	conn, err := grpc.Dial(endpoint, opts...)
 	if err != nil {
 		return err

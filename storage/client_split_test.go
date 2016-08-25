@@ -652,7 +652,9 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 
 // fillRange writes keys with the given prefix and associated values
 // until bytes bytes have been written or the given range has split.
-func fillRange(store *storage.Store, rangeID roachpb.RangeID, prefix roachpb.Key, bytes int64, t *testing.T) {
+func fillRange(
+	store *storage.Store, rangeID roachpb.RangeID, prefix roachpb.Key, bytes int64, t *testing.T,
+) {
 	src := rand.New(rand.NewSource(0))
 	for {
 		var ms enginepb.MVCCStats
@@ -893,7 +895,9 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 // Nodes 1-5 are stopped; only node 0 is running.
 //
 // See https://github.com/cockroachdb/cockroach/issues/1644.
-func setupSplitSnapshotRace(t *testing.T) (mtc *multiTestContext, leftKey roachpb.Key, rightKey roachpb.Key) {
+func setupSplitSnapshotRace(
+	t *testing.T,
+) (mtc *multiTestContext, leftKey roachpb.Key, rightKey roachpb.Key) {
 	mtc = startMultiTestContext(t, 6)
 
 	leftKey = roachpb.Key("a")
@@ -1498,10 +1502,7 @@ func BenchmarkStoreRangeSplit(b *testing.B) {
 }
 
 func writeRandomDataToRange(
-	t testing.TB,
-	store *storage.Store,
-	rangeID roachpb.RangeID,
-	keyPrefix []byte,
+	t testing.TB, store *storage.Store, rangeID roachpb.RangeID, keyPrefix []byte,
 ) (midpoint []byte) {
 	src := rand.New(rand.NewSource(0))
 	for i := 0; i < 100; i++ {
@@ -1523,10 +1524,7 @@ func writeRandomDataToRange(
 }
 
 func writeRandomTimeSeriesDataToRange(
-	t testing.TB,
-	store *storage.Store,
-	rangeID roachpb.RangeID,
-	keyPrefix []byte,
+	t testing.TB, store *storage.Store, rangeID roachpb.RangeID, keyPrefix []byte,
 ) (midpoint []byte) {
 	src := rand.New(rand.NewSource(0))
 	r := ts.Resolution10s

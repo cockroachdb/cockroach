@@ -172,9 +172,7 @@ func updateTrigger(old, new *PostCommitTrigger) *PostCommitTrigger {
 	return old
 }
 
-func (r *Replica) computeChecksumTrigger(
-	ctx context.Context, args roachpb.ComputeChecksumRequest,
-) {
+func (r *Replica) computeChecksumTrigger(ctx context.Context, args roachpb.ComputeChecksumRequest) {
 	stopper := r.store.Stopper()
 	id := args.ChecksumID
 	now := timeutil.Now()
@@ -223,9 +221,7 @@ func (r *Replica) computeChecksumTrigger(
 	}
 }
 
-func (r *Replica) verifyChecksumTrigger(
-	ctx context.Context, args roachpb.VerifyChecksumRequest,
-) {
+func (r *Replica) verifyChecksumTrigger(ctx context.Context, args roachpb.VerifyChecksumRequest) {
 	id := args.ChecksumID
 	c, ok := r.getChecksum(ctx, id)
 	if !ok {
@@ -288,7 +284,7 @@ func (r *Replica) leasePostCommitTrigger(
 	ctx context.Context,
 	trigger PostCommitTrigger,
 	replicaID roachpb.ReplicaID,
-	prevLease *roachpb.Lease, // TODO(tschottdorf): could this not be nil?
+	prevLease *roachpb.Lease,
 ) {
 	if prevLease.Replica.StoreID != trigger.lease.Replica.StoreID {
 		// The lease is changing hands. Is this replica the new lease holder?
@@ -346,9 +342,7 @@ func (r *Replica) leasePostCommitTrigger(
 }
 
 func (r *Replica) handleTrigger(
-	ctx context.Context,
-	originReplica roachpb.ReplicaDescriptor,
-	trigger PostCommitTrigger,
+	ctx context.Context, originReplica roachpb.ReplicaDescriptor, trigger PostCommitTrigger,
 ) {
 	if trigger.noConcurrentReads {
 		r.readOnlyCmdMu.Lock()

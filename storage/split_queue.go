@@ -60,8 +60,9 @@ func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQue
 // shouldQueue determines whether a range should be queued for
 // splitting. This is true if the range is intersected by a zone config
 // prefix or if the range's size in bytes exceeds the limit for the zone.
-func (*splitQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
-	sysCfg config.SystemConfig) (shouldQ bool, priority float64) {
+func (*splitQueue) shouldQueue(
+	now hlc.Timestamp, rng *Replica, sysCfg config.SystemConfig,
+) (shouldQ bool, priority float64) {
 
 	desc := rng.Desc()
 	if len(sysCfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)) > 0 {
@@ -87,10 +88,7 @@ func (*splitQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
 
 // process synchronously invokes admin split for each proposed split key.
 func (sq *splitQueue) process(
-	ctx context.Context,
-	now hlc.Timestamp,
-	rng *Replica,
-	sysCfg config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, rng *Replica, sysCfg config.SystemConfig,
 ) error {
 	// First handle case of splitting due to zone config maps.
 	desc := rng.Desc()

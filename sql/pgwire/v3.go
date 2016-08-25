@@ -709,7 +709,9 @@ func (c *v3Conn) sendErrorWithCode(errCode string, errCtx sqlbase.SrcCtx, errToS
 	return c.wr.Flush()
 }
 
-func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, sendDescription bool, limit int) error {
+func (c *v3Conn) sendResponse(
+	results sql.ResultList, formatCodes []formatCode, sendDescription bool, limit int,
+) error {
 	if len(results) == 0 {
 		return c.sendCommandComplete(nil)
 	}

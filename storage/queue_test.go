@@ -44,15 +44,14 @@ type testQueueImpl struct {
 	err           error // always returns this error on process
 }
 
-func (tq *testQueueImpl) shouldQueue(now hlc.Timestamp, r *Replica, _ config.SystemConfig) (bool, float64) {
+func (tq *testQueueImpl) shouldQueue(
+	now hlc.Timestamp, r *Replica, _ config.SystemConfig,
+) (bool, float64) {
 	return tq.shouldQueueFn(now, r)
 }
 
 func (tq *testQueueImpl) process(
-	_ context.Context,
-	now hlc.Timestamp,
-	r *Replica,
-	_ config.SystemConfig,
+	_ context.Context, now hlc.Timestamp, r *Replica, _ config.SystemConfig,
 ) error {
 	atomic.AddInt32(&tq.processed, 1)
 	return tq.err

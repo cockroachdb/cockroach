@@ -43,7 +43,9 @@ type valuesNode struct {
 	tmpValues     parser.DTuple // Used to store temporary values.
 }
 
-func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Datum) (planNode, error) {
+func (p *planner) ValuesClause(
+	n *parser.ValuesClause, desiredTypes []parser.Datum,
+) (planNode, error) {
 	v := &valuesNode{
 		p:            p,
 		n:            n,

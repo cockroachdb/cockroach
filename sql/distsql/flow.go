@@ -79,11 +79,7 @@ type Flow struct {
 	status flowStatus
 }
 
-func newFlow(
-	flowCtx FlowCtx,
-	flowReg *flowRegistry,
-	simpleFlowConsumer RowReceiver,
-) *Flow {
+func newFlow(flowCtx FlowCtx, flowReg *flowRegistry, simpleFlowConsumer RowReceiver) *Flow {
 	flowCtx.Context = log.WithLogTagStr(flowCtx.Context, "f", flowCtx.id.Short())
 	return &Flow{
 		FlowCtx:            flowCtx,

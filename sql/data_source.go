@@ -217,9 +217,7 @@ func (p *planner) getVirtualDataSource(tn *parser.TableName) (planDataSource, bo
 // getDataSource builds a planDataSource from a single data source clause
 // (TableExpr) in a SelectClause.
 func (p *planner) getDataSource(
-	src parser.TableExpr,
-	hints *parser.IndexHints,
-	scanVisibility scanVisibility,
+	src parser.TableExpr, hints *parser.IndexHints, scanVisibility scanVisibility,
 ) (planDataSource, error) {
 	switch t := src.(type) {
 	case *parser.NormalizableTableName:
@@ -381,9 +379,7 @@ func (src *dataSourceInfo) expandStar(
 // specify a table name, all columns in the data source are
 // considered.  If no column is found, invalidColIdx is returned with
 // no error.
-func (p *planDataSource) findUnaliasedColumn(
-	c *parser.ColumnItem,
-) (colIdx int, err error) {
+func (p *planDataSource) findUnaliasedColumn(c *parser.ColumnItem) (colIdx int, err error) {
 	colName := sqlbase.NormalizeName(c.ColumnName)
 	tableName := sqlbase.NormalizeTableName(c.TableName)
 

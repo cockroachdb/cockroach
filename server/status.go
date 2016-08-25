@@ -110,9 +110,7 @@ func (s *statusServer) RegisterService(g *grpc.Server) {
 // RegisterGateway starts the gateway (i.e. reverse
 // proxy) that proxies HTTP requests to the appropriate gRPC endpoints.
 func (s *statusServer) RegisterGateway(
-	ctx context.Context,
-	mux *gwruntime.ServeMux,
-	conn *grpc.ClientConn,
+	ctx context.Context, mux *gwruntime.ServeMux, conn *grpc.ClientConn,
 ) error {
 	return serverpb.RegisterStatusHandler(ctx, mux, conn)
 }
@@ -144,7 +142,9 @@ func (s *statusServer) dialNode(nodeID roachpb.NodeID) (serverpb.StatusClient, e
 }
 
 // Gossip returns gossip network status.
-func (s *statusServer) Gossip(ctx context.Context, req *serverpb.GossipRequest) (*gossip.InfoStatus, error) {
+func (s *statusServer) Gossip(
+	ctx context.Context, req *serverpb.GossipRequest,
+) (*gossip.InfoStatus, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -162,7 +162,9 @@ func (s *statusServer) Gossip(ctx context.Context, req *serverpb.GossipRequest) 
 }
 
 // Details returns node details.
-func (s *statusServer) Details(ctx context.Context, req *serverpb.DetailsRequest) (*serverpb.DetailsResponse, error) {
+func (s *statusServer) Details(
+	ctx context.Context, req *serverpb.DetailsRequest,
+) (*serverpb.DetailsResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -185,7 +187,9 @@ func (s *statusServer) Details(ctx context.Context, req *serverpb.DetailsRequest
 }
 
 // LogFilesList returns a list of available log files.
-func (s *statusServer) LogFilesList(ctx context.Context, req *serverpb.LogFilesListRequest) (*serverpb.LogFilesListResponse, error) {
+func (s *statusServer) LogFilesList(
+	ctx context.Context, req *serverpb.LogFilesListRequest,
+) (*serverpb.LogFilesListResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -206,7 +210,9 @@ func (s *statusServer) LogFilesList(ctx context.Context, req *serverpb.LogFilesL
 }
 
 // LogFile returns a single log file.
-func (s *statusServer) LogFile(ctx context.Context, req *serverpb.LogFileRequest) (*serverpb.LogEntriesResponse, error) {
+func (s *statusServer) LogFile(
+	ctx context.Context, req *serverpb.LogFileRequest,
+) (*serverpb.LogEntriesResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -270,7 +276,9 @@ func parseInt64WithDefault(s string, defaultValue int64) (int64, error) {
 //   entries. Defaults to defaultMaxLogEntries.
 // * "level" query parameter filters the log entries to be those of the
 //   corresponding severity level or worse. Defaults to "info".
-func (s *statusServer) Logs(ctx context.Context, req *serverpb.LogsRequest) (*serverpb.LogEntriesResponse, error) {
+func (s *statusServer) Logs(
+	ctx context.Context, req *serverpb.LogsRequest,
+) (*serverpb.LogEntriesResponse, error) {
 	log.Flush()
 
 	var sev log.Severity
@@ -327,7 +335,9 @@ func (s *statusServer) Logs(ctx context.Context, req *serverpb.LogsRequest) (*se
 // that this one allows querying by NodeID.
 //
 // Stacks handles returns goroutine stack traces.
-func (s *statusServer) Stacks(ctx context.Context, req *serverpb.StacksRequest) (*serverpb.JSONResponse, error) {
+func (s *statusServer) Stacks(
+	ctx context.Context, req *serverpb.StacksRequest,
+) (*serverpb.JSONResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -356,7 +366,9 @@ func (s *statusServer) Stacks(ctx context.Context, req *serverpb.StacksRequest) 
 }
 
 // Nodes returns all node statuses.
-func (s *statusServer) Nodes(ctx context.Context, req *serverpb.NodesRequest) (*serverpb.NodesResponse, error) {
+func (s *statusServer) Nodes(
+	ctx context.Context, req *serverpb.NodesRequest,
+) (*serverpb.NodesResponse, error) {
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
@@ -381,7 +393,9 @@ func (s *statusServer) Nodes(ctx context.Context, req *serverpb.NodesRequest) (*
 }
 
 // handleNodeStatus handles GET requests for a single node's status.
-func (s *statusServer) Node(ctx context.Context, req *serverpb.NodeRequest) (*status.NodeStatus, error) {
+func (s *statusServer) Node(
+	ctx context.Context, req *serverpb.NodeRequest,
+) (*status.NodeStatus, error) {
 	nodeID, _, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -405,7 +419,9 @@ func (s *statusServer) Node(ctx context.Context, req *serverpb.NodeRequest) (*st
 }
 
 // Metrics return metrics information for the server specified.
-func (s *statusServer) Metrics(ctx context.Context, req *serverpb.MetricsRequest) (*serverpb.JSONResponse, error) {
+func (s *statusServer) Metrics(
+	ctx context.Context, req *serverpb.MetricsRequest,
+) (*serverpb.JSONResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -422,7 +438,9 @@ func (s *statusServer) Metrics(ctx context.Context, req *serverpb.MetricsRequest
 }
 
 // RaftDebug returns raft debug information for all known nodes.
-func (s *statusServer) RaftDebug(ctx context.Context, _ *serverpb.RaftDebugRequest) (*serverpb.RaftDebugResponse, error) {
+func (s *statusServer) RaftDebug(
+	ctx context.Context, _ *serverpb.RaftDebugRequest,
+) (*serverpb.RaftDebugResponse, error) {
 	nodes, err := s.Nodes(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -525,7 +543,9 @@ func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request) {
 }
 
 // Ranges returns range info for the server specified
-func (s *statusServer) Ranges(ctx context.Context, req *serverpb.RangesRequest) (*serverpb.RangesResponse, error) {
+func (s *statusServer) Ranges(
+	ctx context.Context, req *serverpb.RangesRequest,
+) (*serverpb.RangesResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -582,9 +602,9 @@ func (s *statusServer) Ranges(ctx context.Context, req *serverpb.RangesRequest) 
 
 // SpanStats requests the total statistics stored on a node for a given key
 // span, which may include multiple ranges.
-func (s *statusServer) SpanStats(ctx context.Context, req *serverpb.SpanStatsRequest) (
-	*serverpb.SpanStatsResponse, error,
-) {
+func (s *statusServer) SpanStats(
+	ctx context.Context, req *serverpb.SpanStatsRequest,
+) (*serverpb.SpanStatsResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeID)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())

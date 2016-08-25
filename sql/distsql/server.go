@@ -63,10 +63,7 @@ func NewServer(cfg ServerConfig) *ServerImpl {
 	return ds
 }
 
-func (ds *ServerImpl) setupTxn(
-	ctx context.Context,
-	txnProto *roachpb.Transaction,
-) *client.Txn {
+func (ds *ServerImpl) setupTxn(ctx context.Context, txnProto *roachpb.Transaction) *client.Txn {
 	txn := client.NewTxn(ctx, *ds.DB)
 	// TODO(radu): we should sanity check some of these fields
 	txn.Proto = *txnProto
@@ -121,9 +118,9 @@ func (ds *ServerImpl) RunSimpleFlow(
 }
 
 // SetupFlow is part of the DistSQLServer interface.
-func (ds *ServerImpl) SetupFlow(ctx context.Context, req *SetupFlowRequest) (
-	*SimpleResponse, error,
-) {
+func (ds *ServerImpl) SetupFlow(
+	ctx context.Context, req *SetupFlowRequest,
+) (*SimpleResponse, error) {
 	// Note: ctx will be canceled when the RPC completes, so we can't associate
 	// it with the transaction.
 

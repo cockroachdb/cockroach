@@ -419,10 +419,7 @@ type multiTestContextKVTransport struct {
 }
 
 func (m *multiTestContext) kvTransportFactory(
-	_ kv.SendOptions,
-	_ *rpc.Context,
-	replicas kv.ReplicaSlice,
-	args roachpb.BatchRequest,
+	_ kv.SendOptions, _ *rpc.Context, replicas kv.ReplicaSlice, args roachpb.BatchRequest,
 ) (kv.Transport, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &multiTestContextKVTransport{

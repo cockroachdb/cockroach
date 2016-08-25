@@ -59,8 +59,9 @@ import (
 // gossip instance, KV database and a node using the specified slice
 // of engines. The server, clock and node are returned. If gossipBS is
 // not nil, the gossip bootstrap address is set to gossipBS.
-func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
-	*grpc.Server, net.Addr, *hlc.Clock, *Node, *stop.Stopper) {
+func createTestNode(
+	addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T,
+) (*grpc.Server, net.Addr, *hlc.Clock, *Node, *stop.Stopper) {
 	ctx := storage.StoreContext{}
 
 	stopper := stop.NewStopper()
@@ -107,8 +108,9 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 }
 
 // createAndStartTestNode creates a new test node and starts it. The server and node are returned.
-func createAndStartTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
-	*grpc.Server, net.Addr, *Node, *stop.Stopper) {
+func createAndStartTestNode(
+	addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T,
+) (*grpc.Server, net.Addr, *Node, *stop.Stopper) {
 	grpcServer, addr, _, node, stopper := createTestNode(addr, engines, gossipBS, t)
 	if err := node.start(context.Background(), addr, engines, roachpb.Attributes{}); err != nil {
 		t.Fatal(err)
@@ -319,7 +321,9 @@ func TestCorruptedClusterID(t *testing.T) {
 // the bytes and counts for Live, Key and Val are at least the expected value.
 // And that UpdatedAt has increased.
 // The latest actual stats are returned.
-func compareNodeStatus(t *testing.T, ts *TestServer, expectedNodeStatus *status.NodeStatus, testNumber int) *status.NodeStatus {
+func compareNodeStatus(
+	t *testing.T, ts *TestServer, expectedNodeStatus *status.NodeStatus, testNumber int,
+) *status.NodeStatus {
 	// ========================================
 	// Read NodeStatus from server and validate top-level fields.
 	// ========================================

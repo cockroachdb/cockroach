@@ -28,9 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func mustGetHosts(t *testing.T, c cluster.Cluster) (
-	[]iptables.IP, map[iptables.IP]int,
-) {
+func mustGetHosts(t *testing.T, c cluster.Cluster) ([]iptables.IP, map[iptables.IP]int) {
 	var addrs []iptables.IP
 	addrsToNode := make(map[iptables.IP]int)
 	for i := 0; i < c.NumNodes(); i++ {

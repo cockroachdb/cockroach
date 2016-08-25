@@ -117,8 +117,9 @@ func TestMergeAndSortSpans(t *testing.T) {
 	}
 }
 
-func makeTestIndex(t *testing.T, columns []string, dirs []encoding.Direction) (
-	*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor) {
+func makeTestIndex(
+	t *testing.T, columns []string, dirs []encoding.Direction,
+) (*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor) {
 	desc := testTableDesc()
 	desc.Indexes = append(desc.Indexes, sqlbase.IndexDescriptor{
 		Name:        "foo",
@@ -145,7 +146,9 @@ func makeTestIndex(t *testing.T, columns []string, dirs []encoding.Direction) (
 // makeTestIndexFromStr creates a test index from a string that enumerates the
 // columns, separated by commas. Each column has an optional '-' at the end if
 // it is descending.
-func makeTestIndexFromStr(t *testing.T, columnsStr string) (*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor) {
+func makeTestIndexFromStr(
+	t *testing.T, columnsStr string,
+) (*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor) {
 	columns := strings.Split(columnsStr, ",")
 	dirs := make([]encoding.Direction, len(columns))
 	for i, c := range columns {
@@ -159,8 +162,9 @@ func makeTestIndexFromStr(t *testing.T, columnsStr string) (*sqlbase.TableDescri
 	return makeTestIndex(t, columns, dirs)
 }
 
-func makeConstraints(t *testing.T, sql string, desc *sqlbase.TableDescriptor,
-	index *sqlbase.IndexDescriptor) (orIndexConstraints, parser.TypedExpr) {
+func makeConstraints(
+	t *testing.T, sql string, desc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
+) (orIndexConstraints, parser.TypedExpr) {
 	expr, _ := parseAndNormalizeExpr(t, sql)
 	exprs, equiv := analyzeExpr(expr)
 

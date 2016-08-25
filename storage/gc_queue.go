@@ -113,8 +113,9 @@ type resolveFunc func([]roachpb.Intent, bool, bool) error
 // collection, and if so, at what priority. Returns true for shouldQ
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
-func (*gcQueue) shouldQueue(now hlc.Timestamp, repl *Replica,
-	sysCfg config.SystemConfig) (shouldQ bool, priority float64) {
+func (*gcQueue) shouldQueue(
+	now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
+) (shouldQ bool, priority float64) {
 	desc := repl.Desc()
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
@@ -287,10 +288,7 @@ func processAbortCache(
 // 7) push these transactions (again, recreating txn entries).
 // 8) send a GCRequest.
 func (gcq *gcQueue) process(
-	ctx context.Context,
-	now hlc.Timestamp,
-	repl *Replica,
-	sysCfg config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
 ) error {
 	snap := repl.store.Engine().NewSnapshot()
 	desc := repl.Desc()
@@ -577,8 +575,7 @@ func (*gcQueue) purgatoryChan() <-chan struct{} {
 
 // pushTxn attempts to abort the txn via push. The wait group is signaled on
 // completion.
-func pushTxn(db *client.DB, now hlc.Timestamp, txn *roachpb.Transaction,
-	typ roachpb.PushTxnType) {
+func pushTxn(db *client.DB, now hlc.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
 
 	// Attempt to push the transaction which created the intent.
 	pushArgs := &roachpb.PushTxnRequest{

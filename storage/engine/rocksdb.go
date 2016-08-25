@@ -297,10 +297,7 @@ func NewRocksDB(
 }
 
 func newMemRocksDB(
-	attrs roachpb.Attributes,
-	cache RocksDBCache,
-	memtableBudget int64,
-	stopper *stop.Stopper,
+	attrs roachpb.Attributes, cache RocksDBCache, memtableBudget int64, stopper *stop.Stopper,
 ) *RocksDB {
 	return &RocksDB{
 		attrs: attrs,
@@ -458,8 +455,9 @@ func (r *RocksDB) Get(key MVCCKey) ([]byte, error) {
 }
 
 // GetProto fetches the value at the specified key and unmarshals it.
-func (r *RocksDB) GetProto(key MVCCKey, msg proto.Message) (
-	ok bool, keyBytes, valBytes int64, err error) {
+func (r *RocksDB) GetProto(
+	key MVCCKey, msg proto.Message,
+) (ok bool, keyBytes, valBytes int64, err error) {
 	return dbGetProto(r.rdb, key, msg)
 }
 
@@ -667,8 +665,9 @@ func (r *rocksDBSnapshot) Get(key MVCCKey) ([]byte, error) {
 	return dbGet(r.handle, key)
 }
 
-func (r *rocksDBSnapshot) GetProto(key MVCCKey, msg proto.Message) (
-	ok bool, keyBytes, valBytes int64, err error) {
+func (r *rocksDBSnapshot) GetProto(
+	key MVCCKey, msg proto.Message,
+) (ok bool, keyBytes, valBytes int64, err error) {
 	return dbGetProto(r.handle, key, msg)
 }
 
@@ -738,8 +737,9 @@ func (r *distinctBatch) Get(key MVCCKey) ([]byte, error) {
 	return dbGet(r.batch, key)
 }
 
-func (r *distinctBatch) GetProto(key MVCCKey, msg proto.Message) (
-	ok bool, keyBytes, valBytes int64, err error) {
+func (r *distinctBatch) GetProto(
+	key MVCCKey, msg proto.Message,
+) (ok bool, keyBytes, valBytes int64, err error) {
 	return dbGetProto(r.batch, key, msg)
 }
 
@@ -821,7 +821,9 @@ func (r *rocksDBBatchIterator) PrevKey() {
 	r.iter.PrevKey()
 }
 
-func (r *rocksDBBatchIterator) ComputeStats(start, end MVCCKey, nowNanos int64) (enginepb.MVCCStats, error) {
+func (r *rocksDBBatchIterator) ComputeStats(
+	start, end MVCCKey, nowNanos int64,
+) (enginepb.MVCCStats, error) {
 	r.batch.flushMutations()
 	return r.iter.ComputeStats(start, end, nowNanos)
 }
@@ -928,8 +930,9 @@ func (r *rocksDBBatch) Get(key MVCCKey) ([]byte, error) {
 	return dbGet(r.batch, key)
 }
 
-func (r *rocksDBBatch) GetProto(key MVCCKey, msg proto.Message) (
-	ok bool, keyBytes, valBytes int64, err error) {
+func (r *rocksDBBatch) GetProto(
+	key MVCCKey, msg proto.Message,
+) (ok bool, keyBytes, valBytes int64, err error) {
 	if r.distinctOpen {
 		panic("distinct batch open")
 	}
@@ -1191,7 +1194,9 @@ func (r *rocksDBIterator) setState(state C.DBIterState) {
 	r.value = state.value
 }
 
-func (r *rocksDBIterator) ComputeStats(start, end MVCCKey, nowNanos int64) (enginepb.MVCCStats, error) {
+func (r *rocksDBIterator) ComputeStats(
+	start, end MVCCKey, nowNanos int64,
+) (enginepb.MVCCStats, error) {
 	result := C.MVCCComputeStats(r.iter, goToCKey(start), goToCKey(end), C.int64_t(nowNanos))
 	ms := enginepb.MVCCStats{}
 	if err := statusToError(result.status); err != nil {
@@ -1371,8 +1376,9 @@ func dbGet(rdb *C.DBEngine, key MVCCKey) ([]byte, error) {
 	return cStringToGoBytes(result), nil
 }
 
-func dbGetProto(rdb *C.DBEngine, key MVCCKey,
-	msg proto.Message) (ok bool, keyBytes, valBytes int64, err error) {
+func dbGetProto(
+	rdb *C.DBEngine, key MVCCKey, msg proto.Message,
+) (ok bool, keyBytes, valBytes int64, err error) {
 	if len(key.Key) == 0 {
 		err = emptyKeyError()
 		return
@@ -1406,8 +1412,9 @@ func dbClear(rdb *C.DBEngine, key MVCCKey) error {
 	return statusToError(C.DBDelete(rdb, goToCKey(key)))
 }
 
-func dbIterate(rdb *C.DBEngine, engine Reader, start, end MVCCKey,
-	f func(MVCCKeyValue) (bool, error)) error {
+func dbIterate(
+	rdb *C.DBEngine, engine Reader, start, end MVCCKey, f func(MVCCKeyValue) (bool, error),
+) error {
 	if !start.Less(end) {
 		return nil
 	}
@@ -1472,7 +1479,9 @@ func (fr *RocksDBSstFileReader) AddFile(path string) error {
 
 // Iterate iterates over the keys between start inclusive and end
 // exclusive, invoking f() on each key/value pair.
-func (fr *RocksDBSstFileReader) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
+func (fr *RocksDBSstFileReader) Iterate(
+	start, end MVCCKey, f func(MVCCKeyValue) (bool, error),
+) error {
 	if fr.rocksDB == nil {
 		return errors.New("cannot call Iterate on a closed reader")
 	}

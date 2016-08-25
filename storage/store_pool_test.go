@@ -58,7 +58,9 @@ var uniqueStore = []*roachpb.StoreDescriptor{
 
 // createTestStorePool creates a stopper, gossip and storePool for use in
 // tests. Stopper must be stopped by the caller.
-func createTestStorePool(timeUntilStoreDead time.Duration) (*stop.Stopper, *gossip.Gossip, *hlc.ManualClock, *StorePool) {
+func createTestStorePool(
+	timeUntilStoreDead time.Duration,
+) (*stop.Stopper, *gossip.Gossip, *hlc.ManualClock, *StorePool) {
 	stopper := stop.NewStopper()
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
@@ -449,11 +451,15 @@ type fakeStoresServer struct {
 
 var _ StoresServer = fakeStoresServer{}
 
-func (f fakeStoresServer) PollFrozen(_ context.Context, _ *PollFrozenRequest) (*PollFrozenResponse, error) {
+func (f fakeStoresServer) PollFrozen(
+	_ context.Context, _ *PollFrozenRequest,
+) (*PollFrozenResponse, error) {
 	panic("unimplemented")
 }
 
-func (f fakeStoresServer) Reserve(_ context.Context, _ *ReservationRequest) (*ReservationResponse, error) {
+func (f fakeStoresServer) Reserve(
+	_ context.Context, _ *ReservationRequest,
+) (*ReservationResponse, error) {
 	return &ReservationResponse{Reserved: f.reservationResponse}, f.reservationErr
 }
 

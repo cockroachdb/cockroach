@@ -185,7 +185,9 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 	}
 }
 
-func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) error, receiverFn func() (*Request, error)) error {
+func (s *server) gossipReceiver(
+	argsPtr **Request, senderFn func(*Response) error, receiverFn func() (*Request, error),
+) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

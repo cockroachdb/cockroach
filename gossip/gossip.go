@@ -195,7 +195,13 @@ type Gossip struct {
 }
 
 // New creates an instance of a gossip node.
-func New(rpcContext *rpc.Context, grpcServer *grpc.Server, resolvers []resolver.Resolver, stopper *stop.Stopper, registry *metric.Registry) *Gossip {
+func New(
+	rpcContext *rpc.Context,
+	grpcServer *grpc.Server,
+	resolvers []resolver.Resolver,
+	stopper *stop.Stopper,
+	registry *metric.Registry,
+) *Gossip {
 	g := &Gossip{
 		Connected:         make(chan struct{}),
 		rpcContext:        rpcContext,

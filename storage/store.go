@@ -105,11 +105,7 @@ func TestStoreContext() StoreContext {
 }
 
 func newRaftConfig(
-	strg raft.Storage,
-	id uint64,
-	appliedIndex uint64,
-	storeCtx StoreContext,
-	logger raft.Logger,
+	strg raft.Storage, id uint64, appliedIndex uint64, storeCtx StoreContext, logger raft.Logger,
 ) *raft.Config {
 	return &raft.Config{
 		ID:            id,
@@ -707,8 +703,8 @@ func (s *Store) IsStarted() bool {
 // IterateRangeDescriptors calls the provided function with each descriptor
 // from the provided Engine. The return values of this method and fn have
 // semantics similar to engine.MVCCIterate.
-func IterateRangeDescriptors(ctx context.Context,
-	eng engine.Reader, fn func(desc roachpb.RangeDescriptor) (bool, error),
+func IterateRangeDescriptors(
+	ctx context.Context, eng engine.Reader, fn func(desc roachpb.RangeDescriptor) (bool, error),
 ) error {
 	log.Trace(ctx, "beginning range descriptor iteration")
 	// Iterator over all range-local key-based data.
@@ -1411,10 +1407,7 @@ func (s *Store) NewRangeDescriptor(
 // TODO(tschottdorf): Want to merge this with SplitRange, but some legacy
 // testing code calls SplitRange directly.
 func splitTriggerPostCommit(
-	ctx context.Context,
-	deltaMS enginepb.MVCCStats,
-	split *roachpb.SplitTrigger,
-	r *Replica,
+	ctx context.Context, deltaMS enginepb.MVCCStats, split *roachpb.SplitTrigger, r *Replica,
 ) {
 	// Create the new Replica representing the right side of the split.
 	// Our error handling options at this point are very limited, but
@@ -1583,7 +1576,9 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 // merge operation will fail if the two ranges are not collocated on the same
 // store. Must be called (perhaps indirectly) from the processRaft goroutine,
 // which holds the processRaftMu lock.
-func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, subsumedRangeID roachpb.RangeID) error {
+func (s *Store) MergeRange(
+	subsumingRng *Replica, updatedEndKey roachpb.RKey, subsumedRangeID roachpb.RangeID,
+) error {
 	subsumingDesc := subsumingRng.Desc()
 
 	if !subsumingDesc.EndKey.Less(updatedEndKey) {
@@ -1709,7 +1704,9 @@ func (s *Store) RemoveReplica(rep *Replica, origDesc roachpb.RangeDescriptor, de
 // removeReplicaImpl is the implementation of RemoveReplica, which is
 // sometimes called directly when the necessary lock is already held.
 // It requires that s.processRaftMu is held and that s.mu is not held.
-func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor, destroy bool) error {
+func (s *Store) removeReplicaImpl(
+	rep *Replica, origDesc roachpb.RangeDescriptor, destroy bool,
+) error {
 	desc := rep.Desc()
 	if repDesc, ok := desc.GetReplicaDescriptor(s.StoreID()); ok && repDesc.ReplicaID >= origDesc.NextReplicaID {
 		return errors.Errorf("cannot remove replica %s; replica ID has changed (%s >= %s)",
@@ -1917,7 +1914,9 @@ func (s *Store) ReplicaCount() int {
 // instance due to the timestamp cache or finding a committed value in the path
 // of one of its writes), the response will have a transaction set which should
 // be used to update the client transaction.
-func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
+func (s *Store) Send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// Attach any log tags from the store to the context (which normally
 	// comes from gRPC).
 	ctx = s.logContext(ctx)
@@ -2136,7 +2135,9 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 //
 // The supplied transaction is updated with the results of the
 // "query" push if possible.
-func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now hlc.Timestamp) (*roachpb.Transaction, *roachpb.Error) {
+func (s *Store) maybeUpdateTransaction(
+	txn *roachpb.Transaction, now hlc.Timestamp,
+) (*roachpb.Transaction, *roachpb.Error) {
 	// Attempt to push the transaction which created the intent.
 	b := &client.Batch{}
 	b.AddRawRequest(&roachpb.PushTxnRequest{
@@ -2205,7 +2206,8 @@ func checkReplicaTooOld(r *Replica, fromReplicaID roachpb.ReplicaID) *roachpb.Er
 
 // HandleSnapshot reads an incoming streaming snapshot and applies it if
 // possible.
-func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream MultiRaft_RaftSnapshotServer,
+func (s *Store) HandleSnapshot(
+	header *SnapshotRequest_Header, stream MultiRaft_RaftSnapshotServer,
 ) error {
 	var addedPlaceholder, appliedSnapshot bool
 	if err := func() error {
@@ -2283,7 +2285,10 @@ func (s *Store) HandleSnapshot(header *SnapshotRequest_Header, stream MultiRaft_
 // addedPlaceholder indicates that a placeholder for this snapshot needs
 // to be removed once it is applied.
 func (s *Store) applySnapshot(
-	ctx context.Context, header *SnapshotRequest_Header, batches [][]byte, logEntries [][]byte,
+	ctx context.Context,
+	header *SnapshotRequest_Header,
+	batches [][]byte,
+	logEntries [][]byte,
 	addedPlaceholder bool,
 ) *roachpb.Error {
 	s.processRaftMu.Lock()
@@ -2818,7 +2823,11 @@ func (s *Store) processRaft() {
 // getOrCreateReplicaLocked returns a replica for the given RangeID,
 // creating an uninitialized replica if necessary. The caller must
 // hold the store's lock.
-func (s *Store) getOrCreateReplicaLocked(rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, creatingReplica roachpb.ReplicaDescriptor) (*Replica, error) {
+func (s *Store) getOrCreateReplicaLocked(
+	rangeID roachpb.RangeID,
+	replicaID roachpb.ReplicaID,
+	creatingReplica roachpb.ReplicaDescriptor,
+) (*Replica, error) {
 	r, ok := s.mu.replicas[rangeID]
 	if ok {
 		if err := r.setReplicaID(replicaID); err != nil {
@@ -2864,7 +2873,9 @@ func (s *Store) getOrCreateReplicaLocked(rangeID roachpb.RangeID, replicaID roac
 // this store's replica (i.e. the snapshot is not from an older incarnation of
 // the replica) and a placeholder can be added to the replicasByKey map (if
 // necessary). If a placeholder is required, it is returned as the first value.
-func (s *Store) canApplySnapshotLocked(rangeDescriptor *roachpb.RangeDescriptor) (*ReplicaPlaceholder, error) {
+func (s *Store) canApplySnapshotLocked(
+	rangeDescriptor *roachpb.RangeDescriptor,
+) (*ReplicaPlaceholder, error) {
 	if r, ok := s.mu.replicas[rangeDescriptor.RangeID]; ok && r.IsInitialized() {
 		// We have the range and it's initialized, so let the snapshot through.
 		return nil, nil
@@ -2899,8 +2910,12 @@ func (s *Store) canApplySnapshotLocked(rangeDescriptor *roachpb.RangeDescriptor)
 // TODO(bram): #4564 It may be appropriate to compute these statistics while
 // scanning ranges. An ideal solution would be to create incremental events
 // whenever availability changes.
-func (s *Store) computeReplicationStatus(now int64) (
-	leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount int64, err error) {
+func (s *Store) computeReplicationStatus(
+	now int64,
+) (
+	leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount int64,
+	err error,
+) {
 	// Load the system config.
 	cfg, ok := s.Gossip().GetSystemConfig()
 	if !ok {

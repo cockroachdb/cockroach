@@ -104,7 +104,9 @@ func setupMultipleRanges(
 var errInfo = testutils.MakeCaller(3, 2)
 
 // checks the keys returned from a Scan/ReverseScan.
-func checkSpanResults(t *testing.T, spans [][]string, results []client.Result, expResults [][]string, expCount int) {
+func checkSpanResults(
+	t *testing.T, spans [][]string, results []client.Result, expResults [][]string, expCount int,
+) {
 	if len(expResults) != len(results) {
 		t.Fatalf("only got %d results, wanted %d", len(expResults), len(results))
 	}
@@ -135,7 +137,9 @@ func checkSpanResults(t *testing.T, spans [][]string, results []client.Result, e
 }
 
 // checks ResumeSpan returned in a ScanResponse.
-func checkResumeSpanScanResults(t *testing.T, spans [][]string, results []client.Result, expResults [][]string, expCount int) {
+func checkResumeSpanScanResults(
+	t *testing.T, spans [][]string, results []client.Result, expResults [][]string, expCount int,
+) {
 	for i, res := range results {
 		rowLen := len(res.Rows)
 		// Check ResumeSpan when request has been processed.
@@ -167,7 +171,9 @@ func checkResumeSpanScanResults(t *testing.T, spans [][]string, results []client
 }
 
 // check ResumeSpan returned in a ReverseScanResponse.
-func checkResumeSpanReverseScanResults(t *testing.T, spans [][]string, results []client.Result, expResults [][]string, expCount int) {
+func checkResumeSpanReverseScanResults(
+	t *testing.T, spans [][]string, results []client.Result, expResults [][]string, expCount int,
+) {
 	for i, res := range results {
 		// Check ResumeSpan when request has been processed.
 		rowLen := len(res.Rows)
@@ -197,13 +203,17 @@ func checkResumeSpanReverseScanResults(t *testing.T, spans [][]string, results [
 }
 
 // check an entire scan result including the ResumeSpan.
-func checkScanResults(t *testing.T, spans [][]string, results []client.Result, expResults [][]string, expCount int) {
+func checkScanResults(
+	t *testing.T, spans [][]string, results []client.Result, expResults [][]string, expCount int,
+) {
 	checkSpanResults(t, spans, results, expResults, expCount)
 	checkResumeSpanScanResults(t, spans, results, expResults, expCount)
 }
 
 // check an entire reverse scan result including the ResumeSpan.
-func checkReverseScanResults(t *testing.T, spans [][]string, results []client.Result, expResults [][]string, expCount int) {
+func checkReverseScanResults(
+	t *testing.T, spans [][]string, results []client.Result, expResults [][]string, expCount int,
+) {
 	checkSpanResults(t, spans, results, expResults, expCount)
 	checkResumeSpanReverseScanResults(t, spans, results, expResults, expCount)
 }
@@ -418,7 +428,9 @@ func TestMultiRangeBoundedBatchScanSortedOverlapping(t *testing.T) {
 }
 
 // check ResumeSpan in the DelRange results.
-func checkResumeSpanDelRangeResults(t *testing.T, spans [][]string, results []client.Result, expResults [][]string, expCount int) {
+func checkResumeSpanDelRangeResults(
+	t *testing.T, spans [][]string, results []client.Result, expResults [][]string, expCount int,
+) {
 	for i, res := range results {
 		// Check ResumeSpan when request has been processed.
 		rowLen := len(res.Keys)

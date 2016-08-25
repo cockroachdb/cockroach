@@ -93,7 +93,9 @@ func addHistory(ins *readline.Instance, line string) {
 // by the user at the prompt and decides what to do: either
 // run a client-side command, print some help or continue with
 // a regular query.
-func handleInputLine(ins *readline.Instance, stmt *[]string, line string, syntax parser.Syntax) (status int, hasSet bool) {
+func handleInputLine(
+	ins *readline.Instance, stmt *[]string, line string, syntax parser.Syntax,
+) (status int, hasSet bool) {
 	if len(*stmt) == 0 {
 		// Special case: first line of multi-line statement.
 		// In this case ignore empty lines, and recognize "help" specially.

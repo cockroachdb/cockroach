@@ -1156,7 +1156,9 @@ func (desc *TableDescriptor) RenameColumnNormalized(colID ColumnID, newColName s
 
 // FindActiveColumnsByNames finds all requested columns (in the requested order)
 // or returns an error.
-func (desc *TableDescriptor) FindActiveColumnsByNames(names parser.NameList) ([]ColumnDescriptor, error) {
+func (desc *TableDescriptor) FindActiveColumnsByNames(
+	names parser.NameList,
+) ([]ColumnDescriptor, error) {
 	cols := make([]ColumnDescriptor, len(names))
 	for i := range names {
 		c, err := desc.FindActiveColumnByName(names[i])
@@ -1171,7 +1173,9 @@ func (desc *TableDescriptor) FindActiveColumnsByNames(names parser.NameList) ([]
 // FindColumnByNormalizedName finds the column with the specified name. It returns
 // DescriptorStatus for the column, and an index into either the columns
 // (status == DescriptorActive) or mutations (status == DescriptorIncomplete).
-func (desc *TableDescriptor) FindColumnByNormalizedName(normName string) (DescriptorStatus, int, error) {
+func (desc *TableDescriptor) FindColumnByNormalizedName(
+	normName string,
+) (DescriptorStatus, int, error) {
 	for i, c := range desc.Columns {
 		if ReNormalizeName(c.Name) == normName {
 			return DescriptorActive, i, nil
@@ -1193,7 +1197,9 @@ func (desc *TableDescriptor) FindColumnByName(name parser.Name) (DescriptorStatu
 }
 
 // FindActiveColumnByNormalizedName finds an active column with the specified normalized name.
-func (desc *TableDescriptor) FindActiveColumnByNormalizedName(normName string) (ColumnDescriptor, error) {
+func (desc *TableDescriptor) FindActiveColumnByNormalizedName(
+	normName string,
+) (ColumnDescriptor, error) {
 	for _, c := range desc.Columns {
 		if ReNormalizeName(c.Name) == normName {
 			return c, nil
@@ -1247,7 +1253,9 @@ func (desc *TableDescriptor) FindFamilyByID(id FamilyID) (*ColumnFamilyDescripto
 // FindIndexByNormalizedName finds the index with the specified name. It returns
 // DescriptorStatus for the index, and an index into either the indexes
 // (status == DescriptorActive) or mutations (status == DescriptorIncomplete).
-func (desc *TableDescriptor) FindIndexByNormalizedName(normName string) (DescriptorStatus, int, error) {
+func (desc *TableDescriptor) FindIndexByNormalizedName(
+	normName string,
+) (DescriptorStatus, int, error) {
 	for i, idx := range desc.Indexes {
 		if ReNormalizeName(idx.Name) == normName {
 			return DescriptorActive, i, nil
@@ -1327,13 +1335,17 @@ func (desc *TableDescriptor) MakeMutationComplete(m DescriptorMutation) {
 }
 
 // AddColumnMutation adds a column mutation to desc.Mutations.
-func (desc *TableDescriptor) AddColumnMutation(c ColumnDescriptor, direction DescriptorMutation_Direction) {
+func (desc *TableDescriptor) AddColumnMutation(
+	c ColumnDescriptor, direction DescriptorMutation_Direction,
+) {
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Column{Column: &c}, Direction: direction}
 	desc.addMutation(m)
 }
 
 // AddIndexMutation adds an index mutation to desc.Mutations.
-func (desc *TableDescriptor) AddIndexMutation(idx IndexDescriptor, direction DescriptorMutation_Direction) {
+func (desc *TableDescriptor) AddIndexMutation(
+	idx IndexDescriptor, direction DescriptorMutation_Direction,
+) {
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Index{Index: &idx}, Direction: direction}
 	desc.addMutation(m)
 }

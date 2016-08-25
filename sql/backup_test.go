@@ -73,11 +73,7 @@ func testingTempDir(t testing.TB, depth int) (string, func()) {
 // setupBackupRestoreDB creates a table and inserts `count` rows. It then splits
 // the kv ranges for the table as evenly as possible into `rangeCount` ranges.
 func setupBackupRestoreDB(
-	t testing.TB,
-	ctx context.Context,
-	tc *testcluster.TestCluster,
-	count int,
-	rangeCount int,
+	t testing.TB, ctx context.Context, tc *testcluster.TestCluster, count int, rangeCount int,
 ) []*roachpb.RangeDescriptor {
 	rng, _ := randutil.NewPseudoRand()
 

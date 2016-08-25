@@ -221,9 +221,7 @@ func runQuery(conn *sqlConn, fn queryFunc, pretty bool) ([]string, [][]string, s
 
 // runQueryAndFormatResults takes a 'query' with optional 'parameters'.
 // It runs the sql query and writes output to 'w'.
-func runQueryAndFormatResults(
-	conn *sqlConn, w io.Writer, fn queryFunc, pretty bool,
-) error {
+func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc, pretty bool) error {
 	for {
 		cols, allRows, result, err := runQuery(conn, fn, pretty)
 		if err != nil {
@@ -303,9 +301,7 @@ func expandTabsAndNewLines(s string) string {
 
 // printQueryOutput takes a list of column names and a list of row contents
 // writes a pretty table to 'w', or "OK" if empty.
-func printQueryOutput(
-	w io.Writer, cols []string, allRows [][]string, tag string, pretty bool,
-) {
+func printQueryOutput(w io.Writer, cols []string, allRows [][]string, tag string, pretty bool) {
 	if len(cols) == 0 {
 		// This operation did not return rows, just show the tag.
 		fmt.Fprintln(w, tag)
@@ -351,9 +347,7 @@ func isNotGraphicUnicodeOrTabOrNewline(r rune) bool {
 	return r != '\t' && r != '\n' && !unicode.IsGraphic(r)
 }
 
-func formatVal(
-	val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs bool,
-) string {
+func formatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs bool) string {
 	switch t := val.(type) {
 	case nil:
 		return "NULL"

@@ -44,7 +44,9 @@ func NewDB(db *client.DB) *DB {
 // DataSource for time series data, storing the returned data in the server.
 // Stored data will be sampled using the provided Resolution. The polling
 // process will continue until the provided stop.Stopper is stopped.
-func (db *DB) PollSource(source DataSource, frequency time.Duration, r Resolution, stopper *stop.Stopper) {
+func (db *DB) PollSource(
+	source DataSource, frequency time.Duration, r Resolution, stopper *stop.Stopper,
+) {
 	p := &poller{
 		db:        db,
 		source:    source,

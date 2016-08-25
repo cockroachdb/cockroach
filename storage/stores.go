@@ -136,7 +136,9 @@ func (ls *Stores) VisitStores(visitor func(s *Store) error) error {
 // store map if specified by the request; otherwise, the command is being
 // executed locally, and the replica is determined via lookup through each
 // store's LookupRange method. The latter path is taken only by unit tests.
-func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+func (ls *Stores) Send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
 	// If we aren't given a Replica, then a little bending over
 	// backwards here. This case applies exclusively to unittests.
 	if ba.RangeID == 0 || ba.Replica.StoreID == 0 {
@@ -192,7 +194,9 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 // if not found.
 // If end is nil, a replica containing start is looked up.
 // This is only for testing usage; performance doesn't matter.
-func (ls *Stores) LookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeID, repDesc roachpb.ReplicaDescriptor, err error) {
+func (ls *Stores) LookupReplica(
+	start, end roachpb.RKey,
+) (rangeID roachpb.RangeID, repDesc roachpb.ReplicaDescriptor, err error) {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
 	var rng *Replica

@@ -221,7 +221,9 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, er
 
 // newPlan constructs a planNode from a statement. This is used
 // recursively by the various node constructors.
-func (p *planner) newPlan(stmt parser.Statement, desiredTypes []parser.Datum, autoCommit bool) (planNode, error) {
+func (p *planner) newPlan(
+	stmt parser.Statement, desiredTypes []parser.Datum, autoCommit bool,
+) (planNode, error) {
 	tracing.AnnotateTrace()
 
 	// This will set the system DB trigger for transactions containing

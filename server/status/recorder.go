@@ -113,8 +113,9 @@ func NewMetricsRecorder(clock *hlc.Clock) *MetricsRecorder {
 
 // AddNode adds the Registry from an initialized node, along with its descriptor
 // and start time.
-func (mr *MetricsRecorder) AddNode(reg *metric.Registry, desc roachpb.NodeDescriptor,
-	startedAt int64) {
+func (mr *MetricsRecorder) AddNode(
+	reg *metric.Registry, desc roachpb.NodeDescriptor, startedAt int64,
+) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	mr.mu.nodeRegistry = reg

@@ -612,7 +612,9 @@ func (a *aggregateFuncHolder) String() string { return parser.AsString(a) }
 
 func (a *aggregateFuncHolder) Walk(v parser.Visitor) parser.Expr { return a }
 
-func (a *aggregateFuncHolder) TypeCheck(_ *parser.SemaContext, desired parser.Datum) (parser.TypedExpr, error) {
+func (a *aggregateFuncHolder) TypeCheck(
+	_ *parser.SemaContext, desired parser.Datum,
+) (parser.TypedExpr, error) {
 	return a, nil
 }
 

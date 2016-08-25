@@ -93,7 +93,9 @@ func (s *Store) testSender() client.Sender {
 // Since kv/ depends on storage/, we can't get access to a
 // TxnCoordSender from here.
 // TODO(tschottdorf): {kv->storage}.LocalSender
-func (db *testSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+func (db *testSender) Send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
 	if et, ok := ba.GetArg(roachpb.EndTransaction); ok {
 		return nil, roachpb.NewErrorf("%s method not supported", et.Method())
 	}
@@ -127,7 +129,9 @@ func (db *testSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 // clock's manual unix nanos time and a stopper. The caller is
 // responsible for stopping the stopper upon completion.
 // Some fields of ctx are populated by this function.
-func createTestStoreWithoutStart(t testing.TB, ctx *StoreContext) (*Store, *hlc.ManualClock, *stop.Stopper) {
+func createTestStoreWithoutStart(
+	t testing.TB, ctx *StoreContext,
+) (*Store, *hlc.ManualClock, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(stopper)
@@ -171,8 +175,9 @@ func createTestStore(t testing.TB) (*Store, *hlc.ManualClock, *stop.Stopper) {
 // engine. It returns the store, the store clock's manual unix nanos time
 // and a stopper. The caller is responsible for stopping the stopper
 // upon completion.
-func createTestStoreWithContext(t testing.TB, ctx *StoreContext) (
-	*Store, *hlc.ManualClock, *stop.Stopper) {
+func createTestStoreWithContext(
+	t testing.TB, ctx *StoreContext,
+) (*Store, *hlc.ManualClock, *stop.Stopper) {
 
 	store, manual, stopper := createTestStoreWithoutStart(t, ctx)
 	// Put an empty system config into gossip.

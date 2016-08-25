@@ -272,10 +272,7 @@ func (dbs sortedDBDescs) Less(i, j int) bool { return dbs[i].Name < dbs[j].Name 
 // forEachTableDesc retrieves all database descriptors and iterates through them in
 // lexicographical order with respect to their name. For each database, the function
 // will call fn with its descriptor.
-func forEachDatabaseDesc(
-	p *planner,
-	fn func(*sqlbase.DatabaseDescriptor),
-) error {
+func forEachDatabaseDesc(p *planner, fn func(*sqlbase.DatabaseDescriptor)) error {
 	// Handle real schemas
 	dbDescs, err := p.getAllDatabaseDescs()
 	if err != nil {
@@ -301,8 +298,7 @@ func forEachDatabaseDesc(
 // to table name. For each table, the function will call fn with its respective
 // database and table descriptor.
 func forEachTableDesc(
-	p *planner,
-	fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor),
+	p *planner, fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor),
 ) error {
 	type dbDescTables struct {
 		desc   *sqlbase.DatabaseDescriptor

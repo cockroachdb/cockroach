@@ -210,11 +210,7 @@ type baseQueue struct {
 // limits the total size. Higher priority replicas can still be
 // added; their addition simply removes the lowest priority replica.
 func makeBaseQueue(
-	name string,
-	impl queueImpl,
-	store *Store,
-	gossip *gossip.Gossip,
-	cfg queueConfig,
+	name string, impl queueImpl, store *Store, gossip *gossip.Gossip, cfg queueConfig,
 ) baseQueue {
 	bq := baseQueue{
 		name:        name,
@@ -493,7 +489,9 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 // purgatoryError and the queue implementation must have its own
 // mechanism for signaling re-processing of replicas held in
 // purgatory.
-func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Clock, stopper *stop.Stopper) {
+func (bq *baseQueue) maybeAddToPurgatory(
+	repl *Replica, err error, clock *hlc.Clock, stopper *stop.Stopper,
+) {
 	// Check whether the failure is a purgatory error and whether the queue supports it.
 	if _, ok := err.(purgatoryError); !ok || bq.impl.purgatoryChan() == nil {
 		bq.eventLog.Error(errors.Wrapf(err, "on %s", repl))

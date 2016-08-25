@@ -397,7 +397,9 @@ func TestSendRPCOrder(t *testing.T) {
 
 type MockRangeDescriptorDB func(roachpb.RKey, bool, bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error)
 
-func (mdb MockRangeDescriptorDB) RangeLookup(key roachpb.RKey, _ *roachpb.RangeDescriptor, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+func (mdb MockRangeDescriptorDB) RangeLookup(
+	key roachpb.RKey, _ *roachpb.RangeDescriptor, considerIntents, useReverseScan bool,
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 	return mdb(stripMeta(key), considerIntents, useReverseScan)
 }
 func (mdb MockRangeDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
@@ -1788,10 +1790,7 @@ type slowLeaseHolderTransport struct {
 }
 
 func (t *slowLeaseHolderTransport) factory(
-	_ SendOptions,
-	_ *rpc.Context,
-	_ ReplicaSlice,
-	_ roachpb.BatchRequest,
+	_ SendOptions, _ *rpc.Context, _ ReplicaSlice, _ roachpb.BatchRequest,
 ) (Transport, error) {
 	if t.created {
 		return nil, errors.Errorf("should not create multiple transports")

@@ -346,7 +346,9 @@ var (
 // isolation types across the transactions. The inner slice describes
 // the isolation type for each transaction. The outer slice contains
 // each possible combination of such transaction isolations.
-func enumerateIsolations(numTxns int, isolations []enginepb.IsolationType) [][]enginepb.IsolationType {
+func enumerateIsolations(
+	numTxns int, isolations []enginepb.IsolationType,
+) [][]enginepb.IsolationType {
 	// Use a count from 0 to pow(# isolations, numTxns)-1 and examine
 	// n-ary digits to get all possible combinations of txn isolations.
 	n := len(isolations)
@@ -639,7 +641,9 @@ type historyVerifier struct {
 	}
 }
 
-func newHistoryVerifier(name string, txns []string, verify *verifier, t *testing.T) *historyVerifier {
+func newHistoryVerifier(
+	name string, txns []string, verify *verifier, t *testing.T,
+) *historyVerifier {
 	return &historyVerifier{
 		name:           name,
 		txns:           parseHistories(txns, t),
@@ -680,8 +684,13 @@ func (hv *historyVerifier) run(isolations []enginepb.IsolationType, db *client.D
 // history.
 //
 // This process continues recursively if there are further retries.
-func (hv *historyVerifier) runHistoryWithRetry(priorities []int32,
-	isolations []enginepb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
+func (hv *historyVerifier) runHistoryWithRetry(
+	priorities []int32,
+	isolations []enginepb.IsolationType,
+	cmds []*cmd,
+	db *client.DB,
+	t *testing.T,
+) error {
 	if err := hv.runHistory(priorities, isolations, cmds, db, t); err != nil {
 		if log.V(1) {
 			log.Infof(context.Background(), "got an error running history %s: %s", historyString(cmds), err)
@@ -713,8 +722,13 @@ func (hv *historyVerifier) runHistoryWithRetry(priorities []int32,
 	return nil
 }
 
-func (hv *historyVerifier) runHistory(priorities []int32,
-	isolations []enginepb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
+func (hv *historyVerifier) runHistory(
+	priorities []int32,
+	isolations []enginepb.IsolationType,
+	cmds []*cmd,
+	db *client.DB,
+	t *testing.T,
+) error {
 	hv.idx++
 	if t.Failed() {
 		return errors.New("already failed")
@@ -788,7 +802,9 @@ func (hv *historyVerifier) runHistory(priorities []int32,
 	return err
 }
 
-func (hv *historyVerifier) runCmds(cmds []*cmd, db *client.DB, t *testing.T) (string, map[string]int64, error) {
+func (hv *historyVerifier) runCmds(
+	cmds []*cmd, db *client.DB, t *testing.T,
+) (string, map[string]int64, error) {
 	var strs []string
 	env := map[string]int64{}
 	err := db.Txn(context.TODO(), func(txn *client.Txn) error {
@@ -807,8 +823,14 @@ func (hv *historyVerifier) runCmds(cmds []*cmd, db *client.DB, t *testing.T) (st
 	return strings.Join(strs, " "), env, err
 }
 
-func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
-	isolation enginepb.IsolationType, cmds []*cmd, db *client.DB, t *testing.T) error {
+func (hv *historyVerifier) runTxn(
+	txnIdx int,
+	priority int32,
+	isolation enginepb.IsolationType,
+	cmds []*cmd,
+	db *client.DB,
+	t *testing.T,
+) error {
 	var retry int
 	txnName := fmt.Sprintf("txn %d", txnIdx+1)
 	cmdIdx := -1
@@ -856,7 +878,9 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 	return err
 }
 
-func (hv *historyVerifier) runCmd(txn *client.Txn, txnIdx, retry int, c *cmd, t *testing.T) (string, error) {
+func (hv *historyVerifier) runCmd(
+	txn *client.Txn, txnIdx, retry int, c *cmd, t *testing.T,
+) (string, error) {
 	fmtStr, err := c.execute(txn, t)
 	cmdStr := fmt.Sprintf(fmtStr, txnIdx+1, retry)
 	hv.mu.Lock()
