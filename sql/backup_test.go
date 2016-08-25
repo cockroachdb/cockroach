@@ -187,7 +187,7 @@ func TestBackupRestore(t *testing.T) {
 
 		_ = setupBackupRestoreDB(t, ctx, tc, count, backupRestoreDefaultRanges)
 
-		desc, err := sql.Backup(ctx, *kvDB, dir)
+		desc, err := sql.Backup(ctx, *kvDB, dir, tc.Server(0).Clock().Now())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -319,7 +319,7 @@ func TestBackupRestoreBank(t *testing.T) {
 	for i := 0; i < backupRestoreIterations; i++ {
 		dir := filepath.Join(baseDir, strconv.Itoa(i))
 
-		_, err := sql.Backup(ctx, *kvDB, dir)
+		_, err := sql.Backup(ctx, *kvDB, dir, tc.Server(0).Clock().Now())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -385,7 +385,7 @@ func runBenchmarkClusterBackup(b *testing.B, clusterSize int, count int) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		desc, err := sql.Backup(ctx, *kvDB, dir)
+		desc, err := sql.Backup(ctx, *kvDB, dir, tc.Server(0).Clock().Now())
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -412,7 +412,7 @@ func runBenchmarkClusterRestore(b *testing.B, clusterSize int, count int) {
 	dir, cleanupFn := testingTempDir(b, 1)
 	defer cleanupFn()
 
-	desc, err := sql.Backup(ctx, *kvDB, dir)
+	desc, err := sql.Backup(ctx, *kvDB, dir, tc.Server(0).Clock().Now())
 	if err != nil {
 		b.Fatal(err)
 	}
