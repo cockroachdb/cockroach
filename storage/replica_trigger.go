@@ -290,68 +290,91 @@ func (r *Replica) leasePostCommitTrigger(
 	replicaID roachpb.ReplicaID,
 	prevLease *roachpb.Lease, // TODO(tschottdorf): could this not be nil?
 ) {
-	if prevLease.Replica.StoreID != trigger.lease.Replica.StoreID {
-		// The lease is changing hands. Is this replica the new lease holder?
-		if trigger.lease.Replica.ReplicaID == replicaID {
-			// If this replica is a new holder of the lease, update the low water
-			// mark of the timestamp cache. Note that clock offset scenarios are
-			// handled via a stasis period inherent in the lease which is documented
-			// in on the Lease struct.
-			//
-			// The introduction of lease transfers implies that the previous lease
-			// may have been shortened and we are now applying a formally overlapping
-			// lease (since the old lease holder has promised not to serve any more
-			// requests, this is kosher). This means that we don't use the old
-			// lease's expiration but instead use the new lease's start to initialize
-			// the timestamp cache low water.
-			log.Infof(ctx, "new range lease %s following %s [physicalTime=%s]",
-				trigger.lease, prevLease, r.store.Clock().PhysicalTime())
-			r.mu.Lock()
-			r.mu.tsCache.SetLowWater(trigger.lease.Start)
-			r.mu.Unlock()
+	iAmTheLeaseHolder := trigger.lease.Replica.ReplicaID == replicaID
+	leaseChangingHands := prevLease.Replica.StoreID != trigger.lease.Replica.StoreID
 
-			// Gossip the first range whenever its lease is acquired. We check to
-			// make sure the lease is active so that a trailing replica won't process
-			// an old lease request and attempt to gossip the first range.
-			if r.IsFirstRange() && trigger.lease.Covers(r.store.Clock().Now()) {
-				func() {
-					r.mu.Lock()
-					defer r.mu.Unlock()
-					r.gossipFirstRangeLocked(ctx)
-				}()
-			}
-		} else {
-			// We're not the lease holder, reset our timestamp cache, releasing
-			// anything currently cached. The timestamp cache is only used by the
-			// lease holder. Note that we'll call SetLowWater when we next acquire
-			// the lease.
-			r.mu.Lock()
-			r.mu.tsCache.Clear(r.store.Clock())
-			r.mu.Unlock()
+	if leaseChangingHands && iAmTheLeaseHolder {
+		// If this replica is a new holder of the lease, update the low water
+		// mark of the timestamp cache. Note that clock offset scenarios are
+		// handled via a stasis period inherent in the lease which is documented
+		// in on the Lease struct.
+		//
+		// The introduction of lease transfers implies that the previous lease
+		// may have been shortened and we are now applying a formally overlapping
+		// lease (since the old lease holder has promised not to serve any more
+		// requests, this is kosher). This means that we don't use the old
+		// lease's expiration but instead use the new lease's start to initialize
+		// the timestamp cache low water.
+		log.Infof(ctx, "new range lease %s following %s [physicalTime=%s]",
+			trigger.lease, prevLease, r.store.Clock().PhysicalTime())
+		r.mu.Lock()
+		r.mu.tsCache.SetLowWater(trigger.lease.Start)
+		r.mu.Unlock()
 
-			if trigger.lease.Covers(r.store.Clock().Now()) {
-				if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
-					if raftGroup.Status().RaftState == raft.StateLeader {
-						// If this replica is the raft leader but it is not the new lease
-						// holder, then try to transfer the raft leadership to match the
-						// lease.
-						log.Infof(ctx, "range %v: replicaID %v transfer raft leadership to replicaID %v",
-							r.RangeID, replicaID, trigger.lease.Replica.ReplicaID)
-						raftGroup.TransferLeader(uint64(trigger.lease.Replica.ReplicaID))
-					}
-					return nil
-				}); err != nil {
-					// An error here indicates that this Replica has been destroyed
-					// while lacking the necessary synchronization (or even worse, it
-					// fails spuriously - could be a storage error), and so we avoid
-					// sweeping that under the rug.
-					//
-					// TODO(tschottdorf): this error is not handled any more
-					// at this level.
-					log.Fatal(ctx, NewReplicaCorruptionError(err))
-				}
-			}
+		// Gossip the first range whenever its lease is acquired. We check to
+		// make sure the lease is active so that a trailing replica won't process
+		// an old lease request and attempt to gossip the first range.
+		if r.IsFirstRange() && trigger.lease.Covers(r.store.Clock().Now()) {
+			func() {
+				r.mu.Lock()
+				defer r.mu.Unlock()
+				r.gossipFirstRangeLocked(ctx)
+			}()
 		}
+	}
+	if leaseChangingHands && !iAmTheLeaseHolder {
+		// We're not the lease holder, reset our timestamp cache, releasing
+		// anything currently cached. The timestamp cache is only used by the
+		// lease holder. Note that we'll call SetLowWater when we next acquire
+		// the lease.
+		r.mu.Lock()
+		r.mu.tsCache.Clear(r.store.Clock())
+		r.mu.Unlock()
+	}
+
+	if !iAmTheLeaseHolder && trigger.lease.Covers(r.store.Clock().Now()) {
+		// If this replica is the raft leader but it is not the new lease holder,
+		// then try to transfer the raft leadership to match the lease. We like it
+		// when leases and raft leadership are collocated because that facilitates
+		// quick command application (requests generally need to make it to both the
+		// lease holder and the raft leader before being applied by other replicas).
+		//
+		// TODO(andrei): We want to do this attempt when a lease changes hands, and
+		// then periodically check that the collocation is fine. So we keep checking
+		// it here on lease extensions, which happen periodically, but that's pretty
+		// arbitrary. There might be a more natural place elsewhere where this
+		// periodic check should happen.
+		r.maybeTransferRaftLeadership(ctx, replicaID, trigger.lease.Replica.ReplicaID)
+	}
+}
+
+// maybeTransferRaftLeadership attempts to transfer the leadership away from
+// this node to target, if this node is the current raft leader.
+// The transfer might silently fail, particularly (only?) if the transferee is
+// behind on applying the log.
+func (r *Replica) maybeTransferRaftLeadership(
+	ctx context.Context,
+	replicaID roachpb.ReplicaID,
+	target roachpb.ReplicaID,
+) {
+	err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
+		if raftGroup.Status().RaftState == raft.StateLeader {
+			// Only the raft leader can attempt a leadership transfer.
+			log.Infof(ctx, "range %s: transferring raft leadership to replica ID %v",
+				r, target)
+			raftGroup.TransferLeader(uint64(target))
+		}
+		return nil
+	})
+	if err != nil {
+		// An error here indicates that this Replica has been destroyed
+		// while lacking the necessary synchronization (or even worse, it
+		// fails spuriously - could be a storage error), and so we avoid
+		// sweeping that under the rug.
+		//
+		// TODO(tschottdorf): this error is not handled any more
+		// at this level.
+		log.Fatal(ctx, NewReplicaCorruptionError(err))
 	}
 }
 
