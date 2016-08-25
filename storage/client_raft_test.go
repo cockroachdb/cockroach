@@ -563,6 +563,59 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	})
 }
 
+// TestSnapshotAfterTruncation tests that Raft will properly send a
+// non-preemptive snapshot when a node is brought up and the log has been
+// truncated.
+func TestSnapshotAfterTruncation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+	rng, err := mtc.stores[0].GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	key := roachpb.Key("a")
+	inc := int64(5)
+
+	// Set up a key to replicate across the cluster. We're going to modify this
+	// key and truncate the raft logs from that command after killing one of the
+	// nodes to check that it gets the new value after it comes up.
+	incArgs := incrementArgs(key, inc)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	mtc.replicateRange(1, 1, 2)
+	mtc.waitForValues(key, []int64{inc, inc, inc})
+
+	// Now kill store 1, increment the key on the other stores and truncate
+	// their logs to make sure that when store 1 comes back up it will require a
+	// non-preemptive snapshot from Raft.
+	mtc.stopStore(1)
+
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	mtc.waitForValues(key, []int64{inc * 2, inc, inc * 2})
+
+	index, err := rng.GetLastIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Truncate the log at index+1 (log entries < N are removed, so this includes
+	// the increment).
+	truncArgs := truncateLogArgs(index+1, 1)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &truncArgs); err != nil {
+		t.Fatal(err)
+	}
+	mtc.restartStore(1)
+
+	mtc.waitForValues(key, []int64{inc * 2, inc * 2, inc * 2})
+}
+
 // Test various mechanism for refreshing pending commands.
 func TestRefreshPendingCommands(t *testing.T) {
 	defer leaktest.AfterTest(t)()
