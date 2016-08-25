@@ -7,7 +7,6 @@ import Long from "long";
 import * as protos from  "../js/protos";
 import { AdminUIState } from "../redux/state";
 import { queryMetrics, MetricsQuery } from "../redux/metrics";
-import * as timewindow from "../redux/timewindow";
 import { MetricProps, Metric, MetricsDataComponentProps } from "../components/graphs";
 import { findChildrenOfType } from "../util/find";
 import { MilliToNano } from "../util/convert";
@@ -64,13 +63,24 @@ function queryFromProps(metricProps: MetricProps,
     });
 }
 
+// QueryTimeInfo is a convenience structure which can be used to pass important
+// time information to a MetricsDataProvider.
+export interface QueryTimeInfo {
+  // The start time of the query, expressed as a unix timestamp in nanoseconds.
+  start: Long;
+  // The end time of the query, expressed as a unix timestamp in nanoseconds.
+  end: Long;
+  // The duration of individual samples in the query, expressed in nanoseconds.
+  sampleDuration: Long;
+}
+
 /**
  * MetricsDataProviderConnectProps are the properties provided to a
  * MetricsDataProvider via the react-redux connect() system.
  */
 interface MetricsDataProviderConnectProps {
   metrics: MetricsQuery;
-  timeSpan: Long[];
+  timeInfo: QueryTimeInfo;
   queryMetrics(id: string, request: TSRequestMessage): void;
 }
 
@@ -124,15 +134,16 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
     });
 
   private requestMessage = createSelector(
-    (props: MetricsDataProviderProps) => props.timeSpan,
+    (props: MetricsDataProviderProps) => props.timeInfo,
     this.queriesSelector,
-    (timeSpan, queries) => {
-      if (!timeSpan) {
+    (timeInfo, queries) => {
+      if (!timeInfo) {
         return undefined;
       }
       return new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
-        start_nanos: timeSpan[0],
-        end_nanos: timeSpan[1],
+        start_nanos: timeInfo.start,
+        end_nanos: timeInfo.end,
+        sample_nanos: timeInfo.sampleDuration,
         queries,
       });
     });
@@ -184,18 +195,19 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
   }
 }
 
-// timeSpanSelector converts the current global time window into a pair of Long
-// values, which can be sent with requests to the server.
-let timeSpanSelector = createSelector(
-  (state: AdminUIState) => state.timewindow as timewindow.TimeWindowState,
+// timeInfoSelector converts the current global time window into a set of Long
+// timestamps, which can be sent with requests to the server.
+let timeInfoSelector = createSelector(
+  (state: AdminUIState) => state.timewindow,
   (tw) => {
     if (!_.isObject(tw.currentWindow)) {
       return null;
     }
-    return [
-      Long.fromNumber(MilliToNano(tw.currentWindow.start.valueOf())),
-      Long.fromNumber(MilliToNano(tw.currentWindow.end.valueOf())),
-    ];
+    return {
+      start: Long.fromNumber(MilliToNano(tw.currentWindow.start.valueOf())),
+      end: Long.fromNumber(MilliToNano(tw.currentWindow.end.valueOf())),
+      sampleDuration: Long.fromNumber(MilliToNano(tw.scale.sampleSize.asMilliseconds())),
+    };
   });
 
 // Connect the MetricsDataProvider class to redux state.
@@ -203,7 +215,7 @@ let metricsDataProviderConnected = connect(
   (state: AdminUIState, ownProps: MetricsDataProviderExplicitProps) => {
     return {
       metrics: state.metrics.queries[ownProps.id],
-      timeSpan: timeSpanSelector(state),
+      timeInfo: timeInfoSelector(state),
     };
   },
   {
