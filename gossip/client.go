@@ -228,7 +228,7 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 		return errors.Errorf("received forward from node %d to %d (%s)", reply.NodeID, reply.AlternateNodeID, reply.AlternateAddr)
 	}
 
-	// If we have the sentinel gossip we're considered connected.
+	// Check whether we're connected at this point.
 	g.signalConnectedLocked()
 
 	// Check whether this outgoing client is duplicating work already
