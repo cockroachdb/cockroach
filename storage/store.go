@@ -758,32 +758,6 @@ func (s *Store) migrate(ctx context.Context, desc roachpb.RangeDescriptor) {
 func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	s.stopper = stopper
 
-	// Add a closer for the various scanner queues, needed to properly clean up
-	// the event logs.
-	s.stopper.AddCloser(stop.CloserFn(func() {
-		if q := s.gcQueue; q != nil {
-			q.Close()
-		}
-		if q := s.splitQueue; q != nil {
-			q.Close()
-		}
-		if q := s.verifyQueue; q != nil {
-			q.Close()
-		}
-		if q := s.replicateQueue; q != nil {
-			q.Close()
-		}
-		if q := s.replicaGCQueue; q != nil {
-			q.Close()
-		}
-		if q := s.raftLogQueue; q != nil {
-			q.Close()
-		}
-		if q := s.replicaConsistencyQueue; q != nil {
-			q.Close()
-		}
-	}))
-
 	// Add the bookie to the store.
 	s.bookie = newBookie(
 		s.ctx.Clock,
