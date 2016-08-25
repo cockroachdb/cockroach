@@ -35,7 +35,8 @@ type TestServerArgs struct {
 	// PartOfCluster must be set if the TestServer is joining others in a cluster.
 	// If not set (and hence the server is the only one in the cluster), the
 	// default zone config will be overridden to disable all replication - so that
-	// tests don't get log spam about ranges not being replicated enough.
+	// tests don't get log spam about ranges not being replicated enough. This
+	// is always set to true when the server is started via a TestCluster.
 	PartOfCluster bool
 
 	// JoinAddr (if nonempty) is the address of a node we are joining.
