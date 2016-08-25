@@ -151,7 +151,13 @@ func TestStatusGossipJson(t *testing.T) {
 // the scan to complete, and return the server. The caller is
 // responsible for stopping the server.
 func startServer(t *testing.T) *TestServer {
-	tsI, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{StoresPerNode: 3})
+	tsI, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		StoreSpecs: []base.StoreSpec{
+			base.DefaultTestStoreSpec,
+			base.DefaultTestStoreSpec,
+			base.DefaultTestStoreSpec,
+		},
+	})
 
 	ts := tsI.(*TestServer)
 
