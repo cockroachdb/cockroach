@@ -1035,7 +1035,7 @@ func (m *multiTestContext) transferLease(rangeID roachpb.RangeID, destStore *sto
 		return err
 	}
 
-	return origRepl.AdminTransferLease(destStore.Ident.StoreID)
+	return origRepl.AdminTransferLease(context.TODO(), destStore.Ident.StoreID)
 }
 
 // getArgs returns a GetRequest and GetResponse pair addressed to

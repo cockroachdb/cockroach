@@ -693,7 +693,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 					// a lease extension. We don't need to wait for that extension
 					// to go through and simply ignore the returned channel (which
 					// is buffered).
-					_ = r.requestLeaseLocked(timestamp)
+					_ = r.requestLeaseLocked(ctx, timestamp)
 				}
 				// Return a nil chan to signal that we have a valid lease.
 				return nil, nil
@@ -701,7 +701,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 			log.Tracef(ctx, "request range lease (attempt #%d)", attempt)
 
 			// No active lease: Request renewal if a renewal is not already pending.
-			return r.requestLeaseLocked(timestamp), nil
+			return r.requestLeaseLocked(ctx, timestamp), nil
 		}()
 		if pErr != nil {
 			return pErr
@@ -1298,7 +1298,7 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 		reply, pErr = r.AdminMerge(ctx, *tArgs, r.Desc())
 		resp = &reply
 	case *roachpb.AdminTransferLeaseRequest:
-		pErr = roachpb.NewError(r.AdminTransferLease(tArgs.Target))
+		pErr = roachpb.NewError(r.AdminTransferLease(ctx, tArgs.Target))
 		resp = &roachpb.AdminTransferLeaseResponse{}
 	case *roachpb.CheckConsistencyRequest:
 		var reply roachpb.CheckConsistencyResponse

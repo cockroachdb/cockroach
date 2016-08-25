@@ -526,7 +526,7 @@ func TestRangeTransferLease(t *testing.T) {
 		// Transferring the lease to ourself should be a no-op.
 		origLeasePtr, _ := replica0.GetLease()
 		origLease := *origLeasePtr
-		if err := replica0.AdminTransferLease(replica0Desc.StoreID); err != nil {
+		if err := replica0.AdminTransferLease(context.TODO(), replica0Desc.StoreID); err != nil {
 			t.Fatal(err)
 		}
 		newLeasePtr, _ := replica0.GetLease()
@@ -538,7 +538,7 @@ func TestRangeTransferLease(t *testing.T) {
 	{
 		// An invalid target should result in an error.
 		const expected = "unable to find store .* in range"
-		if err := replica0.AdminTransferLease(1000); !testutils.IsError(err, expected) {
+		if err := replica0.AdminTransferLease(context.TODO(), 1000); !testutils.IsError(err, expected) {
 			t.Fatalf("expected %s, but found %v", expected, err)
 		}
 	}
@@ -551,7 +551,7 @@ func TestRangeTransferLease(t *testing.T) {
 		return err
 	})
 
-	if err := replica0.AdminTransferLease(newHolderDesc.StoreID); err != nil {
+	if err := replica0.AdminTransferLease(context.TODO(), newHolderDesc.StoreID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -636,7 +636,7 @@ func TestRangeTransferLease(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		// Transfer back from replica1 to replica0.
-		if err := replica1.AdminTransferLease(replica0Desc.StoreID); err != nil {
+		if err := replica1.AdminTransferLease(context.TODO(), replica0Desc.StoreID); err != nil {
 			panic(err)
 		}
 	}()
@@ -854,6 +854,99 @@ func TestLeaseInfoRequest(t *testing.T) {
 	// active lease - the node getting the request is supposed to acquire the
 	// lease. This requires a way to expire leases; the TestCluster probably needs
 	// to use a mock clock.
+}
+
+// Test the beneficial effects of proactively transferring the Raft leadership
+// on range lease transfers. Namely, test that the transferee is usually aware
+// that it's a lease holder as soon as possible after the TransferLease
+// operation. This is desirable, as it allows the new lease holder to receive
+// commands quicker after a transfer; there's a period of unavailability between
+// the time the old lease holder has proposed the lease transfer and the time the
+// new lease holder applies it, during which requests for the range float around
+// the cluster looking for a lease holder. See #8816.
+func TestProactiveRaftLeadershipMovesOnLeaseTransfers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testcluster.StartTestCluster(t, 2,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop()
+
+	key := []byte("a")
+	var rangeDesc *roachpb.RangeDescriptor = new(roachpb.RangeDescriptor)
+	var err error
+	*rangeDesc, err = tc.LookupRange(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rangeDesc, err = tc.AddReplicas(rangeDesc.StartKey.AsRawKey(), tc.Target(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rangeDesc.Replicas) != 2 {
+		t.Fatalf("expected 2 replicas, got %+v", rangeDesc.Replicas)
+	}
+	replicas := make([]roachpb.ReplicaDescriptor, 2)
+	kvDB := make([]*client.DB, 2)
+	for i := 0; i < 2; i++ {
+		kvDB[i] = tc.Servers[i].DB()
+		var ok bool
+		replicas[i], ok = rangeDesc.GetReplicaDescriptor(tc.Servers[i].GetFirstStoreID())
+		if !ok {
+			t.Fatalf("expected to find replica in server %d", i)
+		}
+	}
+
+	// Lease should start on Server 0, since nobody told it to move.
+	leaseHolderReplica := LeaseInfo(t, kvDB[0], *rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+	if leaseHolderReplica != replicas[0] {
+		t.Fatalf("lease holder should be replica %+v, but is: %+v", replicas[0], leaseHolderReplica)
+	}
+
+	leaseHolder := 0 // node 0 starts with the lease
+	successes := 0
+	attempts := 100
+
+	// Count how often a transferee has not applied the transfer quickly after the
+	// transfer returned.
+	for i := 0; i < attempts; i++ {
+		transferee := (leaseHolder + 1) % 2
+		// Transfer the lease to the other server and check that the transferee is
+		// aware of the new lease soon after.
+		err := kvDB[leaseHolder].AdminTransferLease(
+			rangeDesc.StartKey.AsRawKey(), tc.Target(transferee).StoreID)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		firstTry := true
+		// We're counting how many times the transferee responds well to a
+		// LeaseInfoRequest from the first try. But if that doesn't happen, we'll
+		// keep doing the LeaseInfoRequest in SucceedsSoon until we get the desired
+		// response, because we want the next iteration to start in a good state,
+		// where the leaseHolder knows it's the lease holder.
+		util.SucceedsSoon(t, func() error {
+			leaseHolderReplica = LeaseInfo(
+				t, kvDB[transferee], *rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+			if leaseHolderReplica == replicas[transferee] {
+				if firstTry {
+					successes++
+				}
+				return nil
+			} else {
+				firstTry = false
+				return errors.Errorf("not yet")
+			}
+		})
+		leaseHolder = transferee
+	}
+
+	// The success rate when this was written was over 99%.
+	successRate := float64(successes) / float64(attempts)
+	if successRate < 0.9 {
+		t.Fatalf("expected a success rate over 0.9, got: %f", successRate)
+	}
 }
 
 // Test that an error encountered by a read-only "NonKV" command is not

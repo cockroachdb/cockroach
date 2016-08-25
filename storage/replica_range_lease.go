@@ -20,9 +20,13 @@
 package storage
 
 import (
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
+	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
 )
 
@@ -58,6 +62,8 @@ func (p *pendingLeaseRequest) RequestPending() (roachpb.Lease, bool) {
 // It is an error to call InitOrJoinRequest() while a request is in progress
 // naming another replica as lease holder.
 //
+// replica.mu needs to be locked when calling this.
+//
 // replica is used to schedule and execute async work (proposing a RequestLease
 // command). replica.mu is locked when delivering results, so calls from the
 // replica happen either before or after a result for a pending request has
@@ -70,6 +76,7 @@ func (p *pendingLeaseRequest) RequestPending() (roachpb.Lease, bool) {
 // of replica.store.Stopper().ShouldQuiesce(), care will be needed for cancelling
 // the Raft command, similar to replica.addWriteCmd.
 func (p *pendingLeaseRequest) InitOrJoinRequest(
+	ctx context.Context,
 	replica *Replica,
 	nextLeaseHolder roachpb.ReplicaDescriptor,
 	timestamp hlc.Timestamp,
@@ -106,6 +113,36 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		Replica:     nextLeaseHolder,
 	}
 	if transfer {
+		// Attempt to proactively and speculatively transfer the raft leadership to
+		// the future lease holder. There's a period of unavailability between
+		// the time the old lease holder has proposed the lease transfer and the time the
+		// new lease holder applies it, during which requests for the range float around
+		// the cluster looking for a lease holder (see #8816). So, we attempt to
+		// move Raft leadership early, making it more likely that the next lease
+		// holder applies the lease transfer quickly after it's proposed. This
+		// should minimize the unavailability period.
+		err := replica.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
+			if raftGroup.Status().RaftState == raft.StateLeader {
+				// Only the raft leader can attempt a leadership transfer.
+				// The transfer might silently fail, particularly (only?) if the transferee is
+				// behind on applying the log.
+				log.Infof(ctx, "range %v: replicaID %v transfer raft leadership to replicaID %v "+
+					"before a lease transfer",
+					replica.RangeID, replica.mu.replicaID, nextLeaseHolder.ReplicaID)
+				raftGroup.TransferLeader(uint64(nextLeaseHolder.ReplicaID))
+			}
+			return nil
+		})
+		if err != nil {
+			// An error here indicates that this Replica has been destroyed
+			// while lacking the necessary synchronization (or even worse, it
+			// fails spuriously - could be a storage error), and so we avoid
+			// sweeping that under the rug.
+			//
+			// TODO(tschottdorf): this error is not handled any more at this level.
+			log.Fatal(ctx, NewReplicaCorruptionError(err))
+		}
+
 		leaseReq = &roachpb.TransferLeaseRequest{
 			Span:  reqSpan,
 			Lease: reqLease,
@@ -195,7 +232,9 @@ func (p *pendingLeaseRequest) TransferInProgress(
 // for a time interval containing the requested timestamp.
 // If a transfer is in progress, a NotLeaderError directing to the recipient is
 // sent on the returned chan.
-func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Error {
+func (r *Replica) requestLeaseLocked(
+	ctx context.Context, timestamp hlc.Timestamp,
+) <-chan *roachpb.Error {
 	// Propose a Raft command to get a lease for this replica.
 	repDesc, err := r.getReplicaDescriptorLocked()
 	if err != nil {
@@ -217,7 +256,7 @@ func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Er
 		return llChan
 	}
 	return r.mu.pendingLeaseRequest.InitOrJoinRequest(
-		r, repDesc, timestamp, r.mu.state.Desc.StartKey.AsRawKey(), false /* transfer */)
+		ctx, r, repDesc, timestamp, r.mu.state.Desc.StartKey.AsRawKey(), false /* transfer */)
 }
 
 // AdminTransferLease transfers the LeaderLease to another replica. Only the
@@ -238,7 +277,8 @@ func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Er
 //
 // TODO(andrei): figure out how to persist the "not serving" state across node
 // restarts.
-func (r *Replica) AdminTransferLease(target roachpb.StoreID) error {
+func (r *Replica) AdminTransferLease(
+	ctx context.Context, target roachpb.StoreID) error {
 	// initTransferHelper inits a transfer if no extension is in progress.
 	// It returns a channel for waiting for the result of a pending
 	// extension (if any is in progress) and a channel for waiting for the
@@ -285,7 +325,7 @@ func (r *Replica) AdminTransferLease(target roachpb.StoreID) error {
 		nextLeaseBegin.Forward(
 			hlc.ZeroTimestamp.Add(r.store.startedAt+int64(r.store.Clock().MaxOffset()), 0))
 		transfer := r.mu.pendingLeaseRequest.InitOrJoinRequest(
-			r, nextLeaseHolder, nextLeaseBegin,
+			ctx, r, nextLeaseHolder, nextLeaseBegin,
 			desc.StartKey.AsRawKey(), true /* transfer */)
 		return nil, transfer, nil
 	}

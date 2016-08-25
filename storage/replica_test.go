@@ -1016,7 +1016,7 @@ func TestReplicaDrainLease(t *testing.T) {
 		t.Fatal("DrainLeases returned with active lease")
 	}
 	tc.rng.mu.Lock()
-	pErr := <-tc.rng.requestLeaseLocked(tc.clock.Now())
+	pErr := <-tc.rng.requestLeaseLocked(context.TODO(), tc.clock.Now())
 	tc.rng.mu.Unlock()
 	_, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
 	if !ok {
@@ -1640,7 +1640,7 @@ func TestLeaseConcurrent(t *testing.T) {
 			for i := 0; i < num; i++ {
 				if err := tc.stopper.RunAsyncTask(func() {
 					tc.rng.mu.Lock()
-					leaseCh := tc.rng.requestLeaseLocked(ts)
+					leaseCh := tc.rng.requestLeaseLocked(context.TODO(), ts)
 					tc.rng.mu.Unlock()
 					wg.Done()
 					pErr := <-leaseCh
