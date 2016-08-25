@@ -97,7 +97,12 @@ func TestReportUsage(t *testing.T) {
 	}
 	defer stubURL(&reportingURL, u)()
 
-	params := base.TestServerArgs{StoresPerNode: 2}
+	params := base.TestServerArgs{
+		StoreSpecs: []base.StoreSpec{
+			base.DefaultTestStoreSpec,
+			base.DefaultTestStoreSpec,
+		},
+	}
 	s, _, _ := serverutils.StartServer(t, params)
 	ts := s.(*TestServer)
 
@@ -146,7 +151,7 @@ func TestReportUsage(t *testing.T) {
 	if minExpected, actual := totalRanges, reported.Node.RangeCount; minExpected > actual {
 		t.Errorf("expected node ranges at least %v got %v", minExpected, actual)
 	}
-	if minExpected, actual := params.StoresPerNode, len(reported.Stores); minExpected > actual {
+	if minExpected, actual := len(params.StoreSpecs), len(reported.Stores); minExpected > actual {
 		t.Errorf("expected at least %v stores got %v", minExpected, actual)
 	}
 
