@@ -58,6 +58,10 @@ func addStructured(ctx context.Context, s Severity, depth int, format string, ar
 	}
 	file, line, _ := caller.Lookup(depth + 1)
 	msg := makeMessage(ctx, format, args)
-	Trace(ctx, msg)
+	if s >= ErrorLog {
+		ErrEvent(ctx, msg)
+	} else {
+		Event(ctx, msg)
+	}
 	logging.outputLogEntry(s, file, line, msg)
 }
