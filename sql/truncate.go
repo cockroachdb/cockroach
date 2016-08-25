@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/util"
 	"golang.org/x/net/context"
 )
 
@@ -59,6 +60,9 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 		if helper, err := makeFKDeleteHelper(p.txn, *tableDesc, fkTables, colMap); err != nil {
 			return nil, err
 		} else if err = helper.checkAll(nil); err != nil {
+			if n.DropBehavior == parser.DropCascade {
+				return nil, util.UnimplementedWithIssueErrorf(8502, "CASCADE not yet supported: %s", err.Error())
+			}
 			return nil, err
 		}
 	}
