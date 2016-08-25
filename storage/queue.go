@@ -144,10 +144,6 @@ func (l queueLog) Error(err error) {
 	l.traceLog.Errorf(format, err)
 }
 
-func (l queueLog) Finish() {
-	l.traceLog.Finish()
-}
-
 type queueConfig struct {
 	// maxSize is the maximum number of replicas to queue.
 	maxSize int
@@ -285,9 +281,6 @@ func (bq *baseQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 func (bq *baseQueue) Add(repl *Replica, priority float64) (bool, error) {
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
-	if bq.mu.stopped {
-		return false, errQueueStopped
-	}
 	return bq.addInternal(repl, true, priority)
 }
 
@@ -345,7 +338,7 @@ func (bq *baseQueue) requiresSplit(cfg config.SystemConfig, repl *Replica) bool 
 // priority. Expects the queue lock is held by caller.
 func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) (bool, error) {
 	if bq.mu.stopped {
-		panic("stopped queue")
+		return false, errQueueStopped
 	}
 
 	if bq.mu.disabled {
