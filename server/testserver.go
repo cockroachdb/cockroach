@@ -232,9 +232,8 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 				params.Stopper,
 			))
 		} else {
-			// TODO(bram): This will require both cleanup and on failure or if
-			// desired, not cleanup (perhaps on failure).
-			panic(fmt.Sprintf("test server does not yet support in non-memory stores: %s", storeSpec))
+			// TODO(bram): This will require some cleanup of on disk files.
+			panic(fmt.Sprintf("test server does not yet support on disk stores: %s", storeSpec))
 		}
 	}
 

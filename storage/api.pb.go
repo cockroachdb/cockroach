@@ -100,7 +100,7 @@ func (m *ReservationRequest) String() string            { return proto.CompactTe
 func (*ReservationRequest) ProtoMessage()               {}
 func (*ReservationRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{3} }
 
-// A ReservationResponse is the repoonse returned from a ReservationRequest.
+// A ReservationResponse is the response returned from a ReservationRequest.
 type ReservationResponse struct {
 	Reserved bool `protobuf:"varint,1,opt,name=reserved,proto3" json:"reserved,omitempty"`
 	// The current number of ranges and reservations on the target
