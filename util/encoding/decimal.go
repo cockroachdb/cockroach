@@ -713,8 +713,8 @@ func UpperBoundNonsortingDecimalSize(d *inf.Dec) int {
 	// Makeup of upper bound size:
 	// - 1 byte for the prefix
 	// - maxVarintSize for the exponent
-	// - wordLen for the big.Int bytes
-	return 1 + maxVarintSize + wordLen(d.UnscaledBig().Bits())
+	// - WordLen for the big.Int bytes
+	return 1 + maxVarintSize + WordLen(d.UnscaledBig().Bits())
 }
 
 // upperBoundNonsortingDecimalUnscaledSize is the same as
@@ -737,7 +737,8 @@ func upperBoundNonsortingDecimalUnscaledSize(unscaledLen int) int {
 // Taken from math/big/arith.go.
 const bigWordSize = int(unsafe.Sizeof(big.Word(0)))
 
-func wordLen(nat []big.Word) int {
+// WordLen returns the size in bytes of the given array of Words.
+func WordLen(nat []big.Word) int {
 	return len(nat) * bigWordSize
 }
 
