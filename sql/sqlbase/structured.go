@@ -1428,7 +1428,13 @@ func (desc *TableDescriptor) HasPrimaryKey() bool {
 // SQLString returns the SQL string corresponding to the type.
 func (c *ColumnType) SQLString() string {
 	switch c.Kind {
-	case ColumnType_INT, ColumnType_STRING:
+	case ColumnType_INT:
+		if c.Width > 0 {
+			// A non-zero width indicates a bit array. The syntax "INT(N)"
+			// is invalid so be sure to use "BIT".
+			return fmt.Sprintf("BIT(%d)", c.Width)
+		}
+	case ColumnType_STRING:
 		if c.Width > 0 {
 			return fmt.Sprintf("%s(%d)", c.Kind.String(), c.Width)
 		}
