@@ -229,7 +229,7 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 	}
 
 	// If we have the sentinel gossip we're considered connected.
-	g.checkHasConnectedLocked()
+	g.signalConnectedLocked()
 
 	// Check whether this outgoing client is duplicating work already
 	// being done by an incoming client, either because an outgoing
