@@ -434,7 +434,7 @@ func forEachDatabaseDesc(
 	}
 
 	// Handle virtual schemas.
-	for _, schema := range p.virtualSchemas() {
+	for _, schema := range p.virtualSchemas().m {
 		dbDescs = append(dbDescs, schema.desc)
 	}
 
@@ -494,7 +494,7 @@ func forEachTableDesc(
 	}
 
 	// Handle virtual schemas.
-	for dbName, schema := range p.virtualSchemas() {
+	for dbName, schema := range p.virtualSchemas().m {
 		dbTables := make(map[string]*sqlbase.TableDescriptor, len(schema.tables))
 		for tableName, entry := range schema.tables {
 			dbTables[tableName] = entry.desc

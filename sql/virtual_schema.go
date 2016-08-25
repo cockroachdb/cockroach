@@ -53,19 +53,23 @@ type virtualSchemaTable struct {
 // add that object to this slice.
 var virtualSchemas = []virtualSchema{
 	informationSchema,
+	pgCatalog,
 }
 
 //
 // SQL-layer interface to work with virtual schemas.
 //
 
-// virtualSchemaMap is a type used to provide convenient access to virtual
-// database and table descriptors. virtualSchemaMap, virtualSchemaEntry,
+// virtualSchemaHolder is a type used to provide convenient access to virtual
+// database and table descriptors. virtualSchemaHolder, virtualSchemaEntry,
 // and virtualTableEntry make up the generated data structure which the
 // virtualSchemas slice is mapped to. Because of this, they should not be
 // created directly, but instead will be populated in a post-startup hook
 // on an Executor.
-type virtualSchemaMap map[string]virtualSchemaEntry
+type virtualSchemaHolder struct {
+	m            map[string]virtualSchemaEntry
+	orderedNames []string
+}
 
 type virtualSchemaEntry struct {
 	desc              *sqlbase.DatabaseDescriptor
@@ -115,9 +119,12 @@ func (e virtualTableEntry) getValuesNode(p *planner) (*valuesNode, error) {
 	return v, nil
 }
 
-func (vsm *virtualSchemaMap) init(p *planner) error {
-	*vsm = make(map[string]virtualSchemaEntry, len(virtualSchemas))
-	for _, schema := range virtualSchemas {
+func (vs *virtualSchemaHolder) init(p *planner) error {
+	*vs = virtualSchemaHolder{
+		m:            make(map[string]virtualSchemaEntry, len(virtualSchemas)),
+		orderedNames: make([]string, len(virtualSchemas)),
+	}
+	for i, schema := range virtualSchemas {
 		dbName := schema.name
 		dbDesc := initVirtualDatabaseDesc(dbName)
 		tables := make(map[string]virtualTableEntry, len(schema.tables))
@@ -134,12 +141,14 @@ func (vsm *virtualSchemaMap) init(p *planner) error {
 			orderedTableNames = append(orderedTableNames, tableDesc.Name)
 		}
 		sort.Strings(orderedTableNames)
-		(*vsm)[dbName] = virtualSchemaEntry{
+		vs.m[dbName] = virtualSchemaEntry{
 			desc:              dbDesc,
 			tables:            tables,
 			orderedTableNames: orderedTableNames,
 		}
+		vs.orderedNames[i] = dbName
 	}
+	sort.Strings(vs.orderedNames)
 	return nil
 }
 
@@ -168,23 +177,26 @@ func initVirtualTableDesc(p *planner, t virtualSchemaTable) (sqlbase.TableDescri
 }
 
 // getVirtualSchemaEntry retrieves a virtual schema entry given a database name.
-func (vsm virtualSchemaMap) getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool) {
-	e, ok := vsm[name]
+func (vs *virtualSchemaHolder) getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool) {
+	if vs == nil {
+		return virtualSchemaEntry{}, false
+	}
+	e, ok := vs.m[name]
 	return e, ok
 }
 
 // getVirtualDatabaseDesc checks if the provided name matches a virtual database,
 // and if so, returns that database's descriptor.
-func (vsm virtualSchemaMap) getVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
-	if e, ok := vsm.getVirtualSchemaEntry(name); ok {
+func (vs *virtualSchemaHolder) getVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
+	if e, ok := vs.getVirtualSchemaEntry(name); ok {
 		return e.desc
 	}
 	return nil
 }
 
 // isVirtualDatabase checks if the provided name corresponds to a virtual database.
-func (vsm virtualSchemaMap) isVirtualDatabase(name string) bool {
-	_, ok := vsm.getVirtualSchemaEntry(name)
+func (vs *virtualSchemaHolder) isVirtualDatabase(name string) bool {
+	_, ok := vs.getVirtualSchemaEntry(name)
 	return ok
 }
 
@@ -198,8 +210,8 @@ func (e *Executor) IsVirtualDatabase(name string) bool {
 // pair. The function will return the table's virtual table entry if the name matches
 // a specific table. It will return an error if the name references a virtual database
 // but the table is non-existent.
-func (vsm virtualSchemaMap) getVirtualTableEntry(tn *parser.TableName) (virtualTableEntry, error) {
-	if db, ok := vsm.getVirtualSchemaEntry(tn.Database()); ok {
+func (vs *virtualSchemaHolder) getVirtualTableEntry(tn *parser.TableName) (virtualTableEntry, error) {
+	if db, ok := vs.getVirtualSchemaEntry(tn.Database()); ok {
 		if t, ok := db.tables[sqlbase.NormalizeName(tn.TableName)]; ok {
 			return t, nil
 		}
@@ -210,8 +222,8 @@ func (vsm virtualSchemaMap) getVirtualTableEntry(tn *parser.TableName) (virtualT
 
 // getVirtualTableDesc checks if the provided name matches a virtual database/table
 // pair, and returns its descriptor if it does.
-func (vsm virtualSchemaMap) getVirtualTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
-	t, err := vsm.getVirtualTableEntry(tn)
+func (vs *virtualSchemaHolder) getVirtualTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
+	t, err := vs.getVirtualTableEntry(tn)
 	if err != nil {
 		return nil, err
 	}
