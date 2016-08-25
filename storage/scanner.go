@@ -72,8 +72,9 @@ type replicaScanner struct {
 	// Count of times and total duration through the scanning loop.
 	mu struct {
 		syncutil.Mutex
-		count int64
-		total time.Duration
+		scanCount        int64
+		waitEnabledCount int64
+		total            time.Duration
 		// Some tests in this package disable scanning.
 		disabled bool
 	}
@@ -116,12 +117,20 @@ func (rs *replicaScanner) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 	rs.scanLoop(clock, stopper)
 }
 
-// Count returns the number of times the scanner has cycled through
+// scanCount returns the number of times the scanner has cycled through
 // all replicas.
-func (rs *replicaScanner) Count() int64 {
+func (rs *replicaScanner) scanCount() int64 {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	return rs.mu.count
+	return rs.mu.scanCount
+}
+
+// waitEnabledCount returns the number of times the scanner went in the mode of
+// waiting to be reenabled.
+func (rs *replicaScanner) waitEnabledCount() int64 {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.mu.waitEnabledCount
 }
 
 // SetDisabled turns replica scanning off or on as directed. Note that while
@@ -147,7 +156,7 @@ func (rs *replicaScanner) GetDisabled() bool {
 func (rs *replicaScanner) avgScan() time.Duration {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	return time.Duration(rs.mu.total.Nanoseconds() / rs.mu.count)
+	return time.Duration(rs.mu.total.Nanoseconds() / rs.mu.scanCount)
 }
 
 // RemoveReplica removes a replica from any replica queues the scanner may
@@ -259,7 +268,7 @@ func (rs *replicaScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 				// Increment iteration count.
 				rs.mu.Lock()
 				defer rs.mu.Unlock()
-				rs.mu.count++
+				rs.mu.scanCount++
 				rs.mu.total += timeutil.Since(start)
 				if log.V(6) {
 					log.Infof(context.TODO(), "reset replica scan iteration")
@@ -278,6 +287,9 @@ func (rs *replicaScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 // waitEnabled loops, removing replicas from the scanner's queues,
 // until scanning is enabled or the stopper signals shutdown,
 func (rs *replicaScanner) waitEnabled(stopper *stop.Stopper) bool {
+	rs.mu.Lock()
+	rs.mu.waitEnabledCount++
+	rs.mu.Unlock()
 	for {
 		if !rs.GetDisabled() {
 			return false
