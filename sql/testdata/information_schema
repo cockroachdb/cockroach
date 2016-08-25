@@ -97,6 +97,7 @@ query T
 SHOW DATABASES
 ----
 information_schema
+pg_catalog
 system
 test
 
@@ -290,6 +291,7 @@ SELECT * FROM information_schema.schemata
 ----
 CATALOG_NAME  SCHEMA_NAME         DEFAULT_CHARACTER_SET_NAME  SQL_PATH
 def           information_schema  NULL                        NULL
+def           pg_catalog          NULL                        NULL
 def           system              NULL                        NULL
 def           test                NULL                        NULL
 
@@ -302,6 +304,7 @@ SELECT * FROM information_schema.schemata
 CATALOG_NAME  SCHEMA_NAME         DEFAULT_CHARACTER_SET_NAME  SQL_PATH
 def           information_schema  NULL                        NULL
 def           other_db            NULL                        NULL
+def           pg_catalog          NULL                        NULL
 def           system              NULL                        NULL
 def           test                NULL                        NULL
 

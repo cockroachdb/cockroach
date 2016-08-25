@@ -1,0 +1,41 @@
+# Verify pg_catalog database handles mutation statements correctly.
+
+query error user root does not have DROP privilege on database pg_catalog
+ALTER DATABASE pg_catalog RENAME TO not_pg_catalog
+
+statement error user root does not have CREATE privilege on database pg_catalog
+CREATE TABLE pg_catalog.t (x INT)
+
+query error user root does not have DROP privilege on database pg_catalog
+DROP DATABASE pg_catalog
+
+
+# Verify other databases can't be called "pg_catalog".
+
+statement ok
+CREATE DATABASE other_db
+
+statement error the new database name "pg_catalog" already exists
+ALTER DATABASE other_db RENAME TO pg_catalog
+
+statement error database "pg_catalog" already exists
+CREATE DATABASE pg_catalog
+
+statement ok
+DROP DATABASE other_db
+
+
+# Verify pg_catalog can be used like a normal database.
+
+statement ok
+SET DATABASE = pg_catalog
+
+statement ok
+SET DATABASE = test
+
+
+# Verify pg_catalog handles reflection correctly.
+
+query T
+SHOW TABLES FROM pg_catalog
+----

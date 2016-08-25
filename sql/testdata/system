@@ -2,6 +2,7 @@ query T
 SHOW DATABASES
 ----
 information_schema
+pg_catalog
 system
 test
 

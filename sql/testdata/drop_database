@@ -5,6 +5,7 @@ query T
 SHOW DATABASES
 ----
 information_schema
+pg_catalog
 foo-bar
 system
 test
@@ -16,6 +17,7 @@ query T
 SHOW DATABASES
 ----
 information_schema
+pg_catalog
 system
 test
 
@@ -26,6 +28,7 @@ query T
 SHOW DATABASES
 ----
 information_schema
+pg_catalog
 foo bar
 system
 test
@@ -37,5 +40,6 @@ query T
 SHOW DATABASES
 ----
 information_schema
+pg_catalog
 system
 test
