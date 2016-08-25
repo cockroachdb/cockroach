@@ -14,7 +14,7 @@
 //
 // Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
-package server
+package base
 
 import (
 	"fmt"

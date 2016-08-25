@@ -44,7 +44,6 @@ import (
 	roachClient "github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -462,7 +461,7 @@ func (l *LocalCluster) startNode(node *testNode) {
 	}
 
 	for _, store := range node.stores {
-		storeSpec := server.StoreSpec{
+		storeSpec := base.StoreSpec{
 			Path:        store.dataStr,
 			SizeInBytes: int64(store.config.MaxRanges) * maxRangeBytes,
 		}

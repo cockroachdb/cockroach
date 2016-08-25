@@ -76,7 +76,7 @@ type Context struct {
 	SocketFile string
 
 	// Stores is specified to enable durable key-value storage.
-	Stores StoreSpecList
+	Stores base.StoreSpecList
 
 	// Attrs specifies a colon-separated list of node topography or machine
 	// capabilities, used to match capabilities or location preferences specified
@@ -86,7 +86,7 @@ type Context struct {
 	// JoinList is a list of node addresses that act as bootstrap hosts for
 	// connecting to the gossip network. Each item in the list can actually be
 	// multiple comma-separated addresses, kept for backward-compatibility.
-	JoinList JoinListType
+	JoinList base.JoinListType
 
 	// CacheSize is the amount of memory in bytes to use for caching data.
 	// The value is split evenly between the stores if there are more than one.
@@ -337,8 +337,8 @@ func MakeContext() Context {
 		MetricsSampleInterval:    defaultMetricsSampleInterval,
 		TimeUntilStoreDead:       defaultTimeUntilStoreDead,
 		ReservationsEnabled:      defaultReservationsEnabled,
-		Stores: StoreSpecList{
-			Specs: []StoreSpec{{Path: defaultStorePath}},
+		Stores: base.StoreSpecList{
+			Specs: []base.StoreSpec{{Path: defaultStorePath}},
 		},
 	}
 	ctx.Context.InitDefaults()
@@ -371,9 +371,9 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 				}
 				sizeInBytes = int64(float64(sysMem) * spec.SizePercent / 100)
 			}
-			if sizeInBytes != 0 && sizeInBytes < minimumStoreSize {
+			if sizeInBytes != 0 && sizeInBytes < base.MinimumStoreSize {
 				return fmt.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
-					spec.SizePercent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(minimumStoreSize))
+					spec.SizePercent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 			ctx.Engines = append(ctx.Engines, engine.NewInMem(spec.Attributes, sizeInBytes, stopper))
 		} else {
@@ -384,9 +384,9 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 				}
 				sizeInBytes = int64(float64(fileSystemUsage.Total) * spec.SizePercent / 100)
 			}
-			if sizeInBytes != 0 && sizeInBytes < minimumStoreSize {
+			if sizeInBytes != 0 && sizeInBytes < base.MinimumStoreSize {
 				return fmt.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
-					spec.SizePercent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(minimumStoreSize))
+					spec.SizePercent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 			ctx.Engines = append(
 				ctx.Engines,

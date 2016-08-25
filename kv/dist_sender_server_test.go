@@ -1162,7 +1162,12 @@ func TestPropagateTxnOnPushError(t *testing.T) {
 // should be willing to get rid of it.
 func TestRequestToUninitializedRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{StoresPerNode: 2})
+	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		StoreSpecs: []base.StoreSpec{
+			base.DefaultTestStoreSpec,
+			base.DefaultTestStoreSpec,
+		},
+	})
 	defer srv.Stopper().Stop()
 	s := srv.(*server.TestServer)
 
