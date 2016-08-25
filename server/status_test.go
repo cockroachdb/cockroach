@@ -50,6 +50,10 @@ import (
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
+func getStatusJSONProto(ts serverutils.TestServerInterface, path string, response proto.Message) error {
+	return serverutils.GetJSONProto(ts, statusPrefix+path, response)
+}
+
 // TestStatusLocalStacks verifies that goroutine stack traces are available
 // via the /_status/stacks/local endpoint.
 func TestStatusLocalStacks(t *testing.T) {
@@ -62,7 +66,7 @@ func TestStatusLocalStacks(t *testing.T) {
 
 	var stacks serverpb.JSONResponse
 	for _, nodeID := range []string{"local", "1"} {
-		if err := getJSONProto(s, "/_status/stacks/"+nodeID, &stacks); err != nil {
+		if err := getStatusJSONProto(s, "stacks/"+nodeID, &stacks); err != nil {
 			t.Fatal(err)
 		}
 		if !re.Match(stacks.Data) {
@@ -87,7 +91,7 @@ func TestStatusJson(t *testing.T) {
 
 	var nodes serverpb.NodesResponse
 	util.SucceedsSoon(t, func() error {
-		if err := getJSONProto(s, "/_status/nodes", &nodes); err != nil {
+		if err := getStatusJSONProto(s, "nodes", &nodes); err != nil {
 			t.Fatal(err)
 		}
 
@@ -99,11 +103,11 @@ func TestStatusJson(t *testing.T) {
 
 	for _, path := range []string{
 		"/health",
-		"/_status/details/local",
-		"/_status/details/" + strconv.FormatUint(uint64(nodeID), 10),
+		statusPrefix + "details/local",
+		statusPrefix + "details/" + strconv.FormatUint(uint64(nodeID), 10),
 	} {
 		var details serverpb.DetailsResponse
-		if err := getJSONProto(s, path, &details); err != nil {
+		if err := serverutils.GetJSONProto(s, path, &details); err != nil {
 			t.Fatal(err)
 		}
 		if a, e := details.NodeID, nodeID; a != e {
@@ -126,7 +130,7 @@ func TestStatusGossipJson(t *testing.T) {
 	defer s.Stopper().Stop()
 
 	var data gossip.InfoStatus
-	if err := getJSONProto(s, "/_status/gossip/local", &data); err != nil {
+	if err := getStatusJSONProto(s, "gossip/local", &data); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := data.Infos["first-range"]; !ok {
@@ -141,14 +145,6 @@ func TestStatusGossipJson(t *testing.T) {
 	if _, ok := data.Infos["system-db"]; !ok {
 		t.Errorf("no system config info returned: %v", data)
 	}
-}
-
-func getJSONProto(ts serverutils.TestServerInterface, path string, v proto.Message) error {
-	httpClient, err := ts.GetHTTPClient()
-	if err != nil {
-		return err
-	}
-	return util.GetJSON(httpClient, ts.AdminURL()+path, v)
 }
 
 // startServer will start a server with a short scan interval, wait for
@@ -212,7 +208,7 @@ func TestStatusLocalLogs(t *testing.T) {
 	timestampEWI := timeutil.Now().UnixNano()
 
 	var wrapper serverpb.LogFilesListResponse
-	if err := getJSONProto(ts, "/_status/logfiles/local", &wrapper); err != nil {
+	if err := getStatusJSONProto(ts, "logfiles/local", &wrapper); err != nil {
 		t.Fatal(err)
 	}
 	if a, e := len(wrapper.Files), 3; a != e {
@@ -228,7 +224,7 @@ func TestStatusLocalLogs(t *testing.T) {
 	var foundInfo, foundWarning, foundError bool
 	for _, file := range wrapper.Files {
 		var wrapper serverpb.LogEntriesResponse
-		if err := getJSONProto(ts, fmt.Sprintf("/_status/logfiles/local/%s", file.Name), &wrapper); err != nil {
+		if err := getStatusJSONProto(ts, "logfiles/local/"+file.Name, &wrapper); err != nil {
 			t.Fatal(err)
 		}
 		for _, entry := range wrapper.Entries {
@@ -285,7 +281,7 @@ func TestStatusLocalLogs(t *testing.T) {
 
 	for i, testCase := range testCases {
 		var url bytes.Buffer
-		fmt.Fprintf(&url, "/_status/logs/local?level=%s", testCase.Level.Name())
+		fmt.Fprintf(&url, "logs/local?level=%s", testCase.Level.Name())
 		if testCase.MaxEntities > 0 {
 			fmt.Fprintf(&url, "&max=%d", testCase.MaxEntities)
 		}
@@ -301,7 +297,7 @@ func TestStatusLocalLogs(t *testing.T) {
 
 		var wrapper serverpb.LogEntriesResponse
 		path := url.String()
-		if err := getJSONProto(ts, path, &wrapper); err != nil {
+		if err := getStatusJSONProto(ts, path, &wrapper); err != nil {
 			t.Fatal(err)
 		}
 
@@ -341,7 +337,7 @@ func TestNodeStatusResponse(t *testing.T) {
 
 	// First fetch all the node statuses.
 	wrapper := serverpb.NodesResponse{}
-	if err := getJSONProto(s, "/_status/nodes", &wrapper); err != nil {
+	if err := getStatusJSONProto(s, "nodes", &wrapper); err != nil {
 		t.Fatal(err)
 	}
 	nodeStatuses := wrapper.Nodes
@@ -357,7 +353,7 @@ func TestNodeStatusResponse(t *testing.T) {
 	// ids only.
 	for _, oldNodeStatus := range nodeStatuses {
 		nodeStatus := status.NodeStatus{}
-		if err := getJSONProto(s, "/_status/nodes/"+oldNodeStatus.Desc.NodeID.String(), &nodeStatus); err != nil {
+		if err := getStatusJSONProto(s, "nodes/"+oldNodeStatus.Desc.NodeID.String(), &nodeStatus); err != nil {
 			t.Fatal(err)
 		}
 		if !reflect.DeepEqual(s.node.Descriptor, nodeStatus.Desc) {
@@ -402,7 +398,7 @@ func TestMetricsEndpoint(t *testing.T) {
 	s := startServer(t)
 	defer s.Stopper().Stop()
 
-	if _, err := getText(s, s.AdminURL()+"/_status/metrics/"+s.Gossip().GetNodeID().String()); err != nil {
+	if _, err := getText(s, s.AdminURL()+statusPrefix+"metrics/"+s.Gossip().GetNodeID().String()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -418,7 +414,7 @@ func TestRangesResponse(t *testing.T) {
 	}
 
 	var response serverpb.RangesResponse
-	if err := getJSONProto(ts, "/_status/ranges/local", &response); err != nil {
+	if err := getStatusJSONProto(ts, "ranges/local", &response); err != nil {
 		t.Fatal(err)
 	}
 	if len(response.Ranges) == 0 {
@@ -453,7 +449,7 @@ func TestRaftDebug(t *testing.T) {
 	defer s.Stopper().Stop()
 
 	var resp serverpb.RaftDebugResponse
-	if err := getJSONProto(s, "/_status/raft", &resp); err != nil {
+	if err := getStatusJSONProto(s, "raft", &resp); err != nil {
 		t.Fatal(err)
 	}
 	if len(resp.Ranges) == 0 {
@@ -468,7 +464,7 @@ func TestStatusVars(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	if body, err := getText(s, s.AdminURL()+"/_status/vars"); err != nil {
+	if body, err := getText(s, s.AdminURL()+statusPrefix+"vars"); err != nil {
 		t.Fatal(err)
 	} else if !bytes.Contains(body, []byte("# TYPE sql_bytesout counter\nsql_bytesout")) {
 		t.Errorf("expected sql_bytesout, got: %s", body)
