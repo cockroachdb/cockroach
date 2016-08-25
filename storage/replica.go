@@ -1536,6 +1536,20 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 	})
 }
 
+func (r *Replica) isLeaseHolder() bool {
+	lease := r.mu.state.Lease
+	if lease == nil {
+		return false
+	}
+	timestamp := r.store.Clock().Now()
+	if lease.Covers(timestamp) {
+		if lease.OwnedBy(r.store.Ident.StoreID) {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *Replica) handleRaftReady() error {
 	ctx := context.TODO()
 	var hasReady bool
@@ -1545,6 +1559,18 @@ func (r *Replica) handleRaftReady() error {
 	lastIndex := r.mu.lastIndex // used for append below
 	raftLogSize := r.mu.raftLogSize
 	leaderID := r.mu.leaderID
+
+	if leaderID == r.mu.replicaID {
+		r.store.metrics.raftLeaders.Inc(1)
+	}
+
+	if r.isLeaseHolder() {
+		r.store.metrics.raftLeaseHolders.Inc(1)
+		if leaderID != r.mu.replicaID {
+			r.store.metrics.raftLeaseHoldersWithoutLeadership.Inc(1)
+		}
+	}
+
 	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
 		if hasReady = raftGroup.HasReady(); hasReady {
 			rd = raftGroup.Ready()
@@ -1872,6 +1898,16 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 		return
 	}
 
+	r.store.ctx.Transport.mu.Lock()
+	transportQueues := r.store.ctx.Transport.mu.queues[false]
+	var queuedMsgs int64
+	for _, queue := range transportQueues {
+		queuedMsgs += int64(len(queue))
+	}
+	r.store.ctx.Transport.mu.Unlock()
+	r.store.metrics.RaftSentPending.Update(queuedMsgs)
+	r.store.metrics.RaftSentMessages.Inc(1)
+
 	if !r.store.ctx.Transport.SendAsync(&RaftMessageRequest{
 		RangeID:     rangeID,
 		ToReplica:   toReplica,
@@ -1880,6 +1916,7 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	}) {
 		r.mu.Lock()
 		r.mu.droppedMessages++
+		r.store.metrics.RaftDroppedMessages.Inc(1)
 		r.mu.Unlock()
 
 		if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
