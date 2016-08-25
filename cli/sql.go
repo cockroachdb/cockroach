@@ -311,14 +311,21 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 		// we join with spaces for keeping history, because otherwise a
 		// history recall will only pull one line from a multi-line
 		// statement.
-		fullStmt := strings.Join(stmt, "\n")
+		fullStmt := strings.TrimRight(strings.Join(stmt, "\n"), " \n\t\f")
 
 		// Ensure the statement is terminated with a semicolon. This
 		// catches cases where the last line before EOF was not terminated
 		// properly.
 		if len(fullStmt) > 0 && !strings.HasSuffix(fullStmt, ";") {
-			fmt.Fprintln(osStderr, "no semicolon at end of statement; statement ignored")
-			continue
+			if strings.TrimSpace(fullStmt) == "" {
+				// Only whitespace. Nothing to do really.
+				continue
+			}
+
+			// That was the last line of input but some statement bits
+			// were accumulated. Report an error.
+			fmt.Fprintf(osStderr, "missing semicolon at end of statement: %q\n", fullStmt)
+			return fmt.Errorf("last statement was not executed")
 		}
 
 		if isInteractive {
