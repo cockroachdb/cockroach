@@ -407,7 +407,7 @@ CREATE TABLE test.tbl (
 	for i, a := range resp.Columns {
 		e := expColumns[i]
 		if a.String() != e.String() {
-			t.Fatalf("mismatch at index %d: actual %#v != %#v", i, a, e)
+			t.Fatalf("mismatch at column %d: actual %#v != %#v", i, a, e)
 		}
 	}
 
@@ -445,6 +445,7 @@ CREATE TABLE test.tbl (
 		}
 	}
 
+	// Verify range count.
 	if a, e := resp.RangeCount, int64(1); a != e {
 		t.Fatalf("# of ranges %d != expected %d", a, e)
 	}
@@ -456,6 +457,79 @@ CREATE TABLE test.tbl (
 			createTableCol       = "CreateTable"
 		)
 
+		resSet := ts.sqlExecutor.ExecuteStatements(session, showCreateTableQuery, nil)
+		res := resSet.ResultList[0]
+		if res.Err != nil {
+			t.Fatalf("error executing '%s': %s", showCreateTableQuery, res.Err)
+		}
+
+		scanner := makeResultScanner(res.Columns)
+		var createStmt string
+		if err := scanner.Scan(res.Rows[0], createTableCol, &createStmt); err != nil {
+			t.Fatal(err)
+		}
+
+		if a, e := resp.CreateTableStatement, createStmt; a != e {
+			t.Fatalf("mismatched create table statement; expected %s, got %s", e, a)
+		}
+	}
+}
+
+func TestAdminAPITableDetailsForVirtualSchema(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+	ts := s.(*TestServer)
+
+	// Perform API call.
+	var resp serverpb.TableDetailsResponse
+	if err := apiGet(s, "databases/information_schema/tables/schemata", &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify columns.
+	expColumns := []serverpb.TableDetailsResponse_Column{
+		{Name: "CATALOG_NAME", Type: "STRING", Nullable: false, DefaultValue: "''"},
+		{Name: "SCHEMA_NAME", Type: "STRING", Nullable: false, DefaultValue: "''"},
+		{Name: "DEFAULT_CHARACTER_SET_NAME", Type: "STRING", Nullable: false, DefaultValue: "''"},
+		{Name: "SQL_PATH", Type: "STRING", Nullable: true},
+	}
+	testutils.SortStructs(expColumns, "Name")
+	testutils.SortStructs(resp.Columns, "Name")
+	if a, e := len(resp.Columns), len(expColumns); a != e {
+		t.Fatalf("# of result columns %d != expected %d (got: %#v)", a, e, resp.Columns)
+	}
+	for i, a := range resp.Columns {
+		e := expColumns[i]
+		if a.String() != e.String() {
+			t.Fatalf("mismatch at column %d: actual %#v != %#v", i, a, e)
+		}
+	}
+
+	// Verify grants.
+	if a, e := len(resp.Grants), 0; a != e {
+		t.Fatalf("# of grant columns %d != expected %d (got: %#v)", a, e, resp.Grants)
+	}
+
+	// Verify indexes.
+	if a, e := resp.RangeCount, int64(0); a != e {
+		t.Fatalf("# of indexes %d != expected %d", a, e)
+	}
+
+	// Verify range count.
+	if a, e := resp.RangeCount, int64(0); a != e {
+		t.Fatalf("# of ranges %d != expected %d", a, e)
+	}
+
+	// Verify Create Table Statement.
+	{
+		const (
+			showCreateTableQuery = "SHOW CREATE TABLE information_schema.schemata"
+			createTableCol       = "CreateTable"
+		)
+
+		session := sql.NewSession(
+			context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
 		resSet := ts.sqlExecutor.ExecuteStatements(session, showCreateTableQuery, nil)
 		res := resSet.ResultList[0]
 		if res.Err != nil {
