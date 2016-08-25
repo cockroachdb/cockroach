@@ -65,6 +65,7 @@ import (
 	"google.golang.org/grpc"
 
 	"golang.org/x/net/context"
+	"golang.org/x/net/trace"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
@@ -192,6 +193,8 @@ type Gossip struct {
 	// Membership sets for resolvers and bootstrap addresses.
 	resolverAddrs  map[util.UnresolvedAddr]resolver.Resolver
 	bootstrapAddrs map[util.UnresolvedAddr]struct{}
+
+	events trace.EventLog
 }
 
 // New creates an instance of a gossip node.
@@ -210,9 +213,13 @@ func New(rpcContext *rpc.Context, grpcServer *grpc.Server, resolvers []resolver.
 		nodeDescs:         map[roachpb.NodeID]*roachpb.NodeDescriptor{},
 		resolverAddrs:     map[util.UnresolvedAddr]resolver.Resolver{},
 		bootstrapAddrs:    map[util.UnresolvedAddr]struct{}{},
+		events:            trace.NewEventLog("gossip", "gossip"),
 	}
+	stopper.AddCloser(stop.CloserFn(g.events.Finish))
+
 	registry.AddMetric(g.outgoing.gauge)
 	g.clientsMu.breakers = map[string]*circuit.Breaker{}
+	g.events.Printf("initial resolvers: %s", resolvers)
 	g.SetResolvers(resolvers)
 
 	g.mu.Lock()
@@ -223,7 +230,6 @@ func New(rpcContext *rpc.Context, grpcServer *grpc.Server, resolvers []resolver.
 	g.mu.Unlock()
 
 	RegisterGossipServer(grpcServer, g.server)
-
 	return g
 }
 
@@ -247,6 +253,7 @@ func (g *Gossip) SetNodeID(nodeID roachpb.NodeID) {
 		panic(fmt.Sprintf("different node IDs were set for the same gossip instance (%d, %d)", g.mu.is.NodeID, nodeID))
 	}
 	g.mu.is.NodeID = nodeID
+	g.events.Printf("NodeID set to %d", nodeID)
 }
 
 // ResetNodeID resets the infostore's node ID.
@@ -260,6 +267,7 @@ func (g *Gossip) ResetNodeID(nodeID roachpb.NodeID) {
 // SetNodeDescriptor adds the node descriptor to the gossip network
 // and sets the infostore's node ID.
 func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
+	g.events.Printf("NodeDescriptor set to %+v", desc)
 	if err := g.AddInfoProto(MakeNodeIDKey(desc.NodeID), desc, ttlNodeDescriptorGossip); err != nil {
 		return errors.Errorf("node %d: couldn't gossip descriptor: %v", desc.NodeID, err)
 	}
@@ -364,7 +372,7 @@ func (g *Gossip) SetResolvers(resolvers []resolver.Resolver) {
 	g.resolvers = resolvers
 	g.resolversTried = map[int]struct{}{}
 	// Start new bootstrapping immediately instead of waiting for next bootstrap interval.
-	g.maybeSignalStalledLocked()
+	g.maybeSignalStatusChangeLocked()
 }
 
 // GetResolvers returns a copy of the resolvers slice.
@@ -399,9 +407,12 @@ func (g *Gossip) LogStatus() {
 	}
 	g.mu.Unlock()
 
-	log.Infof(context.TODO(), "gossip status (%s, %d node%s)\n%s%s",
+	msg := fmt.Sprintf("gossip status (%s, %d node%s)\n%s%s",
 		status, n, util.Pluralize(int64(n)),
 		g.clientStatus(), g.server.status())
+
+	g.events.Printf(msg)
+	log.Infof(context.TODO(), msg)
 }
 
 func (g *Gossip) clientStatus() string {
@@ -459,6 +470,7 @@ func (g *Gossip) maybeAddResolver(addr util.UnresolvedAddr) bool {
 		}
 		g.resolvers = append(g.resolvers, r)
 		g.resolverAddrs[addr] = r
+		g.events.Printf("add resolver %s", r)
 		return true
 	}
 	return false
@@ -471,6 +483,7 @@ func (g *Gossip) maybeAddBootstrapAddress(addr util.UnresolvedAddr) bool {
 	if _, ok := g.bootstrapAddrs[addr]; !ok {
 		g.bootstrapInfo.Addresses = append(g.bootstrapInfo.Addresses, addr)
 		g.bootstrapAddrs[addr] = struct{}{}
+		g.events.Printf("add bootstrap %s", addr)
 		return true
 	}
 	return false
@@ -484,6 +497,7 @@ func (g *Gossip) maybeCleanupBootstrapAddressesLocked(ctx context.Context) {
 		return
 	}
 	defer func() { g.hasCleanedBS = true }()
+	g.events.Printf("cleaning up bootstrap addresses")
 
 	g.resolvers = g.resolvers[:0]
 	g.resolverIdx = 0
@@ -627,7 +641,7 @@ func (g *Gossip) AddInfo(key string, val []byte, ttl time.Duration) error {
 	defer g.mu.Unlock()
 	err := g.mu.is.addInfo(key, g.mu.is.newInfo(val, ttl))
 	if err == nil {
-		g.checkHasConnectedLocked()
+		g.signalConnectedLocked()
 	}
 	return err
 }
@@ -855,6 +869,9 @@ func (g *Gossip) getNextBootstrapAddress() net.Addr {
 // lost and requires re-bootstrapping.
 func (g *Gossip) bootstrap() {
 	g.server.stopper.RunWorker(func() {
+		events := trace.NewEventLog("gossip", "bootstrap")
+		defer events.Finish()
+
 		var bootstrapTimer timeutil.Timer
 		defer bootstrapTimer.Stop()
 		for {
@@ -863,14 +880,20 @@ func (g *Gossip) bootstrap() {
 				defer g.mu.Unlock()
 				haveClients := g.outgoing.len() > 0
 				haveSentinel := g.mu.is.getInfo(KeySentinel) != nil
+				events.Printf("have clients: %t, have sentinel: %t", haveClients, haveSentinel)
 				if !haveClients || !haveSentinel {
 					// Try to get another bootstrap address from the resolvers.
 					if addr := g.getNextBootstrapAddress(); addr != nil {
 						g.startClient(addr, g.mu.is.NodeID)
 					} else {
+						bootstrapAddrs := make([]string, 0, len(g.bootstrapping))
+						for addr := range g.bootstrapping {
+							bootstrapAddrs = append(bootstrapAddrs, addr)
+						}
+						events.Printf("no next bootstrap address; currently bootstrapping: %v", bootstrapAddrs)
 						// We couldn't start a client, signal that we're stalled so that
 						// we'll retry.
-						g.maybeSignalStalledLocked()
+						g.maybeSignalStatusChangeLocked()
 					}
 				}
 			}) != nil {
@@ -879,6 +902,7 @@ func (g *Gossip) bootstrap() {
 
 			// Pause an interval before next possible bootstrap.
 			bootstrapTimer.Reset(g.bootstrapInterval)
+			events.Printf("sleeping %s until bootstrap", g.bootstrapInterval)
 			select {
 			case <-bootstrapTimer.C:
 				bootstrapTimer.Read = true
@@ -886,9 +910,11 @@ func (g *Gossip) bootstrap() {
 			case <-g.server.stopper.ShouldStop():
 				return
 			}
+			events.Printf("idling until bootstrap required")
 			// Block until we need bootstrapping again.
 			select {
 			case <-g.stalledCh:
+				events.Printf("detected stall; commencing bootstrap")
 				// break
 			case <-g.server.stopper.ShouldStop():
 				return
@@ -933,6 +959,7 @@ func (g *Gossip) manage() {
 							if log.V(1) {
 								log.Infof(context.TODO(), "closing least useful client %+v to tighten network graph", c)
 							}
+							g.events.Printf("culling %s", c.addr)
 							c.close()
 
 							// After releasing the lock, block until the client disconnects.
@@ -951,7 +978,7 @@ func (g *Gossip) manage() {
 				}()
 			case <-stallTicker.C:
 				g.mu.Lock()
-				g.maybeSignalStalledLocked()
+				g.maybeSignalStatusChangeLocked()
 				g.mu.Unlock()
 			}
 		}
@@ -977,6 +1004,7 @@ func (g *Gossip) tightenNetwork(distantNodeID roachpb.NodeID) {
 		} else {
 			log.Infof(context.TODO(), "node %d: starting client to distant node %d to tighten network graph",
 				g.mu.is.NodeID, distantNodeID)
+			g.events.Printf("tightening network with new client to %s", nodeAddr)
 			g.startClient(nodeAddr, g.mu.is.NodeID)
 		}
 	}
@@ -991,12 +1019,12 @@ func (g *Gossip) doDisconnected(c *client) {
 	if c.forwardAddr != nil {
 		g.startClient(c.forwardAddr, g.mu.is.NodeID)
 	}
-	g.maybeSignalStalledLocked()
+	g.maybeSignalStatusChangeLocked()
 }
 
-// If the sentinel gossip is missing, log and signal bootstrapper to
-// try another resolver.
-func (g *Gossip) maybeSignalStalledLocked() {
+// maybeSignalStatusChangeLocked checks whether gossip should transition its
+// internal state from connected to stalled or vice versa.
+func (g *Gossip) maybeSignalStatusChangeLocked() {
 	ctx := context.TODO()
 	if g.mu.is.getInfo(KeySentinel) != nil && g.outgoing.len()+g.mu.incoming.len() > 0 {
 		// When gossip is connected, the set of bootstrap addresses is
@@ -1004,13 +1032,16 @@ func (g *Gossip) maybeSignalStalledLocked() {
 		// gossiped, and may no longer be valid.
 		g.maybeCleanupBootstrapAddressesLocked(ctx)
 		if g.stalled {
+			g.events.Printf("connected")
 			log.Infof(ctx, "node has connected to cluster via gossip")
 			g.stalled = false
+			g.signalConnectedLocked()
 		}
 		return
 	}
 	// We employ the stalled boolean to avoid filling logs with warnings.
 	if !g.stalled {
+		g.events.Printf("now stalled")
 		g.stalled = true
 		g.warnAboutStallLocked(ctx)
 	}
@@ -1044,12 +1075,16 @@ func (g *Gossip) warnAboutStallLocked(ctx context.Context) {
 	}
 }
 
-// checkHasConnectedLocked checks whether this gossip instance is connected
-// to enough of the gossip network that it has received the cluster ID
-// gossip info. Once connected, the "Connected" channel is closed to
-// signal to any waiters that the gossip instance is ready. The gossip
-// mutex should be held by caller.
-func (g *Gossip) checkHasConnectedLocked() {
+// signalConnectedLocked checks whether this gossip instance is connected to
+// enough of the gossip network that it has received the cluster ID gossip
+// info. Once connected, the "Connected" channel is closed to signal to any
+// waiters that the gossip instance is ready. The gossip mutex should be held
+// by caller.
+//
+// TODO(tschottdorf): this is called from various locations which seem ad-hoc
+// (with the exception of the call bootstrap loop) yet necessary. Consolidate
+// and add commentary at each callsite.
+func (g *Gossip) signalConnectedLocked() {
 	// Check if we have the cluster ID gossip to start.
 	// If so, then mark ourselves as trivially connected to the gossip network.
 	if !g.hasConnected && g.mu.is.getInfo(KeyClusterID) != nil {
@@ -1069,6 +1104,8 @@ func (g *Gossip) startClient(addr net.Addr, nodeID roachpb.NodeID) {
 		breaker = g.rpcContext.NewBreaker()
 		g.clientsMu.breakers[addr.String()] = breaker
 	}
+
+	g.events.Printf("starting new client to %s", addr)
 	c := newClient(addr, g.serverMetrics)
 	g.clientsMu.clients = append(g.clientsMu.clients, c)
 	c.start(g, g.disconnected, g.rpcContext, g.server.stopper, nodeID, breaker)
@@ -1081,6 +1118,7 @@ func (g *Gossip) removeClient(target *client) {
 	defer g.clientsMu.Unlock()
 	for i, candidate := range g.clientsMu.clients {
 		if candidate == target {
+			g.events.Printf("client %s disconnected", candidate.addr)
 			g.clientsMu.clients = append(g.clientsMu.clients[:i], g.clientsMu.clients[i+1:]...)
 			delete(g.bootstrapping, candidate.addr.String())
 			g.outgoing.removeNode(candidate.peerID)
