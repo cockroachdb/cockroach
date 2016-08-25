@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/syncutil"
+	"github.com/coreos/etcd/raft/raftpb"
 )
 
 var (
@@ -74,9 +75,76 @@ var (
 	metaRangeSnapshotsPreemptiveApplied = metric.Metadata{Name: "range.snapshots.preemptive-applied"}
 
 	// Raft processing metrics.
-	metaRaftSelectDurationNanos  = metric.Metadata{Name: "process-raft.waitingnanos"}
-	metaRaftWorkingDurationNanos = metric.Metadata{Name: "process-raft.workingnanos"}
-	metaRaftTickingDurationNanos = metric.Metadata{Name: "process-raft.tickingnanos"}
+	metaRaftSelectDurationNanos = metric.Metadata{Name: "raft.process.waitingnanos",
+		Help: "Nanoseconds spent in store.processRaft() waiting"}
+	metaRaftWorkingDurationNanos = metric.Metadata{Name: "raft.process.workingnanos",
+		Help: "Nanoseconds spent in store.processRaft() working"}
+	metaRaftTickingDurationNanos = metric.Metadata{Name: "raft.process.tickingnanos",
+		Help: "Nanoseconds spent in store.processRaft() processing replica.Tick()"}
+
+	// Raft message metrics.
+	metaRaftRcvdProp = metric.Metadata{
+		Name: "raft.rcvd.prop",
+		Help: "Total number of MsgProp messages received by this store",
+	}
+	metaRaftRcvdApp = metric.Metadata{
+		Name: "raft.rcvd.app",
+		Help: "Total number of MsgApp messages received by this store",
+	}
+	metaRaftRcvdAppResp = metric.Metadata{
+		Name: "raft.rcvd.appresp",
+		Help: "Total number of MsgAppResp messages received by this store",
+	}
+	metaRaftRcvdVote = metric.Metadata{
+		Name: "raft.rcvd.vote",
+		Help: "Total number of MsgVote messages received by this store",
+	}
+	metaRaftRcvdVoteResp = metric.Metadata{
+		Name: "raft.rcvd.voteresp",
+		Help: "Total number of MsgVoteResp messages received by this store",
+	}
+	metaRaftRcvdSnap = metric.Metadata{
+		Name: "raft.rcvd.snap",
+		Help: "Total number of MsgSnap messages received by this store",
+	}
+	metaRaftRcvdHeartbeat = metric.Metadata{
+		Name: "raft.rcvd.heartbeat",
+		Help: "Total number of MsgHeartbeat messages received by this store",
+	}
+	metaRaftRcvdHeartbeatResp = metric.Metadata{
+		Name: "raft.rcvd.heartbeatresp",
+		Help: "Total number of MsgHeartbeatResp messages received by this store",
+	}
+	metaRaftRcvdTransferLeader = metric.Metadata{
+		Name: "raft.rcvd.transferleader",
+		Help: "Total number of MsgTransferLeader messages received by this store",
+	}
+	metaRaftRcvdTimeoutNow = metric.Metadata{
+		Name: "raft.rcvd.timeoutnow",
+		Help: "Total number of MsgTimeoutNow messages received by this store",
+	}
+
+	metaRaftTicks = metric.Metadata{
+		Name: "raft.ticks",
+		Help: "Total number of Raft ticks processed"}
+
+	metaRaftLeaders = metric.Metadata{
+		Name: "raft.leaders",
+		Help: "Total number of Replicas on this store that are leaders.",
+	}
+
+	metaRangeLeaseHolders = metric.Metadata{
+		Name: "range.leaseholders",
+		Help: "Total number of Replicas on this store that are Lease holders.",
+	}
+
+	metaRangeLeaseHoldersWithoutRaftLeadership = metric.Metadata{
+		Name: "range.leaseholders.without.leadership",
+		Help: "Total number of Replicas on this store that are Lease holders but not Raft leaders.",
+	}
+
+	metaRaftEnqueuedPending = metric.Metadata{Name: "raft.enqueued.pending",
+		Help: "Number of pending outgoing messages in the Raft Transport queue"}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -128,6 +196,11 @@ type StoreMetrics struct {
 	RdbTableReadersMemEstimate  *metric.Gauge
 	RdbReadAmplification        *metric.Gauge
 
+	// TODO(mrtracy): This should be removed as part of #4465. This is only
+	// maintained to keep the current structure of StatusSummaries; it would be
+	// better to convert the Gauges above into counters which are adjusted
+	// accordingly.
+
 	// Range event metrics.
 	RangeSplits                     *metric.Counter
 	RangeAdds                       *metric.Counter
@@ -141,11 +214,33 @@ type StoreMetrics struct {
 	RaftWorkingDurationNanos *metric.Counter
 	RaftTickingDurationNanos *metric.Counter
 
+	// Raft message metrics.
+	RaftRcvdMsgProp           *metric.Counter
+	RaftRcvdMsgApp            *metric.Counter
+	RaftRcvdMsgAppResp        *metric.Counter
+	RaftRcvdMsgVote           *metric.Counter
+	RaftRcvdMsgVoteResp       *metric.Counter
+	RaftRcvdMsgSnap           *metric.Counter
+	RaftRcvdMsgHeartbeat      *metric.Counter
+	RaftRcvdMsgHeartbeatResp  *metric.Counter
+	RaftRcvdMsgTransferLeader *metric.Counter
+	RaftRcvdMsgTimeoutNow     *metric.Counter
+
+	// A map for conveniently finding the appropriate metric. The individual
+	// metric references must exist as AddMetricStruct adds them by reflection
+	// on this struct and does not process map types.
+	// TODO(arjun): eliminate this duplication.
+	raftRcvdMessages map[raftpb.MessageType]*metric.Counter
+
+	RaftTicks           *metric.Counter
+	RaftEnqueuedPending *metric.Gauge
+
+	// These three gauges need to be atomically updated, but the values are aggregated from individual replicas using the private int64s.
+	RaftLeaders                            *metric.Gauge
+	RangeLeaseHolders                      *metric.Gauge
+	RangeLeaseHoldersWithoutRaftLeadership *metric.Gauge
+
 	// Stats for efficient merges.
-	// TODO(mrtracy): This should be removed as part of #4465. This is only
-	// maintained to keep the current structure of StatusSummaries; it would be
-	// better to convert the Gauges above into counters which are adjusted
-	// accordingly.
 	mu    syncutil.Mutex
 	stats enginepb.MVCCStats
 }
@@ -206,7 +301,37 @@ func newStoreMetrics() *StoreMetrics {
 		RaftSelectDurationNanos:  metric.NewCounter(metaRaftSelectDurationNanos),
 		RaftWorkingDurationNanos: metric.NewCounter(metaRaftWorkingDurationNanos),
 		RaftTickingDurationNanos: metric.NewCounter(metaRaftTickingDurationNanos),
+
+		// Raft message metrics.
+		RaftRcvdMsgProp:           metric.NewCounter(metaRaftRcvdProp),
+		RaftRcvdMsgApp:            metric.NewCounter(metaRaftRcvdApp),
+		RaftRcvdMsgAppResp:        metric.NewCounter(metaRaftRcvdAppResp),
+		RaftRcvdMsgVote:           metric.NewCounter(metaRaftRcvdVote),
+		RaftRcvdMsgVoteResp:       metric.NewCounter(metaRaftRcvdVoteResp),
+		RaftRcvdMsgSnap:           metric.NewCounter(metaRaftRcvdSnap),
+		RaftRcvdMsgHeartbeat:      metric.NewCounter(metaRaftRcvdHeartbeat),
+		RaftRcvdMsgHeartbeatResp:  metric.NewCounter(metaRaftRcvdHeartbeatResp),
+		RaftRcvdMsgTransferLeader: metric.NewCounter(metaRaftRcvdTransferLeader),
+		RaftRcvdMsgTimeoutNow:     metric.NewCounter(metaRaftRcvdTimeoutNow),
+		raftRcvdMessages:          make(map[raftpb.MessageType]*metric.Counter, len(raftpb.MessageType_name)),
+
+		RaftTicks:                              metric.NewCounter(metaRaftTicks),
+		RaftLeaders:                            metric.NewGauge(metaRaftLeaders),
+		RangeLeaseHolders:                      metric.NewGauge(metaRangeLeaseHolders),
+		RangeLeaseHoldersWithoutRaftLeadership: metric.NewGauge(metaRangeLeaseHoldersWithoutRaftLeadership),
+		RaftEnqueuedPending:                    metric.NewGauge(metaRaftEnqueuedPending),
 	}
+
+	sm.raftRcvdMessages[raftpb.MsgProp] = sm.RaftRcvdMsgProp
+	sm.raftRcvdMessages[raftpb.MsgApp] = sm.RaftRcvdMsgApp
+	sm.raftRcvdMessages[raftpb.MsgAppResp] = sm.RaftRcvdMsgAppResp
+	sm.raftRcvdMessages[raftpb.MsgVote] = sm.RaftRcvdMsgVote
+	sm.raftRcvdMessages[raftpb.MsgVoteResp] = sm.RaftRcvdMsgVoteResp
+	sm.raftRcvdMessages[raftpb.MsgSnap] = sm.RaftRcvdMsgSnap
+	sm.raftRcvdMessages[raftpb.MsgHeartbeat] = sm.RaftRcvdMsgHeartbeat
+	sm.raftRcvdMessages[raftpb.MsgHeartbeatResp] = sm.RaftRcvdMsgHeartbeatResp
+	sm.raftRcvdMessages[raftpb.MsgTransferLeader] = sm.RaftRcvdMsgTransferLeader
+	sm.raftRcvdMessages[raftpb.MsgTimeoutNow] = sm.RaftRcvdMsgTimeoutNow
 
 	storeRegistry.AddMetricStruct(sm)
 

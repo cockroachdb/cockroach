@@ -319,6 +319,12 @@ type KeyRange interface {
 
 var _ KeyRange = &Replica{}
 
+type tickInfo struct {
+	Exists             bool
+	IsRangeLeaseHolder bool
+	IsRaftLeader       bool
+}
+
 // withRaftGroupLocked calls the supplied function with the (lazily
 // initialized) Raft group. It assumes that the Replica lock is held.
 func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
@@ -1536,6 +1542,24 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 	})
 }
 
+func (r *Replica) isRangeLeaseHolderLocked() bool {
+	lease := r.mu.state.Lease
+	if lease == nil {
+		return false
+	}
+	timestamp := r.store.Clock().Now()
+	if lease.Covers(timestamp) {
+		if lease.OwnedBy(r.store.Ident.StoreID) {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Replica) isRaftLeaderLocked() bool {
+	return r.mu.leaderID == r.mu.replicaID
+}
+
 func (r *Replica) handleRaftReady() error {
 	ctx := context.TODO()
 	var hasReady bool
@@ -1545,6 +1569,7 @@ func (r *Replica) handleRaftReady() error {
 	lastIndex := r.mu.lastIndex // used for append below
 	raftLogSize := r.mu.raftLogSize
 	leaderID := r.mu.leaderID
+
 	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
 		if hasReady = raftGroup.HasReady(); hasReady {
 			rd = raftGroup.Ready()
@@ -1738,9 +1763,12 @@ func (r *Replica) handleRaftReady() error {
 
 // tick the Raft group, returning any error and true if the raft group exists
 // and false otherwise.
-func (r *Replica) tick() (bool, error) {
+func (r *Replica) tick(info *tickInfo) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	info.IsRaftLeader = r.isRaftLeaderLocked()
+	info.IsRangeLeaseHolder = r.isRangeLeaseHolderLocked()
 
 	// If the raft group is uninitialized, do not initialize raft groups on
 	// tick.
@@ -1871,6 +1899,16 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 			"failed to look up recipient replica %d in range %d while sending %s: %s", msg.To, rangeID, msg.Type, toErr)
 		return
 	}
+
+	r.store.ctx.Transport.mu.Lock()
+	var queuedMsgs int64
+	for _, transportQueues := range r.store.ctx.Transport.mu.queues {
+		for _, queue := range transportQueues {
+			queuedMsgs += int64(len(queue))
+		}
+	}
+	r.store.ctx.Transport.mu.Unlock()
+	r.store.metrics.RaftEnqueuedPending.Update(queuedMsgs)
 
 	if !r.store.ctx.Transport.SendAsync(&RaftMessageRequest{
 		RangeID:     rangeID,
