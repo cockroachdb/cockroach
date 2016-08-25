@@ -85,24 +85,38 @@ func allSQLDescriptors(txn *client.Txn) ([]sqlbase.Descriptor, error) {
 //
 // TODO(dan): Bikeshed this directory structure and naming.
 func Backup(
-	ctx context.Context, db client.DB, base string,
+	ctx context.Context, db client.DB, base string, endTime hlc.Timestamp,
 ) (desc sqlbase.BackupDescriptor, retErr error) {
 	// TODO(dan): Optionally take a start time for an incremental backup.
 	// TODO(dan): Take a uri for the path prefix and support various cloud storages.
 	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
 	// for grpc.
 
-	// TODO(dan): Pick an appropriate end time and set it in the txn.
-	txn := client.NewTxn(ctx, db)
+	var rangeDescs []roachpb.RangeDescriptor
+	var sqlDescs []sqlbase.Descriptor
 
-	rangeDescs, err := allRangeDescriptors(txn)
-	if err != nil {
-		return sqlbase.BackupDescriptor{}, err
+	opt := client.TxnExecOptions{
+		AutoRetry:  true,
+		AutoCommit: true,
 	}
 
-	sqlDescs, err := allSQLDescriptors(txn)
-	if err != nil {
-		return sqlbase.BackupDescriptor{}, err
+	{
+		// TODO(dan): Pick an appropriate end time and set it in the txn.
+		txn := client.NewTxn(ctx, db)
+		err := txn.Exec(opt, func(txn *client.Txn, opt *client.TxnExecOptions) error {
+			var err error
+			setTxnTimestamps(txn, endTime)
+
+			rangeDescs, err = allRangeDescriptors(txn)
+			if err != nil {
+				return err
+			}
+			sqlDescs, err = allSQLDescriptors(txn)
+			return err
+		})
+		if err != nil {
+			return sqlbase.BackupDescriptor{}, err
+		}
 	}
 
 	var dataSize int64
@@ -124,8 +138,17 @@ func Backup(
 			return sqlbase.BackupDescriptor{}, err
 		}
 
-		// TODO(dan): Iterate with some batch size.
-		kvs, err := txn.Scan(backupDescs[i].StartKey, backupDescs[i].EndKey, 0)
+		var kvs []client.KeyValue
+
+		txn := client.NewTxn(ctx, db)
+		err := txn.Exec(opt, func(txn *client.Txn, opt *client.TxnExecOptions) error {
+			var err error
+			setTxnTimestamps(txn, endTime)
+
+			// TODO(dan): Iterate with some batch size.
+			kvs, err = txn.Scan(backupDescs[i].StartKey, backupDescs[i].EndKey, 0)
+			return err
+		})
 		if err != nil {
 			return sqlbase.BackupDescriptor{}, err
 		}
@@ -159,12 +182,9 @@ func Backup(
 		}
 		dataSize += sst.DataSize
 	}
-	if err := txn.CommitOrCleanup(); err != nil {
-		return sqlbase.BackupDescriptor{}, err
-	}
 
 	desc = sqlbase.BackupDescriptor{
-		EndTime:  txn.Proto.MaxTimestamp,
+		EndTime:  endTime,
 		Ranges:   backupDescs,
 		SQL:      sqlDescs,
 		DataSize: dataSize,

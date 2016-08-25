@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 type backupContext struct {
@@ -52,7 +53,7 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	kvDB, stopper := makeDBClient()
 	defer stopper.Stop()
 
-	desc, err := sql.Backup(ctx, *kvDB, base)
+	desc, err := sql.Backup(ctx, *kvDB, base, hlc.NewClock(hlc.UnixNano).Now())
 	if err != nil {
 		return err
 	}
