@@ -81,7 +81,6 @@ type Context struct {
 	Stopper      *stop.Stopper
 	RemoteClocks *RemoteClockMonitor
 	masterCtx    context.Context
-	cancel       context.CancelFunc
 
 	HeartbeatInterval time.Duration
 	HeartbeatTimeout  time.Duration
@@ -111,7 +110,8 @@ func NewContext(baseCtx *base.Context, hlcClock *hlc.Clock, stopper *stop.Stoppe
 	ctx.breakerClock = breakerClock{
 		clock: ctx.localClock,
 	}
-	ctx.masterCtx, ctx.cancel = context.WithCancel(context.Background())
+	var cancel context.CancelFunc
+	ctx.masterCtx, cancel = context.WithCancel(context.Background())
 	ctx.Stopper = stopper
 	ctx.RemoteClocks = newRemoteClockMonitor(ctx.localClock, 10*defaultHeartbeatInterval)
 	ctx.HeartbeatInterval = defaultHeartbeatInterval
@@ -121,7 +121,7 @@ func NewContext(baseCtx *base.Context, hlcClock *hlc.Clock, stopper *stop.Stoppe
 	stopper.RunWorker(func() {
 		<-stopper.ShouldQuiesce()
 
-		ctx.cancel()
+		cancel()
 		ctx.conns.Lock()
 		for key, meta := range ctx.conns.cache {
 			meta.Do(func() {
