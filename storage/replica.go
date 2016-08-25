@@ -1536,6 +1536,24 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 	})
 }
 
+func (r *Replica) isRangeLeaseHolderLocked() bool {
+	lease := r.mu.state.Lease
+	if lease == nil {
+		return false
+	}
+	timestamp := r.store.Clock().Now()
+	if lease.Covers(timestamp) {
+		if lease.OwnedBy(r.store.Ident.StoreID) {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Replica) isRaftLeaderLocked() bool {
+	return r.mu.leaderID == r.mu.replicaID
+}
+
 func (r *Replica) handleRaftReady() error {
 	ctx := context.TODO()
 	var hasReady bool
@@ -1545,6 +1563,7 @@ func (r *Replica) handleRaftReady() error {
 	lastIndex := r.mu.lastIndex // used for append below
 	raftLogSize := r.mu.raftLogSize
 	leaderID := r.mu.leaderID
+
 	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
 		if hasReady = raftGroup.HasReady(); hasReady {
 			rd = raftGroup.Ready()
@@ -1872,6 +1891,17 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 		return
 	}
 
+	r.store.ctx.Transport.mu.Lock()
+	var queuedMsgs int64
+	for _, transportQueues := range r.store.ctx.Transport.mu.queues {
+		for _, queue := range transportQueues {
+			queuedMsgs += int64(len(queue))
+		}
+	}
+	r.store.ctx.Transport.mu.Unlock()
+	r.store.metrics.RaftEnqueuedPending.Update(queuedMsgs)
+	r.store.metrics.RaftEnqueuedMessages.Inc(1)
+
 	if !r.store.ctx.Transport.SendAsync(&RaftMessageRequest{
 		RangeID:     rangeID,
 		ToReplica:   toReplica,
@@ -1880,6 +1910,7 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	}) {
 		r.mu.Lock()
 		r.mu.droppedMessages++
+		r.store.metrics.RaftDroppedMessages.Inc(1)
 		r.mu.Unlock()
 
 		if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {

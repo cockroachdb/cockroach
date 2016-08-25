@@ -2202,6 +2202,9 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 	}
 
 	addedPlaceholder := false
+
+	s.metrics.raftRcvdMessages[req.Message.Type].Inc(1)
+
 	switch req.Message.Type {
 	case raftpb.MsgSnap:
 		if earlyReturn := func() bool {
@@ -2540,6 +2543,7 @@ func (s *Store) processRaft() {
 			// replicas, clear all remaining placeholders.
 			s.clearAllPlaceholders()
 			s.processRaftMu.Unlock()
+
 			s.metrics.RaftWorkingDurationNanos.Inc(timeutil.Since(workingStart).Nanoseconds())
 
 			maybeWarnDuration(workingStart, s, "raft ready processing")
@@ -2575,7 +2579,33 @@ func (s *Store) processRaft() {
 						pendingReplicas = append(pendingReplicas, id)
 					}
 				}
+
+				var raftLeaders, rangeLeaseHolders, rangeLeaseHoldersWithoutRaftLeadership int64
+
+				for _, r := range s.mu.replicas {
+					r.mu.Lock()
+					isRaftLeader := r.isRaftLeaderLocked()
+					isRangeLeaseHolder := r.isRangeLeaseHolderLocked()
+					if isRangeLeaseHolder && !isRaftLeader {
+						rangeLeaseHoldersWithoutRaftLeadership++
+					}
+					if isRaftLeader {
+						raftLeaders++
+					}
+					if isRangeLeaseHolder {
+						rangeLeaseHolders++
+					}
+					r.mu.Unlock()
+				}
+
+				s.metrics.RaftLeaders.Update(raftLeaders)
+				s.metrics.RangeLeaseHolders.Update(rangeLeaseHolders)
+				s.metrics.RangeLeaseHoldersWithoutRaftLeadership.Update(rangeLeaseHoldersWithoutRaftLeadership)
+
 				s.mu.Unlock()
+
+				s.metrics.RaftTicks.Inc(1)
+
 				// Enqueue all pending ranges for readiness checks. Note that we could
 				// not hold the pendingRaftGroups lock during the previous loop because
 				// of lock ordering constraints with r.tick().
