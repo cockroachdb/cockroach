@@ -20,7 +20,6 @@ import (
 	"container/heap"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/opentracing/opentracing-go"
@@ -98,6 +97,7 @@ func (pq *priorityQueue) update(item *replicaItem, priority float64) {
 
 var (
 	errQueueDisabled     = errors.New("queue disabled")
+	errQueueStopped      = errors.New("queue stopped")
 	errReplicaNotAddable = errors.New("replica shouldn't be added to queue")
 )
 
@@ -195,11 +195,13 @@ type baseQueue struct {
 		priorityQ   priorityQueue                    // The priority queue
 		replicas    map[roachpb.RangeID]*replicaItem // Map from RangeID to replicaItem (for updating priority)
 		purgatory   map[roachpb.RangeID]error        // Map of replicas to processing errors
+		stopped     bool
+		// Some tests in this package disable queues.
+		disabled bool
 	}
-	// Some tests in this package disable queues.
-	disabled int32 // updated atomically
 
 	// TODO(tamird): update all queues to use eventLog.
+	// TODO(radu): remove this in favor of using the context (and log.WithEventLog).
 	eventLog queueLog
 }
 
@@ -249,20 +251,16 @@ func (bq *baseQueue) PurgatoryLength() int {
 
 // SetDisabled turns queue processing off or on as directed.
 func (bq *baseQueue) SetDisabled(disabled bool) {
-	if disabled {
-		atomic.StoreInt32(&bq.disabled, 1)
-	} else {
-		atomic.StoreInt32(&bq.disabled, 0)
-	}
+	bq.mu.Lock()
+	bq.mu.disabled = disabled
+	bq.mu.Unlock()
 }
 
 // Disabled returns true is the queue is currently disabled.
 func (bq *baseQueue) Disabled() bool {
-	return atomic.LoadInt32(&bq.disabled) == 1
-}
-
-func (bq *baseQueue) Close() {
-	bq.eventLog.Finish()
+	bq.mu.Lock()
+	defer bq.mu.Unlock()
+	return bq.mu.disabled
 }
 
 // Start launches a goroutine to process entries in the queue. The
@@ -281,6 +279,9 @@ func (bq *baseQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 func (bq *baseQueue) Add(repl *Replica, priority float64) (bool, error) {
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
+	if bq.mu.stopped {
+		return false, errQueueStopped
+	}
 	return bq.addInternal(repl, true, priority)
 }
 
@@ -291,21 +292,28 @@ func (bq *baseQueue) Add(repl *Replica, priority float64) (bool, error) {
 // dropped.
 func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 	// Load the system config.
-	cfg, ok := bq.gossip.GetSystemConfig()
-	if !ok {
+	cfg, cfgOk := bq.gossip.GetSystemConfig()
+	requiresSplit := cfgOk && bq.requiresSplit(cfg, repl)
+
+	bq.mu.Lock()
+	defer bq.mu.Unlock()
+
+	if bq.mu.stopped {
+		return
+	}
+
+	if !cfgOk {
 		bq.eventLog.VInfof(log.V(1), "no system config available. skipping")
 		return
 	}
 
-	if bq.requiresSplit(cfg, repl) {
+	if requiresSplit {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
 		bq.eventLog.VInfof(log.V(1), "%s: split needed; not adding", repl)
 		return
 	}
 
-	bq.mu.Lock()
-	defer bq.mu.Unlock()
 	should, priority := bq.impl.shouldQueue(now, repl, cfg)
 	if _, err := bq.addInternal(repl, should, priority); !isExpectedQueueError(err) {
 		bq.eventLog.Error(errors.Wrapf(err, "unable to add %s", repl))
@@ -330,7 +338,11 @@ func (bq *baseQueue) requiresSplit(cfg config.SystemConfig, repl *Replica) bool 
 // the replica is already queued, updates the existing
 // priority. Expects the queue lock is held by caller.
 func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) (bool, error) {
-	if atomic.LoadInt32(&bq.disabled) == 1 {
+	if bq.mu.stopped {
+		panic("stopped queue")
+	}
+
+	if bq.mu.disabled {
 		bq.eventLog.VInfof(false, "queue disabled")
 		return false, errQueueDisabled
 	}
@@ -380,6 +392,12 @@ func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) (
 func (bq *baseQueue) MaybeRemove(repl *Replica) {
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
+
+	if bq.mu.stopped {
+		// The eventLog is no longer available after we stopped.
+		return
+	}
+
 	if item, ok := bq.mu.replicas[repl.RangeID]; ok {
 		bq.eventLog.VInfof(log.V(3), "%s: removing", item.value)
 		bq.remove(item)
@@ -392,6 +410,15 @@ func (bq *baseQueue) MaybeRemove(repl *Replica) {
 // TODO(spencer): current load should factor into replica processing timer.
 func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
+		defer func() {
+			bq.mu.Lock()
+			bq.mu.stopped = true
+			bq.mu.Unlock()
+
+			bq.eventLog.traceLog.Finish()
+			bq.eventLog.traceLog = nil
+		}()
+
 		// nextTime is initially nil; we don't start any timers until the queue
 		// becomes non-empty.
 		var nextTime <-chan time.Time
