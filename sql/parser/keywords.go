@@ -113,6 +113,7 @@ var keywords = map[string]int{
 	"INSERT":            INSERT,
 	"INT":               INT,
 	"INT64":             INT64,
+	"INT8":              INT8,
 	"INTEGER":           INTEGER,
 	"INTERLEAVE":        INTERLEAVE,
 	"INTERSECT":         INTERSECT,
