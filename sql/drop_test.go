@@ -17,11 +17,13 @@
 package sql_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
@@ -164,10 +166,19 @@ func TestDropIndex(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.kv (k INT PRIMARY KEY, v INT);
 CREATE INDEX foo on t.kv (v);
-INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 `); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	maxValue := 2*sql.IndexBackfillChunkSize + 1
+	insert := fmt.Sprintf(`INSERT INTO t.kv VALUES (%d, %d)`, 0, maxValue)
+	for i := 1; i <= maxValue; i++ {
+		insert += fmt.Sprintf(` ,(%d, %d)`, i, maxValue-i)
+	}
+	if _, err := sqlDB.Exec(insert); err != nil {
 		t.Fatal(err)
 	}
 
@@ -186,7 +197,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	indexEndKey := indexStartKey.PrefixEnd()
 	if kvs, err := kvDB.Scan(indexStartKey, indexEndKey, 0); err != nil {
 		t.Fatal(err)
-	} else if l := 3; len(kvs) != l {
+	} else if l := maxValue + 1; len(kvs) != l {
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
 	}
 
@@ -205,8 +216,66 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
-	if err != nil {
+}
+
+func TestDropIndexInterleaved(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+SET DATABASE=t;
+CREATE TABLE kv (k INT PRIMARY KEY, v INT);
+CREATE TABLE intlv (k INT, m INT, n INT, PRIMARY KEY (k, m)) INTERLEAVE IN PARENT kv (k);
+CREATE INDEX intlv_idx ON intlv (k, n) INTERLEAVE IN PARENT kv (k);
+`); err != nil {
 		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	maxValue := 2*sql.IndexBackfillChunkSize + 1
+	insert := fmt.Sprintf(`INSERT INTO t.kv VALUES (%d, %d)`, 0, maxValue)
+	for i := 1; i <= maxValue; i++ {
+		insert += fmt.Sprintf(` ,(%d, %d)`, i, maxValue-i)
+	}
+	if _, err := sqlDB.Exec(insert); err != nil {
+		t.Fatal(err)
+	}
+	insert = fmt.Sprintf(`INSERT INTO t.intlv VALUES (%d, %d, %d)`, 0, maxValue, maxValue)
+	for i := 1; i <= maxValue; i++ {
+		insert += fmt.Sprintf(` ,(%d, %d, %d)`, i, maxValue-i, maxValue-i)
+	}
+	if _, err := sqlDB.Exec(insert); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	indexPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+
+	indexStartKey := roachpb.Key(indexPrefix)
+	indexEndKey := indexStartKey.PrefixEnd()
+	if kvs, err := kvDB.Scan(indexStartKey, indexEndKey, 0); err != nil {
+		t.Fatal(err)
+	} else if l := 3 * (maxValue + 1); len(kvs) != l {
+		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
+	}
+
+	if _, err := sqlDB.Exec(`DROP INDEX t.intlv@intlv_idx`); err != nil {
+		t.Fatal(err)
+	}
+
+	if kvs, err := kvDB.Scan(indexStartKey, indexEndKey, 0); err != nil {
+		t.Fatal(err)
+	} else if l := 2 * (maxValue + 1); len(kvs) != l {
+		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
+	}
+
+	// Ensure that index is not active.
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "intlv")
+	if _, _, err := tableDesc.FindIndexByName("intlv_idx"); err == nil {
+		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
 }
 
