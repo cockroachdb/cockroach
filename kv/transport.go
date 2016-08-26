@@ -100,7 +100,7 @@ type Transport interface {
 	// replica. May panic if the transport is exhausted. Should not
 	// block; the transport is responsible for starting other goroutines
 	// as needed.
-	SendNext(chan BatchCall)
+	SendNext(chan<- BatchCall)
 
 	// Close is called when the transport is no longer needed. It may
 	// cancel any pending RPCs without writing any response to the channel.
@@ -155,7 +155,7 @@ func (gt *grpcTransport) IsExhausted() bool {
 // SendNext invokes the specified RPC on the supplied client when the
 // client is ready. On success, the reply is sent on the channel;
 // otherwise an error is sent.
-func (gt *grpcTransport) SendNext(done chan BatchCall) {
+func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
 	client := gt.orderedClients[0]
 	gt.orderedClients = gt.orderedClients[1:]
 
@@ -241,7 +241,7 @@ func (s *senderTransport) IsExhausted() bool {
 	return s.called
 }
 
-func (s *senderTransport) SendNext(done chan BatchCall) {
+func (s *senderTransport) SendNext(done chan<- BatchCall) {
 	if s.called {
 		panic("called an exhausted transport")
 	}

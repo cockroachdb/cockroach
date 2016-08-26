@@ -38,7 +38,7 @@ type localTestClusterTransport struct {
 	latency time.Duration
 }
 
-func (l *localTestClusterTransport) SendNext(done chan BatchCall) {
+func (l *localTestClusterTransport) SendNext(done chan<- BatchCall) {
 	if l.latency > 0 {
 		time.Sleep(l.latency)
 	}
