@@ -215,9 +215,9 @@ func (n *indexJoinNode) Next() (bool, error) {
 				return false, err
 			}
 			key := roachpb.Key(primaryIndexKey)
-			n.table.spans = append(n.table.spans, sqlbase.Span{
-				Start: key,
-				End:   key.PrefixEnd(),
+			n.table.spans = append(n.table.spans, roachpb.Span{
+				Key:    key,
+				EndKey: key.PrefixEnd(),
 			})
 
 			if n.explain == explainDebug {
