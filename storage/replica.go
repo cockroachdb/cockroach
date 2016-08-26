@@ -319,10 +319,10 @@ type KeyRange interface {
 
 var _ KeyRange = &Replica{}
 
-type tickInfo struct {
-	Exists             bool
-	IsRangeLeaseHolder bool
-	IsRaftLeader       bool
+type tickAccumulator struct {
+	RaftLeaders                            int64
+	RangeLeaseHolders                      int64
+	RangeLeaseHoldersWithoutRaftLeadership int64
 }
 
 // withRaftGroupLocked calls the supplied function with the (lazily
@@ -1761,20 +1761,31 @@ func (r *Replica) handleRaftReady() error {
 	})
 }
 
-// tick the Raft group, returning any error. tick() updates the tickInfo
-// struct.
-func (r *Replica) tick(info *tickInfo) error {
+// tick the Raft group, returning any error and true if the raft group exists
+// and false otherwise. Updates acc based on the replica's state.
+func (r *Replica) tick(acc *tickAccumulator) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	info.IsRaftLeader = r.isRaftLeaderLocked()
-	info.IsRangeLeaseHolder = r.isRangeLeaseHolderLocked()
+	if acc != nil {
+		isRaftLeader := r.isRaftLeaderLocked()
+		isRangeLeaseHolder := r.isRangeLeaseHolderLocked()
+
+		if isRaftLeader {
+			acc.RaftLeaders++
+		}
+		if isRangeLeaseHolder {
+			acc.RangeLeaseHolders++
+		}
+		if isRangeLeaseHolder && !isRaftLeader {
+			acc.RangeLeaseHoldersWithoutRaftLeadership++
+		}
+	}
 
 	// If the raft group is uninitialized, do not initialize raft groups on
 	// tick.
 	if r.mu.internalRaftGroup == nil {
-		info.Exists = false
-		return nil
+		return false, nil
 	}
 
 	r.mu.ticks++
@@ -1789,12 +1800,10 @@ func (r *Replica) tick(info *tickInfo) error {
 		// cycles.
 		if err := r.refreshPendingCmdsLocked(
 			reasonTicks, r.store.ctx.RaftElectionTimeoutTicks); err != nil {
-			info.Exists = true
-			return err
+			return true, err
 		}
 	}
-	info.Exists = true
-	return nil
+	return true, nil
 }
 
 // pendingCmdSlice sorts by increasing MaxLeaseIndex.

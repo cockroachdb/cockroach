@@ -2572,31 +2572,21 @@ func (s *Store) processRaft() {
 				s.processRaftMu.Lock()
 				s.mu.Lock()
 				pendingReplicas = pendingReplicas[:0]
-				var raftLeaders, rangeLeaseHolders, rangeLeaseHoldersWithoutRaftLeadership int64
 
-				var info tickInfo
+				var acc tickAccumulator
 				for id, r := range s.mu.replicas {
-					if err := r.tick(&info); err != nil {
+					if exists, err := r.tick(&acc); err != nil {
 						log.Error(context.TODO(), err)
-					} else if info.Exists {
+					} else if exists {
 						pendingReplicas = append(pendingReplicas, id)
-					}
-					if info.IsRangeLeaseHolder && !info.IsRaftLeader {
-						rangeLeaseHoldersWithoutRaftLeadership++
-					}
-					if info.IsRaftLeader {
-						raftLeaders++
-					}
-					if info.IsRangeLeaseHolder {
-						rangeLeaseHolders++
 					}
 				}
 
 				s.mu.Unlock()
 
-				s.metrics.RaftLeaders.Update(raftLeaders)
-				s.metrics.RangeLeaseHolders.Update(rangeLeaseHolders)
-				s.metrics.RangeLeaseHoldersWithoutRaftLeadership.Update(rangeLeaseHoldersWithoutRaftLeadership)
+				s.metrics.RaftLeaders.Update(acc.RaftLeaders)
+				s.metrics.RangeLeaseHolders.Update(acc.RangeLeaseHolders)
+				s.metrics.RangeLeaseHoldersWithoutRaftLeadership.Update(acc.RangeLeaseHoldersWithoutRaftLeadership)
 				s.metrics.RaftTicks.Inc(1)
 
 				// Enqueue all pending ranges for readiness checks. Note that we could
