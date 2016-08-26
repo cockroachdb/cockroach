@@ -161,8 +161,7 @@ func scanNodeToTableReaderSpec(n *scanNode) *distsql.TableReaderSpec {
 	}
 	s.Spans = make([]distsql.TableReaderSpan, len(n.spans))
 	for i, span := range n.spans {
-		s.Spans[i].Span.Key = span.Start
-		s.Spans[i].Span.EndKey = span.End
+		s.Spans[i].Span = span
 	}
 	s.OutputColumns = make([]uint32, 0, len(n.resultColumns))
 	for i := range n.resultColumns {
