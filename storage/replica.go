@@ -348,6 +348,12 @@ type KeyRange interface {
 
 var _ KeyRange = &Replica{}
 
+type tickInfo struct {
+	Exists             bool
+	IsRangeLeaseHolder bool
+	IsRaftLeader       bool
+}
+
 // withRaftGroupLocked calls the supplied function with the (lazily
 // initialized) Raft group. It assumes that the Replica lock is held.
 func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
@@ -1593,6 +1599,24 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 	})
 }
 
+func (r *Replica) isRangeLeaseHolderLocked() bool {
+	lease := r.mu.state.Lease
+	if lease == nil {
+		return false
+	}
+	timestamp := r.store.Clock().Now()
+	if lease.Covers(timestamp) {
+		if lease.OwnedBy(r.store.Ident.StoreID) {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Replica) isRaftLeaderLocked() bool {
+	return r.mu.leaderID == r.mu.replicaID
+}
+
 // handleRaftReady processes the Ready() messages on the replica if there are any. It takes a
 // non-nil IncomingSnapshot pointer to indicate that it is about to process a snapshot.
 func (r *Replica) handleRaftReady(inSnap *IncomingSnapshot) error {
@@ -1604,6 +1628,7 @@ func (r *Replica) handleRaftReady(inSnap *IncomingSnapshot) error {
 	lastIndex := r.mu.lastIndex // used for append below
 	raftLogSize := r.mu.raftLogSize
 	leaderID := r.mu.leaderID
+
 	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
 		if hasReady = raftGroup.HasReady(); hasReady {
 			rd = raftGroup.Ready()
@@ -1802,16 +1827,20 @@ func (r *Replica) handleRaftReady(inSnap *IncomingSnapshot) error {
 	})
 }
 
-// tick the Raft group, returning any error and true if the raft group exists
-// and false otherwise.
-func (r *Replica) tick() (bool, error) {
+// tick the Raft group, returning any error. tick() updates the tickInfo
+// struct.
+func (r *Replica) tick(info *tickInfo) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	info.IsRaftLeader = r.isRaftLeaderLocked()
+	info.IsRangeLeaseHolder = r.isRangeLeaseHolderLocked()
 
 	// If the raft group is uninitialized, do not initialize raft groups on
 	// tick.
 	if r.mu.internalRaftGroup == nil {
-		return false, nil
+		info.Exists = false
+		return nil
 	}
 
 	r.mu.ticks++
@@ -1826,10 +1855,12 @@ func (r *Replica) tick() (bool, error) {
 		// cycles.
 		if err := r.refreshPendingCmdsLocked(
 			reasonTicks, r.store.ctx.RaftElectionTimeoutTicks); err != nil {
-			return true, err
+			info.Exists = true
+			return err
 		}
 	}
-	return true, nil
+	info.Exists = true
+	return nil
 }
 
 // pendingCmdSlice sorts by increasing MaxLeaseIndex.
@@ -1975,6 +2006,16 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 		}
 		return
 	}
+
+	r.store.ctx.Transport.mu.Lock()
+	var queuedMsgs int64
+	for _, transportQueues := range r.store.ctx.Transport.mu.queues {
+		for _, queue := range transportQueues {
+			queuedMsgs += int64(len(queue))
+		}
+	}
+	r.store.ctx.Transport.mu.Unlock()
+	r.store.metrics.RaftEnqueuedPending.Update(queuedMsgs)
 
 	if !r.store.ctx.Transport.SendAsync(&RaftMessageRequest{
 		RangeID:     rangeID,

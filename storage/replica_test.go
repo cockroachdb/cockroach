@@ -6104,8 +6104,9 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		r.mu.Lock()
 		ticks := r.mu.ticks
 		r.mu.Unlock()
+		var info tickInfo
 		for ; (ticks % electionTicks) != 0; ticks++ {
-			if _, err := r.tick(); err != nil {
+			if err := r.tick(&info); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -6135,7 +6136,8 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		r.mu.Unlock()
 
 		// Tick raft.
-		if _, err := r.tick(); err != nil {
+		var info tickInfo
+		if err := r.tick(&info); err != nil {
 			t.Fatal(err)
 		}
 

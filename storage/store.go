@@ -2441,6 +2441,8 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 		}
 	}
 
+	s.metrics.raftRcvdMessages[req.Message.Type].Inc(1)
+
 	switch req.Message.Type {
 	case raftpb.MsgSnap:
 		// All snapshots should be handled by the streaming endpoint.
@@ -2724,6 +2726,7 @@ func (s *Store) processRaft() {
 			}
 			wg.Wait()
 			s.processRaftMu.Unlock()
+
 			s.metrics.RaftWorkingDurationNanos.Inc(timeutil.Since(workingStart).Nanoseconds())
 
 			maybeWarnDuration(workingStart, s, "raft ready processing")
@@ -2752,14 +2755,33 @@ func (s *Store) processRaft() {
 				s.processRaftMu.Lock()
 				s.mu.Lock()
 				pendingReplicas = pendingReplicas[:0]
+				var raftLeaders, rangeLeaseHolders, rangeLeaseHoldersWithoutRaftLeadership int64
+
+				var info tickInfo
 				for id, r := range s.mu.replicas {
-					if exists, err := r.tick(); err != nil {
+					if err := r.tick(&info); err != nil {
 						log.Error(s.Ctx(), err)
-					} else if exists {
+					} else if info.Exists {
 						pendingReplicas = append(pendingReplicas, id)
 					}
+					if info.IsRangeLeaseHolder && !info.IsRaftLeader {
+						rangeLeaseHoldersWithoutRaftLeadership++
+					}
+					if info.IsRaftLeader {
+						raftLeaders++
+					}
+					if info.IsRangeLeaseHolder {
+						rangeLeaseHolders++
+					}
 				}
+
 				s.mu.Unlock()
+
+				s.metrics.RaftLeaders.Update(raftLeaders)
+				s.metrics.RangeLeaseHolders.Update(rangeLeaseHolders)
+				s.metrics.RangeLeaseHoldersWithoutRaftLeadership.Update(rangeLeaseHoldersWithoutRaftLeadership)
+				s.metrics.RaftTicks.Inc(1)
+
 				// Enqueue all pending ranges for readiness checks. Note that we could
 				// not hold the pendingRaftGroups lock during the previous loop because
 				// of lock ordering constraints with r.tick().
