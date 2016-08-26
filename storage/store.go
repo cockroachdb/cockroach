@@ -2470,7 +2470,7 @@ func (s *Store) processRaft() {
 			close(workQueue)
 		}()
 
-		var pendingReplicas []roachpb.RangeID
+		var acc tickAccumulator
 		var warnDuration = 10 * s.ctx.RaftTickInterval
 		maybeWarnDuration := func(start time.Time, prefix fmt.Stringer, msg string) {
 			// If Raft processing took longer than a second something bad is going
@@ -2570,43 +2570,31 @@ func (s *Store) processRaft() {
 				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
 				tickerStart := timeutil.Now()
 				s.processRaftMu.Lock()
-				s.mu.Lock()
-				pendingReplicas = pendingReplicas[:0]
-				var raftLeaders, rangeLeaseHolders, rangeLeaseHoldersWithoutRaftLeadership int64
 
-				var info tickInfo
-				for id, r := range s.mu.replicas {
-					if err := r.tick(&info); err != nil {
+				acc = tickAccumulator{PendingReplicas: acc.PendingReplicas[:0]}
+
+				s.mu.Lock()
+				for _, r := range s.mu.replicas {
+					if err := r.tick(&acc); err != nil {
 						log.Error(context.TODO(), err)
-					} else if info.Exists {
-						pendingReplicas = append(pendingReplicas, id)
-					}
-					if info.IsRangeLeaseHolder && !info.IsRaftLeader {
-						rangeLeaseHoldersWithoutRaftLeadership++
-					}
-					if info.IsRaftLeader {
-						raftLeaders++
-					}
-					if info.IsRangeLeaseHolder {
-						rangeLeaseHolders++
 					}
 				}
-
 				s.mu.Unlock()
 
-				s.metrics.RaftLeaders.Update(raftLeaders)
-				s.metrics.RangeLeaseHolders.Update(rangeLeaseHolders)
-				s.metrics.RangeLeaseHoldersWithoutRaftLeadership.Update(rangeLeaseHoldersWithoutRaftLeadership)
+				s.metrics.RaftLeaders.Update(acc.RaftLeaders)
+				s.metrics.RangeLeaseHolders.Update(acc.RangeLeaseHolders)
+				s.metrics.RangeLeaseHoldersWithoutRaftLeadership.Update(acc.RangeLeaseHoldersWithoutRaftLeadership)
 				s.metrics.RaftTicks.Inc(1)
 
 				// Enqueue all pending ranges for readiness checks. Note that we could
 				// not hold the pendingRaftGroups lock during the previous loop because
 				// of lock ordering constraints with r.tick().
 				s.pendingRaftGroups.Lock()
-				for _, rangeID := range pendingReplicas {
+				for _, rangeID := range acc.PendingReplicas {
 					s.pendingRaftGroups.value[rangeID] = struct{}{}
 				}
 				s.pendingRaftGroups.Unlock()
+
 				s.processRaftMu.Unlock()
 				s.metrics.RaftTickingDurationNanos.Inc(timeutil.Since(tickerStart).Nanoseconds())
 
