@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/pkg/errors"
@@ -156,7 +157,7 @@ type tableReader struct {
 
 	ctx context.Context
 
-	spans                sqlbase.Spans
+	spans                roachpb.Spans
 	hardLimit, softLimit int64
 
 	output RowReceiver
@@ -187,9 +188,9 @@ func newTableReader(
 
 	tr.ctx = log.WithLogTagInt(tr.flowCtx.Context, "TableReader", int(tr.desc.ID))
 
-	tr.spans = make(sqlbase.Spans, len(spec.Spans))
+	tr.spans = make(roachpb.Spans, len(spec.Spans))
 	for i, s := range spec.Spans {
-		tr.spans[i] = sqlbase.Span{Start: s.Span.Key, End: s.Span.EndKey}
+		tr.spans[i] = s.Span
 	}
 
 	return tr, nil

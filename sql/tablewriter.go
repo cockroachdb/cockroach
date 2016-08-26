@@ -423,11 +423,11 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.DTuple, er
 		return nil, err
 	}
 
-	pkSpans := make(sqlbase.Spans, 0, len(primaryKeys))
+	pkSpans := make(roachpb.Spans, 0, len(primaryKeys))
 	rowIdxForPrimaryKey := make(map[string]int, len(primaryKeys))
 	for i, primaryKey := range primaryKeys {
 		if primaryKey != nil {
-			pkSpans = append(pkSpans, sqlbase.Span{Start: primaryKey, End: primaryKey.PrefixEnd()})
+			pkSpans = append(pkSpans, roachpb.Span{Key: primaryKey, EndKey: primaryKey.PrefixEnd()})
 			if _, ok := rowIdxForPrimaryKey[string(primaryKey)]; ok {
 				return nil, fmt.Errorf("UPSERT/ON CONFLICT DO UPDATE command cannot affect row a second time")
 			}
@@ -542,9 +542,9 @@ func (td *tableDeleter) fastPathAvailable(ctx context.Context) bool {
 func (td *tableDeleter) fastDelete(ctx context.Context, scan *scanNode) (rowCount int, err error) {
 	for _, span := range scan.spans {
 		if log.V(2) {
-			log.Infof(ctx, "Skipping scan and just deleting %s - %s", span.Start, span.End)
+			log.Infof(ctx, "Skipping scan and just deleting %s - %s", span.Key, span.EndKey)
 		}
-		td.b.DelRange(span.Start, span.End, true)
+		td.b.DelRange(span.Key, span.EndKey, true)
 	}
 
 	err = td.finalize(ctx)
@@ -613,7 +613,7 @@ func (td *tableDeleter) deleteAllRowsFast(ctx context.Context) error {
 func (td *tableDeleter) deleteAllRowsScan(ctx context.Context) error {
 	tablePrefix := sqlbase.MakeIndexKeyPrefix(
 		td.rd.helper.tableDesc, td.rd.helper.tableDesc.PrimaryIndex.ID)
-	span := sqlbase.Span{Start: roachpb.Key(tablePrefix), End: roachpb.Key(tablePrefix).PrefixEnd()}
+	span := roachpb.Span{Key: roachpb.Key(tablePrefix), EndKey: roachpb.Key(tablePrefix).PrefixEnd()}
 
 	valNeededForCol := make([]bool, len(td.rd.helper.tableDesc.Columns))
 	for _, idx := range td.rd.fetchColIDtoRowIndex {
@@ -627,7 +627,7 @@ func (td *tableDeleter) deleteAllRowsScan(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := rf.StartScan(td.txn, sqlbase.Spans{span}, 0); err != nil {
+	if err := rf.StartScan(td.txn, roachpb.Spans{span}, 0); err != nil {
 		return err
 	}
 
@@ -675,7 +675,7 @@ func (td *tableDeleter) deleteIndexFast(ctx context.Context, idx *sqlbase.IndexD
 func (td *tableDeleter) deleteIndexScan(ctx context.Context, idx *sqlbase.IndexDescriptor) error {
 	tablePrefix := sqlbase.MakeIndexKeyPrefix(
 		td.rd.helper.tableDesc, td.rd.helper.tableDesc.PrimaryIndex.ID)
-	span := sqlbase.Span{Start: roachpb.Key(tablePrefix), End: roachpb.Key(tablePrefix).PrefixEnd()}
+	span := roachpb.Span{Key: roachpb.Key(tablePrefix), EndKey: roachpb.Key(tablePrefix).PrefixEnd()}
 
 	valNeededForCol := make([]bool, len(td.rd.helper.tableDesc.Columns))
 	for _, idx := range td.rd.fetchColIDtoRowIndex {
@@ -689,7 +689,7 @@ func (td *tableDeleter) deleteIndexScan(ctx context.Context, idx *sqlbase.IndexD
 	if err != nil {
 		return err
 	}
-	if err := rf.StartScan(td.txn, sqlbase.Spans{span}, 0); err != nil {
+	if err := rf.StartScan(td.txn, roachpb.Spans{span}, 0); err != nil {
 		return err
 	}
 
