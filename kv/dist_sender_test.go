@@ -1798,47 +1798,42 @@ func TestCountRanges(t *testing.T) {
 }
 
 type slowLeaseHolderTransport struct {
-	created     bool
-	count       int
-	slowReqChan chan<- BatchCall
-}
-
-func (t *slowLeaseHolderTransport) factory(
-	_ SendOptions,
-	_ *rpc.Context,
-	_ ReplicaSlice,
-	_ roachpb.BatchRequest,
-) (Transport, error) {
-	if t.created {
-		return nil, errors.Errorf("should not create multiple transports")
-	}
-	t.created = true
-	return t, nil
+	replicaCount, sendCount int
+	slowReqChan             chan<- BatchCall
 }
 
 func (t *slowLeaseHolderTransport) IsExhausted() bool {
-	if t.count >= 3 {
-		// When we've tried all replicas, let the slow request finish.
-		t.slowReqChan <- BatchCall{Reply: &roachpb.BatchResponse{}}
-		return true
-	}
-	return false
+	return t.sendCount > t.replicaCount
 }
 
 func (t *slowLeaseHolderTransport) SendNext(done chan<- BatchCall) {
-	if t.count == 0 {
+	t.sendCount++
+	if t.sendCount == 1 {
 		// Save the first request to finish later.
 		t.slowReqChan = done
-	} else {
-		// Other requests fail immediately with NotLeaseHolderError.
+	} else if t.sendCount < t.replicaCount {
+		// Some requests fail immediately with NotLeaseHolderError.
 		var br roachpb.BatchResponse
 		br.Error = roachpb.NewError(&roachpb.NotLeaseHolderError{})
 		done <- BatchCall{Reply: &br}
+	} else {
+		// When we've tried all replicas, let the slow request finish.
+		t.slowReqChan <- BatchCall{Reply: &roachpb.BatchResponse{}}
 	}
-	t.count++
 }
 
 func (t *slowLeaseHolderTransport) Close() {
+}
+
+func getSlowLeaseHolderTransportFactory() func(SendOptions, *rpc.Context, ReplicaSlice, roachpb.BatchRequest) (Transport, error) {
+	created := false
+	return func(_ SendOptions, _ *rpc.Context, rs ReplicaSlice, _ roachpb.BatchRequest) (Transport, error) {
+		if created {
+			return nil, errors.Errorf("should not create multiple transports")
+		}
+		created = true
+		return &slowLeaseHolderTransport{replicaCount: len(rs)}, nil
+	}
 }
 
 // TestSlowLeaseHolderRetry verifies that when the lease holder is slow, we wait
@@ -1849,13 +1844,46 @@ func TestSlowLeaseHolderRetry(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	g := makeGossip(t, stopper)
-	transport := slowLeaseHolderTransport{}
+	n := simulation.NewNetwork(stopper, 3, true)
+	for _, node := range n.Nodes {
+		// TODO(spencer): remove the use of gossip/simulation here.
+		node.Gossip.EnableSimulationCycler(false)
+	}
+	n.Start()
+
+	n.RunUntilFullyConnected()
+
+	metaRangeDescriptor := roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: testutils.MakeKey(keys.Meta2Prefix, roachpb.RKey("a")),
+		EndKey:   testutils.MakeKey(keys.Meta2Prefix, roachpb.RKey("z")),
+	}
+
+	rangeDescriptor := roachpb.RangeDescriptor{
+		RangeID:  2,
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("z"),
+	}
+
+	for _, node := range n.Nodes {
+		nodeID := node.Gossip.GetNodeID()
+
+		metaRangeDescriptor.Replicas = append(metaRangeDescriptor.Replicas, roachpb.ReplicaDescriptor{NodeID: nodeID})
+		rangeDescriptor.Replicas = append(rangeDescriptor.Replicas, roachpb.ReplicaDescriptor{NodeID: nodeID})
+	}
+
+	rangeDescDB := MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+		if bytes.HasPrefix(key, keys.Meta2Prefix) {
+			return []roachpb.RangeDescriptor{metaRangeDescriptor}, nil, nil
+		}
+		return []roachpb.RangeDescriptor{rangeDescriptor}, nil, nil
+	})
+
 	ds := NewDistSender(&DistSenderConfig{
-		TransportFactory:  transport.factory,
-		RangeDescriptorDB: defaultMockRangeDescriptorDB,
+		TransportFactory:  getSlowLeaseHolderTransportFactory(),
+		RangeDescriptorDB: rangeDescDB,
 		SendNextTimeout:   time.Millisecond,
-	}, g)
+	}, n.Nodes[0].Gossip)
 
 	var ba roachpb.BatchRequest
 	ba.Add(roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("foo")))
