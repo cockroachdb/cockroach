@@ -64,12 +64,12 @@ type Network struct {
 }
 
 // NewNetwork creates nodeCount gossip nodes.
-func NewNetwork(nodeCount int, createResolvers bool) *Network {
+func NewNetwork(stopper *stop.Stopper, nodeCount int, createResolvers bool) *Network {
 	log.Infof(context.TODO(), "simulating gossip network with %d nodes", nodeCount)
 
 	n := &Network{
 		Nodes:   []*Node{},
-		Stopper: stop.NewStopper(),
+		Stopper: stopper,
 	}
 	n.rpcContext = rpc.NewContext(&base.Context{Insecure: true}, nil, n.Stopper)
 	var err error
@@ -102,14 +102,15 @@ func (n *Network) CreateNode() (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
+	node := &Node{Server: server, Listener: ln, Registry: metric.NewRegistry()}
+	node.Gossip = gossip.New(n.rpcContext, server, nil, n.Stopper, node.Registry)
 	n.Stopper.RunWorker(func() {
 		<-n.Stopper.ShouldQuiesce()
 		netutil.FatalIfUnexpected(ln.Close())
 		<-n.Stopper.ShouldStop()
 		server.Stop()
+		node.Gossip.EnableSimulationCycler(false)
 	})
-	node := &Node{Server: server, Listener: ln, Registry: metric.NewRegistry()}
-	node.Gossip = gossip.New(n.rpcContext, server, nil, n.Stopper, node.Registry)
 	n.Nodes = append(n.Nodes, node)
 	return node, nil
 }
@@ -206,14 +207,6 @@ func (n *Network) Start() {
 			log.Fatal(context.TODO(), err)
 		}
 	}
-}
-
-// Stop stops all servers and gossip nodes.
-func (n *Network) Stop() {
-	for _, node := range n.Nodes {
-		node.Gossip.EnableSimulationCycler(false)
-	}
-	n.Stopper.Stop()
 }
 
 // RunUntilFullyConnected blocks until the gossip network has received
