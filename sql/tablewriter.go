@@ -650,33 +650,58 @@ func (td *tableDeleter) deleteAllRowsScan(ctx context.Context) error {
 
 // deleteIndex runs the kv operations necessary to delete all kv entries in the
 // given index. This may require a scan.
-func (td *tableDeleter) deleteIndex(ctx context.Context, idx *sqlbase.IndexDescriptor) error {
+//
+// resume is the resume-span which should be used for the index deletion
+// when the index deletion is chunked. The first call to this method should
+// use a zero resume-span. After a chunk of the index is deleted a new resume-
+// span is returned.
+//
+// limit is a limit on the number of index entries deleted in the operation.
+func (td *tableDeleter) deleteIndex(
+	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64,
+) (roachpb.Span, error) {
 	if len(idx.Interleave.Ancestors) > 0 || len(idx.InterleavedBy) > 0 {
 		if log.V(2) {
 			log.Info(ctx, "delete forced to scan: table is interleaved")
 		}
-		return td.deleteIndexScan(ctx, idx)
+		return td.deleteIndexScan(ctx, idx, resume, limit)
 	}
-	return td.deleteIndexFast(ctx, idx)
+	return td.deleteIndexFast(ctx, idx, resume, limit)
 }
 
-func (td *tableDeleter) deleteIndexFast(ctx context.Context, idx *sqlbase.IndexDescriptor) error {
-	indexPrefix := sqlbase.MakeIndexKeyPrefix(td.rd.helper.tableDesc, idx.ID)
-	indexStartKey := roachpb.Key(indexPrefix)
-	indexEndKey := indexStartKey.PrefixEnd()
+func (td *tableDeleter) deleteIndexFast(
+	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64,
+) (roachpb.Span, error) {
+	if resume.Key == nil {
+		indexPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(td.rd.helper.tableDesc, idx.ID))
+		resume = roachpb.Span{
+			Key:    indexPrefix,
+			EndKey: indexPrefix.PrefixEnd(),
+		}
+	}
 
 	if log.V(2) {
-		log.Infof(ctx, "DelRange %s - %s", indexStartKey, indexEndKey)
+		log.Infof(ctx, "DelRange %s - %s", resume.Key, resume.EndKey)
 	}
-	td.b.DelRange(indexStartKey, indexEndKey, false)
-	return td.finalize(ctx)
+	td.b.DelRange(resume.Key, resume.EndKey, false)
+	td.b.Header.MaxSpanRequestKeys = limit
+	if err := td.finalize(ctx); err != nil {
+		return resume, err
+	}
+	if l := len(td.b.Results); l != 1 {
+		panic(fmt.Sprintf("%d results returned, expected 1", l))
+	}
+	return td.b.Results[0].ResumeSpan, nil
 }
 
-func (td *tableDeleter) deleteIndexScan(ctx context.Context, idx *sqlbase.IndexDescriptor) error {
-	tablePrefix := sqlbase.MakeIndexKeyPrefix(
-		td.rd.helper.tableDesc, td.rd.helper.tableDesc.PrimaryIndex.ID)
-	span := roachpb.Span{Key: roachpb.Key(tablePrefix), EndKey: roachpb.Key(tablePrefix).PrefixEnd()}
-
+func (td *tableDeleter) deleteIndexScan(
+	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64,
+) (roachpb.Span, error) {
+	if resume.Key == nil {
+		tablePrefix := sqlbase.MakeIndexKeyPrefix(
+			td.rd.helper.tableDesc, td.rd.helper.tableDesc.PrimaryIndex.ID)
+		resume = roachpb.Span{Key: roachpb.Key(tablePrefix), EndKey: roachpb.Key(tablePrefix).PrefixEnd()}
+	}
 	valNeededForCol := make([]bool, len(td.rd.helper.tableDesc.Columns))
 	for _, idx := range td.rd.fetchColIDtoRowIndex {
 		valNeededForCol[idx] = true
@@ -687,24 +712,29 @@ func (td *tableDeleter) deleteIndexScan(ctx context.Context, idx *sqlbase.IndexD
 		td.rd.helper.tableDesc, td.rd.fetchColIDtoRowIndex, &td.rd.helper.tableDesc.PrimaryIndex,
 		false, false, td.rd.fetchCols, valNeededForCol)
 	if err != nil {
-		return err
+		return resume, err
 	}
-	if err := rf.StartScan(td.txn, roachpb.Spans{span}, 0); err != nil {
-		return err
+	if err := rf.StartScan(td.txn, roachpb.Spans{resume}, 0); err != nil {
+		return resume, err
 	}
 
-	for {
+	for i := int64(0); i < limit; i++ {
 		row, err := rf.NextRow()
 		if err != nil {
-			return err
+			return resume, err
 		}
 		if row == nil {
-			// Done deleting rows.
+			// Done deleting all rows.
+			resume = roachpb.Span{}
 			break
 		}
 		if err := td.rd.deleteIndexRow(ctx, td.b, idx, row); err != nil {
-			return err
+			return resume, err
 		}
 	}
-	return td.finalize(ctx)
+	if resume.Key != nil {
+		// Update the resume start key for the next iteration.
+		resume.Key = rf.Key()
+	}
+	return resume, td.finalize(ctx)
 }
