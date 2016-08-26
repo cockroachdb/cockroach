@@ -386,7 +386,7 @@ func (t *multiTestContextKVTransport) IsExhausted() bool {
 	return len(t.replicas) == 0
 }
 
-func (t *multiTestContextKVTransport) SendNext(done chan kv.BatchCall) {
+func (t *multiTestContextKVTransport) SendNext(done chan<- kv.BatchCall) {
 	rep := t.replicas[0]
 	t.replicas = t.replicas[1:]
 

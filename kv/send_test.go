@@ -163,7 +163,7 @@ func TestRetryableError(t *testing.T) {
 // channelSaveTransport captures the 'done' channels of every RPC it
 // "sends".
 type channelSaveTransport struct {
-	ch        chan chan BatchCall
+	ch        chan chan<- BatchCall
 	remaining int
 }
 
@@ -171,7 +171,7 @@ func (c *channelSaveTransport) IsExhausted() bool {
 	return c.remaining <= 0
 }
 
-func (c *channelSaveTransport) SendNext(done chan BatchCall) {
+func (c *channelSaveTransport) SendNext(done chan<- BatchCall) {
 	c.remaining--
 	c.ch <- done
 }
@@ -189,7 +189,7 @@ func (*channelSaveTransport) Close() {
 // Either give each call its own channel, return a list of (replica
 // descriptor, channel) pair, or decide we don't care about
 // distinguishing them and just send a single channel.
-func setupSendNextTest(t *testing.T) ([]chan BatchCall, chan BatchCall, *stop.Stopper) {
+func setupSendNextTest(t *testing.T) ([]chan<- BatchCall, chan BatchCall, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	nodeContext := newNodeTestContext(nil, stopper)
 
@@ -199,7 +199,7 @@ func setupSendNextTest(t *testing.T) ([]chan BatchCall, chan BatchCall, *stop.St
 		util.NewUnresolvedAddr("dummy", "3"),
 	}
 
-	doneChanChan := make(chan chan BatchCall, len(addrs))
+	doneChanChan := make(chan chan<- BatchCall, len(addrs))
 
 	opts := SendOptions{
 		SendNextTimeout: 1 * time.Millisecond,
@@ -225,7 +225,7 @@ func setupSendNextTest(t *testing.T) ([]chan BatchCall, chan BatchCall, *stop.St
 		sendChan <- BatchCall{br, err}
 	}()
 
-	doneChans := make([]chan BatchCall, len(addrs))
+	doneChans := make([]chan<- BatchCall, len(addrs))
 	for i := range doneChans {
 		// Note that this blocks until the replica has been contacted.
 		doneChans[i] = <-doneChanChan
@@ -524,7 +524,7 @@ func (f *firstNErrorTransport) IsExhausted() bool {
 	return f.numSent >= len(f.replicas)
 }
 
-func (f *firstNErrorTransport) SendNext(done chan BatchCall) {
+func (f *firstNErrorTransport) SendNext(done chan<- BatchCall) {
 	call := BatchCall{
 		Reply: &roachpb.BatchResponse{},
 	}
