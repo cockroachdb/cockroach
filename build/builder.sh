@@ -81,6 +81,16 @@ echo "${username}:x:${uid_gid}::${container_home}:/bin/bash" > "${passwd_file}"
 # runs as root.
 mkdir -p "${HOME}"/.{jspm,npm} "${gopath0}"/pkg/docker_amd64{,_race} "${gopath0}/bin/docker_amd64"
 
+# Since we're mounting both /root and /root/.{jspm,npm} in our container,
+# Docker will create the .jspm and .npm on the host side under the directory
+# that we're mounting as /root, as the root user. This creates problems for CI
+# processes trying to clean up the working directory, so we create them here
+# as the invoking user to avoid root-owned paths.
+# Note: this only happens on Linux. On Docker for Mac, the directories are
+# still created, but they're owned by the invoking user already.
+# This issue is tracked in docker issue #26051.
+mkdir -p "${host_home}"/.{jspm,npm}
+
 # Run our build container with a set of volumes mounted that will
 # allow the container to store persistent build data on the host
 # computer.
