@@ -76,6 +76,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 const (
@@ -303,7 +304,10 @@ func main() {
 
 	edgeSet := make(map[string]edge)
 
-	n := simulation.NewNetwork(nodeCount, true)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	n := simulation.NewNetwork(stopper, nodeCount, true)
 	n.SimulateNetwork(
 		func(cycle int, network *simulation.Network) bool {
 			// Output dot graph.
@@ -311,8 +315,8 @@ func main() {
 			_, quiescent := outputDotFile(dotFN, cycle, network, edgeSet)
 			// Run until network has quiesced.
 			return !quiescent
-		})
-	n.Stop()
+		},
+	)
 
 	// Output instructions for viewing graphs.
 	fmt.Printf("To view simulation graph output run (you must install graphviz):\n\nfor f in %s/*.dot ; do circo $f -Tpng -o $f.png ; echo $f.png ; done\n", dirName)
