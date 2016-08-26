@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
@@ -97,9 +98,10 @@ func (s unresolvedAddrSlice) Swap(i, j int) {
 // using the bootstrap hosts in a gossip.Storage object.
 func TestGossipStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
 
-	network := simulation.NewNetwork(3, true)
-	defer network.Stop()
+	network := simulation.NewNetwork(stopper, 3, true)
 
 	// Set storage for each of the nodes.
 	addresses := make(unresolvedAddrSlice, len(network.Nodes))
@@ -213,10 +215,11 @@ func TestGossipStorage(t *testing.T) {
 // from the bootstrap info after gossip has successfully connected.
 func TestGossipStorageCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
 
 	const numNodes = 3
-	network := simulation.NewNetwork(numNodes, false)
-	defer network.Stop()
+	network := simulation.NewNetwork(stopper, numNodes, false)
 
 	const notReachableAddr = "localhost:0"
 	const invalidAddr = "10.0.0.1000:3333333"
