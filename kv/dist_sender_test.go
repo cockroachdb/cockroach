@@ -100,7 +100,7 @@ func (l *legacyTransportAdapter) IsExhausted() bool {
 	return l.called
 }
 
-func (l *legacyTransportAdapter) SendNext(done chan BatchCall) {
+func (l *legacyTransportAdapter) SendNext(done chan<- BatchCall) {
 	l.called = true
 	br, err := l.f(l.opts, l.replicas, l.args, l.rpcContext)
 	done <- BatchCall{
@@ -1787,7 +1787,7 @@ func TestCountRanges(t *testing.T) {
 type slowLeaseHolderTransport struct {
 	created     bool
 	count       int
-	slowReqChan chan BatchCall
+	slowReqChan chan<- BatchCall
 }
 
 func (t *slowLeaseHolderTransport) factory(
@@ -1812,7 +1812,7 @@ func (t *slowLeaseHolderTransport) IsExhausted() bool {
 	return false
 }
 
-func (t *slowLeaseHolderTransport) SendNext(done chan BatchCall) {
+func (t *slowLeaseHolderTransport) SendNext(done chan<- BatchCall) {
 	if t.count == 0 {
 		// Save the first request to finish later.
 		t.slowReqChan = done
