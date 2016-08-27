@@ -1871,7 +1871,7 @@ func (s *Store) Metrics() *StoreMetrics {
 func (s *Store) MVCCStats() enginepb.MVCCStats {
 	s.metrics.mu.Lock()
 	defer s.metrics.mu.Unlock()
-	return s.metrics.stats
+	return s.metrics.mu.stats
 }
 
 // Descriptor returns a StoreDescriptor including current store
