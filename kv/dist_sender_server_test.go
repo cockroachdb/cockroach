@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -1275,4 +1276,21 @@ func TestRequestToUninitializedRange(t *testing.T) {
 			t.Fatal(pErr)
 		}
 	}
+}
+
+func TestKVDBTransactionWithPromotedRaces(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	var args base.TestServerArgs
+	args.Knobs.Server = &server.SrvTestingKnobs{
+		TransportFactory: kv.RacePromotingTransportFactory(kv.GRPCTransportFactory, stopper),
+	}
+
+	s, _, _ := serverutils.StartServer(t, args)
+	defer s.Stopper().Stop()
+
+	testKVDBTransaction(t, s)
 }

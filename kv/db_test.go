@@ -206,9 +206,14 @@ func TestKVDBInternalMethods(t *testing.T) {
 // the KV DB endpoint.
 func TestKVDBTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
+	testKVDBTransaction(t, s)
+}
+
+func testKVDBTransaction(t *testing.T, s serverutils.TestServerInterface) {
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	key := roachpb.Key("db-txn-test")

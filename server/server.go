@@ -71,6 +71,17 @@ var (
 	GracefulDrainModes = []serverpb.DrainMode{serverpb.DrainMode_CLIENT, serverpb.DrainMode_LEASES}
 )
 
+// SrvTestingKnobs is a part of the context used to control parts of the
+// system.
+//
+// It is not called ServerTestingKnobs to satisfy the linters.
+type SrvTestingKnobs struct {
+	TransportFactory kv.TransportFactory
+}
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (SrvTestingKnobs) ModuleTestingKnobs() {}
+
 // Server is the cockroach server node.
 type Server struct {
 	ctx           Context
@@ -171,10 +182,26 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	// DistSender needs to know that it should not retry in this situation.
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = s.stopper.ShouldQuiesce()
+
+	var transportFactory kv.TransportFactory
+	{
+		// Assign this to transportFactory to make all tests which use
+		// TestServer contribute to race detection.
+		//
+		// TODO(tschottdorf): make a default in race-enabled builds? It does
+		// make things an awful lot slower; perhaps the reads don't need to
+		// be as aggressively timed.
+		_ = kv.RacePromotingTransportFactory(kv.GRPCTransportFactory, s.stopper)
+	}
+	if serverKnobs, _ := srvCtx.TestingKnobs.Server.(*SrvTestingKnobs); serverKnobs != nil {
+		transportFactory = serverKnobs.TransportFactory
+	}
+
 	s.distSender = kv.NewDistSender(&kv.DistSenderConfig{
-		Clock:           s.clock,
-		RPCContext:      s.rpcContext,
-		RPCRetryOptions: &retryOpts,
+		TransportFactory: transportFactory,
+		Clock:            s.clock,
+		RPCContext:       s.rpcContext,
+		RPCRetryOptions:  &retryOpts,
 	}, s.gossip)
 	txnMetrics := kv.MakeTxnMetrics()
 	s.registry.AddMetricStruct(txnMetrics)
