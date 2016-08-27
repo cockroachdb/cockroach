@@ -241,8 +241,10 @@ type StoreMetrics struct {
 	RangeLeaseHoldersWithoutRaftLeadership *metric.Gauge
 
 	// Stats for efficient merges.
-	mu    syncutil.Mutex
-	stats enginepb.MVCCStats
+	mu struct {
+		syncutil.Mutex
+		stats enginepb.MVCCStats
+	}
 }
 
 func newStoreMetrics() *StoreMetrics {
@@ -345,19 +347,19 @@ func newStoreMetrics() *StoreMetrics {
 // snapshot of these gauges in the registry might mix the values of two
 // subsequent updates.
 func (sm *StoreMetrics) updateMVCCGaugesLocked() {
-	sm.LiveBytes.Update(sm.stats.LiveBytes)
-	sm.KeyBytes.Update(sm.stats.KeyBytes)
-	sm.ValBytes.Update(sm.stats.ValBytes)
-	sm.IntentBytes.Update(sm.stats.IntentBytes)
-	sm.LiveCount.Update(sm.stats.LiveCount)
-	sm.KeyCount.Update(sm.stats.KeyCount)
-	sm.ValCount.Update(sm.stats.ValCount)
-	sm.IntentCount.Update(sm.stats.IntentCount)
-	sm.IntentAge.Update(sm.stats.IntentAge)
-	sm.GcBytesAge.Update(sm.stats.GCBytesAge)
-	sm.LastUpdateNanos.Update(sm.stats.LastUpdateNanos)
-	sm.SysBytes.Update(sm.stats.SysBytes)
-	sm.SysCount.Update(sm.stats.SysCount)
+	sm.LiveBytes.Update(sm.mu.stats.LiveBytes)
+	sm.KeyBytes.Update(sm.mu.stats.KeyBytes)
+	sm.ValBytes.Update(sm.mu.stats.ValBytes)
+	sm.IntentBytes.Update(sm.mu.stats.IntentBytes)
+	sm.LiveCount.Update(sm.mu.stats.LiveCount)
+	sm.KeyCount.Update(sm.mu.stats.KeyCount)
+	sm.ValCount.Update(sm.mu.stats.ValCount)
+	sm.IntentCount.Update(sm.mu.stats.IntentCount)
+	sm.IntentAge.Update(sm.mu.stats.IntentAge)
+	sm.GcBytesAge.Update(sm.mu.stats.GCBytesAge)
+	sm.LastUpdateNanos.Update(sm.mu.stats.LastUpdateNanos)
+	sm.SysBytes.Update(sm.mu.stats.SysBytes)
+	sm.SysCount.Update(sm.mu.stats.SysCount)
 }
 
 func (sm *StoreMetrics) updateCapacityGauges(capacity roachpb.StoreCapacity) {
@@ -379,14 +381,14 @@ func (sm *StoreMetrics) updateReplicationGauges(leaders, replicated, pending, av
 func (sm *StoreMetrics) addMVCCStats(stats enginepb.MVCCStats) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	sm.stats.Add(stats)
+	sm.mu.stats.Add(stats)
 	sm.updateMVCCGaugesLocked()
 }
 
 func (sm *StoreMetrics) subtractMVCCStats(stats enginepb.MVCCStats) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	sm.stats.Subtract(stats)
+	sm.mu.stats.Subtract(stats)
 	sm.updateMVCCGaugesLocked()
 }
 
