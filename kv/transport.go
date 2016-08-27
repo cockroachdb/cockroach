@@ -18,6 +18,8 @@
 package kv
 
 import (
+	"encoding/gob"
+	"io/ioutil"
 	"sort"
 	"time"
 
@@ -28,7 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
 
@@ -107,8 +111,8 @@ type Transport interface {
 	Close()
 }
 
-// grpcTransportFactory is the default TransportFactory, using GRPC.
-func grpcTransportFactory(
+// GRPCTransportFactory is the default TransportFactory, using GRPC.
+func GRPCTransportFactory(
 	opts SendOptions,
 	rpcContext *rpc.Context,
 	replicas ReplicaSlice,
@@ -265,4 +269,78 @@ func (s *senderTransport) SendNext(done chan BatchCall) {
 }
 
 func (s *senderTransport) Close() {
+}
+
+type racePromotingTransport struct {
+	err     error
+	curTP   Transport
+	factory func() Transport
+}
+
+// RacePromotingTransportFactory will hold on to the BatchRequest it was created for and
+// read it in a tight loop, which allows the race detector to catch any
+// mutations of a batch passed to the transport.
+// Stops after a short time; otherwise the overhead is too large.
+func RacePromotingTransportFactory(wrapped TransportFactory, stopper *stop.Stopper) TransportFactory {
+	return func(
+		s SendOptions, c *rpc.Context, sl ReplicaSlice, args roachpb.BatchRequest,
+	) (Transport, error) {
+		if err := stopper.RunAsyncTask(func() {
+			encoder := gob.NewEncoder(ioutil.Discard)
+			timeout := time.After(time.Second)
+			for {
+				select {
+				case <-timeout:
+				case <-stopper.ShouldQuiesce():
+				case <-s.Context.Done():
+				default:
+					// Doesn't matter what we do here as long as we access
+					// all fields (it would be enough to access all pointer
+					// fields as the rest has been passed by-value anyway).
+					if err := encoder.Encode(&args); err != nil {
+						panic(err)
+					}
+					continue
+				}
+				return
+			}
+		}); err != nil {
+			return nil, err
+		}
+
+		rtp := &racePromotingTransport{}
+
+		factory := func() Transport {
+			tp, err := wrapped(s, c, sl, args)
+			if err != nil {
+				rtp.err = err
+			}
+			return tp
+		}
+
+		rtp.factory = factory
+		return rtp, nil
+	}
+}
+
+func (s *racePromotingTransport) IsExhausted() bool {
+	if s.err != nil {
+		return true
+	}
+	s.curTP = s.factory()
+	return false
+}
+
+func (s *racePromotingTransport) SendNext(done chan BatchCall) {
+	if s.err != nil {
+		var resp roachpb.BatchResponse
+		resp.Error = roachpb.NewError(errors.Wrap(s.err, "in race transport"))
+		done <- BatchCall{Reply: &resp}
+		return
+	}
+	s.curTP.SendNext(done)
+	s.curTP = nil
+}
+
+func (s *racePromotingTransport) Close() {
 }
