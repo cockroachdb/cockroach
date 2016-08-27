@@ -305,8 +305,7 @@ func TestDropTable(t *testing.T) {
 	// family heuristics are updated.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR, FAMILY (k), FAMILY (v));
-INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
+CREATE TABLE t.kv (k INT PRIMARY KEY, v INT, FAMILY (k), FAMILY (v));
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -342,12 +341,27 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf("zone config entry not found")
 	}
 
+	// Bulk insert.
+	maxValue := 2*sql.TableTruncateChunkSize + 1
+	var insert bytes.Buffer
+	if _, err := insert.WriteString(fmt.Sprintf(`INSERT INTO t.kv VALUES (%d, %d)`, 0, maxValue-1)); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i < maxValue; i++ {
+		if _, err := insert.WriteString(fmt.Sprintf(` ,(%d, %d)`, i, maxValue-i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := sqlDB.Exec(insert.String()); err != nil {
+		t.Fatal(err)
+	}
+
 	tablePrefix := keys.MakeTablePrefix(uint32(tableDesc.ID))
 	tableStartKey := roachpb.Key(tablePrefix)
 	tableEndKey := tableStartKey.PrefixEnd()
 	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
 		t.Fatal(err)
-	} else if l := 6; len(kvs) != l {
+	} else if l := 2 * maxValue; len(kvs) != l {
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
 	}
 
@@ -383,6 +397,82 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	} else if gr.Exists() {
 		t.Fatalf("zone config entry still exists after the table is dropped")
+	}
+}
+
+// TestDropTableInterleaved tests dropping a table that is interleaved within
+// another table.
+func TestDropTableInterleaved(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+
+	// Fix the column families so the key counts below don't change if the
+	// family heuristics are updated.
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+SET DATABASE=t;
+CREATE TABLE kv (k INT PRIMARY KEY, v INT, FAMILY (k), FAMILY (v));
+CREATE TABLE intlv (k INT, m INT, n INT, PRIMARY KEY (k, m)) INTERLEAVE IN PARENT kv (k);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	maxValue := 2*sql.TableTruncateChunkSize + 1
+	var insert bytes.Buffer
+	if _, err := insert.WriteString(fmt.Sprintf(`INSERT INTO t.kv VALUES (%d, %d)`, 0, maxValue-1)); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i < maxValue; i++ {
+		if _, err := insert.WriteString(fmt.Sprintf(` ,(%d, %d)`, i, maxValue-i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := sqlDB.Exec(insert.String()); err != nil {
+		t.Fatal(err)
+	}
+	insert.Reset()
+	if _, err := insert.WriteString(fmt.Sprintf(`INSERT INTO t.intlv VALUES (%d, %d, %d)`, 0, maxValue-1, maxValue-1)); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i < maxValue; i++ {
+		if _, err := insert.WriteString(fmt.Sprintf(` ,(%d, %d, %d)`, i, maxValue-i, maxValue-i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := sqlDB.Exec(insert.String()); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	tablePrefix := keys.MakeTablePrefix(uint32(tableDesc.ID))
+	tableStartKey := roachpb.Key(tablePrefix)
+	tableEndKey := tableStartKey.PrefixEnd()
+	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
+		t.Fatal(err)
+	} else if l := 3 * maxValue; len(kvs) != l {
+		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
+	}
+
+	if _, err := sqlDB.Exec(`DROP TABLE t.intlv`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Test that deleted table cannot be used. This prevents regressions where
+	// name -> descriptor ID caches might make this statement erronously work.
+	if _, err := sqlDB.Exec(`SELECT * FROM t.intlv`); !testutils.IsError(
+		err, `table "t.intlv" does not exist`,
+	) {
+		t.Fatalf("different error than expected: %v", err)
+	}
+
+	// Check that the interleaved table data has been deleted.
+	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
+		t.Fatal(err)
+	} else if l := 2 * maxValue; len(kvs) != l {
+		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
 	}
 }
 
