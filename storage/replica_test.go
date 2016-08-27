@@ -145,7 +145,8 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 	if tc.gossip == nil {
 		rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, tc.stopper)
 		server := rpc.NewServer(rpcContext) // never started
-		tc.gossip = gossip.New(rpcContext, server, nil, tc.stopper, metric.NewRegistry())
+		tc.gossip = gossip.New(
+			context.Background(), rpcContext, server, nil, tc.stopper, metric.NewRegistry())
 		tc.gossip.SetNodeID(1)
 	}
 	if tc.manualClock == nil {

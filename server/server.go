@@ -163,7 +163,8 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	s.grpc = rpc.NewServer(s.rpcContext)
 
 	s.registry = metric.NewRegistry()
-	s.gossip = gossip.New(s.rpcContext, s.grpc, s.ctx.GossipBootstrapResolvers, s.stopper, s.registry)
+	s.gossip = gossip.New(
+		s.Ctx(), s.rpcContext, s.grpc, s.ctx.GossipBootstrapResolvers, s.stopper, s.registry)
 	s.storePool = storage.NewStorePool(
 		s.gossip,
 		s.clock,
