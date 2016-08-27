@@ -103,7 +103,7 @@ func (n *Network) CreateNode() (*Node, error) {
 		return nil, err
 	}
 	node := &Node{Server: server, Listener: ln, Registry: metric.NewRegistry()}
-	node.Gossip = gossip.New(n.rpcContext, server, nil, n.Stopper, node.Registry)
+	node.Gossip = gossip.New(context.TODO(), n.rpcContext, server, nil, n.Stopper, node.Registry)
 	n.Stopper.RunWorker(func() {
 		<-n.Stopper.ShouldQuiesce()
 		netutil.FatalIfUnexpected(ln.Close())
