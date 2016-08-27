@@ -24,7 +24,7 @@ export PATH := $(shell npm bin):$(PATH)
 # Setting the SHELL variable to a value other than the default (/bin/sh)
 # is one way to do this globally.
 # http://stackoverflow.com/questions/8941110/how-i-could-add-dir-to-path-in-makefile/13468229#13468229
-SHELL := $(shell which bash)
+export SHELL := $(shell which bash)
 ifeq ($(SHELL),)
 $(error bash is required)
 endif
