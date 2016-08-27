@@ -65,13 +65,36 @@ func TestTrace(t *testing.T) {
 	Event(ctxWithSpan, "test1")
 	ErrEvent(ctxWithSpan, "testerr")
 	VEvent(logging.verbosity.get()+1, ctxWithSpan, "test2")
+	Info(ctxWithSpan, "log")
 
 	// Events to parent context should still be no-ops.
 	Event(ctx, "should-not-show-up")
 
 	sp.Finish()
 
-	expected := "[start test1 testerr test2 finish]"
+	expected := "[start test1 testerr test2 log finish]"
+	if evStr := fmt.Sprint(ev); evStr != expected {
+		t.Errorf("expected events '%s', got '%s'", expected, evStr)
+	}
+}
+
+func TestTraceWithTags(t *testing.T) {
+	ctx := context.Background()
+	ctx = WithLogTagInt(ctx, "tag", 1)
+
+	var ev events
+
+	tracer := testingTracer(&ev)
+	sp := tracer.StartSpan("")
+	ctxWithSpan := opentracing.ContextWithSpan(ctx, sp)
+	Event(ctxWithSpan, "test1")
+	ErrEvent(ctxWithSpan, "testerr")
+	VEvent(logging.verbosity.get()+1, ctxWithSpan, "test2")
+	Info(ctxWithSpan, "log")
+
+	sp.Finish()
+
+	expected := "[start [tag1] test1 [tag1] testerr [tag1] test2 [tag1] log finish]"
 	if evStr := fmt.Sprint(ev); evStr != expected {
 		t.Errorf("expected events '%s', got '%s'", expected, evStr)
 	}
@@ -105,16 +128,18 @@ func TestEventLog(t *testing.T) {
 	el := &testingEventLog{}
 	ctxWithEventLog := WithEventLog(ctx, el)
 
-	Event(ctxWithEventLog, "test1")
+	Eventf(ctxWithEventLog, "test%d", 1)
 	ErrEvent(ctxWithEventLog, "testerr")
-	VEvent(logging.verbosity.get()+1, ctxWithEventLog, "test2")
+	VEventf(logging.verbosity.get()+1, ctxWithEventLog, "test%d", 2)
+	Info(ctxWithEventLog, "log")
+	Errorf(ctxWithEventLog, "errlog%d", 1)
 
 	// Events to parent context should still be no-ops.
 	Event(ctx, "should-not-show-up")
 
 	el.Finish()
 
-	expected := "[test1 testerr(err) test2 finish]"
+	expected := "[test1 testerr(err) test2 log errlog1(err) finish]"
 	if evStr := fmt.Sprint(el.ev); evStr != expected {
 		t.Errorf("expected events '%s', got '%s'", expected, evStr)
 	}
