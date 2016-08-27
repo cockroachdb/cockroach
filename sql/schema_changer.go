@@ -60,6 +60,7 @@ type SchemaChanger struct {
 }
 
 func (sc *SchemaChanger) truncateAndDropTable(
+	ctx context.Context,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	tableDesc *sqlbase.TableDescriptor) error {
 
@@ -68,7 +69,7 @@ func (sc *SchemaChanger) truncateAndDropTable(
 		return err
 	}
 	*lease = l
-	return truncateAndDropTable(tableDesc, &sc.db)
+	return truncateAndDropTable(ctx, tableDesc, &sc.db)
 }
 
 // NewSchemaChangerForTesting only for tests.
@@ -237,7 +238,7 @@ func (sc SchemaChanger) exec(
 		}
 
 		// Truncate the table and delete the descriptor.
-		if err := sc.truncateAndDropTable(&lease, table); err != nil {
+		if err := sc.truncateAndDropTable(context.TODO(), &lease, table); err != nil {
 			return err
 		}
 		needRelease = false
