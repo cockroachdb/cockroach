@@ -133,7 +133,7 @@ func createTestStoreWithoutStart(t testing.TB, ctx *StoreContext) (*Store, *hlc.
 	config.TestingSetupZoneConfigHook(stopper)
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 	server := rpc.NewServer(rpcContext) // never started
-	ctx.Gossip = gossip.New(rpcContext, server, nil, stopper, metric.NewRegistry())
+	ctx.Gossip = gossip.New(context.TODO(), rpcContext, server, nil, stopper, metric.NewRegistry())
 	ctx.Gossip.SetNodeID(1)
 	manual := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manual.UnixNano)

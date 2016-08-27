@@ -64,7 +64,7 @@ func createTestStorePool(timeUntilStoreDead time.Duration) (*stop.Stopper, *goss
 	clock := hlc.NewClock(mc.UnixNano)
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
 	server := rpc.NewServer(rpcContext) // never started
-	g := gossip.New(rpcContext, server, nil, stopper, metric.NewRegistry())
+	g := gossip.New(context.TODO(), rpcContext, server, nil, stopper, metric.NewRegistry())
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	storePool := NewStorePool(
@@ -482,7 +482,7 @@ func TestStorePoolReserve(t *testing.T) {
 	defer stopper.Stop()
 
 	// Create a fake node server to generate responses for calls to Reserve.
-	f, ctx, address, err := newFakeNodeServer(stopper)
+	f, rpcCtx, address, err := newFakeNodeServer(stopper)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -490,14 +490,14 @@ func TestStorePoolReserve(t *testing.T) {
 	// Create a fake store pool.
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	server := rpc.NewServer(ctx) // never started
-	g := gossip.New(ctx, server, nil, stopper, metric.NewRegistry())
+	server := rpc.NewServer(rpcCtx) // never started
+	g := gossip.New(context.TODO(), rpcCtx, server, nil, stopper, metric.NewRegistry())
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	storePool := NewStorePool(
 		g,
 		clock,
-		ctx,
+		rpcCtx,
 		/* reservationsEnabled */ true,
 		TestTimeUntilStoreDeadOff,
 		stopper,

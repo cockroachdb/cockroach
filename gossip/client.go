@@ -36,6 +36,7 @@ import (
 
 // client is a client-side RPC connection to a gossip peer node.
 type client struct {
+	ctx                   context.Context
 	createdAt             time.Time
 	peerID                roachpb.NodeID           // Peer node ID; 0 until first gossip response
 	addr                  net.Addr                 // Peer node network address
@@ -56,8 +57,9 @@ func extractKeys(delta map[string]*Info) string {
 }
 
 // newClient creates and returns a client struct.
-func newClient(addr net.Addr, nodeMetrics Metrics) *client {
+func newClient(ctx context.Context, addr net.Addr, nodeMetrics Metrics) *client {
 	return &client{
+		ctx:       ctx,
 		createdAt: timeutil.Now(),
 		addr:      addr,
 		remoteHighWaterStamps: map[roachpb.NodeID]int64{},
@@ -79,7 +81,7 @@ func (c *client) start(
 	breaker *circuit.Breaker,
 ) {
 	stopper.RunWorker(func() {
-		ctx, cancel := context.WithCancel(context.TODO())
+		ctx, cancel := context.WithCancel(c.ctx)
 		defer cancel()
 		defer func() {
 			disconnected <- c
@@ -172,7 +174,7 @@ func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient) error {
 		c.nodeMetrics.InfosSent.Add(infosSent)
 
 		if log.V(1) {
-			log.Infof(context.TODO(), "node %d: sending %s", g.mu.is.NodeID, extractKeys(args.Delta))
+			log.Infof(c.ctx, "node %d: sending %s", g.mu.is.NodeID, extractKeys(args.Delta))
 		}
 
 		g.mu.Unlock()
@@ -199,11 +201,11 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 	if reply.Delta != nil {
 		freshCount, err := g.mu.is.combine(reply.Delta, reply.NodeID)
 		if err != nil {
-			log.Warningf(context.TODO(), "node %d: failed to fully combine delta from node %d: %s", g.mu.is.NodeID, reply.NodeID, err)
+			log.Warningf(c.ctx, "node %d: failed to fully combine delta from node %d: %s", g.mu.is.NodeID, reply.NodeID, err)
 		}
 		if infoCount := len(reply.Delta); infoCount > 0 {
 			if log.V(1) {
-				log.Infof(context.TODO(), "node %d: received %s from node %d (%d fresh)", g.mu.is.NodeID, extractKeys(reply.Delta), reply.NodeID, freshCount)
+				log.Infof(c.ctx, "node %d: received %s from node %d (%d fresh)", g.mu.is.NodeID, extractKeys(reply.Delta), reply.NodeID, freshCount)
 			}
 		}
 		g.maybeTightenLocked()
