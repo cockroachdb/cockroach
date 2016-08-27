@@ -14,11 +14,20 @@
 #
 # Author: Tamir Duberstein (tamird@gmail.com)
 
-# NOTE: for some reason bash is necessary for updating the PATH to work
-# See http://stackoverflow.com/questions/8941110/how-i-could-add-dir-to-path-in-makefile
-SHELL = /bin/bash
-# Update the path to prefer binstubs over globals
-PATH := $(shell npm bin):$(PATH)
+# Prefer tools from node_modules over those elsewhere on the path.
+# This ensures that we get the versions pinned in npm-shrinkwrap.json.
+export PATH := $(shell npm bin):$(PATH)
+# HACK: Make has a fast path and a slow path for command execution,
+# but the fast path uses the PATH variable from when make was started,
+# not the one we set on the previous line. In order for the above
+# line to have any effect, we must force make to always take the slow path.
+# Setting the SHELL variable to a value other than the default (/bin/sh)
+# is one way to do this globally.
+# http://stackoverflow.com/questions/8941110/how-i-could-add-dir-to-path-in-makefile/13468229#13468229
+SHELL := $(shell which bash)
+ifeq ($(SHELL),)
+$(error bash is required)
+endif
 
 REPO_ROOT   = $(realpath ..)
 ORG_ROOT    = $(REPO_ROOT)/..
