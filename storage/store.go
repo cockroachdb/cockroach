@@ -2775,23 +2775,33 @@ func (s *Store) canApplySnapshotLocked(rangeID roachpb.RangeID, snap raftpb.Snap
 	return placeholder, nil
 }
 
-// computeReplicationStatus counts a number of simple replication statistics for
+func (s *Store) updateCapacityGauges() error {
+	desc, err := s.Descriptor()
+	if err != nil {
+		return err
+	}
+	s.metrics.Capacity.Update(desc.Capacity.Capacity)
+	s.metrics.Available.Update(desc.Capacity.Available)
+
+	return nil
+}
+
+// updateReplicationGauges counts a number of simple replication statistics for
 // the ranges in this store.
 // TODO(bram): #4564 It may be appropriate to compute these statistics while
 // scanning ranges. An ideal solution would be to create incremental events
 // whenever availability changes.
-func (s *Store) computeReplicationStatus(now int64) (
-	leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount int64, err error) {
+func (s *Store) updateReplicationGauges() error {
 	// Load the system config.
 	cfg, ok := s.Gossip().GetSystemConfig()
 	if !ok {
-		err = errors.Errorf("%s: system config not yet available", s)
-		return
+		return errors.Errorf("%s: system config not yet available", s)
 	}
 
-	timestamp := hlc.Timestamp{WallTime: now}
+	var leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount int64
+
+	timestamp := s.ctx.Clock.Now()
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	for _, rng := range s.mu.replicas {
 		desc := rng.Desc()
 		zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey)
@@ -2834,29 +2844,27 @@ func (s *Store) computeReplicationStatus(now int64) (
 			}
 		}
 	}
-	return
+	s.mu.Unlock()
+
+	s.metrics.LeaderRangeCount.Update(leaderRangeCount)
+	s.metrics.ReplicatedRangeCount.Update(replicatedRangeCount)
+	s.metrics.ReplicationPendingRangeCount.Update(replicationPendingRangeCount)
+	s.metrics.AvailableRangeCount.Update(availableRangeCount)
+
+	return nil
 }
 
 // ComputeMetrics immediately computes the current value of store metrics which
 // cannot be computed incrementally. This method should be invoked periodically
 // by a higher-level system which records store metrics.
 func (s *Store) ComputeMetrics(tick int) error {
-	// Broadcast store descriptor.
-	desc, err := s.Descriptor()
-	if err != nil {
+	if err := s.updateCapacityGauges(); err != nil {
 		return err
 	}
-	s.metrics.updateCapacityGauges(desc.Capacity)
 
-	// Broadcast replication status.
-	now := s.ctx.Clock.Now().WallTime
-	leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount, err :=
-		s.computeReplicationStatus(now)
-	if err != nil {
+	if err := s.updateReplicationGauges(); err != nil {
 		return err
 	}
-	s.metrics.updateReplicationGauges(
-		leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount)
 
 	// Get the latest RocksDB stats.
 	stats, err := s.engine.GetStats()

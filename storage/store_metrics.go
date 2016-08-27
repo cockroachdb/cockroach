@@ -17,7 +17,6 @@
 package storage
 
 import (
-	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -360,22 +359,6 @@ func (sm *StoreMetrics) updateMVCCGaugesLocked() {
 	sm.LastUpdateNanos.Update(sm.mu.stats.LastUpdateNanos)
 	sm.SysBytes.Update(sm.mu.stats.SysBytes)
 	sm.SysCount.Update(sm.mu.stats.SysCount)
-}
-
-func (sm *StoreMetrics) updateCapacityGauges(capacity roachpb.StoreCapacity) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	sm.Capacity.Update(capacity.Capacity)
-	sm.Available.Update(capacity.Available)
-}
-
-func (sm *StoreMetrics) updateReplicationGauges(leaders, replicated, pending, available int64) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	sm.LeaderRangeCount.Update(leaders)
-	sm.ReplicatedRangeCount.Update(replicated)
-	sm.ReplicationPendingRangeCount.Update(pending)
-	sm.AvailableRangeCount.Update(available)
 }
 
 func (sm *StoreMetrics) addMVCCStats(stats enginepb.MVCCStats) {
