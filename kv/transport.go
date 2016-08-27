@@ -18,7 +18,10 @@
 package kv
 
 import (
+	"encoding/gob"
+	"io/ioutil"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -107,40 +110,56 @@ type Transport interface {
 	Close()
 }
 
-// grpcTransportFactory is the default TransportFactory, using GRPC.
-func grpcTransportFactory(
+// GRPCTransportFactory is the default TransportFactory, using GRPC.
+//
+// During race builds, it does extra work to hold on to and read all obtained
+// requests in a tight loop, exposing data races.
+var GRPCTransportFactory = func() func(
 	opts SendOptions,
 	rpcContext *rpc.Context,
 	replicas ReplicaSlice,
 	args roachpb.BatchRequest,
 ) (Transport, error) {
-	clients := make([]batchClient, 0, len(replicas))
-	for _, replica := range replicas {
-		conn, err := rpcContext.GRPCDial(replica.NodeDesc.Address.String())
-		if err != nil {
-			return nil, err
+
+	impl := func(
+		opts SendOptions,
+		rpcContext *rpc.Context,
+		replicas ReplicaSlice,
+		args roachpb.BatchRequest,
+	) (Transport, error) {
+		clients := make([]batchClient, 0, len(replicas))
+		for _, replica := range replicas {
+			conn, err := rpcContext.GRPCDial(replica.NodeDesc.Address.String())
+			if err != nil {
+				return nil, err
+			}
+			argsCopy := args
+			argsCopy.Replica = replica.ReplicaDescriptor
+			remoteAddr := replica.NodeDesc.Address.String()
+			clients = append(clients, batchClient{
+				remoteAddr: remoteAddr,
+				conn:       conn,
+				client:     roachpb.NewInternalClient(conn),
+				args:       argsCopy,
+				healthy:    rpcContext.IsConnHealthy(remoteAddr),
+			})
 		}
-		argsCopy := args
-		argsCopy.Replica = replica.ReplicaDescriptor
-		remoteAddr := replica.NodeDesc.Address.String()
-		clients = append(clients, batchClient{
-			remoteAddr: remoteAddr,
-			conn:       conn,
-			client:     roachpb.NewInternalClient(conn),
-			args:       argsCopy,
-			healthy:    rpcContext.IsConnHealthy(remoteAddr),
-		})
+
+		// Put known-unhealthy clients last.
+		splitHealthy(clients)
+
+		return &grpcTransport{
+			opts:           opts,
+			rpcContext:     rpcContext,
+			orderedClients: clients,
+		}, nil
 	}
 
-	// Put known-unhealthy clients last.
-	splitHealthy(clients)
-
-	return &grpcTransport{
-		opts:           opts,
-		rpcContext:     rpcContext,
-		orderedClients: clients,
-	}, nil
-}
+	if isRace {
+		return promoteRacesInTransport(impl)
+	}
+	return impl
+}()
 
 type grpcTransport struct {
 	opts           SendOptions
@@ -167,6 +186,18 @@ func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
 	if localServer := gt.rpcContext.GetLocalInternalServerForAddr(addr); enableLocalCalls && localServer != nil {
 		ctx, cancel := gt.opts.contextWithTimeout()
 		defer cancel()
+
+		// Clone the request. At the time of writing, Replica may mutate it
+		// during command execution which can lead to data races.
+		//
+		// TODO(tamird): we should clone all of client.args.Header, but the
+		// assertions in protoutil.Clone fire and there seems to be no
+		// reasonable workaround.
+		origTxn := client.args.Txn
+		if origTxn != nil {
+			clonedTxn := origTxn.Clone()
+			client.args.Txn = &clonedTxn
+		}
 
 		reply, err := localServer.Batch(ctx, &client.args)
 		done <- BatchCall{Reply: reply, Err: err}
@@ -265,4 +296,46 @@ func (s *senderTransport) SendNext(done chan<- BatchCall) {
 }
 
 func (s *senderTransport) Close() {
+}
+
+// promoteRacesInTransport wraps the supplied TransportFactory and intercepts
+// all BatchRequests, reading them in a tight loop. This allows the race
+// detector to catch any mutations of a batch passed to the transport.
+func promoteRacesInTransport(wrapped TransportFactory) TransportFactory {
+	incoming := make(chan *roachpb.BatchRequest, 100)
+
+	var running atomic.Value // bool
+	running.Store(false)
+
+	return func(
+		s SendOptions, c *rpc.Context, sl ReplicaSlice, args roachpb.BatchRequest,
+	) (Transport, error) {
+		if !running.Load().(bool) {
+			running.Store(true)
+			c.Stopper.RunWorker(func() {
+				var bas []*roachpb.BatchRequest
+				encoder := gob.NewEncoder(ioutil.Discard)
+				for {
+					select {
+					case ba := <-incoming:
+						bas = append(bas, ba)
+						continue
+					case <-c.Stopper.ShouldStop():
+						return
+					default:
+					}
+					for _, ba := range bas {
+						if err := encoder.Encode(&ba); err != nil {
+							panic(err)
+						}
+					}
+				}
+			})
+		}
+		select {
+		case incoming <- &args:
+		default:
+		}
+		return wrapped(s, c, sl, args)
+	}
 }

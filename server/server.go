@@ -171,6 +171,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	// DistSender needs to know that it should not retry in this situation.
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = s.stopper.ShouldQuiesce()
+
 	s.distSender = kv.NewDistSender(&kv.DistSenderConfig{
 		Clock:           s.clock,
 		RPCContext:      s.rpcContext,

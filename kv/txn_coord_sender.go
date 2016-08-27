@@ -343,6 +343,9 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 			// TODO(peter): Populate DistinctSpans on all batches, not just batches
 			// which contain an EndTransactionRequest.
 			var distinct bool
+			// The request might already be used by an outgoing goroutine, so
+			// we can't safely mutate anything in-place (as MergeSpans does).
+			et.IntentSpans = append([]roachpb.Span(nil), et.IntentSpans...)
 			et.IntentSpans, distinct = roachpb.MergeSpans(et.IntentSpans)
 			ba.Header.DistinctSpans = distinct && distinctSpans
 			if len(et.IntentSpans) == 0 {
