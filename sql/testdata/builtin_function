@@ -479,6 +479,9 @@ SELECT exp(-1.0::float), exp(1.0::float), exp(2.0::decimal)
 ----
 0.36787944117144233 2.718281828459045 7.3890560989306502
 
+query error argument value is too large
+SELECT exp(2000::decimal)
+
 query RRR
 SELECT floor(-1.5::float), floor(1.5::float), floor(9.123456789::decimal)
 ----
@@ -602,14 +605,8 @@ SELECT radians(-45.0), radians(45.0)
 ----
 -0.7853981633974483 0.7853981633974483
 
-# Our implementation of round is not fully Postgres-compatible because we do
-# not allow negative numbers of digits.
-
-query error round: number of digits must be greater than 0
-SELECT round(41.2::float, -1)
-
 query RRR
-SELECT round(4.2::float, 0), round(4.2::float, 50), round(4.22222222::decimal, 3)
+SELECT round(4.2::float, 0), round(4.2::float, 10), round(4.22222222::decimal, 3)
 ----
 4 4.2 4.222
 
@@ -633,12 +630,17 @@ SELECT round(-2.5::float), round(-1.5::float), round(-0.0::float), round(0.0::fl
 query RRRR
 SELECT round(-2.5::decimal, 0), round(-1.5::decimal, 0), round(1.5::decimal, 0), round(2.5::decimal, 0)
 ----
--3 -2 2 3
+-2 -2 2 2
+
+query RRRRR
+SELECT round(-2.5::decimal, 3), round(-1.5::decimal, 3), round(0.0::decimal, 3), round(1.5::decimal, 3), round(2.5::decimal, 3)
+----
+-2.500 -1.500 0.000 1.500 2.500
 
 query RRRRR
 SELECT round(-2.5::decimal), round(-1.5::decimal), round(0.0::decimal), round(1.5::decimal), round(2.5::decimal)
 ----
--3 -2 0 2 3
+-2 -2 0 2 2
 
 # Test rounding to 14 digits, because the logic test itself
 # formats floats rounded to 15 digits behind the decimal point.
@@ -652,6 +654,39 @@ query RR
 SELECT round(-1.7976931348623157e+308::float, 1), round(1.7976931348623157e+308::float, 1)
 ----
 -1.7976931348623157e+308 1.7976931348623157e+308
+
+query RR
+SELECT round(-1.7976931348623157e+308::float, -303), round(1.7976931348623157e+308::float, -303)
+----
+-1.797690000000001e+308 1.797690000000001e+308
+
+query RR
+SELECT round(-1.23456789e+308::float, -308), round(1.23456789e+308::float, -308)
+----
+-1.0000000000000006e+308 1.0000000000000006e+308
+
+query RR
+SELECT round(-1.7976931348623157e-308::float, 1), round(1.7976931348623157e-308::float, 1)
+----
+-0 0
+
+query RRRR
+SELECT 1.234567890123456789::float,  round(1.234567890123456789::float,15), round(1.234567890123456789::float,16), round(1.234567890123456789::float,17);
+----
+1.2345678901234567 1.234567890123457 1.2345678901234567 1.2345678901234567
+
+query RRRR
+SELECT round(123.456::float, -1), round(123.456::float, -2), round(123.456::float, -3), round(123.456::float, -2438602134409251682)
+----
+120 100 0 0
+
+query RRRR
+SELECT round(123.456::decimal, -1), round(123.456::decimal, -2), round(123.456::decimal, -3), round(123.456::decimal, -2438602134409251682)
+----
+120 100 0 0
+
+query error rounding would extend value by more than 2000 decimal digits
+SELECT round(1::decimal, 3000)
 
 query III
 SELECT sign(-2), sign(0), sign(2)
