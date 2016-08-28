@@ -142,6 +142,45 @@ SELECT * FROM p0
 3  3  3.0  3
 5  5  5.0  5
 
+statement ok
+DROP INDEX p0@p0i
+
+query ITTT
+SELECT * FROM p0
+----
+2  2  2.0  2
+3  3  3.0  3
+5  5  5.0  5
+
+statement ok
+DROP TABLE p0
+
+query ITTT
+SELECT * FROM p1_0
+----
+2  2  2.01  2
+7  5  7.01  7
+
+statement ok
+TRUNCATE TABLE p2
+
+statement error unimplemented
+DROP TABLE p2
+
+statement ok
+CREATE INDEX p1_s2 ON p1_1 (s2)
+
+query ITTT
+SELECT * FROM p1_0
+----
+2  2  2.01  2
+7  5  7.01  7
+
+statement ok
+DROP TABLE p2 CASCADE
+
+statement error table "p0" does not exist
+SELECT * FROM p0
 
 # Validation and descriptor bookkeeping
 
@@ -153,52 +192,52 @@ CREATE TABLE all_interleaves (
   d INT,
   INDEX (c),
   UNIQUE INDEX (d)
-) INTERLEAVE IN PARENT p2 (b)
+) INTERLEAVE IN PARENT p1_1 (b)
 
 statement ok
-CREATE INDEX ON all_interleaves (c, d) INTERLEAVE IN PARENT p2 (c)
+CREATE INDEX ON all_interleaves (c, d) INTERLEAVE IN PARENT p1_1 (c)
 
 statement ok
-CREATE UNIQUE INDEX ON all_interleaves (d, c) INTERLEAVE IN PARENT p2 (d)
+CREATE UNIQUE INDEX ON all_interleaves (d, c) INTERLEAVE IN PARENT p1_1 (d)
 
 query TT
 SHOW CREATE TABLE all_interleaves
 ----
 all_interleaves   CREATE TABLE all_interleaves (
-                     b INT NOT NULL,
-                     c INT NULL,
-                     d INT NULL,
-                     CONSTRAINT "primary" PRIMARY KEY (b),
-                     INDEX all_interleaves_c_idx (c),
-                     UNIQUE INDEX all_interleaves_d_key (d),
-                     INDEX all_interleaves_c_d_idx (c, d) INTERLEAVE IN PARENT p2 (c),
-                     UNIQUE INDEX all_interleaves_d_c_key (d, c) INTERLEAVE IN PARENT p2 (d),
-                     FAMILY "primary" (b, c, d)
-                  ) INTERLEAVE IN PARENT p2 (b)
+                    b INT NOT NULL,
+                    c INT NULL,
+                    d INT NULL,
+                    CONSTRAINT "primary" PRIMARY KEY (b),
+                    INDEX all_interleaves_c_idx (c),
+                    UNIQUE INDEX all_interleaves_d_key (d),
+                    INDEX all_interleaves_c_d_idx (c, d) INTERLEAVE IN PARENT p1_1 (c),
+                    UNIQUE INDEX all_interleaves_d_c_key (d, c) INTERLEAVE IN PARENT p1_1 (d),
+                    FAMILY "primary" (b, c, d)
+                  ) INTERLEAVE IN PARENT p1_1 (b)
 
-statement error table \"missing\" does not exist
+statement error table "missing" does not exist
 CREATE TABLE err (f FLOAT PRIMARY KEY) INTERLEAVE IN PARENT missing (f)
 
 statement error interleaved columns must match parent
-CREATE TABLE err (f FLOAT PRIMARY KEY) INTERLEAVE IN PARENT p2 (f)
+CREATE TABLE err (f FLOAT PRIMARY KEY) INTERLEAVE IN PARENT p1_1 (f)
 
 statement error interleaved columns must match parent
-CREATE INDEX ON p0 (i DESC) INTERLEAVE IN PARENT p2 (i)
+CREATE INDEX ON p1_0 (i DESC) INTERLEAVE IN PARENT p1_1 (i)
 
 statement error interleaved columns must match parent
-CREATE INDEX ON p0 (d) INTERLEAVE IN PARENT p2 (d)
+CREATE INDEX ON p1_0 (d) INTERLEAVE IN PARENT p1_1 (d)
 
 statement error declared columns must match index being interleaved
-CREATE TABLE err (i INT, j INT, PRIMARY KEY (i, j)) INTERLEAVE IN PARENT p2 (j)
+CREATE TABLE err (i INT, j INT, PRIMARY KEY (i, j)) INTERLEAVE IN PARENT p1_1 (j)
 
 statement error unimplemented
-CREATE TABLE err (i INT PRIMARY KEY, INDEX (i) INTERLEAVE IN PARENT p2 (i))
+CREATE TABLE err (i INT PRIMARY KEY, INDEX (i) INTERLEAVE IN PARENT p1_1 (i))
 
 statement error unimplemented
-CREATE TABLE err (i INT PRIMARY KEY, UNIQUE INDEX (i) INTERLEAVE IN PARENT p2 (i))
+CREATE TABLE err (i INT PRIMARY KEY, UNIQUE INDEX (i) INTERLEAVE IN PARENT p1_1 (i))
 
 statement error unimplemented: unsupported shorthand CASCADE
-CREATE TABLE err (i INT PRIMARY KEY) INTERLEAVE IN PARENT p2 (i) CASCADE
+CREATE TABLE err (i INT PRIMARY KEY) INTERLEAVE IN PARENT p1_1 (i) CASCADE
 
 statement error unimplemented: unsupported shorthand RESTRICT
-CREATE TABLE err (i INT PRIMARY KEY) INTERLEAVE IN PARENT p2 (i) RESTRICT
+CREATE TABLE err (i INT PRIMARY KEY) INTERLEAVE IN PARENT p1_1 (i) RESTRICT

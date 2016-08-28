@@ -70,19 +70,6 @@ ALTER TABLE t RENAME TO new_kv
 
 user testuser
 
-statement error user testuser does not have CREATE privilege on database test
-ALTER TABLE test.t RENAME TO t2
-
-user root
-
-statement ok
-GRANT CREATE ON DATABASE test TO testuser
-
-statement ok
-create database test2
-
-user testuser
-
 statement error user testuser does not have DROP privilege on table t
 ALTER TABLE test.t RENAME TO t2
 
@@ -90,6 +77,19 @@ user root
 
 statement ok
 GRANT DROP ON TABLE test.t TO testuser
+
+statement ok
+create database test2
+
+user testuser
+
+statement error user testuser does not have CREATE privilege on database test
+ALTER TABLE test.t RENAME TO t2
+
+user root
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
 
 statement ok
 ALTER TABLE test.t RENAME TO t2

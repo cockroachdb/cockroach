@@ -3,27 +3,20 @@
 
 set -euo pipefail
 
+archive=$1
+tags=${2-}
+
 source $(dirname $0)/build-common.sh
 
-test_build_dir=$(mktemp -d test-binaries.XXXX)
 time make STATIC=1 build
-# sql/sql.test is built standalone as well to simplify the nightly logictest runs.
-time make STATIC=1 testbuild PKG=./sql
-time make STATIC=1 testbuild PKG=./acceptance TAGS=acceptance
-time make STATIC=1 testbuildall DIR=${test_build_dir}
+time make STATIC=1 testbuild PKG=./... TAGS="$tags acceptance"
 
 # We don't check all test binaries, but one from each invocation.
 check_static cockroach
-check_static sql/sql.test
-check_static acceptance/acceptance.test
-check_static ${test_build_dir}/github.com/cockroachdb/cockroach/sql/sql.test
+check_static cli/cli.test
 
 strip -S cockroach
-strip -S sql/sql.test
-strip -S acceptance/acceptance.test
+find . -type f -name '*.test' | xargs strip -S
 
-rm -f static-tests.tar.gz
-# Skip the project/repo part of the path inside the tarball.
-# Even for stripped binaries, gzip results in 167MB (21s spent) vs 512MB (3s spent).
-# It makes a big difference when fetching from outside AWS.
-time tar cfz static-tests.tar.gz -C ${test_build_dir}/github.com/cockroachdb/ cockroach/
+rm -f $archive
+time tar cfz $archive -C .. $(git ls-files | sed -r 's,^,cockroach/,') $(find . -type f -name '*.test' -and -not -name acceptance.test | sed 's,^\./,cockroach/,')

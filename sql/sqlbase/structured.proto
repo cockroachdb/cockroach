@@ -164,8 +164,8 @@ message IndexDescriptor {
   repeated uint32 implicit_column_ids = 7 [(gogoproto.customname) = "ImplicitColumnIDs",
       (gogoproto.casttype) = "ColumnID"];
 
-  optional ForeignKeyReference foreign_key = 9;
-  repeated ForeignKeyReference referenced_by = 10;
+  optional ForeignKeyReference foreign_key = 9 [(gogoproto.nullable) = false];
+  repeated ForeignKeyReference referenced_by = 10 [(gogoproto.nullable) = false];
 
   // Interleave, if it's not the zero value, describes how this index's data is
   // interleaved into another index's data.
@@ -366,7 +366,7 @@ message TableDescriptor {
     // The database that the table belonged to before the rename (tables can be
     // renamed from one db to another).
     optional uint32 old_parent_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "OldParentID"];
+      (gogoproto.customname) = "OldParentID", (gogoproto.casttype) = "ID"];
     optional string old_name = 2 [(gogoproto.nullable) = false];
   }
 

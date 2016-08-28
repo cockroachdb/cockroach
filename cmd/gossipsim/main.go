@@ -68,12 +68,15 @@ import (
 	"strconv"
 	"strings"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 const (
@@ -145,7 +148,7 @@ func (em edgeMap) addEdge(nodeID roachpb.NodeID, e edge) {
 func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet map[string]edge) (string, bool) {
 	f, err := os.Create(dotFN)
 	if err != nil {
-		log.Fatalf("unable to create temp file: %s", err)
+		log.Fatalf(context.TODO(), "unable to create temp file: %s", err)
 	}
 	defer f.Close()
 
@@ -183,7 +186,7 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 		quiescent = false
 		nodeID, err := strconv.Atoi(strings.Split(key, ":")[0])
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal(context.TODO(), err)
 		}
 		outgoingMap.addEdge(roachpb.NodeID(nodeID), e)
 		delete(edgeSet, key)
@@ -199,7 +202,7 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 			if otherNode == simNode {
 				continue // skip the node's own info
 			}
-			infoKey := otherNode.Addr.String()
+			infoKey := otherNode.Addr().String()
 			// GetInfo returns an error if the info is missing.
 			if info, err := node.GetInfo(infoKey); err != nil {
 				missing = append(missing, otherNode.Gossip.GetNodeID())
@@ -207,21 +210,21 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 			} else {
 				_, val, err := encoding.DecodeUint64Ascending(info)
 				if err != nil {
-					log.Fatalf("bad decode of node info cycle: %s", err)
+					log.Fatalf(context.TODO(), "bad decode of node info cycle: %s", err)
 				}
 				totalAge += int64(cycle) - int64(val)
 			}
 		}
-		log.Infof("node %d: missing infos for nodes %s", node.GetNodeID(), missing)
+		log.Infof(context.TODO(), "node %d: missing infos for nodes %s", node.GetNodeID(), missing)
 
 		var sentinelAge int64
 		// GetInfo returns an error if the info is missing.
 		if info, err := node.GetInfo(gossip.KeySentinel); err != nil {
-			log.Infof("error getting info for sentinel gossip key %q: %s", gossip.KeySentinel, err)
+			log.Infof(context.TODO(), "error getting info for sentinel gossip key %q: %s", gossip.KeySentinel, err)
 		} else {
 			_, val, err := encoding.DecodeUint64Ascending(info)
 			if err != nil {
-				log.Fatalf("bad decode of sentinel cycle: %s", err)
+				log.Fatalf(context.TODO(), "bad decode of sentinel cycle: %s", err)
 			}
 			sentinelAge = int64(cycle) - int64(val)
 		}
@@ -275,7 +278,7 @@ func main() {
 
 	dirName, err := ioutil.TempDir("", "gossip-simulation-")
 	if err != nil {
-		log.Fatalf("could not create temporary directory for gossip simulation output: %s", err)
+		log.Fatalf(context.TODO(), "could not create temporary directory for gossip simulation output: %s", err)
 	}
 
 	// Simulation callbacks to run the simulation for cycleCount
@@ -296,12 +299,15 @@ func main() {
 	case "ginormous":
 		nodeCount = 250
 	default:
-		log.Fatalf("unknown simulation size: %s", *size)
+		log.Fatalf(context.TODO(), "unknown simulation size: %s", *size)
 	}
 
 	edgeSet := make(map[string]edge)
 
-	n := simulation.NewNetwork(nodeCount)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	n := simulation.NewNetwork(stopper, nodeCount, true)
 	n.SimulateNetwork(
 		func(cycle int, network *simulation.Network) bool {
 			// Output dot graph.
@@ -309,8 +315,8 @@ func main() {
 			_, quiescent := outputDotFile(dotFN, cycle, network, edgeSet)
 			// Run until network has quiesced.
 			return !quiescent
-		})
-	n.Stop()
+		},
+	)
 
 	// Output instructions for viewing graphs.
 	fmt.Printf("To view simulation graph output run (you must install graphviz):\n\nfor f in %s/*.dot ; do circo $f -Tpng -o $f.png ; echo $f.png ; done\n", dirName)

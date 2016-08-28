@@ -19,7 +19,6 @@ package server
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -32,11 +31,14 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
@@ -45,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
@@ -170,24 +173,24 @@ func getRequestReader(t *testing.T, ts serverutils.TestServerInterface, path str
 		req.Header.Set(util.AcceptHeader, util.JSONContentType)
 		resp, err := httpClient.Do(req)
 		if err != nil {
-			log.Infof("could not GET %s - %s", url, err)
+			log.Infof(context.Background(), "could not GET %s - %s", url, err)
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {
 			body, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
-				log.Infof("could not read body for %s - %s", url, err)
+				log.Infof(context.Background(), "could not read body for %s - %s", url, err)
 				continue
 			}
-			log.Infof("could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
+			log.Infof(context.Background(), "could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
 			continue
 		}
 		returnedContentType := resp.Header.Get(util.ContentTypeHeader)
 		if returnedContentType != util.JSONContentType {
-			log.Infof("unexpected content type: %v", returnedContentType)
+			log.Infof(context.Background(), "unexpected content type: %v", returnedContentType)
 			continue
 		}
-		log.Infof("OK response from %s", url)
+		log.Infof(context.Background(), "OK response from %s", url)
 		return resp.Body
 	}
 	t.Fatalf("There was an error retrieving %s", url)
@@ -201,7 +204,7 @@ func getRequest(t *testing.T, ts serverutils.TestServerInterface, path string) [
 	defer respBody.Close()
 	body, err := ioutil.ReadAll(respBody)
 	if err != nil {
-		log.Infof("could not read body for %s - %s", path, err)
+		log.Infof(context.Background(), "could not read body for %s - %s", path, err)
 		return nil
 	}
 	return body
@@ -230,7 +233,7 @@ func startServer(t *testing.T) serverutils.TestServerInterface {
 	// Make sure the node status is available. This is done by forcing stores to
 	// publish their status, synchronizing to the event feed with a canary
 	// event, and then forcing the server to write summaries immediately.
-	if err := ts.(*TestServer).node.computePeriodicMetrics(); err != nil {
+	if err := ts.(*TestServer).node.computePeriodicMetrics(0); err != nil {
 		t.Fatalf("error publishing store statuses: %s", err)
 	}
 
@@ -246,6 +249,9 @@ func startServer(t *testing.T) serverutils.TestServerInterface {
 // correctly.
 func TestStatusLocalLogs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	if log.V(3) {
+		t.Skip("Test only works with low verbosity levels")
+	}
 	dir, err := ioutil.TempDir("", "local_log_test")
 	if err != nil {
 		t.Fatal(err)
@@ -263,42 +269,34 @@ func TestStatusLocalLogs(t *testing.T) {
 
 	// Log an error which we expect to show up on every log file.
 	timestamp := timeutil.Now().UnixNano()
-	log.Errorf("TestStatusLocalLogFile test message-Error")
+	log.Errorf(context.Background(), "TestStatusLocalLogFile test message-Error")
 	timestampE := timeutil.Now().UnixNano()
-	log.Warningf("TestStatusLocalLogFile test message-Warning")
+	log.Warningf(context.Background(), "TestStatusLocalLogFile test message-Warning")
 	timestampEW := timeutil.Now().UnixNano()
-	log.Infof("TestStatusLocalLogFile test message-Info")
+	log.Infof(context.Background(), "TestStatusLocalLogFile test message-Info")
 	timestampEWI := timeutil.Now().UnixNano()
 
-	type logsWrapper struct {
-		Data []log.FileInfo `json:"d"`
-	}
-	var logs logsWrapper
-	if err := json.Unmarshal(getRequest(t, ts, "/_status/logfiles/local"), &logs); err != nil {
+	var wrapper serverpb.LogFilesListResponse
+	if err := getRequestProto(t, ts, "/_status/logfiles/local", &wrapper); err != nil {
 		t.Fatal(err)
 	}
-	if a, e := len(logs.Data), 3; a != e {
+	if a, e := len(wrapper.Files), 3; a != e {
 		t.Fatalf("expected %d log files; got %d", e, a)
 	}
 	for i, name := range []string{"log.ERROR", "log.INFO", "log.WARNING"} {
-		if !strings.Contains(logs.Data[i].Name, name) {
-			t.Errorf("expected log file name %s to contain %q", logs.Data[i].Name, name)
+		if !strings.Contains(wrapper.Files[i].Name, name) {
+			t.Errorf("expected log file name %s to contain %q", wrapper.Files[i].Name, name)
 		}
-	}
-
-	// Fetch the full list of log entries.
-	type logWrapper struct {
-		Data []log.Entry `json:"d"`
 	}
 
 	// Check each individual log can be fetched and is non-empty.
 	var foundInfo, foundWarning, foundError bool
-	for _, file := range logs.Data {
-		var log logWrapper
-		if err := json.Unmarshal(getRequest(t, ts, fmt.Sprintf("/_status/logfiles/local/%s", file.Name)), &log); err != nil {
+	for _, file := range wrapper.Files {
+		var wrapper serverpb.LogEntriesResponse
+		if err := getRequestProto(t, ts, fmt.Sprintf("/_status/logfiles/local/%s", file.Name), &wrapper); err != nil {
 			t.Fatal(err)
 		}
-		for _, entry := range log.Data {
+		for _, entry := range wrapper.Entries {
 			switch entry.Message {
 			case "TestStatusLocalLogFile test message-Error":
 				foundError = true
@@ -311,7 +309,7 @@ func TestStatusLocalLogs(t *testing.T) {
 	}
 
 	if !(foundInfo && foundWarning && foundError) {
-		t.Errorf("expected to find test messages in %v", logs.Data)
+		t.Errorf("expected to find test messages in %v", wrapper.Files)
 	}
 
 	testCases := []struct {
@@ -364,20 +362,20 @@ func TestStatusLocalLogs(t *testing.T) {
 			fmt.Fprintf(&url, "&pattern=%s", testCase.Pattern)
 		}
 
-		var log logWrapper
+		var wrapper serverpb.LogEntriesResponse
 		path := url.String()
-		if err := json.Unmarshal(getRequest(t, ts, path), &log); err != nil {
+		if err := getRequestProto(t, ts, path, &wrapper); err != nil {
 			t.Fatal(err)
 		}
 
 		if testCase.MaxEntities > 0 {
-			if a, e := len(log.Data), testCase.MaxEntities; a != e {
-				t.Errorf("%d expected %d entries, got %d: \n%+v", i, e, a, log.Data)
+			if a, e := len(wrapper.Entries), testCase.MaxEntities; a != e {
+				t.Errorf("%d expected %d entries, got %d: \n%+v", i, e, a, wrapper.Entries)
 			}
 		} else {
 			var actualInfo, actualWarning, actualError bool
 			var formats bytes.Buffer
-			for _, entry := range log.Data {
+			for _, entry := range wrapper.Entries {
 				fmt.Fprintf(&formats, "%s\n", entry.Message)
 
 				switch entry.Message {
@@ -504,8 +502,8 @@ func TestRangesResponse(t *testing.T) {
 	for _, ri := range response.Ranges {
 		// Do some simple validation based on the fact that this is a
 		// single-node cluster.
-		if ri.RaftState != "StateLeader" {
-			t.Errorf("expected to be raft leader but was %s", ri.RaftState)
+		if ri.RaftState != "StateLeader" && ri.RaftState != "StateDormant" {
+			t.Errorf("expected to be Raft leader or dormant, but was '%s'", ri.RaftState)
 		}
 		expReplica := roachpb.ReplicaDescriptor{
 			NodeID:    1,
@@ -564,13 +562,43 @@ func TestSpanStatsResponse(t *testing.T) {
 
 	var response serverpb.SpanStatsResponse
 	request := serverpb.SpanStatsRequest{
-		NodeId:   "1",
+		NodeID:   "1",
 		StartKey: []byte(roachpb.RKeyMin),
 		EndKey:   []byte(roachpb.RKeyMax),
 	}
 
 	url := ts.AdminURL() + statusPrefix + "span"
 	if err := util.PostJSON(httpClient, url, &request, &response); err != nil {
+		t.Fatal(err)
+	}
+	if a, e := int(response.RangeCount), ExpectedInitialRangeCount(); a != e {
+		t.Errorf("expected %d ranges, found %d", e, a)
+	}
+}
+
+func TestSpanStatsGRPCResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ts := startServer(t)
+	defer ts.Stopper().Stop()
+
+	rpcStopper := stop.NewStopper()
+	defer rpcStopper.Stop()
+	rpcContext := rpc.NewContext(ts.RPCContext().Context, ts.Clock(), rpcStopper)
+	request := serverpb.SpanStatsRequest{
+		NodeID:   "1",
+		StartKey: []byte(roachpb.RKeyMin),
+		EndKey:   []byte(roachpb.RKeyMax),
+	}
+
+	url := ts.ServingAddr()
+	conn, err := rpcContext.GRPCDial(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := serverpb.NewStatusClient(conn)
+
+	response, err := client.SpanStats(context.Background(), &request)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if a, e := int(response.RangeCount), ExpectedInitialRangeCount(); a != e {

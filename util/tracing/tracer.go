@@ -70,7 +70,7 @@ func JoinOrNewSnowball(opName string, carrier *Span, callback func(sp basictrace
 		// We definitely want to sample a Snowball trace.
 		// This must be set *before* SetBaggageItem, as that will otherwise be ignored.
 		ext.SamplingPriority.Set(sp, 1)
-		sp.Context().SetBaggageItem(Snowball, "1")
+		sp.SetBaggageItem(Snowball, "1")
 	}
 	return sp, err
 }
@@ -85,7 +85,7 @@ func defaultOptions(recorder func(basictracer.RawSpan)) basictracer.Options {
 	return opts
 }
 
-var lightstepToken = envutil.EnvOrDefaultString("lightstep_token", "")
+var lightstepToken = envutil.EnvOrDefaultString("COCKROACH_LIGHTSTEP_TOKEN", "")
 
 // newTracer implements NewTracer and allows that function to be mocked out via Disable().
 var newTracer = func() opentracing.Tracer {
@@ -140,4 +140,23 @@ func EncodeRawSpan(rawSpan *basictracer.RawSpan, dest []byte) ([]byte, error) {
 // DecodeRawSpan unmarshals into the given RawSpan.
 func DecodeRawSpan(enc []byte, dest *basictracer.RawSpan) error {
 	return gob.NewDecoder(bytes.NewBuffer(enc)).Decode(dest)
+}
+
+// contextTracerKeyType is an empty type for the handle associated with the
+// tracer value (see context.Value).
+type contextTracerKeyType struct{}
+
+// WithTracer returns a context derived from the given context, for which
+// TracerFromCtx returns the given tracer.
+func WithTracer(ctx context.Context, tracer opentracing.Tracer) context.Context {
+	return context.WithValue(ctx, contextTracerKeyType{}, tracer)
+}
+
+// TracerFromCtx returns the tracer set on the context (or a parent context) via
+// WithTracer.
+func TracerFromCtx(ctx context.Context) opentracing.Tracer {
+	if tracerVal := ctx.Value(contextTracerKeyType{}); tracerVal != nil {
+		return tracerVal.(opentracing.Tracer)
+	}
+	return nil
 }

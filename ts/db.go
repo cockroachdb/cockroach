@@ -19,6 +19,8 @@ package ts
 import (
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/ts/tspb"
@@ -96,10 +98,10 @@ func (p *poller) poll() {
 		}
 
 		if err := p.db.StoreData(p.r, data); err != nil {
-			log.Warningf("error writing time series data: %s", err)
+			log.Warningf(context.TODO(), "error writing time series data: %s", err)
 		}
 	}); err != nil {
-		log.Warning(err)
+		log.Warning(context.TODO(), err)
 	}
 }
 
@@ -128,7 +130,7 @@ func (db *DB) StoreData(r Resolution, data []tspb.TimeSeriesData) error {
 	}
 
 	// Send the individual internal merge requests.
-	b := client.Batch{}
+	b := &client.Batch{}
 	for _, kv := range kvs {
 		b.AddRawRequest(&roachpb.MergeRequest{
 			Span: roachpb.Span{
@@ -138,5 +140,5 @@ func (db *DB) StoreData(r Resolution, data []tspb.TimeSeriesData) error {
 		})
 	}
 
-	return db.db.Run(&b)
+	return db.db.Run(b)
 }

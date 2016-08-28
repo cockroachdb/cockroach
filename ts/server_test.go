@@ -105,11 +105,8 @@ func TestQuery(t *testing.T) {
 		Results: []tspb.TimeSeriesQueryResponse_Result{
 			{
 				Query: tspb.Query{
-					Name:             "test.metric",
-					Sources:          []string{"source1", "source2"},
-					Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
-					SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
-					Derivative:       tspb.TimeSeriesQueryDerivative_NONE.Enum(),
+					Name:    "test.metric",
+					Sources: []string{"source1", "source2"},
 				},
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
@@ -128,11 +125,8 @@ func TestQuery(t *testing.T) {
 			},
 			{
 				Query: tspb.Query{
-					Name:             "other.metric",
-					Sources:          []string{""},
-					Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
-					SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
-					Derivative:       tspb.TimeSeriesQueryDerivative_NONE.Enum(),
+					Name:    "other.metric",
+					Sources: []string{""},
 				},
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{

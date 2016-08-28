@@ -17,15 +17,14 @@
 package kv
 
 import (
-	"sync"
-
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/cache"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 // A leaseHolderCache is a cache of replica descriptors keyed by range ID.
 type leaseHolderCache struct {
-	mu    sync.Mutex
+	mu    syncutil.Mutex
 	cache *cache.UnorderedCache
 }
 

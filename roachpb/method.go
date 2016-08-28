@@ -63,6 +63,8 @@ const (
 	AdminSplit
 	// AdminMerge is called to coordinate a merge of two adjacent ranges.
 	AdminMerge
+	// AdminTransferLease is called to initiate a range lease transfer.
+	AdminTransferLease
 	// HeartbeatTxn sends a periodic heartbeat to extant
 	// transaction rows to indicate the client is still alive and
 	// the transaction should not be considered abandoned.

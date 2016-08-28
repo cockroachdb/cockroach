@@ -80,7 +80,7 @@ let helpusBannerDismissed = (state: AdminUIState): boolean => state.ui[HELPUS_BA
 
 // Connect the HelpUsBanner class with our redux store.
 let helpusBannerConnected = connect(
-  (state: AdminUIState, ownProps: any) => {
+  (state: AdminUIState) => {
     return {
       attributes: optinAttributes(state),
       attributesLoaded: attributesLoaded(state),

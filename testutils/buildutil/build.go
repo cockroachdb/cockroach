@@ -22,9 +22,9 @@ import (
 	"testing"
 )
 
-// TransitiveImports returns a set containing all of importpath's
-// transitive dependencies.
-func TransitiveImports(importpath string, cgo bool) (map[string]struct{}, error) {
+// TransitiveImports returns a set containing all of importPath's transitive
+// dependencies.
+func TransitiveImports(importPath string, cgo bool) (map[string]struct{}, error) {
 	buildContext := build.Default
 	buildContext.CgoEnabled = cgo
 
@@ -32,7 +32,7 @@ func TransitiveImports(importpath string, cgo bool) (map[string]struct{}, error)
 
 	var addImports func(string) error
 	addImports = func(root string) error {
-		pkg, err := buildContext.Import(root, buildContext.GOPATH, 0)
+		pkg, err := buildContext.Import(root, "", 0)
 		if err != nil {
 			return err
 		}
@@ -42,6 +42,11 @@ func TransitiveImports(importpath string, cgo bool) (map[string]struct{}, error)
 			if imp == "C" {
 				continue // "C" is fake
 			}
+			importPkg, err := buildContext.Import(imp, pkg.Dir, build.FindOnly)
+			if err != nil {
+				return err
+			}
+			imp = importPkg.ImportPath
 			if _, ok := imports[imp]; !ok {
 				imports[imp] = struct{}{}
 				if err := addImports(imp); err != nil {
@@ -52,7 +57,7 @@ func TransitiveImports(importpath string, cgo bool) (map[string]struct{}, error)
 		return nil
 	}
 
-	return imports, addImports(importpath)
+	return imports, addImports(importPath)
 }
 
 // VerifyNoImports verifies that a package doesn't depend (directly or

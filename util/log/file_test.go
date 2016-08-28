@@ -44,8 +44,8 @@ func TestLogFilenameParsing(t *testing.T) {
 		if details.Severity != testCase.Severity {
 			t.Errorf("%d: Severities do not match, expected:%s - actual:%s", i, testCase.Severity.Name(), details.Severity.Name())
 		}
-		if details.Time.Format(time.RFC3339) != testCase.Time.Format(time.RFC3339) {
-			t.Errorf("%d: Times do not match, expected:%v - actual:%v", i, testCase.Time.Format(time.RFC3339), details.Time.Format(time.RFC3339))
+		if a, e := time.Unix(0, details.Time).Format(time.RFC3339), testCase.Time.Format(time.RFC3339); a != e {
+			t.Errorf("%d: Times do not match, expected:%s - actual:%s", i, a, e)
 		}
 	}
 }
@@ -65,7 +65,7 @@ func TestSelectFiles(t *testing.T) {
 			Name: name,
 			Details: FileDetails{
 				Severity: sev,
-				Time:     fileTime,
+				Time:     fileTime.UnixNano(),
 			},
 		}
 		testFiles = append(testFiles, testfile)
@@ -94,16 +94,16 @@ func TestSelectFiles(t *testing.T) {
 			t.Fatalf("%d: expected %d files, actual %d", i, testCase.ExpectedCount, len(actualFiles))
 		}
 		for _, file := range actualFiles {
-			if file.Details.Time.UnixNano() > previousTimestamp {
+			if file.Details.Time > previousTimestamp {
 				t.Fatalf("%d: returned files are not in the correct order", i)
 			}
 			if file.Details.Severity != testCase.Severity {
 				t.Fatalf("%d: did not filter by severity", i)
 			}
-			if file.Details.Time.UnixNano() > testCase.EndTimestamp {
+			if file.Details.Time > testCase.EndTimestamp {
 				t.Fatalf("%d: did not filter by endTime", i)
 			}
-			previousTimestamp = file.Details.Time.UnixNano()
+			previousTimestamp = file.Details.Time
 		}
 	}
 }

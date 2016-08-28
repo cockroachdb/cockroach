@@ -3,6 +3,7 @@ import { connect } from "react-redux";
 import classNames = require("classnames");
 import _ = require("lodash");
 
+import { AdminUIState } from "../redux/state";
 import * as timewindow from "../redux/timewindow";
 
 interface TimeScaleSelectorProps {
@@ -64,7 +65,7 @@ class TimeScaleSelector extends React.Component<TimeScaleSelectorProps, TimeScal
 }
 
 export default connect(
-  (state) => {
+  (state: AdminUIState) => {
     return {
       currentScale: (state.timewindow as timewindow.TimeWindowState).scale,
       availableScales: timewindow.availableTimeScales,

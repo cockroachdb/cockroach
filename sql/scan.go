@@ -244,10 +244,10 @@ func (n *scanNode) ExplainTypes(regTypes func(string, string)) {
 // fully-qualified columns if an alias is not specified.
 func (n *scanNode) initTable(
 	p *planner,
-	tableName *parser.QualifiedName,
+	tableName *parser.TableName,
 	indexHints *parser.IndexHints,
 	scanVisibility scanVisibility,
-) (string, error) {
+) error {
 	descFunc := p.getTableLease
 	if p.asOf {
 		// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
@@ -258,35 +258,33 @@ func (n *scanNode) initTable(
 	}
 	desc, err := descFunc(tableName)
 	if err != nil {
-		return "", err
+		return err
 	}
 	n.desc = *desc
 
 	if err := p.checkPrivilege(&n.desc, privilege.SELECT); err != nil {
-		return "", err
+		return err
 	}
 
-	alias := n.desc.Name
-
 	if indexHints != nil && indexHints.Index != "" {
-		indexName := sqlbase.NormalizeName(string(indexHints.Index))
-		if indexName == sqlbase.NormalizeName(n.desc.PrimaryIndex.Name) {
+		indexName := sqlbase.NormalizeName(indexHints.Index)
+		if indexName == sqlbase.ReNormalizeName(n.desc.PrimaryIndex.Name) {
 			n.specifiedIndex = &n.desc.PrimaryIndex
 		} else {
 			for i := range n.desc.Indexes {
-				if indexName == sqlbase.NormalizeName(n.desc.Indexes[i].Name) {
+				if indexName == sqlbase.ReNormalizeName(n.desc.Indexes[i].Name) {
 					n.specifiedIndex = &n.desc.Indexes[i]
 					break
 				}
 			}
 			if n.specifiedIndex == nil {
-				return "", fmt.Errorf("index \"%s\" not found", indexName)
+				return fmt.Errorf("index \"%s\" not found", indexName)
 			}
 		}
 	}
 	n.noIndexJoin = (indexHints != nil && indexHints.NoIndexJoin)
 	n.initDescDefaults(scanVisibility)
-	return alias, nil
+	return nil
 }
 
 // setNeededColumns sets the flags indicating which columns are needed by the upper layer.
@@ -378,7 +376,7 @@ func (n *scanNode) IndexedVarReturnType(idx int) parser.Datum {
 }
 
 func (n *scanNode) IndexedVarString(idx int) string {
-	return string(n.resultColumns[idx].Name)
+	return n.resultColumns[idx].Name
 }
 
 // scanVisibility represents which table columns should be included in a scan.

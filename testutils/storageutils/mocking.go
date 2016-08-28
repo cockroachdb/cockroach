@@ -17,10 +17,9 @@
 package storageutils
 
 import (
-	"sync"
-
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 // raftCmdIDAndIndex identifies a batch and a command within it.
@@ -32,7 +31,7 @@ type raftCmdIDAndIndex struct {
 // ReplayProtectionFilterWrapper wraps a CommandFilter and assures protection
 // from Raft replays.
 type ReplayProtectionFilterWrapper struct {
-	sync.Mutex
+	syncutil.Mutex
 	processedCommands map[raftCmdIDAndIndex]*roachpb.Error
 	filter            storagebase.ReplicaCommandFilter
 }

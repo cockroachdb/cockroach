@@ -44,28 +44,29 @@ type serverMessageType byte
 
 // http://www.postgresql.org/docs/9.4/static/protocol-message-formats.html
 const (
-	clientMsgSimpleQuery clientMessageType = 'Q'
-	clientMsgParse       clientMessageType = 'P'
-	clientMsgTerminate   clientMessageType = 'X'
-	clientMsgDescribe    clientMessageType = 'D'
-	clientMsgSync        clientMessageType = 'S'
-	clientMsgClose       clientMessageType = 'C'
 	clientMsgBind        clientMessageType = 'B'
+	clientMsgClose       clientMessageType = 'C'
+	clientMsgDescribe    clientMessageType = 'D'
 	clientMsgExecute     clientMessageType = 'E'
 	clientMsgFlush       clientMessageType = 'H'
+	clientMsgParse       clientMessageType = 'P'
+	clientMsgSimpleQuery clientMessageType = 'Q'
+	clientMsgSync        clientMessageType = 'S'
+	clientMsgTerminate   clientMessageType = 'X'
 
 	serverMsgAuth                 serverMessageType = 'R'
+	serverMsgBindComplete         serverMessageType = '2'
 	serverMsgCommandComplete      serverMessageType = 'C'
+	serverMsgCloseComplete        serverMessageType = '3'
 	serverMsgDataRow              serverMessageType = 'D'
+	serverMsgEmptyQuery           serverMessageType = 'I'
 	serverMsgErrorResponse        serverMessageType = 'E'
+	serverMsgNoData               serverMessageType = 'n'
+	serverMsgParameterDescription serverMessageType = 't'
+	serverMsgParameterStatus      serverMessageType = 'S'
 	serverMsgParseComplete        serverMessageType = '1'
 	serverMsgReady                serverMessageType = 'Z'
 	serverMsgRowDescription       serverMessageType = 'T'
-	serverMsgEmptyQuery           serverMessageType = 'I'
-	serverMsgParameterDescription serverMessageType = 't'
-	serverMsgBindComplete         serverMessageType = '2'
-	serverMsgParameterStatus      serverMessageType = 'S'
-	serverMsgNoData               serverMessageType = 'n'
 )
 
 //go:generate stringer -type=serverErrFieldType
@@ -120,27 +121,27 @@ type v3Conn struct {
 	// https://github.com/postgres/postgres/blob/master/src/backend/tcop/postgres.c
 	doingExtendedQueryMessage, ignoreTillSync bool
 
-	metrics *serverMetrics
+	metrics ServerMetrics
 }
 
 func makeV3Conn(
-	conn net.Conn, executor *sql.Executor,
-	metrics *serverMetrics, sessionArgs sql.SessionArgs) v3Conn {
+	conn net.Conn, executor *sql.Executor, metrics ServerMetrics, sessionArgs sql.SessionArgs,
+) v3Conn {
 	return v3Conn{
 		conn:     conn,
 		rd:       bufio.NewReader(conn),
 		wr:       bufio.NewWriter(conn),
 		executor: executor,
-		writeBuf: writeBuffer{bytecount: metrics.bytesOutCount},
+		writeBuf: writeBuffer{bytecount: metrics.BytesOutCount},
 		metrics:  metrics,
-		session:  sql.NewSession(sessionArgs, executor, conn.RemoteAddr()),
+		session:  sql.NewSession(executor.Ctx(), sessionArgs, executor, conn.RemoteAddr()),
 	}
 }
 
 func (c *v3Conn) finish() {
 	// This is better than always flushing on error.
 	if err := c.wr.Flush(); err != nil {
-		log.Error(err)
+		log.Error(context.TODO(), err)
 	}
 	_ = c.conn.Close()
 	c.session.Finish()
@@ -168,7 +169,7 @@ func parseOptions(data []byte) (sql.SessionArgs, error) {
 			args.User = value
 		default:
 			if log.V(1) {
-				log.Warningf("unrecognized configuration parameter %q", key)
+				log.Warningf(context.TODO(), "unrecognized configuration parameter %q", key)
 			}
 		}
 	}
@@ -189,8 +190,7 @@ var statusReportParams = map[string]string{
 }
 
 func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := c.session.Ctx()
 
 	if authenticationHook != nil {
 		if err := authenticationHook(c.session.User, true /* public */); err != nil {
@@ -236,7 +236,7 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 			}
 
 			if log.V(2) {
-				log.Infof("pgwire: %s: %q", serverMsgReady, txnStatus)
+				log.Infof(context.TODO(), "pgwire: %s: %q", serverMsgReady, txnStatus)
 			}
 			c.writeBuf.writeByte(txnStatus)
 			if err := c.writeBuf.finishMsg(c.wr); err != nil {
@@ -250,7 +250,7 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 			}
 		}
 		typ, n, err := c.readBuf.readTypedMsg(c.rd)
-		c.metrics.bytesInCount.Inc(int64(n))
+		c.metrics.BytesInCount.Inc(int64(n))
 		if err != nil {
 			return err
 		}
@@ -258,12 +258,12 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 		// any messages until we get a sync.
 		if c.ignoreTillSync && typ != clientMsgSync {
 			if log.V(2) {
-				log.Infof("pgwire: ignoring %s till sync", typ)
+				log.Infof(context.TODO(), "pgwire: ignoring %s till sync", typ)
 			}
 			continue
 		}
 		if log.V(2) {
-			log.Infof("pgwire: processing %s", typ)
+			log.Infof(context.TODO(), "pgwire: processing %s", typ)
 		}
 		switch typ {
 		case clientMsgSync:
@@ -467,7 +467,8 @@ func (c *v3Conn) handleClose(buf *readBuffer) error {
 	default:
 		return errors.Errorf("unknown close type: %s", typ)
 	}
-	return nil
+	c.writeBuf.initMsg(serverMsgCloseComplete)
+	return c.writeBuf.finishMsg(c.wr)
 }
 
 func (c *v3Conn) handleBind(buf *readBuffer) error {
@@ -582,7 +583,7 @@ func (c *v3Conn) handleBind(buf *readBuffer) error {
 		}
 		fmtCode := formatCode(c)
 		for i := range columnFormatCodes {
-			columnFormatCodes[i] = formatCode(fmtCode)
+			columnFormatCodes[i] = fmtCode
 		}
 	case numColumns:
 		// Read one format code for each column and apply it to that column.
@@ -637,7 +638,7 @@ func (c *v3Conn) executeStatements(
 	limit int,
 ) error {
 	tracing.AnnotateTrace()
-	results := c.executor.ExecuteStatements(ctx, c.session, stmts, pinfo)
+	results := c.executor.ExecuteStatements(c.session, stmts, pinfo)
 
 	tracing.AnnotateTrace()
 	if results.Empty {
@@ -775,7 +776,7 @@ func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, 
 
 			// Send CommandComplete.
 			tag = append(tag, ' ')
-			tag = appendUint(tag, uint(len(result.Rows)))
+			tag = strconv.AppendUint(tag, uint64(len(result.Rows)), 10)
 			if err := c.sendCommandComplete(tag); err != nil {
 				return err
 			}
@@ -803,7 +804,7 @@ func (c *v3Conn) sendRowDescription(columns []sql.ResultColumn, formatCodes []fo
 	c.writeBuf.putInt16(int16(len(columns)))
 	for i, column := range columns {
 		if log.V(2) {
-			log.Infof("pgwire writing column %s of type: %T", column.Name, column.Typ)
+			log.Infof(context.TODO(), "pgwire writing column %s of type: %T", column.Name, column.Typ)
 		}
 		c.writeBuf.writeTerminatedString(column.Name)
 
@@ -820,26 +821,4 @@ func (c *v3Conn) sendRowDescription(columns []sql.ResultColumn, formatCodes []fo
 		}
 	}
 	return c.writeBuf.finishMsg(c.wr)
-}
-
-func appendUint(in []byte, u uint) []byte {
-	var buf []byte
-	if cap(in)-len(in) >= 10 {
-		buf = in[len(in) : len(in)+10]
-	} else {
-		buf = make([]byte, 10)
-	}
-	i := len(buf)
-
-	for u >= 10 {
-		i--
-		q := u / 10
-		buf[i] = byte(u - q*10 + '0')
-		u = q
-	}
-	// u < 10
-	i--
-	buf[i] = byte(u + '0')
-
-	return append(in, buf[i:]...)
 }

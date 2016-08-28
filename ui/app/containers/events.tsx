@@ -95,7 +95,7 @@ let events = (state: AdminUIState): Event[] => state.cachedData.events.data && s
 
 // Connect the EventsList class with our redux store.
 let eventsConnected = connect(
-  (state, ownProps) => {
+  (state: AdminUIState) => {
     return {
       events: events(state),
     };

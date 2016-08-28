@@ -30,7 +30,6 @@ import (
 	"regexp/syntax"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -41,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/decimal"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -216,12 +216,20 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      ArgTypes{TypeString, TypeInt},
 			ReturnType: TypeString,
-			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+			fn: func(_ *EvalContext, args DTuple) (_ Datum, err error) {
 				s := string(*args[0].(*DString))
 				count := int(*args[1].(*DInt))
 				if count < 0 {
 					count = 0
 				}
+				// Repeat can overflow if len(s) * count is very large. The computation
+				// for the limit about what make can allocate is not trivial, so it's most
+				// accurate to detect it with a recover.
+				defer func() {
+					if r := recover(); r != nil {
+						err = fmt.Errorf("%s", r)
+					}
+				}()
 				return NewDString(strings.Repeat(s, count)), nil
 			},
 		},
@@ -1061,7 +1069,10 @@ var substringImpls = []Builtin{
 			}
 
 			end := start + length
-			if end < 0 {
+			// Check for integer overflow.
+			if end < start {
+				end = len(runes)
+			} else if end < 0 {
 				end = 0
 			} else if end > len(runes) {
 				end = len(runes)
@@ -1478,7 +1489,7 @@ func pickFromTuple(ctx *EvalContext, greatest bool, args DTuple) (Datum, error) 
 }
 
 var uniqueBytesState struct {
-	sync.Mutex
+	syncutil.Mutex
 	nanos uint64
 }
 
@@ -1510,7 +1521,7 @@ func generateUniqueBytes(nodeID roachpb.NodeID) DBytes {
 }
 
 var uniqueIntState struct {
-	sync.Mutex
+	syncutil.Mutex
 	timestamp uint64
 }
 

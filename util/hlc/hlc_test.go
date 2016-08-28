@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -47,15 +49,15 @@ func ExampleNewClock() {
 	// The sanity checks below will usually never be triggered.
 
 	if s.Less(t) || !t.Less(s) {
-		log.Fatalf("The later timestamp is smaller than the earlier one")
+		log.Fatalf(context.Background(), "The later timestamp is smaller than the earlier one")
 	}
 
 	if t.WallTime-s.WallTime > 0 {
-		log.Fatalf("HLC timestamp %d deviates from physical clock %d", s, t)
+		log.Fatalf(context.Background(), "HLC timestamp %d deviates from physical clock %d", s, t)
 	}
 
 	if s.Logical > 0 {
-		log.Fatalf("Trivial timestamp has logical component")
+		log.Fatalf(context.Background(), "Trivial timestamp has logical component")
 	}
 
 	fmt.Printf("The Unix Epoch is now approximately %dns old.\n", t.WallTime)

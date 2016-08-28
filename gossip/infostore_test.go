@@ -28,7 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -294,7 +296,7 @@ func TestLeastUseful(t *testing.T) {
 	defer stopper.Stop()
 	is := newInfoStore(1, emptyAddr, stopper)
 
-	set := makeNodeSet(3)
+	set := makeNodeSet(3, metric.NewGauge(metric.Metadata{Name: ""}))
 	if is.leastUseful(set) != 0 {
 		t.Error("not expecting a node from an empty set")
 	}
@@ -343,7 +345,7 @@ func TestLeastUseful(t *testing.T) {
 type callbackRecord struct {
 	keys []string
 	wg   *sync.WaitGroup
-	sync.Mutex
+	syncutil.Mutex
 }
 
 func (cr *callbackRecord) Add(key string, _ roachpb.Value) {

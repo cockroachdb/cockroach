@@ -20,6 +20,8 @@ import (
 	"reflect"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/keys"
@@ -62,7 +64,7 @@ func TestGossipFirstRange(t *testing.T) {
 				if reflect.DeepEqual(desc, gossiped) {
 					return
 				}
-				log.Infof("expected\n%+v\nbut found\n%+v", desc, gossiped)
+				log.Infof(context.TODO(), "expected\n%+v\nbut found\n%+v", desc, gossiped)
 			}
 		}
 	}
@@ -71,13 +73,13 @@ func TestGossipFirstRange(t *testing.T) {
 	select {
 	case err := <-errors:
 		t.Fatal(err)
-	case _ = <-descs:
+	case <-descs:
 	}
 
 	// Add two replicas. The first range descriptor should be gossiped after each
 	// addition.
 	var desc *roachpb.RangeDescriptor
-	firstRangeKey := roachpb.RKey(keys.MinKey)
+	firstRangeKey := keys.MinKey
 	for i := 1; i <= 2; i++ {
 		var err error
 		if desc, err = tc.AddReplicas(firstRangeKey, tc.Target(i)); err != nil {

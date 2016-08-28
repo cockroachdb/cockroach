@@ -27,6 +27,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"golang.org/x/net/context"
+
 	"github.com/chzyer/readline"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/envutil"
@@ -79,8 +81,8 @@ func addHistory(ins *readline.Instance, line string) {
 	// persist to disk (if ins's config.HistoryFile is set).  err can
 	// be not nil only if it got a IO error while trying to persist.
 	if err := ins.SaveHistory(line); err != nil {
-		log.Warningf("cannot save command-line history: %s", err)
-		log.Info("command-line history will not be saved in this session")
+		log.Warningf(context.TODO(), "cannot save command-line history: %s", err)
+		log.Info(context.TODO(), "command-line history will not be saved in this session")
 		cfg := ins.Config.Clone()
 		cfg.HistoryFile = ""
 		ins.SetConfig(cfg)
@@ -188,7 +190,7 @@ func runSyscmd(line string) int {
 		return cliNextLine
 	}
 
-	fmt.Printf(cmdOut)
+	fmt.Print(cmdOut)
 	return cliNextLine
 }
 
@@ -251,8 +253,8 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 		userAcct, err := user.Current()
 		if err != nil {
 			if log.V(2) {
-				log.Warningf("cannot retrieve user information: %s", err)
-				log.Info("cannot load or save the command-line history")
+				log.Warningf(context.TODO(), "cannot retrieve user information: %s", err)
+				log.Info(context.TODO(), "cannot load or save the command-line history")
 			}
 		} else {
 			histFile := filepath.Join(userAcct.HomeDir, ".cockroachdb_history")

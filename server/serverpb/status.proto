@@ -23,8 +23,8 @@ import "cockroach/gossip/gossip.proto";
 import "cockroach/server/status/status.proto";
 import "cockroach/storage/engine/enginepb/mvcc.proto";
 import "cockroach/storage/storagebase/state.proto";
+import "cockroach/util/log/log.proto";
 import "cockroach/util/unresolved_addr.proto";
-import "cockroach/roachpb/data.proto";
 
 import weak "gogoproto/gogo.proto";
 import weak "google/api/annotations.proto";
@@ -83,8 +83,16 @@ message LogsRequest {
   string pattern = 6;
 }
 
+message LogEntriesResponse {
+  repeated cockroach.util.log.Entry entries = 1 [(gogoproto.nullable) = false];
+}
+
 message LogFilesListRequest {
   string node_id = 1;
+}
+
+message LogFilesListResponse {
+  repeated cockroach.util.log.FileInfo files = 1 [(gogoproto.nullable) = false];
 }
 
 message LogFileRequest {
@@ -126,7 +134,7 @@ message RaftDebugResponse {
 }
 
 message SpanStatsRequest {
-  string node_id = 1;
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
   bytes start_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RKey"];
   bytes end_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RKey"];
 }
@@ -184,9 +192,9 @@ service Status {
   }
   rpc Stacks(StacksRequest) returns (JSONResponse) {}
   rpc Metrics(MetricsRequest) returns (JSONResponse) {}
-  rpc Logs(LogsRequest) returns (JSONResponse) {}
-  rpc LogFilesList(LogFilesListRequest) returns (JSONResponse) {}
-  rpc LogFile(LogFileRequest) returns (JSONResponse) {}
+  rpc LogFilesList(LogFilesListRequest) returns (LogFilesListResponse) {}
+  rpc LogFile(LogFileRequest) returns (LogEntriesResponse) {}
+  rpc Logs(LogsRequest) returns (LogEntriesResponse) {}
 }
 
 // PrettySpan holds a pretty-printed key range.

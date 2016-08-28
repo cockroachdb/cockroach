@@ -27,6 +27,7 @@ void protobuf_AddDesc_cockroach_2froachpb_2finternal_2eproto_impl() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
 #else
+void protobuf_AddDesc_cockroach_2froachpb_2finternal_2eproto() GOOGLE_ATTRIBUTE_COLD;
 void protobuf_AddDesc_cockroach_2froachpb_2finternal_2eproto() {
   static bool already_here = false;
   if (already_here) return;
@@ -55,16 +56,6 @@ struct StaticDescriptorInitializer_cockroach_2froachpb_2finternal_2eproto {
   }
 } static_descriptor_initializer_cockroach_2froachpb_2finternal_2eproto_;
 #endif
-
-namespace {
-
-static void MergeFromFail(int line) GOOGLE_ATTRIBUTE_COLD;
-static void MergeFromFail(int line) {
-  GOOGLE_CHECK(false) << __FILE__ << ":" << line;
-}
-
-}  // namespace
-
 
 // ===================================================================
 
@@ -325,7 +316,9 @@ void InternalTimeSeriesData::CheckTypeAndMergeFrom(
 
 void InternalTimeSeriesData::MergeFrom(const InternalTimeSeriesData& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.InternalTimeSeriesData)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (GOOGLE_PREDICT_FALSE(&from == this)) {
+    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  }
   samples_.MergeFrom(from.samples_);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_start_timestamp_nanos()) {
@@ -761,7 +754,9 @@ void InternalTimeSeriesSample::CheckTypeAndMergeFrom(
 
 void InternalTimeSeriesSample::MergeFrom(const InternalTimeSeriesSample& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.InternalTimeSeriesSample)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (GOOGLE_PREDICT_FALSE(&from == this)) {
+    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  }
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_offset()) {
       set_offset(from.offset());

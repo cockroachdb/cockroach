@@ -22,11 +22,14 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	_ "github.com/cockroachdb/cockroach/util/log" // for flags
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -155,10 +158,7 @@ func TestStopperRunWorker(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
 	s.RunWorker(func() {
-		select {
-		case <-s.ShouldStop():
-			return
-		}
+		<-s.ShouldStop()
 	})
 	closer := make(chan struct{})
 	go func() {
@@ -244,7 +244,7 @@ func TestStopperClosers(t *testing.T) {
 	s.AddCloser(&tc1)
 	s.AddCloser(&tc2)
 	s.Stop()
-	if bool(tc1) != true || bool(tc2) != true {
+	if !bool(tc1) || !bool(tc2) {
 		t.Errorf("expected true & true; got %t & %t", tc1, tc2)
 	}
 }
@@ -339,6 +339,16 @@ func TestStopperRunTaskPanic(t *testing.T) {
 	}
 }
 
+func TestStopperWithCancel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := stop.NewStopper()
+	ctx := s.WithCancel(context.Background())
+	s.Stop()
+	if err := ctx.Err(); err != context.Canceled {
+		t.Fatal(err)
+	}
+}
+
 func TestStopperShouldQuiesce(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
@@ -408,7 +418,7 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 	const maxConcurrency = 5
 	const duration = 10 * time.Millisecond
 	sem := make(chan struct{}, maxConcurrency)
-	var mu sync.Mutex
+	var mu syncutil.Mutex
 	concurrency := 0
 	peakConcurrency := 0
 	var wg sync.WaitGroup

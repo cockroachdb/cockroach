@@ -1,54 +1,72 @@
 import _ = require("lodash");
 import { combineReducers } from "redux";
-import { CachedDataReducer, CachedDataReducerState } from "./cachedDataReducer";
+import moment = require("moment");
+
+import { CachedDataReducer, CachedDataReducerState, KeyedCachedDataReducer, KeyedCachedDataReducerState } from "./cachedDataReducer";
 import * as api from "../util/api";
 import { VersionList } from "../interfaces/cockroachlabs";
-import { versionCheck, VersionCheckRequest } from "../util/cockroachlabsAPI";
+import { versionCheck } from "../util/cockroachlabsAPI";
 import { NodeStatus, RollupStoreMetrics } from "../util/proto";
 
-type ClusterResponseMessage = cockroach.server.serverpb.ClusterResponseMessage;
-type EventsRequest = cockroach.server.serverpb.EventsRequest;
-type EventsResponseMessage = cockroach.server.serverpb.EventsResponseMessage;
-type HealthResponseMessage = cockroach.server.serverpb.HealthResponseMessage;
-type RaftDebugResponseMessage = cockroach.server.serverpb.RaftDebugResponseMessage;
-type NodesResponseMessage = cockroach.server.serverpb.NodesResponseMessage;
+const clusterReducerObj = new CachedDataReducer(api.getCluster, "cluster");
+export const refreshCluster = clusterReducerObj.refresh;
 
-const TEN_SECONDS = 10 * 1000;
-const TWO_SECONDS = 2 * 1000;
+const eventsReducerObj = new CachedDataReducer(api.getEvents, "events", moment.duration(10, "s"));
+export const refreshEvents = eventsReducerObj.refresh;
 
-export let clusterReducerObj = new CachedDataReducer<void, ClusterResponseMessage>(api.getCluster, "cluster");
-export let refreshCluster = clusterReducerObj.refresh;
+export type HealthState = CachedDataReducerState<api.HealthResponseMessage>;
+const healthReducerObj = new CachedDataReducer(api.getHealth, "health", moment.duration(2, "s"));
+export const refreshHealth = healthReducerObj.refresh;
 
-export let eventsReducerObj = new CachedDataReducer<EventsRequest, EventsResponseMessage>(api.getEvents, "events", TEN_SECONDS);
-export let refreshEvents = eventsReducerObj.refresh;
-
-export type HealthState = CachedDataReducerState<HealthResponseMessage>;
-export let healthReducerObj = new CachedDataReducer<void, HealthResponseMessage>(api.getHealth, "health", TWO_SECONDS);
-export let refreshHealth = healthReducerObj.refresh;
-
-function rollupStoreMetrics(res: NodesResponseMessage): NodeStatus[] {
+function rollupStoreMetrics(res: api.NodesResponseMessage): NodeStatus[] {
   return _.map(res.nodes, (node) => {
     RollupStoreMetrics(node);
     return node;
   });
 }
 
-export let nodesReducerObj = new CachedDataReducer<void, NodeStatus[]>(() => api.getNodes().then(rollupStoreMetrics), "nodes", TEN_SECONDS);
-export let refreshNodes = nodesReducerObj.refresh;
+const nodesReducerObj = new CachedDataReducer((req: api.NodesRequestMessage, timeout?: moment.Duration) => api.getNodes(req, timeout).then(rollupStoreMetrics), "nodes", moment.duration(10, "s"));
+export const refreshNodes = nodesReducerObj.refresh;
 
-export let raftReducerObj = new CachedDataReducer<void, RaftDebugResponseMessage>(api.raftDebug, "raft");
-export let refreshRaft = raftReducerObj.refresh;
+const raftReducerObj = new CachedDataReducer(api.raftDebug, "raft");
+export const refreshRaft = raftReducerObj.refresh;
 
-export let versionReducerObj = new CachedDataReducer<VersionCheckRequest, VersionList>(versionCheck, "version");
-export let refreshVersion = versionReducerObj.refresh;
+const versionReducerObj = new CachedDataReducer(versionCheck, "version");
+export const refreshVersion = versionReducerObj.refresh;
+
+const databasesReducerObj = new CachedDataReducer(api.getDatabaseList, "databases");
+export const refreshDatabases = databasesReducerObj.refresh;
+
+export const databaseRequestToID = (req: api.DatabaseDetailsRequestMessage): string => req.database;
+
+const databaseDetailsReducerObj = new KeyedCachedDataReducer(api.getDatabaseDetails, "databaseDetails", databaseRequestToID);
+export const refreshDatabaseDetails = databaseDetailsReducerObj.refresh;
+
+// NOTE: We encode the db and table name so we can combine them as a string.
+// TODO(maxlang): there's probably a nicer way to do this
+export function generateTableID(db: string, table: string) {
+  return `${encodeURIComponent(db)}/${encodeURIComponent(table)}`;
+}
+
+export const tableRequestToID = (req: api.TableDetailsRequestMessage | api.TableStatsRequestMessage): string => generateTableID(req.database, req.table);
+
+const tableDetailsReducerObj = new KeyedCachedDataReducer(api.getTableDetails, "tableDetails", tableRequestToID);
+export const refreshTableDetails = tableDetailsReducerObj.refresh;
+
+const tableStatsReducerObj = new KeyedCachedDataReducer(api.getTableStats, "tableStats", tableRequestToID);
+export const refreshTableStats = tableStatsReducerObj.refresh;
 
 export interface APIReducersState {
-  cluster: CachedDataReducerState<ClusterResponseMessage>;
-  events: CachedDataReducerState<EventsResponseMessage>;
+  cluster: CachedDataReducerState<api.ClusterResponseMessage>;
+  events: CachedDataReducerState<api.EventsResponseMessage>;
   health: HealthState;
   nodes: CachedDataReducerState<NodeStatus[]>;
-  raft: CachedDataReducerState<RaftDebugResponseMessage>;
+  raft: CachedDataReducerState<api.RaftDebugResponseMessage>;
   version: CachedDataReducerState<VersionList>;
+  databases: CachedDataReducerState<api.DatabasesResponseMessage>;
+  databaseDetails: KeyedCachedDataReducerState<api.DatabaseDetailsResponseMessage>;
+  tableDetails: KeyedCachedDataReducerState<api.TableDetailsResponseMessage>;
+  tableStats: KeyedCachedDataReducerState<api.TableStatsResponseMessage>;
 }
 
 export default combineReducers<APIReducersState>({
@@ -58,4 +76,10 @@ export default combineReducers<APIReducersState>({
   [nodesReducerObj.actionNamespace]: nodesReducerObj.reducer,
   [raftReducerObj.actionNamespace]: raftReducerObj.reducer,
   [versionReducerObj.actionNamespace]: versionReducerObj.reducer,
+  [databasesReducerObj.actionNamespace]: databasesReducerObj.reducer,
+  [databaseDetailsReducerObj.actionNamespace]: databaseDetailsReducerObj.reducer,
+  [tableDetailsReducerObj.actionNamespace]: tableDetailsReducerObj.reducer,
+  [tableStatsReducerObj.actionNamespace]: tableStatsReducerObj.reducer,
 });
+
+export {CachedDataReducerState, KeyedCachedDataReducerState};

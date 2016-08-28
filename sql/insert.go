@@ -20,9 +20,12 @@ import (
 	"bytes"
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 type insertNode struct {
@@ -53,7 +56,12 @@ type insertNode struct {
 func (p *planner) Insert(
 	n *parser.Insert, desiredTypes []parser.Datum, autoCommit bool,
 ) (planNode, error) {
-	en, err := p.makeEditNode(n.Table, autoCommit, privilege.INSERT)
+	tn, err := p.getAliasedTableName(n.Table)
+	if err != nil {
+		return nil, err
+	}
+
+	en, err := p.makeEditNode(tn, autoCommit, privilege.INSERT)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +150,7 @@ func (p *planner) Insert(
 		return nil, fmt.Errorf("INSERT error: table %s has %d columns but %d values were supplied", n.Table, numInputColumns, expressions)
 	}
 
-	fkTables := TablesNeededForFKs(*en.tableDesc, CheckInserts)
+	fkTables := tablesNeededForFKs(*en.tableDesc, CheckInserts)
 	if err := p.fillFKTableMap(fkTables); err != nil {
 		return nil, err
 	}
@@ -175,12 +183,12 @@ func (p *planner) Insert(
 				return nil, err
 			}
 
-			helper, err := p.makeUpsertHelper(en.tableDesc, ri.insertCols, updateCols, updateExprs, conflictIndex)
+			helper, err := p.makeUpsertHelper(tn, en.tableDesc, ri.insertCols, updateCols, updateExprs, conflictIndex)
 			if err != nil {
 				return nil, err
 			}
 
-			fkTables := TablesNeededForFKs(*en.tableDesc, CheckUpdates)
+			fkTables := tablesNeededForFKs(*en.tableDesc, CheckUpdates)
 			if err := p.fillFKTableMap(fkTables); err != nil {
 				return nil, err
 			}
@@ -198,7 +206,7 @@ func (p *planner) Insert(
 		tw: tw,
 	}
 
-	if err := in.checkHelper.init(p, en.tableDesc); err != nil {
+	if err := in.checkHelper.init(p, tn, en.tableDesc); err != nil {
 		return nil, err
 	}
 
@@ -250,10 +258,11 @@ func (n *insertNode) Start() error {
 }
 
 func (n *insertNode) Next() (bool, error) {
+	ctx := context.TODO()
 	if next, err := n.run.rows.Next(); !next {
 		if err == nil {
 			// We're done. Finish the batch.
-			err = n.tw.finalize()
+			err = n.tw.finalize(ctx)
 		}
 		return false, err
 	}
@@ -300,7 +309,7 @@ func (n *insertNode) Next() (bool, error) {
 		return false, err
 	}
 
-	_, err := n.tw.row(rowVals)
+	_, err := n.tw.row(ctx, rowVals)
 	if err != nil {
 		return false, err
 	}
@@ -321,7 +330,7 @@ func (n *insertNode) Next() (bool, error) {
 }
 
 func (p *planner) processColumns(tableDesc *sqlbase.TableDescriptor,
-	node parser.QualifiedNames) ([]sqlbase.ColumnDescriptor, error) {
+	node parser.UnresolvedNames) ([]sqlbase.ColumnDescriptor, error) {
 	if node == nil {
 		// VisibleColumns is used here to prevent INSERT INTO <table> VALUES (...)
 		// (as opposed to INSERT INTO <table> (...) VALUES (...)) from writing
@@ -333,17 +342,22 @@ func (p *planner) processColumns(tableDesc *sqlbase.TableDescriptor,
 	cols := make([]sqlbase.ColumnDescriptor, len(node))
 	colIDSet := make(map[sqlbase.ColumnID]struct{}, len(node))
 	for i, n := range node {
-		// TODO(pmattis): If the name is qualified, verify the table name matches
-		// tableDesc.Name.
-		if err := n.NormalizeColumnName(); err != nil {
-			return nil, err
-		}
-		col, err := tableDesc.FindActiveColumnByName(n.Column())
+		c, err := n.NormalizeUnqualifiedColumnItem()
 		if err != nil {
 			return nil, err
 		}
+
+		if len(c.Selector) > 0 {
+			return nil, util.UnimplementedWithIssueErrorf(8318, "compound types not supported yet: %q", n)
+		}
+
+		col, err := tableDesc.FindActiveColumnByName(c.ColumnName)
+		if err != nil {
+			return nil, err
+		}
+
 		if _, ok := colIDSet[col.ID]; ok {
-			return nil, fmt.Errorf("multiple assignments to same column \"%s\"", n.Column())
+			return nil, fmt.Errorf("multiple assignments to the same column %q", n)
 		}
 		colIDSet[col.ID] = struct{}{}
 		cols[i] = col

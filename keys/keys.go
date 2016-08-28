@@ -253,6 +253,12 @@ func RangeLastVerificationTimestampKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDUnreplicatedKey(rangeID, LocalRangeLastVerificationTimestampSuffix, nil)
 }
 
+// RangeReplicaDestroyedErrorKey returns a range-local key for
+// the range's replica destroyed error.
+func RangeReplicaDestroyedErrorKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDUnreplicatedKey(rangeID, LocalRangeReplicaDestroyedErrorSuffix, nil)
+}
+
 // MakeRangeKey creates a range-local key based on the range
 // start key, metadata key suffix, and optional detail (e.g. the
 // transaction ID for a txn record, etc.).
@@ -358,10 +364,11 @@ func Addr(k roachpb.Key) (roachpb.RKey, error) {
 	return roachpb.RKey(k), nil
 }
 
-func mustAddr(k roachpb.Key) roachpb.RKey {
+// MustAddr calls Addr and panics on errors.
+func MustAddr(k roachpb.Key) roachpb.RKey {
 	rk, err := Addr(k)
 	if err != nil {
-		panic(err)
+		panic(errors.Wrapf(err, "could not take address of '%s'", k))
 	}
 	return rk
 }

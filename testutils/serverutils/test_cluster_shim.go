@@ -42,6 +42,13 @@ type TestClusterInterface interface {
 	// ServerConn returns a gosql.DB connection to a specific node.
 	ServerConn(idx int) *gosql.DB
 
+	WaitForFullReplication() error
+
+	// StopServer stops a single server.
+	StopServer(idx int)
+
+	// Stopper retrieves the stopper for this test cluster. Tests should call or
+	// defer the Stop() method on this stopper after starting a test cluster.
 	Stopper() *stop.Stopper
 }
 
@@ -64,9 +71,9 @@ func InitTestClusterFactory(impl TestClusterFactory) {
 // StartTestCluster starts up a TestCluster made up of numNodes in-memory
 // testing servers. The cluster should be stopped using Stopper().Stop().
 func StartTestCluster(t testing.TB, numNodes int, args base.TestClusterArgs) TestClusterInterface {
+	if srvFactoryImpl == nil {
+		panic("TestClusterFactory not initialized. One needs to be injected " +
+			"from the package's TestMain()")
+	}
 	return clusterFactoryImpl.StartTestCluster(t, numNodes, args)
 }
-
-// TODO(radu): Currently unused. Remove in follow-up change which uses
-// StartTestCluster
-var _ = StartTestCluster

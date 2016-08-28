@@ -432,17 +432,15 @@ func (db *DB) Query(query tspb.Query, r Resolution, startNanos, endNanos int64) 
 		// query.
 		startKey := MakeDataKey(query.Name, "" /* source */, r, startNanos)
 		endKey := MakeDataKey(query.Name, "" /* source */, r, endNanos).PrefixEnd()
-		var b client.Batch
-		b.Header.ReadConsistency = roachpb.INCONSISTENT
-		b.Scan(startKey, endKey, 0)
+		b := &client.Batch{}
+		b.Scan(startKey, endKey)
 
-		if err := db.db.Run(&b); err != nil {
+		if err := db.db.Run(b); err != nil {
 			return nil, nil, err
 		}
 		rows = b.Results[0].Rows
 	} else {
-		b := db.db.NewBatch()
-		b.Header.ReadConsistency = roachpb.INCONSISTENT
+		b := &client.Batch{}
 		// Iterate over all key timestamps which may contain data for the given
 		// sources, based on the given start/end time and the resolution.
 		kd := r.KeyDuration()

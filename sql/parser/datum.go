@@ -186,12 +186,12 @@ func (*DBool) Next() Datum {
 
 // IsMax implements the Datum interface.
 func (d *DBool) IsMax() bool {
-	return *d == true
+	return bool(*d)
 }
 
 // IsMin implements the Datum interface.
 func (d *DBool) IsMin() bool {
-	return *d == false
+	return !bool(*d)
 }
 
 // Format implements the NodeFormatter interface.
@@ -678,7 +678,7 @@ func ParseDDate(s string, loc *time.Location) (*DDate, error) {
 	}
 
 	for _, format := range dateFormats {
-		if t, err := time.Parse(format, string(s)); err == nil {
+		if t, err := time.Parse(format, s); err == nil {
 			return NewDDateFromTime(t, loc), nil
 		}
 	}

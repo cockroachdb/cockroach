@@ -2,6 +2,7 @@ import * as React from "react";
 import { connect } from "react-redux";
 import moment = require("moment");
 
+import { AdminUIState } from "../redux/state";
 import * as timewindow from "../redux/timewindow";
 
 interface TimeWindowManagerProps {
@@ -93,7 +94,7 @@ class TimeWindowManager extends React.Component<TimeWindowManagerProps, TimeWind
 }
 
 let timeWindowManagerConnected = connect(
-  (state) => {
+  (state: AdminUIState) => {
     return {
       timeWindow: state.timewindow,
     };

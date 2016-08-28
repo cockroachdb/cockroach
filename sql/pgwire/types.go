@@ -27,6 +27,8 @@ import (
 	"strconv"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -120,7 +122,7 @@ const secondsInDay = 24 * 60 * 60
 
 func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) {
 	if log.V(2) {
-		log.Infof("pgwire writing TEXT datum of type: %T, %#v", d, d)
+		log.Infof(context.TODO(), "pgwire writing TEXT datum of type: %T, %#v", d, d)
 	}
 	if d == parser.DNull {
 		// NULL is encoded as -1; all other values have a length prefix.
@@ -138,7 +140,6 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 
 	case *parser.DInt:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		// TODO(tamird): @petermattis sez this allocates. Investigate.
 		s := strconv.AppendInt(b.putbuf[4:4], int64(*v), 10)
 		b.putInt32(int32(len(s)))
 		b.write(s)
@@ -192,7 +193,7 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 
 func (b *writeBuffer) writeBinaryDatum(d parser.Datum) {
 	if log.V(2) {
-		log.Infof("pgwire writing BINARY datum of type: %T, %#v", d, d)
+		log.Infof(context.TODO(), "pgwire writing BINARY datum of type: %T, %#v", d, d)
 	}
 	if d == parser.DNull {
 		// NULL is encoded as -1; all other values have a length prefix.
@@ -278,7 +279,7 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum) {
 				digit *= 10
 				digit += int16(decDigit - '0')
 			}
-			b.putInt16(int16(digit))
+			b.putInt16(digit)
 			decDigits = decDigits[pgDecDigits:]
 		}
 

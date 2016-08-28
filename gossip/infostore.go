@@ -21,8 +21,9 @@ import (
 	"fmt"
 	"math"
 	"regexp"
-	"sync"
 	"time"
+
+	"golang.org/x/net/context"
 
 	"github.com/pkg/errors"
 
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -69,13 +71,13 @@ type infoStore struct {
 	highWaterStamps map[roachpb.NodeID]int64 // Per-node information for gossip peers
 	callbacks       []*callback
 
-	callbackMu     sync.Mutex // Serializes callbacks
-	callbackWorkMu sync.Mutex // Protects callbackWork
+	callbackMu     syncutil.Mutex // Serializes callbacks
+	callbackWorkMu syncutil.Mutex // Protects callbackWork
 	callbackWork   []func()
 }
 
 var monoTime struct {
-	sync.Mutex
+	syncutil.Mutex
 	last int64
 }
 
@@ -115,7 +117,7 @@ func (is *infoStore) String() string {
 		prepend = ", "
 		return nil
 	}); err != nil {
-		log.Errorf("failed to properly construct string representation of infoStore: %s", err)
+		log.Errorf(context.TODO(), "failed to properly construct string representation of infoStore: %s", err)
 	}
 	return buf.String()
 }
@@ -286,7 +288,7 @@ func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks .
 			w()
 		}
 	}); err != nil {
-		log.Warning(err)
+		log.Warning(context.TODO(), err)
 	}
 }
 

@@ -18,6 +18,7 @@ syntax = "proto2";
 package cockroach.storage;
 option go_package = "storage";
 
+import "cockroach/roachpb/errors.proto";
 import "cockroach/roachpb/metadata.proto";
 import "etcd/raft/raftpb/raft.proto";
 import weak "gogoproto/gogo.proto";
@@ -35,9 +36,28 @@ message RaftMessageRequest {
   optional raftpb.Message message = 4 [(gogoproto.nullable) = false];
 }
 
-// RaftMessageResponse is an empty message returned by raft RPCs. If a
-// response is needed it will be sent as a separate message.
+message RaftMessageResponseUnion {
+  option (gogoproto.onlyone) = true;
+
+  optional roachpb.Error error = 1;
+}
+
+// RaftMessageResponse may be sent to the sender of a
+// RaftMessageRequest. RaftMessage does not use the usual
+// request/response pattern; it is primarily modeled as a one-way
+// stream of requests. Normal 'responses' are usually sent as new
+// requests on a separate stream in the other direction.
+// RaftMessageResponse is not sent for every RaftMessageRequest, but
+// may be used for certain error conditions.
 message RaftMessageResponse {
+  optional uint64 range_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
+
+  optional roachpb.ReplicaDescriptor from_replica = 2 [(gogoproto.nullable) = false];
+  optional roachpb.ReplicaDescriptor to_replica = 3 [(gogoproto.nullable) = false];
+
+  optional RaftMessageResponseUnion union = 4 [(gogoproto.nullable) = false];
 }
 
 // ConfChangeContext is encoded in the raftpb.ConfChange.Context field.
@@ -54,5 +74,6 @@ message ConfChangeContext {
 }
 
 service MultiRaft {
-  rpc RaftMessage (stream RaftMessageRequest) returns (RaftMessageResponse) {}
+  rpc RaftMessage (stream RaftMessageRequest) returns (stream RaftMessageResponse) {}
+  rpc RaftMessageSync (RaftMessageRequest) returns (RaftMessageResponse) {}
 }

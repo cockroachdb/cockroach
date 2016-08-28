@@ -106,7 +106,7 @@ let versionCheckDismissed = (state: AdminUIState): number => versionCheckDismiss
 
 let versions = createSelector(
   nodeStatuses,
-  (statuses: NodeStatus[]): string[] => statuses && _.uniq(_.map(statuses, (s: NodeStatus) => s.build_info.tag))
+  (statuses: NodeStatus[]): string[] => statuses && _.uniq(_.map(statuses, (s: NodeStatus) => s.build_info && s.build_info.tag))
 );
 
 let nodeCount = createSelector(
@@ -131,7 +131,7 @@ let buildtag = createSelector(
 
 // Connect the DisconnectedBanner class with our redux store.
 let outdatedBannerConnected = connect(
-  (state, ownProps) => {
+  (state: AdminUIState) => {
     return {
       clusterID: clusterID(state),
       buildtag: buildtag(state),

@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
@@ -35,6 +37,7 @@ import (
 )
 
 func TestFreezeCluster(t *testing.T) {
+	t.Skip("#7957")
 	runTestOnConfigs(t, testFreezeClusterInner)
 }
 
@@ -43,7 +46,7 @@ func postFreeze(c cluster.Cluster, freeze bool, timeout time.Duration) (serverpb
 	httpClient.Timeout = timeout
 
 	var resp serverpb.ClusterFreezeResponse
-	log.Infof("requesting: freeze=%t, timeout=%s", freeze, timeout)
+	log.Infof(context.Background(), "requesting: freeze=%t, timeout=%s", freeze, timeout)
 	cb := func(v proto.Message) {
 		oldNum := resp.RangesAffected
 		resp = *v.(*serverpb.ClusterFreezeResponse)
@@ -51,7 +54,7 @@ func postFreeze(c cluster.Cluster, freeze bool, timeout time.Duration) (serverpb
 			resp.RangesAffected = oldNum
 		}
 		if (resp != serverpb.ClusterFreezeResponse{}) {
-			log.Infof("%+v", &resp)
+			log.Infof(context.Background(), "%+v", &resp)
 		}
 	}
 	err := util.StreamJSON(

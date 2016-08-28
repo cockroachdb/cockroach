@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -96,15 +97,6 @@ const (
 	// of new development.
 	bootstrapRangeOnly
 )
-
-// LeaseExpiration returns an int64 to increment a manual clock with to
-// make sure that all active range leases expire.
-func LeaseExpiration(s *Store, clock *hlc.Clock) int64 {
-	// Due to lease extensions, the remaining interval can be longer than just
-	// the sum of the offset (=length of stasis period) and the active
-	// duration, but definitely not by 2x.
-	return 2 * int64(s.ctx.rangeLeaseActiveDuration+clock.MaxOffset())
-}
 
 // leaseExpiry returns a duration in nanos after which any range lease the
 // Replica may hold is expired. It is more precise than LeaseExpiration
@@ -151,8 +143,9 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(tc.stopper)
 	if tc.gossip == nil {
-		rpcContext := rpc.NewContext(nil, nil, tc.stopper)
-		tc.gossip = gossip.New(rpcContext, nil, tc.stopper)
+		rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, tc.stopper)
+		server := rpc.NewServer(rpcContext) // never started
+		tc.gossip = gossip.New(rpcContext, server, nil, tc.stopper, metric.NewRegistry())
 		tc.gossip.SetNodeID(1)
 	}
 	if tc.manualClock == nil {
@@ -195,7 +188,7 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 				t.Fatal(err)
 			}
 		}
-		if err := tc.store.Start(tc.stopper); err != nil {
+		if err := tc.store.Start(context.Background(), tc.stopper); err != nil {
 			t.Fatal(err)
 		}
 		tc.store.WaitForInit()
@@ -207,6 +200,7 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 		if tc.bootstrapMode == bootstrapRangeOnly {
 			testDesc := testRangeDescriptor()
 			if _, err := writeInitialState(
+				context.Background(),
 				tc.store.Engine(),
 				enginepb.MVCCStats{},
 				*testDesc,
@@ -585,7 +579,7 @@ func TestReplicaLease(t *testing.T) {
 		{Start: one, StartStasis: one},
 		{Start: one, StartStasis: one.Next(), Expiration: one},
 	} {
-		if _, err := tc.rng.RequestLease(context.Background(), tc.store.Engine(), nil,
+		if _, _, err := tc.rng.RequestLease(context.Background(), tc.store.Engine(), nil,
 			roachpb.Header{}, roachpb.RequestLeaseRequest{
 				Lease: lease,
 			}); !testutils.IsError(err, "illegal lease interval") {
@@ -722,8 +716,8 @@ func TestReplicaLeaseCounters(t *testing.T) {
 		}
 	}
 	metrics := tc.rng.store.metrics
-	assert(metrics.leaseRequestSuccessCount.Count(), 1, 1000)
-	assert(metrics.leaseRequestErrorCount.Count(), 0, 0)
+	assert(metrics.LeaseRequestSuccessCount.Count(), 1, 1000)
+	assert(metrics.LeaseRequestErrorCount.Count(), 0, 0)
 
 	now := tc.clock.Now()
 	if err := sendLeaseRequest(tc.rng, &roachpb.Lease{
@@ -738,8 +732,8 @@ func TestReplicaLeaseCounters(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	assert(metrics.leaseRequestSuccessCount.Count(), 2, 1000)
-	assert(metrics.leaseRequestErrorCount.Count(), 0, 0)
+	assert(metrics.LeaseRequestSuccessCount.Count(), 2, 1000)
+	assert(metrics.LeaseRequestErrorCount.Count(), 0, 0)
 
 	// Make lease request fail by providing an invalid ReplicaDescriptor.
 	if err := sendLeaseRequest(tc.rng, &roachpb.Lease{
@@ -755,8 +749,8 @@ func TestReplicaLeaseCounters(t *testing.T) {
 		t.Fatal("lease request did not fail on invalid ReplicaDescriptor")
 	}
 
-	assert(metrics.leaseRequestSuccessCount.Count(), 2, 1000)
-	assert(metrics.leaseRequestErrorCount.Count(), 1, 1000)
+	assert(metrics.LeaseRequestSuccessCount.Count(), 2, 1000)
+	assert(metrics.LeaseRequestErrorCount.Count(), 1, 1000)
 }
 
 // TestReplicaGossipConfigsOnLease verifies that config info is gossiped
@@ -879,6 +873,8 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	tc.rng.mu.Lock()
 	baseRTS, _ := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil /* end */, nil /* txn */)
 	tc.rng.mu.Unlock()
+	// TODO(tschottdorf): this value is zero, which seems ripe for producing
+	// test cases that do not test anything.
 	baseLowWater := baseRTS.WallTime
 
 	newLowWater := now.Add(50, 0).WallTime + baseLowWater
@@ -892,28 +888,21 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	}{
 		// Grant the lease fresh.
 		{storeID: tc.store.StoreID(),
-			start: now, expiration: now.Add(10, 0),
-			expLowWater: baseLowWater},
+			start: now, expiration: now.Add(10, 0)},
 		// Renew the lease.
 		{storeID: tc.store.StoreID(),
-			start: now.Add(15, 0), expiration: now.Add(30, 0),
-			expLowWater: baseLowWater},
-		// Renew the lease but shorten expiration. This errors out.
+			start: now.Add(15, 0), expiration: now.Add(30, 0)},
+		// Renew the lease but shorten expiration. This is silently ignored.
 		{storeID: tc.store.StoreID(),
-			start: now.Add(16, 0), expiration: now.Add(25, 0),
-			expErr: "lease shortening currently unsupported",
-		},
+			start: now.Add(16, 0), expiration: now.Add(25, 0)},
 		// Another Store attempts to get the lease, but overlaps. If the
 		// previous lease expiration had worked, this would have too.
 		{storeID: tc.store.StoreID() + 1,
 			start: now.Add(29, 0), expiration: now.Add(50, 0),
-			expLowWater: baseLowWater,
-			expErr:      "overlaps previous",
-		},
+			expErr: "overlaps previous"},
 		// The other store tries again, this time without the overlap.
 		{storeID: tc.store.StoreID() + 1,
-			start: now.Add(31, 0), expiration: now.Add(50, 0),
-			expLowWater: baseLowWater},
+			start: now.Add(31, 0), expiration: now.Add(50, 0)},
 		// Lease is regranted to this replica. Store clock moves forward avoid
 		// influencing the result.
 		{storeID: tc.store.StoreID(),
@@ -935,18 +924,16 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 				NodeID:    roachpb.NodeID(test.storeID),
 				StoreID:   test.storeID,
 			},
-		}); err != nil {
-			if test.expErr == "" || !testutils.IsError(err, test.expErr) {
-				t.Fatalf("%d: unexpected error %s", i, err)
-			}
+		}); !(test.expErr == "" && err == nil || testutils.IsError(err, test.expErr)) {
+			t.Fatalf("%d: unexpected error %v", i, err)
 		}
 		// Verify expected low water mark.
 		tc.rng.mu.Lock()
-		rTS, rOK := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil, nil)
-		wTS, wOK := tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil, nil)
+		rTS, _ := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil, nil)
+		wTS, _ := tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil, nil)
 		tc.rng.mu.Unlock()
-		if rTS.WallTime != test.expLowWater || wTS.WallTime != test.expLowWater || rOK || wOK {
-			t.Errorf("%d: expected low water %d; got %d, %d; rOK=%t, wOK=%t", i, test.expLowWater, rTS.WallTime, wTS.WallTime, rOK, wOK)
+		if rTS.WallTime != test.expLowWater || wTS.WallTime != test.expLowWater {
+			t.Errorf("%d: expected low water %d; got maxRead=%d, maxWrite=%d", i, test.expLowWater, rTS.WallTime, wTS.WallTime)
 		}
 	}
 }
@@ -1625,7 +1612,7 @@ func TestLeaseConcurrent(t *testing.T) {
 					// Morally speaking, this is an error, but reproposals can
 					// happen and so we warn (in case this trips the test up
 					// in more unexpected ways).
-					log.Infof("reproposal of %+v", ll)
+					log.Infof(context.Background(), "reproposal of %+v", ll)
 				}
 				go func() {
 					wg.Wait()
@@ -2693,7 +2680,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		txn.Sequence++
 
 		if _, pErr := tc.SendWrappedWith(h, &args); !testutils.IsPError(pErr, test.expErrRegexp) {
-			t.Errorf("%d: expected error:\n%s\nto match:\n%s", i, pErr, test.expErrRegexp)
+			t.Errorf("%d: expected error:\n%s\not match:\n%s", i, pErr, test.expErrRegexp)
 		} else if txn := pErr.GetTxn(); txn != nil && txn.ID == nil {
 			// Prevent regression of #5591.
 			t.Fatalf("%d: received empty Transaction proto in error", i)
@@ -3329,7 +3316,7 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 	setupResolutionTest(t, tc, roachpb.Key("a") /* irrelevant */, splitKey, true /* commit */)
 	txn := newTransaction("name", key, 1, enginepb.SERIALIZABLE, tc.clock)
 	txn.Status = roachpb.COMMITTED
-	if pErr := tc.store.intentResolver.resolveIntents(context.Background(), tc.rng,
+	if pErr := tc.store.intentResolver.resolveIntents(context.Background(),
 		[]roachpb.Intent{{
 			Span:   roachpb.Span{Key: key},
 			Txn:    txn.TxnMeta,
@@ -4413,7 +4400,7 @@ func TestReplicaCorruption(t *testing.T) {
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Header().Key.Equal(roachpb.Key("boom")) {
-				return roachpb.NewError(newReplicaCorruptionError())
+				return roachpb.NewError(NewReplicaCorruptionError(errors.New("boom")))
 			}
 			return nil
 		}
@@ -4428,11 +4415,34 @@ func TestReplicaCorruption(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
+	key := roachpb.Key("boom")
+
 	// maybeSetCorrupt should have been called.
-	args = putArgs(roachpb.Key("boom"), []byte("value"))
+	args = putArgs(key, []byte("value"))
 	_, pErr := tc.SendWrapped(&args)
 	if !testutils.IsPError(pErr, "replica corruption \\(processed=true\\)") {
 		t.Fatalf("unexpected error: %s", pErr)
+	}
+
+	// Verify replica destroyed was set.
+	rkey, err := keys.Addr(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := tc.store.LookupReplica(rkey, rkey)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.mu.destroyed.Error() != pErr.GetDetail().Error() {
+		t.Fatalf("expected r.mu.destroyed == pErr.GetDetail(), instead %q != %q", r.mu.destroyed, pErr.GetDetail())
+	}
+
+	// Verify destroyed error was persisted.
+	pErr, err = loadReplicaDestroyedError(context.Background(), r.store.Engine(), r.RangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.mu.destroyed.Error() != pErr.GetDetail().Error() {
+		t.Fatalf("expected r.mu.destroyed == pErr.GetDetail(), instead %q != %q", r.mu.destroyed, pErr.GetDetail())
 	}
 
 	// TODO(bdarnell): when maybeSetCorrupt is finished verify that future commands fail too.
@@ -4709,14 +4719,6 @@ func TestReplicaLookup(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	mustAddr := func(k roachpb.Key) roachpb.RKey {
-		rk, err := keys.Addr(k)
-		if err != nil {
-			panic(err)
-		}
-		return rk
-	}
-
 	expected := []roachpb.RangeDescriptor{*tc.rng.Desc()}
 	testCases := []struct {
 		key      roachpb.RKey
@@ -4731,10 +4733,10 @@ func TestReplicaLookup(t *testing.T) {
 		{key: roachpb.RKeyMin, reverse: false, expected: expected},
 		// Test with the last key in a meta prefix. This is an edge case in the
 		// implementation.
-		{key: mustAddr(keys.Meta1KeyMax), reverse: false, expected: expected},
-		{key: mustAddr(keys.Meta2KeyMax), reverse: false, expected: nil},
-		{key: mustAddr(keys.Meta1KeyMax), reverse: true, expected: expected},
-		{key: mustAddr(keys.Meta2KeyMax), reverse: true, expected: expected},
+		{key: keys.MustAddr(keys.Meta1KeyMax), reverse: false, expected: expected},
+		{key: keys.MustAddr(keys.Meta2KeyMax), reverse: false, expected: nil},
+		{key: keys.MustAddr(keys.Meta1KeyMax), reverse: true, expected: expected},
+		{key: keys.MustAddr(keys.Meta2KeyMax), reverse: true, expected: expected},
 	}
 
 	for _, c := range testCases {
@@ -4977,7 +4979,7 @@ func TestReplicaDestroy(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := rep.Destroy(*origDesc); !testutils.IsError(err, "replica ID has changed") {
-		t.Fatalf("expected error 'replica ID has changed' but got %s", err)
+		t.Fatalf("expected error 'replica ID has changed' but got %v", err)
 	}
 
 	// Now try a fresh descriptor and succeed.
@@ -4993,71 +4995,113 @@ func TestEntries(t *testing.T) {
 	defer tc.Stop()
 	tc.rng.store.SetRaftLogQueueActive(false)
 
-	// Populate the log with 10 entries. Save the LastIndex after each write.
-	var indexes []uint64
-	for i := 0; i < 10; i++ {
-		args := incrementArgs([]byte("a"), int64(i))
-
-		if _, pErr := tc.SendWrapped(&args); pErr != nil {
-			t.Fatal(pErr)
-		}
-		idx, err := tc.rng.GetLastIndex()
-		if err != nil {
-			t.Fatal(err)
-		}
-		indexes = append(indexes, idx)
-	}
-
 	rng := tc.rng
 	rangeID := rng.RangeID
+	var indexes []uint64
 
-	// Discard the first half of the log.
-	truncateArgs := truncateLogArgs(indexes[5], rangeID)
-	if _, pErr := tc.SendWrapped(&truncateArgs); pErr != nil {
-		t.Fatal(pErr)
+	populateLogs := func(from, to int) []uint64 {
+		var newIndexes []uint64
+		for i := from; i < to; i++ {
+			args := incrementArgs([]byte("a"), int64(i))
+			if _, pErr := tc.SendWrapped(&args); pErr != nil {
+				t.Fatal(pErr)
+			}
+			idx, err := rng.GetLastIndex()
+			if err != nil {
+				t.Fatal(err)
+			}
+			newIndexes = append(newIndexes, idx)
+		}
+		return newIndexes
 	}
+
+	truncateLogs := func(index int) {
+		truncateArgs := truncateLogArgs(indexes[index], rangeID)
+		if _, err := client.SendWrapped(tc.Sender(), context.Background(), &truncateArgs); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Populate the log with 10 entries. Save the LastIndex after each write.
+	indexes = append(indexes, populateLogs(0, 10)...)
 
 	for i, tc := range []struct {
 		lo             uint64
 		hi             uint64
 		maxBytes       uint64
 		expResultCount int
+		expCacheCount  int
 		expError       error
+		// Setup, if not nil, is called before running the test case.
+		setup func()
 	}{
-		// Case 0: Just most of the entries.
-		{lo: indexes[5], hi: indexes[9], expResultCount: 4},
-		// Case 1: Get a single entry.
-		{lo: indexes[5], hi: indexes[6], expResultCount: 1},
-		// Case 2: Use MaxUint64 instead of 0 for maxBytes.
-		{lo: indexes[5], hi: indexes[9], maxBytes: math.MaxUint64, expResultCount: 4},
-		// Case 3: maxBytes is set low so only a single value should be
+		// Case 0: All of the entries from cache.
+		{lo: indexes[0], hi: indexes[9] + 1, expResultCount: 10, expCacheCount: 10, setup: nil},
+		// Case 1: Get the first entry from cache.
+		{lo: indexes[0], hi: indexes[1], expResultCount: 1, expCacheCount: 1, setup: nil},
+		// Case 2: Get the last entry from cache.
+		{lo: indexes[9], hi: indexes[9] + 1, expResultCount: 1, expCacheCount: 1, setup: nil},
+		// Case 3: lo is available, but hi is not, cache miss.
+		{lo: indexes[9], hi: indexes[9] + 2, expCacheCount: 1, expError: raft.ErrUnavailable, setup: nil},
+
+		// Case 4: Just most of the entries from cache.
+		{lo: indexes[5], hi: indexes[9], expResultCount: 4, expCacheCount: 4, setup: func() {
+			// Discard the first half of the log.
+			truncateLogs(5)
+		}},
+		// Case 5: Get a single entry from cache.
+		{lo: indexes[5], hi: indexes[6], expResultCount: 1, expCacheCount: 1, setup: nil},
+		// Case 6: Use MaxUint64 instead of 0 for maxBytes.
+		{lo: indexes[5], hi: indexes[9], maxBytes: math.MaxUint64, expResultCount: 4, expCacheCount: 4, setup: nil},
+		// Case 7: maxBytes is set low so only a single value should be
 		// returned.
-		{lo: indexes[5], hi: indexes[9], maxBytes: 1, expResultCount: 1},
-		// Case 4: hi value is past the last index, should return all available
-		// entries
-		{lo: indexes[5], hi: indexes[9] + 1, expResultCount: 5},
-		// Case 5: all values have been truncated.
-		{lo: indexes[1], hi: indexes[2], expError: raft.ErrCompacted},
-		// Case 6: hi has just been truncated.
-		{lo: indexes[1], hi: indexes[4], expError: raft.ErrCompacted},
-		// Case 7: another case where hi has just been truncated.
-		{lo: indexes[3], hi: indexes[4], expError: raft.ErrCompacted},
-		// Case 8: lo has been truncated and hi is the truncation point.
-		{lo: indexes[4], hi: indexes[5], expError: raft.ErrCompacted},
-		// Case 9: lo has been truncated but hi is available.
-		{lo: indexes[4], hi: indexes[9], expError: raft.ErrCompacted},
-		// Case 10: lo has been truncated and hi is not available.
-		{lo: indexes[4], hi: indexes[9] + 100, expError: raft.ErrCompacted},
-		// Case 11: lo has been truncated but hi is available, and maxBytes is
+		{lo: indexes[5], hi: indexes[9], maxBytes: 1, expResultCount: 1, expCacheCount: 1, setup: nil},
+		// Case 8: hi value is just past the last index, should return all
+		// available entries.
+		{lo: indexes[5], hi: indexes[9] + 1, expResultCount: 5, expCacheCount: 5, setup: nil},
+		// Case 9: all values have been truncated from cache and storage.
+		{lo: indexes[1], hi: indexes[2], expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
+		// Case 10: hi has just been truncated from cache and storage.
+		{lo: indexes[1], hi: indexes[4], expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
+		// Case 11: another case where hi has just been truncated from
+		// cache and storage.
+		{lo: indexes[3], hi: indexes[4], expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
+		// Case 12: lo has been truncated and hi is the truncation point.
+		{lo: indexes[4], hi: indexes[5], expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
+		// Case 13: lo has been truncated but hi is available.
+		{lo: indexes[4], hi: indexes[9], expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
+		// Case 14: lo has been truncated and hi is not available.
+		{lo: indexes[4], hi: indexes[9] + 100, expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
+		// Case 15: lo has been truncated but hi is available, and maxBytes is
 		// set low.
-		{lo: indexes[4], hi: indexes[9], maxBytes: 1, expError: raft.ErrCompacted},
-		// Case 12: lo is available but hi isn't.
-		{lo: indexes[5], hi: indexes[9] + 100, expError: raft.ErrUnavailable},
-		// Case 13: both lo and hi are not available.
-		{lo: indexes[9] + 100, hi: indexes[9] + 1000, expError: raft.ErrUnavailable},
-		// Case 14: lo is available, hi is not, but it was cut off by maxBytes.
-		{lo: indexes[5], hi: indexes[9] + 1000, maxBytes: 1, expResultCount: 1},
+		{lo: indexes[4], hi: indexes[9], maxBytes: 1, expCacheCount: 0, expError: raft.ErrCompacted, setup: nil},
+		// Case 16: lo is available but hi is not.
+		{lo: indexes[5], hi: indexes[9] + 100, expCacheCount: 6, expError: raft.ErrUnavailable, setup: nil},
+		// Case 17: both lo and hi are not available, cache miss.
+		{lo: indexes[9] + 100, hi: indexes[9] + 1000, expCacheCount: 0, expError: raft.ErrUnavailable, setup: nil},
+		// Case 18: lo is available, hi is not, but it was cut off by maxBytes.
+		{lo: indexes[5], hi: indexes[9] + 1000, maxBytes: 1, expResultCount: 1, expCacheCount: 1, setup: nil},
+
+		// Case 19: lo and hi are available, but entry cache evicted.
+		{lo: indexes[5], hi: indexes[9], expResultCount: 4, expCacheCount: 0, setup: func() {
+			// Manually evict cache for the first 10 log entries.
+			rng.store.raftEntryCache.delEntries(rangeID, indexes[0], indexes[9]+1)
+			indexes = append(indexes, populateLogs(10, 40)...)
+		}},
+		// Case 20: lo and hi are available, entry cache evicted and hi available in cache.
+		{lo: indexes[5], hi: indexes[9] + 5, expResultCount: 9, expCacheCount: 4, setup: nil},
+		// Case 21: lo and hi are available and in entry cache.
+		{lo: indexes[9] + 2, hi: indexes[9] + 32, expResultCount: 30, expCacheCount: 30, setup: nil},
+		// Case 22: lo is available and hi is not.
+		{lo: indexes[9] + 2, hi: indexes[9] + 33, expCacheCount: 30, expError: raft.ErrUnavailable, setup: nil},
 	} {
+		if tc.setup != nil {
+			tc.setup()
+		}
+		cacheEntries, _, _ := rng.store.raftEntryCache.getEntries(rangeID, tc.lo, tc.hi, tc.maxBytes)
+		if len(cacheEntries) != tc.expCacheCount {
+			t.Errorf("%d: expected cache count %d, got %d", i, tc.expCacheCount, len(cacheEntries))
+		}
 		rng.mu.Lock()
 		ents, err := rng.Entries(tc.lo, tc.hi, tc.maxBytes)
 		rng.mu.Unlock()
@@ -5069,41 +5113,41 @@ func TestEntries(t *testing.T) {
 			continue
 		}
 		if len(ents) != tc.expResultCount {
-			t.Errorf("%d: expected %d entires, got %d", i, tc.expResultCount, len(ents))
+			t.Errorf("%d: expected %d entries, got %d", i, tc.expResultCount, len(ents))
 		}
 	}
 
-	// Case 15: Lo must be less than or equal to hi.
+	// Case 23: Lo must be less than or equal to hi.
 	rng.mu.Lock()
 	if _, err := rng.Entries(indexes[9], indexes[5], 0); err == nil {
-		t.Errorf("15: error expected, got none")
+		t.Errorf("23: error expected, got none")
 	}
 	rng.mu.Unlock()
 
-	// Case 16: add a gap to the indexes.
-	if err := engine.MVCCDelete(context.Background(), tc.store.Engine(), nil, keys.RaftLogKey(rangeID, indexes[6]), hlc.ZeroTimestamp,
-		nil); err != nil {
+	// Case 24: add a gap to the indexes.
+	if err := engine.MVCCDelete(context.Background(), tc.store.Engine(), nil, keys.RaftLogKey(rangeID, indexes[6]), hlc.ZeroTimestamp, nil); err != nil {
 		t.Fatal(err)
 	}
+	rng.store.raftEntryCache.delEntries(rangeID, indexes[6], indexes[6]+1)
 
 	rng.mu.Lock()
 	defer rng.mu.Unlock()
 	if _, err := rng.Entries(indexes[5], indexes[9], 0); err == nil {
-		t.Errorf("16: error expected, got none")
+		t.Errorf("24: error expected, got none")
 	}
 
-	// Case 17: don't hit the gap due to maxBytes.
+	// Case 25: don't hit the gap due to maxBytes.
 	ents, err := rng.Entries(indexes[5], indexes[9], 1)
 	if err != nil {
-		t.Errorf("17: expected no error, got %s", err)
+		t.Errorf("25: expected no error, got %s", err)
 	}
 	if len(ents) != 1 {
-		t.Errorf("17: expected 1 entry, got %d", len(ents))
+		t.Errorf("25: expected 1 entry, got %d", len(ents))
 	}
 
-	// Case 18: don't hit the gap due to truncation.
+	// Case 26: don't hit the gap due to truncation.
 	if _, err := rng.Entries(indexes[4], indexes[9], 0); err != raft.ErrCompacted {
-		t.Errorf("18: expected error %s , got %s", raft.ErrCompacted, err)
+		t.Errorf("26: expected error %s , got %s", raft.ErrCompacted, err)
 	}
 }
 
@@ -5287,7 +5331,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			if err := ba.SetActiveTimestamp(tc.clock.Now); err != nil {
 				t.Fatal(err)
 			}
-			br, pErr := tc.rng.addWriteCmd(ctx, ba, nil /* wg */)
+			br, pErr := tc.rng.addWriteCmd(ctx, ba)
 			if pErr == nil {
 				if !cancelEarly {
 					// We cancelled the context while the command was already
@@ -5308,42 +5352,31 @@ func TestReplicaCancelRaft(t *testing.T) {
 
 // verify the checksum for the range and return it.
 func verifyChecksum(t *testing.T, rng *Replica) []byte {
+	ctx := context.Background()
 	id := uuid.MakeV4()
-	if _, err := rng.ComputeChecksum(
-		context.Background(),
-		nil,
-		nil,
-		roachpb.Header{},
-		roachpb.ComputeChecksumRequest{
-			ChecksumID: id,
-			Version:    replicaChecksumVersion,
-		},
-	); err != nil {
-		t.Fatal(err)
-	}
-	c, ok := rng.getChecksum(id)
+	rng.computeChecksumTrigger(ctx, roachpb.ComputeChecksumRequest{
+		ChecksumID: id,
+		Version:    replicaChecksumVersion,
+	})
+	c, ok := rng.getChecksum(ctx, id)
 	if !ok {
 		t.Fatalf("checksum for id = %v not found", id)
 	}
 	if c.checksum == nil {
 		t.Fatal("couldn't compute checksum")
 	}
-	if _, err := rng.VerifyChecksum(
-		context.Background(),
-		nil,
-		nil,
-		roachpb.Header{},
+	rng.verifyChecksumTrigger(
+		ctx,
 		roachpb.VerifyChecksumRequest{
 			ChecksumID: id,
 			Version:    replicaChecksumVersion,
 			Checksum:   c.checksum,
-		},
-	); err != nil {
-		t.Fatal(err)
-	}
+		})
 	return c.checksum
 }
 
+// TODO(tschottdorf): this test is really frail and unidiomatic. Consider
+// some better high-level check of this functionality.
 func TestComputeVerifyChecksum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
@@ -5367,7 +5400,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 		rng.mu.Lock()
 		defer rng.mu.Unlock()
 
-		appliedIndex, _, err := loadAppliedIndex(rng.store.Engine(), rng.RangeID)
+		appliedIndex, _, err := loadAppliedIndex(context.Background(), rng.store.Engine(), rng.RangeID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -5425,18 +5458,12 @@ func TestComputeVerifyChecksum(t *testing.T) {
 
 	// Verify that a bad version/checksum sent will result in an error.
 	id1 := uuid.MakeV4()
-	if _, err := rng.ComputeChecksum(
+	rng.computeChecksumTrigger(
 		context.Background(),
-		nil,
-		nil,
-		roachpb.Header{},
 		roachpb.ComputeChecksumRequest{
 			ChecksumID: id1,
 			Version:    replicaChecksumVersion,
-		},
-	); err != nil {
-		t.Fatal(err)
-	}
+		})
 	// Set a callback for checksum mismatch panics.
 	badChecksumChan := make(chan []ReplicaSnapshotDiff, 1)
 	rng.store.ctx.TestingKnobs.BadChecksumPanic = func(diff []ReplicaSnapshotDiff) {
@@ -5445,19 +5472,13 @@ func TestComputeVerifyChecksum(t *testing.T) {
 
 	// First test that sending a Verification request with a bad version and
 	// bad checksum will return without panicking because of a bad checksum.
-	if _, err := rng.VerifyChecksum(
+	rng.verifyChecksumTrigger(
 		context.Background(),
-		nil,
-		nil,
-		roachpb.Header{},
 		roachpb.VerifyChecksumRequest{
 			ChecksumID: id1,
 			Version:    10000001,
 			Checksum:   []byte("bad checksum"),
-		},
-	); err != nil {
-		t.Fatal(err)
-	}
+		})
 	select {
 	case badChecksum := <-badChecksumChan:
 		t.Fatalf("bad checksum: %v", badChecksum)
@@ -5467,19 +5488,13 @@ func TestComputeVerifyChecksum(t *testing.T) {
 	// checksum mismatch and trigger a rerun of the consistency check,
 	// but the second consistency check will succeed because the checksum
 	// provided in the second consistency check is the correct one.
-	if _, err := rng.VerifyChecksum(
+	rng.verifyChecksumTrigger(
 		context.Background(),
-		nil,
-		nil,
-		roachpb.Header{},
 		roachpb.VerifyChecksumRequest{
 			ChecksumID: id1,
 			Version:    replicaChecksumVersion,
 			Checksum:   []byte("bad checksum"),
-		},
-	); err != nil {
-		t.Fatal(err)
-	}
+		})
 	select {
 	case badChecksum := <-badChecksumChan:
 		t.Fatalf("bad checksum: %v", badChecksum)
@@ -5489,20 +5504,14 @@ func TestComputeVerifyChecksum(t *testing.T) {
 	// Repeat the same but provide a snapshot this time. This will
 	// result in the checksum failure not running the second consistency
 	// check; it will panic.
-	if _, err := rng.VerifyChecksum(
+	rng.verifyChecksumTrigger(
 		context.Background(),
-		nil,
-		nil,
-		roachpb.Header{},
 		roachpb.VerifyChecksumRequest{
 			ChecksumID: id1,
 			Version:    replicaChecksumVersion,
 			Checksum:   []byte("bad checksum"),
 			Snapshot:   &roachpb.RaftSnapshotData{},
-		},
-	); err != nil {
-		t.Fatal(err)
-	}
+		})
 	select {
 	case <-badChecksumChan:
 	default:
@@ -5512,7 +5521,7 @@ func TestComputeVerifyChecksum(t *testing.T) {
 	id2 := uuid.MakeV4()
 	// Sending a ComputeChecksum with a bad version doesn't result in a
 	// computed checksum.
-	if _, err := rng.ComputeChecksum(
+	if _, _, err := rng.ComputeChecksum(
 		context.Background(),
 		nil,
 		nil,
@@ -5525,20 +5534,14 @@ func TestComputeVerifyChecksum(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Sending a VerifyChecksum with a bad checksum is a noop.
-	if _, err := rng.VerifyChecksum(
+	rng.verifyChecksumTrigger(
 		context.Background(),
-		nil,
-		nil,
-		roachpb.Header{},
 		roachpb.VerifyChecksumRequest{
 			ChecksumID: id2,
 			Version:    replicaChecksumVersion,
 			Checksum:   []byte("bad checksum"),
 			Snapshot:   &roachpb.RaftSnapshotData{},
-		},
-	); err != nil {
-		t.Fatal(err)
-	}
+		})
 	select {
 	case badChecksum := <-badChecksumChan:
 		t.Fatalf("bad checksum: %v", badChecksum)
@@ -5552,8 +5555,9 @@ func TestNewReplicaCorruptionError(t *testing.T) {
 		errStruct *roachpb.ReplicaCorruptionError
 		expErr    string
 	}{
-		{newReplicaCorruptionError(errors.New("foo"), nil, errors.New("bar"), nil), "replica corruption (processed=false): foo (caused by bar)"},
-		{newReplicaCorruptionError(nil, nil, nil), "replica corruption (processed=false)"},
+		{NewReplicaCorruptionError(errors.New("")), "replica corruption (processed=false)"},
+		{NewReplicaCorruptionError(errors.New("foo")), "replica corruption (processed=false): foo"},
+		{NewReplicaCorruptionError(errors.Wrap(errors.New("bar"), "foo")), "replica corruption (processed=false): foo: bar"},
 	} {
 		// This uses fmt.Sprint because that ends up calling Error() and is the
 		// intended use. A previous version of this test called String() directly
@@ -5836,7 +5840,7 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 
 	wrongIndex := ai - 1 // will chose this as MaxLeaseIndex
 
-	log.Infof("test begins")
+	log.Infof(context.Background(), "test begins")
 
 	var ba roachpb.BatchRequest
 	ba.Timestamp = tc.clock.Now()
@@ -5863,7 +5867,7 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 		cmd.raftCmd.MaxLeaseIndex = wrongIndex
 		tc.rng.insertRaftCommandLocked(cmd)
 		if repropose {
-			if err := tc.rng.refreshPendingCmdsLocked(noReason); err != nil {
+			if err := tc.rng.refreshPendingCmdsLocked(noReason, 0); err != nil {
 				fatalf("%s", err)
 			}
 		} else if err := tc.rng.proposePendingCmdLocked(cmd); err != nil {
@@ -5959,7 +5963,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			// the command and it isn't reproposed due to the
 			// client abandoning it.
 			if rand.Intn(2) == 0 {
-				log.Infof("abandoning command %d", i)
+				log.Infof(context.Background(), "abandoning command %d", i)
 				delete(rng.mu.pendingCmds, cmd.idKey)
 			} else if err := rng.proposePendingCmdLocked(cmd); err != nil {
 				t.Fatal(err)
@@ -5983,6 +5987,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 // in these commands applying at the computed indexes.
 func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("TODO(bdarnell): https://github.com/cockroachdb/cockroach/issues/8422")
 	var tc testContext
 	tc.Start(t)
 	defer tc.Stop()
@@ -6025,6 +6030,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
 			cmd := tc.rng.prepareRaftCommandLocked(ctx, makeIDKey(), repDesc, ba)
 			tc.rng.insertRaftCommandLocked(cmd)
+			chs = append(chs, cmd.done)
 		}
 
 		for _, p := range tc.rng.mu.pendingCmds {
@@ -6039,7 +6045,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			t.Fatalf("wanted required indexes %v, got %v", expIndexes, origIndexes)
 		}
 
-		if err := tc.rng.refreshPendingCmdsLocked(noReason); err != nil {
+		if err := tc.rng.refreshPendingCmdsLocked(noReason, 0); err != nil {
 			t.Fatal(err)
 		}
 		return chs
@@ -6067,6 +6073,96 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		}
 		return errors.New("still pending commands")
 	})
+}
+
+func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var tc testContext
+	tc.Start(t)
+	defer tc.Stop()
+
+	// Grab processRaftMu in order to block normal raft replica processing. This
+	// test is ticking the replicas manually and doesn't want the store to be
+	// doing so concurrently.
+	tc.store.processRaftMu.Lock()
+	defer tc.store.processRaftMu.Unlock()
+
+	r := tc.rng
+	repDesc, err := r.GetReplicaDescriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	electionTicks := tc.store.ctx.RaftElectionTimeoutTicks
+
+	{
+		// The verifications of the reproposal counts below rely on r.mu.ticks
+		// starting with a value of 0 (modulo electionTicks). Move the replica into
+		// that state in case the replica was ticked before we grabbed
+		// processRaftMu.
+		r.mu.Lock()
+		ticks := r.mu.ticks
+		r.mu.Unlock()
+		var info tickInfo
+		for ; (ticks % electionTicks) != 0; ticks++ {
+			if err := r.tick(&info); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	// We tick the replica 2*RaftElectionTimeoutTicks. RaftElectionTimeoutTicks
+	// is special in that it controls how often pending commands are reproposed
+	// or refurbished.
+	for i := 0; i < 2*electionTicks; i++ {
+		// Add another pending command on each iteration.
+		r.mu.Lock()
+		id := fmt.Sprintf("%08d", i)
+		var ba roachpb.BatchRequest
+		ba.Timestamp = tc.clock.Now()
+		ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: roachpb.Key(id)}})
+		cmd := r.prepareRaftCommandLocked(context.Background(),
+			storagebase.CmdIDKey(id), repDesc, ba)
+		r.insertRaftCommandLocked(cmd)
+		if err := r.proposePendingCmdLocked(cmd); err != nil {
+			t.Fatal(err)
+		}
+		// Build a map from command key to proposed-at-ticks.
+		m := map[storagebase.CmdIDKey]int{}
+		for id, p := range r.mu.pendingCmds {
+			m[id] = p.proposedAtTicks
+		}
+		r.mu.Unlock()
+
+		// Tick raft.
+		var info tickInfo
+		if err := r.tick(&info); err != nil {
+			t.Fatal(err)
+		}
+
+		// Gather up the reproprosed commands.
+		r.mu.Lock()
+		var reproposed []*pendingCmd
+		for id, p := range r.mu.pendingCmds {
+			if m[id] != p.proposedAtTicks {
+				reproposed = append(reproposed, p)
+			}
+		}
+		ticks := r.mu.ticks
+		r.mu.Unlock()
+
+		// Reproposals are only performed every electionTicks. We'll need to fix
+		// this test if that changes.
+		if (ticks % electionTicks) == 0 {
+			if len(reproposed) != i-1 {
+				t.Fatalf("%d: expected %d reproprosed commands, but found %+v", i, i-1, reproposed)
+			}
+		} else {
+			if len(reproposed) != 0 {
+				t.Fatalf("%d: expected no reproprosed commands, but found %+v", i, reproposed)
+			}
+		}
+	}
 }
 
 // TestReplicaDoubleRefurbish exercises a code path in which a command is seen
@@ -6172,18 +6268,12 @@ func TestCommandTimeThreshold(t *testing.T) {
 	}
 
 	// Do a GC.
-	b := tc.store.Engine().NewBatch()
-	var h roachpb.Header
 	gcr := roachpb.GCRequest{
 		Threshold: ts2,
 	}
-	if _, err := tc.rng.GC(context.Background(), b, nil, h, gcr); err != nil {
+	if _, err := tc.SendWrapped(&gcr); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Commit(); err != nil {
-		t.Fatal(err)
-	}
-	b.Close()
 
 	// Do the same Get, which should now fail.
 	if _, err := tc.SendWrappedWith(roachpb.Header{
@@ -6238,20 +6328,20 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 
 	key := roachpb.RKey("a")
 	firstRng := tc.store.LookupReplica(key, nil)
-	snap, err := firstRng.GetSnapshot()
+	snap, err := firstRng.GetSnapshot(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	tc.store.metrics.available.Update(tc.store.bookie.maxReservedBytes)
+	tc.store.metrics.Available.Update(tc.store.bookie.maxReservedBytes)
 
 	// Note that this is an artificial scenario in which we're adding a
 	// reservation for a replica that is already on the range. This test is
 	// designed to test the filling of the reservation specifically and in
 	// normal operation there should not be a reservation for an existing
 	// replica.
-	req := roachpb.ReservationRequest{
-		StoreRequestHeader: roachpb.StoreRequestHeader{
+	req := ReservationRequest{
+		StoreRequestHeader: StoreRequestHeader{
 			StoreID: tc.store.StoreID(),
 			NodeID:  tc.store.nodeDesc.NodeID,
 		},
@@ -6259,14 +6349,14 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 		RangeSize: 10,
 	}
 
-	if !tc.store.Reserve(req).Reserved {
+	if !tc.store.Reserve(context.Background(), req).Reserved {
 		t.Fatalf("Can't reserve the replica")
 	}
 	checkReservations(t, 1)
 
 	// Apply a snapshot and check the reservation was filled. Note that this
 	// out-of-band application could be a root cause if this test ever crashes.
-	if _, err := firstRng.applySnapshot(snap, raftpb.HardState{}); err != nil {
+	if err := firstRng.applySnapshot(context.Background(), snap, raftpb.HardState{}); err != nil {
 		t.Fatal(err)
 	}
 	checkReservations(t, 0)

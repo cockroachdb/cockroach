@@ -30,9 +30,10 @@ iterative_coverpkg() {
   old_line_count="-1"
   while [ "$old_line_count" != "$line_count" ]; do
     old_line_count=$line_count
-    imports=$(go list  -f '{{join .Imports "\n"}}
+    imports+=$'\n'$(go list  -f '{{join .Imports "\n"}}
 {{join .TestImports "\n"}}
-{{join .XTestImports "\n"}}' $imports | grep $main_package | sort | uniq)
+{{join .XTestImports "\n"}}' $imports | grep $main_package)
+    imports=$(echo "$imports" | sort | uniq)
     line_count=$(echo $imports | wc -w)
   done
   coverpkg=$(echo $imports | sed 's/ /,/g')
@@ -43,6 +44,7 @@ mkdir -p "$coverage_dir"
 
 # Run "make coverage" on each package.
 for pkg in $(go list ./...); do
+  echo "Processing $pkg..."
   # Verify package has test files.
   if [ -z "$(go list -f '{{join .TestGoFiles ""}}{{join .XTestGoFiles ""}}' $pkg)" ]; then
     echo "$pkg: Skipping due to no test files."

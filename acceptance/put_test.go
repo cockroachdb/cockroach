@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
@@ -73,12 +75,12 @@ func testPutInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
 			// Periodically print out progress so that we know the test is still
 			// running.
 			loadedCount := atomic.LoadInt64(&count)
-			log.Infof("%d (%d/s)", loadedCount, loadedCount-baseCount)
+			log.Infof(context.Background(), "%d (%d/s)", loadedCount, loadedCount-baseCount)
 			c.Assert(t)
 			cluster.Consistent(t, c)
 		}
 	}
 
 	elapsed := timeutil.Since(start)
-	log.Infof("%d %.1f/sec", count, float64(count)/elapsed.Seconds())
+	log.Infof(context.Background(), "%d %.1f/sec", count, float64(count)/elapsed.Seconds())
 }

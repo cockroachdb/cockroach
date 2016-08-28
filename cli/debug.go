@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
@@ -65,13 +66,17 @@ func parseRangeID(arg string) (roachpb.RangeID, error) {
 func openStore(cmd *cobra.Command, dir string, stopper *stop.Stopper) (*engine.RocksDB, error) {
 	cache := engine.NewRocksDBCache(512 << 20)
 	defer cache.Release()
+	maxOpenFiles, err := server.SetOpenFileLimitForOneStore()
+	if err != nil {
+		return nil, err
+	}
 	db := engine.NewRocksDB(
 		roachpb.Attributes{},
 		dir,
 		cache,
 		10<<20,
 		0,
-		engine.DefaultMaxOpenFiles,
+		maxOpenFiles,
 		stopper,
 	)
 	if err := db.Open(); err != nil {
@@ -402,10 +407,7 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	start := engine.MakeMVCCMetadataKey(keys.LocalRangePrefix)
 	end := engine.MakeMVCCMetadataKey(keys.LocalRangeMax)
 
-	if err := db.Iterate(start, end, printRangeDescriptor); err != nil {
-		return err
-	}
-	return nil
+	return db.Iterate(start, end, printRangeDescriptor)
 }
 
 var debugRaftLogCmd = &cobra.Command{
@@ -482,10 +484,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 	start := engine.MakeMVCCMetadataKey(keys.RaftLogPrefix(rangeID))
 	end := engine.MakeMVCCMetadataKey(keys.RaftLogPrefix(rangeID).PrefixEnd())
 
-	if err := db.Iterate(start, end, printRaftLogEntry); err != nil {
-		return err
-	}
-	return nil
+	return db.Iterate(start, end, printRaftLogEntry)
 }
 
 var debugGCCmd = &cobra.Command{

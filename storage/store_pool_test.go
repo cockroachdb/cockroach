@@ -17,6 +17,7 @@
 package storage
 
 import (
+	"net"
 	"reflect"
 	"sort"
 	"testing"
@@ -24,6 +25,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -32,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -59,8 +62,9 @@ func createTestStorePool(timeUntilStoreDead time.Duration) (*stop.Stopper, *goss
 	stopper := stop.NewStopper()
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	rpcContext := rpc.NewContext(nil, clock, stopper)
-	g := gossip.New(rpcContext, nil, stopper)
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
+	server := rpc.NewServer(rpcContext) // never started
+	g := gossip.New(rpcContext, server, nil, stopper, metric.NewRegistry())
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	storePool := NewStorePool(
@@ -392,7 +396,7 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 
 	sg.GossipStores(stores, t)
 
-	deadReplicas := sp.deadReplicas(replicas)
+	deadReplicas := sp.deadReplicas(0, replicas)
 	if len(deadReplicas) > 0 {
 		t.Fatalf("expected no dead replicas initially, found %d (%v)", len(deadReplicas), deadReplicas)
 	}
@@ -402,7 +406,7 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 	// Resurrect all stores except for 4 and 5.
 	sg.GossipStores(stores[:3], t)
 
-	deadReplicas = sp.deadReplicas(replicas)
+	deadReplicas = sp.deadReplicas(0, replicas)
 	if a, e := deadReplicas, replicas[3:]; !reflect.DeepEqual(a, e) {
 		t.Fatalf("findDeadReplicas did not return expected values; got \n%v, expected \n%v", a, e)
 	}
@@ -420,7 +424,7 @@ func TestStorePoolDefaultState(t *testing.T) {
 	stopper, _, _, sp := createTestStorePool(TestTimeUntilStoreDeadOff)
 	defer stopper.Stop()
 
-	if dead := sp.deadReplicas([]roachpb.ReplicaDescriptor{{StoreID: 1}}); len(dead) > 0 {
+	if dead := sp.deadReplicas(0, []roachpb.ReplicaDescriptor{{StoreID: 1}}); len(dead) > 0 {
 		t.Errorf("expected 0 dead replicas; got %v", dead)
 	}
 
@@ -436,29 +440,27 @@ func TestStorePoolDefaultState(t *testing.T) {
 	}
 }
 
-// fakeNodeServer implements the InternalServer interface. Specifically, this
-// is used for testing the Reserve() RPC.
-type fakeNodeServer struct {
+// fakeStoresServer implements the InternalStoresServer interface. Specifically,
+// this is used for testing the Reserve() RPC.
+type fakeStoresServer struct {
 	reservationResponse bool
 	reservationErr      error
 }
 
-func (f *fakeNodeServer) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+var _ StoresServer = fakeStoresServer{}
+
+func (f fakeStoresServer) PollFrozen(_ context.Context, _ *PollFrozenRequest) (*PollFrozenResponse, error) {
 	panic("unimplemented")
 }
 
-func (f *fakeNodeServer) PollFrozen(_ context.Context, _ *roachpb.PollFrozenRequest) (*roachpb.PollFrozenResponse, error) {
-	panic("unimplemented")
+func (f fakeStoresServer) Reserve(_ context.Context, _ *ReservationRequest) (*ReservationResponse, error) {
+	return &ReservationResponse{Reserved: f.reservationResponse}, f.reservationErr
 }
 
-func (f *fakeNodeServer) Reserve(_ context.Context, _ *roachpb.ReservationRequest) (*roachpb.ReservationResponse, error) {
-	return &roachpb.ReservationResponse{Reserved: f.reservationResponse}, f.reservationErr
-}
-
-// newFakeNodeServer returns a fakeNodeServer designed to handle internal
+// newFakeNodeServer returns a fakeStoresServer designed to handle internal
 // node server RPCs, an rpc context used for the server and the fake server's
 // address.
-func newFakeNodeServer(stopper *stop.Stopper) (*fakeNodeServer, *rpc.Context, string, error) {
+func newFakeNodeServer(stopper *stop.Stopper) (*fakeStoresServer, *rpc.Context, string, error) {
 	ctx := rpc.NewContext(testutils.NewNodeTestBaseContext(), nil, stopper)
 	s := rpc.NewServer(ctx)
 	ln, err := netutil.ListenAndServeGRPC(ctx.Stopper, s, util.TestAddr)
@@ -466,8 +468,8 @@ func newFakeNodeServer(stopper *stop.Stopper) (*fakeNodeServer, *rpc.Context, st
 		return nil, nil, "", err
 	}
 	stopper.AddCloser(stop.CloserFn(func() { _ = ln.Close() }))
-	f := &fakeNodeServer{}
-	roachpb.RegisterInternalServer(s, f)
+	f := &fakeStoresServer{}
+	RegisterStoresServer(s, f)
 	return f, ctx, ln.Addr().String(), nil
 }
 
@@ -488,7 +490,8 @@ func TestStorePoolReserve(t *testing.T) {
 	// Create a fake store pool.
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	g := gossip.New(ctx, nil, stopper)
+	server := rpc.NewServer(ctx) // never started
+	g := gossip.New(ctx, server, nil, stopper, metric.NewRegistry())
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	storePool := NewStorePool(
@@ -499,6 +502,11 @@ func TestStorePoolReserve(t *testing.T) {
 		TestTimeUntilStoreDeadOff,
 		stopper,
 	)
+	storePool.resolver = func(_ roachpb.NodeID) (net.Addr, error) {
+		return &util.UnresolvedAddr{
+			AddressField: address,
+		}, nil
+	}
 	sg := gossiputil.NewStoreGossiper(g)
 
 	// Gossip a fake store descriptor into the store pool so we can redirect
@@ -508,9 +516,6 @@ func TestStorePoolReserve(t *testing.T) {
 			StoreID: 2,
 			Node: roachpb.NodeDescriptor{
 				NodeID: 2,
-				Address: util.UnresolvedAddr{
-					AddressField: address,
-				},
 			},
 		},
 	}
@@ -548,16 +553,8 @@ func TestStorePoolReserve(t *testing.T) {
 			roachpb.RangeID(2),
 			100000,
 		)
-		if len(testCase.expErr) == 0 {
-			if err != nil {
-				t.Errorf("%d: expected no error, got %s", i, err)
-			}
-			continue
-		}
-		if err == nil {
-			t.Errorf("%d: expected an error:%s, got none", i, testCase.expErr)
-		} else if !testutils.IsError(err, testCase.expErr) {
-			t.Errorf("%d: expected error:%s, actual:%s", i, testCase.expErr, err)
+		if !(testCase.expErr == "" && err == nil || testutils.IsError(err, testCase.expErr)) {
+			t.Errorf("%d: expected error:%s, actual:%v", i, testCase.expErr, err)
 		}
 	}
 }

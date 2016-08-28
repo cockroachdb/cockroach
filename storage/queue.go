@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -132,14 +133,14 @@ type queueLog struct {
 
 func (l queueLog) VInfof(logv bool, format string, a ...interface{}) {
 	if logv {
-		log.InfofDepth(1, l.prefix+format, a...)
+		log.InfofDepth(context.TODO(), 1, l.prefix+format, a...)
 	}
 	l.traceLog.Printf(format, a...)
 }
 
 func (l queueLog) Error(err error) {
 	const format = "%s"
-	log.ErrorfDepth(1, l.prefix+format, err)
+	log.ErrorfDepth(context.TODO(), 1, l.prefix+format, err)
 	l.traceLog.Errorf(format, err)
 }
 
@@ -227,7 +228,7 @@ func makeBaseQueue(
 			prefix:   fmt.Sprintf("[%s] ", name),
 		},
 	}
-	bq.mu.Locker = new(sync.Mutex)
+	bq.mu.Locker = new(syncutil.Mutex)
 	bq.mu.replicas = map[roachpb.RangeID]*replicaItem{}
 	return bq
 }
@@ -270,12 +271,14 @@ func (bq *baseQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 	bq.processLoop(clock, stopper)
 }
 
-// Add adds the specified replica to the queue, regardless of the return
-// value of bq.shouldQueue. The replica is added with specified
-// priority. If the queue is too full, the replica may not be added, as
-// the replica with the lowest priority will be dropped. Returns an
-// error if the replica was not added.
-func (bq *baseQueue) Add(repl *Replica, priority float64) error {
+// Add adds the specified replica to the queue, regardless of the
+// return value of bq.shouldQueue. The replica is added with specified
+// priority. If the queue is too full, the replica may not be added,
+// as the replica with the lowest priority will be dropped. Returns
+// (true, nil) if the replica was added, (false, nil) if the replica
+// was already present, and (false, err) if the replica could not be
+// added for any other reason.
+func (bq *baseQueue) Add(repl *Replica, priority float64) (bool, error) {
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
 	return bq.addInternal(repl, true, priority)
@@ -304,7 +307,7 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
 	should, priority := bq.impl.shouldQueue(now, repl, cfg)
-	if err := bq.addInternal(repl, should, priority); !isExpectedQueueError(err) {
+	if _, err := bq.addInternal(repl, should, priority); !isExpectedQueueError(err) {
 		bq.eventLog.Error(errors.Wrapf(err, "unable to add %s", repl))
 	}
 }
@@ -323,19 +326,18 @@ func (bq *baseQueue) requiresSplit(cfg config.SystemConfig, repl *Replica) bool 
 	return cfg.NeedsSplit(desc.StartKey, desc.EndKey)
 }
 
-// addInternal adds the replica the queue with specified priority. If the
-// replica is already queued, updates the existing priority. Expects the
-// queue lock is held by caller. Returns an error if the replica was not
-// added.
-func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) error {
+// addInternal adds the replica the queue with specified priority. If
+// the replica is already queued, updates the existing
+// priority. Expects the queue lock is held by caller.
+func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) (bool, error) {
 	if atomic.LoadInt32(&bq.disabled) == 1 {
 		bq.eventLog.VInfof(false, "queue disabled")
-		return errQueueDisabled
+		return false, errQueueDisabled
 	}
 
 	// If the replica is currently in purgatory, don't re-add it.
 	if _, ok := bq.mu.purgatory[repl.RangeID]; ok {
-		return nil
+		return false, nil
 	}
 
 	item, ok := bq.mu.replicas[repl.RangeID]
@@ -344,7 +346,7 @@ func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) e
 			bq.eventLog.VInfof(false, "%s: removing", item.value)
 			bq.remove(item)
 		}
-		return errReplicaNotAddable
+		return false, errReplicaNotAddable
 	} else if ok {
 		if item.priority != priority {
 			bq.eventLog.VInfof(false, "%s: updating priority: %0.3f -> %0.3f",
@@ -352,7 +354,7 @@ func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) e
 		}
 		// Replica has already been added; update priority.
 		bq.mu.priorityQ.update(item, priority)
-		return nil
+		return false, nil
 	}
 
 	bq.eventLog.VInfof(log.V(3), "%s: adding: priority=%0.3f", repl, priority)
@@ -371,7 +373,7 @@ func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) e
 	default:
 		// No need to signal again.
 	}
-	return nil
+	return true, nil
 }
 
 // MaybeRemove removes the specified replica from the queue if enqueued.
@@ -455,9 +457,10 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 		return nil
 	}
 
-	sp := repl.store.Tracer().StartSpan(fmt.Sprintf("%s:%d", bq.name, repl.RangeID))
+	sp := repl.store.Tracer().StartSpan(bq.name)
 	ctx := opentracing.ContextWithSpan(context.Background(), sp)
 	defer sp.Finish()
+	log.Tracef(ctx, "processing replica %s", repl)
 
 	// If the queue requires a replica to have the range lease in
 	// order to be processed, check whether this replica has range lease

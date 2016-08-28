@@ -23,7 +23,7 @@ statement error table "a" already exists
 CREATE TABLE a (id INT PRIMARY KEY)
 
 statement error duplicate column name: "id"
-CREATE TABLE a (id INT PRIMARY KEY, id INT)
+CREATE TABLE b (id INT PRIMARY KEY, id INT)
 
 statement error multiple primary keys for table "b" are not allowed
 CREATE TABLE b (id INT PRIMARY KEY, id2 INT PRIMARY KEY)
@@ -186,10 +186,10 @@ test.users CREATE TABLE "test.users"
   CONSTRAINT "primary" PRIMARY KEY (id),
   INDEX foo (name),
   UNIQUE INDEX bar (id, name),
-  FAMILY "primary" (id, username, email),
-  FAMILY fam_1_name (name),
-  FAMILY fam_2_title (title),
-  FAMILY fam_3_nickname (nickname),
+  FAMILY "primary" (id, name),
+  FAMILY fam_1_title (title),
+  FAMILY fam_2_nickname (nickname),
+  FAMILY fam_3_username_email (username, email),
   CHECK (LENGTH(nickname) < LENGTH(name)),
   CHECK (LENGTH(nickname) < 10)
 )
@@ -223,10 +223,10 @@ test.named_constraints  CREATE TABLE "test.named_constraints" (
                         INDEX foo (name),
                         UNIQUE INDEX uq2 (username),
                         UNIQUE INDEX bar (id, name),
-                        FAMILY "primary" (id, username, email),
-                        FAMILY fam_1_name (name),
-                        FAMILY fam_2_title (title),
-                        FAMILY fam_3_nickname (nickname),
+                        FAMILY "primary" (id, name),
+                        FAMILY fam_1_title (title),
+                        FAMILY fam_2_nickname (nickname),
+                        FAMILY fam_3_username_email (username, email),
                         CONSTRAINT ck2 CHECK (LENGTH(nickname) < LENGTH(name)),
                         CONSTRAINT ck1 CHECK (LENGTH(nickname) < 10)
                         )

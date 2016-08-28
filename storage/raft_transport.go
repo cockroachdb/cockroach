@@ -18,8 +18,11 @@
 package storage
 
 import (
+	"bytes"
+	"fmt"
 	"net"
-	"sync"
+	"sort"
+	"sync/atomic"
 	"time"
 
 	"github.com/coreos/etcd/raft/raftpb"
@@ -30,12 +33,22 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
+	"github.com/rubyist/circuitbreaker"
 )
 
 const (
-	// Outgoing messages are queued per-replica on a channel of this size.
-	raftSendBufferSize = 100
+	// Outgoing messages are queued per-node on a channel of this size.
+	//
+	// TODO(peter): The normal send buffer size is larger than we would like. It
+	// is a temporary patch for the issue discussed in #8630 where
+	// Store.HandleRaftRequest can block applying a preemptive snapshot for a
+	// long enough period of time that grpc flow control kicks in and messages
+	// are dropped on the sending side.
+	raftNormalSendBufferSize   = 10000
+	raftSnapshotSendBufferSize = 10
 
 	// When no message has been queued for this duration, the corresponding
 	// instance of processQueue will shut down.
@@ -45,7 +58,18 @@ const (
 	raftIdleTimeout = time.Minute
 )
 
-type raftMessageHandler func(*RaftMessageRequest) error
+// RaftMessageHandler is the interface that must be implemented by
+// arguments to RaftTransport.Listen.
+type RaftMessageHandler interface {
+	// HandleRaftRequest is called for each incoming message. If it
+	// returns an error it will be streamed back to the sender of the
+	// message as a RaftMessageResponse.
+	HandleRaftRequest(context.Context, *RaftMessageRequest) *roachpb.Error
+
+	// HandleRaftResponse is called for each raft response. Note that
+	// not all messages receive a response.
+	HandleRaftResponse(context.Context, *RaftMessageResponse)
+}
 
 // NodeAddressResolver is the function used by RaftTransport to map node IDs to
 // network addresses.
@@ -66,6 +90,23 @@ type RaftSnapshotStatus struct {
 	Err error
 }
 
+type raftTransportStats struct {
+	nodeID        roachpb.NodeID
+	queue         int
+	queueMax      int32
+	clientSent    int64
+	clientRecv    int64
+	clientDropped int64
+	serverSent    int64
+	serverRecv    int64
+}
+
+type raftTransportStatsSlice []*raftTransportStats
+
+func (s raftTransportStatsSlice) Len() int           { return len(s) }
+func (s raftTransportStatsSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s raftTransportStatsSlice) Less(i, j int) bool { return s[i].nodeID < s[j].nodeID }
+
 // RaftTransport handles the rpc messages for raft.
 //
 // The raft transport is asynchronous with respect to the caller, and
@@ -84,9 +125,11 @@ type RaftTransport struct {
 	SnapshotStatusChan chan RaftSnapshotStatus
 
 	mu struct {
-		sync.Mutex
-		handlers map[roachpb.StoreID]raftMessageHandler
-		queues   map[bool]map[roachpb.ReplicaDescriptor]chan *RaftMessageRequest
+		syncutil.Mutex
+		handlers map[roachpb.StoreID]RaftMessageHandler
+		queues   map[bool]map[roachpb.NodeID]chan *RaftMessageRequest
+		stats    map[roachpb.NodeID]*raftTransportStats
+		breakers map[roachpb.NodeID]*circuit.Breaker
 	}
 }
 
@@ -104,17 +147,122 @@ func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpc
 		rpcContext:         rpcContext,
 		SnapshotStatusChan: make(chan RaftSnapshotStatus),
 	}
-	t.mu.handlers = make(map[roachpb.StoreID]raftMessageHandler)
-	t.mu.queues = make(map[bool]map[roachpb.ReplicaDescriptor]chan *RaftMessageRequest)
+	t.mu.handlers = make(map[roachpb.StoreID]RaftMessageHandler)
+	t.mu.queues = make(map[bool]map[roachpb.NodeID]chan *RaftMessageRequest)
+	t.mu.stats = make(map[roachpb.NodeID]*raftTransportStats)
+	t.mu.breakers = make(map[roachpb.NodeID]*circuit.Breaker)
 
 	if grpcServer != nil {
 		RegisterMultiRaftServer(grpcServer, t)
 	}
 
+	if t.rpcContext != nil && log.V(1) {
+		t.rpcContext.Stopper.RunWorker(func() {
+			ticker := time.NewTicker(10 * time.Second)
+			defer ticker.Stop()
+			lastStats := make(map[roachpb.NodeID]raftTransportStats)
+			lastTime := timeutil.Now()
+			var stats raftTransportStatsSlice
+			for {
+				select {
+				case <-ticker.C:
+					t.mu.Lock()
+					stats = stats[:0]
+					for _, s := range t.mu.stats {
+						stats = append(stats, s)
+						s.queue = 0
+					}
+					for _, isSnap := range []bool{false, true} {
+						for nodeID, ch := range t.mu.queues[isSnap] {
+							t.mu.stats[nodeID].queue += len(ch)
+						}
+					}
+					t.mu.Unlock()
+
+					now := timeutil.Now()
+					elapsed := now.Sub(lastTime).Seconds()
+					sort.Sort(stats)
+
+					var buf bytes.Buffer
+					// NB: The header is 80 characters which should display in a single
+					// line on most terminals.
+					fmt.Fprintf(&buf,
+						"         qlen   qmax   qdropped client-sent client-recv server-sent server-recv\n")
+					for _, s := range stats {
+						last := lastStats[s.nodeID]
+						cur := raftTransportStats{
+							nodeID:        s.nodeID,
+							queue:         s.queue,
+							queueMax:      atomic.LoadInt32(&s.queueMax),
+							clientDropped: atomic.LoadInt64(&s.clientDropped),
+							clientSent:    atomic.LoadInt64(&s.clientSent),
+							clientRecv:    atomic.LoadInt64(&s.clientRecv),
+							serverSent:    atomic.LoadInt64(&s.serverSent),
+							serverRecv:    atomic.LoadInt64(&s.serverRecv),
+						}
+						fmt.Fprintf(&buf, "  %3d: %6d %6d %10d %11.1f %11.1f %11.1f %11.1f\n",
+							cur.nodeID, cur.queue, cur.queueMax, cur.clientDropped,
+							float64(cur.clientSent-last.clientSent)/elapsed,
+							float64(cur.clientRecv-last.clientRecv)/elapsed,
+							float64(cur.serverSent-last.serverSent)/elapsed,
+							float64(cur.serverRecv-last.serverRecv)/elapsed)
+						lastStats[s.nodeID] = cur
+					}
+					lastTime = now
+					log.Infof(context.TODO(), "stats:\n%s", buf.String())
+				case <-t.rpcContext.Stopper.ShouldStop():
+					return
+				}
+			}
+		})
+	}
+
 	return t
 }
 
-// RaftMessage proxies the incoming request to the listening server interface.
+// handleRaftRequest proxies a request to the listening server interface.
+func (t *RaftTransport) handleRaftRequest(
+	ctx context.Context, req *RaftMessageRequest,
+) *roachpb.Error {
+	t.mu.Lock()
+	handler, ok := t.mu.handlers[req.ToReplica.StoreID]
+	t.mu.Unlock()
+
+	if !ok {
+		return roachpb.NewErrorf("unable to accept Raft message from %+v: no handler registered for %+v",
+			req.FromReplica, req.ToReplica)
+	}
+
+	return handler.HandleRaftRequest(ctx, req)
+}
+
+// newRaftMessageResponse constructs a RaftMessageResponse from the
+// given request and error.
+func newRaftMessageResponse(req *RaftMessageRequest, pErr *roachpb.Error) *RaftMessageResponse {
+	resp := &RaftMessageResponse{
+		RangeID: req.RangeID,
+		// From and To are reversed in the response.
+		ToReplica:   req.FromReplica,
+		FromReplica: req.ToReplica,
+	}
+	if pErr != nil {
+		resp.Union.SetValue(pErr)
+	}
+	return resp
+}
+
+func (t *RaftTransport) getStats(nodeID roachpb.NodeID) *raftTransportStats {
+	t.mu.Lock()
+	stats, ok := t.mu.stats[nodeID]
+	if !ok {
+		stats = &raftTransportStats{nodeID: nodeID}
+		t.mu.stats[nodeID] = stats
+	}
+	t.mu.Unlock()
+	return stats
+}
+
+// RaftMessage proxies the incoming requests to the listening server interface.
 func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err error) {
 	errCh := make(chan error, 1)
 
@@ -122,24 +270,23 @@ func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err err
 	if err := t.rpcContext.Stopper.RunTask(func() {
 		t.rpcContext.Stopper.RunWorker(func() {
 			errCh <- func() error {
+				var stats *raftTransportStats
 				for {
 					req, err := stream.Recv()
 					if err != nil {
 						return err
 					}
 
-					t.mu.Lock()
-					handler, ok := t.mu.handlers[req.ToReplica.StoreID]
-					t.mu.Unlock()
-
-					if !ok {
-						return errors.Errorf(
-							"unable to accept Raft message from %+v: no store registered for %+v",
-							req.ToReplica, req.FromReplica)
+					if stats == nil {
+						stats = t.getStats(req.FromReplica.NodeID)
 					}
+					atomic.AddInt64(&stats.serverRecv, 1)
 
-					if err := handler(req); err != nil {
-						return err
+					if pErr := t.handleRaftRequest(stream.Context(), req); pErr != nil {
+						atomic.AddInt64(&stats.serverSent, 1)
+						if err := stream.Send(newRaftMessageResponse(req, pErr)); err != nil {
+							return err
+						}
 					}
 				}
 			}()
@@ -152,12 +299,27 @@ func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err err
 	case err := <-errCh:
 		return err
 	case <-t.rpcContext.Stopper.ShouldQuiesce():
-		return stream.SendAndClose(new(RaftMessageResponse))
+		return nil
 	}
 }
 
+// RaftMessageSync proxies the incoming request to the listening server interface.
+func (t *RaftTransport) RaftMessageSync(ctx context.Context, req *RaftMessageRequest,
+) (*RaftMessageResponse, error) {
+	var pErr *roachpb.Error
+	if err := t.rpcContext.Stopper.RunTask(func() {
+		stats := t.getStats(req.FromReplica.NodeID)
+		atomic.AddInt64(&stats.serverRecv, 1)
+		pErr = t.handleRaftRequest(ctx, req)
+		atomic.AddInt64(&stats.serverSent, 1)
+	}); err != nil {
+		return nil, err
+	}
+	return newRaftMessageResponse(req, pErr), nil
+}
+
 // Listen registers a raftMessageHandler to receive proxied messages.
-func (t *RaftTransport) Listen(storeID roachpb.StoreID, handler raftMessageHandler) {
+func (t *RaftTransport) Listen(storeID roachpb.StoreID, handler RaftMessageHandler) {
 	t.mu.Lock()
 	t.mu.handlers[storeID] = handler
 	t.mu.Unlock()
@@ -170,38 +332,94 @@ func (t *RaftTransport) Stop(storeID roachpb.StoreID) {
 	t.mu.Unlock()
 }
 
-// processQueue creates a client and sends messages from its designated queue
-// via that client, exiting when the client fails or when it idles out. All
-// messages remaining in the queue at that point are lost and a new instance of
-// processQueue should be started by the next message to be sent.
-// TODO(tschottdorf) should let raft know if the node is down;
-// need a feedback mechanism for that. Potentially easiest is to arrange for
-// the next call to Send() to fail appropriately.
-func (t *RaftTransport) processQueue(ch chan *RaftMessageRequest, toReplica roachpb.ReplicaDescriptor) error {
-	addr, err := t.resolver(toReplica.NodeID)
-	if err != nil {
-		return err
+// GetCircuitBreaker returns the circuit breaker controlling
+// connection attempts to the specified node.
+func (t *RaftTransport) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breaker {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	breaker, ok := t.mu.breakers[nodeID]
+	if !ok {
+		breaker = t.rpcContext.NewBreaker()
+		t.mu.breakers[nodeID] = breaker
 	}
+	return breaker
+}
 
-	conn, err := t.rpcContext.GRPCDial(addr.String())
-	if err != nil {
-		return err
+// connectAndProcess connects to the node and then processes the
+// provided channel containing a queue of raft messages until there is
+// an unrecoverable error with the underlying connection. A circuit
+// breaker is used to allow fast failures in SendAsync which will drop
+// incoming raft messages and report unreachable status to the raft group.
+func (t *RaftTransport) connectAndProcess(
+	nodeID roachpb.NodeID,
+	ch chan *RaftMessageRequest,
+	stats *raftTransportStats,
+) {
+	breaker := t.GetCircuitBreaker(nodeID)
+	successes := breaker.Successes()
+	consecFailures := breaker.ConsecFailures()
+	if err := breaker.Call(func() error {
+		addr, err := t.resolver(nodeID)
+		if err != nil {
+			return err
+		}
+		conn, err := t.rpcContext.GRPCDial(addr.String(), grpc.WithBlock())
+		if err != nil {
+			return err
+		}
+		client := NewMultiRaftClient(conn)
+		ctx, cancel := context.WithCancel(context.TODO())
+		defer cancel()
+		stream, err := client.RaftMessage(ctx)
+		if err != nil {
+			return err
+		}
+		if successes == 0 || consecFailures > 0 {
+			log.Infof(context.TODO(), "raft transport stream to node %d established", nodeID)
+		}
+		return t.processQueue(nodeID, ch, stats, stream)
+	}, 0); err != nil {
+		if consecFailures == 0 {
+			log.Warningf(context.TODO(), "raft transport stream to node %d failed: %s", nodeID, err)
+		}
+		return
 	}
-	client := NewMultiRaftClient(conn)
+}
 
-	ctx, cancel := context.WithCancel(context.TODO())
-	defer cancel()
-	stream, err := client.RaftMessage(ctx)
-	if err != nil {
-		return err
-	}
-
+// processQueue opens a Raft client stream and sends messages from the
+// designated queue (ch) via that stream, exiting when an error is received or
+// when it idles out. All messages remaining in the queue at that point are
+// lost and a new instance of processQueue will be started by the next message
+// to be sent.
+func (t *RaftTransport) processQueue(
+	nodeID roachpb.NodeID,
+	ch chan *RaftMessageRequest,
+	stats *raftTransportStats,
+	stream MultiRaft_RaftMessageClient,
+) error {
 	errCh := make(chan error, 1)
 
 	// Starting workers in a task prevents data races during shutdown.
 	if err := t.rpcContext.Stopper.RunTask(func() {
 		t.rpcContext.Stopper.RunWorker(func() {
-			errCh <- stream.RecvMsg(new(RaftMessageResponse))
+			errCh <- func() error {
+				for {
+					resp, err := stream.Recv()
+					if err != nil {
+						return err
+					}
+					atomic.AddInt64(&stats.clientRecv, 1)
+					t.mu.Lock()
+					handler, ok := t.mu.handlers[resp.ToReplica.StoreID]
+					t.mu.Unlock()
+					if !ok {
+						log.Warningf(context.TODO(), "no handler found for store %s in response %s",
+							resp.ToReplica.StoreID, resp)
+						continue
+					}
+					handler.HandleRaftResponse(stream.Context(), resp)
+				}
+			}()
 		})
 	}); err != nil {
 		return err
@@ -221,13 +439,13 @@ func (t *RaftTransport) processQueue(ch chan *RaftMessageRequest, toReplica roac
 			return err
 		case req := <-ch:
 			err := stream.Send(req)
+			atomic.AddInt64(&stats.clientSent, 1)
 			if req.Message.Type == raftpb.MsgSnap {
 				select {
 				case <-t.rpcContext.Stopper.ShouldStop():
 					return nil
 				case t.SnapshotStatusChan <- RaftSnapshotStatus{req, err}:
 				}
-
 			}
 			if err != nil {
 				return err
@@ -236,24 +454,10 @@ func (t *RaftTransport) processQueue(ch chan *RaftMessageRequest, toReplica roac
 	}
 }
 
-type errHandler func(error, roachpb.ReplicaDescriptor)
-
-// RaftSender is a wrapper around RaftTransport that provides an error
-// handler.
-type RaftSender struct {
-	transport *RaftTransport
-	onError   errHandler
-}
-
-// MakeSender constructs a RaftSender with the provided error handler.
-func (t *RaftTransport) MakeSender(onError errHandler) RaftSender {
-	return RaftSender{transport: t, onError: onError}
-}
-
 // SendAsync sends a message to the recipient specified in the request. It
 // returns false if the outgoing queue is full and calls s.onError when the
 // recipient closes the stream.
-func (s RaftSender) SendAsync(req *RaftMessageRequest) bool {
+func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 	isHeartbeat := (req.Message.Type == raftpb.MsgHeartbeat ||
 		req.Message.Type == raftpb.MsgHeartbeatResp)
 	if req.RangeID == 0 && !isHeartbeat {
@@ -262,41 +466,100 @@ func (s RaftSender) SendAsync(req *RaftMessageRequest) bool {
 		panic("only heartbeat messages may be sent to range ID 0")
 	}
 	isSnap := req.Message.Type == raftpb.MsgSnap
-	toReplica := req.ToReplica
-	s.transport.mu.Lock()
+	toNodeID := req.ToReplica.NodeID
+
+	// First, check the circuit breaker for connections to the outgoing
+	// node. We fail fast if the breaker is open to drop the raft
+	// message and have the caller mark the raft group as unreachable.
+	if !t.GetCircuitBreaker(toNodeID).Ready() {
+		return false
+	}
+
+	t.mu.Lock()
+	stats, ok := t.mu.stats[toNodeID]
+	if !ok {
+		stats = &raftTransportStats{nodeID: toNodeID}
+		t.mu.stats[toNodeID] = stats
+	}
 	// We use two queues; one will be used for snapshots, the other for all other
 	// traffic. This is done to prevent snapshots from blocking other traffic.
-	queues, ok := s.transport.mu.queues[isSnap]
+	queues, ok := t.mu.queues[isSnap]
 	if !ok {
-		queues = make(map[roachpb.ReplicaDescriptor]chan *RaftMessageRequest)
-		s.transport.mu.queues[isSnap] = queues
+		queues = make(map[roachpb.NodeID]chan *RaftMessageRequest)
+		t.mu.queues[isSnap] = queues
 	}
-	ch, ok := queues[toReplica]
+	ch, ok := queues[toNodeID]
 	if !ok {
-		ch = make(chan *RaftMessageRequest, raftSendBufferSize)
-		queues[toReplica] = ch
+		size := raftNormalSendBufferSize
+		if isSnap {
+			size = raftSnapshotSendBufferSize
+		}
+		ch = make(chan *RaftMessageRequest, size)
+		queues[toNodeID] = ch
 	}
-	s.transport.mu.Unlock()
+	t.mu.Unlock()
 
 	if !ok {
+		deleteQueue := func() {
+			t.mu.Lock()
+			delete(queues, toNodeID)
+			t.mu.Unlock()
+		}
 		// Starting workers in a task prevents data races during shutdown.
-		if err := s.transport.rpcContext.Stopper.RunTask(func() {
-			s.transport.rpcContext.Stopper.RunWorker(func() {
-				s.onError(s.transport.processQueue(ch, toReplica), toReplica)
-
-				s.transport.mu.Lock()
-				delete(queues, toReplica)
-				s.transport.mu.Unlock()
+		if err := t.rpcContext.Stopper.RunTask(func() {
+			t.rpcContext.Stopper.RunWorker(func() {
+				t.connectAndProcess(toNodeID, ch, stats)
+				deleteQueue()
 			})
 		}); err != nil {
-			s.onError(err, toReplica)
+			deleteQueue()
+			return false
 		}
 	}
 
 	select {
 	case ch <- req:
+		l := int32(len(ch))
+		if v := atomic.LoadInt32(&stats.queueMax); v < l {
+			atomic.CompareAndSwapInt32(&stats.queueMax, v, l)
+		}
 		return true
 	default:
+		atomic.AddInt64(&stats.clientDropped, 1)
 		return false
+	}
+}
+
+// SendSync sends a raft message and waits for an acknowledgement.
+func (t *RaftTransport) SendSync(ctx context.Context, req *RaftMessageRequest) error {
+	// Use the circuit breaker to fail fast if the breaker is open.
+	// The same underlying connection is shared between sync and
+	// async raft transports, so we use the same breaker.
+	var resp *RaftMessageResponse
+	nodeID := req.ToReplica.NodeID
+	breaker := t.GetCircuitBreaker(nodeID)
+	if err := breaker.Call(func() error {
+		addr, err := t.resolver(nodeID)
+		if err != nil {
+			return err
+		}
+		conn, err := t.rpcContext.GRPCDial(addr.String(), grpc.WithBlock())
+		if err != nil {
+			return err
+		}
+		client := NewMultiRaftClient(conn)
+		resp, err = client.RaftMessageSync(ctx, req)
+		return err
+	}, 0); err != nil {
+		return err
+	}
+
+	switch val := resp.Union.GetValue().(type) {
+	case *roachpb.Error:
+		return val.GoError()
+	case nil:
+		return nil
+	default:
+		return errors.Errorf("unexpected response value %T %s", val, val)
 	}
 }

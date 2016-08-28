@@ -27,7 +27,7 @@ import "bytes"
 // Insert represents an INSERT statement.
 type Insert struct {
 	Table      TableExpr
-	Columns    QualifiedNames
+	Columns    UnresolvedNames
 	Rows       *Select
 	OnConflict *OnConflict
 	Returning  ReturningExprs
@@ -93,5 +93,5 @@ type OnConflict struct {
 
 // IsUpsertAlias returns true if the UPSERT syntactic sugar was used.
 func (oc *OnConflict) IsUpsertAlias() bool {
-	return oc != nil && oc.Columns == nil && oc.Exprs == nil && oc.Where == nil && oc.DoNothing == false
+	return oc != nil && oc.Columns == nil && oc.Exprs == nil && oc.Where == nil && !oc.DoNothing
 }

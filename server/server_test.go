@@ -28,6 +28,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/gogo/protobuf/jsonpb"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -43,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
@@ -224,13 +225,13 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	ts := s.(*TestServer)
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = ts.stopper.ShouldQuiesce()
-	ds := kv.NewDistSender(&kv.DistSenderContext{
+	ds := kv.NewDistSender(&kv.DistSenderConfig{
 		Clock:           s.Clock(),
 		RPCContext:      s.RPCContext(),
 		RPCRetryOptions: &retryOpts,
 	}, ts.Gossip())
 	tds := kv.NewTxnCoordSender(ds, s.Clock(), ts.Ctx.Linearizable, tracing.NewTracer(),
-		ts.stopper, kv.NewTxnMetrics(metric.NewRegistry()))
+		ts.stopper, kv.MakeTxnMetrics())
 
 	if err := ts.node.ctx.DB.AdminSplit("m"); err != nil {
 		t.Fatal(err)
@@ -250,7 +251,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), 0)
+		scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next())
 		reply, err = client.SendWrapped(tds, nil, scan)
 		if err != nil {
 			t.Fatal(err)
@@ -285,7 +286,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		t.Errorf("expected %d keys to be deleted, but got %d instead", writes, dr.Keys)
 	}
 
-	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next(), 0)
+	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next())
 	txn := &roachpb.Transaction{Name: "MyTxn"}
 	reply, err = client.SendWrappedWith(tds, nil, roachpb.Header{Txn: txn}, scan)
 	if err != nil {
@@ -321,13 +322,13 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 		ts := s.(*TestServer)
 		retryOpts := base.DefaultRetryOptions()
 		retryOpts.Closer = ts.stopper.ShouldQuiesce()
-		ds := kv.NewDistSender(&kv.DistSenderContext{
+		ds := kv.NewDistSender(&kv.DistSenderConfig{
 			Clock:           s.Clock(),
 			RPCContext:      s.RPCContext(),
 			RPCRetryOptions: &retryOpts,
 		}, ts.Gossip())
 		tds := kv.NewTxnCoordSender(ds, ts.Clock(), ts.Ctx.Linearizable, tracing.NewTracer(),
-			ts.stopper, kv.NewTxnMetrics(metric.NewRegistry()))
+			ts.stopper, kv.MakeTxnMetrics())
 
 		for _, sk := range tc.splitKeys {
 			if err := ts.node.ctx.DB.AdminSplit(sk); err != nil {
@@ -346,9 +347,10 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 		for start := 0; start < len(tc.keys); start++ {
 			// Try every possible maxResults, from 1 to beyond the size of key array.
 			for maxResults := 1; maxResults <= len(tc.keys)-start+1; maxResults++ {
-				scan := roachpb.NewScan(tc.keys[start], tc.keys[len(tc.keys)-1].Next(),
-					int64(maxResults))
-				reply, err := client.SendWrapped(tds, nil, scan)
+				scan := roachpb.NewScan(tc.keys[start], tc.keys[len(tc.keys)-1].Next())
+				reply, err := client.SendWrappedWith(
+					tds, nil, roachpb.Header{MaxSpanRequestKeys: int64(maxResults)}, scan,
+				)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -391,7 +393,7 @@ func TestSystemConfigGossip(t *testing.T) {
 	}
 
 	// Now do it as part of a transaction, but without the trigger set.
-	if err := kvDB.Txn(func(txn *client.Txn) error {
+	if err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
 		return txn.Put(key, valAt(1))
 	}); err != nil {
 		t.Fatal(err)
@@ -412,7 +414,7 @@ func TestSystemConfigGossip(t *testing.T) {
 	}
 
 	// This time mark the transaction as having a Gossip trigger.
-	if err := kvDB.Txn(func(txn *client.Txn) error {
+	if err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
 		return txn.Put(key, valAt(2))
 	}); err != nil {

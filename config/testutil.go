@@ -17,29 +17,32 @@
 package config
 
 import (
-	"sync"
-
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
+type zoneConfigMap map[uint32]ZoneConfig
+
 var (
-	testingZoneConfig   map[uint32]*ZoneConfig
+	testingZoneConfig   zoneConfigMap
 	testingHasHook      bool
-	testingPreviousHook func(SystemConfig, uint32) (*ZoneConfig, error)
-	testingLock         sync.Mutex
+	testingPreviousHook zoneConfigHook
+	testingLock         syncutil.Mutex
 )
 
 // TestingSetupZoneConfigHook initializes the zone config hook
 // to 'testingZoneConfigHook' which uses 'testingZoneConfig'.
 // Settings go back to their previous values when the stopper runs our closer.
 func TestingSetupZoneConfigHook(stopper *stop.Stopper) {
+	stopper.AddCloser(stop.CloserFn(testingResetZoneConfigHook))
+
 	testingLock.Lock()
 	defer testingLock.Unlock()
 	if testingHasHook {
 		panic("TestingSetupZoneConfigHook called without restoring state")
 	}
 	testingHasHook = true
-	testingZoneConfig = map[uint32]*ZoneConfig{}
+	testingZoneConfig = make(zoneConfigMap)
 	testingPreviousHook = ZoneConfigHook
 	ZoneConfigHook = testingZoneConfigHook
 	testingLargestIDHook = func(maxID uint32) (max uint32) {
@@ -55,8 +58,6 @@ func TestingSetupZoneConfigHook(stopper *stop.Stopper) {
 		}
 		return
 	}
-
-	stopper.AddCloser(stop.CloserFn(testingResetZoneConfigHook))
 }
 
 // testingResetZoneConfigHook resets the zone config hook back to what it was
@@ -74,17 +75,17 @@ func testingResetZoneConfigHook() {
 
 // TestingSetZoneConfig sets the zone config entry for object 'id'
 // in the testing map.
-func TestingSetZoneConfig(id uint32, zone *ZoneConfig) {
+func TestingSetZoneConfig(id uint32, zone ZoneConfig) {
 	testingLock.Lock()
 	defer testingLock.Unlock()
 	testingZoneConfig[id] = zone
 }
 
-func testingZoneConfigHook(_ SystemConfig, id uint32) (*ZoneConfig, error) {
+func testingZoneConfigHook(_ SystemConfig, id uint32) (ZoneConfig, bool, error) {
 	testingLock.Lock()
 	defer testingLock.Unlock()
 	if zone, ok := testingZoneConfig[id]; ok {
-		return zone, nil
+		return zone, true, nil
 	}
-	return &defaultZoneConfig, nil
+	return ZoneConfig{}, false, nil
 }

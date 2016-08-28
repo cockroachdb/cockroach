@@ -20,8 +20,9 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
-	"sync"
 	"testing"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/internal/client"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 func TestIntentResolution(t *testing.T) {
@@ -74,12 +76,12 @@ func TestIntentResolution(t *testing.T) {
 		// Use deterministic randomness to randomly put the writes in separate
 		// batches or commit them with EndTransaction.
 		rnd, seed := randutil.NewPseudoRand()
-		log.Infof("%d: using intent test seed %d", i, seed)
+		log.Infof(context.Background(), "%d: using intent test seed %d", i, seed)
 
 		results := map[string]struct{}{}
 		func() {
 			var storeKnobs storage.StoreTestingKnobs
-			var mu sync.Mutex
+			var mu syncutil.Mutex
 			closer := make(chan struct{}, 2)
 			var done bool
 			storeKnobs.TestingCommandFilter =
@@ -103,7 +105,7 @@ func TestIntentResolution(t *testing.T) {
 						}
 					}
 					if entry != "" {
-						log.Infof("got %s", entry)
+						log.Infof(context.Background(), "got %s", entry)
 						results[entry] = struct{}{}
 					}
 					if len(results) >= len(tc.exp) && !done {
@@ -121,7 +123,7 @@ func TestIntentResolution(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := kvDB.Txn(func(txn *client.Txn) error {
+			if err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
 				b := txn.NewBatch()
 				if tc.keys[0] >= string(splitKey) {
 					t.Fatalf("first key %s must be < split key %s", tc.keys[0], splitKey)
@@ -130,7 +132,7 @@ func TestIntentResolution(t *testing.T) {
 					// The first write must not go to batch, it anchors the
 					// transaction to the correct range.
 					local := i != 0 && rnd.Intn(2) == 0
-					log.Infof("%d: %s: local: %t", i, key, local)
+					log.Infof(context.Background(), "%d: %s: local: %t", i, key, local)
 					if local {
 						b.Put(key, "test")
 					} else if err := txn.Put(key, "test"); err != nil {
@@ -140,7 +142,7 @@ func TestIntentResolution(t *testing.T) {
 
 				for _, kr := range tc.ranges {
 					local := rnd.Intn(2) == 0
-					log.Infof("%d: [%s,%s): local: %t", i, kr[0], kr[1], local)
+					log.Infof(context.Background(), "%d: [%s,%s): local: %t", i, kr[0], kr[1], local)
 					if local {
 						b.DelRange(kr[0], kr[1], false)
 					} else if err := txn.DelRange(kr[0], kr[1]); err != nil {

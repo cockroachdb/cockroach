@@ -34,17 +34,22 @@ package acceptance
 //	 TESTTIMEOUT=48h \
 //	 PKG=./acceptance \
 //	 TESTS=Rebalance_3To5Small \
-//	 TESTFLAGS='-v -remote -key-name google_compute_engine -cwd allocator_terraform -tf.keep-cluster=failed'
+//	 TESTFLAGS='-v -remote -key-name google_compute_engine -cwd terraform -tf.keep-cluster=failed'
 //
 // Things to note:
+// - You must use an SSH key without a passphrase. It is recommended that you
+//   create a neww key for this purpose named google_compute_engine so that
+//   gcloud and related tools can use it too. Create the key with:
+//     ssh-keygen -f ~/.ssh/google_compute_engine
 // - Your SSH key (-key-name) for Google Cloud Platform must be in
-//    ~/.ssh/google_compute_engine
+//   ~/.ssh/google_compute_engine
+// - If you want to manually fiddle with a test cluster, start the test with
+//   `-tf.keep-cluster=failed". After the cluster has been created, press
+//   Control-C and the cluster will remain up.
 // - These tests rely on a specific Terraform config that's specified using the
 //   -cwd test flag.
 // - You *must* set the TESTTIMEOUT high enough for any of these tests to
 //   finish. To be safe, specify a timeout of at least 24 hours.
-// - The Google credentials you're using for Terraform must have access to the
-//   Google Cloud Storage bucket referenced by archivedStoreURL.
 // - Your Google Cloud credentials must be accessible by Terraform, as described
 //   here:
 //   https://www.terraform.io/docs/providers/google/
@@ -54,20 +59,29 @@ package acceptance
 //   binary. If omitted, your test will use the latest CircleCI Linux build.
 //   Note that the location has to be specified relative to the terraform
 //   working directory, so typically `-at.cockroach-binary=../../cockroach`.
+//
+// Troubleshooting:
+// - The minimum recommended version of Terraform is 0.6.16. If you see strange
+//   Terraform errors, upgrade your install of Terraform.
+// - Adding `-tf.keep-cluster=always` to your TESTFLAGS allows the cluster to
+//   stay around after the test completes.
 
 import (
 	gosql "database/sql"
-	"errors"
 	"fmt"
+	"math"
 	"net/http"
-	"os"
 	"strconv"
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/montanaflynn/stats"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/acceptance/terrafarm"
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage"
@@ -79,6 +93,14 @@ import (
 const (
 	archivedStoreURL = "gs://cockroach-test/allocatortest"
 	StableInterval   = 3 * time.Minute
+	adminPort        = base.DefaultHTTPPort
+)
+
+const (
+	urlStore1s = archivedStoreURL + "/1node-10g-262ranges"
+	urlStore1m = archivedStoreURL + "/1node-2065replicas-108G"
+	urlStore3s = archivedStoreURL + "/3nodes-10g-262ranges"
+	urlStore6m = archivedStoreURL + "/6nodes-1038replicas-56G"
 )
 
 type allocatorTest struct {
@@ -101,53 +123,41 @@ type allocatorTest struct {
 	f *terrafarm.Farmer
 }
 
+func (at *allocatorTest) Cleanup(t *testing.T) {
+	if r := recover(); r != nil {
+		t.Errorf("recovered from panic to destroy cluster: %v", r)
+	}
+	if at.f != nil {
+		at.f.MustDestroy(t)
+	}
+}
+
 func (at *allocatorTest) Run(t *testing.T) {
 	at.f = farmer(t, at.Prefix)
-	defer func() {
-		if r := recover(); r != nil {
-			t.Errorf("recovered from panic to destroy cluster: %v", r)
-		}
-		at.f.MustDestroy(t)
-	}()
 
-	if e := "GOOGLE_PROJECT"; os.Getenv(e) == "" {
-		t.Fatalf("%s environment variable must be set for Terraform", e)
-	}
-
-	// Pass on overrides to Terraform input variables.
-	if *flagATCockroachBinary != "" {
-		at.f.AddVars["cockroach_binary"] = *flagATCockroachBinary
-	}
-	if *flagATCockroachFlags != "" {
-		at.f.AddVars["cockroach_flags"] = *flagATCockroachFlags
-	}
-	if *flagATCockroachEnv != "" {
-		at.f.AddVars["cockroach_env"] = *flagATCockroachEnv
-	}
 	if at.CockroachDiskSizeGB != 0 {
 		at.f.AddVars["cockroach_disk_size"] = strconv.Itoa(at.CockroachDiskSizeGB)
 	}
-	at.f.AddVars["cockroach_disk_type"] = *flagATDiskType
 
-	log.Infof("creating cluster with %d node(s)", at.StartNodes)
-	if err := at.f.Resize(at.StartNodes, 0 /*writers*/); err != nil {
+	log.Infof(context.Background(), "creating cluster with %d node(s)", at.StartNodes)
+	if err := at.f.Resize(at.StartNodes); err != nil {
 		t.Fatal(err)
 	}
 	checkGossip(t, at.f, longWaitTime, hasPeers(at.StartNodes))
 	at.f.Assert(t)
-	log.Info("initial cluster is up")
+	log.Info(context.Background(), "initial cluster is up")
 
 	// We must stop the cluster because a) `nodectl` pokes at the data directory
 	// and, more importantly, b) we don't want the cluster above and the cluster
 	// below to ever talk to each other (see #7224).
-	log.Info("stopping cluster")
+	log.Info(context.Background(), "stopping cluster")
 	for i := 0; i < at.f.NumNodes(); i++ {
 		if err := at.f.Kill(i); err != nil {
 			t.Fatalf("error stopping node %d: %s", i, err)
 		}
 	}
 
-	log.Info("downloading archived stores from Google Cloud Storage in parallel")
+	log.Info(context.Background(), "downloading archived stores from Google Cloud Storage in parallel")
 	errors := make(chan error, at.f.NumNodes())
 	for i := 0; i < at.f.NumNodes(); i++ {
 		go func(nodeNum int) {
@@ -160,7 +170,7 @@ func (at *allocatorTest) Run(t *testing.T) {
 		}
 	}
 
-	log.Info("restarting cluster with archived store(s)")
+	log.Info(context.Background(), "restarting cluster with archived store(s)")
 	for i := 0; i < at.f.NumNodes(); i++ {
 		if err := at.f.Restart(i); err != nil {
 			t.Fatalf("error restarting node %d: %s", i, err)
@@ -168,24 +178,52 @@ func (at *allocatorTest) Run(t *testing.T) {
 	}
 	at.f.Assert(t)
 
-	log.Infof("resizing cluster to %d nodes", at.EndNodes)
-	if err := at.f.Resize(at.EndNodes, 0 /*writers*/); err != nil {
+	log.Infof(context.Background(), "resizing cluster to %d nodes", at.EndNodes)
+	if err := at.f.Resize(at.EndNodes); err != nil {
 		t.Fatal(err)
 	}
 	checkGossip(t, at.f, longWaitTime, hasPeers(at.EndNodes))
 	at.f.Assert(t)
 
-	log.Info("waiting for rebalance to finish")
+	log.Info(context.Background(), "waiting for rebalance to finish")
 	if err := at.WaitForRebalance(t); err != nil {
 		t.Fatal(err)
 	}
-
 	at.f.Assert(t)
+}
+
+func (at *allocatorTest) RunAndCleanup(t *testing.T) {
+	defer at.Cleanup(t)
+	at.Run(t)
+}
+
+func (at *allocatorTest) stdDev() (float64, error) {
+	host := at.f.Nodes()[0]
+	var client http.Client
+	var nodesResp serverpb.NodesResponse
+	url := fmt.Sprintf("http://%s:%s/_status/nodes", host, adminPort)
+	if err := util.GetJSON(client, url, &nodesResp); err != nil {
+		return 0, err
+	}
+	var replicaCounts stats.Float64Data
+	for _, node := range nodesResp.Nodes {
+		for _, ss := range node.StoreStatuses {
+			replicaCounts = append(replicaCounts, float64(ss.Metrics["replicas"]))
+		}
+	}
+	stdDev, err := stats.StdDevP(replicaCounts)
+	if err != nil {
+		return 0, err
+	}
+	return stdDev, nil
 }
 
 // printStats prints the time it took for rebalancing to finish and the final
 // standard deviation of replica counts across stores.
-func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string, adminPort int) error {
+func (at *allocatorTest) printRebalanceStats(
+	db *gosql.DB,
+	host string,
+) error {
 	// TODO(cuongdo): Output these in a machine-friendly way and graph.
 
 	// Output time it took to rebalance.
@@ -205,7 +243,7 @@ func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string, adminPor
 			// This can happen with single-node clusters.
 			rebalanceInterval = time.Duration(0)
 		}
-		log.Infof("cluster took %s to rebalance", rebalanceInterval)
+		log.Infof(context.Background(), "cluster took %s to rebalance", rebalanceInterval)
 	}
 
 	// Output # of range events that occurred. All other things being equal,
@@ -216,37 +254,42 @@ func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string, adminPor
 		if err := db.QueryRow(q).Scan(&rangeEvents); err != nil {
 			return err
 		}
-		log.Infof("%d range events", rangeEvents)
+		log.Infof(context.Background(), "%d range events", rangeEvents)
 	}
 
 	// Output standard deviation of the replica counts for all stores.
-	{
-		var client http.Client
-		var nodesResp serverpb.NodesResponse
-		url := fmt.Sprintf("http://%s:%d/_status/nodes", host, adminPort)
-		if err := util.GetJSON(client, url, &nodesResp); err != nil {
-			return err
-		}
-		var replicaCounts stats.Float64Data
-		for _, node := range nodesResp.Nodes {
-			for _, ss := range node.StoreStatuses {
-				replicaCounts = append(replicaCounts, float64(ss.Metrics["replicas"]))
-			}
-		}
-		stddev, err := stats.StdDevP(replicaCounts)
-		if err != nil {
-			return err
-		}
-		log.Infof("stddev(replica count) = %.2f", stddev)
+	stdDev, err := at.stdDev()
+	if err != nil {
+		return err
 	}
+	log.Infof(context.Background(), "stddev(replica count) = %.2f", stdDev)
 
 	return nil
 }
 
-// checkAllocatorStable returns whether the replica distribution within the
-// cluster has been stable for at least `StableInterval`. Only unrecoverable
+type replicationStats struct {
+	ElapsedSinceLastEvent time.Duration
+	EventType             string
+	RangeID               int64
+	StoreID               int64
+	ReplicaCountStdDev    float64
+}
+
+func (s replicationStats) String() string {
+	return fmt.Sprintf("last range event: %s for range %d/store %d (%s ago)",
+		s.EventType, s.RangeID, s.StoreID, s.ElapsedSinceLastEvent)
+}
+
+// checkAllocatorStable returns the duration of stability (i.e. no replication
+// changes) and the standard deviation in replica counts. Only unrecoverable
 // errors are returned.
-func (at *allocatorTest) checkAllocatorStable(db *gosql.DB) (bool, error) {
+func (at *allocatorTest) allocatorStats(db *gosql.DB) (s replicationStats, err error) {
+	defer func() {
+		if err != nil {
+			s.ReplicaCountStdDev = math.MaxFloat64
+		}
+	}()
+
 	q := `SELECT NOW()-timestamp, rangeID, storeID, eventType FROM rangelog WHERE ` +
 		`timestamp=(SELECT MAX(timestamp) FROM rangelog WHERE eventType IN ($1, $2, $3))`
 	eventTypes := []interface{}{
@@ -254,41 +297,43 @@ func (at *allocatorTest) checkAllocatorStable(db *gosql.DB) (bool, error) {
 		string(storage.RangeEventLogAdd),
 		string(storage.RangeEventLogRemove),
 	}
+
 	var elapsedStr string
-	var rangeID int64
-	var storeID int64
-	var eventType string
 
 	row := db.QueryRow(q, eventTypes...)
 	if row == nil {
-		log.Errorf("couldn't find any range events")
-		return false, nil
+		// This should never happen, because the archived store we're starting with
+		// will always have some range events.
+		return replicationStats{}, errors.New("couldn't find any range events")
 	}
-	if err := row.Scan(&elapsedStr, &rangeID, &storeID, &eventType); err != nil {
-		// Log but don't return errors, to increase resilience against transient
-		// errors.
-		log.Errorf("error checking rebalancer: %s", err)
-		return false, nil
-	}
-	elapsedSinceLastRangeEvent, err := time.ParseDuration(elapsedStr)
-	if err != nil {
-		return false, err
+	if err := row.Scan(&elapsedStr, &s.RangeID, &s.StoreID, &s.EventType); err != nil {
+		return replicationStats{}, err
 	}
 
-	log.Infof("last range event: %s for range %d/store %d (%s ago)",
-		eventType, rangeID, storeID, elapsedSinceLastRangeEvent)
-	return elapsedSinceLastRangeEvent >= StableInterval, nil
+	s.ElapsedSinceLastEvent, err = time.ParseDuration(elapsedStr)
+	if err != nil {
+		return replicationStats{}, err
+	}
+
+	s.ReplicaCountStdDev, err = at.stdDev()
+	if err != nil {
+		return replicationStats{}, err
+	}
+
+	return s, nil
 }
 
 // WaitForRebalance waits until there's been no recent range adds, removes, and
 // splits. We wait until the cluster is balanced or until `StableInterval`
 // elapses, whichever comes first. Then, it prints stats about the rebalancing
-// process.
+// process. If the replica count appears unbalanced, an error is returned.
 //
 // This method is crude but necessary. If we were to wait until range counts
 // were just about even, we'd miss potential post-rebalance thrashing.
 func (at *allocatorTest) WaitForRebalance(t *testing.T) error {
-	db, err := gosql.Open("postgres", at.f.PGUrl(1))
+	const statsInterval = 20 * time.Second
+
+	db, err := gosql.Open("postgres", at.f.PGUrl(0))
 	if err != nil {
 		return err
 	}
@@ -300,24 +345,31 @@ func (at *allocatorTest) WaitForRebalance(t *testing.T) error {
 	var assertTimer timeutil.Timer
 	defer statsTimer.Stop()
 	defer assertTimer.Stop()
-	statsTimer.Reset(0)
+	statsTimer.Reset(statsInterval)
 	assertTimer.Reset(0)
 	for {
 		select {
 		case <-statsTimer.C:
 			statsTimer.Read = true
-			stable, err := at.checkAllocatorStable(db)
+			stats, err := at.allocatorStats(db)
 			if err != nil {
 				return err
 			}
-			if stable {
+
+			log.Info(context.Background(), stats)
+			if StableInterval <= stats.ElapsedSinceLastEvent {
 				host := at.f.Nodes()[0]
-				if err := at.printRebalanceStats(db, host, 8080); err != nil {
-					return err
+				log.Infof(context.Background(), "replica count = %f, max = %f", stats.ReplicaCountStdDev, *flagATMaxStdDev)
+				if stats.ReplicaCountStdDev > *flagATMaxStdDev {
+					_ = at.printRebalanceStats(db, host)
+					return errors.Errorf(
+						"%s elapsed without changes, but replica count standard "+
+							"deviation is %.2f (>%.2f)", stats.ElapsedSinceLastEvent,
+						stats.ReplicaCountStdDev, *flagATMaxStdDev)
 				}
-				return nil
+				return at.printRebalanceStats(db, host)
 			}
-			statsTimer.Reset(10 * time.Second)
+			statsTimer.Reset(statsInterval)
 		case <-assertTimer.C:
 			assertTimer.Read = true
 			at.f.Assert(t)
@@ -325,7 +377,6 @@ func (at *allocatorTest) WaitForRebalance(t *testing.T) error {
 		case <-stopper:
 			return errors.New("interrupted")
 		}
-
 	}
 }
 
@@ -335,10 +386,10 @@ func TestUpreplicate_1To3Small(t *testing.T) {
 	at := allocatorTest{
 		StartNodes: 1,
 		EndNodes:   3,
-		StoreURL:   archivedStoreURL + "/1node-10g-262ranges",
+		StoreURL:   urlStore1s,
 		Prefix:     "uprep-1to3s",
 	}
-	at.Run(t)
+	at.RunAndCleanup(t)
 }
 
 // TestRebalance3to5Small tests rebalancing, starting with 3 nodes (each
@@ -347,10 +398,10 @@ func TestRebalance_3To5Small(t *testing.T) {
 	at := allocatorTest{
 		StartNodes: 3,
 		EndNodes:   5,
-		StoreURL:   archivedStoreURL + "/3nodes-10g-262ranges",
+		StoreURL:   urlStore3s,
 		Prefix:     "rebal-3to5s",
 	}
-	at.Run(t)
+	at.RunAndCleanup(t)
 }
 
 // TestUpreplicate_1To3Medium tests up-replication, starting with 1 node
@@ -359,22 +410,25 @@ func TestUpreplicate_1To3Medium(t *testing.T) {
 	at := allocatorTest{
 		StartNodes:          1,
 		EndNodes:            3,
-		StoreURL:            archivedStoreURL + "/1node-2065replicas-108G",
+		StoreURL:            urlStore1m,
 		Prefix:              "uprep-1to3m",
 		CockroachDiskSizeGB: 250, // GB
 	}
-	at.Run(t)
+	at.RunAndCleanup(t)
 }
 
+// TestUpreplicate_1To6Medium tests up-replication (and, to a lesser extent,
+// rebalancing), starting with 1 node containing 108 GiB of data and growing to
+// 6 nodes.
 func TestUpreplicate_1To6Medium(t *testing.T) {
 	at := allocatorTest{
 		StartNodes:          1,
 		EndNodes:            6,
-		StoreURL:            archivedStoreURL + "/1node-2065replicas-108G",
+		StoreURL:            urlStore1m,
 		Prefix:              "uprep-1to6m",
 		CockroachDiskSizeGB: 250, // GB
 	}
-	at.Run(t)
+	at.RunAndCleanup(t)
 }
 
 // TestSteady_6Medium is useful for creating a medium-size balanced cluster
@@ -385,9 +439,9 @@ func TestSteady_6Medium(t *testing.T) {
 	at := allocatorTest{
 		StartNodes:          6,
 		EndNodes:            6,
-		StoreURL:            archivedStoreURL + "/6nodes-1038replicas-56G",
+		StoreURL:            urlStore6m,
 		Prefix:              "steady-6m",
 		CockroachDiskSizeGB: 250, // GB
 	}
-	at.Run(t)
+	at.RunAndCleanup(t)
 }

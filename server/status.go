@@ -31,6 +31,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/gogo/protobuf/proto"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/julienschmidt/httprouter"
 	"github.com/pkg/errors"
@@ -110,12 +111,6 @@ const (
 // Pattern for local used when determining the node ID.
 var localRE = regexp.MustCompile(`(?i)local`)
 
-func inconsistentBatch() *client.Batch {
-	b := &client.Batch{}
-	b.Header.ReadConsistency = roachpb.INCONSISTENT
-	return b
-}
-
 type metricMarshaler interface {
 	json.Marshaler
 	PrintAsText(io.Writer) error
@@ -128,7 +123,6 @@ type statusServer struct {
 	metricSource metricMarshaler
 	router       *httprouter.Router
 	rpcCtx       *rpc.Context
-	proxyClient  http.Client
 	stores       *storage.Stores
 }
 
@@ -141,20 +135,12 @@ func newStatusServer(
 	rpcCtx *rpc.Context,
 	stores *storage.Stores,
 ) *statusServer {
-	// Create an http client with a timeout
-	httpClient, err := ctx.GetHTTPClient()
-	if err != nil {
-		log.Error(err)
-		return nil
-	}
-
 	server := &statusServer{
 		db:           db,
 		gossip:       gossip,
 		metricSource: metricSource,
 		router:       httprouter.New(),
 		rpcCtx:       rpcCtx,
-		proxyClient:  httpClient,
 		stores:       stores,
 	}
 
@@ -261,7 +247,7 @@ func (s *statusServer) Details(ctx context.Context, req *serverpb.DetailsRequest
 }
 
 // LogFilesList returns a list of available log files.
-func (s *statusServer) LogFilesList(ctx context.Context, req *serverpb.LogFilesListRequest) (*serverpb.JSONResponse, error) {
+func (s *statusServer) LogFilesList(ctx context.Context, req *serverpb.LogFilesListRequest) (*serverpb.LogFilesListResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -278,22 +264,22 @@ func (s *statusServer) LogFilesList(ctx context.Context, req *serverpb.LogFilesL
 	if err != nil {
 		return nil, err
 	}
-	return marshalJSONResponse(logFiles)
+	return &serverpb.LogFilesListResponse{Files: logFiles}, err
 }
 
 // handleLogFilesList handles GET requests for a list of available log files.
 func (s *statusServer) handleLogFilesList(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	resp, err := s.LogFilesList(context.TODO(), &serverpb.LogFilesListRequest{NodeId: ps.ByName("node_id")})
+	resp, err := s.LogFilesList(r.Context(), &serverpb.LogFilesListRequest{NodeId: ps.ByName("node_id")})
 	if err != nil {
-		log.Error(err)
+		log.Error(r.Context(), err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSONResponse(w, resp)
+	writeJSONProtoMessage(w, resp)
 }
 
 // LogFile returns a single log file.
-func (s *statusServer) LogFile(ctx context.Context, req *serverpb.LogFileRequest) (*serverpb.JSONResponse, error) {
+func (s *statusServer) LogFile(ctx context.Context, req *serverpb.LogFileRequest) (*serverpb.LogEntriesResponse, error) {
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -313,8 +299,8 @@ func (s *statusServer) LogFile(ctx context.Context, req *serverpb.LogFileRequest
 	}
 	defer reader.Close()
 
-	entry := log.Entry{}
-	var entries []log.Entry
+	var entry log.Entry
+	var resp serverpb.LogEntriesResponse
 	decoder := log.NewEntryDecoder(reader)
 	for {
 		if err := decoder.Decode(&entry); err != nil {
@@ -323,10 +309,10 @@ func (s *statusServer) LogFile(ctx context.Context, req *serverpb.LogFileRequest
 			}
 			return nil, err
 		}
-		entries = append(entries, entry)
+		resp.Entries = append(resp.Entries, entry)
 	}
 
-	return marshalJSONResponse(entries)
+	return &resp, nil
 }
 
 // handleLogFile handles GET requests for a single log file.
@@ -335,13 +321,13 @@ func (s *statusServer) handleLogFile(w http.ResponseWriter, r *http.Request, ps 
 		NodeId: ps.ByName("node_id"),
 		File:   ps.ByName("file"),
 	}
-	resp, err := s.LogFile(context.TODO(), &req)
+	resp, err := s.LogFile(r.Context(), &req)
 	if err != nil {
-		log.Error(err)
+		log.Error(r.Context(), err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSONResponse(w, resp)
+	writeJSONProtoMessage(w, resp)
 }
 
 // parseInt64WithDefault attempts to parse the passed in string. If an empty
@@ -372,7 +358,7 @@ func parseInt64WithDefault(s string, defaultValue int64) (int64, error) {
 //   entries. Defaults to defaultMaxLogEntries.
 // * "level" query parameter filters the log entries to be those of the
 //   corresponding severity level or worse. Defaults to "info".
-func (s *statusServer) Logs(ctx context.Context, req *serverpb.LogsRequest) (*serverpb.JSONResponse, error) {
+func (s *statusServer) Logs(ctx context.Context, req *serverpb.LogsRequest) (*serverpb.LogEntriesResponse, error) {
 	log.Flush()
 
 	var sev log.Severity
@@ -422,10 +408,10 @@ func (s *statusServer) Logs(ctx context.Context, req *serverpb.LogsRequest) (*se
 		return nil, err
 	}
 
-	return marshalJSONResponse(entries)
+	return &serverpb.LogEntriesResponse{Entries: entries}, nil
 }
 
-// handleLogs handles GET requests for log entires.
+// handleLogs handles GET requests for log entries.
 func (s *statusServer) handleLogs(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	q := r.URL.Query()
 	req := serverpb.LogsRequest{
@@ -436,13 +422,13 @@ func (s *statusServer) handleLogs(w http.ResponseWriter, r *http.Request, ps htt
 		Max:       q.Get("max"),
 		Pattern:   q.Get("pattern"),
 	}
-	resp, err := s.Logs(context.TODO(), &req)
+	resp, err := s.Logs(r.Context(), &req)
 	if err != nil {
-		log.Error(err)
+		log.Error(r.Context(), err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSONResponse(w, resp)
+	writeJSONProtoMessage(w, resp)
 }
 
 // Stacks handles returns goroutine stack traces.
@@ -476,7 +462,7 @@ func (s *statusServer) Stacks(ctx context.Context, req *serverpb.StacksRequest) 
 
 // handleStacksLocal handles GET requests for goroutine stack traces.
 func (s *statusServer) handleStacks(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	resp, err := s.Stacks(context.TODO(), &serverpb.StacksRequest{NodeId: ps.ByName("node_id")})
+	resp, err := s.Stacks(r.Context(), &serverpb.StacksRequest{NodeId: ps.ByName("node_id")})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -489,14 +475,14 @@ func (s *statusServer) handleStacks(w http.ResponseWriter, r *http.Request, ps h
 }
 
 // Nodes returns all node statuses.
-func (s *statusServer) Nodes(_ context.Context, req *serverpb.NodesRequest) (*serverpb.NodesResponse, error) {
+func (s *statusServer) Nodes(ctx context.Context, req *serverpb.NodesRequest) (*serverpb.NodesResponse, error) {
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
-	b := inconsistentBatch()
-	b.Scan(startKey, endKey, 0)
+	b := &client.Batch{}
+	b.Scan(startKey, endKey)
 	if err := s.db.Run(b); err != nil {
-		log.Error(err)
+		log.Error(ctx, err)
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
 	rows := b.Results[0].Rows
@@ -506,7 +492,7 @@ func (s *statusServer) Nodes(_ context.Context, req *serverpb.NodesRequest) (*se
 	}
 	for i, row := range rows {
 		if err := row.ValueProto(&resp.Nodes[i]); err != nil {
-			log.Error(err)
+			log.Error(ctx, err)
 			return nil, grpc.Errorf(codes.Internal, err.Error())
 		}
 	}
@@ -521,17 +507,17 @@ func (s *statusServer) Node(ctx context.Context, req *serverpb.NodeRequest) (*st
 	}
 
 	key := keys.NodeStatusKey(int32(nodeID))
-	b := inconsistentBatch()
+	b := &client.Batch{}
 	b.Get(key)
 	if err := s.db.Run(b); err != nil {
-		log.Error(err)
+		log.Error(ctx, err)
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
 
 	var nodeStatus status.NodeStatus
 	if err := b.Results[0].Rows[0].ValueProto(&nodeStatus); err != nil {
 		err = errors.Errorf("could not unmarshal NodeStatus from %s: %s", key, err)
-		log.Error(err)
+		log.Error(ctx, err)
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
 	return &nodeStatus, nil
@@ -555,9 +541,9 @@ func (s *statusServer) Metrics(ctx context.Context, req *serverpb.MetricsRequest
 }
 
 func (s *statusServer) handleMetrics(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	resp, err := s.Metrics(context.TODO(), &serverpb.MetricsRequest{NodeId: ps.ByName("node_id")})
+	resp, err := s.Metrics(r.Context(), &serverpb.MetricsRequest{NodeId: ps.ByName("node_id")})
 	if err != nil {
-		log.Error(err)
+		log.Error(r.Context(), err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -579,7 +565,7 @@ func (s *statusServer) RaftDebug(ctx context.Context, _ *serverpb.RaftDebugReque
 		nodeID := node.Desc.NodeID
 		ranges, err := s.Ranges(ctx, &serverpb.RangesRequest{NodeId: nodeID.String()})
 		if err != nil {
-			log.Infof("Failed to get ranges from %d: %q", node.Desc.NodeID, err)
+			log.Infof(ctx, "Failed to get ranges from %d: %q", node.Desc.NodeID, err)
 			continue
 		}
 		for _, rng := range ranges.Ranges {
@@ -635,7 +621,7 @@ func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request, ps htt
 	w.Header().Set(util.ContentTypeHeader, util.PlaintextContentType)
 	err := s.metricSource.PrintAsText(w)
 	if err != nil {
-		log.Error(err)
+		log.Error(r.Context(), err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -661,7 +647,7 @@ func (s *statusServer) Ranges(ctx context.Context, req *serverpb.RangesRequest) 
 	err = s.stores.VisitStores(func(store *storage.Store) error {
 		// Use IterateRangeDescriptors to read from the engine only
 		// because it's already exported.
-		err := storage.IterateRangeDescriptors(store.Engine(),
+		err := storage.IterateRangeDescriptors(ctx, store.Engine(),
 			func(desc roachpb.RangeDescriptor) (bool, error) {
 				rep, err := store.GetReplica(desc.RangeID)
 				if err != nil {
@@ -674,6 +660,8 @@ func (s *statusServer) Ranges(ctx context.Context, req *serverpb.RangesRequest) 
 					// because it contains a map with integer keys. Just extract
 					// the most interesting bit for now.
 					raftState = status.RaftState.String()
+				} else {
+					raftState = "StateDormant"
 				}
 				state := rep.State()
 				output.Ranges = append(output.Ranges, serverpb.RangeInfo{
@@ -699,7 +687,7 @@ func (s *statusServer) Ranges(ctx context.Context, req *serverpb.RangesRequest) 
 func (s *statusServer) SpanStats(ctx context.Context, req *serverpb.SpanStatsRequest) (
 	*serverpb.SpanStatsResponse, error,
 ) {
-	nodeID, local, err := s.parseNodeID(req.NodeId)
+	nodeID, local, err := s.parseNodeID(req.NodeID)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
 	}
@@ -722,6 +710,7 @@ func (s *statusServer) SpanStats(ctx context.Context, req *serverpb.SpanStatsReq
 	if err != nil {
 		return nil, err
 	}
+
 	return output, nil
 }
 
@@ -764,6 +753,17 @@ func marshalJSONResponse(value interface{}) (*serverpb.JSONResponse, error) {
 func writeJSONResponse(w http.ResponseWriter, resp *serverpb.JSONResponse) {
 	w.Header().Set(util.ContentTypeHeader, util.JSONContentType)
 	if _, err := w.Write(resp.Data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func writeJSONProtoMessage(w http.ResponseWriter, resp proto.Message) {
+	w.Header().Set(util.ContentTypeHeader, util.JSONContentType)
+	if err := (&util.JSONPb{
+		EnumsAsInts:  true,
+		EmitDefaults: true,
+		Indent:       "  ",
+	}).NewEncoder(w).Encode(resp); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

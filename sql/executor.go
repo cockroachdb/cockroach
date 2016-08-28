@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -50,6 +51,22 @@ var errNotRetriable = errors.New("the transaction is not in a retriable state")
 
 const sqlTxnName string = "sql txn"
 const sqlImplicitTxnName string = "sql txn implicit"
+
+// Fully-qualified names for metrics.
+var (
+	MetaLatency     = metric.Metadata{Name: "sql.latency"}
+	MetaTxnBegin    = metric.Metadata{Name: "sql.txn.begin.count"}
+	MetaTxnCommit   = metric.Metadata{Name: "sql.txn.commit.count"}
+	MetaTxnAbort    = metric.Metadata{Name: "sql.txn.abort.count"}
+	MetaTxnRollback = metric.Metadata{Name: "sql.txn.rollback.count"}
+	MetaSelect      = metric.Metadata{Name: "sql.select.count"}
+	MetaUpdate      = metric.Metadata{Name: "sql.update.count"}
+	MetaInsert      = metric.Metadata{Name: "sql.insert.count"}
+	MetaDelete      = metric.Metadata{Name: "sql.delete.count"}
+	MetaDdl         = metric.Metadata{Name: "sql.ddl.count"}
+	MetaMisc        = metric.Metadata{Name: "sql.misc.count"}
+	MetaQuery       = metric.Metadata{Name: "sql.query.count"}
+)
 
 // TODO(radu): experimental code for testing distSQL flows.
 //    0 : disabled
@@ -119,42 +136,42 @@ type ResultRow struct {
 // Executor is thread-safe.
 type Executor struct {
 	nodeID  roachpb.NodeID
-	ctx     ExecutorContext
+	cfg     ExecutorConfig
 	reCache *parser.RegexpCache
 
 	// Transient stats.
-	registry      *metric.Registry
-	latency       metric.Histograms
-	selectCount   *metric.Counter
-	txnBeginCount *metric.Counter
+	Latency       metric.Histograms
+	SelectCount   *metric.Counter
+	TxnBeginCount *metric.Counter
 
 	// txnCommitCount counts the number of times a COMMIT was attempted.
-	txnCommitCount *metric.Counter
+	TxnCommitCount *metric.Counter
 
-	txnAbortCount    *metric.Counter
-	txnRollbackCount *metric.Counter
-	updateCount      *metric.Counter
-	insertCount      *metric.Counter
-	deleteCount      *metric.Counter
-	ddlCount         *metric.Counter
-	miscCount        *metric.Counter
-	queryCount       *metric.Counter
+	TxnAbortCount    *metric.Counter
+	TxnRollbackCount *metric.Counter
+	UpdateCount      *metric.Counter
+	InsertCount      *metric.Counter
+	DeleteCount      *metric.Counter
+	DdlCount         *metric.Counter
+	MiscCount        *metric.Counter
+	QueryCount       *metric.Counter
 
 	// System Config and mutex.
 	systemConfig   config.SystemConfig
 	databaseCache  *databaseCache
-	systemConfigMu sync.RWMutex
+	systemConfigMu syncutil.RWMutex
 	// This uses systemConfigMu in RLocker mode to not block
 	// execution of statements. So don't go on changing state after you've
 	// Wait()ed on it.
 	systemConfigCond *sync.Cond
 }
 
-// An ExecutorContext encompasses the auxiliary objects and configuration
+// An ExecutorConfig encompasses the auxiliary objects and configuration
 // required to create an executor.
 // All fields holding a pointer or an interface are required to create
 // a Executor; the rest will have sane defaults set if omitted.
-type ExecutorContext struct {
+type ExecutorConfig struct {
+	Context      context.Context
 	DB           *client.DB
 	Gossip       *gossip.Gossip
 	LeaseManager *LeaseManager
@@ -226,34 +243,34 @@ type ExecutorTestingKnobs struct {
 
 // NewExecutor creates an Executor and registers a callback on the
 // system config.
-func NewExecutor(ctx ExecutorContext, stopper *stop.Stopper, registry *metric.Registry) *Executor {
+func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 	exec := &Executor{
-		ctx:     ctx,
+		cfg:     cfg,
 		reCache: parser.NewRegexpCache(512),
 
-		registry:         registry,
-		latency:          registry.Latency("latency"),
-		txnBeginCount:    registry.Counter("txn.begin.count"),
-		txnCommitCount:   registry.Counter("txn.commit.count"),
-		txnAbortCount:    registry.Counter("txn.abort.count"),
-		txnRollbackCount: registry.Counter("txn.rollback.count"),
-		selectCount:      registry.Counter("select.count"),
-		updateCount:      registry.Counter("update.count"),
-		insertCount:      registry.Counter("insert.count"),
-		deleteCount:      registry.Counter("delete.count"),
-		ddlCount:         registry.Counter("ddl.count"),
-		miscCount:        registry.Counter("misc.count"),
-		queryCount:       registry.Counter("query.count"),
+		Latency:          metric.NewLatency(MetaLatency),
+		TxnBeginCount:    metric.NewCounter(MetaTxnBegin),
+		TxnCommitCount:   metric.NewCounter(MetaTxnCommit),
+		TxnAbortCount:    metric.NewCounter(MetaTxnAbort),
+		TxnRollbackCount: metric.NewCounter(MetaTxnRollback),
+		SelectCount:      metric.NewCounter(MetaSelect),
+		UpdateCount:      metric.NewCounter(MetaUpdate),
+		InsertCount:      metric.NewCounter(MetaInsert),
+		DeleteCount:      metric.NewCounter(MetaDelete),
+		DdlCount:         metric.NewCounter(MetaDdl),
+		MiscCount:        metric.NewCounter(MetaMisc),
+		QueryCount:       metric.NewCounter(MetaQuery),
 	}
+
 	exec.systemConfigCond = sync.NewCond(exec.systemConfigMu.RLocker())
 
-	gossipUpdateC := ctx.Gossip.RegisterSystemConfigChannel()
+	gossipUpdateC := cfg.Gossip.RegisterSystemConfigChannel()
 	stopper.RunWorker(func() {
 		for {
 			select {
 			case <-gossipUpdateC:
-				cfg, _ := ctx.Gossip.GetSystemConfig()
-				exec.updateSystemConfig(cfg)
+				sysCfg, _ := cfg.Gossip.GetSystemConfig()
+				exec.updateSystemConfig(sysCfg)
 			case <-stopper.ShouldStop():
 				return
 			}
@@ -263,11 +280,21 @@ func NewExecutor(ctx ExecutorContext, stopper *stop.Stopper, registry *metric.Re
 	return exec
 }
 
+// NewDummyExecutor creates an empty Executor that is used for certain tests.
+func NewDummyExecutor() *Executor {
+	return &Executor{cfg: ExecutorConfig{Context: context.Background()}}
+}
+
+// Ctx returns the Context associated with this Executor.
+func (e *Executor) Ctx() context.Context {
+	return e.cfg.Context
+}
+
 // SetNodeID sets the node ID for the SQL server. This method must be called
 // before actually using the Executor.
 func (e *Executor) SetNodeID(nodeID roachpb.NodeID) {
 	e.nodeID = nodeID
-	e.ctx.LeaseManager.nodeID = uint32(nodeID)
+	e.cfg.LeaseManager.nodeID = uint32(nodeID)
 }
 
 // updateSystemConfig is called whenever the system config gossip entry is updated.
@@ -295,13 +322,14 @@ func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 // populate the missing types. The column result types are returned (or
 // nil if there are no results).
 func (e *Executor) Prepare(
-	ctx context.Context,
 	query string,
 	session *Session,
 	pinfo parser.PlaceholderTypes,
 ) ([]ResultColumn, error) {
 	if log.V(2) {
-		log.Infof("preparing statement: %s", query)
+		log.Infof(session.Ctx(), "preparing: %s", query)
+	} else if traceSQL {
+		log.Tracef(session.Ctx(), "preparing: %s", query)
 	}
 	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
 	if err != nil {
@@ -310,7 +338,7 @@ func (e *Executor) Prepare(
 	if err = pinfo.ProcessPlaceholderAnnotations(stmt); err != nil {
 		return nil, err
 	}
-	protoTS, err := isAsOf(&session.planner, stmt, e.ctx.Clock.Now())
+	protoTS, err := isAsOf(&session.planner, stmt, e.cfg.Clock.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -321,7 +349,7 @@ func (e *Executor) Prepare(
 
 	// Prepare needs a transaction because it needs to retrieve db/table
 	// descriptors for type checking.
-	txn := client.NewTxn(ctx, *e.ctx.DB)
+	txn := client.NewTxn(session.Ctx(), *e.cfg.DB)
 	txn.Proto.Isolation = session.DefaultIsolationLevel
 	session.planner.setTxn(txn)
 	defer session.planner.setTxn(nil)
@@ -353,7 +381,7 @@ func (e *Executor) Prepare(
 
 // ExecuteStatements executes the given statement(s) and returns a response.
 func (e *Executor) ExecuteStatements(
-	ctx context.Context, session *Session, stmts string, pinfo *parser.PlaceholderInfo,
+	session *Session, stmts string, pinfo *parser.PlaceholderInfo,
 ) StatementResults {
 
 	session.planner.resetForBatch(e)
@@ -361,7 +389,7 @@ func (e *Executor) ExecuteStatements(
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	return e.execRequest(ctx, session, stmts)
+	return e.execRequest(session, stmts)
 }
 
 // blockConfigUpdates blocks any gossip updates to the system config
@@ -396,7 +424,7 @@ func (e *Executor) waitForConfigUpdate() {
 // Args:
 //  txnState: State about about ongoing transaction (if any). The state will be
 //   updated.
-func (e *Executor) execRequest(ctx context.Context, session *Session, sql string) StatementResults {
+func (e *Executor) execRequest(session *Session, sql string) StatementResults {
 	var res StatementResults
 	txnState := &session.TxnState
 	planMaker := &session.planner
@@ -435,7 +463,7 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 		// (i.e. the next statements we're going to see are the first statements in
 		// a transaction).
 		if !inTxn {
-			execOpt.MinInitialTimestamp = e.ctx.Clock.Now()
+			execOpt.MinInitialTimestamp = e.cfg.Clock.Now()
 			// Detect implicit transactions.
 			if _, isBegin := stmts[0].(*parser.BeginTransaction); !isBegin {
 				execOpt.AutoCommit = true
@@ -454,10 +482,10 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 					}()
 				}
 			}
-			txnState.reset(ctx, e, session)
+			txnState.reset(session.Ctx(), e, session)
 			txnState.State = Open
 			txnState.autoRetry = true
-			txnState.sqlTimestamp = e.ctx.Clock.PhysicalTime()
+			txnState.sqlTimestamp = e.cfg.Clock.PhysicalTime()
 			if execOpt.AutoCommit {
 				txnState.txn.SetDebugName(sqlImplicitTxnName, 0)
 			} else {
@@ -492,12 +520,7 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 		}
 		// This is where the magic happens - we ask db to run a KV txn and possibly retry it.
 		txn := txnState.txn // this might be nil if the txn was already aborted.
-		err := txnState.txn.Exec(execOpt, txnClosure)
-
-		// Until #7881 fixed.
-		if txnState.State != NoTxn && txnState.txn == nil {
-			log.Errorf("txnState not cleared while txn == nil: %+v, execOpt %+v, stmts %+v, remaining %+v", txnState, execOpt, stmts, remainingStmts)
-		}
+		err := txn.Exec(execOpt, txnClosure)
 
 		// Update the Err field of the last result if the error was coming from
 		// auto commit. The error was generated outside of the txn closure, so it was not
@@ -506,15 +529,19 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 			lastResult := &results[len(results)-1]
 			if aErr, ok := err.(*client.AutoCommitError); ok {
 				// Until #7881 fixed.
-				if txnState.txn == nil {
-					log.Errorf("AutoCommitError on nil txn: %+v, txnState %+v, execOpt %+v, stmts %+v, remaining %+v", err, txnState, execOpt, stmts, remainingStmts)
+				if txn == nil {
+					log.Errorf(session.Ctx(), "AutoCommitError on nil txn: %+v, "+
+						"txnState %+v, execOpt %+v, stmts %+v, remaining %+v",
+						err, txnState, execOpt, stmts, remainingStmts)
 				}
 				lastResult.Err = aErr
-				e.txnAbortCount.Inc(1)
-				txnState.txn.CleanupOnError(err)
+				e.TxnAbortCount.Inc(1)
+				txn.CleanupOnError(err)
 			}
 			if lastResult.Err == nil {
-				log.Fatalf("error (%s) was returned, but it was not set in the last result (%v)", err, lastResult)
+				log.Fatalf(session.Ctx(),
+					"error (%s) was returned, but it was not set in the last result (%v)",
+					err, lastResult)
 			}
 		}
 
@@ -525,7 +552,7 @@ func (e *Executor) execRequest(ctx context.Context, session *Session, sql string
 			// A COMMIT got an error (retryable or not). Too bad, this txn is toast.
 			// After we return a result for COMMIT (with the COMMIT pgwire tag), the
 			// user can't send any more commands.
-			e.txnAbortCount.Inc(1)
+			e.TxnAbortCount.Inc(1)
 			txn.CleanupOnError(err)
 			txnState.resetStateAndTxn(NoTxn)
 		}
@@ -659,15 +686,18 @@ func (e *Executor) execStmtsInCurrentTxn(
 	}
 
 	for i, stmt := range stmts {
+		ctx := planMaker.session.Ctx()
 		if log.V(2) {
-			log.Infof("about to execute sql statement (%d/%d): %s", i+1, len(stmts), stmt)
+			log.Infof(ctx, "executing %d/%d: %s", i+1, len(stmts), stmt)
+		} else if traceSQL {
+			log.Tracef(ctx, "executing %d/%d: %s", i+1, len(stmts), stmt)
 		}
 		txnState.schemaChangers.curStatementIdx = i
 
 		var stmtStrBefore string
 		// TODO(nvanbenschoten) Constant literals can change their representation (1.0000 -> 1) when type checking,
 		// so we need to reconsider how this works.
-		if e.ctx.TestingKnobs.CheckStmtStringChange && false {
+		if e.cfg.TestingKnobs.CheckStmtStringChange && false {
 			stmtStrBefore = stmt.String()
 		}
 		var res Result
@@ -684,7 +714,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 		default:
 			panic(fmt.Sprintf("unexpected txn state: %s", txnState.State))
 		}
-		if e.ctx.TestingKnobs.CheckStmtStringChange && false {
+		if e.cfg.TestingKnobs.CheckStmtStringChange && false {
 			if after := stmt.String(); after != stmtStrBefore {
 				panic(fmt.Sprintf("statement changed after exec; before:\n    %s\nafter:\n    %s",
 					stmtStrBefore, after))
@@ -824,7 +854,7 @@ func (e *Executor) execStmtInOpenTxn(
 	}
 
 	planMaker.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
-	planMaker.evalCtx.SetStmtTimestamp(e.ctx.Clock.PhysicalTime())
+	planMaker.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
 
 	// TODO(cdo): Figure out how to not double count on retries.
 	e.updateStmtCounts(stmt)
@@ -928,8 +958,12 @@ func (e *Executor) execStmtInOpenTxn(
 	if txnState.tr != nil {
 		txnState.tr.LazyLog(stmt, true /* sensitive */)
 	}
+
 	result, err := e.execStmt(stmt, planMaker, implicitTxn /* autoCommit */)
 	if err != nil {
+		if traceSQL {
+			log.Tracef(txnState.txn.Context, "ERROR: %v", err)
+		}
 		if txnState.tr != nil {
 			txnState.tr.LazyPrintf("ERROR: %v", err)
 		}
@@ -944,6 +978,9 @@ func (e *Executor) execStmtInOpenTxn(
 			tResult.count = len(result.Rows)
 		}
 		txnState.tr.LazyLog(tResult, false)
+		if traceSQL {
+			log.Tracef(txnState.txn.Context, "%s done", tResult)
+		}
 	}
 	return result, err
 }
@@ -968,7 +1005,7 @@ func rollbackSQLTransaction(txnState *txnState, p *planner) Result {
 	err := p.txn.Rollback()
 	result := Result{PGTag: (*parser.RollbackTransaction)(nil).StatementTag()}
 	if err != nil {
-		log.Warningf("txn rollback failed. The error was swallowed: %s", err)
+		log.Warningf(p.ctx(), "txn rollback failed. The error was swallowed: %s", err)
 		result.Err = err
 	}
 	// We're done with this txn.
@@ -1018,6 +1055,7 @@ func commitSQLTransaction(
 			// We're done with this txn.
 			txnState.State = NoTxn
 		}
+		txnState.dumpTrace()
 		txnState.txn = nil
 	}
 	// Reset transaction to prevent running further commands on this planner.
@@ -1103,35 +1141,29 @@ func (e *Executor) execStmt(
 // updateStmtCounts updates metrics for the number of times the different types of SQL
 // statements have been received by this node.
 func (e *Executor) updateStmtCounts(stmt parser.Statement) {
-	e.queryCount.Inc(1)
+	e.QueryCount.Inc(1)
 	switch stmt.(type) {
 	case *parser.BeginTransaction:
-		e.txnBeginCount.Inc(1)
+		e.TxnBeginCount.Inc(1)
 	case *parser.Select:
-		e.selectCount.Inc(1)
+		e.SelectCount.Inc(1)
 	case *parser.Update:
-		e.updateCount.Inc(1)
+		e.UpdateCount.Inc(1)
 	case *parser.Insert:
-		e.insertCount.Inc(1)
+		e.InsertCount.Inc(1)
 	case *parser.Delete:
-		e.deleteCount.Inc(1)
+		e.DeleteCount.Inc(1)
 	case *parser.CommitTransaction:
-		e.txnCommitCount.Inc(1)
+		e.TxnCommitCount.Inc(1)
 	case *parser.RollbackTransaction:
-		e.txnRollbackCount.Inc(1)
+		e.TxnRollbackCount.Inc(1)
 	default:
 		if stmt.StatementType() == parser.DDL {
-			e.ddlCount.Inc(1)
+			e.DdlCount.Inc(1)
 		} else {
-			e.miscCount.Inc(1)
+			e.MiscCount.Inc(1)
 		}
 	}
-}
-
-// Registry returns a registry with the metrics tracked by this executor, which can be used to
-// access its stats or be added to another registry.
-func (e *Executor) Registry() *metric.Registry {
-	return e.registry
 }
 
 // golangFillQueryArguments populates the placeholder map with
@@ -1250,17 +1282,10 @@ func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.
 	if !ok {
 		return nil, nil
 	}
-	if len(sc.From) != 1 {
+	if sc.From == nil || sc.From.AsOf.Expr == nil {
 		return nil, nil
 	}
-	ate, ok := sc.From[0].(*parser.AliasedTableExpr)
-	if !ok {
-		return nil, nil
-	}
-	if ate.AsOf.Expr == nil {
-		return nil, nil
-	}
-	te, err := ate.AsOf.Expr.TypeCheck(nil, parser.TypeString)
+	te, err := sc.From.AsOf.Expr.TypeCheck(nil, parser.TypeString)
 	if err != nil {
 		return nil, err
 	}

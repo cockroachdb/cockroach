@@ -34,7 +34,7 @@ import (
 // This file implements method receivers for members of server.Context struct
 // -- 'Stores' and 'JoinList', which satisfies pflag's value interface
 
-var minimumStoreSize = 10 * int64(config.DefaultZoneConfig().RangeMaxBytes)
+var minimumStoreSize = 10 * config.DefaultZoneConfig().RangeMaxBytes
 
 // StoreSpec contains the details that can be specified in the cli pertaining
 // to the --store flag.

@@ -260,8 +260,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected a transaction to be created on coordinator")
 	}
-	roachpb.MergeSpans(&txnMeta.keys)
-	keys := txnMeta.keys
+	keys, _ := roachpb.MergeSpans(txnMeta.keys)
 	if len(keys) != 2 {
 		t.Errorf("expected 2 entries in keys range group; got %v", keys)
 	}
@@ -499,8 +498,7 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 	}
 	sender.Lock()
 	txnID := *txn.Proto.ID
-	roachpb.MergeSpans(&sender.txns[txnID].keys)
-	intentSpans := sender.txns[txnID].keys
+	intentSpans, _ := roachpb.MergeSpans(sender.txns[txnID].keys)
 	expSpans := []roachpb.Span{{Key: key, EndKey: []byte("")}}
 	equal := !reflect.DeepEqual(intentSpans, expSpans)
 	sender.Unlock()
@@ -597,10 +595,11 @@ func TestTxnCoordSenderCancel(t *testing.T) {
 
 	// Commit the transaction. Note that we cancel the transaction when the
 	// commit is sent which stresses the TxnCoordSender.tryAsyncAbort code
-	// path. We'll either succeed or get a "does not exist" error. Anything else
-	// is unexpected.
+	// path. We'll either succeed, get a "does not exist" error, or get a
+	// context canceled error. Anything else is unexpected.
 	err := txn.CommitOrCleanup()
-	if err != nil && !testutils.IsError(err, "does not exist") {
+	if err != nil && err.Error() != context.Canceled.Error() &&
+		!testutils.IsError(err, "does not exist") {
 		t.Fatal(err)
 	}
 }
@@ -799,7 +798,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				reply = ba.CreateReply()
 			}
 			return reply, test.pErr
-		}), clock, false, tracing.NewTracer(), stopper, NewTxnMetrics(metric.NewRegistry()))
+		}), clock, false, tracing.NewTracer(), stopper, MakeTxnMetrics())
 		db := client.NewDB(ts)
 		txn := client.NewTxn(context.Background(), *db)
 		txn.InternalSetPriority(1)
@@ -936,7 +935,7 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 		br.Txn = &txnClone
 		br.Txn.Writing = true
 		return br, nil
-	}), clock, false, tracing.NewTracer(), stopper, NewTxnMetrics(metric.NewRegistry()))
+	}), clock, false, tracing.NewTracer(), stopper, MakeTxnMetrics())
 
 	// Stop the stopper manually, prior to trying the transaction. This has the
 	// effect of returning a NodeUnavailableError for any attempts at launching
@@ -986,7 +985,7 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 				*pErr = test.Error
 				pErr.SetTxn(&txn)
 				return nil, pErr
-			}), clock, false, tracing.NewTracer(), stopper, NewTxnMetrics(metric.NewRegistry()))
+			}), clock, false, tracing.NewTracer(), stopper, MakeTxnMetrics())
 
 			var ba roachpb.BatchRequest
 			key := roachpb.Key("test")
@@ -1057,7 +1056,7 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 		return br, nil
 	}
 	ts := NewTxnCoordSender(senderFn(senderFunc), clock, false, tracing.NewTracer(), stopper,
-		NewTxnMetrics(metric.NewRegistry()))
+		MakeTxnMetrics())
 
 	defer stopper.Stop()
 	defer teardownHeartbeats(ts)
@@ -1150,8 +1149,7 @@ func checkTxnMetrics(t *testing.T, sender *TxnCoordSender, name string,
 // test.
 func setupMetricsTest(t *testing.T) (*hlc.ManualClock, *TxnCoordSender, func()) {
 	s, testSender := createTestDB(t)
-	reg := metric.NewRegistry()
-	txnMetrics := NewTxnMetrics(reg)
+	txnMetrics := MakeTxnMetrics()
 	sender := NewTxnCoordSender(testSender.wrapped, s.Clock, false, tracing.NewTracer(), s.Stopper, txnMetrics)
 
 	return s.Manual, sender, func() {
@@ -1171,7 +1169,7 @@ func TestTxnCommit(t *testing.T) {
 	db := client.NewDB(sender)
 
 	// Test normal commit.
-	if err := db.Txn(func(txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		key := []byte("key-commit")
 
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
@@ -1202,7 +1200,7 @@ func TestTxnOnePhaseCommit(t *testing.T) {
 	value := []byte("value")
 	db := client.NewDB(sender)
 
-	if err := db.Txn(func(txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		key := []byte("key-commit")
 		b := txn.NewBatch()
 		b.Put(key, value)
@@ -1226,7 +1224,7 @@ func TestTxnAbandonCount(t *testing.T) {
 	// abandoned transactions.
 	sender.heartbeatInterval = 2 * time.Millisecond
 	sender.clientTimeout = 1 * time.Millisecond
-	if err := db.Txn(func(txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		key := []byte("key-abandon")
 
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
@@ -1243,7 +1241,7 @@ func TestTxnAbandonCount(t *testing.T) {
 
 		return nil
 	}); !testutils.IsError(err, "writing transaction timed out") {
-		t.Fatalf("unexpected error: %s", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -1263,7 +1261,7 @@ func TestTxnReadAfterAbandon(t *testing.T) {
 	sender.heartbeatInterval = 2 * time.Millisecond
 	sender.clientTimeout = 1 * time.Millisecond
 
-	err := db.Txn(func(txn *client.Txn) error {
+	err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		key := []byte("key-abandon")
 
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
@@ -1279,12 +1277,10 @@ func TestTxnReadAfterAbandon(t *testing.T) {
 		checkTxnMetrics(t, sender, "abandon txn", 0, 0, 1, 0, 0)
 
 		_, err := txn.Get(key)
-		if err == nil {
-			t.Fatalf("Get succeeded on abandoned txn")
-		} else if !testutils.IsError(err, "writing transaction timed out") {
-			t.Fatalf("unexpected error from Get on abandoned txn: %s", err)
+		if !testutils.IsError(err, "writing transaction timed out") {
+			t.Fatalf("unexpected error from Get on abandoned txn: %v", err)
 		}
-		return err
+		return err // appease compiler
 	})
 
 	if err == nil {
@@ -1302,7 +1298,7 @@ func TestTxnAbortCount(t *testing.T) {
 
 	intentionalErrText := "intentional error to cause abort"
 	// Test aborted transaction.
-	if err := db.Txn(func(txn *client.Txn) error {
+	if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		key := []byte("key-abort")
 
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
@@ -1315,7 +1311,7 @@ func TestTxnAbortCount(t *testing.T) {
 
 		return errors.New(intentionalErrText)
 	}); !testutils.IsError(err, intentionalErrText) {
-		t.Fatalf("unexpected error: %s", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	teardownHeartbeats(sender)
 	checkTxnMetrics(t, sender, "abort txn", 0, 0, 0, 1, 0)
@@ -1369,7 +1365,7 @@ func TestTxnDurations(t *testing.T) {
 	const incr int64 = 1000
 	for i := 0; i < puts; i++ {
 		key := roachpb.Key(fmt.Sprintf("key-txn-durations-%d", i))
-		if err := db.Txn(func(txn *client.Txn) error {
+		if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 				return err
 			}

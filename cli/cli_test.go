@@ -31,6 +31,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -67,12 +69,12 @@ func newCLITest() cliTest {
 
 	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
 	if err != nil {
-		log.Fatalf("Could not start server: %v", err)
+		log.Fatalf(context.Background(), "Could not start server: %v", err)
 	}
 
 	tempDir, err := ioutil.TempDir("", "cli-test")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(context.Background(), err)
 	}
 
 	// Copy these assets to disk from embedded strings, so this test can
@@ -99,7 +101,7 @@ func newCLITest() cliTest {
 		certsDir:   tempDir,
 		cleanupFunc: func() {
 			if err := os.RemoveAll(tempDir); err != nil {
-				log.Fatal(err)
+				log.Fatal(context.Background(), err)
 			}
 		},
 	}
@@ -302,7 +304,7 @@ func Example_insecure() {
 	s, err := serverutils.StartServerRaw(
 		base.TestServerArgs{Insecure: true})
 	if err != nil {
-		log.Fatalf("Could not start server: %v", err)
+		log.Fatalf(context.Background(), "Could not start server: %v", err)
 	}
 	defer s.Stopper().Stop()
 	c := cliTest{TestServer: s.(*server.TestServer), cleanupFunc: func() {}}
@@ -483,29 +485,23 @@ func Example_zone() {
 	c := newCLITest()
 	defer c.stop()
 
-	const zone1 = `replicas:
-- attrs: [us-east-1a,ssd]`
-	const zone2 = `range_max_bytes: 134217728`
-
 	c.Run("zone ls")
-	// Call RunWithArgs to bypass the "split-by-whitespace" arg builder.
-	c.RunWithArgs([]string{"zone", "set", "system", zone1})
+	c.Run("zone set system --file=./testdata/zone_attrs.yaml")
 	c.Run("zone ls")
 	c.Run("zone get system.nonexistent")
 	c.Run("zone get system.lease")
-	c.RunWithArgs([]string{"zone", "set", "system", zone2})
+	c.Run("zone set system --file=./testdata/zone_range_max_bytes.yaml")
 	c.Run("zone get system")
 	c.Run("zone rm system")
 	c.Run("zone ls")
 	c.Run("zone rm .default")
-	c.RunWithArgs([]string{"zone", "set", ".default", zone2})
+	c.Run("zone set .default --file=./testdata/zone_range_max_bytes.yaml")
 	c.Run("zone get system")
 
 	// Output:
 	// zone ls
 	// .default
-	// zone set system replicas:
-	// - attrs: [us-east-1a,ssd]
+	// zone set system --file=./testdata/zone_attrs.yaml
 	// INSERT 1
 	// replicas:
 	// - attrs: [us-east-1a, ssd]
@@ -526,7 +522,7 @@ func Example_zone() {
 	// range_max_bytes: 67108864
 	// gc:
 	//   ttlseconds: 86400
-	// zone set system range_max_bytes: 134217728
+	// zone set system --file=./testdata/zone_range_max_bytes.yaml
 	// UPDATE 1
 	// replicas:
 	// - attrs: [us-east-1a, ssd]
@@ -548,7 +544,7 @@ func Example_zone() {
 	// .default
 	// zone rm .default
 	// unable to remove .default
-	// zone set .default range_max_bytes: 134217728
+	// zone set .default --file=./testdata/zone_range_max_bytes.yaml
 	// UPDATE 1
 	// replicas:
 	// - attrs: []
@@ -599,8 +595,9 @@ func Example_sql() {
 	// x	y
 	// 42	69
 	// sql --execute=show databases
-	// 2 rows
+	// 3 rows
 	// Database
+	// information_schema
 	// system
 	// t
 	// sql -e explain select 3
@@ -867,7 +864,7 @@ func Example_node() {
 
 	// Refresh time series data, which is required to retrieve stats.
 	if err := c.TestServer.WriteSummaries(); err != nil {
-		log.Fatalf("Couldn't write stats summaries: %s", err)
+		log.Fatalf(context.Background(), "Couldn't write stats summaries: %s", err)
 	}
 
 	c.Run("node ls")

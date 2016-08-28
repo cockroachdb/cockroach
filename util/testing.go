@@ -24,6 +24,9 @@ import (
 	"reflect"
 	"time"
 
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -82,7 +85,7 @@ func CreateRestrictedFile(t Tester, contents []byte, tempdir, name string) strin
 	tempPath := filepath.Join(tempdir, name)
 	if err := ioutil.WriteFile(tempPath, contents, 0600); err != nil {
 		if t == nil {
-			log.Fatal(err)
+			log.Fatal(context.TODO(), err)
 		} else {
 			t.Fatal(err)
 		}
@@ -95,7 +98,7 @@ func CleanupDir(dir string) {
 	_ = os.RemoveAll(dir)
 }
 
-const defaultSucceedsSoonDuration = 15 * time.Second
+const defaultSucceedsSoonDuration = 45 * time.Second
 
 // SucceedsSoon fails the test (with t.Fatal) unless the supplied
 // function runs without error within a preset maximum duration. The
@@ -110,7 +113,8 @@ func SucceedsSoon(t Tester, fn func() error) {
 // stack depth offset.
 func SucceedsSoonDepth(depth int, t Tester, fn func() error) {
 	if err := RetryForDuration(defaultSucceedsSoonDuration, fn); err != nil {
-		t.Fatalf("condition failed to evaluate within %s: %s", defaultSucceedsSoonDuration, err)
+		file, line, _ := caller.Lookup(depth + 1)
+		t.Fatalf("%s:%d, condition failed to evaluate within %s: %s", file, line, defaultSucceedsSoonDuration, err)
 	}
 }
 

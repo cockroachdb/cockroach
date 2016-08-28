@@ -31,7 +31,6 @@ interface StackedAreaGraphProps extends MetricsDataComponentProps {
  * on the same axis.
  */
 export class StackedAreaGraph extends React.Component<StackedAreaGraphProps, {}> {
-
   // The SVG Element in the DOM used to render the graph.
   svgEl: SVGElement;
 

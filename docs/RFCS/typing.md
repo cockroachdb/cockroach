@@ -245,7 +245,7 @@ For example:
    the +, and not the fact that $1 may have a richer type.
 
    One may argue that a typing algorithm that only performs "locally"
-   is sufficient, and that this statement can be reliabily understood
+   is sufficient, and that this statement can be reliably understood
    to perform an integer operation in all cases, with a forced cast of
    the value filled in the placeholder. The problem with this argument
    is that this interpretation loses the equivalence between a direct
@@ -1146,13 +1146,13 @@ is determined by the column names targeted by the insert.
 First pass: populating initial types for literals and placeholders.
 
 - for each numeric literal, annotate with an internal type
-  `exact`. Just like for Rick, we can do arithmethic in this type for
+  `exact`. Just like for Rick, we can do arithmetic in this type for
   constant folding.
 
 - for each placeholder, process immediate casts if any by annotating
   the placeholder by the type indicated by the cast *when there is no
   other type discovered earlier for this placeholder* during this
-  phase. If the same placehoder is encountered a 2nd time with a
+  phase. If the same placeholder is encountered a 2nd time with a
   conflicting cast, report a typing error ("conflicting types for $n
   ...")
 

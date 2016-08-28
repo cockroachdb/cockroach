@@ -224,7 +224,7 @@ let rangeStatuses = (state: AdminUIState): cockroach.server.serverpb.RaftDebugRe
 
 // Connect the RangesMain class with our redux store.
 let rangesMainConnected = connect(
-  (state, ownProps) => {
+  (state: AdminUIState) => {
     return {
       rangeStatuses: rangeStatuses(state),
     };

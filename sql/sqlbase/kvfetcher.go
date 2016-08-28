@@ -30,7 +30,6 @@ import (
 type Span struct {
 	Start roachpb.Key // inclusive key
 	End   roachpb.Key // exclusive key
-	Count int64       // max # of keys for this span
 }
 
 // Spans is a slice of spans.
@@ -65,9 +64,6 @@ func prettyKey(key roachpb.Key, skip int) string {
 // PrettySpan returns a human-readable representation of a span.
 func PrettySpan(span Span, skip int) string {
 	var buf bytes.Buffer
-	if span.Count != 0 {
-		fmt.Fprintf(&buf, "%d:", span.Count)
-	}
 	fmt.Fprintf(&buf, "%s-%s", prettyKey(span.Start, skip), prettyKey(span.End, skip))
 	return buf.String()
 }
@@ -165,7 +161,7 @@ func (f *kvFetcher) fetch() error {
 	batchSize := f.getBatchSize()
 
 	b := &client.Batch{}
-	b.Header.MaxScanResults = batchSize
+	b.Header.MaxSpanRequestKeys = batchSize
 
 	var resumeKey roachpb.Key
 	if len(f.kvs) > 0 {
@@ -196,7 +192,7 @@ func (f *kvFetcher) fetch() error {
 				}
 			}
 			atEnd = false
-			b.Scan(start, f.spans[i].End, f.spans[i].Count)
+			b.Scan(start, f.spans[i].End)
 		}
 	} else {
 		for i := len(f.spans) - 1; i >= 0; i-- {
@@ -207,15 +203,12 @@ func (f *kvFetcher) fetch() error {
 					continue
 				}
 				if resumeKey.Compare(end) < 0 {
-					// We are resuming from a key inside this span.
-					// In this case we should technically reduce the max count for the span; but
-					// since this count is only an optimization it's not incorrect to retrieve more
-					// keys for the span.
+					// We resume from a key inside this span.
 					end = resumeKey
 				}
 			}
 			atEnd = false
-			b.ReverseScan(f.spans[i].Start, end, f.spans[i].Count)
+			b.ReverseScan(f.spans[i].Start, end)
 		}
 	}
 

@@ -80,7 +80,7 @@ func newDistSQLNode(
 	colMapping []uint32,
 	ordering orderingInfo,
 	srv *distsql.ServerImpl,
-	flowReq *distsql.SetupFlowsRequest,
+	flowReq *distsql.SetupFlowRequest,
 	syncMode bool,
 ) (*distSQLNode, error) {
 	n := &distSQLNode{
@@ -201,9 +201,9 @@ func scanNodeToTableReaderSpec(n *scanNode) *distsql.TableReaderSpec {
 // If syncMode is true, the plan does not instantiate any goroutines
 // internally.
 func scanNodeToDistSQL(n *scanNode, syncMode bool) (*distSQLNode, error) {
-	req := distsql.SetupFlowsRequest{Txn: n.p.txn.Proto}
+	req := distsql.SetupFlowRequest{Txn: n.p.txn.Proto}
 	tr := scanNodeToTableReaderSpec(n)
-	req.Flows = []distsql.FlowSpec{{
+	req.Flow = distsql.FlowSpec{
 		Processors: []distsql.ProcessorSpec{{
 			Core: distsql.ProcessorCoreUnion{TableReader: tr},
 			Output: []distsql.OutputRouterSpec{{
@@ -213,10 +213,10 @@ func scanNodeToDistSQL(n *scanNode, syncMode bool) (*distSQLNode, error) {
 				}},
 			}},
 		}},
-	}}
+	}
 
 	return newDistSQLNode(
-		n.resultColumns, tr.OutputColumns, n.ordering, n.p.execCtx.DistSQLSrv, &req, syncMode)
+		n.resultColumns, tr.OutputColumns, n.ordering, n.p.execCfg.DistSQLSrv, &req, syncMode)
 }
 
 // hackPlanToUseDistSQL goes through a planNode tree and replaces each scanNode with

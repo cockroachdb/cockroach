@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -61,9 +63,9 @@ type planner struct {
 	subqueryVisitor             subqueryVisitor
 	subqueryPlanVisitor         subqueryPlanVisitor
 	collectSubqueryPlansVisitor collectSubqueryPlansVisitor
-	qnameVisitor                qnameVisitor
+	nameResolutionVisitor       nameResolutionVisitor
 
-	execCtx *ExecutorContext
+	execCfg *ExecutorConfig
 }
 
 // makePlanner creates a new planner instances, referencing a dummy Session.
@@ -71,7 +73,7 @@ type planner struct {
 func makePlanner() *planner {
 	// init with an empty session. We can't leave this nil because too much code
 	// looks in the session for the current database.
-	return &planner{session: &Session{Location: time.UTC}}
+	return &planner{session: &Session{Location: time.UTC, context: context.Background()}}
 }
 
 // queryRunner abstracts the services provided by a planner object
@@ -142,6 +144,11 @@ type queryRunner interface {
 }
 
 var _ queryRunner = &planner{}
+
+// ctx returns the current session context (suitable for logging/tracing).
+func (p *planner) ctx() context.Context {
+	return p.session.Ctx()
+}
 
 // setTxn implements the queryRunner interface.
 func (p *planner) setTxn(txn *client.Txn) {
@@ -218,10 +225,7 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, erro
 		return nil, err
 	}
 	if next, err := plan.Next(); !next {
-		if err != nil {
-			return nil, err
-		}
-		return nil, nil
+		return nil, err
 	}
 	values := plan.Values()
 	next, err := plan.Next()
@@ -254,7 +258,7 @@ func (p *planner) setTestingVerifyMetadata(fn func(config.SystemConfig) error) {
 
 // blockConfigUpdatesMaybe implements the queryRunner interface.
 func (p *planner) blockConfigUpdatesMaybe(e *Executor) func() {
-	if !e.ctx.TestingKnobs.WaitForGossipUpdate {
+	if !e.cfg.TestingKnobs.WaitForGossipUpdate {
 		return func() {}
 	}
 	return e.blockConfigUpdates()
@@ -263,7 +267,7 @@ func (p *planner) blockConfigUpdatesMaybe(e *Executor) func() {
 // checkTestingVerifyMetadataInitialOrDie implements the queryRunner interface.
 func (p *planner) checkTestingVerifyMetadataInitialOrDie(
 	e *Executor, stmts parser.StatementList) {
-	if !p.execCtx.TestingKnobs.WaitForGossipUpdate {
+	if !p.execCfg.TestingKnobs.WaitForGossipUpdate {
 		return
 	}
 	// If there's nothinging to verify, or we've already verified the initial
@@ -282,12 +286,12 @@ func (p *planner) checkTestingVerifyMetadataInitialOrDie(
 // checkTestingVerifyMetadataOrDie implements the queryRunner interface.
 func (p *planner) checkTestingVerifyMetadataOrDie(
 	e *Executor, stmts parser.StatementList) {
-	if !p.execCtx.TestingKnobs.WaitForGossipUpdate ||
+	if !p.execCfg.TestingKnobs.WaitForGossipUpdate ||
 		p.testingVerifyMetadataFn == nil {
 		return
 	}
 	if !p.verifyFnCheckedOnce {
-		panic("intial state of the condition to verify was not checked")
+		panic("initial state of the condition to verify was not checked")
 	}
 
 	for p.testingVerifyMetadataFn(e.systemConfig) != nil {
@@ -296,12 +300,17 @@ func (p *planner) checkTestingVerifyMetadataOrDie(
 	p.testingVerifyMetadataFn = nil
 }
 
-func (p *planner) fillFKTableMap(m TablesByID) error {
-	var err error
+func (p *planner) fillFKTableMap(m tableLookupsByID) error {
 	for tableID := range m {
-		if m[tableID], err = p.getTableLeaseByID(tableID); err != nil {
+		table, err := p.getTableLeaseByID(tableID)
+		if err == errTableAdding {
+			m[tableID] = tableLookup{isAdding: true}
+			continue
+		}
+		if err != nil {
 			return err
 		}
+		m[tableID] = tableLookup{table: table}
 	}
 	return nil
 }

@@ -22,7 +22,8 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
-	"sync"
+
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 type cachedLookup struct {
@@ -38,7 +39,7 @@ var dummyLookup = cachedLookup{file: "???", line: 1, fun: "???"}
 // its lookups and strips the uninteresting prefix from both the caller's
 // location and name; see NewCallResolver().
 type CallResolver struct {
-	mu    sync.Mutex
+	mu    syncutil.Mutex
 	cache map[uintptr]*cachedLookup
 	re    *regexp.Regexp
 }

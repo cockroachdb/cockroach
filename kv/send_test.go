@@ -20,6 +20,7 @@ import (
 	"net"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -65,11 +67,11 @@ func (n Node) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.B
 	}
 	return &roachpb.BatchResponse{}, nil
 }
-func (n Node) PollFrozen(_ context.Context, _ *roachpb.PollFrozenRequest) (*roachpb.PollFrozenResponse, error) {
+func (n Node) PollFrozen(_ context.Context, _ *storage.PollFrozenRequest) (*storage.PollFrozenResponse, error) {
 	panic("unimplemented")
 }
 
-func (n Node) Reserve(_ context.Context, _ *roachpb.ReservationRequest) (*roachpb.ReservationResponse, error) {
+func (n Node) Reserve(_ context.Context, _ *storage.ReservationRequest) (*storage.ReservationResponse, error) {
 	panic("unimplemented")
 }
 
@@ -128,28 +130,25 @@ func TestRetryableError(t *testing.T) {
 	s, ln := newTestServer(t, serverContext)
 	roachpb.RegisterInternalServer(s, Node(0))
 
-	grpcConn, err := clientContext.GRPCDial(ln.Addr().String())
-	if err != nil {
+	addr := ln.Addr().String()
+	if _, err := clientContext.GRPCDial(addr); err != nil {
 		t.Fatal(err)
 	}
-	ctx := context.Background()
-	waitForConnState := func(desiredState grpc.ConnectivityState) {
-		clientState, err := grpcConn.State()
-		for clientState != desiredState {
-			if err != nil {
-				t.Fatal(err)
-			}
-			if clientState == grpc.Shutdown {
-				t.Fatalf("%v has unexpectedly shut down", grpcConn)
-			}
-			clientState, err = grpcConn.WaitForStateChange(ctx, clientState)
-		}
-	}
 	// Wait until the client becomes healthy and shut down the server.
-	waitForConnState(grpc.Ready)
+	util.SucceedsSoon(t, func() error {
+		if !clientContext.IsConnHealthy(addr) {
+			return errors.Errorf("client not yet healthy")
+		}
+		return nil
+	})
 	serverStopper.Stop()
 	// Wait until the client becomes unhealthy.
-	waitForConnState(grpc.TransientFailure)
+	util.SucceedsSoon(t, func() error {
+		if clientContext.IsConnHealthy(addr) {
+			return errors.Errorf("client not yet unhealthy")
+		}
+		return nil
+	})
 
 	opts := SendOptions{
 		SendNextTimeout: 100 * time.Millisecond,
@@ -164,7 +163,7 @@ func TestRetryableError(t *testing.T) {
 // channelSaveTransport captures the 'done' channels of every RPC it
 // "sends".
 type channelSaveTransport struct {
-	ch        chan chan BatchCall
+	ch        chan chan<- BatchCall
 	remaining int
 }
 
@@ -172,7 +171,7 @@ func (c *channelSaveTransport) IsExhausted() bool {
 	return c.remaining <= 0
 }
 
-func (c *channelSaveTransport) SendNext(done chan BatchCall) {
+func (c *channelSaveTransport) SendNext(done chan<- BatchCall) {
 	c.remaining--
 	c.ch <- done
 }
@@ -190,7 +189,7 @@ func (*channelSaveTransport) Close() {
 // Either give each call its own channel, return a list of (replica
 // descriptor, channel) pair, or decide we don't care about
 // distinguishing them and just send a single channel.
-func setupSendNextTest(t *testing.T) ([]chan BatchCall, chan BatchCall, *stop.Stopper) {
+func setupSendNextTest(t *testing.T) ([]chan<- BatchCall, chan BatchCall, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	nodeContext := newNodeTestContext(nil, stopper)
 
@@ -200,7 +199,7 @@ func setupSendNextTest(t *testing.T) ([]chan BatchCall, chan BatchCall, *stop.St
 		util.NewUnresolvedAddr("dummy", "3"),
 	}
 
-	doneChanChan := make(chan chan BatchCall, len(addrs))
+	doneChanChan := make(chan chan<- BatchCall, len(addrs))
 
 	opts := SendOptions{
 		SendNextTimeout: 1 * time.Millisecond,
@@ -226,7 +225,7 @@ func setupSendNextTest(t *testing.T) ([]chan BatchCall, chan BatchCall, *stop.St
 		sendChan <- BatchCall{br, err}
 	}()
 
-	doneChans := make([]chan BatchCall, len(addrs))
+	doneChans := make([]chan<- BatchCall, len(addrs))
 	for i := range doneChans {
 		// Note that this blocks until the replica has been contacted.
 		doneChans[i] = <-doneChanChan
@@ -378,7 +377,7 @@ func TestSendNext_AllRetryableApplicationErrors(t *testing.T) {
 	} else if _, ok := bc.Err.(*roachpb.SendError); !ok {
 		t.Fatalf("expected SendError, got err=%s", bc.Err)
 	} else if exp := "range 1 was not found"; !testutils.IsError(bc.Err, exp) {
-		t.Errorf("expected SendError to contain %q, but got %s", exp, bc.Err)
+		t.Errorf("expected SendError to contain %q, but got %v", exp, bc.Err)
 	}
 }
 
@@ -446,7 +445,7 @@ func TestClientNotReady(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := grpcConn.Close(); err != nil {
+			if err := grpcConn.Close(); err != nil && err != grpc.ErrClientConnClosing {
 				t.Fatal(err)
 			}
 
@@ -480,8 +479,13 @@ func TestClientNotReady(t *testing.T) {
 		_, err := sendBatch(SendOptions{
 			Context: context.Background(),
 		}, addrs, nodeContext)
-		if !testutils.IsError(err, "failed as client connection was closed") {
-			errCh <- errors.Errorf("unexpected error: %v", err)
+		expected := strings.Join([]string{
+			"context canceled",
+			"connection is closing",
+			"failed fast due to transport failure",
+		}, "|")
+		if !testutils.IsError(err, expected) {
+			errCh <- errors.Wrap(err, "unexpected error")
 		} else {
 			close(errCh)
 		}
@@ -499,7 +503,7 @@ func TestClientNotReady(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := grpcConn.Close(); err != nil {
+	if err := grpcConn.Close(); err != nil && err != grpc.ErrClientConnClosing {
 		t.Fatal(err)
 	}
 	for err := range errCh {
@@ -520,7 +524,7 @@ func (f *firstNErrorTransport) IsExhausted() bool {
 	return f.numSent >= len(f.replicas)
 }
 
-func (f *firstNErrorTransport) SendNext(done chan BatchCall) {
+func (f *firstNErrorTransport) SendNext(done chan<- BatchCall) {
 	call := BatchCall{
 		Reply: &roachpb.BatchResponse{},
 	}

@@ -68,7 +68,7 @@ func (node *ParenSelect) Format(buf *bytes.Buffer, f FmtFlags) {
 type SelectClause struct {
 	Distinct    bool
 	Exprs       SelectExprs
-	From        TableExprs
+	From        *From
 	Where       *Where
 	GroupBy     GroupBy
 	Having      *Where
@@ -78,9 +78,9 @@ type SelectClause struct {
 
 // Format implements the NodeFormatter interface.
 func (node *SelectClause) Format(buf *bytes.Buffer, f FmtFlags) {
-	if node.tableSelect && len(node.From) == 1 {
+	if node.tableSelect {
 		buf.WriteString("TABLE ")
-		FormatNode(buf, f, node.From[0])
+		FormatNode(buf, f, node.From.Tables[0])
 	} else {
 		buf.WriteString("SELECT ")
 		if node.Distinct {
@@ -112,6 +112,21 @@ func (node SelectExprs) Format(buf *bytes.Buffer, f FmtFlags) {
 type SelectExpr struct {
 	Expr Expr
 	As   Name
+}
+
+// NormalizeTopLevelVarName preemptively expands any UnresolvedName at
+// the top level of the expression into a VarName. This is meant
+// to catch stars so that sql.checkRenderStar() can see it prior to
+// other expression transformations.
+func (node *SelectExpr) NormalizeTopLevelVarName() error {
+	if vBase, ok := node.Expr.(VarName); ok {
+		v, err := vBase.NormalizeVarName()
+		if err != nil {
+			return err
+		}
+		node.Expr = v
+	}
+	return nil
 }
 
 // starSelectExpr is a convenience function that represents an unqualified "*"
@@ -156,6 +171,21 @@ type AsOfClause struct {
 func (a AsOfClause) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("AS OF SYSTEM TIME ")
 	FormatNode(buf, f, a.Expr)
+}
+
+// From represents a FROM clause.
+type From struct {
+	Tables TableExprs
+	AsOf   AsOfClause
+}
+
+// Format implements the NodeFormatter interface.
+func (node *From) Format(buf *bytes.Buffer, f FmtFlags) {
+	FormatNode(buf, f, node.Tables)
+	if node.AsOf.Expr != nil {
+		buf.WriteByte(' ')
+		FormatNode(buf, f, node.AsOf)
+	}
 }
 
 // TableExprs represents a list of table expressions.
@@ -216,7 +246,6 @@ type AliasedTableExpr struct {
 	Expr  TableExpr
 	Hints *IndexHints
 	As    AliasClause
-	AsOf  AsOfClause
 }
 
 // Format implements the NodeFormatter interface.
@@ -229,14 +258,9 @@ func (node *AliasedTableExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteString(" AS ")
 		FormatNode(buf, f, node.As)
 	}
-	if node.AsOf.Expr != nil {
-		buf.WriteByte(' ')
-		FormatNode(buf, f, node.AsOf)
-	}
 }
 
-func (QualifiedName) tableExpr() {}
-func (*Subquery) tableExpr()     {}
+func (*Subquery) tableExpr() {}
 
 // ParenTableExpr represents a parenthesized TableExpr.
 type ParenTableExpr struct {

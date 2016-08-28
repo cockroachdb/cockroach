@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -117,7 +118,7 @@ func (*gcQueue) shouldQueue(now hlc.Timestamp, repl *Replica,
 	desc := repl.Desc()
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		log.Errorf("could not find zone config for range %s: %s", repl, err)
+		log.Errorf(context.TODO(), "could not find zone config for range %s: %s", repl, err)
 		return
 	}
 
@@ -195,7 +196,7 @@ func processTransactionTable(
 				defer infoMu.Lock()
 				if err := resolveIntents(roachpb.AsIntents(txn.Intents, &txn),
 					true /* wait */, false /* !poison */); err != nil {
-					log.Warningf("failed to resolve intents of aborted txn on gc: %s", err)
+					log.Warningf(ctx, "failed to resolve intents of aborted txn on gc: %s", err)
 				}
 			}()
 		case roachpb.COMMITTED:
@@ -206,7 +207,7 @@ func processTransactionTable(
 				defer infoMu.Lock()
 				return resolveIntents(roachpb.AsIntents(txn.Intents, &txn), true /* wait */, false /* !poison */)
 			}(); err != nil {
-				log.Warningf("unable to resolve intents of committed txn on gc: %s", err)
+				log.Warningf(ctx, "unable to resolve intents of committed txn on gc: %s", err)
 				// Returning the error here would abort the whole GC run, and
 				// we don't want that. Instead, we simply don't GC this entry.
 				return nil
@@ -303,10 +304,10 @@ func (gcq *gcQueue) process(
 
 	gcKeys, info, err := RunGC(ctx, desc, snap, now, zone.GC,
 		func(now hlc.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
-			pushTxn(repl, now, txn, typ)
+			pushTxn(gcq.store.DB(), now, txn, typ)
 		},
 		func(intents []roachpb.Intent, poison bool, wait bool) error {
-			return repl.store.intentResolver.resolveIntents(ctx, repl, intents, poison, wait)
+			return repl.store.intentResolver.resolveIntents(ctx, intents, poison, wait)
 		})
 
 	if err != nil {
@@ -372,7 +373,7 @@ type GCInfo struct {
 }
 
 type lockableGCInfo struct {
-	sync.Mutex
+	syncutil.Mutex
 	GCInfo
 }
 
@@ -448,7 +449,7 @@ func RunGC(
 		if len(keys) > 1 {
 			meta := &enginepb.MVCCMetadata{}
 			if err := proto.Unmarshal(vals[0], meta); err != nil {
-				log.Errorf("unable to unmarshal MVCC metadata for key %q: %s", keys[0], err)
+				log.Errorf(ctx, "unable to unmarshal MVCC metadata for key %q: %s", keys[0], err)
 			} else {
 				// In the event that there's an active intent, send for
 				// intent resolution if older than the threshold.
@@ -576,7 +577,7 @@ func (*gcQueue) purgatoryChan() <-chan struct{} {
 
 // pushTxn attempts to abort the txn via push. The wait group is signaled on
 // completion.
-func pushTxn(repl *Replica, now hlc.Timestamp, txn *roachpb.Transaction,
+func pushTxn(db *client.DB, now hlc.Timestamp, txn *roachpb.Transaction,
 	typ roachpb.PushTxnType) {
 
 	// Attempt to push the transaction which created the intent.
@@ -591,8 +592,8 @@ func pushTxn(repl *Replica, now hlc.Timestamp, txn *roachpb.Transaction,
 	}
 	b := &client.Batch{}
 	b.AddRawRequest(pushArgs)
-	if err := repl.store.DB().Run(b); err != nil {
-		log.Warningf("push of txn %s failed: %s", txn, err)
+	if err := db.Run(b); err != nil {
+		log.Warningf(context.TODO(), "push of txn %s failed: %s", txn, err)
 		return
 	}
 	br := b.RawResponse()

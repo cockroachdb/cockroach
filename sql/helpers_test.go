@@ -16,7 +16,7 @@
 
 package sql
 
-import "sync"
+import "github.com/cockroachdb/cockroach/util/syncutil"
 
 // LeaseRemovalTracker can be used to wait for leases to be removed from the
 // store (leases are removed from the store async w.r.t. LeaseManager
@@ -29,7 +29,7 @@ import "sync"
 //
 // All methods are thread-safe.
 type LeaseRemovalTracker struct {
-	mu sync.Mutex
+	mu syncutil.Mutex
 	// map from a lease whose release we're waiting for to a tracker for that
 	// lease.
 	tracking map[*LeaseState]RemovalTracker

@@ -224,7 +224,7 @@ func TestAllocateWithStopper(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	idAlloc, err := newIDAllocator(keys.RangeIDGenerator, store.ctx.DB, 2, 10, stopper)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(context.Background(), err)
 	}
 
 	stopper.Stop()

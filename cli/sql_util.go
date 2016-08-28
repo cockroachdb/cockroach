@@ -26,6 +26,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"golang.org/x/net/context"
+
 	"github.com/olekukonko/tablewriter"
 
 	"github.com/cockroachdb/cockroach/util"
@@ -107,7 +109,7 @@ func (c *sqlConn) Close() {
 	if c.conn != nil {
 		err := c.conn.Close()
 		if err != nil && err != driver.ErrBadConn {
-			log.Info(err)
+			log.Info(context.TODO(), err)
 		}
 		c.conn = nil
 	}

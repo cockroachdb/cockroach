@@ -18,9 +18,9 @@ package parser
 
 import (
 	"regexp"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/util/cache"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 // regexpCacheKey allows cache keys to take the form of different types,
@@ -36,7 +36,7 @@ type regexpCacheKey interface {
 // safe to use the cache through a nil reference, where it will act like a valid
 // cache with no capacity.
 type RegexpCache struct {
-	mu    sync.Mutex
+	mu    syncutil.Mutex
 	cache *cache.UnorderedCache
 }
 

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -28,17 +29,20 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/ts/tspb"
 	"github.com/cockroachdb/cockroach/util"
@@ -106,7 +110,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	}
 
 	// Update SystemConfig to trigger gossip.
-	if err := store.DB().Txn(func(txn *client.Txn) error {
+	if err := store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
 		// We don't care about the values, just the keys.
 		k := sqlbase.MakeDescMetadataKey(sqlbase.ID(keys.MaxReservedDescID + 1))
@@ -277,21 +281,35 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 	defer stopper.Stop()
 
 	splitKey := roachpb.Key("a")
-	concurrentCount := int32(10)
-	wg := sync.WaitGroup{}
-	wg.Add(int(concurrentCount))
-	failureCount := int32(0)
-	for i := int32(0); i < concurrentCount; i++ {
+	concurrentCount := 10
+	errCh := make(chan *roachpb.Error, concurrentCount)
+	for i := 0; i < concurrentCount; i++ {
 		go func() {
 			args := adminSplitArgs(roachpb.KeyMin, splitKey)
 			_, pErr := client.SendWrapped(rg1(store), nil, &args)
-			if pErr != nil {
-				atomic.AddInt32(&failureCount, 1)
-			}
-			wg.Done()
+			errCh <- pErr
 		}()
 	}
-	wg.Wait()
+
+	var failureCount int
+	for i := 0; i < concurrentCount; i++ {
+		pErr := <-errCh
+		if pErr != nil {
+			// There are only three expected errors from concurrent splits:
+			// conflicting range descriptors if the splits are initiated
+			// concurrently, the range is already split at the specified key or the
+			// split key is outside of the bounds for the range.
+			expected := strings.Join([]string{
+				"conflict updating range descriptors",
+				"range is already split at key",
+				"key range .* outside of bounds of range",
+			}, "|")
+			if !testutils.IsError(pErr.GoError(), expected) {
+				t.Fatalf("unexpected error: %v", pErr)
+			}
+			failureCount++
+		}
+	}
 	if failureCount != concurrentCount-1 {
 		t.Fatalf("concurrent splits succeeded unexpectedly; failureCount=%d", failureCount)
 	}
@@ -300,13 +318,13 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 	if a, e := store.ReplicaCount(), 2; a != e {
 		t.Fatalf("expected %d stores after concurrent splits; actual count=%d", e, a)
 	}
-	rng := store.LookupReplica(roachpb.RKeyMin, nil)
-	newRng := store.LookupReplica(roachpb.RKey(splitKey), nil)
-	if !bytes.Equal(newRng.Desc().StartKey, splitKey) || !bytes.Equal(splitKey, rng.Desc().EndKey) {
-		t.Errorf("ranges mismatched, wanted %q=%q=%q", newRng.Desc().StartKey, splitKey, rng.Desc().EndKey)
+	rngDesc := store.LookupReplica(roachpb.RKeyMin, nil).Desc()
+	newRngDesc := store.LookupReplica(roachpb.RKey(splitKey), nil).Desc()
+	if !bytes.Equal(newRngDesc.StartKey, splitKey) || !bytes.Equal(splitKey, rngDesc.EndKey) {
+		t.Errorf("ranges mismatched, wanted %q=%q=%q", newRngDesc.StartKey, splitKey, rngDesc.EndKey)
 	}
-	if !bytes.Equal(newRng.Desc().EndKey, roachpb.RKeyMax) || !bytes.Equal(rng.Desc().StartKey, roachpb.RKeyMin) {
-		t.Errorf("new ranges do not cover KeyMin-KeyMax, but only %q-%q", rng.Desc().StartKey, newRng.Desc().EndKey)
+	if !bytes.Equal(newRngDesc.EndKey, roachpb.RKeyMax) || !bytes.Equal(rngDesc.StartKey, roachpb.RKeyMin) {
+		t.Errorf("new ranges do not cover KeyMin-KeyMax, but only %q-%q", rngDesc.StartKey, newRngDesc.EndKey)
 	}
 }
 
@@ -676,7 +694,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	const maxBytes = 1 << 16
 	// Set max bytes.
 	descID := uint32(keys.MaxReservedDescID + 1)
-	config.TestingSetZoneConfig(descID, &config.ZoneConfig{RangeMaxBytes: maxBytes})
+	config.TestingSetZoneConfig(descID, config.ZoneConfig{RangeMaxBytes: maxBytes})
 
 	// Trigger gossip callback.
 	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {
@@ -733,7 +751,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	// Set max bytes.
 	const maxBytes = 1 << 16
 	descID := uint32(keys.MaxReservedDescID + 1)
-	config.TestingSetZoneConfig(descID, &config.ZoneConfig{RangeMaxBytes: maxBytes})
+	config.TestingSetZoneConfig(descID, config.ZoneConfig{RangeMaxBytes: maxBytes})
 
 	// Trigger gossip callback.
 	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {
@@ -770,7 +788,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	// - descriptor IDs are used to determine split keys
 	// - the write triggers a SystemConfig update and gossip.
 	// We should end up with splits at each user table prefix.
-	if err := store.DB().Txn(func(txn *client.Txn) error {
+	if err := store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
 		prefix := keys.MakeTablePrefix(keys.DescriptorTableID)
 		txn.SetSystemConfigTrigger()
 		for i, kv := range initialSystemValues {
@@ -779,7 +797,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 			}
 			bytes, err := kv.Value.GetBytes()
 			if err != nil {
-				log.Info(err)
+				log.Info(context.TODO(), err)
 				continue
 			}
 			if err := txn.Put(kv.Key, bytes); err != nil {
@@ -840,10 +858,10 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 
 	verifySplitsAtTablePrefixes(userTableMax)
 
-	numTotalValues := keys.MaxSystemConfigDescID + 5
+	numTotalValues := keys.MaxSystemConfigDescID + server.ExpectedInitialRangeCount()
 
 	// Write another, disjoint descriptor for a user table.
-	if err := store.DB().Txn(func(txn *client.Txn) error {
+	if err := store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
 		// This time, only write the last table descriptor. Splits
 		// still occur for every intervening ID.
@@ -1006,6 +1024,7 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 // so it still has a conflicting range.
 func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#8416")
 	mtc, leftKey, rightKey := setupSplitSnapshotRace(t)
 	defer mtc.Stop()
 
@@ -1052,13 +1071,13 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	mtc.waitForValues(rightKey, []int64{0, 0, 0, 225, 225, 225})
 }
 
-// TestStoreSplitReadRace prevents regression of #3148. It begins a couple of
-// read requests and lets them complete while a split is happening; the reads
-// hit the second half of the split. If the split happens non-atomically with
-// respect to the reads (and in particular their update of the timestamp
-// cache), then some of them may not be reflected in the timestamp cache of the
-// new range, in which case this test would fail.
-func TestStoreSplitReadRace(t *testing.T) {
+// TestStoreSplitTimestampCacheReadRace prevents regression of #3148. It begins
+// a couple of read requests and lets them complete while a split is happening;
+// the reads hit the right half of the split. If the split happens
+// non-atomically with respect to the reads (and in particular their update of
+// the timestamp cache), then some of them may not be reflected in the
+// timestamp cache of the new range, in which case this test would fail.
+func TestStoreSplitTimestampCacheReadRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	splitKey := roachpb.Key("a")
 	key := func(i int) roachpb.Key {
@@ -1140,6 +1159,154 @@ func TestStoreSplitReadRace(t *testing.T) {
 		if respH.Timestamp.Less(ts(i)) {
 			t.Fatalf("%d: expected Put to be forced higher than %s by timestamp caches, but wrote at %s", i, ts(i), respH.Timestamp)
 		}
+	}
+}
+
+// TestStoreSplitTimestampCacheDifferentLeaseHolder prevents regression of
+// #7899. When the first lease holder of the right-hand side of a Split was
+// not equal to the left-hand side lease holder (at the time of the split),
+// its timestamp cache would not be properly initialized, which would allow
+// for writes which invalidated reads previously served by the pre-split lease.
+func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	leftKey := roachpb.Key("a")
+	splitKey := roachpb.Key("b")
+	rightKey := roachpb.Key("c")
+
+	// This filter is better understood when reading the meat of the test
+	// below first.
+	var noLeaseForDesc atomic.Value
+	var numLeases int32
+	filter := func(args storagebase.FilterArgs) *roachpb.Error {
+		leaseReq, argOK := args.Req.(*roachpb.RequestLeaseRequest)
+		forbiddenDesc, descOK := noLeaseForDesc.Load().(*roachpb.ReplicaDescriptor)
+		if !argOK || !descOK || !bytes.Equal(leaseReq.Key, splitKey) {
+			return nil
+		}
+		atomic.AddInt32(&numLeases, 1)
+		if !reflect.DeepEqual(*forbiddenDesc, leaseReq.Lease.Replica) {
+			return nil
+		}
+		log.Infof(context.TODO(), "refusing %+v because %+v held lease for LHS of split",
+			leaseReq, forbiddenDesc)
+		return roachpb.NewError(&roachpb.NotLeaseHolderError{RangeID: args.Hdr.RangeID})
+	}
+
+	var args base.TestClusterArgs
+	args.ReplicationMode = base.ReplicationManual
+	args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
+		TestingCommandFilter: filter,
+	}
+
+	tc := testcluster.StartTestCluster(t, 2, args)
+	defer tc.Stopper().Stop()
+
+	// Split the data range, mainly to avoid other splits getting in our way.
+	for _, k := range []roachpb.Key{leftKey, rightKey} {
+		if _, _, err := tc.SplitRange(k); err != nil {
+			t.Fatal(errors.Wrapf(err, "split at %s", k))
+		}
+	}
+	if _, err := tc.AddReplicas(leftKey, tc.Target(1)); err != nil {
+		t.Fatal(err)
+	}
+
+	db := tc.Servers[0].DB() // irrelevant which one we use
+
+	// Make a context tied to the Stopper. The test works without, but this
+	// is cleaner since we won't properly terminate the transaction below.
+	ctx := tc.Server(0).Stopper().WithCancel(context.Background())
+
+	// This transaction will try to write "under" a served read.
+	txnOld := client.NewTxn(ctx, *db)
+
+	// Do something with txnOld so that its timestamp gets set.
+	if _, err := txnOld.Scan("a", "b", 0); err != nil {
+		t.Fatal(err)
+	}
+
+	// Another client comes along at a higher timestamp, touching everything on
+	// the right of the (soon-to-be) split key.
+	if _, err := db.Scan(splitKey, rightKey, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	// This block makes sure that from now on, we don't allow the current
+	// lease holder of our range to extend. Any attempt of doing so will
+	// catch a NotLeaseHolderError, which means a retry by DistSender (until
+	// the other node gets to be the lease holder instead).
+	//
+	// This makes sure that once we split, we'll be in the situation described
+	// in #7899 (before the fix): The first lease holder of the right hand side
+	// of the Split will not be that of the pre-split Range.
+	// With the fix, the right-hand lease is initialized from the left-hand
+	// lease, so the lease holders are the same, and there will never be a
+	// lease request for the right-hand side in this test.
+	leaseHolder := func(k roachpb.Key) roachpb.ReplicaDescriptor {
+		desc, err := tc.LookupRange(k)
+		if err != nil {
+			t.Fatal(err)
+		}
+		leaseHolder, err := tc.FindRangeLeaseHolder(&desc, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		replica, found := desc.GetReplicaDescriptor(leaseHolder.StoreID)
+		if !found {
+			t.Fatalf("no replica on store %d found in %+v", leaseHolder.StoreID, desc)
+		}
+		return replica
+	}
+	blacklistedLeaseHolder := leaseHolder(leftKey)
+	noLeaseForDesc.Store(&blacklistedLeaseHolder)
+
+	// Pull the trigger. This actually also reads the RHS descriptor after the
+	// split, so when this returns, we've got the leases set up already.
+	//
+	// There's a slight race here: Just above, we've settled on who must not
+	// be the future lease holder. But between then and now, that lease could
+	// have expired and the other Replica could have obtained it. This would
+	// have given it a proper initialization of the timestamp cache, and so
+	// the split trigger would populate the right hand side with a timestamp
+	// cache which does not exhibit the anomaly.
+	//
+	// In practice, this should only be possible if second-long delays occur
+	// just above this comment, and we assert against it below.
+	if _, _, err := tc.SplitRange(splitKey); err != nil {
+		t.Fatal(err)
+	}
+
+	if currentLHSLeaseHolder := leaseHolder(leftKey); !reflect.DeepEqual(
+		currentLHSLeaseHolder, blacklistedLeaseHolder) {
+		t.Fatalf("lease holder changed from %+v to %+v, should de-flake this test",
+			blacklistedLeaseHolder, currentLHSLeaseHolder)
+	}
+
+	// This write (to the right-hand side of the split) should hit the
+	// timestamp cache and flag the txn for a restart when we try to commit it
+	// below. With the bug in #7899, the RHS of the split had an empty
+	// timestamp cache and would simply let us write behind the previous read.
+	if err := txnOld.Put("bb", "bump"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := txnOld.Commit(); !testutils.IsError(err, "retry txn") {
+		t.Fatalf("expected txn retry, got %v", err)
+	}
+
+	// As outlined above, the anomaly was fixed by giving the right-hand side
+	// of the split the same lease as the left-hand side of the Split. Check
+	// that that's what's happened (we actually test a little more, namely
+	// that it's the same ReplicaID, which is not required but should always
+	// hold).
+	if rhsLease := leaseHolder(rightKey); !reflect.DeepEqual(
+		rhsLease, blacklistedLeaseHolder,
+	) {
+		t.Errorf("expected LHS and RHS to have same lease holder")
+	}
+	if num := atomic.LoadInt32(&numLeases); num > 0 {
+		t.Errorf("expected to see no lease requests for the right-hand side")
 	}
 }
 
@@ -1226,17 +1393,18 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 			// side in the split trigger was racing with the uninitialized
 			// version for the same group, resulting in clobbered HardState).
 			for term := uint64(1); ; term++ {
-				if err := mtc.stores[0].HandleRaftMessage(&storage.RaftMessageRequest{
-					RangeID:     trigger.RightDesc.RangeID,
-					ToReplica:   replicas[0],
-					FromReplica: replicas[1],
-					Message: raftpb.Message{
-						Type: raftpb.MsgVote,
-						To:   uint64(replicas[0].ReplicaID),
-						From: uint64(replicas[1].ReplicaID),
-						Term: term,
-					},
-				}); err != nil {
+				if err := mtc.stores[0].HandleRaftRequest(context.Background(),
+					&storage.RaftMessageRequest{
+						RangeID:     trigger.RightDesc.RangeID,
+						ToReplica:   replicas[0],
+						FromReplica: replicas[1],
+						Message: raftpb.Message{
+							Type: raftpb.MsgVote,
+							To:   uint64(replicas[0].ReplicaID),
+							From: uint64(replicas[1].ReplicaID),
+							Term: term,
+						},
+					}); err != nil {
 					t.Error(err)
 				}
 				select {

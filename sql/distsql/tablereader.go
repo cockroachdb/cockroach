@@ -19,8 +19,8 @@ package distsql
 import (
 	"sync"
 
-	"github.com/cockroachdb/cockroach/internal/client"
-	"github.com/cockroachdb/cockroach/sql/parser"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/pkg/errors"
@@ -28,12 +28,12 @@ import (
 
 // readerBase implements basic code shared by tableReader and joinReader.
 type readerBase struct {
-	desc sqlbase.TableDescriptor
+	flowCtx *FlowCtx
+	desc    sqlbase.TableDescriptor
 
 	index            *sqlbase.IndexDescriptor
 	isSecondaryIndex bool
 
-	txn     *client.Txn
 	fetcher sqlbase.RowFetcher
 
 	filter exprHelper
@@ -49,16 +49,15 @@ type readerBase struct {
 }
 
 func (rb *readerBase) init(
+	flowCtx *FlowCtx,
 	desc *sqlbase.TableDescriptor,
 	indexIdx int,
-	txn *client.Txn,
 	filter Expression,
-	evalCtx *parser.EvalContext,
 	outputCols []uint32,
 	reverseScan bool,
 ) error {
+	rb.flowCtx = flowCtx
 	rb.desc = *desc
-	rb.txn = txn
 
 	rb.outputCols = make([]int, len(outputCols))
 	for i, v := range outputCols {
@@ -82,7 +81,7 @@ func (rb *readerBase) init(
 		for i := range types {
 			types[i] = rb.desc.Columns[i].Type.Kind
 		}
-		if err := rb.filter.init(filter, types, evalCtx); err != nil {
+		if err := rb.filter.init(filter, types, flowCtx.evalCtx); err != nil {
 			return err
 		}
 		for c := 0; c < numCols; c++ {
@@ -155,6 +154,8 @@ func (rb *readerBase) nextRow() (sqlbase.EncDatumRow, error) {
 type tableReader struct {
 	readerBase
 
+	ctx context.Context
+
 	spans                sqlbase.Spans
 	hardLimit, softLimit int64
 
@@ -165,8 +166,8 @@ var _ processor = &tableReader{}
 
 // newTableReader creates a tableReader.
 func newTableReader(
-	spec *TableReaderSpec, txn *client.Txn, output RowReceiver, evalCtx *parser.EvalContext,
-) (*tableReader, error) {
+	flowCtx *FlowCtx, spec *TableReaderSpec, output RowReceiver) (*tableReader, error,
+) {
 	tr := &tableReader{
 		output:    output,
 		hardLimit: spec.HardLimit,
@@ -178,11 +179,13 @@ func newTableReader(
 			tr.hardLimit)
 	}
 
-	err := tr.readerBase.init(&spec.Table, int(spec.IndexIdx), txn, spec.Filter, evalCtx,
+	err := tr.readerBase.init(flowCtx, &spec.Table, int(spec.IndexIdx), spec.Filter,
 		spec.OutputColumns, spec.Reverse)
 	if err != nil {
 		return nil, err
 	}
+
+	tr.ctx = log.WithLogTagInt(tr.flowCtx.Context, "TableReader", int(tr.desc.ID))
 
 	tr.spans = make(sqlbase.Spans, len(spec.Spans))
 	for i, s := range spec.Spans {
@@ -215,11 +218,14 @@ func (tr *tableReader) Run(wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
+
 	if log.V(2) {
-		log.Infof("TableReader filter: %s\n", tr.filter.expr)
+		log.Infof(tr.ctx, "starting (filter: %s)", tr.filter)
+		defer log.Infof(tr.ctx, "exiting")
 	}
 
-	if err := tr.fetcher.StartScan(tr.txn, tr.spans, tr.getLimitHint()); err != nil {
+	if err := tr.fetcher.StartScan(tr.flowCtx.txn, tr.spans, tr.getLimitHint()); err != nil {
+		log.Errorf(tr.ctx, "scan error: %s", err)
 		tr.output.Close(err)
 		return
 	}
@@ -230,9 +236,15 @@ func (tr *tableReader) Run(wg *sync.WaitGroup) {
 			tr.output.Close(err)
 			return
 		}
+		if log.V(3) {
+			log.Infof(tr.ctx, "pushing row %s\n", outRow)
+		}
 		// Push the row to the output RowReceiver; stop if they don't need more
 		// rows.
 		if !tr.output.PushRow(outRow) {
+			if log.V(2) {
+				log.Infof(tr.ctx, "no more rows required")
+			}
 			tr.output.Close(nil)
 			return
 		}

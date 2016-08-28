@@ -118,7 +118,7 @@ func selectIndex(
 		// possibly overlapping ranges.
 		exprs, equivalent := analyzeExpr(s.filter)
 		if log.V(2) {
-			log.Infof("analyzeExpr: %s -> %s [equivalent=%v]", s.filter, exprs, equivalent)
+			log.Infof(s.p.ctx(), "analyzeExpr: %s -> %s [equivalent=%v]", s.filter, exprs, equivalent)
 		}
 
 		// Check to see if the filter simplified to a constant.
@@ -188,7 +188,7 @@ func selectIndex(
 
 	if log.V(2) {
 		for i, c := range candidates {
-			log.Infof("%d: selectIndex(%s): cost=%v constraints=%s reverse=%t",
+			log.Infof(s.p.ctx(), "%d: selectIndex(%s): cost=%v constraints=%s reverse=%t",
 				i, c.index.Name, c.cost, c.constraints, c.reverse)
 		}
 	}
@@ -218,9 +218,9 @@ func selectIndex(
 	}
 
 	if log.V(3) {
-		log.Infof("%s: filter=%v", c.index.Name, s.filter)
+		log.Infof(s.p.ctx(), "%s: filter=%v", c.index.Name, s.filter)
 		for i, span := range s.spans {
-			log.Infof("%s/%d: %s", c.index.Name, i, sqlbase.PrettySpan(span, 2))
+			log.Infof(s.p.ctx(), "%s/%d: %s", c.index.Name, i, sqlbase.PrettySpan(span, 2))
 		}
 	}
 
@@ -402,7 +402,7 @@ func (v *indexInfo) analyzeOrdering(scan *scanNode, analyzeOrdering analyzeOrder
 	}
 
 	if log.V(2) {
-		log.Infof("%s: analyzeOrdering: weight=%0.2f reverse=%v match=%d",
+		log.Infof(scan.p.ctx(), "%s: analyzeOrdering: weight=%0.2f reverse=%v match=%d",
 			v.index.Name, weight, v.reverse, match)
 	}
 }
