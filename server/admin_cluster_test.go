@@ -53,7 +53,7 @@ func TestAdminAPITableStats(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	client.Timeout = base.NetworkTimeout * 3
+	client.Timeout = base.NetworkTimeout * 15
 
 	// Make a single table and insert some data. The database and test have
 	// names which require escaping, in order to verify that database and
