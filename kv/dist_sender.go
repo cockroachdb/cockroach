@@ -607,7 +607,7 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 		}
 		// Propagate transaction from last reply to next request. The final
 		// update is taken and put into the response's main header.
-		ba.Txn.Update(rpl.Txn)
+		ba.UpdateTxn(rpl.Txn)
 		rplChunks = append(rplChunks, rpl)
 		parts = parts[1:]
 	}
@@ -817,7 +817,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			}
 		}
 
-		ba.Txn.Update(curReply.Txn)
+		ba.UpdateTxn(curReply.Txn)
 
 		if br == nil {
 			// First response from a Range.
@@ -959,7 +959,8 @@ func fillSkippedResponses(
 // replicas. On success, Send returns the first successful reply. Otherwise,
 // Send returns an error if and as soon as the number of failed RPCs exceeds
 // the available endpoints less the number of required replies.
-func (ds *DistSender) sendToReplicas(opts SendOptions,
+func (ds *DistSender) sendToReplicas(
+	opts SendOptions,
 	rangeID roachpb.RangeID,
 	replicas ReplicaSlice,
 	args roachpb.BatchRequest,
