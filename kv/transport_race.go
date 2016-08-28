@@ -69,15 +69,22 @@ func grpcTransportFactory(
 			encoder := gob.NewEncoder(ioutil.Discard)
 			var curIdx int
 			for {
-				iters++
 				select {
-				case ba := <-incoming:
-					bas[curIdx] = ba
-					curIdx = (curIdx + 1) % size
-					continue
 				case <-rpcContext.Stopper.ShouldStop():
 					return
 				case <-time.After(jitter()):
+				}
+
+				iters++
+				for i := 0; i < size/10; i++ {
+					select {
+					case ba := <-incoming:
+						bas[curIdx] = ba
+						curIdx = (curIdx + 1) % size
+						continue
+					default:
+					}
+					break
 				}
 				for _, ba := range bas {
 					if ba != nil {
