@@ -482,8 +482,11 @@ type TxnExecOptions struct {
 	// encountered. If not set, committing or leaving open the txn is the
 	// responsibility of the client.
 	AutoCommit bool
-	// Minimum initial timestamp, if so desired by a higher level (e.g. sql.Executor).
-	MinInitialTimestamp hlc.Timestamp
+	// If not nil, the clock can be used to generate txn timestamps early.
+	// Useful for SQL txns for ensuring that the value returned by
+	// `cluster_logical_timestamp()` is consistent with the commit (serializable)
+	// ordering.
+	Clock *hlc.Clock
 }
 
 // AutoCommitError wraps a non-retryable error coming from auto-commit.
@@ -545,8 +548,11 @@ func (txn *Txn) Exec(
 			// If we're looking at a brand new transaction, then communicate
 			// what should be used as initial timestamp for the KV txn created
 			// by TxnCoordSender.
-			if txn.Proto.OrigTimestamp == hlc.ZeroTimestamp {
-				txn.Proto.OrigTimestamp = opt.MinInitialTimestamp
+			if opt.Clock != nil && !txn.Proto.IsInitialized() {
+				// Control the KV timestamp, such that the value returned by
+				// `cluster_logical_timestamp()` is consistent with the commit
+				// (serializable) ordering.
+				txn.Proto.OrigTimestamp = opt.Clock.Now()
 			}
 		}
 

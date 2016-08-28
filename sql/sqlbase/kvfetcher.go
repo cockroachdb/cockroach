@@ -26,20 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 )
 
-// Span represents a span that is part of a scan.
-type Span struct {
-	Start roachpb.Key // inclusive key
-	End   roachpb.Key // exclusive key
-}
-
-// Spans is a slice of spans.
-type Spans []Span
-
-// implement Sort.Interface
-func (a Spans) Len() int           { return len(a) }
-func (a Spans) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a Spans) Less(i, j int) bool { return a[i].Start.Compare(a[j].Start) < 0 }
-
 // prettyKey pretty-prints the specified key, skipping over the first `skip`
 // fields. The pretty printed key looks like:
 //
@@ -62,14 +48,14 @@ func prettyKey(key roachpb.Key, skip int) string {
 }
 
 // PrettySpan returns a human-readable representation of a span.
-func PrettySpan(span Span, skip int) string {
+func PrettySpan(span roachpb.Span, skip int) string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s-%s", prettyKey(span.Start, skip), prettyKey(span.End, skip))
+	fmt.Fprintf(&buf, "%s-%s", prettyKey(span.Key, skip), prettyKey(span.EndKey, skip))
 	return buf.String()
 }
 
 // PrettySpans returns a human-readable description of the spans.
-func PrettySpans(spans []Span, skip int) string {
+func PrettySpans(spans []roachpb.Span, skip int) string {
 	var buf bytes.Buffer
 	for i, span := range spans {
 		if i > 0 {
@@ -97,7 +83,7 @@ func SetKVBatchSize(val int64) func() {
 type kvFetcher struct {
 	// "Constant" fields, provided by the caller.
 	txn             *client.Txn
-	spans           Spans
+	spans           roachpb.Spans
 	reverse         bool
 	firstBatchLimit int64
 
@@ -149,7 +135,9 @@ func (f *kvFetcher) getBatchSize() int64 {
 
 // makeKVFetcher initializes a kvFetcher for the given spans. If non-zero, firstBatchLimit limits
 // the size of the first batch (subsequent batches use the default size).
-func makeKVFetcher(txn *client.Txn, spans Spans, reverse bool, firstBatchLimit int64) kvFetcher {
+func makeKVFetcher(
+	txn *client.Txn, spans roachpb.Spans, reverse bool, firstBatchLimit int64,
+) kvFetcher {
 	if firstBatchLimit < 0 {
 		panic(fmt.Sprintf("invalid batch limit %d", firstBatchLimit))
 	}
@@ -177,9 +165,9 @@ func (f *kvFetcher) fetch() error {
 	atEnd := true
 	if !f.reverse {
 		for i := 0; i < len(f.spans); i++ {
-			start := f.spans[i].Start
+			start := f.spans[i].Key
 			if resumeKey != nil {
-				if resumeKey.Compare(f.spans[i].End) >= 0 {
+				if resumeKey.Compare(f.spans[i].EndKey) >= 0 {
 					// We are resuming from a key after this span.
 					continue
 				}
@@ -192,13 +180,13 @@ func (f *kvFetcher) fetch() error {
 				}
 			}
 			atEnd = false
-			b.Scan(start, f.spans[i].End)
+			b.Scan(start, f.spans[i].EndKey)
 		}
 	} else {
 		for i := len(f.spans) - 1; i >= 0; i-- {
-			end := f.spans[i].End
+			end := f.spans[i].EndKey
 			if resumeKey != nil {
-				if resumeKey.Compare(f.spans[i].Start) <= 0 {
+				if resumeKey.Compare(f.spans[i].Key) <= 0 {
 					// We are resuming from a key before this span.
 					continue
 				}
@@ -208,7 +196,7 @@ func (f *kvFetcher) fetch() error {
 				}
 			}
 			atEnd = false
-			b.ReverseScan(f.spans[i].Start, end)
+			b.ReverseScan(f.spans[i].Key, end)
 		}
 	}
 

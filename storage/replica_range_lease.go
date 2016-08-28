@@ -20,11 +20,8 @@
 package storage
 
 import (
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/hlc"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/pkg/errors"
 )
@@ -121,33 +118,11 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 	}
 	if replica.store.Stopper().RunAsyncTask(func() {
 		// Propose a RequestLease command and wait for it to apply.
-		var execPErr *roachpb.Error
 		ba := roachpb.BatchRequest{}
 		ba.Timestamp = replica.store.Clock().Now()
 		ba.RangeID = replica.RangeID
 		ba.Add(leaseReq)
-		// Send lease request directly to raft in order to skip unnecessary
-		// checks from normal request machinery, (e.g. the command queue).
-		// Note that the command itself isn't traced, but usually the caller
-		// waiting for the result has an active Trace.
-		ch, _, err := replica.proposeRaftCommand(context.Background(), ba)
-		if err != nil {
-			execPErr = roachpb.NewError(err)
-		} else {
-			// If the command was committed, wait for the range to apply it.
-			select {
-			case c := <-ch:
-				if c.Err != nil {
-					if log.V(1) {
-						log.Infof(context.TODO(), "failed to acquire lease for replica %s: %s", replica, c.Err)
-					}
-					execPErr = c.Err
-				}
-			case <-replica.store.Stopper().ShouldQuiesce():
-				execPErr = roachpb.NewError(
-					newNotLeaseHolderError(nil, replica.store.StoreID(), replica.Desc()))
-			}
-		}
+		_, pErr := replica.Send(replica.store.Ctx(), ba)
 
 		// Send result of lease to all waiter channels.
 		replica.mu.Lock()
@@ -158,9 +133,9 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			// the channels (the last one; if we send it earlier the race can still
 			// happen).
 			if i == len(p.llChans)-1 {
-				llChan <- execPErr
+				llChan <- pErr
 			} else {
-				llChan <- protoutil.Clone(execPErr).(*roachpb.Error) // works with `nil`
+				llChan <- protoutil.Clone(pErr).(*roachpb.Error) // works with `nil`
 			}
 		}
 		p.llChans = p.llChans[:0]
@@ -194,7 +169,7 @@ func (p *pendingLeaseRequest) JoinRequest() <-chan *roachpb.Error {
 }
 
 // TransferInProgress returns the next lease, if the replica is in the process
-// of transferring aways its range lease. This next lease indicates the next
+// of transferring away its range lease. This next lease indicates the next
 // lease holder. The second return val is true if a transfer is in progress.
 //
 // It is assumed that the replica owning this pendingLeaseRequest owns the

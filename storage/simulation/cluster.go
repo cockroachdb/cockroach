@@ -24,6 +24,8 @@ import (
 	"sort"
 	"text/tabwriter"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -77,7 +79,7 @@ func createCluster(
 	clock := hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
 	server := rpc.NewServer(rpcContext)
-	g := gossip.New(rpcContext, server, nil, stopper, metric.NewRegistry())
+	g := gossip.New(context.TODO(), rpcContext, server, nil, stopper, metric.NewRegistry())
 	// NodeID is required for Gossip, so set it to -1 for the cluster Gossip
 	// instance to prevent conflicts with real NodeIDs.
 	g.SetNodeID(-1)
@@ -290,10 +292,12 @@ func (c *Cluster) prepareActions() {
 		for storeID, rep := range r.replicas {
 			rep.action, rep.priority = r.allocator.ComputeAction(r.zone, &r.desc)
 			if rep.action == storage.AllocatorNoop {
-				rep.rebalance = r.allocator.ShouldRebalance(storeID)
-				// Set the priority to 1 so that rebalances will occur in
-				// performActions.
-				rep.priority = 1
+				if _, ok := r.getRebalanceTarget(storeID); ok {
+					rep.rebalance = true
+					// Set the priority to 1 so that rebalances will occur in
+					// performActions.
+					rep.priority = 1
+				}
 			} else {
 				rep.rebalance = false
 			}
@@ -459,7 +463,7 @@ func (c *Cluster) OutputEpochHeader() {
 	fmt.Fprintf(c.epochWriter, "\n")
 }
 
-// OutputEpoch writes to the epochWRiter the current free capacity for all
+// OutputEpoch writes to the epochWriter the current free capacity for all
 // stores.
 func (c *Cluster) OutputEpoch() {
 	fmt.Fprintf(c.epochWriter, "%d:\t", c.epoch)

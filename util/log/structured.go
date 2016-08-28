@@ -37,7 +37,6 @@ func makeMessage(ctx context.Context, format string, args []interface{}) string 
 			}
 			buf.WriteString(t.name)
 			if value := t.value(); value != nil {
-				buf.WriteString("=")
 				fmt.Fprint(&buf, value)
 			}
 		}
@@ -59,6 +58,10 @@ func addStructured(ctx context.Context, s Severity, depth int, format string, ar
 	}
 	file, line, _ := caller.Lookup(depth + 1)
 	msg := makeMessage(ctx, format, args)
-	Trace(ctx, msg)
+	if s >= Severity_ERROR {
+		ErrEvent(ctx, msg)
+	} else {
+		Event(ctx, msg)
+	}
 	logging.outputLogEntry(s, file, line, msg)
 }

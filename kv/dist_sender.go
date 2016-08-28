@@ -83,7 +83,11 @@ func (n noNodeAddrsAvailError) Error() string {
 // ranges. RPCs are sent to one or more of the replicas to satisfy
 // the method invocation.
 type DistSender struct {
-	opentracing.Tracer
+	// Ctx is the "base context" for DistSender, used for log messages that are
+	// not associated with a more specific request context. It also holds the
+	// Tracer that should be used.
+	Ctx context.Context
+
 	// nodeDescriptor, if set, holds the descriptor of the node the
 	// DistSender lives on. It should be accessed via getNodeDescriptor(),
 	// which tries to obtain the value from the Gossip network if the
@@ -116,6 +120,10 @@ type rpcSendFn func(SendOptions, ReplicaSlice,
 // DistSenderConfig holds configuration and auxiliary objects that can be passed
 // to NewDistSender.
 type DistSenderConfig struct {
+	// Base context for the DistSender. The context can have a Tracer set. If nil,
+	// context.Background() will be used.
+	Ctx context.Context
+
 	Clock                    *hlc.Clock
 	RangeDescriptorCacheSize int32
 	// RangeLookupMaxRanges sets how many ranges will be prefetched into the
@@ -132,7 +140,6 @@ type DistSenderConfig struct {
 	TransportFactory  TransportFactory
 	RPCContext        *rpc.Context
 	RangeDescriptorDB RangeDescriptorDB
-	Tracer            opentracing.Tracer
 	SendNextTimeout   time.Duration
 }
 
@@ -144,14 +151,27 @@ func NewDistSender(cfg *DistSenderConfig, g *gossip.Gossip) *DistSender {
 	if cfg == nil {
 		cfg = &DistSenderConfig{}
 	}
-	clock := cfg.Clock
-	if clock == nil {
-		clock = hlc.NewClock(hlc.UnixNano)
+
+	ds := &DistSender{gossip: g}
+
+	ds.Ctx = cfg.Ctx
+	if ds.Ctx == nil {
+		ds.Ctx = context.Background()
 	}
-	ds := &DistSender{
-		clock:  clock,
-		gossip: g,
+
+	if ds.Ctx.Done() != nil {
+		panic("context with cancel or deadline")
 	}
+
+	if tracing.TracerFromCtx(ds.Ctx) == nil {
+		ds.Ctx = tracing.WithTracer(ds.Ctx, tracing.NewTracer())
+	}
+
+	ds.clock = cfg.Clock
+	if ds.clock == nil {
+		ds.clock = hlc.NewClock(hlc.UnixNano)
+	}
+
 	if cfg.nodeDescriptor != nil {
 		atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(cfg.nodeDescriptor))
 	}
@@ -185,11 +205,6 @@ func NewDistSender(cfg *DistSenderConfig, g *gossip.Gossip) *DistSender {
 			ds.rpcRetryOptions.Closer = ds.rpcContext.Stopper.ShouldQuiesce()
 		}
 	}
-	if cfg.Tracer != nil {
-		ds.Tracer = cfg.Tracer
-	} else {
-		ds.Tracer = tracing.NewTracer()
-	}
 	if cfg.SendNextTimeout != 0 {
 		ds.sendNextTimeout = cfg.SendNextTimeout
 	} else {
@@ -199,19 +214,18 @@ func NewDistSender(cfg *DistSenderConfig, g *gossip.Gossip) *DistSender {
 	if g != nil {
 		g.RegisterCallback(gossip.KeyFirstRangeDescriptor,
 			func(_ string, value roachpb.Value) {
-				ctx := context.Background()
 				if log.V(1) {
 					var desc roachpb.RangeDescriptor
 					if err := value.GetProto(&desc); err != nil {
-						log.Errorf(ctx, "unable to parse gossipped first range descriptor: %s", err)
+						log.Errorf(ds.Ctx, "unable to parse gossipped first range descriptor: %s", err)
 					} else {
-						log.Infof(ctx,
+						log.Infof(ds.Ctx,
 							"gossipped first range descriptor: %+v", desc.Replicas)
 					}
 				}
 				err := ds.rangeCache.EvictCachedRangeDescriptor(roachpb.RKeyMin, nil, false)
 				if err != nil {
-					log.Warningf(ctx, "failed to evict first range descriptor: %s", err)
+					log.Warningf(ds.Ctx, "failed to evict first range descriptor: %s", err)
 				}
 			})
 	}
@@ -247,7 +261,8 @@ func (ds *DistSender) RangeLookup(
 	replicas.Shuffle()
 	// TODO(tschottdorf): Ideally we would use the trace of the request which
 	// caused this lookup.
-	br, err := ds.sendRPC(context.Background(), desc.RangeID, replicas, ba)
+	_ = context.TODO()
+	br, err := ds.sendRPC(ds.Ctx, desc.RangeID, replicas, ba)
 	if err != nil {
 		return nil, nil, roachpb.NewError(err)
 	}
@@ -325,7 +340,7 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 			return nodeDesc
 		}
 	}
-	log.Infof(context.TODO(), "unable to determine this node's attributes for replica "+
+	log.Infof(ds.Ctx, "unable to determine this node's attributes for replica "+
 		"selection; node is most likely bootstrapping")
 	return nil
 }
@@ -630,7 +645,9 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error, bool) {
 	isReverse := ba.IsReverse()
 
-	ctx, cleanup := tracing.EnsureContext(ctx, ds.Tracer)
+	// TODO(radu): when contexts are properly plumbed, we should be able to get
+	// the tracer from ctx, not from the DistSender.
+	ctx, cleanup := tracing.EnsureContext(ctx, tracing.TracerFromCtx(ds.Ctx))
 	defer cleanup()
 
 	// The minimal key range encompassing all requests contained within.
@@ -1013,9 +1030,9 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 			err := call.Err
 			if err == nil {
 				if log.V(2) {
-					log.Infof(context.TODO(), "RPC reply: %+v", call.Reply)
+					log.Infof(opts.Context, "RPC reply: %+v", call.Reply)
 				} else if log.V(1) && call.Reply.Error != nil {
-					log.Infof(context.TODO(), "application error: %s", call.Reply.Error)
+					log.Infof(opts.Context, "application error: %s", call.Reply.Error)
 				}
 
 				if !ds.handlePerReplicaError(rangeID, call.Reply.Error) {
@@ -1031,7 +1048,7 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 				// information than a RangeNotFound).
 				err = call.Reply.Error.GoError()
 			} else if log.V(1) {
-				log.Warningf(context.TODO(), "RPC error: %s", err)
+				log.Warningf(opts.Context, "RPC error: %s", err)
 			}
 
 			// Send to additional replicas if available.
@@ -1081,12 +1098,12 @@ func (ds *DistSender) updateLeaseHolderCache(
 	if log.V(1) {
 		if oldLeaseHolder, ok := ds.leaseHolderCache.Lookup(rangeID); ok {
 			if (newLeaseHolder == roachpb.ReplicaDescriptor{}) {
-				log.Infof(context.TODO(), "range %d: evicting cached lease holder %+v", rangeID, oldLeaseHolder)
+				log.Infof(ds.Ctx, "range %d: evicting cached lease holder %+v", rangeID, oldLeaseHolder)
 			} else if newLeaseHolder != oldLeaseHolder {
-				log.Infof(context.TODO(), "range %d: replacing cached lease holder %+v with %+v", rangeID, oldLeaseHolder, newLeaseHolder)
+				log.Infof(ds.Ctx, "range %d: replacing cached lease holder %+v with %+v", rangeID, oldLeaseHolder, newLeaseHolder)
 			}
 		} else {
-			log.Infof(context.TODO(), "range %d: caching new lease holder %+v", rangeID, newLeaseHolder)
+			log.Infof(ds.Ctx, "range %d: caching new lease holder %+v", rangeID, newLeaseHolder)
 		}
 	}
 	ds.leaseHolderCache.Update(rangeID, newLeaseHolder)

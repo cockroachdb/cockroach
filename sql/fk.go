@@ -293,7 +293,7 @@ func (f baseFKHelper) check(values parser.DTuple) (parser.DTuple, error) {
 	} else {
 		key = roachpb.Key(f.searchPrefix)
 	}
-	spans := sqlbase.Spans{sqlbase.Span{Start: key, End: key.PrefixEnd()}}
+	spans := roachpb.Spans{roachpb.Span{Key: key, EndKey: key.PrefixEnd()}}
 	if err := f.rf.StartScan(f.txn, spans, 1); err != nil {
 		return nil, err
 	}

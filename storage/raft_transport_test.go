@@ -78,6 +78,12 @@ func (s channelServer) HandleRaftResponse(ctx context.Context, resp *storage.Raf
 	log.Fatalf(ctx, "unexpected raft response: %s", resp)
 }
 
+func (s channelServer) HandleSnapshot(
+	header *storage.SnapshotRequest_Header, stream storage.MultiRaft_RaftSnapshotServer,
+) error {
+	panic("unexpected HandleSnapshot")
+}
+
 // raftTransportTestContext contains objects needed to test RaftTransport.
 // Typical usage will add multiple nodes with AddNode, attach channels
 // to at least one store with ListenStore, and send messages with Send.
@@ -97,7 +103,8 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 	}
 	rttc.nodeRPCContext = rpc.NewContext(testutils.NewNodeTestBaseContext(), nil, rttc.stopper)
 	server := rpc.NewServer(rttc.nodeRPCContext) // never started
-	rttc.gossip = gossip.New(rttc.nodeRPCContext, server, nil, rttc.stopper, metric.NewRegistry())
+	rttc.gossip = gossip.New(
+		context.TODO(), rttc.nodeRPCContext, server, nil, rttc.stopper, metric.NewRegistry())
 	rttc.gossip.SetNodeID(1)
 	return rttc
 }

@@ -95,7 +95,7 @@ func (jr *joinReader) mainLoop() error {
 	primaryKeyPrefix := sqlbase.MakeIndexKeyPrefix(&jr.desc, jr.index.ID)
 
 	var alloc sqlbase.DatumAlloc
-	spans := make(sqlbase.Spans, 0, joinReaderBatchSize)
+	spans := make(roachpb.Spans, 0, joinReaderBatchSize)
 
 	if log.V(2) {
 		log.Infof(jr.ctx, "starting (filter: %s)", jr.filter)
@@ -122,9 +122,9 @@ func (jr *joinReader) mainLoop() error {
 				return err
 			}
 
-			spans = append(spans, sqlbase.Span{
-				Start: key,
-				End:   key.PrefixEnd(),
+			spans = append(spans, roachpb.Span{
+				Key:    key,
+				EndKey: key.PrefixEnd(),
 			})
 		}
 

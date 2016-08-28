@@ -63,6 +63,7 @@ type callback struct {
 //
 // infoStores are not thread safe.
 type infoStore struct {
+	ctx     context.Context
 	stopper *stop.Stopper
 
 	Infos           infoMap                  `json:"infos,omitempty"` // Map from key to info
@@ -117,14 +118,17 @@ func (is *infoStore) String() string {
 		prepend = ", "
 		return nil
 	}); err != nil {
-		log.Errorf(context.TODO(), "failed to properly construct string representation of infoStore: %s", err)
+		log.Errorf(is.ctx, "failed to properly construct string representation of infoStore: %s", err)
 	}
 	return buf.String()
 }
 
 // newInfoStore allocates and returns a new infoStore.
-func newInfoStore(nodeID roachpb.NodeID, nodeAddr util.UnresolvedAddr, stopper *stop.Stopper) *infoStore {
+func newInfoStore(
+	ctx context.Context, nodeID roachpb.NodeID, nodeAddr util.UnresolvedAddr, stopper *stop.Stopper,
+) *infoStore {
 	return &infoStore{
+		ctx:             ctx,
 		stopper:         stopper,
 		Infos:           make(infoMap),
 		NodeID:          nodeID,
@@ -288,7 +292,7 @@ func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks .
 			w()
 		}
 	}); err != nil {
-		log.Warning(context.TODO(), err)
+		log.Warning(is.ctx, err)
 	}
 }
 

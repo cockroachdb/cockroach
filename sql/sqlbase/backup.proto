@@ -48,4 +48,8 @@ message BackupDescriptor {
   util.hlc.Timestamp end_time = 1 [(gogoproto.nullable) = false];
   repeated BackupRangeDescriptor ranges = 2 [(gogoproto.nullable) = false];
   repeated Descriptor sql = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "SQL"];
+
+  // TODO(dan): Consider also including total file size and per-range data and
+  // file size.
+  int64 data_size = 4;
 }

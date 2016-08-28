@@ -70,7 +70,13 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	ctx.ConsistencyCheckInterval = 10 * time.Hour
 	grpcServer := rpc.NewServer(nodeRPCContext)
 	serverCtx := makeTestContext()
-	g := gossip.New(nodeRPCContext, grpcServer, serverCtx.GossipBootstrapResolvers, stopper, metric.NewRegistry())
+	g := gossip.New(
+		context.Background(),
+		nodeRPCContext,
+		grpcServer,
+		serverCtx.GossipBootstrapResolvers,
+		stopper,
+		metric.NewRegistry())
 	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
 	if err != nil {
 		t.Fatal(err)
@@ -95,12 +101,11 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		RPCContext:      nodeRPCContext,
 		RPCRetryOptions: &retryOpts,
 	}, g)
-	tracer := tracing.NewTracer()
-	sender := kv.NewTxnCoordSender(distSender, ctx.Clock, false, tracer, stopper,
+	ctx.Ctx = tracing.WithTracer(context.Background(), tracing.NewTracer())
+	sender := kv.NewTxnCoordSender(ctx.Ctx, distSender, ctx.Clock, false, stopper,
 		kv.MakeTxnMetrics())
 	ctx.DB = client.NewDB(sender)
 	ctx.Transport = storage.NewDummyRaftTransport()
-	ctx.Tracer = tracer
 	node := NewNode(ctx, status.NewMetricsRecorder(ctx.Clock), metric.NewRegistry(), stopper,
 		kv.MakeTxnMetrics(), sql.MakeEventLogger(nil))
 	roachpb.RegisterInternalServer(grpcServer, node)
@@ -147,7 +152,7 @@ func TestBootstrapCluster(t *testing.T) {
 	}
 
 	// Scan the complete contents of the local database directly from the engine.
-	rows, _, err := engine.MVCCScan(context.Background(), e, keys.LocalMax, roachpb.KeyMax, math.MaxInt64, hlc.MaxTimestamp, true, nil)
+	rows, _, _, err := engine.MVCCScan(context.Background(), e, keys.LocalMax, roachpb.KeyMax, math.MaxInt64, hlc.MaxTimestamp, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

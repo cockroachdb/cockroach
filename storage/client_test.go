@@ -117,10 +117,11 @@ func createTestStoreWithEngine(
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 	server := rpc.NewServer(rpcContext) // never started
-	sCtx.Gossip = gossip.New(rpcContext, server, nil, stopper, metric.NewRegistry())
+	sCtx.Gossip = gossip.New(context.TODO(), rpcContext, server, nil, stopper, metric.NewRegistry())
 	sCtx.Gossip.SetNodeID(nodeDesc.NodeID)
 	sCtx.ScanMaxIdleTime = 1 * time.Second
-	sCtx.Tracer = tracing.NewTracer()
+	tracer := tracing.NewTracer()
+	sCtx.Ctx = tracing.WithTracer(context.Background(), tracer)
 	stores := storage.NewStores(clock)
 
 	if err := sCtx.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
@@ -131,12 +132,12 @@ func createTestStoreWithEngine(
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	distSender := kv.NewDistSender(&kv.DistSenderConfig{
 		Clock:             clock,
-		TransportFactory:  kv.SenderTransportFactory(sCtx.Tracer, stores),
+		TransportFactory:  kv.SenderTransportFactory(tracer, stores),
 		RPCRetryOptions:   &retryOpts,
 		RangeDescriptorDB: stores, // for descriptor lookup
 	}, sCtx.Gossip)
 
-	sender := kv.NewTxnCoordSender(distSender, clock, false, tracing.NewTracer(), stopper,
+	sender := kv.NewTxnCoordSender(sCtx.Ctx, distSender, clock, false, stopper,
 		kv.MakeTxnMetrics())
 	sCtx.Clock = clock
 	sCtx.DB = client.NewDB(sender)
@@ -358,6 +359,57 @@ func (m *multiTestContext) Stop() {
 	}
 }
 
+// gossipStores forces each store to gossip its store descriptor and then
+// blocks until all nodes have received these updated descriptors.
+func (m *multiTestContext) gossipStores() {
+	timestamps := make(map[string]int64)
+	for i := 0; i < len(m.stores); i++ {
+		if err := m.stores[i].GossipStore(context.Background()); err != nil {
+			m.t.Fatal(err)
+		}
+		infoStatus := m.gossips[i].GetInfoStatus()
+		storeKey := gossip.MakeStoreKey(m.stores[i].Ident.StoreID)
+		timestamps[storeKey] = infoStatus.Infos[storeKey].OrigStamp
+	}
+	// Wait until all stores know about each other.
+	util.SucceedsSoon(m.t, func() error {
+		for i := 0; i < len(m.stores); i++ {
+			nodeID := m.stores[i].Ident.NodeID
+			infoStatus := m.gossips[i].GetInfoStatus()
+			for storeKey, timestamp := range timestamps {
+				info, ok := infoStatus.Infos[storeKey]
+				if !ok {
+					return errors.Errorf("node %d does not have a storeDesc for %s yet", nodeID, storeKey)
+				}
+				if info.OrigStamp < timestamp {
+					return errors.Errorf("node %d's storeDesc for %s is not up to date", nodeID, storeKey)
+				}
+			}
+		}
+		return nil
+	})
+}
+
+// initGossipNetwork gossips all store descriptors and waits until all
+// storePools have received those descriptors.
+func (m *multiTestContext) initGossipNetwork() {
+	m.gossipStores()
+	util.SucceedsSoon(m.t, func() error {
+		for i := 0; i < len(m.stores); i++ {
+			_, alive, _ := m.storePools[i].GetStoreList(
+				roachpb.Attributes{},
+				/* deterministic */ false,
+			)
+			if alive != len(m.stores) {
+				return errors.Errorf("node %d's store pool only has %d alive stores, expected %d",
+					m.stores[i].Ident.NodeID, alive, len(m.stores))
+			}
+		}
+		return nil
+	})
+	log.Info(context.Background(), "gossip network initialized")
+}
+
 type multiTestContextKVTransport struct {
 	mtc      *multiTestContext
 	ctx      context.Context
@@ -541,7 +593,8 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 		TransportFactory:  m.kvTransportFactory,
 		RPCRetryOptions:   &retryOpts,
 	}, m.gossips[idx])
-	sender := kv.NewTxnCoordSender(m.distSenders[idx], m.clock, false, tracing.NewTracer(),
+	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
+	sender := kv.NewTxnCoordSender(ctx, m.distSenders[idx], m.clock, false,
 		stopper, kv.MakeTxnMetrics())
 	m.dbs[idx] = client.NewDB(sender)
 }
@@ -599,7 +652,8 @@ func (m *multiTestContext) addStore(idx int) {
 		}
 		return []resolver.Resolver{r}
 	}()
-	m.gossips[idx] = gossip.New(m.rpcContext, grpcServer, resolvers, m.transportStopper, metric.NewRegistry())
+	m.gossips[idx] = gossip.New(
+		context.TODO(), m.rpcContext, grpcServer, resolvers, m.transportStopper, metric.NewRegistry())
 	m.gossips[idx].SetNodeID(roachpb.NodeID(idx + 1))
 	if m.timeUntilStoreDead == 0 {
 		m.timeUntilStoreDead = storage.TestTimeUntilStoreDeadOff
@@ -955,6 +1009,36 @@ func (m *multiTestContext) getRaftLeader(rangeID roachpb.RangeID) *storage.Repli
 	return raftLeaderRepl
 }
 
+// transferLease moves the lease for the specified rangeID to the destination
+// store. The destination store must have a replica of the range on it.
+func (m *multiTestContext) transferLease(rangeID roachpb.RangeID, destStore *storage.Store) error {
+	destReplica, err := destStore.GetReplica(rangeID)
+	if err != nil {
+		return err
+	}
+	origLeasePtr, _ := destReplica.GetLease()
+	if origLeasePtr == nil {
+		return errors.Errorf("could not get lease ptr from replica %s", destReplica)
+	}
+	originalStoreID := origLeasePtr.Replica.StoreID
+
+	// Get the replica that currently holds the lease.
+	var origStore *storage.Store
+	for _, store := range m.stores {
+		if store.Ident.StoreID == originalStoreID {
+			origStore = store
+			break
+		}
+	}
+
+	origRepl, err := origStore.GetReplica(destReplica.RangeID)
+	if err != nil {
+		return err
+	}
+
+	return origRepl.AdminTransferLease(destStore.Ident.StoreID)
+}
+
 // getArgs returns a GetRequest and GetResponse pair addressed to
 // the default replica for the specified key.
 func getArgs(key roachpb.Key) roachpb.GetRequest {
@@ -976,8 +1060,8 @@ func putArgs(key roachpb.Key, value []byte) roachpb.PutRequest {
 	}
 }
 
-// incrementArgs returns an IncrementRequest and IncrementResponse pair
-// addressed to the default replica for the specified key / value.
+// incrementArgs returns an IncrementRequest addressed to the default replica
+// for the specified key.
 func incrementArgs(key roachpb.Key, inc int64) roachpb.IncrementRequest {
 	return roachpb.IncrementRequest{
 		Span: roachpb.Span{

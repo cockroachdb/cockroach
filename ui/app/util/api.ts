@@ -1,3 +1,5 @@
+/// <reference path="../../typings/index.d.ts" />
+
 /**
  * This module contains all the REST endpoints for communicating with the admin UI.
  */
@@ -47,11 +49,15 @@ export type ClusterResponseMessage = cockroach.server.serverpb.ClusterResponseMe
 export type TableStatsRequestMessage = cockroach.server.serverpb.TableStatsRequestMessage;
 export type TableStatsResponseMessage = cockroach.server.serverpb.TableStatsResponseMessage;
 
-export const API_PREFIX = "/_admin/v1";
+export type LogsRequestMessage = cockroach.server.serverpb.LogsRequestMessage;
+export type LogEntriesResponseMessage = cockroach.server.serverpb.LogEntriesResponseMessage;
 
-/**
- * HELPER FUNCTIONS
- */
+// API constants
+
+export const API_PREFIX = "/_admin/v1";
+export const STATUS_PREFIX = "/_status";
+
+// HELPER FUNCTIONS
 
 // Inspired by https://github.com/github/fetch/issues/175
 //
@@ -179,4 +185,10 @@ export function getCluster(req: ClusterRequestMessage, timeout?: moment.Duration
 // getTableStats gets details stats about the current table
 export function getTableStats(req: TableStatsRequestMessage, timeout?: moment.Duration): Promise<TableStatsResponseMessage> {
   return timeoutFetch(serverpb.TableStatsResponse, `${API_PREFIX}/databases/${req.database}/tables/${req.table}/stats`, null, timeout);
+}
+
+// TODO (maxlang): add filtering
+// getLogs gets the logs for a specific node
+export function getLogs(req: LogsRequestMessage, timeout?: moment.Duration): Promise<LogEntriesResponseMessage> {
+  return timeoutFetch(serverpb.LogEntriesResponse, `${STATUS_PREFIX}/logs/${req.node_id}`, null, timeout);
 }

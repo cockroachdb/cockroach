@@ -1,5 +1,5 @@
 import { assert } from "chai";
-import _ = require("lodash");
+import _ from "lodash";
 import { CachedDataReducer, CachedDataReducerState, KeyedCachedDataReducer, KeyedCachedDataReducerState } from "./cachedDataReducer";
 import { Action } from "../interfaces/action";
 

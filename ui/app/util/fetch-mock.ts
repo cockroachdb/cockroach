@@ -1,8 +1,8 @@
 import "../js/object-assign";
-import * as fetchMock from "fetch-mock";
+import fetchMock from "fetch-mock";
 
 fetchMock.configure({
   sendAsJson: false,
 });
 
-export = fetchMock;
+export default fetchMock;

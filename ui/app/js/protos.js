@@ -83,12 +83,9 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "fields": [
                                 {
                                     "rule": "optional",
-                                    "type": "int64",
+                                    "type": "Severity",
                                     "name": "severity",
-                                    "id": 1,
-                                    "options": {
-                                        "(gogoproto.casttype)": "Severity"
-                                    }
+                                    "id": 1
                                 },
                                 {
                                     "rule": "optional",
@@ -139,12 +136,9 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                 },
                                 {
                                     "rule": "optional",
-                                    "type": "int64",
+                                    "type": "Severity",
                                     "name": "severity",
-                                    "id": 4,
-                                    "options": {
-                                        "(gogoproto.casttype)": "Severity"
-                                    }
+                                    "id": 4
                                 },
                                 {
                                     "rule": "optional",
@@ -192,6 +186,37 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "options": {
                                         "(gogoproto.nullable)": false
                                     }
+                                }
+                            ]
+                        }
+                    ],
+                    "enums": [
+                        {
+                            "name": "Severity",
+                            "values": [
+                                {
+                                    "name": "UNKNOWN",
+                                    "id": 0
+                                },
+                                {
+                                    "name": "INFO",
+                                    "id": 1
+                                },
+                                {
+                                    "name": "WARNING",
+                                    "id": 2
+                                },
+                                {
+                                    "name": "ERROR",
+                                    "id": 3
+                                },
+                                {
+                                    "name": "FATAL",
+                                    "id": 4
+                                },
+                                {
+                                    "name": "NONE",
+                                    "id": 5
                                 }
                             ]
                         }
@@ -1037,20 +1062,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     }
                                 }
                             ]
-                        }
-                    ]
-                },
-                {
-                    "name": "PartialRaftSnapshotData",
-                    "fields": [
-                        {
-                            "rule": "optional",
-                            "type": "RangeDescriptor",
-                            "name": "range_descriptor",
-                            "id": 1,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
                         }
                     ]
                 }
@@ -2640,6 +2651,15 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                         "(gogoproto.nullable)": false,
                                         "(gogoproto.castkey)": "github.com/cockroachdb/cockroach/roachpb.RangeID"
                                     }
+                                },
+                                {
+                                    "rule": "repeated",
+                                    "type": "RaftRangeError",
+                                    "name": "errors",
+                                    "id": 2,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
                                 }
                             ]
                         },
@@ -2901,27 +2921,37 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                 "Stacks": {
                                     "request": "StacksRequest",
                                     "response": "JSONResponse",
-                                    "options": {}
+                                    "options": {
+                                        "(google.api.http).get": "/_status/stacks/{node_id}"
+                                    }
                                 },
                                 "Metrics": {
                                     "request": "MetricsRequest",
                                     "response": "JSONResponse",
-                                    "options": {}
+                                    "options": {
+                                        "(google.api.http).get": "/_status/metrics/{node_id}"
+                                    }
                                 },
                                 "LogFilesList": {
                                     "request": "LogFilesListRequest",
                                     "response": "LogFilesListResponse",
-                                    "options": {}
+                                    "options": {
+                                        "(google.api.http).get": "/_status/logfiles/{node_id}"
+                                    }
                                 },
                                 "LogFile": {
                                     "request": "LogFileRequest",
                                     "response": "LogEntriesResponse",
-                                    "options": {}
+                                    "options": {
+                                        "(google.api.http).get": "/_status/logfiles/{node_id}/{file}"
+                                    }
                                 },
                                 "Logs": {
                                     "request": "LogsRequest",
                                     "response": "LogEntriesResponse",
-                                    "options": {}
+                                    "options": {
+                                        "(google.api.http).get": "/_status/logs/{node_id}"
+                                    }
                                 }
                             }
                         }
@@ -3441,6 +3471,15 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "type": "Query",
                                     "name": "queries",
                                     "id": 3,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "sample_nanos",
+                                    "id": 4,
                                     "options": {
                                         "(gogoproto.nullable)": false
                                     }

@@ -487,22 +487,18 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 
 	switch t := expr.(type) {
 	case *parser.FuncExpr:
-		fn, err := t.Name.Normalize()
-		if err != nil {
-			v.err = err
-			return false, expr
-		}
-
-		if impl, ok := parser.Aggregates[strings.ToLower(fn.Function())]; ok {
+		if agg := t.GetAggregateConstructor(); agg != nil {
 			if len(t.Exprs) != 1 {
 				// Type checking has already run on these expressions thus
 				// if an aggregate function of the wrong arity gets here,
 				// something has gone really wrong.
-				panic(fmt.Sprintf("%q has %d arguments (expected 1)", fn, len(t.Exprs)))
+				panic(fmt.Sprintf("%q has %d arguments (expected 1)", t.Name, len(t.Exprs)))
 			}
 
+			argExpr := t.Exprs[0]
+
 			defer v.subAggregateVisitor.Reset()
-			parser.WalkExprConst(&v.subAggregateVisitor, t.Exprs[0])
+			parser.WalkExprConst(&v.subAggregateVisitor, argExpr)
 			if v.subAggregateVisitor.Aggregated {
 				v.err = fmt.Errorf("aggregate function calls cannot be nested under %s", t.Name)
 				return false, expr
@@ -510,8 +506,8 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 
 			f := &aggregateFuncHolder{
 				expr:    t,
-				arg:     t.Exprs[0].(parser.TypedExpr),
-				create:  impl[0].AggregateFunc,
+				arg:     argExpr.(parser.TypedExpr),
+				create:  agg,
 				group:   v.n,
 				buckets: make(map[string]parser.AggregateFunc),
 			}
@@ -603,7 +599,8 @@ func (a *aggregateFuncHolder) add(bucket []byte, d parser.Datum) error {
 		a.buckets[string(bucket)] = impl
 	}
 
-	return impl.Add(d)
+	impl.Add(d)
+	return nil
 }
 
 func (*aggregateFuncHolder) Variable() {}
@@ -632,10 +629,7 @@ func (a *aggregateFuncHolder) Eval(ctx *parser.EvalContext) (parser.Datum, error
 		found = a.create()
 	}
 
-	datum, err := found.Result()
-	if err != nil {
-		return nil, err
-	}
+	datum := found.Result()
 
 	// This is almost certainly the identity. Oh well.
 	return datum.Eval(ctx)

@@ -46,12 +46,13 @@ import (
 )
 
 var (
-	errEmptyInputString  = errors.New("the input string must not be empty")
-	errAbsOfMinInt64     = errors.New("abs of min integer value (-9223372036854775808) not defined")
-	errRoundNumberDigits = errors.New("number of digits must be greater than 0")
-	errSqrtOfNegNumber   = errors.New("cannot take square root of a negative number")
-	errLogOfNegNumber    = errors.New("cannot take logarithm of a negative number")
-	errLogOfZero         = errors.New("cannot take logarithm of zero")
+	errEmptyInputString = errors.New("the input string must not be empty")
+	errAbsOfMinInt64    = errors.New("abs of min integer value (-9223372036854775808) not defined")
+	errRoundTooLow      = errors.New("rounding would extend value by more than 2000 decimal digits")
+	errArgTooBig        = errors.New("argument value is too large")
+	errSqrtOfNegNumber  = errors.New("cannot take square root of a negative number")
+	errLogOfNegNumber   = errors.New("cannot take logarithm of a negative number")
+	errLogOfZero        = errors.New("cannot take logarithm of zero")
 )
 
 const (
@@ -815,9 +816,7 @@ var Builtins = map[string][]Builtin{
 			return NewDFloat(DFloat(math.Exp(x))), nil
 		}),
 		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
-			dd := &DDecimal{}
-			decimal.Exp(&dd.Dec, x, decimal.Precision)
-			return dd, nil
+			return expDecimal(x)
 		}),
 	},
 
@@ -896,9 +895,7 @@ var Builtins = map[string][]Builtin{
 			return round(x, 0)
 		}),
 		decimalBuiltin1(func(x *inf.Dec) (Datum, error) {
-			dd := &DDecimal{}
-			dd.Round(x, 0, inf.RoundHalfUp)
-			return dd, nil
+			return roundDecimal(x, 0)
 		}),
 		Builtin{
 			Types:      ArgTypes{TypeFloat, TypeInt},
@@ -911,10 +908,8 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{TypeDecimal, TypeInt},
 			ReturnType: TypeDecimal,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				dec := &args[0].(*DDecimal).Dec
-				dd := &DDecimal{}
-				dd.Round(dec, inf.Scale(*args[1].(*DInt)), inf.RoundHalfUp)
-				return dd, nil
+				scale := int64(*args[1].(*DInt))
+				return roundDecimal(&args[0].(*DDecimal).Dec, scale)
 			},
 		},
 	},
@@ -1437,32 +1432,83 @@ func overlay(s, to string, pos, size int) (Datum, error) {
 }
 
 func round(x float64, n int64) (Datum, error) {
-	switch {
-	case n < 0:
-		return DNull, errRoundNumberDigits
-	case n > 323:
-		// When rounding to more than 323 digits after the decimal
-		// point, the original number is returned, because rounding has
-		// no effect at scales smaller than 1e-323.
-		//
-		// 323 is the sum of
-		//
-		// 15, the maximum number of significant digits in a decimal
-		// string that can be converted to the IEEE 754 double precision
-		// representation and back to a string that matches the
-		// original; and
-		//
-		// 308, the largest exponent. The significant digits can be
-		// right shifted by 308 positions at most, by setting the
-		// exponent to -308.
+	pow := math.Pow(10, float64(n))
+
+	if pow == 0 {
+		// Rounding to so many digits on the left that we're underflowing.
+		// Avoid a NaN below.
+		return NewDFloat(DFloat(0)), nil
+	}
+	if math.Abs(x*pow) > 1e17 {
+		// Rounding touches decimals below float precision; the operation
+		// is a no-op.
 		return NewDFloat(DFloat(x)), nil
 	}
-	const b = 64
-	y, err := strconv.ParseFloat(strconv.FormatFloat(x, 'f', int(n), b), b)
-	if err != nil {
-		panic(fmt.Sprintf("parsing a float that was just formatted failed: %s", err))
+
+	v, frac := math.Modf(x * pow)
+	// The following computation implements unbiased rounding, also
+	// called bankers' rounding. It ensures that values that fall
+	// exactly between two integers get equal chance to be rounded up or
+	// down.
+	if x > 0.0 {
+		if frac > 0.5 || (frac == 0.5 && uint64(v)%2 != 0) {
+			v += 1.0
+		}
+	} else {
+		if frac < -0.5 || (frac == -0.5 && uint64(v)%2 != 0) {
+			v -= 1.0
+		}
 	}
-	return NewDFloat(DFloat(y)), nil
+
+	return NewDFloat(DFloat(v / pow)), nil
+}
+
+const (
+	scaleRatio = math.Ln2 / math.Ln10
+)
+
+func roundDecimal(x *inf.Dec, n int64) (Datum, error) {
+	curScale := int64(x.Scale())
+
+	if n > curScale+2000 {
+		// If we let the decimal value grow too many decimals, the server
+		// could explode (#8633).
+		return nil, errRoundTooLow
+	}
+
+	dd := &DDecimal{}
+
+	// We use WordLen(Bits())*8 instead of UnscaledBig().BitLen() here
+	// as this is faster and we do not need an exact value for the
+	// optimization below.
+	upperCurDigits := encoding.WordLen(x.UnscaledBig().Bits()) * 8
+	upperDigitsLeft := float64(curScale) - float64(upperCurDigits)*scaleRatio
+	if n < int64(upperDigitsLeft)-1 {
+		// This is an optimization. When the rounding scale is definitely
+		// larger than the number, the result is 0, so we avoid
+		// spending a lot of time in the division for nothing.
+		return dd, nil
+	}
+	dd.Round(x, inf.Scale(n), inf.RoundHalfEven)
+	return dd, nil
+}
+
+func expDecimal(x *inf.Dec) (Datum, error) {
+	// The computation of Exp is separated in the decimal module by
+	// computing the exponents on the left and right of the decimal
+	// separator. The computation on the right is bounded by
+	// decimal.Precision already; however if the value is too large on
+	// the left the decimal value can grow too large in memory and slow
+	// down / crash the entire server. So we prevent this from happening
+	// and limit the argument to be ~1000 or less.
+	curDigits := x.UnscaledBig().BitLen()
+	binDigitsLeft := curDigits - int(float64(x.Scale())/scaleRatio)
+	if binDigitsLeft > 10 /* 1024 */ {
+		return nil, errArgTooBig
+	}
+	dd := &DDecimal{}
+	decimal.Exp(&dd.Dec, x, decimal.Precision)
+	return dd, nil
 }
 
 // Pick the greatest (or least value) from a tuple.

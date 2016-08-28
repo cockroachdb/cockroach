@@ -54,7 +54,7 @@ type scanNode struct {
 	// Map used to get the index for columns in cols.
 	colIdxMap map[sqlbase.ColumnID]int
 
-	spans            []sqlbase.Span
+	spans            []roachpb.Span
 	isSecondaryIndex bool
 	reverse          bool
 	ordering         orderingInfo
@@ -137,7 +137,7 @@ func (n *scanNode) initScan() error {
 		// index key prefix. This isn't needed for the fetcher, but it is for
 		// other external users of n.spans.
 		start := roachpb.Key(sqlbase.MakeIndexKeyPrefix(&n.desc, n.index.ID))
-		n.spans = append(n.spans, sqlbase.Span{Start: start, End: start.PrefixEnd()})
+		n.spans = append(n.spans, roachpb.Span{Key: start, EndKey: start.PrefixEnd()})
 	}
 
 	limitHint := n.limitHint

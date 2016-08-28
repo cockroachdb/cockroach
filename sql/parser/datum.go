@@ -769,7 +769,8 @@ func MakeDTimestamp(t time.Time, precision time.Duration) *DTimestamp {
 // time.Time formats.
 const (
 	timestampFormat                       = "2006-01-02 15:04:05"
-	timestampWithOffsetZoneFormat         = timestampFormat + "-07:00"
+	timestampWithOffsetZoneFormat         = timestampFormat + "-07"
+	timestampWithOffsetSecondsZoneFormat  = timestampWithOffsetZoneFormat + ":00"
 	timestampWithNamedZoneFormat          = timestampFormat + " MST"
 	timestampRFC3339NanoWithoutZoneFormat = "2006-01-02T15:04:05"
 
@@ -781,6 +782,7 @@ var timeFormats = []string{
 	dateFormat,
 	time.RFC3339Nano,
 	timestampWithOffsetZoneFormat,
+	timestampWithOffsetSecondsZoneFormat,
 	timestampFormat,
 	timestampWithNamedZoneFormat,
 	timestampRFC3339NanoWithoutZoneFormat,
@@ -1006,14 +1008,44 @@ func ParseDInterval(s string) (*DInterval, error) {
 			return nil, makeParseError(s, TypeInterval.Type(), err)
 		}
 		return &DInterval{Duration: dur}, nil
-	} else {
-		// Fallback to golang durations.
-		dur, err := time.ParseDuration(s)
+	} else if strings.ContainsRune(s, ':') {
+		// Colon-separated intervals in Postgres are odd. They have day, hour,
+		// minute, or second parts depending on number of fields and if the field
+		// is an int or float.
+		//
+		// Instead of supporting unit changing based on int or float, use the
+		// following rules:
+		// - One field is S.
+		// - Two fields is H:M.
+		// - Three fields is H:M:S.
+		// - All fields support both int and float.
+		parts := strings.Split(s, ":")
+		var err error
+		var dur time.Duration
+		switch len(parts) {
+		case 2:
+			dur, err = time.ParseDuration(parts[0] + "h" + parts[1] + "m")
+		case 3:
+			dur, err = time.ParseDuration(parts[0] + "h" + parts[1] + "m" + parts[2] + "s")
+		default:
+			return nil, makeParseError(s, TypeInterval.Type(), fmt.Errorf("unknown format"))
+		}
 		if err != nil {
 			return nil, makeParseError(s, TypeInterval.Type(), err)
 		}
 		return &DInterval{Duration: duration.Duration{Nanos: dur.Nanoseconds()}}, nil
 	}
+
+	// An interval that's just a number is seconds.
+	if _, err := strconv.ParseFloat(s, 64); err == nil {
+		s += "s"
+	}
+	// Fallback to golang durations.
+	dur, err := time.ParseDuration(s)
+	if err != nil {
+		return nil, makeParseError(s, TypeInterval.Type(), err)
+	}
+	return &DInterval{Duration: duration.Duration{Nanos: dur.Nanoseconds()}}, nil
 }
 
 // ReturnType implements the TypedExpr interface.

@@ -206,6 +206,10 @@ func (tscc TestingSchemaChangerCollection) ClearSchemaChangers() {
 // through the sync schema changers path.
 type SyncSchemaChangersFilter func(TestingSchemaChangerCollection)
 
+// StatementFilter is the type of callback that
+// ExecutorTestingKnobs.StatementFilter takes.
+type StatementFilter func(stms string, res *Result)
+
 // ExecutorTestingKnobs is part of the context used to control parts of the
 // system during testing.
 type ExecutorTestingKnobs struct {
@@ -239,6 +243,20 @@ type ExecutorTestingKnobs struct {
 	//old name are gone, and just before the mapping of the old name to the
 	//descriptor id is about to be deleted.
 	SyncSchemaChangersRenameOldNameNotInUseNotification func()
+
+	// StatementFilter can be used to trap execution of SQL statements and
+	// optionally change their results. The filter function is invoked after each
+	// statement has been executed.
+	StatementFilter StatementFilter
+
+	// DisableAutoCommit, if set, disables the auto-commit functionality of some
+	// SQL statements. That functionality allows some statements to commit
+	// directly when they're executed in an implicit SQL txn, without waiting for
+	// the Executor to commit the implicit txn.
+	// This has to be set in tests that need to abort such statements using a
+	// StatementFilter; otherwise, the statement commits immediately after
+	// execution so there'll be nothing left to abort by the time the filter runs.
+	DisableAutoCommit bool
 }
 
 // NewExecutor creates an Executor and registers a callback on the
@@ -387,6 +405,13 @@ func (e *Executor) ExecuteStatements(
 	session.planner.resetForBatch(e)
 	session.planner.semaCtx.Placeholders.Assign(pinfo)
 
+	defer func() {
+		if r := recover(); r != nil {
+			// On a panic, prepend the executed SQL.
+			panic(fmt.Errorf("%s: %s", stmts, r))
+		}
+	}()
+
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
 	return e.execRequest(session, stmts)
@@ -459,18 +484,18 @@ func (e *Executor) execRequest(session *Session, sql string) StatementResults {
 		// If protoTS is set, the transaction proto sets its Orig and Max timestamps
 		// to it each retry.
 		var protoTS *hlc.Timestamp
+		execOpt.Clock = e.cfg.Clock
 		// We can AutoRetry the next batch of statements if we're in a clean state
 		// (i.e. the next statements we're going to see are the first statements in
 		// a transaction).
 		if !inTxn {
-			execOpt.MinInitialTimestamp = e.cfg.Clock.Now()
 			// Detect implicit transactions.
 			if _, isBegin := stmts[0].(*parser.BeginTransaction); !isBegin {
 				execOpt.AutoCommit = true
 				stmtsToExec = stmtsToExec[:1]
 				// Check for AS OF SYSTEM TIME. If it is present but not detected here,
 				// it will raise an error later on.
-				protoTS, err = isAsOf(planMaker, stmtsToExec[0], execOpt.MinInitialTimestamp)
+				protoTS, err = isAsOf(planMaker, stmtsToExec[0], e.cfg.Clock.Now())
 				if err != nil {
 					res.ResultList = append(res.ResultList, Result{Err: err})
 					return res
@@ -697,7 +722,11 @@ func (e *Executor) execStmtsInCurrentTxn(
 		var stmtStrBefore string
 		// TODO(nvanbenschoten) Constant literals can change their representation (1.0000 -> 1) when type checking,
 		// so we need to reconsider how this works.
-		if e.cfg.TestingKnobs.CheckStmtStringChange && false {
+		if (e.cfg.TestingKnobs.CheckStmtStringChange && false) ||
+			(e.cfg.TestingKnobs.StatementFilter != nil) {
+			// We do "statement string change" if a StatementFilter is installed,
+			// because the StatementFilter relies on the textual representation of
+			// statements to not change from what the client sends.
 			stmtStrBefore = stmt.String()
 		}
 		var res Result
@@ -714,13 +743,17 @@ func (e *Executor) execStmtsInCurrentTxn(
 		default:
 			panic(fmt.Sprintf("unexpected txn state: %s", txnState.State))
 		}
-		if e.cfg.TestingKnobs.CheckStmtStringChange && false {
+		if (e.cfg.TestingKnobs.CheckStmtStringChange && false) ||
+			(e.cfg.TestingKnobs.StatementFilter != nil) {
 			if after := stmt.String(); after != stmtStrBefore {
 				panic(fmt.Sprintf("statement changed after exec; before:\n    %s\nafter:\n    %s",
 					stmtStrBefore, after))
 			}
 		}
 		res.Err = convertToErrWithPGCode(res.Err)
+		if e.cfg.TestingKnobs.StatementFilter != nil {
+			e.cfg.TestingKnobs.StatementFilter(stmt.String(), &res)
+		}
 		results = append(results, res)
 		if err != nil {
 			// After an error happened, skip executing all the remaining statements
@@ -959,7 +992,8 @@ func (e *Executor) execStmtInOpenTxn(
 		txnState.tr.LazyLog(stmt, true /* sensitive */)
 	}
 
-	result, err := e.execStmt(stmt, planMaker, implicitTxn /* autoCommit */)
+	autoCommit := implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
+	result, err := e.execStmt(stmt, planMaker, autoCommit)
 	if err != nil {
 		if traceSQL {
 			log.Tracef(txnState.txn.Context, "ERROR: %v", err)
@@ -1273,6 +1307,9 @@ func makeResultColumns(colDescs []sqlbase.ColumnDescriptor) []ResultColumn {
 // since that requires the transaction to be started already. If the returned
 // timestamp is not nil, it is the timestamp to which a transaction should
 // be set.
+//
+// max is a lower bound on what the transaction's timestamp will be. Used to
+// check that the user didn't specify a timestamp in the future.
 func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.Timestamp, error) {
 	s, ok := stmt.(*parser.Select)
 	if !ok {

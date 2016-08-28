@@ -202,6 +202,7 @@ export interface logBuilder {
 	Entry: log.EntryBuilder;
 	FileDetails: log.FileDetailsBuilder;
 	FileInfo: log.FileInfoBuilder;
+	Severity: log.Severity;
 	
 }
 
@@ -213,11 +214,11 @@ declare module cockroach.util.log {
 
 		
 
-severity?: Long;
+severity?: Severity;
 		
 
-getSeverity?() : Long;
-		setSeverity?(severity : Long): void;
+getSeverity?() : Severity;
+		setSeverity?(severity : Severity): void;
 		
 
 
@@ -312,11 +313,11 @@ getUserName?() : string;
 
 
 
-severity?: Long;
+severity?: Severity;
 		
 
-getSeverity?() : Long;
-		setSeverity?(severity : Long): void;
+getSeverity?() : Severity;
+		setSeverity?(severity : Severity): void;
 		
 
 
@@ -423,6 +424,18 @@ export interface FileInfoBuilder {
 }
 
 
+declare module cockroach.util.log {
+	export const enum Severity {
+		UNKNOWN = 0,
+		INFO = 1,
+		WARNING = 2,
+		ERROR = 3,
+		FATAL = 4,
+		NONE = 5,
+		
+}
+}
+
 
 
 declare module cockroach {
@@ -470,7 +483,6 @@ export interface roachpbBuilder {
 	RaftTruncatedState: roachpb.RaftTruncatedStateBuilder;
 	RaftTombstone: roachpb.RaftTombstoneBuilder;
 	RaftSnapshotData: roachpb.RaftSnapshotDataBuilder;
-	PartialRaftSnapshotData: roachpb.PartialRaftSnapshotDataBuilder;
 	ValueType: roachpb.ValueType;
 	ReplicaChangeType: roachpb.ReplicaChangeType;
 	TransactionStatus: roachpb.TransactionStatus;
@@ -1828,42 +1840,6 @@ export interface KeyValueBuilder {
 
 }
 
-
-
-declare module cockroach.roachpb {
-
-	export interface PartialRaftSnapshotData {
-
-		
-
-range_descriptor?: RangeDescriptor;
-		
-
-getRangeDescriptor?() : RangeDescriptor;
-		setRangeDescriptor?(rangeDescriptor : RangeDescriptor): void;
-		
-
-
-
-}
-
-	export interface PartialRaftSnapshotDataMessage extends PartialRaftSnapshotData {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface PartialRaftSnapshotDataBuilder {
-	new(data?: PartialRaftSnapshotData): PartialRaftSnapshotDataMessage;
-	decode(buffer: ArrayBuffer) : PartialRaftSnapshotDataMessage;
-	decode(buffer: ByteBuffer) : PartialRaftSnapshotDataMessage;
-	decode64(buffer: string) : PartialRaftSnapshotDataMessage;
-	
-}
-
-}
 
 
 declare module cockroach.roachpb {
@@ -5193,6 +5169,15 @@ getRanges?() : ProtoBufMap<Long, RaftRangeStatus>;
 
 
 
+errors?: RaftRangeError[];
+		
+
+getErrors?() : RaftRangeError[];
+		setErrors?(errors : RaftRangeError[]): void;
+		
+
+
+
 }
 
 	export interface RaftDebugResponseMessage extends RaftDebugResponse {
@@ -6240,6 +6225,15 @@ queries?: Query[];
 
 getQueries?() : Query[];
 		setQueries?(queries : Query[]): void;
+		
+
+
+
+sample_nanos?: Long;
+		
+
+getSampleNanos?() : Long;
+		setSampleNanos?(sampleNanos : Long): void;
 		
 
 

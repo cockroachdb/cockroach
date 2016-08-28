@@ -164,7 +164,7 @@ func (p *planner) ShowCreateTable(n *parser.ShowCreateTable) (planNode, error) {
 			}
 			fmt.Fprintf(&buf, " DEFAULT %s", *col.DefaultExpr)
 		}
-		if len(desc.PrimaryIndex.ColumnIDs) > 0 && desc.PrimaryIndex.ColumnIDs[0] == col.ID {
+		if desc.HasPrimaryKey() && desc.PrimaryIndex.ColumnIDs[0] == col.ID {
 			// Only set primary if the primary key is on a visible column (not rowid).
 			primary = fmt.Sprintf(",\n\tCONSTRAINT %s PRIMARY KEY (%s)",
 				quoteNames(desc.PrimaryIndex.Name),
@@ -375,7 +375,7 @@ func (p *planner) ShowIndex(n *parser.ShowIndex) (planNode, error) {
 }
 
 // ShowConstraints returns all the constraints for a table.
-// Privileges: None.
+// Privileges: Any privilege on table.
 //   Notes: postgres does not have a SHOW CONSTRAINTS statement.
 //          mysql requires some privilege for any column.
 func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
@@ -386,6 +386,9 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 
 	desc, err := p.mustGetTableDesc(tn)
 	if err != nil {
+		return nil, err
+	}
+	if err := p.anyPrivilege(desc); err != nil {
 		return nil, err
 	}
 

@@ -69,6 +69,15 @@ import NodeLogs from "./containers/nodeLogs";
 import Raft from "./containers/raft";
 import RaftRanges from "./containers/raftRanges";
 
+// tslint:disable-next-line:variable-name
+const DOMNode = document.getElementById("react-layout");
+
+// Voodoo to force react-router to reload stuff when directed by livereload.
+// See https://github.com/capaj/systemjs-hot-reloader.
+export function __unload() {
+  ReactDOM.unmountComponentAtNode(DOMNode);
+}
+
 ReactDOM.render(
   <Provider store={store}>
     <Router history={history}>
@@ -122,5 +131,5 @@ ReactDOM.render(
       </Route>
     </Router>
   </Provider>,
-  document.getElementById("react-layout")
+  DOMNode
 );

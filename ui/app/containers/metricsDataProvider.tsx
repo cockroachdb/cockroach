@@ -1,63 +1,19 @@
 import * as React from "react";
 import { createSelector } from "reselect";
 import { connect } from "react-redux";
-import _ = require("lodash");
-import Long = require("long");
+import _ from "lodash";
+import Long from "long";
 
 import * as protos from  "../js/protos";
 import { AdminUIState } from "../redux/state";
 import { queryMetrics, MetricsQuery } from "../redux/metrics";
-import * as timewindow from "../redux/timewindow";
 import { MetricProps, Metric, MetricsDataComponentProps } from "../components/graphs";
 import { findChildrenOfType } from "../util/find";
 import { MilliToNano } from "../util/convert";
+import { TimeSeriesQueryAggregator, TimeSeriesQueryDerivative } from "../util/protoEnums";
 
 type TSQueryMessage = cockroach.ts.tspb.QueryMessage;
 type TSRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
-
-/**
- * TimeSeriesQueryAggregator is an enumeration used by Cockroach's time series
- * query system, used to select an aggregator function.
- * This must be kept manually in sync with the same enumeration in `generated/protos.d.ts`.
- *
- * HACK
- *
- * This enumeration is copied due to an incompatibility between two tools in our
- * system:
- *
- * 1. The systemJS typescript loader (frankwallis/plugin-typescript) compiles
- * files using typescript's "single file compilation" mode, which is unable to
- * resolve ambiently declared const enums:
- *
- *     https://github.com/frankwallis/plugin-typescript/issues/89
- *
- * 2. The Proto2Typescript generator (SINTEF-9012/Proto2TypeScript) outputs
- * enumerations as ambiently declared const enums.
- *
- * Unfortunately, it is not trivial to change either of these behaviors; the
- * plugin-typescript behavior is unfixable (fundamentally incompatible with its
- * current basic strategy), while the Proto2Typescript generated file would need
- * to be changed dramatically; specifically, it would need generate an
- * importable module format (rather than its current design of declaring ambient
- * global objects).
- */
-export const enum TimeSeriesQueryAggregator {
-  AVG = 1,
-  SUM = 2,
-  MAX = 3,
-  MIN = 4
-}
-
-/**
- * TimeSeriesQueryDerivative is an enumeration used by Cockroach's time series
- * query system, used to select an derivated function.
- * This must be kept manually in sync with the same enumeration in `generated/protos.d.ts`.
- */
-export const enum TimeSeriesQueryDerivative {
-  NONE = 0,
-  DERIVATIVE = 1,
-  NON_NEGATIVE_DERIVATIVE = 2
-}
 
 /**
  * queryFromProps is a helper method which generates a TimeSeries Query data
@@ -107,13 +63,24 @@ function queryFromProps(metricProps: MetricProps,
     });
 }
 
+// QueryTimeInfo is a convenience structure which can be used to pass important
+// time information to a MetricsDataProvider.
+export interface QueryTimeInfo {
+  // The start time of the query, expressed as a unix timestamp in nanoseconds.
+  start: Long;
+  // The end time of the query, expressed as a unix timestamp in nanoseconds.
+  end: Long;
+  // The duration of individual samples in the query, expressed in nanoseconds.
+  sampleDuration: Long;
+}
+
 /**
  * MetricsDataProviderConnectProps are the properties provided to a
  * MetricsDataProvider via the react-redux connect() system.
  */
 interface MetricsDataProviderConnectProps {
   metrics: MetricsQuery;
-  timeSpan: Long[];
+  timeInfo: QueryTimeInfo;
   queryMetrics(id: string, request: TSRequestMessage): void;
 }
 
@@ -167,15 +134,16 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
     });
 
   private requestMessage = createSelector(
-    (props: MetricsDataProviderProps) => props.timeSpan,
+    (props: MetricsDataProviderProps) => props.timeInfo,
     this.queriesSelector,
-    (timeSpan, queries) => {
-      if (!timeSpan) {
+    (timeInfo, queries) => {
+      if (!timeInfo) {
         return undefined;
       }
       return new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
-        start_nanos: timeSpan[0],
-        end_nanos: timeSpan[1],
+        start_nanos: timeInfo.start,
+        end_nanos: timeInfo.end,
+        sample_nanos: timeInfo.sampleDuration,
         queries,
       });
     });
@@ -227,18 +195,19 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
   }
 }
 
-// timeSpanSelector converts the current global time window into a pair of Long
-// values, which can be sent with requests to the server.
-let timeSpanSelector = createSelector(
-  (state: AdminUIState) => state.timewindow as timewindow.TimeWindowState,
+// timeInfoSelector converts the current global time window into a set of Long
+// timestamps, which can be sent with requests to the server.
+let timeInfoSelector = createSelector(
+  (state: AdminUIState) => state.timewindow,
   (tw) => {
     if (!_.isObject(tw.currentWindow)) {
       return null;
     }
-    return [
-      Long.fromNumber(MilliToNano(tw.currentWindow.start.valueOf())),
-      Long.fromNumber(MilliToNano(tw.currentWindow.end.valueOf())),
-    ];
+    return {
+      start: Long.fromNumber(MilliToNano(tw.currentWindow.start.valueOf())),
+      end: Long.fromNumber(MilliToNano(tw.currentWindow.end.valueOf())),
+      sampleDuration: Long.fromNumber(MilliToNano(tw.scale.sampleSize.asMilliseconds())),
+    };
   });
 
 // Connect the MetricsDataProvider class to redux state.
@@ -246,7 +215,7 @@ let metricsDataProviderConnected = connect(
   (state: AdminUIState, ownProps: MetricsDataProviderExplicitProps) => {
     return {
       metrics: state.metrics.queries[ownProps.id],
-      timeSpan: timeSpanSelector(state),
+      timeInfo: timeInfoSelector(state),
     };
   },
   {

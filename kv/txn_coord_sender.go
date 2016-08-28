@@ -145,6 +145,7 @@ func MakeTxnMetrics() TxnMetrics {
 // transaction. When the transaction is committed or aborted, it
 // clears accumulated write intents for the transaction.
 type TxnCoordSender struct {
+	ctx               context.Context
 	wrapped           client.Sender
 	clock             *hlc.Clock
 	heartbeatInterval time.Duration
@@ -152,7 +153,6 @@ type TxnCoordSender struct {
 	syncutil.Mutex                               // protects txns and txnStats
 	txns              map[uuid.UUID]*txnMetadata // txn key to metadata
 	linearizable      bool                       // enables linearizable behaviour
-	tracer            opentracing.Tracer
 	stopper           *stop.Stopper
 	metrics           TxnMetrics
 }
@@ -161,25 +161,30 @@ var _ client.Sender = &TxnCoordSender{}
 
 // NewTxnCoordSender creates a new TxnCoordSender for use from a KV
 // distributed DB instance.
+// ctx is the base context and is used for logs and traces when there isn't a
+// more specific context available; it must have a Tracer set.
 func NewTxnCoordSender(
+	ctx context.Context,
 	wrapped client.Sender,
 	clock *hlc.Clock,
 	linearizable bool,
-	tracer opentracing.Tracer,
 	stopper *stop.Stopper,
 	txnMetrics TxnMetrics,
 ) *TxnCoordSender {
-	if tracer == nil {
-		panic("nil tracer supplied")
+	if ctx == nil || tracing.TracerFromCtx(ctx) == nil {
+		panic("ctx with tracer must be supplied")
+	}
+	if ctx.Done() != nil {
+		panic("context with cancel or deadline")
 	}
 	tc := &TxnCoordSender{
+		ctx:               ctx,
 		wrapped:           wrapped,
 		clock:             clock,
 		heartbeatInterval: base.DefaultHeartbeatInterval,
 		clientTimeout:     defaultClientTimeout,
 		txns:              map[uuid.UUID]*txnMetadata{},
 		linearizable:      linearizable,
-		tracer:            tracer,
 		stopper:           stopper,
 		metrics:           txnMetrics,
 	}
@@ -235,7 +240,7 @@ func (tc *TxnCoordSender) startStats() {
 			rMax := restarts.Max()
 			num := durations.TotalCount()
 
-			log.Infof(context.TODO(),
+			log.Infof(tc.ctx,
 				"txn coordinator: %.2f txn/sec, %.2f/%.2f/%.2f/%.2f %%cmmt/cmmt1pc/abrt/abnd, %s/%s/%s avg/σ/max duration, %.1f/%.1f/%d avg/σ/max restarts (%d samples)",
 				totalRate, pCommitted, pCommitted1PC, pAborted, pAbandoned,
 				util.TruncateDuration(time.Duration(dMean), res),
@@ -265,8 +270,11 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		// header for use by RPC recipients. From here on, there's always an active
 		// Trace, though its overhead is small unless it's sampled.
 		sp := opentracing.SpanFromContext(ctx)
+		// TODO(radu): once contexts are plumbed correctly, we should use the Tracer
+		// from ctx.
+		tracer := tracing.TracerFromCtx(tc.ctx)
 		if sp == nil {
-			sp = tc.tracer.StartSpan(opTxnCoordSender)
+			sp = tracer.StartSpan(opTxnCoordSender)
 			defer sp.Finish()
 			ctx = opentracing.ContextWithSpan(ctx, sp)
 		}
@@ -279,7 +287,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		if ba.Header.Trace == nil {
 			ba.Header.Trace = &tracing.Span{}
 		}
-		if err := tc.tracer.Inject(sp.Context(), basictracer.Delegator, ba.Trace); err != nil {
+		if err := tracer.Inject(sp.Context(), basictracer.Delegator, ba.Trace); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 	}
@@ -582,7 +590,7 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context, txnID uuid.UUID) {
 	var closer <-chan struct{}
 	// TODO(tschottdorf): this should join to the trace of the request
 	// which starts this goroutine.
-	sp := tc.tracer.StartSpan(opHeartbeatLoop)
+	sp := tracing.TracerFromCtx(tc.ctx).StartSpan(opHeartbeatLoop)
 	defer sp.Finish()
 	ctx = opentracing.ContextWithSpan(ctx, sp)
 
@@ -659,11 +667,11 @@ func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
 		// before the goroutine.
 		if _, pErr := tc.wrapped.Send(context.Background(), ba); pErr != nil {
 			if log.V(1) {
-				log.Warningf(context.TODO(), "abort due to inactivity failed for %s: %s ", txn, pErr)
+				log.Warningf(tc.ctx, "abort due to inactivity failed for %s: %s ", txn, pErr)
 			}
 		}
 	}); err != nil {
-		log.Warning(context.TODO(), err)
+		log.Warning(tc.ctx, err)
 	}
 }
 
@@ -924,7 +932,7 @@ func (tc *TxnCoordSender) updateState(
 func (tc *TxnCoordSender) resendWithTxn(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Run a one-off transaction with that single command.
 	if log.V(1) {
-		log.Infof(context.TODO(), "%s: auto-wrapping in txn and re-executing: ", ba)
+		log.Infof(tc.ctx, "%s: auto-wrapping in txn and re-executing: ", ba)
 	}
 	// TODO(bdarnell): need to be able to pass other parts of DBContext
 	// through here.

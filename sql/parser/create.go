@@ -557,6 +557,13 @@ type CreateTable struct {
 	Table       NormalizableTableName
 	Interleave  *InterleaveDef
 	Defs        TableDefs
+	AsSource    *Select
+}
+
+// As returns true if this table represents a CREATE TABLE ... AS statement,
+// false otherwise.
+func (node *CreateTable) As() bool {
+	return node.AsSource != nil
 }
 
 // Format implements the NodeFormatter interface.
@@ -566,10 +573,15 @@ func (node *CreateTable) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteString("IF NOT EXISTS ")
 	}
 	FormatNode(buf, f, node.Table)
-	buf.WriteString(" (")
-	FormatNode(buf, f, node.Defs)
-	buf.WriteByte(')')
-	if node.Interleave != nil {
-		FormatNode(buf, f, node.Interleave)
+	if node.As() {
+		buf.WriteString(" AS ")
+		FormatNode(buf, f, node.AsSource)
+	} else {
+		buf.WriteString(" (")
+		FormatNode(buf, f, node.Defs)
+		buf.WriteByte(')')
+		if node.Interleave != nil {
+			FormatNode(buf, f, node.Interleave)
+		}
 	}
 }

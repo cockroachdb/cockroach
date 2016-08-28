@@ -73,30 +73,33 @@ var (
 
 // Server is the cockroach server node.
 type Server struct {
-	ctx           Context
-	mux           *http.ServeMux
-	clock         *hlc.Clock
-	rpcContext    *rpc.Context
-	grpc          *grpc.Server
-	gossip        *gossip.Gossip
-	storePool     *storage.StorePool
-	distSender    *kv.DistSender
-	db            *client.DB
-	kvDB          *kv.DBServer
-	pgServer      *pgwire.Server
-	distSQLServer *distsql.ServerImpl
-	node          *Node
-	registry      *metric.Registry
-	recorder      *status.MetricsRecorder
-	runtime       status.RuntimeStatSampler
-	admin         adminServer
-	status        *statusServer
-	tsDB          *ts.DB
-	tsServer      ts.Server
-	raftTransport *storage.RaftTransport
-	stopper       *stop.Stopper
-	sqlExecutor   *sql.Executor
-	leaseMgr      *sql.LeaseManager
+	ctx            Context
+	mux            *http.ServeMux
+	clock          *hlc.Clock
+	rpcContext     *rpc.Context
+	grpc           *grpc.Server
+	gossip         *gossip.Gossip
+	storePool      *storage.StorePool
+	txnCoordSender *kv.TxnCoordSender
+	distSender     *kv.DistSender
+	db             *client.DB
+	kvDB           *kv.DBServer
+	pgServer       *pgwire.Server
+	distSQLServer  *distsql.ServerImpl
+	node           *Node
+	registry       *metric.Registry
+	recorder       *status.MetricsRecorder
+	runtime        status.RuntimeStatSampler
+	admin          adminServer
+	status         *statusServer
+	tsDB           *ts.DB
+	tsServer       ts.Server
+	raftTransport  *storage.RaftTransport
+	stopper        *stop.Stopper
+	sqlExecutor    *sql.Executor
+	leaseMgr       *sql.LeaseManager
+
+	nodeLogTagVal log.DynamicIntValue
 }
 
 // NewServer creates a Server from a server.Context.
@@ -111,13 +114,11 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	if srvCtx.Ctx.Done() != nil {
 		panic("context with cancel or deadline")
 	}
-	tracer := tracing.TracerFromCtx(srvCtx.Ctx)
-	if tracer == nil {
-		tracer = tracing.NewTracer()
+	if tracing.TracerFromCtx(srvCtx.Ctx) == nil {
 		// TODO(radu): instead of modifying srvCtx.Ctx, we should have a separate
 		// context.Context inside Server. We will need to rename server.Context
 		// though.
-		srvCtx.Ctx = tracing.WithTracer(srvCtx.Ctx, tracer)
+		srvCtx.Ctx = tracing.WithTracer(srvCtx.Ctx, tracing.NewTracer())
 	}
 
 	if srvCtx.Insecure {
@@ -132,11 +133,25 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	s := &Server{
-		ctx:     srvCtx,
 		mux:     http.NewServeMux(),
 		clock:   hlc.NewClock(hlc.UnixNano),
 		stopper: stopper,
 	}
+	// Add a dynamic log tag value for the node ID.
+	//
+	// We need to pass the server's Ctx as a base context for the various server
+	// components, but we won't know the node ID until we Start(). At that point
+	// it's too late to change the contexts in the components (various background
+	// processes will have already started using the contexts).
+	//
+	// The dynamic value allows us to add the log tag to the context now and
+	// update the value asynchronously. It's not significantly more expensive than
+	// a regular tag since it's just doing an (atomic) load when a log/trace
+	// message is constructed.
+	s.nodeLogTagVal.Set(log.DynamicIntValueUnknown)
+	srvCtx.Ctx = log.WithLogTag(srvCtx.Ctx, "n", &s.nodeLogTagVal)
+	s.ctx = srvCtx
+
 	s.clock.SetMaxOffset(srvCtx.MaxOffset)
 
 	s.rpcContext = rpc.NewContext(srvCtx.Context, s.clock, s.stopper)
@@ -148,7 +163,8 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	s.grpc = rpc.NewServer(s.rpcContext)
 
 	s.registry = metric.NewRegistry()
-	s.gossip = gossip.New(s.rpcContext, s.grpc, s.ctx.GossipBootstrapResolvers, s.stopper, s.registry)
+	s.gossip = gossip.New(
+		s.Ctx(), s.rpcContext, s.grpc, s.ctx.GossipBootstrapResolvers, s.stopper, s.registry)
 	s.storePool = storage.NewStorePool(
 		s.gossip,
 		s.clock,
@@ -171,20 +187,23 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	// DistSender needs to know that it should not retry in this situation.
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = s.stopper.ShouldQuiesce()
-	s.distSender = kv.NewDistSender(&kv.DistSenderConfig{
+	distSenderCfg := kv.DistSenderConfig{
+		Ctx:             s.Ctx(),
 		Clock:           s.clock,
 		RPCContext:      s.rpcContext,
 		RPCRetryOptions: &retryOpts,
-	}, s.gossip)
+	}
+	s.distSender = kv.NewDistSender(&distSenderCfg, s.gossip)
+
 	txnMetrics := kv.MakeTxnMetrics()
 	s.registry.AddMetricStruct(txnMetrics)
-	sender := kv.NewTxnCoordSender(s.distSender, s.clock, srvCtx.Linearizable, tracer,
+	s.txnCoordSender = kv.NewTxnCoordSender(s.Ctx(), s.distSender, s.clock, srvCtx.Linearizable,
 		s.stopper, txnMetrics)
-	s.db = client.NewDB(sender)
+	s.db = client.NewDB(s.txnCoordSender)
 
 	s.raftTransport = storage.NewRaftTransport(storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext)
 
-	s.kvDB = kv.NewDBServer(s.ctx.Context, sender, s.stopper)
+	s.kvDB = kv.NewDBServer(s.ctx.Context, s.txnCoordSender, s.stopper)
 	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
 
 	// Set up Lease Manager
@@ -227,6 +246,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
+		Ctx:                            s.Ctx(),
 		Clock:                          s.clock,
 		DB:                             s.db,
 		Gossip:                         s.gossip,
@@ -236,8 +256,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		ScanMaxIdleTime:                s.ctx.ScanMaxIdleTime,
 		ConsistencyCheckInterval:       s.ctx.ConsistencyCheckInterval,
 		ConsistencyCheckPanicOnFailure: s.ctx.ConsistencyCheckPanicOnFailure,
-		Tracer:    tracer,
-		StorePool: s.storePool,
+		StorePool:                      s.storePool,
 		SQLExecutor: sql.InternalExecutor{
 			LeaseManager: s.leaseMgr,
 		},
@@ -288,9 +307,16 @@ type grpcGatewayServer interface {
 	) error
 }
 
-// Start starts the server on the specified port, starts gossip and
-// initializes the node using the engines from the server's context.
+// Start starts the server on the specified port, starts gossip and initializes
+// the node using the engines from the server's context.
+//
+// The passed context can be used to trace the server startup. The context
+// should represent the general startup operation, and is different from
+// contexts used at runtime for server's background work (like `s.Ctx()`).
 func (s *Server) Start(ctx context.Context) error {
+	// Copy log tags from s.Ctx()
+	ctx = log.WithLogTagsFromCtx(ctx, s.Ctx())
+
 	tlsConfig, err := s.ctx.GetServerTLSConfig()
 	if err != nil {
 		return err
@@ -433,6 +459,10 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	log.Trace(ctx, "started node")
 
+	// Set the NodeID in the base context (which was inherited by the
+	// various components of the server).
+	s.nodeLogTagVal.Set(int64(s.node.Descriptor.NodeID))
+
 	// We can now add the node registry.
 	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt)
 
@@ -446,7 +476,6 @@ func (s *Server) Start(ctx context.Context) error {
 	s.node.startWriteSummaries(s.ctx.MetricsSampleInterval)
 
 	s.sqlExecutor.SetNodeID(s.node.Descriptor.NodeID)
-	s.distSQLServer.SetNodeID(s.node.Descriptor.NodeID)
 
 	// Create and start the schema change manager only after a NodeID
 	// has been assigned.
@@ -522,10 +551,11 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// TODO(marc): when cookie-based authentication exists,
 	// apply it for all web endpoints.
-	s.mux.Handle(adminEndpoint, gwMux)
+	s.mux.Handle(adminPrefix, gwMux)
 	s.mux.Handle(ts.URLPrefix, gwMux)
-	s.mux.Handle(statusPrefix, s.status)
-	s.mux.Handle(healthEndpoint, s.status)
+	s.mux.Handle(statusPrefix, gwMux)
+	s.mux.Handle("/health", gwMux)
+	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 	log.Trace(ctx, "added http endpoints")
 
 	if err := sdnotify.Ready(); err != nil {

@@ -1,4 +1,4 @@
-import * as _ from "lodash";
+import _ from "lodash";
 import * as React from "react";
 import * as d3 from "d3";
 import { Link, IInjectedProps } from "react-router";
@@ -11,7 +11,8 @@ import { Bytes } from "../../util/format";
 import { AdminUIState } from "../../redux/state";
 import { setUISetting } from "../../redux/ui";
 import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats, generateTableID, KeyedCachedDataReducerState } from "../../redux/apiReducers";
-import { SortableTable, SortableColumn, SortSetting } from "../../components/sortabletable";
+import { SortSetting } from "../../components/sortabletable";
+import { SortedTable } from "../../components/sortedtable";
 import Visualization from "../../components/visualization";
 
 type DatabaseDetailsResponseMessage = cockroach.server.serverpb.DatabaseDetailsResponseMessage;
@@ -20,115 +21,42 @@ type TableStatsResponseMessage = cockroach.server.serverpb.TableStatsResponseMes
 
 // Constants used to store per-page sort settings in the redux UI store.
 const UI_DATABASE_TABLES_SORT_SETTING_KEY = "databaseDetails/sort_setting/tables";
-const UI_DATABASE_GRANTS_SORT_SETTING_KEY = "databaseDetails/sort_setting/grants";
 
+// TableInfo is a structure which contains basic information about a Table, as
+// computed from multiple backend queries.
 class TableInfo {
   constructor(
     public name: string,
     public numColumns: number,
     public numIndices: number,
-    public size: number,
+    public size: number
   ) { };
 }
 
-/******************************
- *      TABLE COLUMN DEFINITION
- */
+// Specialization of generic SortedTable component:
+//   https://github.com/Microsoft/TypeScript/issues/3960
+//
+// The variable name must start with a capital letter or TSX will not recognize
+// it as a component.
+// tslint:disable-next-line:variable-name
+const DatabaseTableListSortedTable = SortedTable as new () => SortedTable<TableInfo>;
 
 /**
- * TablesTableColumn provides an enumeration value for each column in the tables table.
- */
-enum TablesTableColumn {
-  Name = 1,
-  NumColumns = 2,
-  NumIndices = 3,
-  LastModified = 4,
-  LastModifiedBy = 5,
-}
-
-/**
- * TablesColumnDescriptor is used to describe metadata about an individual column
- * in the Tables table.
- */
-interface TablesColumnDescriptor {
-  // Enumeration key to distinguish this column from others.
-  key: TablesTableColumn;
-  // Title string that should appear in the header column.
-  title: string;
-  // Function which generates the contents of an individual cell in this table.
-  cell: (tableInfo: TableInfo, id: string) => React.ReactNode;
-  // Function which returns a value that can be used to sort a collection of
-  // tables. This will be used to sort the table according to the data in
-  // this column.
-  sort?: (tableInfo: TableInfo) => any;
-  // className to be applied to the td elements
-  className?: string;
-}
-
-/**
- * tablesColumnDescriptors describes all columns that appear in the tables table.
- * Columns are displayed in the same order they do in this collection, from left
- * to right.
- */
-let tablesColumnDescriptors: TablesColumnDescriptor[] = [
-  {
-    key: TablesTableColumn.Name,
-    title: "Table Name",
-    cell: (tableInfo, id) => {
-      return <Link to={`databases/database/${id}/table/${tableInfo.name}`}>{tableInfo.name}</Link>;
-    } ,
-    sort: (tableInfo) => tableInfo.name,
-    className: "expand-link", // don't pad the td element to allow the link to expand
-  },
-  {
-    key: TablesTableColumn.NumColumns,
-    title: "# of Columns",
-    cell: (tableInfo, id) => tableInfo.numColumns,
-    sort: (tableInfo) => tableInfo.numColumns,
-  },
-  {
-    key: TablesTableColumn.NumIndices,
-    title: "# of Indices",
-    cell: (tableInfo, id) => tableInfo.numIndices,
-    sort: (tableInfo) => tableInfo.numIndices,
-  },
-  {
-    key: TablesTableColumn.LastModified,
-    title: "Last Modified",
-    cell: (tableInfo, id) => "", // TODO (maxlang): Pending #8246
-    sort: _.identity,
-  },
-  {
-    key: TablesTableColumn.LastModifiedBy,
-    title: "Last Modified By",
-    cell: (tableInfo, id) => "", // TODO (maxlang): Pending #8246
-    sort: _.identity,
-  },
-];
-
-/******************************
- *   DATABASE MAIN COMPONENT
- */
-
-/**
- * DatabaseMainData are the data properties which should be passed to the DatabaseMain
+ * DatabaseDetailsData are the data properties which should be passed to the DatabaseDetails
  * container.
  */
-
-interface DatabaseMainData {
-  // Current sort setting for the grant table. Incoming rows will already be sorted
-  // according to this setting.
+interface DatabaseDetailsData {
+  // Current sort setting for the table list.
   tablesSortSetting: SortSetting;
-  // A list of grants, which are possibly sorted according to
-  // sortSetting.
-  sortedTables: TableInfo[];
+  // A list of TableInfo for the tables in the selected database.
+  tableInfos: TableInfo[];
 }
 
 /**
- * DatabaseMainActions are the action dispatchers which should be passed to the
- * DatabaseMain container.
+ * DatabaseDetailsActions are the action dispatchers which should be passed to the
+ * DatabaseDetails container.
  */
-interface DatabaseMainActions {
+interface DatabaseDetailsActions {
   // Call if the user indicates they wish to change the sort of the table data.
   setUISetting: typeof setUISetting;
   refreshDatabaseDetails: typeof refreshDatabaseDetails;
@@ -137,46 +65,24 @@ interface DatabaseMainActions {
 }
 
 /**
- * DatabaseMainProps is the type of the props object that must be passed to
- * DatabaseMain component.
+ * DatabaseDetailsProps is the type of the props object that must be passed to
+ * DatabaseDetails component.
  */
-type DatabaseMainProps = DatabaseMainData & DatabaseMainActions & IInjectedProps;
+type DatabaseDetailsProps = DatabaseDetailsData & DatabaseDetailsActions & IInjectedProps;
 
 /**
- * DatabaseMain renders the main content of the database details page, which is primarily a
- * data table of all tables and grants.
+ * DatabaseDetails renders the main content of the database details page.
  */
-class DatabaseMain extends React.Component<DatabaseMainProps, {}> {
-  /**
-   * tableColumns is a selector which computes the input Columns to the table table,
-   * based on the tableColumnDescriptors and the current sorted table data
-   */
-  tableColumns = createSelector(
-    (props: DatabaseMainProps) => props.sortedTables,
-    (tables: TableInfo[]) => {
-      return _.map(tablesColumnDescriptors, (cd): SortableColumn => {
-        return {
-          title: cd.title,
-          cell: (index) => cd.cell(tables[index], this.props.params[databaseNameAttr]),
-          sortKey: cd.sort ? cd.key : undefined,
-          className: cd.className,
-        };
-      });
-    });
-
+class DatabaseDetails extends React.Component<DatabaseDetailsProps, {}> {
   // Callback when the user elects to change the table table sort setting.
   changeTableSortSetting(setting: SortSetting) {
     this.props.setUISetting(UI_DATABASE_TABLES_SORT_SETTING_KEY, setting);
   }
 
-  // Callback when the user elects to change the grant table sort setting.
-  changeGrantSortSetting(setting: SortSetting) {
-    this.props.setUISetting(UI_DATABASE_GRANTS_SORT_SETTING_KEY, setting);
-  }
   // loadTableDetails loads data for each table with no info in the store.
   loadTableDetails(props = this.props) {
-    if (props.sortedTables.length) {
-      _.each(props.sortedTables, (tblInfo) => {
+    if (props.tableInfos.length) {
+      _.each(props.tableInfos, (tblInfo) => {
         if (_.isUndefined(tblInfo.numColumns)) {
           props.refreshTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({
             database: props.params[databaseNameAttr],
@@ -199,16 +105,17 @@ class DatabaseMain extends React.Component<DatabaseMainProps, {}> {
     this.loadTableDetails();
   }
 
-  componentWillReceiveProps(props: DatabaseMainProps) {
+  componentWillReceiveProps(props: DatabaseDetailsProps) {
     this.loadTableDetails(props);
   }
 
   render() {
-    let { sortedTables, tablesSortSetting } = this.props;
+    let { tableInfos, tablesSortSetting } = this.props;
+    let dbID = this.props.params[databaseNameAttr];
 
-    let numTables = this.props.sortedTables.length;
+    let numTables = this.props.tableInfos.length;
 
-    if (sortedTables) {
+    if (tableInfos) {
       return <div className="sql-table">
                 <div className="table-stats small half">
           <Visualization
@@ -221,7 +128,7 @@ class DatabaseMain extends React.Component<DatabaseMainProps, {}> {
           <Visualization title="Database Size" tooltip="Not yet implemented.">
             <div className="visualization">
               <div style={{ zoom: "40%" }} className="number">
-                { Bytes(_.reduce(sortedTables, (memo, t) => memo + t.size, 0)) }
+                { Bytes(_.reduce(tableInfos, (memo, t) => memo + t.size, 0)) }
               </div>
             </div>
           </Visualization>
@@ -236,11 +143,40 @@ class DatabaseMain extends React.Component<DatabaseMainProps, {}> {
             </div>
           </Visualization>
         </div>
-          <SortableTable count={sortedTables.length}
+          <DatabaseTableListSortedTable
+            data={tableInfos}
             sortSetting={tablesSortSetting}
-            onChangeSortSetting={(setting) => this.changeTableSortSetting(setting) }>
-            { this.tableColumns(this.props) }
-          </SortableTable>
+            onChangeSortSetting={(setting) => this.changeTableSortSetting(setting) }
+            columns={[
+            {
+              title: "Table Name",
+              cell: (tableInfo) => {
+                return <Link to={`databases/database/${dbID}/table/${tableInfo.name}`}>{tableInfo.name}</Link>;
+              },
+              sort: (tableInfo) => tableInfo.name,
+              className: "expand-link", // don't pad the td element to allow the link to expand
+            },
+            {
+              title: "# of Columns",
+              cell: (tableInfo) => tableInfo.numColumns,
+              sort: (tableInfo) => tableInfo.numColumns,
+            },
+            {
+              title: "# of Indices",
+              cell: (tableInfo) => tableInfo.numIndices,
+              sort: (tableInfo) => tableInfo.numIndices,
+            },
+            {
+              title: "Last Modified",
+              cell: (tableInfo) => "", // TODO (maxlang): Pending #8246
+              sort: _.identity,
+            },
+            {
+              title: "Last Modified By",
+              cell: (tableInfo) => "", // TODO (maxlang): Pending #8246
+              sort: _.identity,
+            },
+            ]}/>
         </div>;
     }
     return <div>No results.</div>;
@@ -261,11 +197,8 @@ function databaseDetails(state: AdminUIState, props: IInjectedProps): DatabaseDe
 let tables = (state: AdminUIState, props: IInjectedProps): string[] => databaseDetails(state, props) ? databaseDetails(state, props).table_names : [];
 let tablesSortSetting = (state: AdminUIState): SortSetting => state.ui[UI_DATABASE_TABLES_SORT_SETTING_KEY] || {};
 
-// Selectors which sorts statuses according to current sort setting.
-let tablesSortFunctionLookup = _(tablesColumnDescriptors).keyBy("key").mapValues<(s: TableInfo) => any>("sort").value();
-
 // Selector which generates the table rows as a TableInfo[].
-let tableInfo = createSelector(
+let tableInfos = createSelector(
   (dummy: {}, props: IInjectedProps) => props.params[databaseNameAttr],
   tables,
   (state: AdminUIState) => state.cachedData.tableDetails,
@@ -286,24 +219,11 @@ let tableInfo = createSelector(
     }
 );
 
-// Selector which generates the sorted table rows as a TableInfo[].
-let sortedTables = createSelector(
-  tableInfo,
-  tablesSortSetting,
-  (t: TableInfo[], sort: SortSetting) => {
-    let sortFn = tablesSortFunctionLookup[sort.sortKey];
-    if (sort && sortFn) {
-      return _.orderBy(t, sortFn, sort.ascending ? "asc" : "desc");
-    } else {
-      return t;
-    }
-  });
-
-// Connect the DatabaseMain class with our redux store.
-let databaseMainConnected = connect(
+// Connect the DatabaseDetails class with our redux store.
+let databaseDetailsConnected = connect(
   (state: AdminUIState, ownProps: IInjectedProps) => {
     return {
-      sortedTables: sortedTables(state, ownProps),
+      tableInfos: tableInfos(state, ownProps),
       tablesSortSetting: tablesSortSetting(state),
     };
   },
@@ -313,6 +233,6 @@ let databaseMainConnected = connect(
     refreshTableDetails,
     refreshTableStats,
   }
-)(DatabaseMain);
+)(DatabaseDetails);
 
-export default databaseMainConnected;
+export default databaseDetailsConnected;

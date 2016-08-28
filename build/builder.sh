@@ -144,4 +144,6 @@ docker run -i ${tty-} ${rm} \
   --env="CIRCLE_NODE_INDEX=${CIRCLE_NODE_INDEX-0}" \
   --env="CIRCLE_NODE_TOTAL=${CIRCLE_NODE_TOTAL-1}" \
   --env="GOTRACEBACK=${GOTRACEBACK-all}" \
+  --env="COVERALLS_TOKEN=${COVERALLS_TOKEN-}" \
+  --env="CODECOV_TOKEN=${CODECOV_TOKEN-}" \
   "${image}:${version}" "$@"

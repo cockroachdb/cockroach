@@ -31,6 +31,11 @@ import weak "google/api/annotations.proto";
 
 // DetailsRequest requests a nodes details.
 message DetailsRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  //
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
   string node_id = 1;
 }
 
@@ -49,6 +54,11 @@ message NodesResponse {
 }
 
 message NodeRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  //
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
   string node_id = 1;
 }
 
@@ -59,6 +69,11 @@ message RangeInfo {
 }
 
 message RangesRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  //
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
   string node_id = 1;
 }
 
@@ -67,6 +82,11 @@ message RangesResponse {
 }
 
 message GossipRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  //
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
   string node_id = 1;
 }
 
@@ -75,6 +95,11 @@ message JSONResponse {
 }
 
 message LogsRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  //
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
   string node_id = 1;
   string level = 2;
   string start_time = 3;
@@ -88,6 +113,11 @@ message LogEntriesResponse {
 }
 
 message LogFilesListRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  //
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
   string node_id = 1;
 }
 
@@ -96,15 +126,30 @@ message LogFilesListResponse {
 }
 
 message LogFileRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  //
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
   string node_id = 1;
   string file = 2;
 }
 
 message StacksRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  //
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
   string node_id = 1;
 }
 
 message MetricsRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  //
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
   string node_id = 1;
 }
 
@@ -131,6 +176,7 @@ message RaftDebugRequest {
 message RaftDebugResponse {
   map<int64, RaftRangeStatus> ranges = 1 [(gogoproto.nullable) = false,
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
+  repeated RaftRangeError errors = 2 [(gogoproto.nullable) = false];
 }
 
 message SpanStatsRequest {
@@ -190,11 +236,31 @@ service Status {
       body: "*"
     };
   }
-  rpc Stacks(StacksRequest) returns (JSONResponse) {}
-  rpc Metrics(MetricsRequest) returns (JSONResponse) {}
-  rpc LogFilesList(LogFilesListRequest) returns (LogFilesListResponse) {}
-  rpc LogFile(LogFileRequest) returns (LogEntriesResponse) {}
-  rpc Logs(LogsRequest) returns (LogEntriesResponse) {}
+  rpc Stacks(StacksRequest) returns (JSONResponse) {
+    option (google.api.http) = {
+      get: "/_status/stacks/{node_id}"
+    };
+  }
+  rpc Metrics(MetricsRequest) returns (JSONResponse) {
+    option (google.api.http) = {
+      get: "/_status/metrics/{node_id}"
+    };
+  }
+  rpc LogFilesList(LogFilesListRequest) returns (LogFilesListResponse) {
+    option (google.api.http) = {
+      get: "/_status/logfiles/{node_id}"
+    };
+  }
+  rpc LogFile(LogFileRequest) returns (LogEntriesResponse) {
+    option (google.api.http) = {
+      get: "/_status/logfiles/{node_id}/{file}"
+    };
+  }
+  rpc Logs(LogsRequest) returns (LogEntriesResponse) {
+    option (google.api.http) = {
+      get: "/_status/logs/{node_id}"
+    };
+  }
 }
 
 // PrettySpan holds a pretty-printed key range.

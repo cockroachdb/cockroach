@@ -133,7 +133,7 @@ func createTestStoreWithoutStart(t testing.TB, ctx *StoreContext) (*Store, *hlc.
 	config.TestingSetupZoneConfigHook(stopper)
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 	server := rpc.NewServer(rpcContext) // never started
-	ctx.Gossip = gossip.New(rpcContext, server, nil, stopper, metric.NewRegistry())
+	ctx.Gossip = gossip.New(context.TODO(), rpcContext, server, nil, stopper, metric.NewRegistry())
 	ctx.Gossip.SetNodeID(1)
 	manual := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
@@ -270,7 +270,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 
 	// Can't init as haven't bootstrapped.
 	if err := store.Start(context.Background(), stopper); err == nil {
-		t.Error("expected failure init'ing un-bootstrapped store")
+		t.Error("expected failure initializing un-bootstrapped store")
 	}
 
 	// Bootstrap should fail on non-empty engine.
@@ -1030,7 +1030,7 @@ func TestStoreRangeIDAllocation(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	// Range IDs should be allocated from ID 2 (first alloc'd range)
+	// Range IDs should be allocated from ID 2 (first allocated range)
 	// to rangeIDAllocCount * 3 + 1.
 	for i := 0; i < rangeIDAllocCount*3; i++ {
 		replicas := []roachpb.ReplicaDescriptor{{StoreID: store.StoreID()}}
@@ -2159,7 +2159,7 @@ func TestStoreRangePlaceholders(t *testing.T) {
 		t.Fatal("new store should have zero replica placeholders")
 	}
 
-	// Clobber the existing range so we can test nonoverlapping placeholders.
+	// Clobber the existing range so we can test non-overlapping placeholders.
 	rng1, err := s.GetReplica(1)
 	if err != nil {
 		t.Error(err)

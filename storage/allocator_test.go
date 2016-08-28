@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -166,22 +168,8 @@ var multiDCStores = []*roachpb.StoreDescriptor{
 // createTestAllocator creates a stopper, gossip, store pool and allocator for
 // use in tests. Stopper must be stopped by the caller.
 func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator, *hlc.ManualClock) {
-	stopper := stop.NewStopper()
-	manualClock := hlc.NewManualClock(hlc.UnixNano())
-	clock := hlc.NewClock(manualClock.UnixNano)
-	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
-	server := rpc.NewServer(rpcContext) // never started
-	g := gossip.New(rpcContext, server, nil, stopper, metric.NewRegistry())
-	// Have to call g.SetNodeID before call g.AddInfo
-	g.SetNodeID(roachpb.NodeID(1))
-	storePool := NewStorePool(
-		g,
-		clock,
-		rpcContext,
-		/* reservationsEnabled */ true,
-		TestTimeUntilStoreDeadOff,
-		stopper,
-	)
+	stopper, g, manualClock, storePool := createTestStorePool(TestTimeUntilStoreDeadOff)
+	manualClock.Set(hlc.UnixNano())
 	a := MakeAllocator(storePool, AllocatorOptions{AllowRebalance: true})
 	return stopper, g, storePool, a, manualClock
 }
@@ -1167,7 +1155,7 @@ func Example_rebalancing() {
 	// randomly adding / removing stores and adding bytes.
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 	server := rpc.NewServer(rpcContext) // never started
-	g := gossip.New(rpcContext, server, nil, stopper, metric.NewRegistry())
+	g := gossip.New(context.Background(), rpcContext, server, nil, stopper, metric.NewRegistry())
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	sp := NewStorePool(

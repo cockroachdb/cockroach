@@ -53,13 +53,9 @@ import (
 )
 
 const (
-	// adminEndpoint is the prefix for RESTful endpoints used to
-	// provide an administrative interface to the cockroach cluster.
-	adminEndpoint = "/_admin/"
-	// apiEndpoint is the prefix for the RESTful API used by the admin UI.
-	apiEndpoint = adminEndpoint + "v1/"
-	// healthPath is the health endpoint.
-	healthPath = apiEndpoint + "health"
+	// adminPrefix is the prefix for RESTful endpoints used to provide an
+	// administrative interface to the cockroach cluster.
+	adminPrefix = "/_admin/v1/"
 
 	// eventLimit is the maximum number of events returned by any endpoints
 	// returning events.
@@ -389,59 +385,62 @@ func (s *adminServer) TableDetails(
 		resp.CreateTableStatement = createStmt
 	}
 
-	// Get the number of ranges in the table. We get the key span for the table
-	// data. Then, we count the number of ranges that make up that key span.
-	{
-		var iexecutor sql.InternalExecutor
-		var tableSpan roachpb.Span
-		if err := s.server.db.Txn(context.TODO(), func(txn *client.Txn) error {
+	// Range and ZoneConfig information is not applicable to virtual schemas.
+	if !sql.IsVirtualDatabase(escDBName) {
+		// Get the number of ranges in the table. We get the key span for the table
+		// data. Then, we count the number of ranges that make up that key span.
+		{
+			var iexecutor sql.InternalExecutor
+			var tableSpan roachpb.Span
+			if err := s.server.db.Txn(context.TODO(), func(txn *client.Txn) error {
+				var err error
+				tableSpan, err = iexecutor.GetTableSpan(s.getUser(req), txn, escDBName, escTableName)
+				return err
+			}); err != nil {
+				return nil, s.serverError(err)
+			}
+			tableRSpan := roachpb.RSpan{}
 			var err error
-			tableSpan, err = iexecutor.GetTableSpan(s.getUser(req), txn, escDBName, escTableName)
-			return err
-		}); err != nil {
-			return nil, s.serverError(err)
-		}
-		tableRSpan := roachpb.RSpan{}
-		var err error
-		tableRSpan.Key, err = keys.Addr(tableSpan.Key)
-		if err != nil {
-			return nil, s.serverError(err)
-		}
-		tableRSpan.EndKey, err = keys.Addr(tableSpan.EndKey)
-		if err != nil {
-			return nil, s.serverError(err)
-		}
-		rangeCount, err := s.server.distSender.CountRanges(tableRSpan)
-		if err != nil {
-			return nil, s.serverError(err)
-		}
-		resp.RangeCount = rangeCount
-	}
-
-	// Query the zone configuration for this table.
-	{
-		path, err := s.queryDescriptorIDPath(session, []string{escDBName, escTableName})
-		if err != nil {
-			return nil, s.serverError(err)
+			tableRSpan.Key, err = keys.Addr(tableSpan.Key)
+			if err != nil {
+				return nil, s.serverError(err)
+			}
+			tableRSpan.EndKey, err = keys.Addr(tableSpan.EndKey)
+			if err != nil {
+				return nil, s.serverError(err)
+			}
+			rangeCount, err := s.server.distSender.CountRanges(tableRSpan)
+			if err != nil {
+				return nil, s.serverError(err)
+			}
+			resp.RangeCount = rangeCount
 		}
 
-		id, zone, zoneExists, err := s.queryZonePath(session, path)
-		if err != nil {
-			return nil, s.serverError(err)
-		}
+		// Query the zone configuration for this table.
+		{
+			path, err := s.queryDescriptorIDPath(session, []string{escDBName, escTableName})
+			if err != nil {
+				return nil, s.serverError(err)
+			}
 
-		if !zoneExists {
-			zone = config.DefaultZoneConfig()
-		}
-		resp.ZoneConfig = zone
+			id, zone, zoneExists, err := s.queryZonePath(session, path)
+			if err != nil {
+				return nil, s.serverError(err)
+			}
 
-		switch id {
-		case path[1]:
-			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_DATABASE
-		case path[2]:
-			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_TABLE
-		default:
-			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_CLUSTER
+			if !zoneExists {
+				zone = config.DefaultZoneConfig()
+			}
+			resp.ZoneConfig = zone
+
+			switch id {
+			case path[1]:
+				resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_DATABASE
+			case path[2]:
+				resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_TABLE
+			default:
+				resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_CLUSTER
+			}
 		}
 	}
 

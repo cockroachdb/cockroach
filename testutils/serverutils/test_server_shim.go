@@ -29,12 +29,15 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/gogo/protobuf/proto"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -141,4 +144,24 @@ func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
 		return nil, err
 	}
 	return server, nil
+}
+
+// GetJSONProto uses the supplied client to GET the URL specified by the parameters
+// and unmarshals the result into response.
+func GetJSONProto(ts TestServerInterface, path string, response proto.Message) error {
+	httpClient, err := ts.GetHTTPClient()
+	if err != nil {
+		return err
+	}
+	return util.GetJSON(httpClient, ts.AdminURL()+path, response)
+}
+
+// PostJSONProto uses the supplied client to POST request to the URL specified by
+// the parameters and unmarshals the result into response.
+func PostJSONProto(ts TestServerInterface, path string, request, response proto.Message) error {
+	httpClient, err := ts.GetHTTPClient()
+	if err != nil {
+		return err
+	}
+	return util.PostJSON(httpClient, ts.AdminURL()+path, request, response)
 }

@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/bufalloc"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -145,7 +146,8 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 	if tc.gossip == nil {
 		rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, tc.stopper)
 		server := rpc.NewServer(rpcContext) // never started
-		tc.gossip = gossip.New(rpcContext, server, nil, tc.stopper, metric.NewRegistry())
+		tc.gossip = gossip.New(
+			context.Background(), rpcContext, server, nil, tc.stopper, metric.NewRegistry())
 		tc.gossip.SetNodeID(1)
 	}
 	if tc.manualClock == nil {
@@ -360,7 +362,7 @@ func TestReplicaContains(t *testing.T) {
 	// This test really only needs a hollow shell of a Replica.
 	r := &Replica{}
 	r.mu.state.Desc = desc
-	r.rangeDesc.Store(desc)
+	r.rangeDesc.store(desc)
 
 	if statsKey := keys.RangeStatsKey(desc.RangeID); !r.ContainsKey(statsKey) {
 		t.Errorf("expected range to contain range stats key %q", statsKey)
@@ -6140,7 +6142,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Gather up the reproprosed commands.
+		// Gather up the reproposed commands.
 		r.mu.Lock()
 		var reproposed []*pendingCmd
 		for id, p := range r.mu.pendingCmds {
@@ -6155,11 +6157,11 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		// this test if that changes.
 		if (ticks % electionTicks) == 0 {
 			if len(reproposed) != i-1 {
-				t.Fatalf("%d: expected %d reproprosed commands, but found %+v", i, i-1, reproposed)
+				t.Fatalf("%d: expected %d reproposed commands, but found %+v", i, i-1, reproposed)
 			}
 		} else {
 			if len(reproposed) != 0 {
-				t.Fatalf("%d: expected no reproprosed commands, but found %+v", i, reproposed)
+				t.Fatalf("%d: expected no reproposed commands, but found %+v", i, reproposed)
 			}
 		}
 	}
@@ -6332,6 +6334,7 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer snap.Close()
 
 	tc.store.metrics.Available.Update(tc.store.bookie.maxReservedBytes)
 
@@ -6354,9 +6357,30 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 	}
 	checkReservations(t, 1)
 
+	b := firstRng.store.Engine().NewBatch()
+	var alloc bufalloc.ByteAllocator
+	for ; snap.Iter.Valid(); snap.Iter.Next() {
+		var key engine.MVCCKey
+		var value []byte
+		alloc, key, value = snap.Iter.allocIterKeyValue(alloc)
+		mvccKey := engine.MVCCKey{
+			Key:       key.Key,
+			Timestamp: key.Timestamp,
+		}
+		if err := b.Put(mvccKey, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	// Apply a snapshot and check the reservation was filled. Note that this
 	// out-of-band application could be a root cause if this test ever crashes.
-	if err := firstRng.applySnapshot(context.Background(), snap, raftpb.HardState{}); err != nil {
+	if err := firstRng.applySnapshot(context.Background(), IncomingSnapshot{
+		SnapUUID:        snap.SnapUUID,
+		RangeDescriptor: *firstRng.Desc(),
+		Batches:         [][]byte{b.Repr()},
+		LogEntries:      snap.LogEntries,
+	},
+		snap.Snapshot, raftpb.HardState{}); err != nil {
 		t.Fatal(err)
 	}
 	checkReservations(t, 0)
