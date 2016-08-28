@@ -107,8 +107,12 @@ type Transport interface {
 	Close()
 }
 
-// grpcTransportFactory is the default TransportFactory, using GRPC.
-func grpcTransportFactory(
+// grpcTransportFactoryImpl is the default TransportFactory, using GRPC.
+// Do not use this directly - use grpcTransportFactory instead.
+//
+// During race builds, we wrap this to hold on to and read all obtained
+// requests in a tight loop, exposing data races; see transport_race.go.
+func grpcTransportFactoryImpl(
 	opts SendOptions,
 	rpcContext *rpc.Context,
 	replicas ReplicaSlice,
@@ -167,6 +171,18 @@ func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
 	if localServer := gt.rpcContext.GetLocalInternalServerForAddr(addr); enableLocalCalls && localServer != nil {
 		ctx, cancel := gt.opts.contextWithTimeout()
 		defer cancel()
+
+		// Clone the request. At the time of writing, Replica may mutate it
+		// during command execution which can lead to data races.
+		//
+		// TODO(tamird): we should clone all of client.args.Header, but the
+		// assertions in protoutil.Clone fire and there seems to be no
+		// reasonable workaround.
+		origTxn := client.args.Txn
+		if origTxn != nil {
+			clonedTxn := origTxn.Clone()
+			client.args.Txn = &clonedTxn
+		}
 
 		reply, err := localServer.Batch(ctx, &client.args)
 		done <- BatchCall{Reply: reply, Err: err}
