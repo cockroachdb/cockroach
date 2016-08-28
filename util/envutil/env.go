@@ -23,11 +23,13 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 type envVarInfo struct {
@@ -37,7 +39,7 @@ type envVarInfo struct {
 }
 
 var envVarRegistry struct {
-	mu    sync.Mutex
+	mu    syncutil.Mutex
 	cache map[string]envVarInfo
 }
 
@@ -45,10 +47,19 @@ func init() {
 	ClearEnvCache()
 }
 
-// VarName returns the name of the environment variable
-// corresponding to a configuration key or command-line flag name.
-func VarName(name string) string {
-	return "COCKROACH_" + strings.ToUpper(strings.Replace(name, "-", "_", -1))
+func checkVarName(name string) {
+	// Env vars must:
+	//  - start with COCKROACH_
+	//  - be uppercase
+	//  - only contain letters, digits, and _
+	valid := strings.HasPrefix(name, "COCKROACH_")
+	for i := 0; valid && i < len(name); i++ {
+		c := name[i]
+		valid = ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_')
+	}
+	if !valid {
+		panic("invalid env var name " + name)
+	}
 }
 
 // getEnv retrieves an environment variable, keeps track of where
@@ -57,9 +68,9 @@ func VarName(name string) string {
 // The bookkeeping enables a report of all influential environment
 // variables with "cockroach debug env". To keep this report useful,
 // all relevant environment variables should be read during start up.
-func getEnv(name string) (string, bool) {
-	_, consumer, _, _ := runtime.Caller(2)
-	varName := VarName(name)
+func getEnv(varName string, depth int) (string, bool) {
+	_, consumer, _, _ := runtime.Caller(depth + 1)
+	checkVarName(varName)
 
 	envVarRegistry.mu.Lock()
 	defer envVarRegistry.mu.Unlock()
@@ -116,11 +127,19 @@ func GetShellCommand(cmd string) []string {
 	return []string{"/bin/sh", "-c", cmd}
 }
 
+// EnvString returns the value set by the specified environment variable. The
+// depth argument indicates the stack depth of the caller that should be
+// associated with the variable.
+// The returned boolean flag indicates if the variable is set.
+func EnvString(name string, depth int) (string, bool) {
+	return getEnv(name, depth+1)
+}
+
 // EnvOrDefaultString returns the value set by the specified
 // environment variable, if any, otherwise the specified default
 // value.
 func EnvOrDefaultString(name string, value string) string {
-	if v, present := getEnv(name); present {
+	if v, present := getEnv(name, 1); present {
 		return v
 	}
 	return value
@@ -129,10 +148,10 @@ func EnvOrDefaultString(name string, value string) string {
 // EnvOrDefaultBool returns the value set by the specified environment
 // variable, if any, otherwise the specified default value.
 func EnvOrDefaultBool(name string, value bool) bool {
-	if str, present := getEnv(name); present {
+	if str, present := getEnv(name, 1); present {
 		v, err := strconv.ParseBool(str)
 		if err != nil {
-			log.Errorf("error parsing %s: %s", VarName(name), err)
+			log.Errorf(context.Background(), "error parsing %s: %s", name, err)
 			return value
 		}
 		return v
@@ -143,10 +162,10 @@ func EnvOrDefaultBool(name string, value bool) bool {
 // EnvOrDefaultInt returns the value set by the specified environment
 // variable, if any, otherwise the specified default value.
 func EnvOrDefaultInt(name string, value int) int {
-	if str, present := getEnv(name); present {
+	if str, present := getEnv(name, 1); present {
 		v, err := strconv.ParseInt(str, 0, 0)
 		if err != nil {
-			log.Errorf("error parsing %s: %s", VarName(name), err)
+			log.Errorf(context.Background(), "error parsing %s: %s", name, err)
 			return value
 		}
 		return int(v)
@@ -157,10 +176,10 @@ func EnvOrDefaultInt(name string, value int) int {
 // EnvOrDefaultInt64 returns the value set by the specified environment
 // variable, if any, otherwise the specified default value.
 func EnvOrDefaultInt64(name string, value int64) int64 {
-	if str, present := getEnv(name); present {
+	if str, present := getEnv(name, 1); present {
 		v, err := strconv.ParseInt(str, 0, 64)
 		if err != nil {
-			log.Errorf("error parsing %s: %s", VarName(name), err)
+			log.Errorf(context.Background(), "error parsing %s: %s", name, err)
 			return value
 		}
 		return v
@@ -171,10 +190,10 @@ func EnvOrDefaultInt64(name string, value int64) int64 {
 // EnvOrDefaultBytes returns the value set by the specified environment
 // variable, if any, otherwise the specified default value.
 func EnvOrDefaultBytes(name string, value int64) int64 {
-	if str, present := getEnv(name); present {
+	if str, present := getEnv(name, 1); present {
 		v, err := humanizeutil.ParseBytes(str)
 		if err != nil {
-			log.Errorf("error parsing %s: %s", VarName(name), err)
+			log.Errorf(context.Background(), "error parsing %s: %s", name, err)
 			return value
 		}
 		return v
@@ -185,10 +204,10 @@ func EnvOrDefaultBytes(name string, value int64) int64 {
 // EnvOrDefaultDuration returns the value set by the specified environment
 // variable, if any, otherwise the specified default value.
 func EnvOrDefaultDuration(name string, value time.Duration) time.Duration {
-	if str, present := getEnv(name); present {
+	if str, present := getEnv(name, 1); present {
 		v, err := time.ParseDuration(str)
 		if err != nil {
-			log.Errorf("error parsing %s: %s", VarName(name), err)
+			log.Errorf(context.Background(), "error parsing %s: %s", name, err)
 			return value
 		}
 		return v

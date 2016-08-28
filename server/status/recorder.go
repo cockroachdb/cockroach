@@ -21,7 +21,8 @@ import (
 	"fmt"
 	"io"
 	"strconv"
-	"sync"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -76,50 +78,48 @@ type storeMetrics interface {
 // store hosted by the node. There are slight differences in the way these are
 // recorded, and they are thus kept separate.
 type MetricsRecorder struct {
-	// nodeRegistry contains, as subregistries, the multiple component-specific
-	// registries which are recorded as "node level" metrics.
-	nodeRegistry *metric.Registry
-
-	// Fields below are locked by this mutex.
 	mu struct {
-		sync.Mutex
+		syncutil.Mutex
+		// nodeRegistry contains, as subregistries, the multiple component-specific
+		// registries which are recorded as "node level" metrics.
+		nodeRegistry *metric.Registry
+		desc         roachpb.NodeDescriptor
+		startedAt    int64
+
 		// storeRegistries contains a registry for each store on the node. These
 		// are not stored as subregistries, but rather are treated as wholly
 		// independent.
 		storeRegistries map[roachpb.StoreID]*metric.Registry
-		nodeID          roachpb.NodeID
 		clock           *hlc.Clock
+		stores          map[roachpb.StoreID]storeMetrics
 
 		// Counts to help optimize slice allocation.
 		lastDataCount        int
 		lastSummaryCount     int
 		lastNodeMetricCount  int
 		lastStoreMetricCount int
-
-		startedAt int64
-		desc      roachpb.NodeDescriptor
-		stores    map[roachpb.StoreID]storeMetrics
 	}
 }
 
 // NewMetricsRecorder initializes a new MetricsRecorder object that uses the
 // given clock.
 func NewMetricsRecorder(clock *hlc.Clock) *MetricsRecorder {
-	mr := &MetricsRecorder{
-		nodeRegistry: metric.NewRegistry(),
-	}
+	mr := &MetricsRecorder{}
 	mr.mu.storeRegistries = make(map[roachpb.StoreID]*metric.Registry)
 	mr.mu.stores = make(map[roachpb.StoreID]storeMetrics)
 	mr.mu.clock = clock
 	return mr
 }
 
-// AddNodeRegistry adds a node-level registry to this recorder. Each node-level
-// registry has a 'prefix format' which is used to add a prefix to the name of
-// all metrics in that registry while recording (see the metric.Registry object
-// for more information on prefix format strings).
-func (mr *MetricsRecorder) AddNodeRegistry(prefixFmt string, registry *metric.Registry) {
-	mr.nodeRegistry.MustAdd(prefixFmt, registry)
+// AddNode adds the Registry from an initialized node, along with its descriptor
+// and start time.
+func (mr *MetricsRecorder) AddNode(reg *metric.Registry, desc roachpb.NodeDescriptor,
+	startedAt int64) {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+	mr.mu.nodeRegistry = reg
+	mr.mu.desc = desc
+	mr.mu.startedAt = startedAt
 }
 
 // AddStore adds the Registry from the provided store as a store-level registry
@@ -131,19 +131,9 @@ func (mr *MetricsRecorder) AddStore(store storeMetrics) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	storeID := store.StoreID()
+	store.Registry().AddLabel("store", strconv.Itoa(int(storeID)))
 	mr.mu.storeRegistries[storeID] = store.Registry()
 	mr.mu.stores[storeID] = store
-}
-
-// NodeStarted should be called on the recorder once the associated node has
-// received its Node ID; this indicates that it is appropriate to begin
-// recording statistics for this node.
-func (mr *MetricsRecorder) NodeStarted(desc roachpb.NodeDescriptor, startedAt int64) {
-	mr.mu.Lock()
-	defer mr.mu.Unlock()
-	mr.mu.desc = desc
-	mr.mu.nodeID = desc.NodeID
-	mr.mu.startedAt = startedAt
 }
 
 // MarshalJSON returns an appropriate JSON representation of the current values
@@ -151,16 +141,16 @@ func (mr *MetricsRecorder) NodeStarted(desc roachpb.NodeDescriptor, startedAt in
 func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
-	if mr.mu.nodeID == 0 {
+	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; return an empty
 		// JSON object.
 		if log.V(1) {
-			log.Warning("MetricsRecorder.MarshalJSON() called before NodeID allocation")
+			log.Warning(context.TODO(), "MetricsRecorder.MarshalJSON() called before NodeID allocation")
 		}
 		return []byte("{}"), nil
 	}
 	topLevel := map[string]interface{}{
-		fmt.Sprintf("node.%d", mr.mu.nodeID): mr.nodeRegistry,
+		fmt.Sprintf("node.%d", mr.mu.desc.NodeID): mr.mu.nodeRegistry,
 	}
 	// Add collection of stores to top level. JSON requires that keys be strings,
 	// so we must convert the store ID to a string.
@@ -176,15 +166,15 @@ func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
 func (mr *MetricsRecorder) PrintAsText(w io.Writer) error {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
-	if mr.mu.nodeID == 0 {
+	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; output nothing.
 		if log.V(1) {
-			log.Warning("MetricsRecorder.MarshalText() called before NodeID allocation")
+			log.Warning(context.TODO(), "MetricsRecorder.MarshalText() called before NodeID allocation")
 		}
 		return nil
 	}
 
-	if err := mr.nodeRegistry.PrintAsText(w); err != nil {
+	if err := mr.mu.nodeRegistry.PrintAsText(w); err != nil {
 		return err
 	}
 	for _, reg := range mr.mu.storeRegistries {
@@ -201,10 +191,10 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 
-	if mr.mu.desc.NodeID == 0 {
+	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; do nothing.
 		if log.V(1) {
-			log.Warning("MetricsRecorder.GetTimeSeriesData() called before NodeID allocation")
+			log.Warning(context.TODO(), "MetricsRecorder.GetTimeSeriesData() called before NodeID allocation")
 		}
 		return nil
 	}
@@ -214,9 +204,9 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 	// Record time series from node-level registries.
 	now := mr.mu.clock.PhysicalNow()
 	recorder := registryRecorder{
-		registry:       mr.nodeRegistry,
+		registry:       mr.mu.nodeRegistry,
 		format:         nodeTimeSeriesPrefix,
-		source:         strconv.FormatInt(int64(mr.mu.nodeID), 10),
+		source:         strconv.FormatInt(int64(mr.mu.desc.NodeID), 10),
 		timestampNanos: now,
 	}
 	recorder.record(&data)
@@ -242,10 +232,10 @@ func (mr *MetricsRecorder) GetStatusSummary() *NodeStatus {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 
-	if mr.mu.nodeID == 0 {
+	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; do nothing.
 		if log.V(1) {
-			log.Warning("MetricsRecorder.GetStatusSummary called before NodeID allocation.")
+			log.Warning(context.TODO(), "MetricsRecorder.GetStatusSummary called before NodeID allocation.")
 		}
 		return nil
 	}
@@ -262,7 +252,7 @@ func (mr *MetricsRecorder) GetStatusSummary() *NodeStatus {
 		Metrics:       make(map[string]float64, mr.mu.lastNodeMetricCount),
 	}
 
-	eachRecordableValue(mr.nodeRegistry, func(name string, val float64) {
+	eachRecordableValue(mr.mu.nodeRegistry, func(name string, val float64) {
 		nodeStat.Metrics[name] = val
 	})
 
@@ -276,7 +266,7 @@ func (mr *MetricsRecorder) GetStatusSummary() *NodeStatus {
 		// Gather descriptor from store.
 		descriptor, err := mr.mu.stores[storeID].Descriptor()
 		if err != nil {
-			log.Errorf("Could not record status summaries: Store %d could not return descriptor, error: %s", storeID, err)
+			log.Errorf(context.TODO(), "Could not record status summaries: Store %d could not return descriptor, error: %s", storeID, err)
 			continue
 		}
 
@@ -335,7 +325,7 @@ func eachRecordableValue(reg *metric.Registry, fn func(string, float64)) {
 		} else {
 			val, err := extractValue(mtr)
 			if err != nil {
-				log.Warning(err)
+				log.Warning(context.TODO(), err)
 				return
 			}
 			fn(name, val)

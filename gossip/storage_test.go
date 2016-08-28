@@ -20,7 +20,6 @@ import (
 	"reflect"
 	"sort"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -32,10 +31,12 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/protoutil"
+	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 type testStorage struct {
-	sync.Mutex
+	syncutil.Mutex
 	read, write bool
 	info        gossip.BootstrapInfo
 }
@@ -97,15 +98,16 @@ func (s unresolvedAddrSlice) Swap(i, j int) {
 // using the bootstrap hosts in a gossip.Storage object.
 func TestGossipStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
 
-	network := simulation.NewNetwork(3)
-	defer network.Stop()
+	network := simulation.NewNetwork(stopper, 3, true)
 
 	// Set storage for each of the nodes.
 	addresses := make(unresolvedAddrSlice, len(network.Nodes))
 	stores := make([]testStorage, len(network.Nodes))
 	for i, n := range network.Nodes {
-		addresses[i] = util.MakeUnresolvedAddr(n.Addr.Network(), n.Addr.String())
+		addresses[i] = util.MakeUnresolvedAddr(n.Addr().Network(), n.Addr().String())
 		if err := n.Gossip.SetStorage(&stores[i]); err != nil {
 			t.Fatal(err)
 		}
@@ -162,7 +164,7 @@ func TestGossipStorage(t *testing.T) {
 	}
 	node.Gossip.SetBootstrapInterval(1 * time.Millisecond)
 
-	r, err := resolver.NewResolverFromAddress(node.Addr)
+	r, err := resolver.NewResolverFromAddress(node.Addr())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,6 +206,61 @@ func TestGossipStorage(t *testing.T) {
 	util.SucceedsSoon(t, func() error {
 		if expected, actual := len(network.Nodes)-1 /* -1 is ourself */, ts2.Len(); expected != actual {
 			return errors.Errorf("expected %v, got %v (info: %#v)", expected, actual, ts2.Info().Addresses)
+		}
+		return nil
+	})
+}
+
+// TestGossipStorageCleanup verifies that bad resolvers are purged
+// from the bootstrap info after gossip has successfully connected.
+func TestGossipStorageCleanup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	const numNodes = 3
+	network := simulation.NewNetwork(stopper, numNodes, false)
+
+	const notReachableAddr = "localhost:0"
+	const invalidAddr = "10.0.0.1000:3333333"
+	// Set storage for each of the nodes.
+	addresses := make(unresolvedAddrSlice, len(network.Nodes))
+	stores := make([]testStorage, len(network.Nodes))
+	for i, n := range network.Nodes {
+		addresses[i] = util.MakeUnresolvedAddr(n.Addr().Network(), n.Addr().String())
+		// Pre-add an invalid address to each gossip storage.
+		if err := stores[i].WriteBootstrapInfo(&gossip.BootstrapInfo{
+			Addresses: []util.UnresolvedAddr{
+				util.MakeUnresolvedAddr("tcp", network.Nodes[(i+1)%numNodes].Addr().String()), // node i+1 address
+				util.MakeUnresolvedAddr("tcp", notReachableAddr),                              // unreachable address
+				util.MakeUnresolvedAddr("tcp", invalidAddr),                                   // invalid address
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := n.Gossip.SetStorage(&stores[i]); err != nil {
+			t.Fatal(err)
+		}
+		n.Gossip.SetStallInterval(1 * time.Millisecond)
+		n.Gossip.SetBootstrapInterval(1 * time.Millisecond)
+	}
+
+	// Wait for the gossip network to connect.
+	network.RunUntilFullyConnected()
+
+	// Wait long enough for storage to get the expected number of
+	// addresses and no pending cleanups.
+	util.SucceedsSoon(t, func() error {
+		for i := range stores {
+			p := &stores[i]
+			if expected, actual := len(network.Nodes)-1 /* -1 is ourself */, p.Len(); expected != actual {
+				return errors.Errorf("expected %v, got %v (info: %#v)", expected, actual, p.Info().Addresses)
+			}
+			for _, addr := range p.Info().Addresses {
+				if addr.String() == invalidAddr {
+					return errors.Errorf("node %d still needs bootstrap cleanup", i)
+				}
+			}
 		}
 		return nil
 	})

@@ -95,6 +95,10 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (a INT CONSTRAINT one DEFAULT 1 CONSTRAINT positive CHECK (a > 0))`},
 		// "0" lost quotes previously.
 		{`CREATE TABLE a (b INT, c TEXT, PRIMARY KEY (b, c, "0"))`},
+		{`CREATE TABLE a (b INT, c TEXT, FOREIGN KEY (b) REFERENCES other)`},
+		{`CREATE TABLE a (b INT, c TEXT, FOREIGN KEY (b, c) REFERENCES other)`},
+		{`CREATE TABLE a (b INT, c TEXT, FOREIGN KEY (b, c) REFERENCES other (x, y))`},
+		{`CREATE TABLE a (b INT, c TEXT, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y))`},
 		{`CREATE TABLE a (b INT, c TEXT, INDEX (b, c))`},
 		{`CREATE TABLE a (b INT, c TEXT, INDEX d (b, c))`},
 		{`CREATE TABLE a (b INT, c TEXT, CONSTRAINT d UNIQUE (b, c))`},
@@ -114,6 +118,9 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b INT) INTERLEAVE IN PARENT foo (c) CASCADE`},
 		{`CREATE TABLE a.b (b INT)`},
 		{`CREATE TABLE IF NOT EXISTS a (b INT)`},
+
+		{`CREATE TABLE a AS SELECT * FROM b`},
+		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b`},
 
 		{`DELETE FROM a`},
 		{`DELETE FROM a.b`},
@@ -155,7 +162,6 @@ func TestParse(t *testing.T) {
 		{`SHOW DATABASES`},
 		{`SHOW TABLES`},
 		{`SHOW TABLES FROM a`},
-		{`SHOW TABLES FROM a.b.c`},
 		{`SHOW COLUMNS FROM a`},
 		{`SHOW COLUMNS FROM a.b.c`},
 		{`SHOW INDEXES FROM a`},
@@ -402,6 +408,9 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t1 NATURAL JOIN t2`},
 		{`SELECT a FROM t1 INNER JOIN t2 USING (a)`},
 		{`SELECT a FROM t1 FULL JOIN t2 USING (a)`},
+
+		{`SELECT a FROM t1 AS OF SYSTEM TIME '2016-01-01'`},
+		{`SELECT a FROM t1, t2 AS OF SYSTEM TIME '2016-01-01'`},
 
 		{`SELECT a FROM t LIMIT a`},
 		{`SELECT a FROM t OFFSET b`},
@@ -808,6 +817,13 @@ SELECT * FROM t WHERE k=
 CREATE TABLE test (
   CONSTRAINT foo INDEX (bar)
                  ^
+`},
+		{`CREATE TABLE test (
+  foo BIT(0)
+)`, `length for type bit must be at least 1 at or near ")"
+CREATE TABLE test (
+  foo BIT(0)
+           ^
 `},
 		{`CREATE DATABASE a b`,
 			`syntax error at or near "b"

@@ -680,7 +680,7 @@ func TestRSpanContains(t *testing.T) {
 		{[]byte("b"), []byte("a"), false},
 	}
 	for i, test := range testData {
-		if bytes.Compare(test.start, test.end) == 0 {
+		if bytes.Equal(test.start, test.end) {
 			if rs.ContainsKey(test.start) != test.contains {
 				t.Errorf("%d: expected key %q within range", i, test.start)
 			}
@@ -743,11 +743,8 @@ func TestRSpanIntersect(t *testing.T) {
 			t.Error(err)
 			continue
 		}
-		if bytes.Compare(actual.Key, test.expected.Key) != 0 ||
-			bytes.Compare(actual.EndKey, test.expected.EndKey) != 0 {
-			t.Errorf("%d: expected RSpan [%q,%q) but got [%q,%q)",
-				i, test.expected.Key, test.expected.EndKey,
-				actual.Key, actual.EndKey)
+		if !actual.Equal(test.expected) {
+			t.Errorf("%d: expected %+v but got %+v", i, test.expected, actual)
 		}
 	}
 

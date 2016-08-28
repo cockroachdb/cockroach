@@ -18,7 +18,6 @@
 package sql
 
 import (
-	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 // TestRenameTable tests the table descriptor changes during
@@ -138,7 +138,7 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 			},
 			SQLLeaseManager: &lmKnobs,
 		}}
-	var mu sync.Mutex
+	var mu syncutil.Mutex
 	var waitTableID sqlbase.ID
 	// renamed is used to block until the node cannot get leases with the original
 	// table name. It will be signaled once the table has been renamed and the update

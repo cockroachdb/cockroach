@@ -18,7 +18,6 @@ package storage
 
 import (
 	"fmt"
-	"sync"
 
 	"golang.org/x/net/context"
 
@@ -30,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -42,7 +42,7 @@ import (
 // information to be read at node startup.
 type Stores struct {
 	clock      *hlc.Clock
-	mu         sync.RWMutex               // Protects storeMap and addrs
+	mu         syncutil.RWMutex           // Protects storeMap and addrs
 	storeMap   map[roachpb.StoreID]*Store // Map from StoreID to Store
 	biLatestTS hlc.Timestamp              // Timestamp of gossip bootstrap info
 	latestBI   *gossip.BootstrapInfo      // Latest cached bootstrap info
@@ -99,7 +99,7 @@ func (ls *Stores) AddStore(s *Store) {
 	// all stores have the most recent values.
 	if !ls.biLatestTS.Equal(hlc.ZeroTimestamp) {
 		if err := ls.updateBootstrapInfo(ls.latestBI); err != nil {
-			log.Errorf("failed to update bootstrap info on newly added store: %s", err)
+			log.Errorf(context.TODO(), "failed to update bootstrap info on newly added store: %s", err)
 		}
 	}
 }
@@ -111,13 +111,20 @@ func (ls *Stores) RemoveStore(s *Store) {
 	delete(ls.storeMap, s.Ident.StoreID)
 }
 
-// VisitStores implements a visitor pattern over stores in the storeMap.
-// The specified function is invoked with each store in turn. Stores are
-// visited in a random order.
+// VisitStores implements a visitor pattern over stores in the
+// storeMap. The specified function is invoked with each store in
+// turn. Care is taken to invoke the visitor func without the lock
+// held to avoid inconsistent lock orderings, as some visitor
+// functions may call back into the Stores object. Stores are visited
+// in random order.
 func (ls *Stores) VisitStores(visitor func(s *Store) error) error {
 	ls.mu.RLock()
-	defer ls.mu.RUnlock()
+	stores := make([]*Store, 0, len(ls.storeMap))
 	for _, s := range ls.storeMap {
+		stores = append(stores, s)
+	}
+	ls.mu.RUnlock()
+	for _, s := range stores {
 		if err := visitor(s); err != nil {
 			return err
 		}
@@ -195,9 +202,9 @@ func (ls *Stores) LookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeI
 		rng = store.LookupReplica(start, end)
 		if rng == nil {
 			if tmpRng := store.LookupReplica(start, nil); tmpRng != nil {
-				log.Warningf("range not contained in one range: [%s,%s), but have [%s,%s)",
-					start, end, tmpRng.Desc().StartKey, tmpRng.Desc().EndKey)
 				partialDesc = tmpRng.Desc()
+				log.Warningf(context.TODO(), "range not contained in one range: [%s,%s), but have [%s,%s)",
+					start, end, partialDesc.StartKey, partialDesc.EndKey)
 				break
 			}
 			continue
@@ -292,7 +299,7 @@ func (ls *Stores) ReadBootstrapInfo(bi *gossip.BootstrapInfo) error {
 			*bi = storeBI
 		}
 	}
-	log.Infof("read %d node addresses from persistent storage", len(bi.Addresses))
+	log.Infof(context.TODO(), "read %d node addresses from persistent storage", len(bi.Addresses))
 	return ls.updateBootstrapInfo(bi)
 }
 
@@ -307,7 +314,7 @@ func (ls *Stores) WriteBootstrapInfo(bi *gossip.BootstrapInfo) error {
 	if err := ls.updateBootstrapInfo(bi); err != nil {
 		return err
 	}
-	log.Infof("wrote %d node addresses to persistent storage", len(bi.Addresses))
+	log.Infof(context.TODO(), "wrote %d node addresses to persistent storage", len(bi.Addresses))
 	return nil
 }
 

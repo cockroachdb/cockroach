@@ -92,13 +92,15 @@ CockroachDB supports the PostgreSQL wire protocol, so you can use any available 
 
 ## Get In Touch
 
-When you see a bug or have improvements to suggest, please open an [issue](https://github.com/cockroachdb/cockroach/issues).
+### Report a Bug
 
-For development-related questions and anything else, there are two easy ways to get in touch:
+For filing bugs, suggesting improvements, or requesting new features, help us out by [opening an issue](https://github.com/cockroachdb/cockroach/issues/new).
 
--   [Join us on Gitter](https://gitter.im/cockroachdb/cockroach) - This is the best, most immediate way to connect with CockroachDB engineers.
+### Need Help?
 
--   [Post to our Developer mailing list](https://groups.google.com/forum/#!forum/cockroach-db) - Please join first or you messages may be held back for moderation.
+-   [CockroachDB Forum](https://forum.cockroachlabs.com/) - Ask questions, find answers, and help other users.
+
+-   [Join us on Gitter](https://gitter.im/cockroachdb/cockroach) - This is the most immediate way to connect with CockroachDB engineers.
 
 ## Contributing
 

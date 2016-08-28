@@ -196,7 +196,7 @@ func TestTransactionConfig(t *testing.T) {
 	dbCtx := DefaultDBContext()
 	dbCtx.UserPriority = 101
 	db := NewDBWithContext(newTestSender(nil, nil), dbCtx)
-	if err := db.Txn(func(txn *Txn) error {
+	if err := db.Txn(context.TODO(), func(txn *Txn) error {
 		if txn.db.ctx.UserPriority != db.ctx.UserPriority {
 			t.Errorf("expected txn user priority %f; got %f",
 				db.ctx.UserPriority, txn.db.ctx.UserPriority)
@@ -217,7 +217,7 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 		calls = append(calls, ba.Methods()...)
 		return ba.CreateReply(), nil
 	}, nil))
-	if err := db.Txn(func(txn *Txn) error {
+	if err := db.Txn(context.TODO(), func(txn *Txn) error {
 		_, err := txn.Get("a")
 		return err
 	}); err != nil {
@@ -240,7 +240,7 @@ func TestCommitReadOnlyTransactionExplicit(t *testing.T) {
 			calls = append(calls, ba.Methods()...)
 			return ba.CreateReply(), nil
 		}, nil))
-		if err := db.Txn(func(txn *Txn) error {
+		if err := db.Txn(context.TODO(), func(txn *Txn) error {
 			b := txn.NewBatch()
 			if withGet {
 				b.Get("foo")
@@ -292,7 +292,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 	}
 	for i, test := range testArgs {
 		calls = []roachpb.Method{}
-		if err := db.Txn(func(txn *Txn) error {
+		if err := db.Txn(context.TODO(), func(txn *Txn) error {
 			return test.f(txn)
 		}); err != nil {
 			t.Errorf("%d: unexpected error on commit: %s", i, err)
@@ -313,7 +313,7 @@ func TestTxnInsertBeginTransaction(t *testing.T) {
 		calls = append(calls, ba.Methods()...)
 		return ba.CreateReply(), nil
 	}, nil))
-	if err := db.Txn(func(txn *Txn) error {
+	if err := db.Txn(context.TODO(), func(txn *Txn) error {
 		if _, err := txn.Get("foo"); err != nil {
 			return err
 		}
@@ -336,7 +336,7 @@ func TestBeginTransactionErrorIndex(t *testing.T) {
 		pErr.SetErrorIndex(0)
 		return nil, pErr
 	}, nil))
-	_ = db.Txn(func(txn *Txn) error {
+	_ = db.Txn(context.TODO(), func(txn *Txn) error {
 		b := txn.NewBatch()
 		b.Put("a", "b")
 		_, err := runOneResult(txn, b)
@@ -362,7 +362,7 @@ func TestCommitTransactionOnce(t *testing.T) {
 		count++
 		return ba.CreateReply(), nil
 	}, nil))
-	if err := db.Txn(func(txn *Txn) error {
+	if err := db.Txn(context.TODO(), func(txn *Txn) error {
 		b := txn.NewBatch()
 		b.Put("z", "adding a write exposed a bug in #1882")
 		return txn.CommitInBatch(b)
@@ -384,7 +384,7 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 		}
 		return ba.CreateReply(), nil
 	}, nil))
-	if err := db.Txn(func(txn *Txn) error {
+	if err := db.Txn(context.TODO(), func(txn *Txn) error {
 		return errors.New("foo")
 	}); err == nil {
 		t.Error("expected error on abort")
@@ -406,7 +406,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 			return ba.CreateReply(), nil
 		}, nil))
 		ok := false
-		if err := db.Txn(func(txn *Txn) error {
+		if err := db.Txn(context.TODO(), func(txn *Txn) error {
 			if !ok {
 				if err := txn.Put("consider", "phlebas"); err != nil {
 					t.Fatal(err)
@@ -458,7 +458,7 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 		return ba.CreateReply(), nil
 	}))
 
-	if err := db.Txn(func(txn *Txn) error {
+	if err := db.Txn(context.TODO(), func(txn *Txn) error {
 		tries++
 		b := txn.NewBatch()
 		b.Put("a", "b")
@@ -491,7 +491,7 @@ func TestAbortMutatingTransaction(t *testing.T) {
 		return ba.CreateReply(), nil
 	}, nil))
 
-	if err := db.Txn(func(txn *Txn) error {
+	if err := db.Txn(context.TODO(), func(txn *Txn) error {
 		if err := txn.Put("a", "b"); err != nil {
 			return err
 		}
@@ -538,7 +538,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 				}
 				return ba.CreateReply(), nil
 			}, nil), dbCtx)
-		err := db.Txn(func(txn *Txn) error {
+		err := db.Txn(context.TODO(), func(txn *Txn) error {
 			return txn.Put("a", "b")
 		})
 		if test.retry {
@@ -559,15 +559,17 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 	}
 }
 
-// TestAbortedRetryPreservesTimestamp verifies that the minimum timestamp
-// set by the client is preserved across retries of aborted transactions.
-func TestAbortedRetryPreservesTimestamp(t *testing.T) {
+// Test that the a txn gets a fresh OrigTimestamp with every retry.
+func TestAbortedRetryRenewsTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Create a TestSender that aborts a transaction 2 times before succeeding.
+	mc := hlc.NewManualClock(0)
+	clock := hlc.NewClock(mc.UnixNano)
 	count := 0
 	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		if _, ok := ba.GetArg(roachpb.Put); ok {
+			mc.Increment(1)
 			count++
 			if count < 3 {
 				return nil, roachpb.NewError(&roachpb.TransactionAbortedError{})
@@ -584,9 +586,12 @@ func TestAbortedRetryPreservesTimestamp(t *testing.T) {
 	txn := NewTxn(context.Background(), *db)
 
 	// Request a client-defined timestamp.
-	refTimestamp := hlc.Timestamp{WallTime: 42, Logical: 69}
-	execOpt := TxnExecOptions{AutoRetry: true, AutoCommit: true}
-	execOpt.MinInitialTimestamp = refTimestamp
+	refTimestamp := clock.Now()
+	execOpt := TxnExecOptions{
+		AutoRetry:  true,
+		AutoCommit: true,
+		Clock:      clock,
+	}
 
 	// Perform the transaction.
 	if err := txn.Exec(execOpt, txnClosure); err != nil {
@@ -594,8 +599,8 @@ func TestAbortedRetryPreservesTimestamp(t *testing.T) {
 	}
 
 	// Check the timestamp was preserved.
-	if txn.Proto.OrigTimestamp != refTimestamp {
-		t.Errorf("expected txn orig ts to be %s; got %s", refTimestamp, txn.Proto.OrigTimestamp)
+	if txn.Proto.OrigTimestamp.WallTime == refTimestamp.WallTime {
+		t.Errorf("expected txn orig ts to be different than %s", refTimestamp)
 	}
 }
 
@@ -711,9 +716,11 @@ func TestTimestampSelectionInOptions(t *testing.T) {
 	db := NewDB(newTestSender(nil, nil))
 	txn := NewTxn(context.Background(), *db)
 
+	mc := hlc.NewManualClock(100)
+	clock := hlc.NewClock(mc.UnixNano)
 	var execOpt TxnExecOptions
-	refTimestamp := hlc.Timestamp{WallTime: 42, Logical: 69}
-	execOpt.MinInitialTimestamp = refTimestamp
+	refTimestamp := clock.Now()
+	execOpt.Clock = clock
 
 	txnClosure := func(txn *Txn, opt *TxnExecOptions) error {
 		// Ensure the KV transaction is created.
@@ -724,8 +731,8 @@ func TestTimestampSelectionInOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Check the timestamp was preserved.
-	if txn.Proto.OrigTimestamp != refTimestamp {
+	// Check the timestamp was initialized.
+	if txn.Proto.OrigTimestamp.WallTime != refTimestamp.WallTime {
 		t.Errorf("expected txn orig ts to be %s; got %s", refTimestamp, txn.Proto.OrigTimestamp)
 	}
 }
@@ -778,7 +785,7 @@ func TestWrongTxnRetry(t *testing.T) {
 
 	var retries int
 	txnClosure := func(outerTxn *Txn) error {
-		log.Infof("outer retry")
+		log.Infof(context.Background(), "outer retry")
 		retries++
 		// Ensure the KV transaction is created.
 		if err := outerTxn.Put("a", "b"); err != nil {
@@ -799,7 +806,7 @@ func TestWrongTxnRetry(t *testing.T) {
 		return err
 	}
 
-	if err := db.Txn(txnClosure); !testutils.IsError(err, "failed to push") {
+	if err := db.Txn(context.TODO(), txnClosure); !testutils.IsError(err, "failed to push") {
 		t.Fatal(err)
 	}
 	if retries != 1 {
@@ -811,7 +818,7 @@ func TestBatchMixRawRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	db := NewDB(newTestSender(nil, nil))
 
-	b := db.NewBatch()
+	b := &Batch{}
 	b.AddRawRequest(&roachpb.EndTransactionRequest{})
 	b.Put("x", "y")
 	if err := db.Run(b); !testutils.IsError(err, "non-raw operations") {

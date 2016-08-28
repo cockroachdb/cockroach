@@ -18,7 +18,6 @@
 package kv
 
 import (
-	"fmt"
 	"sort"
 	"time"
 
@@ -35,7 +34,7 @@ import (
 
 // Allow local calls to be dispatched directly to the local server without
 // sending an RPC.
-var enableLocalCalls = envutil.EnvOrDefaultBool("enable_local_calls", true)
+var enableLocalCalls = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_LOCAL_CALLS", true)
 
 // A SendOptions structure describes the algorithm for sending RPCs to one or
 // more replicas, depending on error conditions and how many successful
@@ -101,7 +100,7 @@ type Transport interface {
 	// replica. May panic if the transport is exhausted. Should not
 	// block; the transport is responsible for starting other goroutines
 	// as needed.
-	SendNext(chan BatchCall)
+	SendNext(chan<- BatchCall)
 
 	// Close is called when the transport is no longer needed. It may
 	// cancel any pending RPCs without writing any response to the channel.
@@ -156,13 +155,13 @@ func (gt *grpcTransport) IsExhausted() bool {
 // SendNext invokes the specified RPC on the supplied client when the
 // client is ready. On success, the reply is sent on the channel;
 // otherwise an error is sent.
-func (gt *grpcTransport) SendNext(done chan BatchCall) {
+func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
 	client := gt.orderedClients[0]
 	gt.orderedClients = gt.orderedClients[1:]
 
 	addr := client.remoteAddr
 	if log.V(2) {
-		log.Infof("sending request to %s: %+v", addr, client.args)
+		log.Infof(gt.opts.Context, "sending request to %s: %+v", addr, client.args)
 	}
 
 	if localServer := gt.rpcContext.GetLocalInternalServerForAddr(addr); enableLocalCalls && localServer != nil {
@@ -178,23 +177,11 @@ func (gt *grpcTransport) SendNext(done chan BatchCall) {
 		ctx, cancel := gt.opts.contextWithTimeout()
 		defer cancel()
 
-		c := client.conn
-		for state, err := c.State(); state != grpc.Ready; state, err = c.WaitForStateChange(ctx, state) {
-			if err != nil {
-				done <- BatchCall{Err: err}
-				return
-			}
-			if state == grpc.Shutdown {
-				done <- BatchCall{Err: fmt.Errorf("rpc to %s failed as client connection was closed", addr)}
-				return
-			}
-		}
-
 		reply, err := client.client.Batch(ctx, &client.args)
 		if reply != nil {
 			for i := range reply.Responses {
 				if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {
-					log.Error(err)
+					log.Error(ctx, err)
 				}
 			}
 		}
@@ -254,7 +241,7 @@ func (s *senderTransport) IsExhausted() bool {
 	return s.called
 }
 
-func (s *senderTransport) SendNext(done chan BatchCall) {
+func (s *senderTransport) SendNext(done chan<- BatchCall) {
 	if s.called {
 		panic("called an exhausted transport")
 	}

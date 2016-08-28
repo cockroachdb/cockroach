@@ -2,7 +2,7 @@ import * as React from "react";
 import * as nvd3 from "nvd3";
 import * as d3 from "d3";
 import { createSelector } from "reselect";
-import _ = require("lodash");
+import _ from "lodash";
 
 import { findChildrenOfType } from "../util/find";
 import { NanoToMilli } from "../util/convert";
@@ -31,7 +31,6 @@ interface StackedAreaGraphProps extends MetricsDataComponentProps {
  * on the same axis.
  */
 export class StackedAreaGraph extends React.Component<StackedAreaGraphProps, {}> {
-
   // The SVG Element in the DOM used to render the graph.
   svgEl: SVGElement;
 

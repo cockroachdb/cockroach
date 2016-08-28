@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
@@ -56,16 +57,23 @@ var normalize = unicode.SpecialCase{
 
 // NormalizeName normalizes to lowercase and Unicode Normalization Form C
 // (NFC).
-func NormalizeName(name string) string {
-	lower := strings.Map(normalize.ToLower, name)
+func NormalizeName(name parser.Name) string {
+	lower := strings.Map(normalize.ToLower, string(name))
 	if isASCII(lower) {
 		return lower
 	}
 	return norm.NFC.String(lower)
 }
 
+// ReNormalizeName performs the same work as NormalizeName but when
+// the string originates from the database. We define a different
+// function so as to be able to track usage of this function (cf. #8200).
+func ReNormalizeName(name string) string {
+	return NormalizeName(parser.Name(name))
+}
+
 // EqualName returns true iff the normalizations of a and b are equal.
-func EqualName(a, b string) bool {
+func EqualName(a, b parser.Name) bool {
 	return NormalizeName(a) == NormalizeName(b)
 }
 
@@ -78,33 +86,46 @@ func isASCII(s string) bool {
 	return true
 }
 
+// NormalizeTableName normalizes the TableName using NormalizeName().
+func NormalizeTableName(tn parser.TableName) parser.TableName {
+	return parser.TableName{
+		DatabaseName: parser.Name(NormalizeName(tn.DatabaseName)),
+		TableName:    parser.Name(NormalizeName(tn.TableName)),
+	}
+}
+
 // MakeNameMetadataKey returns the key for the name. Pass name == "" in order
 // to generate the prefix key to use to scan over all of the names for the
 // specified parentID.
 func MakeNameMetadataKey(parentID ID, name string) roachpb.Key {
-	name = NormalizeName(name)
-	k := keys.MakeTablePrefix(uint32(namespaceTable.ID))
-	k = encoding.EncodeUvarintAscending(k, uint64(namespaceTable.PrimaryIndex.ID))
+	normName := ReNormalizeName(name)
+	k := keys.MakeTablePrefix(uint32(NamespaceTable.ID))
+	k = encoding.EncodeUvarintAscending(k, uint64(NamespaceTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
 	if name != "" {
-		k = encoding.EncodeBytesAscending(k, []byte(name))
-		k = keys.MakeFamilyKey(k, uint32(namespaceTable.Columns[2].ID))
+		k = encoding.EncodeBytesAscending(k, []byte(normName))
+		k = keys.MakeFamilyKey(k, uint32(NamespaceTable.Columns[2].ID))
 	}
 	return k
 }
 
+// MakeAllDescsMetadataKey returns the key for all descriptors.
+func MakeAllDescsMetadataKey() roachpb.Key {
+	k := keys.MakeTablePrefix(uint32(DescriptorTable.ID))
+	return encoding.EncodeUvarintAscending(k, uint64(DescriptorTable.PrimaryIndex.ID))
+}
+
 // MakeDescMetadataKey returns the key for the descriptor.
 func MakeDescMetadataKey(descID ID) roachpb.Key {
-	k := keys.MakeTablePrefix(uint32(DescriptorTable.ID))
-	k = encoding.EncodeUvarintAscending(k, uint64(DescriptorTable.PrimaryIndex.ID))
+	k := MakeAllDescsMetadataKey()
 	k = encoding.EncodeUvarintAscending(k, uint64(descID))
 	return keys.MakeFamilyKey(k, uint32(DescriptorTable.Columns[1].ID))
 }
 
 // MakeZoneKey returns the key for 'id's entry in the system.zones table.
 func MakeZoneKey(id ID) roachpb.Key {
-	k := keys.MakeTablePrefix(uint32(zonesTable.ID))
-	k = encoding.EncodeUvarintAscending(k, uint64(zonesTable.PrimaryIndex.ID))
+	k := keys.MakeTablePrefix(uint32(ZonesTable.ID))
+	k = encoding.EncodeUvarintAscending(k, uint64(ZonesTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(id))
-	return keys.MakeFamilyKey(k, uint32(zonesTable.Columns[1].ID))
+	return keys.MakeFamilyKey(k, uint32(ZonesTable.Columns[1].ID))
 }

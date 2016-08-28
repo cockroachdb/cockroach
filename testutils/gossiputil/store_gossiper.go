@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 // StoreGossiper allows tests to push storeDescriptors into gossip and
@@ -30,7 +31,7 @@ import (
 // gossip instance.
 type StoreGossiper struct {
 	g           *gossip.Gossip
-	mu          sync.Mutex
+	mu          syncutil.Mutex
 	cond        *sync.Cond
 	storeKeyMap map[string]struct{}
 }
@@ -77,7 +78,6 @@ func (sg *StoreGossiper) GossipWithFunction(storeIDs []roachpb.StoreID, gossipFn
 	for _, storeID := range storeIDs {
 		storeKey := gossip.MakeStoreKey(storeID)
 		sg.storeKeyMap[storeKey] = struct{}{}
-
 	}
 
 	gossipFn()

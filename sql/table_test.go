@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -38,8 +40,13 @@ func TestMakeTableDescColumns(t *testing.T) {
 		nullable bool
 	}{
 		{
-			"BIT(1)",
+			"BIT",
 			sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT, Width: 1},
+			true,
+		},
+		{
+			"BIT(3)",
+			sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT, Width: 3},
 			true,
 		},
 		{
@@ -110,10 +117,7 @@ func TestMakeTableDescColumns(t *testing.T) {
 			t.Fatalf("%d: %v", i, err)
 		}
 		create := stmt.(*parser.CreateTable)
-		if err := create.Table.NormalizeTableName(""); err != nil {
-			t.Fatalf("%d: %v", i, err)
-		}
-		schema, err := sqlbase.MakeTableDesc(create, 1)
+		schema, err := MakeTableDesc(create, 1)
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
@@ -208,21 +212,18 @@ func TestMakeTableDescIndexes(t *testing.T) {
 	for i, d := range testData {
 		stmt, err := parser.ParseOneTraditional("CREATE TABLE foo.test (" + d.sql + ")")
 		if err != nil {
-			t.Fatalf("%d: %v", i, err)
+			t.Fatalf("%d (%s): %v", i, d.sql, err)
 		}
 		create := stmt.(*parser.CreateTable)
-		if err := create.Table.NormalizeTableName(""); err != nil {
-			t.Fatalf("%d: %v", i, err)
-		}
-		schema, err := sqlbase.MakeTableDesc(create, 1)
+		schema, err := MakeTableDesc(create, 1)
 		if err != nil {
-			t.Fatalf("%d: %v", i, err)
+			t.Fatalf("%d (%s): %v", i, d.sql, err)
 		}
 		if !reflect.DeepEqual(d.primary, schema.PrimaryIndex) {
-			t.Fatalf("%d: expected %+v, but got %+v", i, d.primary, schema.PrimaryIndex)
+			t.Fatalf("%d (%s): primary mismatch: expected %+v, but got %+v", i, d.sql, d.primary, schema.PrimaryIndex)
 		}
 		if !reflect.DeepEqual(d.indexes, append([]sqlbase.IndexDescriptor{}, schema.Indexes...)) {
-			t.Fatalf("%d: expected %+v, but got %+v", i, d.indexes, schema.Indexes)
+			t.Fatalf("%d (%s): index mismatch: expected %+v, but got %+v", i, d.sql, d.indexes, schema.Indexes)
 		}
 
 	}
@@ -236,27 +237,24 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 		t.Fatal(err)
 	}
 	create := stmt.(*parser.CreateTable)
-	if err := create.Table.NormalizeTableName(""); err != nil {
-		t.Fatal(err)
-	}
-	desc, err := sqlbase.MakeTableDesc(create, 1)
+	desc, err := MakeTableDesc(create, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	err = desc.AllocateIDs()
 	if !testutils.IsError(err, sqlbase.ErrMissingPrimaryKey.Error()) {
-		t.Fatalf("unexpected error: %s", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestRemoveLeaseIfExpiring(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	p := planner{}
+	p := planner{session: &Session{context: context.Background()}}
 	mc := hlc.NewManualClock(0)
 	p.leaseMgr = &LeaseManager{LeaseStore: LeaseStore{clock: hlc.NewClock(mc.UnixNano)}}
 	p.leases = make([]*LeaseState, 0)
-	txn := client.Txn{}
+	txn := client.Txn{Context: context.Background()}
 	p.setTxn(&txn)
 
 	if p.removeLeaseIfExpiring(nil) {
@@ -271,7 +269,7 @@ func TestRemoveLeaseIfExpiring(t *testing.T) {
 	txn.UpdateDeadlineMaybe(et)
 
 	if p.removeLeaseIfExpiring(l1) {
-		t.Error("expected false wih a non-expiring lease")
+		t.Error("expected false with a non-expiring lease")
 	}
 	if !p.txn.GetDeadline().Equal(et) {
 		t.Errorf("expected deadline %s but got %s", et, p.txn.GetDeadline())

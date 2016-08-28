@@ -26,6 +26,8 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 
@@ -74,7 +76,7 @@ type Context struct {
 	SocketFile string
 
 	// Stores is specified to enable durable key-value storage.
-	Stores StoreSpecList
+	Stores base.StoreSpecList
 
 	// Attrs specifies a colon-separated list of node topography or machine
 	// capabilities, used to match capabilities or location preferences specified
@@ -84,7 +86,7 @@ type Context struct {
 	// JoinList is a list of node addresses that act as bootstrap hosts for
 	// connecting to the gossip network. Each item in the list can actually be
 	// multiple comma-separated addresses, kept for backward-compatibility.
-	JoinList JoinListType
+	JoinList base.JoinListType
 
 	// CacheSize is the amount of memory in bytes to use for caching data.
 	// The value is split evenly between the stores if there are more than one.
@@ -129,7 +131,7 @@ type Context struct {
 	MetricsSampleInterval time.Duration
 
 	// ScanInterval determines a duration during which each range should be
-	// visited approximately once by the range scanner.
+	// visited approximately once by the range scanner. Set to 0 to disable.
 	// Environment Variable: COCKROACH_SCAN_INTERVAL
 	ScanInterval time.Duration
 
@@ -140,6 +142,7 @@ type Context struct {
 	ScanMaxIdleTime time.Duration
 
 	// ConsistencyCheckInterval determines the time between range consistency checks.
+	// Set to 0 to disable.
 	// Environment Variable: COCKROACH_CONSISTENCY_CHECK_INTERVAL
 	ConsistencyCheckInterval time.Duration
 
@@ -158,6 +161,10 @@ type Context struct {
 
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
+
+	// Ctx is the base context.Context for the server. If nil,
+	// context.Background() will be used.
+	Ctx context.Context
 }
 
 // GetTotalMemory returns either the total system memory or if possible the
@@ -177,7 +184,7 @@ func GetTotalMemory() (int64, error) {
 		var buf []byte
 		if buf, err = ioutil.ReadFile(defaultCGroupMemPath); err != nil {
 			if log.V(1) {
-				log.Infof("can't read available memory from cgroups (%s), using system memory %s instead", err,
+				log.Infof(context.TODO(), "can't read available memory from cgroups (%s), using system memory %s instead", err,
 					humanizeutil.IBytes(totalMem))
 			}
 			return totalMem, nil
@@ -185,14 +192,14 @@ func GetTotalMemory() (int64, error) {
 		var cgAvlMem uint64
 		if cgAvlMem, err = strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64); err != nil {
 			if log.V(1) {
-				log.Infof("can't parse available memory from cgroups (%s), using system memory %s instead", err,
+				log.Infof(context.TODO(), "can't parse available memory from cgroups (%s), using system memory %s instead", err,
 					humanizeutil.IBytes(totalMem))
 			}
 			return totalMem, nil
 		}
 		if cgAvlMem > math.MaxInt64 {
 			if log.V(1) {
-				log.Infof("available memory from cgroups is too large and unsupported %s using system memory %s instead",
+				log.Infof(context.TODO(), "available memory from cgroups is too large and unsupported %s using system memory %s instead",
 					humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
 
 			}
@@ -200,7 +207,7 @@ func GetTotalMemory() (int64, error) {
 		}
 		if cgAvlMem > mem.Total {
 			if log.V(1) {
-				log.Infof("available memory from cgroups %s exceeds system memory %s, using system memory",
+				log.Infof(context.TODO(), "available memory from cgroups %s exceeds system memory %s, using system memory",
 					humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
 			}
 			return totalMem, nil
@@ -228,7 +235,7 @@ func setOpenFileLimit(physicalStoreCount int) (int, error) {
 	var rLimit syscall.Rlimit
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit); err != nil {
 		if log.V(1) {
-			log.Infof("could not get rlimit; setting maxOpenFiles to the default value %d - %s", engine.DefaultMaxOpenFiles, err)
+			log.Infof(context.TODO(), "could not get rlimit; setting maxOpenFiles to the default value %d - %s", engine.DefaultMaxOpenFiles, err)
 		}
 		return engine.DefaultMaxOpenFiles, nil
 	}
@@ -257,7 +264,7 @@ func setOpenFileLimit(physicalStoreCount int) (int, error) {
 	}
 	if rLimit.Cur < newCurrent {
 		if log.V(1) {
-			log.Infof("setting the soft limit for open file descriptors from %d to %d",
+			log.Infof(context.TODO(), "setting the soft limit for open file descriptors from %d to %d",
 				rLimit.Cur, newCurrent)
 		}
 		rLimit.Cur = newCurrent
@@ -270,7 +277,7 @@ func setOpenFileLimit(physicalStoreCount int) (int, error) {
 			return 0, err
 		}
 		if log.V(1) {
-			log.Infof("soft open file descriptor limit is now %d", rLimit.Cur)
+			log.Infof(context.TODO(), "soft open file descriptor limit is now %d", rLimit.Cur)
 		}
 	}
 
@@ -289,7 +296,7 @@ func setOpenFileLimit(physicalStoreCount int) (int, error) {
 
 	// We're still below the recommended amount, we should always show a
 	// warning.
-	log.Warningf("soft open file descriptor limit %d is under the recommended limit %d; this may decrease performance\n%s",
+	log.Warningf(context.TODO(), "soft open file descriptor limit %d is under the recommended limit %d; this may decrease performance\n%s",
 		rLimit.Cur,
 		recommendedOpenFileLimit,
 		productionSettingsWebpage)
@@ -311,6 +318,12 @@ func setOpenFileLimit(physicalStoreCount int) (int, error) {
 	return int(rLimit.Cur-minimumNetworkFileDescriptors) / physicalStoreCount, nil
 }
 
+// SetOpenFileLimitForOneStore sets the soft limit for open file descriptors
+// when there is only one store.
+func SetOpenFileLimitForOneStore() (int, error) {
+	return setOpenFileLimit(1)
+}
+
 // MakeContext returns a Context with default values.
 func MakeContext() Context {
 	ctx := Context{
@@ -324,8 +337,8 @@ func MakeContext() Context {
 		MetricsSampleInterval:    defaultMetricsSampleInterval,
 		TimeUntilStoreDead:       defaultTimeUntilStoreDead,
 		ReservationsEnabled:      defaultReservationsEnabled,
-		Stores: StoreSpecList{
-			Specs: []StoreSpec{{Path: defaultStorePath}},
+		Stores: base.StoreSpecList{
+			Specs: []base.StoreSpec{{Path: defaultStorePath}},
 		},
 	}
 	ctx.Context.InitDefaults()
@@ -358,9 +371,9 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 				}
 				sizeInBytes = int64(float64(sysMem) * spec.SizePercent / 100)
 			}
-			if sizeInBytes != 0 && sizeInBytes < minimumStoreSize {
+			if sizeInBytes != 0 && sizeInBytes < base.MinimumStoreSize {
 				return fmt.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
-					spec.SizePercent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(minimumStoreSize))
+					spec.SizePercent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 			ctx.Engines = append(ctx.Engines, engine.NewInMem(spec.Attributes, sizeInBytes, stopper))
 		} else {
@@ -371,9 +384,9 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 				}
 				sizeInBytes = int64(float64(fileSystemUsage.Total) * spec.SizePercent / 100)
 			}
-			if sizeInBytes != 0 && sizeInBytes < minimumStoreSize {
+			if sizeInBytes != 0 && sizeInBytes < base.MinimumStoreSize {
 				return fmt.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
-					spec.SizePercent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(minimumStoreSize))
+					spec.SizePercent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 			ctx.Engines = append(
 				ctx.Engines,
@@ -391,9 +404,9 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 	}
 
 	if len(ctx.Engines) == 1 {
-		log.Infof("1 storage engine initialized")
+		log.Infof(context.TODO(), "1 storage engine initialized")
 	} else {
-		log.Infof("%d storage engines initialized", len(ctx.Engines))
+		log.Infof(context.TODO(), "%d storage engines initialized", len(ctx.Engines))
 	}
 	return nil
 }
@@ -423,17 +436,17 @@ func (ctx *Context) InitNode() error {
 // when NewContext is called.
 func (ctx *Context) readEnvironmentVariables() {
 	// cockroach-linearizable
-	ctx.Linearizable = envutil.EnvOrDefaultBool("linearizable", ctx.Linearizable)
-	ctx.ConsistencyCheckPanicOnFailure = envutil.EnvOrDefaultBool("consistency_check_panic_on_failure", ctx.ConsistencyCheckPanicOnFailure)
-	ctx.MaxOffset = envutil.EnvOrDefaultDuration("max_offset", ctx.MaxOffset)
-	ctx.MetricsSampleInterval = envutil.EnvOrDefaultDuration("metrics_sample_interval", ctx.MetricsSampleInterval)
-	ctx.ScanInterval = envutil.EnvOrDefaultDuration("scan_interval", ctx.ScanInterval)
-	ctx.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("scan_max_idle_time", ctx.ScanMaxIdleTime)
-	ctx.TimeUntilStoreDead = envutil.EnvOrDefaultDuration("time_until_store_dead", ctx.TimeUntilStoreDead)
-	ctx.ConsistencyCheckInterval = envutil.EnvOrDefaultDuration("consistency_check_interval", ctx.ConsistencyCheckInterval)
+	ctx.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_LINEARIZABLE", ctx.Linearizable)
+	ctx.ConsistencyCheckPanicOnFailure = envutil.EnvOrDefaultBool("COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE", ctx.ConsistencyCheckPanicOnFailure)
+	ctx.MaxOffset = envutil.EnvOrDefaultDuration("COCKROACH_MAX_OFFSET", ctx.MaxOffset)
+	ctx.MetricsSampleInterval = envutil.EnvOrDefaultDuration("COCKROACH_METRICS_SAMPLE_INTERVAL", ctx.MetricsSampleInterval)
+	ctx.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", ctx.ScanInterval)
+	ctx.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", ctx.ScanMaxIdleTime)
+	ctx.TimeUntilStoreDead = envutil.EnvOrDefaultDuration("COCKROACH_TIME_UNTIL_STORE_DEAD", ctx.TimeUntilStoreDead)
+	ctx.ConsistencyCheckInterval = envutil.EnvOrDefaultDuration("COCKROACH_CONSISTENCY_CHECK_INTERVAL", ctx.ConsistencyCheckInterval)
 	// TODO(bram): remove ReservationsEnabled once we've completed testing the
 	// feature.
-	ctx.ReservationsEnabled = envutil.EnvOrDefaultBool("reservations_enabled", ctx.ReservationsEnabled)
+	ctx.ReservationsEnabled = envutil.EnvOrDefaultBool("COCKROACH_RESERVATIONS_ENABLED", ctx.ReservationsEnabled)
 }
 
 // parseGossipBootstrapResolvers parses list of gossip bootstrap resolvers.
@@ -445,7 +458,7 @@ func (ctx *Context) parseGossipBootstrapResolvers() ([]resolver.Resolver, error)
 			if len(address) == 0 {
 				continue
 			}
-			resolver, err := resolver.NewResolver(ctx.Context, address)
+			resolver, err := resolver.NewResolver(address)
 			if err != nil {
 				return nil, err
 			}

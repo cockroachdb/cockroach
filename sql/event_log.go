@@ -77,7 +77,13 @@ CREATE TABLE system.eventlog (
 // AddEventLogToMetadataSchema adds the event log table to the supplied
 // MetadataSchema.
 func AddEventLogToMetadataSchema(schema *sqlbase.MetadataSchema) {
-	schema.AddTable(keys.EventLogTableID, eventTableSchema)
+	desc := CreateTableDescriptor(
+		keys.EventLogTableID,
+		keys.SystemDatabaseID,
+		eventTableSchema,
+		sqlbase.NewDefaultPrivilegeDescriptor(),
+	)
+	schema.AddDescriptor(keys.SystemDatabaseID, &desc)
 }
 
 // An EventLogger exposes methods used to record events to the event table.
@@ -97,7 +103,7 @@ func MakeEventLogger(leaseMgr *LeaseManager) EventLogger {
 // provided transaction.
 func (ev EventLogger) InsertEventRecord(txn *client.Txn, eventType EventLogType, targetID, reportingID int32, info interface{}) error {
 	// Record event record insertion in local log output.
-	log.Infoc(txn.Context, "Event: %q, target: %d, info: %+v",
+	log.Infof(txn.Context, "Event: %q, target: %d, info: %+v",
 		eventType,
 		targetID,
 		info)

@@ -32,41 +32,15 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/util/caller"
-)
-
-// Severity identifies the sort of log: info, warning etc. It also implements
-// the flag.Value interface. The -stderrthreshold flag is of type Severity and
-// should be modified only through the flag.Value interface. The values match
-// the corresponding constants in C++.
-type Severity int32 // sync/atomic int32
-
-// These constants identify the log levels in order of increasing Severity.
-// A message written to a high-Severity log file is also written to each
-// lower-Severity log file.
-const (
-	InfoLog Severity = iota
-	WarningLog
-	ErrorLog
-	FatalLog
-	NumSeverity = 4
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 const severityChar = "IWEF"
-
-// severityName provides a mapping from Severity level to a string.
-var severityName = []string{
-	InfoLog:     "INFO",
-	WarningLog:  "WARNING",
-	ErrorLog:    "ERROR",
-	FatalLog:    "FATAL",
-	NumSeverity: "NONE",
-}
 
 const (
 	tracebackNone = iota
@@ -97,14 +71,6 @@ func (s *Severity) set(val Severity) {
 	atomic.StoreInt32((*int32)(s), int32(val))
 }
 
-// String is part of the flag.Value interface.
-func (s *Severity) String() string {
-	if i := int(*s); i >= 0 && i < len(severityName) {
-		return severityName[i]
-	}
-	return strconv.FormatInt(int64(*s), 10)
-}
-
 // Set is part of the flag.Value interface.
 func (s *Severity) Set(value string) error {
 	var threshold Severity
@@ -124,23 +90,21 @@ func (s *Severity) Set(value string) error {
 
 // Name returns the string representation of the severity (i.e. ERROR, INFO).
 func (s *Severity) Name() string {
-	return severityName[s.get()]
+	return s.String()
 }
 
 // SeverityByName attempts to parse the passed in string into a severity. (i.e.
 // ERROR, INFO). If it succeeds, the returned bool is set to true.
 func SeverityByName(s string) (Severity, bool) {
 	s = strings.ToUpper(s)
-	for i, name := range severityName {
-		if name == s {
-			return Severity(i), true
-		}
+	if i, ok := Severity_value[s]; ok {
+		return Severity(i), true
 	}
 	switch s {
 	case "TRUE":
-		return InfoLog, true
+		return Severity_INFO, true
 	case "FALSE":
-		return NumSeverity, true
+		return Severity_NONE, true
 	}
 	return 0, false
 }
@@ -185,10 +149,10 @@ var Stats struct {
 	Info, Warning, Error outputStats
 }
 
-var severityStats = [NumSeverity]*outputStats{
-	InfoLog:    &Stats.Info,
-	WarningLog: &Stats.Warning,
-	ErrorLog:   &Stats.Error,
+var severityStats = [Severity_NONE]*outputStats{
+	Severity_INFO:    &Stats.Info,
+	Severity_WARNING: &Stats.Warning,
+	Severity_ERROR:   &Stats.Error,
 }
 
 // Level is exported because it appears in the arguments to V and is
@@ -407,17 +371,18 @@ func (d *EntryDecoder) Decode(entry *Entry) error {
 		if m == nil {
 			continue
 		}
-		entry.Severity = strings.IndexByte(severityChar, m[1][0])
+		entry.Severity = Severity(strings.IndexByte(severityChar, m[1][0]) + 1)
 		t, err := time.ParseInLocation("060102 15:04:05.999999", string(m[2]), time.Local)
 		if err != nil {
 			return err
 		}
 		entry.Time = t.UnixNano()
 		entry.File = string(m[3])
-		entry.Line, err = strconv.Atoi(string(m[4]))
+		line, err := strconv.Atoi(string(m[4]))
 		if err != nil {
 			return err
 		}
+		entry.Line = int64(line)
 		entry.Message = string(m[5])
 		return nil
 	}
@@ -469,8 +434,8 @@ func formatHeader(s Severity, now time.Time, file string, line int, colors *colo
 	if line < 0 {
 		line = 0 // not a real line number, but acceptable to someDigits
 	}
-	if s > FatalLog {
-		s = InfoLog // for safety.
+	if s > Severity_FATAL {
+		s = Severity_INFO // for safety.
 	}
 
 	tmp := buf.tmp[:len(buf.tmp)]
@@ -478,11 +443,11 @@ func formatHeader(s Severity, now time.Time, file string, line int, colors *colo
 	if colors != nil {
 		var prefix []byte
 		switch s {
-		case InfoLog:
+		case Severity_INFO:
 			prefix = colors.infoPrefix
-		case WarningLog:
+		case Severity_WARNING:
 			prefix = colors.warnPrefix
-		case ErrorLog, FatalLog:
+		case Severity_ERROR, Severity_FATAL:
 			prefix = colors.errorPrefix
 		}
 		n += copy(tmp, prefix)
@@ -492,9 +457,9 @@ func formatHeader(s Severity, now time.Time, file string, line int, colors *colo
 	year, month, day := now.Date()
 	hour, minute, second := now.Clock()
 	// Lyymmdd hh:mm:ss.uuuuuu file:line
-	tmp[n] = severityChar[s]
+	tmp[n] = severityChar[s-1]
 	n++
-	n += buf.twoDigits(n, int(year)-2000)
+	n += buf.twoDigits(n, year-2000)
 	n += buf.twoDigits(n, int(month))
 	n += buf.twoDigits(n, day)
 	if colors != nil {
@@ -517,7 +482,7 @@ func formatHeader(s Severity, now time.Time, file string, line int, colors *colo
 	buf.Write(tmp[:n])
 	buf.WriteString(file)
 	tmp[0] = ':'
-	n = buf.someDigits(1, int(line))
+	n = buf.someDigits(1, line)
 	n++
 	// Extra space between the header and the actual message for scannability.
 	tmp[n] = ' '
@@ -576,8 +541,8 @@ func (buf *buffer) someDigits(i, d int) int {
 }
 
 func formatLogEntry(entry Entry, stacks []byte, colors *colorProfile) *buffer {
-	buf := formatHeader(Severity(entry.Severity), time.Unix(0, entry.Time),
-		entry.File, entry.Line, colors)
+	buf := formatHeader(entry.Severity, time.Unix(0, entry.Time),
+		entry.File, int(entry.Line), colors)
 	_, _ = buf.WriteString(entry.Message)
 	if buf.Bytes()[buf.Len()-1] != '\n' {
 		_ = buf.WriteByte('\n')
@@ -590,10 +555,10 @@ func formatLogEntry(entry Entry, stacks []byte, colors *colorProfile) *buffer {
 
 func init() {
 	// Default stderrThreshold to log nothing.
-	logging.stderrThreshold = NumSeverity
+	logging.stderrThreshold = Severity_NONE
 
 	logging.setVState(0, nil, false)
-	osExitFunc = os.Exit
+	logging.exitFunc = os.Exit
 
 	go logging.flushDaemon()
 }
@@ -617,7 +582,7 @@ type loggingT struct {
 	// freeListMu maintains the free list. It is separate from the main mutex
 	// so buffers can be grabbed and printed to without holding the main lock,
 	// for better parallelization.
-	freeListMu sync.Mutex
+	freeListMu syncutil.Mutex
 
 	// mu protects the remaining elements of this structure and is
 	// used to synchronize logging.
@@ -625,9 +590,9 @@ type loggingT struct {
 	// Boolean flags. Also protected by mu (see flags.go).
 	toStderr bool // The -logtostderr flag.
 
-	mu sync.Mutex
+	mu syncutil.Mutex
 	// file holds writer for each of the log types.
-	file [NumSeverity]flushSyncWriter
+	file [Severity_NONE]flushSyncWriter
 	// pcs is used in V to avoid an allocation when computing the caller's PC.
 	pcs [1]uintptr
 	// vmap is a cache of the V Level for each V() call site, identified by PC.
@@ -643,6 +608,7 @@ type loggingT struct {
 	// safely using atomic.LoadInt32.
 	vmodule   moduleSpec // The state of the --vmodule flag.
 	verbosity level      // V logging level, the value of the --verbosity flag/
+	exitFunc  func(int)  // func that will be called on fatal errors
 }
 
 // buffer holds a byte Buffer for reuse. The zero value is ready for use.
@@ -712,15 +678,15 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 	// Set additional details in log entry.
 	now := time.Now()
 	entry := Entry{
-		Severity: int(s),
+		Severity: s,
 		Time:     now.UnixNano(),
 		File:     file,
-		Line:     line,
+		Line:     int64(line),
 		Message:  msg,
 	}
 	// On fatal log, set all stacks.
 	var stacks []byte
-	if s == FatalLog {
+	if s == Severity_FATAL {
 		switch traceback {
 		case tracebackSingle:
 			stacks = getStacks(false)
@@ -752,23 +718,23 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		data := buf.Bytes()
 
 		switch s {
-		case FatalLog:
-			if _, err := l.file[FatalLog].Write(data); err != nil {
+		case Severity_FATAL:
+			if _, err := l.file[Severity_FATAL].Write(data); err != nil {
 				panic(err)
 			}
 			fallthrough
-		case ErrorLog:
-			if _, err := l.file[ErrorLog].Write(data); err != nil {
+		case Severity_ERROR:
+			if _, err := l.file[Severity_ERROR].Write(data); err != nil {
 				panic(err)
 			}
 			fallthrough
-		case WarningLog:
-			if _, err := l.file[WarningLog].Write(data); err != nil {
+		case Severity_WARNING:
+			if _, err := l.file[Severity_WARNING].Write(data); err != nil {
 				panic(err)
 			}
 			fallthrough
-		case InfoLog:
-			if _, err := l.file[InfoLog].Write(data); err != nil {
+		case Severity_INFO:
+			if _, err := l.file[Severity_INFO].Write(data); err != nil {
 				panic(err)
 			}
 		}
@@ -780,15 +746,16 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 			atomic.AddInt64(&stats.bytes, int64(len(data)))
 		}
 	}
+	exitFunc := l.exitFunc
 	l.mu.Unlock()
 	// Flush and exit on fatal logging.
-	if s == FatalLog {
+	if s == Severity_FATAL {
 		// If we got here via Exit rather than Fatal, print no stacks.
 		timeoutFlush(10 * time.Second)
 		if atomic.LoadUint32(&fatalNoStacks) > 0 {
-			osExitFunc(1)
+			exitFunc(1)
 		} else {
-			osExitFunc(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
+			exitFunc(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
 		}
 	}
 }
@@ -873,7 +840,6 @@ func getStacks(all bool) []byte {
 // for fatal logs. Instead, exit could be a function rather than a method but that
 // would make its use clumsier.
 var logExitFunc func(error)
-var osExitFunc func(int)
 
 // exit is called if there is trouble creating or writing log files.
 // It flushes the logs and exits the program; there's no point in hanging around.
@@ -886,7 +852,10 @@ func (l *loggingT) exit(err error) {
 		return
 	}
 	l.flushAll()
-	osExitFunc(2)
+	l.mu.Lock()
+	exitFunc := l.exitFunc
+	l.mu.Unlock()
+	exitFunc(2)
 }
 
 // syncBuffer joins a bufio.Writer to its underlying file, providing access to the
@@ -947,10 +916,10 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 		fmt.Sprintf("line format: [IWEF]yymmdd hh:mm:ss.uuuuuu file:line msg\n"),
 	} {
 		buf := formatLogEntry(Entry{
-			Severity: int(sb.sev),
+			Severity: sb.sev,
 			Time:     now.UnixNano(),
 			File:     f,
-			Line:     l,
+			Line:     int64(l),
 			Message:  msg,
 		}, nil, nil)
 		var n int
@@ -970,7 +939,7 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 const bufferSize = 256 * 1024
 
 func (l *loggingT) removeFilesLocked() error {
-	for s := FatalLog; s >= InfoLog; s-- {
+	for s := Severity_FATAL; s >= Severity_INFO; s-- {
 		if sb, ok := l.file[s].(*syncBuffer); ok {
 			if err := sb.file.Close(); err != nil {
 				return err
@@ -984,13 +953,13 @@ func (l *loggingT) removeFilesLocked() error {
 	return nil
 }
 
-// createFiles creates all the log files for severity from sev down to InfoLog.
+// createFiles creates all the log files for severity from sev down to Severity_INFO.
 // l.mu is held.
 func (l *loggingT) createFiles(sev Severity) error {
 	now := time.Now()
 	// Files are created in decreasing severity order, so as soon as we find one
 	// has already been created, we can stop.
-	for s := sev; s >= InfoLog && l.file[s] == nil; s-- {
+	for s := sev; s >= Severity_INFO && l.file[s] == nil; s-- {
 		sb := &syncBuffer{
 			logger: l,
 			sev:    s,
@@ -1024,7 +993,7 @@ func (l *loggingT) lockAndFlushAll() {
 // l.mu is held.
 func (l *loggingT) flushAll() {
 	// Flush from fatal down, in case there's trouble flushing.
-	for s := FatalLog; s >= InfoLog; s-- {
+	for s := Severity_FATAL; s >= Severity_INFO; s-- {
 		file := l.file[s]
 		if file != nil {
 			_ = file.Flush() // ignore error

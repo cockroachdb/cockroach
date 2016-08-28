@@ -22,8 +22,9 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
-	"sync"
 	"time"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
@@ -59,7 +61,7 @@ type LeaseState struct {
 	sqlbase.TableDescriptor
 	expiration parser.DTimestamp
 	// mu protects refcount and released
-	mu       sync.Mutex
+	mu       syncutil.Mutex
 	refcount int
 	// Set if the lease has been released and cannot be handed out any more. The
 	// table name cache can have references to such leases since releasing a lease
@@ -101,7 +103,7 @@ func (s *LeaseState) incRefcountLocked() {
 	}
 	s.refcount++
 	if log.V(3) {
-		log.Infof("LeaseState.incRef: descID=%d name=%q version=%d refcount=%d",
+		log.Infof(context.TODO(), "LeaseState.incRef: descID=%d name=%q version=%d refcount=%d",
 			s.ID, s.Name, s.Version, s.refcount)
 	}
 }
@@ -121,8 +123,6 @@ type LeaseStore struct {
 func jitteredLeaseDuration() time.Duration {
 	return time.Duration(float64(LeaseDuration) * (0.75 + 0.5*rand.Float64()))
 }
-
-var errTableDeleted = errors.New("table is being deleted")
 
 // Acquire a lease on the most recent version of a table descriptor.
 // If the lease cannot be obtained because the descriptor is in the process of
@@ -150,7 +150,7 @@ func (s LeaseStore) Acquire(
 		return nil, err
 	}
 	if values == nil {
-		return nil, errDescriptorNotFound
+		return nil, sqlbase.ErrDescriptorNotFound
 	}
 	desc := &sqlbase.Descriptor{}
 	if err := proto.Unmarshal([]byte(*values[0].(*parser.DBytes)), desc); err != nil {
@@ -158,17 +158,18 @@ func (s LeaseStore) Acquire(
 	}
 
 	tableDesc := desc.GetTable()
-	if tableDesc != nil && tableDesc.Deleted() {
-		return nil, errTableDeleted
-	}
-	if tableDesc == nil || tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
+	if tableDesc == nil {
 		return nil, errors.Errorf("ID %d is not a table", tableID)
 	}
-
+	if err := filterTableState(tableDesc); err != nil {
+		return nil, err
+	}
 	tableDesc.MaybeUpgradeFormatVersion()
 	lease.TableDescriptor = *tableDesc
 
-	if err := lease.Validate(); err != nil {
+	// ValidateTable instead of Validate, even though we have a txn available,
+	// so we don't block reads waiting for this lease.
+	if err := lease.ValidateTable(); err != nil {
 		return nil, err
 	}
 	if lease.Version < minVersion {
@@ -187,7 +188,9 @@ func (s LeaseStore) Acquire(
 	// there is no harm in that as no other transaction will be attempting to
 	// modify the descriptor and even if the descriptor is never created we'll
 	// just have a dangling lease entry which will eventually get GC'd.
-	err = s.db.Txn(func(txn *client.Txn) error {
+	ctx := txn.Context // propagate context/trace to new transaction
+	err = s.db.Txn(context.TODO(), func(txn *client.Txn) error {
+		txn.Context = ctx
 		p := makeInternalPlanner(txn, security.RootUser)
 		const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
 			`VALUES ($1, $2, $3, $4)`
@@ -205,9 +208,9 @@ func (s LeaseStore) Acquire(
 
 // Release a previously acquired table descriptor lease.
 func (s LeaseStore) Release(lease *LeaseState) error {
-	err := s.db.Txn(func(txn *client.Txn) error {
+	err := s.db.Txn(context.TODO(), func(txn *client.Txn) error {
 		if log.V(2) {
-			log.Infof("LeaseStore releasing lease %s", lease)
+			log.Infof(context.TODO(), "LeaseStore releasing lease %s", lease)
 		}
 		p := makeInternalPlanner(txn, security.RootUser)
 		const deleteLease = `DELETE FROM system.lease ` +
@@ -261,7 +264,7 @@ func (s LeaseStore) waitForOneVersion(tableID sqlbase.ID, retryOpts retry.Option
 		if count == 0 {
 			break
 		}
-		log.Infof("publish (count leases): descID=%d name=%s version=%d count=%d",
+		log.Infof(context.TODO(), "publish (count leases): descID=%d name=%s version=%d count=%d",
 			tableDesc.ID, tableDesc.Name, tableDesc.Version-1, count)
 	}
 	return tableDesc.Version, nil
@@ -297,7 +300,7 @@ func (s LeaseStore) Publish(
 		desc := &sqlbase.Descriptor{}
 		// There should be only one version of the descriptor, but it's
 		// a race now to update to the next version.
-		err = s.db.Txn(func(txn *client.Txn) error {
+		err = s.db.Txn(context.TODO(), func(txn *client.Txn) error {
 			descKey := sqlbase.MakeDescMetadataKey(tableID)
 
 			// Re-read the current version of the table descriptor, this time
@@ -313,7 +316,7 @@ func (s LeaseStore) Publish(
 				// The version changed out from under us. Someone else must be
 				// performing a schema change operation.
 				if log.V(3) {
-					log.Infof("publish (version changed): %d != %d", expectedVersion, tableDesc.Version)
+					log.Infof(context.TODO(), "publish (version changed): %d != %d", expectedVersion, tableDesc.Version)
 				}
 				return errLeaseVersionChanged
 			}
@@ -328,10 +331,10 @@ func (s LeaseStore) Publish(
 			now := s.clock.Now()
 			tableDesc.ModificationTime = now
 			if log.V(3) {
-				log.Infof("publish: descID=%d (%s) version=%d mtime=%s",
+				log.Infof(context.TODO(), "publish: descID=%d (%s) version=%d mtime=%s",
 					tableDesc.ID, tableDesc.Name, tableDesc.Version, now.GoTime())
 			}
-			if err := tableDesc.Validate(); err != nil {
+			if err := tableDesc.ValidateTable(); err != nil {
 				return err
 			}
 
@@ -377,7 +380,7 @@ func (s LeaseStore) countLeases(
 	descID sqlbase.ID, version sqlbase.DescriptorVersion, expiration time.Time,
 ) (int, error) {
 	var count int
-	err := s.db.Txn(func(txn *client.Txn) error {
+	err := s.db.Txn(context.TODO(), func(txn *client.Txn) error {
 		p := makeInternalPlanner(txn, security.RootUser)
 		const countLeases = `SELECT COUNT(version) FROM system.lease ` +
 			`WHERE descID = $1 AND version = $2 AND expiration > $3`
@@ -489,7 +492,7 @@ type tableState struct {
 	tableNameCache *tableNameCache
 	stopper        *stop.Stopper
 	// Protects both active and acquiring.
-	mu sync.Mutex
+	mu syncutil.Mutex
 	// The active leases for the table: sorted by their version and expiration
 	// time. There may be more than one active lease when the system is
 	// transitioning from one version of the descriptor to another or when the
@@ -712,7 +715,7 @@ func (t *tableState) release(lease *LeaseState, store LeaseStore) error {
 		defer s.mu.Unlock()
 		s.refcount--
 		if log.V(3) {
-			log.Infof("release: descID=%d name:%q version=%d refcount=%d", s.ID, s.Name, s.Version, s.refcount)
+			log.Infof(context.TODO(), "release: descID=%d name:%q version=%d refcount=%d", s.ID, s.Name, s.Version, s.refcount)
 		}
 		if s.refcount < 0 {
 			panic(fmt.Sprintf("negative ref count: descID=%d(%q) version=%d refcount=%d", s.ID, s.Name, s.Version, s.refcount))
@@ -735,11 +738,11 @@ func (t *tableState) removeLease(lease *LeaseState, store LeaseStore) {
 	// Release to the store asynchronously, without the tableState lock.
 	err := t.stopper.RunAsyncTask(func() {
 		if err := store.Release(lease); err != nil {
-			log.Warningf("error releasing lease %q: %s", lease, err)
+			log.Warningf(context.TODO(), "error releasing lease %q: %s", lease, err)
 		}
 	})
 	if log.V(1) && err != nil {
-		log.Warningf("error removing lease from store: %s", err)
+		log.Warningf(context.TODO(), "error removing lease from store: %s", err)
 	}
 }
 
@@ -764,7 +767,7 @@ func (t *tableState) purgeOldLeases(
 
 	// Acquire and release a lease on the table at a version >= minVersion.
 	var lease *LeaseState
-	err := db.Txn(func(txn *client.Txn) error {
+	err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		var err error
 		if !deleted {
 			lease, err = t.acquire(txn, minVersion, store)
@@ -834,7 +837,7 @@ type tableNameCacheKey struct {
 // from the store. The cache maintains the newest lease for each table name.
 // All methods are thread-safe.
 type tableNameCache struct {
-	mu     sync.Mutex
+	mu     syncutil.Mutex
 	tables map[tableNameCacheKey]*LeaseState
 }
 
@@ -845,17 +848,17 @@ type tableNameCache struct {
 // This method handles normalizing the table name.
 // The lease's refcount is incremented before returning, so the caller is
 // responsible for releasing it to the leaseManager.
-func (c *tableNameCache) get(dbID sqlbase.ID, tableName string, clock *hlc.Clock,
+func (c *tableNameCache) get(
+	dbID sqlbase.ID, tableName string, clock *hlc.Clock,
 ) *LeaseState {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	lease, ok := c.tables[c.makeCacheKey(dbID, tableName)]
+	lease, ok := c.tables[makeTableNameCacheKey(dbID, tableName)]
+	c.mu.Unlock()
 	if !ok {
 		return nil
 	}
-	if lease == nil {
-		panic("nil lease in name cache")
-	}
+	lease.mu.Lock()
+	defer lease.mu.Unlock()
 	if !nameMatchesLease(lease, dbID, tableName) {
 		panic(fmt.Sprintf("Out of sync entry in the name cache. "+
 			"Cache entry: %d.%q -> %d. Lease: %d.%q.",
@@ -866,8 +869,6 @@ func (c *tableNameCache) get(dbID sqlbase.ID, tableName string, clock *hlc.Clock
 		// Expired, or almost expired, lease. Don't hand it out.
 		return nil
 	}
-	lease.mu.Lock()
-	defer lease.mu.Unlock()
 	if lease.released {
 		// This get() raced with a release operation. The leaseManager should remove
 		// this cache entry soon.
@@ -881,7 +882,7 @@ func (c *tableNameCache) insert(lease *LeaseState) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := c.makeCacheKey(lease.ParentID, lease.Name)
+	key := makeTableNameCacheKey(lease.ParentID, lease.Name)
 	existing, ok := c.tables[key]
 	if !ok {
 		c.tables[key] = lease
@@ -901,7 +902,7 @@ func (c *tableNameCache) remove(lease *LeaseState) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := c.makeCacheKey(lease.ParentID, lease.Name)
+	key := makeTableNameCacheKey(lease.ParentID, lease.Name)
 	existing, ok := c.tables[key]
 	if !ok {
 		// Table for lease not found in table name cache. This can happen if we had
@@ -917,8 +918,8 @@ func (c *tableNameCache) remove(lease *LeaseState) {
 	}
 }
 
-func (c *tableNameCache) makeCacheKey(dbID sqlbase.ID, tableName string) tableNameCacheKey {
-	return tableNameCacheKey{dbID, sqlbase.NormalizeName(tableName)}
+func makeTableNameCacheKey(dbID sqlbase.ID, tableName string) tableNameCacheKey {
+	return tableNameCacheKey{dbID, sqlbase.ReNormalizeName(tableName)}
 }
 
 // LeaseManager manages acquiring and releasing per-table leases. It also
@@ -930,7 +931,7 @@ func (c *tableNameCache) makeCacheKey(dbID sqlbase.ID, tableName string) tableNa
 // LeaseManager.mu > tableState.mu > tableNameCache.mu > LeaseState.mu
 type LeaseManager struct {
 	LeaseStore
-	mu     sync.Mutex
+	mu     syncutil.Mutex
 	tables map[sqlbase.ID]*tableState
 
 	// tableNames is a cache for name -> id mappings. A mapping for the cache
@@ -971,7 +972,7 @@ func NewLeaseManager(
 
 func nameMatchesLease(lease *LeaseState, dbID sqlbase.ID, tableName string) bool {
 	return lease.ParentID == dbID &&
-		sqlbase.NormalizeName(lease.Name) == sqlbase.NormalizeName(tableName)
+		sqlbase.ReNormalizeName(lease.Name) == sqlbase.ReNormalizeName(tableName)
 }
 
 // AcquireByName acquires a read lease for the specified table.
@@ -1032,7 +1033,7 @@ func (m *LeaseManager) AcquireByName(
 		// resolve the current or the old name.
 
 		if err := m.Release(lease); err != nil {
-			log.Warningf("error releasing lease: %s", err)
+			log.Warningf(context.TODO(), "error releasing lease: %s", err)
 		}
 		lease, err = m.acquireFreshestFromStore(txn, tableID)
 		if err != nil {
@@ -1042,16 +1043,16 @@ func (m *LeaseManager) AcquireByName(
 			// If the name we had doesn't match the newest descriptor in the DB, then
 			// we're trying to use an old name.
 			if err := m.Release(lease); err != nil {
-				log.Warningf("error releasing lease: %s", err)
+				log.Warningf(context.TODO(), "error releasing lease: %s", err)
 			}
-			return nil, errDescriptorNotFound
+			return nil, sqlbase.ErrDescriptorNotFound
 		}
 	}
 	return lease, nil
 }
 
 // resolveName resolves a table name to a descriptor ID by looking in the
-// database. If the mapping is not found, errDescriptorNotFound is returned.
+// database. If the mapping is not found, sqlbase.ErrDescriptorNotFound is returned.
 func (m *LeaseManager) resolveName(
 	txn *client.Txn, dbID sqlbase.ID, tableName string,
 ) (sqlbase.ID, error) {
@@ -1062,7 +1063,7 @@ func (m *LeaseManager) resolveName(
 		return 0, err
 	}
 	if !gr.Exists() {
-		return 0, errDescriptorNotFound
+		return 0, sqlbase.ErrDescriptorNotFound
 	}
 	return sqlbase.ID(gr.ValueInt()), nil
 }
@@ -1147,7 +1148,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 				}
 				// Read all tables and their versions
 				if log.V(2) {
-					log.Info("received a new config; will refresh leases")
+					log.Info(context.TODO(), "received a new config; will refresh leases")
 				}
 
 				// Loop through the configuration to find all the tables.
@@ -1158,26 +1159,26 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 					// Attempt to unmarshal config into a table/database descriptor.
 					var descriptor sqlbase.Descriptor
 					if err := kv.Value.GetProto(&descriptor); err != nil {
-						log.Warningf("%s: unable to unmarshal descriptor %v", kv.Key, kv.Value)
+						log.Warningf(context.TODO(), "%s: unable to unmarshal descriptor %v", kv.Key, kv.Value)
 						continue
 					}
 					switch union := descriptor.Union.(type) {
 					case *sqlbase.Descriptor_Table:
 						table := union.Table
 						table.MaybeUpgradeFormatVersion()
-						if err := table.Validate(); err != nil {
-							log.Errorf("%s: received invalid table descriptor: %v", kv.Key, table)
+						if err := table.ValidateTable(); err != nil {
+							log.Errorf(context.TODO(), "%s: received invalid table descriptor: %v", kv.Key, table)
 							continue
 						}
 						if log.V(2) {
-							log.Infof("%s: refreshing lease table: %d (%s), version: %d, deleted: %t",
+							log.Infof(context.TODO(), "%s: refreshing lease table: %d (%s), version: %d, deleted: %t",
 								kv.Key, table.ID, table.Name, table.Version, table.Deleted())
 						}
 						// Try to refresh the table lease to one >= this version.
 						if t := m.findTableState(table.ID, false /* create */); t != nil {
 							if err := t.purgeOldLeases(
 								db, table.Deleted(), table.Version, m.LeaseStore); err != nil {
-								log.Warningf("error purging leases for table %d(%s): %s",
+								log.Warningf(context.TODO(), "error purging leases for table %d(%s): %s",
 									table.ID, table.Name, err)
 							}
 						}

@@ -78,10 +78,12 @@ func (s *Store) insertRangeLogEvent(txn *client.Txn, event rangeLogEvent) error 
 	if event.info != nil {
 		info = *event.info
 	}
-	log.Infoc(txn.Context, "Range Event: %q, range: %d, info: %s",
-		event.eventType,
-		event.rangeID,
-		info)
+	if log.V(1) {
+		log.Infof(txn.Context, "Range Event: %q, range: %d, info: %s",
+			event.eventType,
+			event.rangeID,
+			info)
+	}
 
 	const insertEventTableStmt = `
 INSERT INTO system.rangelog (
@@ -111,11 +113,11 @@ VALUES(
 	// range log.
 	switch event.eventType {
 	case RangeEventLogSplit:
-		s.metrics.rangeSplits.Inc(1)
+		s.metrics.RangeSplits.Inc(1)
 	case RangeEventLogAdd:
-		s.metrics.rangeAdds.Inc(1)
+		s.metrics.RangeAdds.Inc(1)
 	case RangeEventLogRemove:
-		s.metrics.rangeRemoves.Inc(1)
+		s.metrics.RangeRemoves.Inc(1)
 	}
 
 	rows, err := s.ctx.SQLExecutor.ExecuteStatementInTransaction(txn, insertEventTableStmt, args...)

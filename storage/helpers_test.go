@@ -22,18 +22,11 @@
 package storage
 
 import (
-	"sync/atomic"
-
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
-
-// HandleRaftMessage delegates to handleRaftMessage.
-func (s *Store) HandleRaftMessage(req *RaftMessageRequest) error {
-	return s.handleRaftMessage(req)
-}
 
 // ComputeMVCCStats immediately computes correct total MVCC usage statistics
 // for the store, returning the computed values (but without modifying the
@@ -100,6 +93,20 @@ func (s *Store) ForceRaftLogScanAndProcess() {
 	s.raftLogQueue.DrainQueue(s.ctx.Clock)
 }
 
+// GetDeadReplicas exports s.deadReplicas for tests.
+func (s *Store) GetDeadReplicas() roachpb.StoreDeadReplicas {
+	return s.deadReplicas()
+}
+
+// LeaseExpiration returns an int64 to increment a manual clock with to
+// make sure that all active range leases expire.
+func (s *Store) LeaseExpiration(clock *hlc.Clock) int64 {
+	// Due to lease extensions, the remaining interval can be longer than just
+	// the sum of the offset (=length of stasis period) and the active
+	// duration, but definitely not by 2x.
+	return 2 * int64(s.ctx.rangeLeaseActiveDuration+clock.MaxOffset())
+}
+
 // LogReplicaChangeTest adds a fake replica change event to the log for the
 // range which contains the given key.
 func (s *Store) LogReplicaChangeTest(txn *client.Txn, changeType roachpb.ReplicaChangeType, replica roachpb.ReplicaDescriptor, desc roachpb.RangeDescriptor) error {
@@ -127,10 +134,16 @@ func (s *Store) SetSplitQueueActive(active bool) {
 	s.setSplitQueueActive(active)
 }
 
-// SetReplicaScannerDisabled turns replica scanning off or on as directed. Note
-// that while disabled, removals are still processed.
-func (s *Store) SetReplicaScannerDisabled(disabled bool) {
-	s.scanner.SetDisabled(disabled)
+// SetReplicaScannerActive enables or disables the scanner. Note that while
+// inactive, removals are still processed.
+func (s *Store) SetReplicaScannerActive(active bool) {
+	s.setScannerActive(active)
+}
+
+// EnqueueRaftUpdateCheck enqueues the replica for a Raft update check, forcing
+// the replica's Raft group into existence.
+func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
+	s.enqueueRaftUpdateCheck(rangeID)
 }
 
 // GetLastIndex is the same function as LastIndex but it does not require
@@ -139,16 +152,6 @@ func (r *Replica) GetLastIndex() (uint64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.LastIndex()
-}
-
-// SetDisabled turns replica scanning off or on as directed. Note that while
-// disabled, removals are still processed.
-func (rs *replicaScanner) SetDisabled(disabled bool) {
-	if disabled {
-		atomic.StoreInt32(&rs.disabled, 1)
-	} else {
-		atomic.StoreInt32(&rs.disabled, 0)
-	}
 }
 
 // GetLease exposes replica.getLease for tests.
@@ -161,4 +164,9 @@ func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.mu.tsCache.lowWater
+}
+
+// GetStoreList is the same function as GetStoreList exposed for tests only.
+func (sp *StorePool) GetStoreList(required roachpb.Attributes, deterministic bool) (StoreList, int, int) {
+	return sp.getStoreList(required, deterministic)
 }

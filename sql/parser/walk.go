@@ -38,18 +38,6 @@ type Visitor interface {
 	VisitPost(expr Expr) (newNode Expr)
 }
 
-func copyQualifiedNames(q QualifiedNames) QualifiedNames {
-	if q == nil {
-		return nil
-	}
-	copy := QualifiedNames(make([]*QualifiedName, len(q)))
-	for i, n := range q {
-		qCopy := *n
-		copy[i] = &qCopy
-	}
-	return copy
-}
-
 // Walk implements the Expr interface.
 func (expr *AndExpr) Walk(v Visitor) Expr {
 	left, changedL := WalkExpr(v, expr.Left)
@@ -357,7 +345,20 @@ func (expr *Tuple) Walk(v Visitor) Expr {
 }
 
 // Walk implements the Expr interface.
-func (expr *QualifiedName) Walk(_ Visitor) Expr { return expr }
+func (expr UnqualifiedStar) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr UnresolvedName) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr *AllColumnsSelector) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr *ColumnItem) Walk(_ Visitor) Expr {
+	// TODO(knz) When ARRAY is supported, this must be extended
+	// to recurse into the index expressions of the ColumnItems' Selector.
+	return expr
+}
 
 // Walk implements the Expr interface.
 func (expr DefaultVal) Walk(_ Visitor) Expr { return expr }
@@ -492,7 +493,6 @@ func (stmt *Explain) WalkStmt(v Visitor) Statement {
 // CopyNode makes a copy of this Expr without recursing in any child Exprs.
 func (stmt *Insert) CopyNode() *Insert {
 	stmtCopy := *stmt
-	stmtCopy.Columns = copyQualifiedNames(stmt.Columns)
 	stmtCopy.Returning = ReturningExprs(append([]SelectExpr(nil), stmt.Returning...))
 	return &stmtCopy
 }
@@ -589,7 +589,10 @@ func (stmt *Select) WalkStmt(v Visitor) Statement {
 func (stmt *SelectClause) CopyNode() *SelectClause {
 	stmtCopy := *stmt
 	stmtCopy.Exprs = SelectExprs(append([]SelectExpr(nil), stmt.Exprs...))
-	stmtCopy.From = TableExprs(append([]TableExpr(nil), stmt.From...))
+	stmtCopy.From = &From{
+		Tables: TableExprs(append([]TableExpr(nil), stmt.From.Tables...)),
+		AsOf:   stmt.From.AsOf,
+	}
 	if stmt.Where != nil {
 		wCopy := *stmt.Where
 		stmtCopy.Where = &wCopy
@@ -613,6 +616,16 @@ func (stmt *SelectClause) WalkStmt(v Visitor) Statement {
 				ret = stmt.CopyNode()
 			}
 			ret.Exprs[i].Expr = e
+		}
+	}
+
+	if stmt.From != nil && stmt.From.AsOf.Expr != nil {
+		e, changed := WalkExpr(v, stmt.From.AsOf.Expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.From.AsOf.Expr = e
 		}
 	}
 
@@ -676,7 +689,6 @@ func (stmt *Update) CopyNode() *Update {
 	stmtCopy.Exprs = UpdateExprs(make([]*UpdateExpr, len(stmt.Exprs)))
 	for i, e := range stmt.Exprs {
 		eCopy := *e
-		eCopy.Names = copyQualifiedNames(e.Names)
 		stmtCopy.Exprs[i] = &eCopy
 	}
 	if stmt.Where != nil {

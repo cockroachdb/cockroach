@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -88,7 +89,7 @@ func setupMVCCData(emk engineMaker, numVersions, numKeys, valueBytes int, b *tes
 		return eng, loc, stopper
 	}
 
-	log.Infof("creating mvcc data: %s", loc)
+	log.Infof(context.Background(), "creating mvcc data: %s", loc)
 
 	// Generate the same data every time.
 	rng := rand.New(rand.NewSource(1449168817))
@@ -119,7 +120,7 @@ func setupMVCCData(emk engineMaker, numVersions, numKeys, valueBytes int, b *tes
 		// optimizations which change the data size result in the same number of
 		// sstables.
 		if scaled := len(order) / 20; i > 0 && (i%scaled) == 0 {
-			log.Infof("committing (%d/~%d)", i/scaled, 20)
+			log.Infof(context.Background(), "committing (%d/~%d)", i/scaled, 20)
 			if err := batch.Commit(); err != nil {
 				b.Fatal(err)
 			}
@@ -174,7 +175,7 @@ func runMVCCScan(emk engineMaker, numRows, numVersions, valueSize int, b *testin
 		startKey := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(keyIdx)))
 		walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 		ts := makeTS(walltime, 0)
-		kvs, _, err := MVCCScan(context.Background(), eng, startKey, keyMax, int64(numRows), ts, true, nil)
+		kvs, _, _, err := MVCCScan(context.Background(), eng, startKey, keyMax, int64(numRows), ts, true, nil)
 		if err != nil {
 			b.Fatalf("failed scan: %s", err)
 		}
@@ -439,7 +440,9 @@ func runMVCCDeleteRange(emk engineMaker, valueBytes int, b *testing.B) {
 		dupEng, stopper := emk(b, locDirty)
 
 		b.StartTimer()
-		_, err := MVCCDeleteRange(context.Background(), dupEng, &enginepb.MVCCStats{}, roachpb.KeyMin, roachpb.KeyMax, 0, hlc.MaxTimestamp, nil, false)
+		_, _, _, err := MVCCDeleteRange(context.Background(), dupEng,
+			&enginepb.MVCCStats{}, roachpb.KeyMin, roachpb.KeyMax, math.MaxInt64,
+			hlc.MaxTimestamp, nil, false)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -472,7 +475,7 @@ func runMVCCComputeStats(emk engineMaker, valueBytes int, b *testing.B) {
 	}
 
 	b.StopTimer()
-	log.Infof("live_bytes: %d", stats.LiveBytes)
+	log.Infof(context.Background(), "live_bytes: %d", stats.LiveBytes)
 }
 
 func BenchmarkMVCCPutDelete_RocksDB(b *testing.B) {

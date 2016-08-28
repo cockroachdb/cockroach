@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -32,7 +33,7 @@ func TestParseInitNodeAttributes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := MakeContext()
 	ctx.Attrs = "attr1=val1::attr2=val2"
-	ctx.Stores = StoreSpecList{Specs: []StoreSpec{{InMemory: true, SizeInBytes: minimumStoreSize * 100}}}
+	ctx.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, SizeInBytes: base.MinimumStoreSize * 100}}}
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	if err := ctx.InitStores(stopper); err != nil {
@@ -53,7 +54,7 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := MakeContext()
 	ctx.JoinList = []string{"localhost:12345,,localhost:23456", "localhost:34567"}
-	ctx.Stores = StoreSpecList{Specs: []StoreSpec{{InMemory: true, SizeInBytes: minimumStoreSize * 100}}}
+	ctx.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, SizeInBytes: base.MinimumStoreSize * 100}}}
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	if err := ctx.InitStores(stopper); err != nil {
@@ -62,15 +63,15 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 	if err := ctx.InitNode(); err != nil {
 		t.Fatalf("Failed to initialize node: %s", err)
 	}
-	r1, err := resolver.NewResolver(ctx.Context, "localhost:12345")
+	r1, err := resolver.NewResolver("localhost:12345")
 	if err != nil {
 		t.Fatal(err)
 	}
-	r2, err := resolver.NewResolver(ctx.Context, "localhost:23456")
+	r2, err := resolver.NewResolver("localhost:23456")
 	if err != nil {
 		t.Fatal(err)
 	}
-	r3, err := resolver.NewResolver(ctx.Context, "localhost:34567")
+	r3, err := resolver.NewResolver("localhost:34567")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,6 +118,7 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		if err := os.Unsetenv("COCKROACH_RESERVATIONS_ENABLED"); err != nil {
 			t.Fatal(err)
 		}
+		envutil.ClearEnvCache()
 	}
 	defer resetEnvVar()
 

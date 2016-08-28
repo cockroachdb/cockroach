@@ -22,6 +22,7 @@ package engine
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"os"
 	"path/filepath"
@@ -29,6 +30,8 @@ import (
 	"sort"
 	"sync"
 	"unsafe"
+
+	"golang.org/x/net/context"
 
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
@@ -66,7 +69,7 @@ const (
 )
 
 func init() {
-	rocksdb.Logger = log.Infof
+	rocksdb.Logger = func(format string, args ...interface{}) { log.Infof(context.TODO(), format, args...) }
 }
 
 // SSTableInfo contains metadata about a single RocksDB sstable. This mirrors
@@ -231,7 +234,9 @@ type RocksDBCache struct {
 	cache *C.DBCache
 }
 
-// NewRocksDBCache creates a new cache of the specified size.
+// NewRocksDBCache creates a new cache of the specified size. Note that the
+// cache is refcounted internally and starts out with a refcount of one (i.e.
+// Release() should be called after having used the cache).
 func NewRocksDBCache(cacheSize int64) RocksDBCache {
 	return RocksDBCache{cache: C.DBNewCache(C.uint64_t(cacheSize))}
 }
@@ -244,7 +249,8 @@ func (c RocksDBCache) ref() RocksDBCache {
 }
 
 // Release releases the cache. Note that the cache will continue to be used
-// until all of the RocksDB engines it was attached to have been closed.
+// until all of the RocksDB engines it was attached to have been closed, and
+// that RocksDB engines which use it auto-release when they close.
 func (c RocksDBCache) Release() {
 	if c.cache != nil {
 		C.DBReleaseCache(c.cache)
@@ -301,6 +307,7 @@ func newMemRocksDB(
 		// dir: empty dir == "mem" RocksDB instance.
 		cache:          cache.ref(),
 		memtableBudget: memtableBudget,
+		maxSize:        memtableBudget,
 		stopper:        stopper,
 		deallocated:    make(chan struct{}),
 	}
@@ -330,7 +337,7 @@ func (r *RocksDB) Open() error {
 
 	var ver storageVersion
 	if len(r.dir) != 0 {
-		log.Infof("opening rocksdb instance at %q", r.dir)
+		log.Infof(context.TODO(), "opening rocksdb instance at %q", r.dir)
 
 		// Check the version number.
 		var err error
@@ -344,18 +351,21 @@ func (r *RocksDB) Open() error {
 				versionCurrent, ver, versionMinimum)
 		}
 	} else {
-		log.Infof("opening in memory rocksdb instance")
+		log.Infof(context.TODO(), "opening in memory rocksdb instance")
 
 		// In memory dbs are always current.
 		ver = versionCurrent
 	}
 
+	blockSize := envutil.EnvOrDefaultBytes("COCKROACH_ROCKSDB_BLOCK_SIZE", defaultBlockSize)
+	walTTL := envutil.EnvOrDefaultDuration("COCKROACH_ROCKSDB_WAL_TTL", 0).Seconds()
+
 	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.dir)),
 		C.DBOptions{
 			cache:           r.cache.cache,
 			memtable_budget: C.uint64_t(r.memtableBudget),
-			block_size:      C.uint64_t(envutil.EnvOrDefaultBytes("rocksdb_block_size", defaultBlockSize)),
-			wal_ttl_seconds: C.uint64_t(envutil.EnvOrDefaultDuration("rocksdb_wal_ttl", 0).Seconds()),
+			block_size:      C.uint64_t(blockSize),
+			wal_ttl_seconds: C.uint64_t(walTTL),
 			allow_os_buffer: C.bool(true),
 			logging_enabled: C.bool(log.V(3)),
 			num_cpu:         C.int(runtime.NumCPU()),
@@ -384,15 +394,15 @@ func (r *RocksDB) Open() error {
 // Close closes the database by deallocating the underlying handle.
 func (r *RocksDB) Close() {
 	if r.rdb == nil {
-		log.Errorf("closing unopened rocksdb instance")
+		log.Errorf(context.TODO(), "closing unopened rocksdb instance")
 		return
 	}
 	if len(r.dir) == 0 {
 		if log.V(1) {
-			log.Infof("closing in-memory rocksdb instance")
+			log.Infof(context.TODO(), "closing in-memory rocksdb instance")
 		}
 	} else {
-		log.Infof("closing rocksdb instance at %q", r.dir)
+		log.Infof(context.TODO(), "closing rocksdb instance at %q", r.dir)
 	}
 	if r.rdb != nil {
 		C.DBClose(r.rdb)
@@ -469,7 +479,14 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 	fileSystemUsage := gosigar.FileSystemUsage{}
 	dir := r.dir
 	if dir == "" {
-		dir = "/tmp"
+		// This is an in-memory instance. Pretend we're empty since we
+		// don't know better and only use this for testing. Using any
+		// part of the actual file system here can throw off allocator
+		// rebalancing in a hard-to-trace manner. See #7050.
+		return roachpb.StoreCapacity{
+			Capacity:  r.maxSize,
+			Available: r.maxSize,
+		}, nil
 	}
 	if err := fileSystemUsage.Get(dir); err != nil {
 		return roachpb.StoreCapacity{}, err
@@ -840,7 +857,6 @@ func (r *rocksDBBatchIterator) Less(key MVCCKey) bool {
 type rocksDBBatch struct {
 	parent             *RocksDB
 	batch              *C.DBEngine
-	defers             []func()
 	flushes            int
 	prefixIter         rocksDBBatchIterator
 	normalIter         rocksDBBatchIterator
@@ -985,22 +1001,12 @@ func (r *rocksDBBatch) Commit() error {
 	C.DBClose(r.batch)
 	r.batch = nil
 
-	// On success, run the deferred functions in reverse order.
-	for i := len(r.defers) - 1; i >= 0; i-- {
-		r.defers[i]()
-	}
-	r.defers = nil
-
 	return nil
 }
 
 func (r *rocksDBBatch) Repr() []byte {
 	r.flushMutations()
 	return cSliceToGoBytes(C.DBBatchRepr(r.batch))
-}
-
-func (r *rocksDBBatch) Defer(fn func()) {
-	r.defers = append(r.defers, fn)
 }
 
 func (r *rocksDBBatch) Distinct() ReadWriter {
@@ -1420,4 +1426,112 @@ func dbIterate(rdb *C.DBEngine, engine Reader, start, end MVCCKey,
 	}
 	// Check for any errors during iteration.
 	return it.Error()
+}
+
+// RocksDBSstFileReader allows iteration over a number of non-overlapping
+// sstables exported by `RocksDBSstFileWriter`.
+type RocksDBSstFileReader struct {
+	// TODO(dan): This currently works by creating a RocksDB instance in a
+	// temporary directory that's cleaned up on `Close`. It doesn't appear that
+	// we can use an in-memory RocksDB with this, because AddFile doesn't then
+	// work with files on disk. This should also work with overlapping files.
+
+	dir     string
+	rocksDB *RocksDB
+}
+
+// MakeRocksDBSstFileReader creates a RocksDBSstFileReader that uses a scrach
+// directory which is cleaned up by `Close`.
+func MakeRocksDBSstFileReader() (RocksDBSstFileReader, error) {
+	stopper := stop.NewStopper()
+
+	dir, err := ioutil.TempDir("", "RocksDBSstFileReader")
+	if err != nil {
+		return RocksDBSstFileReader{}, err
+	}
+
+	// TODO(dan): I pulled all these magic numbers out of nowhere. Make them
+	// less magic.
+	cache := NewRocksDBCache(1 << 20)
+	rocksDB := NewRocksDB(
+		roachpb.Attributes{}, dir, cache, 512<<20, 512<<20, DefaultMaxOpenFiles, stopper)
+	if err := rocksDB.Open(); err != nil {
+		return RocksDBSstFileReader{}, err
+	}
+	return RocksDBSstFileReader{dir, rocksDB}, nil
+}
+
+// AddFile links the file at the given path into a database. See the RocksDB
+// documentation on `AddFile` for the various restrictions on what can be added.
+func (fr *RocksDBSstFileReader) AddFile(path string) error {
+	if fr.rocksDB == nil {
+		return errors.New("cannot call AddFile on a closed reader")
+	}
+	return statusToError(C.DBEngineAddFile(fr.rocksDB.rdb, goToCSlice([]byte(path))))
+}
+
+// Iterate iterates over the keys between start inclusive and end
+// exclusive, invoking f() on each key/value pair.
+func (fr *RocksDBSstFileReader) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error {
+	if fr.rocksDB == nil {
+		return errors.New("cannot call Iterate on a closed reader")
+	}
+	return fr.rocksDB.Iterate(start, end, f)
+}
+
+// Close finishes the reader.
+func (fr *RocksDBSstFileReader) Close() {
+	if fr.rocksDB == nil {
+		return
+	}
+	fr.rocksDB.Close()
+	fr.rocksDB = nil
+	if err := os.RemoveAll(fr.dir); err != nil {
+		log.Warningf(context.TODO(), "error removing temp rocksdb directory %q: %s", fr.dir, err)
+	}
+}
+
+// RocksDBSstFileWriter creates a file suitable for importing with
+// RocksDBSstFileReader.
+type RocksDBSstFileWriter struct {
+	fw *C.DBSstFileWriter
+	// DataSize tracks the total key and value bytes added so far.
+	DataSize int64
+}
+
+// MakeRocksDBSstFileWriter creates a new RocksDBSstFileWriter with the default
+// configuration.
+func MakeRocksDBSstFileWriter() RocksDBSstFileWriter {
+	return RocksDBSstFileWriter{C.DBSstFileWriterNew(), 0}
+}
+
+// Open creates a file at the given path for output of an sstable.
+func (fw *RocksDBSstFileWriter) Open(path string) error {
+	if fw == nil {
+		return errors.New("cannot call Open on a closed writer")
+	}
+	return statusToError(C.DBSstFileWriterOpen(fw.fw, goToCSlice([]byte(path))))
+}
+
+// Add puts a kv entry into the sstable being built. An error is returned if it
+// is not greater than any previously added entry (according to the comparator
+// configured during writer creation). `Open` must have been called. `Close`
+// cannot have been called.
+func (fw *RocksDBSstFileWriter) Add(kv MVCCKeyValue) error {
+	if fw == nil {
+		return errors.New("cannot call Open on a closed writer")
+	}
+	fw.DataSize += int64(len(kv.Key.Key)) + int64(len(kv.Value))
+	return statusToError(C.DBSstFileWriterAdd(fw.fw, goToCKey(kv.Key), goToCSlice(kv.Value)))
+}
+
+// Close finishes the writer, flushing any remaining writes to disk. At least
+// one kv entry must have been added.
+func (fw *RocksDBSstFileWriter) Close() error {
+	if fw.fw == nil {
+		return errors.New("writer is already closed")
+	}
+	err := statusToError(C.DBSstFileWriterClose(fw.fw))
+	fw.fw = nil
+	return err
 }

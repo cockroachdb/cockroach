@@ -31,6 +31,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/container"
 
@@ -64,6 +66,10 @@ func init() {
 		"keep the cluster after the test, either 'always', 'never', or 'failed'")
 
 	flag.Parse()
+
+	if *flagCLTWriters == -1 {
+		*flagCLTWriters = *flagNodes
+	}
 }
 
 var flagDuration = flag.Duration("d", cluster.DefaultDuration, "duration to run the test")
@@ -81,19 +87,33 @@ var flagConfig = flag.String("config", "", "a json TestConfig proto, see testcon
 var flagPrivileged = flag.Bool("privileged", os.Getenv("CIRCLECI") != "true",
 	"run containers in privileged mode (required for nemesis tests")
 
-var flagTFKeepCluster = keepClusterVar(terrafarm.KeepClusterNever) // see init()
+// Terrafarm flags.
+var flagTFReuseCluster = flag.String("reuse", "",
+	`attempt to use the cluster with the given name.
+	  Tests which don't support this may behave unexpectedly.
+	  This flag can also be set to have a test create a cluster
+	  with predetermined name.`,
+)
 
-// TODO(cuongdo): These should be refactored so that they're not allocator
-// test-specific when we have more than one kind of system test that uses these
-// flags.
-var flagATCockroachBinary = flag.String("at.cockroach-binary", "",
+var flagTFKeepCluster = keepClusterVar(terrafarm.KeepClusterNever) // see init()
+var flagTFCockroachBinary = flag.String("tf.cockroach-binary", "",
 	"path to custom CockroachDB binary to use for allocator tests")
-var flagATCockroachFlags = flag.String("at.cockroach-flags", "",
+var flagTFCockroachFlags = flag.String("tf.cockroach-flags", "",
 	"command-line flags to pass to cockroach for allocator tests")
-var flagATCockroachEnv = flag.String("at.cockroach-env", "",
+var flagTFCockroachEnv = flag.String("tf.cockroach-env", "",
 	"supervisor-style environment variables to pass to cockroach")
-var flagATDiskType = flag.String("at.disk-type", "pd-standard",
+var flagTFDiskType = flag.String("tf.disk-type", "pd-standard",
 	"type of disk (either 'pd-standard' for spinny disk, or 'pd-ssd' for SSD)")
+
+// Allocator test flags.
+var flagATMaxStdDev = flag.Float64("at.std-dev", 10,
+	"maximum standard deviation of replica counts")
+
+// continuousLoadTest (CLT) flags.
+var flagCLTWriters = flag.Int("clt.writers", -1,
+	"# of load generators to spawn (defaults to # of nodes)")
+var flagCLTMinQPS = flag.Float64("clt.min-qps", 5.0,
+	"fail load tests when queries per second drops below this during a health check interval")
 
 var testFuncRE = regexp.MustCompile("^(Test|Benchmark)")
 
@@ -131,12 +151,16 @@ func runTests(m *testing.M) {
 var prefixRE = regexp.MustCompile("^(?:[a-z](?:[-a-z0-9]{0,45}[a-z0-9])?)$")
 
 func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
-	if !*flagRemote {
-		t.Skip("running in docker mode")
-	}
+	SkipUnlessRemote(t)
+
 	if *flagKeyName == "" {
 		t.Fatal("-key-name is required") // saves a lot of trouble
 	}
+
+	if e := "GOOGLE_PROJECT"; os.Getenv(e) == "" {
+		t.Fatalf("%s environment variable must be set for Terraform", e)
+	}
+
 	logDir := *flagLogDir
 	if logDir == "" {
 		var err error
@@ -148,34 +172,56 @@ func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 	if !filepath.IsAbs(logDir) {
 		logDir = filepath.Join(filepath.Clean(os.ExpandEnv("${PWD}")), logDir)
 	}
-	stores := "--store=data0"
+	stores := "--store=/mnt/data0"
 	for j := 1; j < *flagStores; j++ {
-		stores += " --store=data" + strconv.Itoa(j)
+		stores += " --store=/mnt/data" + strconv.Itoa(j)
 	}
 
-	// We concatenate a random name to the prefix (for Terraform resource
-	// names) to allow multiple instances of the same test to run concurrently.
-	// The prefix is also used as the name of the Terraform state file.
-	if prefix != "" {
-		prefix += "-"
+	// Pass variables to be passed to the Terraform config.
+	terraformVars := make(map[string]string)
+	if *flagTFCockroachBinary != "" {
+		terraformVars["cockroach_binary"] = *flagTFCockroachBinary
 	}
-	prefix += getRandomName()
+	if *flagTFCockroachFlags != "" {
+		terraformVars["cockroach_flags"] = *flagTFCockroachFlags
+	}
+	if *flagTFCockroachEnv != "" {
+		terraformVars["cockroach_env"] = *flagTFCockroachEnv
+	}
+	terraformVars["cockroach_disk_type"] = *flagTFDiskType
 
-	// Rudimentary collision control.
-	for i := 0; ; i++ {
-		newPrefix := prefix
-		if i > 0 {
-			newPrefix += strconv.Itoa(i)
+	var name string
+	if *flagTFReuseCluster == "" {
+		// We concatenate a random name to the prefix (for Terraform resource
+		// names) to allow multiple instances of the same test to run
+		// concurrently. The prefix is also used as the name of the Terraform
+		// state file.
+
+		name = prefix
+		if name != "" {
+			name += "-"
 		}
-		_, err := os.Stat(filepath.Join(*flagCwd, newPrefix+".tfstate"))
-		if os.IsNotExist(err) {
-			prefix = newPrefix
-			break
+
+		name += getRandomName()
+
+		// Rudimentary collision control.
+		for i := 0; ; i++ {
+			newName := name
+			if i > 0 {
+				newName += strconv.Itoa(i)
+			}
+			_, err := os.Stat(filepath.Join(*flagCwd, newName+".tfstate"))
+			if os.IsNotExist(err) {
+				name = newName
+				break
+			}
 		}
+	} else {
+		name = *flagTFReuseCluster
 	}
 
-	if !prefixRE.MatchString(prefix) {
-		t.Fatalf("generated farmer prefix '%s' must match regex %s", prefix, prefixRE)
+	if !prefixRE.MatchString(name) {
+		t.Fatalf("generated cluster name '%s' must match regex %s", name, prefixRE)
 	}
 	f := &terrafarm.Farmer{
 		Output:      os.Stderr,
@@ -183,12 +229,12 @@ func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 		LogDir:      logDir,
 		KeyName:     *flagKeyName,
 		Stores:      stores,
-		Prefix:      prefix,
-		StateFile:   prefix + ".tfstate",
-		AddVars:     make(map[string]string),
+		Prefix:      name,
+		StateFile:   name + ".tfstate",
+		AddVars:     terraformVars,
 		KeepCluster: flagTFKeepCluster.String(),
 	}
-	log.Infof("logging to %s", logDir)
+	log.Infof(context.Background(), "logging to %s", logDir)
 	return f
 }
 
@@ -293,7 +339,7 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
 	}
 	f := farmer(t, "")
 	c = f
-	if err := f.Resize(*flagNodes, 0); err != nil {
+	if err := f.Resize(*flagNodes); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.WaitReady(5 * time.Minute); err != nil {
@@ -311,6 +357,13 @@ func StartCluster(t *testing.T, cfg cluster.TestConfig) (c cluster.Cluster) {
 func SkipUnlessLocal(t *testing.T) {
 	if *flagRemote {
 		t.Skip("skipping since not run against local cluster")
+	}
+}
+
+// SkipUnlessRemote calls t.Skip if not running against a remote cluster.
+func SkipUnlessRemote(t *testing.T) {
+	if !*flagRemote {
+		t.Skip("skipping since not run against remote cluster")
 	}
 }
 
@@ -381,4 +434,27 @@ func testDockerSingleNode(t *testing.T, name string, cmd []string) error {
 
 func testDockerOneShot(t *testing.T, name string, cmd []string) error {
 	return testDocker(t, 0, name, cmd)
+}
+
+// WithClusterTimeout returns a copy of the given parent Context with a timeout
+// that's less than the `test.timeout` flag, allowing time for test cluster
+// creation and destruction to occur.
+func WithClusterTimeout(parent context.Context) (context.Context, error) {
+	// createDestroyInterval is set based on occasional observed teardown times of 6-7
+	// minutes.
+	const createDestroyInterval = 10 * time.Minute
+	fl := flag.Lookup("test.timeout")
+	if fl == nil {
+		return parent, nil
+	}
+	testTimeout, err := time.ParseDuration(fl.Value.String())
+	if err != nil {
+		return nil, err
+	}
+	if createDestroyInterval >= testTimeout {
+		return nil, fmt.Errorf("test.timeout must be greater than create/destroy interval %s",
+			createDestroyInterval)
+	}
+	ctx, _ := context.WithTimeout(parent, testTimeout-createDestroyInterval)
+	return ctx, nil
 }

@@ -27,6 +27,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"golang.org/x/net/context"
+
 	"github.com/chzyer/readline"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/envutil"
@@ -79,8 +81,8 @@ func addHistory(ins *readline.Instance, line string) {
 	// persist to disk (if ins's config.HistoryFile is set).  err can
 	// be not nil only if it got a IO error while trying to persist.
 	if err := ins.SaveHistory(line); err != nil {
-		log.Warningf("cannot save command-line history: %s", err)
-		log.Info("command-line history will not be saved in this session")
+		log.Warningf(context.TODO(), "cannot save command-line history: %s", err)
+		log.Info(context.TODO(), "command-line history will not be saved in this session")
 		cfg := ins.Config.Clone()
 		cfg.HistoryFile = ""
 		ins.SetConfig(cfg)
@@ -188,7 +190,7 @@ func runSyscmd(line string) int {
 		return cliNextLine
 	}
 
-	fmt.Printf(cmdOut)
+	fmt.Print(cmdOut)
 	return cliNextLine
 }
 
@@ -251,8 +253,8 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 		userAcct, err := user.Current()
 		if err != nil {
 			if log.V(2) {
-				log.Warningf("cannot retrieve user information: %s", err)
-				log.Info("cannot load or save the command-line history")
+				log.Warningf(context.TODO(), "cannot retrieve user information: %s", err)
+				log.Info(context.TODO(), "cannot load or save the command-line history")
 			}
 		} else {
 			histFile := filepath.Join(userAcct.HomeDir, ".cockroachdb_history")
@@ -309,14 +311,21 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 		// we join with spaces for keeping history, because otherwise a
 		// history recall will only pull one line from a multi-line
 		// statement.
-		fullStmt := strings.Join(stmt, "\n")
+		fullStmt := strings.TrimRight(strings.Join(stmt, "\n"), " \n\t\f")
 
 		// Ensure the statement is terminated with a semicolon. This
 		// catches cases where the last line before EOF was not terminated
 		// properly.
 		if len(fullStmt) > 0 && !strings.HasSuffix(fullStmt, ";") {
-			fmt.Fprintln(osStderr, "no semicolon at end of statement; statement ignored")
-			continue
+			if strings.TrimSpace(fullStmt) == "" {
+				// Only whitespace. Nothing to do really.
+				continue
+			}
+
+			// That was the last line of input but some statement bits
+			// were accumulated. Report an error.
+			fmt.Fprintf(osStderr, "missing semicolon at end of statement: %q\n", fullStmt)
+			return fmt.Errorf("last statement was not executed")
 		}
 
 		if isInteractive {

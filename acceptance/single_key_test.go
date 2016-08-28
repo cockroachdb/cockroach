@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
@@ -66,7 +68,7 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 			var r result
 			for timeutil.Now().Before(deadline) {
 				start := timeutil.Now()
-				err := db.Txn(func(txn *client.Txn) error {
+				err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 					minExp := atomic.LoadInt64(&expected)
 					r, err := txn.Get(key)
 					if err != nil {
@@ -112,7 +114,7 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 		case <-time.After(1 * time.Second):
 			// Periodically print out progress so that we know the test is still
 			// running.
-			log.Infof("%d", atomic.LoadInt64(&expected))
+			log.Infof(context.Background(), "%d", atomic.LoadInt64(&expected))
 		}
 	}
 
@@ -129,5 +131,5 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 	for _, r := range results {
 		maxLatency = append(maxLatency, r.maxLatency)
 	}
-	log.Infof("%d increments: %s", v, maxLatency)
+	log.Infof(context.Background(), "%d increments: %s", v, maxLatency)
 }

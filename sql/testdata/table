@@ -23,7 +23,7 @@ statement error table "a" already exists
 CREATE TABLE a (id INT PRIMARY KEY)
 
 statement error duplicate column name: "id"
-CREATE TABLE a (id INT PRIMARY KEY, id INT)
+CREATE TABLE b (id INT PRIMARY KEY, id INT)
 
 statement error multiple primary keys for table "b" are not allowed
 CREATE TABLE b (id INT PRIMARY KEY, id2 INT PRIMARY KEY)
@@ -186,10 +186,10 @@ test.users CREATE TABLE "test.users"
   CONSTRAINT "primary" PRIMARY KEY (id),
   INDEX foo (name),
   UNIQUE INDEX bar (id, name),
-  FAMILY "primary" (id, username, email),
-  FAMILY fam_1_name (name),
-  FAMILY fam_2_title (title),
-  FAMILY fam_3_nickname (nickname),
+  FAMILY "primary" (id, name),
+  FAMILY fam_1_title (title),
+  FAMILY fam_2_nickname (nickname),
+  FAMILY fam_3_username_email (username, email),
   CHECK (LENGTH(nickname) < LENGTH(name)),
   CHECK (LENGTH(nickname) < 10)
 )
@@ -223,10 +223,10 @@ test.named_constraints  CREATE TABLE "test.named_constraints" (
                         INDEX foo (name),
                         UNIQUE INDEX uq2 (username),
                         UNIQUE INDEX bar (id, name),
-                        FAMILY "primary" (id, username, email),
-                        FAMILY fam_1_name (name),
-                        FAMILY fam_2_title (title),
-                        FAMILY fam_3_nickname (nickname),
+                        FAMILY "primary" (id, name),
+                        FAMILY fam_1_title (title),
+                        FAMILY fam_2_nickname (nickname),
+                        FAMILY fam_3_username_email (username, email),
                         CONSTRAINT ck2 CHECK (LENGTH(nickname) < LENGTH(name)),
                         CONSTRAINT ck1 CHECK (LENGTH(nickname) < 10)
                         )
@@ -281,6 +281,90 @@ CREATE TABLE test.dupe_named_constraints (
   name      VARCHAR CONSTRAINT def REFERENCES test.named_constraints (username),
   INDEX (name)
 )
+
+statement ok
+CREATE TABLE test.alltypes (
+  a BOOL,
+  b INT,
+  c INT64,
+  d INTEGER,
+  e SMALLINT,
+  f BIGINT,
+  g SERIAL,
+  h SMALLSERIAL,
+  i BIGSERIAL,
+  j BIT,
+  k BIT(12),
+  l CHAR,
+  m CHAR(12),
+  n VARCHAR,
+  o VARCHAR(12),
+  p REAL,
+  q FLOAT,
+  r DOUBLE PRECISION,
+  s DEC,
+  t DEC(1),
+  u DEC(2,1),
+  v DECIMAL,
+  w DECIMAL(1),
+  x DECIMAL(2,1),
+  y NUMERIC,
+  z NUMERIC(1),
+  aa NUMERIC(2,1),
+  ab DATE,
+  ac TIMESTAMP,
+  ad TIMESTAMP WITH TIME ZONE,
+  ae STRING,
+  af STRING(12),
+  ag TEXT,
+  ai BLOB,
+  ak BYTES,
+  am BYTEA,
+  ao INTERVAL
+  )
+
+query TTBT colnames
+SHOW COLUMNS FROM test.alltypes
+----
+Field       Type        Null    Default
+a      BOOL                      true   NULL
+b      INT                       true   NULL
+c      INT                       true   NULL
+d      INT                       true   NULL
+e      INT                       true   NULL
+f      INT                       true   NULL
+g      INT                       true   unique_rowid()
+h      INT                       true   unique_rowid()
+i      INT                       true   unique_rowid()
+j      BIT(1)                    true   NULL
+k      BIT(12)                   true   NULL
+l      STRING                    true   NULL
+m      STRING(12)                true   NULL
+n      STRING                    true   NULL
+o      STRING(12)                true   NULL
+p      FLOAT                     true   NULL
+q      FLOAT                     true   NULL
+r      FLOAT                     true   NULL
+s      DECIMAL                   true   NULL
+t      DECIMAL(1)                true   NULL
+u      DECIMAL(2,1)              true   NULL
+v      DECIMAL                   true   NULL
+w      DECIMAL(1)                true   NULL
+x      DECIMAL(2,1)              true   NULL
+y      DECIMAL                   true   NULL
+z      DECIMAL(1)                true   NULL
+aa     DECIMAL(2,1)              true   NULL
+ab     DATE                      true   NULL
+ac     TIMESTAMP                 true   NULL
+ad     TIMESTAMP WITH TIME ZONE  true   NULL
+ae     STRING                    true   NULL
+af     STRING(12)                true   NULL
+ag     STRING                    true   NULL
+ai     BYTES                     true   NULL
+ak     BYTES                     true   NULL
+am     BYTES                     true   NULL
+ao     INTERVAL                  true   NULL
+rowid  INT                       false  unique_rowid()
 
 statement ok
 CREATE DATABASE IF NOT EXISTS smtng;

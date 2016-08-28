@@ -1,4 +1,4 @@
-import * as _ from "lodash";
+import _ from "lodash";
 import * as React from "react";
 import * as ReactPaginate from "react-paginate";
 import { Link } from "react-router";
@@ -6,6 +6,7 @@ import { connect } from "react-redux";
 
 import { AdminUIState } from "../redux/state";
 import { refreshRaft } from "../redux/apiReducers";
+import { CachedDataReducerState } from "../redux/cachedDataReducer";
 import { ToolTip } from "../components/toolTip";
 
 /******************************
@@ -19,9 +20,7 @@ const RANGES_PER_PAGE = 100;
  * container.
  */
 interface RangesMainData {
-  // A list of store statuses to display, which are possibly sorted according to
-  // sortSetting.
-  rangeStatuses: cockroach.server.serverpb.RaftDebugResponse;
+  state: CachedDataReducerState<cockroach.server.serverpb.RaftDebugResponse>;
 }
 
 /**
@@ -69,7 +68,7 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
   componentWillReceiveProps(props: RangesMainProps) {
     // Refresh ranges when props are received; this will immediately
     // trigger a new request if previous results are invalidated.
-    if (!props.rangeStatuses) {
+    if (!props.state.valid) {
       props.refreshRaft();
     }
   }
@@ -122,10 +121,19 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
   }
 
   render() {
-    let statuses = this.props.rangeStatuses;
+    let statuses = this.props.state.data;
     let content: React.ReactNode = null;
+    let errors: string[] = [];
 
-    if (statuses) {
+    if (this.props.state.lastError) {
+      errors.push(this.props.state.lastError.message);
+    }
+
+    if (this.props.state.inFlight) {
+      content = <div className="section">Loading...</div>;
+    } else if (statuses) {
+      errors = errors.concat(statuses.errors.map(err => err.message));
+
       // Build list of all nodes for static ordering.
       let nodeIDs = _(statuses.ranges.map).flatMap("value.nodes").map("node_id").uniq().value().sort() as number[];
 
@@ -148,7 +156,7 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
       let rows: React.ReactNode[][] = [];
       ranges.forEach((range, i) => {
         let hasErrors = range.value.errors.length > 0;
-        let errors = <ul>{_.map(range.value.errors, (error, j) => {
+        let rangeErrors = <ul>{_.map(range.value.errors, (error, j) => {
           return <li key={j}>{error.message}</li>;
           })}</ul>;
         let row = [<td key={-1}>
@@ -158,7 +166,7 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
                 <div className="viz-info-icon">
                   <div className="icon-warning" />
                 </div>
-                <ToolTip title="Errors" text={errors} />
+                <ToolTip title="Errors" text={rangeErrors} />
               </span>) : ""
             }
           </td>];
@@ -189,28 +197,40 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
       });
 
       // Build the final display table
-      content = <div>
-        {this.renderFilterSettings()}
-        <table>
-          <thead><tr>{columns}</tr></thead>
-          <tbody>
-            {_.values(rows).map((row: React.ReactNode[], i: number) => {
-              return <tr key={i}>{row}</tr>;
-            })}
-          </tbody>
-        </table>
-        <div className="section">
-          {this.renderPagination(Math.ceil(filteredRanges.length / RANGES_PER_PAGE))}
-        </div>
-      </div>;
-    } else {
-      content = <div className="section">No results.</div>;
+      if (columns.length > 1) {
+        content = <div>
+          {this.renderFilterSettings()}
+          <table>
+            <thead><tr>{columns}</tr></thead>
+            <tbody>
+              {_.values(rows).map((row: React.ReactNode[], i: number) => {
+                return <tr key={i}>{row}</tr>;
+              })}
+            </tbody>
+          </table>
+          <div className="section">
+            {this.renderPagination(Math.ceil(filteredRanges.length / RANGES_PER_PAGE))}
+          </div>
+        </div>;
+      }
     }
     return <div className="section table">
       { this.props.children }
       <div className="stats-table">
+        { this.renderErrors(errors) }
         { content }
       </div>
+    </div>;
+  }
+
+  renderErrors(errors: string[]) {
+    if (!errors || errors.length === 0) {
+      return;
+    }
+    return <div className="section">
+      {errors.map((err: string, i: number) => {
+        return <div key={i}>Error: {err}</div>;
+      }) }
     </div>;
   }
 }
@@ -220,13 +240,13 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
  */
 
 // Base selectors to extract data from redux state.
-let rangeStatuses = (state: AdminUIState): cockroach.server.serverpb.RaftDebugResponse => state.cachedData.raft.data;
+const raftState = (state: AdminUIState): CachedDataReducerState<cockroach.server.serverpb.RaftDebugResponse> => state.cachedData.raft;
 
 // Connect the RangesMain class with our redux store.
 let rangesMainConnected = connect(
-  (state, ownProps) => {
+  (state: AdminUIState) => {
     return {
-      rangeStatuses: rangeStatuses(state),
+      state: raftState(state),
     };
   },
   {

@@ -1,8 +1,8 @@
 import * as React from "react";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
-import moment = require("moment");
-import _ = require("lodash");
+import moment from "moment";
+import _ from "lodash";
 
 import Banner from "./banner";
 import { AdminUIState } from "../../redux/state";
@@ -106,7 +106,7 @@ let versionCheckDismissed = (state: AdminUIState): number => versionCheckDismiss
 
 let versions = createSelector(
   nodeStatuses,
-  (statuses: NodeStatus[]): string[] => statuses && _.uniq(_.map(statuses, (s: NodeStatus) => s.build_info.tag))
+  (statuses: NodeStatus[]): string[] => statuses && _.uniq(_.map(statuses, (s: NodeStatus) => s.build_info && s.build_info.tag))
 );
 
 let nodeCount = createSelector(
@@ -131,7 +131,7 @@ let buildtag = createSelector(
 
 // Connect the DisconnectedBanner class with our redux store.
 let outdatedBannerConnected = connect(
-  (state, ownProps) => {
+  (state: AdminUIState) => {
     return {
       clusterID: clusterID(state),
       buildtag: buildtag(state),

@@ -1,10 +1,10 @@
 import * as React from "react";
 import * as d3 from "d3";
-import _ = require("lodash");
+import _ from "lodash";
 
 type TSResponseMessage = cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
 
-/** 
+/**
  * MetricProps reperesents the properties assigned to a selector component. A
  * selector describes a single time series that should be queried from the
  * server, along with some basic information on how that data should be rendered
@@ -18,6 +18,7 @@ export interface MetricProps {
   nonNegativeRate?: boolean;
   aggregateMax?: boolean;
   aggregateMin?: boolean;
+  aggregateAvg?: boolean;
   downsampleMax?: boolean;
   downsampleMin?: boolean;
 }
@@ -64,7 +65,7 @@ export class Axis extends React.Component<AxisProps, {}> {
 
 /**
  * AxisDomain is a helper class used to compute the domain of a set of numbers.
- * It can also be used to 
+ * It can also be used to
  */
 class AxisDomain {
   min: number;
@@ -91,7 +92,7 @@ class AxisDomain {
 // Global set of d3 colors.
 let colors: d3.scale.Ordinal<string, string> = d3.scale.category10();
 
-/** 
+/**
  * ProcessDataPoints is a helper function to process graph data from the server
  * into a format appropriate for display on an NVD3 graph. This includes the
  * computation of domains and ticks for all axes.

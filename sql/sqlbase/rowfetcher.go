@@ -21,6 +21,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -150,12 +152,12 @@ func (rf *RowFetcher) Init(
 
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
-func (rf *RowFetcher) StartScan(txn *client.Txn, spans Spans, limitHint int64) error {
+func (rf *RowFetcher) StartScan(txn *client.Txn, spans roachpb.Spans, limitHint int64) error {
 	if len(spans) == 0 {
 		// If no spans were specified retrieve all of the keys that start with our
 		// index key prefix.
 		start := roachpb.Key(MakeIndexKeyPrefix(rf.desc, rf.index.ID))
-		spans = []Span{{Start: start, End: start.PrefixEnd()}}
+		spans = []roachpb.Span{{Key: start, EndKey: start.PrefixEnd()}}
 	}
 
 	rf.indexKey = nil
@@ -311,9 +313,9 @@ func (rf *RowFetcher) ProcessKV(kv client.KeyValue, debugStrings bool) (
 
 		if log.V(2) {
 			if rf.implicitVals != nil {
-				log.Infof("Scan %s -> %s", kv.Key, prettyDatums(rf.implicitVals))
+				log.Infof(context.TODO(), "Scan %s -> %s", kv.Key, prettyDatums(rf.implicitVals))
 			} else {
-				log.Infof("Scan %s", kv.Key)
+				log.Infof(context.TODO(), "Scan %s", kv.Key)
 			}
 		}
 	}
@@ -364,13 +366,13 @@ func (rf *RowFetcher) processValueSingle(
 		}
 		rf.row[idx] = value
 		if log.V(3) {
-			log.Infof("Scan %s -> %v", kv.Key, value)
+			log.Infof(context.TODO(), "Scan %s -> %v", kv.Key, value)
 		}
 	} else {
 		// No need to unmarshal the column value. Either the column was part of
 		// the index key or it isn't needed.
 		if log.V(3) {
-			log.Infof("Scan %s -> [%d] (skipped)", kv.Key, colID)
+			log.Infof(context.TODO(), "Scan %s -> [%d] (skipped)", kv.Key, colID)
 		}
 	}
 
@@ -415,7 +417,7 @@ func (rf *RowFetcher) processValueTuple(
 			}
 			tupleBytes = tupleBytes[i:]
 			if log.V(3) {
-				log.Infof("Scan %s -> [%d] (skipped)", kv.Key, colID)
+				log.Infof(context.TODO(), "Scan %s -> [%d] (skipped)", kv.Key, colID)
 			}
 			continue
 		}
@@ -437,7 +439,7 @@ func (rf *RowFetcher) processValueTuple(
 		}
 		rf.row[idx] = value
 		if log.V(3) {
-			log.Infof("Scan %d -> %v", idx, value)
+			log.Infof(context.TODO(), "Scan %d -> %v", idx, value)
 		}
 	}
 

@@ -24,12 +24,16 @@ import (
 	"sort"
 	"text/tabwriter"
 
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -73,8 +77,9 @@ func createCluster(
 	rand *rand.Rand,
 ) *Cluster {
 	clock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(nil, clock, stopper)
-	g := gossip.New(rpcContext, nil, stopper)
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
+	server := rpc.NewServer(rpcContext)
+	g := gossip.New(context.TODO(), rpcContext, server, nil, stopper, metric.NewRegistry())
 	// NodeID is required for Gossip, so set it to -1 for the cluster Gossip
 	// instance to prevent conflicts with real NodeIDs.
 	g.SetNodeID(-1)
@@ -287,10 +292,12 @@ func (c *Cluster) prepareActions() {
 		for storeID, rep := range r.replicas {
 			rep.action, rep.priority = r.allocator.ComputeAction(r.zone, &r.desc)
 			if rep.action == storage.AllocatorNoop {
-				rep.rebalance = r.allocator.ShouldRebalance(storeID)
-				// Set the priority to 1 so that rebalances will occur in
-				// performActions.
-				rep.priority = 1
+				if _, ok := r.getRebalanceTarget(storeID); ok {
+					rep.rebalance = true
+					// Set the priority to 1 so that rebalances will occur in
+					// performActions.
+					rep.priority = 1
+				}
 			} else {
 				rep.rebalance = false
 			}
@@ -456,13 +463,13 @@ func (c *Cluster) OutputEpochHeader() {
 	fmt.Fprintf(c.epochWriter, "\n")
 }
 
-// OutputEpoch writes to the epochWRiter the current free capacity for all
+// OutputEpoch writes to the epochWriter the current free capacity for all
 // stores.
 func (c *Cluster) OutputEpoch() {
 	fmt.Fprintf(c.epochWriter, "%d:\t", c.epoch)
 
 	for _, storeID := range c.storeIDs {
-		store := c.stores[roachpb.StoreID(storeID)]
+		store := c.stores[storeID]
 		capacity := store.getCapacity(len(c.rangeIDsByStore[storeID]))
 		fmt.Fprintf(c.epochWriter, "%d/%.0f%%\t", len(c.rangeIDsByStore[storeID]), float64(capacity.Available)/float64(capacity.Capacity)*100)
 	}

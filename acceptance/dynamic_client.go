@@ -19,12 +19,15 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"sync"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 // dynamicClient should be used in acceptance tests when connecting to a
@@ -34,7 +37,7 @@ type dynamicClient struct {
 	stopper *stop.Stopper
 
 	mu struct {
-		sync.Mutex
+		syncutil.Mutex
 		// clients is a map from node indexes used by methods passed to the
 		// cluster `c` to db clients.
 		clients map[int]*gosql.DB
@@ -58,17 +61,10 @@ func (dc *dynamicClient) Close() {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 	for i, client := range dc.mu.clients {
-		log.Infof("closing connection to %s", dc.cluster.Addr(i))
+		log.Infof(context.TODO(), "closing connection to %s", dc.cluster.Addr(i, base.DefaultPort))
 		client.Close()
 		delete(dc.mu.clients, i)
 	}
-}
-
-// isRetryableError returns true for any errors that show a connection issue
-// or an issue with the node itself. This can occur when a node is restarting
-// or is unstable in some other way.
-func isRetryableError(err error) bool {
-	return testutils.IsError(err, "(connection reset by peer|connection refused|failed to send RPC|EOF|context deadline exceeded)")
 }
 
 var errTestFinished = errors.New("test is shutting down")
@@ -80,7 +76,9 @@ func (dc *dynamicClient) exec(query string, args ...interface{}) (gosql.Result, 
 		if err != nil {
 			return nil, err
 		}
-		if result, err := client.Exec(query, args...); err == nil || !isRetryableError(err) {
+		if result, err := client.Exec(
+			query, args...,
+		); err == nil || !testutils.IsSQLRetryError(err) {
 			return result, err
 		}
 	}
@@ -95,7 +93,9 @@ func (dc *dynamicClient) queryRowScan(query string, queryArgs, destArgs []interf
 		if err != nil {
 			return err
 		}
-		if err := client.QueryRow(query, queryArgs...).Scan(destArgs...); err == nil || !isRetryableError(err) {
+		if err := client.QueryRow(
+			query, queryArgs...,
+		).Scan(destArgs...); err == nil || !testutils.IsSQLRetryError(err) {
 			return err
 		}
 	}
@@ -114,10 +114,11 @@ func (dc *dynamicClient) getClient() (*gosql.DB, error) {
 		}
 		client, err := gosql.Open("postgres", dc.cluster.PGUrl(index))
 		if err != nil {
-			log.Infof("could not establish connection to %s: %s", dc.cluster.Addr(index), err)
+			log.Infof(context.TODO(), "could not establish connection to %s: %s", dc.cluster.Addr(index, base.DefaultPort), err)
 			continue
 		}
-		log.Infof("connection established to %s", dc.cluster.Addr(index))
+		log.Infof(context.TODO(), "connection established to %s",
+			dc.cluster.Addr(index, base.DefaultPort))
 		dc.mu.clients[index] = client
 		return client, nil
 	}

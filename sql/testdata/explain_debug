@@ -5,7 +5,9 @@ CREATE TABLE abc (
   c FLOAT,
   PRIMARY KEY (a, b),
   UNIQUE INDEX foo (b),
-  INDEX bar (a)
+  INDEX bar (a),
+  FAMILY (a, b),
+  FAMILY (c)
 )
 
 query ITTT colnames

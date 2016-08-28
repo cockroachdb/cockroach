@@ -18,13 +18,17 @@
 package storage
 
 import (
+	"bytes"
 	"fmt"
-	"sync"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/gogo/protobuf/proto"
 )
 
 // init installs an adapter to use clog for log messages from raft which
@@ -45,105 +49,161 @@ func init() {
 // This file is named raft.go instead of something like logger.go because this
 // file's name is used to determine the vmodule parameter: --vmodule=raft=1
 type raftLogger struct {
-	rangeID roachpb.RangeID
+	stringer fmt.Stringer
 }
 
 // logPrefix returns a string that will prefix logs emitted by
 // raftLogger. Bad things will happen if this method returns a string
 // containing unescaped '%' characters.
 func (r *raftLogger) logPrefix() string {
-	if r.rangeID != 0 {
-		return fmt.Sprintf("[range %d] ", r.rangeID)
+	if r.stringer != nil {
+		return fmt.Sprintf("%s: ", r.stringer)
 	}
 	return ""
 }
 
 func (r *raftLogger) Debug(v ...interface{}) {
 	if log.V(3) {
-		log.InfofDepth(1, r.logPrefix(), v...)
+		log.InfofDepth(context.TODO(), 1, r.logPrefix(), v...)
 	}
 }
 
 func (r *raftLogger) Debugf(format string, v ...interface{}) {
 	if log.V(3) {
-		log.InfofDepth(1, r.logPrefix()+format, v...)
+		log.InfofDepth(context.TODO(), 1, r.logPrefix()+format, v...)
 	}
 }
 
 func (r *raftLogger) Info(v ...interface{}) {
 	if log.V(2) {
-		log.InfofDepth(1, r.logPrefix(), v...)
+		log.InfofDepth(context.TODO(), 1, r.logPrefix(), v...)
 	}
 }
 
 func (r *raftLogger) Infof(format string, v ...interface{}) {
 	if log.V(2) {
-		log.InfofDepth(1, r.logPrefix()+format, v...)
+		log.InfofDepth(context.TODO(), 1, r.logPrefix()+format, v...)
 	}
 }
 
 func (r *raftLogger) Warning(v ...interface{}) {
-	log.WarningfDepth(1, r.logPrefix(), v...)
+	log.WarningfDepth(context.TODO(), 1, r.logPrefix(), v...)
 }
 
 func (r *raftLogger) Warningf(format string, v ...interface{}) {
-	log.WarningfDepth(1, r.logPrefix()+format, v...)
+	log.WarningfDepth(context.TODO(), 1, r.logPrefix()+format, v...)
 }
 
 func (r *raftLogger) Error(v ...interface{}) {
-	log.ErrorfDepth(1, r.logPrefix(), v...)
+	log.ErrorfDepth(context.TODO(), 1, r.logPrefix(), v...)
 }
 
 func (r *raftLogger) Errorf(format string, v ...interface{}) {
-	log.ErrorfDepth(1, r.logPrefix()+format, v...)
+	log.ErrorfDepth(context.TODO(), 1, r.logPrefix()+format, v...)
 }
 
 func (r *raftLogger) Fatal(v ...interface{}) {
-	log.FatalfDepth(1, r.logPrefix(), v...)
+	log.FatalfDepth(context.TODO(), 1, r.logPrefix(), v...)
 }
 
 func (r *raftLogger) Fatalf(format string, v ...interface{}) {
-	log.FatalfDepth(1, r.logPrefix()+format, v...)
+	log.FatalfDepth(context.TODO(), 1, r.logPrefix()+format, v...)
 }
 
 func (r *raftLogger) Panic(v ...interface{}) {
 	s := fmt.Sprint(v...)
-	log.ErrorfDepth(1, s)
+	log.ErrorfDepth(context.TODO(), 1, s)
 	panic(s)
 }
 
 func (r *raftLogger) Panicf(format string, v ...interface{}) {
-	log.ErrorfDepth(1, r.logPrefix()+format, v...)
+	log.ErrorfDepth(context.TODO(), 1, r.logPrefix()+format, v...)
 	panic(fmt.Sprintf(r.logPrefix()+format, v...))
 }
 
-var logRaftReadyMu sync.Mutex
-
-func logRaftReady(storeID roachpb.StoreID, rangeID roachpb.RangeID, ready raft.Ready) {
+func logRaftReady(ctx context.Context, prefix fmt.Stringer, ready raft.Ready) {
 	if log.V(5) {
-		// Globally synchronize to avoid interleaving different sets of logs in tests.
-		logRaftReadyMu.Lock()
-		defer logRaftReadyMu.Unlock()
-		log.Infof("store %d: range %d raft ready", storeID, rangeID)
+		var buf bytes.Buffer
 		if ready.SoftState != nil {
-			log.Infof("SoftState updated: %+v", *ready.SoftState)
+			fmt.Fprintf(&buf, "  SoftState updated: %+v\n", *ready.SoftState)
 		}
 		if !raft.IsEmptyHardState(ready.HardState) {
-			log.Infof("HardState updated: %+v", ready.HardState)
+			fmt.Fprintf(&buf, "  HardState updated: %+v\n", ready.HardState)
 		}
 		for i, e := range ready.Entries {
-			log.Infof("New Entry[%d]: %.200s", i, raft.DescribeEntry(e, raftEntryFormatter))
+			fmt.Fprintf(&buf, "  New Entry[%d]: %.200s\n",
+				i, raft.DescribeEntry(e, raftEntryFormatter))
 		}
 		for i, e := range ready.CommittedEntries {
-			log.Infof("Committed Entry[%d]: %.200s", i, raft.DescribeEntry(e, raftEntryFormatter))
+			fmt.Fprintf(&buf, "  Committed Entry[%d]: %.200s\n",
+				i, raft.DescribeEntry(e, raftEntryFormatter))
 		}
 		if !raft.IsEmptySnap(ready.Snapshot) {
-			log.Infof("Snapshot updated: %.200s", ready.Snapshot.String())
+			snap := ready.Snapshot
+			snap.Data = nil
+			fmt.Fprintf(&buf, "  Snapshot updated: %v\n", snap)
 		}
 		for i, m := range ready.Messages {
-			log.Infof("Outgoing Message[%d]: %.200s", i, raft.DescribeMessage(m, raftEntryFormatter))
+			fmt.Fprintf(&buf, "  Outgoing Message[%d]: %.200s\n",
+				i, raftDescribeMessage(m, raftEntryFormatter))
+		}
+		log.Infof(ctx, "%s raft ready\n%s", prefix, buf.String())
+	}
+}
+
+// This is a fork of raft.DescribeMessage with a tweak to avoid logging
+// snapshot data.
+func raftDescribeMessage(m raftpb.Message, f raft.EntryFormatter) string {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "%x->%x %v Term:%d Log:%d/%d", m.From, m.To, m.Type, m.Term, m.LogTerm, m.Index)
+	if m.Reject {
+		fmt.Fprintf(&buf, " Rejected")
+		if m.RejectHint != 0 {
+			fmt.Fprintf(&buf, "(Hint:%d)", m.RejectHint)
 		}
 	}
+	if m.Commit != 0 {
+		fmt.Fprintf(&buf, " Commit:%d", m.Commit)
+	}
+	if len(m.Entries) > 0 {
+		fmt.Fprintf(&buf, " Entries:[")
+		for i, e := range m.Entries {
+			if i != 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(raft.DescribeEntry(e, f))
+		}
+		fmt.Fprintf(&buf, "]")
+	}
+	if !raft.IsEmptySnap(m.Snapshot) {
+		snap := m.Snapshot
+		snap.Data = nil
+		fmt.Fprintf(&buf, " Snapshot:%v", snap)
+	}
+	return buf.String()
+}
+
+func raftEntryFormatter(data []byte) string {
+	if len(data) == 0 {
+		return "[empty]"
+	}
+	if len(data) >= 1024 {
+		// Don't try to unmarshal and stringify the command if it is large. Doing
+		// so is super expensive (multiple seconds for the call to String()) for
+		// large snapshot entries.
+		return fmt.Sprintf("[%d]", len(data))
+	}
+	_, encodedCmd := DecodeRaftCommand(data)
+	var cmd roachpb.RaftCommand
+	if err := proto.Unmarshal(encodedCmd, &cmd); err != nil {
+		return fmt.Sprintf("[error parsing entry: %s]", err)
+	}
+	s := cmd.Cmd.String()
+	maxLen := 300
+	if len(s) > maxLen {
+		s = s[:maxLen]
+	}
+	return s
 }
 
 var _ security.RequestWithUser = &RaftMessageRequest{}

@@ -88,7 +88,7 @@ func TestEngineBatchCommit(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if val != nil && bytes.Compare(val, finalVal) != 0 {
+					if val != nil && !bytes.Equal(val, finalVal) {
 						close(readsDone)
 						t.Fatalf("key value should be empty or %q; got %q", string(finalVal), string(val))
 					}

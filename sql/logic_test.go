@@ -29,7 +29,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"runtime/trace"
 	"sort"
 	"strconv"
 	"strings"
@@ -696,7 +695,6 @@ func (t *logicTest) processTestFile(path string) error {
 			t.success(path)
 
 		case "halt", "hash-threshold":
-			break
 
 		case "user":
 			if len(fields) < 2 {
@@ -768,27 +766,21 @@ func (t *logicTest) processTestFile(path string) error {
 		}
 	}
 
-	if err := s.Err(); err != nil {
-		return err
-	}
-
-	return nil
+	return s.Err()
 }
 
 // verifyError checks that either no error was found where none was
 // expected, or that an error was found when one was expected. Returns
 // "true" to indicate the behavior was as expected.
 func (t *logicTest) verifyError(
-	sql string, pos string, expectErr string, expectErrCode string, err error) bool {
+	sql, pos, expectErr, expectErrCode string,
+	err error,
+) bool {
 	if expectErr == "" && expectErrCode == "" && err != nil {
 		return t.unexpectedError(sql, pos, err)
 	}
 	if expectErr != "" && !testutils.IsError(err, expectErr) {
-		if err != nil {
-			t.Errorf("%s: expected %q, but found\n%s", pos, expectErr, err)
-		} else {
-			t.Errorf("%s: expected %q, but found success", pos, expectErr)
-		}
+		t.Errorf("%s: expected %q, but found %v", pos, expectErr, err)
 		return false
 	}
 	if expectErrCode != "" {
@@ -1022,28 +1014,6 @@ func (t *logicTest) success(file string) {
 	if now.Sub(t.lastProgress) >= 2*time.Second {
 		t.lastProgress = now
 		fmt.Printf("--- progress: %s: %d statements/queries\n", file, t.progress)
-	}
-}
-
-func (t *logicTest) traceStart(filename string) {
-	if t.traceFile != nil {
-		t.Fatalf("tracing already active")
-	}
-	var err error
-	t.traceFile, err = os.Create(filename)
-	if err != nil {
-		t.Fatalf("unable to open trace output file: %s", err)
-	}
-	if err := trace.Start(t.traceFile); err != nil {
-		t.Fatalf("unable to start tracing: %s", err)
-	}
-}
-
-func (t *logicTest) traceStop() {
-	if t.traceFile != nil {
-		trace.Stop()
-		t.traceFile.Close()
-		t.traceFile = nil
 	}
 }
 

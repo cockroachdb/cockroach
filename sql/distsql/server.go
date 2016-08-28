@@ -17,35 +17,48 @@
 package distsql
 
 import (
+	"io"
+	"time"
+
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/pkg/errors"
 )
 
-// ServerContext encompasses the configuration required to create a
+// ServerConfig encompasses the configuration required to create a
 // DistSQLServer.
-type ServerContext struct {
-	DB *client.DB
+type ServerConfig struct {
+	Context    context.Context
+	DB         *client.DB
+	RPCContext *rpc.Context
 }
 
 // ServerImpl implements the server for the distributed SQL APIs.
 type ServerImpl struct {
-	ctx     ServerContext
-	evalCtx parser.EvalContext
+	ServerConfig
+	evalCtx      parser.EvalContext
+	flowRegistry *flowRegistry
 }
+
+// flowStreamTimeout is the amount of time incoming streams wait for a flow to
+// be set up before erroring out.
+const flowStreamTimeout time.Duration = 2000 * time.Millisecond
 
 var _ DistSQLServer = &ServerImpl{}
 
 // NewServer instantiates a DistSQLServer.
-func NewServer(ctx ServerContext) *ServerImpl {
+func NewServer(cfg ServerConfig) *ServerImpl {
 	ds := &ServerImpl{
-		ctx: ctx,
+		ServerConfig: cfg,
 		evalCtx: parser.EvalContext{
 			ReCache: parser.NewRegexpCache(512),
 		},
+		flowRegistry: makeFlowRegistry(),
 	}
 	return ds
 }
@@ -54,7 +67,7 @@ func (ds *ServerImpl) setupTxn(
 	ctx context.Context,
 	txnProto *roachpb.Transaction,
 ) *client.Txn {
-	txn := client.NewTxn(ctx, *ds.ctx.DB)
+	txn := client.NewTxn(ctx, *ds.DB)
 	// TODO(radu): we should sanity check some of these fields
 	txn.Proto = *txnProto
 	return txn
@@ -63,20 +76,21 @@ func (ds *ServerImpl) setupTxn(
 // SetupSimpleFlow sets up a simple flow, connecting the simple response output
 // stream to the given RowReceiver. The flow is not started.
 func (ds *ServerImpl) SetupSimpleFlow(
-	ctx context.Context, req *SetupFlowsRequest, output RowReceiver,
+	ctx context.Context, req *SetupFlowRequest, output RowReceiver,
 ) (*Flow, error) {
-	f := &Flow{evalCtx: &ds.evalCtx}
-	f.txn = ds.setupTxn(ctx, &req.Txn)
-	f.simpleFlowConsumer = output
-
-	flow := req.Flows[0]
-
-	// TODO(radu): for now we expect exactly one processor (a table reader).
-	if len(flow.Processors) != 1 {
-		return nil, errors.Errorf("only single-processor flows supported")
+	txn := ds.setupTxn(ctx, &req.Txn)
+	flowCtx := FlowCtx{
+		Context: ds.ServerConfig.Context,
+		id:      req.Flow.FlowID,
+		evalCtx: &ds.evalCtx,
+		rpcCtx:  ds.RPCContext,
+		txn:     txn,
 	}
-	_, err := f.setupProcessor(&flow.Processors[0])
+
+	f := newFlow(flowCtx, ds.flowRegistry, output)
+	err := f.setupFlow(&req.Flow)
 	if err != nil {
+		log.Errorf(ds.Context, err.Error(), "", err)
 		return nil, err
 	}
 	return f, nil
@@ -84,34 +98,88 @@ func (ds *ServerImpl) SetupSimpleFlow(
 
 // RunSimpleFlow is part of the DistSQLServer interface.
 func (ds *ServerImpl) RunSimpleFlow(
-	req *SetupFlowsRequest, stream DistSQL_RunSimpleFlowServer,
+	req *SetupFlowRequest, stream DistSQL_RunSimpleFlowServer,
 ) error {
-	if len(req.Flows) != 1 {
-		return errors.Errorf("expected exactly one flow, got %d", len(req.Flows))
-	}
-	// Set up the outgoing mailbox for the stream.
-	mbox := newOutbox(stream)
+	cfg := ds.ServerConfig.Context
 
-	f, err := ds.SetupSimpleFlow(stream.Context(), req, mbox)
+	// Set up the outgoing mailbox for the stream.
+	mbox := newOutboxSimpleFlowStream(stream)
+
+	f, err := ds.SetupSimpleFlow(cfg, req, mbox)
 	if err != nil {
+		log.Errorf(ds.Context, err.Error(), "", err)
 		return err
 	}
+	mbox.setFlowCtx(&f.FlowCtx)
 
 	// TODO(radu): this stuff should probably be run through a stopper.
 	mbox.start(&f.waitGroup)
 	f.Start()
 	f.Wait()
+	f.Cleanup()
 	return mbox.err
 }
 
-// SetupFlows is part of the DistSQLServer interface.
-func (ds *ServerImpl) SetupFlows(ctx context.Context, req *SetupFlowsRequest) (
+// SetupFlow is part of the DistSQLServer interface.
+func (ds *ServerImpl) SetupFlow(ctx context.Context, req *SetupFlowRequest) (
 	*SimpleResponse, error,
 ) {
-	return nil, errors.Errorf("not implemented")
+	// Note: ctx will be canceled when the RPC completes, so we can't associate
+	// it with the transaction.
+
+	txn := ds.setupTxn(ds.ServerConfig.Context, &req.Txn)
+	flowCtx := FlowCtx{
+		Context: ds.ServerConfig.Context,
+		id:      req.Flow.FlowID,
+		evalCtx: &ds.evalCtx,
+		rpcCtx:  ds.RPCContext,
+		txn:     txn,
+	}
+	f := newFlow(flowCtx, ds.flowRegistry, nil)
+	err := f.setupFlow(&req.Flow)
+	if err != nil {
+		log.Errorf(ds.Context, err.Error(), "", err)
+		return nil, err
+	}
+	f.Start()
+	// TODO(radu): firing off a goroutine just to call Cleanup is temporary. We
+	// will have a flow scheduler that will be notified when the flow completes.
+	go func() {
+		f.Wait()
+		f.Cleanup()
+	}()
+	return &SimpleResponse{}, nil
+}
+
+func (ds *ServerImpl) flowStreamInt(stream DistSQL_FlowStreamServer) error {
+	// Receive the first message.
+	msg, err := stream.Recv()
+	if err != nil {
+		if err == io.EOF {
+			return errors.Errorf("empty stream")
+		}
+		return err
+	}
+	if msg.Header == nil {
+		return errors.Errorf("no header in first message")
+	}
+	flowID := msg.Header.FlowID
+	f := ds.flowRegistry.LookupFlow(flowID, flowStreamTimeout)
+	if f == nil {
+		return errors.Errorf("flow %s not found", flowID)
+	}
+	rowChan, err := f.getInboundStream(msg.Header.StreamID)
+	if err != nil {
+		return err
+	}
+	return ProcessInboundStream(&f.FlowCtx, stream, msg, rowChan)
 }
 
 // FlowStream is part of the DistSQLServer interface.
 func (ds *ServerImpl) FlowStream(stream DistSQL_FlowStreamServer) error {
-	return errors.Errorf("not implemented")
+	err := ds.flowStreamInt(stream)
+	if err != nil {
+		log.Errorf(ds.Context, err.Error(), "", err)
+	}
+	return err
 }

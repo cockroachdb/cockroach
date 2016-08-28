@@ -1,8 +1,9 @@
 import * as React from "react";
 import { connect } from "react-redux";
-import classNames = require("classnames");
-import _ = require("lodash");
+import classNames from "classnames";
+import _ from "lodash";
 
+import { AdminUIState } from "../redux/state";
 import * as timewindow from "../redux/timewindow";
 
 interface TimeScaleSelectorProps {
@@ -18,6 +19,9 @@ interface TimeScaleSelectorState {
 }
 
 class TimeScaleSelector extends React.Component<TimeScaleSelectorProps, TimeScaleSelectorState> {
+
+  timescaleBtn: Element;
+
   constructor() {
     super();
     this.state = {
@@ -25,10 +29,16 @@ class TimeScaleSelector extends React.Component<TimeScaleSelectorProps, TimeScal
     };
   }
 
-  toggleControls = () => {
+  setVisible = (visible: boolean) => {
     this.setState({
-      controlsVisible: !this.state.controlsVisible,
+      controlsVisible: visible,
     });
+  };
+
+  hide = (e: Event) => {
+    if (e.target !== this.timescaleBtn) {
+      this.setVisible(false);
+    }
   };
 
   changeSettings(newSettings: timewindow.TimeScale) {
@@ -39,13 +49,28 @@ class TimeScaleSelector extends React.Component<TimeScaleSelectorProps, TimeScal
     return scale === this.props.currentScale;
   }
 
+  componentWillMount() {
+    // Hide the popup when you click anywhere on the page
+    document.body.addEventListener("click", this.hide);
+  }
+
+  componentWillUnmount() {
+    // Remove popup hiding event listener on unmount
+    document.body.removeEventListener("click", this.hide);
+  }
+
   render() {
     let selectorClass = classNames({
       "timescale-selector": true,
       "show": this.state.controlsVisible,
     });
     return <div className="timescale-selector-container">
-      <button className="timescale" onClick={this.toggleControls}>Select Timescale</button>
+      <button
+        className="timescale"
+        ref={(timescaleBtn) => this.timescaleBtn = timescaleBtn}
+        onClick={() => this.setVisible(!this.state.controlsVisible)}>
+          Select Timescale
+      </button>
       <div className={selectorClass}>
         <div className="text">View Last: </div>
         {
@@ -53,7 +78,7 @@ class TimeScaleSelector extends React.Component<TimeScaleSelectorProps, TimeScal
             let theseSettings = scale;
             return <button key={key}
                            className={classNames({selected: this.isSelected(scale)})}
-                           onClick={() => this.changeSettings(theseSettings)}>
+                           onClick={(e) => { this.changeSettings(theseSettings); this.setVisible(false); } }>
                            { key }
             </button>;
           })
@@ -64,7 +89,7 @@ class TimeScaleSelector extends React.Component<TimeScaleSelectorProps, TimeScal
 }
 
 export default connect(
-  (state) => {
+  (state: AdminUIState) => {
     return {
       currentScale: (state.timewindow as timewindow.TimeWindowState).scale,
       availableScales: timewindow.availableTimeScales,

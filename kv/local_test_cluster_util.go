@@ -19,6 +19,8 @@ package kv
 import (
 	"time"
 
+	"golang.org/x/net/context"
+
 	opentracing "github.com/opentracing/opentracing-go"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -27,8 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util/hlc"
-	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 // localTestClusterTransport augments senderTransport with an optional
@@ -39,7 +41,7 @@ type localTestClusterTransport struct {
 	latency time.Duration
 }
 
-func (l *localTestClusterTransport) SendNext(done chan BatchCall) {
+func (l *localTestClusterTransport) SendNext(done chan<- BatchCall) {
 	if l.latency > 0 {
 		time.Sleep(l.latency)
 	}
@@ -60,7 +62,7 @@ func InitSenderForLocalTestCluster(
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	senderTransportFactory := SenderTransportFactory(tracer, stores)
-	distSender := NewDistSender(&DistSenderContext{
+	distSender := NewDistSender(&DistSenderConfig{
 		Clock: clock,
 		RangeDescriptorCacheSize: defaultRangeDescriptorCacheSize,
 		RangeLookupMaxRanges:     defaultRangeLookupMaxRanges,
@@ -82,6 +84,7 @@ func InitSenderForLocalTestCluster(
 		RangeDescriptorDB: stores.(RangeDescriptorDB), // for descriptor lookup
 	}, gossip)
 
-	return NewTxnCoordSender(distSender, clock, false /* !linearizable */, tracer,
-		stopper, NewTxnMetrics(metric.NewRegistry()))
+	ctx := tracing.WithTracer(context.Background(), tracer)
+	return NewTxnCoordSender(ctx, distSender, clock, false, /* !linearizable */
+		stopper, MakeTxnMetrics())
 }

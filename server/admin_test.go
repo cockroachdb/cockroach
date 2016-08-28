@@ -19,7 +19,6 @@ package server
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -30,9 +29,10 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
@@ -48,15 +48,22 @@ import (
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
+func getAdminJSONProto(ts serverutils.TestServerInterface, path string, response proto.Message) error {
+	return serverutils.GetJSONProto(ts, adminPrefix+path, response)
+}
+
+func postAdminJSONProto(ts serverutils.TestServerInterface, path string, request, response proto.Message) error {
+	return serverutils.PostJSONProto(ts, adminPrefix+path, request, response)
+}
+
 // getText fetches the HTTP response body as text in the form of a
 // byte slice from the specified URL.
-func getText(url string) ([]byte, error) {
-	// There are no particular permissions on admin endpoints, TestUser is fine.
-	client, err := testutils.NewTestBaseContext(TestUser).GetHTTPClient()
+func getText(ts serverutils.TestServerInterface, url string) ([]byte, error) {
+	httpClient, err := ts.GetHTTPClient()
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -67,8 +74,8 @@ func getText(url string) ([]byte, error) {
 // getJSON fetches the JSON from the specified URL and returns
 // it as unmarshaled JSON. Returns an error on any failure to fetch
 // or unmarshal response body.
-func getJSON(url string) (interface{}, error) {
-	body, err := getText(url)
+func getJSON(ts serverutils.TestServerInterface, url string) (interface{}, error) {
+	body, err := getText(ts, url)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +98,7 @@ func TestAdminDebugExpVar(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	jI, err := getJSON(debugURL(s) + "vars")
+	jI, err := getJSON(s, debugURL(s)+"vars")
 	if err != nil {
 		t.Fatalf("failed to fetch JSON: %v", err)
 	}
@@ -111,7 +118,7 @@ func TestAdminDebugMetrics(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	jI, err := getJSON(debugURL(s) + "metrics")
+	jI, err := getJSON(s, debugURL(s)+"metrics")
 	if err != nil {
 		t.Fatalf("failed to fetch JSON: %v", err)
 	}
@@ -131,7 +138,7 @@ func TestAdminDebugPprof(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	body, err := getText(debugURL(s) + "pprof/block")
+	body, err := getText(s, debugURL(s)+"pprof/block")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +162,7 @@ func TestAdminDebugTrace(t *testing.T) {
 	}
 
 	for _, c := range tc {
-		body, err := getText(debugURL(s) + c.segment)
+		body, err := getText(s, debugURL(s)+c.segment)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -207,28 +214,6 @@ func TestAdminDebugRedirect(t *testing.T) {
 	}
 }
 
-// apiGet issues a GET to the provided server using the given API path and
-// marshals the result into response.
-func apiGet(s serverutils.TestServerInterface, path string, response proto.Message) error {
-	apiPath := apiEndpoint + path
-	client, err := s.GetHTTPClient()
-	if err != nil {
-		return err
-	}
-	return util.GetJSON(client, s.AdminURL()+apiPath, response)
-}
-
-// apiPost issues a POST to the provided server using the given API path and
-// request, marshalling the result into response.
-func apiPost(s serverutils.TestServerInterface, path string, request, response proto.Message) error {
-	apiPath := apiEndpoint + path
-	client, err := s.GetHTTPClient()
-	if err != nil {
-		return err
-	}
-	return util.PostJSON(client, s.AdminURL()+apiPath, request, response)
-}
-
 func TestAdminAPIDatabases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -238,42 +223,44 @@ func TestAdminAPIDatabases(t *testing.T) {
 	// Test databases endpoint.
 	const testdb = "test"
 	session := sql.NewSession(
-		sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
 	query := "CREATE DATABASE " + testdb
-	createRes := ts.sqlExecutor.ExecuteStatements(context.Background(), session, query, nil)
+	createRes := ts.sqlExecutor.ExecuteStatements(session, query, nil)
 	if createRes.ResultList[0].Err != nil {
 		t.Fatal(createRes.ResultList[0].Err)
 	}
 
 	var resp serverpb.DatabasesResponse
-	if err := apiGet(s, "databases", &resp); err != nil {
+	if err := getAdminJSONProto(s, "databases", &resp); err != nil {
 		t.Fatal(err)
 	}
 
-	// We should have the system database and the newly created test database.
-	if a, e := len(resp.Databases), 2; a != e {
+	// We should have three databases:
+	// - system database
+	// - information_schema
+	// - newly created test database
+	if a, e := len(resp.Databases), 3; a != e {
 		t.Fatalf("length of result %d != expected %d", a, e)
 	}
 
 	sort.Strings(resp.Databases)
-	if a, e := resp.Databases[0], "system"; a != e {
-		t.Fatalf("database name %s != expected %s", a, e)
-	}
-	if a, e := resp.Databases[1], testdb; a != e {
-		t.Fatalf("database name %s != expected %s", a, e)
+	for i, e := range []string{"information_schema", "system", testdb} {
+		if a := resp.Databases[i]; a != e {
+			t.Fatalf("database name %s != expected %s", a, e)
+		}
 	}
 
 	// Test database details endpoint.
 	privileges := []string{"SELECT", "UPDATE"}
 	testuser := "testuser"
 	grantQuery := "GRANT " + strings.Join(privileges, ", ") + " ON DATABASE " + testdb + " TO " + testuser
-	grantRes := s.(*TestServer).sqlExecutor.ExecuteStatements(context.Background(), session, grantQuery, nil)
+	grantRes := s.(*TestServer).sqlExecutor.ExecuteStatements(session, grantQuery, nil)
 	if grantRes.ResultList[0].Err != nil {
 		t.Fatal(grantRes.ResultList[0].Err)
 	}
 
 	var details serverpb.DatabaseDetailsResponse
-	if err := apiGet(s, "databases/"+testdb, &details); err != nil {
+	if err := getAdminJSONProto(s, "databases/"+testdb, &details); err != nil {
 		t.Fatal(err)
 	}
 
@@ -303,8 +290,9 @@ func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	if err := apiGet(s, "databases/I_DO_NOT_EXIST", nil); !testutils.IsError(err, "database.+does not exist") {
-		t.Fatalf("unexpected error: %s", err)
+	const errPattern = "database.+does not exist"
+	if err := getAdminJSONProto(s, "databases/I_DO_NOT_EXIST", nil); !testutils.IsError(err, errPattern) {
+		t.Fatalf("unexpected error: %v\nexpected: %s", err, errPattern)
 	}
 }
 
@@ -316,8 +304,8 @@ func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
 	const fakedb = "system;DROP DATABASE system;"
 	const path = "databases/" + fakedb
 	const errPattern = `database \\"` + fakedb + `\\" does not exist`
-	if err := apiGet(s, path, nil); !testutils.IsError(err, errPattern) {
-		t.Fatalf("unexpected error: %s", err)
+	if err := getAdminJSONProto(s, path, nil); !testutils.IsError(err, errPattern) {
+		t.Fatalf("unexpected error: %v\nexpected: %s", err, errPattern)
 	}
 }
 
@@ -329,14 +317,14 @@ func TestAdminAPITableDoesNotExist(t *testing.T) {
 	const fakename = "I_DO_NOT_EXIST"
 	const badDBPath = "databases/" + fakename + "/tables/foo"
 	const dbErrPattern = `database \\"` + fakename + `\\" does not exist`
-	if err := apiGet(s, badDBPath, nil); !testutils.IsError(err, dbErrPattern) {
-		t.Fatalf("unexpected error: %s", err)
+	if err := getAdminJSONProto(s, badDBPath, nil); !testutils.IsError(err, dbErrPattern) {
+		t.Fatalf("unexpected error: %v\nexpected: %s", err, dbErrPattern)
 	}
 
 	const badTablePath = "databases/system/tables/" + fakename
 	const tableErrPattern = `table \\"system.` + fakename + `\\" does not exist`
-	if err := apiGet(s, badTablePath, nil); !testutils.IsError(err, tableErrPattern) {
-		t.Fatalf("unexpected error: %s", err)
+	if err := getAdminJSONProto(s, badTablePath, nil); !testutils.IsError(err, tableErrPattern) {
+		t.Fatalf("unexpected error: %v\nexpected: %s", err, tableErrPattern)
 	}
 }
 
@@ -348,8 +336,8 @@ func TestAdminAPITableSQLInjection(t *testing.T) {
 	const fakeTable = "users;DROP DATABASE system;"
 	const path = "databases/system/tables/" + fakeTable
 	const errPattern = `table \"system.\\\"` + fakeTable + `\\\"\" does not exist`
-	if err := apiGet(s, path, nil); !testutils.IsError(err, regexp.QuoteMeta(errPattern)) {
-		t.Fatalf("unexpected error: %s\nexpected: %s", err, errPattern)
+	if err := getAdminJSONProto(s, path, nil); !testutils.IsError(err, regexp.QuoteMeta(errPattern)) {
+		t.Fatalf("unexpected error: %v\nexpected: %s", err, errPattern)
 	}
 }
 
@@ -359,7 +347,8 @@ func TestAdminAPITableDetails(t *testing.T) {
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
 
-	session := sql.NewSession(sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+	session := sql.NewSession(
+		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
 	setupQueries := []string{
 		"CREATE DATABASE test",
 		`
@@ -375,7 +364,7 @@ CREATE TABLE test.tbl (
 	}
 
 	for _, q := range setupQueries {
-		res := ts.sqlExecutor.ExecuteStatements(context.Background(), session, q, nil)
+		res := ts.sqlExecutor.ExecuteStatements(session, q, nil)
 		if res.ResultList[0].Err != nil {
 			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].Err)
 		}
@@ -383,7 +372,7 @@ CREATE TABLE test.tbl (
 
 	// Perform API call.
 	var resp serverpb.TableDetailsResponse
-	if err := apiGet(s, "databases/test/tables/tbl", &resp); err != nil {
+	if err := getAdminJSONProto(s, "databases/test/tables/tbl", &resp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -403,7 +392,7 @@ CREATE TABLE test.tbl (
 	for i, a := range resp.Columns {
 		e := expColumns[i]
 		if a.String() != e.String() {
-			t.Fatalf("mismatch at index %d: actual %#v != %#v", i, a, e)
+			t.Fatalf("mismatch at column %d: actual %#v != %#v", i, a, e)
 		}
 	}
 
@@ -441,6 +430,7 @@ CREATE TABLE test.tbl (
 		}
 	}
 
+	// Verify range count.
 	if a, e := resp.RangeCount, int64(1); a != e {
 		t.Fatalf("# of ranges %d != expected %d", a, e)
 	}
@@ -452,7 +442,80 @@ CREATE TABLE test.tbl (
 			createTableCol       = "CreateTable"
 		)
 
-		resSet := ts.sqlExecutor.ExecuteStatements(context.Background(), session, showCreateTableQuery, nil)
+		resSet := ts.sqlExecutor.ExecuteStatements(session, showCreateTableQuery, nil)
+		res := resSet.ResultList[0]
+		if res.Err != nil {
+			t.Fatalf("error executing '%s': %s", showCreateTableQuery, res.Err)
+		}
+
+		scanner := makeResultScanner(res.Columns)
+		var createStmt string
+		if err := scanner.Scan(res.Rows[0], createTableCol, &createStmt); err != nil {
+			t.Fatal(err)
+		}
+
+		if a, e := resp.CreateTableStatement, createStmt; a != e {
+			t.Fatalf("mismatched create table statement; expected %s, got %s", e, a)
+		}
+	}
+}
+
+func TestAdminAPITableDetailsForVirtualSchema(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+	ts := s.(*TestServer)
+
+	// Perform API call.
+	var resp serverpb.TableDetailsResponse
+	if err := getAdminJSONProto(s, "databases/information_schema/tables/schemata", &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify columns.
+	expColumns := []serverpb.TableDetailsResponse_Column{
+		{Name: "CATALOG_NAME", Type: "STRING", Nullable: false, DefaultValue: "''"},
+		{Name: "SCHEMA_NAME", Type: "STRING", Nullable: false, DefaultValue: "''"},
+		{Name: "DEFAULT_CHARACTER_SET_NAME", Type: "STRING", Nullable: false, DefaultValue: "''"},
+		{Name: "SQL_PATH", Type: "STRING", Nullable: true},
+	}
+	testutils.SortStructs(expColumns, "Name")
+	testutils.SortStructs(resp.Columns, "Name")
+	if a, e := len(resp.Columns), len(expColumns); a != e {
+		t.Fatalf("# of result columns %d != expected %d (got: %#v)", a, e, resp.Columns)
+	}
+	for i, a := range resp.Columns {
+		e := expColumns[i]
+		if a.String() != e.String() {
+			t.Fatalf("mismatch at column %d: actual %#v != %#v", i, a, e)
+		}
+	}
+
+	// Verify grants.
+	if a, e := len(resp.Grants), 0; a != e {
+		t.Fatalf("# of grant columns %d != expected %d (got: %#v)", a, e, resp.Grants)
+	}
+
+	// Verify indexes.
+	if a, e := resp.RangeCount, int64(0); a != e {
+		t.Fatalf("# of indexes %d != expected %d", a, e)
+	}
+
+	// Verify range count.
+	if a, e := resp.RangeCount, int64(0); a != e {
+		t.Fatalf("# of ranges %d != expected %d", a, e)
+	}
+
+	// Verify Create Table Statement.
+	{
+		const (
+			showCreateTableQuery = "SHOW CREATE TABLE information_schema.schemata"
+			createTableCol       = "CreateTable"
+		)
+
+		session := sql.NewSession(
+			context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+		resSet := ts.sqlExecutor.ExecuteStatements(session, showCreateTableQuery, nil)
 		res := resSet.ResultList[0]
 		if res.Err != nil {
 			t.Fatalf("error executing '%s': %s", showCreateTableQuery, res.Err)
@@ -477,13 +540,14 @@ func TestAdminAPITableDetailsZone(t *testing.T) {
 	ts := s.(*TestServer)
 
 	// Create database and table.
-	session := sql.NewSession(sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+	session := sql.NewSession(
+		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
 	setupQueries := []string{
 		"CREATE DATABASE test",
 		"CREATE TABLE test.tbl (val STRING)",
 	}
 	for _, q := range setupQueries {
-		res := ts.sqlExecutor.ExecuteStatements(context.Background(), session, q, nil)
+		res := ts.sqlExecutor.ExecuteStatements(session, q, nil)
 		if res.ResultList[0].Err != nil {
 			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].Err)
 		}
@@ -492,7 +556,7 @@ func TestAdminAPITableDetailsZone(t *testing.T) {
 	// Function to verify the zone for test.tbl as returned by the Admin API.
 	verifyZone := func(expectedZone config.ZoneConfig, expectedLevel serverpb.ZoneConfigurationLevel) {
 		var resp serverpb.TableDetailsResponse
-		if err := apiGet(s, "databases/test/tables/tbl", &resp); err != nil {
+		if err := getAdminJSONProto(s, "databases/test/tables/tbl", &resp); err != nil {
 			t.Fatal(err)
 		}
 		if a, e := &resp.ZoneConfig, &expectedZone; !proto.Equal(a, e) {
@@ -516,7 +580,7 @@ func TestAdminAPITableDetailsZone(t *testing.T) {
 		params := parser.NewPlaceholderInfo()
 		params.SetValue(`1`, parser.NewDInt(parser.DInt(id)))
 		params.SetValue(`2`, parser.NewDBytes(parser.DBytes(zoneBytes)))
-		res := ts.sqlExecutor.ExecuteStatements(context.Background(), session, query, params)
+		res := ts.sqlExecutor.ExecuteStatements(session, query, params)
 		if res.ResultList[0].Err != nil {
 			t.Fatalf("error executing '%s': %s", query, res.ResultList[0].Err)
 		}
@@ -527,7 +591,7 @@ func TestAdminAPITableDetailsZone(t *testing.T) {
 
 	// Get ID path for table. This will be an array of three IDs, containing the ID of the root namespace,
 	// the database, and the table (in that order).
-	idPath, err := ts.admin.queryDescriptorIDPath(context.Background(), session, []string{"test", "tbl"})
+	idPath, err := ts.admin.queryDescriptorIDPath(session, []string{"test", "tbl"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -554,11 +618,12 @@ func TestAdminAPIUsers(t *testing.T) {
 	ts := s.(*TestServer)
 
 	// Create sample users.
-	session := sql.NewSession(sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+	session := sql.NewSession(
+		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
 	query := `
 INSERT INTO system.users (username, hashedPassword)
 VALUES ('admin', 'abc'), ('bob', 'xyz')`
-	res := ts.sqlExecutor.ExecuteStatements(context.Background(), session, query, nil)
+	res := ts.sqlExecutor.ExecuteStatements(session, query, nil)
 	if a, e := len(res.ResultList), 1; a != e {
 		t.Fatalf("len(results) %d != %d", a, e)
 	} else if res.ResultList[0].Err != nil {
@@ -567,7 +632,7 @@ VALUES ('admin', 'abc'), ('bob', 'xyz')`
 
 	// Query the API for users.
 	var resp serverpb.UsersResponse
-	if err := apiGet(s, "users", &resp); err != nil {
+	if err := getAdminJSONProto(s, "users", &resp); err != nil {
 		t.Fatal(err)
 	}
 	expResult := serverpb.UsersResponse{
@@ -592,7 +657,8 @@ func TestAdminAPIEvents(t *testing.T) {
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
 
-	session := sql.NewSession(sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+	session := sql.NewSession(
+		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
 	setupQueries := []string{
 		"CREATE DATABASE api_test",
 		"CREATE TABLE api_test.tbl1 (a INT)",
@@ -602,7 +668,7 @@ func TestAdminAPIEvents(t *testing.T) {
 		"DROP TABLE api_test.tbl2",
 	}
 	for _, q := range setupQueries {
-		res := ts.sqlExecutor.ExecuteStatements(context.Background(), session, q, nil)
+		res := ts.sqlExecutor.ExecuteStatements(session, q, nil)
 		if res.ResultList[0].Err != nil {
 			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].Err)
 		}
@@ -623,14 +689,12 @@ func TestAdminAPIEvents(t *testing.T) {
 		{sql.EventLogCreateTable, 3},
 	}
 	for i, tc := range testcases {
-		var url string
+		url := "events"
 		if len(tc.eventType) > 0 {
-			url = fmt.Sprintf("events?type=%s", tc.eventType)
-		} else {
-			url = "events"
+			url += "?type=" + string(tc.eventType)
 		}
 		var resp serverpb.EventsResponse
-		if err := apiGet(s, url, &resp); err != nil {
+		if err := getAdminJSONProto(s, url, &resp); err != nil {
 			t.Fatal(err)
 		}
 
@@ -678,7 +742,7 @@ func TestAdminAPIUIData(t *testing.T) {
 	start := timeutil.Now()
 
 	mustSetUIData := func(keyValues map[string][]byte) {
-		if err := apiPost(s, "uidata", &serverpb.SetUIDataRequest{
+		if err := postAdminJSONProto(s, "uidata", &serverpb.SetUIDataRequest{
 			KeyValues: keyValues,
 		}, &serverpb.SetUIDataResponse{}); err != nil {
 			t.Fatal(err)
@@ -691,8 +755,8 @@ func TestAdminAPIUIData(t *testing.T) {
 		for key := range expKeyValues {
 			queryValues.Add("keys", key)
 		}
-		url := fmt.Sprintf("uidata?%s", queryValues.Encode())
-		if err := apiGet(s, url, &resp); err != nil {
+		url := "uidata?" + queryValues.Encode()
+		if err := getAdminJSONProto(s, url, &resp); err != nil {
 			t.Fatal(err)
 		}
 		// Do a two-way comparison. We can't use reflect.DeepEqual(), because
@@ -727,8 +791,8 @@ func TestAdminAPIUIData(t *testing.T) {
 
 	expectKeyNotFound := func(key string) {
 		var resp serverpb.GetUIDataResponse
-		url := fmt.Sprintf("uidata?keys=%s", key)
-		if err := apiGet(s, url, &resp); err != nil {
+		url := "uidata?keys=" + key
+		if err := getAdminJSONProto(s, url, &resp); err != nil {
 			t.Fatal(err)
 		}
 		if len(resp.KeyValues) != 0 {
@@ -738,8 +802,9 @@ func TestAdminAPIUIData(t *testing.T) {
 
 	// Basic tests.
 	var badResp serverpb.GetUIDataResponse
-	if err := apiGet(s, "uidata", &badResp); !testutils.IsError(err, "400 Bad Request") {
-		t.Fatalf("unexpected error: %v", err)
+	const errPattern = "400 Bad Request"
+	if err := getAdminJSONProto(s, "uidata", &badResp); !testutils.IsError(err, errPattern) {
+		t.Fatalf("unexpected error: %v\nexpected: %s", err, errPattern)
 	}
 
 	mustSetUIData(map[string][]byte{"k1": []byte("v1")})
@@ -782,7 +847,7 @@ func TestClusterAPI(t *testing.T) {
 	// bootstrapping.
 	util.SucceedsSoon(t, func() error {
 		var resp serverpb.ClusterResponse
-		if err := apiGet(s, "cluster", &resp); err != nil {
+		if err := getAdminJSONProto(s, "cluster", &resp); err != nil {
 			return err
 		}
 		if a, e := resp.ClusterID, s.(*TestServer).node.ClusterID.String(); a != e {
@@ -815,7 +880,7 @@ func TestClusterFreeze(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		path := s.AdminURL() + apiEndpoint + "cluster/freeze"
+		path := s.AdminURL() + adminPrefix + "cluster/freeze"
 
 		if err := util.StreamJSON(cli, path, &req, &serverpb.ClusterFreezeResponse{}, cb); err != nil {
 			t.Fatal(err)

@@ -275,8 +275,8 @@ query ITT
 EXPLAIN SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) LIMIT 1
 ----
 0  limit  count: 1
-1  join   INNER ON (a.b = c.d) AND (c.d = onecolumn.x)
-2  join   INNER ON a.b = twocolumn.x
+1  join   INNER ON (a.b = c.d) AND (c.d = test.onecolumn.x)
+2  join   INNER ON a.b = test.twocolumn.x
 3  join   CROSS
 4  scan   onecolumn@primary
 4  scan   twocolumn@primary
@@ -317,10 +317,10 @@ x    x    x    y  y  y
 44   44   44   51 51 51
 42   42   42   53 53 53
 
-query error column.*in USING clause does not exist
+query error column "y" specified in USING clause does not exist
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(y))
 
-query error column.*appears more than once in USING clause
+query error column "x" appears more than once in USING clause
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(x, x))
 
 statement ok
@@ -329,14 +329,17 @@ CREATE TABLE othertype (x TEXT);
 query error JOIN/USING types.*cannot be matched
 SELECT * FROM (onecolumn AS a JOIN othertype AS b USING(x))
 
-query error table name.*specified more than once
+query error cannot join columns from the same source name "onecolumn"
 SELECT * FROM (onecolumn JOIN onecolumn USING(x))
 
-query error table name.*specified more than once
+query error cannot join columns from the same source name "onecolumn"
 SELECT * FROM (onecolumn JOIN twocolumn USING(x) JOIN onecolumn USING(x))
 
-query error column reference.*is ambiguous
+query error cannot join columns from multiple anonymous sources
+SELECT * FROM (SELECT * FROM onecolumn), (SELECT * FROM onecolumn)
+
+query error column reference "x" is ambiguous
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON x > 32)
 
-query error qualified name.*not found
+query error column name "a\.y" not found
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON a.y > y)

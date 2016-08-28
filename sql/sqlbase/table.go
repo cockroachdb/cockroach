@@ -27,162 +27,12 @@ import (
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/decimal"
 	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/encoding"
+
 	"github.com/pkg/errors"
 )
-
-// MakeTableDesc creates a table descriptor from a CreateTable statement.
-func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) {
-	desc := TableDescriptor{}
-	if err := p.Table.NormalizeTableName(""); err != nil {
-		return desc, err
-	}
-	desc.Name = p.Table.Table()
-	desc.ParentID = parentID
-	desc.FormatVersion = FamilyFormatVersion
-	// We don't use version 0.
-	desc.Version = 1
-
-	var primaryIndexColumnSet map[parser.Name]struct{}
-	for _, def := range p.Defs {
-		switch d := def.(type) {
-		case *parser.ColumnTableDef:
-			col, idx, err := MakeColumnDefDescs(d)
-			if err != nil {
-				return desc, err
-			}
-			desc.AddColumn(*col)
-			if idx != nil {
-				if err := desc.AddIndex(*idx, d.PrimaryKey); err != nil {
-					return desc, err
-				}
-			}
-			if d.Family.Create || len(d.Family.Name) > 0 {
-				// Pass true for `create` and `ifNotExists` because when we're creating
-				// a table, we always want to create the specified family if it doesn't
-				// exist.
-				err := desc.AddColumnToFamilyMaybeCreate(col.Name, string(d.Family.Name), true, true)
-				if err != nil {
-					return desc, err
-				}
-			}
-
-		case *parser.IndexTableDef:
-			idx := IndexDescriptor{
-				Name:             string(d.Name),
-				StoreColumnNames: d.Storing,
-			}
-			if err := idx.FillColumns(d.Columns); err != nil {
-				return desc, err
-			}
-			if err := desc.AddIndex(idx, false); err != nil {
-				return desc, err
-			}
-			if d.Interleave != nil {
-				return desc, util.UnimplementedWithIssueErrorf(2972, "interleaving is not yet supported")
-			}
-		case *parser.UniqueConstraintTableDef:
-			idx := IndexDescriptor{
-				Name:             string(d.Name),
-				Unique:           true,
-				StoreColumnNames: d.Storing,
-			}
-			if err := idx.FillColumns(d.Columns); err != nil {
-				return desc, err
-			}
-			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
-				return desc, err
-			}
-			if d.PrimaryKey {
-				primaryIndexColumnSet = make(map[parser.Name]struct{})
-				for _, c := range d.Columns {
-					primaryIndexColumnSet[c.Column] = struct{}{}
-				}
-			}
-			if d.Interleave != nil {
-				return desc, util.UnimplementedWithIssueErrorf(2972, "interleaving is not yet supported")
-			}
-		case *parser.CheckConstraintTableDef:
-			// CHECK expressions seem to vary across databases. Wikipedia's entry on
-			// Check_constraint (https://en.wikipedia.org/wiki/Check_constraint) says
-			// that if the constraint refers to a single column only, it is possible to
-			// specify the constraint as part of the column definition. Postgres allows
-			// specifying them anywhere about any columns, but it moves all constraints to
-			// the table level (i.e., columns never have a check constraint themselves). We
-			// will adhere to the stricter definition.
-
-			preFn := func(expr parser.Expr) (err error, recurse bool, newExpr parser.Expr) {
-				qname, ok := expr.(*parser.QualifiedName)
-				if !ok {
-					// Not a qname, don't do anything to this node.
-					return nil, true, expr
-				}
-
-				if err := qname.NormalizeColumnName(); err != nil {
-					return err, false, nil
-				}
-
-				if qname.IsStar() {
-					return fmt.Errorf("* not allowed in constraint %q", d.Expr.String()), false, nil
-				}
-				col, err := desc.FindActiveColumnByName(qname.Column())
-				if err != nil {
-					return fmt.Errorf("column %q not found for constraint %q", qname.String(), d.Expr.String()), false, nil
-				}
-				// Convert to a dummy datum of the correct type.
-				return nil, false, col.Type.ToDatumType()
-			}
-
-			expr, err := parser.SimpleVisit(d.Expr, preFn)
-			if err != nil {
-				return desc, err
-			}
-
-			if err := SanitizeVarFreeExpr(expr, parser.TypeBool, "CHECK"); err != nil {
-				return desc, err
-			}
-
-			var p parser.Parser
-			if p.AggregateInExpr(expr) {
-				return desc, fmt.Errorf("Aggregate functions are not allowed in CHECK expressions")
-			}
-
-			check := &TableDescriptor_CheckConstraint{Expr: d.Expr.String()}
-			if len(d.Name) > 0 {
-				check.Name = string(d.Name)
-			}
-			desc.Checks = append(desc.Checks, check)
-
-		case *parser.FamilyTableDef:
-			names := make([]string, len(d.Columns))
-			for i, col := range d.Columns {
-				names[i] = string(col.Column)
-			}
-			fam := ColumnFamilyDescriptor{
-				Name:        string(d.Name),
-				ColumnNames: names,
-			}
-			desc.AddFamily(fam)
-
-		default:
-			return desc, errors.Errorf("unsupported table def: %T", def)
-		}
-	}
-
-	if primaryIndexColumnSet != nil {
-		// Primary index columns are not nullable.
-		for i := range desc.Columns {
-			if _, ok := primaryIndexColumnSet[parser.Name(desc.Columns[i].Name)]; ok {
-				desc.Columns[i].Nullable = false
-			}
-		}
-	}
-
-	return desc, nil
-}
 
 func exprContainsVarsError(context string, Expr parser.Expr) error {
 	return fmt.Errorf("%s expression '%s' may not contain variable sub-expressions", context, Expr)
@@ -655,7 +505,7 @@ func DecodeIndexKeyPrefix(a *DatumAlloc, desc *TableDescriptor, key []byte) (
 
 		for i := len(interleaves) - 1; i >= 0; i-- {
 			if len(interleaves[i].Interleave.Ancestors) <= component ||
-				interleaves[i].Interleave.Ancestors[component].TableID != ID(tableID) ||
+				interleaves[i].Interleave.Ancestors[component].TableID != tableID ||
 				interleaves[i].Interleave.Ancestors[component].IndexID != indexID {
 
 				// This component, and thus this interleave, doesn't match what was
@@ -725,7 +575,7 @@ func DecodeIndexKey(
 			// We reuse NotNullDescending as the interleave sentinel, consume it.
 			var ok bool
 			key, ok = encoding.DecodeIfNotNull(key)
-			if ok != true {
+			if !ok {
 				return nil, false, nil
 			}
 		}
@@ -1453,9 +1303,9 @@ func UnmarshalColumnValue(
 	}
 }
 
-// CheckValueWidth checks that the width (for strings/byte arrays) and
-// scale (for decimals) of the value fits the specified column type.
-// Used by INSERT and UPDATE.
+// CheckValueWidth checks that the width (for strings, byte arrays, and
+// bit string) and scale (for decimals) of the value fits the specified
+// column type. Used by INSERT and UPDATE.
 func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
 	switch col.Type.Kind {
 	case ColumnType_STRING:
@@ -1463,6 +1313,28 @@ func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
 			if col.Type.Width > 0 && utf8.RuneCountInString(string(*v)) > int(col.Type.Width) {
 				return fmt.Errorf("value too long for type %s (column %q)",
 					col.Type.SQLString(), col.Name)
+			}
+		}
+	case ColumnType_INT:
+		if v, ok := val.(*parser.DInt); ok {
+			if col.Type.Width > 0 {
+				// https://www.postgresql.org/docs/9.5/static/datatype-bit.html
+				// "bit type data must match the length n exactly; it is an error
+				// to attempt to store shorter or longer bit strings. bit varying
+				// data is of variable length up to the maximum length n; longer
+				// strings will be rejected."
+				//
+				// TODO(nvanbenschoten) Because we do not propagate the "varying"
+				// flag on the column type, the best we can do here is conservatively
+				// assume the varying bit type and error only on longer bit strings.
+				mostSignificantBit := int32(0)
+				for bits := uint64(*v); bits != 0; mostSignificantBit++ {
+					bits >>= 1
+				}
+				if mostSignificantBit > col.Type.Width {
+					return fmt.Errorf("bit string too long for type %s (column %q)",
+						col.Type.SQLString(), col.Name)
+				}
 			}
 		}
 	case ColumnType_DECIMAL:

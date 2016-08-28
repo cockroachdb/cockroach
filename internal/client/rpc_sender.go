@@ -17,20 +17,16 @@
 package client
 
 import (
-	"time"
-
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/pkg/errors"
 )
 
-const healthyTimeout = 2 * time.Second
-
 type sender struct {
-	conn   *grpc.ClientConn
-	client roachpb.ExternalClient
+	roachpb.ExternalClient
 }
 
 // NewSender returns an implementation of Sender which exposes the Key-Value
@@ -41,30 +37,14 @@ func NewSender(ctx *rpc.Context, target string) (Sender, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &sender{
-		conn:   conn,
-		client: roachpb.NewExternalClient(conn),
-	}, nil
+	return sender{roachpb.NewExternalClient(conn)}, nil
 }
 
 // Send implements the Sender interface.
-func (s *sender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, healthyTimeout)
-	defer cancel()
-
-	c := s.conn
-	for state, err := c.State(); state != grpc.Ready; state, err = c.WaitForStateChange(ctxWithTimeout, state) {
-		if err != nil {
-			return nil, roachpb.NewErrorf("roachpb.Batch RPC failed: %s", err)
-		}
-		if state == grpc.Shutdown {
-			return nil, roachpb.NewErrorf("roachpb.Batch RPC failed as client connection was closed")
-		}
-	}
-
-	br, err := s.client.Batch(ctx, &ba)
+func (s sender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	br, err := s.Batch(ctx, &ba, grpc.FailFast(false))
 	if err != nil {
-		return nil, roachpb.NewErrorf("roachpb.Batch RPC failed: %s", err)
+		return nil, roachpb.NewError(errors.Wrap(err, "roachpb.Batch RPC failed"))
 	}
 	pErr := br.Error
 	br.Error = nil

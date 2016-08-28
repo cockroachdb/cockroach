@@ -1,10 +1,12 @@
 import { assert } from "chai";
-import _ = require("lodash");
-import ByteBuffer = require("bytebuffer");
-import * as fetchMock from "fetch-mock";
+import _ from "lodash";
+import ByteBuffer from "bytebuffer";
+import fetchMock from "../util/fetch-mock";
 
 import * as protos from "../js/protos";
-import reducer, * as uidata from "./uiData";
+import reducer from "./uiData";
+import * as uidata from "./uiData";
+
 import { Action } from "../interfaces/action";
 
 describe("UIData reducer", function() {
@@ -121,24 +123,27 @@ describe("UIData reducer", function() {
     afterEach(fetchMock.restore);
 
     it("correctly saves UIData", function() {
-      fetchMock.mock("/_admin/v1/uidata", "post", (url: string, requestObj: RequestInit) => {
-        assert.equal(state.inFlight, 1);
+      fetchMock.mock({
+        matcher: "/_admin/v1/uidata",
+        method: "POST",
+        response: (url: string, requestObj: RequestInit) => {
+          assert.equal(state.inFlight, 1);
 
-        let kvs = protos.cockroach.server.serverpb.SetUIDataRequest.decode(requestObj.body as ArrayBuffer).getKeyValues();
+          let kvs = protos.cockroach.server.serverpb.SetUIDataRequest.decode(requestObj.body as ArrayBuffer).getKeyValues();
 
-        assert.equal(kvs.size, 2);
+          assert.equal(kvs.size, 2);
 
-        let deserialize = function(buff: ByteBuffer): Object {
-          return JSON.parse(buff.readString(buff.limit - buff.offset));
-        };
+          let deserialize = function(buff: ByteBuffer): Object {
+            return JSON.parse(buff.readString(buff.limit - buff.offset));
+          };
 
-        assert.deepEqual(deserialize(kvs.get(uiKey1)), uiObj1);
-        assert.deepEqual(deserialize(kvs.get(uiKey2)), uiObj2);
+          assert.deepEqual(deserialize(kvs.get(uiKey1)), uiObj1);
+          assert.deepEqual(deserialize(kvs.get(uiKey2)), uiObj2);
 
-        return {
-          sendAsJson: false,
-          body: new protos.cockroach.server.serverpb.SetUIDataResponse().toArrayBuffer(),
-        };
+          return {
+            body: new protos.cockroach.server.serverpb.SetUIDataResponse().toArrayBuffer(),
+          };
+        },
       });
 
       let p = saveUIData(
@@ -157,8 +162,12 @@ describe("UIData reducer", function() {
     });
 
     it("correctly reacts to error during save", function() {
-      fetchMock.mock("/_admin/v1/uidata", "post", () => {
-        return { throws: new Error() };
+      fetchMock.mock({
+        matcher: "/_admin/v1/uidata",
+        method: "POST",
+        response: () => {
+          return { throws: new Error() };
+        },
       });
 
       let p = saveUIData(
@@ -177,24 +186,27 @@ describe("UIData reducer", function() {
     it("correctly loads UIData", function() {
       let expectedURL = `/_admin/v1/uidata?keys=${uiKey1}&keys=${uiKey2}`;
 
-      fetchMock.mock(expectedURL, "get", function() {
-        // FetchMock URL must match the above string exactly, requesting both
-        // keys.
-        assert.equal(state.inFlight, 1);
+      fetchMock.mock({
+        matcher: expectedURL,
+        method: "GET",
+        response: () => {
+          // FetchMock URL must match the above string exactly, requesting both
+          // keys.
+          assert.equal(state.inFlight, 1);
 
-        let response = new protos.cockroach.server.serverpb.GetUIDataResponse();
-        let setValue = function(key: string, obj: Object) {
-          let value = new protos.cockroach.server.serverpb.GetUIDataResponse.Value();
-          value.setValue(ByteBuffer.fromUTF8(JSON.stringify(obj)));
-          response.key_values.set(key, value);
-        };
-        setValue(uiKey1, uiObj1);
-        setValue(uiKey2, uiObj2);
+          let response = new protos.cockroach.server.serverpb.GetUIDataResponse();
+          let setValue = function(key: string, obj: Object) {
+            let value = new protos.cockroach.server.serverpb.GetUIDataResponse.Value();
+            value.setValue(ByteBuffer.fromUTF8(JSON.stringify(obj)));
+            response.key_values.set(key, value);
+          };
+          setValue(uiKey1, uiObj1);
+          setValue(uiKey2, uiObj2);
 
-        return {
-          sendAsJson: false,
-          body: response.toArrayBuffer(),
-        };
+          return {
+            body: response.toArrayBuffer(),
+          };
+        },
       });
 
       let p = loadUIData(uiKey1, uiKey2);
@@ -210,8 +222,11 @@ describe("UIData reducer", function() {
     });
 
     it("correctly reacts to error during load", function() {
-      fetchMock.mock("^/_admin/v1/uidata" /* "^" allows prefix match */, "get", () => {
-        return { throws: new Error() };
+      fetchMock.mock({
+        matcher: "^/_admin/v1/uidata" /* "^" allows prefix match */,
+        response: () => {
+          return { throws: new Error() };
+        },
       });
 
       let p = loadUIData(uiKey1, uiKey2);
@@ -229,15 +244,17 @@ describe("UIData reducer", function() {
 
       let expectedURL = `/_admin/v1/uidata?keys=${missingKey}`;
 
-      fetchMock.mock(expectedURL, "get", function() {
-        assert.equal(state.inFlight, 1);
+      fetchMock.mock({
+        matcher: expectedURL,
+        response: () => {
+          assert.equal(state.inFlight, 1);
 
-        let response = new protos.cockroach.server.serverpb.GetUIDataResponse();
+          let response = new protos.cockroach.server.serverpb.GetUIDataResponse();
 
-        return {
-          sendAsJson: false,
-          body: response.toArrayBuffer(),
-        };
+          return {
+            body: response.toArrayBuffer(),
+          };
+        },
       });
 
       let p = loadUIData(missingKey);

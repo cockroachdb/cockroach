@@ -124,7 +124,7 @@ func (db *testDescriptorDB) splitRange(t *testing.T, key roachpb.RKey) {
 		t.Fatalf("Error splitting range at key %s, range to split not found", string(key))
 	}
 	val := v.(testDescriptorNode)
-	if bytes.Compare(val.EndKey, key) == 0 {
+	if bytes.Equal(val.EndKey, key) {
 		t.Fatalf("Attempt to split existing range at Endkey: %s", string(key))
 	}
 	db.data.Insert(testDescriptorNode{

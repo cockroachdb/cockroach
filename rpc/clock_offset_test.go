@@ -181,13 +181,12 @@ func TestClockOffsetMetrics(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reg := monitor.Registry()
 	expLower := offset.Offset - offset.Uncertainty
-	if a, e := reg.GetGauge("lower-bound-nanos").Value(), expLower; a != e {
+	if a, e := monitor.Metrics().ClusterOffsetLowerBound.Value(), expLower; a != e {
 		t.Errorf("lower bound %d != expected %d", a, e)
 	}
 	expHigher := offset.Offset + offset.Uncertainty
-	if a, e := reg.GetGauge("upper-bound-nanos").Value(), expHigher; a != e {
+	if a, e := monitor.Metrics().ClusterOffsetUpperBound.Value(), expHigher; a != e {
 		t.Errorf("upper bound %d != expected %d", a, e)
 	}
 }

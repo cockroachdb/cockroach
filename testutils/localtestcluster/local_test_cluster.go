@@ -19,6 +19,8 @@ package localtestcluster
 import (
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/internal/client"
@@ -28,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -87,7 +90,9 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Context, initSen
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano)
 	ltc.Stopper = stop.NewStopper()
 	rpcContext := rpc.NewContext(baseCtx, ltc.Clock, ltc.Stopper)
-	ltc.Gossip = gossip.New(rpcContext, nil, ltc.Stopper)
+	server := rpc.NewServer(rpcContext) // never started
+	ltc.Gossip = gossip.New(
+		context.Background(), rpcContext, server, nil, ltc.Stopper, metric.NewRegistry())
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20, ltc.Stopper)
 
 	ltc.Stores = storage.NewStores(ltc.Clock)
@@ -104,11 +109,11 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Context, initSen
 	if ltc.RangeRetryOptions != nil {
 		ctx.RangeRetryOptions = *ltc.RangeRetryOptions
 	}
+	ctx.Ctx = tracing.WithTracer(context.Background(), tracer)
 	ctx.Clock = ltc.Clock
 	ctx.DB = ltc.DB
 	ctx.Gossip = ltc.Gossip
 	ctx.Transport = transport
-	ctx.Tracer = tracer
 	ltc.Store = storage.NewStore(ctx, ltc.Eng, nodeDesc)
 	if err := ltc.Store.Bootstrap(roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}, ltc.Stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
@@ -117,7 +122,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Context, initSen
 	if err := ltc.Store.BootstrapRange(nil); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
-	if err := ltc.Store.Start(ltc.Stopper); err != nil {
+	if err := ltc.Store.Start(context.Background(), ltc.Stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
 	ltc.Gossip.SetNodeID(nodeDesc.NodeID)

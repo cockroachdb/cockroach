@@ -18,13 +18,8 @@
 // with the capability of running multiple test data files in parallel.
 //
 // Each test lives in a separate subdir under testdata/paralleltest. Each test
-// dir contains a "main" file along with a set of files in logic test format.
-//
-// The format of the main file is very simple (for now). Each line is of the
-// form:
-//     run <file1> <file2> ..
-// This will run the given logic test files in parallel and wait for them to
-// complete.  The same file can be specified multiple times.
+// dir contains a "test.yaml" file along with a set of files in logic test
+// format. The test.yaml file corresponds to the parTestSpec structure below.
 
 package sql_test
 
@@ -32,139 +27,216 @@ import (
 	gosql "database/sql"
 	"flag"
 	"fmt"
-	"os"
+	"io/ioutil"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"golang.org/x/net/context"
+
+	"gopkg.in/yaml.v1"
+
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/protoutil"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 var (
 	paralleltestdata = flag.String("partestdata", "partestdata/[^.]*", "test data glob")
 )
 
-type testDB struct {
-	db      *gosql.DB
-	cleanup func()
-}
-
 type parallelTest struct {
 	*testing.T
-	srv     serverutils.TestServerInterface
-	clients []testDB
+	ctx     context.Context
+	cluster serverutils.TestClusterInterface
+	clients [][]*gosql.DB
 }
 
 func (t *parallelTest) close() {
-	for i := len(t.clients) - 1; i >= 0; i-- {
-		t.clients[i].cleanup()
-		t.clients[i].db.Close()
-	}
 	t.clients = nil
-	if t.srv != nil {
-		t.srv.Stopper().Stop()
-		t.srv = nil
+	if t.cluster != nil {
+		t.cluster.Stopper().Stop()
 	}
 }
 
-func (t *parallelTest) addClient(createDB bool) {
-	pgURL, cleanupFunc := sqlutils.PGUrl(t.T, t.srv.ServingAddr(), security.RootUser,
-		"TestParallel")
-	db, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if createDB {
-		if _, err := db.Exec("CREATE DATABASE test;"); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if _, err := db.Exec("SET DATABASE = test;"); err != nil {
-		t.Fatal(err)
-	}
-
-	t.clients = append(t.clients, testDB{db: db, cleanup: cleanupFunc})
-}
-
-func (t *parallelTest) processTestFile(path string, db *gosql.DB, ch chan bool) {
+func (t *parallelTest) processTestFile(path string, nodeIdx int, db *gosql.DB, ch chan bool) {
 	if ch != nil {
 		defer func() { ch <- true }()
 	}
 
 	// Set up a dummy logicTest structure to use that code.
-	l := &logicTest{T: t.T, srv: t.srv, db: db, user: security.RootUser}
+	l := &logicTest{
+		T:       t.T,
+		srv:     t.cluster.Server(nodeIdx),
+		db:      db,
+		user:    security.RootUser,
+		verbose: testing.Verbose() || log.V(1),
+	}
 	if err := l.processTestFile(path); err != nil {
 		t.Error(err)
 	}
 }
 
-func (t *parallelTest) run(dir string) {
-	defer t.close()
-	t.setup()
-
-	// Add the main client and set up the database.
-	t.addClient(true)
-
-	// Open the main faile.
-	fmt.Printf("Running test %s\n", dir)
-	mainFile := filepath.Join(dir, "main")
-	file, err := os.Open(mainFile)
-	if err != nil {
-		t.Fatal(err)
+func (t *parallelTest) getClient(nodeIdx, clientIdx int) *gosql.DB {
+	for len(t.clients[nodeIdx]) <= clientIdx {
+		// Add a client.
+		pgURL, cleanupFunc := sqlutils.PGUrl(t.T,
+			t.cluster.Server(nodeIdx).ServingAddr(),
+			security.RootUser,
+			"TestParallel")
+		db, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		sqlutils.MakeSQLRunner(t, db).Exec("SET DATABASE = test")
+		t.cluster.Stopper().AddCloser(
+			stop.CloserFn(func() {
+				_ = db.Close()
+				cleanupFunc()
+			}))
+		t.clients[nodeIdx] = append(t.clients[nodeIdx], db)
 	}
-	defer file.Close()
-	s := newLineScanner(file)
-	for s.Scan() {
-		fields := strings.Fields(s.Text())
-		if len(fields) == 0 {
-			continue
+	return t.clients[nodeIdx][clientIdx]
+}
+
+type parTestRunEntry struct {
+	Node int    `yaml:"node"`
+	File string `yaml:"file"`
+}
+
+type parTestSpec struct {
+	SkipReason string `yaml:"skip_reason"`
+
+	// ClusterSize is the number of nodes in the cluster. If 0, single node.
+	ClusterSize int `yaml:"cluster_size"`
+
+	RangeSplitSize int `yaml:"range_split_size"`
+
+	// Run contains a set of "run lists". The files in a runlist are run in
+	// parallel and they complete before the next run list start.
+	Run [][]parTestRunEntry `yaml:"run"`
+}
+
+func (t *parallelTest) run(dir string) {
+	// Process the spec file.
+	mainFile := filepath.Join(dir, "test.yaml")
+	yamlData, err := ioutil.ReadFile(mainFile)
+	if err != nil {
+		t.Fatalf("%s: %s", mainFile, err)
+	}
+	var spec parTestSpec
+	err = yaml.Unmarshal(yamlData, &spec)
+	if err != nil {
+		t.Fatalf("%s: %s", mainFile, err)
+	}
+
+	if spec.SkipReason != "" {
+		log.Warningf(t.ctx, "Skipping test %s: %s", dir, spec.SkipReason)
+		return
+	}
+
+	log.Infof(t.ctx, "Running test %s", dir)
+	if testing.Verbose() || log.V(1) {
+		log.Infof(t.ctx, "spec: %+v", spec)
+	}
+
+	t.setup(&spec)
+	defer t.close()
+
+	for runListIdx, runList := range spec.Run {
+		if testing.Verbose() || log.V(1) {
+			var descr []string
+			for _, re := range runList {
+				descr = append(descr, fmt.Sprintf("%d:%s", re.Node, re.File))
+			}
+			log.Infof(t.ctx, "%s: run list %d: %s", mainFile, runListIdx,
+				strings.Join(descr, ", "))
 		}
-		cmd := fields[0]
-		if strings.HasPrefix(cmd, "#") {
-			// Skip comment lines.
-			continue
+		// Store the number of clients used so far (per node).
+		numClients := make([]int, spec.ClusterSize)
+		ch := make(chan bool)
+		for _, re := range runList {
+			client := t.getClient(re.Node, numClients[re.Node])
+			numClients[re.Node]++
+			go t.processTestFile(filepath.Join(dir, re.File), re.Node, client, ch)
 		}
-		switch cmd {
-		case "run":
-			testFiles := fields[1:]
-			for len(t.clients) < len(testFiles) {
-				t.addClient(false)
-			}
-			if testing.Verbose() || log.V(1) {
-				fmt.Printf("%s:%d: running %s\n", mainFile, s.line, strings.Join(testFiles, ","))
-			}
-			ch := make(chan bool)
-			for i, f := range testFiles {
-				go t.processTestFile(filepath.Join(dir, f), t.clients[i].db, ch)
-			}
-			// Wait for all clients to complete.
-			for range testFiles {
-				<-ch
-			}
-		default:
-			t.Fatalf("%s:%d: unknown command: %s", mainFile, s.line, cmd)
+		// Wait for all clients to complete.
+		for range runList {
+			<-ch
 		}
 	}
 }
 
-func (t *parallelTest) setup() {
-	params := base.TestServerArgs{
-		MaxOffset: logicMaxOffset,
-		Knobs: base.TestingKnobs{
-			SQLExecutor: &sql.ExecutorTestingKnobs{
-				WaitForGossipUpdate:   true,
-				CheckStmtStringChange: true,
+func (t *parallelTest) setup(spec *parTestSpec) {
+	if spec.ClusterSize == 0 {
+		spec.ClusterSize = 1
+	}
+
+	if testing.Verbose() || log.V(1) {
+		log.Infof(t.ctx, "Cluster Size: %d", spec.ClusterSize)
+	}
+
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			MaxOffset: logicMaxOffset,
+			Knobs: base.TestingKnobs{
+				SQLExecutor: &sql.ExecutorTestingKnobs{
+					WaitForGossipUpdate:   true,
+					CheckStmtStringChange: true,
+				},
 			},
 		},
 	}
-	t.srv, _, _ = serverutils.StartServer(t, params)
+	t.cluster = serverutils.StartTestCluster(t, spec.ClusterSize, args)
+	t.clients = make([][]*gosql.DB, spec.ClusterSize)
+	for i := range t.clients {
+		t.clients[i] = append(t.clients[i], t.cluster.ServerConn(i))
+	}
+	r0 := sqlutils.MakeSQLRunner(t, t.clients[0][0])
+
+	if spec.RangeSplitSize != 0 {
+		if testing.Verbose() || log.V(1) {
+			log.Infof(t.ctx, "Setting range split size: %d", spec.RangeSplitSize)
+		}
+		zoneCfg := config.DefaultZoneConfig()
+		zoneCfg.RangeMaxBytes = int64(spec.RangeSplitSize)
+		zoneCfg.RangeMinBytes = zoneCfg.RangeMaxBytes / 2
+		buf, err := protoutil.Marshal(&zoneCfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		objID := keys.RootNamespaceID
+		r0.Exec(`UPDATE system.zones SET config = $2 WHERE id = $1`, objID, buf)
+	}
+
+	if testing.Verbose() || log.V(1) {
+		log.Infof(t.ctx, "Creating database")
+	}
+
+	r0.Exec("CREATE DATABASE test")
+	for i := range t.clients {
+		sqlutils.MakeSQLRunner(t, t.clients[i][0]).Exec("SET DATABASE = test")
+	}
+
+	if spec.ClusterSize >= 3 {
+		if testing.Verbose() || log.V(1) {
+			log.Infof(t.ctx, "Waiting for full replication")
+		}
+		if err := t.cluster.WaitForFullReplication(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if testing.Verbose() || log.V(1) {
+		log.Infof(t.ctx, "Test setup done")
+	}
 }
 
 func TestParallel(t *testing.T) {
@@ -180,9 +252,9 @@ func TestParallel(t *testing.T) {
 	}
 	total := 0
 	for _, p := range paths {
-		pt := parallelTest{T: t}
+		pt := parallelTest{T: t, ctx: context.Background()}
 		pt.run(p)
 		total++
 	}
-	fmt.Printf("%d parallel tests passed\n", total)
+	log.Infof(context.Background(), "%d parallel tests passed", total)
 }

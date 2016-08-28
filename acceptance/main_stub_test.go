@@ -29,12 +29,14 @@ package acceptance
 import (
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
 func TestMain(m *testing.M) {
 	if !*flagRemote {
-		log.Infof("not running with `acceptance` build tag or against remote cluster; skipping")
+		log.Infof(context.Background(), "not running with `acceptance` build tag or against remote cluster; skipping")
 		return
 	}
 	runTests(m)

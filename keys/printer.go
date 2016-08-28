@@ -84,7 +84,7 @@ var (
 					if len(unq) == 0 {
 						return "", Meta1Prefix
 					}
-					return "", RangeMetaKey(mustAddr(RangeMetaKey(mustAddr(
+					return "", RangeMetaKey(MustAddr(RangeMetaKey(MustAddr(
 						roachpb.Key(unq)))))
 				},
 			}},
@@ -100,7 +100,7 @@ var (
 					if len(unq) == 0 {
 						return "", Meta2Prefix
 					}
-					return "", RangeMetaKey(mustAddr(roachpb.Key(unq)))
+					return "", RangeMetaKey(MustAddr(roachpb.Key(unq)))
 				},
 			}},
 		},
@@ -294,7 +294,7 @@ func localRangeIDKeyParse(input string) (remainder string, key roachpb.Key) {
 		// 	return "", nil, err
 		// }
 		remainder = ""
-		key = maker(roachpb.RangeID(rangeID), suffix, roachpb.RKey(detail))
+		key = maker(roachpb.RangeID(rangeID), suffix, detail)
 		return
 	}
 	panic(&errUglifyUnsupported{errors.New("unhandled general range key")})

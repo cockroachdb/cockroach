@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
@@ -37,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -105,7 +108,7 @@ func (t *leaseTest) expectLeases(descID sqlbase.ID, expected string) {
 
 func (t *leaseTest) acquire(nodeID uint32, descID sqlbase.ID, version sqlbase.DescriptorVersion) (*csql.LeaseState, error) {
 	var lease *csql.LeaseState
-	err := t.kvDB.Txn(func(txn *client.Txn) error {
+	err := t.kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
 		var err error
 		lease, err = t.node(nodeID).Acquire(txn, descID, version)
 		return err
@@ -400,7 +403,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 func TestCantLeaseDeletedTable(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 
-	var mu sync.Mutex
+	var mu syncutil.Mutex
 	clearSchemaChangers := false
 
 	params, _ := createTestServerParams()
@@ -449,7 +452,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	// already had.
 	_, err = t.acquire(1, tableDesc.ID, tableDesc.Version+1)
 	if !testutils.IsError(err, "table is being deleted") {
-		t.Fatalf("got a different error than expected: %s", err)
+		t.Fatalf("got a different error than expected: %v", err)
 	}
 }
 
@@ -469,7 +472,7 @@ func isDeleted(tableID sqlbase.ID, cfg config.SystemConfig) bool {
 
 func acquire(s *server.TestServer, descID sqlbase.ID, version sqlbase.DescriptorVersion) (*csql.LeaseState, error) {
 	var lease *csql.LeaseState
-	err := s.DB().Txn(func(txn *client.Txn) error {
+	err := s.DB().Txn(context.TODO(), func(txn *client.Txn) error {
 		var err error
 		lease, err = s.LeaseManager().(*csql.LeaseManager).Acquire(txn, descID, version)
 		return err
@@ -483,7 +486,7 @@ func acquire(s *server.TestServer, descID sqlbase.ID, version sqlbase.Descriptor
 func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var mu sync.Mutex
+	var mu syncutil.Mutex
 	clearSchemaChangers := false
 
 	var waitTableID sqlbase.ID
@@ -575,7 +578,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	// Now we shouldn't be able to acquire any more.
 	_, err = acquire(s.(*server.TestServer), tableDesc.ID, 0)
 	if !testutils.IsError(err, "table is being deleted") {
-		t.Fatalf("got a different error than expected: %s", err)
+		t.Fatalf("got a different error than expected: %v", err)
 	}
 }
 
@@ -642,6 +645,6 @@ func runCommandAndExpireLease(t *testing.T, clock *hlc.Clock, sqlDB *gosql.DB, s
 
 	// Commit and see the aborted txn.
 	if err := txn.Commit(); !testutils.IsError(err, "pq: restart transaction: txn aborted") {
-		t.Fatalf("%s, err = %s", sql, err)
+		t.Fatalf("%s, err = %v", sql, err)
 	}
 }

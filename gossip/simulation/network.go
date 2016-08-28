@@ -21,6 +21,8 @@ import (
 	"net"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
@@ -39,9 +42,15 @@ import (
 // about the node's gossip instance, network address, and underlying
 // server.
 type Node struct {
-	Gossip *gossip.Gossip
-	Server *grpc.Server
-	Addr   net.Addr
+	Gossip   *gossip.Gossip
+	Server   *grpc.Server
+	Listener net.Listener
+	Registry *metric.Registry
+}
+
+// Addr returns the address of the connected listener.
+func (n *Node) Addr() net.Addr {
+	return n.Listener.Addr()
 }
 
 // Network provides access to a test gossip network of nodes.
@@ -51,36 +60,36 @@ type Network struct {
 	nodeIDAllocator roachpb.NodeID // provides unique node IDs
 	rpcContext      *rpc.Context
 	tlsConfig       *tls.Config
+	started         bool
 }
 
 // NewNetwork creates nodeCount gossip nodes.
-func NewNetwork(nodeCount int) *Network {
-	log.Infof("simulating gossip network with %d nodes", nodeCount)
+func NewNetwork(stopper *stop.Stopper, nodeCount int, createResolvers bool) *Network {
+	log.Infof(context.TODO(), "simulating gossip network with %d nodes", nodeCount)
 
 	n := &Network{
 		Nodes:   []*Node{},
-		Stopper: stop.NewStopper(),
+		Stopper: stopper,
 	}
 	n.rpcContext = rpc.NewContext(&base.Context{Insecure: true}, nil, n.Stopper)
 	var err error
 	n.tlsConfig, err = n.rpcContext.GetServerTLSConfig()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(context.TODO(), err)
 	}
 
 	for i := 0; i < nodeCount; i++ {
 		node, err := n.CreateNode()
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal(context.TODO(), err)
 		}
 		// Build a resolver for each instance or we'll get data races.
-		r, err := resolver.NewResolverFromAddress(n.Nodes[0].Addr)
-		if err != nil {
-			log.Fatalf("bad gossip address %s: %s", n.Nodes[0].Addr, err)
-		}
-		node.Gossip.SetResolvers([]resolver.Resolver{r})
-		if err := n.StartNode(node); err != nil {
-			log.Fatal(err)
+		if createResolvers {
+			r, err := resolver.NewResolverFromAddress(n.Nodes[0].Addr())
+			if err != nil {
+				log.Fatalf(context.TODO(), "bad gossip address %s: %s", n.Nodes[0].Addr(), err)
+			}
+			node.Gossip.SetResolvers([]resolver.Resolver{r})
 		}
 	}
 	return n
@@ -89,12 +98,19 @@ func NewNetwork(nodeCount int) *Network {
 // CreateNode creates a simulation node and starts an RPC server for it.
 func (n *Network) CreateNode() (*Node, error) {
 	server := rpc.NewServer(n.rpcContext)
-	ln, err := netutil.ListenAndServeGRPC(n.Stopper, server, util.TestAddr)
+	ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
 	if err != nil {
 		return nil, err
 	}
-	node := &Node{Server: server, Addr: ln.Addr()}
-	node.Gossip = gossip.New(n.rpcContext, nil, n.Stopper)
+	node := &Node{Server: server, Listener: ln, Registry: metric.NewRegistry()}
+	node.Gossip = gossip.New(context.TODO(), n.rpcContext, server, nil, n.Stopper, node.Registry)
+	n.Stopper.RunWorker(func() {
+		<-n.Stopper.ShouldQuiesce()
+		netutil.FatalIfUnexpected(ln.Close())
+		<-n.Stopper.ShouldStop()
+		server.Stop()
+		node.Gossip.EnableSimulationCycler(false)
+	})
 	n.Nodes = append(n.Nodes, node)
 	return node, nil
 }
@@ -102,20 +118,23 @@ func (n *Network) CreateNode() (*Node, error) {
 // StartNode initializes a gossip instance for the simulation node and
 // starts it.
 func (n *Network) StartNode(node *Node) error {
-	node.Gossip.Start(node.Server, node.Addr)
+	node.Gossip.Start(node.Addr())
 	node.Gossip.EnableSimulationCycler(true)
 	n.nodeIDAllocator++
 	node.Gossip.SetNodeID(n.nodeIDAllocator)
 	if err := node.Gossip.SetNodeDescriptor(&roachpb.NodeDescriptor{
 		NodeID:  node.Gossip.GetNodeID(),
-		Address: util.MakeUnresolvedAddr(node.Addr.Network(), node.Addr.String()),
+		Address: util.MakeUnresolvedAddr(node.Addr().Network(), node.Addr().String()),
 	}); err != nil {
 		return err
 	}
-	if err := node.Gossip.AddInfo(node.Addr.String(),
+	if err := node.Gossip.AddInfo(node.Addr().String(),
 		encoding.EncodeUint64Ascending(nil, 0), time.Hour); err != nil {
 		return err
 	}
+	n.Stopper.RunWorker(func() {
+		netutil.FatalIfUnexpected(node.Server.Serve(node.Listener))
+	})
 	return nil
 }
 
@@ -141,40 +160,53 @@ func (n *Network) GetNodeFromID(nodeID roachpb.NodeID) (*Node, bool) {
 //
 // The simulation callback receives the cycle and the network as arguments.
 func (n *Network) SimulateNetwork(simCallback func(cycle int, network *Network) bool) {
+	n.Start()
 	nodes := n.Nodes
 	for cycle := 1; simCallback(cycle, n); cycle++ {
 		// Node 0 gossips sentinel & cluster ID every cycle.
 		if err := nodes[0].Gossip.AddInfo(
 			gossip.KeySentinel,
 			encoding.EncodeUint64Ascending(nil, uint64(cycle)),
-			time.Hour); err != nil {
-			log.Fatal(err)
+			time.Hour,
+		); err != nil {
+			log.Fatal(context.TODO(), err)
 		}
-		if err := nodes[0].Gossip.AddInfo(gossip.KeyClusterID,
-			encoding.EncodeUint64Ascending(nil, uint64(cycle)), 0*time.Second); err != nil {
-			log.Fatal(err)
+		if err := nodes[0].Gossip.AddInfo(
+			gossip.KeyClusterID,
+			encoding.EncodeUint64Ascending(nil, uint64(cycle)),
+			0*time.Second,
+		); err != nil {
+			log.Fatal(context.TODO(), err)
 		}
-		// Every node gossips cycle.
+		// Every node gossips every cycle.
 		for _, node := range nodes {
 			if err := node.Gossip.AddInfo(
-				node.Addr.String(),
+				node.Addr().String(),
 				encoding.EncodeUint64Ascending(nil, uint64(cycle)),
-				time.Hour); err != nil {
-				log.Fatal(err)
+				time.Hour,
+			); err != nil {
+				log.Fatal(context.TODO(), err)
 			}
 			node.Gossip.SimulationCycle()
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	log.Infof("gossip network simulation: total infos sent=%d, received=%d", n.infosSent(), n.infosReceived())
+	log.Infof(context.TODO(), "gossip network simulation: total infos sent=%d, received=%d", n.infosSent(), n.infosReceived())
 }
 
-// Stop stops all servers and gossip nodes.
-func (n *Network) Stop() {
-	for _, node := range n.Nodes {
-		node.Gossip.EnableSimulationCycler(false)
+// Start starts all gossip nodes.
+// TODO(spencer): make all methods in Network return errors instead of
+// fatal logging.
+func (n *Network) Start() {
+	if n.started {
+		return
 	}
-	n.Stopper.Stop()
+	n.started = true
+	for _, node := range n.Nodes {
+		if err := n.StartNode(node); err != nil {
+			log.Fatal(context.TODO(), err)
+		}
+	}
 }
 
 // RunUntilFullyConnected blocks until the gossip network has received
@@ -198,7 +230,7 @@ func (n *Network) RunUntilFullyConnected() int {
 func (n *Network) isNetworkConnected() bool {
 	for _, leftNode := range n.Nodes {
 		for _, rightNode := range n.Nodes {
-			if _, err := leftNode.Gossip.GetInfo(rightNode.Addr.String()); err != nil {
+			if _, err := leftNode.Gossip.GetInfo(gossip.MakeNodeIDKey(rightNode.Gossip.GetNodeID())); err != nil {
 				return false
 			}
 		}
@@ -209,19 +241,19 @@ func (n *Network) isNetworkConnected() bool {
 // infosSent returns the total count of infos sent from all nodes in
 // the network.
 func (n *Network) infosSent() int {
-	var count int
+	var count int64
 	for _, node := range n.Nodes {
-		count += node.Gossip.InfosSent()
+		count += node.Gossip.GetNodeMetrics().InfosSent.Counter.Count()
 	}
-	return count
+	return int(count)
 }
 
 // infosReceived returns the total count of infos received from all
 // nodes in the network.
 func (n *Network) infosReceived() int {
-	var count int
+	var count int64
 	for _, node := range n.Nodes {
-		count += node.Gossip.InfosReceived()
+		count += node.Gossip.GetNodeMetrics().InfosReceived.Counter.Count()
 	}
-	return count
+	return int(count)
 }

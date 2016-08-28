@@ -1,15 +1,19 @@
-import _ = require("lodash");
+import _ from "lodash";
 import { createStore, combineReducers, applyMiddleware, compose, StoreEnhancer } from "redux";
 import { hashHistory } from "react-router";
 import { syncHistoryWithStore, routerReducer, IRouterState } from "react-router-redux";
 import thunk from "redux-thunk";
 
-import uiReducer, * as ui from "./ui";
-import uiDataReducer, * as uiData from "./uiData";
-import metricsReducer, * as metrics from "./metrics";
-import timeWindowReducer, * as timewindow from "./timewindow";
-import databaseInfoReducer, * as databaseInfo from "./databaseInfo";
-import apiReducersReducer, * as apiReducers from "./apiReducers";
+import uiReducer from "./ui";
+import * as ui from "./ui";
+import uiDataReducer from "./uiData";
+import * as uiData from "./uiData";
+import metricsReducer from "./metrics";
+import * as metrics from "./metrics";
+import timeWindowReducer from "./timewindow";
+import * as timewindow from "./timewindow";
+import apiReducersReducer from "./apiReducers";
+import * as apiReducers from "./apiReducers";
 
 export interface AdminUIState {
     routing: IRouterState;
@@ -17,7 +21,6 @@ export interface AdminUIState {
     uiData: uiData.UIDataSet;
     metrics: metrics.MetricQueryState;
     timewindow: timewindow.TimeWindowState;
-    databaseInfo: databaseInfo.DatabaseInfoState;
     cachedData: apiReducers.APIReducersState;
 }
 
@@ -28,14 +31,22 @@ export const store = createStore<AdminUIState>(
     uiData: uiDataReducer,
     metrics: metricsReducer,
     timewindow: timeWindowReducer,
-    databaseInfo: databaseInfoReducer,
     cachedData: apiReducersReducer,
   }),
   compose(
     applyMiddleware(thunk),
     // Support for redux dev tools
     // https://chrome.google.com/webstore/detail/redux-devtools/lmhkpmbekcpmknklioeibfkpmmfibljd
-    (window as any).devToolsExtension ? (window as any).devToolsExtension() : _.identity
+    (window as any).devToolsExtension ? (window as any).devToolsExtension({
+      // TODO(maxlang): implement {,de}serializeAction.
+      // TODO(maxlang): implement deserializeState.
+      serializeState: (key: string, value: any): Object => {
+        if (value && value.toRaw) {
+          return value.toRaw();
+        }
+        return value;
+      },
+    }) : _.identity
   ) as StoreEnhancer<AdminUIState>
 );
 

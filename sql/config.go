@@ -29,24 +29,21 @@ func init() {
 }
 
 // GetZoneConfig returns the zone config for the object with 'id'.
-func GetZoneConfig(cfg config.SystemConfig, id uint32) (*config.ZoneConfig, error) {
+func GetZoneConfig(cfg config.SystemConfig, id uint32) (config.ZoneConfig, bool, error) {
 	// Look in the zones table.
 	if zoneVal := cfg.GetValue(sqlbase.MakeZoneKey(sqlbase.ID(id))); zoneVal != nil {
-		zone := &config.ZoneConfig{}
-		if err := zoneVal.GetProto(zone); err != nil {
-			return nil, err
-		}
+		var zone config.ZoneConfig
 		// We're done.
-		return zone, nil
+		return zone, true, zoneVal.GetProto(&zone)
 	}
 
 	// No zone config for this ID. We need to figure out if it's a database
 	// or table. Lookup its descriptor.
 	if descVal := cfg.GetValue(sqlbase.MakeDescMetadataKey(sqlbase.ID(id))); descVal != nil {
 		// Determine whether this is a database or table.
-		desc := &sqlbase.Descriptor{}
-		if err := descVal.GetProto(desc); err != nil {
-			return nil, err
+		var desc sqlbase.Descriptor
+		if err := descVal.GetProto(&desc); err != nil {
+			return config.ZoneConfig{}, false, err
 		}
 		if tableDesc := desc.GetTable(); tableDesc != nil {
 			// This is a table descriptor. Lookup its parent database zone config.
@@ -61,7 +58,7 @@ func GetZoneConfig(cfg config.SystemConfig, id uint32) (*config.ZoneConfig, erro
 	}
 
 	// No descriptor or not a table.
-	return nil, nil
+	return config.ZoneConfig{}, false, nil
 }
 
 // GetTableDesc returns the table descriptor for the table with 'id'.

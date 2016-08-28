@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -56,18 +57,18 @@ func TestHeartbeatCB(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	serverClock := hlc.NewClock(time.Unix(0, 20).UnixNano)
-	serverCtx := newNodeTestContext(serverClock, stopper)
+	clock := hlc.NewClock(time.Unix(0, 20).UnixNano)
+	serverCtx := newNodeTestContext(clock, stopper)
 	s, ln := newTestServer(t, serverCtx, true)
 	remoteAddr := ln.Addr().String()
 
 	RegisterHeartbeatServer(s, &HeartbeatService{
-		clock:              serverClock,
+		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
 	})
 
 	// Clocks don't matter in this test.
-	clientCtx := newNodeTestContext(serverClock, stopper)
+	clientCtx := newNodeTestContext(clock, stopper)
 
 	var once sync.Once
 	ch := make(chan struct{})
@@ -86,8 +87,8 @@ func TestHeartbeatCB(t *testing.T) {
 	<-ch
 }
 
-// TestHeartbeatHealth verifies that the health status changes after heartbeats
-// succeed or fail.
+// TestHeartbeatHealth verifies that the health status changes after
+// heartbeats succeed or fail.
 func TestHeartbeatHealth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -117,8 +118,8 @@ func TestHeartbeatHealth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// This code is inherently racy so when we need to verify heartbeats we want
-	// them to always succeed.
+	// This code is inherently racy so when we need to verify heartbeats we
+	// want them to always succeed.
 	sendHeartbeats := func() func() {
 		done := make(chan struct{})
 		go func() {
@@ -135,17 +136,24 @@ func TestHeartbeatHealth(t *testing.T) {
 		}
 	}
 
-	// Should be healthy after the first successful heartbeat.
-	stopHeartbeats := sendHeartbeats()
-	util.SucceedsSoon(t, func() error {
-		if !clientCtx.IsConnHealthy(remoteAddr) {
-			return errors.Errorf("expected %s to be healthy", remoteAddr)
-		}
-		return nil
-	})
-	stopHeartbeats()
+	// Should be unhealthy in the absence of heartbeats.
+	if clientCtx.IsConnHealthy(remoteAddr) {
+		t.Fatalf("expected %s to be unhealthy", remoteAddr)
+	}
 
-	// Should no longer be healthy after heartbeating stops.
+	func() {
+		defer sendHeartbeats()()
+
+		// Should become healthy in the presence of heartbeats.
+		util.SucceedsSoon(t, func() error {
+			if !clientCtx.IsConnHealthy(remoteAddr) {
+				return errors.Errorf("expected %s to be healthy", remoteAddr)
+			}
+			return nil
+		})
+	}()
+
+	// Should become unhealthy again in the absence of heartbeats.
 	util.SucceedsSoon(t, func() error {
 		if clientCtx.IsConnHealthy(remoteAddr) {
 			return errors.Errorf("expected %s to be unhealthy", remoteAddr)
@@ -153,18 +161,160 @@ func TestHeartbeatHealth(t *testing.T) {
 		return nil
 	})
 
-	// Should return to healthy after another successful heartbeat.
-	stopHeartbeats = sendHeartbeats()
+	func() {
+		defer sendHeartbeats()()
+
+		// Should become healthy again in the presence of heartbeats.
+		util.SucceedsSoon(t, func() error {
+			if !clientCtx.IsConnHealthy(remoteAddr) {
+				return errors.Errorf("expected %s to be healthy", remoteAddr)
+			}
+			return nil
+		})
+	}()
+
+	if clientCtx.IsConnHealthy("non-existent connection") {
+		t.Errorf("non-existent connection is reported as healthy")
+	}
+}
+
+type interceptingListener struct {
+	net.Listener
+	connectChan chan struct{}
+	connCB      func(net.Conn)
+}
+
+func (ln *interceptingListener) Accept() (net.Conn, error) {
+	<-ln.connectChan
+	conn, err := ln.Listener.Accept()
+	if err == nil {
+		ln.connCB(conn)
+	}
+	return conn, err
+}
+
+// TestHeartbeatHealth verifies that the health status changes after
+// heartbeats succeed or fail due to transport failures.
+func TestHeartbeatHealthTransport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	// Can't be zero because that'd be an empty offset.
+	clock := hlc.NewClock(time.Unix(0, 1).UnixNano)
+
+	serverCtx := newNodeTestContext(clock, stopper)
+	// newTestServer with a custom listener.
+	tlsConfig, err := serverCtx.GetServerTLSConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)))
+	ln, err := net.Listen("tcp", util.TestAddr.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	mu := struct {
+		syncutil.Mutex
+		conns []net.Conn
+	}{}
+	connectChan := make(chan struct{})
+	defer close(connectChan)
+	ln = &interceptingListener{Listener: ln, connectChan: connectChan, connCB: func(conn net.Conn) {
+		mu.Lock()
+		mu.conns = append(mu.conns, conn)
+		mu.Unlock()
+	}}
+	stopper.RunWorker(func() {
+		<-stopper.ShouldQuiesce()
+		netutil.FatalIfUnexpected(ln.Close())
+		<-stopper.ShouldStop()
+		s.Stop()
+	})
+
+	stopper.RunWorker(func() {
+		netutil.FatalIfUnexpected(s.Serve(ln))
+	})
+
+	remoteAddr := ln.Addr().String()
+
+	RegisterHeartbeatServer(s, &HeartbeatService{
+		clock:              clock,
+		remoteClockMonitor: serverCtx.RemoteClocks,
+	})
+
+	clientCtx := newNodeTestContext(clock, stopper)
+	// Make the intervals shorter to speed up the tests.
+	clientCtx.HeartbeatInterval = 1 * time.Millisecond
+	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
+		t.Fatal(err)
+	}
+	// Allow the connection to go through.
+	connectChan <- struct{}{}
+
+	// Everything is normal; should become healthy.
 	util.SucceedsSoon(t, func() error {
 		if !clientCtx.IsConnHealthy(remoteAddr) {
 			return errors.Errorf("expected %s to be healthy", remoteAddr)
 		}
 		return nil
 	})
-	stopHeartbeats()
 
-	if clientCtx.IsConnHealthy("non-existent connection") {
-		t.Errorf("non-existent connection is reported as healthy")
+	closeConns := func() {
+		mu.Lock()
+		for _, conn := range mu.conns {
+			if err := conn.Close(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		mu.conns = mu.conns[:0]
+		mu.Unlock()
+	}
+
+	// Close all the connections.
+	closeConns()
+
+	// Should become unhealthy now that the connection was closed.
+	util.SucceedsSoon(t, func() error {
+		if clientCtx.IsConnHealthy(remoteAddr) {
+			return errors.Errorf("expected %s to be unhealthy", remoteAddr)
+		}
+		return nil
+	})
+
+	// Should become healthy again after GRPC reconnects.
+	connectChan <- struct{}{}
+	util.SucceedsSoon(t, func() error {
+		if !clientCtx.IsConnHealthy(remoteAddr) {
+			return errors.Errorf("expected %s to be healthy", remoteAddr)
+		}
+		return nil
+	})
+
+	// Close the listener and all the connections.
+	if err := ln.Close(); err != nil {
+		t.Fatal(err)
+	}
+	closeConns()
+
+	// Should become unhealthy again now that the connection was closed.
+	util.SucceedsSoon(t, func() error {
+		if clientCtx.IsConnHealthy(remoteAddr) {
+			return errors.Errorf("expected %s to be unhealthy", remoteAddr)
+		}
+		return nil
+	})
+
+	// Should stay unhealthy despite reconnection attempts.
+	errUnhealthy := errors.New("connection is still unhealthy")
+	if err := util.RetryForDuration(100*clientCtx.HeartbeatInterval, func() error {
+		if clientCtx.IsConnHealthy(remoteAddr) {
+			return errors.Errorf("expected %s to be unhealthy", remoteAddr)
+		}
+		return errUnhealthy
+	}); err != errUnhealthy {
+		t.Fatal(err)
 	}
 }
 
@@ -277,7 +427,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 }
 
 type AdvancingClock struct {
-	sync.Mutex
+	syncutil.Mutex
 	time                time.Time
 	advancementInterval atomic.Value // time.Duration
 }
@@ -377,7 +527,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 			if err := nodeCtx.ctx.RemoteClocks.VerifyClockOffset(); testutils.IsError(err, errOffsetGreaterThanMaxOffset) {
 				t.Logf("max offset: %s - node %d with excessive clock offset of %s returned expected error: %s", maxOffset, i, nodeOffset, err)
 			} else {
-				t.Errorf("max offset: %s - node %d with excessive clock offset of %s returned unexpected error: %s", maxOffset, i, nodeOffset, err)
+				t.Errorf("max offset: %s - node %d with excessive clock offset of %s returned unexpected error: %v", maxOffset, i, nodeOffset, err)
 			}
 		} else {
 			if err := nodeCtx.ctx.RemoteClocks.VerifyClockOffset(); err != nil {

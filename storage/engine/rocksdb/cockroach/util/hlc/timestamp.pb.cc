@@ -27,6 +27,7 @@ void protobuf_AddDesc_cockroach_2futil_2fhlc_2ftimestamp_2eproto_impl() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
 #else
+void protobuf_AddDesc_cockroach_2futil_2fhlc_2ftimestamp_2eproto() GOOGLE_ATTRIBUTE_COLD;
 void protobuf_AddDesc_cockroach_2futil_2fhlc_2ftimestamp_2eproto() {
   static bool already_here = false;
   if (already_here) return;
@@ -53,16 +54,6 @@ struct StaticDescriptorInitializer_cockroach_2futil_2fhlc_2ftimestamp_2eproto {
   }
 } static_descriptor_initializer_cockroach_2futil_2fhlc_2ftimestamp_2eproto_;
 #endif
-
-namespace {
-
-static void MergeFromFail(int line) GOOGLE_ATTRIBUTE_COLD;
-static void MergeFromFail(int line) {
-  GOOGLE_CHECK(false) << __FILE__ << ":" << line;
-}
-
-}  // namespace
-
 
 // ===================================================================
 
@@ -290,7 +281,9 @@ void Timestamp::CheckTypeAndMergeFrom(
 
 void Timestamp::MergeFrom(const Timestamp& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:cockroach.util.hlc.Timestamp)
-  if (GOOGLE_PREDICT_FALSE(&from == this)) MergeFromFail(__LINE__);
+  if (GOOGLE_PREDICT_FALSE(&from == this)) {
+    ::google::protobuf::internal::MergeFromFail(__FILE__, __LINE__);
+  }
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_wall_time()) {
       set_wall_time(from.wall_time());

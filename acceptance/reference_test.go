@@ -44,11 +44,10 @@ set -xe
 mkdir /old
 cd /old
 
+touch oldout newout
 function finish() {
-  touch oldout newout
   cat oldout newout
 }
-
 trap finish EXIT
 
 export PGHOST=localhost
@@ -56,8 +55,10 @@ export PGPORT=""
 
 bin=/%s/cockroach
 # TODO(bdarnell): when --background is in referenceBinPath, use it here and below.
+# The until loop will also be unnecessary at that point.
 $bin start --alsologtostderr & &> oldout
-sleep 1
+# Wait until cockroach has started up successfully.
+until $bin sql -e "SELECT 1"; do sleep 1; done
 
 echo "Use the reference binary to write a couple rows, then render its output to a file and shut down."
 $bin sql -e "CREATE DATABASE old"
@@ -97,7 +98,13 @@ bin=/%s/cockroach
 
 func TestDockerReadWriteBidirectionalReferenceVersion(t *testing.T) {
 	backwardReferenceTest := `
-$bin start --background
+touch out
+function finish() {
+  cat out
+}
+trap finish EXIT
+
+$bin start --background --alsologtostderr &> out
 $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_old" > old.everything
 $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_new" >> old.everything
 # diff returns non-zero if different. With set -e above, that would exit here.
@@ -109,14 +116,14 @@ $bin quit && wait
 
 func TestDockerReadWriteForwardReferenceVersion(t *testing.T) {
 	backwardReferenceTest := `
+touch out
 function finish() {
-  touch out
   cat out
 }
 trap finish EXIT
 
 $bin start & &> out
-sleep 1
+until $bin sql -e "SELECT 1"; do sleep 1; done
 # grep returns non-zero if it didn't match anything. With set -e above, that would exit here.
 $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_new" 2>&1 | grep "is encoded using using version 2, but this client only supports version 1"
 $bin quit && wait
@@ -130,11 +137,9 @@ set -eux
 bin=/cockroach
 
 touch out
-
-function finish {
+function finish() {
   cat out
 }
-
 trap finish EXIT
 
 $bin start --alsologtostderr=INFO --background --store=/cockroach-data-reference-7429 &> out

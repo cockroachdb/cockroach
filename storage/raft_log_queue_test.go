@@ -29,23 +29,21 @@ import (
 	"github.com/pkg/errors"
 )
 
-// TestGetBehindIndexes verifies that the indexes that are behind the quorum
-// committed index are correctly returned in ascending order.
-func TestGetBehindIndexes(t *testing.T) {
+func TestGetBehindIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
 		progress []uint64
 		commit   uint64
-		expected []uint64
+		expected uint64
 	}{
 		// Basic cases.
-		{[]uint64{1}, 1, nil},
-		{[]uint64{1, 2}, 2, []uint64{1}},
-		{[]uint64{2, 3, 4}, 4, []uint64{2, 3}},
-		{[]uint64{1, 2, 3, 4, 5}, 3, []uint64{1, 2}},
+		{[]uint64{1}, 1, 1},
+		{[]uint64{1, 2}, 2, 1},
+		{[]uint64{2, 3, 4}, 4, 2},
+		{[]uint64{1, 2, 3, 4, 5}, 3, 1},
 		// sorting.
-		{[]uint64{5, 4, 3, 2, 1}, 3, []uint64{1, 2}},
+		{[]uint64{5, 4, 3, 2, 1}, 3, 1},
 	}
 	for i, c := range testCases {
 		status := &raft.Status{
@@ -55,36 +53,40 @@ func TestGetBehindIndexes(t *testing.T) {
 		for j, v := range c.progress {
 			status.Progress[uint64(j)] = raft.Progress{Match: v}
 		}
-		out := getBehindIndexes(status)
+		out := getBehindIndex(status)
 		if !reflect.DeepEqual(c.expected, out) {
-			t.Errorf("%d: getBehindIndexes(...) expected %d, but got %d", i, c.expected, out)
+			t.Errorf("%d: getBehindIndex(...) expected %d, but got %d", i, c.expected, out)
 		}
 	}
 }
 
-// TestComputeTruncatableIndex verifies that the correc
 func TestComputeTruncatableIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const targetSize = 1000
 
 	testCases := []struct {
-		progress    []uint64
-		commit      uint64
-		raftLogSize int64
-		firstIndex  uint64
-		expected    uint64
+		progress        []uint64
+		commit          uint64
+		raftLogSize     int64
+		firstIndex      uint64
+		pendingSnapshot uint64
+		expected        uint64
 	}{
-		{[]uint64{1, 2}, 1, 100, 1, 1},
-		{[]uint64{1, 2, 3, 4}, 3, 100, 1, 1},
-		{[]uint64{1, 2, 3, 4}, 3, 100, 2, 2},
-		// If over targetSize, should truncate to next behind replica, or quorum
-		// committed index.
-		{[]uint64{1, 2, 3, 4}, 3, 2000, 1, 2},
-		{[]uint64{1, 2, 3, 4}, 3, 2000, 2, 3},
-		{[]uint64{1, 2, 3, 4}, 3, 2000, 3, 3},
+		{[]uint64{1, 2}, 1, 100, 1, 0, 1},
+		{[]uint64{1, 5, 5}, 5, 100, 1, 0, 1},
+		{[]uint64{1, 5, 5}, 5, 100, 2, 0, 2},
+		{[]uint64{5, 5, 5}, 5, 100, 2, 0, 5},
+		{[]uint64{5, 5, 5}, 5, 100, 2, 1, 2},
+		{[]uint64{5, 5, 5}, 5, 100, 2, 3, 3},
+		{[]uint64{1, 2, 3, 4}, 3, 100, 1, 0, 1},
+		{[]uint64{1, 2, 3, 4}, 3, 100, 2, 0, 2},
+		// If over targetSize, should truncate to quorum committed index.
+		{[]uint64{1, 2, 3, 4}, 3, 2000, 1, 0, 3},
+		{[]uint64{1, 2, 3, 4}, 3, 2000, 2, 0, 3},
+		{[]uint64{1, 2, 3, 4}, 3, 2000, 3, 0, 3},
 		// Never truncate past raftStatus.Commit.
-		{[]uint64{4, 5, 6}, 3, 100, 4, 3},
+		{[]uint64{4, 5, 6}, 3, 100, 4, 0, 3},
 	}
 	for i, c := range testCases {
 		status := &raft.Status{
@@ -94,7 +96,7 @@ func TestComputeTruncatableIndex(t *testing.T) {
 		for j, v := range c.progress {
 			status.Progress[uint64(j)] = raft.Progress{Match: v}
 		}
-		out := computeTruncatableIndex(status, c.raftLogSize, targetSize, c.firstIndex)
+		out := computeTruncatableIndex(status, c.raftLogSize, targetSize, c.firstIndex, c.pendingSnapshot)
 		if !reflect.DeepEqual(c.expected, out) {
 			t.Errorf("%d: computeTruncatableIndex(...) expected %d, but got %d", i, c.expected, out)
 		}
@@ -114,7 +116,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	store.SetRaftLogQueueActive(false)
 
 	// Test on a new range which should not have a raft group yet.
-	rngNew := createRange(store, 100, roachpb.RKey("a"), roachpb.RKey("c"))
+	rngNew := createReplica(store, 100, roachpb.RKey("a"), roachpb.RKey("c"))
 	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(rngNew)
 	if err != nil {
 		t.Errorf("expected no error, got %s", err)
@@ -204,7 +206,7 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
-	store.scanner.SetDisabled(true)
+	store.SetReplicaScannerActive(false)
 
 	r, err := store.GetReplica(1)
 	if err != nil {

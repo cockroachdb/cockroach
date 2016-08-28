@@ -205,7 +205,7 @@ func (txn *Txn) SystemConfigTrigger() bool {
 
 // NewBatch creates and returns a new empty batch object for use with the Txn.
 func (txn *Txn) NewBatch() *Batch {
-	return &Batch{DB: &txn.db, txn: txn}
+	return &Batch{txn: txn}
 }
 
 // Get retrieves the value for a key, returning the retrieved key/value or an
@@ -287,10 +287,13 @@ func (txn *Txn) Inc(key interface{}, value int64) (KeyValue, error) {
 
 func (txn *Txn) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]KeyValue, error) {
 	b := txn.NewBatch()
+	if maxRows > 0 {
+		b.Header.MaxSpanRequestKeys = maxRows
+	}
 	if !isReverse {
-		b.Scan(begin, end, maxRows)
+		b.Scan(begin, end)
 	} else {
-		b.ReverseScan(begin, end, maxRows)
+		b.ReverseScan(begin, end)
 	}
 	r, err := runOneResult(txn, b)
 	return r.Rows, err
@@ -299,7 +302,8 @@ func (txn *Txn) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]K
 // Scan retrieves the rows between begin (inclusive) and end (exclusive) in
 // ascending order.
 //
-// The returned []KeyValue will contain up to maxRows elements.
+// The returned []KeyValue will contain up to maxRows elements (or all results
+// when zero is supplied).
 //
 // key can be either a byte slice or a string.
 func (txn *Txn) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
@@ -309,7 +313,8 @@ func (txn *Txn) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) 
 // ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
 // in descending order.
 //
-// The returned []KeyValue will contain up to maxRows elements.
+// The returned []KeyValue will contain up to maxRows elements (or all results
+// when zero is supplied).
 //
 // key can be either a byte slice or a string.
 func (txn *Txn) ReverseScan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
@@ -368,7 +373,7 @@ func (txn *Txn) CleanupOnError(err error) {
 		panic("no error")
 	}
 	if replyErr := txn.Rollback(); replyErr != nil {
-		log.Errorf("failure aborting transaction: %s; abort caused by: %s", replyErr, err)
+		log.Errorf(txn.Context, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
 	}
 }
 
@@ -477,8 +482,11 @@ type TxnExecOptions struct {
 	// encountered. If not set, committing or leaving open the txn is the
 	// responsibility of the client.
 	AutoCommit bool
-	// Minimum initial timestamp, if so desired by a higher level (e.g. sql.Executor).
-	MinInitialTimestamp hlc.Timestamp
+	// If not nil, the clock can be used to generate txn timestamps early.
+	// Useful for SQL txns for ensuring that the value returned by
+	// `cluster_logical_timestamp()` is consistent with the commit (serializable)
+	// ordering.
+	Clock *hlc.Clock
 }
 
 // AutoCommitError wraps a non-retryable error coming from auto-commit.
@@ -540,8 +548,11 @@ func (txn *Txn) Exec(
 			// If we're looking at a brand new transaction, then communicate
 			// what should be used as initial timestamp for the KV txn created
 			// by TxnCoordSender.
-			if txn.Proto.OrigTimestamp == hlc.ZeroTimestamp {
-				txn.Proto.OrigTimestamp = opt.MinInitialTimestamp
+			if opt.Clock != nil && !txn.Proto.IsInitialized() {
+				// Control the KV timestamp, such that the value returned by
+				// `cluster_logical_timestamp()` is consistent with the commit
+				// (serializable) ordering.
+				txn.Proto.OrigTimestamp = opt.Clock.Now()
 			}
 		}
 
@@ -581,7 +592,7 @@ func (txn *Txn) Exec(
 			}
 		}
 		if log.V(2) {
-			log.Infof("automatically retrying transaction: %s because of error: %s",
+			log.Infof(context.TODO(), "automatically retrying transaction: %s because of error: %s",
 				txn.DebugName(), err)
 		}
 	}

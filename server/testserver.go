@@ -23,6 +23,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -32,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/ts"
@@ -40,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -217,11 +218,23 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 
 	// Ensure we have the correct number of engines. Add in-memory ones where
 	// needed. There must be at least one store/engine.
-	if params.StoresPerNode < 1 {
-		params.StoresPerNode = 1
+	if len(params.StoreSpecs) == 0 {
+		params.StoreSpecs = []base.StoreSpec{base.DefaultTestStoreSpec}
 	}
-	for i := len(ts.Ctx.Engines); i < params.StoresPerNode; i++ {
-		ts.Ctx.Engines = append(ts.Ctx.Engines, engine.NewInMem(roachpb.Attributes{}, 100<<20, params.Stopper))
+	for _, storeSpec := range params.StoreSpecs {
+		if storeSpec.InMemory {
+			if storeSpec.SizePercent > 0 {
+				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %s", storeSpec))
+			}
+			ts.Ctx.Engines = append(ts.Ctx.Engines, engine.NewInMem(
+				roachpb.Attributes{},
+				storeSpec.SizeInBytes,
+				params.Stopper,
+			))
+		} else {
+			// TODO(bram): This will require some cleanup of on disk files.
+			panic(fmt.Sprintf("test server does not yet support on disk stores: %s", storeSpec))
+		}
 	}
 
 	var err error
@@ -232,7 +245,7 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	// Our context must be shared with our server.
 	ts.Ctx = &ts.Server.ctx
 
-	if err := ts.Server.Start(); err != nil {
+	if err := ts.Server.Start(context.Background()); err != nil {
 		return err
 	}
 
@@ -256,7 +269,8 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 // assuming no additional information is added outside of the normal bootstrap
 // process.
 func ExpectedInitialRangeCount() int {
-	return GetBootstrapSchema().DescriptorCount() - sqlbase.NumSystemDescriptors + 1
+	bootstrap := GetBootstrapSchema()
+	return bootstrap.SystemDescriptorCount() - bootstrap.SystemConfigDescriptorCount() + 1
 }
 
 // WaitForInitialSplits waits for the server to complete its expected initial
@@ -326,7 +340,7 @@ func (ts *TestServer) MustGetSQLCounter(name string) int64 {
 	var c int64
 	var found bool
 
-	ts.sqlExecutor.Registry().Each(func(n string, v interface{}) {
+	ts.registry.Each(func(n string, v interface{}) {
 		if name == n {
 			c = v.(*metric.Counter).Count()
 			found = true
@@ -343,7 +357,9 @@ func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
 	var c int64
 	var found bool
 
-	ts.pgServer.Registry().Each(func(n string, v interface{}) {
+	reg := metric.NewRegistry()
+	reg.AddMetricStruct(ts.pgServer.Metrics())
+	reg.Each(func(n string, v interface{}) {
 		if name == n {
 			c = v.(*metric.Counter).Count()
 			found = true

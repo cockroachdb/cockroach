@@ -2,7 +2,7 @@ import * as React from "react";
 import * as d3 from "d3";
 import { IInjectedProps } from "react-router";
 
-import { nodeID } from "./../util/constants";
+import { nodeIDAttr } from "./../util/constants";
 
 import GraphGroup from "../components/graphGroup";
 import { LineGraph, Axis, Metric } from "../components/linegraph";
@@ -18,7 +18,7 @@ export default class extends React.Component<IInjectedProps, {}> {
 
   render() {
     let sources: string[];
-    let node = this.props.params[nodeID];
+    let node = this.props.params[nodeIDAttr];
     sources = node ? [node] : null;
     let specifier = node ? `on node ${node}` : "across all nodes";
 
@@ -55,7 +55,7 @@ export default class extends React.Component<IInjectedProps, {}> {
                        subtitle="(Max Per Percentile)"
                        tooltip={`The latency between query requests and responses over a 1 minute period.
                                  Percentiles are first calculated on each node.
-                                 For Each percentile, the maximum latency across all nodes is then shown.`}
+                                 For each percentile, the maximum latency across all nodes is then shown.`}
                        sources={sources}>
               <Axis format={ (n: number) => d3.format(".1f")(NanoToMilli(n)) } label="Milliseconds">
                 <Metric name="cr.node.exec.latency-1m-max" title="Max Latency"
@@ -69,9 +69,10 @@ export default class extends React.Component<IInjectedProps, {}> {
               </Axis>
             </LineGraph>
 
-            <LineGraph title="GC Pause Time" sources={sources} tooltip={`The average amount of processor time used by Go’s garbage collector per second ${specifier}. During garbage collection, application code execution is paused.`}>
+            <LineGraph title="GC Pause Time" sources={sources} tooltip={`The ${sources ? "average and maximum" : ""} amount of processor time used by Go’s garbage collector per second ${specifier}. During garbage collection, application code execution is paused.`}>
               <Axis label="Milliseconds" format={ (n) => d3.format(".1f")(NanoToMilli(n)) }>
-                <Metric name="cr.node.sys.gc.pause.ns" title="Time" nonNegativeRate />
+                <Metric name="cr.node.sys.gc.pause.ns" title={`${sources ? "" : "Avg "}Time`} aggregateAvg nonNegativeRate />
+                { node ? null : <Metric name="cr.node.sys.gc.pause.ns" title="Max Time" aggregateMax nonNegativeRate /> }
               </Axis>
             </LineGraph>
 
@@ -110,10 +111,10 @@ export default class extends React.Component<IInjectedProps, {}> {
         <h2>System Resources</h2>
           <GraphGroup groupId="node.resources">
 
-            <StackedAreaGraph title="CPU Usage" sources={sources} tooltip={`The percentage of CPU used by CockroachDB (User %) and system-level operations (Sys %) ${specifier}.`}>
+            <StackedAreaGraph title="CPU Usage" sources={sources} tooltip={`The average percentage of CPU used by CockroachDB (User %) and system-level operations (Sys %) ${specifier}.`}>
               <Axis format={ d3.format(".2%") }>
-                <Metric name="cr.node.sys.cpu.user.percent" title="CPU User %"/>
-                <Metric name="cr.node.sys.cpu.sys.percent" title="CPU Sys %"/>
+                <Metric name="cr.node.sys.cpu.user.percent" aggregateAvg title="CPU User %" />
+                <Metric name="cr.node.sys.cpu.sys.percent" aggregateAvg title="CPU Sys %" />
               </Axis>
             </StackedAreaGraph>
 
@@ -209,6 +210,50 @@ export default class extends React.Component<IInjectedProps, {}> {
                 <Metric name="cr.store.rocksdb.read-amplification" title="Read Amplification" />
               </Axis>
             </LineGraph>
+
+            <StackedAreaGraph title="Raft Time" sources={sources}>
+              <Axis label="Milliseconds" format={ (n) => d3.format(".1f")(NanoToMilli(n)) }>
+                <Metric name="cr.store.raft.process.waitingnanos" title="Waiting" nonNegativeRate />
+                <Metric name="cr.store.raft.process.workingnanos" title="Working" nonNegativeRate />
+                <Metric name="cr.store.raft.process.tickingnanos" title="Ticking" nonNegativeRate />
+              </Axis>
+            </StackedAreaGraph>
+
+            <StackedAreaGraph title="Raft Messages received" sources={sources}>
+              <Axis label="Count" format={ d3.format(".1f") }>
+                <Metric name="cr.store.raft.rcvd.prop" title="MsgProp" nonNegativeRate />
+                <Metric name="cr.store.raft.rcvd.app" title="MsgApp" nonNegativeRate />
+                <Metric name="cr.store.raft.rcvd.appresp" title="MsgAppResp" nonNegativeRate />
+                <Metric name="cr.store.raft.rcvd.vote" title="MsgVote" nonNegativeRate />
+                <Metric name="cr.store.raft.rcvd.voteresp" title="MsgVoteResp" nonNegativeRate />
+                <Metric name="cr.store.raft.rcvd.snap" title="MsgSnap" nonNegativeRate />
+                <Metric name="cr.store.raft.rcvd.heartbeat" title="MsgHeartbeat" nonNegativeRate />
+                <Metric name="cr.store.raft.rcvd.heartbeatresp" title="MsgHeartbeatResp" nonNegativeRate />
+                <Metric name="cr.store.raft.rcvd.transferleader" title="MsgTransferLeader" nonNegativeRate />
+                <Metric name="cr.store.raft.rcvd.timeoutnow" title="MsgTimeoutNow" nonNegativeRate />
+              </Axis>
+            </StackedAreaGraph>
+
+            <LineGraph title="Raft Transport Queue Pending Count" sources={sources}>
+              <Axis format={ d3.format(".1f") }>
+                <Metric name="cr.store.raft.enqueued.pending" title="Outstanding message count in the Raft Transport queue" />
+              </Axis>
+            </LineGraph>
+
+            <LineGraph title="Raft Leaders and LeaseHolders" sources={sources}>
+              <Axis format={ d3.format(".1f") }>
+                <Metric name="cr.store.raft.leaders" title="Ranges on this Store that are Raft Leaders" />
+                <Metric name="cr.store.range.leaseholders" title="Ranges on this Store that are Raft LeaseHolders" />
+                <Metric name="cr.store.range.leaseholders.without.leadership" title="Ranges on this Store that are Raft LeaseHolders but aren't Raft Leaders" />
+              </Axis>
+            </LineGraph>
+
+            <LineGraph title="Raft Ticks" sources={sources}>
+              <Axis format={ d3.format(".1f") }>
+                <Metric name="cr.store.raft.ticks" title="Raft Ticks" nonNegativeRate />
+              </Axis>
+            </LineGraph>
+
           </GraphGroup>
       </div>
     </div>;

@@ -2,9 +2,9 @@ import * as React from "react";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { IInjectedProps } from "react-router";
-import _ = require("lodash");
+import _ from "lodash";
 
-import { nodeID } from "./../util/constants";
+import { nodeIDAttr } from "./../util/constants";
 import { AdminUIState } from "../redux/state";
 import { refreshNodes } from "../redux/apiReducers";
 import { NodeStatus, MetricConstants } from  "../util/proto";
@@ -120,7 +120,7 @@ function TableRow(props: { data: NodeStatus, title: string, valueFn: (s: cockroa
 
 let currentNode = createSelector(
   (state: AdminUIState, props: IInjectedProps): NodeStatus[] => state.cachedData.nodes.data,
-  (state: AdminUIState, props: IInjectedProps): number => parseInt(props.params[nodeID], 10),
+  (state: AdminUIState, props: IInjectedProps): number => parseInt(props.params[nodeIDAttr], 10),
   (nodes, id) => {
     if (!nodes || !id) {
       return undefined;

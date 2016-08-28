@@ -21,6 +21,9 @@ import (
 	"runtime"
 	"time"
 
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -29,21 +32,26 @@ import (
 	"github.com/elastic/gosigar"
 )
 
-const (
-	nameCgoCalls       = "cgocalls"
-	nameGoroutines     = "goroutines"
-	nameGoAllocBytes   = "go.allocbytes"
-	nameGoTotalBytes   = "go.totalbytes"
-	nameCgoAllocBytes  = "cgo.allocbytes"
-	nameCgoTotalBytes  = "cgo.totalbytes"
-	nameGCCount        = "gc.count"
-	nameGCPauseNS      = "gc.pause.ns"
-	nameGCPausePercent = "gc.pause.percent"
-	nameCPUUserNS      = "cpu.user.ns"
-	nameCPUUserPercent = "cpu.user.percent"
-	nameCPUSysNS       = "cpu.sys.ns"
-	nameCPUSysPercent  = "cpu.sys.percent"
-	nameRSS            = "rss"
+var (
+	metaCgoCalls       = metric.Metadata{Name: "sys.cgocalls", Help: "Total number of cgo calls"}
+	metaGoroutines     = metric.Metadata{Name: "sys.goroutines", Help: "Current number of goroutines"}
+	metaGoAllocBytes   = metric.Metadata{Name: "sys.go.allocbytes", Help: "Current bytes allocated by go"}
+	metaGoTotalBytes   = metric.Metadata{Name: "sys.go.totalbytes", Help: "Total bytes allocated by go, but not released"}
+	metaCgoAllocBytes  = metric.Metadata{Name: "sys.cgo.allocbytes", Help: "Current bytes allocated by cgo"}
+	metaCgoTotalBytes  = metric.Metadata{Name: "sys.cgo.totalbytes", Help: "Total bytes allocated by cgo, but not released"}
+	metaGCCount        = metric.Metadata{Name: "sys.gc.count", Help: "Total number of GC runs"}
+	metaGCPauseNS      = metric.Metadata{Name: "sys.gc.pause.ns", Help: "Total GC pause in nanoseconds"}
+	metaGCPausePercent = metric.Metadata{Name: "sys.gc.pause.percent", Help: "Current GC pause percentage"}
+	metaCPUUserNS      = metric.Metadata{Name: "sys.cpu.user.ns", Help: "Total user cpu time in nanoseconds"}
+	metaCPUUserPercent = metric.Metadata{Name: "sys.cpu.user.percent", Help: "Current user cpu percentage"}
+	metaCPUSysNS       = metric.Metadata{Name: "sys.cpu.sys.ns", Help: "Total system cpu time in nanoseconds"}
+	metaCPUSysPercent  = metric.Metadata{Name: "sys.cpu.sys.percent", Help: "Current system cpu percentage"}
+	metaRSS            = metric.Metadata{Name: "sys.rss", Help: "Current process RSS"}
+	metaUptime         = metric.Metadata{Name: "sys.uptime", Help: "Process uptime in seconds"}
+
+	// Build information. Placed here for lack of a better location.
+	// Labels for this metric get populated in MakeRuntimeStatSampler
+	metaBuildTimestamp = metric.Metadata{Name: "build.timestamp", Help: "Build information"}
 )
 
 // getCgoMemStats is a function that fetches stats for the C++ portion of the code.
@@ -59,9 +67,9 @@ var getCgoMemStats func() (uint64, uint64, error)
 // the resulting information in a format that can be easily consumed by status
 // logging systems.
 type RuntimeStatSampler struct {
-	clock    *hlc.Clock
-	registry *metric.Registry
+	clock *hlc.Clock
 
+	startTimeNanos int64
 	// The last sampled values of some statistics are kept only to compute
 	// derivative statistics.
 	lastNow       int64
@@ -72,49 +80,61 @@ type RuntimeStatSampler struct {
 	lastNumGC     uint32
 
 	// Metric gauges maintained by the sampler.
-	cgoCalls       *metric.Gauge
-	goroutines     *metric.Gauge
-	goAllocBytes   *metric.Gauge
-	goTotalBytes   *metric.Gauge
-	cgoAllocBytes  *metric.Gauge
-	cgoTotalBytes  *metric.Gauge
-	gcCount        *metric.Gauge
-	gcPauseNS      *metric.Gauge
-	gcPausePercent *metric.GaugeFloat64
-	cpuUserNS      *metric.Gauge
-	cpuUserPercent *metric.GaugeFloat64
-	cpuSysNS       *metric.Gauge
-	cpuSysPercent  *metric.GaugeFloat64
-	rss            *metric.Gauge
+	CgoCalls       *metric.Gauge
+	Goroutines     *metric.Gauge
+	GoAllocBytes   *metric.Gauge
+	GoTotalBytes   *metric.Gauge
+	CgoAllocBytes  *metric.Gauge
+	CgoTotalBytes  *metric.Gauge
+	GcCount        *metric.Gauge
+	GcPauseNS      *metric.Gauge
+	GcPausePercent *metric.GaugeFloat64
+	CPUUserNS      *metric.Gauge
+	CPUUserPercent *metric.GaugeFloat64
+	CPUSysNS       *metric.Gauge
+	CPUSysPercent  *metric.GaugeFloat64
+	Rss            *metric.Gauge
+	Uptime         *metric.Gauge // We use a gauge to be able to call Update.
+	BuildTimestamp *metric.Gauge
 }
 
 // MakeRuntimeStatSampler constructs a new RuntimeStatSampler object.
 func MakeRuntimeStatSampler(clock *hlc.Clock) RuntimeStatSampler {
-	reg := metric.NewRegistry()
-	return RuntimeStatSampler{
-		registry:       reg,
-		clock:          clock,
-		cgoCalls:       reg.Gauge(nameCgoCalls),
-		goroutines:     reg.Gauge(nameGoroutines),
-		goAllocBytes:   reg.Gauge(nameGoAllocBytes),
-		goTotalBytes:   reg.Gauge(nameGoTotalBytes),
-		cgoAllocBytes:  reg.Gauge(nameCgoAllocBytes),
-		cgoTotalBytes:  reg.Gauge(nameCgoTotalBytes),
-		gcCount:        reg.Gauge(nameGCCount),
-		gcPauseNS:      reg.Gauge(nameGCPauseNS),
-		gcPausePercent: reg.GaugeFloat64(nameGCPausePercent),
-		cpuUserNS:      reg.Gauge(nameCPUUserNS),
-		cpuUserPercent: reg.GaugeFloat64(nameCPUUserPercent),
-		cpuSysNS:       reg.Gauge(nameCPUSysNS),
-		cpuSysPercent:  reg.GaugeFloat64(nameCPUSysPercent),
-		rss:            reg.Gauge(nameRSS),
+	// Construct the build info metric. It is constant.
+	// We first build set the labels on the metadata.
+	info := build.GetInfo()
+	timestamp, err := info.Timestamp()
+	if err != nil {
+		// We can't panic here, tests don't have a build timestamp.
+		log.Warningf(context.TODO(), "Could not parse build timestamp: %v", err)
 	}
-}
 
-// Registry returns the metric.Registry object in which the runtime recorder
-// stores its metric gauges.
-func (rsr RuntimeStatSampler) Registry() *metric.Registry {
-	return rsr.registry
+	metaBuildTimestamp.AddLabel("tag", info.Tag)
+	metaBuildTimestamp.AddLabel("go_version", info.GoVersion)
+
+	buildTimestamp := metric.NewGauge(metaBuildTimestamp)
+	buildTimestamp.Update(timestamp)
+
+	return RuntimeStatSampler{
+		clock:          clock,
+		startTimeNanos: clock.PhysicalNow(),
+		CgoCalls:       metric.NewGauge(metaCgoCalls),
+		Goroutines:     metric.NewGauge(metaGoroutines),
+		GoAllocBytes:   metric.NewGauge(metaGoAllocBytes),
+		GoTotalBytes:   metric.NewGauge(metaGoTotalBytes),
+		CgoAllocBytes:  metric.NewGauge(metaCgoAllocBytes),
+		CgoTotalBytes:  metric.NewGauge(metaCgoTotalBytes),
+		GcCount:        metric.NewGauge(metaGCCount),
+		GcPauseNS:      metric.NewGauge(metaGCPauseNS),
+		GcPausePercent: metric.NewGaugeFloat64(metaGCPausePercent),
+		CPUUserNS:      metric.NewGauge(metaCPUUserNS),
+		CPUUserPercent: metric.NewGaugeFloat64(metaCPUUserPercent),
+		CPUSysNS:       metric.NewGauge(metaCPUSysNS),
+		CPUSysPercent:  metric.NewGaugeFloat64(metaCPUSysPercent),
+		Rss:            metric.NewGauge(metaRSS),
+		Uptime:         metric.NewGauge(metaUptime),
+		BuildTimestamp: buildTimestamp,
+	}
 }
 
 // SampleEnvironment queries the runtime system for various interesting metrics,
@@ -143,11 +163,11 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 	pid := os.Getpid()
 	mem := gosigar.ProcMem{}
 	if err := mem.Get(pid); err != nil {
-		log.Errorf("unable to get mem usage: %v", err)
+		log.Errorf(context.TODO(), "unable to get mem usage: %v", err)
 	}
 	cpu := gosigar.ProcTime{}
 	if err := cpu.Get(pid); err != nil {
-		log.Errorf("unable to get cpu usage: %v", err)
+		log.Errorf(context.TODO(), "unable to get cpu usage: %v", err)
 	}
 
 	// Time statistics can be compared to the total elapsed time to create a
@@ -171,7 +191,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 		var err error
 		cgoAllocated, cgoTotal, err = getCgoMemStats()
 		if err != nil {
-			log.Warningf("problem fetching CGO memory stats: %s, CGO stats will be empty.", err)
+			log.Warningf(context.TODO(), "problem fetching CGO memory stats: %s, CGO stats will be empty.", err)
 		}
 	}
 
@@ -180,29 +200,30 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 
 	// Log summary of statistics to console.
 	cgoRate := float64((numCgoCall-rsr.lastCgoCall)*int64(time.Second)) / dur
-	log.Infof("runtime stats: %s RSS, %d goroutines, %s/%s/%s GO alloc/idle/total, %s/%s CGO alloc/total, %.2fcgo/sec, %.2f/%.2f %%(u/s)time, %.2f %%gc (%dx)",
+	log.Infof(context.TODO(), "runtime stats: %s RSS, %d goroutines, %s/%s/%s GO alloc/idle/total, %s/%s CGO alloc/total, %.2fcgo/sec, %.2f/%.2f %%(u/s)time, %.2f %%gc (%dx)",
 		humanize.IBytes(mem.Resident), numGoroutine,
 		humanize.IBytes(goAllocated), humanize.IBytes(ms.HeapIdle-ms.HeapReleased), humanize.IBytes(goTotal),
 		humanize.IBytes(cgoAllocated), humanize.IBytes(cgoTotal),
 		cgoRate, uPerc, sPerc, pausePerc, ms.NumGC-rsr.lastNumGC)
 	if log.V(2) {
-		log.Infof("memstats: %+v", ms)
+		log.Infof(context.TODO(), "memstats: %+v", ms)
 	}
 	rsr.lastCgoCall = numCgoCall
 	rsr.lastNumGC = ms.NumGC
 
-	rsr.cgoCalls.Update(numCgoCall)
-	rsr.goroutines.Update(int64(numGoroutine))
-	rsr.goAllocBytes.Update(int64(goAllocated))
-	rsr.goTotalBytes.Update(int64(goTotal))
-	rsr.cgoAllocBytes.Update(int64(cgoAllocated))
-	rsr.cgoTotalBytes.Update(int64(cgoTotal))
-	rsr.gcCount.Update(int64(ms.NumGC))
-	rsr.gcPauseNS.Update(int64(ms.PauseTotalNs))
-	rsr.gcPausePercent.Update(pausePerc)
-	rsr.cpuUserNS.Update(newUtime)
-	rsr.cpuUserPercent.Update(uPerc)
-	rsr.cpuSysNS.Update(newStime)
-	rsr.cpuSysPercent.Update(sPerc)
-	rsr.rss.Update(int64(mem.Resident))
+	rsr.CgoCalls.Update(numCgoCall)
+	rsr.Goroutines.Update(int64(numGoroutine))
+	rsr.GoAllocBytes.Update(int64(goAllocated))
+	rsr.GoTotalBytes.Update(int64(goTotal))
+	rsr.CgoAllocBytes.Update(int64(cgoAllocated))
+	rsr.CgoTotalBytes.Update(int64(cgoTotal))
+	rsr.GcCount.Update(int64(ms.NumGC))
+	rsr.GcPauseNS.Update(int64(ms.PauseTotalNs))
+	rsr.GcPausePercent.Update(pausePerc)
+	rsr.CPUUserNS.Update(newUtime)
+	rsr.CPUUserPercent.Update(uPerc)
+	rsr.CPUSysNS.Update(newStime)
+	rsr.CPUSysPercent.Update(sPerc)
+	rsr.Rss.Update(int64(mem.Resident))
+	rsr.Uptime.Update((now - rsr.startTimeNanos) / 1e9)
 }

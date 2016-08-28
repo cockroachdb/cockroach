@@ -78,7 +78,7 @@ func newReplicaGCQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *repl
 func (*replicaGCQueue) shouldQueue(now hlc.Timestamp, rng *Replica, _ config.SystemConfig) (bool, float64) {
 	lastCheck, err := rng.getLastReplicaGCTimestamp()
 	if err != nil {
-		log.Errorf("could not read last replica GC timestamp: %s", err)
+		log.Errorf(context.TODO(), "could not read last replica GC timestamp: %s", err)
 		return false, 0
 	}
 
@@ -167,7 +167,7 @@ func (q *replicaGCQueue) process(
 	if _, currentMember := replyDesc.GetReplicaDescriptor(rng.store.StoreID()); !currentMember {
 		// We are no longer a member of this range; clean up our local data.
 		if log.V(1) {
-			log.Infof("destroying local data from range %d", desc.RangeID)
+			log.Infof(ctx, "destroying local data from range %d", desc.RangeID)
 		}
 		log.Trace(ctx, "destroying local data")
 		if err := rng.store.RemoveReplica(rng, replyDesc, true); err != nil {
@@ -179,7 +179,7 @@ func (q *replicaGCQueue) process(
 		// subsuming range. Shut down raft processing for the former range
 		// and delete any remaining metadata, but do not delete the data.
 		if log.V(1) {
-			log.Infof("removing merged range %d", desc.RangeID)
+			log.Infof(ctx, "removing merged range %d", desc.RangeID)
 		}
 		log.Trace(ctx, "removing merged range")
 		if err := rng.store.RemoveReplica(rng, replyDesc, false); err != nil {

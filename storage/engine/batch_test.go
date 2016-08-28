@@ -574,35 +574,6 @@ func TestBatchConcurrency(t *testing.T) {
 	}
 }
 
-func TestBatchDefer(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-	e := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
-
-	b := e.NewBatch()
-	defer b.Close()
-
-	list := []string{}
-
-	b.Defer(func() {
-		list = append(list, "one")
-	})
-	b.Defer(func() {
-		list = append(list, "two")
-	})
-
-	if err := b.Commit(); err != nil {
-		t.Fatal(err)
-	}
-
-	// Order was reversed when the defers were run.
-	if !reflect.DeepEqual(list, []string{"two", "one"}) {
-		t.Errorf("expected [two, one]; got %v", list)
-	}
-}
-
 func TestBatchBuilder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

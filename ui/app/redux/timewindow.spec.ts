@@ -1,6 +1,7 @@
 import { assert } from "chai";
-import reducer, * as timewindow from "./timewindow";
-import moment = require("moment");
+import reducer from "./timewindow";
+import  * as timewindow from "./timewindow";
+import moment from "moment";
 
 describe("time window reducer", function() {
   describe("actions", function() {
@@ -22,15 +23,17 @@ describe("time window reducer", function() {
     it("should create the correct action to set time window settings", function() {
       let windowSize = moment.duration(10, "s");
       let windowValid = moment.duration(10, "s");
+      let sampleSize = moment.duration(10, "s");
       const expectedSetting = {
         type: timewindow.SET_SCALE,
         payload: {
           windowSize,
           windowValid,
+          sampleSize,
         },
       };
       assert.deepEqual(
-        timewindow.setTimeScale({ windowSize, windowValid }),
+        timewindow.setTimeScale({ windowSize, windowValid, sampleSize }),
         expectedSetting);
     });
   });
@@ -46,6 +49,7 @@ describe("time window reducer", function() {
         {
           windowSize: moment.duration(10, "m"),
           windowValid: moment.duration(10, "s"),
+          sampleSize: moment.duration(10, "s"),
         }
       );
     });
@@ -70,17 +74,20 @@ describe("time window reducer", function() {
     describe("setTimeWindowSettings", () => {
       let newSize = moment.duration(1, "h");
       let newValid = moment.duration(1, "m");
+      let newSample = moment.duration(1, "m");
       it("should correctly overwrite previous value", () => {
         let expected = new timewindow.TimeWindowState();
         expected.scale = {
           windowSize: newSize,
           windowValid: newValid,
+          sampleSize: newSample,
         };
         expected.scaleChanged = true;
         assert.deepEqual(
           reducer(undefined, timewindow.setTimeScale({
             windowSize: newSize,
             windowValid: newValid,
+            sampleSize: newSample,
           })),
           expected
         );

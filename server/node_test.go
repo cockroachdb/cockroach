@@ -19,6 +19,7 @@ package server
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"net"
 	"reflect"
 	"sort"
@@ -68,12 +69,18 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	ctx.ScanInterval = 10 * time.Hour
 	ctx.ConsistencyCheckInterval = 10 * time.Hour
 	grpcServer := rpc.NewServer(nodeRPCContext)
+	serverCtx := makeTestContext()
+	g := gossip.New(
+		context.Background(),
+		nodeRPCContext,
+		grpcServer,
+		serverCtx.GossipBootstrapResolvers,
+		stopper,
+		metric.NewRegistry())
 	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	serverCtx := makeTestContext()
-	g := gossip.New(nodeRPCContext, serverCtx.GossipBootstrapResolvers, stopper)
 	if gossipBS != nil {
 		// Handle possibility of a :0 port specification.
 		if gossipBS.Network() == addr.Network() && gossipBS.String() == addr.String() {
@@ -84,24 +91,23 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 			t.Fatalf("bad gossip address %s: %s", gossipBS, err)
 		}
 		g.SetResolvers([]resolver.Resolver{r})
-		g.Start(grpcServer, ln.Addr())
+		g.Start(ln.Addr())
 	}
 	ctx.Gossip = g
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
-	distSender := kv.NewDistSender(&kv.DistSenderContext{
+	distSender := kv.NewDistSender(&kv.DistSenderConfig{
 		Clock:           ctx.Clock,
 		RPCContext:      nodeRPCContext,
 		RPCRetryOptions: &retryOpts,
 	}, g)
-	tracer := tracing.NewTracer()
-	sender := kv.NewTxnCoordSender(distSender, ctx.Clock, false, tracer, stopper,
-		kv.NewTxnMetrics(metric.NewRegistry()))
+	ctx.Ctx = tracing.WithTracer(context.Background(), tracing.NewTracer())
+	sender := kv.NewTxnCoordSender(ctx.Ctx, distSender, ctx.Clock, false, stopper,
+		kv.MakeTxnMetrics())
 	ctx.DB = client.NewDB(sender)
 	ctx.Transport = storage.NewDummyRaftTransport()
-	ctx.Tracer = tracer
-	node := NewNode(ctx, status.NewMetricsRecorder(ctx.Clock), stopper,
-		kv.NewTxnMetrics(metric.NewRegistry()), sql.MakeEventLogger(nil))
+	node := NewNode(ctx, status.NewMetricsRecorder(ctx.Clock), metric.NewRegistry(), stopper,
+		kv.MakeTxnMetrics(), sql.MakeEventLogger(nil))
 	roachpb.RegisterInternalServer(grpcServer, node)
 	return grpcServer, ln.Addr(), ctx.Clock, node, stopper
 }
@@ -110,7 +116,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 func createAndStartTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
 	*grpc.Server, net.Addr, *Node, *stop.Stopper) {
 	grpcServer, addr, _, node, stopper := createTestNode(addr, engines, gossipBS, t)
-	if err := node.start(addr, engines, roachpb.Attributes{}); err != nil {
+	if err := node.start(context.Background(), addr, engines, roachpb.Attributes{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := WaitForInitialSplits(node.ctx.DB); err != nil {
@@ -141,12 +147,12 @@ func TestBootstrapCluster(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.NewTxnMetrics(metric.NewRegistry())); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics()); err != nil {
 		t.Fatal(err)
 	}
 
 	// Scan the complete contents of the local database directly from the engine.
-	rows, _, err := engine.MVCCScan(context.Background(), e, keys.LocalMax, roachpb.KeyMax, 0, hlc.MaxTimestamp, true, nil)
+	rows, _, _, err := engine.MVCCScan(context.Background(), e, keys.LocalMax, roachpb.KeyMax, math.MaxInt64, hlc.MaxTimestamp, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +188,7 @@ func TestBootstrapNewStore(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.NewTxnMetrics(metric.NewRegistry())); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -208,7 +214,7 @@ func TestBootstrapNewStore(t *testing.T) {
 
 	// Check whether all stores are started properly.
 	if err := node.stores.VisitStores(func(s *storage.Store) error {
-		if s.IsStarted() == false {
+		if !s.IsStarted() {
 			return errors.Errorf("fail to start store: %s", s)
 		}
 		return nil
@@ -224,7 +230,7 @@ func TestNodeJoin(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.NewTxnMetrics(metric.NewRegistry())); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -278,7 +284,7 @@ func TestNodeJoinSelf(t *testing.T) {
 	engines := []engine.Engine{engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)}
 	_, addr, _, node, stopper := createTestNode(util.TestAddr, engines, util.TestAddr, t)
 	defer stopper.Stop()
-	err := node.start(addr, engines, roachpb.Attributes{})
+	err := node.start(context.Background(), addr, engines, roachpb.Attributes{})
 	if err != errCannotJoinSelf {
 		t.Fatalf("expected err %s; got %s", errCannotJoinSelf, err)
 	}
@@ -291,7 +297,7 @@ func TestCorruptedClusterID(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
 	defer engineStopper.Stop()
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.NewTxnMetrics(metric.NewRegistry())); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -308,7 +314,7 @@ func TestCorruptedClusterID(t *testing.T) {
 	engines := []engine.Engine{e}
 	_, serverAddr, _, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
 	stopper.Stop()
-	if err := node.start(serverAddr, engines, roachpb.Attributes{}); !testutils.IsError(err, "unidentified store") {
+	if err := node.start(context.Background(), serverAddr, engines, roachpb.Attributes{}); !testutils.IsError(err, "unidentified store") {
 		t.Errorf("unexpected error %v", err)
 	}
 }
@@ -520,7 +526,7 @@ func TestStatusSummaries(t *testing.T) {
 	// were multiple replicas, more care would need to be taken in the initial
 	// syncFeed().
 	forceWriteStatus := func() {
-		if err := ts.node.computePeriodicMetrics(); err != nil {
+		if err := ts.node.computePeriodicMetrics(0); err != nil {
 			t.Fatalf("error publishing store statuses: %s", err)
 		}
 

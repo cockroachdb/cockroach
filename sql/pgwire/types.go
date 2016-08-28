@@ -25,15 +25,18 @@ import (
 	"math/big"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
-	"gopkg.in/inf.v0"
-
-	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/pq"
 	"github.com/cockroachdb/pq/oid"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+	"gopkg.in/inf.v0"
+
+	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util/duration"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 //go:generate stringer -type=formatCode
@@ -120,7 +123,7 @@ const secondsInDay = 24 * 60 * 60
 
 func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) {
 	if log.V(2) {
-		log.Infof("pgwire writing TEXT datum of type: %T, %#v", d, d)
+		log.Infof(context.TODO(), "pgwire writing TEXT datum of type: %T, %#v", d, d)
 	}
 	if d == parser.DNull {
 		// NULL is encoded as -1; all other values have a length prefix.
@@ -138,7 +141,6 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 
 	case *parser.DInt:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		// TODO(tamird): @petermattis sez this allocates. Investigate.
 		s := strconv.AppendInt(b.putbuf[4:4], int64(*v), 10)
 		b.putInt32(int32(len(s)))
 		b.write(s)
@@ -190,9 +192,9 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 	}
 }
 
-func (b *writeBuffer) writeBinaryDatum(d parser.Datum) {
+func (b *writeBuffer) writeBinaryDatum(d parser.Datum, sessionLoc *time.Location) {
 	if log.V(2) {
-		log.Infof("pgwire writing BINARY datum of type: %T, %#v", d, d)
+		log.Infof(context.TODO(), "pgwire writing BINARY datum of type: %T, %#v", d, d)
 	}
 	if d == parser.DNull {
 		// NULL is encoded as -1; all other values have a length prefix.
@@ -233,25 +235,41 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum) {
 			alloc.pgNum.sign = pgNumericNeg
 		}
 
-		// Much of this logic is cribbed from libpqtypes' str2num, but padding is
-		// managed manually instead of actually padding the string, for reasons of
-		// performance.
-		decDigits := alloc.bigI.Abs(v.UnscaledBig()).String()
-
-		// Convert pure-decimal representation to base NBASE. First we need to
-		// determine the converted weight and ndigits.
-		ddigits := int16(len(decDigits))
-		dweight := ddigits - alloc.pgNum.dscale - 1
-		if dweight >= 0 {
-			alloc.pgNum.weight = (dweight+1+pgDecDigits-1)/pgDecDigits - 1
-		} else {
-			alloc.pgNum.weight = -((-dweight-1)/pgDecDigits + 1)
+		isZero := func(r rune) bool {
+			return r == '0'
 		}
 
-		// The number of decimal zeroes to insert before the first given digit to
-		// have a correctly aligned first NBASE digit.
-		offset := (alloc.pgNum.weight+1)*pgDecDigits - (dweight + 1)
-		alloc.pgNum.ndigits = (ddigits + offset + pgDecDigits - 1) / pgDecDigits
+		// Mostly cribbed from libpqtypes' str2num.
+		digits := strings.TrimLeftFunc(alloc.bigI.Abs(v.UnscaledBig()).String(), isZero)
+		dweight := len(digits) - int(alloc.pgNum.dscale) - 1
+		digits = strings.TrimRightFunc(digits, isZero)
+
+		if dweight >= 0 {
+			alloc.pgNum.weight = int16((dweight+1+pgDecDigits-1)/pgDecDigits - 1)
+		} else {
+			alloc.pgNum.weight = int16(-((-dweight-1)/pgDecDigits + 1))
+		}
+		offset := (int(alloc.pgNum.weight)+1)*pgDecDigits - (dweight + 1)
+		alloc.pgNum.ndigits = int16((len(digits) + offset + pgDecDigits - 1) / pgDecDigits)
+
+		if len(digits) == 0 {
+			offset = 0
+			alloc.pgNum.ndigits = 0
+			alloc.pgNum.weight = 0
+		}
+
+		digitIdx := -offset
+
+		nextDigit := func() int16 {
+			var ndigit int16
+			for nextDigitIdx := digitIdx + pgDecDigits; digitIdx < nextDigitIdx; digitIdx++ {
+				ndigit *= 10
+				if digitIdx >= 0 && digitIdx < len(digits) {
+					ndigit += int16(digits[digitIdx] - '0')
+				}
+			}
+			return ndigit
+		}
 
 		b.putInt32(int32(2 * (4 + alloc.pgNum.ndigits)))
 		b.putInt16(alloc.pgNum.ndigits)
@@ -259,40 +277,8 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum) {
 		b.putInt16(int16(alloc.pgNum.sign))
 		b.putInt16(alloc.pgNum.dscale)
 
-		{
-			// Emulate leading padding.
-			digitLength := pgDecDigits - offset
-			var digit int16
-			for _, decDigit := range decDigits[:digitLength] {
-				digit *= 10
-				digit += int16(decDigit - '0')
-			}
-			b.putInt16(digit)
-			decDigits = decDigits[digitLength:]
-		}
-
-		// No padding for the middle digits.
-		for n := int16(0); n < alloc.pgNum.ndigits-2; n++ {
-			var digit int16
-			for _, decDigit := range decDigits[:pgDecDigits] {
-				digit *= 10
-				digit += int16(decDigit - '0')
-			}
-			b.putInt16(int16(digit))
-			decDigits = decDigits[pgDecDigits:]
-		}
-
-		{
-			var digit int16
-			for _, decDigit := range decDigits {
-				digit *= 10
-				digit += int16(decDigit - '0')
-			}
-			// Emulate trailing padding.
-			for i := 0; i < pgDecDigits-len(decDigits); i++ {
-				digit *= 10
-			}
-			b.putInt16(digit)
+		for digitIdx < len(digits) {
+			b.putInt16(nextDigit())
 		}
 
 	case *parser.DBytes:
@@ -301,6 +287,18 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum) {
 
 	case *parser.DString:
 		b.writeLengthPrefixedString(string(*v))
+
+	case *parser.DTimestamp:
+		b.putInt32(8)
+		b.putInt64(timeToPgBinary(v.Time, nil))
+
+	case *parser.DTimestampTZ:
+		b.putInt32(8)
+		b.putInt64(timeToPgBinary(v.Time, sessionLoc))
+
+	case *parser.DDate:
+		b.putInt32(4)
+		b.putInt32(dateToPgBinary(v))
 
 	default:
 		b.setError(errors.Errorf("unsupported type %T", d))
@@ -357,6 +355,45 @@ func parseTs(str string) (time.Time, error) {
 	// CockroachDB send in responses, so this allows roundtripping of the encoded
 	// timestamps that we send.
 	return pq.ParseTimestamp(nil, str)
+}
+
+var (
+	pgEpochJDate         = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	pgEpochJDateFromUnix = int32(pgEpochJDate.Unix() / secondsInDay)
+)
+
+// timeToPgBinary calculates the Postgres binary format for a timestamp. The timestamp
+// is represented as the number of microseconds between the given time and Jan 1, 2000
+// (dubbed the pgEpochJDate), stored within an int64.
+func timeToPgBinary(t time.Time, offset *time.Location) int64 {
+	if offset != nil {
+		t = t.In(offset)
+	} else {
+		t = t.UTC()
+	}
+	return duration.DiffMicros(t, pgEpochJDate)
+}
+
+// pgBinaryToTime takes an int64 and interprets it as the Postgres binary format
+// for a timestamp. To create a timestamp from this value, it takes the microseconds
+// delta and adds it to pgEpochJDate.
+func pgBinaryToTime(i int64) time.Time {
+	return duration.AddMicros(pgEpochJDate, i)
+}
+
+// dateToPgBinary calculates the Postgres binary format for a date. The date is
+// represented as the number of days between the given date and Jan 1, 2000
+// (dubbed the pgEpochJDate), stored within an int32.
+func dateToPgBinary(d *parser.DDate) int32 {
+	return int32(*d) - pgEpochJDateFromUnix
+}
+
+// pgBinaryToDate takes an int32 and interprets it as the Postgres binary format
+// for a date. To create a date from this value, it takes the day delta and adds
+// it to pgEpochJDate.
+func pgBinaryToDate(i int32) *parser.DDate {
+	daysSinceEpoch := pgEpochJDateFromUnix + i
+	return parser.NewDDate(parser.DDate(daysSinceEpoch))
 }
 
 var (
@@ -425,11 +462,10 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.NewDInt(parser.DInt(i))
 		case formatBinary:
-			var i int16
-			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &i)
-			if err != nil {
-				return d, err
+			if len(b) < 2 {
+				return d, errors.Errorf("int2 requires 2 bytes for binary format")
 			}
+			i := int16(binary.BigEndian.Uint16(b))
 			d = parser.NewDInt(parser.DInt(i))
 		default:
 			return d, errors.Errorf("unsupported int2 format code: %s", code)
@@ -443,11 +479,10 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.NewDInt(parser.DInt(i))
 		case formatBinary:
-			var i int32
-			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &i)
-			if err != nil {
-				return d, err
+			if len(b) < 4 {
+				return d, errors.Errorf("int4 requires 4 bytes for binary format")
 			}
+			i := int32(binary.BigEndian.Uint32(b))
 			d = parser.NewDInt(parser.DInt(i))
 		default:
 			return d, errors.Errorf("unsupported int4 format code: %s", code)
@@ -461,11 +496,10 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.NewDInt(parser.DInt(i))
 		case formatBinary:
-			var i int64
-			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &i)
-			if err != nil {
-				return d, err
+			if len(b) < 8 {
+				return d, errors.Errorf("int8 requires 8 bytes for binary format")
 			}
+			i := int64(binary.BigEndian.Uint64(b))
 			d = parser.NewDInt(parser.DInt(i))
 		default:
 			return d, errors.Errorf("unsupported int8 format code: %s", code)
@@ -479,11 +513,10 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.NewDFloat(parser.DFloat(f))
 		case formatBinary:
-			var f float32
-			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &f)
-			if err != nil {
-				return d, err
+			if len(b) < 4 {
+				return d, errors.Errorf("float4 requires 4 bytes for binary format")
 			}
+			f := math.Float32frombits(binary.BigEndian.Uint32(b))
 			d = parser.NewDFloat(parser.DFloat(f))
 		default:
 			return d, errors.Errorf("unsupported float4 format code: %s", code)
@@ -497,11 +530,10 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			d = parser.NewDFloat(parser.DFloat(f))
 		case formatBinary:
-			var f float64
-			err := binary.Read(bytes.NewReader(b), binary.BigEndian, &f)
-			if err != nil {
-				return d, err
+			if len(b) < 8 {
+				return d, errors.Errorf("float8 requires 8 bytes for binary format")
 			}
+			f := math.Float64frombits(binary.BigEndian.Uint64(b))
 			d = parser.NewDFloat(parser.DFloat(f))
 		default:
 			return d, errors.Errorf("unsupported float8 format code: %s", code)
@@ -535,28 +567,49 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				}
 			}
 
-			decDigits := make([]byte, 0, alloc.pgNum.ndigits*pgDecDigits)
-			for i := int16(0); i < alloc.pgNum.ndigits-1; i++ {
-				if err := binary.Read(r, binary.BigEndian, &alloc.i16); err != nil {
+			if alloc.pgNum.ndigits > 0 {
+				decDigits := make([]byte, 0, alloc.pgNum.ndigits*pgDecDigits)
+				nextDigit := func() error {
+					if err := binary.Read(r, binary.BigEndian, &alloc.i16); err != nil {
+						return err
+					}
+					numZeroes := pgDecDigits
+					for i16 := alloc.i16; i16 > 0; i16 /= 10 {
+						numZeroes--
+					}
+					for ; numZeroes > 0; numZeroes-- {
+						decDigits = append(decDigits, '0')
+					}
+					return nil
+				}
+
+				for i := int16(0); i < alloc.pgNum.ndigits-1; i++ {
+					if err := nextDigit(); err != nil {
+						return d, err
+					}
+					if alloc.i16 > 0 {
+						decDigits = strconv.AppendUint(decDigits, uint64(alloc.i16), 10)
+					}
+				}
+
+				// The last digit may contain padding, which we need to deal with.
+				if err := nextDigit(); err != nil {
 					return d, err
 				}
-				decDigits = strconv.AppendUint(decDigits, uint64(alloc.i16), 10)
-			}
-
-			// The last digit may contain padding, which we need to deal with.
-			if err := binary.Read(r, binary.BigEndian, &alloc.i16); err != nil {
-				return d, err
-			}
-			dscale := (alloc.pgNum.ndigits - 1 - alloc.pgNum.weight) * pgDecDigits
-			if overScale := dscale - alloc.pgNum.dscale; overScale > 0 {
-				dscale -= overScale
-				for i := int16(0); i < overScale; i++ {
-					alloc.i16 /= 10
+				dscale := (alloc.pgNum.ndigits - (alloc.pgNum.weight + 1)) * pgDecDigits
+				if overScale := dscale - alloc.pgNum.dscale; overScale > 0 {
+					dscale -= overScale
+					for i := int16(0); i < overScale; i++ {
+						alloc.i16 /= 10
+					}
 				}
+				decDigits = strconv.AppendUint(decDigits, uint64(alloc.i16), 10)
+				decString := string(decDigits)
+				if _, ok := alloc.dd.UnscaledBig().SetString(decString, 10); !ok {
+					return nil, errors.Errorf("could not parse string %q as decimal", decString)
+				}
+				alloc.dd.SetScale(inf.Scale(dscale))
 			}
-			decDigits = strconv.AppendUint(decDigits, uint64(alloc.i16), 10)
-			alloc.dd.UnscaledBig().SetString(string(decDigits), 10)
-			alloc.dd.SetScale(inf.Scale(dscale))
 
 			switch alloc.pgNum.sign {
 			case pgNumericPos:
@@ -608,6 +661,12 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				return d, errors.Errorf("could not parse string %q as timestamp", b)
 			}
 			d = parser.MakeDTimestamp(ts, time.Microsecond)
+		case formatBinary:
+			if len(b) < 8 {
+				return d, errors.Errorf("timestamp requires 8 bytes for binary format")
+			}
+			i := int64(binary.BigEndian.Uint64(b))
+			d = parser.MakeDTimestamp(pgBinaryToTime(i), time.Microsecond)
 		default:
 			return d, errors.Errorf("unsupported timestamp format code: %s", code)
 		}
@@ -619,6 +678,12 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				return d, errors.Errorf("could not parse string %q as timestamp", b)
 			}
 			d = parser.MakeDTimestampTZ(ts, time.Microsecond)
+		case formatBinary:
+			if len(b) < 8 {
+				return d, errors.Errorf("timestamptz requires 8 bytes for binary format")
+			}
+			i := int64(binary.BigEndian.Uint64(b))
+			d = parser.MakeDTimestampTZ(pgBinaryToTime(i), time.Microsecond)
 		default:
 			return d, errors.Errorf("unsupported timestamptz format code: %s", code)
 		}
@@ -635,6 +700,12 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			daysSinceEpoch := ts.Unix() / secondsInDay
 			d = parser.NewDDate(parser.DDate(daysSinceEpoch))
+		case formatBinary:
+			if len(b) < 4 {
+				return d, errors.Errorf("date requires 4 bytes for binary format")
+			}
+			i := int32(binary.BigEndian.Uint32(b))
+			d = pgBinaryToDate(i)
 		default:
 			return d, errors.Errorf("unsupported date format code: %s", code)
 		}

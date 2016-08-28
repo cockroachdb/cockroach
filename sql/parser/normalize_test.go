@@ -19,7 +19,7 @@ package parser
 import "testing"
 
 func TestNormalizeExpr(t *testing.T) {
-	defer mockQualifiedNameTypes(map[string]Datum{
+	defer mockNameTypes(map[string]Datum{
 		"a": TypeInt,
 		"b": TypeInt,
 		"c": TypeInt,

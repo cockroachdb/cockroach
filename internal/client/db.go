@@ -132,6 +132,14 @@ type Result struct {
 
 	// Keys is set by some operations instead of returning the rows themselves.
 	Keys []roachpb.Key
+
+	// ResumeSpan is the the span to be used on the next operation in a
+	// sequence of operations. It is returned whenever an operation over a
+	// span of keys is bounded and the operation returns before completely
+	// running over the span. It allows the operation to be called again with
+	// a new shorter span of keys. An empty span is returned when the
+	// operation has successfully completed running through the span.
+	ResumeSpan roachpb.Span
 }
 
 func (r Result) String() string {
@@ -193,12 +201,6 @@ func NewDBWithContext(sender Sender, ctx DBContext) *DB {
 	}
 }
 
-// NewBatch creates and returns a new empty batch object for use with the DB.
-// TODO(tschottdorf): it appears this can be unexported.
-func (db *DB) NewBatch() *Batch {
-	return &Batch{DB: db}
-}
-
 // Get retrieves the value for a key, returning the retrieved key/value or an
 // error.
 //
@@ -207,7 +209,7 @@ func (db *DB) NewBatch() *Batch {
 //
 // key can be either a byte slice or a string.
 func (db *DB) Get(key interface{}) (KeyValue, error) {
-	b := db.NewBatch()
+	b := &Batch{}
 	b.Get(key)
 	return runOneRow(db, b)
 }
@@ -229,7 +231,7 @@ func (db *DB) GetProto(key interface{}, msg proto.Message) error {
 // key can be either a byte slice or a string. value can be any key type, a
 // proto.Message or any Go primitive type (bool, int, etc).
 func (db *DB) Put(key, value interface{}) error {
-	b := db.NewBatch()
+	b := &Batch{}
 	b.Put(key, value)
 	_, err := runOneResult(db, b)
 	return err
@@ -243,7 +245,7 @@ func (db *DB) Put(key, value interface{}) error {
 // key can be either a byte slice or a string. value can be any key type, a
 // proto.Message or any Go primitive type (bool, int, etc).
 func (db *DB) PutInline(key, value interface{}) error {
-	b := db.NewBatch()
+	b := &Batch{}
 	b.PutInline(key, value)
 	_, err := runOneResult(db, b)
 	return err
@@ -257,7 +259,7 @@ func (db *DB) PutInline(key, value interface{}) error {
 // key can be either a byte slice or a string. value can be any key type, a
 // proto.Message or any Go primitive type (bool, int, etc).
 func (db *DB) CPut(key, value, expValue interface{}) error {
-	b := db.NewBatch()
+	b := &Batch{}
 	b.CPut(key, value, expValue)
 	_, err := runOneResult(db, b)
 	return err
@@ -270,7 +272,7 @@ func (db *DB) CPut(key, value, expValue interface{}) error {
 // proto.Message or any Go primitive type (bool, int, etc). It is illegal to
 // set value to nil.
 func (db *DB) InitPut(key, value interface{}) error {
-	b := db.NewBatch()
+	b := &Batch{}
 	b.InitPut(key, value)
 	_, err := runOneResult(db, b)
 	return err
@@ -282,7 +284,7 @@ func (db *DB) InitPut(key, value interface{}) error {
 //
 // key can be either a byte slice or a string.
 func (db *DB) Inc(key interface{}, value int64) (KeyValue, error) {
-	b := db.NewBatch()
+	b := &Batch{}
 	b.Inc(key, value)
 	return runOneRow(db, b)
 }
@@ -293,12 +295,15 @@ func (db *DB) scan(
 	isReverse bool,
 	readConsistency roachpb.ReadConsistencyType,
 ) ([]KeyValue, error) {
-	b := db.NewBatch()
+	b := &Batch{}
 	b.Header.ReadConsistency = readConsistency
+	if maxRows > 0 {
+		b.Header.MaxSpanRequestKeys = maxRows
+	}
 	if !isReverse {
-		b.Scan(begin, end, maxRows)
+		b.Scan(begin, end)
 	} else {
-		b.ReverseScan(begin, end, maxRows)
+		b.ReverseScan(begin, end)
 	}
 	r, err := runOneResult(db, b)
 	return r.Rows, err
@@ -328,7 +333,7 @@ func (db *DB) ReverseScan(begin, end interface{}, maxRows int64) ([]KeyValue, er
 //
 // key can be either a byte slice or a string.
 func (db *DB) Del(keys ...interface{}) error {
-	b := db.NewBatch()
+	b := &Batch{}
 	b.Del(keys...)
 	_, err := runOneResult(db, b)
 	return err
@@ -340,7 +345,7 @@ func (db *DB) Del(keys ...interface{}) error {
 //
 // key can be either a byte slice or a string.
 func (db *DB) DelRange(begin, end interface{}) error {
-	b := db.NewBatch()
+	b := &Batch{}
 	b.DelRange(begin, end, false)
 	_, err := runOneResult(db, b)
 	return err
@@ -353,7 +358,7 @@ func (db *DB) DelRange(begin, end interface{}) error {
 //
 // key can be either a byte slice or a string.
 func (db *DB) AdminMerge(key interface{}) error {
-	b := db.NewBatch()
+	b := &Batch{}
 	b.adminMerge(key)
 	_, err := runOneResult(db, b)
 	return err
@@ -363,8 +368,20 @@ func (db *DB) AdminMerge(key interface{}) error {
 //
 // key can be either a byte slice or a string.
 func (db *DB) AdminSplit(splitKey interface{}) error {
-	b := db.NewBatch()
+	b := &Batch{}
 	b.adminSplit(splitKey)
+	_, err := runOneResult(db, b)
+	return err
+}
+
+// AdminTransferLease transfers the lease for the range containing key to the
+// specified target. The target replica for the lease transfer must be one of
+// the existing replicas of the range.
+//
+// key can be either a byte slice or a string.
+func (db *DB) AdminTransferLease(key interface{}, target roachpb.StoreID) error {
+	b := &Batch{}
+	b.adminTransferLease(key, target)
 	_, err := runOneResult(db, b)
 	return err
 }
@@ -373,7 +390,7 @@ func (db *DB) AdminSplit(splitKey interface{}) error {
 // the key span. It logs a diff of all the keys that are inconsistent
 // when withDiff is set to true.
 func (db *DB) CheckConsistency(begin, end interface{}, withDiff bool) error {
-	b := db.NewBatch()
+	b := &Batch{}
 	b.CheckConsistency(begin, end, withDiff)
 	_, err := runOneResult(db, b)
 	return err
@@ -425,10 +442,12 @@ func (db *DB) Run(b *Batch) error {
 // cause problems in the event it must be run more than once.
 //
 // If you need more control over how the txn is executed, check out txn.Exec().
-func (db *DB) Txn(retryable func(txn *Txn) error) error {
+func (db *DB) Txn(ctx context.Context, retryable func(txn *Txn) error) error {
+	// TODO(radu): we should open a tracing Span here (we need to figure out how
+	// to use the correct tracer).
 	// TODO(dan): This context should, at longest, live for the lifetime of this
 	// method. Add a defered cancel.
-	txn := NewTxn(context.TODO(), *db)
+	txn := NewTxn(ctx, *db)
 	txn.SetDebugName("", 1)
 	err := txn.Exec(TxnExecOptions{AutoRetry: true, AutoCommit: true},
 		func(txn *Txn, _ *TxnExecOptions) error {
@@ -471,7 +490,7 @@ func (db *DB) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Er
 	br, pErr := db.sender.Send(context.TODO(), ba)
 	if pErr != nil {
 		if log.V(1) {
-			log.Infof("failed batch: %s", pErr)
+			log.Infof(context.TODO(), "failed batch: %s", pErr)
 		}
 		return nil, pErr
 	}

@@ -35,9 +35,11 @@ func TestDropDatabase(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
+	// Fix the column families so the key counts below don't change if the
+	// family heuristics are updated.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR, FAMILY (k), FAMILY (v));
 INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 `); err != nil {
 		t.Fatal(err)
@@ -214,9 +216,11 @@ func TestDropTable(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
+	// Fix the column families so the key counts below don't change if the
+	// family heuristics are updated.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR, FAMILY (k), FAMILY (v));
 INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 `); err != nil {
 		t.Fatal(err)
@@ -269,7 +273,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	// Test that deleted table cannot be used. This prevents regressions where
 	// name -> descriptor ID caches might make this statement erronously work.
 	if _, err := sqlDB.Exec(`SELECT * FROM t.kv`); !testutils.IsError(err, `table "t.kv" does not exist`) {
-		t.Fatalf("different error than expected: %s", err)
+		t.Fatalf("different error than expected: %v", err)
 	}
 
 	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
@@ -323,7 +327,7 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 	// until the schema changer runs, but we shouldn't be able to ALTER it.
 	if _, err := tx.Exec(`ALTER TABLE t.kv ADD COLUMN w CHAR`); !testutils.IsError(err,
 		`table "kv" has been deleted`) {
-		t.Fatalf("different error than expected: %s", err)
+		t.Fatalf("different error than expected: %v", err)
 	}
 
 	// Can't commit after ALTER errored, so we ROLLBACK.

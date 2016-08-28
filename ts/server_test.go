@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func TestQuery(t *testing.T) {
+func TestServerQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
@@ -105,11 +105,8 @@ func TestQuery(t *testing.T) {
 		Results: []tspb.TimeSeriesQueryResponse_Result{
 			{
 				Query: tspb.Query{
-					Name:             "test.metric",
-					Sources:          []string{"source1", "source2"},
-					Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
-					SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
-					Derivative:       tspb.TimeSeriesQueryDerivative_NONE.Enum(),
+					Name:    "test.metric",
+					Sources: []string{"source1", "source2"},
 				},
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
@@ -128,11 +125,8 @@ func TestQuery(t *testing.T) {
 			},
 			{
 				Query: tspb.Query{
-					Name:             "other.metric",
-					Sources:          []string{""},
-					Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
-					SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
-					Derivative:       tspb.TimeSeriesQueryDerivative_NONE.Enum(),
+					Name:    "other.metric",
+					Sources: []string{""},
 				},
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
@@ -175,7 +169,8 @@ func TestQuery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := tspb.NewTimeSeriesClient(conn).Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+	client := tspb.NewTimeSeriesClient(conn)
+	response, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
 		StartNanos: 500 * 1e9,
 		EndNanos:   526 * 1e9,
 		Queries: []tspb.Query{
@@ -190,6 +185,50 @@ func TestQuery(t *testing.T) {
 				Downsampler:      tspb.TimeSeriesQueryAggregator_MAX.Enum(),
 				SourceAggregator: tspb.TimeSeriesQueryAggregator_MAX.Enum(),
 				Derivative:       tspb.TimeSeriesQueryDerivative_DERIVATIVE.Enum(),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range response.Results {
+		sort.Strings(r.Sources)
+	}
+	if !proto.Equal(response, expectedResult) {
+		t.Fatalf("actual response \n%v\n did not match expected response \n%v",
+			response, expectedResult)
+	}
+
+	// Test a query with downsampling enabled. The query is a sum of maximums.
+	expectedResult = &tspb.TimeSeriesQueryResponse{
+		Results: []tspb.TimeSeriesQueryResponse_Result{
+			{
+				Query: tspb.Query{
+					Name:        "test.metric",
+					Sources:     []string{"source1", "source2"},
+					Downsampler: tspb.TimeSeriesQueryAggregator_MAX.Enum(),
+				},
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 250 * 1e9,
+						Value:          200.0,
+					},
+					{
+						TimestampNanos: 750 * 1e9,
+						Value:          650.0,
+					},
+				},
+			},
+		},
+	}
+	response, err = client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos:  0,
+		EndNanos:    1000 * 1e9,
+		SampleNanos: 500 * 1e9,
+		Queries: []tspb.Query{
+			{
+				Name:        "test.metric",
+				Downsampler: tspb.TimeSeriesQueryAggregator_MAX.Enum(),
 			},
 		},
 	})

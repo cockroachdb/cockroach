@@ -1,3 +1,3 @@
-export const databaseName = "database_name";
-export const nodeID = "node_id";
-export const tableName = "table_name";
+export const databaseNameAttr = "database_name";
+export const nodeIDAttr = "node_id";
+export const tableNameAttr = "table_name";

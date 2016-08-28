@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
@@ -73,16 +74,16 @@ func TestQueryCounts(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		checkCounterEQ(t, s, "txn.begin.count", tc.txnBeginCount)
-		checkCounterEQ(t, s, "select.count", tc.selectCount)
-		checkCounterEQ(t, s, "update.count", tc.updateCount)
-		checkCounterEQ(t, s, "insert.count", tc.insertCount)
-		checkCounterEQ(t, s, "delete.count", tc.deleteCount)
-		checkCounterEQ(t, s, "ddl.count", tc.ddlCount)
-		checkCounterEQ(t, s, "misc.count", tc.miscCount)
-		checkCounterEQ(t, s, "txn.commit.count", tc.txnCommitCount)
-		checkCounterEQ(t, s, "txn.rollback.count", tc.txnRollbackCount)
-		checkCounterEQ(t, s, "txn.abort.count", 0)
+		checkCounterEQ(t, s, sql.MetaTxnBegin, tc.txnBeginCount)
+		checkCounterEQ(t, s, sql.MetaTxnCommit, tc.txnCommitCount)
+		checkCounterEQ(t, s, sql.MetaTxnRollback, tc.txnRollbackCount)
+		checkCounterEQ(t, s, sql.MetaTxnAbort, 0)
+		checkCounterEQ(t, s, sql.MetaSelect, tc.selectCount)
+		checkCounterEQ(t, s, sql.MetaUpdate, tc.updateCount)
+		checkCounterEQ(t, s, sql.MetaInsert, tc.insertCount)
+		checkCounterEQ(t, s, sql.MetaDelete, tc.deleteCount)
+		checkCounterEQ(t, s, sql.MetaDdl, tc.ddlCount)
+		checkCounterEQ(t, s, sql.MetaMisc, tc.miscCount)
 
 		// Everything after this query will also fail, so quit now to avoid deluge of errors.
 		if t.Failed() {
@@ -133,11 +134,11 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	checkCounterEQ(t, s, "txn.abort.count", 1)
-	checkCounterEQ(t, s, "txn.begin.count", 1)
-	checkCounterEQ(t, s, "txn.rollback.count", 0)
-	checkCounterEQ(t, s, "txn.commit.count", 0)
-	checkCounterEQ(t, s, "insert.count", 1)
+	checkCounterEQ(t, s, sql.MetaTxnAbort, 1)
+	checkCounterEQ(t, s, sql.MetaTxnBegin, 1)
+	checkCounterEQ(t, s, sql.MetaTxnRollback, 0)
+	checkCounterEQ(t, s, sql.MetaTxnCommit, 0)
+	checkCounterEQ(t, s, sql.MetaInsert, 1)
 }
 
 // TestErrorDuringTransaction tests that the transaction abort count goes up when a query
@@ -157,7 +158,7 @@ func TestAbortCountErrorDuringTransaction(t *testing.T) {
 		t.Fatal("Expected an error but didn't get one")
 	}
 
-	checkCounterEQ(t, s, "txn.abort.count", 1)
-	checkCounterEQ(t, s, "txn.begin.count", 1)
-	checkCounterEQ(t, s, "select.count", 1)
+	checkCounterEQ(t, s, sql.MetaTxnAbort, 1)
+	checkCounterEQ(t, s, sql.MetaTxnBegin, 1)
+	checkCounterEQ(t, s, sql.MetaSelect, 1)
 }

@@ -18,6 +18,7 @@ syntax = "proto2";
 package cockroach.storage;
 option go_package = "storage";
 
+import "cockroach/roachpb/errors.proto";
 import "cockroach/roachpb/metadata.proto";
 import "etcd/raft/raftpb/raft.proto";
 import weak "gogoproto/gogo.proto";
@@ -35,9 +36,70 @@ message RaftMessageRequest {
   optional raftpb.Message message = 4 [(gogoproto.nullable) = false];
 }
 
-// RaftMessageResponse is an empty message returned by raft RPCs. If a
-// response is needed it will be sent as a separate message.
+message RaftMessageResponseUnion {
+  option (gogoproto.onlyone) = true;
+
+  optional roachpb.Error error = 1;
+}
+
+// RaftMessageResponse may be sent to the sender of a
+// RaftMessageRequest. RaftMessage does not use the usual
+// request/response pattern; it is primarily modeled as a one-way
+// stream of requests. Normal 'responses' are usually sent as new
+// requests on a separate stream in the other direction.
+// RaftMessageResponse is not sent for every RaftMessageRequest, but
+// may be used for certain error conditions.
 message RaftMessageResponse {
+  optional uint64 range_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
+
+  optional roachpb.ReplicaDescriptor from_replica = 2 [(gogoproto.nullable) = false];
+  optional roachpb.ReplicaDescriptor to_replica = 3 [(gogoproto.nullable) = false];
+
+  optional RaftMessageResponseUnion union = 4 [(gogoproto.nullable) = false];
+}
+
+// SnapshotRequest is the request used to send streaming snapshot requests.
+message SnapshotRequest {
+  message Header {
+    optional roachpb.RangeDescriptor range_descriptor = 1 [(gogoproto.nullable) = false];
+
+    // The inner raft message is of type MsgSnap, and its snapshot data contains a UUID.
+    optional RaftMessageRequest raft_message_request = 2 [(gogoproto.nullable) = false];
+
+    // The estimated size of the range, to be used in reservation decisions.
+    optional int64 range_size = 3 [(gogoproto.nullable) = false];
+
+    // can_decline is set on preemptive snapshots, but not those generated
+    // by raft because at that point it is better to queue up the stream
+    // than to cancel it.
+    optional bool can_decline = 4 [(gogoproto.nullable) = false];
+  }
+
+  optional Header header = 1;
+
+  // A RocksDB BatchRepr. Multiple kv_batches may be sent across multiple request messages.
+  optional bytes kv_batch = 2 [(gogoproto.customname) = "KVBatch"];
+
+  // These are really raftpb.Entry, but we model them as raw bytes to avoid
+  // roundtripping through memory. They are separate from the kv_batch to
+  // allow flexibility in log implementations.
+  repeated bytes log_entries = 3;
+
+  optional bool final = 4 [(gogoproto.nullable) = false];
+}
+
+message SnapshotResponse {
+  enum Status {
+    UNKNOWN = 0;
+    ACCEPTED = 1;
+    APPLIED = 2;
+    ERROR = 3;
+    DECLINED = 4;
+  }
+  optional Status status = 1 [(gogoproto.nullable) = false];
+  optional string message = 2 [(gogoproto.nullable) = false];
 }
 
 // ConfChangeContext is encoded in the raftpb.ConfChange.Context field.
@@ -54,5 +116,6 @@ message ConfChangeContext {
 }
 
 service MultiRaft {
-  rpc RaftMessage (stream RaftMessageRequest) returns (RaftMessageResponse) {}
+  rpc RaftMessage (stream RaftMessageRequest) returns (stream RaftMessageResponse) {}
+  rpc RaftSnapshot (stream SnapshotRequest) returns (stream SnapshotResponse) {}
 }

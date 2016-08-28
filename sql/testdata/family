@@ -21,7 +21,7 @@ abcd  CREATE TABLE abcd (
       CONSTRAINT "primary" PRIMARY KEY (a),
       FAMILY f1 (a, b),
       FAMILY fam_1_c_d (c, d)
-		  )
+      )
 
 statement ok
 INSERT INTO abcd VALUES (1, 2, 3, 4), (5, 6, 7, 8)
@@ -139,6 +139,21 @@ abcd  CREATE TABLE abcd (
       FAMILY fam_2_f (f),
       FAMILY fam_3_g (g)
       )
+
+statement ok
+CREATE TABLE f1 (a INT PRIMARY KEY, b STRING, c STRING)
+
+query TT
+SHOW CREATE TABLE f1
+----
+f1  CREATE TABLE f1 (
+      a INT NOT NULL,
+      b STRING NULL,
+      c STRING NULL,
+      CONSTRAINT "primary" PRIMARY KEY (a),
+      FAMILY "primary" (a, b),
+      FAMILY fam_1_c (c)
+    )
 
 statement ok
 CREATE TABLE assign_at_create (a INT PRIMARY KEY FAMILY pri, b INT FAMILY foo, c INT CREATE FAMILY)

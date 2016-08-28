@@ -35,15 +35,12 @@ type alterTableNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
-	if err := n.Table.NormalizeTableName(p.session.Database); err != nil {
+	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
+	if err != nil {
 		return nil, err
 	}
 
-	if _, err := p.mustGetDatabaseDesc(n.Table.Database()); err != nil {
-		return nil, err
-	}
-
-	tableDesc, err := p.getTableDesc(n.Table)
+	tableDesc, err := p.getTableDesc(tn)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +48,7 @@ func (p *planner) AlterTable(n *parser.AlterTable) (planNode, error) {
 		if n.IfExists {
 			return &emptyNode{}, nil
 		}
-		return nil, sqlbase.NewUndefinedTableError(n.Table.String())
+		return nil, sqlbase.NewUndefinedTableError(tn.String())
 	}
 
 	if err := p.checkPrivilege(tableDesc, privilege.CREATE); err != nil {
@@ -79,7 +76,8 @@ func (n *alterTableNode) Start() error {
 			if err != nil {
 				return err
 			}
-			status, i, err := n.tableDesc.FindColumnByName(col.Name)
+			normName := sqlbase.ReNormalizeName(col.Name)
+			status, i, err := n.tableDesc.FindColumnByNormalizedName(normName)
 			if err == nil {
 				if status == sqlbase.DescriptorIncomplete &&
 					n.tableDesc.Mutations[i].Direction == sqlbase.DescriptorMutation_DROP {
@@ -109,20 +107,19 @@ func (n *alterTableNode) Start() error {
 				if d.PrimaryKey {
 					return fmt.Errorf("multiple primary keys for table %q are not allowed", n.tableDesc.Name)
 				}
-				name := string(d.Name)
 				idx := sqlbase.IndexDescriptor{
-					Name:             name,
+					Name:             string(d.Name),
 					Unique:           true,
-					StoreColumnNames: d.Storing,
+					StoreColumnNames: d.Storing.ToStrings(),
 				}
 				if err := idx.FillColumns(d.Columns); err != nil {
 					return err
 				}
-				status, i, err := n.tableDesc.FindIndexByName(name)
+				status, i, err := n.tableDesc.FindIndexByName(d.Name)
 				if err == nil {
 					if status == sqlbase.DescriptorIncomplete &&
 						n.tableDesc.Mutations[i].Direction == sqlbase.DescriptorMutation_DROP {
-						return fmt.Errorf("index %q being dropped, try again later", name)
+						return fmt.Errorf("index %q being dropped, try again later", d.Name)
 					}
 				}
 				n.tableDesc.AddIndexMutation(idx, sqlbase.DescriptorMutation_ADD)

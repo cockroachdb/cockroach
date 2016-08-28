@@ -24,6 +24,9 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -31,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -164,42 +168,37 @@ var multiDCStores = []*roachpb.StoreDescriptor{
 // createTestAllocator creates a stopper, gossip, store pool and allocator for
 // use in tests. Stopper must be stopped by the caller.
 func createTestAllocator() (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator, *hlc.ManualClock) {
-	stopper := stop.NewStopper()
-	manualClock := hlc.NewManualClock(hlc.UnixNano())
-	clock := hlc.NewClock(manualClock.UnixNano)
-	rpcContext := rpc.NewContext(nil, clock, stopper)
-	g := gossip.New(rpcContext, nil, stopper)
-	// Have to call g.SetNodeID before call g.AddInfo
-	g.SetNodeID(roachpb.NodeID(1))
-	storePool := NewStorePool(
-		g,
-		clock,
-		rpcContext,
-		/* reservationsEnabled */ true,
-		TestTimeUntilStoreDeadOff,
-		stopper,
-	)
+	stopper, g, manualClock, storePool := createTestStorePool(TestTimeUntilStoreDeadOff)
+	manualClock.Set(hlc.UnixNano())
 	a := MakeAllocator(storePool, AllocatorOptions{AllowRebalance: true})
 	return stopper, g, storePool, a, manualClock
 }
 
-// mockStorePool sets up a collection of a alive and dead stores in the
-// store pool for testing purposes.
-func mockStorePool(storePool *StorePool, aliveStoreIDs, deadStoreIDs []roachpb.StoreID) {
+// mockStorePool sets up a collection of a alive and dead stores in the store
+// pool for testing purposes. It also adds dead replicas to the stores and
+// ranges in deadReplicas.
+func mockStorePool(storePool *StorePool, aliveStoreIDs, deadStoreIDs []roachpb.StoreID, deadReplicas []roachpb.ReplicaIdent) {
 	storePool.mu.Lock()
 	defer storePool.mu.Unlock()
 
 	storePool.mu.stores = make(map[roachpb.StoreID]*storeDetail)
 	for _, storeID := range aliveStoreIDs {
-		storePool.mu.stores[storeID] = &storeDetail{
-			dead: false,
-			desc: &roachpb.StoreDescriptor{StoreID: storeID},
-		}
+		detail := newStoreDetail()
+		detail.desc = &roachpb.StoreDescriptor{StoreID: storeID}
+		storePool.mu.stores[storeID] = detail
 	}
 	for _, storeID := range deadStoreIDs {
-		storePool.mu.stores[storeID] = &storeDetail{
-			dead: true,
-			desc: &roachpb.StoreDescriptor{StoreID: storeID},
+		detail := newStoreDetail()
+		detail.dead = true
+		detail.desc = &roachpb.StoreDescriptor{StoreID: storeID}
+		storePool.mu.stores[storeID] = detail
+	}
+	for storeID, detail := range storePool.mu.stores {
+		for _, replica := range deadReplicas {
+			if storeID != replica.Replica.StoreID {
+				continue
+			}
+			detail.deadReplicas[replica.RangeID] = append(detail.deadReplicas[replica.RangeID], replica.Replica)
 		}
 	}
 }
@@ -209,7 +208,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
-	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false, nil)
+	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -222,7 +221,7 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, _, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
-	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false, nil)
+	result, err := a.AllocateTarget(simpleZoneConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false)
 	if result != nil {
 		t.Errorf("expected nil result: %+v", result)
 	}
@@ -236,7 +235,7 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
-	result1, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false, nil)
+	result1, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -249,7 +248,7 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 			StoreID: result1.StoreID,
 		},
 	}
-	result2, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[1], exReplicas, false, nil)
+	result2, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[1], exReplicas, false)
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
 	}
@@ -259,7 +258,7 @@ func TestAllocatorThreeDisksSameDC(t *testing.T) {
 	if result1.Node.NodeID == result2.Node.NodeID {
 		t.Errorf("Expected node ids to be different %+v vs %+v", result1, result2)
 	}
-	result3, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[2], []roachpb.ReplicaDescriptor{}, false, nil)
+	result3, err := a.AllocateTarget(multiDisksConfig.ReplicaAttrs[2], []roachpb.ReplicaDescriptor{}, false)
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
 	}
@@ -273,11 +272,11 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator()
 	defer stopper.Stop()
 	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
-	result1, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false, nil)
+	result1, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[0], []roachpb.ReplicaDescriptor{}, false)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
-	result2, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[1], []roachpb.ReplicaDescriptor{}, false, nil)
+	result2, err := a.AllocateTarget(multiDCConfig.ReplicaAttrs[1], []roachpb.ReplicaDescriptor{}, false)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -290,7 +289,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 			NodeID:  result2.Node.NodeID,
 			StoreID: result2.StoreID,
 		},
-	}, false, nil)
+	}, false)
 	if err == nil {
 		t.Errorf("expected error on allocation without available stores")
 	}
@@ -306,7 +305,7 @@ func TestAllocatorExistingReplica(t *testing.T) {
 			NodeID:  2,
 			StoreID: 2,
 		},
-	}, false, nil)
+	}, false)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -355,7 +354,7 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 		for _, id := range test.existing {
 			existing = append(existing, roachpb.ReplicaDescriptor{NodeID: roachpb.NodeID(id), StoreID: roachpb.StoreID(id)})
 		}
-		result, err := a.AllocateTarget(roachpb.Attributes{Attrs: test.required}, existing, test.relaxConstraints, nil)
+		result, err := a.AllocateTarget(roachpb.Attributes{Attrs: test.required}, existing, test.relaxConstraints)
 		if haveErr := (err != nil); haveErr != test.expErr {
 			t.Errorf("%d: expected error %t; got %t: %s", i, test.expErr, haveErr, err)
 		} else if err == nil && roachpb.StoreID(test.expID) != result.StoreID {
@@ -417,7 +416,8 @@ func TestAllocatorRebalance(t *testing.T) {
 
 	// Every rebalance target must be either stores 1 or 2.
 	for i := 0; i < 10; i++ {
-		result := a.RebalanceTarget(3, roachpb.Attributes{}, []roachpb.ReplicaDescriptor{})
+		result := a.RebalanceTarget(roachpb.Attributes{},
+			[]roachpb.ReplicaDescriptor{{StoreID: 3}}, 0)
 		if result == nil {
 			t.Fatal("nil result")
 		}
@@ -426,10 +426,15 @@ func TestAllocatorRebalance(t *testing.T) {
 		}
 	}
 
-	// Verify ShouldRebalance results.
+	// Verify shouldRebalance results.
 	a.options.Deterministic = true
 	for i, store := range stores {
-		result := a.ShouldRebalance(store.StoreID)
+		desc, ok := a.storePool.getStoreDescriptor(store.StoreID)
+		if !ok {
+			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
+		}
+		sl, _, _ := a.storePool.getStoreList(roachpb.Attributes{}, true)
+		result := a.shouldRebalance(desc, sl)
 		if expResult := (i >= 2); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
 		}
@@ -471,16 +476,22 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 
 	// Every rebalance target must be store 4 (or nil for case of missing the only option).
 	for i := 0; i < 10; i++ {
-		result := a.RebalanceTarget(1, roachpb.Attributes{}, []roachpb.ReplicaDescriptor{})
+		result := a.RebalanceTarget(roachpb.Attributes{},
+			[]roachpb.ReplicaDescriptor{{StoreID: 1}}, 0)
 		if result != nil && result.StoreID != 4 {
 			t.Errorf("expected store 4; got %d", result.StoreID)
 		}
 	}
 
-	// Verify ShouldRebalance results.
+	// Verify shouldRebalance results.
 	a.options.Deterministic = true
 	for i, store := range stores {
-		result := a.ShouldRebalance(store.StoreID)
+		desc, ok := a.storePool.getStoreDescriptor(store.StoreID)
+		if !ok {
+			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
+		}
+		sl, _, _ := a.storePool.getStoreList(roachpb.Attributes{}, true)
+		result := a.shouldRebalance(desc, sl)
 		if expResult := (i < 3); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
 		}
@@ -569,8 +580,19 @@ func TestAllocatorComputeAction(t *testing.T) {
 	stopper, _, sp, a, _ := createTestAllocator()
 	defer stopper.Stop()
 
-	// Set up seven stores. Stores six and seven are marked as dead.
-	mockStorePool(sp, []roachpb.StoreID{1, 2, 3, 4, 5}, []roachpb.StoreID{6, 7})
+	// Set up eight stores. Stores six and seven are marked as dead. Replica eight
+	// is dead.
+	mockStorePool(sp,
+		[]roachpb.StoreID{1, 2, 3, 4, 5, 8},
+		[]roachpb.StoreID{6, 7},
+		[]roachpb.ReplicaIdent{{
+			RangeID: 0,
+			Replica: roachpb.ReplicaDescriptor{
+				NodeID:    8,
+				StoreID:   8,
+				ReplicaID: 8,
+			},
+		}})
 
 	// Each test case should describe a repair situation which has a lower
 	// priority than the previous test case.
@@ -579,7 +601,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		desc           roachpb.RangeDescriptor
 		expectedAction AllocatorAction
 	}{
-		// Needs Three replicas, two are on dead stores.
+		// Needs three replicas, two are on dead stores.
 		{
 			zone: config.ZoneConfig{
 				ReplicaAttrs: []roachpb.Attributes{
@@ -617,7 +639,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 			},
 			expectedAction: AllocatorRemoveDead,
 		},
-		// Needs Three replicas, one is on a dead store.
+		// Needs three replicas, one is on a dead store.
 		{
 			zone: config.ZoneConfig{
 				ReplicaAttrs: []roachpb.Attributes{
@@ -650,6 +672,44 @@ func TestAllocatorComputeAction(t *testing.T) {
 						StoreID:   6,
 						NodeID:    6,
 						ReplicaID: 6,
+					},
+				},
+			},
+			expectedAction: AllocatorRemoveDead,
+		},
+		// Needs three replicas, one is dead.
+		{
+			zone: config.ZoneConfig{
+				ReplicaAttrs: []roachpb.Attributes{
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+					{
+						Attrs: []string{"us-east"},
+					},
+				},
+				RangeMinBytes: 0,
+				RangeMaxBytes: 64000,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   8,
+						NodeID:    8,
+						ReplicaID: 8,
 					},
 				},
 			},
@@ -961,7 +1021,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
 			continue
 		}
-		if tcase.expectedAction != AllocatorNoop && priority >= lastPriority {
+		if tcase.expectedAction != AllocatorNoop && priority > lastPriority {
 			t.Errorf("Test cases should have descending priority. Case %d had priority %f, previous case had priority %f", i, priority, lastPriority)
 		}
 		lastPriority = priority
@@ -1032,9 +1092,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	_, err := a.AllocateTarget(
 		simpleZoneConfig.ReplicaAttrs[0],
 		[]roachpb.ReplicaDescriptor{},
-		false,
-		nil,
-	)
+		false)
 	if _, ok := err.(purgatoryError); !ok {
 		t.Fatalf("expected a purgatory error, got: %v", err)
 	}
@@ -1044,9 +1102,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	result, err := a.AllocateTarget(
 		simpleZoneConfig.ReplicaAttrs[0],
 		[]roachpb.ReplicaDescriptor{},
-		false,
-		nil,
-	)
+		false)
 	if err != nil {
 		t.Fatalf("unable to perform allocation: %v", err)
 	}
@@ -1066,9 +1122,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	_, err = a.AllocateTarget(
 		simpleZoneConfig.ReplicaAttrs[0],
 		[]roachpb.ReplicaDescriptor{},
-		false,
-		nil,
-	)
+		false)
 	if _, ok := err.(purgatoryError); ok {
 		t.Fatalf("expected a non purgatory error, got: %v", err)
 	}
@@ -1099,7 +1153,9 @@ func Example_rebalancing() {
 
 	// Model a set of stores in a cluster,
 	// randomly adding / removing stores and adding bytes.
-	g := gossip.New(nil, nil, stopper)
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
+	server := rpc.NewServer(rpcContext) // never started
+	g := gossip.New(context.Background(), rpcContext, server, nil, stopper, metric.NewRegistry())
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	sp := NewStorePool(
@@ -1145,11 +1201,12 @@ func Example_rebalancing() {
 		// Next loop through test stores and maybe rebalance.
 		for j := 0; j < len(testStores); j++ {
 			ts := &testStores[j]
-			if alloc.ShouldRebalance(ts.StoreID) {
-				target := alloc.RebalanceTarget(ts.StoreID, roachpb.Attributes{}, []roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}})
-				if target != nil {
-					testStores[j].rebalance(&testStores[int(target.StoreID)], alloc.randGen.Int63n(1<<20))
-				}
+			target := alloc.RebalanceTarget(
+				roachpb.Attributes{},
+				[]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}},
+				-1)
+			if target != nil {
+				testStores[j].rebalance(&testStores[int(target.StoreID)], alloc.randGen.Int63n(1<<20))
 			}
 		}
 
@@ -1190,50 +1247,50 @@ func Example_rebalancing() {
 	// 999 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000
 	// 999 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000
 	// 999 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000
-	// 999 000 000 000 000 000 000 000 000 000 045 140 000 000 000 000 000 105 000 000
-	// 999 014 143 000 000 000 000 039 017 000 112 071 000 088 009 000 097 134 000 151
-	// 999 196 213 000 000 000 143 098 210 039 262 260 077 139 078 087 237 316 281 267
-	// 999 394 368 391 000 393 316 356 364 263 474 262 214 321 345 374 403 445 574 220
-	// 999 337 426 577 023 525 459 426 229 315 495 327 310 370 363 423 390 473 587 308
-	// 999 481 529 533 132 563 519 496 396 363 636 337 414 408 425 533 445 605 559 405
-	// 999 572 585 507 256 609 570 586 513 341 660 347 544 443 488 525 446 596 556 462
-	// 999 580 575 603 325 636 590 549 495 337 698 386 663 526 518 511 517 572 546 533
-	// 999 576 601 637 374 629 573 558 520 391 684 446 692 555 510 461 552 593 568 564
-	// 999 573 636 671 441 643 619 629 628 452 705 525 795 590 542 525 589 658 589 655
-	// 999 585 625 651 467 686 606 662 611 508 654 516 746 594 542 528 591 646 569 642
-	// 999 636 690 728 501 704 638 700 619 539 688 555 738 592 556 568 659 669 602 649
-	// 999 655 749 773 519 790 713 781 698 604 758 601 755 634 580 661 716 735 607 660
-	// 999 648 716 726 549 813 748 766 693 606 784 568 749 655 579 642 692 711 587 632
-	// 999 688 734 731 553 805 736 779 701 575 763 562 722 647 599 631 691 732 598 608
-	// 999 679 770 719 590 815 754 799 687 613 748 540 715 664 590 638 703 720 621 588
-	// 999 736 775 724 614 813 771 829 703 679 782 560 754 692 624 658 756 763 636 643
-	// 999 759 792 737 688 847 782 872 761 695 841 617 756 730 607 664 762 807 677 666
-	// 999 793 837 754 704 876 803 897 753 742 880 639 758 766 653 684 785 850 720 670
-	// 999 815 864 778 735 921 843 927 778 752 896 696 775 796 698 681 775 859 730 693
-	// 999 827 876 759 759 911 838 938 781 798 920 708 778 794 698 711 804 870 732 710
-	// 999 815 893 733 790 924 849 940 755 777 901 720 794 832 704 721 834 851 722 748
-	// 999 820 905 772 807 941 884 938 781 788 888 738 835 849 735 742 865 884 743 791
-	// 999 828 889 768 828 939 865 936 789 805 913 751 841 860 751 759 895 889 730 814
-	// 999 829 893 794 840 933 883 943 805 830 929 735 842 871 778 788 886 912 746 845
-	// 999 848 892 820 824 963 913 978 832 828 952 755 860 890 784 814 905 905 755 855
-	// 999 847 880 846 847 963 939 984 851 835 958 777 862 880 799 829 912 895 772 870
-	// 999 850 886 859 871 950 921 998 847 823 925 759 877 861 787 810 908 915 798 840
-	// 982 854 891 854 900 956 945 999 833 804 929 767 896 861 781 797 911 932 791 855
-	// 961 849 884 846 881 949 928 999 829 796 906 768 868 858 797 804 883 897 774 834
-	// 965 863 924 874 903 988 953 999 864 831 924 786 876 886 821 804 903 940 799 843
-	// 963 873 936 880 915 997 966 999 885 832 935 799 891 919 854 801 916 953 802 866
-	// 951 886 938 873 900 990 972 999 898 822 915 795 871 917 853 798 928 953 779 850
-	// 932 880 939 866 897 999 948 970 884 837 912 805 877 893 866 807 922 933 791 846
-	// 925 896 935 885 899 999 963 965 886 858 897 820 894 876 876 811 918 921 793 856
-	// 926 881 933 876 896 999 952 942 857 859 878 812 898 884 883 791 920 894 783 853
-	// 951 890 947 898 919 999 959 952 863 871 895 845 902 898 893 816 934 920 790 881
-	// 962 895 959 919 921 999 982 951 883 877 901 860 911 910 899 835 949 923 803 883
-	// 957 886 970 905 915 999 970 974 888 894 924 879 938 930 909 847 955 937 830 899
-	// 941 881 958 889 914 999 957 953 885 890 900 870 946 919 885 822 950 927 832 875
-	// 937 888 962 897 934 999 963 950 902 900 905 890 952 920 895 831 963 930 852 872
-	// 916 888 967 881 924 999 970 946 912 890 901 889 958 910 911 830 966 928 834 866
-	// 900 859 959 877 895 999 955 931 893 868 894 881 929 893 885 813 937 909 819 849
-	// 902 857 960 875 896 999 944 929 911 867 911 895 946 897 897 812 926 921 815 859
-	// 902 855 951 867 893 999 949 938 901 867 911 892 949 898 903 803 935 930 809 868
-	// Total bytes=909881714, ranges=1745
+	// 999 000 000 000 014 000 000 118 000 000 000 000 111 000 000 000 000 000 000 000
+	// 999 113 095 000 073 064 000 221 003 000 020 178 182 000 057 000 027 000 055 000
+	// 999 398 222 000 299 366 000 525 239 135 263 385 424 261 261 000 260 194 207 322
+	// 999 307 170 335 380 357 336 539 233 373 218 444 539 336 258 479 267 352 384 387
+	// 999 558 318 587 623 602 453 719 409 506 414 617 638 411 359 486 502 507 454 673
+	// 999 588 404 854 616 642 559 705 482 622 505 554 673 489 410 390 524 607 535 671
+	// 999 651 498 922 668 696 612 809 619 691 682 674 682 584 533 449 619 724 646 702
+	// 999 710 505 832 645 732 719 867 605 794 743 693 717 645 602 503 683 733 686 776
+	// 999 773 688 810 658 761 812 957 663 875 856 797 871 670 733 602 839 781 736 909
+	// 959 778 750 879 685 797 786 999 751 944 870 786 882 670 828 611 880 817 714 883
+	// 946 843 781 892 726 887 876 993 717 999 940 802 879 672 842 634 862 818 736 906
+	// 924 826 754 859 742 878 836 927 721 999 893 762 874 672 882 684 918 818 745 897
+	// 910 872 789 858 752 878 824 976 715 999 860 739 848 684 890 699 968 846 751 833
+	// 938 892 789 879 754 916 861 997 774 983 887 805 827 690 912 751 999 927 800 893
+	// 895 887 792 845 784 920 800 999 770 961 890 747 871 701 907 733 970 893 811 858
+	// 887 843 742 839 792 938 826 999 778 971 859 792 857 731 889 777 979 900 779 833
+	// 891 861 802 819 802 966 826 999 776 946 843 792 836 769 914 792 968 879 775 874
+	// 923 840 830 842 778 969 820 999 791 950 843 820 838 767 893 794 995 915 789 885
+	// 932 816 783 830 805 926 783 999 790 977 824 856 838 789 866 787 992 892 760 896
+	// 917 799 781 813 800 901 759 999 776 983 795 861 813 799 852 776 944 891 739 883
+	// 895 759 757 827 799 894 741 999 772 955 779 864 823 812 835 785 956 882 746 865
+	// 906 762 773 867 848 874 747 999 763 992 766 866 831 812 839 820 973 906 765 885
+	// 915 795 781 884 854 899 782 983 756 999 744 890 840 791 848 806 992 934 774 904
+	// 935 768 813 893 859 881 788 948 758 999 748 892 828 803 857 834 989 940 798 900
+	// 953 752 816 919 852 882 806 966 771 976 733 877 804 802 854 822 999 957 800 898
+	// 909 732 804 882 874 885 814 956 758 937 703 877 805 783 849 833 999 955 796 903
+	// 885 744 788 859 851 881 802 929 732 905 702 843 801 774 847 810 999 936 778 880
+	// 856 741 790 827 842 897 771 922 732 873 719 849 771 789 845 828 999 914 764 859
+	// 880 787 825 841 867 941 782 962 752 918 749 886 797 819 899 862 999 935 792 891
+	// 902 829 841 857 903 979 786 979 760 935 767 903 816 839 907 880 999 963 827 927
+	// 873 809 831 837 906 964 786 952 772 928 780 904 810 817 914 878 999 974 827 914
+	// 879 810 855 843 936 977 806 956 799 930 801 931 823 835 928 895 997 999 864 935
+	// 885 806 858 825 921 971 791 965 784 930 809 936 813 829 904 893 999 974 858 902
+	// 865 776 855 811 903 966 771 958 770 906 809 923 810 825 896 901 999 964 841 895
+	// 880 789 876 816 918 987 772 972 776 912 814 935 836 833 913 901 999 978 863 903
+	// 866 779 861 824 926 986 773 958 776 920 810 936 836 855 894 899 999 989 859 904
+	// 880 798 862 826 910 997 795 948 767 910 798 923 838 835 872 911 999 975 856 894
+	// 885 785 845 807 906 973 783 943 782 918 789 920 832 838 861 894 999 965 849 877
+	// 889 793 855 802 918 985 786 948 793 920 800 941 818 849 846 899 999 982 851 886
+	// 866 796 854 801 911 969 782 958 791 907 788 940 800 844 843 890 999 977 851 873
+	// 849 794 855 815 912 970 790 942 792 898 789 938 794 850 843 884 999 964 854 886
+	// 856 806 867 837 930 980 787 944 789 903 804 947 800 863 840 891 999 977 860 874
+	// 847 796 852 849 925 980 777 948 786 905 792 922 798 853 835 887 999 968 868 866
+	// 851 801 866 846 936 999 795 945 774 909 793 931 794 860 846 908 985 976 882 854
+	// 861 815 861 845 934 999 808 958 784 913 780 924 800 860 844 912 986 974 897 844
+	// Total bytes=941960698, ranges=1750
 }

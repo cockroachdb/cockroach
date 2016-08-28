@@ -125,6 +125,9 @@ var (
 	// localRangeLastVerificationTimestampSuffix is the suffix for a range's
 	// last verification timestamp (for checking integrity of on-disk data).
 	LocalRangeLastVerificationTimestampSuffix = []byte("rlvt")
+	// LocalRangeReplicaDestroyedErrorSuffix is the suffix for a range's replica
+	// destroyed error (for marking replicas as dead).
+	LocalRangeReplicaDestroyedErrorSuffix = []byte("rrde")
 
 	// LocalRangePrefix is the prefix identifying per-range data indexed
 	// by range key (either start key, or some key in the range). The
@@ -221,6 +224,9 @@ const (
 	// IDs. Reserved IDs are used by namespaces and tables used internally by
 	// cockroach.
 	MaxReservedDescID = 49
+
+	// VirtualDescriptorID is the ID used by all virtual descriptors.
+	VirtualDescriptorID = math.MaxUint32
 
 	// RootNamespaceID is the ID of the root namespace.
 	RootNamespaceID = 0

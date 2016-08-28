@@ -52,7 +52,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 		// We do not need to fully analyze the GROUP BY expression here
 		// (as per analyzeExpr) because this is taken care of by addRender
 		// below.
-		resolved, err := resolveQNames(groupBy[i], s.sourceInfo, s.qvals, &p.qnameVisitor)
+		resolved, err := resolveNames(groupBy[i], s.sourceInfo, s.qvals, &p.nameResolutionVisitor)
 		if err != nil {
 			return nil, err
 		}
@@ -136,7 +136,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 		for _, f := range group.funcs {
 			strs = append(strs, f.String())
 		}
-		log.Infof("Group: %s", strings.Join(strs, ", "))
+		log.Infof(p.ctx(), "Group: %s", strings.Join(strs, ", "))
 	}
 
 	// Replace the render expressions in the scanNode with expressions that
@@ -487,19 +487,18 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 
 	switch t := expr.(type) {
 	case *parser.FuncExpr:
-		if len(t.Name.Indirect) > 0 {
-			break
-		}
-		if impl, ok := parser.Aggregates[strings.ToLower(string(t.Name.Base))]; ok {
+		if agg := t.GetAggregateConstructor(); agg != nil {
 			if len(t.Exprs) != 1 {
 				// Type checking has already run on these expressions thus
 				// if an aggregate function of the wrong arity gets here,
 				// something has gone really wrong.
-				panic(fmt.Sprintf("%s has %d arguments (expected 1)", t.Name.Base, len(t.Exprs)))
+				panic(fmt.Sprintf("%q has %d arguments (expected 1)", t.Name, len(t.Exprs)))
 			}
 
+			argExpr := t.Exprs[0]
+
 			defer v.subAggregateVisitor.Reset()
-			parser.WalkExprConst(&v.subAggregateVisitor, t.Exprs[0])
+			parser.WalkExprConst(&v.subAggregateVisitor, argExpr)
 			if v.subAggregateVisitor.Aggregated {
 				v.err = fmt.Errorf("aggregate function calls cannot be nested under %s", t.Name)
 				return false, expr
@@ -507,8 +506,8 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 
 			f := &aggregateFuncHolder{
 				expr:    t,
-				arg:     t.Exprs[0].(parser.TypedExpr),
-				create:  impl[0].AggregateFunc,
+				arg:     argExpr.(parser.TypedExpr),
+				create:  agg,
 				group:   v.n,
 				buckets: make(map[string]parser.AggregateFunc),
 			}
@@ -600,7 +599,8 @@ func (a *aggregateFuncHolder) add(bucket []byte, d parser.Datum) error {
 		a.buckets[string(bucket)] = impl
 	}
 
-	return impl.Add(d)
+	impl.Add(d)
+	return nil
 }
 
 func (*aggregateFuncHolder) Variable() {}
@@ -629,10 +629,7 @@ func (a *aggregateFuncHolder) Eval(ctx *parser.EvalContext) (parser.Datum, error
 		found = a.create()
 	}
 
-	datum, err := found.Result()
-	if err != nil {
-		return nil, err
-	}
+	datum := found.Result()
 
 	// This is almost certainly the identity. Oh well.
 	return datum.Eval(ctx)

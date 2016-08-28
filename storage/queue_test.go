@@ -131,11 +131,11 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 		t.Error(err)
 	}
 
-	r1 := createRange(tc.store, 1001, roachpb.RKey("1001"), roachpb.RKey("1001/end"))
+	r1 := createReplica(tc.store, 1001, roachpb.RKey("1001"), roachpb.RKey("1001/end"))
 	if err := tc.store.AddReplicaTest(r1); err != nil {
 		t.Fatal(err)
 	}
-	r2 := createRange(tc.store, 1002, roachpb.RKey("1002"), roachpb.RKey("1002/end"))
+	r2 := createReplica(tc.store, 1002, roachpb.RKey("1002"), roachpb.RKey("1002/end"))
 	if err := tc.store.AddReplicaTest(r2); err != nil {
 		t.Fatal(err)
 	}
@@ -237,8 +237,12 @@ func TestBaseQueueAdd(t *testing.T) {
 	if bq.Length() != 0 {
 		t.Fatalf("expected length 0; got %d", bq.Length())
 	}
-	if err := bq.Add(r, 1.0); err != nil {
-		t.Fatalf("expected Add to succeed: %s", err)
+	if added, err := bq.Add(r, 1.0); err != nil || !added {
+		t.Fatalf("expected Add to succeed: %t, %s", added, err)
+	}
+	// Add again and verify it's not actually added (it's already there).
+	if added, err := bq.Add(r, 1.0); err != nil || added {
+		t.Fatalf("expected Add to succeed: %t, %s", added, err)
 	}
 	if bq.Length() != 1 {
 		t.Fatalf("expected length 1; got %d", bq.Length())
@@ -263,11 +267,11 @@ func TestBaseQueueProcess(t *testing.T) {
 		t.Error(err)
 	}
 
-	r1 := createRange(tc.store, 1001, roachpb.RKey("1001"), roachpb.RKey("1001/end"))
+	r1 := createReplica(tc.store, 1001, roachpb.RKey("1001"), roachpb.RKey("1001/end"))
 	if err := tc.store.AddReplicaTest(r1); err != nil {
 		t.Fatal(err)
 	}
-	r2 := createRange(tc.store, 1002, roachpb.RKey("1002"), roachpb.RKey("1002/end"))
+	r2 := createReplica(tc.store, 1002, roachpb.RKey("1002"), roachpb.RKey("1002/end"))
 	if err := tc.store.AddReplicaTest(r2); err != nil {
 		t.Fatal(err)
 	}
@@ -374,13 +378,13 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	}
 
 	// This range can never be split due to zone configs boundaries.
-	neverSplits := createRange(s, 2, roachpb.RKeyMin, dataMaxAddr)
+	neverSplits := createReplica(s, 2, roachpb.RKeyMin, dataMaxAddr)
 	if err := s.AddReplicaTest(neverSplits); err != nil {
 		t.Fatal(err)
 	}
 
 	// This range will need to be split after user db/table entries are created.
-	willSplit := createRange(s, 3, dataMaxAddr, roachpb.RKeyMax)
+	willSplit := createReplica(s, 3, dataMaxAddr, roachpb.RKeyMax)
 	if err := s.AddReplicaTest(willSplit); err != nil {
 		t.Fatal(err)
 	}
@@ -398,10 +402,15 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	bq.Start(s.ctx.Clock, stopper)
 
 	// Check our config.
-	sysCfg, ok := s.ctx.Gossip.GetSystemConfig()
-	if !ok {
-		t.Fatal("config not set")
-	}
+	var sysCfg config.SystemConfig
+	util.SucceedsSoon(t, func() error {
+		var ok bool
+		sysCfg, ok = s.ctx.Gossip.GetSystemConfig()
+		if !ok {
+			return errors.New("system config not yet present")
+		}
+		return nil
+	})
 	neverSplitsDesc := neverSplits.Desc()
 	if sysCfg.NeedsSplit(neverSplitsDesc.StartKey, neverSplitsDesc.EndKey) {
 		t.Fatal("System config says range needs to be split")
@@ -430,7 +439,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	// Now add a user object, it will trigger a split.
 	// The range willSplit starts at the beginning of the user data range,
 	// which means keys.MaxReservedDescID+1.
-	config.TestingSetZoneConfig(keys.MaxReservedDescID+2, &config.ZoneConfig{RangeMaxBytes: 1 << 20})
+	config.TestingSetZoneConfig(keys.MaxReservedDescID+2, config.ZoneConfig{RangeMaxBytes: 1 << 20})
 
 	// Check our config.
 	neverSplitsDesc = neverSplits.Desc()
@@ -501,7 +510,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	bq.Start(tc.clock, tc.stopper)
 
 	for i := 1; i <= replicaCount; i++ {
-		r := createRange(tc.store, roachpb.RangeID(i+1000),
+		r := createReplica(tc.store, roachpb.RangeID(i+1000),
 			roachpb.RKey(fmt.Sprintf("%d", i)), roachpb.RKey(fmt.Sprintf("%d/end", i)))
 		if err := tc.store.AddReplicaTest(r); err != nil {
 			t.Fatal(err)

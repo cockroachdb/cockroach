@@ -20,6 +20,8 @@ package kv
 import (
 	"math/rand"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -51,7 +53,7 @@ func newReplicaSlice(gossip *gossip.Gossip, desc *roachpb.RangeDescriptor) Repli
 		nd, err := gossip.GetNodeDescriptor(r.NodeID)
 		if err != nil {
 			if log.V(1) {
-				log.Infof("node %d is not gossiped: %v", r.NodeID, err)
+				log.Infof(context.TODO(), "node %d is not gossiped: %v", r.NodeID, err)
 			}
 			continue
 		}

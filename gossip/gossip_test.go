@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -40,8 +41,8 @@ func TestGossipInfoStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rpcContext := rpc.NewContext(nil, nil, stopper)
-	g := New(rpcContext, nil, stopper)
+	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
+	g := New(context.TODO(), rpcContext, rpc.NewServer(rpcContext), nil, stopper, metric.NewRegistry())
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	slice := []byte("b")
@@ -58,6 +59,8 @@ func TestGossipInfoStore(t *testing.T) {
 
 func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
 
 	resolverSpecs := []string{
 		"127.0.0.1:9000",
@@ -67,7 +70,7 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 
 	resolvers := []resolver.Resolver{}
 	for _, rs := range resolverSpecs {
-		resolver, err := resolver.NewResolver(&base.Context{Insecure: true}, rs)
+		resolver, err := resolver.NewResolver(rs)
 		if err == nil {
 			resolvers = append(resolvers, resolver)
 		}
@@ -75,7 +78,8 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	if len(resolvers) != 3 {
 		t.Errorf("expected 3 resolvers; got %d", len(resolvers))
 	}
-	g := New(nil, resolvers, nil)
+	server := rpc.NewServer(rpc.NewContext(&base.Context{Insecure: true}, nil, stopper))
+	g := New(context.TODO(), nil, server, resolvers, stop.NewStopper(), metric.NewRegistry())
 
 	// Using specified resolvers, fetch bootstrap addresses 3 times
 	// and verify the results match expected addresses.
@@ -98,11 +102,11 @@ func TestGossipRaceLogStatus(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	local := startGossip(1, stopper, t)
+	local := startGossip(1, stopper, t, metric.NewRegistry())
 
 	local.mu.Lock()
-	peer := startGossip(2, stopper, t)
-	local.startClient(&peer.is.NodeAddr)
+	peer := startGossip(2, stopper, t, metric.NewRegistry())
+	local.startClient(&peer.mu.is.NodeAddr, peer.mu.is.NodeID)
 	local.mu.Unlock()
 
 	// Race gossiping against LogStatus.
@@ -144,7 +148,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	local := startGossip(1, stopper, t)
+	local := startGossip(1, stopper, t, metric.NewRegistry())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -152,12 +156,15 @@ func TestGossipNoForwardSelf(t *testing.T) {
 	// Start one loopback client plus enough additional clients to fill the
 	// incoming clients.
 	peers := []*Gossip{local}
-	for i := 0; i < local.server.incoming.maxSize; i++ {
-		peers = append(peers, startGossip(roachpb.NodeID(i+2), stopper, t))
+	local.server.mu.Lock()
+	maxSize := local.server.mu.incoming.maxSize
+	local.server.mu.Unlock()
+	for i := 0; i < maxSize; i++ {
+		peers = append(peers, startGossip(roachpb.NodeID(i+2), stopper, t, metric.NewRegistry()))
 	}
 
 	for _, peer := range peers {
-		c := newClient(&local.is.NodeAddr)
+		c := newClient(context.TODO(), local.GetNodeAddr(), makeMetrics())
 
 		util.SucceedsSoon(t, func() error {
 			conn, err := peer.rpcContext.GRPCDial(c.addr.String(), grpc.WithBlock())
@@ -170,7 +177,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 				return err
 			}
 
-			if err := c.requestGossip(peer, peer.is.NodeAddr, stream); err != nil {
+			if err := c.requestGossip(peer, stream); err != nil {
 				return err
 			}
 
@@ -186,11 +193,15 @@ func TestGossipNoForwardSelf(t *testing.T) {
 	// Start a few overflow peers and assert that they don't get forwarded to us
 	// again.
 	for i := 0; i < numClients; i++ {
-		peer := startGossip(roachpb.NodeID(i+local.server.incoming.maxSize+2), stopper, t)
+		local.server.mu.Lock()
+		maxSize := local.server.mu.incoming.maxSize
+		local.server.mu.Unlock()
+		peer := startGossip(roachpb.NodeID(i+maxSize+2), stopper, t, metric.NewRegistry())
 
 		for {
-			c := newClient(&local.is.NodeAddr)
-			c.start(peer, disconnectedCh, peer.rpcContext, stopper)
+			localAddr := local.GetNodeAddr()
+			c := newClient(context.TODO(), localAddr, makeMetrics())
+			c.start(peer, disconnectedCh, peer.rpcContext, stopper, peer.GetNodeID(), peer.rpcContext.NewBreaker())
 
 			disconnectedClient := <-disconnectedCh
 			if disconnectedClient != c {
@@ -198,10 +209,10 @@ func TestGossipNoForwardSelf(t *testing.T) {
 			} else if c.forwardAddr == nil {
 				// Under high load, clients sometimes fail to connect for reasons
 				// unrelated to the test, so we need to permit some.
-				t.Logf("node #%d: got nil forwarding address", peer.is.NodeID)
+				t.Logf("node #%d: got nil forwarding address", peer.GetNodeID())
 				continue
-			} else if *c.forwardAddr == local.is.NodeAddr {
-				t.Errorf("node #%d: got local's forwarding address", peer.is.NodeID)
+			} else if *c.forwardAddr == *localAddr {
+				t.Errorf("node #%d: got local's forwarding address", peer.GetNodeID())
 			}
 			break
 		}
@@ -215,13 +226,13 @@ func TestGossipCullNetwork(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	local := startGossip(1, stopper, t)
+	local := startGossip(1, stopper, t, metric.NewRegistry())
 	local.SetCullInterval(5 * time.Millisecond)
 
 	local.mu.Lock()
 	for i := 0; i < minPeers; i++ {
-		peer := startGossip(roachpb.NodeID(i+2), stopper, t)
-		local.startClient(&peer.is.NodeAddr)
+		peer := startGossip(roachpb.NodeID(i+2), stopper, t, metric.NewRegistry())
+		local.startClient(peer.GetNodeAddr(), peer.GetNodeID())
 	}
 	local.mu.Unlock()
 

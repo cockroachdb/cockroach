@@ -75,7 +75,7 @@ func testCustomEncodeUint32(testCases []testCaseUint32,
 	encFunc func([]byte, uint32) []byte, t *testing.T) {
 	for _, test := range testCases {
 		enc := encFunc(nil, test.value)
-		if bytes.Compare(enc, test.expEnc) != 0 {
+		if !bytes.Equal(enc, test.expEnc) {
 			t.Errorf("expected [% x]; got [% x]", test.expEnc, enc)
 		}
 	}
@@ -222,7 +222,7 @@ func testCustomEncodeInt64(testCases []testCaseInt64,
 	encFunc func([]byte, int64) []byte, t *testing.T) {
 	for _, test := range testCases {
 		enc := encFunc(nil, test.value)
-		if bytes.Compare(enc, test.expEnc) != 0 {
+		if !bytes.Equal(enc, test.expEnc) {
 			t.Errorf("expected [% x]; got [% x] (value: %d)", test.expEnc, enc, test.value)
 		}
 	}
@@ -237,7 +237,7 @@ func testCustomEncodeUint64(testCases []testCaseUint64,
 	encFunc func([]byte, uint64) []byte, t *testing.T) {
 	for _, test := range testCases {
 		enc := encFunc(nil, test.value)
-		if bytes.Compare(enc, test.expEnc) != 0 {
+		if !bytes.Equal(enc, test.expEnc) {
 			t.Errorf("expected [% x]; got [% x] (value: %d)", test.expEnc, enc, test.value)
 		}
 	}
@@ -794,7 +794,7 @@ func testCustomEncodeDuration(
 		if err != nil {
 			t.Fatal(err)
 		}
-		if bytes.Compare(enc, test.expEnc) != 0 {
+		if !bytes.Equal(enc, test.expEnc) {
 			t.Errorf("%d expected [% x]; got [% x] (value: %d)", i, test.expEnc, enc, test.value)
 		}
 		_, decoded, err := decFunc(enc)

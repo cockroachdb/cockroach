@@ -11,7 +11,7 @@ tabs).
 ### Line Length
 Format your code assuming it will be read in a window 100 columns wide.
 Wrap code at 100 characters and comments at 80 unless doing so makes the
-code less legible.
+code less legible. These values assume tab width is 2 characters.
 
 ### Wrapping Function Signatures
 When wrapping function signatures that do not fit on one line,
@@ -55,3 +55,12 @@ Exception when omitting repeated types for consecutive arguments:
 short and related arguments (e.g. `start, end int64`) should either go on the same line
 or the type should be repeated on each line -- no argument should appear by itself
 on a line with no type (confusing and brittle when edited).
+
+### fmt Verbs
+
+Prefer the most specific verb for your use. In other words, prefer to avoid %v
+when possible. However, %v is to be used when formatting bindings which might
+be nil and which do not already handle nil formatting. Notably, nil errors
+formatted as %s will render as "%!s(<nil>)" while nil errors formatted as %v
+will render as "<nil>". Therefore, prefer %v when formatting errors which are
+not known to be non-nil.

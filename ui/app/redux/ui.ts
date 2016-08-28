@@ -3,7 +3,7 @@
  * maintained within a session, but not saved between sessions.
  */
 
-import assign = require("object-assign");
+import * as _ from "lodash";
 import { Action, PayloadAction } from "../interfaces/action";
 
 const SET_UI_VALUE = "cockroachui/ui/SET_UI_VALUE";
@@ -28,7 +28,9 @@ export default function reducer(state: UISettingsDict, action: Action): UISettin
   switch (action.type) {
     case SET_UI_VALUE:
       let { payload } = action as PayloadAction<UISetting>;
-      return assign({}, state, {[payload.key]: payload.value});
+      state = _.clone(state);
+      state[payload.key] = payload.value;
+      return state;
     default:
       return state;
   }

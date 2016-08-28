@@ -298,7 +298,7 @@ func NewRangeKeyMismatchError(start, end Key, desc *RangeDescriptor) *RangeKeyMi
 	if desc != nil && !desc.IsInitialized() {
 		// We must never send uninitialized ranges back to the client (nil
 		// is fine) guard against regressions of #6027.
-		panic("descriptor is not initialized")
+		panic(fmt.Sprintf("descriptor is not initialized: %+v", desc))
 	}
 	return &RangeKeyMismatchError{
 		RequestStartKey: start,
@@ -532,3 +532,13 @@ func (e *ReplicaCorruptionError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &ReplicaCorruptionError{}
+
+func (e *ReplicaTooOldError) Error() string {
+	return e.message(nil)
+}
+
+func (*ReplicaTooOldError) message(_ *Error) string {
+	return "sender replica too old, discarding message"
+}
+
+var _ ErrorDetailInterface = &ReplicaTooOldError{}

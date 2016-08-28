@@ -430,6 +430,18 @@ ALTER INDEX t.test@foo RENAME TO ufo
 	}
 }
 
+func runSqlWithRetry(t *testing.T, db *gosql.DB, sql string) {
+	for {
+		_, err := db.Exec(sql)
+		if err == nil {
+			break
+		} else if !testutils.IsSQLRetryError(err) {
+			t.Fatal(err)
+		}
+		t.Logf("retry %s on err: %s", sql, err)
+	}
+}
+
 // Run a particular schema change and run some OLTP operations in parallel, as
 // soon as the schema change starts executing its backfill.
 func runSchemaChangeWithOperations(
@@ -473,40 +485,31 @@ func runSchemaChangeWithOperations(
 	for i := 0; i < 10; i++ {
 		k := rand.Intn(maxValue)
 		v := maxValue + i + 1
-		if _, err := sqlDB.Exec(`UPDATE t.test SET v = $2 WHERE k = $1`, k, v); err != nil {
-			t.Fatal(err)
-		}
+		runSqlWithRetry(t, sqlDB, fmt.Sprintf(`UPDATE t.test SET v = %d WHERE k = %d`, v, k))
 		updatedKeys = append(updatedKeys, k)
 	}
 
 	// Reupdate updated values back to what they were before.
 	for _, k := range updatedKeys {
-		if _, err := sqlDB.Exec(`UPDATE t.test SET v = $2 WHERE k = $1`, k, maxValue-k); err != nil {
-			t.Fatal(err)
-		}
+		runSqlWithRetry(t, sqlDB, fmt.Sprintf(`UPDATE t.test SET v = %d WHERE k = %d`, maxValue-k, k))
 	}
 
 	// Delete some rows.
 	deleteStartKey := rand.Intn(maxValue - 10)
 	for i := 0; i < 10; i++ {
-		if _, err := sqlDB.Exec(`DELETE FROM t.test WHERE k = $1`, deleteStartKey+i); err != nil {
-			t.Fatal(err)
-		}
+		runSqlWithRetry(t, sqlDB, fmt.Sprintf(`DELETE FROM t.test WHERE k = %d`, deleteStartKey+i))
 	}
 	// Reinsert deleted rows.
 	for i := 0; i < 10; i++ {
 		k := deleteStartKey + i
-		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $2)`, k, maxValue-k); err != nil {
-			t.Fatal(err)
-		}
+		runSqlWithRetry(t, sqlDB, fmt.Sprintf(`INSERT INTO t.test VALUES(%d, %d)`, k, maxValue-k))
 	}
 
 	// Insert some new rows.
 	numInserts := 10
 	for i := 0; i < numInserts; i++ {
-		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $2)`, maxValue+i+1, maxValue+i+1); err != nil {
-			t.Fatal(err)
-		}
+		k := maxValue + i + 1
+		runSqlWithRetry(t, sqlDB, fmt.Sprintf(`INSERT INTO t.test VALUES(%d, %d)`, k, k))
 	}
 
 	wg.Wait() // for schema change to complete.
@@ -523,9 +526,7 @@ func runSchemaChangeWithOperations(
 
 	// Delete the rows inserted.
 	for i := 0; i < numInserts; i++ {
-		if _, err := sqlDB.Exec(`DELETE FROM t.test WHERE k = $1`, maxValue+i+1); err != nil {
-			t.Fatal(err)
-		}
+		runSqlWithRetry(t, sqlDB, fmt.Sprintf(`DELETE FROM t.test WHERE k = %d`, maxValue+i+1))
 	}
 }
 
@@ -533,7 +534,6 @@ func runSchemaChangeWithOperations(
 // that run simultaneously.
 func TestRaceWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#7628")
 
 	var backfillNotification chan bool
 	params, _ := createTestServerParams()
@@ -545,6 +545,7 @@ func TestRaceWithBackfill(t *testing.T) {
 				if backfillNotification != nil {
 					// Close channel to notify that the backfill has started.
 					close(backfillNotification)
+					backfillNotification = nil
 				}
 				return nil
 			},
@@ -669,7 +670,8 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	// This test could be made its own test but is placed here to speed up the
 	// testing.
 
-	backfillNotification = make(chan bool)
+	notification := make(chan bool)
+	backfillNotification = notification
 	// Run the schema change in a separate goroutine.
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -682,7 +684,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	}()
 
 	// Wait until the schema change backfill starts.
-	<-backfillNotification
+	<-notification
 
 	// Wait for a short bit to ensure that the backfill has likely progressed
 	// and written some data, but not long enough that the backfill has

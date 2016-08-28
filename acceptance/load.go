@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
@@ -78,7 +80,7 @@ CREATE TABLE %s (
 		}
 
 		if timeutil.Now().After(nextUpdate) {
-			log.Infof("Insert %d: inserted and checked %d values", ID, valueInsert)
+			log.Infof(context.TODO(), "Insert %d: inserted and checked %d values", ID, valueInsert)
 			nextUpdate = timeutil.Now().Add(time.Second)
 		}
 	}

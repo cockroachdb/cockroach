@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as d3 from "d3";
-import _ = require("lodash");
+import _ from "lodash";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 
@@ -46,7 +46,7 @@ class ClusterMain extends React.Component<ClusterMainProps, {}> {
 
   render() {
     let { totalNodes, bytesUsed, availableCapacity } = this.props.clusterInfo;
-    let capacityPercent = (availableCapacity !== 0) ? bytesUsed / availableCapacity : 0.0;
+    let capacityPercent = (availableCapacity !== 0) ? bytesUsed / (bytesUsed + availableCapacity) : 0.0;
     return <div className="section overview">
       <div className="charts half">
 
@@ -81,7 +81,7 @@ class ClusterMain extends React.Component<ClusterMainProps, {}> {
                      subtitle="(Max Per Percentile)"
                      tooltip={`The latency between query requests and responses over a 1 minute period.
                                Percentiles are first calculated on each node.
-                               For Each percentile, the maximum latency across all nodes is then shown.`}>
+                               For each percentile, the maximum latency across all nodes is then shown.`}>
             <Axis format={ (n: number) => d3.format(".1f")(NanoToMilli(n)) } label="Milliseconds">
               <Metric name="cr.node.exec.latency-1m-max" title="Max Latency"
                       aggregateMax downsampleMax />
@@ -96,11 +96,11 @@ class ClusterMain extends React.Component<ClusterMainProps, {}> {
 
           <StackedAreaGraph title="CPU Usage"
                      legend={ false }
-                     tooltip={`The percentage of CPU used by CockroachDB (User %) and system-level operations
+                     tooltip={`The average percentage of CPU used by CockroachDB (User %) and system-level operations
                                (Sys %) across all nodes.`}>
             <Axis format={ d3.format(".2%") }>
-              <Metric name="cr.node.sys.cpu.user.percent" title="CPU User %" />
-              <Metric name="cr.node.sys.cpu.sys.percent" title="CPU Sys %" />
+              <Metric name="cr.node.sys.cpu.user.percent" aggregateAvg title="CPU User %" />
+              <Metric name="cr.node.sys.cpu.sys.percent" aggregateAvg title="CPU Sys %" />
             </Axis>
           </StackedAreaGraph>
 
@@ -165,7 +165,7 @@ let clusterInfo = createSelector(
 );
 
 let clusterMainConnected = connect(
-  (state, ownProps) => {
+  (state: AdminUIState) => {
     return {
       clusterInfo: clusterInfo(state),
     };

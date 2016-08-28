@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -33,7 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/testutils/storageutils"
+	"github.com/cockroachdb/cockroach/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -44,7 +45,7 @@ import (
 // CommandFilters is thread-safe.
 // CommandFilters also optionally does replay protection if filters need it.
 type CommandFilters struct {
-	sync.RWMutex
+	syncutil.RWMutex
 	filters []struct {
 		id         int
 		idempotent bool
@@ -194,5 +195,6 @@ func TestMain(m *testing.M) {
 	security.SetReadFileFn(securitytest.Asset)
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
+	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 	os.Exit(m.Run())
 }

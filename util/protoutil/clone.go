@@ -19,8 +19,8 @@ package protoutil
 import (
 	"fmt"
 	"reflect"
-	"sync"
 
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -34,7 +34,7 @@ type typeKey struct {
 }
 
 var types struct {
-	sync.Mutex
+	syncutil.Mutex
 	known map[typeKey]bool
 }
 

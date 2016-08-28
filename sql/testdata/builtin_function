@@ -112,9 +112,10 @@ SELECT SUBSTR('RoacH', -2, 4)
 ----
 R
 
-# See #6601
+# See #6601 and #8210. We use three arguments to guarantee a very high
+# probability that at least one of the UUIDs is invalid UTF8.
 query error invalid utf8
-select cast(uuid_v4() as string)
+select cast(uuid_v4() as string), cast(uuid_v4() as string), cast(uuid_v4() as string)
 
 query T
 SELECT SUBSTR('12345', 2, 77)
@@ -128,6 +129,11 @@ SELECT SUBSTR('12345', -2, 77)
 
 statement error SUBSTR: negative substring length -1 not allowed
 SELECT SUBSTR('12345', 2, -1)
+
+query T
+SELECT SUBSTR('string', 4827075662841736053, 5123273972570225659) || 'empty'
+----
+empty
 
 query T
 SELECT SUBSTRING('12345' for 3)
@@ -183,6 +189,9 @@ query T
 SELECT repeat('Pg', -1) || 'empty'
 ----
 empty
+
+statement error pq: repeat: runtime error: makeslice: len out of range
+SELECT repeat('s', 9223372036854775807)
 
 query I
 SELECT ascii('x')
@@ -470,6 +479,9 @@ SELECT exp(-1.0::float), exp(1.0::float), exp(2.0::decimal)
 ----
 0.36787944117144233 2.718281828459045 7.3890560989306502
 
+query error argument value is too large
+SELECT exp(2000::decimal)
+
 query RRR
 SELECT floor(-1.5::float), floor(1.5::float), floor(9.123456789::decimal)
 ----
@@ -593,14 +605,8 @@ SELECT radians(-45.0), radians(45.0)
 ----
 -0.7853981633974483 0.7853981633974483
 
-# Our implementation of round is not fully Postgres-compatible because we do
-# not allow negative numbers of digits.
-
-query error round: number of digits must be greater than 0
-SELECT round(41.2::float, -1)
-
 query RRR
-SELECT round(4.2::float, 0), round(4.2::float, 50), round(4.22222222::decimal, 3)
+SELECT round(4.2::float, 0), round(4.2::float, 10), round(4.22222222::decimal, 3)
 ----
 4 4.2 4.222
 
@@ -624,12 +630,17 @@ SELECT round(-2.5::float), round(-1.5::float), round(-0.0::float), round(0.0::fl
 query RRRR
 SELECT round(-2.5::decimal, 0), round(-1.5::decimal, 0), round(1.5::decimal, 0), round(2.5::decimal, 0)
 ----
--3 -2 2 3
+-2 -2 2 2
+
+query RRRRR
+SELECT round(-2.5::decimal, 3), round(-1.5::decimal, 3), round(0.0::decimal, 3), round(1.5::decimal, 3), round(2.5::decimal, 3)
+----
+-2.500 -1.500 0.000 1.500 2.500
 
 query RRRRR
 SELECT round(-2.5::decimal), round(-1.5::decimal), round(0.0::decimal), round(1.5::decimal), round(2.5::decimal)
 ----
--3 -2 0 2 3
+-2 -2 0 2 2
 
 # Test rounding to 14 digits, because the logic test itself
 # formats floats rounded to 15 digits behind the decimal point.
@@ -643,6 +654,39 @@ query RR
 SELECT round(-1.7976931348623157e+308::float, 1), round(1.7976931348623157e+308::float, 1)
 ----
 -1.7976931348623157e+308 1.7976931348623157e+308
+
+query RR
+SELECT round(-1.7976931348623157e+308::float, -303), round(1.7976931348623157e+308::float, -303)
+----
+-1.797690000000001e+308 1.797690000000001e+308
+
+query RR
+SELECT round(-1.23456789e+308::float, -308), round(1.23456789e+308::float, -308)
+----
+-1.0000000000000006e+308 1.0000000000000006e+308
+
+query RR
+SELECT round(-1.7976931348623157e-308::float, 1), round(1.7976931348623157e-308::float, 1)
+----
+-0 0
+
+query RRRR
+SELECT 1.234567890123456789::float,  round(1.234567890123456789::float,15), round(1.234567890123456789::float,16), round(1.234567890123456789::float,17);
+----
+1.2345678901234567 1.234567890123457 1.2345678901234567 1.2345678901234567
+
+query RRRR
+SELECT round(123.456::float, -1), round(123.456::float, -2), round(123.456::float, -3), round(123.456::float, -2438602134409251682)
+----
+120 100 0 0
+
+query RRRR
+SELECT round(123.456::decimal, -1), round(123.456::decimal, -2), round(123.456::decimal, -3), round(123.456::decimal, -2438602134409251682)
+----
+120 100 0 0
+
+query error rounding would extend value by more than 2000 decimal digits
+SELECT round(1::decimal, 3000)
 
 query III
 SELECT sign(-2), sign(0), sign(2)
@@ -1066,5 +1110,26 @@ SELECT strpos(version(), 'CockroachDB')
 1
 
 # Don't panic during incorrect use of * (#7727)
-query error pq: cannot use '\*' with COS
+query error pq: COS: cannot use "\*" in this context
 SELECT COS(*) FROM system.namespace
+
+# Don't panic with invalid names (#8045)
+query error invalid column name: "nonexistent.\*"
+SELECT TRIM(TRAILING nonexistent.*[1])
+
+query error invalid column name: "foo.\*"
+SELECT TRIM(TRAILING foo.*[1]) FROM (VALUES (1)) AS foo(x)
+
+# Don't panic with invalid names (#8044)
+query error cannot use "nonexistent.\*" in this context
+SELECT OVERLAY(nonexistent.* PLACING 'string' FROM 'string')
+
+query error cannot use "foo.\*" in this context
+SELECT OVERLAY(foo.* PLACING 'string' FROM 'string') FROM (VALUES (1)) AS foo(x)
+
+# Don't panic with invalid names (#8023)
+query error cannot use "nonexistent.\*" in this context
+SELECT nonexistent.* IS NOT TRUE
+
+query error cannot use "foo.\*" in this context
+SELECT foo.* IS NOT TRUE FROM (VALUES (1)) AS foo(x)

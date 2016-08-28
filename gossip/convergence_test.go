@@ -19,22 +19,13 @@ package gossip_test
 import (
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 )
-
-// verifyConvergence verifies that info from each node is visible from
-// every node in the network within numCycles cycles of the gossip protocol.
-func verifyConvergence(numNodes, maxCycles int, _ *testing.T) {
-	network := simulation.NewNetwork(numNodes)
-
-	if connectedCycle := network.RunUntilFullyConnected(); connectedCycle > maxCycles {
-		log.Warningf("expected a fully-connected network within %d cycles; took %d",
-			maxCycles, connectedCycle)
-	}
-	network.Stop()
-}
 
 // TestConvergence verifies a 10 node gossip network converges within
 // a fixed number of simulation cycles. It's really difficult to
@@ -46,5 +37,14 @@ func verifyConvergence(numNodes, maxCycles int, _ *testing.T) {
 // actual production gossip code than seems worthwhile for a unittest.
 func TestConvergence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	verifyConvergence(10, 100, t)
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	network := simulation.NewNetwork(stopper, 10, true)
+
+	const maxCycles = 100
+	if connectedCycle := network.RunUntilFullyConnected(); connectedCycle > maxCycles {
+		log.Warningf(context.TODO(), "expected a fully-connected network within %d cycles; took %d",
+			maxCycles, connectedCycle)
+	}
 }

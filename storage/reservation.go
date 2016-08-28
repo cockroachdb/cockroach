@@ -15,14 +15,16 @@
 package storage
 
 import (
-	"sync"
 	"time"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -37,7 +39,7 @@ const (
 // reservation is an item in both the reservationQ and the used in bookie's
 // reservation map.
 type reservation struct {
-	roachpb.ReservationRequest
+	ReservationRequest
 	expireAt hlc.Timestamp
 }
 
@@ -74,12 +76,12 @@ func (pq *reservationQ) dequeue() *reservation {
 // bookie contains a store's replica reservations.
 type bookie struct {
 	clock              *hlc.Clock
-	metrics            *storeMetrics
+	metrics            *StoreMetrics
 	reservationTimeout time.Duration // How long each reservation is held.
 	maxReservations    int           // Maximum number of allowed reservations.
 	maxReservedBytes   int64         // Maximum bytes allowed for all reservations combined.
 	mu                 struct {
-		sync.Mutex                                             // Protects all values within the mu struct.
+		syncutil.Mutex                                         // Protects all values within the mu struct.
 		queue                 reservationQ                     // Queue used to handle expiring of reservations.
 		reservationsByRangeID map[roachpb.RangeID]*reservation // All active reservations
 		size                  int64                            // Total bytes required for all reservations.
@@ -90,15 +92,15 @@ type bookie struct {
 func newBookie(
 	clock *hlc.Clock,
 	stopper *stop.Stopper,
-	metrics *storeMetrics,
+	metrics *StoreMetrics,
 	reservationTimeout time.Duration,
 ) *bookie {
 	b := &bookie{
 		clock:              clock,
 		metrics:            metrics,
 		reservationTimeout: reservationTimeout,
-		maxReservations:    envutil.EnvOrDefaultInt("max_reservations", defaultMaxReservations),
-		maxReservedBytes:   envutil.EnvOrDefaultBytes("max_reserved_bytes", defaultMaxReservedBytes),
+		maxReservations:    envutil.EnvOrDefaultInt("COCKROACH_MAX_RESERVATIONS", defaultMaxReservations),
+		maxReservedBytes:   envutil.EnvOrDefaultBytes("COCKROACH_MAX_RESERVED_BYTES", defaultMaxReservedBytes),
 	}
 	b.mu.reservationsByRangeID = make(map[roachpb.RangeID]*reservation)
 	b.start(stopper)
@@ -108,9 +110,18 @@ func newBookie(
 // Reserve a new replica. Reservations can be rejected due to having too many
 // outstanding reservations already or not having enough free disk space.
 // Accepted reservations return a ReservationResponse with Reserved set to true.
-func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResponse {
+func (b *bookie) Reserve(
+	ctx context.Context, req ReservationRequest, deadReplicas []roachpb.ReplicaIdent,
+) ReservationResponse {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	resp := ReservationResponse{
+		Reserved: false,
+		RangeCount: int32(b.metrics.ReplicaCount.Count()) +
+			int32(len(b.mu.reservationsByRangeID)),
+	}
+
 	if olderReservation, ok := b.mu.reservationsByRangeID[req.RangeID]; ok {
 		// If the reservation is a repeat of an already existing one, just
 		// update it. This can occur when an RPC repeats.
@@ -118,48 +129,55 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 			// To update the reservation, fill the original one and add the
 			// new one.
 			if log.V(2) {
-				log.Infof("updating existing reservation for rangeID:%d, %+v", req.RangeID,
+				log.Infof(ctx, "updating existing reservation for rangeID:%d, %+v", req.RangeID,
 					olderReservation)
 			}
 			b.fillReservationLocked(olderReservation)
 		} else {
 			if log.V(2) {
-				log.Infof("there is pre-existing reservation %+v, can't update with %+v",
+				log.Infof(ctx, "there is pre-existing reservation %+v, can't update with %+v",
 					olderReservation, req)
 			}
-			return roachpb.ReservationResponse{Reserved: false}
+			return resp
 		}
 	}
 
 	// Do we have too many current reservations?
 	if len(b.mu.reservationsByRangeID) >= b.maxReservations {
 		if log.V(1) {
-			log.Infof("could not book reservation %+v, too many reservations already (current:%d, max:%d)",
+			log.Infof(ctx, "could not book reservation %+v, too many reservations already (current:%d, max:%d)",
 				req, len(b.mu.reservationsByRangeID), b.maxReservations)
 		}
-		return roachpb.ReservationResponse{Reserved: false}
+		return resp
 	}
 
 	// Can we accommodate the requested number of bytes (doubled for safety) on
 	// the hard drive?
 	// TODO(bram): Explore if doubling the requested size enough?
 	// Store `available` in case it changes between if and log.
-	available := b.metrics.available.Value()
+	available := b.metrics.Available.Value()
 	if b.mu.size+(req.RangeSize*2) > available {
 		if log.V(1) {
-			log.Infof("could not book reservation %+v, not enough available disk space (requested:%d*2, reserved:%d, available:%d)",
+			log.Infof(ctx, "could not book reservation %+v, not enough available disk space (requested:%d*2, reserved:%d, available:%d)",
 				req, req.RangeSize, b.mu.size, available)
 		}
-		return roachpb.ReservationResponse{Reserved: false}
+		return resp
 	}
 
 	// Do we have enough reserved space free for the reservation?
 	if b.mu.size+req.RangeSize > b.maxReservedBytes {
 		if log.V(1) {
-			log.Infof("could not book reservation %+v, not enough available reservation space (requested:%d, reserved:%d, maxReserved:%d)",
+			log.Infof(ctx, "could not book reservation %+v, not enough available reservation space (requested:%d, reserved:%d, maxReserved:%d)",
 				req, req.RangeSize, b.mu.size, b.maxReservedBytes)
 		}
-		return roachpb.ReservationResponse{Reserved: false}
+		return resp
+	}
+
+	// Make sure that we don't add back a destroyed replica.
+	for _, rep := range deadReplicas {
+		if req.RangeID == rep.RangeID {
+			return ReservationResponse{Reserved: false}
+		}
 	}
 
 	newReservation := &reservation{
@@ -172,14 +190,15 @@ func (b *bookie) Reserve(req roachpb.ReservationRequest) roachpb.ReservationResp
 	b.mu.size += req.RangeSize
 
 	// Update the store metrics.
-	b.metrics.reservedReplicaCount.Inc(1)
-	b.metrics.reserved.Inc(req.RangeSize)
+	b.metrics.ReservedReplicaCount.Inc(1)
+	b.metrics.Reserved.Inc(req.RangeSize)
 
 	if log.V(1) {
-		log.Infof("new reservation added: %+v", newReservation)
+		log.Infof(ctx, "new reservation added: %+v", newReservation)
 	}
 
-	return roachpb.ReservationResponse{Reserved: true}
+	resp.Reserved = true
+	return resp
 }
 
 // Fill removes a reservation. Returns true when the reservation has been
@@ -192,7 +211,7 @@ func (b *bookie) Fill(rangeID roachpb.RangeID) bool {
 	res, ok := b.mu.reservationsByRangeID[rangeID]
 	if !ok {
 		if log.V(2) {
-			log.Infof("there is no reservation for rangeID:%d", rangeID)
+			log.Infof(context.TODO(), "there is no reservation for rangeID:%d", rangeID)
 		}
 		return false
 	}
@@ -205,7 +224,7 @@ func (b *bookie) Fill(rangeID roachpb.RangeID) bool {
 // lock is held. This should only be called internally.
 func (b *bookie) fillReservationLocked(res *reservation) {
 	if log.V(2) {
-		log.Infof("filling reservation: %+v", res)
+		log.Infof(context.TODO(), "filling reservation: %+v", res)
 	}
 
 	// Remove it from reservationsByRangeID. Note that we don't remove it from the
@@ -216,8 +235,8 @@ func (b *bookie) fillReservationLocked(res *reservation) {
 	b.mu.size -= res.RangeSize
 
 	// Update the store metrics.
-	b.metrics.reservedReplicaCount.Dec(1)
-	b.metrics.reserved.Dec(res.RangeSize)
+	b.metrics.ReservedReplicaCount.Dec(1)
+	b.metrics.Reserved.Dec(res.RangeSize)
 }
 
 // start will run continuously and expire old reservations.
@@ -241,7 +260,7 @@ func (b *bookie) start(stopper *stop.Stopper) {
 					if b.mu.reservationsByRangeID[expiredReservation.RangeID] == expiredReservation {
 						b.fillReservationLocked(expiredReservation)
 					} else if log.V(2) {
-						log.Infof("the reservation for rangeID %d has already been filled.",
+						log.Infof(context.TODO(), "the reservation for rangeID %d has already been filled.",
 							expiredReservation.RangeID)
 					}
 					// Set the timeout to 0 to force another peek.

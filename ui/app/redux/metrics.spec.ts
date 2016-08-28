@@ -1,15 +1,14 @@
 import { assert } from "chai";
-import _ = require("lodash");
-import Long = require("long");
-import * as fetchMock from "fetch-mock";
+import _ from "lodash";
+import Long from "long";
+import fetchMock from "../util/fetch-mock";
 
 import * as protos from "../js/protos";
-import reducer, * as metrics from "./metrics";
+import * as metrics from "./metrics";
+import reducer from "./metrics";
 import { Action } from "../interfaces/action";
 
-type TSRequest = cockroach.ts.tspb.TimeSeriesQueryRequest;
 type TSRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
-type TSResponse = cockroach.ts.tspb.TimeSeriesQueryResponse;
 
 describe("metrics reducer", function() {
   describe("actions", function() {
@@ -156,7 +155,10 @@ describe("metrics reducer", function() {
 
       // Mock out fetch server; we are only expecting requests to /ts/query,
       // which we simply reflect with an empty set of datapoints.
-      fetchMock.mock("/ts/query", "post", (url: string, requestObj: RequestInit) => {
+      fetchMock.mock({
+        matcher: "/ts/query",
+        method: "POST",
+        response: (url: string, requestObj: RequestInit) => {
           // Assert that metric store's "inFlight" is 1 or 2.
           assert.isAtLeast(mockMetricsState.inFlight, 1);
           assert.isAtMost(mockMetricsState.inFlight, 2);
@@ -164,7 +166,6 @@ describe("metrics reducer", function() {
           let request = protos.cockroach.ts.tspb.TimeSeriesQueryRequest.decode(requestObj.body as ArrayBuffer);
 
           return {
-            sendAsJson: false,
             body: new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
               results: _.map(request.queries, (q) => {
                 return {
@@ -174,6 +175,7 @@ describe("metrics reducer", function() {
               }),
             }).toArrayBuffer(),
           };
+        },
       });
 
       // Dispatch several requests. Requests are divided among two timespans,
@@ -223,7 +225,10 @@ describe("metrics reducer", function() {
       // Mock out fetch server; send a positive reply to the first request, and
       // an error to the second request.
       let successSent = false;
-      fetchMock.mock("/ts/query", "post", (url: string, requestObj: any) => {
+      fetchMock.mock({
+        matcher: "/ts/query",
+        method: "POST",
+        response: (url: string, requestObj: RequestInit) => {
           // Assert that metric store's "inFlight" is 1.
           assert.equal(mockMetricsState.inFlight, 1);
 
@@ -235,7 +240,6 @@ describe("metrics reducer", function() {
           let request = protos.cockroach.ts.tspb.TimeSeriesQueryRequest.decode(requestObj.body as ArrayBuffer);
 
           return {
-            sendAsJson: false,
             body: new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
               results: _.map(request.queries, (q) => {
                 return {
@@ -245,6 +249,7 @@ describe("metrics reducer", function() {
               }),
             }).toArrayBuffer(),
           };
+        },
       });
 
       // Dispatch several requests. Requests are divided among two timespans,

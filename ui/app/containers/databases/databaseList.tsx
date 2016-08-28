@@ -1,192 +1,169 @@
 import * as React from "react";
-import { Link } from "react-router";
-import * as _ from "lodash";
+import { Link, IInjectedProps } from "react-router";
+import _ from "lodash";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 
+import * as protos from "../../js/protos";
 import { AdminUIState } from "../../redux/state";
 import { setUISetting } from "../../redux/ui";
-import { SortableTable, SortableColumn, SortSetting } from "../../components/sortabletable";
+import { refreshDatabases, refreshDatabaseDetails, KeyedCachedDataReducerState } from "../../redux/apiReducers";
+import { SortSetting } from "../../components/sortabletable";
+import { SortedTable } from "../../components/sortedtable";
 
-import { refreshDatabases } from "../../redux/databaseInfo";
+type DatabaseDetailsResponseMessage = cockroach.server.serverpb.DatabaseDetailsResponseMessage;
 
 // Constant used to store sort settings in the redux UI store.
 const UI_DATABASES_SORT_SETTING_KEY = "databaseList/sort_setting";
 
-/******************************
- *      COLUMN DEFINITION
- */
-
-/**
- * DatabasesTableColumn provides an enumeration value for each column in the databases table.
- */
-enum DatabasesTableColumn {
-  Name = 1,
+// DatabaseInfo is a structure that aggregates information from multiple backend
+// queries regarding the same database.
+class DatabaseInfo {
+  constructor(public name: string, public numTables: number) { };
 }
 
-/**
- * DatabasesColumnDescriptor is used to describe metadata about an individual column
- * in the Databases table.
- */
-interface DatabasesColumnDescriptor {
-  // Enumeration key to distinguish this column from others.
-  key: DatabasesTableColumn;
-  // Title string that should appear in the header column.
-  title: string;
-  // Function which generates the contents of an individual cell in this table.
-  cell: (s: string) => React.ReactNode;
-  // Function which returns a value that can be used to sort a collection of
-  // databases. This will be used to sort the table according to the data in
-  // this column.
-  sort?: (s: string) => any;
-  // className to be applied to the td elements
-  className?: string;
-}
+// Specialization of generic SortedTable component:
+//   https://github.com/Microsoft/TypeScript/issues/3960
+//
+// The variable name must start with a capital letter or TSX will not recognize
+// it as a component.
+// tslint:disable-next-line:variable-name
+const DatabasesSortedTable = SortedTable as new () => SortedTable<DatabaseInfo>;
 
 /**
- * columnDescriptors describes all columns that appear in the databases table.
- * Columns are displayed in the same order they do in this collection, from left
- * to right.
- */
-let columnDescriptors: DatabasesColumnDescriptor[] = [
-  // Database name column
-  {
-    key: DatabasesTableColumn.Name,
-    title: "Database Name",
-    cell: (s) => <Link to={`databases/${s}`}>{s}</Link>,
-    sort: _.identity,
-    className: "expand-link", // don't pad the td element to allow the link to expand
-  },
-];
-
-/******************************
- *   DATABASES MAIN COMPONENT
- */
-
-/**
- * DatabasesMainData are the data properties which should be passed to the DatabasesMain
+ * DatabaseListData are the data properties which should be passed to the DatabaseList
  * container.
  */
-
-interface DatabasesMainData {
+interface DatabaseListData {
   // Current sort setting for the table. Incoming rows will already be sorted
   // according to this setting.
   sortSetting: SortSetting;
   // A list of databases, which are possibly sorted according to
   // sortSetting.
-  sortedDatabases: string[];
+  databaseInfos: DatabaseInfo[];
 }
 
 /**
- * DatabasesMainActions are the action dispatchers which should be passed to the
- * DatabasesMain container.
+ * DatabaseListActions are the action dispatchers which should be passed to the
+ * DatabaseList container.
  */
-interface DatabasesMainActions {
+interface DatabaseListActions {
   // Call if the user indicates they wish to change the sort of the table data.
   setUISetting: typeof setUISetting;
-
   refreshDatabases: typeof refreshDatabases;
+  refreshDatabaseDetails: typeof refreshDatabaseDetails;
 }
 
 /**
- * DatabasesMainProps is the type of the props object that must be passed to
- * DatabasesMain component.
+ * DatabaseListProps is the type of the props object that must be passed to
+ * DatabaseList component.
  */
-type DatabasesMainProps = DatabasesMainData & DatabasesMainActions;
+type DatabaseListProps = DatabaseListData & DatabaseListActions & IInjectedProps;
 
 /**
- * DatabasesMain renders the main content of the databases page, which is primarily a
+ * DatabaseList renders the main content of the databases page, which is primarily a
  * data table of all databases.
  */
-class DatabasesMain extends React.Component<DatabasesMainProps, {}> {
-  /**
-   * columns is a selector which computes the input Columns to our data table,
-   * based our columnDescriptors and the current sorted data
-   */
-  columns = createSelector(
-    (props: DatabasesMainProps) => props.sortedDatabases,
-    (databases: string[]) => {
-      return _.map(columnDescriptors, (cd): SortableColumn => {
-        return {
-          title: cd.title,
-          cell: (index) => cd.cell(databases[index]),
-          sortKey: cd.sort ? cd.key : undefined,
-          className: cd.className,
-        };
-      });
-    });
-
-  static title() {
-    return <h2>Databases</h2>;
-  }
-
+class DatabaseList extends React.Component<DatabaseListProps, {}> {
   // Callback when the user elects to change the sort setting.
   changeSortSetting(setting: SortSetting) {
     this.props.setUISetting(UI_DATABASES_SORT_SETTING_KEY, setting);
   }
 
-  componentWillMount() {
-    // Refresh databases when mounting.
-    this.props.refreshDatabases();
+  // loadDatabaseDetails loads detailed data for each database with no info in 
+  // the store.
+  loadDatabaseDetails(props = this.props) {
+    if (props.databaseInfos.length) {
+      _.each(props.databaseInfos, (dbInfo) => {
+        if (_.isUndefined(dbInfo.numTables)) {
+          props.refreshDatabaseDetails(new protos.cockroach.server.serverpb.DatabaseDetailsRequest({
+            database: dbInfo.name,
+          }));
+        }
+      });
+    }
   }
 
-  componentWillReceiveProps(props: DatabasesMainProps) {
-    // Refresh databases when props are received; this will immediately
-    // trigger a new request if previous results are invalidated.
-    // this.props.refreshDatabases();
+  componentWillMount() {
+    this.props.refreshDatabases();
+    this.loadDatabaseDetails();
+  }
+
+  componentWillReceiveProps(props: DatabaseListProps) {
+    this.loadDatabaseDetails(props);
   }
 
   render() {
-    let { sortedDatabases: databases, sortSetting } = this.props;
+    let { databaseInfos, sortSetting } = this.props;
 
-    if (databases) {
+    if (databaseInfos) {
       return <div className="sql-table">
-        <SortableTable count={databases.length}
+        <DatabasesSortedTable
+          data={databaseInfos}
           sortSetting={sortSetting}
-          onChangeSortSetting={(setting) => this.changeSortSetting(setting) }>
-          {this.columns(this.props) }
-        </SortableTable>
+          onChangeSortSetting={(setting) => this.changeSortSetting(setting)}
+          columns={[
+            {
+              title: "Database Name",
+              cell: (dbInfo) => <Link to={`databases/database/${dbInfo.name}`}>{dbInfo.name}</Link>,
+              sort: (dbInfo) => dbInfo.name,
+              className: "expand-link", // don't pad the td element to allow the link to expand
+            },
+            {
+              title: "# Of Tables",
+              cell: (dbInfo) => dbInfo.numTables,
+              sort: (dbInfo) => dbInfo.numTables,
+            },
+            {
+              title: "Last Modified",
+              cell: (dbInfo) => "", // TODO (maxlang): Pending #8246
+            },
+            {
+              title: "Events",
+              cell: (dbInfo) => "", // TODO (maxlang): Pending #8246
+            },
+            {
+              title: "Replication Factor",
+              cell: (dbInfo) => "", // TODO (maxlang): Pending #8248
+            },
+            {
+              title: "Target Range Size",
+              cell: (dbInfo) => "", // TODO (maxlang): Pending #8248
+            },
+          ]} />
       </div>;
     }
     return <div>No results.</div>;
   }
 }
 
-/******************************
- *         SELECTORS
- */
-
 // Base selectors to extract data from redux state.
-let databases = (state: AdminUIState): string[] => state.databaseInfo && state.databaseInfo.databases && state.databaseInfo.databases.data  && state.databaseInfo.databases.data.databases;
+let databases = (state: AdminUIState): string[] => state.cachedData.databases.data  && state.cachedData.databases.data.databases;
+let databaseDetails = (state: AdminUIState) => state.cachedData.databaseDetails;
 let sortSetting = (state: AdminUIState): SortSetting => state.ui[UI_DATABASES_SORT_SETTING_KEY] || {};
 
-// Selector which sorts statuses according to current sort setting.
-let sortFunctionLookup = _(columnDescriptors).keyBy("key").mapValues<(s: string) => any>("sort").value();
-
-let sortedDatabases = createSelector(
+// Selector which generates the table rows as a DatabaseInfo[].
+let databaseInfos = createSelector(
   databases,
-  sortSetting,
-  (dbs, sort) => {
-    let sortFn = sortFunctionLookup[sort.sortKey];
-    if (sort && sortFn) {
-      return _.orderBy(dbs, sortFn, sort.ascending ? "asc" : "desc");
-    } else {
-      return dbs;
-    }
-  });
+  databaseDetails,
+  (dbs: string[], details: KeyedCachedDataReducerState<DatabaseDetailsResponseMessage>): DatabaseInfo[] => {
+    return _.map(dbs, (db) => new DatabaseInfo(db, details[db] && details[db].data && details[db].data.table_names.length));
+  }
+);
 
-// Connect the DatabasesMain class with our redux store.
-let databasesMainConnected = connect(
-  (state, ownProps) => {
+// Connect the DatabaseList class with our redux store.
+let databaseListConnected = connect(
+  (state: AdminUIState) => {
     return {
-      sortedDatabases: sortedDatabases(state),
+      databaseInfos: databaseInfos(state),
       sortSetting: sortSetting(state),
     };
   },
   {
     setUISetting,
     refreshDatabases,
+    refreshDatabaseDetails,
   }
-)(DatabasesMain);
+)(DatabaseList);
 
-export default databasesMainConnected;
+export default databaseListConnected;

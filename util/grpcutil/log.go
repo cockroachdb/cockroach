@@ -18,6 +18,7 @@
 package grpcutil
 
 import (
+	"golang.org/x/net/context"
 	"google.golang.org/grpc/grpclog"
 
 	"github.com/cockroachdb/cockroach/util/log"
@@ -40,25 +41,25 @@ var _ grpclog.Logger = (*logger)(nil)
 type logger struct{}
 
 func (*logger) Fatal(args ...interface{}) {
-	log.FatalfDepth(2, "", args...)
+	log.FatalfDepth(context.TODO(), 2, "", args...)
 }
 
 func (*logger) Fatalf(format string, args ...interface{}) {
-	log.FatalfDepth(2, format, args...)
+	log.FatalfDepth(context.TODO(), 2, format, args...)
 }
 
 func (*logger) Fatalln(args ...interface{}) {
-	log.FatalfDepth(2, "", args...)
+	log.FatalfDepth(context.TODO(), 2, "", args...)
 }
 
 func (*logger) Print(args ...interface{}) {
-	log.InfofDepth(2, "", args...)
+	log.InfofDepth(context.TODO(), 2, "", args...)
 }
 
 func (*logger) Printf(format string, args ...interface{}) {
-	log.InfofDepth(2, format, args...)
+	log.InfofDepth(context.TODO(), 2, format, args...)
 }
 
 func (*logger) Println(args ...interface{}) {
-	log.InfofDepth(2, "", args...)
+	log.InfofDepth(context.TODO(), 2, "", args...)
 }

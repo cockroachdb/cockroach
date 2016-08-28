@@ -1,6 +1,6 @@
-import _ = require("lodash");
+import _ from "lodash";
 import { Dispatch } from "redux";
-import ByteBuffer = require("bytebuffer");
+import ByteBuffer from "bytebuffer";
 
 import * as protos from  "../js/protos";
 import { Action, PayloadAction } from "../interfaces/action";
@@ -155,7 +155,7 @@ export function loadUIData<S>(...keys: string[]) {
   return (dispatch: Dispatch<S>, getState: () => S): Promise<void> => {
     dispatch(fetchUIData());
 
-    return getUIData({ keys }).then((response) => {
+    return getUIData(new protos.cockroach.server.serverpb.GetUIDataRequest({ keys })).then((response) => {
       let keyValues = response.getKeyValues();
 
       _.each(keys, (key) => {

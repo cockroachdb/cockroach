@@ -1,0 +1,453 @@
+# Verify information_schema database handles mutation statements correctly.
+
+query error user root does not have DROP privilege on database information_schema
+ALTER DATABASE information_schema RENAME TO not_information_schema
+
+statement error user root does not have CREATE privilege on database information_schema
+CREATE TABLE information_schema.t (x INT)
+
+query error user root does not have DROP privilege on database information_schema
+DROP DATABASE information_schema
+
+
+# Verify other databases cant be called "information_schema".
+
+statement ok
+CREATE DATABASE other_db
+
+statement error the new database name "information_schema" already exists
+ALTER DATABASE other_db RENAME TO information_schema
+
+statement error database "information_schema" already exists
+CREATE DATABASE information_schema
+
+statement ok
+DROP DATABASE other_db
+
+
+# Verify information_schema tables handle mutation statements correctly.
+
+statement error user root does not have DROP privilege on table tables
+ALTER TABLE information_schema.tables RENAME TO information_schema.bad
+
+statement error user root does not have CREATE privilege on table tables
+ALTER TABLE information_schema.tables RENAME COLUMN x TO y
+
+statement error user root does not have CREATE privilege on table tables
+ALTER TABLE information_schema.tables ADD COLUMN x DECIMAL
+
+statement error user root does not have CREATE privilege on table tables
+ALTER TABLE information_schema.tables DROP COLUMN x
+
+statement error user root does not have CREATE privilege on table tables
+ALTER TABLE information_schema.tables ADD CONSTRAINT foo UNIQUE (b)
+
+statement error user root does not have CREATE privilege on table tables
+ALTER TABLE information_schema.tables DROP CONSTRAINT bar
+
+statement error user root does not have CREATE privilege on table tables
+ALTER TABLE information_schema.tables ALTER COLUMN x SET DEFAULT 'foo'
+
+statement error user root does not have CREATE privilege on table tables
+ALTER TABLE information_schema.tables ALTER x DROP NOT NULL
+
+statement error user root does not have CREATE privilege on table tables
+CREATE INDEX i on information_schema.tables (x)
+
+statement error user root does not have DROP privilege on table tables
+DROP TABLE information_schema.tables
+
+statement error user root does not have CREATE privilege on table tables
+DROP INDEX information_schema.tables@i
+
+statement error user root does not have GRANT privilege on table tables
+GRANT CREATE ON information_schema.tables TO root
+
+statement error user root does not have GRANT privilege on table tables
+REVOKE CREATE ON information_schema.tables FROM root
+
+
+# Verify information_schema tables handles read-only property correctly.
+
+query error user root does not have DELETE privilege on table tables
+DELETE FROM information_schema.tables
+
+query error user root does not have INSERT privilege on table tables
+INSERT INTO information_schema.tables VALUES ('abc')
+
+statement error user root does not have UPDATE privilege on table tables
+UPDATE information_schema.tables SET a = 'abc'
+
+statement error user root does not have DROP privilege on table tables
+TRUNCATE TABLE information_schema.tables
+
+
+# Verify information_schema can be used like a normal database.
+
+statement ok
+SET DATABASE = information_schema
+
+statement ok
+SET DATABASE = test
+
+
+# Verify information_schema handles reflection correctly.
+
+query T
+SHOW DATABASES
+----
+information_schema
+system
+test
+
+query T
+SHOW TABLES FROM information_schema
+----
+columns
+schemata
+table_constraints
+tables
+
+query TT colnames
+SHOW CREATE TABLE information_schema.tables
+----
+Table                      CreateTable
+information_schema.tables  CREATE TABLE "information_schema.tables" (
+                               TABLE_CATALOG STRING NOT NULL DEFAULT '',
+                               TABLE_SCHEMA STRING NOT NULL DEFAULT '',
+                               TABLE_NAME STRING NOT NULL DEFAULT '',
+                               TABLE_TYPE STRING NOT NULL DEFAULT '',
+                               VERSION INT NULL
+                           )
+
+query TTBT colnames
+SHOW COLUMNS FROM information_schema.tables
+----
+Field            Type       Null   Default
+TABLE_CATALOG    STRING     false  ''
+TABLE_SCHEMA     STRING     false  ''
+TABLE_NAME       STRING     false  ''
+TABLE_TYPE       STRING     false  ''
+VERSION          INT        true   NULL
+
+query TTTTTTT colnames
+SHOW INDEXES FROM information_schema.tables
+----
+Table  Name  Unique  Seq  Column  Direction  Storing
+
+query TTTTT colnames
+SHOW CONSTRAINTS FROM information_schema.tables
+----
+Table   Name     Type  Column(s)  Details
+tables  PRIMARY  KEY   []         NULL
+
+query TTT colnames
+SHOW GRANTS ON information_schema.tables
+----
+Table  User  Privileges
+
+
+# Verify selecting from information_schema.
+
+## information_schema.columns
+
+query TTTTI colnames
+SELECT table_catalog, table_schema, table_name, column_name, ordinal_position
+FROM information_schema.columns
+WHERE table_schema != 'information_schema'
+----
+table_catalog  table_schema        table_name  column_name               ordinal_position
+def            system              descriptor  id                        1
+def            system              descriptor  descriptor                2
+def            system              eventlog    timestamp                 1
+def            system              eventlog    eventType                 2
+def            system              eventlog    targetID                  3
+def            system              eventlog    reportingID               4
+def            system              eventlog    info                      5
+def            system              eventlog    uniqueID                  6
+def            system              lease       descID                    1
+def            system              lease       version                   2
+def            system              lease       nodeID                    3
+def            system              lease       expiration                4
+def            system              namespace   parentID                  1
+def            system              namespace   name                      2
+def            system              namespace   id                        3
+def            system              rangelog    timestamp                 1
+def            system              rangelog    rangeID                   2
+def            system              rangelog    storeID                   3
+def            system              rangelog    eventType                 4
+def            system              rangelog    otherRangeID              5
+def            system              rangelog    info                      6
+def            system              rangelog    uniqueID                  7
+def            system              ui          key                       1
+def            system              ui          value                     2
+def            system              ui          lastUpdated               3
+def            system              users       username                  1
+def            system              users       hashedPassword            2
+def            system              zones       id                        1
+def            system              zones       config                    2
+
+statement ok
+CREATE TABLE with_defaults (a INT DEFAULT 9, b STRING DEFAULT 'default', c INT, d STRING)
+
+query TTT colnames
+SELECT table_name, column_name, column_default
+FROM information_schema.columns
+WHERE table_schema = 'test' AND table_name = 'with_defaults'
+----
+table_name     column_name  column_default
+with_defaults  a            9
+with_defaults  b            'default'
+with_defaults  c            NULL
+with_defaults  d            NULL
+
+statement ok
+DROP TABLE with_defaults
+
+statement ok
+CREATE TABLE nullability (a INT NOT NULL, b STRING NOT NULL, c INT, d STRING)
+
+query TTT colnames
+SELECT table_name, column_name, is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'test' AND table_name = 'nullability'
+----
+table_name   column_name  is_nullable
+nullability  a            NO
+nullability  b            NO
+nullability  c            YES
+nullability  d            YES
+
+statement ok
+DROP TABLE nullability
+
+statement ok
+CREATE TABLE data_types (a INT, b FLOAT, c DECIMAL, d STRING, e BYTES, f TIMESTAMP, g TIMESTAMPTZ)
+
+query TTT colnames
+SELECT table_name, column_name, data_type
+FROM information_schema.columns
+WHERE table_schema = 'test' AND table_name = 'data_types'
+----
+table_name  column_name  data_type
+data_types  a            INT
+data_types  b            FLOAT
+data_types  c            DECIMAL
+data_types  d            STRING
+data_types  e            BYTES
+data_types  f            TIMESTAMP
+data_types  g            TIMESTAMPTZ
+
+statement ok
+DROP TABLE data_types
+
+statement ok
+CREATE TABLE char_len (a INT, b BIT, c BIT(12), d STRING, e STRING(12), f FLOAT)
+
+query TTII colnames
+SELECT table_name, column_name, character_maximum_length, character_octet_length
+FROM information_schema.columns
+WHERE table_schema = 'test' AND table_name = 'char_len'
+----
+table_name  column_name  character_maximum_length  character_octet_length
+char_len    a            NULL                      NULL
+char_len    b            1                         NULL
+char_len    c            12                        NULL
+char_len    d            NULL                      NULL
+char_len    e            12                        48
+char_len    f            NULL                      NULL
+
+statement ok
+DROP TABLE char_len
+
+statement ok
+CREATE TABLE num_prec (a INT, b FLOAT, c FLOAT(23), d DECIMAL, e DECIMAL(12), f DECIMAL(12, 6), g BOOLEAN)
+
+query TTIII colnames
+SELECT table_name, column_name, numeric_precision, numeric_scale, datetime_precision
+FROM information_schema.columns
+WHERE table_schema = 'test' AND table_name = 'num_prec'
+----
+table_name  column_name  numeric_precision  numeric_scale  datetime_precision
+num_prec    a            64                 0              NULL
+num_prec    b            53                 NULL           NULL
+num_prec    c            23                 NULL           NULL
+num_prec    d            NULL               NULL           NULL
+num_prec    e            12                 0              NULL
+num_prec    f            12                 6              NULL
+num_prec    g            NULL               NULL           NULL
+
+statement ok
+DROP TABLE num_prec
+
+## information_schema.schemata
+
+query TTTT colnames
+SELECT * FROM information_schema.schemata
+----
+CATALOG_NAME  SCHEMA_NAME         DEFAULT_CHARACTER_SET_NAME  SQL_PATH
+def           information_schema  NULL                        NULL
+def           system              NULL                        NULL
+def           test                NULL                        NULL
+
+statement ok
+CREATE DATABASE other_db
+
+query TTTT colnames
+SELECT * FROM information_schema.schemata
+----
+CATALOG_NAME  SCHEMA_NAME         DEFAULT_CHARACTER_SET_NAME  SQL_PATH
+def           information_schema  NULL                        NULL
+def           other_db            NULL                        NULL
+def           system              NULL                        NULL
+def           test                NULL                        NULL
+
+statement ok
+DROP DATABASE other_db
+
+## information_schema.tables
+
+statement ok
+CREATE DATABASE other_db
+
+statement ok
+CREATE TABLE other_db.xyz (i INT)
+
+query T
+SELECT table_name FROM information_schema.tables
+----
+columns
+schemata
+table_constraints
+tables
+xyz
+descriptor
+eventlog
+lease
+namespace
+rangelog
+ui
+users
+zones
+
+query T
+SELECT table_name FROM information_schema.tables WHERE table_name > 'n' ORDER BY 1 DESC
+----
+zones
+xyz
+users
+ui
+tables
+table_constraints
+schemata
+rangelog
+namespace
+
+query TTTTI colnames
+SELECT * FROM information_schema.tables
+----
+TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME         TABLE_TYPE   VERSION
+def            information_schema  columns            SYSTEM VIEW  1
+def            information_schema  schemata           SYSTEM VIEW  1
+def            information_schema  table_constraints  SYSTEM VIEW  1
+def            information_schema  tables             SYSTEM VIEW  1
+def            other_db            xyz                BASE TABLE   1
+def            system              descriptor         BASE TABLE   1
+def            system              eventlog           BASE TABLE   1
+def            system              lease              BASE TABLE   1
+def            system              namespace          BASE TABLE   1
+def            system              rangelog           BASE TABLE   1
+def            system              ui                 BASE TABLE   1
+def            system              users              BASE TABLE   1
+def            system              zones              BASE TABLE   1
+
+statement ok
+ALTER TABLE other_db.xyz ADD COLUMN j INT
+
+query TTI colnames
+SELECT TABLE_SCHEMA, TABLE_NAME, VERSION FROM information_schema.tables WHERE version > 1
+----
+TABLE_SCHEMA  TABLE_NAME  VERSION
+other_db      xyz         4
+
+user testuser
+
+query TTTTI colnames
+SELECT * FROM information_schema.tables
+----
+TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME         TABLE_TYPE   VERSION
+def            information_schema  columns            SYSTEM VIEW  1
+def            information_schema  schemata           SYSTEM VIEW  1
+def            information_schema  table_constraints  SYSTEM VIEW  1
+def            information_schema  tables             SYSTEM VIEW  1
+
+user root
+
+statement ok
+GRANT SELECT ON other_db.xyz TO testuser
+
+user testuser
+
+query TTTTI colnames
+SELECT * FROM information_schema.tables
+----
+TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME         TABLE_TYPE   VERSION
+def            information_schema  columns            SYSTEM VIEW  1
+def            information_schema  schemata           SYSTEM VIEW  1
+def            information_schema  table_constraints  SYSTEM VIEW  1
+def            information_schema  tables             SYSTEM VIEW  1
+def            other_db            xyz                BASE TABLE   5
+
+user root
+
+statement ok
+DROP DATABASE other_db
+
+
+## information_schema.table_constraints
+## This test case will be moved up into the correct order when #8497 is fixed.
+
+query TTTTTT colnames
+SELECT * FROM information_schema.table_constraints
+----
+CONSTRAINT_CATALOG  CONSTRAINT_SCHEMA  CONSTRAINT_NAME  TABLE_SCHEMA  TABLE_NAME  CONSTRAINT_TYPE
+def                 system             primary          system        descriptor  PRIMARY KEY
+def                 system             primary          system        eventlog    PRIMARY KEY
+def                 system             primary          system        lease       PRIMARY KEY
+def                 system             primary          system        namespace   PRIMARY KEY
+def                 system             primary          system        rangelog    PRIMARY KEY
+def                 system             primary          system        ui          PRIMARY KEY
+def                 system             primary          system        users       PRIMARY KEY
+def                 system             primary          system        zones       PRIMARY KEY
+
+statement ok
+CREATE DATABASE constraint_db
+
+statement ok
+CREATE TABLE constraint_db.t1 (
+  p FLOAT PRIMARY KEY,
+  a INT UNIQUE CHECK (a > 4),
+  CONSTRAINT c2 CHECK (a < 99)
+)
+
+statement ok
+CREATE TABLE constraint_db.t2 (
+    t1_ID INT,
+    CONSTRAINT fk FOREIGN KEY (t1_ID) REFERENCES constraint_db.t1(a),
+    INDEX (t1_ID)
+)
+
+query TTTTTT colnames
+SELECT * FROM information_schema.table_constraints WHERE constraint_schema = 'constraint_db'
+----
+CONSTRAINT_CATALOG  CONSTRAINT_SCHEMA  CONSTRAINT_NAME  TABLE_SCHEMA   TABLE_NAME  CONSTRAINT_TYPE
+def                 constraint_db      primary          constraint_db  t1          PRIMARY KEY
+def                 constraint_db      t1_a_key         constraint_db  t1          UNIQUE
+def                 constraint_db      c2               constraint_db  t1          CHECK
+def                 constraint_db      NULL             constraint_db  t1          CHECK
+def                 constraint_db      primary          constraint_db  t2          PRIMARY KEY
+def                 constraint_db      t2_t1_ID_idx     constraint_db  t2          FOREIGN KEY
+
+# TODO(nvanbenschoten) blocked on #8497.
+#statement ok
+#DROP DATABASE constraint_db

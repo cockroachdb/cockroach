@@ -29,6 +29,7 @@
 #include "rocksdb/options.h"
 #include "rocksdb/slice_transform.h"
 #include "rocksdb/statistics.h"
+#include "rocksdb/sst_file_writer.h"
 #include "rocksdb/table.h"
 #include "rocksdb/utilities/checkpoint.h"
 #include "rocksdb/utilities/write_batch_with_index.h"
@@ -38,6 +39,9 @@
 #include "db.h"
 #include "encoding.h"
 #include "eventlistener.h"
+#include "options_builder.h"
+
+#include <iostream>
 
 extern "C" {
 #include "_cgo_export.h"
@@ -1969,4 +1973,54 @@ DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats) {
 
 DBSSTable* DBGetSSTables(DBEngine* db, int* n) {
   return db->GetSSTables(n);
+}
+
+DBStatus DBEngineAddFile(DBEngine* db, DBSlice path) {
+  rocksdb::Status status = db->rep->AddFile(ToString(path));
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+  return kSuccess;
+}
+
+struct DBSstFileWriter {
+  std::unique_ptr<rocksdb::Options> options;
+  rocksdb::SstFileWriter rep;
+
+  DBSstFileWriter(rocksdb::Options* o)
+      : options(o),
+        rep(rocksdb::EnvOptions(), *o, o->comparator) {
+  }
+  virtual ~DBSstFileWriter() { }
+};
+
+DBSstFileWriter* DBSstFileWriterNew() {
+  rocksdb::Options* options = new rocksdb::Options();
+  options->comparator = &kComparator;
+  return new DBSstFileWriter(options);
+}
+
+DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw, DBSlice path) {
+  rocksdb::Status status = fw->rep.Open(ToString(path));
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+  return kSuccess;
+}
+
+DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val) {
+  rocksdb::Status status = fw->rep.Add(EncodeKey(key), ToSlice(val));
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+  return kSuccess;
+}
+
+DBStatus DBSstFileWriterClose(DBSstFileWriter* fw) {
+  rocksdb::Status status = fw->rep.Finish();
+  delete fw;
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+  return kSuccess;
 }

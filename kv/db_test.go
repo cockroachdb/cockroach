@@ -22,6 +22,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -168,7 +170,6 @@ func TestKVDBInternalMethods(t *testing.T) {
 		&roachpb.HeartbeatTxnRequest{},
 		&roachpb.GCRequest{},
 		&roachpb.PushTxnRequest{},
-		&roachpb.RangeLookupRequest{},
 		&roachpb.ResolveIntentRequest{},
 		&roachpb.ResolveIntentRangeRequest{},
 		&roachpb.MergeRequest{},
@@ -195,10 +196,8 @@ func TestKVDBInternalMethods(t *testing.T) {
 		b := &client.Batch{}
 		b.AddRawRequest(args)
 		err := db.Run(b)
-		if err == nil {
-			t.Errorf("%d: unexpected success calling %s", i, args.Method())
-		} else if !testutils.IsError(err, "contains an internal request|contains commit trigger") {
-			t.Errorf("%d: unexpected error for %s: %s", i, args.Method(), err)
+		if !testutils.IsError(err, "contains an internal request|contains commit trigger") {
+			t.Errorf("%d: unexpected error for %s: %v", i, args.Method(), err)
 		}
 	}
 }
@@ -214,7 +213,7 @@ func TestKVDBTransaction(t *testing.T) {
 
 	key := roachpb.Key("db-txn-test")
 	value := []byte("value")
-	err := db.Txn(func(txn *client.Txn) error {
+	err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 		// Use snapshot isolation so non-transactional read can always push.
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			return err
@@ -257,23 +256,23 @@ func TestAuthentication(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	var b1 client.Batch
+	b1 := &client.Batch{}
 	b1.Put("a", "b")
 
 	// Create a node user client and call Run() on it which lets us build our own
 	// request, specifying the user.
 	db1 := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.NodeUser)
-	if err := db1.Run(&b1); err != nil {
+	if err := db1.Run(b1); err != nil {
 		t.Fatal(err)
 	}
 
-	var b2 client.Batch
+	b2 := &client.Batch{}
 	b2.Put("c", "d")
 
 	// Try again, but this time with certs for a non-node user (even the root
 	// user has no KV permissions).
 	db2 := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.RootUser)
-	if err := db2.Run(&b2); !testutils.IsError(err, "is not allowed") {
+	if err := db2.Run(b2); !testutils.IsError(err, "is not allowed") {
 		t.Fatal(err)
 	}
 }

@@ -14,16 +14,22 @@
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
 
-package sqlbase
+package sqlbase_test
 
 import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/security/securitytest"
+	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
 func TestMain(m *testing.M) {
+	security.SetReadFileFn(securitytest.Asset)
 	randutil.SeedForTests()
+	serverutils.InitTestServerFactory(server.TestServerFactory)
 	os.Exit(m.Run())
 }

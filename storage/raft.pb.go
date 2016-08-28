@@ -2,22 +2,12 @@
 // source: cockroach/storage/raft.proto
 // DO NOT EDIT!
 
-/*
-	Package storage is a generated protocol buffer package.
-
-	It is generated from these files:
-		cockroach/storage/raft.proto
-
-	It has these top-level messages:
-		RaftMessageRequest
-		RaftMessageResponse
-		ConfChangeContext
-*/
 package storage
 
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
+import cockroach_roachpb2 "github.com/cockroachdb/cockroach/roachpb"
 import cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 import raftpb "github.com/coreos/etcd/raft/raftpb"
 
@@ -37,9 +27,50 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
-// This is a compile-time assertion to ensure that this generated file
-// is compatible with the proto package it is being compiled against.
-const _ = proto.GoGoProtoPackageIsVersion1
+type SnapshotResponse_Status int32
+
+const (
+	SnapshotResponse_UNKNOWN  SnapshotResponse_Status = 0
+	SnapshotResponse_ACCEPTED SnapshotResponse_Status = 1
+	SnapshotResponse_APPLIED  SnapshotResponse_Status = 2
+	SnapshotResponse_ERROR    SnapshotResponse_Status = 3
+	SnapshotResponse_DECLINED SnapshotResponse_Status = 4
+)
+
+var SnapshotResponse_Status_name = map[int32]string{
+	0: "UNKNOWN",
+	1: "ACCEPTED",
+	2: "APPLIED",
+	3: "ERROR",
+	4: "DECLINED",
+}
+var SnapshotResponse_Status_value = map[string]int32{
+	"UNKNOWN":  0,
+	"ACCEPTED": 1,
+	"APPLIED":  2,
+	"ERROR":    3,
+	"DECLINED": 4,
+}
+
+func (x SnapshotResponse_Status) Enum() *SnapshotResponse_Status {
+	p := new(SnapshotResponse_Status)
+	*p = x
+	return p
+}
+func (x SnapshotResponse_Status) String() string {
+	return proto.EnumName(SnapshotResponse_Status_name, int32(x))
+}
+func (x *SnapshotResponse_Status) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(SnapshotResponse_Status_value, data, "SnapshotResponse_Status")
+	if err != nil {
+		return err
+	}
+	*x = SnapshotResponse_Status(value)
+	return nil
+}
+func (SnapshotResponse_Status) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptorRaft, []int{4, 0}
+}
 
 // RaftMessageRequest is the request used to send raft messages using our
 // protobuf-based RPC codec.
@@ -55,15 +86,77 @@ func (m *RaftMessageRequest) String() string            { return proto.CompactTe
 func (*RaftMessageRequest) ProtoMessage()               {}
 func (*RaftMessageRequest) Descriptor() ([]byte, []int) { return fileDescriptorRaft, []int{0} }
 
-// RaftMessageResponse is an empty message returned by raft RPCs. If a
-// response is needed it will be sent as a separate message.
+type RaftMessageResponseUnion struct {
+	Error *cockroach_roachpb2.Error `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
+}
+
+func (m *RaftMessageResponseUnion) Reset()                    { *m = RaftMessageResponseUnion{} }
+func (m *RaftMessageResponseUnion) String() string            { return proto.CompactTextString(m) }
+func (*RaftMessageResponseUnion) ProtoMessage()               {}
+func (*RaftMessageResponseUnion) Descriptor() ([]byte, []int) { return fileDescriptorRaft, []int{1} }
+
+// RaftMessageResponse may be sent to the sender of a
+// RaftMessageRequest. RaftMessage does not use the usual
+// request/response pattern; it is primarily modeled as a one-way
+// stream of requests. Normal 'responses' are usually sent as new
+// requests on a separate stream in the other direction.
+// RaftMessageResponse is not sent for every RaftMessageRequest, but
+// may be used for certain error conditions.
 type RaftMessageResponse struct {
+	RangeID     github_com_cockroachdb_cockroach_roachpb.RangeID `protobuf:"varint,1,opt,name=range_id,json=rangeId,casttype=github.com/cockroachdb/cockroach/roachpb.RangeID" json:"range_id"`
+	FromReplica cockroach_roachpb.ReplicaDescriptor              `protobuf:"bytes,2,opt,name=from_replica,json=fromReplica" json:"from_replica"`
+	ToReplica   cockroach_roachpb.ReplicaDescriptor              `protobuf:"bytes,3,opt,name=to_replica,json=toReplica" json:"to_replica"`
+	Union       RaftMessageResponseUnion                         `protobuf:"bytes,4,opt,name=union" json:"union"`
 }
 
 func (m *RaftMessageResponse) Reset()                    { *m = RaftMessageResponse{} }
 func (m *RaftMessageResponse) String() string            { return proto.CompactTextString(m) }
 func (*RaftMessageResponse) ProtoMessage()               {}
-func (*RaftMessageResponse) Descriptor() ([]byte, []int) { return fileDescriptorRaft, []int{1} }
+func (*RaftMessageResponse) Descriptor() ([]byte, []int) { return fileDescriptorRaft, []int{2} }
+
+// SnapshotRequest is the request used to send streaming snapshot requests.
+type SnapshotRequest struct {
+	Header *SnapshotRequest_Header `protobuf:"bytes,1,opt,name=header" json:"header,omitempty"`
+	// A RocksDB BatchRepr. Multiple kv_batches may be sent across multiple request messages.
+	KVBatch []byte `protobuf:"bytes,2,opt,name=kv_batch,json=kvBatch" json:"kv_batch,omitempty"`
+	// These are really raftpb.Entry, but we model them as raw bytes to avoid
+	// roundtripping through memory. They are separate from the kv_batch to
+	// allow flexibility in log implementations.
+	LogEntries [][]byte `protobuf:"bytes,3,rep,name=log_entries,json=logEntries" json:"log_entries,omitempty"`
+	Final      bool     `protobuf:"varint,4,opt,name=final" json:"final"`
+}
+
+func (m *SnapshotRequest) Reset()                    { *m = SnapshotRequest{} }
+func (m *SnapshotRequest) String() string            { return proto.CompactTextString(m) }
+func (*SnapshotRequest) ProtoMessage()               {}
+func (*SnapshotRequest) Descriptor() ([]byte, []int) { return fileDescriptorRaft, []int{3} }
+
+type SnapshotRequest_Header struct {
+	RangeDescriptor cockroach_roachpb.RangeDescriptor `protobuf:"bytes,1,opt,name=range_descriptor,json=rangeDescriptor" json:"range_descriptor"`
+	// The inner raft message is of type MsgSnap, and its snapshot data contains a UUID.
+	RaftMessageRequest RaftMessageRequest `protobuf:"bytes,2,opt,name=raft_message_request,json=raftMessageRequest" json:"raft_message_request"`
+	// The estimated size of the range, to be used in reservation decisions.
+	RangeSize int64 `protobuf:"varint,3,opt,name=range_size,json=rangeSize" json:"range_size"`
+	// can_decline is set on preemptive snapshots, but not those generated
+	// by raft because at that point it is better to queue up the stream
+	// than to cancel it.
+	CanDecline bool `protobuf:"varint,4,opt,name=can_decline,json=canDecline" json:"can_decline"`
+}
+
+func (m *SnapshotRequest_Header) Reset()                    { *m = SnapshotRequest_Header{} }
+func (m *SnapshotRequest_Header) String() string            { return proto.CompactTextString(m) }
+func (*SnapshotRequest_Header) ProtoMessage()               {}
+func (*SnapshotRequest_Header) Descriptor() ([]byte, []int) { return fileDescriptorRaft, []int{3, 0} }
+
+type SnapshotResponse struct {
+	Status  SnapshotResponse_Status `protobuf:"varint,1,opt,name=status,enum=cockroach.storage.SnapshotResponse_Status" json:"status"`
+	Message string                  `protobuf:"bytes,2,opt,name=message" json:"message"`
+}
+
+func (m *SnapshotResponse) Reset()                    { *m = SnapshotResponse{} }
+func (m *SnapshotResponse) String() string            { return proto.CompactTextString(m) }
+func (*SnapshotResponse) ProtoMessage()               {}
+func (*SnapshotResponse) Descriptor() ([]byte, []int) { return fileDescriptorRaft, []int{4} }
 
 // ConfChangeContext is encoded in the raftpb.ConfChange.Context field.
 type ConfChangeContext struct {
@@ -78,12 +171,17 @@ type ConfChangeContext struct {
 func (m *ConfChangeContext) Reset()                    { *m = ConfChangeContext{} }
 func (m *ConfChangeContext) String() string            { return proto.CompactTextString(m) }
 func (*ConfChangeContext) ProtoMessage()               {}
-func (*ConfChangeContext) Descriptor() ([]byte, []int) { return fileDescriptorRaft, []int{2} }
+func (*ConfChangeContext) Descriptor() ([]byte, []int) { return fileDescriptorRaft, []int{5} }
 
 func init() {
 	proto.RegisterType((*RaftMessageRequest)(nil), "cockroach.storage.RaftMessageRequest")
+	proto.RegisterType((*RaftMessageResponseUnion)(nil), "cockroach.storage.RaftMessageResponseUnion")
 	proto.RegisterType((*RaftMessageResponse)(nil), "cockroach.storage.RaftMessageResponse")
+	proto.RegisterType((*SnapshotRequest)(nil), "cockroach.storage.SnapshotRequest")
+	proto.RegisterType((*SnapshotRequest_Header)(nil), "cockroach.storage.SnapshotRequest.Header")
+	proto.RegisterType((*SnapshotResponse)(nil), "cockroach.storage.SnapshotResponse")
 	proto.RegisterType((*ConfChangeContext)(nil), "cockroach.storage.ConfChangeContext")
+	proto.RegisterEnum("cockroach.storage.SnapshotResponse_Status", SnapshotResponse_Status_name, SnapshotResponse_Status_value)
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -92,12 +190,13 @@ var _ grpc.ClientConn
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion2
+const _ = grpc.SupportPackageIsVersion3
 
 // Client API for MultiRaft service
 
 type MultiRaftClient interface {
 	RaftMessage(ctx context.Context, opts ...grpc.CallOption) (MultiRaft_RaftMessageClient, error)
+	RaftSnapshot(ctx context.Context, opts ...grpc.CallOption) (MultiRaft_RaftSnapshotClient, error)
 }
 
 type multiRaftClient struct {
@@ -119,7 +218,7 @@ func (c *multiRaftClient) RaftMessage(ctx context.Context, opts ...grpc.CallOpti
 
 type MultiRaft_RaftMessageClient interface {
 	Send(*RaftMessageRequest) error
-	CloseAndRecv() (*RaftMessageResponse, error)
+	Recv() (*RaftMessageResponse, error)
 	grpc.ClientStream
 }
 
@@ -131,11 +230,39 @@ func (x *multiRaftRaftMessageClient) Send(m *RaftMessageRequest) error {
 	return x.ClientStream.SendMsg(m)
 }
 
-func (x *multiRaftRaftMessageClient) CloseAndRecv() (*RaftMessageResponse, error) {
-	if err := x.ClientStream.CloseSend(); err != nil {
+func (x *multiRaftRaftMessageClient) Recv() (*RaftMessageResponse, error) {
+	m := new(RaftMessageResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
-	m := new(RaftMessageResponse)
+	return m, nil
+}
+
+func (c *multiRaftClient) RaftSnapshot(ctx context.Context, opts ...grpc.CallOption) (MultiRaft_RaftSnapshotClient, error) {
+	stream, err := grpc.NewClientStream(ctx, &_MultiRaft_serviceDesc.Streams[1], c.cc, "/cockroach.storage.MultiRaft/RaftSnapshot", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &multiRaftRaftSnapshotClient{stream}
+	return x, nil
+}
+
+type MultiRaft_RaftSnapshotClient interface {
+	Send(*SnapshotRequest) error
+	Recv() (*SnapshotResponse, error)
+	grpc.ClientStream
+}
+
+type multiRaftRaftSnapshotClient struct {
+	grpc.ClientStream
+}
+
+func (x *multiRaftRaftSnapshotClient) Send(m *SnapshotRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *multiRaftRaftSnapshotClient) Recv() (*SnapshotResponse, error) {
+	m := new(SnapshotResponse)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -146,6 +273,7 @@ func (x *multiRaftRaftMessageClient) CloseAndRecv() (*RaftMessageResponse, error
 
 type MultiRaftServer interface {
 	RaftMessage(MultiRaft_RaftMessageServer) error
+	RaftSnapshot(MultiRaft_RaftSnapshotServer) error
 }
 
 func RegisterMultiRaftServer(s *grpc.Server, srv MultiRaftServer) {
@@ -157,7 +285,7 @@ func _MultiRaft_RaftMessage_Handler(srv interface{}, stream grpc.ServerStream) e
 }
 
 type MultiRaft_RaftMessageServer interface {
-	SendAndClose(*RaftMessageResponse) error
+	Send(*RaftMessageResponse) error
 	Recv() (*RaftMessageRequest, error)
 	grpc.ServerStream
 }
@@ -166,12 +294,38 @@ type multiRaftRaftMessageServer struct {
 	grpc.ServerStream
 }
 
-func (x *multiRaftRaftMessageServer) SendAndClose(m *RaftMessageResponse) error {
+func (x *multiRaftRaftMessageServer) Send(m *RaftMessageResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
 func (x *multiRaftRaftMessageServer) Recv() (*RaftMessageRequest, error) {
 	m := new(RaftMessageRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func _MultiRaft_RaftSnapshot_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(MultiRaftServer).RaftSnapshot(&multiRaftRaftSnapshotServer{stream})
+}
+
+type MultiRaft_RaftSnapshotServer interface {
+	Send(*SnapshotResponse) error
+	Recv() (*SnapshotRequest, error)
+	grpc.ServerStream
+}
+
+type multiRaftRaftSnapshotServer struct {
+	grpc.ServerStream
+}
+
+func (x *multiRaftRaftSnapshotServer) Send(m *SnapshotResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *multiRaftRaftSnapshotServer) Recv() (*SnapshotRequest, error) {
+	m := new(SnapshotRequest)
 	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -186,9 +340,17 @@ var _MultiRaft_serviceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "RaftMessage",
 			Handler:       _MultiRaft_RaftMessage_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "RaftSnapshot",
+			Handler:       _MultiRaft_RaftSnapshot_Handler,
+			ServerStreams: true,
 			ClientStreams: true,
 		},
 	},
+	Metadata: fileDescriptorRaft,
 }
 
 func (m *RaftMessageRequest) Marshal() (data []byte, err error) {
@@ -236,6 +398,34 @@ func (m *RaftMessageRequest) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
+func (m *RaftMessageResponseUnion) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *RaftMessageResponseUnion) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Error != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintRaft(data, i, uint64(m.Error.Size()))
+		n4, err := m.Error.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n4
+	}
+	return i, nil
+}
+
 func (m *RaftMessageResponse) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -251,6 +441,153 @@ func (m *RaftMessageResponse) MarshalTo(data []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintRaft(data, i, uint64(m.RangeID))
+	data[i] = 0x12
+	i++
+	i = encodeVarintRaft(data, i, uint64(m.FromReplica.Size()))
+	n5, err := m.FromReplica.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n5
+	data[i] = 0x1a
+	i++
+	i = encodeVarintRaft(data, i, uint64(m.ToReplica.Size()))
+	n6, err := m.ToReplica.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n6
+	data[i] = 0x22
+	i++
+	i = encodeVarintRaft(data, i, uint64(m.Union.Size()))
+	n7, err := m.Union.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n7
+	return i, nil
+}
+
+func (m *SnapshotRequest) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *SnapshotRequest) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Header != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintRaft(data, i, uint64(m.Header.Size()))
+		n8, err := m.Header.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n8
+	}
+	if m.KVBatch != nil {
+		data[i] = 0x12
+		i++
+		i = encodeVarintRaft(data, i, uint64(len(m.KVBatch)))
+		i += copy(data[i:], m.KVBatch)
+	}
+	if len(m.LogEntries) > 0 {
+		for _, b := range m.LogEntries {
+			data[i] = 0x1a
+			i++
+			i = encodeVarintRaft(data, i, uint64(len(b)))
+			i += copy(data[i:], b)
+		}
+	}
+	data[i] = 0x20
+	i++
+	if m.Final {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
+	return i, nil
+}
+
+func (m *SnapshotRequest_Header) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *SnapshotRequest_Header) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintRaft(data, i, uint64(m.RangeDescriptor.Size()))
+	n9, err := m.RangeDescriptor.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n9
+	data[i] = 0x12
+	i++
+	i = encodeVarintRaft(data, i, uint64(m.RaftMessageRequest.Size()))
+	n10, err := m.RaftMessageRequest.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n10
+	data[i] = 0x18
+	i++
+	i = encodeVarintRaft(data, i, uint64(m.RangeSize))
+	data[i] = 0x20
+	i++
+	if m.CanDecline {
+		data[i] = 1
+	} else {
+		data[i] = 0
+	}
+	i++
+	return i, nil
+}
+
+func (m *SnapshotResponse) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *SnapshotResponse) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintRaft(data, i, uint64(m.Status))
+	data[i] = 0x12
+	i++
+	i = encodeVarintRaft(data, i, uint64(len(m.Message)))
+	i += copy(data[i:], m.Message)
 	return i, nil
 }
 
@@ -282,11 +619,11 @@ func (m *ConfChangeContext) MarshalTo(data []byte) (int, error) {
 	data[i] = 0x1a
 	i++
 	i = encodeVarintRaft(data, i, uint64(m.Replica.Size()))
-	n4, err := m.Replica.MarshalTo(data[i:])
+	n11, err := m.Replica.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n4
+	i += n11
 	return i, nil
 }
 
@@ -330,9 +667,68 @@ func (m *RaftMessageRequest) Size() (n int) {
 	return n
 }
 
+func (m *RaftMessageResponseUnion) Size() (n int) {
+	var l int
+	_ = l
+	if m.Error != nil {
+		l = m.Error.Size()
+		n += 1 + l + sovRaft(uint64(l))
+	}
+	return n
+}
+
 func (m *RaftMessageResponse) Size() (n int) {
 	var l int
 	_ = l
+	n += 1 + sovRaft(uint64(m.RangeID))
+	l = m.FromReplica.Size()
+	n += 1 + l + sovRaft(uint64(l))
+	l = m.ToReplica.Size()
+	n += 1 + l + sovRaft(uint64(l))
+	l = m.Union.Size()
+	n += 1 + l + sovRaft(uint64(l))
+	return n
+}
+
+func (m *SnapshotRequest) Size() (n int) {
+	var l int
+	_ = l
+	if m.Header != nil {
+		l = m.Header.Size()
+		n += 1 + l + sovRaft(uint64(l))
+	}
+	if m.KVBatch != nil {
+		l = len(m.KVBatch)
+		n += 1 + l + sovRaft(uint64(l))
+	}
+	if len(m.LogEntries) > 0 {
+		for _, b := range m.LogEntries {
+			l = len(b)
+			n += 1 + l + sovRaft(uint64(l))
+		}
+	}
+	n += 2
+	return n
+}
+
+func (m *SnapshotRequest_Header) Size() (n int) {
+	var l int
+	_ = l
+	l = m.RangeDescriptor.Size()
+	n += 1 + l + sovRaft(uint64(l))
+	l = m.RaftMessageRequest.Size()
+	n += 1 + l + sovRaft(uint64(l))
+	n += 1 + sovRaft(uint64(m.RangeSize))
+	n += 2
+	return n
+}
+
+func (m *SnapshotResponse) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovRaft(uint64(m.Status))
+	l = len(m.Message)
+	n += 1 + l + sovRaft(uint64(l))
 	return n
 }
 
@@ -362,6 +758,22 @@ func sovRaft(x uint64) (n int) {
 }
 func sozRaft(x uint64) (n int) {
 	return sovRaft(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (this *RaftMessageResponseUnion) GetValue() interface{} {
+	if this.Error != nil {
+		return this.Error
+	}
+	return nil
+}
+
+func (this *RaftMessageResponseUnion) SetValue(value interface{}) bool {
+	switch vt := value.(type) {
+	case *cockroach_roachpb2.Error:
+		this.Error = vt
+	default:
+		return false
+	}
+	return true
 }
 func (m *RaftMessageRequest) Unmarshal(data []byte) error {
 	l := len(data)
@@ -522,6 +934,89 @@ func (m *RaftMessageRequest) Unmarshal(data []byte) error {
 	}
 	return nil
 }
+func (m *RaftMessageResponseUnion) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRaft
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RaftMessageResponseUnion: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RaftMessageResponseUnion: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaft
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRaft
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Error == nil {
+				m.Error = &cockroach_roachpb2.Error{}
+			}
+			if err := m.Error.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRaft(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRaft
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *RaftMessageResponse) Unmarshal(data []byte) error {
 	l := len(data)
 	iNdEx := 0
@@ -551,6 +1046,525 @@ func (m *RaftMessageResponse) Unmarshal(data []byte) error {
 			return fmt.Errorf("proto: RaftMessageResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeID", wireType)
+			}
+			m.RangeID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaft
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.RangeID |= (github_com_cockroachdb_cockroach_roachpb.RangeID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FromReplica", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaft
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRaft
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.FromReplica.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ToReplica", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaft
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRaft
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.ToReplica.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Union", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaft
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRaft
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Union.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRaft(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRaft
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SnapshotRequest) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRaft
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SnapshotRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SnapshotRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Header", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaft
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRaft
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Header == nil {
+				m.Header = &SnapshotRequest_Header{}
+			}
+			if err := m.Header.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field KVBatch", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaft
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthRaft
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.KVBatch = append(m.KVBatch[:0], data[iNdEx:postIndex]...)
+			if m.KVBatch == nil {
+				m.KVBatch = []byte{}
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LogEntries", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaft
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthRaft
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.LogEntries = append(m.LogEntries, make([]byte, postIndex-iNdEx))
+			copy(m.LogEntries[len(m.LogEntries)-1], data[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Final", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaft
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Final = bool(v != 0)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRaft(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRaft
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SnapshotRequest_Header) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRaft
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Header: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Header: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeDescriptor", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaft
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRaft
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.RangeDescriptor.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RaftMessageRequest", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaft
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRaft
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.RaftMessageRequest.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeSize", wireType)
+			}
+			m.RangeSize = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaft
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.RangeSize |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CanDecline", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaft
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.CanDecline = bool(v != 0)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRaft(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRaft
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SnapshotResponse) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRaft
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SnapshotResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SnapshotResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
+			}
+			m.Status = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaft
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Status |= (SnapshotResponse_Status(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Message", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRaft
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthRaft
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Message = string(data[iNdEx:postIndex])
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipRaft(data[iNdEx:])
@@ -817,33 +1831,59 @@ var (
 	ErrIntOverflowRaft   = fmt.Errorf("proto: integer overflow")
 )
 
+func init() { proto.RegisterFile("cockroach/storage/raft.proto", fileDescriptorRaft) }
+
 var fileDescriptorRaft = []byte{
-	// 420 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x9c, 0x92, 0xb1, 0x4e, 0xeb, 0x30,
-	0x14, 0x86, 0x93, 0xde, 0x4a, 0xb9, 0x71, 0x2b, 0x5d, 0xd5, 0xf7, 0x5e, 0x29, 0x0a, 0xa8, 0x2d,
-	0x15, 0xa0, 0x4e, 0x4e, 0xd5, 0x47, 0x48, 0xba, 0x74, 0xe8, 0x92, 0x09, 0x31, 0x50, 0xdc, 0xc4,
-	0x4d, 0x23, 0x9a, 0x38, 0x38, 0xae, 0x04, 0x6f, 0xc1, 0x4b, 0xf0, 0x1c, 0xac, 0x1d, 0x19, 0x99,
-	0x2a, 0x28, 0x6f, 0xc1, 0x84, 0x93, 0x38, 0x29, 0xa8, 0x03, 0x82, 0xc1, 0x91, 0xe3, 0xf3, 0xff,
-	0xbf, 0xcf, 0xf9, 0x64, 0x70, 0xe8, 0x51, 0xef, 0x8a, 0x51, 0xec, 0x2d, 0xac, 0x94, 0x53, 0x86,
-	0x03, 0x62, 0x31, 0x3c, 0xe7, 0x28, 0x61, 0x94, 0x53, 0xd8, 0xaa, 0xaa, 0x48, 0x56, 0xcd, 0xee,
-	0xce, 0x90, 0x7f, 0x93, 0x99, 0x15, 0x11, 0x8e, 0x7d, 0xcc, 0x71, 0x61, 0x32, 0x0f, 0x08, 0xf7,
-	0xfc, 0x3c, 0x25, 0xff, 0x08, 0xc1, 0x2e, 0xd1, 0xfc, 0x17, 0xd0, 0x80, 0xe6, 0x5b, 0x2b, 0xdb,
-	0x15, 0xa7, 0xbd, 0x87, 0x1a, 0x80, 0xae, 0x10, 0x4d, 0x48, 0x9a, 0x8a, 0x4b, 0x5c, 0x72, 0xbd,
-	0x22, 0x29, 0x87, 0x17, 0xe0, 0x37, 0xc3, 0x71, 0x40, 0xa6, 0xa1, 0x6f, 0xa8, 0x5d, 0xb5, 0x5f,
-	0xb7, 0x9d, 0xf5, 0xa6, 0xa3, 0x6c, 0x37, 0x1d, 0xcd, 0xcd, 0xce, 0xc7, 0xa3, 0xb7, 0x4d, 0x67,
-	0x10, 0x84, 0x7c, 0xb1, 0x9a, 0x21, 0x8f, 0x46, 0x56, 0xd5, 0x9b, 0x3f, 0xb3, 0xf6, 0xfa, 0x44,
-	0xd2, 0xe3, 0x6a, 0x79, 0xe8, 0xd8, 0x87, 0x13, 0xd0, 0x9c, 0x33, 0x1a, 0x4d, 0x19, 0x49, 0x96,
-	0xa1, 0x87, 0x8d, 0x9a, 0xb8, 0xa3, 0x31, 0x3c, 0x46, 0xbb, 0xa9, 0x2b, 0x6b, 0xa1, 0x18, 0x91,
-	0xd4, 0x63, 0x61, 0x22, 0x50, 0xd8, 0xf5, 0xac, 0x13, 0xb7, 0x91, 0xf9, 0x65, 0x11, 0x8e, 0x01,
-	0xe0, 0xb4, 0x0a, 0xfb, 0xf5, 0xed, 0x30, 0x9d, 0xd3, 0x32, 0xca, 0x02, 0x5a, 0x54, 0xb0, 0x30,
-	0xea, 0x79, 0xce, 0x1f, 0x54, 0xb0, 0x44, 0x12, 0x91, 0xb4, 0x94, 0xaa, 0xde, 0x7f, 0xf0, 0xf7,
-	0x13, 0xc0, 0x34, 0xa1, 0x71, 0x4a, 0x7a, 0xf7, 0x2a, 0x68, 0x39, 0x34, 0x9e, 0x3b, 0x8b, 0x6c,
-	0x64, 0xb1, 0xe3, 0xe4, 0x86, 0xc3, 0x01, 0x00, 0x82, 0x56, 0x84, 0x63, 0xbf, 0x24, 0xab, 0xdb,
-	0x2d, 0x49, 0x56, 0x77, 0x8a, 0x8a, 0xe0, 0xa4, 0x4b, 0x91, 0x20, 0x65, 0x00, 0x2d, 0xc1, 0xb7,
-	0x4b, 0x8a, 0xfd, 0x1c, 0x52, 0xd3, 0x2d, 0x7f, 0xe1, 0x08, 0x68, 0x3f, 0x9f, 0xb8, 0xb4, 0x0e,
-	0x23, 0xa0, 0x4f, 0x56, 0x4b, 0x1e, 0x66, 0x33, 0xc0, 0x4b, 0xd0, 0xf8, 0x30, 0x0b, 0x3c, 0x41,
-	0x7b, 0xaf, 0x10, 0xed, 0x3f, 0x16, 0xf3, 0xf4, 0x2b, 0x99, 0x44, 0xa2, 0xf4, 0x55, 0xfb, 0x68,
-	0xfd, 0xd2, 0x56, 0xd6, 0xdb, 0xb6, 0xfa, 0x28, 0xd6, 0x93, 0x58, 0xcf, 0x62, 0xdd, 0xbd, 0xb6,
-	0x95, 0x73, 0x4d, 0x5a, 0xcf, 0x6a, 0xef, 0x01, 0x00, 0x00, 0xff, 0xff, 0x52, 0xab, 0x5c, 0xb6,
-	0x1b, 0x03, 0x00, 0x00,
+	// 807 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xe4, 0x54, 0x4f, 0x6f, 0xe3, 0x44,
+	0x14, 0x8f, 0x93, 0xb4, 0x6e, 0x9e, 0x23, 0x9a, 0x0e, 0x7b, 0x88, 0x02, 0x72, 0x8a, 0x97, 0x5d,
+	0x15, 0x90, 0x9c, 0xaa, 0x47, 0x6e, 0x8d, 0x6d, 0xb1, 0xd6, 0x6e, 0xbb, 0x95, 0xcb, 0x02, 0x42,
+	0x5a, 0xa2, 0x89, 0x3d, 0x71, 0xac, 0x26, 0x1e, 0x33, 0x9e, 0xac, 0x60, 0x3f, 0x01, 0x47, 0x3e,
+	0x02, 0x17, 0x3e, 0x07, 0x17, 0x24, 0x7a, 0x42, 0x1c, 0xf7, 0x54, 0x41, 0xf8, 0x16, 0x9c, 0xd0,
+	0xfc, 0x71, 0xba, 0xdd, 0x04, 0xb6, 0x70, 0xdd, 0x4b, 0x34, 0x79, 0xef, 0xfd, 0x7e, 0xf3, 0xe6,
+	0xf7, 0x7b, 0xcf, 0xf0, 0x6e, 0x4c, 0xe3, 0x0b, 0x46, 0x71, 0x3c, 0x1d, 0x94, 0x9c, 0x32, 0x9c,
+	0x92, 0x01, 0xc3, 0x13, 0xee, 0x16, 0x8c, 0x72, 0x8a, 0xf6, 0x56, 0x59, 0x57, 0x67, 0x7b, 0xf6,
+	0x35, 0x40, 0xfe, 0x16, 0xe3, 0x01, 0x61, 0x8c, 0xb2, 0x52, 0x41, 0x7a, 0xfb, 0xeb, 0xf9, 0x39,
+	0xe1, 0x38, 0xc1, 0x1c, 0xeb, 0x8a, 0x77, 0x08, 0x8f, 0x13, 0x79, 0x8b, 0xfc, 0x29, 0xc6, 0x2f,
+	0xdd, 0xd8, 0xbb, 0x93, 0xd2, 0x94, 0xca, 0xe3, 0x40, 0x9c, 0x54, 0xd4, 0xf9, 0xa9, 0x0e, 0x28,
+	0xc2, 0x13, 0x7e, 0x42, 0xca, 0x12, 0xa7, 0x24, 0x22, 0x5f, 0x2f, 0x48, 0xc9, 0xd1, 0x57, 0xb0,
+	0xc3, 0x70, 0x9e, 0x92, 0x51, 0x96, 0x74, 0x8d, 0x7d, 0xe3, 0xa0, 0x39, 0xf4, 0x2e, 0xaf, 0xfa,
+	0xb5, 0xe5, 0x55, 0xdf, 0x8c, 0x44, 0x3c, 0xf4, 0xff, 0xba, 0xea, 0x1f, 0xa6, 0x19, 0x9f, 0x2e,
+	0xc6, 0x6e, 0x4c, 0xe7, 0x83, 0x55, 0x6f, 0xc9, 0x78, 0xb0, 0xd6, 0xa7, 0xab, 0x31, 0x91, 0x29,
+	0x49, 0xc3, 0x04, 0x9d, 0x40, 0x7b, 0xc2, 0xe8, 0x7c, 0xc4, 0x48, 0x31, 0xcb, 0x62, 0xdc, 0xad,
+	0xef, 0x1b, 0x07, 0xd6, 0xd1, 0xfb, 0xee, 0xb5, 0x2a, 0x2b, 0xa8, 0xaa, 0xf0, 0x49, 0x19, 0xb3,
+	0xac, 0xe0, 0x94, 0x0d, 0x9b, 0xa2, 0x93, 0xc8, 0x12, 0x78, 0x9d, 0x44, 0x21, 0x00, 0xa7, 0x2b,
+	0xb2, 0xc6, 0x7f, 0x26, 0x6b, 0x71, 0x5a, 0x51, 0x0d, 0xc0, 0x9c, 0x2b, 0x2d, 0xba, 0x4d, 0xc9,
+	0xb3, 0xeb, 0x2a, 0x2d, 0x5d, 0x2d, 0x91, 0x86, 0x54, 0x55, 0xce, 0x19, 0x74, 0x6f, 0x08, 0x58,
+	0x16, 0x34, 0x2f, 0xc9, 0x93, 0x3c, 0xa3, 0x39, 0x72, 0x61, 0x4b, 0x5a, 0x28, 0x35, 0xb4, 0x8e,
+	0xba, 0x1b, 0x5a, 0x0a, 0x44, 0x3e, 0x52, 0x65, 0x1f, 0x37, 0x2f, 0x7f, 0xe8, 0x1b, 0xce, 0x8b,
+	0x3a, 0xbc, 0xbd, 0x81, 0xf2, 0x0d, 0x36, 0xe5, 0x13, 0xd8, 0x5a, 0x08, 0x41, 0xb5, 0x25, 0x1f,
+	0xb9, 0x6b, 0xdb, 0xe3, 0xfe, 0x93, 0x07, 0x9a, 0x4c, 0xe1, 0x9d, 0x9f, 0x1b, 0xb0, 0x7b, 0x9e,
+	0xe3, 0xa2, 0x9c, 0x52, 0x5e, 0xcd, 0xfa, 0x31, 0x6c, 0x4f, 0x09, 0x4e, 0x48, 0xe5, 0xd2, 0x07,
+	0x1b, 0xd8, 0x5f, 0xc1, 0xb8, 0x0f, 0x24, 0x20, 0xd2, 0x40, 0x74, 0x1f, 0x76, 0x2e, 0x9e, 0x8d,
+	0xc6, 0x98, 0xc7, 0x53, 0xa9, 0x5a, 0x7b, 0x68, 0x09, 0x57, 0x1e, 0x7e, 0x36, 0x14, 0xa1, 0xc8,
+	0xbc, 0x78, 0x26, 0x0f, 0xa8, 0x0f, 0xd6, 0x8c, 0xa6, 0x23, 0x92, 0x73, 0x96, 0x91, 0xb2, 0xdb,
+	0xd8, 0x6f, 0x1c, 0xb4, 0x23, 0x98, 0xd1, 0x34, 0x50, 0x11, 0xd4, 0x83, 0xad, 0x49, 0x96, 0xe3,
+	0x99, 0x7c, 0xe8, 0x4e, 0xd5, 0xbb, 0x0c, 0xf5, 0xbe, 0xab, 0xc3, 0xb6, 0xba, 0x17, 0x9d, 0x43,
+	0x47, 0x4d, 0x42, 0xb2, 0x12, 0x4d, 0x37, 0xef, 0x6c, 0x12, 0x58, 0x94, 0xae, 0xc9, 0xbb, 0xcb,
+	0x6e, 0x86, 0xd1, 0x53, 0xb8, 0x23, 0x26, 0x7d, 0xa4, 0x07, 0x7b, 0xc4, 0xd4, 0x5b, 0xf5, 0x18,
+	0xdc, 0x7b, 0x9d, 0xe6, 0xb2, 0x58, 0x73, 0x23, 0xb6, 0xfe, 0x49, 0xb9, 0x0b, 0xa0, 0x7a, 0x2e,
+	0xb3, 0xe7, 0x44, 0x8e, 0x43, 0xa3, 0x32, 0x5a, 0xc6, 0xcf, 0xb3, 0xe7, 0x04, 0xdd, 0x03, 0x2b,
+	0xc6, 0xf9, 0x28, 0x21, 0xf1, 0x2c, 0xcb, 0xc9, 0x0d, 0x15, 0x20, 0xc6, 0xb9, 0xaf, 0xe2, 0xce,
+	0x2f, 0x06, 0x74, 0xae, 0x2d, 0xd1, 0xeb, 0xf1, 0x00, 0xb6, 0x4b, 0x8e, 0xf9, 0xa2, 0x94, 0x52,
+	0xbc, 0x75, 0xf4, 0xe1, 0xbf, 0xfa, 0xa8, 0x40, 0xee, 0xb9, 0x44, 0xe8, 0x2b, 0x34, 0x1e, 0xd9,
+	0xd7, 0xdf, 0x00, 0xf1, 0xf8, 0xd6, 0xab, 0x2b, 0x1f, 0xc2, 0xb6, 0xc2, 0x21, 0x0b, 0xcc, 0x27,
+	0xa7, 0x0f, 0x4f, 0x1f, 0x7f, 0x7e, 0xda, 0xa9, 0xa1, 0x36, 0xec, 0x1c, 0x7b, 0x5e, 0x70, 0xf6,
+	0x69, 0xe0, 0x77, 0x0c, 0x91, 0x3a, 0x3e, 0x3b, 0x7b, 0x14, 0x06, 0x7e, 0xa7, 0x8e, 0x5a, 0xb0,
+	0x15, 0x44, 0xd1, 0xe3, 0xa8, 0xd3, 0x10, 0x55, 0x7e, 0xe0, 0x3d, 0x0a, 0x4f, 0x03, 0xbf, 0xd3,
+	0x74, 0x7e, 0x34, 0x60, 0xcf, 0xa3, 0xf9, 0xc4, 0x9b, 0x0a, 0x0d, 0x3c, 0x9a, 0x73, 0xf2, 0x0d,
+	0x47, 0x87, 0x00, 0x31, 0x9d, 0xcf, 0x71, 0x9e, 0x54, 0xbb, 0xde, 0x1a, 0xee, 0xe9, 0x5d, 0x6f,
+	0x79, 0x2a, 0x13, 0xfa, 0x51, 0x4b, 0x17, 0x85, 0x09, 0xea, 0x82, 0x59, 0xe0, 0x6f, 0x67, 0x14,
+	0x27, 0x6a, 0x00, 0xa3, 0xea, 0x2f, 0xf2, 0xc1, 0xfc, 0xff, 0x3b, 0x58, 0x41, 0x8f, 0x7e, 0x35,
+	0xa0, 0x75, 0xb2, 0x98, 0xf1, 0x4c, 0x78, 0x8e, 0xc6, 0x60, 0xbd, 0xe4, 0x3d, 0xba, 0xdd, 0x6c,
+	0xf4, 0xee, 0xdf, 0x6e, 0x6d, 0x9d, 0xda, 0x81, 0x71, 0x68, 0xa0, 0xa7, 0xd0, 0x16, 0xc9, 0xca,
+	0x31, 0xe4, 0xbc, 0x7e, 0x2d, 0x7b, 0x77, 0x6f, 0x61, 0xb9, 0xa2, 0x1f, 0xbe, 0x77, 0xf9, 0x87,
+	0x5d, 0xbb, 0x5c, 0xda, 0xc6, 0x6f, 0x4b, 0xdb, 0x78, 0xb1, 0xb4, 0x8d, 0xdf, 0x97, 0xb6, 0xf1,
+	0xfd, 0x9f, 0x76, 0xed, 0x4b, 0x53, 0x23, 0xbf, 0x68, 0xfc, 0x1d, 0x00, 0x00, 0xff, 0xff, 0xf5,
+	0xa1, 0x7b, 0x6b, 0xc4, 0x07, 0x00, 0x00,
 }

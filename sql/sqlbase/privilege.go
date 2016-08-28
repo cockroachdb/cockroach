@@ -173,7 +173,7 @@ func (p PrivilegeDescriptor) Validate(id ID) error {
 	}
 	if IsSystemConfigID(id) {
 		// System databases and tables have custom maximum allowed privileges.
-		objectPrivileges, ok := systemConfigAllowedPrivileges[id]
+		objectPrivileges, ok := SystemConfigAllowedPrivileges[id]
 		if !ok {
 			return fmt.Errorf("no allowed privileges found for system object with ID=%d", id)
 		}
@@ -231,4 +231,13 @@ func (p PrivilegeDescriptor) CheckPrivilege(user string, priv privilege.Kind) bo
 		return true
 	}
 	return isPrivilegeSet(userPriv.Privileges, priv)
+}
+
+// AnyPrivilege returns true if 'user' has any privilege on this descriptor.
+func (p PrivilegeDescriptor) AnyPrivilege(user string) bool {
+	userPriv, ok := p.findUser(user)
+	if !ok {
+		return false
+	}
+	return userPriv.Privileges != 0
 }

@@ -24,8 +24,13 @@ import (
 	"github.com/pkg/errors"
 )
 
-// TablesByID maps table IDs to looked up descriptors.
-type TablesByID map[sqlbase.ID]*sqlbase.TableDescriptor
+// tableLookupsByID maps table IDs to looked up descriptors or, for tables that
+// exist but are not yet public/leasable, entries with just the isAdding flag.
+type tableLookupsByID map[sqlbase.ID]tableLookup
+type tableLookup struct {
+	table    *sqlbase.TableDescriptor
+	isAdding bool
+}
 
 // FKCheck indicates a kind of FK check (delete, insert, or both).
 type FKCheck int
@@ -39,29 +44,29 @@ const (
 	CheckUpdates
 )
 
-// TablesNeededForFKs calculates the IDs of the additional TableDescriptors that
+// tablesNeededForFKs calculates the IDs of the additional TableDescriptors that
 // will be needed for FK checking delete and/or insert operations on `table`.
 //
 // NB: the returned map's values are *not* set -- higher level calling code, eg
 // in planner, should fill the map's values by acquiring leases. This function
 // is essentially just returning a slice of IDs, but the empty map can be filled
 // in place and reused, avoiding a second allocation.
-func TablesNeededForFKs(table sqlbase.TableDescriptor, usage FKCheck) TablesByID {
-	var ret TablesByID
+func tablesNeededForFKs(table sqlbase.TableDescriptor, usage FKCheck) tableLookupsByID {
+	var ret tableLookupsByID
 	for _, idx := range table.AllNonDropIndexes() {
-		if usage != CheckDeletes && idx.ForeignKey != nil {
+		if usage != CheckDeletes && idx.ForeignKey.IsSet() {
 			if ret == nil {
-				ret = make(TablesByID)
+				ret = make(tableLookupsByID)
 			}
-			ret[idx.ForeignKey.Table] = nil
+			ret[idx.ForeignKey.Table] = tableLookup{}
 		}
 		if usage != CheckInserts {
 			for _, idx := range table.AllNonDropIndexes() {
 				for _, ref := range idx.ReferencedBy {
 					if ret == nil {
-						ret = make(TablesByID)
+						ret = make(tableLookupsByID)
 					}
-					ret[ref.Table] = nil
+					ret[ref.Table] = tableLookup{}
 				}
 			}
 		}
@@ -74,11 +79,11 @@ type fkInsertHelper map[sqlbase.IndexID][]baseFKHelper
 var errSkipUnsedFK = errors.New("no columns involved in FK included in writer")
 
 func makeFKInsertHelper(
-	txn *client.Txn, table sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
+	txn *client.Txn, table sqlbase.TableDescriptor, otherTables tableLookupsByID, colMap map[sqlbase.ColumnID]int,
 ) (fkInsertHelper, error) {
 	var fks fkInsertHelper
 	for _, idx := range table.AllNonDropIndexes() {
-		if idx.ForeignKey != nil {
+		if idx.ForeignKey.IsSet() {
 			fk, err := makeBaseFKHelper(txn, otherTables, idx, idx.ForeignKey, colMap)
 			if err == errSkipUnsedFK {
 				continue
@@ -107,8 +112,8 @@ func (fks fkInsertHelper) checkAll(row parser.DTuple) error {
 func (fks fkInsertHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error {
 	for _, fk := range fks[idx] {
 		nulls := true
-		for i := range fk.searchIdx.ColumnIDs {
-			found, ok := fk.ids[fk.searchIdx.ColumnIDs[i]]
+		for _, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
+			found, ok := fk.ids[colID]
 			if !ok {
 				panic("fk ids missing column id")
 			}
@@ -123,11 +128,11 @@ func (fks fkInsertHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error
 			return err
 		}
 		if found == nil {
-			fkValues := make(parser.DTuple, len(fk.searchIdx.ColumnIDs))
-			for i := range fk.searchIdx.ColumnIDs {
-				fkValues[i] = row[fk.ids[fk.searchIdx.ColumnIDs[i]]]
+			fkValues := make(parser.DTuple, fk.prefixLen)
+			for i, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
+				fkValues[i] = row[fk.ids[colID]]
 			}
-			return fmt.Errorf("foreign key violation: value %s not found in %s@%s %s", fkValues, fk.searchTable.Name, fk.searchIdx.Name, fk.searchIdx.ColumnNames)
+			return fmt.Errorf("foreign key violation: value %s not found in %s@%s %s", fkValues, fk.searchTable.Name, fk.searchIdx.Name, fk.searchIdx.ColumnNames[:fk.prefixLen])
 		}
 	}
 	return nil
@@ -136,11 +141,16 @@ func (fks fkInsertHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error
 type fkDeleteHelper map[sqlbase.IndexID][]baseFKHelper
 
 func makeFKDeleteHelper(
-	txn *client.Txn, table sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
+	txn *client.Txn, table sqlbase.TableDescriptor, otherTables tableLookupsByID, colMap map[sqlbase.ColumnID]int,
 ) (fkDeleteHelper, error) {
 	var fks fkDeleteHelper
 	for _, idx := range table.AllNonDropIndexes() {
 		for _, ref := range idx.ReferencedBy {
+			if otherTables[ref.Table].isAdding {
+				// We can assume that a table being added but not yet public is empty,
+				// and thus does not need to be checked for FK violations.
+				continue
+			}
 			fk, err := makeBaseFKHelper(txn, otherTables, idx, ref, colMap)
 			if err == errSkipUnsedFK {
 				continue
@@ -175,14 +185,14 @@ func (fks fkDeleteHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error
 		if found != nil {
 			if row == nil {
 				return fmt.Errorf("foreign key violation: non-empty columns %s referenced in table %q",
-					fk.writeIdx.ColumnNames, fk.searchTable.Name)
+					fk.writeIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
 			}
-			fkValues := make(parser.DTuple, len(fk.searchIdx.ColumnIDs))
-			for i := range fk.searchIdx.ColumnIDs {
-				fkValues[i] = row[fk.ids[fk.searchIdx.ColumnIDs[i]]]
+			fkValues := make(parser.DTuple, fk.prefixLen)
+			for i, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
+				fkValues[i] = row[fk.ids[colID]]
 			}
-			return fmt.Errorf("foreign key violation: value(s) %v in columns %s referenced in table %q",
-				fkValues, fk.writeIdx.ColumnNames, fk.searchTable.Name)
+			return fmt.Errorf("foreign key violation: values %v in columns %s referenced in table %q",
+				fkValues, fk.writeIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
 		}
 
 	}
@@ -195,7 +205,7 @@ type fkUpdateHelper struct {
 }
 
 func makeFKUpdateHelper(
-	txn *client.Txn, table sqlbase.TableDescriptor, otherTables TablesByID, colMap map[sqlbase.ColumnID]int,
+	txn *client.Txn, table sqlbase.TableDescriptor, otherTables tableLookupsByID, colMap map[sqlbase.ColumnID]int,
 ) (fkUpdateHelper, error) {
 	ret := fkUpdateHelper{}
 	var err error
@@ -218,6 +228,7 @@ type baseFKHelper struct {
 	rf           sqlbase.RowFetcher
 	searchTable  *sqlbase.TableDescriptor // the table being searched (for err msg)
 	searchIdx    *sqlbase.IndexDescriptor // the index that must (not) contain a value
+	prefixLen    int
 	writeIdx     sqlbase.IndexDescriptor  // the index we want to modify
 	searchPrefix []byte                   // prefix of keys in searchIdx
 	ids          map[sqlbase.ColumnID]int // col IDs
@@ -225,38 +236,40 @@ type baseFKHelper struct {
 
 func makeBaseFKHelper(
 	txn *client.Txn,
-	otherTables TablesByID,
+	otherTables tableLookupsByID,
 	writeIdx sqlbase.IndexDescriptor,
-	ref *sqlbase.ForeignKeyReference,
+	ref sqlbase.ForeignKeyReference,
 	colMap map[sqlbase.ColumnID]int, // col ids (for idx being written) to row offset.
 ) (baseFKHelper, error) {
-	b := baseFKHelper{txn: txn, writeIdx: writeIdx}
-	searchTable, ok := otherTables[ref.Table]
-	if !ok {
+	b := baseFKHelper{txn: txn, writeIdx: writeIdx, searchTable: otherTables[ref.Table].table}
+	if b.searchTable == nil {
 		return b, errors.Errorf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
 	}
-	b.searchTable = searchTable
 	b.searchPrefix = sqlbase.MakeIndexKeyPrefix(b.searchTable, ref.Index)
-	searchIdx, err := searchTable.FindIndexByID(ref.Index)
+	searchIdx, err := b.searchTable.FindIndexByID(ref.Index)
 	if err != nil {
 		return b, err
 	}
+	b.prefixLen = len(searchIdx.ColumnIDs)
+	if len(writeIdx.ColumnIDs) < b.prefixLen {
+		b.prefixLen = len(writeIdx.ColumnIDs)
+	}
 	b.searchIdx = searchIdx
-	ids := colIDtoRowIndexFromCols(searchTable.Columns)
+	ids := colIDtoRowIndexFromCols(b.searchTable.Columns)
 	needed := make([]bool, len(ids))
 	for _, i := range searchIdx.ColumnIDs {
 		needed[ids[i]] = true
 	}
-	isSecondary := searchTable.PrimaryIndex.ID != searchIdx.ID
-	err = b.rf.Init(searchTable, ids, searchIdx, false, isSecondary, searchTable.Columns, needed)
+	isSecondary := b.searchTable.PrimaryIndex.ID != searchIdx.ID
+	err = b.rf.Init(b.searchTable, ids, searchIdx, false, isSecondary, b.searchTable.Columns, needed)
 	if err != nil {
 		return b, err
 	}
 
 	b.ids = make(map[sqlbase.ColumnID]int, len(writeIdx.ColumnIDs))
 	nulls := true
-	for i := range writeIdx.ColumnIDs {
-		if found, ok := colMap[writeIdx.ColumnIDs[i]]; ok {
+	for i, writeColID := range writeIdx.ColumnIDs[:b.prefixLen] {
+		if found, ok := colMap[writeColID]; ok {
 			b.ids[searchIdx.ColumnIDs[i]] = found
 			nulls = false
 		}
@@ -280,7 +293,7 @@ func (f baseFKHelper) check(values parser.DTuple) (parser.DTuple, error) {
 	} else {
 		key = roachpb.Key(f.searchPrefix)
 	}
-	spans := sqlbase.Spans{sqlbase.Span{Start: key, End: key.PrefixEnd()}}
+	spans := roachpb.Spans{roachpb.Span{Key: key, EndKey: key.PrefixEnd()}}
 	if err := f.rf.StartScan(f.txn, spans, 1); err != nil {
 		return nil, err
 	}

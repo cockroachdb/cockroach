@@ -14,11 +14,20 @@
 #
 # Author: Tamir Duberstein (tamird@gmail.com)
 
-# NOTE: for some reason bash is necessary for updating the PATH to work
-# See http://stackoverflow.com/questions/8941110/how-i-could-add-dir-to-path-in-makefile
-SHELL = /bin/bash
-# Update the path to prefer binstubs over globals
-PATH := $(shell npm bin):$(PATH)
+# Prefer tools from node_modules over those elsewhere on the path.
+# This ensures that we get the versions pinned in npm-shrinkwrap.json.
+export PATH := $(shell npm bin):$(PATH)
+# HACK: Make has a fast path and a slow path for command execution,
+# but the fast path uses the PATH variable from when make was started,
+# not the one we set on the previous line. In order for the above
+# line to have any effect, we must force make to always take the slow path.
+# Setting the SHELL variable to a value other than the default (/bin/sh)
+# is one way to do this globally.
+# http://stackoverflow.com/questions/8941110/how-i-could-add-dir-to-path-in-makefile/13468229#13468229
+export SHELL := $(shell which bash)
+ifeq ($(SHELL),)
+$(error bash is required)
+endif
 
 REPO_ROOT   = $(realpath ..)
 ORG_ROOT    = $(REPO_ROOT)/..
@@ -45,10 +54,10 @@ JSPM_TARGET      = build/app.js
 GOBINDATA_TARGET = embedded.go
 
 .PHONY: all
-all: protobuf lint test $(GOBINDATA_TARGET)
+all: lint test $(GOBINDATA_TARGET)
 
-.PHONY: protobuf
-protobuf:
+# TODO(tamird): is there a way to not repeat this here? It's already in protobuf.mk
+app/js/protos.js generated/protos.json generated/protos.d.ts: $(addprefix $(REPO_ROOT)/, $(sort $(shell cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.proto')))
 	$(MAKE) -C $(ORG_ROOT) -f cockroach/build/protobuf.mk
 
 .PHONY: lint
@@ -57,7 +66,7 @@ lint: npm.installed typings.installed
 	tslint -c tslint.json $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts')
 
 .PHONY: test
-test: protobuf npm.installed typings.installed jspm.installed
+test: npm.installed typings.installed jspm.installed
 	karma start
 
 GOBINDATA_SOURCES = $(JSPM_TARGET) assets fonts favicon.ico apple-touch-icon.png release.html
@@ -71,6 +80,10 @@ $(GOBINDATA_TARGET): $(GO_BINDATA) $(GOBINDATA_SOURCES)
 
 $(JSPM_TARGET): jspm.installed typings.installed $(CSS_TARGET) $(shell find $(TS_ROOT) -name '*.tsx' -or -name '*.ts' -or -name '*.js')
 	jspm bundle-sfx app/app build/app.js
+
+.PHONY: livereload
+livereload:
+	chokidar-socket-emitter
 
 # TODO(tamird/matt/max): write a systemjs stylus plugin.
 .PHONY: watch
@@ -87,7 +100,7 @@ npm.installed: package.json npm-shrinkwrap.json
 	npm install --no-progress
 	touch $@
 
-typings.installed: typings.json npm.installed
+typings.installed: generated/protos.d.ts typings.json npm.installed
 	typings install
 	typings prune
 	touch $@

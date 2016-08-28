@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
@@ -119,12 +121,11 @@ func TestLogSplits(t *testing.T) {
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	reg := store.Registry()
 	minSplits := int64(initialSplits + 1)
 	// Verify that the minimimum number of splits has occurred. This is a min
 	// instead of an exact number, because the number of splits seems to vary
 	// between different runs of this test.
-	if a := reg.GetCounter("range.splits").Count(); a < minSplits {
+	if a := store.Metrics().RangeSplits.Count(); a < minSplits {
 		t.Errorf("splits = %d < min %d", a, minSplits)
 	}
 }
@@ -152,18 +153,17 @@ func TestLogRebalances(t *testing.T) {
 
 	// Log several fake events using the store.
 	logEvent := func(changeType roachpb.ReplicaChangeType) {
-		if err := db.Txn(func(txn *client.Txn) error {
+		if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
 			return store.LogReplicaChangeTest(txn, changeType, desc.Replicas[0], *desc)
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	reg := store.Registry()
 	checkMetrics := func(expAdds, expRemoves int64) {
-		if a, e := reg.GetCounter("range.adds").Count(), expAdds; a != e {
+		if a, e := store.Metrics().RangeAdds.Count(), expAdds; a != e {
 			t.Errorf("range adds %d != expected %d", a, e)
 		}
-		if a, e := reg.GetCounter("range.removes").Count(), expRemoves; a != e {
+		if a, e := store.Metrics().RangeRemoves.Count(), expRemoves; a != e {
 			t.Errorf("range removes %d != expected %d", a, e)
 		}
 	}

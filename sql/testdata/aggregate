@@ -340,6 +340,9 @@ SELECT COUNT(*), COUNT(kv.*), COUNT(k), COUNT(kv.v) FROM kv
 COUNT(*) COUNT(kv.*) COUNT(k) COUNT(kv.v)
 6        6           6        5
 
+query error source name "nonexistent" not found in FROM clause
+SELECT COUNT(nonexistent.*) FROM kv
+
 query III
 SELECT COUNT(DISTINCT k), COUNT(DISTINCT v), COUNT(DISTINCT (v)) FROM kv
 ----
@@ -381,6 +384,11 @@ query I
 SELECT COUNT(k)+COUNT(kv.v) FROM kv
 ----
 11
+
+query II
+SELECT COUNT(NULL::int), COUNT((NULL, NULL))
+----
+0 1
 
 query IIII
 SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM kv

@@ -46,8 +46,5 @@ func (f *Farmer) scp(host, keyfile, src, dest string) error {
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-q", "-i", keyfile,
 		sshUser+"@"+host+":"+src, dest)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
