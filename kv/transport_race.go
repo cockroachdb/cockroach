@@ -41,6 +41,12 @@ func init() {
 	incoming = make(chan *roachpb.BatchRequest, 100)
 }
 
+func jitter() time.Duration {
+	// Prevent the goroutine from spinning too hot as this lets CI times
+	// skyrocket.
+	return time.Duration(rand.Int63n(int64(300 * time.Microsecond)))
+}
+
 // grpcTransportFactory during race builds wraps the implementation and
 // intercepts all BatchRequests, reading them in a tight loop. This allows the
 // race detector to catch any mutations of a batch passed to the transport.
@@ -68,9 +74,10 @@ func grpcTransportFactory(
 				case ba := <-incoming:
 					bas[curIdx] = ba
 					curIdx = (curIdx + 1) % size
+					continue
 				case <-rpcContext.Stopper.ShouldStop():
 					return
-				case <-time.After(time.Duration(rand.Int63n(int64(time.Microsecond)))):
+				case <-time.After(jitter()):
 				}
 				for _, ba := range bas {
 					if ba != nil {
