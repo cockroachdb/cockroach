@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+function gpr () {
+  hub fetch origin refs/pull/$1/head:pr/$1 && hub checkout pr/$1
+}
