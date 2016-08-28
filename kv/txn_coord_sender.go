@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -278,6 +279,11 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		// used by goroutines we didn't wait for.
 		if ba.Header.Trace == nil {
 			ba.Header.Trace = &tracing.Span{}
+		} else {
+			// This is unfortunately necessary to prevent a data race which is
+			// likely not relevant in practice but is caught by the transport's
+			// race promotion.
+			ba.Header.Trace = protoutil.Clone(ba.Header.Trace).(*tracing.Span)
 		}
 		if err := tc.tracer.Inject(sp.Context(), basictracer.Delegator, ba.Trace); err != nil {
 			return nil, roachpb.NewError(err)
