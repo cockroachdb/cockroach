@@ -619,8 +619,9 @@ func (*BatchRequest) GetUser() string {
 // Store, a sequence counter less than or equal to the last observed one incurs
 // a transaction restart (if the request is transactional).
 func (ba *BatchRequest) SetNewRequest() {
-	if ba.Txn == nil {
-		return
+	if ba.Txn != nil {
+		txn := *ba.Txn
+		txn.Sequence++
+		ba.Txn = &txn
 	}
-	ba.Txn.Sequence++
 }
