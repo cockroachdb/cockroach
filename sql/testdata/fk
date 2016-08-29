@@ -125,6 +125,9 @@ DELETE FROM products WHERE sku = 'VP-W9QH-W44L'
 statement error foreign key violation: non-empty
 TRUNCATE products
 
+statement error CASCADE not yet supported: foreign key violation
+TRUNCATE products CASCADE
+
 # Blanking a field nobody cares about is fine.
 statement ok
 UPDATE products SET vendor = '' WHERE sku = '780'
