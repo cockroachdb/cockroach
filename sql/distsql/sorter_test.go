@@ -22,11 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 
 	"golang.org/x/net/context"
 )
 
 func TestSorter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	v := [6]sqlbase.EncDatum{}
 	for i := range v {
 		v[i].SetDatum(sqlbase.ColumnType_INT, parser.NewDInt(parser.DInt(i)))
