@@ -2440,6 +2440,60 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             ]
                         },
                         {
+                            "name": "ConstraintsRequest",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "constraints",
+                                    "id": 1
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Candidate",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "roachpb.StoreDescriptor",
+                                    "name": "desc",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "double",
+                                    "name": "score",
+                                    "id": 2
+                                }
+                            ]
+                        },
+                        {
+                            "name": "ConstraintsResponse",
+                            "fields": [
+                                {
+                                    "rule": "repeated",
+                                    "type": "roachpb.StoreDescriptor",
+                                    "name": "stores",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "repeated",
+                                    "type": "Candidate",
+                                    "name": "candidates",
+                                    "id": 2,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ]
+                        },
+                        {
                             "name": "DetailsRequest",
                             "fields": [
                                 {
@@ -3000,6 +3054,13 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "options": {
                                         "(google.api.http).post": "/_admin/v1/cluster/freeze",
                                         "(google.api.http).body": "*"
+                                    }
+                                },
+                                "Constraints": {
+                                    "request": "ConstraintsRequest",
+                                    "response": "ConstraintsResponse",
+                                    "options": {
+                                        "(google.api.http).get": "/_admin/v1/constraints/{constraints}"
                                     }
                                 }
                             }

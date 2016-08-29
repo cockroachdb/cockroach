@@ -20,6 +20,7 @@ option go_package = "serverpb";
 
 import "cockroach/config/config.proto";
 import "cockroach/storage/engine/enginepb/mvcc.proto";
+import "cockroach/roachpb/metadata.proto";
 import weak "gogoproto/gogo.proto";
 import weak "google/api/annotations.proto";
 
@@ -164,7 +165,7 @@ message TableStatsResponse {
   // with range_count, this can be used to estimate the current replication
   // factor of the table.
   int64 replica_count = 2;
-  // node_count is the number of nodes which contain data for this table, 
+  // node_count is the number of nodes which contain data for this table,
   // according to a query of range meta keys.
   int64 node_count = 3;
   // stats is the summation of MVCCStats for all replicas of this table
@@ -354,6 +355,20 @@ message ClusterFreezeResponse {
   string message = 2;
 }
 
+message ConstraintsRequest {
+  string constraints = 1;
+}
+
+message Candidate {
+  roachpb.StoreDescriptor desc = 1 [(gogoproto.nullable) = false];
+  double score = 2;
+}
+
+message ConstraintsResponse {
+  repeated roachpb.StoreDescriptor stores = 1 [(gogoproto.nullable) = false];
+  repeated Candidate candidates = 2 [(gogoproto.nullable) = false];
+}
+
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
@@ -465,6 +480,13 @@ service Admin {
     option (google.api.http) = {
       post: "/_admin/v1/cluster/freeze"
       body: "*"
+    };
+  }
+
+  // Constraints computes the candidate stores for the given set of constraints.
+  rpc Constraints(ConstraintsRequest) returns (ConstraintsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/constraints/{constraints}"
     };
   }
 }

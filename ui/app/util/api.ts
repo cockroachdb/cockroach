@@ -52,6 +52,9 @@ export type TableStatsResponseMessage = cockroach.server.serverpb.TableStatsResp
 export type LogsRequestMessage = cockroach.server.serverpb.LogsRequestMessage;
 export type LogEntriesResponseMessage = cockroach.server.serverpb.LogEntriesResponseMessage;
 
+export type ConstraintsRequestMessage = cockroach.server.serverpb.ConstraintsRequestMessage;
+export type ConstraintsResponseMessage = cockroach.server.serverpb.ConstraintsResponseMessage;
+
 // API constants
 
 export const API_PREFIX = "/_admin/v1";
@@ -191,4 +194,9 @@ export function getTableStats(req: TableStatsRequestMessage, timeout?: moment.Du
 // getLogs gets the logs for a specific node
 export function getLogs(req: LogsRequestMessage, timeout?: moment.Duration): Promise<LogEntriesResponseMessage> {
   return timeoutFetch(serverpb.LogEntriesResponse, `${STATUS_PREFIX}/logs/${req.node_id}`, null, timeout);
+}
+
+export function getConstraints(req: ConstraintsRequestMessage): Promise<ConstraintsResponseMessage> {
+  // NB: raftDebug intentionally does not pass a timeout through.
+  return timeoutFetch(serverpb.ConstraintsResponse, `${API_PREFIX}/constraints/${req.constraints}`);
 }

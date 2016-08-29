@@ -127,7 +127,7 @@ type Allocator struct {
 	storePool  *StorePool
 	randGen    allocatorRand
 	options    AllocatorOptions
-	ruleSolver *ruleSolver
+	ruleSolver *RuleSolver
 }
 
 // MakeAllocator creates a new allocator using the specified StorePool.
@@ -142,7 +142,7 @@ func MakeAllocator(storePool *StorePool, options AllocatorOptions) Allocator {
 		storePool:  storePool,
 		options:    options,
 		randGen:    makeAllocatorRand(randSource),
-		ruleSolver: makeDefaultRuleSolver(storePool),
+		ruleSolver: MakeDefaultRuleSolver(storePool),
 	}
 }
 
@@ -194,7 +194,7 @@ func (a *Allocator) AllocateTarget(
 	constraints config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
 ) (*roachpb.StoreDescriptor, error) {
-	candidates, err := a.ruleSolver.solveScores(constraints, existing)
+	candidates, err := a.ruleSolver.SolveScores(constraints, existing)
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +206,7 @@ func (a *Allocator) AllocateTarget(
 			required: constraints.Constraints,
 		}
 	}
-	return &candidates[0].store, nil
+	return &candidates[0].Store, nil
 }
 
 // RemoveTarget returns a suitable replica to remove from the provided replica
@@ -237,8 +237,8 @@ func (a Allocator) RemoveTarget(
 		}
 		// If it's not a valid candidate, score will be zero.
 		candidate, _ := a.ruleSolver.computeCandidate(constraints, desc, nil, sl)
-		if !found || candidate.score < worstScore {
-			worstScore = candidate.score
+		if !found || candidate.Score < worstScore {
+			worstScore = candidate.Score
 			worst = exist
 			found = true
 		}

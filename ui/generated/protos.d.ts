@@ -2975,6 +2975,9 @@ export interface serverpbBuilder {
 	HealthResponse: serverpb.HealthResponseBuilder;
 	ClusterFreezeRequest: serverpb.ClusterFreezeRequestBuilder;
 	ClusterFreezeResponse: serverpb.ClusterFreezeResponseBuilder;
+	ConstraintsRequest: serverpb.ConstraintsRequestBuilder;
+	Candidate: serverpb.CandidateBuilder;
+	ConstraintsResponse: serverpb.ConstraintsResponseBuilder;
 	DetailsRequest: serverpb.DetailsRequestBuilder;
 	DetailsResponse: serverpb.DetailsResponseBuilder;
 	NodesRequest: serverpb.NodesRequestBuilder;
@@ -4505,6 +4508,132 @@ export interface ClusterFreezeResponseBuilder {
 	decode(buffer: ArrayBuffer) : ClusterFreezeResponseMessage;
 	decode(buffer: ByteBuffer) : ClusterFreezeResponseMessage;
 	decode64(buffer: string) : ClusterFreezeResponseMessage;
+	
+}
+
+}
+
+
+declare module cockroach.server.serverpb {
+
+	export interface ConstraintsRequest {
+
+		
+
+constraints?: string;
+		
+
+getConstraints?() : string;
+		setConstraints?(constraints : string): void;
+		
+
+
+
+}
+
+	export interface ConstraintsRequestMessage extends ConstraintsRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ConstraintsRequestBuilder {
+	new(data?: ConstraintsRequest): ConstraintsRequestMessage;
+	decode(buffer: ArrayBuffer) : ConstraintsRequestMessage;
+	decode(buffer: ByteBuffer) : ConstraintsRequestMessage;
+	decode64(buffer: string) : ConstraintsRequestMessage;
+	
+}
+
+}
+
+
+declare module cockroach.server.serverpb {
+
+	export interface Candidate {
+
+		
+
+desc?: roachpb.StoreDescriptor;
+		
+
+getDesc?() : roachpb.StoreDescriptor;
+		setDesc?(desc : roachpb.StoreDescriptor): void;
+		
+
+
+
+score?: number;
+		
+
+getScore?() : number;
+		setScore?(score : number): void;
+		
+
+
+
+}
+
+	export interface CandidateMessage extends Candidate {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface CandidateBuilder {
+	new(data?: Candidate): CandidateMessage;
+	decode(buffer: ArrayBuffer) : CandidateMessage;
+	decode(buffer: ByteBuffer) : CandidateMessage;
+	decode64(buffer: string) : CandidateMessage;
+	
+}
+
+}
+
+
+declare module cockroach.server.serverpb {
+
+	export interface ConstraintsResponse {
+
+		
+
+stores?: roachpb.StoreDescriptor[];
+		
+
+getStores?() : roachpb.StoreDescriptor[];
+		setStores?(stores : roachpb.StoreDescriptor[]): void;
+		
+
+
+
+candidates?: Candidate[];
+		
+
+getCandidates?() : Candidate[];
+		setCandidates?(candidates : Candidate[]): void;
+		
+
+
+
+}
+
+	export interface ConstraintsResponseMessage extends ConstraintsResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ConstraintsResponseBuilder {
+	new(data?: ConstraintsResponse): ConstraintsResponseMessage;
+	decode(buffer: ArrayBuffer) : ConstraintsResponseMessage;
+	decode(buffer: ByteBuffer) : ConstraintsResponseMessage;
+	decode64(buffer: string) : ConstraintsResponseMessage;
 	
 }
 
