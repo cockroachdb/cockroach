@@ -775,7 +775,6 @@ const (
 	timestampRFC3339NanoWithoutZoneFormat = "2006-01-02T15:04:05"
 
 	timestampNodeFormat = timestampFormat + ".999999-07:00"
-	timestampFormatNS   = timestampFormat + ".999999999"
 )
 
 var timeFormats = []string{

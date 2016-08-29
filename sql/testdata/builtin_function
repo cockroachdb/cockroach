@@ -852,16 +852,6 @@ SELECT extract(microsecond FROM '2016-02-10 19:46:33.306157519'::timestamp)
 306158
 
 query I
-SELECT extract(nanoseconds FROM '2016-02-10 19:46:33.306157519'::timestamp)
-----
-306158000
-
-query I
-SELECT extract(nanosecond FROM '2016-02-10 19:46:33.306157519'::timestamp)
-----
-306158000
-
-query I
 SELECT extract(second FROM '2016-02-10 19:46:33.306157519'::timestamp)
 ----
 33
@@ -925,16 +915,6 @@ query I
 SELECT extract(epoch FROM '1970-01-02 00:00:01.000001'::timestamp)
 ----
 86401
-
-query I
-SELECT extract(epoch_nanosecond FROM '1970-01-02 00:00:01.000001'::timestamp)
-----
-86401000001000
-
-query I
-SELECT extract(epoch_nanoseconds FROM '1970-01-02 00:00:01.000001'::timestamp)
-----
-86401000001000
 
 query BI
 SELECT experimental_unique_bytes() < experimental_unique_bytes(), length(experimental_unique_bytes())

@@ -658,58 +658,12 @@ var Builtins = map[string][]Builtin{
 				case "microsecond", "microseconds":
 					return NewDInt(DInt(fromTime.Nanosecond() / int(time.Microsecond))), nil
 
-				case "nanosecond", "nanoseconds":
-					// This is a CockroachDB extension.
-					return NewDInt(DInt(fromTime.Nanosecond())), nil
-
-				case "epoch_nanosecond", "epoch_nanoseconds":
-					// This is a CockroachDB extension.
-					return NewDInt(DInt(fromTime.UnixNano())), nil
-
 				case "epoch":
 					return NewDInt(DInt(fromTime.Unix())), nil
 
 				default:
 					return DNull, fmt.Errorf("unsupported timespan: %s", timeSpan)
 				}
-			},
-		},
-	},
-
-	// Nanosecond functions.
-	// These functions are the only ways to create and read nanoseconds in
-	// timestamps. All other functions round to microseconds.
-
-	"parse_timestamp_ns": {
-		Builtin{
-			Types:      ArgTypes{TypeString},
-			ReturnType: TypeTimestamp,
-			category:   categoryDateAndTime,
-			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-				s := string(*args[0].(*DString))
-				return ParseDTimestamp(s, ctx.GetLocation(), time.Nanosecond)
-			},
-		},
-	},
-
-	"format_timestamp_ns": {
-		Builtin{
-			Types:      ArgTypes{TypeTimestamp},
-			ReturnType: TypeString,
-			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-				t := args[0].(*DTimestamp)
-				return NewDString(t.Time.UTC().Format(timestampFormatNS)), nil
-			},
-		},
-	},
-
-	"current_timestamp_ns": {
-		Builtin{
-			Types:      ArgTypes{},
-			ReturnType: TypeTimestamp,
-			impure:     true,
-			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-				return ctx.GetTxnTimestamp(time.Nanosecond), nil
 			},
 		},
 	},
