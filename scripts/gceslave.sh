@@ -10,7 +10,7 @@ cd "$(dirname "${0}")"
 
 case $1 in
     create)
-    gcloud compute --project "cockroach-tschottdorf" \
+    gcloud compute --project "${project}" \
            instances create "${name}" \
            --zone "${zone}" \
            --machine-type "custom-32-65536" \
