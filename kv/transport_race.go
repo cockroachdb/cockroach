@@ -67,8 +67,8 @@ func grpcTransportFactory(
 					iters, curIdx+1,
 				)
 			}()
-			// Make a fixed-size slice of *BatchRequest which is populated
-			// FILO by requests we get our hands on.
+			// Make a fixed-size slice of *BatchRequest. When full, entries
+			// are evicted in FIFO order.
 			const size = 1000
 			bas := make([]*roachpb.BatchRequest, size)
 			encoder := gob.NewEncoder(ioutil.Discard)
