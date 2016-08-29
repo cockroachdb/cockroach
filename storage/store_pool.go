@@ -505,6 +505,18 @@ func (sp *StorePool) getStoreList() (StoreList, int, int) {
 	return sl, aliveStoreCount, throttledStoreCount
 }
 
+// GetStoreDescs returns the descriptors of all known stores.
+func (sp *StorePool) GetStoreDescs() []roachpb.StoreDescriptor {
+	sp.mu.RLock()
+	defer sp.mu.RUnlock()
+
+	descs := make([]roachpb.StoreDescriptor, 0, len(sp.mu.stores))
+	for _, sd := range sp.mu.stores {
+		descs = append(descs, *sd.desc)
+	}
+	return descs
+}
+
 // reserve send a reservation request rpc to the node and store
 // based on the toStoreID. It returns an error if the reservation was not
 // successfully booked. When unsuccessful, the store is marked as having a

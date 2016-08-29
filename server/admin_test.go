@@ -36,6 +36,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/sql"
@@ -891,6 +892,44 @@ func TestClusterFreeze(t *testing.T) {
 
 		if err := util.StreamJSON(cli, path, &req, &serverpb.ClusterFreezeResponse{}, cb); err != nil {
 			t.Fatal(err)
+		}
+	}
+}
+
+func TestConstraints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+
+	testCases := []struct {
+		constraints string
+		want        []roachpb.StoreID
+	}{
+		{
+			"",
+			[]roachpb.StoreID{1},
+		},
+		{
+			"+nonexistant",
+			nil,
+		},
+	}
+
+	for i, tc := range testCases {
+		var resp serverpb.ConstraintsResponse
+		path := "constraints/" + tc.constraints
+		if err := getAdminJSONProto(s, path, &resp); err != nil {
+			t.Fatal(err)
+		}
+		if len(resp.Candidates) != len(tc.want) {
+			t.Errorf("%d: GET %q len(%+v) = %d; not %d", i, path, resp.Candidates, len(resp.Candidates), len(tc.want))
+			continue
+		}
+		for j, id := range tc.want {
+			rid := resp.Candidates[j].Desc.StoreID
+			if rid != id {
+				t.Errorf("%d: GET %q [%d] = %+v; not %+v", i, path, j, rid, id)
+			}
 		}
 	}
 }

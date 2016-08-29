@@ -23,6 +23,7 @@ export default class Layout extends React.Component<{}, {}> {
         <ul className="nav">
           <ListLink to="/nodes/overview">Overview</ListLink>
           <ListLink to="/nodes/graphs">Graphs</ListLink>
+          <ListLink to="/nodes/constraints">Constraints</ListLink>
           { displayTimescale ? <TimeScaleSelector/> : null }
         </ul>
       </div>
