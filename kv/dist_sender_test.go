@@ -594,9 +594,6 @@ func makeGossip(t *testing.T, stopper *stop.Stopper) *gossip.Gossip {
 	if err := g.AddInfo(gossip.KeySentinel, nil, time.Hour); err != nil {
 		t.Fatal(err)
 	}
-	if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &testRangeDescriptor, time.Hour); err != nil {
-		t.Fatal(err)
-	}
 
 	return g
 }
@@ -634,7 +631,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 	rDB := MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) (
 		[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error,
 	) {
-		if len(key) == 0 {
+		if key.Equal(roachpb.KeyMin) {
 			atomic.AddInt32(&numFirstRange, 1)
 		}
 		return []roachpb.RangeDescriptor{desc}, nil, nil
@@ -650,10 +647,11 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 	ds := NewDistSender(ctx, g)
 
 	anyKey := roachpb.Key("anything")
+	rAnyKey := keys.MustAddr(anyKey)
 
 	call := func() {
 		if _, _, err := ds.rangeCache.LookupRangeDescriptor(
-			context.Background(), keys.MustAddr(anyKey), nil, false, false,
+			context.Background(), rAnyKey, nil, false, false,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -661,6 +659,10 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 
 	// Perform multiple calls and check that the first range is only looked up
 	// once, with subsequent calls hitting the cache.
+	//
+	// This potentially races with the cache-evicting gossip callback on the
+	// first range, so it is important that the first range descriptor's state
+	// in gossip is stable from this point forward.
 	for i := 0; i < 3; i++ {
 		call()
 		if num := atomic.LoadInt32(&numFirstRange); num != 1 {
@@ -759,6 +761,10 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	defer stopper.Stop()
 
 	g := makeGossip(t, stopper)
+	if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &testRangeDescriptor, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
 	// Updated below, after it has first been returned.
 	badStartKey := roachpb.RKey("m")
 	newRangeDescriptor := testRangeDescriptor
@@ -832,6 +838,10 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 	defer stopper.Stop()
 
 	g := makeGossip(t, stopper)
+	if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &testRangeDescriptor, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
 	// Updated below, after it has first been returned.
 	goodRangeDescriptor := testRangeDescriptor
 	badRangeDescriptor := testRangeDescriptor
