@@ -116,7 +116,7 @@ func (k *mvccKey) Set(value string) error {
 
 	switch typ {
 	case raw:
-		*k = mvccKey(engine.MakeMVCCMetadataKey(roachpb.Key(keyStr)))
+		*k = mvccKey(engine.MakeMVCCMetadataKey(roachpb.Key(unquoteArg(keyStr, false))))
 	case human:
 		key, err := keys.UglyPrint(keyStr)
 		if err != nil {
