@@ -1934,6 +1934,91 @@ func TestReplicaCommandQueueInconsistent(t *testing.T) {
 	// Success.
 }
 
+// TestReplicaCommandQueueCancellation verifies that commands which are
+// waiting on the command queue do not execute if their context is cancelled.
+func TestReplicaCommandQueueCancellation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Intercept commands with matching command IDs and block them.
+	blockingStart := make(chan struct{})
+	blockingDone := make(chan struct{})
+
+	tc := testContext{}
+	tsc := TestStoreContext()
+	tsc.TestingKnobs.TestingCommandFilter =
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+			if filterArgs.Hdr.UserPriority == 42 {
+				blockingStart <- struct{}{}
+				<-blockingDone
+			}
+			return nil
+		}
+	tc.StartWithStoreContext(t, tsc)
+	defer tc.Stop()
+
+	defer close(blockingDone) // make sure teardown can happen
+
+	startBlockingCmd := func(ctx context.Context, keys ...roachpb.Key) <-chan *roachpb.Error {
+		done := make(chan *roachpb.Error)
+
+		if err := tc.stopper.RunAsyncTask(func() {
+			ba := roachpb.BatchRequest{
+				Header: roachpb.Header{
+					UserPriority: 42,
+				},
+			}
+			for _, key := range keys {
+				args := putArgs(key, nil)
+				ba.Add(&args)
+			}
+
+			_, pErr := tc.Sender().Send(ctx, ba)
+			done <- pErr
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		return done
+	}
+
+	key1 := roachpb.Key("one")
+	key2 := roachpb.Key("two")
+
+	// Wait until the command queue is blocked.
+	cmd1Done := startBlockingCmd(context.Background(), key1)
+	<-blockingStart
+
+	// Put a cancelled blocking command in the command queue. This command will
+	// block on the previous command, but will not itself reach the filter since
+	// its context is cancelled.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cmd2Done := startBlockingCmd(ctx, key1, key2)
+
+	// Wait until both commands are in the command queue.
+	util.SucceedsSoon(t, func() error {
+		tc.rng.mu.Lock()
+		chans := tc.rng.mu.cmdQ.getWait(false, roachpb.Span{Key: key1}, roachpb.Span{Key: key2})
+		tc.rng.mu.Unlock()
+		if a, e := len(chans), 2; a < e {
+			return errors.Errorf("%d of %d commands in the command queue", a, e)
+		}
+		return nil
+	})
+
+	// Finish the previous command.
+	blockingDone <- struct{}{}
+	if pErr := <-cmd1Done; pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// If this deadlocks, the command has unexpectedly begun executing and was
+	// trapped in the command filter. Indeed, the absence of such a deadlock is
+	// what's being tested here.
+	if pErr := <-cmd2Done; !testutils.IsPError(pErr, context.Canceled.Error()) {
+		t.Fatal(pErr)
+	}
+}
+
 func SendWrapped(sender client.Sender, ctx context.Context, header roachpb.Header, args roachpb.Request) (roachpb.Response, roachpb.BatchResponse_Header, *roachpb.Error) {
 	var ba roachpb.BatchRequest
 	ba.Add(args)
