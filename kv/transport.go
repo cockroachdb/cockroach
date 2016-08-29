@@ -100,15 +100,19 @@ type Transport interface {
 	// replica. May panic if the transport is exhausted. Should not
 	// block; the transport is responsible for starting other goroutines
 	// as needed.
-	SendNext(chan BatchCall)
+	SendNext(chan<- BatchCall)
 
 	// Close is called when the transport is no longer needed. It may
 	// cancel any pending RPCs without writing any response to the channel.
 	Close()
 }
 
-// grpcTransportFactory is the default TransportFactory, using GRPC.
-func grpcTransportFactory(
+// grpcTransportFactoryImpl is the default TransportFactory, using GRPC.
+// Do not use this directly - use grpcTransportFactory instead.
+//
+// During race builds, we wrap this to hold on to and read all obtained
+// requests in a tight loop, exposing data races; see transport_race.go.
+func grpcTransportFactoryImpl(
 	opts SendOptions,
 	rpcContext *rpc.Context,
 	replicas ReplicaSlice,
@@ -155,7 +159,7 @@ func (gt *grpcTransport) IsExhausted() bool {
 // SendNext invokes the specified RPC on the supplied client when the
 // client is ready. On success, the reply is sent on the channel;
 // otherwise an error is sent.
-func (gt *grpcTransport) SendNext(done chan BatchCall) {
+func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
 	client := gt.orderedClients[0]
 	gt.orderedClients = gt.orderedClients[1:]
 
@@ -167,6 +171,18 @@ func (gt *grpcTransport) SendNext(done chan BatchCall) {
 	if localServer := gt.rpcContext.GetLocalInternalServerForAddr(addr); enableLocalCalls && localServer != nil {
 		ctx, cancel := gt.opts.contextWithTimeout()
 		defer cancel()
+
+		// Clone the request. At the time of writing, Replica may mutate it
+		// during command execution which can lead to data races.
+		//
+		// TODO(tamird): we should clone all of client.args.Header, but the
+		// assertions in protoutil.Clone fire and there seems to be no
+		// reasonable workaround.
+		origTxn := client.args.Txn
+		if origTxn != nil {
+			clonedTxn := origTxn.Clone()
+			client.args.Txn = &clonedTxn
+		}
 
 		reply, err := localServer.Batch(ctx, &client.args)
 		done <- BatchCall{Reply: reply, Err: err}
@@ -241,7 +257,7 @@ func (s *senderTransport) IsExhausted() bool {
 	return s.called
 }
 
-func (s *senderTransport) SendNext(done chan BatchCall) {
+func (s *senderTransport) SendNext(done chan<- BatchCall) {
 	if s.called {
 		panic("called an exhausted transport")
 	}

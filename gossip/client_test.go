@@ -41,15 +41,19 @@ import (
 
 // startGossip creates and starts a gossip instance.
 func startGossip(nodeID roachpb.NodeID, stopper *stop.Stopper, t *testing.T, registry *metric.Registry) *Gossip {
+	return startGossipAtAddr(nodeID, util.TestAddr, stopper, t, registry)
+}
+
+func startGossipAtAddr(nodeID roachpb.NodeID, addr net.Addr, stopper *stop.Stopper, t *testing.T, registry *metric.Registry) *Gossip {
 	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
 
 	server := rpc.NewServer(rpcContext)
 	g := New(context.TODO(), rpcContext, server, nil, stopper, registry)
-	ln, err := netutil.ListenAndServeGRPC(stopper, server, util.TestAddr)
+	ln, err := netutil.ListenAndServeGRPC(stopper, server, addr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	addr := ln.Addr()
+	addr = ln.Addr()
 	g.SetNodeID(nodeID)
 	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{
 		NodeID:  nodeID,
