@@ -215,7 +215,7 @@ type evictionToken struct {
 	doOnce    sync.Once                                 // assures that do and doReplace are run up to once.
 	doLocker  sync.Locker                               // protects do and doReplace.
 	do        func() error                              // called on eviction.
-	doReplace func(rs ...roachpb.RangeDescriptor) error // called after eviction on evictAndReplace.
+	doReplace func(rs ...roachpb.RangeDescriptor) error // called after eviction on EvictAndReplace.
 }
 
 func (rdc *rangeDescriptorCache) makeEvictionToken(prevDesc *roachpb.RangeDescriptor, evict func() error) *evictionToken {

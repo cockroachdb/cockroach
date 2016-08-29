@@ -1032,52 +1032,42 @@ func (g *Gossip) doDisconnected(c *client) {
 // maybeSignalStatusChangeLocked checks whether gossip should transition its
 // internal state from connected to stalled or vice versa.
 func (g *Gossip) maybeSignalStatusChangeLocked() {
-	if g.mu.is.getInfo(KeySentinel) != nil && g.outgoing.len()+g.mu.incoming.len() > 0 {
-		// When gossip is connected, the set of bootstrap addresses is
-		// potentially cleaned up to remove ones which haven't yet been
-		// gossiped, and may no longer be valid.
-		g.maybeCleanupBootstrapAddressesLocked()
+	orphaned := g.outgoing.len()+g.mu.incoming.len() == 0
+	stalled := orphaned || g.mu.is.getInfo(KeySentinel) == nil
+	if stalled {
+		// We employ the stalled boolean to avoid filling logs with warnings.
+		if !g.stalled {
+			log.Eventf(g.ctx, "now stalled")
+			if orphaned {
+				if len(g.resolvers) == 0 {
+					log.Warningf(g.ctx, "no resolvers found; use --join to specify a connected node")
+				} else {
+					log.Warningf(g.ctx, "no incoming or outgoing connections")
+				}
+			} else if len(g.resolversTried) == len(g.resolvers) {
+				log.Warningf(g.ctx, "first range unavailable; resolvers exhausted")
+			} else {
+				log.Warningf(g.ctx, "first range unavailable; trying remaining resolvers")
+			}
+		}
+		if len(g.resolvers) > 0 {
+			g.signalStalledLocked()
+		}
+	} else {
 		if g.stalled {
 			log.Eventf(g.ctx, "connected")
 			log.Infof(g.ctx, "node has connected to cluster via gossip")
-			g.stalled = false
 			g.signalConnectedLocked()
 		}
-		return
+		g.maybeCleanupBootstrapAddressesLocked()
 	}
-	// We employ the stalled boolean to avoid filling logs with warnings.
-	if !g.stalled {
-		log.Eventf(g.ctx, "now stalled")
-		g.stalled = true
-		g.warnAboutStallLocked()
-	}
-	g.signalStalledLocked()
+	g.stalled = stalled
 }
 
 func (g *Gossip) signalStalledLocked() {
-	if len(g.resolvers) > 0 {
-		select {
-		case g.stalledCh <- struct{}{}:
-		default:
-		}
-	}
-}
-
-// warnAboutStallLocked attempts to diagnose the cause of a gossip network
-// not being connected to the sentinel. This could happen in a network
-// partition, or because of misconfiguration. It's impossible to tell,
-// but we can warn appropriately. If there are no incoming or outgoing
-// connections, we warn about the --join flag being set. If we've
-// connected, and all resolvers have been tried, we warn about either
-// the first range not being available or else possible the cluster
-// never having been initialized. Mutex must be held by the caller.
-func (g *Gossip) warnAboutStallLocked() {
-	if g.outgoing.len()+g.mu.incoming.len() == 0 {
-		log.Warningf(g.ctx, "not connected to cluster; use --join to specify a connected node")
-	} else if len(g.resolversTried) == len(g.resolvers) {
-		log.Warningf(g.ctx, "first range unavailable or cluster not initialized")
-	} else {
-		log.Warningf(g.ctx, "partition in gossip network; attempting new connection")
+	select {
+	case g.stalledCh <- struct{}{}:
+	default:
 	}
 }
 
