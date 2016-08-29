@@ -371,6 +371,11 @@ func (db *DB) AdminSplit(splitKey interface{}) error {
 // the existing replicas of the range.
 //
 // key can be either a byte slice or a string.
+//
+// When this method returns, it's guaranteed that the old lease holder has
+// applied the new lease, but that's about it. It's not guaranteed that the new
+// lease holder has applied it (so it might not know immediately that it is the
+// new lease holder).
 func (db *DB) AdminTransferLease(key interface{}, target roachpb.StoreID) error {
 	b := &Batch{}
 	b.adminTransferLease(key, target)
