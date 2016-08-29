@@ -52,6 +52,9 @@ export type TableStatsResponseMessage = Proto2TypeScript.cockroach.server.server
 export type LogsRequestMessage = Proto2TypeScript.cockroach.server.serverpb.LogsRequestMessage;
 export type LogEntriesResponseMessage = Proto2TypeScript.cockroach.server.serverpb.LogEntriesResponseMessage;
 
+export type ConstraintsRequestMessage = Proto2TypeScript.cockroach.server.serverpb.ConstraintsRequestMessage;
+export type ConstraintsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.ConstraintsResponseMessage;
+
 // API constants
 
 export const API_PREFIX = "/_admin/v1";
@@ -191,4 +194,8 @@ export function getTableStats(req: TableStatsRequestMessage, timeout?: moment.Du
 // getLogs gets the logs for a specific node
 export function getLogs(req: LogsRequestMessage, timeout?: moment.Duration): Promise<LogEntriesResponseMessage> {
   return timeoutFetch(serverpb.LogEntriesResponse, `${STATUS_PREFIX}/logs/${req.node_id}`, null, timeout);
+}
+
+export function getConstraints(req: ConstraintsRequestMessage, timeout?: moment.Duration): Promise<ConstraintsResponseMessage> {
+  return timeoutFetch(serverpb.ConstraintsResponse, `${API_PREFIX}/constraints/${req.constraints}`, null, timeout);
 }

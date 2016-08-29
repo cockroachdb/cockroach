@@ -99,7 +99,7 @@ type AllocatorOptions struct {
 type Allocator struct {
 	storePool  *StorePool
 	options    AllocatorOptions
-	ruleSolver *ruleSolver
+	ruleSolver *RuleSolver
 }
 
 // MakeAllocator creates a new allocator using the specified StorePool.
@@ -107,7 +107,7 @@ func MakeAllocator(storePool *StorePool, options AllocatorOptions) Allocator {
 	return Allocator{
 		storePool:  storePool,
 		options:    options,
-		ruleSolver: makeDefaultRuleSolver(storePool),
+		ruleSolver: MakeDefaultRuleSolver(storePool),
 	}
 }
 
@@ -169,7 +169,7 @@ func (a *Allocator) AllocateTarget(
 			required: constraints.Constraints,
 		}
 	}
-	return &candidates[0].store, nil
+	return &candidates[0].Store, nil
 }
 
 // RemoveTarget returns a suitable replica to remove from the provided replica
@@ -207,8 +207,8 @@ func (a Allocator) RemoveTarget(
 			tierOrder:   canonicalTierOrder(sl),
 			tiers:       storeTierMap(sl),
 		})
-		if !found || candidate.score < worstScore {
-			worstScore = candidate.score
+		if !found || candidate.Score < worstScore {
+			worstScore = candidate.Score
 			worst = exist
 			found = true
 		}
@@ -278,7 +278,7 @@ func (a Allocator) RebalanceTarget(
 	// return nil.
 	candidatesFound := 0
 	for _, candidate := range candidates {
-		store := candidate.store
+		store := candidate.Store
 		found := false
 		for _, repl := range existing {
 			if repl.StoreID == store.StoreID {

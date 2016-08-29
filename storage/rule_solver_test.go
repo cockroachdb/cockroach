@@ -26,18 +26,18 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-type byScoreAndID []candidate
+type byScoreAndID []Candidate
 
 func (c byScoreAndID) Len() int { return len(c) }
 func (c byScoreAndID) Less(i, j int) bool {
-	if c[i].score == c[j].score {
-		return c[i].store.StoreID < c[j].store.StoreID
+	if c[i].Score == c[j].Score {
+		return c[i].Store.StoreID < c[j].Store.StoreID
 	}
-	return c[i].score > c[j].score
+	return c[i].Score > c[j].Score
 }
 func (c byScoreAndID) Swap(i, j int) { c[i], c[j] = c[j], c[i] }
 
-// TestRuleSolver tests the mechanics of ruleSolver.
+// TestRuleSolver tests the mechanics of RuleSolver.
 func TestRuleSolver(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, _, _, storePool := createTestStorePool(TestTimeUntilStoreDeadOff)
@@ -234,7 +234,7 @@ func TestRuleSolver(t *testing.T) {
 			continue
 		}
 		for j, expected := range tc.expected {
-			if out := candidates[j].store.StoreID; out != expected {
+			if out := candidates[j].Store.StoreID; out != expected {
 				t.Errorf("%d: candidates[%d].store.StoreID = %d; not %d; %+v", i, j, out, expected, candidates)
 			}
 		}

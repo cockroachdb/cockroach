@@ -25,6 +25,8 @@ import (
 	"strings"
 	"time"
 
+	yaml "gopkg.in/yaml.v2"
+
 	"github.com/gogo/protobuf/proto"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
@@ -1305,4 +1307,32 @@ func (s *adminServer) queryDescriptorIDPath(
 		path = append(path, id)
 	}
 	return path, nil
+}
+
+// Constraints runs a set of constraints against the current stores and returns
+// a list of candidates that satisfy them along with their scores.
+func (s *adminServer) Constraints(ctx context.Context, req *serverpb.ConstraintsRequest) (*serverpb.ConstraintsResponse, error) {
+	input := fmt.Sprintf("[%s]", req.Constraints)
+	var constraints config.Constraints
+	if err := yaml.Unmarshal([]byte(input), &constraints); err != nil {
+		return nil, err
+	}
+
+	rs := storage.MakeDefaultRuleSolver(s.server.storePool)
+	candidates, err := rs.Solve(constraints, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp := serverpb.ConstraintsResponse{
+		Stores:     s.server.storePool.GetStoreDescs(),
+		Candidates: make([]serverpb.Candidate, len(candidates)),
+	}
+
+	for i, c := range candidates {
+		resp.Candidates[i] = serverpb.Candidate{
+			Desc:  c.Store,
+			Score: c.Score,
+		}
+	}
+	return &resp, nil
 }

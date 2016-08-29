@@ -21,8 +21,8 @@ declare module Proto2TypeScript {
 	export interface ProtoBufBuilder {
 		gogoproto: gogoprotoBuilder;
 		cockroach: cockroachBuilder;
-		google: googleBuilder;
 		raftpb: raftpbBuilder;
+		google: googleBuilder;
 		
 }
 }
@@ -3041,6 +3041,9 @@ export interface serverpbBuilder {
 	HealthResponse: serverpb.HealthResponseBuilder;
 	ClusterFreezeRequest: serverpb.ClusterFreezeRequestBuilder;
 	ClusterFreezeResponse: serverpb.ClusterFreezeResponseBuilder;
+	ConstraintsRequest: serverpb.ConstraintsRequestBuilder;
+	Candidate: serverpb.CandidateBuilder;
+	ConstraintsResponse: serverpb.ConstraintsResponseBuilder;
 	DetailsRequest: serverpb.DetailsRequestBuilder;
 	DetailsResponse: serverpb.DetailsResponseBuilder;
 	NodesRequest: serverpb.NodesRequestBuilder;
@@ -4572,6 +4575,132 @@ export interface ClusterFreezeResponseBuilder {
 	decode(buffer: ArrayBuffer) : ClusterFreezeResponseMessage;
 	decode(buffer: ByteBuffer) : ClusterFreezeResponseMessage;
 	decode64(buffer: string) : ClusterFreezeResponseMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.cockroach.server.serverpb {
+
+	export interface ConstraintsRequest {
+
+		
+
+constraints?: string;
+		
+
+getConstraints?() : string;
+		setConstraints?(constraints : string): void;
+		
+
+
+
+}
+
+	export interface ConstraintsRequestMessage extends ConstraintsRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ConstraintsRequestBuilder {
+	new(data?: ConstraintsRequest): ConstraintsRequestMessage;
+	decode(buffer: ArrayBuffer) : ConstraintsRequestMessage;
+	decode(buffer: ByteBuffer) : ConstraintsRequestMessage;
+	decode64(buffer: string) : ConstraintsRequestMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.cockroach.server.serverpb {
+
+	export interface Candidate {
+
+		
+
+desc?: roachpb.StoreDescriptor;
+		
+
+getDesc?() : roachpb.StoreDescriptor;
+		setDesc?(desc : roachpb.StoreDescriptor): void;
+		
+
+
+
+score?: number;
+		
+
+getScore?() : number;
+		setScore?(score : number): void;
+		
+
+
+
+}
+
+	export interface CandidateMessage extends Candidate {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface CandidateBuilder {
+	new(data?: Candidate): CandidateMessage;
+	decode(buffer: ArrayBuffer) : CandidateMessage;
+	decode(buffer: ByteBuffer) : CandidateMessage;
+	decode64(buffer: string) : CandidateMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.cockroach.server.serverpb {
+
+	export interface ConstraintsResponse {
+
+		
+
+stores?: roachpb.StoreDescriptor[];
+		
+
+getStores?() : roachpb.StoreDescriptor[];
+		setStores?(stores : roachpb.StoreDescriptor[]): void;
+		
+
+
+
+candidates?: Candidate[];
+		
+
+getCandidates?() : Candidate[];
+		setCandidates?(candidates : Candidate[]): void;
+		
+
+
+
+}
+
+	export interface ConstraintsResponseMessage extends ConstraintsResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ConstraintsResponseBuilder {
+	new(data?: ConstraintsResponse): ConstraintsResponseMessage;
+	decode(buffer: ArrayBuffer) : ConstraintsResponseMessage;
+	decode(buffer: ByteBuffer) : ConstraintsResponseMessage;
+	decode64(buffer: string) : ConstraintsResponseMessage;
 	
 }
 
@@ -6798,208 +6927,6 @@ declare module Proto2TypeScript.cockroach.ts.tspb {
 
 declare module Proto2TypeScript {
 
-	export interface google {
-
-		
-
-}
-
-	export interface googleMessage extends google {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface googleBuilder {
-	new(data?: google): googleMessage;
-	decode(buffer: ArrayBuffer) : googleMessage;
-	decode(buffer: ByteBuffer) : googleMessage;
-	decode64(buffer: string) : googleMessage;
-	api: google.apiBuilder;
-	
-}
-
-}
-
-declare module Proto2TypeScript.google {
-
-	export interface api {
-
-		
-
-}
-
-	export interface apiMessage extends api {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface apiBuilder {
-	new(data?: api): apiMessage;
-	decode(buffer: ArrayBuffer) : apiMessage;
-	decode(buffer: ByteBuffer) : apiMessage;
-	decode64(buffer: string) : apiMessage;
-	HttpRule: api.HttpRuleBuilder;
-	CustomHttpPattern: api.CustomHttpPatternBuilder;
-	
-}
-
-}
-
-declare module Proto2TypeScript.google.api {
-
-	export interface HttpRule {
-
-		
-
-get?: string;
-		
-
-getGet?() : string;
-		setGet?(get : string): void;
-		
-
-
-
-put?: string;
-		
-
-getPut?() : string;
-		setPut?(put : string): void;
-		
-
-
-
-post?: string;
-		
-
-getPost?() : string;
-		setPost?(post : string): void;
-		
-
-
-
-delete?: string;
-		
-
-getDelete?() : string;
-		
-
-
-
-patch?: string;
-		
-
-getPatch?() : string;
-		setPatch?(patch : string): void;
-		
-
-
-
-custom?: CustomHttpPattern;
-		
-
-getCustom?() : CustomHttpPattern;
-		setCustom?(custom : CustomHttpPattern): void;
-		
-
-
-
-body?: string;
-		
-
-getBody?() : string;
-		setBody?(body : string): void;
-		
-
-
-
-additional_bindings?: HttpRule[];
-		
-
-getAdditionalBindings?() : HttpRule[];
-		setAdditionalBindings?(additionalBindings : HttpRule[]): void;
-		
-
-
-
-pattern?: string
-		
-}
-
-	export interface HttpRuleMessage extends HttpRule {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface HttpRuleBuilder {
-	new(data?: HttpRule): HttpRuleMessage;
-	decode(buffer: ArrayBuffer) : HttpRuleMessage;
-	decode(buffer: ByteBuffer) : HttpRuleMessage;
-	decode64(buffer: string) : HttpRuleMessage;
-	
-}
-
-}
-
-
-declare module Proto2TypeScript.google.api {
-
-	export interface CustomHttpPattern {
-
-		
-
-kind?: string;
-		
-
-getKind?() : string;
-		setKind?(kind : string): void;
-		
-
-
-
-path?: string;
-		
-
-getPath?() : string;
-		setPath?(path : string): void;
-		
-
-
-
-}
-
-	export interface CustomHttpPatternMessage extends CustomHttpPattern {
-	toArrayBuffer(): ArrayBuffer;
-	encode(): ByteBuffer;
-	encodeJSON(): string;
-	toBase64(): string;
-	toString(): string;
-}
-
-export interface CustomHttpPatternBuilder {
-	new(data?: CustomHttpPattern): CustomHttpPatternMessage;
-	decode(buffer: ArrayBuffer) : CustomHttpPatternMessage;
-	decode(buffer: ByteBuffer) : CustomHttpPatternMessage;
-	decode64(buffer: string) : CustomHttpPatternMessage;
-	
-}
-
-}
-
-
-
-
-declare module Proto2TypeScript {
-
 	export interface raftpb {
 
 		
@@ -7523,6 +7450,208 @@ declare module Proto2TypeScript.raftpb {
 		
 }
 }
+
+
+declare module Proto2TypeScript {
+
+	export interface google {
+
+		
+
+}
+
+	export interface googleMessage extends google {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface googleBuilder {
+	new(data?: google): googleMessage;
+	decode(buffer: ArrayBuffer) : googleMessage;
+	decode(buffer: ByteBuffer) : googleMessage;
+	decode64(buffer: string) : googleMessage;
+	api: google.apiBuilder;
+	
+}
+
+}
+
+declare module Proto2TypeScript.google {
+
+	export interface api {
+
+		
+
+}
+
+	export interface apiMessage extends api {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface apiBuilder {
+	new(data?: api): apiMessage;
+	decode(buffer: ArrayBuffer) : apiMessage;
+	decode(buffer: ByteBuffer) : apiMessage;
+	decode64(buffer: string) : apiMessage;
+	HttpRule: api.HttpRuleBuilder;
+	CustomHttpPattern: api.CustomHttpPatternBuilder;
+	
+}
+
+}
+
+declare module Proto2TypeScript.google.api {
+
+	export interface HttpRule {
+
+		
+
+get?: string;
+		
+
+getGet?() : string;
+		setGet?(get : string): void;
+		
+
+
+
+put?: string;
+		
+
+getPut?() : string;
+		setPut?(put : string): void;
+		
+
+
+
+post?: string;
+		
+
+getPost?() : string;
+		setPost?(post : string): void;
+		
+
+
+
+delete?: string;
+		
+
+getDelete?() : string;
+		
+
+
+
+patch?: string;
+		
+
+getPatch?() : string;
+		setPatch?(patch : string): void;
+		
+
+
+
+custom?: CustomHttpPattern;
+		
+
+getCustom?() : CustomHttpPattern;
+		setCustom?(custom : CustomHttpPattern): void;
+		
+
+
+
+body?: string;
+		
+
+getBody?() : string;
+		setBody?(body : string): void;
+		
+
+
+
+additional_bindings?: HttpRule[];
+		
+
+getAdditionalBindings?() : HttpRule[];
+		setAdditionalBindings?(additionalBindings : HttpRule[]): void;
+		
+
+
+
+pattern?: string
+		
+}
+
+	export interface HttpRuleMessage extends HttpRule {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface HttpRuleBuilder {
+	new(data?: HttpRule): HttpRuleMessage;
+	decode(buffer: ArrayBuffer) : HttpRuleMessage;
+	decode(buffer: ByteBuffer) : HttpRuleMessage;
+	decode64(buffer: string) : HttpRuleMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.google.api {
+
+	export interface CustomHttpPattern {
+
+		
+
+kind?: string;
+		
+
+getKind?() : string;
+		setKind?(kind : string): void;
+		
+
+
+
+path?: string;
+		
+
+getPath?() : string;
+		setPath?(path : string): void;
+		
+
+
+
+}
+
+	export interface CustomHttpPatternMessage extends CustomHttpPattern {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface CustomHttpPatternBuilder {
+	new(data?: CustomHttpPattern): CustomHttpPatternMessage;
+	decode(buffer: ArrayBuffer) : CustomHttpPatternMessage;
+	decode(buffer: ByteBuffer) : CustomHttpPatternMessage;
+	decode64(buffer: string) : CustomHttpPatternMessage;
+	
+}
+
+}
+
+
 
 
 
