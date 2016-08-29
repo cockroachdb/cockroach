@@ -378,33 +378,43 @@ func (sc *SchemaChanger) truncateIndexes(
 	dropped []sqlbase.IndexDescriptor,
 ) error {
 	for _, desc := range dropped {
-		// First extend the schema change lease.
-		l, err := sc.ExtendLease(*lease)
-		if err != nil {
-			return err
-		}
-		*lease = l
-		if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
-			tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
+		var resume roachpb.Span
+		for done := false; !done; {
+			// First extend the schema change lease.
+			l, err := sc.ExtendLease(*lease)
 			if err != nil {
 				return err
 			}
-			// Short circuit the truncation if the table has been deleted.
-			if tableDesc.Deleted() {
-				return nil
-			}
+			*lease = l
 
-			rd, err := makeRowDeleter(txn, tableDesc, nil, nil, false)
-			if err != nil {
+			resumeAt := resume
+			if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
+				tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
+				if err != nil {
+					return err
+				}
+				// Short circuit the truncation if the table has been deleted.
+				if tableDesc.Deleted() {
+					done = true
+					return nil
+				}
+
+				rd, err := makeRowDeleter(txn, tableDesc, nil, nil, false)
+				if err != nil {
+					return err
+				}
+				td := tableDeleter{rd: rd}
+				if err := td.init(txn); err != nil {
+					return err
+				}
+				resume, err = td.deleteIndex(
+					context.TODO(), &desc, resumeAt, IndexBackfillChunkSize,
+				)
+				done = resume.Key == nil
+				return err
+			}); err != nil {
 				return err
 			}
-			td := tableDeleter{rd: rd}
-			if err := td.init(txn); err != nil {
-				return err
-			}
-			return td.deleteIndex(context.TODO(), &desc)
-		}); err != nil {
-			return err
 		}
 	}
 	return nil
