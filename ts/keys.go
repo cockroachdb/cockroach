@@ -64,7 +64,7 @@ import (
 // Resolution's KeyDuration.
 func MakeDataKey(name string, source string, r Resolution, timestamp int64) roachpb.Key {
 	// Normalize timestamp into a timeslot before recording.
-	timeslot := timestamp / r.KeyDuration()
+	timeslot := timestamp / r.SlabDuration()
 
 	k := append(roachpb.Key(nil), keys.TimeseriesPrefix...)
 	k = encoding.EncodeBytesAscending(k, []byte(name))
@@ -104,7 +104,7 @@ func decodeDataKeySuffix(key roachpb.Key) (string, string, Resolution, int64, er
 	if err != nil {
 		return "", "", 0, 0, err
 	}
-	timestamp := timeslot * resolution.KeyDuration()
+	timestamp := timeslot * resolution.SlabDuration()
 	// The remaining bytes are the source.
 	source := remainder
 
