@@ -211,18 +211,28 @@ func Import(
 	startKey, endKey engine.MVCCKey,
 	newTableID sqlbase.ID,
 ) error {
+	const batchSize = 10000
+
 	// TODO(dan): Check if the range being imported into is empty. If newTableID
 	// is non-zero, it'll have to be derived from startKey and endKey.
 
+	b := txn.NewBatch()
 	var v roachpb.Value
+	count := 0
 	importFunc := func(kv engine.MVCCKeyValue) (bool, error) {
 		v = roachpb.Value{RawBytes: kv.Value}
 		v.ClearChecksum()
 		if log.V(3) {
 			log.Infof(ctx, "Put %s %s\n", kv.Key.Key, v.PrettyPrint())
 		}
-		if err := txn.Put(kv.Key.Key, &v); err != nil {
-			return true, err
+		b.Put(kv.Key.Key, &v)
+		count++
+		if count > batchSize {
+			if err := txn.Run(b); err != nil {
+				return true, err
+			}
+			b = txn.NewBatch()
+			count = 0
 		}
 		return false, nil
 	}
@@ -232,7 +242,11 @@ func Import(
 		// reference to the mmaped file.)
 		importFunc = MakeRekeyMVCCKeyValFunc(newTableID, importFunc)
 	}
-	return sst.Iterate(startKey, endKey, importFunc)
+	err := sst.Iterate(startKey, endKey, importFunc)
+	if err != nil {
+		return err
+	}
+	return txn.Run(b)
 }
 
 // restoreTable inserts the given DatabaseDescriptor. If the name conflicts with
@@ -312,7 +326,7 @@ func restoreTable(
 	// table, then flip (or initialize) the name -> ID entry so any new queries
 	// will use the new one. If there was an exiting table, it can now be
 	// cleaned up.
-	b := &client.Batch{}
+	b := txn.NewBatch()
 	b.CPut(tableDescKey, sqlbase.WrapDescriptor(table), nil)
 	if existingTable := existingDesc.GetTable(); existingTable == nil {
 		b.CPut(tableIDKey, table.ID, nil)
