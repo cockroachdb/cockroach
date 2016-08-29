@@ -728,9 +728,27 @@ func newNotLeaseHolderError(
 		_, stillMember := rangeDesc.GetReplicaDescriptor(l.Replica.StoreID)
 		if stillMember {
 			err.LeaseHolder = &l.Replica
+			err.Lease = l
 		}
 	}
 	return err
+}
+
+// newNotLeaseHolderErrorWithGuess creates a NotLeaseHolderError initialized
+// with a guess about who the leader is.
+// This is to be used instead of newNotLeaseHolderError when the current lease
+// is not known.
+func newNotLeaseHolderErrorWithGuess(
+	rangeID roachpb.RangeID,
+	origin roachpb.ReplicaDescriptor,
+	leaseHolder roachpb.ReplicaDescriptor,
+) error {
+	return &roachpb.NotLeaseHolderError{
+		RangeID:     rangeID,
+		Replica:     roachpb.ReplicaDescriptor{},
+		LeaseHolder: &leaseHolder,
+		Lease:       nil,
+	}
 }
 
 // redirectOnOrAcquireLease checks whether this replica has the lease at the
@@ -913,8 +931,19 @@ func (r *Replica) getReplicaDescriptorLocked() (roachpb.ReplicaDescriptor, error
 	return roachpb.ReplicaDescriptor{}, roachpb.NewRangeNotFoundError(r.RangeID)
 }
 
-// setLastReplicaDescriptors sets the the most recently seen replica descriptors to those
-// contained in the *RaftMessageRequest, acquiring r.mu to do so.
+func (r *Replica) mustGetReplicaID() roachpb.ReplicaID {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.mu.replicaID == 0 {
+		panic("the replica's raft group has not yet been configured (i.e. the replica " +
+			"was created from a preemptive snapshot)")
+	}
+	return r.mu.replicaID
+}
+
+// setLastReplicaDescriptors sets the the most recently seen replica
+// descriptors to those contained in the *RaftMessageRequest, acquiring r.mu to
+// do so.
 func (r *Replica) setLastReplicaDescriptors(req *RaftMessageRequest) {
 	r.mu.Lock()
 	r.mu.lastFromReplica = req.FromReplica
@@ -1080,7 +1109,7 @@ func (r *Replica) Send(
 		pErr = roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
 	}
 	if pErr != nil {
-		log.Tracef(ctx, "error: %s", pErr)
+		log.Tracef(ctx, "replica.Send got error: %s", pErr)
 	}
 	return br, pErr
 }
@@ -1408,9 +1437,9 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 		}
 	} else {
 		endCmdsFunc = func(
-			*roachpb.BatchResponse, *roachpb.Error,
+			br *roachpb.BatchResponse, pErr *roachpb.Error,
 		) *roachpb.Error {
-			return nil
+			return pErr
 		}
 	}
 

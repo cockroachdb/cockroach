@@ -163,6 +163,8 @@ func (r *Replica) GetLastIndex() (uint64, error) {
 }
 
 // GetLease exposes replica.getLease for tests.
+// If you just need information about the lease holder, consider issuing a
+// LeaseInfoRequest instead of using this internal method.
 func (r *Replica) GetLease() (*roachpb.Lease, *roachpb.Lease) {
 	return r.getLease()
 }
