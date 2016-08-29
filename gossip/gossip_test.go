@@ -115,6 +115,7 @@ func TestGossipRaceLogStatus(t *testing.T) {
 		go func() {
 			<-gun
 			local.LogStatus()
+			gun <- struct{}{}
 		}()
 		gun <- struct{}{}
 		if err := local.AddInfo(
@@ -124,6 +125,7 @@ func TestGossipRaceLogStatus(t *testing.T) {
 		); err != nil {
 			t.Fatal(err)
 		}
+		<-gun
 	}
 	close(gun)
 }
