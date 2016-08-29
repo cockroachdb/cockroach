@@ -1934,6 +1934,77 @@ func TestReplicaCommandQueueInconsistent(t *testing.T) {
 	// Success.
 }
 
+// TestReplicaCommandQueueCancellation verifies that commands which are
+// waiting on the command queue do not execute if their context is cancelled.
+func TestReplicaCommandQueueCancellation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Intercept commands with matching command IDs and block them.
+	blockingStart := make(chan struct{})
+	blockingDone := make(chan struct{})
+
+	tc := testContext{}
+	tsc := TestStoreContext()
+	tsc.TestingKnobs.TestingCommandFilter =
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+			if filterArgs.Hdr.UserPriority == 42 {
+				blockingStart <- struct{}{}
+				<-blockingDone
+			}
+			return nil
+		}
+	tc.StartWithStoreContext(t, tsc)
+	defer tc.Stop()
+
+	defer close(blockingDone) // make sure teardown can happen
+
+	startReadCmd := func(ctx context.Context, key roachpb.Key, blocking bool) <-chan *roachpb.Error {
+		done := make(chan *roachpb.Error)
+		if err := tc.stopper.RunAsyncTask(func() {
+			log.Infof(ctx, "starting key=%s, blocking=%t", key, blocking)
+			h := roachpb.Header{}
+			if blocking {
+				h.UserPriority = 42
+			}
+			args := putArgs(key, nil)
+			_, pErr := client.SendWrappedWith(tc.Sender(), ctx, h, &args)
+			log.Infof(ctx, "ending key=%s, blocking=%t", key, blocking)
+			done <- pErr
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return done
+	}
+
+	blockingKey := roachpb.Key("blocking")
+	// nonBlockingKey := roachpb.Key("non-blocking")
+
+	// Wait until the command queue is blocked.
+	cmd1Done := startReadCmd(context.Background(), blockingKey, true)
+	<-blockingStart
+
+	// Put a cancelled blocking command in the command queue. This command will
+	// block on the previous command, but will not itself reach the filter since
+	// its context is cancelled.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cmd2Done := startReadCmd(ctx, blockingKey, true)
+
+	// Finish the previous command.
+	blockingDone <- struct{}{}
+	if pErr := <-cmd1Done; pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	select {
+	case pErr := <-cmd2Done:
+		if !testutils.IsPError(pErr, context.Canceled.Error()) {
+			t.Fatal(pErr)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("command unexpectedly entered the command queue")
+	}
+}
+
 func SendWrapped(sender client.Sender, ctx context.Context, header roachpb.Header, args roachpb.Request) (roachpb.Response, roachpb.BatchResponse_Header, *roachpb.Error) {
 	var ba roachpb.BatchRequest
 	ba.Add(args)
