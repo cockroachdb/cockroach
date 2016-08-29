@@ -45,6 +45,22 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 	return nil
 }
 
+// UpdateTxn updates the batch transaction from the supplied one in
+// a copy-on-write fashion, i.e. without mutating an existing
+// Transaction struct.
+func (ba *BatchRequest) UpdateTxn(otherTxn *Transaction) {
+	if otherTxn == nil {
+		return
+	}
+	if ba.Txn == nil {
+		ba.Txn = otherTxn
+		return
+	}
+	clonedTxn := ba.Txn.Clone()
+	clonedTxn.Update(otherTxn)
+	ba.Txn = &clonedTxn
+}
+
 // IsFreeze returns whether the batch consists of a single ChangeFrozen request.
 func (ba *BatchRequest) IsFreeze() bool {
 	if !ba.IsSingleRequest() {
