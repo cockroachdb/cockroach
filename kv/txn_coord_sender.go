@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -278,6 +279,11 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		// used by goroutines we didn't wait for.
 		if ba.Header.Trace == nil {
 			ba.Header.Trace = &tracing.Span{}
+		} else {
+			// We didn't make this object but are about to mutate it, so we
+			// have to take a copy - the original might already have been
+			// passed to the RPC layer.
+			ba.Header.Trace = protoutil.Clone(ba.Header.Trace).(*tracing.Span)
 		}
 		if err := tc.tracer.Inject(sp.Context(), basictracer.Delegator, ba.Trace); err != nil {
 			return nil, roachpb.NewError(err)
@@ -343,6 +349,9 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 			// TODO(peter): Populate DistinctSpans on all batches, not just batches
 			// which contain an EndTransactionRequest.
 			var distinct bool
+			// The request might already be used by an outgoing goroutine, so
+			// we can't safely mutate anything in-place (as MergeSpans does).
+			et.IntentSpans = append([]roachpb.Span(nil), et.IntentSpans...)
 			et.IntentSpans, distinct = roachpb.MergeSpans(et.IntentSpans)
 			ba.Header.DistinctSpans = distinct && distinctSpans
 			if len(et.IntentSpans) == 0 {
