@@ -440,6 +440,9 @@ func (*RequestLeaseRequest) Method() Method { return RequestLease }
 func (*TransferLeaseRequest) Method() Method { return TransferLease }
 
 // Method implements the Request interface.
+func (*LeaseInfoRequest) Method() Method { return LeaseInfo }
+
+// Method implements the Request interface.
 func (*ComputeChecksumRequest) Method() Method { return ComputeChecksum }
 
 // ShallowCopy implements the Request interface.
@@ -605,6 +608,12 @@ func (lt *TransferLeaseRequest) ShallowCopy() Request {
 }
 
 // ShallowCopy implements the Request interface.
+func (lt *LeaseInfoRequest) ShallowCopy() Request {
+	shallowCopy := *lt
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
 func (ccr *ComputeChecksumRequest) ShallowCopy() Request {
 	shallowCopy := *ccr
 	return &shallowCopy
@@ -637,6 +646,7 @@ func (*MergeRequest) createReply() Response              { return &MergeResponse
 func (*TruncateLogRequest) createReply() Response        { return &TruncateLogResponse{} }
 func (*RequestLeaseRequest) createReply() Response       { return &RequestLeaseResponse{} }
 func (*TransferLeaseRequest) createReply() Response      { return &RequestLeaseResponse{} }
+func (*LeaseInfoRequest) createReply() Response          { return &LeaseInfoResponse{} }
 func (*ComputeChecksumRequest) createReply() Response    { return &ComputeChecksumResponse{} }
 
 // NewGet returns a Request initialized to get the value at key.
@@ -809,6 +819,10 @@ func (*TruncateLogRequest) flags() int        { return isWrite | isNonKV }
 func (*RequestLeaseRequest) flags() int {
 	return isWrite | isAlone | isNonKV | skipLeaseCheck
 }
+
+// LeaseInfoRequest is usually executed in an INCONSISTENT batch, which has the
+// effect of the `skipLeaseCheck` flag that lease write operations have.
+func (*LeaseInfoRequest) flags() int { return isRead | isNonKV | isAlone }
 func (*TransferLeaseRequest) flags() int {
 	// TransferLeaseRequest requires the lease, which is checked in
 	// `AdminTransferLease()` at proposal time and in the usual way for write

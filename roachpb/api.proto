@@ -621,6 +621,21 @@ message TransferLeaseRequest {
   optional Lease lease = 2 [(gogoproto.nullable) = false];
 }
 
+// LeaseInfoRequest is the argument to the LeaseInfo() method, for getting
+// information about a range's lease.
+// It's a point request, so it addresses one single range, and returns the lease
+// currently in effect for that range.
+message LeaseInfoRequest{
+  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+// LeaseInfoResponse is the response to a LeaseInfo() operation.
+message LeaseInfoResponse{
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // The current lease. It can also be the tentative future lease, if a lease
+  // transfer is in progress.
+  optional Lease lease = 2 [(gogoproto.nullable) = false];
+}
+
 // A RequestLeaseResponse is the response to a RequestLease() or TransferLease()
 // operation.
 message RequestLeaseResponse{
@@ -685,6 +700,7 @@ message RequestUnion {
   optional InitPutRequest init_put = 26;
   optional ChangeFrozenRequest change_frozen = 27;
   optional TransferLeaseRequest transfer_lease = 28;
+  optional LeaseInfoRequest lease_info = 30;
 }
 
 // A ResponseUnion contains exactly one of the optional responses.
@@ -721,6 +737,7 @@ message ResponseUnion {
   optional InitPutResponse init_put = 26;
   optional ChangeFrozenResponse change_frozen = 27;
   reserved 28; // TransferLease and RequestLease both use RequestLeaseResponse
+  optional LeaseInfoResponse lease_info = 30;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary

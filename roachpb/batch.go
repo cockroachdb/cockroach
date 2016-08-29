@@ -277,6 +277,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 		checkConsistency   int
 		noop               int
 		changeFrozen       int
+		leaseInfo          int
 	}
 	for _, union := range ba.Requests {
 		switch union.GetInner().(type) {
@@ -334,6 +335,8 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			counts.noop++
 		case *ChangeFrozenRequest:
 			counts.changeFrozen++
+		case *LeaseInfoRequest:
+			counts.leaseInfo++
 		default:
 			panic(fmt.Sprintf("unsupported type %T", union.GetInner()))
 		}
@@ -367,6 +370,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 		checkConsistency   []CheckConsistencyResponse
 		noop               []NoopResponse
 		changeFrozen       []ChangeFrozenResponse
+		leaseInfo          []LeaseInfoResponse
 	}
 	for i, union := range ba.Requests {
 		var reply Response
@@ -506,6 +510,11 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 				bufs.changeFrozen = make([]ChangeFrozenResponse, counts.changeFrozen)
 			}
 			reply, bufs.changeFrozen = &bufs.changeFrozen[0], bufs.changeFrozen[1:]
+		case *LeaseInfoRequest:
+			if bufs.leaseInfo == nil {
+				bufs.leaseInfo = make([]LeaseInfoResponse, counts.leaseInfo)
+			}
+			reply, bufs.leaseInfo = &bufs.leaseInfo[0], bufs.leaseInfo[1:]
 		default:
 			panic(fmt.Sprintf("unsupported type %T", union.GetInner()))
 		}
