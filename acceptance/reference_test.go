@@ -52,6 +52,7 @@ trap finish EXIT
 
 export PGHOST=localhost
 export PGPORT=""
+export COCKROACH_SKIP_UPDATE_CHECK=1
 
 bin=/%s/cockroach
 # TODO(bdarnell): when --background is in referenceBinPath, use it here and below.
@@ -142,6 +143,7 @@ function finish() {
 }
 trap finish EXIT
 
+export COCKROACH_SKIP_UPDATE_CHECK=1
 $bin start --alsologtostderr=INFO --background --store=/cockroach-data-reference-7429 &> out
 $bin debug kv scan
 $bin quit
