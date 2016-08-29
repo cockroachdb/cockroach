@@ -1402,8 +1402,9 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   rocksdb::Options options(rocksdb::GetOptions(db_opts.memtable_budget));
   // Increase parallelism for compactions based on the number of
   // cpus. This will use 1 high priority thread for flushes and
-  // num_cpu-1 low priority threads for compactions.
-  options.IncreaseParallelism(db_opts.num_cpu);
+  // num_cpu-1 low priority threads for compactions. Always use at
+  // least 2 threads, otherwise compactions won't happen.
+  options.IncreaseParallelism(std::max(db_opts.num_cpu, 2));
   // Enable subcompactions which will use multiple threads to speed up
   // a single compaction. The value of num_cpu/2 has not been tuned.
   options.max_subcompactions = std::max(db_opts.num_cpu / 2, 1);
