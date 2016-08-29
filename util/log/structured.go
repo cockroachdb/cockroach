@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/util/caller"
 )
 
-// makeMessage creates a structured log entry.
-func makeMessage(ctx context.Context, format string, args []interface{}) string {
-	var buf bytes.Buffer
+// formatTags appends the tags to a bytes.Buffer. If there are no tags,
+// returns false.
+func formatTags(buf *bytes.Buffer, ctx context.Context) bool {
 	tags := contextLogTags(ctx)
 	if len(tags) > 0 {
 		buf.WriteString("[")
@@ -37,11 +37,19 @@ func makeMessage(ctx context.Context, format string, args []interface{}) string 
 			}
 			buf.WriteString(t.name)
 			if value := t.value(); value != nil {
-				fmt.Fprint(&buf, value)
+				fmt.Fprint(buf, value)
 			}
 		}
 		buf.WriteString("] ")
+		return true
 	}
+	return false
+}
+
+// makeMessage creates a structured log entry.
+func makeMessage(ctx context.Context, format string, args []interface{}) string {
+	var buf bytes.Buffer
+	formatTags(&buf, ctx)
 	if len(format) == 0 {
 		fmt.Fprint(&buf, args...)
 	} else {
@@ -58,10 +66,8 @@ func addStructured(ctx context.Context, s Severity, depth int, format string, ar
 	}
 	file, line, _ := caller.Lookup(depth + 1)
 	msg := makeMessage(ctx, format, args)
-	if s >= ErrorLog {
-		ErrEvent(ctx, msg)
-	} else {
-		Event(ctx, msg)
-	}
+	// makeMessage already added the tags when forming msg, we don't want
+	// eventInternal to prepend them again.
+	eventInternal(ctx, (s >= ErrorLog), false /*withTags*/, "%s", msg)
 	logging.outputLogEntry(s, file, line, msg)
 }
