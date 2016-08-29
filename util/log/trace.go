@@ -54,6 +54,11 @@ func WithEventLog(ctx context.Context, family, title string) context.Context {
 	return withEventLogInternal(ctx, trace.NewEventLog(family, title))
 }
 
+// WithNoEventLog creates a context which no longer has an embedded event log.
+func WithNoEventLog(ctx context.Context) context.Context {
+	return withEventLogInternal(ctx, nil)
+}
+
 func eventLogFromCtx(ctx context.Context) *ctxEventLog {
 	if val := ctx.Value(ctxEventLogKey{}); val != nil {
 		return val.(*ctxEventLog)
