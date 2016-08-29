@@ -82,7 +82,7 @@ prepare_artifacts() {
 
   if [ "${ret}" -ne 0 ] &&
      [ -n "${GITHUB_API_TOKEN-}" ] &&
-     [ "${CIRCLE_BRANCH-}" = "master" ]
+     [ "${CIRCLE_BRANCH-}" = "master" ] || [ "${CIRCLE_BRANCH-}" = "develop" ]
   then
       function post() {
         curl -X POST -H "Authorization: token ${GITHUB_API_TOKEN}" \
