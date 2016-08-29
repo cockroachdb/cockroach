@@ -1,2 +1,2 @@
-replicas:
-  - attrs: [us-east-1a,ssd]
+num_replicas: 1
+constraints: [us-east-1a,ssd]

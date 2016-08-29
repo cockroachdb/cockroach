@@ -32,9 +32,9 @@ func init() {
 func GetZoneConfig(cfg config.SystemConfig, id uint32) (config.ZoneConfig, bool, error) {
 	// Look in the zones table.
 	if zoneVal := cfg.GetValue(sqlbase.MakeZoneKey(sqlbase.ID(id))); zoneVal != nil {
-		var zone config.ZoneConfig
 		// We're done.
-		return zone, true, zoneVal.GetProto(&zone)
+		zone, err := config.MigrateZoneConfig(zoneVal)
+		return zone, true, err
 	}
 
 	// No zone config for this ID. We need to figure out if it's a database

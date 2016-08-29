@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
+	"gopkg.in/yaml.v2"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
@@ -332,26 +333,26 @@ func TestZoneConfigValidate(t *testing.T) {
 		},
 		{
 			config.ZoneConfig{
-				ReplicaAttrs: make([]roachpb.Attributes, 2),
+				NumReplicas: 2,
 			},
 			"at least 3 replicas are required for multi-replica configurations",
 		},
 		{
 			config.ZoneConfig{
-				ReplicaAttrs: make([]roachpb.Attributes, 1),
+				NumReplicas: 1,
 			},
 			"RangeMaxBytes 0 less than minimum allowed",
 		},
 		{
 			config.ZoneConfig{
-				ReplicaAttrs:  make([]roachpb.Attributes, 1),
+				NumReplicas:   1,
 				RangeMaxBytes: config.DefaultZoneConfig().RangeMaxBytes,
 			},
 			"",
 		},
 		{
 			config.ZoneConfig{
-				ReplicaAttrs:  make([]roachpb.Attributes, 1),
+				NumReplicas:   1,
 				RangeMinBytes: config.DefaultZoneConfig().RangeMaxBytes,
 				RangeMaxBytes: config.DefaultZoneConfig().RangeMaxBytes,
 			},
@@ -367,5 +368,62 @@ func TestZoneConfigValidate(t *testing.T) {
 		} else if !testutils.IsError(err, c.expected) {
 			t.Fatalf("%d: expected %s, but got %v", i, c.expected, err)
 		}
+	}
+}
+
+// TestZoneConfigMarshalYAML makes sure that ZoneConfig is correctly marshaled
+// to YAML and back.
+func TestZoneConfigMarshalYAML(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	original := config.ZoneConfig{
+		RangeMinBytes: 1,
+		RangeMaxBytes: 1,
+		GC: config.GCPolicy{
+			TTLSeconds: 1,
+		},
+		NumReplicas: 1,
+		Constraints: config.Constraints{
+			Constraints: []config.Constraint{
+				{
+					Type:  config.Constraint_POSITIVE,
+					Value: "foo",
+				},
+				{
+					Type:  config.Constraint_REQUIRED,
+					Key:   "duck",
+					Value: "foo",
+				},
+				{
+					Type:  config.Constraint_PROHIBITED,
+					Key:   "duck",
+					Value: "foo",
+				},
+			},
+		},
+	}
+
+	expected := `range_min_bytes: 1
+range_max_bytes: 1
+gc:
+  ttlseconds: 1
+num_replicas: 1
+constraints: [foo, +duck=foo, -duck=foo]
+`
+
+	body, err := yaml.Marshal(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != expected {
+		t.Fatalf("yaml.Marshal(%+v) = %s; not %s", original, body, expected)
+	}
+
+	var unmarshaled config.ZoneConfig
+	if err := yaml.Unmarshal(body, &unmarshaled); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(unmarshaled, original) {
+		t.Errorf("yaml.Unmarshal(%q) = %+v; not %+v", body, unmarshaled, original)
 	}
 }

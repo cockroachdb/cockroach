@@ -63,7 +63,7 @@ class TableMain extends React.Component<TableMainProps, {}> {
     if (tableDetails) {
       let ranges = tableDetails.range_count.toNumber();
       let createTableStatement = tableDetails.create_table_statement;
-      let replicationFactor = tableDetails.zone_config.replica_attrs.length;
+      let replicationFactor = tableDetails.zone_config.num_replicas;
       let targetRangeSize = tableDetails.zone_config.range_max_bytes.toNumber();
       let tableSize = tableStats && (tableStats.stats.live_bytes.toNumber() + tableStats.stats.key_bytes.toNumber());
 

@@ -2547,6 +2547,8 @@ export interface configBuilder {
 	decode(buffer: ByteBuffer) : configMessage;
 	decode64(buffer: string) : configMessage;
 	GCPolicy: config.GCPolicyBuilder;
+	Constraint: config.ConstraintBuilder;
+	Constraints: config.ConstraintsBuilder;
 	ZoneConfig: config.ZoneConfigBuilder;
 	SystemConfig: config.SystemConfigBuilder;
 	
@@ -2592,6 +2594,106 @@ export interface GCPolicyBuilder {
 
 declare module cockroach.config {
 
+	export interface Constraint {
+
+		
+
+type?: Constraint.Type;
+		
+
+getType?() : Constraint.Type;
+		setType?(type : Constraint.Type): void;
+		
+
+
+
+key?: string;
+		
+
+getKey?() : string;
+		setKey?(key : string): void;
+		
+
+
+
+value?: string;
+		
+
+getValue?() : string;
+		setValue?(value : string): void;
+		
+
+
+
+}
+
+	export interface ConstraintMessage extends Constraint {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ConstraintBuilder {
+	new(data?: Constraint): ConstraintMessage;
+	decode(buffer: ArrayBuffer) : ConstraintMessage;
+	decode(buffer: ByteBuffer) : ConstraintMessage;
+	decode64(buffer: string) : ConstraintMessage;
+	Type: Constraint.Type;
+	
+}
+
+}
+
+declare module cockroach.config.Constraint {
+	export const enum Type {
+		POSITIVE = 0,
+		REQUIRED = 1,
+		PROHIBITED = 2,
+		
+}
+}
+
+
+declare module cockroach.config {
+
+	export interface Constraints {
+
+		
+
+constraints?: Constraint[];
+		
+
+getConstraints?() : Constraint[];
+		setConstraints?(constraints : Constraint[]): void;
+		
+
+
+
+}
+
+	export interface ConstraintsMessage extends Constraints {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ConstraintsBuilder {
+	new(data?: Constraints): ConstraintsMessage;
+	decode(buffer: ArrayBuffer) : ConstraintsMessage;
+	decode(buffer: ByteBuffer) : ConstraintsMessage;
+	decode64(buffer: string) : ConstraintsMessage;
+	
+}
+
+}
+
+
+declare module cockroach.config {
+
 	export interface ZoneConfig {
 
 		
@@ -2628,6 +2730,24 @@ gc?: GCPolicy;
 
 getGc?() : GCPolicy;
 		setGc?(gc : GCPolicy): void;
+		
+
+
+
+num_replicas?: number;
+		
+
+getNumReplicas?() : number;
+		setNumReplicas?(numReplicas : number): void;
+		
+
+
+
+constraints?: Constraints;
+		
+
+getConstraints?() : Constraints;
+		setConstraints?(constraints : Constraints): void;
 		
 
 
