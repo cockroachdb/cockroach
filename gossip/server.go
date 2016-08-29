@@ -137,54 +137,58 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 
 	errCh := make(chan error, 1)
 
-	// Starting workers in a task prevents data races during shutdown.
+	var retErr error
+	// Using a task prevents data races during shutdown.
 	if err := s.stopper.RunTask(func() {
 		s.stopper.RunWorker(func() {
 			errCh <- s.gossipReceiver(&args, send, stream.Recv)
 		})
-	}); err != nil {
-		return err
-	}
 
-	reply := new(Response)
+		reply := new(Response)
 
-	for {
-		s.mu.Lock()
-		// Store the old ready so that if it gets replaced with a new one
-		// (once the lock is released) and is closed, we still trigger the
-		// select below.
-		ready := s.mu.ready
-		delta := s.mu.is.delta(args.HighWaterStamps)
+		for {
+			s.mu.Lock()
+			// Store the old ready so that if it gets replaced with a new one
+			// (once the lock is released) and is closed, we still trigger the
+			// select below.
+			ready := s.mu.ready
+			delta := s.mu.is.delta(args.HighWaterStamps)
 
-		if infoCount := len(delta); infoCount > 0 {
-			if log.V(1) {
-				log.Infof(s.ctx, "node %d: returning %d info(s) to node %d: %s",
-					s.mu.is.NodeID, infoCount, args.NodeID, extractKeys(delta))
-			}
+			if infoCount := len(delta); infoCount > 0 {
+				if log.V(1) {
+					log.Infof(s.ctx, "node %d: returning %d info(s) to node %d: %s",
+						s.mu.is.NodeID, infoCount, args.NodeID, extractKeys(delta))
+				}
 
-			*reply = Response{
-				NodeID:          s.mu.is.NodeID,
-				HighWaterStamps: s.mu.is.getHighWaterStamps(),
-				Delta:           delta,
+				*reply = Response{
+					NodeID:          s.mu.is.NodeID,
+					HighWaterStamps: s.mu.is.getHighWaterStamps(),
+					Delta:           delta,
+				}
+
+				s.mu.Unlock()
+				if err := send(reply); err != nil {
+					retErr = err
+					return
+				}
+				s.mu.Lock()
 			}
 
 			s.mu.Unlock()
-			if err := send(reply); err != nil {
-				return err
+
+			select {
+			case <-s.stopper.ShouldQuiesce():
+				return
+			case err := <-errCh:
+				retErr = err
+				return
+			case <-ready:
 			}
-			s.mu.Lock()
 		}
-
-		s.mu.Unlock()
-
-		select {
-		case <-s.stopper.ShouldQuiesce():
-			return nil
-		case err := <-errCh:
-			return err
-		case <-ready:
-		}
+	}); err != nil {
+		return err
 	}
+	return retErr
 }
 
 func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) error, receiverFn func() (*Request, error)) error {
