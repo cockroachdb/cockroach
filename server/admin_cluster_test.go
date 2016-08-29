@@ -31,6 +31,8 @@ import (
 
 func TestAdminAPITableStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#8890")
+
 	const nodeCount = 3
 	tc := testcluster.StartTestCluster(t, nodeCount, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationAuto,

@@ -44,6 +44,7 @@ deployment:
     tag: /beta-[0-9]+/
     commands:
       - sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < "resource/deploy_templates/.dockercfg.template" > ~/.dockercfg
+      - build/builder.sh build/build-static-binaries.sh static-tests.tar.gz
       - |
           export VERSION=$CIRCLE_TAG
           echo "Deploying ${VERSION}..."
@@ -51,13 +52,6 @@ deployment:
             build/push-docker-deploy.sh
           fi
       - aws configure set region us-east-1
-      - build/builder.sh build/build-static-binaries.sh static-tests.tar.gz
-      - mkdir -p "${CIRCLE_ARTIFACTS}/acceptance_deploy"
-      - time acceptance/acceptance.test -test.v -test.timeout 10m
-          -i cockroachdb/cockroach -nodes 3
-          -l "${CIRCLE_ARTIFACTS}"/acceptance_deploy >
-          "${CIRCLE_ARTIFACTS}/acceptance_deploy.log" 2>&1
-
       - build/build-osx.sh
       - build/push-tagged-aws.sh
   beta:
