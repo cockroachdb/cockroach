@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/gogo/protobuf/jsonpb"
@@ -81,6 +82,9 @@ func PostJSON(httpClient http.Client, path string, request, response proto.Messa
 }
 
 func doJSONRequest(httpClient http.Client, req *http.Request, response proto.Message) error {
+	if timeout := httpClient.Timeout; timeout > 0 {
+		req.Header.Set("Grpc-Timeout", strconv.FormatInt(timeout.Nanoseconds(), 10)+"n")
+	}
 	req.Header.Set(AcceptHeader, JSONContentType)
 	resp, err := httpClient.Do(req)
 	if err != nil {
