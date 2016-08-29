@@ -261,3 +261,64 @@ func TestGossipCullNetwork(t *testing.T) {
 		t.Fatalf("condition failed to evaluate within %s: %s", slowGossipDuration, err)
 	}
 }
+
+func TestGossipOrphanedStallDetection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	local := startGossip(1, stopper, t, metric.NewRegistry())
+	local.SetStallInterval(5 * time.Millisecond)
+
+	// Make sure we have the sentinel to ensure that its absence is not the
+	// cause of stall detection.
+	if err := local.AddInfo(KeySentinel, nil, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
+	peerStopper := stop.NewStopper()
+	peer := startGossip(2, peerStopper, t, metric.NewRegistry())
+
+	peerNodeID := peer.GetNodeID()
+	peerAddr := peer.GetNodeAddr()
+
+	local.startClient(peerAddr, peerNodeID)
+
+	const slowGossipDuration = time.Minute
+
+	util.SucceedsSoon(t, func() error {
+		for _, peerID := range local.Outgoing() {
+			if peerID == peerNodeID {
+				return nil
+			}
+		}
+		return errors.Errorf("%d not yet connected", peerNodeID)
+	})
+
+	local.bootstrap()
+	local.manage()
+
+	peerStopper.Stop()
+
+	util.SucceedsSoon(t, func() error {
+		for _, peerID := range local.Outgoing() {
+			if peerID == peerNodeID {
+				return errors.Errorf("%d still connected", peerNodeID)
+			}
+		}
+		return nil
+	})
+
+	peerStopper = stop.NewStopper()
+	defer peerStopper.Stop()
+	peer = startGossipAtAddr(peerNodeID, peerAddr, peerStopper, t, metric.NewRegistry())
+
+	util.SucceedsSoon(t, func() error {
+		for _, peerID := range local.Outgoing() {
+			if peerID == peerNodeID {
+				return nil
+			}
+		}
+		return errors.Errorf("%d not yet connected", peerNodeID)
+	})
+}
