@@ -1,0 +1,371 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Author: Matt Jibson
+
+package sql
+
+import (
+	"bytes"
+	"fmt"
+	"time"
+
+	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/sql/privilege"
+)
+
+// COPY FROM is not a usual planNode. After a COPY FROM is executed as a
+// planNode and until an error or it is explicitly completed, the planner
+// carries a reference to a copyNode to send the contents of copy data
+// payloads using the executor's Copy methods. Attempting to execute non-COPY
+// statements before the COPY has finished will result in an error.
+//
+// The copyNode hold two buffers: raw bytes and rows. All copy data is
+// appended to the byte buffer. Afterward, rows are extracted from the
+// bytes. When the number of rows has reached some limit (whose purpose is
+// to increase performance by batching inserts), they are inserted with an
+// insertNode. A CopyDone message will flush and insert all remaining data.
+//
+// See: https://www.postgresql.org/docs/9.5/static/sql-copy.html
+type copyNode struct {
+	p             *planner
+	table         parser.TableExpr
+	columns       parser.UnresolvedNames
+	resultColumns []ResultColumn
+	buf           bytes.Buffer
+	rows          []*parser.Tuple
+}
+
+func (n *copyNode) Columns() []ResultColumn           { return n.resultColumns }
+func (*copyNode) Ordering() orderingInfo              { return orderingInfo{} }
+func (*copyNode) Values() parser.DTuple               { return nil }
+func (*copyNode) ExplainTypes(_ func(string, string)) {}
+func (*copyNode) SetLimitHint(_ int64, _ bool)        {}
+func (*copyNode) MarkDebug(_ explainMode)             {}
+func (*copyNode) expandPlan() error                   { return nil }
+func (*copyNode) Next() (bool, error)                 { return false, nil }
+
+func (*copyNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
+	return "copy", "-", nil
+}
+
+func (*copyNode) DebugValues() debugValues {
+	return debugValues{
+		rowIdx: 0,
+		key:    "",
+		value:  parser.DNull.String(),
+		output: debugValueRow,
+	}
+}
+
+// CopyFrom begins a COPY.
+// Privileges: INSERT on table.
+func (p *planner) CopyFrom(n *parser.CopyFrom, autoCommit bool) (planNode, error) {
+	cn := &copyNode{
+		table:   &n.Table,
+		columns: n.Columns,
+	}
+
+	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
+	if err != nil {
+		return nil, err
+	}
+	en, err := p.makeEditNode(tn, autoCommit, privilege.INSERT)
+	if err != nil {
+		return nil, err
+	}
+	cols, err := p.processColumns(en.tableDesc, n.Columns)
+	if err != nil {
+		return nil, err
+	}
+	cn.resultColumns = make([]ResultColumn, len(cols))
+	for i, c := range cols {
+		cn.resultColumns[i] = ResultColumn{Typ: c.Type.ToDatumType()}
+	}
+	cn.p = p
+	return cn, nil
+}
+
+func (c *copyNode) Start() error {
+	// Should never happen because the executor prevents non-COPY messages during
+	// a COPY.
+	if c.p.copyFrom != nil {
+		return fmt.Errorf("COPY already in progress")
+	}
+	c.p.copyFrom = c
+	return nil
+}
+
+// CopyDataBlock represents a data block of a COPY FROM statement.
+type CopyDataBlock struct {
+	Done bool
+}
+
+// CopyData is the statement type after a block of COPY data has been
+// received. There may be additional rows ready to insert. If so, return an
+// insertNode, otherwise emptyNode.
+func (p *planner) CopyData(n CopyDataBlock, autoCommit bool) (planNode, error) {
+	const copyRowSize = 100
+
+	cf := p.copyFrom
+
+	// Only do work if we have lots of rows or this is the end.
+	if ln := len(cf.rows); ln == 0 || (ln < copyRowSize && !n.Done) {
+		return &emptyNode{}, nil
+	}
+
+	vc := &parser.ValuesClause{Tuples: cf.rows}
+	// Reuse the same backing array once the Insert is complete.
+	cf.rows = cf.rows[:0]
+
+	in := parser.Insert{
+		Table:   cf.table,
+		Columns: cf.columns,
+		Rows: &parser.Select{
+			Select: vc,
+		},
+	}
+	return p.Insert(&in, nil, autoCommit)
+}
+
+type copyMsg int
+
+const (
+	copyMsgNone copyMsg = iota
+	copyMsgData
+	copyMsgDone
+
+	nullString = `\N`
+	lineDelim  = '\n'
+)
+
+var (
+	fieldDelim = []byte{'\t'}
+)
+
+// ProcessCopyData appends data to the planner's internal COPY state as
+// parsed datums. Since the COPY protocol allows any length of data to be
+// sent in a message, there's no guarantee that data contains a complete row
+// (or even a complete datum). It is thus valid to have no new rows added
+// to the internal state after this call.
+func (p *planner) ProcessCopyData(data string, msg copyMsg) (parser.StatementList, error) {
+	cf := p.copyFrom
+	buf := cf.buf
+
+	switch msg {
+	case copyMsgData:
+		// ignore
+	case copyMsgDone:
+		var err error
+		// If there's a line in the buffer without \n at EOL, add it here.
+		if buf.Len() > 0 {
+			err = cf.addRow(buf.Bytes())
+		}
+		return parser.StatementList{CopyDataBlock{Done: true}}, err
+	default:
+		return nil, fmt.Errorf("expected copy command")
+	}
+
+	buf.WriteString(data)
+	for buf.Len() > 0 {
+		b := buf.Bytes()
+		// Don't blindly use buf.ReadBytes because if lineDelim is not present we
+		// must rewrite the bytes to buf. Instead check if lineDelim is present.
+		if bytes.IndexByte(b, lineDelim) == -1 {
+			continue
+		}
+		line, err := buf.ReadBytes(lineDelim)
+		if err != nil {
+			return nil, err
+		}
+		// Remove lineDelim from end.
+		line = line[:len(line)-1]
+		// Remove a single '\r' at EOL, if present.
+		if len(line) > 0 && line[len(line)-1] == '\r' {
+			line = line[:len(line)-1]
+		}
+		if err := cf.addRow(line); err != nil {
+			return nil, err
+		}
+	}
+	return parser.StatementList{CopyDataBlock{}}, nil
+}
+
+func (c *copyNode) addRow(line []byte) error {
+	var err error
+	parts := bytes.Split(line, fieldDelim)
+	if len(parts) != len(c.resultColumns) {
+		return fmt.Errorf("expected %d values, got %d", len(c.resultColumns), len(parts))
+	}
+	exprs := make(parser.Exprs, len(parts))
+	for i, part := range parts {
+		s := string(part)
+		if s == nullString {
+			exprs[i] = parser.DNull
+			continue
+		}
+		var d parser.Datum
+		switch t := c.resultColumns[i].Typ.(type) {
+		case *parser.DBool:
+			d, err = parser.ParseDBool(s)
+		case *parser.DBytes:
+			s, err = decodeCopy(s)
+			d = parser.NewDBytes(parser.DBytes(s))
+		case *parser.DDate:
+			s, err = decodeCopy(s)
+			if err != nil {
+				break
+			}
+			d, err = parser.ParseDDate(s, c.p.session.Location)
+		case *parser.DDecimal:
+			d, err = parser.ParseDDecimal(s)
+		case *parser.DFloat:
+			d, err = parser.ParseDFloat(s)
+		case *parser.DInt:
+			d, err = parser.ParseDInt(s)
+		case *parser.DInterval:
+			s, err = decodeCopy(s)
+			if err != nil {
+				break
+			}
+			d, err = parser.ParseDInterval(s)
+		case *parser.DString:
+			s, err = decodeCopy(s)
+			d = parser.NewDString(s)
+		case *parser.DTimestamp:
+			s, err = decodeCopy(s)
+			if err != nil {
+				break
+			}
+			d, err = parser.ParseDTimestamp(s, c.p.session.Location, time.Microsecond)
+		case *parser.DTimestampTZ:
+			s, err = decodeCopy(s)
+			if err != nil {
+				break
+			}
+			d, err = parser.ParseDTimestampTZ(s, c.p.session.Location, time.Microsecond)
+		default:
+			return fmt.Errorf("unknown type %s (%T)", t.Type(), t)
+		}
+		if err != nil {
+			return err
+		}
+		exprs[i] = d
+	}
+	c.rows = append(c.rows, &parser.Tuple{Exprs: exprs})
+	return nil
+}
+
+// decodeCopy unescapes a single COPY field.
+//
+// See: https://www.postgresql.org/docs/9.5/static/sql-copy.html#AEN74432
+func decodeCopy(in string) (string, error) {
+	var buf bytes.Buffer
+	start := 0
+	for i, n := 0, len(in); i < n; i++ {
+		if in[i] != '\\' {
+			continue
+		}
+		buf.WriteString(in[start:i])
+		i++
+		if i >= n {
+			return "", fmt.Errorf("unknown escape sequence: %q", in[i-1:])
+		}
+
+		ch := in[i]
+		if decodedChar := decodeMap[ch]; decodedChar != 0 {
+			buf.WriteByte(decodedChar)
+		} else if ch == 'x' {
+			// \x can be followed by 1 or 2 hex digits.
+			i++
+			if i >= n {
+				return "", fmt.Errorf("unknown escape sequence: %q", in[i-2:])
+			}
+			ch = in[i]
+			digit, ok := decodeHexDigit(ch)
+			if !ok {
+				return "", fmt.Errorf("unknown escape sequence: %q", in[i-2:i])
+			}
+			if i+1 < n {
+				if v, ok := decodeHexDigit(in[i+1]); ok {
+					i++
+					digit <<= 4
+					digit += v
+				}
+			}
+			buf.WriteByte(digit)
+		} else if ch >= '0' && ch <= '7' {
+			digit, _ := decodeOctDigit(ch)
+			// 1 to 2 more octal digits follow.
+			if i+1 < n {
+				if v, ok := decodeOctDigit(in[i+1]); ok {
+					i++
+					digit <<= 3
+					digit += v
+				}
+			}
+			if i+1 < n {
+				if v, ok := decodeOctDigit(in[i+1]); ok {
+					i++
+					digit <<= 3
+					digit += v
+				}
+			}
+			buf.WriteByte(digit)
+		} else {
+			return "", fmt.Errorf("unknown escape sequence: %q", in[i-1:i+1])
+		}
+		start = i + 1
+	}
+	buf.WriteString(in[start:])
+	return buf.String(), nil
+}
+
+func decodeDigit(c byte, onlyOctal bool) (byte, bool) {
+	switch {
+	case c >= '0' && c <= '7':
+		return c - '0', true
+	case !onlyOctal && c >= '8' && c <= '9':
+		return c - '0', true
+	case !onlyOctal && c >= 'a' && c <= 'f':
+		return c - 'a' + 10, true
+	case !onlyOctal && c >= 'A' && c <= 'F':
+		return c - 'A' + 10, true
+	default:
+		return 0, false
+	}
+}
+
+func decodeOctDigit(c byte) (byte, bool) { return decodeDigit(c, true) }
+func decodeHexDigit(c byte) (byte, bool) { return decodeDigit(c, false) }
+
+var decodeMap = map[byte]byte{
+	'b':  '\b',
+	'f':  '\f',
+	'n':  '\n',
+	'r':  '\r',
+	't':  '\t',
+	'v':  '\v',
+	'\\': '\\',
+}
+
+// Format implements the NodeFormatter interface.
+func (CopyDataBlock) Format(buf *bytes.Buffer, f parser.FmtFlags) {}
+
+// StatementType implements the Statement interface.
+func (CopyDataBlock) StatementType() parser.StatementType { return parser.RowsAffected }
+
+// StatementTag returns a short string identifying the type of statement.
+func (CopyDataBlock) StatementTag() string { return "" }
+func (CopyDataBlock) String() string       { return "" }
