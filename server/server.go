@@ -219,6 +219,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		Context:    s.Ctx(),
 		DB:         s.db,
 		RPCContext: s.rpcContext,
+		Stopper:    s.stopper,
 	}
 	s.distSQLServer = distsql.NewServer(distSQLCfg)
 	distsql.RegisterDistSQLServer(s.grpc, s.distSQLServer)
