@@ -152,6 +152,9 @@ func TestEventLog(t *testing.T) {
 	Info(ctxWithEventLog, "log")
 	Errorf(ctxWithEventLog, "errlog%d", 1)
 
+	// Events to child contexts without the event log should be no-ops.
+	Event(WithNoEventLog(ctxWithEventLog), "should-not-show-up")
+
 	// Events to parent context should still be no-ops.
 	Event(ctx, "should-not-show-up")
 
