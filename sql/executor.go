@@ -955,34 +955,31 @@ func (e *Executor) execStmtInOpenTxn(
 		return Result{PGTag: s.StatementTag()}, nil
 	}
 
-	if txnState.tr != nil {
-		txnState.tr.LazyLog(stmt, true /* sensitive */)
-	}
+	session := planMaker.session
+	log.Event(session.context, stmt.String())
 
 	result, err := e.execStmt(stmt, planMaker, implicitTxn /* autoCommit */)
 	if err != nil {
 		if traceSQL {
-			log.Tracef(txnState.txn.Context, "ERROR: %v", err)
+			log.ErrEventf(txnState.txn.Context, "ERROR: %v", err)
 		}
-		if txnState.tr != nil {
-			txnState.tr.LazyPrintf("ERROR: %v", err)
-		}
+		log.ErrEventf(session.context, "ERROR: %v", err)
 		txnState.updateStateAndCleanupOnErr(err, e)
-		result = Result{Err: err}
-	} else if txnState.tr != nil {
-		tResult := &traceResult{tag: result.PGTag, count: -1}
-		switch result.Type {
-		case parser.RowsAffected:
-			tResult.count = result.RowsAffected
-		case parser.Rows:
-			tResult.count = len(result.Rows)
-		}
-		txnState.tr.LazyLog(tResult, false)
-		if traceSQL {
-			log.Tracef(txnState.txn.Context, "%s done", tResult)
-		}
+		return Result{Err: err}, err
 	}
-	return result, err
+
+	tResult := &traceResult{tag: result.PGTag, count: -1}
+	switch result.Type {
+	case parser.RowsAffected:
+		tResult.count = result.RowsAffected
+	case parser.Rows:
+		tResult.count = len(result.Rows)
+	}
+	if traceSQL {
+		log.Eventf(txnState.txn.Context, "%s done", tResult)
+	}
+	log.Event(session.context, tResult.String())
+	return result, nil
 }
 
 // Clean up after trying to execute a transactional statement while not in a SQL
