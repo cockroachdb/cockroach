@@ -572,29 +572,29 @@ func TestAggregation(t *testing.T) {
 
 	testCases := []struct {
 		expected []float64
-		aggFunc  func(ui unionIterator) float64
+		aggFunc  func(ui aggregatingIterator) float64
 	}{
 		{
 			[]float64{4.4, 12, 17.5, 35, 40, 80, 56},
-			func(ui unionIterator) float64 {
+			func(ui aggregatingIterator) float64 {
 				return ui.sum()
 			},
 		},
 		{
 			[]float64{3.4, 7, 10, 25, 20, 40, 56},
-			func(ui unionIterator) float64 {
+			func(ui aggregatingIterator) float64 {
 				return ui.max()
 			},
 		},
 		{
 			[]float64{1, 5, 7.5, 10, 20, 40, 0},
-			func(ui unionIterator) float64 {
+			func(ui aggregatingIterator) float64 {
 				return ui.min()
 			},
 		},
 		{
 			[]float64{2.2, 6, 8.75, 17.5, 20, 40, 28},
-			func(ui unionIterator) float64 {
+			func(ui aggregatingIterator) float64 {
 				return ui.avg()
 			},
 		},
@@ -605,7 +605,7 @@ func TestAggregation(t *testing.T) {
 	}
 	for i, tc := range testCases {
 		actual := make([]float64, 0, len(tc.expected))
-		iters := unionIterator{
+		iters := aggregatingIterator{
 			newInterpolatingIterator(dataSpan1, 0, 10, extractFn, downsampleSum),
 			newInterpolatingIterator(dataSpan2, 0, 10, extractFn, downsampleSum),
 		}
@@ -671,7 +671,7 @@ func (tm *testModel) assertQuery(
 	// Iterate over all possible sources which may have data for this query.
 	for sourceName := range sourcesToCheck {
 		// Iterate over all possible key times at which query data may be present.
-		for time := start - (start % r.KeyDuration()); time < end; time += r.KeyDuration() {
+		for time := start - (start % r.SlabDuration()); time < end; time += r.SlabDuration() {
 			// Construct a key for this source/time and retrieve it from model.
 			key := MakeDataKey(name, sourceName, r, time)
 			value, ok := tm.modelData[string(key)]
@@ -713,7 +713,7 @@ func (tm *testModel) assertQuery(
 	if err != nil {
 		tm.t.Fatal(err)
 	}
-	var iters unionIterator
+	var iters aggregatingIterator
 	for _, ds := range dataSpans {
 		iters = append(iters, newInterpolatingIterator(*ds, startOffset, sampleDuration, extractFn, downsampleFn))
 	}
