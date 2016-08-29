@@ -394,7 +394,7 @@ func (s *adminServer) TableDetails(
 	{
 		var iexecutor sql.InternalExecutor
 		var tableSpan roachpb.Span
-		if err := s.server.db.Txn(context.TODO(), func(txn *client.Txn) error {
+		if err := s.server.db.Txn(ctx, func(txn *client.Txn) error {
 			var err error
 			tableSpan, err = iexecutor.GetTableSpan(s.getUser(req), txn, escDBName, escTableName)
 			return err
@@ -456,7 +456,7 @@ func (s *adminServer) TableStats(ctx context.Context, req *serverpb.TableStatsRe
 	// Get table span.
 	var tableSpan roachpb.Span
 	var iexecutor sql.InternalExecutor
-	if err := s.server.db.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := s.server.db.Txn(ctx, func(txn *client.Txn) error {
 		var err error
 		tableSpan, err = iexecutor.GetTableSpan(s.getUser(req), txn, req.Database, req.Table)
 		return err
@@ -506,7 +506,7 @@ func (s *adminServer) TableStats(ctx context.Context, req *serverpb.TableStatsRe
 	// Send a SpanStats query to each node. Set a timeout on the context for
 	// these queries.
 	responses := make(chan nodeResponse)
-	ctx, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
+	nodeCtx, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
 	defer cancel()
 	for nodeID := range nodeIDs {
 		nodeID := nodeID
@@ -519,7 +519,7 @@ func (s *adminServer) TableStats(ctx context.Context, req *serverpb.TableStatsRe
 					EndKey:   endKey,
 					NodeID:   nodeID.String(),
 				}
-				spanResponse, err = client.SpanStats(ctx, &req)
+				spanResponse, err = client.SpanStats(nodeCtx, &req)
 			}
 
 			response := nodeResponse{
@@ -530,7 +530,7 @@ func (s *adminServer) TableStats(ctx context.Context, req *serverpb.TableStatsRe
 			select {
 			case responses <- response:
 				// Response processed.
-			case <-ctx.Done():
+			case <-nodeCtx.Done():
 				// Context completed, response no longer needed.
 			}
 		}); err != nil {
