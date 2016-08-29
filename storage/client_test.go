@@ -44,6 +44,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/internal/client"
@@ -397,7 +398,7 @@ func (m *multiTestContext) initGossipNetwork() {
 	util.SucceedsSoon(m.t, func() error {
 		for i := 0; i < len(m.stores); i++ {
 			_, alive, _ := m.storePools[i].GetStoreList(
-				roachpb.Attributes{},
+				config.Constraints{},
 				/* deterministic */ false,
 			)
 			if alive != len(m.stores) {
