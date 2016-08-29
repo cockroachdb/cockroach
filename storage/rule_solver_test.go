@@ -35,7 +35,7 @@ func (c byScoreAndID) Less(i, j int) bool {
 }
 func (c byScoreAndID) Swap(i, j int) { c[i], c[j] = c[j], c[i] }
 
-// TestRuleSolver tests the mechanics of ruleSolver.
+// TestRuleSolver tests the mechanics of RuleSolver.
 func TestRuleSolver(t *testing.T) {
 	stopper, _, _, storePool := createTestStorePool(TestTimeUntilStoreDeadOff)
 	defer stopper.Stop()

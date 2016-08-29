@@ -65,6 +65,7 @@ import NodesOverview from "./containers/nodesOverview";
 import Node from "./containers/node";
 import NodeOverview from "./containers/nodeOverview";
 import NodeGraphs from "./containers/nodeGraphs";
+import NodeConstraints from "./containers/nodeConstraints";
 import NodeLogs from "./containers/nodeLogs";
 import Raft from "./containers/raft";
 import RaftRanges from "./containers/raftRanges";
@@ -91,6 +92,7 @@ ReactDOM.render(
           <IndexRedirect to="overview" />
           <Route path="overview" component={ NodesOverview } />
           <Route path="graphs" component={ NodeGraphs } />
+          <Route path="constraints" component={ NodeConstraints } />
         </Route>
         <Route path="nodes">
           // This path has to match the "nodes" route for the purpose of

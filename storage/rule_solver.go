@@ -35,16 +35,16 @@ var defaultRules = []rule{
 	ruleDiversity,
 }
 
-// makeDefaultRuleSolver returns a ruleSolver with defaultRules.
-func makeDefaultRuleSolver(storePool *StorePool) *ruleSolver {
+// MakeDefaultRuleSolver returns a RuleSolver with defaultRules.
+func MakeDefaultRuleSolver(storePool *StorePool) *RuleSolver {
 	return makeRuleSolver(storePool, defaultRules)
 }
 
-// makeRuleSolver makes a new ruleSolver. The order of the rules is the order in
+// makeRuleSolver makes a new RuleSolver. The order of the rules is the order in
 // which they are run. For optimization purposes, less computationally intense
 // rules should run first to eliminate candidates.
-func makeRuleSolver(storePool *StorePool, rules []rule) *ruleSolver {
-	return &ruleSolver{
+func makeRuleSolver(storePool *StorePool, rules []rule) *RuleSolver {
+	return &RuleSolver{
 		storePool: storePool,
 		rules:     rules,
 	}
@@ -58,32 +58,32 @@ type rule func(
 	sl StoreList,
 ) (candidate bool, score float64)
 
-// ruleSolver solves a set of rules for a store.
-type ruleSolver struct {
+// RuleSolver solves a set of rules for a store.
+type RuleSolver struct {
 	storePool *StorePool
 	rules     []rule
 }
 
-// solveInternal solves given constraints. See (*ruleSolver).solveInternal.
-func (rs *ruleSolver) solve(
+// solveInternal solves given constraints. See (*RuleSolver).solveInternal.
+func (rs *RuleSolver) solve(
 	c config.Constraints, existing []roachpb.ReplicaDescriptor,
 ) ([]roachpb.StoreDescriptor, error) {
-	candidates, err := rs.solveScores(c, existing)
+	candidates, err := rs.SolveScores(c, existing)
 	if err != nil {
 		return nil, err
 	}
 
 	candidateStores := make([]roachpb.StoreDescriptor, len(candidates))
 	for i, candidate := range candidates {
-		candidateStores[i] = candidate.store
+		candidateStores[i] = candidate.Store
 	}
 	return candidateStores, nil
 }
 
-// solvel solves given constraints and returns the score.
-func (rs *ruleSolver) solveScores(
+// SolveScores solves given constraints and returns the score.
+func (rs *RuleSolver) SolveScores(
 	c config.Constraints, existing []roachpb.ReplicaDescriptor,
-) ([]candidate, error) {
+) ([]Candidate, error) {
 	sl, _, throttledStoreCount := rs.storePool.getStoreList()
 
 	// When there are throttled stores that do match, we shouldn't send
@@ -92,7 +92,7 @@ func (rs *ruleSolver) solveScores(
 		return nil, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
 	}
 
-	candidates := make([]candidate, 0, len(sl.stores))
+	candidates := make([]Candidate, 0, len(sl.stores))
 
 	for _, store := range sl.stores {
 		if candidate, ok := rs.computeCandidate(c, store, existing, sl); ok {
@@ -103,34 +103,35 @@ func (rs *ruleSolver) solveScores(
 	return candidates, nil
 }
 
-func (rs *ruleSolver) computeCandidate(
+func (rs *RuleSolver) computeCandidate(
 	constraints config.Constraints,
 	store roachpb.StoreDescriptor,
 	existing []roachpb.ReplicaDescriptor,
 	sl StoreList,
-) (candidate, bool) {
+) (Candidate, bool) {
 	var totalScore float64
 	for _, rule := range rs.rules {
 		isCandidate, score := rule(constraints, store, existing, sl)
 		if !isCandidate {
-			return candidate{}, false
+			return Candidate{}, false
 		}
 		if !math.IsNaN(score) {
 			totalScore += score
 		}
 	}
-	return candidate{store: store, score: totalScore}, true
+	return Candidate{Store: store, Score: totalScore}, true
 }
 
-type candidate struct {
-	store roachpb.StoreDescriptor
-	score float64
+// Candidate represents a store and the score for the associated constraints.
+type Candidate struct {
+	Store roachpb.StoreDescriptor
+	Score float64
 }
 
-type byScore []candidate
+type byScore []Candidate
 
 func (c byScore) Len() int           { return len(c) }
-func (c byScore) Less(i, j int) bool { return c[i].score > c[j].score }
+func (c byScore) Less(i, j int) bool { return c[i].Score > c[j].Score }
 func (c byScore) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
 
 // ruleReplicasUniqueNodes ensures that no two replicas are put on the same
