@@ -884,6 +884,8 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 	}
 	desc.Name = string(t.TableName)
 
+	generatedNames := map[string]struct{}{}
+
 	var primaryIndexColumnSet map[string]struct{}
 	for _, def := range p.Defs {
 		switch d := def.(type) {
@@ -1005,6 +1007,21 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 			}
 			if generateName {
 				name = nameBuf.String()
+
+				// If generated name isn't unique, attempt to add a number to the end to
+				// get a unique name.
+				if _, ok := generatedNames[name]; ok {
+					i := 1
+					for {
+						appended := fmt.Sprintf("%s%d", name, i)
+						if _, ok := generatedNames[appended]; !ok {
+							name = appended
+							break
+						}
+						i++
+					}
+				}
+				generatedNames[name] = struct{}{}
 			}
 
 			desc.Checks = append(desc.Checks,
