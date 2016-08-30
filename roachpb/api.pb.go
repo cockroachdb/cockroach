@@ -129,6 +129,8 @@
 		NodeDescriptor
 		StoreDescriptor
 		StoreDeadReplicas
+		Locality
+		Tier
 */
 package roachpb
 
