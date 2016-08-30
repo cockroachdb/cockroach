@@ -278,7 +278,15 @@ func (n *valuesNode) ExplainPlan(_ bool) (name, description string, children []p
 	name = "values"
 	description = fmt.Sprintf("%d column%s",
 		len(n.columns), util.Pluralize(int64(len(n.columns))))
-	return name, description, nil
+
+	var subplans []planNode
+	for _, tuple := range n.tuples {
+		for _, expr := range tuple {
+			subplans = n.p.collectSubqueryPlans(expr, subplans)
+		}
+	}
+
+	return name, description, subplans
 }
 
 func (n *valuesNode) ExplainTypes(regTypes func(string, string)) {
