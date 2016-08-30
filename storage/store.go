@@ -2595,11 +2595,33 @@ func sendSnapshot(
 		}
 	}
 
-	if err := stream.Send(&SnapshotRequest{LogEntries: snap.LogEntries, Final: true}); err != nil {
+	rangeID := header.RangeDescriptor.RangeID
+
+	truncState, err := loadTruncatedState(stream.Context(), snap.Snap, rangeID)
+	if err != nil {
+		return err
+	}
+	firstIndex := truncState.Index + 1
+
+	endIndex := snap.Snapshot.Metadata.Index + 1
+	logEntries := make([][]byte, 0, endIndex-firstIndex)
+
+	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
+		bytes, err := kv.Value.GetBytes()
+		if err == nil {
+			logEntries = append(logEntries, bytes)
+		}
+		return false, err
+	}
+
+	if err := iterateEntries(stream.Context(), snap.Snap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
+		return err
+	}
+	if err := stream.Send(&SnapshotRequest{LogEntries: logEntries, Final: true}); err != nil {
 		return err
 	}
 	log.Infof(stream.Context(), "streamed snapshot: kv pairs: %d, log entries: %d",
-		n, len(snap.LogEntries))
+		n, len(logEntries))
 
 	resp, err = stream.Recv()
 	if err != nil {

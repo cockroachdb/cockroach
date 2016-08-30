@@ -415,8 +415,6 @@ type OutgoingSnapshot struct {
 	Snap engine.Reader
 	// The complete range iterator for the snapshot to stream.
 	Iter *ReplicaDataIterator
-	// The Raft log entries to send.
-	LogEntries [][]byte
 }
 
 // IncomingSnapshot contains the data for an incoming streaming snapshot message.
@@ -446,19 +444,6 @@ func snapshot(
 ) (OutgoingSnapshot, error) {
 	start := timeutil.Now()
 
-	truncState, err := loadTruncatedState(ctx, snap, rangeID)
-	if err != nil {
-		return OutgoingSnapshot{}, err
-	}
-	firstIndex := truncState.Index + 1
-
-	// Read the range metadata from the snapshot instead of the members
-	// of the Range struct because they might be changed concurrently.
-	appliedIndex, _, err := loadAppliedIndex(ctx, snap, rangeID)
-	if err != nil {
-		return OutgoingSnapshot{}, err
-	}
-
 	var desc roachpb.RangeDescriptor
 	// We ignore intents on the range descriptor (consistent=false) because we
 	// know they cannot be committed yet; operations that modify range
@@ -476,18 +461,10 @@ func snapshot(
 	// Store RangeDescriptor as metadata, it will be retrieved by ApplySnapshot()
 	snapData.RangeDescriptor = desc
 
-	endIndex := appliedIndex + 1
-	snapData.LogEntries = make([][]byte, 0, endIndex-firstIndex)
-
-	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
-		bytes, err := kv.Value.GetBytes()
-		if err == nil {
-			snapData.LogEntries = append(snapData.LogEntries, bytes)
-		}
-		return false, err
-	}
-
-	if err := iterateEntries(ctx, snap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
+	// Read the range metadata from the snapshot instead of the members
+	// of the Range struct because they might be changed concurrently.
+	appliedIndex, _, err := loadAppliedIndex(ctx, snap, rangeID)
+	if err != nil {
 		return OutgoingSnapshot{}, err
 	}
 
@@ -512,7 +489,6 @@ func snapshot(
 	return OutgoingSnapshot{
 		Snap:       snap,
 		Iter:       iter,
-		LogEntries: snapData.LogEntries,
 		SnapUUID:   *snapUUID,
 		Snapshot: raftpb.Snapshot{
 			Data: snapUUID.GetBytes(),
