@@ -81,16 +81,22 @@ func (b *rocksDBBatchBuilder) maybeInit() {
 // the builder may be used to construct another batch, but the returned []byte
 // is only valid until the next builder method is called.
 func (b *rocksDBBatchBuilder) Finish() []byte {
+	repr := b.getRepr()
+	b.repr = b.repr[:headerSize]
+	b.count = 0
+	return repr
+}
+
+// getRepr constructs the batch representation and returns it.
+func (b *rocksDBBatchBuilder) getRepr() []byte {
+	b.maybeInit()
 	buf := b.repr[8:headerSize]
 	v := uint32(b.count)
 	buf[0] = byte(v)
 	buf[1] = byte(v >> 8)
 	buf[2] = byte(v >> 16)
 	buf[3] = byte(v >> 24)
-	repr := b.repr
-	b.repr = b.repr[:headerSize]
-	b.count = 0
-	return repr
+	return b.repr
 }
 
 func (b *rocksDBBatchBuilder) grow(n int) {
