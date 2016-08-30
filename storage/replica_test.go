@@ -6464,7 +6464,7 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 		RangeDescriptor: *firstRng.Desc(),
 		Batches:         [][]byte{b.Repr()},
 	},
-		snap.Snapshot, raftpb.HardState{}); err != nil {
+		snap.RaftSnap, raftpb.HardState{}); err != nil {
 		t.Fatal(err)
 	}
 	checkReservations(t, 0)
