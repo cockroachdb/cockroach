@@ -126,7 +126,7 @@ func TestEventLog(t *testing.T) {
 	Event(ctx, "should-not-show-up")
 
 	el := &testingEventLog{}
-	ctxWithEventLog := WithEventLog(ctx, el)
+	ctxWithEventLog := withEventLogInternal(ctx, el)
 
 	Eventf(ctxWithEventLog, "test%d", 1)
 	ErrEvent(ctxWithEventLog, "testerr")
@@ -137,7 +137,10 @@ func TestEventLog(t *testing.T) {
 	// Events to parent context should still be no-ops.
 	Event(ctx, "should-not-show-up")
 
-	el.Finish()
+	FinishEventLog(ctxWithEventLog)
+
+	// Events after Finish should be ignored.
+	Errorf(ctxWithEventLog, "should-not-show-up")
 
 	expected := "[test1 testerr(err) test2 log errlog1(err) finish]"
 	if evStr := fmt.Sprint(el.ev); evStr != expected {
@@ -152,7 +155,7 @@ func TestEventLogAndTrace(t *testing.T) {
 	Event(ctx, "should-not-show-up")
 
 	el := &testingEventLog{}
-	ctxWithEventLog := WithEventLog(ctx, el)
+	ctxWithEventLog := withEventLogInternal(ctx, el)
 
 	Event(ctxWithEventLog, "test1")
 	ErrEvent(ctxWithEventLog, "testerr")
