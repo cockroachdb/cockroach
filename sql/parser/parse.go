@@ -59,10 +59,11 @@ const (
 // Parser wraps a scanner, parser and other utilities present in the parser
 // package.
 type Parser struct {
-	scanner            Scanner
-	parserImpl         sqlParserImpl
-	normalizeVisitor   normalizeVisitor
-	isAggregateVisitor IsAggregateVisitor
+	scanner               Scanner
+	parserImpl            sqlParserImpl
+	normalizeVisitor      normalizeVisitor
+	isAggregateVisitor    IsAggregateVisitor
+	containsWindowVisitor ContainsWindowVisitor
 }
 
 // Parse parses the sql and returns a list of statements.

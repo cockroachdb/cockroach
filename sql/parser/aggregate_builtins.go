@@ -50,6 +50,11 @@ type IsAggregateVisitor struct {
 func (v *IsAggregateVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	switch t := expr.(type) {
 	case *FuncExpr:
+		if t.IsWindowFunction() {
+			// A window function is not an aggregate function, but it can
+			// contain aggregate functions.
+			return true, expr
+		}
 		fn, err := t.Name.Normalize()
 		if err != nil {
 			return false, expr
@@ -99,6 +104,18 @@ func (p *Parser) IsAggregate(n *SelectClause) bool {
 		}
 	}
 	return false
+}
+
+// AssertNoAggregationOrWindowing checks if the provided expression contains either
+// aggregate functions or window functions, returning an error in either case.
+func (p *Parser) AssertNoAggregationOrWindowing(expr Expr, op string) error {
+	if p.AggregateInExpr(expr) {
+		return fmt.Errorf("aggregate functions are not allowed in %s", op)
+	}
+	if p.WindowFuncInExpr(expr) {
+		return fmt.Errorf("window functions are not allowed in %s", op)
+	}
+	return nil
 }
 
 // Aggregates are a special class of builtin functions that are wrapped
@@ -250,8 +267,10 @@ func (a *avgAggregate) Result() Datum {
 		return NewDFloat(*t / DFloat(a.count))
 	case *DDecimal:
 		count := inf.NewDec(int64(a.count), 0)
-		t.QuoRound(&t.Dec, count, decimal.Precision, inf.RoundHalfUp)
-		return t
+		dd := &DDecimal{}
+		dd.Set(&t.Dec)
+		dd.QuoRound(&dd.Dec, count, decimal.Precision, inf.RoundHalfUp)
+		return dd
 	default:
 		panic(fmt.Sprintf("unexpected SUM result type: %s", t.Type()))
 	}
@@ -446,7 +465,9 @@ func (a *intSumAggregate) Result() Datum {
 	if !a.large {
 		a.decSum.SetUnscaled(a.intSum)
 	}
-	return &a.decSum
+	dd := &DDecimal{}
+	dd.Set(&a.decSum.Dec)
+	return dd
 }
 
 type decimalSumAggregate struct {
@@ -637,8 +658,9 @@ func (a *stddevAggregate) Result() Datum {
 	case *DFloat:
 		return NewDFloat(DFloat(math.Sqrt(float64(*t))))
 	case *DDecimal:
-		decimal.Sqrt(&t.Dec, &t.Dec, decimal.Precision)
-		return t
+		dd := &DDecimal{}
+		decimal.Sqrt(&dd.Dec, &t.Dec, decimal.Precision)
+		return dd
 	}
 	panic(fmt.Sprintf("unexpected variance result type: %s", variance.Type()))
 }

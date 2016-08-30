@@ -970,8 +970,8 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 			}
 
 			var p parser.Parser
-			if p.AggregateInExpr(expr) {
-				return desc, fmt.Errorf("aggregate functions are not allowed in CHECK expressions")
+			if err := p.AssertNoAggregationOrWindowing(expr, "CHECK expressions"); err != nil {
+				return desc, err
 			}
 
 			if err := sqlbase.SanitizeVarFreeExpr(expr, parser.TypeBool, "CHECK"); err != nil {
