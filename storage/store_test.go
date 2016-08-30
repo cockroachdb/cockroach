@@ -622,7 +622,7 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 		store:      store,
 		abortCache: NewAbortCache(desc.RangeID),
 	}
-	if err := r.newReplicaInner(desc, store.Clock(), 0); err != nil {
+	if err := r.init(desc, store.Clock(), 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2277,7 +2277,7 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 		ToReplica: roachpb.ReplicaDescriptor{
 			NodeID:    1,
 			StoreID:   1,
-			ReplicaID: 1,
+			ReplicaID: 0,
 		},
 		FromReplica: roachpb.ReplicaDescriptor{
 			NodeID:    2,
@@ -2291,7 +2291,7 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 			},
 		},
 	}
-	const expected = "raft group deleted"
+	const expected = "preemptive snapshot from term 0 received"
 	if err := s.HandleRaftRequest(ctx, req); !testutils.IsError(errors.Errorf("%s", err), expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
 	}
