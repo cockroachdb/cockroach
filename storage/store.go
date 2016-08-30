@@ -1171,8 +1171,7 @@ func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 	return s.getReplicaLocked(rangeID)
 }
 
-// getReplicaLocked fetches a replica by RangeID. The store's lock must be held
-// in read or read/write mode.
+// getReplicaLocked fetches a replica by RangeID. The store's lock must be held.
 func (s *Store) getReplicaLocked(rangeID roachpb.RangeID) (*Replica, error) {
 	if rng, ok := s.mu.replicas[rangeID]; ok {
 		return rng, nil
@@ -1774,7 +1773,26 @@ func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 	rangeID := rng.RangeID
 
 	if _, ok := s.mu.uninitReplicas[rangeID]; !ok {
-		// Do nothing if the range has already been initialized.
+		// If we have an existing range for this rangeID, and the new range
+		// descriptor's span is different from our old range descriptor's,
+		// update our state.
+		rngDesc := rng.Desc()
+		var existingRng *Replica
+		if existingRng, ok = s.mu.replicas[rangeID]; !ok {
+			log.Errorf(context.TODO(), "processRangeDescriptorUpdateLocked sees a range that is not in uninitReplicas[] or replicas[]. LookupReplica says: %v",
+				s.LookupReplica(rngDesc.StartKey, nil))
+			return nil
+		}
+
+		if !rngDesc.RSpan().Equal(existingRng.Desc().RSpan()) {
+			if s.mu.replicasByKey.Delete(existingRng) == nil {
+				return errors.Errorf("couldn't delete range %s in replicasByKey btree", existingRng)
+			}
+
+			if err := s.addReplicaInternalLocked(rng); err != nil {
+				return errors.Errorf("couldn't insert range %v in replicasByKey btree: %s", rng, err)
+			}
+		}
 		return nil
 	}
 	delete(s.mu.uninitReplicas, rangeID)

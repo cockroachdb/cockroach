@@ -1071,6 +1071,42 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	mtc.waitForValues(rightKey, []int64{0, 0, 0, 225, 225, 225})
 }
 
+// TestSplitSnapshotRaceSplitWins_RangeDescUpdate tests that upon receipt of a snapshot
+// with a split, the receiving store updates its internal state correctly.
+func TestSplitSnapshotSplitWins_RangeDescUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc, leftKey, rightKey := setupSplitSnapshotRace(t)
+	defer mtc.Stop()
+
+	// Simulate the range falling back so that a snapshot will be sent,
+	// instead of just the split command
+
+	// TODO(arjun): how do we achieve this?
+
+	// Bring the left range up first so that the split happens before it sees a snapshot.
+	for i := 1; i <= 3; i++ {
+		mtc.restartStore(i)
+	}
+
+	// Perform a write on the left range and wait for it to propagate.
+	incArgs := incrementArgs(leftKey, 10)
+	if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+	mtc.waitForValues(leftKey, []int64{0, 11, 11, 11, 0, 0})
+
+	// Now wake the other stores up.
+	mtc.restartStore(4)
+	mtc.restartStore(5)
+
+	// Write to the right range.
+	incArgs = incrementArgs(rightKey, 20)
+	if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+	mtc.waitForValues(rightKey, []int64{0, 0, 0, 25, 25, 25})
+}
+
 // TestStoreSplitTimestampCacheReadRace prevents regression of #3148. It begins
 // a couple of read requests and lets them complete while a split is happening;
 // the reads hit the right half of the split. If the split happens
