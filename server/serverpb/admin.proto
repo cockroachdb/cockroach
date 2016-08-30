@@ -70,6 +70,14 @@ message DatabaseDetailsResponse {
   // table_names contains the names of all tables (SHOW TABLES) in this
   // database.
   repeated string table_names = 2;
+  // descriptor_id is an identifier used by the backend to uniquely identify
+  // this database. It can be used to find events pertaining to this database
+  // by filtering on the 'target_id' field of events.
+  int64 descriptor_id = 3 [(gogoproto.customname) = "DescriptorID"];
+  // The zone configuration in effect for this database.
+  cockroach.config.ZoneConfig zone_config = 4 [(gogoproto.nullable) = false];
+  // The level at which this object's zone configuration is set.
+  ZoneConfigurationLevel zone_config_level = 5;
 }
 
 // TableDetailsRequest is a request for detailed information about a table.
@@ -142,6 +150,10 @@ message TableDetailsResponse {
   cockroach.config.ZoneConfig zone_config = 6 [(gogoproto.nullable) = false];
   // The level at which this object's zone configuration is set.
   ZoneConfigurationLevel zone_config_level = 7;
+  // descriptor_id is an identifier used by the backend to uniquely identify
+  // this database. It can be used to find events pertaining to this database
+  // by filtering on the 'target_id' field of events.
+  int64 descriptor_id = 8 [(gogoproto.customname) = "DescriptorID"];
 }
 
 // TableStatsRequest is a request for detailed, computationally expensive

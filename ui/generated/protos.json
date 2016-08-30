@@ -1866,6 +1866,30 @@
                                     "type": "string",
                                     "name": "table_names",
                                     "id": 2
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "descriptor_id",
+                                    "id": 3,
+                                    "options": {
+                                        "(gogoproto.customname)": "DescriptorID"
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "config.ZoneConfig",
+                                    "name": "zone_config",
+                                    "id": 4,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "ZoneConfigurationLevel",
+                                    "name": "zone_config_level",
+                                    "id": 5
                                 }
                             ],
                             "messages": [
@@ -1961,6 +1985,15 @@
                                     "type": "ZoneConfigurationLevel",
                                     "name": "zone_config_level",
                                     "id": 7
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int64",
+                                    "name": "descriptor_id",
+                                    "id": 8,
+                                    "options": {
+                                        "(gogoproto.customname)": "DescriptorID"
+                                    }
                                 }
                             ],
                             "messages": [
