@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # The caller should download the static-tests and extract them into the
 # local directory.
 

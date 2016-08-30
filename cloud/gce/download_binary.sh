@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # This script takes the name of a binary and downloads it from S3.
 # It takes the repo_name/binary_name and an optional sha.
 # If the sha is not specified, the latest binary is downloaded.

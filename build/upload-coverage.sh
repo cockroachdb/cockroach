@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 if [ -z "$COVERALLS_TOKEN" ]; then
   echo "FAIL: Missing or empty COVERALLS_TOKEN."

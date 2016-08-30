@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Build cockroach binary with race detection enabled.
 
 set -euo pipefail
