@@ -59,8 +59,8 @@ func (p *planner) Limit(n *parser.Limit) (*limitNode, error) {
 
 	for _, datum := range data {
 		if datum.src != nil {
-			if p.parser.AggregateInExpr(datum.src) {
-				return nil, fmt.Errorf("aggregate functions are not allowed in %s", datum.name)
+			if err := p.parser.AssertNoAggregationOrWindowing(datum.src, datum.name); err != nil {
+				return nil, err
 			}
 
 			normalized, err := p.analyzeExpr(datum.src, nil, nil, parser.TypeInt, true, datum.name)

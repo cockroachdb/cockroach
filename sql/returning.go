@@ -17,8 +17,6 @@
 package sql
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
@@ -50,8 +48,8 @@ func (p *planner) makeReturningHelper(
 	}
 
 	for _, e := range r {
-		if p.parser.AggregateInExpr(e.Expr) {
-			return rh, fmt.Errorf("aggregate functions are not allowed in RETURNING")
+		if err := p.parser.AssertNoAggregationOrWindowing(e.Expr, "RETURNING"); err != nil {
+			return rh, err
 		}
 	}
 

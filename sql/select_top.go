@@ -19,12 +19,13 @@ package sql
 import "github.com/cockroachdb/cockroach/sql/parser"
 
 // selectTopNode encapsulate the whole logic of a select statement.
-// This exposes the selectNode, groupNode, sortNode, distinctNode and limitNode
+// This exposes the selectNode, groupNode, windowNode, sortNode, distinctNode and limitNode
 // side-by-side so that they can "see" each other during query optimization.
 type selectTopNode struct {
 	// The various nodes involved in obtaining the results.
 	source   planNode
 	group    *groupNode
+	window   *windowNode
 	sort     *sortNode
 	distinct *distinctNode
 	limit    *limitNode
@@ -46,6 +47,9 @@ func (n *selectTopNode) ExplainTypes(f func(string, string)) {
 		}
 		if n.sort != nil {
 			n.sort.ExplainTypes(f)
+		}
+		if n.window != nil {
+			n.window.ExplainTypes(f)
 		}
 		if n.group != nil {
 			n.group.ExplainTypes(f)
@@ -75,6 +79,13 @@ func (n *selectTopNode) expandPlan() error {
 	n.plan = n.group.wrap(n.plan)
 	if n.group != nil {
 		if err := n.group.expandPlan(); err != nil {
+			return err
+		}
+	}
+
+	n.plan = n.window.wrap(n.plan)
+	if n.window != nil {
+		if err := n.window.expandPlan(); err != nil {
 			return err
 		}
 	}
@@ -128,6 +139,10 @@ func (n *selectTopNode) ExplainPlan(v bool) (name, description string, subplans 
 			_, _, plans := n.sort.ExplainPlan(false)
 			subplans = append(subplans, plans[1:]...)
 		}
+		if n.window != nil {
+			_, _, plans := n.window.ExplainPlan(false)
+			subplans = append(subplans, plans[1:]...)
+		}
 		if n.group != nil {
 			_, _, plans := n.group.ExplainPlan(false)
 			subplans = append(subplans, plans[1:]...)
@@ -138,11 +153,14 @@ func (n *selectTopNode) ExplainPlan(v bool) (name, description string, subplans 
 }
 
 func (n *selectTopNode) Columns() []ResultColumn {
-	// sort, group and source may have different ideas about the
+	// sort, window, group and source may have different ideas about the
 	// result columns. Ask them in turn.
 	// (We cannot ask n.plan because it may not be connected yet.)
 	if n.sort != nil {
 		return n.sort.Columns()
+	}
+	if n.window != nil {
+		return n.window.Columns()
 	}
 	if n.group != nil {
 		return n.group.Columns()

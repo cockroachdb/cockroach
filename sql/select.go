@@ -304,8 +304,13 @@ func (p *planner) SelectClause(
 		return nil, err
 	}
 
-	// NB: both orderBy and groupBy are passed and can modify the selectNode but orderBy must do so first.
+	// NB: orderBy, window, and groupBy are passed and can modify the selectNode,
+	// but must do so in that order.
 	sort, err := p.orderBy(orderBy, s)
+	if err != nil {
+		return nil, err
+	}
+	window, err := p.window(parsed, s)
 	if err != nil {
 		return nil, err
 	}
@@ -328,6 +333,7 @@ func (p *planner) SelectClause(
 	result := &selectTopNode{
 		source:   s,
 		group:    group,
+		window:   window,
 		sort:     sort,
 		distinct: distinctPlan,
 		limit:    limitPlan,
@@ -479,10 +485,10 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 		return err
 	}
 
-	// Make sure there are no aggregation functions in the filter (after subqueries have been
-	// expanded).
-	if s.planner.parser.AggregateInExpr(s.filter) {
-		return fmt.Errorf("aggregate functions are not allowed in WHERE")
+	// Make sure there are no aggregation/window functions in the filter
+	// (after subqueries have been expanded).
+	if err := s.planner.parser.AssertNoAggregationOrWindowing(s.filter, "WHERE"); err != nil {
+		return err
 	}
 
 	return nil

@@ -82,6 +82,10 @@ INSERT INTO calls_func VALUES (-5)
 statement error aggregate functions are not allowed in CHECK expressions
 CREATE TABLE bad (a INT CHECK(SUM(a) > 1))
 
+# Window function calls in CHECK are not ok.
+statement error window functions are not allowed in CHECK expressions
+CREATE TABLE bad (a INT CHECK(SUM(a) OVER () > 1))
+
 # fail on bad check types
 statement error pq: unsupported binary operator: <bool> - <bool>
 CREATE TABLE t4 (a INT CHECK (false - true))
