@@ -2703,11 +2703,21 @@ func (s *Store) canApplySnapshotLocked(rangeID roachpb.RangeID, snap raftpb.Snap
 		// When such a conflict exists, it will be resolved by one range
 		// either being split or garbage collected.
 		exReplica, err := s.getReplicaLocked(exRange.Desc().RangeID)
+		msg := "snapshot intersects existing range"
 		if err != nil {
 			log.Warning(context.TODO(), errors.Wrapf(
 				err, "unable to look up overlapping replica on %s", exReplica))
+		} else {
+			exLease, exPendingLease := exReplica.getLease()
+			now := s.Clock().Now()
+			// If the RHS shows no signs of recent activity, give it a GC run.
+			// See #
+			if (exLease == nil || !exLease.Covers(now)) && (exPendingLease == nil || !exPendingLease.Covers(now)) {
+				s.replicaGCQueue.Add(exReplica, 2.0)
+				msg += "; initiated GC: "
+			}
 		}
-		return nil, errors.Errorf("snapshot intersects existing range %s", exReplica)
+		return nil, errors.Errorf("%s %v", msg, exReplica) // exReplica can be nil
 	}
 
 	placeholder := &ReplicaPlaceholder{
