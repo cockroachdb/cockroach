@@ -6185,13 +6185,12 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	// Grab processRaftMu in order to block normal raft replica processing. This
-	// test is ticking the replicas manually and doesn't want the store to be
+	// Grab Replica.raftMu in order to block normal raft replica processing. This
+	// test is ticking the replica manually and doesn't want the store to be
 	// doing so concurrently.
-	tc.store.processRaftMu.Lock()
-	defer tc.store.processRaftMu.Unlock()
-
 	r := tc.rng
+	defer r.raftUnlock(r.raftLock())
+
 	repDesc, err := r.GetReplicaDescriptor()
 	if err != nil {
 		t.Fatal(err)
@@ -6208,7 +6207,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		ticks := r.mu.ticks
 		r.mu.Unlock()
 		for ; (ticks % electionTicks) != 0; ticks++ {
-			if _, err := r.tick(); err != nil {
+			if _, err := r.tickRaftMuLocked(); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -6238,7 +6237,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		r.mu.Unlock()
 
 		// Tick raft.
-		if _, err := r.tick(); err != nil {
+		if _, err := r.tickRaftMuLocked(); err != nil {
 			t.Fatal(err)
 		}
 
