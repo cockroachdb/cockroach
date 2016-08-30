@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
+
+set -euxo pipefail
+
 # The caller should download the static-tests and extract them into the
 # local directory.
-
-set -x
 
 TEST_FLAGS="-test.bench=.* -test.benchmem -test.run=NONE -test.count=10"
 LOG_DIR="logs"

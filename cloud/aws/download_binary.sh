@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+
+set -euxo pipefail
+
 # This script takes the name of a binary and downloads it from S3.
 # It takes the repo_name/binary_name and an optional sha.
 # If the sha is not specified, the latest binary is downloaded.
@@ -29,7 +32,6 @@
 # }
 # ...
 # <<<
-set -ex
 
 BUCKET_NAME="cockroach"
 LATEST_SUFFIX=".LATEST"
