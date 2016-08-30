@@ -120,6 +120,12 @@ table tr td {
 <a href="./pprof/goroutine?debug=1">goroutine</a> (<a href="./pprof/goroutine?debug=2">all</a>)<br />
 </td>
 </tr>
+<tr>
+<td>change vmodule</td>
+<td>
+get /debug/setvmodule/<your_vmodule_here><br />For example, <code>*=1</code> or <code>raft=3,storage=2</code>. Empty string disables vmodule logging.
+</td>
+</tr>
 </table>
 </body></html>
 `)

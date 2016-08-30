@@ -16,7 +16,28 @@
 
 package log
 
-import "golang.org/x/net/context"
+import (
+	"fmt"
+	"net/http"
+
+	"golang.org/x/net/context"
+)
+
+const httpLogLevelPrefix = "/debug/vmodule/"
+
+func handleVModule(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	spec := r.RequestURI[len(httpLogLevelPrefix):]
+	if err := logging.vmodule.Set(spec); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	Infof(context.Background(), "vmodule changed to: %s", spec)
+	fmt.Fprint(w, "ok: "+spec)
+}
+
+func init() {
+	http.Handle(httpLogLevelPrefix, http.HandlerFunc(handleVModule))
+}
 
 func init() {
 	copyStandardLogTo("INFO")
