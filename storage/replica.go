@@ -229,6 +229,22 @@ type Replica struct {
 	// updates to state.Desc should be duplicated here
 	rangeDesc atomicRangeDesc
 
+	// raftMu protects Raft processing for initialized replicas. Raft processing
+	// for uninitialized replicas is also protected by Store.uninitRaftMu. Use
+	// Replica.raft{Lock,Unlock}() for acquiring and releasing raftMu.
+	//
+	// Locking notes: Replica.raftMu < Store.uninitRaftMu < Replica.mu
+	raftMu struct {
+		syncutil.Mutex
+		// Is the Replica initialized or not? This mirrors the presence of the
+		// Replica in Store.mu.uninitReplicas.
+		initialized bool
+		// Are we holding the Store.uninitRaftMu? Note that this variable is
+		// protected by Replica.raftMu. Used to avoid recursively locking
+		// Store.uninitRaftMu during split trigger processing.
+		uninitRaftLocked bool
+	}
+
 	mu struct {
 		// Protects all fields in the mu struct.
 		syncutil.Mutex
@@ -449,6 +465,7 @@ func (r *Replica) newReplicaInner(
 		return err
 	}
 	r.rangeDesc.store(r.mu.state.Desc)
+	r.raftMu.initialized = r.isInitializedLocked()
 
 	r.mu.lastIndex, err = loadLastIndex(ctx, r.store.Engine(), r.RangeID)
 	if err != nil {
@@ -749,7 +766,7 @@ func (r *Replica) Desc() *roachpb.RangeDescriptor {
 
 // setDesc atomically sets the range's descriptor. This method calls
 // processRangeDescriptorUpdate() to make the Store handle the descriptor
-// update.
+// update. Requires raftMu to be locked.
 func (r *Replica) setDesc(desc *roachpb.RangeDescriptor) error {
 	r.setDescWithoutProcessUpdate(desc)
 	if r.store == nil {
@@ -760,17 +777,11 @@ func (r *Replica) setDesc(desc *roachpb.RangeDescriptor) error {
 }
 
 // setDescWithoutProcessUpdate updates the range descriptor without calling
-// processRangeDescriptorUpdate.
+// processRangeDescriptorUpdate. Requires raftMu to be locked.
 func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.setDescWithoutProcessUpdateLocked(desc)
-}
 
-// setDescWithoutProcessUpdateLocked updates the range descriptor without
-// calling processRangeDescriptorUpdate.
-// setDescWithoutProcessUpdateLocked requires that the replica lock is held.
-func (r *Replica) setDescWithoutProcessUpdateLocked(desc *roachpb.RangeDescriptor) {
 	if desc.RangeID != r.RangeID {
 		r.panicf("range descriptor ID (%d) does not match replica's range ID (%d)",
 			desc.RangeID, r.RangeID)
@@ -780,6 +791,8 @@ func (r *Replica) setDescWithoutProcessUpdateLocked(desc *roachpb.RangeDescripto
 	// order here would be crucial.
 	r.rangeDesc.store(desc)
 	r.mu.state.Desc = desc
+
+	r.raftMu.initialized = r.isInitializedLocked()
 }
 
 // GetReplicaDescriptor returns the replica for this range from the range
@@ -1579,7 +1592,47 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 	})
 }
 
+// Acquire Store.uninitRaftMu and note that this replica holds the lock.
+func (r *Replica) uninitRaftLock() {
+	r.store.uninitRaftMu.Lock()
+	r.raftMu.uninitRaftLocked = true
+}
+
+// Release Store.uninitRaftMu.
+func (r *Replica) uninitRaftUnlock() {
+	if !r.raftMu.uninitRaftLocked {
+		panic(fmt.Sprintf("%s: does not hold Store.uninitRaftMu", r))
+	}
+	r.raftMu.uninitRaftLocked = false
+	r.store.uninitRaftMu.Unlock()
+}
+
+// Lock the replica for Raft processing, grabbing Store.uninitRaftMu if the
+// replica is uninitialized.
+func (r *Replica) raftLock() {
+	r.raftMu.Lock()
+	if !r.raftMu.initialized {
+		r.uninitRaftLock()
+	}
+}
+
+// Unlock the replica for Raft processing, releasing Store.uninitRaftMu if was
+// being held.
+func (r *Replica) raftUnlock() {
+	if r.raftMu.uninitRaftLocked {
+		r.uninitRaftUnlock()
+	}
+	r.raftMu.Unlock()
+}
+
+// handleRaftReady processes a raft.Ready containing entries and messages that
+// are ready to read, be saved to stable storage, committed or sent to other
+// peers. The uninitialized parameter indicates whether the Replica is
+// initialized or not (i.e. present in Store.mu.uninitReplicas).
 func (r *Replica) handleRaftReady() error {
+	r.raftLock()
+	defer r.raftUnlock()
+
 	ctx := r.ctx
 	var hasReady bool
 	var rd raft.Ready
@@ -1780,6 +1833,12 @@ func (r *Replica) handleRaftReady() error {
 // tick the Raft group, returning any error and true if the raft group exists
 // and false otherwise.
 func (r *Replica) tick() (bool, error) {
+	r.raftLock()
+	defer r.raftUnlock()
+	return r.tickRaftLocked()
+}
+
+func (r *Replica) tickRaftLocked() (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -1943,6 +2002,9 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 }
 
 func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
+	r.raftLock()
+	defer r.raftUnlock()
+
 	snapStatus := raft.SnapshotFinish
 	if snapErr != nil {
 		snapStatus = raft.SnapshotFailure
