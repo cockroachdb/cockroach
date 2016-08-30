@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
+
+set -euxo pipefail
+
 # This file uses `bash` and not `sh` due to the `time` builtin (the external
 # `time` is not available on CircleCI).
-
-set -eu
 
 BUCKET_NAME="binaries.cockroachdb.com"
 

@@ -2,6 +2,7 @@ cmd github.com/client9/misspell/cmd/misspell
 cmd github.com/cockroachdb/c-protobuf/cmd/protoc
 cmd github.com/cockroachdb/cockroach/cmd/protoc-gen-gogoroach
 cmd github.com/cockroachdb/stress
+cmd github.com/cockroachdb/yacc
 cmd github.com/golang/lint/golint
 cmd github.com/gordonklaus/ineffassign
 cmd github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
@@ -41,6 +42,7 @@ github.com/cockroachdb/cmux b64f5908f4945f4b11ed4a0a9d3cc1e23350866d
 github.com/cockroachdb/cockroach-go 2e4a60d41697eebb308b1def89f0abaf1c056137
 github.com/cockroachdb/pq 40c6b2414c76cdb84aacc955f79dc844e48ad0c0
 github.com/cockroachdb/stress 029c9348806514969d1109a6ae36e521af411ca7
+github.com/cockroachdb/yacc 7c99dfd2164a5d23c3f495ffc2e0b72b6379d066
 github.com/codahale/hdrhistogram f8ad88b59a584afeee9d334eff879b104439117b
 github.com/coreos/etcd 48f4a7d037ca8fd276fff09ef068074193b24dfa
 github.com/cpuguy83/go-md2man 2724a9c9051aa62e9cca11304e7dd518e9e41599
