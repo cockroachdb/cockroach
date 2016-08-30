@@ -4,8 +4,9 @@ set -euxo pipefail
 
 export CLOUDSDK_CORE_PROJECT=${CLOUDSDK_CORE_PROJECT-${GOOGLE_PROJECT-cockroach-$(id -un)}}
 export CLOUDSDK_COMPUTE_ZONE=${GCEWORKER_ZONE-${CLOUDSDK_COMPUTE_ZONE-us-east1-b}}
+GOVERSION=${GOVERSION-1.7}
 
-name=${GCEWORKER_NAME-gceworker}
+name=${GCEWORKER_NAME-gceworker$(echo "${GOVERSION}" | tr -d '.')}
 
 cd "$(dirname "${0}")"
 
@@ -13,7 +14,7 @@ case ${1-} in
     create)
     gcloud compute instances \
            create "${name}" \
-           --machine-type "custom-32-65536" \
+           --machine-type "custom-32-32768" \
            --network "default" \
            --maintenance-policy "MIGRATE" \
            --image "/debian-cloud/debian-8-jessie-v20160803" \
@@ -23,7 +24,7 @@ case ${1-} in
     sleep 20 # avoid SSH timeout on copy-files
 
     gcloud compute copy-files . "${name}:scripts"
-    gcloud compute ssh "${name}" ./scripts/bootstrap-debian.sh
+    gcloud compute ssh "${name}" "GOVERSION=${GOVERSION} ./scripts/bootstrap-debian.sh"
     # Install automatic shutdown after ten minutes of operation without a
     # logged in user. To disable this, `sudo touch /.active`.
     # This is much more intricate than it looks. A few complications which

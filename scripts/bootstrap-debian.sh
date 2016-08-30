@@ -3,9 +3,9 @@
 # On a (recent enough) Debian/Ubuntu system, bootstraps a source Go install
 # (with improved parallel build patches) and the cockroach repo.
 
-set -euo pipefail
+set -euxo pipefail
 
-GOVERSION="1.7"
+GOVERSION="${GOVERSION-1.7}"
 
 cd "$(dirname "${0}")"
 
@@ -15,7 +15,7 @@ mkdir -p ~/go-bootstrap
 curl "https://storage.googleapis.com/golang/go${GOVERSION}.linux-amd64.tar.gz" | tar -C ~/go-bootstrap -xvz --strip=1
 curl "https://storage.googleapis.com/golang/go${GOVERSION}.src.tar.gz" | tar -C ~ -xvz
 
-patch -p1 -d ../go < parallelbuilds-go1.7.patch
+patch -p1 -d ../go < "parallelbuilds-go${GOVERSION}.patch"
 
 (cd ~/go/src && GOROOT_BOOTSTRAP=~/go-bootstrap ./make.bash)
 
