@@ -100,6 +100,7 @@ message StoreDescriptor {
   optional Attributes attrs = 2 [(gogoproto.nullable) = false];
   optional NodeDescriptor node = 3 [(gogoproto.nullable) = false];
   optional StoreCapacity capacity = 4 [(gogoproto.nullable) = false];
+  optional Locality locality = 5 [(gogoproto.nullable) = false];
 }
 
 // StoreDeadReplicas holds a storeID and a list of dead replicas on that store.
@@ -109,4 +110,22 @@ message StoreDeadReplicas {
   optional int32 store_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
   repeated ReplicaIdent replicas = 2 [(gogoproto.nullable) = false];
+}
+
+// Locality is an ordered set of key value Tiers that describe a nodes location.
+// The tier keys should be the same across all nodes.
+message Locality {
+  option (gogoproto.goproto_stringer) = false;
+
+  repeated Tier tiers = 1 [(gogoproto.nullable) = false];
+}
+
+// Tier represents one level of the locality hiearchy.
+message Tier {
+  option (gogoproto.goproto_stringer) = false;
+
+  // Key is the name of tier and should match all other nodes.
+  optional string key = 1 [(gogoproto.nullable) = false];
+  // Value is node specific value corresponding to the key.
+  optional string value = 2 [(gogoproto.nullable) = false];
 }
