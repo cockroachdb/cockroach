@@ -46,6 +46,9 @@ type serverMessageType byte
 const (
 	clientMsgBind        clientMessageType = 'B'
 	clientMsgClose       clientMessageType = 'C'
+	clientMsgCopyData    clientMessageType = 'd'
+	clientMsgCopyDone    clientMessageType = 'c'
+	clientMsgCopyFail    clientMessageType = 'f'
 	clientMsgDescribe    clientMessageType = 'D'
 	clientMsgExecute     clientMessageType = 'E'
 	clientMsgFlush       clientMessageType = 'H'
@@ -58,6 +61,7 @@ const (
 	serverMsgBindComplete         serverMessageType = '2'
 	serverMsgCommandComplete      serverMessageType = 'C'
 	serverMsgCloseComplete        serverMessageType = '3'
+	serverMsgCopyInResponse       serverMessageType = 'G'
 	serverMsgDataRow              serverMessageType = 'D'
 	serverMsgEmptyQuery           serverMessageType = 'I'
 	serverMsgErrorResponse        serverMessageType = 'E'
@@ -300,6 +304,9 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 		case clientMsgFlush:
 			c.doingExtendedQueryMessage = true
 			err = c.wr.Flush()
+
+		case clientMsgCopyData, clientMsgCopyDone, clientMsgCopyFail:
+			// The spec says to drop any extra of these messages.
 
 		default:
 			err = c.sendErrorWithCode(pgerror.CodeProtocolViolationError, sqlbase.MakeSrcCtx(0),
@@ -786,6 +793,11 @@ func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, 
 				return err
 			}
 
+		case parser.CopyIn:
+			if err := c.copyIn(result.Columns); err != nil {
+				return err
+			}
+
 		default:
 			panic(fmt.Sprintf("unexpected result type %v", result.Type))
 		}
@@ -821,4 +833,58 @@ func (c *v3Conn) sendRowDescription(columns []sql.ResultColumn, formatCodes []fo
 		}
 	}
 	return c.writeBuf.finishMsg(c.wr)
+}
+
+// See: https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-COPY
+func (c *v3Conn) copyIn(columns []sql.ResultColumn) error {
+	defer c.session.CopyEnd()
+
+	c.writeBuf.initMsg(serverMsgCopyInResponse)
+	c.writeBuf.writeByte(byte(formatText))
+	c.writeBuf.putInt16(int16(len(columns)))
+	for range columns {
+		c.writeBuf.putInt16(int16(formatText))
+	}
+	if err := c.writeBuf.finishMsg(c.wr); err != nil {
+		return err
+	}
+	if err := c.wr.Flush(); err != nil {
+		return err
+	}
+
+	for {
+		typ, n, err := c.readBuf.readTypedMsg(c.rd)
+		c.metrics.BytesInCount.Inc(int64(n))
+		if err != nil {
+			return err
+		}
+		var sr sql.StatementResults
+		var done bool
+		switch typ {
+		case clientMsgCopyData:
+			sr = c.executor.CopyData(c.session, string(c.readBuf.msg))
+
+		case clientMsgCopyDone:
+			sr = c.executor.CopyDone(c.session)
+			done = true
+
+		case clientMsgCopyFail:
+			done = true
+
+		case clientMsgFlush, clientMsgSync:
+			// Spec says to "ignore Flush and Sync messages received during copy-in mode".
+
+		default:
+			return c.sendErrorWithCode(pgerror.CodeProtocolViolationError, sqlbase.MakeSrcCtx(0),
+				fmt.Sprintf("unrecognized client message type %s", typ))
+		}
+		for _, res := range sr.ResultList {
+			if res.Err != nil {
+				return c.sendError(res.Err)
+			}
+		}
+		if done {
+			return nil
+		}
+	}
 }
