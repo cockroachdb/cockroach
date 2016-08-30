@@ -953,9 +953,11 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      ArgTypes{TypeString, TypeString},
 			ReturnType: TypeDate,
+			category:   categoryDateAndTime,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				dateTxt := string(*args[0].(*DString))
-				return ParseDDate(dateTxt, ctx.GetLocation())
+				fmtTxt := string(*args[1].(*DString))
+				return StrToDDate(dateTxt, fmtTxt)
 			},
 		},
 	},
@@ -964,14 +966,17 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      ArgTypes{TypeString, TypeString},
 			ReturnType: TypeTimestamp,
+			category:   categoryDateAndTime,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-				s := string(*args[0].(*DString))
-				return ParseDTimestamp(s, ctx.GetLocation(), time.Nanosecond)
+				tsTxt := string(*args[0].(*DString))
+				fmtTxt := string(*args[1].(*DString))
+				return StrToDTimestampTZ(tsTxt, fmtTxt, ctx.GetLocation())
 			},
 		},
 		Builtin{
 			Types:      ArgTypes{TypeFloat},
 			ReturnType: TypeTimestamp,
+			category:   categoryDateAndTime,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				t := int64(*args[0].(*DFloat))
 				return MakeDTimestampTZ(time.Unix(t, 0), time.Nanosecond), nil
