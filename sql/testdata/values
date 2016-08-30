@@ -17,3 +17,17 @@ VALUES (1), (1), (2), (3) ORDER BY 1 DESC LIMIT 3
 
 query error column z does not exist
 VALUES (1), (1), (2), (3) ORDER BY z
+
+# subqueries can be evaluated in VALUES
+query I
+VALUES ((SELECT 1)), ((SELECT 2))
+----
+1
+2
+
+# the subquery's plan must be visible in EXPLAIN
+query ITT
+EXPLAIN VALUES (1), ((SELECT 2))
+----
+0 values 1 column
+1 empty  -
