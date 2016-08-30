@@ -3,9 +3,9 @@
 set -euxo pipefail
 
 export CLOUDSDK_CORE_PROJECT=${CLOUDSDK_CORE_PROJECT-${GOOGLE_PROJECT-cockroach-$(id -un)}}
-export CLOUDSDK_COMPUTE_ZONE=${GCESLAVE_ZONE-${CLOUDSDK_COMPUTE_ZONE-us-east1-b}}
+export CLOUDSDK_COMPUTE_ZONE=${GCEWORKER_ZONE-${CLOUDSDK_COMPUTE_ZONE-us-east1-b}}
 
-name=${GCESLAVE_NAME-gceslave}
+name=${GCEWORKER_NAME-gceworker}
 
 cd "$(dirname "${0}")"
 
