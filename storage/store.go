@@ -397,7 +397,19 @@ type Store struct {
 	// HandleRaftRequest. (#4476)
 
 	processRaftMu syncutil.Mutex
-	mu            struct {
+
+	// uninitRaftMu protects Raft processing for uninitialized replicas. We need
+	// to serialize processing of uninitialized replicas because we do not know
+	// what range of keys such replicas cover. Uninitialized replicas might
+	// conflict with either initialized replicas (which can create new replicas
+	// via splits) or other uninitialized replicas (by applying snapshots). Use
+	// Replica.uninitRaft{Lock,Unlock}() for acquiring and releasing
+	// uninitRaftMu.
+	//
+	// Locking notes: Replica.raftMu < Store.uninitRaftMu < Replica.mu
+	uninitRaftMu syncutil.Mutex
+
+	mu struct {
 		syncutil.Mutex                              // Protects all variables in the mu struct.
 		replicas       map[roachpb.RangeID]*Replica // Map of replicas by Range ID
 		replicasByKey  *btree.BTree                 // btree keyed by ranges end keys.
@@ -1423,6 +1435,18 @@ func splitTriggerPostCommit(
 	split *roachpb.SplitTrigger,
 	r *Replica,
 ) {
+	// Block processing of uninitialized replicas. The left hand side of the
+	// split (i.e. r) is guaranteed to be an initialized replica.
+	//
+	// It's unlikely, but looks possible, for a replica to be uninitialized at
+	// the start of Replica.handleRaftReady, become initialized and then process
+	// a split. So we condition whether to grab Store.uninitRaftMu on whether it
+	// is already held by the Replica higher on the call stack.
+	if !r.raftMu.uninitRaftLocked {
+		r.uninitRaftLock()
+		defer r.uninitRaftUnlock()
+	}
+
 	// Create the new Replica representing the right side of the split.
 	// Our error handling options at this point are very limited, but
 	// we need to do this after our batch has committed.
@@ -1723,6 +1747,8 @@ func (s *Store) addReplicaToRangeMapLocked(rng *Replica) error {
 func (s *Store) RemoveReplica(rep *Replica, origDesc roachpb.RangeDescriptor, destroy bool) error {
 	s.processRaftMu.Lock()
 	defer s.processRaftMu.Unlock()
+	rep.raftLock()
+	defer rep.raftUnlock()
 	return s.removeReplicaImpl(rep, origDesc, destroy)
 }
 
@@ -1800,7 +1826,8 @@ func (s *Store) processRangeDescriptorUpdate(rng *Replica) error {
 	return s.processRangeDescriptorUpdateLocked(rng)
 }
 
-// processRangeDescriptorUpdateLocked requires that the store lock is held.
+// processRangeDescriptorUpdateLocked requires that Store.mu and Replica.raftMu
+// are locked.
 func (s *Store) processRangeDescriptorUpdateLocked(rng *Replica) error {
 	if !rng.IsInitialized() {
 		return errors.Errorf("attempted to process uninitialized range %s", rng)
@@ -2307,6 +2334,9 @@ func (s *Store) HandleRaftRequest(
 	}
 	r.setLastReplicaDescriptors(req)
 
+	r.raftLock()
+	defer r.raftUnlock()
+
 	if req.ToReplica.ReplicaID == 0 {
 		if req.Message.Type == raftpb.MsgSnap {
 			// Allow snapshots to be applied to replicas before they are
@@ -2536,6 +2566,8 @@ func (s *Store) processRaft() {
 			close(workQueue)
 		}()
 
+		var initReplicas []*Replica
+		var uninitReplicas []*Replica
 		var tickReplicas []*Replica
 		var pendingReplicas []roachpb.RangeID
 		var warnDuration = 10 * s.ctx.RaftTickInterval
@@ -2555,8 +2587,8 @@ func (s *Store) processRaft() {
 			// variables that we can use without the lock. Divide them into
 			// separate lists for initialized and uninitialized replicas
 			// (explained below).
-			var initReplicas []*Replica
-			var uninitReplicas []*Replica
+			initReplicas = initReplicas[:0]
+			uninitReplicas = uninitReplicas[:0]
 			s.mu.Lock()
 			s.pendingRaftGroups.Lock()
 			if len(s.pendingRaftGroups.value) > 0 {
@@ -2648,8 +2680,11 @@ func (s *Store) processRaft() {
 				// TODO(bdarnell): rework raft ticker.
 				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
 				tickerStart := timeutil.Now()
-				s.mu.Lock()
+
 				tickReplicas = tickReplicas[:0]
+				pendingReplicas = pendingReplicas[:0]
+
+				s.mu.Lock()
 				for _, r := range s.mu.replicas {
 					tickReplicas = append(tickReplicas, r)
 				}
@@ -2659,18 +2694,16 @@ func (s *Store) processRaft() {
 				// has been removed, Replica.mu.destroyed will be non-nil causing
 				// Replica.tick() to be a no-op.
 				s.processRaftMu.Lock()
-				pendingReplicas = pendingReplicas[:0]
 
-				for id, r := range s.mu.replicas {
+				for _, r := range tickReplicas {
 					if exists, err := r.tick(); err != nil {
 						log.Error(s.Ctx(), err)
 					} else if exists {
-						pendingReplicas = append(pendingReplicas, id)
+						pendingReplicas = append(pendingReplicas, r.RangeID)
 					}
 				}
 
 				s.processRaftMu.Unlock()
-				s.mu.Unlock()
 
 				s.metrics.RaftTicks.Inc(1)
 
@@ -2696,7 +2729,8 @@ func (s *Store) processRaft() {
 
 // getOrCreateReplica returns a replica for the given RangeID, creating an
 // uninitialized replica if necessary. The caller must not hold the store's
-// lock.
+// lock. The uninitialized return value indicates whether the Replica is
+// initialized or not.
 func (s *Store) getOrCreateReplica(
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
