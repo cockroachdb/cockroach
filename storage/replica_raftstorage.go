@@ -273,7 +273,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
-	return snap.Snapshot, err
+	return snap.RaftSnap, err
 }
 
 // SnapshotWithContext is main implementation for Snapshot() but it takes a
@@ -410,9 +410,9 @@ func (r *Replica) GetSnapshot(ctx context.Context) (OutgoingSnapshot, error) {
 type OutgoingSnapshot struct {
 	SnapUUID uuid.UUID
 	// The Raft snapshot message to send. Contains SnapUUID as its data.
-	Snapshot raftpb.Snapshot
+	RaftSnap raftpb.Snapshot
 	// The RocksDB snapshot that will be streamed from.
-	Snap engine.Reader
+	EngineSnap engine.Reader
 	// The complete range iterator for the snapshot to stream.
 	Iter *ReplicaDataIterator
 }
@@ -431,7 +431,7 @@ type IncomingSnapshot struct {
 // Close this OutgoingSnapshot, freeing associated resources.
 func (snap OutgoingSnapshot) Close() {
 	snap.Iter.Close()
-	snap.Snap.Close()
+	snap.EngineSnap.Close()
 }
 
 // snapshot creates an OutgoingSnapshot containing a rocksdb snapshot for the given range.
@@ -487,10 +487,10 @@ func snapshot(
 	log.Infof(ctx, "generated snapshot %s for range %s at index %d in %s. %d log entries",
 		snapUUID, rangeID, appliedIndex, timeutil.Since(start), len(snapData.LogEntries))
 	return OutgoingSnapshot{
-		Snap:       snap,
+		EngineSnap: snap,
 		Iter:       iter,
 		SnapUUID:   *snapUUID,
-		Snapshot: raftpb.Snapshot{
+		RaftSnap: raftpb.Snapshot{
 			Data: snapUUID.GetBytes(),
 			Metadata: raftpb.SnapshotMetadata{
 				Index:     appliedIndex,
@@ -614,7 +614,7 @@ func (r *Replica) applySnapshot(
 
 	log.Infof(ctx, "%s: with replicaID %s, applying %s snapshot at index %d "+
 		"(id=%s, encoded size=%d, %d rocksdb batches, %d log entries)",
-		r, replicaIDStr, snapType, snap.Metadata.Index, inSnap.SnapUUID,
+		r, replicaIDStr, snapType, snap.Metadata.Index, inSnap.SnapUUID.Short(),
 		len(snap.Data), len(inSnap.Batches), len(inSnap.LogEntries))
 	defer func(start time.Time) {
 		log.Infof(ctx, "%s: with replicaID %s, applied %s snapshot in %.3fs",
