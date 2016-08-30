@@ -2621,7 +2621,7 @@ func sendSnapshot(
 		return err
 	}
 	log.Infof(stream.Context(), "streamed snapshot: kv pairs: %d, log entries: %d",
-		n, len(snap.LogEntries))
+		n, len(logEntries))
 
 	resp, err = stream.Recv()
 	if err != nil {
