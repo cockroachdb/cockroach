@@ -298,6 +298,8 @@ func (p *planner) newPlan(stmt parser.Statement, desiredTypes []parser.Datum, au
 		return p.ShowConstraints(n)
 	case *parser.ShowTables:
 		return p.ShowTables(n)
+	case *parser.Split:
+		return p.Split(n)
 	case *parser.Truncate:
 		return p.Truncate(n)
 	case *parser.UnionClause:

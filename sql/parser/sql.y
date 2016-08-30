@@ -341,6 +341,7 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %type <Statement> savepoint_stmt
 %type <Statement> set_stmt
 %type <Statement> show_stmt
+%type <Statement> split_stmt
 %type <Statement> transaction_stmt
 %type <Statement> truncate_stmt
 %type <Statement> update_stmt
@@ -614,7 +615,7 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 
 %token <str>   SAVEPOINT SEARCH SECOND SELECT
 %token <str>   SERIAL SERIALIZABLE SESSION SESSION_USER SET SHOW
-%token <str>   SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SQL
+%token <str>   SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 %token <str>   START STRICT STRING STORING SUBSTRING
 %token <str>   SYMMETRIC SYSTEM
 
@@ -750,6 +751,7 @@ stmt:
   }
 | set_stmt
 | show_stmt
+| split_stmt
 | transaction_stmt
 | release_stmt
 | truncate_stmt
@@ -1473,6 +1475,12 @@ for_grantee_clause:
 | /* EMPTY */
   {
     $$.val = NameList(nil)
+  }
+
+split_stmt:
+  SPLIT qualified_name AT expr_list
+  {
+    $$.val = &Split{Table: $2.normalizableTableName(), Exprs: $4.exprs()}
   }
 
 // CREATE TABLE relname
@@ -4500,6 +4508,7 @@ unreserved_keyword:
 | START
 | STORING
 | STRICT
+| SPLIT
 | SYSTEM
 | TABLES
 | TEXT

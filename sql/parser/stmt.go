@@ -319,6 +319,12 @@ func (*ShowTables) StatementType() StatementType { return Rows }
 func (*ShowTables) StatementTag() string { return "SHOW TABLES" }
 
 // StatementType implements the Statement interface.
+func (*Split) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*Split) StatementTag() string { return "SPLIT" }
+
+// StatementType implements the Statement interface.
 func (*Truncate) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -389,6 +395,7 @@ func (n *ShowGrants) String() string               { return AsString(n) }
 func (n *ShowIndex) String() string                { return AsString(n) }
 func (n *ShowConstraints) String() string          { return AsString(n) }
 func (n *ShowTables) String() string               { return AsString(n) }
+func (n *Split) String() string                    { return AsString(n) }
 func (l StatementList) String() string             { return AsString(l) }
 func (n *Truncate) String() string                 { return AsString(n) }
 func (n *UnionClause) String() string              { return AsString(n) }

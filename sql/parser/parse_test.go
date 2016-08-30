@@ -504,6 +504,9 @@ func TestParse(t *testing.T) {
 		{`ALTER TABLE a ALTER COLUMN b DROP DEFAULT`},
 		{`ALTER TABLE a ALTER COLUMN b DROP NOT NULL`},
 		{`ALTER TABLE a ALTER b DROP NOT NULL`},
+
+		{`SPLIT a AT 1`},
+		{`SPLIT d.a AT 'b', 2`},
 	}
 	for _, d := range testData {
 		stmts, err := parseTraditional(d.sql)
