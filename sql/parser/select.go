@@ -72,6 +72,7 @@ type SelectClause struct {
 	Where       *Where
 	GroupBy     GroupBy
 	Having      *Where
+	Window      Window
 	Lock        string
 	tableSelect bool
 }
@@ -91,6 +92,7 @@ func (node *SelectClause) Format(buf *bytes.Buffer, f FmtFlags) {
 		FormatNode(buf, f, node.Where)
 		FormatNode(buf, f, node.GroupBy)
 		FormatNode(buf, f, node.Having)
+		FormatNode(buf, f, node.Window)
 		buf.WriteString(node.Lock)
 	}
 }
@@ -467,4 +469,60 @@ func (node *Limit) Format(buf *bytes.Buffer, f FmtFlags) {
 			FormatNode(buf, f, node.Offset)
 		}
 	}
+}
+
+// Window represents a WINDOW clause.
+type Window []*WindowDef
+
+// Format implements the NodeFormatter interface.
+func (node Window) Format(buf *bytes.Buffer, f FmtFlags) {
+	prefix := " WINDOW "
+	for _, n := range node {
+		buf.WriteString(prefix)
+		buf.WriteString(n.Name)
+		buf.WriteString(" AS ")
+		FormatNode(buf, f, n)
+		prefix = ", "
+	}
+}
+
+// WindowDef represents a single window definition expression.
+type WindowDef struct {
+	Name       string
+	RefName    string
+	Partitions Exprs
+	OrderBy    OrderBy
+}
+
+// Format implements the NodeFormatter interface.
+func (node *WindowDef) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteRune('(')
+	space := false
+	if node.RefName != "" {
+		buf.WriteString(node.RefName)
+		space = true
+	}
+	if node.Partitions != nil {
+		if space {
+			buf.WriteRune(' ')
+		}
+		buf.WriteString("PARTITION BY ")
+		FormatNode(buf, f, node.Partitions)
+		space = true
+	}
+	if node.OrderBy != nil {
+		if space {
+			FormatNode(buf, f, node.OrderBy)
+		} else {
+			// We need to remove the initial space produced by OrderBy.Format.
+			var tmpBuf bytes.Buffer
+			FormatNode(&tmpBuf, f, node.OrderBy)
+			buf.WriteString(tmpBuf.String()[1:])
+		}
+		space = true
+		_ = space // avoid compiler warning until TODO below is addressed.
+	}
+	// TODO(nvanbenschoten): Support Window Frames.
+	// if node.Frame != nil {}
+	buf.WriteRune(')')
 }
