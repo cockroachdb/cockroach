@@ -392,6 +392,22 @@ func TestParse(t *testing.T) {
 
 		{`SELECT a FROM t HAVING a = b`},
 
+		{`SELECT a FROM t WINDOW w AS ()`},
+		{`SELECT a FROM t WINDOW w AS (w2)`},
+		{`SELECT a FROM t WINDOW w AS (PARTITION BY b)`},
+		{`SELECT a FROM t WINDOW w AS (PARTITION BY b, 1 + 2)`},
+		{`SELECT a FROM t WINDOW w AS (ORDER BY c)`},
+		{`SELECT a FROM t WINDOW w AS (ORDER BY c, 1 + 2)`},
+		{`SELECT a FROM t WINDOW w AS (PARTITION BY b ORDER BY c)`},
+
+		{`SELECT avg(1) OVER w FROM t`},
+		{`SELECT avg(1) OVER () FROM t`},
+		{`SELECT avg(1) OVER (w) FROM t`},
+		{`SELECT avg(1) OVER (PARTITION BY b) FROM t`},
+		{`SELECT avg(1) OVER (ORDER BY c) FROM t`},
+		{`SELECT avg(1) OVER (PARTITION BY b ORDER BY c) FROM t`},
+		{`SELECT avg(1) OVER (w PARTITION BY b ORDER BY c) FROM t`},
+
 		{`SELECT a FROM t UNION SELECT 1 FROM t`},
 		{`SELECT a FROM t UNION SELECT 1 FROM t UNION SELECT 1 FROM t`},
 		{`SELECT a FROM t UNION ALL SELECT 1 FROM t`},

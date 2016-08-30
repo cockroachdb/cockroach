@@ -786,9 +786,10 @@ func (node *UnaryExpr) TypedInnerExpr() TypedExpr {
 
 // FuncExpr represents a function call.
 type FuncExpr struct {
-	Name  NormalizableFunctionName
-	Type  funcType
-	Exprs Exprs
+	Name      NormalizableFunctionName
+	Type      funcType
+	Exprs     Exprs
+	WindowDef *WindowDef
 
 	typeAnnotation
 	fn Builtin
@@ -798,6 +799,25 @@ type FuncExpr struct {
 // the group node in package sql.
 func (node *FuncExpr) GetAggregateConstructor() func() AggregateFunc {
 	return node.fn.AggregateFunc
+}
+
+// GetWindowConstructor returns a window function constructor if the
+// FuncExpr is a built-in window function.
+func (node *FuncExpr) GetWindowConstructor() func() {
+	// TODO(nvanbenschoten) Support built-in window functions.
+	return nil
+}
+
+// IsWindowFunction returns if the function is being applied as a window function.
+func (node *FuncExpr) IsWindowFunction() bool {
+	return node.WindowDef != nil
+}
+
+// IsImpure returns whether the function application is impure, meaning that it
+// potentially returns a different value when called in the same statement with
+// the same parameters.
+func (node *FuncExpr) IsImpure() bool {
+	return node.fn.impure || node.IsWindowFunction()
 }
 
 type funcType int
@@ -825,6 +845,14 @@ func (node *FuncExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(typ)
 	FormatNode(buf, f, node.Exprs)
 	buf.WriteByte(')')
+	if window := node.WindowDef; window != nil {
+		buf.WriteString(" OVER ")
+		if window.Name != "" {
+			FormatNode(buf, f, window.Name)
+		} else {
+			FormatNode(buf, f, window)
+		}
+	}
 }
 
 // OverlayExpr represents an overlay function call.

@@ -303,6 +303,12 @@ func (u *sqlSymUnion) dropBehavior() DropBehavior {
 func (u *sqlSymUnion) interleave() *InterleaveDef {
     return u.val.(*InterleaveDef)
 }
+func (u *sqlSymUnion) windowDef() *WindowDef {
+    return u.val.(*WindowDef)
+}
+func (u *sqlSymUnion) window() Window {
+    return u.val.(Window)
+}
 
 %}
 
@@ -523,10 +529,11 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 
 %type <empty> within_group_clause
 %type <empty> filter_clause
-%type <empty> window_clause window_definition_list opt_partition_clause
-%type <empty> window_definition over_clause window_specification
+%type <Exprs> opt_partition_clause
+%type <Window> window_clause window_definition_list
+%type <*WindowDef> window_definition over_clause window_specification
+%type <str> opt_existing_window_name
 %type <empty> opt_frame_clause frame_extent frame_bound
-%type <empty> opt_existing_window_name
 
 %type <TargetList>    privilege_target
 %type <*TargetList> on_privilege_target_clause
@@ -2339,6 +2346,7 @@ simple_select:
       Where:   newWhere(astWhere, $5.expr()),
       GroupBy: $6.groupBy(),
       Having:  newWhere(astHaving, $7.expr()),
+      Window:  $8.window(),
     }
   }
 | SELECT distinct_clause target_list
@@ -2352,6 +2360,7 @@ simple_select:
       Where:    newWhere(astWhere, $5.expr()),
       GroupBy:  $6.groupBy(),
       Having:   newWhere(astHaving, $7.expr()),
+      Window:   $8.window(),
     }
   }
 | values_clause
@@ -3655,7 +3664,9 @@ func_application:
 func_expr:
   func_application within_group_clause filter_clause over_clause
   {
-    $$.val = $1.expr()
+    f := $1.expr().(*FuncExpr)
+    f.WindowDef = $4.windowDef()
+    $$.val = f
   }
 | func_expr_common_subexpr
   {
@@ -3770,24 +3781,57 @@ filter_clause:
 
 // Window Definitions
 window_clause:
-  WINDOW window_definition_list { unimplemented() }
-| /* EMPTY */ {}
+  WINDOW window_definition_list
+  {
+    $$.val = $2.window()
+  }
+| /* EMPTY */
+  {
+    $$.val = Window(nil)
+  }
 
 window_definition_list:
-  window_definition { unimplemented() }
-| window_definition_list ',' window_definition { unimplemented() }
+  window_definition
+  {
+    $$.val = Window{$1.windowDef()}
+  }
+| window_definition_list ',' window_definition
+  {
+    $$.val = append($1.window(), $3.windowDef())
+  }
 
 window_definition:
-  name AS window_specification { unimplemented() }
+  name AS window_specification
+  {
+    n := $3.windowDef()
+    n.Name = Name($1)
+    $$.val = n
+  }
 
 over_clause:
-  OVER window_specification { unimplemented() }
-| OVER name { unimplemented() }
-| /* EMPTY */ {}
+  OVER window_specification
+  {
+    $$.val = $2.windowDef()
+  }
+| OVER name
+  {
+    $$.val = &WindowDef{Name: Name($2)}
+  }
+| /* EMPTY */
+  {
+    $$.val = (*WindowDef)(nil)
+  }
 
 window_specification:
   '(' opt_existing_window_name opt_partition_clause
-    opt_sort_clause opt_frame_clause ')' { unimplemented() }
+    opt_sort_clause opt_frame_clause ')'
+  {
+    $$.val = &WindowDef{
+      RefName: Name($2),
+      Partitions: $3.exprs(),
+      OrderBy: $4.orderBy(),
+    }
+  }
 
 // If we see PARTITION, RANGE, or ROWS as the first token after the '(' of a
 // window_specification, we want the assumption to be that there is no
@@ -3798,12 +3842,21 @@ window_specification:
 // keywords are thus precluded from being an existing_window_name but are not
 // reserved for any other purpose.
 opt_existing_window_name:
-  name { unimplemented() }
-| /* EMPTY */ %prec CONCAT {}
+  name
+| /* EMPTY */ %prec CONCAT
+  {
+    $$ = ""
+  }
 
 opt_partition_clause:
-  PARTITION BY expr_list { unimplemented() }
-| /* EMPTY */ {}
+  PARTITION BY expr_list
+  {
+    $$.val = $3.exprs()
+  }
+| /* EMPTY */
+  {
+    $$.val = Exprs(nil)
+  }
 
 // For frame clauses, we return a WindowDef, but only some fields are used:
 // frameOptions, startOffset, and endOffset.

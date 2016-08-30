@@ -45,8 +45,8 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 	// that determination is made during validation, which will require matching
 	// expressions.
 	for i := range groupBy {
-		if p.parser.AggregateInExpr(groupBy[i]) {
-			return nil, fmt.Errorf("aggregate functions are not allowed in GROUP BY")
+		if err := p.parser.AssertNoAggregationOrWindowing(groupBy[i], "GROUP BY"); err != nil {
+			return nil, err
 		}
 
 		// We do not need to fully analyze the GROUP BY expression here
@@ -276,10 +276,10 @@ func (n *groupNode) Next() (bool, error) {
 			}
 		}
 		if !next {
+			n.populated = true
 			if err := n.computeAggregates(); err != nil {
 				return false, err
 			}
-			n.populated = true
 			break
 		}
 		if n.explain == explainDebug && n.plan.DebugValues().output != debugValueRow {
@@ -324,9 +324,6 @@ func (n *groupNode) computeAggregates() error {
 	if len(n.buckets) < 1 && n.addNullBucketIfEmpty {
 		n.buckets[""] = struct{}{}
 	}
-
-	// Since this controls Eval behavior of aggregateFuncHolder, it is not set until init is complete.
-	n.populated = true
 
 	// Render the results.
 	n.values.rows = make([]parser.DTuple, 0, len(n.buckets))
@@ -617,13 +614,6 @@ func (a *aggregateFuncHolder) TypeCheck(_ *parser.SemaContext, desired parser.Da
 }
 
 func (a *aggregateFuncHolder) Eval(ctx *parser.EvalContext) (parser.Datum, error) {
-	// During init of the group buckets, grouped expressions (i.e. wrapped
-	// qvalues) are Eval()'ed to determine the bucket for a row, so pass these
-	// calls through to the underlying `arg` expr Eval until init is done.
-	if !a.group.populated {
-		return a.arg.Eval(ctx)
-	}
-
 	found, ok := a.buckets[a.group.currentBucket]
 	if !ok {
 		found = a.create()
