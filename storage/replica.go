@@ -1617,8 +1617,8 @@ func (r *Replica) handleRaftReady() error {
 			defer r.store.mu.Unlock()
 
 			if _, exists := r.store.mu.replicaPlaceholders[r.RangeID]; exists {
-				if err := r.store.removePlaceholderLocked(r.RangeID); err != nil {
-					return errors.Wrapf(err, "could not remove placeholder before applySnapshot")
+				if !r.store.removePlaceholderLocked(r.RangeID) {
+					return errors.Errorf("%s: could not remove placeholder after normal snapshot", r)
 				}
 			}
 			if err := r.store.processRangeDescriptorUpdateLocked(r); err != nil {
