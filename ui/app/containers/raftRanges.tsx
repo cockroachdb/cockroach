@@ -170,7 +170,7 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
           let replicaNodeIDs = nodeRange.state.state.desc.replicas.map((replica) => replica.node_id.toString());
           let index = nodeIDIndex[node.node_id];
           let cell = <td key={index}>
-            {(this.state.showState) ? <div>State: {nodeRange.raft_state}</div> : ""}
+            {(this.state.showState) ? <div>State: {nodeRange.raft_state.state} ID={nodeRange.raft_state.getId().toString()} Term={nodeRange.raft_state.getHardState().getTerm().toString()} Lead={nodeRange.raft_state.getLead().toString()}</div> : ""}
             {(this.state.showReplicas) ? <div>
               <div>Replica On: {replicaNodeIDs.join(", ")}</div>
               <div>Next Replica ID: {nodeRange.state.state.desc.next_replica_id}</div>
