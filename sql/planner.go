@@ -59,6 +59,9 @@ type planner struct {
 	// table descriptor is not leased, only fetched at the correct time.
 	asOf bool
 
+	// If set, contains the in progress COPY FROM columns.
+	copyFrom *copyNode
+
 	// Avoid allocations by embedding commonly used visitors.
 	subqueryVisitor             subqueryVisitor
 	subqueryPlanVisitor         subqueryPlanVisitor

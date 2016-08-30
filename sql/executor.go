@@ -401,7 +401,6 @@ func (e *Executor) Prepare(
 func (e *Executor) ExecuteStatements(
 	session *Session, stmts string, pinfo *parser.PlaceholderInfo,
 ) StatementResults {
-
 	session.planner.resetForBatch(e)
 	session.planner.semaCtx.Placeholders.Assign(pinfo)
 
@@ -414,7 +413,22 @@ func (e *Executor) ExecuteStatements(
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	return e.execRequest(session, stmts)
+	return e.execRequest(session, stmts, copyMsgNone)
+}
+
+// CopyData adds data to the COPY buffer and executes if there are enough rows.
+func (e *Executor) CopyData(session *Session, data string) StatementResults {
+	return e.execRequest(session, data, copyMsgData)
+}
+
+// CopyDone executes the buffered COPY data.
+func (e *Executor) CopyDone(session *Session) StatementResults {
+	return e.execRequest(session, "", copyMsgDone)
+}
+
+// CopyEnd ends the COPY mode. Any buffered data is discarded.
+func (session *Session) CopyEnd() {
+	session.planner.copyFrom = nil
 }
 
 // blockConfigUpdates blocks any gossip updates to the system config
@@ -449,11 +463,20 @@ func (e *Executor) waitForConfigUpdate() {
 // Args:
 //  txnState: State about about ongoing transaction (if any). The state will be
 //   updated.
-func (e *Executor) execRequest(session *Session, sql string) StatementResults {
+func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) StatementResults {
 	var res StatementResults
 	txnState := &session.TxnState
 	planMaker := &session.planner
-	stmts, err := planMaker.parser.Parse(sql, parser.Syntax(session.Syntax))
+	var stmts parser.StatementList
+	var err error
+
+	if session.planner.copyFrom != nil {
+		stmts, err = session.planner.ProcessCopyData(sql, copymsg)
+	} else if copymsg != copyMsgNone {
+		err = fmt.Errorf("unexpected copy command")
+	} else {
+		stmts, err = planMaker.parser.Parse(sql, parser.Syntax(session.Syntax))
+	}
 	if err != nil {
 		// A parse error occurred: we can't determine if there were multiple
 		// statements or only one, so just pretend there was one.
