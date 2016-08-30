@@ -141,7 +141,16 @@ func makeKVFetcher(
 	if firstBatchLimit < 0 {
 		panic(fmt.Sprintf("invalid batch limit %d", firstBatchLimit))
 	}
-	return kvFetcher{txn: txn, spans: spans, reverse: reverse, firstBatchLimit: firstBatchLimit}
+	// Make a copy of the spans because we update them.
+	copySpans := make(roachpb.Spans, len(spans))
+	for i := range spans {
+		if reverse {
+			copySpans[len(spans)-i-1] = spans[i]
+		} else {
+			copySpans[i] = spans[i]
+		}
+	}
+	return kvFetcher{txn: txn, spans: copySpans, reverse: reverse, firstBatchLimit: firstBatchLimit}
 }
 
 // fetch retrieves spans from the kv
@@ -151,60 +160,19 @@ func (f *kvFetcher) fetch() error {
 	b := &client.Batch{}
 	b.Header.MaxSpanRequestKeys = batchSize
 
-	var resumeKey roachpb.Key
-	if len(f.kvs) > 0 {
-		resumeKey = f.kvs[len(f.kvs)-1].Key
-		// To resume forward scans we will set the (inclusive) scan start to the Next of the last
-		// received key. To resume reverse scans we will set the (exclusive) scan end to the last
-		// received key.
-		if !f.reverse {
-			resumeKey = resumeKey.Next()
+	// The indexes of the spans that are included in the batch.
+	idxs := make([]int, 0, len(f.spans))
+	for i, span := range f.spans {
+		if span.Key == nil {
+			// The span has been processed.
+			continue
 		}
-	}
-
-	atEnd := true
-	if !f.reverse {
-		for i := 0; i < len(f.spans); i++ {
-			start := f.spans[i].Key
-			if resumeKey != nil {
-				if resumeKey.Compare(f.spans[i].EndKey) >= 0 {
-					// We are resuming from a key after this span.
-					continue
-				}
-				if resumeKey.Compare(start) > 0 {
-					// We are resuming from a key inside this span.
-					// In this case we should technically reduce the max count for the span; but
-					// since this count is only an optimization it's not incorrect to retrieve more
-					// keys for the span.
-					start = resumeKey
-				}
-			}
-			atEnd = false
-			b.Scan(start, f.spans[i].EndKey)
+		idxs = append(idxs, i)
+		if f.reverse {
+			b.ReverseScan(span.Key, span.EndKey)
+		} else {
+			b.Scan(span.Key, span.EndKey)
 		}
-	} else {
-		for i := len(f.spans) - 1; i >= 0; i-- {
-			end := f.spans[i].EndKey
-			if resumeKey != nil {
-				if resumeKey.Compare(f.spans[i].Key) <= 0 {
-					// We are resuming from a key before this span.
-					continue
-				}
-				if resumeKey.Compare(end) < 0 {
-					// We resume from a key inside this span.
-					end = resumeKey
-				}
-			}
-			atEnd = false
-			b.ReverseScan(f.spans[i].Key, end)
-		}
-	}
-
-	if atEnd {
-		// The last scan happened to finish just at the end of the last span.
-		f.kvs = nil
-		f.fetchEnd = true
-		return nil
 	}
 
 	if err := f.txn.Run(b); err != nil {
@@ -221,17 +189,32 @@ func (f *kvFetcher) fetch() error {
 		f.kvs = f.kvs[:0]
 	}
 
-	for _, result := range b.Results {
-		f.kvs = append(f.kvs, result.Rows...)
+	// Set end to true until disproved.
+	f.fetchEnd = true
+	var readPartialResponse bool
+	for i, result := range b.Results {
+		if len(result.Rows) > 0 {
+			if readPartialResponse {
+				return fmt.Errorf("read partial responses for more than one span %+v", b)
+			}
+			f.kvs = append(f.kvs, result.Rows...)
+			if result.ResumeSpan.Key != nil {
+				// There are more keys to be read from this span, so ensure
+				// that the code is not appending keys from another span until
+				// this span has been completely read.
+				readPartialResponse = true
+			}
+		}
+		if result.ResumeSpan.Key != nil {
+			// A span needs to be resumed.
+			f.fetchEnd = false
+		}
+		f.spans[idxs[i]] = result.ResumeSpan
 	}
 
 	f.batchIdx++
 	f.totalFetched += int64(len(f.kvs))
 	f.kvIndex = 0
-
-	if int64(len(f.kvs)) < batchSize {
-		f.fetchEnd = true
-	}
 
 	// TODO(radu): We should fetch the next chunk in the background instead of waiting for the next
 	// call to fetch(). We can use a pool of workers to issue the KV ops which will also limit the
