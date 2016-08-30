@@ -273,7 +273,7 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
-	return snap.Snapshot, err
+	return snap.RaftSnap, err
 }
 
 // SnapshotWithContext is main implementation for Snapshot() but it takes a
@@ -410,13 +410,11 @@ func (r *Replica) GetSnapshot(ctx context.Context) (OutgoingSnapshot, error) {
 type OutgoingSnapshot struct {
 	SnapUUID uuid.UUID
 	// The Raft snapshot message to send. Contains SnapUUID as its data.
-	Snapshot raftpb.Snapshot
+	RaftSnap raftpb.Snapshot
 	// The RocksDB snapshot that will be streamed from.
-	Snap engine.Reader
+	EngineSnap engine.Reader
 	// The complete range iterator for the snapshot to stream.
 	Iter *ReplicaDataIterator
-	// The Raft log entries to send.
-	LogEntries [][]byte
 }
 
 // IncomingSnapshot contains the data for an incoming streaming snapshot message.
@@ -433,7 +431,7 @@ type IncomingSnapshot struct {
 // Close this OutgoingSnapshot, freeing associated resources.
 func (snap OutgoingSnapshot) Close() {
 	snap.Iter.Close()
-	snap.Snap.Close()
+	snap.EngineSnap.Close()
 }
 
 // snapshot creates an OutgoingSnapshot containing a rocksdb snapshot for the given range.
@@ -445,19 +443,6 @@ func snapshot(
 	startKey roachpb.RKey,
 ) (OutgoingSnapshot, error) {
 	start := timeutil.Now()
-
-	truncState, err := loadTruncatedState(ctx, snap, rangeID)
-	if err != nil {
-		return OutgoingSnapshot{}, err
-	}
-	firstIndex := truncState.Index + 1
-
-	// Read the range metadata from the snapshot instead of the members
-	// of the Range struct because they might be changed concurrently.
-	appliedIndex, _, err := loadAppliedIndex(ctx, snap, rangeID)
-	if err != nil {
-		return OutgoingSnapshot{}, err
-	}
 
 	var desc roachpb.RangeDescriptor
 	// We ignore intents on the range descriptor (consistent=false) because we
@@ -476,18 +461,10 @@ func snapshot(
 	// Store RangeDescriptor as metadata, it will be retrieved by ApplySnapshot()
 	snapData.RangeDescriptor = desc
 
-	endIndex := appliedIndex + 1
-	snapData.LogEntries = make([][]byte, 0, endIndex-firstIndex)
-
-	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
-		bytes, err := kv.Value.GetBytes()
-		if err == nil {
-			snapData.LogEntries = append(snapData.LogEntries, bytes)
-		}
-		return false, err
-	}
-
-	if err := iterateEntries(ctx, snap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
+	// Read the range metadata from the snapshot instead of the members
+	// of the Range struct because they might be changed concurrently.
+	appliedIndex, _, err := loadAppliedIndex(ctx, snap, rangeID)
+	if err != nil {
 		return OutgoingSnapshot{}, err
 	}
 
@@ -510,11 +487,10 @@ func snapshot(
 	log.Infof(ctx, "generated snapshot %s for range %s at index %d in %s. %d log entries",
 		snapUUID, rangeID, appliedIndex, timeutil.Since(start), len(snapData.LogEntries))
 	return OutgoingSnapshot{
-		Snap:       snap,
+		EngineSnap: snap,
 		Iter:       iter,
-		LogEntries: snapData.LogEntries,
 		SnapUUID:   *snapUUID,
-		Snapshot: raftpb.Snapshot{
+		RaftSnap: raftpb.Snapshot{
 			Data: snapUUID.GetBytes(),
 			Metadata: raftpb.SnapshotMetadata{
 				Index:     appliedIndex,
@@ -638,7 +614,7 @@ func (r *Replica) applySnapshot(
 
 	log.Infof(ctx, "%s: with replicaID %s, applying %s snapshot at index %d "+
 		"(id=%s, encoded size=%d, %d rocksdb batches, %d log entries)",
-		r, replicaIDStr, snapType, snap.Metadata.Index, inSnap.SnapUUID,
+		r, replicaIDStr, snapType, snap.Metadata.Index, inSnap.SnapUUID.Short(),
 		len(snap.Data), len(inSnap.Batches), len(inSnap.LogEntries))
 	defer func(start time.Time) {
 		log.Infof(ctx, "%s: with replicaID %s, applied %s snapshot in %.3fs",
@@ -648,16 +624,22 @@ func (r *Replica) applySnapshot(
 	batch := r.store.Engine().NewBatch()
 	defer batch.Close()
 
+	// Clear the range using a distinct batch in order to prevent the iteration
+	// from forcing the batch to flush from Go to C++.
+	distinctBatch := batch.Distinct()
+
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
 	// that predate the snapshot will be orphaned and never truncated or GC'd.
-	iter := NewReplicaDataIterator(&desc, batch, false /* !replicatedOnly */)
+	iter := NewReplicaDataIterator(&desc, distinctBatch, false /* !replicatedOnly */)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
-		if err := batch.Clear(iter.Key()); err != nil {
+		if err := distinctBatch.Clear(iter.Key()); err != nil {
 			return err
 		}
 	}
+
+	distinctBatch.Close()
 
 	// Write the snapshot into the range.
 	for _, batchRepr := range inSnap.Batches {
@@ -666,20 +648,16 @@ func (r *Replica) applySnapshot(
 		}
 	}
 
+	// The log entries are all written to distinct keys so we can use a
+	// distinct batch.
+	distinctBatch = batch.Distinct()
+
 	logEntries := make([]raftpb.Entry, len(inSnap.LogEntries))
 	for i, bytes := range inSnap.LogEntries {
 		if err := logEntries[i].Unmarshal(bytes); err != nil {
 			return err
 		}
 	}
-
-	// The log entries are all written to distinct keys so we can use a
-	// distinct batch. Note that we clear keys above that are potentially
-	// overwritten below, which violates the spirit of the distinct batch. This
-	// is safe because we don't do any reads until after the distinct batch is
-	// closed (the raft log writes are "blind").
-	distinctBatch := batch.Distinct()
-
 	// Write the snapshot's Raft log into the range.
 	_, raftLogSize, err := r.append(ctx, distinctBatch, 0, raftLogSize, logEntries)
 	if err != nil {
@@ -698,7 +676,6 @@ func (r *Replica) applySnapshot(
 		// snapshot, but who is to say it isn't going to accept a snapshot
 		// which is identical to the current state?
 	}
-
 	// We need to close the distinct batch and start using the normal batch for
 	// the read below.
 	distinctBatch.Close()
