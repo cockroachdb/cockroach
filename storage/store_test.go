@@ -2201,8 +2201,8 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	}
 
 	// Test that simple deletion works.
-	if err := s.removePlaceholderLocked(placeholder1.rangeDesc.RangeID); err != nil {
-		t.Fatalf("could not remove placeholder that was present, got %s", err)
+	if !s.removePlaceholderLocked(placeholder1.rangeDesc.RangeID) {
+		t.Fatalf("could not remove placeholder that was present")
 	}
 
 	// Test cannot double insert the same placeholder.
@@ -2214,11 +2214,11 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	}
 
 	// Test cannot double delete a placeholder.
-	if err := s.removePlaceholderLocked(placeholder1.rangeDesc.RangeID); err != nil {
-		t.Fatalf("could not remove placeholder that was present, got %s", err)
+	if !s.removePlaceholderLocked(placeholder1.rangeDesc.RangeID) {
+		t.Fatalf("could not remove placeholder that was present")
 	}
-	if err := s.removePlaceholderLocked(placeholder1.rangeDesc.RangeID); !testutils.IsError(err, "cannot remove placeholder for RangeID \\d+; Placeholder doesn't exist") {
-		t.Fatalf("could not remove placeholder that was present, got %v", err)
+	if s.removePlaceholderLocked(placeholder1.rangeDesc.RangeID) {
+		t.Fatalf("successfully removed placeholder that was not present")
 	}
 
 	// This placeholder overlaps with an existing replica.
@@ -2236,7 +2236,7 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	}
 
 	// Test that Placeholder deletion doesn't delete replicas.
-	if err := s.removePlaceholderLocked(repID); !testutils.IsError(err, "cannot remove placeholder for RangeID \\d+; Placeholder doesn't exist") {
-		t.Fatalf("should not be able to process removeReplicaPlaceholder for a RangeID where a Replica exists, got: %v", err)
+	if s.removePlaceholderLocked(repID) {
+		t.Fatalf("should not be able to process removeReplicaPlaceholder for a RangeID where a Replica exists")
 	}
 }
