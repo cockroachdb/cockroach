@@ -919,6 +919,7 @@ func (r *rocksDBBatch) ApplyBatchRepr(repr []byte) error {
 	if r.distinctOpen {
 		panic("distinct batch open")
 	}
+	r.flushMutations()
 	return dbApplyBatchRepr(r.batch, repr)
 }
 
@@ -1007,6 +1008,10 @@ func (r *rocksDBBatch) Commit() error {
 }
 
 func (r *rocksDBBatch) Repr() []byte {
+	if r.flushes == 0 {
+		// We've never flushed to C++. Return the mutations only.
+		return r.builder.getRepr()
+	}
 	r.flushMutations()
 	return cSliceToGoBytes(C.DBBatchRepr(r.batch))
 }

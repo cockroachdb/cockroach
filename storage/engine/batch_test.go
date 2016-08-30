@@ -582,6 +582,10 @@ func TestBatchBuilder(t *testing.T) {
 	e := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 
 	batch := e.NewBatch().(*rocksDBBatch)
+	// Ensure that, even though we reach into the batch's internals with
+	// dbPut etc, asking for the batch's Repr will get data from C++ and
+	// not its unused builder.
+	batch.flushes++
 	defer batch.Close()
 
 	builder := &rocksDBBatchBuilder{}
@@ -632,6 +636,10 @@ func TestBatchBuilderStress(t *testing.T) {
 
 		func() {
 			batch := e.NewBatch().(*rocksDBBatch)
+			// Ensure that, even though we reach into the batch's internals with
+			// dbPut etc, asking for the batch's Repr will get data from C++ and
+			// not its unused builder.
+			batch.flushes++
 			defer batch.Close()
 
 			builder := &rocksDBBatchBuilder{}
