@@ -236,9 +236,9 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 	// matches an incoming or the client is connecting to itself.
 	if g.mu.is.NodeID == c.peerID {
 		return errors.Errorf("stopping outgoing client to node %d (%s); loopback connection", c.peerID, c.addr)
-	} else if g.hasIncomingLocked(c.peerID) && g.mu.is.NodeID < c.peerID {
+	} else if g.hasIncomingLocked(c.peerID) && g.mu.is.NodeID > c.peerID {
 		// To avoid mutual shutdown, we only shutdown our client if our
-		// node ID is less than the peer's.
+		// node ID is higher than the peer's.
 		return errors.Errorf("stopping outgoing client to node %d (%s); already have incoming", c.peerID, c.addr)
 	}
 
