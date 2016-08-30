@@ -2005,7 +2005,7 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 		}
 		if *msgUUID != snap.SnapUUID {
 			log.Fatalf(r.ctx, "programming error: snapshot message from Raft.Ready %s doesn't match outgoing snapshot UUID %s.",
-				*msgUUID, snap.SnapUUID)
+				msgUUID.Short(), snap.SnapUUID.Short())
 		}
 		// Asynchronously stream the snapshot to the recipient.
 		if err := r.store.Stopper().RunTask(func() {
