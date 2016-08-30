@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -eu
+set -euo pipefail
 
 # This step runs sql.y through the YACC compiler directly without
 # performing any type/token declaration modifications, throwing out
