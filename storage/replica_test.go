@@ -4978,12 +4978,12 @@ func TestReplicaDestroy(t *testing.T) {
 	if err := rep.setDesc(newDesc); err != nil {
 		t.Fatal(err)
 	}
-	if err := rep.Destroy(*origDesc); !testutils.IsError(err, "replica ID has changed") {
+	if err := rep.Destroy(*origDesc, true); !testutils.IsError(err, "replica ID has changed") {
 		t.Fatalf("expected error 'replica ID has changed' but got %v", err)
 	}
 
 	// Now try a fresh descriptor and succeed.
-	if err := rep.Destroy(*rep.Desc()); err != nil {
+	if err := rep.Destroy(*rep.Desc(), true); err != nil {
 		t.Fatal(err)
 	}
 }
