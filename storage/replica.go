@@ -229,6 +229,10 @@ type Replica struct {
 	// updates to state.Desc should be duplicated here
 	rangeDesc atomicRangeDesc
 
+	// raftMu protects Raft processing for initialized replicas. Raft processing
+	// for uninitialized replicas are protected by Store.uninitRaftMu.
+	raftMu syncutil.Mutex
+
 	mu struct {
 		// Protects all fields in the mu struct.
 		syncutil.Mutex
@@ -1599,7 +1603,14 @@ func (r *Replica) isRaftLeaderLocked() bool {
 	return r.mu.leaderID == r.mu.replicaID
 }
 
-func (r *Replica) handleRaftReady() error {
+func (r *Replica) handleRaftReady(uninitRaftMu *syncutil.Mutex) error {
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	if uninitRaftMu != nil {
+		uninitRaftMu.Lock()
+		defer uninitRaftMu.Unlock()
+	}
+
 	ctx := r.ctx
 	var hasReady bool
 	var rd raft.Ready
@@ -1801,6 +1812,8 @@ func (r *Replica) handleRaftReady() error {
 // tick the Raft group, returning any error. tick() updates the tickInfo
 // struct.
 func (r *Replica) tick(info *tickInfo) error {
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

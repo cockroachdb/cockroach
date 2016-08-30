@@ -397,7 +397,13 @@ type Store struct {
 	// HandleRaftRequest. (#4476)
 
 	processRaftMu syncutil.Mutex
-	mu            struct {
+
+	// uninitRaftMu protects Raft processing for uninitialized replicas. Note
+	// that we always grab Replica.raftMu first and then, if the replica is
+	// uninitialized, uninitRaftMu.
+	uninitRaftMu syncutil.Mutex
+
+	mu struct {
 		syncutil.Mutex                              // Protects all variables in the mu struct.
 		replicas       map[roachpb.RangeID]*Replica // Map of replicas by Range ID
 		replicasByKey  *btree.BTree                 // btree keyed by ranges end keys.
@@ -1423,6 +1429,15 @@ func splitTriggerPostCommit(
 	split *roachpb.SplitTrigger,
 	r *Replica,
 ) {
+	// Block processing of uninitialized replicas. The left hand side of the
+	// split (i.e. r) is guaranteed to be an initialized replica.
+	//
+	// TODO(peter): But does that mean that we aren't already holding
+	// uninitRaftMu? Can a single call to handleRaftReady both initialize a
+	// Replica and perform a split?
+	r.store.uninitRaftMu.Lock()
+	defer r.store.uninitRaftMu.Unlock()
+
 	// Create the new Replica representing the right side of the split.
 	// Our error handling options at this point are very limited, but
 	// we need to do this after our batch has committed.
@@ -1718,6 +1733,10 @@ func (s *Store) addReplicaToRangeMapLocked(rng *Replica) error {
 func (s *Store) RemoveReplica(rep *Replica, origDesc roachpb.RangeDescriptor, destroy bool) error {
 	s.processRaftMu.Lock()
 	defer s.processRaftMu.Unlock()
+	rep.raftMu.Lock()
+	defer rep.raftMu.Unlock()
+	s.uninitRaftMu.Lock()
+	defer s.uninitRaftMu.Unlock()
 	return s.removeReplicaImpl(rep, origDesc, destroy)
 }
 
@@ -2287,11 +2306,19 @@ func (s *Store) HandleRaftRequest(
 	}
 
 	// Lazily create the replica.
-	r, err := s.getOrCreateReplica(req.RangeID, req.ToReplica.ReplicaID, req.FromReplica)
+	r, uninitialized, err := s.getOrCreateReplica(req.RangeID, req.ToReplica.ReplicaID, req.FromReplica)
 	if err != nil {
 		return roachpb.NewError(err)
 	}
 	r.setLastReplicaDescriptors(req)
+
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+
+	if uninitialized {
+		s.uninitRaftMu.Lock()
+		defer s.uninitRaftMu.Unlock()
+	}
 
 	if req.ToReplica.ReplicaID == 0 {
 		if req.Message.Type == raftpb.MsgSnap {
@@ -2575,7 +2602,7 @@ func (s *Store) processRaft() {
 			// parallel.
 			for _, r := range uninitReplicas {
 				start := timeutil.Now()
-				if err := r.handleRaftReady(); err != nil {
+				if err := r.handleRaftReady(&s.uninitRaftMu); err != nil {
 					panic(err) // TODO(bdarnell)
 				}
 				maybeWarnDuration(start, r, "handle raft ready")
@@ -2596,7 +2623,7 @@ func (s *Store) processRaft() {
 				workQueue <- func() {
 					defer wg.Done()
 					start := timeutil.Now()
-					if err := r.handleRaftReady(); err != nil {
+					if err := r.handleRaftReady(nil); err != nil {
 						panic(err) // TODO(bdarnell)
 					}
 					maybeWarnDuration(start, r, "handle raft ready")
@@ -2698,16 +2725,17 @@ func (s *Store) getOrCreateReplica(
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
 	creatingReplica roachpb.ReplicaDescriptor,
-) (*Replica, error) {
+) (*Replica, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	r, ok := s.mu.replicas[rangeID]
 	if ok {
 		if err := r.setReplicaID(replicaID); err != nil {
-			return nil, err
+			return nil, false, err
 		}
-		return r, nil
+		_, uninitialized := s.mu.uninitReplicas[rangeID]
+		return r, uninitialized, nil
 	}
 
 	// Before creating the replica, see if there is a tombstone which
@@ -2715,10 +2743,10 @@ func (s *Store) getOrCreateReplica(
 	tombstoneKey := keys.RaftTombstoneKey(rangeID)
 	var tombstone roachpb.RaftTombstone
 	if ok, err := engine.MVCCGetProto(context.Background(), s.Engine(), tombstoneKey, hlc.ZeroTimestamp, true, nil, &tombstone); err != nil {
-		return nil, err
+		return nil, false, err
 	} else if ok {
 		if replicaID != 0 && replicaID < tombstone.NextReplicaID {
-			return nil, &roachpb.RaftGroupDeletedError{}
+			return nil, false, &roachpb.RaftGroupDeletedError{}
 		}
 	}
 
@@ -2729,18 +2757,18 @@ func (s *Store) getOrCreateReplica(
 		// snapshot.
 	}, s, replicaID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	r.creatingReplica = &creatingReplica
 	// Add the range to range map, but not replicasByKey since
 	// the range's start key is unknown. The range will be
 	// added to replicasByKey later when a snapshot is applied.
 	if err = s.addReplicaToRangeMapLocked(r); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	s.mu.uninitReplicas[r.RangeID] = r
 
-	return r, nil
+	return r, true, nil
 }
 
 // canApplySnapshotLocked returns (_, nil) if the snapshot can be applied to
