@@ -1656,6 +1656,18 @@ func (s *Store) addPlaceholderLocked(placeholder *ReplicaPlaceholder) error {
 	return nil
 }
 
+func (s *Store) clearPlaceholder(rngID roachpb.RangeID) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if rng, ok := s.mu.replicaPlaceholders[rngID]; ok {
+		if exRng := s.mu.replicasByKey.Delete(rng); exRng != rng {
+			log.Errorf(context.TODO(), "%s: expected placeholder for RangeID: %v, got %+v", s, rngID, rng)
+			return
+		}
+		delete(s.mu.replicaPlaceholders, rngID)
+	}
+}
+
 func (s *Store) removePlaceholderLocked(rngID roachpb.RangeID) error {
 	rng, ok := s.mu.replicaPlaceholders[rngID]
 	if !ok {
@@ -1709,6 +1721,7 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 	defer s.mu.Unlock()
 
 	delete(s.mu.replicas, rep.RangeID)
+	delete(s.mu.replicaPlaceholders, rep.RangeID)
 	if s.mu.replicasByKey.Delete(rep) == nil {
 		return errors.Errorf("couldn't find range in replicasByKey btree")
 	}
@@ -2537,11 +2550,6 @@ func (s *Store) processRaft() {
 				}
 			}
 			wg.Wait()
-			// After a round of readys, if a placeholder hasn't been removed
-			// by the handleRaftReady, this means that the Raft group rejected
-			// the snapshot. Now that we have called handleRaftReady on all
-			// replicas, clear all remaining placeholders.
-			s.clearAllPlaceholders()
 			s.processRaftMu.Unlock()
 
 			s.metrics.RaftWorkingDurationNanos.Inc(timeutil.Since(workingStart).Nanoseconds())
@@ -2618,18 +2626,6 @@ func (s *Store) processRaft() {
 			}
 		}
 	})
-}
-
-func (s *Store) clearAllPlaceholders() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for rngID, res := range s.mu.replicaPlaceholders {
-		if s.mu.replicasByKey.Delete(res) == nil {
-			log.Fatalf(context.TODO(), "%s: expected to find placeholder %s in replicasByKey", s, res)
-		}
-		delete(s.mu.replicaPlaceholders, rngID)
-	}
 }
 
 // getOrCreateReplicaLocked returns a replica for the given RangeID,

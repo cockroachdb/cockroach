@@ -1561,6 +1561,8 @@ func (r *Replica) isRaftLeaderLocked() bool {
 }
 
 func (r *Replica) handleRaftReady() error {
+	defer r.store.clearPlaceholder(r.RangeID)
+
 	ctx := context.TODO()
 	var hasReady bool
 	var rd raft.Ready
