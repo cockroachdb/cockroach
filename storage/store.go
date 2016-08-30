@@ -1724,7 +1724,7 @@ func (s *Store) RemoveReplica(rep *Replica, origDesc roachpb.RangeDescriptor, de
 // removeReplicaImpl is the implementation of RemoveReplica, which is
 // sometimes called directly when the necessary lock is already held.
 // It requires that s.processRaftMu is held and that s.mu is not held.
-func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor, destroy bool) error {
+func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor, destroyData bool) error {
 	desc := rep.Desc()
 	if repDesc, ok := desc.GetReplicaDescriptor(s.StoreID()); ok && repDesc.ReplicaID >= origDesc.NextReplicaID {
 		return errors.Errorf("cannot remove replica %s; replica ID has changed (%s >= %s)",
@@ -1735,6 +1735,7 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 
 	delete(s.mu.replicas, rep.RangeID)
 	delete(s.mu.replicaPlaceholders, rep.RangeID)
+	delete(s.mu.uninitReplicas, rep.RangeID)
 	if s.mu.replicasByKey.Delete(rep) == nil {
 		return errors.Errorf("couldn't find range in replicasByKey btree")
 	}
@@ -1750,13 +1751,7 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 	// TODO(bdarnell): This is fairly expensive to do under store.Mutex, but
 	// doing it outside the lock is tricky due to the risk that a replica gets
 	// recreated by an incoming raft message.
-	if destroy {
-		if err := rep.Destroy(origDesc); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return rep.Destroy(origDesc, destroyData)
 }
 
 // destroyReplicaData deletes all data associated with a replica, leaving a tombstone.
@@ -2206,9 +2201,6 @@ func (s *Store) HandleRaftRequest(
 	ctx context.Context,
 	req *RaftMessageRequest,
 ) (pErr *roachpb.Error) {
-	s.processRaftMu.Lock()
-	defer s.processRaftMu.Unlock()
-
 	ctx = s.context(ctx)
 
 	// Drop messages that come from a node that we believe was once
@@ -2235,6 +2227,14 @@ func (s *Store) HandleRaftRequest(
 
 	var addedPlaceholder bool
 	var removePlaceholder bool
+
+	// TODO(peter): Ideally we would move this to just before the replica is
+	// created, but this lock currently ensures the placeholder created for a
+	// snapshot is not removed by an iteration of Store.processRaft(). When we
+	// move to per-Replica raft mutexes, we'll need a mechanism to ensure the
+	// placeholder for a replica is not removed prematurely.
+	s.processRaftMu.Lock()
+	defer s.processRaftMu.Unlock()
 
 	switch req.Message.Type {
 	case raftpb.MsgSnap:
@@ -2522,6 +2522,7 @@ func (s *Store) processRaft() {
 			close(workQueue)
 		}()
 
+		var tickReplicas []*Replica
 		var pendingReplicas []roachpb.RangeID
 		var warnDuration = 10 * s.ctx.RaftTickInterval
 		maybeWarnDuration := func(start time.Time, prefix fmt.Stringer, msg string) {
@@ -2535,7 +2536,6 @@ func (s *Store) processRaft() {
 
 		for {
 			workingStart := timeutil.Now()
-			s.processRaftMu.Lock()
 
 			// Copy the replicas tracked in pendingRaftGroups into local
 			// variables that we can use without the lock. Divide them into
@@ -2557,6 +2557,12 @@ func (s *Store) processRaft() {
 			}
 			s.pendingRaftGroups.Unlock()
 			s.mu.Unlock()
+
+			// Note that between unlocking Store.mu and locking Store.processRaftMu a
+			// replica may have been removed. This results in Replica.mu.destroyed
+			// being set which in turn causes Replica.handleRaftReady() to return
+			// immediately.
+			s.processRaftMu.Lock()
 
 			// Handle raft updates for all replicas. Concurrency here is
 			// subtle: we can process replicas in parallel if they are
@@ -2611,30 +2617,42 @@ func (s *Store) processRaft() {
 
 			case st := <-s.ctx.Transport.SnapshotStatusChan:
 				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
-				s.processRaftMu.Lock()
 				s.mu.Lock()
-				if r, ok := s.mu.replicas[st.Req.RangeID]; ok {
-					r.reportSnapshotStatus(st.Req.Message.To, st.Err)
-
-				}
+				r, ok := s.mu.replicas[st.Req.RangeID]
 				s.mu.Unlock()
-				s.processRaftMu.Unlock()
+
+				if ok {
+					// Similar to the locking for Replica.handleRaftReady(), if the
+					// replica has been removed, Replica.mu.destroyed will be non-nil
+					// causing Replica.reportSnapshotStatus() to be a no-op.
+					s.processRaftMu.Lock()
+					r.reportSnapshotStatus(st.Req.Message.To, st.Err)
+					s.processRaftMu.Unlock()
+				}
 
 			case <-ticker.C:
 				// TODO(bdarnell): rework raft ticker.
 				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
 				tickerStart := timeutil.Now()
-				s.processRaftMu.Lock()
 				s.mu.Lock()
+				tickReplicas = tickReplicas[:0]
+				for _, r := range s.mu.replicas {
+					tickReplicas = append(tickReplicas, r)
+				}
+				s.mu.Unlock()
+
+				// Similar to the locking for Replica.handleRaftReady(), if a replica
+				// has been removed, Replica.mu.destroyed will be non-nil causing
+				// Replica.tick() to be a no-op.
+				s.processRaftMu.Lock()
 				pendingReplicas = pendingReplicas[:0]
 				var raftLeaders, rangeLeaseHolders, rangeLeaseHoldersWithoutRaftLeadership int64
-
 				var info tickInfo
-				for id, r := range s.mu.replicas {
+				for _, r := range tickReplicas {
 					if err := r.tick(&info); err != nil {
 						log.Error(s.Ctx(), err)
 					} else if info.Exists {
-						pendingReplicas = append(pendingReplicas, id)
+						pendingReplicas = append(pendingReplicas, r.RangeID)
 					}
 					if info.IsRangeLeaseHolder && !info.IsRaftLeader {
 						rangeLeaseHoldersWithoutRaftLeadership++
@@ -2646,8 +2664,7 @@ func (s *Store) processRaft() {
 						rangeLeaseHolders++
 					}
 				}
-
-				s.mu.Unlock()
+				s.processRaftMu.Unlock()
 
 				s.metrics.RaftLeaders.Update(raftLeaders)
 				s.metrics.RangeLeaseHolders.Update(rangeLeaseHolders)
@@ -2662,7 +2679,6 @@ func (s *Store) processRaft() {
 					s.pendingRaftGroups.value[rangeID] = struct{}{}
 				}
 				s.pendingRaftGroups.Unlock()
-				s.processRaftMu.Unlock()
 				s.metrics.RaftTickingDurationNanos.Inc(timeutil.Since(tickerStart).Nanoseconds())
 
 				maybeWarnDuration(tickerStart, s, "raft ticking")
