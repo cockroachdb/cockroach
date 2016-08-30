@@ -49,6 +49,8 @@ const (
 	// Rows indicates that the statement returns the affected rows after
 	// the statement was applied.
 	Rows
+	// CopyIn indicates a COPY FROM statement.
+	CopyIn
 	// Unknown indicates that the statement does not have a known
 	// return style at the time of parsing. This is not first in the
 	// enumeration because it is more convenient to have Ack as a zero
@@ -89,6 +91,12 @@ func (*CommitTransaction) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CommitTransaction) StatementTag() string { return "COMMIT" }
+
+// StatementType implements the Statement interface.
+func (*CopyFrom) StatementType() StatementType { return CopyIn }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CopyFrom) StatementTag() string { return "COPY FROM" }
 
 // StatementType implements the Statement interface.
 func (*CreateDatabase) StatementType() StatementType { return DDL }
@@ -352,6 +360,7 @@ func (n *AlterTableDropNotNull) String() string    { return AsString(n) }
 func (n *AlterTableSetDefault) String() string     { return AsString(n) }
 func (n *BeginTransaction) String() string         { return AsString(n) }
 func (n *CommitTransaction) String() string        { return AsString(n) }
+func (n *CopyFrom) String() string                 { return AsString(n) }
 func (n *CreateDatabase) String() string           { return AsString(n) }
 func (n *CreateIndex) String() string              { return AsString(n) }
 func (n *CreateTable) String() string              { return AsString(n) }
