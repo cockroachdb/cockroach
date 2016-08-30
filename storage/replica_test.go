@@ -6465,7 +6465,7 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 		Batches:         [][]byte{b.Repr()},
 		LogEntries:      snap.LogEntries,
 	},
-		snap.Snapshot, raftpb.HardState{}); err != nil {
+		snap.RaftSnap, raftpb.HardState{}); err != nil {
 		t.Fatal(err)
 	}
 	checkReservations(t, 0)
