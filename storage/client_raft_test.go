@@ -1246,7 +1246,13 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 }
 
 func testReplicaAddRemove(t *testing.T, addFirst bool) {
-	mtc := startMultiTestContext(t, 4)
+	sc := storage.TestStoreContext()
+	// We're gonna want to validate the state of the store before and after the
+	// replica GC queue does its work, so we disable the replica gc queue here
+	// and run it manually when we're ready.
+	sc.TestingKnobs.DisableReplicaGCQueue = true
+	mtc := multiTestContext{storeContext: &sc}
+	mtc.Start(t, 4)
 	defer mtc.Stop()
 
 	key := roachpb.Key("a")
@@ -1342,6 +1348,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 	// Wait out the range lease and the unleased duration to make the replica GC'able.
 	mtc.expireLeases()
 	mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold + 1))
+	mtc.stores[1].SetReplicaGCQueueActive(true)
 	mtc.stores[1].ForceReplicaGCScanAndProcess()
 
 	// The removed store no longer has any of the data from the range.

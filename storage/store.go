@@ -525,10 +525,12 @@ type StoreTestingKnobs struct {
 	// replica.TransferLease() encounters an in-progress lease extension.
 	// nextLeader is the replica that we're trying to transfer the lease to.
 	LeaseTransferBlockedOnExtensionEvent func(nextLeader roachpb.ReplicaDescriptor)
-	// DisableSplitQueue disables the split queue.
-	DisableSplitQueue bool
+	// DisableReplicaGCQueue disables the replication queue.
+	DisableReplicaGCQueue bool
 	// DisableReplicateQueue disables the replication queue.
 	DisableReplicateQueue bool
+	// DisableSplitQueue disables the split queue.
+	DisableSplitQueue bool
 	// DisableScanner disables the replica scanner.
 	DisableScanner bool
 	// DisableRefreshReasonTicks disables refreshing pending commands when a new
@@ -635,11 +637,14 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 		s.consistencyScanner.AddQueues(s.replicaConsistencyQueue)
 	}
 
-	if ctx.TestingKnobs.DisableSplitQueue {
-		s.setSplitQueueActive(false)
+	if ctx.TestingKnobs.DisableReplicaGCQueue {
+		s.setReplicaGCQueueActive(false)
 	}
 	if ctx.TestingKnobs.DisableReplicateQueue {
 		s.setReplicateQueueActive(false)
+	}
+	if ctx.TestingKnobs.DisableSplitQueue {
+		s.setSplitQueueActive(false)
 	}
 	if ctx.TestingKnobs.DisableScanner {
 		s.setScannerActive(false)
