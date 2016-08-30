@@ -395,18 +395,18 @@ func TestFailedReplicaChange(t *testing.T) {
 	var runFilter atomic.Value
 	runFilter.Store(true)
 
-	ctx := storage.TestStoreContext()
-	mtc := &multiTestContext{}
-	mtc.storeContext = &ctx
-	mtc.storeContext.TestingKnobs.TestingCommandFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-			if runFilter.Load().(bool) {
-				if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok && et.Commit {
-					return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
-				}
+	sc := storage.TestStoreContext()
+	sc.TestingKnobs.TestingCommandFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+		if runFilter.Load().(bool) {
+			if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok && et.Commit {
+				return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
 			}
-			return nil
 		}
+		return nil
+	}
+	mtc := &multiTestContext{
+		storeContext: &sc,
+	}
 	mtc.Start(t, 2)
 	defer mtc.Stop()
 
@@ -645,9 +645,9 @@ func TestRefreshPendingCommands(t *testing.T) {
 		// TODO(peter): Debugging to track down #8397. Remove when fixed.
 		log.Infof(context.TODO(), "test case %d", i)
 		func() {
-			ctx := storage.TestStoreContext()
-			ctx.TestingKnobs = c
-			mtc := &multiTestContext{storeContext: &ctx}
+			sc := storage.TestStoreContext()
+			sc.TestingKnobs = c
+			mtc := &multiTestContext{storeContext: &sc}
 			mtc.Start(t, 3)
 			defer mtc.Stop()
 
@@ -754,31 +754,30 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	const numReplicas = 3
 	const extraStores = 3
 
-	ctx := storage.TestStoreContext()
+	sc := storage.TestStoreContext()
 	var corrupt struct {
 		syncutil.Mutex
 		store *storage.Store
 	}
-	ctx.TestingKnobs.TestingCommandFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-			corrupt.Lock()
-			defer corrupt.Unlock()
+	sc.TestingKnobs.TestingCommandFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+		corrupt.Lock()
+		defer corrupt.Unlock()
 
-			if corrupt.store == nil || filterArgs.Sid != corrupt.store.StoreID() {
-				return nil
-			}
-
-			if filterArgs.Req.Header().Key.Equal(roachpb.Key("boom")) {
-				return roachpb.NewError(storage.NewReplicaCorruptionError(errors.New("test")))
-			}
+		if corrupt.store == nil || filterArgs.Sid != corrupt.store.StoreID() {
 			return nil
 		}
 
+		if filterArgs.Req.Header().Key.Equal(roachpb.Key("boom")) {
+			return roachpb.NewError(storage.NewReplicaCorruptionError(errors.New("test")))
+		}
+		return nil
+	}
+
 	// Don't timeout raft leader.
-	ctx.RaftElectionTimeoutTicks = 1000000
+	sc.RaftElectionTimeoutTicks = 1000000
 	mtc := &multiTestContext{
 		reservationsEnabled: true,
-		storeContext:        &ctx,
+		storeContext:        &sc,
 	}
 	mtc.Start(t, numReplicas+extraStores)
 	defer mtc.Stop()
@@ -1694,13 +1693,13 @@ func TestStoreRangeRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Start multiTestContext with replica rebalancing enabled.
-	mtc := &multiTestContext{
-		storeContext: &storage.StoreContext{},
-	}
-	*mtc.storeContext = storage.TestStoreContext()
-	mtc.storeContext.AllocatorOptions = storage.AllocatorOptions{
+	sc := storage.TestStoreContext()
+	sc.AllocatorOptions = storage.AllocatorOptions{
 		AllowRebalance: true,
 		Deterministic:  true,
+	}
+	mtc := &multiTestContext{
+		storeContext: &sc,
 	}
 
 	// Four stores.
@@ -2315,8 +2314,9 @@ func TestTransferRaftLeadership(t *testing.T) {
 	// and cause leadership to change hands in ways this test doesn't
 	// expect.
 	sc.RaftElectionTimeoutTicks = 100000
-	mtc := &multiTestContext{}
-	mtc.storeContext = &sc
+	mtc := &multiTestContext{
+		storeContext: &sc,
+	}
 	mtc.Start(t, numStores)
 	defer mtc.Stop()
 
