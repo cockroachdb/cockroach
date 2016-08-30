@@ -314,7 +314,7 @@ func (gcq *gcQueue) process(
 		return err
 	}
 
-	log.Infof(gcq.mu.ctx, "completed with stats %+v", info)
+	log.Infof(gcq.ctx, "completed with stats %+v", info)
 
 	var ba roachpb.BatchRequest
 	var gcArgs roachpb.GCRequest

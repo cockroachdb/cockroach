@@ -126,7 +126,7 @@ func TestEventLog(t *testing.T) {
 	Event(ctx, "should-not-show-up")
 
 	el := &testingEventLog{}
-	ctxWithEventLog := withEventLogInt(ctx, el)
+	ctxWithEventLog := withEventLogInternal(ctx, el)
 
 	Eventf(ctxWithEventLog, "test%d", 1)
 	ErrEvent(ctxWithEventLog, "testerr")
@@ -155,7 +155,7 @@ func TestEventLogAndTrace(t *testing.T) {
 	Event(ctx, "should-not-show-up")
 
 	el := &testingEventLog{}
-	ctxWithEventLog := withEventLogInt(ctx, el)
+	ctxWithEventLog := withEventLogInternal(ctx, el)
 
 	Event(ctxWithEventLog, "test1")
 	ErrEvent(ctxWithEventLog, "testerr")
