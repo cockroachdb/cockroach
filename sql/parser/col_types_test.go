@@ -35,6 +35,7 @@ func TestParseColumnType(t *testing.T) {
 		{"BIGINT", &IntColType{Name: "BIGINT"}},
 		{"INTEGER", &IntColType{Name: "INTEGER"}},
 		{"INT", &IntColType{Name: "INT"}},
+		{"INT8", &IntColType{Name: "INT8"}},
 		{"INT64", &IntColType{Name: "INT64"}},
 		{"REAL", &FloatColType{Name: "REAL"}},
 		{"DOUBLE PRECISION", &FloatColType{Name: "DOUBLE PRECISION"}},
