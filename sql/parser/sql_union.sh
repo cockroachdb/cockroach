@@ -10,7 +10,8 @@ set -euo pipefail
 # to union type accessors in the Go code within rules, as the YACC
 # compiler does not type check Go code.
 function type_check() {
-    ! go tool yacc -o /dev/null -p sql sql.y | grep -F 'conflicts'
+    ret=$(go tool yacc -o /dev/null -p sql sql.y)
+    ! echo "$ret" | grep -F 'conflicts'
 }
 
 # This step performs the actual compilation from the sql.y syntax to
@@ -42,7 +43,8 @@ function compile() {
 
     # Compile this new "unionized" syntax file through YACC, this time writing
     # the output to sql.go.
-    ! go tool yacc -o sql.go -p sql sql.y | grep -F 'conflicts'
+    ret=$(go tool yacc -o sql.go -p sql sql.y)
+    ! echo "$ret" | grep -F 'conflicts'
 
     # Overwrite the migrated syntax file with the original syntax file.
     mv sql.y.tmp sql.y
