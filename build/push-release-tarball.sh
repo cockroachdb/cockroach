@@ -15,14 +15,14 @@ BUCKET_NAME="binaries.cockroachdb.com"
 rel_path=$1
 tarball_base=$2
 
-cd "$(dirname "${0}")/.."
+cd "$(dirname "${0}")"/..
 
 tmpdir=$(mktemp -d /tmp/cockroach-push.XXXXXX)
 mkdir -p "${tmpdir}/${tarball_base}"
 
 # Make sure the binary is named 'cockroach'.
-cp ${rel_path} "${tmpdir}/${tarball_base}/cockroach"
-time tar cz -C ${tmpdir} -f ${tarball_base}.tgz ${tarball_base}
-time aws s3 cp ${tarball_base}.tgz s3://${BUCKET_NAME}/${tarball_base}.tgz
+cp "${rel_path}" "${tmpdir}/${tarball_base}/cockroach"
+time tar cz -C "${tmpdir}" -f "${tarball_base}".tgz "${tarball_base}"
+time aws s3 cp "${tarball_base}".tgz "s3://${BUCKET_NAME}/${tarball_base}.tgz"
 
-rm -rf ${tmpdir}
+rm -rf "${tmpdir}"
