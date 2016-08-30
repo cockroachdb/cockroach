@@ -584,7 +584,7 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 
 %token <str>   IF IFNULL ILIKE IN INTERLEAVE
 %token <str>   INDEX INDEXES INITIALLY
-%token <str>   INNER INSERT INT INT64 INTEGER
+%token <str>   INNER INSERT INT INT8 INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO IS ISOLATION
 
 %token <str>   JOIN
@@ -2926,6 +2926,10 @@ numeric:
   {
     $$.val = intColTypeInt
   }
+| INT8
+  {
+    $$.val = intColTypeInt8
+  }
 | INT64
   {
     $$.val = intColTypeInt64
@@ -4550,6 +4554,7 @@ col_name_keyword:
 | IF
 | IFNULL
 | INT
+| INT8
 | INT64
 | INTEGER
 | INTERVAL
