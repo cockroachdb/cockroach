@@ -2176,9 +2176,6 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now hlc.Timesta
 // HandleRaftRequest dispatches a raft message to the appropriate Replica. It
 // requires that s.processRaftMu and s.mu are not held.
 func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) *roachpb.Error {
-	s.processRaftMu.Lock()
-	defer s.processRaftMu.Unlock()
-
 	ctx = s.context(ctx)
 
 	// Drop messages that come from a node that we believe was once
@@ -2204,6 +2201,14 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 	addedPlaceholder := false
 
 	s.metrics.raftRcvdMessages[req.Message.Type].Inc(1)
+
+	// TODO(peter): Ideally we would move this to just before the replica is
+	// created, but this lock currently ensures the placeholder created for a
+	// snapshot is not removed by an iteration of Store.processRaft(). When we
+	// move to per-Replica raft mutexes, we'll need a mechanism to ensure the
+	// placeholder for a replica is not removed prematurely.
+	s.processRaftMu.Lock()
+	defer s.processRaftMu.Unlock()
 
 	switch req.Message.Type {
 	case raftpb.MsgSnap:
@@ -2470,6 +2475,7 @@ func (s *Store) processRaft() {
 			close(workQueue)
 		}()
 
+		var tickReplicas []*Replica
 		var pendingReplicas []roachpb.RangeID
 		var warnDuration = 10 * s.ctx.RaftTickInterval
 		maybeWarnDuration := func(start time.Time, prefix fmt.Stringer, msg string) {
@@ -2483,7 +2489,6 @@ func (s *Store) processRaft() {
 
 		for {
 			workingStart := timeutil.Now()
-			s.processRaftMu.Lock()
 
 			// Copy the replicas tracked in pendingRaftGroups into local
 			// variables that we can use without the lock. Divide them into
@@ -2505,6 +2510,8 @@ func (s *Store) processRaft() {
 			}
 			s.pendingRaftGroups.Unlock()
 			s.mu.Unlock()
+
+			s.processRaftMu.Lock()
 
 			// Handle raft updates for all replicas. Concurrency here is
 			// subtle: we can process replicas in parallel if they are
@@ -2556,30 +2563,36 @@ func (s *Store) processRaft() {
 
 			case st := <-s.ctx.Transport.SnapshotStatusChan:
 				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
-				s.processRaftMu.Lock()
 				s.mu.Lock()
-				if r, ok := s.mu.replicas[st.Req.RangeID]; ok {
-					r.reportSnapshotStatus(st.Req.Message.To, st.Err)
-
-				}
+				r, ok := s.mu.replicas[st.Req.RangeID]
 				s.mu.Unlock()
-				s.processRaftMu.Unlock()
+
+				if ok {
+					s.processRaftMu.Lock()
+					r.reportSnapshotStatus(st.Req.Message.To, st.Err)
+					s.processRaftMu.Unlock()
+				}
 
 			case <-ticker.C:
 				// TODO(bdarnell): rework raft ticker.
 				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
 				tickerStart := timeutil.Now()
-				s.processRaftMu.Lock()
 				s.mu.Lock()
+				tickReplicas = tickReplicas[:0]
+				for _, r := range s.mu.replicas {
+					tickReplicas = append(tickReplicas, r)
+				}
+				s.mu.Unlock()
+
+				s.processRaftMu.Lock()
 				pendingReplicas = pendingReplicas[:0]
 				var raftLeaders, rangeLeaseHolders, rangeLeaseHoldersWithoutRaftLeadership int64
-
 				var info tickInfo
-				for id, r := range s.mu.replicas {
+				for _, r := range tickReplicas {
 					if err := r.tick(&info); err != nil {
 						log.Error(context.TODO(), err)
 					} else if info.Exists {
-						pendingReplicas = append(pendingReplicas, id)
+						pendingReplicas = append(pendingReplicas, r.RangeID)
 					}
 					if info.IsRangeLeaseHolder && !info.IsRaftLeader {
 						rangeLeaseHoldersWithoutRaftLeadership++
@@ -2591,8 +2604,7 @@ func (s *Store) processRaft() {
 						rangeLeaseHolders++
 					}
 				}
-
-				s.mu.Unlock()
+				s.processRaftMu.Unlock()
 
 				s.metrics.RaftLeaders.Update(raftLeaders)
 				s.metrics.RangeLeaseHolders.Update(rangeLeaseHolders)
@@ -2607,7 +2619,6 @@ func (s *Store) processRaft() {
 					s.pendingRaftGroups.value[rangeID] = struct{}{}
 				}
 				s.pendingRaftGroups.Unlock()
-				s.processRaftMu.Unlock()
 				s.metrics.RaftTickingDurationNanos.Inc(timeutil.Since(tickerStart).Nanoseconds())
 
 				maybeWarnDuration(tickerStart, s, "raft ticking")
