@@ -1005,6 +1005,10 @@ func (r *rocksDBBatch) Commit() error {
 }
 
 func (r *rocksDBBatch) Repr() []byte {
+	if r.flushes == 0 {
+		// We've never flushed to C++. Return the mutations only.
+		return r.builder.getRepr()
+	}
 	r.flushMutations()
 	return cSliceToGoBytes(C.DBBatchRepr(r.batch))
 }
