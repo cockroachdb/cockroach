@@ -19,6 +19,7 @@ package gossip
 import (
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -80,8 +81,19 @@ func (c *client) start(
 ) {
 	stopper.RunWorker(func() {
 		ctx, cancel := context.WithCancel(context.TODO())
-		defer cancel()
+		var wg sync.WaitGroup
 		defer func() {
+			// This closes the outgoing stream, causing any attempt to send or
+			// receive to return an error.
+			//
+			// Note: it is still possible for incoming gossip to be processed after
+			// this point.
+			cancel()
+
+			// The stream is closed, but there may still be some incoming gossip
+			// being processed. Wait until that is complete to avoid racing the
+			// client's removal against the discovery of its remote's node ID.
+			wg.Wait()
 			disconnected <- c
 		}()
 
@@ -109,7 +121,7 @@ func (c *client) start(
 
 		// Start gossiping.
 		log.Infof(ctx, "node %d: started gossip client to %s", nodeID, c.addr)
-		if err := c.gossip(ctx, g, stream, stopper); err != nil {
+		if err := c.gossip(ctx, g, stream, stopper, &wg); err != nil {
 			if !grpcutil.IsClosedConnection(err) {
 				g.mu.Lock()
 				peerID := c.peerID
@@ -248,7 +260,7 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 // gossip loops, sending deltas of the infostore and receiving deltas
 // in turn. If an alternate is proposed on response, the client addr
 // is modified and method returns for forwarding by caller.
-func (c *client) gossip(ctx context.Context, g *Gossip, stream Gossip_GossipClient, stopper *stop.Stopper) error {
+func (c *client) gossip(ctx context.Context, g *Gossip, stream Gossip_GossipClient, stopper *stop.Stopper, wg *sync.WaitGroup) error {
 	sendGossipChan := make(chan struct{}, 1)
 
 	// Register a callback for gossip updates.
@@ -261,6 +273,7 @@ func (c *client) gossip(ctx context.Context, g *Gossip, stream Gossip_GossipClie
 	// Defer calling "undoer" callback returned from registration.
 	defer g.RegisterCallback(".*", updateCallback)()
 
+	wg.Add(1)
 	errCh := make(chan error, 1)
 	stopper.RunWorker(func() {
 		errCh <- func() error {
@@ -274,6 +287,7 @@ func (c *client) gossip(ctx context.Context, g *Gossip, stream Gossip_GossipClie
 				}
 			}
 		}()
+		wg.Done()
 	})
 
 	for {
