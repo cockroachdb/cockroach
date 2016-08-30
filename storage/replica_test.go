@@ -6463,9 +6463,8 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 		SnapUUID:        snap.SnapUUID,
 		RangeDescriptor: *firstRng.Desc(),
 		Batches:         [][]byte{b.Repr()},
-		LogEntries:      snap.LogEntries,
 	},
-		snap.Snapshot, raftpb.HardState{}); err != nil {
+		snap.RaftSnap, raftpb.HardState{}); err != nil {
 		t.Fatal(err)
 	}
 	checkReservations(t, 0)
