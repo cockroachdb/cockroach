@@ -109,7 +109,7 @@ golang.org/x/sys a646d33e2ee3172a661fc09bca23bb4889a41bc8
 golang.org/x/text 2910a502d2bf9e43193af9d68ca516529614eed3
 golang.org/x/tools 0e9f43fcb67267967af8c15d7dc54b373e341d20
 google.golang.org/appengine e951d3868b377b14f4e60efa3a301532ee3c1ebf
-google.golang.org/grpc b7aa4e95cbb5ec9d07c52a7541ce178ef9626316
+google.golang.org/grpc 79b7c349179cdd6efd8bac4a1ce7f01b98c16e9b
 gopkg.in/check.v1 4f90aeace3a26ad7021961c297b22c42160c7b25
 gopkg.in/inf.v0 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de
