@@ -1,8 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+set -euxo pipefail
+
 # The caller should download the static-tests and extract them into the
 # local directory.
-
-set -x
 
 LOG_DIR="logs"
 MAX_RUNS=0

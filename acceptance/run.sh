@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -eu
+set -euo pipefail
 
 source $(dirname $0)/../build/init-docker.sh
 $(dirname $0)/../build/builder.sh make install GOFLAGS='-tags clockoffset'

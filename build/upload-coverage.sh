@@ -1,4 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+set -euo pipefail
 
 if [ -z "$COVERALLS_TOKEN" ]; then
   echo "FAIL: Missing or empty COVERALLS_TOKEN."

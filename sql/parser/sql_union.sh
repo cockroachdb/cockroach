@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-set -eu
+set -euo pipefail
 
 YACC="../../../../../../bin/yacc"
 
@@ -12,8 +12,8 @@ YACC="../../../../../../bin/yacc"
 # to union type accessors in the Go code within rules, as the YACC
 # compiler does not type check Go code.
 function type_check() {
-    ! $YACC -o /dev/null -p sql sql.y | grep -F 'conflicts' || exit 1
-    [ ${PIPESTATUS[0]} -eq 0 ] || exit 1
+    ret=$($YACC -o /dev/null -p sql sql.y)
+    ! echo "$ret" | grep -F 'conflicts'
 }
 
 # This step performs the actual compilation from the sql.y syntax to
@@ -45,8 +45,8 @@ function compile() {
 
     # Compile this new "unionized" syntax file through YACC, this time writing
     # the output to sql.go.
-    ! $YACC -o sql.go -p sql sql.y | grep -F 'conflicts' || exit 1
-    [ ${PIPESTATUS[0]} -eq 0 ] || exit 1
+    ret=$($YACC -o sql.go -p sql sql.y)
+    ! echo "$ret" | grep -F 'conflicts'
 
     # Overwrite the migrated syntax file with the original syntax file.
     mv sql.y.tmp sql.y

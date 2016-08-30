@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-set -eux
+set -euxo pipefail
 
 $(dirname $0)/build-docker-deploy.sh
 

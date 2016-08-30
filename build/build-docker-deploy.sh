@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Build a statically linked Cockroach binary
 #
 # Author: Peter Mattis (peter@cockroachlabs.com)

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Build various statically linked binaries.
 
 set -euo pipefail
