@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
@@ -31,18 +32,26 @@ type ctxEventLogKey struct{}
 
 // ctxEventLog is used for contexts to keep track of an EventLog.
 type ctxEventLog struct {
+	syncutil.Mutex
 	eventLog trace.EventLog
 }
 
-// WithEventLog embeds a trace.EventLog in the context, causing future logging
-// and event calls to go to the EventLog. The current context must not have an
-// open span already.
-func WithEventLog(ctx context.Context, eventLog trace.EventLog) context.Context {
+// withEventLogInternal embeds a trace.EventLog in the context, causing future
+// logging and event calls to go to the EventLog. The current context must not
+// have an existing open span.
+func withEventLogInternal(ctx context.Context, eventLog trace.EventLog) context.Context {
 	if opentracing.SpanFromContext(ctx) != nil {
 		panic("event log under span")
 	}
 	val := &ctxEventLog{eventLog: eventLog}
 	return context.WithValue(ctx, ctxEventLogKey{}, val)
+}
+
+// WithEventLog creates and embeds a trace.EventLog in the context, causing
+// future logging and event calls to go to the EventLog. The current context
+// must not have an existing open span.
+func WithEventLog(ctx context.Context, family, title string) context.Context {
+	return withEventLogInternal(ctx, trace.NewEventLog(family, title))
 }
 
 func eventLogFromCtx(ctx context.Context) *ctxEventLog {
@@ -52,11 +61,25 @@ func eventLogFromCtx(ctx context.Context) *ctxEventLog {
 	return nil
 }
 
+// FinishEventLog closes the event log in the context (see WithEventLog).
+// Concurrent and subsequent calls to record events are allowed.
+func FinishEventLog(ctx context.Context) {
+	if el := eventLogFromCtx(ctx); el != nil {
+		el.Lock()
+		if el.eventLog != nil {
+			el.eventLog.Finish()
+			el.eventLog = nil
+		}
+		el.Unlock()
+	}
+}
+
 var noopTracer opentracing.NoopTracer
 
 // getSpanOrEventLog returns the current Span. If there is no Span, it returns
-// the current EventLog. If neither (or the Span is NoopTracer), returns false.
-func getSpanOrEventLog(ctx context.Context) (opentracing.Span, trace.EventLog, bool) {
+// the current ctxEventLog. If neither (or the Span is NoopTracer), returns
+// false.
+func getSpanOrEventLog(ctx context.Context) (opentracing.Span, *ctxEventLog, bool) {
 	if sp := opentracing.SpanFromContext(ctx); sp != nil {
 		if sp.Tracer() == noopTracer {
 			return nil, nil, false
@@ -64,7 +87,7 @@ func getSpanOrEventLog(ctx context.Context) (opentracing.Span, trace.EventLog, b
 		return sp, nil, true
 	}
 	if el := eventLogFromCtx(ctx); el != nil {
-		return nil, el.eventLog, true
+		return nil, el, true
 	}
 	return nil, nil, false
 }
@@ -101,11 +124,15 @@ func eventInternal(ctx context.Context, isErr, withTags bool, format string, arg
 				// Tag or Baggage on the span. See #8827 for more discussion.
 			}
 		} else {
-			if isErr {
-				el.Errorf("%s", msg)
-			} else {
-				el.Printf("%s", msg)
+			el.Lock()
+			if el.eventLog != nil {
+				if isErr {
+					el.eventLog.Errorf("%s", msg)
+				} else {
+					el.eventLog.Printf("%s", msg)
+				}
 			}
+			el.Unlock()
 		}
 	}
 }

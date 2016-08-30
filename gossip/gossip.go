@@ -65,7 +65,6 @@ import (
 	"google.golang.org/grpc"
 
 	"golang.org/x/net/context"
-	"golang.org/x/net/trace"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
@@ -205,8 +204,7 @@ func New(
 	stopper *stop.Stopper,
 	registry *metric.Registry,
 ) *Gossip {
-	eventLog := trace.NewEventLog("gossip", "gossip")
-	ctx = log.WithEventLog(ctx, eventLog)
+	ctx = log.WithEventLog(ctx, "gossip", "gossip")
 	g := &Gossip{
 		ctx:               ctx,
 		Connected:         make(chan struct{}),
@@ -224,7 +222,7 @@ func New(
 		bootstrapAddrs:    map[util.UnresolvedAddr]struct{}{},
 	}
 	stopper.AddCloser(stop.CloserFn(func() {
-		eventLog.Finish()
+		log.FinishEventLog(ctx)
 	}))
 
 	registry.AddMetric(g.outgoing.gauge)
