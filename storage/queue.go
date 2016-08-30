@@ -24,7 +24,6 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
-	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -175,10 +174,7 @@ type baseQueue struct {
 		stopped     bool
 		// Some tests in this package disable queues.
 		disabled bool
-		eventLog trace.EventLog
-		// ctx is protected by the mutex because it embeds a reference to the
-		// eventLog.
-		ctx context.Context
+		ctx      context.Context
 	}
 	// processMu synchronizes execution of processing for a single queue,
 	// ensuring that we never process more than a single replica at a time. This
@@ -211,11 +207,10 @@ func makeBaseQueue(
 	bq.mu.Locker = new(syncutil.Mutex)
 	bq.mu.replicas = map[roachpb.RangeID]*replicaItem{}
 
-	bq.mu.eventLog = trace.NewEventLog("queue", name)
 	bq.mu.ctx = context.TODO()
 	// Prepend [name] to logs.
 	bq.mu.ctx = log.WithLogTag(bq.mu.ctx, name, nil)
-	bq.mu.ctx = log.WithEventLog(bq.mu.ctx, bq.mu.eventLog)
+	bq.mu.ctx = log.WithEventLog(bq.mu.ctx, "queue", name)
 
 	bq.processMu = new(syncutil.Mutex)
 	return bq
@@ -377,7 +372,6 @@ func (bq *baseQueue) MaybeRemove(repl *Replica) {
 	defer bq.mu.Unlock()
 
 	if bq.mu.stopped {
-		// The eventLog is no longer available after we stopped.
 		return
 	}
 
@@ -396,9 +390,8 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 		defer func() {
 			bq.mu.Lock()
 			bq.mu.stopped = true
-			bq.mu.eventLog.Finish()
-			bq.mu.ctx = nil
 			bq.mu.Unlock()
+			log.FinishEventLog(bq.mu.ctx)
 		}()
 
 		// nextTime is initially nil; we don't start any timers until the queue
