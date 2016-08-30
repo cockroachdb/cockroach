@@ -415,8 +415,6 @@ type OutgoingSnapshot struct {
 	EngineSnap engine.Reader
 	// The complete range iterator for the snapshot to stream.
 	Iter *ReplicaDataIterator
-	// The Raft log entries to send.
-	LogEntries [][]byte
 }
 
 // IncomingSnapshot contains the data for an incoming streaming snapshot message.
@@ -491,7 +489,6 @@ func snapshot(
 	return OutgoingSnapshot{
 		EngineSnap: snap,
 		Iter:       iter,
-		LogEntries: snapData.LogEntries,
 		SnapUUID:   *snapUUID,
 		RaftSnap: raftpb.Snapshot{
 			Data: snapUUID.GetBytes(),
@@ -627,16 +624,22 @@ func (r *Replica) applySnapshot(
 	batch := r.store.Engine().NewBatch()
 	defer batch.Close()
 
+	// Clear the range using a distinct batch in order to prevent the iteration
+	// from forcing the batch to flush from Go to C++.
+	distinctBatch := batch.Distinct()
+
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
 	// that predate the snapshot will be orphaned and never truncated or GC'd.
-	iter := NewReplicaDataIterator(&desc, batch, false /* !replicatedOnly */)
+	iter := NewReplicaDataIterator(&desc, distinctBatch, false /* !replicatedOnly */)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
-		if err := batch.Clear(iter.Key()); err != nil {
+		if err := distinctBatch.Clear(iter.Key()); err != nil {
 			return err
 		}
 	}
+
+	distinctBatch.Close()
 
 	// Write the snapshot into the range.
 	for _, batchRepr := range inSnap.Batches {
@@ -645,20 +648,16 @@ func (r *Replica) applySnapshot(
 		}
 	}
 
+	// The log entries are all written to distinct keys so we can use a
+	// distinct batch.
+	distinctBatch = batch.Distinct()
+
 	logEntries := make([]raftpb.Entry, len(inSnap.LogEntries))
 	for i, bytes := range inSnap.LogEntries {
 		if err := logEntries[i].Unmarshal(bytes); err != nil {
 			return err
 		}
 	}
-
-	// The log entries are all written to distinct keys so we can use a
-	// distinct batch. Note that we clear keys above that are potentially
-	// overwritten below, which violates the spirit of the distinct batch. This
-	// is safe because we don't do any reads until after the distinct batch is
-	// closed (the raft log writes are "blind").
-	distinctBatch := batch.Distinct()
-
 	// Write the snapshot's Raft log into the range.
 	_, raftLogSize, err := r.append(ctx, distinctBatch, 0, raftLogSize, logEntries)
 	if err != nil {
@@ -677,7 +676,6 @@ func (r *Replica) applySnapshot(
 		// snapshot, but who is to say it isn't going to accept a snapshot
 		// which is identical to the current state?
 	}
-
 	// We need to close the distinct batch and start using the normal batch for
 	// the read below.
 	distinctBatch.Close()
