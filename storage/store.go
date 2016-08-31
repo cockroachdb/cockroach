@@ -865,7 +865,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	doneUnfreezing := make(chan struct{})
 	if s.stopper.RunAsyncTask(func() {
-		taskCtx := s.Ctx()
 		defer close(doneUnfreezing)
 		sem := make(chan struct{}, 512)
 		var wg sync.WaitGroup // wait for unfreeze goroutines
@@ -891,8 +890,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 					MustVersion: build.GetInfo().Tag,
 				}
 				ba.Add(&fReq)
-				if _, pErr := r.Send(taskCtx, ba); pErr != nil {
-					log.Errorf(taskCtx, "%s: could not unfreeze Range %s on startup: %s", s, r, pErr)
+				if _, pErr := r.Send(s.Ctx(), ba); pErr != nil {
+					log.Errorf(s.Ctx(), "%s: could not unfreeze Range %s on startup: %s", s, r, pErr)
 				} else {
 					// We don't use the returned RangesAffected (0 or 1) for
 					// counting. One of the other Replicas may have beaten us
@@ -908,7 +907,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		})
 		wg.Wait()
 		if unfrozen > 0 {
-			log.Infof(taskCtx, "%s: reactivated %d frozen Ranges", s, unfrozen)
+			log.Infof(s.Ctx(), "reactivated %d frozen Ranges", unfrozen)
 		}
 	}) != nil {
 		close(doneUnfreezing)
@@ -1906,7 +1905,6 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 	// Attach any log tags from the store to the context (which normally
 	// comes from gRPC).
 	ctx = s.logContext(ctx)
-
 	for _, union := range ba.Requests {
 		arg := union.GetInner()
 		header := arg.Header()
@@ -2523,8 +2521,8 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 			}
 
 		default:
-			log.Warningf(ctx, "%s: got error from range %d, replica %s: %s",
-				s, resp.RangeID, resp.FromReplica, val)
+			log.Warningf(ctx, "got error from range %d, replica %s: %s",
+				resp.RangeID, resp.FromReplica, val)
 		}
 
 	default:
@@ -3023,7 +3021,7 @@ func (s *Store) ComputeMetrics(tick int) error {
 		s.metrics.RdbReadAmplification.Update(int64(readAmp))
 		// Log this metric infrequently.
 		if tick%100 == 0 {
-			log.Infof(s.Ctx(), "%s: sstables (read amplification = %d):\n%s", s, readAmp, sstables)
+			log.Infof(s.Ctx(), "sstables (read amplification = %d):\n%s", readAmp, sstables)
 		}
 	}
 	return nil
