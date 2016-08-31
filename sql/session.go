@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"golang.org/x/net/context"
-	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/internal/client"
@@ -63,7 +62,6 @@ type Session struct {
 
 	Location              *time.Location
 	DefaultIsolationLevel enginepb.IsolationType
-	Trace                 trace.Trace
 	context               context.Context
 	cancel                context.CancelFunc
 }
@@ -97,9 +95,11 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 	if remote != nil {
 		remoteStr = remote.String()
 	}
-	s.Trace = trace.New("sql."+args.User, remoteStr)
-	s.Trace.SetMaxEvents(100)
+
+	// Set up an EventLog for session events.
+	ctx = log.WithEventLog(ctx, fmt.Sprintf("sql [%s]", args.User), remoteStr)
 	s.context, s.cancel = context.WithCancel(ctx)
+
 	return s
 }
 
@@ -109,16 +109,16 @@ func (s *Session) Finish() {
 	// session abruptly in the middle of a transaction, or, until #7648 is
 	// addressed, there might be leases accumulated by preparing statements.
 	s.planner.releaseLeases()
-	if s.Trace != nil {
-		s.Trace.Finish()
-		s.Trace = nil
-	}
+	log.FinishEventLog(s.context)
 	s.cancel()
 }
 
-// Ctx returns the current context for the session. If there is an active
+// Ctx returns the current context for the session: if there is an active
 // transaction it returns the transaction context, otherwise it returns the
 // session context.
+// Note that in some cases we may want the session context even if there is an
+// active transaction (an example is when we want to log an event to the session
+// event log); in that case s.context should be used directly.
 func (s *Session) Ctx() context.Context {
 	if s.TxnState.txn != nil {
 		return s.TxnState.txn.Context
@@ -176,9 +176,7 @@ type txnState struct {
 
 	// The schema change closures to run when this txn is done.
 	schemaChangers schemaChangerCollection
-	// TODO(andrei): this is the same as Session.Trace. Consider removing this and
-	// passing the Session along everywhere the trace is needed.
-	tr trace.Trace
+
 	sp opentracing.Span
 
 	// The timestamp to report for current_timestamp(), now() etc.
@@ -192,7 +190,6 @@ func (ts *txnState) reset(ctx context.Context, e *Executor, s *Session) {
 	ts.txn = client.NewTxn(ctx, *e.cfg.DB)
 	ts.txn.Context = s.context
 	ts.txn.Proto.Isolation = s.DefaultIsolationLevel
-	ts.tr = s.Trace
 	// Discard the old schemaChangers, if any.
 	ts.schemaChangers = schemaChangerCollection{}
 
@@ -204,8 +201,11 @@ func (ts *txnState) reset(ctx context.Context, e *Executor, s *Session) {
 			log.Warningf(ctx, "unable to create snowball tracer: %s", err)
 			return
 		}
-		ts.txn.Context = opentracing.ContextWithSpan(ts.txn.Context, sp)
+		ts.txn.Context = opentracing.ContextWithSpan(s.context, sp)
 		ts.sp = sp
+	} else {
+		// Don't pollute the session event log with txn events.
+		ts.txn.Context = log.WithNoEventLog(s.context)
 	}
 }
 
