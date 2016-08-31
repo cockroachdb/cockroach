@@ -17,10 +17,13 @@
 package storage
 
 import (
+	"bytes"
+
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // Server implements the storage parts of the StoresServer interface.
@@ -76,4 +79,51 @@ func (is Server) Reserve(
 			return nil
 		})
 	return resp, err
+}
+
+// ConsistencyServerImpl implements ConsistencyServer.
+//
+// TODO(tamird): incorporate this into #9246.
+type ConsistencyServerImpl struct {
+	descriptor *roachpb.NodeDescriptor
+	stores     *Stores
+}
+
+var _ ConsistencyServer = ConsistencyServerImpl{}
+
+// MakeConsistencyServer returns a new instance of ConsistencyServer.
+func MakeConsistencyServer(
+	descriptor *roachpb.NodeDescriptor, stores *Stores,
+) ConsistencyServer {
+	return ConsistencyServerImpl{descriptor, stores}
+}
+
+// CollectChecksum implements ConsistencyServer.
+func (is ConsistencyServerImpl) CollectChecksum(
+	ctx context.Context, req *CollectChecksumRequest,
+) (*CollectChecksumResponse, error) {
+	resp := &CollectChecksumResponse{}
+	if req.NodeID != is.descriptor.NodeID {
+		return resp, errors.Errorf("request for NodeID %d cannot be served by NodeID %d",
+			req.NodeID, is.descriptor.NodeID)
+	}
+	s, err := is.stores.GetStore(req.StoreID)
+	if err != nil {
+		return resp, err
+	}
+	r, err := s.GetReplica(req.RangeID)
+	if err != nil {
+		return resp, err
+	}
+	c, err := r.getChecksum(ctx, req.ChecksumID)
+	if err != nil {
+		return resp, err
+	}
+	resp.Checksum = c.checksum
+	if !bytes.Equal(req.Checksum, c.checksum) {
+		log.Errorf(ctx, "consistency check failed on range ID %s: expected checksum %x, got %x",
+			req.RangeID, req.Checksum, c.checksum)
+		resp.Snapshot = c.snapshot
+	}
+	return resp, nil
 }
