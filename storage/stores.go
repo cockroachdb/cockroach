@@ -192,44 +192,54 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 // if not found.
 // If end is nil, a replica containing start is looked up.
 // This is only for testing usage; performance doesn't matter.
-func (ls *Stores) LookupReplica(start, end roachpb.RKey) (rangeID roachpb.RangeID, repDesc roachpb.ReplicaDescriptor, err error) {
+func (ls *Stores) LookupReplica(
+	start, end roachpb.RKey,
+) (roachpb.RangeID, roachpb.ReplicaDescriptor, error) {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
-	var rng *Replica
-	var partialDesc *roachpb.RangeDescriptor
+	var rangeID roachpb.RangeID
+	var repDesc roachpb.ReplicaDescriptor
 	var repDescFound bool
 	for _, store := range ls.storeMap {
-		rng = store.LookupReplica(start, end)
-		if rng == nil {
-			if tmpRng := store.LookupReplica(start, nil); tmpRng != nil {
-				partialDesc = tmpRng.Desc()
-				log.Warningf(context.TODO(), "range not contained in one range: [%s,%s), but have [%s,%s)",
-					start, end, partialDesc.StartKey, partialDesc.EndKey)
-				break
-			}
+		replica := store.LookupReplica(start, nil)
+		if replica == nil {
 			continue
 		}
-		if !repDescFound {
-			rangeID = rng.RangeID
-			repDesc, err = rng.GetReplicaDescriptor()
-			if err != nil {
-				if _, ok := err.(*roachpb.RangeNotFoundError); !ok {
-					return 0, roachpb.ReplicaDescriptor{}, err
-				}
-			} else {
-				repDescFound = true
-			}
-			continue
+
+		// Verify that the descriptor contains the entire range.
+		if desc := replica.Desc(); !desc.ContainsKeyRange(start, end) {
+			log.Warningf(context.TODO(), "range not contained in one range: [%s,%s), but have [%s,%s)",
+				start, end, desc.StartKey, desc.EndKey)
+			err := roachpb.NewRangeKeyMismatchError(start.AsRawKey(), end.AsRawKey(), desc)
+			return 0, roachpb.ReplicaDescriptor{}, err
 		}
-		// Should never happen outside of tests.
-		return 0, roachpb.ReplicaDescriptor{}, errors.Errorf(
-			"range %+v exists on additional store: %+v", rng, store,
-		)
+
+		rangeID = replica.RangeID
+
+		var err error
+		repDesc, err = replica.GetReplicaDescriptor()
+		if err != nil {
+			if _, ok := err.(*roachpb.RangeNotFoundError); ok {
+				// We are not holding a lock across this block so the range could have
+				// gone away between the LookupReplica and the GetReplicaDescriptor
+				// calls. In this case just ignore this replica.
+				continue
+			}
+			return 0, roachpb.ReplicaDescriptor{}, err
+		}
+
+		if repDescFound {
+			// We already found the range; this should never happen outside of tests.
+			err := errors.Errorf("range %+v exists on additional store: %+v", replica, store)
+			return 0, roachpb.ReplicaDescriptor{}, err
+		}
+
+		repDescFound = true
 	}
 	if !repDescFound {
-		err = roachpb.NewRangeKeyMismatchError(start.AsRawKey(), end.AsRawKey(), partialDesc)
+		return 0, roachpb.ReplicaDescriptor{}, roachpb.NewRangeNotFoundError(0)
 	}
-	return rangeID, repDesc, err
+	return rangeID, repDesc, nil
 }
 
 // FirstRange implements the RangeDescriptorDB interface. It returns the

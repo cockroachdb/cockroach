@@ -197,6 +197,11 @@ func TestStoresLookupReplica(t *testing.T) {
 			end:        nil,
 			expStoreID: s[1].Ident.StoreID,
 		},
+		{
+			start:    roachpb.RKey("z1"),
+			end:      roachpb.RKey("z2"),
+			expError: "range 0 was not found",
+		},
 	}
 	for testIdx, tc := range testCases {
 		_, r, err := ls.LookupReplica(tc.start, tc.end)
