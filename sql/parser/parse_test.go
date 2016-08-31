@@ -507,6 +507,11 @@ func TestParse(t *testing.T) {
 
 		{`COPY t FROM STDIN`},
 		{`COPY t (a, b, c) FROM STDIN`},
+
+		{`ALTER TABLE a SPLIT AT (1)`},
+		{`ALTER TABLE d.a SPLIT AT ('b', 2)`},
+		{`ALTER INDEX a@i SPLIT AT (1)`},
+		{`ALTER INDEX d.a@i SPLIT AT (2)`},
 	}
 	for _, d := range testData {
 		stmts, err := parseTraditional(d.sql)
