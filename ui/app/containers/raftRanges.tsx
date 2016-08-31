@@ -21,7 +21,7 @@ const RANGES_PER_PAGE = 100;
 interface RangesMainData {
   // A list of store statuses to display, which are possibly sorted according to
   // sortSetting.
-  rangeStatuses: cockroach.server.serverpb.RaftDebugResponse;
+  rangeStatuses: Proto2TypeScript.cockroach.server.serverpb.RaftDebugResponse;
 }
 
 /**
@@ -220,7 +220,7 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
  */
 
 // Base selectors to extract data from redux state.
-let rangeStatuses = (state: AdminUIState): cockroach.server.serverpb.RaftDebugResponse => state.cachedData.raft.data;
+let rangeStatuses = (state: AdminUIState): Proto2TypeScript.cockroach.server.serverpb.RaftDebugResponse => state.cachedData.raft.data;
 
 // Connect the RangesMain class with our redux store.
 let rangesMainConnected = connect(

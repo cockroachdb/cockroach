@@ -1,7 +1,7 @@
 import _ = require("lodash");
 
-type NodeStatus = cockroach.server.status.NodeStatus;
-type StatusMetrics = cockroach.ProtoBufMap<string, number>;
+type NodeStatus = Proto2TypeScript.cockroach.server.status.NodeStatus;
+type StatusMetrics = Proto2TypeScript.ProtoBufMap<string, number>;
 
 /**
  * AccumulateMetrics is a convenience function which accumulates the values

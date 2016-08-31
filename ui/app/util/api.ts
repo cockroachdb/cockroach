@@ -11,41 +11,41 @@ import * as protos from "../js/protos";
 let serverpb = protos.cockroach.server.serverpb;
 let ts = protos.cockroach.ts.tspb;
 
-export type DatabasesRequestMessage = cockroach.server.serverpb.DatabasesRequestMessage;
-export type DatabasesResponseMessage = cockroach.server.serverpb.DatabasesResponseMessage;
+export type DatabasesRequestMessage = Proto2TypeScript.cockroach.server.serverpb.DatabasesRequestMessage;
+export type DatabasesResponseMessage = Proto2TypeScript.cockroach.server.serverpb.DatabasesResponseMessage;
 
-export type DatabaseDetailsRequestMessage = cockroach.server.serverpb.DatabaseDetailsRequestMessage;
-export type DatabaseDetailsResponseMessage = cockroach.server.serverpb.DatabaseDetailsResponseMessage;
+export type DatabaseDetailsRequestMessage = Proto2TypeScript.cockroach.server.serverpb.DatabaseDetailsRequestMessage;
+export type DatabaseDetailsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.DatabaseDetailsResponseMessage;
 
-export type TableDetailsRequestMessage = cockroach.server.serverpb.TableDetailsRequestMessage;
-export type TableDetailsResponseMessage = cockroach.server.serverpb.TableDetailsResponseMessage;
+export type TableDetailsRequestMessage = Proto2TypeScript.cockroach.server.serverpb.TableDetailsRequestMessage;
+export type TableDetailsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.TableDetailsResponseMessage;
 
-export type EventsRequestMessage = cockroach.server.serverpb.EventsRequestMessage;
-export type EventsResponseMessage = cockroach.server.serverpb.EventsResponseMessage;
+export type EventsRequestMessage = Proto2TypeScript.cockroach.server.serverpb.EventsRequestMessage;
+export type EventsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.EventsResponseMessage;
 
-export type NodesRequestMessage = cockroach.server.serverpb.NodesRequestMessage;
-export type NodesResponseMessage = cockroach.server.serverpb.NodesResponseMessage;
+export type NodesRequestMessage = Proto2TypeScript.cockroach.server.serverpb.NodesRequestMessage;
+export type NodesResponseMessage = Proto2TypeScript.cockroach.server.serverpb.NodesResponseMessage;
 
-export type GetUIDataRequestMessage = cockroach.server.serverpb.GetUIDataRequestMessage;
-export type GetUIDataResponseMessage = cockroach.server.serverpb.GetUIDataResponseMessage;
+export type GetUIDataRequestMessage = Proto2TypeScript.cockroach.server.serverpb.GetUIDataRequestMessage;
+export type GetUIDataResponseMessage = Proto2TypeScript.cockroach.server.serverpb.GetUIDataResponseMessage;
 
-export type SetUIDataRequestMessage = cockroach.server.serverpb.SetUIDataRequestMessage;
-export type SetUIDataResponseMessage = cockroach.server.serverpb.SetUIDataResponseMessage;
+export type SetUIDataRequestMessage = Proto2TypeScript.cockroach.server.serverpb.SetUIDataRequestMessage;
+export type SetUIDataResponseMessage = Proto2TypeScript.cockroach.server.serverpb.SetUIDataResponseMessage;
 
-export type RaftDebugRequestMessage = cockroach.server.serverpb.RaftDebugRequestMessage;
-export type RaftDebugResponseMessage = cockroach.server.serverpb.RaftDebugResponseMessage;
+export type RaftDebugRequestMessage = Proto2TypeScript.cockroach.server.serverpb.RaftDebugRequestMessage;
+export type RaftDebugResponseMessage = Proto2TypeScript.cockroach.server.serverpb.RaftDebugResponseMessage;
 
-export type TimeSeriesQueryRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
-export type TimeSeriesQueryResponseMessage = cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
+export type TimeSeriesQueryRequestMessage = Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
+export type TimeSeriesQueryResponseMessage = Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
 
-export type HealthRequestMessage = cockroach.server.serverpb.HealthRequestMessage;
-export type HealthResponseMessage = cockroach.server.serverpb.HealthResponseMessage;
+export type HealthRequestMessage = Proto2TypeScript.cockroach.server.serverpb.HealthRequestMessage;
+export type HealthResponseMessage = Proto2TypeScript.cockroach.server.serverpb.HealthResponseMessage;
 
-export type ClusterRequestMessage = cockroach.server.serverpb.ClusterRequestMessage;
-export type ClusterResponseMessage = cockroach.server.serverpb.ClusterResponseMessage;
+export type ClusterRequestMessage = Proto2TypeScript.cockroach.server.serverpb.ClusterRequestMessage;
+export type ClusterResponseMessage = Proto2TypeScript.cockroach.server.serverpb.ClusterResponseMessage;
 
-export type TableStatsRequestMessage = cockroach.server.serverpb.TableStatsRequestMessage;
-export type TableStatsResponseMessage = cockroach.server.serverpb.TableStatsResponseMessage;
+export type TableStatsRequestMessage = Proto2TypeScript.cockroach.server.serverpb.TableStatsRequestMessage;
+export type TableStatsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.TableStatsResponseMessage;
 
 export const API_PREFIX = "/_admin/v1";
 

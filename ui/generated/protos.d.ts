@@ -1,5 +1,5 @@
 // GENERATED FILE DO NOT EDIT
-declare module cockroach {
+declare module Proto2TypeScript {
 	
 	
 	interface ProtoBufMapItem<KeyType, ValueType> {
@@ -19,19 +19,75 @@ declare module cockroach {
 	}
 	
 	export interface ProtoBufBuilder {
-		util: utilBuilder;
-		roachpb: roachpbBuilder;
-		storage: storageBuilder;
-		config: configBuilder;
-		server: serverBuilder;
-		build: buildBuilder;
-		gossip: gossipBuilder;
-		ts: tsBuilder;
+		gogoproto: gogoprotoBuilder;
+		cockroach: cockroachBuilder;
+		google: googleBuilder;
 		
 }
 }
 
-declare module cockroach {
+declare module Proto2TypeScript {
+
+	export interface gogoproto {
+
+		
+
+}
+
+	export interface gogoprotoMessage extends gogoproto {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface gogoprotoBuilder {
+	new(data?: gogoproto): gogoprotoMessage;
+	decode(buffer: ArrayBuffer) : gogoprotoMessage;
+	decode(buffer: ByteBuffer) : gogoprotoMessage;
+	decode64(buffer: string) : gogoprotoMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript {
+
+	export interface cockroach {
+
+		
+
+}
+
+	export interface cockroachMessage extends cockroach {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface cockroachBuilder {
+	new(data?: cockroach): cockroachMessage;
+	decode(buffer: ArrayBuffer) : cockroachMessage;
+	decode(buffer: ByteBuffer) : cockroachMessage;
+	decode64(buffer: string) : cockroachMessage;
+	util: cockroach.utilBuilder;
+	roachpb: cockroach.roachpbBuilder;
+	storage: cockroach.storageBuilder;
+	config: cockroach.configBuilder;
+	server: cockroach.serverBuilder;
+	build: cockroach.buildBuilder;
+	gossip: cockroach.gossipBuilder;
+	ts: cockroach.tsBuilder;
+	
+}
+
+}
+
+declare module Proto2TypeScript.cockroach {
 
 	export interface util {
 
@@ -60,7 +116,7 @@ export interface utilBuilder {
 
 }
 
-declare module cockroach.util {
+declare module Proto2TypeScript.cockroach.util {
 
 	export interface UnresolvedAddr {
 
@@ -105,7 +161,7 @@ export interface UnresolvedAddrBuilder {
 }
 
 
-declare module cockroach.util {
+declare module Proto2TypeScript.cockroach.util {
 
 	export interface hlc {
 
@@ -132,7 +188,7 @@ export interface hlcBuilder {
 
 }
 
-declare module cockroach.util.hlc {
+declare module Proto2TypeScript.cockroach.util.hlc {
 
 	export interface Timestamp {
 
@@ -178,7 +234,7 @@ export interface TimestampBuilder {
 
 
 
-declare module cockroach.util {
+declare module Proto2TypeScript.cockroach.util {
 
 	export interface log {
 
@@ -207,7 +263,7 @@ export interface logBuilder {
 
 }
 
-declare module cockroach.util.log {
+declare module Proto2TypeScript.cockroach.util.log {
 
 	export interface Entry {
 
@@ -288,7 +344,7 @@ export interface EntryBuilder {
 }
 
 
-declare module cockroach.util.log {
+declare module Proto2TypeScript.cockroach.util.log {
 
 	export interface FileDetails {
 
@@ -369,7 +425,7 @@ export interface FileDetailsBuilder {
 }
 
 
-declare module cockroach.util.log {
+declare module Proto2TypeScript.cockroach.util.log {
 
 	export interface FileInfo {
 
@@ -434,7 +490,7 @@ export interface FileInfoBuilder {
 
 
 
-declare module cockroach {
+declare module Proto2TypeScript.cockroach {
 
 	export interface roachpb {
 
@@ -488,7 +544,7 @@ export interface roachpbBuilder {
 
 }
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface Attributes {
 
@@ -524,7 +580,7 @@ export interface AttributesBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface ReplicaDescriptor {
 
@@ -578,7 +634,7 @@ export interface ReplicaDescriptorBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface ReplicaIdent {
 
@@ -623,7 +679,7 @@ export interface ReplicaIdentBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface RangeDescriptor {
 
@@ -695,7 +751,7 @@ export interface RangeDescriptorBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface StoreCapacity {
 
@@ -749,7 +805,7 @@ export interface StoreCapacityBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface NodeDescriptor {
 
@@ -803,7 +859,7 @@ export interface NodeDescriptorBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface StoreDescriptor {
 
@@ -866,7 +922,7 @@ export interface StoreDescriptorBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface StoreDeadReplicas {
 
@@ -911,7 +967,7 @@ export interface StoreDeadReplicasBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface Span {
 
@@ -956,7 +1012,7 @@ export interface SpanBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface Value {
 
@@ -1001,7 +1057,7 @@ export interface ValueBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface KeyValue {
 
@@ -1046,7 +1102,7 @@ export interface KeyValueBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface StoreIdent {
 
@@ -1100,7 +1156,7 @@ export interface StoreIdentBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface SplitTrigger {
 
@@ -1145,7 +1201,7 @@ export interface SplitTriggerBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface MergeTrigger {
 
@@ -1190,7 +1246,7 @@ export interface MergeTriggerBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface ChangeReplicasTrigger {
 
@@ -1253,7 +1309,7 @@ export interface ChangeReplicasTriggerBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface ModifiedSpanTrigger {
 
@@ -1289,7 +1345,7 @@ export interface ModifiedSpanTriggerBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface InternalCommitTrigger {
 
@@ -1352,7 +1408,7 @@ export interface InternalCommitTriggerBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface Transaction {
 
@@ -1478,7 +1534,7 @@ export interface TransactionBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface Intent {
 
@@ -1532,7 +1588,7 @@ export interface IntentBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface Lease {
 
@@ -1595,7 +1651,7 @@ export interface LeaseBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface AbortCacheEntry {
 
@@ -1649,7 +1705,7 @@ export interface AbortCacheEntryBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface RaftTruncatedState {
 
@@ -1694,7 +1750,7 @@ export interface RaftTruncatedStateBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface RaftTombstone {
 
@@ -1730,7 +1786,7 @@ export interface RaftTombstoneBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface RaftSnapshotData {
 
@@ -1784,7 +1840,7 @@ export interface RaftSnapshotDataBuilder {
 
 }
 
-declare module cockroach.roachpb.RaftSnapshotData {
+declare module Proto2TypeScript.cockroach.roachpb.RaftSnapshotData {
 
 	export interface KeyValue {
 
@@ -1839,7 +1895,7 @@ export interface KeyValueBuilder {
 
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 
 	export interface PartialRaftSnapshotData {
 
@@ -1875,7 +1931,7 @@ export interface PartialRaftSnapshotDataBuilder {
 }
 
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 	export const enum ValueType {
 		UNKNOWN = 0,
 		NULL = 7,
@@ -1893,7 +1949,7 @@ declare module cockroach.roachpb {
 }
 }
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 	export const enum ReplicaChangeType {
 		ADD_REPLICA = 0,
 		REMOVE_REPLICA = 1,
@@ -1901,7 +1957,7 @@ declare module cockroach.roachpb {
 }
 }
 
-declare module cockroach.roachpb {
+declare module Proto2TypeScript.cockroach.roachpb {
 	export const enum TransactionStatus {
 		PENDING = 0,
 		COMMITTED = 1,
@@ -1911,7 +1967,7 @@ declare module cockroach.roachpb {
 }
 
 
-declare module cockroach {
+declare module Proto2TypeScript.cockroach {
 
 	export interface storage {
 
@@ -1939,7 +1995,7 @@ export interface storageBuilder {
 
 }
 
-declare module cockroach.storage {
+declare module Proto2TypeScript.cockroach.storage {
 
 	export interface engine {
 
@@ -1966,7 +2022,7 @@ export interface engineBuilder {
 
 }
 
-declare module cockroach.storage.engine {
+declare module Proto2TypeScript.cockroach.storage.engine {
 
 	export interface enginepb {
 
@@ -1996,7 +2052,7 @@ export interface enginepbBuilder {
 
 }
 
-declare module cockroach.storage.engine.enginepb {
+declare module Proto2TypeScript.cockroach.storage.engine.enginepb {
 
 	export interface TxnMeta {
 
@@ -2095,7 +2151,7 @@ export interface TxnMetaBuilder {
 }
 
 
-declare module cockroach.storage.engine.enginepb {
+declare module Proto2TypeScript.cockroach.storage.engine.enginepb {
 
 	export interface MVCCMetadata {
 
@@ -2185,7 +2241,7 @@ export interface MVCCMetadataBuilder {
 }
 
 
-declare module cockroach.storage.engine.enginepb {
+declare module Proto2TypeScript.cockroach.storage.engine.enginepb {
 
 	export interface MVCCStats {
 
@@ -2338,7 +2394,7 @@ export interface MVCCStatsBuilder {
 }
 
 
-declare module cockroach.storage.engine.enginepb {
+declare module Proto2TypeScript.cockroach.storage.engine.enginepb {
 	export const enum IsolationType {
 		SERIALIZABLE = 0,
 		SNAPSHOT = 1,
@@ -2348,7 +2404,7 @@ declare module cockroach.storage.engine.enginepb {
 
 
 
-declare module cockroach.storage {
+declare module Proto2TypeScript.cockroach.storage {
 
 	export interface storagebase {
 
@@ -2376,7 +2432,7 @@ export interface storagebaseBuilder {
 
 }
 
-declare module cockroach.storage.storagebase {
+declare module Proto2TypeScript.cockroach.storage.storagebase {
 
 	export interface ReplicaState {
 
@@ -2475,7 +2531,7 @@ export interface ReplicaStateBuilder {
 }
 
 
-declare module cockroach.storage.storagebase {
+declare module Proto2TypeScript.cockroach.storage.storagebase {
 
 	export interface RangeInfo {
 
@@ -2558,7 +2614,7 @@ export interface RangeInfoBuilder {
 
 
 
-declare module cockroach {
+declare module Proto2TypeScript.cockroach {
 
 	export interface config {
 
@@ -2587,7 +2643,7 @@ export interface configBuilder {
 
 }
 
-declare module cockroach.config {
+declare module Proto2TypeScript.cockroach.config {
 
 	export interface GCPolicy {
 
@@ -2623,7 +2679,7 @@ export interface GCPolicyBuilder {
 }
 
 
-declare module cockroach.config {
+declare module Proto2TypeScript.cockroach.config {
 
 	export interface ZoneConfig {
 
@@ -2686,7 +2742,7 @@ export interface ZoneConfigBuilder {
 }
 
 
-declare module cockroach.config {
+declare module Proto2TypeScript.cockroach.config {
 
 	export interface SystemConfig {
 
@@ -2723,7 +2779,7 @@ export interface SystemConfigBuilder {
 
 
 
-declare module cockroach {
+declare module Proto2TypeScript.cockroach {
 
 	export interface server {
 
@@ -2751,7 +2807,7 @@ export interface serverBuilder {
 
 }
 
-declare module cockroach.server {
+declare module Proto2TypeScript.cockroach.server {
 
 	export interface serverpb {
 
@@ -2828,7 +2884,7 @@ export interface serverpbBuilder {
 
 }
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface DatabasesRequest {
 
@@ -2855,7 +2911,7 @@ export interface DatabasesRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface DatabasesResponse {
 
@@ -2891,7 +2947,7 @@ export interface DatabasesResponseBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface DatabaseDetailsRequest {
 
@@ -2927,7 +2983,7 @@ export interface DatabaseDetailsRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface DatabaseDetailsResponse {
 
@@ -2972,7 +3028,7 @@ export interface DatabaseDetailsResponseBuilder {
 
 }
 
-declare module cockroach.server.serverpb.DatabaseDetailsResponse {
+declare module Proto2TypeScript.cockroach.server.serverpb.DatabaseDetailsResponse {
 
 	export interface Grant {
 
@@ -3018,7 +3074,7 @@ export interface GrantBuilder {
 
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface TableDetailsRequest {
 
@@ -3063,7 +3119,7 @@ export interface TableDetailsRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface TableDetailsResponse {
 
@@ -3155,7 +3211,7 @@ export interface TableDetailsResponseBuilder {
 
 }
 
-declare module cockroach.server.serverpb.TableDetailsResponse {
+declare module Proto2TypeScript.cockroach.server.serverpb.TableDetailsResponse {
 
 	export interface Grant {
 
@@ -3200,7 +3256,7 @@ export interface GrantBuilder {
 }
 
 
-declare module cockroach.server.serverpb.TableDetailsResponse {
+declare module Proto2TypeScript.cockroach.server.serverpb.TableDetailsResponse {
 
 	export interface Column {
 
@@ -3263,7 +3319,7 @@ export interface ColumnBuilder {
 }
 
 
-declare module cockroach.server.serverpb.TableDetailsResponse {
+declare module Proto2TypeScript.cockroach.server.serverpb.TableDetailsResponse {
 
 	export interface Index {
 
@@ -3345,7 +3401,7 @@ export interface IndexBuilder {
 
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface TableStatsRequest {
 
@@ -3390,7 +3446,7 @@ export interface TableStatsRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface TableStatsResponse {
 
@@ -3462,7 +3518,7 @@ export interface TableStatsResponseBuilder {
 
 }
 
-declare module cockroach.server.serverpb.TableStatsResponse {
+declare module Proto2TypeScript.cockroach.server.serverpb.TableStatsResponse {
 
 	export interface MissingNode {
 
@@ -3508,7 +3564,7 @@ export interface MissingNodeBuilder {
 
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface UsersRequest {
 
@@ -3535,7 +3591,7 @@ export interface UsersRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface UsersResponse {
 
@@ -3571,7 +3627,7 @@ export interface UsersResponseBuilder {
 
 }
 
-declare module cockroach.server.serverpb.UsersResponse {
+declare module Proto2TypeScript.cockroach.server.serverpb.UsersResponse {
 
 	export interface User {
 
@@ -3608,7 +3664,7 @@ export interface UserBuilder {
 
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface EventsRequest {
 
@@ -3653,7 +3709,7 @@ export interface EventsRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface EventsResponse {
 
@@ -3689,7 +3745,7 @@ export interface EventsResponseBuilder {
 
 }
 
-declare module cockroach.server.serverpb.EventsResponse {
+declare module Proto2TypeScript.cockroach.server.serverpb.EventsResponse {
 
 	export interface Event {
 
@@ -3770,7 +3826,7 @@ export interface EventBuilder {
 
 }
 
-declare module cockroach.server.serverpb.EventsResponse.Event {
+declare module Proto2TypeScript.cockroach.server.serverpb.EventsResponse.Event {
 
 	export interface Timestamp {
 
@@ -3817,7 +3873,7 @@ export interface TimestampBuilder {
 
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface SetUIDataRequest {
 
@@ -3853,7 +3909,7 @@ export interface SetUIDataRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface SetUIDataResponse {
 
@@ -3880,7 +3936,7 @@ export interface SetUIDataResponseBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface GetUIDataRequest {
 
@@ -3916,7 +3972,7 @@ export interface GetUIDataRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface GetUIDataResponse {
 
@@ -3953,7 +4009,7 @@ export interface GetUIDataResponseBuilder {
 
 }
 
-declare module cockroach.server.serverpb.GetUIDataResponse {
+declare module Proto2TypeScript.cockroach.server.serverpb.GetUIDataResponse {
 
 	export interface Timestamp {
 
@@ -3998,7 +4054,7 @@ export interface TimestampBuilder {
 }
 
 
-declare module cockroach.server.serverpb.GetUIDataResponse {
+declare module Proto2TypeScript.cockroach.server.serverpb.GetUIDataResponse {
 
 	export interface Value {
 
@@ -4044,7 +4100,7 @@ export interface ValueBuilder {
 
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface ClusterRequest {
 
@@ -4071,7 +4127,7 @@ export interface ClusterRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface ClusterResponse {
 
@@ -4107,7 +4163,7 @@ export interface ClusterResponseBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface DrainRequest {
 
@@ -4161,7 +4217,7 @@ export interface DrainRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface DrainResponse {
 
@@ -4197,7 +4253,7 @@ export interface DrainResponseBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface HealthRequest {
 
@@ -4224,7 +4280,7 @@ export interface HealthRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface HealthResponse {
 
@@ -4251,7 +4307,7 @@ export interface HealthResponseBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface ClusterFreezeRequest {
 
@@ -4287,7 +4343,7 @@ export interface ClusterFreezeRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface ClusterFreezeResponse {
 
@@ -4332,7 +4388,7 @@ export interface ClusterFreezeResponseBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface DetailsRequest {
 
@@ -4368,7 +4424,7 @@ export interface DetailsRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface DetailsResponse {
 
@@ -4422,7 +4478,7 @@ export interface DetailsResponseBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface NodesRequest {
 
@@ -4449,7 +4505,7 @@ export interface NodesRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface NodesResponse {
 
@@ -4485,7 +4541,7 @@ export interface NodesResponseBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface NodeRequest {
 
@@ -4521,7 +4577,7 @@ export interface NodeRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface RangeInfo {
 
@@ -4575,7 +4631,7 @@ export interface RangeInfoBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface RangesRequest {
 
@@ -4611,7 +4667,7 @@ export interface RangesRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface RangesResponse {
 
@@ -4647,7 +4703,7 @@ export interface RangesResponseBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface GossipRequest {
 
@@ -4683,7 +4739,7 @@ export interface GossipRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface JSONResponse {
 
@@ -4719,7 +4775,7 @@ export interface JSONResponseBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface LogsRequest {
 
@@ -4800,7 +4856,7 @@ export interface LogsRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface LogEntriesResponse {
 
@@ -4836,7 +4892,7 @@ export interface LogEntriesResponseBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface LogFilesListRequest {
 
@@ -4872,7 +4928,7 @@ export interface LogFilesListRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface LogFilesListResponse {
 
@@ -4908,7 +4964,7 @@ export interface LogFilesListResponseBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface LogFileRequest {
 
@@ -4953,7 +5009,7 @@ export interface LogFileRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface StacksRequest {
 
@@ -4989,7 +5045,7 @@ export interface StacksRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface MetricsRequest {
 
@@ -5025,7 +5081,7 @@ export interface MetricsRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface RaftRangeNode {
 
@@ -5070,7 +5126,7 @@ export interface RaftRangeNodeBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface RaftRangeError {
 
@@ -5106,7 +5162,7 @@ export interface RaftRangeErrorBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface RaftRangeStatus {
 
@@ -5160,7 +5216,7 @@ export interface RaftRangeStatusBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface RaftDebugRequest {
 
@@ -5187,7 +5243,7 @@ export interface RaftDebugRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface RaftDebugResponse {
 
@@ -5223,7 +5279,7 @@ export interface RaftDebugResponseBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface SpanStatsRequest {
 
@@ -5277,7 +5333,7 @@ export interface SpanStatsRequestBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface SpanStatsResponse {
 
@@ -5322,7 +5378,7 @@ export interface SpanStatsResponseBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 
 	export interface PrettySpan {
 
@@ -5367,7 +5423,7 @@ export interface PrettySpanBuilder {
 }
 
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 	export const enum ZoneConfigurationLevel {
 		UNKNOWN = 0,
 		CLUSTER = 1,
@@ -5377,7 +5433,7 @@ declare module cockroach.server.serverpb {
 }
 }
 
-declare module cockroach.server.serverpb {
+declare module Proto2TypeScript.cockroach.server.serverpb {
 	export const enum DrainMode {
 		CLIENT = 0,
 		LEASES = 1,
@@ -5386,7 +5442,7 @@ declare module cockroach.server.serverpb {
 }
 
 
-declare module cockroach.server {
+declare module Proto2TypeScript.cockroach.server {
 
 	export interface status {
 
@@ -5414,7 +5470,7 @@ export interface statusBuilder {
 
 }
 
-declare module cockroach.server.status {
+declare module Proto2TypeScript.cockroach.server.status {
 
 	export interface StoreStatus {
 
@@ -5459,7 +5515,7 @@ export interface StoreStatusBuilder {
 }
 
 
-declare module cockroach.server.status {
+declare module Proto2TypeScript.cockroach.server.status {
 
 	export interface NodeStatus {
 
@@ -5542,7 +5598,7 @@ export interface NodeStatusBuilder {
 
 
 
-declare module cockroach {
+declare module Proto2TypeScript.cockroach {
 
 	export interface build {
 
@@ -5569,7 +5625,7 @@ export interface buildBuilder {
 
 }
 
-declare module cockroach.build {
+declare module Proto2TypeScript.cockroach.build {
 
 	export interface Info {
 
@@ -5651,7 +5707,7 @@ export interface InfoBuilder {
 
 
 
-declare module cockroach {
+declare module Proto2TypeScript.cockroach {
 
 	export interface gossip {
 
@@ -5682,7 +5738,7 @@ export interface gossipBuilder {
 
 }
 
-declare module cockroach.gossip {
+declare module Proto2TypeScript.cockroach.gossip {
 
 	export interface BootstrapInfo {
 
@@ -5727,7 +5783,7 @@ export interface BootstrapInfoBuilder {
 }
 
 
-declare module cockroach.gossip {
+declare module Proto2TypeScript.cockroach.gossip {
 
 	export interface Request {
 
@@ -5790,7 +5846,7 @@ export interface RequestBuilder {
 }
 
 
-declare module cockroach.gossip {
+declare module Proto2TypeScript.cockroach.gossip {
 
 	export interface Response {
 
@@ -5871,7 +5927,7 @@ export interface ResponseBuilder {
 }
 
 
-declare module cockroach.gossip {
+declare module Proto2TypeScript.cockroach.gossip {
 
 	export interface InfoStatus {
 
@@ -5907,7 +5963,7 @@ export interface InfoStatusBuilder {
 }
 
 
-declare module cockroach.gossip {
+declare module Proto2TypeScript.cockroach.gossip {
 
 	export interface Info {
 
@@ -5989,7 +6045,7 @@ export interface InfoBuilder {
 
 
 
-declare module cockroach {
+declare module Proto2TypeScript.cockroach {
 
 	export interface ts {
 
@@ -6016,7 +6072,7 @@ export interface tsBuilder {
 
 }
 
-declare module cockroach.ts {
+declare module Proto2TypeScript.cockroach.ts {
 
 	export interface tspb {
 
@@ -6049,7 +6105,7 @@ export interface tspbBuilder {
 
 }
 
-declare module cockroach.ts.tspb {
+declare module Proto2TypeScript.cockroach.ts.tspb {
 
 	export interface TimeSeriesDatapoint {
 
@@ -6094,7 +6150,7 @@ export interface TimeSeriesDatapointBuilder {
 }
 
 
-declare module cockroach.ts.tspb {
+declare module Proto2TypeScript.cockroach.ts.tspb {
 
 	export interface TimeSeriesData {
 
@@ -6148,7 +6204,7 @@ export interface TimeSeriesDataBuilder {
 }
 
 
-declare module cockroach.ts.tspb {
+declare module Proto2TypeScript.cockroach.ts.tspb {
 
 	export interface Query {
 
@@ -6220,7 +6276,7 @@ export interface QueryBuilder {
 }
 
 
-declare module cockroach.ts.tspb {
+declare module Proto2TypeScript.cockroach.ts.tspb {
 
 	export interface TimeSeriesQueryRequest {
 
@@ -6274,7 +6330,7 @@ export interface TimeSeriesQueryRequestBuilder {
 }
 
 
-declare module cockroach.ts.tspb {
+declare module Proto2TypeScript.cockroach.ts.tspb {
 
 	export interface TimeSeriesQueryResponse {
 
@@ -6310,7 +6366,7 @@ export interface TimeSeriesQueryResponseBuilder {
 
 }
 
-declare module cockroach.ts.tspb.TimeSeriesQueryResponse {
+declare module Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryResponse {
 
 	export interface Result {
 
@@ -6356,7 +6412,7 @@ export interface ResultBuilder {
 
 
 
-declare module cockroach.ts.tspb {
+declare module Proto2TypeScript.cockroach.ts.tspb {
 	export const enum TimeSeriesQueryAggregator {
 		AVG = 1,
 		SUM = 2,
@@ -6366,7 +6422,7 @@ declare module cockroach.ts.tspb {
 }
 }
 
-declare module cockroach.ts.tspb {
+declare module Proto2TypeScript.cockroach.ts.tspb {
 	export const enum TimeSeriesQueryDerivative {
 		NONE = 0,
 		DERIVATIVE = 1,
@@ -6374,6 +6430,209 @@ declare module cockroach.ts.tspb {
 		
 }
 }
+
+
+
+
+declare module Proto2TypeScript {
+
+	export interface google {
+
+		
+
+}
+
+	export interface googleMessage extends google {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface googleBuilder {
+	new(data?: google): googleMessage;
+	decode(buffer: ArrayBuffer) : googleMessage;
+	decode(buffer: ByteBuffer) : googleMessage;
+	decode64(buffer: string) : googleMessage;
+	api: google.apiBuilder;
+	
+}
+
+}
+
+declare module Proto2TypeScript.google {
+
+	export interface api {
+
+		
+
+}
+
+	export interface apiMessage extends api {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface apiBuilder {
+	new(data?: api): apiMessage;
+	decode(buffer: ArrayBuffer) : apiMessage;
+	decode(buffer: ByteBuffer) : apiMessage;
+	decode64(buffer: string) : apiMessage;
+	HttpRule: api.HttpRuleBuilder;
+	CustomHttpPattern: api.CustomHttpPatternBuilder;
+	
+}
+
+}
+
+declare module Proto2TypeScript.google.api {
+
+	export interface HttpRule {
+
+		
+
+get?: string;
+		
+
+getGet?() : string;
+		setGet?(get : string): void;
+		
+
+
+
+put?: string;
+		
+
+getPut?() : string;
+		setPut?(put : string): void;
+		
+
+
+
+post?: string;
+		
+
+getPost?() : string;
+		setPost?(post : string): void;
+		
+
+
+
+delete?: string;
+		
+
+getDelete?() : string;
+		
+
+
+
+patch?: string;
+		
+
+getPatch?() : string;
+		setPatch?(patch : string): void;
+		
+
+
+
+custom?: CustomHttpPattern;
+		
+
+getCustom?() : CustomHttpPattern;
+		setCustom?(custom : CustomHttpPattern): void;
+		
+
+
+
+body?: string;
+		
+
+getBody?() : string;
+		setBody?(body : string): void;
+		
+
+
+
+additional_bindings?: HttpRule[];
+		
+
+getAdditionalBindings?() : HttpRule[];
+		setAdditionalBindings?(additionalBindings : HttpRule[]): void;
+		
+
+
+
+pattern?: string
+		
+}
+
+	export interface HttpRuleMessage extends HttpRule {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface HttpRuleBuilder {
+	new(data?: HttpRule): HttpRuleMessage;
+	decode(buffer: ArrayBuffer) : HttpRuleMessage;
+	decode(buffer: ByteBuffer) : HttpRuleMessage;
+	decode64(buffer: string) : HttpRuleMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.google.api {
+
+	export interface CustomHttpPattern {
+
+		
+
+kind?: string;
+		
+
+getKind?() : string;
+		setKind?(kind : string): void;
+		
+
+
+
+path?: string;
+		
+
+getPath?() : string;
+		setPath?(path : string): void;
+		
+
+
+
+}
+
+	export interface CustomHttpPatternMessage extends CustomHttpPattern {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface CustomHttpPatternBuilder {
+	new(data?: CustomHttpPattern): CustomHttpPatternMessage;
+	decode(buffer: ArrayBuffer) : CustomHttpPatternMessage;
+	decode(buffer: ByteBuffer) : CustomHttpPatternMessage;
+	decode64(buffer: string) : CustomHttpPatternMessage;
+	
+}
+
+}
+
 
 
 

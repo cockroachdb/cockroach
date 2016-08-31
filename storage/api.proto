@@ -19,7 +19,7 @@ package cockroach.storage;
 option go_package = "storage";
 
 import "cockroach/roachpb/metadata.proto";
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 // StoreRequestHeader locates a Store on a Node.
 message StoreRequestHeader {

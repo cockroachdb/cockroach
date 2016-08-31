@@ -1,1 +1,1 @@
-export var cockroach: cockroach.ProtoBufBuilder;
+export const cockroach: Proto2TypeScript.cockroachBuilder;

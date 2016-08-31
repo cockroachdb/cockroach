@@ -24,7 +24,7 @@ import "cockroach/roachpb/metadata.proto";
 import "cockroach/roachpb/data.proto";
 import "cockroach/util/hlc/timestamp.proto";
 
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 // ReplicaState is the part of the Range Raft state machine which is cached
 // in memory and which is manipulated exclusively through consensus.
