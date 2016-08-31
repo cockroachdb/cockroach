@@ -231,6 +231,15 @@ getTime?() : Long;
 
 
 
+goroutine?: Long;
+		
+
+getGoroutine?() : Long;
+		setGoroutine?(goroutine : Long): void;
+		
+
+
+
 file?: string;
 		
 

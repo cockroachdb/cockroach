@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/syncutil"
+	"github.com/petermattis/goid"
 )
 
 // Severity identifies the sort of log: info, warning etc. It also implements
@@ -377,7 +378,7 @@ func (t *traceLocation) Set(value string) error {
 }
 
 var entryRE = regexp.MustCompile(
-	`(?m)^([IWEF])(\d{6} \d{2}:\d{2}:\d{2}.\d{6}) ([^:]+):(\d+)  (.*)`)
+	`(?m)^([IWEF])(\d{6} \d{2}:\d{2}:\d{2}.\d{6}) (?:(\d+) )?([^:]+):(\d+)  (.*)`)
 
 // EntryDecoder reads successive encoded log entries from the input
 // buffer. Each entry is preceded by a single big-ending uint32
@@ -413,13 +414,20 @@ func (d *EntryDecoder) Decode(entry *Entry) error {
 			return err
 		}
 		entry.Time = t.UnixNano()
-		entry.File = string(m[3])
-		line, err := strconv.Atoi(string(m[4]))
+		if len(m[3]) > 0 {
+			goroutine, err := strconv.Atoi(string(m[3]))
+			if err != nil {
+				return err
+			}
+			entry.Goroutine = int64(goroutine)
+		}
+		entry.File = string(m[4])
+		line, err := strconv.Atoi(string(m[5]))
 		if err != nil {
 			return err
 		}
 		entry.Line = int64(line)
-		entry.Message = string(m[5])
+		entry.Message = string(m[6])
 		return nil
 	}
 }
@@ -455,17 +463,18 @@ type flushSyncWriter interface {
 // line number. Log lines are colorized depending on severity.
 //
 // Log lines have this form:
-// 	Lyymmdd hh:mm:ss.uuuuuu file:line] msg...
+// 	Lyymmdd hh:mm:ss.uuuuuu goid file:line msg...
 // where the fields are defined as follows:
 // 	L                A single character, representing the log level (eg 'I' for INFO)
 // 	yy               The year (zero padded; ie 2016 is '16')
 // 	mm               The month (zero padded; ie May is '05')
 // 	dd               The day (zero padded)
 // 	hh:mm:ss.uuuuuu  Time in hours, minutes and fractional seconds
+// 	goid             The goroutine id (omitted if zero for use by tests)
 // 	file             The file name
 // 	line             The line number
 // 	msg              The user-supplied message
-func formatHeader(s Severity, now time.Time, file string, line int, colors *colorProfile) *buffer {
+func formatHeader(s Severity, now time.Time, gid int, file string, line int, colors *colorProfile) *buffer {
 	buf := logging.getBuffer()
 	if line < 0 {
 		line = 0 // not a real line number, but acceptable to someDigits
@@ -515,6 +524,11 @@ func formatHeader(s Severity, now time.Time, file string, line int, colors *colo
 	n += buf.nDigits(6, n, now.Nanosecond()/1000, '0')
 	tmp[n] = ' '
 	n++
+	if gid > 0 {
+		n += buf.someDigits(n, gid)
+		tmp[n] = ' '
+		n++
+	}
 	buf.Write(tmp[:n])
 	buf.WriteString(file)
 	tmp[0] = ':'
@@ -578,7 +592,7 @@ func (buf *buffer) someDigits(i, d int) int {
 
 func formatLogEntry(entry Entry, stacks []byte, colors *colorProfile) *buffer {
 	buf := formatHeader(entry.Severity, time.Unix(0, entry.Time),
-		entry.File, int(entry.Line), colors)
+		int(entry.Goroutine), entry.File, int(entry.Line), colors)
 	_, _ = buf.WriteString(entry.Message)
 	if buf.Bytes()[buf.Len()-1] != '\n' {
 		_ = buf.WriteByte('\n')
@@ -714,11 +728,12 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 	// Set additional details in log entry.
 	now := time.Now()
 	entry := Entry{
-		Severity: s,
-		Time:     now.UnixNano(),
-		File:     file,
-		Line:     int64(line),
-		Message:  msg,
+		Severity:  s,
+		Time:      now.UnixNano(),
+		Goroutine: goid.Get(),
+		File:      file,
+		Line:      int64(line),
+		Message:   msg,
 	}
 	// On fatal log, set all stacks.
 	var stacks []byte
@@ -949,14 +964,15 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 		fmt.Sprintf("[config] running on machine: %s\n", host),
 		fmt.Sprintf("[config] binary: %s\n", build.GetInfo().Short()),
 		fmt.Sprintf("[config] arguments: %s\n", os.Args),
-		fmt.Sprintf("line format: [IWEF]yymmdd hh:mm:ss.uuuuuu file:line msg\n"),
+		fmt.Sprintf("line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg\n"),
 	} {
 		buf := formatLogEntry(Entry{
-			Severity: sb.sev,
-			Time:     now.UnixNano(),
-			File:     f,
-			Line:     int64(l),
-			Message:  msg,
+			Severity:  sb.sev,
+			Time:      now.UnixNano(),
+			Goroutine: goid.Get(),
+			File:      f,
+			Line:      int64(l),
+			Message:   msg,
 		}, nil, nil)
 		var n int
 		n, err = sb.file.Write(buf.Bytes())
