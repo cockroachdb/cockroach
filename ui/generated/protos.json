@@ -2366,6 +2366,117 @@
                             ]
                         },
                         {
+                            "name": "RaftState",
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "uint64",
+                                    "name": "replica_id",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.customname)": "ReplicaID"
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "HardState",
+                                    "name": "hard_state",
+                                    "id": 2,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "uint64",
+                                    "name": "lead",
+                                    "id": 3
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "state",
+                                    "id": 4
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "uint64",
+                                    "name": "applied",
+                                    "id": 5
+                                },
+                                {
+                                    "rule": "map",
+                                    "type": "Progress",
+                                    "keytype": "uint64",
+                                    "name": "progress",
+                                    "id": 6,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ],
+                            "messages": [
+                                {
+                                    "name": "HardState",
+                                    "fields": [
+                                        {
+                                            "rule": "optional",
+                                            "type": "uint64",
+                                            "name": "term",
+                                            "id": 1
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "uint64",
+                                            "name": "vote",
+                                            "id": 2
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "uint64",
+                                            "name": "commit",
+                                            "id": 3
+                                        }
+                                    ]
+                                },
+                                {
+                                    "name": "Progress",
+                                    "fields": [
+                                        {
+                                            "rule": "optional",
+                                            "type": "uint64",
+                                            "name": "match",
+                                            "id": 1
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "uint64",
+                                            "name": "next",
+                                            "id": 2
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "state",
+                                            "id": 3
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "bool",
+                                            "name": "paused",
+                                            "id": 4
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "uint64",
+                                            "name": "pending_snapshot",
+                                            "id": 5
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
                             "name": "RangeInfo",
                             "fields": [
                                 {
@@ -2379,9 +2490,12 @@
                                 },
                                 {
                                     "rule": "optional",
-                                    "type": "string",
+                                    "type": "RaftState",
                                     "name": "raft_state",
-                                    "id": 2
+                                    "id": 2,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
                                 },
                                 {
                                     "rule": "optional",

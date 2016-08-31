@@ -2801,6 +2801,7 @@ export interface serverpbBuilder {
 	NodesRequest: serverpb.NodesRequestBuilder;
 	NodesResponse: serverpb.NodesResponseBuilder;
 	NodeRequest: serverpb.NodeRequestBuilder;
+	RaftState: serverpb.RaftStateBuilder;
 	RangeInfo: serverpb.RangeInfoBuilder;
 	RangesRequest: serverpb.RangesRequestBuilder;
 	RangesResponse: serverpb.RangesResponseBuilder;
@@ -4523,6 +4524,215 @@ export interface NodeRequestBuilder {
 
 declare module cockroach.server.serverpb {
 
+	export interface RaftState {
+
+		
+
+replica_id?: Long;
+		
+
+getReplicaId?() : Long;
+		setReplicaId?(replicaId : Long): void;
+		
+
+
+
+hard_state?: RaftState.HardState;
+		
+
+getHardState?() : RaftState.HardState;
+		setHardState?(hardState : RaftState.HardState): void;
+		
+
+
+
+lead?: Long;
+		
+
+getLead?() : Long;
+		setLead?(lead : Long): void;
+		
+
+
+
+state?: string;
+		
+
+getState?() : string;
+		setState?(state : string): void;
+		
+
+
+
+applied?: Long;
+		
+
+getApplied?() : Long;
+		setApplied?(applied : Long): void;
+		
+
+
+
+progress?: ProtoBufMap<Long, RaftState.Progress>;
+		
+
+getProgress?() : ProtoBufMap<Long, RaftState.Progress>;
+		setProgress?(progress : ProtoBufMap<Long, RaftState.Progress>): void;
+		
+
+
+
+}
+
+	export interface RaftStateMessage extends RaftState {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RaftStateBuilder {
+	new(data?: RaftState): RaftStateMessage;
+	decode(buffer: ArrayBuffer) : RaftStateMessage;
+	decode(buffer: ByteBuffer) : RaftStateMessage;
+	decode64(buffer: string) : RaftStateMessage;
+	HardState: RaftState.HardStateBuilder;
+	Progress: RaftState.ProgressBuilder;
+	
+}
+
+}
+
+declare module cockroach.server.serverpb.RaftState {
+
+	export interface HardState {
+
+		
+
+term?: Long;
+		
+
+getTerm?() : Long;
+		setTerm?(term : Long): void;
+		
+
+
+
+vote?: Long;
+		
+
+getVote?() : Long;
+		setVote?(vote : Long): void;
+		
+
+
+
+commit?: Long;
+		
+
+getCommit?() : Long;
+		setCommit?(commit : Long): void;
+		
+
+
+
+}
+
+	export interface HardStateMessage extends HardState {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface HardStateBuilder {
+	new(data?: HardState): HardStateMessage;
+	decode(buffer: ArrayBuffer) : HardStateMessage;
+	decode(buffer: ByteBuffer) : HardStateMessage;
+	decode64(buffer: string) : HardStateMessage;
+	
+}
+
+}
+
+
+declare module cockroach.server.serverpb.RaftState {
+
+	export interface Progress {
+
+		
+
+match?: Long;
+		
+
+getMatch?() : Long;
+		setMatch?(match : Long): void;
+		
+
+
+
+next?: Long;
+		
+
+getNext?() : Long;
+		setNext?(next : Long): void;
+		
+
+
+
+state?: string;
+		
+
+getState?() : string;
+		setState?(state : string): void;
+		
+
+
+
+paused?: boolean;
+		
+
+getPaused?() : boolean;
+		setPaused?(paused : boolean): void;
+		
+
+
+
+pending_snapshot?: Long;
+		
+
+getPendingSnapshot?() : Long;
+		setPendingSnapshot?(pendingSnapshot : Long): void;
+		
+
+
+
+}
+
+	export interface ProgressMessage extends Progress {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ProgressBuilder {
+	new(data?: Progress): ProgressMessage;
+	decode(buffer: ArrayBuffer) : ProgressMessage;
+	decode(buffer: ByteBuffer) : ProgressMessage;
+	decode64(buffer: string) : ProgressMessage;
+	
+}
+
+}
+
+
+
+declare module cockroach.server.serverpb {
+
 	export interface RangeInfo {
 
 		
@@ -4536,11 +4746,11 @@ getSpan?() : PrettySpan;
 
 
 
-raft_state?: string;
+raft_state?: RaftState;
 		
 
-getRaftState?() : string;
-		setRaftState?(raftState : string): void;
+getRaftState?() : RaftState;
+		setRaftState?(raftState : RaftState): void;
 		
 
 
