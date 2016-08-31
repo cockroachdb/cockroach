@@ -394,6 +394,9 @@ func (t *multiTestContextKVTransport) SendNext(done chan<- kv.BatchCall) {
 	// the multi test context, so we can derive the index for stoppers
 	// and senders by subtracting 1 from the node ID.
 	nodeIndex := int(rep.NodeID) - 1
+	if log.V(1) {
+		log.Infof(context.TODO(), "SendNext nodeIndex=%d", nodeIndex)
+	}
 
 	// This method crosses store boundaries: it is possible that the
 	// destination store is stopped while the source is still running.
