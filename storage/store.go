@@ -2183,7 +2183,10 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now hlc.Timesta
 
 // HandleRaftRequest dispatches a raft message to the appropriate Replica. It
 // requires that s.processRaftMu and s.mu are not held.
-func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) *roachpb.Error {
+func (s *Store) HandleRaftRequest(
+	ctx context.Context,
+	req *RaftMessageRequest,
+) (pErr *roachpb.Error) {
 	s.processRaftMu.Lock()
 	defer s.processRaftMu.Unlock()
 
@@ -2249,12 +2252,10 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 		// TODO(bdarnell): handle coalesced heartbeats.
 	}
 
-	s.mu.Lock()
 	// Lazily create the replica.
-	r, err := s.getOrCreateReplicaLocked(req.RangeID, req.ToReplica.ReplicaID, req.FromReplica)
+	r, err := s.getOrCreateReplica(req.RangeID, req.ToReplica.ReplicaID, req.FromReplica)
 	// TODO(bdarnell): is it safe to release the store lock here?
 	// It deadlocks to hold s.Mutex while calling raftGroup.Step.
-	s.mu.Unlock()
 	if err != nil {
 		return roachpb.NewError(err)
 	}
@@ -2262,13 +2263,31 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 
 	if req.ToReplica.ReplicaID == 0 {
 		if req.Message.Type == raftpb.MsgSnap {
-			// TODO(peter): We need to remove the placeholder if the preemptive
-			// snapshot fails for some reason.
-
 			// Allow snapshots to be applied to replicas before they are
 			// members of the raft group (i.e. replicas with an ID of 0). This
 			// is the only operation that can be performed before it is part of
 			// the raft group.
+
+			defer func() {
+				s.mu.Lock()
+				defer s.mu.Unlock()
+
+				// We need to remove the placeholder regardless of whether the snapshot
+				// applied successfully or not.
+				if addedPlaceholder {
+					// Clear the replica placeholder; we are about to swap it with a real replica.
+					if !s.removePlaceholderLocked(req.RangeID) {
+						log.Fatalf(ctx, "%s: could not remove placeholder after preemptive snapshot", r)
+					}
+				}
+
+				if pErr == nil {
+					// If the snapshot succeeded, process the range descriptor update.
+					if err := s.processRangeDescriptorUpdateLocked(r); err != nil {
+						pErr = roachpb.NewError(err)
+					}
+				}
+			}()
 
 			// Requiring that the Term is set in a message makes sure that we
 			// get all of Raft's internal safety checks (it confuses messages
@@ -2362,19 +2381,8 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 				return roachpb.NewError(err)
 			}
 
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			if addedPlaceholder {
-				// Clear the replica placeholder; we are about to swap it with a real replica.
-				if !s.removePlaceholderLocked(req.RangeID) {
-					log.Fatalf(ctx, "%s: could not remove placeholder after preemptive snapshot", r)
-				}
-			}
-
-			if err := s.processRangeDescriptorUpdateLocked(r); err != nil {
-				return roachpb.NewError(err)
-			}
-
+			// NB: See the defer at the start of this block for the removal of the
+			// placeholder and processing of the range descriptor update.
 			return nil
 
 			// At this point, the Replica has data but no ReplicaID. We hope
@@ -2383,8 +2391,8 @@ func (s *Store) HandleRaftRequest(ctx context.Context, req *RaftMessageRequest) 
 			// happen, at some point the Replica GC queue will have to grab it.
 		}
 		// We disallow non-snapshot messages to replica ID 0. Note that
-		// getOrCreateReplicaLocked disallows moving the replica ID backward, so
-		// the only way we can get here is if the replica did not previously exist.
+		// getOrCreateReplica disallows moving the replica ID backward, so the only
+		// way we can get here is if the replica did not previously exist.
 		if log.V(1) {
 			log.Infof(context.TODO(), "refusing incoming Raft message %s for range %d from %+v to %+v",
 				req.Message.Type, req.RangeID, req.FromReplica, req.ToReplica)
@@ -2634,10 +2642,12 @@ func (s *Store) processRaft() {
 	})
 }
 
-// getOrCreateReplicaLocked returns a replica for the given RangeID,
-// creating an uninitialized replica if necessary. The caller must
-// hold the store's lock.
-func (s *Store) getOrCreateReplicaLocked(rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, creatingReplica roachpb.ReplicaDescriptor) (*Replica, error) {
+// getOrCreateReplica returns a replica for the given RangeID, creating an
+// uninitialized replica if necessary. The caller must hold the store's lock.
+func (s *Store) getOrCreateReplica(rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, creatingReplica roachpb.ReplicaDescriptor) (*Replica, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	r, ok := s.mu.replicas[rangeID]
 	if ok {
 		if err := r.setReplicaID(replicaID); err != nil {
