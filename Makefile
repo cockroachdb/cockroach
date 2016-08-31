@@ -134,6 +134,10 @@ coverage:
 	$(GO) test -v $(GOFLAGS) -i $(PKG)
 	$(GO) test $(GOFLAGS) -cover -run "$(TESTS)" $(PKG) $(TESTFLAGS)
 
+.PHONY: upload-coverage
+upload-coverage:
+	@build/upload-coverage.sh
+
 # "make stress PKG=./storage TESTS=TestBlah" will build the given test
 # and run it in a loop (the PKG argument is required; if TESTS is not
 # given all tests in the package will be run).
@@ -211,10 +215,6 @@ $(GLOCK):
 .bootstrap: $(GITHOOKS) $(GLOCK) GLOCKFILE
 	@unset GIT_WORK_TREE; $(GLOCK) sync github.com/cockroachdb/cockroach
 	touch $@
-
-.PHONY: upload-coverage
-upload-coverage:
-	@build/upload-coverage.sh
 
 include .bootstrap
 
