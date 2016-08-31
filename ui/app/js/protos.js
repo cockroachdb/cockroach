@@ -98,6 +98,12 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                 },
                                 {
                                     "rule": "optional",
+                                    "type": "int64",
+                                    "name": "goroutine",
+                                    "id": 6
+                                },
+                                {
+                                    "rule": "optional",
                                     "type": "string",
                                     "name": "file",
                                     "id": 3
