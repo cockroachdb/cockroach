@@ -196,6 +196,11 @@ type baseQueue struct {
 		replicas    map[roachpb.RangeID]*replicaItem // Map from RangeID to replicaItem (for updating priority)
 		purgatory   map[roachpb.RangeID]error        // Map of replicas to processing errors
 	}
+	// processMu synchronizes execution of processing for a single queue,
+	// ensuring that we never process more than a single replica at a time. This
+	// is needed because both the main processing loop and the purgatory loop can
+	// process replicas.
+	processMu sync.Locker
 	// Some tests in this package disable queues.
 	disabled int32 // updated atomically
 
@@ -230,6 +235,7 @@ func makeBaseQueue(
 	}
 	bq.mu.Locker = new(syncutil.Mutex)
 	bq.mu.replicas = map[roachpb.RangeID]*replicaItem{}
+	bq.processMu = new(syncutil.Mutex)
 	return bq
 }
 
@@ -443,6 +449,9 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 // called externally to the queue. bq.mu.Lock should not be held
 // while calling this method.
 func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
+	bq.processMu.Lock()
+	defer bq.processMu.Unlock()
+
 	// Load the system config.
 	cfg, ok := bq.gossip.GetSystemConfig()
 	if !ok {
