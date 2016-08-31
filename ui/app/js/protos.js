@@ -2379,6 +2379,94 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     ]
                                 },
                                 {
+                                    "name": "RaftState",
+                                    "fields": [
+                                        {
+                                            "rule": "optional",
+                                            "type": "uint64",
+                                            "name": "replica_id",
+                                            "id": 1,
+                                            "options": {
+                                                "(gogoproto.customname)": "ReplicaID"
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "raftpb.HardState",
+                                            "name": "hard_state",
+                                            "id": 2,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "uint64",
+                                            "name": "lead",
+                                            "id": 3
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "state",
+                                            "id": 4
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "uint64",
+                                            "name": "applied",
+                                            "id": 5
+                                        },
+                                        {
+                                            "rule": "map",
+                                            "type": "Progress",
+                                            "keytype": "uint64",
+                                            "name": "progress",
+                                            "id": 6,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        }
+                                    ],
+                                    "messages": [
+                                        {
+                                            "name": "Progress",
+                                            "fields": [
+                                                {
+                                                    "rule": "optional",
+                                                    "type": "uint64",
+                                                    "name": "match",
+                                                    "id": 1
+                                                },
+                                                {
+                                                    "rule": "optional",
+                                                    "type": "uint64",
+                                                    "name": "next",
+                                                    "id": 2
+                                                },
+                                                {
+                                                    "rule": "optional",
+                                                    "type": "string",
+                                                    "name": "state",
+                                                    "id": 3
+                                                },
+                                                {
+                                                    "rule": "optional",
+                                                    "type": "bool",
+                                                    "name": "paused",
+                                                    "id": 4
+                                                },
+                                                {
+                                                    "rule": "optional",
+                                                    "type": "uint64",
+                                                    "name": "pending_snapshot",
+                                                    "id": 5
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                {
                                     "name": "RangeInfo",
                                     "fields": [
                                         {
@@ -2392,9 +2480,12 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                         },
                                         {
                                             "rule": "optional",
-                                            "type": "string",
+                                            "type": "RaftState",
                                             "name": "raft_state",
-                                            "id": 2
+                                            "id": 2,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
                                         },
                                         {
                                             "rule": "optional",
@@ -3665,6 +3756,405 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "id": 2
                                 }
                             ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "raftpb",
+            "fields": [],
+            "options": {
+                "(gogoproto.marshaler_all)": true,
+                "(gogoproto.sizer_all)": true,
+                "(gogoproto.unmarshaler_all)": true,
+                "(gogoproto.goproto_getters_all)": false,
+                "(gogoproto.goproto_enum_prefix_all)": false
+            },
+            "messages": [
+                {
+                    "name": "Entry",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "uint64",
+                            "name": "Term",
+                            "id": 2,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "uint64",
+                            "name": "Index",
+                            "id": 3,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "EntryType",
+                            "name": "Type",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "bytes",
+                            "name": "Data",
+                            "id": 4
+                        }
+                    ]
+                },
+                {
+                    "name": "SnapshotMetadata",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "ConfState",
+                            "name": "conf_state",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "uint64",
+                            "name": "index",
+                            "id": 2,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "uint64",
+                            "name": "term",
+                            "id": 3,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Snapshot",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "bytes",
+                            "name": "data",
+                            "id": 1
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "SnapshotMetadata",
+                            "name": "metadata",
+                            "id": 2,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Message",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "MessageType",
+                            "name": "type",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "uint64",
+                            "name": "to",
+                            "id": 2,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "uint64",
+                            "name": "from",
+                            "id": 3,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "uint64",
+                            "name": "term",
+                            "id": 4,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "uint64",
+                            "name": "logTerm",
+                            "id": 5,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "uint64",
+                            "name": "index",
+                            "id": 6,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "repeated",
+                            "type": "Entry",
+                            "name": "entries",
+                            "id": 7,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "uint64",
+                            "name": "commit",
+                            "id": 8,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "Snapshot",
+                            "name": "snapshot",
+                            "id": 9,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "bool",
+                            "name": "reject",
+                            "id": 10,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "uint64",
+                            "name": "rejectHint",
+                            "id": 11,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "bytes",
+                            "name": "context",
+                            "id": 12
+                        }
+                    ]
+                },
+                {
+                    "name": "HardState",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "uint64",
+                            "name": "term",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "uint64",
+                            "name": "vote",
+                            "id": 2,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "uint64",
+                            "name": "commit",
+                            "id": 3,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "ConfState",
+                    "fields": [
+                        {
+                            "rule": "repeated",
+                            "type": "uint64",
+                            "name": "nodes",
+                            "id": 1
+                        }
+                    ]
+                },
+                {
+                    "name": "ConfChange",
+                    "fields": [
+                        {
+                            "rule": "optional",
+                            "type": "uint64",
+                            "name": "ID",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "ConfChangeType",
+                            "name": "Type",
+                            "id": 2,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "uint64",
+                            "name": "NodeID",
+                            "id": 3,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
+                            "type": "bytes",
+                            "name": "Context",
+                            "id": 4
+                        }
+                    ]
+                }
+            ],
+            "enums": [
+                {
+                    "name": "EntryType",
+                    "values": [
+                        {
+                            "name": "EntryNormal",
+                            "id": 0
+                        },
+                        {
+                            "name": "EntryConfChange",
+                            "id": 1
+                        }
+                    ]
+                },
+                {
+                    "name": "MessageType",
+                    "values": [
+                        {
+                            "name": "MsgHup",
+                            "id": 0
+                        },
+                        {
+                            "name": "MsgBeat",
+                            "id": 1
+                        },
+                        {
+                            "name": "MsgProp",
+                            "id": 2
+                        },
+                        {
+                            "name": "MsgApp",
+                            "id": 3
+                        },
+                        {
+                            "name": "MsgAppResp",
+                            "id": 4
+                        },
+                        {
+                            "name": "MsgVote",
+                            "id": 5
+                        },
+                        {
+                            "name": "MsgVoteResp",
+                            "id": 6
+                        },
+                        {
+                            "name": "MsgSnap",
+                            "id": 7
+                        },
+                        {
+                            "name": "MsgHeartbeat",
+                            "id": 8
+                        },
+                        {
+                            "name": "MsgHeartbeatResp",
+                            "id": 9
+                        },
+                        {
+                            "name": "MsgUnreachable",
+                            "id": 10
+                        },
+                        {
+                            "name": "MsgSnapStatus",
+                            "id": 11
+                        },
+                        {
+                            "name": "MsgCheckQuorum",
+                            "id": 12
+                        },
+                        {
+                            "name": "MsgTransferLeader",
+                            "id": 13
+                        },
+                        {
+                            "name": "MsgTimeoutNow",
+                            "id": 14
+                        },
+                        {
+                            "name": "MsgReadIndex",
+                            "id": 15
+                        },
+                        {
+                            "name": "MsgReadIndexResp",
+                            "id": 16
+                        }
+                    ]
+                },
+                {
+                    "name": "ConfChangeType",
+                    "values": [
+                        {
+                            "name": "ConfChangeAddNode",
+                            "id": 0
+                        },
+                        {
+                            "name": "ConfChangeRemoveNode",
+                            "id": 1
+                        },
+                        {
+                            "name": "ConfChangeUpdateNode",
+                            "id": 2
                         }
                     ]
                 }
