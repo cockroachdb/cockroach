@@ -2,7 +2,7 @@
 
 set -eu
 
-cd "$(dirname "${0}")/.."
+cd "$(dirname "${0}")"/..
 
 # The build.utcTime format must remain in sync with TimeFormat in info.go.
 echo '-X "github.com/cockroachdb/cockroach/build.tag='$(git describe --dirty --tags)'"' \
