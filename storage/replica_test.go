@@ -5456,202 +5456,27 @@ func TestReplicaCancelRaft(t *testing.T) {
 	}
 }
 
-// verify the checksum for the range and return it.
-func verifyChecksum(t *testing.T, rng *Replica) []byte {
-	ctx := context.Background()
-	id := uuid.MakeV4()
-	rng.computeChecksumTrigger(ctx, roachpb.ComputeChecksumRequest{
-		ChecksumID: id,
-		Version:    replicaChecksumVersion,
-	})
-	c, ok := rng.getChecksum(ctx, id)
-	if !ok {
-		t.Fatalf("checksum for id = %v not found", id)
-	}
-	if c.checksum == nil {
-		t.Fatal("couldn't compute checksum")
-	}
-	rng.verifyChecksumTrigger(
-		ctx,
-		roachpb.VerifyChecksumRequest{
-			ChecksumID: id,
-			Version:    replicaChecksumVersion,
-			Checksum:   c.checksum,
-		})
-	return c.checksum
-}
-
-// TODO(tschottdorf): this test is really frail and unidiomatic. Consider
-// some better high-level check of this functionality.
-func TestComputeVerifyChecksum(t *testing.T) {
+// TestComputeChecksumVersioning checks that the ComputeChecksum post-commit
+// trigger is called if and only if the checksum version is right.
+func TestComputeChecksumVersioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
 	rng := tc.rng
+	ctx := rng.store.Ctx()
+	var pct *PostCommitTrigger
 
-	key := roachpb.Key("a")
-	{
-		incArgs := incrementArgs(key, 23)
-		if _, err := tc.SendWrapped(&incArgs); err != nil {
-			t.Fatal(err)
-		}
+	_, pct, _ = rng.ComputeChecksum(ctx, nil, nil, roachpb.Header{},
+		roachpb.ComputeChecksumRequest{ChecksumID: uuid.MakeV4(), Version: replicaChecksumVersion})
+	if pct == nil {
+		t.Error("expected post-commit trigger with right checksum version")
 	}
 
-	// We use this helper below to gauge whether another Raft command possibly
-	// snuck in (in which case we recompute). We can't use the in-memory state
-	// because it's not updated atomically with the batch and because this
-	// test doesn't respect Raft ordering.
-	getAppliedIndex := func() uint64 {
-		rng.mu.Lock()
-		defer rng.mu.Unlock()
-
-		appliedIndex, _, err := loadAppliedIndex(context.Background(), rng.store.Engine(), rng.RangeID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return appliedIndex
-	}
-
-	// The following part of the test is inherently racy if other Raft commands
-	// get processed (which could happen due to reproposals). The loop makes
-	// sure that we catch this.
-	util.SucceedsSoon(t, func() error {
-		oldAppliedIndex := getAppliedIndex()
-		initialChecksum := verifyChecksum(t, rng)
-
-		// Getting a value will not affect the snapshot checksum.
-		gArgs := getArgs(roachpb.Key("a"))
-		if _, err := tc.SendWrapped(&gArgs); err != nil {
-			t.Fatal(err)
-		}
-		checksum := verifyChecksum(t, rng)
-
-		appliedIndex := getAppliedIndex()
-		if appliedIndex != oldAppliedIndex {
-			return errors.Errorf("applied index changed from %d to %d",
-				oldAppliedIndex, appliedIndex)
-		}
-
-		if !bytes.Equal(initialChecksum, checksum) {
-			t.Fatalf("changed checksum: e = %v, c = %v", initialChecksum, checksum)
-		}
-		return nil
-	})
-
-	util.SucceedsSoon(t, func() error {
-		oldAppliedIndex := getAppliedIndex()
-		initialChecksum := verifyChecksum(t, rng)
-
-		// Modifying the range will change the checksum.
-		incArgs := incrementArgs(key, 5)
-		if _, err := tc.SendWrapped(&incArgs); err != nil {
-			t.Fatal(err)
-		}
-		checksum := verifyChecksum(t, rng)
-
-		appliedIndex := getAppliedIndex()
-		if diff := appliedIndex - oldAppliedIndex; diff != 1 {
-			return errors.Errorf("applied index changed by %d, from %d to %d",
-				diff, oldAppliedIndex, appliedIndex)
-		}
-
-		if bytes.Equal(initialChecksum, checksum) {
-			t.Fatalf("same checksum: e = %v, c = %v", initialChecksum, checksum)
-		}
-		return nil
-	})
-
-	// Verify that a bad version/checksum sent will result in an error.
-	id1 := uuid.MakeV4()
-	rng.computeChecksumTrigger(
-		context.Background(),
-		roachpb.ComputeChecksumRequest{
-			ChecksumID: id1,
-			Version:    replicaChecksumVersion,
-		})
-	// Set a callback for checksum mismatch panics.
-	badChecksumChan := make(chan []ReplicaSnapshotDiff, 1)
-	rng.store.ctx.TestingKnobs.BadChecksumPanic = func(diff []ReplicaSnapshotDiff) {
-		badChecksumChan <- diff
-	}
-
-	// First test that sending a Verification request with a bad version and
-	// bad checksum will return without panicking because of a bad checksum.
-	rng.verifyChecksumTrigger(
-		context.Background(),
-		roachpb.VerifyChecksumRequest{
-			ChecksumID: id1,
-			Version:    10000001,
-			Checksum:   []byte("bad checksum"),
-		})
-	select {
-	case badChecksum := <-badChecksumChan:
-		t.Fatalf("bad checksum: %v", badChecksum)
-	default:
-	}
-	// Setting the correct version will verify the checksum see a
-	// checksum mismatch and trigger a rerun of the consistency check,
-	// but the second consistency check will succeed because the checksum
-	// provided in the second consistency check is the correct one.
-	rng.verifyChecksumTrigger(
-		context.Background(),
-		roachpb.VerifyChecksumRequest{
-			ChecksumID: id1,
-			Version:    replicaChecksumVersion,
-			Checksum:   []byte("bad checksum"),
-		})
-	select {
-	case badChecksum := <-badChecksumChan:
-		t.Fatalf("bad checksum: %v", badChecksum)
-	default:
-	}
-
-	// Repeat the same but provide a snapshot this time. This will
-	// result in the checksum failure not running the second consistency
-	// check; it will panic.
-	rng.verifyChecksumTrigger(
-		context.Background(),
-		roachpb.VerifyChecksumRequest{
-			ChecksumID: id1,
-			Version:    replicaChecksumVersion,
-			Checksum:   []byte("bad checksum"),
-			Snapshot:   &roachpb.RaftSnapshotData{},
-		})
-	select {
-	case <-badChecksumChan:
-	default:
-		t.Fatal("expected bad checksum, but did not get one")
-	}
-
-	id2 := uuid.MakeV4()
-	// Sending a ComputeChecksum with a bad version doesn't result in a
-	// computed checksum.
-	if _, _, err := rng.ComputeChecksum(
-		context.Background(),
-		nil,
-		nil,
-		roachpb.Header{},
-		roachpb.ComputeChecksumRequest{
-			ChecksumID: id2,
-			Version:    23343434,
-		},
-	); err != nil {
-		t.Fatal(err)
-	}
-	// Sending a VerifyChecksum with a bad checksum is a noop.
-	rng.verifyChecksumTrigger(
-		context.Background(),
-		roachpb.VerifyChecksumRequest{
-			ChecksumID: id2,
-			Version:    replicaChecksumVersion,
-			Checksum:   []byte("bad checksum"),
-			Snapshot:   &roachpb.RaftSnapshotData{},
-		})
-	select {
-	case badChecksum := <-badChecksumChan:
-		t.Fatalf("bad checksum: %v", badChecksum)
-	default:
+	_, pct, _ = rng.ComputeChecksum(ctx, nil, nil, roachpb.Header{},
+		roachpb.ComputeChecksumRequest{ChecksumID: uuid.MakeV4(), Version: replicaChecksumVersion + 1})
+	if pct != nil {
+		t.Error("expected no post-commit trigger with wrong checksum version")
 	}
 }
 

@@ -39,8 +39,9 @@ currently the lease holder.
 3.  If the initiator discovers an inconsistency, it immediately retries
     the check with the `snapshot` option set to true. In this mode,
     inconsistent replicas include their full snapshot in their
-    `CollectChecksum` response and then commit suicide. The initiator
-    retains its own snapshot long enough to log the diffs.
+    `CollectChecksum` response. The initiator retains its own snapshot
+    long enough to log the diffs and panic (so that someone
+    will notice).
 
 Details
 -------

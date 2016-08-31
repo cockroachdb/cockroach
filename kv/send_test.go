@@ -67,11 +67,21 @@ func (n Node) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.B
 	}
 	return &roachpb.BatchResponse{}, nil
 }
+
+// PollFrozen implements the StoresServer interface.
 func (n Node) PollFrozen(_ context.Context, _ *storage.PollFrozenRequest) (*storage.PollFrozenResponse, error) {
 	panic("unimplemented")
 }
 
+// Reserve implements the StoresServer interface.
 func (n Node) Reserve(_ context.Context, _ *storage.ReservationRequest) (*storage.ReservationResponse, error) {
+	panic("unimplemented")
+}
+
+// CollectChecksum implements the StoresServer interface.
+func (n Node) CollectChecksum(
+	_ context.Context, _ *storage.CollectChecksumRequest,
+) (*storage.CollectChecksumResponse, error) {
 	panic("unimplemented")
 }
 

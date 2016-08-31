@@ -2318,9 +2318,9 @@ func TestCheckInconsistent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The consistency check will panic on store 1.
-	notify := make(chan struct{}, 1)
-	mtc.stores[1].TestingKnobs().BadChecksumPanic = func(diff []storage.ReplicaSnapshotDiff) {
+	// The consistency check will report a diff on store 0.
+	notifyReportDiff := make(chan struct{}, 1)
+	mtc.stores[0].TestingKnobs().BadChecksumReportDiff = func(diff []storage.ReplicaSnapshotDiff) {
 		if len(diff) != 1 {
 			t.Errorf("diff length = %d, diff = %v", len(diff), diff)
 		}
@@ -2328,8 +2328,11 @@ func TestCheckInconsistent(t *testing.T) {
 		if d.LeaseHolder || !bytes.Equal(key, d.Key) || !timestamp.Equal(d.Timestamp) {
 			t.Errorf("diff = %v", d)
 		}
-		notify <- struct{}{}
+		notifyReportDiff <- struct{}{}
 	}
+	// The consistency check will panic on store 0.
+	notifyPanic := make(chan struct{}, 1)
+	mtc.stores[0].TestingKnobs().BadChecksumPanic = func() { notifyPanic <- struct{}{} }
 	// Run consistency check.
 	checkArgs := roachpb.CheckConsistencyRequest{
 		Span: roachpb.Span{
@@ -2342,9 +2345,14 @@ func TestCheckInconsistent(t *testing.T) {
 		t.Fatal(err)
 	}
 	select {
-	case <-notify:
+	case <-notifyReportDiff:
 	case <-time.After(5 * time.Second):
-		t.Fatal("didn't receive notification from VerifyChecksum() that should have panicked")
+		t.Fatal("CheckConsistency() failed to report a diff as expected")
+	}
+	select {
+	case <-notifyPanic:
+	case <-time.After(5 * time.Second):
+		t.Fatal("CheckConsistency() failed to panic as expected")
 	}
 }
 
