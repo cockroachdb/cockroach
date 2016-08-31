@@ -18,6 +18,7 @@ syntax = "proto3";
 package cockroach.storage;
 option go_package = "storage";
 
+import "cockroach/roachpb/internal_raft.proto";
 import "cockroach/roachpb/metadata.proto";
 import "gogoproto/gogo.proto";
 
@@ -63,9 +64,23 @@ message ReservationResponse {
   int32 range_count = 2;
 }
 
+message CollectChecksumRequest {
+  StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  int64 range_id = 2 [(gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
+  bytes checksum_id = 3 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ChecksumID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
+  bytes checksum = 4;
+  roachpb.RaftSnapshotData snapshot = 5;
+}
+
+message CollectChecksumResponse { bytes checksum = 1; }
+
 // Stores is a wrapper for internal RPCs that operate only on the stores of a
 // node.
 service Stores {
   rpc PollFrozen (PollFrozenRequest) returns (PollFrozenResponse) {}
   rpc Reserve(ReservationRequest) returns (ReservationResponse) {}
+  rpc CollectChecksum(CollectChecksumRequest) returns (CollectChecksumResponse) {}
 }

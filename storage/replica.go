@@ -161,10 +161,12 @@ type pendingCmd struct {
 }
 
 type replicaChecksum struct {
+	// started is true if the checksum computation has started.
+	started bool
 	// Computed checksum. This is set to nil on error.
 	checksum []byte
-	// GC this checksum after this timestamp. The timestamp is valid only
-	// after the checksum has been computed.
+	// If gcTimestamp is nonzero, GC this checksum after gcTimestamp. gcTimestamp
+	// is zero if and only if the checksum computation is in progress.
 	gcTimestamp time.Time
 	// This channel is closed after the checksum is computed, and is used
 	// as a notification.
@@ -1323,7 +1325,7 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 		resp = &roachpb.AdminTransferLeaseResponse{}
 	case *roachpb.CheckConsistencyRequest:
 		var reply roachpb.CheckConsistencyResponse
-		reply, pErr = r.CheckConsistency(*tArgs, r.Desc())
+		reply, pErr = r.CheckConsistency(ctx, *tArgs, r.Desc())
 		resp = &reply
 	default:
 		return nil, roachpb.NewErrorf("unrecognized admin command: %T", args)

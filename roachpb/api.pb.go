@@ -1121,9 +1121,7 @@ func (m *ComputeChecksumResponse) String() string            { return proto.Comp
 func (*ComputeChecksumResponse) ProtoMessage()               {}
 func (*ComputeChecksumResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{55} }
 
-// A VerifyChecksumRequest is arguments to the VerifyChecksum() method, to
-// verify the checksum computed on the lease holder against the one requested
-// earlier through a ComputeChecksumRequest with the same checksum_id.
+// VerifyChecksumRequest is DEPRECATED.
 type VerifyChecksumRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// The version used to pick the checksum method. It allows us to use a
@@ -1140,7 +1138,7 @@ func (m *VerifyChecksumRequest) String() string            { return proto.Compac
 func (*VerifyChecksumRequest) ProtoMessage()               {}
 func (*VerifyChecksumRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{56} }
 
-// A VerifyChecksumResponse is the response to a VerifyChecksum() operation.
+// VerifyChecksumResponse is DEPRECATED.
 type VerifyChecksumResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }

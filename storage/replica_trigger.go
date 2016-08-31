@@ -17,9 +17,8 @@
 package storage
 
 import (
-	"bytes"
+	"time"
 
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -172,6 +171,19 @@ func updateTrigger(old, new *PostCommitTrigger) *PostCommitTrigger {
 	return old
 }
 
+func (r *Replica) gcOldChecksumEntriesLocked(now time.Time) {
+	var oldEntries []uuid.UUID
+	for id, val := range r.mu.checksums {
+		// The timestamp is valid only if set.
+		if !val.gcTimestamp.IsZero() && now.After(val.gcTimestamp) {
+			oldEntries = append(oldEntries, id)
+		}
+	}
+	for _, id := range oldEntries {
+		delete(r.mu.checksums, id)
+	}
+}
+
 func (r *Replica) computeChecksumTrigger(
 	ctx context.Context, args roachpb.ComputeChecksumRequest,
 ) {
@@ -179,26 +191,23 @@ func (r *Replica) computeChecksumTrigger(
 	id := args.ChecksumID
 	now := timeutil.Now()
 	r.mu.Lock()
-	if _, ok := r.mu.checksums[id]; ok {
+	var notify chan struct{}
+	if c, ok := r.mu.checksums[id]; !ok {
+		// There is no record of this ID. Make a new notification.
+		notify = make(chan struct{})
+	} else if !c.started {
+		// A CollectChecksumRequest is waiting on the existing notification.
+		notify = c.notify
+	} else {
 		// A previous attempt was made to compute the checksum.
 		r.mu.Unlock()
 		return
 	}
 
-	// GC old entries.
-	var oldEntries []uuid.UUID
-	for id, val := range r.mu.checksums {
-		// The timestamp is only valid when the checksum is set.
-		if val.checksum != nil && now.After(val.gcTimestamp) {
-			oldEntries = append(oldEntries, id)
-		}
-	}
-	for _, id := range oldEntries {
-		delete(r.mu.checksums, id)
-	}
+	r.gcOldChecksumEntriesLocked(now)
 
 	// Create an entry with checksum == nil and gcTimestamp unset.
-	r.mu.checksums[id] = replicaChecksum{notify: make(chan struct{})}
+	r.mu.checksums[id] = replicaChecksum{started: true, notify: notify}
 	desc := *r.mu.state.Desc
 	r.mu.Unlock()
 	snap := r.store.NewSnapshot()
@@ -220,67 +229,6 @@ func (r *Replica) computeChecksumTrigger(
 		defer snap.Close()
 		// Set checksum to nil.
 		r.computeChecksumDone(ctx, id, nil, nil)
-	}
-}
-
-func (r *Replica) verifyChecksumTrigger(
-	ctx context.Context, args roachpb.VerifyChecksumRequest,
-) {
-	id := args.ChecksumID
-	c, ok := r.getChecksum(ctx, id)
-	if !ok {
-		log.Errorf(ctx, "consistency check skipped: checksum for id = %v doesn't exist", id)
-		// Return success because a checksum might be missing only on
-		// this replica. A checksum might be missing because of a
-		// number of reasons: GC-ed, server restart, and ComputeChecksum
-		// version incompatibility.
-		return
-	}
-	if c.checksum != nil && !bytes.Equal(c.checksum, args.Checksum) {
-		// Replication consistency problem!
-		logFunc := log.Errorf
-
-		// Collect some more debug information.
-		if args.Snapshot == nil {
-			// No debug information; run another consistency check to deliver
-			// more debug information.
-			if err := r.store.stopper.RunAsyncTask(func() {
-				log.Errorf(ctx, "%s: consistency check failed; fetching details", r)
-				desc := r.Desc()
-				startKey := desc.StartKey.AsRawKey()
-				// Can't use a start key less than LocalMax.
-				if bytes.Compare(startKey, keys.LocalMax) < 0 {
-					startKey = keys.LocalMax
-				}
-				if err := r.store.db.CheckConsistency(startKey, desc.EndKey.AsRawKey(), true /* withDiff */); err != nil {
-					log.Errorf(ctx, "couldn't rerun consistency check: %s", err)
-				}
-			}); err != nil {
-				log.Error(ctx, errors.Wrap(err, "could not rerun consistency check"))
-			}
-		} else {
-			// Compute diff.
-			diff := diffRange(args.Snapshot, c.snapshot)
-			if diff != nil {
-				for _, d := range diff {
-					l := "leader"
-					if d.LeaseHolder {
-						l = "replica"
-					}
-					log.Errorf(ctx, "consistency check failed: k:v = (%s (%x), %s, %x) not present on %s",
-						d.Key, d.Key, d.Timestamp, d.Value, l)
-				}
-			}
-			if r.store.ctx.ConsistencyCheckPanicOnFailure {
-				if p := r.store.ctx.TestingKnobs.BadChecksumPanic; p != nil {
-					p(diff)
-				} else {
-					logFunc = log.Fatalf
-				}
-			}
-		}
-
-		logFunc(ctx, "consistency check failed on replica: %s, checksum mismatch: e = %x, v = %x", args.Checksum, c.checksum)
 	}
 }
 
@@ -503,9 +451,4 @@ func (r *Replica) handleTrigger(
 	if trigger.computeChecksum != nil {
 		r.computeChecksumTrigger(ctx, *trigger.computeChecksum)
 	}
-
-	if trigger.verifyChecksum != nil {
-		r.verifyChecksumTrigger(ctx, *trigger.verifyChecksum)
-	}
-
 }

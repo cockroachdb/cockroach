@@ -17,10 +17,14 @@
 package storage
 
 import (
+	"bytes"
+	"time"
+
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // Server implements the storage parts of the StoresServer interface.
@@ -73,6 +77,52 @@ func (is Server) Reserve(
 	err := is.execStoreCommand(req.StoreRequestHeader,
 		func(s *Store) error {
 			*resp = s.Reserve(ctx, *req)
+			return nil
+		})
+	return resp, err
+}
+
+// CollectChecksum implements the StoresServer interface.
+func (is Server) CollectChecksum(
+	ctx context.Context, req *CollectChecksumRequest,
+) (*CollectChecksumResponse, error) {
+	resp := &CollectChecksumResponse{}
+	err := is.execStoreCommand(req.StoreRequestHeader,
+		func(s *Store) error {
+			r, err := s.GetReplica(req.RangeID)
+			if err != nil {
+				return err
+			}
+			c, err := r.getChecksum(ctx, req.ChecksumID)
+			if err != nil {
+				return err
+			}
+			resp.Checksum = c.checksum
+			if bytes.Compare(req.Checksum, c.checksum) != 0 {
+				log.Errorf(ctx, "consistency check failed on range ID %s: expected checksum %x, got %x",
+					req.RangeID, req.Checksum, c.checksum)
+				if req.Snapshot != nil && c.snapshot != nil {
+					diff := diffRange(req.Snapshot, c.snapshot)
+					for _, d := range diff {
+						l := "lease holder"
+						if d.LeaseHolder {
+							l = "replica"
+						}
+						log.Errorf(ctx, "consistency check failed: k:v = (%s (%x), %s, %x) not present on %s",
+							d.Key, d.Key, d.Timestamp, d.Value, l)
+					}
+					if r.store.ctx.ConsistencyCheckPanicOnFailure {
+						go func() {
+							if p := r.store.ctx.TestingKnobs.BadChecksumPanic; p != nil {
+								p(diff)
+							} else {
+								time.Sleep(10 * time.Second)
+								panic("consistency check failed")
+							}
+						}()
+					}
+				}
+			}
 			return nil
 		})
 	return resp, err

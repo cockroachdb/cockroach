@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/coreos/etcd/raft/raftpb"
@@ -43,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -1757,15 +1759,14 @@ func (r *Replica) applyNewLeaseLocked(
 // a ComputeChecksum command on the range. It then applies a VerifyChecksum
 // command passing along a locally computed checksum for the range.
 func (r *Replica) CheckConsistency(
+	ctx context.Context,
 	args roachpb.CheckConsistencyRequest,
 	desc *roachpb.RangeDescriptor,
 ) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
-	ctx := context.TODO()
 	key := desc.StartKey.AsRawKey()
 	endKey := desc.EndKey.AsRawKey()
 	id := uuid.MakeV4()
 	// Send a ComputeChecksum to all the replicas of the range.
-	start := timeutil.Now()
 	{
 		var ba roachpb.BatchRequest
 		ba.RangeID = r.Desc().RangeID
@@ -1787,37 +1788,79 @@ func (r *Replica) CheckConsistency(
 	}
 
 	// Get local checksum. This might involving waiting for it.
-	c, ok := r.getChecksum(ctx, id)
-	if !ok || c.checksum == nil {
-		return roachpb.CheckConsistencyResponse{}, roachpb.NewErrorf("unable to compute checksum for range [%v, %v]", key, endKey)
+	c, err := r.getChecksum(ctx, id)
+	if err != nil || c.checksum == nil {
+		return roachpb.CheckConsistencyResponse{}, roachpb.NewError(
+			errors.Wrapf(err, "could not compute checksum for range [%s, %s]", key, endKey))
 	}
 
-	// Wait for a bit to improve the probability that all
-	// the replicas have computed their checksum. We do this
-	// because VerifyChecksum blocks on every replica until the
-	// computed checksum is available.
-	computeChecksumDuration := timeutil.Since(start)
-	time.Sleep(computeChecksumDuration)
-
-	// Send a VerifyChecksum to all the replicas of the range.
-	{
-		var ba roachpb.BatchRequest
-		ba.RangeID = r.Desc().RangeID
-		checkArgs := &roachpb.VerifyChecksumRequest{
-			Span: roachpb.Span{
-				Key:    key,
-				EndKey: endKey,
-			},
-			Version:    replicaChecksumVersion,
-			ChecksumID: id,
-			Checksum:   c.checksum,
-			Snapshot:   c.snapshot,
-		}
-		ba.Add(checkArgs)
-		ba.Timestamp = r.store.Clock().Now()
-		_, pErr := r.Send(ctx, ba)
-		if pErr != nil {
-			return roachpb.CheckConsistencyResponse{}, pErr
+	// Get remote checksums.
+	var mu struct {
+		syncutil.Mutex
+		inconsistent bool
+	}
+	var wg sync.WaitGroup
+	sp := r.store.ctx.StorePool
+	for _, replica := range r.Desc().Replicas {
+		wg.Add(1)
+		go func(replica roachpb.ReplicaDescriptor) {
+			defer wg.Done()
+			if localReplica, err := r.GetReplicaDescriptor(); err != nil {
+				log.Error(ctx, errors.Wrap(err, "could not get replica descriptor"))
+				return
+			} else if replica == localReplica {
+				return
+			}
+			addr, err := sp.resolver(replica.NodeID)
+			if err != nil {
+				log.Error(ctx, errors.Wrapf(err, "could not resolve node ID %d", replica.NodeID))
+				return
+			}
+			conn, err := sp.rpcContext.GRPCDial(addr.String())
+			if err != nil {
+				log.Error(ctx,
+					errors.Wrapf(err, "could not dial node ID %d address %s", replica.NodeID, addr))
+				return
+			}
+			client := NewStoresClient(conn)
+			req := &CollectChecksumRequest{
+				StoreRequestHeader{NodeID: replica.NodeID, StoreID: replica.StoreID},
+				r.RangeID,
+				id,
+				c.checksum,
+				c.snapshot,
+			}
+			resp, err := client.CollectChecksum(ctx, req)
+			if err != nil {
+				log.Error(ctx, errors.Wrapf(err, "could not CollectChecksum from replica %s", replica))
+				return
+			}
+			if bytes.Compare(c.checksum, resp.Checksum) != 0 {
+				log.Errorf(ctx, "replica %s is inconsistent: expected checksum %x, got %x",
+					replica, c.checksum, resp.Checksum)
+				mu.Lock()
+				mu.inconsistent = true
+				mu.Unlock()
+			}
+		}(replica)
+	}
+	wg.Wait()
+	if !args.WithDiff && mu.inconsistent {
+		if err := r.store.stopper.RunAsyncTask(func() {
+			innerCtx := context.Background()
+			log.Errorf(innerCtx, "%s: consistency check failed; fetching details", r)
+			desc := r.Desc()
+			startKey := desc.StartKey.AsRawKey()
+			// Can't use a start key less than LocalMax.
+			if bytes.Compare(startKey, keys.LocalMax) < 0 {
+				startKey = keys.LocalMax
+			}
+			if err := r.store.db.CheckConsistency(
+				startKey, desc.EndKey.AsRawKey(), true /* withDiff */); err != nil {
+				log.Error(innerCtx, errors.Wrap(err, "could not rerun consistency check"))
+			}
+		}); err != nil {
+			log.Error(ctx, errors.Wrap(err, "could not rerun consistency check"))
 		}
 	}
 
@@ -1835,23 +1878,36 @@ const (
 func (r *Replica) getChecksum(
 	ctx context.Context,
 	id uuid.UUID,
-) (replicaChecksum, bool) {
-	r.mu.Lock()
-	c, ok := r.mu.checksums[id]
-	r.mu.Unlock()
-	if !ok {
-		return replicaChecksum{}, false
-	}
-	// Wait
+) (replicaChecksum, error) {
 	now := timeutil.Now()
-	<-c.notify
+	r.mu.Lock()
+	r.gcOldChecksumEntriesLocked(now)
+	c, ok := r.mu.checksums[id]
+	if !ok {
+		if d, ok := ctx.Deadline(); ok {
+			c.gcTimestamp = d
+		}
+		c.notify = make(chan struct{})
+		r.mu.checksums[id] = c
+	}
+	r.mu.Unlock()
+	// Wait
+	select {
+	case <-ctx.Done():
+		return replicaChecksum{},
+			fmt.Errorf("deadline exceeded while waiting for checksum (ID = %s)", id)
+	case <-c.notify:
+	}
 	if log.V(1) {
 		log.Infof(ctx, "waited for compute checksum for %s", timeutil.Since(now))
 	}
 	r.mu.Lock()
 	c, ok = r.mu.checksums[id]
 	r.mu.Unlock()
-	return c, ok
+	if !ok {
+		return replicaChecksum{}, fmt.Errorf("no map entry for checksum (ID = %s)", id)
+	}
+	return c, nil
 }
 
 // computeChecksumDone adds the computed checksum, sets a deadline for GCing the
@@ -1875,7 +1931,7 @@ func (r *Replica) computeChecksumDone(
 		// ComputeChecksum adds an entry into the map, and the entry can
 		// only be GCed once the gcTimestamp is set above. Something
 		// really bad happened.
-		log.Errorf(ctx, "no checksum for id = %v", id)
+		log.Errorf(ctx, "no map entry for checksum (ID = %s)", id)
 	}
 }
 

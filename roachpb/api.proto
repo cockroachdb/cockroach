@@ -652,9 +652,7 @@ message ComputeChecksumResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// A VerifyChecksumRequest is arguments to the VerifyChecksum() method, to
-// verify the checksum computed on the lease holder against the one requested
-// earlier through a ComputeChecksumRequest with the same checksum_id.
+// VerifyChecksumRequest is DEPRECATED.
 message VerifyChecksumRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The version used to pick the checksum method. It allows us to use a
@@ -668,7 +666,7 @@ message VerifyChecksumRequest {
   optional RaftSnapshotData snapshot = 5;
 }
 
-// A VerifyChecksumResponse is the response to a VerifyChecksum() operation.
+// VerifyChecksumResponse is DEPRECATED.
 message VerifyChecksumResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
