@@ -1,9 +1,9 @@
 - Feature Name: Foreign Keys
-- Status: in-progress
+- Status: completed
 - Start Date: 2016-04-20
 - Authors: David Taylor
-- RFC PR: (PR # after acceptance of initial draft)
-- Cockroach Issue: 2968
+- RFC PR: #6309
+- Cockroach Issue: #2968
 
 
 # Summary

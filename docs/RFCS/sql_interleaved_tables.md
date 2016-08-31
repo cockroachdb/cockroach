@@ -1,9 +1,9 @@
 - Feature Name: sql_interleaved_tables
-- Status: draft
+- Status: in-progress
 - Start Date: 2016-06-24
 - Authors: Daniel Harrison
-- RFC PR: [7465](https://github.com/cockroachdb/cockroach/pull/7465)
-- Cockroach Issue: [2972](https://github.com/cockroachdb/cockroach/issues/2972)
+- RFC PR: [#7465](https://github.com/cockroachdb/cockroach/pull/7465)
+- Cockroach Issue: [#2972](https://github.com/cockroachdb/cockroach/issues/2972)
 
 
 # Summary
