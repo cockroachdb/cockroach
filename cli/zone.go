@@ -454,7 +454,7 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	zoneID, zone, err := queryZonePath(conn, path)
+	_, zone, err := queryZonePath(conn, path)
 	if err != nil {
 		return err
 	}
@@ -486,13 +486,9 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 	}
 
 	id := path[len(path)-1]
-	if id == zoneID {
-		err = runQueryAndFormatResults(conn, os.Stdout,
-			makeQuery(`UPDATE system.zones SET config = $2 WHERE id = $1`, id, buf), cliCtx.prettyFmt)
-	} else {
-		err = runQueryAndFormatResults(conn, os.Stdout,
-			makeQuery(`INSERT INTO system.zones VALUES ($1, $2)`, id, buf), cliCtx.prettyFmt)
-	}
+	_, _, _, err = runQuery(conn, makeQuery(
+		`UPSERT INTO system.zones (id, config) VALUES ($1, $2)`,
+		id, buf), false)
 	if err != nil {
 		return err
 	}
