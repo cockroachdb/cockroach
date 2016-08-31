@@ -17,7 +17,10 @@
 package sql
 
 import (
+	"math"
+
 	"github.com/cockroachdb/cockroach/internal/client"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
@@ -70,8 +73,8 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 	return &emptyNode{}, nil
 }
 
-// truncateTable truncates the data of a table.
-// It deletes a range of data for the table, which includes the PK and all
+// truncateTable truncates the data of a table in a single transaction. It
+// deletes a range of data for the table, which includes the PK and all
 // indexes.
 func truncateTable(tableDesc *sqlbase.TableDescriptor, txn *client.Txn) error {
 	rd, err := makeRowDeleter(txn, tableDesc, nil, nil, false)
@@ -82,5 +85,38 @@ func truncateTable(tableDesc *sqlbase.TableDescriptor, txn *client.Txn) error {
 	if err := td.init(txn); err != nil {
 		return err
 	}
-	return td.deleteAllRows(context.TODO())
+	_, err = td.deleteAllRows(context.TODO(), roachpb.Span{}, math.MaxInt64)
+	return err
+}
+
+// TableTruncateChunkSize is the size of a chunk during a table
+// truncation/drop operation. The chunk can be interpreted as the number of
+// keys or table rows to be deleted.
+const TableTruncateChunkSize = 1000
+
+// truncateTableInChunks truncates the data of a table in chunks. It deletes a
+// range of data for the table, which includes the PK and all indexes.
+func truncateTableInChunks(
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *client.DB,
+) error {
+	var resume roachpb.Span
+	for done := false; !done; {
+		resumeAt := resume
+		if err := db.Txn(ctx, func(txn *client.Txn) error {
+			rd, err := makeRowDeleter(txn, tableDesc, nil, nil, false)
+			if err != nil {
+				return err
+			}
+			td := tableDeleter{rd: rd}
+			if err := td.init(txn); err != nil {
+				return err
+			}
+			resume, err = td.deleteAllRows(txn.Context, resumeAt, TableTruncateChunkSize)
+			return err
+		}); err != nil {
+			return err
+		}
+		done = resume.Key == nil
+	}
+	return nil
 }
