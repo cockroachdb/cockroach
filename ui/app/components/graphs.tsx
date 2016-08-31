@@ -2,7 +2,7 @@ import * as React from "react";
 import * as d3 from "d3";
 import _ from "lodash";
 
-type TSResponseMessage = cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
+type TSResponseMessage = Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
 
 /**
  * MetricProps reperesents the properties assigned to a selector component. A

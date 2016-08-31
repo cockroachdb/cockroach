@@ -14,7 +14,7 @@ import {
 import { TimeSeriesQueryAggregator, TimeSeriesQueryDerivative } from "../util/protoEnums";
 import { MetricsQuery } from "../redux/metrics";
 
-type TSRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
+type TSRequestMessage = Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
 
 function makeDataProvider(id: string,
                           metrics: MetricsQuery,
@@ -42,23 +42,23 @@ function makeMetricsRequest(timeInfo: QueryTimeInfo, sources?: string[]) {
       {
         name: "test.metric.1",
         sources: sources,
-        downsampler: TimeSeriesQueryAggregator.AVG as number as cockroach.ts.tspb.TimeSeriesQueryAggregator,
-        source_aggregator: TimeSeriesQueryAggregator.SUM as number as cockroach.ts.tspb.TimeSeriesQueryAggregator,
-        derivative: TimeSeriesQueryDerivative.NONE as number as cockroach.ts.tspb.TimeSeriesQueryDerivative,
+        downsampler: TimeSeriesQueryAggregator.AVG as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryAggregator,
+        source_aggregator: TimeSeriesQueryAggregator.SUM as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryAggregator,
+        derivative: TimeSeriesQueryDerivative.NONE as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryDerivative,
       },
       {
         name: "test.metric.2",
         sources: sources,
-        downsampler: TimeSeriesQueryAggregator.AVG as number as cockroach.ts.tspb.TimeSeriesQueryAggregator,
-        source_aggregator: TimeSeriesQueryAggregator.SUM as number as cockroach.ts.tspb.TimeSeriesQueryAggregator,
-        derivative: TimeSeriesQueryDerivative.NONE as number as cockroach.ts.tspb.TimeSeriesQueryDerivative,
+        downsampler: TimeSeriesQueryAggregator.AVG as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryAggregator,
+        source_aggregator: TimeSeriesQueryAggregator.SUM as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryAggregator,
+        derivative: TimeSeriesQueryDerivative.NONE as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryDerivative,
       },
       {
         name: "test.metric.3",
         sources: sources,
-        downsampler: TimeSeriesQueryAggregator.AVG as number as cockroach.ts.tspb.TimeSeriesQueryAggregator,
-        source_aggregator: TimeSeriesQueryAggregator.SUM as number as cockroach.ts.tspb.TimeSeriesQueryAggregator,
-        derivative: TimeSeriesQueryDerivative.NONE as number as cockroach.ts.tspb.TimeSeriesQueryDerivative,
+        downsampler: TimeSeriesQueryAggregator.AVG as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryAggregator,
+        source_aggregator: TimeSeriesQueryAggregator.SUM as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryAggregator,
+        derivative: TimeSeriesQueryDerivative.NONE as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryDerivative,
       },
     ],
   });

@@ -24,7 +24,7 @@ import "cockroach/roachpb/data.proto";
 import "cockroach/roachpb/errors.proto";
 import "cockroach/sql/distsql/data.proto";
 import "cockroach/sql/distsql/processors.proto";
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 message SetupFlowRequest {
   optional roachpb.Transaction txn = 1 [(gogoproto.nullable) = false];

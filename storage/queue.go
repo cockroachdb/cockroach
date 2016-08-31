@@ -175,6 +175,13 @@ type baseQueue struct {
 		// Some tests in this package disable queues.
 		disabled bool
 	}
+
+	// processMu synchronizes execution of processing for a single queue,
+	// ensuring that we never process more than a single replica at a time. This
+	// is needed because both the main processing loop and the purgatory loop can
+	// process replicas.
+	processMu sync.Locker
+
 	ctx context.Context
 }
 
@@ -201,11 +208,13 @@ func makeBaseQueue(
 	}
 	bq.mu.Locker = new(syncutil.Mutex)
 	bq.mu.replicas = map[roachpb.RangeID]*replicaItem{}
+	bq.processMu = new(syncutil.Mutex)
 
 	bq.ctx = context.TODO()
 	// Prepend [name] to logs.
 	bq.ctx = log.WithLogTag(bq.ctx, name, nil)
 	bq.ctx = log.WithEventLog(bq.ctx, "queue", name)
+
 	return bq
 }
 
@@ -438,6 +447,9 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 // called externally to the queue. bq.mu.Lock should not be held
 // while calling this method.
 func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
+	bq.processMu.Lock()
+	defer bq.processMu.Unlock()
+
 	// Load the system config.
 	cfg, ok := bq.gossip.GetSystemConfig()
 	if !ok {

@@ -1445,7 +1445,7 @@ type RocksDBSstFileReader struct {
 	rocksDB *RocksDB
 }
 
-// MakeRocksDBSstFileReader creates a RocksDBSstFileReader that uses a scrach
+// MakeRocksDBSstFileReader creates a RocksDBSstFileReader that uses a scratch
 // directory which is cleaned up by `Close`.
 func MakeRocksDBSstFileReader() (RocksDBSstFileReader, error) {
 	stopper := stop.NewStopper()

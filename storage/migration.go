@@ -62,6 +62,7 @@ func migrate7310And6991(ctx context.Context, batch engine.ReadWriter, desc roach
 	// don't have a snapshot here, so we could wind up lowering the commit
 	// index (which would error out and fatal us).
 	if hs.Commit == 0 {
+		log.Warningf(ctx, "migration: synthesized HardState for %+v", desc)
 		if err := synthesizeHardState(ctx, batch, state, hs); err != nil {
 			return errors.Wrap(err, "could not migrate HardState")
 		}

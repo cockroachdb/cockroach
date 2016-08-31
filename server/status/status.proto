@@ -20,7 +20,7 @@ option go_package = "status";
 
 import "cockroach/roachpb/metadata.proto";
 import "cockroach/build/info.proto";
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 // StoreStatus records the most recent values of metrics for a store.
 message StoreStatus {
