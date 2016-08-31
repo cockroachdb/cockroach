@@ -88,6 +88,7 @@ github.com/opentracing/basictracer-go c7c0202a8a77f658aeb2193a27b6c0cfcc821038
 github.com/opentracing/opentracing-go 855519783f479520497c6b3445611b05fc42f009
 github.com/pborman/uuid c55201b036063326c5b1b89ccfe45a184973d073
 github.com/peterbourgon/g2s 5767a0b2078638d14800683fd0fe425604883f63
+github.com/petermattis/goid 208e1c5be6bf38853827abdc6290b5f6a0c404d5
 github.com/pkg/errors a22138067af1c4942683050411a841ade67fe1eb
 github.com/prometheus/client_model fa8ad6fec33561be4280a8f0514318c79d7f6cb6
 github.com/prometheus/common ebdfc6da46522d58825777cf1f90490a5b1ef1d8
