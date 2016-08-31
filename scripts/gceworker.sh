@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -euxo pipefail
+set -euo pipefail
 
 export CLOUDSDK_CORE_PROJECT=${CLOUDSDK_CORE_PROJECT-${GOOGLE_PROJECT-cockroach-$(id -un)}}
 export CLOUDSDK_COMPUTE_ZONE=${GCEWORKER_ZONE-${CLOUDSDK_COMPUTE_ZONE-us-east1-b}}
@@ -12,6 +12,7 @@ cd "$(dirname "${0}")"
 
 case ${1-} in
     create)
+    set -x
     gcloud compute instances \
            create "${name}" \
            --machine-type "custom-32-32768" \
@@ -53,6 +54,22 @@ case ${1-} in
     ssh)
     shift
     gcloud compute ssh "${name}" "$@"
+    ;;
+    mount)
+    shift
+    if [ $# != 2 ]; then
+      echo "usage: $0 <remote-path> <local-path>"
+      exit 1
+    fi
+    if ! hash sshfs 2>/dev/null; then
+      echo "sshfs not found (install sshfs)"
+      exit 1
+    fi
+    set -x
+    tmpfile=$(mktemp /tmp/gceworker-ssh.XXXXXX)
+    trap "rm ${tmpfile}" EXIT
+    gcloud compute config-ssh --ssh-config-file "$tmpfile" > /dev/null
+    sshfs -F "$tmpfile" ${name}.${CLOUDSDK_COMPUTE_ZONE}.${CLOUDSDK_CORE_PROJECT}:$1 $2 -o defer_permissions -o volname="${name}"
     ;;
     *)
     echo "$0: unknown command: ${1-}, use one of create, start, stop, destroy, or ssh"
