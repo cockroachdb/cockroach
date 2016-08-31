@@ -47,7 +47,7 @@ func Tracef(ctx context.Context, format string, args ...interface{}) {
 // active trace) or logs to the trace alone depending on whether the specified
 // verbosity level is active.
 func VTrace(level level, ctx context.Context, msg string) {
-	if V(level) {
+	if VDepth(level, 1) {
 		Info(ctx, msg)
 	} else {
 		Trace(ctx, msg)
@@ -60,7 +60,7 @@ var _ = VTrace // TODO(peter): silence unused error, remove when used
 // active trace) or logs to the trace alone depending on whether the specified
 // verbosity level is active.
 func VTracef(level level, ctx context.Context, format string, args ...interface{}) {
-	if V(level) {
+	if VDepth(level, 1) {
 		Infof(ctx, format, args...)
 	} else {
 		Tracef(ctx, format, args...)
