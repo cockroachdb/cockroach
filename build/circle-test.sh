@@ -13,7 +13,7 @@ else
   outdir="/tmp"
 fi
 
-builder=$(dirname $0)/builder.sh
+builder="$(dirname "${0}")"/builder.sh
 match='^F[0-9]+|^panic|^[Gg]oroutine [0-9]+|(read|write) by.*goroutine|DATA RACE|Too many goroutines running after tests'
 
 prepare_artifacts() {
@@ -93,11 +93,11 @@ prepare_artifacts() {
       echo "Posting an issue"
       # Generate string of failed tests: 'TestRaftRemoveRace TestChaos TestHoneyBooBoo'
       FAILEDTESTS=$(grep -oh '^--- FAIL: \w*' "${outdir}/excerpt.txt" | sed -e 's/--- FAIL: //' | tr '\n' ' ' || true)
-      if [ -z "${FAILEDTESTS}" -a -n "${CIRCLE_TEST_REPORTS-}" ]; then
+      if [ -z "${FAILEDTESTS}" ] && [ -n "${CIRCLE_TEST_REPORTS-}" ]; then
         # If we generated XML reports and the simple grep didn't find
         # anything (which happens for timeouts and panics), parse the
         # XML for more robust results.
-        FAILEDTESTS=$(python3 -c 'import sys, xml.etree.ElementTree as ET; [print(t.attrib["name"]) for filename in sys.argv[1:] for t in ET.parse(filename).findall(".//failure/..")]' $(find "${CIRCLE_TEST_REPORTS}" -type f -iname '*.xml'))
+        FAILEDTESTS=$(python3 -c 'import sys, xml.etree.ElementTree as ET; [print(t.attrib["name"]) for filename in sys.argv[1:] for t in ET.parse(filename).findall(".//failure/..")]' "$(find "${CIRCLE_TEST_REPORTS}" -type f -iname '*.xml')")
       fi
 
       # JSON monster to post the issue.
@@ -111,7 +111,7 @@ prepare_artifacts() {
 trap prepare_artifacts EXIT
 
 function is_shard() {
-  test $(($1 % $CIRCLE_NODE_TOTAL)) -eq $CIRCLE_NODE_INDEX
+  test $(($1 % CIRCLE_NODE_TOTAL)) -eq "$CIRCLE_NODE_INDEX"
 }
 
 # Note that the order of the is_shard tests is a bit odd. It would be
@@ -151,7 +151,7 @@ if is_shard 0; then
     # Note that this test requires 2>&1 but the others don't because
     # this one runs outside the builder container (and inside the
     # container, something is already combining stdout and stderr).
-    time $(dirname $0)/../acceptance.test -nodes 3 -l ${outdir}/acceptance \
+    time "$(dirname "${0}")"/../acceptance.test -nodes 3 -l ${outdir}/acceptance \
       -test.v -test.timeout 10m \
       --verbosity=1 --vmodule=monitor=2 2>&1 | \
       tr -d '\r' | tee "${outdir}/acceptance.log" | \
