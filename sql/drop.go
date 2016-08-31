@@ -595,14 +595,23 @@ func (p *planner) removeInterleaveBackReference(
 	return p.saveNonmutationAndNotify(t)
 }
 
-// truncateAndDropTable batches all the commands required for truncating and deleting the
-// table descriptor.
-// It is called from a mutation, async wrt the DROP statement.
-func truncateAndDropTable(tableDesc *sqlbase.TableDescriptor, db *client.DB) error {
-	return db.Txn(context.TODO(), func(txn *client.Txn) error {
-		if err := truncateTable(tableDesc, txn); err != nil {
-			return err
-		}
+// truncateAndDropTable batches all the commands required for truncating and
+// deleting the table descriptor. It is called from a mutation, async wrt the
+// DROP statement. Before this method is called, the table has already been
+// marked for deletion and has been purged from the descriptor cache on all
+// nodes. No node is reading/writing data on the table at this stage,
+// therefore the entire table can be deleted with no concern for conflicts (we
+// can even eliminate the need to use a transaction for each chunk at a later
+// stage if it proves inefficient).
+func truncateAndDropTable(
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *client.DB,
+) error {
+	if err := truncateTableInChunks(ctx, tableDesc, db); err != nil {
+		return err
+	}
+
+	// Finished deleting all the table data, now delete the table meta data.
+	return db.Txn(ctx, func(txn *client.Txn) error {
 		zoneKey, nameKey, descKey := getKeysForTableDescriptor(tableDesc)
 		// Delete table descriptor
 		b := &client.Batch{}
