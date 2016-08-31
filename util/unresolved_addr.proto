@@ -18,7 +18,7 @@ syntax = "proto2";
 package cockroach.util;
 option go_package = "util";
 
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 // / UnresolvedAddr is an unresolved version of net.Addr.
 message UnresolvedAddr {

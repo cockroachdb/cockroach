@@ -8,8 +8,6 @@ GOVERSION=${GOVERSION-1.7}
 
 name=${GCEWORKER_NAME-gceworker$(echo "${GOVERSION}" | tr -d '.')}
 
-cd "$(dirname "${0}")"
-
 case ${1-} in
     create)
     gcloud compute instances \
@@ -23,8 +21,8 @@ case ${1-} in
            --boot-disk-device-name "${name}"
     sleep 20 # avoid SSH timeout on copy-files
 
-    gcloud compute copy-files . "${name}:scripts"
-    gcloud compute ssh "${name}" "GOVERSION=${GOVERSION} ./scripts/bootstrap-debian.sh"
+    gcloud compute copy-files "$(dirname "${0}")" "${name}:scripts"
+    gcloud compute ssh "${name}" --ssh-flag="-A" --command="GOVERSION=${GOVERSION} ./scripts/bootstrap-debian.sh"
     # Install automatic shutdown after ten minutes of operation without a
     # logged in user. To disable this, `sudo touch /.active`.
     # This is much more intricate than it looks. A few complications which
@@ -52,7 +50,7 @@ case ${1-} in
     ;;
     ssh)
     shift
-    gcloud compute ssh "${name}" "$@"
+    gcloud compute ssh "${name}" --ssh-flag="-A" -- "$@"
     ;;
     *)
     echo "$0: unknown command: ${1-}, use one of create, start, stop, destroy, or ssh"

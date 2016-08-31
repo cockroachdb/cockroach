@@ -18,7 +18,7 @@ syntax = "proto2";
 package cockroach.util.hlc;
 option go_package = "hlc";
 
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 // Timestamp represents a state of the hybrid logical clock.
 message Timestamp {

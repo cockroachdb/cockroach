@@ -25,7 +25,7 @@ import "cockroach/roachpb/metadata.proto";
 import "cockroach/storage/engine/enginepb/mvcc.proto";
 import "cockroach/util/tracing/span.proto";
 import "cockroach/util/hlc/timestamp.proto";
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 // ReadConsistencyType specifies what type of consistency is observed
 // during read operations.

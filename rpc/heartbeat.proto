@@ -19,7 +19,7 @@ syntax = "proto2";
 package cockroach.rpc;
 option go_package = "rpc";
 
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 // RemoteOffset keeps track of this client's estimate of its offset from a
 // remote server. Uncertainty is the maximum error in the reading of this

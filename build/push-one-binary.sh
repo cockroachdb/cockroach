@@ -20,11 +20,11 @@ sha=$1
 rel_path=$2
 binary_name=${3-$(basename "${2}")}
 
-cd "$(dirname "${0}")/.."
-time aws s3 cp ${rel_path} s3://${BUCKET_NAME}/${REPO_NAME}/${binary_name}.${sha}
+cd "$(dirname "${0}")"/..
+time aws s3 cp "${rel_path}" "s3://${BUCKET_NAME}/${REPO_NAME}/${binary_name}.${sha}"
 
 # Upload LATEST file.
 tmpfile=$(mktemp /tmp/cockroach-push.XXXXXX)
-echo ${sha} > ${tmpfile}
-time aws s3 cp --website-redirect "/${REPO_NAME}/${binary_name}.${sha}" ${tmpfile} s3://${BUCKET_NAME}/${REPO_NAME}/${binary_name}${LATEST_SUFFIX}
-rm -f ${tmpfile}
+echo "${sha}" > "${tmpfile}"
+time aws s3 cp --website-redirect "/${REPO_NAME}/${binary_name}.${sha}" "${tmpfile}" "s3://${BUCKET_NAME}/${REPO_NAME}/${binary_name}${LATEST_SUFFIX}"
+rm -f "${tmpfile}"

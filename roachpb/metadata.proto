@@ -20,7 +20,7 @@ package cockroach.roachpb;
 option go_package = "roachpb";
 
 import "cockroach/util/unresolved_addr.proto";
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 // Attributes specifies a list of arbitrary strings describing
 // node topology, store type, and machine capabilities.
