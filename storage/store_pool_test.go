@@ -457,6 +457,12 @@ func (f fakeStoresServer) Reserve(_ context.Context, _ *ReservationRequest) (*Re
 	return &ReservationResponse{Reserved: f.reservationResponse}, f.reservationErr
 }
 
+func (f fakeStoresServer) CollectChecksum(
+	_ context.Context, _ *CollectChecksumRequest,
+) (*CollectChecksumResponse, error) {
+	panic("unimplemented")
+}
+
 // newFakeNodeServer returns a fakeStoresServer designed to handle internal
 // node server RPCs, an rpc context used for the server and the fake server's
 // address.
