@@ -20,7 +20,6 @@ option go_package = "roachpb";
 
 import "cockroach/roachpb/data.proto";
 import "cockroach/roachpb/errors.proto";
-import "cockroach/roachpb/internal_raft.proto";
 import "cockroach/roachpb/metadata.proto";
 import "cockroach/storage/engine/enginepb/mvcc.proto";
 import "cockroach/util/tracing/span.proto";
@@ -629,47 +628,26 @@ message RequestLeaseResponse{
 }
 
 // A ComputeChecksumRequest is arguments to the ComputeChecksum() method, to
-// start computing the checksum for the specified range at the snapshot for
-// this request command. A response is returned without the checksum.
-// The computed checksum is later compared to the one supplied
-// through a VerifyChecksumRequest.
+// start computing the checksum for the specified range at the snapshot for this
+// request command. A response is returned without the checksum. The computed
+// checksum is retrieved via a CollectChecksumRequest (storage/api.proto).
 message ComputeChecksumRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The version used to pick the checksum method. It allows us to use a
   // consistent checksumming method across replicas.
   optional uint32 version = 2 [(gogoproto.nullable) = false];
-  // A unique identifier to match a future VerifyChecksumRequest with this request.
+  // A unique identifier to match a future CollectChecksumRequest with this
+  // request.
   optional bytes checksum_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ChecksumID",
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
-  // Compute a checksum along with a snapshot of the entire range, that will
-  // be used in logging a diff during checksum verification.
+  // Compute a checksum along with a snapshot of the entire range, that will be
+  // used in logging a diff during checksum verification.
   optional bool snapshot = 4 [(gogoproto.nullable) = false];
 }
 
 // A ComputeChecksumResponse is the response to a ComputeChecksum() operation.
 message ComputeChecksumResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
-// A VerifyChecksumRequest is arguments to the VerifyChecksum() method, to
-// verify the checksum computed on the lease holder against the one requested
-// earlier through a ComputeChecksumRequest with the same checksum_id.
-message VerifyChecksumRequest {
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // The version used to pick the checksum method. It allows us to use a
-  // consistent checksumming method across replicas.
-  optional uint32 version = 2 [(gogoproto.nullable) = false];
-  optional bytes checksum_id = 3 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "ChecksumID",
-      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
-  optional bytes checksum = 4;
-  // Used when a diff is requested on observing a checksum mismatch.
-  optional RaftSnapshotData snapshot = 5;
-}
-
-// A VerifyChecksumResponse is the response to a VerifyChecksum() operation.
-message VerifyChecksumResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
@@ -701,7 +679,7 @@ message RequestUnion {
   optional RequestLeaseRequest request_lease = 20;
   optional ReverseScanRequest reverse_scan = 21;
   optional ComputeChecksumRequest compute_checksum = 22;
-  optional VerifyChecksumRequest verify_checksum = 23;
+  // Tag 23 was used.
   optional CheckConsistencyRequest check_consistency = 24;
   optional NoopRequest noop = 25;
   optional InitPutRequest init_put = 26;
@@ -737,7 +715,7 @@ message ResponseUnion {
   optional RequestLeaseResponse request_lease = 20;
   optional ReverseScanResponse reverse_scan = 21;
   optional ComputeChecksumResponse compute_checksum = 22;
-  optional VerifyChecksumResponse verify_checksum = 23;
+  // Tag 23 was used.
   optional CheckConsistencyResponse check_consistency = 24;
   optional NoopResponse noop = 25;
   optional InitPutResponse init_put = 26;
