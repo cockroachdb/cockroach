@@ -39,8 +39,9 @@ type Options struct {
 type Retry struct {
 	opts           Options
 	ctxDoneChan    <-chan struct{}
-	currentAttempt int
+	currentAttempt int // used for computing backoff
 	isReset        bool
+	totalAttempts  int // informational only
 }
 
 // Start returns a new Retry initialized to some default values. The Retry can
@@ -98,6 +99,11 @@ func (r *Retry) CurrentAttempt() int {
 	return r.currentAttempt
 }
 
+// TotalAttempts is zero initially and increases with each call to Next().
+func (r *Retry) TotalAttempts() int {
+	return r.currentAttempt
+}
+
 func (r Retry) retryIn() time.Duration {
 	backoff := float64(r.opts.InitialBackoff) * math.Pow(r.opts.Multiplier, float64(r.currentAttempt))
 	if maxBackoff := float64(r.opts.MaxBackoff); backoff > maxBackoff {
@@ -117,6 +123,7 @@ func (r Retry) retryIn() time.Duration {
 func (r *Retry) Next() bool {
 	if r.isReset {
 		r.isReset = false
+		r.totalAttempts++
 		return true
 	}
 
@@ -128,6 +135,7 @@ func (r *Retry) Next() bool {
 	select {
 	case <-time.After(r.retryIn()):
 		r.currentAttempt++
+		r.totalAttempts++
 		return true
 	case <-r.opts.Closer:
 		return false
