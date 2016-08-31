@@ -1,6 +1,6 @@
 import _ from "lodash";
 import * as React from "react";
-import * as ReactPaginate from "react-paginate";
+import ReactPaginate from "react-paginate";
 import { Link } from "react-router";
 import { connect } from "react-redux";
 
