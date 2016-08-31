@@ -234,7 +234,7 @@ func (s LeaseStore) Release(lease *LeaseState) error {
 // waitForOneVersion returns once there are no unexpired leases on the
 // previous version of the table descriptor. It returns the current version.
 // After returning there can only be versions of the descriptor >= to the
-// returned verson. Lease acquisition (see acquire()) maintains the
+// returned version. Lease acquisition (see acquire()) maintains the
 // invariant that no new leases for desc.Version-1 will be granted once
 // desc.Version exists.
 func (s LeaseStore) waitForOneVersion(tableID sqlbase.ID, retryOpts retry.Options) (
@@ -1028,7 +1028,7 @@ func (m *LeaseManager) AcquireByName(
 		// RENAME had a lease on the old name, and then tries to use the new name
 		// after the RENAME statement.
 		//
-		// How do we dissambiguate between the a) and b)? We get a fresh lease on
+		// How do we disambiguate between the a) and b)? We get a fresh lease on
 		// the descriptor, as required by b), and then we'll know if we're trying to
 		// resolve the current or the old name.
 

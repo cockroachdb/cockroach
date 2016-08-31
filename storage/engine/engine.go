@@ -38,9 +38,9 @@ type Iterator interface {
 	// SeekReverse advances the iterator to the first key in the engine which
 	// is <= the provided key.
 	SeekReverse(key MVCCKey)
-	// Valid returns true if the iterator is currently valid. An
-	// iterator which hasn't been seeked or has gone past the end of the
-	// key range is invalid.
+	// Valid returns true if the iterator is currently valid. An iterator that
+	// hasn't had Seek called on it or has gone past the end of the key range
+	// is invalid.
 	Valid() bool
 	// Next advances the iterator to the next key/value in the
 	// iteration. After this call, Valid() will be true if the
