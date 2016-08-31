@@ -132,6 +132,8 @@ type Node struct {
 	txnMetrics  kv.TxnMetrics
 
 	storesServer storage.StoresServer
+
+	consistencyServer storage.ConsistencyServer
 }
 
 // allocateNodeID increments the node id generator key to allocate
@@ -265,6 +267,7 @@ func NewNode(
 		eventLogger: eventLogger,
 	}
 	n.storesServer = storage.MakeServer(&n.Descriptor, n.stores)
+	n.consistencyServer = storage.MakeConsistencyServer(&n.Descriptor, n.stores)
 	return n
 }
 
