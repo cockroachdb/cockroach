@@ -528,9 +528,12 @@ type StoreTestingKnobs struct {
 	// If your filter is not idempotent, consider wrapping it in a
 	// ReplayProtectionFilterWrapper.
 	TestingCommandFilter storagebase.ReplicaCommandFilter
-	// A callback to be called instead of panicking due to a
-	// checksum mismatch in VerifyChecksum()
-	BadChecksumPanic func([]ReplicaSnapshotDiff)
+	// When non-nil, BadChecksumPanic is called on a checksum mismatch in
+	// CollectChecksum() instead of panic().
+	BadChecksumPanic func()
+	// When non-nil, BadChecksumReportDiff is called on a checksum mismatch in
+	// CheckConsistency() to report the diff between snapshots.
+	BadChecksumReportDiff func([]ReplicaSnapshotDiff)
 	// Disables the use of one phase commits.
 	DisableOnePhaseCommits bool
 	// A hack to manipulate the clock before sending a batch request to a replica.
