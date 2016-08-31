@@ -13,9 +13,9 @@ import { refreshDatabaseDetails, refreshTableDetails, generateTableID, CachedDat
 
 import { SortableTable, SortableColumn, SortSetting } from "../../components/sortabletable";
 
-type DatabaseDetailsResponseMessage = cockroach.server.serverpb.DatabaseDetailsResponseMessage;
-type TableDetailsResponseMessage = cockroach.server.serverpb.TableDetailsResponseMessage;
-type Grant = cockroach.server.serverpb.DatabaseDetailsResponse.Grant | cockroach.server.serverpb.TableDetailsResponse.Grant;
+type DatabaseDetailsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.DatabaseDetailsResponseMessage;
+type TableDetailsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.TableDetailsResponseMessage;
+type Grant = Proto2TypeScript.cockroach.server.serverpb.DatabaseDetailsResponse.Grant | Proto2TypeScript.cockroach.server.serverpb.TableDetailsResponse.Grant;
 
 // Constants used to store per-page sort settings in the redux UI store.
 const UI_DATABASE_GRANTS_SORT_SETTING_KEY = "databaseDetails/sort_setting/grants";

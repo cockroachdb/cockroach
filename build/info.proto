@@ -18,7 +18,7 @@ syntax = "proto2";
 package cockroach.build;
 option go_package = "build";
 
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 // Info describes build information for this CockroachDB binary.
 message Info {

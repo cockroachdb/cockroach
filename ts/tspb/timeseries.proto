@@ -18,8 +18,8 @@ syntax = "proto2";
 package cockroach.ts.tspb;
 option go_package = "tspb";
 
-import weak "gogoproto/gogo.proto";
-import weak "google/api/annotations.proto";
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
 
 // TimeSeriesDatapoint is a single point of time series data; a value associated
 // with a timestamp.
