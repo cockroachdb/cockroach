@@ -875,7 +875,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	verifySplitsAtTablePrefixes(numTotalValues)
 }
 
-// setupSplitSnapshotRace engineers a situation in which a range has
+// runSetupSplitSnapshotRace engineers a situation in which a range has
 // been split but node 3 hasn't processed it yet. There is a race
 // depending on whether node 3 learns of the split from its left or
 // right side. When this function returns most of the nodes will be
@@ -893,11 +893,12 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 // Nodes 1-5 are stopped; only node 0 is running.
 //
 // See https://github.com/cockroachdb/cockroach/issues/1644.
-func setupSplitSnapshotRace(t *testing.T) (mtc *multiTestContext, leftKey roachpb.Key, rightKey roachpb.Key) {
-	mtc = startMultiTestContext(t, 6)
+func runSetupSplitSnapshotRace(t *testing.T, testFn func(*multiTestContext, roachpb.Key, roachpb.Key)) {
+	mtc := startMultiTestContext(t, 6)
+	defer mtc.Stop()
 
-	leftKey = roachpb.Key("a")
-	rightKey = roachpb.Key("z")
+	leftKey := roachpb.Key("a")
+	rightKey := roachpb.Key("z")
 
 	// First, do a couple of writes; we'll use these to determine when
 	// the dust has settled.
@@ -982,7 +983,7 @@ func setupSplitSnapshotRace(t *testing.T) (mtc *multiTestContext, leftKey roachp
 	mtc.stopStore(5)
 	mtc.expireLeases()
 
-	return mtc, leftKey, rightKey
+	testFn(mtc, leftKey, rightKey)
 }
 
 // TestSplitSnapshotRace_SplitWins exercises one outcome of the
@@ -991,31 +992,30 @@ func setupSplitSnapshotRace(t *testing.T) (mtc *multiTestContext, leftKey roachp
 // the more common outcome in practice.
 func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc, leftKey, rightKey := setupSplitSnapshotRace(t)
-	defer mtc.Stop()
+	runSetupSplitSnapshotRace(t, func(mtc *multiTestContext, leftKey, rightKey roachpb.Key) {
+		// Bring the left range up first so that the split happens before it sees a snapshot.
+		for i := 1; i <= 3; i++ {
+			mtc.restartStore(i)
+		}
 
-	// Bring the left range up first so that the split happens before it sees a snapshot.
-	for i := 1; i <= 3; i++ {
-		mtc.restartStore(i)
-	}
+		// Perform a write on the left range and wait for it to propagate.
+		incArgs := incrementArgs(leftKey, 10)
+		if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
+		mtc.waitForValues(leftKey, []int64{0, 11, 11, 11, 0, 0})
 
-	// Perform a write on the left range and wait for it to propagate.
-	incArgs := incrementArgs(leftKey, 10)
-	if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
-	mtc.waitForValues(leftKey, []int64{0, 11, 11, 11, 0, 0})
+		// Now wake the other stores up.
+		mtc.restartStore(4)
+		mtc.restartStore(5)
 
-	// Now wake the other stores up.
-	mtc.restartStore(4)
-	mtc.restartStore(5)
-
-	// Write to the right range.
-	incArgs = incrementArgs(rightKey, 20)
-	if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
-	mtc.waitForValues(rightKey, []int64{0, 0, 0, 25, 25, 25})
+		// Write to the right range.
+		incArgs = incrementArgs(rightKey, 20)
+		if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
+		mtc.waitForValues(rightKey, []int64{0, 0, 0, 25, 25, 25})
+	})
 }
 
 // TestSplitSnapshotRace_SnapshotWins exercises one outcome of the
@@ -1025,50 +1025,50 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	t.Skip("#8416")
-	mtc, leftKey, rightKey := setupSplitSnapshotRace(t)
-	defer mtc.Stop()
+	runSetupSplitSnapshotRace(t, func(mtc *multiTestContext, leftKey, rightKey roachpb.Key) {
+		// Bring the right range up first.
+		for i := 3; i <= 5; i++ {
+			mtc.restartStore(i)
+		}
 
-	// Bring the right range up first.
-	for i := 3; i <= 5; i++ {
-		mtc.restartStore(i)
-	}
+		// Perform a write on the right range.
+		incArgs := incrementArgs(rightKey, 20)
+		if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
 
-	// Perform a write on the right range.
-	incArgs := incrementArgs(rightKey, 20)
-	if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
+		// It immediately propagates between nodes 4 and 5, but node 3
+		// remains at its old value. It can't accept the right-hand range
+		// because it conflicts with its not-yet-split copy of the left-hand
+		// range. This test is not completely deterministic: we want to make
+		// sure that node 3 doesn't panic when it receives the snapshot, but
+		// since it silently drops the message there is nothing we can wait
+		// for. There is a high probability that the message will have been
+		// received by the time that nodes 4 and 5 have processed their
+		// update.
+		mtc.waitForValues(rightKey, []int64{0, 0, 0, 2, 25, 25})
 
-	// It immediately propagates between nodes 4 and 5, but node 3
-	// remains at its old value. It can't accept the right-hand range
-	// because it conflicts with its not-yet-split copy of the left-hand
-	// range. This test is not completely deterministic: we want to make
-	// sure that node 3 doesn't panic when it receives the snapshot, but
-	// since it silently drops the message there is nothing we can wait
-	// for. There is a high probability that the message will have been
-	// received by the time that nodes 4 and 5 have processed their
-	// update.
-	mtc.waitForValues(rightKey, []int64{0, 0, 0, 2, 25, 25})
+		// Wake up the left-hand range. This will allow the left-hand
+		// range's split to complete and unblock the right-hand range.
+		mtc.restartStore(1)
+		mtc.restartStore(2)
 
-	// Wake up the left-hand range. This will allow the left-hand
-	// range's split to complete and unblock the right-hand range.
-	mtc.restartStore(1)
-	mtc.restartStore(2)
+		// Perform writes on both sides. This is not strictly necessary but
+		// it helps wake up dormant ranges that would otherwise have to wait
+		// for retry timeouts.
+		incArgs = incrementArgs(leftKey, 10)
+		if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
+		mtc.waitForValues(leftKey, []int64{0, 11, 11, 11, 0, 0})
 
-	// Perform writes on both sides. This is not strictly necessary but
-	// it helps wake up dormant ranges that would otherwise have to wait
-	// for retry timeouts.
-	incArgs = incrementArgs(leftKey, 10)
-	if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
-	mtc.waitForValues(leftKey, []int64{0, 11, 11, 11, 0, 0})
+		incArgs = incrementArgs(rightKey, 200)
+		if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
+		mtc.waitForValues(rightKey, []int64{0, 0, 0, 225, 225, 225})
 
-	incArgs = incrementArgs(rightKey, 200)
-	if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &incArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
-	mtc.waitForValues(rightKey, []int64{0, 0, 0, 225, 225, 225})
+	})
 }
 
 // TestStoreSplitTimestampCacheReadRace prevents regression of #3148. It begins
