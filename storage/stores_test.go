@@ -167,28 +167,48 @@ func TestStoresLookupReplica(t *testing.T) {
 		ls.AddStore(s[i])
 	}
 
-	if _, r, err := ls.LookupReplica(roachpb.RKey("a"), roachpb.RKey("c")); err != nil {
-		t.Error(err)
-	} else if r.StoreID != s[0].Ident.StoreID {
-		t.Errorf("expected store %d; got %d", s[0].Ident.StoreID, r.StoreID)
+	testCases := []struct {
+		start, end roachpb.RKey
+		expStoreID roachpb.StoreID
+		expError   string
+	}{
+		{
+			start:      roachpb.RKey("a"),
+			end:        roachpb.RKey("c"),
+			expStoreID: s[0].Ident.StoreID,
+		},
+		{
+			start:      roachpb.RKey("b"),
+			end:        nil,
+			expStoreID: s[0].Ident.StoreID,
+		},
+		{
+			start:    roachpb.RKey("b"),
+			end:      roachpb.RKey("d"),
+			expError: "outside of bounds of range",
+		},
+		{
+			start:      roachpb.RKey("x"),
+			end:        roachpb.RKey("z"),
+			expStoreID: s[1].Ident.StoreID,
+		},
+		{
+			start:      roachpb.RKey("y"),
+			end:        nil,
+			expStoreID: s[1].Ident.StoreID,
+		},
 	}
-	if _, r, err := ls.LookupReplica(roachpb.RKey("b"), nil); err != nil {
-		t.Error(err)
-	} else if r.StoreID != s[0].Ident.StoreID {
-		t.Errorf("expected store %d; got %d", s[0].Ident.StoreID, r.StoreID)
-	}
-	if _, _, err := ls.LookupReplica(roachpb.RKey("b"), roachpb.RKey("d")); !testutils.IsError(err, "outside of bounds of range") {
-		t.Errorf("got unexpected error %v", err)
-	}
-	if _, r, err := ls.LookupReplica(roachpb.RKey("x"), roachpb.RKey("z")); err != nil {
-		t.Error(err)
-	} else if r.StoreID != s[1].Ident.StoreID {
-		t.Errorf("expected store %d; got %d", s[1].Ident.StoreID, r.StoreID)
-	}
-	if _, r, err := ls.LookupReplica(roachpb.RKey("y"), nil); err != nil {
-		t.Error(err)
-	} else if r.StoreID != s[1].Ident.StoreID {
-		t.Errorf("expected store %d; got %d", s[1].Ident.StoreID, r.StoreID)
+	for _, tc := range testCases {
+		_, r, err := ls.LookupReplica(tc.start, tc.end)
+		if tc.expError != "" {
+			if !testutils.IsError(err, tc.expError) {
+				t.Errorf("got unexpected error %v", err)
+			}
+		} else if err != nil {
+			t.Error(err)
+		} else if r.StoreID != tc.expStoreID {
+			t.Errorf("expected store %d; got %d", tc.expStoreID, r.StoreID)
+		}
 	}
 
 	if desc, err := ls.FirstRange(); err != nil {
