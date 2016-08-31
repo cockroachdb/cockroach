@@ -208,6 +208,7 @@ var keywords = map[string]int{
 	"SMALLSERIAL":       SMALLSERIAL,
 	"SNAPSHOT":          SNAPSHOT,
 	"SOME":              SOME,
+	"SPLIT":             SPLIT,
 	"SQL":               SQL,
 	"START":             START,
 	"STDIN":             STDIN,
