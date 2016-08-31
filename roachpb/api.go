@@ -434,9 +434,6 @@ func (*TransferLeaseRequest) Method() Method { return TransferLease }
 // Method implements the Request interface.
 func (*ComputeChecksumRequest) Method() Method { return ComputeChecksum }
 
-// Method implements the Request interface.
-func (*VerifyChecksumRequest) Method() Method { return VerifyChecksum }
-
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
 	shallowCopy := *gr
@@ -605,12 +602,6 @@ func (ccr *ComputeChecksumRequest) ShallowCopy() Request {
 	return &shallowCopy
 }
 
-// ShallowCopy implements the Request interface.
-func (vcr *VerifyChecksumRequest) ShallowCopy() Request {
-	shallowCopy := *vcr
-	return &shallowCopy
-}
-
 func (*GetRequest) createReply() Response                { return &GetResponse{} }
 func (*PutRequest) createReply() Response                { return &PutResponse{} }
 func (*ConditionalPutRequest) createReply() Response     { return &ConditionalPutResponse{} }
@@ -639,7 +630,6 @@ func (*TruncateLogRequest) createReply() Response        { return &TruncateLogRe
 func (*RequestLeaseRequest) createReply() Response       { return &RequestLeaseResponse{} }
 func (*TransferLeaseRequest) createReply() Response      { return &RequestLeaseResponse{} }
 func (*ComputeChecksumRequest) createReply() Response    { return &ComputeChecksumResponse{} }
-func (*VerifyChecksumRequest) createReply() Response     { return &VerifyChecksumResponse{} }
 
 // NewGet returns a Request initialized to get the value at key.
 func NewGet(key Key) Request {
@@ -813,6 +803,5 @@ func (*TruncateLogRequest) flags() int        { return isWrite }
 func (*RequestLeaseRequest) flags() int     { return isWrite }
 func (*TransferLeaseRequest) flags() int    { return isWrite }
 func (*ComputeChecksumRequest) flags() int  { return isWrite }
-func (*VerifyChecksumRequest) flags() int   { return isWrite }
 func (*CheckConsistencyRequest) flags() int { return isAdmin | isRange }
 func (*ChangeFrozenRequest) flags() int     { return isWrite | isRange }
