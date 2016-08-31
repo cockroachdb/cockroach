@@ -205,19 +205,7 @@ func (tc *TestCluster) waitForStores(t testing.TB) {
 
 // LookupRange returns the descriptor of the range containing key.
 func (tc *TestCluster) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error) {
-	rangeLookupReq := roachpb.RangeLookupRequest{
-		Span: roachpb.Span{
-			Key: keys.RangeMetaKey(keys.MustAddr(key)),
-		},
-		MaxRanges:       1,
-		ConsiderIntents: false,
-	}
-	resp, pErr := client.SendWrapped(tc.Servers[0].GetDistSender(), nil, &rangeLookupReq)
-	if pErr != nil {
-		return roachpb.RangeDescriptor{}, errors.Errorf(
-			"%q: lookup range unexpected error: %s", key, pErr)
-	}
-	return resp.(*roachpb.RangeLookupResponse).Ranges[0], nil
+	return serverutils.LookupRange(tc.Servers[0].GetDistSender(), key)
 }
 
 // SplitRange splits the range containing splitKey.
