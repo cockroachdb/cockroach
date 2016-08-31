@@ -2285,8 +2285,39 @@ func TestCheckConsistencyMultiStore(t *testing.T) {
 func TestCheckInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	sc := storage.TestStoreContext()
+	mtc := multiTestContext{storeContext: &sc}
+	// Store 0 will report a diff with inconsistent key "e".
+	diffKey := []byte("e")
+	var diffTimestamp hlc.Timestamp
+	notifyReportDiff := make(chan struct{}, 1)
+	sc.TestingKnobs.BadChecksumReportDiff =
+		func(s roachpb.StoreIdent, diff []storage.ReplicaSnapshotDiff) {
+			if s != mtc.Store(0).Ident {
+				t.Errorf("BadChecksumReportDiff called from follower (StoreIdent = %s)", s)
+				return
+			}
+			if len(diff) != 1 {
+				t.Errorf("diff length = %d, diff = %v", len(diff), diff)
+			}
+			d := diff[0]
+			if d.LeaseHolder || !bytes.Equal(diffKey, d.Key) || !diffTimestamp.Equal(d.Timestamp) {
+				t.Errorf("diff = %v", d)
+			}
+			notifyReportDiff <- struct{}{}
+		}
+	// Store 0 will panic.
+	notifyPanic := make(chan struct{}, 1)
+	sc.TestingKnobs.BadChecksumPanic = func(s roachpb.StoreIdent) {
+		if s != mtc.Store(0).Ident {
+			t.Errorf("BadChecksumPanic called from follower (StoreIdent = %s)", s)
+			return
+		}
+		notifyPanic <- struct{}{}
+	}
+
 	const numStores = 3
-	mtc := startMultiTestContext(t, numStores)
+	mtc.Start(t, numStores)
 	defer mtc.Stop()
 	// Setup replication of range 1 on store 0 to stores 1 and 2.
 	mtc.replicateRange(1, 1, 2)
@@ -2302,26 +2333,15 @@ func TestCheckInconsistent(t *testing.T) {
 	}
 
 	// Write some arbitrary data only to store 1. Inconsistent key "e"!
-	key := []byte("e")
 	var val roachpb.Value
 	val.SetInt(42)
-	timestamp := mtc.stores[1].Clock().Timestamp()
-	if err := engine.MVCCPut(context.Background(), mtc.stores[1].Engine(), nil, key, timestamp, val, nil); err != nil {
+	diffTimestamp = mtc.stores[1].Clock().Timestamp()
+	if err := engine.MVCCPut(
+		context.Background(), mtc.stores[1].Engine(), nil, diffKey, diffTimestamp, val, nil,
+	); err != nil {
 		t.Fatal(err)
 	}
 
-	// The consistency check will panic on store 1.
-	notify := make(chan struct{}, 1)
-	mtc.stores[1].TestingKnobs().BadChecksumPanic = func(diff []storage.ReplicaSnapshotDiff) {
-		if len(diff) != 1 {
-			t.Errorf("diff length = %d, diff = %v", len(diff), diff)
-		}
-		d := diff[0]
-		if d.LeaseHolder || !bytes.Equal(key, d.Key) || !timestamp.Equal(d.Timestamp) {
-			t.Errorf("diff = %v", d)
-		}
-		notify <- struct{}{}
-	}
 	// Run consistency check.
 	checkArgs := roachpb.CheckConsistencyRequest{
 		Span: roachpb.Span{
@@ -2334,9 +2354,14 @@ func TestCheckInconsistent(t *testing.T) {
 		t.Fatal(err)
 	}
 	select {
-	case <-notify:
+	case <-notifyReportDiff:
 	case <-time.After(5 * time.Second):
-		t.Fatal("didn't receive notification from VerifyChecksum() that should have panicked")
+		t.Fatal("CheckConsistency() failed to report a diff as expected")
+	}
+	select {
+	case <-notifyPanic:
+	case <-time.After(5 * time.Second):
+		t.Fatal("CheckConsistency() failed to panic as expected")
 	}
 }
 

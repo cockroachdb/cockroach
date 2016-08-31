@@ -131,7 +131,7 @@ type Node struct {
 	initialBoot bool // True if this is the first time this node has started.
 	txnMetrics  kv.TxnMetrics
 
-	storesServer storage.StoresServer
+	storesServer storage.Server
 }
 
 // allocateNodeID increments the node id generator key to allocate
