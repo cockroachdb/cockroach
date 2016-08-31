@@ -838,6 +838,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 				// the replica before shutting down. Destroy the replica now
 				// to avoid creating a new replica without a valid replica ID
 				// (which is necessary to have a non-nil raft group)
+				log.Infof(ctx, "eagerly GC'ed %+v", desc)
 				return false, s.destroyReplicaData(&desc)
 			}
 			if !desc.IsInitialized() {
