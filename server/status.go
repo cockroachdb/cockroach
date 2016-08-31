@@ -31,6 +31,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/coreos/etcd/raft"
 	"github.com/gogo/protobuf/proto"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/julienschmidt/httprouter"
@@ -644,6 +645,36 @@ func (s *statusServer) Ranges(ctx context.Context, req *serverpb.RangesRequest) 
 	output := serverpb.RangesResponse{
 		Ranges: make([]serverpb.RangeInfo, 0, s.stores.GetStoreCount()),
 	}
+
+	convertRaftStatus := func(raftStatus *raft.Status) serverpb.RaftState {
+		var state serverpb.RaftState
+		if raftStatus == nil {
+			state.State = "StateDormant"
+			return state
+		}
+
+		state.ReplicaID = raftStatus.ID
+		state.HardState = raftStatus.HardState
+		state.Applied = raftStatus.Applied
+
+		// Grab Lead and State, which together form the SoftState.
+		state.Lead = raftStatus.Lead
+		state.State = raftStatus.RaftState.String()
+
+		state.Progress = make(map[uint64]serverpb.RaftState_Progress)
+		for id, progress := range raftStatus.Progress {
+			state.Progress[id] = serverpb.RaftState_Progress{
+				Match:           progress.Match,
+				Next:            progress.Next,
+				Paused:          progress.Paused,
+				PendingSnapshot: progress.PendingSnapshot,
+				State:           progress.State.String(),
+			}
+		}
+
+		return state
+	}
+
 	err = s.stores.VisitStores(func(store *storage.Store) error {
 		// Use IterateRangeDescriptors to read from the engine only
 		// because it's already exported.
@@ -653,24 +684,13 @@ func (s *statusServer) Ranges(ctx context.Context, req *serverpb.RangesRequest) 
 				if err != nil {
 					return true, err
 				}
-				status := rep.RaftStatus()
-				var raftState string
-				if status != nil {
-					// We can't put the whole raft.Status object in the json output
-					// because it contains a map with integer keys. Just extract
-					// the most interesting bit for now.
-					raftState = status.RaftState.String()
-				} else {
-					raftState = "StateDormant"
-				}
-				state := rep.State()
 				output.Ranges = append(output.Ranges, serverpb.RangeInfo{
 					Span: serverpb.PrettySpan{
 						StartKey: desc.StartKey.String(),
 						EndKey:   desc.EndKey.String(),
 					},
-					RaftState: raftState,
-					State:     state,
+					RaftState: convertRaftStatus(rep.RaftStatus()),
+					State:     rep.State(),
 				})
 				return false, nil
 			})
