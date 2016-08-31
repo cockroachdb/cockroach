@@ -139,7 +139,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			case c := <-ch:
 				if c.Err != nil {
 					if log.V(1) {
-						log.Infof(context.TODO(), "failed to acquire lease for replica %s: %s", replica, c.Err)
+						log.Infof(replica.store.Ctx(), "failed to acquire lease for replica %s: %s", replica, c.Err)
 					}
 					execPErr = c.Err
 				}

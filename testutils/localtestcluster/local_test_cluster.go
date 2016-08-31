@@ -91,7 +91,8 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Context, initSen
 	ltc.Stopper = stop.NewStopper()
 	rpcContext := rpc.NewContext(baseCtx, ltc.Clock, ltc.Stopper)
 	server := rpc.NewServer(rpcContext) // never started
-	ltc.Gossip = gossip.New(rpcContext, server, nil, ltc.Stopper, metric.NewRegistry())
+	ltc.Gossip = gossip.New(
+		context.Background(), rpcContext, server, nil, ltc.Stopper, metric.NewRegistry())
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20, ltc.Stopper)
 
 	ltc.Stores = storage.NewStores(ltc.Clock)
@@ -108,11 +109,11 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Context, initSen
 	if ltc.RangeRetryOptions != nil {
 		ctx.RangeRetryOptions = *ltc.RangeRetryOptions
 	}
+	ctx.Ctx = tracing.WithTracer(context.Background(), tracer)
 	ctx.Clock = ltc.Clock
 	ctx.DB = ltc.DB
 	ctx.Gossip = ltc.Gossip
 	ctx.Transport = transport
-	ctx.Tracer = tracer
 	ltc.Store = storage.NewStore(ctx, ltc.Eng, nodeDesc)
 	if err := ltc.Store.Bootstrap(roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}, ltc.Stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)

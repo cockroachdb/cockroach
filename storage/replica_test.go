@@ -145,7 +145,8 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 	if tc.gossip == nil {
 		rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, tc.stopper)
 		server := rpc.NewServer(rpcContext) // never started
-		tc.gossip = gossip.New(rpcContext, server, nil, tc.stopper, metric.NewRegistry())
+		tc.gossip = gossip.New(
+			context.Background(), rpcContext, server, nil, tc.stopper, metric.NewRegistry())
 		tc.gossip.SetNodeID(1)
 	}
 	if tc.manualClock == nil {
@@ -360,7 +361,7 @@ func TestReplicaContains(t *testing.T) {
 	// This test really only needs a hollow shell of a Replica.
 	r := &Replica{}
 	r.mu.state.Desc = desc
-	r.rangeDesc.Store(desc)
+	r.rangeDesc.store(desc)
 
 	if statsKey := keys.RangeStatsKey(desc.RangeID); !r.ContainsKey(statsKey) {
 		t.Errorf("expected range to contain range stats key %q", statsKey)

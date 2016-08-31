@@ -17,52 +17,195 @@
 package log
 
 import (
+	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
+	"golang.org/x/net/trace"
 )
+
+// ctxEventLogKey is an empty type for the handle associated with the
+// ctxEventLog value (see context.Value).
+type ctxEventLogKey struct{}
+
+// ctxEventLog is used for contexts to keep track of an EventLog.
+type ctxEventLog struct {
+	syncutil.Mutex
+	eventLog trace.EventLog
+}
+
+// withEventLogInternal embeds a trace.EventLog in the context, causing future
+// logging and event calls to go to the EventLog. The current context must not
+// have an existing open span.
+func withEventLogInternal(ctx context.Context, eventLog trace.EventLog) context.Context {
+	if opentracing.SpanFromContext(ctx) != nil {
+		panic("event log under span")
+	}
+	val := &ctxEventLog{eventLog: eventLog}
+	return context.WithValue(ctx, ctxEventLogKey{}, val)
+}
+
+// WithEventLog creates and embeds a trace.EventLog in the context, causing
+// future logging and event calls to go to the EventLog. The current context
+// must not have an existing open span.
+func WithEventLog(ctx context.Context, family, title string) context.Context {
+	return withEventLogInternal(ctx, trace.NewEventLog(family, title))
+}
+
+func eventLogFromCtx(ctx context.Context) *ctxEventLog {
+	if val := ctx.Value(ctxEventLogKey{}); val != nil {
+		return val.(*ctxEventLog)
+	}
+	return nil
+}
+
+// FinishEventLog closes the event log in the context (see WithEventLog).
+// Concurrent and subsequent calls to record events are allowed.
+func FinishEventLog(ctx context.Context) {
+	if el := eventLogFromCtx(ctx); el != nil {
+		el.Lock()
+		if el.eventLog != nil {
+			el.eventLog.Finish()
+			el.eventLog = nil
+		}
+		el.Unlock()
+	}
+}
 
 var noopTracer opentracing.NoopTracer
 
-// Trace looks for an opentracing.Trace in the context and logs the given
-// message to it on success.
+// getSpanOrEventLog returns the current Span. If there is no Span, it returns
+// the current ctxEventLog. If neither (or the Span is NoopTracer), returns
+// false.
+func getSpanOrEventLog(ctx context.Context) (opentracing.Span, *ctxEventLog, bool) {
+	if sp := opentracing.SpanFromContext(ctx); sp != nil {
+		if sp.Tracer() == noopTracer {
+			return nil, nil, false
+		}
+		return sp, nil, true
+	}
+	if el := eventLogFromCtx(ctx); el != nil {
+		return nil, el, true
+	}
+	return nil, nil, false
+}
+
+// eventInternal is the common code for logging an event. If no args are given,
+// the format is treated as a pre-formatted string.
+func eventInternal(ctx context.Context, isErr, withTags bool, format string, args ...interface{}) {
+	if sp, el, ok := getSpanOrEventLog(ctx); ok {
+		var buf bytes.Buffer
+		if withTags {
+			withTags = formatTags(&buf, ctx)
+		}
+
+		var msg string
+		if !withTags && len(args) == 0 {
+			// Fast path for pre-formatted messages.
+			msg = format
+		} else {
+			if len(args) == 0 {
+				buf.WriteString(format)
+			} else {
+				fmt.Fprintf(&buf, format, args...)
+			}
+			msg = buf.String()
+		}
+
+		if sp != nil {
+			sp.LogEvent(msg)
+			if isErr {
+				// TODO(radu): figure out a way to signal that this is an error. We
+				// could use LogEventWithPayload and pass an error or special sentinel
+				// as the payload. Things like NetTraceIntegrator would need to be
+				// modified to understand the difference. We could also set a special
+				// Tag or Baggage on the span. See #8827 for more discussion.
+			}
+		} else {
+			el.Lock()
+			if el.eventLog != nil {
+				if isErr {
+					el.eventLog.Errorf("%s", msg)
+				} else {
+					el.eventLog.Printf("%s", msg)
+				}
+			}
+			el.Unlock()
+		}
+	}
+}
+
+// Event looks for an opentracing.Trace in the context and logs the given
+// message to it. If no Trace is found, it looks for an EventLog in the context
+// and logs the message to it. If neither is found, does nothing.
+func Event(ctx context.Context, msg string) {
+	eventInternal(ctx, false /*isErr*/, true /*withTags*/, "%s", msg)
+}
+
+// Eventf looks for an opentracing.Trace in the context and formats and logs
+// the given message to it. If no Trace is found, it looks for an EventLog in
+// the context and logs the message to it. If neither is found, does nothing.
+func Eventf(ctx context.Context, format string, args ...interface{}) {
+	eventInternal(ctx, false /*isErr*/, true /*withTags*/, format, args...)
+}
+
+// ErrEvent looks for an opentracing.Trace in the context and logs the given
+// message to it. If no Trace is found, it looks for an EventLog in the context
+// and logs the message to it (as an error). If neither is found, does nothing.
+func ErrEvent(ctx context.Context, msg string) {
+	eventInternal(ctx, true /*isErr*/, true /*withTags*/, "%s", msg)
+}
+
+// ErrEventf looks for an opentracing.Trace in the context and formats and logs
+// the given message to it. If no Trace is found, it looks for an EventLog in
+// the context and formats and logs the message to it (as an error). If neither
+// is found, does nothing.
+func ErrEventf(ctx context.Context, format string, args ...interface{}) {
+	eventInternal(ctx, true /*isErr*/, true /*withTags*/, format, args...)
+}
+
+// VEvent either logs a message to the log files (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+func VEvent(level level, ctx context.Context, msg string) {
+	if VDepth(level, 1) {
+		// Log to INFO (which also logs an event).
+		logDepth(ctx, 1, InfoLog, "", []interface{}{msg})
+	} else {
+		eventInternal(ctx, false /*isErr*/, true /*withTags*/, "%s", msg)
+	}
+}
+
+// VEventf either logs a message to the log files (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+func VEventf(level level, ctx context.Context, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		// Log to INFO (which also logs an event).
+		logDepth(ctx, 1, InfoLog, format, args)
+	} else {
+		eventInternal(ctx, false /*isErr*/, true /*withTags*/, format, args...)
+	}
+}
+
+// Trace is a DEPRECATED alias for Event.
 func Trace(ctx context.Context, msg string) {
-	sp := opentracing.SpanFromContext(ctx)
-	if sp != nil && sp.Tracer() != noopTracer {
-		sp.LogEvent(msg)
-	}
+	Event(ctx, msg)
 }
 
-// Tracef looks for an opentracing.Trace in the context and formats and logs
-// the given message to it on success.
+// Tracef is a DEPRECATED alias for Eventf.
 func Tracef(ctx context.Context, format string, args ...interface{}) {
-	sp := opentracing.SpanFromContext(ctx)
-	if sp != nil && sp.Tracer() != noopTracer {
-		sp.LogEvent(fmt.Sprintf(format, args...))
-	}
+	Eventf(ctx, format, args...)
 }
 
-// VTrace either logs a message to the log files (which also outputs to the
-// active trace) or logs to the trace alone depending on whether the specified
-// verbosity level is active.
-func VTrace(level level, ctx context.Context, msg string) {
-	if V(level) {
-		Info(ctx, msg)
-	} else {
-		Trace(ctx, msg)
-	}
-}
-
-var _ = VTrace // TODO(peter): silence unused error, remove when used
-
-// VTracef either logs a message to the log files (which also outputs to the
-// active trace) or logs to the trace alone depending on whether the specified
-// verbosity level is active.
+// VTracef is a DEPRECATED alias for VEventf.
 func VTracef(level level, ctx context.Context, format string, args ...interface{}) {
-	if V(level) {
-		Infof(ctx, format, args...)
+	if VDepth(level, 1) {
+		// Log to INFO (which also logs an event).
+		logDepth(ctx, 1, InfoLog, format, args)
 	} else {
-		Tracef(ctx, format, args...)
+		eventInternal(ctx, false /*isErr*/, true /*withTags*/, format, args...)
 	}
 }
