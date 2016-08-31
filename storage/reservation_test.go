@@ -77,7 +77,7 @@ func bookieQueueLen(b *bookie) int {
 // correctly.
 func TestBookieReserve(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper, _, b := createTestBookie(time.Hour, defaultMaxReservations, defaultMaxReservedBytes)
+	stopper, _, b := createTestBookie(time.Hour, 5, defaultMaxReservedBytes)
 	defer stopper.Stop()
 
 	testCases := []struct {
