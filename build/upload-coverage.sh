@@ -28,8 +28,9 @@ coverage_mode=count
 # iterative_coverpkg fetches all test deps and main deps, filters them, and
 # converts them into a comma separated list stored in $coverpkg.
 iterative_coverpkg() {
-  imports="$1"
-  old_line_count="-1"
+  local imports="$1"
+  local old_line_count="-1"
+  local line_count=""
   while [ "$old_line_count" != "$line_count" ]; do
     old_line_count=$line_count
     imports+=$'\n'$(go list  -f '{{join .Imports "\n"}}
@@ -60,7 +61,7 @@ for pkg in $(go list ./...); do
   # tests.
   f="${coverage_dir}/$(echo $pkg | tr / -).cover"
   touch $f
-  time ${builder} make coverage \
+  time make coverage \
     PKG="$pkg" \
     TESTFLAGS="-v -coverprofile=$f -covermode=$coverage_mode -coverpkg=$coverpkg" | \
     tee "${outdir}/coverage.log"
