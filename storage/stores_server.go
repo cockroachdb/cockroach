@@ -17,10 +17,14 @@
 package storage
 
 import (
+	"bytes"
+	"time"
+
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // Server implements the storage parts of the StoresServer interface.
@@ -73,6 +77,56 @@ func (is Server) Reserve(
 	err := is.execStoreCommand(req.StoreRequestHeader,
 		func(s *Store) error {
 			*resp = s.Reserve(ctx, *req)
+			return nil
+		})
+	return resp, err
+}
+
+// CollectChecksum implements the StoresServer interface.
+func (is Server) CollectChecksum(
+	ctx context.Context, req *CollectChecksumRequest,
+) (*CollectChecksumResponse, error) {
+	resp := &CollectChecksumResponse{}
+	err := is.execStoreCommand(req.StoreRequestHeader,
+		func(s *Store) error {
+			r, err := s.GetReplica(req.RangeID)
+			if err != nil {
+				return err
+			}
+			c, err := r.getChecksum(ctx, req.ChecksumID)
+			if err != nil {
+				return err
+			}
+			resp.Checksum = c.checksum
+			if bytes.Equal(req.Checksum, c.checksum) {
+				return nil
+			}
+			log.Errorf(ctx, "consistency check failed on range ID %s: expected checksum %x, got %x",
+				req.RangeID, req.Checksum, c.checksum)
+			if req.Snapshot == nil || c.snapshot == nil {
+				return nil
+			}
+			diff := diffRange(req.Snapshot, c.snapshot)
+			for _, d := range diff {
+				otherSide := "lease holder"
+				if d.LeaseHolder {
+					otherSide = "replica"
+				}
+				log.Errorf(ctx, "consistency check failed: k:v = (%s (%x), %s, %x) not present on %s",
+					d.Key, d.Key, d.Timestamp, d.Value, otherSide)
+			}
+			if p := r.store.ctx.TestingKnobs.BadChecksumPanic; p != nil {
+				p(diff)
+			} else if r.store.ctx.ConsistencyCheckPanicOnFailure {
+				go func() {
+					// We use a goroutine and a sleep here to give gRPC a chance to get
+					// the response back to the initiator of the check. The upside is that
+					// the corresponding goroutine on the initiator can return immediately
+					// instead of waiting for a timeout.
+					time.Sleep(10 * time.Second)
+					panic("committing suicide due to failed consistency check")
+				}()
+			}
 			return nil
 		})
 	return resp, err
