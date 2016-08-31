@@ -18,7 +18,7 @@ syntax = "proto3";
 package cockroach.util.tracing;
 option go_package = "tracing";
 
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 // A Span message holds metadata of a (potentially ongoing) span of a
 // distributed trace as per the OpenTracing specification. See

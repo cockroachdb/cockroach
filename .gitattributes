@@ -1,3 +1,5 @@
-sql/parser/sql.go -diff
-ui/embedded.go -diff
 *.pb.* -diff
+sql/parser/sql.go -diff
+ui/app/js/protos.js -diff
+ui/embedded.go -diff
+ui/generated/* -diff

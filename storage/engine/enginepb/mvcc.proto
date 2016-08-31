@@ -20,7 +20,7 @@ package cockroach.storage.engine.enginepb;
 option go_package = "enginepb";
 
 import "cockroach/util/hlc/timestamp.proto";
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 // TODO(tschottdorf): Should not live in enginepb (but can't live in roachpb
 // either).
@@ -115,7 +115,7 @@ message MVCCStats {
 
   // contains_estimates indicates that the MVCCStats object contains values
   // which have been estimated. This means that the stats should not be used
-  // where complete accuracy is required, and instead should be recomputed 
+  // where complete accuracy is required, and instead should be recomputed
   // when necessary.
   optional bool contains_estimates = 14 [(gogoproto.nullable) = false];
 

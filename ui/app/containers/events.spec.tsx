@@ -9,7 +9,7 @@ import * as protos from  "../js/protos";
 import { EventList, EventRow } from "./events";
 import { refreshEvents } from "../redux/apiReducers";
 
-type Event = cockroach.server.serverpb.EventsResponse.Event;
+type Event = Proto2TypeScript.cockroach.server.serverpb.EventsResponse.Event;
 
 function makeEventList(events: Event[], refreshEventsFn: typeof refreshEvents) {
   return shallow(<EventList events={events} refreshEvents={refreshEventsFn}></EventList>);

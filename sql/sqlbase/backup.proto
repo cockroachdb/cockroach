@@ -20,7 +20,7 @@ option go_package = "sqlbase";
 
 import "cockroach/sql/sqlbase/structured.proto";
 import "cockroach/util/hlc/timestamp.proto";
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 // BackupRangeDescriptor represents a file that contains the diff for a key
 // range between two timestamps.

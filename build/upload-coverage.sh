@@ -28,8 +28,9 @@ coverage_mode=count
 # iterative_coverpkg fetches all test deps and main deps, filters them, and
 # converts them into a comma separated list stored in $coverpkg.
 iterative_coverpkg() {
-  imports="$1"
-  old_line_count="-1"
+  local imports="$1"
+  local old_line_count="-1"
+  local line_count=""
   while [ "$old_line_count" != "$line_count" ]; do
     old_line_count=$line_count
     imports+=$'\n'$(go list  -f '{{join .Imports "\n"}}

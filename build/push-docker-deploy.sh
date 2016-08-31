@@ -2,12 +2,12 @@
 
 set -euxo pipefail
 
-$(dirname $0)/build-docker-deploy.sh
+"$(dirname "${0}")"/build-docker-deploy.sh
 
-cd $(dirname $0)/../acceptance
+cd "$(dirname "${0}")"/../acceptance
 time ./acceptance.test -i cockroachdb/cockroach -b /cockroach/cockroach -nodes 3 -test.v -test.timeout -5m
 
-docker tag cockroachdb/cockroach cockroachdb/cockroach:${VERSION}
+docker tag cockroachdb/cockroach cockroachdb/cockroach:"${VERSION}"
 
 # Pushing to the registry just fails sometimes, so for the time
 # being just make this a best-effort action.
