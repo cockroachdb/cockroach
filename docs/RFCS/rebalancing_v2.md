@@ -1,8 +1,10 @@
 - Feature name: Rebalancing V2
-- Status: draft
+- Status: done
 - Start date: 2016-04-20
 - Last revised: 2016-05-03
 - Authors: Bram Gruneir & Cuong Do
+- RFC PR: #6484
+- Cockroach Issue:
 
 # Table of Contents
 

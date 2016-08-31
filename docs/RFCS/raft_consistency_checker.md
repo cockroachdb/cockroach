@@ -1,8 +1,8 @@
 -   Feature Name: Raft consistency checker
--   Status: draft
+-   Status: in-progress
 -   Start Date: 2016-02-10
 -   Authors: Ben Darnell, David Eisenstat, Bram Gruneir, Vivek Menezes
--   RFC PR: (PR #8032 after acceptance of initial draft)
+-   RFC PR: #4317, #8032
 -   Cockroach Issues: #837, #7739
 
 Summary

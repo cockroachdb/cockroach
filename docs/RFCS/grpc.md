@@ -1,7 +1,7 @@
 - Feature Name: grpc
-- Status: draft
+- Status: completed
 - Start Date: 2015-12-07
-- RFC PR:
+- RFC PR: #3352
 - Cockroach Issue: #2381, #3013, #3421
 
 # Summary

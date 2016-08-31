@@ -3,7 +3,7 @@
 - Start Date: 2016-04-19
 - Authors: Tobias Schottdorf
 - RFC PR: #6166
-- Cockroach Issue: (one or more # from the issue tracker)
+- Cockroach Issue: #6290
 
 
 # Summary

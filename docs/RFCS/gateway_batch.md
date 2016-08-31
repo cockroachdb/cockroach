@@ -2,7 +2,7 @@
 - Status: completed
 - Start Date: 2015-08-06
 - RFC PR: #1998, #2141, #2406
-- Cockroach Issue:
+- Cockroach Issue: #2130
 
 # Summary
 

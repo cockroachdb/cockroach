@@ -1,8 +1,8 @@
 - Feature Name: Distributing SQL queries
-- Status: draft
+- Status: in-progress
 - Start Date: 2015/02/12
 - Authors: andreimatei, knz, RaduBerinde
-- RFC PR: (PR # after acceptance of initial draft)
+- RFC PR: #6067
 - Cockroach Issue: (one or more # from the issue tracker)
 
 # Table of Contents
