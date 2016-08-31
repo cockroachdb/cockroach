@@ -68,8 +68,8 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
 
     this.chart = nvd3.models.lineChart();
     this.chart
-      .x((d: cockroach.ts.tspb.TimeSeriesDatapoint) => new Date(NanoToMilli(d && d.timestamp_nanos.toNumber())))
-      .y((d: cockroach.ts.tspb.TimeSeriesDatapoint) => d && d.value)
+      .x((d: Proto2TypeScript.cockroach.ts.tspb.TimeSeriesDatapoint) => new Date(NanoToMilli(d && d.timestamp_nanos.toNumber())))
+      .y((d: Proto2TypeScript.cockroach.ts.tspb.TimeSeriesDatapoint) => d && d.value)
       .useInteractiveGuideline(true)
       .showLegend(true)
       .showYAxis(true)

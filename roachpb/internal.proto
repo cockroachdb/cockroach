@@ -19,7 +19,7 @@ syntax = "proto2";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 // InternalTimeSeriesData is a collection of data samples for some
 // measurable value, where each sample is taken over a uniform time

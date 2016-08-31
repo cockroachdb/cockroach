@@ -26,7 +26,7 @@ import "cockroach/roachpb/data.proto";
 import "cockroach/roachpb/errors.proto";
 import "cockroach/sql/sqlbase/structured.proto";
 import "cockroach/sql/sqlbase/encoded_datum.proto";
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 message Expression {
   // TODO(radu): TBD how this will be used

@@ -12,8 +12,8 @@ import { MetricProps, Metric, MetricsDataComponentProps } from "../components/gr
 import { findChildrenOfType } from "../util/find";
 import { MilliToNano } from "../util/convert";
 
-type TSQueryMessage = cockroach.ts.tspb.QueryMessage;
-type TSRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
+type TSQueryMessage = Proto2TypeScript.cockroach.ts.tspb.QueryMessage;
+type TSRequestMessage = Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
 
 /**
  * TimeSeriesQueryAggregator is an enumeration used by Cockroach's time series
@@ -101,9 +101,9 @@ function queryFromProps(metricProps: MetricProps,
        * not available in the SystemJS compiler. Values are cast *through*
        * number, as apparently direct casts between enumerations are forbidden.
        */
-      downsampler: downsampler as number as cockroach.ts.tspb.TimeSeriesQueryAggregator,
-      source_aggregator: sourceAggregator as number as cockroach.ts.tspb.TimeSeriesQueryAggregator,
-      derivative: derivative as number as cockroach.ts.tspb.TimeSeriesQueryDerivative,
+      downsampler: downsampler as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryAggregator,
+      source_aggregator: sourceAggregator as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryAggregator,
+      derivative: derivative as number as Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryDerivative,
     });
 }
 

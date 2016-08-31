@@ -21,7 +21,7 @@ option go_package = "storage";
 import "cockroach/roachpb/errors.proto";
 import "cockroach/roachpb/metadata.proto";
 import "etcd/raft/raftpb/raft.proto";
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 // RaftMessageRequest is the request used to send raft messages using our
 // protobuf-based RPC codec.

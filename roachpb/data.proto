@@ -22,7 +22,7 @@ option go_package = "roachpb";
 import "cockroach/roachpb/metadata.proto";
 import "cockroach/storage/engine/enginepb/mvcc.proto";
 import "cockroach/util/hlc/timestamp.proto";
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 // Span is supplied with every storage node request.
 message Span {
