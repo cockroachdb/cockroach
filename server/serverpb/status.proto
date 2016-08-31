@@ -26,8 +26,8 @@ import "cockroach/storage/storagebase/state.proto";
 import "cockroach/util/log/log.proto";
 import "cockroach/util/unresolved_addr.proto";
 
-import weak "gogoproto/gogo.proto";
-import weak "google/api/annotations.proto";
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
 
 // DetailsRequest requests a nodes details.
 message DetailsRequest {

@@ -22,7 +22,7 @@ import "cockroach/roachpb/data.proto";
 import "cockroach/roachpb/metadata.proto";
 import "cockroach/util/hlc/timestamp.proto";
 import "cockroach/util/unresolved_addr.proto";
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 // BootstrapInfo contains information necessary to bootstrapping the
 // gossip network from a cold start.
