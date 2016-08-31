@@ -171,6 +171,14 @@ func (ts *TestServer) RPCContext() *rpc.Context {
 	return nil
 }
 
+// DistSender returns the DistSender used by the TestServer.
+func (ts *TestServer) DistSender() *kv.DistSender {
+	if ts != nil {
+		return ts.distSender
+	}
+	return nil
+}
+
 // TsDB returns the ts.DB instance used by the TestServer.
 func (ts *TestServer) TsDB() *ts.DB {
 	if ts != nil {
