@@ -97,7 +97,8 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 	}
 	rttc.nodeRPCContext = rpc.NewContext(testutils.NewNodeTestBaseContext(), nil, rttc.stopper)
 	server := rpc.NewServer(rttc.nodeRPCContext) // never started
-	rttc.gossip = gossip.New(rttc.nodeRPCContext, server, nil, rttc.stopper, metric.NewRegistry())
+	rttc.gossip = gossip.New(
+		context.TODO(), rttc.nodeRPCContext, server, nil, rttc.stopper, metric.NewRegistry())
 	rttc.gossip.SetNodeID(1)
 	return rttc
 }

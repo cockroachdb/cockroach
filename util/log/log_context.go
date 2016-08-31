@@ -16,7 +16,13 @@
 
 package log
 
-import "golang.org/x/net/context"
+import (
+	"math"
+	"strconv"
+	"sync/atomic"
+
+	"golang.org/x/net/context"
+)
 
 type valueType int
 
@@ -26,6 +32,16 @@ const (
 	stringType
 )
 
+// logTag contains a tag name and value.
+//
+// Log tags are associated with Contexts and appear in all log and trace
+// messages under that context.
+//
+// The logTag entries form a linked chain (newer to older), overlaid onto a
+// Context chain. A context has an association to the bottom-most logTag (via
+// context.Value) and from that we can traverse the entire chain. Different
+// contexts can share pieces of the same chain, so once a logTag is associated
+// to a context, it is immutable.
 type logTag struct {
 	name string
 
@@ -34,7 +50,7 @@ type logTag struct {
 	strVal     string
 	genericVal interface{}
 
-	prev *logTag
+	parent *logTag
 }
 
 func (t *logTag) value() interface{} {
@@ -52,7 +68,7 @@ func (t *logTag) value() interface{} {
 // logTag value (see context.Value).
 type contextTagKeyType struct{}
 
-func contextLastTag(ctx context.Context) *logTag {
+func contextBottomTag(ctx context.Context) *logTag {
 	val := ctx.Value(contextTagKeyType{})
 	if val == nil {
 		return nil
@@ -62,7 +78,7 @@ func contextLastTag(ctx context.Context) *logTag {
 
 func contextLogTags(ctx context.Context) []logTag {
 	var tags []logTag
-	for t := contextLastTag(ctx); t != nil; t = t.prev {
+	for t := contextBottomTag(ctx); t != nil; t = t.parent {
 		tags = append(tags, *t)
 	}
 	for i, j := 0, len(tags)-1; i < j; i, j = i+1, j-1 {
@@ -71,32 +87,98 @@ func contextLogTags(ctx context.Context) []logTag {
 	return tags
 }
 
-func withLogTag(ctx context.Context, newTag *logTag) context.Context {
-	newTag.prev = contextLastTag(ctx)
-	return context.WithValue(ctx, contextTagKeyType{}, newTag)
+// addLogTagChain adds a chain of log tags to a context.
+func addLogTagChain(ctx context.Context, bottomTag *logTag) context.Context {
+	t := bottomTag
+	for t.parent != nil {
+		t = t.parent
+	}
+	t.parent = contextBottomTag(ctx)
+	return context.WithValue(ctx, contextTagKeyType{}, bottomTag)
 }
 
 // WithLogTag returns a context (derived from the given context) which when used
 // with a logging function results in the given name and value being printed in
-// the message. If the value is nil, just the name shows up.
+// the message.
+//
+// The value is stored and passed to fmt.Fprint when the log message is
+// constructed. A fmt.Stringer can be passed which allows the value to be
+// "dynamic".
+//
+// If the value is nil, just the name shows up.
 func WithLogTag(ctx context.Context, name string, value interface{}) context.Context {
-	return withLogTag(ctx, &logTag{name: name, valType: genericType, genericVal: value})
+	return addLogTagChain(ctx, &logTag{name: name, valType: genericType, genericVal: value})
 }
 
 // WithLogTagInt is a variant of WithLogTag that avoids the allocation
 // associated with boxing the value in an interface{}.
 func WithLogTagInt(ctx context.Context, name string, value int) context.Context {
-	return withLogTag(ctx, &logTag{name: name, valType: int64Type, intVal: int64(value)})
+	return addLogTagChain(ctx, &logTag{name: name, valType: int64Type, intVal: int64(value)})
 }
 
 // WithLogTagInt64 is a variant of WithLogTag that avoids the allocation
 // associated with boxing the value in an interface{}.
 func WithLogTagInt64(ctx context.Context, name string, value int64) context.Context {
-	return withLogTag(ctx, &logTag{name: name, valType: int64Type, intVal: value})
+	return addLogTagChain(ctx, &logTag{name: name, valType: int64Type, intVal: value})
 }
 
 // WithLogTagStr is a variant of WithLogTag that avoids the allocation
 // associated with boxing the value in an interface{}.
 func WithLogTagStr(ctx context.Context, name string, value string) context.Context {
-	return withLogTag(ctx, &logTag{name: name, valType: stringType, strVal: value})
+	return addLogTagChain(ctx, &logTag{name: name, valType: stringType, strVal: value})
+}
+
+// WithLogTagsFromCtx returns a context based on ctx with fromCtx's log tags
+// added on.
+//
+// The result is equivalent to replicating the `WithLogTag*` calls that were
+// used to obtain `fromCtx` and applying them to `ctx` in the same order.
+func WithLogTagsFromCtx(ctx, fromCtx context.Context) context.Context {
+	bottomTag := contextBottomTag(fromCtx)
+	if bottomTag == nil {
+		// Nothing to do.
+		return ctx
+	}
+
+	if contextBottomTag(ctx) == nil {
+		// Special fast path: reuse the same log tag list directly.
+		return context.WithValue(ctx, contextTagKeyType{}, bottomTag)
+	}
+
+	// Make a copy of the logTag chain.
+	// TODO(radu): should we do something smart if we have log tags with the same
+	// name in both contexts?
+
+	// Copy the bottom tag in the chain.
+	bottomTagCopy := *bottomTag
+	chain := &bottomTagCopy
+
+	for t := chain; t.parent != nil; t = t.parent {
+		// Copy the next tag in the chain.
+		parentCopy := *t.parent
+		t.parent = &parentCopy
+	}
+	return addLogTagChain(ctx, chain)
+}
+
+// DynamicIntValue is a helper type that allows using a "dynamic" int32 value
+// for a log tag.
+type DynamicIntValue struct {
+	value int64
+}
+
+// DynamicIntValueUnknown can be used with Set; it makes the value "?".
+const DynamicIntValueUnknown = math.MinInt64
+
+func (dv *DynamicIntValue) String() string {
+	val := atomic.LoadInt64(&dv.value)
+	if val == math.MinInt64 {
+		return "?"
+	}
+	return strconv.FormatInt(val, 10)
+}
+
+// Set changes the value returned by String().
+func (dv *DynamicIntValue) Set(newVal int64) {
+	atomic.StoreInt64(&dv.value, newVal)
 }
