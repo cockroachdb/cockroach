@@ -185,7 +185,7 @@ func (r *Replica) executeCmd(
 	reply.SetHeader(header)
 
 	if log.V(2) {
-		log.Infof(ctx, "%s: executed %s command %+v: %+v, err=%v", r, args.Method(), args, reply, err)
+		log.Infof(ctx, "executed %s command %+v: %+v, err=%s", args.Method(), args, reply, err)
 	}
 
 	// Create a roachpb.Error by initializing txn from the request/response header.
