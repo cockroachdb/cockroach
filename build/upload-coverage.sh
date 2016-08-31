@@ -25,6 +25,8 @@ coverage_dir="${outdir}/coverage"
 coverage_profile="${coverage_dir}/coverage.out"
 coverage_mode=count
 
+line_count=""
+
 # iterative_coverpkg fetches all test deps and main deps, filters them, and
 # converts them into a comma separated list stored in $coverpkg.
 iterative_coverpkg() {
