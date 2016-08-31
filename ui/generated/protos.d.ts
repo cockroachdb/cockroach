@@ -22,6 +22,7 @@ declare module Proto2TypeScript {
 		gogoproto: gogoprotoBuilder;
 		cockroach: cockroachBuilder;
 		google: googleBuilder;
+		raftpb: raftpbBuilder;
 		
 }
 }
@@ -2857,6 +2858,7 @@ export interface serverpbBuilder {
 	NodesRequest: serverpb.NodesRequestBuilder;
 	NodesResponse: serverpb.NodesResponseBuilder;
 	NodeRequest: serverpb.NodeRequestBuilder;
+	RaftState: serverpb.RaftStateBuilder;
 	RangeInfo: serverpb.RangeInfoBuilder;
 	RangesRequest: serverpb.RangesRequestBuilder;
 	RangesResponse: serverpb.RangesResponseBuilder;
@@ -4579,6 +4581,160 @@ export interface NodeRequestBuilder {
 
 declare module Proto2TypeScript.cockroach.server.serverpb {
 
+	export interface RaftState {
+
+		
+
+replica_id?: Long;
+		
+
+getReplicaId?() : Long;
+		setReplicaId?(replicaId : Long): void;
+		
+
+
+
+hard_state?: raftpb.HardState;
+		
+
+getHardState?() : raftpb.HardState;
+		setHardState?(hardState : raftpb.HardState): void;
+		
+
+
+
+lead?: Long;
+		
+
+getLead?() : Long;
+		setLead?(lead : Long): void;
+		
+
+
+
+state?: string;
+		
+
+getState?() : string;
+		setState?(state : string): void;
+		
+
+
+
+applied?: Long;
+		
+
+getApplied?() : Long;
+		setApplied?(applied : Long): void;
+		
+
+
+
+progress?: ProtoBufMap<Long, RaftState.Progress>;
+		
+
+getProgress?() : ProtoBufMap<Long, RaftState.Progress>;
+		setProgress?(progress : ProtoBufMap<Long, RaftState.Progress>): void;
+		
+
+
+
+}
+
+	export interface RaftStateMessage extends RaftState {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface RaftStateBuilder {
+	new(data?: RaftState): RaftStateMessage;
+	decode(buffer: ArrayBuffer) : RaftStateMessage;
+	decode(buffer: ByteBuffer) : RaftStateMessage;
+	decode64(buffer: string) : RaftStateMessage;
+	Progress: RaftState.ProgressBuilder;
+	
+}
+
+}
+
+declare module Proto2TypeScript.cockroach.server.serverpb.RaftState {
+
+	export interface Progress {
+
+		
+
+match?: Long;
+		
+
+getMatch?() : Long;
+		setMatch?(match : Long): void;
+		
+
+
+
+next?: Long;
+		
+
+getNext?() : Long;
+		setNext?(next : Long): void;
+		
+
+
+
+state?: string;
+		
+
+getState?() : string;
+		setState?(state : string): void;
+		
+
+
+
+paused?: boolean;
+		
+
+getPaused?() : boolean;
+		setPaused?(paused : boolean): void;
+		
+
+
+
+pending_snapshot?: Long;
+		
+
+getPendingSnapshot?() : Long;
+		setPendingSnapshot?(pendingSnapshot : Long): void;
+		
+
+
+
+}
+
+	export interface ProgressMessage extends Progress {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ProgressBuilder {
+	new(data?: Progress): ProgressMessage;
+	decode(buffer: ArrayBuffer) : ProgressMessage;
+	decode(buffer: ByteBuffer) : ProgressMessage;
+	decode64(buffer: string) : ProgressMessage;
+	
+}
+
+}
+
+
+
+declare module Proto2TypeScript.cockroach.server.serverpb {
+
 	export interface RangeInfo {
 
 		
@@ -4592,11 +4748,11 @@ getSpan?() : PrettySpan;
 
 
 
-raft_state?: string;
+raft_state?: RaftState;
 		
 
-getRaftState?() : string;
-		setRaftState?(raftState : string): void;
+getRaftState?() : RaftState;
+		setRaftState?(raftState : RaftState): void;
 		
 
 
@@ -6634,6 +6790,533 @@ export interface CustomHttpPatternBuilder {
 }
 
 
+
+
+declare module Proto2TypeScript {
+
+	export interface raftpb {
+
+		
+
+}
+
+	export interface raftpbMessage extends raftpb {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface raftpbBuilder {
+	new(data?: raftpb): raftpbMessage;
+	decode(buffer: ArrayBuffer) : raftpbMessage;
+	decode(buffer: ByteBuffer) : raftpbMessage;
+	decode64(buffer: string) : raftpbMessage;
+	Entry: raftpb.EntryBuilder;
+	SnapshotMetadata: raftpb.SnapshotMetadataBuilder;
+	Snapshot: raftpb.SnapshotBuilder;
+	Message: raftpb.MessageBuilder;
+	HardState: raftpb.HardStateBuilder;
+	ConfState: raftpb.ConfStateBuilder;
+	ConfChange: raftpb.ConfChangeBuilder;
+	EntryType: raftpb.EntryType;
+	MessageType: raftpb.MessageType;
+	ConfChangeType: raftpb.ConfChangeType;
+	
+}
+
+}
+
+declare module Proto2TypeScript.raftpb {
+
+	export interface Entry {
+
+		
+
+Term?: Long;
+		
+
+getTerm?() : Long;
+		setTerm?(term : Long): void;
+		
+
+
+
+Index?: Long;
+		
+
+getIndex?() : Long;
+		setIndex?(index : Long): void;
+		
+
+
+
+Type?: EntryType;
+		
+
+getType?() : EntryType;
+		setType?(type : EntryType): void;
+		
+
+
+
+Data?: ByteBuffer;
+		
+
+getData?() : ByteBuffer;
+		setData?(data : ByteBuffer): void;
+		
+
+
+
+}
+
+	export interface EntryMessage extends Entry {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface EntryBuilder {
+	new(data?: Entry): EntryMessage;
+	decode(buffer: ArrayBuffer) : EntryMessage;
+	decode(buffer: ByteBuffer) : EntryMessage;
+	decode64(buffer: string) : EntryMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.raftpb {
+
+	export interface SnapshotMetadata {
+
+		
+
+conf_state?: ConfState;
+		
+
+getConfState?() : ConfState;
+		setConfState?(confState : ConfState): void;
+		
+
+
+
+index?: Long;
+		
+
+getIndex?() : Long;
+		setIndex?(index : Long): void;
+		
+
+
+
+term?: Long;
+		
+
+getTerm?() : Long;
+		setTerm?(term : Long): void;
+		
+
+
+
+}
+
+	export interface SnapshotMetadataMessage extends SnapshotMetadata {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface SnapshotMetadataBuilder {
+	new(data?: SnapshotMetadata): SnapshotMetadataMessage;
+	decode(buffer: ArrayBuffer) : SnapshotMetadataMessage;
+	decode(buffer: ByteBuffer) : SnapshotMetadataMessage;
+	decode64(buffer: string) : SnapshotMetadataMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.raftpb {
+
+	export interface Snapshot {
+
+		
+
+data?: ByteBuffer;
+		
+
+getData?() : ByteBuffer;
+		setData?(data : ByteBuffer): void;
+		
+
+
+
+metadata?: SnapshotMetadata;
+		
+
+getMetadata?() : SnapshotMetadata;
+		setMetadata?(metadata : SnapshotMetadata): void;
+		
+
+
+
+}
+
+	export interface SnapshotMessage extends Snapshot {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface SnapshotBuilder {
+	new(data?: Snapshot): SnapshotMessage;
+	decode(buffer: ArrayBuffer) : SnapshotMessage;
+	decode(buffer: ByteBuffer) : SnapshotMessage;
+	decode64(buffer: string) : SnapshotMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.raftpb {
+
+	export interface Message {
+
+		
+
+type?: MessageType;
+		
+
+getType?() : MessageType;
+		setType?(type : MessageType): void;
+		
+
+
+
+to?: Long;
+		
+
+getTo?() : Long;
+		setTo?(to : Long): void;
+		
+
+
+
+from?: Long;
+		
+
+getFrom?() : Long;
+		setFrom?(from : Long): void;
+		
+
+
+
+term?: Long;
+		
+
+getTerm?() : Long;
+		setTerm?(term : Long): void;
+		
+
+
+
+logTerm?: Long;
+		
+
+getLogTerm?() : Long;
+		setLogTerm?(logTerm : Long): void;
+		
+
+
+
+index?: Long;
+		
+
+getIndex?() : Long;
+		setIndex?(index : Long): void;
+		
+
+
+
+entries?: Entry[];
+		
+
+getEntries?() : Entry[];
+		setEntries?(entries : Entry[]): void;
+		
+
+
+
+commit?: Long;
+		
+
+getCommit?() : Long;
+		setCommit?(commit : Long): void;
+		
+
+
+
+snapshot?: Snapshot;
+		
+
+getSnapshot?() : Snapshot;
+		setSnapshot?(snapshot : Snapshot): void;
+		
+
+
+
+reject?: boolean;
+		
+
+getReject?() : boolean;
+		setReject?(reject : boolean): void;
+		
+
+
+
+rejectHint?: Long;
+		
+
+getRejectHint?() : Long;
+		setRejectHint?(rejectHint : Long): void;
+		
+
+
+
+context?: ByteBuffer;
+		
+
+getContext?() : ByteBuffer;
+		setContext?(context : ByteBuffer): void;
+		
+
+
+
+}
+
+	export interface MessageMessage extends Message {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface MessageBuilder {
+	new(data?: Message): MessageMessage;
+	decode(buffer: ArrayBuffer) : MessageMessage;
+	decode(buffer: ByteBuffer) : MessageMessage;
+	decode64(buffer: string) : MessageMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.raftpb {
+
+	export interface HardState {
+
+		
+
+term?: Long;
+		
+
+getTerm?() : Long;
+		setTerm?(term : Long): void;
+		
+
+
+
+vote?: Long;
+		
+
+getVote?() : Long;
+		setVote?(vote : Long): void;
+		
+
+
+
+commit?: Long;
+		
+
+getCommit?() : Long;
+		setCommit?(commit : Long): void;
+		
+
+
+
+}
+
+	export interface HardStateMessage extends HardState {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface HardStateBuilder {
+	new(data?: HardState): HardStateMessage;
+	decode(buffer: ArrayBuffer) : HardStateMessage;
+	decode(buffer: ByteBuffer) : HardStateMessage;
+	decode64(buffer: string) : HardStateMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.raftpb {
+
+	export interface ConfState {
+
+		
+
+nodes?: Long[];
+		
+
+getNodes?() : Long[];
+		setNodes?(nodes : Long[]): void;
+		
+
+
+
+}
+
+	export interface ConfStateMessage extends ConfState {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ConfStateBuilder {
+	new(data?: ConfState): ConfStateMessage;
+	decode(buffer: ArrayBuffer) : ConfStateMessage;
+	decode(buffer: ByteBuffer) : ConfStateMessage;
+	decode64(buffer: string) : ConfStateMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.raftpb {
+
+	export interface ConfChange {
+
+		
+
+ID?: Long;
+		
+
+getID?() : Long;
+		setID?(iD : Long): void;
+		
+
+
+
+Type?: ConfChangeType;
+		
+
+getType?() : ConfChangeType;
+		setType?(type : ConfChangeType): void;
+		
+
+
+
+NodeID?: Long;
+		
+
+getNodeID?() : Long;
+		setNodeID?(nodeID : Long): void;
+		
+
+
+
+Context?: ByteBuffer;
+		
+
+getContext?() : ByteBuffer;
+		setContext?(context : ByteBuffer): void;
+		
+
+
+
+}
+
+	export interface ConfChangeMessage extends ConfChange {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ConfChangeBuilder {
+	new(data?: ConfChange): ConfChangeMessage;
+	decode(buffer: ArrayBuffer) : ConfChangeMessage;
+	decode(buffer: ByteBuffer) : ConfChangeMessage;
+	decode64(buffer: string) : ConfChangeMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.raftpb {
+	export const enum EntryType {
+		EntryNormal = 0,
+		EntryConfChange = 1,
+		
+}
+}
+
+declare module Proto2TypeScript.raftpb {
+	export const enum MessageType {
+		MsgHup = 0,
+		MsgBeat = 1,
+		MsgProp = 2,
+		MsgApp = 3,
+		MsgAppResp = 4,
+		MsgVote = 5,
+		MsgVoteResp = 6,
+		MsgSnap = 7,
+		MsgHeartbeat = 8,
+		MsgHeartbeatResp = 9,
+		MsgUnreachable = 10,
+		MsgSnapStatus = 11,
+		MsgCheckQuorum = 12,
+		MsgTransferLeader = 13,
+		MsgTimeoutNow = 14,
+		MsgReadIndex = 15,
+		MsgReadIndexResp = 16,
+		
+}
+}
+
+declare module Proto2TypeScript.raftpb {
+	export const enum ConfChangeType {
+		ConfChangeAddNode = 0,
+		ConfChangeRemoveNode = 1,
+		ConfChangeUpdateNode = 2,
+		
+}
+}
 
 
 

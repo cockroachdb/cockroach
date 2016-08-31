@@ -88,7 +88,7 @@ $(REPO_ROOT)/build/npm.installed: $(REPO_ROOT)/build/package.json
 	cd $(REPO_ROOT)/build && npm install --no-progress
 	touch $@
 
-PBJS_ARGS = --path $(ORG_ROOT) --path $(GOGOPROTO_ROOT) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS)
+PBJS_ARGS = --path $(ORG_ROOT) --path $(GOGOPROTO_ROOT) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS)
 
 $(REPO_ROOT)/ui/app/js/protos.js: $(REPO_ROOT)/build/npm.installed $(GO_PROTOS)
 	# Add comment recognized by reviewable.
