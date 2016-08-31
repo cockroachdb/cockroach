@@ -1,7 +1,7 @@
 - Feature Name: Stateless Replica Relocation
-- Status: complete
+- Status: completed
 - Start Date: 2015-08-19
-- RFC PR:
+- RFC PR: #2171
 - Cockroach Issue: #620
 
 # Summary
