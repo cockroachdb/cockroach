@@ -39,7 +39,7 @@ type Iterator interface {
 	// is <= the provided key.
 	SeekReverse(key MVCCKey)
 	// Valid returns true if the iterator is currently valid. An
-	// iterator which hasn't been seeked or has gone past the end of the
+	// iterator which hasn't been sought or has gone past the end of the
 	// key range is invalid.
 	Valid() bool
 	// Next advances the iterator to the next key/value in the
