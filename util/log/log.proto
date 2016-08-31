@@ -18,7 +18,7 @@ syntax = "proto3";
 package cockroach.util.log;
 option go_package = "log";
 
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 enum Severity {
   UNKNOWN = 0;
@@ -36,6 +36,7 @@ message Entry {
   Severity severity = 1;
   // Nanoseconds since the epoch.
   int64 time = 2;
+  int64 goroutine = 6;
   string file = 3;
   int64 line = 4;
   string message = 5;

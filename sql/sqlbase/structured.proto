@@ -21,7 +21,7 @@ option go_package = "sqlbase";
 
 import "cockroach/util/hlc/timestamp.proto";
 import "cockroach/sql/sqlbase/privilege.proto";
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 message ColumnType {
   // These mirror the types supported by the sql/parser. See

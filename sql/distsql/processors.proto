@@ -27,7 +27,7 @@ import "cockroach/roachpb/errors.proto";
 import "cockroach/sql/sqlbase/structured.proto";
 import "cockroach/sql/sqlbase/encoded_datum.proto";
 import "cockroach/sql/distsql/data.proto";
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 message TableReaderSpan {
   // TODO(radu): the dist_sql APIs should be agnostic to how we map tables to
@@ -83,7 +83,7 @@ message JoinReaderSpec {
   // The table reader will only produce values for these columns, referenced by
   // their indices in table.columns.
   repeated uint32 output_columns = 4 [packed = true];
- 
+
   // TODO(radu): add field to describe the input columns and allow plumbing
   // through values that aren't used for the lookup.
 }

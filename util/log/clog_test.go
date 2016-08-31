@@ -136,8 +136,8 @@ func TestStandardLog(t *testing.T) {
 
 // Verify that a log can be fetched in JSON format.
 func TestEntryDecoder(t *testing.T) {
-	formatEntry := func(s Severity, now time.Time, file string, line int, msg string) string {
-		buf := formatHeader(s, now, file, line, nil)
+	formatEntry := func(s Severity, now time.Time, gid int, file string, line int, msg string) string {
+		buf := formatHeader(s, now, gid, file, line, nil)
 		buf.WriteString(msg)
 		buf.WriteString("\n")
 		defer logging.putBuffer(buf)
@@ -149,10 +149,10 @@ func TestEntryDecoder(t *testing.T) {
 	t3 := t2.Add(time.Microsecond)
 	t4 := t3.Add(time.Microsecond)
 
-	contents := formatEntry(Severity_INFO, t1, "clog_test.go", 136, "info")
-	contents += formatEntry(Severity_WARNING, t2, "clog_test.go", 137, "warning")
-	contents += formatEntry(Severity_ERROR, t3, "clog_test.go", 138, "error")
-	contents += formatEntry(Severity_FATAL, t4, "clog_test.go", 139, "fatal")
+	contents := formatEntry(Severity_INFO, t1, 0, "clog_test.go", 136, "info")
+	contents += formatEntry(Severity_WARNING, t2, 1, "clog_test.go", 137, "warning")
+	contents += formatEntry(Severity_ERROR, t3, 2, "clog_test.go", 138, "error")
+	contents += formatEntry(Severity_FATAL, t4, 3, "clog_test.go", 139, "fatal")
 
 	readAllEntries := func(contents string) []Entry {
 		decoder := NewEntryDecoder(strings.NewReader(contents))
@@ -173,32 +173,36 @@ func TestEntryDecoder(t *testing.T) {
 	entries := readAllEntries(contents)
 	expected := []Entry{
 		{
-			Severity: Severity_INFO,
-			Time:     t1.UnixNano(),
-			File:     `clog_test.go`,
-			Line:     136,
-			Message:  `info`,
+			Severity:  Severity_INFO,
+			Time:      t1.UnixNano(),
+			Goroutine: 0,
+			File:      `clog_test.go`,
+			Line:      136,
+			Message:   `info`,
 		},
 		{
-			Severity: Severity_WARNING,
-			Time:     t2.UnixNano(),
-			File:     `clog_test.go`,
-			Line:     137,
-			Message:  `warning`,
+			Severity:  Severity_WARNING,
+			Time:      t2.UnixNano(),
+			Goroutine: 1,
+			File:      `clog_test.go`,
+			Line:      137,
+			Message:   `warning`,
 		},
 		{
-			Severity: Severity_ERROR,
-			Time:     t3.UnixNano(),
-			File:     `clog_test.go`,
-			Line:     138,
-			Message:  `error`,
+			Severity:  Severity_ERROR,
+			Time:      t3.UnixNano(),
+			Goroutine: 2,
+			File:      `clog_test.go`,
+			Line:      138,
+			Message:   `error`,
 		},
 		{
-			Severity: Severity_FATAL,
-			Time:     t4.UnixNano(),
-			File:     `clog_test.go`,
-			Line:     139,
-			Message:  `fatal`,
+			Severity:  Severity_FATAL,
+			Time:      t4.UnixNano(),
+			Goroutine: 3,
+			File:      `clog_test.go`,
+			Line:      139,
+			Message:   `fatal`,
 		},
 	}
 	if !reflect.DeepEqual(expected, entries) {
@@ -588,7 +592,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 
 func BenchmarkHeader(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		buf := formatHeader(Severity_INFO, time.Now(), "file.go", 100, nil)
+		buf := formatHeader(Severity_INFO, time.Now(), 200, "file.go", 100, nil)
 		logging.putBuffer(buf)
 	}
 }

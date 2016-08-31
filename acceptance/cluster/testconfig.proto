@@ -18,7 +18,7 @@ syntax = "proto2";
 package cockroach.acceptance.cluster;
 option go_package = "cluster";
 
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 // StoreConfig holds the configuration of a collection of similar stores.
 message StoreConfig {
