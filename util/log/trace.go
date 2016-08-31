@@ -170,7 +170,7 @@ func ErrEventf(ctx context.Context, format string, args ...interface{}) {
 // active trace or event log) or to the trace/event log alone, depending on
 // whether the specified verbosity level is active.
 func VEvent(level level, ctx context.Context, msg string) {
-	if V(level) {
+	if VDepth(level, 1) {
 		// Log to INFO (which also logs an event).
 		logDepth(ctx, 1, InfoLog, "", []interface{}{msg})
 	} else {
@@ -182,7 +182,7 @@ func VEvent(level level, ctx context.Context, msg string) {
 // active trace or event log) or to the trace/event log alone, depending on
 // whether the specified verbosity level is active.
 func VEventf(level level, ctx context.Context, format string, args ...interface{}) {
-	if V(level) {
+	if VDepth(level, 1) {
 		// Log to INFO (which also logs an event).
 		logDepth(ctx, 1, InfoLog, format, args)
 	} else {
@@ -190,19 +190,19 @@ func VEventf(level level, ctx context.Context, format string, args ...interface{
 	}
 }
 
-// Trace is a deprecated alias for Event.
+// Trace is a DEPRECATED alias for Event.
 func Trace(ctx context.Context, msg string) {
 	Event(ctx, msg)
 }
 
-// Tracef is a deprecated alias for Eventf.
+// Tracef is a DEPRECATED alias for Eventf.
 func Tracef(ctx context.Context, format string, args ...interface{}) {
 	Eventf(ctx, format, args...)
 }
 
-// VTracef is a deprecated alias for VEventf.
+// VTracef is a DEPRECATED alias for VEventf.
 func VTracef(level level, ctx context.Context, format string, args ...interface{}) {
-	if V(level) {
+	if VDepth(level, 1) {
 		// Log to INFO (which also logs an event).
 		logDepth(ctx, 1, InfoLog, format, args)
 	} else {
