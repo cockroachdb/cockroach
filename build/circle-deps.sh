@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-set -eux
+set -euxo pipefail
 
 CIRCLE_NODE_INDEX="${CIRCLE_NODE_INDEX-0}"
 CIRCLE_NODE_TOTAL="${CIRCLE_NODE_TOTAL-1}"

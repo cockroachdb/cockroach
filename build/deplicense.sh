@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-#
+
+set -euo pipefail
+
 # Output the license info for the current directory's dependencies.
 #
 # The output is sorted by package name:
 #   <package-repo-root> <license info>
-
-set -e
 
 dirs=()
 function visit() {
