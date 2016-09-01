@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/distsql"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 // distSQLNode is a planNode that receives results from a distsql flow (through
@@ -223,15 +224,16 @@ func scanNodeToDistSQL(n *scanNode, syncMode bool) (*distSQLNode, error) {
 
 // hackPlanToUseDistSQL goes through a planNode tree and replaces each scanNode with
 // a distSQLNode and a corresponding flow.
-// If syncMode is true, the plan does not instantiate any goroutines
-// internally.
-func hackPlanToUseDistSQL(plan planNode, syncMode bool) error {
+func hackPlanToUseDistSQL(plan planNode, syncMode distSQLExecMode) error {
+	if syncMode != distSQLSync && syncMode != distSQLAsync {
+		return errors.Errorf("unsupported DistSql mode: %d", syncMode)
+	}
 	// Trigger limit propagation.
 	plan.SetLimitHint(math.MaxInt64, true)
 
 	if sel, ok := plan.(*selectNode); ok {
 		if scan, ok := sel.source.plan.(*scanNode); ok {
-			distNode, err := scanNodeToDistSQL(scan, syncMode)
+			distNode, err := scanNodeToDistSQL(scan, syncMode == distSQLSync)
 			if err != nil {
 				return err
 			}
