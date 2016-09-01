@@ -86,6 +86,8 @@ type Session struct {
 	// Currently we bind an instance of MemoryUsageMonitor to each
 	// session, and the logical timespan for tracking memory usage is
 	// also bound to the entire duration of the session.
+	// (For context about memory usage monitoring/constraints see
+	// the comments at the start of mon/mem_usage.go.)
 	//
 	// The "logical timespan" is the duration between the point in time where
 	// to "begin" monitoring (set counters to 0) and where to "end"
@@ -160,7 +162,6 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 	ctx = log.WithEventLog(ctx, fmt.Sprintf("sql [%s]", args.User), remoteStr)
 	s.context, s.cancel = context.WithCancel(ctx)
 
-	s.mon.StartMonitor()
 	return s
 }
 

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/mon"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/syncutil"
@@ -65,13 +66,14 @@ var (
 type Server struct {
 	context  *base.Context
 	executor *sql.Executor
-
-	metrics ServerMetrics
+	metrics  ServerMetrics
 
 	mu struct {
 		syncutil.Mutex
 		draining bool
 	}
+
+	connMonitor mon.MemoryUsageMonitorWithMutex
 }
 
 // ServerMetrics is the set of metrics for the pgwire server.
@@ -91,11 +93,13 @@ func makeServerMetrics() ServerMetrics {
 
 // MakeServer creates a Server.
 func MakeServer(context *base.Context, executor *sql.Executor) *Server {
-	return &Server{
+	server := &Server{
 		context:  context,
 		executor: executor,
 		metrics:  makeServerMetrics(),
 	}
+	server.connMonitor.StartMonitor(&executor.MemoryPool, mon.MemoryAccount{})
+	return server
 }
 
 // Match returns true if rd appears to be a Postgres connection.
@@ -237,9 +241,9 @@ func (s *Server) ServeConn(conn net.Conn) error {
 			if err != nil {
 				return v3conn.sendInternalError(err.Error())
 			}
-			return v3conn.serve(authenticationHook)
+			return v3conn.serve(authenticationHook, &s.connMonitor)
 		}
-		return v3conn.serve(nil)
+		return v3conn.serve(nil, &s.connMonitor)
 	}
 
 	return errors.Errorf("unknown protocol version %d", version)

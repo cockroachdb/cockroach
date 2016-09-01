@@ -23,8 +23,13 @@ import (
 )
 
 // MemoryAccount tracks the cumulated allocations for one client of
-// MemoryUsageMonitor. This allows a client to release all the memory
-// at once when it completes its work.
+// MemoryPool or MemoryUsageMonitor. MemoryUsageMonitor has an account
+// to its pool; MemoryUsageMonitor clients have an account to the
+// monitor. This allows each client to release all the memory at once
+// when it completes its work.
+//
+// See the comments in mem_usage.go for a fuller picture of how
+// these accounts are used in CockroachDB.
 type MemoryAccount struct {
 	curAllocated int64
 }

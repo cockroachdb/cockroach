@@ -21,6 +21,7 @@ package server
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -42,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/mon"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
@@ -74,7 +76,8 @@ var errAdminAPIError = grpc.Errorf(codes.Internal, "An internal server error "+
 // A adminServer provides a RESTful HTTP API to administration of
 // the cockroach cluster.
 type adminServer struct {
-	server *Server
+	server     *Server
+	memoryPool mon.MemoryPool
 }
 
 // makeAdminServer allocates and returns a new REST server for
@@ -82,6 +85,10 @@ type adminServer struct {
 func makeAdminServer(s *Server) adminServer {
 	return adminServer{
 		server: s,
+
+		// TODO(knz): We do not limit memory usage by admin operations
+		// yet. Is this wise?
+		memoryPool: mon.MakeMemoryPool(math.MaxInt64),
 	}
 }
 
@@ -168,7 +175,9 @@ func (s *adminServer) NewSessionForRPC(
 	// TODO(radu): figure out a general way to merge the RPC context with the
 	// server's context.
 	ctx = tracing.WithTracer(ctx, tracing.TracerFromCtx(s.server.ctx.Ctx))
-	return sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session.StartMonitor(&s.memoryPool, mon.MemoryAccount{})
+	return session
 }
 
 // Databases is an endpoint that returns a list of databases.

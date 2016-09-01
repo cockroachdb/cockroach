@@ -37,7 +37,7 @@ func TestValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	p := makePlanner()
-	p.session.mon.StartMonitor()
+	p.session.StartUnlimitedMonitor()
 	defer p.session.mon.StopMonitor(context.Background())
 
 	vInt := int64(5)
