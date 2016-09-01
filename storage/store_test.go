@@ -2376,13 +2376,15 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		numPlaceholders := len(s.mu.replicaPlaceholders)
 		s.mu.Unlock()
 
-		if numPlaceholders == 0 {
-			return nil
+		if numPlaceholders != 0 {
+			return errors.Errorf("expected 0 placeholders, but found %d", numPlaceholders)
 		}
-		return errors.Errorf("expected 0 placeholders, but found %d", numPlaceholders)
+		// The count of dropped placeholders is incremented after the placeholder
+		// is removed (and while not holding Store.mu), so we need to perform the
+		// check of the number of dropped placeholders in this retry loop.
+		if n := atomic.LoadInt32(&s.counts.droppedPlaceholders); n != 1 {
+			return errors.Errorf("expected 1 dropped placeholder, but found %d", n)
+		}
+		return nil
 	})
-
-	if n := atomic.LoadInt32(&s.counts.droppedPlaceholders); n != 1 {
-		t.Fatalf("expected 1 dropped placeholder, but found %d", n)
-	}
 }
