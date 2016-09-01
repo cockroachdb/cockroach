@@ -184,7 +184,7 @@ func (ds *ServerImpl) flowStreamInt(stream DistSQL_FlowStreamServer) error {
 func (ds *ServerImpl) FlowStream(stream DistSQL_FlowStreamServer) error {
 	err := ds.flowStreamInt(stream)
 	if err != nil {
-		log.Errorf(ds.Context, err.Error(), "", err)
+		log.Error(ds.Context, err.Error())
 	}
 	return err
 }
