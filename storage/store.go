@@ -834,31 +834,40 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// due to a split crashing halfway will simply be resolved on the
 	// next split attempt. They can otherwise be ignored.
 	s.mu.Lock()
+
+	// TODO(peter): While we have to iterate to find the replica descriptors
+	// serially, we can perform the migrations and replica creation
+	// concurrently. Note that while we can perform this initialization
+	// concurrently, all of the initialization must be performed before we start
+	// listening for Raft messages and starting the process Raft loop.
 	err = IterateRangeDescriptors(ctx, s.engine,
 		func(desc roachpb.RangeDescriptor) (bool, error) {
-			if _, ok := desc.GetReplicaDescriptor(s.StoreID()); !ok {
-				// We are no longer a member of the range, but we didn't GC
-				// the replica before shutting down. Destroy the replica now
-				// to avoid creating a new replica without a valid replica ID
-				// (which is necessary to have a non-nil raft group)
-				log.Infof(ctx, "eagerly destroying local data: %+v", desc)
-				return false, s.destroyReplicaData(&desc)
-			}
 			if !desc.IsInitialized() {
 				return false, errors.Errorf("found uninitialized RangeDescriptor: %+v", desc)
 			}
 			s.migrate(ctx, desc)
 
-			rng, err := NewReplica(&desc, s, 0)
+			rep, err := NewReplica(&desc, s, 0)
 			if err != nil {
 				return false, err
 			}
-			if err = s.addReplicaInternalLocked(rng); err != nil {
+			if err = s.addReplicaInternalLocked(rep); err != nil {
 				return false, err
 			}
 			// Add this range and its stats to our counter.
 			s.metrics.ReplicaCount.Inc(1)
-			s.metrics.addMVCCStats(rng.GetMVCCStats())
+			s.metrics.addMVCCStats(rep.GetMVCCStats())
+
+			if _, ok := desc.GetReplicaDescriptor(s.StoreID()); !ok {
+				// We are no longer a member of the range, but we didn't GC the replica
+				// before shutting down. Add the replica to the GC queue.
+				if added, err := s.replicaGCQueue.Add(rep, replicaGCPriorityRemoved); err != nil {
+					log.Errorf(ctx, "%s: unable to add replica to GC queue: %s", rep, err)
+				} else if added {
+					log.Infof(ctx, "%s: added to replica GC queue", rep)
+				}
+			}
+
 			// Note that we do not create raft groups at this time; they will be created
 			// on-demand the first time they are needed. This helps reduce the amount of
 			// election-related traffic in a cold start.
