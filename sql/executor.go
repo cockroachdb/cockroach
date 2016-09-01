@@ -69,10 +69,15 @@ var (
 )
 
 // TODO(radu): experimental code for testing distSQL flows.
-//    0 : disabled
-//    1 : enabled, sync mode
-//    2 : enabled, async mode
-const testDistSQL int = 0
+type distSQLExecMode int
+
+const (
+	distSQLDisabled distSQLExecMode = iota
+	//The plan does not instantiate any goroutines internally.
+	distSQLSync
+	distSQLAsync
+)
+const testDistSQL distSQLExecMode = distSQLDisabled
 
 type traceResult struct {
 	tag   string
@@ -1150,8 +1155,12 @@ func (e *Executor) execStmt(
 
 	defer plan.Close()
 
-	if testDistSQL != 0 {
-		if err := hackPlanToUseDistSQL(plan, testDistSQL == 1); err != nil {
+	distSQLMode := testDistSQL
+	if planMaker.session.DistSQLMode != distSQLDisabled {
+		distSQLMode = planMaker.session.DistSQLMode
+	}
+	if distSQLMode != distSQLDisabled {
+		if err := hackPlanToUseDistSQL(plan, distSQLMode); err != nil {
 			return result, err
 		}
 	}
