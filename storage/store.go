@@ -304,13 +304,12 @@ type Store struct {
 	// that required `s.mu` as well).
 	drainLeases atomic.Value
 
-	// Locking notes: To avoid deadlocks, the following lock order must
-	// be obeyed: Store.processRaftMu < Replica.readOnlyCmdMu <
-	// Store.mu.Mutex < Replica.mu.Mutex <
-	// Store.pendingRaftGroups.Mutex. (It is not required to acquire
-	// every lock in sequence, but when multiple locks are held at the
-	// same time, it is incorrect to acquire a lock with "lesser" value
-	// in this sequence after one with "greater" value)
+	// Locking notes: To avoid deadlocks, the following lock order must be
+	// obeyed: Replica.raftMu < Store.uninitRaftMu < Replica.readOnlyCmdMu <
+	// Store.mu.Mutex < Replica.mu.Mutex < Store.pendingRaftGroups.Mutex. (It is
+	// not required to acquire every lock in sequence, but when multiple locks
+	// are held at the same time, it is incorrect to acquire a lock with "lesser"
+	// value in this sequence after one with "greater" value)
 	//
 	// Methods of Store with a "Locked" suffix require that
 	// Store.mu.Mutex be held. Other locking requirements are indicated
@@ -322,7 +321,7 @@ type Store struct {
 	// (including splits) modify the Store. Therefore we generally lock
 	// Store.mu to find a Replica, release it, then call a method on the
 	// Replica. These short-lived locks of Store.mu and Replica.mu are
-	// often surrounded by a long-lived lock of processRaftMu as
+	// often surrounded by a long-lived lock of Replica.raftMu as
 	// described below.
 	//
 	// There are two major entry points to this stack of locks:
@@ -340,12 +339,10 @@ type Store struct {
 	//
 	// Detailed description of the locks:
 	//
-	// * processRaftMu: Named after the processRaft goroutine; held
-	//   while any raft messages are being processed (including
-	//   handleRaftReady and HandleRaftRequest) or while the set of
-	//   Replicas in the Store is being changed (which may happen
-	//   outside of raft via the replica GC queue). Multiple Replicas
-	//   may be processed at a time.
+	// * Replica.raftMu/Store.uninitRaftMu: Held while any raft messages are
+	//   being processed (including handleRaftReady and HandleRaftRequest) or
+	//   while the set of Replicas in the Store is being changed (which may
+	//   happen outside of raft via the replica GC queue).
 	//
 	// * Replica.readOnlyCmdMu (RWMutex): Held in read mode while any
 	//   read-only command is in progress on the replica; held in write
@@ -357,12 +354,12 @@ type Store struct {
 	//   multiple reads in parallel (#3148). TODO(bdarnell): this lock
 	//   only needs to be held during splitTrigger, not all triggers.
 	//
-	// * Store.mu: Protects the Store's map of its Replicas. Acquired
-	//   and released briefly at the start of each request; metadata
-	//   operations like splits acquire it again to update the map. Even
-	//   though these lock acquisitions do not make up a single critical
-	//   section, it is safe thanks to processRaftMu which prevents any
-	//   concurrent modifications.
+	// * Store.mu: Protects the Store's map of its Replicas. Acquired and
+	//   released briefly at the start of each request; metadata operations like
+	//   splits acquire it again to update the map. Even though these lock
+	//   acquisitions do not make up a single critical section, it is safe thanks
+	//   to Replica.raftMu/Store.uninitRaftMu which prevents any concurrent
+	//   modifications.
 	//
 	// * Replica.mu: Protects the Replica's in-memory state. Acquired
 	//   and released briefly as needed (note that while the lock is
@@ -389,22 +386,17 @@ type Store struct {
 	// initialized replicas which can run in parallel.
 	//
 	// Note that because we acquire and release Store.mu and Replica.mu
-	// repeatedly rather than holding a lock for an entire request, we
-	// are actually relying on higher-level locks to ensure that things
-	// don't change out from under us. In particular, handleRaftReady
-	// accesses the replicaID more than once, and we rely on
-	// processRaftMu to ensure that this is not modified by a concurrent
-	// HandleRaftRequest. (#4476)
-
-	processRaftMu syncutil.Mutex
+	// repeatedly rather than holding a lock for an entire request, we are
+	// actually relying on higher-level locks to ensure that things don't change
+	// out from under us. In particular, handleRaftReady accesses the replicaID
+	// more than once, and we rely on Replica.raftMu/Store.uninitRaftMu to ensure
+	// that this is not modified by a concurrent HandleRaftRequest. (#4476)
 
 	// uninitRaftMu protects Raft processing for uninitialized replicas. We need
 	// to serialize processing of uninitialized replicas because we do not know
 	// what range of keys such replicas cover. Uninitialized replicas might
 	// conflict with either initialized replicas (which can create new replicas
-	// via splits) or other uninitialized replicas (by applying snapshots). Use
-	// Replica.uninitRaft{Lock,Unlock}() for acquiring and releasing
-	// uninitRaftMu.
+	// via splits) or other uninitialized replicas (by applying snapshots).
 	//
 	// Locking notes: Replica.raftMu < Store.uninitRaftMu < Replica.mu
 	uninitRaftMu syncutil.Mutex
@@ -1425,7 +1417,7 @@ func (s *Store) NewRangeDescriptor(
 }
 
 // splitTriggerPostCommit is the part of the split trigger which coordinates
-// the actual split with the Store.
+// the actual split with the Store. Requires that Replica.raftMu is held.
 //
 // TODO(tschottdorf): Want to merge this with SplitRange, but some legacy
 // testing code calls SplitRange directly.
@@ -1435,18 +1427,6 @@ func splitTriggerPostCommit(
 	split *roachpb.SplitTrigger,
 	r *Replica,
 ) {
-	// Block processing of uninitialized replicas. The left hand side of the
-	// split (i.e. r) is guaranteed to be an initialized replica.
-	//
-	// It's unlikely, but looks possible, for a replica to be uninitialized at
-	// the start of Replica.handleRaftReady, become initialized and then process
-	// a split. So we condition whether to grab Store.uninitRaftMu on whether it
-	// is already held by the Replica higher on the call stack.
-	if !r.raftMu.uninitRaftLocked {
-		r.uninitRaftLock()
-		defer r.uninitRaftUnlock()
-	}
-
 	// Create the new Replica representing the right side of the split.
 	// Our error handling options at this point are very limited, but
 	// we need to do this after our batch has committed.
@@ -1454,6 +1434,9 @@ func splitTriggerPostCommit(
 	if err != nil {
 		panic(err)
 	}
+
+	rightRng.raftMu.Lock()
+	defer rightRng.raftMu.Unlock()
 
 	// Copy the timestamp cache into the RHS range.
 	r.mu.Lock()
@@ -1552,12 +1535,12 @@ func splitTriggerPostCommit(
 	}
 }
 
-// SplitRange shortens the original range to accommodate the new
-// range. The new range is added to the ranges map and the replicasByKey
-// btree. processRaftMu must be held.
+// SplitRange shortens the original range to accommodate the new range. The new
+// range is added to the ranges map and the replicasByKey
+// btree. origRng.raftMu, newRng.raftMu and Store.uninitRaftMu must be held.
 //
 // This is only called from the split trigger in the context of the execution
-// of a Raft command (so processRaftMu *is* held).
+// of a Raft command.
 func (s *Store) SplitRange(origRng, newRng *Replica) error {
 	origDesc := origRng.Desc()
 	newDesc := newRng.Desc()
@@ -1569,7 +1552,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.mu.uninitReplicas[newDesc.RangeID]; ok {
+	if exRng, ok := s.mu.uninitReplicas[newDesc.RangeID]; ok {
 		// If we have an uninitialized replica of the new range, delete it
 		// to make way for the complete one created by the split. A live
 		// uninitialized raft group cannot be converted to an
@@ -1578,6 +1561,11 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 		// removed before we install the new range into s.replicas.
 		delete(s.mu.uninitReplicas, newDesc.RangeID)
 		delete(s.mu.replicas, newDesc.RangeID)
+		// Mark the existing replica as destroyed to prevent it from performing any
+		// additional raft operations.
+		if err := exRng.Destroy(*exRng.Desc(), false); err != nil {
+			panic(err)
+		}
 	}
 
 	// Replace the end key of the original range with the start key of
@@ -1612,8 +1600,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 
 // MergeRange expands the subsuming range to absorb the subsumed range. This
 // merge operation will fail if the two ranges are not collocated on the same
-// store. Must be called (perhaps indirectly) from the processRaft goroutine,
-// which holds the processRaftMu lock.
+// store.
 func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, subsumedRangeID roachpb.RangeID) error {
 	subsumingDesc := subsumingRng.Desc()
 
@@ -1634,8 +1621,8 @@ func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, su
 	}
 
 	// Remove and destroy the subsumed range. Note that we were called
-	// (indirectly) from the processRaft goroutine so we must call
-	// removeReplicaImpl directly to avoid deadlocking on processRaftMu.
+	// (indirectly) from raft processing so we must call removeReplicaImpl
+	// directly to avoid deadlocking on Replica.raftMu.
 	if err := s.removeReplicaImpl(subsumedRng, *subsumedDesc, false); err != nil {
 		return errors.Errorf("cannot remove range %s", err)
 	}
@@ -1740,16 +1727,13 @@ func (s *Store) addReplicaToRangeMapLocked(rng *Replica) error {
 // then. If `destroy` is true, all data belonging to the replica will be
 // deleted. In either case a tombstone record will be written.
 func (s *Store) RemoveReplica(rep *Replica, origDesc roachpb.RangeDescriptor, destroy bool) error {
-	s.processRaftMu.Lock()
-	defer s.processRaftMu.Unlock()
-	rep.raftLock()
-	defer rep.raftUnlock()
+	defer rep.raftUnlock(rep.raftLock())
 	return s.removeReplicaImpl(rep, origDesc, destroy)
 }
 
-// removeReplicaImpl is the implementation of RemoveReplica, which is
-// sometimes called directly when the necessary lock is already held.
-// It requires that s.processRaftMu is held and that s.mu is not held.
+// removeReplicaImpl is the implementation of RemoveReplica, which is sometimes
+// called directly when the necessary lock is already held. It requires that
+// Replica.raftMu is held and that s.mu is not held.
 func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor, destroyData bool) error {
 	desc := rep.Desc()
 	if repDesc, ok := desc.GetReplicaDescriptor(s.StoreID()); ok && repDesc.ReplicaID >= origDesc.NextReplicaID {
@@ -2232,7 +2216,7 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now hlc.Timesta
 }
 
 // HandleRaftRequest dispatches a raft message to the appropriate Replica. It
-// requires that s.processRaftMu and s.mu are not held.
+// requires that s.mu is not held.
 func (s *Store) HandleRaftRequest(
 	ctx context.Context,
 	req *RaftMessageRequest,
@@ -2263,14 +2247,6 @@ func (s *Store) HandleRaftRequest(
 
 	var addedPlaceholder bool
 	var removePlaceholder bool
-
-	// TODO(peter): Ideally we would move this to just before the replica is
-	// created, but this lock currently ensures the placeholder created for a
-	// snapshot is not removed by an iteration of Store.processRaft(). When we
-	// move to per-Replica raft mutexes, we'll need a mechanism to ensure the
-	// placeholder for a replica is not removed prematurely.
-	s.processRaftMu.Lock()
-	defer s.processRaftMu.Unlock()
 
 	switch req.Message.Type {
 	case raftpb.MsgSnap:
@@ -2323,14 +2299,13 @@ func (s *Store) HandleRaftRequest(
 	}
 
 	// Lazily create the replica.
-	r, err := s.getOrCreateReplica(req.RangeID, req.ToReplica.ReplicaID, req.FromReplica)
+	r, uninitRaftLocked, err := s.getOrCreateReplica(
+		req.RangeID, req.ToReplica.ReplicaID, req.FromReplica)
 	if err != nil {
 		return roachpb.NewError(err)
 	}
+	defer r.raftUnlock(uninitRaftLocked)
 	r.setLastReplicaDescriptors(req)
-
-	r.raftLock()
-	defer r.raftUnlock()
 
 	if req.ToReplica.ReplicaID == 0 {
 		if req.Message.Type == raftpb.MsgSnap {
@@ -2395,6 +2370,7 @@ func (s *Store) HandleRaftRequest(
 			// preemptive snapshot was sent has likely failed and removes both
 			// in-memory and on-disk state.
 			r.mu.Lock()
+			destroyed := r.mu.destroyed
 			// We are paranoid about applying preemptive snapshots (which
 			// were constructed via our code rather than raft) to the "real"
 			// raft group. Instead, we destroy the "real" raft group if one
@@ -2413,6 +2389,14 @@ func (s *Store) HandleRaftRequest(
 			// preemptive snapshots.
 			r.mu.internalRaftGroup = nil
 			r.mu.Unlock()
+
+			if destroyed != nil {
+				// TODO(peter): Figure out how to handle this better. We can't return
+				// an error or TestRaftRemoveRace fails.
+				//
+				// return roachpb.NewErrorf("%s: preemptive snapshot dropped", destroyed)
+				return nil
+			}
 
 			appliedIndex, _, err := loadAppliedIndex(ctx, r.store.Engine(), r.RangeID)
 			if err != nil {
@@ -2487,8 +2471,8 @@ func (s *Store) HandleRaftRequest(
 	return nil
 }
 
-// HandleRaftResponse handles response messages from the raft
-// transport. It requires that s.processRaftMu and s.mu are not held.
+// HandleRaftResponse handles response messages from the raft transport. It
+// requires that s.mu is not held.
 func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageResponse) {
 	ctx = s.logContext(ctx)
 	switch val := resp.Union.GetValue().(type) {
@@ -2599,11 +2583,10 @@ func (s *Store) processRaft() {
 			s.pendingRaftGroups.Unlock()
 			s.mu.Unlock()
 
-			// Note that between unlocking Store.mu and locking Store.processRaftMu a
+			// Note that between unlocking Store.mu and locking Replica.raftMu a
 			// replica may have been removed. This results in Replica.mu.destroyed
 			// being set which in turn causes Replica.handleRaftReady() to return
 			// immediately.
-			s.processRaftMu.Lock()
 
 			// Handle raft updates for all replicas. Concurrency here is
 			// subtle: we can process replicas in parallel if they are
@@ -2644,7 +2627,6 @@ func (s *Store) processRaft() {
 				}
 			}
 			wg.Wait()
-			s.processRaftMu.Unlock()
 
 			s.metrics.RaftWorkingDurationNanos.Inc(timeutil.Since(workingStart).Nanoseconds())
 
@@ -2666,9 +2648,7 @@ func (s *Store) processRaft() {
 					// Similar to the locking for Replica.handleRaftReady(), if the
 					// replica has been removed, Replica.mu.destroyed will be non-nil
 					// causing Replica.reportSnapshotStatus() to be a no-op.
-					s.processRaftMu.Lock()
 					r.reportSnapshotStatus(st.Req.Message.To, st.Err)
-					s.processRaftMu.Unlock()
 				}
 
 			case <-ticker.C:
@@ -2688,8 +2668,6 @@ func (s *Store) processRaft() {
 				// Similar to the locking for Replica.handleRaftReady(), if a replica
 				// has been removed, Replica.mu.destroyed will be non-nil causing
 				// Replica.tick() to be a no-op.
-				s.processRaftMu.Lock()
-
 				for _, r := range tickReplicas {
 					if exists, err := r.tick(); err != nil {
 						log.Error(s.Ctx(), err)
@@ -2697,8 +2675,6 @@ func (s *Store) processRaft() {
 						pendingReplicas = append(pendingReplicas, r.RangeID)
 					}
 				}
-
-				s.processRaftMu.Unlock()
 
 				s.metrics.RaftTicks.Inc(1)
 
@@ -2724,55 +2700,85 @@ func (s *Store) processRaft() {
 
 // getOrCreateReplica returns a replica for the given RangeID, creating an
 // uninitialized replica if necessary. The caller must not hold the store's
-// lock. The uninitialized return value indicates whether the Replica is
-// initialized or not.
+// lock. The returned replica has Replica.raftMu locked and it is the caller's
+// responsibility to unlock it.
 func (s *Store) getOrCreateReplica(
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
 	creatingReplica roachpb.ReplicaDescriptor,
-) (*Replica, error) {
+) (_ *Replica, uninitRaftLocked bool, err error) {
+	// The locking here is tricky. We need to grab uninitRaftMu in order to
+	// exclude concurrent processing on uninitialized replicas which might
+	// conflict with the replica we're about to create. Lock ordering requires we
+	// grab uninitRaftMu before Store.mu.
+	s.uninitRaftMu.Lock()
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	r, ok := s.mu.replicas[rangeID]
 	if ok {
+		s.mu.Unlock()
+		// We have the replica and want to acquire Replica.raftMu, but first we
+		// have to unlock uninitRaftMu in order to respect the required lock
+		// ordering: Replica.raftMu < Store.uninitRaftMu.
+		s.uninitRaftMu.Unlock()
+		// Note that between the lock release on the previous line and the lock
+		// acquisition on the next line, another goroutine might have snuck in and
+		// replaced the replica in s.mu.replicas, marking r as
+		// "destroyed". Specifically, a split may have occurred create a new
+		// *Replica for the right-hand side of the split and installing it in
+		// s.mu.replicas leaving r orphaned.
+		//
+		// TODO(peter): Perhaps we should explicitly check if r.mu.destroyed is
+		// non-nil here and loop trying to get the replica again. Or lock
+		// s.mu.replicas and verify that r is still the *Replica present there.
+		uninitRaftLocked := r.raftLock()
 		if err := r.setReplicaID(replicaID); err != nil {
-			return nil, err
+			r.raftUnlock(uninitRaftLocked)
+			return nil, false, err
 		}
-		return r, nil
+		return r, uninitRaftLocked, nil
 	}
+
+	defer func() {
+		s.mu.Unlock()
+		if err != nil {
+			s.uninitRaftMu.Unlock()
+		}
+	}()
 
 	// Before creating the replica, see if there is a tombstone which
 	// would indicate that this is a stale message.
 	tombstoneKey := keys.RaftTombstoneKey(rangeID)
 	var tombstone roachpb.RaftTombstone
 	if ok, err := engine.MVCCGetProto(context.Background(), s.Engine(), tombstoneKey, hlc.ZeroTimestamp, true, nil, &tombstone); err != nil {
-		return nil, err
+		return nil, false, err
 	} else if ok {
 		if replicaID != 0 && replicaID < tombstone.NextReplicaID {
-			return nil, &roachpb.RaftGroupDeletedError{}
+			return nil, false, &roachpb.RaftGroupDeletedError{}
 		}
 	}
 
-	var err error
 	r, err = NewReplica(&roachpb.RangeDescriptor{
 		RangeID: rangeID,
 		// TODO(bdarnell): other fields are unknown; need to populate them from
 		// snapshot.
 	}, s, replicaID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	r.creatingReplica = &creatingReplica
 	// Add the range to range map, but not replicasByKey since
 	// the range's start key is unknown. The range will be
 	// added to replicasByKey later when a snapshot is applied.
 	if err = s.addReplicaToRangeMapLocked(r); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	s.mu.uninitReplicas[r.RangeID] = r
 
-	return r, nil
+	// For a new replica we can grab Replica.raftMu while holding Store.mu
+	// because nothing can have a reference to the replica yet.
+	r.raftMu.Lock()
+	return r, true, nil
 }
 
 // canApplySnapshotLocked returns (_, nil) if the snapshot can be applied to
