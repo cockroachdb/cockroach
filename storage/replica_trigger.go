@@ -463,7 +463,7 @@ func (r *Replica) handleTrigger(
 	}
 
 	if trigger.addToReplicaGCQueue {
-		if _, err := r.store.replicaGCQueue.Add(r, 1.0); err != nil {
+		if _, err := r.store.replicaGCQueue.Add(r, replicaGCPriorityRemoved); err != nil {
 			// Log the error; the range should still be GC'd eventually.
 			log.Errorf(ctx, "unable to add to GC queue: %s", err)
 		}
