@@ -2399,7 +2399,7 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 			rep, ok := s.mu.replicas[resp.RangeID]
 			s.mu.Unlock()
 			if ok {
-				if added, err := s.replicaGCQueue.Add(rep, 1.0); err != nil {
+				if added, err := s.replicaGCQueue.Add(rep, replicaGCPriorityRemoved); err != nil {
 					log.Errorf(ctx, "%s: unable to add replica %d to GC queue: %s", rep, resp.ToReplica, err)
 				} else if added {
 					log.Infof(ctx, "%s: replica %s too old, added to replica GC queue", rep, resp.ToReplica)
