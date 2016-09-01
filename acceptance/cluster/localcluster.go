@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/log/logflags"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -459,6 +460,12 @@ func (l *LocalCluster) startNode(node *testNode) {
 		"--host=" + node.nodeStr,
 		"--alsologtostderr=INFO",
 		"--verbosity=1",
+	}
+
+	// Forward the vmodule flag to the nodes.
+	vmoduleFlag := flag.Lookup(logflags.VModuleName)
+	if vmoduleFlag.Value.String() != "" {
+		cmd = append(cmd, fmt.Sprintf("--%s=%s", vmoduleFlag.Name, vmoduleFlag.Value.String()))
 	}
 
 	for _, store := range node.stores {
