@@ -6189,8 +6189,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	// test is ticking the replica manually and doesn't want the store to be
 	// doing so concurrently.
 	r := tc.rng
-	r.raftLock()
-	defer r.raftUnlock()
+	defer r.raftUnlock(r.raftLock())
 
 	repDesc, err := r.GetReplicaDescriptor()
 	if err != nil {
@@ -6208,7 +6207,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		ticks := r.mu.ticks
 		r.mu.Unlock()
 		for ; (ticks % electionTicks) != 0; ticks++ {
-			if _, err := r.tickRaftLocked(); err != nil {
+			if _, err := r.tickRaftMuLocked(); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -6238,7 +6237,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		r.mu.Unlock()
 
 		// Tick raft.
-		if _, err := r.tickRaftLocked(); err != nil {
+		if _, err := r.tickRaftMuLocked(); err != nil {
 			t.Fatal(err)
 		}
 
