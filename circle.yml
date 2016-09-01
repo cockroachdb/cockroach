@@ -24,6 +24,8 @@ checkout:
     - mkdir -p       "${GOPATH%%:*}/src/github.com/cockroachdb/"
     - mv ~/cockroach "${GOPATH%%:*}/src/github.com/cockroachdb/"
     - ln -s          "${GOPATH%%:*}/src/github.com/cockroachdb/cockroach" ~/cockroach
+    - mkdir -p ~/.reference-binary-cache
+    - ln -s ~/.reference-binary-cache ~/cockroach/acceptance/.reference-binary-cache
 
 dependencies:
   override:
@@ -33,7 +35,6 @@ dependencies:
     - ~/.jspm
     - ~/.npm
     - ~/builder
-    - ~/cockroach/acceptance/.reference-binary-cache
 
 test:
   override:
