@@ -921,7 +921,8 @@ func StrToDTimestampTZ(s string, f string, loc *time.Location,
 	}
 
 	t := time.Date(tm.year, time.Month(tm.mon), tm.mday, tm.hour, tm.min, tm.sec, 0, loc)
-	return MakeDTimestampTZ(t, time.Nanosecond), nil
+	return MakeDTimestampTZ(time.Unix(t.Unix()+tm.nsec/int64(time.Second), tm.nsec%int64(time.Second)),
+		time.Nanosecond), nil
 }
 
 // ReturnType implements the TypedExpr interface.

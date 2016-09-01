@@ -83,8 +83,43 @@ func TestToDateAndTimestampBuildin(t *testing.T) {
 			"to_timestamp",
 			0,
 			&EvalContext{Location: &(time.UTC)},
+			DTuple{NewDString("2016324 16:12:30:3000"), NewDString("YYYYDDD HH24:MI:SS:MS")},
+			MakeDTimestampTZ(time.Date(2016, time.Month(11), 19, 16, 12, 33, 0, time.UTC), time.Nanosecond),
+		},
+		{
+			"to_timestamp",
+			0,
+			&EvalContext{Location: &(time.UTC)},
 			DTuple{NewDString("2016Jun12 16:12:30"), NewDString("YYYYMonDD HH24:MI:SS")},
 			MakeDTimestampTZ(time.Date(2016, time.Month(06), 12, 16, 12, 30, 0, time.UTC), time.Nanosecond),
+		},
+		{
+			"to_timestamp",
+			0,
+			&EvalContext{Location: &(time.UTC)},
+			DTuple{NewDString("2016Jun12 8493"), NewDString("YYYYMonDD SSSS")},
+			MakeDTimestampTZ(time.Date(2016, time.Month(06), 12, 2, 21, 33, 0, time.UTC), time.Nanosecond),
+		},
+		{
+			"to_timestamp",
+			0,
+			&EvalContext{Location: &(time.UTC)},
+			DTuple{NewDString("2016Jun12 08:12:30PM"), NewDString("YYYYMonDD HH:MI:SSPM")},
+			MakeDTimestampTZ(time.Date(2016, time.Month(06), 12, 20, 12, 30, 0, time.UTC), time.Nanosecond),
+		},
+		{
+			"to_timestamp",
+			0,
+			&EvalContext{Location: &(time.UTC)},
+			DTuple{NewDString("2,0160635 15:12:02.020.001230"), NewDString("Y,YYYMMWD HH24:MI:SS.MS.US")},
+			MakeDTimestampTZ(time.Date(2016, time.Month(6), 15, 15, 12, 02, 21230*int(time.Microsecond), time.UTC), time.Nanosecond),
+		},
+		{
+			"to_timestamp",
+			0,
+			&EvalContext{Location: &(time.UTC)},
+			DTuple{NewDString("2016XI12 16:12:30"), NewDString("YYYYRMDD HH24:MI:SS")},
+			MakeDTimestampTZ(time.Date(2016, time.Month(11), 12, 16, 12, 30, 0, time.UTC), time.Nanosecond),
 		},
 		{
 			"to_timestamp",
@@ -92,6 +127,13 @@ func TestToDateAndTimestampBuildin(t *testing.T) {
 			&EvalContext{Location: &(time.UTC)},
 			DTuple{NewDFloat(DFloat(200120400))},
 			MakeDTimestampTZ(time.Date(1976, time.Month(05), 5, 5, 0, 0, 0, time.UTC), time.Nanosecond),
+		},
+		{
+			"to_timestamp",
+			0,
+			&EvalContext{Location: &(time.UTC)},
+			DTuple{NewDString("16XI12 16:12:30"), NewDString("YYRMDD HH24:MI:SS")},
+			MakeDTimestampTZ(time.Date(2016, time.Month(11), 12, 16, 12, 30, 0, time.UTC), time.Nanosecond),
 		},
 	}
 

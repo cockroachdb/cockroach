@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-// Author:
+// Author: Yan Long (rafealyim@qq.com)
 
 package parser
 
@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 /* ----------
@@ -119,39 +120,22 @@ const (
 	idxLowerDayOfYear
 	idxLowerDayOfMonth
 	idxLowerAbbreviatedDayName
-	idxLowerDayOfWeek
 	idxLowerFixedFormatGlobalOption
 	idxLowerOurOfDay24
-	idxLowerOurOfDay12
-	idxLowerOurOfDay
 	idxLowerISODayOfYear
-	idxLowerISODayOfWeek
-	idxLowerISOWeekOfMonth
-	idxLowerISO4DigitsOfYear
-	idxLowerISO3DigitsOfYear
-	idxLowerISO2DigitsOfYear
-	idxLowerISOLastDigitsOfYear
 	idxLowerJulianDay
 	idxLowerMinute
-	idxLowerMonthNumber
 	idxLowerMonthName
 	idxAbbreviatedLowerMonthName
-	idxLowerMillisecond
 	idxLowerPostDotMeridiem
 	idxLowerPostMeridiem
 	idxLowerQuarter
 	idxLowerMonthInRomanNumerals
 	idxLowerSecondPastMidnight
-	idxLowerSecond
 	idxLowerTimeZone
 	idxLowerMicrosecond
 	idxLowerWeekNumberOfYear
-	idxLowerWeekOfMonth
 	idxLowerYearWithComma
-	idxLower4DigitsOfYear
-	idxLower3DigitsOfYear
-	idxLower2DigitsOfYear
-	idxLowerLastDigitsOfYear
 )
 
 const (
@@ -160,7 +144,6 @@ const (
 )
 
 const (
-	clock24Hour = 0
 	clock12Hour = 1
 )
 
@@ -342,14 +325,12 @@ var datetimeFmtIdx = []int{
 }
 
 type numDesc struct {
-	pre, post, lsign, flag, preLsignNum, multi, zeroStart, zeroEnd, needLocale int
 }
 
 // PgTimestamp is PG style timestamp
 type PgTimestamp struct {
-	sec, min, hour, mday, mon, year, wday, yday, isdst int
-	gmtoff                                             int64
-	zone                                               string
+	sec, min, hour, mday, mon, year, wday, yday int
+	nsec                                        int64
 }
 
 /* ----------
@@ -418,13 +399,9 @@ const (
 )
 
 const (
-	secondPerYear = (36525 * 864)
-	secondPerDay  = 86400
 	secondPerHour = 3600
 	secondPerMin  = 60
-	minsPerHour   = 60
 	hoursPerDay   = 24
-	daysPerMonth  = 30
 	monthsPerYear = 12
 )
 
@@ -503,7 +480,7 @@ func DoToTimestamp(dateTxt string, fmtStr string) (*PgTimestamp, error) {
 	}
 
 	if tm.clock == clock12Hour {
-		if ts.hour < 1 || ts.hour > hoursPerDay {
+		if ts.hour < 1 || ts.hour > hoursPerDay/2 {
 			return nil, fmt.Errorf("hour \"%d\" is invalid for 12-hour-clock", ts.hour)
 		}
 
@@ -597,7 +574,7 @@ func DoToTimestamp(dateTxt string, fmtStr string) (*PgTimestamp, error) {
 		 * this field may be interpreted as a Gregorian day-of-year, or an ISO
 		 * week date day-of-year.
 		 */
-		if ts.year == 0 && tm.bc > 0 {
+		if ts.year == 0 && tm.bc == 0 {
 			return nil, fmt.Errorf("cannot calculate day of year without year information")
 		}
 
@@ -624,6 +601,13 @@ func DoToTimestamp(dateTxt string, fmtStr string) (*PgTimestamp, error) {
 				ts.mday = tm.ddd - y[i-1]
 			}
 		}
+	}
+
+	if tm.ms > 0 {
+		ts.nsec += int64(tm.ms) * int64(time.Millisecond)
+	}
+	if tm.us > 0 {
+		ts.nsec += int64(tm.us) * int64(time.Microsecond)
 	}
 	return &ts, nil
 }
@@ -958,12 +942,12 @@ func datetimeDecodeFromString(node []*formatNode, in string) (*tmFromChar, error
 			j += used
 			skipTHSuffix(&j, n.suffix)
 		case idxUpperYearWithComma:
-			var millenia, years int
-			matched, err := fmt.Sscanf(in[j:], "%d,%03d", &millenia, &years)
+			var millennia, years int
+			matched, err := fmt.Sscanf(in[j:], "%d,%03d", &millennia, &years)
 			if err != nil || matched != 2 {
 				return nil, fmt.Errorf("invalid input string for \"Y,YYY\"")
 			}
-			years += (millenia * 1000)
+			years += (millennia * 1000)
 			out.year = years
 			out.yysz = 4
 			j += strDigitLen(in[j:]) + 4
@@ -1108,10 +1092,10 @@ func seqSearch(name string, array []string, typ, max int) (int, int) {
 	}
 
 	for i, a := range array {
-		if ((max != 0 && len(a) >= max) || max == 0) && strings.HasPrefix(name, a) {
+		if ((max != 0 && len(a) <= max) || max == 0) && strings.HasPrefix(name, a) {
 			return i, len(a)
 		}
-		if ((max != 0 && len(a) < max) || max == 0) && strings.HasPrefix(name, a[0:max]) {
+		if (max != 0 && len(a) > max) && strings.HasPrefix(name, a[0:max]) {
 			return i, max
 		}
 	}
@@ -1171,7 +1155,7 @@ func isNextSeparator(node []*formatNode) bool {
 	}
 
 	if n.nType == nodeTypeAction {
-		return n.key.isDigit
+		return !n.key.isDigit
 	} else if isDigit(int(n.character)) {
 		return false
 	}
