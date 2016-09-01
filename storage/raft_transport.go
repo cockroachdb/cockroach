@@ -562,7 +562,7 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 func (t *RaftTransport) SendSnapshot(
 	ctx context.Context,
 	header SnapshotRequest_Header,
-	snap OutgoingSnapshot,
+	snap *OutgoingSnapshot,
 	newBatch func() engine.Batch,
 ) error {
 	nodeID := header.RaftMessageRequest.ToReplica.NodeID

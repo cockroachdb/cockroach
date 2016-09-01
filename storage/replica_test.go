@@ -5729,78 +5729,10 @@ func TestDiffRange(t *testing.T) {
 	}
 }
 
-func TestAsyncSnapshot(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	tsc := TestStoreContext()
-	tsc.BlockingSnapshotDuration = 0
-	tc := testContext{}
-	tc.StartWithStoreContext(t, tsc)
-	defer tc.Stop()
-
-	// Lock the replica manually instead of going through GetSnapshot()
-	// because we want to test the underlying async functionality.
-	tc.rng.mu.Lock()
-	_, err := tc.rng.Snapshot()
-	tc.rng.mu.Unlock()
-
-	// In async operation, the first call never succeeds.
-	if err != raft.ErrSnapshotTemporarilyUnavailable {
-		t.Fatalf("expected ErrSnapshotTemporarilyUnavailable, got %s", err)
-	}
-
-	// It will eventually succeed.
-	util.SucceedsSoon(t, func() error {
-		tc.rng.mu.Lock()
-		snap, err := tc.rng.Snapshot()
-		tc.rng.mu.Unlock()
-		if err != nil {
-			return err
-		}
-		if len(snap.Data) == 0 {
-			return errors.Errorf("snapshot is empty")
-		}
-		return nil
-	})
-}
-
-func TestAsyncSnapshotMaxAge(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	tsc := TestStoreContext()
-	tsc.BlockingSnapshotDuration = 0
-	tsc.AsyncSnapshotMaxAge = time.Millisecond
-	tc := testContext{}
-	tc.StartWithStoreContext(t, tsc)
-	defer tc.Stop()
-
-	// Lock the replica manually instead of going through GetSnapshot()
-	// because we want to test the underlying async functionality.
-	tc.rng.mu.Lock()
-	_, err := tc.rng.Snapshot()
-	tc.rng.mu.Unlock()
-
-	// In async operation, the first call never succeeds.
-	if err != raft.ErrSnapshotTemporarilyUnavailable {
-		t.Fatalf("expected ErrSnapshotTemporarilyUnavailable, got %s", err)
-	}
-
-	// Wait for the snapshot to be generated and abandoned.
-	time.Sleep(100 * time.Millisecond)
-	tc.rng.mu.Lock()
-	defer tc.rng.mu.Unlock()
-	// The channel was closed without producing a result.
-	snap, ok := <-tc.rng.mu.snapshotChan
-	if ok {
-		t.Fatalf("expected channel to be closed but got result: %v", snap)
-	}
-}
-
 func TestSyncSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tsc := TestStoreContext()
-	tsc.BlockingSnapshotDuration = time.Second
 	tc := testContext{}
 	tc.StartWithStoreContext(t, tsc)
 	defer tc.Stop()
