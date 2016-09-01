@@ -195,12 +195,30 @@ func (p *planner) resetContexts() {
 	}
 }
 
-func makeInternalPlanner(opName string, txn *client.Txn, user string) *planner {
+func makeInternalPlanner(
+	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics,
+) *planner {
 	p := makePlanner(opName)
 	p.setTxn(txn)
 	p.resetContexts()
 	p.session.User = user
+	p.session.mon.StartUnlimitedMonitor("internal-session-top-mon",
+		memMetrics.CurBytesCount, memMetrics.MaxBytesHist)
+	p.session.sessionMon.StartMonitor("internal-session-mon",
+		memMetrics.SessionCurBytesCount,
+		memMetrics.SessionMaxBytesHist,
+		&p.session.mon, 0, 1)
+	p.session.txnMon.StartMonitor("internal-txn-mon",
+		memMetrics.TxnCurBytesCount,
+		memMetrics.TxnMaxBytesHist,
+		&p.session.mon, 0, 1)
 	return p
+}
+
+func finishInternalPlanner(p *planner) {
+	p.session.txnMon.StopMonitor(p.session.context)
+	p.session.sessionMon.StopMonitor(p.session.context)
+	p.session.mon.StopMonitor(p.session.context)
 }
 
 // resetForBatch implements the queryRunner interface.
@@ -230,8 +248,6 @@ func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
 
 // queryRow implements the queryRunner interface.
 func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, error) {
-	p.session.mon.StartMonitor()
-	defer p.session.mon.StopMonitor(p.ctx())
 	plan, err := p.query(sql, args...)
 	if err != nil {
 		return nil, err
@@ -256,8 +272,6 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, erro
 
 // exec implements the queryRunner interface.
 func (p *planner) exec(sql string, args ...interface{}) (int, error) {
-	p.session.mon.StartMonitor()
-	defer p.session.mon.StopMonitor(p.ctx())
 	plan, err := p.query(sql, args...)
 	if err != nil {
 		return 0, err

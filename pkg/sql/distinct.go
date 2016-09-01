@@ -52,8 +52,8 @@ func (p *planner) Distinct(n *parser.SelectClause) *distinctNode {
 		return nil
 	}
 	d := &distinctNode{p: p}
-	d.prefixMemAcc = p.session.OpenAccount()
-	d.suffixMemAcc = p.session.OpenAccount()
+	d.prefixMemAcc = p.session.OpenTxnAccount()
+	d.suffixMemAcc = p.session.OpenTxnAccount()
 	return d
 }
 
@@ -148,8 +148,8 @@ func (n *distinctNode) addSuffixSeen(acc WrappedMemoryAccount, sKey string) erro
 
 func (n *distinctNode) Next() (bool, error) {
 
-	prefixMemAcc := n.prefixMemAcc.W(n.p.session)
-	suffixMemAcc := n.suffixMemAcc.W(n.p.session)
+	prefixMemAcc := n.prefixMemAcc.Wtxn(n.p.session)
+	suffixMemAcc := n.suffixMemAcc.Wtxn(n.p.session)
 
 	for {
 		next, err := n.plan.Next()
@@ -256,7 +256,7 @@ func (n *distinctNode) SetLimitHint(numRows int64, soft bool) {
 func (n *distinctNode) Close() {
 	n.plan.Close()
 	n.prefixSeen = nil
-	n.prefixMemAcc.W(n.p.session).Close()
+	n.prefixMemAcc.Wtxn(n.p.session).Close()
 	n.suffixSeen = nil
-	n.suffixMemAcc.W(n.p.session).Close()
+	n.suffixMemAcc.Wtxn(n.p.session).Close()
 }

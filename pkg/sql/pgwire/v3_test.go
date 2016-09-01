@@ -23,13 +23,15 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func makeTestV3Conn(c net.Conn) v3Conn {
+	metrics := makeServerMetrics()
 	return makeV3Conn(c,
 		sql.NewDummyExecutor(),
-		makeServerMetrics(),
+		&metrics,
 		sql.SessionArgs{},
 	)
 }
@@ -86,5 +88,8 @@ func testMaliciousInput(t *testing.T, data []byte) {
 	}()
 
 	v3Conn := makeTestV3Conn(r)
-	_ = v3Conn.serve(nil)
+
+	var connMonitor mon.MemoryMonitor
+	connMonitor.StartUnlimitedMonitor("test-mon", nil, nil)
+	_ = v3Conn.serve(nil, &connMonitor)
 }

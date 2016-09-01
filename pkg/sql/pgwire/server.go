@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -65,13 +66,14 @@ var (
 type Server struct {
 	context  *base.Config
 	executor *sql.Executor
-
-	metrics ServerMetrics
+	metrics  ServerMetrics
 
 	mu struct {
 		syncutil.Mutex
 		draining bool
 	}
+
+	connMonitor mon.MemoryMonitor
 }
 
 // ServerMetrics is the set of metrics for the pgwire server.
@@ -79,6 +81,7 @@ type ServerMetrics struct {
 	BytesInCount  *metric.Counter
 	BytesOutCount *metric.Counter
 	Conns         *metric.Counter
+	SQLMemMetrics sql.MemoryMetrics
 }
 
 func makeServerMetrics() ServerMetrics {
@@ -86,16 +89,22 @@ func makeServerMetrics() ServerMetrics {
 		Conns:         metric.NewCounter(MetaConns),
 		BytesInCount:  metric.NewCounter(MetaBytesIn),
 		BytesOutCount: metric.NewCounter(MetaBytesOut),
+		SQLMemMetrics: sql.MakeClientMemMetrics(),
 	}
 }
 
 // MakeServer creates a Server.
-func MakeServer(context *base.Config, executor *sql.Executor) *Server {
-	return &Server{
+func MakeServer(context *base.Config, executor *sql.Executor, maxSQLMem int64) *Server {
+	server := &Server{
 		context:  context,
 		executor: executor,
 		metrics:  makeServerMetrics(),
 	}
+	server.connMonitor.StartMonitor("sql-mon",
+		server.metrics.SQLMemMetrics.CurBytesCount,
+		server.metrics.SQLMemMetrics.MaxBytesHist,
+		nil, maxSQLMem, 1)
+	return server
 }
 
 // Match returns true if rd appears to be a Postgres connection.
@@ -217,7 +226,7 @@ func (s *Server) ServeConn(conn net.Conn) error {
 		// We make a connection regardless of argsErr. If there was an error parsing
 		// the args, the connection will only be used to send a report of that
 		// error.
-		v3conn := makeV3Conn(conn, s.executor, s.metrics, sessionArgs)
+		v3conn := makeV3Conn(conn, s.executor, &s.metrics, sessionArgs)
 		defer v3conn.finish()
 		if argsErr != nil {
 			return v3conn.sendInternalError(argsErr.Error())
@@ -237,9 +246,9 @@ func (s *Server) ServeConn(conn net.Conn) error {
 			if err != nil {
 				return v3conn.sendInternalError(err.Error())
 			}
-			return v3conn.serve(authenticationHook)
+			return v3conn.serve(authenticationHook, &s.connMonitor)
 		}
-		return v3conn.serve(nil)
+		return v3conn.serve(nil, &s.connMonitor)
 	}
 
 	return errors.Errorf("unknown protocol version %d", version)

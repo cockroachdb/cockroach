@@ -29,9 +29,11 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -125,11 +127,15 @@ type v3Conn struct {
 	// https://github.com/postgres/postgres/blob/master/src/backend/tcop/postgres.c
 	doingExtendedQueryMessage, ignoreTillSync bool
 
-	metrics ServerMetrics
+	metrics *ServerMetrics
+
+	// baseMemAcc holds a base memory budget allocated via the pgwire
+	// server's shared monitor.
+	baseMemAcc mon.MemoryAccount
 }
 
 func makeV3Conn(
-	conn net.Conn, executor *sql.Executor, metrics ServerMetrics, sessionArgs sql.SessionArgs,
+	conn net.Conn, executor *sql.Executor, metrics *ServerMetrics, sessionArgs sql.SessionArgs,
 ) v3Conn {
 	ctx := log.WithLogTagStr(context.Background(), "client", conn.RemoteAddr().String())
 	return v3Conn{
@@ -139,7 +145,13 @@ func makeV3Conn(
 		executor: executor,
 		writeBuf: writeBuffer{bytecount: metrics.BytesOutCount},
 		metrics:  metrics,
-		session:  sql.NewSession(ctx, sessionArgs, executor, conn.RemoteAddr()),
+		session: sql.NewSession(
+			ctx,
+			sessionArgs,
+			executor,
+			conn.RemoteAddr(),
+			&metrics.SQLMemMetrics,
+		),
 	}
 }
 
@@ -194,7 +206,11 @@ var statusReportParams = map[string]string{
 	"server_version": "9.5.0",
 }
 
-func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
+var baseSQLMemoryBudget = envutil.EnvOrDefaultInt64("COCKROACH_BASE_SQL_MEMORY_BUDGET", 1024)
+
+func (c *v3Conn) serve(
+	authenticationHook func(string, bool) error, connMonitor *mon.MemoryMonitor,
+) error {
 	ctx := c.session.Ctx()
 
 	if authenticationHook != nil {
@@ -218,6 +234,12 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 	if err := c.wr.Flush(); err != nil {
 		return err
 	}
+
+	if err := connMonitor.GrowAccount(ctx, &c.baseMemAcc, baseSQLMemoryBudget); err != nil {
+		return errors.Errorf("unable to pre-allocate %d bytes for this connection: %v", baseSQLMemoryBudget, err)
+	}
+	defer connMonitor.CloseAccount(ctx, &c.baseMemAcc)
+	c.session.StartMonitor(connMonitor, baseSQLMemoryBudget)
 
 	for {
 		if !c.doingExtendedQueryMessage {

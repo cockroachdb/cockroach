@@ -1067,7 +1067,7 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 		idx    int
 		maxval int64
 	}{
-		{"live_bytes", 5, 30000},
+		{"live_bytes", 5, 40000},
 		{"key_bytes", 6, 30000},
 		{"value_bytes", 7, 30000},
 		{"intent_bytes", 8, 30000},
