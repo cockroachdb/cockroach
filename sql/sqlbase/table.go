@@ -67,10 +67,6 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		Nullable: d.Nullable.Nullability != parser.NotNull && !d.PrimaryKey,
 	}
 
-	if d.Nullable.ConstraintName != "" {
-		col.NullableConstraintName = string(d.Nullable.ConstraintName)
-	}
-
 	var colDatumType parser.Datum
 	switch t := d.Type.(type) {
 	case *parser.BoolColType:
@@ -130,6 +126,15 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		}
 	}
 
+	if d.CheckExpr.Expr != nil {
+		// Should never happen since `hoistConstraints` moves these to table level
+		return nil, nil, errors.New("unexpected column CHECK constraint")
+	}
+	if d.References.Table.TableNameReference != nil {
+		// Should never happen since `hoistConstraints` moves these to table level
+		return nil, nil, errors.New("unexpected column REFERENCED constraint")
+	}
+
 	if d.DefaultExpr.Expr != nil {
 		// Verify the default expression type is compatible with the column type.
 		if err := SanitizeVarFreeExpr(d.DefaultExpr.Expr, colDatumType, "DEFAULT"); err != nil {
@@ -138,9 +143,6 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		var p parser.Parser
 		if p.AggregateInExpr(d.DefaultExpr.Expr) {
 			return nil, nil, fmt.Errorf("Aggregate functions are not allowed in DEFAULT expressions")
-		}
-		if d.DefaultExpr.ConstraintName != "" {
-			col.DefaultExprConstraintName = string(d.DefaultExpr.ConstraintName)
 		}
 		s := d.DefaultExpr.Expr.String()
 		col.DefaultExpr = &s
@@ -1369,4 +1371,100 @@ func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
 		}
 	}
 	return nil
+}
+
+// ConstraintType is used to itentify the type of a constraint.
+type ConstraintType string
+
+const (
+	// ConstraintTypePK identifies a PRIMARY KEY constraint.
+	ConstraintTypePK ConstraintType = "PRIMARY KEY"
+	// ConstraintTypeFK identifies a FOREIGN KEY constraint.
+	ConstraintTypeFK ConstraintType = "FOREIGN KEY"
+	// ConstraintTypeUnique identifies a FOREIGN constraint.
+	ConstraintTypeUnique ConstraintType = "UNIQUE"
+	// ConstraintTypeCheck identifies a CHECK constraint.
+	ConstraintTypeCheck ConstraintType = "CHECK"
+)
+
+// ConstraintDetail describes a constraint.
+type ConstraintDetail struct {
+	Kind    ConstraintType
+	Columns []string
+	Details string
+}
+
+// GetConstraintInfo returns a summary of all constraints on the table.
+func (desc TableDescriptor) GetConstraintInfo(txn *client.Txn) (map[string]ConstraintDetail, error) {
+	return desc.collectConstraintInfo(txn)
+}
+
+// CheckUniqueConstraints returns a non-nil error if a descriptor contains two
+// constraints with the same name.
+func (desc TableDescriptor) CheckUniqueConstraints() error {
+	_, err := desc.collectConstraintInfo(nil)
+	return err
+}
+
+// if `txn` is non-nil, provide a full summary of constraints, otherwise just
+// check that constraints have unique names.
+func (desc TableDescriptor) collectConstraintInfo(txn *client.Txn) (map[string]ConstraintDetail, error) {
+	info := make(map[string]ConstraintDetail)
+
+	// Indexes provide PK, Unique and FK constraints.
+	for _, index := range desc.AllNonDropIndexes() {
+		if index.ID == desc.PrimaryIndex.ID {
+			if _, ok := info[index.Name]; ok {
+				return nil, errors.Errorf("duplicate constraint name: %q", index.Name)
+			}
+			detail := ConstraintDetail{Kind: ConstraintTypePK}
+			if txn != nil {
+				detail.Columns = index.ColumnNames
+			}
+			info[index.Name] = detail
+		} else if index.Unique {
+			if _, ok := info[index.Name]; ok {
+				return nil, errors.Errorf("duplicate constraint name: %q", index.Name)
+			}
+			detail := ConstraintDetail{Kind: ConstraintTypeUnique}
+			if txn != nil {
+				detail.Columns = index.ColumnNames
+			}
+			info[index.Name] = detail
+		}
+
+		if index.ForeignKey.IsSet() {
+			if _, ok := info[index.ForeignKey.Name]; ok {
+				return nil, errors.Errorf("duplicate constraint name: %q", index.ForeignKey.Name)
+			}
+			detail := ConstraintDetail{Kind: ConstraintTypeFK}
+			if txn != nil {
+				detail.Columns = index.ColumnNames
+				other, err := GetTableDescFromID(txn, index.ForeignKey.Table)
+				if err != nil {
+					return nil, errors.Errorf("error resolving table %d referenced in foreign key",
+						index.ForeignKey.Table)
+				}
+				otherIdx, err := other.FindIndexByID(index.ForeignKey.Index)
+				if err != nil {
+					return nil, errors.Errorf("error resolving index %d in table %s referenced in foreign key",
+						index.ForeignKey.Index, other.Name)
+				}
+				detail.Details = fmt.Sprintf("%s.%v", other.Name, otherIdx.ColumnNames)
+			}
+			info[index.ForeignKey.Name] = detail
+		}
+	}
+
+	for _, c := range desc.Checks {
+		if _, ok := info[c.Name]; ok {
+			return nil, errors.Errorf("duplicate constraint name: %q", c.Name)
+		}
+		detail := ConstraintDetail{Kind: ConstraintTypeCheck}
+		if txn != nil {
+			detail.Details = c.Expr
+		}
+		info[c.Name] = detail
+	}
+	return info, nil
 }
