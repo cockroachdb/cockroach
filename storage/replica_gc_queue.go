@@ -48,6 +48,19 @@ const (
 	ReplicaGCQueueCandidateTimeout = 1 * time.Second
 )
 
+// Priorities for the replica GC queue.
+const (
+	replicaGCPriorityDefault float64 = 0
+
+	// Replicas that have been removed from the range spend a lot of
+	// time in the candidate state, so treat them as higher priority.
+	replicaGCPriorityCandidate = 1
+
+	// The highest priority is used when we have definite evidence
+	// (external to replicaGCQueue) that the replica has been removed.
+	replicaGCPriorityRemoved = 2
+)
+
 // replicaGCQueue manages a queue of replicas to be considered for garbage
 // collections. The GC process asynchronously removes local data for
 // ranges that have been rebalanced away from this store.
@@ -103,13 +116,13 @@ func replicaGCShouldQueueImpl(
 	now, lastCheck, lastActivity hlc.Timestamp, isCandidate bool,
 ) (bool, float64) {
 	timeout := ReplicaGCQueueInactivityThreshold
-	var priority float64
+	priority := replicaGCPriorityDefault
 
 	if isCandidate {
 		// If the range is a candidate (which happens if its former replica set
 		// ignores it), let it expire much earlier.
 		timeout = ReplicaGCQueueCandidateTimeout
-		priority++
+		priority = replicaGCPriorityCandidate
 	} else if now.Less(lastCheck.Add(ReplicaGCQueueInactivityThreshold.Nanoseconds(), 0)) {
 		// Return false immediately if the previous check was less than the
 		// check interval in the past. Note that we don't do this is the
