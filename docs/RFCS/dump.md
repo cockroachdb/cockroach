@@ -2,8 +2,8 @@
 - Status: completed
 - Start Date: 2016-04-14
 - Authors: Matt Jibson
-- RFC PR: #6058
-
+- RFC PR: [#6058](https://github.com/cockroachdb/cockroach/pull/6058)
+- Cockroach Issue:
 
 # Summary
 

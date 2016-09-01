@@ -2,9 +2,8 @@
 - Status: in-progress
 - Start Date: 2016-04-19
 - Authors: Tobias Schottdorf
-- RFC PR: #6166
-- Cockroach Issue: (one or more # from the issue tracker)
-
+- RFC PR: [#6166](https://github.com/cockroachdb/cockroach/pull/6166)
+- Cockroach Issue: [#6290](https://github.com/cockroachdb/cockroach/pull/6290)
 
 # Summary
 

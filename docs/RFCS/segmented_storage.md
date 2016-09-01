@@ -1,8 +1,8 @@
 - Feature Name: segmented_storage
 - Status: rejected
 - Start Date: 2015-07-29
-- RFC PR:
-- Cockroach Issue: #1644
+- RFC PR: [#1866](https://github.com/cockroachdb/cockroach/pull/1866)
+- Cockroach Issue: [#1644](https://github.com/cockroachdb/cockroach/issues/1644)
 
 # Rejection notes
 
