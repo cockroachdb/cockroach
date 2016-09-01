@@ -14,6 +14,7 @@
 //
 // Author: Andrei Matei (andreimatei1@gmail.com)
 // Author: Radu Berinde (radu@cockroachlabs.com)
+// Author: Irfan Sharif (irfansharif@cockroachlabs.com)
 
 package sqlbase
 
@@ -122,4 +123,25 @@ func RandEncDatum(rng *rand.Rand) EncDatum {
 	var ed EncDatum
 	ed.SetDatum(typ, datum)
 	return ed
+}
+
+// RandEncDatumSet generates a set of random EncDatum values of the same random
+// type.
+func RandEncDatumSet(rng *rand.Rand, numVals int) []EncDatum {
+	typ := RandColumnType(rng)
+	vals := make([]EncDatum, numVals)
+	for i := range vals {
+		vals[i].SetDatum(typ, RandDatum(rng, typ, true))
+	}
+	return vals
+}
+
+// RandEncDatumSets generates EncDatum sets, each set with values of the same
+// random type.
+func RandEncDatumSets(rng *rand.Rand, numSets, numValsPerSet int) [][]EncDatum {
+	vals := make([][]EncDatum, numSets)
+	for i := range vals {
+		vals[i] = RandEncDatumSet(rng, numValsPerSet)
+	}
+	return vals
 }

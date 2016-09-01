@@ -13,6 +13,7 @@
 // permissions and limitations under the License.
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
+// Author: Irfan Sharif (irfansharif@cockroachlabs.com)
 //
 // Routers are used by processors to direct outgoing rows to (potentially)
 // multiple streams; see docs/RFCS/distributed_sql.md
@@ -40,34 +41,64 @@ func makeRouter(spec *OutputRouterSpec, streams []RowReceiver) (
 	switch spec.Type {
 	case OutputRouterSpec_BY_HASH:
 		return makeHashRouter(spec.HashColumns, streams)
+	case OutputRouterSpec_MIRROR:
+		return makeMirrorRouter(streams)
 	default:
 		return nil, errors.Errorf("router type %s not supported", spec.Type)
 	}
 }
 
-type hashRouter struct {
-	hashCols []uint32
-
+type routerBase struct {
 	streams []RowReceiver
+	err     error
+}
 
-	buffer []byte
-	err    error
+type mirrorRouter struct {
+	routerBase
+}
 
-	alloc sqlbase.DatumAlloc
+type hashRouter struct {
+	routerBase
+
+	hashCols []uint32
+	buffer   []byte
+	alloc    sqlbase.DatumAlloc
 }
 
 var _ RowReceiver = &hashRouter{}
+var _ RowReceiver = &mirrorRouter{}
 
 var crc32Table = crc32.MakeTable(crc32.Castagnoli)
+
+func makeMirrorRouter(streams []RowReceiver) (*mirrorRouter, error) {
+	return &mirrorRouter{
+		routerBase: routerBase{streams: streams},
+	}, nil
+}
 
 func makeHashRouter(hashCols []uint32, streams []RowReceiver) (*hashRouter, error) {
 	if len(hashCols) == 0 {
 		return nil, errors.Errorf("no hash columns for BY_HASH router")
 	}
 	return &hashRouter{
-		hashCols: hashCols,
-		streams:  streams,
+		routerBase: routerBase{streams: streams},
+		hashCols:   hashCols,
 	}, nil
+}
+
+// PushRow is part of the RowReceiver interface.
+func (mr *mirrorRouter) PushRow(row sqlbase.EncDatumRow) bool {
+	if mr.err != nil {
+		return false
+	}
+
+	// Each row is sent to all the output streams, returning false here if a
+	// stream in particular does not need more rows or if none of them do seems
+	// unnecessary.
+	for _, s := range mr.streams {
+		s.PushRow(row)
+	}
+	return true
 }
 
 // PushRow is part of the RowReceiver interface.
@@ -104,12 +135,12 @@ func (hr *hashRouter) PushRow(row sqlbase.EncDatumRow) bool {
 }
 
 // Close is part of the RowReceiver interface.
-func (hr *hashRouter) Close(err error) {
-	if hr.err != nil {
+func (rb *routerBase) Close(err error) {
+	if rb.err != nil {
 		// Any error we ran into takes precedence.
-		err = hr.err
+		err = rb.err
 	}
-	for _, s := range hr.streams {
+	for _, s := range rb.streams {
 		s.Close(err)
 	}
 }
