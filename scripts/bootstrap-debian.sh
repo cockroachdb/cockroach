@@ -20,7 +20,7 @@ patch -p1 -d ../go < "parallelbuilds-go${GOVERSION}.patch"
 (cd ~/go/src && GOROOT_BOOTSTRAP=~/go-bootstrap ./make.bash)
 
 echo 'export GOPATH=${HOME}; export PATH=${HOME}/go/bin:${GOPATH}/bin:${PATH}' >> ~/.bashrc_go
-echo '. .bashrc_go' >> ~/.bashrc
+echo '. ~/.bashrc_go' >> ~/.bashrc
 
 . ~/.bashrc_go
 
