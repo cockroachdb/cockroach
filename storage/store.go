@@ -1733,10 +1733,19 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if _, ok := s.mu.replicas[rep.RangeID]; !ok {
+		return errors.New("replica not found")
+	}
+
 	delete(s.mu.replicas, rep.RangeID)
 	delete(s.mu.replicaPlaceholders, rep.RangeID)
 	if s.mu.replicasByKey.Delete(rep) == nil {
-		return errors.Errorf("couldn't find range in replicasByKey btree")
+		// This is a fatal error because returning at this point will
+		// leave the Store in an inconsistent state (we've already deleted
+		// from s.mu.replicas), and uninitialized replicas shouldn't make
+		// it this far anyway. This method will need some changes when we
+		// introduce GC of uninitialized replicas.
+		log.Fatalf(context.TODO(), "replica %s found by id but not by key", rep)
 	}
 	s.scanner.RemoveReplica(rep)
 	s.consistencyScanner.RemoveReplica(rep)
