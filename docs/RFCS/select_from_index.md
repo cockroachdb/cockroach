@@ -1,7 +1,7 @@
 - Feature Name: select_from_index
 - Status: completed
 - Start Date: 2015-08-10
-- RFC PR: #2046
+- RFC PR: [#2046](https://github.com/cockroachdb/cockroach/pull/2046)
 - Cockroach Issue:
 
 # Summary

@@ -1,8 +1,10 @@
 - Feature Name: grpc
-- Status: draft
+- Status: completed
 - Start Date: 2015-12-07
-- RFC PR:
-- Cockroach Issue: #2381, #3013, #3421
+- RFC PR: [#3352](https://github.com/cockroachdb/cockroach/pull/3352)
+- Cockroach Issue: [#2381](https://github.com/cockroachdb/cockroach/pull/2381),
+                   [#3013](https://github.com/cockroachdb/cockroach/issues/3013),
+                   [#3421](https://github.com/cockroachdb/cockroach/pull/3421)
 
 # Summary
 
