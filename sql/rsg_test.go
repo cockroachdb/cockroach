@@ -17,6 +17,7 @@
 package sql_test
 
 import (
+	gosql "database/sql"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -45,49 +46,15 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 
 	const rootStmt = "target_list"
 
-	if *flagRSGTime == 0 {
-		t.Skip("enable with '-rsg <duration>'")
-	}
-
-	params, _ := createTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
-
-	y, err := ioutil.ReadFile(filepath.Join("parser", "sql.y"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	r, err := rsg.NewRSG(timeutil.Now().UnixNano(), string(y))
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Broadcast channel for all workers.
-	done := make(chan bool)
-	var wg sync.WaitGroup
-	worker := func() {
-		defer wg.Done()
-		for {
-			select {
-			case <-done:
-				return
-			default:
-			}
-			s := r.Generate(rootStmt, 20)
-			if strings.HasPrefix(s, "REVOKE") || strings.HasPrefix(s, "GRANT") {
-				continue
-			}
-			_, _ = db.Exec(`ROLLBACK`)
-			_, _ = db.Exec(`CREATE DATABASE IF NOT EXISTS name; SET DATABASE name;`)
-			_, _ = db.Exec(s)
+	testRandomSyntax(t, func(db *gosql.DB, r *rsg.RSG) {
+		s := r.Generate(rootStmt, 20)
+		if strings.HasPrefix(s, "REVOKE") || strings.HasPrefix(s, "GRANT") {
+			return
 		}
-	}
-	for i := 0; i < *flagRSGGoRoutines; i++ {
-		go worker()
-		wg.Add(1)
-	}
-	time.Sleep(*flagRSGTime)
-	close(done)
-	wg.Wait()
+		_, _ = db.Exec(`ROLLBACK`)
+		_, _ = db.Exec(`CREATE DATABASE IF NOT EXISTS name; SET DATABASE name;`)
+		_, _ = db.Exec(s)
+	})
 }
 
 func TestRandomSyntaxSelect(t *testing.T) {
@@ -95,147 +62,79 @@ func TestRandomSyntaxSelect(t *testing.T) {
 
 	const rootStmt = "stmt"
 
-	if *flagRSGTime == 0 {
-		t.Skip("enable with '-rsg <duration>'")
-	}
-
-	params, _ := createTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
-
-	y, err := ioutil.ReadFile(filepath.Join("parser", "sql.y"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	r, err := rsg.NewRSG(timeutil.Now().UnixNano(), string(y))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS ident; CREATE TABLE IF NOT EXISTS ident.ident (ident decimal);`); err != nil {
-		panic(err)
-	}
-	// Broadcast channel for all workers.
-	done := make(chan bool)
-	var wg sync.WaitGroup
-	worker := func() {
-		defer wg.Done()
-		for {
-			select {
-			case <-done:
-				return
-			default:
-			}
-			targets := r.Generate(rootStmt, 30)
-			var where, from string
-			// Only generate complex clauses half the time.
-			if rand.Intn(2) == 0 {
-				where = r.Generate("where_clause", 30)
-				from = r.Generate("from_clause", 30)
-			} else {
-				from = "FROM ident"
-			}
-			s := fmt.Sprintf("SELECT %s %s %s", targets, from, where)
-			_, _ = db.Exec(`ROLLBACK`)
-			_, _ = db.Exec(`SET DATABASE = ident`)
-			_, _ = db.Exec(s)
+	testRandomSyntax(t, func(db *gosql.DB, r *rsg.RSG) {
+		if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS ident; CREATE TABLE IF NOT EXISTS ident.ident (ident decimal);`); err != nil {
+			panic(err)
 		}
-	}
-	for i := 0; i < *flagRSGGoRoutines; i++ {
-		go worker()
-		wg.Add(1)
-	}
-	time.Sleep(*flagRSGTime)
-	close(done)
-	wg.Wait()
+
+		targets := r.Generate(rootStmt, 30)
+		var where, from string
+		// Only generate complex clauses half the time.
+		if rand.Intn(2) == 0 {
+			where = r.Generate("where_clause", 30)
+			from = r.Generate("from_clause", 30)
+		} else {
+			from = "FROM ident"
+		}
+		s := fmt.Sprintf("SELECT %s %s %s", targets, from, where)
+		_, _ = db.Exec(`ROLLBACK`)
+		_, _ = db.Exec(`SET DATABASE = ident`)
+		_, _ = db.Exec(s)
+	})
 }
 
 func TestRandomSyntaxFunctions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	if *flagRSGTime == 0 {
-		t.Skip("enable with '-rsg <duration>'")
-	}
-
-	params, _ := createTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop()
-
-	y, err := ioutil.ReadFile(filepath.Join("parser", "sql.y"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	r, err := rsg.NewRSG(timeutil.Now().UnixNano(), string(y))
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	var names []string
 	for b := range parser.Builtins {
 		names = append(names, b)
 	}
 
-	// Broadcast channel for all workers.
-	done := make(chan bool)
-	var wg sync.WaitGroup
-	worker := func() {
-		defer wg.Done()
-		for {
-			select {
-			case <-done:
-				return
-			default:
-			}
-			name := names[r.Intn(len(names))]
-			variations := parser.Builtins[name]
-			fn := variations[r.Intn(len(variations))]
-			var args []string
-			switch ft := fn.Types.(type) {
-			case parser.ArgTypes:
-				for _, typ := range ft {
-					var v interface{}
-					switch typ.(type) {
-					case *parser.DInt:
-						i := r.Intn(math.MaxInt64)
-						i -= r.Intn(math.MaxInt64)
-						v = i
-					case *parser.DFloat, *parser.DDecimal:
-						v = r.Float64()
-					case *parser.DString:
-						v = `'string'`
-					case *parser.DBytes:
-						v = `b'bytes'`
-					case *parser.DTimestamp:
-						t := time.Unix(0, int64(r.Intn(math.MaxInt64)))
-						v = fmt.Sprintf(`'%s'`, t.Format(time.RFC3339Nano))
-					default:
-						panic(fmt.Errorf("unknown arg type: %T", typ))
-					}
-					args = append(args, fmt.Sprint(v))
+	testRandomSyntax(t, func(db *gosql.DB, r *rsg.RSG) {
+		name := names[r.Intn(len(names))]
+		variations := parser.Builtins[name]
+		fn := variations[r.Intn(len(variations))]
+		var args []string
+		switch ft := fn.Types.(type) {
+		case parser.ArgTypes:
+			for _, typ := range ft {
+				var v interface{}
+				switch typ.(type) {
+				case *parser.DInt:
+					i := r.Intn(math.MaxInt64)
+					i -= r.Intn(math.MaxInt64)
+					v = i
+				case *parser.DFloat, *parser.DDecimal:
+					v = r.Float64()
+				case *parser.DString:
+					v = `'string'`
+				case *parser.DBytes:
+					v = `b'bytes'`
+				case *parser.DTimestamp:
+					t := time.Unix(0, int64(r.Intn(math.MaxInt64)))
+					v = fmt.Sprintf(`'%s'`, t.Format(time.RFC3339Nano))
+				default:
+					panic(fmt.Errorf("unknown arg type: %T", typ))
 				}
-			default:
-				continue
+				args = append(args, fmt.Sprint(v))
 			}
-			s := fmt.Sprintf("SELECT %s(%s)", name, strings.Join(args, ", "))
-			_, _ = db.Exec("ROLLBACK")
-			funcdone := make(chan bool, 1)
-			go func() {
-				_, _ = db.Exec(s)
-				funcdone <- true
-			}()
-			select {
-			case <-funcdone:
-			case <-time.After(time.Second * 5):
-				panic(fmt.Errorf("func exec timeout: %s", s))
-			}
+		default:
+			return
 		}
-	}
-	for i := 0; i < *flagRSGGoRoutines; i++ {
-		go worker()
-		wg.Add(1)
-	}
-	time.Sleep(*flagRSGTime)
-	close(done)
-	wg.Wait()
+		s := fmt.Sprintf("SELECT %s(%s)", name, strings.Join(args, ", "))
+		_, _ = db.Exec("ROLLBACK")
+		funcdone := make(chan bool, 1)
+		go func() {
+			_, _ = db.Exec(s)
+			funcdone <- true
+		}()
+		select {
+		case <-funcdone:
+		case <-time.After(time.Second * 5):
+			panic(fmt.Errorf("func exec timeout: %s", s))
+		}
+	})
 }
 
 func TestRandomSyntaxFuncCommon(t *testing.T) {
@@ -243,6 +142,15 @@ func TestRandomSyntaxFuncCommon(t *testing.T) {
 
 	const rootStmt = "func_expr_common_subexpr"
 
+	testRandomSyntax(t, func(db *gosql.DB, r *rsg.RSG) {
+		expr := r.Generate(rootStmt, 30)
+		s := fmt.Sprintf("SELECT %s", expr)
+		_, _ = db.Exec(`ROLLBACK`)
+		_, _ = db.Exec(s)
+	})
+}
+
+func testRandomSyntax(t *testing.T, f func(db *gosql.DB, r *rsg.RSG)) {
 	if *flagRSGTime == 0 {
 		t.Skip("enable with '-rsg <duration>'")
 	}
@@ -270,10 +178,7 @@ func TestRandomSyntaxFuncCommon(t *testing.T) {
 				return
 			default:
 			}
-			expr := r.Generate(rootStmt, 30)
-			s := fmt.Sprintf("SELECT %s", expr)
-			_, _ = db.Exec(`ROLLBACK`)
-			_, _ = db.Exec(s)
+			f(db, r)
 		}
 	}
 	for i := 0; i < *flagRSGGoRoutines; i++ {
