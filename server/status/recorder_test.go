@@ -211,8 +211,8 @@ func TestMetricsRecorder(t *testing.T) {
 
 		// Stats needed for store summaries.
 		{"ranges", "counter", 1},
-		{"ranges.leader", "gauge", 1},
-		{"ranges.replicated", "gauge", 1},
+		{"replicas.leaders", "gauge", 1},
+		{"replicas.leaseholders", "gauge", 1},
 		{"ranges.available", "gauge", 1},
 	}
 

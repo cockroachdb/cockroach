@@ -1871,7 +1871,7 @@ func (s *Store) Metrics() *StoreMetrics {
 func (s *Store) MVCCStats() enginepb.MVCCStats {
 	s.metrics.mu.Lock()
 	defer s.metrics.mu.Unlock()
-	return s.metrics.stats
+	return s.metrics.mu.stats
 }
 
 // Descriptor returns a StoreDescriptor including current store
@@ -2636,31 +2636,16 @@ func (s *Store) processRaft() {
 				s.processRaftMu.Lock()
 				s.mu.Lock()
 				pendingReplicas = pendingReplicas[:0]
-				var raftLeaders, rangeLeaseHolders, rangeLeaseHoldersWithoutRaftLeadership int64
 
-				var info tickInfo
 				for id, r := range s.mu.replicas {
-					if err := r.tick(&info); err != nil {
+					if exists, err := r.tick(); err != nil {
 						log.Error(s.Ctx(), err)
-					} else if info.Exists {
+					} else if exists {
 						pendingReplicas = append(pendingReplicas, id)
-					}
-					if info.IsRangeLeaseHolder && !info.IsRaftLeader {
-						rangeLeaseHoldersWithoutRaftLeadership++
-					}
-					if info.IsRaftLeader {
-						raftLeaders++
-					}
-					if info.IsRangeLeaseHolder {
-						rangeLeaseHolders++
 					}
 				}
 
 				s.mu.Unlock()
-
-				s.metrics.RaftLeaders.Update(raftLeaders)
-				s.metrics.RangeLeaseHolders.Update(rangeLeaseHolders)
-				s.metrics.RangeLeaseHoldersWithoutRaftLeadership.Update(rangeLeaseHoldersWithoutRaftLeadership)
 				s.metrics.RaftTicks.Inc(1)
 
 				// Enqueue all pending ranges for readiness checks. Note that we could
@@ -2775,23 +2760,38 @@ func (s *Store) canApplySnapshotLocked(rangeID roachpb.RangeID, snap raftpb.Snap
 	return placeholder, nil
 }
 
-// computeReplicationStatus counts a number of simple replication statistics for
+func (s *Store) updateCapacityGauges() error {
+	desc, err := s.Descriptor()
+	if err != nil {
+		return err
+	}
+	s.metrics.Capacity.Update(desc.Capacity.Capacity)
+	s.metrics.Available.Update(desc.Capacity.Available)
+
+	return nil
+}
+
+// updateReplicationGauges counts a number of simple replication statistics for
 // the ranges in this store.
 // TODO(bram): #4564 It may be appropriate to compute these statistics while
 // scanning ranges. An ideal solution would be to create incremental events
 // whenever availability changes.
-func (s *Store) computeReplicationStatus(now int64) (
-	leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount int64, err error) {
+func (s *Store) updateReplicationGauges() error {
 	// Load the system config.
 	cfg, ok := s.Gossip().GetSystemConfig()
 	if !ok {
-		err = errors.Errorf("%s: system config not yet available", s)
-		return
+		return errors.Errorf("%s: system config not yet available", s)
 	}
 
-	timestamp := hlc.Timestamp{WallTime: now}
+	var raftLeaderCount, leaseHolderCount, raftLeaderNotLeaseHolderCount, availableRangeCount,
+		replicaAllocatorNoopCount,
+		replicaAllocatorAddCount,
+		replicaAllocatorRemoveCount,
+		replicaAllocatorRemoveDeadCount int64
+
+	timestamp := s.ctx.Clock.Now()
+
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	for _, rng := range s.mu.replicas {
 		desc := rng.Desc()
 		zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey)
@@ -2799,23 +2799,33 @@ func (s *Store) computeReplicationStatus(now int64) (
 			log.Error(s.Ctx(), err)
 			continue
 		}
-		raftStatus := rng.RaftStatus()
 
+		rng.mu.Lock()
+		raftStatus := rng.raftStatusLocked()
+		lease := rng.mu.state.Lease
+		rng.mu.Unlock()
+
+		leaseCovers := lease.Covers(timestamp)
+		leaseOwned := lease.OwnedBy(s.Ident.StoreID)
+
+		// To avoid double counting, most stats are only counted on the raft
+		// leader. The lease holder count is the exception, which is counted by
+		// all replicas.
 		if raftStatus != nil && raftStatus.SoftState.RaftState == raft.StateLeader {
-			leaderRangeCount++
-			// TODO(bram): #4564 Compare attributes of the stores so we can
-			// track ranges that have enough replicas but still need to be
-			// migrated onto nodes with the desired attributes.
-			if len(raftStatus.Progress) >= len(zoneConfig.ReplicaAttrs) {
-				replicatedRangeCount++
-			}
+			raftLeaderCount++
 
-			// If any replica holds the range lease, the range is available.
-			if lease, _ := rng.getLease(); lease.Covers(timestamp) {
+			if leaseCovers {
+				// If any replica holds the range lease, the range is available.
 				availableRangeCount++
+
+				if leaseOwned {
+					leaseHolderCount++
+				} else {
+					raftLeaderNotLeaseHolderCount++
+				}
 			} else {
-				// If there is no range lease, then as long as more than 50%
-				// of the replicas are current then it is available.
+				// If there is no range lease, then as long as a majority of
+				// the replicas are current then it is available.
 				current := 0
 				for _, progress := range raftStatus.Progress {
 					if progress.Match == raftStatus.Applied {
@@ -2829,34 +2839,47 @@ func (s *Store) computeReplicationStatus(now int64) (
 				}
 			}
 
-			if action, _ := s.allocator.ComputeAction(zoneConfig, desc); action != AllocatorNoop {
-				replicationPendingRangeCount++
+			switch action, _ := s.allocator.ComputeAction(zoneConfig, desc); action {
+			case AllocatorNoop:
+				replicaAllocatorNoopCount++
+			case AllocatorAdd:
+				replicaAllocatorAddCount++
+			case AllocatorRemove:
+				replicaAllocatorRemoveCount++
+			case AllocatorRemoveDead:
+				replicaAllocatorRemoveDeadCount++
 			}
+		} else if leaseCovers && leaseOwned {
+			leaseHolderCount++
 		}
 	}
-	return
+	s.mu.Unlock()
+
+	s.metrics.RaftLeaderCount.Update(raftLeaderCount)
+	s.metrics.RaftLeaderNotLeaseHolderCount.Update(raftLeaderNotLeaseHolderCount)
+	s.metrics.LeaseHolderCount.Update(leaseHolderCount)
+
+	s.metrics.AvailableRangeCount.Update(availableRangeCount)
+
+	s.metrics.ReplicaAllocatorNoopCount.Update(replicaAllocatorNoopCount)
+	s.metrics.ReplicaAllocatorRemoveCount.Update(replicaAllocatorRemoveCount)
+	s.metrics.ReplicaAllocatorAddCount.Update(replicaAllocatorAddCount)
+	s.metrics.ReplicaAllocatorRemoveDeadCount.Update(replicaAllocatorRemoveDeadCount)
+
+	return nil
 }
 
 // ComputeMetrics immediately computes the current value of store metrics which
 // cannot be computed incrementally. This method should be invoked periodically
 // by a higher-level system which records store metrics.
 func (s *Store) ComputeMetrics(tick int) error {
-	// Broadcast store descriptor.
-	desc, err := s.Descriptor()
-	if err != nil {
+	if err := s.updateCapacityGauges(); err != nil {
 		return err
 	}
-	s.metrics.updateCapacityGauges(desc.Capacity)
 
-	// Broadcast replication status.
-	now := s.ctx.Clock.Now().WallTime
-	leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount, err :=
-		s.computeReplicationStatus(now)
-	if err != nil {
+	if err := s.updateReplicationGauges(); err != nil {
 		return err
 	}
-	s.metrics.updateReplicationGauges(
-		leaderRangeCount, replicatedRangeCount, replicationPendingRangeCount, availableRangeCount)
 
 	// Get the latest RocksDB stats.
 	stats, err := s.engine.GetStats()

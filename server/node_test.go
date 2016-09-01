@@ -418,7 +418,7 @@ func compareNodeStatus(t *testing.T, ts *TestServer, expectedNodeStatus *status.
 		compareMetricMaps(actualStores[key].Metrics, expectedStores[key].Metrics,
 			[]string{
 				"replicas",
-				"ranges.replicated",
+				"replicas.leaseholders",
 			},
 			[]string{
 				"livebytes",
@@ -503,14 +503,14 @@ func TestStatusSummaries(t *testing.T) {
 		stat := status.StoreStatus{
 			Desc: *desc,
 			Metrics: map[string]float64{
-				"replicas":          float64(expectedReplicas),
-				"ranges.replicated": float64(expectedReplicas),
-				"livebytes":         0,
-				"keybytes":          0,
-				"valbytes":          0,
-				"livecount":         0,
-				"keycount":          0,
-				"valcount":          0,
+				"replicas":              float64(expectedReplicas),
+				"replicas.leaseholders": float64(expectedReplicas),
+				"livebytes":             0,
+				"keybytes":              0,
+				"valbytes":              0,
+				"livecount":             0,
+				"keycount":              0,
+				"valcount":              0,
 			},
 		}
 		expectedNodeStatus.StoreStatuses = append(expectedNodeStatus.StoreStatuses, stat)
@@ -599,9 +599,9 @@ func TestStatusSummaries(t *testing.T) {
 	// Increment metrics on the first store.
 	store1 = expectedStoreStatuses[roachpb.StoreID(1)].Metrics
 	store1["replicas"]++
-	store1["ranges.leader"]++
+	store1["replicas.leaders"]++
+	store1["replicas.leaseholders"]++
 	store1["ranges.available"]++
-	store1["ranges.replicated"]++
 
 	forceWriteStatus()
 	expectedNodeStatus = compareNodeStatus(t, ts, expectedNodeStatus, 3)
