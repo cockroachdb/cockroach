@@ -99,38 +99,47 @@ export class StackedAreaGraph extends React.Component<StackedAreaGraphProps, {}>
   }
 
   drawChart() {
-    let metrics = this.metrics(this.props);
-    let axis = this.axis(this.props);
-    if (!axis) {
-      return;
+    if (!document.hidden) {
+      let metrics = this.metrics(this.props);
+      let axis = this.axis(this.props);
+      if (!axis) {
+        return;
+      }
+
+      this.chart.showLegend(_.isBoolean(this.props.legend) ? this.props.legend :
+        metrics.length > 1 && metrics.length <= MAX_LEGEND_SERIES);
+      let formattedData: any[] = [];
+
+      if (this.props.data) {
+        let processed = ProcessDataPoints(metrics, axis, this.props.data);
+        formattedData = processed.formattedData;
+        let {yAxisDomain, xAxisDomain } = processed;
+
+        this.chart.yDomain(yAxisDomain.domain());
+
+        // always set the tick values to the lowest axis value, the highest axis
+        // value, and one value in between
+        this.chart.yAxis.tickValues(yAxisDomain.ticks());
+        this.chart.xAxis.tickValues(xAxisDomain.ticks((n) => new Date(NanoToMilli(n))));
+      }
+
+      d3.select(this.svgEl)
+        .datum(formattedData)
+        .transition().duration(500)
+        .call(this.chart);
     }
-
-    this.chart.showLegend(_.isBoolean(this.props.legend) ? this.props.legend :
-      metrics.length > 1 && metrics.length <= MAX_LEGEND_SERIES);
-    let formattedData: any[] = [];
-
-    if (this.props.data)  {
-      let processed = ProcessDataPoints(metrics, axis, this.props.data);
-      formattedData = processed.formattedData;
-      let {yAxisDomain, xAxisDomain } = processed;
-
-      this.chart.yDomain(yAxisDomain.domain());
-
-      // always set the tick values to the lowest axis value, the highest axis
-      // value, and one value in between
-      this.chart.yAxis.tickValues(yAxisDomain.ticks());
-      this.chart.xAxis.tickValues(xAxisDomain.ticks((n) => new Date(NanoToMilli(n))));
-    }
-
-    d3.select(this.svgEl)
-      .datum(formattedData)
-      .transition().duration(500)
-      .call(this.chart);
   }
 
   componentDidMount() {
     this.initChart();
     this.drawChart();
+    // TODO (maxlang): make more backwards compatible
+    // TODO (maxlang): check whether element is visible based on scroll state
+    document.addEventListener("visibilitychange", this.drawChart);
+  }
+
+  componentWillUnmount() {
+    document.removeEventListener("visibilitychange", this.drawChart);
   }
 
   componentDidUpdate() {
