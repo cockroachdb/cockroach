@@ -515,6 +515,11 @@ func (db *DB) Query(query tspb.Query, r Resolution, startNanos, endNanos int64) 
 	// unionIterator at each offset encountered. If the query is requesting a
 	// derivative, a rate of change is recorded instead of the actual values.
 	iters.init()
+	if !iters.isValid() {
+		// We have no data to return.
+		return nil, sources, nil
+	}
+
 	var last tspb.TimeSeriesDatapoint
 	if isDerivative {
 		last = tspb.TimeSeriesDatapoint{
