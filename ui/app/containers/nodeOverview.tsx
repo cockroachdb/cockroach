@@ -76,14 +76,14 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
                         title="Total Replicas"
                         valueFn={(metrics) => metrics.get(MetricConstants.replicas).toString()} />
               <TableRow data={node}
-                        title="Leader Ranges"
-                        valueFn={(metrics) => metrics.get(MetricConstants.leaderRanges).toString()} />
+                        title="Raft Leaders"
+                        valueFn={(metrics) => metrics.get(MetricConstants.raftLeaders).toString()} />
               <TableRow data={node}
                         title="Available"
-                        valueFn={(metrics) => Percentage(metrics.get(MetricConstants.availableRanges), metrics.get(MetricConstants.leaderRanges))} />
+                        valueFn={(metrics) => Percentage(metrics.get(MetricConstants.availableRanges), metrics.get(MetricConstants.raftLeaders))} />
               <TableRow data={node}
                         title="Fully Replicated"
-                        valueFn={(metrics) => Percentage(metrics.get(MetricConstants.replicatedRanges), metrics.get(MetricConstants.leaderRanges))} />
+                        valueFn={(metrics) => Percentage(metrics.get(MetricConstants.replicatedRanges), metrics.get(MetricConstants.raftLeaders))} />
               <TableRow data={node}
                         title="Available Capacity"
                         valueFn={(metrics) => Bytes(metrics.get(MetricConstants.availableCapacity))} />
