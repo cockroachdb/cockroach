@@ -58,11 +58,11 @@ message ColumnDescriptor {
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "ColumnID"];
   optional ColumnType type = 3 [(gogoproto.nullable) = false];
   optional bool nullable = 4 [(gogoproto.nullable) = false];
-  optional string nullable_constraint_name = 8 [(gogoproto.nullable) = false];
+  reserved 8;
   // Default expression to use to populate the column on insert if no
   // value is provided.
   optional string default_expr = 5;
-  optional string default_expr_constraint_name = 9 [(gogoproto.nullable) = false];
+  reserved 9;
   optional bool hidden = 6 [(gogoproto.nullable) = false];
   reserved 7;
 }
