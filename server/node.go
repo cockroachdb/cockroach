@@ -471,8 +471,7 @@ func (n *Node) initStores(
 	// Bootstrap any uninitialized stores asynchronously.
 	if len(bootstraps) > 0 {
 		if err := stopper.RunAsyncTask(func() {
-			taskCtx := context.TODO()
-			n.bootstrapStores(taskCtx, bootstraps, stopper)
+			n.bootstrapStores(n.Ctx(), bootstraps, stopper)
 		}); err != nil {
 			return err
 		}
@@ -646,7 +645,7 @@ func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper) {
 func (n *Node) computePeriodicMetrics(tick int) error {
 	return n.stores.VisitStores(func(store *storage.Store) error {
 		if err := store.ComputeMetrics(tick); err != nil {
-			log.Warningf(context.TODO(), "%s: unable to compute metrics: %s", store, err)
+			log.Warningf(n.Ctx(), "%s: unable to compute metrics: %s", store, err)
 		}
 		return nil
 	})
