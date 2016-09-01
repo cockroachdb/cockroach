@@ -240,7 +240,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		execCfg.TestingKnobs = &sql.ExecutorTestingKnobs{}
 	}
 
-	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper)
+	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper, srvCtx.SQLMemoryPoolSize)
 	s.registry.AddMetricStruct(s.sqlExecutor)
 
 	s.pgServer = pgwire.MakeServer(s.ctx.Context, s.sqlExecutor)

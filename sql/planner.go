@@ -220,7 +220,7 @@ func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
 
 // queryRow implements the queryRunner interface.
 func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, error) {
-	p.session.mon.StartMonitor()
+	p.session.mon.StartUnlimitedMonitor()
 	defer p.session.mon.StopMonitor(p.ctx())
 	plan, err := p.query(sql, args...)
 	if err != nil {
@@ -246,7 +246,7 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, erro
 
 // exec implements the queryRunner interface.
 func (p *planner) exec(sql string, args ...interface{}) (int, error) {
-	p.session.mon.StartMonitor()
+	p.session.mon.StartUnlimitedMonitor()
 	defer p.session.mon.StopMonitor(p.ctx())
 	plan, err := p.query(sql, args...)
 	if err != nil {

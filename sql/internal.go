@@ -42,6 +42,8 @@ func (ie InternalExecutor) ExecuteStatementInTransaction(
 	txn *client.Txn, statement string, qargs ...interface{},
 ) (int, error) {
 	p := makeInternalPlanner(txn, security.RootUser)
+	p.session.mon.StartUnlimitedMonitor()
+	defer p.session.mon.StopMonitor(p.ctx())
 	p.leaseMgr = ie.LeaseManager
 	return p.exec(statement, qargs...)
 }

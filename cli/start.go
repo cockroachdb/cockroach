@@ -106,13 +106,18 @@ uninitialized, specify the --join flag to point to any healthy node
 	RunE:         runStart,
 }
 
-func setDefaultCacheSize(ctx *server.Context) {
+func setDefaultSizeParameters(ctx *server.Context) {
 	if size, err := server.GetTotalMemory(); err == nil {
 		// Default the cache size to 1/4 of total memory. A larger cache size
 		// doesn't necessarily improve performance as this is memory that is
 		// dedicated to uncompressed blocks in RocksDB. A larger value here will
 		// compete with the OS buffer cache which holds compressed blocks.
 		ctx.CacheSize = size / 4
+
+		// Default the SQL memory pool size to 1/4 of total memory.  Again
+		// we do not want to allow too much lest this will pressure
+		// against OS buffers and decrease overall client throughput.
+		ctx.SQLMemoryPoolSize = size / 4
 	}
 }
 

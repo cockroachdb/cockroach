@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/distsql"
+	"github.com/cockroachdb/cockroach/sql/mon"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
@@ -179,6 +180,8 @@ type Executor struct {
 	// execution of statements. So don't go on changing state after you've
 	// Wait()ed on it.
 	systemConfigCond *sync.Cond
+
+	MemoryPool mon.MemoryPool
 }
 
 // An ExecutorConfig encompasses the auxiliary objects and configuration
@@ -276,7 +279,7 @@ type ExecutorTestingKnobs struct {
 
 // NewExecutor creates an Executor and registers a callback on the
 // system config.
-func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
+func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper, maxSQLMem int64) *Executor {
 	exec := &Executor{
 		cfg:     cfg,
 		reCache: parser.NewRegexpCache(512),
@@ -293,6 +296,7 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 		DdlCount:         metric.NewCounter(MetaDdl),
 		MiscCount:        metric.NewCounter(MetaMisc),
 		QueryCount:       metric.NewCounter(MetaQuery),
+		MemoryPool:       mon.MakeMemoryPool(maxSQLMem),
 	}
 
 	exec.systemConfigCond = sync.NewCond(exec.systemConfigMu.RLocker())

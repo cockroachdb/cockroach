@@ -78,3 +78,13 @@ func (w WrappedMemoryAccount) Clear() {
 func (w WrappedMemoryAccount) ResizeItem(oldSize, newSize int64) error {
 	return w.mon.ResizeItem(w.ctx, w.acc, oldSize, newSize)
 }
+
+// StartMonitor interfaces between Session and mon.MemoryUsageMonitor
+func (s *Session) StartMonitor(pool *mon.MemoryPool, preBudget mon.MemoryAccount) {
+	s.mon.StartMonitor(pool, preBudget)
+}
+
+// StartUnlimitedMonitor interfaces between Session and mon.MemoryUsageMonitor
+func (s *Session) StartUnlimitedMonitor() {
+	s.mon.StartUnlimitedMonitor()
+}

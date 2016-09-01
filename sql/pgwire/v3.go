@@ -29,9 +29,11 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/mon"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
@@ -126,6 +128,8 @@ type v3Conn struct {
 	doingExtendedQueryMessage, ignoreTillSync bool
 
 	metrics ServerMetrics
+
+	memAcc mon.MemoryAccount
 }
 
 func makeV3Conn(
@@ -193,7 +197,11 @@ var statusReportParams = map[string]string{
 	"server_version": "9.5.0",
 }
 
-func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
+var baseSQLMemoryBudget = envutil.EnvOrDefaultInt64("COCKROACH_BASE_SQL_MEMORY_BUDGET", 1024)
+
+func (c *v3Conn) serve(
+	authenticationHook func(string, bool) error, connMonitor *mon.MemoryUsageMonitorWithMutex,
+) error {
 	ctx := c.session.Ctx()
 
 	if authenticationHook != nil {
@@ -217,6 +225,12 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 	if err := c.wr.Flush(); err != nil {
 		return err
 	}
+
+	if err := connMonitor.GrowAccount(ctx, &c.memAcc, baseSQLMemoryBudget); err != nil {
+		return errors.Errorf("unable to pre-allocate %d bytes for this connection: %v", baseSQLMemoryBudget, err)
+	}
+	defer connMonitor.CloseAccount(ctx, &c.memAcc)
+	c.session.StartMonitor(&c.executor.MemoryPool, c.memAcc)
 
 	for {
 		if !c.doingExtendedQueryMessage {

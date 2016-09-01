@@ -43,9 +43,10 @@ import (
 
 // Context defaults.
 const (
-	defaultCGroupMemPath = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
-	defaultMaxOffset     = 250 * time.Millisecond
-	defaultCacheSize     = 512 << 20 // 512 MB
+	defaultCGroupMemPath     = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+	defaultMaxOffset         = 250 * time.Millisecond
+	defaultCacheSize         = 512 << 20 // 512 MB
+	defaultSQLMemoryPoolSize = 512 << 20 // 512 MB
 	// defaultMemtableBudget controls how much memory can be used for memory
 	// tables. The way we initialize RocksDB, 100% (32 MB) of this setting can be
 	// used for memory tables and each memory table will be 25% of the size (8
@@ -91,6 +92,10 @@ type Context struct {
 	// CacheSize is the amount of memory in bytes to use for caching data.
 	// The value is split evenly between the stores if there are more than one.
 	CacheSize int64
+
+	// SQLMemoryPoolSize is the amount of memory in bytes that can be
+	// used by SQL clients to store row data in server RAM.
+	SQLMemoryPoolSize int64
 
 	// MemtableBudget is the amount of memory, per store, in bytes to use for
 	// the memory table.
@@ -333,6 +338,7 @@ func MakeContext() Context {
 		Context:                  new(base.Context),
 		MaxOffset:                defaultMaxOffset,
 		CacheSize:                defaultCacheSize,
+		SQLMemoryPoolSize:        defaultSQLMemoryPoolSize,
 		MemtableBudget:           defaultMemtableBudget,
 		ScanInterval:             defaultScanInterval,
 		ScanMaxIdleTime:          defaultScanMaxIdleTime,

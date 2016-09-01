@@ -21,6 +21,8 @@ package server
 import (
 	"bytes"
 	"fmt"
+	"math"
+	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -42,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/mon"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
@@ -73,7 +76,8 @@ var errAdminAPIError = grpc.Errorf(codes.Internal, "An internal server error "+
 // A adminServer provides a RESTful HTTP API to administration of
 // the cockroach cluster.
 type adminServer struct {
-	server *Server
+	server     *Server
+	memoryPool mon.MemoryPool
 }
 
 // makeAdminServer allocates and returns a new REST server for
@@ -81,7 +85,21 @@ type adminServer struct {
 func makeAdminServer(s *Server) adminServer {
 	return adminServer{
 		server: s,
+
+		// TODO(knz): We do not limit memory usage by admin operations
+		// yet. Is this wise?
+		memoryPool: mon.MakeMemoryPool(math.MaxInt64),
 	}
+}
+
+// newSession creates a SQL session and initializes the memory
+// monitor.
+func (s *adminServer) newSession(
+	ctx context.Context, args sql.SessionArgs, e *sql.Executor, remote net.Addr,
+) *sql.Session {
+	session := sql.NewSession(ctx, args, e, remote)
+	session.StartMonitor(&s.memoryPool, mon.MemoryAccount{})
+	return session
 }
 
 // RegisterService registers the GRPC service.
@@ -164,7 +182,7 @@ func (s *adminServer) Databases(
 	ctx context.Context, req *serverpb.DatabasesRequest,
 ) (*serverpb.DatabasesResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := s.newSession(ctx, args, s.server.sqlExecutor, nil)
 	defer session.Finish()
 
 	r := s.server.sqlExecutor.ExecuteStatements(session, "SHOW DATABASES;", nil)
@@ -192,7 +210,7 @@ func (s *adminServer) DatabaseDetails(
 	ctx context.Context, req *serverpb.DatabaseDetailsRequest,
 ) (*serverpb.DatabaseDetailsResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := s.newSession(ctx, args, s.server.sqlExecutor, nil)
 	defer session.Finish()
 
 	// Placeholders don't work with SHOW statements, so we need to manually
@@ -287,7 +305,7 @@ func (s *adminServer) TableDetails(
 	ctx context.Context, req *serverpb.TableDetailsRequest,
 ) (*serverpb.TableDetailsResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := s.newSession(ctx, args, s.server.sqlExecutor, nil)
 	defer session.Finish()
 
 	// TODO(cdo): Use real placeholders for the table and database names when we've extended our SQL
@@ -606,7 +624,7 @@ func (s *adminServer) TableStats(ctx context.Context, req *serverpb.TableStatsRe
 // Users returns a list of users, stripped of any passwords.
 func (s *adminServer) Users(ctx context.Context, req *serverpb.UsersRequest) (*serverpb.UsersResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := s.newSession(ctx, args, s.server.sqlExecutor, nil)
 	defer session.Finish()
 
 	query := "SELECT username FROM system.users"
@@ -631,7 +649,7 @@ func (s *adminServer) Users(ctx context.Context, req *serverpb.UsersRequest) (*s
 // targetID=INT returns events for that have this targetID
 func (s *adminServer) Events(ctx context.Context, req *serverpb.EventsRequest) (*serverpb.EventsResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := s.newSession(ctx, args, s.server.sqlExecutor, nil)
 	defer session.Finish()
 
 	// Execute the query.
@@ -747,7 +765,7 @@ func (s *adminServer) SetUIData(ctx context.Context, req *serverpb.SetUIDataRequ
 	}
 
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := s.newSession(ctx, args, s.server.sqlExecutor, nil)
 	defer session.Finish()
 
 	for key, val := range req.KeyValues {
@@ -807,7 +825,7 @@ func (s *adminServer) SetUIData(ctx context.Context, req *serverpb.SetUIDataRequ
 // have the prefix `serverUIDataKeyPrefix`.
 func (s *adminServer) GetUIData(ctx context.Context, req *serverpb.GetUIDataRequest) (*serverpb.GetUIDataResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := s.newSession(ctx, args, s.server.sqlExecutor, nil)
 	defer session.Finish()
 
 	if len(req.Keys) == 0 {

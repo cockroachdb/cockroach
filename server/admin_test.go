@@ -225,6 +225,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	const testdb = "test"
 	session := sql.NewSession(
 		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+	session.StartUnlimitedMonitor()
 	defer session.Finish()
 
 	query := "CREATE DATABASE " + testdb
@@ -376,6 +377,7 @@ func testAdminAPITableDetailsInner(t *testing.T, dbName, tblName string) {
 
 	session := sql.NewSession(
 		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+	session.StartUnlimitedMonitor()
 	defer session.Finish()
 
 	setupQueries := []string{
@@ -554,6 +556,7 @@ func TestAdminAPITableDetailsForVirtualSchema(t *testing.T) {
 
 		session := sql.NewSession(
 			context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+		session.StartUnlimitedMonitor()
 		defer session.Finish()
 
 		resSet := ts.sqlExecutor.ExecuteStatements(session, showCreateTableQuery, nil)
@@ -586,6 +589,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	// Create database and table.
 	session := sql.NewSession(
 		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+	session.StartUnlimitedMonitor()
 	defer session.Finish()
 
 	setupQueries := []string{
@@ -694,6 +698,7 @@ func TestAdminAPIUsers(t *testing.T) {
 	// Create sample users.
 	session := sql.NewSession(
 		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+	session.StartUnlimitedMonitor()
 	defer session.Finish()
 
 	query := `
@@ -736,6 +741,7 @@ func TestAdminAPIEvents(t *testing.T) {
 
 	session := sql.NewSession(
 		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+	session.StartUnlimitedMonitor()
 	defer session.Finish()
 
 	setupQueries := []string{
