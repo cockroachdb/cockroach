@@ -3176,6 +3176,8 @@ func TestEndTransactionLocalGC(t *testing.T) {
 	}
 }
 
+// setupResolutionTest splits the range at the specified splitKey and completes
+// a transaction which creates intents at key and splitKey.
 func setupResolutionTest(t *testing.T, tc testContext, key roachpb.Key,
 	splitKey roachpb.RKey, commit bool) (*Replica, *roachpb.Transaction) {
 	// Split the range and create an intent at splitKey and key.
@@ -3208,7 +3210,7 @@ func setupResolutionTest(t *testing.T, tc testContext, key roachpb.Key,
 
 	// End the transaction and resolve the intents.
 	args, h := endTxnArgs(txn, commit)
-	args.IntentSpans = []roachpb.Span{{Key: key, EndKey: splitKey.Next().AsRawKey()}}
+	args.IntentSpans = []roachpb.Span{{Key: key}, {Key: splitKey.AsRawKey()}}
 	txn.Sequence++
 	if _, pErr := tc.SendWrappedWith(h, &args); pErr != nil {
 		t.Fatal(pErr)
@@ -3226,7 +3228,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	splitKey := roachpb.RKey(key).Next()
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-			if filterArgs.Req.Method() == roachpb.ResolveIntentRange &&
+			if filterArgs.Req.Method() == roachpb.ResolveIntent &&
 				filterArgs.Req.Header().Key.Equal(splitKey.AsRawKey()) {
 				return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
 			}
@@ -3259,7 +3261,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 		t.Fatal(pErr)
 	}
 	hbResp := reply.(*roachpb.HeartbeatTxnResponse)
-	expIntents := []roachpb.Span{{Key: splitKey.AsRawKey(), EndKey: splitKey.AsRawKey().Next()}}
+	expIntents := []roachpb.Span{{Key: splitKey.AsRawKey()}}
 	if !reflect.DeepEqual(hbResp.Txn.Intents, expIntents) {
 		t.Fatalf("expected persisted intents %v, got %v",
 			expIntents, hbResp.Txn.Intents)
@@ -3271,35 +3273,51 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 // abort cache records are purged on both the local range and non-local range.
 func TestEndTransactionDirectGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := testContext{}
-	key := roachpb.Key("a")
-	splitKey := roachpb.RKey(key).Next()
-	tc.Start(t)
-	defer tc.Stop()
+	a := roachpb.Key("a")
+	splitKey := keys.MustAddr(a).Next()
 
-	rightRng, txn := setupResolutionTest(t, tc, key, splitKey, false /* generate abort cache entry */)
+	for i, testKey := range []roachpb.Key{
+		a,
+		keys.RangeDescriptorKey(keys.MustAddr(a)),
+		keys.RangeDescriptorKey(keys.MustAddr(roachpb.KeyMin)),
+	} {
+		func() {
+			tc := testContext{}
+			tc.Start(t)
+			defer tc.Stop()
 
-	util.SucceedsSoon(t, func() error {
-		if gr, _, err := tc.rng.Get(context.Background(), tc.engine, roachpb.Header{}, roachpb.GetRequest{Span: roachpb.Span{Key: keys.TransactionKey(txn.Key, txn.ID)}}); err != nil {
-			return err
-		} else if gr.Value != nil {
-			return errors.Errorf("txn entry still there: %+v", gr)
-		}
+			ctx := log.WithLogTag(context.Background(), "testcase", i)
 
-		var entry roachpb.AbortCacheEntry
-		if aborted, err := tc.rng.abortCache.Get(context.Background(), tc.engine, txn.ID, &entry); err != nil {
-			t.Fatal(err)
-		} else if aborted {
-			return errors.Errorf("abort cache still populated: %v", entry)
-		}
-		if aborted, err := rightRng.abortCache.Get(context.Background(), tc.engine, txn.ID, &entry); err != nil {
-			t.Fatal(err)
-		} else if aborted {
-			t.Fatalf("right-hand side abort cache still populated: %v", entry)
-		}
+			rightRng, txn := setupResolutionTest(t, tc, testKey, splitKey, false /* generate abort cache entry */)
 
-		return nil
-	})
+			util.SucceedsSoon(t, func() error {
+				if gr, _, err := tc.rng.Get(
+					ctx, tc.engine, roachpb.Header{},
+					roachpb.GetRequest{Span: roachpb.Span{
+						Key: keys.TransactionKey(txn.Key, txn.ID),
+					}},
+				); err != nil {
+					return err
+				} else if gr.Value != nil {
+					return errors.Errorf("%d: txn entry still there: %+v", i, gr)
+				}
+
+				var entry roachpb.AbortCacheEntry
+				if aborted, err := tc.rng.abortCache.Get(ctx, tc.engine, txn.ID, &entry); err != nil {
+					t.Fatal(err)
+				} else if aborted {
+					return errors.Errorf("%d: abort cache still populated: %v", i, entry)
+				}
+				if aborted, err := rightRng.abortCache.Get(ctx, tc.engine, txn.ID, &entry); err != nil {
+					t.Fatal(err)
+				} else if aborted {
+					t.Fatalf("%d: right-hand side abort cache still populated: %v", i, entry)
+				}
+
+				return nil
+			})
+		}()
+	}
 }
 
 // TestEndTransactionDirectGCFailure verifies that no immediate GC takes place
@@ -3313,7 +3331,7 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 	tsc := TestStoreContext()
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-			if filterArgs.Req.Method() == roachpb.ResolveIntentRange &&
+			if filterArgs.Req.Method() == roachpb.ResolveIntent &&
 				filterArgs.Req.Header().Key.Equal(splitKey.AsRawKey()) {
 				atomic.AddInt64(&count, 1)
 				return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
