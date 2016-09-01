@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -199,12 +200,30 @@ func (p *planner) resetContexts() {
 	}
 }
 
-func makeInternalPlanner(opName string, txn *client.Txn, user string) *planner {
+func makeInternalPlanner(
+	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics,
+) *planner {
 	p := makePlanner(opName)
 	p.setTxn(txn)
 	p.resetContexts()
 	p.session.User = user
+	p.session.mon.StartUnlimited("internal-session-top-mon",
+		memMetrics.CurBytesCount, memMetrics.MaxBytesHist)
+	p.session.sessionMon.Start("internal-session-mon",
+		memMetrics.SessionCurBytesCount,
+		memMetrics.SessionMaxBytesHist,
+		&p.session.mon, mon.BoundAccount{}, 1)
+	p.session.txnMon.Start("internal-txn-mon",
+		memMetrics.TxnCurBytesCount,
+		memMetrics.TxnMaxBytesHist,
+		&p.session.mon, mon.BoundAccount{}, 1)
 	return p
+}
+
+func finishInternalPlanner(p *planner) {
+	p.session.txnMon.Stop(p.session.context)
+	p.session.sessionMon.Stop(p.session.context)
+	p.session.mon.Stop(p.session.context)
 }
 
 // resetForBatch implements the queryRunner interface.
@@ -236,8 +255,6 @@ func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
 
 // queryRow implements the queryRunner interface.
 func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, error) {
-	p.session.mon.StartMonitor()
-	defer p.session.mon.StopMonitor(p.ctx())
 	plan, err := p.query(sql, args...)
 	if err != nil {
 		return nil, err
@@ -262,8 +279,6 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, erro
 
 // exec implements the queryRunner interface.
 func (p *planner) exec(sql string, args ...interface{}) (int, error) {
-	p.session.mon.StartMonitor()
-	defer p.session.mon.StopMonitor(p.ctx())
 	plan, err := p.query(sql, args...)
 	if err != nil {
 		return 0, err

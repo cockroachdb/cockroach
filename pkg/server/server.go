@@ -78,33 +78,35 @@ var (
 type Server struct {
 	nodeIDContainer base.NodeIDContainer
 
-	cfg            Config
-	mux            *http.ServeMux
-	clock          *hlc.Clock
-	rpcContext     *rpc.Context
-	grpc           *grpc.Server
-	gossip         *gossip.Gossip
-	nodeLiveness   *storage.NodeLiveness
-	storePool      *storage.StorePool
-	txnCoordSender *kv.TxnCoordSender
-	distSender     *kv.DistSender
-	db             *client.DB
-	kvDB           *kv.DBServer
-	pgServer       *pgwire.Server
-	distSQLServer  *distsql.ServerImpl
-	node           *Node
-	registry       *metric.Registry
-	recorder       *status.MetricsRecorder
-	runtime        status.RuntimeStatSampler
-	admin          adminServer
-	status         *statusServer
-	tsDB           *ts.DB
-	tsServer       ts.Server
-	raftTransport  *storage.RaftTransport
-	stopper        *stop.Stopper
-	sqlExecutor    *sql.Executor
-	leaseMgr       *sql.LeaseManager
-	engines        Engines
+	cfg                Config
+	mux                *http.ServeMux
+	clock              *hlc.Clock
+	rpcContext         *rpc.Context
+	grpc               *grpc.Server
+	gossip             *gossip.Gossip
+	nodeLiveness       *storage.NodeLiveness
+	storePool          *storage.StorePool
+	txnCoordSender     *kv.TxnCoordSender
+	distSender         *kv.DistSender
+	db                 *client.DB
+	kvDB               *kv.DBServer
+	pgServer           *pgwire.Server
+	distSQLServer      *distsql.ServerImpl
+	node               *Node
+	registry           *metric.Registry
+	recorder           *status.MetricsRecorder
+	runtime            status.RuntimeStatSampler
+	admin              *adminServer
+	status             *statusServer
+	tsDB               *ts.DB
+	tsServer           ts.Server
+	raftTransport      *storage.RaftTransport
+	stopper            *stop.Stopper
+	sqlExecutor        *sql.Executor
+	leaseMgr           *sql.LeaseManager
+	engines            Engines
+	internalMemMetrics sql.MemoryMetrics
+	adminMemMetrics    sql.MemoryMetrics
 }
 
 // NewServer creates a Server from a server.Context.
@@ -232,12 +234,17 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.kvDB = kv.NewDBServer(s.cfg.Config, s.txnCoordSender, s.stopper)
 	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
 
+	// Set up internal memory metrics for use by internal SQL executors.
+	s.internalMemMetrics = sql.MakeMemMetrics("internal")
+	s.registry.AddMetricStruct(s.internalMemMetrics)
+
 	// Set up Lease Manager
 	var lmKnobs sql.LeaseManagerTestingKnobs
 	if cfg.TestingKnobs.SQLLeaseManager != nil {
 		lmKnobs = *s.cfg.TestingKnobs.SQLLeaseManager.(*sql.LeaseManagerTestingKnobs)
 	}
-	s.leaseMgr = sql.NewLeaseManager(&s.nodeIDContainer, *s.db, s.clock, lmKnobs, s.stopper)
+	s.leaseMgr = sql.NewLeaseManager(&s.nodeIDContainer, *s.db, s.clock, lmKnobs,
+		s.stopper, &s.internalMemMetrics)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
 
 	// Set up the DistSQL server
@@ -249,6 +256,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	s.distSQLServer = distsql.NewServer(distSQLCfg)
 	distsql.RegisterDistSQLServer(s.grpc, s.distSQLServer)
+
+	// Set up admin memory metrics for use by admin SQL executors.
+	s.adminMemMetrics = sql.MakeMemMetrics("admin")
+	s.registry.AddMetricStruct(s.adminMemMetrics)
 
 	// Set up Executor
 	execCfg := sql.ExecutorConfig{
@@ -272,10 +283,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	} else {
 		execCfg.SchemaChangerTestingKnobs = &sql.SchemaChangerTestingKnobs{}
 	}
-	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper)
+	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper, &s.adminMemMetrics)
 	s.registry.AddMetricStruct(s.sqlExecutor)
 
-	s.pgServer = pgwire.MakeServer(s.cfg.AmbientCtx, s.cfg.Config, s.sqlExecutor)
+	s.pgServer = pgwire.MakeServer(
+		s.cfg.AmbientCtx, s.cfg.Config, s.sqlExecutor, s.cfg.SQLMemoryPoolSize,
+	)
 	s.registry.AddMetricStruct(s.pgServer.Metrics())
 
 	s.tsDB = ts.NewDB(s.db)
@@ -322,11 +335,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	storage.RegisterConsistencyServer(s.grpc, s.node.storesServer)
 	storage.RegisterFreezeServer(s.grpc, s.node.storesServer)
 
-	s.admin = makeAdminServer(s)
+	s.admin = newAdminServer(s)
 	s.status = newStatusServer(
 		s.cfg.AmbientCtx, s.db, s.gossip, s.recorder, s.rpcContext, s.node.stores,
 	)
-	for _, gw := range []grpcGatewayServer{&s.admin, s.status, &s.tsServer} {
+	for _, gw := range []grpcGatewayServer{s.admin, s.status, &s.tsServer} {
 		gw.RegisterService(s.grpc)
 	}
 
@@ -648,7 +661,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return errors.Errorf("error constructing grpc-gateway: %s; are your certificates valid?", err)
 	}
 
-	for _, gw := range []grpcGatewayServer{&s.admin, s.status, &s.tsServer} {
+	for _, gw := range []grpcGatewayServer{s.admin, s.status, &s.tsServer} {
 		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
 			return err
 		}

@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -74,15 +75,19 @@ var errAdminAPIError = grpc.Errorf(codes.Internal, "An internal server error "+
 // A adminServer provides a RESTful HTTP API to administration of
 // the cockroach cluster.
 type adminServer struct {
-	server *Server
+	server     *Server
+	memMonitor mon.MemoryMonitor
+	memMetrics *sql.MemoryMetrics
 }
 
-// makeAdminServer allocates and returns a new REST server for
+// newAdminServer allocates and returns a new REST server for
 // administrative APIs.
-func makeAdminServer(s *Server) adminServer {
-	return adminServer{
-		server: s,
-	}
+func newAdminServer(s *Server) *adminServer {
+	server := &adminServer{server: s, memMetrics: &s.adminMemMetrics}
+	// TODO(knz): We do not limit memory usage by admin operations
+	// yet. Is this wise?
+	server.memMonitor.StartUnlimited("admin-mon", nil, nil)
+	return server
 }
 
 // RegisterService registers the GRPC service.
@@ -163,7 +168,9 @@ func (s *adminServer) firstNotFoundError(results []sql.Result) error {
 func (s *adminServer) NewSessionForRPC(ctx context.Context, args sql.SessionArgs) *sql.Session {
 	ctx = s.server.AnnotateCtx(ctx)
 	ctx = tracing.WithTracer(ctx, s.server.cfg.AmbientCtx.Tracer)
-	return sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil, s.memMetrics)
+	session.StartMonitor(&s.memMonitor, mon.BoundAccount{})
+	return session
 }
 
 // Databases is an endpoint that returns a list of databases.
@@ -435,7 +442,7 @@ func (s *adminServer) TableDetails(
 		// Get the number of ranges in the table. We get the key span for the table
 		// data. Then, we count the number of ranges that make up that key span.
 		{
-			var iexecutor sql.InternalExecutor
+			iexecutor := sql.InternalExecutor{LeaseManager: s.server.leaseMgr}
 			var tableSpan roachpb.Span
 			if err := s.server.db.Txn(ctx, func(txn *client.Txn) error {
 				var err error
@@ -502,7 +509,7 @@ func (s *adminServer) TableStats(
 ) (*serverpb.TableStatsResponse, error) {
 	// Get table span.
 	var tableSpan roachpb.Span
-	var iexecutor sql.InternalExecutor
+	iexecutor := sql.InternalExecutor{LeaseManager: s.server.leaseMgr}
 	if err := s.server.db.Txn(ctx, func(txn *client.Txn) error {
 		var err error
 		tableSpan, err = iexecutor.GetTableSpan(s.getUser(req), txn, req.Database, req.Table)

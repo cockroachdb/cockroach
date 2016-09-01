@@ -343,3 +343,10 @@ SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON x > 32)
 
 query error column name "a\.y" not found
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON a.y > y)
+
+statement ok
+CREATE TABLE s(x INT); INSERT INTO s(x) VALUES (1),(2),(3),(4),(5),(6),(7),(8),(9),(10)
+
+# The following query demands at least 100GB of RAM if unoptimized.
+query error memory budget exceeded
+SELECT COUNT(*) FROM s AS a, s AS b, s AS c, s AS d, s AS e, s AS f, s AS g, s AS h, s AS i, s AS j, s AS k;

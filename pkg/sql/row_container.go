@@ -44,6 +44,10 @@ type RowContainer struct {
 	// memAcc tracks the current memory consumption of this
 	// RowContainer.
 	memAcc WrappableMemoryAccount
+
+	// sessionBound indicates whether memAcc is session-bound or
+	// txn-bound.
+	sessionBound bool
 }
 
 // NewRowContainer allocates a new row container.
@@ -63,7 +67,9 @@ type RowContainer struct {
 // test properly.  The trade-off is that very large table schemas or
 // column selections could cause unchecked and potentially dangerous
 // memory growth.
-func (p *planner) NewRowContainer(h ResultColumns, rowCapacity int) *RowContainer {
+func (p *planner) NewRowContainer(
+	sessionBound bool, h ResultColumns, rowCapacity int,
+) *RowContainer {
 	nCols := len(h)
 
 	res := &RowContainer{
@@ -71,7 +77,12 @@ func (p *planner) NewRowContainer(h ResultColumns, rowCapacity int) *RowContaine
 		rows:            make([]parser.DTuple, 0, rowCapacity),
 		numCols:         nCols,
 		varSizedColumns: make([]int, 0, nCols),
-		memAcc:          p.session.OpenAccount(),
+		sessionBound:    sessionBound,
+	}
+	if sessionBound {
+		res.memAcc = p.session.OpenSessionAccount()
+	} else {
+		res.memAcc = p.session.OpenTxnAccount()
 	}
 
 	for i := 0; i < nCols; i++ {
@@ -91,7 +102,13 @@ func (p *planner) NewRowContainer(h ResultColumns, rowCapacity int) *RowContaine
 func (c *RowContainer) Close() {
 	c.rows = nil
 	c.varSizedColumns = nil
-	c.memAcc.W(c.p.session).Close()
+	var acc WrappedMemoryAccount
+	if c.sessionBound {
+		acc = c.memAcc.Wsession(c.p.session)
+	} else {
+		acc = c.memAcc.Wtxn(c.p.session)
+	}
+	acc.Close()
 }
 
 // rowSize computes the size of a single row.
@@ -106,7 +123,13 @@ func (c *RowContainer) rowSize(row parser.DTuple) int64 {
 // AddRow attempts to insert a new row in the RowContainer.
 // Returns an error if the allocation was denied by the MemoryUsageMonitor.
 func (c *RowContainer) AddRow(row parser.DTuple) error {
-	if err := c.memAcc.W(c.p.session).Grow(c.rowSize(row)); err != nil {
+	var acc WrappedMemoryAccount
+	if c.sessionBound {
+		acc = c.memAcc.Wsession(c.p.session)
+	} else {
+		acc = c.memAcc.Wtxn(c.p.session)
+	}
+	if err := acc.Grow(c.rowSize(row)); err != nil {
 		return err
 	}
 	c.rows = append(c.rows, row)
@@ -162,7 +185,13 @@ func (c *RowContainer) Replace(i int, newRow parser.DTuple) error {
 		oldSz = c.rowSize(c.rows[i])
 	}
 	if newSz != oldSz {
-		if err := c.memAcc.W(c.p.session).ResizeItem(oldSz, newSz); err != nil {
+		var acc WrappedMemoryAccount
+		if c.sessionBound {
+			acc = c.memAcc.Wsession(c.p.session)
+		} else {
+			acc = c.memAcc.Wtxn(c.p.session)
+		}
+		if err := acc.ResizeItem(oldSz, newSz); err != nil {
 			return err
 		}
 	}
