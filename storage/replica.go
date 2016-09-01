@@ -190,6 +190,9 @@ func (d *atomicRangeDesc) load() *roachpb.RangeDescriptor {
 // using a lock, the copy might be inconsistent.
 func (d *atomicRangeDesc) String() string {
 	inconsistentDesc := d.load()
+	if len(inconsistentDesc.EndKey) == 0 {
+		return fmt.Sprintf("%d{-}", inconsistentDesc.RangeID)
+	}
 	return fmt.Sprintf("%d{%s-%s}",
 		inconsistentDesc.RangeID, inconsistentDesc.StartKey, inconsistentDesc.EndKey)
 }
@@ -1554,10 +1557,11 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 		return err
 	}
 	defer r.store.enqueueRaftUpdateCheck(r.RangeID)
+
+	var hasSplit bool
 	if union, ok := p.raftCmd.Cmd.GetArg(roachpb.EndTransaction); ok {
-		if crt := union.(*roachpb.EndTransactionRequest).
-			InternalCommitTrigger.
-			GetChangeReplicasTrigger(); crt != nil {
+		ict := union.(*roachpb.EndTransactionRequest).InternalCommitTrigger
+		if crt := ict.GetChangeReplicasTrigger(); crt != nil {
 			// EndTransactionRequest with a ChangeReplicasTrigger is special
 			// because raft needs to understand it; it cannot simply be an
 			// opaque command.
@@ -1582,13 +1586,15 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 				})
 			})
 		}
+
+		hasSplit = ict.GetSplitTrigger() != nil
 	}
 
 	return r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
 		if log.V(4) {
 			log.Infof(r.ctx, "proposing command %x", p.idKey)
 		}
-		return raftGroup.Propose(encodeRaftCommand(string(p.idKey), data))
+		return raftGroup.Propose(encodeRaftCommand(string(p.idKey), data, hasSplit))
 	})
 }
 
@@ -1714,6 +1720,27 @@ func (r *Replica) handleRaftReady() error {
 		}
 		// TODO(bdarnell): update coalesced heartbeat mapping with snapshot info.
 	}
+
+	if !r.raftMu.uninitRaftLocked {
+		// Block processing of uninitialized replicas if any of the committed
+		// entries contains a split. We need to grab Store.uninitRaftMu before
+		// creating the batch (more precisely, before reading from the batch) in
+		// order to provide proper synchronization with uninitialized replicas. If
+		// we locked uninitRaftMu after reading from the batch (i.e. in
+		// Replica.splitTrigger) we could be reading stale data that a concurrent
+		// operation (on an uninitialized Replica) is updating.
+		for _, e := range rd.CommittedEntries {
+			if e.Type != raftpb.EntryNormal {
+				continue
+			}
+			if raftCommandHasSplit(e.Data) {
+				if !r.raftMu.uninitRaftLocked {
+					r.uninitRaftLock()
+				}
+			}
+		}
+	}
+
 	batch := r.store.Engine().NewBatch()
 	defer batch.Close()
 
