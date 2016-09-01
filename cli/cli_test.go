@@ -502,7 +502,6 @@ func Example_zone() {
 	// zone ls
 	// .default
 	// zone set system --file=./testdata/zone_attrs.yaml
-	// INSERT 1
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
 	// gc:
@@ -523,7 +522,6 @@ func Example_zone() {
 	// num_replicas: 1
 	// constraints: [us-east-1a, ssd]
 	// zone set system --file=./testdata/zone_range_max_bytes.yaml
-	// UPDATE 1
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
@@ -545,7 +543,6 @@ func Example_zone() {
 	// zone rm .default
 	// unable to remove .default
 	// zone set .default --file=./testdata/zone_range_max_bytes.yaml
-	// UPDATE 1
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
