@@ -387,8 +387,8 @@ func (ts *TestServer) GetNode() *Node {
 	return ts.node
 }
 
-// GetDistSender exposes the Server's DistSender.
-func (ts *TestServer) GetDistSender() *kv.DistSender {
+// DistSender exposes the Server's DistSender.
+func (ts *TestServer) DistSender() *kv.DistSender {
 	return ts.distSender
 }
 
