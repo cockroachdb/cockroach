@@ -40,9 +40,17 @@ func makeRouter(spec *OutputRouterSpec, streams []RowReceiver) (
 	switch spec.Type {
 	case OutputRouterSpec_BY_HASH:
 		return makeHashRouter(spec.HashColumns, streams)
+	case OutputRouterSpec_MIRROR:
+		return makeMirrorRouter(streams)
 	default:
 		return nil, errors.Errorf("router type %s not supported", spec.Type)
 	}
+}
+
+type mirrorRouter struct {
+	streams []RowReceiver
+
+	err error
 }
 
 type hashRouter struct {
@@ -57,8 +65,15 @@ type hashRouter struct {
 }
 
 var _ RowReceiver = &hashRouter{}
+var _ RowReceiver = &mirrorRouter{}
 
 var crc32Table = crc32.MakeTable(crc32.Castagnoli)
+
+func makeMirrorRouter(streams []RowReceiver) (*mirrorRouter, error) {
+	return &mirrorRouter{
+		streams: streams,
+	}, nil
+}
 
 func makeHashRouter(hashCols []uint32, streams []RowReceiver) (*hashRouter, error) {
 	if len(hashCols) == 0 {
@@ -68,6 +83,33 @@ func makeHashRouter(hashCols []uint32, streams []RowReceiver) (*hashRouter, erro
 		hashCols: hashCols,
 		streams:  streams,
 	}, nil
+}
+
+// PushRow is part of the RowReceiver interface.
+func (mr *mirrorRouter) PushRow(row sqlbase.EncDatumRow) bool {
+	if mr.err != nil {
+		return false
+	}
+
+	// Each row is sent to all the output streams, returning false here if a
+	// stream in particular does not need more rows or if none of them do seems
+	// unnecessary.
+	for _, s := range mr.streams {
+		s.PushRow(row)
+	}
+	return true
+}
+
+// Close is part of the RowReceiver interface.
+func (mr *mirrorRouter) Close(err error) {
+	if mr.err != nil {
+		// Any error we ran into takes precedence.
+		err = mr.err
+	}
+
+	for _, s := range mr.streams {
+		s.Close(err)
+	}
 }
 
 // PushRow is part of the RowReceiver interface.

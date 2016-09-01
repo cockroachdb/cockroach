@@ -32,14 +32,7 @@ func TestHashRouter(t *testing.T) {
 
 	// Generate tables of possible values for each column; we have fewer possible
 	// values than rows to guarantee many occurrences of each value.
-	vals := make([][]sqlbase.EncDatum, numCols)
-	for i := 0; i < numCols; i++ {
-		typ := sqlbase.RandColumnType(rng)
-		vals[i] = make([]sqlbase.EncDatum, numRows/10)
-		for j := range vals[i] {
-			vals[i][j].SetDatum(typ, sqlbase.RandDatum(rng, typ, true))
-		}
-	}
+	vals := sqlbase.RandEncDatumColumns(rng, numCols, numRows/10)
 
 	testCases := []struct {
 		hashColumns []uint32
@@ -106,6 +99,84 @@ func TestHashRouter(t *testing.T) {
 						if equal {
 							t.Errorf("rows %s and %s in different buckets", row, row2)
 						}
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestMirrorRouter(t *testing.T) {
+	const numCols = 6
+	const numRows = 20
+
+	rng, _ := randutil.NewPseudoRand()
+	alloc := &sqlbase.DatumAlloc{}
+
+	vals := sqlbase.RandEncDatumColumns(rng, numCols, numRows)
+
+	testCases := []struct {
+		numBuckets int
+	}{
+		{1},
+		{2},
+		{3},
+	}
+
+	for _, tc := range testCases {
+		bufs := make([]*RowBuffer, tc.numBuckets)
+		recvs := make([]RowReceiver, tc.numBuckets)
+		for i := 0; i < tc.numBuckets; i++ {
+			bufs[i] = &RowBuffer{}
+			recvs[i] = bufs[i]
+		}
+		mr, err := makeMirrorRouter(recvs)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for i := 0; i < numRows; i++ {
+			row := make(sqlbase.EncDatumRow, numCols)
+			for j := 0; j < numCols; j++ {
+				row[j] = vals[j][rng.Intn(len(vals[j]))]
+			}
+			ok := mr.PushRow(row)
+			if !ok {
+				t.Fatalf("PushRow returned false")
+			}
+		}
+		mr.Close(nil)
+
+		// Verify each row is sent to each of the output streams.
+		for bIdx, b := range bufs {
+			if !b.closed {
+				t.Errorf("bucket not closed")
+			}
+			if b.err != nil {
+				t.Error(b.err)
+			}
+
+			for b2Idx, b2 := range bufs {
+				if b2Idx == bIdx {
+					continue
+				}
+
+				for rIdx, row := range b.rows {
+					row2 := b2.rows[rIdx]
+
+					equal := true
+					for i, c := range row {
+						cmp, err := c.Compare(alloc, &row2[i])
+						if err != nil {
+							t.Fatal(err)
+						}
+						if cmp != 0 {
+							equal = false
+							break
+						}
+					}
+					if !equal {
+						t.Errorf("rows %s and %s found in one bucket and not the other", row, row2)
 					}
 				}
 			}

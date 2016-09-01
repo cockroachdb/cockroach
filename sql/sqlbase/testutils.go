@@ -123,3 +123,24 @@ func RandEncDatum(rng *rand.Rand) EncDatum {
 	ed.SetDatum(typ, datum)
 	return ed
 }
+
+// RandEncDatumColumn generates a EncDatum column with random values of a
+// single random type.
+func RandEncDatumColumn(rng *rand.Rand, numRows int) []EncDatum {
+	typ := RandColumnType(rng)
+	vals := make([]EncDatum, numRows)
+	for i := range vals {
+		vals[i].SetDatum(typ, RandDatum(rng, typ, true))
+	}
+	return vals
+}
+
+// RandEncDatumColumns generates EncDatum columns with random values, each
+// column with a single random type.
+func RandEncDatumColumns(rng *rand.Rand, numCols, numRows int) [][]EncDatum {
+	vals := make([][]EncDatum, numCols)
+	for i := range vals {
+		vals[i] = RandEncDatumColumn(rng, numRows)
+	}
+	return vals
+}
