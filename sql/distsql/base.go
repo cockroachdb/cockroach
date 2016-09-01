@@ -31,7 +31,7 @@ type RowReceiver interface {
 	// PushRow sends a row to this receiver. May block.
 	// Returns true if the row was sent, or false if the receiver does not need
 	// any more rows. In all cases, Close() still needs to be called.
-	// The sender must not use the row anymore after calling this function.
+	// The sender must not modify the row after calling this function.
 	PushRow(row sqlbase.EncDatumRow) bool
 	// Close is called when we have no more rows; it causes the RowReceiver to
 	// process all rows and clean up. If err is not null, the error is sent to
@@ -44,6 +44,7 @@ type RowReceiver interface {
 type RowSource interface {
 	// NextRow retrieves the next row. Returns a nil row if there are no more
 	// rows. Depending on the implementation, it may block.
+	// The caller must not modify the received row.
 	NextRow() (sqlbase.EncDatumRow, error)
 }
 
