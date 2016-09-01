@@ -36,6 +36,6 @@ func main() {
 	}
 	if err := cli.Run(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed running %q\n", os.Args[1])
-		os.Exit(1)
+		os.Exit(cli.ErrorCode)
 	}
 }

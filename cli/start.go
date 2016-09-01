@@ -292,6 +292,11 @@ func initCheckpointing(engines []engine.Engine) {
 	}()
 }
 
+// ErrorCode is the value to be used by main() as exit code in case of
+// error. For most errors 1 is appropriate, but a signal termination
+// can change this.
+var ErrorCode = 1
+
 // runStart starts the cockroach node using --store as the list of
 // storage devices ("stores") on this machine and --join as the list
 // of other active nodes used to join this node to the cockroach
@@ -404,7 +409,7 @@ func runStart(_ *cobra.Command, args []string) error {
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, os.Interrupt, os.Kill)
 	// TODO(spencer): move this behind a build tag.
-	signal.Notify(signalCh, syscall.SIGTERM)
+	signal.Notify(signalCh, syscall.SIGTERM, syscall.SIGQUIT)
 
 	// Block until one of the signals above is received or the stopper
 	// is stopped externally (for example, via the quit endpoint).
@@ -440,10 +445,17 @@ func runStart(_ *cobra.Command, args []string) error {
 	}()
 
 	select {
-	case <-signalCh:
-		log.Errorf(context.TODO(), "second signal received, initiating hard shutdown")
+	case sig := <-signalCh:
+		err := fmt.Errorf("received signal '%s' during shutdown, initiating hard shutdown", sig)
+		log.Errorf(context.TODO(), "%v", err)
+		// On Unix, os.Signal is syscall.Signal and it's convertible to int.
+		ErrorCode = 128 + int(sig.(syscall.Signal))
+		return err
 	case <-time.After(time.Minute):
-		log.Errorf(context.TODO(), "time limit reached, initiating hard shutdown")
+		err := errors.New("time limit reached, initiating hard shutdown")
+		log.Errorf(context.TODO(), "%v", err)
+		ErrorCode = 2
+		return err
 	case <-stopper.IsStopped():
 		const msgDone = "server drained and shutdown completed"
 		log.Infof(context.TODO(), msgDone)
