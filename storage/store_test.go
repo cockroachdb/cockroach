@@ -365,6 +365,54 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	}
 }
 
+// TestReplicasByKey tests that operations that depend on the
+// store.replicasByKey map function correctly when the underlying replicas'
+// start and end keys are manipulated in place. This mutation happens when a
+// snapshot is applied that advances a replica past a split.
+func TestReplicasByKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	store, _, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	// Shrink the main replica.
+	rep, err := store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep.mu.Lock()
+	rep.mu.state.Desc.EndKey = roachpb.RKey("e")
+	rep.mu.Unlock()
+
+	// Ensure that this shrinkage is recognized by future additions to replicasByKey.
+	reps := []*struct {
+		replica            *Replica
+		id                 int
+		start, end         roachpb.RKey
+		expectedErrorOnAdd string
+	}{
+		// [a,c) is contained in [KeyMin, e)
+		{nil, 2, roachpb.RKey("a"), roachpb.RKey("c"), ".*has overlapping range"},
+		// [c,f) partially overlaps with [KeyMin, e)
+		{nil, 3, roachpb.RKey("c"), roachpb.RKey("f"), ".*has overlapping range"},
+		// [e, f) is disjoint from [KeyMin, e)
+		{nil, 4, roachpb.RKey("e"), roachpb.RKey("f"), ""},
+	}
+
+	for i, desc := range reps {
+		desc.replica = createReplica(store, roachpb.RangeID(desc.id), desc.start, desc.end)
+		err := store.AddReplicaTest(desc.replica)
+		if desc.expectedErrorOnAdd == "" {
+			if err != nil {
+				t.Fatalf("adding replica %d: expected success, but encountered %s", i, err)
+			}
+		} else {
+			if !testutils.IsError(err, desc.expectedErrorOnAdd) {
+				t.Fatalf("adding replica %d: expected err %s, but encountered %v", i, desc.expectedErrorOnAdd, err)
+			}
+		}
+	}
+}
+
 func TestStoreRemoveReplicaOldDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	store, _, stopper := createTestStore(t)
