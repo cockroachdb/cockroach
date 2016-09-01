@@ -320,17 +320,13 @@ type Replica struct {
 		// Computed checksum at a snapshot UUID.
 		checksums map[uuid.UUID]replicaChecksum
 
-		// Set to an open channel while a snapshot is being generated.
-		// When no snapshot is in progress, this field may either be nil
-		// or a closed channel. If an error occurs during generation,
-		// this channel may be closed without producing a result.
-		snapshotChan chan OutgoingSnapshot
-
 		// Counts calls to Replica.tick()
 		ticks int
 
 		// Counts Raft messages refused due to queue congestion.
 		droppedMessages int
+
+		outSnapDone chan struct{}
 
 		// The pending outgoing snapshot if there is one.
 		outSnap OutgoingSnapshot
@@ -431,6 +427,8 @@ func NewReplica(
 		store:      store,
 		abortCache: NewAbortCache(desc.RangeID),
 	}
+	r.mu.outSnapDone = make(chan struct{})
+	close(r.mu.outSnapDone)
 
 	if err := r.newReplicaInner(desc, store.Clock(), replicaID); err != nil {
 		return nil, err
@@ -1984,8 +1982,19 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	r.mu.Lock()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
-	snap := r.mu.outSnap
+	snap := &r.mu.outSnap
 	r.mu.Unlock()
+
+	hasSnapshot := !raft.IsEmptySnap(msg.Snapshot)
+
+	var beganStreaming bool
+	if hasSnapshot {
+		defer func() {
+			if !beganStreaming {
+				r.CloseOutSnap()
+			}
+		}()
+	}
 
 	if fromErr != nil {
 		log.Warningf(r.ctx, "failed to look up sender replica %d in range %d while sending %s: %s",
@@ -1998,7 +2007,7 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 		return
 	}
 
-	if !raft.IsEmptySnap(msg.Snapshot) {
+	if hasSnapshot {
 		msgUUID, err := uuid.FromBytes(msg.Snapshot.Data)
 		if err != nil {
 			log.Fatalf(r.ctx, "invalid snapshot: couldn't parse UUID from data: %s", err)
@@ -2009,8 +2018,9 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 		}
 		// Asynchronously stream the snapshot to the recipient.
 		if err := r.store.Stopper().RunTask(func() {
+			beganStreaming = true
 			r.store.Stopper().RunWorker(func() {
-				defer snap.Close()
+				defer r.CloseOutSnap()
 				if err := r.store.ctx.Transport.SendSnapshot(
 					context.Background(),
 					SnapshotRequest_Header{
@@ -2029,7 +2039,6 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 				}
 			})
 		}); err != nil {
-			snap.Close()
 			log.Warningf(r.ctx, "range=%d: failed to send snapshot: %s", r.Desc().RangeID, err)
 		}
 		return

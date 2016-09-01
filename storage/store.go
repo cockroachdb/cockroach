@@ -100,7 +100,6 @@ func TestStoreContext() StoreContext {
 		ScanInterval:                   10 * time.Minute,
 		ConsistencyCheckInterval:       10 * time.Minute,
 		ConsistencyCheckPanicOnFailure: true,
-		BlockingSnapshotDuration:       100 * time.Millisecond,
 	}
 }
 
@@ -480,13 +479,6 @@ type StoreContext struct {
 	// If LogRangeEvents is true, major changes to ranges will be logged into
 	// the range event log.
 	LogRangeEvents bool
-
-	// BlockingSnapshotDuration is the amount of time Replica.Snapshot
-	// will wait before switching to asynchronous mode. Zero is a good
-	// choice for production but non-zero values can speed up tests.
-	// (This only blocks on the first attempt; it will not block a
-	// second time if the generation is still in progress).
-	BlockingSnapshotDuration time.Duration
 
 	// AsyncSnapshotMaxAge is the maximum amount of time that an
 	// asynchronous snapshot will be held while waiting for raft to pick
@@ -2534,7 +2526,7 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 func sendSnapshot(
 	stream MultiRaft_RaftSnapshotClient,
 	header SnapshotRequest_Header,
-	snap OutgoingSnapshot,
+	snap *OutgoingSnapshot,
 	newBatch func() engine.Batch,
 ) error {
 

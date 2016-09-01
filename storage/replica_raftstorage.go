@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -277,26 +276,10 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 }
 
 // SnapshotWithContext is main implementation for Snapshot() but it takes a
-// context to allow tracing.
-func (r *Replica) SnapshotWithContext(ctx context.Context) (OutgoingSnapshot, error) {
+// context to allow tracing. Callers of this method must eventually call
+// CloseOutSnap to ready this replica for more snapshots.
+func (r *Replica) SnapshotWithContext(ctx context.Context) (*OutgoingSnapshot, error) {
 	rangeID := r.RangeID
-
-	// If a snapshot is in progress, see if it's ready.
-	if r.mu.snapshotChan != nil {
-		select {
-		case snapData, ok := <-r.mu.snapshotChan:
-			if ok {
-				r.mu.outSnap = snapData
-				return snapData, nil
-			}
-			// If the old channel was closed, fall through to start a new task.
-
-		default:
-			// If the result is not ready, return immediately.
-			log.Trace(ctx, "snapshot not yet ready")
-			return OutgoingSnapshot{}, raft.ErrSnapshotTemporarilyUnavailable
-		}
-	}
 
 	if r.exceedsDoubleSplitSizeLocked() {
 		maxBytes := r.mu.maxBytes
@@ -304,105 +287,68 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (OutgoingSnapshot, er
 		log.Infof(ctx,
 			"%s: not generating snapshot because replica is too large: %d > 2 * %d",
 			r, size, maxBytes)
-		return OutgoingSnapshot{}, raft.ErrSnapshotTemporarilyUnavailable
+		return &OutgoingSnapshot{}, raft.ErrSnapshotTemporarilyUnavailable
 	}
 
 	// See if there is already a snapshot running for this store.
+	select {
+	case <-r.mu.outSnapDone:
+	default:
+		log.Trace(ctx, "snapshot already running")
+		return nil, raft.ErrSnapshotTemporarilyUnavailable
+	}
 	if !r.store.AcquireRaftSnapshot() {
 		log.Trace(ctx, "snapshot already running")
-		return OutgoingSnapshot{}, raft.ErrSnapshotTemporarilyUnavailable
+		return nil, raft.ErrSnapshotTemporarilyUnavailable
 	}
+	defer r.store.ReleaseRaftSnapshot()
 
 	startKey := r.mu.state.Desc.StartKey
 
-	// Use an unbuffered channel so the worker stays alive until someone
-	// reads from the channel, and can abandon the snapshot if it gets stale.
-	ch := make(chan (OutgoingSnapshot))
+	sp := r.store.Tracer().StartSpan("snapshot")
+	ctxInner := opentracing.ContextWithSpan(context.Background(), sp)
+	defer sp.Finish()
+	snap := r.store.NewSnapshot()
+	log.Tracef(ctxInner, "new engine snapshot for replica %s", r)
 
-	if r.store.Stopper().RunAsyncTask(func() {
-		defer close(ch)
-		sp := r.store.Tracer().StartSpan("snapshot async")
-		ctxInner := opentracing.ContextWithSpan(context.Background(), sp)
-		defer sp.Finish()
-		snap := r.store.NewSnapshot()
-		log.Tracef(ctxInner, "new engine snapshot for replica %s", r)
-		defer r.store.ReleaseRaftSnapshot()
-
-		// Delegate to a static function to make sure that we do not depend
-		// on any indirect calls to r.store.Engine() (or other in-memory
-		// state of the Replica). Everything must come from the snapshot.
-		snapData, err := snapshot(context.Background(), snap, rangeID, r.store.raftEntryCache, startKey)
-		if err != nil {
-			log.Errorf(ctxInner, "%s: error generating snapshot: %s", r, err)
-		} else {
-			log.Trace(ctxInner, "snapshot generated")
-			r.store.metrics.RangeSnapshotsGenerated.Inc(1)
-			select {
-			case ch <- snapData:
-				log.Trace(ctxInner, "snapshot accepted")
-			case <-time.After(r.store.ctx.AsyncSnapshotMaxAge):
-				// If raft decides it doesn't need this snapshot any more (or
-				// just takes too long to use it), abandon it to save memory.
-				snapData.Close()
-				log.Infof(ctxInner, "%s: abandoning snapshot after %s", r, r.store.ctx.AsyncSnapshotMaxAge)
-			case <-r.store.Stopper().ShouldQuiesce():
-			}
-		}
-	}) == nil {
-		r.mu.snapshotChan = ch
-	} else {
-		r.store.ReleaseRaftSnapshot()
+	// Delegate to a static function to make sure that we do not depend
+	// on any indirect calls to r.store.Engine() (or other in-memory
+	// state of the Replica). Everything must come from the snapshot.
+	snapData, err := snapshot(context.Background(), snap, rangeID, r.store.raftEntryCache, startKey)
+	if err != nil {
+		log.Errorf(ctxInner, "%s: error generating snapshot: %s", r, err)
+		return nil, err
 	}
-
-	if r.store.ctx.BlockingSnapshotDuration > 0 {
-		select {
-		case snap, ok := <-r.mu.snapshotChan:
-			if ok {
-				r.mu.outSnap = snap
-				return snap, nil
-			}
-		case <-time.After(r.store.ctx.BlockingSnapshotDuration):
-			log.Trace(ctx, "snapshot blocking duration exceeded")
-		}
-	}
-	return OutgoingSnapshot{}, raft.ErrSnapshotTemporarilyUnavailable
+	log.Trace(ctxInner, "snapshot generated")
+	r.store.metrics.RangeSnapshotsGenerated.Inc(1)
+	r.mu.outSnap = snapData
+	r.mu.outSnapDone = make(chan struct{})
+	return &r.mu.outSnap, nil
 }
 
 // GetSnapshot wraps Snapshot() but does not require the replica lock
 // to be held and it will block instead of returning
 // ErrSnapshotTemporaryUnavailable.
-func (r *Replica) GetSnapshot(ctx context.Context) (OutgoingSnapshot, error) {
-	retryOptions := retry.Options{
-		InitialBackoff: 1 * time.Millisecond,
-		MaxBackoff:     50 * time.Millisecond,
-		Multiplier:     2,
-		Closer:         r.store.Stopper().ShouldQuiesce(),
-	}
-	for retry := retry.Start(retryOptions); retry.Next(); {
-		log.Tracef(ctx, "snapshot retry loop pass %d", retry.CurrentAttempt())
+func (r *Replica) GetSnapshot(ctx context.Context) (*OutgoingSnapshot, error) {
+	for i := 0; ; i++ {
+		log.Tracef(ctx, "snapshot retry loop pass %d", i)
+
+		r.mu.Lock()
+		doneChan := r.mu.outSnapDone
+		r.mu.Unlock()
+
+		<-doneChan
+
 		r.mu.Lock()
 		snap, err := r.SnapshotWithContext(ctx)
-		snapshotChan := r.mu.snapshotChan
 		r.mu.Unlock()
 		if err == raft.ErrSnapshotTemporarilyUnavailable {
-			if snapshotChan == nil {
-				// The call to Snapshot() didn't start an async process due to
-				// rate limiting. Try again later.
-				continue
-			}
-			var ok bool
-			snap, ok = <-snapshotChan
-			if ok {
-				return snap, nil
-			}
-			// Each snapshot worker's output can only be consumed once.
-			// We could be racing with raft itself, so if we get a closed
-			// channel loop back and try again.
+			continue
 		} else {
 			return snap, err
 		}
 	}
-	return OutgoingSnapshot{}, &roachpb.NodeUnavailableError{}
+	return nil, &roachpb.NodeUnavailableError{}
 }
 
 // OutgoingSnapshot contains the data required to stream a snapshot to a recipient. Once one is
@@ -428,10 +374,16 @@ type IncomingSnapshot struct {
 	LogEntries [][]byte
 }
 
-// Close this OutgoingSnapshot, freeing associated resources.
-func (snap OutgoingSnapshot) Close() {
-	snap.Iter.Close()
-	snap.EngineSnap.Close()
+// CloseOutSnap closes the Replica's outgoing snapshot, freeing its resources
+// and readying the Replica to send more snapshots. Must be called after any
+// invocation of SnapshotWithContext.
+func (r *Replica) CloseOutSnap() {
+	r.mu.Lock()
+	r.mu.outSnap.Iter.Close()
+	r.mu.outSnap.EngineSnap.Close()
+	r.mu.outSnap = OutgoingSnapshot{}
+	r.mu.Unlock()
+	close(r.mu.outSnapDone)
 }
 
 // snapshot creates an OutgoingSnapshot containing a rocksdb snapshot for the given range.
@@ -484,8 +436,8 @@ func snapshot(
 	iter := NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
 	snapUUID := uuid.NewV4()
 
-	log.Infof(ctx, "generated snapshot %s for range %s at index %d in %s. %d log entries",
-		snapUUID, rangeID, appliedIndex, timeutil.Since(start), len(snapData.LogEntries))
+	log.Infof(ctx, "generated snapshot %s for range %s at index %d in %s.",
+		snapUUID.Short(), rangeID, appliedIndex, timeutil.Since(start))
 	return OutgoingSnapshot{
 		EngineSnap: snap,
 		Iter:       iter,

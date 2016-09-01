@@ -2983,7 +2983,7 @@ func (r *Replica) ChangeReplicas(
 		// negate the benefits of pre-emptive snapshots, but that is a recoverable
 		// degradation, not a catastrophic failure.
 		snap, err := r.GetSnapshot(ctx)
-		defer snap.Close()
+		defer r.CloseOutSnap()
 		log.Trace(ctx, "generated snapshot")
 		if err != nil {
 			return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
