@@ -24,7 +24,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -199,12 +201,43 @@ func (p *planner) resetContexts() {
 	}
 }
 
-func makeInternalPlanner(opName string, txn *client.Txn, user string) *planner {
+// noteworthyInternalMemoryUsageBytes is the minimum size tracked by
+// each internal SQL pool before the pool start explicitly logging
+// overall usage growth in the log.
+var noteworthyInternalMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_INTERNAL_MEMORY_USAGE", 100*1024)
+
+func makeInternalPlanner(
+	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics,
+) *planner {
 	p := makePlanner(opName)
 	p.setTxn(txn)
 	p.resetContexts()
 	p.session.User = user
+
+	p.session.mon = mon.MakeUnlimitedMonitor(p.session.context,
+		"internal-root",
+		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
+		noteworthyInternalMemoryUsageBytes)
+
+	p.session.sessionMon = mon.MakeMonitor("internal-session",
+		memMetrics.SessionCurBytesCount,
+		memMetrics.SessionMaxBytesHist,
+		-1, noteworthyInternalMemoryUsageBytes/5)
+	p.session.sessionMon.Start(p.session.context, &p.session.mon, mon.BoundAccount{})
+
+	p.session.txnMon = mon.MakeMonitor("internal-txn",
+		memMetrics.TxnCurBytesCount,
+		memMetrics.TxnMaxBytesHist,
+		-1, noteworthyInternalMemoryUsageBytes/5)
+	p.session.txnMon.Start(p.session.context, &p.session.mon, mon.BoundAccount{})
+
 	return p
+}
+
+func finishInternalPlanner(p *planner) {
+	p.session.txnMon.Stop(p.session.context)
+	p.session.sessionMon.Stop(p.session.context)
+	p.session.mon.Stop(p.session.context)
 }
 
 // resetForBatch implements the queryRunner interface.
@@ -236,8 +269,6 @@ func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
 
 // queryRow implements the queryRunner interface.
 func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, error) {
-	p.session.mon.StartMonitor()
-	defer p.session.mon.StopMonitor(p.ctx())
 	plan, err := p.query(sql, args...)
 	if err != nil {
 		return nil, err
@@ -262,8 +293,6 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, erro
 
 // exec implements the queryRunner interface.
 func (p *planner) exec(sql string, args ...interface{}) (int, error) {
-	p.session.mon.StartMonitor()
-	defer p.session.mon.StopMonitor(p.ctx())
 	plan, err := p.query(sql, args...)
 	if err != nil {
 		return 0, err
