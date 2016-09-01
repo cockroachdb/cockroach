@@ -123,8 +123,8 @@ func (p *planner) window(n *parser.SelectClause, s *selectNode) (*windowNode, er
 		return nil, err
 	}
 
-	window.wrappedValues = p.NewRowContainer(s.columns, 0)
-	window.windowsAcc = p.session.OpenAccount()
+	window.wrappedValues = p.NewRowContainer(false, s.columns, 0)
+	window.windowsAcc = p.session.OpenTxnAccount()
 
 	return window, nil
 }
@@ -409,7 +409,7 @@ func (n *windowNode) computeWindows() error {
 	}
 
 	windowCount := len(n.funcs)
-	acc := n.windowsAcc.W(n.planner.session)
+	acc := n.windowsAcc.Wtxn(n.planner.session)
 
 	winValSz := uintptr(rowCount) * unsafe.Sizeof([]parser.Datum{})
 	winAllocSz := uintptr(rowCount*windowCount) * unsafe.Sizeof(parser.Datum(nil))
@@ -567,9 +567,9 @@ func (n *windowNode) computeWindows() error {
 // populateValues populates n.values with final datum values after computing
 // window result values in n.windowValues.
 func (n *windowNode) populateValues() error {
-	acc := n.windowsAcc.W(n.planner.session)
+	acc := n.windowsAcc.Wtxn(n.planner.session)
 	rowCount := n.wrappedValues.Len()
-	n.values.rows = n.planner.NewRowContainer(n.values.columns, rowCount)
+	n.values.rows = n.planner.NewRowContainer(false, n.values.columns, rowCount)
 
 	rowWidth := len(n.windowRender)
 
@@ -668,7 +668,7 @@ func (n *windowNode) Close() {
 	}
 	if n.windowValues != nil {
 		n.windowValues = nil
-		n.windowsAcc.W(n.planner.session).Close()
+		n.windowsAcc.Wtxn(n.planner.session).Close()
 	}
 	n.values.Close()
 }

@@ -74,6 +74,7 @@ type Session struct {
 
 	planner            planner
 	executor           *Executor
+	memMetrics         *MemoryMetrics
 	PreparedStatements PreparedStatements
 	PreparedPortals    PreparedPortals
 
@@ -90,43 +91,12 @@ type Session struct {
 	cancel context.CancelFunc
 
 	// mon tracks memory usage for SQL activity within this session.
-	// Currently we bind an instance of MemoryUsageMonitor to each
-	// session, and the logical timespan for tracking memory usage is
-	// also bound to the entire duration of the session.
-	//
-	// The "logical timespan" is the duration between the point in time where
-	// to "begin" monitoring (set counters to 0) and where to "end"
-	// monitoring (check that if counters != 0 then there was a leak, and
-	// report that in logs/errors).
-	//
-	// Alternatives to define the logical timespan were considered and
-	// rejected:
-	//
-	// - binding to a single statement: fails to track transaction
-	//   state including intents across a transaction.
-	// - binding to a single transaction attempt: idem.
-	// - binding to an entire transaction: fails to track the
-	//   ResultList created by Executor.ExecuteStatements which
-	//   stays alive after the transaction commits and until
-	//   pgwire sends the ResultList back to the client.
-	// - binding to the duration of v3.go:handleExecute(): fails
-	//   to track transaction state that spans across multiple
-	//   separate execute messages.
-	//
-	// Ideally we would want a "magic" timespan that extends automatically
-	// from the start of a transaction to the point where all related
-	// Results (ResultList items) have been sent back to the
-	// client. However with this definition and the current code there can
-	// be multiple such "magic" timespans alive simultaneously. This is
-	// because a client can start a new transaction before it reads the
-	// ResultList of a previous transaction, e.g. if issuing `BEGIN;
-	// SELECT; COMMIT; BEGIN; SELECT; COMMIT` in one pgwire message.
-	//
-	// A way forward to implement this "magic" timespan would be to
-	// fix/implement #7775 (stream results from Executor to pgwire) and
-	// take care that the corresponding new streaming/pipeline logic
-	// passes a transaction-bound context to the monitor throughout.
-	mon mon.MemoryUsageMonitor
+	// It is not directly used, but rather indirectly used via
+	// sessionMon and txnMon. sessionMon tracks session-bound objects
+	// like prepared statements and result sets. txnMon tracks txn-bound objects.
+	mon        mon.MemoryMonitor
+	sessionMon mon.MemoryMonitor
+	txnMon     mon.MemoryMonitor
 }
 
 // SessionArgs contains arguments for creating a new Session with NewSession().
@@ -137,7 +107,9 @@ type SessionArgs struct {
 
 // NewSession creates and initializes a new Session object.
 // remote can be nil.
-func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.Addr) *Session {
+func NewSession(
+	ctx context.Context, args SessionArgs, e *Executor, remote net.Addr, memMetrics *MemoryMetrics,
+) *Session {
 	ctx = e.AnnotateCtx(ctx)
 	s := &Session{
 		Database:   args.Database,
@@ -145,6 +117,7 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 		User:       args.User,
 		Location:   time.UTC,
 		executor:   e,
+		memMetrics: memMetrics,
 	}
 	cfg, cache := e.getSystemConfig()
 	s.planner = planner{
@@ -158,7 +131,7 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 	s.PreparedPortals = makePreparedPortals(s)
 
 	if opentracing.SpanFromContext(ctx) == nil {
-		remoteStr := "<internal>"
+		remoteStr := "<admin>"
 		if remote != nil {
 			remoteStr = remote.String()
 		}
@@ -168,7 +141,6 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 	}
 	s.context, s.cancel = context.WithCancel(ctx)
 
-	s.mon.StartMonitor()
 	return s
 }
 
@@ -180,7 +152,7 @@ func (s *Session) Finish() {
 			errors.Errorf("session closing"), s.executor)
 	}
 	if s.TxnState.State != NoTxn {
-		s.TxnState.finishSQLTxn(s.context)
+		s.TxnState.finishSQLTxn(s)
 	}
 
 	// Cleanup leases. We might have unreleased leases if we're finishing the
@@ -189,7 +161,8 @@ func (s *Session) Finish() {
 	s.planner.releaseLeases()
 
 	s.ClearStatementsAndPortals()
-	s.mon.StopMonitor(s.context)
+	s.sessionMon.Stop(s.context)
+	s.mon.Stop(s.context)
 
 	if s.finishEventLog {
 		log.FinishEventLog(s.context)
@@ -338,6 +311,11 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 	}
 	ts.Ctx = ctx
 
+	s.txnMon.Start("txn-mon",
+		s.memMetrics.TxnCurBytesCount,
+		s.memMetrics.TxnMaxBytesHist,
+		&s.mon, 0, 1)
+
 	ts.txn = client.NewTxn(ts.Ctx, *e.cfg.DB)
 	ts.txn.Proto.Isolation = s.DefaultIsolationLevel
 	ts.State = Open
@@ -376,7 +354,8 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 // finishSQLTxn closes the root span for the current SQL txn.
 // This needs to be called before resetForNewSQLTransaction() is called for
 // starting another SQL txn.
-func (ts *txnState) finishSQLTxn(sessionCtx context.Context) {
+func (ts *txnState) finishSQLTxn(s *Session) {
+	s.txnMon.Stop(ts.Ctx)
 	span := opentracing.SpanFromContext(ts.Ctx)
 	if span == nil {
 		panic("No span in context? Was resetForNewSQLTxn() called previously?")
@@ -387,7 +366,7 @@ func (ts *txnState) finishSQLTxn(sessionCtx context.Context) {
 		(traceSQLFor7881 && sampledFor7881) {
 		dump := tracing.FormatRawSpans(ts.CollectedSpans)
 		if len(dump) > 0 {
-			log.Infof(sessionCtx, "SQL trace:\n%s", dump)
+			log.Infof(s.context, "SQL trace:\n%s", dump)
 		}
 	}
 }

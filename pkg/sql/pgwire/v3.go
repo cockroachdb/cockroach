@@ -31,9 +31,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -113,37 +115,49 @@ type preparedPortalMeta struct {
 }
 
 type v3Conn struct {
-	conn     net.Conn
-	rd       *bufio.Reader
-	wr       *bufio.Writer
-	executor *sql.Executor
-	readBuf  readBuffer
-	writeBuf writeBuffer
-	tagBuf   [64]byte
-	session  *sql.Session
+	conn        net.Conn
+	rd          *bufio.Reader
+	wr          *bufio.Writer
+	executor    *sql.Executor
+	readBuf     readBuffer
+	writeBuf    writeBuffer
+	tagBuf      [64]byte
+	sessionArgs sql.SessionArgs
+	session     *sql.Session
 
 	// The logic governing these guys is hairy, and is not sufficiently
 	// specified in documentation. Consult the sources before you modify:
 	// https://github.com/postgres/postgres/blob/master/src/backend/tcop/postgres.c
 	doingExtendedQueryMessage, ignoreTillSync bool
 
-	metrics ServerMetrics
+	metrics *ServerMetrics
+
+	sqlMemoryPool *mon.MemoryMonitor
+	connMonitor   *mon.MemoryMonitor
+
+	// baseMemAcc holds a base memory budget allocated from connMonitor,
+	// serving as base budget for the session's monitor.
+	baseMemAcc mon.MemoryAccount
 }
 
-func makeV3Conn(ctx context.Context, conn net.Conn, metrics ServerMetrics) v3Conn {
+func makeV3Conn(
+	ctx context.Context,
+	conn net.Conn,
+	metrics *ServerMetrics,
+	sqlMemoryPool, connMonitor *mon.MemoryMonitor,
+) v3Conn {
 	return v3Conn{
-		conn:     conn,
-		rd:       bufio.NewReader(conn),
-		wr:       bufio.NewWriter(conn),
-		writeBuf: writeBuffer{bytecount: metrics.BytesOutCount},
-		metrics:  metrics,
+		conn:          conn,
+		rd:            bufio.NewReader(conn),
+		wr:            bufio.NewWriter(conn),
+		writeBuf:      writeBuffer{bytecount: metrics.BytesOutCount},
+		metrics:       metrics,
+		sqlMemoryPool: sqlMemoryPool,
+		connMonitor:   connMonitor,
 	}
 }
 
 func (c *v3Conn) finish(ctx context.Context) {
-	if c.session != nil {
-		c.session.Finish()
-	}
 	// This is better than always flushing on error.
 	if err := c.wr.Flush(); err != nil {
 		log.Error(ctx, err)
@@ -194,13 +208,11 @@ var statusReportParams = map[string]string{
 }
 
 // handleAuthentication should discuss with the client to arrange
-// authentication and update sessionArgs with the authenticated user's
+// authentication and update c.sessionArgs with the authenticated user's
 // name, if different from the one given initially. Note: at this
 // point the sql.Session does not exist yet! If need exists to access the
 // database to look up authentication data, use the internal executor.
-func (c *v3Conn) handleAuthentication(
-	ctx context.Context, insecure bool, sessionArgs *sql.SessionArgs,
-) error {
+func (c *v3Conn) handleAuthentication(ctx context.Context, insecure bool) error {
 	if tlsConn, ok := c.conn.(*tls.Conn); ok {
 		tlsState := tlsConn.ConnectionState()
 		authenticationHook, err := security.UserAuthHook(insecure, &tlsState)
@@ -208,22 +220,42 @@ func (c *v3Conn) handleAuthentication(
 			return c.sendInternalError(err.Error())
 		}
 		if authenticationHook != nil {
-			if err := authenticationHook(sessionArgs.User, true /* public */); err != nil {
+			if err := authenticationHook(c.sessionArgs.User, true /* public */); err != nil {
 				return c.sendInternalError(err.Error())
 			}
 		}
 	}
 	c.writeBuf.initMsg(serverMsgAuth)
 	c.writeBuf.putInt32(authOK)
-	if err := c.writeBuf.finishMsg(c.wr); err != nil {
-		return err
+	return c.writeBuf.finishMsg(c.wr)
+}
+
+var baseSQLMemoryBudget = envutil.EnvOrDefaultInt64("COCKROACH_BASE_SQL_MEMORY_BUDGET", 1024)
+
+func (c *v3Conn) setupSession(ctx context.Context, executor *sql.Executor) error {
+	// We only reserve memory to the connection monitor after
+	// authentication has completed successfully, so as to prevent a DoS
+	// attack: many open-but-unauthenticated connections that exhaust
+	// the memory available to connections already open.
+	if err := c.connMonitor.GrowAccount(ctx, &c.baseMemAcc, baseSQLMemoryBudget); err != nil {
+		return errors.Errorf("unable to pre-allocate %d bytes for this connection: %v",
+			baseSQLMemoryBudget, err)
 	}
+	c.executor = executor
+	c.session = sql.NewSession(
+		ctx, c.sessionArgs, executor, c.conn.RemoteAddr(), &c.metrics.SQLMemMetrics,
+	)
+	c.session.StartMonitor(c.sqlMemoryPool, baseSQLMemoryBudget)
 	return nil
 }
 
-func (c *v3Conn) serve(
-	ctx context.Context, executor *sql.Executor, sessionArgs sql.SessionArgs,
-) error {
+func (c *v3Conn) closeSession(ctx context.Context) {
+	c.connMonitor.CloseAccount(ctx, &c.baseMemAcc)
+	c.session.Finish()
+	c.session = nil
+}
+
+func (c *v3Conn) serve(ctx context.Context, executor *sql.Executor) error {
 	for key, value := range statusReportParams {
 		c.writeBuf.initMsg(serverMsgParameterStatus)
 		c.writeBuf.writeTerminatedString(key)
@@ -236,9 +268,11 @@ func (c *v3Conn) serve(
 		return err
 	}
 
-	ctx = log.WithLogTagStr(ctx, "user", sessionArgs.User)
-	c.executor = executor
-	c.session = sql.NewSession(ctx, sessionArgs, executor, c.conn.RemoteAddr())
+	ctx = log.WithLogTagStr(ctx, "user", c.sessionArgs.User)
+	if err := c.setupSession(ctx, executor); err != nil {
+		return err
+	}
+	defer c.closeSession(ctx)
 
 	for {
 		if !c.doingExtendedQueryMessage {

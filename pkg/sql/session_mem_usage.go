@@ -22,10 +22,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 )
 
-// OpenAccount interfaces between Session and mon.MemoryUsageMonitor.
-func (s *Session) OpenAccount() WrappableMemoryAccount {
+// OpenSessionAccount interfaces between Session and mon.MemoryUsageMonitor.
+func (s *Session) OpenSessionAccount() WrappableMemoryAccount {
 	res := WrappableMemoryAccount{}
-	s.mon.OpenAccount(s.Ctx(), &res.acc)
+	s.mon.OpenAccount(s.context, &res.acc)
+	return res
+}
+
+// OpenTxnAccount interfaces between Session and mon.MemoryUsageMonitor.
+func (s *Session) OpenTxnAccount() WrappableMemoryAccount {
+	res := WrappableMemoryAccount{}
+	s.txnMon.OpenAccount(s.TxnState.Ctx, &res.acc)
 	return res
 }
 
@@ -35,14 +42,25 @@ type WrappableMemoryAccount struct {
 	acc mon.MemoryAccount
 }
 
-// W captures the current monitor pointer and session logging context
-// so they can be provided transparently to the other Account APIs
-// below.
-func (w *WrappableMemoryAccount) W(s *Session) WrappedMemoryAccount {
+// Wsession captures the current session monitor pointer and session
+// logging context so they can be provided transparently to the other
+// Account APIs below.
+func (w *WrappableMemoryAccount) Wsession(s *Session) WrappedMemoryAccount {
 	return WrappedMemoryAccount{
 		acc: &w.acc,
-		mon: &s.mon,
-		ctx: s.Ctx(),
+		mon: &s.sessionMon,
+		ctx: s.context,
+	}
+}
+
+// Wtxn captures the current txn-specific monitor pointer and session
+// logging context so they can be provided transparently to the other
+// Account APIs below.
+func (w *WrappableMemoryAccount) Wtxn(s *Session) WrappedMemoryAccount {
+	return WrappedMemoryAccount{
+		acc: &w.acc,
+		mon: &s.txnMon,
+		ctx: s.TxnState.Ctx,
 	}
 }
 
@@ -50,7 +68,7 @@ func (w *WrappableMemoryAccount) W(s *Session) WrappedMemoryAccount {
 // the extra argument to the MemoryAccount APIs.
 type WrappedMemoryAccount struct {
 	acc *mon.MemoryAccount
-	mon *mon.MemoryUsageMonitor
+	mon *mon.MemoryMonitor
 	ctx context.Context
 }
 
@@ -77,4 +95,28 @@ func (w WrappedMemoryAccount) Clear() {
 // ResizeItem interfaces between Session and mon.MemoryUsageMonitor.
 func (w WrappedMemoryAccount) ResizeItem(oldSize, newSize int64) error {
 	return w.mon.ResizeItem(w.ctx, w.acc, oldSize, newSize)
+}
+
+// StartMonitor interfaces between Session and mon.MemoryUsageMonitor
+func (s *Session) StartMonitor(pool *mon.MemoryMonitor, reserved int64) {
+	s.mon.Start("session-top-mon",
+		s.memMetrics.CurBytesCount,
+		s.memMetrics.MaxBytesHist,
+		pool, reserved, -1)
+	s.sessionMon.Start("session-mon",
+		s.memMetrics.SessionCurBytesCount,
+		s.memMetrics.SessionMaxBytesHist,
+		&s.mon, 0, 1)
+}
+
+// StartUnlimitedMonitor interfaces between Session and mon.MemoryUsageMonitor
+func (s *Session) StartUnlimitedMonitor() {
+	s.mon.StartUnlimited("session-top-mon",
+		s.memMetrics.CurBytesCount,
+		s.memMetrics.MaxBytesHist,
+	)
+	s.sessionMon.Start("session-mon",
+		s.memMetrics.SessionCurBytesCount,
+		s.memMetrics.SessionMaxBytesHist,
+		&s.mon, 0, 1)
 }

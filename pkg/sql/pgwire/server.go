@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -75,31 +76,49 @@ type Server struct {
 		syncutil.Mutex
 		draining bool
 	}
+
+	sqlMemoryPool mon.MemoryMonitor
+	connMonitor   mon.MemoryMonitor
 }
 
 // ServerMetrics is the set of metrics for the pgwire server.
 type ServerMetrics struct {
-	BytesInCount  *metric.Counter
-	BytesOutCount *metric.Counter
-	Conns         *metric.Counter
+	BytesInCount   *metric.Counter
+	BytesOutCount  *metric.Counter
+	Conns          *metric.Counter
+	ConnMemMetrics sql.MemoryMetrics
+	SQLMemMetrics  sql.MemoryMetrics
 }
 
 func makeServerMetrics() ServerMetrics {
 	return ServerMetrics{
-		Conns:         metric.NewCounter(MetaConns),
-		BytesInCount:  metric.NewCounter(MetaBytesIn),
-		BytesOutCount: metric.NewCounter(MetaBytesOut),
+		Conns:          metric.NewCounter(MetaConns),
+		BytesInCount:   metric.NewCounter(MetaBytesIn),
+		BytesOutCount:  metric.NewCounter(MetaBytesOut),
+		ConnMemMetrics: sql.MakeMemMetrics("conns"),
+		SQLMemMetrics:  sql.MakeMemMetrics("client"),
 	}
 }
 
 // MakeServer creates a Server.
-func MakeServer(ambientCtx log.AmbientContext, cfg *base.Config, executor *sql.Executor) *Server {
-	return &Server{
+func MakeServer(
+	ambientCtx log.AmbientContext, cfg *base.Config, executor *sql.Executor, maxSQLMem int64,
+) *Server {
+	server := &Server{
 		AmbientCtx: ambientCtx,
 		cfg:        cfg,
 		executor:   executor,
 		metrics:    makeServerMetrics(),
 	}
+	server.sqlMemoryPool.Start("sql-mon",
+		server.metrics.SQLMemMetrics.CurBytesCount,
+		server.metrics.SQLMemMetrics.MaxBytesHist,
+		nil, maxSQLMem, 1)
+	server.connMonitor.Start("conn-mon",
+		server.metrics.ConnMemMetrics.CurBytesCount,
+		server.metrics.ConnMemMetrics.MaxBytesHist,
+		&server.sqlMemoryPool, 0, -1)
+	return server
 }
 
 // Match returns true if rd appears to be a Postgres connection.
@@ -217,14 +236,14 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 	}
 
 	if version == version30 {
-		sessionArgs, argsErr := parseOptions(buf.msg)
-		// We make a connection regardless of argsErr. If there was an error parsing
-		// the args, the connection will only be used to send a report of that
-		// error.
-		v3conn := makeV3Conn(ctx, conn, s.metrics)
+		// We make a connection before anything. If there is an error
+		// parsing the connection arguments, the connection will only be
+		// used to send a report of that error.
+		v3conn := makeV3Conn(ctx, conn, &s.metrics, &s.sqlMemoryPool, &s.connMonitor)
 		defer v3conn.finish(ctx)
-		if argsErr != nil {
-			return v3conn.sendInternalError(argsErr.Error())
+
+		if v3conn.sessionArgs, err = parseOptions(buf.msg); err != nil {
+			return v3conn.sendInternalError(err.Error())
 		}
 		if errSSLRequired {
 			return v3conn.sendInternalError(ErrSSLRequired)
@@ -235,10 +254,10 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 			return v3conn.sendInternalError(ErrDraining)
 		}
 
-		if err := v3conn.handleAuthentication(ctx, s.cfg.Insecure, &sessionArgs); err != nil {
+		if err := v3conn.handleAuthentication(ctx, s.cfg.Insecure); err != nil {
 			return v3conn.sendInternalError(err.Error())
 		}
-		return v3conn.serve(ctx, s.executor, sessionArgs)
+		return v3conn.serve(ctx, s.executor)
 	}
 
 	return errors.Errorf("unknown protocol version %d", version)

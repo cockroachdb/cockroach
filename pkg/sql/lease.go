@@ -116,6 +116,7 @@ type LeaseStore struct {
 	nodeID uint32
 
 	testingKnobs LeaseStoreTestingKnobs
+	memMetrics   *MemoryMetrics
 }
 
 // jitteredLeaseDuration returns a randomly jittered duration from the interval
@@ -143,7 +144,8 @@ func (s LeaseStore) Acquire(
 
 	// Use the supplied (user) transaction to look up the descriptor because the
 	// descriptor might have been created within the transaction.
-	p := makeInternalPlanner("lease-acquire", txn, security.RootUser)
+	p := makeInternalPlanner("lease-acquire", txn, security.RootUser, s.memMetrics)
+	defer finishInternalPlanner(p)
 
 	const getDescriptor = `SELECT descriptor FROM system.descriptor WHERE id = $1`
 	values, err := p.queryRow(getDescriptor, int(tableID))
@@ -190,7 +192,8 @@ func (s LeaseStore) Acquire(
 	// modify the descriptor and even if the descriptor is never created we'll
 	// just have a dangling lease entry which will eventually get GC'd.
 	err = s.db.Txn(txn.Context, func(txn *client.Txn) error {
-		p := makeInternalPlanner("lease-insert", txn, security.RootUser)
+		p := makeInternalPlanner("lease-insert", txn, security.RootUser, s.memMetrics)
+		defer finishInternalPlanner(p)
 		const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
 			`VALUES ($1, $2, $3, $4)`
 		count, err := p.exec(insertLease, lease.ID, int(lease.Version), s.nodeID, &lease.expiration)
@@ -211,7 +214,8 @@ func (s LeaseStore) Release(lease *LeaseState) error {
 		if log.V(2) {
 			log.Infof(txn.Context, "LeaseStore releasing lease %s", lease)
 		}
-		p := makeInternalPlanner("lease-release", txn, security.RootUser)
+		p := makeInternalPlanner("lease-release", txn, security.RootUser, s.memMetrics)
+		defer finishInternalPlanner(p)
 		const deleteLease = `DELETE FROM system.lease ` +
 			`WHERE (descID, version, nodeID, expiration) = ($1, $2, $3, $4)`
 		count, err := p.exec(deleteLease, lease.ID, int(lease.Version), s.nodeID, &lease.expiration)
@@ -378,7 +382,8 @@ func (s LeaseStore) countLeases(
 ) (int, error) {
 	var count int
 	err := s.db.Txn(context.TODO(), func(txn *client.Txn) error {
-		p := makeInternalPlanner("lease-count", txn, security.RootUser)
+		p := makeInternalPlanner("leases-count", txn, security.RootUser, s.memMetrics)
+		defer finishInternalPlanner(p)
 		const countLeases = `SELECT COUNT(version) FROM system.lease ` +
 			`WHERE descID = $1 AND version = $2 AND expiration > $3`
 		values, err := p.queryRow(countLeases, descID, int(version), expiration)
@@ -947,6 +952,7 @@ func NewLeaseManager(
 	clock *hlc.Clock,
 	testingKnobs LeaseManagerTestingKnobs,
 	stopper *stop.Stopper,
+	memMetrics *MemoryMetrics,
 ) *LeaseManager {
 	lm := &LeaseManager{
 		LeaseStore: LeaseStore{
@@ -954,6 +960,7 @@ func NewLeaseManager(
 			clock:        clock,
 			nodeID:       nodeID,
 			testingKnobs: testingKnobs.LeaseStoreTestingKnobs,
+			memMetrics:   memMetrics,
 		},
 		tables:       make(map[sqlbase.ID]*tableState),
 		testingKnobs: testingKnobs,

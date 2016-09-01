@@ -25,14 +25,20 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func makeTestV3Conn(c net.Conn) v3Conn {
+	metrics := makeServerMetrics()
+	mon := &mon.MemoryMonitor{}
+	mon.StartUnlimited("test-mon", nil, nil)
 	return makeV3Conn(
 		context.Background(),
 		c,
-		makeServerMetrics(),
+		&metrics,
+		mon,
+		mon,
 	)
 }
 
@@ -88,9 +94,6 @@ func testMaliciousInput(t *testing.T, data []byte) {
 	}()
 
 	v3Conn := makeTestV3Conn(r)
-	_ = v3Conn.serve(
-		context.Background(),
-		sql.NewDummyExecutor(),
-		sql.SessionArgs{},
-	)
+	defer v3Conn.finish(context.Background())
+	_ = v3Conn.serve(context.Background(), sql.NewDummyExecutor())
 }
