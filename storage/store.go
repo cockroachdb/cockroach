@@ -1176,8 +1176,7 @@ func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 	return s.getReplicaLocked(rangeID)
 }
 
-// getReplicaLocked fetches a replica by RangeID. The store's lock must be held
-// in read or read/write mode.
+// getReplicaLocked fetches a replica by RangeID. The store's lock must be held.
 func (s *Store) getReplicaLocked(rangeID roachpb.RangeID) (*Replica, error) {
 	if rng, ok := s.mu.replicas[rangeID]; ok {
 		return rng, nil

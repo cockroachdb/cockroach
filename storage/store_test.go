@@ -364,6 +364,72 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	}
 }
 
+// TestReplicasByKey tests that operations that depend on the
+// store.replicasByKey map function correctly when the underlying replicas'
+// start and end keys are manipulated in place.
+func TestReplicasByKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	store, _, stopper := createTestStore(t)
+	defer stopper.Stop()
+
+	// Remove the main replica so that we can test on that key space.
+	rep, err := store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RemoveReplica(rep, *rep.Desc(), true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create and add ranges.
+	reps := []*struct {
+		replica            *Replica
+		id                 int
+		start, end         roachpb.RKey
+		expectedErrorOnAdd bool
+	}{
+		{nil, 2, roachpb.RKey("a"), roachpb.RKey("c"), false}, // 0
+		{nil, 3, roachpb.RKey("c"), roachpb.RKey("d"), false}, // 1
+		{nil, 4, roachpb.RKey("c"), roachpb.RKey("f"), true},  // 2
+		{nil, 5, roachpb.RKey("d"), roachpb.RKey("f"), false}, // 3
+	}
+
+	for _, desc := range reps {
+		desc.replica = createReplica(store, roachpb.RangeID(desc.id), desc.start, desc.end)
+		if err := store.AddReplicaTest(desc.replica); (desc.expectedErrorOnAdd && err == nil) || (!desc.expectedErrorOnAdd && err != nil) {
+			t.Fatalf("expected %t, but received %v", desc.expectedErrorOnAdd, err)
+		}
+	}
+
+	if err := store.RemoveReplica(reps[3].replica, *reps[3].replica.Desc(), true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Modify a range in place
+	reps[1].replica.mu.Lock()
+	reps[1].replica.mu.state.Desc.EndKey = roachpb.RKey("e")
+	reps[1].replica.mu.Unlock()
+
+	// Ensure that this modification is recognized in future operations on replicasByKey
+	if err := store.AddReplicaTest(reps[3].replica); !testutils.IsError(err, "cannot addReplicaInternalLocked") {
+		t.Fatalf("expected error 'cannot addReplicaInternalLocked; range [...] has overlapping range [...]', but got: %v", err)
+	}
+
+	krs := []struct {
+		desc          *roachpb.RangeDescriptor
+		expectedError bool
+	}{
+		{&roachpb.RangeDescriptor{StartKey: roachpb.RKey("d"), EndKey: roachpb.RKey("e")}, true},
+		{&roachpb.RangeDescriptor{StartKey: roachpb.RKey("e"), EndKey: roachpb.RKey("f")}, false},
+	}
+
+	for _, kr := range krs {
+		if err := store.getOverlappingKeyRangeLocked(kr.desc); (kr.expectedError && err == nil) || (!kr.expectedError && err != nil) {
+			t.Fatalf("expected %t, but received %v", kr.expectedError, err)
+		}
+	}
+}
+
 func TestStoreRemoveReplicaOldDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	store, _, stopper := createTestStore(t)
