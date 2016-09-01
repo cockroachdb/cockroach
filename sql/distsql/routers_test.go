@@ -13,6 +13,7 @@
 // permissions and limitations under the License.
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
+// Author: Irfan Sharif (irfansharif@cockroachlabs.com)
 
 package distsql
 
@@ -32,14 +33,7 @@ func TestHashRouter(t *testing.T) {
 
 	// Generate tables of possible values for each column; we have fewer possible
 	// values than rows to guarantee many occurrences of each value.
-	vals := make([][]sqlbase.EncDatum, numCols)
-	for i := 0; i < numCols; i++ {
-		typ := sqlbase.RandColumnType(rng)
-		vals[i] = make([]sqlbase.EncDatum, numRows/10)
-		for j := range vals[i] {
-			vals[i][j].SetDatum(typ, sqlbase.RandDatum(rng, typ, true))
-		}
-	}
+	vals := sqlbase.RandEncDatumSets(rng, numCols, numRows/10)
 
 	testCases := []struct {
 		hashColumns []uint32
@@ -107,6 +101,77 @@ func TestHashRouter(t *testing.T) {
 							t.Errorf("rows %s and %s in different buckets", row, row2)
 						}
 					}
+				}
+			}
+		}
+	}
+}
+
+func TestMirrorRouter(t *testing.T) {
+	const numCols = 6
+	const numRows = 20
+
+	rng, _ := randutil.NewPseudoRand()
+	alloc := &sqlbase.DatumAlloc{}
+
+	vals := sqlbase.RandEncDatumSets(rng, numCols, numRows)
+
+	for numBuckets := 1; numBuckets <= 3; numBuckets++ {
+		bufs := make([]*RowBuffer, numBuckets)
+		recvs := make([]RowReceiver, numBuckets)
+		for i := 0; i < numBuckets; i++ {
+			bufs[i] = &RowBuffer{}
+			recvs[i] = bufs[i]
+		}
+		mr, err := makeMirrorRouter(recvs)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for i := 0; i < numRows; i++ {
+			row := make(sqlbase.EncDatumRow, numCols)
+			for j := 0; j < numCols; j++ {
+				row[j] = vals[j][rng.Intn(len(vals[j]))]
+			}
+			ok := mr.PushRow(row)
+			if !ok {
+				t.Fatalf("PushRow returned false")
+			}
+		}
+		mr.Close(nil)
+
+		// Verify each row is sent to each of the output streams.
+		for bIdx, b := range bufs {
+			if len(b.rows) != len(bufs[0].rows) {
+				t.Errorf("buckets %d and %d have different number of rows", 0, bIdx)
+			}
+			if !b.closed {
+				t.Errorf("bucket not closed")
+			}
+			if b.err != nil {
+				t.Error(b.err)
+			}
+			if bIdx == 0 {
+				continue
+			}
+
+			// Verify that the i-th row is the same across all buffers.
+			for i, row := range b.rows {
+				row2 := bufs[0].rows[i]
+
+				equal := true
+				for j, c := range row {
+					cmp, err := c.Compare(alloc, &row2[j])
+					if err != nil {
+						t.Fatal(err)
+					}
+					if cmp != 0 {
+						equal = false
+						break
+					}
+				}
+				if !equal {
+					t.Errorf("rows %s and %s found in one bucket and not the other", row, row2)
 				}
 			}
 		}
