@@ -292,6 +292,11 @@ func initCheckpointing(engines []engine.Engine) {
 	}()
 }
 
+// ErrorCode is the value to be used by main() as exit code in case of
+// error. For most errors 1 is appropriate, but a signal termination
+// can change this.
+var ErrorCode = 1
+
 // runStart starts the cockroach node using --store as the list of
 // storage devices ("stores") on this machine and --join as the list
 // of other active nodes used to join this node to the cockroach
@@ -402,15 +407,27 @@ func runStart(_ *cobra.Command, args []string) error {
 	}
 
 	signalCh := make(chan os.Signal, 1)
-	signal.Notify(signalCh, os.Interrupt, os.Kill)
+	signal.Notify(signalCh, os.Interrupt)
 	// TODO(spencer): move this behind a build tag.
-	signal.Notify(signalCh, syscall.SIGTERM)
+	signal.Notify(signalCh, syscall.SIGTERM, syscall.SIGQUIT)
+
+	var returnErr error
 
 	// Block until one of the signals above is received or the stopper
 	// is stopped externally (for example, via the quit endpoint).
 	select {
 	case <-stopper.ShouldStop():
-	case <-signalCh:
+	case sig := <-signalCh:
+		log.Infof(context.TODO(), "received signal '%s'", sig)
+		if sig == os.Interrupt {
+			// Graceful shutdown after an interrupt should cause the process
+			// to terminate with a non-zero exit code; however SIGTERM is
+			// "legitimate" and should be acknowledged with a success exit
+			// code. So we keep the error state here for later.
+			returnErr = errors.New("interrupted")
+			msgDouble := "Note: a second interrupt will skip graceful shutdown and terminate forcefully"
+			fmt.Fprintln(os.Stdout, msgDouble)
+		}
 		go func() {
 			if _, err := s.Drain(server.GracefulDrainModes); err != nil {
 				log.Warning(context.TODO(), err)
@@ -440,17 +457,29 @@ func runStart(_ *cobra.Command, args []string) error {
 	}()
 
 	select {
-	case <-signalCh:
-		log.Errorf(context.TODO(), "second signal received, initiating hard shutdown")
+	case sig := <-signalCh:
+		returnErr = fmt.Errorf("received signal '%s' during shutdown, initiating hard shutdown", sig)
+		log.Errorf(context.TODO(), "%v", err)
+		// This new signal is not welcome, as it interferes with the
+		// graceful shutdown process.  On Unix, a signal that was not
+		// handled gracefully by the application should be visible to
+		// other processes as an exit code encoded as 128+signal number.
+
+		// Also, on Unix, os.Signal is syscall.Signal and it's convertible to int.
+		ErrorCode = 128 + int(sig.(syscall.Signal))
+		// NB: we do not return here to go through log.Flush below.
 	case <-time.After(time.Minute):
-		log.Errorf(context.TODO(), "time limit reached, initiating hard shutdown")
+		returnErr = errors.New("time limit reached, initiating hard shutdown")
+		log.Errorf(context.TODO(), "%v", err)
+		// NB: we do not return here to go through log.Flush below.
 	case <-stopper.IsStopped():
 		const msgDone = "server drained and shutdown completed"
 		log.Infof(context.TODO(), msgDone)
 		fmt.Fprintln(os.Stdout, msgDone)
 	}
 	log.Flush()
-	return nil
+
+	return returnErr
 }
 
 // rerunBackground restarts the current process in the background.
