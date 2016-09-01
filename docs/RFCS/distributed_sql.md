@@ -2,8 +2,8 @@
 - Status: in-progress
 - Start Date: 2015/02/12
 - Authors: andreimatei, knz, RaduBerinde
-- RFC PR: #6067
-- Cockroach Issue: (one or more # from the issue tracker)
+- RFC PR: [#6067](https://github.com/cockroachdb/cockroach/pull/6067)
+- Cockroach Issue:
 
 # Table of Contents
 

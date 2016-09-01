@@ -1,8 +1,8 @@
 - Feature Name: bounds_generation
 - Status: rejected
 - Start Date: 2015-07-29
-- RFC PR: #1867
-- Cockroach Issue: #1644
+- RFC PR: [#1867](https://github.com/cockroachdb/cockroach/pull/1867)
+- Cockroach Issue: [#1644](https://github.com/cockroachdb/cockroach/issues/1644)
 
 # Rejection notes
 

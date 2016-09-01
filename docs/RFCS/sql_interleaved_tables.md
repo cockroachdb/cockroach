@@ -5,7 +5,6 @@
 - RFC PR: [#7465](https://github.com/cockroachdb/cockroach/pull/7465)
 - Cockroach Issue: [#2972](https://github.com/cockroachdb/cockroach/issues/2972)
 
-
 # Summary
 
 Support interleaving the data for sql tables such that the rows alternate in the

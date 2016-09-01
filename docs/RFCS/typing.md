@@ -2,8 +2,15 @@
 - Status: completed
 - Authors: Andrei, knz, Nathan
 - Start date: 2016-01-29
-- RFC PR: #4121 #6189
-- Cockroach Issue: #4024  #4026  #3633  #4073  #4088  #3271 #1795
+- RFC PR: [#4121](https://github.com/cockroachdb/cockroach/pull/4121),
+          [#6189](https://github.com/cockroachdb/cockroach/pull/6189)
+- Cockroach Issue: [#4024](https://github.com/cockroachdb/cockroach/issues/4024),
+                   [#4026](https://github.com/cockroachdb/cockroach/issues/4026),
+                   [#3633](https://github.com/cockroachdb/cockroach/issues/3633),
+                   [#4073](https://github.com/cockroachdb/cockroach/issues/4073),
+                   [#4088](https://github.com/cockroachdb/cockroach/issues/4088),
+                   [#327](https://github.com/cockroachdb/cockroach/pull/327),
+                   [#1795](https://github.com/cockroachdb/cockroach/issues/1795)
 
 # Summary
 

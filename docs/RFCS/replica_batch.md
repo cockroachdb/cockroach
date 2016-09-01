@@ -1,7 +1,7 @@
 - Feature Name: replica_batch
 - Status: completed
 - Start Date: 2015-08-11
-- RFC PR: #2340
+- RFC PR: [#2340](https://github.com/cockroachdb/cockroach/pull/2340)
 - Cockroach Issue:
 
 # Summary

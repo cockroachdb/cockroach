@@ -2,9 +2,8 @@
 - Status: in-progress
 - Start Date: 2016-07-30
 - Authors: bdarnell
-- RFC PR: #8151
-- Cockroach Issue: #7551
-
+- RFC PR: [#8151](https://github.com/cockroachdb/cockroach/pull/8151)
+- Cockroach Issue: [#7551](https://github.com/cockroachdb/cockroach/issues/7551)
 
 # Summary
 
