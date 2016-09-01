@@ -310,7 +310,6 @@ var datetimeFmtIdx = []int{
 	   0	1	2	3	4	5	6	7	8	9
 	*/
 	/*---- first 0..31 chars are skipped ----*/
-
 	-1, -1, -1, -1, -1, -1, -1, -1,
 	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
 	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
@@ -453,7 +452,6 @@ func DoToTimestamp(dateTxt string, fmtStr string) (*PgTimestamp, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	tm, err := datetimeDecodeFromString(format, dateTxt)
 	if err != nil {
 		return nil, err
