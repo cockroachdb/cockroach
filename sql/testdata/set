@@ -94,3 +94,6 @@ SHOW SYNTAX
 ----
 SYNTAX
 Modern
+
+statement error invalid statement
+SET ROW (1, TRUE, NULL)
