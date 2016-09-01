@@ -25,20 +25,22 @@ import (
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
+
+func makeTestPlanner() *planner {
+	return makeInternalPlanner("test", nil, security.RootUser, &MemoryMetrics{})
+}
 
 func TestValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	p := makePlanner("test")
-	p.session.mon.StartMonitor()
-	defer p.session.mon.StopMonitor(context.Background())
+	p := makeTestPlanner()
 
 	vInt := int64(5)
 	vNum := 3.14159

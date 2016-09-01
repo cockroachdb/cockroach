@@ -134,6 +134,12 @@ export default class extends React.Component<IInjectedProps, {}> {
               </Axis>
             </LineGraph>
 
+            <StackedAreaGraph title="SQL Memory" sources={sources}>
+              <Axis format={ Bytes }>
+                <Metric name="cr.node.sql.mon.client.cur" title="Clients" />
+              </Axis>
+            </StackedAreaGraph>
+
             <LineGraph title="Goroutine Count" sources={sources} tooltip={`The number of Goroutines ${specifier}. This count should rise and fall based on load.`}>
               <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.node.sys.goroutines" title="Goroutine Count" />
@@ -295,7 +301,122 @@ export default class extends React.Component<IInjectedProps, {}> {
                 <Metric name="cr.store.mutex.raftnanos-max" title="RaftMu"
                         aggregateMax downsampleMax />
               </Axis>
+            </LineGraph>
 
+            <StackedAreaGraph title="SQL Memory (detailed)" sources={sources}>
+              <Axis format={ Bytes }>
+                <Metric name="cr.node.sql.mon.client.cur" title="Clients" />
+                <Metric name="cr.node.sql.mon.admin.cur" title="Admin" />
+                <Metric name="cr.node.sql.mon.internal.cur" title="Internal" />
+              </Axis>
+            </StackedAreaGraph>
+
+            <LineGraph title="SQL Session Cumulative Max Size"
+                       subtitle="(log10(Max) Per Percentile)"
+                       tooltip={`The maximum memory usage per SQL session (including session-bound and txn-bound data), displayed as log(max).
+                                 Percentiles are first calculated on each node.
+                                 For each percentile, the maximum usage across all nodes is then shown.`}
+                       sources={sources}>
+              <Axis format={ (n: number) => d3.format(".3f")(n / 1000) } label="log10(Bytes)">
+                <Metric name="cr.node.sql.mon.client.max-max" title="Max Mem Usage (log10)"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.mon.client.max-p99" title="99th percentile max mem usage (log10)"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.mon.client.max-p90" title="90th percentile max mem usage (log10)"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.mon.client.max-p50" title="50th percentile max mem usage (log10)"
+                        aggregateMax downsampleMax />
+              </Axis>
+            </LineGraph>
+
+            <LineGraph title="SQL Session Cumulative Max Size (Admin)"
+                       subtitle="(log10(Max) Per Percentile)"
+                       tooltip={`The maximum memory usage per SQL admin session (including session-bound and txn-bound data), displayed as log(max).
+                                 Percentiles are first calculated on each node.
+                                 For each percentile, the maximum usage across all nodes is then shown.`}
+                       sources={sources}>
+              <Axis format={ (n: number) => d3.format(".3f")(n / 1000) } label="log10(Bytes)">
+                <Metric name="cr.node.sql.mon.admin.max-max" title="Max Mem Usage (log10)"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.mon.admin.max-p99" title="99th percentile max mem usage (log10)"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.mon.admin.max-p90" title="90th percentile max mem usage (log10)"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.mon.admin.max-p50" title="50th percentile max mem usage (log10)"
+                        aggregateMax downsampleMax />
+              </Axis>
+            </LineGraph>
+
+            <LineGraph title="SQL Session Cumulative Max Size (Internal)"
+                       subtitle="(log10(Max) Per Percentile)"
+                       tooltip={`The maximum memory usage per SQL internal session (including session-bound and txn-bound data), displayed as log(max).
+                                 Percentiles are first calculated on each node.
+                                 For each percentile, the maximum usage across all nodes is then shown.`}
+                       sources={sources}>
+              <Axis format={ (n: number) => d3.format(".3f")(n / 1000) } label="log10(Bytes)">
+                <Metric name="cr.node.sql.mon.internal.max-max" title="Max Mem Usage (log10)"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.mon.internal.max-p99" title="99th percentile max mem usage (log10)"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.mon.internal.max-p90" title="90th percentile max mem usage (log10)"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.mon.internal.max-p50" title="50th percentile max mem usage (log10)"
+                        aggregateMax downsampleMax />
+              </Axis>
+            </LineGraph>
+
+            <LineGraph title="SQL Txn Max Size"
+                       subtitle="(log10(Max) Per Percentile)"
+                       tooltip={`The maximum memory usage per SQL txn, displayed as log(max).
+                                 Percentiles are first calculated on each node.
+                                 For each percentile, the maximum usage across all nodes is then shown.`}
+                       sources={sources}>
+              <Axis format={ (n: number) => d3.format(".3f")(n / 1000) } label="log10(Bytes)">
+                <Metric name="cr.node.sql.mon.client.txn.max-max" title="Max Mem Usage (log10)"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.mon.client.txn.max-p99" title="99th percentile max mem usage (log10)"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.mon.client.txn.max-p90" title="90th percentile max mem usage (log10)"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.mon.client.txn.max-p50" title="50th percentile max mem usage (log10)"
+                        aggregateMax downsampleMax />
+              </Axis>
+            </LineGraph>
+
+            <LineGraph title="SQL Txn Max Size (Admin)"
+                       subtitle="(log10(Max) Per Percentile)"
+                       tooltip={`The maximum memory usage per SQL admin session (including session-bound and txn-bound data), displayed as log(max).
+                                 Percentiles are first calculated on each node.
+                                 For each percentile, the maximum usage across all nodes is then shown.`}
+                       sources={sources}>
+              <Axis format={ (n: number) => d3.format(".3f")(n / 1000) } label="log10(Bytes)">
+                <Metric name="cr.node.sql.mon.admin.txn.max-max" title="Max Mem Usage (log10)"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.mon.admin.txn.max-p99" title="99th percentile max mem usage (log10)"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.mon.admin.txn.max-p90" title="90th percentile max mem usage (log10)"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.mon.admin.txn.max-p50" title="50th percentile max mem usage (log10)"
+                        aggregateMax downsampleMax />
+              </Axis>
+            </LineGraph>
+
+            <LineGraph title="SQL Txn Max Size (Internal)"
+                       subtitle="(log10(Max) Per Percentile)"
+                       tooltip={`The maximum memory usage per SQL internal session (including session-bound and txn-bound data), displayed as log(max).
+                                 Percentiles are first calculated on each node.
+                                 For each percentile, the maximum usage across all nodes is then shown.`}
+                       sources={sources}>
+              <Axis format={ (n: number) => d3.format(".3f")(n / 1000) } label="log10(Bytes)">
+                <Metric name="cr.node.sql.mon.internal.txn.max-max" title="Max Mem Usage (log10)"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.mon.internal.txn.max-p99" title="99th percentile max mem usage (log10)"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.mon.internal.txn.max-p90" title="90th percentile max mem usage (log10)"
+                        aggregateMax downsampleMax />
+                <Metric name="cr.node.sql.mon.internal.txn.max-p50" title="50th percentile max mem usage (log10)"
+                        aggregateMax downsampleMax />
+              </Axis>
             </LineGraph>
 
           </GraphGroup>

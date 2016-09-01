@@ -40,6 +40,12 @@ type Registry struct {
 	tracked []Iterable
 }
 
+// Struct can be implemented by the types of members of a metric
+// container so that the members get automatically registered.
+type Struct interface {
+	MetricStruct()
+}
+
 // NewRegistry creates a new Registry.
 func NewRegistry() *Registry {
 	return &Registry{
@@ -96,6 +102,8 @@ func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 		switch typ := val.(type) {
 		case Iterable:
 			r.AddMetric(typ)
+		case Struct:
+			r.AddMetricStruct(typ)
 		default:
 			if log.V(2) {
 				log.Infof(context.TODO(), "Skipping non-metric field %s", tfield.Name)

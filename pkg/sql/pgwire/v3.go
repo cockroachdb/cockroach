@@ -30,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -112,37 +113,45 @@ type preparedPortalMeta struct {
 }
 
 type v3Conn struct {
-	conn     net.Conn
-	rd       *bufio.Reader
-	wr       *bufio.Writer
-	executor *sql.Executor
-	readBuf  readBuffer
-	writeBuf writeBuffer
-	tagBuf   [64]byte
-	session  *sql.Session
+	conn        net.Conn
+	rd          *bufio.Reader
+	wr          *bufio.Writer
+	executor    *sql.Executor
+	readBuf     readBuffer
+	writeBuf    writeBuffer
+	tagBuf      [64]byte
+	sessionArgs sql.SessionArgs
+	session     *sql.Session
 
 	// The logic governing these guys is hairy, and is not sufficiently
 	// specified in documentation. Consult the sources before you modify:
 	// https://github.com/postgres/postgres/blob/master/src/backend/tcop/postgres.c
 	doingExtendedQueryMessage, ignoreTillSync bool
 
-	metrics ServerMetrics
+	metrics *ServerMetrics
+
+	sqlMemoryPool *mon.MemoryMonitor
 }
 
-func makeV3Conn(ctx context.Context, conn net.Conn, metrics ServerMetrics) v3Conn {
+func makeV3Conn(
+	ctx context.Context,
+	conn net.Conn,
+	metrics *ServerMetrics,
+	sqlMemoryPool *mon.MemoryMonitor,
+	executor *sql.Executor,
+) v3Conn {
 	return v3Conn{
-		conn:     conn,
-		rd:       bufio.NewReader(conn),
-		wr:       bufio.NewWriter(conn),
-		writeBuf: writeBuffer{bytecount: metrics.BytesOutCount},
-		metrics:  metrics,
+		conn:          conn,
+		rd:            bufio.NewReader(conn),
+		wr:            bufio.NewWriter(conn),
+		writeBuf:      writeBuffer{bytecount: metrics.BytesOutCount},
+		metrics:       metrics,
+		executor:      executor,
+		sqlMemoryPool: sqlMemoryPool,
 	}
 }
 
 func (c *v3Conn) finish(ctx context.Context) {
-	if c.session != nil {
-		c.session.Finish(c.executor)
-	}
 	// This is better than always flushing on error.
 	if err := c.wr.Flush(); err != nil {
 		log.Error(ctx, err)
@@ -193,13 +202,11 @@ var statusReportParams = map[string]string{
 }
 
 // handleAuthentication should discuss with the client to arrange
-// authentication and update sessionArgs with the authenticated user's
+// authentication and update c.sessionArgs with the authenticated user's
 // name, if different from the one given initially. Note: at this
 // point the sql.Session does not exist yet! If need exists to access the
 // database to look up authentication data, use the internal executor.
-func (c *v3Conn) handleAuthentication(
-	ctx context.Context, insecure bool, sessionArgs *sql.SessionArgs,
-) error {
+func (c *v3Conn) handleAuthentication(ctx context.Context, insecure bool) error {
 	if tlsConn, ok := c.conn.(*tls.Conn); ok {
 		tlsState := tlsConn.ConnectionState()
 		authenticationHook, err := security.UserAuthHook(insecure, &tlsState)
@@ -207,22 +214,30 @@ func (c *v3Conn) handleAuthentication(
 			return c.sendInternalError(err.Error())
 		}
 		if authenticationHook != nil {
-			if err := authenticationHook(sessionArgs.User, true /* public */); err != nil {
+			if err := authenticationHook(c.sessionArgs.User, true /* public */); err != nil {
 				return c.sendInternalError(err.Error())
 			}
 		}
 	}
 	c.writeBuf.initMsg(serverMsgAuth)
 	c.writeBuf.putInt32(authOK)
-	if err := c.writeBuf.finishMsg(c.wr); err != nil {
-		return err
-	}
+	return c.writeBuf.finishMsg(c.wr)
+}
+
+func (c *v3Conn) setupSession(ctx context.Context, reserved mon.BoundAccount) error {
+	c.session = sql.NewSession(
+		ctx, c.sessionArgs, c.executor, c.conn.RemoteAddr(), &c.metrics.SQLMemMetrics,
+	)
+	c.session.StartMonitor(c.sqlMemoryPool, reserved)
 	return nil
 }
 
-func (c *v3Conn) serve(
-	ctx context.Context, executor *sql.Executor, sessionArgs sql.SessionArgs,
-) error {
+func (c *v3Conn) closeSession(ctx context.Context) {
+	c.session.Finish(c.executor)
+	c.session = nil
+}
+
+func (c *v3Conn) serve(ctx context.Context, reserved mon.BoundAccount) error {
 	for key, value := range statusReportParams {
 		c.writeBuf.initMsg(serverMsgParameterStatus)
 		c.writeBuf.writeTerminatedString(key)
@@ -235,9 +250,11 @@ func (c *v3Conn) serve(
 		return err
 	}
 
-	ctx = log.WithLogTagStr(ctx, "user", sessionArgs.User)
-	c.executor = executor
-	c.session = sql.NewSession(ctx, sessionArgs, executor, c.conn.RemoteAddr())
+	ctx = log.WithLogTagStr(ctx, "user", c.sessionArgs.User)
+	if err := c.setupSession(ctx, reserved); err != nil {
+		return err
+	}
+	defer c.closeSession(ctx)
 
 	for {
 		if !c.doingExtendedQueryMessage {

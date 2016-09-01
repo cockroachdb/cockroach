@@ -47,7 +47,7 @@ type valuesNode struct {
 func (p *planner) newContainerValuesNode(columns ResultColumns, capacity int) *valuesNode {
 	return &valuesNode{
 		columns: columns,
-		rows:    p.NewRowContainer(columns, capacity),
+		rows:    p.NewRowContainer(p.session.TxnState.makeBoundAccount(), columns, capacity),
 	}
 }
 
@@ -138,7 +138,7 @@ func (n *valuesNode) Start() error {
 	// others that create a valuesNode internally for storing results
 	// from other planNodes), so its expressions need evaluting.
 	// This may run subqueries.
-	n.rows = n.p.NewRowContainer(n.columns, len(n.n.Tuples))
+	n.rows = n.p.NewRowContainer(n.p.session.TxnState.makeBoundAccount(), n.columns, len(n.n.Tuples))
 
 	numCols := len(n.columns)
 	rowBuf := make([]parser.Datum, len(n.n.Tuples)*numCols)

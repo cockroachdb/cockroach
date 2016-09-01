@@ -59,7 +59,7 @@ func (*copyNode) expandPlan() error                   { return nil }
 func (*copyNode) Next() (bool, error)                 { return false, nil }
 
 func (n *copyNode) Close() {
-	n.rowsMemAcc.W(n.p.session).Close()
+	n.rowsMemAcc.Wtxn(n.p.session).Close()
 }
 
 func (*copyNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
@@ -190,7 +190,7 @@ func (n *copyNode) addRow(line []byte) error {
 		return fmt.Errorf("expected %d values, got %d", len(n.resultColumns), len(parts))
 	}
 	exprs := make(parser.Exprs, len(parts))
-	acc := n.rowsMemAcc.W(n.p.session)
+	acc := n.rowsMemAcc.Wtxn(n.p.session)
 	for i, part := range parts {
 		s := string(part)
 		if s == nullString {
@@ -370,7 +370,7 @@ func (p *planner) CopyData(n CopyDataBlock, autoCommit bool) (planNode, error) {
 	vc := &parser.ValuesClause{Tuples: cf.rows}
 	// Reuse the same backing array once the Insert is complete.
 	cf.rows = cf.rows[:0]
-	cf.rowsMemAcc.W(p.session).Clear()
+	cf.rowsMemAcc.Wtxn(p.session).Clear()
 
 	in := parser.Insert{
 		Table:   cf.table,
