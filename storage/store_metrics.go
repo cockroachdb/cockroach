@@ -25,30 +25,46 @@ import (
 )
 
 var (
-	metaReplicaCount                 = metric.Metadata{Name: "replicas"}
-	metaReservedReplicaCount         = metric.Metadata{Name: "replicas.reserved"}
-	metaLeaderRangeCount             = metric.Metadata{Name: "ranges.leader"}
-	metaReplicatedRangeCount         = metric.Metadata{Name: "ranges.replicated"}
-	metaReplicationPendingRangeCount = metric.Metadata{Name: "ranges.replication-pending"}
-	metaAvailableRangeCount          = metric.Metadata{Name: "ranges.available"}
-	metaLeaseRequestSuccessCount     = metric.Metadata{Name: "leases.success"}
-	metaLeaseRequestErrorCount       = metric.Metadata{Name: "leases.error"}
-	metaLiveBytes                    = metric.Metadata{Name: "livebytes"}
-	metaKeyBytes                     = metric.Metadata{Name: "keybytes"}
-	metaValBytes                     = metric.Metadata{Name: "valbytes"}
-	metaIntentBytes                  = metric.Metadata{Name: "intentbytes"}
-	metaLiveCount                    = metric.Metadata{Name: "livecount"}
-	metaKeyCount                     = metric.Metadata{Name: "keycount"}
-	metaValCount                     = metric.Metadata{Name: "valcount"}
-	metaIntentCount                  = metric.Metadata{Name: "intentcount"}
-	metaIntentAge                    = metric.Metadata{Name: "intentage"}
-	metaGcBytesAge                   = metric.Metadata{Name: "gcbytesage"}
-	metaLastUpdateNanos              = metric.Metadata{Name: "lastupdatenanos"}
-	metaCapacity                     = metric.Metadata{Name: "capacity"}
-	metaAvailable                    = metric.Metadata{Name: "capacity.available"}
-	metaReserved                     = metric.Metadata{Name: "capacity.reserved"}
-	metaSysBytes                     = metric.Metadata{Name: "sysbytes"}
-	metaSysCount                     = metric.Metadata{Name: "syscount"}
+	// Replica metrics.
+	metaReplicaCount                  = metric.Metadata{Name: "replicas"}
+	metaReservedReplicaCount          = metric.Metadata{Name: "replicas.reserved"}
+	metaRaftLeaderCount               = metric.Metadata{Name: "replicas.leaders"}
+	metaRaftLeaderNotLeaseHolderCount = metric.Metadata{
+		Name: "replicas.leaders_not_leaseholders",
+		Help: "Total number of Replicas on this store that are Raft leaders but not Range lease holders.",
+	}
+	metaLeaseHolderCount = metric.Metadata{Name: "replicas.leaseholders"}
+
+	// Range metrics.
+	metaAvailableRangeCount = metric.Metadata{Name: "ranges.available"}
+
+	// Replication metrics.
+	metaReplicaAllocatorNoopCount       = metric.Metadata{Name: "ranges.allocator.noop"}
+	metaReplicaAllocatorRemoveCount     = metric.Metadata{Name: "ranges.allocator.remove"}
+	metaReplicaAllocatorAddCount        = metric.Metadata{Name: "ranges.allocator.add"}
+	metaReplicaAllocatorRemoveDeadCount = metric.Metadata{Name: "ranges.allocator.removedead"}
+
+	// Lease request metrics.
+	metaLeaseRequestSuccessCount = metric.Metadata{Name: "leases.success"}
+	metaLeaseRequestErrorCount   = metric.Metadata{Name: "leases.error"}
+
+	// Storage metrics.
+	metaLiveBytes       = metric.Metadata{Name: "livebytes"}
+	metaKeyBytes        = metric.Metadata{Name: "keybytes"}
+	metaValBytes        = metric.Metadata{Name: "valbytes"}
+	metaIntentBytes     = metric.Metadata{Name: "intentbytes"}
+	metaLiveCount       = metric.Metadata{Name: "livecount"}
+	metaKeyCount        = metric.Metadata{Name: "keycount"}
+	metaValCount        = metric.Metadata{Name: "valcount"}
+	metaIntentCount     = metric.Metadata{Name: "intentcount"}
+	metaIntentAge       = metric.Metadata{Name: "intentage"}
+	metaGcBytesAge      = metric.Metadata{Name: "gcbytesage"}
+	metaLastUpdateNanos = metric.Metadata{Name: "lastupdatenanos"}
+	metaCapacity        = metric.Metadata{Name: "capacity"}
+	metaAvailable       = metric.Metadata{Name: "capacity.available"}
+	metaReserved        = metric.Metadata{Name: "capacity.reserved"}
+	metaSysBytes        = metric.Metadata{Name: "sysbytes"}
+	metaSysCount        = metric.Metadata{Name: "syscount"}
 
 	// RocksDB metrics.
 	metaRdbBlockCacheHits           = metric.Metadata{Name: "rocksdb.block.cache.hits"}
@@ -74,12 +90,19 @@ var (
 	metaRangeSnapshotsPreemptiveApplied = metric.Metadata{Name: "range.snapshots.preemptive-applied"}
 
 	// Raft processing metrics.
+	metaRaftTicks = metric.Metadata{
+		Name: "raft.ticks",
+		Help: "Total number of Raft ticks processed",
+	}
 	metaRaftSelectDurationNanos = metric.Metadata{Name: "raft.process.waitingnanos",
-		Help: "Nanoseconds spent in store.processRaft() waiting"}
+		Help: "Nanoseconds spent in store.processRaft() waiting",
+	}
 	metaRaftWorkingDurationNanos = metric.Metadata{Name: "raft.process.workingnanos",
-		Help: "Nanoseconds spent in store.processRaft() working"}
+		Help: "Nanoseconds spent in store.processRaft() working",
+	}
 	metaRaftTickingDurationNanos = metric.Metadata{Name: "raft.process.tickingnanos",
-		Help: "Nanoseconds spent in store.processRaft() processing replica.Tick()"}
+		Help: "Nanoseconds spent in store.processRaft() processing replica.Tick()",
+	}
 
 	// Raft message metrics.
 	metaRaftRcvdProp = metric.Metadata{
@@ -123,25 +146,6 @@ var (
 		Help: "Total number of MsgTimeoutNow messages received by this store",
 	}
 
-	metaRaftTicks = metric.Metadata{
-		Name: "raft.ticks",
-		Help: "Total number of Raft ticks processed"}
-
-	metaRaftLeaders = metric.Metadata{
-		Name: "raft.leaders",
-		Help: "Total number of Replicas on this store that are leaders.",
-	}
-
-	metaRangeLeaseHolders = metric.Metadata{
-		Name: "range.leaseholders",
-		Help: "Total number of Replicas on this store that are Lease holders.",
-	}
-
-	metaRangeLeaseHoldersWithoutRaftLeadership = metric.Metadata{
-		Name: "range.leaseholders.without.leadership",
-		Help: "Total number of Replicas on this store that are Lease holders but not Raft leaders.",
-	}
-
 	metaRaftEnqueuedPending = metric.Metadata{Name: "raft.enqueued.pending",
 		Help: "Number of pending outgoing messages in the Raft Transport queue"}
 )
@@ -150,15 +154,23 @@ var (
 type StoreMetrics struct {
 	registry *metric.Registry
 
-	// Range data metrics.
-	ReplicaCount                 *metric.Counter // Does not include reserved replicas.
-	ReservedReplicaCount         *metric.Counter
-	LeaderRangeCount             *metric.Gauge
-	ReplicatedRangeCount         *metric.Gauge
-	ReplicationPendingRangeCount *metric.Gauge
-	AvailableRangeCount          *metric.Gauge
+	// Replica metrics.
+	ReplicaCount                  *metric.Counter // Does not include reserved replicas.
+	ReservedReplicaCount          *metric.Counter
+	RaftLeaderCount               *metric.Gauge
+	RaftLeaderNotLeaseHolderCount *metric.Gauge
+	LeaseHolderCount              *metric.Gauge
 
-	// Lease data metrics.
+	// Range metrics.
+	AvailableRangeCount *metric.Gauge
+
+	// Replication metrics.
+	ReplicaAllocatorNoopCount       *metric.Gauge
+	ReplicaAllocatorRemoveCount     *metric.Gauge
+	ReplicaAllocatorAddCount        *metric.Gauge
+	ReplicaAllocatorRemoveDeadCount *metric.Gauge
+
+	// Lease request metrics.
 	LeaseRequestSuccessCount *metric.Counter
 	LeaseRequestErrorCount   *metric.Counter
 
@@ -209,6 +221,7 @@ type StoreMetrics struct {
 	RangeSnapshotsPreemptiveApplied *metric.Counter
 
 	// Raft processing metrics.
+	RaftTicks                *metric.Counter
 	RaftSelectDurationNanos  *metric.Counter
 	RaftWorkingDurationNanos *metric.Counter
 	RaftTickingDurationNanos *metric.Counter
@@ -231,13 +244,7 @@ type StoreMetrics struct {
 	// TODO(arjun): eliminate this duplication.
 	raftRcvdMessages map[raftpb.MessageType]*metric.Counter
 
-	RaftTicks           *metric.Counter
 	RaftEnqueuedPending *metric.Gauge
-
-	// These three gauges need to be atomically updated, but the values are aggregated from individual replicas using the private int64s.
-	RaftLeaders                            *metric.Gauge
-	RangeLeaseHolders                      *metric.Gauge
-	RangeLeaseHoldersWithoutRaftLeadership *metric.Gauge
 
 	// Stats for efficient merges.
 	mu struct {
@@ -249,31 +256,45 @@ type StoreMetrics struct {
 func newStoreMetrics() *StoreMetrics {
 	storeRegistry := metric.NewRegistry()
 	sm := &StoreMetrics{
-		registry:                     storeRegistry,
-		ReplicaCount:                 metric.NewCounter(metaReplicaCount),
-		ReservedReplicaCount:         metric.NewCounter(metaReservedReplicaCount),
-		LeaderRangeCount:             metric.NewGauge(metaLeaderRangeCount),
-		ReplicatedRangeCount:         metric.NewGauge(metaReplicatedRangeCount),
-		ReplicationPendingRangeCount: metric.NewGauge(metaReplicationPendingRangeCount),
-		AvailableRangeCount:          metric.NewGauge(metaAvailableRangeCount),
-		LeaseRequestSuccessCount:     metric.NewCounter(metaLeaseRequestSuccessCount),
-		LeaseRequestErrorCount:       metric.NewCounter(metaLeaseRequestErrorCount),
-		LiveBytes:                    metric.NewGauge(metaLiveBytes),
-		KeyBytes:                     metric.NewGauge(metaKeyBytes),
-		ValBytes:                     metric.NewGauge(metaValBytes),
-		IntentBytes:                  metric.NewGauge(metaIntentBytes),
-		LiveCount:                    metric.NewGauge(metaLiveCount),
-		KeyCount:                     metric.NewGauge(metaKeyCount),
-		ValCount:                     metric.NewGauge(metaValCount),
-		IntentCount:                  metric.NewGauge(metaIntentCount),
-		IntentAge:                    metric.NewGauge(metaIntentAge),
-		GcBytesAge:                   metric.NewGauge(metaGcBytesAge),
-		LastUpdateNanos:              metric.NewGauge(metaLastUpdateNanos),
-		Capacity:                     metric.NewGauge(metaCapacity),
-		Available:                    metric.NewGauge(metaAvailable),
-		Reserved:                     metric.NewCounter(metaReserved),
-		SysBytes:                     metric.NewGauge(metaSysBytes),
-		SysCount:                     metric.NewGauge(metaSysCount),
+		registry: storeRegistry,
+
+		// Replica metrics.
+		ReplicaCount:                  metric.NewCounter(metaReplicaCount),
+		ReservedReplicaCount:          metric.NewCounter(metaReservedReplicaCount),
+		RaftLeaderCount:               metric.NewGauge(metaRaftLeaderCount),
+		RaftLeaderNotLeaseHolderCount: metric.NewGauge(metaRaftLeaderNotLeaseHolderCount),
+		LeaseHolderCount:              metric.NewGauge(metaLeaseHolderCount),
+
+		// Range metrics.
+		AvailableRangeCount: metric.NewGauge(metaAvailableRangeCount),
+
+		// Replication metrics.
+		ReplicaAllocatorNoopCount:       metric.NewGauge(metaReplicaAllocatorNoopCount),
+		ReplicaAllocatorRemoveCount:     metric.NewGauge(metaReplicaAllocatorRemoveCount),
+		ReplicaAllocatorAddCount:        metric.NewGauge(metaReplicaAllocatorAddCount),
+		ReplicaAllocatorRemoveDeadCount: metric.NewGauge(metaReplicaAllocatorRemoveDeadCount),
+
+		// Lease request metrics.
+		LeaseRequestSuccessCount: metric.NewCounter(metaLeaseRequestSuccessCount),
+		LeaseRequestErrorCount:   metric.NewCounter(metaLeaseRequestErrorCount),
+
+		// Storage metrics.
+		LiveBytes:       metric.NewGauge(metaLiveBytes),
+		KeyBytes:        metric.NewGauge(metaKeyBytes),
+		ValBytes:        metric.NewGauge(metaValBytes),
+		IntentBytes:     metric.NewGauge(metaIntentBytes),
+		LiveCount:       metric.NewGauge(metaLiveCount),
+		KeyCount:        metric.NewGauge(metaKeyCount),
+		ValCount:        metric.NewGauge(metaValCount),
+		IntentCount:     metric.NewGauge(metaIntentCount),
+		IntentAge:       metric.NewGauge(metaIntentAge),
+		GcBytesAge:      metric.NewGauge(metaGcBytesAge),
+		LastUpdateNanos: metric.NewGauge(metaLastUpdateNanos),
+		Capacity:        metric.NewGauge(metaCapacity),
+		Available:       metric.NewGauge(metaAvailable),
+		Reserved:        metric.NewCounter(metaReserved),
+		SysBytes:        metric.NewGauge(metaSysBytes),
+		SysCount:        metric.NewGauge(metaSysCount),
 
 		// RocksDB metrics.
 		RdbBlockCacheHits:           metric.NewGauge(metaRdbBlockCacheHits),
@@ -299,6 +320,7 @@ func newStoreMetrics() *StoreMetrics {
 		RangeSnapshotsPreemptiveApplied: metric.NewCounter(metaRangeSnapshotsPreemptiveApplied),
 
 		// Raft processing metrics.
+		RaftTicks:                metric.NewCounter(metaRaftTicks),
 		RaftSelectDurationNanos:  metric.NewCounter(metaRaftSelectDurationNanos),
 		RaftWorkingDurationNanos: metric.NewCounter(metaRaftWorkingDurationNanos),
 		RaftTickingDurationNanos: metric.NewCounter(metaRaftTickingDurationNanos),
@@ -316,11 +338,7 @@ func newStoreMetrics() *StoreMetrics {
 		RaftRcvdMsgTimeoutNow:     metric.NewCounter(metaRaftRcvdTimeoutNow),
 		raftRcvdMessages:          make(map[raftpb.MessageType]*metric.Counter, len(raftpb.MessageType_name)),
 
-		RaftTicks:                              metric.NewCounter(metaRaftTicks),
-		RaftLeaders:                            metric.NewGauge(metaRaftLeaders),
-		RangeLeaseHolders:                      metric.NewGauge(metaRangeLeaseHolders),
-		RangeLeaseHoldersWithoutRaftLeadership: metric.NewGauge(metaRangeLeaseHoldersWithoutRaftLeadership),
-		RaftEnqueuedPending:                    metric.NewGauge(metaRaftEnqueuedPending),
+		RaftEnqueuedPending: metric.NewGauge(metaRaftEnqueuedPending),
 	}
 
 	sm.raftRcvdMessages[raftpb.MsgProp] = sm.RaftRcvdMsgProp
