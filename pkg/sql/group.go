@@ -333,7 +333,10 @@ func (n *groupNode) computeAggregates() error {
 	}
 
 	// Render the results.
-	n.values.rows = n.planner.NewRowContainer(n.values.Columns(), len(n.buckets))
+	n.values.rows = n.planner.NewRowContainer(
+		n.planner.session.TxnState.makeBoundAccount(),
+		n.values.Columns(), len(n.buckets),
+	)
 	for k := range n.buckets {
 		n.currentBucket = k
 
@@ -590,7 +593,7 @@ func (n *groupNode) newAggregateFuncHolder(
 		create:        create,
 		group:         n,
 		buckets:       make(map[string]parser.AggregateFunc),
-		bucketsMemAcc: n.planner.session.OpenAccount(),
+		bucketsMemAcc: n.planner.session.TxnState.OpenAccount(),
 	}
 	return res
 }
@@ -599,7 +602,7 @@ func (a *aggregateFuncHolder) close(s *Session) {
 	a.buckets = nil
 	a.seen = nil
 	a.group = nil
-	a.bucketsMemAcc.W(s).Close()
+	a.bucketsMemAcc.Wtxn(s).Close()
 }
 
 func (a *aggregateFuncHolder) add(s *Session, bucket []byte, d parser.Datum) error {
@@ -615,7 +618,7 @@ func (a *aggregateFuncHolder) add(s *Session, bucket []byte, d parser.Datum) err
 			// skip
 			return nil
 		}
-		if err := a.bucketsMemAcc.W(s).Grow(int64(len(encoded))); err != nil {
+		if err := a.bucketsMemAcc.Wtxn(s).Grow(int64(len(encoded))); err != nil {
 			return err
 		}
 		a.seen[string(encoded)] = struct{}{}

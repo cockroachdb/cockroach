@@ -71,6 +71,21 @@ func TestCacheFlagValue(t *testing.T) {
 	}
 }
 
+func TestSQLMemoryPoolFlagValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	f := startCmd.Flags()
+	args := []string{"--max-sql-memory", "100MB"}
+	if err := f.Parse(args); err != nil {
+		t.Fatal(err)
+	}
+
+	const expectedSQLMemSize = 100 * 1000 * 1000
+	if expectedSQLMemSize != serverCfg.SQLMemoryPoolSize {
+		t.Errorf("expected %d, but got %d", expectedSQLMemSize, serverCfg.SQLMemoryPoolSize)
+	}
+}
+
 func TestRaftTickIntervalFlagValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

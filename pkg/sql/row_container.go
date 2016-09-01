@@ -19,6 +19,7 @@ package sql
 import (
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
@@ -30,7 +31,6 @@ import (
 // TODO(knz): this does not currently track the amount of memory used
 // for the outer array of DTuple references.
 type RowContainer struct {
-	p       *planner
 	rows    []parser.DTuple
 	numCols int
 
@@ -43,10 +43,14 @@ type RowContainer struct {
 
 	// memAcc tracks the current memory consumption of this
 	// RowContainer.
-	memAcc WrappableMemoryAccount
+	memAcc mon.BoundAccount
 }
 
 // NewRowContainer allocates a new row container.
+//
+// The acc argument indicates where to register memory allocations by
+// this row container. Should probably be created by
+// Session.makeSessionBoundAccount() or Session.makeTxnBoundAccount().
 //
 // The rowCapacity argument indicates how many rows are to be
 // expected; it is used to pre-allocate the outer array of row
@@ -63,15 +67,16 @@ type RowContainer struct {
 // test properly.  The trade-off is that very large table schemas or
 // column selections could cause unchecked and potentially dangerous
 // memory growth.
-func (p *planner) NewRowContainer(h ResultColumns, rowCapacity int) *RowContainer {
+func (p *planner) NewRowContainer(
+	acc mon.BoundAccount, h ResultColumns, rowCapacity int,
+) *RowContainer {
 	nCols := len(h)
 
 	res := &RowContainer{
-		p:               p,
 		rows:            make([]parser.DTuple, 0, rowCapacity),
 		numCols:         nCols,
 		varSizedColumns: make([]int, 0, nCols),
-		memAcc:          p.session.OpenAccount(),
+		memAcc:          acc,
 	}
 
 	for i := 0; i < nCols; i++ {
@@ -91,7 +96,7 @@ func (p *planner) NewRowContainer(h ResultColumns, rowCapacity int) *RowContaine
 func (c *RowContainer) Close() {
 	c.rows = nil
 	c.varSizedColumns = nil
-	c.memAcc.W(c.p.session).Close()
+	c.memAcc.Close()
 }
 
 // rowSize computes the size of a single row.
@@ -104,9 +109,9 @@ func (c *RowContainer) rowSize(row parser.DTuple) int64 {
 }
 
 // AddRow attempts to insert a new row in the RowContainer.
-// Returns an error if the allocation was denied by the MemoryUsageMonitor.
+// Returns an error if the allocation was denied by the MemoryMonitor.
 func (c *RowContainer) AddRow(row parser.DTuple) error {
-	if err := c.memAcc.W(c.p.session).Grow(c.rowSize(row)); err != nil {
+	if err := c.memAcc.Grow(c.rowSize(row)); err != nil {
 		return err
 	}
 	c.rows = append(c.rows, row)
@@ -153,7 +158,7 @@ func (c *RowContainer) ResetLen(l int) {
 }
 
 // Replace substitutes one row for another. This does query the
-// MemoryUsageMonitor to determine whether the new row fits the
+// MemoryMonitor to determine whether the new row fits the
 // allowance.
 func (c *RowContainer) Replace(i int, newRow parser.DTuple) error {
 	newSz := c.rowSize(newRow)
@@ -162,7 +167,7 @@ func (c *RowContainer) Replace(i int, newRow parser.DTuple) error {
 		oldSz = c.rowSize(c.rows[i])
 	}
 	if newSz != oldSz {
-		if err := c.memAcc.W(c.p.session).ResizeItem(oldSz, newSz); err != nil {
+		if err := c.memAcc.ResizeItem(oldSz, newSz); err != nil {
 			return err
 		}
 	}

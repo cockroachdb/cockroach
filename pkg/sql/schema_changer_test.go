@@ -170,7 +170,8 @@ func TestSchemaChangeProcess(t *testing.T) {
 	var id = sqlbase.ID(keys.MaxReservedDescID + 2)
 	var node = roachpb.NodeID(2)
 	stopper := stop.NewStopper()
-	leaseMgr := csql.NewLeaseManager(&base.NodeIDContainer{}, *kvDB, hlc.NewClock(hlc.UnixNano), csql.LeaseManagerTestingKnobs{}, stopper)
+	leaseMgr := csql.NewLeaseManager(&base.NodeIDContainer{}, *kvDB, hlc.NewClock(hlc.UnixNano),
+		csql.LeaseManagerTestingKnobs{}, stopper, &csql.MemoryMetrics{})
 	defer stopper.Stop()
 	changer := csql.NewSchemaChangerForTesting(id, 0, node, *kvDB, leaseMgr)
 
