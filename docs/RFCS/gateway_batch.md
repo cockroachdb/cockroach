@@ -1,8 +1,10 @@
 - Feature Name: gateway_batch
 - Status: completed
 - Start Date: 2015-08-06
-- RFC PR: #1998, #2141, #2406
-- Cockroach Issue: #2130
+- RFC PR: [#1998](https://github.com/cockroachdb/cockroach/pull/1998),
+          [#2141](https://github.com/cockroachdb/cockroach/pull/2141),
+          [#2406](https://github.com/cockroachdb/cockroach/pull/2406)
+- Cockroach Issue: [#2130](https://github.com/cockroachdb/cockroach/issues/2130)
 
 # Summary
 

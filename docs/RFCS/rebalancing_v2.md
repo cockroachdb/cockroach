@@ -3,7 +3,7 @@
 - Start date: 2016-04-20
 - Last revised: 2016-05-03
 - Authors: Bram Gruneir & Cuong Do
-- RFC PR: #6484
+- RFC PR: [#6484](https://github.com/cockroachdb/cockroach/pull/6484)
 - Cockroach Issue:
 
 # Table of Contents
