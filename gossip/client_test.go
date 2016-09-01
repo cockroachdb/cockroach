@@ -334,7 +334,7 @@ func TestClientDisconnectRedundant(t *testing.T) {
 		// Check which of the clients is connected to the other.
 		ok1 := local.findClient(func(c *client) bool { return c.addr.String() == rAddr.String() }) != nil
 		ok2 := remote.findClient(func(c *client) bool { return c.addr.String() == lAddr.String() }) != nil
-		// We expect node 1 to disconnect; if both are still connected,
+		// We expect node 2 to disconnect; if both are still connected,
 		// it's possible that node 1 gossiped before node 2 connected, in
 		// which case we have to gossip from node 1 to trigger the
 		// disconnect redundant client code.
@@ -342,7 +342,7 @@ func TestClientDisconnectRedundant(t *testing.T) {
 			if err := local.AddInfo("local-key", nil, time.Second); err != nil {
 				t.Fatal(err)
 			}
-		} else if !ok1 && ok2 && verifyServerMaps(local, 1) && verifyServerMaps(remote, 0) {
+		} else if ok1 && !ok2 && verifyServerMaps(local, 0) && verifyServerMaps(remote, 1) {
 			return nil
 		}
 		return errors.New("local client to remote not yet closed as redundant")

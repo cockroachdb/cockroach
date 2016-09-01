@@ -12,8 +12,8 @@ import * as protos from  "../js/protos";
 import { Action, PayloadAction } from "../interfaces/action";
 import { queryTimeSeries } from "../util/api";
 
-type TSRequestMessage = cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
-type TSResponseMessage = cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
+type TSRequestMessage = Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
+type TSResponseMessage = Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
 
 export const REQUEST = "cockroachui/metrics/REQUEST";
 export const RECEIVE = "cockroachui/metrics/RECEIVE";

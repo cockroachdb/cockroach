@@ -11,7 +11,7 @@ import { refreshDatabases, refreshDatabaseDetails, KeyedCachedDataReducerState }
 import { SortSetting } from "../../components/sortabletable";
 import { SortedTable } from "../../components/sortedtable";
 
-type DatabaseDetailsResponseMessage = cockroach.server.serverpb.DatabaseDetailsResponseMessage;
+type DatabaseDetailsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.DatabaseDetailsResponseMessage;
 
 // Constant used to store sort settings in the redux UI store.
 const UI_DATABASES_SORT_SETTING_KEY = "databaseList/sort_setting";

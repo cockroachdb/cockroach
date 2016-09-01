@@ -508,6 +508,9 @@ type StoreContext struct {
 	// period) during which operations will trigger an asynchronous renewal of the
 	// lease.
 	rangeLeaseRenewalDuration time.Duration
+
+	// Locality is a description of the topography of the store.
+	Locality roachpb.Locality
 }
 
 // StoreTestingKnobs is a part of the context used to control parts of the system.
@@ -529,10 +532,12 @@ type StoreTestingKnobs struct {
 	// replica.TransferLease() encounters an in-progress lease extension.
 	// nextLeader is the replica that we're trying to transfer the lease to.
 	LeaseTransferBlockedOnExtensionEvent func(nextLeader roachpb.ReplicaDescriptor)
-	// DisableSplitQueue disables the split queue.
-	DisableSplitQueue bool
+	// DisableReplicaGCQueue disables the replication queue.
+	DisableReplicaGCQueue bool
 	// DisableReplicateQueue disables the replication queue.
 	DisableReplicateQueue bool
+	// DisableSplitQueue disables the split queue.
+	DisableSplitQueue bool
 	// DisableScanner disables the replica scanner.
 	DisableScanner bool
 	// DisableRefreshReasonTicks disables refreshing pending commands when a new
@@ -640,11 +645,14 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 		s.consistencyScanner.AddQueues(s.replicaConsistencyQueue)
 	}
 
-	if ctx.TestingKnobs.DisableSplitQueue {
-		s.setSplitQueueActive(false)
+	if ctx.TestingKnobs.DisableReplicaGCQueue {
+		s.setReplicaGCQueueActive(false)
 	}
 	if ctx.TestingKnobs.DisableReplicateQueue {
 		s.setReplicateQueueActive(false)
+	}
+	if ctx.TestingKnobs.DisableSplitQueue {
+		s.setSplitQueueActive(false)
 	}
 	if ctx.TestingKnobs.DisableScanner {
 		s.setScannerActive(false)
@@ -818,6 +826,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 				// the replica before shutting down. Destroy the replica now
 				// to avoid creating a new replica without a valid replica ID
 				// (which is necessary to have a non-nil raft group)
+				log.Infof(ctx, "eagerly destroying local data: %+v", desc)
 				return false, s.destroyReplicaData(&desc)
 			}
 			if !desc.IsInitialized() {
@@ -1838,6 +1847,7 @@ func (s *Store) Descriptor() (*roachpb.StoreDescriptor, error) {
 		Attrs:    s.Attrs(),
 		Node:     *s.nodeDesc,
 		Capacity: capacity,
+		Locality: s.ctx.Locality,
 	}, nil
 }
 
@@ -2557,8 +2567,8 @@ func sendSnapshot(
 	// unreplicated keys from the snapshot.
 	unreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(header.RangeDescriptor.RangeID)
 	var alloc bufalloc.ByteAllocator
-	// TODO(jordan) make this configurable.
-	batchSize := 50
+	// TODO(jordan) make this configurable. For now, 1MB.
+	const batchSize = 1 << 20
 	n := 0
 	var b engine.Batch
 	for ; snap.Iter.Valid(); snap.Iter.Next() {
@@ -2581,11 +2591,14 @@ func sendSnapshot(
 			return err
 		}
 
-		if n%batchSize == 0 {
+		if len(b.Repr()) >= batchSize {
 			if err := sendBatch(stream, b); err != nil {
 				return err
 			}
 			b = nil
+			// We no longer need the keys and values in the batch we just sent,
+			// so reset alloc and allow them to be garbage collected.
+			alloc = bufalloc.ByteAllocator{}
 		}
 	}
 	if b != nil {
@@ -2594,11 +2607,33 @@ func sendSnapshot(
 		}
 	}
 
-	if err := stream.Send(&SnapshotRequest{LogEntries: snap.LogEntries, Final: true}); err != nil {
+	rangeID := header.RangeDescriptor.RangeID
+
+	truncState, err := loadTruncatedState(stream.Context(), snap.EngineSnap, rangeID)
+	if err != nil {
+		return err
+	}
+	firstIndex := truncState.Index + 1
+
+	endIndex := snap.RaftSnap.Metadata.Index + 1
+	logEntries := make([][]byte, 0, endIndex-firstIndex)
+
+	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
+		bytes, err := kv.Value.GetBytes()
+		if err == nil {
+			logEntries = append(logEntries, bytes)
+		}
+		return false, err
+	}
+
+	if err := iterateEntries(stream.Context(), snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
+		return err
+	}
+	if err := stream.Send(&SnapshotRequest{LogEntries: logEntries, Final: true}); err != nil {
 		return err
 	}
 	log.Infof(stream.Context(), "streamed snapshot: kv pairs: %d, log entries: %d",
-		n, len(snap.LogEntries))
+		n, len(logEntries))
 
 	resp, err = stream.Recv()
 	if err != nil {

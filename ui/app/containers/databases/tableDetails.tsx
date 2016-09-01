@@ -11,8 +11,8 @@ import { setUISetting } from "../../redux/ui";
 import { refreshTableDetails, refreshTableStats, generateTableID } from "../../redux/apiReducers";
 import Visualization from "../../components/visualization";
 
-type TableDetailsResponseMessage = cockroach.server.serverpb.TableDetailsResponseMessage;
-type TableStatsResponseMessage = cockroach.server.serverpb.TableStatsResponseMessage;
+type TableDetailsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.TableDetailsResponseMessage;
+type TableStatsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.TableStatsResponseMessage;
 
 /******************************
  *   TABLE DETAILS MAIN COMPONENT

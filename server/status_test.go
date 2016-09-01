@@ -429,8 +429,8 @@ func TestRangesResponse(t *testing.T) {
 	for _, ri := range response.Ranges {
 		// Do some simple validation based on the fact that this is a
 		// single-node cluster.
-		if ri.RaftState != "StateLeader" && ri.RaftState != "StateDormant" {
-			t.Errorf("expected to be Raft leader or dormant, but was '%s'", ri.RaftState)
+		if ri.RaftState.State != "StateLeader" && ri.RaftState.State != "StateDormant" {
+			t.Errorf("expected to be Raft leader or dormant, but was '%s'", ri.RaftState.State)
 		}
 		expReplica := roachpb.ReplicaDescriptor{
 			NodeID:    1,

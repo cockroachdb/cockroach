@@ -18,7 +18,7 @@ syntax = "proto2";
 package cockroach.sql.sqlbase;
 option go_package = "sqlbase";
 
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 // UserPrivileges describes the list of privileges available for a given user.
 message UserPrivileges {

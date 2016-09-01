@@ -1,6 +1,6 @@
 import _ from "lodash";
 import * as React from "react";
-import * as ReactPaginate from "react-paginate";
+import ReactPaginate from "react-paginate";
 import { Link } from "react-router";
 import { connect } from "react-redux";
 
@@ -20,7 +20,7 @@ const RANGES_PER_PAGE = 100;
  * container.
  */
 interface RangesMainData {
-  state: CachedDataReducerState<cockroach.server.serverpb.RaftDebugResponse>;
+  state: CachedDataReducerState<Proto2TypeScript.cockroach.server.serverpb.RaftDebugResponse>;
 }
 
 /**
@@ -175,12 +175,16 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
         // Render each replica into a cell
         range.value.nodes.forEach((node) => {
           let nodeRange = node.range;
-          let replicaNodeIDs = nodeRange.state.state.desc.replicas.map((replica) => replica.node_id.toString());
+          let replicaLocations = nodeRange.state.state.desc.replicas.map(
+            (replica) => "(Node " + replica.node_id.toString() +
+                         " Store " + replica.store_id.toString() +
+                         " ReplicaID " + replica.replica_id.toString() + ")"
+          );
           let index = nodeIDIndex[node.node_id];
           let cell = <td key={index}>
-            {(this.state.showState) ? <div>State: {nodeRange.raft_state}</div> : ""}
+            {(this.state.showState) ? <div>State: {nodeRange.raft_state.state} ReplicaID={nodeRange.raft_state.getReplicaId().toString()} Term={nodeRange.raft_state.getHardState().getTerm().toString()} Lead={nodeRange.raft_state.getLead().toString()}</div> : ""}
             {(this.state.showReplicas) ? <div>
-              <div>Replica On: {replicaNodeIDs.join(", ")}</div>
+              <div>Replica On: {replicaLocations.join(", ")}</div>
               <div>Next Replica ID: {nodeRange.state.state.desc.next_replica_id}</div>
             </div> : ""}
             {(this.state.showPending) ? <div>Pending Command Count: {(nodeRange.state.num_pending || 0).toString()}</div> : ""}
@@ -240,7 +244,7 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
  */
 
 // Base selectors to extract data from redux state.
-const raftState = (state: AdminUIState): CachedDataReducerState<cockroach.server.serverpb.RaftDebugResponse> => state.cachedData.raft;
+const raftState = (state: AdminUIState): CachedDataReducerState<Proto2TypeScript.cockroach.server.serverpb.RaftDebugResponse> => state.cachedData.raft;
 
 // Connect the RangesMain class with our redux store.
 let rangesMainConnected = connect(

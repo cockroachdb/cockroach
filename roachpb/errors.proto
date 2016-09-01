@@ -21,7 +21,7 @@ option go_package = "roachpb";
 import "cockroach/roachpb/metadata.proto";
 import "cockroach/roachpb/data.proto";
 import "cockroach/util/hlc/timestamp.proto";
-import weak "gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 // Issue #1246. Commented out because
 // https://github.com/golang/protobuf/commit/d3d78384b82d449651d2435ed3

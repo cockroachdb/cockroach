@@ -401,7 +401,6 @@ func (e *Executor) Prepare(
 func (e *Executor) ExecuteStatements(
 	session *Session, stmts string, pinfo *parser.PlaceholderInfo,
 ) StatementResults {
-
 	session.planner.resetForBatch(e)
 	session.planner.semaCtx.Placeholders.Assign(pinfo)
 
@@ -414,7 +413,22 @@ func (e *Executor) ExecuteStatements(
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	return e.execRequest(session, stmts)
+	return e.execRequest(session, stmts, copyMsgNone)
+}
+
+// CopyData adds data to the COPY buffer and executes if there are enough rows.
+func (e *Executor) CopyData(session *Session, data string) StatementResults {
+	return e.execRequest(session, data, copyMsgData)
+}
+
+// CopyDone executes the buffered COPY data.
+func (e *Executor) CopyDone(session *Session) StatementResults {
+	return e.execRequest(session, "", copyMsgDone)
+}
+
+// CopyEnd ends the COPY mode. Any buffered data is discarded.
+func (session *Session) CopyEnd() {
+	session.planner.copyFrom = nil
 }
 
 // blockConfigUpdates blocks any gossip updates to the system config
@@ -449,11 +463,20 @@ func (e *Executor) waitForConfigUpdate() {
 // Args:
 //  txnState: State about about ongoing transaction (if any). The state will be
 //   updated.
-func (e *Executor) execRequest(session *Session, sql string) StatementResults {
+func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) StatementResults {
 	var res StatementResults
 	txnState := &session.TxnState
 	planMaker := &session.planner
-	stmts, err := planMaker.parser.Parse(sql, parser.Syntax(session.Syntax))
+	var stmts parser.StatementList
+	var err error
+
+	if session.planner.copyFrom != nil {
+		stmts, err = session.planner.ProcessCopyData(sql, copymsg)
+	} else if copymsg != copyMsgNone {
+		err = fmt.Errorf("unexpected copy command")
+	} else {
+		stmts, err = planMaker.parser.Parse(sql, parser.Syntax(session.Syntax))
+	}
 	if err != nil {
 		// A parse error occurred: we can't determine if there were multiple
 		// statements or only one, so just pretend there was one.
@@ -988,35 +1011,32 @@ func (e *Executor) execStmtInOpenTxn(
 		return Result{PGTag: s.StatementTag()}, nil
 	}
 
-	if txnState.tr != nil {
-		txnState.tr.LazyLog(stmt, true /* sensitive */)
-	}
+	session := planMaker.session
+	log.Event(session.context, stmt.String())
 
 	autoCommit := implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
 	result, err := e.execStmt(stmt, planMaker, autoCommit)
 	if err != nil {
 		if traceSQL {
-			log.Tracef(txnState.txn.Context, "ERROR: %v", err)
+			log.ErrEventf(txnState.txn.Context, "ERROR: %v", err)
 		}
-		if txnState.tr != nil {
-			txnState.tr.LazyPrintf("ERROR: %v", err)
-		}
+		log.ErrEventf(session.context, "ERROR: %v", err)
 		txnState.updateStateAndCleanupOnErr(err, e)
-		result = Result{Err: err}
-	} else if txnState.tr != nil {
-		tResult := &traceResult{tag: result.PGTag, count: -1}
-		switch result.Type {
-		case parser.RowsAffected:
-			tResult.count = result.RowsAffected
-		case parser.Rows:
-			tResult.count = len(result.Rows)
-		}
-		txnState.tr.LazyLog(tResult, false)
-		if traceSQL {
-			log.Tracef(txnState.txn.Context, "%s done", tResult)
-		}
+		return Result{Err: err}, err
 	}
-	return result, err
+
+	tResult := &traceResult{tag: result.PGTag, count: -1}
+	switch result.Type {
+	case parser.RowsAffected:
+		tResult.count = result.RowsAffected
+	case parser.Rows:
+		tResult.count = len(result.Rows)
+	}
+	if traceSQL {
+		log.Eventf(txnState.txn.Context, "%s done", tResult)
+	}
+	log.Event(session.context, tResult.String())
+	return result, nil
 }
 
 // Clean up after trying to execute a transactional statement while not in a SQL

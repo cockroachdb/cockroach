@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-set -eu
+set -euo pipefail
 
 image="cockroachdb/builder"
 
@@ -8,14 +8,14 @@ image="cockroachdb/builder"
 # variable named builderTag, splitting the line on double quotes (")
 # and taking the second component.
 version=$(awk -F\" '/builderTag *=/ {print $2}' \
-            $(dirname $0)/../acceptance/cluster/localcluster.go)
+            "$(dirname "${0}")"/../acceptance/cluster/localcluster.go)
 if [ -z "${version}" ]; then
   echo "unable to determine builder tag"
   exit 1
 fi
 
 function init() {
-  docker build --tag="${image}" "$(dirname $0)"
+  docker build --tag="${image}" "$(dirname "${0}")"
 }
 
 if [ "${1-}" = "pull" ]; then
@@ -57,7 +57,7 @@ if [ -t 0 ]; then
 fi
 
 # Absolute path to the toplevel cockroach directory.
-cockroach_toplevel="$(dirname $(cd $(dirname $0); pwd))"
+cockroach_toplevel="$(dirname "$(cd "$(dirname "${0}")"; pwd)")"
 
 # Make a fake passwd file for the invoking user.
 #

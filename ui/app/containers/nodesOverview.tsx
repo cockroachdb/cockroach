@@ -23,7 +23,7 @@ const UI_NODES_SORT_SETTING_KEY = "nodes/sort_setting";
 // The variable name must start with a capital letter or TSX will not recognize
 // it as a component.
 // tslint:disable-next-line:variable-name
-const NodeSortedTable = SortedTable as new () => SortedTable<cockroach.server.status.NodeStatus>;
+const NodeSortedTable = SortedTable as new () => SortedTable<Proto2TypeScript.cockroach.server.status.NodeStatus>;
 
 /**
  * NodesMainData are the data properties which should be passed to the NodesMain

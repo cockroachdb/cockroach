@@ -1,12 +1,12 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-set -eux
+set -euxo pipefail
 
 CIRCLE_NODE_INDEX="${CIRCLE_NODE_INDEX-0}"
 CIRCLE_NODE_TOTAL="${CIRCLE_NODE_TOTAL-1}"
 
 function is_shard() {
-  test $(($1 % $CIRCLE_NODE_TOTAL)) -eq $CIRCLE_NODE_INDEX
+  test $(($1 % CIRCLE_NODE_TOTAL)) -eq "$CIRCLE_NODE_INDEX"
 }
 
 function fetch_docker() {
@@ -15,7 +15,7 @@ function fetch_docker() {
   local tag="${3}"
   local name="${user}/${repo}"
   local ref="${name}:${tag}"
-  if ! docker images --format {{.Repository}}:{{.Tag}} | grep -q "${ref}"; then
+  if ! docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "${ref}"; then
     # If we have a saved image, load it.
     imgcache="${builder_dir}/${user}.${repo}.tar"
     if [[ -e "${imgcache}" ]]; then
@@ -23,7 +23,7 @@ function fetch_docker() {
     fi
 
     # If we still don't have the tag we want: pull it and save it.
-    if ! docker images --format {{.Repository}}:{{.Tag}} | grep -q "${ref}"; then
+    if ! docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "${ref}"; then
       time docker pull "${ref}"
       time docker save -o "${imgcache}" "${ref}"
     fi
@@ -110,12 +110,12 @@ mkdir -p "${builder_dir}"
 du -sh "${builder_dir}"
 ls -lah "${builder_dir}"
 
-fetch_docker "cockroachdb" "builder" $($(dirname $0)/builder.sh version)
+fetch_docker "cockroachdb" "builder" "$("$(dirname "${0}")"/builder.sh version)"
 
 if is_shard 0; then
   # See the comment in build/builder.sh about this awk line.
   postgresTestTag=$(awk -F\" '/postgresTestTag *=/ {print $2}' \
-                      $(dirname $0)/../acceptance/util_test.go)
+                      "$(dirname "${0}")"/../acceptance/util_test.go)
   if [ -z "${postgresTestTag}" ]; then
     echo "unable to determine postgres-test tag"
     exit 1
@@ -126,7 +126,7 @@ fi
 
 # Recursively invoke this script inside the builder docker container,
 # passing "docker" as the first argument.
-$(dirname $0)/builder.sh $0 docker
+"$(dirname "${0}")"/builder.sh "${0}" docker
 
 # According to
 # https://discuss.circleci.com/t/cache-save-restore-algorithm/759, the
@@ -168,18 +168,18 @@ if is_shard 0; then
   set +x
   start=$(date +%s)
   while :; do
-    if [ -e "${shard1_done}" -a -e "${shard2_done}" ]; then
+    if [ -e "${shard1_done}" ] && [ -e "${shard2_done}" ]; then
       break
     fi
     sleep 1
   done
-  echo "waited $(($(date +%s) - ${start})) secs"
+  echo "waited $(($(date +%s) - start)) secs"
 
   # Sync the go packages from the node which built the commands. We
   # have to do this as a pull instead of as a push because node 0 is
   # building an overlapping set of packages.
   if ! is_shard 2; then
-    node=$((2 % $CIRCLE_NODE_TOTAL))
+    node=$((2 % CIRCLE_NODE_TOTAL))
     dir="${gopath0}/pkg/docker_amd64"
     time rsync -au node${node}:"${dir}/" "${dir}"
   fi

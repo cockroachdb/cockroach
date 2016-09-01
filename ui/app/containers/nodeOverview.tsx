@@ -106,7 +106,7 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
  * across the different stores on the node (along with a total value for the
  * node itself).
  */
-function TableRow(props: { data: NodeStatus, title: string, valueFn: (s: cockroach.ProtoBufMap<string, number>) => React.ReactNode }) {
+function TableRow(props: { data: NodeStatus, title: string, valueFn: (s: Proto2TypeScript.ProtoBufMap<string, number>) => React.ReactNode }) {
   return <tr>
     <td className="title">{ props.title }</td>
     <td className="value">{ props.valueFn(props.data.metrics) }</td>
