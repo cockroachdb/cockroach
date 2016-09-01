@@ -1176,8 +1176,7 @@ func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 	return s.getReplicaLocked(rangeID)
 }
 
-// getReplicaLocked fetches a replica by RangeID. The store's lock must be held
-// in read or read/write mode.
+// getReplicaLocked fetches a replica by RangeID. The store's lock must be held.
 func (s *Store) getReplicaLocked(rangeID roachpb.RangeID) (*Replica, error) {
 	if rng, ok := s.mu.replicas[rangeID]; ok {
 		return rng, nil
@@ -1762,8 +1761,11 @@ func (s *Store) destroyReplicaData(desc *roachpb.RangeDescriptor) error {
 	return batch.Commit()
 }
 
-// processRangeDescriptorUpdate is called whenever a range's
-// descriptor is updated.
+// processRangeDescriptorUpdate should be called whenever a range's descriptor
+// is updated, to update the store's maps of its ranges to match the updated
+// descriptor. Since the latter update requires acquiring the store lock
+// (which cannot always safely be done by replicas), this function call should
+// be deferred until it is safe to acquire the store lock.
 func (s *Store) processRangeDescriptorUpdate(rng *Replica) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
