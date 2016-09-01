@@ -686,6 +686,17 @@ func ParseDDate(s string, loc *time.Location) (*DDate, error) {
 	return nil, makeParseError(s, TypeDate.Type(), nil)
 }
 
+// StrToDDate parses and returns the *DDate Datum value represented by the provided
+// string with the provided format, or an error if parsing is unsuccessful.
+func StrToDDate(s string, format string) (*DDate, error) {
+	ts, err := DoToTimestamp(s, format)
+	if err != nil {
+		return nil, makeParseError(s, TypeDate.Type(), err)
+	}
+	secs := time.Date(ts.year, time.Month(ts.mon), ts.mday, 0, 0, 0, 0, time.UTC).Unix()
+	return NewDDate(DDate(secs / secondsInDay)), nil
+}
+
 // ReturnType implements the TypedExpr interface.
 func (*DDate) ReturnType() Datum {
 	return TypeDate
@@ -898,6 +909,20 @@ func ParseDTimestampTZ(
 		return nil, err
 	}
 	return MakeDTimestampTZ(t, precision), nil
+}
+
+// StrToDTimestampTZ parses and returns the *DTimestampTZ Datum value represented by
+// the provided string with provided format in the provided location, or an error if parsing is unsuccessful.
+func StrToDTimestampTZ(s string, f string, loc *time.Location,
+) (*DTimestampTZ, error) {
+	tm, err := DoToTimestamp(s, f)
+	if err != nil {
+		return nil, err
+	}
+
+	t := time.Date(tm.year, time.Month(tm.mon), tm.mday, tm.hour, tm.min, tm.sec, 0, loc)
+	return MakeDTimestampTZ(time.Unix(t.Unix()+tm.nsec/int64(time.Second), tm.nsec%int64(time.Second)),
+		time.Nanosecond), nil
 }
 
 // ReturnType implements the TypedExpr interface.
