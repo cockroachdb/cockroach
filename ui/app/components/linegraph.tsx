@@ -94,38 +94,57 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   }
 
   drawChart() {
-    let metrics = this.metrics(this.props);
-    let axis = this.axis(this.props);
-    if (!axis) {
-      return;
+    // If the document is not visible (e.g. if the window is minimized) we don't
+    // attempt to redraw the chart. Redrawing the chart uses
+    // requestAnimationFrame, which isn't called when the tab is in the
+    // background, and is then apparently queued up and called en masse when the
+    // tab re-enters the foreground. This check prevents the issue in #8896
+    // where switching to a tab with the graphs page open that had been in the
+    // background caused the UI to run out of memory and either lag or crash.
+    // NOTE: This might not work on Android:
+    // http://caniuse.com/#feat=pagevisibility
+    if (!document.hidden) {
+      let metrics = this.metrics(this.props);
+      let axis = this.axis(this.props);
+      if (!axis) {
+        return;
+      }
+
+      this.chart.showLegend(_.isBoolean(this.props.legend) ? this.props.legend :
+        metrics.length > 1 && metrics.length <= MAX_LEGEND_SERIES);
+      let formattedData: any[] = [];
+
+      if (this.props.data) {
+        let processed = ProcessDataPoints(metrics, axis, this.props.data);
+        formattedData = processed.formattedData;
+        let {yAxisDomain, xAxisDomain } = processed;
+
+        this.chart.yDomain(yAxisDomain.domain());
+
+        // always set the tick values to the lowest axis value, the highest axis
+        // value, and one value in between
+        this.chart.yAxis.tickValues(yAxisDomain.ticks());
+        this.chart.xAxis.tickValues(xAxisDomain.ticks((n) => new Date(NanoToMilli(n))));
+      }
+
+      d3.select(this.svgEl)
+        .datum(formattedData)
+        .transition().duration(500)
+        .call(this.chart);
     }
-
-    this.chart.showLegend(_.isBoolean(this.props.legend) ? this.props.legend :
-      metrics.length > 1 && metrics.length <= MAX_LEGEND_SERIES);
-    let formattedData: any[] = [];
-
-    if (this.props.data)  {
-      let processed = ProcessDataPoints(metrics, axis, this.props.data);
-      formattedData = processed.formattedData;
-      let {yAxisDomain, xAxisDomain } = processed;
-
-      this.chart.yDomain(yAxisDomain.domain());
-
-      // always set the tick values to the lowest axis value, the highest axis
-      // value, and one value in between
-      this.chart.yAxis.tickValues(yAxisDomain.ticks());
-      this.chart.xAxis.tickValues(xAxisDomain.ticks((n) => new Date(NanoToMilli(n))));
-    }
-
-    d3.select(this.svgEl)
-      .datum(formattedData)
-      .transition().duration(500)
-      .call(this.chart);
   }
 
   componentDidMount() {
     this.initChart();
     this.drawChart();
+    // NOTE: This might not work on Android:
+    // http://caniuse.com/#feat=pagevisibility
+    // TODO (maxlang): Check if this element is visible based on scroll state.
+    document.addEventListener("visibilitychange", this.drawChart);
+  }
+
+  componentWillUnmount() {
+    document.removeEventListener("visibilitychange", this.drawChart);
   }
 
   componentDidUpdate() {
