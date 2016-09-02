@@ -2565,8 +2565,8 @@ func sendSnapshot(
 	// unreplicated keys from the snapshot.
 	unreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(header.RangeDescriptor.RangeID)
 	var alloc bufalloc.ByteAllocator
-	// TODO(jordan) make this configurable. For now, 1MB.
-	const batchSize = 1 << 20
+	// TODO(jordan) make this configurable.
+	batchSize := 50
 	n := 0
 	var b engine.Batch
 	for ; snap.Iter.Valid(); snap.Iter.Next() {
@@ -2589,14 +2589,11 @@ func sendSnapshot(
 			return err
 		}
 
-		if len(b.Repr()) >= batchSize {
+		if n%batchSize == 0 {
 			if err := sendBatch(stream, b); err != nil {
 				return err
 			}
 			b = nil
-			// We no longer need the keys and values in the batch we just sent,
-			// so reset alloc and allow them to be garbage collected.
-			alloc = bufalloc.ByteAllocator{}
 		}
 	}
 	if b != nil {
