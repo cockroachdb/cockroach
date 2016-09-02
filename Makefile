@@ -194,8 +194,11 @@ include .go-version
 
 ifneq ($(SKIP_BOOTSTRAP),1)
 
-GITHOOKS := $(subst githooks/,.git/hooks/,$(wildcard githooks/*))
-.git/hooks/%: githooks/%
+# If we're in a git worktree, the git hooks directory may not be in our root,
+# so we ask git for the location.
+GITHOOKSDIR := $(shell git rev-parse --git-path hooks)
+GITHOOKS := $(subst githooks/,$(GITHOOKSDIR)/,$(wildcard githooks/*))
+$(GITHOOKSDIR)/%: githooks/%
 	@echo installing $<
 	@rm -f $@
 	@mkdir -p $(dir $@)
