@@ -39,7 +39,7 @@ To see the actions expected to be performed by terraform, use `plan` instead of 
 #### Create a cockroach cluster with 3 nodes
 
 ```
-$ terraform apply --var=num_instances=3
+$ terraform apply --var=num_instances=\"3\"
 
 Outputs:
   example_block_writer =
@@ -101,7 +101,7 @@ $ go tool pprof <address:port>/debug/pprof/profile
 See `examples.tf` for sample examples and how to run them against the created cluster.
 The `block_writer` can be run against the newly-created cluster by running:
 ```
-$ terraform apply --var=num_instances=3 --var=example_block_writer_instances=1
+$ terraform apply --var=num_instances=\"3\" --var=example_block_writer_instances=\"1\"
 
 Outputs:
   example_block_writer = ec2-54-175-206-76.compute-1.amazonaws.com
@@ -111,7 +111,7 @@ Outputs:
 ## Destroy the cluster
 
 ```
-$ terraform destroy --var=num_instances=3
+$ terraform destroy --var=num_instances=\"3\"
 ```
 
 The destroy command requires confirmation.
