@@ -2458,6 +2458,41 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     ]
                                 },
                                 {
+                                    "name": "ServerWarning",
+                                    "fields": [
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "server",
+                                            "id": 1
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "string",
+                                            "name": "message",
+                                            "id": 2
+                                        }
+                                    ]
+                                },
+                                {
+                                    "name": "ServerWarningsRequest",
+                                    "fields": []
+                                },
+                                {
+                                    "name": "ServerWarningsResponse",
+                                    "fields": [
+                                        {
+                                            "rule": "repeated",
+                                            "type": "ServerWarning",
+                                            "name": "warnings",
+                                            "id": 1,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        }
+                                    ]
+                                },
+                                {
                                     "name": "DetailsRequest",
                                     "fields": [
                                         {
@@ -3109,6 +3144,13 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "options": {
                                                 "(google.api.http).post": "/_admin/v1/cluster/freeze",
                                                 "(google.api.http).body": "*"
+                                            }
+                                        },
+                                        "ServerWarnings": {
+                                            "request": "ServerWarningsRequest",
+                                            "response": "ServerWarningsResponse",
+                                            "options": {
+                                                "(google.api.http).get": "/_admin/v1/warnings"
                                             }
                                         }
                                     }

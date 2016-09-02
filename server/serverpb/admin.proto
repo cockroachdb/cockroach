@@ -354,6 +354,21 @@ message ClusterFreezeResponse {
   string message = 2;
 }
 
+// ServerWarning represents a warning that the user should be notified about.
+message ServerWarning {
+  string server = 1;
+  string message = 2;
+}
+
+// ServerWarningsRequest requests all server warnings.
+message ServerWarningsRequest{
+}
+
+// ServerWarningsResponse returns all server warnings.
+message ServerWarningsResponse{
+  repeated ServerWarning warnings = 1 [(gogoproto.nullable) = false];
+}
+
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
@@ -465,6 +480,13 @@ service Admin {
     option (google.api.http) = {
       post: "/_admin/v1/cluster/freeze"
       body: "*"
+    };
+  }
+
+  // ServerWarnings returns any warnings that need to be shown to the user.
+  rpc ServerWarnings(ServerWarningsRequest) returns (ServerWarningsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/warnings"
     };
   }
 }

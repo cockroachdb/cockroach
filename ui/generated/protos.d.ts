@@ -3041,6 +3041,9 @@ export interface serverpbBuilder {
 	HealthResponse: serverpb.HealthResponseBuilder;
 	ClusterFreezeRequest: serverpb.ClusterFreezeRequestBuilder;
 	ClusterFreezeResponse: serverpb.ClusterFreezeResponseBuilder;
+	ServerWarning: serverpb.ServerWarningBuilder;
+	ServerWarningsRequest: serverpb.ServerWarningsRequestBuilder;
+	ServerWarningsResponse: serverpb.ServerWarningsResponseBuilder;
 	DetailsRequest: serverpb.DetailsRequestBuilder;
 	DetailsResponse: serverpb.DetailsResponseBuilder;
 	NodesRequest: serverpb.NodesRequestBuilder;
@@ -4572,6 +4575,114 @@ export interface ClusterFreezeResponseBuilder {
 	decode(buffer: ArrayBuffer) : ClusterFreezeResponseMessage;
 	decode(buffer: ByteBuffer) : ClusterFreezeResponseMessage;
 	decode64(buffer: string) : ClusterFreezeResponseMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.cockroach.server.serverpb {
+
+	export interface ServerWarning {
+
+		
+
+server?: string;
+		
+
+getServer?() : string;
+		setServer?(server : string): void;
+		
+
+
+
+message?: string;
+		
+
+getMessage?() : string;
+		setMessage?(message : string): void;
+		
+
+
+
+}
+
+	export interface ServerWarningMessage extends ServerWarning {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ServerWarningBuilder {
+	new(data?: ServerWarning): ServerWarningMessage;
+	decode(buffer: ArrayBuffer) : ServerWarningMessage;
+	decode(buffer: ByteBuffer) : ServerWarningMessage;
+	decode64(buffer: string) : ServerWarningMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.cockroach.server.serverpb {
+
+	export interface ServerWarningsRequest {
+
+		
+
+}
+
+	export interface ServerWarningsRequestMessage extends ServerWarningsRequest {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ServerWarningsRequestBuilder {
+	new(data?: ServerWarningsRequest): ServerWarningsRequestMessage;
+	decode(buffer: ArrayBuffer) : ServerWarningsRequestMessage;
+	decode(buffer: ByteBuffer) : ServerWarningsRequestMessage;
+	decode64(buffer: string) : ServerWarningsRequestMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.cockroach.server.serverpb {
+
+	export interface ServerWarningsResponse {
+
+		
+
+warnings?: ServerWarning[];
+		
+
+getWarnings?() : ServerWarning[];
+		setWarnings?(warnings : ServerWarning[]): void;
+		
+
+
+
+}
+
+	export interface ServerWarningsResponseMessage extends ServerWarningsResponse {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ServerWarningsResponseBuilder {
+	new(data?: ServerWarningsResponse): ServerWarningsResponseMessage;
+	decode(buffer: ArrayBuffer) : ServerWarningsResponseMessage;
+	decode(buffer: ByteBuffer) : ServerWarningsResponseMessage;
+	decode64(buffer: string) : ServerWarningsResponseMessage;
 	
 }
 

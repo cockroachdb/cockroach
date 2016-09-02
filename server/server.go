@@ -290,12 +290,41 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		gw.RegisterService(s.grpc)
 	}
 
+	s.LogWarnings()
+
 	return s, nil
 }
 
 // Ctx returns the base context for the server.
 func (s *Server) Ctx() context.Context {
 	return s.ctx.Ctx
+}
+
+// Warnings returns all warnings that should seen by the user.
+func (s *Server) Warnings() []serverpb.ServerWarning {
+	return s.storePool.Warnings()
+}
+
+// warningLogInterval is the interval between logging warning messages.
+const warningLogInterval = 1 * time.Minute
+
+// LogWarnings launches a long running goroutine to log server warnings to the
+// console.
+func (s *Server) LogWarnings() {
+	ctx := s.Ctx()
+	go func() {
+		t := time.NewTicker(warningLogInterval)
+		for {
+			for _, warning := range s.Warnings() {
+				log.Warningf(ctx, "%s: %s", warning.Server, warning.Message)
+			}
+			select {
+			case <-t.C:
+			case <-s.stopper.ShouldStop():
+				return
+			}
+		}
+	}()
 }
 
 // grpcGatewayServer represents a grpc service with HTTP endpoints through GRPC

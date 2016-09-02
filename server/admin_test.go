@@ -894,3 +894,14 @@ func TestClusterFreeze(t *testing.T) {
 		}
 	}
 }
+
+func TestServerWarnings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+
+	var resp serverpb.ServerWarningsResponse
+	if err := getAdminJSONProto(s, "warnings", &resp); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -412,6 +413,35 @@ outer:
 		}
 	}
 	return deadReplicas
+}
+
+// Warnings returns all warnings that should be seen by the user.
+func (sp *StorePool) Warnings() []serverpb.ServerWarning {
+	var warnings []serverpb.ServerWarning
+	sl, _, _ := sp.getStoreList()
+	tiers := canonicalTierOrder(sl)
+	for _, store := range sl.stores {
+		equal := true
+		if len(tiers) != len(store.Locality.Tiers) {
+			equal = false
+		}
+		if equal {
+			for i, tier := range tiers {
+				stier := store.Locality.Tiers[i]
+				if tier.Key != stier.Key {
+					equal = false
+					break
+				}
+			}
+		}
+		if !equal {
+			warnings = append(warnings, serverpb.ServerWarning{
+				Server:  store.Node.Address.String(),
+				Message: fmt.Sprintf("--locality flag %s does not match canonical format %s", store.Locality.Tiers, tiers),
+			})
+		}
+	}
+	return warnings
 }
 
 // stat provides a running sample size and running stats.

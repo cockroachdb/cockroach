@@ -52,6 +52,9 @@ export type TableStatsResponseMessage = Proto2TypeScript.cockroach.server.server
 export type LogsRequestMessage = Proto2TypeScript.cockroach.server.serverpb.LogsRequestMessage;
 export type LogEntriesResponseMessage = Proto2TypeScript.cockroach.server.serverpb.LogEntriesResponseMessage;
 
+export type WarningsRequestMessage = Proto2TypeScript.cockroach.server.serverpb.ServerWarningsRequestMessage;
+export type WarningsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.ServerWarningsResponseMessage;
+
 // API constants
 
 export const API_PREFIX = "/_admin/v1";
@@ -191,4 +194,9 @@ export function getTableStats(req: TableStatsRequestMessage, timeout?: moment.Du
 // getLogs gets the logs for a specific node
 export function getLogs(req: LogsRequestMessage, timeout?: moment.Duration): Promise<LogEntriesResponseMessage> {
   return timeoutFetch(serverpb.LogEntriesResponse, `${STATUS_PREFIX}/logs/${req.node_id}`, null, timeout);
+}
+
+// getWarnings returns warning information.
+export function getWarnings(req: WarningsRequestMessage, timeout?: moment.Duration): Promise<WarningsResponseMessage> {
+  return timeoutFetch(serverpb.ServerWarningsResponse, `${API_PREFIX}/warnings`, null, timeout);
 }

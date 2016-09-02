@@ -1306,3 +1306,9 @@ func (s *adminServer) queryDescriptorIDPath(
 	}
 	return path, nil
 }
+
+func (s *adminServer) ServerWarnings(ctx context.Context, req *serverpb.ServerWarningsRequest) (*serverpb.ServerWarningsResponse, error) {
+	return &serverpb.ServerWarningsResponse{
+		Warnings: s.server.Warnings(),
+	}, nil
+}

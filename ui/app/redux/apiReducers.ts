@@ -37,6 +37,9 @@ export const refreshVersion = versionReducerObj.refresh;
 const databasesReducerObj = new CachedDataReducer(api.getDatabaseList, "databases");
 export const refreshDatabases = databasesReducerObj.refresh;
 
+const warningsReducerObj = new CachedDataReducer(api.getWarnings, "warnings");
+export const refreshWarnings = warningsReducerObj.refresh;
+
 export const databaseRequestToID = (req: api.DatabaseDetailsRequestMessage): string => req.database;
 
 const databaseDetailsReducerObj = new KeyedCachedDataReducer(api.getDatabaseDetails, "databaseDetails", databaseRequestToID);
@@ -71,6 +74,7 @@ export interface APIReducersState {
   tableDetails: KeyedCachedDataReducerState<api.TableDetailsResponseMessage>;
   tableStats: KeyedCachedDataReducerState<api.TableStatsResponseMessage>;
   logs: CachedDataReducerState<api.LogEntriesResponseMessage>;
+  warnings: CachedDataReducerState<api.WarningsResponseMessage>;
 }
 
 export default combineReducers<APIReducersState>({
@@ -85,6 +89,7 @@ export default combineReducers<APIReducersState>({
   [tableDetailsReducerObj.actionNamespace]: tableDetailsReducerObj.reducer,
   [tableStatsReducerObj.actionNamespace]: tableStatsReducerObj.reducer,
   [logsReducerObj.actionNamespace]: logsReducerObj.reducer,
+  [warningsReducerObj.actionNamespace]: warningsReducerObj.reducer,
 });
 
 export {CachedDataReducerState, KeyedCachedDataReducerState};

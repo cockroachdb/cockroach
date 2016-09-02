@@ -549,3 +549,13 @@ func TestStorePoolReserve(t *testing.T) {
 		}
 	}
 }
+
+func TestStorePoolWarnings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper, _, _, sp := createTestStorePool(TestTimeUntilStoreDeadOff)
+	defer stopper.Stop()
+
+	if out := sp.Warnings(); out != nil {
+		t.Errorf("sp.Warnings() = %+v; not nil", out)
+	}
+}
