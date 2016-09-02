@@ -89,7 +89,7 @@ var nodesColumnHeaders = []string{
 	"system_bytes",
 	"replicas_leaders",
 	"replicas_leaseholders",
-	"ranges_availalbe",
+	"ranges_available",
 }
 
 var statusNodeCmd = &cobra.Command{
