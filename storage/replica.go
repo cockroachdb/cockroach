@@ -498,15 +498,15 @@ func (r *Replica) String() string {
 
 // Destroy clears pending command queue by sending each pending
 // command an error and cleans up all data associated with this range.
-func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor) error {
+func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor, destroyData bool) error {
 	desc := r.Desc()
 	if repDesc, ok := desc.GetReplicaDescriptor(r.store.StoreID()); ok && repDesc.ReplicaID >= origDesc.NextReplicaID {
 		return errors.Errorf("cannot destroy replica %s; replica ID has changed (%s >= %s)",
 			r, repDesc.ReplicaID, origDesc.NextReplicaID)
 	}
 
-	// Clear the pending command queue.
 	r.mu.Lock()
+	// Clear the pending command queue.
 	for _, p := range r.mu.pendingCmds {
 		p.done <- roachpb.ResponseWithError{
 			Reply: &roachpb.BatchResponse{},
@@ -520,6 +520,9 @@ func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor) error {
 		r.mu.replicaID, r.RangeID)
 	r.mu.Unlock()
 
+	if !destroyData {
+		return nil
+	}
 	return r.store.destroyReplicaData(desc)
 }
 
