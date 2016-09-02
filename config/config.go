@@ -82,6 +82,9 @@ func (c Constraint) String() string {
 
 // FromString populates the constraint from the constraint shorthand notation.
 func (c *Constraint) FromString(short string) error {
+	if len(short) == 0 {
+		return errors.Errorf("constraint needs to be in the form \"(key=)value\", not %q", short)
+	}
 	switch short[0] {
 	case '+':
 		c.Type = Constraint_REQUIRED

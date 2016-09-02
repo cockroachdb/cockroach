@@ -427,3 +427,66 @@ constraints: [foo, +duck=foo, -duck=foo]
 		t.Errorf("yaml.Unmarshal(%q) = %+v; not %+v", body, unmarshaled, original)
 	}
 }
+
+func TestConstraintFromString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		short    string
+		expected config.Constraint
+		err      string
+	}{
+		{
+			short:    "",
+			expected: config.Constraint{},
+			err:      "constraint needs to be in the form",
+		},
+		{
+			short:    "a=b=c",
+			expected: config.Constraint{},
+			err:      "constraint needs to be in the form",
+		},
+		{
+			short:    "+foo",
+			expected: config.Constraint{Type: config.Constraint_REQUIRED, Value: "foo"},
+		},
+		{
+			short:    "-foo",
+			expected: config.Constraint{Type: config.Constraint_PROHIBITED, Value: "foo"},
+		},
+		{
+			short:    "foo",
+			expected: config.Constraint{Type: config.Constraint_POSITIVE, Value: "foo"},
+		},
+		{
+			short:    "+bar=foo",
+			expected: config.Constraint{Type: config.Constraint_REQUIRED, Key: "bar", Value: "foo"},
+		},
+		{
+			short:    "-bar=foo",
+			expected: config.Constraint{Type: config.Constraint_PROHIBITED, Key: "bar", Value: "foo"},
+		},
+		{
+			short:    "bar=foo",
+			expected: config.Constraint{Type: config.Constraint_POSITIVE, Key: "bar", Value: "foo"},
+		},
+	}
+	for i, tc := range testCases {
+		var c config.Constraint
+		err := c.FromString(tc.short)
+		if len(tc.err) > 0 {
+			if !testutils.IsError(err, tc.err) {
+				t.Errorf("%d: expected err %q, not %q", i, tc.err, err)
+			}
+			continue
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		if c != tc.expected {
+			t.Errorf("%d: c.FromString(%+v) = %+v; not %+v", i, tc.short, c, tc.expected)
+		}
+		if short := c.String(); short != tc.short {
+			t.Errorf("%d: %+v.String() = %+v; not %+v", i, c, short, tc.short)
+		}
+	}
+}
