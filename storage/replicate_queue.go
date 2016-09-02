@@ -109,8 +109,10 @@ func (rq *replicateQueue) shouldQueue(
 	if lease, _ := repl.getLease(); lease != nil {
 		leaseStoreID = lease.Replica.StoreID
 	}
-	target := rq.allocator.RebalanceTarget(
-		zone.Constraints, desc.Replicas, leaseStoreID)
+	target, err := rq.allocator.RebalanceTarget(zone.Constraints, desc.Replicas, leaseStoreID)
+	if err != nil {
+		return false, 0
+	}
 	return target != nil, 0
 }
 
@@ -140,7 +142,7 @@ func (rq *replicateQueue) process(
 	switch action {
 	case AllocatorAdd:
 		log.Trace(ctx, "adding a new replica")
-		newStore, err := rq.allocator.AllocateTarget(zone.Constraints, desc.Replicas, true)
+		newStore, err := rq.allocator.AllocateTarget(zone.Constraints, desc.Replicas)
 		if err != nil {
 			return err
 		}
@@ -157,7 +159,7 @@ func (rq *replicateQueue) process(
 		log.Trace(ctx, "removing a replica")
 		// We require the lease in order to process replicas, so
 		// repl.store.StoreID() corresponds to the lease-holder's store ID.
-		removeReplica, err := rq.allocator.RemoveTarget(desc.Replicas, repl.store.StoreID())
+		removeReplica, err := rq.allocator.RemoveTarget(zone.Constraints, desc.Replicas, repl.store.StoreID())
 		if err != nil {
 			return err
 		}
@@ -189,13 +191,13 @@ func (rq *replicateQueue) process(
 		//
 		// We require the lease in order to process replicas, so
 		// repl.store.StoreID() corresponds to the lease-holder's store ID.
-		rebalanceStore := rq.allocator.RebalanceTarget(
+		rebalanceStore, err := rq.allocator.RebalanceTarget(
 			zone.Constraints, desc.Replicas, repl.store.StoreID())
-		if rebalanceStore == nil {
+		if rebalanceStore == nil || err != nil {
 			log.VTracef(1, ctx, "%s: no suitable rebalance target", repl)
 			// No action was necessary and no rebalance target was found. Return
 			// without re-queuing this replica.
-			return nil
+			return err
 		}
 		rebalanceReplica := roachpb.ReplicaDescriptor{
 			NodeID:  rebalanceStore.Node.NodeID,
