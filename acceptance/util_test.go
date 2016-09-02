@@ -228,7 +228,7 @@ func farmer(t *testing.T, prefix string) *terrafarm.Farmer {
 		Cwd:         *flagCwd,
 		LogDir:      logDir,
 		KeyName:     *flagKeyName,
-		Stores:      stores,
+		Stores:      strconv.Quote(stores),
 		Prefix:      name,
 		StateFile:   name + ".tfstate",
 		AddVars:     terraformVars,
