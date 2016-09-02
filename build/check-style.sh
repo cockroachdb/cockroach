@@ -45,7 +45,9 @@ TestMissingLeakTest() {
 }
 
 TestMisspell() {
-  ! git ls-files | xargs misspell | read
+  misspellings=$(git ls-files | xargs misspell)
+  echo "${misspellings}"
+  [[ -z "${misspellings}" ]]
 }
 
 TestTabsInShellScripts() {
@@ -129,7 +131,9 @@ TestGofmtSimplify() {
 }
 
 TestGoimports() {
-  ! goimports -l . | read
+  badimports=$(goimports -l .)
+  echo "${badimports}"
+  [[ -z "${badimports}" ]]
 }
 
 TestUnconvert() {
