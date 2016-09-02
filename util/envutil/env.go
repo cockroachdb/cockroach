@@ -97,7 +97,7 @@ func ClearEnvCache() {
 
 // GetEnvReport dumps all configuration variables that may have been
 // used and their value.
-func GetEnvReport() string {
+func GetEnvReport(presentOnly bool) string {
 	envVarRegistry.mu.Lock()
 	defer envVarRegistry.mu.Unlock()
 
@@ -105,7 +105,7 @@ func GetEnvReport() string {
 	for k, v := range envVarRegistry.cache {
 		if v.present {
 			fmt.Fprintf(&b, "%s = %s # %s\n", k, v.value, v.consumer)
-		} else {
+		} else if !presentOnly {
 			fmt.Fprintf(&b, "# %s is not set (read from %s)\n", k, v.consumer)
 		}
 	}
