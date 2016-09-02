@@ -92,7 +92,7 @@ func (f *Farmer) NumNodes() int {
 func (f *Farmer) Add(nodes int) error {
 	nodes += f.NumNodes()
 	args := []string{
-		fmt.Sprintf("-var=num_instances=%d", nodes),
+		fmt.Sprintf("-var=num_instances=\"%d\"", nodes),
 		fmt.Sprintf("-var=stores=%s", f.Stores),
 	}
 
