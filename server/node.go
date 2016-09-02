@@ -63,6 +63,9 @@ const (
 	// publishStatusInterval is the interval for publishing periodic statistics
 	// from stores to the internal event feed.
 	publishStatusInterval = 10 * time.Second
+
+	// FirstNodeID is the node ID of the first node in a new cluster.
+	FirstNodeID = 1
 )
 
 // Metric names.
@@ -199,13 +202,13 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics kv.TxnMetrics) (uuid.U
 	for i, eng := range engines {
 		sIdent := roachpb.StoreIdent{
 			ClusterID: clusterID,
-			NodeID:    1,
+			NodeID:    FirstNodeID,
 			StoreID:   roachpb.StoreID(i + 1),
 		}
 
 		// The bootstrapping store will not connect to other nodes so its
 		// StoreConfig doesn't really matter.
-		s := storage.NewStore(ctx, eng, &roachpb.NodeDescriptor{NodeID: 1})
+		s := storage.NewStore(ctx, eng, &roachpb.NodeDescriptor{NodeID: FirstNodeID})
 
 		// Verify the store isn't already part of a cluster.
 		if s.Ident.ClusterID != *uuid.EmptyUUID {
