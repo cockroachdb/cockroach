@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -44,29 +45,29 @@ var (
 func TestRandomSyntaxGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const rootStmt = "target_list"
+	const rootStmt = "stmt"
 
-	testRandomSyntax(t, func(db *gosql.DB, r *rsg.RSG) {
+	testRandomSyntax(t, nil, func(db *gosql.DB, r *rsg.RSG) bool {
 		s := r.Generate(rootStmt, 20)
 		if strings.HasPrefix(s, "REVOKE") || strings.HasPrefix(s, "GRANT") {
-			return
+			return false
 		}
 		_, _ = db.Exec(`ROLLBACK`)
 		_, _ = db.Exec(`CREATE DATABASE IF NOT EXISTS name; SET DATABASE name;`)
-		_, _ = db.Exec(s)
+		_, err := db.Exec(s)
+		return err == nil
 	})
 }
 
 func TestRandomSyntaxSelect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const rootStmt = "stmt"
+	const rootStmt = "target_list"
 
-	testRandomSyntax(t, func(db *gosql.DB, r *rsg.RSG) {
-		if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS ident; CREATE TABLE IF NOT EXISTS ident.ident (ident decimal);`); err != nil {
-			panic(err)
-		}
-
+	testRandomSyntax(t, func(db *gosql.DB) error {
+		_, err := db.Exec(`CREATE DATABASE IF NOT EXISTS ident; CREATE TABLE IF NOT EXISTS ident.ident (ident decimal);`)
+		return err
+	}, func(db *gosql.DB, r *rsg.RSG) bool {
 		targets := r.Generate(rootStmt, 30)
 		var where, from string
 		// Only generate complex clauses half the time.
@@ -79,7 +80,8 @@ func TestRandomSyntaxSelect(t *testing.T) {
 		s := fmt.Sprintf("SELECT %s %s %s", targets, from, where)
 		_, _ = db.Exec(`ROLLBACK`)
 		_, _ = db.Exec(`SET DATABASE = ident`)
-		_, _ = db.Exec(s)
+		_, err := db.Exec(s)
+		return err == nil
 	})
 }
 
@@ -91,7 +93,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 		names = append(names, b)
 	}
 
-	testRandomSyntax(t, func(db *gosql.DB, r *rsg.RSG) {
+	testRandomSyntax(t, nil, func(db *gosql.DB, r *rsg.RSG) bool {
 		name := names[r.Intn(len(names))]
 		variations := parser.Builtins[name]
 		fn := variations[r.Intn(len(variations))]
@@ -120,17 +122,18 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				args = append(args, fmt.Sprint(v))
 			}
 		default:
-			return
+			return false
 		}
 		s := fmt.Sprintf("SELECT %s(%s)", name, strings.Join(args, ", "))
 		_, _ = db.Exec("ROLLBACK")
 		funcdone := make(chan bool, 1)
 		go func() {
-			_, _ = db.Exec(s)
-			funcdone <- true
+			_, err := db.Exec(s)
+			funcdone <- err == nil
 		}()
 		select {
-		case <-funcdone:
+		case success := <-funcdone:
+			return success
 		case <-time.After(time.Second * 5):
 			panic(fmt.Errorf("func exec timeout: %s", s))
 		}
@@ -142,15 +145,17 @@ func TestRandomSyntaxFuncCommon(t *testing.T) {
 
 	const rootStmt = "func_expr_common_subexpr"
 
-	testRandomSyntax(t, func(db *gosql.DB, r *rsg.RSG) {
+	testRandomSyntax(t, nil, func(db *gosql.DB, r *rsg.RSG) bool {
 		expr := r.Generate(rootStmt, 30)
 		s := fmt.Sprintf("SELECT %s", expr)
 		_, _ = db.Exec(`ROLLBACK`)
-		_, _ = db.Exec(s)
+		_, err := db.Exec(s)
+		return err == nil
 	})
 }
 
-func testRandomSyntax(t *testing.T, f func(db *gosql.DB, r *rsg.RSG)) {
+// testRandomSyntax performs all of the RSG setup and teardown for common random syntax testing operations. It takes f, a closure where the random expression should be generated and executed. It returns a boolean indicating if the statement executed successfully. This is used to verify that at least 1 success occurs (otherwise it is likely a bad test).
+func testRandomSyntax(t *testing.T, setup func(db *gosql.DB) error, f func(db *gosql.DB, r *rsg.RSG) (success bool)) {
 	if *flagRSGTime == 0 {
 		t.Skip("enable with '-rsg <duration>'")
 	}
@@ -158,6 +163,13 @@ func testRandomSyntax(t *testing.T, f func(db *gosql.DB, r *rsg.RSG)) {
 	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
+
+	if setup != nil {
+		err := setup(db)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	y, err := ioutil.ReadFile(filepath.Join("parser", "sql.y"))
 	if err != nil {
@@ -170,6 +182,8 @@ func testRandomSyntax(t *testing.T, f func(db *gosql.DB, r *rsg.RSG)) {
 	// Broadcast channel for all workers.
 	done := make(chan bool)
 	var wg sync.WaitGroup
+	var lock syncutil.Mutex
+	var total, success int
 	worker := func() {
 		defer wg.Done()
 		for {
@@ -178,7 +192,13 @@ func testRandomSyntax(t *testing.T, f func(db *gosql.DB, r *rsg.RSG)) {
 				return
 			default:
 			}
-			f(db, r)
+			s := f(db, r)
+			lock.Lock()
+			total++
+			if s {
+				success++
+			}
+			lock.Unlock()
 		}
 	}
 	for i := 0; i < *flagRSGGoRoutines; i++ {
@@ -188,4 +208,8 @@ func testRandomSyntax(t *testing.T, f func(db *gosql.DB, r *rsg.RSG)) {
 	time.Sleep(*flagRSGTime)
 	close(done)
 	wg.Wait()
+	t.Logf("%d executions, %d successful", total, success)
+	if success == 0 {
+		t.Fatal("0 successful executions")
+	}
 }

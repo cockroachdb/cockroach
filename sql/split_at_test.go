@@ -138,7 +138,7 @@ func TestSplitAt(t *testing.T) {
 			}
 		} else {
 			// Successful split, verify it happened.
-			rng, err := serverutils.LookupRange(s.DistSender(), key)
+			rng, err := s.DistSender().LookupRange(key)
 			if err != nil {
 				t.Fatal(err)
 			}
