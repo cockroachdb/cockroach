@@ -29,6 +29,11 @@ import "cockroach/sql/sqlbase/encoded_datum.proto";
 import "cockroach/sql/distsql/data.proto";
 import "gogoproto/gogo.proto";
 
+// NoopCoreSpec indicates a "no-op" processor core. This is used when only a
+// synchronizer is required, e.g. at the final endpoint.
+message NoopCoreSpec {
+}
+
 message TableReaderSpan {
   // TODO(radu): the dist_sql APIs should be agnostic to how we map tables to
   // KVs. The span should be described as starting and ending lists of values
@@ -91,8 +96,9 @@ message JoinReaderSpec {
 message ProcessorCoreUnion {
   option (gogoproto.onlyone) = true;
 
-  optional TableReaderSpec tableReader = 1;
-  optional JoinReaderSpec joinReader = 2;
+  optional NoopCoreSpec noop = 1;
+  optional TableReaderSpec tableReader = 2;
+  optional JoinReaderSpec joinReader = 3;
   // TODO(radu): other "processor core" types will go here.
 }
 
