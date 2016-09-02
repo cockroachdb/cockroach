@@ -1545,7 +1545,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.mu.uninitReplicas[newDesc.RangeID]; ok {
+	if exRng, ok := s.mu.uninitReplicas[newDesc.RangeID]; ok {
 		// If we have an uninitialized replica of the new range, delete it
 		// to make way for the complete one created by the split. A live
 		// uninitialized raft group cannot be converted to an
@@ -1554,6 +1554,11 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 		// removed before we install the new range into s.replicas.
 		delete(s.mu.uninitReplicas, newDesc.RangeID)
 		delete(s.mu.replicas, newDesc.RangeID)
+		// Mark the existing replica as destroyed to prevent it from performing any
+		// additional raft operations.
+		if err := exRng.Destroy(*exRng.Desc(), false); err != nil {
+			log.Fatalf(exRng.ctx, "unable to destroy: %v", err)
+		}
 	}
 
 	// Replace the end key of the original range with the start key of
@@ -1724,7 +1729,7 @@ func (s *Store) RemoveReplica(rep *Replica, origDesc roachpb.RangeDescriptor, de
 // removeReplicaImpl is the implementation of RemoveReplica, which is
 // sometimes called directly when the necessary lock is already held.
 // It requires that s.processRaftMu is held and that s.mu is not held.
-func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor, destroy bool) error {
+func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor, destroyData bool) error {
 	desc := rep.Desc()
 	if repDesc, ok := desc.GetReplicaDescriptor(s.StoreID()); ok && repDesc.ReplicaID >= origDesc.NextReplicaID {
 		return errors.Errorf("cannot remove replica %s; replica ID has changed (%s >= %s)",
@@ -1739,6 +1744,7 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 
 	delete(s.mu.replicas, rep.RangeID)
 	delete(s.mu.replicaPlaceholders, rep.RangeID)
+	delete(s.mu.uninitReplicas, rep.RangeID)
 	if s.mu.replicasByKey.Delete(rep) == nil {
 		// This is a fatal error because returning at this point will
 		// leave the Store in an inconsistent state (we've already deleted
@@ -1756,16 +1762,10 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 	s.metrics.subtractMVCCStats(rep.GetMVCCStats())
 	s.metrics.ReplicaCount.Dec(1)
 
-	// TODO(bdarnell): This is fairly expensive to do under store.Mutex, but
-	// doing it outside the lock is tricky due to the risk that a replica gets
-	// recreated by an incoming raft message.
-	if destroy {
-		if err := rep.Destroy(origDesc); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	// TODO(bdarnell): Destroying the on-disk data is fairly expensive to do
+	// under store.Mutex, but doing it outside the lock is tricky due to the risk
+	// that a replica gets recreated by an incoming raft message.
+	return rep.Destroy(origDesc, destroyData)
 }
 
 // destroyReplicaData deletes all data associated with a replica, leaving a tombstone.
