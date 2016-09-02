@@ -12,15 +12,19 @@ Terraform stores the state of the cloud resources locally (in a file called
 For multi-user cooperation, please see [Terraform's documentation on remote state](https://terraform.io/docs/state/remote.html).
 
 ## One-time setup steps
-1. Have a [Google Cloud Platform](https://cloud.google.com/compute/) account
-2. [Download terraform](https://terraform.io/downloads.html), *version 0.6.7 or greater*, unzip, and add to your `PATH`.
+1. Get a `<username>@cockroachlabs.com` account.
+1. Ask one of the [admins](https://sites.google.com/a/cockroachlabs.com/cockroach-labs/external-services/google-cloud-setup) to setup a cockroach-<username> project for you so that you can start launching jobs using that project and bill them against the company.
+2. See the project on [Google Cloud Platform dashboard](https://console.cloud.google.com/home/dashboard).
+2. [Download terraform](https://terraform.io/downloads.html), *version 0.7.2 or greater*, unzip, and add to your `PATH`.
 3. [Create and download GCE credentials](https://developers.google.com/identity/protocols/application-default-credentials#howtheywork).
 4. Set your credentials in environment variables:
 ```
 $ export GOOGLE_CREDENTIALS="contents of json credentials file"
-$ export GOOGLE_PROJECT="my-google-project"
-5. Save your GCE key as `~/.ssh/google_compute_engine`, or adjust the `key_name` variable.
+$ export GOOGLE_PROJECT="cockroach-<username>"
 ```
+5. Create a new pair of ssh keys `ssh-keygen -t rsa -C "<username>@cockroachlabs.com"` for GCE with location `~/.ssh/google_compute_engine`, or use an existing pair and adjust the `key_name` variable described below.
+6. The ssh private key by default is encrypted. Decrypt the private key using: `openssl rsa -in ~/.ssh/google_compute_engine  -out ~/.ssh/google_compute_engine`.
+7. Add the contents of your public key `~/.ssh/google_compute_engine.pub` to GCE using the web UI `Compute Engine > Metadata > ssh-keys`.
 
 ## Variables
 
@@ -43,7 +47,7 @@ The following variables can be modified if necessary:
 #### Create a cockroach cluster with 3 nodes
 
 ```
-$ terraform apply --var=num_instances=3
+$ terraform apply --var=num_instances=\"3\"
 
 
 Outputs:
