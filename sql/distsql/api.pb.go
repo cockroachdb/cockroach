@@ -24,6 +24,7 @@
 		StreamData
 		StreamTrailer
 		StreamMessage
+		NoopCoreSpec
 		TableReaderSpan
 		TableReaderSpec
 		JoinReaderSpec

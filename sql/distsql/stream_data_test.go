@@ -105,3 +105,20 @@ func TestStreamEncodeDecode(t *testing.T) {
 		testRowStream(t, rng, rows, trailerErr)
 	}
 }
+
+func TestEmptyStreamEncodeDecode(t *testing.T) {
+	var se StreamEncoder
+	var sd StreamDecoder
+	msg := se.FormMessage(true /*final*/, nil /*error*/)
+	if err := sd.AddMessage(msg); err != nil {
+		t.Fatal(err)
+	}
+	if msg.Header == nil {
+		t.Errorf("no header in first message")
+	}
+	if row, err := sd.GetRow(nil); err != nil {
+		t.Fatal(err)
+	} else if row != nil {
+		t.Errorf("received bogus row %s", row)
+	}
+}

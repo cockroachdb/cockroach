@@ -96,8 +96,8 @@ func (se *StreamEncoder) FormMessage(final bool, trailerErr error) *StreamMessag
 	msg.Data.RawBytes = se.rowBuf
 	msg.Trailer = nil
 	if !se.firstMessageDone {
+		msg.Header = &se.msgHdr
 		if se.infos != nil {
-			msg.Header = &se.msgHdr
 			msg.Header.Info = se.infos
 		} else {
 			if !final {

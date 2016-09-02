@@ -183,6 +183,12 @@ func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (processor, 
 			return nil, err
 		}
 	}
+	if ps.Core.Noop != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newNoopProcessor(&f.FlowCtx, inputs[0], outputs[0]), nil
+	}
 	if ps.Core.TableReader != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
 			return nil, err
