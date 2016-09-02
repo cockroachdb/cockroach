@@ -2607,13 +2607,13 @@ func sendSnapshot(
 
 	rangeID := header.RangeDescriptor.RangeID
 
-	truncState, err := loadTruncatedState(stream.Context(), snap.EngineSnap, rangeID)
+	truncState, err := loadTruncatedState(stream.Context(), snap.Snap, rangeID)
 	if err != nil {
 		return err
 	}
 	firstIndex := truncState.Index + 1
 
-	endIndex := snap.RaftSnap.Metadata.Index + 1
+	endIndex := snap.Snapshot.Metadata.Index + 1
 	logEntries := make([][]byte, 0, endIndex-firstIndex)
 
 	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
@@ -2624,7 +2624,7 @@ func sendSnapshot(
 		return false, err
 	}
 
-	if err := iterateEntries(stream.Context(), snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
+	if err := iterateEntries(stream.Context(), snap.Snap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
 		return err
 	}
 	if err := stream.Send(&SnapshotRequest{LogEntries: logEntries, Final: true}); err != nil {

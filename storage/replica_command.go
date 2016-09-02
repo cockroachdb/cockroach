@@ -3001,7 +3001,7 @@ func (r *Replica) ChangeReplicas(
 			)
 		}
 
-		if err := r.setPendingSnapshotIndex(snap.RaftSnap.Metadata.Index); err != nil {
+		if err := r.setPendingSnapshotIndex(snap.Snapshot.Metadata.Index); err != nil {
 			return err
 		}
 
@@ -3015,8 +3015,8 @@ func (r *Replica) ChangeReplicas(
 					Type:     raftpb.MsgSnap,
 					To:       0, // special cased ReplicaID for preemptive snapshots
 					From:     uint64(fromRepDesc.ReplicaID),
-					Term:     snap.RaftSnap.Metadata.Term,
-					Snapshot: snap.RaftSnap,
+					Term:     snap.Snapshot.Metadata.Term,
+					Snapshot: snap.Snapshot,
 				},
 			},
 			// TODO(jordan) set this accurately
