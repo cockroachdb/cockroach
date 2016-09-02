@@ -668,7 +668,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 
 // String formats a store for debug output.
 func (s *Store) String() string {
-	return fmt.Sprintf("store=%d:%d", s.Ident.NodeID, s.Ident.StoreID)
+	return fmt.Sprintf("[n%d,s%d]", s.Ident.NodeID, s.Ident.StoreID)
 }
 
 // Ctx returns the base context for the store.

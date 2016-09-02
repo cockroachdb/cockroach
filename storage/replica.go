@@ -190,6 +190,9 @@ func (d *atomicRangeDesc) load() *roachpb.RangeDescriptor {
 // using a lock, the copy might be inconsistent.
 func (d *atomicRangeDesc) String() string {
 	inconsistentDesc := d.load()
+	if !inconsistentDesc.IsInitialized() {
+		return fmt.Sprintf("%d{-}", inconsistentDesc.RangeID)
+	}
 	return fmt.Sprintf("%d{%s-%s}",
 		inconsistentDesc.RangeID, inconsistentDesc.StartKey, inconsistentDesc.EndKey)
 }
@@ -490,7 +493,7 @@ func (r *Replica) newReplicaInner(
 // require a lock and its output may not be atomic with other ongoing work in
 // the replica. This is done to prevent deadlocks in logging sites.
 func (r *Replica) String() string {
-	return fmt.Sprintf("%s %s", r.store, &r.rangeDesc)
+	return fmt.Sprintf("[n%d,s%d,r%s]", r.store.Ident.NodeID, r.store.Ident.StoreID, &r.rangeDesc)
 }
 
 // Destroy clears pending command queue by sending each pending
