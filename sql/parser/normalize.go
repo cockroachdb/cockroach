@@ -316,6 +316,12 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 					break
 				}
 
+				newRightExpr, err := newBinExpr.Eval(v.ctx)
+				if err != nil {
+					v.err = err
+					return expr
+				}
+
 				if !exprCopied {
 					exprCopy := *expr
 					expr = &exprCopy
@@ -323,11 +329,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 				}
 
 				expr.Left = left.Left
-				expr.Right, v.err = newBinExpr.Eval(v.ctx)
-				if v.err != nil {
-					return expr
-				}
-
+				expr.Right = newRightExpr
 				expr.memoizeFn()
 				if !isVar(expr.Left) {
 					// Continue as long as the left side of the comparison is not a
@@ -368,6 +370,12 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 					break
 				}
 
+				newRightExpr, err := newBinExpr.Eval(v.ctx)
+				if err != nil {
+					v.err = err
+					return expr
+				}
+
 				if !exprCopied {
 					exprCopy := *expr
 					expr = &exprCopy
@@ -376,11 +384,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 
 				expr.Operator = op
 				expr.Left = left.Right
-				expr.Right, v.err = newBinExpr.Eval(v.ctx)
-				if v.err != nil {
-					return nil
-				}
-
+				expr.Right = newRightExpr
 				expr.memoizeFn()
 				if !isVar(expr.Left) {
 					// Continue as long as the left side of the comparison is not a
