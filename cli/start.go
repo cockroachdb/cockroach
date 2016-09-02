@@ -394,8 +394,26 @@ func runStart(_ *cobra.Command, args []string) error {
 	for i, spec := range serverCtx.Stores.Specs {
 		fmt.Fprintf(tw, "store[%d]:\t%s\n", i, spec)
 	}
-	for i, address := range serverCtx.JoinList {
-		fmt.Fprintf(tw, "join[%d]:\t%s\n", i, address)
+	var joinStr string
+	initialBoot := s.InitialBoot()
+	nodeID := s.NodeID()
+	if initialBoot {
+		if nodeID == server.FirstNodeID {
+			fmt.Fprintf(tw, "Initialized new cluster\n")
+			joinStr = "failed to join"
+		} else {
+			fmt.Fprintf(tw, "Joined existing cluster\n")
+			joinStr = "joined"
+		}
+	} else {
+		fmt.Fprintf(tw, "Restarted existing node\n")
+	}
+	fmt.Fprintf(tw, "clusterID:\t%s\n", s.ClusterID())
+	fmt.Fprintf(tw, "nodeID:\t%d\n", nodeID)
+	if joinStr != "" {
+		for i, address := range serverCtx.JoinList {
+			fmt.Fprintf(tw, "%s[%d]:\t%s\n", joinStr, i, address)
+		}
 	}
 	if err := tw.Flush(); err != nil {
 		return err
