@@ -31,7 +31,7 @@ var (
 	metaRaftLeaderCount               = metric.Metadata{Name: "replicas.leaders"}
 	metaRaftLeaderNotLeaseHolderCount = metric.Metadata{
 		Name: "replicas.leaders_not_leaseholders",
-		Help: "Total number of Replicas on this store that are Raft leaders but not Range lease holders.",
+		Help: "Total number of Replicas that are Raft leaders whose Range lease is held by another store.",
 	}
 	metaLeaseHolderCount = metric.Metadata{Name: "replicas.leaseholders"}
 
