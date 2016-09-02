@@ -1647,7 +1647,7 @@ func (r *Replica) isRaftLeaderLocked() bool {
 
 // handleRaftReady processes the Ready() messages on the replica if there are any. It takes a
 // non-nil IncomingSnapshot pointer to indicate that it is about to process a snapshot.
-func (r *Replica) handleRaftReady(inSnap *IncomingSnapshot) error {
+func (r *Replica) handleRaftReady(inSnap IncomingSnapshot) error {
 	ctx := r.ctx
 	var hasReady bool
 	var rd raft.Ready
@@ -1697,11 +1697,11 @@ func (r *Replica) handleRaftReady(inSnap *IncomingSnapshot) error {
 		if err != nil {
 			return errors.Wrap(err, "invalid snapshot id")
 		}
-		if inSnap == nil || *snapUUID != inSnap.SnapUUID {
+		if *snapUUID != inSnap.SnapUUID {
 			log.Fatalf(ctx, "programming error: a snapshot application was attempted outside of the streaming snapshot codepath")
 		}
 
-		if err := r.applySnapshot(ctx, *inSnap, rd.Snapshot, rd.HardState); err != nil {
+		if err := r.applySnapshot(ctx, inSnap, rd.Snapshot, rd.HardState); err != nil {
 			return err
 		}
 
