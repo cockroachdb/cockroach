@@ -432,6 +432,14 @@ func (r *Replica) withRaftGroup(f func(r *raft.RawNode) error) error {
 
 var _ client.Sender = &Replica{}
 
+func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
+	return &Replica{
+		RangeID:    rangeID,
+		store:      store,
+		abortCache: NewAbortCache(rangeID),
+	}
+}
+
 // NewReplica initializes the replica using the given metadata. If the
 // replica is initialized (i.e. desc contains more than a RangeID),
 // replicaID should be 0 and the replicaID will be discovered from the
@@ -439,12 +447,7 @@ var _ client.Sender = &Replica{}
 func NewReplica(
 	desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.ReplicaID,
 ) (*Replica, error) {
-	r := &Replica{
-		RangeID:    desc.RangeID,
-		store:      store,
-		abortCache: NewAbortCache(desc.RangeID),
-	}
-
+	r := newReplica(desc.RangeID, store)
 	if err := r.init(desc, store.Clock(), replicaID); err != nil {
 		return nil, err
 	}
@@ -461,7 +464,12 @@ func (r *Replica) init(
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.initLocked(desc, clock, replicaID)
+}
 
+func (r *Replica) initLocked(
+	desc *roachpb.RangeDescriptor, clock *hlc.Clock, replicaID roachpb.ReplicaID,
+) error {
 	if r.mu.state.Desc != nil && r.isInitializedLocked() {
 		log.Fatalf(r.store.Ctx(), "r%d: cannot reinitialize an initialized replica", desc.RangeID)
 	}
