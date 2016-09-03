@@ -1,0 +1,69 @@
+#! /usr/bin/env expect -f
+
+# We are sending vt100 terminal sequences below, so inform readline
+# accordingly.
+set env(TERM) vt100
+
+# Keep the history in a test location, so as to not override the
+# developer's own history file.
+set env(COCKROACH_SQL_CLI_HISTORY) ".crdb_test_history" 
+
+# Everything in this test should be fast. Don't be tolerant for long
+# waits.
+set timeout 1
+
+system "rm -f ~/.crdb_test_history"
+
+spawn ./cockroach sql
+
+expect root@		{} timeout {exit 1}
+
+send "select 1;\r"
+expect "1 row"		{} timeout {exit 1}
+expect root@ 		{} timeout {exit 1}
+
+# Test that last line can be recalled with arrow-up
+send "\033\[A"
+expect "select 1;"	{} timeout {exit 1}
+
+# Test that recalled last line can be executed
+send "\r"
+expect "1 row"		{} timeout {exit 1}
+expect root@ 		{} timeout {exit 1}
+
+# Test that we can recall a previous line with Ctrl+R
+send "foo;\r"
+expect "syntax error"	{} timeout {exit 1}
+expect root@   		{} timeout {exit 1}
+send "\022sel"
+expect "select 1;"	{} timeout {exit 1}
+
+# Test that recalled previous line can be executed
+send "\r"
+expect "1 row"		{} timeout {exit 1}
+expect root@ 		{} timeout {exit 1}
+
+# Test that last recalled line becomes top of history
+send "\033\[A"
+expect "select 1;"	{} timeout {exit 1}
+
+# Test that client cannot terminate with Ctrl+D while cursor
+# is on recalled line
+send "\004"
+send "\r"
+expect "1 row"		{} timeout {exit 1}
+expect root@ 		{} timeout {exit 1}
+
+# Test that Ctrl+D does terminate client on empty line
+send "\004"
+expect eof		{} timeout {exit 1}
+
+# Test that history is preserved across runs
+spawn ./cockroach sql
+expect root@		{} timeout {exit 1}
+send "\033\[A"
+expect "select 1;"	{} timeout {exit 1}
+
+# Finally terminate with Ctrl+C
+send "\003"
+expect eof		{} timeout {exit 1}
