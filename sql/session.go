@@ -94,6 +94,7 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 	remoteStr := ""
 	if remote != nil {
 		remoteStr = remote.String()
+		ctx = log.WithLogTag(ctx, "client=", remoteStr)
 	}
 
 	// Set up an EventLog for session events.
