@@ -236,6 +236,8 @@ func preparePrompts(dbURL string) (fullPrompt string, continuePrompt string) {
 	return fullPrompt, continuePrompt
 }
 
+var cmdHistFile = envutil.EnvOrDefaultString("COCKROACH_SQL_CLI_HISTORY", ".cockroachdb_history")
+
 // runInteractive runs the SQL client interactively, presenting
 // a prompt to the user for each statement.
 func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
@@ -258,7 +260,7 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 				log.Info(context.TODO(), "cannot load or save the command-line history")
 			}
 		} else {
-			histFile := filepath.Join(userAcct.HomeDir, ".cockroachdb_history")
+			histFile := filepath.Join(userAcct.HomeDir, cmdHistFile)
 			cfg := ins.Config.Clone()
 			cfg.HistoryFile = histFile
 			ins.SetConfig(cfg)
