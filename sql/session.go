@@ -100,6 +100,10 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 	ctx = log.WithEventLog(ctx, fmt.Sprintf("sql [%s]", args.User), remoteStr)
 	s.context, s.cancel = context.WithCancel(ctx)
 
+	if remoteStr != "" {
+		s.context = log.WithLogTag(s.context, "remote=", remoteStr)
+	}
+
 	return s
 }
 
