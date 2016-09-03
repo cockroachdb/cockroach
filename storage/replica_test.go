@@ -205,6 +205,7 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 				tc.store.Engine(),
 				enginepb.MVCCStats{},
 				*testDesc,
+				raftpb.HardState{},
 			); err != nil {
 				t.Fatal(err)
 			}

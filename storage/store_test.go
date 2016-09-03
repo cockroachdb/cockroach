@@ -985,7 +985,8 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 	}
 	// Minimal amount of work to keep this deprecated machinery working: Write
 	// some required Raft keys.
-	if _, err := writeInitialState(context.Background(), store.engine, enginepb.MVCCStats{}, *desc); err != nil {
+	if _, err := writeInitialState(context.Background(), store.engine,
+		enginepb.MVCCStats{}, *desc, raftpb.HardState{}); err != nil {
 		t.Fatal(err)
 	}
 	newRng, err := NewReplica(desc, store, 0)
@@ -2328,7 +2329,8 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := writeInitialState(ctx, s.Engine(), enginepb.MVCCStats{}, *rng1.Desc()); err != nil {
+	if _, err := writeInitialState(ctx, s.Engine(),
+		enginepb.MVCCStats{}, *rng1.Desc(), raftpb.HardState{}); err != nil {
 		t.Fatal(err)
 	}
 
