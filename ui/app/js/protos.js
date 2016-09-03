@@ -3957,6 +3957,15 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                     "fields": [
                         {
                             "rule": "optional",
+                            "type": "EntryType",
+                            "name": "Type",
+                            "id": 1,
+                            "options": {
+                                "(gogoproto.nullable)": false
+                            }
+                        },
+                        {
+                            "rule": "optional",
                             "type": "uint64",
                             "name": "Term",
                             "id": 2,
@@ -3969,15 +3978,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "type": "uint64",
                             "name": "Index",
                             "id": 3,
-                            "options": {
-                                "(gogoproto.nullable)": false
-                            }
-                        },
-                        {
-                            "rule": "optional",
-                            "type": "EntryType",
-                            "name": "Type",
-                            "id": 1,
                             "options": {
                                 "(gogoproto.nullable)": false
                             }
@@ -4143,12 +4143,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             "options": {
                                 "(gogoproto.nullable)": false
                             }
-                        },
-                        {
-                            "rule": "optional",
-                            "type": "bytes",
-                            "name": "context",
-                            "id": 12
                         }
                     ]
                 },
@@ -4310,14 +4304,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                         {
                             "name": "MsgTimeoutNow",
                             "id": 14
-                        },
-                        {
-                            "name": "MsgReadIndex",
-                            "id": 15
-                        },
-                        {
-                            "name": "MsgReadIndexResp",
-                            "id": 16
                         }
                     ]
                 },

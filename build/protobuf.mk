@@ -17,18 +17,18 @@
 # This file is evaluated in the repo's parent directory. See main.go's
 # go:generate invocation.
 
-ORG_ROOT       := .
-REPO_ROOT      := $(ORG_ROOT)/cockroach
-GITHUB_ROOT    := $(ORG_ROOT)/..
+REPO_PARENT    := .
+REPO_ROOT      := $(REPO_PARENT)/cockroach
+GITHUB_ROOT    := $(REPO_ROOT)/vendor/github.com
 GOGOPROTO_ROOT := $(GITHUB_ROOT)/gogo/protobuf
 PROTOBUF_ROOT  := $(GOGOPROTO_ROOT)/protobuf
 
 NATIVE_ROOT := $(REPO_ROOT)/storage/engine/rocksdb
 
 # Ensure we have an unambiguous GOPATH
-GOPATH := $(realpath $(GITHUB_ROOT)/../..)
-#                                   ^  ^~ GOPATH
-#                                   |~ GOPATH/src
+GOPATH := $(realpath $(REPO_PARENT)/../../..)
+#                                      ^  ^~ GOPATH
+#                                      |~ GOPATH/src
 
 GOPATH_BIN      := $(GOPATH)/bin
 PROTOC          := $(GOPATH_BIN)/protoc
@@ -70,7 +70,7 @@ IMPORT_PREFIX := github.com/$(REPO_NAME)/
 $(GO_SOURCES): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.go' | xargs rm -f)
 	for dir in $(sort $(dir $(GO_PROTOS))); do \
-	  $(PROTOC) -I.:$(GOGOPROTO_ROOT):$(PROTOBUF_ROOT):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=$(GRPC_GATEWAY_MAPPING),plugins=grpc,import_prefix=$(IMPORT_PREFIX):$(ORG_ROOT) $$dir/*.proto; \
+	  $(PROTOC) -I.:$(GOGOPROTO_ROOT):$(PROTOBUF_ROOT):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=$(GRPC_GATEWAY_MAPPING),plugins=grpc,import_prefix=$(IMPORT_PREFIX):$(REPO_PARENT) $$dir/*.proto; \
 	done
 	sed -i~ -E '/gogoproto/d' $(GO_SOURCES)
 	sed -i~ -E 's!import (fmt|math) "$(IMPORT_PREFIX)(fmt|math)"! !g' $(GO_SOURCES)
@@ -88,7 +88,7 @@ $(REPO_ROOT)/build/npm.installed: $(REPO_ROOT)/build/package.json
 	cd $(REPO_ROOT)/build && npm install --no-progress
 	touch $@
 
-PBJS_ARGS = --path $(ORG_ROOT) --path $(GOGOPROTO_ROOT) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS)
+PBJS_ARGS = --path $(REPO_PARENT) --path $(GOGOPROTO_ROOT) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS)
 
 $(REPO_ROOT)/ui/app/js/protos.js: $(REPO_ROOT)/build/npm.installed $(GO_PROTOS)
 	# Add comment recognized by reviewable.
