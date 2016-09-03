@@ -35,7 +35,12 @@ func init() {
 
 // AggregateFunc accumulates the result of a some function of a Datum.
 type AggregateFunc interface {
+	// Add accumulates the passed datum into the AggregateFunc.
 	Add(Datum)
+
+	// Result returns the current value of the accumulation. This value
+	// will be a deep copy of any AggregateFunc internal state, so that
+	// it will not be mutated by additional calls to Add.
 	Result() Datum
 }
 
@@ -443,10 +448,13 @@ func (a *intSumAggregate) Result() Datum {
 	if !a.seenNonNull {
 		return DNull
 	}
-	if !a.large {
-		a.decSum.SetUnscaled(a.intSum)
+	dd := &DDecimal{}
+	if a.large {
+		dd.Set(&a.decSum.Dec)
+	} else {
+		dd.SetUnscaled(a.intSum)
 	}
-	return &a.decSum
+	return dd
 }
 
 type decimalSumAggregate struct {
