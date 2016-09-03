@@ -543,7 +543,7 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %token <str>   IDENT SCONST BCONST
 %token <*NumVal> ICONST FCONST
 %token <str>   PLACEHOLDER
-%token <str>   TYPECAST DOT_DOT
+%token <str>   TYPECAST TYPEANNOTATE DOT_DOT
 %token <str>   LESS_EQUALS GREATER_EQUALS NOT_EQUALS
 %token <str>   NOT_REGMATCH REGIMATCH NOT_REGIMATCH
 %token <str>   ERROR
@@ -697,8 +697,7 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %left      '~'
 %left      '[' ']'
 %left      '(' ')'
-// TODO(nvanbenschoten) introduce a shorthand type annotation notation.
-// %left      '!' TYPECAST
+%left      TYPEANNOTATE
 %left      TYPECAST
 %left      '.'
 // These might seem to be low-precedence, but actually they are not part
@@ -3198,11 +3197,10 @@ a_expr:
   {
     $$.val = &CastExpr{Expr: $1.expr(), Type: $3.colType()}
   }
-// TODO(nvanbenschoten) introduce a shorthand type annotation notation.
-//| a_expr '!' typename
-//  {
-//    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType()}
-//  }
+| a_expr TYPEANNOTATE typename
+  {
+    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType()}
+  }
 | a_expr COLLATE any_name { unimplemented() }
 | a_expr AT TIME ZONE a_expr %prec AT { unimplemented() }
   // These operators must be called out explicitly in order to make use of
@@ -3446,11 +3444,10 @@ b_expr:
   {
     $$.val = &CastExpr{Expr: $1.expr(), Type: $3.colType()}
   }
-// TODO(nvanbenschoten) introduce a shorthand type annotation notation.
-//| b_expr '!' typename
-//  {
-//    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType()}
-//  }
+| b_expr TYPEANNOTATE typename
+  {
+    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType()}
+  }
 | '+' b_expr %prec UMINUS
   {
     $$.val = &UnaryExpr{Operator: UnaryPlus, Expr: $2.expr()}

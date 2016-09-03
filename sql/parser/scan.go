@@ -363,6 +363,12 @@ func (s *Scanner) scan(lval *sqlSymType) {
 	case ':':
 		switch s.peek() {
 		case ':': // ::
+			if s.peekN(1) == ':' {
+				// :::
+				s.pos += 2
+				lval.id = TYPEANNOTATE
+				return
+			}
 			s.pos++
 			lval.id = TYPECAST
 			return
