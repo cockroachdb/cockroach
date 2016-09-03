@@ -2236,33 +2236,6 @@ func (s *Store) HandleRaftRequest(
 	req *RaftMessageRequest,
 ) (pErr *roachpb.Error) {
 	ctx = s.context(ctx)
-
-	// Drop messages that come from a node that we believe was once
-	// a member of the group but has been removed.
-	//
-	// TODO(peter): Why are we doing this check here vs after we retrieve the
-	// replica below.
-	s.mu.Lock()
-	r, ok := s.mu.replicas[req.RangeID]
-	s.mu.Unlock()
-	if ok {
-		found := false
-		desc := r.Desc()
-		for _, rep := range desc.Replicas {
-			if rep.ReplicaID == req.FromReplica.ReplicaID {
-				found = true
-				break
-			}
-		}
-		// It's not a current member of the group. Is it from the past?
-		if !found && req.FromReplica.ReplicaID < desc.NextReplicaID {
-			return roachpb.NewError(&roachpb.ReplicaTooOldError{})
-		}
-	}
-
-	// TODO(peter): Should this move to the start of the function? Even if we
-	// don't handle the message I think we want to count it as received in the
-	// metrics.
 	s.metrics.raftRcvdMessages[req.Message.Type].Inc(1)
 
 	if req.Message.Type == raftpb.MsgHeartbeat {
@@ -2271,7 +2244,7 @@ func (s *Store) HandleRaftRequest(
 
 	// Lazily create the replica.
 	r, uninitRaftLocked, err := s.getOrCreateReplica(
-		req.RangeID, req.ToReplica.ReplicaID, req.FromReplica)
+		req.RangeID, req.ToReplica.ReplicaID, req.FromReplica.ReplicaID, req.FromReplica)
 	if err != nil {
 		return roachpb.NewError(err)
 	}
@@ -2724,10 +2697,12 @@ var errRetry = errors.New("retry: orphaned replica")
 func (s *Store) getOrCreateReplica(
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
+	fromReplicaID roachpb.ReplicaID,
 	creatingReplica roachpb.ReplicaDescriptor,
 ) (_ *Replica, uninitRaftLocked bool, err error) {
 	for {
-		r, uninitRaftLocked, err := s.tryGetOrCreateReplica(rangeID, replicaID, creatingReplica)
+		r, uninitRaftLocked, err := s.tryGetOrCreateReplica(
+			rangeID, replicaID, fromReplicaID, creatingReplica)
 		if err == errRetry {
 			continue
 		}
@@ -2747,6 +2722,7 @@ func (s *Store) getOrCreateReplica(
 func (s *Store) tryGetOrCreateReplica(
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
+	fromReplicaID roachpb.ReplicaID,
 	creatingReplica roachpb.ReplicaDescriptor,
 ) (_ *Replica, uninitRaftLocked bool, err error) {
 	// The common case: look up an existing (initialized) replica.
@@ -2754,6 +2730,15 @@ func (s *Store) tryGetOrCreateReplica(
 	r, ok := s.mu.replicas[rangeID]
 	s.mu.Unlock()
 	if ok {
+		// Drop messages that come from a node that we believe was once a member of
+		// the group but has been removed.
+		desc := r.Desc()
+		_, found := desc.GetReplicaDescriptorByID(fromReplicaID)
+		// It's not a current member of the group. Is it from the past?
+		if !found && fromReplicaID < desc.NextReplicaID {
+			return nil, false, &roachpb.ReplicaTooOldError{}
+		}
+
 		uninitRaftUnlocked := r.raftLock()
 		r.mu.Lock()
 		destroyed, corrupted := r.mu.destroyed, r.mu.corrupted
