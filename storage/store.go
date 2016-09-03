@@ -2785,47 +2785,54 @@ func (s *Store) tryGetOrCreateReplica(
 		}
 	}
 
-	// We need to hold both Store.uninitRaftMu and Store.mu before creating the
-	// new replica in order to provide proper synchronization with
-	// Store.splitCommitPostTrigger. In particular, uninitRaftMu ensures that the
-	// reads of previous state when the replica is created (see
-	// Replica.newReplicaInner) do not contain stale data.
-	s.uninitRaftMu.Lock()
-	s.mu.Lock()
-	defer func() {
-		s.mu.Unlock()
-		if err != nil {
-			s.uninitRaftMu.Unlock()
-		}
-	}()
-
-	// After unlocking Store.mu above, another goroutine might have snuck in and
-	// created the replica.
-	if _, ok := s.mu.replicas[rangeID]; ok {
-		return nil, false, errRetry
+	// Create a new replica and lock it for raft processing. This will lock
+	// Replica.raftMu and Store.uninitRaftMu because the newly created replica is
+	// uninitialized.
+	r = newReplica(rangeID, s)
+	r.creatingReplica = &creatingReplica
+	if !r.raftLock() {
+		log.Fatalf(s.Ctx(), "uninitRaftLocked must be true")
 	}
 
-	r, err = NewReplica(&roachpb.RangeDescriptor{
+	// Install the replica in the store's replica map. The replica is in an
+	// inconsistent state, but nobody will be accessing it while we hold it's
+	// locks.
+	s.mu.Lock()
+	// Grab the internal Replica state lock to ensure nobody mucks with our
+	// replica even outside of raft processing. Have to do this after grabbing
+	// Store.mu to maintain lock ordering invariant.
+	r.mu.Lock()
+	// Add the range to range map, but not replicasByKey since the range's start
+	// key is unknown. The range will be added to replicasByKey later when a
+	// snapshot is applied. After unlocking Store.mu above, another goroutine
+	// might have snuck in and created the replica, so we retry on error.
+	if s.addReplicaToRangeMapLocked(r) != nil {
+		r.mu.Unlock()
+		s.mu.Unlock()
+		r.raftUnlock(true)
+		return nil, false, errRetry
+	}
+	s.mu.uninitReplicas[r.RangeID] = r
+	s.mu.Unlock()
+
+	desc := &roachpb.RangeDescriptor{
 		RangeID: rangeID,
 		// TODO(bdarnell): other fields are unknown; need to populate them from
 		// snapshot.
-	}, s, replicaID)
-	if err != nil {
+	}
+	if err := r.initLocked(desc, s.Clock(), replicaID); err != nil {
+		// Mark the replica as destroyed and remove it from the replicas maps to
+		// ensure nobody tries to use it
+		r.mu.destroyed = errors.Wrapf(err, "%s: failed to initialize", r)
+		r.mu.Unlock()
+		s.mu.Lock()
+		delete(s.mu.replicas, rangeID)
+		delete(s.mu.uninitReplicas, rangeID)
+		s.mu.Unlock()
+		r.raftUnlock(true)
 		return nil, false, err
 	}
-	r.creatingReplica = &creatingReplica
-	// Add the range to range map, but not replicasByKey since
-	// the range's start key is unknown. The range will be
-	// added to replicasByKey later when a snapshot is applied.
-	if err = s.addReplicaToRangeMapLocked(r); err != nil {
-		return nil, false, err
-	}
-	s.mu.uninitReplicas[r.RangeID] = r
-
-	// For a new replica we can grab Replica.raftMu while holding Store.mu
-	// because nothing can have a reference to the replica yet. Note that we
-	// already grabbed Store.uninitRaftMu earlier in this method.
-	r.raftMu.Lock()
+	r.mu.Unlock()
 	return r, true, nil
 }
 
