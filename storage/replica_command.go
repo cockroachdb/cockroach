@@ -2574,7 +2574,15 @@ func (r *Replica) splitTrigger(
 		// and for history #7600. Note also that it is crucial that
 		// writeInitialState *absorbs* an existing HardState (which might
 		// contain a cast vote).
-		rightMS, err = writeInitialState(ctx, batch, rightMS, split.RightDesc)
+		//
+		// NB: We load the existing hard state from the underlying engine instead
+		// of the batch because batch reads are from a snapshot taken at the point
+		// in time when the first read was performed on the batch.
+		oldHS, err := loadHardState(ctx, r.store.Engine(), split.RightDesc.RangeID)
+		if err != nil {
+			return enginepb.MVCCStats{}, nil, errors.Wrap(err, "unable to load hard state")
+		}
+		rightMS, err = writeInitialState(ctx, batch, rightMS, split.RightDesc, oldHS)
 		if err != nil {
 			return enginepb.MVCCStats{}, nil, errors.Wrap(err, "unable to write initial state")
 		}
