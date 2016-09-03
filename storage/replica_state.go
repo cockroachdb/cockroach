@@ -425,7 +425,11 @@ func synthesizeHardState(
 // The supplied MVCCStats are used for the Stats field after adjusting for
 // persisting the state itself, and the updated stats are returned.
 func writeInitialState(
-	ctx context.Context, eng engine.ReadWriter, ms enginepb.MVCCStats, desc roachpb.RangeDescriptor,
+	ctx context.Context,
+	eng engine.ReadWriter,
+	ms enginepb.MVCCStats,
+	desc roachpb.RangeDescriptor,
+	oldHS raftpb.HardState,
 ) (enginepb.MVCCStats, error) {
 	var s storagebase.ReplicaState
 
@@ -440,11 +444,6 @@ func writeInitialState(
 	s.Stats = ms
 
 	newMS, err := saveState(ctx, eng, s)
-	if err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-
-	oldHS, err := loadHardState(ctx, eng, desc.RangeID)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
