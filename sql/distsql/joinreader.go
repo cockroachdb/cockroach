@@ -128,7 +128,7 @@ func (jr *joinReader) mainLoop() error {
 			})
 		}
 
-		err := jr.fetcher.StartScan(jr.flowCtx.txn, spans, 0)
+		err := jr.fetcher.StartScan(jr.flowCtx.txn, spans, false /* no batch limits */, 0)
 		if err != nil {
 			log.Errorf(jr.ctx, "scan error: %s", err)
 			return err
