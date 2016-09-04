@@ -654,11 +654,14 @@ func Example_sql_escape() {
 	// sql -e insert into t.t values (e'\xdc\x88\x38\x35', 'UTF8 string with RTL char')
 	// INSERT 1
 	// sql -e insert into t.t values (e'\xc3\x28', 'non-UTF8 string')
-	// INSERT 1
+	// pq: invalid UTF-8 byte sequence
+	// insert into t.t values (e'\xc3\x28', 'non-UTF8 string')
+	//                         ^
+	//
 	// sql -e insert into t.t values (e'a\tb\tc\n12\t123123213\t12313', 'tabs')
 	// INSERT 1
 	// sql -e select * from t.t
-	// 10 rows
+	// 9 rows
 	// s	d
 	// foo	printable ASCII
 	// "\"foo"	printable ASCII with quotes
@@ -668,7 +671,6 @@ func Example_sql_escape() {
 	// "\u00f1"	printable UTF8 using escapes
 	// "\x01"	non-printable UTF8 string
 	// "\u070885"	UTF8 string with RTL char
-	// "\xc3("	non-UTF8 string
 	// "a\tb\tc\n12\t123123213\t12313"	tabs
 	// sql -e create table t.u ("""foo" int, "\foo" int, "foo
 	// bar" int, "κόσμε" int, "܈85" int)
@@ -701,11 +703,10 @@ func Example_sql_escape() {
 	// | ñ                              | printable UTF8 using escapes   |
 	// | "\x01"                         | non-printable UTF8 string      |
 	// | ܈85                            | UTF8 string with RTL char      |
-	// | "\xc3("                        | non-UTF8 string                |
 	// | a   b         c␤               | tabs                           |
 	// | 12  123123213 12313            |                                |
 	// +--------------------------------+--------------------------------+
-	// (10 rows)
+	// (9 rows)
 	// sql --pretty -e show columns from t.u
 	// +----------+------+-------+----------------+
 	// |  Field   | Type | Null  |    Default     |

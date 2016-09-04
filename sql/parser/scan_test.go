@@ -79,6 +79,8 @@ func TestScanner(t *testing.T) {
 		{`'a'`, []int{SCONST}},
 		{`b'a'`, []int{BCONST}},
 		{`B'a'`, []int{BCONST}},
+		{`b'\xff'`, []int{BCONST}},
+		{`B'\xff'`, []int{BCONST}},
 		{`e'a'`, []int{SCONST}},
 		{`E'a'`, []int{SCONST}},
 		{`NOT`, []int{NOT}},
@@ -91,8 +93,8 @@ func TestScanner(t *testing.T) {
 		{`WITH ORDINALITY`, []int{WITH_LA, ORDINALITY}},
 		{`1`, []int{ICONST}},
 		{`0xa`, []int{ICONST}},
-		{`x'ba'`, []int{SCONST}},
-		{`X'ba'`, []int{SCONST}},
+		{`x'2F'`, []int{SCONST}},
+		{`X'2F'`, []int{SCONST}},
 		{`1.0`, []int{FCONST}},
 		{`1.0e1`, []int{FCONST}},
 		{`1e+1`, []int{FCONST}},
@@ -111,7 +113,7 @@ func TestScanner(t *testing.T) {
 		}
 
 		if !reflect.DeepEqual(d.expected, tokens) {
-			t.Errorf("%d: expected %d, but found %d", i, d.expected, tokens)
+			t.Errorf("%d: %q: expected %d, but found %d", i, d.sql, d.expected, tokens)
 		}
 	}
 }
@@ -327,6 +329,7 @@ func TestScanString(t *testing.T) {
 		{`e'\009'`, `invalid syntax`},
 		{`e'\101'`, `A`},
 		{`e'\101B'`, `AB`},
+		{`e'\xff'`, `invalid UTF-8 byte sequence`},
 		{`e'\u1'`, `invalid syntax`},
 		{`e'\U123'`, `invalid syntax`},
 		{`e'\u0041'`, `A`},
@@ -343,6 +346,7 @@ world'`, `hello
 world`},
 		{`x'666f6f'`, `foo`},
 		{`X'626172'`, `bar`},
+		{`X'FF'`, `invalid UTF-8 byte sequence`},
 	}
 	for _, d := range testData {
 		s := MakeScanner(d.sql, Traditional)
@@ -366,6 +370,8 @@ func TestScanStringModern(t *testing.T) {
 		{`B'\x41'`, `A`},
 		{`e"\x41"`, `A`},
 		{`E'\x41'`, `A`},
+		{`e"\xff"`, `invalid UTF-8 byte sequence`},
+		{`E'\xff'`, `invalid UTF-8 byte sequence`},
 		// Disable escapes with raw strings.
 		{`r"\x41"`, `\x41`},
 		{`R'\x41'`, `\x41`},

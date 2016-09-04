@@ -22,6 +22,7 @@ import (
 	"go/constant"
 	"reflect"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/testutils"
 	_ "github.com/cockroachdb/cockroach/util/log" // for flags
@@ -1195,19 +1196,23 @@ func BenchmarkParse(b *testing.B) {
 }
 
 func TestEncodeSQLBytes(t *testing.T) {
-	testEncodeSQL(t, encodeSQLBytes)
+	testEncodeSQL(t, encodeSQLBytes, false)
 }
 
 func TestEncodeSQLString(t *testing.T) {
-	testEncodeSQL(t, encodeSQLString)
+	testEncodeSQL(t, encodeSQLString, true)
 }
 
-func testEncodeSQL(t *testing.T, encode func(*bytes.Buffer, string)) {
+func testEncodeSQL(t *testing.T, encode func(*bytes.Buffer, string), forceUTF8 bool) {
 	type entry struct{ i, j int }
 	seen := make(map[string]entry)
 	for i := 0; i < 256; i++ {
 		for j := 0; j < 256; j++ {
-			s := string([]byte{byte(i), byte(j)})
+			bytepair := []byte{byte(i), byte(j)}
+			if forceUTF8 && !utf8.Valid(bytepair) {
+				continue
+			}
+			s := string(bytepair)
 			var buf bytes.Buffer
 			encode(&buf, s)
 			sql := fmt.Sprintf("SELECT %s", buf.String())
