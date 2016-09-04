@@ -313,8 +313,8 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		if err != nil {
 			return err
 		}
-		// StartScan uses 0 as a sentinal for the default limit of entries scanned.
-		if err := rf.StartScan(txn, roachpb.Spans{sp}, 0); err != nil {
+		err = rf.StartScan(txn, roachpb.Spans{sp}, true /* limit batches */, 0 /* no limit hint */)
+		if err != nil {
 			return err
 		}
 

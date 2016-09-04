@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
@@ -761,6 +762,20 @@ func (t *logicTest) processTestFile(path string) error {
 
 			execKnobs.FixTxnPriority = true
 			defer func() { execKnobs.FixTxnPriority = false }()
+
+		case "kv-batch-size":
+			// kv-batch-size limits the kvfetcher batch size. It can be used to
+			// trigger certain error conditions around limited batches.
+			if len(fields) != 2 {
+				return fmt.Errorf("kv-batch-size needs an integer argument, found: %v", fields[1:])
+			}
+			batchSize, err := strconv.Atoi(fields[1])
+			if err != nil {
+				return fmt.Errorf("kv-batch-size needs an integer argument; %s", err)
+			}
+			fmt.Printf("Setting kv batch size %d\n", batchSize)
+			defer sqlbase.SetKVBatchSize(int64(batchSize))()
+
 		default:
 			return fmt.Errorf("%s:%d: unknown command: %s", path, s.line, cmd)
 		}

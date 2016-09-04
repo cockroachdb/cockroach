@@ -294,7 +294,7 @@ func (f baseFKHelper) check(values parser.DTuple) (parser.DTuple, error) {
 		key = roachpb.Key(f.searchPrefix)
 	}
 	spans := roachpb.Spans{roachpb.Span{Key: key, EndKey: key.PrefixEnd()}}
-	if err := f.rf.StartScan(f.txn, spans, 1); err != nil {
+	if err := f.rf.StartScan(f.txn, spans, true /* limit batches */, 1); err != nil {
 		return nil, err
 	}
 	return f.rf.NextRow()

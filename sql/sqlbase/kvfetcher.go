@@ -69,8 +69,8 @@ func PrettySpans(spans []roachpb.Span, skip int) string {
 }
 
 // kvBatchSize is the number of keys we request at a time.
-// On a single node, 1000 was enough to avoid any performance degradation. On multi-node clusters,
-// we want bigger chunks to make up for the higher latency.
+// On a single node, 1000 was enough to avoid any performance degradation. On
+// multi-node clusters, we want bigger chunks to make up for the higher latency.
 // TODO(radu): parameters like this should be configurable
 var kvBatchSize int64 = 10000
 
@@ -87,6 +87,7 @@ type kvFetcher struct {
 	txn             *client.Txn
 	spans           roachpb.Spans
 	reverse         bool
+	useBatchLimit   bool
 	firstBatchLimit int64
 
 	batchIdx     int
@@ -98,6 +99,9 @@ type kvFetcher struct {
 
 // getBatchSize returns the max size of the next batch.
 func (f *kvFetcher) getBatchSize() int64 {
+	if !f.useBatchLimit {
+		return 0
+	}
 	if f.firstBatchLimit == 0 || f.firstBatchLimit >= kvBatchSize {
 		return kvBatchSize
 	}
@@ -135,27 +139,48 @@ func (f *kvFetcher) getBatchSize() int64 {
 	}
 }
 
-// makeKVFetcher initializes a kvFetcher for the given spans. If non-zero,
-// firstBatchLimit limits the size of the first batch (subsequent batches use
-// the default size). When a batch limit is used, the spans supplied should
-// not overlap each other or be out of increasing order, or else, multiple
-// partial responses can be returned from the KV store.
+// makeKVFetcher initializes a kvFetcher for the given spans.
+//
+// If useBatchLimit is true, batches are limited to kvBatchSize. If
+// firstBatchLimit is also set, the first batch is limited to that value.
+// Subsequent batches are larger, up to kvBatchSize.
+//
+// Batch limits can only be used if the spans are ordered.
 func makeKVFetcher(
-	txn *client.Txn, spans roachpb.Spans, reverse bool, firstBatchLimit int64,
-) kvFetcher {
-	if firstBatchLimit < 0 {
-		panic(fmt.Sprintf("invalid batch limit %d", firstBatchLimit))
+	txn *client.Txn, spans roachpb.Spans, reverse bool, useBatchLimit bool, firstBatchLimit int64,
+) (kvFetcher, error) {
+	if firstBatchLimit < 0 || (!useBatchLimit && firstBatchLimit != 0) {
+		return kvFetcher{}, errors.Errorf("invalid batch limit %d (useBatchLimit: %t)",
+			firstBatchLimit, useBatchLimit)
 	}
+
+	if useBatchLimit {
+		// Verify the spans are ordered if a batch limit is used.
+		for i := 1; i < len(spans); i++ {
+			if spans[i].Key.Compare(spans[i-1].EndKey) < 0 {
+				return kvFetcher{}, errors.Errorf("unordered spans (%s %s)", spans[i-1], spans[i])
+			}
+		}
+	}
+
 	// Make a copy of the spans because we update them.
 	copySpans := make(roachpb.Spans, len(spans))
 	for i := range spans {
 		if reverse {
+			// Reverse scans receive the spans in decreasing order.
 			copySpans[len(spans)-i-1] = spans[i]
 		} else {
 			copySpans[i] = spans[i]
 		}
 	}
-	return kvFetcher{txn: txn, spans: copySpans, reverse: reverse, firstBatchLimit: firstBatchLimit}
+
+	return kvFetcher{
+		txn:             txn,
+		spans:           copySpans,
+		reverse:         reverse,
+		useBatchLimit:   useBatchLimit,
+		firstBatchLimit: firstBatchLimit,
+	}, nil
 }
 
 // fetch retrieves spans from the kv
@@ -191,7 +216,7 @@ func (f *kvFetcher) fetch() error {
 
 	// Set end to true until disproved.
 	f.fetchEnd = true
-	var readPartialResponse bool
+	var sawResumeSpan bool
 	for _, result := range b.Results {
 		if result.ResumeSpan.Key != nil {
 			// A span needs to be resumed.
@@ -199,18 +224,16 @@ func (f *kvFetcher) fetch() error {
 			f.spans = append(f.spans, result.ResumeSpan)
 		}
 		if len(result.Rows) > 0 {
-			if readPartialResponse {
+			if sawResumeSpan {
 				return errors.Errorf(
-					"read partial responses for more than one span, new spans: %s",
+					"span with results after resume span; new spans: %s",
 					PrettySpans(f.spans, 0))
 			}
 			f.kvs = append(f.kvs, result.Rows...)
-			if result.ResumeSpan.Key != nil {
-				// There are more keys to be read from this span, so ensure
-				// that the code is not appending keys from another span until
-				// this span has been completely read.
-				readPartialResponse = true
-			}
+		}
+		if result.ResumeSpan.Key != nil {
+			// Verify we don't receive results for any remaining spans.
+			sawResumeSpan = true
 		}
 	}
 

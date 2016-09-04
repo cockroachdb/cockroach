@@ -71,8 +71,9 @@ type scanNode struct {
 	scanInitialized bool
 	fetcher         sqlbase.RowFetcher
 
-	limitHint int64
-	limitSoft bool
+	limitHint          int64
+	limitSoft          bool
+	disableBatchLimits bool
 }
 
 func (p *planner) Scan() *scanNode {
@@ -108,12 +109,20 @@ func (n *scanNode) DebugValues() debugValues {
 func (n *scanNode) SetLimitHint(numRows int64, soft bool) {
 	// Either a limitNode or EXPLAIN is pushing a limit down onto this
 	// node. The special value math.MaxInt64 means "no limit".
-	if numRows != math.MaxInt64 {
+	if !n.disableBatchLimits && numRows != math.MaxInt64 {
 		n.limitHint = numRows
 		// If we have a filter, some of the rows we retrieve may not pass the
 		// filter so the limit becomes "soft".
 		n.limitSoft = soft || n.filter != nil
 	}
+}
+
+// disableBatchLimit disables the kvfetcher batch limits. Used for index-join,
+// where we scan batches of unordered spans.
+func (n *scanNode) disableBatchLimit() {
+	n.disableBatchLimits = true
+	n.limitHint = 0
+	n.limitSoft = false
 }
 
 func (n *scanNode) expandPlan() error {
@@ -146,7 +155,7 @@ func (n *scanNode) initScan() error {
 		limitHint *= 2
 	}
 
-	if err := n.fetcher.StartScan(n.p.txn, n.spans, limitHint); err != nil {
+	if err := n.fetcher.StartScan(n.p.txn, n.spans, !n.disableBatchLimits, limitHint); err != nil {
 		return err
 	}
 	n.scanInitialized = true

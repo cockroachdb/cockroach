@@ -52,11 +52,12 @@ func (p *planner) makeIndexJoin(origScan *scanNode, exactPrefix int) (resultPlan
 	// at a starting point to build the new indexScan node.
 	indexScan = origScan
 
-	// Create a new table scan node with the primary index.
+	// Create a new scanNode that will be used with the primary index.
 	table := p.Scan()
 	table.desc = origScan.desc
 	table.initDescDefaults(publicColumns)
 	table.initOrdering(0)
+	table.disableBatchLimit()
 
 	colIDtoRowIndex := map[sqlbase.ColumnID]int{}
 	for _, colID := range table.desc.PrimaryIndex.ColumnIDs {
