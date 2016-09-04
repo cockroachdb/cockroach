@@ -278,9 +278,14 @@ func TestTimestampCacheMergeInto(t *testing.T) {
 	}
 }
 
+type txnState struct {
+	ts hlc.Timestamp
+	id *uuid.UUID
+}
+
 type layeredIntervalTestCase struct {
 	spans     []roachpb.Span
-	validator func(t *testing.T, tc *timestampCache, tss []hlc.Timestamp, txns []*uuid.UUID)
+	validator func(t *testing.T, tc *timestampCache, txns []txnState)
 }
 
 // assertTS is a helper function for layeredIntervalTestCase
@@ -318,6 +323,18 @@ func assertTS(
 	}
 }
 
+// nilIfSimul returns nil if this test involves multiple transactions
+// with the same timestamp (i.e. the timestamps in txns are identical
+// but the transaction ids are not), and the given txnID if they are
+// not. This is because timestampCache.GetMaxRead must not return a
+// transaction ID when two different transactions have the same timestamp.
+func nilIfSimul(txns []txnState, txnID *uuid.UUID) *uuid.UUID {
+	if txns[0].ts.Equal(txns[1].ts) && !uuid.Equal(*txns[0].id, *txns[1].id) {
+		return nil
+	}
+	return txnID
+}
+
 // layeredIntervalTestCase1 tests the left partial overlap and old containing
 // new cases for adding intervals to the interval cache when tested in order,
 // and tests the cases' inverses when tested in reverse.
@@ -333,19 +350,19 @@ var layeredIntervalTestCase1 = layeredIntervalTestCase{
 		// No overlap backwards.
 		{Key: roachpb.Key("c")},
 	},
-	validator: func(t *testing.T, tc *timestampCache, tss []hlc.Timestamp, txns []*uuid.UUID) {
-		abbIdx, beIdx, cIdx := 0, 1, 2
+	validator: func(t *testing.T, tc *timestampCache, txns []txnState) {
+		abbTx, beTx, cTx := txns[0], txns[1], txns[2]
 
-		assertTS(t, tc, roachpb.Key("a"), nil, tss[abbIdx], txns[abbIdx])
-		assertTS(t, tc, roachpb.Key("b"), nil, tss[beIdx], txns[beIdx])
-		assertTS(t, tc, roachpb.Key("c"), nil, tss[cIdx], txns[cIdx])
-		assertTS(t, tc, roachpb.Key("d"), nil, tss[beIdx], txns[beIdx])
-		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("b"), tss[abbIdx], txns[abbIdx])
-		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("c"), tss[beIdx], txns[beIdx])
-		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("d"), tss[cIdx], txns[cIdx])
-		assertTS(t, tc, roachpb.Key("b"), roachpb.Key("d"), tss[cIdx], txns[cIdx])
-		assertTS(t, tc, roachpb.Key("c"), roachpb.Key("d"), tss[cIdx], txns[cIdx])
-		assertTS(t, tc, roachpb.Key("c0"), roachpb.Key("d"), tss[beIdx], txns[beIdx])
+		assertTS(t, tc, roachpb.Key("a"), nil, abbTx.ts, abbTx.id)
+		assertTS(t, tc, roachpb.Key("b"), nil, beTx.ts, nilIfSimul(txns, beTx.id))
+		assertTS(t, tc, roachpb.Key("c"), nil, cTx.ts, nilIfSimul(txns, cTx.id))
+		assertTS(t, tc, roachpb.Key("d"), nil, beTx.ts, beTx.id)
+		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("b"), abbTx.ts, abbTx.id)
+		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("c"), beTx.ts, nilIfSimul(txns, beTx.id))
+		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("d"), cTx.ts, nilIfSimul(txns, cTx.id))
+		assertTS(t, tc, roachpb.Key("b"), roachpb.Key("d"), cTx.ts, nilIfSimul(txns, cTx.id))
+		assertTS(t, tc, roachpb.Key("c"), roachpb.Key("d"), cTx.ts, nilIfSimul(txns, cTx.id))
+		assertTS(t, tc, roachpb.Key("c0"), roachpb.Key("d"), beTx.ts, beTx.id)
 	},
 }
 
@@ -364,17 +381,17 @@ var layeredIntervalTestCase2 = layeredIntervalTestCase{
 		// No overlap backwards.
 		{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
 	},
-	validator: func(t *testing.T, tc *timestampCache, tss []hlc.Timestamp, txns []*uuid.UUID) {
-		_, bfIdx, acIdx := 0, 1, 2
+	validator: func(t *testing.T, tc *timestampCache, txns []txnState) {
+		_, bfTx, acTx := txns[0], txns[1], txns[2]
 
-		assertTS(t, tc, roachpb.Key("a"), nil, tss[acIdx], txns[acIdx])
-		assertTS(t, tc, roachpb.Key("b"), nil, tss[acIdx], txns[acIdx])
-		assertTS(t, tc, roachpb.Key("c"), nil, tss[bfIdx], txns[bfIdx])
-		assertTS(t, tc, roachpb.Key("d"), nil, tss[bfIdx], txns[bfIdx])
-		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("c"), tss[acIdx], txns[acIdx])
-		assertTS(t, tc, roachpb.Key("b"), roachpb.Key("d"), tss[acIdx], txns[acIdx])
-		assertTS(t, tc, roachpb.Key("c"), roachpb.Key("d"), tss[bfIdx], txns[bfIdx])
-		assertTS(t, tc, roachpb.Key("c0"), roachpb.Key("d"), tss[bfIdx], txns[bfIdx])
+		assertTS(t, tc, roachpb.Key("a"), nil, acTx.ts, acTx.id)
+		assertTS(t, tc, roachpb.Key("b"), nil, acTx.ts, nilIfSimul(txns, acTx.id))
+		assertTS(t, tc, roachpb.Key("c"), nil, bfTx.ts, bfTx.id)
+		assertTS(t, tc, roachpb.Key("d"), nil, bfTx.ts, nilIfSimul(txns, bfTx.id))
+		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("c"), acTx.ts, nilIfSimul(txns, acTx.id))
+		assertTS(t, tc, roachpb.Key("b"), roachpb.Key("d"), acTx.ts, nilIfSimul(txns, acTx.id))
+		assertTS(t, tc, roachpb.Key("c"), roachpb.Key("d"), bfTx.ts, bfTx.id)
+		assertTS(t, tc, roachpb.Key("c0"), roachpb.Key("d"), bfTx.ts, bfTx.id)
 	},
 }
 
@@ -390,15 +407,15 @@ var layeredIntervalTestCase3 = layeredIntervalTestCase{
 		// No overlap backwards.
 		{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
 	},
-	validator: func(t *testing.T, tc *timestampCache, tss []hlc.Timestamp, txns []*uuid.UUID) {
-		acIdx, bcIdx := 0, 1
+	validator: func(t *testing.T, tc *timestampCache, txns []txnState) {
+		acTx, bcTx := txns[0], txns[1]
 
-		assertTS(t, tc, roachpb.Key("a"), nil, tss[acIdx], txns[acIdx])
-		assertTS(t, tc, roachpb.Key("b"), nil, tss[bcIdx], txns[bcIdx])
+		assertTS(t, tc, roachpb.Key("a"), nil, acTx.ts, acTx.id)
+		assertTS(t, tc, roachpb.Key("b"), nil, bcTx.ts, nilIfSimul(txns, bcTx.id))
 		assertTS(t, tc, roachpb.Key("c"), nil, tc.lowWater, nil)
-		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("c"), tss[bcIdx], txns[bcIdx])
-		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("b"), tss[acIdx], txns[acIdx])
-		assertTS(t, tc, roachpb.Key("b"), roachpb.Key("c"), tss[bcIdx], txns[bcIdx])
+		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("c"), bcTx.ts, nilIfSimul(txns, bcTx.id))
+		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("b"), acTx.ts, acTx.id)
+		assertTS(t, tc, roachpb.Key("b"), roachpb.Key("c"), bcTx.ts, nilIfSimul(txns, bcTx.id))
 	},
 }
 
@@ -414,15 +431,26 @@ var layeredIntervalTestCase4 = layeredIntervalTestCase{
 		// No overlap backwards.
 		{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 	},
-	validator: func(t *testing.T, tc *timestampCache, tss []hlc.Timestamp, txns []*uuid.UUID) {
-		acIdx, abIdx := 0, 1
+	validator: func(t *testing.T, tc *timestampCache, txns []txnState) {
+		acTx, abTx := txns[0], txns[1]
 
-		assertTS(t, tc, roachpb.Key("a"), nil, tss[abIdx], txns[abIdx])
-		assertTS(t, tc, roachpb.Key("b"), nil, tss[acIdx], txns[acIdx])
+		assertTS(t, tc, roachpb.Key("a"), nil, abTx.ts, nilIfSimul(txns, abTx.id))
+		assertTS(t, tc, roachpb.Key("b"), nil, acTx.ts, acTx.id)
 		assertTS(t, tc, roachpb.Key("c"), nil, tc.lowWater, nil)
-		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("c"), tss[abIdx], txns[abIdx])
-		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("b"), tss[abIdx], txns[abIdx])
-		assertTS(t, tc, roachpb.Key("b"), roachpb.Key("c"), tss[acIdx], txns[acIdx])
+		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("c"), abTx.ts, nilIfSimul(txns, abTx.id))
+		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("b"), abTx.ts, nilIfSimul(txns, abTx.id))
+		assertTS(t, tc, roachpb.Key("b"), roachpb.Key("c"), acTx.ts, acTx.id)
+	},
+}
+
+var layeredIntervalTestCase5 = layeredIntervalTestCase{
+	spans: []roachpb.Span{
+		// Two identical spans
+		{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+		{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+	},
+	validator: func(t *testing.T, tc *timestampCache, txns []txnState) {
+		assertTS(t, tc, roachpb.Key("a"), nil, txns[1].ts, nilIfSimul(txns, txns[1].id))
 	},
 }
 
@@ -441,41 +469,73 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 	clock.SetMaxOffset(0)
 	tc := newTimestampCache(clock)
 
+	// Run each test case in several configurations.
 	for testCaseIdx, testCase := range []layeredIntervalTestCase{
 		layeredIntervalTestCase1,
 		layeredIntervalTestCase2,
 		layeredIntervalTestCase3,
 		layeredIntervalTestCase4,
+		layeredIntervalTestCase5,
 	} {
 		t.Logf("test case %d", testCaseIdx+1)
-		tss := make([]hlc.Timestamp, len(testCase.spans))
-		txns := make([]*uuid.UUID, len(testCase.spans))
-		for i := range testCase.spans {
-			txns[i] = uuid.NewV4()
-		}
 
-		// Perform actions in order and validate.
-		t.Log("in order")
-		tc.Clear(clock)
-		for i := range testCase.spans {
-			tss[i] = clock.Now()
-		}
-		for i, span := range testCase.spans {
-			tc.add(span.Key, span.EndKey, tss[i], txns[i], true)
-		}
-		testCase.validator(t, tc, tss, txns)
+		// In simultaneous runs, each span in the test case is given the
+		// same time. Otherwise each gets a distinct timestamp (in the
+		// order of definition).
+		for _, simultaneous := range []bool{false, true} {
+			t.Logf("simultaneous: %v", simultaneous)
 
-		// Perform actions out of order and validate.
-		t.Log("reverse order")
-		tc.Clear(clock)
-		for i := range testCase.spans {
-			// Recreate timestamps because Clear() sets lowWater to Now().
-			tss[i] = clock.Now()
+			// In reverse runs, spans are inserted into the timestamp cache
+			// out of order (so spans with higher timestamps are inserted
+			// before those with lower timestamps). In simultaneous+reverse
+			// runs, timestamps are all the same, but running in both
+			// directions is still necessary to exercise all branches in the
+			// code.
+			for _, reverse := range []bool{false, true} {
+				t.Logf("reverse: %v", reverse)
+
+				// In sameTxn runs, all spans are inserted as a part of the
+				// same transaction; otherwise each is a separate transaction.
+				for _, sameTxn := range []bool{false, true} {
+					t.Logf("sameTxn: %v", sameTxn)
+
+					txns := make([]txnState, len(testCase.spans))
+					if sameTxn {
+						id := uuid.NewV4()
+						for i := range testCase.spans {
+							txns[i].id = id
+						}
+					} else {
+						for i := range testCase.spans {
+							txns[i].id = uuid.NewV4()
+						}
+					}
+
+					tc.Clear(clock)
+					if simultaneous {
+						now := clock.Now()
+						for i := range txns {
+							txns[i].ts = now
+						}
+					} else {
+						for i := range txns {
+							txns[i].ts = clock.Now()
+						}
+					}
+
+					if reverse {
+						for i := len(testCase.spans) - 1; i >= 0; i-- {
+							tc.add(testCase.spans[i].Key, testCase.spans[i].EndKey, txns[i].ts, txns[i].id, true)
+						}
+					} else {
+						for i := range testCase.spans {
+							tc.add(testCase.spans[i].Key, testCase.spans[i].EndKey, txns[i].ts, txns[i].id, true)
+						}
+					}
+					testCase.validator(t, tc, txns)
+				}
+			}
 		}
-		for i := len(testCase.spans) - 1; i >= 0; i-- {
-			tc.add(testCase.spans[i].Key, testCase.spans[i].EndKey, tss[i], txns[i], true)
-		}
-		testCase.validator(t, tc, tss, txns)
 	}
 }
 
