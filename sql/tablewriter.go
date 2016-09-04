@@ -439,7 +439,8 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.DTuple, er
 		return make([]parser.DTuple, len(primaryKeys)), nil
 	}
 
-	if err := tu.fetcher.StartScan(tu.txn, pkSpans, int64(len(pkSpans))); err != nil {
+	// We don't limit batches here because the spans are unordered.
+	if err := tu.fetcher.StartScan(tu.txn, pkSpans, false /* no batch limits */, 0); err != nil {
 		return nil, err
 	}
 
@@ -647,7 +648,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 	if err != nil {
 		return resume, err
 	}
-	if err := rf.StartScan(td.txn, roachpb.Spans{resume}, 0); err != nil {
+	if err := rf.StartScan(td.txn, roachpb.Spans{resume}, true /* limit batches */, 0); err != nil {
 		return resume, err
 	}
 
@@ -739,7 +740,7 @@ func (td *tableDeleter) deleteIndexScan(
 	if err != nil {
 		return resume, err
 	}
-	if err := rf.StartScan(td.txn, roachpb.Spans{resume}, 0); err != nil {
+	if err := rf.StartScan(td.txn, roachpb.Spans{resume}, true /* limit batches */, 0); err != nil {
 		return resume, err
 	}
 

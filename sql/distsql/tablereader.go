@@ -225,7 +225,9 @@ func (tr *tableReader) Run(wg *sync.WaitGroup) {
 		defer log.Infof(tr.ctx, "exiting")
 	}
 
-	if err := tr.fetcher.StartScan(tr.flowCtx.txn, tr.spans, tr.getLimitHint()); err != nil {
+	if err := tr.fetcher.StartScan(
+		tr.flowCtx.txn, tr.spans, true /* limit batches */, tr.getLimitHint(),
+	); err != nil {
 		log.Errorf(tr.ctx, "scan error: %s", err)
 		tr.output.Close(err)
 		return
