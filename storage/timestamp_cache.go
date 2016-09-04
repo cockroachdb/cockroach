@@ -408,35 +408,28 @@ func (tc *timestampCache) ExpandRequests(timestamp hlc.Timestamp) {
 }
 
 // GetMaxRead returns the maximum read timestamp which overlaps the
-// interval spanning from start to end. Cached timestamps matching the
-// specified txnID are not considered. If no part of the specified
-// range is overlapped by timestamps from different transactions in
-// the cache, the low water timestamp is returned for the read
-// timestamps. Also returns an "ok" bool, indicating whether an
-// explicit match of the interval was found in the cache.
-func (tc *timestampCache) GetMaxRead(start, end roachpb.Key, txnID *uuid.UUID) (hlc.Timestamp, bool) {
-	return tc.getMax(start, end, txnID, true)
+// interval spanning from start to end. If that timestamp belongs to a
+// single transaction, that transaction's ID is returned. If no part
+// of the specified range is overlapped by timestamps from different
+// transactions in the cache, the low water timestamp is returned for
+// the read timestamps. Also returns an "ok" bool, indicating whether
+// an explicit match of the interval was found in the cache.
+func (tc *timestampCache) GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, *uuid.UUID, bool) {
+	return tc.getMax(start, end, true)
 }
 
 // GetMaxWrite returns the maximum write timestamp which overlaps the
-// interval spanning from start to end. Cached timestamps matching the
-// specified txnID are not considered. If no part of the specified
-// range is overlapped by timestamps from different transactions in
-// the cache, the low water timestamp is returned for the write
-// timestamps. Also returns an "ok" bool, indicating whether an
-// explicit match of the interval was found in the cache.
-//
-// The txn ID prevents restarts with a pattern like: read("a"),
-// write("a"). The read adds a timestamp for "a". Then the write (for
-// the same transaction) would get that as the max timestamp and be
-// forced to increment it. This allows timestamps from the same txn
-// to be ignored because the write would instead get the low water
-// timestamp.
-func (tc *timestampCache) GetMaxWrite(start, end roachpb.Key, txnID *uuid.UUID) (hlc.Timestamp, bool) {
-	return tc.getMax(start, end, txnID, false)
+// interval spanning from start to end. If that timestamp belongs to a
+// single transaction, that transaction's ID is returned. If no part
+// of the specified range is overlapped by timestamps from different
+// transactions in the cache, the low water timestamp is returned for
+// the write timestamps. Also returns an "ok" bool, indicating whether
+// an explicit match of the interval was found in the cache.
+func (tc *timestampCache) GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, *uuid.UUID, bool) {
+	return tc.getMax(start, end, false)
 }
 
-func (tc *timestampCache) getMax(start, end roachpb.Key, txnID *uuid.UUID, readTSCache bool) (hlc.Timestamp, bool) {
+func (tc *timestampCache) getMax(start, end roachpb.Key, readTSCache bool) (hlc.Timestamp, *uuid.UUID, bool) {
 	if len(end) == 0 {
 		end = start.Next()
 	}
@@ -446,16 +439,19 @@ func (tc *timestampCache) getMax(start, end roachpb.Key, txnID *uuid.UUID, readT
 	if readTSCache {
 		cache = tc.rCache
 	}
+	var txnID *uuid.UUID
 	for _, o := range cache.GetOverlaps(start, end) {
 		ce := o.Value.(*cacheValue)
-		if ce.txnID == nil || txnID == nil || !roachpb.TxnIDEqual(txnID, ce.txnID) {
-			if max.Less(ce.timestamp) {
-				ok = true
-				max = ce.timestamp
-			}
+		if max.Less(ce.timestamp) {
+			ok = true
+			max = ce.timestamp
+			txnID = ce.txnID
+		} else if max.Equal(ce.timestamp) && txnID != nil &&
+			(ce.txnID == nil || !uuid.Equal(*txnID, *ce.txnID)) {
+			txnID = nil
 		}
 	}
-	return max, ok
+	return max, txnID, ok
 }
 
 // MergeInto merges all entries from this timestamp cache into the
