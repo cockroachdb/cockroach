@@ -150,11 +150,16 @@ func newTimestampCache(clock *hlc.Clock) *timestampCache {
 	return tc
 }
 
+func (tc *timestampCache) reset() {
+	tc.requests = btree.New(btreeDegree)
+	tc.rCache.Clear()
+	tc.wCache.Clear()
+}
+
 // Clear clears the cache and resets the low water mark to the
 // current time plus the maximum clock offset.
 func (tc *timestampCache) Clear(clock *hlc.Clock) {
-	tc.rCache.Clear()
-	tc.wCache.Clear()
+	tc.reset()
 	tc.lowWater = clock.Now()
 	// TODO(tschottdorf): It's dangerous to inject timestamps (which will make
 	// it into the HLC) like that.

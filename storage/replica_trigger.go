@@ -321,6 +321,16 @@ func (r *Replica) leasePostCommitTrigger(
 				}()
 			}
 		} else if trigger.lease.Covers(r.store.Clock().Now()) {
+			// We're not the lease holder, reset our timestamp cache, releasing
+			// anything currently cached. The timestamp cache is only used by the
+			// lease holder. Note that we'll call SetLowWater when we next acquire
+			// the lease.
+			r.mu.Lock()
+			// TODO(tschottdorf): Why does calling TimestampCache.Clear() cause
+			// TestReplicaTSCacheLowWaterOnLease to fail?
+			r.mu.tsCache.reset()
+			r.mu.Unlock()
+
 			if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
 				if raftGroup.Status().RaftState == raft.StateLeader {
 					// If this replica is the raft leader but it is not the new lease
