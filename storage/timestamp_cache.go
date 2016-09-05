@@ -141,7 +141,6 @@ func newTimestampCache(clock *hlc.Clock) *timestampCache {
 	tc := &timestampCache{
 		rCache:                cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
 		wCache:                cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
-		requests:              btree.New(btreeDegree),
 		evictionSizeThreshold: defaultEvictionSizeThreshold,
 	}
 	tc.Clear(clock)
@@ -153,6 +152,7 @@ func newTimestampCache(clock *hlc.Clock) *timestampCache {
 // Clear clears the cache and resets the low water mark to the
 // current time plus the maximum clock offset.
 func (tc *timestampCache) Clear(clock *hlc.Clock) {
+	tc.requests = btree.New(btreeDegree)
 	tc.rCache.Clear()
 	tc.wCache.Clear()
 	tc.lowWater = clock.Now()
