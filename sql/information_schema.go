@@ -31,6 +31,8 @@ var informationSchema = virtualSchema{
 		informationSchemaSchemataTable,
 		informationSchemaTableConstraintTable,
 		informationSchemaTablesTable,
+		informationSchemaTablePrivileges,
+		informationSchemaSchemataTablePrivileges,
 	},
 }
 
@@ -124,6 +126,40 @@ CREATE TABLE information_schema.columns (
 	},
 }
 
+var informationSchemaTablePrivileges = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.table_privileges (
+	GRANTOR STRING NOT NULL DEFAULT '',
+	GRANTEE STRING NOT NULL DEFAULT '',
+	TABLE_CATALOG STRING NOT NULL DEFAULT '',
+	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
+	TABLE_NAME STRING NOT NULL DEFAULT '',
+	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
+	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE,
+	WITH_HIERARCHY BOOL NOT NULL DEFAULT FALSE
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum)) error {
+		return forEachTableDesc(p,
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) {
+				for _, u := range table.Privileges.Show() {
+					addRow(
+						parser.DNull,                    // Grantor
+						parser.NewDString(u.User),       // Grantee
+						defString,                       // Table catalog,
+						parser.NewDString(db.Name),      // Table schema
+						parser.NewDString(table.Name),   // Table name
+						parser.NewDString(u.Privileges), // Privilege type
+						parser.DNull,                    // Is grantable
+						parser.DNull,                    // With hierarchy
+					)
+				}
+
+			},
+		)
+	},
+}
+
 func characterMaximumLength(colType sqlbase.ColumnType) parser.Datum {
 	return dIntFnOrNull(colType.MaxCharacterLength)
 }
@@ -162,6 +198,33 @@ CREATE TABLE information_schema.schemata (
 				parser.DNull,               // sql_path
 			)
 		})
+	},
+}
+
+var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.schema_privileges (
+	GRANTEE STRING NOT NULL DEFAULT '',
+	TABLE_CATALOG STRING NOT NULL DEFAULT '',
+	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
+	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
+	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum)) error {
+		return forEachDatabaseDesc(p, func(db *sqlbase.DatabaseDescriptor) {
+			for _, u := range db.Privileges.Show() {
+				addRow(
+					parser.NewDString(u.User),       // Grentee
+					defString,                       // table_catalog,
+					parser.NewDString(db.Name),      // database_name
+					parser.NewDString(u.Privileges), // Privilege type
+					parser.DNull,                    // Is grantable
+				)
+			}
+
+		},
+		)
 	},
 }
 
