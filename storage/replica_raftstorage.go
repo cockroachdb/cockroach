@@ -426,6 +426,10 @@ type IncomingSnapshot struct {
 	Batches [][]byte
 	// The Raft log entries for this snapshot.
 	LogEntries [][]byte
+
+	// If true, indicates that a placeholder for this snapshot needs to be
+	// removed once it is applied.
+	addedPlaceholder bool
 }
 
 // Close this OutgoingSnapshot, freeing associated resources.
