@@ -232,6 +232,7 @@ func (tc *timestampCache) add(
 					// Old: ------------
 					//
 					// New: ------------
+					// Old:
 					*cv = cacheValue{timestamp: timestamp, txnID: txnID}
 					tcache.MoveToEnd(entry)
 					return
@@ -241,6 +242,7 @@ func (tc *timestampCache) add(
 					// New: ------------      ------------      ------------
 					// Old:   --------    or    ----------  or  ----------
 					//
+					// New: ------------      ------------      ------------
 					// Old:
 					tcache.DelEntry(entry)
 				case sCmp > 0 && eCmp < 0:
@@ -249,12 +251,13 @@ func (tc *timestampCache) add(
 					// New:     ----
 					// Old: ------------
 					//
+					// New:     ----
 					// Old: ----    ----
 					oldEnd := key.End
 					key.End = r.Start
 
-					key := tcache.MakeKey(r.End, oldEnd)
-					newEntry := makeCacheEntry(key, *cv)
+					newKey := tcache.MakeKey(r.End, oldEnd)
+					newEntry := makeCacheEntry(newKey, *cv)
 					tcache.AddEntryAfter(newEntry, entry)
 				case eCmp >= 0:
 					// Left partial overlap; truncate old end.
@@ -262,6 +265,7 @@ func (tc *timestampCache) add(
 					// New:     --------          --------
 					// Old: --------      or  ------------
 					//
+					// New:     --------          --------
 					// Old: ----              ----
 					key.End = r.Start
 				case sCmp <= 0:
@@ -270,6 +274,7 @@ func (tc *timestampCache) add(
 					// New: --------          --------
 					// Old:     --------  or  ------------
 					//
+					// New: --------          --------
 					// Old:         ----              ----
 					key.Start = r.End
 				default:
@@ -286,6 +291,7 @@ func (tc *timestampCache) add(
 					// Old: -----------      -----------      -----------      -----------
 					// New:    -----     or  -----------  or  --------     or     --------
 					//
+					// Old: -----------      -----------      -----------      -----------
 					// New:
 					return
 				case sCmp < 0 && eCmp > 0:
@@ -296,6 +302,7 @@ func (tc *timestampCache) add(
 					// Old:    ------
 					// New: ------------
 					//
+					// Old:    ------
 					// New: ---      ---
 					lr := interval.Range{Start: r.Start, End: key.Start}
 					addRange(lr)
@@ -307,6 +314,7 @@ func (tc *timestampCache) add(
 					// Old: --------          --------
 					// New:     --------  or  ------------
 					//
+					// Old: --------          --------
 					// New:         ----              ----
 					r.Start = key.End
 				case sCmp < 0:
@@ -315,6 +323,7 @@ func (tc *timestampCache) add(
 					// Old:     --------          --------
 					// New: --------      or  ------------
 					//
+					// Old:     --------          --------
 					// New: ----              ----
 					r.End = key.Start
 				default:
@@ -334,16 +343,16 @@ func (tc *timestampCache) add(
 				}
 				switch {
 				case sCmp == 0 && eCmp == 0:
-					// New and old are equal; replace old with new and avoid the
-					// need to insert new. Segment is no longer owned by any
+					// New and old are equal. Segment is no longer owned by any
 					// transaction.
 					//
 					// New: ------------
 					// Old: ------------
 					//
-					// Nil: ------------
+					// New:
+					// Nil: ============
+					// Old:
 					clearTxnIfDifferent(&cv.txnID, txnID)
-					tcache.MoveToEnd(entry)
 					return
 				case sCmp == 0 && eCmp > 0:
 					// New contains old, left-aligned. Clear ownership of the
@@ -353,7 +362,8 @@ func (tc *timestampCache) add(
 					// Old: ----------
 					//
 					// New:           --
-					// Nil: ----------
+					// Nil: ==========
+					// Old:
 					clearTxnIfDifferent(&cv.txnID, txnID)
 					r.Start = key.End
 				case sCmp < 0 && eCmp == 0:
@@ -364,11 +374,10 @@ func (tc *timestampCache) add(
 					// Old:   ----------
 					//
 					// New: --
-					// Nil:   ----------
+					// Nil:   ==========
+					// Old:
 					clearTxnIfDifferent(&cv.txnID, txnID)
 					r.End = key.Start
-					addRange(r)
-					return
 				case sCmp < 0 && eCmp > 0:
 					// New contains old; split into three segments with the
 					// overlap owned by no txn.
@@ -377,7 +386,8 @@ func (tc *timestampCache) add(
 					// Old:   --------
 					//
 					// New: --        --
-					// Nil:   --------
+					// Nil:   ========
+					// Old:
 					clearTxnIfDifferent(&cv.txnID, txnID)
 					newKey := tcache.MakeKey(r.Start, key.Start)
 					newEntry := makeCacheEntry(newKey, cacheValue{timestamp: timestamp, txnID: txnID})
@@ -390,24 +400,25 @@ func (tc *timestampCache) add(
 					// New:     ----
 					// Old: ------------
 					//
-					// Nil:     ----
+					// New:
+					// Nil:     ====
 					// Old: ----    ----
 					oldEnd := key.End
 					key.End = r.Start
 					clearTxnIfDifferent(&txnID, cv.txnID)
 
-					key := tcache.MakeKey(r.End, oldEnd)
-					newEntry := makeCacheEntry(key, *cv)
+					newKey := tcache.MakeKey(r.End, oldEnd)
+					newEntry := makeCacheEntry(newKey, *cv)
 					tcache.AddEntryAfter(newEntry, entry)
 				case eCmp == 0:
-					// Right-aligned partial overlap; truncate old end and clear ownership of
-					// new segment.
+					// Right-aligned partial overlap; truncate old end and clear
+					// ownership of new segment.
 					//
 					// New:     --------
 					// Old: ------------
 					//
 					// New:
-					// Nil:     --------
+					// Nil:     ========
 					// Old: ----
 					key.End = r.Start
 					clearTxnIfDifferent(&txnID, cv.txnID)
@@ -419,13 +430,13 @@ func (tc *timestampCache) add(
 					// Old: --------
 					//
 					// New:         ----
-					// Nil:     ----
+					// Nil:     ====
 					// Old: ----
 					key.End, r.Start = r.Start, key.End
-					key := tcache.MakeKey(key.End, r.Start)
+					newKey := tcache.MakeKey(key.End, r.Start)
 					newCV := cacheValue{timestamp: cv.timestamp, txnID: txnID}
 					clearTxnIfDifferent(&newCV.txnID, cv.txnID)
-					newEntry := makeCacheEntry(key, newCV)
+					newEntry := makeCacheEntry(newKey, newCV)
 					tcache.AddEntryAfter(newEntry, entry)
 				case sCmp == 0:
 					// Left-aligned partial overlap; truncate old start and
@@ -434,7 +445,7 @@ func (tc *timestampCache) add(
 					// Old: ------------
 					//
 					// New:
-					// Nil: --------
+					// Nil: ========
 					// Old:         ----
 					key.Start = r.End
 					clearTxnIfDifferent(&txnID, cv.txnID)
@@ -446,20 +457,14 @@ func (tc *timestampCache) add(
 					// Old:     --------
 					//
 					// New: ----
-					// Nil:     ----
+					// Nil:     ====
 					// Old:         ----
 					key.Start, r.End = r.End, key.Start
-					key := tcache.MakeKey(r.End, key.Start)
+					newKey := tcache.MakeKey(r.End, key.Start)
 					newCV := cacheValue{timestamp: cv.timestamp, txnID: txnID}
 					clearTxnIfDifferent(&newCV.txnID, cv.txnID)
-					newEntry := makeCacheEntry(key, newCV)
+					newEntry := makeCacheEntry(newKey, newCV)
 					tcache.AddEntryAfter(newEntry, entry)
-					// We can add the new range now because it is guaranteed to
-					// be any other overlaps; we ust do so because we've changed
-					// our boundaries and continuing to iterate may hit the "no
-					// overlap" panic.
-					addRange(r)
-					return
 				default:
 					panic(fmt.Sprintf("no overlap between %v and %v", key.Range, r))
 				}
@@ -557,7 +562,8 @@ func (tc *timestampCache) ExpandRequests(timestamp hlc.Timestamp) {
 // of the specified range is overlapped by timestamps from different
 // transactions in the cache, the low water timestamp is returned for
 // the read timestamps. Also returns an "ok" bool, indicating whether
-// an explicit match of the interval was found in the cache.
+// an explicit match of the interval was found in the cache (as
+// opposed to using the low-water mark).
 func (tc *timestampCache) GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, *uuid.UUID, bool) {
 	return tc.getMax(start, end, true)
 }
@@ -568,7 +574,8 @@ func (tc *timestampCache) GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, *uu
 // of the specified range is overlapped by timestamps from different
 // transactions in the cache, the low water timestamp is returned for
 // the write timestamps. Also returns an "ok" bool, indicating whether
-// an explicit match of the interval was found in the cache.
+// an explicit match of the interval was found in the cache (as
+// opposed to using the low-water mark).
 func (tc *timestampCache) GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, *uuid.UUID, bool) {
 	return tc.getMax(start, end, false)
 }
@@ -578,24 +585,24 @@ func (tc *timestampCache) getMax(start, end roachpb.Key, readTSCache bool) (hlc.
 		end = start.Next()
 	}
 	var ok bool
-	max := tc.lowWater
+	maxTS := tc.lowWater
+	var maxTxnID *uuid.UUID
 	cache := tc.wCache
 	if readTSCache {
 		cache = tc.rCache
 	}
-	var txnID *uuid.UUID
 	for _, o := range cache.GetOverlaps(start, end) {
 		ce := o.Value.(*cacheValue)
-		if max.Less(ce.timestamp) {
+		if maxTS.Less(ce.timestamp) {
 			ok = true
-			max = ce.timestamp
-			txnID = ce.txnID
-		} else if max.Equal(ce.timestamp) && txnID != nil &&
-			(ce.txnID == nil || !uuid.Equal(*txnID, *ce.txnID)) {
-			txnID = nil
+			maxTS = ce.timestamp
+			maxTxnID = ce.txnID
+		} else if maxTS.Equal(ce.timestamp) && maxTxnID != nil &&
+			(ce.txnID == nil || !uuid.Equal(*maxTxnID, *ce.txnID)) {
+			maxTxnID = nil
 		}
 	}
-	return max, txnID, ok
+	return maxTS, maxTxnID, ok
 }
 
 // MergeInto merges all entries from this timestamp cache into the
