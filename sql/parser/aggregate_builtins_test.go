@@ -15,11 +15,130 @@
 package parser
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/util/decimal"
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
+
+// testAggregateResultDeepCopy verifies that Datum returned from AggregateFunc's
+// Result() method are not mutated during future accumulation. It verifies this by
+// printing all values to strings immediately after calling Result(), and later
+// printing all values to strings once the accumulation has finished. If the string
+// slices are not equal, it means that the result Datums were modified during later
+// accumulation, which violates the "deep copy of any internal state" condition.
+func testAggregateResultDeepCopy(t *testing.T, aggFunc func() AggregateFunc, vals []Datum) {
+	aggImpl := aggFunc()
+	runningDatums := make([]Datum, len(vals))
+	runningStrings := make([]string, len(vals))
+	for i := range vals {
+		aggImpl.Add(vals[i])
+		res := aggImpl.Result()
+		runningDatums[i] = res
+		runningStrings[i] = res.String()
+	}
+	finalStrings := make([]string, len(vals))
+	for i, d := range runningDatums {
+		finalStrings[i] = d.String()
+	}
+	if !reflect.DeepEqual(runningStrings, finalStrings) {
+		t.Errorf("Aggregate result mutated during future accumulation: initial results were %v,"+
+			" later results were %v", runningStrings, finalStrings)
+	}
+}
+
+func TestAvgIntResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newIntAvgAggregate, makeIntTestDatum(10))
+}
+
+func TestAvgFloatResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newFloatAvgAggregate, makeFloatTestDatum(10))
+}
+
+func TestAvgDecimalResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newDecimalAvgAggregate, makeDecimalTestDatum(10))
+}
+
+func TestBoolAndResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newBoolAndAggregate, makeBoolTestDatum(10))
+}
+
+func TestBoolOrResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newBoolOrAggregate, makeBoolTestDatum(10))
+}
+
+func TestCountResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newCountAggregate, makeIntTestDatum(10))
+}
+
+func TestMaxIntResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newMaxAggregate, makeIntTestDatum(10))
+}
+
+func TestMaxFloatResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newMaxAggregate, makeFloatTestDatum(10))
+}
+
+func TestMaxDecimalResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newMaxAggregate, makeDecimalTestDatum(10))
+}
+
+func TestMaxBoolResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newMaxAggregate, makeBoolTestDatum(10))
+}
+
+func TestMinIntResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newMinAggregate, makeIntTestDatum(10))
+}
+
+func TestMinFloatResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newMinAggregate, makeFloatTestDatum(10))
+}
+
+func TestMinDecimalResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newMinAggregate, makeDecimalTestDatum(10))
+}
+
+func TestMinBoolResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newMinAggregate, makeBoolTestDatum(10))
+}
+
+func TestSumIntResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newIntSumAggregate, makeIntTestDatum(10))
+}
+
+func TestSumFloatResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newFloatSumAggregate, makeFloatTestDatum(10))
+}
+
+func TestSumDecimalResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newDecimalSumAggregate, makeDecimalTestDatum(10))
+}
+
+func TestVarianceIntResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newIntVarianceAggregate, makeIntTestDatum(10))
+}
+
+func TestVarianceFloatResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newFloatVarianceAggregate, makeFloatTestDatum(10))
+}
+
+func TestVarianceDecimalResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newDecimalVarianceAggregate, makeDecimalTestDatum(10))
+}
+
+func TestStddevIntResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newIntStddevAggregate, makeIntTestDatum(10))
+}
+
+func TestStddevFloatResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newFloatStddevAggregate, makeFloatTestDatum(10))
+}
+
+func TestStddevDecimalResultDeepCopy(t *testing.T) {
+	testAggregateResultDeepCopy(t, newDecimalStddevAggregate, makeDecimalTestDatum(10))
+}
 
 func makeIntTestDatum(count int) []Datum {
 	rng, _ := randutil.NewPseudoRand()
@@ -68,6 +187,16 @@ func makeDecimalTestDatum(count int) []Datum {
 		dd := &DDecimal{}
 		decimal.SetFromFloat(&dd.Dec, rng.Float64())
 		vals[i] = dd
+	}
+	return vals
+}
+
+func makeBoolTestDatum(count int) []Datum {
+	rng, _ := randutil.NewPseudoRand()
+
+	vals := make([]Datum, count)
+	for i := range vals {
+		vals[i] = MakeDBool(DBool(rng.Int31n(2) == 0))
 	}
 	return vals
 }
