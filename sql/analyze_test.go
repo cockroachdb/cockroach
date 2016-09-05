@@ -41,6 +41,7 @@ func testTableDesc() *sqlbase.TableDescriptor {
 			{Name: "h", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_FLOAT}},
 			{Name: "i", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_STRING}},
 			{Name: "j", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT}},
+			{Name: "k", Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_BYTES}},
 		},
 		PrimaryIndex: sqlbase.IndexDescriptor{
 			Name: "primary", Unique: true, ColumnNames: []string{"a"},

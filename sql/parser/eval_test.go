@@ -617,8 +617,6 @@ func TestEvalError(t *testing.T) {
 		{`ANNOTATE_TYPE(ANNOTATE_TYPE(1, int), decimal)`,
 			`incompatible type assertion for ANNOTATE_TYPE(1, INT) as decimal, found type: int`},
 		{`b'\xff\xfe\xfd'::string`, `invalid utf8: "\xff\xfe\xfd"`},
-		{`'' LIKE ` + string([]byte{0x27, 0xc2, 0x30, 0x7a, 0xd5, 0x25, 0x30, 0x27}),
-			`LIKE regexp compilation failed: error parsing regexp: invalid UTF-8: .*`},
 		// TODO(pmattis): Check for overflow.
 		// {`~0 + 1`, `0`},
 	}
