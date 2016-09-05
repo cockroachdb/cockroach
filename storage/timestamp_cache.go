@@ -329,18 +329,52 @@ func (tc *timestampCache) add(
 				default:
 					panic(fmt.Sprintf("no overlap between %v and %v", key.Range, r))
 				}
+			} else if (cv.txnID == nil && txnID == nil) || uuid.Equal(*cv.txnID, *txnID) {
+				// The existing interval has a timestamp equal to the new
+				// interval, and the same transaction ID.
+				switch {
+				case sCmp >= 0 && eCmp <= 0:
+					// Old contains or is equal to new; no need to add.
+					//
+					// New:    -----     or  -----------  or  --------     or     --------
+					// Old: -----------      -----------      -----------      -----------
+					//
+					// New:
+					// Old: -----------      -----------      -----------      -----------
+					return
+				case sCmp <= 0 && eCmp >= 0:
+					// New contains old; delete old.
+					//
+					// New: ------------      ------------      ------------
+					// Old:   --------    or    ----------  or  ----------
+					//
+					// New: ------------      ------------      ------------
+					// Old:
+					tcache.DelEntry(entry)
+				case eCmp >= 0:
+					// Left partial overlap; truncate old end.
+					//
+					// New:     --------          --------
+					// Old: --------      or  ------------
+					//
+					// New:     --------          --------
+					// Old: ----              ----
+					key.End = r.Start
+				case sCmp <= 0:
+					// Right partial overlap; truncate old start.
+					//
+					// New: --------          --------
+					// Old:     --------  or  ------------
+					//
+					// New: --------          --------
+					// Old:         ----              ----
+					key.Start = r.End
+				default:
+					panic(fmt.Sprintf("no overlap between %v and %v", key.Range, r))
+				}
 			} else {
 				// The existing interval has a timestamp equal to the new
-				// interval. Compare interval ranges to determine how to
-				// modify existing interval.
-
-				// If the intervals have two different transactions, we must
-				// clear the transaction id.
-				clearTxnIfDifferent := func(a **uuid.UUID, b *uuid.UUID) {
-					if b == nil || (*a != nil && !uuid.Equal(**a, *b)) {
-						*a = nil
-					}
-				}
+				// interval and a different transaction ID.
 				switch {
 				case sCmp == 0 && eCmp == 0:
 					// New and old are equal. Segment is no longer owned by any
@@ -352,7 +386,7 @@ func (tc *timestampCache) add(
 					// New:
 					// Nil: ============
 					// Old:
-					clearTxnIfDifferent(&cv.txnID, txnID)
+					cv.txnID = nil
 					return
 				case sCmp == 0 && eCmp > 0:
 					// New contains old, left-aligned. Clear ownership of the
@@ -364,7 +398,7 @@ func (tc *timestampCache) add(
 					// New:           --
 					// Nil: ==========
 					// Old:
-					clearTxnIfDifferent(&cv.txnID, txnID)
+					cv.txnID = nil
 					r.Start = key.End
 				case sCmp < 0 && eCmp == 0:
 					// New contains old, right-aligned. Clear ownership of the
@@ -376,7 +410,7 @@ func (tc *timestampCache) add(
 					// New: --
 					// Nil:   ==========
 					// Old:
-					clearTxnIfDifferent(&cv.txnID, txnID)
+					cv.txnID = nil
 					r.End = key.Start
 				case sCmp < 0 && eCmp > 0:
 					// New contains old; split into three segments with the
@@ -388,7 +422,7 @@ func (tc *timestampCache) add(
 					// New: --        --
 					// Nil:   ========
 					// Old:
-					clearTxnIfDifferent(&cv.txnID, txnID)
+					cv.txnID = nil
 					newKey := tcache.MakeKey(r.Start, key.Start)
 					newEntry := makeCacheEntry(newKey, cacheValue{timestamp: timestamp, txnID: txnID})
 					tcache.AddEntryAfter(newEntry, entry)
@@ -403,15 +437,15 @@ func (tc *timestampCache) add(
 					// New:
 					// Nil:     ====
 					// Old: ----    ----
+					txnID = nil
 					oldEnd := key.End
 					key.End = r.Start
-					clearTxnIfDifferent(&txnID, cv.txnID)
 
 					newKey := tcache.MakeKey(r.End, oldEnd)
 					newEntry := makeCacheEntry(newKey, *cv)
 					tcache.AddEntryAfter(newEntry, entry)
 				case eCmp == 0:
-					// Right-aligned partial overlap; truncate old end and clear
+					// Old contains new, right-aligned; truncate old end and clear
 					// ownership of new segment.
 					//
 					// New:     --------
@@ -420,8 +454,19 @@ func (tc *timestampCache) add(
 					// New:
 					// Nil:     ========
 					// Old: ----
+					txnID = nil
 					key.End = r.Start
-					clearTxnIfDifferent(&txnID, cv.txnID)
+				case sCmp == 0:
+					// Old contains new, left-aligned; truncate old start and
+					// clear ownership of new segment.
+					// New: --------
+					// Old: ------------
+					//
+					// New:
+					// Nil: ========
+					// Old:         ----
+					txnID = nil
+					key.Start = r.End
 				case eCmp > 0:
 					// Left partial overlap; truncate old end and split new into
 					// segments owned by no txn (the overlap) and the new txn.
@@ -434,21 +479,9 @@ func (tc *timestampCache) add(
 					// Old: ----
 					key.End, r.Start = r.Start, key.End
 					newKey := tcache.MakeKey(key.End, r.Start)
-					newCV := cacheValue{timestamp: cv.timestamp, txnID: txnID}
-					clearTxnIfDifferent(&newCV.txnID, cv.txnID)
+					newCV := cacheValue{timestamp: cv.timestamp, txnID: nil}
 					newEntry := makeCacheEntry(newKey, newCV)
 					tcache.AddEntryAfter(newEntry, entry)
-				case sCmp == 0:
-					// Left-aligned partial overlap; truncate old start and
-					// clear ownership of new segment.
-					// New: --------
-					// Old: ------------
-					//
-					// New:
-					// Nil: ========
-					// Old:         ----
-					key.Start = r.End
-					clearTxnIfDifferent(&txnID, cv.txnID)
 				case sCmp < 0:
 					// Right partial overlap; truncate old start and split new into
 					// segments owned by no txn (the overlap) and the new txn.
@@ -461,8 +494,7 @@ func (tc *timestampCache) add(
 					// Old:         ----
 					key.Start, r.End = r.End, key.Start
 					newKey := tcache.MakeKey(r.End, key.Start)
-					newCV := cacheValue{timestamp: cv.timestamp, txnID: txnID}
-					clearTxnIfDifferent(&newCV.txnID, cv.txnID)
+					newCV := cacheValue{timestamp: cv.timestamp, txnID: nil}
 					newEntry := makeCacheEntry(newKey, newCV)
 					tcache.AddEntryAfter(newEntry, entry)
 				default:
