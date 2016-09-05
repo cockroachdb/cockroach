@@ -320,26 +320,36 @@ func (r *Replica) leasePostCommitTrigger(
 					r.gossipFirstRangeLocked(ctx)
 				}()
 			}
-		} else if trigger.lease.Covers(r.store.Clock().Now()) {
-			if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
-				if raftGroup.Status().RaftState == raft.StateLeader {
-					// If this replica is the raft leader but it is not the new lease
-					// holder, then try to transfer the raft leadership to match the
-					// lease.
-					log.Infof(ctx, "range %v: replicaID %v transfer raft leadership to replicaID %v",
-						r.RangeID, replicaID, trigger.lease.Replica.ReplicaID)
-					raftGroup.TransferLeader(uint64(trigger.lease.Replica.ReplicaID))
+		} else {
+			// We're not the lease holder, reset our timestamp cache, releasing
+			// anything currently cached. The timestamp cache is only used by the
+			// lease holder. Note that we'll call SetLowWater when we next acquire
+			// the lease.
+			r.mu.Lock()
+			r.mu.tsCache.Clear(r.store.Clock())
+			r.mu.Unlock()
+
+			if trigger.lease.Covers(r.store.Clock().Now()) {
+				if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
+					if raftGroup.Status().RaftState == raft.StateLeader {
+						// If this replica is the raft leader but it is not the new lease
+						// holder, then try to transfer the raft leadership to match the
+						// lease.
+						log.Infof(ctx, "range %v: replicaID %v transfer raft leadership to replicaID %v",
+							r.RangeID, replicaID, trigger.lease.Replica.ReplicaID)
+						raftGroup.TransferLeader(uint64(trigger.lease.Replica.ReplicaID))
+					}
+					return nil
+				}); err != nil {
+					// An error here indicates that this Replica has been destroyed
+					// while lacking the necessary synchronization (or even worse, it
+					// fails spuriously - could be a storage error), and so we avoid
+					// sweeping that under the rug.
+					//
+					// TODO(tschottdorf): this error is not handled any more
+					// at this level.
+					log.Fatal(ctx, NewReplicaCorruptionError(err))
 				}
-				return nil
-			}); err != nil {
-				// An error here indicates that this Replica has been destroyed
-				// while lacking the necessary synchronization (or even worse, it
-				// fails spuriously - could be a storage error), and so we avoid
-				// sweeping that under the rug.
-				//
-				// TODO(tschottdorf): this error is not handled any more
-				// at this level.
-				log.Fatal(ctx, NewReplicaCorruptionError(err))
 			}
 		}
 	}
