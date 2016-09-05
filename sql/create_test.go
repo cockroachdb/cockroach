@@ -17,14 +17,20 @@
 package sql_test
 
 import (
+	gosql "database/sql"
+	"fmt"
+	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -145,4 +151,195 @@ func TestDatabaseDescriptor(t *testing.T) {
 	} else if !gr.Exists() {
 		t.Fatal("key is missing")
 	}
+}
+
+// createTestTable tries to create a new table named based on the passed in id.
+// It is designed to be synced with a number of concurrent calls to this
+// function. Before starting, it first signals a done on the start waitgroup
+// and then will block until the signal channel is closed. Once closed, it will
+// proceed to try to create the table. Once the table creation is finished (be
+// it successful or not) it signals a done on the end waitgroup.
+func createTestTable(
+	t *testing.T,
+	tc *testcluster.TestCluster,
+	id int,
+	db *gosql.DB,
+	wgStart *sync.WaitGroup,
+	wgEnd *sync.WaitGroup,
+	signal chan struct{},
+	completed chan int,
+	ignoreError string,
+) {
+	defer wgEnd.Done()
+
+	wgStart.Done()
+	<-signal
+
+	tableSQL := fmt.Sprintf(`
+			CREATE TABLE "test"."table_%d" (
+			id INT PRIMARY KEY,
+			val INT
+		)`, id)
+	if _, err := db.Exec(tableSQL); err != nil {
+		if !(ignoreError != "" && testutils.IsError(err, ignoreError)) {
+			t.Errorf("table %d: could not be created: %s", id, err)
+		}
+	} else {
+		completed <- id
+	}
+}
+
+// verifyTables inserts a value into each table based on the IDs of the passed
+// in channel. It also ensures that the correct number of tables were created
+// and that they all correspond to individual table descriptor IDs in the
+// correct range of values.
+func verifyTables(t *testing.T,
+	tc *testcluster.TestCluster,
+	completed chan int,
+	expectedNumOfTables int,
+	descIDStart int64,
+) {
+	numTablesCreated := len(completed)
+	if numTablesCreated != expectedNumOfTables {
+		t.Fatalf("expected %d tables created, only got %d", expectedNumOfTables, numTablesCreated)
+	}
+	descIDEnd := descIDStart + int64(numTablesCreated)
+
+	kvDB := tc.Servers[0].KVClient().(*client.DB)
+	usedTableIDs := make(map[sqlbase.ID]string)
+
+	for id := range completed {
+		tableName := fmt.Sprintf("table_%d", id)
+		insertTableSQL := fmt.Sprintf(`
+			INSERT INTO "test"."%s"
+			VALUES ($1, $1)
+		`, tableName)
+		db := tc.ServerConn(id % tc.NumServers())
+		if _, err := db.Exec(insertTableSQL, id); err != nil {
+			t.Fatal(err)
+		}
+
+		tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", tableName)
+		if int64(tableDesc.ID) < descIDStart || int64(tableDesc.ID) >= descIDEnd {
+			t.Fatalf(
+				"table %s's ID %d  is not within the expected range of %d to %d",
+				tableName,
+				tableDesc.ID,
+				descIDStart,
+				descIDEnd,
+			)
+		}
+		if otherTableName, ok := usedTableIDs[tableDesc.ID]; ok {
+			t.Fatalf("duplicate ID used for both tables %s and %s", tableName, otherTableName)
+		}
+		usedTableIDs[tableDesc.ID] = tableName
+	}
+}
+
+// TestParallelCreateTables tests that concurrent create table requests are
+// correctly filled.
+func TestParallelCreateTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numberOfTables = 30
+	const numberOfNodes = 3
+
+	tc := testcluster.StartTestCluster(t, numberOfNodes, base.TestClusterArgs{})
+	defer tc.Stopper().Stop()
+	if err := tc.WaitForFullReplication(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tc.ServerConn(0).Exec(`CREATE DATABASE "test"`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Get the id descriptor generator count.
+	kvDB := tc.Servers[0].KVClient().(*client.DB)
+	var descIDStart int64
+	if descID, err := kvDB.Get(keys.DescIDGenerator); err != nil {
+		t.Fatal(err)
+	} else {
+		descIDStart = descID.ValueInt()
+	}
+
+	var wgStart sync.WaitGroup
+	var wgEnd sync.WaitGroup
+	wgStart.Add(numberOfTables)
+	wgEnd.Add(numberOfTables)
+	signal := make(chan struct{})
+	completed := make(chan int, numberOfTables)
+	for i := 0; i < numberOfTables; i++ {
+		db := tc.ServerConn(i % numberOfNodes)
+		go createTestTable(t, tc, i, db, &wgStart, &wgEnd, signal, completed, "")
+	}
+
+	// Wait until all goroutines are ready.
+	wgStart.Wait()
+	// Signal the create table goroutines to start.
+	close(signal)
+	// Wait until all create tables are finished.
+	wgEnd.Wait()
+	close(completed)
+
+	verifyTables(t, tc, completed, numberOfTables, descIDStart)
+}
+
+// TestParallelCreateConflictingTables tests that concurrent create table
+// requests with same name are only filled once. This is the same test as
+// TestParallelCreateTables but in this test the tables names are all the same.
+func TestParallelCreateConflictingTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numberOfTables = 30
+	const numberOfNodes = 3
+
+	tc := testcluster.StartTestCluster(t, numberOfNodes, base.TestClusterArgs{})
+	defer tc.Stopper().Stop()
+	if err := tc.WaitForFullReplication(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tc.ServerConn(0).Exec(`CREATE DATABASE "test"`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Get the id descriptor generator count.
+	kvDB := tc.Servers[0].KVClient().(*client.DB)
+	var descIDStart int64
+	if descID, err := kvDB.Get(keys.DescIDGenerator); err != nil {
+		t.Fatal(err)
+	} else {
+		descIDStart = descID.ValueInt()
+	}
+
+	var wgStart sync.WaitGroup
+	var wgEnd sync.WaitGroup
+	wgStart.Add(numberOfTables)
+	wgEnd.Add(numberOfTables)
+	signal := make(chan struct{})
+	completed := make(chan int, numberOfTables)
+	for i := 0; i < numberOfTables; i++ {
+		db := tc.ServerConn(i % numberOfNodes)
+		go createTestTable(
+			t,
+			tc,
+			0,
+			db,
+			&wgStart,
+			&wgEnd,
+			signal,
+			completed,
+			`pq: table "table_0" already exists`)
+	}
+
+	// Wait until all goroutines are ready.
+	wgStart.Wait()
+	// Signal the create table goroutines to start.
+	close(signal)
+	// Wait until all create tables are finished.
+	wgEnd.Wait()
+	close(completed)
+
+	verifyTables(t, tc, completed, 1, descIDStart)
 }
