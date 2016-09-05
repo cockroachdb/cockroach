@@ -878,7 +878,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	// test cases that do not test anything.
 	baseLowWater := baseRTS.WallTime
 
-	newLowWater := now.Add(50, 0).WallTime + baseLowWater
+	newLowWater := now.Add(0, 0).WallTime + baseLowWater + int64(maxClockOffset)
 
 	testCases := []struct {
 		storeID     roachpb.StoreID
@@ -903,7 +903,8 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 			expErr: "overlaps previous"},
 		// The other store tries again, this time without the overlap.
 		{storeID: tc.store.StoreID() + 1,
-			start: now.Add(31, 0), expiration: now.Add(50, 0)},
+			start: now.Add(31, 0), expiration: now.Add(50, 0),
+			expLowWater: newLowWater},
 		// Lease is regranted to this replica. Store clock moves forward avoid
 		// influencing the result.
 		{storeID: tc.store.StoreID(),
