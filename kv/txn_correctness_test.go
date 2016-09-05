@@ -1111,7 +1111,7 @@ func runWriteSkewTest(t *testing.T, iso enginepb.IsolationType) {
 }
 
 // TestTxnDBWriteSkewAnomaly verifies that SI suffers from the write
-// skew anomaly but not SSI. The write skew anamoly is a condition which
+// skew anomaly but not SSI. The write skew anomaly is a condition which
 // illustrates that snapshot isolation is not serializable in practice.
 //
 // With write skew, two transactions both read values from A and B
