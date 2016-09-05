@@ -17,15 +17,21 @@
 package sql_test
 
 import (
+	gosql "database/sql"
+	"fmt"
+	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
 func TestDatabaseDescriptor(t *testing.T) {
@@ -144,5 +150,114 @@ func TestDatabaseDescriptor(t *testing.T) {
 		t.Fatal(err)
 	} else if !gr.Exists() {
 		t.Fatal("key is missing")
+	}
+}
+
+// TestCreateTable tests that concurrent create table requests are correctly
+// filled.
+func TestCreateTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numberOfTables = 30
+	const minimumCreatedTables = 10
+	const numberOfNodes = 3
+
+	tc := testcluster.StartTestCluster(t, numberOfNodes, base.TestClusterArgs{})
+	defer tc.Stopper().Stop()
+	if err := tc.WaitForFullReplication(); err != nil {
+		t.Fatal(err)
+	}
+
+	db0 := tc.ServerConn(0)
+	if _, err := db0.Exec(`CREATE DATABASE "test"`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Completed stores all reported created tables.
+	completed := struct {
+		syncutil.Mutex
+		tables map[int]struct{}
+	}{
+		tables: make(map[int]struct{}),
+	}
+
+	createTestTable := func(
+		ID int,
+		db *gosql.DB,
+		wg *sync.WaitGroup,
+		signal chan struct{},
+		hideErrors bool,
+	) {
+		defer wg.Done()
+		select {
+		case <-tc.Stopper().ShouldStop():
+			t.Fatalf("text exiting, start signal never received")
+		case <-signal:
+		}
+
+		tableSQL := fmt.Sprintf(`
+			CREATE TABLE "test"."table_%d" (
+			id INT PRIMARY KEY,
+			val INT
+		)`, ID)
+		if _, err := db.Exec(tableSQL); err != nil {
+			if !hideErrors {
+				t.Logf("table %d: could be created: %s", ID, err)
+			}
+		} else {
+			// Mark the table as created.
+			completed.Lock()
+			defer completed.Unlock()
+			completed.tables[ID] = struct{}{}
+		}
+	}
+
+	var wg1 sync.WaitGroup
+	wg1.Add(numberOfTables)
+	signal1 := make(chan struct{})
+	for i := 0; i < numberOfTables; i++ {
+		db := tc.ServerConn(i % numberOfNodes)
+		go createTestTable(i, db, &wg1, signal1, false /*hideErrors*/)
+	}
+
+	close(signal1)
+	wg1.Wait()
+
+	completed.Lock()
+	for ID := range completed.tables {
+		insertTableSQL := fmt.Sprintf(`
+			INSERT INTO "test"."table_%d"
+			VALUES ($1, $1)
+		`, ID)
+		if _, err := db0.Exec(insertTableSQL, ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	totalCreated := len(completed.tables)
+	completed.Unlock()
+	if totalCreated < minimumCreatedTables {
+		t.Fatalf("expected at least %d tables created, only got %d", minimumCreatedTables, totalCreated)
+	}
+
+	// Perform the same test, but with conflicting table names. only one table
+	// should be created.
+	finalTableNumber := numberOfTables * 2
+	var wg2 sync.WaitGroup
+	wg2.Add(numberOfTables)
+	signal2 := make(chan struct{})
+	for i := 0; i < numberOfTables; i++ {
+		db := tc.ServerConn(i % numberOfNodes)
+		go createTestTable(finalTableNumber, db, &wg2, signal2, true /*hideErrors*/)
+	}
+
+	close(signal2)
+	wg2.Wait()
+
+	insertFinalTableSQL := fmt.Sprintf(`
+		INSERT INTO "test"."table_%d"
+		VALUES (0, 0)
+	`, finalTableNumber)
+	if _, err := db0.Exec(insertFinalTableSQL); err != nil {
+		t.Fatal(err)
 	}
 }
