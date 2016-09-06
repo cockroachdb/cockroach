@@ -36,7 +36,7 @@ github.com/chzyer/test bea8f082b6fd8382588bf6fdc6af9217078af151
 github.com/client9/misspell dcb75ecbeec8f85e28b639c3a2f5b4c8a7b8a888
 github.com/cockroachdb/c-jemalloc 42e6a32cd7a4dff9c70d80323681d46d046181ef
 github.com/cockroachdb/c-protobuf 951f3e665896e7ba939fd1f2db9aeaae6ca988f8
-github.com/cockroachdb/c-rocksdb ba8e37dfc825bedc3c0512f2c53dfd7cbbf8076d
+github.com/cockroachdb/c-rocksdb ab57b321a358f4c93fb639331ac3e10911649492
 github.com/cockroachdb/c-snappy d4e7b428fe7fc09e93573df3448567a62df8c9fa
 github.com/cockroachdb/cmux b64f5908f4945f4b11ed4a0a9d3cc1e23350866d
 github.com/cockroachdb/cockroach-go 2e4a60d41697eebb308b1def89f0abaf1c056137
