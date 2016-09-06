@@ -360,8 +360,8 @@ func runStart(_ *cobra.Command, args []string) error {
 	}
 
 	log.Info(startCtx, "starting cockroach node")
-	if envVarsUsed := envutil.GetEnvReport(true); envVarsUsed != "" {
-		log.Infof(startCtx, "using local environment variables:\n%s", envVarsUsed)
+	if envVarsUsed := envutil.GetEnvVarsUsed(); len(envVarsUsed) > 0 {
+		log.Infof(startCtx, "using local environment variables: %s", strings.Join(envVarsUsed, ", "))
 	}
 	s, err := server.NewServer(serverCtx, stopper)
 	if err != nil {
