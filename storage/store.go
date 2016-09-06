@@ -1443,6 +1443,11 @@ func splitTriggerPostCommit(
 		// This is safe because any other goroutine which has a pointer to rightRng
 		// cannot be performing raft processing on it since this goroutine holds
 		// Store.uninitRaftMu.
+		//
+		// TODO(peter): We can't lock rightRng.raftMu here because another
+		// goroutine may already hold that lock. But that goroutine will be waiting
+		// on Store.uninitRaftMu which we hold, so we're safe to proceed. This
+		// subtlety will go away when Store.uninitRaftMu goes away.
 		err = rightRng.init(&split.RightDesc, r.store.Clock(), 0)
 	} else {
 		rightRng, err = NewReplica(&split.RightDesc, r.store, 0)
@@ -2677,7 +2682,7 @@ func (s *Store) getOrCreateReplica(
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
 	creatingReplica roachpb.ReplicaDescriptor,
-) (_ *Replica, uninitRaftLocked bool, err error) {
+) (_ *Replica, uninitRaftLocked bool, _ error) {
 	for {
 		r, uninitRaftLocked, err := s.tryGetOrCreateReplica(
 			rangeID, replicaID, creatingReplica)
@@ -2701,7 +2706,7 @@ func (s *Store) tryGetOrCreateReplica(
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
 	creatingReplica roachpb.ReplicaDescriptor,
-) (_ *Replica, uninitRaftLocked bool, err error) {
+) (_ *Replica, uninitRaftLocked bool, _ error) {
 	// The common case: look up an existing (initialized) replica.
 	s.mu.Lock()
 	r, ok := s.mu.replicas[rangeID]
@@ -2757,7 +2762,7 @@ func (s *Store) tryGetOrCreateReplica(
 	}
 
 	// Install the replica in the store's replica map. The replica is in an
-	// inconsistent state, but nobody will be accessing it while we hold it's
+	// inconsistent state, but nobody will be accessing it while we hold its
 	// locks.
 	s.mu.Lock()
 	// Grab the internal Replica state lock to ensure nobody mucks with our
@@ -2803,6 +2808,8 @@ func (s *Store) tryGetOrCreateReplica(
 // the replica) and a placeholder can be added to the replicasByKey map (if
 // necessary). If a placeholder is required, it is returned as the first value.
 func (s *Store) canApplySnapshotLocked(r *Replica, snap raftpb.Snapshot) (*ReplicaPlaceholder, error) {
+	// TODO(peter): The call to r.IsInitialized can move to the caller, allowing
+	// us to pass only rangeID (again).
 	if r.IsInitialized() {
 		// We have the range and it's initialized, so let the snapshot through.
 		return nil, nil

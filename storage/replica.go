@@ -232,9 +232,10 @@ type Replica struct {
 	// updates to state.Desc should be duplicated here
 	rangeDesc atomicRangeDesc
 
-	// raftMu protects Raft processing for initialized replicas. Raft processing
-	// for uninitialized replicas is also protected by Store.uninitRaftMu. Use
-	// Replica.raft{Lock,Unlock}() for acquiring and releasing raftMu.
+	// raftMu protects Raft processing the replica. Note that Raft processing for
+	// uninitialized replicas is also protected by Store.uninitRaftMu, but that
+	// detail is encapsulated in Replica.raft{Lock,Unlock}() which should be used
+	// for acquiring and releasing raftMu.
 	//
 	// Locking notes: Replica.raftMu < Store.uninitRaftMu < Replica.mu
 	raftMu struct {
@@ -253,8 +254,8 @@ type Replica struct {
 		syncutil.Mutex
 		// Has the replica been destroyed.
 		destroyed error
-		// Corrupted persistently (across restarts) indicates whether the replica
-		// has been corrupted.
+		// Corrupted persistently (across process restarts) indicates whether the
+		// replica has been corrupted.
 		corrupted bool
 		// The state of the Raft state machine.
 		state storagebase.ReplicaState
@@ -452,7 +453,9 @@ func NewReplica(
 		return nil, err
 	}
 	// Safe to do without holding raftMu because nothing has a reference to the
-	// new Replica yet.
+	// new Replica yet. We can't perform this initialization in
+	// Replica.initLocked() because that method is sometimes called without
+	// Replica.raftMu held (see splitTriggerPostCommit).
 	r.raftMu.initialized = r.IsInitialized()
 
 	r.maybeGossipSystemConfig()
@@ -478,6 +481,9 @@ func (r *Replica) initLocked(
 	r.mu.tsCache = newTimestampCache(clock)
 	r.mu.pendingCmds = map[storagebase.CmdIDKey]*pendingCmd{}
 	r.mu.checksums = map[uuid.UUID]replicaChecksum{}
+	// Clear the internal raft group in case we're being reset. Since we're
+	// reloading the raft state below, it isn't safe to use the existing raft
+	// group.
 	r.mu.internalRaftGroup = nil
 
 	var err error
@@ -504,6 +510,8 @@ func (r *Replica) initLocked(
 	r.mu.destroyed = pErr.GetDetail()
 	r.mu.corrupted = r.mu.destroyed != nil
 
+	// TODO(peter): Move this check up to the other usage of
+	// isInitializedLocked().
 	if r.isInitializedLocked() && replicaID != 0 {
 		return errors.Errorf("replicaID must be 0 when creating an initialized replica")
 	}
@@ -1622,8 +1630,7 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 	})
 }
 
-// Lock the replica for Raft processing, grabbing Store.uninitRaftMu if the
-// replica is uninitialized.
+// Lock the replica for Raft processing.
 func (r *Replica) raftLock() (uninitRaftLocked bool) {
 	r.raftMu.Lock()
 	if r.raftMu.initialized {
@@ -1633,8 +1640,7 @@ func (r *Replica) raftLock() (uninitRaftLocked bool) {
 	return true
 }
 
-// Unlock the replica for Raft processing, releasing Store.uninitRaftMu if was
-// being held.
+// Unlock the replica for Raft processing.
 func (r *Replica) raftUnlock(uninitRaftLocked bool) {
 	if uninitRaftLocked {
 		r.store.uninitRaftMu.Unlock()
@@ -1747,6 +1753,7 @@ func (r *Replica) handleRaftReady() error {
 		// operation (on an uninitialized Replica) is updating.
 		for _, e := range rd.CommittedEntries {
 			if e.Type != raftpb.EntryNormal {
+				// Only normal entries can contain splits.
 				continue
 			}
 			if raftCommandHasSplit(e.Data) {
