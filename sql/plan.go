@@ -203,6 +203,7 @@ var _ planNode = &updateNode{}
 var _ planNode = &deleteNode{}
 var _ planNode = &createDatabaseNode{}
 var _ planNode = &createTableNode{}
+var _ planNode = &createViewNode{}
 var _ planNode = &createIndexNode{}
 var _ planNode = &dropDatabaseNode{}
 var _ planNode = &dropTableNode{}
@@ -252,6 +253,8 @@ func (p *planner) newPlan(stmt parser.Statement, desiredTypes []parser.Datum, au
 		return p.CreateIndex(n)
 	case *parser.CreateTable:
 		return p.CreateTable(n)
+	case *parser.CreateView:
+		return p.CreateView(n)
 	case *parser.Delete:
 		return p.Delete(n, desiredTypes, autoCommit)
 	case *parser.DropDatabase:

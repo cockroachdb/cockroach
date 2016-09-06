@@ -234,6 +234,9 @@ func (desc *TableDescriptor) SetID(id ID) {
 
 // TypeName returns the plain type of this descriptor.
 func (desc *TableDescriptor) TypeName() string {
+	if desc.ViewQuery != "" {
+		return "view"
+	}
 	return "table"
 }
 
@@ -885,6 +888,22 @@ func (desc *TableDescriptor) ValidateTable() error {
 		}
 	}
 
+	// Only validate the indexes if this is actually a table, not if it's
+	// just a view.
+	if desc.ViewQuery == "" {
+		err := desc.validateTableIndexes(columnNames, colIDToFamilyID)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Validate the privilege descriptor.
+	return desc.Privileges.Validate(desc.GetID())
+}
+
+func (desc *TableDescriptor) validateTableIndexes(
+	columnNames map[string]ColumnID, colIDToFamilyID map[ColumnID]FamilyID,
+) error {
 	// TODO(pmattis): Check that the indexes are unique. That is, no 2 indexes
 	// should contain identical sets of columns.
 	if len(desc.PrimaryIndex.ColumnIDs) == 0 {
@@ -950,8 +969,7 @@ func (desc *TableDescriptor) ValidateTable() error {
 		}
 	}
 
-	// Validate the privilege descriptor.
-	return desc.Privileges.Validate(desc.GetID())
+	return nil
 }
 
 // FamilyHeuristicTargetBytes is the target total byte size of columns that the

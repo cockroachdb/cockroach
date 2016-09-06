@@ -78,6 +78,7 @@ var reservedKeywords = map[string]struct{}{
 	"USER":              {},
 	"USING":             {},
 	"VARIADIC":          {},
+	"VIEW":              {},
 	"WHEN":              {},
 	"WHERE":             {},
 	"WINDOW":            {},
