@@ -447,3 +447,9 @@ Field Type Null  Default
 a     INT  false NULL
 b     INT  true  NULL
 c     INT  true  NULL
+
+statement error table "nonexistent" does not exist
+ALTER TABLE nonexistent SPLIT AT (42)
+
+statement error table "nonexistent" does not exist
+ALTER INDEX nonexistent@noindex SPLIT AT (42)
