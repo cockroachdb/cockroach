@@ -131,7 +131,7 @@ func (p *planner) createDescriptor(
 		return false, err
 	}
 
-	return p.createDescriptorWithID(idKey, id, descriptor)
+	return true, p.createDescriptorWithID(idKey, id, descriptor)
 }
 
 func (p *planner) descExists(idKey roachpb.Key) (bool, error) {
@@ -145,7 +145,7 @@ func (p *planner) descExists(idKey roachpb.Key) (bool, error) {
 
 func (p *planner) createDescriptorWithID(
 	idKey roachpb.Key, id sqlbase.ID, descriptor sqlbase.DescriptorProto,
-) (bool, error) {
+) error {
 	descriptor.SetID(id)
 	// TODO(pmattis): The error currently returned below is likely going to be
 	// difficult to interpret.
@@ -175,7 +175,7 @@ func (p *planner) createDescriptorWithID(
 		return expectDescriptor(systemConfig, descKey, descDesc)
 	})
 
-	return true, p.txn.Run(b)
+	return p.txn.Run(b)
 }
 
 // getDescriptor implements the DescriptorAccessor interface.

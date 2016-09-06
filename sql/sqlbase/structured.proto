@@ -244,9 +244,9 @@ message DescriptorMutation {
       (gogoproto.customname) = "MutationID", (gogoproto.casttype) = "MutationID"];
 }
 
-// A TableDescriptor represents a table and is stored in a structured metadata
-// key. The TableDescriptor has a globally-unique ID, while its member
-// {Column,Index}Descriptors have locally-unique IDs.
+// A TableDescriptor represents a table or view and is stored in a
+// structured metadata key. The TableDescriptor has a globally-unique ID,
+// while its member {Column,Index}Descriptors have locally-unique IDs.
 message TableDescriptor {
   // Needed for the descriptorProto interface.
   option (gogoproto.goproto_getters) = true;
@@ -383,6 +383,14 @@ message TableDescriptor {
   // When this is detected in a schema change, the records for the old names are
   // deleted and this field is cleared.
   repeated RenameInfo renames = 21 [(gogoproto.nullable) = false];
+
+  // The TableDescriptor is used for views in addition to tables. Views
+  // use mostly the same fields as tables, but need to track the actual
+  // query from the view definition as well.
+  //
+  // Note: The presence of this field is used to determine whether or not
+  // a TableDescriptor represents a view.
+  optional string view_query = 24 [(gogoproto.nullable) = false];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
