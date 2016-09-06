@@ -213,7 +213,7 @@ func makeBaseQueue(
 	bq.ctx = context.TODO()
 	// Prepend [name] to logs.
 	bq.ctx = log.WithLogTag(bq.ctx, name, nil)
-	bq.ctx = log.WithEventLog(bq.ctx, "queue", name)
+	bq.ctx = log.WithEventLog(bq.ctx, name, name)
 
 	bq.processMu = new(syncutil.Mutex)
 	return bq
@@ -346,7 +346,7 @@ func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) (
 	item, ok := bq.mu.replicas[repl.RangeID]
 	if !should {
 		if ok {
-			log.Eventf(bq.ctx, "%s: removing", item.value)
+			log.Eventf(bq.ctx, "%s: removing from queue", item.value)
 			bq.remove(item)
 		}
 		return false, errReplicaNotAddable
