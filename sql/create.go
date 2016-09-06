@@ -389,7 +389,7 @@ func (n *createTableNode) Start() error {
 
 	id, err := generateUniqueDescID(n.p.txn)
 	if err != nil {
-		return nil
+		return err
 	}
 	desc.SetID(id)
 
