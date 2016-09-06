@@ -717,15 +717,6 @@ func (s *Store) DrainLeases(drain bool) error {
 	})
 }
 
-// context returns a base context to pass along with commands being executed,
-// derived from the supplied context (which is not allowed to be nil).
-func (s *Store) context(ctx context.Context) context.Context {
-	if ctx == nil {
-		panic("ctx cannot be nil")
-	}
-	return ctx // TODO(tschottdorf): see #1779
-}
-
 // IsStarted returns true if the Store has been started.
 func (s *Store) IsStarted() bool {
 	return atomic.LoadInt32(&s.started) == 1
@@ -784,7 +775,6 @@ func (s *Store) migrate(ctx context.Context, desc roachpb.RangeDescriptor) {
 // Start the engine, set the GC and read the StoreIdent.
 func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	s.stopper = stopper
-	ctx = s.context(ctx)
 
 	// Add the bookie to the store.
 	s.bookie = newBookie(
@@ -1027,10 +1017,9 @@ func (s *Store) startGossip() {
 	// of their first iteration.
 	s.initComplete.Add(2)
 	s.stopper.RunWorker(func() {
-		ctx := s.context(context.Background())
 		// Run the first time without waiting for the Ticker and signal the WaitGroup.
 		if err := s.maybeGossipFirstRange(); err != nil {
-			log.Warningf(ctx, "error gossiping first range data: %s", err)
+			log.Warningf(s.Ctx(), "error gossiping first range data: %s", err)
 		}
 		s.initComplete.Done()
 		ticker := time.NewTicker(sentinelGossipInterval)
@@ -1039,7 +1028,7 @@ func (s *Store) startGossip() {
 			select {
 			case <-ticker.C:
 				if err := s.maybeGossipFirstRange(); err != nil {
-					log.Warningf(ctx, "error gossiping first range data: %s", err)
+					log.Warningf(s.Ctx(), "error gossiping first range data: %s", err)
 				}
 			case <-s.stopper.ShouldStop():
 				return
@@ -1048,9 +1037,8 @@ func (s *Store) startGossip() {
 	})
 
 	s.stopper.RunWorker(func() {
-		ctx := s.context(context.Background())
 		if err := s.maybeGossipSystemConfig(); err != nil {
-			log.Warningf(ctx, "error gossiping system config: %s", err)
+			log.Warningf(s.Ctx(), "error gossiping system config: %s", err)
 		}
 		s.initComplete.Done()
 		ticker := time.NewTicker(configGossipInterval)
@@ -1059,7 +1047,7 @@ func (s *Store) startGossip() {
 			select {
 			case <-ticker.C:
 				if err := s.maybeGossipSystemConfig(); err != nil {
-					log.Warningf(ctx, "error gossiping system config: %s", err)
+					log.Warningf(s.Ctx(), "error gossiping system config: %s", err)
 				}
 			case <-s.stopper.ShouldStop():
 				return
@@ -2240,7 +2228,7 @@ func (s *Store) HandleRaftRequest(
 	ctx context.Context,
 	req *RaftMessageRequest,
 ) (pErr *roachpb.Error) {
-	ctx = s.context(ctx)
+	ctx = s.logContext(ctx)
 	s.metrics.raftRcvdMessages[req.Message.Type].Inc(1)
 
 	if req.Message.Type == raftpb.MsgHeartbeat {
