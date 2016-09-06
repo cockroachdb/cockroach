@@ -330,18 +330,46 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				// the txn span directly.
 				b := &client.Batch{}
 				txn := item.intents[0].Txn
-				gcArgs := roachpb.GCRequest{
-					Span: roachpb.Span{
-						Key:    txn.Key,
-						EndKey: roachpb.Key(txn.Key).Next(),
-					},
+				txnKey := keys.TransactionKey(txn.Key, txn.ID)
+
+				// This is pretty tricky. Transaction keys are range-local and
+				// so they are encoded specially. The key range addressed by
+				// (txnKey, txnKey.Next()) might be empty (since Next() does
+				// not imply monotonicity on the address side). Instead, we
+				// send this request to a range determined using the resolved
+				// transaction anchor, i.e. if the txn is anchored on
+				// /Local/RangeDescriptor/"a"/uuid, the key range below would
+				// be ["a", "a\x00"). However, the first range is special again
+				// because the above procedure results in KeyMin, but we need
+				// at least KeyLocalMax.
+				//
+				// #7880 will address this by making GCRequest less special and
+				// thus obviating the need to cook up an artificial range here.
+				var gcArgs roachpb.GCRequest
+				{
+					key := keys.MustAddr(txn.Key)
+					if localMax := keys.MustAddr(keys.LocalMax); key.Less(localMax) {
+						key = localMax
+					}
+					endKey := key.Next()
+
+					gcArgs.Span = roachpb.Span{
+						Key:    key.AsRawKey(),
+						EndKey: endKey.AsRawKey(),
+					}
 				}
+
 				gcArgs.Keys = append(gcArgs.Keys, roachpb.GCRequest_GCKey{
-					Key: keys.TransactionKey(txn.Key, txn.ID),
+					Key: txnKey,
 				})
 				b.AddRawRequest(&gcArgs)
 				if err := ir.store.db.Run(b); err != nil {
-					log.Warningf(context.TODO(), "could not GC completed transaction: %s", err)
+					log.Warningf(
+						context.TODO(),
+						"could not GC completed transaction anchored at %s: %s",
+						roachpb.Key(txn.Key), err,
+					)
+					return
 				}
 			}); err != nil {
 				log.Warningf(context.TODO(), "failed to resolve intents: %s", err)

@@ -37,32 +37,33 @@ export function RollupStoreMetrics(ns: NodeStatus): void {
  */
 export namespace MetricConstants {
   // Store level metrics.
-  export var replicas: string = "replicas";
-  export var leaderRanges: string = "ranges.leader";
-  export var replicatedRanges: string = "ranges.replicated";
-  export var availableRanges: string = "ranges.available";
-  export var liveBytes: string = "livebytes";
-  export var keyBytes: string = "keybytes";
-  export var valBytes: string = "valbytes";
-  export var intentBytes: string = "intentbytes";
-  export var liveCount: string = "livecount";
-  export var keyCount: string = "keycount";
-  export var valCount: string = "valcount";
-  export var intentCount: string = "intentcount";
-  export var intentAge: string = "intentage";
-  export var gcBytesAge: string = "gcbytesage";
-  export var lastUpdateNano: string = "lastupdatenanos";
-  export var capacity: string = "capacity";
-  export var availableCapacity: string = "capacity.available";
-  export var sysBytes: string = "sysbytes";
-  export var sysCount: string = "syscount";
+  export const replicas: string = "replicas";
+  export const raftLeaders: string = "replicas.leaders";
+  export const leaseHolders: string = "replicas.leaseholders";
+  export const availableRanges: string = "ranges.available";
+  export const replicatedRanges: string  = "ranges.allocator.noop";
+  export const liveBytes: string = "livebytes";
+  export const keyBytes: string = "keybytes";
+  export const valBytes: string = "valbytes";
+  export const intentBytes: string = "intentbytes";
+  export const liveCount: string = "livecount";
+  export const keyCount: string = "keycount";
+  export const valCount: string = "valcount";
+  export const intentCount: string = "intentcount";
+  export const intentAge: string = "intentage";
+  export const gcBytesAge: string = "gcbytesage";
+  export const lastUpdateNano: string = "lastupdatenanos";
+  export const capacity: string = "capacity";
+  export const availableCapacity: string = "capacity.available";
+  export const sysBytes: string = "sysbytes";
+  export const sysCount: string = "syscount";
 
   // Node level metrics.
-  export var userCPUPercent: string = "sys.cpu.user.percent";
-  export var sysCPUPercent: string = "sys.cpu.sys.percent";
-  export var allocBytes: string = "sys.go.allocbytes";
-  export var sqlConns: string = "sql.conns";
-  export var rss: string = "sys.rss";
+  export const userCPUPercent: string = "sys.cpu.user.percent";
+  export const sysCPUPercent: string = "sys.cpu.sys.percent";
+  export const allocBytes: string = "sys.go.allocbytes";
+  export const sqlConns: string = "sql.conns";
+  export const rss: string = "sys.rss";
 }
 
 /**

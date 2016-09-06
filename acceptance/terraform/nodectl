@@ -19,6 +19,9 @@ if [ $# -ne 2 ]; then
     usage
 fi
 
+# ~/.config/gcloud may be erroneously owned by root, so fix that.
+sudo chown -R ${USER} "${HOME}/.config/gcloud"
+
 # CockroachDB nodes are named blah-cockroach-[0-9]*, so extract the final
 # numeric part.
 gcs_url="$2"

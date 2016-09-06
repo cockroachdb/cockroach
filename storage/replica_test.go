@@ -490,9 +490,9 @@ func TestApplyCmdLeaseError(t *testing.T) {
 		StoreID:   2,
 		ReplicaID: 2,
 	}
-	rngDesc := tc.rng.Desc()
+	rngDesc := *tc.rng.Desc()
 	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
-	tc.rng.setDescWithoutProcessUpdate(rngDesc)
+	tc.rng.setDescWithoutProcessUpdate(&rngDesc)
 
 	pArgs := putArgs(roachpb.Key("a"), []byte("asd"))
 
@@ -878,7 +878,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	// test cases that do not test anything.
 	baseLowWater := baseRTS.WallTime
 
-	newLowWater := now.Add(50, 0).WallTime + baseLowWater
+	newLowWater := now.WallTime + baseLowWater + int64(maxClockOffset)
 
 	testCases := []struct {
 		storeID     roachpb.StoreID
@@ -903,7 +903,8 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 			expErr: "overlaps previous"},
 		// The other store tries again, this time without the overlap.
 		{storeID: tc.store.StoreID() + 1,
-			start: now.Add(31, 0), expiration: now.Add(50, 0)},
+			start: now.Add(31, 0), expiration: now.Add(50, 0),
+			expLowWater: newLowWater},
 		// Lease is regranted to this replica. Store clock moves forward avoid
 		// influencing the result.
 		{storeID: tc.store.StoreID(),
@@ -3176,6 +3177,8 @@ func TestEndTransactionLocalGC(t *testing.T) {
 	}
 }
 
+// setupResolutionTest splits the range at the specified splitKey and completes
+// a transaction which creates intents at key and splitKey.
 func setupResolutionTest(t *testing.T, tc testContext, key roachpb.Key,
 	splitKey roachpb.RKey, commit bool) (*Replica, *roachpb.Transaction) {
 	// Split the range and create an intent at splitKey and key.
@@ -3208,7 +3211,7 @@ func setupResolutionTest(t *testing.T, tc testContext, key roachpb.Key,
 
 	// End the transaction and resolve the intents.
 	args, h := endTxnArgs(txn, commit)
-	args.IntentSpans = []roachpb.Span{{Key: key, EndKey: splitKey.Next().AsRawKey()}}
+	args.IntentSpans = []roachpb.Span{{Key: key}, {Key: splitKey.AsRawKey()}}
 	txn.Sequence++
 	if _, pErr := tc.SendWrappedWith(h, &args); pErr != nil {
 		t.Fatal(pErr)
@@ -3226,7 +3229,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	splitKey := roachpb.RKey(key).Next()
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-			if filterArgs.Req.Method() == roachpb.ResolveIntentRange &&
+			if filterArgs.Req.Method() == roachpb.ResolveIntent &&
 				filterArgs.Req.Header().Key.Equal(splitKey.AsRawKey()) {
 				return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
 			}
@@ -3259,7 +3262,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 		t.Fatal(pErr)
 	}
 	hbResp := reply.(*roachpb.HeartbeatTxnResponse)
-	expIntents := []roachpb.Span{{Key: splitKey.AsRawKey(), EndKey: splitKey.AsRawKey().Next()}}
+	expIntents := []roachpb.Span{{Key: splitKey.AsRawKey()}}
 	if !reflect.DeepEqual(hbResp.Txn.Intents, expIntents) {
 		t.Fatalf("expected persisted intents %v, got %v",
 			expIntents, hbResp.Txn.Intents)
@@ -3271,35 +3274,51 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 // abort cache records are purged on both the local range and non-local range.
 func TestEndTransactionDirectGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := testContext{}
-	key := roachpb.Key("a")
-	splitKey := roachpb.RKey(key).Next()
-	tc.Start(t)
-	defer tc.Stop()
+	a := roachpb.Key("a")
+	splitKey := keys.MustAddr(a).Next()
 
-	rightRng, txn := setupResolutionTest(t, tc, key, splitKey, false /* generate abort cache entry */)
+	for i, testKey := range []roachpb.Key{
+		a,
+		keys.RangeDescriptorKey(keys.MustAddr(a)),
+		keys.RangeDescriptorKey(keys.MustAddr(roachpb.KeyMin)),
+	} {
+		func() {
+			tc := testContext{}
+			tc.Start(t)
+			defer tc.Stop()
 
-	util.SucceedsSoon(t, func() error {
-		if gr, _, err := tc.rng.Get(context.Background(), tc.engine, roachpb.Header{}, roachpb.GetRequest{Span: roachpb.Span{Key: keys.TransactionKey(txn.Key, txn.ID)}}); err != nil {
-			return err
-		} else if gr.Value != nil {
-			return errors.Errorf("txn entry still there: %+v", gr)
-		}
+			ctx := log.WithLogTag(context.Background(), "testcase", i)
 
-		var entry roachpb.AbortCacheEntry
-		if aborted, err := tc.rng.abortCache.Get(context.Background(), tc.engine, txn.ID, &entry); err != nil {
-			t.Fatal(err)
-		} else if aborted {
-			return errors.Errorf("abort cache still populated: %v", entry)
-		}
-		if aborted, err := rightRng.abortCache.Get(context.Background(), tc.engine, txn.ID, &entry); err != nil {
-			t.Fatal(err)
-		} else if aborted {
-			t.Fatalf("right-hand side abort cache still populated: %v", entry)
-		}
+			rightRng, txn := setupResolutionTest(t, tc, testKey, splitKey, false /* generate abort cache entry */)
 
-		return nil
-	})
+			util.SucceedsSoon(t, func() error {
+				if gr, _, err := tc.rng.Get(
+					ctx, tc.engine, roachpb.Header{},
+					roachpb.GetRequest{Span: roachpb.Span{
+						Key: keys.TransactionKey(txn.Key, txn.ID),
+					}},
+				); err != nil {
+					return err
+				} else if gr.Value != nil {
+					return errors.Errorf("%d: txn entry still there: %+v", i, gr)
+				}
+
+				var entry roachpb.AbortCacheEntry
+				if aborted, err := tc.rng.abortCache.Get(ctx, tc.engine, txn.ID, &entry); err != nil {
+					t.Fatal(err)
+				} else if aborted {
+					return errors.Errorf("%d: abort cache still populated: %v", i, entry)
+				}
+				if aborted, err := rightRng.abortCache.Get(ctx, tc.engine, txn.ID, &entry); err != nil {
+					t.Fatal(err)
+				} else if aborted {
+					t.Fatalf("%d: right-hand side abort cache still populated: %v", i, entry)
+				}
+
+				return nil
+			})
+		}()
+	}
 }
 
 // TestEndTransactionDirectGCFailure verifies that no immediate GC takes place
@@ -3313,7 +3332,7 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 	tsc := TestStoreContext()
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-			if filterArgs.Req.Method() == roachpb.ResolveIntentRange &&
+			if filterArgs.Req.Method() == roachpb.ResolveIntent &&
 				filterArgs.Req.Header().Key.Equal(splitKey.AsRawKey()) {
 				atomic.AddInt64(&count, 1)
 				return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
@@ -5064,12 +5083,12 @@ func TestReplicaDestroy(t *testing.T) {
 	if err := rep.setDesc(newDesc); err != nil {
 		t.Fatal(err)
 	}
-	if err := rep.Destroy(*origDesc); !testutils.IsError(err, "replica ID has changed") {
+	if err := rep.Destroy(*origDesc, true); !testutils.IsError(err, "replica ID has changed") {
 		t.Fatalf("expected error 'replica ID has changed' but got %v", err)
 	}
 
 	// Now try a fresh descriptor and succeed.
-	if err := rep.Destroy(*rep.Desc()); err != nil {
+	if err := rep.Destroy(*rep.Desc(), true); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -6189,9 +6208,8 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		r.mu.Lock()
 		ticks := r.mu.ticks
 		r.mu.Unlock()
-		var info tickInfo
 		for ; (ticks % electionTicks) != 0; ticks++ {
-			if err := r.tick(&info); err != nil {
+			if _, err := r.tick(); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -6221,8 +6239,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		r.mu.Unlock()
 
 		// Tick raft.
-		var info tickInfo
-		if err := r.tick(&info); err != nil {
+		if _, err := r.tick(); err != nil {
 			t.Fatal(err)
 		}
 

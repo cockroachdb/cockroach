@@ -17,6 +17,7 @@ if [ "${1-}" = "docker" ]; then
     time make STATIC=1 release
 
     check_static cockroach
+    strip -S cockroach
 
     mv cockroach build/deploy/cockroach
 

@@ -30,7 +30,7 @@ import (
 
 const (
 	// defaultMaxReservations is the number of concurrent reservations allowed.
-	defaultMaxReservations = 5
+	defaultMaxReservations = 1
 	// defaultMaxReservedBytes is the total number of bytes that can be
 	// reserved, by all active reservations, at any time.
 	defaultMaxReservedBytes = 250 << 20 // 250 MiB

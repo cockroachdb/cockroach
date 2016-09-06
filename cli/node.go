@@ -87,9 +87,9 @@ var nodesColumnHeaders = []string{
 	"value_bytes",
 	"intent_bytes",
 	"system_bytes",
-	"leader_ranges",
-	"repl_ranges", // Using abbreviations to avoid excessively wide output.
-	"avail_ranges",
+	"replicas_leaders",
+	"replicas_leaseholders",
+	"ranges_available",
 }
 
 var statusNodeCmd = &cobra.Command{
@@ -176,8 +176,8 @@ func nodeStatusesToRows(statuses []status.NodeStatus) [][]string {
 			strconv.FormatInt(int64(metricVals["valbytes"]), 10),
 			strconv.FormatInt(int64(metricVals["intentbytes"]), 10),
 			strconv.FormatInt(int64(metricVals["sysbytes"]), 10),
-			strconv.FormatInt(int64(metricVals["ranges.leader"]), 10),
-			strconv.FormatInt(int64(metricVals["ranges.replicated"]), 10),
+			strconv.FormatInt(int64(metricVals["replicas.leaders"]), 10),
+			strconv.FormatInt(int64(metricVals["replicas.leaseholders"]), 10),
 			strconv.FormatInt(int64(metricVals["ranges.available"]), 10),
 		})
 	}
