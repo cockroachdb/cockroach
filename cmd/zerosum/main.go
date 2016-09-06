@@ -46,6 +46,7 @@ var monkeys = flag.Int("m", 3, "number of monkeys")
 var numNodes = flag.Int("n", 4, "number of nodes")
 var numAccounts = flag.Int("a", 1e5, "number of accounts")
 var chaosType = flag.String("c", "simple", "chaos type [none|simple|flappy|freeze]")
+var verify = flag.Bool("verify", true, "verify range and account consistency")
 
 func newRand() *rand.Rand {
 	return rand.New(rand.NewSource(timeutil.Now().UnixNano()))
@@ -103,8 +104,10 @@ func (z *zeroSum) run(workers, monkeys int) {
 	}
 	if workers > 0 || monkeys > 0 {
 		z.chaos()
-		go z.check(20 * time.Second)
-		go z.verify(10 * time.Second)
+		if *verify {
+			go z.check(20 * time.Second)
+			go z.verify(10 * time.Second)
+		}
 	}
 	go z.rangeStats(time.Second)
 	z.monitor(time.Second)
