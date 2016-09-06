@@ -15,7 +15,7 @@ case ${1-} in
            --machine-type "custom-32-32768" \
            --network "default" \
            --maintenance-policy "MIGRATE" \
-           --image "/debian-cloud/debian-8-jessie-v20160803" \
+           --image "/ubuntu-os-cloud/ubuntu-1604-xenial-v20160830" \
            --boot-disk-size "100" \
            --boot-disk-type "pd-ssd" \
            --boot-disk-device-name "${name}"
