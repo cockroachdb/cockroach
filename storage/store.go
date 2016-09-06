@@ -1029,47 +1029,48 @@ func (s *Store) WaitForInit() {
 // whether the store has a first range or config replica and asks those ranges
 // to gossip accordingly.
 func (s *Store) startGossip() {
+	gossipFns := []struct {
+		fn          func() error
+		description string
+		interval    time.Duration
+	}{
+		{
+			fn:          s.maybeGossipFirstRange,
+			description: "first range descriptor",
+			interval:    sentinelGossipInterval,
+		},
+		{
+			fn:          s.maybeGossipSystemConfig,
+			description: "system config",
+			interval:    configGossipInterval,
+		},
+	}
+
 	// Periodic updates run in a goroutine and signal a WaitGroup upon completion
 	// of their first iteration.
-	s.initComplete.Add(2)
-	s.stopper.RunWorker(func() {
-		// Run the first time without waiting for the Ticker and signal the WaitGroup.
-		if err := s.maybeGossipFirstRange(); err != nil {
-			log.Warningf(s.Ctx(), "error gossiping first range data: %s", err)
-		}
-		s.initComplete.Done()
-		ticker := time.NewTicker(sentinelGossipInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if err := s.maybeGossipFirstRange(); err != nil {
-					log.Warningf(s.Ctx(), "error gossiping first range data: %s", err)
-				}
-			case <-s.stopper.ShouldStop():
-				return
+	s.initComplete.Add(len(gossipFns))
+	for _, gossipFn := range gossipFns {
+		gossipFn := gossipFn // per-iteration copy
+		s.stopper.RunWorker(func() {
+			// Run the first time without waiting for the Ticker and signal the WaitGroup.
+			if err := gossipFn.fn(); err != nil {
+				log.Warningf(s.Ctx(), "error gossiping %s: %s", gossipFn.description, err)
 			}
-		}
-	})
-
-	s.stopper.RunWorker(func() {
-		if err := s.maybeGossipSystemConfig(); err != nil {
-			log.Warningf(s.Ctx(), "error gossiping system config: %s", err)
-		}
-		s.initComplete.Done()
-		ticker := time.NewTicker(configGossipInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if err := s.maybeGossipSystemConfig(); err != nil {
-					log.Warningf(s.Ctx(), "error gossiping system config: %s", err)
+			s.initComplete.Done()
+			ticker := time.NewTicker(gossipFn.interval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					if err := gossipFn.fn(); err != nil {
+						log.Warningf(s.Ctx(), "error gossiping %s: %s", gossipFn.description, err)
+					}
+				case <-s.stopper.ShouldStop():
+					return
 				}
-			case <-s.stopper.ShouldStop():
-				return
 			}
-		}
-	})
+		})
+	}
 }
 
 // maybeGossipFirstRange checks whether the store has a replica of the
