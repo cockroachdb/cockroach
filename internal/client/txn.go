@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/tracing"
-	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 // txnSender implements the Sender interface and is used to keep the Send
@@ -572,13 +571,8 @@ func (txn *Txn) Exec(
 		} else {
 			// Make sure the txn record that err carries is for this txn.
 			// If it's not, we terminate the "retryable" character of the error.
-			if txn.Proto.ID != nil {
-				if retErr.TxnID == nil {
-					return errors.New(retErr.Error())
-				}
-				if !uuid.Equal(*retErr.TxnID, *txn.Proto.ID) {
-					return errors.New(retErr.Error())
-				}
+			if txn.Proto.ID != nil && (retErr.TxnID == nil || *retErr.TxnID != *txn.Proto.ID) {
+				return errors.New(retErr.Error())
 			}
 
 			if !retErr.Backoff {
