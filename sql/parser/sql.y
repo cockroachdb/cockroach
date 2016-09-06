@@ -913,7 +913,7 @@ opt_validate_behavior:
   }
 | /* EMPTY */
   {
-  $$.val = ValidationDefault
+    $$.val = ValidationDefault
   }
 
 opt_collate_clause:

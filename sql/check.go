@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 type checkHelper struct {
@@ -86,6 +87,43 @@ func (c *checkHelper) check(ctx *parser.EvalContext) error {
 			// Failed to satisfy CHECK constraint.
 			return fmt.Errorf("failed to satisfy CHECK constraint (%s)", expr)
 		}
+	}
+	return nil
+}
+
+func (p *planner) validateCheckExpr(
+	exprStr string,
+	tableName parser.TableExpr,
+	tableDesc *sqlbase.TableDescriptor,
+) error {
+	expr, err := parser.ParseExprTraditional(exprStr)
+	if err != nil {
+		return err
+	}
+	sel := &parser.SelectClause{
+		Exprs: sqlbase.ColumnsSelectors(tableDesc.Columns),
+		From:  &parser.From{Tables: parser.TableExprs{tableName}},
+		Where: &parser.Where{Expr: &parser.NotExpr{Expr: expr}},
+	}
+	lim := &parser.Limit{Count: parser.NewDInt(1)}
+	// This could potentially use a variant of planner.SelectClause that could
+	// use the tableDesc we have, but this is a rare operation and be benefit
+	// would be marginal compared to the work of the actual query, so the added
+	// complexity seems unjustified.
+	rows, err := p.SelectClause(sel, nil, lim, nil, publicAndNonPublicColumns)
+	if err := rows.expandPlan(); err != nil {
+		return err
+	}
+	if err := rows.Start(); err != nil {
+		return err
+	}
+	next, err := rows.Next()
+	if err != nil {
+		return err
+	}
+	if next {
+		return errors.Errorf("validation of CHECK %q failed on row: %s",
+			expr.String(), labeledRowValues(tableDesc.Columns, rows.Values()))
 	}
 	return nil
 }
