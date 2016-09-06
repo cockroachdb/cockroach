@@ -679,7 +679,7 @@ var debugEnvCmd = &cobra.Command{
 Output environment variables that influence configuration.
 `,
 	Run: func(cmd *cobra.Command, args []string) {
-		env := envutil.GetEnvReport(false)
+		env := envutil.GetEnvReport()
 		fmt.Print(env)
 	},
 }

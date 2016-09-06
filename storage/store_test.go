@@ -622,7 +622,7 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 		store:      store,
 		abortCache: NewAbortCache(desc.RangeID),
 	}
-	if err := r.newReplicaInner(desc, store.Clock(), 0); err != nil {
+	if err := r.init(desc, store.Clock(), 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -985,7 +985,8 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 	}
 	// Minimal amount of work to keep this deprecated machinery working: Write
 	// some required Raft keys.
-	if _, err := writeInitialState(context.Background(), store.engine, enginepb.MVCCStats{}, *desc); err != nil {
+	if _, err := writeInitialState(context.Background(), store.engine,
+		enginepb.MVCCStats{}, *desc, raftpb.HardState{}); err != nil {
 		t.Fatal(err)
 	}
 	newRng, err := NewReplica(desc, store, 0)
@@ -2277,7 +2278,7 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 		ToReplica: roachpb.ReplicaDescriptor{
 			NodeID:    1,
 			StoreID:   1,
-			ReplicaID: 1,
+			ReplicaID: 0,
 		},
 		FromReplica: roachpb.ReplicaDescriptor{
 			NodeID:    2,
@@ -2291,7 +2292,7 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 			},
 		},
 	}
-	const expected = "raft group deleted"
+	const expected = "preemptive snapshot from term 0 received"
 	if err := s.HandleRaftRequest(ctx, req); !testutils.IsError(errors.Errorf("%s", err), expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
 	}
@@ -2328,7 +2329,8 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := writeInitialState(ctx, s.Engine(), enginepb.MVCCStats{}, *rng1.Desc()); err != nil {
+	if _, err := writeInitialState(ctx, s.Engine(),
+		enginepb.MVCCStats{}, *rng1.Desc(), raftpb.HardState{}); err != nil {
 		t.Fatal(err)
 	}
 
