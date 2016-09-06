@@ -13,5 +13,9 @@
     "noImplicitAny": true,
     "noUnusedLocals": true,
     "target": "ES5"
-  }
+  },
+  "files": [
+    "typings/index.d.ts",
+    "app/app.tsx"
+  ]
 }
