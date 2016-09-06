@@ -37,17 +37,22 @@ const (
 	EventLogCreateDatabase EventLogType = "create_database"
 	// EventLogDropDatabase is recorded when a database is dropped.
 	EventLogDropDatabase EventLogType = "drop_database"
+
 	// EventLogCreateTable is recorded when a table is created.
 	EventLogCreateTable EventLogType = "create_table"
 	// EventLogDropTable is recorded when a table is dropped.
 	EventLogDropTable EventLogType = "drop_table"
-
 	// EventLogAlterTable is recorded when a table is altered.
 	EventLogAlterTable EventLogType = "alter_table"
+
 	// EventLogCreateIndex is recorded when an index is created.
 	EventLogCreateIndex EventLogType = "create_index"
 	// EventLogDropIndex is recorded when an index is created.
 	EventLogDropIndex EventLogType = "drop_index"
+
+	// EventLogCreateView is recorded when an view is created.
+	EventLogCreateView EventLogType = "create_view"
+
 	// EventLogReverseSchemaChange is recorded when an in-progress schema change
 	// encounters a problem and is reversed.
 	EventLogReverseSchemaChange EventLogType = "reverse_schema_change"

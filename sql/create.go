@@ -227,6 +227,125 @@ func (n *createIndexNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "create index", "", nil
 }
 
+type createViewNode struct {
+	p          *planner
+	n          *parser.CreateView
+	dbDesc     *sqlbase.DatabaseDescriptor
+	selectPlan planNode
+}
+
+// CreateView creates a view.
+// Privileges: CREATE on underlying table(s).
+//   notes: postgres requires CREATE on database plus SELECT on all the
+//						selected columns.
+//          mysql requires CREATE VIEW plus SELECT on all the selected columns.
+func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
+	name, err := n.Name.NormalizeWithDatabaseName(p.session.Database)
+	if err != nil {
+		return nil, err
+	}
+
+	dbDesc, err := p.mustGetDatabaseDesc(name.Database())
+	if err != nil {
+		return nil, err
+	}
+
+	if err := p.checkPrivilege(dbDesc, privilege.CREATE); err != nil {
+		return nil, err
+	}
+
+	// TODO(a-robinson): Ensure the explicit column name list gets used.
+	selectPlan, err := p.getSelectPlan(n.AsSource)
+	if err != nil {
+		return nil, err
+	}
+	return &createViewNode{p: p, n: n, dbDesc: dbDesc, selectPlan: selectPlan}, nil
+}
+
+func (n *createViewNode) expandPlan() error {
+	return nil
+}
+
+func (n *createViewNode) Start() error {
+	desc, err := makeViewTableDesc(n.n, n.dbDesc.ID, n.selectPlan.Columns())
+	if err != nil {
+		return err
+	}
+
+	tKey := tableKey{parentID: n.dbDesc.ID, name: n.n.Name.TableName().Table()}
+	key := tKey.Key()
+	if exists, err := n.p.descExists(key); err == nil && exists {
+		// TODO(a-robinson): Support CREATE OR REPLACE commands.
+		return descriptorAlreadyExistsErr{&desc, tKey.Name()}
+	} else if err != nil {
+		return err
+	}
+
+	// Inherit permissions from the database descriptor.
+	desc.Privileges = n.dbDesc.GetPrivileges()
+
+	id, err := generateUniqueDescID(n.p.txn)
+	if err != nil {
+		return nil
+	}
+	desc.SetID(id)
+
+	if err := desc.AllocateIDs(); err != nil {
+		return err
+	}
+
+	// Bookkeeping references are made after the descriptor is otherwise
+	// complete and IDs have been allocated since the IDs are needed in the
+	// references.
+	// TODO(a-robinson): Create and validate bookkeeping references.
+
+	err = desc.ValidateTable()
+	if err != nil {
+		return err
+	}
+
+	err = n.p.createDescriptorWithID(key, id, &desc)
+	if err != nil {
+		return err
+	}
+
+	if desc.Adding() {
+		n.p.notifySchemaChange(desc.ID, sqlbase.InvalidMutationID)
+	}
+	if err := desc.Validate(n.p.txn); err != nil {
+		return err
+	}
+
+	// Log Create View event. This is an auditable log event and is
+	// recorded in the same transaction as the table descriptor update.
+	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
+		EventLogCreateView,
+		int32(desc.ID),
+		int32(n.p.evalCtx.NodeID),
+		struct {
+			ViewName  string
+			Statement string
+			User      string
+		}{n.n.Name.String(), n.n.String(), n.p.session.User},
+	); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (n *createViewNode) Next() (bool, error)                 { return false, nil }
+func (n *createViewNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
+func (n *createViewNode) Ordering() orderingInfo              { return orderingInfo{} }
+func (n *createViewNode) Values() parser.DTuple               { return parser.DTuple{} }
+func (n *createViewNode) DebugValues() debugValues            { return debugValues{} }
+func (n *createViewNode) ExplainTypes(_ func(string, string)) {}
+func (n *createViewNode) SetLimitHint(_ int64, _ bool)        {}
+func (n *createViewNode) MarkDebug(mode explainMode)          {}
+func (n *createViewNode) ExplainPlan(v bool) (string, string, []planNode) {
+	return "create view", "", nil
+}
+
 type createTableNode struct {
 	p          *planner
 	n          *parser.CreateTable
@@ -265,7 +384,7 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 
 	var selectPlan planNode
 	if n.As() {
-		selectPlan, err = p.getSelectPlan(n)
+		selectPlan, err = p.getSelectPlan(n.AsSource)
 		if err != nil {
 			return nil, err
 		}
@@ -284,16 +403,16 @@ func removeParens(sel parser.SelectStatement) (parser.SelectStatement, error) {
 	}
 }
 
-func (p *planner) getSelectPlan(n *parser.CreateTable) (planNode, error) {
-	selNoParens, err := removeParens(n.AsSource.Select)
+func (p *planner) getSelectPlan(s *parser.Select) (planNode, error) {
+	selNoParens, err := removeParens(s.Select)
 	if err != nil {
 		return nil, errors.Errorf("Invalid Select type.")
 	}
-	s, err := p.SelectClause(selNoParens.(*parser.SelectClause), n.AsSource.OrderBy, n.AsSource.Limit, []parser.Datum{}, 0)
+	selPlan, err := p.SelectClause(selNoParens.(*parser.SelectClause), s.OrderBy, s.Limit, []parser.Datum{}, 0)
 	if err != nil {
 		return nil, err
 	}
-	return s, nil
+	return selPlan, nil
 }
 
 func hoistConstraints(n *parser.CreateTable) {
@@ -399,7 +518,7 @@ func (n *createTableNode) Start() error {
 
 	// FKs are resolved after the descriptor is otherwise complete and IDs have
 	// been allocated since the FKs will reference those IDs. Resolution also
-	// accumulated updates to other tables (adding backreferences) in the passed
+	// accumulates updates to other tables (adding backreferences) in the passed
 	// map -- anything in that map should be saved when the table is created.
 	affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 	for _, def := range n.n.Defs {
@@ -433,47 +552,45 @@ func (n *createTableNode) Start() error {
 		return err
 	}
 
-	created, err := n.p.createDescriptorWithID(key, id, &desc)
+	err = n.p.createDescriptorWithID(key, id, &desc)
 	if err != nil {
 		return err
 	}
 
-	if created {
-		for _, updated := range affected {
-			if err := n.p.saveNonmutationAndNotify(updated); err != nil {
+	for _, updated := range affected {
+		if err := n.p.saveNonmutationAndNotify(updated); err != nil {
+			return err
+		}
+	}
+	if desc.Adding() {
+		n.p.notifySchemaChange(desc.ID, sqlbase.InvalidMutationID)
+	}
+
+	for _, index := range desc.AllNonDropIndexes() {
+		if len(index.Interleave.Ancestors) > 0 {
+			if err := n.p.finalizeInterleave(&desc, index); err != nil {
 				return err
 			}
 		}
-		if desc.Adding() {
-			n.p.notifySchemaChange(desc.ID, sqlbase.InvalidMutationID)
-		}
+	}
 
-		for _, index := range desc.AllNonDropIndexes() {
-			if len(index.Interleave.Ancestors) > 0 {
-				if err := n.p.finalizeInterleave(&desc, index); err != nil {
-					return err
-				}
-			}
-		}
+	if err := desc.Validate(n.p.txn); err != nil {
+		return err
+	}
 
-		if err := desc.Validate(n.p.txn); err != nil {
-			return err
-		}
-
-		// Log Create Table event. This is an auditable log event and is
-		// recorded in the same transaction as the table descriptor update.
-		if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
-			EventLogCreateTable,
-			int32(desc.ID),
-			int32(n.p.evalCtx.NodeID),
-			struct {
-				TableName string
-				Statement string
-				User      string
-			}{n.n.Table.String(), n.n.String(), n.p.session.User},
-		); err != nil {
-			return err
-		}
+	// Log Create Table event. This is an auditable log event and is
+	// recorded in the same transaction as the table descriptor update.
+	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
+		EventLogCreateTable,
+		int32(desc.ID),
+		int32(n.p.evalCtx.NodeID),
+		struct {
+			TableName string
+			Statement string
+			User      string
+		}{n.n.Table.String(), n.n.String(), n.p.session.User},
+	); err != nil {
+		return err
 	}
 
 	if n.n.As() {
@@ -839,6 +956,37 @@ func CreateTableDescriptor(
 	}
 
 	return desc
+}
+
+// makeViewTableDesc returns the table descriptor for a new view.
+func makeViewTableDesc(
+	p *parser.CreateView, parentID sqlbase.ID, resultColumns []ResultColumn,
+) (sqlbase.TableDescriptor, error) {
+	desc := sqlbase.TableDescriptor{ParentID: parentID,
+		FormatVersion: sqlbase.FamilyFormatVersion, Version: 1}
+	viewName, err := p.Name.Normalize()
+	if err != nil {
+		return desc, err
+	}
+	desc.Name = viewName.String()
+	for _, colRes := range resultColumns {
+		colType, _ := parser.DatumTypeToColumnType(colRes.Typ)
+		columnTableDef := parser.ColumnTableDef{Name: parser.Name(colRes.Name), Type: colType}
+		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef)
+		if err != nil {
+			return desc, err
+		}
+		desc.AddColumn(*col)
+	}
+
+	// TODO(a-robinson): Is this sufficient to retain the correctness of the
+	// query, or do we need to parse the query as a raw string initially and
+	// save it verbatim?
+	var buf bytes.Buffer
+	parser.FormatNode(&buf, parser.FmtSimple, p.AsSource)
+	desc.ViewQuery = buf.String()
+
+	return desc, nil
 }
 
 // makeTableDescIfAs is the MakeTableDesc method for when we have a table
