@@ -39,7 +39,6 @@
 #include "db.h"
 #include "encoding.h"
 #include "eventlistener.h"
-#include "options_builder.h"
 
 #include <iostream>
 
@@ -1986,11 +1985,13 @@ DBStatus DBEngineAddFile(DBEngine* db, DBSlice path) {
 
 struct DBSstFileWriter {
   std::unique_ptr<rocksdb::Options> options;
+  rocksdb::ImmutableCFOptions ioptions;
   rocksdb::SstFileWriter rep;
 
   DBSstFileWriter(rocksdb::Options* o)
       : options(o),
-        rep(rocksdb::EnvOptions(), *o, o->comparator) {
+        ioptions(*o),
+        rep(rocksdb::EnvOptions(), ioptions, o->comparator) {
   }
   virtual ~DBSstFileWriter() { }
 };

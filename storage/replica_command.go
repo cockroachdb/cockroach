@@ -2541,17 +2541,34 @@ func (r *Replica) splitTrigger(
 			return enginepb.MVCCStats{}, nil, errors.Wrap(err, "unable to account for enginepb.MVCCStats's own stats impact")
 		}
 
-		// TODO(tschottdorf): Writing the initial state is subtle since this
-		// also seeds the Raft group. We are writing to the right hand side's
-		// Raft group state in this batch. Between committing and telling the
-		// Store, we could race with an uninitialized version of our new
-		// Replica which might have been created by an incoming message from
-		// another node which already processed the split. We rely on
-		// synchronization provided at the Store level to avoid this. See #7860
-		// and for history #7600. Note also that it is crucial that
-		// writeInitialState *absorbs* an existing HardState (which might
-		// contain a cast vote).
-		rightMS, err = writeInitialState(ctx, batch, rightMS, split.RightDesc)
+		// Writing the initial state is subtle since this also seeds the Raft
+		// group. We are writing to the right hand side's Raft group state in this
+		// batch so we need to synchronize with anything else that could be
+		// touching that replica's Raft state. Specifically, we want to prohibit an
+		// uninitialized Replica from receiving a message for the right hand side
+		// range and performing raft processing. This is achieved by serializing
+		// execution of uninitialized Replicas in Store.processRaft and ensuring
+		// that no uninitialized Replica is being processed while an initialized
+		// one (like the one currently being split) is being processed.
+		//
+		// Note also that it is crucial that writeInitialState *absorbs* an
+		// existing HardState (which might contain a cast vote). We load the
+		// existing HardState from the underlying engine instead of the batch
+		// because batch reads are from a snapshot taken at the point in time when
+		// the first read was performed on the batch. This last requirement is not
+		// currently needed due to the uninitialized Replica synchronization
+		// mentioned above, but future work will relax that synchronization, moving
+		// it from before the point that batch was created to this method. We want
+		// to see any writes to the hard state that were performed between the
+		// creation of the batch and that synchronization point. The only drawback
+		// to not reading from the batch is that we won't see any writes to the
+		// right hand side's hard state that were previously made in the batch
+		// (which should be impossible).
+		oldHS, err := loadHardState(ctx, r.store.Engine(), split.RightDesc.RangeID)
+		if err != nil {
+			return enginepb.MVCCStats{}, nil, errors.Wrap(err, "unable to load hard state")
+		}
+		rightMS, err = writeInitialState(ctx, batch, rightMS, split.RightDesc, oldHS)
 		if err != nil {
 			return enginepb.MVCCStats{}, nil, errors.Wrap(err, "unable to write initial state")
 		}
