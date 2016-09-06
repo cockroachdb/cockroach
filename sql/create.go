@@ -253,14 +253,9 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		return nil, err
 	}
 
+	hoistConstraints(n)
 	for _, def := range n.Defs {
 		switch t := def.(type) {
-		case *parser.ColumnTableDef:
-			if t.References.Table.TableNameReference != nil {
-				if _, err := t.References.Table.NormalizeWithDatabaseName(p.session.Database); err != nil {
-					return nil, err
-				}
-			}
 		case *parser.ForeignKeyConstraintTableDef:
 			if _, err := t.Table.NormalizeWithDatabaseName(p.session.Database); err != nil {
 				return nil, err
@@ -338,7 +333,6 @@ func (n *createTableNode) expandPlan() error {
 }
 
 func (n *createTableNode) Start() error {
-	hoistConstraints(n.n)
 	var desc sqlbase.TableDescriptor
 	var err error
 	if n.n.As() {
@@ -409,21 +403,8 @@ func (n *createTableNode) Start() error {
 	// map -- anything in that map should be saved when the table is created.
 	affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 	for _, def := range n.n.Defs {
-		switch d := def.(type) {
-		case *parser.ColumnTableDef:
-			if d.References.Table.TableNameReference != nil {
-				var targetCol parser.NameList
-				if d.References.Col != "" {
-					targetCol = append(targetCol, d.References.Col)
-				}
-				err := n.resolveFK(&desc, parser.NameList{d.Name},
-					d.References.Table.TableName(), targetCol, d.References.ConstraintName, affected)
-				if err != nil {
-					return err
-				}
-			}
-		case *parser.ForeignKeyConstraintTableDef:
-			err := n.resolveFK(&desc, d.FromCols, d.Table.TableName(), d.ToCols, d.Name, affected)
+		if d, ok := def.(*parser.ForeignKeyConstraintTableDef); ok {
+			err := n.p.resolveFK(&desc, d, affected, newTable)
 			if err != nil {
 				return err
 			}
@@ -548,19 +529,29 @@ func (n *createTableNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "create table", "", nil
 }
 
+type constraintCreationMode int
+
+const (
+	newTable constraintCreationMode = iota
+	existingTable
+)
+
 // resolveFK looks up the tables and columns mentioned in a `REFERENCES`
 // constraint and adds metadata representing that constraint to the descriptor.
 // It may, in doing so, add to or alter descriptors in the passed in `backrefs`
 // map of other tables that need to be updated when this table is created.
-func (n *createTableNode) resolveFK(
+// Constraints that are not known to hold for existing data are created
+// "unvalidated", but when table is empty (e.g. during creation), no existing
+// data imples no existing violations, and thus the constraint can be created
+// without the unvalidated flag.
+func (p *planner) resolveFK(
 	tbl *sqlbase.TableDescriptor,
-	fromColNames parser.NameList,
-	targetTable *parser.TableName,
-	targetColNames parser.NameList,
-	constraintName parser.Name,
+	d *parser.ForeignKeyConstraintTableDef,
 	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
+	mode constraintCreationMode,
 ) error {
-	target, err := n.p.getTableDesc(targetTable)
+	targetTable := d.Table.TableName()
+	target, err := p.getTableDesc(targetTable)
 	if err != nil {
 		return err
 	}
@@ -577,9 +568,11 @@ func (n *createTableNode) resolveFK(
 		// Since this FK is referencing another table, this table must be created in
 		// a non-public "ADD" state and made public only after all leases on the
 		// other table are updated to include the backref.
-		tbl.State = sqlbase.TableDescriptor_ADD
-		if err := tbl.SetUpVersion(); err != nil {
-			return err
+		if mode == newTable {
+			tbl.State = sqlbase.TableDescriptor_ADD
+			if err := tbl.SetUpVersion(); err != nil {
+				return err
+			}
 		}
 
 		// If we resolve the same table more than once, we only want to edit a
@@ -591,11 +584,12 @@ func (n *createTableNode) resolveFK(
 		}
 	}
 
-	srcCols, err := tbl.FindActiveColumnsByNames(fromColNames)
+	srcCols, err := tbl.FindActiveColumnsByNames(d.FromCols)
 	if err != nil {
 		return err
 	}
 
+	targetColNames := d.ToCols
 	// If no columns are specified, attempt to default to PK.
 	if len(targetColNames) == 0 {
 		targetColNames = make(parser.NameList, len(target.PrimaryIndex.ColumnNames))
@@ -645,8 +639,9 @@ func (n *createTableNode) resolveFK(
 		return true
 	}
 
+	constraintName := string(d.Name)
 	if constraintName == "" {
-		constraintName = parser.Name(fmt.Sprintf("fk_%s_ref_%s", fromColNames[0], target.Name))
+		constraintName = fmt.Sprintf("fk_%s_ref_%s", d.FromCols[0], target.Name)
 	}
 
 	var targetIdx *sqlbase.IndexDescriptor
@@ -667,7 +662,10 @@ func (n *createTableNode) resolveFK(
 		}
 	}
 
-	ref := sqlbase.ForeignKeyReference{Table: target.ID, Index: targetIdx.ID, Name: string(constraintName)}
+	ref := sqlbase.ForeignKeyReference{Table: target.ID, Index: targetIdx.ID, Name: constraintName}
+	if mode == existingTable {
+		ref.Unvalidated = true
+	}
 	backref := sqlbase.ForeignKeyReference{Table: tbl.ID}
 
 	if matchesIndex(srcCols, tbl.PrimaryIndex, matchPrefix) {
@@ -946,87 +944,11 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 				return desc, util.UnimplementedWithIssueErrorf(2972, "interleaving is not yet supported")
 			}
 		case *parser.CheckConstraintTableDef:
-			// CHECK expressions seem to vary across databases. Wikipedia's entry on
-			// Check_constraint (https://en.wikipedia.org/wiki/Check_constraint) says
-			// that if the constraint refers to a single column only, it is possible to
-			// specify the constraint as part of the column definition. Postgres allows
-			// specifying them anywhere about any columns, but it moves all constraints to
-			// the table level (i.e., columns never have a check constraint themselves). We
-			// will adhere to the stricter definition.
-
-			var nameBuf bytes.Buffer
-			name := string(d.Name)
-
-			generateName := name == ""
-			if generateName {
-				nameBuf.WriteString("check")
-			}
-
-			preFn := func(expr parser.Expr) (err error, recurse bool, newExpr parser.Expr) {
-				vBase, ok := expr.(parser.VarName)
-				if !ok {
-					// Not a VarName, don't do anything to this node.
-					return nil, true, expr
-				}
-
-				v, err := vBase.NormalizeVarName()
-				if err != nil {
-					return err, false, nil
-				}
-
-				c, ok := v.(*parser.ColumnItem)
-				if !ok {
-					return nil, true, expr
-				}
-
-				col, err := desc.FindActiveColumnByName(c.ColumnName)
-				if err != nil {
-					return fmt.Errorf("column %q not found for constraint %q",
-						c.ColumnName, d.Expr.String()), false, nil
-				}
-				if generateName {
-					nameBuf.WriteByte('_')
-					nameBuf.WriteString(col.Name)
-				}
-				// Convert to a dummy datum of the correct type.
-				return nil, false, col.Type.ToDatumType()
-			}
-
-			expr, err := parser.SimpleVisit(d.Expr, preFn)
+			ck, err := makeCheckConstraint(desc, d, generatedNames)
 			if err != nil {
 				return desc, err
 			}
-
-			var p parser.Parser
-			if p.AggregateInExpr(expr) {
-				return desc, fmt.Errorf("aggregate functions are not allowed in CHECK expressions")
-			}
-
-			if err := sqlbase.SanitizeVarFreeExpr(expr, parser.TypeBool, "CHECK"); err != nil {
-				return desc, err
-			}
-			if generateName {
-				name = nameBuf.String()
-
-				// If generated name isn't unique, attempt to add a number to the end to
-				// get a unique name.
-				if _, ok := generatedNames[name]; ok {
-					i := 1
-					for {
-						appended := fmt.Sprintf("%s%d", name, i)
-						if _, ok := generatedNames[appended]; !ok {
-							name = appended
-							break
-						}
-						i++
-					}
-				}
-				generatedNames[name] = struct{}{}
-			}
-
-			desc.Checks = append(desc.Checks,
-				&sqlbase.TableDescriptor_CheckConstraint{Expr: d.Expr.String(), Name: name},
-			)
+			desc.Checks = append(desc.Checks, ck)
 
 		case *parser.FamilyTableDef:
 			fam := sqlbase.ColumnFamilyDescriptor{
@@ -1054,4 +976,89 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 	}
 
 	return desc, nil
+}
+
+func makeCheckConstraint(
+	desc sqlbase.TableDescriptor, d *parser.CheckConstraintTableDef, inuseNames map[string]struct{},
+) (*sqlbase.TableDescriptor_CheckConstraint, error) {
+	// CHECK expressions seem to vary across databases. Wikipedia's entry on
+	// Check_constraint (https://en.wikipedia.org/wiki/Check_constraint) says
+	// that if the constraint refers to a single column only, it is possible to
+	// specify the constraint as part of the column definition. Postgres allows
+	// specifying them anywhere about any columns, but it moves all constraints to
+	// the table level (i.e., columns never have a check constraint themselves). We
+	// will adhere to the stricter definition.
+
+	var nameBuf bytes.Buffer
+	name := string(d.Name)
+
+	generateName := name == ""
+	if generateName {
+		nameBuf.WriteString("check")
+	}
+
+	preFn := func(expr parser.Expr) (err error, recurse bool, newExpr parser.Expr) {
+		vBase, ok := expr.(parser.VarName)
+		if !ok {
+			// Not a VarName, don't do anything to this node.
+			return nil, true, expr
+		}
+
+		v, err := vBase.NormalizeVarName()
+		if err != nil {
+			return err, false, nil
+		}
+
+		c, ok := v.(*parser.ColumnItem)
+		if !ok {
+			return nil, true, expr
+		}
+
+		col, err := desc.FindActiveColumnByName(c.ColumnName)
+		if err != nil {
+			return fmt.Errorf("column %q not found for constraint %q",
+				c.ColumnName, d.Expr.String()), false, nil
+		}
+		if generateName {
+			nameBuf.WriteByte('_')
+			nameBuf.WriteString(col.Name)
+		}
+		// Convert to a dummy datum of the correct type.
+		return nil, false, col.Type.ToDatumType()
+	}
+
+	expr, err := parser.SimpleVisit(d.Expr, preFn)
+	if err != nil {
+		return nil, err
+	}
+
+	var p parser.Parser
+	if p.AggregateInExpr(expr) {
+		return nil, fmt.Errorf("aggregate functions are not allowed in CHECK expressions")
+	}
+
+	if err := sqlbase.SanitizeVarFreeExpr(expr, parser.TypeBool, "CHECK"); err != nil {
+		return nil, err
+	}
+	if generateName {
+		name = nameBuf.String()
+
+		// If generated name isn't unique, attempt to add a number to the end to
+		// get a unique name.
+		if _, ok := inuseNames[name]; ok {
+			i := 1
+			for {
+				appended := fmt.Sprintf("%s%d", name, i)
+				if _, ok := inuseNames[appended]; !ok {
+					name = appended
+					break
+				}
+				i++
+			}
+		}
+		if inuseNames != nil {
+			inuseNames[name] = struct{}{}
+		}
+	}
+	return &sqlbase.TableDescriptor_CheckConstraint{Expr: d.Expr.String(), Name: name}, nil
 }

@@ -109,6 +109,14 @@ func (n *alterTableNode) Start() error {
 			}
 
 		case *parser.AlterTableAddConstraint:
+			info, err := n.tableDesc.GetConstraintInfo(nil)
+			if err != nil {
+				return err
+			}
+			inuseNames := make(map[string]struct{}, len(info))
+			for k := range info {
+				inuseNames[k] = struct{}{}
+			}
 			switch d := t.ConstraintDef.(type) {
 			case *parser.UniqueConstraintTableDef:
 				if d.PrimaryKey {
@@ -130,6 +138,31 @@ func (n *alterTableNode) Start() error {
 					}
 				}
 				n.tableDesc.AddIndexMutation(idx, sqlbase.DescriptorMutation_ADD)
+
+			case *parser.CheckConstraintTableDef:
+				ck, err := makeCheckConstraint(*n.tableDesc, d, inuseNames)
+				if err != nil {
+					return err
+				}
+				ck.Unvalidated = true
+				n.tableDesc.Checks = append(n.tableDesc.Checks, ck)
+				descriptorChanged = true
+
+			case *parser.ForeignKeyConstraintTableDef:
+				if _, err := d.Table.NormalizeWithDatabaseName(n.p.session.Database); err != nil {
+					return err
+				}
+				affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+				err := n.p.resolveFK(n.tableDesc, d, affected, existingTable)
+				if err != nil {
+					return err
+				}
+				descriptorChanged = true
+				for _, updated := range affected {
+					if err := n.p.saveNonmutationAndNotify(updated); err != nil {
+						return err
+					}
+				}
 
 			default:
 				return fmt.Errorf("unsupported constraint: %T", t.ConstraintDef)

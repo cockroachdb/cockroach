@@ -50,6 +50,7 @@ message ForeignKeyReference {
   optional uint32 table = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ID"];
   optional uint32 index = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
   optional string name = 3 [(gogoproto.nullable) = false];
+  optional bool unvalidated = 4 [(gogoproto.nullable) = false];
 }
 
 message ColumnDescriptor {
@@ -358,6 +359,7 @@ message TableDescriptor {
   message CheckConstraint {
     optional string expr = 1 [(gogoproto.nullable) = false];
     optional string name = 2 [(gogoproto.nullable) = false];
+    optional bool unvalidated = 3 [(gogoproto.nullable) = false];
   }
 
   repeated CheckConstraint checks = 20;
