@@ -60,48 +60,6 @@ message RaftMessageResponse {
   optional RaftMessageResponseUnion union = 4 [(gogoproto.nullable) = false];
 }
 
-// SnapshotRequest is the request used to send streaming snapshot requests.
-message SnapshotRequest {
-  message Header {
-    optional roachpb.RangeDescriptor range_descriptor = 1 [(gogoproto.nullable) = false];
-
-    // The inner raft message is of type MsgSnap, and its snapshot data contains a UUID.
-    optional RaftMessageRequest raft_message_request = 2 [(gogoproto.nullable) = false];
-
-    // The estimated size of the range, to be used in reservation decisions.
-    optional int64 range_size = 3 [(gogoproto.nullable) = false];
-
-    // can_decline is set on preemptive snapshots, but not those generated
-    // by raft because at that point it is better to queue up the stream
-    // than to cancel it.
-    optional bool can_decline = 4 [(gogoproto.nullable) = false];
-  }
-
-  optional Header header = 1;
-
-  // A RocksDB BatchRepr. Multiple kv_batches may be sent across multiple request messages.
-  optional bytes kv_batch = 2 [(gogoproto.customname) = "KVBatch"];
-
-  // These are really raftpb.Entry, but we model them as raw bytes to avoid
-  // roundtripping through memory. They are separate from the kv_batch to
-  // allow flexibility in log implementations.
-  repeated bytes log_entries = 3;
-
-  optional bool final = 4 [(gogoproto.nullable) = false];
-}
-
-message SnapshotResponse {
-  enum Status {
-    UNKNOWN = 0;
-    ACCEPTED = 1;
-    APPLIED = 2;
-    ERROR = 3;
-    DECLINED = 4;
-  }
-  optional Status status = 1 [(gogoproto.nullable) = false];
-  optional string message = 2 [(gogoproto.nullable) = false];
-}
-
 // ConfChangeContext is encoded in the raftpb.ConfChange.Context field.
 message ConfChangeContext {
   optional string command_id = 1 [(gogoproto.nullable) = false,
@@ -117,5 +75,5 @@ message ConfChangeContext {
 
 service MultiRaft {
   rpc RaftMessage (stream RaftMessageRequest) returns (stream RaftMessageResponse) {}
-  rpc RaftSnapshot (stream SnapshotRequest) returns (stream SnapshotResponse) {}
+  rpc RaftMessageSync (RaftMessageRequest) returns (RaftMessageResponse) {}
 }

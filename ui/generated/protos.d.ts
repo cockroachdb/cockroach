@@ -551,6 +551,7 @@ export interface roachpbBuilder {
 	RaftTruncatedState: roachpb.RaftTruncatedStateBuilder;
 	RaftTombstone: roachpb.RaftTombstoneBuilder;
 	RaftSnapshotData: roachpb.RaftSnapshotDataBuilder;
+	PartialRaftSnapshotData: roachpb.PartialRaftSnapshotDataBuilder;
 	ValueType: roachpb.ValueType;
 	ReplicaChangeType: roachpb.ReplicaChangeType;
 	TransactionStatus: roachpb.TransactionStatus;
@@ -1998,6 +1999,42 @@ export interface KeyValueBuilder {
 
 }
 
+
+
+declare module Proto2TypeScript.cockroach.roachpb {
+
+	export interface PartialRaftSnapshotData {
+
+		
+
+range_descriptor?: RangeDescriptor;
+		
+
+getRangeDescriptor?() : RangeDescriptor;
+		setRangeDescriptor?(rangeDescriptor : RangeDescriptor): void;
+		
+
+
+
+}
+
+	export interface PartialRaftSnapshotDataMessage extends PartialRaftSnapshotData {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface PartialRaftSnapshotDataBuilder {
+	new(data?: PartialRaftSnapshotData): PartialRaftSnapshotDataMessage;
+	decode(buffer: ArrayBuffer) : PartialRaftSnapshotDataMessage;
+	decode(buffer: ByteBuffer) : PartialRaftSnapshotDataMessage;
+	decode64(buffer: string) : PartialRaftSnapshotDataMessage;
+	
+}
+
+}
 
 
 declare module Proto2TypeScript.cockroach.roachpb {
