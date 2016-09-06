@@ -1389,9 +1389,10 @@ const (
 
 // ConstraintDetail describes a constraint.
 type ConstraintDetail struct {
-	Kind    ConstraintType
-	Columns []string
-	Details string
+	Kind        ConstraintType
+	Columns     []string
+	Details     string
+	Unvalidated bool
 }
 
 // GetConstraintInfo returns a summary of all constraints on the table.
@@ -1438,6 +1439,7 @@ func (desc TableDescriptor) collectConstraintInfo(txn *client.Txn) (map[string]C
 				return nil, errors.Errorf("duplicate constraint name: %q", index.ForeignKey.Name)
 			}
 			detail := ConstraintDetail{Kind: ConstraintTypeFK}
+			detail.Unvalidated = index.ForeignKey.Validity == ConstraintValidity_Unvalidated
 			if txn != nil {
 				detail.Columns = index.ColumnNames
 				other, err := GetTableDescFromID(txn, index.ForeignKey.Table)
@@ -1461,6 +1463,7 @@ func (desc TableDescriptor) collectConstraintInfo(txn *client.Txn) (map[string]C
 			return nil, errors.Errorf("duplicate constraint name: %q", c.Name)
 		}
 		detail := ConstraintDetail{Kind: ConstraintTypeCheck}
+		detail.Unvalidated = c.Validity == ConstraintValidity_Unvalidated
 		if txn != nil {
 			detail.Details = c.Expr
 		}
