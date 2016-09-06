@@ -2193,10 +2193,11 @@ func TestLeaderRemoveSelf(t *testing.T) {
 func TestRemoveRangeWithoutGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := startMultiTestContext(t, 2)
+	sc := storage.TestStoreContext()
+	sc.TestingKnobs.DisableScanner = true
+	mtc := multiTestContext{storeContext: &sc}
+	mtc.Start(t, 2)
 	defer mtc.Stop()
-	// Disable the GC queue and move the range from store 0 to 1.
-	mtc.stores[0].SetReplicaGCQueueActive(false)
 	const rangeID roachpb.RangeID = 1
 	mtc.replicateRange(rangeID, 1)
 	mtc.unreplicateRange(rangeID, 0)
@@ -2230,25 +2231,22 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 	// can continue to use its last known replica ID.
 	mtc.stopStore(0)
 	mtc.restartStore(0)
-	// Turn off the GC queue to ensure that the replica is deleted at
-	// startup instead of by the scanner. This is not 100% guaranteed
-	// since the scanner could have already run at this point, but it
-	// should be enough to prevent us from accidentally relying on the
-	// scanner.
-	mtc.stores[0].SetReplicaGCQueueActive(false)
 
-	// The Replica object is not recreated.
-	if _, err := mtc.stores[0].GetReplica(rangeID); err == nil {
-		t.Fatalf("expected replica to be missing")
-	}
+	util.SucceedsSoon(t, func() error {
+		// The Replica object should be removed.
+		if _, err := mtc.stores[0].GetReplica(rangeID); err == nil {
+			return errors.Errorf("expected replica to be missing")
+		}
 
-	// And the data is no longer on disk.
-	if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), descKey,
-		mtc.stores[0].Clock().Now(), true, nil, &desc); err != nil {
-		t.Fatal(err)
-	} else if ok {
-		t.Fatal("expected range descriptor to be absent")
-	}
+		// And the data should no longer be on disk.
+		if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), descKey,
+			mtc.stores[0].Clock().Now(), true, nil, &desc); err != nil {
+			return err
+		} else if ok {
+			return errors.Errorf("expected range descriptor to be absent")
+		}
+		return nil
+	})
 }
 
 // TestCheckConsistencyMultiStore creates a Db with three stores ]

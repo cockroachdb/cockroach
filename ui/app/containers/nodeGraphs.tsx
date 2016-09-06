@@ -240,11 +240,11 @@ export default class extends React.Component<IInjectedProps, {}> {
               </Axis>
             </LineGraph>
 
-            <LineGraph title="Raft Leaders and LeaseHolders" sources={sources}>
+            <LineGraph title="Replicas: Raft leaders and Range Lease holders" sources={sources}>
               <Axis format={ d3.format(".1f") }>
-                <Metric name="cr.store.raft.leaders" title="Ranges on this Store that are Raft Leaders" />
-                <Metric name="cr.store.range.leaseholders" title="Ranges on this Store that are Raft LeaseHolders" />
-                <Metric name="cr.store.range.leaseholders.without.leadership" title="Ranges on this Store that are Raft LeaseHolders but aren't Raft Leaders" />
+                <Metric name="cr.store.replicas.leaders" title="Leaders" />
+                <Metric name="cr.store.replicas.leaseholders" title="Lease Holders" />
+                <Metric name="cr.store.replicas.leaders_not_leaseholders" title="Leaders w/o Lease" />
               </Axis>
             </LineGraph>
 

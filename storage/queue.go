@@ -107,10 +107,12 @@ func isExpectedQueueError(err error) bool {
 type queueImpl interface {
 	// shouldQueue accepts current time, a replica, and the system config
 	// and returns whether it should be queued and if so, at what priority.
+	// The Replica is guaranteed to be initialized.
 	shouldQueue(hlc.Timestamp, *Replica, config.SystemConfig) (shouldQueue bool, priority float64)
 
 	// process accepts current time, a replica, and the system config
-	// and executes queue-specific work on it.
+	// and executes queue-specific work on it. The Replica is guaranteed
+	// to be initialized.
 	process(context.Context, hlc.Timestamp, *Replica, config.SystemConfig) error
 
 	// timer returns a duration to wait between processing the next item
@@ -282,6 +284,10 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 		return
 	}
 
+	if !repl.IsInitialized() {
+		return
+	}
+
 	if !cfgOk {
 		log.VEvent(1, bq.ctx, "no system config available. skipping")
 		return
@@ -325,6 +331,12 @@ func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) (
 	if bq.mu.disabled {
 		log.Event(bq.ctx, "queue disabled")
 		return false, errQueueDisabled
+	}
+
+	if !repl.IsInitialized() {
+		// We checked this above in MaybeAdd(), but we need to check it
+		// again for Add().
+		return false, errors.New("replica not initialized")
 	}
 
 	// If the replica is currently in purgatory, don't re-add it.

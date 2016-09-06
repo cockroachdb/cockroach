@@ -799,6 +799,11 @@ func (db *DB) Query(
 	// requesting a derivative, a rate of change is recorded instead of the
 	// actual values.
 	iters.init()
+	if !iters.isValid() {
+		// We have no data to return.
+		return nil, sources, nil
+	}
+
 	var last tspb.TimeSeriesDatapoint
 	if isDerivative {
 		last = tspb.TimeSeriesDatapoint{

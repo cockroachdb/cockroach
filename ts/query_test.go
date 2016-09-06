@@ -699,6 +699,13 @@ func (tm *testModel) assertQuery(
 		}
 	}
 
+	// Verify that expected sources match actual sources.
+	sort.Strings(expectedSources)
+	sort.Strings(actualSources)
+	if !reflect.DeepEqual(actualSources, expectedSources) {
+		tm.t.Error(errors.Errorf("actual source list: %v, expected: %v", actualSources, expectedSources))
+	}
+
 	// Iterate over data in all dataSpans and construct expected datapoints.
 	var startOffset int32
 	isDerivative := q.GetDerivative() != tspb.TimeSeriesQueryDerivative_NONE
@@ -719,6 +726,12 @@ func (tm *testModel) assertQuery(
 	}
 
 	iters.init()
+	if !iters.isValid() {
+		if a, e := 0, len(expectedDatapoints); a != e {
+			tm.t.Error(errors.Errorf("query had zero datapoints, expected: %v", expectedDatapoints))
+		}
+		return
+	}
 	currentVal := func() tspb.TimeSeriesDatapoint {
 		var value float64
 		switch q.GetSourceAggregator() {
@@ -766,11 +779,6 @@ func (tm *testModel) assertQuery(
 		iters.advance()
 	}
 
-	sort.Strings(expectedSources)
-	sort.Strings(actualSources)
-	if !reflect.DeepEqual(actualSources, expectedSources) {
-		tm.t.Error(errors.Errorf("actual source list: %v, expected: %v", actualSources, expectedSources))
-	}
 	if !reflect.DeepEqual(actualDatapoints, expectedDatapoints) {
 		tm.t.Error(errors.Errorf("actual datapoints: %v, expected: %v", actualDatapoints, expectedDatapoints))
 	}
@@ -843,8 +851,38 @@ func TestQuery(t *testing.T) {
 	// Test with everything specified.
 	tm.assertQuery("test.multimetric", nil, tspb.TimeSeriesQueryAggregator_MIN.Enum(), tspb.TimeSeriesQueryAggregator_MAX.Enum(),
 		tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(), resolution1ns, 1, 0, 90, 8, 2)
-	// Test query that returns no data.
-	tm.assertQuery("nodata", nil, nil, nil, nil, resolution1ns, 1, 0, 90, 0, 0)
+
+	// Test queries that return no data. Check with every
+	// aggregator/downsampler/derivative combination. This situation is
+	// particularly prone to nil panics (parts of the query system will not have
+	// data).
+	aggs := []tspb.TimeSeriesQueryAggregator{
+		tspb.TimeSeriesQueryAggregator_MIN, tspb.TimeSeriesQueryAggregator_MAX,
+		tspb.TimeSeriesQueryAggregator_AVG, tspb.TimeSeriesQueryAggregator_SUM,
+	}
+	derivs := []tspb.TimeSeriesQueryDerivative{
+		tspb.TimeSeriesQueryDerivative_NONE, tspb.TimeSeriesQueryDerivative_DERIVATIVE,
+		tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE,
+	}
+	for _, downsampler := range aggs {
+		for _, agg := range aggs {
+			for _, deriv := range derivs {
+				tm.assertQuery(
+					"nodata",
+					nil,
+					downsampler.Enum(),
+					agg.Enum(),
+					deriv.Enum(),
+					resolution1ns,
+					1,
+					0,
+					90,
+					0,
+					0,
+				)
+			}
+		}
+	}
 
 	// Verify querying specific sources, thus excluding other available sources
 	// in the same time period.

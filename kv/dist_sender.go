@@ -680,7 +680,31 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 		var needAnother bool
 		var pErr *roachpb.Error
 		var finished bool
+		var numAttempts int
 		for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
+			numAttempts++
+			{
+				const magicLogCurAttempt = 20
+
+				var seq int32
+				if ba.Txn != nil {
+					seq = ba.Txn.Sequence
+				}
+
+				// seq + 1 so that we don't log on the first attempt.
+				if numAttempts%magicLogCurAttempt == 0 || (seq+1)%magicLogCurAttempt == 0 {
+					// Log a message if a request appears to get stuck for a long
+					// time or, potentially, forever. See #8975.
+					// The local counter captures this loop here; the Sequence number
+					// should capture anything higher up (as it needs to be
+					// incremented every time this method is called).
+					log.Warningf(
+						ctx,
+						"%d retries for an RPC at sequence %d, last error was: %s, remaining key ranges %q: %s",
+						numAttempts, seq, pErr, rs, ba,
+					)
+				}
+			}
 			// Get range descriptor (or, when spanning range, descriptors). Our
 			// error handling below may clear them on certain errors, so we
 			// refresh (likely from the cache) on every retry.
