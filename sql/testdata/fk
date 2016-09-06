@@ -149,6 +149,22 @@ statement error foreign key violation: values \['885155001450'\] in columns \[up
 UPDATE products SET upc = 'blah' WHERE sku = '780'
 
 statement ok
+ALTER TABLE scans DROP CONSTRAINT fk_scanned_ref_products
+
+statement ok
+UPDATE products SET upc = 'blah' WHERE sku = '780'
+
+statement ok
+ALTER TABLE scans ADD FOREIGN KEY (scanned) REFERENCES products (upc)
+
+statement ok
+UPDATE products SET upc = '885155001450' WHERE sku = '780'
+
+# Changing referenced non-pk index fails once again with constraint re-added.
+statement error foreign key violation: values \['885155001450'\] in columns \[upc\] referenced in table "scans"
+UPDATE products SET upc = 'blah' WHERE sku = '780'
+
+statement ok
 TRUNCATE orders
 
 # Changing now non-referenced and secondary field is fine.

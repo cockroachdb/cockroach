@@ -409,10 +409,14 @@ func (p *planner) ShowConstraints(n *parser.ShowConstraints) (planNode, error) {
 		if c.Columns != nil {
 			columnsDatum = parser.NewDString(strings.Join(c.Columns, ", "))
 		}
+		kind := string(c.Kind)
+		if c.Unvalidated {
+			kind += " (UNVALIDATED)"
+		}
 		v.rows = append(v.rows, []parser.Datum{
 			parser.NewDString(tn.Table()),
 			parser.NewDString(name),
-			parser.NewDString(string(c.Kind)),
+			parser.NewDString(kind),
 			columnsDatum,
 			detailsDatum,
 		})
