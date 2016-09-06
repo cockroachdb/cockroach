@@ -369,7 +369,7 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 			uint64(r.mu.replicaID),
 			r.mu.state.RaftAppliedIndex,
 			r.store.ctx,
-			&raftLogger{stringer: r},
+			&raftLogger{ctx: r.ctx},
 		), nil)
 		if err != nil {
 			return err
@@ -1606,7 +1606,7 @@ func (r *Replica) handleRaftReady() error {
 		return nil
 	}
 
-	logRaftReady(ctx, r, rd)
+	logRaftReady(ctx, rd)
 
 	refreshReason := noReason
 	if rd.SoftState != nil && leaderID != roachpb.ReplicaID(rd.SoftState.Lead) {
