@@ -1347,7 +1347,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 
-	updatedMS, err := writeInitialState(ctx, batch, *ms, *desc)
+	updatedMS, err := writeInitialState(ctx, batch, *ms, *desc, raftpb.HardState{})
 	if err != nil {
 		return err
 	}
