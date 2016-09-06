@@ -2256,16 +2256,17 @@ func (s *Store) HandleRaftRequest(
 	defer r.raftUnlock(uninitRaftLocked)
 	r.setLastReplicaDescriptors(req)
 
-	// Check to see if a snapshot can be applied. Note that if we add a
-	// placeholder we need to already be holding Store.uninitRaftMu in order to
-	// prevent concurrent raft-ready processing of uninitialized replicas.
+	// Check to see if a snapshot can be applied. Snapshots can always be applied
+	// to initialized replicas. Note that if we add a placeholder we need to
+	// already be holding Store.uninitRaftMu in order to prevent concurrent
+	// raft-ready processing of uninitialized replicas.
 	var addedPlaceholder bool
 	var removePlaceholder bool
-	if req.Message.Type == raftpb.MsgSnap {
+	if req.Message.Type == raftpb.MsgSnap && !r.IsInitialized() {
 		if earlyReturn := func() bool {
 			s.mu.Lock()
 			defer s.mu.Unlock()
-			placeholder, err := s.canApplySnapshotLocked(r, req.Message.Snapshot)
+			placeholder, err := s.canApplySnapshotLocked(r.RangeID, req.Message.Snapshot)
 			if err != nil {
 				// If the storage cannot accept the snapshot, drop it before
 				// passing it to RawNode.Step, since our error handling
@@ -2807,14 +2808,7 @@ func (s *Store) tryGetOrCreateReplica(
 // this store's replica (i.e. the snapshot is not from an older incarnation of
 // the replica) and a placeholder can be added to the replicasByKey map (if
 // necessary). If a placeholder is required, it is returned as the first value.
-func (s *Store) canApplySnapshotLocked(r *Replica, snap raftpb.Snapshot) (*ReplicaPlaceholder, error) {
-	// TODO(peter): The call to r.IsInitialized can move to the caller, allowing
-	// us to pass only rangeID (again).
-	if r.IsInitialized() {
-		// We have the range and it's initialized, so let the snapshot through.
-		return nil, nil
-	}
-
+func (s *Store) canApplySnapshotLocked(rangeID roachpb.RangeID, snap raftpb.Snapshot) (*ReplicaPlaceholder, error) {
 	// We don't have the range (or we have an uninitialized
 	// placeholder). Will we be able to create/initialize it?
 	var parsedSnap roachpb.PartialRaftSnapshotData
@@ -2822,7 +2816,7 @@ func (s *Store) canApplySnapshotLocked(r *Replica, snap raftpb.Snapshot) (*Repli
 		return nil, errors.Wrapf(err, "%s: failed to unmarshal snapshot", s)
 	}
 
-	if exRng, ok := s.mu.replicaPlaceholders[r.RangeID]; ok {
+	if exRng, ok := s.mu.replicaPlaceholders[rangeID]; ok {
 		return nil, errors.Errorf("%s: cannot add placeholder, have an existing placeholder %s", s, exRng)
 	}
 

@@ -476,6 +476,9 @@ func (r *Replica) initLocked(
 	if r.mu.state.Desc != nil && r.isInitializedLocked() {
 		log.Fatalf(r.store.Ctx(), "r%d: cannot reinitialize an initialized replica", desc.RangeID)
 	}
+	if desc.IsInitialized() && replicaID != 0 {
+		return errors.Errorf("replicaID must be 0 when creating an initialized replica")
+	}
 
 	r.mu.cmdQ = NewCommandQueue()
 	r.mu.tsCache = newTimestampCache(clock)
@@ -510,11 +513,6 @@ func (r *Replica) initLocked(
 	r.mu.destroyed = pErr.GetDetail()
 	r.mu.corrupted = r.mu.destroyed != nil
 
-	// TODO(peter): Move this check up to the other usage of
-	// isInitializedLocked().
-	if r.isInitializedLocked() && replicaID != 0 {
-		return errors.Errorf("replicaID must be 0 when creating an initialized replica")
-	}
 	if replicaID == 0 {
 		repDesc, ok := desc.GetReplicaDescriptor(r.store.StoreID())
 		if !ok {
