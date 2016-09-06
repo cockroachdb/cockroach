@@ -18,8 +18,6 @@
 		RaftMessageRequest
 		RaftMessageResponseUnion
 		RaftMessageResponse
-		SnapshotRequest
-		SnapshotResponse
 		ConfChangeContext
 */
 package storage

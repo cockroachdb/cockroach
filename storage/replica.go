@@ -324,16 +324,13 @@ type Replica struct {
 		// When no snapshot is in progress, this field may either be nil
 		// or a closed channel. If an error occurs during generation,
 		// this channel may be closed without producing a result.
-		snapshotChan chan OutgoingSnapshot
+		snapshotChan chan raftpb.Snapshot
 
 		// Counts calls to Replica.tick()
 		ticks int
 
 		// Counts Raft messages refused due to queue congestion.
 		droppedMessages int
-
-		// The pending outgoing snapshot if there is one.
-		outSnap OutgoingSnapshot
 	}
 }
 
@@ -835,9 +832,9 @@ func (r *Replica) mustGetReplicaID() roachpb.ReplicaID {
 }
 
 // setLastReplicaDescriptors sets the the most recently seen replica
-// descriptors to those contained in the *RaftMessageRequest, acquiring r.mu to
-// do so.
-func (r *Replica) setLastReplicaDescriptors(req RaftMessageRequest) {
+// descriptors to those contained in the *RaftMessageRequest, acquiring r.mu
+// to do so.
+func (r *Replica) setLastReplicaDescriptors(req *RaftMessageRequest) {
 	r.mu.Lock()
 	r.mu.lastFromReplica = req.FromReplica
 	r.mu.lastToReplica = req.ToReplica
@@ -1645,10 +1642,8 @@ func (r *Replica) isRaftLeaderLocked() bool {
 	return r.mu.leaderID == r.mu.replicaID
 }
 
-// handleRaftReady processes the Ready() messages on the replica if there are any. It takes a
-// non-nil IncomingSnapshot pointer to indicate that it is about to process a snapshot.
-func (r *Replica) handleRaftReady(inSnap *IncomingSnapshot) error {
-	ctx := r.ctx
+func (r *Replica) handleRaftReady() error {
+	ctx := context.TODO()
 	var hasReady bool
 	var rd raft.Ready
 	r.mu.Lock()
@@ -1693,15 +1688,7 @@ func (r *Replica) handleRaftReady(inSnap *IncomingSnapshot) error {
 	}
 
 	if !raft.IsEmptySnap(rd.Snapshot) {
-		snapUUID, err := uuid.FromBytes(rd.Snapshot.Data)
-		if err != nil {
-			return errors.Wrap(err, "invalid snapshot id")
-		}
-		if inSnap == nil || *snapUUID != inSnap.SnapUUID {
-			log.Fatalf(ctx, "programming error: a snapshot application was attempted outside of the streaming snapshot codepath")
-		}
-
-		if err := r.applySnapshot(ctx, *inSnap, rd.Snapshot, rd.HardState); err != nil {
+		if err := r.applySnapshot(ctx, rd.Snapshot, rd.HardState); err != nil {
 			return err
 		}
 
@@ -1724,6 +1711,7 @@ func (r *Replica) handleRaftReady(inSnap *IncomingSnapshot) error {
 			return err
 		}
 
+		var err error
 		if lastIndex, err = loadLastIndex(ctx, r.store.Engine(), r.RangeID); err != nil {
 			return err
 		}
@@ -1984,7 +1972,6 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	r.mu.Lock()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
-	snap := r.mu.outSnap
 	r.mu.Unlock()
 
 	if fromErr != nil {
@@ -1995,43 +1982,6 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	if toErr != nil {
 		log.Warningf(r.ctx, "failed to look up recipient replica %d in range %d while sending %s: %s",
 			msg.To, rangeID, msg.Type, toErr)
-		return
-	}
-
-	if !raft.IsEmptySnap(msg.Snapshot) {
-		msgUUID, err := uuid.FromBytes(msg.Snapshot.Data)
-		if err != nil {
-			log.Fatalf(r.ctx, "invalid snapshot: couldn't parse UUID from data: %s", err)
-		}
-		if *msgUUID != snap.SnapUUID {
-			log.Fatalf(r.ctx, "programming error: snapshot message from Raft.Ready %s doesn't match outgoing snapshot UUID %s.",
-				msgUUID.Short(), snap.SnapUUID.Short())
-		}
-		// Asynchronously stream the snapshot to the recipient.
-		if err := r.store.Stopper().RunTask(func() {
-			r.store.Stopper().RunWorker(func() {
-				defer snap.Close()
-				if err := r.store.ctx.Transport.SendSnapshot(
-					context.Background(),
-					SnapshotRequest_Header{
-						RangeDescriptor: *r.Desc(),
-						RaftMessageRequest: RaftMessageRequest{
-							RangeID:     r.RangeID,
-							FromReplica: fromReplica,
-							ToReplica:   toReplica,
-							Message:     msg,
-						},
-						// TODO(jordan) set this size accurately
-						RangeSize:  0,
-						CanDecline: false,
-					}, snap, r.store.Engine().NewBatch); err != nil {
-					log.Warningf(r.ctx, "range=%d: failed to send snapshot: %s", r.Desc().RangeID, err)
-				}
-			})
-		}); err != nil {
-			snap.Close()
-			log.Warningf(r.ctx, "range=%d: failed to send snapshot: %s", r.Desc().RangeID, err)
-		}
 		return
 	}
 

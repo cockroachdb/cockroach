@@ -17,11 +17,13 @@
 package storage
 
 import (
+	"bytes"
 	"strconv"
 	"time"
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -30,11 +32,12 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/util/bufalloc"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/timeutil"
-	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 var _ raft.Storage = (*Replica)(nil)
@@ -269,16 +272,12 @@ func (r *Replica) GetFirstIndex() (uint64, error) {
 // Snapshot implements the raft.Storage interface.
 // Snapshot requires that the replica lock is held.
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
-	snap, err := r.SnapshotWithContext(context.Background())
-	if err != nil {
-		return raftpb.Snapshot{}, err
-	}
-	return snap.RaftSnap, err
+	return r.SnapshotWithContext(context.Background())
 }
 
 // SnapshotWithContext is main implementation for Snapshot() but it takes a
 // context to allow tracing.
-func (r *Replica) SnapshotWithContext(ctx context.Context) (OutgoingSnapshot, error) {
+func (r *Replica) SnapshotWithContext(ctx context.Context) (raftpb.Snapshot, error) {
 	rangeID := r.RangeID
 
 	// If a snapshot is in progress, see if it's ready.
@@ -286,7 +285,6 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (OutgoingSnapshot, er
 		select {
 		case snapData, ok := <-r.mu.snapshotChan:
 			if ok {
-				r.mu.outSnap = snapData
 				return snapData, nil
 			}
 			// If the old channel was closed, fall through to start a new task.
@@ -294,7 +292,7 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (OutgoingSnapshot, er
 		default:
 			// If the result is not ready, return immediately.
 			log.Trace(ctx, "snapshot not yet ready")
-			return OutgoingSnapshot{}, raft.ErrSnapshotTemporarilyUnavailable
+			return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
 		}
 	}
 
@@ -304,20 +302,20 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (OutgoingSnapshot, er
 		log.Infof(ctx,
 			"%s: not generating snapshot because replica is too large: %d > 2 * %d",
 			r, size, maxBytes)
-		return OutgoingSnapshot{}, raft.ErrSnapshotTemporarilyUnavailable
+		return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
 	}
 
 	// See if there is already a snapshot running for this store.
 	if !r.store.AcquireRaftSnapshot() {
 		log.Trace(ctx, "snapshot already running")
-		return OutgoingSnapshot{}, raft.ErrSnapshotTemporarilyUnavailable
+		return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
 	}
 
 	startKey := r.mu.state.Desc.StartKey
 
 	// Use an unbuffered channel so the worker stays alive until someone
 	// reads from the channel, and can abandon the snapshot if it gets stale.
-	ch := make(chan (OutgoingSnapshot))
+	ch := make(chan (raftpb.Snapshot))
 
 	if r.store.Stopper().RunAsyncTask(func() {
 		defer close(ch)
@@ -326,8 +324,8 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (OutgoingSnapshot, er
 		defer sp.Finish()
 		snap := r.store.NewSnapshot()
 		log.Tracef(ctxInner, "new engine snapshot for replica %s", r)
+		defer snap.Close()
 		defer r.store.ReleaseRaftSnapshot()
-
 		// Delegate to a static function to make sure that we do not depend
 		// on any indirect calls to r.store.Engine() (or other in-memory
 		// state of the Replica). Everything must come from the snapshot.
@@ -343,7 +341,6 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (OutgoingSnapshot, er
 			case <-time.After(r.store.ctx.AsyncSnapshotMaxAge):
 				// If raft decides it doesn't need this snapshot any more (or
 				// just takes too long to use it), abandon it to save memory.
-				snapData.Close()
 				log.Infof(ctxInner, "%s: abandoning snapshot after %s", r, r.store.ctx.AsyncSnapshotMaxAge)
 			case <-r.store.Stopper().ShouldQuiesce():
 			}
@@ -358,20 +355,19 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (OutgoingSnapshot, er
 		select {
 		case snap, ok := <-r.mu.snapshotChan:
 			if ok {
-				r.mu.outSnap = snap
 				return snap, nil
 			}
 		case <-time.After(r.store.ctx.BlockingSnapshotDuration):
 			log.Trace(ctx, "snapshot blocking duration exceeded")
 		}
 	}
-	return OutgoingSnapshot{}, raft.ErrSnapshotTemporarilyUnavailable
+	return raftpb.Snapshot{}, raft.ErrSnapshotTemporarilyUnavailable
 }
 
 // GetSnapshot wraps Snapshot() but does not require the replica lock
 // to be held and it will block instead of returning
 // ErrSnapshotTemporaryUnavailable.
-func (r *Replica) GetSnapshot(ctx context.Context) (OutgoingSnapshot, error) {
+func (r *Replica) GetSnapshot(ctx context.Context) (raftpb.Snapshot, error) {
 	retryOptions := retry.Options{
 		InitialBackoff: 1 * time.Millisecond,
 		MaxBackoff:     50 * time.Millisecond,
@@ -402,47 +398,31 @@ func (r *Replica) GetSnapshot(ctx context.Context) (OutgoingSnapshot, error) {
 			return snap, err
 		}
 	}
-	return OutgoingSnapshot{}, &roachpb.NodeUnavailableError{}
+	return raftpb.Snapshot{}, &roachpb.NodeUnavailableError{}
 }
 
-// OutgoingSnapshot contains the data required to stream a snapshot to a recipient. Once one is
-// created, it needs to be closed via Close() to prevent resource leakage.
-type OutgoingSnapshot struct {
-	SnapUUID uuid.UUID
-	// The Raft snapshot message to send. Contains SnapUUID as its data.
-	RaftSnap raftpb.Snapshot
-	// The RocksDB snapshot that will be streamed from.
-	EngineSnap engine.Reader
-	// The complete range iterator for the snapshot to stream.
-	Iter *ReplicaDataIterator
-}
-
-// IncomingSnapshot contains the data for an incoming streaming snapshot message.
-type IncomingSnapshot struct {
-	SnapUUID uuid.UUID
-	// The target RangeDescriptor for this snapshot.
-	RangeDescriptor roachpb.RangeDescriptor
-	// The RocksDB BatchReprs that make up this snapshot.
-	Batches [][]byte
-	// The Raft log entries for this snapshot.
-	LogEntries [][]byte
-}
-
-// Close this OutgoingSnapshot, freeing associated resources.
-func (snap OutgoingSnapshot) Close() {
-	snap.Iter.Close()
-	snap.EngineSnap.Close()
-}
-
-// snapshot creates an OutgoingSnapshot containing a rocksdb snapshot for the given range.
 func snapshot(
 	ctx context.Context,
 	snap engine.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftEntryCache,
 	startKey roachpb.RKey,
-) (OutgoingSnapshot, error) {
+) (raftpb.Snapshot, error) {
 	start := timeutil.Now()
+	var snapData roachpb.RaftSnapshotData
+
+	truncState, err := loadTruncatedState(ctx, snap, rangeID)
+	if err != nil {
+		return raftpb.Snapshot{}, err
+	}
+	firstIndex := truncState.Index + 1
+
+	// Read the range metadata from the snapshot instead of the members
+	// of the Range struct because they might be changed concurrently.
+	appliedIndex, _, err := loadAppliedIndex(ctx, snap, rangeID)
+	if err != nil {
+		return raftpb.Snapshot{}, err
+	}
 
 	var desc roachpb.RangeDescriptor
 	// We ignore intents on the range descriptor (consistent=false) because we
@@ -451,21 +431,50 @@ func snapshot(
 	ok, err := engine.MVCCGetProto(ctx, snap, keys.RangeDescriptorKey(startKey),
 		hlc.MaxTimestamp, false /* !consistent */, nil, &desc)
 	if err != nil {
-		return OutgoingSnapshot{}, errors.Errorf("failed to get desc: %s", err)
+		return raftpb.Snapshot{}, errors.Errorf("failed to get desc: %s", err)
 	}
 	if !ok {
-		return OutgoingSnapshot{}, errors.Errorf("couldn't find range descriptor")
+		return raftpb.Snapshot{}, errors.Errorf("couldn't find range descriptor")
 	}
 
-	var snapData roachpb.RaftSnapshotData
 	// Store RangeDescriptor as metadata, it will be retrieved by ApplySnapshot()
 	snapData.RangeDescriptor = desc
 
-	// Read the range metadata from the snapshot instead of the members
-	// of the Range struct because they might be changed concurrently.
-	appliedIndex, _, err := loadAppliedIndex(ctx, snap, rangeID)
+	// Iterate over all the data in the range, including local-only data like
+	// the sequence cache.
+	iter := NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
+	defer iter.Close()
+	var alloc bufalloc.ByteAllocator
+	for ; iter.Valid(); iter.Next() {
+		var key engine.MVCCKey
+		var value []byte
+		alloc, key, value = iter.allocIterKeyValue(alloc)
+		snapData.KV = append(snapData.KV,
+			roachpb.RaftSnapshotData_KeyValue{
+				Key:       key.Key,
+				Value:     value,
+				Timestamp: key.Timestamp,
+			})
+	}
+
+	endIndex := appliedIndex + 1
+	snapData.LogEntries = make([][]byte, 0, endIndex-firstIndex)
+
+	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
+		bytes, err := kv.Value.GetBytes()
+		if err == nil {
+			snapData.LogEntries = append(snapData.LogEntries, bytes)
+		}
+		return false, err
+	}
+
+	if err := iterateEntries(ctx, snap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
+		return raftpb.Snapshot{}, err
+	}
+
+	data, err := protoutil.Marshal(&snapData)
 	if err != nil {
-		return OutgoingSnapshot{}, err
+		return raftpb.Snapshot{}, err
 	}
 
 	// Synthesize our raftpb.ConfState from desc.
@@ -476,27 +485,18 @@ func snapshot(
 
 	term, err := term(ctx, snap, rangeID, eCache, appliedIndex)
 	if err != nil {
-		return OutgoingSnapshot{}, errors.Errorf("failed to fetch term of %d: %s", appliedIndex, err)
+		return raftpb.Snapshot{}, errors.Errorf("failed to fetch term of %d: %s", appliedIndex, err)
 	}
 
-	// Intentionally let this iterator and the snapshot escape so that the
-	// streamer can send chunks from it bit by bit.
-	iter := NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
-	snapUUID := uuid.NewV4()
+	log.Infof(ctx, "generated snapshot for range %s at index %d in %s. encoded size=%d, %d KV pairs, %d log entries",
+		rangeID, appliedIndex, timeutil.Since(start), len(data), len(snapData.KV), len(snapData.LogEntries))
 
-	log.Infof(ctx, "generated snapshot %s for range %s at index %d in %s. %d log entries",
-		snapUUID, rangeID, appliedIndex, timeutil.Since(start), len(snapData.LogEntries))
-	return OutgoingSnapshot{
-		EngineSnap: snap,
-		Iter:       iter,
-		SnapUUID:   *snapUUID,
-		RaftSnap: raftpb.Snapshot{
-			Data: snapUUID.GetBytes(),
-			Metadata: raftpb.SnapshotMetadata{
-				Index:     appliedIndex,
-				Term:      term,
-				ConfState: cs,
-			},
+	return raftpb.Snapshot{
+		Data: data,
+		Metadata: raftpb.SnapshotMetadata{
+			Index:     appliedIndex,
+			Term:      term,
+			ConfState: cs,
 		},
 	}, nil
 }
@@ -590,10 +590,23 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 // a raft.Ready. It is the caller's responsibility to call
 // r.store.processRangeDescriptorUpdate(r) after a successful applySnapshot.
 func (r *Replica) applySnapshot(
-	ctx context.Context, inSnap IncomingSnapshot, snap raftpb.Snapshot, hs raftpb.HardState,
+	ctx context.Context, snap raftpb.Snapshot, hs raftpb.HardState,
 ) error {
+	// We use a separate batch to apply the snapshot since the Replica (and in
+	// particular the last index) is updated after the batch commits. Using a
+	// separate batch also allows for future optimization (such as using a
+	// Distinct() batch).
+	batch := r.store.Engine().NewBatch()
+	defer batch.Close()
+
+	snapData := roachpb.RaftSnapshotData{}
+	err := proto.Unmarshal(snap.Data, &snapData)
+	if err != nil {
+		return err
+	}
+
 	// Extract the updated range descriptor.
-	desc := inSnap.RangeDescriptor
+	desc := snapData.RangeDescriptor
 	// Fill the reservation if there was one for this range, regardless of
 	// whether the application succeeded.
 	defer r.store.bookie.Fill(desc.RangeID)
@@ -613,24 +626,24 @@ func (r *Replica) applySnapshot(
 	}
 
 	log.Infof(ctx, "%s: with replicaID %s, applying %s snapshot at index %d "+
-		"(id=%s, encoded size=%d, %d rocksdb batches, %d log entries)",
-		r, replicaIDStr, snapType, snap.Metadata.Index, inSnap.SnapUUID.Short(),
-		len(snap.Data), len(inSnap.Batches), len(inSnap.LogEntries))
+		"(encoded size=%d, %d KV pairs, %d log entries)",
+		r, replicaIDStr, snapType, snap.Metadata.Index,
+		len(snap.Data), len(snapData.KV), len(snapData.LogEntries))
 	defer func(start time.Time) {
 		log.Infof(ctx, "%s: with replicaID %s, applied %s snapshot in %.3fs",
 			r, replicaIDStr, snapType, timeutil.Since(start).Seconds())
 	}(timeutil.Now())
 
-	batch := r.store.Engine().NewBatch()
-	defer batch.Close()
-
-	// Clear the range using a distinct batch in order to prevent the iteration
-	// from forcing the batch to flush from Go to C++.
-	distinctBatch := batch.Distinct()
-
 	// Delete everything in the range and recreate it from the snapshot.
 	// We need to delete any old Raft log entries here because any log entries
 	// that predate the snapshot will be orphaned and never truncated or GC'd.
+	//
+	// The KVs and log entries are all written to distinct keys so we can use a
+	// distinct batch. Note that we clear keys here that are potentially
+	// overwritten below, which violates the spirit of the distinct batch. This
+	// is safe because we don't do any reads until after the distinct batch is
+	// closed (the raft log writes are "blind").
+	distinctBatch := batch.Distinct()
 	iter := NewReplicaDataIterator(&desc, distinctBatch, false /* !replicatedOnly */)
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
@@ -639,27 +652,33 @@ func (r *Replica) applySnapshot(
 		}
 	}
 
-	distinctBatch.Close()
+	// Determine the unreplicated key prefix so we can drop any
+	// unreplicated keys from the snapshot.
+	unreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(desc.RangeID)
 
 	// Write the snapshot into the range.
-	for _, batchRepr := range inSnap.Batches {
-		if err := batch.ApplyBatchRepr(batchRepr); err != nil {
+	for _, kv := range snapData.KV {
+		if bytes.HasPrefix(kv.Key, unreplicatedPrefix) {
+			continue
+		}
+		mvccKey := engine.MVCCKey{
+			Key:       kv.Key,
+			Timestamp: kv.Timestamp,
+		}
+		if err := distinctBatch.Put(mvccKey, kv.Value); err != nil {
 			return err
 		}
 	}
 
-	// The log entries are all written to distinct keys so we can use a
-	// distinct batch.
-	distinctBatch = batch.Distinct()
-
-	logEntries := make([]raftpb.Entry, len(inSnap.LogEntries))
-	for i, bytes := range inSnap.LogEntries {
+	logEntries := make([]raftpb.Entry, len(snapData.LogEntries))
+	for i, bytes := range snapData.LogEntries {
 		if err := logEntries[i].Unmarshal(bytes); err != nil {
 			return err
 		}
 	}
+
 	// Write the snapshot's Raft log into the range.
-	_, raftLogSize, err := r.append(ctx, distinctBatch, 0, raftLogSize, logEntries)
+	_, raftLogSize, err = r.append(ctx, distinctBatch, 0, raftLogSize, logEntries)
 	if err != nil {
 		return err
 	}
@@ -676,6 +695,7 @@ func (r *Replica) applySnapshot(
 		// snapshot, but who is to say it isn't going to accept a snapshot
 		// which is identical to the current state?
 	}
+
 	// We need to close the distinct batch and start using the normal batch for
 	// the read below.
 	distinctBatch.Close()
