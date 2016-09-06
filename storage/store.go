@@ -2535,9 +2535,7 @@ func (s *Store) processRaft() {
 			close(workQueue)
 		}()
 
-		var initReplicas []*Replica
-		var uninitReplicas []*Replica
-		var tickReplicas []*Replica
+		var replicas []*Replica
 		var pendingReplicas []roachpb.RangeID
 		var warnDuration = 10 * s.ctx.RaftTickInterval
 		maybeWarnDuration := func(start time.Time, prefix fmt.Stringer, msg string) {
@@ -2553,19 +2551,14 @@ func (s *Store) processRaft() {
 			workingStart := timeutil.Now()
 
 			// Copy the replicas tracked in pendingRaftGroups into local
-			// variables that we can use without the lock. Divide them into
-			// separate lists for initialized and uninitialized replicas
-			// (explained below).
-			initReplicas = initReplicas[:0]
-			uninitReplicas = uninitReplicas[:0]
+			// variables that we can use without the lock.
+			replicas = replicas[:0]
 			s.mu.Lock()
 			s.pendingRaftGroups.Lock()
 			if len(s.pendingRaftGroups.value) > 0 {
 				for rangeID := range s.pendingRaftGroups.value {
-					if r, ok := s.mu.uninitReplicas[rangeID]; ok {
-						uninitReplicas = append(uninitReplicas, r)
-					} else if r, ok := s.mu.replicas[rangeID]; ok {
-						initReplicas = append(initReplicas, r)
+					if r, ok := s.mu.replicas[rangeID]; ok {
+						replicas = append(replicas, r)
 					}
 				}
 				s.pendingRaftGroups.value = map[roachpb.RangeID]struct{}{}
@@ -2579,33 +2572,9 @@ func (s *Store) processRaft() {
 			// immediately.
 
 			// Handle raft updates for all replicas.
-			//
-			// TODO(peter): We process uninitialized replicas separately because they
-			// will grab Store.uninitRaftMu and serialize anyways. This raft
-			// processing loop will be refactored soon because all of the
-			// synchronization is in place to allow processing and ticking replicas
-			// completely independently and we want to get away from the situation
-			// where processing of an uninitialized replica blocks processing of
-			// initialized ones.
-			for _, r := range uninitReplicas {
-				start := timeutil.Now()
-				if err := r.handleRaftReady(); err != nil {
-					panic(err) // TODO(bdarnell)
-				}
-				maybeWarnDuration(start, r, "handle raft ready")
-				// Only an uninitialized replica can have a placeholder since, by
-				// definition, an initialized replica will be present in the
-				// replicasByKey map. While the replica will usually consume the
-				// placeholder itself, that isn't guaranteed and so this invocation
-				// here is crucial (i.e. don't remove it).
-				if s.removePlaceholder(r.RangeID) {
-					atomic.AddInt32(&s.counts.droppedPlaceholders, 1)
-				}
-			}
-
 			var wg sync.WaitGroup
-			wg.Add(len(initReplicas))
-			for _, r := range initReplicas {
+			wg.Add(len(replicas))
+			for _, r := range replicas {
 				r := r // per-iteration copy
 				workQueue <- func() {
 					defer wg.Done()
@@ -2614,6 +2583,16 @@ func (s *Store) processRaft() {
 						panic(err) // TODO(bdarnell)
 					}
 					maybeWarnDuration(start, r, "handle raft ready")
+					if !r.IsInitialized() {
+						// Only an uninitialized replica can have a placeholder since, by
+						// definition, an initialized replica will be present in the
+						// replicasByKey map. While the replica will usually consume the
+						// placeholder itself, that isn't guaranteed and so this invocation
+						// here is crucial (i.e. don't remove it).
+						if s.removePlaceholder(r.RangeID) {
+							atomic.AddInt32(&s.counts.droppedPlaceholders, 1)
+						}
+					}
 				}
 			}
 			wg.Wait()
@@ -2646,19 +2625,19 @@ func (s *Store) processRaft() {
 				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
 				tickerStart := timeutil.Now()
 
-				tickReplicas = tickReplicas[:0]
+				replicas = replicas[:0]
 				pendingReplicas = pendingReplicas[:0]
 
 				s.mu.Lock()
 				for _, r := range s.mu.replicas {
-					tickReplicas = append(tickReplicas, r)
+					replicas = append(replicas, r)
 				}
 				s.mu.Unlock()
 
 				// Similar to the locking for Replica.handleRaftReady(), if a replica
 				// has been removed, Replica.mu.destroyed will be non-nil causing
 				// Replica.tick() to be a no-op.
-				for _, r := range tickReplicas {
+				for _, r := range replicas {
 					if exists, err := r.tick(); err != nil {
 						log.Error(s.Ctx(), err)
 					} else if exists {
