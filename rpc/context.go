@@ -37,6 +37,15 @@ import (
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
+func init() {
+	// Disable GRPC tracing. This retains a subset of messages for
+	// display on /debug/requests, which is very expensive for
+	// snapshots. Until we can be more selective about what is retained
+	// in traces, we must disable tracing entirely.
+	// https://github.com/grpc/grpc-go/issues/695
+	grpc.EnableTracing = false
+}
+
 const (
 	defaultHeartbeatInterval = 3 * time.Second
 	// The coefficient by which the maximum offset is multiplied to determine the
