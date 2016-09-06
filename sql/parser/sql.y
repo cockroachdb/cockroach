@@ -334,6 +334,7 @@ func (u *sqlSymUnion) window() Window {
 %type <Statement> create_index_stmt
 %type <Statement> create_table_stmt
 %type <Statement> create_table_as_stmt
+%type <Statement> create_view_stmt
 %type <Statement> delete_stmt
 %type <Statement> drop_stmt
 %type <Statement> explain_stmt
@@ -640,7 +641,7 @@ func (u *sqlSymUnion) window() Window {
 %token <str>   UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
 %token <str>   UPDATE UPSERT USER USING
 
-%token <str>   VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VARYING
+%token <str>   VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VIEW VARYING
 
 %token <str>   WHEN WHERE WINDOW WITH WITHIN WITHOUT
 
@@ -938,12 +939,13 @@ copy_from_stmt:
     $$.val = &CopyFrom{Table: $2.normalizableTableName(), Columns: $4.unresolvedNames(), Stdin: true}
   }
 
-// CREATE [DATABASE|INDEX|TABLE|TABLE AS]
+// CREATE [DATABASE|INDEX|TABLE|TABLE AS|VIEW]
 create_stmt:
   create_database_stmt
 | create_index_stmt
 | create_table_stmt
 | create_table_as_stmt
+| create_view_stmt
 
 // DELETE FROM query
 delete_stmt:
@@ -1862,6 +1864,19 @@ truncate_stmt:
   {
     $$.val = &Truncate{Tables: $3.tableNameReferences(), DropBehavior: $4.dropBehavior()}
   }
+
+// CREATE VIEW relname
+create_view_stmt:
+  CREATE VIEW any_name opt_column_list AS select_stmt
+  {
+    $$.val = &CreateView{
+      Name: $3.normalizableTableName(),
+      ColumnNames: $4.nameList(),
+      AsSource: $6.slct(),
+    }
+  }
+
+// TODO(a-robinson): CREATE OR REPLACE, ALTER, and DROP VIEW support (#2971).
 
 // CREATE INDEX
 create_index_stmt:
@@ -4806,6 +4821,7 @@ reserved_keyword:
 | USER
 | USING
 | VARIADIC
+| VIEW
 | WHEN
 | WHERE
 | WINDOW
