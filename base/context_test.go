@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -36,6 +37,8 @@ func fillCertPaths(context *base.Context, user string) {
 func TestClientSSLSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	const assetNotFound = "error setting up client TLS config: Asset .* not found"
+
 	testCases := []struct {
 		// args
 		insecure bool
@@ -43,16 +46,16 @@ func TestClientSSLSettings(t *testing.T) {
 		user     string
 		// output
 		requestScheme string
-		configSuccess bool
+		configErr     string
 		nilConfig     bool
 		noCAs         bool
 	}{
-		{true, false, security.NodeUser, "http", true, true, false},
-		{true, true, "not-a-user", "http", true, true, false},
-		{false, true, "not-a-user", "https", false, true, false},
-		{false, false, security.NodeUser, "https", true, false, true},
-		{false, true, security.NodeUser, "https", true, false, false},
-		{false, true, "bad-user", "https", false, false, false},
+		{true, false, security.NodeUser, "http", "", true, false},
+		{true, true, "not-a-user", "http", "", true, false},
+		{false, true, "not-a-user", "https", assetNotFound, true, false},
+		{false, false, security.NodeUser, "https", assetNotFound, false, true},
+		{false, true, security.NodeUser, "https", "", false, false},
+		{false, true, "bad-user", "https", assetNotFound, false, false},
 	}
 
 	for tcNum, tc := range testCases {
@@ -64,8 +67,8 @@ func TestClientSSLSettings(t *testing.T) {
 			t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, ctx.HTTPRequestScheme())
 		}
 		tlsConfig, err := ctx.GetClientTLSConfig()
-		if (err == nil) != tc.configSuccess {
-			t.Fatalf("#%d: expected GetClientTLSConfig success=%t, got err=%v", tcNum, tc.configSuccess, err)
+		if !(tc.configErr == "" && err == nil || testutils.IsError(err, tc.configErr)) {
+			t.Fatalf("#%d: expected err=%s, got err=%v", tcNum, tc.configErr, err)
 		}
 		if err != nil {
 			continue

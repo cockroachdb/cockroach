@@ -18,6 +18,7 @@ package server
 
 import (
 	"bytes"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -55,6 +56,30 @@ func doHTTPReq(t *testing.T, client http.Client, method, url string, body proto.
 	return client.Do(req)
 }
 
+type ctxI interface {
+	GetHTTPClient() (http.Client, error)
+	HTTPRequestScheme() string
+}
+
+var _ ctxI = insecureCtx{}
+var _ ctxI = (*base.Context)(nil)
+
+type insecureCtx struct{}
+
+func (insecureCtx) GetHTTPClient() (http.Client, error) {
+	return http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	}, nil
+}
+
+func (insecureCtx) HTTPRequestScheme() string {
+	return "https"
+}
+
 // Verify client certificate enforcement and user whitelisting.
 func TestSSLEnforcement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -68,8 +93,7 @@ func TestSSLEnforcement(t *testing.T) {
 	// HTTPS with client certs for TestUser.
 	testCertsContext := testutils.NewTestBaseContext(TestUser)
 	// HTTPS without client certs. The user does not matter.
-	noCertsContext := testutils.NewTestBaseContext(TestUser)
-	noCertsContext.SSLCert = ""
+	noCertsContext := insecureCtx{}
 	// Plain http.
 	insecureContext := testutils.NewTestBaseContext(TestUser)
 	insecureContext.Insecure = true
@@ -80,7 +104,7 @@ func TestSSLEnforcement(t *testing.T) {
 	testCases := []struct {
 		method, path string
 		body         proto.Message
-		ctx          *base.Context
+		ctx          ctxI
 		success      bool // request sent successfully (may be non-200)
 		code         int  // http response code
 	}{
