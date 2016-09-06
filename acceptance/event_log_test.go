@@ -86,12 +86,12 @@ func testEventLogInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) 
 			}
 
 			// Verify cluster ID is recorded, and is the same for all nodes.
-			if uuid.Equal(info.ClusterID, *uuid.EmptyUUID) {
+			if (info.ClusterID == uuid.UUID{}) {
 				t.Fatalf("Node join recorded nil cluster id, info: %v", info)
 			}
-			if uuid.Equal(clusterID, *uuid.EmptyUUID) {
+			if (clusterID == uuid.UUID{}) {
 				clusterID = info.ClusterID
-			} else if !uuid.Equal(clusterID, info.ClusterID) {
+			} else if clusterID != info.ClusterID {
 				t.Fatalf(
 					"Node join recorded different cluster ID than earlier node. Expected %s, got %s. Info: %v",
 					clusterID, info.ClusterID, info)
@@ -156,7 +156,7 @@ func testEventLogInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) 
 			}
 
 			// Verify cluster ID is recorded, and is the same for all nodes.
-			if !uuid.Equal(confirmedClusterID, info.ClusterID) {
+			if confirmedClusterID != info.ClusterID {
 				t.Fatalf(
 					"Node restart recorded different cluster ID than earlier join. Expected %s, got %s. Info: %v",
 					confirmedClusterID, info.ClusterID, info)
