@@ -124,11 +124,26 @@ t  fk_f_ref_other  FOREIGN KEY          f  other.[b]
 t  foo             UNIQUE               b  NULL
 t  primary         PRIMARY KEY          a  NULL
 
-statement error validating CHECK constraint "check_a" unsupported
+statement error constraint "typo" does not exist
+ALTER TABLE t VALIDATE CONSTRAINT typo
+
+statement error validation of CHECK "a > 0" failed on row: a=-2, f=9, b=NULL, c=NULL
 ALTER TABLE t VALIDATE CONSTRAINT check_a
 
 statement ok
 DELETE FROM t WHERE a = -2
+
+statement ok
+ALTER TABLE t VALIDATE CONSTRAINT check_a
+
+query TTTTT
+SHOW CONSTRAINTS FROM t
+----
+t  check_a         CHECK                NULL  a > 0
+t  check_a1        CHECK (UNVALIDATED)  NULL  a > 0
+t  fk_f_ref_other  FOREIGN KEY          f  other.[b]
+t  foo             UNIQUE               b  NULL
+t  primary         PRIMARY KEY          a  NULL
 
 statement ok
 ALTER TABLE t DROP CONSTRAINT check_a, DROP CONSTRAINT check_a1

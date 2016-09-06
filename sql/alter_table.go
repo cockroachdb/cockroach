@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -248,16 +249,35 @@ func (n *alterTableNode) Start() error {
 				return err
 			}
 			name := string(t.Constraint)
-			details, ok := info[name]
+			constraint, ok := info[name]
 			if !ok {
 				return errors.Errorf("constraint %q does not exist", t.Constraint)
 			}
-			if !details.Unvalidated {
+			if !constraint.Unvalidated {
 				continue
 			}
-			switch details.Kind {
+			switch constraint.Kind {
+			case sqlbase.ConstraintTypeCheck:
+				found := false
+				var idx int
+				for idx = range n.tableDesc.Checks {
+					if n.tableDesc.Checks[idx].Name == name {
+						found = true
+						break
+					}
+				}
+				if !found {
+					panic("constrint returned by GetConstraintInfo not found")
+				}
+				ck := n.tableDesc.Checks[idx]
+				if err := n.p.validateCheckExpr(ck.Expr, &n.n.Table, n.tableDesc); err != nil {
+					return err
+				}
+				n.tableDesc.Checks[idx].Validity = sqlbase.ConstraintValidity_Validated
+				descriptorChanged = true
+
 			default:
-				return errors.Errorf("validating %s constraint %q unsupported", details.Kind, t.Constraint)
+				return errors.Errorf("validating %s constraint %q unsupported", constraint.Kind, t.Constraint)
 			}
 
 		case parser.ColumnMutationCmd:
@@ -370,4 +390,17 @@ func applyColumnMutation(col *sqlbase.ColumnDescriptor, mut parser.ColumnMutatio
 		col.Nullable = true
 	}
 	return nil
+}
+
+func labeledRowValues(cols []sqlbase.ColumnDescriptor, values parser.DTuple) string {
+	var s bytes.Buffer
+	for i := range cols {
+		if i != 0 {
+			s.WriteString(`, `)
+		}
+		s.WriteString(cols[i].Name)
+		s.WriteString(`=`)
+		s.WriteString(values[i].String())
+	}
+	return s.String()
 }
