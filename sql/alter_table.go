@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -256,6 +257,41 @@ func (n *alterTableNode) Start() error {
 				continue
 			}
 			switch details.Kind {
+			case sqlbase.ConstraintTypeCheck:
+				var idx int
+				for idx = range n.tableDesc.Checks {
+					if n.tableDesc.Checks[idx].Name == name {
+						break
+					}
+				}
+				ck := n.tableDesc.Checks[idx]
+				expr, err := parser.ParseExprTraditional(ck.Expr)
+				if err != nil {
+					return err
+				}
+				rows, err := n.p.SelectClause(&parser.SelectClause{
+					Exprs: sqlbase.ColumnsSelectors(n.tableDesc.Columns),
+					From:  &parser.From{Tables: parser.TableExprs{&n.n.Table}},
+					Where: &parser.Where{Expr: &parser.NotExpr{Expr: expr}},
+				}, nil, &parser.Limit{Count: parser.NewDInt(1)}, nil, publicAndNonPublicColumns)
+				if err := rows.expandPlan(); err != nil {
+					return err
+				}
+				if err := rows.Start(); err != nil {
+					return err
+				}
+
+				next, err := rows.Next()
+				if err != nil {
+					return err
+				}
+				if next {
+					return errors.Errorf("validation of CHECK %q failed on row: %s",
+						expr.String(), labeledRowValues(n.tableDesc.Columns, rows.Values()))
+				}
+				n.tableDesc.Checks[idx].Validity = sqlbase.ConstraintValidity_Validated
+				descriptorChanged = true
+
 			default:
 				return errors.Errorf("validating %s constraint %q unsupported", details.Kind, t.Constraint)
 			}
@@ -370,4 +406,17 @@ func applyColumnMutation(col *sqlbase.ColumnDescriptor, mut parser.ColumnMutatio
 		col.Nullable = true
 	}
 	return nil
+}
+
+func labeledRowValues(cols []sqlbase.ColumnDescriptor, values parser.DTuple) string {
+	var s bytes.Buffer
+	for i := range cols {
+		if i != 0 {
+			s.WriteString(`, `)
+		}
+		s.WriteString(cols[i].Name)
+		s.WriteString(`=`)
+		s.WriteString(values[i].String())
+	}
+	return s.String()
 }
