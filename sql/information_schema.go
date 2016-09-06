@@ -31,6 +31,7 @@ var informationSchema = virtualSchema{
 		informationSchemaSchemataTable,
 		informationSchemaTableConstraintTable,
 		informationSchemaTablesTable,
+		informationSchemaKeyColumnUsage,
 	},
 }
 
@@ -257,6 +258,79 @@ CREATE TABLE information_schema.tables (
 					tableType,                     // table_type
 					parser.NewDInt(parser.DInt(table.Version)), // version
 				)
+			},
+		)
+	},
+}
+
+var informationSchemaKeyColumnUsage = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.key_column_usage (
+  CONSTRAINT_CATALOG STRING NOT NULL DEFAULT '',
+  CONSTRAINT_SCHEMA STRING NOT NULL DEFAULT '',
+  CONSTRAINT_NAME STRING NOT NULL DEFAULT '',
+  TABLE_CATALOG STRING NOT NULL DEFAULT '',
+  TABLE_SCHEMA STRING NOT NULL DEFAULT '',
+  TABLE_NAME STRING NOT NULL DEFAULT '',
+  COLUMN_NAME STRING NOT NULL DEFAULT '',
+  ORDINAL_POSITION INT NOT NULL DEFAULT 0,
+  POSITION_IN_UNIQUE_CONSTRAINT INT NOT NULL DEFAULT 0
+);`,
+	populate: func(p *planner, addRow func(...parser.Datum)) error {
+		return forEachTableDesc(p,
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) {
+				type constraint struct {
+					name       string
+					columns    []string
+					primaryKey bool
+					foreignKey bool
+					unique     bool
+				}
+				var constraints []constraint
+				if table.HasPrimaryKey() {
+					var columnNames []string
+					columnNames = append(columnNames, table.PrimaryIndex.ColumnNames...)
+					constraints = append(constraints, constraint{
+						name:       table.PrimaryIndex.Name,
+						columns:    columnNames,
+						primaryKey: true,
+					})
+				}
+				for _, index := range table.Indexes {
+					var columnNames []string
+					columnNames = append(columnNames, index.ColumnNames...)
+					con := constraint{
+						name:    index.Name,
+						columns: columnNames,
+					}
+					switch {
+					case index.Unique:
+						con.unique = true
+						constraints = append(constraints, con)
+					case index.ForeignKey.IsSet():
+						con.foreignKey = true
+						constraints = append(constraints, con)
+					}
+				}
+				for _, c := range constraints {
+					for pos, column := range c.columns {
+						var uniquePosition int
+						if c.unique && c.foreignKey {
+							uniquePosition = pos
+						}
+						addRow(
+							defString,                                   // constraint_catalog
+							parser.NewDString(db.Name),                  // constraint_schema
+							dStringOrNull(c.name),                       // constraint_name
+							defString,                                   // table_catalog
+							parser.NewDString(db.Name),                  // table_schema
+							parser.NewDString(table.Name),               // table_name
+							parser.NewDString(column),                   // column_name
+							parser.NewDInt(parser.DInt(pos)),            // ordinal_position, 1-indexed
+							parser.NewDInt(parser.DInt(uniquePosition)), // position_in_unique_constraint
+						)
+					}
+				}
 			},
 		)
 	},
