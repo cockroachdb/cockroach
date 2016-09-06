@@ -34,7 +34,7 @@ import (
 // init installs an adapter to use clog for log messages from raft which
 // don't belong to any range.
 func init() {
-	raft.SetLogger(&raftLogger{})
+	raft.SetLogger(&raftLogger{ctx: context.Background()})
 }
 
 // *clogLogger implements the raft.Logger interface. Note that all methods
@@ -49,79 +49,69 @@ func init() {
 // This file is named raft.go instead of something like logger.go because this
 // file's name is used to determine the vmodule parameter: --vmodule=raft=1
 type raftLogger struct {
-	stringer fmt.Stringer
-}
-
-// logPrefix returns a string that will prefix logs emitted by
-// raftLogger. Bad things will happen if this method returns a string
-// containing unescaped '%' characters.
-func (r *raftLogger) logPrefix() string {
-	if r.stringer != nil {
-		return fmt.Sprintf("%s: ", r.stringer)
-	}
-	return ""
+	ctx context.Context
 }
 
 func (r *raftLogger) Debug(v ...interface{}) {
 	if log.V(3) {
-		log.InfofDepth(context.TODO(), 1, r.logPrefix(), v...)
+		log.InfofDepth(r.ctx, 1, "", v...)
 	}
 }
 
 func (r *raftLogger) Debugf(format string, v ...interface{}) {
 	if log.V(3) {
-		log.InfofDepth(context.TODO(), 1, r.logPrefix()+format, v...)
+		log.InfofDepth(r.ctx, 1, format, v...)
 	}
 }
 
 func (r *raftLogger) Info(v ...interface{}) {
 	if log.V(2) {
-		log.InfofDepth(context.TODO(), 1, r.logPrefix(), v...)
+		log.InfofDepth(r.ctx, 1, "", v...)
 	}
 }
 
 func (r *raftLogger) Infof(format string, v ...interface{}) {
 	if log.V(2) {
-		log.InfofDepth(context.TODO(), 1, r.logPrefix()+format, v...)
+		log.InfofDepth(r.ctx, 1, format, v...)
 	}
 }
 
 func (r *raftLogger) Warning(v ...interface{}) {
-	log.WarningfDepth(context.TODO(), 1, r.logPrefix(), v...)
+	log.WarningfDepth(r.ctx, 1, "", v...)
 }
 
 func (r *raftLogger) Warningf(format string, v ...interface{}) {
-	log.WarningfDepth(context.TODO(), 1, r.logPrefix()+format, v...)
+	log.WarningfDepth(r.ctx, 1, format, v...)
 }
 
 func (r *raftLogger) Error(v ...interface{}) {
-	log.ErrorfDepth(context.TODO(), 1, r.logPrefix(), v...)
+	log.ErrorfDepth(r.ctx, 1, "", v...)
 }
 
 func (r *raftLogger) Errorf(format string, v ...interface{}) {
-	log.ErrorfDepth(context.TODO(), 1, r.logPrefix()+format, v...)
+	log.ErrorfDepth(r.ctx, 1, format, v...)
 }
 
 func (r *raftLogger) Fatal(v ...interface{}) {
-	log.FatalfDepth(context.TODO(), 1, r.logPrefix(), v...)
+	log.FatalfDepth(r.ctx, 1, "", v...)
 }
 
 func (r *raftLogger) Fatalf(format string, v ...interface{}) {
-	log.FatalfDepth(context.TODO(), 1, r.logPrefix()+format, v...)
+	log.FatalfDepth(r.ctx, 1, format, v...)
 }
 
 func (r *raftLogger) Panic(v ...interface{}) {
 	s := fmt.Sprint(v...)
-	log.ErrorfDepth(context.TODO(), 1, s)
+	log.ErrorfDepth(r.ctx, 1, s)
 	panic(s)
 }
 
 func (r *raftLogger) Panicf(format string, v ...interface{}) {
-	log.ErrorfDepth(context.TODO(), 1, r.logPrefix()+format, v...)
-	panic(fmt.Sprintf(r.logPrefix()+format, v...))
+	log.ErrorfDepth(r.ctx, 1, format, v...)
+	panic(fmt.Sprintf(format, v...))
 }
 
-func logRaftReady(ctx context.Context, prefix fmt.Stringer, ready raft.Ready) {
+func logRaftReady(ctx context.Context, ready raft.Ready) {
 	if log.V(5) {
 		var buf bytes.Buffer
 		if ready.SoftState != nil {
@@ -147,7 +137,7 @@ func logRaftReady(ctx context.Context, prefix fmt.Stringer, ready raft.Ready) {
 			fmt.Fprintf(&buf, "  Outgoing Message[%d]: %.200s\n",
 				i, raftDescribeMessage(m, raftEntryFormatter))
 		}
-		log.Infof(ctx, "%s raft ready\n%s", prefix, buf.String())
+		log.Infof(ctx, "raft ready\n%s", buf.String())
 	}
 }
 

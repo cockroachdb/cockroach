@@ -2398,7 +2398,7 @@ func (s *Store) HandleRaftRequest(
 					// crashing potential for any choice of dummy value below.
 					appliedIndex,
 					r.store.ctx,
-					&raftLogger{stringer: r},
+					&raftLogger{ctx: r.ctx},
 				), nil)
 			if err != nil {
 				return roachpb.NewError(err)
