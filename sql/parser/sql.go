@@ -37,7 +37,7 @@ func unimplementedWithIssue(issue int) {
 // By using an empty interface, we lose the type checking previously provided
 // by yacc and the Go compiler when dealing with union values. Instead, runtime
 // type assertions must be relied upon in the methods below, and as such, the
-// parser should be thoroughly tested whenever new sytax is added.
+// parser should be thoroughly tested whenever new syntax is added.
 //
 // It is important to note that when assigning values to sqlSymUnion.val, all
 // nil values should be typed so that they are stored as nil instances in the

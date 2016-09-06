@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
 )
 
@@ -2201,8 +2202,8 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	}
 
 	// Test that simple deletion works.
-	if err := s.removePlaceholderLocked(placeholder1.rangeDesc.RangeID); err != nil {
-		t.Fatalf("could not remove placeholder that was present, got %s", err)
+	if !s.removePlaceholderLocked(placeholder1.rangeDesc.RangeID) {
+		t.Fatalf("could not remove placeholder that was present")
 	}
 
 	// Test cannot double insert the same placeholder.
@@ -2214,11 +2215,11 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	}
 
 	// Test cannot double delete a placeholder.
-	if err := s.removePlaceholderLocked(placeholder1.rangeDesc.RangeID); err != nil {
-		t.Fatalf("could not remove placeholder that was present, got %s", err)
+	if !s.removePlaceholderLocked(placeholder1.rangeDesc.RangeID) {
+		t.Fatalf("could not remove placeholder that was present")
 	}
-	if err := s.removePlaceholderLocked(placeholder1.rangeDesc.RangeID); !testutils.IsError(err, "cannot remove placeholder for RangeID \\d+; Placeholder doesn't exist") {
-		t.Fatalf("could not remove placeholder that was present, got %v", err)
+	if s.removePlaceholderLocked(placeholder1.rangeDesc.RangeID) {
+		t.Fatalf("successfully removed placeholder that was not present")
 	}
 
 	// This placeholder overlaps with an existing replica.
@@ -2236,7 +2237,154 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	}
 
 	// Test that Placeholder deletion doesn't delete replicas.
-	if err := s.removePlaceholderLocked(repID); !testutils.IsError(err, "cannot remove placeholder for RangeID \\d+; Placeholder doesn't exist") {
-		t.Fatalf("should not be able to process removeReplicaPlaceholder for a RangeID where a Replica exists, got: %v", err)
+	if s.removePlaceholderLocked(repID) {
+		t.Fatalf("should not be able to process removeReplicaPlaceholder for a RangeID where a Replica exists")
 	}
+}
+
+// Test that we remove snapshot placeholders on error conditions.
+func TestStoreRemovePlaceholderOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+	s := tc.store
+	ctx := context.Background()
+
+	// Clobber the existing range so we can test nonoverlapping placeholders.
+	rng1, err := s.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Generate a minimal fake snapshot.
+	snapData := &roachpb.RaftSnapshotData{
+		RangeDescriptor: *rng1.Desc(),
+	}
+	data, err := protoutil.Marshal(snapData)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wrap the snapshot in a minimal request. The request will error because the
+	// replica tombstone for the range requires that a new replica have an ID
+	// greater than 1.
+	req := &RaftMessageRequest{
+		RangeID: 1,
+		ToReplica: roachpb.ReplicaDescriptor{
+			NodeID:    1,
+			StoreID:   1,
+			ReplicaID: 1,
+		},
+		FromReplica: roachpb.ReplicaDescriptor{
+			NodeID:    2,
+			StoreID:   2,
+			ReplicaID: 2,
+		},
+		Message: raftpb.Message{
+			Type: raftpb.MsgSnap,
+			Snapshot: raftpb.Snapshot{
+				Data: data,
+			},
+		},
+	}
+	const expected = "raft group deleted"
+	if err := s.HandleRaftRequest(ctx, req); !testutils.IsError(errors.Errorf("%s", err), expected) {
+		t.Fatalf("expected %s, but found %v", expected, err)
+	}
+
+	s.mu.Lock()
+	numPlaceholders := len(s.mu.replicaPlaceholders)
+	s.mu.Unlock()
+
+	if numPlaceholders != 0 {
+		t.Fatalf("expected 0 placeholders, but found %d", numPlaceholders)
+	}
+	if n := atomic.LoadInt32(&s.counts.removedPlaceholders); n != 1 {
+		t.Fatalf("expected 1 removed placeholder, but found %d", n)
+	}
+}
+
+// Test that we remove snapshot placeholders when raft ignores the
+// snapshot. This is testing the removal of placeholder after handleRaftReady
+// processing for an unitialized Replica.
+func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+	s := tc.store
+	ctx := context.Background()
+
+	// Clobber the existing range so we can test nonoverlapping placeholders.
+	rng1, err := s.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := writeInitialState(ctx, s.Engine(), enginepb.MVCCStats{}, *rng1.Desc()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Generate a minimal fake snapshot.
+	snapData := &roachpb.RaftSnapshotData{
+		RangeDescriptor: *rng1.Desc(),
+	}
+	data, err := protoutil.Marshal(snapData)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wrap the snapshot in a minimal request. The request will be dropped
+	// because the Raft log index and term are less than the hard state written
+	// above.
+	req := &RaftMessageRequest{
+		RangeID: 1,
+		ToReplica: roachpb.ReplicaDescriptor{
+			NodeID:    1,
+			StoreID:   1,
+			ReplicaID: 2,
+		},
+		FromReplica: roachpb.ReplicaDescriptor{
+			NodeID:    2,
+			StoreID:   2,
+			ReplicaID: 2,
+		},
+		Message: raftpb.Message{
+			Type: raftpb.MsgSnap,
+			Snapshot: raftpb.Snapshot{
+				Data: data,
+				Metadata: raftpb.SnapshotMetadata{
+					Index: 1,
+					Term:  1,
+				},
+			},
+		},
+	}
+	if err := s.HandleRaftRequest(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+
+	util.SucceedsSoon(t, func() error {
+		s.mu.Lock()
+		numPlaceholders := len(s.mu.replicaPlaceholders)
+		s.mu.Unlock()
+
+		if numPlaceholders != 0 {
+			return errors.Errorf("expected 0 placeholders, but found %d", numPlaceholders)
+		}
+		// The count of dropped placeholders is incremented after the placeholder
+		// is removed (and while not holding Store.mu), so we need to perform the
+		// check of the number of dropped placeholders in this retry loop.
+		if n := atomic.LoadInt32(&s.counts.droppedPlaceholders); n != 1 {
+			return errors.Errorf("expected 1 dropped placeholder, but found %d", n)
+		}
+		return nil
+	})
 }

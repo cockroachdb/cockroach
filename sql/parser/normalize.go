@@ -478,8 +478,8 @@ func (expr *OrExpr) normalize(v *normalizeVisitor) TypedExpr {
 
 func (expr *ParenExpr) normalize(v *normalizeVisitor) TypedExpr {
 	newExpr := expr.TypedInnerExpr()
-	if normalizeable, ok := newExpr.(normalizableExpr); ok {
-		newExpr = normalizeable.normalize(v)
+	if normalizable, ok := newExpr.(normalizableExpr); ok {
+		newExpr = normalizable.normalize(v)
 		if v.err != nil {
 			return expr
 		}
@@ -575,8 +575,8 @@ func (v *normalizeVisitor) VisitPost(expr Expr) Expr {
 	}
 
 	// Normalize expressions that know how to normalize themselves.
-	if normalizeable, ok := expr.(normalizableExpr); ok {
-		expr = normalizeable.normalize(v)
+	if normalizable, ok := expr.(normalizableExpr); ok {
+		expr = normalizable.normalize(v)
 		if v.err != nil {
 			return expr
 		}
