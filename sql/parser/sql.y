@@ -300,6 +300,9 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 func (u *sqlSymUnion) dropBehavior() DropBehavior {
     return u.val.(DropBehavior)
 }
+func (u *sqlSymUnion) validationBehavior() ValidationBehavior {
+    return u.val.(ValidationBehavior)
+}
 func (u *sqlSymUnion) interleave() *InterleaveDef {
     return u.val.(*InterleaveDef)
 }
@@ -360,6 +363,8 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %type <empty> opt_collate_clause
 
 %type <DropBehavior> opt_drop_behavior
+
+%type <ValidationBehavior> opt_validate_behavior
 
 %type <*StrVal> opt_encoding_clause
 
@@ -834,9 +839,12 @@ alter_table_cmd:
   //     [ USING <expression> ]
 | ALTER opt_column name opt_set_data TYPE typename opt_collate_clause alter_using { unimplemented() }
   // ALTER TABLE <name> ADD CONSTRAINT ...
-| ADD table_constraint
+| ADD table_constraint opt_validate_behavior
   {
-    $$.val = &AlterTableAddConstraint{ConstraintDef: $2.constraintDef()}
+    $$.val = &AlterTableAddConstraint{
+      ConstraintDef: $2.constraintDef(),
+      ValidationBehavior: $3.validationBehavior(),
+    }
   }
   // ALTER TABLE <name> ALTER CONSTRAINT ...
 | ALTER CONSTRAINT name { unimplemented() }
@@ -883,6 +891,16 @@ opt_drop_behavior:
 | /* EMPTY */
   {
     $$.val = DropDefault
+  }
+
+opt_validate_behavior:
+  NOT VALID
+  {
+    $$.val = ValidationSkip
+  }
+| /* EMPTY */
+  {
+  $$.val = ValidationDefault
   }
 
 opt_collate_clause:
