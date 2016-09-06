@@ -412,9 +412,9 @@ func TestReplicaReadConsistency(t *testing.T) {
 		StoreID:   2,
 		ReplicaID: 2,
 	}
-	rngDesc := tc.rng.Desc()
+	rngDesc := *tc.rng.Desc()
 	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
-	tc.rng.setDescWithoutProcessUpdate(rngDesc)
+	tc.rng.setDescWithoutProcessUpdate(&rngDesc)
 
 	gArgs := getArgs(roachpb.Key("a"))
 
@@ -570,9 +570,9 @@ func TestReplicaLease(t *testing.T) {
 		StoreID:   2,
 		ReplicaID: 2,
 	}
-	rngDesc := tc.rng.Desc()
+	rngDesc := *tc.rng.Desc()
 	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
-	tc.rng.setDescWithoutProcessUpdate(rngDesc)
+	tc.rng.setDescWithoutProcessUpdate(&rngDesc)
 
 	// Test that leases with invalid times are rejected.
 	// Start leases at a point that avoids overlapping with the existing lease.
@@ -771,9 +771,9 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 		StoreID:   2,
 		ReplicaID: 2,
 	}
-	rngDesc := tc.rng.Desc()
+	rngDesc := *tc.rng.Desc()
 	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
-	tc.rng.setDescWithoutProcessUpdate(rngDesc)
+	tc.rng.setDescWithoutProcessUpdate(&rngDesc)
 
 	// Write some arbitrary data in the system config span.
 	key := keys.MakeTablePrefix(keys.MaxSystemConfigDescID)
@@ -865,9 +865,9 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 		StoreID:   2,
 		ReplicaID: 2,
 	}
-	rngDesc := tc.rng.Desc()
+	rngDesc := *tc.rng.Desc()
 	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
-	tc.rng.setDescWithoutProcessUpdate(rngDesc)
+	tc.rng.setDescWithoutProcessUpdate(&rngDesc)
 
 	tc.manualClock.Set(leaseExpiry(tc.rng))
 	now := hlc.Timestamp{WallTime: tc.manualClock.UnixNano()}
