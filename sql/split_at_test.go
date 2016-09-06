@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -115,19 +114,10 @@ func TestSplitAt(t *testing.T) {
 		},
 	}
 
-	for i, tt := range tests {
+	for _, tt := range tests {
 		var key roachpb.Key
 		var pretty string
-		var err error
-		if i == 0 {
-			// After the CREATE TABLE, a SPLIT will sometimes fail with "conflict updating
-			// range descriptors". So the first test can retry a few times.
-			util.SucceedsSoon(t, func() error {
-				return db.QueryRow(tt.in, tt.args...).Scan(&key, &pretty)
-			})
-		} else {
-			err = db.QueryRow(tt.in, tt.args...).Scan(&key, &pretty)
-		}
+		err := db.QueryRow(tt.in, tt.args...).Scan(&key, &pretty)
 		if err != nil && tt.error == "" {
 			t.Fatalf("%s: unexpected error: %s", tt.in, err)
 		} else if tt.error != "" && err == nil {
