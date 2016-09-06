@@ -164,7 +164,7 @@ func runBenchmarkSelectWithTargetsAndFilter(
 	buf.WriteString(`INSERT INTO bench.select VALUES `)
 
 	// We insert all combinations of values between 1 and num for columns a, b, c. The intention is
-	// to benchrmark the expression parsing and query setup so we don't want to have many rows to go
+	// to benchmark the expression parsing and query setup so we don't want to have many rows to go
 	// through.
 	const num = 3
 	row := 0
@@ -543,7 +543,7 @@ func BenchmarkUpsert1000_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, runBenchmarkUpsert1000)
 }
 
-func BenchmarkUpsert1Multinode_ockroach(b *testing.B) {
+func BenchmarkUpsert1Multinode_Cockroach(b *testing.B) {
 	benchmarkMultinodeCockroach(b, runBenchmarkUpsert1)
 }
 
