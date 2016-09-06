@@ -198,7 +198,7 @@ func iterateEntries(
 func (r *Replica) Term(i uint64) (uint64, error) {
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
-	return term(context.Background(), snap, r.RangeID, r.store.raftEntryCache, i)
+	return term(r.ctx, snap, r.RangeID, r.store.raftEntryCache, i)
 }
 
 func term(
@@ -765,17 +765,33 @@ const (
 	// The prescribed length for each command ID.
 	raftCommandIDLen                = 8
 	raftCommandEncodingVersion byte = 0
+	raftCommandNoSplitBit           = 1 << 7
+	raftCommandNoSplitMask          = raftCommandNoSplitBit - 1
 )
 
-func encodeRaftCommand(commandID string, command []byte) []byte {
+// encode a command ID, an encoded roachpb.RaftCommand, and whether the command
+// contains a split. The hasSplit parameter indicates whether the command
+// contains an EndTransaction containing a split trigger. We store this info in
+// the first byte of the encoded data so that we can quickly determine whether
+// a raft command contains a split before decoding the command. Splits require
+// additional synchronization which must be obtained before the command is
+// decoded. See Replica.handleRaftReady.
+func encodeRaftCommand(commandID string, command []byte, hasSplit bool) []byte {
 	if len(commandID) != raftCommandIDLen {
 		log.Fatalf(context.TODO(), "invalid command ID length; %d != %d", len(commandID), raftCommandIDLen)
 	}
 	x := make([]byte, 1, 1+raftCommandIDLen+len(command))
 	x[0] = raftCommandEncodingVersion
+	if !hasSplit {
+		x[0] |= raftCommandNoSplitBit
+	}
 	x = append(x, []byte(commandID)...)
 	x = append(x, command...)
 	return x
+}
+
+func raftCommandHasSplit(data []byte) bool {
+	return len(data) > 0 && (data[0]&raftCommandNoSplitBit) == 0
 }
 
 // DecodeRaftCommand splits a raftpb.Entry.Data into its commandID and
@@ -784,7 +800,7 @@ func encodeRaftCommand(commandID string, command []byte) []byte {
 // than a real command). Usage is mostly internal to the storage package
 // but is exported for use by debugging tools.
 func DecodeRaftCommand(data []byte) (commandID string, command []byte) {
-	if data[0] != raftCommandEncodingVersion {
+	if data[0]&raftCommandNoSplitMask != raftCommandEncodingVersion {
 		log.Fatalf(context.TODO(), "unknown command encoding version %v", data[0])
 	}
 	return string(data[1 : 1+raftCommandIDLen]), data[1+raftCommandIDLen:]

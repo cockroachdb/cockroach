@@ -97,7 +97,7 @@ func ClearEnvCache() {
 
 // GetEnvReport dumps all configuration variables that may have been
 // used and their value.
-func GetEnvReport(presentOnly bool) string {
+func GetEnvReport() string {
 	envVarRegistry.mu.Lock()
 	defer envVarRegistry.mu.Unlock()
 
@@ -105,11 +105,26 @@ func GetEnvReport(presentOnly bool) string {
 	for k, v := range envVarRegistry.cache {
 		if v.present {
 			fmt.Fprintf(&b, "%s = %s # %s\n", k, v.value, v.consumer)
-		} else if !presentOnly {
+		} else {
 			fmt.Fprintf(&b, "# %s is not set (read from %s)\n", k, v.consumer)
 		}
 	}
 	return b.String()
+}
+
+// GetEnvVarsUsed returns the names of all environment variables that
+// may have been used.
+func GetEnvVarsUsed() []string {
+	envVarRegistry.mu.Lock()
+	defer envVarRegistry.mu.Unlock()
+
+	var vars []string
+	for k, v := range envVarRegistry.cache {
+		if v.present {
+			vars = append(vars, k)
+		}
+	}
+	return vars
 }
 
 // GetShellCommand returns a complete command to run with a prefix of the command line.
