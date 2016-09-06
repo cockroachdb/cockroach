@@ -97,6 +97,9 @@ INSERT INTO t (a, f) VALUES (-2, 9)
 statement ok
 ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
 
+statement error CHECK
+INSERT INTO t (a) VALUES (-3)
+
 query TTTTT
 SHOW CONSTRAINTS FROM t
 ----
@@ -108,6 +111,7 @@ t  primary         PRIMARY KEY          a  NULL
 statement error duplicate constraint name
 ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
 
+# added constraints with generated names avoid name collisions.
 statement ok
 ALTER TABLE t ADD CHECK (a > 0)
 
@@ -119,6 +123,9 @@ t  check_a1        CHECK (UNVALIDATED)  NULL  a > 0
 t  fk_f_ref_other  FOREIGN KEY          f  other.[b]
 t  foo             UNIQUE               b  NULL
 t  primary         PRIMARY KEY          a  NULL
+
+statement error validating CHECK constraint "check_a" unsupported
+ALTER TABLE t VALIDATE CONSTRAINT check_a
 
 statement ok
 DELETE FROM t WHERE a = -2

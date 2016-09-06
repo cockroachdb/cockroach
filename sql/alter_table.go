@@ -242,6 +242,24 @@ func (n *alterTableNode) Start() error {
 				return errors.Errorf("dropping %s constraint %q unsupported", details.Kind, t.Constraint)
 			}
 
+		case *parser.AlterTableValidateConstraint:
+			info, err := n.tableDesc.GetConstraintInfo(nil)
+			if err != nil {
+				return err
+			}
+			name := string(t.Constraint)
+			details, ok := info[name]
+			if !ok {
+				return errors.Errorf("constraint %q does not exist", t.Constraint)
+			}
+			if !details.Unvalidated {
+				continue
+			}
+			switch details.Kind {
+			default:
+				return errors.Errorf("validating %s constraint %q unsupported", details.Kind, t.Constraint)
+			}
+
 		case parser.ColumnMutationCmd:
 			// Column mutations
 			status, i, err := n.tableDesc.FindColumnByName(t.GetColumn())
