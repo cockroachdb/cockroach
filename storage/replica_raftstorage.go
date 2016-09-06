@@ -769,7 +769,7 @@ const (
 	raftCommandNoSplitMask          = raftCommandNoSplitBit - 1
 )
 
-// encode a commandId, an encoded roachpb.RaftCommand and whether the command
+// encode a command ID, an encoded roachpb.RaftCommand, and whether the command
 // contains a split. The hasSplit parameter indicates whether the command
 // contains an EndTransaction containing a split trigger. We store this info in
 // the first byte of the encoded data so that we can quickly determine whether
