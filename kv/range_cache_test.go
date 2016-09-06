@@ -177,7 +177,7 @@ func initTestDescriptorDB(t *testing.T) *testDescriptorDB {
 			db.splitRange(t, mustMeta(roachpb.RKey(string(char))))
 		}
 	}
-	db.cache = newRangeDescriptorCache(db, 2<<10)
+	db.cache = newRangeDescriptorCache(context.TODO(), db, 2<<10)
 	return db
 }
 
@@ -636,7 +636,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		EndKey:   roachpb.RKeyMax,
 	}
 
-	cache := newRangeDescriptorCache(nil, 2<<10)
+	cache := newRangeDescriptorCache(context.TODO(), nil, 2<<10)
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), defDesc)
 
 	// Now, add a new, overlapping set of descriptors.
@@ -731,7 +731,7 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 		EndKey:   roachpb.RKeyMax,
 	}
 
-	cache := newRangeDescriptorCache(nil, 2<<10)
+	cache := newRangeDescriptorCache(context.TODO(), nil, 2<<10)
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(firstDesc.EndKey)),
 		firstDesc)
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(restDesc.EndKey)),
@@ -765,7 +765,7 @@ func TestGetCachedRangeDescriptorInclusive(t *testing.T) {
 		{StartKey: roachpb.RKey("g"), EndKey: roachpb.RKey("z")},
 	}
 
-	cache := newRangeDescriptorCache(nil, 2<<10)
+	cache := newRangeDescriptorCache(context.TODO(), nil, 2<<10)
 	for _, rd := range testData {
 		cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(rd.EndKey)), rd)
 	}
