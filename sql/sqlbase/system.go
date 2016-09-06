@@ -147,7 +147,7 @@ var (
 		},
 		NextIndexID:    2,
 		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemConfigAllowedPrivileges[2]),
-		FormatVersion:  FamilyFormatVersion,
+		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 
@@ -170,7 +170,7 @@ var (
 		PrimaryIndex:   pk("id"),
 		NextFamilyID:   3,
 		NextIndexID:    2,
-		FormatVersion:  FamilyFormatVersion,
+		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 
@@ -193,7 +193,7 @@ var (
 		NextFamilyID:   3,
 		NextIndexID:    2,
 		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemConfigAllowedPrivileges[4]),
-		FormatVersion:  FamilyFormatVersion,
+		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 
@@ -216,7 +216,7 @@ var (
 		NextFamilyID:   3,
 		NextIndexID:    2,
 		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemConfigAllowedPrivileges[5]),
-		FormatVersion:  FamilyFormatVersion,
+		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 
@@ -266,7 +266,7 @@ var (
 		NextFamilyID:   1,
 		NextIndexID:    2,
 		Privileges:     NewDefaultPrivilegeDescriptor(),
-		FormatVersion:  FamilyFormatVersion,
+		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 
@@ -291,7 +291,7 @@ var (
 		PrimaryIndex:   pk("key"),
 		NextIndexID:    2,
 		Privileges:     NewDefaultPrivilegeDescriptor(),
-		FormatVersion:  FamilyFormatVersion,
+		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 )

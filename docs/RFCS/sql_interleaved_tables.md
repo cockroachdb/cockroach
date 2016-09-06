@@ -1,5 +1,5 @@
 - Feature Name: sql_interleaved_tables
-- Status: in-progress
+- Status: completed
 - Start Date: 2016-06-24
 - Authors: Daniel Harrison
 - RFC PR: [#7465](https://github.com/cockroachdb/cockroach/pull/7465)
