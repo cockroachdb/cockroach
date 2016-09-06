@@ -2536,9 +2536,9 @@ func (r *Replica) applyRaftCommand(
 
 	r.mu.Lock()
 	oldIndex := r.mu.state.RaftAppliedIndex
-	// When frozen, the Range only applies freeze-related requests. Overrides
-	// any forcedError.
-	if mayApply := !r.mu.state.Frozen || ba.IsFreeze(); !mayApply {
+	// When frozen, the Range only applies freeze- and consistency-related
+	// requests. Overrides any forcedError.
+	if mayApply := !r.mu.state.Frozen || ba.IsFreeze() || ba.IsConsistencyRelated(); !mayApply {
 		forcedError = roachpb.NewError(roachpb.NewRangeFrozenError(*r.mu.state.Desc))
 	}
 	r.mu.Unlock()
