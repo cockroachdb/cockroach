@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "allowJs": true,
+    "allowSyntheticDefaultImports": true,
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,
     "forceConsistentCasingInFileNames": true,
@@ -12,9 +13,8 @@
     "noImplicitAny": true,
     "noUnusedLocals": true,
     "target": "ES5"
-  },
-  "files": [
-    "typings/index.d.ts",
-    "app/app.tsx"
-  ]
+  }
+  // "files" is omitted here so that vscode and other editors will use these
+  // options for test files that aren't in the main project. The files option
+  // for the app is in tsconfig.build.json
 }
