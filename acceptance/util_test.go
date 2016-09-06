@@ -398,7 +398,7 @@ func testDockerSuccess(t *testing.T, name string, cmd []string) {
 
 const (
 	// NB: postgresTestTag is grepped for in circle-deps.sh, so don't rename it.
-	postgresTestTag = "20160705-1326"
+	postgresTestTag = "20160810-1626"
 	// Iterating against a locally built version of the docker image can be done
 	// by changing postgresTestImage to the hash of the container.
 	postgresTestImage = "cockroachdb/postgres-test:" + postgresTestTag

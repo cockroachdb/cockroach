@@ -4,3 +4,4 @@
 .cluster.certs.*
 *.backup
 *.tfstate
+.reference-binary-cache
