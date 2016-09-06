@@ -204,6 +204,12 @@ func (q *replicaGCQueue) process(
 	} else {
 		// This replica is a current member of the raft group. Set the last replica
 		// GC check time to avoid re-processing for another check interval.
+		//
+		// TODO(tschottdorf): should keep stats in particular on this outcome
+		// but also on how good a job the queue does at inspecting every
+		// Replica (see #8111) when inactive ones can be starved by
+		// event-driven additions.
+		log.Trace(ctx, "not gc'able")
 		if err := rng.setLastReplicaGCTimestamp(now); err != nil {
 			return err
 		}
