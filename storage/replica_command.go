@@ -49,6 +49,10 @@ import (
 
 var errTransactionUnsupported = errors.New("not supported within a transaction")
 
+// ErrConflictUpdatingRangeDesc is an error that is returned by AdminSplit when
+// it conflicts with some other process that updates range descriptors.
+var ErrConflictUpdatingRangeDesc = errors.New("conflict updating range descriptors")
+
 // executeCmd switches over the method and multiplexes to execute the appropriate storage API
 // command. It returns the response, an error, and a post commit trigger which
 // may be actionable even in the case of an error.
@@ -2211,7 +2215,7 @@ func (r *Replica) AdminSplit(
 		}
 		if err := txn.Run(b); err != nil {
 			if _, ok := err.(*roachpb.ConditionFailedError); ok {
-				return errors.Errorf("conflict updating range descriptors")
+				return ErrConflictUpdatingRangeDesc
 			}
 			return err
 		}

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/syncutil"
@@ -223,7 +224,7 @@ func (z *zeroSum) monkey(tableID uint32, d time.Duration) {
 		case 0:
 			if err := z.split(z.randNode(r.Intn), key); err != nil {
 				if strings.Contains(err.Error(), "range is already split at key") ||
-					strings.Contains(err.Error(), "conflict updating range descriptors") {
+					strings.Contains(err.Error(), storage.ErrConflictUpdatingRangeDesc.Error()) {
 					continue
 				}
 				z.maybeLogError(err)
