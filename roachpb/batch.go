@@ -61,6 +61,17 @@ func (ba *BatchRequest) UpdateTxn(otherTxn *Transaction) {
 	ba.Txn = &clonedTxn
 }
 
+// IsConsistencyRelated returns whether the batch consists of a single
+// ComputeChecksum or CheckConsistency request.
+func (ba *BatchRequest) IsConsistencyRelated() bool {
+	if !ba.IsSingleRequest() {
+		return false
+	}
+	_, ok1 := ba.GetArg(ComputeChecksum)
+	_, ok2 := ba.GetArg(CheckConsistency)
+	return ok1 || ok2
+}
+
 // IsFreeze returns whether the batch consists of a single ChangeFrozen request.
 func (ba *BatchRequest) IsFreeze() bool {
 	if !ba.IsSingleRequest() {
