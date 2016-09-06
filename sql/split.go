@@ -27,27 +27,34 @@ import (
 // Split executes a KV split.
 // Privileges: INSERT on table.
 func (p *planner) Split(n *parser.Split) (planNode, error) {
-	var index sqlbase.IndexDescriptor
-	var tableDesc *sqlbase.TableDescriptor
+	var tableName parser.NormalizableTableName
 	if n.Index == nil {
-		tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
-		if err != nil {
-			return nil, err
-		}
-		tableDesc, err = p.getTableDesc(tn)
-		if err != nil {
-			return nil, err
-		}
+		tableName = n.Table
+	} else {
+		tableName = n.Index.Table
+	}
+
+	// Check that the table exists and that the user has permission.
+	tn, err := tableName.NormalizeWithDatabaseName(p.session.Database)
+	if err != nil {
+		return nil, err
+	}
+	tableDesc, err := p.getTableDesc(tn)
+	if err != nil {
+		return nil, err
+	}
+	if tableDesc == nil {
+		return nil, sqlbase.NewUndefinedTableError(tn.String())
+	}
+	if err := p.checkPrivilege(tableDesc, privilege.INSERT); err != nil {
+		return nil, err
+	}
+
+	// Determine which index to use.
+	var index sqlbase.IndexDescriptor
+	if n.Index == nil {
 		index = tableDesc.PrimaryIndex
 	} else {
-		tn, err := n.Index.Table.NormalizeWithDatabaseName(p.session.Database)
-		if err != nil {
-			return nil, err
-		}
-		tableDesc, err = p.getTableDesc(tn)
-		if err != nil {
-			return nil, err
-		}
 		normIdxName := sqlbase.NormalizeName(n.Index.Index)
 		status, i, err := tableDesc.FindIndexByNormalizedName(normIdxName)
 		if err != nil {
@@ -58,9 +65,8 @@ func (p *planner) Split(n *parser.Split) (planNode, error) {
 		}
 		index = tableDesc.Indexes[i]
 	}
-	if err := p.checkPrivilege(tableDesc, privilege.INSERT); err != nil {
-		return nil, err
-	}
+
+	// Determine how to use the remaining argument expressions.
 	if len(index.ColumnIDs) != len(n.Exprs) {
 		return nil, errors.Errorf("expected %d expressions, got %d", len(index.ColumnIDs), len(n.Exprs))
 	}
@@ -77,6 +83,7 @@ func (p *planner) Split(n *parser.Split) (planNode, error) {
 		}
 		typedExprs[i] = typedExpr
 	}
+
 	return &splitNode{
 		p:         p,
 		tableDesc: tableDesc,
