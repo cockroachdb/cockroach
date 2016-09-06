@@ -161,6 +161,17 @@ func (node *AlterTableDropConstraint) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+// AlterTableValidateConstraint represents a VALIDATE CONSTRAINT command.
+type AlterTableValidateConstraint struct {
+	Constraint Name
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableValidateConstraint) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("VALIDATE CONSTRAINT ")
+	FormatNode(buf, f, node.Constraint)
+}
+
 // AlterTableSetDefault represents an ALTER COLUMN SET DEFAULT
 // or DROP DEFAULT command.
 type AlterTableSetDefault struct {

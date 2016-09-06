@@ -849,7 +849,12 @@ alter_table_cmd:
   // ALTER TABLE <name> ALTER CONSTRAINT ...
 | ALTER CONSTRAINT name { unimplemented() }
   // ALTER TABLE <name> VALIDATE CONSTRAINT ...
-| VALIDATE CONSTRAINT name { unimplemented() }
+| VALIDATE CONSTRAINT name
+  {
+    $$.val = &AlterTableValidateConstraint{
+      Constraint: Name($3),
+    }
+  }
   // ALTER TABLE <name> DROP CONSTRAINT IF EXISTS <name> [RESTRICT|CASCADE]
 | DROP CONSTRAINT IF EXISTS name opt_drop_behavior
   {

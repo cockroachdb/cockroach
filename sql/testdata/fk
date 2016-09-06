@@ -157,6 +157,15 @@ UPDATE products SET upc = 'blah' WHERE sku = '780'
 statement ok
 ALTER TABLE scans ADD FOREIGN KEY (scanned) REFERENCES products (upc)
 
+query TTTTT
+SHOW CONSTRAINTS FROM scans
+----
+scans  fk_scanned_ref_products  FOREIGN KEY (UNVALIDATED)  scanned  products.[upc]
+scans  primary                  PRIMARY KEY                rowid    NULL
+
+statement error validating FOREIGN KEY constraint "fk_scanned_ref_products" unsupported
+ALTER TABLE scans VALIDATE CONSTRAINT fk_scanned_ref_products
+
 statement ok
 UPDATE products SET upc = '885155001450' WHERE sku = '780'
 
