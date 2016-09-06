@@ -510,8 +510,6 @@ func (r *Replica) initLocked(
 	r.mu.destroyed = pErr.GetDetail()
 	r.mu.corrupted = r.mu.destroyed != nil
 
-	// TODO(peter): Move this check up to the other usage of
-	// isInitializedLocked().
 	if r.isInitializedLocked() && replicaID != 0 {
 		return errors.Errorf("replicaID must be 0 when creating an initialized replica")
 	}
