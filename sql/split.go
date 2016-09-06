@@ -21,8 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/pkg/errors"
 )
+
+const maxSplitRetries = 4
 
 // Split executes a KV split.
 // Privileges: INSERT on table.
@@ -124,7 +127,18 @@ func (n *splitNode) Start() error {
 		return err
 	}
 	n.key = keys.MakeRowSentinelKey(key)
-	return n.p.execCfg.DB.AdminSplit(n.key)
+
+	// We retry a few times if we hit an error. One instance of expected errors
+	// happens after a table creation, where AdminSplit will sometimes fail with
+	// "conflict updating range descriptors".
+	var splitErr error
+	for r := retry.Start(retry.Options{MaxRetries: maxSplitRetries}); r.Next(); {
+		splitErr = n.p.execCfg.DB.AdminSplit(n.key)
+		if splitErr == nil {
+			return nil
+		}
+	}
+	return splitErr
 }
 
 func (n *splitNode) expandPlan() error {
