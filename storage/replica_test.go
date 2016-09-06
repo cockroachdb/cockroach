@@ -205,6 +205,7 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 				tc.store.Engine(),
 				enginepb.MVCCStats{},
 				*testDesc,
+				raftpb.HardState{},
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -654,9 +655,9 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 		StoreID:   2,
 		ReplicaID: 2,
 	}
-	rngDesc := tc.rng.Desc()
+	rngDesc := *tc.rng.Desc()
 	rngDesc.Replicas = append(rngDesc.Replicas, secondReplica)
-	tc.rng.setDescWithoutProcessUpdate(rngDesc)
+	tc.rng.setDescWithoutProcessUpdate(&rngDesc)
 
 	tc.manualClock.Set(leaseExpiry(tc.rng))
 	now := tc.clock.Now()
