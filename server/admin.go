@@ -244,6 +244,32 @@ func (s *adminServer) DatabaseDetails(
 		}
 	}
 
+	// Query the descriptor ID and zone configuration for this database.
+	{
+		path, err := s.queryDescriptorIDPath(session, []string{req.Database})
+		if err != nil {
+			return nil, s.serverError(err)
+		}
+		resp.DescriptorID = int64(path[1])
+
+		id, zone, zoneExists, err := s.queryZonePath(session, path)
+		if err != nil {
+			return nil, s.serverError(err)
+		}
+
+		if !zoneExists {
+			zone = config.DefaultZoneConfig()
+		}
+		resp.ZoneConfig = zone
+
+		switch id {
+		case path[1]:
+			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_DATABASE
+		default:
+			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_CLUSTER
+		}
+	}
+
 	return &resp, nil
 }
 
@@ -386,7 +412,7 @@ func (s *adminServer) TableDetails(
 	}
 
 	// Range and ZoneConfig information is not applicable to virtual schemas.
-	if !sql.IsVirtualDatabase(escDBName) {
+	if !sql.IsVirtualDatabase(req.Database) {
 		// Get the number of ranges in the table. We get the key span for the table
 		// data. Then, we count the number of ranges that make up that key span.
 		{
@@ -394,7 +420,9 @@ func (s *adminServer) TableDetails(
 			var tableSpan roachpb.Span
 			if err := s.server.db.Txn(ctx, func(txn *client.Txn) error {
 				var err error
-				tableSpan, err = iexecutor.GetTableSpan(s.getUser(req), txn, escDBName, escTableName)
+				tableSpan, err = iexecutor.GetTableSpan(
+					s.getUser(req), txn, req.Database, req.Table,
+				)
 				return err
 			}); err != nil {
 				return nil, s.serverError(err)
@@ -416,12 +444,13 @@ func (s *adminServer) TableDetails(
 			resp.RangeCount = rangeCount
 		}
 
-		// Query the zone configuration for this table.
+		// Query the descriptor ID and zone configuration for this table.
 		{
-			path, err := s.queryDescriptorIDPath(session, []string{escDBName, escTableName})
+			path, err := s.queryDescriptorIDPath(session, []string{req.Database, req.Table})
 			if err != nil {
 				return nil, s.serverError(err)
 			}
+			resp.DescriptorID = int64(path[2])
 
 			id, zone, zoneExists, err := s.queryZonePath(session, path)
 			if err != nil {
