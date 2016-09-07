@@ -42,6 +42,7 @@ var (
 // RemoteClockMonitor keeps track of the most recent measurements of remote
 // offsets from this node to connected nodes.
 type RemoteClockMonitor struct {
+	ctx       context.Context
 	clock     *hlc.Clock
 	offsetTTL time.Duration
 
@@ -54,8 +55,11 @@ type RemoteClockMonitor struct {
 }
 
 // newRemoteClockMonitor returns a monitor with the given server clock.
-func newRemoteClockMonitor(clock *hlc.Clock, offsetTTL time.Duration) *RemoteClockMonitor {
+func newRemoteClockMonitor(
+	ctx context.Context, clock *hlc.Clock, offsetTTL time.Duration,
+) *RemoteClockMonitor {
 	r := RemoteClockMonitor{
+		ctx:       ctx,
 		clock:     clock,
 		offsetTTL: offsetTTL,
 	}
@@ -109,7 +113,7 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
 	}
 
 	if log.V(2) {
-		log.Infof(context.TODO(), "update offset: %s %v", addr, r.mu.offsets[addr])
+		log.Infof(r.ctx, "update offset: %s %v", addr, r.mu.offsets[addr])
 	}
 }
 
@@ -133,7 +137,7 @@ func (r *RemoteClockMonitor) VerifyClockOffset() error {
 				delete(r.mu.offsets, addr)
 				continue
 			}
-			if offset.isHealthy(maxOffset) {
+			if offset.isHealthy(r.ctx, maxOffset) {
 				healthyOffsetCount++
 			}
 		}
@@ -144,14 +148,14 @@ func (r *RemoteClockMonitor) VerifyClockOffset() error {
 			return errors.Errorf("fewer than half the known nodes are within the maximum offset of %s (%d of %d)", maxOffset, healthyOffsetCount, numClocks)
 		}
 		if log.V(1) {
-			log.Infof(context.TODO(), "%d of %d nodes are within the maximum offset of %s", healthyOffsetCount, numClocks, maxOffset)
+			log.Infof(r.ctx, "%d of %d nodes are within the maximum offset of %s", healthyOffsetCount, numClocks, maxOffset)
 		}
 	}
 
 	return nil
 }
 
-func (r RemoteOffset) isHealthy(maxOffset time.Duration) bool {
+func (r RemoteOffset) isHealthy(ctx context.Context, maxOffset time.Duration) bool {
 	// Offset may be negative, but Uncertainty is always positive.
 	absOffset := r.Offset
 	if absOffset < 0 {
@@ -173,7 +177,7 @@ func (r RemoteOffset) isHealthy(maxOffset time.Duration) bool {
 		// health is ambiguous. For now, we err on the side of not spuriously
 		// killing nodes.
 		if log.V(1) {
-			log.Infof(context.TODO(), "uncertain remote offset %s for maximum offset %s, treating as healthy", r, maxOffset)
+			log.Infof(ctx, "uncertain remote offset %s for maximum offset %s, treating as healthy", r, maxOffset)
 		}
 		return true
 	}
