@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"container/heap"
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -428,6 +429,14 @@ func (s *stat) update(x float64) {
 	// Update variable used to calculate running standard deviation. See: Knuth
 	// TAOCP, vol 2, 3rd ed, page 232.
 	s.s = s.s + (x-oldMean)*(x-s.mean)
+}
+
+func (s *stat) stddev() float64 {
+	if s.n <= 1 {
+		return 0
+	}
+	variance := s.s / (s.n - 1)
+	return math.Sqrt(variance)
 }
 
 // StoreList holds a list of store descriptors and associated count and used

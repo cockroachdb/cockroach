@@ -199,13 +199,15 @@ func (at *allocatorTest) RunAndCleanup(t *testing.T) {
 	at.Run(t)
 }
 
-func (at *allocatorTest) stdDev() (float64, error) {
+// replicaCountStats returns the standard deviation and mean of the range
+// counts, as well as any error that may have occurred.
+func (at *allocatorTest) replicaCountStats() (float64, float64, error) {
 	host := at.f.Nodes()[0]
 	var client http.Client
 	var nodesResp serverpb.NodesResponse
 	url := fmt.Sprintf("http://%s:%s/_status/nodes", host, adminPort)
 	if err := util.GetJSON(client, url, &nodesResp); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	var replicaCounts stats.Float64Data
 	for _, node := range nodesResp.Nodes {
@@ -215,9 +217,13 @@ func (at *allocatorTest) stdDev() (float64, error) {
 	}
 	stdDev, err := stats.StdDevP(replicaCounts)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return stdDev, nil
+	mean, err := stats.Mean(replicaCounts)
+	if err != nil {
+		return 0, 0, err
+	}
+	return stdDev, mean, nil
 }
 
 // printStats prints the time it took for rebalancing to finish and the final
@@ -260,7 +266,7 @@ func (at *allocatorTest) printRebalanceStats(
 	}
 
 	// Output standard deviation of the replica counts for all stores.
-	stdDev, err := at.stdDev()
+	stdDev, _, err := at.replicaCountStats()
 	if err != nil {
 		return err
 	}
@@ -275,6 +281,7 @@ type replicationStats struct {
 	RangeID               int64
 	StoreID               int64
 	ReplicaCountStdDev    float64
+	ReplicaCountMean      float64
 }
 
 func (s replicationStats) String() string {
@@ -317,7 +324,7 @@ func (at *allocatorTest) allocatorStats(db *gosql.DB) (s replicationStats, err e
 		return replicationStats{}, err
 	}
 
-	s.ReplicaCountStdDev, err = at.stdDev()
+	s.ReplicaCountStdDev, s.ReplicaCountMean, err = at.replicaCountStats()
 	if err != nil {
 		return replicationStats{}, err
 	}
@@ -358,16 +365,21 @@ func (at *allocatorTest) WaitForRebalance(t *testing.T) error {
 				return err
 			}
 
+			maxStdDev := *flagATMaxStdDev
+			if maxStdDev == 0 {
+				maxStdDev = storage.MinStdDevPercentForRebalance * stats.ReplicaCountMean
+			}
+
 			log.Info(context.Background(), stats)
 			if StableInterval <= stats.ElapsedSinceLastEvent {
 				host := at.f.Nodes()[0]
 				log.Infof(context.Background(), "replica count = %f, max = %f", stats.ReplicaCountStdDev, *flagATMaxStdDev)
-				if stats.ReplicaCountStdDev > *flagATMaxStdDev {
+				if stats.ReplicaCountStdDev > maxStdDev {
 					_ = at.printRebalanceStats(db, host)
 					return errors.Errorf(
 						"%s elapsed without changes, but replica count standard "+
 							"deviation is %.2f (>%.2f)", stats.ElapsedSinceLastEvent,
-						stats.ReplicaCountStdDev, *flagATMaxStdDev)
+						stats.ReplicaCountStdDev, maxStdDev)
 				}
 				return at.printRebalanceStats(db, host)
 			}

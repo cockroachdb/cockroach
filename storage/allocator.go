@@ -39,6 +39,19 @@ const (
 	// stores.
 	maxFractionUsedThreshold = 0.95
 
+	// MinStdDevPercentForRebalance is the minimum percentage of the mean replica
+	// count the standard deviation must be for rebalances to occur. Rebalancing
+	// is possible when:
+	//
+	// stddev(rangeCounts) >= max(minStdDevPercentForRebalance * meanRangeCount,
+	//                            minStdDevForRebalance)
+	MinStdDevPercentForRebalance = 0.05
+
+	// minStdDevForRebalance is the minimum standard deviation for replica counts
+	// across stores for rebalancing to occur. This number should be empirically
+	// obtained and should work for small (e.g. 15 total replicas) and large data.
+	minStdDevForRebalance = 1.5
+
 	// priorities for various repair operations.
 	removeDeadReplicaPriority  float64 = 10000
 	addMissingReplicaPriority  float64 = 1000
@@ -366,6 +379,22 @@ func (a Allocator) improve(
 func (a Allocator) shouldRebalance(
 	store roachpb.StoreDescriptor, sl StoreList,
 ) bool {
+	minStdDev := MinStdDevPercentForRebalance * sl.count.mean
+	if minStdDev < minStdDevForRebalance {
+		minStdDev = minStdDevForRebalance
+	}
+	stdDev := sl.count.stddev()
+	if stdDev < minStdDev {
+		if log.V(3) {
+			log.Infof(context.TODO(), "should not rebalance: stddev (%f) < min stddev (%f)\n%s",
+				stdDev, minStdDev, sl)
+		}
+		return false
+	}
+	if log.V(3) {
+		log.Infof(context.TODO(), "should rebalance: stddev (%f) >= min stddev (%f)\n%s",
+			stdDev, minStdDev, sl)
+	}
 	rcb := rangeCountBalancer{a.randGen}
 	return rcb.shouldRebalance(store, sl)
 }
