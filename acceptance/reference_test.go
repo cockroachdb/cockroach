@@ -115,6 +115,64 @@ $bin quit && wait
 	runReadWriteReferenceTest(t, `bidirectional-reference-version`, backwardReferenceTest)
 }
 
+func runWriteReadForwardReferenceTest(
+	t *testing.T,
+	referenceBinPath string,
+) {
+	forwardReferenceTestScript := fmt.Sprintf(`
+set -xe
+mkdir /new
+cd /new
+
+touch newout oldout
+function finish() {
+  cat newout oldout
+}
+trap finish EXIT
+
+export PGHOST=localhost
+export PGPORT=""
+export COCKROACH_SKIP_UPDATE_CHECK=1
+
+bin=/cockroach
+# TODO(bdarnell): when --background is in referenceBinPath, use it here and below.
+# The until loop will also be unnecessary at that point.
+$bin start --alsologtostderr & &> newout
+# Wait until cockroach has started up successfully.
+until $bin sql -e "SELECT 1"; do sleep 1; done
+
+echo "Use the new binary to write a couple rows, then render its output to a file and shut down."
+$bin sql -e "CREATE DATABASE new"
+$bin sql -d new -e "CREATE TABLE testing_new (i int primary key, b bool, s string unique, d decimal, f float, t timestamp, v interval, index sb (s, b))"
+$bin sql -d new -e "INSERT INTO testing_new values (1, true, 'hello', decimal '3.14159', 3.14159, NOW(), interval '1h')"
+$bin sql -d new -e "INSERT INTO testing_new values (2, false, 'world', decimal '0.14159', 0.14159, NOW(), interval '234h45m2s234ms')"
+$bin sql -d new -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_new" > new.everything
+$bin quit && wait # wait will block until all background jobs finish.
+
+bin=/%s/cockroach
+$bin start --background --alsologtostderr &> oldout
+echo "Read data written by new version using reference binary"
+$bin sql -d new -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_new" > old.everything
+# diff returns non-zero if different. With set -e above, that would exit here.
+diff old.everything new.everything
+
+# Scan all data (some of which may not have been touched by the SQL commands)
+# to wake up all Raft groups.
+$bin debug kv scan
+
+echo "Add a row with reference new binary and render the updated data before shutting down."
+$bin sql -d new -e "INSERT INTO testing_new values (3, false, '!', decimal '2.14159', 2.14159, NOW(), interval '3h')"
+$bin sql -d new -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_new" > old.everything
+$bin sql -d new -e "CREATE TABLE testing_old (i int primary key, b bool, s string unique, d decimal, f float, t timestamp, v interval, index sb (s, b))"
+$bin sql -d new -e "INSERT INTO testing_old values (4, false, '!!', decimal '1.14159', 1.14159, NOW(), interval '4h')"
+$bin sql -d new -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_old" >> old.everything
+$bin quit
+# Let it close its listening sockets.
+sleep 1
+`, referenceBinPath)
+	runReferenceTestWithScript(t, forwardReferenceTestScript)
+}
+
 func TestDockerReadWriteForwardReferenceVersion(t *testing.T) {
 	backwardReferenceTest := `
 touch out
@@ -130,6 +188,7 @@ $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_
 $bin quit && wait
 `
 	runReadWriteReferenceTest(t, `forward-reference-version`, backwardReferenceTest)
+	runWriteReadForwardReferenceTest(t, `forward-reference-version`)
 }
 
 func TestDockerMigration_7429(t *testing.T) {
