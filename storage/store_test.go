@@ -379,7 +379,7 @@ func TestReplicasByKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rep.mu.Lock()
+	rep.mu.MustLock()
 	rep.mu.state.Desc.EndKey = roachpb.RKey("e")
 	rep.mu.Unlock()
 
@@ -680,10 +680,10 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 	}
 
 	// Initialize the range with start and end keys.
-	r.mu.Lock()
+	r.mu.Wrapped().Lock()
 	r.mu.state.Desc.StartKey = roachpb.RKey("b")
 	r.mu.state.Desc.EndKey = roachpb.RKey("d")
-	r.mu.Unlock()
+	r.mu.Wrapped().Unlock()
 
 	if err := store.processRangeDescriptorUpdateLocked(r); err != nil {
 		t.Errorf("expected processRangeDescriptorUpdate on a replica that's not in the uninit map to silently succeed, got %v", err)
@@ -2022,7 +2022,7 @@ func TestStoreChangeFrozen(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		repl.mu.Lock()
+		repl.mu.Wrapped().Lock()
 		frozen := repl.mu.state.Frozen
 		repl.mu.Unlock()
 		pFrozen, err := loadFrozenStatus(context.Background(), store.Engine(), 1)
@@ -2161,7 +2161,7 @@ func TestStoreGCThreshold(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		repl.mu.Lock()
+		repl.mu.Wrapped().Lock()
 		gcThreshold := repl.mu.state.GCThreshold
 		repl.mu.Unlock()
 		pgcThreshold, err := loadGCThreshold(context.Background(), store.Engine(), 1)

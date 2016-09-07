@@ -888,7 +888,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		var wg sync.WaitGroup // wait for unfreeze goroutines
 		var unfrozen int64    // updated atomically
 		newStoreRangeSet(s).Visit(func(r *Replica) bool {
-			r.mu.Lock()
+			if err := r.mu.Lock(); err != nil {
+				r.mu.Wrapped().Lock()
+			}
 			frozen := r.mu.state.Frozen
 			r.mu.Unlock()
 			if !frozen {
@@ -1451,8 +1453,8 @@ func splitTriggerPostCommit(
 	// which marks it initialized while holding Store.mu.
 
 	// Copy the timestamp cache into the RHS range.
-	r.mu.Lock()
-	rightRng.mu.Lock()
+	r.mu.MustLock()
+	rightRng.mu.MustLock()
 	r.mu.tsCache.MergeInto(rightRng.mu.tsCache, true /* clear */)
 	rightRng.mu.Unlock()
 	r.mu.Unlock()
@@ -1495,7 +1497,7 @@ func splitTriggerPostCommit(
 	// Note that in multi-node scenarios the async campaign is safe
 	// because it has exactly the same behavior as an incoming message
 	// from another node; the problem here is only with merges.
-	rightRng.mu.Lock()
+	rightRng.mu.MustLock()
 	shouldCampaign := rightRng.mu.state.Lease.OwnedBy(r.store.StoreID())
 	rightRng.mu.Unlock()
 	if len(split.RightDesc.Replicas) > 1 && shouldCampaign {
@@ -1733,7 +1735,11 @@ func (s *Store) addReplicaToRangeMapLocked(rng *Replica) error {
 // then. If `destroy` is true, all data belonging to the replica will be
 // deleted. In either case a tombstone record will be written.
 func (s *Store) RemoveReplica(rep *Replica, origDesc roachpb.RangeDescriptor, destroy bool) error {
-	defer rep.raftUnlock(rep.raftLock())
+	uninitLocked, err := rep.raftLock()
+	if err != nil {
+		return err
+	}
+	defer rep.raftUnlock(uninitLocked)
 	return s.removeReplicaImpl(rep, origDesc, destroy)
 }
 
@@ -1912,10 +1918,10 @@ func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
 
 	var deadReplicas []roachpb.ReplicaIdent
 	for rangeID, repl := range s.mu.replicas {
-		repl.mu.Lock()
-		destroyed := repl.mu.destroyed
+		repl.mu.Wrapped().Lock()
+		destroyed := repl.mu.DestroyedLocked()
 		replicaID := repl.mu.replicaID
-		repl.mu.Unlock()
+		repl.mu.Wrapped().Unlock()
 
 		if destroyed != nil {
 			deadReplicas = append(deadReplicas, roachpb.ReplicaIdent{
@@ -2364,7 +2370,9 @@ func (s *Store) HandleRaftRequest(
 			// decides that the ChangeReplicas as a part of which the
 			// preemptive snapshot was sent has likely failed and removes both
 			// in-memory and on-disk state.
-			r.mu.Lock()
+			if err := r.mu.Lock(); err != nil {
+				return roachpb.NewError(errors.Wrap(err, "while preparing for preemptive snapshot"))
+			}
 			// We are paranoid about applying preemptive snapshots (which
 			// were constructed via our code rather than raft) to the "real"
 			// raft group. Instead, we destroy the "real" raft group if one
@@ -2712,10 +2720,14 @@ func (s *Store) tryGetOrCreateReplica(
 			return nil, false, &roachpb.ReplicaTooOldError{}
 		}
 
-		uninitRaftUnlocked := r.raftLock()
-		r.mu.Lock()
-		destroyed, corrupted := r.mu.destroyed, r.mu.corrupted
-		r.mu.Unlock()
+		uninitRaftUnlocked, err := r.raftLock()
+		if err != nil {
+			return nil, false, err
+		}
+		r.mu.Wrapped().Lock()
+		destroyed := r.mu.DestroyedLocked()
+		corrupted := r.mu.corrupted
+		r.mu.Wrapped().Unlock()
 		if destroyed != nil {
 			r.raftUnlock(uninitRaftLocked)
 			if corrupted {
@@ -2748,7 +2760,11 @@ func (s *Store) tryGetOrCreateReplica(
 	// uninitialized.
 	r = newReplica(rangeID, s)
 	r.creatingReplica = &creatingReplica
-	if !r.raftLock() {
+	uninitLocked, err := r.raftLock()
+	if err != nil {
+		return nil, false, err
+	}
+	if !uninitLocked {
 		log.Fatalf(s.Ctx(), "uninitRaftLocked must be true")
 	}
 
@@ -2759,7 +2775,13 @@ func (s *Store) tryGetOrCreateReplica(
 	// Grab the internal Replica state lock to ensure nobody mucks with our
 	// replica even outside of raft processing. Have to do this after grabbing
 	// Store.mu to maintain lock ordering invariant.
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		// TODO(tschottdorf): Can this ever happen? We should make sure to write
+		// the tombstone key before actually deleting the replica to make sure
+		// there aren't any races here.
+		// For now, grab the mutex anyway.
+		r.mu.Wrapped().Lock()
+	}
 	// Add the range to range map, but not replicasByKey since the range's start
 	// key is unknown. The range will be added to replicasByKey later when a
 	// snapshot is applied. After unlocking Store.mu above, another goroutine
@@ -2781,7 +2803,7 @@ func (s *Store) tryGetOrCreateReplica(
 	if err := r.initLocked(desc, s.Clock(), replicaID); err != nil {
 		// Mark the replica as destroyed and remove it from the replicas maps to
 		// ensure nobody tries to use it
-		r.mu.destroyed = errors.Wrapf(err, "%s: failed to initialize", r)
+		r.mu.DestroyLocked(errors.Wrapf(err, "%s: failed to initialize", r))
 		r.mu.Unlock()
 		s.mu.Lock()
 		delete(s.mu.replicas, rangeID)
@@ -2868,7 +2890,10 @@ func (s *Store) updateReplicationGauges() error {
 			continue
 		}
 
-		rng.mu.Lock()
+		if err := rng.mu.Lock(); err != nil {
+			log.Error(s.Ctx(), err)
+			continue
+		}
 		raftStatus := rng.raftStatusLocked()
 		lease := rng.mu.state.Lease
 		rng.mu.Unlock()
@@ -2978,11 +3003,13 @@ func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (enginepb.
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.visitReplicasLocked(startKey, endKey, func(repl *Replica) bool {
-		repl.mu.Lock()
+		if err := repl.mu.Lock(); err != nil {
+			return true // want more
+		}
 		output.Add(repl.mu.state.Stats)
 		repl.mu.Unlock()
 		count++
-		return true
+		return true // want more
 	})
 
 	return output, count
@@ -3004,7 +3031,11 @@ func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDesc
 			}
 			log.Fatalf(s.Ctx(), "unexpected error: %s", err)
 		}
-		r.mu.Lock()
+		if err := r.mu.Lock(); err != nil {
+			// Skip this one; it's deleted or corrupt so we don't care about
+			// it.
+			return true // want more
+		}
 		if r.mu.state.Frozen == collectFrozen {
 			repDescs = append(repDescs, repDesc)
 		}

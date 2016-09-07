@@ -133,9 +133,9 @@ func TestGetTruncatableIndexes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r.mu.Lock()
+	r.mu.Wrapped().Lock()
 	firstIndex, err := r.FirstIndex()
-	r.mu.Unlock()
+	r.mu.Wrapped().Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,9 +168,9 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	// before ForceRaftLogScanAndProcess but is still working on it.
 	stopper.Quiesce()
 
-	r.mu.Lock()
+	r.mu.Wrapped().Lock()
 	newFirstIndex, err := r.FirstIndex()
-	r.mu.Unlock()
+	r.mu.Wrapped().Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,9 +213,9 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r.mu.Lock()
+	r.mu.Wrapped().Lock()
 	oldFirstIndex, err := r.FirstIndex()
-	r.mu.Unlock()
+	r.mu.Wrapped().Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,9 +233,9 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 	// Wait for any asynchronous tasks to finish.
 	stopper.Quiesce()
 
-	r.mu.Lock()
+	r.mu.Wrapped().Lock()
 	newFirstIndex, err := r.FirstIndex()
-	r.mu.Unlock()
+	r.mu.Wrapped().Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -625,13 +625,13 @@ func TestReplicaLease(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rng.mu.Lock()
+	rng.mu.Wrapped().Lock()
 	rng.mu.proposeRaftCommandFn = func(*pendingCmd) error {
 		return &roachpb.LeaseRejectedError{
 			Message: "replica not found",
 		}
 	}
-	rng.mu.Unlock()
+	rng.mu.Wrapped().Unlock()
 
 	{
 		if _, ok := rng.redirectOnOrAcquireLease(context.Background()).GetDetail().(*roachpb.NotLeaseHolderError); !ok {
@@ -872,9 +872,9 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	tc.manualClock.Set(leaseExpiry(tc.rng))
 	now := hlc.Timestamp{WallTime: tc.manualClock.UnixNano()}
 
-	tc.rng.mu.Lock()
+	tc.rng.mu.Wrapped().Lock()
 	baseRTS, _, _ := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil /* end */)
-	tc.rng.mu.Unlock()
+	tc.rng.mu.Wrapped().Unlock()
 	// TODO(tschottdorf): this value is zero, which seems ripe for producing
 	// test cases that do not test anything.
 	baseLowWater := baseRTS.WallTime
@@ -931,10 +931,10 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 			t.Fatalf("%d: unexpected error %v", i, err)
 		}
 		// Verify expected low water mark.
-		tc.rng.mu.Lock()
+		tc.rng.mu.Wrapped().Lock()
 		rTS, _, _ := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil)
 		wTS, _, _ := tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil)
-		tc.rng.mu.Unlock()
+		tc.rng.mu.Wrapped().Unlock()
 		if rTS.WallTime != test.expLowWater || wTS.WallTime != test.expLowWater {
 			t.Errorf("%d: expected low water %d; got maxRead=%d, maxWrite=%d", i, test.expLowWater, rTS.WallTime, wTS.WallTime)
 		}
@@ -1017,9 +1017,9 @@ func TestReplicaDrainLease(t *testing.T) {
 	if !slept.Load().(bool) {
 		t.Fatal("DrainLeases returned with active lease")
 	}
-	tc.rng.mu.Lock()
+	tc.rng.mu.Wrapped().Lock()
 	pErr := <-tc.rng.requestLeaseLocked(tc.clock.Now())
-	tc.rng.mu.Unlock()
+	tc.rng.mu.Wrapped().Unlock()
 	_, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
 	if !ok {
 		t.Fatalf("expected NotLeaseHolderError, not %v", pErr)
@@ -1604,7 +1604,7 @@ func TestLeaseConcurrent(t *testing.T) {
 			active.Store(false)
 
 			var seen int32
-			tc.rng.mu.Lock()
+			tc.rng.mu.Wrapped().Lock()
 			tc.rng.mu.proposeRaftCommandFn = func(cmd *pendingCmd) error {
 				ll, ok := cmd.raftCmd.Cmd.Requests[0].
 					GetInner().(*roachpb.RequestLeaseRequest)
@@ -1625,15 +1625,15 @@ func TestLeaseConcurrent(t *testing.T) {
 						}
 						return
 					}
-					tc.rng.mu.Lock()
-					defer tc.rng.mu.Unlock()
+					tc.rng.mu.Wrapped().Lock()
+					defer tc.rng.mu.Wrapped().Unlock()
 					if err := defaultProposeRaftCommandLocked(tc.rng, cmd); err != nil {
 						panic(err) // unlikely, so punt on proper handling
 					}
 				}()
 				return nil
 			}
-			tc.rng.mu.Unlock()
+			tc.rng.mu.Wrapped().Unlock()
 
 			active.Store(true)
 			tc.manualClock.Increment(leaseExpiry(tc.rng))
@@ -1641,9 +1641,9 @@ func TestLeaseConcurrent(t *testing.T) {
 			pErrCh := make(chan *roachpb.Error, num)
 			for i := 0; i < num; i++ {
 				if err := tc.stopper.RunAsyncTask(func() {
-					tc.rng.mu.Lock()
+					tc.rng.mu.Wrapped().Lock()
 					leaseCh := tc.rng.requestLeaseLocked(ts)
-					tc.rng.mu.Unlock()
+					tc.rng.mu.Wrapped().Unlock()
 					wg.Done()
 					pErr := <-leaseCh
 					// Mutate the errors as we receive them to expose races.
@@ -1713,8 +1713,8 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 		t.Error(pErr)
 	}
 	// Verify the timestamp cache has rTS=1s and wTS=0s for "a".
-	tc.rng.mu.Lock()
-	defer tc.rng.mu.Unlock()
+	tc.rng.mu.Wrapped().Lock()
+	defer tc.rng.mu.Wrapped().Unlock()
 	_, _, rOK := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil)
 	_, _, wOK := tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil)
 	if rOK || wOK {
@@ -1999,9 +1999,9 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 
 	// Wait until both commands are in the command queue.
 	util.SucceedsSoon(t, func() error {
-		tc.rng.mu.Lock()
+		tc.rng.mu.Wrapped().Lock()
 		chans := tc.rng.mu.cmdQ.getWait(false, roachpb.Span{Key: key1}, roachpb.Span{Key: key2})
-		tc.rng.mu.Unlock()
+		tc.rng.mu.Wrapped().Unlock()
 		if a, e := len(chans), 2; a < e {
 			return errors.Errorf("%d of %d commands in the command queue", a, e)
 		}
@@ -4336,9 +4336,9 @@ func TestTruncateLog(t *testing.T) {
 	}
 
 	// We can still get what remains of the log.
-	tc.rng.mu.Lock()
+	tc.rng.mu.Wrapped().Lock()
 	entries, err := tc.rng.Entries(indexes[5], indexes[9], math.MaxUint64)
-	tc.rng.mu.Unlock()
+	tc.rng.mu.Wrapped().Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4347,17 +4347,17 @@ func TestTruncateLog(t *testing.T) {
 	}
 
 	// But any range that includes the truncated entries returns an error.
-	tc.rng.mu.Lock()
+	tc.rng.mu.Wrapped().Lock()
 	_, err = tc.rng.Entries(indexes[4], indexes[9], math.MaxUint64)
-	tc.rng.mu.Unlock()
+	tc.rng.mu.Wrapped().Unlock()
 	if err != raft.ErrCompacted {
 		t.Errorf("expected ErrCompacted, got %s", err)
 	}
 
 	// The term of the last truncated entry is still available.
-	tc.rng.mu.Lock()
+	tc.rng.mu.Wrapped().Lock()
 	term, err := tc.rng.Term(indexes[4])
-	tc.rng.mu.Unlock()
+	tc.rng.mu.Wrapped().Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4366,9 +4366,9 @@ func TestTruncateLog(t *testing.T) {
 	}
 
 	// The terms of older entries are gone.
-	tc.rng.mu.Lock()
+	tc.rng.mu.Wrapped().Lock()
 	_, err = tc.rng.Term(indexes[3])
-	tc.rng.mu.Unlock()
+	tc.rng.mu.Wrapped().Unlock()
 	if err != raft.ErrCompacted {
 		t.Errorf("expected ErrCompacted, got %s", err)
 	}
@@ -4387,10 +4387,10 @@ func TestTruncateLog(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	tc.rng.mu.Lock()
+	tc.rng.mu.Wrapped().Lock()
 	// The term of the last truncated entry is still available.
 	term, err = tc.rng.Term(indexes[4])
-	tc.rng.mu.Unlock()
+	tc.rng.mu.Wrapped().Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4487,9 +4487,9 @@ func TestAppliedIndex(t *testing.T) {
 			t.Errorf("expected %d, got %d", sum, reply.NewValue)
 		}
 
-		tc.rng.mu.Lock()
+		tc.rng.mu.Wrapped().Lock()
 		newAppliedIndex := tc.rng.mu.state.RaftAppliedIndex
-		tc.rng.mu.Unlock()
+		tc.rng.mu.Wrapped().Unlock()
 		if newAppliedIndex <= appliedIndex {
 			t.Errorf("appliedIndex did not advance. Was %d, now %d", appliedIndex, newAppliedIndex)
 		}
@@ -4536,10 +4536,9 @@ func TestReplicaCorruption(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := tc.store.LookupReplica(rkey, rkey)
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.mu.destroyed.Error() != pErr.GetDetail().Error() {
-		t.Fatalf("expected r.mu.destroyed == pErr.GetDetail(), instead %q != %q", r.mu.destroyed, pErr.GetDetail())
+	destroyed := r.mu.Destroyed()
+	if destroyed.Error() != pErr.GetDetail().Error() {
+		t.Fatalf("expected r.mu.destroyed == pErr.GetDetail(), instead %q != %q", destroyed, pErr.GetDetail())
 	}
 
 	// Verify destroyed error was persisted.
@@ -4547,8 +4546,8 @@ func TestReplicaCorruption(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.mu.destroyed.Error() != pErr.GetDetail().Error() {
-		t.Fatalf("expected r.mu.destroyed == pErr.GetDetail(), instead %q != %q", r.mu.destroyed, pErr.GetDetail())
+	if destroyed.Error() != pErr.GetDetail().Error() {
+		t.Fatalf("expected r.mu.destroyed == pErr.GetDetail(), instead %q != %q", destroyed, pErr.GetDetail())
 	}
 
 	// TODO(bdarnell): when maybeSetCorrupt is finished verify that future commands fail too.
@@ -4881,9 +4880,9 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 
 	rng := tc.rng
 
-	rng.mu.Lock()
+	rng.mu.Wrapped().Lock()
 	rng.mu.proposeRaftCommandFn = proposeRaftCommandFn
-	rng.mu.Unlock()
+	rng.mu.Wrapped().Unlock()
 
 	gArgs := getArgs(roachpb.Key("a"))
 	// Force the read command request a new lease.
@@ -5208,9 +5207,9 @@ func TestEntries(t *testing.T) {
 		if len(cacheEntries) != tc.expCacheCount {
 			t.Errorf("%d: expected cache count %d, got %d", i, tc.expCacheCount, len(cacheEntries))
 		}
-		rng.mu.Lock()
+		rng.mu.Wrapped().Lock()
 		ents, err := rng.Entries(tc.lo, tc.hi, tc.maxBytes)
-		rng.mu.Unlock()
+		rng.mu.Wrapped().Unlock()
 		if tc.expError == nil && err != nil {
 			t.Errorf("%d: expected no error, got %s", i, err)
 			continue
@@ -5224,11 +5223,11 @@ func TestEntries(t *testing.T) {
 	}
 
 	// Case 23: Lo must be less than or equal to hi.
-	rng.mu.Lock()
+	rng.mu.Wrapped().Lock()
 	if _, err := rng.Entries(indexes[9], indexes[5], 0); err == nil {
 		t.Errorf("23: error expected, got none")
 	}
-	rng.mu.Unlock()
+	rng.mu.Wrapped().Unlock()
 
 	// Case 24: add a gap to the indexes.
 	if err := engine.MVCCDelete(context.Background(), tc.store.Engine(), nil, keys.RaftLogKey(rangeID, indexes[6]), hlc.ZeroTimestamp, nil); err != nil {
@@ -5236,8 +5235,8 @@ func TestEntries(t *testing.T) {
 	}
 	rng.store.raftEntryCache.delEntries(rangeID, indexes[6], indexes[6]+1)
 
-	rng.mu.Lock()
-	defer rng.mu.Unlock()
+	rng.mu.Wrapped().Lock()
+	defer rng.mu.Wrapped().Unlock()
 	if _, err := rng.Entries(indexes[5], indexes[9], 0); err == nil {
 		t.Errorf("24: error expected, got none")
 	}
@@ -5288,8 +5287,8 @@ func TestTerm(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	rng.mu.Lock()
-	defer rng.mu.Unlock()
+	rng.mu.Wrapped().Lock()
+	defer rng.mu.Wrapped().Unlock()
 
 	firstIndex, err := rng.FirstIndex()
 	if err != nil {
@@ -5424,11 +5423,11 @@ func TestReplicaCancelRaft(t *testing.T) {
 			defer tc.Stop()
 			if cancelEarly {
 				cancel()
-				tc.rng.mu.Lock()
+				tc.rng.mu.Wrapped().Lock()
 				tc.rng.mu.proposeRaftCommandFn = func(*pendingCmd) error {
 					return nil
 				}
-				tc.rng.mu.Unlock()
+				tc.rng.mu.Wrapped().Unlock()
 			}
 			var ba roachpb.BatchRequest
 			ba.Add(&roachpb.GetRequest{
@@ -5503,8 +5502,8 @@ func TestComputeVerifyChecksum(t *testing.T) {
 	// because it's not updated atomically with the batch and because this
 	// test doesn't respect Raft ordering.
 	getAppliedIndex := func() uint64 {
-		rng.mu.Lock()
-		defer rng.mu.Unlock()
+		rng.mu.Wrapped().Lock()
+		defer rng.mu.Wrapped().Unlock()
 
 		appliedIndex, _, err := loadAppliedIndex(context.Background(), rng.store.Engine(), rng.RangeID)
 		if err != nil {
@@ -5759,9 +5758,9 @@ func TestAsyncSnapshot(t *testing.T) {
 
 	// Lock the replica manually instead of going through GetSnapshot()
 	// because we want to test the underlying async functionality.
-	tc.rng.mu.Lock()
+	tc.rng.mu.Wrapped().Lock()
 	_, err := tc.rng.Snapshot()
-	tc.rng.mu.Unlock()
+	tc.rng.mu.Wrapped().Unlock()
 
 	// In async operation, the first call never succeeds.
 	if err != raft.ErrSnapshotTemporarilyUnavailable {
@@ -5770,9 +5769,9 @@ func TestAsyncSnapshot(t *testing.T) {
 
 	// It will eventually succeed.
 	util.SucceedsSoon(t, func() error {
-		tc.rng.mu.Lock()
+		tc.rng.mu.Wrapped().Lock()
 		snap, err := tc.rng.Snapshot()
-		tc.rng.mu.Unlock()
+		tc.rng.mu.Wrapped().Unlock()
 		if err != nil {
 			return err
 		}
@@ -5795,9 +5794,9 @@ func TestAsyncSnapshotMaxAge(t *testing.T) {
 
 	// Lock the replica manually instead of going through GetSnapshot()
 	// because we want to test the underlying async functionality.
-	tc.rng.mu.Lock()
+	tc.rng.mu.Wrapped().Lock()
 	_, err := tc.rng.Snapshot()
-	tc.rng.mu.Unlock()
+	tc.rng.mu.Wrapped().Unlock()
 
 	// In async operation, the first call never succeeds.
 	if err != raft.ErrSnapshotTemporarilyUnavailable {
@@ -5806,8 +5805,8 @@ func TestAsyncSnapshotMaxAge(t *testing.T) {
 
 	// Wait for the snapshot to be generated and abandoned.
 	time.Sleep(100 * time.Millisecond)
-	tc.rng.mu.Lock()
-	defer tc.rng.mu.Unlock()
+	tc.rng.mu.Wrapped().Lock()
+	defer tc.rng.mu.Wrapped().Unlock()
 	// The channel was closed without producing a result.
 	snap, ok := <-tc.rng.mu.snapshotChan
 	if ok {
@@ -5826,9 +5825,9 @@ func TestSyncSnapshot(t *testing.T) {
 
 	// With enough time in BlockingSnapshotDuration, we succeed on the
 	// first try.
-	tc.rng.mu.Lock()
+	tc.rng.mu.Wrapped().Lock()
 	snap, err := tc.rng.Snapshot()
-	tc.rng.mu.Unlock()
+	tc.rng.mu.Wrapped().Unlock()
 
 	if err != nil {
 		t.Fatal(err)
@@ -5849,9 +5848,9 @@ func TestReplicaIDChangePending(t *testing.T) {
 	rng := tc.rng
 
 	// Stop the command from being proposed to the raft group and being removed.
-	rng.mu.Lock()
+	rng.mu.Wrapped().Lock()
 	rng.mu.proposeRaftCommandFn = func(p *pendingCmd) error { return nil }
-	rng.mu.Unlock()
+	rng.mu.Wrapped().Unlock()
 
 	// Add a command to the pending list.
 	magicTS := tc.clock.Now()
@@ -5870,8 +5869,8 @@ func TestReplicaIDChangePending(t *testing.T) {
 	// Set the raft command handler so we can tell if the command has been
 	// re-proposed.
 	commandProposed := make(chan struct{}, 1)
-	rng.mu.Lock()
-	defer rng.mu.Unlock()
+	rng.mu.Wrapped().Lock()
+	defer rng.mu.Wrapped().Unlock()
 	rng.mu.proposeRaftCommandFn = func(p *pendingCmd) error {
 		if p.raftCmd.Cmd.Timestamp.Equal(magicTS) {
 			commandProposed <- struct{}{}
@@ -5910,7 +5909,7 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 
 	var c int32 // updated atomically
 
-	tc.rng.mu.Lock()
+	tc.rng.mu.Wrapped().Lock()
 	tc.rng.mu.proposeRaftCommandFn = func(cmd *pendingCmd) error {
 		if v := cmd.ctx.Value(magicKey{}); v != nil {
 			curAttempt := atomic.AddInt32(&c, 1)
@@ -5920,7 +5919,7 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 		}
 		return defaultProposeRaftCommandLocked(tc.rng, cmd)
 	}
-	tc.rng.mu.Unlock()
+	tc.rng.mu.Wrapped().Unlock()
 
 	if pErr := tc.rng.redirectOnOrAcquireLease(context.Background()); pErr != nil {
 		fatalf("%s", pErr)
@@ -5936,9 +5935,9 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 		}
 	}
 
-	tc.rng.mu.Lock()
+	tc.rng.mu.Wrapped().Lock()
 	ai := tc.rng.mu.state.LeaseAppliedIndex
-	tc.rng.mu.Unlock()
+	tc.rng.mu.Wrapped().Unlock()
 
 	if ai < 1 {
 		t.Fatal("committed a batch, but still at lease index zero")
@@ -5957,8 +5956,8 @@ func runWrongIndexTest(t *testing.T, repropose bool, withErr bool, expProposals 
 		t.Fatal(err)
 	}
 	ch := func() chan roachpb.ResponseWithError {
-		tc.rng.mu.Lock()
-		defer tc.rng.mu.Unlock()
+		tc.rng.mu.Wrapped().Lock()
+		defer tc.rng.mu.Wrapped().Unlock()
 		// Make a new command, but pretend it didn't increment the assignment
 		// counter. This leaks some implementation, but not too much.
 		preAssigned := tc.rng.mu.lastAssignedLeaseIndex
@@ -6055,8 +6054,8 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 	var chs []chan roachpb.ResponseWithError
 
 	func() {
-		rng.mu.Lock()
-		defer rng.mu.Unlock()
+		rng.mu.Wrapped().Lock()
+		defer rng.mu.Wrapped().Unlock()
 		for i := 0; i < num; i++ {
 			var ba roachpb.BatchRequest
 			ba.Timestamp = tc.clock.Now()
@@ -6107,14 +6106,14 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	type magicKey struct{}
 
 	var seenCmds []int
-	tc.rng.mu.Lock()
+	tc.rng.mu.Wrapped().Lock()
 	tc.rng.mu.proposeRaftCommandFn = func(cmd *pendingCmd) error {
 		if v := cmd.ctx.Value(magicKey{}); v != nil {
 			seenCmds = append(seenCmds, int(cmd.raftCmd.MaxLeaseIndex))
 		}
 		return defaultProposeRaftCommandLocked(tc.rng, cmd)
 	}
-	tc.rng.mu.Unlock()
+	tc.rng.mu.Wrapped().Unlock()
 
 	if pErr := tc.rng.redirectOnOrAcquireLease(context.Background()); pErr != nil {
 		t.Fatal(pErr)
@@ -6122,8 +6121,8 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 
 	expIndexes := make([]int, 0, num)
 	chs := func() []chan roachpb.ResponseWithError {
-		tc.rng.mu.Lock()
-		defer tc.rng.mu.Unlock()
+		tc.rng.mu.Wrapped().Lock()
+		defer tc.rng.mu.Wrapped().Unlock()
 		chs := make([]chan roachpb.ResponseWithError, 0, num)
 
 		origIndexes := make([]int, 0, num)
@@ -6167,8 +6166,8 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	}
 
 	util.SucceedsSoon(t, func() error {
-		tc.rng.mu.Lock()
-		defer tc.rng.mu.Unlock()
+		tc.rng.mu.Wrapped().Lock()
+		defer tc.rng.mu.Wrapped().Unlock()
 		nonePending := len(tc.rng.mu.pendingCmds) == 0
 		c := int(tc.rng.mu.lastAssignedLeaseIndex) - int(tc.rng.mu.state.LeaseAppliedIndex)
 		if nonePending && c > 0 {
@@ -6191,7 +6190,11 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	// test is ticking the replica manually and doesn't want the store to be
 	// doing so concurrently.
 	r := tc.rng
-	defer r.raftUnlock(r.raftLock())
+	uninitLocked, err := r.raftLock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.raftUnlock(uninitLocked)
 
 	repDesc, err := r.GetReplicaDescriptor()
 	if err != nil {
@@ -6205,9 +6208,9 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		// starting with a value of 0 (modulo electionTicks). Move the replica into
 		// that state in case the replica was ticked before we grabbed
 		// processRaftMu.
-		r.mu.Lock()
+		r.mu.Wrapped().Lock()
 		ticks := r.mu.ticks
-		r.mu.Unlock()
+		r.mu.Wrapped().Unlock()
 		for ; (ticks % electionTicks) != 0; ticks++ {
 			if _, err := r.tickRaftMuLocked(); err != nil {
 				t.Fatal(err)
@@ -6220,7 +6223,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	// or refurbished.
 	for i := 0; i < 2*electionTicks; i++ {
 		// Add another pending command on each iteration.
-		r.mu.Lock()
+		r.mu.Wrapped().Lock()
 		id := fmt.Sprintf("%08d", i)
 		var ba roachpb.BatchRequest
 		ba.Timestamp = tc.clock.Now()
@@ -6236,7 +6239,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		for id, p := range r.mu.pendingCmds {
 			m[id] = p.proposedAtTicks
 		}
-		r.mu.Unlock()
+		r.mu.Wrapped().Unlock()
 
 		// Tick raft.
 		if _, err := r.tickRaftMuLocked(); err != nil {
@@ -6244,7 +6247,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		}
 
 		// Gather up the reproprosed commands.
-		r.mu.Lock()
+		r.mu.Wrapped().Lock()
 		var reproposed []*pendingCmd
 		for id, p := range r.mu.pendingCmds {
 			if m[id] != p.proposedAtTicks {
@@ -6252,7 +6255,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 			}
 		}
 		ticks := r.mu.ticks
-		r.mu.Unlock()
+		r.mu.Wrapped().Unlock()
 
 		// Reproposals are only performed every electionTicks. We'll need to fix
 		// this test if that changes.
@@ -6287,10 +6290,10 @@ func TestReplicaDoubleRefurbish(t *testing.T) {
 
 	// Make a Raft command; we'll set things up so that it will be considered
 	// for refurbishment multiple times.
-	tc.rng.mu.Lock()
+	tc.rng.mu.Wrapped().Lock()
 	cmd := tc.rng.prepareRaftCommandLocked(context.Background(), makeIDKey(), repDesc, ba)
 	ch := cmd.done // must not use cmd outside of mutex
-	tc.rng.mu.Unlock()
+	tc.rng.mu.Wrapped().Unlock()
 
 	{
 		// Send some random request to advance the lease applied counter to
@@ -6306,8 +6309,8 @@ func TestReplicaDoubleRefurbish(t *testing.T) {
 
 	const num = 10
 	func() {
-		tc.rng.mu.Lock()
-		defer tc.rng.mu.Unlock()
+		tc.rng.mu.Wrapped().Lock()
+		defer tc.rng.mu.Wrapped().Unlock()
 		// Insert the command and propose it ten times. Before the commit
 		// which introduced this test, the first application would repropose,
 		// and the second would decide to not repropose, but accidentally send

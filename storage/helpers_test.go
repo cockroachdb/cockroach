@@ -149,8 +149,8 @@ func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 // GetLastIndex is the same function as LastIndex but it does not require
 // that the replica lock is held.
 func (r *Replica) GetLastIndex() (uint64, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.Wrapped().Lock()
+	defer r.mu.Wrapped().Unlock()
 	return r.LastIndex()
 }
 
@@ -161,7 +161,7 @@ func (r *Replica) GetLease() (*roachpb.Lease, *roachpb.Lease) {
 
 // GetTimestampCacheLowWater returns the timestamp cache low water mark.
 func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.Wrapped().Lock()
+	defer r.mu.Wrapped().Unlock()
 	return r.mu.tsCache.lowWater
 }

@@ -264,8 +264,8 @@ func (r *Replica) FirstIndex() (uint64, error) {
 // GetFirstIndex is the same function as FirstIndex but it does not require
 // that the replica lock is held.
 func (r *Replica) GetFirstIndex() (uint64, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.Wrapped().Lock()
+	defer r.mu.Wrapped().Unlock()
 	return r.FirstIndex()
 }
 
@@ -376,7 +376,9 @@ func (r *Replica) GetSnapshot(ctx context.Context) (raftpb.Snapshot, error) {
 	}
 	for retry := retry.Start(retryOptions); retry.Next(); {
 		log.Tracef(ctx, "snapshot retry loop pass %d", retry.CurrentAttempt())
-		r.mu.Lock()
+		if err := r.mu.Lock(); err != nil {
+			return raftpb.Snapshot{}, err
+		}
 		snap, err := r.SnapshotWithContext(ctx)
 		snapshotChan := r.mu.snapshotChan
 		r.mu.Unlock()
@@ -611,7 +613,9 @@ func (r *Replica) applySnapshot(
 	// whether the application succeeded.
 	defer r.store.bookie.Fill(desc.RangeID)
 
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return err
+	}
 	replicaID := r.mu.replicaID
 	raftLogSize := r.mu.raftLogSize
 	r.mu.Unlock()
@@ -720,7 +724,9 @@ func (r *Replica) applySnapshot(
 		return err
 	}
 
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return err
+	}
 	// We set the persisted last index to the last applied index. This is
 	// not a correctness issue, but means that we may have just transferred
 	// some entries we're about to re-request from the leader and overwrite.

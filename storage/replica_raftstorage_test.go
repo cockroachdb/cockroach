@@ -47,9 +47,9 @@ func fillTestRange(t testing.TB, rep *Replica, size int64) {
 			t.Fatal(pErr)
 		}
 	}
-	rep.mu.Lock()
+	rep.mu.Wrapped().Lock()
 	after := rep.mu.state.Stats.Total()
-	rep.mu.Unlock()
+	rep.mu.Wrapped().Unlock()
 	if after < size {
 		t.Fatalf("range not full after filling: wrote %d, but range at %d", size, after)
 	}
@@ -86,7 +86,7 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 	fillTestRange(t, rep, snapSize*2)
 
 	if _, err := rep.Snapshot(); err != raft.ErrSnapshotTemporarilyUnavailable {
-		rep.mu.Lock()
+		rep.mu.Wrapped().Lock()
 		after := rep.mu.state.Stats.Total()
 		rep.mu.Unlock()
 		t.Fatalf(
