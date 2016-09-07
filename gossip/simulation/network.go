@@ -71,7 +71,7 @@ func NewNetwork(stopper *stop.Stopper, nodeCount int, createResolvers bool) *Net
 		Nodes:   []*Node{},
 		Stopper: stopper,
 	}
-	n.rpcContext = rpc.NewContext(&base.Context{Insecure: true}, nil, n.Stopper)
+	n.rpcContext = rpc.NewContext(context.TODO(), &base.Context{Insecure: true}, nil, n.Stopper)
 	var err error
 	n.tlsConfig, err = n.rpcContext.GetServerTLSConfig()
 	if err != nil {
