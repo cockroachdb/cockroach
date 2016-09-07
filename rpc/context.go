@@ -57,7 +57,11 @@ const (
 // service.
 func NewServer(ctx *Context) *grpc.Server {
 	opts := []grpc.ServerOption{
-		grpc.MaxMsgSize(math.MaxInt32), // TODO(peter,tamird): need tests before lowering
+		// The limiting factor for lowering the max message size is the fact
+		// that a single large kv can be sent over the network in one message.
+		// Our maximum kv size is unlimited, so we need this to be very large.
+		// TODO(peter,tamird): need tests before lowering
+		grpc.MaxMsgSize(math.MaxInt32),
 	}
 	if !ctx.Insecure {
 		tlsConfig, err := ctx.GetServerTLSConfig()
