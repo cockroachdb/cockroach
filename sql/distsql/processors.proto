@@ -41,7 +41,7 @@ message TableReaderSpan {
   optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
 }
 
-// TableReaderSpec is the specification for a table reader. A table reader
+// TableReaderSpec is the specification for a "table reader". A table reader
 // performs KV operations to retrieve rows for a table and outputs the desired
 // columns of the rows that pass a filter expression.
 message TableReaderSpec {
@@ -93,13 +93,23 @@ message JoinReaderSpec {
   // through values that aren't used for the lookup.
 }
 
+// SorterSpec is the specification for a "sorting aggregator". A sorting aggregator
+// sorts elements in the input stream providing a certain output order
+// guarantee regardless of the input ordering, it is done so according to a
+// configurable set of columns.
+message SorterSpec {
+  optional Ordering ordering = 1 [(gogoproto.nullable) = false];
+}
+
 message ProcessorCoreUnion {
   option (gogoproto.onlyone) = true;
 
   optional NoopCoreSpec noop = 1;
   optional TableReaderSpec tableReader = 2;
   optional JoinReaderSpec joinReader = 3;
+  optional SorterSpec sorter = 4;
   // TODO(radu): other "processor core" types will go here.
+  // TODO(irfansharif): add aggregation, join, etc. from #7587
 }
 
 message ProcessorSpec {
