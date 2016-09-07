@@ -94,9 +94,6 @@ var (
 		Name: "raft.ticks",
 		Help: "Total number of Raft ticks processed",
 	}
-	metaRaftSelectDurationNanos = metric.Metadata{Name: "raft.process.waitingnanos",
-		Help: "Nanoseconds spent in store.processRaft() waiting",
-	}
 	metaRaftWorkingDurationNanos = metric.Metadata{Name: "raft.process.workingnanos",
 		Help: "Nanoseconds spent in store.processRaft() working",
 	}
@@ -222,7 +219,6 @@ type StoreMetrics struct {
 
 	// Raft processing metrics.
 	RaftTicks                *metric.Counter
-	RaftSelectDurationNanos  *metric.Counter
 	RaftWorkingDurationNanos *metric.Counter
 	RaftTickingDurationNanos *metric.Counter
 
@@ -321,7 +317,6 @@ func newStoreMetrics() *StoreMetrics {
 
 		// Raft processing metrics.
 		RaftTicks:                metric.NewCounter(metaRaftTicks),
-		RaftSelectDurationNanos:  metric.NewCounter(metaRaftSelectDurationNanos),
 		RaftWorkingDurationNanos: metric.NewCounter(metaRaftWorkingDurationNanos),
 		RaftTickingDurationNanos: metric.NewCounter(metaRaftTickingDurationNanos),
 

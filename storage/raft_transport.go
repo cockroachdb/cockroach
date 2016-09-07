@@ -61,10 +61,12 @@ const (
 // RaftMessageHandler is the interface that must be implemented by
 // arguments to RaftTransport.Listen.
 type RaftMessageHandler interface {
-	// HandleRaftRequest is called for each incoming message. If it
-	// returns an error it will be streamed back to the sender of the
-	// message as a RaftMessageResponse.
-	HandleRaftRequest(context.Context, *RaftMessageRequest) *roachpb.Error
+	// HandleRaftRequest is called for each incoming message. If it returns an
+	// error it will be streamed back to the sender of the message as a
+	// RaftMessageResponse. The third parameter is a stream to return an error
+	// on. If nil, the request should be processed synchronously.
+	HandleRaftRequest(context.Context, *RaftMessageRequest,
+		MultiRaft_RaftMessageServer) *roachpb.Error
 
 	// HandleRaftResponse is called for each raft response. Note that
 	// not all messages receive a response.
@@ -126,10 +128,14 @@ type RaftTransport struct {
 
 	mu struct {
 		syncutil.Mutex
-		handlers map[roachpb.StoreID]RaftMessageHandler
 		queues   map[bool]map[roachpb.NodeID]chan *RaftMessageRequest
 		stats    map[roachpb.NodeID]*raftTransportStats
 		breakers map[roachpb.NodeID]*circuit.Breaker
+	}
+
+	recvMu struct {
+		syncutil.Mutex
+		handlers map[roachpb.StoreID]RaftMessageHandler
 	}
 }
 
@@ -147,10 +153,11 @@ func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpc
 		rpcContext:         rpcContext,
 		SnapshotStatusChan: make(chan RaftSnapshotStatus),
 	}
-	t.mu.handlers = make(map[roachpb.StoreID]RaftMessageHandler)
 	t.mu.queues = make(map[bool]map[roachpb.NodeID]chan *RaftMessageRequest)
 	t.mu.stats = make(map[roachpb.NodeID]*raftTransportStats)
 	t.mu.breakers = make(map[roachpb.NodeID]*circuit.Breaker)
+
+	t.recvMu.handlers = make(map[roachpb.StoreID]RaftMessageHandler)
 
 	if grpcServer != nil {
 		RegisterMultiRaftServer(grpcServer, t)
@@ -222,18 +229,20 @@ func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpc
 
 // handleRaftRequest proxies a request to the listening server interface.
 func (t *RaftTransport) handleRaftRequest(
-	ctx context.Context, req *RaftMessageRequest,
+	ctx context.Context,
+	req *RaftMessageRequest,
+	stream MultiRaft_RaftMessageServer,
 ) *roachpb.Error {
-	t.mu.Lock()
-	handler, ok := t.mu.handlers[req.ToReplica.StoreID]
-	t.mu.Unlock()
+	t.recvMu.Lock()
+	handler, ok := t.recvMu.handlers[req.ToReplica.StoreID]
+	t.recvMu.Unlock()
 
 	if !ok {
 		return roachpb.NewErrorf("unable to accept Raft message from %+v: no handler registered for %+v",
 			req.FromReplica, req.ToReplica)
 	}
 
-	return handler.HandleRaftRequest(ctx, req)
+	return handler.HandleRaftRequest(ctx, req, stream)
 }
 
 // newRaftMessageResponse constructs a RaftMessageResponse from the
@@ -282,7 +291,7 @@ func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err err
 					}
 					atomic.AddInt64(&stats.serverRecv, 1)
 
-					if pErr := t.handleRaftRequest(stream.Context(), req); pErr != nil {
+					if pErr := t.handleRaftRequest(stream.Context(), req, stream); pErr != nil {
 						atomic.AddInt64(&stats.serverSent, 1)
 						if err := stream.Send(newRaftMessageResponse(req, pErr)); err != nil {
 							return err
@@ -310,7 +319,7 @@ func (t *RaftTransport) RaftMessageSync(ctx context.Context, req *RaftMessageReq
 	if err := t.rpcContext.Stopper.RunTask(func() {
 		stats := t.getStats(req.FromReplica.NodeID)
 		atomic.AddInt64(&stats.serverRecv, 1)
-		pErr = t.handleRaftRequest(ctx, req)
+		pErr = t.handleRaftRequest(ctx, req, nil)
 		atomic.AddInt64(&stats.serverSent, 1)
 	}); err != nil {
 		return nil, err
@@ -320,16 +329,16 @@ func (t *RaftTransport) RaftMessageSync(ctx context.Context, req *RaftMessageReq
 
 // Listen registers a raftMessageHandler to receive proxied messages.
 func (t *RaftTransport) Listen(storeID roachpb.StoreID, handler RaftMessageHandler) {
-	t.mu.Lock()
-	t.mu.handlers[storeID] = handler
-	t.mu.Unlock()
+	t.recvMu.Lock()
+	t.recvMu.handlers[storeID] = handler
+	t.recvMu.Unlock()
 }
 
 // Stop unregisters a raftMessageHandler.
 func (t *RaftTransport) Stop(storeID roachpb.StoreID) {
-	t.mu.Lock()
-	delete(t.mu.handlers, storeID)
-	t.mu.Unlock()
+	t.recvMu.Lock()
+	delete(t.recvMu.handlers, storeID)
+	t.recvMu.Unlock()
 }
 
 // GetCircuitBreaker returns the circuit breaker controlling
@@ -409,9 +418,9 @@ func (t *RaftTransport) processQueue(
 						return err
 					}
 					atomic.AddInt64(&stats.clientRecv, 1)
-					t.mu.Lock()
-					handler, ok := t.mu.handlers[resp.ToReplica.StoreID]
-					t.mu.Unlock()
+					t.recvMu.Lock()
+					handler, ok := t.recvMu.handlers[resp.ToReplica.StoreID]
+					t.recvMu.Unlock()
 					if !ok {
 						log.Warningf(context.TODO(), "no handler found for store %s in response %s",
 							resp.ToReplica.StoreID, resp)
