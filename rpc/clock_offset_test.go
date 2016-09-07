@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -34,7 +36,8 @@ const errOffsetGreaterThanMaxOffset = "fewer than half the known nodes are withi
 // not update the offset for an addr.
 func TestUpdateOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	monitor := newRemoteClockMonitor(hlc.NewClock(hlc.NewManualClock(123).UnixNano), time.Hour)
+	monitor := newRemoteClockMonitor(
+		context.TODO(), hlc.NewClock(hlc.NewManualClock(123).UnixNano), time.Hour)
 
 	const key = "addr"
 
@@ -99,7 +102,7 @@ func TestVerifyClockOffset(t *testing.T) {
 
 	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano)
 	clock.SetMaxOffset(50 * time.Nanosecond)
-	monitor := newRemoteClockMonitor(clock, time.Hour)
+	monitor := newRemoteClockMonitor(context.TODO(), clock, time.Hour)
 
 	for idx, tc := range []struct {
 		offsets       []RemoteOffset
@@ -146,7 +149,7 @@ func TestIsHealthyOffsetInterval(t *testing.T) {
 		{RemoteOffset{Offset: 15, Uncertainty: 4}, false},
 		{RemoteOffset{Offset: math.MaxInt64, Uncertainty: 0}, false},
 	} {
-		if isHealthy := tc.offset.isHealthy(maxOffset); tc.expectedHealthy {
+		if isHealthy := tc.offset.isHealthy(context.TODO(), maxOffset); tc.expectedHealthy {
 			if !isHealthy {
 				t.Errorf("%d: expected remote offset %s for maximum offset %s to be healthy", i, tc.offset, maxOffset)
 			}
@@ -172,7 +175,7 @@ func TestClockOffsetMetrics(t *testing.T) {
 	}
 	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano)
 	clock.SetMaxOffset(20 * time.Nanosecond)
-	monitor := newRemoteClockMonitor(clock, time.Hour)
+	monitor := newRemoteClockMonitor(context.TODO(), clock, time.Hour)
 	monitor.mu.offsets = map[string]RemoteOffset{
 		"0": offset,
 	}
