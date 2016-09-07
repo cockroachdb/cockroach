@@ -201,7 +201,7 @@ func TestStopServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rpcContext := rpc.NewContext(
+	rpcContext := rpc.NewContext(context.TODO(),
 		tc.Server(1).RPCContext().Context, tc.Server(1).Clock(), tc.Stopper(),
 	)
 	conn, err := rpcContext.GRPCDial(server1.ServingAddr())
