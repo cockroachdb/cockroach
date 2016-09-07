@@ -316,7 +316,7 @@ func assertTS(
 	} else {
 		if txnID == nil {
 			t.Errorf("expected %s to have txn id %s, but found nil", keys, expectedTxnID.Short())
-		} else if !uuid.Equal(*txnID, *expectedTxnID) {
+		} else if *txnID != *expectedTxnID {
 			t.Errorf("expected %s to have txn id %s, but found %s",
 				keys, expectedTxnID.Short(), txnID.Short())
 		}
@@ -329,7 +329,7 @@ func assertTS(
 // not. This is because timestampCache.GetMaxRead must not return a
 // transaction ID when two different transactions have the same timestamp.
 func nilIfSimul(txns []txnState, txnID *uuid.UUID) *uuid.UUID {
-	if txns[0].ts.Equal(txns[1].ts) && !uuid.Equal(*txns[0].id, *txns[1].id) {
+	if txns[0].ts.Equal(txns[1].ts) && *txns[0].id != *txns[1].id {
 		return nil
 	}
 	return txnID
@@ -610,12 +610,12 @@ func TestTimestampCacheEqualTimestamps(t *testing.T) {
 	// When querying either side separately, the transaction ID is returned.
 	if ts, txn, _ := tc.GetMaxRead(roachpb.Key("a"), roachpb.Key("b")); !ts.Equal(ts1) {
 		t.Errorf("expected 'a'-'b' to have timestamp %s, but found %s", ts1, ts)
-	} else if !uuid.Equal(*txn, *txn1) {
+	} else if *txn != *txn1 {
 		t.Errorf("expected 'a'-'b' to have txn id %s, but found %s", txn1, txn)
 	}
 	if ts, txn, _ := tc.GetMaxRead(roachpb.Key("b"), roachpb.Key("c")); !ts.Equal(ts1) {
 		t.Errorf("expected 'b'-'c' to have timestamp %s, but found %s", ts1, ts)
-	} else if !uuid.Equal(*txn, *txn2) {
+	} else if *txn != *txn2 {
 		t.Errorf("expected 'b'-'c' to have txn id %s, but found %s", txn2, txn)
 	}
 
