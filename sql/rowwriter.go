@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -188,22 +187,14 @@ func makeRowInserter(
 
 // insertCPutFn is used by insertRow when conflicts should be respected.
 // logValue is used for pretty printing.
-func insertCPutFn(ctx context.Context, b *client.Batch, key *roachpb.Key, value *roachpb.Value) {
-	// TODO(dan): We want do this V(2) log everywhere in sql. Consider making a
-	// client.Batch wrapper instead of inlining it everywhere.
-	if log.V(2) {
-		log.InfofDepth(ctx, 1, "CPut %s -> %s", *key, value.PrettyPrint())
-	}
-	b.CPut(key, value, nil)
+func insertCPutFn(b *client.Batch, key *roachpb.Key, value *roachpb.Value) {
+	b.CPutDepth(key, value, nil, 2)
 }
 
 // insertPutFn is used by insertRow when conflicts should be ignored.
 // logValue is used for pretty printing.
-func insertPutFn(ctx context.Context, b *client.Batch, key *roachpb.Key, value *roachpb.Value) {
-	if log.V(2) {
-		log.InfofDepth(ctx, 1, "Put %s -> %s", *key, value.PrettyPrint())
-	}
-	b.Put(key, value)
+func insertPutFn(b *client.Batch, key *roachpb.Key, value *roachpb.Value) {
+	b.PutDepth(key, value, 2)
 }
 
 // insertRow adds to the batch the kv operations necessary to insert a table row
@@ -219,7 +210,6 @@ func (ri *rowInserter) insertRow(
 	if ignoreConflicts {
 		putFn = insertPutFn
 	}
-
 	// Encode the values to the expected column type. This needs to
 	// happen before index encoding because certain datum types (i.e. tuple)
 	// cannot be used as index values.
@@ -267,7 +257,7 @@ func (ri *rowInserter) insertRow(
 				// the row exists.
 
 				ri.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
-				putFn(ctx, b, &ri.key, &ri.marshalled[idx])
+				putFn(b, &ri.key, &ri.marshalled[idx])
 				ri.key = nil
 			}
 
@@ -316,7 +306,7 @@ func (ri *rowInserter) insertRow(
 
 		if family.ID == 0 || len(ri.valueBuf) > 0 {
 			ri.value.SetTuple(ri.valueBuf)
-			putFn(ctx, b, &ri.key, &ri.value)
+			putFn(b, &ri.key, &ri.value)
 		}
 
 		ri.key = nil
@@ -324,7 +314,7 @@ func (ri *rowInserter) insertRow(
 
 	for i := range secondaryIndexEntries {
 		e := &secondaryIndexEntries[i]
-		putFn(ctx, b, &e.Key, &e.Value)
+		putFn(b, &e.Key, &e.Value)
 	}
 
 	return nil
@@ -630,9 +620,6 @@ func (ru *rowUpdater) updateRow(
 			}
 
 			ru.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
-			if log.V(2) {
-				log.Infof(ctx, "Put %s -> %v", ru.key, ru.marshalled[idx].PrettyPrint())
-			}
 			b.Put(&ru.key, &ru.marshalled[idx])
 			ru.key = nil
 
@@ -681,16 +668,9 @@ func (ru *rowUpdater) updateRow(
 		if family.ID != 0 && len(ru.valueBuf) == 0 {
 			// The family might have already existed but every column in it is being
 			// set to NULL, so delete it.
-			if log.V(2) {
-				log.Infof(ctx, "Del %s", ru.key)
-			}
-
 			b.Del(&ru.key)
 		} else {
 			ru.value.SetTuple(ru.valueBuf)
-			if log.V(2) {
-				log.Infof(ctx, "Put %s -> %v", ru.key, ru.value.PrettyPrint())
-			}
 			b.Put(&ru.key, &ru.value)
 		}
 
@@ -706,15 +686,9 @@ func (ru *rowUpdater) updateRow(
 				return nil, err
 			}
 
-			if log.V(2) {
-				log.Infof(ctx, "Del %s", secondaryIndexEntry.Key)
-			}
 			b.Del(secondaryIndexEntry.Key)
 			// Do not update Indexes in the DELETE_ONLY state.
 			if _, ok := ru.deleteOnlyIndex[i]; !ok {
-				if log.V(2) {
-					log.Infof(ctx, "CPut %s -> %v", newSecondaryIndexEntry.Key, newSecondaryIndexEntry.Value.PrettyPrint())
-				}
 				b.CPut(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, nil)
 			}
 		}
@@ -820,18 +794,12 @@ func (rd *rowDeleter) deleteRow(ctx context.Context, b *client.Batch, values []p
 	}
 
 	for _, secondaryIndexEntry := range secondaryIndexEntries {
-		if log.V(2) {
-			log.Infof(ctx, "Del %s", secondaryIndexEntry.Key)
-		}
 		b.Del(secondaryIndexEntry.Key)
 	}
 
 	// Delete the row.
 	rd.startKey = roachpb.Key(primaryIndexKey)
 	rd.endKey = roachpb.Key(encoding.EncodeNotNullDescending(primaryIndexKey))
-	if log.V(2) {
-		log.Infof(ctx, "DelRange %s - %s", rd.startKey, rd.endKey)
-	}
 	b.DelRange(&rd.startKey, &rd.endKey, false)
 	rd.startKey, rd.endKey = nil, nil
 
@@ -850,9 +818,6 @@ func (rd *rowDeleter) deleteIndexRow(
 		rd.helper.tableDesc, idx, rd.fetchColIDtoRowIndex, values)
 	if err != nil {
 		return err
-	}
-	if log.V(2) {
-		log.Infof(ctx, "Del %s", secondaryIndexEntry.Key)
 	}
 	b.Del(secondaryIndexEntry.Key)
 	return nil
