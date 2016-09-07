@@ -2341,7 +2341,11 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 		},
 	}
 	const expected = "preemptive snapshot from term 0 received"
-	if err := s.HandleRaftRequest(ctx, req, nil); !testutils.IsError(
+	if err := s.processRaftRequest(ctx, req,
+		IncomingSnapshot{
+			SnapUUID:        uuid.MakeV4(),
+			RangeDescriptor: *rng1.Desc(),
+		}); !testutils.IsError(
 		errors.Errorf("%s", err), expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
 	}
@@ -2418,7 +2422,11 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 			},
 		},
 	}
-	if err := s.HandleRaftRequest(ctx, req, nil); err != nil {
+	if err := s.processRaftRequest(ctx, req,
+		IncomingSnapshot{
+			SnapUUID:        uuid.MakeV4(),
+			RangeDescriptor: *rng1.Desc(),
+		}); err != nil {
 		t.Fatal(err)
 	}
 
