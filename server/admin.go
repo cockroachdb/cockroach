@@ -386,7 +386,7 @@ func (s *adminServer) TableDetails(
 	}
 
 	// Range and ZoneConfig information is not applicable to virtual schemas.
-	if !sql.IsVirtualDatabase(escDBName) {
+	if !sql.IsVirtualDatabase(req.Database) {
 		// Get the number of ranges in the table. We get the key span for the table
 		// data. Then, we count the number of ranges that make up that key span.
 		{
@@ -394,7 +394,9 @@ func (s *adminServer) TableDetails(
 			var tableSpan roachpb.Span
 			if err := s.server.db.Txn(ctx, func(txn *client.Txn) error {
 				var err error
-				tableSpan, err = iexecutor.GetTableSpan(s.getUser(req), txn, escDBName, escTableName)
+				tableSpan, err = iexecutor.GetTableSpan(
+					s.getUser(req), txn, req.Database, req.Table,
+				)
 				return err
 			}); err != nil {
 				return nil, s.serverError(err)
@@ -418,7 +420,7 @@ func (s *adminServer) TableDetails(
 
 		// Query the zone configuration for this table.
 		{
-			path, err := s.queryDescriptorIDPath(session, []string{escDBName, escTableName})
+			path, err := s.queryDescriptorIDPath(session, []string{req.Database, req.Table})
 			if err != nil {
 				return nil, s.serverError(err)
 			}
