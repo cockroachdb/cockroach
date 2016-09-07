@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"fmt"
 	"reflect"
+	"sort"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1265,23 +1266,20 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	})
 
 	// Define our rpcSend stub which checks the span of the batch
-	// requests. The first request should be the point request on
-	// "a". The second request should be on "b".
-	first := true
+	// requests. Because of parallelization, there's no guarantee
+	// on the ordering of requests.
+	var haveA, haveB bool
 	sendStub := func(_ SendOptions, _ ReplicaSlice, ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		rs, err := keys.Range(ba)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if first {
-			if !(rs.Key.Equal(roachpb.RKey("a")) && rs.EndKey.Equal(roachpb.RKey("a").Next())) {
-				t.Errorf("Unexpected span [%s,%s)", rs.Key, rs.EndKey)
-			}
-			first = false
+		if rs.Key.Equal(roachpb.RKey("a")) && rs.EndKey.Equal(roachpb.RKey("a").Next()) {
+			haveA = true
+		} else if rs.Key.Equal(roachpb.RKey("b")) && rs.EndKey.Equal(roachpb.RKey("b").Next()) {
+			haveB = true
 		} else {
-			if !(rs.Key.Equal(roachpb.RKey("b")) && rs.EndKey.Equal(roachpb.RKey("b").Next())) {
-				t.Errorf("Unexpected span [%s,%s)", rs.Key, rs.EndKey)
-			}
+			t.Fatalf("Unexpected span %s", rs)
 		}
 
 		batchReply := &roachpb.BatchResponse{}
@@ -1313,6 +1311,10 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 
 	if _, pErr := ds.Send(context.Background(), ba); pErr != nil {
 		t.Fatal(pErr)
+	}
+
+	if !haveA || !haveB {
+		t.Errorf("expected two requests for \"a\" and \"b\": %t, %t", haveA, haveB)
 	}
 }
 
@@ -1385,30 +1387,18 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 
 	// Define our rpcSend stub which checks the span of the batch
 	// requests.
-	requests := 0
+	haveRequest := []bool{false, false, false}
 	sendStub := func(_ SendOptions, _ ReplicaSlice, ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		h := ba.Requests[0].GetInner().Header()
-		switch requests {
-		case 0:
-			wantStart := keys.RangeDescriptorKey(roachpb.RKey("a"))
-			wantEnd := keys.MakeRangeKeyPrefix(roachpb.RKey("b"))
-			if !(h.Key.Equal(wantStart) && h.EndKey.Equal(wantEnd)) {
-				t.Errorf("Unexpected span [%s,%s), want [%s,%s)", h.Key, h.EndKey, wantStart, wantEnd)
-			}
-		case 1:
-			wantStart := keys.MakeRangeKeyPrefix(roachpb.RKey("b"))
-			wantEnd := keys.MakeRangeKeyPrefix(roachpb.RKey("c"))
-			if !(h.Key.Equal(wantStart) && h.EndKey.Equal(wantEnd)) {
-				t.Errorf("Unexpected span [%s,%s), want [%s,%s)", h.Key, h.EndKey, wantStart, wantEnd)
-			}
-		case 2:
-			wantStart := keys.MakeRangeKeyPrefix(roachpb.RKey("c"))
-			wantEnd := keys.RangeDescriptorKey(roachpb.RKey("c"))
-			if !(h.Key.Equal(wantStart) && h.EndKey.Equal(wantEnd)) {
-				t.Errorf("Unexpected span [%s,%s), want [%s,%s)", h.Key, h.EndKey, wantStart, wantEnd)
-			}
+		if h.Key.Equal(keys.RangeDescriptorKey(roachpb.RKey("a"))) && h.EndKey.Equal(keys.MakeRangeKeyPrefix(roachpb.RKey("b"))) {
+			haveRequest[0] = true
+		} else if h.Key.Equal(keys.MakeRangeKeyPrefix(roachpb.RKey("b"))) && h.EndKey.Equal(keys.MakeRangeKeyPrefix(roachpb.RKey("c"))) {
+			haveRequest[1] = true
+		} else if h.Key.Equal(keys.MakeRangeKeyPrefix(roachpb.RKey("c"))) && h.EndKey.Equal(keys.RangeDescriptorKey(roachpb.RKey("c"))) {
+			haveRequest[2] = true
+		} else {
+			t.Fatalf("Unexpected span [%s,%s)", h.Key, h.EndKey)
 		}
-		requests++
 
 		batchReply := &roachpb.BatchResponse{}
 		reply := &roachpb.ScanResponse{}
@@ -1437,8 +1427,10 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 	if _, pErr := ds.Send(context.Background(), ba); pErr != nil {
 		t.Fatal(pErr)
 	}
-	if want := 3; requests != want {
-		t.Errorf("expected request to be split into %d parts, found %d", want, requests)
+	for i, found := range haveRequest {
+		if !found {
+			t.Errorf("request %d not received", i)
+		}
 	}
 }
 
@@ -1556,31 +1548,22 @@ func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
 	})
 
 	// Define our rpcSend stub which checks the span of the batch
-	// requests. The first request should be the point request on
-	// "a". The second request should be on "b". The sequence of the
-	// second request will be incremented by one from that of the
-	// first request.
-	first := true
-	var firstSequence int32
-	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
-		ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
+	// requests. Because of parallelization, the requests for the
+	// two batches won't necessarily arrive in a stable order. The
+	// request to "a" should have a sequence number that immediately
+	// precedes the request to "b".
+	var aSequence, bSequence int32
+	var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice, ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 		rs, err := keys.Range(ba)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if first {
-			if !(rs.Key.Equal(roachpb.RKey("a")) && rs.EndKey.Equal(roachpb.RKey("a").Next())) {
-				t.Errorf("unexpected span [%s,%s)", rs.Key, rs.EndKey)
-			}
-			first = false
-			firstSequence = ba.Txn.Sequence
+		if rs.Key.Equal(roachpb.RKey("a")) && rs.EndKey.Equal(roachpb.RKey("a").Next()) {
+			aSequence = ba.Txn.Sequence
+		} else if rs.Key.Equal(roachpb.RKey("b")) && rs.EndKey.Equal(roachpb.RKey("b").Next()) {
+			bSequence = ba.Txn.Sequence
 		} else {
-			if !(rs.Key.Equal(roachpb.RKey("b")) && rs.EndKey.Equal(roachpb.RKey("b").Next())) {
-				t.Errorf("unexpected span [%s,%s)", rs.Key, rs.EndKey)
-			}
-			if ba.Txn.Sequence != firstSequence+1 {
-				t.Errorf("unexpected sequence; expected %d, but got %d", firstSequence+1, ba.Txn.Sequence)
-			}
+			t.Fatalf("unexpected request for span %s", rs)
 		}
 		return ba.CreateReply(), nil
 	}
@@ -1601,6 +1584,21 @@ func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
 	if _, pErr := ds.Send(context.Background(), ba); pErr != nil {
 		t.Fatal(pErr)
 	}
+	if bSequence != aSequence+1 {
+		t.Errorf("unexpected sequence; expected %d, but got %d", aSequence+1, bSequence)
+	}
+}
+
+type batchMethods struct {
+	sequence int32
+	methods  []roachpb.Method
+}
+type batchMethodsSlice []batchMethods
+
+func (s batchMethodsSlice) Len() int      { return len(s) }
+func (s batchMethodsSlice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s batchMethodsSlice) Less(i, j int) bool {
+	return s[i].sequence < s[j].sequence && s[i].methods[0] != roachpb.EndTransaction
 }
 
 // TestMultiRangeSplitEndTransaction verifies that when a chunk of batch looks
@@ -1687,15 +1685,14 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 		return []roachpb.RangeDescriptor{desc}, nil, nil
 	})
 
-	for _, test := range testCases {
-		var act [][]roachpb.Method
-		var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice,
-			ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
+	for i, test := range testCases {
+		act := batchMethodsSlice{}
+		var testFn rpcSendFn = func(_ SendOptions, _ ReplicaSlice, ba roachpb.BatchRequest, _ *rpc.Context) (*roachpb.BatchResponse, error) {
 			var cur []roachpb.Method
 			for _, union := range ba.Requests {
 				cur = append(cur, union.GetInner().Method())
 			}
-			act = append(act, cur)
+			act = append(act, batchMethods{sequence: ba.Txn.Sequence, methods: cur})
 			return ba.CreateReply(), nil
 		}
 
@@ -1718,8 +1715,11 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 			t.Fatal(pErr)
 		}
 
-		if !reflect.DeepEqual(test.exp, act) {
-			t.Fatalf("expected %v, got %v", test.exp, act)
+		sort.Sort(act)
+		for j, batchMethods := range act {
+			if !reflect.DeepEqual(test.exp[j], batchMethods.methods) {
+				t.Fatalf("test %d: expected [%d] %v, got %v", i, j, test.exp[j], batchMethods.methods)
+			}
 		}
 	}
 }
