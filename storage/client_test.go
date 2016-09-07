@@ -114,7 +114,7 @@ func createTestStoreWithEngine(
 	sCtx storage.StoreContext,
 	stopper *stop.Stopper,
 ) *storage.Store {
-	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, clock, stopper)
+	rpcContext := rpc.NewContext(context.TODO(), &base.Context{Insecure: true}, clock, stopper)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 	server := rpc.NewServer(rpcContext) // never started
 	sCtx.Gossip = gossip.New(context.TODO(), rpcContext, server, nil, stopper, metric.NewRegistry())
@@ -268,7 +268,8 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		m.transportStopper = stop.NewStopper()
 	}
 	if m.rpcContext == nil {
-		m.rpcContext = rpc.NewContext(&base.Context{Insecure: true}, m.clock, m.transportStopper)
+		m.rpcContext = rpc.NewContext(
+			context.TODO(), &base.Context{Insecure: true}, m.clock, m.transportStopper)
 		// Create breaker options which retry very quickly and use a "real"
 		// clock so breakers retry without requiring the manual clock to be
 		// incremented manually to untrip the breaker.
