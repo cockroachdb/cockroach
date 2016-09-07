@@ -349,4 +349,9 @@ defined in terms of multiples of this value.`,
 		Name:        "undo",
 		Description: `Attempt to undo an earlier attempt to freeze the cluster.`,
 	}
+
+	Replicated = FlagInfo{
+		Name:        "replicated",
+		Description: "Restrict scan to replicated data.",
+	}
 )
