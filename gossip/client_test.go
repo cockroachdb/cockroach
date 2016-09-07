@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -45,10 +46,12 @@ func startGossip(nodeID roachpb.NodeID, stopper *stop.Stopper, t *testing.T, reg
 }
 
 func startGossipAtAddr(nodeID roachpb.NodeID, addr net.Addr, stopper *stop.Stopper, t *testing.T, registry *metric.Registry) *Gossip {
-	rpcContext := rpc.NewContext(context.TODO(), &base.Context{Insecure: true}, nil, stopper)
+	ctx := log.WithLogTagInt(context.TODO(), "n", int(nodeID))
+
+	rpcContext := rpc.NewContext(ctx, &base.Context{Insecure: true}, nil, stopper)
 
 	server := rpc.NewServer(rpcContext)
-	g := New(context.TODO(), rpcContext, server, nil, stopper, registry)
+	g := New(ctx, rpcContext, server, nil, stopper, registry)
 	ln, err := netutil.ListenAndServeGRPC(stopper, server, addr)
 	if err != nil {
 		t.Fatal(err)
