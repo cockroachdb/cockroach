@@ -39,6 +39,19 @@ const (
 	// stores.
 	maxFractionUsedThreshold = 0.95
 
+	// MinStdDevRatioForRebalance is the minimum ratio of the standard deviation
+	// of per-store replica counts to the mean of the per-store-replica counts.
+	// So, rebalancing is possible when:
+	//
+	// stdDev(rangeCounts) >= max(minStdDevRatioForRebalance * mean(rangeCounts),
+	//                            minStdDevForRebalance)
+	MinStdDevRatioForRebalance = 0.05
+
+	// minStdDevForRebalance is the minimum standard deviation for replica counts
+	// across stores for rebalancing to occur. This number should be empirically
+	// obtained and should work for small (e.g. 15 total replicas) and large data.
+	minStdDevForRebalance = 1.5
+
 	// priorities for various repair operations.
 	removeDeadReplicaPriority  float64 = 10000
 	addMissingReplicaPriority  float64 = 1000
@@ -366,6 +379,42 @@ func (a Allocator) improve(
 func (a Allocator) shouldRebalance(
 	store roachpb.StoreDescriptor, sl StoreList,
 ) bool {
+	// To prevent thrashing, we don't rebalance when the standard deviation of
+	// per-store range counts is within a reasonable range. For example, suppose
+	// MinStdDevRatioForRebalance is 0.05 and minStdDevForRebalance is 1.5. Let's
+	// look at the following examples:
+	//
+	// 5, 5, 5, 5 stdDev=0.0 mean=5 minStdDev=max(0.05*5, 1.5)=1.5
+	//   stdDev (0) < minStdDev(1.5) ==> return false
+	//
+	// 6, 6, 8, 0 : stdDev=3.5 mean=5 minStdDev=max(0.05*5, 1.5)=1.5
+	//   stdDev (3.5) >= minStdDev(1.5) ==> balancer makes decision
+	//
+	// 1, 1, 1, 0 : stdDev=0.5 mean=1 minStdDev=max(0.05*1, 1.5)=1.5
+	//   stdDev(0.5) < minStdDev(1.5) ==> return false
+	//
+	// 100, 106, 90, 80: stdDev=11 mean=94 minStdDev=max(0.05*94), 1.5)=4.7
+	//   stdDev (11) >= minStdDev(4.7) => balancer makes decision
+	//
+	// 101, 99, 100, 98: stdDev=1.3 mean=99.5 minStdDev=max(0.05*99.5, 1.5)=4.98
+	//   return false: can't rebalance because stdDev (1.3) < minStdDev(4.98)
+	minStdDev := MinStdDevRatioForRebalance * sl.count.mean
+	if minStdDev < minStdDevForRebalance {
+		minStdDev = minStdDevForRebalance
+	}
+	stdDev := sl.count.stddev()
+	if stdDev < minStdDev {
+		if log.V(3) {
+			log.Infof(context.TODO(), "should not rebalance: stddev (%f) < min stddev (%f)\n%s",
+				stdDev, minStdDev, sl)
+		}
+		return false
+	}
+	if log.V(3) {
+		log.Infof(context.TODO(), "should rebalance: stddev (%f) >= min stddev (%f)\n%s",
+			stdDev, minStdDev, sl)
+	}
+
 	rcb := rangeCountBalancer{a.randGen}
 	return rcb.shouldRebalance(store, sl)
 }
