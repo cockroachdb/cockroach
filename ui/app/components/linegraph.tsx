@@ -93,7 +93,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     }
   }
 
-  drawChart() {
+  drawChart = () => {
     // If the document is not visible (e.g. if the window is minimized) we don't
     // attempt to redraw the chart. Redrawing the chart uses
     // requestAnimationFrame, which isn't called when the tab is in the
