@@ -201,6 +201,12 @@ func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (processor, 
 		}
 		return newJoinReader(&f.FlowCtx, ps.Core.JoinReader, inputs[0], outputs[0])
 	}
+	if ps.Core.Sorter != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newSorter(&f.FlowCtx, ps.Core.Sorter, inputs[0], outputs[0]), nil
+	}
 	return nil, errors.Errorf("unsupported processor %s", ps)
 }
 
@@ -244,7 +250,7 @@ func (f *Flow) setupFlow(spec *FlowSpec) error {
 					streams[i] = rowChan
 				}
 				var err error
-				sync, err = makeOrderedSync(convertColumnOrdering(is.Ordering), streams)
+				sync, err = makeOrderedSync(convertToColumnOrdering(is.Ordering), streams)
 				if err != nil {
 					return err
 				}
