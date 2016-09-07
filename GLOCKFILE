@@ -27,7 +27,7 @@ github.com/Sirupsen/logrus 08a8a7c27e3d058a8989316a850daad1c10bf4ab
 github.com/StackExchange/wmi e54cbda6595d7293a7a468ccf9525f6bc8887f99
 github.com/VividCortex/ewma 8b9f1311551e712ea8a06b494238b8a2351e1c33
 github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
-github.com/backtrace-labs/go-bcd c5383e2df7004f8b2fb2f10a33167d757bb0fbfb
+github.com/backtrace-labs/go-bcd 84eadf5656a924e6d2e1851ee22dd7d21a01cc4b
 github.com/biogo/store 913427a1d5e89604e50ea1db0f28f34966d61602
 github.com/cenk/backoff cdf48bbc1eb78d1349cbda326a4a037f7ba565c6
 github.com/chzyer/logex 96a4d311aa9ba1c5f9f2abda8039671de20f6aa5
