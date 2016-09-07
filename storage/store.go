@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/bufalloc"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -103,7 +104,6 @@ func TestStoreContext() StoreContext {
 		ScanInterval:                   10 * time.Minute,
 		ConsistencyCheckInterval:       10 * time.Minute,
 		ConsistencyCheckPanicOnFailure: true,
-		BlockingSnapshotDuration:       100 * time.Millisecond,
 	}
 }
 
@@ -511,13 +511,6 @@ type StoreContext struct {
 	// If LogRangeEvents is true, major changes to ranges will be logged into
 	// the range event log.
 	LogRangeEvents bool
-
-	// BlockingSnapshotDuration is the amount of time Replica.Snapshot
-	// will wait before switching to asynchronous mode. Zero is a good
-	// choice for production but non-zero values can speed up tests.
-	// (This only blocks on the first attempt; it will not block a
-	// second time if the generation is still in progress).
-	BlockingSnapshotDuration time.Duration
 
 	// AsyncSnapshotMaxAge is the maximum amount of time that an
 	// asynchronous snapshot will be held while waiting for raft to pick
@@ -2284,17 +2277,138 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now hlc.Timesta
 	return txn, nil
 }
 
+// HandleSnapshot reads an incoming streaming snapshot and applies it if
+// possible.
+func (s *Store) HandleSnapshot(
+	header *SnapshotRequest_Header,
+	stream MultiRaft_RaftSnapshotServer,
+) error {
+
+	sendSnapError := func(err error) error {
+		return stream.Send(&SnapshotResponse{
+			Status:  SnapshotResponse_ERROR,
+			Message: err.Error(),
+		})
+	}
+
+	ctx := s.logContext(stream.Context())
+
+	var addedPlaceholder bool
+	if err := func() error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		placeholder, err := s.canApplySnapshotLocked(&header.RangeDescriptor)
+		if err != nil {
+			return sendSnapError(
+				errors.Wrapf(err, "%s: cannot apply snapshot on range %d", s, header.RangeDescriptor.RangeID),
+			)
+		}
+
+		addedPlaceholder = placeholder != nil
+		if addedPlaceholder {
+			// NB: The placeholder added here is either removed below after a
+			// preemptive snapshot is applied or after the next call to
+			// Replica.handleRaftReady. Note that we can only get here if the
+			// replica doesn't exist or is uninitialized.
+			if err := s.addPlaceholderLocked(placeholder); err != nil {
+				log.Fatal(ctx,
+					errors.Wrapf(err, "%s: could not add vetted placeholder %s", s, placeholder),
+				)
+			}
+		}
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "permanently rejected snapshot")
+	}
+
+	removePlaceholder := addedPlaceholder
+
+	defer func() {
+		if removePlaceholder {
+			s.mu.Lock()
+			if !s.removePlaceholderLocked(header.RangeDescriptor.RangeID) {
+				log.Fatalf(ctx, "%s: could not remove placeholder after snapshot", header.RangeDescriptor.RangeID)
+			}
+			// TODO(jordan) should this be droppedPlaceholders?
+			atomic.AddInt32(&s.counts.removedPlaceholders, 1)
+			s.mu.Unlock()
+		}
+	}()
+
+	if err := stream.Send(&SnapshotResponse{Status: SnapshotResponse_ACCEPTED}); err != nil {
+		return err
+	}
+
+	var batches [][]byte
+	var logEntries [][]byte
+	for {
+		req, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		if req.Header != nil {
+			return sendSnapError(errors.New("client error: provided a header mid-stream"))
+		}
+
+		if req.KVBatch != nil {
+			batches = append(batches, req.KVBatch)
+		}
+		if req.LogEntries != nil {
+			logEntries = append(logEntries, req.LogEntries...)
+		}
+		if req.Final {
+			snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
+			if err != nil {
+				return sendSnapError(errors.Wrap(err, "invalid snapshot"))
+			}
+
+			inSnap := IncomingSnapshot{
+				SnapUUID:          *snapUUID,
+				RangeDescriptor:   header.RangeDescriptor,
+				Batches:           batches,
+				LogEntries:        logEntries,
+				addedPlaceholder:  addedPlaceholder,
+				removePlaceholder: &removePlaceholder,
+			}
+
+			if err := s.handleRaftRequest(ctx, &header.RaftMessageRequest, inSnap, nil); err != nil {
+				return sendSnapError(errors.Wrap(err.GoError(), "failed to apply snapshot"))
+			}
+			return stream.Send(&SnapshotResponse{Status: SnapshotResponse_APPLIED})
+		}
+	}
+}
+
 // HandleRaftRequest dispatches a raft message to the appropriate Replica. It
-// requires that s.mu is not held.
+// requires that s.processRaftMu and s.mu are not held.
 func (s *Store) HandleRaftRequest(
+	ctx context.Context, req *RaftMessageRequest, respStream RaftMessageResponseStream) *roachpb.Error {
+	return s.handleRaftRequest(s.logContext(ctx), req, IncomingSnapshot{}, nil)
+}
+
+// handleRaftRequest is the same as HandleRaftRequest except that it also
+// handles buffered streaming snapshots. If req.Message.Type is
+// raftpb.MsgSnap, inSnap must not be empty; in that case, inSnap will be
+// applied. Preemptive and raft-initiated snapshots are supported.
+func (s *Store) handleRaftRequest(
 	ctx context.Context,
 	req *RaftMessageRequest,
+	inSnap IncomingSnapshot,
 	respStream RaftMessageResponseStream,
 ) (pErr *roachpb.Error) {
 	s.metrics.raftRcvdMessages[req.Message.Type].Inc(1)
 
+	switch req.Message.Type {
+	case raftpb.MsgSnap:
+		if (inSnap.SnapUUID == uuid.UUID{}) {
+			log.Fatalf(ctx, "programming error: received %s via the Raft transport", raftpb.MsgSnap)
+		}
+	case raftpb.MsgHeartbeat:
+		// TODO(bdarnell): handle coalesced heartbeats.
+	}
+
 	if respStream == nil {
-		return s.processRaftRequest(ctx, req)
+		return s.processRaftRequest(ctx, req, inSnap)
 	}
 
 	s.mu.Lock()
@@ -2318,6 +2432,7 @@ func (s *Store) HandleRaftRequest(
 func (s *Store) processRaftRequest(
 	ctx context.Context,
 	req *RaftMessageRequest,
+	inSnap IncomingSnapshot,
 ) (pErr *roachpb.Error) {
 	// Lazily create the replica.
 	r, uninitRaftLocked, err := s.getOrCreateReplica(
@@ -2338,59 +2453,6 @@ func (s *Store) processRaftRequest(
 			return
 		}
 	}
-
-	// Check to see if a snapshot can be applied. Snapshots can always be applied
-	// to initialized replicas. Note that if we add a placeholder we need to
-	// already be holding Store.uninitRaftMu in order to prevent concurrent
-	// raft-ready processing of uninitialized replicas.
-	var addedPlaceholder bool
-	var removePlaceholder bool
-	if req.Message.Type == raftpb.MsgSnap && !r.IsInitialized() {
-		if earlyReturn := func() bool {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			placeholder, err := s.canApplySnapshotLocked(r.RangeID, req.Message.Snapshot)
-			if err != nil {
-				// If the storage cannot accept the snapshot, drop it before
-				// passing it to RawNode.Step, since our error handling
-				// options past that point are limited.
-				// TODO(arjun): Now that we have better raft transport error
-				// handling, consider if this error should be returned and
-				// handled by the sending store.
-				log.Info(ctx, errors.Wrapf(err, "%s: cannot apply snapshot", r))
-				return true
-			}
-
-			if placeholder != nil {
-				// NB: The placeholder added here is either removed below after a
-				// preemptive snapshot is applied or after the next call to
-				// Replica.handleRaftReady. Note that we can only get here if the
-				// replica doesn't exist or is uninitialized.
-				if err := s.addPlaceholderLocked(placeholder); err != nil {
-					log.Fatal(ctx, errors.Wrapf(err, "%s: could not add vetted placeholder %s", s, placeholder))
-				}
-				addedPlaceholder = true
-			}
-			return false
-		}(); earlyReturn {
-			return nil
-		}
-
-		if addedPlaceholder {
-			// If we added a placeholder remove it before we return unless some other
-			// part of the code takes ownership of the removal (indicated by setting
-			// removePlaceholder to false).
-			removePlaceholder = true
-			defer func() {
-				if removePlaceholder {
-					if s.removePlaceholder(req.RangeID) {
-						atomic.AddInt32(&s.counts.removedPlaceholders, 1)
-					}
-				}
-			}()
-		}
-	}
-
 	if req.ToReplica.ReplicaID == 0 {
 		if req.Message.Type == raftpb.MsgSnap {
 			// Allow snapshots to be applied to replicas before they are
@@ -2404,7 +2466,7 @@ func (s *Store) processRaftRequest(
 
 				// We need to remove the placeholder regardless of whether the snapshot
 				// applied successfully or not.
-				if addedPlaceholder {
+				if inSnap.addedPlaceholder {
 					// Clear the replica placeholder; we are about to swap it with a real replica.
 					if !s.removePlaceholderLocked(req.RangeID) {
 						log.Fatalf(ctx, "%s: could not remove placeholder after preemptive snapshot", r)
@@ -2414,7 +2476,7 @@ func (s *Store) processRaftRequest(
 					} else {
 						atomic.AddInt32(&s.counts.removedPlaceholders, 1)
 					}
-					removePlaceholder = false
+					*inSnap.removePlaceholder = false
 				}
 
 				if pErr == nil {
@@ -2513,7 +2575,7 @@ func (s *Store) processRaftRequest(
 			}
 
 			// Apply the snapshot, as Raft told us to.
-			if err := r.applySnapshot(ctx, ready.Snapshot, ready.HardState); err != nil {
+			if err := r.applySnapshot(ctx, inSnap, ready.Snapshot, ready.HardState); err != nil {
 				return roachpb.NewError(err)
 			}
 
@@ -2543,10 +2605,31 @@ func (s *Store) processRaftRequest(
 		return roachpb.NewError(err)
 	}
 
-	s.enqueueRaftUpdateCheck(req.RangeID)
-	// If a placeholder was added it is now owned by the replica and will be
-	// removed after the next call to Replica.handleRaftReady().
-	removePlaceholder = false
+	if (inSnap.SnapUUID == uuid.UUID{}) {
+		s.enqueueRaftUpdateCheck(req.RangeID)
+	} else {
+		defer func() {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+
+			// We need to remove the placeholder regardless of whether the snapshot
+			// applied successfully or not.
+			if inSnap.addedPlaceholder && *inSnap.removePlaceholder {
+				// Clear the replica placeholder; we are about to swap it with a real replica.
+				if !s.removePlaceholderLocked(req.RangeID) {
+					log.Fatalf(ctx, "%s: could not remove placeholder after raft snapshot", r)
+				}
+				atomic.AddInt32(&s.counts.droppedPlaceholders, 1)
+				*inSnap.removePlaceholder = false
+			}
+		}()
+		// Force the replica to deal with this snapshot right now.
+		if err := r.handleRaftReadyRaftMuLocked(&uninitRaftLocked, inSnap); err != nil {
+			// mimic the behavior in processRaft.
+			panic(err)
+		}
+	}
+
 	return nil
 }
 
@@ -2579,6 +2662,131 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 	}
 }
 
+// sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
+func sendSnapshot(
+	stream MultiRaft_RaftSnapshotClient,
+	header SnapshotRequest_Header,
+	snap *OutgoingSnapshot,
+	newBatch func() engine.Batch,
+) error {
+
+	if err := stream.Send(&SnapshotRequest{Header: &header}); err != nil {
+		return err
+	}
+	// Wait until we get a response from the server.
+	resp, err := stream.Recv()
+	switch resp.Status {
+	case SnapshotResponse_DECLINED:
+		if header.CanDecline {
+			return errors.Errorf("range=%s: remote declined snapshot: %s",
+				header.RangeDescriptor.RangeID, resp.Message)
+		}
+		return errors.Errorf("range=%s: programming error: remote declined required snapshot: %s",
+			header.RangeDescriptor.RangeID, resp.Message)
+	case SnapshotResponse_ERROR:
+		return errors.Errorf("range=%s: remote couldn't accept snapshot with error: %s",
+			header.RangeDescriptor.RangeID, resp.Message)
+	case SnapshotResponse_ACCEPTED:
+		// This is the response we're expecting. Continue with snapshot sending.
+	default:
+		return errors.Errorf("range=%s: server sent an invalid status during negotiation: %s",
+			header.RangeDescriptor.RangeID, resp.Status)
+	}
+
+	// Determine the unreplicated key prefix so we can drop any
+	// unreplicated keys from the snapshot.
+	unreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(header.RangeDescriptor.RangeID)
+	var alloc bufalloc.ByteAllocator
+	// TODO(jordan) make this configurable. For now, 1MB.
+	const batchSize = 1 << 20
+	n := 0
+	var b engine.Batch
+	for ; snap.Iter.Valid(); snap.Iter.Next() {
+		var key engine.MVCCKey
+		var value []byte
+		alloc, key, value = snap.Iter.allocIterKeyValue(alloc)
+		if bytes.HasPrefix(key.Key, unreplicatedPrefix) {
+			continue
+		}
+		n++
+		mvccKey := engine.MVCCKey{
+			Key:       key.Key,
+			Timestamp: key.Timestamp,
+		}
+		if b == nil {
+			b = newBatch()
+		}
+		if err := b.Put(mvccKey, value); err != nil {
+			b.Close()
+			return err
+		}
+
+		if len(b.Repr()) >= batchSize {
+			if err := sendBatch(stream, b); err != nil {
+				return err
+			}
+			b = nil
+			// We no longer need the keys and values in the batch we just sent,
+			// so reset alloc and allow them to be garbage collected.
+			alloc = bufalloc.ByteAllocator{}
+		}
+	}
+	if b != nil {
+		if err := sendBatch(stream, b); err != nil {
+			return err
+		}
+	}
+
+	rangeID := header.RangeDescriptor.RangeID
+
+	truncState, err := loadTruncatedState(stream.Context(), snap.EngineSnap, rangeID)
+	if err != nil {
+		return err
+	}
+	firstIndex := truncState.Index + 1
+
+	endIndex := snap.RaftSnap.Metadata.Index + 1
+	logEntries := make([][]byte, 0, endIndex-firstIndex)
+
+	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
+		bytes, err := kv.Value.GetBytes()
+		if err == nil {
+			logEntries = append(logEntries, bytes)
+		}
+		return false, err
+	}
+
+	if err := iterateEntries(stream.Context(), snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
+		return err
+	}
+	if err := stream.Send(&SnapshotRequest{LogEntries: logEntries, Final: true}); err != nil {
+		return err
+	}
+	log.Infof(stream.Context(), "streamed snapshot: kv pairs: %d, log entries: %d",
+		n, len(logEntries))
+
+	resp, err = stream.Recv()
+	if err != nil {
+		return errors.Wrapf(err, "range=%s: remote failed to apply snapshot", header.RangeDescriptor.RangeID)
+	}
+	switch resp.Status {
+	case SnapshotResponse_ERROR:
+		return errors.Errorf("range=%s: remote failed to apply snapshot for reason %s",
+			header.RangeDescriptor.RangeID, resp.Message)
+	case SnapshotResponse_APPLIED:
+		return nil
+	default:
+		return errors.Errorf("range=%s: server sent an invalid status during finalization: %s",
+			header.RangeDescriptor.RangeID, resp.Status)
+	}
+}
+
+func sendBatch(stream MultiRaft_RaftSnapshotClient, batch engine.Batch) error {
+	repr := batch.Repr()
+	batch.Close()
+	return stream.Send(&SnapshotRequest{KVBatch: repr})
+}
+
 // enqueueRaftUpdateCheck asynchronously registers the given range ID to be
 // checked for raft updates when the processRaft goroutine is idle.
 func (s *Store) enqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
@@ -2594,7 +2802,7 @@ func (s *Store) processRequestQueue(rangeID roachpb.RangeID) {
 	s.mu.Unlock()
 
 	for _, info := range q {
-		if pErr := s.processRaftRequest(info.respStream.Context(), info.req); pErr != nil {
+		if pErr := s.processRaftRequest(info.respStream.Context(), info.req, IncomingSnapshot{}); pErr != nil {
 			if err := info.respStream.Send(newRaftMessageResponse(info.req, pErr)); err != nil {
 				// Seems excessive to log this on every occurrence as the other side
 				// might have closed.
@@ -2614,7 +2822,7 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 	s.mu.Unlock()
 
 	if ok {
-		if err := r.handleRaftReady(); err != nil {
+		if err := r.handleRaftReady(IncomingSnapshot{}); err != nil {
 			panic(err) // TODO(bdarnell)
 		}
 		elapsed := timeutil.Since(start)
@@ -2864,19 +3072,19 @@ func (s *Store) tryGetOrCreateReplica(
 // this store's replica (i.e. the snapshot is not from an older incarnation of
 // the replica) and a placeholder can be added to the replicasByKey map (if
 // necessary). If a placeholder is required, it is returned as the first value.
-func (s *Store) canApplySnapshotLocked(rangeID roachpb.RangeID, snap raftpb.Snapshot) (*ReplicaPlaceholder, error) {
+func (s *Store) canApplySnapshotLocked(rangeDescriptor *roachpb.RangeDescriptor) (*ReplicaPlaceholder, error) {
+	if r, ok := s.mu.replicas[rangeDescriptor.RangeID]; ok && r.IsInitialized() {
+		// We have the range and it's initialized, so let the snapshot through.
+		return nil, nil
+	}
+
 	// We don't have the range (or we have an uninitialized
 	// placeholder). Will we be able to create/initialize it?
-	var parsedSnap roachpb.PartialRaftSnapshotData
-	if err := parsedSnap.Unmarshal(snap.Data); err != nil {
-		return nil, errors.Wrapf(err, "%s: failed to unmarshal snapshot", s)
+	if exRng, ok := s.mu.replicaPlaceholders[rangeDescriptor.RangeID]; ok {
+		return nil, errors.Errorf("%s: canApplySnapshotLocked: cannot add placeholder, have an existing placeholder %s", s, exRng)
 	}
 
-	if exRng, ok := s.mu.replicaPlaceholders[rangeID]; ok {
-		return nil, errors.Errorf("%s: cannot add placeholder, have an existing placeholder %s", s, exRng)
-	}
-
-	if exRange := s.getOverlappingKeyRangeLocked(&parsedSnap.RangeDescriptor); exRange != nil {
+	if exRange := s.getOverlappingKeyRangeLocked(rangeDescriptor); exRange != nil {
 		// We have a conflicting range, so we must block the snapshot.
 		// When such a conflict exists, it will be resolved by one range
 		// either being split or garbage collected.
@@ -2889,7 +3097,7 @@ func (s *Store) canApplySnapshotLocked(rangeID roachpb.RangeID, snap raftpb.Snap
 	}
 
 	placeholder := &ReplicaPlaceholder{
-		rangeDesc: parsedSnap.RangeDescriptor,
+		rangeDesc: *rangeDescriptor,
 	}
 	return placeholder, nil
 }
