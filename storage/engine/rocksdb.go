@@ -57,7 +57,9 @@ import (
 import "C"
 
 const (
-	minMemtableBudget = 1 << 20  // 1 MB
+	// Small values for minMemtableBudget trigger assertions in debug
+	// builds of rocksdb.
+	minMemtableBudget = 10 << 20 // 10 MB
 	defaultBlockSize  = 32 << 10 // 32KB (rocksdb default is 4KB)
 
 	// DefaultMaxOpenFiles is the default value for rocksDB's max_open_files
