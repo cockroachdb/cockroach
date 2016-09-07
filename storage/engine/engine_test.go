@@ -274,6 +274,7 @@ func TestEngineBatch(t *testing.T) {
 			expectedValue := get(engine, key)
 			// Run the whole thing as a batch and compare.
 			b := engine.NewBatch()
+			defer b.Close()
 			if err := b.Clear(key); err != nil {
 				t.Fatal(err)
 			}
