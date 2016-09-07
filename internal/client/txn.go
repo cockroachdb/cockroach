@@ -133,8 +133,8 @@ func (txn *Txn) IsFinalized() bool {
 // appear in log files and the web UI. Each transaction starts out with an
 // automatically assigned debug name composed of the file and line number where
 // the transaction was created.
-func (txn *Txn) SetDebugName(name string, depth int) {
-	file, line, fun := caller.Lookup(depth + 1)
+func (txn *Txn) SetDebugName(name string, level int) {
+	file, line, fun := caller.Lookup(level + 1)
 	if name == "" {
 		name = fun
 	}
@@ -205,7 +205,10 @@ func (txn *Txn) SystemConfigTrigger() bool {
 
 // NewBatch creates and returns a new empty batch object for use with the Txn.
 func (txn *Txn) NewBatch() *Batch {
-	return &Batch{txn: txn}
+	return &Batch{
+		txn:     txn,
+		Context: txn.Context,
+	}
 }
 
 // Get retrieves the value for a key, returning the retrieved key/value or an
