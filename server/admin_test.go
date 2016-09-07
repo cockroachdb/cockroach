@@ -19,6 +19,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -283,6 +284,15 @@ func TestAdminAPIDatabases(t *testing.T) {
 			t.Fatalf("unknown grant to user %s", grant.User)
 		}
 	}
+
+	// Verify Descriptor ID.
+	path, err := ts.admin.queryDescriptorIDPath(session, []string{testdb})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, e := details.DescriptorID, int64(path[1]); a != e {
+		t.Fatalf("db had descriptorID %d, expected %d", a, e)
+	}
 }
 
 func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
@@ -343,24 +353,35 @@ func TestAdminAPITableSQLInjection(t *testing.T) {
 
 func TestAdminAPITableDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testAdminAPITableDetailsInner(t, "test", "tbl")
+}
+
+func TestAdminAPITableDetailsEscapedNames(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testAdminAPITableDetailsInner(t, "test test", "tbl tbl")
+}
+
+func testAdminAPITableDetailsInner(t *testing.T, dbName, tblName string) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
 
+	escDBName := parser.Name(dbName).String()
+	escTblName := parser.Name(tblName).String()
+
 	session := sql.NewSession(
 		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
 	setupQueries := []string{
-		"CREATE DATABASE test",
-		`
-CREATE TABLE test.tbl (
+		fmt.Sprintf("CREATE DATABASE %s", escDBName),
+		fmt.Sprintf(`CREATE TABLE %s.%s (
 	nulls_allowed INT,
 	nulls_not_allowed INT NOT NULL DEFAULT 1000,
 	default2 INT DEFAULT 2,
 	string_default STRING DEFAULT 'default_string'
-)`,
-		"GRANT SELECT ON test.tbl TO readonly",
-		"GRANT SELECT,UPDATE,DELETE ON test.tbl TO app",
-		"CREATE INDEX descIdx ON test.tbl (default2 DESC)",
+)`, escDBName, escTblName),
+		fmt.Sprintf("GRANT SELECT ON %s.%s TO readonly", escDBName, escTblName),
+		fmt.Sprintf("GRANT SELECT,UPDATE,DELETE ON %s.%s TO app", escDBName, escTblName),
+		fmt.Sprintf("CREATE INDEX descIdx ON %s.%s (default2 DESC)", escDBName, escTblName),
 	}
 
 	for _, q := range setupQueries {
@@ -372,7 +393,8 @@ CREATE TABLE test.tbl (
 
 	// Perform API call.
 	var resp serverpb.TableDetailsResponse
-	if err := getAdminJSONProto(s, "databases/test/tables/tbl", &resp); err != nil {
+	url := fmt.Sprintf("databases/%s/tables/%s", dbName, tblName)
+	if err := getAdminJSONProto(s, url, &resp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -437,10 +459,9 @@ CREATE TABLE test.tbl (
 
 	// Verify Create Table Statement.
 	{
-		const (
-			showCreateTableQuery = "SHOW CREATE TABLE test.tbl"
-			createTableCol       = "CreateTable"
-		)
+
+		const createTableCol = "CreateTable"
+		showCreateTableQuery := fmt.Sprintf("SHOW CREATE TABLE %s.%s", escDBName, escTblName)
 
 		resSet := ts.sqlExecutor.ExecuteStatements(session, showCreateTableQuery, nil)
 		res := resSet.ResultList[0]
@@ -457,6 +478,15 @@ CREATE TABLE test.tbl (
 		if a, e := resp.CreateTableStatement, createStmt; a != e {
 			t.Fatalf("mismatched create table statement; expected %s, got %s", e, a)
 		}
+	}
+
+	// Verify Descriptor ID.
+	path, err := ts.admin.queryDescriptorIDPath(session, []string{dbName, tblName})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, e := resp.DescriptorID, int64(path[2]); a != e {
+		t.Fatalf("table had descriptorID %d, expected %d", a, e)
 	}
 }
 
@@ -533,7 +563,9 @@ func TestAdminAPITableDetailsForVirtualSchema(t *testing.T) {
 	}
 }
 
-func TestAdminAPITableDetailsZone(t *testing.T) {
+// TestAdminAPIZoneDetails verifies the zone configuration information returned
+// for both DatabaseDetailsResponse AND TableDetailsResponse.
+func TestAdminAPIZoneDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
@@ -553,17 +585,40 @@ func TestAdminAPITableDetailsZone(t *testing.T) {
 		}
 	}
 
-	// Function to verify the zone for test.tbl as returned by the Admin API.
-	verifyZone := func(expectedZone config.ZoneConfig, expectedLevel serverpb.ZoneConfigurationLevel) {
+	// Function to verify the zone for table "test.tbl" as returned by the Admin
+	// API.
+	verifyTblZone := func(
+		expectedZone config.ZoneConfig, expectedLevel serverpb.ZoneConfigurationLevel,
+	) {
 		var resp serverpb.TableDetailsResponse
 		if err := getAdminJSONProto(s, "databases/test/tables/tbl", &resp); err != nil {
 			t.Fatal(err)
 		}
 		if a, e := &resp.ZoneConfig, &expectedZone; !proto.Equal(a, e) {
-			t.Errorf("actual zone config %v did not match expected value %v", a, e)
+			t.Errorf("actual table zone config %v did not match expected value %v", a, e)
 		}
 		if a, e := resp.ZoneConfigLevel, expectedLevel; a != e {
-			t.Errorf("actual ZoneConfigurationLevel %s did not match expected value %s", a, e)
+			t.Errorf("actual table ZoneConfigurationLevel %s did not match expected value %s", a, e)
+		}
+		if t.Failed() {
+			t.FailNow()
+		}
+	}
+
+	// Function to verify the zone for database "test" as returned by the Admin
+	// API.
+	verifyDbZone := func(
+		expectedZone config.ZoneConfig, expectedLevel serverpb.ZoneConfigurationLevel,
+	) {
+		var resp serverpb.DatabaseDetailsResponse
+		if err := getAdminJSONProto(s, "databases/test", &resp); err != nil {
+			t.Fatal(err)
+		}
+		if a, e := &resp.ZoneConfig, &expectedZone; !proto.Equal(a, e) {
+			t.Errorf("actual db zone config %v did not match expected value %v", a, e)
+		}
+		if a, e := resp.ZoneConfigLevel, expectedLevel; a != e {
+			t.Errorf("actual db ZoneConfigurationLevel %s did not match expected value %s", a, e)
 		}
 		if t.Failed() {
 			t.FailNow()
@@ -587,7 +642,8 @@ func TestAdminAPITableDetailsZone(t *testing.T) {
 	}
 
 	// Verify zone matches cluster default.
-	verifyZone(config.DefaultZoneConfig(), serverpb.ZoneConfigurationLevel_CLUSTER)
+	verifyDbZone(config.DefaultZoneConfig(), serverpb.ZoneConfigurationLevel_CLUSTER)
+	verifyTblZone(config.DefaultZoneConfig(), serverpb.ZoneConfigurationLevel_CLUSTER)
 
 	// Get ID path for table. This will be an array of three IDs, containing the ID of the root namespace,
 	// the database, and the table (in that order).
@@ -601,14 +657,16 @@ func TestAdminAPITableDetailsZone(t *testing.T) {
 		RangeMinBytes: 456,
 	}
 	setZone(dbZone, idPath[1])
-	verifyZone(dbZone, serverpb.ZoneConfigurationLevel_DATABASE)
+	verifyDbZone(dbZone, serverpb.ZoneConfigurationLevel_DATABASE)
+	verifyTblZone(dbZone, serverpb.ZoneConfigurationLevel_DATABASE)
 
 	// Apply zone configuration to table and check again.
 	tblZone := config.ZoneConfig{
 		RangeMinBytes: 789,
 	}
 	setZone(tblZone, idPath[2])
-	verifyZone(tblZone, serverpb.ZoneConfigurationLevel_TABLE)
+	verifyDbZone(dbZone, serverpb.ZoneConfigurationLevel_DATABASE)
+	verifyTblZone(tblZone, serverpb.ZoneConfigurationLevel_TABLE)
 }
 
 func TestAdminAPIUsers(t *testing.T) {
