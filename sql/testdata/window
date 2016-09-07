@@ -1,0 +1,418 @@
+statement ok
+CREATE TABLE kv (
+  -- don't add column "a"
+  k INT PRIMARY KEY,
+  v INT,
+  w INT,
+  f FLOAT,
+  d DECIMAL,
+  s STRING,
+  b BOOL
+)
+
+statement OK
+INSERT INTO kv VALUES
+(1, 2, 3, 1.0, 1, 'a', true),
+(3, 4, 5, 2, 8, 'a', true),
+(5, NULL, 5, 9.9, -321, NULL, false),
+(6, 2, 3, 4.4, 4.4, 'b', true),
+(7, 2, 2, 6, 7.9, 'b', true),
+(8, 4, 2, 3, 3, 'A', false)
+
+query error window functions are not allowed in GROUP BY
+SELECT * FROM kv GROUP BY v, COUNT(w) OVER ()
+
+query error window functions are not allowed in RETURNING
+INSERT INTO kv (k, v) VALUES (99, 100) RETURNING sum(v) OVER ()
+
+query error window functions are not allowed in LIMIT
+SELECT SUM(v) FROM kv GROUP BY k LIMIT SUM(v) OVER ()
+
+query error window functions are not allowed in OFFSET
+SELECT SUM(v) FROM kv GROUP BY k LIMIT 1 OFFSET SUM(v) OVER ()
+
+query error window functions are not allowed in VALUES
+INSERT INTO kv (k, v) VALUES (99, COUNT(1) OVER ())
+
+query error window functions are not allowed in WHERE
+SELECT k FROM kv WHERE AVG(k) OVER () > 1
+
+query R
+SELECT avg(k) OVER () FROM kv ORDER BY 1
+----
+5.0000000000000000
+5.0000000000000000
+5.0000000000000000
+5.0000000000000000
+5.0000000000000000
+5.0000000000000000
+
+query R
+SELECT avg(k) OVER (PARTITION BY v) FROM kv ORDER BY 1
+----
+4.6666666666666667
+4.6666666666666667
+4.6666666666666667
+5.0000000000000000
+5.5000000000000000
+5.5000000000000000
+
+query R
+SELECT avg(k) OVER (ORDER BY w) FROM kv ORDER BY 1
+----
+5.0000000000000000
+5.0000000000000000
+5.5000000000000000
+5.5000000000000000
+7.5000000000000000
+7.5000000000000000
+
+query R
+SELECT avg(k) OVER (ORDER BY w DESC) FROM kv ORDER BY 1
+----
+3.7500000000000000
+3.7500000000000000
+4.0000000000000000
+4.0000000000000000
+5.0000000000000000
+5.0000000000000000
+
+query R
+SELECT avg(k) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+4.6666666666666667
+4.6666666666666667
+5.0000000000000000
+5.5000000000000000
+7.0000000000000000
+8.0000000000000000
+
+query R
+SELECT avg(k) OVER w FROM kv WINDOW w AS (PARTITION BY v ORDER BY w) ORDER BY 1
+----
+4.6666666666666667
+4.6666666666666667
+5.0000000000000000
+5.5000000000000000
+7.0000000000000000
+8.0000000000000000
+
+query R
+SELECT avg(k) OVER (w) FROM kv WINDOW w AS (PARTITION BY v ORDER BY w) ORDER BY 1
+----
+4.6666666666666667
+4.6666666666666667
+5.0000000000000000
+5.5000000000000000
+7.0000000000000000
+8.0000000000000000
+
+query R
+SELECT avg(k) OVER (w ORDER BY w) FROM kv WINDOW w AS (PARTITION BY v) ORDER BY 1
+----
+4.6666666666666667
+4.6666666666666667
+5.0000000000000000
+5.5000000000000000
+7.0000000000000000
+8.0000000000000000
+
+query IIIRRTBR colnames
+SELECT *, avg(k) OVER (w ORDER BY w) FROM kv WINDOW w AS (PARTITION BY v) ORDER BY 1
+----
+k  v     w  f    d     s     b      avg(k) OVER (w ORDER BY w)
+1  2     3  1    1     a     true   4.6666666666666667
+3  4     5  2    8     a     true   5.5000000000000000
+5  NULL  5  9.9  -321  NULL  false  5.0000000000000000
+6  2     3  4.4  4.4   b     true   4.6666666666666667
+7  2     2  6    7.9   b     true   7.0000000000000000
+8  4     2  3    3     A     false  8.0000000000000000
+
+query IIIRRTBR colnames
+SELECT *, avg(k) OVER w FROM kv WINDOW w AS (PARTITION BY v ORDER BY w) ORDER BY avg(k) OVER w, k
+----
+k  v     w  f    d     s     b      avg(k) OVER w
+1  2     3  1    1     a     true   4.6666666666666667
+6  2     3  4.4  4.4   b     true   4.6666666666666667
+5  NULL  5  9.9  -321  NULL  false  5.0000000000000000
+3  4     5  2    8     a     true   5.5000000000000000
+7  2     2  6    7.9   b     true   7.0000000000000000
+8  4     2  3    3     A     false  8.0000000000000000
+
+query IIIRRTB colnames
+SELECT * FROM kv WINDOW w AS (PARTITION BY v ORDER BY w) ORDER BY avg(k) OVER w DESC, k
+----
+k  v     w  f    d     s     b
+8  4     2  3    3     A     false
+7  2     2  6    7.9   b     true
+3  4     5  2    8     a     true
+5  NULL  5  9.9  -321  NULL  false
+1  2     3  1    1     a     true
+6  2     3  4.4  4.4   b     true
+
+query error window "w" is already defined
+SELECT avg(k) OVER w FROM kv WINDOW w AS (), w AS ()
+
+query error window "x" does not exist
+SELECT avg(k) OVER x FROM kv WINDOW w AS ()
+
+query error window "x" does not exist
+SELECT avg(k) OVER (x) FROM kv WINDOW w AS ()
+
+query error cannot override PARTITION BY clause of window "w"
+SELECT avg(k) OVER (w PARTITION BY v) FROM kv WINDOW w AS ()
+
+query error cannot override PARTITION BY clause of window "w"
+SELECT avg(k) OVER (w PARTITION BY v) FROM kv WINDOW w AS (PARTITION BY v)
+
+query error cannot override ORDER BY clause of window "w"
+SELECT avg(k) OVER (w ORDER BY v) FROM kv WINDOW w AS (ORDER BY v)
+
+query error column name "a" not found
+SELECT avg(k) OVER (PARTITION BY a) FROM kv
+
+query error column name "a" not found
+SELECT avg(k) OVER (ORDER BY a) FROM kv
+
+query error aggregate function calls cannot contain window function call avg
+SELECT avg(avg(k) OVER ()) FROM kv ORDER BY 1
+
+query R
+SELECT avg(avg(k)) OVER () FROM kv ORDER BY 1
+----
+5.0000000000000000
+
+query error OVER specified, but now is not a window function nor an aggregate function
+SELECT now() OVER () FROM kv ORDER BY 1
+
+query error window function calls cannot be nested under avg
+SELECT avg(avg(k) OVER ()) OVER () FROM kv ORDER BY 1
+
+query error OVER specified, but round is not a window function nor an aggregate function
+SELECT round(avg(k) OVER ()) OVER () FROM kv ORDER BY 1
+
+query R
+SELECT round(avg(k) OVER (PARTITION BY v ORDER BY w)) FROM kv ORDER BY 1
+----
+5
+5
+5
+6
+7
+8
+
+query R
+SELECT avg(f) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+2.5
+3
+3.8000000000000003
+3.8000000000000003
+6
+9.9
+
+query R
+SELECT avg(d) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+-321.0000000000000000
+   3.0000000000000000
+   4.4333333333333333
+   4.4333333333333333
+   5.5000000000000000
+   7.9000000000000000
+
+query IB
+SELECT k, bool_and(b) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+1  true
+3  false
+5  false
+6  true
+7  true
+8  false
+
+query IB
+SELECT k, bool_or(b) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+1  true
+3  true
+5  false
+6  true
+7  true
+8  false
+
+query II
+SELECT k, count(d) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+1  3
+3  2
+5  1
+6  3
+7  1
+8  1
+
+query II
+SELECT k, count(*) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+1  3
+3  2
+5  1
+6  3
+7  1
+8  1
+
+query IR
+SELECT k, max(d) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+1  7.9
+3  8
+5  -321
+6  7.9
+7  7.9
+8  3
+
+query IR
+SELECT k, min(d) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+1  1
+3  3
+5  -321
+6  1
+7  7.9
+8  3
+
+query IR
+SELECT k, max(d) OVER (PARTITION BY v) FROM kv ORDER BY 1
+----
+1  7.9
+3  8
+5  -321
+6  7.9
+7  7.9
+8  8
+
+query IR
+SELECT k, sum(d) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+1  13.3
+3  11
+5  -321
+6  13.3
+7  7.9
+8  3
+
+query IR
+SELECT k, variance(d) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+1  11.9033333333333333
+3  12.5000000000000000
+5  NULL
+6  11.9033333333333333
+7  NULL
+8  NULL
+
+query IR
+SELECT k, stddev(d) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+1  3.4501207708330057
+3  3.5355339059327376
+5  NULL
+6  3.4501207708330057
+7  NULL
+8  NULL
+
+query IR
+SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
+----
+5  NULL
+1  3.4501207708330057
+6  3.4501207708330057
+7  3.4501207708330057
+3  3.5355339059327376
+8  3.5355339059327376
+
+query IRIR
+SELECT * FROM (SELECT k, d, v, stddev(d) OVER (PARTITION BY v) FROM kv) sub ORDER BY variance(d) OVER (PARTITION BY v), k
+----
+5  -321  NULL  NULL
+1  1     2     3.4501207708330057
+6  4.4   2     3.4501207708330057
+7  7.9   2     3.4501207708330057
+3  8     4     3.5355339059327376
+8  3     4     3.5355339059327376
+
+query IR
+SELECT k, max(stddev) OVER (ORDER BY d) FROM (SELECT k, d, stddev(d) OVER (PARTITION BY v) as stddev FROM kv) sub ORDER BY 2, k
+----
+5  NULL
+1  3.4501207708330057
+3  3.5355339059327376
+6  3.5355339059327376
+7  3.5355339059327376
+8  3.5355339059327376
+
+query IR
+SELECT k, max(stddev) OVER (ORDER BY d DESC) FROM (SELECT k, d, stddev(d) OVER (PARTITION BY v) as stddev FROM kv) sub ORDER BY 2, k
+----
+1  3.5355339059327376
+3  3.5355339059327376
+5  3.5355339059327376
+6  3.5355339059327376
+7  3.5355339059327376
+8  3.5355339059327376
+
+query ITT
+EXPLAIN SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
+----
+0  sort    +"variance(d) OVER w",+k
+1  window  stddev(d) OVER w, variance(d) OVER w
+2  scan    kv@primary -
+
+query ITTT
+EXPLAIN (DEBUG) SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
+----
+0  /kv/primary/1/v  /2                                            PARTIAL
+0  /kv/primary/1/d  1                                             PARTIAL
+0  /kv/primary/1/s  'a'                                           BUFFERED
+1  /kv/primary/3/v  /4                                            PARTIAL
+1  /kv/primary/3/d  8                                             PARTIAL
+1  /kv/primary/3/s  'a'                                           BUFFERED
+2  /kv/primary/5    NULL                                          PARTIAL
+2  /kv/primary/5/d  -321                                          BUFFERED
+3  /kv/primary/6/v  /2                                            PARTIAL
+3  /kv/primary/6/d  4.4                                           PARTIAL
+3  /kv/primary/6/s  'b'                                           BUFFERED
+4  /kv/primary/7/v  /2                                            PARTIAL
+4  /kv/primary/7/d  7.9                                           PARTIAL
+4  /kv/primary/7/s  'b'                                           BUFFERED
+5  /kv/primary/8/v  /4                                            PARTIAL
+5  /kv/primary/8/d  3                                             PARTIAL
+5  /kv/primary/8/s  'A'                                           BUFFERED
+0  0                (1, 3.4501207708330057, 11.9033333333333334)  BUFFERED
+1  1                (3, 3.5355339059327376, 12.5000000000000000)  BUFFERED
+2  2                (5, NULL, NULL)                               BUFFERED
+3  3                (6, 3.4501207708330057, 11.9033333333333334)  BUFFERED
+4  4                (7, 3.4501207708330057, 11.9033333333333334)  BUFFERED
+5  5                (8, 3.5355339059327376, 12.5000000000000000)  BUFFERED
+0  0                (5, NULL, NULL)                               ROW
+1  1                (1, 3.4501207708330057, 11.9033333333333334)  ROW
+2  2                (6, 3.4501207708330057, 11.9033333333333334)  ROW
+3  3                (7, 3.4501207708330057, 11.9033333333333334)  ROW
+4  4                (3, 3.5355339059327376, 12.5000000000000000)  ROW
+5  5                (8, 3.5355339059327376, 12.5000000000000000)  ROW
+
+query ITTT
+EXPLAIN (TYPES) SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
+----
+0  select         result                     (k int, "stddev(d) OVER w" decimal)
+1  sort           result                     (k int, "stddev(d) OVER w" decimal)
+2  window         result                     (k int, "stddev(d) OVER w" decimal, "variance(d) OVER w" decimal)
+2  window         render stddev(d) OVER w    (stddev((d)[decimal]) OVER w)[decimal]
+2  window         render variance(d) OVER w  (variance((d)[decimal]) OVER w)[decimal]
+3  render/filter  result                     (k int, d decimal, d decimal, v int, v int)
+3  render/filter  render 0                   (k)[int]
+3  render/filter  render 1                   (d)[decimal]
+3  render/filter  render 2                   (d)[decimal]
+3  render/filter  render 3                   (v)[int]
+3  render/filter  render 4                   (v)[int]
+4  scan           result                     (k int, v int, w int, f float, d decimal, s string, b bool)

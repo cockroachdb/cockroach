@@ -1032,8 +1032,8 @@ func makeCheckConstraint(
 	}
 
 	var p parser.Parser
-	if p.AggregateInExpr(expr) {
-		return nil, fmt.Errorf("aggregate functions are not allowed in CHECK expressions")
+	if err := p.AssertNoAggregationOrWindowing(expr, "CHECK expressions"); err != nil {
+		return nil, err
 	}
 
 	if err := sqlbase.SanitizeVarFreeExpr(expr, parser.TypeBool, "CHECK"); err != nil {

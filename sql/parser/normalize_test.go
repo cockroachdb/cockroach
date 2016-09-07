@@ -111,6 +111,7 @@ func TestNormalizeExpr(t *testing.T) {
 		{`a/2=1`, `a = 2`},
 		{`1=a/2`, `a = 2`},
 		{`s=lower('FOO')`, `s = 'foo'`},
+		{`s=lower('FOO') OVER ()`, `s = lower('FOO') OVER ()`},
 		{`lower(s)='foo'`, `lower(s) = 'foo'`},
 		{`random()`, `random()`},
 		{`9223372036854775808`, `9223372036854775808`},

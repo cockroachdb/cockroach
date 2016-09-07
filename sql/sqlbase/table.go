@@ -141,8 +141,8 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 			return nil, nil, err
 		}
 		var p parser.Parser
-		if p.AggregateInExpr(d.DefaultExpr.Expr) {
-			return nil, nil, fmt.Errorf("Aggregate functions are not allowed in DEFAULT expressions")
+		if err := p.AssertNoAggregationOrWindowing(d.DefaultExpr.Expr, "DEFAULT expressions"); err != nil {
+			return nil, nil, err
 		}
 		s := d.DefaultExpr.Expr.String()
 		col.DefaultExpr = &s
