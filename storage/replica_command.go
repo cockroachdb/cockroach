@@ -3034,6 +3034,7 @@ func (r *Replica) ChangeReplicas(
 		// negate the benefits of pre-emptive snapshots, but that is a recoverable
 		// degradation, not a catastrophic failure.
 		snap, err := r.GetSnapshot(ctx)
+		defer r.CloseOutSnap()
 		log.Trace(ctx, "generated snapshot")
 		if err != nil {
 			return errors.Wrapf(err, "%s: change replicas failed", r)
@@ -3051,23 +3052,30 @@ func (r *Replica) ChangeReplicas(
 			)
 		}
 
-		if err := r.setPendingSnapshotIndex(snap.Metadata.Index); err != nil {
+		if err := r.setPendingSnapshotIndex(snap.RaftSnap.Metadata.Index); err != nil {
 			return err
 		}
 
-		req := &RaftMessageRequest{
-			RangeID:     r.RangeID,
-			FromReplica: fromRepDesc,
-			ToReplica:   repDesc,
-			Message: raftpb.Message{
-				Type:     raftpb.MsgSnap,
-				To:       0, // special cased ReplicaID for preemptive snapshots
-				From:     uint64(fromRepDesc.ReplicaID),
-				Term:     snap.Metadata.Term,
-				Snapshot: snap,
+		req := SnapshotRequest_Header{
+			RangeDescriptor: updatedDesc,
+			RaftMessageRequest: RaftMessageRequest{
+				RangeID:     r.RangeID,
+				FromReplica: fromRepDesc,
+				ToReplica:   repDesc,
+				Message: raftpb.Message{
+					Type:     raftpb.MsgSnap,
+					To:       0, // special cased ReplicaID for preemptive snapshots
+					From:     uint64(fromRepDesc.ReplicaID),
+					Term:     snap.RaftSnap.Metadata.Term,
+					Snapshot: snap.RaftSnap,
+				},
 			},
+			// TODO(jordan) set this accurately
+			RangeSize: 0,
+			// Recipients can choose to decline preemptive snapshots.
+			CanDecline: true,
 		}
-		if err := r.store.ctx.Transport.SendSync(ctx, req); err != nil {
+		if err := r.store.ctx.Transport.SendSnapshot(ctx, req, snap, r.store.Engine().NewBatch); err != nil {
 			return errors.Wrapf(err, "%s: change replicas aborted due to failed preemptive snapshot", r)
 		}
 

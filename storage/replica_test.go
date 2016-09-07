@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/bufalloc"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -5748,78 +5749,10 @@ func TestDiffRange(t *testing.T) {
 	}
 }
 
-func TestAsyncSnapshot(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	tsc := TestStoreContext()
-	tsc.BlockingSnapshotDuration = 0
-	tc := testContext{}
-	tc.StartWithStoreContext(t, tsc)
-	defer tc.Stop()
-
-	// Lock the replica manually instead of going through GetSnapshot()
-	// because we want to test the underlying async functionality.
-	tc.rng.mu.Lock()
-	_, err := tc.rng.Snapshot()
-	tc.rng.mu.Unlock()
-
-	// In async operation, the first call never succeeds.
-	if err != raft.ErrSnapshotTemporarilyUnavailable {
-		t.Fatalf("expected ErrSnapshotTemporarilyUnavailable, got %s", err)
-	}
-
-	// It will eventually succeed.
-	util.SucceedsSoon(t, func() error {
-		tc.rng.mu.Lock()
-		snap, err := tc.rng.Snapshot()
-		tc.rng.mu.Unlock()
-		if err != nil {
-			return err
-		}
-		if len(snap.Data) == 0 {
-			return errors.Errorf("snapshot is empty")
-		}
-		return nil
-	})
-}
-
-func TestAsyncSnapshotMaxAge(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	tsc := TestStoreContext()
-	tsc.BlockingSnapshotDuration = 0
-	tsc.AsyncSnapshotMaxAge = time.Millisecond
-	tc := testContext{}
-	tc.StartWithStoreContext(t, tsc)
-	defer tc.Stop()
-
-	// Lock the replica manually instead of going through GetSnapshot()
-	// because we want to test the underlying async functionality.
-	tc.rng.mu.Lock()
-	_, err := tc.rng.Snapshot()
-	tc.rng.mu.Unlock()
-
-	// In async operation, the first call never succeeds.
-	if err != raft.ErrSnapshotTemporarilyUnavailable {
-		t.Fatalf("expected ErrSnapshotTemporarilyUnavailable, got %s", err)
-	}
-
-	// Wait for the snapshot to be generated and abandoned.
-	time.Sleep(100 * time.Millisecond)
-	tc.rng.mu.Lock()
-	defer tc.rng.mu.Unlock()
-	// The channel was closed without producing a result.
-	snap, ok := <-tc.rng.mu.snapshotChan
-	if ok {
-		t.Fatalf("expected channel to be closed but got result: %v", snap)
-	}
-}
-
 func TestSyncSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tsc := TestStoreContext()
-	tsc.BlockingSnapshotDuration = time.Second
 	tc := testContext{}
 	tc.StartWithStoreContext(t, tsc)
 	defer tc.Stop()
@@ -5829,6 +5762,7 @@ func TestSyncSnapshot(t *testing.T) {
 	tc.rng.mu.Lock()
 	snap, err := tc.rng.Snapshot()
 	tc.rng.mu.Unlock()
+	tc.rng.CloseOutSnap()
 
 	if err != nil {
 		t.Fatal(err)
@@ -6457,10 +6391,31 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 	}
 	checkReservations(t, 1)
 
+	b := firstRng.store.Engine().NewBatch()
+	var alloc bufalloc.ByteAllocator
+	for ; snap.Iter.Valid(); snap.Iter.Next() {
+		var key engine.MVCCKey
+		var value []byte
+		alloc, key, value = snap.Iter.allocIterKeyValue(alloc)
+		mvccKey := engine.MVCCKey{
+			Key:       key.Key,
+			Timestamp: key.Timestamp,
+		}
+		if err := b.Put(mvccKey, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	// Apply a snapshot and check the reservation was filled. Note that this
 	// out-of-band application could be a root cause if this test ever crashes.
-	if err := firstRng.applySnapshot(context.Background(), snap, raftpb.HardState{}); err != nil {
+	if err := firstRng.applySnapshot(context.Background(), IncomingSnapshot{
+		SnapUUID:        snap.SnapUUID,
+		RangeDescriptor: *firstRng.Desc(),
+		Batches:         [][]byte{b.Repr()},
+	},
+		snap.RaftSnap, raftpb.HardState{}); err != nil {
 		t.Fatal(err)
 	}
+	firstRng.CloseOutSnap()
 	checkReservations(t, 0)
 }

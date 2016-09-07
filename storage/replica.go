@@ -343,17 +343,18 @@ type Replica struct {
 		// Computed checksum at a snapshot UUID.
 		checksums map[uuid.UUID]replicaChecksum
 
-		// Set to an open channel while a snapshot is being generated.
-		// When no snapshot is in progress, this field may either be nil
-		// or a closed channel. If an error occurs during generation,
-		// this channel may be closed without producing a result.
-		snapshotChan chan raftpb.Snapshot
-
 		// Counts calls to Replica.tick()
 		ticks int
 
 		// Counts Raft messages refused due to queue congestion.
 		droppedMessages int
+
+		// When closed, indicates that this replica has finished sending
+		// an outgoing snapshot. Nothing is sent on this channel.
+		outSnapDone chan struct{}
+
+		// The pending outgoing snapshot if there is one.
+		outSnap OutgoingSnapshot
 	}
 }
 
@@ -433,12 +434,20 @@ func (r *Replica) withRaftGroup(f func(r *raft.RawNode) error) error {
 
 var _ client.Sender = &Replica{}
 
+var initialOutSnapDone = func() chan struct{} {
+	ch := make(chan struct{})
+	close(ch)
+	return ch
+}()
+
 func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
-	return &Replica{
+	r := &Replica{
 		RangeID:    rangeID,
 		store:      store,
 		abortCache: NewAbortCache(rangeID),
 	}
+	r.mu.outSnapDone = initialOutSnapDone
+	return r
 }
 
 // NewReplica initializes the replica using the given metadata. If the
@@ -449,6 +458,7 @@ func NewReplica(
 	desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.ReplicaID,
 ) (*Replica, error) {
 	r := newReplica(desc.RangeID, store)
+
 	if err := r.init(desc, store.Clock(), replicaID); err != nil {
 		return nil, err
 	}
@@ -1657,8 +1667,9 @@ func (r *Replica) raftUnlock(uninitRaftLocked bool) {
 
 // handleRaftReady processes a raft.Ready containing entries and messages that
 // are ready to read, be saved to stable storage, committed or sent to other
-// peers.
-func (r *Replica) handleRaftReady() error {
+// peers. It takes a non-nil IncomingSnapshot pointer to indicate that it is
+// about to process a snapshot.
+func (r *Replica) handleRaftReady(inSnap IncomingSnapshot) error {
 	uninitRaftLocked := r.raftLock()
 	// We overwrite uninitRaftLocked below (in case a raft command contains a
 	// split), which requires using a separate closure to capture
@@ -1667,7 +1678,12 @@ func (r *Replica) handleRaftReady() error {
 	defer func() {
 		r.raftUnlock(uninitRaftLocked)
 	}()
+	return r.handleRaftReadyLocked(&uninitRaftLocked, inSnap)
+}
 
+// handleRaftReadyLocked is the same as handleRaftReady but requires that the
+// replica be locked for raft processing via r.raftLock.
+func (r *Replica) handleRaftReadyLocked(uninitRaftLocked *bool, inSnap IncomingSnapshot) error {
 	ctx := r.ctx
 	var hasReady bool
 	var rd raft.Ready
@@ -1712,7 +1728,15 @@ func (r *Replica) handleRaftReady() error {
 	}
 
 	if !raft.IsEmptySnap(rd.Snapshot) {
-		if err := r.applySnapshot(ctx, rd.Snapshot, rd.HardState); err != nil {
+		snapUUID, err := uuid.FromBytes(rd.Snapshot.Data)
+		if err != nil {
+			return errors.Wrap(err, "invalid snapshot id")
+		}
+		if *snapUUID != inSnap.SnapUUID {
+			log.Fatalf(ctx, "programming error: a snapshot application was attempted outside of the streaming snapshot codepath")
+		}
+
+		if err := r.applySnapshot(ctx, inSnap, rd.Snapshot, rd.HardState); err != nil {
 			return err
 		}
 
@@ -1722,6 +1746,7 @@ func (r *Replica) handleRaftReady() error {
 			r.store.mu.Lock()
 			defer r.store.mu.Unlock()
 
+			*inSnap.removePlaceholder = false
 			if r.store.removePlaceholderLocked(r.RangeID) {
 				atomic.AddInt32(&r.store.counts.filledPlaceholders, 1)
 			}
@@ -1733,7 +1758,6 @@ func (r *Replica) handleRaftReady() error {
 			return err
 		}
 
-		var err error
 		if lastIndex, err = loadLastIndex(ctx, r.store.Engine(), r.RangeID); err != nil {
 			return err
 		}
@@ -1750,7 +1774,7 @@ func (r *Replica) handleRaftReady() error {
 		// TODO(bdarnell): update coalesced heartbeat mapping with snapshot info.
 	}
 
-	if !uninitRaftLocked {
+	if !*uninitRaftLocked {
 		// Block processing of uninitialized replicas if any of the committed
 		// entries contains a split. We need to grab Store.uninitRaftMu before
 		// creating the batch (more precisely, before reading from the batch) in
@@ -1765,7 +1789,7 @@ func (r *Replica) handleRaftReady() error {
 			}
 			if raftCommandHasSplit(e.Data) {
 				r.store.uninitRaftMu.Lock()
-				uninitRaftLocked = true
+				*uninitRaftLocked = true
 				break
 			}
 		}
@@ -2015,7 +2039,19 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	r.mu.Lock()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
+	snap := &r.mu.outSnap
 	r.mu.Unlock()
+
+	hasSnapshot := !raft.IsEmptySnap(msg.Snapshot)
+
+	var beganStreaming bool
+	if hasSnapshot {
+		defer func() {
+			if !beganStreaming {
+				r.CloseOutSnap()
+			}
+		}()
+	}
 
 	if fromErr != nil {
 		log.Warningf(r.ctx, "failed to look up sender replica %d in range %d while sending %s: %s",
@@ -2025,6 +2061,43 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	if toErr != nil {
 		log.Warningf(r.ctx, "failed to look up recipient replica %d in range %d while sending %s: %s",
 			msg.To, rangeID, msg.Type, toErr)
+		return
+	}
+
+	if hasSnapshot {
+		msgUUID, err := uuid.FromBytes(msg.Snapshot.Data)
+		if err != nil {
+			log.Fatalf(r.ctx, "invalid snapshot: couldn't parse UUID from data: %s", err)
+		}
+		if *msgUUID != snap.SnapUUID {
+			log.Fatalf(r.ctx, "programming error: snapshot message from Raft.Ready %s doesn't match outgoing snapshot UUID %s.",
+				msgUUID.Short(), snap.SnapUUID.Short())
+		}
+		// Asynchronously stream the snapshot to the recipient.
+		if err := r.store.Stopper().RunTask(func() {
+			beganStreaming = true
+			r.store.Stopper().RunWorker(func() {
+				defer r.CloseOutSnap()
+				if err := r.store.ctx.Transport.SendSnapshot(
+					context.Background(),
+					SnapshotRequest_Header{
+						RangeDescriptor: *r.Desc(),
+						RaftMessageRequest: RaftMessageRequest{
+							RangeID:     r.RangeID,
+							FromReplica: fromReplica,
+							ToReplica:   toReplica,
+							Message:     msg,
+						},
+						// TODO(jordan) set this size accurately
+						RangeSize:  0,
+						CanDecline: false,
+					}, snap, r.store.Engine().NewBatch); err != nil {
+					log.Warningf(r.ctx, "range=%d: failed to send snapshot: %s", r.Desc().RangeID, err)
+				}
+			})
+		}); err != nil {
+			log.Warningf(r.ctx, "range=%d: failed to send snapshot: %s", r.Desc().RangeID, err)
+		}
 		return
 	}
 
