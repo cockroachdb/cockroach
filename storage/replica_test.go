@@ -2008,16 +2008,16 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 		return nil
 	})
 
-	// Finish the previous command.
-	blockingDone <- struct{}{}
-	if pErr := <-cmd1Done; pErr != nil {
-		t.Fatal(pErr)
-	}
-
 	// If this deadlocks, the command has unexpectedly begun executing and was
 	// trapped in the command filter. Indeed, the absence of such a deadlock is
 	// what's being tested here.
 	if pErr := <-cmd2Done; !testutils.IsPError(pErr, context.Canceled.Error()) {
+		t.Fatal(pErr)
+	}
+
+	// Finish the previous command, allowing the test to shut down.
+	blockingDone <- struct{}{}
+	if pErr := <-cmd1Done; pErr != nil {
 		t.Fatal(pErr)
 	}
 }
