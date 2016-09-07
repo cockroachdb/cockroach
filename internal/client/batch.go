@@ -20,6 +20,8 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/log"
+	"golang.org/x/net/context"
 )
 
 const (
@@ -290,10 +292,118 @@ func (b *Batch) growReqs(n int) {
 	b.reqs = b.reqs[:len(b.reqs)+n]
 }
 
+func (b *Batch) logRequest(arg roachpb.Request) {
+	switch req := arg.(type) {
+	case *roachpb.GetRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "Get %s", req.Key)
+		}
+	case *roachpb.PutRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "Put %s -> %s", req.Key, req.Value.PrettyPrint())
+		}
+	case *roachpb.ConditionalPutRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "CPut %s -> %s", req.Key, req.Value.PrettyPrint())
+		}
+	case *roachpb.InitPutRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "InitPut %s -> %s", req.Key, req.Value.PrettyPrint())
+		}
+	case *roachpb.IncrementRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "Increment %s by %v", req.Key, req.Increment)
+		}
+	case *roachpb.ScanRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "Scan from %s to %s", req.Key, req.EndKey)
+		}
+	case *roachpb.ReverseScanRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "Reverse scan from %s to %s", req.Key, req.EndKey)
+		}
+	case *roachpb.DeleteRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "Del %s", req.Key)
+		}
+	case *roachpb.DeleteRangeRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "DelRange %s", req.Key)
+		}
+	case *roachpb.BeginTransactionRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "BeginTransaction %s", req.Key)
+		}
+	case *roachpb.EndTransactionRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "EndTransaction %s", req.Key)
+		}
+	case *roachpb.AdminMergeRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "AdminMerge from %s to %s", req.Key, req.EndKey)
+		}
+	case *roachpb.AdminSplitRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "AdminSplit %s at %s", req.Key, req.SplitKey)
+		}
+	case *roachpb.AdminTransferLeaseRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "AdminTransferLease %s to %s", req.Key, req.Target)
+		}
+	case *roachpb.HeartbeatTxnRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "HeartbeatTxn %s at %v", req.Key, req.Now)
+		}
+	case *roachpb.GCRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "GC from %s to ", req.Key, req.EndKey)
+		}
+	case *roachpb.PushTxnRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "PushTxn %s from %s to %s", req.Key, req.PusherTxn, req.PusheeTxn)
+		}
+	case *roachpb.RangeLookupRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "RangeLook at %s", req.Key)
+		}
+	case *roachpb.ResolveIntentRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "ResolveIntent at %s for txn %s", req.Span, req.IntentTxn)
+		}
+	case *roachpb.ResolveIntentRangeRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "ResolveIntentRange at %s for txn %s", req.Span, req.IntentTxn)
+		}
+	case *roachpb.MergeRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "Merge at %s -> %s", req.Key, req.Value.PrettyPrint())
+		}
+	case *roachpb.TruncateLogRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "TruncateLog at %s for range %v", req.Index, req.RangeID)
+		}
+	case *roachpb.RequestLeaseRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "RequestLease at %s for lease %s", req.Key, req.Lease)
+		}
+	case *roachpb.CheckConsistencyRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "CheckConsistency from %s to %s", req.Key, req.EndKey)
+		}
+	case *roachpb.ChangeFrozenRequest:
+		if log.V(2) {
+			log.Infof(context.TODO(), "ChangeFrozen from %s to %s", req.Key, req.EndKey)
+		}
+	default:
+
+	}
+}
+
 func (b *Batch) appendReqs(args ...roachpb.Request) {
 	n := len(b.reqs)
 	b.growReqs(len(args))
 	for i := range args {
+		b.logRequest(args[i])
 		b.reqs[n+i].MustSetInner(args[i])
 	}
 }
