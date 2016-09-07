@@ -48,11 +48,20 @@ support unless we have reason not to.
   (i.e. it can only add new columns to the end).
 * We should also support the applicable limited `ALTER VIEW` options that
   [Postgres offers](https://www.postgresql.org/docs/9.1/static/sql-alterview.html).
+* Posgres supports views over
+  [VALUES statements](https://www.postgresql.org/docs/9.1/static/sql-values.html),
+  while MySQL does not. We have taken the approach of supporting VALUES
+  statements elsewhere, and will do so here as well.
+* Even though it is intentionally undefined by the SQL standard (and despite
+  [SQL Server's lack of support](https://msdn.microsoft.com/en-us/library/ms187956.aspx#Anchor_1),
+  both Postgres and MySQL support `ORDER BY` clauses on the select
+  statements used in view definitions, and respect them in later queries.
+  For compatibility reasons, we should try to do so as well.
 * We should support the `RESTRICT` option as the default on
   [`DROP VIEW`](https://www.postgresql.org/docs/9.1/static/sql-dropview.html).
   While supporting `CASCADE` as well would be nice, it can implemented
-  separately at a later time, as we
-  [chose to do with foreign keys](fk.md#cascade-and-other-behaviors).
+  separately at a later time, as we have so far
+  [chosen to do for DELETE/TRUNCATE on foreign keys](fk.md#cascade-and-other-behaviors).
 * Now that there will be references to underlying tables and indexes, we
   will have to support the `RESTRICT` option (and eventually `CASCADE`)
   on various other `DROP` commands as well.
@@ -60,8 +69,6 @@ support unless we have reason not to.
   propose that we don't either for now.
 
 # Detailed design
-
-TODO(a-robinson): Flesh this out as needed after getting initial feedback.
 
 The major problems we have to solve to support the in-scope features are
 validating new views, storing view definitions somewhere, tracking
