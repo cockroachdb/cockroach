@@ -47,7 +47,7 @@ func createTestClientForUser(t *testing.T, stopper *stop.Stopper, addr, user str
 	ctx.SSLCA = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
 	ctx.SSLCert = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user))
 	ctx.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user))
-	sender, err := client.NewSender(rpc.NewContext(&ctx, nil, stopper), addr)
+	sender, err := client.NewSender(rpc.NewContext(context.TODO(), &ctx, nil, stopper), addr)
 	if err != nil {
 		t.Fatal(err)
 	}
