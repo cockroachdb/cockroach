@@ -985,7 +985,7 @@ func TestNoSequenceCachePutOnRangeMismatchError(t *testing.T) {
 	}
 }
 
-// TestPropagateTxnOnError verifies that DistSender.sendChunk properly
+// TestPropagateTxnOnError verifies that DistSender.sendBatch properly
 // propagates the txn data to a next iteration. Use txn.Writing field to
 // verify that.
 func TestPropagateTxnOnError(t *testing.T) {
