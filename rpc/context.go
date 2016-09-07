@@ -107,7 +107,9 @@ type Context struct {
 }
 
 // NewContext creates an rpc Context with the supplied values.
-func NewContext(baseCtx *base.Context, hlcClock *hlc.Clock, stopper *stop.Stopper) *Context {
+func NewContext(
+	masterCtx context.Context, baseCtx *base.Context, hlcClock *hlc.Clock, stopper *stop.Stopper,
+) *Context {
 	ctx := &Context{
 		Context: baseCtx,
 	}
@@ -120,7 +122,7 @@ func NewContext(baseCtx *base.Context, hlcClock *hlc.Clock, stopper *stop.Stoppe
 		clock: ctx.localClock,
 	}
 	var cancel context.CancelFunc
-	ctx.masterCtx, cancel = context.WithCancel(context.Background())
+	ctx.masterCtx, cancel = context.WithCancel(masterCtx)
 	ctx.Stopper = stopper
 	ctx.RemoteClocks = newRemoteClockMonitor(ctx.localClock, 10*defaultHeartbeatInterval)
 	ctx.HeartbeatInterval = defaultHeartbeatInterval

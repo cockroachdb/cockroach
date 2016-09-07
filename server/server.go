@@ -154,7 +154,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 
 	s.clock.SetMaxOffset(srvCtx.MaxOffset)
 
-	s.rpcContext = rpc.NewContext(srvCtx.Context, s.clock, s.stopper)
+	s.rpcContext = rpc.NewContext(s.Ctx(), srvCtx.Context, s.clock, s.stopper)
 	s.rpcContext.HeartbeatCB = func() {
 		if err := s.rpcContext.RemoteClocks.VerifyClockOffset(); err != nil {
 			log.Fatal(s.Ctx(), err)

@@ -22,6 +22,8 @@ import (
 	"strconv"
 	"strings"
 
+	"golang.org/x/net/context"
+
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -35,14 +37,14 @@ import (
 
 func makeDBClient() (*client.DB, *stop.Stopper) {
 	stopper := stop.NewStopper()
-	context := &base.Context{
+	ctx := &base.Context{
 		User:       security.NodeUser,
 		SSLCA:      baseCtx.SSLCA,
 		SSLCert:    baseCtx.SSLCert,
 		SSLCertKey: baseCtx.SSLCertKey,
 		Insecure:   baseCtx.Insecure,
 	}
-	sender, err := client.NewSender(rpc.NewContext(context, nil, stopper), baseCtx.Addr)
+	sender, err := client.NewSender(rpc.NewContext(context.TODO(), ctx, nil, stopper), baseCtx.Addr)
 	if err != nil {
 		stopper.Stop()
 		panicf("failed to initialize KV client: %s", err)

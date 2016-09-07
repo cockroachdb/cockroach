@@ -82,6 +82,8 @@ type InitSenderFn func(
 // TestServer.Addr after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
 func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Context, initSender InitSenderFn) {
+	clusterCtx := context.TODO()
+
 	nodeID := roachpb.NodeID(1)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: nodeID}
 	tracer := tracing.NewTracer()
@@ -89,7 +91,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Context, initSen
 	ltc.Manual = hlc.NewManualClock(0)
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano)
 	ltc.Stopper = stop.NewStopper()
-	rpcContext := rpc.NewContext(baseCtx, ltc.Clock, ltc.Stopper)
+	rpcContext := rpc.NewContext(clusterCtx, baseCtx, ltc.Clock, ltc.Stopper)
 	server := rpc.NewServer(rpcContext) // never started
 	ltc.Gossip = gossip.New(
 		context.Background(), rpcContext, server, nil, ltc.Stopper, metric.NewRegistry())
@@ -109,7 +111,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Context, initSen
 	if ltc.RangeRetryOptions != nil {
 		ctx.RangeRetryOptions = *ltc.RangeRetryOptions
 	}
-	ctx.Ctx = tracing.WithTracer(context.Background(), tracer)
+	ctx.Ctx = tracing.WithTracer(clusterCtx, tracer)
 	ctx.Clock = ltc.Clock
 	ctx.DB = ltc.DB
 	ctx.Gossip = ltc.Gossip

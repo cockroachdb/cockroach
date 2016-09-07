@@ -19,6 +19,8 @@ package rpc
 import (
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/testutils"
@@ -35,7 +37,7 @@ func init() {
 // newNodeTestContext returns a rpc.Context for testing.
 // It is meant to be used by nodes.
 func newNodeTestContext(clock *hlc.Clock, stopper *stop.Stopper) *Context {
-	ctx := NewContext(testutils.NewNodeTestBaseContext(), clock, stopper)
+	ctx := NewContext(context.TODO(), testutils.NewNodeTestBaseContext(), clock, stopper)
 	ctx.HeartbeatInterval = 10 * time.Millisecond
 	ctx.HeartbeatTimeout = 2 * defaultHeartbeatInterval
 	return ctx
