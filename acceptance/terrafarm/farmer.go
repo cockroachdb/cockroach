@@ -112,7 +112,7 @@ func (f *Farmer) Add(nodes int) error {
 	}
 
 	for v, val := range f.AddVars {
-		args = append(args, fmt.Sprintf("-var=%s=%s", v, val))
+		args = append(args, fmt.Sprintf(`-var=%s="%s"`, v, val))
 	}
 
 	if nodes == 0 {
