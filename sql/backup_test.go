@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/pkg/errors"
@@ -241,11 +242,11 @@ func TestBackupRestore(t *testing.T) {
 	}
 }
 
-func startBankTransfers(t testing.TB, ctx context.Context, sqlDB *gosql.DB, numAccounts int) {
+func startBankTransfers(t testing.TB, stopper *stop.Stopper, sqlDB *gosql.DB, numAccounts int) {
 	const maxTransfer = 999
 	for {
 		select {
-		case <-ctx.Done():
+		case <-stopper.ShouldQuiesce():
 			return // All done.
 		default:
 			// Keep going.
@@ -264,7 +265,7 @@ func startBankTransfers(t testing.TB, ctx context.Context, sqlDB *gosql.DB, numA
 				WHERE id IN ($1, $2)`
 		util.SucceedsSoon(t, func() error {
 			select {
-			case <-ctx.Done():
+			case <-stopper.ShouldQuiesce():
 				return nil // All done.
 			default:
 				// Keep going.
@@ -277,8 +278,6 @@ func startBankTransfers(t testing.TB, ctx context.Context, sqlDB *gosql.DB, numA
 
 func TestBackupRestoreBank(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(dan): #8813")
-
 	ctx := context.Background()
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
 	defer sql.TestDisableTableLeases()()
@@ -298,15 +297,16 @@ func TestBackupRestoreBank(t *testing.T) {
 		ReplicationMode: base.ReplicationAuto,
 		ServerArgs:      base.TestServerArgs{},
 	})
-	defer tc.Stopper().Stop()
+	stopper := tc.Stopper()
+	defer stopper.Stop()
 	sqlDB := tc.Conns[0]
 	kvDB := tc.Server(0).KVClient().(*client.DB)
 
 	_ = setupBackupRestoreDB(t, ctx, tc, numAccounts, backupRestoreDefaultRanges)
 
-	bankCtx, bankCancel := context.WithCancel(ctx)
-	defer bankCancel()
-	go startBankTransfers(t, bankCtx, sqlDB, numAccounts)
+	stopper.RunWorker(func() {
+		startBankTransfers(t, stopper, sqlDB, numAccounts)
+	})
 
 	// Loop continually doing backup and restores while the bank transfers are
 	// running in a goroutine. After each iteration, check the invariant that
