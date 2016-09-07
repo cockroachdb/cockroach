@@ -2250,7 +2250,6 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 	s := tc.store
-	ctx := context.Background()
 
 	// Clobber the existing range so we can test nonoverlapping placeholders.
 	rng1, err := s.GetReplica(1)
@@ -2293,7 +2292,7 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 		},
 	}
 	const expected = "preemptive snapshot from term 0 received"
-	if err := s.HandleRaftRequest(ctx, req); !testutils.IsError(errors.Errorf("%s", err), expected) {
+	if err := s.handleRaftRequest(req); !testutils.IsError(errors.Errorf("%s", err), expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
 	}
 
