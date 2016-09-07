@@ -19,7 +19,10 @@ package client
 import (
 	"github.com/pkg/errors"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
@@ -37,6 +40,7 @@ type Batch struct {
 	// The Txn the batch is associated with. This field may be nil if the batch
 	// was not created via Txn.NewBatch.
 	txn *Txn
+	ctx context.Context
 	// Results contains an entry for each operation added to the batch. The order
 	// of the results matches the order the operations were added to the
 	// batch. For example:
@@ -290,10 +294,72 @@ func (b *Batch) growReqs(n int) {
 	b.reqs = b.reqs[:len(b.reqs)+n]
 }
 
-func (b *Batch) appendReqs(args ...roachpb.Request) {
+func (b *Batch) logRequest(arg roachpb.Request, level int) {
+	if !log.VDepth(2, level) {
+		return
+	}
+	switch req := arg.(type) {
+	case *roachpb.GetRequest:
+		log.InfofDepth(b.ctx, level, "Get %s", req.Key)
+	case *roachpb.PutRequest:
+		log.InfofDepth(b.ctx, level, "Put %s -> %s", req.Key, req.Value.PrettyPrint())
+	case *roachpb.ConditionalPutRequest:
+		log.InfofDepth(b.ctx, level, "CPut %s -> %s", req.Key, req.Value.PrettyPrint())
+	case *roachpb.InitPutRequest:
+		log.InfofDepth(b.ctx, level, "InitPut %s -> %s", req.Key, req.Value.PrettyPrint())
+	case *roachpb.IncrementRequest:
+		log.InfofDepth(b.ctx, level, "Increment %s by %v", req.Key, req.Increment)
+	case *roachpb.ScanRequest:
+		log.InfofDepth(b.ctx, level, "Scan from %s to %s", req.Key, req.EndKey)
+	case *roachpb.ReverseScanRequest:
+		log.InfofDepth(b.ctx, level, "Reverse scan from %s to %s", req.Key, req.EndKey)
+	case *roachpb.DeleteRequest:
+		log.InfofDepth(b.ctx, level, "Del %s", req.Key)
+	case *roachpb.DeleteRangeRequest:
+		log.InfofDepth(b.ctx, level, "DelRange %s", req.Key)
+	case *roachpb.BeginTransactionRequest:
+		log.InfofDepth(b.ctx, level, "BeginTransaction %s", req.Key)
+	case *roachpb.EndTransactionRequest:
+		log.InfofDepth(b.ctx, level, "EndTransaction %s", req.Key)
+	case *roachpb.AdminMergeRequest:
+		log.InfofDepth(b.ctx, level, "AdminMerge from %s to %s", req.Key, req.EndKey)
+	case *roachpb.AdminSplitRequest:
+		log.InfofDepth(b.ctx, level, "AdminSplit %s at %s", req.Key, req.SplitKey)
+	case *roachpb.AdminTransferLeaseRequest:
+		log.InfofDepth(b.ctx, level, "AdminTransferLease %s to %s", req.Key, req.Target)
+	case *roachpb.HeartbeatTxnRequest:
+		log.InfofDepth(b.ctx, level, "HeartbeatTxn %s at %v", req.Key, req.Now)
+	case *roachpb.GCRequest:
+		log.InfofDepth(b.ctx, level, "GC from %s to %s", req.Key, req.EndKey)
+	case *roachpb.PushTxnRequest:
+		log.InfofDepth(b.ctx, level, "PushTxn %s from %s to %s", req.Key, req.PusherTxn, req.PusheeTxn)
+	case *roachpb.RangeLookupRequest:
+		log.InfofDepth(b.ctx, level, "RangeLook at %s", req.Key)
+	case *roachpb.ResolveIntentRequest:
+		log.InfofDepth(b.ctx, level, "ResolveIntent at %s for txn %s", req.Span, req.IntentTxn)
+	case *roachpb.ResolveIntentRangeRequest:
+		log.InfofDepth(b.ctx, level, "ResolveIntentRange at %s for txn %s", req.Span, req.IntentTxn)
+	case *roachpb.MergeRequest:
+		log.InfofDepth(b.ctx, level, "Merge at %s -> %s", req.Key, req.Value.PrettyPrint())
+	case *roachpb.TruncateLogRequest:
+		log.InfofDepth(b.ctx, level, "TruncateLog at %s for range %v", req.Index, req.RangeID)
+	case *roachpb.RequestLeaseRequest:
+		log.InfofDepth(b.ctx, level, "RequestLease at %s for lease %s", req.Key, req.Lease)
+	case *roachpb.CheckConsistencyRequest:
+		log.InfofDepth(b.ctx, level, "CheckConsistency from %s to %s", req.Key, req.EndKey)
+	case *roachpb.ChangeFrozenRequest:
+		log.InfofDepth(b.ctx, level, "ChangeFrozen from %s to %s", req.Key, req.EndKey)
+	default:
+		log.InfofDepth(b.ctx, level, "%T <unknown>", req)
+
+	}
+}
+
+func (b *Batch) appendReqs(level int, args ...roachpb.Request) {
 	n := len(b.reqs)
 	b.growReqs(len(args))
 	for i := range args {
+		b.logRequest(args[i], level+1)
 		b.reqs[n+i].MustSetInner(args[i])
 	}
 }
@@ -313,7 +379,7 @@ func (b *Batch) AddRawRequest(reqs ...roachpb.Request) {
 			*roachpb.DeleteRequest:
 			numRows = 1
 		}
-		b.appendReqs(args)
+		b.appendReqs(1, args)
 		b.initResult(1 /* calls */, numRows, raw, nil)
 	}
 }
@@ -331,7 +397,7 @@ func (b *Batch) Get(key interface{}) {
 		b.initResult(0, 1, notRaw, err)
 		return
 	}
-	b.appendReqs(roachpb.NewGet(k))
+	b.appendReqs(1, roachpb.NewGet(k))
 	b.initResult(1, 1, notRaw, nil)
 }
 
@@ -347,9 +413,9 @@ func (b *Batch) put(key, value interface{}, inline bool) {
 		return
 	}
 	if inline {
-		b.appendReqs(roachpb.NewPutInline(k, v))
+		b.appendReqs(2, roachpb.NewPutInline(k, v))
 	} else {
-		b.appendReqs(roachpb.NewPut(k, v))
+		b.appendReqs(2, roachpb.NewPut(k, v))
 	}
 	b.initResult(1, 1, notRaw, nil)
 }
@@ -405,7 +471,7 @@ func (b *Batch) CPut(key, value, expValue interface{}) {
 		b.initResult(0, 1, notRaw, err)
 		return
 	}
-	b.appendReqs(roachpb.NewConditionalPut(k, v, ev))
+	b.appendReqs(1, roachpb.NewConditionalPut(k, v, ev))
 	b.initResult(1, 1, notRaw, nil)
 }
 
@@ -426,7 +492,7 @@ func (b *Batch) InitPut(key, value interface{}) {
 		b.initResult(0, 1, notRaw, err)
 		return
 	}
-	b.appendReqs(roachpb.NewInitPut(k, v))
+	b.appendReqs(1, roachpb.NewInitPut(k, v))
 	b.initResult(1, 1, notRaw, nil)
 }
 
@@ -444,7 +510,7 @@ func (b *Batch) Inc(key interface{}, value int64) {
 		b.initResult(0, 1, notRaw, err)
 		return
 	}
-	b.appendReqs(roachpb.NewIncrement(k, value))
+	b.appendReqs(1, roachpb.NewIncrement(k, value))
 	b.initResult(1, 1, notRaw, nil)
 }
 
@@ -460,9 +526,9 @@ func (b *Batch) scan(s, e interface{}, isReverse bool) {
 		return
 	}
 	if !isReverse {
-		b.appendReqs(roachpb.NewScan(begin, end))
+		b.appendReqs(1, roachpb.NewScan(begin, end))
 	} else {
-		b.appendReqs(roachpb.NewReverseScan(begin, end))
+		b.appendReqs(1, roachpb.NewReverseScan(begin, end))
 	}
 	b.initResult(1, 0, notRaw, nil)
 }
@@ -503,7 +569,7 @@ func (b *Batch) CheckConsistency(s, e interface{}, withDiff bool) {
 		b.initResult(0, 0, notRaw, err)
 		return
 	}
-	b.appendReqs(roachpb.NewCheckConsistency(begin, end, withDiff))
+	b.appendReqs(1, roachpb.NewCheckConsistency(begin, end, withDiff))
 	b.initResult(1, 0, notRaw, nil)
 }
 
@@ -523,7 +589,7 @@ func (b *Batch) Del(keys ...interface{}) {
 		}
 		reqs = append(reqs, roachpb.NewDelete(k))
 	}
-	b.appendReqs(reqs...)
+	b.appendReqs(1, reqs...)
 	b.initResult(len(reqs), len(reqs), notRaw, nil)
 }
 
@@ -544,7 +610,7 @@ func (b *Batch) DelRange(s, e interface{}, returnKeys bool) {
 		b.initResult(0, 0, notRaw, err)
 		return
 	}
-	b.appendReqs(roachpb.NewDeleteRange(begin, end, returnKeys))
+	b.appendReqs(1, roachpb.NewDeleteRange(begin, end, returnKeys))
 	b.initResult(1, 0, notRaw, nil)
 }
 
@@ -561,7 +627,7 @@ func (b *Batch) adminMerge(key interface{}) {
 			Key: k,
 		},
 	}
-	b.appendReqs(req)
+	b.appendReqs(1, req)
 	b.initResult(1, 0, notRaw, nil)
 }
 
@@ -579,7 +645,7 @@ func (b *Batch) adminSplit(splitKey interface{}) {
 		},
 	}
 	req.SplitKey = k
-	b.appendReqs(req)
+	b.appendReqs(1, req)
 	b.initResult(1, 0, notRaw, nil)
 }
 
@@ -597,6 +663,6 @@ func (b *Batch) adminTransferLease(key interface{}, target roachpb.StoreID) {
 		},
 		Target: target,
 	}
-	b.appendReqs(req)
+	b.appendReqs(1, req)
 	b.initResult(1, 0, notRaw, nil)
 }
