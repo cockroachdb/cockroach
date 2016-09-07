@@ -19,7 +19,10 @@ package client
 import (
 	"github.com/pkg/errors"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
@@ -36,7 +39,8 @@ const (
 type Batch struct {
 	// The Txn the batch is associated with. This field may be nil if the batch
 	// was not created via Txn.NewBatch.
-	txn *Txn
+	txn     *Txn
+	Context context.Context //must not be nil
 	// Results contains an entry for each operation added to the batch. The order
 	// of the results matches the order the operations were added to the
 	// batch. For example:
@@ -290,10 +294,118 @@ func (b *Batch) growReqs(n int) {
 	b.reqs = b.reqs[:len(b.reqs)+n]
 }
 
+func (b *Batch) logRequest(arg roachpb.Request) {
+	switch req := arg.(type) {
+	case *roachpb.GetRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "Get %s", req.Key)
+		}
+	case *roachpb.PutRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "Put %s -> %s", req.Key, req.Value.PrettyPrint())
+		}
+	case *roachpb.ConditionalPutRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "CPut %s -> %s", req.Key, req.Value.PrettyPrint())
+		}
+	case *roachpb.InitPutRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "InitPut %s -> %s", req.Key, req.Value.PrettyPrint())
+		}
+	case *roachpb.IncrementRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "Increment %s by %v", req.Key, req.Increment)
+		}
+	case *roachpb.ScanRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "Scan from %s to %s", req.Key, req.EndKey)
+		}
+	case *roachpb.ReverseScanRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "Reverse scan from %s to %s", req.Key, req.EndKey)
+		}
+	case *roachpb.DeleteRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "Del %s", req.Key)
+		}
+	case *roachpb.DeleteRangeRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "DelRange %s", req.Key)
+		}
+	case *roachpb.BeginTransactionRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "BeginTransaction %s", req.Key)
+		}
+	case *roachpb.EndTransactionRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "EndTransaction %s", req.Key)
+		}
+	case *roachpb.AdminMergeRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "AdminMerge from %s to %s", req.Key, req.EndKey)
+		}
+	case *roachpb.AdminSplitRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "AdminSplit %s at %s", req.Key, req.SplitKey)
+		}
+	case *roachpb.AdminTransferLeaseRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "AdminTransferLease %s to %s", req.Key, req.Target)
+		}
+	case *roachpb.HeartbeatTxnRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "HeartbeatTxn %s at %v", req.Key, req.Now)
+		}
+	case *roachpb.GCRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "GC from %s to ", req.Key, req.EndKey)
+		}
+	case *roachpb.PushTxnRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "PushTxn %s from %s to %s", req.Key, req.PusherTxn, req.PusheeTxn)
+		}
+	case *roachpb.RangeLookupRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "RangeLook at %s", req.Key)
+		}
+	case *roachpb.ResolveIntentRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "ResolveIntent at %s for txn %s", req.Span, req.IntentTxn)
+		}
+	case *roachpb.ResolveIntentRangeRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "ResolveIntentRange at %s for txn %s", req.Span, req.IntentTxn)
+		}
+	case *roachpb.MergeRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "Merge at %s -> %s", req.Key, req.Value.PrettyPrint())
+		}
+	case *roachpb.TruncateLogRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "TruncateLog at %s for range %v", req.Index, req.RangeID)
+		}
+	case *roachpb.RequestLeaseRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "RequestLease at %s for lease %s", req.Key, req.Lease)
+		}
+	case *roachpb.CheckConsistencyRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "CheckConsistency from %s to %s", req.Key, req.EndKey)
+		}
+	case *roachpb.ChangeFrozenRequest:
+		if log.V(2) {
+			log.InfofDepth(b.Context, 1, "ChangeFrozen from %s to %s", req.Key, req.EndKey)
+		}
+	default:
+
+	}
+}
+
 func (b *Batch) appendReqs(args ...roachpb.Request) {
 	n := len(b.reqs)
 	b.growReqs(len(args))
 	for i := range args {
+		b.logRequest(args[i])
 		b.reqs[n+i].MustSetInner(args[i])
 	}
 }
