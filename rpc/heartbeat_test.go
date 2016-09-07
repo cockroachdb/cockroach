@@ -45,7 +45,7 @@ func TestHeartbeatReply(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano)
 	heartbeat := &HeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour),
+		remoteClockMonitor: newRemoteClockMonitor(context.TODO(), clock, time.Hour),
 	}
 
 	request := &PingRequest{
@@ -71,12 +71,12 @@ func TestManualHeartbeat(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano)
 	manualHeartbeat := &ManualHeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour),
+		remoteClockMonitor: newRemoteClockMonitor(context.TODO(), clock, time.Hour),
 		ready:              make(chan struct{}, 1),
 	}
 	regularHeartbeat := &HeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour),
+		remoteClockMonitor: newRemoteClockMonitor(context.TODO(), clock, time.Hour),
 	}
 
 	request := &PingRequest{
