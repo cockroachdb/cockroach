@@ -57,6 +57,8 @@ export class StackedAreaGraph extends React.Component<StackedAreaGraphProps, {}>
       return findChildrenOfType(children, Metric) as React.ReactElement<MetricProps>[];
     });
 
+  drawChartBound: () => void;
+
   initChart() {
     let axis = this.axis(this.props);
     if (!axis) {
@@ -142,14 +144,15 @@ export class StackedAreaGraph extends React.Component<StackedAreaGraphProps, {}>
   componentDidMount() {
     this.initChart();
     this.drawChart();
+    this.drawChartBound = () => this.drawChart();
     // NOTE: This might not work on Android:
     // http://caniuse.com/#feat=pagevisibility
     // TODO (maxlang): Check if this element is visible based on scroll state.
-    document.addEventListener("visibilitychange", this.drawChart);
+    document.addEventListener("visibilitychange", this.drawChartBound);
   }
 
   componentWillUnmount() {
-    document.removeEventListener("visibilitychange", this.drawChart);
+    document.removeEventListener("visibilitychange", this.drawChartBound);
   }
 
   componentDidUpdate() {
