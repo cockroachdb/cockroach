@@ -244,6 +244,32 @@ func (s *adminServer) DatabaseDetails(
 		}
 	}
 
+	// Query the descriptor ID and zone configuration for this database.
+	{
+		path, err := s.queryDescriptorIDPath(session, []string{req.Database})
+		if err != nil {
+			return nil, s.serverError(err)
+		}
+		resp.DescriptorID = int64(path[1])
+
+		id, zone, zoneExists, err := s.queryZonePath(session, path)
+		if err != nil {
+			return nil, s.serverError(err)
+		}
+
+		if !zoneExists {
+			zone = config.DefaultZoneConfig()
+		}
+		resp.ZoneConfig = zone
+
+		switch id {
+		case path[1]:
+			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_DATABASE
+		default:
+			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_CLUSTER
+		}
+	}
+
 	return &resp, nil
 }
 
@@ -418,12 +444,13 @@ func (s *adminServer) TableDetails(
 			resp.RangeCount = rangeCount
 		}
 
-		// Query the zone configuration for this table.
+		// Query the descriptor ID and zone configuration for this table.
 		{
 			path, err := s.queryDescriptorIDPath(session, []string{req.Database, req.Table})
 			if err != nil {
 				return nil, s.serverError(err)
 			}
+			resp.DescriptorID = int64(path[2])
 
 			id, zone, zoneExists, err := s.queryZonePath(session, path)
 			if err != nil {

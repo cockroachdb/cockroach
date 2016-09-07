@@ -3234,6 +3234,33 @@ getTableNames?() : string[];
 
 
 
+descriptor_id?: Long;
+		
+
+getDescriptorId?() : Long;
+		setDescriptorId?(descriptorId : Long): void;
+		
+
+
+
+zone_config?: config.ZoneConfig;
+		
+
+getZoneConfig?() : config.ZoneConfig;
+		setZoneConfig?(zoneConfig : config.ZoneConfig): void;
+		
+
+
+
+zone_config_level?: ZoneConfigurationLevel;
+		
+
+getZoneConfigLevel?() : ZoneConfigurationLevel;
+		setZoneConfigLevel?(zoneConfigLevel : ZoneConfigurationLevel): void;
+		
+
+
+
 }
 
 	export interface DatabaseDetailsResponseMessage extends DatabaseDetailsResponse {
@@ -3411,6 +3438,15 @@ zone_config_level?: ZoneConfigurationLevel;
 
 getZoneConfigLevel?() : ZoneConfigurationLevel;
 		setZoneConfigLevel?(zoneConfigLevel : ZoneConfigurationLevel): void;
+		
+
+
+
+descriptor_id?: Long;
+		
+
+getDescriptorId?() : Long;
+		setDescriptorId?(descriptorId : Long): void;
 		
 
 
