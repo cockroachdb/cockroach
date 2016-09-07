@@ -107,18 +107,20 @@ func (s *fakeGossipServer) Gossip(stream Gossip_GossipServer) error {
 // faked gossip instance. The remote gossip instance launches its
 // faked gossip service just for check the client message.
 func startFakeServerGossips(t *testing.T) (*Gossip, *fakeGossipServer, *stop.Stopper) {
+	lCtx := log.WithLogTag(context.TODO(), "local", nil)
 	stopper := stop.NewStopper()
-	lRPCContext := rpc.NewContext(context.TODO(), &base.Context{Insecure: true}, nil, stopper)
+	lRPCContext := rpc.NewContext(lCtx, &base.Context{Insecure: true}, nil, stopper)
 
 	lserver := rpc.NewServer(lRPCContext)
-	local := New(context.TODO(), lRPCContext, lserver, nil, stopper, metric.NewRegistry())
+	local := New(lCtx, lRPCContext, lserver, nil, stopper, metric.NewRegistry())
 	lln, err := netutil.ListenAndServeGRPC(stopper, lserver, util.TestAddr)
 	if err != nil {
 		t.Fatal(err)
 	}
 	local.start(lln.Addr())
 
-	rRPCContext := rpc.NewContext(context.TODO(), &base.Context{Insecure: true}, nil, stopper)
+	rCtx := log.WithLogTag(context.TODO(), "remote", nil)
+	rRPCContext := rpc.NewContext(rCtx, &base.Context{Insecure: true}, nil, stopper)
 
 	rserver := rpc.NewServer(rRPCContext)
 	rln, err := netutil.ListenAndServeGRPC(stopper, rserver, util.TestAddr)
