@@ -20,6 +20,14 @@ with the environment variable `COCKROACH_DEBUG_UI` set to a truthy value, e.g.
 [strconv.ParseBool](https://godoc.org/strconv#ParseBool) will work) and
 navigating to the web console.
 
+### Visual Studio Code
+
+To get autocomplete and type-checking working in Visual Studio Code, you may
+need to manually configure your typescript version. Typescript 2 is already
+installed by npm, but you'll need to configure your project/workspace to point
+to it. See
+https://code.visualstudio.com/docs/languages/typescript#_using-newer-typescript-versions.
+
 ## Modification
 
 As mentioned above, be sure to run the CockroachDB server in UI debug mode
