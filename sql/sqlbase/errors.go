@@ -215,17 +215,24 @@ func (e *ErrUniquenessConstraintViolation) SrcContext() SrcCtx {
 
 // NewUndefinedTableError creates a new ErrUndefinedTable.
 func NewUndefinedTableError(name string) error {
-	return &ErrUndefinedTable{ctx: MakeSrcCtx(1), name: name}
+	return &ErrUndefinedTable{ctx: MakeSrcCtx(1), objType: "table", name: name}
+}
+
+// NewUndefinedViewError creates a new ErrUndefinedTable, which is also used
+// for views (sharing the same postgres error code).
+func NewUndefinedViewError(name string) error {
+	return &ErrUndefinedTable{ctx: MakeSrcCtx(1), objType: "view", name: name}
 }
 
 // ErrUndefinedTable represents a missing database table.
 type ErrUndefinedTable struct {
-	ctx  SrcCtx
-	name string
+	ctx     SrcCtx
+	objType string
+	name    string
 }
 
 func (e *ErrUndefinedTable) Error() string {
-	return fmt.Sprintf("table %q does not exist", e.name)
+	return fmt.Sprintf("%s %q does not exist", e.objType, e.name)
 }
 
 // Code implements the ErrorWithPGCode interface.
@@ -265,6 +272,32 @@ func (*ErrUndefinedDatabase) Code() string {
 
 // SrcContext implements the ErrorWithPGCode interface.
 func (e *ErrUndefinedDatabase) SrcContext() SrcCtx {
+	return e.ctx
+}
+
+// NewWrongObjectTypeError creates a new ErrWrongObjectType.
+func NewWrongObjectTypeError(name, desiredObjType string) error {
+	return &ErrWrongObjectType{ctx: MakeSrcCtx(1), name: name, desiredObjType: desiredObjType}
+}
+
+// ErrWrongObjectType represents a wrong object type error.
+type ErrWrongObjectType struct {
+	ctx            SrcCtx
+	name           string
+	desiredObjType string
+}
+
+func (e *ErrWrongObjectType) Error() string {
+	return fmt.Sprintf("%q is not a %s", e.name, e.desiredObjType)
+}
+
+// Code implements the ErrorWithPGCode interface.
+func (*ErrWrongObjectType) Code() string {
+	return pgerror.CodeWrongObjectTypeError
+}
+
+// SrcContext implements the ErrorWithPGCode interface.
+func (e *ErrWrongObjectType) SrcContext() SrcCtx {
 	return e.ctx
 }
 

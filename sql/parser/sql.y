@@ -965,6 +965,14 @@ drop_stmt:
   {
     $$.val = &DropTable{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
+| DROP VIEW table_name_list opt_drop_behavior
+  {
+    $$.val = &DropView{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
+  }
+| DROP VIEW IF EXISTS table_name_list opt_drop_behavior
+  {
+    $$.val = &DropView{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
+  }
 
 table_name_list:
   any_name

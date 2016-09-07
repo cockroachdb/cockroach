@@ -242,6 +242,18 @@ func (desc *TableDescriptor) SetName(name string) {
 	desc.Name = name
 }
 
+// IsTable returns true if the TableDescriptor actually describes a
+// Table resource, as opposed to a different resource (like a View).
+func (desc *TableDescriptor) IsTable() bool {
+	return desc.ViewQuery == ""
+}
+
+// IsView returns true if the TableDescriptor actually describes a
+// View resource rather than a Table.
+func (desc *TableDescriptor) IsView() bool {
+	return desc.ViewQuery != ""
+}
+
 // allNonDropColumns returns all the columns, including those being added
 // in the mutations.
 func (desc *TableDescriptor) allNonDropColumns() []ColumnDescriptor {
