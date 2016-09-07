@@ -59,7 +59,7 @@ func newChannelServer(bufSize int, maxSleep time.Duration) channelServer {
 }
 
 func (s channelServer) HandleRaftRequest(
-	ctx context.Context, req *storage.RaftMessageRequest,
+	ctx context.Context, req *storage.RaftMessageRequest, _ storage.MultiRaft_RaftMessageServer,
 ) *roachpb.Error {
 	if s.maxSleep != 0 {
 		// maxSleep simulates goroutine scheduling delays that could
