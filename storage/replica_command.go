@@ -2762,7 +2762,8 @@ func (r *Replica) mergeTrigger(
 
 	{
 		// TODO(peter,tschottdorf): This is necessary but likely not
-		// sufficient. The right hand side of the merge can still race on reads.
+		// sufficient. The right hand side of the merge can still race on
+		// reads. See #8630.
 		subsumedRng, err := r.store.GetReplica(rightRangeID)
 		if err != nil {
 			panic(err)
