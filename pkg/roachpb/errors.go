@@ -217,6 +217,18 @@ func (e *Error) GetTxn() *Transaction {
 	return e.UnexposedTxn
 }
 
+// UpdateTxn updates the txn.
+func (e *Error) UpdateTxn(o *Transaction) {
+	if e == nil {
+		return
+	}
+	if e.UnexposedTxn == nil {
+		e.UnexposedTxn = o
+	} else {
+		e.UnexposedTxn.Update(o)
+	}
+}
+
 // SetErrorIndex sets the index of the error.
 func (e *Error) SetErrorIndex(index int32) {
 	e.Index = &ErrPosition{Index: index}
