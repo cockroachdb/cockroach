@@ -19,6 +19,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -343,24 +344,35 @@ func TestAdminAPITableSQLInjection(t *testing.T) {
 
 func TestAdminAPITableDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testAdminAPITableDetailsInner(t, "test", "tbl")
+}
+
+func TestAdminAPITableDetailsEscapedNames(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testAdminAPITableDetailsInner(t, "test test", "tbl tbl")
+}
+
+func testAdminAPITableDetailsInner(t *testing.T, dbName, tblName string) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
 
+	escDBName := parser.Name(dbName).String()
+	escTblName := parser.Name(tblName).String()
+
 	session := sql.NewSession(
 		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
 	setupQueries := []string{
-		"CREATE DATABASE test",
-		`
-CREATE TABLE test.tbl (
+		fmt.Sprintf("CREATE DATABASE %s", escDBName),
+		fmt.Sprintf(`CREATE TABLE %s.%s (
 	nulls_allowed INT,
 	nulls_not_allowed INT NOT NULL DEFAULT 1000,
 	default2 INT DEFAULT 2,
 	string_default STRING DEFAULT 'default_string'
-)`,
-		"GRANT SELECT ON test.tbl TO readonly",
-		"GRANT SELECT,UPDATE,DELETE ON test.tbl TO app",
-		"CREATE INDEX descIdx ON test.tbl (default2 DESC)",
+)`, escDBName, escTblName),
+		fmt.Sprintf("GRANT SELECT ON %s.%s TO readonly", escDBName, escTblName),
+		fmt.Sprintf("GRANT SELECT,UPDATE,DELETE ON %s.%s TO app", escDBName, escTblName),
+		fmt.Sprintf("CREATE INDEX descIdx ON %s.%s (default2 DESC)", escDBName, escTblName),
 	}
 
 	for _, q := range setupQueries {
@@ -372,7 +384,8 @@ CREATE TABLE test.tbl (
 
 	// Perform API call.
 	var resp serverpb.TableDetailsResponse
-	if err := getAdminJSONProto(s, "databases/test/tables/tbl", &resp); err != nil {
+	url := fmt.Sprintf("databases/%s/tables/%s", dbName, tblName)
+	if err := getAdminJSONProto(s, url, &resp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -437,10 +450,9 @@ CREATE TABLE test.tbl (
 
 	// Verify Create Table Statement.
 	{
-		const (
-			showCreateTableQuery = "SHOW CREATE TABLE test.tbl"
-			createTableCol       = "CreateTable"
-		)
+
+		const createTableCol = "CreateTable"
+		showCreateTableQuery := fmt.Sprintf("SHOW CREATE TABLE %s.%s", escDBName, escTblName)
 
 		resSet := ts.sqlExecutor.ExecuteStatements(session, showCreateTableQuery, nil)
 		res := resSet.ResultList[0]
