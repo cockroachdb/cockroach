@@ -82,6 +82,7 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 	if _, err := rep.GetSnapshot(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	rep.CloseOutSnap()
 
 	fillTestRange(t, rep, snapSize*2)
 

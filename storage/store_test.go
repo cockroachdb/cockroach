@@ -2340,8 +2340,27 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 			},
 		},
 	}
+
+	s.mu.Lock()
+
+	placeholder, err := s.canApplySnapshotLocked(rng1.Desc())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.addPlaceholderLocked(placeholder); err != nil {
+		t.Fatal(err)
+	}
+
+	s.mu.Unlock()
+	removePlaceholder := true
+	inSnap := IncomingSnapshot{
+		SnapUUID:          uuid.MakeV4(),
+		addedPlaceholder:  true,
+		removePlaceholder: &removePlaceholder,
+	}
+
 	const expected = "preemptive snapshot from term 0 received"
-	if err := s.HandleRaftRequest(ctx, req, nil); !testutils.IsError(
+	if err := s.handleRaftRequest(ctx, req, inSnap, nil); !testutils.IsError(
 		errors.Errorf("%s", err), expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
 	}
@@ -2418,26 +2437,40 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 			},
 		},
 	}
-	if err := s.HandleRaftRequest(ctx, req, nil); err != nil {
+	s.mu.Lock()
+
+	placeholder, err := s.canApplySnapshotLocked(rng1.Desc())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.addPlaceholderLocked(placeholder); err != nil {
 		t.Fatal(err)
 	}
 
-	util.SucceedsSoon(t, func() error {
-		s.mu.Lock()
-		numPlaceholders := len(s.mu.replicaPlaceholders)
-		s.mu.Unlock()
+	s.mu.Unlock()
+	removePlaceholder := true
+	inSnap := IncomingSnapshot{
+		SnapUUID:          uuid.MakeV4(),
+		addedPlaceholder:  true,
+		removePlaceholder: &removePlaceholder,
+	}
+	if err := s.handleRaftRequest(ctx, req, inSnap, nil); err != nil {
+		t.Fatal(err)
+	}
 
-		if numPlaceholders != 0 {
-			return errors.Errorf("expected 0 placeholders, but found %d", numPlaceholders)
-		}
-		// The count of dropped placeholders is incremented after the placeholder
-		// is removed (and while not holding Store.mu), so we need to perform the
-		// check of the number of dropped placeholders in this retry loop.
-		if n := atomic.LoadInt32(&s.counts.droppedPlaceholders); n != 1 {
-			return errors.Errorf("expected 1 dropped placeholder, but found %d", n)
-		}
-		return nil
-	})
+	s.mu.Lock()
+	numPlaceholders := len(s.mu.replicaPlaceholders)
+	s.mu.Unlock()
+
+	if numPlaceholders != 0 {
+		t.Errorf("expected 0 placeholders, but found %d", numPlaceholders)
+	}
+	// The count of dropped placeholders is incremented after the placeholder
+	// is removed (and while not holding Store.mu), so we need to perform the
+	// check of the number of dropped placeholders in this retry loop.
+	if n := atomic.LoadInt32(&s.counts.droppedPlaceholders); n != 1 {
+		t.Errorf("expected 1 dropped placeholder, but found %d", n)
+	}
 }
 
 func TestCanCampaignIdleReplica(t *testing.T) {

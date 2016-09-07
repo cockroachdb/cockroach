@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -68,8 +69,8 @@ type RaftMessageResponseStream interface {
 // RaftMessageHandler is the interface that must be implemented by
 // arguments to RaftTransport.Listen.
 type RaftMessageHandler interface {
-	// HandleRaftRequest is called for each incoming message. If it returns an
-	// error it will be streamed back to the sender of the message as a
+	// HandleRaftRequest is called for each Raft incoming message. If it returns
+	// an error it will be streamed back to the sender of the message as a
 	// RaftMessageResponse. If the stream parameter is nil the request should be
 	// processed synchronously. If the stream is non-nil the request can be
 	// processed asynchronously and any error should be sent on the stream.
@@ -79,6 +80,10 @@ type RaftMessageHandler interface {
 	// HandleRaftResponse is called for each raft response. Note that
 	// not all messages receive a response.
 	HandleRaftResponse(context.Context, *RaftMessageResponse)
+
+	// HandleSnapshot is called for each new incoming snapshot stream, after
+	// parsing the initial SnapshotRequest_Header on the stream.
+	HandleSnapshot(header *SnapshotRequest_Header, stream MultiRaft_RaftSnapshotServer) error
 }
 
 // NodeAddressResolver is the function used by RaftTransport to map node IDs to
@@ -320,19 +325,41 @@ func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err err
 	}
 }
 
-// RaftMessageSync proxies the incoming request to the listening server interface.
-func (t *RaftTransport) RaftMessageSync(ctx context.Context, req *RaftMessageRequest,
-) (*RaftMessageResponse, error) {
-	var pErr *roachpb.Error
-	if err := t.rpcContext.Stopper.RunTask(func() {
-		stats := t.getStats(req.FromReplica.NodeID)
-		atomic.AddInt64(&stats.serverRecv, 1)
-		pErr = t.handleRaftRequest(ctx, req, nil)
-		atomic.AddInt64(&stats.serverSent, 1)
+// RaftSnapshot handles incoming streaming snapshot requests.
+func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error {
+	errCh := make(chan error, 1)
+	if err := t.rpcContext.Stopper.RunAsyncTask(func() {
+		errCh <- func() error {
+			req, err := stream.Recv()
+			if err != nil {
+				return err
+			}
+			if req.Header == nil {
+				return stream.Send(&SnapshotResponse{
+					Status:  SnapshotResponse_ERROR,
+					Message: "client error: no header in first snapshot request message"})
+			}
+			rmr := req.Header.RaftMessageRequest
+			t.recvMu.Lock()
+			handler, ok := t.recvMu.handlers[rmr.ToReplica.StoreID]
+			t.recvMu.Unlock()
+			if !ok {
+				return errors.Errorf(
+					"unable to accept Raft message from %+v: no handler registered for %+v",
+					rmr.ToReplica, rmr.FromReplica)
+			}
+
+			return handler.HandleSnapshot(req.Header, stream)
+		}()
 	}); err != nil {
-		return nil, err
+		return err
 	}
-	return newRaftMessageResponse(req, pErr), nil
+	select {
+	case <-t.rpcContext.Stopper.ShouldStop():
+		return nil
+	case err := <-errCh:
+		return err
+	}
 }
 
 // Listen registers a raftMessageHandler to receive proxied messages.
@@ -547,15 +574,17 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 	}
 }
 
-// SendSync sends a raft message and waits for an acknowledgement.
-func (t *RaftTransport) SendSync(ctx context.Context, req *RaftMessageRequest) error {
-	// Use the circuit breaker to fail fast if the breaker is open.
-	// The same underlying connection is shared between sync and
-	// async raft transports, so we use the same breaker.
-	var resp *RaftMessageResponse
-	nodeID := req.ToReplica.NodeID
+// SendSnapshot streams the given outgoing snapshot. The caller is responsible for closing the
+// OutgoingSnapshot with snap.Close.
+func (t *RaftTransport) SendSnapshot(
+	ctx context.Context,
+	header SnapshotRequest_Header,
+	snap *OutgoingSnapshot,
+	newBatch func() engine.Batch,
+) error {
+	nodeID := header.RaftMessageRequest.ToReplica.NodeID
 	breaker := t.GetCircuitBreaker(nodeID)
-	if err := breaker.Call(func() error {
+	return breaker.Call(func() error {
 		addr, err := t.resolver(nodeID)
 		if err != nil {
 			return err
@@ -565,18 +594,15 @@ func (t *RaftTransport) SendSync(ctx context.Context, req *RaftMessageRequest) e
 			return err
 		}
 		client := NewMultiRaftClient(conn)
-		resp, err = client.RaftMessageSync(ctx, req)
-		return err
-	}, 0); err != nil {
-		return err
-	}
-
-	switch val := resp.Union.GetValue().(type) {
-	case *roachpb.Error:
-		return val.GoError()
-	case nil:
-		return nil
-	default:
-		return errors.Errorf("unexpected response value %T %s", val, val)
-	}
+		stream, err := client.RaftSnapshot(ctx)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if err := stream.CloseSend(); err != nil {
+				log.Warningf(stream.Context(), "failed to close snapshot stream: %s", err)
+			}
+		}()
+		return sendSnapshot(stream, header, snap, newBatch)
+	}, 0)
 }
