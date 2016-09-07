@@ -109,6 +109,14 @@ func (pl List) SortedString() string {
 	return strings.Join(names, ",")
 }
 
+// SortedNames is similar to SortedString() but returns
+// privileges array sorted by name.
+func (pl List) SortedNames() []string {
+	names := pl.names()
+	sort.Strings(names)
+	return names
+}
+
 // ToBitField returns the bitfield representation of
 // a list of privileges.
 func (pl List) ToBitField() uint32 {

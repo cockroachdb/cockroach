@@ -304,7 +304,7 @@ func (p *planner) ShowGrants(n *parser.ShowGrants) (planNode, error) {
 			v.rows = append(v.rows, []parser.Datum{
 				parser.NewDString(descriptor.GetName()),
 				parser.NewDString(userPriv.User),
-				parser.NewDString(userPriv.Privileges),
+				parser.NewDString(userPriv.PrivilegeString()),
 			})
 		}
 	}

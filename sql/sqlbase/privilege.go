@@ -19,6 +19,7 @@ package sqlbase
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -204,7 +205,12 @@ func (p PrivilegeDescriptor) Validate(id ID) error {
 // privileges for a given user.
 type UserPrivilegeString struct {
 	User       string
-	Privileges string
+	Privileges []string
+}
+
+// PrivilegeString returns a string of comma-separted reivilege names
+func (u UserPrivilegeString) PrivilegeString() string {
+	return strings.Join(u.Privileges, ",")
 }
 
 // Show returns the list of {username, privileges} sorted by username.
@@ -214,7 +220,7 @@ func (p PrivilegeDescriptor) Show() []UserPrivilegeString {
 	for _, userPriv := range p.Users {
 		ret = append(ret, UserPrivilegeString{
 			User:       userPriv.User,
-			Privileges: privilege.ListFromBitField(userPriv.Privileges).SortedString(),
+			Privileges: privilege.ListFromBitField(userPriv.Privileges).SortedNames(),
 		})
 	}
 	return ret
