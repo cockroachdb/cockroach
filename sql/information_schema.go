@@ -29,7 +29,9 @@ var informationSchema = virtualSchema{
 	tables: []virtualSchemaTable{
 		informationSchemaColumnsTable,
 		informationSchemaSchemataTable,
+		informationSchemaSchemataTablePrivileges,
 		informationSchemaTableConstraintTable,
+		informationSchemaTablePrivileges,
 		informationSchemaTablesTable,
 	},
 }
@@ -145,6 +147,41 @@ func datetimePrecision(colType sqlbase.ColumnType) parser.Datum {
 	return parser.DNull
 }
 
+var informationSchemaTablePrivileges = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.table_privileges (
+	GRANTOR STRING NOT NULL DEFAULT '',
+	GRANTEE STRING NOT NULL DEFAULT '',
+	TABLE_CATALOG STRING NOT NULL DEFAULT '',
+	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
+	TABLE_NAME STRING NOT NULL DEFAULT '',
+	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
+	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE,
+	WITH_HIERARCHY BOOL NOT NULL DEFAULT FALSE
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum)) error {
+		return forEachTableDesc(p,
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) {
+				for _, u := range table.Privileges.Show() {
+					for _, privilege := range u.Privileges {
+						addRow(
+							parser.DNull,                  // grantor
+							parser.NewDString(u.User),     // grantee
+							defString,                     // table_catalog,
+							parser.NewDString(db.Name),    // table_schema
+							parser.NewDString(table.Name), // table_name
+							parser.NewDString(privilege),  // privilege_type
+							parser.DNull,                  // is_grantable
+							parser.DNull,                  // with_hierarchy
+						)
+					}
+				}
+			},
+		)
+	},
+}
+
 var informationSchemaSchemataTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.schemata (
@@ -161,6 +198,33 @@ CREATE TABLE information_schema.schemata (
 				parser.DNull,               // default_character_set_name
 				parser.DNull,               // sql_path
 			)
+		})
+	},
+}
+
+var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.schema_privileges (
+	GRANTEE STRING NOT NULL DEFAULT '',
+	TABLE_CATALOG STRING NOT NULL DEFAULT '',
+	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
+	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
+	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum)) error {
+		return forEachDatabaseDesc(p, func(db *sqlbase.DatabaseDescriptor) {
+			for _, u := range db.Privileges.Show() {
+				for _, privilege := range u.Privileges {
+					addRow(
+						parser.NewDString(u.User),    // grantee
+						defString,                    // table_catalog,
+						parser.NewDString(db.Name),   // table_schema
+						parser.NewDString(privilege), // privilege_type
+						parser.DNull,                 // is_grantable
+					)
+				}
+			}
 		})
 	},
 }
