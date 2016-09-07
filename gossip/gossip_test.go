@@ -281,6 +281,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 
 	peerNodeID := peer.GetNodeID()
 	peerAddr := peer.GetNodeAddr()
+	peerAddrStr := peerAddr.String()
 
 	local.startClient(peerAddr, peerNodeID)
 
@@ -290,7 +291,16 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 				return nil
 			}
 		}
-		return errors.Errorf("%d not yet connected", peerNodeID)
+		return errors.Errorf("node %d not yet connected", peerNodeID)
+	})
+
+	util.SucceedsSoon(t, func() error {
+		for _, resolver := range local.GetResolvers() {
+			if resolver.Addr() == peerAddrStr {
+				return nil
+			}
+		}
+		return errors.Errorf("node %d descriptor not yet available", peerNodeID)
 	})
 
 	local.bootstrap()
@@ -301,7 +311,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 	util.SucceedsSoon(t, func() error {
 		for _, peerID := range local.Outgoing() {
 			if peerID == peerNodeID {
-				return errors.Errorf("%d still connected", peerNodeID)
+				return errors.Errorf("node %d still connected", peerNodeID)
 			}
 		}
 		return nil
@@ -317,6 +327,6 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 				return nil
 			}
 		}
-		return errors.Errorf("%d not yet connected", peerNodeID)
+		return errors.Errorf("node %d not yet connected", peerNodeID)
 	})
 }
