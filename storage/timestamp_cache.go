@@ -329,7 +329,8 @@ func (tc *timestampCache) add(
 				default:
 					panic(fmt.Sprintf("no overlap between %v and %v", key.Range, r))
 				}
-			} else if (cv.txnID == nil && txnID == nil) || uuid.Equal(*cv.txnID, *txnID) {
+			} else if (cv.txnID == nil && txnID == nil) ||
+				(cv.txnID != nil && txnID != nil && *cv.txnID == *txnID) {
 				// The existing interval has a timestamp equal to the new
 				// interval, and the same transaction ID.
 				switch {
@@ -630,7 +631,7 @@ func (tc *timestampCache) getMax(start, end roachpb.Key, readTSCache bool) (hlc.
 			maxTS = ce.timestamp
 			maxTxnID = ce.txnID
 		} else if maxTS.Equal(ce.timestamp) && maxTxnID != nil &&
-			(ce.txnID == nil || !uuid.Equal(*maxTxnID, *ce.txnID)) {
+			(ce.txnID == nil || *maxTxnID != *ce.txnID) {
 			maxTxnID = nil
 		}
 	}

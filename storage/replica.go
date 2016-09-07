@@ -1260,7 +1260,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
 			// Forward the timestamp if there's been a more recent read (by someone else).
 			rTS, rTxnID, _ := r.mu.tsCache.GetMaxRead(header.Key, header.EndKey)
 			if ba.Txn != nil {
-				if rTxnID == nil || !uuid.Equal(*ba.Txn.ID, *rTxnID) {
+				if rTxnID == nil || *ba.Txn.ID != *rTxnID {
 					ba.Txn.Timestamp.Forward(rTS.Next())
 				}
 			} else {
@@ -1273,7 +1273,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
 			// write timestamp cache.
 			wTS, wTxnID, _ := r.mu.tsCache.GetMaxWrite(header.Key, header.EndKey)
 			if ba.Txn != nil {
-				if wTxnID == nil || !uuid.Equal(*ba.Txn.ID, *wTxnID) {
+				if wTxnID == nil || *ba.Txn.ID != *wTxnID {
 					if !wTS.Less(ba.Txn.Timestamp) {
 						ba.Txn.Timestamp.Forward(wTS.Next())
 						ba.Txn.WriteTooOld = true
