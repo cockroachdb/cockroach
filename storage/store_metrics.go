@@ -92,10 +92,7 @@ var (
 	// Raft processing metrics.
 	metaRaftTicks = metric.Metadata{
 		Name: "raft.ticks",
-		Help: "Total number of Raft ticks processed",
-	}
-	metaRaftSelectDurationNanos = metric.Metadata{Name: "raft.process.waitingnanos",
-		Help: "Nanoseconds spent in store.processRaft() waiting",
+		Help: "Total number of attempted Raft ticks processed",
 	}
 	metaRaftWorkingDurationNanos = metric.Metadata{Name: "raft.process.workingnanos",
 		Help: "Nanoseconds spent in store.processRaft() working",
@@ -144,6 +141,10 @@ var (
 	metaRaftRcvdTimeoutNow = metric.Metadata{
 		Name: "raft.rcvd.timeoutnow",
 		Help: "Total number of MsgTimeoutNow messages received by this store",
+	}
+	metaRaftRcvdDropped = metric.Metadata{
+		Name: "raft.rcvd.dropped",
+		Help: "Number of dropped incoming Raft messages",
 	}
 
 	metaRaftEnqueuedPending = metric.Metadata{Name: "raft.enqueued.pending",
@@ -222,7 +223,6 @@ type StoreMetrics struct {
 
 	// Raft processing metrics.
 	RaftTicks                *metric.Counter
-	RaftSelectDurationNanos  *metric.Counter
 	RaftWorkingDurationNanos *metric.Counter
 	RaftTickingDurationNanos *metric.Counter
 
@@ -237,6 +237,7 @@ type StoreMetrics struct {
 	RaftRcvdMsgHeartbeatResp  *metric.Counter
 	RaftRcvdMsgTransferLeader *metric.Counter
 	RaftRcvdMsgTimeoutNow     *metric.Counter
+	RaftRcvdMsgDropped        *metric.Counter
 
 	// A map for conveniently finding the appropriate metric. The individual
 	// metric references must exist as AddMetricStruct adds them by reflection
@@ -321,7 +322,6 @@ func newStoreMetrics() *StoreMetrics {
 
 		// Raft processing metrics.
 		RaftTicks:                metric.NewCounter(metaRaftTicks),
-		RaftSelectDurationNanos:  metric.NewCounter(metaRaftSelectDurationNanos),
 		RaftWorkingDurationNanos: metric.NewCounter(metaRaftWorkingDurationNanos),
 		RaftTickingDurationNanos: metric.NewCounter(metaRaftTickingDurationNanos),
 
@@ -336,6 +336,7 @@ func newStoreMetrics() *StoreMetrics {
 		RaftRcvdMsgHeartbeatResp:  metric.NewCounter(metaRaftRcvdHeartbeatResp),
 		RaftRcvdMsgTransferLeader: metric.NewCounter(metaRaftRcvdTransferLeader),
 		RaftRcvdMsgTimeoutNow:     metric.NewCounter(metaRaftRcvdTimeoutNow),
+		RaftRcvdMsgDropped:        metric.NewCounter(metaRaftRcvdDropped),
 		raftRcvdMessages:          make(map[raftpb.MessageType]*metric.Counter, len(raftpb.MessageType_name)),
 
 		RaftEnqueuedPending: metric.NewGauge(metaRaftEnqueuedPending),
