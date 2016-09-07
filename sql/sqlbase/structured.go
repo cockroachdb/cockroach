@@ -234,7 +234,7 @@ func (desc *TableDescriptor) SetID(id ID) {
 
 // TypeName returns the plain type of this descriptor.
 func (desc *TableDescriptor) TypeName() string {
-	if desc.ViewQuery != "" {
+	if desc.IsView() {
 		return "view"
 	}
 	return "table"
@@ -243,6 +243,18 @@ func (desc *TableDescriptor) TypeName() string {
 // SetName implements the DescriptorProto interface.
 func (desc *TableDescriptor) SetName(name string) {
 	desc.Name = name
+}
+
+// IsTable returns true if the TableDescriptor actually describes a
+// Table resource, as opposed to a different resource (like a View).
+func (desc *TableDescriptor) IsTable() bool {
+	return !desc.IsView()
+}
+
+// IsView returns true if the TableDescriptor actually describes a
+// View resource rather than a Table.
+func (desc *TableDescriptor) IsView() bool {
+	return desc.ViewQuery != ""
 }
 
 // allNonDropColumns returns all the columns, including those being added
@@ -890,7 +902,7 @@ func (desc *TableDescriptor) ValidateTable() error {
 
 	// Only validate the indexes if this is actually a table, not if it's
 	// just a view.
-	if desc.ViewQuery == "" {
+	if desc.IsTable() {
 		err := desc.validateTableIndexes(columnNames, colIDToFamilyID)
 		if err != nil {
 			return err

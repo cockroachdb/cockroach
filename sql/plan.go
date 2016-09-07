@@ -206,8 +206,9 @@ var _ planNode = &createTableNode{}
 var _ planNode = &createViewNode{}
 var _ planNode = &createIndexNode{}
 var _ planNode = &dropDatabaseNode{}
-var _ planNode = &dropTableNode{}
 var _ planNode = &dropIndexNode{}
+var _ planNode = &dropTableNode{}
+var _ planNode = &dropViewNode{}
 var _ planNode = &alterTableNode{}
 var _ planNode = &joinNode{}
 var _ planNode = &distSQLNode{}
@@ -263,6 +264,8 @@ func (p *planner) newPlan(stmt parser.Statement, desiredTypes []parser.Datum, au
 		return p.DropIndex(n)
 	case *parser.DropTable:
 		return p.DropTable(n)
+	case *parser.DropView:
+		return p.DropView(n)
 	case *parser.Explain:
 		return p.Explain(n, autoCommit)
 	case *parser.Grant:

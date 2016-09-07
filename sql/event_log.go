@@ -45,11 +45,13 @@ const (
 
 	// EventLogCreateIndex is recorded when an index is created.
 	EventLogCreateIndex EventLogType = "create_index"
-	// EventLogDropIndex is recorded when an index is created.
+	// EventLogDropIndex is recorded when an index is dropped.
 	EventLogDropIndex EventLogType = "drop_index"
 
-	// EventLogCreateView is recorded when an view is created.
+	// EventLogCreateView is recorded when a view is created.
 	EventLogCreateView EventLogType = "create_view"
+	// EventLogDropView is recorded when a view is dropped.
+	EventLogDropView EventLogType = "drop_view"
 
 	// EventLogReverseSchemaChange is recorded when an in-progress schema change
 	// encounters a problem and is reversed.
