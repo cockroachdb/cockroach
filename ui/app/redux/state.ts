@@ -1,5 +1,5 @@
 import _ from "lodash";
-import { createStore, combineReducers, applyMiddleware, compose, StoreEnhancer } from "redux";
+import { createStore, combineReducers, applyMiddleware, compose, GenericStoreEnhancer } from "redux";
 import { hashHistory } from "react-router";
 import { syncHistoryWithStore, routerReducer, IRouterState } from "react-router-redux";
 import thunk from "redux-thunk";
@@ -24,7 +24,7 @@ export interface AdminUIState {
     cachedData: apiReducers.APIReducersState;
 }
 
-export const store = createStore<AdminUIState>(
+export const store = createStore(
   combineReducers<AdminUIState>({
     routing: routerReducer,
     ui: uiReducer,
@@ -47,7 +47,7 @@ export const store = createStore<AdminUIState>(
         return value;
       },
     }) : _.identity
-  ) as StoreEnhancer<AdminUIState>
+  ) as GenericStoreEnhancer
 );
 
 // Connect react-router history with redux.
