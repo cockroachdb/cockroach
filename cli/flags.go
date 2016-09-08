@@ -51,8 +51,9 @@ var baseCtx = serverCtx.Context
 var cliCtx = cliContext{Context: baseCtx}
 var sqlCtx = sqlContext{cliContext: &cliCtx}
 var debugCtx = debugContext{
-	startKey: engine.NilKey,
-	endKey:   engine.MVCCKeyMax,
+	startKey:   engine.NilKey,
+	endKey:     engine.MVCCKeyMax,
+	replicated: false,
 }
 
 var cacheSize *bytesValue
@@ -405,6 +406,9 @@ func init() {
 		varFlag(f, (*mvccKey)(&debugCtx.endKey), cliflags.To)
 		boolFlag(f, &debugCtx.values, cliflags.Values, false)
 		boolFlag(f, &debugCtx.sizes, cliflags.Sizes, false)
+
+		f = debugRangeDataCmd.Flags()
+		boolFlag(f, &debugCtx.replicated, cliflags.Replicated, false)
 	}
 
 	boolFlag(versionCmd.Flags(), &versionIncludesDeps, cliflags.Deps, false)

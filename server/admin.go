@@ -798,7 +798,7 @@ func (s *adminServer) GetUIData(ctx context.Context, req *serverpb.GetUIDataRequ
 // Cluster returns cluster metadata.
 func (s *adminServer) Cluster(_ context.Context, req *serverpb.ClusterRequest) (*serverpb.ClusterResponse, error) {
 	clusterID := s.server.node.ClusterID
-	if uuid.Equal(clusterID, *uuid.EmptyUUID) {
+	if clusterID == *uuid.EmptyUUID {
 		return nil, grpc.Errorf(codes.Unavailable, "cluster ID not yet available")
 	}
 	return &serverpb.ClusterResponse{ClusterID: clusterID.String()}, nil

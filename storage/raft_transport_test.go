@@ -95,10 +95,11 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 		stopper:    stop.NewStopper(),
 		transports: map[roachpb.NodeID]*storage.RaftTransport{},
 	}
-	rttc.nodeRPCContext = rpc.NewContext(testutils.NewNodeTestBaseContext(), nil, rttc.stopper)
+	ctx := context.TODO()
+	rttc.nodeRPCContext = rpc.NewContext(ctx, testutils.NewNodeTestBaseContext(), nil, rttc.stopper)
 	server := rpc.NewServer(rttc.nodeRPCContext) // never started
 	rttc.gossip = gossip.New(
-		context.TODO(), rttc.nodeRPCContext, server, nil, rttc.stopper, metric.NewRegistry())
+		ctx, rttc.nodeRPCContext, server, nil, rttc.stopper, metric.NewRegistry())
 	rttc.gossip.SetNodeID(1)
 	return rttc
 }

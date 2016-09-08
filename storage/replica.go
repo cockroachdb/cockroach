@@ -389,7 +389,7 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 			uint64(r.mu.replicaID),
 			r.mu.state.RaftAppliedIndex,
 			r.store.ctx,
-			&raftLogger{stringer: r},
+			&raftLogger{ctx: r.ctx},
 		), nil)
 		if err != nil {
 			return err
@@ -1135,29 +1135,26 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func
 		r.mu.Unlock()
 
 		ctxDone := ctx.Done()
-		for i, ch := range chans {
+		for _, ch := range chans {
 			select {
 			case <-ch:
 			case <-ctxDone:
 				err := ctx.Err()
 				errStr := fmt.Sprintf("%s while in command queue: %s", err, ba)
-				log.Warningf(ctx, "error %v", errStr)
+				log.Warning(ctx, errStr)
 				log.Trace(ctx, errStr)
-				defer log.Trace(ctx, "removed from command queue")
-				// The command is moot, so we don't need to bother executing.
-				// However, the command queue assumes that commands don't drop
-				// out before their prerequisites, so we still have to wait it
-				// out.
-				//
-				// TODO(tamird): this can be done asynchronously, allowing the
-				// caller to return immediately. For now, we're keeping it
-				// simple to avoid unexpected surprises.
-				for _, ch := range chans[i:] {
-					<-ch
-				}
-				r.mu.Lock()
-				r.mu.cmdQ.remove(cmd)
-				r.mu.Unlock()
+				go func() {
+					// The command is moot, so we don't need to bother executing.
+					// However, the command queue assumes that commands don't drop
+					// out before their prerequisites, so we still have to wait it
+					// out.
+					for _, ch := range chans {
+						<-ch
+					}
+					r.mu.Lock()
+					r.mu.cmdQ.remove(cmd)
+					r.mu.Unlock()
+				}()
 				return nil, err
 			}
 		}
@@ -1269,7 +1266,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
 			// has already been finalized, in which case this is a replay.
 			if _, ok := args.(*roachpb.BeginTransactionRequest); ok {
 				key := keys.TransactionKey(header.Key, ba.GetTxnID())
-				wTS, wOK := r.mu.tsCache.GetMaxWrite(key, nil, nil)
+				wTS, _, wOK := r.mu.tsCache.GetMaxWrite(key, nil)
 				if wOK {
 					return roachpb.NewError(roachpb.NewTransactionReplayError())
 				} else if !wTS.Less(ba.Txn.Timestamp) {
@@ -1286,10 +1283,12 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
 				continue
 			}
 
-			// Forward the timestamp if there's been a more recent read.
-			rTS, _ := r.mu.tsCache.GetMaxRead(header.Key, header.EndKey, ba.GetTxnID())
+			// Forward the timestamp if there's been a more recent read (by someone else).
+			rTS, rTxnID, _ := r.mu.tsCache.GetMaxRead(header.Key, header.EndKey)
 			if ba.Txn != nil {
-				ba.Txn.Timestamp.Forward(rTS.Next())
+				if rTxnID == nil || *ba.Txn.ID != *rTxnID {
+					ba.Txn.Timestamp.Forward(rTS.Next())
+				}
 			} else {
 				ba.Timestamp.Forward(rTS.Next())
 			}
@@ -1298,11 +1297,13 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
 			// write too old boolean for transactions. Note that currently
 			// only EndTransaction and DeleteRange requests update the
 			// write timestamp cache.
-			wTS, _ := r.mu.tsCache.GetMaxWrite(header.Key, header.EndKey, ba.GetTxnID())
+			wTS, wTxnID, _ := r.mu.tsCache.GetMaxWrite(header.Key, header.EndKey)
 			if ba.Txn != nil {
-				if !wTS.Less(ba.Txn.Timestamp) {
-					ba.Txn.Timestamp.Forward(wTS.Next())
-					ba.Txn.WriteTooOld = true
+				if wTxnID == nil || *ba.Txn.ID != *wTxnID {
+					if !wTS.Less(ba.Txn.Timestamp) {
+						ba.Txn.Timestamp.Forward(wTS.Next())
+						ba.Txn.WriteTooOld = true
+					}
 				}
 			} else {
 				ba.Timestamp.Forward(wTS.Next())
@@ -1728,7 +1729,7 @@ func (r *Replica) handleRaftReady() error {
 		return nil
 	}
 
-	logRaftReady(ctx, r, rd)
+	logRaftReady(ctx, rd)
 
 	refreshReason := noReason
 	if rd.SoftState != nil && leaderID != roachpb.ReplicaID(rd.SoftState.Lead) {

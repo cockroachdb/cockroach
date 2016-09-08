@@ -114,8 +114,3 @@ func FromString(input string) (*UUID, error) {
 	u, err := uuid.FromString(input)
 	return &UUID{u}, err
 }
-
-// Equal delegates to "github.com/satori/go.uuid".Equal.
-func Equal(u1, u2 UUID) bool {
-	return uuid.Equal(u1.UUID, u2.UUID)
-}
