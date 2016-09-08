@@ -768,6 +768,7 @@ func IterateRangeDescriptors(ctx context.Context,
 
 func (s *Store) migrate(ctx context.Context, desc roachpb.RangeDescriptor) {
 	batch := s.engine.NewBatch()
+	defer batch.Close()
 	if err := migrate7310And6991(ctx, batch, desc); err != nil {
 		log.Fatal(ctx, errors.Wrap(err, "during migration"))
 	}
@@ -1184,8 +1185,7 @@ func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 	return s.getReplicaLocked(rangeID)
 }
 
-// getReplicaLocked fetches a replica by RangeID. The store's lock must be held
-// in read or read/write mode.
+// getReplicaLocked fetches a replica by RangeID. The store's lock must be held.
 func (s *Store) getReplicaLocked(rangeID roachpb.RangeID) (*Replica, error) {
 	if rng, ok := s.mu.replicas[rangeID]; ok {
 		return rng, nil
@@ -1300,6 +1300,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 	batch := s.engine.NewBatch()
+	defer batch.Close()
 	ms := &enginepb.MVCCStats{}
 	now := s.ctx.Clock.Now()
 	ctx := context.Background()
@@ -1808,8 +1809,11 @@ func (s *Store) destroyReplicaData(desc *roachpb.RangeDescriptor) error {
 	return batch.Commit()
 }
 
-// processRangeDescriptorUpdate is called whenever a range's
-// descriptor is updated.
+// processRangeDescriptorUpdate should be called whenever a replica's range
+// descriptor is updated, to update the store's maps of its ranges to match
+// the updated descriptor. Since the latter update requires acquiring the store
+// lock (which cannot always safely be done by replicas), this function call
+// should be deferred until it is safe to acquire the store lock.
 func (s *Store) processRangeDescriptorUpdate(rng *Replica) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -2409,7 +2413,7 @@ func (s *Store) HandleRaftRequest(
 					// crashing potential for any choice of dummy value below.
 					appliedIndex,
 					r.store.ctx,
-					&raftLogger{stringer: r},
+					&raftLogger{ctx: r.ctx},
 				), nil)
 			if err != nil {
 				return roachpb.NewError(err)

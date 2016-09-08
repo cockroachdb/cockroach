@@ -163,28 +163,6 @@ func TestUseCerts(t *testing.T) {
 		t.Fatalf("Expected SSL error, got success")
 	}
 
-	// Secure mode but no Certs: permissive config.
-	clientContext = testutils.NewNodeTestBaseContext()
-	clientContext.Insecure = false
-	clientContext.SSLCert = ""
-	httpClient, err = clientContext.GetHTTPClient()
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Endpoint that does not enforce client auth (see: server/authentication_test.go)
-	req, err = http.NewRequest("GET", s.AdminURL()+"/_admin/v1/health", nil)
-	if err != nil {
-		t.Fatalf("could not create request: %v", err)
-	}
-	resp, err = httpClient.Do(req)
-	if err != nil {
-		t.Fatalf("Expected success, got %v", err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Expected OK, got: %d", resp.StatusCode)
-	}
-
 	// New client. With certs this time.
 	clientContext = testutils.NewNodeTestBaseContext()
 	clientContext.SSLCA = filepath.Join(certsDir, security.EmbeddedCACert)

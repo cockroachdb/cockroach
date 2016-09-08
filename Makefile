@@ -195,6 +195,9 @@ ifneq ($(SKIP_BOOTSTRAP),1)
 
 # If we're in a git worktree, the git hooks directory may not be in our root,
 # so we ask git for the location.
+#
+# Note that this command requires git 2.5+; earlier versions produce opaque
+# errors.
 GITHOOKSDIR := $(shell git rev-parse --git-path hooks)
 GITHOOKS := $(subst githooks/,$(GITHOOKSDIR)/,$(wildcard githooks/*))
 $(GITHOOKSDIR)/%: githooks/%

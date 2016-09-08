@@ -152,8 +152,9 @@ var debugRangeDataCmd = &cobra.Command{
 	Use:   "range-data [directory] range-id",
 	Short: "dump all the data in a range",
 	Long: `
-Pretty-prints all keys and values in a range. This includes all data covered
-by the consistency checker.
+Pretty-prints all keys and values in a range. By default, includes unreplicated
+state like the raft HardState. With --replicated, only includes data covered by
+ the consistency checker.
 `,
 	RunE: runDebugRangeData,
 }
@@ -181,7 +182,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	iter := storage.NewReplicaDataIterator(&desc, db, true)
+	iter := storage.NewReplicaDataIterator(&desc, db, debugCtx.replicated)
 	for ; iter.Valid(); iter.Next() {
 		if _, err := printKeyValue(engine.MVCCKeyValue{
 			Key:   iter.Key(),

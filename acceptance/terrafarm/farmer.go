@@ -27,6 +27,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -206,7 +208,7 @@ func (f *Farmer) Exec(i int, cmd string) error {
 // NewClient implements the Cluster interface.
 func (f *Farmer) NewClient(t *testing.T, i int) (*client.DB, *stop.Stopper) {
 	stopper := stop.NewStopper()
-	rpcContext := rpc.NewContext(&base.Context{
+	rpcContext := rpc.NewContext(context.TODO(), &base.Context{
 		Insecure: true,
 		User:     security.NodeUser,
 	}, nil, stopper)

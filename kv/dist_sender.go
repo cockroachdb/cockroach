@@ -183,7 +183,7 @@ func NewDistSender(cfg *DistSenderConfig, g *gossip.Gossip) *DistSender {
 	if rdb == nil {
 		rdb = ds
 	}
-	ds.rangeCache = newRangeDescriptorCache(rdb, int(rcSize))
+	ds.rangeCache = newRangeDescriptorCache(ds.Ctx, rdb, int(rcSize))
 	lcSize := cfg.LeaseHolderCacheSize
 	if lcSize <= 0 {
 		lcSize = defaultLeaseHolderCacheSize
