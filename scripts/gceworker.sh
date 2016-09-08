@@ -29,14 +29,11 @@ case ${1-} in
     # are addressed in these few commands:
     # - Once a shutdown is close enough, ssh logins are not allowed any more;
     #   hence we preventively remove the /etc/nologin file.
-    # - `pgrep` will never match itself, but it will match its parent process
-    #   and so we require an exact match for systemd-shutdownd's full path.
     # - calling shutdown with a later date cancels the previous shutdown, so
-    #   once a shutdown has been scheduled, we don't want to keep scheduling
-    #   later ones or we will never actually shut down - hence the pgrep.
+    #   we keep scheduling shutdowns in the future while users are logged in.
     # - This is invoked via `sh -c`, and so no `bash` features must be used.
     gcloud compute ssh "${name}" \
-      "echo '* * * * * rm -f /etc/nologin; (w -hs | (grep -q pts && /sbin/shutdown -c --no-wall) || [ -f /.active ] || pgrep -flx /lib/systemd/systemd-shutdownd || /sbin/shutdown --no-wall -h +10) >>/root/idle.log 2>&1' | sudo crontab -"
+      "echo '* * * * * rm -f /etc/nologin; (test -f /.active && /sbin/shutdown -c --no-wall || w -hs | grep -q pts && /sbin/shutdown --no-wall -h +10) >> /root/idle.log 2>&1' | sudo crontab -"
 
     ;;
     start)
