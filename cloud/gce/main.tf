@@ -35,8 +35,7 @@ resource "google_compute_instance" "cockroach" {
   }
 }
 
-resource "template_file" "supervisor" {
-  count = "${var.num_instances}"
+data "template_file" "supervisor" {
   template = "${file("supervisor.conf.tpl")}"
   vars {
     stores = "${var.stores}"
@@ -68,7 +67,7 @@ resource "null_resource" "cockroach-runner" {
   # use rendered templates in the file provisioner.
   provisioner "remote-exec" {
     inline = <<FILE
-echo '${element(template_file.supervisor.*.rendered, count.index)}' > supervisor.conf
+echo '${element(data.template_file.supervisor.*.rendered, count.index)}' > supervisor.conf
 FILE
   }
 
