@@ -13,6 +13,7 @@
     "stylint": "^1.3.10",
     "stylus": "^0.54.5",
     "tslint": "^3.11.0",
+    "typescript": "^2.0.2",
     "typings": "^1.0.4"
   },
   "jspm": {
