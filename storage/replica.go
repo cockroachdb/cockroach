@@ -1106,29 +1106,26 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func
 		r.mu.Unlock()
 
 		ctxDone := ctx.Done()
-		for i, ch := range chans {
+		for _, ch := range chans {
 			select {
 			case <-ch:
 			case <-ctxDone:
 				err := ctx.Err()
 				errStr := fmt.Sprintf("%s while in command queue: %s", err, ba)
-				log.Warningf(ctx, "error %v", errStr)
+				log.Warning(ctx, errStr)
 				log.Trace(ctx, errStr)
-				defer log.Trace(ctx, "removed from command queue")
-				// The command is moot, so we don't need to bother executing.
-				// However, the command queue assumes that commands don't drop
-				// out before their prerequisites, so we still have to wait it
-				// out.
-				//
-				// TODO(tamird): this can be done asynchronously, allowing the
-				// caller to return immediately. For now, we're keeping it
-				// simple to avoid unexpected surprises.
-				for _, ch := range chans[i:] {
-					<-ch
-				}
-				r.mu.Lock()
-				r.mu.cmdQ.remove(cmd)
-				r.mu.Unlock()
+				go func() {
+					// The command is moot, so we don't need to bother executing.
+					// However, the command queue assumes that commands don't drop
+					// out before their prerequisites, so we still have to wait it
+					// out.
+					for _, ch := range chans {
+						<-ch
+					}
+					r.mu.Lock()
+					r.mu.cmdQ.remove(cmd)
+					r.mu.Unlock()
+				}()
 				return nil, err
 			}
 		}
