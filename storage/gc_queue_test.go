@@ -141,7 +141,7 @@ func TestGCQueueShouldQueue(t *testing.T) {
 		func() {
 			// Hold lock throughout to reduce chance of random commands
 			// leading to inconsistent state.
-			tc.rng.mu.Lock()
+			tc.rng.mu.Wrapped().Lock()
 			defer tc.rng.mu.Unlock()
 			if err := setMVCCStats(context.Background(), tc.rng.store.Engine(), tc.rng.RangeID, ms); err != nil {
 				t.Fatal(err)

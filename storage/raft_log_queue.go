@@ -83,7 +83,9 @@ func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
 		return 0, 0, nil
 	}
 
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return 0, 0, err
+	}
 	raftLogSize := r.mu.raftLogSize
 	// We target the raft log size at the size of the replicated data. When
 	// writing to a replica, it is common for the raft log to become larger than

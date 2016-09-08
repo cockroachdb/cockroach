@@ -178,7 +178,8 @@ func (r *Replica) computeChecksumTrigger(
 	stopper := r.store.Stopper()
 	id := args.ChecksumID
 	now := timeutil.Now()
-	r.mu.Lock()
+	r.mu.MustLock()
+
 	if _, ok := r.mu.checksums[id]; ok {
 		// A previous attempt was made to compute the checksum.
 		r.mu.Unlock()
@@ -306,7 +307,7 @@ func (r *Replica) leasePostCommitTrigger(
 			// the timestamp cache low water.
 			log.Infof(ctx, "new range lease %s following %s [physicalTime=%s]",
 				trigger.lease, prevLease, r.store.Clock().PhysicalTime())
-			r.mu.Lock()
+			r.mu.MustLock()
 			r.mu.tsCache.SetLowWater(trigger.lease.Start)
 			r.mu.Unlock()
 
@@ -315,7 +316,7 @@ func (r *Replica) leasePostCommitTrigger(
 			// an old lease request and attempt to gossip the first range.
 			if r.IsFirstRange() && trigger.lease.Covers(r.store.Clock().Now()) {
 				func() {
-					r.mu.Lock()
+					r.mu.MustLock()
 					defer r.mu.Unlock()
 					r.gossipFirstRangeLocked(ctx)
 				}()
@@ -325,7 +326,7 @@ func (r *Replica) leasePostCommitTrigger(
 			// anything currently cached. The timestamp cache is only used by the
 			// lease holder. Note that we'll call SetLowWater when we next acquire
 			// the lease.
-			r.mu.Lock()
+			r.mu.MustLock()
 			r.mu.tsCache.Clear(r.store.Clock())
 			r.mu.Unlock()
 
@@ -361,7 +362,9 @@ func (r *Replica) handleTrigger(
 	trigger PostCommitTrigger,
 ) {
 	if trigger.noConcurrentReads {
-		r.readOnlyCmdMu.Lock()
+		if err := r.readOnlyCmdMu.Lock(); err != nil {
+			log.Fatalf(ctx, "unable to acquire read lock while splitting: %s", err)
+		}
 		defer r.readOnlyCmdMu.Unlock()
 	}
 
@@ -374,7 +377,7 @@ func (r *Replica) handleTrigger(
 		// have three possible values, 'UNCHANGED', 'NO', and 'YES').
 		// Until then, we're left with this rather crude hack.
 		{
-			r.mu.Lock()
+			r.mu.MustLock()
 			r.mu.state.Stats.ContainsEstimates = false
 			stats := r.mu.state.Stats
 			r.mu.Unlock()
@@ -393,7 +396,7 @@ func (r *Replica) handleTrigger(
 		)
 	}
 	if trigger.merge != nil {
-		r.mu.Lock()
+		r.mu.MustLock()
 		r.mu.tsCache.Clear(r.store.Clock())
 		r.mu.Unlock()
 
@@ -406,12 +409,12 @@ func (r *Replica) handleTrigger(
 	}
 
 	if trigger.gcThreshold != nil {
-		r.mu.Lock()
+		r.mu.MustLock()
 		r.mu.state.GCThreshold = *trigger.gcThreshold
 		r.mu.Unlock()
 	}
 	if trigger.truncatedState != nil {
-		r.mu.Lock()
+		r.mu.MustLock()
 		r.mu.state.TruncatedState = trigger.truncatedState
 		r.mu.Unlock()
 		// Clear any entries in the Raft log entry cache for this range up
@@ -419,12 +422,12 @@ func (r *Replica) handleTrigger(
 		r.store.raftEntryCache.clearTo(r.RangeID, trigger.truncatedState.Index+1)
 	}
 	if trigger.raftLogSize != nil {
-		r.mu.Lock()
+		r.mu.MustLock()
 		r.mu.raftLogSize = *trigger.raftLogSize
 		r.mu.Unlock()
 	}
 	if trigger.frozen != nil {
-		r.mu.Lock()
+		r.mu.MustLock()
 		r.mu.state.Frozen = *trigger.frozen
 		r.mu.Unlock()
 	}
@@ -437,7 +440,7 @@ func (r *Replica) handleTrigger(
 		}
 	}
 	if trigger.lease != nil {
-		r.mu.Lock()
+		r.mu.MustLock()
 		prevLease := r.mu.state.Lease
 		r.mu.state.Lease = trigger.lease
 		replicaID := r.mu.replicaID
@@ -461,7 +464,7 @@ func (r *Replica) handleTrigger(
 			// don't want to share the trace.
 			ctxInner := context.Background()
 			if hasLease, pErr := r.getLeaseForGossip(ctxInner); hasLease {
-				r.mu.Lock()
+				r.mu.MustLock()
 				defer r.mu.Unlock()
 				r.gossipFirstRangeLocked(ctxInner)
 			} else {

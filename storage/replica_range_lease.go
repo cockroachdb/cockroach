@@ -150,7 +150,10 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		}
 
 		// Send result of lease to all waiter channels.
-		replica.mu.Lock()
+		if err := replica.mu.Lock(); err != nil {
+			execPErr = roachpb.NewErrorf("when obtaining lease: %s (after %s)", err, execPErr)
+			replica.mu.Wrapped().Lock()
+		}
 		defer replica.mu.Unlock()
 		for i, llChan := range p.llChans {
 			// Don't send the same pErr object twice; this can lead to races. We could
@@ -270,7 +273,9 @@ func (r *Replica) AdminTransferLease(target roachpb.StoreID) error {
 	// transfer (if it was successfully initiated).
 	var nextLeaseHolder roachpb.ReplicaDescriptor
 	initTransferHelper := func() (<-chan *roachpb.Error, <-chan *roachpb.Error, error) {
-		r.mu.Lock()
+		if err := r.mu.Lock(); err != nil {
+			return nil, nil, err
+		}
 		defer r.mu.Unlock()
 
 		lease := r.mu.state.Lease

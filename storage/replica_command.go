@@ -1193,10 +1193,10 @@ func (r *Replica) GC(
 		return reply, nil, err
 	}
 
-	r.mu.Lock()
+	r.mu.Wrapped().Lock()
 	newThreshold := r.mu.state.GCThreshold
 	newThreshold.Forward(args.Threshold)
-	r.mu.Unlock()
+	r.mu.Wrapped().Unlock()
 
 	trigger := &PostCommitTrigger{
 		gcThreshold: &newThreshold,
@@ -1517,8 +1517,8 @@ func (r *Replica) TruncateLog(
 	h roachpb.Header,
 	args roachpb.TruncateLogRequest,
 ) (roachpb.TruncateLogResponse, *PostCommitTrigger, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.Wrapped().Lock()
+	defer r.mu.Wrapped().Unlock()
 	var reply roachpb.TruncateLogResponse
 
 	// After a merge, it's possible that this request was sent to the wrong
@@ -1596,8 +1596,8 @@ func (r *Replica) RequestLease(
 ) (roachpb.RequestLeaseResponse, *PostCommitTrigger, error) {
 	// When returning an error from this method, must always return
 	// a newFailedLeaseTrigger() to satisfy stats.
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.Wrapped().Lock()
+	defer r.mu.Wrapped().Unlock()
 
 	prevLease := r.mu.state.Lease
 	rErr := &roachpb.LeaseRejectedError{
@@ -1663,8 +1663,8 @@ func (r *Replica) TransferLease(
 ) (roachpb.RequestLeaseResponse, *PostCommitTrigger, error) {
 	// When returning an error from this method, must always return
 	// a newFailedLeaseTrigger() to satisfy stats.
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.Wrapped().Lock()
+	defer r.mu.Wrapped().Unlock()
 	if log.V(2) {
 		prevLease := r.mu.state.Lease
 		log.Infof(ctx, "lease transfer: prev lease: %+v, new lease: %+v "+
@@ -1836,9 +1836,9 @@ func (r *Replica) getChecksum(
 	ctx context.Context,
 	id uuid.UUID,
 ) (replicaChecksum, bool) {
-	r.mu.Lock()
+	r.mu.Wrapped().Lock()
 	c, ok := r.mu.checksums[id]
-	r.mu.Unlock()
+	r.mu.Wrapped().Unlock()
 	if !ok {
 		return replicaChecksum{}, false
 	}
@@ -1848,9 +1848,9 @@ func (r *Replica) getChecksum(
 	if log.V(1) {
 		log.Infof(ctx, "waited for compute checksum for %s", timeutil.Since(now))
 	}
-	r.mu.Lock()
+	r.mu.Wrapped().Lock()
 	c, ok = r.mu.checksums[id]
-	r.mu.Unlock()
+	r.mu.Wrapped().Unlock()
 	return c, ok
 }
 
@@ -1862,8 +1862,8 @@ func (r *Replica) computeChecksumDone(
 	sha []byte,
 	snapshot *roachpb.RaftSnapshotData,
 ) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.Wrapped().Lock()
+	defer r.mu.Wrapped().Unlock()
 	if c, ok := r.mu.checksums[id]; ok {
 		c.checksum = sha
 		c.gcTimestamp = timeutil.Now().Add(replicaChecksumGCInterval)
@@ -2815,9 +2815,9 @@ func (r *Replica) mergeTrigger(
 	mergedMS.Subtract(r.GetMVCCStats())
 	*ms = mergedMS
 
-	r.mu.Lock()
+	r.mu.Wrapped().Lock()
 	r.mu.tsCache.Clear(r.store.Clock())
-	r.mu.Unlock()
+	r.mu.Wrapped().Unlock()
 
 	trigger := &PostCommitTrigger{
 		// This makes sure that no reads are happening in parallel; see #3148.

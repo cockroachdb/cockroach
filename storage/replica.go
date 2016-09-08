@@ -225,8 +225,7 @@ type Replica struct {
 	// Held in read mode during read-only commands. Held in exclusive mode to
 	// prevent read-only commands from executing. Acquired before the embedded
 	// RWMutex.
-	readOnlyCmdMu syncutil.RWMutex
-
+	readOnlyCmdMu syncutil.RWMutexWithError
 	// rangeDesc is a *RangeDescriptor that can be atomically read from in
 	// replica.Desc() without needing to acquire the replica.mu lock. All
 	// updates to state.Desc should be duplicated here
@@ -239,7 +238,7 @@ type Replica struct {
 	//
 	// Locking notes: Replica.raftMu < Store.uninitRaftMu < Replica.mu
 	raftMu struct {
-		syncutil.Mutex
+		syncutil.MutexWithError
 		// Is the Replica initialized or not? This mirrors the value returned by
 		// Replica.IsInitialized() (which is protected by Replica.mu). It is also
 		// mostly consistent with the presence of the replica in
@@ -251,9 +250,7 @@ type Replica struct {
 
 	mu struct {
 		// Protects all fields in the mu struct.
-		syncutil.Mutex
-		// Has the replica been destroyed.
-		destroyed error
+		syncutil.MutexWithError
 		// Corrupted persistently (across process restarts) indicates whether the
 		// replica has been corrupted.
 		corrupted bool
@@ -371,12 +368,6 @@ var _ KeyRange = &Replica{}
 // withRaftGroupLocked calls the supplied function with the (lazily
 // initialized) Raft group. It assumes that the Replica lock is held.
 func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
-	if r.mu.destroyed != nil {
-		// Silently ignore all operations on destroyed replicas. We can't return an
-		// error here as all errors returned from this method are considered fatal.
-		return nil
-	}
-
 	if r.mu.replicaID == 0 {
 		// The replica's raft group has not yet been configured (i.e. the replica
 		// was created from a preemptive snapshot).
@@ -426,7 +417,14 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 // Raft group. It acquires and releases the Replica lock, so r.mu must not be
 // held (or acquired by the supplied function).
 func (r *Replica) withRaftGroup(f func(r *raft.RawNode) error) error {
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		// Silently ignore all operations on destroyed replicas. We can't return an
+		// error here as all errors returned from this method are considered fatal.
+		//
+		// TODO(tschottdorf): return a sentinel error here instead and
+		// check at the callsites. See #9071.
+		return nil
+	}
 	defer r.mu.Unlock()
 	return r.withRaftGroupLocked(f)
 }
@@ -465,7 +463,9 @@ func NewReplica(
 func (r *Replica) init(
 	desc *roachpb.RangeDescriptor, clock *hlc.Clock, replicaID roachpb.ReplicaID,
 ) error {
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return err
+	}
 	defer r.mu.Unlock()
 	return r.initLocked(desc, clock, replicaID)
 }
@@ -510,8 +510,9 @@ func (r *Replica) initLocked(
 	if err != nil {
 		return err
 	}
-	r.mu.destroyed = pErr.GetDetail()
-	r.mu.corrupted = r.mu.destroyed != nil
+	destroyedErr := pErr.GetDetail()
+	r.mu.DestroyLocked(destroyedErr)
+	r.mu.corrupted = destroyedErr != nil
 
 	if replicaID == 0 {
 		repDesc, ok := desc.GetReplicaDescriptor(r.store.StoreID())
@@ -540,6 +541,11 @@ func (r *Replica) String() string {
 
 // Destroy clears pending command queue by sending each pending
 // command an error and cleans up all data associated with this range.
+// raftMu must be held by the caller.
+//
+// TODO(tschottdorf): The requirement that raftMu must be held by the caller is
+// odd, but since this is sometimes called from Raft processing (merge
+// trigger), there is no obvious refactor.
 func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor, destroyData bool) error {
 	desc := r.Desc()
 	if repDesc, ok := desc.GetReplicaDescriptor(r.store.StoreID()); ok && repDesc.ReplicaID >= origDesc.NextReplicaID {
@@ -547,19 +553,33 @@ func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor, destroyData bool) er
 			r, repDesc.ReplicaID, origDesc.NextReplicaID)
 	}
 
-	r.mu.Lock()
-	// Clear the pending command queue.
+	if err := r.mu.Lock(); err != nil {
+		r.mu.Wrapped().Lock() // enforce the lock
+	}
+	destroyedErr := errors.Errorf("replica %d (range %d) was garbage collected",
+		r.mu.replicaID, r.RangeID)
+	r.mu.Unlock()
+
+	// Let any outstanding reads finish, but block new ones.
+	r.readOnlyCmdMu.Destroy(destroyedErr)
+	// Ditto for Raft activity.
+	r.raftMu.DestroyLocked(destroyedErr) // we hold raftMu already
+
+	// Clear the pending command queue, signaling all clients waiting on Raft
+	// processing and making sure no new commands can be proposed.
+	if err := r.mu.Lock(); err != nil {
+		r.mu.Wrapped().Lock()
+	}
+
 	for _, p := range r.mu.pendingCmds {
 		p.done <- roachpb.ResponseWithError{
 			Reply: &roachpb.BatchResponse{},
 			Err:   roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID)),
 		}
 	}
-	// Clear the map.
+	r.mu.DestroyLocked(destroyedErr)
 	r.mu.pendingCmds = map[storagebase.CmdIDKey]*pendingCmd{}
 	r.mu.internalRaftGroup = nil
-	r.mu.destroyed = errors.Errorf("replica %d (range %d) was garbage collected",
-		r.mu.replicaID, r.RangeID)
 	r.mu.Unlock()
 
 	if !destroyData {
@@ -569,7 +589,9 @@ func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor, destroyData bool) er
 }
 
 func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return err
+	}
 	defer r.mu.Unlock()
 	return r.setReplicaIDLocked(replicaID)
 }
@@ -608,15 +630,19 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 
 // GetMaxBytes atomically gets the range maximum byte limit.
 func (r *Replica) GetMaxBytes() int64 {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	// TODO(tschottdorf): questionable pattern.
+	if err := r.mu.Lock(); err == nil {
+		defer r.mu.Unlock()
+	}
 	return r.mu.maxBytes
 }
 
 // SetMaxBytes atomically sets the maximum byte limit before
 // split. This value is cached by the range for efficiency.
 func (r *Replica) SetMaxBytes(maxBytes int64) {
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return
+	}
 	defer r.mu.Unlock()
 	r.mu.maxBytes = maxBytes
 }
@@ -629,7 +655,9 @@ func (r *Replica) IsFirstRange() bool {
 // getLease returns the current lease, and the tentative next one, if a lease
 // request initiated by this replica is in progress.
 func (r *Replica) getLease() (*roachpb.Lease, *roachpb.Lease) {
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return nil, nil
+	}
 	defer r.mu.Unlock()
 	if nextLease, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {
 		return r.mu.state.Lease, &nextLease
@@ -685,7 +713,9 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 	for attempt := 1; ; attempt++ {
 		timestamp := r.store.Clock().Now()
 		llChan, pErr := func() (<-chan *roachpb.Error, *roachpb.Error) {
-			r.mu.Lock()
+			if err := r.mu.Lock(); err != nil {
+				return nil, roachpb.NewError(err)
+			}
 			defer r.mu.Unlock()
 			lease := r.mu.state.Lease
 			if lease.Covers(timestamp) {
@@ -770,7 +800,9 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 // another node. It is false when a range has been created in response
 // to an incoming message but we are waiting for our initial snapshot.
 func (r *Replica) IsInitialized() bool {
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return false // TODO(tschottdorf)
+	}
 	defer r.mu.Unlock()
 	return r.isInitializedLocked()
 }
@@ -787,7 +819,10 @@ func (r *Replica) isInitializedLocked() bool {
 // Desc returns the authoritative range descriptor, acquiring a replica lock in
 // the process.
 func (r *Replica) Desc() *roachpb.RangeDescriptor {
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		// When we're destroyed, still return something.
+		r.mu.Wrapped().Lock()
+	}
 	defer r.mu.Unlock()
 	return r.mu.state.Desc
 }
@@ -807,7 +842,9 @@ func (r *Replica) setDesc(desc *roachpb.RangeDescriptor) error {
 // setDescWithoutProcessUpdate updates the range descriptor without calling
 // processRangeDescriptorUpdate. Requires raftMu to be locked.
 func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		panic(err)
+	}
 	defer r.mu.Unlock()
 
 	if desc.RangeID != r.RangeID {
@@ -832,7 +869,9 @@ func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
 // descriptor. Returns a *RangeNotFoundError if the replica is not found.
 // No other errors are returned.
 func (r *Replica) GetReplicaDescriptor() (roachpb.ReplicaDescriptor, error) {
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return roachpb.ReplicaDescriptor{}, err
+	}
 	defer r.mu.Unlock()
 	return r.getReplicaDescriptorLocked()
 }
@@ -849,7 +888,9 @@ func (r *Replica) getReplicaDescriptorLocked() (roachpb.ReplicaDescriptor, error
 // setLastReplicaDescriptors sets the the most recently seen replica descriptors to those
 // contained in the *RaftMessageRequest, acquiring r.mu to do so.
 func (r *Replica) setLastReplicaDescriptors(req *RaftMessageRequest) {
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return
+	}
 	r.mu.lastFromReplica = req.FromReplica
 	r.mu.lastToReplica = req.ToReplica
 	r.mu.Unlock()
@@ -857,7 +898,9 @@ func (r *Replica) setLastReplicaDescriptors(req *RaftMessageRequest) {
 
 // GetMVCCStats returns a copy of the MVCC stats object for this range.
 func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return enginepb.MVCCStats{} // TODO(tschottdorf)
+	}
 	defer r.mu.Unlock()
 	return r.mu.state.Stats
 }
@@ -936,7 +979,9 @@ func (r *Replica) setLastVerificationTimestamp(timestamp hlc.Timestamp) error {
 // RaftStatus returns the current raft status of the replica. It returns nil
 // if the Raft group has not been initialized yet.
 func (r *Replica) RaftStatus() *raft.Status {
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		r.mu.Wrapped().Lock()
+	}
 	defer r.mu.Unlock()
 	return r.raftStatusLocked()
 }
@@ -951,7 +996,9 @@ func (r *Replica) raftStatusLocked() *raft.Status {
 // State returns a copy of the internal state of the Replica, along with some
 // auxiliary information.
 func (r *Replica) State() storagebase.RangeInfo {
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return storagebase.RangeInfo{}
+	}
 	defer r.mu.Unlock()
 	var ri storagebase.RangeInfo
 	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*storagebase.ReplicaState)
@@ -968,7 +1015,9 @@ func (r *Replica) State() storagebase.RangeInfo {
 }
 
 func (r *Replica) assertState(reader engine.Reader) {
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return
+	}
 	defer r.mu.Unlock()
 	r.assertStateLocked(reader)
 }
@@ -1100,7 +1149,9 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func
 		for i, union := range ba.Requests {
 			spans[i] = union.GetInner().Header()
 		}
-		r.mu.Lock()
+		if err := r.mu.Lock(); err != nil {
+			return nil, err
+		}
 		chans := r.mu.cmdQ.getWait(readOnly, spans...)
 		cmd = r.mu.cmdQ.add(readOnly, spans...)
 		r.mu.Unlock()
@@ -1126,7 +1177,9 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func
 				for _, ch := range chans[i:] {
 					<-ch
 				}
-				r.mu.Lock()
+				if err := r.mu.Lock(); err != nil {
+					panic(err) // TODO(tschottdorf)
+				}
 				r.mu.cmdQ.remove(cmd)
 				r.mu.Unlock()
 				return nil, err
@@ -1158,8 +1211,15 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func
 // endCmds removes pending commands from the command queue and updates
 // the timestamp cache using the final timestamp of each command.
 // The returned error replaces the supplied error.
+//
+// TODO(tschottdorf): Whatever the original use of returning an updated error,
+// we don't update it any more so this should be removed.
 func (r *Replica) endCmds(cmd *cmd, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) (rErr *roachpb.Error) {
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		// Even if there was an error we'd like to remove ourselves from the
+		// command queue (though nobody should be waiting on us any more).
+		r.mu.Wrapped().Lock()
+	}
 	defer r.mu.Unlock()
 
 	// Only update the timestamp cache if the command succeeded and is
@@ -1222,7 +1282,9 @@ func (r *Replica) endCmds(cmd *cmd, ba *roachpb.BatchRequest, br *roachpb.BatchR
 // code path a stack frame higher up. Should really address that previous
 // TODO.
 func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return roachpb.NewError(err)
+	}
 	defer r.mu.Unlock()
 
 	if ba.Txn != nil {
@@ -1361,7 +1423,9 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 		return nil, roachpb.NewError(err)
 	}
 
-	r.readOnlyCmdMu.RLock()
+	if err := r.readOnlyCmdMu.RLock(); err != nil {
+		return nil, roachpb.NewError(err)
+	}
 	defer r.readOnlyCmdMu.RUnlock()
 
 	// Guarantee we remove the commands from the command queue. It is
@@ -1545,11 +1609,11 @@ func (r *Replica) proposeRaftCommand(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (
 	chan roachpb.ResponseWithError, func() bool, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.mu.destroyed != nil {
-		return nil, nil, r.mu.destroyed
+	if err := r.mu.Lock(); err != nil {
+		return nil, nil, err
 	}
+	defer r.mu.Unlock()
+
 	repDesc, ok := r.mu.state.Desc.GetReplicaDescriptor(r.store.StoreID())
 	if !ok {
 		return nil, nil, roachpb.NewRangeNotFoundError(r.RangeID)
@@ -1562,7 +1626,9 @@ func (r *Replica) proposeRaftCommand(
 		return nil, nil, err
 	}
 	tryAbandon := func() bool {
-		r.mu.Lock()
+		if err := r.mu.Lock(); err != nil {
+			return false // must already have been abandoned
+		}
 		_, ok := r.mu.pendingCmds[pCmd.idKey]
 		delete(r.mu.pendingCmds, pCmd.idKey)
 		r.mu.Unlock()
@@ -1632,14 +1698,19 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 	})
 }
 
-// Lock the replica for Raft processing.
-func (r *Replica) raftLock() (uninitRaftLocked bool) {
-	r.raftMu.Lock()
+// Lock the replica for Raft processing. If the replica is not available (for
+// instance due to corruption or garbage collection), an error is returned and
+// the lock is not acquired.
+func (r *Replica) raftLock() (uninitRaftLocked bool, _ error) {
+	err := r.raftMu.Lock()
+	if err != nil {
+		return false, err
+	}
 	if r.raftMu.initialized {
-		return false
+		return false, nil
 	}
 	r.store.uninitRaftMu.Lock()
-	return true
+	return true, nil
 }
 
 // Unlock the replica for Raft processing.
@@ -1654,7 +1725,10 @@ func (r *Replica) raftUnlock(uninitRaftLocked bool) {
 // are ready to read, be saved to stable storage, committed or sent to other
 // peers.
 func (r *Replica) handleRaftReady() error {
-	uninitRaftLocked := r.raftLock()
+	uninitRaftLocked, err := r.raftLock()
+	if err != nil {
+		return err
+	}
 	// We overwrite uninitRaftLocked below (in case a raft command contains a
 	// split), which requires using a separate closure to capture
 	// uninitRaftLocked rather than having it evaluated at the point of the defer
@@ -1666,12 +1740,14 @@ func (r *Replica) handleRaftReady() error {
 	ctx := r.ctx
 	var hasReady bool
 	var rd raft.Ready
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return err
+	}
 
 	lastIndex := r.mu.lastIndex // used for append below
 	raftLogSize := r.mu.raftLogSize
 	leaderID := r.mu.leaderID
-	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
+	err = r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
 		if hasReady = raftGroup.HasReady(); hasReady {
 			rd = raftGroup.Ready()
 		}
@@ -1791,7 +1867,9 @@ func (r *Replica) handleRaftReady() error {
 	// Update protected state (last index, raft log size and raft leader
 	// ID) and set raft log entry cache. We clear any older, uncommitted
 	// log entries and cache the latest ones.
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return err
+	}
 	r.store.raftEntryCache.addEntries(r.RangeID, rd.Entries)
 	r.mu.lastIndex = lastIndex
 	r.mu.raftLogSize = raftLogSize
@@ -1865,7 +1943,9 @@ func (r *Replica) handleRaftReady() error {
 		}
 	}
 	if refreshReason != noReason {
-		r.mu.Lock()
+		if err := r.mu.Lock(); err != nil {
+			return err
+		}
 		err := r.refreshPendingCmdsLocked(refreshReason, 0)
 		r.mu.Unlock()
 		if err != nil {
@@ -1885,12 +1965,18 @@ func (r *Replica) handleRaftReady() error {
 // tick the Raft group, returning any error and true if the raft group exists
 // and false otherwise.
 func (r *Replica) tick() (bool, error) {
-	defer r.raftUnlock(r.raftLock())
+	uninitLocked, err := r.raftLock()
+	if err != nil {
+		return false, err
+	}
+	defer r.raftUnlock(uninitLocked)
 	return r.tickRaftMuLocked()
 }
 
 func (r *Replica) tickRaftMuLocked() (bool, error) {
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return false, err
+	}
 	defer r.mu.Unlock()
 
 	// If the raft group is uninitialized, do not initialize raft groups on
@@ -2007,7 +2093,10 @@ func (r *Replica) getReplicaDescriptorByIDLocked(
 func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	rangeID := r.RangeID
 
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		log.Warning(r.ctx, errors.Wrap(err, "unable to send Raft message"))
+		return
+	}
 	fromReplica, fromErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
 	r.mu.Unlock()
@@ -2039,7 +2128,9 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 		FromReplica: fromReplica,
 		Message:     msg,
 	}) {
-		r.mu.Lock()
+		if err := r.mu.Lock(); err != nil {
+			return
+		}
 		r.mu.droppedMessages++
 		r.mu.Unlock()
 
@@ -2053,7 +2144,11 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 }
 
 func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
-	defer r.raftUnlock(r.raftLock())
+	uninitLocked, err := r.raftLock()
+	if err != nil {
+		return
+	}
+	defer r.raftUnlock(uninitLocked)
 
 	snapStatus := raft.SnapshotFinish
 	if snapErr != nil {
@@ -2106,7 +2201,9 @@ func (r *Replica) processRaftCommand(
 		log.Infof(r.ctx, "processing command %x: maxLeaseIndex=%d", idKey, raftCmd.MaxLeaseIndex)
 	}
 
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return roachpb.NewError(err)
+	}
 	cmd := r.mu.pendingCmds[idKey]
 
 	isLeaseError := func() bool {
@@ -2281,7 +2378,9 @@ func (r *Replica) applyRaftCommand(
 		log.Fatalf(ctx, "raft command index is <= 0")
 	}
 
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return nil, proposalResult{}, roachpb.NewError(err)
+	}
 	oldIndex := r.mu.state.RaftAppliedIndex
 	// When frozen, the Range only applies freeze-related requests. Overrides
 	// any forcedError.
@@ -2358,7 +2457,9 @@ func (r *Replica) applyRaftCommand(
 		}
 		rErr = roachpb.NewError(NewReplicaCorruptionError(errors.Wrap(err, "could not commit batch")))
 	} else {
-		r.mu.Lock()
+		if err := r.mu.Lock(); err != nil {
+			return nil, proposalResult{}, roachpb.NewError(err)
+		}
 		// Update cached appliedIndex if we were able to set the applied index
 		// on disk.
 		// TODO(tschottdorf): with proposer-eval'ed KV, the lease applied index
@@ -2443,7 +2544,9 @@ func (r *Replica) applyRaftCommandInBatch(
 func (r *Replica) checkIfTxnAborted(
 	ctx context.Context, b engine.Reader, txn roachpb.Transaction,
 ) *roachpb.Error {
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return roachpb.NewError(err)
+	}
 	defer r.mu.Unlock()
 
 	var entry roachpb.AbortCacheEntry
@@ -2645,7 +2748,9 @@ func (r *Replica) executeBatch(
 	br := ba.CreateReply()
 	var trigger *PostCommitTrigger
 
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return nil, nil, roachpb.NewError(err)
+	}
 	threshold := r.mu.state.GCThreshold
 	r.mu.Unlock()
 	if !threshold.Less(ba.Timestamp) {
@@ -2838,7 +2943,9 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 		log.Errorf(r.ctx, "failed to gossip cluster ID: %s", err)
 	}
 	if hasLease, pErr := r.getLeaseForGossip(r.ctx); hasLease {
-		r.mu.Lock()
+		if err := r.mu.Lock(); err != nil {
+			return roachpb.NewError(err)
+		}
 		defer r.mu.Unlock()
 		r.gossipFirstRangeLocked(r.ctx)
 	} else {
@@ -2940,12 +3047,15 @@ func NewReplicaCorruptionError(err error) *roachpb.ReplicaCorruptionError {
 // to just recompute its stats in the background when one occurs.
 func (r *Replica) maybeSetCorrupt(ctx context.Context, pErr *roachpb.Error) *roachpb.Error {
 	if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
-		r.mu.Lock()
+		log.Errorf(ctx, "stalling replica due to: %s", cErr.ErrorMsg)
+		if err := r.mu.Lock(); err != nil {
+			log.Warningf(ctx, "replica corruption detected, but already destroyed: %s", err)
+			return pErr
+		}
 		defer r.mu.Unlock()
 
-		log.Errorf(ctx, "stalling replica due to: %s", cErr.ErrorMsg)
 		cErr.Processed = true
-		r.mu.destroyed = cErr
+		r.mu.DestroyLocked(cErr)
 		r.mu.corrupted = true
 		pErr = roachpb.NewError(cErr)
 
@@ -2988,7 +3098,9 @@ func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
 // needsSplitBySize returns true if the size of the range requires it
 // to be split.
 func (r *Replica) needsSplitBySize() bool {
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return false
+	}
 	maxBytes := r.mu.maxBytes
 	size := r.mu.state.Stats.Total()
 	r.mu.Unlock()
@@ -3020,7 +3132,9 @@ func (r *Replica) maybeAddToRaftLogQueue(appliedIndex uint64) {
 }
 
 func (r *Replica) setPendingSnapshotIndex(index uint64) error {
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return err
+	}
 	defer r.mu.Unlock()
 	// We allow the pendingSnapshotIndex to change from 0 to 1 and then from 1 to
 	// a value greater than 1. Any other change indicates 2 current preemptive
@@ -3034,7 +3148,9 @@ func (r *Replica) setPendingSnapshotIndex(index uint64) error {
 }
 
 func (r *Replica) clearPendingSnapshotIndex() {
-	r.mu.Lock()
+	if err := r.mu.Lock(); err != nil {
+		return
+	}
 	r.mu.pendingSnapshotIndex = 0
 	r.mu.Unlock()
 }
