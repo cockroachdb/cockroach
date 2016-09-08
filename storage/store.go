@@ -80,6 +80,10 @@ const (
 	// rangeLeaseRenewalDivisor specifies what quotient the range lease renewal
 	// duration should be of the range lease active time.
 	rangeLeaseRenewalDivisor = 5
+
+	// replicaRequestQueueSize specifies the maximum number of requests to queue
+	// for a replica.
+	replicaRequestQueueSize = 100
 )
 
 var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeType{
@@ -87,7 +91,7 @@ var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeTy
 	roachpb.REMOVE_REPLICA: raftpb.ConfChangeRemoveNode,
 }
 
-var storeReplicaRaftReadyConcurrency = 2 * runtime.NumCPU()
+var storeSchedulerConcurrency = 2 * runtime.NumCPU()
 
 // TestStoreContext has some fields initialized with values relevant in tests.
 func TestStoreContext() StoreContext {
@@ -256,6 +260,13 @@ func (rs *storeRangeSet) EstimatedCount() int {
 	return len(rs.rangeIDs) - rs.visited
 }
 
+type raftRequestInfo struct {
+	req        *RaftMessageRequest
+	respStream RaftMessageResponseStream
+}
+
+type raftRequestQueue []raftRequestInfo
+
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
 type Store struct {
@@ -277,7 +288,6 @@ type Store struct {
 	metrics                 *StoreMetrics
 	intentResolver          *intentResolver
 	raftEntryCache          *raftEntryCache
-	wakeRaftLoop            chan struct{}
 	// 1 if the store was started, 0 if it wasn't. To be accessed using atomic
 	// ops.
 	started int32
@@ -409,15 +419,15 @@ type Store struct {
 		// replicaPlaceholders is a map to access all placeholders, so they can
 		// be directly accessed and cleared after stepping all raft groups.
 		replicaPlaceholders map[roachpb.RangeID]*ReplicaPlaceholder
+		// replicaQueues is a map of per-Replica incoming request queues. These
+		// queues might more naturally belong in Replica, but are kept separate to
+		// avoid reworking the locking in getOrCreateReplica which requires
+		// Replica.raftMu to be held while a replica is being inserted into
+		// Store.mu.replicas.
+		replicaQueues map[roachpb.RangeID]raftRequestQueue
 	}
 
-	// pendingRaftGroups contains the ranges that should be checked for
-	// updates. After updating this map, write to wakeRaftLoop to
-	// trigger the check.
-	pendingRaftGroups struct {
-		syncutil.Mutex
-		value map[roachpb.RangeID]struct{}
-	}
+	scheduler *raftScheduler
 
 	counts struct {
 		// Number of placeholders removed due to error.
@@ -617,24 +627,24 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	}
 
 	s := &Store{
-		ctx:          ctx,
-		db:           ctx.DB, // TODO(tschottdorf) remove redundancy.
-		engine:       eng,
-		allocator:    MakeAllocator(ctx.StorePool, ctx.AllocatorOptions),
-		nodeDesc:     nodeDesc,
-		wakeRaftLoop: make(chan struct{}, 1),
-		metrics:      newStoreMetrics(),
+		ctx:       ctx,
+		db:        ctx.DB, // TODO(tschottdorf) remove redundancy.
+		engine:    eng,
+		allocator: MakeAllocator(ctx.StorePool, ctx.AllocatorOptions),
+		nodeDesc:  nodeDesc,
+		metrics:   newStoreMetrics(),
 	}
 	s.intentResolver = newIntentResolver(s)
 	s.raftEntryCache = newRaftEntryCache(ctx.RaftEntryCacheSize)
 	s.drainLeases.Store(false)
+	s.scheduler = newRaftScheduler(ctx.Ctx, s, storeSchedulerConcurrency)
 
 	s.mu.Lock()
 	s.mu.replicas = map[roachpb.RangeID]*Replica{}
 	s.mu.replicaPlaceholders = map[roachpb.RangeID]*ReplicaPlaceholder{}
+	s.mu.replicaQueues = map[roachpb.RangeID]raftRequestQueue{}
 	s.mu.replicasByKey = btree.New(64 /* degree */)
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
-	s.pendingRaftGroups.value = map[roachpb.RangeID]struct{}{}
 	s.mu.Unlock()
 
 	if s.ctx.Gossip != nil {
@@ -1574,6 +1584,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 		}
 		delete(s.mu.uninitReplicas, newDesc.RangeID)
 		delete(s.mu.replicas, newDesc.RangeID)
+		delete(s.mu.replicaQueues, newDesc.RangeID)
 	}
 
 	// Replace the end key of the original range with the start key of
@@ -1609,6 +1620,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 // MergeRange expands the subsuming range to absorb the subsumed range. This
 // merge operation will fail if the two ranges are not collocated on the same
 // store.
+// The subsumed range's raftMu is assumed held.
 func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, subsumedRangeID roachpb.RangeID) error {
 	subsumingDesc := subsumingRng.Desc()
 
@@ -1757,6 +1769,7 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 
 	delete(s.mu.replicas, rep.RangeID)
 	delete(s.mu.replicaPlaceholders, rep.RangeID)
+	delete(s.mu.replicaQueues, rep.RangeID)
 	delete(s.mu.uninitReplicas, rep.RangeID)
 	if s.mu.replicasByKey.Delete(rep) == nil {
 		// This is a fatal error because returning at this point will
@@ -2231,14 +2244,40 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now hlc.Timesta
 func (s *Store) HandleRaftRequest(
 	ctx context.Context,
 	req *RaftMessageRequest,
+	respStream RaftMessageResponseStream,
 ) (pErr *roachpb.Error) {
-	ctx = s.logContext(ctx)
 	s.metrics.raftRcvdMessages[req.Message.Type].Inc(1)
 
 	if req.Message.Type == raftpb.MsgHeartbeat {
 		// TODO(bdarnell): handle coalesced heartbeats.
 	}
 
+	if respStream == nil {
+		return s.processRaftRequest(ctx, req)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	q := s.mu.replicaQueues[req.RangeID]
+	if len(q) >= replicaRequestQueueSize {
+		// TODO(peter): Return an error indicating the request was dropped. Note
+		// that dropping the request is safe. Raft will retry.
+		s.metrics.RaftRcvdMsgDropped.Inc(1)
+		return nil
+	}
+	s.mu.replicaQueues[req.RangeID] = append(q, raftRequestInfo{
+		req:        req,
+		respStream: respStream,
+	})
+
+	s.scheduler.EnqueueRaftRequest(req.RangeID)
+	return nil
+}
+
+func (s *Store) processRaftRequest(
+	ctx context.Context,
+	req *RaftMessageRequest,
+) (pErr *roachpb.Error) {
 	// Lazily create the replica.
 	r, uninitRaftLocked, err := s.getOrCreateReplica(
 		req.RangeID, req.ToReplica.ReplicaID, req.FromReplica)
@@ -2491,122 +2530,134 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 // enqueueRaftUpdateCheck asynchronously registers the given range ID to be
 // checked for raft updates when the processRaft goroutine is idle.
 func (s *Store) enqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
-	s.pendingRaftGroups.Lock()
-	s.pendingRaftGroups.value[rangeID] = struct{}{}
-	s.pendingRaftGroups.Unlock()
-	select {
-	case s.wakeRaftLoop <- struct{}{}:
-	default:
+	s.scheduler.EnqueueRaftReady(rangeID)
+}
+
+func (s *Store) processRequestQueue(rangeID roachpb.RangeID) {
+	s.mu.Lock()
+	q, ok := s.mu.replicaQueues[rangeID]
+	if ok {
+		delete(s.mu.replicaQueues, rangeID)
+	}
+	s.mu.Unlock()
+
+	for _, info := range q {
+		if pErr := s.processRaftRequest(info.respStream.Context(), info.req); pErr != nil {
+			if err := info.respStream.Send(newRaftMessageResponse(info.req, pErr)); err != nil {
+				// Seems excessive to log this on every occurrence as the other side
+				// might have closed.
+				if log.V(1) {
+					log.Info(s.Ctx(), errors.Wrap(err, "error sending error"))
+				}
+			}
+		}
 	}
 }
 
-// processRaft processes write commands that have been committed
-// by the raft consensus algorithm, dispatching them to the
-// appropriate range. This method starts a goroutine to process Raft
-// commands indefinitely or until the stopper signals.
+func (s *Store) processReady(rangeID roachpb.RangeID) {
+	start := timeutil.Now()
+
+	s.mu.Lock()
+	r, ok := s.mu.replicas[rangeID]
+	s.mu.Unlock()
+
+	if ok {
+		if err := r.handleRaftReady(); err != nil {
+			panic(err) // TODO(bdarnell)
+		}
+		elapsed := timeutil.Since(start)
+		s.metrics.RaftWorkingDurationNanos.Inc(elapsed.Nanoseconds())
+		// If Raft processing took longer than 10x the raft tick interval something
+		// bad is going on. Such long processing time means we'll have starved
+		// local replicas of ticks and remote replicas will likely start
+		// campaigning.
+		var warnDuration = 10 * s.ctx.RaftTickInterval
+		if elapsed >= warnDuration {
+			log.Warningf(s.Ctx(), "%s: handle raft ready: %.1fs", r, elapsed.Seconds())
+		}
+		if !r.IsInitialized() {
+			// Only an uninitialized replica can have a placeholder since, by
+			// definition, an initialized replica will be present in the
+			// replicasByKey map. While the replica will usually consume the
+			// placeholder itself, that isn't guaranteed and so this invocation
+			// here is crucial (i.e. don't remove it).
+			if s.removePlaceholder(r.RangeID) {
+				atomic.AddInt32(&s.counts.droppedPlaceholders, 1)
+			}
+		}
+	}
+}
+
+func (s *Store) processTick(rangeID roachpb.RangeID) bool {
+	start := timeutil.Now()
+
+	s.mu.Lock()
+	r, ok := s.mu.replicas[rangeID]
+	s.mu.Unlock()
+
+	var exists bool
+	if ok {
+		var err error
+		if exists, err = r.tick(); err != nil {
+			log.Error(s.Ctx(), err)
+		}
+		s.metrics.RaftTickingDurationNanos.Inc(timeutil.Since(start).Nanoseconds())
+	}
+	return exists // ready
+}
+
 func (s *Store) processRaft() {
 	if s.ctx.TestingKnobs.DisableProcessRaft {
 		return
 	}
+	s.scheduler.Start(s.stopper)
+	s.raftTickLoop()
+	s.raftSnapshotStatusLoop()
+}
 
+func (s *Store) raftTickLoop() {
 	s.stopper.RunWorker(func() {
-		// Start a pool of worker goroutines. These worker goroutines need to
-		// continue processing even when the stopper has been stopped in order to
-		// finish any queued work. We are using a pool instead of creating a new
-		// goroutine for each operation because Replica.handleRaftReady currently
-		// grows the goroutine stack from the default of 2K up to 8K, 16K or
-		// 32K. It's cheaper to reuse a goroutine with a large stack than to start
-		// a new goroutine from scratch.
-		workQueue := make(chan func(), storeReplicaRaftReadyConcurrency)
-		for i := 0; i < cap(workQueue); i++ {
-			go func() {
-				for w := range workQueue {
-					w()
-				}
-			}()
-		}
-
 		ticker := time.NewTicker(s.ctx.RaftTickInterval)
 		defer func() {
 			ticker.Stop()
 			s.ctx.Transport.Stop(s.StoreID())
-			close(workQueue)
 		}()
 
-		var replicas []*Replica
-		var pendingReplicas []roachpb.RangeID
-		var warnDuration = 10 * s.ctx.RaftTickInterval
-		maybeWarnDuration := func(start time.Time, prefix fmt.Stringer, msg string) {
-			// If Raft processing took longer than a second something bad is going
-			// on. Such long processing time means we'll have starved local replicas
-			// of ticks and remote replicas will likely start campaigning.
-			if elapsed := timeutil.Since(start); elapsed >= warnDuration {
-				log.Warningf(s.Ctx(), "%s: %s: %.1fs", prefix, msg, elapsed.Seconds())
-			}
-		}
+		var rangeIDs []roachpb.RangeID
 
 		for {
-			workingStart := timeutil.Now()
-
-			// Copy the replicas tracked in pendingRaftGroups into local
-			// variables that we can use without the lock.
-			replicas = replicas[:0]
-			s.mu.Lock()
-			s.pendingRaftGroups.Lock()
-			if len(s.pendingRaftGroups.value) > 0 {
-				for rangeID := range s.pendingRaftGroups.value {
-					if r, ok := s.mu.replicas[rangeID]; ok {
-						replicas = append(replicas, r)
-					}
-				}
-				s.pendingRaftGroups.value = map[roachpb.RangeID]struct{}{}
-			}
-			s.pendingRaftGroups.Unlock()
-			s.mu.Unlock()
-
-			// Note that between unlocking Store.mu and locking Replica.raftMu a
-			// replica may have been removed. This results in Replica.mu.destroyed
-			// being set which in turn causes Replica.handleRaftReady() to return
-			// immediately.
-
-			// Handle raft updates for all replicas.
-			var wg sync.WaitGroup
-			wg.Add(len(replicas))
-			for _, r := range replicas {
-				r := r // per-iteration copy
-				workQueue <- func() {
-					defer wg.Done()
-					start := timeutil.Now()
-					if err := r.handleRaftReady(); err != nil {
-						panic(err) // TODO(bdarnell)
-					}
-					maybeWarnDuration(start, r, "handle raft ready")
-					if !r.IsInitialized() {
-						// Only an uninitialized replica can have a placeholder since, by
-						// definition, an initialized replica will be present in the
-						// replicasByKey map. While the replica will usually consume the
-						// placeholder itself, that isn't guaranteed and so this invocation
-						// here is crucial (i.e. don't remove it).
-						if s.removePlaceholder(r.RangeID) {
-							atomic.AddInt32(&s.counts.droppedPlaceholders, 1)
-						}
-					}
-				}
-			}
-			wg.Wait()
-
-			s.metrics.RaftWorkingDurationNanos.Inc(timeutil.Since(workingStart).Nanoseconds())
-
-			maybeWarnDuration(workingStart, s, "raft ready processing")
-
-			selectStart := timeutil.Now()
-
 			select {
-			case <-s.wakeRaftLoop:
-				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
+			case <-ticker.C:
+				rangeIDs = rangeIDs[:0]
 
+				s.mu.Lock()
+				for rangeID := range s.mu.replicas {
+					rangeIDs = append(rangeIDs, rangeID)
+				}
+				s.mu.Unlock()
+
+				s.scheduler.EnqueueRaftTick(rangeIDs...)
+
+				s.metrics.RaftTicks.Inc(1)
+
+			case <-s.stopper.ShouldStop():
+				return
+			}
+		}
+	})
+}
+
+func (s *Store) raftSnapshotStatusLoop() {
+	s.stopper.RunWorker(func() {
+		// We use a single goroutine for processing snapshot reporting. This
+		// goroutine needs to grab Replica.raftMu which means that it can block
+		// waiting for other raft processing on the range to complete. But note that
+		// the replica we're reporting the snapshot status on is the one which
+		// generated the snapshot (i.e. the leader). It is very unlikely that it will
+		// be doing expensive raft processing elsewhere in the system.
+		for {
+			select {
 			case st := <-s.ctx.Transport.SnapshotStatusChan:
-				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
 				s.mu.Lock()
 				r, ok := s.mu.replicas[st.Req.RangeID]
 				s.mu.Unlock()
@@ -2618,47 +2669,7 @@ func (s *Store) processRaft() {
 					r.reportSnapshotStatus(st.Req.Message.To, st.Err)
 				}
 
-			case <-ticker.C:
-				// TODO(bdarnell): rework raft ticker.
-				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
-				tickerStart := timeutil.Now()
-
-				replicas = replicas[:0]
-				pendingReplicas = pendingReplicas[:0]
-
-				s.mu.Lock()
-				for _, r := range s.mu.replicas {
-					replicas = append(replicas, r)
-				}
-				s.mu.Unlock()
-
-				// Similar to the locking for Replica.handleRaftReady(), if a replica
-				// has been removed, Replica.mu.destroyed will be non-nil causing
-				// Replica.tick() to be a no-op.
-				for _, r := range replicas {
-					if exists, err := r.tick(); err != nil {
-						log.Error(s.Ctx(), err)
-					} else if exists {
-						pendingReplicas = append(pendingReplicas, r.RangeID)
-					}
-				}
-
-				s.metrics.RaftTicks.Inc(1)
-
-				// Enqueue all pending ranges for readiness checks. Note that we could
-				// not hold the pendingRaftGroups lock during the previous loop because
-				// of lock ordering constraints with r.tick().
-				s.pendingRaftGroups.Lock()
-				for _, rangeID := range pendingReplicas {
-					s.pendingRaftGroups.value[rangeID] = struct{}{}
-				}
-				s.pendingRaftGroups.Unlock()
-				s.metrics.RaftTickingDurationNanos.Inc(timeutil.Since(tickerStart).Nanoseconds())
-
-				maybeWarnDuration(tickerStart, s, "raft ticking")
-
 			case <-s.stopper.ShouldStop():
-				s.metrics.RaftSelectDurationNanos.Inc(timeutil.Since(selectStart).Nanoseconds())
 				return
 			}
 		}
@@ -2787,6 +2798,7 @@ func (s *Store) tryGetOrCreateReplica(
 		r.mu.Unlock()
 		s.mu.Lock()
 		delete(s.mu.replicas, rangeID)
+		delete(s.mu.replicaQueues, rangeID)
 		delete(s.mu.uninitReplicas, rangeID)
 		s.mu.Unlock()
 		r.raftUnlock(true)

@@ -146,6 +146,14 @@ func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 	s.enqueueRaftUpdateCheck(rangeID)
 }
 
+func (r *Replica) RaftLock() bool {
+	return r.raftLock()
+}
+
+func (r *Replica) RaftUnlock(uninitRaftLocked bool) {
+	r.raftUnlock(uninitRaftLocked)
+}
+
 // GetLastIndex is the same function as LastIndex but it does not require
 // that the replica lock is held.
 func (r *Replica) GetLastIndex() (uint64, error) {

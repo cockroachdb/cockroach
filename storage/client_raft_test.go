@@ -2094,17 +2094,9 @@ func TestReplicaLazyLoad(t *testing.T) {
 	mtc.restartStore(0)
 
 	// Wait for a bunch of raft ticks.
-	tickNanos := mtc.stores[0].Metrics().RaftTickingDurationNanos.Count
-	var oldNanos int64
-	for i := 0; i < 10; i++ {
-		for {
-			nanos := tickNanos()
-			if oldNanos != nanos {
-				oldNanos = nanos
-				break
-			}
-			time.Sleep(time.Millisecond)
-		}
+	ticks := mtc.stores[0].Metrics().RaftTicks.Count
+	for targetTicks := ticks() + 5; targetTicks < ticks(); {
+		time.Sleep(time.Millisecond)
 	}
 
 	replica, err := mtc.stores[0].GetReplica(1)
@@ -2445,4 +2437,45 @@ func TestFailedPreemptiveSnapshot(t *testing.T) {
 		rep.Desc()); !testutils.IsError(err, expErr) {
 		t.Fatalf("expected %s; got %v", expErr, err)
 	}
+}
+
+// Test that a single blocked replica does not block other replicas.
+func TestRaftBlockedReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sc := storage.TestStoreContext()
+	sc.RaftTickInterval = time.Millisecond
+	sc.TestingKnobs.DisableScanner = true
+	mtc := multiTestContext{storeContext: &sc}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+
+	// Create 2 ranges by splitting range 1.
+	splitArgs := adminSplitArgs(roachpb.KeyMin, []byte("b"))
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &splitArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Replica range 1 to all 3 nodes. This ensures the usage of the network.
+	mtc.replicateRange(1, 1, 2)
+
+	// Lock range 2 for raft processing.
+	rep, err := mtc.stores[0].GetReplica(2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rep.RaftUnlock(rep.RaftLock())
+
+	// Verify that we're still ticking the non-blocked replica.
+	ticks := mtc.stores[0].Metrics().RaftTicks.Count
+	for targetTicks := ticks() + 5; targetTicks < ticks(); {
+		time.Sleep(time.Millisecond)
+	}
+
+	// Verify we can still perform operations on the non-blocked replica.
+	incArgs := incrementArgs([]byte("a"), 5)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+	mtc.waitForValues(roachpb.Key("a"), []int64{5, 5, 5})
 }
