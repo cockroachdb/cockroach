@@ -110,7 +110,8 @@ $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_
 $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_new" >> old.everything
 # diff returns non-zero if different. With set -e above, that would exit here.
 diff new.everything old.everything
-$bin quit && wait
+$bin quit || true
+wait
 `
 	runReadWriteReferenceTest(t, `bidirectional-reference-version`, backwardReferenceTest)
 }
@@ -127,7 +128,8 @@ $bin start & &> out
 until $bin sql -e "SELECT 1"; do sleep 1; done
 # grep returns non-zero if it didn't match anything. With set -e above, that would exit here.
 $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_new" 2>&1 | grep "is encoded using using version 2, but this client only supports version 1"
-$bin quit && wait
+$bin quit || true
+wait
 `
 	runReadWriteReferenceTest(t, `forward-reference-version`, backwardReferenceTest)
 }
