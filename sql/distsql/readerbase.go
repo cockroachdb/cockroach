@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-// Author: Irfan Sharif (irfansharif@cockroachlabs.com)
+// Author: Radu Berinde (radu@cockroachlabs.com)
 
 package distsql
 

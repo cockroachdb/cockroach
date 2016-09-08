@@ -70,8 +70,8 @@ func TestSorter(t *testing.T) {
 			spec: SorterSpec{
 				Ordering: convertToSpecOrdering(
 					sqlbase.ColumnOrdering{
-						{ColIdx: 1, Direction: desc},
 						{ColIdx: 0, Direction: asc},
+						{ColIdx: 1, Direction: desc},
 						{ColIdx: 2, Direction: asc},
 					}),
 			},
@@ -85,13 +85,13 @@ func TestSorter(t *testing.T) {
 				{v[0], v[0], v[0]},
 			},
 			expected: sqlbase.EncDatumRows{
-				{v[3], v[4], v[1]},
-				{v[4], v[4], v[4]},
-				{v[4], v[4], v[5]},
-				{v[3], v[3], v[0]},
-				{v[3], v[2], v[0]},
 				{v[0], v[0], v[0]},
 				{v[1], v[0], v[4]},
+				{v[3], v[4], v[1]},
+				{v[3], v[3], v[0]},
+				{v[3], v[2], v[0]},
+				{v[4], v[4], v[4]},
+				{v[4], v[4], v[5]},
 			},
 		},
 	}

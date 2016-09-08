@@ -94,10 +94,10 @@ func (m *JoinReaderSpec) String() string            { return proto.CompactTextSt
 func (*JoinReaderSpec) ProtoMessage()               {}
 func (*JoinReaderSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{3} }
 
-// SorterSpec is the specification for a "sorting aggregator". A sorting aggregator
-// sorts elements in the input stream providing a certain output order
-// guarantee regardless of the input ordering, it is done so according to a
-// configurable set of columns.
+// SorterSpec is the specification for a "sorting aggregator". A sorting
+// aggregator sorts elements in the input stream providing a certain output
+// order guarantee regardless of the input ordering. The output ordering is
+// according to a configurable set of columns.
 type SorterSpec struct {
 	Ordering Ordering `protobuf:"bytes,1,opt,name=ordering" json:"ordering"`
 }
