@@ -144,4 +144,5 @@ type debugContext struct {
 	startKey, endKey engine.MVCCKey
 	values           bool
 	sizes            bool
+	replicated       bool
 }

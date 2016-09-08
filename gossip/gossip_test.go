@@ -41,7 +41,7 @@ func TestGossipInfoStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, stopper)
+	rpcContext := rpc.NewContext(context.TODO(), &base.Context{Insecure: true}, nil, stopper)
 	g := New(context.TODO(), rpcContext, rpc.NewServer(rpcContext), nil, stopper, metric.NewRegistry())
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
@@ -78,7 +78,7 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	if len(resolvers) != 3 {
 		t.Errorf("expected 3 resolvers; got %d", len(resolvers))
 	}
-	server := rpc.NewServer(rpc.NewContext(&base.Context{Insecure: true}, nil, stopper))
+	server := rpc.NewServer(rpc.NewContext(context.TODO(), &base.Context{Insecure: true}, nil, stopper))
 	g := New(context.TODO(), nil, server, resolvers, stop.NewStopper(), metric.NewRegistry())
 
 	// Using specified resolvers, fetch bootstrap addresses 3 times
@@ -281,6 +281,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 
 	peerNodeID := peer.GetNodeID()
 	peerAddr := peer.GetNodeAddr()
+	peerAddrStr := peerAddr.String()
 
 	local.startClient(peerAddr, peerNodeID)
 
@@ -290,7 +291,16 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 				return nil
 			}
 		}
-		return errors.Errorf("%d not yet connected", peerNodeID)
+		return errors.Errorf("node %d not yet connected", peerNodeID)
+	})
+
+	util.SucceedsSoon(t, func() error {
+		for _, resolver := range local.GetResolvers() {
+			if resolver.Addr() == peerAddrStr {
+				return nil
+			}
+		}
+		return errors.Errorf("node %d descriptor not yet available", peerNodeID)
 	})
 
 	local.bootstrap()
@@ -301,7 +311,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 	util.SucceedsSoon(t, func() error {
 		for _, peerID := range local.Outgoing() {
 			if peerID == peerNodeID {
-				return errors.Errorf("%d still connected", peerNodeID)
+				return errors.Errorf("node %d still connected", peerNodeID)
 			}
 		}
 		return nil
@@ -317,6 +327,6 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 				return nil
 			}
 		}
-		return errors.Errorf("%d not yet connected", peerNodeID)
+		return errors.Errorf("node %d not yet connected", peerNodeID)
 	})
 }

@@ -30,11 +30,11 @@ package acceptance
 //
 // Example use:
 //
-// make test \
+// build/builder.sh make build && make test \
 //	 TESTTIMEOUT=48h \
 //	 PKG=./acceptance \
 //	 TESTS=Rebalance_3To5Small \
-//	 TESTFLAGS='-v -remote -key-name google_compute_engine -cwd terraform -tf.keep-cluster=failed'
+//	 TESTFLAGS='-v -remote -key-name google_compute_engine -cwd terraform -tf.keep-cluster=failed -tf.cockroach-binary=../../cockroach'
 //
 // Things to note:
 // - You must use an SSH key without a passphrase. It is recommended that you
@@ -53,15 +53,17 @@ package acceptance
 // - Your Google Cloud credentials must be accessible by Terraform, as described
 //   here:
 //   https://www.terraform.io/docs/providers/google/
-// - There are various flags that start with `tf.` and `at.` that control the
+// - There are various flags that start with `tf.` that control the
 //   of Terrafarm and allocator tests, respectively. For example, you can add
-//   "-at.cockroach-binary" to TESTFLAGS to specify a custom Linux CockroachDB
+//   "-tf.cockroach-binary" to TESTFLAGS to specify a custom Linux CockroachDB
 //   binary. If omitted, your test will use the latest CircleCI Linux build.
 //   Note that the location has to be specified relative to the terraform
-//   working directory, so typically `-at.cockroach-binary=../../cockroach`.
+//   working directory, so typically `-tf.cockroach-binary=../../cockroach`.
+//   This must be a linux binary; on a mac you must build with
+//   `build/builder.sh make build`.
 //
 // Troubleshooting:
-// - The minimum recommended version of Terraform is 0.6.16. If you see strange
+// - The minimum recommended version of Terraform is 0.7.2. If you see strange
 //   Terraform errors, upgrade your install of Terraform.
 // - Adding `-tf.keep-cluster=always` to your TESTFLAGS allows the cluster to
 //   stay around after the test completes.

@@ -19,7 +19,6 @@ package base
 import (
 	"crypto/tls"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -186,15 +185,10 @@ func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
 	}
 
 	ctx.clientTLSConfig.once.Do(func() {
-		if ctx.SSLCert != "" {
-			ctx.clientTLSConfig.tlsConfig, ctx.clientTLSConfig.err = security.LoadClientTLSConfig(
-				ctx.SSLCA, ctx.SSLCert, ctx.SSLCertKey)
-			if ctx.clientTLSConfig.err != nil {
-				ctx.clientTLSConfig.err = errors.Errorf("error setting up client TLS config: %s", ctx.clientTLSConfig.err)
-			}
-		} else {
-			log.Println("no certificates specified: using insecure TLS")
-			ctx.clientTLSConfig.tlsConfig = security.LoadInsecureClientTLSConfig()
+		ctx.clientTLSConfig.tlsConfig, ctx.clientTLSConfig.err = security.LoadClientTLSConfig(
+			ctx.SSLCA, ctx.SSLCert, ctx.SSLCertKey)
+		if ctx.clientTLSConfig.err != nil {
+			ctx.clientTLSConfig.err = errors.Errorf("error setting up client TLS config: %s", ctx.clientTLSConfig.err)
 		}
 	})
 

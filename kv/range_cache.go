@@ -93,6 +93,7 @@ type RangeDescriptorDB interface {
 // arbitrary keys. Descriptors are initially queried from storage
 // using a RangeDescriptorDB, but is cached for subsequent lookups.
 type rangeDescriptorCache struct {
+	ctx context.Context
 	// RangeDescriptorDB is used to retrieve range descriptors from the
 	// database, which will be cached by this structure.
 	db RangeDescriptorDB
@@ -182,8 +183,10 @@ func makeLookupRequestKey(key roachpb.RKey, evictToken *evictionToken, considerI
 // newRangeDescriptorCache returns a new RangeDescriptorCache which
 // uses the given RangeDescriptorDB as the underlying source of range
 // descriptors.
-func newRangeDescriptorCache(db RangeDescriptorDB, size int) *rangeDescriptorCache {
-	rdc := &rangeDescriptorCache{db: db}
+func newRangeDescriptorCache(
+	ctx context.Context, db RangeDescriptorDB, size int,
+) *rangeDescriptorCache {
+	rdc := &rangeDescriptorCache{ctx: ctx, db: db}
 	rdc.rangeCache.cache = cache.NewOrderedCache(cache.Config{
 		Policy: cache.CacheLRU,
 		ShouldEvict: func(n int, _, _ interface{}) bool {
@@ -489,9 +492,10 @@ func (rdc *rangeDescriptorCache) evictCachedRangeDescriptorLocked(descKey roachp
 
 	for {
 		if log.V(3) {
-			log.Infof(context.TODO(), "evict cached descriptor: key=%s desc=%s\n%s", descKey, cachedDesc, rdc.stringLocked())
+			log.Infof(rdc.ctx, "evict cached descriptor: key=%s desc=%s\n%s",
+				descKey, cachedDesc, rdc.stringLocked())
 		} else if log.V(2) {
-			log.Infof(context.TODO(), "evict cached descriptor: key=%s desc=%s", descKey, cachedDesc)
+			log.Infof(rdc.ctx, "evict cached descriptor: key=%s desc=%s", descKey, cachedDesc)
 		}
 		rdc.rangeCache.cache.Del(rngKey)
 
@@ -581,7 +585,7 @@ func (rdc *rangeDescriptorCache) insertRangeDescriptorsLocked(rs ...roachpb.Rang
 			return err
 		}
 		if log.V(2) {
-			log.Infof(context.TODO(), "adding descriptor: key=%s desc=%s", rangeKey, &rs[i])
+			log.Infof(rdc.ctx, "adding descriptor: key=%s desc=%s", rangeKey, &rs[i])
 		}
 		rdc.rangeCache.cache.Add(rangeCacheKey(rangeKey), &rs[i])
 	}
@@ -605,7 +609,7 @@ func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(desc *ro
 		descriptor := v.(*roachpb.RangeDescriptor)
 		if descriptor.StartKey.Less(key) && !descriptor.EndKey.Less(key) {
 			if log.V(2) {
-				log.Infof(context.TODO(), "clearing overlapping descriptor: key=%s desc=%s", k, descriptor)
+				log.Infof(rdc.ctx, "clearing overlapping descriptor: key=%s desc=%s", k, descriptor)
 			}
 			rdc.rangeCache.cache.Del(k.(rangeCacheKey))
 		}
@@ -627,7 +631,8 @@ func (rdc *rangeDescriptorCache) clearOverlappingCachedRangeDescriptors(desc *ro
 	var keys []rangeCacheKey
 	rdc.rangeCache.cache.DoRange(func(k, v interface{}) bool {
 		if log.V(2) {
-			log.Infof(context.TODO(), "clearing subsumed descriptor: key=%s desc=%s", k, v.(*roachpb.RangeDescriptor))
+			log.Infof(rdc.ctx, "clearing subsumed descriptor: key=%s desc=%s",
+				k, v.(*roachpb.RangeDescriptor))
 		}
 		keys = append(keys, k.(rangeCacheKey))
 
