@@ -92,7 +92,7 @@ System.config({
     "reselect": "npm:reselect@2.5.3",
     "sinon": "npm:sinon@1.17.5",
     "systemjs-hot-reloader": "github:capaj/systemjs-hot-reloader@0.6.0",
-    "ts": "github:frankwallis/plugin-typescript@5.0.19",
+    "ts": "github:frankwallis/plugin-typescript@5.1.1",
     "ts-runtime": "npm:babel-runtime@6.11.6",
     "typescript": "npm:typescript@1.8.10",
     "whatwg-fetch": "github:tamird/fetch@support-arraybuffer",
@@ -104,8 +104,8 @@ System.config({
     "github:dcodeIO/bytebuffer.js@5.0.1": {
       "long": "github:dcodeIO/long.js@3.2.0"
     },
-    "github:frankwallis/plugin-typescript@5.0.19": {
-      "typescript": "npm:typescript@2.0.0"
+    "github:frankwallis/plugin-typescript@5.1.1": {
+      "typescript": "npm:typescript@2.0.2"
     },
     "github:jspm/nodelibs-assert@0.1.0": {
       "assert": "npm:assert@1.4.1"
@@ -153,7 +153,7 @@ System.config({
       "path-browserify": "npm:path-browserify@0.0.0"
     },
     "github:jspm/nodelibs-process@0.1.2": {
-      "process": "npm:process@0.11.8"
+      "process": "npm:process@0.11.9"
     },
     "github:jspm/nodelibs-punycode@0.1.0": {
       "punycode": "npm:punycode@1.3.2"
@@ -937,7 +937,7 @@ System.config({
     "npm:process-nextick-args@1.0.7": {
       "process": "github:jspm/nodelibs-process@0.1.2"
     },
-    "npm:process@0.11.8": {
+    "npm:process@0.11.9": {
       "assert": "github:jspm/nodelibs-assert@0.1.0",
       "fs": "github:jspm/nodelibs-fs@0.1.2",
       "vm": "github:jspm/nodelibs-vm@0.1.0"
@@ -1164,7 +1164,7 @@ System.config({
       "process": "github:jspm/nodelibs-process@0.1.2"
     },
     "npm:timers-browserify@1.4.2": {
-      "process": "npm:process@0.11.8"
+      "process": "npm:process@0.11.9"
     },
     "npm:tough-cookie@2.3.1": {
       "net": "github:jspm/nodelibs-net@0.1.2",
@@ -1195,7 +1195,7 @@ System.config({
     "npm:typescript@1.8.10": {
       "os": "github:jspm/nodelibs-os@0.1.0"
     },
-    "npm:typescript@2.0.0": {
+    "npm:typescript@2.0.2": {
       "crypto": "github:jspm/nodelibs-crypto@0.1.0",
       "os": "github:jspm/nodelibs-os@0.1.0"
     },

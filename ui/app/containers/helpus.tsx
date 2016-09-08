@@ -34,7 +34,7 @@ export class HelpUs extends React.Component<HelpUsProps, OptInAttributes> {
   }
 
   makeOnChange = (f: (o: OptInAttributes, newVal: any) => void) => {
-    return (e: Event) => {
+    return (e: React.FormEvent) => {
       let target = e.target as HTMLInputElement;
       let value = target.type === "checkbox" ? target.checked : target.value;
       let newState = _.clone(this.state);
@@ -43,7 +43,7 @@ export class HelpUs extends React.Component<HelpUsProps, OptInAttributes> {
     };
   }
 
-  submit = (e: Event) => {
+  submit = (e: React.FormEvent) => {
     e.preventDefault();
     let target = e.target as HTMLFormElement;
     // TODO: add "saving..." text and show/hide the required text
@@ -67,7 +67,7 @@ export class HelpUs extends React.Component<HelpUsProps, OptInAttributes> {
           <span className="status"></span>
           <input name="lastname" placeholder="Last Name" value={attributes.lastname} onChange={this.makeOnChange((o, v) => o.lastname = v)} />
           <span className="status"></span>
-          <input name="email" type="email" required="true" placeholder="Email*" value={attributes.email} onChange={this.makeOnChange((o, v) => o.email = v)} />
+          <input name="email" type="email" required={true} placeholder="Email*" value={attributes.email} onChange={this.makeOnChange((o, v) => o.email = v)} />
           <span className="status"></span>
           <input name="company" placeholder="Company" value={attributes.company} onChange={this.makeOnChange((o, v) => o.company = v)} />
           <span className="status"></span>
