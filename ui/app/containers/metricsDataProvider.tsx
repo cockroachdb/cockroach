@@ -13,7 +13,6 @@ import { MilliToNano } from "../util/convert";
 import { TimeSeriesQueryAggregator, TimeSeriesQueryDerivative } from "../util/protoEnums";
 
 type TSQueryMessage = Proto2TypeScript.cockroach.ts.tspb.QueryMessage;
-type TSRequestMessage = Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
 
 /**
  * queryFromProps is a helper method which generates a TimeSeries Query data
@@ -81,7 +80,7 @@ export interface QueryTimeInfo {
 interface MetricsDataProviderConnectProps {
   metrics: MetricsQuery;
   timeInfo: QueryTimeInfo;
-  queryMetrics(id: string, request: TSRequestMessage): void;
+  queryMetrics: typeof queryMetrics;
 }
 
 /**
