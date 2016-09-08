@@ -16,12 +16,15 @@
     "d3": "registry:npm/d3#3.0.0+20160723033700",
     "enzyme": "registry:npm/enzyme#2.2.0+20160322031343",
     "lodash": "registry:npm/lodash#4.0.0+20160723033700",
+    "moment": "file:jspm_packages/npm/moment@2.14.1/moment.d.ts",
     "nvd3": "registry:npm/nvd3#1.8.3+20160711175044",
     "protos-builders": "file:app/js/protos.d.ts",
     "react-paginate": "file:local_typings/react-paginate.d.ts",
     "react-router": "registry:npm/react-router#2.4.0+20160803174347",
     "react-router-redux": "registry:npm/react-router-redux#4.0.0+20160602212457",
+    "redux": "file:jspm_packages/npm/redux@3.5.2/index.d.ts",
     "redux-thunk": "registry:npm/redux-thunk#2.0.0+20160525185520",
+    "reselect": "file:jspm_packages/npm/reselect@2.5.3/src/reselect.d.ts",
     "sinon": "registry:npm/sinon#1.16.0+20160723033700"
   }
 }
