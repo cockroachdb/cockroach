@@ -1609,6 +1609,7 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 // MergeRange expands the subsuming range to absorb the subsumed range. This
 // merge operation will fail if the two ranges are not collocated on the same
 // store.
+// The subsumed range's raftMu is assumed held.
 func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, subsumedRangeID roachpb.RangeID) error {
 	subsumingDesc := subsumingRng.Desc()
 
