@@ -61,7 +61,7 @@ class ClusterMain extends React.Component<ClusterMainProps, {}> {
             }
             warningTitle = { totalNodes < 3 ? "Low Replication" : "" }>
             <div className="visualization">
-              <div style={{zoom:"100%"}} className="number">{ d3.format("s")(totalNodes) }</div>
+              <div style={{zoom:1.0}} className="number">{ d3.format("s")(totalNodes) }</div>
             </div>
           </Visualization>
         </div>
@@ -71,7 +71,7 @@ class ClusterMain extends React.Component<ClusterMainProps, {}> {
                          tooltip={`You are using ${Bytes(bytesUsed)} of ${Bytes(availableCapacity)} storage
                                    capacity across all nodes.`}>
             <div className="visualization">
-              <div style={{zoom:"50%"}} className="number">{ d3.format("0.1%")(capacityPercent) }</div>
+              <div style={{zoom:0.5}} className="number">{ d3.format("0.1%")(capacityPercent) }</div>
             </div>
           </Visualization>
         </div>

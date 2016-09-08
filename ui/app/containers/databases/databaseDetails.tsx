@@ -122,12 +122,12 @@ class DatabaseDetails extends React.Component<DatabaseDetailsProps, {}> {
             title={ (numTables === 1) ? "Table" : "Tables" }
             tooltip="The total number of tables in this database.">
             <div className="visualization">
-              <div style={{zoom:"100%"}} className="number">{ d3.format("s")(numTables) }</div>
+              <div style={{zoom:1.0}} className="number">{ d3.format("s")(numTables) }</div>
             </div>
           </Visualization>
           <Visualization title="Database Size" tooltip="Not yet implemented.">
             <div className="visualization">
-              <div style={{ zoom: "40%" }} className="number">
+              <div style={{zoom:0.4}} className="number">
                 { Bytes(_.reduce(tableInfos, (memo, t) => memo + t.size, 0)) }
               </div>
             </div>
