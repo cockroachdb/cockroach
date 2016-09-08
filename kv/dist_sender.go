@@ -682,9 +682,11 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 		var finished bool
 		var numAttempts int
 		for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
+			// TODO(tamird): remove this block when #8975 and related infinite retry
+			// issues are resolved.
 			numAttempts++
 			{
-				const magicLogCurAttempt = 20
+				const magicLogCurAttempt = 5
 
 				var seq int32
 				if ba.Txn != nil {
