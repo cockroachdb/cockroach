@@ -764,6 +764,7 @@ func IterateRangeDescriptors(ctx context.Context,
 
 func (s *Store) migrate(ctx context.Context, desc roachpb.RangeDescriptor) {
 	batch := s.engine.NewBatch()
+	defer batch.Close()
 	if err := migrate7310And6991(ctx, batch, desc); err != nil {
 		log.Fatal(ctx, errors.Wrap(err, "during migration"))
 	}
@@ -1295,6 +1296,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 	batch := s.engine.NewBatch()
+	defer batch.Close()
 	ms := &enginepb.MVCCStats{}
 	now := s.ctx.Clock.Now()
 	ctx := context.Background()
