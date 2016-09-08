@@ -2992,7 +2992,7 @@ func (r *Replica) ChangeReplicas(
 		// If the replica exists on the remote node, no matter in which store,
 		// abort the replica add.
 		if nodeUsed {
-			return errors.Errorf("adding replica %v which is already present in range %d", repDesc, rangeID)
+			return errors.Errorf("%s: unable to add replica %v which is already present", r, repDesc)
 		}
 
 		log.Trace(ctx, "requesting reservation")
@@ -3004,7 +3004,7 @@ func (r *Replica) ChangeReplicas(
 			rangeID,
 			r.GetMVCCStats().Total(),
 		); err != nil {
-			return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
+			return errors.Wrapf(err, "%s: change replicas failed", r)
 		}
 		log.Trace(ctx, "reservation granted")
 
@@ -3036,12 +3036,12 @@ func (r *Replica) ChangeReplicas(
 		snap, err := r.GetSnapshot(ctx)
 		log.Trace(ctx, "generated snapshot")
 		if err != nil {
-			return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
+			return errors.Wrapf(err, "%s: change replicas failed", r)
 		}
 
 		fromRepDesc, err := r.GetReplicaDescriptor()
 		if err != nil {
-			return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
+			return errors.Wrapf(err, "%s: change replicas failed", r)
 		}
 
 		if repDesc.ReplicaID != 0 {
@@ -3068,7 +3068,7 @@ func (r *Replica) ChangeReplicas(
 			},
 		}
 		if err := r.store.ctx.Transport.SendSync(ctx, req); err != nil {
-			return errors.Wrapf(err, "change replicas of range %d aborted due to failed preemptive snapshot", rangeID)
+			return errors.Wrapf(err, "%s: change replicas aborted due to failed preemptive snapshot", r)
 		}
 
 		repDesc.ReplicaID = updatedDesc.NextReplicaID
@@ -3078,7 +3078,7 @@ func (r *Replica) ChangeReplicas(
 		// If that exact node-store combination does not have the replica,
 		// abort the removal.
 		if repDescIdx == -1 {
-			return errors.Errorf("removing replica %v which is not present in range %d", repDesc, rangeID)
+			return errors.Errorf("%s: unable to remove replica %v which is not present", r, repDesc)
 		}
 		updatedDesc.Replicas[repDescIdx] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
 		updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
@@ -3098,7 +3098,7 @@ func (r *Replica) ChangeReplicas(
 		if err := txn.GetProto(descKey, oldDesc); err != nil {
 			return err
 		}
-		log.Infof(ctx, "change replicas of %d: read existing descriptor %+v", rangeID, oldDesc)
+		log.Infof(ctx, "change replicas: read existing descriptor %+v", oldDesc)
 
 		{
 			b := txn.NewBatch()

@@ -503,7 +503,7 @@ func (r *Replica) initLocked(
 	}
 
 	// Add replica log tags - the value is rangeDesc.String().
-	ctx = log.WithLogTag(ctx, "r", &r.rangeDesc)
+	ctx = r.withLogTag(ctx)
 	r.ctx = ctx
 
 	pErr, err := loadReplicaDestroyedError(ctx, r.store.Engine(), r.RangeID)
@@ -528,6 +528,10 @@ func (r *Replica) initLocked(
 	}
 	r.assertStateLocked(r.store.Engine())
 	return nil
+}
+
+func (r *Replica) withLogTag(ctx context.Context) context.Context {
+	return log.WithLogTag(ctx, "r", &r.rangeDesc)
 }
 
 // String returns the string representation of the replica using an
