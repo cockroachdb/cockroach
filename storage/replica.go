@@ -530,6 +530,14 @@ func (r *Replica) initLocked(
 	return nil
 }
 
+// logContext adds the node, store and replica log tags to a context. Used to
+// personalize an operation context with this Replica's identity.
+func (r *Replica) logContext(ctx context.Context) context.Context {
+	// Copy the log tags from the base context. This allows us to opaquely set the
+	// log tags that were passed by the upper layers.
+	return log.WithLogTagsFromCtx(ctx, r.ctx)
+}
+
 // String returns the string representation of the replica using an
 // inconsistent copy of the range descriptor. Therefore, String does not
 // require a lock and its output may not be atomic with other ongoing work in
