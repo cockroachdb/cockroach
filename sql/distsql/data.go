@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
-// convertColumnOrdering converts an Ordering type (as defined in data.proto)
-// to a sqlbase.ColumnOrdering type).
+// convertToColumnOrdering converts an Ordering type (as defined in data.proto)
+// to a sqlbase.ColumnOrdering type.
 func convertToColumnOrdering(specOrdering Ordering) sqlbase.ColumnOrdering {
 	ordering := make(sqlbase.ColumnOrdering, len(specOrdering.Columns))
 	for i, c := range specOrdering.Columns {
@@ -36,7 +36,7 @@ func convertToColumnOrdering(specOrdering Ordering) sqlbase.ColumnOrdering {
 	return ordering
 }
 
-// convertSpecOrdering converts a sqlbase.ColumnOrdering type
+// convertToSpecOrdering converts a sqlbase.ColumnOrdering type
 // to an Ordering type (as defined in data.proto).
 func convertToSpecOrdering(columnOrdering sqlbase.ColumnOrdering) Ordering {
 	specOrdering := Ordering{}

@@ -93,10 +93,10 @@ message JoinReaderSpec {
   // through values that aren't used for the lookup.
 }
 
-// SorterSpec is the specification for a "sorting aggregator". A sorting aggregator
-// sorts elements in the input stream providing a certain output order
-// guarantee regardless of the input ordering, it is done so according to a
-// configurable set of columns.
+// SorterSpec is the specification for a "sorting aggregator". A sorting
+// aggregator sorts elements in the input stream providing a certain output
+// order guarantee regardless of the input ordering. The output ordering is
+// according to a configurable set of columns.
 message SorterSpec {
   optional Ordering ordering = 1 [(gogoproto.nullable) = false];
 }
