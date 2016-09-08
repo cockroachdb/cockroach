@@ -159,10 +159,3 @@ func newClientTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 		MinVersion:   tls.VersionTLS12,
 	}, nil
 }
-
-// LoadInsecureClientTLSConfig creates a TLSConfig that disables TLS.
-func LoadInsecureClientTLSConfig() *tls.Config {
-	return &tls.Config{
-		InsecureSkipVerify: true,
-	}
-}

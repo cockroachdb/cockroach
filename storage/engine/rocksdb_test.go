@@ -64,6 +64,7 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 	defer stopper.Stop()
 
 	b := db.NewBatch()
+	defer b.Close()
 
 	k := MakeMVCCMetadataKey(testKey1)
 
@@ -131,6 +132,7 @@ func TestBatchPrefixIter(t *testing.T) {
 	defer stopper.Stop()
 
 	b := db.NewBatch()
+	defer b.Close()
 
 	// Set up a batch with: delete("a"), put("b"). We'll then prefix seek for "b"
 	// which should succeed and then prefix seek for "a" which should fail. Note

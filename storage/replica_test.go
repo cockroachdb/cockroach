@@ -143,7 +143,7 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(tc.stopper)
 	if tc.gossip == nil {
-		rpcContext := rpc.NewContext(&base.Context{Insecure: true}, nil, tc.stopper)
+		rpcContext := rpc.NewContext(context.TODO(), &base.Context{Insecure: true}, nil, tc.stopper)
 		server := rpc.NewServer(rpcContext) // never started
 		tc.gossip = gossip.New(
 			context.Background(), rpcContext, server, nil, tc.stopper, metric.NewRegistry())
@@ -873,7 +873,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	now := hlc.Timestamp{WallTime: tc.manualClock.UnixNano()}
 
 	tc.rng.mu.Lock()
-	baseRTS, _ := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil /* end */, nil /* txn */)
+	baseRTS, _, _ := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil /* end */)
 	tc.rng.mu.Unlock()
 	// TODO(tschottdorf): this value is zero, which seems ripe for producing
 	// test cases that do not test anything.
@@ -932,8 +932,8 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 		}
 		// Verify expected low water mark.
 		tc.rng.mu.Lock()
-		rTS, _ := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil, nil)
-		wTS, _ := tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil, nil)
+		rTS, _, _ := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil)
+		wTS, _, _ := tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil)
 		tc.rng.mu.Unlock()
 		if rTS.WallTime != test.expLowWater || wTS.WallTime != test.expLowWater {
 			t.Errorf("%d: expected low water %d; got maxRead=%d, maxWrite=%d", i, test.expLowWater, rTS.WallTime, wTS.WallTime)
@@ -1715,26 +1715,26 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 	// Verify the timestamp cache has rTS=1s and wTS=0s for "a".
 	tc.rng.mu.Lock()
 	defer tc.rng.mu.Unlock()
-	_, rOK := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil, nil)
-	_, wOK := tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil, nil)
+	_, _, rOK := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil)
+	_, _, wOK := tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil)
 	if rOK || wOK {
 		t.Errorf("expected rOK=false and wOK=false; rOK=%t, wOK=%t", rOK, wOK)
 	}
 	tc.rng.mu.tsCache.ExpandRequests(hlc.ZeroTimestamp)
-	rTS, rOK := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil, nil)
-	wTS, wOK := tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil, nil)
+	rTS, _, rOK := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil)
+	wTS, _, wOK := tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil)
 	if rTS.WallTime != t0.Nanoseconds() || wTS.WallTime != 0 || !rOK || wOK {
 		t.Errorf("expected rTS=1s and wTS=0s, but got %s, %s; rOK=%t, wOK=%t", rTS, wTS, rOK, wOK)
 	}
 	// Verify the timestamp cache has rTS=0s and wTS=2s for "b".
-	rTS, rOK = tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("b"), nil, nil)
-	wTS, wOK = tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("b"), nil, nil)
+	rTS, _, rOK = tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("b"), nil)
+	wTS, _, wOK = tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("b"), nil)
 	if rTS.WallTime != 0 || wTS.WallTime != t1.Nanoseconds() || rOK || !wOK {
 		t.Errorf("expected rTS=0s and wTS=2s, but got %s, %s; rOK=%t, wOK=%t", rTS, wTS, rOK, wOK)
 	}
 	// Verify another key ("c") has 0sec in timestamp cache.
-	rTS, rOK = tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("c"), nil, nil)
-	wTS, wOK = tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("c"), nil, nil)
+	rTS, _, rOK = tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("c"), nil)
+	wTS, _, wOK = tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("c"), nil)
 	if rTS.WallTime != 0 || wTS.WallTime != 0 || rOK || wOK {
 		t.Errorf("expected rTS=0s and wTS=0s, but got %s %s; rOK=%t, wOK=%t", rTS, wTS, rOK, wOK)
 	}
@@ -2008,16 +2008,16 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 		return nil
 	})
 
-	// Finish the previous command.
-	blockingDone <- struct{}{}
-	if pErr := <-cmd1Done; pErr != nil {
-		t.Fatal(pErr)
-	}
-
 	// If this deadlocks, the command has unexpectedly begun executing and was
 	// trapped in the command filter. Indeed, the absence of such a deadlock is
 	// what's being tested here.
 	if pErr := <-cmd2Done; !testutils.IsPError(pErr, context.Canceled.Error()) {
+		t.Fatal(pErr)
+	}
+
+	// Finish the previous command, allowing the test to shut down.
+	blockingDone <- struct{}{}
+	if pErr := <-cmd1Done; pErr != nil {
 		t.Fatal(pErr)
 	}
 }
