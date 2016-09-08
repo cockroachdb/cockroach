@@ -1,1 +1,1 @@
-GOVERS = go1\.7.*
+GOVERS = go1\.7\.1
