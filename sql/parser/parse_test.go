@@ -135,6 +135,14 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5`},
 		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5`},
 
+		{`CREATE VIEW a AS SELECT * FROM b`},
+		{`CREATE VIEW a AS SELECT b.* FROM b LIMIT 5`},
+		{`CREATE VIEW a AS (SELECT c, d FROM b WHERE c > 0 ORDER BY c)`},
+		{`CREATE VIEW a (x, y) AS SELECT c, d FROM b`},
+		{`CREATE VIEW a AS VALUES (1, 'one'), (2, 'two')`},
+		{`CREATE VIEW a (x, y) AS VALUES (1, 'one'), (2, 'two')`},
+		{`CREATE VIEW a AS TABLE b`},
+
 		{`DELETE FROM a`},
 		{`DELETE FROM a.b`},
 		{`DELETE FROM a WHERE a = b`},
@@ -162,6 +170,14 @@ func TestParse(t *testing.T) {
 		{`DROP INDEX IF EXISTS a.b@c, d@f`},
 		{`DROP INDEX a.b@c CASCADE`},
 		{`DROP INDEX IF EXISTS a.b@c RESTRICT`},
+		{`DROP VIEW a`},
+		{`DROP VIEW a.b`},
+		{`DROP VIEW a, b`},
+		{`DROP VIEW IF EXISTS a`},
+		{`DROP VIEW a RESTRICT`},
+		{`DROP VIEW IF EXISTS a, b RESTRICT`},
+		{`DROP VIEW a.b CASCADE`},
+		{`DROP VIEW a, b CASCADE`},
 
 		{`EXPLAIN SELECT 1`},
 		{`EXPLAIN EXPLAIN SELECT 1`},
@@ -876,6 +892,16 @@ CREATE DATABASE a b c
 			`syntax error at or near ")"
 CREATE INDEX ON a (b) STORING ()
                                ^
+`},
+		{`CREATE VIEW a`,
+			`syntax error at or near "EOF"
+CREATE VIEW a
+             ^
+`},
+		{`CREATE VIEW a () AS select * FROM b`,
+			`syntax error at or near ")"
+CREATE VIEW a () AS select * FROM b
+               ^
 `},
 		{`SELECT FROM t`,
 			`syntax error at or near "FROM"
