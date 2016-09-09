@@ -104,8 +104,10 @@ query T
 SHOW TABLES FROM information_schema
 ----
 columns
+schema_privileges
 schemata
 table_constraints
+table_privileges
 tables
 
 query TT colnames
@@ -317,8 +319,10 @@ query T
 SELECT table_name FROM information_schema.tables
 ----
 columns
+schema_privileges
 schemata
 table_constraints
+table_privileges
 tables
 xyz
 descriptor
@@ -338,8 +342,10 @@ xyz
 users
 ui
 tables
+table_privileges
 table_constraints
 schemata
+schema_privileges
 rangelog
 namespace
 
@@ -348,8 +354,10 @@ SELECT * FROM information_schema.tables
 ----
 TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME         TABLE_TYPE   VERSION
 def            information_schema  columns            SYSTEM VIEW  1
+def            information_schema  schema_privileges  SYSTEM VIEW  1
 def            information_schema  schemata           SYSTEM VIEW  1
 def            information_schema  table_constraints  SYSTEM VIEW  1
+def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
 def            other_db            xyz                BASE TABLE   1
 def            system              descriptor         BASE TABLE   1
@@ -377,8 +385,10 @@ SELECT * FROM information_schema.tables
 ----
 TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME         TABLE_TYPE   VERSION
 def            information_schema  columns            SYSTEM VIEW  1
+def            information_schema  schema_privileges  SYSTEM VIEW  1
 def            information_schema  schemata           SYSTEM VIEW  1
 def            information_schema  table_constraints  SYSTEM VIEW  1
+def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
 
 user root
@@ -393,8 +403,10 @@ SELECT * FROM information_schema.tables
 ----
 TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME         TABLE_TYPE   VERSION
 def            information_schema  columns            SYSTEM VIEW  1
+def            information_schema  schema_privileges  SYSTEM VIEW  1
 def            information_schema  schemata           SYSTEM VIEW  1
 def            information_schema  table_constraints  SYSTEM VIEW  1
+def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
 def            other_db            xyz                BASE TABLE   5
 
@@ -451,3 +463,123 @@ def                 constraint_db      t2_t1_ID_idx     constraint_db  t2       
 # TODO(nvanbenschoten) blocked on #8497.
 #statement ok
 #DROP DATABASE constraint_db
+
+
+## information_schema.schema_privileges
+statement ok
+CREATE DATABASE other_db
+
+query TTTTT colnames
+SELECT * FROM information_schema.schema_privileges
+----
+GRANTEE  TABLE_CATALOG  TABLE_SCHEMA   PRIVILEGE_TYPE  IS_GRANTABLE
+root     def            constraint_db  ALL             NULL
+root     def            other_db       ALL             NULL
+root     def            system         GRANT           NULL
+root     def            system         SELECT          NULL
+root     def            test           ALL             NULL
+
+statement ok
+GRANT SELECT ON DATABASE other_db TO testuser
+
+query TTTTT colnames
+SELECT * FROM information_schema.schema_privileges
+----
+GRANTEE   TABLE_CATALOG  TABLE_SCHEMA   PRIVILEGE_TYPE  IS_GRANTABLE
+root      def            constraint_db  ALL             NULL
+root      def            other_db       ALL             NULL
+testuser  def            other_db       SELECT          NULL
+root      def            system         GRANT           NULL
+root      def            system         SELECT          NULL
+root      def            test           ALL             NULL
+
+## information_schema.table_privileges
+query TTTTTTTT colnames
+SELECT * FROM information_schema.table_privileges
+----
+GRANTOR  GRANTEE  TABLE_CATALOG  TABLE_SCHEMA   TABLE_NAME  PRIVILEGE_TYPE  IS_GRANTABLE  WITH_HIERARCHY
+NULL     root     def            constraint_db  t1          ALL             NULL          NULL
+NULL     root     def            constraint_db  t2          ALL             NULL          NULL
+NULL     root     def            system         descriptor  GRANT           NULL          NULL
+NULL     root     def            system         descriptor  SELECT          NULL          NULL
+NULL     root     def            system         eventlog    ALL             NULL          NULL
+NULL     root     def            system         lease       ALL             NULL          NULL
+NULL     root     def            system         namespace   GRANT           NULL          NULL
+NULL     root     def            system         namespace   SELECT          NULL          NULL
+NULL     root     def            system         rangelog    ALL             NULL          NULL
+NULL     root     def            system         ui          ALL             NULL          NULL
+NULL     root     def            system         users       DELETE          NULL          NULL
+NULL     root     def            system         users       GRANT           NULL          NULL
+NULL     root     def            system         users       INSERT          NULL          NULL
+NULL     root     def            system         users       SELECT          NULL          NULL
+NULL     root     def            system         users       UPDATE          NULL          NULL
+NULL     root     def            system         zones       DELETE          NULL          NULL
+NULL     root     def            system         zones       GRANT           NULL          NULL
+NULL     root     def            system         zones       INSERT          NULL          NULL
+NULL     root     def            system         zones       SELECT          NULL          NULL
+NULL     root     def            system         zones       UPDATE          NULL          NULL
+
+statement ok
+CREATE TABLE other_db.xyz (i INT)
+
+query TTTTTTTT colnames
+SELECT * FROM information_schema.table_privileges
+----
+GRANTOR  GRANTEE   TABLE_CATALOG  TABLE_SCHEMA   TABLE_NAME  PRIVILEGE_TYPE  IS_GRANTABLE  WITH_HIERARCHY
+NULL     root      def            constraint_db  t1          ALL             NULL          NULL
+NULL     root      def            constraint_db  t2          ALL             NULL          NULL
+NULL     root      def            other_db       xyz         ALL             NULL          NULL
+NULL     testuser  def            other_db       xyz         SELECT          NULL          NULL
+NULL     root      def            system         descriptor  GRANT           NULL          NULL
+NULL     root      def            system         descriptor  SELECT          NULL          NULL
+NULL     root      def            system         eventlog    ALL             NULL          NULL
+NULL     root      def            system         lease       ALL             NULL          NULL
+NULL     root      def            system         namespace   GRANT           NULL          NULL
+NULL     root      def            system         namespace   SELECT          NULL          NULL
+NULL     root      def            system         rangelog    ALL             NULL          NULL
+NULL     root      def            system         ui          ALL             NULL          NULL
+NULL     root      def            system         users       DELETE          NULL          NULL
+NULL     root      def            system         users       GRANT           NULL          NULL
+NULL     root      def            system         users       INSERT          NULL          NULL
+NULL     root      def            system         users       SELECT          NULL          NULL
+NULL     root      def            system         users       UPDATE          NULL          NULL
+NULL     root      def            system         zones       DELETE          NULL          NULL
+NULL     root      def            system         zones       GRANT           NULL          NULL
+NULL     root      def            system         zones       INSERT          NULL          NULL
+NULL     root      def            system         zones       SELECT          NULL          NULL
+NULL     root      def            system         zones       UPDATE          NULL          NULL
+
+
+statement ok
+GRANT UPDATE ON other_db.xyz TO testuser
+
+query TTTTTTTT colnames
+SELECT * FROM information_schema.table_privileges
+----
+GRANTOR  GRANTEE   TABLE_CATALOG  TABLE_SCHEMA   TABLE_NAME  PRIVILEGE_TYPE  IS_GRANTABLE  WITH_HIERARCHY
+NULL     root      def            constraint_db  t1          ALL             NULL          NULL
+NULL     root      def            constraint_db  t2          ALL             NULL          NULL
+NULL     root      def            other_db       xyz         ALL             NULL          NULL
+NULL     testuser  def            other_db       xyz         SELECT          NULL          NULL
+NULL     testuser  def            other_db       xyz         UPDATE          NULL          NULL
+NULL     root      def            system         descriptor  GRANT           NULL          NULL
+NULL     root      def            system         descriptor  SELECT          NULL          NULL
+NULL     root      def            system         eventlog    ALL             NULL          NULL
+NULL     root      def            system         lease       ALL             NULL          NULL
+NULL     root      def            system         namespace   GRANT           NULL          NULL
+NULL     root      def            system         namespace   SELECT          NULL          NULL
+NULL     root      def            system         rangelog    ALL             NULL          NULL
+NULL     root      def            system         ui          ALL             NULL          NULL
+NULL     root      def            system         users       DELETE          NULL          NULL
+NULL     root      def            system         users       GRANT           NULL          NULL
+NULL     root      def            system         users       INSERT          NULL          NULL
+NULL     root      def            system         users       SELECT          NULL          NULL
+NULL     root      def            system         users       UPDATE          NULL          NULL
+NULL     root      def            system         zones       DELETE          NULL          NULL
+NULL     root      def            system         zones       GRANT           NULL          NULL
+NULL     root      def            system         zones       INSERT          NULL          NULL
+NULL     root      def            system         zones       SELECT          NULL          NULL
+NULL     root      def            system         zones       UPDATE          NULL          NULL
+
+statement ok
+DROP DATABASE other_db
