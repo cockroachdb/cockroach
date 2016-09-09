@@ -162,7 +162,7 @@ func (n *Network) GetNodeFromID(nodeID roachpb.NodeID) (*Node, bool) {
 func (n *Network) SimulateNetwork(simCallback func(cycle int, network *Network) bool) {
 	n.Start()
 	nodes := n.Nodes
-	for cycle := 1; simCallback(cycle, n); cycle++ {
+	for cycle := 1; ; cycle++ {
 		// Node 0 gossips sentinel & cluster ID every cycle.
 		if err := nodes[0].Gossip.AddInfo(
 			gossip.KeySentinel,
@@ -190,6 +190,9 @@ func (n *Network) SimulateNetwork(simCallback func(cycle int, network *Network) 
 			node.Gossip.SimulationCycle()
 		}
 		time.Sleep(5 * time.Millisecond)
+		if !simCallback(cycle, n) {
+			break
+		}
 	}
 	log.Infof(context.TODO(), "gossip network simulation: total infos sent=%d, received=%d", n.infosSent(), n.infosReceived())
 }
