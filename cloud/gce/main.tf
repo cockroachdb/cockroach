@@ -36,6 +36,7 @@ resource "google_compute_instance" "cockroach" {
 }
 
 data "template_file" "supervisor" {
+  count = "${var.num_instances}"
   template = "${file("supervisor.conf.tpl")}"
   vars {
     stores = "${var.stores}"
