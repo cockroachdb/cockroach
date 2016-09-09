@@ -54,7 +54,7 @@ resource "google_compute_instance" "example_block_writer" {
   # use rendered templates in the file provisioner.
   provisioner "remote-exec" {
     inline = <<FILE
-echo '${template_file.supervisor.0.rendered}' > supervisor.conf
+echo '${data.template_file.supervisor.0.rendered}' > supervisor.conf
 FILE
   }
 

@@ -213,7 +213,6 @@ export default class extends React.Component<IInjectedProps, {}> {
 
             <StackedAreaGraph title="Raft Time" sources={sources}>
               <Axis label="Milliseconds" format={ (n) => d3.format(".1f")(NanoToMilli(n)) }>
-                <Metric name="cr.store.raft.process.waitingnanos" title="Waiting" nonNegativeRate />
                 <Metric name="cr.store.raft.process.workingnanos" title="Working" nonNegativeRate />
                 <Metric name="cr.store.raft.process.tickingnanos" title="Ticking" nonNegativeRate />
               </Axis>
@@ -231,6 +230,7 @@ export default class extends React.Component<IInjectedProps, {}> {
                 <Metric name="cr.store.raft.rcvd.heartbeatresp" title="MsgHeartbeatResp" nonNegativeRate />
                 <Metric name="cr.store.raft.rcvd.transferleader" title="MsgTransferLeader" nonNegativeRate />
                 <Metric name="cr.store.raft.rcvd.timeoutnow" title="MsgTimeoutNow" nonNegativeRate />
+                <Metric name="cr.store.raft.rcvd.dropped" title="MsgDropped" nonNegativeRate />
               </Axis>
             </StackedAreaGraph>
 

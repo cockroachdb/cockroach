@@ -179,10 +179,7 @@ func (q *replicaGCQueue) process(
 	replyDesc := reply.Ranges[0]
 	if _, currentMember := replyDesc.GetReplicaDescriptor(rng.store.StoreID()); !currentMember {
 		// We are no longer a member of this range; clean up our local data.
-		if log.V(1) {
-			log.Infof(ctx, "destroying local data from range %d", desc.RangeID)
-		}
-		log.Trace(ctx, "destroying local data")
+		log.VTracef(1, ctx, "destroying local data")
 		if err := rng.store.RemoveReplica(rng, replyDesc, true); err != nil {
 			return err
 		}
@@ -191,10 +188,7 @@ func (q *replicaGCQueue) process(
 		// away. But currentMember is true, so we are still a member of the
 		// subsuming range. Shut down raft processing for the former range
 		// and delete any remaining metadata, but do not delete the data.
-		if log.V(1) {
-			log.Infof(ctx, "removing merged range %d", desc.RangeID)
-		}
-		log.Trace(ctx, "removing merged range")
+		log.VTracef(1, ctx, "removing merged range")
 		if err := rng.store.RemoveReplica(rng, replyDesc, false); err != nil {
 			return err
 		}

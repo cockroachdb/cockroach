@@ -31,10 +31,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/engine-api/client"
-	"github.com/docker/engine-api/types"
-	"github.com/docker/engine-api/types/container"
-	"github.com/docker/engine-api/types/events"
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/events"
+	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -823,7 +824,7 @@ func (l *LocalCluster) ExecRoot(i int, cmd []string) error {
 			defer resp.Close()
 			ch := make(chan error)
 			go func() {
-				_, err := StdCopy(&outputStream, &errorStream, resp.Reader)
+				_, err := stdcopy.StdCopy(&outputStream, &errorStream, resp.Reader)
 				ch <- err
 			}()
 			if err := <-ch; err != nil {

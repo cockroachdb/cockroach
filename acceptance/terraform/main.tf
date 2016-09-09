@@ -48,14 +48,14 @@ resource "google_compute_instance" "cockroach" {
   }
 }
 
-resource "template_file" "supervisor" {
+data "template_file" "supervisor" {
   count = "${var.num_instances}"
   template = "${file("supervisor.conf.tpl")}"
   vars {
     stores = "${var.stores}"
     cockroach_port = "${var.sql_port}"
     # The value of the --join flag must be empty for the first node,
-    # and a running node for all others. We built a list of addresses
+    # and a running node for all others. We build a list of addresses
     # shifted by one (first element is empty), then take the value at index "instance.index".
     join_address = "${element(concat(split(",", ""), google_compute_instance.cockroach.*.network_interface.0.access_config.0.assigned_nat_ip), count.index)}"
     cockroach_flags = "${var.cockroach_flags}"
@@ -88,7 +88,7 @@ resource "null_resource" "cockroach-runner" {
   # use rendered templates in the file provisioner.
   provisioner "remote-exec" {
     inline = <<FILE
-echo '${element(template_file.supervisor.*.rendered, count.index)}' > supervisor.conf
+echo '${element(data.template_file.supervisor.*.rendered, count.index)}' > supervisor.conf
 FILE
   }
 
