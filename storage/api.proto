@@ -64,10 +64,11 @@ message ReservationResponse {
   int32 range_count = 2;
 }
 
-// Stores is a wrapper for internal RPCs that operate only on the stores of a
-// node.
-service Stores {
+service Freeze {
   rpc PollFrozen (PollFrozenRequest) returns (PollFrozenResponse) {}
+}
+
+service Reservation {
   rpc Reserve(ReservationRequest) returns (ReservationResponse) {}
 }
 
