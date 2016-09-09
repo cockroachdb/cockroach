@@ -40,22 +40,13 @@ var enableLocalCalls = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_LOCAL_CALLS", 
 // more replicas, depending on error conditions and how many successful
 // responses are required.
 type SendOptions struct {
-	context.Context // must not be nil
+	ctx context.Context
+
 	// SendNextTimeout is the duration after which RPCs are sent to
 	// other replicas in a set.
 	SendNextTimeout time.Duration
-	// Timeout is the maximum duration of an RPC before failure.
-	// 0 for no timeout.
-	Timeout time.Duration
 
 	transportFactory TransportFactory
-}
-
-func (so SendOptions) contextWithTimeout() (context.Context, func()) {
-	if so.Timeout != 0 {
-		return context.WithTimeout(so.Context, so.Timeout)
-	}
-	return so.Context, func() {}
 }
 
 type batchClient struct {
@@ -165,13 +156,10 @@ func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
 
 	addr := client.remoteAddr
 	if log.V(2) {
-		log.Infof(gt.opts.Context, "sending request to %s: %+v", addr, client.args)
+		log.Infof(gt.opts.ctx, "sending request to %s: %+v", addr, client.args)
 	}
 
 	if localServer := gt.rpcContext.GetLocalInternalServerForAddr(addr); enableLocalCalls && localServer != nil {
-		ctx, cancel := gt.opts.contextWithTimeout()
-		defer cancel()
-
 		// Clone the request. At the time of writing, Replica may mutate it
 		// during command execution which can lead to data races.
 		//
@@ -184,20 +172,17 @@ func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
 			client.args.Txn = &clonedTxn
 		}
 
-		reply, err := localServer.Batch(ctx, &client.args)
+		reply, err := localServer.Batch(gt.opts.ctx, &client.args)
 		done <- BatchCall{Reply: reply, Err: err}
 		return
 	}
 
 	go func() {
-		ctx, cancel := gt.opts.contextWithTimeout()
-		defer cancel()
-
-		reply, err := client.client.Batch(ctx, &client.args)
+		reply, err := client.client.Batch(gt.opts.ctx, &client.args)
 		if reply != nil {
 			for i := range reply.Responses {
 				if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {
-					log.Error(ctx, err)
+					log.Error(gt.opts.ctx, err)
 				}
 			}
 		}

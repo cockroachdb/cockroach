@@ -20,7 +20,6 @@ import (
 	"net"
 	"reflect"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -80,7 +79,7 @@ func TestInvalidAddrLength(t *testing.T) {
 
 	// The provided replicas is nil, so its length will be always less than the
 	// specified response number
-	opts := SendOptions{Context: context.Background()}
+	opts := SendOptions{ctx: context.Background()}
 	ds := &DistSender{Ctx: context.Background()}
 	ret, err := ds.sendToReplicas(opts, 0, nil, roachpb.BatchRequest{}, nil)
 
@@ -102,11 +101,7 @@ func TestSendToOneClient(t *testing.T) {
 	s, ln := newTestServer(t, ctx)
 	roachpb.RegisterInternalServer(s, Node(0))
 
-	opts := SendOptions{
-		SendNextTimeout: 1 * time.Second,
-		Timeout:         10 * time.Second,
-		Context:         context.Background(),
-	}
+	opts := SendOptions{ctx: context.Background()}
 	reply, err := sendBatch(opts, []net.Addr{ln.Addr()}, ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -151,11 +146,7 @@ func TestRetryableError(t *testing.T) {
 		return nil
 	})
 
-	opts := SendOptions{
-		SendNextTimeout: 100 * time.Millisecond,
-		Timeout:         100 * time.Millisecond,
-		Context:         context.Background(),
-	}
+	opts := SendOptions{ctx: context.Background()}
 	if _, err := sendBatch(opts, []net.Addr{ln.Addr()}, clientContext); err == nil {
 		t.Fatalf("Unexpected success")
 	}
@@ -203,9 +194,8 @@ func setupSendNextTest(t *testing.T) ([]chan<- BatchCall, chan BatchCall, *stop.
 	doneChanChan := make(chan chan<- BatchCall, len(addrs))
 
 	opts := SendOptions{
+		ctx:             context.Background(),
 		SendNextTimeout: 1 * time.Millisecond,
-		Timeout:         10 * time.Second,
-		Context:         context.Background(),
 		transportFactory: func(_ SendOptions,
 			_ *rpc.Context,
 			replicas ReplicaSlice,
@@ -408,110 +398,6 @@ func TestSendNext_NonRetryableApplicationError(t *testing.T) {
 	}
 }
 
-// TestClientNotReady verifies that Send gets an RPC error when a client
-// does not become ready.
-func TestClientNotReady(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-
-	// Construct a server that listens but doesn't do anything. Note that we
-	// don't accept any connections on the listener.
-	ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ln.Close()
-	addr := ln.Addr()
-	addrs := []net.Addr{addr}
-
-	{
-		// Send RPC to an address where no server is running.
-		nodeContext := newNodeTestContext(nil, stopper)
-		if _, err := sendBatch(SendOptions{
-			SendNextTimeout: 100 * time.Nanosecond,
-			Timeout:         100 * time.Nanosecond,
-			Context:         context.Background(),
-		}, addrs, nodeContext); !testutils.IsError(err, "context deadline exceeded") {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		// Do a dance to convince GRPC to close the connection.
-		if conn, err := ln.Accept(); err != nil {
-			t.Fatal(err)
-		} else {
-			// The connection is cached in the RPC context.
-			grpcConn, err := nodeContext.GRPCDial(addr.String())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := grpcConn.Close(); err != nil && err != grpc.ErrClientConnClosing {
-				t.Fatal(err)
-			}
-
-			// Just in case, close it from the server as well.
-			if err := conn.Close(); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-
-	errCh := make(chan error)
-	connected := make(chan struct{})
-
-	// Accept a single connection from the client.
-	go func() {
-		if _, err := ln.Accept(); err != nil {
-			errCh <- err
-		} else {
-			close(connected)
-		}
-	}()
-
-	// Send the RPC again with no timeout. We create a new node context to ensure
-	// there is a new connection; we could reuse the old connection by not
-	// closing it, but by the time we reach this point in the test, GRPC may have
-	// attempted to reconnect enough times to make the backoff long enough to
-	// time out the test.
-	nodeContext := newNodeTestContext(nil, stopper)
-
-	go func() {
-		_, err := sendBatch(SendOptions{
-			Context: context.Background(),
-		}, addrs, nodeContext)
-		expected := strings.Join([]string{
-			"context canceled",
-			"connection is closing",
-			"failed fast due to transport failure",
-		}, "|")
-		if !testutils.IsError(err, expected) {
-			errCh <- errors.Wrap(err, "unexpected error")
-		} else {
-			close(errCh)
-		}
-	}()
-
-	select {
-	case err := <-errCh:
-		t.Fatalf("unexpected error: %v", err)
-	case <-connected:
-	}
-
-	// Grab the cached connection and close it. This will cause the blocked RPC
-	// to finish.
-	grpcConn, err := nodeContext.GRPCDial(addr.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := grpcConn.Close(); err != nil && err != grpc.ErrClientConnClosing {
-		t.Fatal(err)
-	}
-	for err := range errCh {
-		t.Fatal(err)
-	}
-}
-
 // firstNErrorTransport is a mock transport that sends an error on
 // requests to the first N addresses, then succeeds.
 type firstNErrorTransport struct {
@@ -577,9 +463,7 @@ func TestComplexScenarios(t *testing.T) {
 		}
 
 		opts := SendOptions{
-			SendNextTimeout: 1 * time.Second,
-			Timeout:         10 * time.Second,
-			Context:         context.Background(),
+			ctx: context.Background(),
 			transportFactory: func(_ SendOptions,
 				_ *rpc.Context,
 				replicas ReplicaSlice,
