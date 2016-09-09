@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
@@ -430,7 +432,7 @@ ALTER INDEX t.test@foo RENAME TO ufo
 	}
 }
 
-func runSqlWithRetry(t *testing.T, db *gosql.DB, sql string) {
+func runSQLWithRetry(t *testing.T, db *gosql.DB, sql string) {
 	for {
 		_, err := db.Exec(sql)
 		if err == nil {
@@ -485,31 +487,31 @@ func runSchemaChangeWithOperations(
 	for i := 0; i < 10; i++ {
 		k := rand.Intn(maxValue)
 		v := maxValue + i + 1
-		runSqlWithRetry(t, sqlDB, fmt.Sprintf(`UPDATE t.test SET v = %d WHERE k = %d`, v, k))
+		runSQLWithRetry(t, sqlDB, fmt.Sprintf(`UPDATE t.test SET v = %d WHERE k = %d`, v, k))
 		updatedKeys = append(updatedKeys, k)
 	}
 
 	// Reupdate updated values back to what they were before.
 	for _, k := range updatedKeys {
-		runSqlWithRetry(t, sqlDB, fmt.Sprintf(`UPDATE t.test SET v = %d WHERE k = %d`, maxValue-k, k))
+		runSQLWithRetry(t, sqlDB, fmt.Sprintf(`UPDATE t.test SET v = %d WHERE k = %d`, maxValue-k, k))
 	}
 
 	// Delete some rows.
 	deleteStartKey := rand.Intn(maxValue - 10)
 	for i := 0; i < 10; i++ {
-		runSqlWithRetry(t, sqlDB, fmt.Sprintf(`DELETE FROM t.test WHERE k = %d`, deleteStartKey+i))
+		runSQLWithRetry(t, sqlDB, fmt.Sprintf(`DELETE FROM t.test WHERE k = %d`, deleteStartKey+i))
 	}
 	// Reinsert deleted rows.
 	for i := 0; i < 10; i++ {
 		k := deleteStartKey + i
-		runSqlWithRetry(t, sqlDB, fmt.Sprintf(`INSERT INTO t.test VALUES(%d, %d)`, k, maxValue-k))
+		runSQLWithRetry(t, sqlDB, fmt.Sprintf(`INSERT INTO t.test VALUES(%d, %d)`, k, maxValue-k))
 	}
 
 	// Insert some new rows.
 	numInserts := 10
 	for i := 0; i < numInserts; i++ {
 		k := maxValue + i + 1
-		runSqlWithRetry(t, sqlDB, fmt.Sprintf(`INSERT INTO t.test VALUES(%d, %d)`, k, k))
+		runSQLWithRetry(t, sqlDB, fmt.Sprintf(`INSERT INTO t.test VALUES(%d, %d)`, k, k))
 	}
 
 	wg.Wait() // for schema change to complete.
@@ -526,7 +528,7 @@ func runSchemaChangeWithOperations(
 
 	// Delete the rows inserted.
 	for i := 0; i < numInserts; i++ {
-		runSqlWithRetry(t, sqlDB, fmt.Sprintf(`DELETE FROM t.test WHERE k = %d`, maxValue+i+1))
+		runSQLWithRetry(t, sqlDB, fmt.Sprintf(`DELETE FROM t.test WHERE k = %d`, maxValue+i+1))
 	}
 }
 
@@ -718,7 +720,7 @@ func TestSchemaChangeRetry(t *testing.T) {
 				attempts++
 				// Return a deadline exceeded error once.
 				if attempts == 1 {
-					return errors.New("context deadline exceeded")
+					return context.DeadlineExceeded
 				}
 				return nil
 			},
@@ -799,7 +801,7 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 				// Return a deadline exceeded error during the second attempt
 				// which attempts to clean up the schema change.
 				if attempts == 2 {
-					return errors.New("context deadline exceeded")
+					return context.DeadlineExceeded
 				}
 				return nil
 			},

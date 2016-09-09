@@ -368,9 +368,8 @@ func (ds *DistSender) sendRPC(
 
 	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := SendOptions{
+		ctx:              ctx,
 		SendNextTimeout:  ds.sendNextTimeout,
-		Timeout:          base.NetworkTimeout,
-		Context:          ctx,
 		transportFactory: ds.transportFactory,
 	}
 	tracing.AnnotateTrace()
@@ -1047,7 +1046,7 @@ func (ds *DistSender) sendToReplicas(
 			sendNextTimer.Read = true
 			// On successive RPC timeouts, send to additional replicas if available.
 			if !transport.IsExhausted() {
-				log.Trace(opts.Context, "timeout, trying next peer")
+				log.Trace(opts.ctx, "timeout, trying next peer")
 				pending++
 				transport.SendNext(done)
 			}
@@ -1057,9 +1056,9 @@ func (ds *DistSender) sendToReplicas(
 			err := call.Err
 			if err == nil {
 				if log.V(2) {
-					log.Infof(opts.Context, "RPC reply: %+v", call.Reply)
+					log.Infof(opts.ctx, "RPC reply: %+v", call.Reply)
 				} else if log.V(1) && call.Reply.Error != nil {
-					log.Infof(opts.Context, "application error: %s", call.Reply.Error)
+					log.Infof(opts.ctx, "application error: %s", call.Reply.Error)
 				}
 
 				if !ds.handlePerReplicaError(rangeID, call.Reply.Error) {
@@ -1075,12 +1074,12 @@ func (ds *DistSender) sendToReplicas(
 				// information than a RangeNotFound).
 				err = call.Reply.Error.GoError()
 			} else if log.V(1) {
-				log.Warningf(opts.Context, "RPC error: %s", err)
+				log.Warningf(opts.ctx, "RPC error: %s", err)
 			}
 
 			// Send to additional replicas if available.
 			if !transport.IsExhausted() {
-				log.Tracef(opts.Context, "error, trying next peer: %s", err)
+				log.Tracef(opts.ctx, "error, trying next peer: %s", err)
 				pending++
 				transport.SendNext(done)
 			}
