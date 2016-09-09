@@ -58,7 +58,7 @@ type rangeCountBalancer struct {
 	rand allocatorRand
 }
 
-func (rcb rangeCountBalancer) selectBest(sl StoreList) *roachpb.StoreDescriptor {
+func (rangeCountBalancer) selectBest(sl StoreList) *roachpb.StoreDescriptor {
 	var best *roachpb.StoreDescriptor
 	for i := range sl.stores {
 		candidate := &sl.stores[i]
@@ -90,7 +90,7 @@ func (rcb rangeCountBalancer) selectGood(
 	return good
 }
 
-func (rcb rangeCountBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
+func (rangeCountBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
 	var worst *roachpb.StoreDescriptor
 	for i := range sl.stores {
 		candidate := &sl.stores[i]
@@ -129,8 +129,8 @@ func (rcb rangeCountBalancer) improve(
 
 	// Adding a replica to the candidate must make its range count converge on the
 	// mean range count.
-	if math.Abs(float64(candidate.Capacity.RangeCount+1)-sl.candidateCount.mean) >=
-		math.Abs(float64(candidate.Capacity.RangeCount)-sl.candidateCount.mean) {
+	rebalanceConvergesOnMean := float64(candidate.Capacity.RangeCount) < sl.candidateCount.mean-0.5
+	if !rebalanceConvergesOnMean {
 		if log.V(2) {
 			log.Infof(context.TODO(), "not rebalancing: %s wouldn't converge on the mean %.1f",
 				formatCandidates(candidate, sl.stores), sl.candidateCount.mean)
@@ -147,7 +147,7 @@ func (rcb rangeCountBalancer) improve(
 
 var rebalanceThreshold = envutil.EnvOrDefaultFloat("COCKROACH_REBALANCE_THRESHOLD", 0.05)
 
-func (rcb rangeCountBalancer) shouldRebalance(
+func (rangeCountBalancer) shouldRebalance(
 	store roachpb.StoreDescriptor, sl StoreList,
 ) bool {
 	// TODO(peter,bram,cuong): The FractionUsed check seems suspicious. When a
@@ -177,9 +177,7 @@ func (rcb rangeCountBalancer) shouldRebalance(
 	// Require that moving a replica from the given store makes its range count
 	// converge on the mean range count. This only affects clusters with a
 	// small number of ranges.
-	rebalanceConvergesOnMean :=
-		(math.Abs(float64(store.Capacity.RangeCount-1)-sl.candidateCount.mean) <
-			math.Abs(float64(store.Capacity.RangeCount)-sl.candidateCount.mean))
+	rebalanceConvergesOnMean := float64(store.Capacity.RangeCount) > sl.candidateCount.mean+0.5
 
 	shouldRebalance :=
 		(maxCapacityUsed || rangeCountAboveTarget || rebalanceToUnderfullStore) && rebalanceConvergesOnMean
