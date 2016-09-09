@@ -74,33 +74,33 @@ var (
 
 // Server is the cockroach server node.
 type Server struct {
-	ctx            Context
-	mux            *http.ServeMux
-	clock          *hlc.Clock
-	rpcContext     *rpc.Context
-	grpc           *grpc.Server
-	gossip         *gossip.Gossip
-	storePool      *storage.StorePool
-	txnCoordSender *kv.TxnCoordSender
-	distSender     *kv.DistSender
-	db             *client.DB
-	kvDB           *kv.DBServer
-	pgServer       *pgwire.Server
-	distSQLServer  *distsql.ServerImpl
-	node           *Node
-	registry       *metric.Registry
-	recorder       *status.MetricsRecorder
-	runtime        status.RuntimeStatSampler
-	admin          adminServer
-	status         *statusServer
-	tsDB           *ts.DB
-	tsServer       ts.Server
-	raftTransport  *storage.RaftTransport
-	stopper        *stop.Stopper
-	sqlExecutor    *sql.Executor
-	leaseMgr       *sql.LeaseManager
-
-	nodeLogTagVal log.DynamicIntValue
+	ctx                 Context
+	mux                 *http.ServeMux
+	clock               *hlc.Clock
+	rpcContext          *rpc.Context
+	grpc                *grpc.Server
+	gossip              *gossip.Gossip
+	storePool           *storage.StorePool
+	txnCoordSender      *kv.TxnCoordSender
+	distSender          *kv.DistSender
+	db                  *client.DB
+	kvDB                *kv.DBServer
+	pgServer            *pgwire.Server
+	distSQLServer       *distsql.ServerImpl
+	node                *Node
+	registry            *metric.Registry
+	recorder            *status.MetricsRecorder
+	runtime             status.RuntimeStatSampler
+	admin               adminServer
+	status              *statusServer
+	tsDB                *ts.DB
+	tsServer            ts.Server
+	raftTransport       *storage.RaftTransport
+	stopper             *stop.Stopper
+	sqlExecutor         *sql.Executor
+	leaseMgr            *sql.LeaseManager
+	nodeLogTagVal       log.DynamicIntValue
+	scannersStartNotify chan bool
 }
 
 // NewServer creates a Server from a server.Context.
@@ -245,7 +245,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 
 	s.pgServer = pgwire.MakeServer(s.ctx.Context, s.sqlExecutor)
 	s.registry.AddMetricStruct(s.pgServer.Metrics())
-
+	s.scannersStartNotify = make(chan bool)
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
 		Ctx:                            s.Ctx(),
@@ -266,7 +266,8 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		AllocatorOptions: storage.AllocatorOptions{
 			AllowRebalance: true,
 		},
-		Locality: srvCtx.Locality,
+		Locality:            srvCtx.Locality,
+		ScannersStartNotify: s.scannersStartNotify,
 	}
 	if srvCtx.TestingKnobs.Store != nil {
 		nCtx.TestingKnobs = *srvCtx.TestingKnobs.Store.(*storage.StoreTestingKnobs)
@@ -579,6 +580,9 @@ func (s *Server) Start(ctx context.Context) error {
 
 	if err := sdnotify.Ready(); err != nil {
 		log.Errorf(s.Ctx(), "failed to signal readiness using systemd protocol: %s", err)
+	}
+	if s.scannersStartNotify != nil {
+		close(s.scannersStartNotify)
 	}
 	log.Trace(ctx, "server ready")
 

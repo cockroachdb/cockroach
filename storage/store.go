@@ -534,6 +534,10 @@ type StoreContext struct {
 
 	// Locality is a description of the topography of the store.
 	Locality roachpb.Locality
+
+	// ScannersStartNotify is a channel the scanners should wait on before
+	// starting.
+	ScannersStartNotify chan bool
 }
 
 // StoreTestingKnobs is a part of the context used to control parts of the system.
@@ -987,6 +991,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.stopper.RunWorker(func() {
 			select {
 			case <-s.ctx.Gossip.Connected:
+				if s.ctx.ScannersStartNotify != nil {
+					select {
+					case <-s.ctx.ScannersStartNotify:
+					}
+				}
 				s.scanner.Start(s.ctx.Clock, s.stopper)
 			case <-s.stopper.ShouldStop():
 				return
@@ -997,6 +1006,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.stopper.RunWorker(func() {
 			select {
 			case <-s.ctx.Gossip.Connected:
+				if s.ctx.ScannersStartNotify != nil {
+					select {
+					case <-s.ctx.ScannersStartNotify:
+					}
+				}
 				s.consistencyScanner.Start(s.ctx.Clock, s.stopper)
 			case <-s.stopper.ShouldStop():
 				return
