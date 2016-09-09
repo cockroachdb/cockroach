@@ -36,7 +36,7 @@ github.com/chzyer/test bea8f082b6fd8382588bf6fdc6af9217078af151
 github.com/client9/misspell 88a1370162d5afbe6e2f40f8f0172e0ebd9cda40
 github.com/cockroachdb/c-jemalloc 42e6a32cd7a4dff9c70d80323681d46d046181ef
 github.com/cockroachdb/c-protobuf 951f3e665896e7ba939fd1f2db9aeaae6ca988f8
-github.com/cockroachdb/c-rocksdb ab57b321a358f4c93fb639331ac3e10911649492
+github.com/cockroachdb/c-rocksdb b5ca031b93fde49bfa2ba99aba423136aebf3c06
 github.com/cockroachdb/c-snappy d4e7b428fe7fc09e93573df3448567a62df8c9fa
 github.com/cockroachdb/cmux b64f5908f4945f4b11ed4a0a9d3cc1e23350866d
 github.com/cockroachdb/cockroach-go 2e4a60d41697eebb308b1def89f0abaf1c056137
@@ -48,7 +48,7 @@ github.com/coreos/etcd 656167d760543d442eae62f0c8c4f92c05f59508
 github.com/cpuguy83/go-md2man 2724a9c9051aa62e9cca11304e7dd518e9e41599
 github.com/davecgh/go-spew 6cf5744a041a0022271cefed95ba843f6d87fd51
 github.com/docker/distribution c810308d1bf3051521dd63cc1cdda03be9f11327
-github.com/docker/engine-api 94a8f8f29307ab291abad6c6f2182d67089aae5d
+github.com/docker/docker 7baa09faa02ad93dcb0e103abde3c45862fc903c
 github.com/docker/go-connections 0bad1a3951398f88ef4dd75fdb42af374430be89
 github.com/docker/go-units eb879ae3e2b84e2a142af415b679ddeda47ec71c
 github.com/dustin/go-humanize 2fcb5204cdc65b4bec9fd0a87606bb0d0e3c54e8

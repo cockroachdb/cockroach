@@ -14,7 +14,7 @@ resource "aws_instance" "cockroach" {
   count = "${var.num_instances}"
 }
 
-resource "template_file" "supervisor" {
+data "template_file" "supervisor" {
   count = "${var.num_instances}"
   template = "${file("supervisor.conf.tpl")}"
   vars {
@@ -52,7 +52,7 @@ resource "null_resource" "cockroach-runner" {
   # use rendered templates in the file provisioner.
   provisioner "remote-exec" {
     inline = <<FILE
-echo '${element(template_file.supervisor.*.rendered, count.index)}' > supervisor.conf
+echo '${element(data.template_file.supervisor.*.rendered, count.index)}' > supervisor.conf
 FILE
   }
 

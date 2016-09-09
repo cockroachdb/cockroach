@@ -1404,7 +1404,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 							From: uint64(replicas[1].ReplicaID),
 							Term: term,
 						},
-					}); err != nil {
+					}, nil); err != nil {
 					t.Error(err)
 				}
 				select {
