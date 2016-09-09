@@ -268,6 +268,56 @@ func (e *ErrUndefinedDatabase) SrcContext() SrcCtx {
 	return e.ctx
 }
 
+// NewDatabaseAlreadyExistsError creates a new ErrDatabaseAlreadyExists.
+func NewDatabaseAlreadyExistsError(name string) error {
+	return &ErrDatabaseAlreadyExists{ctx: MakeSrcCtx(1), name: name}
+}
+
+// ErrDatabaseAlreadyExists represents a missing database error.
+type ErrDatabaseAlreadyExists struct {
+	ctx  SrcCtx
+	name string
+}
+
+func (e *ErrDatabaseAlreadyExists) Error() string {
+	return fmt.Sprintf("database %q already exists", e.name)
+}
+
+// Code implements the ErrorWithPGCode interface.
+func (*ErrDatabaseAlreadyExists) Code() string {
+	return pgerror.CodeDuplicateDatabaseError
+}
+
+// SrcContext implements the ErrorWithPGCode interface.
+func (e *ErrDatabaseAlreadyExists) SrcContext() SrcCtx {
+	return e.ctx
+}
+
+// NewRelationAlreadyExistsError creates a new ErrRelationAlreadyExists.
+func NewRelationAlreadyExistsError(name string) error {
+	return &ErrRelationAlreadyExists{ctx: MakeSrcCtx(1), name: name}
+}
+
+// ErrRelationAlreadyExists represents a missing database error.
+type ErrRelationAlreadyExists struct {
+	ctx  SrcCtx
+	name string
+}
+
+func (e *ErrRelationAlreadyExists) Error() string {
+	return fmt.Sprintf("relation %q already exists", e.name)
+}
+
+// Code implements the ErrorWithPGCode interface.
+func (*ErrRelationAlreadyExists) Code() string {
+	return pgerror.CodeDuplicateRelationError
+}
+
+// SrcContext implements the ErrorWithPGCode interface.
+func (e *ErrRelationAlreadyExists) SrcContext() SrcCtx {
+	return e.ctx
+}
+
 // IsIntegrityConstraintError returns true if the error is some kind of SQL
 // constraint violation.
 func IsIntegrityConstraintError(err error) bool {
