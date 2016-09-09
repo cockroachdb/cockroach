@@ -90,6 +90,17 @@ SET
 (1 row)
 `,
 		},
+		{
+			in: `select 1;
+-- just a comment without final semicolon`,
+			expect: `+---+
+| 1 |
++---+
+| 1 |
++---+
+(1 row)
+`,
+		},
 	}
 
 	conf := readline.Config{
@@ -161,7 +172,7 @@ func TestIsEndOfStatement(t *testing.T) {
 		if syntax == 0 {
 			syntax = parser.Traditional
 		}
-		isEnd, hasSet := isEndOfStatement(syntax, &[]string{test.in})
+		_, isEnd, hasSet := isEndOfStatement(syntax, &[]string{test.in})
 		if isEnd != test.isEnd {
 			t.Errorf("%q: isEnd expected %v, got %v", test.in, test.isEnd, isEnd)
 		}
