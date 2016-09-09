@@ -168,9 +168,10 @@ func (jr *joinReader) mainLoop() error {
 
 // Run is part of the processor interface.
 func (jr *joinReader) Run(wg *sync.WaitGroup) {
+	if wg != nil {
+		defer wg.Done()
+	}
+
 	err := jr.mainLoop()
 	jr.output.Close(err)
-	if wg != nil {
-		wg.Done()
-	}
 }
