@@ -834,7 +834,7 @@ Available Commands:
   node           list nodes and show their status
   dump           dump sql tables
 
-  gen            generate manpages and bash completion file
+  gen            generate auxiliary files
   version        output version information
   debug          debugging commands
 
