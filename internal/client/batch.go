@@ -330,7 +330,7 @@ func (b *Batch) logRequest(arg roachpb.Request, level int) {
 	case *roachpb.HeartbeatTxnRequest:
 		log.InfofDepth(b.Context, level, "HeartbeatTxn %s at %v", req.Key, req.Now)
 	case *roachpb.GCRequest:
-		log.InfofDepth(b.Context, level, "GC from %s to ", req.Key, req.EndKey)
+		log.InfofDepth(b.Context, level, "GC from %s to %s", req.Key, req.EndKey)
 	case *roachpb.PushTxnRequest:
 		log.InfofDepth(b.Context, level, "PushTxn %s from %s to %s", req.Key, req.PusherTxn, req.PusheeTxn)
 	case *roachpb.RangeLookupRequest:
