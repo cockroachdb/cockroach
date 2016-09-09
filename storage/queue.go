@@ -477,8 +477,9 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 
 	sp := repl.store.Tracer().StartSpan(bq.name)
 	ctx := opentracing.ContextWithSpan(context.Background(), sp)
+	ctx = repl.logContext(ctx)
 	defer sp.Finish()
-	log.Tracef(ctx, "processing replica %s", repl)
+	log.Tracef(ctx, "processing replica")
 
 	// If the queue requires a replica to have the range lease in
 	// order to be processed, check whether this replica has range lease
@@ -487,7 +488,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
 		if err := repl.redirectOnOrAcquireLease(ctx); err != nil {
 			if _, harmless := err.GetDetail().(*roachpb.NotLeaseHolderError); harmless {
-				log.VEventf(3, bq.ctx, "%s: not holding lease; skipping", repl)
+				log.VEventf(3, bq.ctx, "not holding lease; skipping")
 				return nil
 			}
 			return errors.Wrapf(err.GoError(), "%s: could not obtain lease", repl)
@@ -495,12 +496,12 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 		log.Trace(ctx, "got range lease")
 	}
 
-	log.VEventf(3, bq.ctx, "%s: processing", repl)
+	log.VEventf(3, bq.ctx, "processing")
 	start := timeutil.Now()
 	if err := bq.impl.process(ctx, clock.Now(), repl, cfg); err != nil {
 		return err
 	}
-	log.VEventf(2, bq.ctx, "%s: done: %s", repl, timeutil.Since(start))
+	log.VEventf(2, bq.ctx, "done: %s", timeutil.Since(start))
 	log.Trace(ctx, "done")
 	return nil
 }
