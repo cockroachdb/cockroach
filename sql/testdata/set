@@ -43,7 +43,7 @@ statement error no database specified
 SHOW TABLES
 
 # SET statement succeeds, CREATE TABLE fails.
-statement error table \"bar\" already exists
+statement error pgcode 42P07 relation \"bar\" already exists
 SET DATABASE = foo; CREATE TABLE bar (k INT PRIMARY KEY)
 
 query T colnames
