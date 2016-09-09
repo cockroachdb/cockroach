@@ -101,8 +101,8 @@ func runGenAutocompleteCmd(cmd *cobra.Command, args []string) error {
 
 var genCmd = &cobra.Command{
 	Use:   "gen [command]",
-	Short: "generate manpages and bash completion file",
-	Long:  "Generate manpages and bash completion file.",
+	Short: "generate auxiliary files",
+	Long:  "Generate manpages, example shell configuration, etc.",
 	Run: func(cmd *cobra.Command, args []string) {
 		mustUsage(cmd)
 	},
@@ -111,6 +111,7 @@ var genCmd = &cobra.Command{
 var genCmds = []*cobra.Command{
 	genManCmd,
 	genAutocompleteCmd,
+	genDemoCmd,
 }
 
 func init() {
