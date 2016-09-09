@@ -115,7 +115,7 @@ const (
 
 	// DefaultGossipStoresInterval is the default interval for gossiping storage-
 	// related info.
-	DefaultGossipStoresInterval = 1 * time.Minute
+	DefaultGossipStoresInterval = 5 * time.Second
 )
 
 // Gossip metrics counter names.
