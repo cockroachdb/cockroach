@@ -121,7 +121,14 @@ func (p *planner) createDescriptor(
 			return false, nil
 		}
 		// Key exists, but we don't want it to: error out.
-		return false, descriptorAlreadyExistsErr{descriptor, plainKey.Name()}
+		switch descriptor.TypeName() {
+		case "database":
+			return false, sqlbase.NewDatabaseAlreadyExistsError(plainKey.Name())
+		case "table", "view":
+			return false, sqlbase.NewRelationAlreadyExistsError(plainKey.Name())
+		default:
+			return false, descriptorAlreadyExistsErr{descriptor, plainKey.Name()}
+		}
 	} else if err != nil {
 		return false, err
 	}
