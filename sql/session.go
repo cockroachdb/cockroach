@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/tracing"
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 )
 
 // COCKROACH_TRACE_SQL=duration can be used to log SQL transactions that take
@@ -58,6 +59,7 @@ type Session struct {
 	TxnState txnState
 
 	planner            planner
+	executor           *Executor
 	PreparedStatements PreparedStatements
 	PreparedPortals    PreparedPortals
 
@@ -67,7 +69,12 @@ type Session struct {
 	// context is the Session's base context. You probably don't want to use it
 	// directly; see Ctx().
 	context context.Context
-	cancel  context.CancelFunc
+	// TODO(andrei): We need to either get rid of this cancel field, or it needs
+	// to move to the TxnState and become a per-txn cancel. Right now, we're
+	// cancelling all the txns that have ever run on this session when the session
+	// is closed, as opposed to cancelling the individual transactions as soon as
+	// they COMMIT/ROLLBACK.
+	cancel context.CancelFunc
 }
 
 // SessionArgs contains arguments for creating a new Session with NewSession().
@@ -86,6 +93,7 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 		Database: args.Database,
 		User:     args.User,
 		Location: time.UTC,
+		executor: e,
 	}
 	cfg, cache := e.getSystemConfig()
 	s.planner = planner{
@@ -117,6 +125,19 @@ func (s *Session) Finish() {
 		s.Trace.Finish()
 		s.Trace = nil
 	}
+	// If we're inside a txn, roll it back.
+	if s.TxnState.State != NoTxn && s.TxnState.State != Aborted {
+		s.TxnState.updateStateAndCleanupOnErr(
+			errors.Errorf("session closing"), s.executor)
+	}
+	if s.TxnState.State != NoTxn {
+		s.TxnState.finishSQLTxn()
+	}
+	// This will stop the heartbeating of the of the txn record.
+	// TODO(andrei): This shouldn't have any effect, since, if there was a
+	// transaction, we just explicitly rolled it back above, so the hearbeat loop
+	// in the TxnCoordSender should not be waiting on this channel any more.
+	// Consider getting rid of this cancel field all-together.
 	s.cancel()
 }
 
