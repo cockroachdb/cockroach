@@ -35,28 +35,28 @@ func TestPrivilege(t *testing.T) {
 		show          []UserPrivilegeString
 	}{
 		{"", nil, nil,
-			[]UserPrivilegeString{{security.RootUser, "ALL"}},
+			[]UserPrivilegeString{{security.RootUser, []string{"ALL"}}},
 		},
 		{security.RootUser, privilege.List{privilege.ALL}, nil,
-			[]UserPrivilegeString{{security.RootUser, "ALL"}},
+			[]UserPrivilegeString{{security.RootUser, []string{"ALL"}}},
 		},
 		{security.RootUser, privilege.List{privilege.INSERT, privilege.DROP}, nil,
-			[]UserPrivilegeString{{security.RootUser, "ALL"}},
+			[]UserPrivilegeString{{security.RootUser, []string{"ALL"}}},
 		},
 		{"foo", privilege.List{privilege.INSERT, privilege.DROP}, nil,
-			[]UserPrivilegeString{{"foo", "DROP,INSERT"}, {security.RootUser, "ALL"}},
+			[]UserPrivilegeString{{"foo", []string{"DROP", "INSERT"}}, {security.RootUser, []string{"ALL"}}},
 		},
 		{"bar", nil, privilege.List{privilege.INSERT, privilege.ALL},
-			[]UserPrivilegeString{{"foo", "DROP,INSERT"}, {security.RootUser, "ALL"}},
+			[]UserPrivilegeString{{"foo", []string{"DROP", "INSERT"}}, {security.RootUser, []string{"ALL"}}},
 		},
 		{"foo", privilege.List{privilege.ALL}, nil,
-			[]UserPrivilegeString{{"foo", "ALL"}, {security.RootUser, "ALL"}},
+			[]UserPrivilegeString{{"foo", []string{"ALL"}}, {security.RootUser, []string{"ALL"}}},
 		},
 		{"foo", nil, privilege.List{privilege.SELECT, privilege.INSERT},
-			[]UserPrivilegeString{{"foo", "CREATE,DELETE,DROP,GRANT,UPDATE"}, {security.RootUser, "ALL"}},
+			[]UserPrivilegeString{{"foo", []string{"CREATE", "DELETE", "DROP", "GRANT", "UPDATE"}}, {security.RootUser, []string{"ALL"}}},
 		},
 		{"foo", nil, privilege.List{privilege.ALL},
-			[]UserPrivilegeString{{security.RootUser, "ALL"}},
+			[]UserPrivilegeString{{security.RootUser, []string{"ALL"}}},
 		},
 		// Validate checks that root still has ALL privileges, but we do not call it here.
 		{security.RootUser, nil, privilege.List{privilege.ALL},
@@ -79,7 +79,7 @@ func TestPrivilege(t *testing.T) {
 				tcNum, descriptor, show, tc.show)
 		}
 		for i := 0; i < len(show); i++ {
-			if show[i].User != tc.show[i].User || show[i].Privileges != tc.show[i].Privileges {
+			if show[i].User != tc.show[i].User || show[i].PrivilegeString() != tc.show[i].PrivilegeString() {
 				t.Fatalf("#%d: show output for descriptor %+v differs, got: %+v, expected %+v",
 					tcNum, descriptor, show, tc.show)
 			}
