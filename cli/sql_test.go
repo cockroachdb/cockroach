@@ -90,6 +90,17 @@ SET
 (1 row)
 `,
 		},
+		{
+			in: `select 1;
+-- just a comment without final semicolon`,
+			expect: `+---+
+| 1 |
++---+
+| 1 |
++---+
+(1 row)
+`,
+		},
 	}
 
 	conf := readline.Config{
@@ -121,10 +132,11 @@ func TestIsEndOfStatement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tests := []struct {
-		syntax parser.Syntax
-		in     string
-		isEnd  bool
-		hasSet bool
+		syntax  parser.Syntax
+		in      string
+		isEnd   bool
+		isEmpty bool
+		hasSet  bool
 	}{
 		{
 			in:    ";",
@@ -154,6 +166,10 @@ func TestIsEndOfStatement(t *testing.T) {
 			in:     "SELECT ''''; SET;",
 			syntax: parser.Modern,
 		},
+		{
+			in:      "  -- hello",
+			isEmpty: true,
+		},
 	}
 
 	for _, test := range tests {
@@ -161,7 +177,10 @@ func TestIsEndOfStatement(t *testing.T) {
 		if syntax == 0 {
 			syntax = parser.Traditional
 		}
-		isEnd, hasSet := isEndOfStatement(syntax, &[]string{test.in})
+		isEmpty, isEnd, hasSet := isEndOfStatement(syntax, &[]string{test.in})
+		if isEmpty != test.isEmpty {
+			t.Errorf("%q: isEmpty expected %v, got %v", test.in, test.isEmpty, isEmpty)
+		}
 		if isEnd != test.isEnd {
 			t.Errorf("%q: isEnd expected %v, got %v", test.in, test.isEnd, isEnd)
 		}

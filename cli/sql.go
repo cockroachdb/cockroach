@@ -93,16 +93,18 @@ func addHistory(ins *readline.Instance, line string) {
 // by the user at the prompt and decides what to do: either
 // run a client-side command, print some help or continue with
 // a regular query.
-func handleInputLine(ins *readline.Instance, stmt *[]string, line string, syntax parser.Syntax) (status int, hasSet bool) {
+func handleInputLine(
+	ins *readline.Instance, stmt *[]string, line string, syntax parser.Syntax,
+) (status int, hasSet bool, isEmpty bool) {
 	if len(*stmt) == 0 {
 		// Special case: first line of multi-line statement.
 		// In this case ignore empty lines, and recognize "help" specially.
 		switch line {
 		case "":
-			return cliNextLine, false
+			return cliNextLine, false, true
 		case "help":
 			printCliHelp()
-			return cliNextLine, false
+			return cliNextLine, false, true
 		}
 
 		if len(line) > 0 && line[0] == '\\' {
@@ -113,13 +115,13 @@ func handleInputLine(ins *readline.Instance, stmt *[]string, line string, syntax
 			cmd := strings.Fields(line)
 			switch cmd[0] {
 			case `\q`:
-				return cliExit, false
+				return cliExit, false, true
 			case `\!`:
-				return runSyscmd(line), false
+				return runSyscmd(line), false, true
 			case `\|`:
 				status = pipeSyscmd(stmt, line)
-				_, hasSet = isEndOfStatement(syntax, stmt)
-				return status, hasSet
+				isEmpty, _, hasSet = isEndOfStatement(syntax, stmt)
+				return status, hasSet, isEmpty
 			case `\`, `\?`:
 				printCliHelp()
 			default:
@@ -131,31 +133,33 @@ func handleInputLine(ins *readline.Instance, stmt *[]string, line string, syntax
 				fmt.Fprint(osStderr, "Suggestion: use the SQL SHOW statement to inspect your schema.\n")
 			}
 
-			return cliNextLine, false
+			return cliNextLine, false, true
 		}
 	}
 
 	*stmt = append(*stmt, line)
-	isEnd, hasSet := isEndOfStatement(syntax, stmt)
-	if isEnd {
+	isEmpty, isEnd, hasSet := isEndOfStatement(syntax, stmt)
+	if isEmpty || isEnd {
 		status = cliProcessQuery
 	} else {
 		status = cliNextLine
 	}
-	return status, hasSet
+	return status, hasSet, isEmpty
 }
 
-func isEndOfStatement(syntax parser.Syntax, stmt *[]string) (isEnd, hasSet bool) {
+func isEndOfStatement(syntax parser.Syntax, stmt *[]string) (isEmpty, isEnd, hasSet bool) {
 	fullStmt := strings.Join(*stmt, "\n")
 	sc := parser.MakeScanner(fullStmt, syntax)
+	isEmpty = true
 	var last int
 	sc.Tokens(func(t int) {
+		isEmpty = false
 		last = t
 		if t == parser.SET {
 			hasSet = true
 		}
 	})
-	return last == ';', hasSet
+	return isEmpty, last == ';', hasSet
 }
 
 // execSyscmd executes system commands.
@@ -296,10 +300,10 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 
 		// Check if this is a request for help or a client-side command.
 		// If so, process it directly and skip query processing below.
-		status, hasSet := handleInputLine(ins, &stmt, l, syntax)
+		status, hasSet, isEmpty := handleInputLine(ins, &stmt, l, syntax)
 		if status == cliExit {
 			break
-		} else if status == cliNextLine && !isFinished {
+		} else if isEmpty || (status == cliNextLine && !isFinished) {
 			// Ask for more input unless we reached EOF.
 			continue
 		} else if isFinished && len(stmt) == 0 {
