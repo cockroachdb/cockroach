@@ -697,7 +697,7 @@ func TestPGPreparedExec(t *testing.T) {
 			"CREATE TABLE d.t (i INT, s STRING, d INT)",
 			[]preparedExecTest{
 				baseTest,
-				baseTest.Error(`pq: table "t" already exists`),
+				baseTest.Error(`pq: relation "t" already exists`),
 			},
 		},
 		{

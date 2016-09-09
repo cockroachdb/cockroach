@@ -350,7 +350,7 @@ func (n *createTableNode) Start() error {
 		if n.n.IfNotExists {
 			return nil
 		}
-		return descriptorAlreadyExistsErr{&desc, tKey.Name()}
+		return sqlbase.NewRelationAlreadyExistsError(tKey.Name())
 	} else if err != nil {
 		return err
 	}
