@@ -915,7 +915,7 @@ func (s *adminServer) waitForStoreFrozen(
 				if err != nil {
 					return err
 				}
-				client := storage.NewStoresClient(conn)
+				client := storage.NewFreezesClient(conn)
 				resp, err = client.PollFrozen(context.Background(),
 					&storage.PollFrozenRequest{
 						StoreRequestHeader: storage.StoreRequestHeader{

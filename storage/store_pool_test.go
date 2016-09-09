@@ -440,27 +440,22 @@ func TestStorePoolDefaultState(t *testing.T) {
 	}
 }
 
-// fakeStoresServer implements the InternalStoresServer interface. Specifically,
-// this is used for testing the Reserve() RPC.
-type fakeStoresServer struct {
+// fakeReservationsServer is used for testing the Reserve() RPC.
+type fakeReservationsServer struct {
 	reservationResponse bool
 	reservationErr      error
 }
 
-var _ StoresServer = fakeStoresServer{}
+var _ ReservationsServer = fakeReservationsServer{}
 
-func (f fakeStoresServer) PollFrozen(_ context.Context, _ *PollFrozenRequest) (*PollFrozenResponse, error) {
-	panic("unimplemented")
-}
-
-func (f fakeStoresServer) Reserve(_ context.Context, _ *ReservationRequest) (*ReservationResponse, error) {
+func (f fakeReservationsServer) Reserve(_ context.Context, _ *ReservationRequest) (*ReservationResponse, error) {
 	return &ReservationResponse{Reserved: f.reservationResponse}, f.reservationErr
 }
 
-// newFakeNodeServer returns a fakeStoresServer designed to handle internal
+// newFakeNodeServer returns a fakeReservationsServer designed to handle internal
 // node server RPCs, an rpc context used for the server and the fake server's
 // address.
-func newFakeNodeServer(stopper *stop.Stopper) (*fakeStoresServer, *rpc.Context, string, error) {
+func newFakeNodeServer(stopper *stop.Stopper) (*fakeReservationsServer, *rpc.Context, string, error) {
 	ctx := rpc.NewContext(context.TODO(), testutils.NewNodeTestBaseContext(), nil, stopper)
 	s := rpc.NewServer(ctx)
 	ln, err := netutil.ListenAndServeGRPC(ctx.Stopper, s, util.TestAddr)
@@ -468,8 +463,8 @@ func newFakeNodeServer(stopper *stop.Stopper) (*fakeStoresServer, *rpc.Context, 
 		return nil, nil, "", err
 	}
 	stopper.AddCloser(stop.CloserFn(func() { _ = ln.Close() }))
-	f := &fakeStoresServer{}
-	RegisterStoresServer(s, f)
+	f := &fakeReservationsServer{}
+	RegisterReservationsServer(s, f)
 	return f, ctx, ln.Addr().String(), nil
 }
 
