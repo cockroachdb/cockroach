@@ -106,8 +106,8 @@ var flagTFDiskType = flag.String("tf.disk-type", "pd-standard",
 	"type of disk (either 'pd-standard' for spinny disk, or 'pd-ssd' for SSD)")
 
 // Allocator test flags.
-var flagATMaxStdDev = flag.Float64("at.std-dev", 10,
-	"maximum standard deviation of replica counts")
+var flagATMaxStdDev = flag.Float64("at.std-dev", 0,
+	"maximum standard deviation of replica counts (default: 5% of mean replica count)")
 
 // continuousLoadTest (CLT) flags.
 var flagCLTWriters = flag.Int("clt.writers", -1,
