@@ -1,0 +1,47 @@
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT)
+
+statement ok
+CREATE VIEW v1 AS select * from t
+
+statement error pgcode 42P07 relation \"v1\" already exists
+CREATE VIEW v1 AS select * from t
+
+statement error pgcode 42P07 relation \"t\" already exists
+CREATE VIEW t AS select * from t
+
+statement ok
+CREATE VIEW v2 (x, y) AS select * from t;
+
+statement error pgcode 42601 CREATE VIEW specifies 1 column name, but data source has 2 columns
+CREATE VIEW v3 (x) AS select * from t;
+
+statement error pgcode 42601 CREATE VIEW specifies 3 column names, but data source has 2 columns
+CREATE VIEW v4 (x, y, z) AS select * from t;
+
+statement ok
+CREATE VIEW v5 AS select * from v1;
+
+statement error pgcode 42P01 table "dne" does not exist
+CREATE VIEW v6 AS select * from dne;
+
+statement error pgcode 42809 "v1" is not a table
+DROP TABLE v1;
+
+statement error pgcode 42809 "t" is not a view
+DROP VIEW t;
+
+statement ok
+DROP VIEW v1;
+
+statement error pgcode 42P01 view "v1" does not exist
+DROP VIEW v1;
+
+statement ok
+DROP VIEW v2;
+
+statement ok
+DROP VIEW v5;
+
+statement ok
+DROP TABLE t;
