@@ -18,7 +18,6 @@ package cluster
 
 import (
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -30,11 +29,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/engine-api/client"
-	"github.com/docker/engine-api/types"
-	"github.com/docker/engine-api/types/container"
-	"github.com/docker/engine-api/types/network"
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/go-connections/nat"
+	isatty "github.com/mattn/go-isatty"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -115,25 +116,11 @@ func pullImage(l *LocalCluster, ref string, options types.ImagePullOptions) erro
 		return err
 	}
 	defer rc.Close()
-	dec := json.NewDecoder(rc)
-	for {
-		// Using `interface{}` to avoid dependency on github.com/docker/docker. See
-		// https://github.com/docker/engine-api/issues/89.
-		var message interface{}
-		if err := dec.Decode(&message); err != nil {
-			if err == io.EOF {
-				_, _ = fmt.Fprintln(os.Stderr)
-				return nil
-			}
-			return err
-		}
-		// The message is a status bar.
-		if log.V(2) {
-			log.Infof(context.TODO(), "ImagePull response: %s", message)
-		} else {
-			_, _ = fmt.Fprintf(os.Stderr, ".")
-		}
-	}
+	out := os.Stderr
+	outFd := out.Fd()
+	isTerminal := isatty.IsTerminal(outFd)
+
+	return jsonmessage.DisplayJSONMessagesStream(rc, out, outFd, isTerminal, nil)
 }
 
 // createContainer creates a new container using the specified
@@ -328,7 +315,7 @@ func (cli resilientDockerClient) ContainerCreate(
 		log.Infof(ctx, "unable to create container %s: %v", containerName, err)
 		containers, cerr := cli.ContainerList(ctx, types.ContainerListOptions{
 			All:   true,
-			Limit: -1, // no limit, see docker/engine-api/client/container_list.go
+			Limit: -1, // no limit, see docker/docker/client/container_list.go
 		})
 		if cerr != nil {
 			log.Infof(ctx, "unable to list containers: %v", cerr)

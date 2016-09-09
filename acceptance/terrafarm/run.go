@@ -81,7 +81,7 @@ func (f *Farmer) appendDefaults(args []string) []string {
 		"-no-color",
 		"-var=key_name="+f.KeyName,
 		"-state="+f.StateFile,
-		"-var=prefix="+f.Prefix)
+		`-var=prefix="`+f.Prefix+`"`)
 }
 
 func (f *Farmer) apply(args ...string) error {
