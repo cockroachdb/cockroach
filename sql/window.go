@@ -106,13 +106,15 @@ func (p *planner) window(n *parser.SelectClause, s *selectNode) (*windowNode, er
 			prevWindowCount := len(window.funcs) - numFuncsAdded
 			for i, funcHolder := range window.funcs[prevWindowCount:] {
 				funcHolder.funcIdx = prevWindowCount + i
-				funcHolder.subRenderCol = len(s.render)
-				arg := funcHolder.arg
-				s.render = append(s.render, arg)
-				s.columns = append(s.columns, ResultColumn{
-					Name: arg.String(),
-					Typ:  arg.ReturnType(),
-				})
+				funcHolder.argIdxStart = len(s.render)
+				for _, argExpr := range funcHolder.args {
+					arg := argExpr.(parser.TypedExpr)
+					s.render = append(s.render, arg)
+					s.columns = append(s.columns, ResultColumn{
+						Name: arg.String(),
+						Typ:  arg.ReturnType(),
+					})
+				}
 			}
 		}
 	}
@@ -531,7 +533,8 @@ func (n *windowNode) computeWindows() error {
 						}
 					}
 					row := partition[rowIdx]
-					agg.Add(row.datum[windowFn.subRenderCol])
+					args := row.datum[windowFn.argIdxStart : windowFn.argIdxStart+windowFn.argCount]
+					agg.Add(args[0])
 					peerGroupSize++
 				}
 
@@ -587,12 +590,14 @@ func (n *windowNode) populateValues() error {
 				// planNode. These were used as arguments to window functions all beneath
 				// a single windowRender.
 				// SELECT rank() over () from t; -> ignore 0 from wrapped values
+				// SELECT (rank() over () + avg(b) over ()) from t; -> ignore 1 from wrapped values
 				// SELECT (avg(a) over () + avg(b) over ()) from t; -> ignore 2 from wrapped values
 				for ; curFnIdx < len(n.funcs); curFnIdx++ {
-					if n.funcs[curFnIdx].subRenderCol != curColIdx {
+					windowFn := n.funcs[curFnIdx]
+					if windowFn.argIdxStart != curColIdx {
 						break
 					}
-					curColIdx++
+					curColIdx += windowFn.argCount
 				}
 				// Instead, we evaluate the current window render, which depends on at least
 				// one window function, at the given row.
@@ -708,21 +713,19 @@ func (v *extractWindowFuncsVisitor) VisitPre(expr parser.Expr) (recurse bool, ne
 				return false, expr
 			}
 
-			// TODO(nvanbenschoten) Once we support built-in window functions instead of
-			// just aggregates over a window, we'll need to support a variable number of
-			// arguments.
-			argExpr := t.Exprs[0].(parser.TypedExpr)
-
 			// Make sure this window function does not contain another window function.
-			if v.subWindowVisitor.ContainsWindowFunc(argExpr) {
-				v.err = fmt.Errorf("window function calls cannot be nested under %s", t.Name)
-				return false, expr
+			for _, argExpr := range t.Exprs {
+				if v.subWindowVisitor.ContainsWindowFunc(argExpr) {
+					v.err = fmt.Errorf("window function calls cannot be nested under %s", t.Name)
+					return false, expr
+				}
 			}
 
 			f := &windowFuncHolder{
-				expr:   t,
-				arg:    argExpr,
-				window: v.n,
+				expr:     t,
+				args:     t.Exprs,
+				argCount: len(t.Exprs),
+				window:   v.n,
 			}
 			v.windowFnCount++
 			v.n.funcs = append(v.n.funcs, f)
@@ -776,10 +779,11 @@ type windowFuncHolder struct {
 	window *windowNode
 
 	expr *parser.FuncExpr
-	arg  parser.TypedExpr
+	args []parser.Expr
 
-	funcIdx      int // index of the windowFuncHolder in window.funcs
-	subRenderCol int // column of the windowFuncHolder in window.wrappedValues
+	funcIdx     int // index of the windowFuncHolder in window.funcs
+	argIdxStart int // index of the window function's first arguments in window.wrappedValues
+	argCount    int // number of arguments taken by the window function
 
 	windowDef      parser.WindowDef
 	partitionIdxs  []int
