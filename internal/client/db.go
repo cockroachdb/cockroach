@@ -465,18 +465,13 @@ func (db *DB) Txn(ctx context.Context, retryable func(txn *Txn) error) error {
 	return err
 }
 
-// send runs the specified calls synchronously in a single batch and returns
-// any errors. Returns (nil, nil) for an empty batch.
-func (db *DB) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	if len(ba.Requests) == 0 {
-		return nil, nil
-	}
+func (db *DB) prepareToSend(ba *roachpb.BatchRequest) *roachpb.Error {
 	if ba.ReadConsistency == roachpb.INCONSISTENT {
 		for _, ru := range ba.Requests {
 			req := ru.GetInner()
 			if req.Method() != roachpb.Get && req.Method() != roachpb.Scan &&
 				req.Method() != roachpb.ReverseScan {
-				return nil, roachpb.NewErrorf("method %s not allowed with INCONSISTENT batch", req.Method)
+				return roachpb.NewErrorf("method %s not allowed with INCONSISTENT batch", req.Method)
 			}
 		}
 	}
@@ -486,6 +481,18 @@ func (db *DB) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Er
 	}
 
 	tracing.AnnotateTrace()
+	return nil
+}
+
+// send runs the specified calls synchronously in a single batch and returns
+// any errors. Returns (nil, nil) for an empty batch.
+func (db *DB) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	if len(ba.Requests) == 0 {
+		return nil, nil
+	}
+	if pErr := db.prepareToSend(&ba); pErr != nil {
+		return nil, pErr
+	}
 
 	br, pErr := db.sender.Send(context.TODO(), ba)
 	if pErr != nil {
