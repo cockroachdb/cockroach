@@ -23,7 +23,6 @@ import (
 	"time"
 	"unsafe"
 
-	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -460,17 +459,7 @@ func (ds *DistSender) getDescriptors(
 func (ds *DistSender) sendSingleRange(
 	ctx context.Context, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	// HACK: avoid formatting the message passed to Span.LogEvent for
-	// opentracing.noopSpans. We can't actually tell if we have a noopSpan, but
-	// we can see if the span as a NoopTracer. Note that this particular
-	// invocation is expensive because we're pretty-printing keys.
-	//
-	// TODO(tschottdorf): This hack can go away when something like
-	// Span.LogEventf is added.
-	sp := opentracing.SpanFromContext(ctx)
-	if sp != nil && sp.Tracer() != (opentracing.NoopTracer{}) {
-		sp.LogEvent(fmt.Sprintf("sending RPC to [%s, %s)", desc.StartKey, desc.EndKey))
-	}
+	log.Eventf(ctx, "sending RPC to [%s, %s)", desc.StartKey, desc.EndKey)
 
 	// Try to send the call.
 	replicas := newReplicaSlice(ds.gossip, desc)
