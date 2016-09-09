@@ -42,10 +42,7 @@ import (
 const (
 	// TODO(bdarnell): make SendNextTimeout configurable.
 	// https://github.com/cockroachdb/cockroach/issues/6719
-	//
-	// Temporarily increased from 500ms to 10s; see
-	// https://github.com/cockroachdb/cockroach/issues/6750
-	defaultSendNextTimeout = 10 * time.Second
+	defaultSendNextTimeout = 500 * time.Millisecond
 	defaultClientTimeout   = 10 * time.Second
 
 	// The default maximum number of ranges to return from a range
