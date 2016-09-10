@@ -43,6 +43,7 @@ var maxResults int64
 
 var connURL string
 var connUser, connHost, connPort, httpPort, httpAddr, connDBName, zoneConfig string
+var zoneDisableReplication bool
 var startBackground bool
 var undoFreezeCluster bool
 
@@ -364,7 +365,9 @@ func init() {
 		boolFlag(f, &cliCtx.prettyFmt, cliflags.Pretty, isInteractive)
 	}
 
-	stringFlag(setZoneCmd.Flags(), &zoneConfig, cliflags.ZoneConfig, "")
+	zf := setZoneCmd.Flags()
+	stringFlag(zf, &zoneConfig, cliflags.ZoneConfig, "")
+	boolFlag(zf, &zoneDisableReplication, cliflags.ZoneDisableReplication, false)
 
 	varFlag(sqlShellCmd.Flags(), &sqlCtx.execStmts, cliflags.Execute)
 

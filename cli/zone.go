@@ -401,25 +401,43 @@ specified zone-config.
 
 The zone config format has the following YAML schema:
 
-  replicas:
-    - attrs: [comma-separated attribute list]
-    - attrs:  ...
+  num_replicas: <num>
+  constraints: [comma-separated attribute list]
   range_min_bytes: <size-in-bytes>
   range_max_bytes: <size-in-bytes>
   gc:
     ttlseconds: <time-in-seconds>
 
 For example, to set the zone config for the system database, run:
-cockroach zone set system "replicas:
-- attrs: [us-east-1a, ssd]
-- attrs: [us-east-1b, ssd]
-- attrs: [us-west-1b, ssd]"
+$ cockroach zone set system -f - << EOF
+num_replicas: 3
+constraints: [ssd, -mem]
+EOF
 
 Note that the specified zone config is merged with the existing zone config for
 the database or table.
 `,
 	SilenceUsage: true,
 	RunE:         runSetZone,
+}
+
+func readZoneConfig() (conf []byte, err error) {
+	if zoneDisableReplication {
+		if zoneConfig != "" {
+			return nil, fmt.Errorf("cannot specify --disable-replication and -f at the same time")
+		}
+		conf = []byte("num_replicas: 1")
+	} else {
+		switch zoneConfig {
+		case "":
+			err = fmt.Errorf("no filename specified with -f")
+		case "-":
+			conf, err = ioutil.ReadAll(os.Stdin)
+		default:
+			conf, err = ioutil.ReadFile(zoneConfig)
+		}
+	}
+	return conf, err
 }
 
 // runSetZone parses the yaml input file, converts it to proto, and inserts it
@@ -463,12 +481,7 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 	// understood format.
 	// Read zoneConfig file to conf.
 
-	var conf []byte
-	if zoneConfig == "-" {
-		conf, err = ioutil.ReadAll(os.Stdin)
-	} else {
-		conf, err = ioutil.ReadFile(zoneConfig)
-	}
+	conf, err := readZoneConfig()
 	if err != nil {
 		return fmt.Errorf("error reading zone config: %s", err)
 	}
