@@ -2201,7 +2201,7 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now hlc.Timesta
 		PusheeTxn: txn.TxnMeta,
 		PushType:  roachpb.PUSH_QUERY,
 	})
-	if err := s.db.Run(b); err != nil {
+	if err := s.db.Run(context.TODO(), b); err != nil {
 		// TODO(tschottdorf):
 		// We shouldn't catch an error here (unless it's from the abort cache, in
 		// which case we would not get the crucial information that we've been

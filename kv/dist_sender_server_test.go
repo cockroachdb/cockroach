@@ -213,6 +213,7 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
+	ctx := context.TODO()
 
 	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
 	for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "c1", "c2", "d1", "f1", "f2", "f3"} {
@@ -241,7 +242,7 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 		for _, span := range spans {
 			b.Scan(span[0], span[1])
 		}
-		if err := db.Run(b); err != nil {
+		if err := db.Run(ctx, b); err != nil {
 			t.Fatal(err)
 		}
 
@@ -260,7 +261,7 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 					newB.Scan(res.ResumeSpan.Key, res.ResumeSpan.EndKey)
 				}
 			}
-			if err := db.Run(newB); err != nil {
+			if err := db.Run(ctx, newB); err != nil {
 				t.Fatal(err)
 			}
 			// Add the results to the previous results.
@@ -283,6 +284,7 @@ func TestMultiRangeBoundedBatchReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
+	ctx := context.TODO()
 
 	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
 	for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "c1", "c2", "d1", "f1", "f2", "f3"} {
@@ -311,7 +313,7 @@ func TestMultiRangeBoundedBatchReverseScan(t *testing.T) {
 		for _, span := range spans {
 			b.ReverseScan(span[0], span[1])
 		}
-		if err := db.Run(b); err != nil {
+		if err := db.Run(ctx, b); err != nil {
 			t.Fatal(err)
 		}
 
@@ -330,7 +332,7 @@ func TestMultiRangeBoundedBatchReverseScan(t *testing.T) {
 					newB.ReverseScan(res.ResumeSpan.Key, res.ResumeSpan.EndKey)
 				}
 			}
-			if err := db.Run(newB); err != nil {
+			if err := db.Run(ctx, newB); err != nil {
 				t.Fatal(err)
 			}
 			// Add the results to the previous results.
@@ -372,7 +374,7 @@ func TestMultiRangeBoundedBatchScanUnsortedOrder(t *testing.T) {
 	for _, span := range spans {
 		b.Scan(span[0], span[1])
 	}
-	if err := db.Run(b); err != nil {
+	if err := db.Run(context.TODO(), b); err != nil {
 		t.Fatal(err)
 	}
 	// See incomplete results for the two requests.
@@ -406,7 +408,7 @@ func TestMultiRangeBoundedBatchScanSortedOverlapping(t *testing.T) {
 	for _, span := range spans {
 		b.Scan(span[0], span[1])
 	}
-	if err := db.Run(b); err != nil {
+	if err := db.Run(context.TODO(), b); err != nil {
 		t.Fatal(err)
 	}
 	// See incomplete results for the two requests.
@@ -480,7 +482,7 @@ func TestMultiRangeBoundedBatchDelRange(t *testing.T) {
 		for _, span := range spans {
 			b.DelRange(span[0], span[1], true)
 		}
-		if err := db.Run(b); err != nil {
+		if err := db.Run(context.TODO(), b); err != nil {
 			t.Fatal(err)
 		}
 
@@ -528,7 +530,7 @@ func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 	b := &client.Batch{}
 	b.Header.MaxSpanRequestKeys = 3
 	b.DelRange("a", "c", true)
-	if err := db.Run(b); err != nil {
+	if err := db.Run(context.TODO(), b); err != nil {
 		t.Fatal(err)
 	}
 	if len(b.Results) != 1 {
@@ -541,7 +543,7 @@ func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 	b = &client.Batch{}
 	b.Header.MaxSpanRequestKeys = 1
 	b.DelRange("b", "c", true)
-	if err := db.Run(b); err != nil {
+	if err := db.Run(context.TODO(), b); err != nil {
 		t.Fatal(err)
 	}
 	if len(b.Results) != 1 {
@@ -585,7 +587,7 @@ func TestMultiRangeBoundedBatchDelRangeOverlappingKeys(t *testing.T) {
 		for _, span := range spans {
 			b.DelRange(span[0], span[1], true)
 		}
-		if err := db.Run(b); err != nil {
+		if err := db.Run(context.TODO(), b); err != nil {
 			t.Fatal(err)
 		}
 
@@ -644,7 +646,7 @@ func TestMultiRequestBatchWithFwdAndReverseRequests(t *testing.T) {
 	b.Header.MaxSpanRequestKeys = 100
 	b.Scan("a", "b")
 	b.ReverseScan("a", "b")
-	if err := db.Run(b); !testutils.IsError(
+	if err := db.Run(context.TODO(), b); !testutils.IsError(
 		err, "batch with limit contains both forward and reverse scans",
 	) {
 		t.Fatal(err)
@@ -721,7 +723,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	for i, key := range keys {
 		b := &client.Batch{}
 		b.Put(key, "value")
-		if err := db.Run(b); err != nil {
+		if err := db.Run(context.TODO(), b); err != nil {
 			t.Fatal(err)
 		}
 		ts[i] = s.Clock().Now()

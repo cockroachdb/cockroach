@@ -140,5 +140,5 @@ func (db *DB) StoreData(r Resolution, data []tspb.TimeSeriesData) error {
 		})
 	}
 
-	return db.db.Run(b)
+	return db.db.Run(context.TODO(), b)
 }
