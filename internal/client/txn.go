@@ -158,7 +158,7 @@ func (txn *Txn) NewBatch() *Batch {
 func (txn *Txn) Get(key interface{}) (KeyValue, error) {
 	b := txn.NewBatch()
 	b.Get(key)
-	return runOneRow(txn, b)
+	return getOneRow(txn.Run(b), b)
 }
 
 // GetProto retrieves the value for a key and decodes the result as a proto
@@ -180,8 +180,7 @@ func (txn *Txn) GetProto(key interface{}, msg proto.Message) error {
 func (txn *Txn) Put(key, value interface{}) error {
 	b := txn.NewBatch()
 	b.Put(key, value)
-	_, err := runOneResult(txn, b)
-	return err
+	return getOneErr(txn.Run(b), b)
 }
 
 // CPut conditionally sets the value for a key if the existing value is equal
@@ -194,8 +193,7 @@ func (txn *Txn) Put(key, value interface{}) error {
 func (txn *Txn) CPut(key, value, expValue interface{}) error {
 	b := txn.NewBatch()
 	b.CPut(key, value, expValue)
-	_, err := runOneResult(txn, b)
-	return err
+	return getOneErr(txn.Run(b), b)
 }
 
 // InitPut sets the first value for a key to value. An error is reported if a
@@ -207,8 +205,7 @@ func (txn *Txn) CPut(key, value, expValue interface{}) error {
 func (txn *Txn) InitPut(key, value interface{}) error {
 	b := txn.NewBatch()
 	b.InitPut(key, value)
-	_, err := runOneResult(txn, b)
-	return err
+	return getOneErr(txn.Run(b), b)
 }
 
 // Inc increments the integer value at key. If the key does not exist it will
@@ -222,7 +219,7 @@ func (txn *Txn) InitPut(key, value interface{}) error {
 func (txn *Txn) Inc(key interface{}, value int64) (KeyValue, error) {
 	b := txn.NewBatch()
 	b.Inc(key, value)
-	return runOneRow(txn, b)
+	return getOneRow(txn.Run(b), b)
 }
 
 func (txn *Txn) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]KeyValue, error) {
@@ -235,7 +232,7 @@ func (txn *Txn) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]K
 	} else {
 		b.ReverseScan(begin, end)
 	}
-	r, err := runOneResult(txn, b)
+	r, err := getOneResult(txn.Run(b), b)
 	return r.Rows, err
 }
 
@@ -271,8 +268,7 @@ var _ = (*Txn)(nil).ReverseScan
 func (txn *Txn) Del(keys ...interface{}) error {
 	b := txn.NewBatch()
 	b.Del(keys...)
-	_, err := runOneResult(txn, b)
-	return err
+	return getOneErr(txn.Run(b), b)
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
@@ -284,11 +280,20 @@ func (txn *Txn) Del(keys ...interface{}) error {
 func (txn *Txn) DelRange(begin, end interface{}) error {
 	b := txn.NewBatch()
 	b.DelRange(begin, end, false)
-	_, err := runOneResult(txn, b)
-	return err
+	return getOneErr(txn.Run(b), b)
 }
 
-// Run implements Runner.Run(). See comments there.
+// Run executes the operations queued up within a batch. Before executing any
+// of the operations the batch is first checked to see if there were any errors
+// during its construction (e.g. failure to marshal a proto message).
+//
+// The operations within a batch are run in parallel and the order is
+// non-deterministic. It is an unspecified behavior to modify and retrieve the
+// same key within a batch.
+//
+// Upon completion, Batch.Results will contain the results for each
+// operation. The order of the results matches the order the operations were
+// added to the batch.
 func (txn *Txn) Run(b *Batch) error {
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
