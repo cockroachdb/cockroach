@@ -74,6 +74,13 @@ tiers and order must be the same on all nodes.  For example:
 File to read the zone configuration from. Specify "-" to read from standard input.`,
 	}
 
+	ZoneDisableReplication = FlagInfo{
+		Name: "disable-replication",
+		Description: `
+Disable replication in the zone by setting the desired replica count to 1.
+Equivalent to setting 'num_replicas: 1' via -f.`,
+	}
+
 	Background = FlagInfo{
 		Name: "background",
 		Description: `
