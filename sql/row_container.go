@@ -19,7 +19,6 @@ package sql
 import (
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/sql/mon"
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
@@ -43,7 +42,7 @@ type RowContainer struct {
 
 	// memAcc tracks the current memory consumption of this
 	// RowContainer.
-	memAcc mon.MemoryAccount
+	memAcc WrappableMemoryAccount
 }
 
 // NewRowContainer allocates a new row container.
@@ -70,9 +69,8 @@ func (p *planner) NewRowContainer(h ResultColumns, rowCapacity int) *RowContaine
 		p:               p,
 		rows:            make([]parser.DTuple, 0, rowCapacity),
 		varSizedColumns: make([]int, 0, nCols),
+		memAcc:          p.session.OpenAccount(),
 	}
-
-	res.memAcc = p.session.mon.OpenAccount(p.session.Ctx())
 
 	for i := 0; i < nCols; i++ {
 		sz, variable := h[i].Typ.Size()
@@ -91,7 +89,7 @@ func (p *planner) NewRowContainer(h ResultColumns, rowCapacity int) *RowContaine
 func (c *RowContainer) Close() {
 	c.rows = nil
 	c.varSizedColumns = nil
-	c.memAcc.Close(c.p.session.Ctx())
+	c.memAcc.W(c.p.session).Close()
 }
 
 // rowSize computes the size of a single row.
@@ -107,7 +105,7 @@ func (c *RowContainer) rowSize(row parser.DTuple) int64 {
 // AddRow attempts to insert a new row in the RowContainer.
 // Returns an error if the allocation was denied by the MemoryUsageMonitor.
 func (c *RowContainer) AddRow(row parser.DTuple) error {
-	if err := c.memAcc.Grow(c.p.session.Ctx(), c.rowSize(row)); err != nil {
+	if err := c.memAcc.W(c.p.session).Grow(c.rowSize(row)); err != nil {
 		return err
 	}
 	c.rows = append(c.rows, row)
@@ -158,7 +156,7 @@ func (c *RowContainer) Replace(i int, newRow parser.DTuple) error {
 		oldSz = c.rowSize(c.rows[i])
 	}
 	if newSz != oldSz {
-		if err := c.memAcc.ResizeItem(c.p.session.Ctx(), oldSz, newSz); err != nil {
+		if err := c.memAcc.W(c.p.session).ResizeItem(oldSz, newSz); err != nil {
 			return err
 		}
 	}
