@@ -18,6 +18,7 @@ package log
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -51,6 +52,23 @@ func testingTracer(ev *events) opentracing.Tracer {
 	return basictracer.NewWithOptions(opts)
 }
 
+func compareTraces(expected, actual events) bool {
+	if len(expected) != len(actual) {
+		return false
+	}
+	for i, ev := range expected {
+		if ev == actual[i] {
+			continue
+		}
+		// Try to strip file:line from the actual event.
+		groups := regexp.MustCompile(`.*:[0-9]* (.*)`).FindStringSubmatch(actual[i])
+		if len(groups) != 2 || groups[0] != actual[i] || groups[1] != ev {
+			return false
+		}
+	}
+	return true
+}
+
 func TestTrace(t *testing.T) {
 	ctx := context.Background()
 
@@ -72,9 +90,9 @@ func TestTrace(t *testing.T) {
 
 	sp.Finish()
 
-	expected := "[start test1 testerr test2 log finish]"
-	if evStr := fmt.Sprint(ev); evStr != expected {
-		t.Errorf("expected events '%s', got '%s'", expected, evStr)
+	expected := events{"start", "test1", "testerr", "test2", "log", "finish"}
+	if !compareTraces(expected, ev) {
+		t.Errorf("expected events '%s', got '%s'", expected, fmt.Sprint(ev))
 	}
 }
 
@@ -94,9 +112,9 @@ func TestTraceWithTags(t *testing.T) {
 
 	sp.Finish()
 
-	expected := "[start [tag1] test1 [tag1] testerr [tag1] test2 [tag1] log finish]"
-	if evStr := fmt.Sprint(ev); evStr != expected {
-		t.Errorf("expected events '%s', got '%s'", expected, evStr)
+	expected := events{"start", "[tag1] test1", "[tag1] testerr", "[tag1] test2", "[tag1] log", "finish"}
+	if !compareTraces(expected, ev) {
+		t.Errorf("expected events '%s', got '%s'", expected, fmt.Sprint(ev))
 	}
 }
 
@@ -142,9 +160,9 @@ func TestEventLog(t *testing.T) {
 	// Events after Finish should be ignored.
 	Errorf(ctxWithEventLog, "should-not-show-up")
 
-	expected := "[test1 testerr(err) test2 log errlog1(err) finish]"
-	if evStr := fmt.Sprint(el.ev); evStr != expected {
-		t.Errorf("expected events '%s', got '%s'", expected, evStr)
+	expected := events{"test1", "testerr(err)", "test2", "log", "errlog1(err)", "finish"}
+	if !compareTraces(expected, el.ev) {
+		t.Errorf("expected events '%s', got '%s'", expected, fmt.Sprint(el.ev))
 	}
 }
 
