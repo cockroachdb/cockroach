@@ -24,7 +24,9 @@ import (
 
 // OpenAccount interfaces between Session and mon.MemoryUsageMonitor.
 func (s *Session) OpenAccount() WrappableMemoryAccount {
-	return WrappableMemoryAccount{acc: s.mon.OpenAccount(s.Ctx())}
+	res := WrappableMemoryAccount{}
+	s.mon.OpenAccount(s.Ctx(), &res.acc)
+	return res
 }
 
 // WrappableMemoryAccount encapsulates a MemoryAccount to
@@ -59,20 +61,20 @@ func (w WrappedMemoryAccount) OpenAndInit(initialAllocation int64) error {
 
 // Grow interfaces between Session and mon.MemoryUsageMonitor.
 func (w WrappedMemoryAccount) Grow(extraSize int64) error {
-	return w.acc.Grow(w.ctx, extraSize)
+	return w.mon.GrowAccount(w.ctx, w.acc, extraSize)
 }
 
 // Close interfaces between Session and mon.MemoryUsageMonitor.
 func (w WrappedMemoryAccount) Close() {
-	w.acc.Close(w.ctx)
+	w.mon.CloseAccount(w.ctx, w.acc)
 }
 
 // Clear interfaces between Session and mon.MemoryUsageMonitor.
 func (w WrappedMemoryAccount) Clear() {
-	w.acc.Clear(w.ctx)
+	w.mon.ClearAccount(w.ctx, w.acc)
 }
 
 // ResizeItem interfaces between Session and mon.MemoryUsageMonitor.
 func (w WrappedMemoryAccount) ResizeItem(oldSize, newSize int64) error {
-	return w.acc.ResizeItem(w.ctx, oldSize, newSize)
+	return w.mon.ResizeItem(w.ctx, w.acc, oldSize, newSize)
 }

@@ -72,43 +72,43 @@ func TestMemoryAccount(t *testing.T) {
 	var a1, a2 MemoryAccount
 
 	m.StartMonitor()
-	a1 = m.OpenAccount(ctx)
-	a2 = m.OpenAccount(ctx)
+	m.OpenAccount(ctx, &a1)
+	m.OpenAccount(ctx, &a2)
 
 	m.maxAllocatedBudget = 100
 
-	if err := a1.Grow(ctx, 10); err != nil {
+	if err := m.GrowAccount(ctx, &a1, 10); err != nil {
 		t.Fatalf("monitor refused allocation: %v", err)
 	}
 
-	if err := a2.Grow(ctx, 30); err != nil {
+	if err := m.GrowAccount(ctx, &a2, 30); err != nil {
 		t.Fatalf("monitor refused allocation: %v", err)
 	}
 
-	if err := a1.Grow(ctx, 61); err == nil {
+	if err := m.GrowAccount(ctx, &a1, 61); err == nil {
 		t.Fatalf("monitor accepted excessive allocation")
 	}
 
-	if err := a2.Grow(ctx, 61); err == nil {
+	if err := m.GrowAccount(ctx, &a2, 61); err == nil {
 		t.Fatalf("monitor accepted excessive allocation")
 	}
 
-	a1.Clear(ctx)
+	m.ClearAccount(ctx, &a1)
 
-	if err := a2.Grow(ctx, 61); err != nil {
+	if err := m.GrowAccount(ctx, &a2, 61); err != nil {
 		t.Fatalf("monitor refused allocation: %v", err)
 	}
 
-	if err := a2.ResizeItem(ctx, 50, 60); err == nil {
+	if err := m.ResizeItem(ctx, &a2, 50, 60); err == nil {
 		t.Fatalf("monitor accepted excessive allocation")
 	}
 
-	if err := a1.ResizeItem(ctx, 0, 5); err != nil {
+	if err := m.ResizeItem(ctx, &a1, 0, 5); err != nil {
 		t.Fatalf("monitor refused allocation: %v", err)
 	}
 
-	a1.Close(ctx)
-	a2.Close(ctx)
+	m.CloseAccount(ctx, &a1)
+	m.CloseAccount(ctx, &a2)
 
 	if m.curAllocated != 0 {
 		t.Fatal("closing spans leaves bytes in monitor")

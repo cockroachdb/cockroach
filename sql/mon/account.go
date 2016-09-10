@@ -26,15 +26,13 @@ import (
 // MemoryUsageMonitor. This allows a client to release all the memory
 // at once when it completes its work.
 type MemoryAccount struct {
-	mon          *MemoryUsageMonitor
 	curAllocated int64
 }
 
 // OpenAccount creates a new empty account.
-func (mm *MemoryUsageMonitor) OpenAccount(_ context.Context) MemoryAccount {
+func (mm *MemoryUsageMonitor) OpenAccount(_ context.Context, acc *MemoryAccount) {
 	// TODO(knz): conditionally track accounts in the memory monitor
 	// (#9122).
-	return MemoryAccount{mon: mm, curAllocated: 0}
 }
 
 // OpenAndInitAccount creates a new account and pre-allocates some
@@ -42,45 +40,44 @@ func (mm *MemoryUsageMonitor) OpenAccount(_ context.Context) MemoryAccount {
 func (mm *MemoryUsageMonitor) OpenAndInitAccount(
 	ctx context.Context, acc *MemoryAccount, initialAllocation int64,
 ) error {
-	*acc = mm.OpenAccount(ctx)
-	return acc.Grow(ctx, initialAllocation)
+	mm.OpenAccount(ctx, acc)
+	return mm.GrowAccount(ctx, acc, initialAllocation)
 }
 
-// Grow requests a new allocation in an account.
-func (acc *MemoryAccount) Grow(
-	ctx context.Context, extraSize int64,
+// GrowAccount requests a new allocation in an account.
+func (mm *MemoryUsageMonitor) GrowAccount(
+	ctx context.Context, acc *MemoryAccount, extraSize int64,
 ) error {
-	if err := acc.mon.reserveMemory(ctx, extraSize); err != nil {
+	if err := mm.reserveMemory(ctx, extraSize); err != nil {
 		return err
 	}
 	acc.curAllocated += extraSize
 	return nil
 }
 
-// Close releases all the cumulated allocations of an account at once.
-func (acc *MemoryAccount) Close(ctx context.Context) {
-	acc.mon.releaseMemory(ctx, acc.curAllocated)
+// CloseAccount releases all the cumulated allocations of an account at once.
+func (mm *MemoryUsageMonitor) CloseAccount(ctx context.Context, acc *MemoryAccount) {
+	mm.releaseMemory(ctx, acc.curAllocated)
 }
 
-// Clear releases all the cumulated allocations of an account at once
+// ClearAccount releases all the cumulated allocations of an account at once
 // and primes it for reuse.
-func (acc *MemoryAccount) Clear(ctx context.Context) {
-	acc.mon.releaseMemory(ctx, acc.curAllocated)
+func (mm *MemoryUsageMonitor) ClearAccount(ctx context.Context, acc *MemoryAccount) {
+	mm.releaseMemory(ctx, acc.curAllocated)
 	acc.curAllocated = 0
 }
 
 // ResizeItem requests a size change for an object already registered
 // in an account. The reservation is not modified if the new allocation is
 // refused, so that the caller can keep using the original item
-// without an accounting error. This is better than calling Clear
-// then Grow because if the Clear succeeds and the Grow fails
+// without an accounting error. This is better than calling ClearAccount
+// then GrowAccount because if the Clear succeeds and the Grow fails
 // the original item becomes invisible from the perspective of the
 // monitor.
-func (acc *MemoryAccount) ResizeItem(
-	ctx context.Context, oldSize, newSize int64,
+func (mm *MemoryUsageMonitor) ResizeItem(
+	ctx context.Context, acc *MemoryAccount, oldSize, newSize int64,
 ) error {
 	delta := newSize - oldSize
-	mm := acc.mon
 	switch {
 	case delta > 0:
 		if err := mm.reserveMemory(ctx, delta); err != nil {
