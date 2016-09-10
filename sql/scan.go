@@ -43,7 +43,7 @@ type scanNode struct {
 	// The table columns, possibly including ones currently in schema changes.
 	cols []sqlbase.ColumnDescriptor
 	// There is a 1-1 correspondence between cols and resultColumns.
-	resultColumns []ResultColumn
+	resultColumns ResultColumns
 	// Contains values for the current row. There is a 1-1 correspondence
 	// between resultColumns and values in row.
 	row parser.DTuple
@@ -80,7 +80,7 @@ func (p *planner) Scan() *scanNode {
 	return &scanNode{p: p}
 }
 
-func (n *scanNode) Columns() []ResultColumn {
+func (n *scanNode) Columns() ResultColumns {
 	return n.resultColumns
 }
 
@@ -138,6 +138,8 @@ func (n *scanNode) Start() error {
 
 	return n.p.startSubqueryPlans(n.filter)
 }
+
+func (n *scanNode) Close() {}
 
 // initScan sets up the rowFetcher and starts a scan.
 func (n *scanNode) initScan() error {

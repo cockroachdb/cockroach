@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/sql/mon"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -64,6 +65,45 @@ type Session struct {
 	DefaultIsolationLevel enginepb.IsolationType
 	context               context.Context
 	cancel                context.CancelFunc
+
+	// mon tracks memory usage for SQL activity within this session.
+	// Currently we bind an instance of MemoryUsageMonitor to each
+	// session, and the logical timespan for tracking memory usage is
+	// also bound to the entire duration of the session.
+	//
+	// The "logical timespan" is the duration between the point in time where
+	// to "begin" monitoring (set counters to 0) and where to "end"
+	// monitoring (check that if counters != 0 then there was a leak, and
+	// report that in logs/errors).
+	//
+	// Alternatives to define the logical timespan were considered and
+	// rejected:
+	//
+	// - binding to a single statement: fails to track transaction
+	//   state including intents across a transaction.
+	// - binding to a single transaction attempt: idem.
+	// - binding to an entire transaction: fails to track the
+	//   ResultList created by Executor.ExecuteStatements which
+	//   stays alive after the transaction commits and until
+	//   pgwire sends the ResultList back to the client.
+	// - binding to the duration of v3.go:handleExecute(): fails
+	//   to track transaction state that spans across multiple
+	//   separate execute messages.
+	//
+	// Ideally we would want a "magic" timespan that extends automatically
+	// from the start of a transaction to the point where all related
+	// Results (ResultList items) have been sent back to the
+	// client. However with this definition and the current code there can
+	// be multiple such "magic" timespans alive simultaneously. This is
+	// because a client can start a new transaction before it reads the
+	// ResultList of a previous transaction, e.g. if issuing `BEGIN;
+	// SELECT; COMMIT; BEGIN; SELECT; COMMIT` in one pgwire message.
+	//
+	// A way forward to implement this "magic" timespan would be to
+	// fix/implement #7775 (stream results from Executor to pgwire) and
+	// take care that the corresponding new streaming/pipeline logic
+	// passes a transaction-bound context to the monitor throughout.
+	mon mon.MemoryUsageMonitor
 }
 
 // SessionArgs contains arguments for creating a new Session with NewSession().
@@ -101,6 +141,7 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 	ctx = log.WithEventLog(ctx, fmt.Sprintf("sql [%s]", args.User), remoteStr)
 	s.context, s.cancel = context.WithCancel(ctx)
 
+	s.mon.StartMonitor()
 	return s
 }
 
@@ -111,6 +152,8 @@ func (s *Session) Finish() {
 	// addressed, there might be leases accumulated by preparing statements.
 	s.planner.releaseLeases()
 	log.FinishEventLog(s.context)
+	s.ClearStatementsAndPortals()
+	s.mon.StopMonitor(s.Ctx())
 	s.cancel()
 }
 

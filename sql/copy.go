@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -42,12 +43,13 @@ type copyNode struct {
 	p             *planner
 	table         parser.TableExpr
 	columns       parser.UnresolvedNames
-	resultColumns []ResultColumn
+	resultColumns ResultColumns
 	buf           bytes.Buffer
 	rows          []*parser.Tuple
+	rowsMemAcc    WrappableMemoryAccount
 }
 
-func (n *copyNode) Columns() []ResultColumn           { return n.resultColumns }
+func (n *copyNode) Columns() ResultColumns            { return n.resultColumns }
 func (*copyNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (*copyNode) Values() parser.DTuple               { return nil }
 func (*copyNode) ExplainTypes(_ func(string, string)) {}
@@ -55,6 +57,10 @@ func (*copyNode) SetLimitHint(_ int64, _ bool)        {}
 func (*copyNode) MarkDebug(_ explainMode)             {}
 func (*copyNode) expandPlan() error                   { return nil }
 func (*copyNode) Next() (bool, error)                 { return false, nil }
+
+func (n *copyNode) Close() {
+	n.rowsMemAcc.W(n.p.session).Close()
+}
 
 func (*copyNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
 	return "copy", "-", nil
@@ -89,15 +95,16 @@ func (p *planner) CopyFrom(n *parser.CopyFrom, autoCommit bool) (planNode, error
 	if err != nil {
 		return nil, err
 	}
-	cn.resultColumns = make([]ResultColumn, len(cols))
+	cn.resultColumns = make(ResultColumns, len(cols))
 	for i, c := range cols {
 		cn.resultColumns[i] = ResultColumn{Typ: c.Type.ToDatumType()}
 	}
 	cn.p = p
+	cn.rowsMemAcc = p.session.OpenAccount()
 	return cn, nil
 }
 
-// Start
+// Start implements the planNode interface.
 func (n *copyNode) Start() error {
 	// Should never happen because the executor prevents non-COPY messages during
 	// a COPY.
@@ -183,6 +190,7 @@ func (n *copyNode) addRow(line []byte) error {
 		return fmt.Errorf("expected %d values, got %d", len(n.resultColumns), len(parts))
 	}
 	exprs := make(parser.Exprs, len(parts))
+	acc := n.rowsMemAcc.W(n.p.session)
 	for i, part := range parts {
 		s := string(part)
 		if s == nullString {
@@ -235,9 +243,20 @@ func (n *copyNode) addRow(line []byte) error {
 		if err != nil {
 			return err
 		}
+
+		sz, _ := d.Size()
+		if err := acc.Grow(int64(sz)); err != nil {
+			return err
+		}
+
 		exprs[i] = d
 	}
-	n.rows = append(n.rows, &parser.Tuple{Exprs: exprs})
+	tuple := &parser.Tuple{Exprs: exprs}
+	if err := acc.Grow(int64(unsafe.Sizeof(*tuple))); err != nil {
+		return err
+	}
+
+	n.rows = append(n.rows, tuple)
 	return nil
 }
 
@@ -351,6 +370,7 @@ func (p *planner) CopyData(n CopyDataBlock, autoCommit bool) (planNode, error) {
 	vc := &parser.ValuesClause{Tuples: cf.rows}
 	// Reuse the same backing array once the Insert is complete.
 	cf.rows = cf.rows[:0]
+	cf.rowsMemAcc.W(p.session).Clear()
 
 	in := parser.Insert{
 		Table:   cf.table,
