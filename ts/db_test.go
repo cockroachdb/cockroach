@@ -203,7 +203,7 @@ func (tm *testModel) storeInModel(r Resolution, data tspb.TimeSeriesData) {
 // in both the model and the system under test.
 func (tm *testModel) storeTimeSeriesData(r Resolution, data []tspb.TimeSeriesData) {
 	// Store data in the system under test.
-	if err := tm.DB.StoreData(r, data); err != nil {
+	if err := tm.DB.StoreData(context.TODO(), r, data); err != nil {
 		tm.t.Fatalf("error storing time series data: %s", err.Error())
 	}
 
@@ -360,7 +360,7 @@ func TestPollSource(t *testing.T) {
 		},
 	}
 
-	tm.DB.PollSource(&testSource, time.Millisecond, Resolution10s, testSource.stopper)
+	tm.DB.PollSource(context.TODO(), &testSource, time.Millisecond, Resolution10s, testSource.stopper)
 	<-testSource.stopper.IsStopped()
 	if a, e := testSource.calledCount, 2; a != e {
 		t.Errorf("testSource was called %d times, expected %d", a, e)

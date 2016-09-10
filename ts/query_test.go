@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/ts/tspb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -257,7 +259,7 @@ func (tm *testModel) assertQuery(
 		Derivative:       derivative,
 		Sources:          sources,
 	}
-	actualDatapoints, actualSources, err := tm.DB.Query(q, r, start, end)
+	actualDatapoints, actualSources, err := tm.DB.Query(context.TODO(), q, r, start, end)
 	if err != nil {
 		tm.t.Fatal(err)
 	}

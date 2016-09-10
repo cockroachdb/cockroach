@@ -280,7 +280,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	storage.RegisterStoresServer(s.grpc, s.node.storesServer)
 
 	s.tsDB = ts.NewDB(s.db)
-	s.tsServer = ts.MakeServer(s.tsDB)
+	s.tsServer = ts.MakeServer(s.Ctx(), s.tsDB)
 
 	s.admin = makeAdminServer(s)
 	s.status = newStatusServer(s.db, s.gossip, s.recorder, s.ctx.Context, s.rpcContext, s.node.stores)
@@ -470,7 +470,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.startSampleEnvironment(s.ctx.MetricsSampleInterval)
 
 	// Begin recording time series data collected by the status monitor.
-	s.tsDB.PollSource(s.recorder, s.ctx.MetricsSampleInterval, ts.Resolution10s, s.stopper)
+	s.tsDB.PollSource(s.Ctx(), s.recorder, s.ctx.MetricsSampleInterval, ts.Resolution10s, s.stopper)
 
 	// Begin recording status summaries.
 	s.node.startWriteSummaries(s.ctx.MetricsSampleInterval)
