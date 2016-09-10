@@ -577,9 +577,7 @@ func (*gcQueue) purgatoryChan() <-chan struct{} {
 
 // pushTxn attempts to abort the txn via push. The wait group is signaled on
 // completion.
-func pushTxn(db *client.DB, now hlc.Timestamp, txn *roachpb.Transaction,
-	typ roachpb.PushTxnType) {
-
+func pushTxn(db *client.DB, now hlc.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
 	// Attempt to push the transaction which created the intent.
 	pushArgs := &roachpb.PushTxnRequest{
 		Span: roachpb.Span{
@@ -592,7 +590,7 @@ func pushTxn(db *client.DB, now hlc.Timestamp, txn *roachpb.Transaction,
 	}
 	b := &client.Batch{}
 	b.AddRawRequest(pushArgs)
-	if err := db.Run(b); err != nil {
+	if err := db.Run(context.TODO(), b); err != nil {
 		log.Warningf(context.TODO(), "push of txn %s failed: %s", txn, err)
 		return
 	}

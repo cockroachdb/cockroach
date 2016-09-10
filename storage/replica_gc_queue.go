@@ -166,7 +166,7 @@ func (q *replicaGCQueue) process(
 		},
 		MaxRanges: 1,
 	})
-	if err := q.db.Run(b); err != nil {
+	if err := q.db.Run(ctx, b); err != nil {
 		return err
 	}
 	br := b.RawResponse()

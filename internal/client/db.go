@@ -211,7 +211,7 @@ func NewDBWithContext(sender Sender, ctx DBContext) *DB {
 func (db *DB) Get(key interface{}) (KeyValue, error) {
 	b := &Batch{}
 	b.Get(key)
-	return getOneRow(db.Run(b), b)
+	return getOneRow(db.Run(context.TODO(), b), b)
 }
 
 // GetProto retrieves the value for a key and decodes the result as a proto
@@ -233,7 +233,7 @@ func (db *DB) GetProto(key interface{}, msg proto.Message) error {
 func (db *DB) Put(key, value interface{}) error {
 	b := &Batch{}
 	b.Put(key, value)
-	return getOneErr(db.Run(b), b)
+	return getOneErr(db.Run(context.TODO(), b), b)
 }
 
 // PutInline sets the value for a key, but does not maintain
@@ -246,7 +246,7 @@ func (db *DB) Put(key, value interface{}) error {
 func (db *DB) PutInline(key, value interface{}) error {
 	b := &Batch{}
 	b.PutInline(key, value)
-	return getOneErr(db.Run(b), b)
+	return getOneErr(db.Run(context.TODO(), b), b)
 }
 
 // CPut conditionally sets the value for a key if the existing value is equal
@@ -259,7 +259,7 @@ func (db *DB) PutInline(key, value interface{}) error {
 func (db *DB) CPut(key, value, expValue interface{}) error {
 	b := &Batch{}
 	b.CPut(key, value, expValue)
-	return getOneErr(db.Run(b), b)
+	return getOneErr(db.Run(context.TODO(), b), b)
 }
 
 // InitPut sets the first value for a key to value. An error is reported if a
@@ -271,7 +271,7 @@ func (db *DB) CPut(key, value, expValue interface{}) error {
 func (db *DB) InitPut(key, value interface{}) error {
 	b := &Batch{}
 	b.InitPut(key, value)
-	return getOneErr(db.Run(b), b)
+	return getOneErr(db.Run(context.TODO(), b), b)
 }
 
 // Inc increments the integer value at key. If the key does not exist it will
@@ -282,7 +282,7 @@ func (db *DB) InitPut(key, value interface{}) error {
 func (db *DB) Inc(key interface{}, value int64) (KeyValue, error) {
 	b := &Batch{}
 	b.Inc(key, value)
-	return getOneRow(db.Run(b), b)
+	return getOneRow(db.Run(context.TODO(), b), b)
 }
 
 func (db *DB) scan(
@@ -301,7 +301,7 @@ func (db *DB) scan(
 	} else {
 		b.ReverseScan(begin, end)
 	}
-	r, err := getOneResult(db.Run(b), b)
+	r, err := getOneResult(db.Run(context.TODO(), b), b)
 	return r.Rows, err
 }
 
@@ -331,7 +331,7 @@ func (db *DB) ReverseScan(begin, end interface{}, maxRows int64) ([]KeyValue, er
 func (db *DB) Del(keys ...interface{}) error {
 	b := &Batch{}
 	b.Del(keys...)
-	return getOneErr(db.Run(b), b)
+	return getOneErr(db.Run(context.TODO(), b), b)
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
@@ -342,7 +342,7 @@ func (db *DB) Del(keys ...interface{}) error {
 func (db *DB) DelRange(begin, end interface{}) error {
 	b := &Batch{}
 	b.DelRange(begin, end, false)
-	return getOneErr(db.Run(b), b)
+	return getOneErr(db.Run(context.TODO(), b), b)
 }
 
 // AdminMerge merges the range containing key and the subsequent
@@ -354,7 +354,7 @@ func (db *DB) DelRange(begin, end interface{}) error {
 func (db *DB) AdminMerge(key interface{}) error {
 	b := &Batch{}
 	b.adminMerge(key)
-	return getOneErr(db.Run(b), b)
+	return getOneErr(db.Run(context.TODO(), b), b)
 }
 
 // AdminSplit splits the range at splitkey.
@@ -363,7 +363,7 @@ func (db *DB) AdminMerge(key interface{}) error {
 func (db *DB) AdminSplit(splitKey interface{}) error {
 	b := &Batch{}
 	b.adminSplit(splitKey)
-	return getOneErr(db.Run(b), b)
+	return getOneErr(db.Run(context.TODO(), b), b)
 }
 
 // AdminTransferLease transfers the lease for the range containing key to the
@@ -374,7 +374,7 @@ func (db *DB) AdminSplit(splitKey interface{}) error {
 func (db *DB) AdminTransferLease(key interface{}, target roachpb.StoreID) error {
 	b := &Batch{}
 	b.adminTransferLease(key, target)
-	return getOneErr(db.Run(b), b)
+	return getOneErr(db.Run(context.TODO(), b), b)
 }
 
 // CheckConsistency runs a consistency check on all the ranges containing
@@ -383,7 +383,7 @@ func (db *DB) AdminTransferLease(key interface{}, target roachpb.StoreID) error 
 func (db *DB) CheckConsistency(begin, end interface{}, withDiff bool) error {
 	b := &Batch{}
 	b.CheckConsistency(begin, end, withDiff)
-	return getOneErr(db.Run(b), b)
+	return getOneErr(db.Run(context.TODO(), b), b)
 }
 
 // sendAndFill is a helper which sends the given batch and fills its results,
@@ -428,11 +428,14 @@ func sendAndFill(
 // Upon completion, Batch.Results will contain the results for each
 // operation. The order of the results matches the order the operations were
 // added to the batch.
-func (db *DB) Run(b *Batch) error {
+func (db *DB) Run(ctx context.Context, b *Batch) error {
 	if err := b.prepare(); err != nil {
 		return err
 	}
-	return sendAndFill(db.send, b)
+	sendFn := func(br roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		return db.send(ctx, br)
+	}
+	return sendAndFill(sendFn, b)
 }
 
 // Txn executes retryable in the context of a distributed transaction. The
@@ -486,7 +489,9 @@ func (db *DB) prepareToSend(ba *roachpb.BatchRequest) *roachpb.Error {
 
 // send runs the specified calls synchronously in a single batch and returns
 // any errors. Returns (nil, nil) for an empty batch.
-func (db *DB) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+func (db *DB) send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
 	if len(ba.Requests) == 0 {
 		return nil, nil
 	}
@@ -494,10 +499,10 @@ func (db *DB) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Er
 		return nil, pErr
 	}
 
-	br, pErr := db.sender.Send(context.TODO(), ba)
+	br, pErr := db.sender.Send(ctx, ba)
 	if pErr != nil {
 		if log.V(1) {
-			log.Infof(context.TODO(), "failed batch: %s", pErr)
+			log.Infof(ctx, "failed batch: %s", pErr)
 		}
 		return nil, pErr
 	}

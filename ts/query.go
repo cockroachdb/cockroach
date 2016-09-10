@@ -22,6 +22,8 @@ import (
 	"sort"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/ts/tspb"
@@ -435,7 +437,7 @@ func (db *DB) Query(query tspb.Query, r Resolution, startNanos, endNanos int64) 
 		b := &client.Batch{}
 		b.Scan(startKey, endKey)
 
-		if err := db.db.Run(b); err != nil {
+		if err := db.db.Run(context.TODO(), b); err != nil {
 			return nil, nil, err
 		}
 		rows = b.Results[0].Rows
@@ -452,7 +454,7 @@ func (db *DB) Query(query tspb.Query, r Resolution, startNanos, endNanos int64) 
 				b.Get(key)
 			}
 		}
-		err := db.db.Run(b)
+		err := db.db.Run(context.TODO(), b)
 		if err != nil {
 			return nil, nil, err
 		}

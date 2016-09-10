@@ -483,6 +483,7 @@ func TestClientBatch(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+	ctx := context.TODO()
 
 	keys := []roachpb.Key{}
 	{
@@ -493,7 +494,7 @@ func TestClientBatch(t *testing.T) {
 			b.Inc(key, int64(i))
 		}
 
-		if err := db.Run(b); err != nil {
+		if err := db.Run(ctx, b); err != nil {
 			t.Error(err)
 		}
 
@@ -509,7 +510,7 @@ func TestClientBatch(t *testing.T) {
 		b := &client.Batch{}
 		b.Scan(testUser+"/key 00", testUser+"/key 05")
 		b.Scan(testUser+"/key 05", testUser+"/key 10")
-		if err := db.Run(b); err != nil {
+		if err := db.Run(ctx, b); err != nil {
 			t.Error(err)
 		}
 		checkKVs(t, b.Results[0].Rows, keys[0], 0, keys[1], 1, keys[2], 2, keys[3], 3, keys[4], 4)
@@ -522,7 +523,7 @@ func TestClientBatch(t *testing.T) {
 		b.Header.MaxSpanRequestKeys = 7
 		b.Scan(testUser+"/key 00", testUser+"/key 05")
 		b.Scan(testUser+"/key 05", testUser+"/key 10")
-		if err := db.Run(b); err != nil {
+		if err := db.Run(ctx, b); err != nil {
 			t.Error(err)
 		}
 		checkKVs(t, b.Results[0].Rows, keys[0], 0, keys[1], 1, keys[2], 2, keys[3], 3, keys[4], 4)
@@ -535,7 +536,7 @@ func TestClientBatch(t *testing.T) {
 		b.Header.MaxSpanRequestKeys = 7
 		b.Scan(testUser+"/key 05", testUser+"/key 10")
 		b.Scan(testUser+"/key 00", testUser+"/key 05")
-		if err := db.Run(b); err != nil {
+		if err := db.Run(ctx, b); err != nil {
 			t.Error(err)
 		}
 		checkKVs(t, b.Results[0].Rows, keys[5], 5, keys[6], 6, keys[7], 7, keys[8], 8, keys[9], 9)
@@ -548,7 +549,7 @@ func TestClientBatch(t *testing.T) {
 		b.Header.MaxSpanRequestKeys = 3
 		b.Scan(testUser+"/key 00", testUser+"/key 05")
 		b.Scan(testUser+"/key 05", testUser+"/key 10")
-		if err := db.Run(b); err != nil {
+		if err := db.Run(ctx, b); err != nil {
 			t.Error(err)
 		}
 		checkKVs(t, b.Results[0].Rows, keys[0], 0, keys[1], 1, keys[2], 2)
@@ -560,7 +561,7 @@ func TestClientBatch(t *testing.T) {
 		b := &client.Batch{}
 		b.ReverseScan(testUser+"/key 00", testUser+"/key 05")
 		b.ReverseScan(testUser+"/key 05", testUser+"/key 10")
-		if err := db.Run(b); err != nil {
+		if err := db.Run(ctx, b); err != nil {
 			t.Error(err)
 		}
 		checkKVs(t, b.Results[0].Rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
@@ -573,7 +574,7 @@ func TestClientBatch(t *testing.T) {
 		b.Header.MaxSpanRequestKeys = 7
 		b.ReverseScan(testUser+"/key 00", testUser+"/key 05")
 		b.ReverseScan(testUser+"/key 05", testUser+"/key 10")
-		if err := db.Run(b); err != nil {
+		if err := db.Run(ctx, b); err != nil {
 			t.Error(err)
 		}
 		checkKVs(t, b.Results[0].Rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
@@ -586,7 +587,7 @@ func TestClientBatch(t *testing.T) {
 		b.Header.MaxSpanRequestKeys = 7
 		b.ReverseScan(testUser+"/key 05", testUser+"/key 10")
 		b.ReverseScan(testUser+"/key 00", testUser+"/key 05")
-		if err := db.Run(b); err != nil {
+		if err := db.Run(ctx, b); err != nil {
 			t.Error(err)
 		}
 		checkKVs(t, b.Results[0].Rows, keys[9], 9, keys[8], 8, keys[7], 7, keys[6], 6, keys[5], 5)
@@ -599,7 +600,7 @@ func TestClientBatch(t *testing.T) {
 		b.Header.MaxSpanRequestKeys = 3
 		b.ReverseScan(testUser+"/key 00", testUser+"/key 05")
 		b.ReverseScan(testUser+"/key 05", testUser+"/key 10")
-		if err := db.Run(b); err != nil {
+		if err := db.Run(ctx, b); err != nil {
 			t.Error(err)
 		}
 		checkKVs(t, b.Results[0].Rows, keys[4], 4, keys[3], 3, keys[2], 2)
@@ -615,7 +616,7 @@ func TestClientBatch(t *testing.T) {
 
 		b := &client.Batch{}
 		b.CPut(key, "goodbyte", nil) // should fail
-		if err := db.Run(b); err == nil {
+		if err := db.Run(ctx, b); err == nil {
 			t.Error("unexpected success")
 		} else {
 			var foundError bool
@@ -640,7 +641,7 @@ func TestClientBatch(t *testing.T) {
 
 		b := &client.Batch{}
 		b.CPut(key, "goodbyte", nil) // should fail
-		if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+		if err := db.Txn(ctx, func(txn *client.Txn) error {
 			return txn.Run(b)
 		}); err == nil {
 			t.Error("unexpected success")
@@ -813,6 +814,7 @@ func TestInconsistentReads(t *testing.T) {
 		return ba.CreateReply(), nil
 	}
 	db := client.NewDB(senderFn)
+	ctx := context.TODO()
 
 	prepInconsistent := func() *client.Batch {
 		b := &client.Batch{}
@@ -825,7 +827,7 @@ func TestInconsistentReads(t *testing.T) {
 		key := roachpb.Key([]byte("key"))
 		b := prepInconsistent()
 		b.Get(key)
-		if err := db.Run(b); err != nil {
+		if err := db.Run(ctx, b); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -835,7 +837,7 @@ func TestInconsistentReads(t *testing.T) {
 		key1 := roachpb.Key([]byte("key1"))
 		key2 := roachpb.Key([]byte("key2"))
 		b.Scan(key1, key2)
-		if err := db.Run(b); err != nil {
+		if err := db.Run(ctx, b); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -845,7 +847,7 @@ func TestInconsistentReads(t *testing.T) {
 		b := &client.Batch{}
 		b.Header.ReadConsistency = roachpb.INCONSISTENT
 		b.Get(key)
-		if err := db.Run(b); err != nil {
+		if err := db.Run(ctx, b); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -889,7 +891,7 @@ func TestTxn_ReverseScan(t *testing.T) {
 		keys = append(keys, key)
 		b.Put(key, i)
 	}
-	if err := db.Run(b); err != nil {
+	if err := db.Run(context.TODO(), b); err != nil {
 		t.Error(err)
 	}
 

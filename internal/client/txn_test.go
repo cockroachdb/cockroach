@@ -814,7 +814,7 @@ func TestBatchMixRawRequest(t *testing.T) {
 	b := &Batch{}
 	b.AddRawRequest(&roachpb.EndTransactionRequest{})
 	b.Put("x", "y")
-	if err := db.Run(b); !testutils.IsError(err, "non-raw operations") {
+	if err := db.Run(context.TODO(), b); !testutils.IsError(err, "non-raw operations") {
 		t.Fatal(err)
 	}
 }
