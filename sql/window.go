@@ -22,7 +22,6 @@ import (
 	"sort"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/sql/mon"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -123,6 +122,7 @@ func (p *planner) window(n *parser.SelectClause, s *selectNode) (*windowNode, er
 	}
 
 	window.wrappedValues = p.NewRowContainer(s.columns, 0)
+	window.windowsAcc = p.session.OpenAccount()
 
 	return window, nil
 }
@@ -256,7 +256,7 @@ type windowNode struct {
 	windowValues [][]parser.Datum
 	curRowIdx    int
 
-	windowsAcc mon.MemoryAccount
+	windowsAcc WrappableMemoryAccount
 
 	explain explainMode
 }
@@ -409,12 +409,13 @@ type peerGroupChecker interface {
 func (n *windowNode) computeWindows() error {
 	rowCount := n.wrappedValues.Len()
 	windowCount := len(n.funcs)
+	acc := n.windowsAcc.W(n.planner.session)
 
 	sz := int64(uintptr(rowCount) *
 		(unsafe.Sizeof([][]parser.Datum{}) /* windowValues */ +
 			uintptr(windowCount)*unsafe.Sizeof([]parser.Datum{}) /* windowAlloc */ +
 			unsafe.Sizeof(parser.Datum(nil)) /* scratchDatum */))
-	if err := n.windowsAcc.Grow(n.planner.session.Ctx(), sz); err != nil {
+	if err := acc.Grow(sz); err != nil {
 		return err
 	}
 
@@ -433,7 +434,7 @@ func (n *windowNode) computeWindows() error {
 			// If no partition indexes are included for the window function, all
 			// rows are added to the same partition, which need to be pre-allocated.
 			sz := int64(uintptr(rowCount) * unsafe.Sizeof(partitionEntry{}))
-			if err := n.windowsAcc.Grow(n.planner.session.Ctx(), sz); err != nil {
+			if err := acc.Grow(sz); err != nil {
 				return err
 			}
 			partitions[""] = make([]partitionEntry, rowCount)
@@ -467,7 +468,7 @@ func (n *windowNode) computeWindows() error {
 				}
 
 				sz := int64(uintptr(len(encoded)) + unsafe.Sizeof(entry))
-				if err := n.windowsAcc.Grow(n.planner.session.Ctx(), sz); err != nil {
+				if err := acc.Grow(sz); err != nil {
 					return err
 				}
 				partitions[string(encoded)] = append(partitions[string(encoded)], entry)
@@ -538,7 +539,7 @@ func (n *windowNode) computeWindows() error {
 				res := agg.Result()
 
 				sz, _ := res.Size()
-				if err := n.windowsAcc.Grow(n.planner.session.Ctx(), int64(sz)); err != nil {
+				if err := acc.Grow(int64(sz)); err != nil {
 					return err
 				}
 
@@ -556,13 +557,14 @@ func (n *windowNode) computeWindows() error {
 // populateValues populates n.values with final datum values after computing
 // window result values in n.windowValues.
 func (n *windowNode) populateValues() error {
+	acc := n.windowsAcc.W(n.planner.session)
 	rowCount := n.wrappedValues.Len()
 	n.values.rows = n.planner.NewRowContainer(n.values.columns, rowCount)
 
 	rowWidth := len(n.windowRender)
 
 	sz := int64(uintptr(rowCount*rowWidth) * unsafe.Sizeof(parser.DTuple{}))
-	if err := n.windowsAcc.Grow(n.planner.session.Ctx(), sz); err != nil {
+	if err := acc.Grow(sz); err != nil {
 		return err
 	}
 
@@ -612,7 +614,7 @@ func (n *windowNode) populateValues() error {
 	n.wrappedValues.Close()
 	n.wrappedValues = nil
 	n.windowValues = nil
-	n.windowsAcc.Close(n.planner.session.Ctx())
+	acc.Close()
 
 	return nil
 }
@@ -654,7 +656,7 @@ func (n *windowNode) Close() {
 	}
 	if n.windowValues != nil {
 		n.windowValues = nil
-		n.windowsAcc.Close(n.planner.session.Ctx())
+		n.windowsAcc.W(n.planner.session).Close()
 	}
 	n.values.Close()
 }

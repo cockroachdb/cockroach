@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/sql/mon"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -571,7 +570,7 @@ type aggregateFuncHolder struct {
 	create        func() parser.AggregateFunc
 	group         *groupNode
 	buckets       map[string]parser.AggregateFunc
-	bucketsMemAcc mon.MemoryAccount
+	bucketsMemAcc WrappableMemoryAccount
 	seen          map[string]struct{}
 }
 
@@ -585,7 +584,7 @@ func (n *groupNode) newAggregateFuncHolder(
 		create:        create,
 		group:         n,
 		buckets:       make(map[string]parser.AggregateFunc),
-		bucketsMemAcc: n.planner.session.mon.OpenAccount(n.planner.session.Ctx()),
+		bucketsMemAcc: n.planner.session.OpenAccount(),
 	}
 	return res
 }
@@ -594,7 +593,7 @@ func (a *aggregateFuncHolder) close(s *Session) {
 	a.buckets = nil
 	a.seen = nil
 	a.group = nil
-	a.bucketsMemAcc.Close(s.Ctx())
+	a.bucketsMemAcc.W(s).Close()
 }
 
 func (a *aggregateFuncHolder) add(s *Session, bucket []byte, d parser.Datum) error {
@@ -610,7 +609,7 @@ func (a *aggregateFuncHolder) add(s *Session, bucket []byte, d parser.Datum) err
 			// skip
 			return nil
 		}
-		if err := a.bucketsMemAcc.Grow(s.Ctx(), int64(len(encoded))); err != nil {
+		if err := a.bucketsMemAcc.W(s).Grow(int64(len(encoded))); err != nil {
 			return err
 		}
 		a.seen[string(encoded)] = struct{}{}

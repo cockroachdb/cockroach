@@ -22,7 +22,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/sql/mon"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 )
@@ -47,7 +46,7 @@ type copyNode struct {
 	resultColumns ResultColumns
 	buf           bytes.Buffer
 	rows          []*parser.Tuple
-	rowsMemAcc    mon.MemoryAccount
+	rowsMemAcc    WrappableMemoryAccount
 }
 
 func (n *copyNode) Columns() ResultColumns            { return n.resultColumns }
@@ -60,7 +59,7 @@ func (*copyNode) expandPlan() error                   { return nil }
 func (*copyNode) Next() (bool, error)                 { return false, nil }
 
 func (n *copyNode) Close() {
-	n.rowsMemAcc.Close(n.p.session.Ctx())
+	n.rowsMemAcc.W(n.p.session).Close()
 }
 
 func (*copyNode) ExplainPlan(_ bool) (name, description string, children []planNode) {
@@ -101,7 +100,7 @@ func (p *planner) CopyFrom(n *parser.CopyFrom, autoCommit bool) (planNode, error
 		cn.resultColumns[i] = ResultColumn{Typ: c.Type.ToDatumType()}
 	}
 	cn.p = p
-	cn.rowsMemAcc = p.session.mon.OpenAccount(p.session.Ctx())
+	cn.rowsMemAcc = p.session.OpenAccount()
 	return cn, nil
 }
 
@@ -191,6 +190,7 @@ func (n *copyNode) addRow(line []byte) error {
 		return fmt.Errorf("expected %d values, got %d", len(n.resultColumns), len(parts))
 	}
 	exprs := make(parser.Exprs, len(parts))
+	acc := n.rowsMemAcc.W(n.p.session)
 	for i, part := range parts {
 		s := string(part)
 		if s == nullString {
@@ -245,14 +245,14 @@ func (n *copyNode) addRow(line []byte) error {
 		}
 
 		sz, _ := d.Size()
-		if err := n.rowsMemAcc.Grow(n.p.session.Ctx(), int64(sz)); err != nil {
+		if err := acc.Grow(int64(sz)); err != nil {
 			return err
 		}
 
 		exprs[i] = d
 	}
 	tuple := &parser.Tuple{Exprs: exprs}
-	if err := n.rowsMemAcc.Grow(n.p.session.Ctx(), int64(unsafe.Sizeof(*tuple))); err != nil {
+	if err := acc.Grow(int64(unsafe.Sizeof(*tuple))); err != nil {
 		return err
 	}
 
@@ -370,7 +370,7 @@ func (p *planner) CopyData(n CopyDataBlock, autoCommit bool) (planNode, error) {
 	vc := &parser.ValuesClause{Tuples: cf.rows}
 	// Reuse the same backing array once the Insert is complete.
 	cf.rows = cf.rows[:0]
-	cf.rowsMemAcc.Clear(p.session.Ctx())
+	cf.rowsMemAcc.W(p.session).Clear()
 
 	in := parser.Insert{
 		Table:   cf.table,

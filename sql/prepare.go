@@ -21,7 +21,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/sql/mon"
 	"github.com/cockroachdb/cockroach/sql/parser"
 )
 
@@ -35,7 +34,7 @@ type PreparedStatement struct {
 
 	ProtocolMeta interface{} // a field for protocol implementations to hang metadata off of.
 
-	memAcc mon.MemoryAccount
+	memAcc WrappableMemoryAccount
 }
 
 // PreparedStatements is a mapping of PreparedStatement names to their
@@ -79,14 +78,14 @@ func (ps PreparedStatements) New(
 	// statement name. When we start storing the prepared query plan
 	// during prepare, this should be tallied up to the monitor as well.
 	sz := int64(uintptr(len(query)+len(name)) + unsafe.Sizeof(*stmt))
-	if err := ps.session.mon.OpenAndInitAccount(ps.session.Ctx(), &stmt.memAcc, sz); err != nil {
+	if err := stmt.memAcc.W(ps.session).OpenAndInit(sz); err != nil {
 		return nil, err
 	}
 
 	// Prepare the query. This completes the typing of placeholders.
 	cols, err := e.Prepare(query, ps.session, placeholderHints)
 	if err != nil {
-		stmt.memAcc.Close(ps.session.Ctx())
+		stmt.memAcc.W(ps.session).Close()
 		return nil, err
 	}
 	stmt.Query = query
@@ -95,7 +94,7 @@ func (ps PreparedStatements) New(
 	stmt.portalNames = make(map[string]struct{})
 
 	if prevStmt, ok := ps.Get(name); ok {
-		prevStmt.memAcc.Close(ps.session.Ctx())
+		prevStmt.memAcc.W(ps.session).Close()
 	}
 
 	ps.stmts[name] = stmt
@@ -110,11 +109,11 @@ func (ps PreparedStatements) Delete(name string) bool {
 			for portalName := range stmt.portalNames {
 				if portal, ok := ps.session.PreparedPortals.Get(name); ok {
 					delete(ps.session.PreparedPortals.portals, portalName)
-					portal.memAcc.Close(ps.session.Ctx())
+					portal.memAcc.W(ps.session).Close()
 				}
 			}
 		}
-		stmt.memAcc.Close(ps.session.Ctx())
+		stmt.memAcc.W(ps.session).Close()
 		delete(ps.stmts, name)
 		return true
 	}
@@ -124,10 +123,10 @@ func (ps PreparedStatements) Delete(name string) bool {
 // closeAll de-registers all statements and portals from the monitor.
 func (ps PreparedStatements) closeAll(s *Session) {
 	for _, stmt := range ps.stmts {
-		stmt.memAcc.Close(s.Ctx())
+		stmt.memAcc.W(s).Close()
 	}
 	for _, portal := range s.PreparedPortals.portals {
-		portal.memAcc.Close(s.Ctx())
+		portal.memAcc.W(s).Close()
 	}
 }
 
@@ -156,7 +155,7 @@ type PreparedPortal struct {
 
 	ProtocolMeta interface{} // a field for protocol implementations to hang metadata off of.
 
-	memAcc mon.MemoryAccount
+	memAcc WrappableMemoryAccount
 }
 
 // PreparedPortals is a mapping of PreparedPortal names to their corresponding
@@ -194,14 +193,14 @@ func (pp PreparedPortals) New(name string, stmt *PreparedStatement, qargs parser
 		Qargs: qargs,
 	}
 	sz := int64(uintptr(len(name)) + unsafe.Sizeof(*portal))
-	if err := pp.session.mon.OpenAndInitAccount(pp.session.Ctx(), &portal.memAcc, sz); err != nil {
+	if err := portal.memAcc.W(pp.session).OpenAndInit(sz); err != nil {
 		return nil, err
 	}
 
 	stmt.portalNames[name] = struct{}{}
 
 	if prevPortal, ok := pp.Get(name); ok {
-		prevPortal.memAcc.Close(pp.session.Ctx())
+		prevPortal.memAcc.W(pp.session).Close()
 	}
 
 	pp.portals[name] = portal
@@ -213,7 +212,7 @@ func (pp PreparedPortals) New(name string, stmt *PreparedStatement, qargs parser
 func (pp PreparedPortals) Delete(name string) bool {
 	if portal, ok := pp.Get(name); ok {
 		delete(portal.Stmt.portalNames, name)
-		portal.memAcc.Close(pp.session.Ctx())
+		portal.memAcc.W(pp.session).Close()
 		delete(pp.portals, name)
 		return true
 	}

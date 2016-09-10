@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/sql/mon"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
@@ -36,12 +35,12 @@ type distinctNode struct {
 	columnsInOrder []bool
 	// Encoding of the columnsInOrder columns for the previous row.
 	prefixSeen   []byte
-	prefixMemAcc mon.MemoryAccount
+	prefixMemAcc WrappableMemoryAccount
 
 	// Encoding of the non-columnInOrder columns for rows sharing the same
 	// prefixSeen value.
 	suffixSeen   map[string]struct{}
-	suffixMemAcc mon.MemoryAccount
+	suffixMemAcc WrappableMemoryAccount
 
 	explain   explainMode
 	debugVals debugValues
@@ -53,9 +52,8 @@ func (p *planner) Distinct(n *parser.SelectClause) *distinctNode {
 		return nil
 	}
 	d := &distinctNode{p: p}
-	ctx := p.session.Ctx()
-	d.prefixMemAcc = p.session.mon.OpenAccount(ctx)
-	d.suffixMemAcc = p.session.mon.OpenAccount(ctx)
+	d.prefixMemAcc = p.session.OpenAccount()
+	d.suffixMemAcc = p.session.OpenAccount()
 	return d
 }
 
@@ -139,9 +137,9 @@ func (n *distinctNode) DebugValues() debugValues {
 	return n.debugVals
 }
 
-func (n *distinctNode) addSuffixSeen(sKey string) error {
+func (n *distinctNode) addSuffixSeen(acc WrappedMemoryAccount, sKey string) error {
 	sz := int64(len(sKey))
-	if err := n.suffixMemAcc.Grow(n.p.session.Ctx(), sz); err != nil {
+	if err := acc.Grow(sz); err != nil {
 		return err
 	}
 	n.suffixSeen[sKey] = struct{}{}
@@ -149,6 +147,10 @@ func (n *distinctNode) addSuffixSeen(sKey string) error {
 }
 
 func (n *distinctNode) Next() (bool, error) {
+
+	prefixMemAcc := n.prefixMemAcc.W(n.p.session)
+	suffixMemAcc := n.suffixMemAcc.W(n.p.session)
+
 	for {
 		next, err := n.plan.Next()
 		if !next {
@@ -171,16 +173,15 @@ func (n *distinctNode) Next() (bool, error) {
 			// The prefix of the row which is ordered differs from the last row;
 			// reset our seen set.
 			if len(n.suffixSeen) > 0 {
-				n.suffixMemAcc.Clear(n.p.session.Ctx())
+				suffixMemAcc.Clear()
 				n.suffixSeen = make(map[string]struct{})
 			}
-			if err := n.prefixMemAcc.ResizeItem(n.p.session.Ctx(),
-				int64(len(n.prefixSeen)), int64(len(prefix))); err != nil {
+			if err := prefixMemAcc.ResizeItem(int64(len(n.prefixSeen)), int64(len(prefix))); err != nil {
 				return false, err
 			}
 			n.prefixSeen = prefix
 			if suffix != nil {
-				if err := n.addSuffixSeen(string(suffix)); err != nil {
+				if err := n.addSuffixSeen(suffixMemAcc, string(suffix)); err != nil {
 					return false, err
 				}
 			}
@@ -192,7 +193,7 @@ func (n *distinctNode) Next() (bool, error) {
 		if suffix != nil {
 			sKey := string(suffix)
 			if _, ok := n.suffixSeen[sKey]; !ok {
-				if err := n.addSuffixSeen(sKey); err != nil {
+				if err := n.addSuffixSeen(suffixMemAcc, sKey); err != nil {
 					return false, err
 				}
 				return true, nil
@@ -255,8 +256,7 @@ func (n *distinctNode) SetLimitHint(numRows int64, soft bool) {
 func (n *distinctNode) Close() {
 	n.plan.Close()
 	n.prefixSeen = nil
+	n.prefixMemAcc.W(n.p.session).Close()
 	n.suffixSeen = nil
-	ctx := n.p.session.Ctx()
-	n.prefixMemAcc.Close(ctx)
-	n.suffixMemAcc.Close(ctx)
+	n.suffixMemAcc.W(n.p.session).Close()
 }
