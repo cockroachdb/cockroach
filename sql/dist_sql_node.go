@@ -30,7 +30,7 @@ import (
 // distSQLNode is a planNode that receives results from a distsql flow (through
 // a RowChannel).
 type distSQLNode struct {
-	columns  []ResultColumn
+	columns  ResultColumns
 	ordering orderingInfo
 
 	// syncMode indicates the mode in which we run the associated flow. If true,
@@ -62,12 +62,15 @@ func (n *distSQLNode) expandPlan() error                           { return nil 
 func (n *distSQLNode) MarkDebug(explainMode)                       {}
 func (n *distSQLNode) DebugValues() debugValues                    { return debugValues{} }
 func (n *distSQLNode) Start() error                                { return nil }
+func (n *distSQLNode) Close() {
+	// TODO(RaduBerinde) close the stream / release resources.
+}
 
 func (n *distSQLNode) ExplainPlan(verbose bool) (name, description string, children []planNode) {
 	return "distsql", "", nil
 }
 
-func (n *distSQLNode) Columns() []ResultColumn {
+func (n *distSQLNode) Columns() ResultColumns {
 	return n.columns
 }
 
@@ -76,7 +79,7 @@ func (n *distSQLNode) Ordering() orderingInfo {
 }
 
 func newDistSQLNode(
-	columns []ResultColumn,
+	columns ResultColumns,
 	colMapping []uint32,
 	ordering orderingInfo,
 	srv *distsql.ServerImpl,
@@ -182,7 +185,7 @@ func scanNodeToTableReaderSpec(n *scanNode) *distsql.TableReaderSpec {
 		// refer to columns. We temporarily rename the scanNode columns to
 		// (literally) "$0", "$1", ... and convert to a string.
 		tmp := n.resultColumns
-		n.resultColumns = make([]ResultColumn, len(tmp))
+		n.resultColumns = make(ResultColumns, len(tmp))
 		for i, orig := range tmp {
 			n.resultColumns[i].Name = fmt.Sprintf("$%d", i)
 			n.resultColumns[i].Typ = orig.Typ
