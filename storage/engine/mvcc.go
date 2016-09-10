@@ -854,9 +854,14 @@ func MVCCPut(
 	value roachpb.Value,
 	txn *roachpb.Transaction,
 ) error {
-	iter := engine.NewIterator(true)
-	defer iter.Close()
-
+	// If we're not tracking stats for the key and we're writing a non-versioned
+	// key we can utilize a blind put to avoid reading any existing value.
+	var iter Iterator
+	blind := ms == nil && timestamp == hlc.ZeroTimestamp
+	if !blind {
+		iter = engine.NewIterator(true)
+		defer iter.Close()
+	}
 	return mvccPutUsingIter(ctx, engine, iter, ms, key, timestamp, value, txn, nil /* valueFn */)
 }
 
