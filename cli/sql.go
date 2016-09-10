@@ -245,6 +245,7 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 	if err != nil {
 		return err
 	}
+	defer func() { _ = ins.Close() }()
 
 	if isInteractive {
 		// We only enable history management when the terminal is actually
