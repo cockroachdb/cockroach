@@ -36,10 +36,15 @@ import (
 // Txn is an in-progress distributed database transaction. A Txn is not safe for
 // concurrent use by multiple goroutines.
 type Txn struct {
-	db             DB
-	Proto          roachpb.Transaction
-	UserPriority   roachpb.UserPriority
-	Context        context.Context // must not be nil
+	db           DB
+	Proto        roachpb.Transaction
+	UserPriority roachpb.UserPriority
+	Context      context.Context // must not be nil
+	// CollectedSpans receives spans from remote hosts for "snowball" traces
+	// initiated on this host.
+	// It's also used by "EXPLAIN TRACE".
+	// Note that in SQL land there's also TxnState.CollectedSpans which
+	// should be used when we want to accumulate everything for a SQL txn.
 	CollectedSpans []basictracer.RawSpan
 	// systemConfigTrigger is set to true when modifying keys from the SystemConfig
 	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
@@ -382,6 +387,7 @@ func (txn *Txn) GetDeadline() *hlc.Timestamp {
 // The txn's status is set to ABORTED in case of error. txn is
 // considered finalized and cannot be used to send any more commands.
 func (txn *Txn) Rollback() error {
+	log.VTracef(2, txn.Context, "rolling back transaction")
 	err := txn.sendEndTxnReq(false /* commit */, nil)
 	txn.finalized = true
 	return err
@@ -491,9 +497,17 @@ func (txn *Txn) Exec(
 		}
 
 		err = fn(txn, &opt)
+
+		// TODO(andrei): Until 7881 is fixed.
+		if err == nil && opt.AutoCommit && txn.Proto.Status == roachpb.ABORTED {
+			log.Errorf(txn.Context, "#7881: no err but aborted txn proto. opt: %+v, txn: %+v",
+				opt, txn)
+		}
+
 		if err == nil && opt.AutoCommit && txn.Proto.Status == roachpb.PENDING {
 			// fn succeeded, but didn't commit.
 			err = txn.Commit()
+			log.Tracef(txn.Context, "client.Txn did AutoCommit. err: %v\ntxn: %+v", err, txn.Proto)
 			if err != nil {
 				if _, retryable := err.(*roachpb.RetryableTxnError); !retryable {
 					// We can't retry, so let the caller know we tried to
@@ -520,10 +534,8 @@ func (txn *Txn) Exec(
 				r.Reset()
 			}
 		}
-		if log.V(2) {
-			log.Infof(context.TODO(), "automatically retrying transaction: %s because of error: %s",
-				txn.DebugName(), err)
-		}
+		log.VTracef(2, txn.Context, "automatically retrying transaction: %s because of error: %s",
+			txn.DebugName(), err)
 	}
 
 	return err
