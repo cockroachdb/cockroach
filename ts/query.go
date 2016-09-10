@@ -423,7 +423,9 @@ func (is unionIterator) min() float64 {
 // returned datapoint will represent the sum of datapoints from all sources at
 // the same time. The returned string slices contains a list of all sources for
 // the metric which were aggregated to produce the result.
-func (db *DB) Query(query tspb.Query, r Resolution, startNanos, endNanos int64) ([]tspb.TimeSeriesDatapoint, []string, error) {
+func (db *DB) Query(
+	ctx context.Context, query tspb.Query, r Resolution, startNanos, endNanos int64,
+) ([]tspb.TimeSeriesDatapoint, []string, error) {
 	// Normalize startNanos and endNanos the nearest SampleDuration boundary.
 	startNanos -= startNanos % r.SampleDuration()
 
@@ -437,7 +439,7 @@ func (db *DB) Query(query tspb.Query, r Resolution, startNanos, endNanos int64) 
 		b := &client.Batch{}
 		b.Scan(startKey, endKey)
 
-		if err := db.db.Run(context.TODO(), b); err != nil {
+		if err := db.db.Run(ctx, b); err != nil {
 			return nil, nil, err
 		}
 		rows = b.Results[0].Rows
@@ -454,7 +456,7 @@ func (db *DB) Query(query tspb.Query, r Resolution, startNanos, endNanos int64) 
 				b.Get(key)
 			}
 		}
-		err := db.db.Run(context.TODO(), b)
+		err := db.db.Run(ctx, b)
 		if err != nil {
 			return nil, nil, err
 		}
