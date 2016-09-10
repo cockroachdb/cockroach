@@ -64,7 +64,8 @@ func (s *Server) RegisterGateway(
 	return tspb.RegisterTimeSeriesHandler(ctx, mux, conn)
 }
 
-// logContext applies the log tags from the Server's context to a GRPC context.
+// logContext applies the log tags from the Server's context to the given
+// context.
 func (s *Server) logContext(ctx context.Context) context.Context {
 	return log.WithLogTagsFromCtx(ctx, s.ctx)
 }
