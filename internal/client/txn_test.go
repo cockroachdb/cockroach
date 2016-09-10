@@ -163,7 +163,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	txn := NewTxn(context.Background(), *db)
 
 	for testIdx = range testCases {
-		if _, pErr := txn.db.sender.Send(context.Background(), ba); pErr != nil {
+		if _, pErr := txn.sendInternal(ba); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}
@@ -177,7 +177,7 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 	}, nil))
 
 	txn := NewTxn(context.Background(), *db)
-	_, pErr := txn.db.sender.Send(context.Background(), testPut())
+	_, pErr := txn.sendInternal(testPut())
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
 		t.Fatalf("expected TransactionAbortedError, got %v", pErr)
 	}
@@ -757,7 +757,7 @@ func TestSetPriority(t *testing.T) {
 	if err := txn.SetUserPriority(expected); err != nil {
 		t.Fatal(err)
 	}
-	if _, pErr := txn.db.sender.Send(context.Background(), roachpb.BatchRequest{}); pErr != nil {
+	if _, pErr := txn.sendInternal(roachpb.BatchRequest{}); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -765,7 +765,7 @@ func TestSetPriority(t *testing.T) {
 	expected = roachpb.UserPriority(-13)
 	txn = NewTxn(context.Background(), *db)
 	txn.InternalSetPriority(13)
-	if _, pErr := txn.db.sender.Send(context.Background(), roachpb.BatchRequest{}); pErr != nil {
+	if _, pErr := txn.sendInternal(roachpb.BatchRequest{}); pErr != nil {
 		t.Fatal(pErr)
 	}
 }
