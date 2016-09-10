@@ -167,6 +167,8 @@ func captureOutput(f func()) (out string, err error) {
 
 func (c cliTest) RunWithArgs(a []string) {
 	sqlCtx.execStmts = nil
+	zoneConfig = ""
+	zoneDisableReplication = false
 
 	var args []string
 	args = append(args, a[0])
@@ -497,6 +499,8 @@ func Example_zone() {
 	c.Run("zone rm .default")
 	c.Run("zone set .default --file=./testdata/zone_range_max_bytes.yaml")
 	c.Run("zone get system")
+	c.Run("zone set .default --disable-replication")
+	c.Run("zone get system")
 
 	// Output:
 	// zone ls
@@ -526,7 +530,7 @@ func Example_zone() {
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 86400
-	// num_replicas: 1
+	// num_replicas: 3
 	// constraints: [us-east-1a, ssd]
 	// zone get system
 	// system
@@ -534,7 +538,7 @@ func Example_zone() {
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 86400
-	// num_replicas: 1
+	// num_replicas: 3
 	// constraints: [us-east-1a, ssd]
 	// zone rm system
 	// DELETE 1
@@ -543,6 +547,21 @@ func Example_zone() {
 	// zone rm .default
 	// unable to remove .default
 	// zone set .default --file=./testdata/zone_range_max_bytes.yaml
+	// range_min_bytes: 1048576
+	// range_max_bytes: 134217728
+	// gc:
+	//   ttlseconds: 86400
+	// num_replicas: 3
+	// constraints: []
+	// zone get system
+	// .default
+	// range_min_bytes: 1048576
+	// range_max_bytes: 134217728
+	// gc:
+	//   ttlseconds: 86400
+	// num_replicas: 3
+	// constraints: []
+	// zone set .default --disable-replication
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
