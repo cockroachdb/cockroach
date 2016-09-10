@@ -328,7 +328,10 @@ func setLastIndex(
 	var value roachpb.Value
 	value.SetInt(int64(lastIndex))
 
-	return engine.MVCCPut(ctx, eng, nil, keys.RaftLastIndexKey(rangeID),
+	// NB: It is safe to use a blind put here because the raft-last-index key is
+	// not part of the replica MVCC stats computation. See also that we're
+	// passing nil for the MVCCStats parameter.
+	return engine.MVCCBlindPut(ctx, eng, nil /* ms */, keys.RaftLastIndexKey(rangeID),
 		hlc.ZeroTimestamp,
 		value,
 		nil /* txn */)
