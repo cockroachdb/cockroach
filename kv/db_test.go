@@ -100,7 +100,7 @@ func TestKVDBCoverage(t *testing.T) {
 	}
 
 	// Delete conditional put value.
-	if pErr := db.Del(key); pErr != nil {
+	if pErr := db.Del(ctx, key); pErr != nil {
 		t.Fatal(pErr)
 	}
 	if gr, pErr := db.Get(ctx, key); pErr != nil {
@@ -157,7 +157,7 @@ func TestKVDBCoverage(t *testing.T) {
 		}
 	}
 
-	if pErr := db.DelRange("a", "c"); pErr != nil {
+	if pErr := db.DelRange(context.TODO(), "a", "c"); pErr != nil {
 		t.Fatal(pErr)
 	}
 }

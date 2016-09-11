@@ -812,7 +812,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, test.err, err.Error())
 		}
 		for _, referencedDesc := range test.referenced {
-			if err := kvDB.Del(MakeDescMetadataKey(referencedDesc.ID)); err != nil {
+			if err := kvDB.Del(context.TODO(), MakeDescMetadataKey(referencedDesc.ID)); err != nil {
 				t.Fatal(err)
 			}
 		}

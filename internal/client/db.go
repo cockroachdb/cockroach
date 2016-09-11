@@ -331,10 +331,10 @@ func (db *DB) ReverseScan(
 // Del deletes one or more keys.
 //
 // key can be either a byte slice or a string.
-func (db *DB) Del(keys ...interface{}) error {
+func (db *DB) Del(ctx context.Context, keys ...interface{}) error {
 	b := &Batch{}
 	b.Del(keys...)
-	return getOneErr(db.Run(context.TODO(), b), b)
+	return getOneErr(db.Run(ctx, b), b)
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
@@ -342,10 +342,10 @@ func (db *DB) Del(keys ...interface{}) error {
 // TODO(pmattis): Perhaps the result should return which rows were deleted.
 //
 // key can be either a byte slice or a string.
-func (db *DB) DelRange(begin, end interface{}) error {
+func (db *DB) DelRange(ctx context.Context, begin, end interface{}) error {
 	b := &Batch{}
 	b.DelRange(begin, end, false)
-	return getOneErr(db.Run(context.TODO(), b), b)
+	return getOneErr(db.Run(ctx, b), b)
 }
 
 // AdminMerge merges the range containing key and the subsequent
