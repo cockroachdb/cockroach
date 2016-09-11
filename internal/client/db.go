@@ -279,10 +279,10 @@ func (db *DB) InitPut(ctx context.Context, key, value interface{}) error {
 // key exists but was set using Put or CPut an error will be returned.
 //
 // key can be either a byte slice or a string.
-func (db *DB) Inc(key interface{}, value int64) (KeyValue, error) {
+func (db *DB) Inc(ctx context.Context, key interface{}, value int64) (KeyValue, error) {
 	b := &Batch{}
 	b.Inc(key, value)
-	return getOneRow(db.Run(context.TODO(), b), b)
+	return getOneRow(db.Run(ctx, b), b)
 }
 
 func (db *DB) scan(

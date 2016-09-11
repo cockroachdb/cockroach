@@ -203,7 +203,7 @@ func runInc(cmd *cobra.Command, args []string) {
 	}
 
 	key := roachpb.Key(unquoteArg(args[0], true /* disallow system keys */))
-	if r, err := kvDB.Inc(key, int64(amount)); err != nil {
+	if r, err := kvDB.Inc(context.TODO(), key, int64(amount)); err != nil {
 		panicf("increment failed: %s", err)
 	} else {
 		fmt.Printf("%d\n", r.ValueInt())

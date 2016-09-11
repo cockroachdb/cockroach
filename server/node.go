@@ -137,7 +137,7 @@ type Node struct {
 // allocateNodeID increments the node id generator key to allocate
 // a new, unique node id.
 func allocateNodeID(db *client.DB) (roachpb.NodeID, error) {
-	r, err := db.Inc(keys.NodeIDGenerator, 1)
+	r, err := db.Inc(context.TODO(), keys.NodeIDGenerator, 1)
 	if err != nil {
 		return 0, errors.Errorf("unable to allocate node ID: %s", err)
 	}
@@ -148,7 +148,7 @@ func allocateNodeID(db *client.DB) (roachpb.NodeID, error) {
 // specified node to allocate "inc" new, unique store ids. The
 // first ID in a contiguous range is returned on success.
 func allocateStoreIDs(nodeID roachpb.NodeID, inc int64, db *client.DB) (roachpb.StoreID, error) {
-	r, err := db.Inc(keys.StoreIDGenerator, inc)
+	r, err := db.Inc(context.TODO(), keys.StoreIDGenerator, inc)
 	if err != nil {
 		return 0, errors.Errorf("unable to allocate %d store IDs for node %d: %s", inc, nodeID, err)
 	}
