@@ -100,7 +100,7 @@ func runSplitRange(cmd *cobra.Command, args []string) {
 	key := roachpb.Key(args[0])
 	kvDB, stopper := makeDBClient()
 	defer stopper.Stop()
-	if err := kvDB.AdminSplit(key); err != nil {
+	if err := kvDB.AdminSplit(context.Background(), key); err != nil {
 		panicf("split failed: %s\n", err)
 	}
 }

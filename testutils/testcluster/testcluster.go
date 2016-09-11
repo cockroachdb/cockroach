@@ -402,7 +402,8 @@ func (tc *TestCluster) RemoveReplicas(
 func (tc *TestCluster) TransferRangeLease(
 	rangeDesc *roachpb.RangeDescriptor, dest ReplicationTarget,
 ) error {
-	err := tc.Servers[0].DB().AdminTransferLease(rangeDesc.StartKey.AsRawKey(), dest.StoreID)
+	err := tc.Servers[0].DB().AdminTransferLease(context.TODO(),
+		rangeDesc.StartKey.AsRawKey(), dest.StoreID)
 	if err != nil {
 		return errors.Wrapf(err, "%q: transfer lease unexpected error", rangeDesc.StartKey)
 	}

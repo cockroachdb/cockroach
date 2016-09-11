@@ -354,19 +354,19 @@ func (db *DB) DelRange(ctx context.Context, begin, end interface{}) error {
 // and the subsequent range will no longer exist.
 //
 // key can be either a byte slice or a string.
-func (db *DB) AdminMerge(key interface{}) error {
+func (db *DB) AdminMerge(ctx context.Context, key interface{}) error {
 	b := &Batch{}
 	b.adminMerge(key)
-	return getOneErr(db.Run(context.TODO(), b), b)
+	return getOneErr(db.Run(ctx, b), b)
 }
 
 // AdminSplit splits the range at splitkey.
 //
 // key can be either a byte slice or a string.
-func (db *DB) AdminSplit(splitKey interface{}) error {
+func (db *DB) AdminSplit(ctx context.Context, splitKey interface{}) error {
 	b := &Batch{}
 	b.adminSplit(splitKey)
-	return getOneErr(db.Run(context.TODO(), b), b)
+	return getOneErr(db.Run(ctx, b), b)
 }
 
 // AdminTransferLease transfers the lease for the range containing key to the
@@ -379,19 +379,19 @@ func (db *DB) AdminSplit(splitKey interface{}) error {
 // applied the new lease, but that's about it. It's not guaranteed that the new
 // lease holder has applied it (so it might not know immediately that it is the
 // new lease holder).
-func (db *DB) AdminTransferLease(key interface{}, target roachpb.StoreID) error {
+func (db *DB) AdminTransferLease(ctx context.Context, key interface{}, target roachpb.StoreID) error {
 	b := &Batch{}
 	b.adminTransferLease(key, target)
-	return getOneErr(db.Run(context.TODO(), b), b)
+	return getOneErr(db.Run(ctx, b), b)
 }
 
 // CheckConsistency runs a consistency check on all the ranges containing
 // the key span. It logs a diff of all the keys that are inconsistent
 // when withDiff is set to true.
-func (db *DB) CheckConsistency(begin, end interface{}, withDiff bool) error {
+func (db *DB) CheckConsistency(ctx context.Context, begin, end interface{}, withDiff bool) error {
 	b := &Batch{}
 	b.CheckConsistency(begin, end, withDiff)
-	return getOneErr(db.Run(context.TODO(), b), b)
+	return getOneErr(db.Run(ctx, b), b)
 }
 
 // sendAndFill is a helper which sends the given batch and fills its results,

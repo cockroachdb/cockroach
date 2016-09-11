@@ -321,7 +321,7 @@ func (z *zeroSum) check(d time.Duration) {
 		time.Sleep(d)
 
 		client := z.clients[z.randNode(rand.Intn)]
-		if err := client.CheckConsistency(keys.LocalMax, keys.MaxKey, false); err != nil {
+		if err := client.CheckConsistency(context.Background(), keys.LocalMax, keys.MaxKey, false); err != nil {
 			z.maybeLogError(err)
 		}
 	}

@@ -92,7 +92,7 @@ func setupMultipleRanges(
 
 	// Split the keyspace at the given keys.
 	for _, key := range splitAt {
-		if err := db.AdminSplit(key); err != nil {
+		if err := db.AdminSplit(context.TODO(), key); err != nil {
 			// Don't leak server goroutines.
 			t.Fatal(err)
 		}
@@ -787,7 +787,7 @@ func initReverseScanTestEnv(s serverutils.TestServerInterface, t *testing.T) *cl
 	// ["", "b"),["b", "e") ,["e", "g") and ["g", "\xff\xff").
 	for _, key := range []string{"b", "e", "g"} {
 		// Split the keyspace at the given key.
-		if err := db.AdminSplit(key); err != nil {
+		if err := db.AdminSplit(context.TODO(), key); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -883,7 +883,7 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 
 	// Case 1: An encounter with a range split.
 	// Split the range ["b", "e") at "c".
-	if err := db.AdminSplit("c"); err != nil {
+	if err := db.AdminSplit(context.TODO(), "c"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -896,7 +896,7 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 
 	// Case 2: encounter with range merge .
 	// Merge the range ["e", "g") and ["g", "\xff\xff") .
-	if err := db.AdminMerge("e"); err != nil {
+	if err := db.AdminMerge(context.TODO(), "e"); err != nil {
 		t.Fatal(err)
 	}
 	if rows, err := db.ReverseScan(context.TODO(), "d", "g", 0); err != nil {
