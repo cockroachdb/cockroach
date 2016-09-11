@@ -298,6 +298,11 @@ type Store struct {
 	initComplete sync.WaitGroup // Signaled by async init tasks
 	bookie       *bookie
 
+	idleReplicaElectionTime struct {
+		syncutil.Mutex
+		at time.Time
+	}
+
 	// This is 1 if there is an active raft snapshot. This field must be checked
 	// and set atomically.
 	// TODO(marc): This may be better inside of `mu`, but is not currently feasible.
@@ -1131,7 +1136,31 @@ func (s *Store) GossipStore(ctx context.Context) error {
 	// Unique gossip key per store.
 	gossipStoreKey := gossip.MakeStoreKey(storeDesc.StoreID)
 	// Gossip store descriptor.
-	return s.ctx.Gossip.AddInfoProto(gossipStoreKey, storeDesc, ttlStoreGossip)
+	if err := s.ctx.Gossip.AddInfoProto(gossipStoreKey, storeDesc, ttlStoreGossip); err != nil {
+		return err
+	}
+	// Once we have gossiped the store descriptor the first time, other nodes
+	// will know that this node has restarted and will start sending Raft
+	// heartbeats for active ranges. We compute the time in the future where a
+	// replica on this store which receives a command for an idle range can
+	// campaign the associated Raft group immediately instead of waiting for the
+	// normal Raft election timeout.
+	s.idleReplicaElectionTime.Lock()
+	if s.idleReplicaElectionTime.at == (time.Time{}) {
+		electionTimeout := s.ctx.RaftTickInterval * time.Duration(s.ctx.RaftElectionTimeoutTicks)
+		s.idleReplicaElectionTime.at = timeutil.Now().Add(electionTimeout)
+	}
+	s.idleReplicaElectionTime.Unlock()
+	return nil
+}
+
+func (s *Store) canCampaignIdleReplica() bool {
+	s.idleReplicaElectionTime.Lock()
+	defer s.idleReplicaElectionTime.Unlock()
+	if s.idleReplicaElectionTime.at == (time.Time{}) {
+		return false
+	}
+	return !timeutil.Now().Before(s.idleReplicaElectionTime.at)
 }
 
 // GossipDeadReplicas broadcasts the stores dead replicas on the gossip network.

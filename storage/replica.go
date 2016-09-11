@@ -1629,12 +1629,34 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 		hasSplit = ict.GetSplitTrigger() != nil
 	}
 
-	return r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
+	// Special handling of idle replicas: we campaign their Raft group upon
+	// creation if we gossiped our store descriptor more than the election
+	// timeout in the past.
+	shouldCampaign := (r.mu.internalRaftGroup == nil) && r.store.canCampaignIdleReplica()
+
+	err = r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
 		if log.V(4) {
 			log.Infof(r.ctx, "proposing command %x", p.idKey)
 		}
 		return raftGroup.Propose(encodeRaftCommand(string(p.idKey), data, hasSplit))
 	})
+	if err != nil {
+		return err
+	}
+
+	// Only perform the eager campaign if we're still a
+	// follower. Replica.withRaftGroupLocked might have campaigned the replica
+	// itself.
+	//
+	// TODO(peter): Perhaps that eager campaign logic should be unified with the
+	// logic here.
+	if shouldCampaign && r.raftStatusLocked().SoftState.RaftState == raft.StateFollower {
+		if log.V(3) {
+			log.Infof(r.ctx, "campaigning idle replica")
+		}
+		return r.mu.internalRaftGroup.Campaign()
+	}
+	return nil
 }
 
 // Lock the replica for Raft processing.
