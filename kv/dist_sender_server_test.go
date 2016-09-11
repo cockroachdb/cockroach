@@ -76,7 +76,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	// intent error. If it did, it would go into a deadloop attempting
 	// to push the transaction, which in turn requires another range
 	// lookup, etc, ad nauseam.
-	if _, err := db.Get("a"); err != nil {
+	if _, err := db.Get(context.TODO(), "a"); err != nil {
 		t.Fatal(err)
 	}
 }

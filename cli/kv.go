@@ -85,7 +85,7 @@ func runGet(cmd *cobra.Command, args []string) {
 	defer stopper.Stop()
 
 	key := roachpb.Key(unquoteArg(args[0], false))
-	r, err := kvDB.Get(key)
+	r, err := kvDB.Get(context.Background(), key)
 	if err != nil {
 		panicf("get failed: %s", err)
 	}

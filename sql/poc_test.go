@@ -19,6 +19,8 @@ package sql
 import (
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -36,7 +38,7 @@ func TestPOC(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kv, err := kvDB.Get("testkey")
+	kv, err := kvDB.Get(context.TODO(), "testkey")
 	if err != nil {
 		t.Fatal(err)
 	}

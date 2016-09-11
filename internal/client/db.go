@@ -208,18 +208,18 @@ func NewDBWithContext(sender Sender, ctx DBContext) *DB {
 //   // string(r.Key) == "a"
 //
 // key can be either a byte slice or a string.
-func (db *DB) Get(key interface{}) (KeyValue, error) {
+func (db *DB) Get(ctx context.Context, key interface{}) (KeyValue, error) {
 	b := &Batch{}
 	b.Get(key)
-	return getOneRow(db.Run(context.TODO(), b), b)
+	return getOneRow(db.Run(ctx, b), b)
 }
 
 // GetProto retrieves the value for a key and decodes the result as a proto
 // message.
 //
 // key can be either a byte slice or a string.
-func (db *DB) GetProto(key interface{}, msg proto.Message) error {
-	r, err := db.Get(key)
+func (db *DB) GetProto(ctx context.Context, key interface{}, msg proto.Message) error {
+	r, err := db.Get(ctx, key)
 	if err != nil {
 		return err
 	}

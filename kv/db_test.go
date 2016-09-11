@@ -60,6 +60,7 @@ func TestKVDBCoverage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
+	ctx := context.TODO()
 
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 	key := roachpb.Key("a")
@@ -73,7 +74,7 @@ func TestKVDBCoverage(t *testing.T) {
 	}
 
 	// Verify put.
-	if gr, pErr := db.Get(key); pErr != nil {
+	if gr, pErr := db.Get(ctx, key); pErr != nil {
 		t.Fatal(pErr)
 	} else if !gr.Exists() {
 		t.Error("expected key to exist")
@@ -85,7 +86,7 @@ func TestKVDBCoverage(t *testing.T) {
 	}
 
 	// Verify get by looking up conditional put value.
-	if gr, pErr := db.Get(key); pErr != nil {
+	if gr, pErr := db.Get(ctx, key); pErr != nil {
 		t.Fatal(pErr)
 	} else if !bytes.Equal(gr.ValueBytes(), value2) {
 		t.Errorf("expected get to return %q; got %q", value2, gr.ValueBytes())
@@ -102,7 +103,7 @@ func TestKVDBCoverage(t *testing.T) {
 	if pErr := db.Del(key); pErr != nil {
 		t.Fatal(pErr)
 	}
-	if gr, pErr := db.Get(key); pErr != nil {
+	if gr, pErr := db.Get(ctx, key); pErr != nil {
 		t.Fatal(pErr)
 	} else if gr.Exists() {
 		t.Error("expected key to not exist after delete")
@@ -224,7 +225,7 @@ func TestKVDBTransaction(t *testing.T) {
 		}
 
 		// Attempt to read outside of txn.
-		if gr, err := db.Get(key); err != nil {
+		if gr, err := db.Get(context.TODO(), key); err != nil {
 			t.Fatal(err)
 		} else if gr.Exists() {
 			t.Errorf("expected nil value; got %+v", gr.Value)
@@ -243,7 +244,7 @@ func TestKVDBTransaction(t *testing.T) {
 	}
 
 	// Verify the value is now visible after commit.
-	if gr, err := db.Get(key); err != nil {
+	if gr, err := db.Get(context.TODO(), key); err != nil {
 		t.Errorf("expected success reading value; got %s", err)
 	} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), value) {
 		t.Errorf("expected value %q; got %q", value, gr.ValueBytes())

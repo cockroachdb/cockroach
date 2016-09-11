@@ -119,7 +119,7 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 	}
 
 	// Verify the resulting value stored at the key is what we expect.
-	r, err := initDB.Get(key)
+	r, err := initDB.Get(context.TODO(), key)
 	if err != nil {
 		t.Fatal(err)
 	}
