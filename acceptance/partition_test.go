@@ -49,7 +49,6 @@ func TestPartitionNemesis(t *testing.T) {
 }
 
 func TestPartitionBank(t *testing.T) {
-	t.Skip("#7978")
 	SkipUnlessPrivileged(t)
 	runTestOnConfigs(t, testBankWithNemesis(BidirectionalPartitionNemesis))
 }
@@ -151,56 +150,73 @@ func (b *Bank) Invoke(i int) {
 	// The following SQL queries are intentionally unoptimized.
 	var bFrom, bTo int
 	{
-		rFrom := txn.QueryRow(`SELECT balance FROM bank.accounts WHERE id = $1`, from)
+		rFrom := txn.QueryRow(fmt.Sprintf(
+			`/* %d: sel1 */ SELECT balance FROM bank.accounts WHERE id = $1`, i),
+			from)
 		handle(rFrom.Scan(&bFrom))
-		rTo := txn.QueryRow(`SELECT balance FROM bank.accounts WHERE id = $1`, to)
+		rTo := txn.QueryRow(fmt.Sprintf(
+			`/* %d: sel2 */ SELECT balance FROM bank.accounts WHERE id = $1`, i), to)
 		handle(rTo.Scan(&bTo))
 	}
 	if diff := bFrom - amount; diff < 0 {
 		handle(fmt.Errorf("%d is %d short to pay $%d", bFrom, -diff, amount))
 	}
-	_, err = txn.Exec(`UPDATE bank.accounts SET balance = $1 WHERE id = $2`, bFrom-amount, from)
+	_, err = txn.Exec(fmt.Sprintf(
+		`/* %d: up1 */ UPDATE bank.accounts SET balance = $1 WHERE id = $2`, i),
+		bFrom-amount, from)
 	handle(err)
-	_, err = txn.Exec(`UPDATE bank.accounts SET balance = $1 WHERE id = $2`, bTo+amount, to)
+	_, err = txn.Exec(fmt.Sprintf(
+		`/* %d: up2 */ UPDATE bank.accounts SET balance = $1 WHERE id = $2`, i),
+		bTo+amount, to)
+	handle(err)
+	err = txn.Commit()
 	handle(err)
 }
 
 func testBankWithNemesis(nemeses ...NemesisFn) configTestRunner {
 	return func(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig) {
-		const (
-			concurrency = 5
-			accounts    = 10
-		)
-		deadline := timeutil.Now().Add(cfg.Duration)
-		s := stop.NewStopper()
-		defer s.Stop()
+		const accounts = 10
 		b := NewBank(t, c)
 		b.Init(accounts, 10)
-		for _, nemesis := range nemeses {
-			s.RunWorker(func() {
-				nemesis(t, s.ShouldQuiesce(), c)
-			})
-		}
-		for i := 0; i < concurrency; i++ {
-			localI := i
-			if err := s.RunAsyncTask(context.Background(), func(_ context.Context) {
-				for timeutil.Now().Before(deadline) {
-					select {
-					case <-s.ShouldQuiesce():
-						return
-					default:
-					}
-					b.Invoke(localI)
-				}
-			}); err != nil {
-				t.Fatal(err)
-			}
-		}
-		select {
-		case <-stopper:
-		case <-time.After(cfg.Duration):
-		}
-		log.Warningf(context.Background(), "finishing test")
+		runTransactionsAndNemeses(t, c, b, cfg.Duration, nemeses...)
+		log.Warningf(context.Background(), "verifying")
 		b.Verify()
+	}
+}
+
+func runTransactionsAndNemeses(
+	t *testing.T,
+	c cluster.Cluster,
+	b *Bank,
+	duration time.Duration,
+	nemeses ...NemesisFn,
+) {
+	deadline := timeutil.Now().Add(duration)
+	s := stop.NewStopper()
+	defer s.Stop()
+	const concurrency = 5
+	for _, nemesis := range nemeses {
+		s.RunWorker(func() {
+			nemesis(t, s.ShouldQuiesce(), c)
+		})
+	}
+	for i := 0; i < concurrency; i++ {
+		localI := i
+		if err := s.RunAsyncTask(context.Background(), func(_ context.Context) {
+			for timeutil.Now().Before(deadline) {
+				select {
+				case <-s.ShouldQuiesce():
+					return
+				default:
+				}
+				b.Invoke(localI)
+			}
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	select {
+	case <-stopper:
+	case <-time.After(duration):
 	}
 }
