@@ -66,7 +66,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 			},
 		},
 	}
-	if err := kvDB.CPut(dbDescKey, dbDesc, nil); err != nil {
+	if err := kvDB.CPut(ctx, dbDescKey, dbDesc, nil); err != nil {
 		t.Fatal(err)
 	}
 
