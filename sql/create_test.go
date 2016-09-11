@@ -91,7 +91,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	}
 
 	// Remove the junk; allow database creation to proceed.
-	if err := kvDB.Del(dbDescKey); err != nil {
+	if err := kvDB.Del(ctx, dbDescKey); err != nil {
 		t.Fatal(err)
 	}
 

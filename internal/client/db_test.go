@@ -269,7 +269,7 @@ func TestDB_Del(t *testing.T) {
 	if err := db.Run(context.TODO(), b); err != nil {
 		panic(err)
 	}
-	if err := db.Del("ab"); err != nil {
+	if err := db.Del(context.TODO(), "ab"); err != nil {
 		panic(err)
 	}
 	rows, err := db.Scan(context.TODO(), "a", "b", 100)

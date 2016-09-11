@@ -266,6 +266,7 @@ func runDelRange(cmd *cobra.Command, args []string) {
 	defer stopper.Stop()
 
 	if err := kvDB.DelRange(
+		context.TODO(),
 		unquoteArg(args[0], true /* disallow system keys */),
 		unquoteArg(args[1], true /* disallow system keys */),
 	); err != nil {

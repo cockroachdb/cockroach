@@ -926,11 +926,11 @@ func TestBadRequest(t *testing.T) {
 		t.Fatalf("unexpected error on reverse scan with startkey == endkey: %v", err)
 	}
 
-	if err := db.DelRange("x", "a"); !testutils.IsError(err, "truncation resulted in empty batch") {
+	if err := db.DelRange(ctx, "x", "a"); !testutils.IsError(err, "truncation resulted in empty batch") {
 		t.Fatalf("unexpected error on deletion on [x, a): %v", err)
 	}
 
-	if err := db.DelRange("", "z"); !testutils.IsError(err, "must be greater than LocalMax") {
+	if err := db.DelRange(ctx, "", "z"); !testutils.IsError(err, "must be greater than LocalMax") {
 		t.Fatalf("unexpected error on deletion on [KeyMin, z): %v", err)
 	}
 }
