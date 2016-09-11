@@ -339,7 +339,7 @@ func TestBeginTransactionErrorIndex(t *testing.T) {
 	_ = db.Txn(context.TODO(), func(txn *Txn) error {
 		b := txn.NewBatch()
 		b.Put("a", "b")
-		_, err := runOneResult(txn, b)
+		err := getOneErr(txn.Run(b), b)
 		pErr := b.MustPErr()
 		// Verify that the original error type is preserved, but the error index is unset.
 		if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
@@ -814,7 +814,7 @@ func TestBatchMixRawRequest(t *testing.T) {
 	b := &Batch{}
 	b.AddRawRequest(&roachpb.EndTransactionRequest{})
 	b.Put("x", "y")
-	if err := db.Run(b); !testutils.IsError(err, "non-raw operations") {
+	if err := db.Run(context.TODO(), b); !testutils.IsError(err, "non-raw operations") {
 		t.Fatal(err)
 	}
 }

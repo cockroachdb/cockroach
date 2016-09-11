@@ -192,7 +192,7 @@ func TestBatch(t *testing.T) {
 	b := &client.Batch{}
 	b.Get("aa")
 	b.Put("bb", "2")
-	if err := db.Run(b); err != nil {
+	if err := db.Run(context.TODO(), b); err != nil {
 		panic(err)
 	}
 
@@ -212,7 +212,7 @@ func TestDB_Scan(t *testing.T) {
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("bb", "3")
-	if err := db.Run(b); err != nil {
+	if err := db.Run(context.TODO(), b); err != nil {
 		panic(err)
 	}
 	rows, err := db.Scan("a", "b", 100)
@@ -237,7 +237,7 @@ func TestDB_ReverseScan(t *testing.T) {
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("bb", "3")
-	if err := db.Run(b); err != nil {
+	if err := db.Run(context.TODO(), b); err != nil {
 		panic(err)
 	}
 	rows, err := db.ReverseScan("ab", "c", 100)
@@ -262,7 +262,7 @@ func TestDB_Del(t *testing.T) {
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("ac", "3")
-	if err := db.Run(b); err != nil {
+	if err := db.Run(context.TODO(), b); err != nil {
 		panic(err)
 	}
 	if err := db.Del("ab"); err != nil {
@@ -298,7 +298,7 @@ func TestTxn_Commit(t *testing.T) {
 	b := &client.Batch{}
 	b.Get("aa")
 	b.Get("ab")
-	if err := db.Run(b); err != nil {
+	if err := db.Run(context.TODO(), b); err != nil {
 		panic(err)
 	}
 	expected := map[string][]byte{

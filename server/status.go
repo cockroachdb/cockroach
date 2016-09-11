@@ -482,7 +482,7 @@ func (s *statusServer) Nodes(ctx context.Context, req *serverpb.NodesRequest) (*
 
 	b := &client.Batch{}
 	b.Scan(startKey, endKey)
-	if err := s.db.Run(b); err != nil {
+	if err := s.db.Run(context.TODO(), b); err != nil {
 		log.Error(ctx, err)
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
@@ -510,7 +510,7 @@ func (s *statusServer) Node(ctx context.Context, req *serverpb.NodeRequest) (*st
 	key := keys.NodeStatusKey(int32(nodeID))
 	b := &client.Batch{}
 	b.Get(key)
-	if err := s.db.Run(b); err != nil {
+	if err := s.db.Run(context.TODO(), b); err != nil {
 		log.Error(ctx, err)
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
