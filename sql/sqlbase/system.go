@@ -76,6 +76,33 @@ CREATE TABLE system.lease (
   PRIMARY KEY (descID, version, expiration, nodeID)
 );`
 
+	// EventTableSchema describes the schema of the event log table.
+	EventTableSchema = `
+CREATE TABLE system.eventlog (
+  timestamp    TIMESTAMP  NOT NULL,
+  eventType    STRING     NOT NULL,
+  targetID     INT        NOT NULL,
+  reportingID  INT        NOT NULL,
+  info         STRING,
+  uniqueID     BYTES      DEFAULT experimental_unique_bytes(),
+  PRIMARY KEY (timestamp, uniqueID)
+);`
+
+	// RangeEventTableSchema defines the schema of the event log table. It is
+	// currently envisioned as a wide table; many different event types can be
+	// recorded to the table.
+	RangeEventTableSchema = `
+CREATE TABLE system.rangelog (
+  timestamp     TIMESTAMP  NOT NULL,
+  rangeID       INT        NOT NULL,
+  storeID       INT        NOT NULL,
+  eventType     STRING     NOT NULL,
+  otherRangeID  INT,
+  info          STRING,
+  uniqueID      INT        DEFAULT unique_rowid(),
+  PRIMARY KEY (timestamp, uniqueID)
+);`
+
 	// UITableSchema is checked in TestSystemTables.
 	// blobs based on unique keys.
 	UITableSchema = `
@@ -325,8 +352,22 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	target.AddConfigDescriptor(keys.SystemDatabaseID, &UsersTable)
 	target.AddConfigDescriptor(keys.SystemDatabaseID, &ZonesTable)
 
-	// Add other system tables.
+	// Add all the other system tables.
 	target.AddDescriptor(keys.SystemDatabaseID, &LeaseTable)
+	eventLogDesc := CreateTableDescriptor(
+		keys.EventLogTableID,
+		keys.SystemDatabaseID,
+		EventTableSchema,
+		NewDefaultPrivilegeDescriptor(),
+	)
+	target.AddDescriptor(keys.SystemDatabaseID, &eventLogDesc)
+	rangeEventLogDesc := CreateTableDescriptor(
+		keys.RangeEventTableID,
+		keys.SystemDatabaseID,
+		RangeEventTableSchema,
+		NewDefaultPrivilegeDescriptor(),
+	)
+	target.AddDescriptor(keys.SystemDatabaseID, &rangeEventLogDesc)
 	target.AddDescriptor(keys.SystemDatabaseID, &UITable)
 
 	target.otherKV = append(target.otherKV, createDefaultZoneConfig()...)

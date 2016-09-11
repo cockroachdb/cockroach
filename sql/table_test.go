@@ -117,7 +117,7 @@ func TestMakeTableDescColumns(t *testing.T) {
 			t.Fatalf("%d: %v", i, err)
 		}
 		create := stmt.(*parser.CreateTable)
-		schema, err := MakeTableDesc(create, 1)
+		schema, err := sqlbase.MakeTableDesc(create, 1)
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
@@ -215,7 +215,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 			t.Fatalf("%d (%s): %v", i, d.sql, err)
 		}
 		create := stmt.(*parser.CreateTable)
-		schema, err := MakeTableDesc(create, 1)
+		schema, err := sqlbase.MakeTableDesc(create, 1)
 		if err != nil {
 			t.Fatalf("%d (%s): %v", i, d.sql, err)
 		}
@@ -237,7 +237,7 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 		t.Fatal(err)
 	}
 	create := stmt.(*parser.CreateTable)
-	desc, err := MakeTableDesc(create, 1)
+	desc, err := sqlbase.MakeTableDesc(create, 1)
 	if err != nil {
 		t.Fatal(err)
 	}

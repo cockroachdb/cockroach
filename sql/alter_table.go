@@ -141,7 +141,7 @@ func (n *alterTableNode) Start() error {
 				n.tableDesc.AddIndexMutation(idx, sqlbase.DescriptorMutation_ADD)
 
 			case *parser.CheckConstraintTableDef:
-				ck, err := makeCheckConstraint(*n.tableDesc, d, inuseNames)
+				ck, err := sqlbase.MakeCheckConstraint(*n.tableDesc, d, inuseNames)
 				if err != nil {
 					return err
 				}

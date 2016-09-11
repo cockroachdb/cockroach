@@ -22,10 +22,14 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -1582,4 +1586,223 @@ func (desc *Descriptor) GetName() string {
 // IsSet returns whether or not the foreign key actually references a table.
 func (f ForeignKeyReference) IsSet() bool {
 	return f.Table != 0
+}
+
+// CreateTableDescriptor turns a schema string into a TableDescriptor.
+func CreateTableDescriptor(
+	id, parentID ID, schema string, privileges *PrivilegeDescriptor,
+) TableDescriptor {
+	stmt, err := parser.ParseOneTraditional(schema)
+	if err != nil {
+		log.Fatal(context.TODO(), err)
+	}
+
+	desc, err := MakeTableDesc(stmt.(*parser.CreateTable), parentID)
+	if err != nil {
+		log.Fatal(context.TODO(), err)
+	}
+
+	desc.Privileges = privileges
+
+	desc.ID = id
+	if err := desc.AllocateIDs(); err != nil {
+		log.Fatalf(context.TODO(), "%s: %v", desc.Name, err)
+	}
+
+	return desc
+}
+
+// MakeTableDesc creates a table descriptor from a CreateTable statement.
+func MakeTableDesc(p *parser.CreateTable, parentID ID) (TableDescriptor, error) {
+	desc := TableDescriptor{
+		ParentID:      parentID,
+		FormatVersion: InterleavedFormatVersion,
+		Version:       1,
+	}
+	t, err := p.Table.Normalize()
+	if err != nil {
+		return desc, err
+	}
+	desc.Name = string(t.TableName)
+
+	generatedNames := map[string]struct{}{}
+
+	var primaryIndexColumnSet map[string]struct{}
+	for _, def := range p.Defs {
+		switch d := def.(type) {
+		case *parser.ColumnTableDef:
+			col, idx, err := MakeColumnDefDescs(d)
+			if err != nil {
+				return desc, err
+			}
+			desc.AddColumn(*col)
+			if idx != nil {
+				if err := desc.AddIndex(*idx, d.PrimaryKey); err != nil {
+					return desc, err
+				}
+			}
+			if d.Family.Create || len(d.Family.Name) > 0 {
+				// Pass true for `create` and `ifNotExists` because when we're creating
+				// a table, we always want to create the specified family if it doesn't
+				// exist.
+				err := desc.AddColumnToFamilyMaybeCreate(col.Name, string(d.Family.Name), true, true)
+				if err != nil {
+					return desc, err
+				}
+			}
+
+		case *parser.IndexTableDef:
+			idx := IndexDescriptor{
+				Name:             string(d.Name),
+				StoreColumnNames: d.Storing.ToStrings(),
+			}
+			if err := idx.FillColumns(d.Columns); err != nil {
+				return desc, err
+			}
+			if err := desc.AddIndex(idx, false); err != nil {
+				return desc, err
+			}
+			if d.Interleave != nil {
+				return desc, util.UnimplementedWithIssueErrorf(9148, "use CREATE INDEX to make interleaved indexes")
+			}
+		case *parser.UniqueConstraintTableDef:
+			idx := IndexDescriptor{
+				Name:             string(d.Name),
+				Unique:           true,
+				StoreColumnNames: d.Storing.ToStrings(),
+			}
+			if err := idx.FillColumns(d.Columns); err != nil {
+				return desc, err
+			}
+			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
+				return desc, err
+			}
+			if d.PrimaryKey {
+				primaryIndexColumnSet = make(map[string]struct{})
+				for _, c := range d.Columns {
+					primaryIndexColumnSet[NormalizeName(c.Column)] = struct{}{}
+				}
+			}
+			if d.Interleave != nil {
+				return desc, util.UnimplementedWithIssueErrorf(9148, "use CREATE INDEX to make interleaved indexes")
+			}
+		case *parser.CheckConstraintTableDef:
+			ck, err := MakeCheckConstraint(desc, d, generatedNames)
+			if err != nil {
+				return desc, err
+			}
+			desc.Checks = append(desc.Checks, ck)
+
+		case *parser.FamilyTableDef:
+			fam := ColumnFamilyDescriptor{
+				Name:        string(d.Name),
+				ColumnNames: d.Columns.ToStrings(),
+			}
+			desc.AddFamily(fam)
+
+		case *parser.ForeignKeyConstraintTableDef:
+			// Pass for now since FKs can reference other elements and thus are
+			// resolved only after the rest of the desc is constructed.
+
+		default:
+			return desc, errors.Errorf("unsupported table def: %T", def)
+		}
+	}
+
+	if primaryIndexColumnSet != nil {
+		// Primary index columns are not nullable.
+		for i := range desc.Columns {
+			if _, ok := primaryIndexColumnSet[ReNormalizeName(desc.Columns[i].Name)]; ok {
+				desc.Columns[i].Nullable = false
+			}
+		}
+	}
+
+	return desc, nil
+}
+
+// MakeCheckConstraint creates check constraints on a table.
+func MakeCheckConstraint(
+	desc TableDescriptor, d *parser.CheckConstraintTableDef, inuseNames map[string]struct{},
+) (*TableDescriptor_CheckConstraint, error) {
+	// CHECK expressions seem to vary across databases. Wikipedia's entry on
+	// Check_constraint (https://en.wikipedia.org/wiki/Check_constraint) says
+	// that if the constraint refers to a single column only, it is possible to
+	// specify the constraint as part of the column definition. Postgres allows
+	// specifying them anywhere about any columns, but it moves all constraints to
+	// the table level (i.e., columns never have a check constraint themselves). We
+	// will adhere to the stricter definition.
+
+	var nameBuf bytes.Buffer
+	name := string(d.Name)
+
+	generateName := name == ""
+	if generateName {
+		nameBuf.WriteString("check")
+	}
+
+	preFn := func(expr parser.Expr) (err error, recurse bool, newExpr parser.Expr) {
+		vBase, ok := expr.(parser.VarName)
+		if !ok {
+			// Not a VarName, don't do anything to this node.
+			return nil, true, expr
+		}
+
+		v, err := vBase.NormalizeVarName()
+		if err != nil {
+			return err, false, nil
+		}
+
+		c, ok := v.(*parser.ColumnItem)
+		if !ok {
+			return nil, true, expr
+		}
+
+		col, err := desc.FindActiveColumnByName(c.ColumnName)
+		if err != nil {
+			return fmt.Errorf("column %q not found for constraint %q",
+				c.ColumnName, d.Expr.String()), false, nil
+		}
+		if generateName {
+			nameBuf.WriteByte('_')
+			nameBuf.WriteString(col.Name)
+		}
+		// Convert to a dummy datum of the correct type.
+		return nil, false, col.Type.ToDatumType()
+	}
+
+	expr, err := parser.SimpleVisit(d.Expr, preFn)
+	if err != nil {
+		return nil, err
+	}
+
+	var p parser.Parser
+	if err := p.AssertNoAggregationOrWindowing(expr, "CHECK expressions"); err != nil {
+		return nil, err
+	}
+
+	if err := SanitizeVarFreeExpr(expr, parser.TypeBool, "CHECK"); err != nil {
+		return nil, err
+	}
+	if generateName {
+		name = nameBuf.String()
+
+		// If generated name isn't unique, attempt to add a number to the end to
+		// get a unique name.
+		if _, ok := inuseNames[name]; ok {
+			i := 1
+			for {
+				appended := fmt.Sprintf("%s%d", name, i)
+				if _, ok := inuseNames[appended]; !ok {
+					name = appended
+					break
+				}
+				i++
+			}
+		}
+		if inuseNames != nil {
+			inuseNames[name] = struct{}{}
+		}
+	}
+	return &TableDescriptor_CheckConstraint{Expr: d.Expr.String(), Name: name}, nil
 }

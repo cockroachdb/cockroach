@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -228,9 +227,9 @@ func TestComputeSplits(t *testing.T) {
 		descriptor(start), descriptor(start+1), descriptor(start+5))
 	// Real SQL system with reserved non-system tables.
 	priv := sqlbase.NewDefaultPrivilegeDescriptor()
-	desc1 := sql.CreateTableDescriptor(reservedStart+1, keys.SystemDatabaseID, "CREATE TABLE system.test1 (i INT PRIMARY KEY)", priv)
+	desc1 := sqlbase.CreateTableDescriptor(reservedStart+1, keys.SystemDatabaseID, "CREATE TABLE system.test1 (i INT PRIMARY KEY)", priv)
 	schema.AddDescriptor(keys.SystemDatabaseID, &desc1)
-	desc2 := sql.CreateTableDescriptor(reservedStart+2, keys.SystemDatabaseID, "CREATE TABLE system.test2 (i INT PRIMARY KEY)", priv)
+	desc2 := sqlbase.CreateTableDescriptor(reservedStart+2, keys.SystemDatabaseID, "CREATE TABLE system.test2 (i INT PRIMARY KEY)", priv)
 	schema.AddDescriptor(keys.SystemDatabaseID, &desc2)
 	reservedSql := schema.GetInitialValues()
 	// Real SQL system with reserved non-system and user database.

@@ -94,6 +94,11 @@ func (ms *MetadataSchema) AddDescriptor(parentID ID, desc DescriptorProto) {
 	if id := desc.GetID(); id > keys.MaxReservedDescID {
 		panic(fmt.Sprintf("invalid reserved table ID: %d > %d", id, keys.MaxReservedDescID))
 	}
+	for _, d := range ms.descs {
+		if d.desc.GetID() == desc.GetID() {
+			return
+		}
+	}
 	ms.descs = append(ms.descs, metadataDescriptor{parentID, desc})
 }
 
