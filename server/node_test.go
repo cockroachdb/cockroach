@@ -463,7 +463,7 @@ func TestStatusSummaries(t *testing.T) {
 	leftKey := "a"
 
 	// Scan over all keys to "wake up" all replicas (force a lease holder election).
-	if _, err := kvDB.Scan(keys.MetaMax, keys.MaxKey, 0); err != nil {
+	if _, err := kvDB.Scan(context.TODO(), keys.MetaMax, keys.MaxKey, 0); err != nil {
 		t.Fatal(err)
 	}
 

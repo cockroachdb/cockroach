@@ -106,7 +106,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	tablePrefix := keys.MakeTablePrefix(uint32(tbDesc.ID))
 	tableStartKey := roachpb.Key(tablePrefix)
 	tableEndKey := tableStartKey.PrefixEnd()
-	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
+	if kvs, err := kvDB.Scan(ctx, tableStartKey, tableEndKey, 0); err != nil {
 		t.Fatal(err)
 	} else if l := 6; len(kvs) != l {
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
@@ -116,7 +116,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
+	if kvs, err := kvDB.Scan(ctx, tableStartKey, tableEndKey, 0); err != nil {
 		t.Fatal(err)
 	} else if l := 0; len(kvs) != l {
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
@@ -187,7 +187,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 
 	indexStartKey := roachpb.Key(indexPrefix)
 	indexEndKey := indexStartKey.PrefixEnd()
-	if kvs, err := kvDB.Scan(indexStartKey, indexEndKey, 0); err != nil {
+	if kvs, err := kvDB.Scan(context.TODO(), indexStartKey, indexEndKey, 0); err != nil {
 		t.Fatal(err)
 	} else if l := 3; len(kvs) != l {
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
@@ -197,7 +197,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	if kvs, err := kvDB.Scan(indexStartKey, indexEndKey, 0); err != nil {
+	if kvs, err := kvDB.Scan(context.TODO(), indexStartKey, indexEndKey, 0); err != nil {
 		t.Fatal(err)
 	} else if l := 0; len(kvs) != l {
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
@@ -264,7 +264,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	tablePrefix := keys.MakeTablePrefix(uint32(tableDesc.ID))
 	tableStartKey := roachpb.Key(tablePrefix)
 	tableEndKey := tableStartKey.PrefixEnd()
-	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
+	if kvs, err := kvDB.Scan(ctx, tableStartKey, tableEndKey, 0); err != nil {
 		t.Fatal(err)
 	} else if l := 6; len(kvs) != l {
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
@@ -280,7 +280,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf("different error than expected: %v", err)
 	}
 
-	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
+	if kvs, err := kvDB.Scan(ctx, tableStartKey, tableEndKey, 0); err != nil {
 		t.Fatal(err)
 	} else if l := 0; len(kvs) != l {
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))

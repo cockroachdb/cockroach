@@ -488,7 +488,7 @@ func TestRangesResponse(t *testing.T) {
 	defer ts.Stopper().Stop()
 
 	// Perform a scan to ensure that all the raft groups are initialized.
-	if _, err := ts.(*TestServer).db.Scan(keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+	if _, err := ts.(*TestServer).db.Scan(context.TODO(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
 		t.Fatal(err)
 	}
 

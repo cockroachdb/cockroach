@@ -158,7 +158,7 @@ func TestIntentResolution(t *testing.T) {
 			// Use Raft to make it likely that any straddling intent
 			// resolutions have come in. Don't touch existing data; that could
 			// generate unexpected intent resolutions.
-			if _, err := kvDB.Scan("z\x00", "z\x00\x00", 0); err != nil {
+			if _, err := kvDB.Scan(context.TODO(), "z\x00", "z\x00\x00", 0); err != nil {
 				t.Fatal(err)
 			}
 		}()
