@@ -93,7 +93,7 @@ func TestKVDBCoverage(t *testing.T) {
 	}
 
 	// Increment.
-	if ir, pErr := db.Inc("i", 10); pErr != nil {
+	if ir, pErr := db.Inc(ctx, "i", 10); pErr != nil {
 		t.Fatal(pErr)
 	} else if ir.ValueInt() != 10 {
 		t.Errorf("expected increment new value of %d; got %d", 10, ir.ValueInt())
