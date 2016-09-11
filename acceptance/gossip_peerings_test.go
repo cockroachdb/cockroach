@@ -191,7 +191,7 @@ func testGossipRestartInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCon
 		for i := 0; i < num; i++ {
 			db, dbStopper := c.NewClient(t, i)
 			if i == 0 {
-				if err := db.Del("count"); err != nil {
+				if err := db.Del(context.Background(), "count"); err != nil {
 					t.Fatal(err)
 				}
 			}
