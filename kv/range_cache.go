@@ -66,7 +66,7 @@ type lookupMismatchError struct {
 
 // Error implements the error interface.
 func (l lookupMismatchError) Error() string {
-	return fmt.Sprintf("key %q not contained in range lookup's resulting decriptor %v", l.desiredKey, l.mismatchedDesc)
+	return fmt.Sprintf("key %q not contained in range lookup's resulting descriptor %v", l.desiredKey, l.mismatchedDesc)
 }
 
 // RangeDescriptorDB is a type which can query range descriptors from an

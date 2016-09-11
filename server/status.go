@@ -598,7 +598,7 @@ func (s *statusServer) RaftDebug(ctx context.Context, _ *serverpb.RaftDebugReque
 			}
 			if !containsNode {
 				rng.Errors = append(rng.Errors, serverpb.RaftRangeError{
-					Message: fmt.Sprintf("node %d not in replica and should be GCed", node.NodeID),
+					Message: fmt.Sprintf("node %d not in range descriptor and should be GCed", node.NodeID),
 				})
 			}
 
