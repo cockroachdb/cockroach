@@ -81,7 +81,7 @@ func TestDB_Get(t *testing.T) {
 	s, db := setup(t)
 	defer s.Stopper().Stop()
 
-	result, err := db.Get("aa")
+	result, err := db.Get(context.TODO(), "aa")
 	if err != nil {
 		panic(err)
 	}
@@ -92,11 +92,12 @@ func TestDB_Put(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
 	defer s.Stopper().Stop()
+	ctx := context.TODO()
 
 	if err := db.Put("aa", "1"); err != nil {
 		panic(err)
 	}
-	result, err := db.Get("aa")
+	result, err := db.Get(ctx, "aa")
 	if err != nil {
 		panic(err)
 	}
@@ -107,6 +108,7 @@ func TestDB_CPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
 	defer s.Stopper().Stop()
+	ctx := context.TODO()
 
 	if err := db.Put("aa", "1"); err != nil {
 		panic(err)
@@ -114,7 +116,7 @@ func TestDB_CPut(t *testing.T) {
 	if err := db.CPut("aa", "2", "1"); err != nil {
 		panic(err)
 	}
-	result, err := db.Get("aa")
+	result, err := db.Get(ctx, "aa")
 	if err != nil {
 		panic(err)
 	}
@@ -123,7 +125,7 @@ func TestDB_CPut(t *testing.T) {
 	if err = db.CPut("aa", "3", "1"); err == nil {
 		panic("expected error from conditional put")
 	}
-	result, err = db.Get("aa")
+	result, err = db.Get(ctx, "aa")
 	if err != nil {
 		panic(err)
 	}
@@ -132,7 +134,7 @@ func TestDB_CPut(t *testing.T) {
 	if err = db.CPut("bb", "4", "1"); err == nil {
 		panic("expected error from conditional put")
 	}
-	result, err = db.Get("bb")
+	result, err = db.Get(ctx, "bb")
 	if err != nil {
 		panic(err)
 	}
@@ -141,7 +143,7 @@ func TestDB_CPut(t *testing.T) {
 	if err = db.CPut("bb", "4", nil); err != nil {
 		panic(err)
 	}
-	result, err = db.Get("bb")
+	result, err = db.Get(ctx, "bb")
 	if err != nil {
 		panic(err)
 	}
@@ -152,6 +154,7 @@ func TestDB_InitPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
 	defer s.Stopper().Stop()
+	ctx := context.TODO()
 
 	if err := db.InitPut("aa", "1"); err != nil {
 		panic(err)
@@ -162,7 +165,7 @@ func TestDB_InitPut(t *testing.T) {
 	if err := db.InitPut("aa", "2"); err == nil {
 		panic("expected error from init put")
 	}
-	result, err := db.Get("aa")
+	result, err := db.Get(ctx, "aa")
 	if err != nil {
 		panic(err)
 	}
@@ -173,11 +176,12 @@ func TestDB_Inc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, db := setup(t)
 	defer s.Stopper().Stop()
+	ctx := context.TODO()
 
 	if _, err := db.Inc("aa", 100); err != nil {
 		panic(err)
 	}
-	result, err := db.Get("aa")
+	result, err := db.Get(ctx, "aa")
 	if err != nil {
 		panic(err)
 	}
@@ -312,11 +316,12 @@ func TestDB_Put_insecure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	defer s.Stopper().Stop()
+	ctx := context.TODO()
 
 	if err := db.Put("aa", "1"); err != nil {
 		panic(err)
 	}
-	result, err := db.Get("aa")
+	result, err := db.Get(ctx, "aa")
 	if err != nil {
 		panic(err)
 	}
