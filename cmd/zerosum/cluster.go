@@ -181,7 +181,7 @@ func (c *cluster) waitForFullReplication() {
 
 func (c *cluster) isReplicated() (bool, string) {
 	db := c.clients[0]
-	rows, err := db.Scan(keys.Meta2Prefix, keys.Meta2Prefix.PrefixEnd(), 100000)
+	rows, err := db.Scan(context.Background(), keys.Meta2Prefix, keys.Meta2Prefix.PrefixEnd(), 100000)
 	if err != nil {
 		log.Fatalf(context.Background(), "scan failed: %s\n", err)
 	}
