@@ -19,6 +19,8 @@ package storage
 import (
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -26,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // postCommitSplit is emitted when a Replica commits a split trigger and
