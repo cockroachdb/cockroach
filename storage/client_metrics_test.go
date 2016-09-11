@@ -194,7 +194,7 @@ func TestStoreMetrics(t *testing.T) {
 
 	// Add some data to the "right" range.
 	dataKey := []byte("z")
-	if _, err := mtc.dbs[0].Inc(dataKey, 5); err != nil {
+	if _, err := mtc.dbs[0].Inc(context.TODO(), dataKey, 5); err != nil {
 		t.Fatal(err)
 	}
 	mtc.waitForValues(roachpb.Key("z"), []int64{5, 5, 5})
