@@ -691,7 +691,7 @@ func (n *Node) writeSummaries() error {
 			// node status, writing one of these every 10s will generate
 			// more versions than will easily fit into a range over the
 			// course of a day.
-			if err = n.ctx.DB.PutInline(key, nodeStatus); err != nil {
+			if err = n.ctx.DB.PutInline(n.Ctx(), key, nodeStatus); err != nil {
 				return
 			}
 			if log.V(2) {

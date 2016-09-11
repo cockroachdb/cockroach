@@ -3355,7 +3355,7 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 	util.SucceedsSoon(t, func() error {
 		if atomic.LoadInt64(&count) == 0 {
 			return errors.Errorf("intent resolution not attempted yet")
-		} else if err := tc.store.DB().Put("panama", "banana"); err != nil {
+		} else if err := tc.store.DB().Put(context.TODO(), "panama", "banana"); err != nil {
 			return err
 		}
 		return nil
