@@ -441,6 +441,7 @@ func compareNodeStatus(t *testing.T, ts *TestServer, expectedNodeStatus *status.
 // both the Node and stores within the node.
 func TestStatusSummaries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#8844")
 
 	// ========================================
 	// Start test server and wait for full initialization.
