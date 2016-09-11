@@ -369,8 +369,10 @@ type KeyRange interface {
 var _ KeyRange = &Replica{}
 
 // withRaftGroupLocked calls the supplied function with the (lazily
-// initialized) Raft group. It assumes that the Replica lock is held.
-func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
+// initialized) Raft group. It assumes that the Replica lock is held. The
+// shouldCampaign argument indicates whether a new raft group should be
+// campaigned upon creation and is used to eagerly campaign idle replicas.
+func (r *Replica) withRaftGroupLocked(shouldCampaign bool, f func(r *raft.RawNode) error) error {
 	if r.mu.destroyed != nil {
 		// Silently ignore all operations on destroyed replicas. We can't return an
 		// error here as all errors returned from this method are considered fatal.
@@ -381,6 +383,13 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 		// The replica's raft group has not yet been configured (i.e. the replica
 		// was created from a preemptive snapshot).
 		return nil
+	}
+
+	if shouldCampaign {
+		// Special handling of idle replicas: we campaign their Raft group upon
+		// creation if we gossiped our store descriptor more than the election
+		// timeout in the past.
+		shouldCampaign = (r.mu.internalRaftGroup == nil) && r.store.canCampaignIdleReplica()
 	}
 
 	if r.mu.internalRaftGroup == nil {
@@ -396,23 +405,40 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 		}
 		r.mu.internalRaftGroup = raftGroup
 
-		// Automatically campaign and elect a leader for this group if there's
-		// exactly one known node for this group.
-		//
-		// A grey area for this being correct happens in the case when we're
-		// currently in the process of adding a second node to the group,
-		// with the change committed but not applied.
-		// Upon restarting, the first node would immediately elect itself and only
-		// then apply the config change, where really it should be applying
-		// first and then waiting for the majority (which would now require
-		// two votes, not only its own).
-		// However, in that special case, the second node has no chance to
-		// be elected leader while the first node restarts (as it's aware of the
-		// configuration and knows it needs two votes), so the worst that
-		// could happen is both nodes ending up in candidate state, timing
-		// out and then voting again. This is expected to be an extremely
-		// rare event.
-		if len(r.mu.state.Desc.Replicas) == 1 && r.mu.state.Desc.Replicas[0].ReplicaID == r.mu.replicaID {
+		if !shouldCampaign {
+			// Automatically campaign and elect a leader for this group if there's
+			// exactly one known node for this group.
+			//
+			// A grey area for this being correct happens in the case when we're
+			// currently in the process of adding a second node to the group, with
+			// the change committed but not applied.
+			//
+			// Upon restarting, the first node would immediately elect itself and
+			// only then apply the config change, where really it should be applying
+			// first and then waiting for the majority (which would now require two
+			// votes, not only its own).
+			//
+			// However, in that special case, the second node has no chance to be
+			// elected leader while the first node restarts (as it's aware of the
+			// configuration and knows it needs two votes), so the worst that could
+			// happen is both nodes ending up in candidate state, timing out and then
+			// voting again. This is expected to be an extremely rare event.
+			//
+			// TODO(peter): It would be more natural for this campaigning to only be
+			// done when proposing a command (see defaultProposeRaftCommandLocked).
+			// Unfortunately, we enqueue the right hand side of a split for Raft
+			// ready processing if the range only has a single replica (see
+			// splitTriggerPostCommit). Doing so implies we need to be campaigning
+			// that right hand side range when raft ready processing is
+			// performed. Perhaps we should move the logic for campaigning single
+			// replica ranges there so that normally we only eagerly campaign when
+			// proposing.
+			shouldCampaign = r.isSoloReplicaLocked()
+		}
+		if shouldCampaign {
+			if log.V(3) {
+				log.Infof(r.ctx, "campaigning")
+			}
 			if err := raftGroup.Campaign(); err != nil {
 				return err
 			}
@@ -428,7 +454,7 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 func (r *Replica) withRaftGroup(f func(r *raft.RawNode) error) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.withRaftGroupLocked(f)
+	return r.withRaftGroupLocked(false, f)
 }
 
 var _ client.Sender = &Replica{}
@@ -1586,6 +1612,11 @@ func (r *Replica) proposePendingCmdLocked(p *pendingCmd) error {
 	return defaultProposeRaftCommandLocked(r, p)
 }
 
+func (r *Replica) isSoloReplicaLocked() bool {
+	return len(r.mu.state.Desc.Replicas) == 1 &&
+		r.mu.state.Desc.Replicas[0].ReplicaID == r.mu.replicaID
+}
+
 func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 	if p.raftCmd.Cmd.Timestamp == hlc.ZeroTimestamp {
 		return errors.Errorf("can't propose Raft command with zero timestamp")
@@ -1617,7 +1648,7 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 				return err
 			}
 
-			return r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
+			return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) error {
 				return raftGroup.ProposeConfChange(raftpb.ConfChange{
 					Type:    changeTypeInternalToRaft[crt.ChangeType],
 					NodeID:  uint64(crt.Replica.ReplicaID),
@@ -1629,7 +1660,7 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 		hasSplit = ict.GetSplitTrigger() != nil
 	}
 
-	return r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
+	return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) error {
 		if log.V(4) {
 			log.Infof(r.ctx, "proposing command %x", p.idKey)
 		}
@@ -1676,7 +1707,7 @@ func (r *Replica) handleRaftReady() error {
 	lastIndex := r.mu.lastIndex // used for append below
 	raftLogSize := r.mu.raftLogSize
 	leaderID := r.mu.leaderID
-	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
+	err := r.withRaftGroupLocked(false, func(raftGroup *raft.RawNode) error {
 		if hasReady = raftGroup.HasReady(); hasReady {
 			rd = raftGroup.Ready()
 		}
