@@ -464,7 +464,7 @@ func TestClientEmptyValues(t *testing.T) {
 		t.Errorf("expected non-nil empty byte slice; got %q", bytes)
 	}
 
-	if _, err := db.Inc(testUser+"/b", 0); err != nil {
+	if _, err := db.Inc(context.TODO(), testUser+"/b", 0); err != nil {
 		t.Error(err)
 	}
 	if gr, err := db.Get(context.TODO(), testUser+"/b"); err != nil {
