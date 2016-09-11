@@ -988,7 +988,7 @@ func (s *adminServer) ClusterFreeze(
 		b := &client.Batch{}
 		fa := roachpb.NewChangeFrozen(from, to, req.Freeze, build.GetInfo().Tag)
 		b.AddRawRequest(fa)
-		if err := s.server.db.Run(b); err != nil {
+		if err := s.server.db.Run(context.TODO(), b); err != nil {
 			return nil, err
 		}
 		fr := b.RawResponse().Responses[0].GetInner().(*roachpb.ChangeFrozenResponse)

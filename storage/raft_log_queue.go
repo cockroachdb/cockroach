@@ -208,7 +208,7 @@ func (rlq *raftLogQueue) process(
 			Index:   oldestIndex,
 			RangeID: r.RangeID,
 		})
-		return rlq.db.Run(b)
+		return rlq.db.Run(ctx, b)
 	}
 	return nil
 }
