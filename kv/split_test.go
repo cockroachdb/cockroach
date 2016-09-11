@@ -191,7 +191,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// Check that we split 5 times in allotted time.
 	util.SucceedsSoon(t, func() error {
 		// Scan the txn records.
-		rows, err := s.DB.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
+		rows, err := s.DB.Scan(context.TODO(), keys.Meta2Prefix, keys.MetaMax, 0)
 		if err != nil {
 			return errors.Errorf("failed to scan meta2 keys: %s", err)
 		}

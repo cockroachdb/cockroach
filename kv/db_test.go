@@ -124,7 +124,7 @@ func TestKVDBCoverage(t *testing.T) {
 			t.Fatal(pErr)
 		}
 	}
-	if rows, pErr := db.Scan("a", "d", 0); pErr != nil {
+	if rows, pErr := db.Scan(context.TODO(), "a", "d", 0); pErr != nil {
 		t.Fatal(pErr)
 	} else if len(rows) != len(keyValues) {
 		t.Fatalf("expected %d rows in scan; got %d", len(keyValues), len(rows))
@@ -141,7 +141,7 @@ func TestKVDBCoverage(t *testing.T) {
 	}
 
 	// Test reverse scan.
-	if rows, pErr := db.ReverseScan("a", "d", 0); pErr != nil {
+	if rows, pErr := db.ReverseScan(context.TODO(), "a", "d", 0); pErr != nil {
 		t.Fatal(pErr)
 	} else if len(rows) != len(keyValues) {
 		t.Fatalf("expected %d rows in scan; got %d", len(keyValues), len(rows))

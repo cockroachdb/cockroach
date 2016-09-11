@@ -356,7 +356,7 @@ func (z *zeroSum) verify(d time.Duration) {
 func (z *zeroSum) rangeInfo() (int, []int) {
 	replicas := make([]int, len(z.nodes))
 	client := z.clients[z.randNode(rand.Intn)]
-	rows, err := client.Scan(keys.Meta2Prefix, keys.Meta2Prefix.PrefixEnd(), 0)
+	rows, err := client.Scan(context.Background(), keys.Meta2Prefix, keys.Meta2Prefix.PrefixEnd(), 0)
 	if err != nil {
 		z.maybeLogError(err)
 		return -1, replicas
