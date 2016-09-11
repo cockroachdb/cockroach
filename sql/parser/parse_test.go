@@ -122,6 +122,18 @@ func TestParse(t *testing.T) {
 
 		{`CREATE TABLE a AS SELECT * FROM b`},
 		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b`},
+		{`CREATE TABLE a AS SELECT * FROM b ORDER BY c`},
+		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b ORDER BY c`},
+		{`CREATE TABLE a AS SELECT * FROM b LIMIT 3`},
+		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b LIMIT 3`},
+		{`CREATE TABLE a AS VALUES ('one', 1), ('two', 2), ('three', 3)`},
+		{`CREATE TABLE IF NOT EXISTS a AS VALUES ('one', 1), ('two', 2), ('three', 3)`},
+		{`CREATE TABLE a (str, num) AS VALUES ('one', 1), ('two', 2), ('three', 3)`},
+		{`CREATE TABLE IF NOT EXISTS a (str, num) AS VALUES ('one', 1), ('two', 2), ('three', 3)`},
+		{`CREATE TABLE a AS SELECT * FROM b UNION SELECT * FROM c`},
+		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION SELECT * FROM c`},
+		{`CREATE TABLE a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5`},
+		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5`},
 
 		{`DELETE FROM a`},
 		{`DELETE FROM a.b`},

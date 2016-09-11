@@ -558,6 +558,7 @@ type CreateTable struct {
 	Interleave  *InterleaveDef
 	Defs        TableDefs
 	AsSource    *Select
+	ToCols      NameList // Only to be used in conjunction with AsSource
 }
 
 // As returns true if this table represents a CREATE TABLE ... AS statement,
@@ -574,6 +575,11 @@ func (node *CreateTable) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 	FormatNode(buf, f, node.Table)
 	if node.As() {
+		if len(node.ToCols) > 0 {
+			buf.WriteString(" (")
+			FormatNode(buf, f, node.ToCols)
+			buf.WriteByte(')')
+		}
 		buf.WriteString(" AS ")
 		FormatNode(buf, f, node.AsSource)
 	} else {
