@@ -450,6 +450,7 @@ func TestStatusSummaries(t *testing.T) {
 	})
 	defer srv.Stopper().Stop()
 	ts := srv.(*TestServer)
+	ctx := context.TODO()
 
 	// Retrieve the first store from the Node.
 	s, err := ts.node.stores.GetStore(roachpb.StoreID(1))
@@ -552,10 +553,10 @@ func TestStatusSummaries(t *testing.T) {
 	rightKey := "c"
 
 	// Write some values left and right of the proposed split key.
-	if err := ts.db.Put(leftKey, content); err != nil {
+	if err := ts.db.Put(ctx, leftKey, content); err != nil {
 		t.Fatal(err)
 	}
-	if err := ts.db.Put(rightKey, content); err != nil {
+	if err := ts.db.Put(ctx, rightKey, content); err != nil {
 		t.Fatal(err)
 	}
 
@@ -588,10 +589,10 @@ func TestStatusSummaries(t *testing.T) {
 
 	// Write on both sides of the split to ensure that the raft machinery
 	// is running.
-	if err := ts.db.Put(leftKey, content); err != nil {
+	if err := ts.db.Put(ctx, leftKey, content); err != nil {
 		t.Fatal(err)
 	}
-	if err := ts.db.Put(rightKey, content); err != nil {
+	if err := ts.db.Put(ctx, rightKey, content); err != nil {
 		t.Fatal(err)
 	}
 

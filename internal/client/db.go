@@ -230,10 +230,10 @@ func (db *DB) GetProto(ctx context.Context, key interface{}, msg proto.Message) 
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // proto.Message or any Go primitive type (bool, int, etc).
-func (db *DB) Put(key, value interface{}) error {
+func (db *DB) Put(ctx context.Context, key, value interface{}) error {
 	b := &Batch{}
 	b.Put(key, value)
-	return getOneErr(db.Run(context.TODO(), b), b)
+	return getOneErr(db.Run(ctx, b), b)
 }
 
 // PutInline sets the value for a key, but does not maintain
@@ -243,10 +243,10 @@ func (db *DB) Put(key, value interface{}) error {
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // proto.Message or any Go primitive type (bool, int, etc).
-func (db *DB) PutInline(key, value interface{}) error {
+func (db *DB) PutInline(ctx context.Context, key, value interface{}) error {
 	b := &Batch{}
 	b.PutInline(key, value)
-	return getOneErr(db.Run(context.TODO(), b), b)
+	return getOneErr(db.Run(ctx, b), b)
 }
 
 // CPut conditionally sets the value for a key if the existing value is equal

@@ -161,10 +161,10 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 	col2Key := keys.MakeFamilyKey(append([]byte(nil), rowKey...), 2)
 
 	// We don't care about the value, so just store any old thing.
-	if err := store.DB().Put(col1Key, "column 1"); err != nil {
+	if err := store.DB().Put(context.TODO(), col1Key, "column 1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.DB().Put(col2Key, "column 2"); err != nil {
+	if err := store.DB().Put(context.TODO(), col2Key, "column 2"); err != nil {
 		t.Fatal(err)
 	}
 

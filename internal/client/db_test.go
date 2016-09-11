@@ -94,7 +94,7 @@ func TestDB_Put(t *testing.T) {
 	defer s.Stopper().Stop()
 	ctx := context.TODO()
 
-	if err := db.Put("aa", "1"); err != nil {
+	if err := db.Put(context.TODO(), "aa", "1"); err != nil {
 		panic(err)
 	}
 	result, err := db.Get(ctx, "aa")
@@ -110,7 +110,7 @@ func TestDB_CPut(t *testing.T) {
 	defer s.Stopper().Stop()
 	ctx := context.TODO()
 
-	if err := db.Put("aa", "1"); err != nil {
+	if err := db.Put(context.TODO(), "aa", "1"); err != nil {
 		panic(err)
 	}
 	if err := db.CPut("aa", "2", "1"); err != nil {
@@ -318,7 +318,7 @@ func TestDB_Put_insecure(t *testing.T) {
 	defer s.Stopper().Stop()
 	ctx := context.TODO()
 
-	if err := db.Put("aa", "1"); err != nil {
+	if err := db.Put(context.TODO(), "aa", "1"); err != nil {
 		panic(err)
 	}
 	result, err := db.Get(ctx, "aa")
