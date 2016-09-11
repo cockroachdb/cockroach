@@ -331,7 +331,7 @@ func compareNodeStatus(t *testing.T, ts *TestServer, expectedNodeStatus *status.
 	// ========================================
 	nodeStatusKey := keys.NodeStatusKey(int32(ts.node.Descriptor.NodeID))
 	nodeStatus := &status.NodeStatus{}
-	if err := ts.db.GetProto(nodeStatusKey, nodeStatus); err != nil {
+	if err := ts.db.GetProto(context.TODO(), nodeStatusKey, nodeStatus); err != nil {
 		t.Fatalf("%d: failure getting node status: %s", testNumber, err)
 	}
 

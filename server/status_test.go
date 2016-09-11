@@ -226,7 +226,7 @@ func startServer(t *testing.T) serverutils.TestServerInterface {
 
 	// Make sure the range is spun up with an arbitrary read command. We do not
 	// expect a specific response.
-	if _, err := kvDB.Get("a"); err != nil {
+	if _, err := kvDB.Get(context.TODO(), "a"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -452,7 +452,7 @@ func TestMetricsRecording(t *testing.T) {
 	checkTimeSeriesKey := func(now int64, keyName string) error {
 		key := ts.MakeDataKey(keyName, "", ts.Resolution10s, now)
 		data := roachpb.InternalTimeSeriesData{}
-		return kvDB.GetProto(key, &data)
+		return kvDB.GetProto(context.TODO(), key, &data)
 	}
 
 	// Verify that metrics for the current timestamp are recorded. This should

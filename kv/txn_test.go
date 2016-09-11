@@ -64,7 +64,7 @@ func TestTxnDBBasics(t *testing.T) {
 			}
 
 			// Attempt to read outside of txn.
-			if gr, err := s.DB.Get(key); err != nil {
+			if gr, err := s.DB.Get(context.TODO(), key); err != nil {
 				return err
 			} else if gr.Exists() {
 				return errors.Errorf("expected nil value; got %v", gr.Value)
@@ -90,7 +90,7 @@ func TestTxnDBBasics(t *testing.T) {
 		}
 
 		// Verify the value is now visible on commit == true, and not visible otherwise.
-		gr, err := s.DB.Get(key)
+		gr, err := s.DB.Get(context.TODO(), key)
 		if commit {
 			if err != nil || !gr.Exists() || !bytes.Equal(gr.ValueBytes(), value) {
 				t.Errorf("expected success reading value: %+v, %s", gr.ValueBytes(), err)
@@ -271,7 +271,7 @@ func TestSnapshotIsolationLostUpdate(t *testing.T) {
 	}
 
 	// Verify final value.
-	gr, err := s.DB.Get(key)
+	gr, err := s.DB.Get(context.TODO(), key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -531,12 +531,12 @@ func TestTxnTimestampRegression(t *testing.T) {
 		}
 
 		// Attempt to read outside of txn (this will push timestamp of transaction).
-		if _, err := s.DB.Get(keyA); err != nil {
+		if _, err := s.DB.Get(context.TODO(), keyA); err != nil {
 			return err
 		}
 
 		// Now, read again outside of txn to warmup timestamp cache with higher timestamp.
-		if _, err := s.DB.Get(keyB); err != nil {
+		if _, err := s.DB.Get(context.TODO(), keyB); err != nil {
 			return err
 		}
 
@@ -756,11 +756,11 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 	// Wait until txnA finishes put(a).
 	<-ch
 	// Attempt to get keyA, which will push txnA.
-	if _, err := s.DB.Get(keyA); err != nil {
+	if _, err := s.DB.Get(context.TODO(), keyA); err != nil {
 		t.Fatal(err)
 	}
 	// Do a read at keyB to cause txnA to forward timestamp.
-	if _, err := s.DB.Get(keyB); err != nil {
+	if _, err := s.DB.Get(context.TODO(), keyB); err != nil {
 		t.Fatal(err)
 	}
 	// Notify txnA to commit.

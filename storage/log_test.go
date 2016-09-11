@@ -138,7 +138,7 @@ func TestLogRebalances(t *testing.T) {
 	// Use a client to get the RangeDescriptor for the first range. We will use
 	// this range's information to log fake rebalance events.
 	desc := &roachpb.RangeDescriptor{}
-	if err := db.GetProto(keys.RangeDescriptorKey(roachpb.RKeyMin), desc); err != nil {
+	if err := db.GetProto(context.TODO(), keys.RangeDescriptorKey(roachpb.RKeyMin), desc); err != nil {
 		t.Fatal(err)
 	}
 
