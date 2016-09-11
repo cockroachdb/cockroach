@@ -1341,7 +1341,7 @@ func TestTxnRestartCount(t *testing.T) {
 
 	// Outside of the transaction, read the same key as was read within the transaction. This
 	// means that future attempts to write will increase the timestamp.
-	if _, err := db.Get(key); err != nil {
+	if _, err := db.Get(context.TODO(), key); err != nil {
 		t.Fatal(err)
 	}
 

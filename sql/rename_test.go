@@ -20,6 +20,8 @@ package sql
 import (
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
@@ -57,7 +59,7 @@ func TestRenameTable(t *testing.T) {
 	// Check the table descriptor.
 	desc := &sqlbase.Descriptor{}
 	tableDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(tableCounter))
-	if err := kvDB.GetProto(tableDescKey, desc); err != nil {
+	if err := kvDB.GetProto(context.TODO(), tableDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
 	tableDesc := desc.GetTable()
@@ -82,7 +84,7 @@ func TestRenameTable(t *testing.T) {
 	}
 
 	// Check the table descriptor again.
-	if err := kvDB.GetProto(tableDescKey, desc); err != nil {
+	if err := kvDB.GetProto(context.TODO(), tableDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
 	tableDesc = desc.GetTable()

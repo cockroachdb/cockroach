@@ -808,7 +808,7 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 		// raft leader is guaranteed to have the updated version, but followers are
 		// not.
 		var desc roachpb.RangeDescriptor
-		if err := m.dbs[0].GetProto(keys.RangeDescriptorKey(startKey), &desc); err != nil {
+		if err := m.dbs[0].GetProto(context.TODO(), keys.RangeDescriptorKey(startKey), &desc); err != nil {
 			m.t.Fatal(err)
 		}
 
@@ -855,7 +855,7 @@ func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
 	startKey := m.findStartKeyLocked(rangeID)
 
 	var desc roachpb.RangeDescriptor
-	if err := m.dbs[0].GetProto(keys.RangeDescriptorKey(startKey), &desc); err != nil {
+	if err := m.dbs[0].GetProto(context.TODO(), keys.RangeDescriptorKey(startKey), &desc); err != nil {
 		m.t.Fatal(err)
 	}
 
