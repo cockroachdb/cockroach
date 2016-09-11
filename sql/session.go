@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"golang.org/x/net/context"
-	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/internal/client"
@@ -72,7 +71,6 @@ type Session struct {
 
 	Location              *time.Location
 	DefaultIsolationLevel enginepb.IsolationType
-	Trace                 trace.Trace
 	// context is the Session's base context. See Ctx().
 	context context.Context
 	// TODO(andrei): We need to either get rid of this cancel field, or it needs
@@ -115,9 +113,11 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 	if remote != nil {
 		remoteStr = remote.String()
 	}
-	s.Trace = trace.New("sql."+args.User, remoteStr)
-	s.Trace.SetMaxEvents(100)
+
+	// Set up an EventLog for session events.
+	ctx = log.WithEventLog(ctx, fmt.Sprintf("sql [%s]", args.User), remoteStr)
 	s.context, s.cancel = context.WithCancel(ctx)
+
 	return s
 }
 
@@ -127,10 +127,7 @@ func (s *Session) Finish() {
 	// session abruptly in the middle of a transaction, or, until #7648 is
 	// addressed, there might be leases accumulated by preparing statements.
 	s.planner.releaseLeases()
-	if s.Trace != nil {
-		s.Trace.Finish()
-		s.Trace = nil
-	}
+	log.FinishEventLog(s.context)
 	// If we're inside a txn, roll it back.
 	if s.TxnState.State != NoTxn && s.TxnState.State != Aborted {
 		s.TxnState.updateStateAndCleanupOnErr(
@@ -147,10 +144,12 @@ func (s *Session) Finish() {
 	s.cancel()
 }
 
-// Ctx returns the current context for the session. If there is an active SQL
+// Ctx returns the current context for the session: if there is an active SQL
 // transaction it returns the transaction context, otherwise it returns the
-// session context (transactions executed during the PREPARE phase don't
-// necessarily have an active TxnState).
+// session context.
+// Note that in some cases we may want the session context even if there is an
+// active transaction (an example is when we want to log an event to the session
+// event log); in that case s.context should be used directly.
 func (s *Session) Ctx() context.Context {
 	if s.TxnState.State != NoTxn {
 		return s.TxnState.Ctx
@@ -211,9 +210,6 @@ type txnState struct {
 
 	// The schema change closures to run when this txn is done.
 	schemaChangers schemaChangerCollection
-	// TODO(andrei): this is the same as Session.Trace. Consider removing this and
-	// passing the Session along everywhere the trace is needed.
-	tr trace.Trace
 
 	sp opentracing.Span
 	// When COCKROACH_TRACE_SQL is enabled, CollectedSpans accumulates spans as
@@ -274,7 +270,6 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 	ts.txn.Proto.Isolation = s.DefaultIsolationLevel
 	ts.State = Open
 
-	ts.tr = s.Trace
 	// Discard the old schemaChangers, if any.
 	ts.schemaChangers = schemaChangerCollection{}
 }
