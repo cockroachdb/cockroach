@@ -298,6 +298,11 @@ type Store struct {
 	initComplete sync.WaitGroup // Signaled by async init tasks
 	bookie       *bookie
 
+	idleReplicaElectionTime struct {
+		syncutil.Mutex
+		at time.Time
+	}
+
 	// This is 1 if there is an active raft snapshot. This field must be checked
 	// and set atomically.
 	// TODO(marc): This may be better inside of `mu`, but is not currently feasible.
@@ -1131,7 +1136,38 @@ func (s *Store) GossipStore(ctx context.Context) error {
 	// Unique gossip key per store.
 	gossipStoreKey := gossip.MakeStoreKey(storeDesc.StoreID)
 	// Gossip store descriptor.
-	return s.ctx.Gossip.AddInfoProto(gossipStoreKey, storeDesc, ttlStoreGossip)
+	if err := s.ctx.Gossip.AddInfoProto(gossipStoreKey, storeDesc, ttlStoreGossip); err != nil {
+		return err
+	}
+	// Once we have gossiped the store descriptor the first time, other nodes
+	// will know that this node has restarted and will start sending Raft
+	// heartbeats for active ranges. We compute the time in the future where a
+	// replica on this store which receives a command for an idle range can
+	// campaign the associated Raft group immediately instead of waiting for the
+	// normal Raft election timeout.
+	s.idleReplicaElectionTime.Lock()
+	if s.idleReplicaElectionTime.at == (time.Time{}) {
+		// Raft uses a randomized election timeout in the range
+		// [electionTimeout,2*electionTimeout]. Using the lower bound here means
+		// that elections are somewhat more likely to be contested (assuming
+		// traffic is distributed evenly across a cluster that is restarted
+		// simultaneously). That's OK; it just adds a network round trip or two to
+		// the process since a contested election just restarts the clock to where
+		// it would have been anyway if we weren't doing idle replica campaigning.
+		electionTimeout := s.ctx.RaftTickInterval * time.Duration(s.ctx.RaftElectionTimeoutTicks)
+		s.idleReplicaElectionTime.at = s.Clock().PhysicalTime().Add(electionTimeout)
+	}
+	s.idleReplicaElectionTime.Unlock()
+	return nil
+}
+
+func (s *Store) canCampaignIdleReplica() bool {
+	s.idleReplicaElectionTime.Lock()
+	defer s.idleReplicaElectionTime.Unlock()
+	if s.idleReplicaElectionTime.at == (time.Time{}) {
+		return false
+	}
+	return !s.Clock().PhysicalTime().Before(s.idleReplicaElectionTime.at)
 }
 
 // GossipDeadReplicas broadcasts the stores dead replicas on the gossip network.
