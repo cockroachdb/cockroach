@@ -110,10 +110,10 @@ func TestDB_CPut(t *testing.T) {
 	defer s.Stopper().Stop()
 	ctx := context.TODO()
 
-	if err := db.Put(context.TODO(), "aa", "1"); err != nil {
+	if err := db.Put(ctx, "aa", "1"); err != nil {
 		panic(err)
 	}
-	if err := db.CPut("aa", "2", "1"); err != nil {
+	if err := db.CPut(ctx, "aa", "2", "1"); err != nil {
 		panic(err)
 	}
 	result, err := db.Get(ctx, "aa")
@@ -122,7 +122,7 @@ func TestDB_CPut(t *testing.T) {
 	}
 	checkResult(t, []byte("2"), result.ValueBytes())
 
-	if err = db.CPut("aa", "3", "1"); err == nil {
+	if err = db.CPut(ctx, "aa", "3", "1"); err == nil {
 		panic("expected error from conditional put")
 	}
 	result, err = db.Get(ctx, "aa")
@@ -131,7 +131,7 @@ func TestDB_CPut(t *testing.T) {
 	}
 	checkResult(t, []byte("2"), result.ValueBytes())
 
-	if err = db.CPut("bb", "4", "1"); err == nil {
+	if err = db.CPut(ctx, "bb", "4", "1"); err == nil {
 		panic("expected error from conditional put")
 	}
 	result, err = db.Get(ctx, "bb")
@@ -140,7 +140,7 @@ func TestDB_CPut(t *testing.T) {
 	}
 	checkResult(t, []byte(""), result.ValueBytes())
 
-	if err = db.CPut("bb", "4", nil); err != nil {
+	if err = db.CPut(ctx, "bb", "4", nil); err != nil {
 		panic(err)
 	}
 	result, err = db.Get(ctx, "bb")
@@ -156,13 +156,13 @@ func TestDB_InitPut(t *testing.T) {
 	defer s.Stopper().Stop()
 	ctx := context.TODO()
 
-	if err := db.InitPut("aa", "1"); err != nil {
+	if err := db.InitPut(ctx, "aa", "1"); err != nil {
 		panic(err)
 	}
-	if err := db.InitPut("aa", "1"); err != nil {
+	if err := db.InitPut(ctx, "aa", "1"); err != nil {
 		panic(err)
 	}
-	if err := db.InitPut("aa", "2"); err == nil {
+	if err := db.InitPut(ctx, "aa", "2"); err == nil {
 		panic("expected error from init put")
 	}
 	result, err := db.Get(ctx, "aa")

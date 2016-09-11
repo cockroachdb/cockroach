@@ -256,10 +256,10 @@ func (db *DB) PutInline(ctx context.Context, key, value interface{}) error {
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // proto.Message or any Go primitive type (bool, int, etc).
-func (db *DB) CPut(key, value, expValue interface{}) error {
+func (db *DB) CPut(ctx context.Context, key, value, expValue interface{}) error {
 	b := &Batch{}
 	b.CPut(key, value, expValue)
-	return getOneErr(db.Run(context.TODO(), b), b)
+	return getOneErr(db.Run(ctx, b), b)
 }
 
 // InitPut sets the first value for a key to value. An error is reported if a
@@ -268,10 +268,10 @@ func (db *DB) CPut(key, value, expValue interface{}) error {
 // key can be either a byte slice or a string. value can be any key type, a
 // proto.Message or any Go primitive type (bool, int, etc). It is illegal to
 // set value to nil.
-func (db *DB) InitPut(key, value interface{}) error {
+func (db *DB) InitPut(ctx context.Context, key, value interface{}) error {
 	b := &Batch{}
 	b.InitPut(key, value)
-	return getOneErr(db.Run(context.TODO(), b), b)
+	return getOneErr(db.Run(ctx, b), b)
 }
 
 // Inc increments the integer value at key. If the key does not exist it will

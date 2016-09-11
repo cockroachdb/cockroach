@@ -140,7 +140,7 @@ func (s *Server) maybeRunPeriodicCheck(op string, key roachpb.Key, f func()) tim
 		}
 
 		nextRetry := whenToCheck.Add(updateCheckRetryFrequency)
-		if err := s.db.CPut(key, nextRetry, whenToCheck); err != nil {
+		if err := s.db.CPut(s.Ctx(), key, nextRetry, whenToCheck); err != nil {
 			if log.V(2) {
 				log.Infof(s.Ctx(), "Could not set next version check time (maybe another node checked?): %v", err)
 			}
@@ -150,7 +150,7 @@ func (s *Server) maybeRunPeriodicCheck(op string, key roachpb.Key, f func()) tim
 		log.Infof(s.Ctx(), "No previous %s time.", op)
 		nextRetry := timeutil.Now().Add(updateCheckRetryFrequency)
 		// CPut with `nil` prev value to assert that no other node has checked.
-		if err := s.db.CPut(key, nextRetry, nil); err != nil {
+		if err := s.db.CPut(s.Ctx(), key, nextRetry, nil); err != nil {
 			if log.V(2) {
 				log.Infof(s.Ctx(), "Could not set %s time (maybe another node checked?): %v", op, err)
 			}

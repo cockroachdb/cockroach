@@ -81,7 +81,7 @@ func TestKVDBCoverage(t *testing.T) {
 	}
 
 	// Conditional put should succeed, changing value1 to value2.
-	if pErr := db.CPut(key, value2, value1); pErr != nil {
+	if pErr := db.CPut(context.TODO(), key, value2, value1); pErr != nil {
 		t.Fatal(pErr)
 	}
 

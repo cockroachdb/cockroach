@@ -159,9 +159,9 @@ func runCPut(cmd *cobra.Command, args []string) {
 	value := unquoteArg(args[1], false)
 	var err error
 	if len(args) == 3 {
-		err = kvDB.CPut(key, value, unquoteArg(args[2], false))
+		err = kvDB.CPut(context.Background(), key, value, unquoteArg(args[2], false))
 	} else {
-		err = kvDB.CPut(key, value, nil)
+		err = kvDB.CPut(context.Background(), key, value, nil)
 	}
 
 	if err != nil {
