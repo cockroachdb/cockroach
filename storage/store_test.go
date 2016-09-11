@@ -2439,3 +2439,41 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		return nil
 	})
 }
+
+func TestCanCampaignIdleReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+	s := tc.store
+	ctx := context.Background()
+
+	// Bump the clock by the election timeout. Idle replicas can't campaign
+	// eagerly yet because we haven't gossiped the store descriptor.
+	electionTimeout := int64(s.ctx.RaftTickInterval * time.Duration(s.ctx.RaftElectionTimeoutTicks))
+	tc.manualClock.Increment(electionTimeout)
+	if s.canCampaignIdleReplica() {
+		t.Fatalf("idle replica can unexpectedly campaign")
+	}
+
+	// Gossip the store descriptor.
+	if err := s.GossipStore(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if s.canCampaignIdleReplica() {
+		t.Fatalf("idle replica can unexpectedly campaign")
+	}
+
+	// Bump the clock to just before the idle election time.
+	tc.manualClock.Increment(electionTimeout - 1)
+	if s.canCampaignIdleReplica() {
+		t.Fatalf("idle replica can unexpectedly campaign")
+	}
+
+	// One more nanosecond bump and idle replicas should be able to campaign
+	// eagerly.
+	tc.manualClock.Increment(1)
+	if !s.canCampaignIdleReplica() {
+		t.Fatalf("idle replica unexpectedly cannot campaign")
+	}
+}
