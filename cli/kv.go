@@ -298,7 +298,7 @@ func runScan(cmd *cobra.Command, args []string) {
 	kvDB, stopper := makeDBClient()
 	defer stopper.Stop()
 
-	rows, err := kvDB.Scan(startKey, endKey, maxResults)
+	rows, err := kvDB.Scan(context.Background(), startKey, endKey, maxResults)
 	if err != nil {
 		panicf("scan failed: %s", err)
 	}
@@ -329,7 +329,7 @@ func runReverseScan(cmd *cobra.Command, args []string) {
 	kvDB, stopper := makeDBClient()
 	defer stopper.Stop()
 
-	rows, err := kvDB.ReverseScan(startKey, endKey, maxResults)
+	rows, err := kvDB.ReverseScan(context.TODO(), startKey, endKey, maxResults)
 	if err != nil {
 		panicf("reverse scan failed: %s", err)
 	}

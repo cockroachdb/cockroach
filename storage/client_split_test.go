@@ -843,7 +843,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		expKeys = append(expKeys, testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax))
 
 		util.SucceedsSoonDepth(1, t, func() error {
-			rows, err := store.DB().Scan(keys.Meta2Prefix, keys.MetaMax, 0)
+			rows, err := store.DB().Scan(context.TODO(), keys.Meta2Prefix, keys.MetaMax, 0)
 			if err != nil {
 				return err
 			}
@@ -1230,7 +1230,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 
 	// Another client comes along at a higher timestamp, touching everything on
 	// the right of the (soon-to-be) split key.
-	if _, err := db.Scan(splitKey, rightKey, 0); err != nil {
+	if _, err := db.Scan(ctx, splitKey, rightKey, 0); err != nil {
 		t.Fatal(err)
 	}
 

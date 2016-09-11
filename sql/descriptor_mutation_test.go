@@ -105,7 +105,7 @@ func (mt mutationTest) checkTableSize(e int) {
 	tablePrefix := keys.MakeTablePrefix(uint32(mt.tableDesc.ID))
 	tableStartKey := roachpb.Key(tablePrefix)
 	tableEndKey := tableStartKey.PrefixEnd()
-	if kvs, err := mt.kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
+	if kvs, err := mt.kvDB.Scan(context.TODO(), tableStartKey, tableEndKey, 0); err != nil {
 		mt.Error(err)
 	} else if len(kvs) != e {
 		mt.Errorf("expected %d key value pairs, but got %d", e, len(kvs))

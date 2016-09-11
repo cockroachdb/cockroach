@@ -668,14 +668,14 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 		}
 	}
 	// Scan to retrieve the keys just written.
-	if rows, err := db.Scan("a", "q", 0); err != nil {
+	if rows, err := db.Scan(context.TODO(), "a", "q", 0); err != nil {
 		t.Fatalf("unexpected error on Scan: %s", err)
 	} else if l := len(rows); l != 3 {
 		t.Errorf("expected 3 rows; got %d", l)
 	}
 
 	// Scan in reverse order to retrieve the keys just written.
-	if rows, err := db.ReverseScan("a", "q", 0); err != nil {
+	if rows, err := db.ReverseScan(context.TODO(), "a", "q", 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 3 {
 		t.Errorf("expected 3 rows; got %d", l)
@@ -692,14 +692,14 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 	}
 
 	// Scan consistently to make sure the intents are gone.
-	if rows, err := db.Scan("a", "q", 0); err != nil {
+	if rows, err := db.Scan(context.TODO(), "a", "q", 0); err != nil {
 		t.Fatalf("unexpected error on Scan: %s", err)
 	} else if l := len(rows); l != 0 {
 		t.Errorf("expected 0 rows; got %d", l)
 	}
 
 	// ReverseScan consistently to make sure the intents are gone.
-	if rows, err := db.ReverseScan("a", "q", 0); err != nil {
+	if rows, err := db.ReverseScan(context.TODO(), "a", "q", 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 0 {
 		t.Errorf("expected 0 rows; got %d", l)
@@ -807,28 +807,29 @@ func TestSingleRangeReverseScan(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := initReverseScanTestEnv(s, t)
+	ctx := context.TODO()
 
 	// Case 1: Request.EndKey is in the middle of the range.
-	if rows, err := db.ReverseScan("b", "d", 0); err != nil {
+	if rows, err := db.ReverseScan(ctx, "b", "d", 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 2 {
 		t.Errorf("expected 2 rows; got %d", l)
 	}
-	if rows, err := db.ReverseScan("b", "d", 1); err != nil {
+	if rows, err := db.ReverseScan(ctx, "b", "d", 1); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 1 {
 		t.Errorf("expected 1 rows; got %d", l)
 	}
 
 	// Case 2: Request.EndKey is equal to the EndKey of the range.
-	if rows, pErr := db.ReverseScan("e", "g", 0); pErr != nil {
+	if rows, pErr := db.ReverseScan(ctx, "e", "g", 0); pErr != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", pErr)
 	} else if l := len(rows); l != 2 {
 		t.Errorf("expected 2 rows; got %d", l)
 	}
 	// Case 3: Test roachpb.TableDataMin. Expected to return "g" and "h".
 	wanted := 2
-	if rows, pErr := db.ReverseScan("g", keys.TableDataMin, 0); pErr != nil {
+	if rows, pErr := db.ReverseScan(ctx, "g", keys.TableDataMin, 0); pErr != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", pErr)
 	} else if l := len(rows); l != wanted {
 		t.Errorf("expected %d rows; got %d", wanted, l)
@@ -837,7 +838,7 @@ func TestSingleRangeReverseScan(t *testing.T) {
 	// This span covers the system DB keys. Note sql.GetInitialSystemValues
 	// returns one key before keys.SystemMax, but our scan is including one key
 	// (\xffa) created for the test.
-	if rows, pErr := db.ReverseScan(keys.SystemMax, "b", 0); pErr != nil {
+	if rows, pErr := db.ReverseScan(ctx, keys.SystemMax, "b", 0); pErr != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", pErr)
 	} else if l := len(rows); l != 1 {
 		t.Errorf("expected 1 row; got %d", l)
@@ -851,20 +852,21 @@ func TestMultiRangeReverseScan(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := initReverseScanTestEnv(s, t)
+	ctx := context.TODO()
 
 	// Case 1: Request.EndKey is in the middle of the range.
-	if rows, pErr := db.ReverseScan("a", "d", 0); pErr != nil {
+	if rows, pErr := db.ReverseScan(ctx, "a", "d", 0); pErr != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", pErr)
 	} else if l := len(rows); l != 3 {
 		t.Errorf("expected 3 rows; got %d", l)
 	}
-	if rows, pErr := db.ReverseScan("a", "d", 2); pErr != nil {
+	if rows, pErr := db.ReverseScan(ctx, "a", "d", 2); pErr != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", pErr)
 	} else if l := len(rows); l != 2 {
 		t.Errorf("expected 2 rows; got %d", l)
 	}
 	// Case 2: Request.EndKey is equal to the EndKey of the range.
-	if rows, pErr := db.ReverseScan("d", "g", 0); pErr != nil {
+	if rows, pErr := db.ReverseScan(ctx, "d", "g", 0); pErr != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", pErr)
 	} else if l := len(rows); l != 3 {
 		t.Errorf("expected 3 rows; got %d", l)
@@ -886,7 +888,7 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 	}
 
 	// The ReverseScan will run into a stale descriptor.
-	if rows, err := db.ReverseScan("a", "d", 0); err != nil {
+	if rows, err := db.ReverseScan(context.TODO(), "a", "d", 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 3 {
 		t.Errorf("expected 3 rows; got %d", l)
@@ -897,7 +899,7 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 	if err := db.AdminMerge("e"); err != nil {
 		t.Fatal(err)
 	}
-	if rows, err := db.ReverseScan("d", "g", 0); err != nil {
+	if rows, err := db.ReverseScan(context.TODO(), "d", "g", 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 3 {
 		t.Errorf("expected 3 rows; got %d", l)
@@ -909,17 +911,18 @@ func TestBadRequest(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+	ctx := context.TODO()
 
 	// Write key "a".
-	if err := db.Put(context.TODO(), "a", "value"); err != nil {
+	if err := db.Put(ctx, "a", "value"); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := db.Scan("a", "a", 0); !testutils.IsError(err, "truncation resulted in empty batch") {
+	if _, err := db.Scan(ctx, "a", "a", 0); !testutils.IsError(err, "truncation resulted in empty batch") {
 		t.Fatalf("unexpected error on scan with startkey == endkey: %v", err)
 	}
 
-	if _, err := db.ReverseScan("a", "a", 0); !testutils.IsError(err, "truncation resulted in empty batch") {
+	if _, err := db.ReverseScan(ctx, "a", "a", 0); !testutils.IsError(err, "truncation resulted in empty batch") {
 		t.Fatalf("unexpected error on reverse scan with startkey == endkey: %v", err)
 	}
 

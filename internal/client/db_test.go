@@ -219,7 +219,7 @@ func TestDB_Scan(t *testing.T) {
 	if err := db.Run(context.TODO(), b); err != nil {
 		panic(err)
 	}
-	rows, err := db.Scan("a", "b", 100)
+	rows, err := db.Scan(context.TODO(), "a", "b", 100)
 	if err != nil {
 		panic(err)
 	}
@@ -244,7 +244,7 @@ func TestDB_ReverseScan(t *testing.T) {
 	if err := db.Run(context.TODO(), b); err != nil {
 		panic(err)
 	}
-	rows, err := db.ReverseScan("ab", "c", 100)
+	rows, err := db.ReverseScan(context.TODO(), "ab", "c", 100)
 	if err != nil {
 		panic(err)
 	}
@@ -272,7 +272,7 @@ func TestDB_Del(t *testing.T) {
 	if err := db.Del("ab"); err != nil {
 		panic(err)
 	}
-	rows, err := db.Scan("a", "b", 100)
+	rows, err := db.Scan(context.TODO(), "a", "b", 100)
 	if err != nil {
 		panic(err)
 	}

@@ -82,7 +82,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	}
 
 	start := roachpb.Key(keys.MakeTablePrefix(uint32(keys.NamespaceTableID)))
-	if kvs, err := kvDB.Scan(start, start.PrefixEnd(), 0); err != nil {
+	if kvs, err := kvDB.Scan(ctx, start, start.PrefixEnd(), 0); err != nil {
 		t.Fatal(err)
 	} else {
 		if a, e := len(kvs), server.GetBootstrapSchema().SystemDescriptorCount(); a != e {

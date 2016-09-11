@@ -286,6 +286,7 @@ func (db *DB) Inc(ctx context.Context, key interface{}, value int64) (KeyValue, 
 }
 
 func (db *DB) scan(
+	ctx context.Context,
 	begin, end interface{},
 	maxRows int64,
 	isReverse bool,
@@ -301,7 +302,7 @@ func (db *DB) scan(
 	} else {
 		b.ReverseScan(begin, end)
 	}
-	r, err := getOneResult(db.Run(context.TODO(), b), b)
+	r, err := getOneResult(db.Run(ctx, b), b)
 	return r.Rows, err
 }
 
@@ -311,8 +312,8 @@ func (db *DB) scan(
 // The returned []KeyValue will contain up to maxRows elements.
 //
 // key can be either a byte slice or a string.
-func (db *DB) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
-	return db.scan(begin, end, maxRows, false, roachpb.CONSISTENT)
+func (db *DB) Scan(ctx context.Context, begin, end interface{}, maxRows int64) ([]KeyValue, error) {
+	return db.scan(ctx, begin, end, maxRows, false, roachpb.CONSISTENT)
 }
 
 // ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
@@ -321,8 +322,10 @@ func (db *DB) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
 // The returned []KeyValue will contain up to maxRows elements.
 //
 // key can be either a byte slice or a string.
-func (db *DB) ReverseScan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
-	return db.scan(begin, end, maxRows, true, roachpb.CONSISTENT)
+func (db *DB) ReverseScan(
+	ctx context.Context, begin, end interface{}, maxRows int64,
+) ([]KeyValue, error) {
+	return db.scan(ctx, begin, end, maxRows, true, roachpb.CONSISTENT)
 }
 
 // Del deletes one or more keys.

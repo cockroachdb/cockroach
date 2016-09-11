@@ -683,7 +683,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		// Check that we split 1 times in allotted time.
 		util.SucceedsSoon(t, func() error {
 			// Scan the meta records.
-			rows, serr := s.DB.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
+			rows, serr := s.DB.Scan(context.TODO(), keys.Meta2Prefix, keys.MetaMax, 0)
 			if serr != nil {
 				t.Fatalf("failed to scan meta2 keys: %s", serr)
 			}
