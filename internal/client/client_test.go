@@ -250,7 +250,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 					if _, ok := test.args.(*roachpb.GetRequest); ok {
 						_, err = db.Get(context.TODO(), key)
 					} else {
-						err = db.Put(key, "value")
+						err = db.Put(context.TODO(), key, "value")
 					}
 					doneCall <- errors.Wrapf(
 						err, "%d: expected success on non-txn call to %s",
@@ -385,7 +385,7 @@ func TestClientGetAndPutProto(t *testing.T) {
 	}
 
 	key := roachpb.Key(testUser + "/zone-config")
-	if err := db.Put(key, &zoneConfig); err != nil {
+	if err := db.Put(context.TODO(), key, &zoneConfig); err != nil {
 		t.Fatalf("unable to put proto: %s", err)
 	}
 
@@ -407,7 +407,7 @@ func TestClientGetAndPut(t *testing.T) {
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	value := []byte("value")
-	if err := db.Put(testUser+"/key", value); err != nil {
+	if err := db.Put(context.TODO(), testUser+"/key", value); err != nil {
 		t.Fatalf("unable to put value: %s", err)
 	}
 	gr, err := db.Get(context.TODO(), testUser+"/key")
@@ -429,7 +429,7 @@ func TestClientPutInline(t *testing.T) {
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	value := []byte("value")
-	if err := db.PutInline(testUser+"/key", value); err != nil {
+	if err := db.PutInline(context.TODO(), testUser+"/key", value); err != nil {
 		t.Fatalf("unable to put value: %s", err)
 	}
 	gr, err := db.Get(context.TODO(), testUser+"/key")
@@ -455,7 +455,7 @@ func TestClientEmptyValues(t *testing.T) {
 	defer s.Stopper().Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
-	if err := db.Put(testUser+"/a", []byte{}); err != nil {
+	if err := db.Put(context.TODO(), testUser+"/a", []byte{}); err != nil {
 		t.Error(err)
 	}
 	if gr, err := db.Get(context.TODO(), testUser+"/a"); err != nil {
@@ -610,7 +610,7 @@ func TestClientBatch(t *testing.T) {
 	// Induce a non-transactional failure.
 	{
 		key := roachpb.Key("conditionalPut")
-		if err := db.Put(key, "hello"); err != nil {
+		if err := db.Put(context.TODO(), key, "hello"); err != nil {
 			t.Fatal(err)
 		}
 
@@ -635,7 +635,7 @@ func TestClientBatch(t *testing.T) {
 	// Induce a transactional failure.
 	{
 		key := roachpb.Key("conditionalPut")
-		if err := db.Put(key, "hello"); err != nil {
+		if err := db.Put(context.TODO(), key, "hello"); err != nil {
 			t.Fatal(err)
 		}
 
@@ -787,7 +787,7 @@ func TestClientPermissions(t *testing.T) {
 	value := []byte("value")
 	const matchErr = "is not allowed"
 	for tcNum, tc := range testCases {
-		err := tc.client.Put(tc.path, value)
+		err := tc.client.Put(context.TODO(), tc.path, value)
 		if (err == nil) != tc.allowed || (!tc.allowed && !testutils.IsError(err, matchErr)) {
 			t.Errorf("#%d: expected allowed=%t, got err=%v", tcNum, tc.allowed, err)
 		}
@@ -861,7 +861,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	defer s.Stopper().Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
-	if err := db.Put("k", "v"); err != nil {
+	if err := db.Put(context.TODO(), "k", "v"); err != nil {
 		t.Fatal(err)
 	}
 
