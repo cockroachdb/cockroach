@@ -22,6 +22,8 @@ import (
 	"math/rand"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
@@ -131,6 +133,7 @@ func (mt mutationTest) makeMutationsActive() {
 		mt.Fatal(err)
 	}
 	if err := mt.kvDB.Put(
+		context.TODO(),
 		sqlbase.MakeDescMetadataKey(mt.tableDesc.ID),
 		sqlbase.WrapDescriptor(mt.tableDesc),
 	); err != nil {
@@ -181,6 +184,7 @@ func (mt mutationTest) writeMutation(m sqlbase.DescriptorMutation) {
 		mt.Fatal(err)
 	}
 	if err := mt.kvDB.Put(
+		context.TODO(),
 		sqlbase.MakeDescMetadataKey(mt.tableDesc.ID),
 		sqlbase.WrapDescriptor(mt.tableDesc),
 	); err != nil {
@@ -974,6 +978,7 @@ func TestAddingFKs(t *testing.T) {
 	ordersDesc.State = sqlbase.TableDescriptor_ADD
 	ordersDesc.Version++
 	if err := kvDB.Put(
+		context.TODO(),
 		sqlbase.MakeDescMetadataKey(ordersDesc.ID),
 		sqlbase.WrapDescriptor(ordersDesc),
 	); err != nil {

@@ -217,7 +217,7 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 
 	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
 	for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "c1", "c2", "d1", "f1", "f2", "f3"} {
-		if err := db.Put(key, "value"); err != nil {
+		if err := db.Put(ctx, key, "value"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -288,7 +288,7 @@ func TestMultiRangeBoundedBatchReverseScan(t *testing.T) {
 
 	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
 	for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "c1", "c2", "d1", "f1", "f2", "f3"} {
-		if err := db.Put(key, "value"); err != nil {
+		if err := db.Put(ctx, key, "value"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -361,7 +361,7 @@ func TestMultiRangeBoundedBatchScanUnsortedOrder(t *testing.T) {
 
 	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
 	for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "b3", "b4", "b5", "c1", "c2", "d1", "f1", "f2", "f3"} {
-		if err := db.Put(key, "value"); err != nil {
+		if err := db.Put(context.TODO(), key, "value"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -395,7 +395,7 @@ func TestMultiRangeBoundedBatchScanSortedOverlapping(t *testing.T) {
 
 	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
 	for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "c1", "c2", "d1", "f1", "f2", "f3"} {
-		if err := db.Put(key, "value"); err != nil {
+		if err := db.Put(context.TODO(), key, "value"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -471,7 +471,7 @@ func TestMultiRangeBoundedBatchDelRange(t *testing.T) {
 	for bound := 1; bound <= 20; bound++ {
 		// Initialize all keys.
 		for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "c1", "c2", "d1", "f1", "f2", "f3", "g1", "g2", "h1"} {
-			if err := db.Put(key, "value"); err != nil {
+			if err := db.Put(context.TODO(), key, "value"); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -522,7 +522,7 @@ func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 	db := setupMultipleRanges(t, s, "a", "b")
 	// Check that a
 	for _, key := range []string{"a1", "a2", "a3", "b1", "b2"} {
-		if err := db.Put(key, "value"); err != nil {
+		if err := db.Put(context.TODO(), key, "value"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -576,7 +576,7 @@ func TestMultiRangeBoundedBatchDelRangeOverlappingKeys(t *testing.T) {
 
 	for bound := 1; bound <= 20; bound++ {
 		for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "b3", "c1", "c2", "d1", "f1", "f2", "f3"} {
-			if err := db.Put(key, "value"); err != nil {
+			if err := db.Put(context.TODO(), key, "value"); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -663,7 +663,7 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 
 	// Write keys before, at, and after the split key.
 	for _, key := range []string{"a", "b", "c"} {
-		if err := db.Put(key, "value"); err != nil {
+		if err := db.Put(context.TODO(), key, "value"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -793,7 +793,7 @@ func initReverseScanTestEnv(s serverutils.TestServerInterface, t *testing.T) *cl
 	}
 	// Write keys before, at, and after the split key.
 	for _, key := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
-		if err := db.Put(key, "value"); err != nil {
+		if err := db.Put(context.TODO(), key, "value"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -911,7 +911,7 @@ func TestBadRequest(t *testing.T) {
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	// Write key "a".
-	if err := db.Put("a", "value"); err != nil {
+	if err := db.Put(context.TODO(), "a", "value"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1001,7 +1001,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 
 	// Set the initial value on the target key "b".
 	origVal := "val"
-	if err := db.Put(targetKey, origVal); err != nil {
+	if err := db.Put(context.TODO(), targetKey, origVal); err != nil {
 		t.Fatal(err)
 	}
 

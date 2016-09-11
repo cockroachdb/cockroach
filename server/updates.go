@@ -160,8 +160,8 @@ func (s *Server) maybeRunPeriodicCheck(op string, key roachpb.Key, f func()) tim
 
 	f()
 
-	if err := s.db.Put(key, timeutil.Now().Add(updateCheckFrequency)); err != nil {
-		log.Infof(context.TODO(), "Error updating %s time: %v", op, err)
+	if err := s.db.Put(s.Ctx(), key, timeutil.Now().Add(updateCheckFrequency)); err != nil {
+		log.Infof(s.Ctx(), "Error updating %s time: %v", op, err)
 	}
 	return updateCheckFrequency
 }

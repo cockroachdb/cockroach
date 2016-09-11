@@ -45,7 +45,7 @@ func testSingleKeyInner(t *testing.T, c cluster.Cluster, cfg cluster.TestConfig)
 	const key = "test-key"
 	initDB, initDBStopper := c.NewClient(t, 0)
 	defer initDBStopper.Stop()
-	if err := initDB.Put(key, 0); err != nil {
+	if err := initDB.Put(context.TODO(), key, 0); err != nil {
 		t.Fatal(err)
 	}
 

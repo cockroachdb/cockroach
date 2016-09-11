@@ -69,7 +69,7 @@ func TestKVDBCoverage(t *testing.T) {
 	value3 := []byte("value3")
 
 	// Put first value at key.
-	if pErr := db.Put(key, value1); pErr != nil {
+	if pErr := db.Put(context.TODO(), key, value1); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -120,7 +120,7 @@ func TestKVDBCoverage(t *testing.T) {
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
-		if pErr := db.Put(kv.Key, valueBytes); pErr != nil {
+		if pErr := db.Put(context.TODO(), kv.Key, valueBytes); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}

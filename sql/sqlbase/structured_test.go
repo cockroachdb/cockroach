@@ -801,7 +801,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			if err := v.SetProto(desc); err != nil {
 				t.Fatal(err)
 			}
-			if err := kvDB.Put(MakeDescMetadataKey(referencedDesc.ID), &v); err != nil {
+			if err := kvDB.Put(context.TODO(), MakeDescMetadataKey(referencedDesc.ID), &v); err != nil {
 				t.Fatal(err)
 			}
 		}

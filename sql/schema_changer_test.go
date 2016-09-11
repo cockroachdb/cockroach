@@ -209,6 +209,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	expectedVersion++
 	tableDesc.UpVersion = true
 	if err := kvDB.Put(
+		context.TODO(),
 		sqlbase.MakeDescMetadataKey(tableDesc.ID),
 		sqlbase.WrapDescriptor(tableDesc),
 	); err != nil {
@@ -276,6 +277,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 		tableDesc.Mutations[0].Direction = direction
 		expectedVersion++
 		if err := kvDB.Put(
+			context.TODO(),
 			sqlbase.MakeDescMetadataKey(tableDesc.ID),
 			sqlbase.WrapDescriptor(tableDesc),
 		); err != nil {
