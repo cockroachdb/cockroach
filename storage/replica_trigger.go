@@ -252,7 +252,7 @@ func (r *Replica) verifyChecksumTrigger(
 				if bytes.Compare(startKey, keys.LocalMax) < 0 {
 					startKey = keys.LocalMax
 				}
-				if err := r.store.db.CheckConsistency(startKey, desc.EndKey.AsRawKey(), true /* withDiff */); err != nil {
+				if err := r.store.db.CheckConsistency(ctx, startKey, desc.EndKey.AsRawKey(), true /* withDiff */); err != nil {
 					log.Errorf(ctx, "couldn't rerun consistency check: %s", err)
 				}
 			}); err != nil {
