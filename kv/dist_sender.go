@@ -1032,6 +1032,7 @@ func (ds *DistSender) sendToReplicas(
 
 	// Send the first request.
 	pending := 1
+	log.VTracef(2, opts.ctx, "sending RPC for batch: %s", args)
 	transport.SendNext(done)
 
 	// Wait for completions. This loop will retry operations that fail
@@ -1046,7 +1047,7 @@ func (ds *DistSender) sendToReplicas(
 			sendNextTimer.Read = true
 			// On successive RPC timeouts, send to additional replicas if available.
 			if !transport.IsExhausted() {
-				log.Trace(opts.ctx, "timeout, trying next peer")
+				log.VTracef(2, opts.ctx, "timeout, trying next peer")
 				pending++
 				transport.SendNext(done)
 			}
@@ -1056,7 +1057,7 @@ func (ds *DistSender) sendToReplicas(
 			err := call.Err
 			if err == nil {
 				if log.V(2) {
-					log.Infof(opts.ctx, "RPC reply: %+v", call.Reply)
+					log.Infof(opts.ctx, "RPC reply: %s", call.Reply)
 				} else if log.V(1) && call.Reply.Error != nil {
 					log.Infof(opts.ctx, "application error: %s", call.Reply.Error)
 				}
@@ -1079,11 +1080,14 @@ func (ds *DistSender) sendToReplicas(
 
 			// Send to additional replicas if available.
 			if !transport.IsExhausted() {
-				log.Tracef(opts.ctx, "error, trying next peer: %s", err)
+				log.VTracef(2, opts.ctx, "error, trying next peer: %s", err)
 				pending++
 				transport.SendNext(done)
 			}
 			if pending == 0 {
+				log.VTracef(2, opts.ctx,
+					"sending to all %d replicas failed; last error: %v",
+					len(replicas), err)
 				return nil, roachpb.NewSendError(
 					fmt.Sprintf("sending to all %d replicas failed; last error: %v",
 						len(replicas), err))

@@ -1359,7 +1359,9 @@ func (r *Replica) PushTxn(
 		if !pusherWins {
 			s = "failed to push"
 		}
-		log.Infof(ctx, "%s "+s+" %s: %s", args.PusherTxn.ID.Short(), reply.PusheeTxn.ID.Short(), reason)
+		log.Infof(ctx, "%s "+s+" %s: %s (pushee last active: %s)",
+			args.PusherTxn.ID.Short(), reply.PusheeTxn.ID.Short(), reason,
+			reply.PusheeTxn.LastActive())
 	}
 
 	if !pusherWins {
