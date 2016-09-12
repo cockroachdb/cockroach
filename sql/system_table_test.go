@@ -17,6 +17,7 @@
 package sql_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/keys"
@@ -31,7 +32,7 @@ import (
 func TestInitialKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const nonSystemDesc = 2
+	const nonSystemDesc = 4
 	const keysPerDesc = 2
 	const nonDescKeys = 2
 
@@ -112,13 +113,22 @@ func TestSystemTableLiterals(t *testing.T) {
 	// test the tables with non-specific NewDefaultPrivilegeDescriptor
 	for _, test := range []testcase{
 		{keys.LeaseTableID, sqlbase.LeaseTableSchema, sqlbase.LeaseTable},
+		{keys.EventLogTableID, sqlbase.EventLogTableSchema, sqlbase.EventLogTable},
+		{keys.RangeEventTableID, sqlbase.RangeEventTableSchema, sqlbase.RangeEventTable},
 		{keys.UITableID, sqlbase.UITableSchema, sqlbase.UITable},
 	} {
 		gen := sql.CreateTableDescriptor(test.id, keys.SystemDatabaseID, test.schema, sqlbase.NewDefaultPrivilegeDescriptor())
 		if !proto.Equal(&test.pkg, &gen) {
-			t.Fatalf(
-				"mismatch between re-generated version and pkg version of %s:\npkg:\n\t%#v\ngenerated\n\t%#v",
-				test.pkg.Name, test.pkg, gen)
+			s1 := fmt.Sprintf("%#v", test.pkg)
+			s2 := fmt.Sprintf("%#v", gen)
+			for i := range s1 {
+				if s1[i] != s2[i] {
+					t.Fatalf(
+						"mismatch between %sv:\npkg:\n\t%#v\npartial-gen\n\t%#v\ngen\n\t%#v",
+						test.pkg.Name, s1[:i+3], s2[:i+3], gen)
+				}
+			}
+			panic("did not locate mismatch between re-generated version and pkg version")
 		}
 	}
 }

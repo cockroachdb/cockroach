@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -821,12 +820,8 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	verifySplitsAtTablePrefixes := func(maxTableID int) {
 		// We expect splits at each of the user tables, but not at the system
 		// tables boundaries.
-		expKeys := make([]roachpb.Key, 0, maxTableID+2)
-
-		// We can't simply set numReservedTables to schema.TableCount(), because
-		// some system tables are created at cluster bootstrap time. So, before the
-		// cluster bootstrap, TableCount() will return a value that's too low.
-		numReservedTables := schema.MaxTableID() - keys.MaxSystemConfigDescID
+		numReservedTables := schema.SystemDescriptorCount() - schema.SystemConfigDescriptorCount()
+		expKeys := make([]roachpb.Key, 0, maxTableID+numReservedTables)
 		for i := 1; i <= int(numReservedTables); i++ {
 			expKeys = append(expKeys,
 				testutils.MakeKey(keys.Meta2Prefix,
@@ -858,9 +853,8 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 
 	verifySplitsAtTablePrefixes(userTableMax)
 
-	numTotalValues := keys.MaxSystemConfigDescID + server.ExpectedInitialRangeCount()
-
-	// Write another, disjoint descriptor for a user table.
+	// Write another, disjoint (+3) descriptor for a user table.
+	numTotalValues := userTableMax + 3
 	if err := store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
 		// This time, only write the last table descriptor. Splits

@@ -161,22 +161,7 @@ func allocateStoreIDs(nodeID roachpb.NodeID, inc int64, db *client.DB) (roachpb.
 // GetBootstrapSchema returns the schema which will be used to bootstrap a new
 // server.
 func GetBootstrapSchema() sqlbase.MetadataSchema {
-	schema := sqlbase.MakeMetadataSchema()
-	AddEventLogToMetadataSchema(&schema)
-	sql.AddEventLogToMetadataSchema(&schema)
-	return schema
-}
-
-// AddEventLogToMetadataSchema adds the range event log table to the supplied
-// MetadataSchema.
-func AddEventLogToMetadataSchema(schema *sqlbase.MetadataSchema) {
-	desc := sql.CreateTableDescriptor(
-		keys.RangeEventTableID,
-		keys.SystemDatabaseID,
-		storage.RangeEventTableSchema,
-		sqlbase.NewDefaultPrivilegeDescriptor(),
-	)
-	schema.AddDescriptor(keys.SystemDatabaseID, &desc)
+	return sqlbase.MakeMetadataSchema()
 }
 
 // bootstrapCluster bootstraps a multiple stores using the provided
