@@ -62,6 +62,9 @@ type TestServerArgs struct {
 	// Stopper can be used to stop the server. If not set, a stopper will be
 	// constructed and it can be gotten through TestServerInterface.Stopper().
 	Stopper *stop.Stopper
+
+	// If set, the recording of events to the event log tables is disabled.
+	DisableEventLog bool
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test
