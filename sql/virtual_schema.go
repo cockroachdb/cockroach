@@ -44,6 +44,7 @@ type virtualSchema struct {
 // virtualSchemaTable represents a table within a virtualSchema.
 type virtualSchemaTable struct {
 	schema   string
+	desc     sqlbase.TableDescriptor
 	populate func(p *planner, addRow func(...parser.Datum) error) error
 }
 
@@ -155,14 +156,8 @@ func initVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
 }
 
 func initVirtualTableDesc(t virtualSchemaTable) *sqlbase.TableDescriptor {
-	stmt, err := parser.ParseOneTraditional(t.schema)
-	if err != nil {
-		panic(err)
-	}
-	desc, err := MakeTableDesc(stmt.(*parser.CreateTable), 0)
-	if err != nil {
-		panic(err)
-	}
+	desc := t.desc
+	desc.ParentID = 0
 	desc.ID = keys.VirtualDescriptorID
 	desc.Privileges = emptyPrivileges
 	return &desc
