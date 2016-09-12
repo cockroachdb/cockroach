@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
@@ -882,5 +883,62 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 		s.DistSender(), nil, roachpb.Header{UserPriority: 42}, &leaseReq)
 	if !testutils.IsPError(pErr, "injected error") {
 		t.Fatalf("expected error %q, got: %s", "injected error", pErr)
+	}
+}
+
+func newTransaction(name string, baseKey roachpb.Key, userPriority roachpb.UserPriority,
+	isolation enginepb.IsolationType, clock *hlc.Clock) *roachpb.Transaction {
+	var offset int64
+	var now hlc.Timestamp
+	if clock != nil {
+		offset = clock.MaxOffset().Nanoseconds()
+		now = clock.Now()
+	}
+	return roachpb.NewTransaction(name, baseKey, userPriority, isolation, now, offset)
+}
+
+// Test that a duplicate BeginTransaction results in a TransactionRetryError, as
+// such recognizing that it's likely the result of the batch being retried by
+// DistSender.
+func TestDuplicateBeginTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	cmdFilter := func(fArgs storagebase.FilterArgs) *roachpb.Error {
+		if fArgs.Hdr.UserPriority == 42 {
+			return roachpb.NewErrorf("injected error")
+		}
+		return nil
+	}
+	srv, _, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &storage.StoreTestingKnobs{
+					TestingCommandFilter: cmdFilter,
+				},
+			},
+		})
+	s := srv.(*server.TestServer)
+	defer s.Stopper().Stop()
+
+	key := roachpb.Key("a")
+	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, srv.Clock())
+
+	btArgs := roachpb.BeginTransactionRequest{
+		Span: roachpb.Span{
+			Key: txn.Key,
+		},
+	}
+	var ba roachpb.BatchRequest
+	ba.Header.Txn = txn
+	ba.Add(&btArgs)
+	_, pErr := srv.KVClient().(*client.DB).GetSender().Send(
+		context.Background(), ba)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	// Send the batch again.
+	_, pErr = srv.KVClient().(*client.DB).GetSender().Send(
+		context.Background(), ba)
+	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
+		t.Fatalf("expected retry error; got %v", pErr)
 	}
 }
