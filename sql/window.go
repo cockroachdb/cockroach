@@ -697,19 +697,11 @@ func (v *extractWindowFuncsVisitor) VisitPre(expr parser.Expr) (recurse bool, ne
 	switch t := expr.(type) {
 	case *parser.FuncExpr:
 		switch {
-		case t.IsWindowFunction():
+		case t.IsWindowFunctionApplication():
 			// Check if a parent node above this window function is an aggregate.
 			if len(v.aggregatesSeen) > 0 {
 				v.err = errors.Errorf("aggregate function calls cannot contain window function "+
 					"call %s", t.Name)
-				return false, expr
-			}
-
-			// Make sure the window function application is of either a built-in window
-			// function or of a built-in aggregate function.
-			if t.GetWindowConstructor() == nil && t.GetAggregateConstructor() == nil {
-				v.err = fmt.Errorf("OVER specified, but %s is not a window function nor an "+
-					"aggregate function", t.Name)
 				return false, expr
 			}
 
