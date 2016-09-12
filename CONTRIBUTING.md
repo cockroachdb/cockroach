@@ -4,8 +4,8 @@
 
 1.  Install the following prerequisites, as necessary:
   - A C++ compiler that supports C++11. Note that GCC prior to 6.0 doesn't
-  work due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48891.
-  - A Go environment with a 64-bit version of Go 1.7.
+    work due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48891
+  - A Go environment with a 64-bit version of Go 1.7.1
   - Git 2.5+
   - Bash
 
