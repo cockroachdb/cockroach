@@ -55,6 +55,21 @@ var (
 	errLogOfZero        = errors.New("cannot take logarithm of zero")
 )
 
+// FunctionClass specifies the class of the builtin function.
+type FunctionClass int
+
+const (
+	// NormalClass is a standard builtin function.
+	NormalClass FunctionClass = iota
+	// AggregateClass is a builtin aggregate function.
+	AggregateClass
+	// WindowClass is a builtin window function.
+	WindowClass
+)
+
+// Avoid vet warning about unused enum value.
+var _ = NormalClass
+
 const (
 	categoryIDGeneration = "ID Generation"
 	categorySystemInfo   = "System Info"
@@ -68,13 +83,16 @@ const (
 type Builtin struct {
 	Types      typeList
 	ReturnType Datum
-	category   string
+
 	// Set to true when a function potentially returns a different value
 	// when called in the same statement with the same parameters.
 	// e.g.: random(), clock_timestamp(). Some functions like now()
 	// return the same value in the same statement, but different values
 	// in separate statements, and should not be marked as impure.
-	impure        bool
+	impure   bool
+	class    FunctionClass
+	category string
+
 	AggregateFunc func() AggregateFunc
 	fn            func(*EvalContext, DTuple) (Datum, error)
 }

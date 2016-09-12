@@ -25,11 +25,23 @@ import (
 )
 
 func init() {
-	for k, v := range Aggregates {
-		for i := range v {
-			v[i].impure = true
+	// Add all aggregates to the Builtins map after a few sanity checks.
+	for k, v := range aggregates {
+		for _, a := range v {
+			if !a.impure {
+				panic(fmt.Sprintf("aggregate functions should all be impure, found %v", a))
+			}
+			if a.class != AggregateClass {
+				panic(fmt.Sprintf("aggregate functions should be marked with the AggregateClass "+
+					"function class, found %v", a))
+			}
+			if a.AggregateFunc == nil {
+				panic(fmt.Sprintf("aggregate functions should have AggregateFunc constructors, "+
+					"found %v", a))
+			}
 		}
-		Aggregates[strings.ToUpper(k)] = v
+		Builtins[strings.ToUpper(k)] = v
+		Builtins[strings.ToLower(k)] = v
 	}
 }
 
@@ -64,7 +76,7 @@ func (v *IsAggregateVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 		if err != nil {
 			return false, expr
 		}
-		if _, ok := Aggregates[strings.ToLower(fn.Function())]; ok {
+		if _, ok := aggregates[strings.ToLower(fn.Function())]; ok {
 			v.Aggregated = true
 			return false, expr
 		}
@@ -123,7 +135,7 @@ func (p *Parser) AssertNoAggregationOrWindowing(expr Expr, op string) error {
 	return nil
 }
 
-// Aggregates are a special class of builtin functions that are wrapped
+// aggregates are a special class of builtin functions that are wrapped
 // at execution in a bucketing layer to combine (aggregate) the result
 // of the function being run over many rows.
 // See `aggregateFuncHolder` in the sql
@@ -133,7 +145,7 @@ func (p *Parser) AssertNoAggregationOrWindowing(expr Expr, op string) error {
 // functions must return NULL when they are no rows in the source
 // table, so their evaluation must always be delayed until query
 // execution.
-var Aggregates = map[string][]Builtin{
+var aggregates = map[string][]Builtin{
 	"avg": {
 		makeAggBuiltin(TypeInt, TypeDecimal, newIntAvgAggregate),
 		makeAggBuiltin(TypeFloat, TypeFloat, newFloatAvgAggregate),
@@ -177,11 +189,13 @@ func makeAggBuiltin(in, ret Datum, f func() AggregateFunc) Builtin {
 		// See the comment about aggregate functions in the definitions
 		// of the Builtins array above.
 		impure:        true,
+		class:         AggregateClass,
 		Types:         ArgTypes{in},
 		ReturnType:    ret,
 		AggregateFunc: f,
 	}
 }
+
 func makeAggBuiltins(f func() AggregateFunc, types ...Datum) []Builtin {
 	ret := make([]Builtin, len(types))
 	for i := range types {
