@@ -105,12 +105,19 @@ func defaultOptions(recorder func(basictracer.RawSpan)) basictracer.Options {
 
 var lightstepToken = envutil.EnvOrDefaultString("COCKROACH_LIGHTSTEP_TOKEN", "")
 
+// By default, if a lightstep token is specified we trace to both Lightstep and
+// net/trace. If this flag is enabled, we will only trace to Lightstep.
+var lightstepOnly = envutil.EnvOrDefaultBool("COCKROACH_LIGHTSTEP_ONLY", false)
+
 // newTracer implements NewTracer and allows that function to be mocked out via Disable().
 var newTracer = func() opentracing.Tracer {
 	if lightstepToken != "" {
-		return lightstep.NewTracer(lightstep.Options{
-			AccessToken: lightstepToken,
-		})
+		lsTr := lightstep.NewTracer(lightstep.Options{AccessToken: lightstepToken})
+		if lightstepOnly {
+			return lsTr
+		}
+		basicTr := basictracer.NewWithOptions(defaultOptions(func(_ basictracer.RawSpan) {}))
+		return NewTeeTracer(basicTr, lsTr)
 	}
 	return basictracer.NewWithOptions(defaultOptions(func(_ basictracer.RawSpan) {}))
 }
