@@ -118,6 +118,9 @@ func makeTestContextFromParams(params base.TestServerArgs) Context {
 	if params.SSLCertKey != "" {
 		ctx.SSLCertKey = params.SSLCertKey
 	}
+	if params.DisableEventLog {
+		ctx.EventLogEnabled = false
+	}
 	ctx.JoinList = []string{params.JoinAddr}
 	return ctx
 }
