@@ -44,7 +44,15 @@ func TestInitialKeys(t *testing.T) {
 	}
 
 	// Add an additional table.
-	desc := sql.CreateTableDescriptor(keys.MaxSystemConfigDescID+1, keys.SystemDatabaseID, "CREATE TABLE testdb.x (val INTEGER PRIMARY KEY)", sqlbase.NewDefaultPrivilegeDescriptor())
+	desc, err := sql.CreateTestTableDescriptor(
+		keys.SystemDatabaseID,
+		keys.MaxSystemConfigDescID+1,
+		"CREATE TABLE testdb.x (val INTEGER PRIMARY KEY)",
+		sqlbase.NewDefaultPrivilegeDescriptor(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
 	ms.AddDescriptor(keys.SystemDatabaseID, &desc)
 	kv = ms.GetInitialValues()
 	expected = nonDescKeys + keysPerDesc*ms.SystemDescriptorCount()
@@ -102,8 +110,15 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.UsersTableID, sqlbase.UsersTableSchema, sqlbase.UsersTable},
 		{keys.ZonesTableID, sqlbase.ZonesTableSchema, sqlbase.ZonesTable},
 	} {
-		gen := sql.CreateTableDescriptor(test.id, keys.SystemDatabaseID, test.schema,
-			sqlbase.NewPrivilegeDescriptor(security.RootUser, sqlbase.SystemConfigAllowedPrivileges[test.id]))
+		gen, err := sql.CreateTestTableDescriptor(
+			keys.SystemDatabaseID,
+			test.id,
+			test.schema,
+			sqlbase.NewPrivilegeDescriptor(security.RootUser, sqlbase.SystemConfigAllowedPrivileges[test.id]),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if !proto.Equal(&test.pkg, &gen) {
 			t.Fatalf(
 				"mismatch between re-generated version and pkg version of %s:\npkg:\n\t%#v\ngenerated\n\t%#v",
@@ -117,7 +132,12 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.RangeEventTableID, sqlbase.RangeEventTableSchema, sqlbase.RangeEventTable},
 		{keys.UITableID, sqlbase.UITableSchema, sqlbase.UITable},
 	} {
-		gen := sql.CreateTableDescriptor(test.id, keys.SystemDatabaseID, test.schema, sqlbase.NewDefaultPrivilegeDescriptor())
+		gen, err := sql.CreateTestTableDescriptor(
+			keys.SystemDatabaseID, test.id, test.schema, sqlbase.NewDefaultPrivilegeDescriptor(),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if !proto.Equal(&test.pkg, &gen) {
 			s1 := fmt.Sprintf("%#v", test.pkg)
 			s2 := fmt.Sprintf("%#v", gen)
