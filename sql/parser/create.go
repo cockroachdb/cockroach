@@ -553,11 +553,12 @@ func (node *InterleaveDef) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
-	IfNotExists bool
-	Table       NormalizableTableName
-	Interleave  *InterleaveDef
-	Defs        TableDefs
-	AsSource    *Select
+	IfNotExists   bool
+	Table         NormalizableTableName
+	Interleave    *InterleaveDef
+	Defs          TableDefs
+	AsSource      *Select
+	AsColumnNames NameList // Only to be used in conjunction with AsSource
 }
 
 // As returns true if this table represents a CREATE TABLE ... AS statement,
@@ -574,6 +575,11 @@ func (node *CreateTable) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 	FormatNode(buf, f, node.Table)
 	if node.As() {
+		if len(node.AsColumnNames) > 0 {
+			buf.WriteString(" (")
+			FormatNode(buf, f, node.AsColumnNames)
+			buf.WriteByte(')')
+		}
 		buf.WriteString(" AS ")
 		FormatNode(buf, f, node.AsSource)
 	} else {
