@@ -190,7 +190,10 @@ func (n *Network) SimulateNetwork(simCallback func(cycle int, network *Network) 
 			node.Gossip.SimulationCycle()
 		}
 		// If the simCallback returns false, we're done with the
-		// simulation; exit the loop.
+		// simulation; exit the loop. This condition is tested here
+		// instead of in the for statement in order to guarantee
+		// we run at least one iteration of this loop in order to
+		// gossip the cluster ID and sentinel.
 		if !simCallback(cycle, n) {
 			break
 		}
