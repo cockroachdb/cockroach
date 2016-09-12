@@ -109,9 +109,6 @@ const (
 	TransferLease
 	// ComputeChecksum starts a checksum computation over a replica snapshot.
 	ComputeChecksum
-	// VerifyChecksum verifies the checksum computed through an earlier
-	// ComputeChecksum.
-	VerifyChecksum
 	// CheckConsistency verifies the consistency of all ranges falling within a
 	// key span.
 	CheckConsistency
