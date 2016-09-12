@@ -417,12 +417,14 @@ func testDocker(t *testing.T, num int32, name string, cmd []string) error {
 	containerConfig := container.Config{
 		Image: postgresTestImage,
 		Env: []string{
-			"PGHOST=roach0",
 			fmt.Sprintf("PGPORT=%s", base.DefaultPort),
 			"PGSSLCERT=/certs/node.crt",
 			"PGSSLKEY=/certs/node.key",
 		},
 		Cmd: cmd,
+	}
+	if len(l.Nodes) > 0 {
+		containerConfig.Env = append(containerConfig.Env, "PGHOST="+l.Hostname(0))
 	}
 	hostConfig := container.HostConfig{NetworkMode: "host"}
 	return l.OneShot(postgresTestImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name)
