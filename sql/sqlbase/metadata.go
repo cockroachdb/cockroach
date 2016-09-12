@@ -113,7 +113,7 @@ func (ms *MetadataSchema) AddConfigDescriptor(parentID ID, desc DescriptorProto)
 // SystemDescriptorCount returns the number of descriptors that will be created by
 // this schema. This value is needed to automate certain tests.
 func (ms MetadataSchema) SystemDescriptorCount() int {
-	return len(ms.descs)
+	return len(ms.descs) + len(NewSystemTablesSchema)
 }
 
 // SystemConfigDescriptorCount returns the number of config descriptors that

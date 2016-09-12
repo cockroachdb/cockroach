@@ -820,7 +820,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	verifySplitsAtTablePrefixes := func(maxTableID int) {
 		// We expect splits at each of the user tables, but not at the system
 		// tables boundaries.
-		numReservedTables := schema.SystemDescriptorCount() - schema.SystemConfigDescriptorCount()
+		numReservedTables := schema.SystemDescriptorCount() - len(sqlbase.NewSystemTablesSchema) - schema.SystemConfigDescriptorCount()
 		expKeys := make([]roachpb.Key, 0, maxTableID+numReservedTables)
 		for i := 1; i <= int(numReservedTables); i++ {
 			expKeys = append(expKeys,

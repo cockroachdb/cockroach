@@ -43,11 +43,13 @@ import (
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/distsql"
 	"github.com/cockroachdb/cockroach/sql/pgwire"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/ui"
@@ -57,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/netutil"
+	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/sdnotify"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -581,12 +584,60 @@ func (s *Server) Start(ctx context.Context) error {
 	if err := sdnotify.Ready(); err != nil {
 		log.Errorf(s.Ctx(), "failed to signal readiness using systemd protocol: %s", err)
 	}
+
+	// Upgrade the system tables schema.
+	if err := s.stopper.RunTask(func() {
+		upgradeSystemTablesSchema(s.sqlExecutor)
+	}); err != nil {
+		return errors.Wrap(err, "failed to invoke upgrade of system tables")
+	}
+
+	// TODO(vivek): remove from this change. This sleep is used to allow the
+	// tables written out above to trigger range splits that are queued before
+	// the scanner can run and execute them.
+	time.Sleep(100 * time.Millisecond)
 	if s.scannersStartNotify != nil {
 		close(s.scannersStartNotify)
 	}
 	log.Trace(ctx, "server ready")
+	return nil
+
+}
+
+// checkQueryResults performs basic tests on the provided query results and
+// returns the first error that was found.
+func checkQueryResults(results []sql.Result, numResults int) error {
+	if a, e := len(results), numResults; a != e {
+		return errors.Errorf("# of results %d != expected %d", a, e)
+	}
+
+	for _, result := range results {
+		if result.Err != nil {
+			return result.Err
+		}
+	}
 
 	return nil
+}
+
+// upgradeSystemTablesSchema creates new system tables. In the future we might
+// run schema changes on system tables, but that should be carefully
+// considered, because schema change execution is much more complex than table
+// creation and might not make sense to run from low level code.
+func upgradeSystemTablesSchema(exec *sql.Executor) {
+	// System tables are created by user "node" which is an internal user.
+	session := sql.NewSession(context.TODO(), sql.SessionArgs{User: security.NodeUser}, exec, nil)
+	for _, table := range sqlbase.NewSystemTablesSchema {
+		retryOpts := base.DefaultRetryOptions()
+		for r := retry.Start(retryOpts); r.Next(); {
+			res := exec.ExecuteStatements(session, table, nil)
+			err := checkQueryResults(res.ResultList, 1)
+			if err == nil {
+				break
+			}
+			log.Warningf(context.TODO(), "err: %s, Unable to create system table: %s", err, table)
+		}
+	}
 }
 
 func (s *Server) doDrain(modes []serverpb.DrainMode, setTo bool) ([]serverpb.DrainMode, error) {

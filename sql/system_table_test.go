@@ -32,13 +32,12 @@ import (
 func TestInitialKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const nonSystemDesc = 4
 	const keysPerDesc = 2
 	const nonDescKeys = 2
 
 	ms := sqlbase.MakeMetadataSchema()
 	kv := ms.GetInitialValues()
-	expected := nonDescKeys + keysPerDesc*(nonSystemDesc+ms.SystemConfigDescriptorCount())
+	expected := nonDescKeys + keysPerDesc*(ms.SystemDescriptorCount()-len(sqlbase.NewSystemTablesSchema))
 	if actual := len(kv); actual != expected {
 		t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)
 	}
@@ -47,7 +46,7 @@ func TestInitialKeys(t *testing.T) {
 	desc := sql.CreateTableDescriptor(keys.MaxSystemConfigDescID+1, keys.SystemDatabaseID, "CREATE TABLE testdb.x (val INTEGER PRIMARY KEY)", sqlbase.NewDefaultPrivilegeDescriptor())
 	ms.AddDescriptor(keys.SystemDatabaseID, &desc)
 	kv = ms.GetInitialValues()
-	expected = nonDescKeys + keysPerDesc*ms.SystemDescriptorCount()
+	expected = nonDescKeys + keysPerDesc*(ms.SystemDescriptorCount()-len(sqlbase.NewSystemTablesSchema))
 	if actual := len(kv); actual != expected {
 		t.Fatalf("Wrong number of initial sql kv pairs: %d, wanted %d", actual, expected)
 	}
@@ -115,7 +114,6 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.LeaseTableID, sqlbase.LeaseTableSchema, sqlbase.LeaseTable},
 		{keys.EventLogTableID, sqlbase.EventLogTableSchema, sqlbase.EventLogTable},
 		{keys.RangeEventTableID, sqlbase.RangeEventTableSchema, sqlbase.RangeEventTable},
-		{keys.UITableID, sqlbase.UITableSchema, sqlbase.UITable},
 	} {
 		gen := sql.CreateTableDescriptor(test.id, keys.SystemDatabaseID, test.schema, sqlbase.NewDefaultPrivilegeDescriptor())
 		if !proto.Equal(&test.pkg, &gen) {

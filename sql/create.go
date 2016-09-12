@@ -23,6 +23,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -348,7 +349,9 @@ func (n *createTableNode) Start() error {
 	}
 
 	// Inherit permissions from the database descriptor.
-	desc.Privileges = n.dbDesc.GetPrivileges()
+	if desc.Privileges == nil {
+		desc.Privileges = n.dbDesc.GetPrivileges()
+	}
 
 	if len(desc.PrimaryIndex.ColumnNames) == 0 {
 		// Ensure a Primary Key exists.
@@ -373,11 +376,12 @@ func (n *createTableNode) Start() error {
 		}
 	}
 
-	id, err := generateUniqueDescID(n.p.txn)
-	if err != nil {
-		return err
+	if desc.ID == 0 {
+		desc.ID, err = generateUniqueDescID(n.p.txn)
+		if err != nil {
+			return err
+		}
 	}
-	desc.SetID(id)
 
 	if err := desc.AllocateIDs(); err != nil {
 		return err
@@ -425,7 +429,7 @@ func (n *createTableNode) Start() error {
 		return err
 	}
 
-	created, err := n.p.createDescriptorWithID(key, id, &desc)
+	created, err := n.p.createDescriptorWithID(key, desc.ID, &desc)
 	if err != nil {
 		return err
 	}
@@ -889,6 +893,10 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 	desc.Name = tableName.Table()
 
 	generatedNames := map[string]struct{}{}
+	if parentID == keys.SystemDatabaseID {
+		desc.ID = sqlbase.SystemTableID(desc.Name)
+		desc.Privileges = sqlbase.NewDefaultPrivilegeDescriptor()
+	}
 
 	var primaryIndexColumnSet map[string]struct{}
 	for _, def := range p.Defs {
