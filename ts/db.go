@@ -44,8 +44,16 @@ func NewDB(db *client.DB) *DB {
 // DataSource for time series data, storing the returned data in the server.
 // Stored data will be sampled using the provided Resolution. The polling
 // process will continue until the provided stop.Stopper is stopped.
-func (db *DB) PollSource(source DataSource, frequency time.Duration, r Resolution, stopper *stop.Stopper) {
+func (db *DB) PollSource(
+	ctx context.Context,
+	source DataSource,
+	frequency time.Duration,
+	r Resolution,
+	stopper *stop.Stopper,
+) {
+	ctx = log.WithLogTag(ctx, "ts-poll", nil)
 	p := &poller{
+		ctx:       ctx,
 		db:        db,
 		source:    source,
 		frequency: frequency,
@@ -62,6 +70,7 @@ type DataSource interface {
 
 // poller maintains information for a polling process started by PollSource().
 type poller struct {
+	ctx       context.Context
 	db        *DB
 	source    DataSource
 	frequency time.Duration
@@ -97,17 +106,17 @@ func (p *poller) poll() {
 			return
 		}
 
-		if err := p.db.StoreData(p.r, data); err != nil {
-			log.Warningf(context.TODO(), "error writing time series data: %s", err)
+		if err := p.db.StoreData(p.ctx, p.r, data); err != nil {
+			log.Warningf(p.ctx, "error writing time series data: %s", err)
 		}
 	}); err != nil {
-		log.Warning(context.TODO(), err)
+		log.Warning(p.ctx, err)
 	}
 }
 
 // StoreData writes the supplied time series data to the cockroach server.
 // Stored data will be sampled at the supplied resolution.
-func (db *DB) StoreData(r Resolution, data []tspb.TimeSeriesData) error {
+func (db *DB) StoreData(ctx context.Context, r Resolution, data []tspb.TimeSeriesData) error {
 	var kvs []roachpb.KeyValue
 
 	// Process data collection: data is converted to internal format, and a key
@@ -140,5 +149,5 @@ func (db *DB) StoreData(r Resolution, data []tspb.TimeSeriesData) error {
 		})
 	}
 
-	return db.db.Run(context.TODO(), b)
+	return db.db.Run(ctx, b)
 }

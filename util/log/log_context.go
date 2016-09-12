@@ -131,8 +131,9 @@ func WithLogTagStr(ctx context.Context, name string, value string) context.Conte
 // WithLogTagsFromCtx returns a context based on ctx with fromCtx's log tags
 // added on.
 //
-// The result is equivalent to replicating the `WithLogTag*` calls that were
-// used to obtain `fromCtx` and applying them to `ctx` in the same order.
+// The result is equivalent to replicating the WithLogTag* calls that were
+// used to obtain fromCtx and applying them to ctx in the same order - but
+// skipping those for which ctx already has a tag with the same name.
 func WithLogTagsFromCtx(ctx, fromCtx context.Context) context.Context {
 	bottomTag := contextBottomTag(fromCtx)
 	if bottomTag == nil {
@@ -140,25 +141,40 @@ func WithLogTagsFromCtx(ctx, fromCtx context.Context) context.Context {
 		return ctx
 	}
 
-	if contextBottomTag(ctx) == nil {
+	existingChain := contextBottomTag(ctx)
+	if existingChain == nil {
 		// Special fast path: reuse the same log tag list directly.
 		return context.WithValue(ctx, contextTagKeyType{}, bottomTag)
 	}
 
-	// Make a copy of the logTag chain.
-	// TODO(radu): should we do something smart if we have log tags with the same
-	// name in both contexts?
+	var chainTop, chainBottom *logTag
 
-	// Copy the bottom tag in the chain.
-	bottomTagCopy := *bottomTag
-	chain := &bottomTagCopy
-
-	for t := chain; t.parent != nil; t = t.parent {
-		// Copy the next tag in the chain.
-		parentCopy := *t.parent
-		t.parent = &parentCopy
+	// Make a copy of the logTag chain, skipping tags that already exist in the
+	// context.
+TopLoop:
+	for t := bottomTag; t != nil; t = t.parent {
+		// Look for the same tag in the existing chain. We expect only a few tags so
+		// going through the chain every time should be faster than allocating a map.
+		for e := existingChain; e != nil; e = e.parent {
+			if e.name == t.name {
+				continue TopLoop
+			}
+		}
+		tCopy := *t
+		tCopy.parent = nil
+		if chainTop == nil {
+			chainBottom = &tCopy
+		} else {
+			chainTop.parent = &tCopy
+		}
+		chainTop = &tCopy
 	}
-	return addLogTagChain(ctx, chain)
+
+	if chainBottom == nil {
+		return ctx
+	}
+
+	return addLogTagChain(ctx, chainBottom)
 }
 
 // DynamicIntValue is a helper type that allows using a "dynamic" int32 value
