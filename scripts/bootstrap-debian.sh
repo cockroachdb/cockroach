@@ -5,7 +5,7 @@
 
 set -euxo pipefail
 
-GOVERSION="${GOVERSION-1.7}"
+GOVERSION="${GOVERSION-1.7.1}"
 
 cd "$(dirname "${0}")"
 
