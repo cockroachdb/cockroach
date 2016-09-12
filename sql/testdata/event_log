@@ -23,6 +23,7 @@ query II
 SELECT targetID, reportingID FROM system.eventlog
 WHERE eventType = 'create_table'
 ----
+14 1
 51 1
 52 1
 

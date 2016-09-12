@@ -245,7 +245,7 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	// Our context must be shared with our server.
 	ts.Ctx = &ts.Server.ctx
 
-	if err := ts.Server.Start(context.Background()); err != nil {
+	if err := ts.Server.StartWithoutSystemTables(context.Background()); err != nil {
 		return err
 	}
 
@@ -260,6 +260,8 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 		ts.Stop()
 		return err
 	}
+
+	ts.Server.UpgradeSystemTablesSchema()
 
 	return nil
 }
@@ -284,7 +286,11 @@ func (ts *TestServer) WaitForInitialSplits() error {
 // populated in the meta2 table. If the expected range count is not reached
 // within a configured timeout, an error is returned.
 func WaitForInitialSplits(db *client.DB) error {
-	expectedRanges := ExpectedInitialRangeCount()
+	return WaitForInitialSplitsExpectedCount(db, ExpectedInitialRangeCount())
+}
+
+// WaitForInitialSplitsExpectedCount wait for initial splits.
+func WaitForInitialSplitsExpectedCount(db *client.DB, expectedRanges int) error {
 	return util.RetryForDuration(initialSplitsTimeout, func() error {
 		// Scan all keys in the Meta2Prefix; we only need a count.
 		rows, err := db.Scan(keys.Meta2Prefix, keys.MetaMax, 0)

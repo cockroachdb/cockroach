@@ -992,9 +992,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			select {
 			case <-s.ctx.Gossip.Connected:
 				if s.ctx.ScannersStartNotify != nil {
-					select {
-					case <-s.ctx.ScannersStartNotify:
-					}
+					<-s.ctx.ScannersStartNotify
 				}
 				s.scanner.Start(s.ctx.Clock, s.stopper)
 			case <-s.stopper.ShouldStop():
@@ -1007,9 +1005,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			select {
 			case <-s.ctx.Gossip.Connected:
 				if s.ctx.ScannersStartNotify != nil {
-					select {
-					case <-s.ctx.ScannersStartNotify:
-					}
+					<-s.ctx.ScannersStartNotify
 				}
 				s.consistencyScanner.Start(s.ctx.Clock, s.stopper)
 			case <-s.stopper.ShouldStop():

@@ -68,6 +68,7 @@ func rangesMatchSplits(ranges []roachpb.Key, splits []roachpb.RKey) bool {
 // as new tables get created.
 func TestSplitOnTableBoundaries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("")
 
 	params, _ := createTestServerParams()
 	// We want fast scan.

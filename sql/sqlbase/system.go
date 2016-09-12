@@ -35,32 +35,32 @@ const (
 	// NamespaceTableSchema is checked in TestSystemTables.
 	NamespaceTableSchema = `
 CREATE TABLE system.namespace (
-  parentID INT,
-  name     STRING,
-  id       INT,
-  PRIMARY KEY (parentID, name)
+parentID INT,
+name     STRING,
+id       INT,
+PRIMARY KEY (parentID, name)
 );`
 
 	// DescriptorTableSchema is checked in TestSystemTables.
 	DescriptorTableSchema = `
 CREATE TABLE system.descriptor (
-  id         INT PRIMARY KEY,
-  descriptor BYTES
+id         INT PRIMARY KEY,
+descriptor BYTES
 );`
 
 	// UsersTableSchema is checked in TestSystemTables.
 	UsersTableSchema = `
 CREATE TABLE system.users (
-  username       STRING PRIMARY KEY,
-  hashedPassword BYTES
+username       STRING PRIMARY KEY,
+hashedPassword BYTES
 );`
 
 	// ZonesTableSchema is checked in TestSystemTables.
 	// Zone settings per DB/Table.
 	ZonesTableSchema = `
 CREATE TABLE system.zones (
-  id     INT PRIMARY KEY,
-  config BYTES
+id     INT PRIMARY KEY,
+config BYTES
 );`
 )
 
@@ -69,11 +69,11 @@ const (
 	// LeaseTableSchema is checked in TestSystemTables.
 	LeaseTableSchema = `
 CREATE TABLE system.lease (
-  descID     INT,
-  version    INT,
-  nodeID     INT,
-  expiration TIMESTAMP,
-  PRIMARY KEY (descID, version, expiration, nodeID)
+descID     INT,
+version    INT,
+nodeID     INT,
+expiration TIMESTAMP,
+PRIMARY KEY (descID, version, expiration, nodeID)
 );`
 
 	// EventLogTableSchema describes the schema of the event log table.
@@ -106,7 +106,7 @@ CREATE TABLE system.rangelog (
 	// UITableSchema is checked in TestSystemTables.
 	// blobs based on unique keys.
 	UITableSchema = `
-CREATE TABLE system.ui (
+CREATE TABLE IF NOT EXISTS system.ui (
 	key         STRING PRIMARY KEY,
 	value       BYTES,
 	lastUpdated TIMESTAMP NOT NULL
@@ -267,6 +267,7 @@ var (
 // `TestSystemTableLiterals` which checks that they do indeed match, and has
 // suggestions on writing and maintaining them.
 var (
+
 	// LeaseTable is the descriptor for the leases table.
 	LeaseTable = TableDescriptor{
 		Name:     "lease",
@@ -378,30 +379,10 @@ var (
 		NextMutationID: 1,
 	}
 
-	// UITable is the descriptor for the ui table.
-	UITable = TableDescriptor{
-		Name:     "ui",
-		ID:       keys.UITableID,
-		ParentID: 1,
-		Version:  1,
-		Columns: []ColumnDescriptor{
-			{Name: "key", ID: 1, Type: colTypeString},
-			{Name: "value", ID: 2, Type: colTypeBytes, Nullable: true},
-			{Name: "lastUpdated", ID: 3, Type: ColumnType{Kind: ColumnType_TIMESTAMP}},
-		},
-		NextColumnID: 4,
-		Families: []ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{"key"}, ColumnIDs: singleID1},
-			{Name: "fam_2_value", ID: 2, ColumnNames: []string{"value"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
-			{Name: "fam_3_lastUpdated", ID: 3, ColumnNames: []string{"lastUpdated"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
-		},
-		NextFamilyID:   4,
-		PrimaryIndex:   pk("key"),
-		NextIndexID:    2,
-		Privileges:     NewDefaultPrivilegeDescriptor(),
-		FormatVersion:  InterleavedFormatVersion,
-		NextMutationID: 1,
-	}
+	// NewSystemTablesSchema is the collection of system tables that need to
+	// be created on legacy clusters without going through the bootstrapping
+	// process.
+	NewSystemTablesSchema = []string{UITableSchema}
 )
 
 // Create the key/value pairs for the default zone config entry.
@@ -437,7 +418,8 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &LeaseTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &EventLogTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &RangeEventTable)
-	target.AddDescriptor(keys.SystemDatabaseID, &UITable)
+
+	// Add all future system table into NewSystemTablesSchema.
 
 	target.otherKV = append(target.otherKV, createDefaultZoneConfig()...)
 }
@@ -445,4 +427,39 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 // IsSystemConfigID returns true if this ID is for a system config object.
 func IsSystemConfigID(id ID) bool {
 	return id > 0 && id <= keys.MaxSystemConfigDescID
+}
+
+// SystemTableID returns an ID for a named system table.
+func SystemTableID(name string) ID {
+	switch name {
+	case "namespace":
+		return keys.NamespaceTableID
+
+	case "descriptor":
+		return keys.DescriptorTableID
+
+	case "users":
+		return keys.UsersTableID
+
+	case "zones":
+		return keys.ZonesTableID
+
+	case "lease":
+		return keys.LeaseTableID
+
+	case "eventlog":
+		return keys.EventLogTableID
+
+	case "rangelog":
+		return keys.RangeEventTableID
+
+	case "ui":
+		return keys.UITableID
+
+	case "test1", "test2":
+		return 0
+	}
+
+	log.Warningf(context.TODO(), "system table %s not found", name)
+	return 0
 }

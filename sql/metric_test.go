@@ -62,6 +62,9 @@ func TestQueryCounts(t *testing.T) {
 		{"SET database = system", 2, 4, 2, 1, 1, 4, 2, 2, 0},
 	}
 
+	// Read the first DDL count.
+	initialDDLCount := s.MustGetSQLCounter(sql.MetaDdl.Name)
+
 	for _, tc := range testcases {
 		if tc.query != "" {
 			if _, err := sqlDB.Exec(tc.query); err != nil {
@@ -82,7 +85,7 @@ func TestQueryCounts(t *testing.T) {
 		checkCounterEQ(t, s, sql.MetaUpdate, tc.updateCount)
 		checkCounterEQ(t, s, sql.MetaInsert, tc.insertCount)
 		checkCounterEQ(t, s, sql.MetaDelete, tc.deleteCount)
-		checkCounterEQ(t, s, sql.MetaDdl, tc.ddlCount)
+		checkCounterEQ(t, s, sql.MetaDdl, tc.ddlCount+initialDDLCount)
 		checkCounterEQ(t, s, sql.MetaMisc, tc.miscCount)
 
 		// Everything after this query will also fail, so quit now to avoid deluge of errors.

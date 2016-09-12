@@ -43,11 +43,13 @@ import (
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/distsql"
 	"github.com/cockroachdb/cockroach/sql/pgwire"
+	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/ui"
@@ -57,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/netutil"
+	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/sdnotify"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
@@ -245,7 +248,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 
 	s.pgServer = pgwire.MakeServer(s.ctx.Context, s.sqlExecutor)
 	s.registry.AddMetricStruct(s.pgServer.Metrics())
-	s.scannersStartNotify = make(chan bool)
+	// s.scannersStartNotify = make(chan bool)
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{
 		Ctx:                            s.Ctx(),
@@ -334,6 +337,15 @@ type grpcGatewayServer interface {
 // should represent the general startup operation, and is different from
 // contexts used at runtime for server's background work (like `s.Ctx()`).
 func (s *Server) Start(ctx context.Context) error {
+	if err := s.StartWithoutSystemTables(ctx); err != nil {
+		return err
+	}
+	s.UpgradeSystemTablesSchema()
+	return nil
+}
+
+// StartWithoutSystemTables start without new system tables.
+func (s *Server) StartWithoutSystemTables(ctx context.Context) error {
 	// Copy log tags from s.Ctx()
 	ctx = log.WithLogTagsFromCtx(ctx, s.Ctx())
 
@@ -581,12 +593,46 @@ func (s *Server) Start(ctx context.Context) error {
 	if err := sdnotify.Ready(); err != nil {
 		log.Errorf(s.Ctx(), "failed to signal readiness using systemd protocol: %s", err)
 	}
-	if s.scannersStartNotify != nil {
-		close(s.scannersStartNotify)
-	}
+
 	log.Trace(ctx, "server ready")
+	return nil
+
+}
+
+// checkQueryResults performs basic tests on the provided query results and
+// returns the first error that was found.
+func checkQueryResults(results []sql.Result, numResults int) error {
+	if a, e := len(results), numResults; a != e {
+		return errors.Errorf("# of results %d != expected %d", a, e)
+	}
+
+	for _, result := range results {
+		if result.Err != nil {
+			return result.Err
+		}
+	}
 
 	return nil
+}
+
+// UpgradeSystemTablesSchema creates new system tables. In the future we might
+// run schema changes on system tables, but that should be carefully
+// considered, because schema change execution is much more complex than table
+// creation and might not make sense to run from low level code.
+func (s *Server) UpgradeSystemTablesSchema() {
+	// System tables are created by user "node" which is an internal user.
+	session := sql.NewSession(context.TODO(), sql.SessionArgs{User: security.NodeUser}, s.sqlExecutor, nil)
+	for _, table := range sqlbase.NewSystemTablesSchema {
+		retryOpts := base.DefaultRetryOptions()
+		for r := retry.Start(retryOpts); r.Next(); {
+			res := s.sqlExecutor.ExecuteStatements(session, table, nil)
+			err := checkQueryResults(res.ResultList, 1)
+			if err == nil {
+				break
+			}
+			log.Warningf(context.TODO(), "err: %s, Unable to create system table: %s", err, table)
+		}
+	}
 }
 
 func (s *Server) doDrain(modes []serverpb.DrainMode, setTo bool) ([]serverpb.DrainMode, error) {

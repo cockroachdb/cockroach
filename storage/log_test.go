@@ -39,6 +39,7 @@ import (
 
 func TestLogSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("")
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 

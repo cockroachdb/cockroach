@@ -391,6 +391,7 @@ func TestRestoreReplicas(t *testing.T) {
 
 func TestFailedReplicaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("")
 
 	var runFilter atomic.Value
 	runFilter.Store(true)
