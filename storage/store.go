@@ -2242,10 +2242,6 @@ func (s *Store) HandleRaftRequest(
 ) (pErr *roachpb.Error) {
 	s.metrics.raftRcvdMessages[req.Message.Type].Inc(1)
 
-	if req.Message.Type == raftpb.MsgHeartbeat {
-		// TODO(bdarnell): handle coalesced heartbeats.
-	}
-
 	if respStream == nil {
 		return s.processRaftRequest(ctx, req)
 	}
@@ -2280,6 +2276,17 @@ func (s *Store) processRaftRequest(
 	}
 	defer r.raftUnlock(uninitRaftLocked)
 	r.setLastReplicaDescriptors(req)
+
+	if req.Quiesce {
+		if req.Message.Type != raftpb.MsgHeartbeat {
+			panic(fmt.Sprintf("unexpected quiesce: %+v", req))
+		}
+		status := r.RaftStatus()
+		if status.Term == req.Message.Term && status.Commit == req.Message.Commit {
+			r.setQuiescent(true)
+			return
+		}
+	}
 
 	// Check to see if a snapshot can be applied. Snapshots can always be applied
 	// to initialized replicas. Note that if we add a placeholder we need to
@@ -2859,11 +2866,17 @@ func (s *Store) updateReplicationGauges() error {
 		return errors.Errorf("%s: system config not yet available", s)
 	}
 
-	var raftLeaderCount, leaseHolderCount, raftLeaderNotLeaseHolderCount, availableRangeCount,
-		replicaAllocatorNoopCount,
-		replicaAllocatorAddCount,
-		replicaAllocatorRemoveCount,
+	var (
+		raftLeaderCount                 int64
+		leaseHolderCount                int64
+		raftLeaderNotLeaseHolderCount   int64
+		quiescentCount                  int64
+		availableRangeCount             int64
+		replicaAllocatorNoopCount       int64
+		replicaAllocatorAddCount        int64
+		replicaAllocatorRemoveCount     int64
 		replicaAllocatorRemoveDeadCount int64
+	)
 
 	timestamp := s.ctx.Clock.Now()
 
@@ -2879,6 +2892,9 @@ func (s *Store) updateReplicationGauges() error {
 		rng.mu.Lock()
 		raftStatus := rng.raftStatusLocked()
 		lease := rng.mu.state.Lease
+		if rng.mu.quiescent {
+			quiescentCount++
+		}
 		rng.mu.Unlock()
 
 		leaseCovers := lease.Covers(timestamp)
@@ -2934,6 +2950,7 @@ func (s *Store) updateReplicationGauges() error {
 	s.metrics.RaftLeaderCount.Update(raftLeaderCount)
 	s.metrics.RaftLeaderNotLeaseHolderCount.Update(raftLeaderNotLeaseHolderCount)
 	s.metrics.LeaseHolderCount.Update(leaseHolderCount)
+	s.metrics.QuiescentCount.Update(quiescentCount)
 
 	s.metrics.AvailableRangeCount.Update(availableRangeCount)
 
