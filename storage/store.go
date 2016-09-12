@@ -2873,8 +2873,16 @@ func (s *Store) updateReplicationGauges() error {
 
 	timestamp := s.ctx.Clock.Now()
 
+	// Make a copy of all the current replicas so we don't need to hold onto
+	// the store lock.
+	var replicas []*Replica
 	s.mu.Lock()
-	for _, rng := range s.mu.replicas {
+	for _, replica := range s.mu.replicas {
+		replicas = append(replicas, replica)
+	}
+	s.mu.Unlock()
+
+	for _, rng := range replicas {
 		desc := rng.Desc()
 		zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey)
 		if err != nil {
@@ -2935,7 +2943,6 @@ func (s *Store) updateReplicationGauges() error {
 			leaseHolderCount++
 		}
 	}
-	s.mu.Unlock()
 
 	s.metrics.RaftLeaderCount.Update(raftLeaderCount)
 	s.metrics.RaftLeaderNotLeaseHolderCount.Update(raftLeaderNotLeaseHolderCount)
