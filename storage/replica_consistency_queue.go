@@ -56,11 +56,11 @@ func (*replicaConsistencyQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
 func (q *replicaConsistencyQueue) process(
 	ctx context.Context,
 	_ hlc.Timestamp,
-	rng *Replica,
+	r *Replica,
 	_ config.SystemConfig,
 ) error {
 	req := roachpb.CheckConsistencyRequest{}
-	_, pErr := rng.CheckConsistency(ctx, req, rng.Desc())
+	_, pErr := r.CheckConsistency(ctx, req, r.Desc())
 	if pErr != nil {
 		log.Error(ctx, pErr.GoError())
 	}
