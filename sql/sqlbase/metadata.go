@@ -94,6 +94,12 @@ func (ms *MetadataSchema) AddDescriptor(parentID ID, desc DescriptorProto) {
 	if id := desc.GetID(); id > keys.MaxReservedDescID {
 		panic(fmt.Sprintf("invalid reserved table ID: %d > %d", id, keys.MaxReservedDescID))
 	}
+	for _, d := range ms.descs {
+		if d.desc.GetID() == desc.GetID() {
+			log.Errorf(context.TODO(), "adding descriptor with duplicate ID: %v", desc)
+			return
+		}
+	}
 	ms.descs = append(ms.descs, metadataDescriptor{parentID, desc})
 }
 
@@ -115,18 +121,6 @@ func (ms MetadataSchema) SystemDescriptorCount() int {
 // tests.
 func (ms MetadataSchema) SystemConfigDescriptorCount() int {
 	return ms.configs
-}
-
-// MaxTableID returns the highest table ID of any system table. This value is
-// needed to automate certain tests.
-func (ms MetadataSchema) MaxTableID() ID {
-	var maxID ID
-	for _, tbl := range ms.descs {
-		if maxID < tbl.desc.GetID() {
-			maxID = tbl.desc.GetID()
-		}
-	}
-	return maxID
 }
 
 // GetInitialValues returns the set of initial K/V values which should be added to
