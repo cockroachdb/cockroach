@@ -56,6 +56,7 @@ var _ ErrorWithPGCode = &ErrTransactionCommitted{}
 var _ ErrorWithPGCode = &ErrUndefinedDatabase{}
 var _ ErrorWithPGCode = &ErrUndefinedTable{}
 var _ ErrorWithPGCode = &ErrRetry{}
+var _ ErrorWithPGCode = &ErrSyntax{}
 
 const (
 	txnAbortedMsg = "current transaction is aborted, commands ignored " +
@@ -315,6 +316,31 @@ func (*ErrRelationAlreadyExists) Code() string {
 
 // SrcContext implements the ErrorWithPGCode interface.
 func (e *ErrRelationAlreadyExists) SrcContext() SrcCtx {
+	return e.ctx
+}
+
+// NewSyntaxError creates a new ErrSyntax.
+func NewSyntaxError(msg string) error {
+	return &ErrSyntax{ctx: MakeSrcCtx(1), msg: msg}
+}
+
+// ErrSyntax represents a syntax error.
+type ErrSyntax struct {
+	ctx SrcCtx
+	msg string
+}
+
+func (e *ErrSyntax) Error() string {
+	return e.msg
+}
+
+// Code implements the ErrorWithPGCode interface.
+func (*ErrSyntax) Code() string {
+	return pgerror.CodeSyntaxError
+}
+
+// SrcContext implements the ErrorWithPGCode interface.
+func (e *ErrSyntax) SrcContext() SrcCtx {
 	return e.ctx
 }
 
