@@ -3147,7 +3147,7 @@ func (r *Replica) ChangeReplicas(
 
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
 
-	if err := r.store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := r.store.DB().Txn(ctx, func(txn *client.Txn) error {
 		log.Trace(ctx, "attempting txn")
 		txn.Proto.Name = replicaChangeTxnName
 		// TODO(tschottdorf): oldDesc is used for sanity checks related to #7224.
