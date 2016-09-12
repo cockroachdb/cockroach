@@ -133,11 +133,14 @@ export class StackedAreaGraph extends React.Component<StackedAreaGraphProps, {}>
         this.chart.yAxis.tickValues(yAxisDomain.ticks());
         this.chart.xAxis.tickValues(xAxisDomain.ticks((n) => new Date(NanoToMilli(n))));
       }
-
-      d3.select(this.svgEl)
-        .datum(formattedData)
-        .transition().duration(500)
-        .call(this.chart);
+      try {
+        d3.select(this.svgEl)
+          .datum(formattedData)
+          .transition().duration(500)
+          .call(this.chart);
+      } catch (e) {
+        console.log("Error rendering graph: ", e);
+      }
     }
   }
 

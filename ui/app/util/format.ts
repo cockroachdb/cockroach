@@ -31,6 +31,9 @@ export function BytesToUnitValue(bytes: number): UnitValue {
  */
 export function Bytes(bytes: number): string {
   let unitVal: UnitValue = BytesToUnitValue(bytes);
+  if (!unitVal.value) {
+    return "0 B";
+  }
   return unitVal.value.toFixed(1) + " " + unitVal.units;
 }
 
