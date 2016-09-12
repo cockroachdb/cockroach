@@ -1,8 +1,5 @@
 statement ok
-CREATE TABLE stock (item string, quantity int)
-
-statement ok
-INSERT INTO stock VALUES ('cups', 10), ('plates', 15), ('forks', 30)
+CREATE TABLE stock (item, quantity) AS VALUES ('cups', 10), ('plates', 15), ('forks', 30)
 
 statement ok
 CREATE TABLE runningOut AS SELECT * FROM stock WHERE quantity < 12
@@ -13,13 +10,10 @@ SELECT * FROM runningOut
 cups 10
 
 statement ok
-CREATE TABLE itemColors (color string)
+CREATE TABLE itemColors (color) AS VALUES ('blue'), ('red'), ('green')
 
 statement ok
-INSERT INTO itemColors VALUES ('blue'), ('red'), ('green')
-
-statement ok
-CREATE TABLE itemTypes AS SELECT item, color FROM stock, itemColors
+CREATE TABLE itemTypes AS (SELECT item, color FROM stock, itemColors)
 
 query TT
 SELECT * FROM itemTypes;
@@ -36,3 +30,29 @@ forks green
 
 statement error pq: unexpected AS OF SYSTEM TIME
 CREATE TABLE t AS SELECT * FROM stock AS OF SYSTEM TIME '2016-01-01'
+
+statement error pgcode 42601 CREATE TABLE specifies more column names than columns
+CREATE TABLE t2 (col1, col2, col3) AS SELECT * FROM stock;
+
+statement error pgcode 42601 CREATE TABLE specifies fewer column names than columns
+CREATE TABLE t2 (col1) AS SELECT * FROM stock;
+
+statement ok
+CREATE TABLE unionstock AS SELECT * FROM stock UNION VALUES ('spoons', 25), ('knives', 50)
+
+query TI
+SELECT * FROM unionstock ORDER BY quantity
+----
+cups 10
+plates 15
+spoons 25
+forks 30
+knives 50
+
+statement ok
+CREATE TABLE IF NOT EXISTS unionstock AS VALUES ('foo', 'bar')
+
+query TI
+SELECT * FROM unionstock ORDER BY quantity LIMIT 1
+----
+cups 10

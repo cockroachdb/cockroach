@@ -271,35 +271,22 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		// to populate the new table descriptor in Start() below. We
 		// instantiate the selectPlan as early as here so that EXPLAIN has
 		// something useful to show about CREATE TABLE .. AS ...
-		selectPlan, err = p.getSelectPlan(n)
+		selectPlan, err = p.Select(n.AsSource, []parser.Datum{}, false)
 		if err != nil {
 			return nil, err
 		}
+		numColNames := len(n.AsColumnNames)
+		if numColNames != 0 {
+			if numColNames > len(selectPlan.Columns()) {
+				return nil, sqlbase.NewSyntaxError("CREATE TABLE specifies more column names than columns")
+			}
+			if numColNames < len(selectPlan.Columns()) {
+				return nil, sqlbase.NewSyntaxError("CREATE TABLE specifies fewer column names than columns")
+			}
+		}
 	}
+
 	return &createTableNode{p: p, n: n, dbDesc: dbDesc, selectPlan: selectPlan}, nil
-}
-
-func removeParens(sel parser.SelectStatement) (parser.SelectStatement, error) {
-	switch ps := sel.(type) {
-	case *parser.SelectClause:
-		return ps, nil
-	case *parser.ParenSelect:
-		return removeParens(ps.Select.Select)
-	default:
-		return nil, errors.Errorf("invalid select type %T", sel)
-	}
-}
-
-func (p *planner) getSelectPlan(n *parser.CreateTable) (planNode, error) {
-	selNoParens, err := removeParens(n.AsSource.Select)
-	if err != nil {
-		return nil, err
-	}
-	s, err := p.SelectClause(selNoParens.(*parser.SelectClause), n.AsSource.OrderBy, n.AsSource.Limit, []parser.Datum{}, 0)
-	if err != nil {
-		return nil, err
-	}
-	return s, nil
 }
 
 func hoistConstraints(n *parser.CreateTable) {
@@ -874,9 +861,12 @@ func makeTableDescIfAs(
 		return desc, err
 	}
 	desc.Name = tableName.String()
-	for _, colRes := range resultColumns {
+	for i, colRes := range resultColumns {
 		colType, _ := parser.DatumTypeToColumnType(colRes.Typ)
 		columnTableDef := parser.ColumnTableDef{Name: parser.Name(colRes.Name), Type: colType}
+		if len(p.AsColumnNames) > i {
+			columnTableDef.Name = p.AsColumnNames[i]
+		}
 		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef)
 		if err != nil {
 			return desc, err
