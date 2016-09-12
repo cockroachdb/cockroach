@@ -433,8 +433,10 @@ func (r *Replica) BeginTransaction(
 				// this command's txn and rewrite the record.
 				reply.Txn.Update(&txn)
 			} else {
-				return reply, roachpb.NewTransactionStatusError(
-					fmt.Sprintf("BeginTransaction can't overwrite %s", txn))
+				// Our txn record already exists. This is either a client error, sending
+				// a duplicate BeginTransaction, or it's an artefact of re-sending a
+				// batch. Assume the latter and ask the client to restart.
+				return reply, roachpb.NewTransactionRetryError()
 			}
 
 		case roachpb.COMMITTED:

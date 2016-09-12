@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
@@ -883,4 +884,15 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 	if !testutils.IsPError(pErr, "injected error") {
 		t.Fatalf("expected error %q, got: %s", "injected error", pErr)
 	}
+}
+
+func newTransaction(name string, baseKey roachpb.Key, userPriority roachpb.UserPriority,
+	isolation enginepb.IsolationType, clock *hlc.Clock) *roachpb.Transaction {
+	var offset int64
+	var now hlc.Timestamp
+	if clock != nil {
+		offset = clock.MaxOffset().Nanoseconds()
+		now = clock.Now()
+	}
+	return roachpb.NewTransaction(name, baseKey, userPriority, isolation, now, offset)
 }
