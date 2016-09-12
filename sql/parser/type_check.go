@@ -341,10 +341,23 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, err
 			expr.Name, expr.Name, strings.Join(typeNames, ", "), desStr)
 	}
 
+	builtin := fn.(Builtin)
+	if expr.IsWindowFunctionApplication() {
+		// Make sure the window function application is of either a built-in window
+		// function or of a built-in aggregate function.
+		switch builtin.class {
+		case AggregateClass:
+		// case WindowClass:
+		default:
+			return nil, fmt.Errorf("OVER specified, but %s is not a window function nor an "+
+				"aggregate function", expr.Name)
+		}
+	}
+
 	for i, subExpr := range typedSubExprs {
 		expr.Exprs[i] = subExpr
 	}
-	expr.fn = fn.(Builtin)
+	expr.fn = builtin
 	returnType := fn.returnType()
 	if _, ok = expr.fn.params().(AnyType); ok {
 		if len(typedSubExprs) > 0 {

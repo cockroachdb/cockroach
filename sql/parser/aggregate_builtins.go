@@ -67,9 +67,9 @@ type IsAggregateVisitor struct {
 func (v *IsAggregateVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	switch t := expr.(type) {
 	case *FuncExpr:
-		if t.IsWindowFunction() {
-			// A window function is not an aggregate function, but it can
-			// contain aggregate functions.
+		if t.IsWindowFunctionApplication() {
+			// A window function application of an aggregate builtin is not an
+			// aggregate function, but it can contain aggregate functions.
 			return true, expr
 		}
 		fn, err := t.Name.Normalize()
