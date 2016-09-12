@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
@@ -258,6 +259,9 @@ type Replica struct {
 		// Corrupted persistently (across process restarts) indicates whether the
 		// replica has been corrupted.
 		corrupted bool
+		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
+		// whenever a Raft operation is performed.
+		quiescent bool
 		// The state of the Raft state machine.
 		state storagebase.ReplicaState
 		// Counter used for assigning lease indexes for proposals.
@@ -419,6 +423,9 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 			}
 		}
 	}
+
+	// Any Raft operation moves the Replica out of quiescence.
+	r.setQuiescentLocked(false)
 
 	return f(r.mu.internalRaftGroup)
 }
@@ -1638,6 +1645,25 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 	})
 }
 
+func (r *Replica) setQuiescent(v bool) {
+	r.mu.Lock()
+	r.setQuiescentLocked(v)
+	r.mu.Unlock()
+}
+
+func (r *Replica) setQuiescentLocked(v bool) {
+	if r.mu.quiescent != v {
+		r.mu.quiescent = v
+		if log.V(3) {
+			if r.mu.quiescent {
+				log.Infof(r.ctx, "quiescing")
+			} else {
+				log.Infof(r.ctx, "unquiescing")
+			}
+		}
+	}
+}
+
 // Lock the replica for Raft processing.
 func (r *Replica) raftLock() (uninitRaftLocked bool) {
 	r.raftMu.Lock()
@@ -1904,6 +1930,12 @@ func (r *Replica) tickRaftMuLocked() (bool, error) {
 	if r.mu.internalRaftGroup == nil {
 		return false, nil
 	}
+	if r.mu.quiescent {
+		return false, nil
+	}
+	if r.maybeQuiesceLocked() {
+		return false, nil
+	}
 
 	r.mu.ticks++
 	r.mu.internalRaftGroup.Tick()
@@ -1921,6 +1953,126 @@ func (r *Replica) tickRaftMuLocked() (bool, error) {
 		}
 	}
 	return true, nil
+}
+
+var enableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_QUIESCENCE", true)
+
+// maybeQuiesceLocked checks to see if the replica is quiescable and initiates
+// quiescence if it is. Returns true if the replica has been quiesced and false
+// otherwise.
+//
+// A quiesced range is not ticked and thus doesn't create MsgHeartbeat requests
+// or cause elections. The Raft leader for a range checks various
+// pre-conditions: no pending raft commands, no pending raft ready, all of the
+// followers are up to date, etc. Quiescence is initiated by a special
+// MsgHeartbeat that is tagged as Quiesce. Upon receipt (see
+// Store.processRaftRequest), the follower checks to see if the term/commit
+// matches and marks the local replica as quiescent. If the term/commit do not
+// match the MsgHeartbeat is passed through to Raft which will generate a
+// MsgHeartbeatResp that will unquiesce the sender.
+//
+// Any Raft operation on the local replica will unquiesce the Replica. For
+// example, a Raft operation initiated on a follower will unquiesce the
+// follower which will send a MsgProp to the leader that will unquiesce the
+// leader. If the leader of a quiesced range dies, followers will not notice,
+// though any request directed to the range will eventually end up on a
+// follower which will unquiesce the follower and lead to an election.
+func (r *Replica) maybeQuiesceLocked() bool {
+	if !enableQuiescence {
+		return false
+	}
+	if len(r.mu.pendingCmds) != 0 {
+		if log.V(4) {
+			log.Infof(r.ctx, "not quiescing: %d pending commands", len(r.mu.pendingCmds))
+		}
+		return false
+	}
+	status := r.mu.internalRaftGroup.Status()
+	if status.SoftState.RaftState != raft.StateLeader {
+		if log.V(4) {
+			log.Infof(r.ctx, "not quiescing: not leader")
+		}
+		return false
+	}
+	// We need all of Applied, Commit, LastIndex and Progress.Match indexes to be
+	// equal in order to quiesce.
+	if status.Applied != status.Commit {
+		if log.V(4) {
+			log.Infof(r.ctx, "not quiescing: applied (%d) != commit (%d)",
+				status.Applied, status.Commit)
+		}
+		return false
+	}
+	if status.Commit != r.mu.lastIndex {
+		if log.V(4) {
+			log.Infof(r.ctx, "not quiescing: commit (%d) != last-index (%d)",
+				status.Commit, r.mu.lastIndex)
+		}
+		return false
+	}
+	var foundSelf bool
+	for id, progress := range status.Progress {
+		if roachpb.ReplicaID(id) == r.mu.replicaID {
+			foundSelf = true
+		}
+		if progress.Match != status.Applied {
+			if log.V(4) {
+				log.Infof(r.ctx, "not quiescing: replica %d match (%d) != applied (%d)",
+					id, progress.Match, status.Applied)
+			}
+			return false
+		}
+	}
+	if !foundSelf {
+		if log.V(4) {
+			log.Infof(r.ctx, "not quiescing: %d not found in progress: %+v",
+				r.mu.replicaID, status.Progress)
+		}
+		return false
+	}
+	if r.mu.internalRaftGroup.HasReady() {
+		if log.V(4) {
+			log.Infof(r.ctx, "not quiescing: raft ready")
+		}
+		return false
+	}
+	fromReplica, fromErr := r.getReplicaDescriptorByIDLocked(r.mu.replicaID, r.mu.lastToReplica)
+	if fromErr != nil {
+		if log.V(4) {
+			log.Infof(r.ctx, "not quiescing: cannot find from replica (%d)", r.mu.replicaID)
+		}
+		return false
+	}
+	r.setQuiescentLocked(true)
+	for id := range status.Progress {
+		if roachpb.ReplicaID(id) == r.mu.replicaID {
+			continue
+		}
+		toReplica, toErr := r.getReplicaDescriptorByIDLocked(
+			roachpb.ReplicaID(id), r.mu.lastFromReplica)
+		if toErr != nil {
+			if log.V(4) {
+				log.Infof(r.ctx, "failed to quiesce: cannot find to replica (%d)", id)
+			}
+			r.setQuiescentLocked(false)
+			return false
+		}
+		msg := raftpb.Message{
+			From:   uint64(r.mu.replicaID),
+			To:     id,
+			Type:   raftpb.MsgHeartbeat,
+			Term:   status.Term,
+			Commit: status.Commit,
+		}
+		r.sendRaftMessageRequest(&RaftMessageRequest{
+			RangeID:     r.RangeID,
+			ToReplica:   toReplica,
+			FromReplica: fromReplica,
+			Message:     msg,
+			Quiesce:     true,
+		})
+	}
+	return true
 }
 
 // pendingCmdSlice sorts by increasing MaxLeaseIndex.
@@ -2011,8 +2163,6 @@ func (r *Replica) getReplicaDescriptorByIDLocked(
 }
 
 func (r *Replica) sendRaftMessage(msg raftpb.Message) {
-	rangeID := r.RangeID
-
 	r.mu.Lock()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
@@ -2020,15 +2170,24 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 
 	if fromErr != nil {
 		log.Warningf(r.ctx, "failed to look up sender replica %d in range %d while sending %s: %s",
-			msg.From, rangeID, msg.Type, fromErr)
+			msg.From, r.RangeID, msg.Type, fromErr)
 		return
 	}
 	if toErr != nil {
 		log.Warningf(r.ctx, "failed to look up recipient replica %d in range %d while sending %s: %s",
-			msg.To, rangeID, msg.Type, toErr)
+			msg.To, r.RangeID, msg.Type, toErr)
 		return
 	}
 
+	r.sendRaftMessageRequest(&RaftMessageRequest{
+		RangeID:     r.RangeID,
+		ToReplica:   toReplica,
+		FromReplica: fromReplica,
+		Message:     msg,
+	})
+}
+
+func (r *Replica) sendRaftMessageRequest(req *RaftMessageRequest) {
 	r.store.ctx.Transport.mu.Lock()
 	var queuedMsgs int64
 	for _, transportQueues := range r.store.ctx.Transport.mu.queues {
@@ -2039,23 +2198,19 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	r.store.ctx.Transport.mu.Unlock()
 	r.store.metrics.RaftEnqueuedPending.Update(queuedMsgs)
 
-	if !r.store.ctx.Transport.SendAsync(&RaftMessageRequest{
-		RangeID:     rangeID,
-		ToReplica:   toReplica,
-		FromReplica: fromReplica,
-		Message:     msg,
-	}) {
+	if !r.store.ctx.Transport.SendAsync(req) {
 		r.mu.Lock()
 		r.mu.droppedMessages++
 		r.mu.Unlock()
 
 		if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
-			raftGroup.ReportUnreachable(msg.To)
+			raftGroup.ReportUnreachable(req.Message.To)
 			return nil
 		}); err != nil {
 			r.panic(err)
 		}
 	}
+
 }
 
 func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
