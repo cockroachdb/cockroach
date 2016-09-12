@@ -76,6 +76,33 @@ CREATE TABLE system.lease (
   PRIMARY KEY (descID, version, expiration, nodeID)
 );`
 
+	// EventLogTableSchema describes the schema of the event log table.
+	EventLogTableSchema = `
+CREATE TABLE system.eventlog (
+  timestamp    TIMESTAMP  NOT NULL,
+  eventType    STRING     NOT NULL,
+  targetID     INT        NOT NULL,
+  reportingID  INT        NOT NULL,
+  info         STRING,
+  uniqueID     BYTES      DEFAULT experimental_unique_bytes(),
+  PRIMARY KEY (timestamp, uniqueID)
+);`
+
+	// RangeEventTableSchema defines the schema of the event log table. It is
+	// currently envisioned as a wide table; many different event types can be
+	// recorded to the table.
+	RangeEventTableSchema = `
+CREATE TABLE system.rangelog (
+  timestamp     TIMESTAMP  NOT NULL,
+  rangeID       INT        NOT NULL,
+  storeID       INT        NOT NULL,
+  eventType     STRING     NOT NULL,
+  otherRangeID  INT,
+  info          STRING,
+  uniqueID      INT        DEFAULT unique_rowid(),
+  PRIMARY KEY (timestamp, uniqueID)
+);`
+
 	// UITableSchema is checked in TestSystemTables.
 	// blobs based on unique keys.
 	UITableSchema = `
@@ -99,11 +126,12 @@ func pk(name string) IndexDescriptor {
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
 var (
-	colTypeInt    = ColumnType{Kind: ColumnType_INT}
-	colTypeString = ColumnType{Kind: ColumnType_STRING}
-	colTypeBytes  = ColumnType{Kind: ColumnType_BYTES}
-	singleASC     = []IndexDescriptor_Direction{IndexDescriptor_ASC}
-	singleID1     = []ColumnID{1}
+	colTypeInt       = ColumnType{Kind: ColumnType_INT}
+	colTypeString    = ColumnType{Kind: ColumnType_STRING}
+	colTypeBytes     = ColumnType{Kind: ColumnType_BYTES}
+	colTypeTimestamp = ColumnType{Kind: ColumnType_TIMESTAMP}
+	singleASC        = []IndexDescriptor_Direction{IndexDescriptor_ASC}
+	singleID1        = []ColumnID{1}
 )
 
 // These system config TableDescriptor literals should match the descriptor
@@ -249,7 +277,7 @@ var (
 			{Name: "descID", ID: 1, Type: colTypeInt},
 			{Name: "version", ID: 2, Type: colTypeInt},
 			{Name: "nodeID", ID: 3, Type: colTypeInt},
-			{Name: "expiration", ID: 4, Type: ColumnType{Kind: ColumnType_TIMESTAMP}},
+			{Name: "expiration", ID: 4, Type: colTypeTimestamp},
 		},
 		NextColumnID: 5,
 		Families: []ColumnFamilyDescriptor{
@@ -264,6 +292,86 @@ var (
 			ColumnIDs:        []ColumnID{1, 2, 4, 3},
 		},
 		NextFamilyID:   1,
+		NextIndexID:    2,
+		Privileges:     NewDefaultPrivilegeDescriptor(),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
+
+	experimentalUniqueBytesString = "experimental_unique_bytes()"
+
+	// EventLogTable is the descriptor for the event log table.
+	EventLogTable = TableDescriptor{
+		Name:     "eventlog",
+		ID:       keys.EventLogTableID,
+		ParentID: 1,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "timestamp", ID: 1, Type: colTypeTimestamp},
+			{Name: "eventType", ID: 2, Type: colTypeString},
+			{Name: "targetID", ID: 3, Type: colTypeInt},
+			{Name: "reportingID", ID: 4, Type: colTypeInt},
+			{Name: "info", ID: 5, Type: colTypeString, Nullable: true},
+			{Name: "uniqueID", ID: 6, Type: colTypeBytes, DefaultExpr: &experimentalUniqueBytesString},
+		},
+		NextColumnID: 7,
+		Families: []ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"timestamp", "uniqueID"}, ColumnIDs: []ColumnID{1, 6}},
+			{Name: "fam_2_eventType", ID: 2, ColumnNames: []string{"eventType"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
+			{Name: "fam_3_targetID", ID: 3, ColumnNames: []string{"targetID"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
+			{Name: "fam_4_reportingID", ID: 4, ColumnNames: []string{"reportingID"}, ColumnIDs: []ColumnID{4}, DefaultColumnID: 4},
+			{Name: "fam_5_info", ID: 5, ColumnNames: []string{"info"}, ColumnIDs: []ColumnID{5}, DefaultColumnID: 5},
+		},
+		PrimaryIndex: IndexDescriptor{
+			Name:             "primary",
+			ID:               1,
+			Unique:           true,
+			ColumnNames:      []string{"timestamp", "uniqueID"},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+			ColumnIDs:        []ColumnID{1, 6},
+		},
+		NextFamilyID:   6,
+		NextIndexID:    2,
+		Privileges:     NewDefaultPrivilegeDescriptor(),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
+
+	uniqueRowIDString = "unique_rowid()"
+
+	// RangeEventTable is the descriptor for the range log table.
+	RangeEventTable = TableDescriptor{
+		Name:     "rangelog",
+		ID:       keys.RangeEventTableID,
+		ParentID: 1,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "timestamp", ID: 1, Type: colTypeTimestamp},
+			{Name: "rangeID", ID: 2, Type: colTypeInt},
+			{Name: "storeID", ID: 3, Type: colTypeInt},
+			{Name: "eventType", ID: 4, Type: colTypeString},
+			{Name: "otherRangeID", ID: 5, Type: colTypeInt, Nullable: true},
+			{Name: "info", ID: 6, Type: colTypeString, Nullable: true},
+			{Name: "uniqueID", ID: 7, Type: colTypeInt, DefaultExpr: &uniqueRowIDString},
+		},
+		NextColumnID: 8,
+		Families: []ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"timestamp", "uniqueID"}, ColumnIDs: []ColumnID{1, 7}},
+			{Name: "fam_2_rangeID", ID: 2, ColumnNames: []string{"rangeID"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
+			{Name: "fam_3_storeID", ID: 3, ColumnNames: []string{"storeID"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
+			{Name: "fam_4_eventType", ID: 4, ColumnNames: []string{"eventType"}, ColumnIDs: []ColumnID{4}, DefaultColumnID: 4},
+			{Name: "fam_5_otherRangeID", ID: 5, ColumnNames: []string{"otherRangeID"}, ColumnIDs: []ColumnID{5}, DefaultColumnID: 5},
+			{Name: "fam_6_info", ID: 6, ColumnNames: []string{"info"}, ColumnIDs: []ColumnID{6}, DefaultColumnID: 6},
+		},
+		PrimaryIndex: IndexDescriptor{
+			Name:             "primary",
+			ID:               1,
+			Unique:           true,
+			ColumnNames:      []string{"timestamp", "uniqueID"},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+			ColumnIDs:        []ColumnID{1, 7},
+		},
+		NextFamilyID:   7,
 		NextIndexID:    2,
 		Privileges:     NewDefaultPrivilegeDescriptor(),
 		FormatVersion:  InterleavedFormatVersion,
@@ -325,8 +433,10 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	target.AddConfigDescriptor(keys.SystemDatabaseID, &UsersTable)
 	target.AddConfigDescriptor(keys.SystemDatabaseID, &ZonesTable)
 
-	// Add other system tables.
+	// Add all the other system tables.
 	target.AddDescriptor(keys.SystemDatabaseID, &LeaseTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &EventLogTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &RangeEventTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &UITable)
 
 	target.otherKV = append(target.otherKV, createDefaultZoneConfig()...)
