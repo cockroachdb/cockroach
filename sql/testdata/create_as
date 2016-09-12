@@ -56,3 +56,12 @@ query TI
 SELECT * FROM unionstock ORDER BY quantity LIMIT 1
 ----
 cups 10
+
+statement ok
+CREATE DATABASE smtng;
+
+statement ok
+CREATE TABLE smtng.something AS SELECT * FROM stock
+
+statement ok
+CREATE TABLE IF NOT EXISTS smtng.something AS SELECT * FROM stock
