@@ -1,4 +1,4 @@
-FROM karalabe/xgo-1.7
+FROM karalabe/xgo-1.7.1
 
 MAINTAINER Tamir Duberstein <tamird@gmail.com>
 
