@@ -22,6 +22,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -57,7 +59,7 @@ func TestCheckVersion(t *testing.T) {
 	defer stubURL(&updatesURL, u)()
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	s.(*TestServer).checkForUpdates()
+	s.(*TestServer).checkForUpdates(context.TODO())
 	recorder.Close()
 	s.Stopper().Stop()
 
@@ -104,7 +106,7 @@ func TestReportUsage(t *testing.T) {
 	}
 
 	node := ts.node.recorder.GetStatusSummary()
-	ts.reportUsage()
+	ts.reportUsage(context.TODO())
 
 	ts.Stopper().Stop() // stopper will wait for the update/report loop to finish too.
 	recorder.Close()
