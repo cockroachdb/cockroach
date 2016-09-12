@@ -265,6 +265,7 @@ func NewNode(
 		eventLogger: eventLogger,
 	}
 	n.storesServer = storage.MakeServer(&n.Descriptor, n.stores)
+
 	return n
 }
 

@@ -2826,18 +2826,6 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 		return nil
 	}
 
-	// When multiple nodes are initialized with overlapping Gossip addresses, they all
-	// will attempt to gossip their cluster ID. This is a fairly obvious misconfiguration,
-	// so we error out below.
-	if uuidBytes, err := r.store.Gossip().GetInfo(gossip.KeyClusterID); err == nil {
-		if gossipClusterID, err := uuid.FromBytes(uuidBytes); err == nil {
-			if *gossipClusterID != r.store.ClusterID() {
-				log.Fatalf(r.ctx, "store %d belongs to cluster %s, but attempted to join cluster %s via gossip",
-					r.store.StoreID(), r.store.ClusterID(), gossipClusterID)
-			}
-		}
-	}
-
 	// Gossip the cluster ID from all replicas of the first range; there
 	// is no expiration on the cluster ID.
 	if log.V(1) {
