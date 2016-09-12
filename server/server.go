@@ -260,7 +260,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		SQLExecutor: sql.InternalExecutor{
 			LeaseManager: s.leaseMgr,
 		},
-		LogRangeEvents: true,
+		LogRangeEvents: s.ctx.EventLogEnabled,
 		AllocatorOptions: storage.AllocatorOptions{
 			AllowRebalance: true,
 		},
