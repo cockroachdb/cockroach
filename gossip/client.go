@@ -126,13 +126,12 @@ func (c *client) start(
 		if err := c.gossip(ctx, g, stream, stopper, &wg); err != nil {
 			if !grpcutil.IsClosedConnection(err) {
 				g.mu.Lock()
-				peerID := c.peerID
-				g.mu.Unlock()
-				if peerID != 0 {
-					log.Infof(ctx, "node %d: closing client to node %d (%s): %s", nodeID, peerID, c.addr, err)
+				if c.peerID != 0 {
+					log.Infof(ctx, "node %d: closing client to node %d (%s): %s", nodeID, c.peerID, c.addr, err)
 				} else {
 					log.Infof(ctx, "node %d: closing client to %s: %s", nodeID, c.addr, err)
 				}
+				g.mu.Unlock()
 			}
 		}
 	})
@@ -186,7 +185,11 @@ func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient) error {
 		c.nodeMetrics.InfosSent.Add(infosSent)
 
 		if log.V(1) {
-			log.Infof(c.ctx, "node %d: sending %s", g.mu.is.NodeID, extractKeys(args.Delta))
+			if c.peerID != 0 {
+				log.Infof(c.ctx, "node %d: sending %s to node %d (%s)", g.mu.is.NodeID, extractKeys(args.Delta), c.peerID, c.addr)
+			} else {
+				log.Infof(c.ctx, "node %d: sending %s to %s", g.mu.is.NodeID, extractKeys(args.Delta), c.addr)
+			}
 		}
 
 		g.mu.Unlock()
