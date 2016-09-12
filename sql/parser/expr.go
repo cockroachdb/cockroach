@@ -795,6 +795,11 @@ type FuncExpr struct {
 	fn Builtin
 }
 
+// FunctionClass returns the function class of the FuncExpr.
+func (node *FuncExpr) FunctionClass() FunctionClass {
+	return node.fn.class
+}
+
 // GetAggregateConstructor exposes the AggregateFunc field for use by
 // the group node in package sql.
 func (node *FuncExpr) GetAggregateConstructor() func() AggregateFunc {
