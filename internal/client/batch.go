@@ -294,72 +294,72 @@ func (b *Batch) growReqs(n int) {
 	b.reqs = b.reqs[:len(b.reqs)+n]
 }
 
-func (b *Batch) logRequest(arg roachpb.Request, level int) {
-	if !log.VDepth(2, level) {
+func (b *Batch) logRequest(arg roachpb.Request, depth int) {
+	if !log.VDepth(2, depth) {
 		return
 	}
 	switch req := arg.(type) {
 	case *roachpb.GetRequest:
-		log.InfofDepth(b.ctx, level, "Get %s", req.Key)
+		log.InfofDepth(b.ctx, depth, "Get %s", req.Key)
 	case *roachpb.PutRequest:
-		log.InfofDepth(b.ctx, level, "Put %s -> %s", req.Key, req.Value.PrettyPrint())
+		log.InfofDepth(b.ctx, depth, "Put %s -> %s", req.Key, req.Value.PrettyPrint())
 	case *roachpb.ConditionalPutRequest:
-		log.InfofDepth(b.ctx, level, "CPut %s -> %s", req.Key, req.Value.PrettyPrint())
+		log.InfofDepth(b.ctx, depth, "CPut %s -> %s", req.Key, req.Value.PrettyPrint())
 	case *roachpb.InitPutRequest:
-		log.InfofDepth(b.ctx, level, "InitPut %s -> %s", req.Key, req.Value.PrettyPrint())
+		log.InfofDepth(b.ctx, depth, "InitPut %s -> %s", req.Key, req.Value.PrettyPrint())
 	case *roachpb.IncrementRequest:
-		log.InfofDepth(b.ctx, level, "Increment %s by %v", req.Key, req.Increment)
+		log.InfofDepth(b.ctx, depth, "Increment %s by %v", req.Key, req.Increment)
 	case *roachpb.ScanRequest:
-		log.InfofDepth(b.ctx, level, "Scan from %s to %s", req.Key, req.EndKey)
+		log.InfofDepth(b.ctx, depth, "Scan from %s to %s", req.Key, req.EndKey)
 	case *roachpb.ReverseScanRequest:
-		log.InfofDepth(b.ctx, level, "Reverse scan from %s to %s", req.Key, req.EndKey)
+		log.InfofDepth(b.ctx, depth, "Reverse scan from %s to %s", req.Key, req.EndKey)
 	case *roachpb.DeleteRequest:
-		log.InfofDepth(b.ctx, level, "Del %s", req.Key)
+		log.InfofDepth(b.ctx, depth, "Del %s", req.Key)
 	case *roachpb.DeleteRangeRequest:
-		log.InfofDepth(b.ctx, level, "DelRange %s", req.Key)
+		log.InfofDepth(b.ctx, depth, "DelRange %s", req.Key)
 	case *roachpb.BeginTransactionRequest:
-		log.InfofDepth(b.ctx, level, "BeginTransaction %s", req.Key)
+		log.InfofDepth(b.ctx, depth, "BeginTransaction %s", req.Key)
 	case *roachpb.EndTransactionRequest:
-		log.InfofDepth(b.ctx, level, "EndTransaction %s", req.Key)
+		log.InfofDepth(b.ctx, depth, "EndTransaction %s", req.Key)
 	case *roachpb.AdminMergeRequest:
-		log.InfofDepth(b.ctx, level, "AdminMerge from %s to %s", req.Key, req.EndKey)
+		log.InfofDepth(b.ctx, depth, "AdminMerge from %s to %s", req.Key, req.EndKey)
 	case *roachpb.AdminSplitRequest:
-		log.InfofDepth(b.ctx, level, "AdminSplit %s at %s", req.Key, req.SplitKey)
+		log.InfofDepth(b.ctx, depth, "AdminSplit %s at %s", req.Key, req.SplitKey)
 	case *roachpb.AdminTransferLeaseRequest:
-		log.InfofDepth(b.ctx, level, "AdminTransferLease %s to %s", req.Key, req.Target)
+		log.InfofDepth(b.ctx, depth, "AdminTransferLease %s to %s", req.Key, req.Target)
 	case *roachpb.HeartbeatTxnRequest:
-		log.InfofDepth(b.ctx, level, "HeartbeatTxn %s at %v", req.Key, req.Now)
+		log.InfofDepth(b.ctx, depth, "HeartbeatTxn %s at %v", req.Key, req.Now)
 	case *roachpb.GCRequest:
-		log.InfofDepth(b.ctx, level, "GC from %s to %s", req.Key, req.EndKey)
+		log.InfofDepth(b.ctx, depth, "GC from %s to %s", req.Key, req.EndKey)
 	case *roachpb.PushTxnRequest:
-		log.InfofDepth(b.ctx, level, "PushTxn %s from %s to %s", req.Key, req.PusherTxn, req.PusheeTxn)
+		log.InfofDepth(b.ctx, depth, "PushTxn %s from %s to %s", req.Key, req.PusherTxn, req.PusheeTxn)
 	case *roachpb.RangeLookupRequest:
-		log.InfofDepth(b.ctx, level, "RangeLook at %s", req.Key)
+		log.InfofDepth(b.ctx, depth, "RangeLook at %s", req.Key)
 	case *roachpb.ResolveIntentRequest:
-		log.InfofDepth(b.ctx, level, "ResolveIntent at %s for txn %s", req.Span, req.IntentTxn)
+		log.InfofDepth(b.ctx, depth, "ResolveIntent at %s for txn %s", req.Span, req.IntentTxn)
 	case *roachpb.ResolveIntentRangeRequest:
-		log.InfofDepth(b.ctx, level, "ResolveIntentRange at %s for txn %s", req.Span, req.IntentTxn)
+		log.InfofDepth(b.ctx, depth, "ResolveIntentRange at %s for txn %s", req.Span, req.IntentTxn)
 	case *roachpb.MergeRequest:
-		log.InfofDepth(b.ctx, level, "Merge at %s -> %s", req.Key, req.Value.PrettyPrint())
+		log.InfofDepth(b.ctx, depth, "Merge at %s -> %s", req.Key, req.Value.PrettyPrint())
 	case *roachpb.TruncateLogRequest:
-		log.InfofDepth(b.ctx, level, "TruncateLog at %s for range %v", req.Index, req.RangeID)
+		log.InfofDepth(b.ctx, depth, "TruncateLog at %s for range %v", req.Index, req.RangeID)
 	case *roachpb.RequestLeaseRequest:
-		log.InfofDepth(b.ctx, level, "RequestLease at %s for lease %s", req.Key, req.Lease)
+		log.InfofDepth(b.ctx, depth, "RequestLease at %s for lease %s", req.Key, req.Lease)
 	case *roachpb.CheckConsistencyRequest:
-		log.InfofDepth(b.ctx, level, "CheckConsistency from %s to %s", req.Key, req.EndKey)
+		log.InfofDepth(b.ctx, depth, "CheckConsistency from %s to %s", req.Key, req.EndKey)
 	case *roachpb.ChangeFrozenRequest:
-		log.InfofDepth(b.ctx, level, "ChangeFrozen from %s to %s", req.Key, req.EndKey)
+		log.InfofDepth(b.ctx, depth, "ChangeFrozen from %s to %s", req.Key, req.EndKey)
 	default:
-		log.InfofDepth(b.ctx, level, "%T <unknown>", req)
+		log.InfofDepth(b.ctx, depth, "%T <unknown>", req)
 
 	}
 }
 
-func (b *Batch) appendReqs(level int, args ...roachpb.Request) {
+func (b *Batch) appendReqs(depth int, args ...roachpb.Request) {
 	n := len(b.reqs)
 	b.growReqs(len(args))
 	for i := range args {
-		b.logRequest(args[i], level+1)
+		b.logRequest(args[i], depth+1)
 		b.reqs[n+i].MustSetInner(args[i])
 	}
 }
