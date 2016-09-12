@@ -3114,6 +3114,32 @@ func TestReplayProtection(t *testing.T) {
 	}
 }
 
+// Test that a duplicate BeginTransaction results in a TransactionRetryError, as
+// such recognizing that it's likely the result of the batch being retried by
+// DistSender.
+func TestDuplicateBeginTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	key := roachpb.Key("a")
+	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.clock)
+	bt, btH := beginTxnArgs(key, txn)
+	var ba roachpb.BatchRequest
+	ba.Header = btH
+	ba.Add(&bt)
+	_, pErr := tc.Sender().Send(context.Background(), ba)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	// Send the batch again.
+	_, pErr = tc.Sender().Send(context.Background(), ba)
+	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
+		t.Fatalf("expected retry error; got %v", pErr)
+	}
+}
+
 // TestEndTransactionGC verifies that a transaction record is immediately
 // garbage-collected upon EndTransaction iff all of the supplied intents are
 // local relative to the transaction record's location.
