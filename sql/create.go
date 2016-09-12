@@ -982,7 +982,7 @@ func makeViewTableDesc(
 	if err != nil {
 		return desc, err
 	}
-	desc.Name = viewName.String()
+	desc.Name = viewName.Table()
 	for i, colRes := range resultColumns {
 		colType, _ := parser.DatumTypeToColumnType(colRes.Typ)
 		columnTableDef := parser.ColumnTableDef{Name: parser.Name(colRes.Name), Type: colType}
