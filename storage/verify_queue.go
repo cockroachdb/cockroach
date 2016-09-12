@@ -85,17 +85,23 @@ func (*verifyQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
 func (*verifyQueue) process(
 	ctx context.Context,
 	now hlc.Timestamp,
-	rng *Replica,
+	r *Replica,
 	_ config.SystemConfig,
 ) error {
 
-	snap := rng.store.Engine().NewSnapshot()
-	iter := NewReplicaDataIterator(rng.Desc(), snap, false /* !replicatedOnly */)
+	snap := r.store.Engine().NewSnapshot()
+	iter := NewReplicaDataIterator(r.Desc(), snap, false /* !replicatedOnly */)
 	defer iter.Close()
 	defer snap.Close()
 
 	// Iterate through all keys & values.
 	for ; iter.Valid(); iter.Next() {
+		// Check the context for cancellation.
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
 	}
 	// An error during iteration is presumed to mean a checksum failure
 	// while iterating over the underlying key/value data.
@@ -103,11 +109,11 @@ func (*verifyQueue) process(
 		// TODO(spencer): do something other than fatal error here. We
 		// want to quarantine this range, make it a non-participating raft
 		// follower until it can be replaced and then destroyed.
-		log.Fatalf(ctx, "unhandled failure when scanning range %s; probable data corruption: %s", rng, iter.Error())
+		log.Fatalf(ctx, "unhandled failure when scanning range %s; probable data corruption: %s", r, iter.Error())
 	}
 
 	// Store current timestamp as last verification for this range.
-	return rng.setLastVerificationTimestamp(now)
+	return r.setLastVerificationTimestamp(now)
 }
 
 // timer returns the duration of intervals between successive range
