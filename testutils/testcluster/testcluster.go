@@ -18,6 +18,7 @@ package testcluster
 
 import (
 	gosql "database/sql"
+	"sync"
 	"testing"
 	"time"
 
@@ -79,6 +80,20 @@ func (tc *TestCluster) Stopper() *stop.Stopper {
 func (tc *TestCluster) stopServers() {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
+
+	// Quiesce the servers in parallel to avoid deadlocks.
+	var wg sync.WaitGroup
+	wg.Add(len(tc.mu.serverStoppers))
+	for _, s := range tc.mu.serverStoppers {
+		go func(s *stop.Stopper) {
+			defer wg.Done()
+			if s != nil {
+				s.Quiesce()
+			}
+		}(s)
+	}
+	wg.Wait()
+
 	for i := range tc.mu.serverStoppers {
 		if tc.mu.serverStoppers[i] != nil {
 			tc.mu.serverStoppers[i].Stop()
