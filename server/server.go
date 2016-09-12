@@ -278,6 +278,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	s.node = NewNode(nCtx, s.recorder, s.registry, s.stopper, txnMetrics, sql.MakeEventLogger(s.leaseMgr))
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 	storage.RegisterStoresServer(s.grpc, s.node.storesServer)
+	storage.RegisterConsistencyServer(s.grpc, s.node.storesServer)
 
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.MakeServer(s.Ctx(), s.tsDB)
