@@ -317,6 +317,7 @@ CREATE TABLE information_schema.table_constraints (
 var (
 	tableTypeSystemView = parser.NewDString("SYSTEM VIEW")
 	tableTypeBaseTable  = parser.NewDString("BASE TABLE")
+	tableTypeView       = parser.NewDString("VIEW")
 )
 
 var informationSchemaTablesTable = virtualSchemaTable{
@@ -335,6 +336,8 @@ CREATE TABLE information_schema.tables (
 				tableType := tableTypeBaseTable
 				if isVirtualDescriptor(table) {
 					tableType = tableTypeSystemView
+				} else if table.IsView() {
+					tableType = tableTypeView
 				}
 				return addRow(
 					defString,                     // table_catalog

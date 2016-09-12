@@ -315,6 +315,9 @@ CREATE DATABASE other_db
 statement ok
 CREATE TABLE other_db.xyz (i INT)
 
+statement ok
+CREATE VIEW other_db.abc AS SELECT * from other_db.xyz
+
 query T
 SELECT table_name FROM information_schema.tables
 ----
@@ -324,6 +327,7 @@ schemata
 table_constraints
 table_privileges
 tables
+abc
 xyz
 descriptor
 eventlog
@@ -359,6 +363,7 @@ def            information_schema  schemata           SYSTEM VIEW  1
 def            information_schema  table_constraints  SYSTEM VIEW  1
 def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
+def            other_db            abc                VIEW         1
 def            other_db            xyz                BASE TABLE   1
 def            system              descriptor         BASE TABLE   1
 def            system              eventlog           BASE TABLE   1
@@ -408,6 +413,26 @@ def            information_schema  schemata           SYSTEM VIEW  1
 def            information_schema  table_constraints  SYSTEM VIEW  1
 def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
+def            other_db            xyz                BASE TABLE   5
+
+user root
+
+statement ok
+GRANT SELECT ON other_db.abc TO testuser
+
+user testuser
+
+query TTTTI colnames
+SELECT * FROM information_schema.tables
+----
+TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME         TABLE_TYPE   VERSION
+def            information_schema  columns            SYSTEM VIEW  1
+def            information_schema  schema_privileges  SYSTEM VIEW  1
+def            information_schema  schemata           SYSTEM VIEW  1
+def            information_schema  table_constraints  SYSTEM VIEW  1
+def            information_schema  table_privileges   SYSTEM VIEW  1
+def            information_schema  tables             SYSTEM VIEW  1
+def            other_db            abc                VIEW         2
 def            other_db            xyz                BASE TABLE   5
 
 user root
@@ -522,12 +547,17 @@ NULL     root     def            system         zones       UPDATE          NULL
 statement ok
 CREATE TABLE other_db.xyz (i INT)
 
+statement ok
+CREATE VIEW other_db.abc AS SELECT * from other_db.xyz
+
 query TTTTTTTT colnames
 SELECT * FROM information_schema.table_privileges
 ----
 GRANTOR  GRANTEE   TABLE_CATALOG  TABLE_SCHEMA   TABLE_NAME  PRIVILEGE_TYPE  IS_GRANTABLE  WITH_HIERARCHY
 NULL     root      def            constraint_db  t1          ALL             NULL          NULL
 NULL     root      def            constraint_db  t2          ALL             NULL          NULL
+NULL     root      def            other_db       abc         ALL             NULL          NULL
+NULL     testuser  def            other_db       abc         SELECT          NULL          NULL
 NULL     root      def            other_db       xyz         ALL             NULL          NULL
 NULL     testuser  def            other_db       xyz         SELECT          NULL          NULL
 NULL     root      def            system         descriptor  GRANT           NULL          NULL
@@ -559,6 +589,8 @@ SELECT * FROM information_schema.table_privileges
 GRANTOR  GRANTEE   TABLE_CATALOG  TABLE_SCHEMA   TABLE_NAME  PRIVILEGE_TYPE  IS_GRANTABLE  WITH_HIERARCHY
 NULL     root      def            constraint_db  t1          ALL             NULL          NULL
 NULL     root      def            constraint_db  t2          ALL             NULL          NULL
+NULL     root      def            other_db       abc         ALL             NULL          NULL
+NULL     testuser  def            other_db       abc         SELECT          NULL          NULL
 NULL     root      def            other_db       xyz         ALL             NULL          NULL
 NULL     testuser  def            other_db       xyz         SELECT          NULL          NULL
 NULL     testuser  def            other_db       xyz         UPDATE          NULL          NULL
