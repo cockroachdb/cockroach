@@ -56,7 +56,7 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 		// The rollback may fail; it's here in case the stmt started a transaction.
 		_, _ = db.Exec(`ROLLBACK`)
 		// But the create should always succeed.
-		_, err := db.Exec(`CREATE DATABASE IF NOT EXISTS ident; SET DATABASE = ident;`)
+		_, err := db.Exec(`CREATE DATABASE IF NOT EXISTS ident`)
 		if err != nil {
 			panic(err)
 		}
@@ -84,11 +84,7 @@ func TestRandomSyntaxSelect(t *testing.T) {
 			from = "FROM ident"
 		}
 		s := fmt.Sprintf("SELECT %s %s %s", targets, from, where)
-		_, err := db.Exec(`SET DATABASE = ident`)
-		if err != nil {
-			panic(err)
-		}
-		_, err = db.Exec(s)
+		_, err := db.Exec(s)
 		return err == nil
 	})
 }
@@ -167,6 +163,7 @@ func testRandomSyntax(t *testing.T, setup func(db *gosql.DB) error, f func(db *g
 	}
 
 	params, _ := createTestServerParams()
+	params.UseDatabase = "ident"
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
