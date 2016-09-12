@@ -265,6 +265,7 @@ func NewNode(
 		eventLogger: eventLogger,
 	}
 	n.storesServer = storage.MakeServer(&n.Descriptor, n.stores)
+
 	return n
 }
 
@@ -352,6 +353,17 @@ func (n *Node) start(
 			return err
 		}
 	}
+
+	n.ctx.Gossip.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyNodeIDPrefix), func(_ string, _ roachpb.Value) {
+		if uuidBytes, err := n.ctx.Gossip.GetInfo(gossip.KeyClusterID); err == nil {
+			if gossipClusterID, err := uuid.FromBytes(uuidBytes); err == nil {
+				if *gossipClusterID != n.ClusterID {
+					log.Fatalf(n.Ctx(), "node %d belongs to cluster %s, but attempted to join cluster %s via gossip",
+						n.Descriptor.NodeID, n.ClusterID, gossipClusterID)
+				}
+			}
+		}
+	})
 
 	n.startedAt = n.ctx.Clock.Now().WallTime
 
