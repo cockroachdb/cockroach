@@ -234,7 +234,7 @@ type createTableNode struct {
 	n          *parser.CreateTable
 	dbDesc     *sqlbase.DatabaseDescriptor
 	insertPlan planNode
-	selectPlan planNode
+	sourcePlan planNode
 }
 
 // CreateTable creates a table.
@@ -265,41 +265,27 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		}
 	}
 
-	var selectPlan planNode
+	var sourcePlan planNode
 	if n.As() {
-		// The selectPlan is needed to determine the set of columns to use
+		// The sourcePlan is needed to determine the set of columns to use
 		// to populate the new table descriptor in Start() below. We
-		// instantiate the selectPlan as early as here so that EXPLAIN has
+		// instantiate the sourcePlan as early as here so that EXPLAIN has
 		// something useful to show about CREATE TABLE .. AS ...
-		selectPlan, err = p.getSelectPlan(n)
+		sourcePlan, err = p.Select(n.AsSource, []parser.Datum{}, false)
 		if err != nil {
 			return nil, err
 		}
+		numColNames := len(n.AsColumnNames)
+		numColumns := len(sourcePlan.Columns())
+		if numColNames != 0 && numColNames != numColumns {
+			return nil, sqlbase.NewSyntaxError(fmt.Sprintf(
+				"CREATE TABLE specifies %d column name%s, but data source has %d column%s",
+				numColNames, util.Pluralize(int64(numColNames)),
+				numColumns, util.Pluralize(int64(numColumns))))
+		}
 	}
-	return &createTableNode{p: p, n: n, dbDesc: dbDesc, selectPlan: selectPlan}, nil
-}
 
-func removeParens(sel parser.SelectStatement) (parser.SelectStatement, error) {
-	switch ps := sel.(type) {
-	case *parser.SelectClause:
-		return ps, nil
-	case *parser.ParenSelect:
-		return removeParens(ps.Select.Select)
-	default:
-		return nil, errors.Errorf("invalid select type %T", sel)
-	}
-}
-
-func (p *planner) getSelectPlan(n *parser.CreateTable) (planNode, error) {
-	selNoParens, err := removeParens(n.AsSource.Select)
-	if err != nil {
-		return nil, err
-	}
-	s, err := p.SelectClause(selNoParens.(*parser.SelectClause), n.AsSource.OrderBy, n.AsSource.Limit, []parser.Datum{}, 0)
-	if err != nil {
-		return nil, err
-	}
-	return s, nil
+	return &createTableNode{p: p, n: n, dbDesc: dbDesc, sourcePlan: sourcePlan}, nil
 }
 
 func hoistConstraints(n *parser.CreateTable) {
@@ -333,7 +319,7 @@ func hoistConstraints(n *parser.CreateTable) {
 
 func (n *createTableNode) expandPlan() error {
 	if n.n.As() {
-		return n.selectPlan.expandPlan()
+		return n.sourcePlan.expandPlan()
 	}
 	return nil
 }
@@ -342,7 +328,7 @@ func (n *createTableNode) Start() error {
 	var desc sqlbase.TableDescriptor
 	var err error
 	if n.n.As() {
-		desc, err = makeTableDescIfAs(n.n, n.dbDesc.ID, n.selectPlan.Columns())
+		desc, err = makeTableDescIfAs(n.n, n.dbDesc.ID, n.sourcePlan.Columns())
 	} else {
 		desc, err = MakeTableDesc(n.n, n.dbDesc.ID)
 	}
@@ -483,20 +469,20 @@ func (n *createTableNode) Start() error {
 	}
 
 	if n.n.As() {
-		resultColumns := n.selectPlan.Columns()
+		resultColumns := n.sourcePlan.Columns()
 		if err != nil {
 			return err
 		}
 
-		// TODO(knz): Ideally we would want to plug the selectPlan which
+		// TODO(knz): Ideally we would want to plug the sourcePlan which
 		// was already computed as a data source into the insertNode. Now
 		// unfortunately this is not so easy: when this point is reached,
-		// selectPlan.expandPlan() has already been called, and
+		// sourcePlan.expandPlan() has already been called, and
 		// insertPlan.expandPlan() below would cause a 2nd invocation and
-		// cause a panic. So instead we close this selectPlan and let the
+		// cause a panic. So instead we close this sourcePlan and let the
 		// insertNode create it anew from the AsSource syntax node.
-		n.selectPlan.Close()
-		n.selectPlan = nil
+		n.sourcePlan.Close()
+		n.sourcePlan = nil
 
 		desiredTypesFromSelect := make([]parser.Datum, len(resultColumns))
 		for i, col := range resultColumns {
@@ -542,7 +528,7 @@ func (n *createTableNode) SetLimitHint(_ int64, _ bool)        {}
 func (n *createTableNode) MarkDebug(mode explainMode)          {}
 func (n *createTableNode) ExplainPlan(v bool) (string, string, []planNode) {
 	if n.n.As() {
-		return "create table", "create table as", []planNode{n.selectPlan}
+		return "create table", "create table as", []planNode{n.sourcePlan}
 	}
 	return "create table", "", nil
 }
@@ -874,9 +860,12 @@ func makeTableDescIfAs(
 		return desc, err
 	}
 	desc.Name = tableName.String()
-	for _, colRes := range resultColumns {
+	for i, colRes := range resultColumns {
 		colType, _ := parser.DatumTypeToColumnType(colRes.Typ)
 		columnTableDef := parser.ColumnTableDef{Name: parser.Name(colRes.Name), Type: colType}
+		if len(p.AsColumnNames) > i {
+			columnTableDef.Name = p.AsColumnNames[i]
+		}
 		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef)
 		if err != nil {
 			return desc, err
