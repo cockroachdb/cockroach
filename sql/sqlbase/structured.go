@@ -717,6 +717,11 @@ func (desc *TableDescriptor) ValidateTable() error {
 		return fmt.Errorf("invalid table ID %d", desc.ID)
 	}
 
+	// TODO(dt, nathan): virtual descs don't validate (missing privs, PK, etc).
+	if desc.ID == keys.VirtualDescriptorID {
+		return nil
+	}
+
 	// ParentID is the ID of the database holding this table.
 	// It is often < ID, except when a table gets moved across databases.
 	if desc.ParentID == 0 {
