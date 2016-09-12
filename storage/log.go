@@ -48,21 +48,6 @@ const (
 	RangeEventLogRemove RangeEventLogType = "remove"
 )
 
-// RangeEventTableSchema defines the schema of the event log table. It is
-// currently envisioned as a wide table; many different event types can be
-// recorded to the table.
-const RangeEventTableSchema = `
-CREATE TABLE system.rangelog (
-  timestamp     TIMESTAMP  NOT NULL,
-  rangeID       INT        NOT NULL,
-  storeID       INT        NOT NULL,
-  eventType     STRING     NOT NULL,
-  otherRangeID  INT,
-  info          STRING,
-  uniqueID      INT        DEFAULT unique_rowid(),
-  PRIMARY KEY (timestamp, uniqueID)
-);`
-
 type rangeLogEvent struct {
 	timestamp    time.Time
 	rangeID      roachpb.RangeID
