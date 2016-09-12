@@ -145,6 +145,7 @@ func (ba *BatchRequest) GetArg(method Method) (Request, bool) {
 
 func (br *BatchResponse) String() string {
 	var str []string
+	str = append(str, fmt.Sprintf("(err: %v)", br.Error))
 	for _, union := range br.Responses {
 		str = append(str, fmt.Sprintf("%T", union.GetInner()))
 	}
@@ -558,6 +559,9 @@ func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 // See #2198.
 func (ba BatchRequest) String() string {
 	var str []string
+	if ba.Txn != nil {
+		str = append(str, fmt.Sprintf("[txn: %s]", ba.Txn.ID.Short()))
+	}
 	for count, arg := range ba.Requests {
 		// Limit the strings to provide just a summary. Without this limit
 		// a log message with a BatchRequest can be very long.
