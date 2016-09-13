@@ -76,7 +76,7 @@ func (p *planner) DropDatabase(n *parser.DropDatabase) (planNode, error) {
 
 	td := make([]*sqlbase.TableDescriptor, len(tbNames))
 	for i := range tbNames {
-		tbDesc, err := p.dropTablePrepare(&tbNames[i])
+		tbDesc, err := p.dropTableOrViewPrepare(&tbNames[i])
 		if err != nil {
 			return nil, err
 		}
@@ -334,7 +334,7 @@ func (p *planner) DropView(n *parser.DropView) (planNode, error) {
 			return nil, err
 		}
 
-		droppedDesc, err := p.dropTablePrepare(tn)
+		droppedDesc, err := p.dropTableOrViewPrepare(tn)
 		if err != nil {
 			return nil, err
 		}
@@ -425,7 +425,7 @@ func (p *planner) DropTable(n *parser.DropTable) (planNode, error) {
 			return nil, err
 		}
 
-		droppedDesc, err := p.dropTablePrepare(tn)
+		droppedDesc, err := p.dropTableOrViewPrepare(tn)
 		if err != nil {
 			return nil, err
 		}
@@ -573,7 +573,7 @@ func (n *dropTableNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "drop table", "", nil
 }
 
-// dropTablePrepare/dropTableImpl is used to drop a single table by
+// dropTableOrViewPrepare/dropTableImpl is used to drop a single table by
 // name, which can result from either a DROP TABLE or DROP DATABASE
 // statement. This method returns the dropped table descriptor, to be
 // used for the purpose of logging the event.  The table is not
@@ -585,9 +585,9 @@ func (n *dropTableNode) ExplainPlan(v bool) (string, string, []planNode) {
 // the deleted bit set, meaning the lease manager will not hand out
 // new leases for it and existing leases are released).
 // If the table does not exist, this function returns a nil descriptor.
-func (p *planner) dropTablePrepare(name *parser.TableName,
+func (p *planner) dropTableOrViewPrepare(name *parser.TableName,
 ) (*sqlbase.TableDescriptor, error) {
-	tableDesc, err := p.getTableDesc(name)
+	tableDesc, err := p.getTableOrViewDesc(name)
 	if err != nil {
 		return nil, err
 	}
