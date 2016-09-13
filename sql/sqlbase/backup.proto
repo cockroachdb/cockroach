@@ -33,6 +33,7 @@ message BackupRangeDescriptor {
   bytes start_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.Key"];
   bytes end_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.Key"];
   util.hlc.Timestamp start_time = 4 [(gogoproto.nullable) = false];
+  uint32 crc = 5 [(gogoproto.customname) = "CRC"];
 }
 
 // BackupDescriptor represents a consistent snapshot of ranges.
