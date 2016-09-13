@@ -1806,6 +1806,7 @@ func (r *Replica) CheckConsistency(
 		if replica == localReplica {
 			continue
 		}
+		wg.Add(1)
 		replica := replica // per-iteration copy
 		if err := r.store.Stopper().RunAsyncTask(func() {
 			defer wg.Done()
@@ -1856,9 +1857,8 @@ func (r *Replica) CheckConsistency(
 			log.Errorf(ctx, buf.String())
 		}); err != nil {
 			log.Error(ctx, errors.Wrap(err, "could not run async CollectChecksum"))
-			continue
+			wg.Done()
 		}
-		wg.Add(1)
 	}
 	wg.Wait()
 
