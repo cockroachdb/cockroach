@@ -23,6 +23,19 @@ import "cockroach/roachpb/metadata.proto";
 import "etcd/raft/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
 
+message RaftHeartbeat {
+  // TODO(arjun): pare this proto down to the bare necessities.
+  optional uint64 range_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
+  optional roachpb.ReplicaDescriptor from_replica = 2 [(gogoproto.nullable) = false];
+  optional roachpb.ReplicaDescriptor to_replica = 3 [(gogoproto.nullable) = false];
+  optional uint64 term = 4 [(gogoproto.nullable) = false];
+  optional uint64 log_term = 5 [(gogoproto.nullable) = false];
+  optional uint64 commit = 6 [(gogoproto.nullable) = false];
+  optional bool response = 7 [(gogoproto.nullable) = false];
+}
+
 // RaftMessageRequest is the request used to send raft messages using our
 // protobuf-based RPC codec.
 message RaftMessageRequest {
@@ -43,6 +56,12 @@ message RaftMessageRequest {
   // Raft which will generate a MsgHeartbeatResp that will unquiesce
   // the sender.
   optional bool quiesce = 5 [(gogoproto.nullable) = false];
+
+  // A coalesced heartbeat request is any request with a nonzero number of
+  // coalesced_heartbeats. If this is the case, the message is treated as a
+  // dummy and discarded. A coalesced heartbeat request's replica descriptor's
+  // range ID should be zero.
+  repeated RaftHeartbeat coalesced_heartbeats = 6 [(gogoproto.nullable) = false];
 }
 
 message RaftMessageResponseUnion {

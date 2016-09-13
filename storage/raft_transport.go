@@ -475,9 +475,7 @@ func (t *RaftTransport) processQueue(
 // returns false if the outgoing queue is full and calls s.onError when the
 // recipient closes the stream.
 func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
-	isHeartbeat := (req.Message.Type == raftpb.MsgHeartbeat ||
-		req.Message.Type == raftpb.MsgHeartbeatResp)
-	if req.RangeID == 0 && !isHeartbeat {
+	if req.RangeID == 0 && len(req.CoalescedHeartbeats) == 0 {
 		// Coalesced heartbeats are addressed to range 0; everything else
 		// needs an explicit range ID.
 		panic("only heartbeat messages may be sent to range ID 0")

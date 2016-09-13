@@ -1717,6 +1717,35 @@ func (r *Replica) raftUnlock(uninitRaftLocked bool) {
 	r.raftMu.Unlock()
 }
 
+func (r *Replica) enqueueHeartbeat(msg raftpb.Message, isResponse bool) {
+	r.mu.Lock()
+	toReplica, toErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.To), r.mu.lastToReplica)
+	fromReplica, fromErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.From),
+		r.mu.lastFromReplica)
+	r.mu.Unlock()
+	if toErr != nil {
+		log.Warningf(r.ctx, "cannot lookup ReplicaDescriptor for replica %d", msg.To)
+	}
+	if fromErr != nil {
+		log.Warningf(r.ctx, "cannot lookup ReplicaDescriptor for replica %d", msg.From)
+	}
+
+	h := RaftHeartbeat{
+		RangeID:     r.RangeID,
+		ToReplica:   toReplica,
+		FromReplica: fromReplica,
+		Term:        msg.Term,
+		LogTerm:     msg.LogTerm,
+		Commit:      msg.Commit,
+		Response:    isResponse,
+	}
+	if len(r.store.coalescedHeartbeatChan) == coalescedHeartbeatChannelSize {
+		log.Warning(r.ctx, "coalescedHeartbeatChan full, triggering early coalescing")
+		r.store.earlyCoalesceHeartbeats <- struct{}{}
+	}
+	r.store.coalescedHeartbeatChan <- h
+}
+
 // handleRaftReady processes a raft.Ready containing entries and messages that
 // are ready to read, be saved to stable storage, committed or sent to other
 // peers.
@@ -1809,7 +1838,6 @@ func (r *Replica) handleRaftReady() error {
 			refreshReason == noReason {
 			refreshReason = reasonSnapshotApplied
 		}
-		// TODO(bdarnell): update coalesced heartbeat mapping with snapshot info.
 	}
 
 	if !uninitRaftLocked {
@@ -1866,7 +1894,23 @@ func (r *Replica) handleRaftReady() error {
 	r.mu.Unlock()
 
 	for _, msg := range rd.Messages {
-		r.sendRaftMessage(msg)
+		switch msg.Type {
+		// heartbeats get buffered and coalesced if the environment variable is set
+		case raftpb.MsgHeartbeat:
+			if enableCoalescedHeartbeats {
+				r.enqueueHeartbeat(msg, false)
+			} else {
+				r.sendRaftMessage(msg)
+			}
+		case raftpb.MsgHeartbeatResp:
+			if enableCoalescedHeartbeats {
+				r.enqueueHeartbeat(msg, true)
+			} else {
+				r.sendRaftMessage(msg)
+			}
+		default:
+			r.sendRaftMessage(msg)
+		}
 	}
 
 	for _, e := range rd.CommittedEntries {
@@ -1991,6 +2035,7 @@ func (r *Replica) tickRaftMuLocked() (bool, error) {
 }
 
 var enableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_QUIESCENCE", false)
+var enableCoalescedHeartbeats = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_COALESCED_HEARBEATS", true)
 
 // maybeQuiesceLocked checks to see if the replica is quiescable and initiates
 // quiescence if it is. Returns true if the replica has been quiesced and false

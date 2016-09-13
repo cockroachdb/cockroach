@@ -84,6 +84,9 @@ const (
 	// replicaRequestQueueSize specifies the maximum number of requests to queue
 	// for a replica.
 	replicaRequestQueueSize = 100
+
+	// the number of heartbeats that this store can coalesce.
+	coalescedHeartbeatChannelSize = 1000
 )
 
 var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeType{
@@ -292,6 +295,9 @@ type Store struct {
 	metrics                 *StoreMetrics
 	intentResolver          *intentResolver
 	raftEntryCache          *raftEntryCache
+	// TODO(arjun): Should this be a slice protected with its own mutex, instead of a channel?
+	coalescedHeartbeatChan  chan RaftHeartbeat
+	earlyCoalesceHeartbeats chan struct{}
 	// 1 if the store was started, 0 if it wasn't. To be accessed using atomic
 	// ops.
 	started int32
@@ -639,12 +645,14 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	}
 
 	s := &Store{
-		ctx:       ctx,
-		db:        ctx.DB, // TODO(tschottdorf) remove redundancy.
-		engine:    eng,
-		allocator: MakeAllocator(ctx.StorePool, ctx.AllocatorOptions),
-		nodeDesc:  nodeDesc,
-		metrics:   newStoreMetrics(),
+		ctx:                    ctx,
+		db:                     ctx.DB, // TODO(tschottdorf) remove redundancy.
+		engine:                 eng,
+		allocator:              MakeAllocator(ctx.StorePool, ctx.AllocatorOptions),
+		nodeDesc:               nodeDesc,
+		metrics:                newStoreMetrics(),
+		coalescedHeartbeatChan: make(chan RaftHeartbeat, coalescedHeartbeatChannelSize),
+		// TODO(arjun): How big should this be? Seems tricky. Maybe this should be a slice...
 	}
 	s.intentResolver = newIntentResolver(s)
 	s.raftEntryCache = newRaftEntryCache(ctx.RaftEntryCacheSize)
@@ -2284,6 +2292,34 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now hlc.Timesta
 	return txn, nil
 }
 
+func (s *Store) fanoutCoalescedHeartbeats(req *RaftMessageRequest,
+	respStream RaftMessageResponseStream) *roachpb.Error {
+	for _, beat := range req.CoalescedHeartbeats {
+		// TODO(arjun): do some accounting
+		msg := raftpb.Message{
+			Type:    raftpb.MsgHeartbeat,
+			From:    uint64(beat.FromReplica.ReplicaID),
+			To:      uint64(beat.ToReplica.ReplicaID),
+			Term:    beat.Term,
+			LogTerm: beat.LogTerm,
+			Commit:  beat.Commit,
+		}
+		beatReq := &RaftMessageRequest{
+			RangeID:     beat.RangeID,
+			FromReplica: beat.FromReplica,
+			ToReplica:   beat.ToReplica,
+			Message:     msg,
+		}
+		// This mutual recursion is safe as long as fanoutCoalescedHeartbeats
+		// is called only on len(req.CoalescedHeartbeats.Heartbeats) > 0, and
+		// this recursive call back into HandleRaftRequest has len(...) == 0.
+		if err := s.HandleRaftRequest(s.Ctx(), beatReq, respStream); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // HandleRaftRequest dispatches a raft message to the appropriate Replica. It
 // requires that s.mu is not held.
 func (s *Store) HandleRaftRequest(
@@ -2291,7 +2327,17 @@ func (s *Store) HandleRaftRequest(
 	req *RaftMessageRequest,
 	respStream RaftMessageResponseStream,
 ) (pErr *roachpb.Error) {
-	s.metrics.raftRcvdMessages[req.Message.Type].Inc(1)
+	// HandleRaftRequest is called on locally uncoalesced heartbeats (which are
+	// not sent over the network if the environment variable is set) so do not
+	// count them.
+	if !enableCoalescedHeartbeats ||
+		(!(req.Message.Type == raftpb.MsgHeartbeat) || (req.Message.Type == raftpb.MsgHeartbeatResp)) {
+		s.metrics.raftRcvdMessages[req.Message.Type].Inc(1)
+	}
+
+	if len(req.CoalescedHeartbeats) > 0 {
+		return s.fanoutCoalescedHeartbeats(req, respStream)
+	}
 
 	if respStream == nil {
 		return s.processRaftRequest(ctx, req)
@@ -2664,6 +2710,7 @@ func (s *Store) processRaft() {
 	}
 	s.scheduler.Start(s.stopper)
 	s.raftTickLoop()
+	s.coalescedHeartbeatLoop()
 	s.raftSnapshotStatusLoop()
 }
 
@@ -2697,6 +2744,69 @@ func (s *Store) raftTickLoop() {
 			}
 		}
 	})
+}
+
+func (s *Store) coalescedHeartbeatLoop() {
+	s.stopper.RunWorker(func() {
+		ticker := time.NewTicker(s.ctx.RaftTickInterval)
+		defer func() {
+			ticker.Stop()
+		}()
+
+		for {
+			select {
+			case <-s.earlyCoalesceHeartbeats:
+				s.sendQueuedHeartbeats()
+			case <-ticker.C:
+				s.sendQueuedHeartbeats()
+			case <-s.stopper.ShouldStop():
+				return
+			}
+		}
+	})
+}
+
+func (s *Store) sendQueuedHeartbeats() {
+	s.metrics.RaftCoalescedHeartbeatsPending.Update(int64(len(s.coalescedHeartbeatChan)))
+	s.ctx.Transport.mu.Lock()
+	chs := make(map[roachpb.NodeID][]RaftHeartbeat, len(s.ctx.Transport.mu.queues[false]))
+	for nodeID := range s.ctx.Transport.mu.queues[false] {
+		chs[nodeID] = make([]RaftHeartbeat, 0)
+	}
+Loop:
+	for {
+		select {
+		case beat := <-s.coalescedHeartbeatChan:
+			nodeID := beat.ToReplica.NodeID
+			chs[nodeID] = append(chs[nodeID], beat)
+		default:
+			break Loop
+		}
+	}
+	s.ctx.Transport.mu.Unlock()
+
+	for _, beats := range chs {
+		if len(beats) == 0 {
+			continue
+		}
+		chReq := &RaftMessageRequest{
+			RangeID: 0,
+			ToReplica: roachpb.ReplicaDescriptor{
+				NodeID:    beats[0].ToReplica.NodeID,
+				StoreID:   beats[0].ToReplica.StoreID,
+				ReplicaID: 0,
+			},
+			Message: raftpb.Message{
+				Type: raftpb.MsgHeartbeat,
+			},
+			CoalescedHeartbeats: beats,
+		}
+
+		if !s.ctx.Transport.SendAsync(chReq) {
+			log.Warning(s.Ctx(), "TODO(arjun): What do we do if we can't send a coalesced heartbeat?")
+		}
+	}
+
 }
 
 func (s *Store) raftSnapshotStatusLoop() {
