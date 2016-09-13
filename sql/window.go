@@ -106,13 +106,15 @@ func (p *planner) window(n *parser.SelectClause, s *selectNode) (*windowNode, er
 			prevWindowCount := len(window.funcs) - numFuncsAdded
 			for i, funcHolder := range window.funcs[prevWindowCount:] {
 				funcHolder.funcIdx = prevWindowCount + i
-				funcHolder.subRenderCol = len(s.render)
-				arg := funcHolder.arg
-				s.render = append(s.render, arg)
-				s.columns = append(s.columns, ResultColumn{
-					Name: arg.String(),
-					Typ:  arg.ReturnType(),
-				})
+				funcHolder.argIdxStart = len(s.render)
+				for _, argExpr := range funcHolder.args {
+					arg := argExpr.(parser.TypedExpr)
+					s.render = append(s.render, arg)
+					s.columns = append(s.columns, ResultColumn{
+						Name: arg.String(),
+						Typ:  arg.ReturnType(),
+					})
+				}
 			}
 		}
 	}
@@ -360,13 +362,8 @@ func (n *windowNode) Next() (bool, error) {
 	return n.values.Next()
 }
 
-type partitionEntry struct {
-	idx   int
-	datum parser.DTuple
-}
-
 type partitionSorter struct {
-	rows     []partitionEntry
+	rows     []parser.IndexedRow
 	ordering sqlbase.ColumnOrdering
 }
 
@@ -379,7 +376,7 @@ func (n *partitionSorter) Less(i, j int) bool { return n.Compare(i, j) < 0 }
 func (n *partitionSorter) InSameGroup(i, j int) bool { return n.Compare(i, j) == 0 }
 
 func (n *partitionSorter) Compare(i, j int) int {
-	ra, rb := n.rows[i].datum, n.rows[j].datum
+	ra, rb := n.rows[i].Row, n.rows[j].Row
 	for _, o := range n.ordering {
 		da := ra[o.ColIdx]
 		db := rb[o.ColIdx]
@@ -428,16 +425,16 @@ func (n *windowNode) computeWindows() error {
 	var scratch []byte
 	scratchDatum := make(parser.DTuple, 0, rowCount)
 	for windowIdx, windowFn := range n.funcs {
-		partitions := make(map[string][]partitionEntry)
+		partitions := make(map[string][]parser.IndexedRow)
 
 		if len(windowFn.partitionIdxs) == 0 {
 			// If no partition indexes are included for the window function, all
 			// rows are added to the same partition, which need to be pre-allocated.
-			sz := int64(uintptr(rowCount) * unsafe.Sizeof(partitionEntry{}))
+			sz := int64(uintptr(rowCount) * unsafe.Sizeof(parser.IndexedRow{}))
 			if err := acc.Grow(sz); err != nil {
 				return err
 			}
-			partitions[""] = make([]partitionEntry, rowCount)
+			partitions[""] = make([]parser.IndexedRow, rowCount)
 		}
 
 		scratchDatum = scratchDatum[:len(windowFn.partitionIdxs)]
@@ -450,7 +447,7 @@ func (n *windowNode) computeWindows() error {
 		// See Cao et al. [http://vldb.org/pvldb/vol5/p1244_yucao_vldb2012.pdf]
 		for rowI := 0; rowI < rowCount; rowI++ {
 			row := n.wrappedValues.At(rowI)
-			entry := partitionEntry{idx: rowI, datum: row}
+			entry := parser.IndexedRow{Idx: rowI, Row: row}
 			if len(windowFn.partitionIdxs) == 0 {
 				// If no partition indexes are included for the window function, all
 				// rows are added to the same partition.
@@ -493,10 +490,7 @@ func (n *windowNode) computeWindows() error {
 			// peer. Without ORDER BY, all rows of the partition are included in the window frame,
 			// since all rows become peers of the current row. Once we add better framing support,
 			// we should flesh this logic out more.
-			//
-			// TODO(nvanbenschoten) Handle built-in window functions in addtition to
-			// aggregate functions.
-			agg := windowFn.expr.GetAggregateConstructor()()
+			builtin := windowFn.expr.GetWindowConstructor()()
 
 			// Since we only support two types of window frames (see TODO above), we only
 			// need two possible types of peerGroupChecker's to help determine peer groups
@@ -519,33 +513,37 @@ func (n *windowNode) computeWindows() error {
 				peerGrouper = allPeers{}
 			}
 
-			// Iterate over peer groups within partition.
-			rowIdx := 0
-			for rowIdx < len(partition) {
-				// Compute the size of a peer group while accumulating in aggregate.
-				peerGroupSize := 0
-				for ; rowIdx < len(partition); rowIdx++ {
-					if peerGroupSize > 0 {
-						if !peerGrouper.InSameGroup(rowIdx-1, rowIdx) {
-							break
-						}
+			// Iterate over peer groups within partition using a window frame.
+			frame := parser.WindowFrame{
+				Rows:        partition,
+				ArgIdxStart: windowFn.argIdxStart,
+				ArgCount:    windowFn.argCount,
+				RowIdx:      0,
+			}
+			for frame.RowIdx < len(partition) {
+				// Compute the size of the current peer group.
+				frame.FirstPeerIdx = frame.RowIdx
+				frame.PeerRowCount = 1
+				for ; frame.FirstPeerIdx+frame.PeerRowCount < len(partition); frame.PeerRowCount++ {
+					cur := frame.FirstPeerIdx + frame.PeerRowCount
+					if !peerGrouper.InSameGroup(cur, cur-1) {
+						break
 					}
-					row := partition[rowIdx]
-					agg.Add(row.datum[windowFn.subRenderCol])
-					peerGroupSize++
 				}
 
-				// Set aggregate result for entire peer group.
-				res := agg.Result()
+				// Perform calculations on each row in the current peer group.
+				for ; frame.RowIdx < frame.FirstPeerIdx+frame.PeerRowCount; frame.RowIdx++ {
+					res := builtin.Compute(frame)
 
-				sz, _ := res.Size()
-				if err := acc.Grow(int64(sz)); err != nil {
-					return err
-				}
+					// This may overestimate, because WindowFuncs may perform internal caching.
+					sz, _ := res.Size()
+					if err := acc.Grow(int64(sz)); err != nil {
+						return err
+					}
 
-				for ; peerGroupSize > 0; peerGroupSize-- {
-					row := partition[rowIdx-peerGroupSize]
-					n.windowValues[row.idx][windowIdx] = res
+					// Save result into n.windowValues, indexed by original row index.
+					valRowIdx := partition[frame.RowIdx].Idx
+					n.windowValues[valRowIdx][windowIdx] = res
 				}
 			}
 		}
@@ -587,12 +585,14 @@ func (n *windowNode) populateValues() error {
 				// planNode. These were used as arguments to window functions all beneath
 				// a single windowRender.
 				// SELECT rank() over () from t; -> ignore 0 from wrapped values
+				// SELECT (rank() over () + avg(b) over ()) from t; -> ignore 1 from wrapped values
 				// SELECT (avg(a) over () + avg(b) over ()) from t; -> ignore 2 from wrapped values
 				for ; curFnIdx < len(n.funcs); curFnIdx++ {
-					if n.funcs[curFnIdx].subRenderCol != curColIdx {
+					windowFn := n.funcs[curFnIdx]
+					if windowFn.argIdxStart != curColIdx {
 						break
 					}
-					curColIdx++
+					curColIdx += windowFn.argCount
 				}
 				// Instead, we evaluate the current window render, which depends on at least
 				// one window function, at the given row.
@@ -692,7 +692,7 @@ func (v *extractWindowFuncsVisitor) VisitPre(expr parser.Expr) (recurse bool, ne
 	switch t := expr.(type) {
 	case *parser.FuncExpr:
 		switch {
-		case t.IsWindowFunction():
+		case t.IsWindowFunctionApplication():
 			// Check if a parent node above this window function is an aggregate.
 			if len(v.aggregatesSeen) > 0 {
 				v.err = errors.Errorf("aggregate function calls cannot contain window function "+
@@ -700,29 +700,19 @@ func (v *extractWindowFuncsVisitor) VisitPre(expr parser.Expr) (recurse bool, ne
 				return false, expr
 			}
 
-			// Make sure the window function application is of either a built-in window
-			// function or of a built-in aggregate function.
-			if t.GetWindowConstructor() == nil && t.GetAggregateConstructor() == nil {
-				v.err = fmt.Errorf("OVER specified, but %s is not a window function nor an "+
-					"aggregate function", t.Name)
-				return false, expr
-			}
-
-			// TODO(nvanbenschoten) Once we support built-in window functions instead of
-			// just aggregates over a window, we'll need to support a variable number of
-			// arguments.
-			argExpr := t.Exprs[0].(parser.TypedExpr)
-
 			// Make sure this window function does not contain another window function.
-			if v.subWindowVisitor.ContainsWindowFunc(argExpr) {
-				v.err = fmt.Errorf("window function calls cannot be nested under %s", t.Name)
-				return false, expr
+			for _, argExpr := range t.Exprs {
+				if v.subWindowVisitor.ContainsWindowFunc(argExpr) {
+					v.err = fmt.Errorf("window function calls cannot be nested under %s", t.Name)
+					return false, expr
+				}
 			}
 
 			f := &windowFuncHolder{
-				expr:   t,
-				arg:    argExpr,
-				window: v.n,
+				expr:     t,
+				args:     t.Exprs,
+				argCount: len(t.Exprs),
+				window:   v.n,
 			}
 			v.windowFnCount++
 			v.n.funcs = append(v.n.funcs, f)
@@ -776,10 +766,11 @@ type windowFuncHolder struct {
 	window *windowNode
 
 	expr *parser.FuncExpr
-	arg  parser.TypedExpr
+	args []parser.Expr
 
-	funcIdx      int // index of the windowFuncHolder in window.funcs
-	subRenderCol int // column of the windowFuncHolder in window.wrappedValues
+	funcIdx     int // index of the windowFuncHolder in window.funcs
+	argIdxStart int // index of the window function's first arguments in window.wrappedValues
+	argCount    int // number of arguments taken by the window function
 
 	windowDef      parser.WindowDef
 	partitionIdxs  []int
