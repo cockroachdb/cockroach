@@ -26,6 +26,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -40,13 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/pkg/errors"
 )
-
-// TestSetDeterministic makes StorePool return results in a deterministic way.
-func (sp *StorePool) TestSetDeterministic(deterministic bool) {
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
-	sp.mu.deterministic = deterministic
-}
 
 var uniqueStore = []*roachpb.StoreDescriptor{
 	{
@@ -222,12 +216,13 @@ func TestStorePoolDies(t *testing.T) {
 // verifyStoreList ensures that the returned list of stores is correct.
 func verifyStoreList(
 	sp *StorePool,
+	constraints config.Constraints,
 	expected []int,
 	expectedAliveStoreCount int,
 	expectedThrottledStoreCount int,
 ) error {
 	var actual []int
-	sl, aliveStoreCount, throttledStoreCount := sp.getStoreList()
+	sl, aliveStoreCount, throttledStoreCount := sp.getStoreList(constraints, false)
 	if aliveStoreCount != expectedAliveStoreCount {
 		return errors.Errorf("expected AliveStoreCount %d does not match actual %d",
 			expectedAliveStoreCount, aliveStoreCount)
@@ -248,51 +243,67 @@ func verifyStoreList(
 }
 
 // TestStorePoolGetStoreList ensures that the store list returns only stores
-// that are alive.
+// that are alive and match the attribute criteria.
 func TestStorePoolGetStoreList(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// We're going to manually mark stores dead in this test.
 	stopper, g, _, sp := createTestStorePool(TestTimeUntilStoreDeadOff)
 	defer stopper.Stop()
 	sg := gossiputil.NewStoreGossiper(g)
+	constraints := config.Constraints{Constraints: []config.Constraint{{Value: "ssd"}, {Value: "dc"}}}
+	required := []string{"ssd", "dc"}
 	// Nothing yet.
-	if sl, _, _ := sp.getStoreList(); len(sl.stores) != 0 {
+	if sl, _, _ := sp.getStoreList(constraints, false); len(sl.stores) != 0 {
 		t.Errorf("expected no stores, instead %+v", sl.stores)
 	}
 
 	matchingStore := roachpb.StoreDescriptor{
 		StoreID: 1,
 		Node:    roachpb.NodeDescriptor{NodeID: 1},
+		Attrs:   roachpb.Attributes{Attrs: required},
 	}
 	supersetStore := roachpb.StoreDescriptor{
 		StoreID: 2,
 		Node:    roachpb.NodeDescriptor{NodeID: 1},
+		Attrs:   roachpb.Attributes{Attrs: append(required, "db")},
 	}
-	deadStore := roachpb.StoreDescriptor{
+	unmatchingStore := roachpb.StoreDescriptor{
 		StoreID: 3,
 		Node:    roachpb.NodeDescriptor{NodeID: 1},
+		Attrs:   roachpb.Attributes{Attrs: []string{"ssd", "otherdc"}},
 	}
-	declinedStore := roachpb.StoreDescriptor{
+	emptyStore := roachpb.StoreDescriptor{
 		StoreID: 4,
 		Node:    roachpb.NodeDescriptor{NodeID: 1},
+		Attrs:   roachpb.Attributes{},
 	}
-
-	allStores := []*roachpb.StoreDescriptor{
-		&matchingStore,
-		&supersetStore,
-		&deadStore,
-		&declinedStore,
+	deadStore := roachpb.StoreDescriptor{
+		StoreID: 5,
+		Node:    roachpb.NodeDescriptor{NodeID: 1},
+		Attrs:   roachpb.Attributes{Attrs: required},
+	}
+	declinedStore := roachpb.StoreDescriptor{
+		StoreID: 6,
+		Node:    roachpb.NodeDescriptor{NodeID: 1},
+		Attrs:   roachpb.Attributes{Attrs: required},
 	}
 
 	// Mark all alive initially.
-	sg.GossipStores(allStores, t)
+	sg.GossipStores([]*roachpb.StoreDescriptor{
+		&matchingStore,
+		&supersetStore,
+		&unmatchingStore,
+		&emptyStore,
+		&deadStore,
+		&declinedStore,
+	}, t)
 
-	if err := verifyStoreList(sp, []int{
+	if err := verifyStoreList(sp, constraints, []int{
 		int(matchingStore.StoreID),
 		int(supersetStore.StoreID),
 		int(deadStore.StoreID),
 		int(declinedStore.StoreID),
-	}, len(allStores), 0); err != nil {
+	}, 6, 0); err != nil {
 		t.Error(err)
 	}
 
@@ -302,10 +313,10 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	sp.mu.stores[declinedStore.StoreID].throttledUntil = sp.clock.Now().GoTime().Add(time.Hour)
 	sp.mu.Unlock()
 
-	if err := verifyStoreList(sp, []int{
+	if err := verifyStoreList(sp, constraints, []int{
 		int(matchingStore.StoreID),
 		int(supersetStore.StoreID),
-	}, len(allStores)-1, 1); err != nil {
+	}, 5, 1); err != nil {
 		t.Error(err)
 	}
 }
@@ -419,7 +430,7 @@ func TestStorePoolDefaultState(t *testing.T) {
 		t.Errorf("expected 0 dead replicas; got %v", dead)
 	}
 
-	sl, alive, throttled := sp.getStoreList()
+	sl, alive, throttled := sp.getStoreList(config.Constraints{}, true)
 	if len(sl.stores) > 0 {
 		t.Errorf("expected no live stores; got list of %v", sl)
 	}
