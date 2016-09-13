@@ -3,7 +3,7 @@ System.config({
   transpiler: "ts",
   typescriptOptions: {
     "typeCheck": "strict",
-    "tsconfig": true
+    "tsconfig": "tsconfig.build.json"
   },
   paths: {
     "github:*": "jspm_packages/github/*",
