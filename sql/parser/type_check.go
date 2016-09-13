@@ -344,13 +344,19 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, err
 	builtin := fn.(Builtin)
 	if expr.IsWindowFunctionApplication() {
 		// Make sure the window function application is of either a built-in window
-		// function or of a built-in aggregate function.
+		// function or of a builtin aggregate function.
 		switch builtin.class {
 		case AggregateClass:
-		// case WindowClass:
+		case WindowClass:
 		default:
 			return nil, fmt.Errorf("OVER specified, but %s is not a window function nor an "+
 				"aggregate function", expr.Name)
+		}
+	} else {
+		// Make sure the window function builtins are used as window function applications.
+		switch builtin.class {
+		case WindowClass:
+			return nil, fmt.Errorf("window function %s requires an OVER clause", expr.Name)
 		}
 	}
 
