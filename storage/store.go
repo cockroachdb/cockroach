@@ -2287,7 +2287,7 @@ func (s *Store) processRaftRequest(
 			panic(fmt.Sprintf("unexpected quiesce: %+v", req))
 		}
 		status := r.RaftStatus()
-		if status.Term == req.Message.Term && status.Commit == req.Message.Commit {
+		if status != nil && status.Term == req.Message.Term && status.Commit == req.Message.Commit {
 			r.setQuiescent(true)
 			return
 		}
