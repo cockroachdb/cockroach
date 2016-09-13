@@ -36,8 +36,13 @@ import (
 )
 
 const (
-	// purgatoryReportInterval is the duration between reports on purgatory status.
+	// purgatoryReportInterval is the duration between reports on
+	// purgatory status.
 	purgatoryReportInterval = 10 * time.Minute
+	// defaultProcessTimeout is the timeout when processing a replica.
+	// The timeout prevents a queue from getting stuck on a replica.
+	// For example, a replica whose range is not reachable for quorum.
+	defaultProcessTimeout = 1 * time.Minute
 )
 
 // a purgatoryError indicates a replica processing failure which indicates
@@ -140,6 +145,8 @@ type queueConfig struct {
 	// want to try to replicate a range until we know which zone it is in and
 	// therefore how many replicas are required).
 	acceptsUnsplitRanges bool
+	// processTimeout is the timeout for processing a replica.
+	processTimeout time.Duration
 }
 
 // baseQueue is the base implementation of the replicaQueue interface.
@@ -199,6 +206,10 @@ func makeBaseQueue(
 	gossip *gossip.Gossip,
 	cfg queueConfig,
 ) baseQueue {
+	// Use the default process timeout if none specified.
+	if cfg.processTimeout == 0 {
+		cfg.processTimeout = defaultProcessTimeout
+	}
 	bq := baseQueue{
 		name:        name,
 		impl:        impl,
@@ -476,9 +487,11 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 	}
 
 	sp := repl.store.Tracer().StartSpan(bq.name)
+	defer sp.Finish()
 	ctx := opentracing.ContextWithSpan(context.Background(), sp)
 	ctx = repl.logContext(ctx)
-	defer sp.Finish()
+	ctx, cancel := context.WithTimeout(ctx, bq.processTimeout)
+	defer cancel()
 	log.Tracef(ctx, "processing replica")
 
 	// If the queue requires a replica to have the range lease in

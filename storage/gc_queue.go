@@ -304,7 +304,7 @@ func (gcq *gcQueue) process(
 
 	gcKeys, info, err := RunGC(ctx, desc, snap, now, zone.GC,
 		func(now hlc.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
-			pushTxn(gcq.store.DB(), now, txn, typ)
+			pushTxn(ctx, gcq.store.DB(), now, txn, typ)
 		},
 		func(intents []roachpb.Intent, poison bool, wait bool) error {
 			return repl.store.intentResolver.resolveIntents(ctx, intents, poison, wait)
@@ -378,8 +378,8 @@ type lockableGCInfo struct {
 }
 
 // RunGC runs garbage collection for the specified descriptor on the provided
-// Engine (which is not mutated). It uses the provided functions pushTxn and
-// resolveIntents to clarify the true status of and clean up after encountered
+// Engine (which is not mutated). It uses the provided functions pushTxnFn and
+// resolveIntentsFn to clarify the true status of and clean up after encountered
 // transactions. It returns a slice of gc'able keys from the data, transaction,
 // and abort spans.
 func RunGC(
@@ -388,8 +388,8 @@ func RunGC(
 	snap engine.Reader,
 	now hlc.Timestamp,
 	policy config.GCPolicy,
-	pushTxn pushFunc,
-	resolveIntents resolveFunc,
+	pushTxnFn pushFunc,
+	resolveIntentsFn resolveFunc,
 ) ([]roachpb.GCRequest_GCKey, GCInfo, error) {
 
 	iter := NewReplicaDataIterator(desc, snap, true /* replicatedOnly */)
@@ -400,8 +400,8 @@ func RunGC(
 	infoMu.Now = now
 
 	{
-		realResolveIntents := resolveIntents
-		resolveIntents = func(intents []roachpb.Intent, poison bool, wait bool) (err error) {
+		realResolveIntentsFn := resolveIntentsFn
+		resolveIntentsFn = func(intents []roachpb.Intent, poison bool, wait bool) (err error) {
 			defer func() {
 				infoMu.Lock()
 				infoMu.ResolveTotal += len(intents)
@@ -410,14 +410,14 @@ func RunGC(
 				}
 				infoMu.Unlock()
 			}()
-			return realResolveIntents(intents, poison, wait)
+			return realResolveIntentsFn(intents, poison, wait)
 		}
-		realPushTxn := pushTxn
-		pushTxn = func(ts hlc.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
+		realPushTxnFn := pushTxnFn
+		pushTxnFn = func(ts hlc.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
 			infoMu.Lock()
 			infoMu.PushTxn++
 			infoMu.Unlock()
-			realPushTxn(ts, txn, typ)
+			realPushTxnFn(ts, txn, typ)
 		}
 	}
 
@@ -511,7 +511,7 @@ func RunGC(
 	infoMu.IntentTxns = len(txnMap)
 	infoMu.GCKeys = len(gcKeys)
 
-	txnKeys, err := processTransactionTable(ctx, snap, desc, txnMap, txnExp, &infoMu, resolveIntents)
+	txnKeys, err := processTransactionTable(ctx, snap, desc, txnMap, txnExp, &infoMu, resolveIntentsFn)
 	if err != nil {
 		return nil, GCInfo{}, err
 	}
@@ -539,7 +539,7 @@ func RunGC(
 				<-sem
 				wg.Done()
 			}()
-			pushTxn(now, txnCopy, roachpb.PUSH_ABORT)
+			pushTxnFn(now, txnCopy, roachpb.PUSH_ABORT)
 		}()
 	}
 	wg.Wait()
@@ -554,13 +554,13 @@ func RunGC(
 		}
 	}
 
-	if err := resolveIntents(intents, true /* wait */, false /* !poison */); err != nil {
+	if err := resolveIntentsFn(intents, true /* wait */, false /* !poison */); err != nil {
 		return nil, GCInfo{}, err
 	}
 
 	// Clean up the abort cache.
 	gcKeys = append(gcKeys, processAbortCache(ctx, snap, desc.RangeID, now,
-		abortCacheAgeThreshold, &infoMu, pushTxn)...)
+		abortCacheAgeThreshold, &infoMu, pushTxnFn)...)
 	return gcKeys, infoMu.GCInfo, nil
 }
 
@@ -577,7 +577,13 @@ func (*gcQueue) purgatoryChan() <-chan struct{} {
 
 // pushTxn attempts to abort the txn via push. The wait group is signaled on
 // completion.
-func pushTxn(db *client.DB, now hlc.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
+func pushTxn(
+	ctx context.Context,
+	db *client.DB,
+	now hlc.Timestamp,
+	txn *roachpb.Transaction,
+	typ roachpb.PushTxnType,
+) {
 	// Attempt to push the transaction which created the intent.
 	pushArgs := &roachpb.PushTxnRequest{
 		Span: roachpb.Span{
@@ -590,8 +596,8 @@ func pushTxn(db *client.DB, now hlc.Timestamp, txn *roachpb.Transaction, typ roa
 	}
 	b := &client.Batch{}
 	b.AddRawRequest(pushArgs)
-	if err := db.Run(context.TODO(), b); err != nil {
-		log.Warningf(context.TODO(), "push of txn %s failed: %s", txn, err)
+	if err := db.Run(ctx, b); err != nil {
+		log.Warningf(ctx, "push of txn %s failed: %s", txn, err)
 		return
 	}
 	br := b.RawResponse()
