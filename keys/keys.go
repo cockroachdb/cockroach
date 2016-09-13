@@ -393,19 +393,22 @@ func AddrUpperBound(k roachpb.Key) (roachpb.RKey, error) {
 	return rk, nil
 }
 
-// RangeMetaKey returns a range metadata (meta1, meta2) indexing key
-// for the given key. For ordinary keys this returns a level 2
-// metadata key - for level 2 keys, it returns a level 1 key. For
-// level 1 keys and local keys, KeyMin is returned.
+// RangeMetaKey returns a range metadata (meta1, meta2) indexing key for the
+// given key.
+//
+// - For an ordinary key, a meta2 key is returned.
+// - For a meta2 key, a meta1 key is returned.
+// - For a meta1 key, KeyMin is returned.
+// - For RKeyMin, KeyMin is returned.
 func RangeMetaKey(key roachpb.RKey) roachpb.Key {
-	if len(key) == 0 {
+	if key.Equal(roachpb.RKeyMin) {
 		return roachpb.KeyMin
 	}
 	var prefix roachpb.Key
 	switch key[0] {
-	case Meta1Prefix[0]:
+	case meta1PrefixByte:
 		return roachpb.KeyMin
-	case Meta2Prefix[0]:
+	case meta2PrefixByte:
 		prefix = Meta1Prefix
 		key = key[len(Meta2Prefix):]
 	default:
