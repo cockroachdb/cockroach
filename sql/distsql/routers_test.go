@@ -21,10 +21,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
 func TestHashRouter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	const numCols = 6
 	const numRows = 200
 
@@ -108,6 +110,7 @@ func TestHashRouter(t *testing.T) {
 }
 
 func TestMirrorRouter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	const numCols = 6
 	const numRows = 20
 

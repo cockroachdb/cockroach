@@ -21,10 +21,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 func TestFlowRegistry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	reg := makeFlowRegistry()
 
 	id1 := FlowID{uuid.MakeV4()}
