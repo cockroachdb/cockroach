@@ -803,13 +803,12 @@ func (node *FuncExpr) GetAggregateConstructor() func() AggregateFunc {
 
 // GetWindowConstructor returns a window function constructor if the
 // FuncExpr is a built-in window function.
-func (node *FuncExpr) GetWindowConstructor() func() {
-	// TODO(nvanbenschoten) Support built-in window functions.
-	return nil
+func (node *FuncExpr) GetWindowConstructor() func() WindowFunc {
+	return node.fn.WindowFunc
 }
 
-// IsWindowFunction returns if the function is being applied as a window function.
-func (node *FuncExpr) IsWindowFunction() bool {
+// IsWindowFunctionApplication returns if the function is being applied as a window function.
+func (node *FuncExpr) IsWindowFunctionApplication() bool {
 	return node.WindowDef != nil
 }
 
@@ -817,7 +816,7 @@ func (node *FuncExpr) IsWindowFunction() bool {
 // potentially returns a different value when called in the same statement with
 // the same parameters.
 func (node *FuncExpr) IsImpure() bool {
-	return node.fn.impure || node.IsWindowFunction()
+	return node.fn.impure
 }
 
 type funcType int
