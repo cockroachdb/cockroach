@@ -577,3 +577,55 @@ func TestBaseQueuePurgatory(t *testing.T) {
 		t.Errorf("expected empty priorityQ; got %d", l)
 	}
 }
+
+type processTimeoutQueueImpl struct {
+	testQueueImpl
+}
+
+func (pq *processTimeoutQueueImpl) process(
+	ctx context.Context,
+	now hlc.Timestamp,
+	r *Replica,
+	_ config.SystemConfig,
+) error {
+	<-ctx.Done()
+	atomic.AddInt32(&pq.processed, 1)
+	return ctx.Err()
+}
+
+func TestBaseQueueProcessTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	r, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ptQueue := &processTimeoutQueueImpl{
+		testQueueImpl: testQueueImpl{
+			blocker: make(chan struct{}, 1),
+			shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+				return true, 1.0
+			},
+		},
+	}
+	bq := makeBaseQueue("test", ptQueue, tc.store, tc.gossip,
+		queueConfig{maxSize: 1, processTimeout: 1 * time.Millisecond})
+	bq.Start(tc.clock, tc.stopper)
+	bq.MaybeAdd(r, hlc.ZeroTimestamp)
+
+	if l := bq.Length(); l != 1 {
+		t.Errorf("expected one queued replica; got %d", l)
+	}
+
+	ptQueue.blocker <- struct{}{}
+	util.SucceedsSoon(t, func() error {
+		if pc := ptQueue.getProcessed(); pc != 1 {
+			return errors.Errorf("expected 1 processed replicas; got %d", pc)
+		}
+		return nil
+	})
+}
