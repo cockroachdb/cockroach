@@ -193,6 +193,15 @@ func (sc StoreCapacity) FractionUsed() float64 {
 	return float64(sc.Capacity-sc.Available) / float64(sc.Capacity)
 }
 
+// CombinedAttrs returns the full list of attributes for the store, including
+// both the node and store attributes.
+func (s StoreDescriptor) CombinedAttrs() *Attributes {
+	var a []string
+	a = append(a, s.Node.Attrs.Attrs...)
+	a = append(a, s.Attrs.Attrs...)
+	return &Attributes{Attrs: a}
+}
+
 // String returns a string representation of the Tier.
 func (t Tier) String() string {
 	return fmt.Sprintf("%s=%s", t.Key, t.Value)
