@@ -100,6 +100,7 @@ func createCluster(
 		storePool: storePool,
 		allocator: storage.MakeAllocator(storePool, storage.AllocatorOptions{
 			AllowRebalance: true,
+			Deterministic:  true,
 		}),
 		storeGossiper:   gossiputil.NewStoreGossiper(g),
 		nodes:           make(map[roachpb.NodeID]*Node),
@@ -292,7 +293,7 @@ func (c *Cluster) prepareActions() {
 		for storeID, rep := range r.replicas {
 			rep.action, rep.priority = r.allocator.ComputeAction(r.zone, &r.desc)
 			if rep.action == storage.AllocatorNoop {
-				if _, ok := r.getRebalanceTarget(storeID); ok && c.rand.Float64() < 0.5 {
+				if _, ok := r.getRebalanceTarget(storeID); ok {
 					rep.rebalance = true
 					// Set the priority to 1 so that rebalances will occur in
 					// performActions.

@@ -1709,6 +1709,7 @@ func TestStoreRangeRebalance(t *testing.T) {
 	sc := storage.TestStoreContext()
 	sc.AllocatorOptions = storage.AllocatorOptions{
 		AllowRebalance: true,
+		Deterministic:  true,
 	}
 	mtc := &multiTestContext{
 		storeContext: &sc,
@@ -1794,7 +1795,7 @@ func TestStoreRangeRebalance(t *testing.T) {
 		// Exit when all stores have a single replica.
 		actual := countReplicas()
 		if !reflect.DeepEqual(expected, actual) {
-			return errors.Errorf("replicas are not distributed as expected = %+v, want %+v, %s", actual, expected, pretty.Diff(expected, actual))
+			return errors.Errorf("replicas are not distributed as expected %s", pretty.Diff(expected, actual))
 		}
 		return nil
 	})
