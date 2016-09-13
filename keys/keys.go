@@ -250,7 +250,7 @@ func RangeLastReplicaGCTimestampKey(rangeID roachpb.RangeID) roachpb.Key {
 // RangeLastVerificationTimestampKey returns a range-local key for
 // the range's last verification timestamp.
 func RangeLastVerificationTimestampKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDUnreplicatedKey(rangeID, LocalRangeLastVerificationTimestampSuffix, nil)
+	return MakeRangeIDUnreplicatedKey(rangeID, LocalRangeLastVerificationTimestampSuffixDeprecated, nil)
 }
 
 // RangeReplicaDestroyedErrorKey returns a range-local key for

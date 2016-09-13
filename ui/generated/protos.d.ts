@@ -2565,15 +2565,6 @@ getNumPending?() : Long;
 
 
 
-last_verification?: util.hlc.Timestamp;
-		
-
-getLastVerification?() : util.hlc.Timestamp;
-		setLastVerification?(lastVerification : util.hlc.Timestamp): void;
-		
-
-
-
 num_dropped?: Long;
 		
 
@@ -2588,6 +2579,15 @@ raft_log_size?: Long;
 
 getRaftLogSize?() : Long;
 		setRaftLogSize?(raftLogSize : Long): void;
+		
+
+
+
+last_verification_deprecated?: util.hlc.Timestamp;
+		
+
+getLastVerificationDeprecated?() : util.hlc.Timestamp;
+		setLastVerificationDeprecated?(lastVerificationDeprecated : util.hlc.Timestamp): void;
 		
 
 

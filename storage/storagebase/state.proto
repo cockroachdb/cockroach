@@ -58,9 +58,11 @@ message RangeInfo {
   // The highest (and last) index in the Raft log.
   uint64 lastIndex = 2;
   uint64 num_pending = 3;
-  util.hlc.Timestamp last_verification = 4 [(gogoproto.nullable) = false];
   uint64 num_dropped = 5;
   // raft_log_size may be initially inaccurate after a server restart.
   // See storage.Replica.mu.raftLogSize.
   int64 raft_log_size = 6;
+
+  // Deprecated with removal of the verify queue.
+  util.hlc.Timestamp last_verification_deprecated = 4 [(gogoproto.nullable) = false];
 }

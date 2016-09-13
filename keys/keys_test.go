@@ -110,8 +110,6 @@ func TestKeyAddressError(t *testing.T) {
 			RaftLogPrefix(0),
 			RaftLogKey(0, 0),
 			RangeLastReplicaGCTimestampKey(0),
-			RangeLastVerificationTimestampKey(0),
-			RangeDescriptorKey(roachpb.RKey(RangeLastVerificationTimestampKey(0))),
 		},
 		"local key .* malformed": {
 			makeKey(localPrefix, roachpb.Key("z")),

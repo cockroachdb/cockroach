@@ -1571,15 +1571,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                         },
                                         {
                                             "rule": "optional",
-                                            "type": "util.hlc.Timestamp",
-                                            "name": "last_verification",
-                                            "id": 4,
-                                            "options": {
-                                                "(gogoproto.nullable)": false
-                                            }
-                                        },
-                                        {
-                                            "rule": "optional",
                                             "type": "uint64",
                                             "name": "num_dropped",
                                             "id": 5
@@ -1589,6 +1580,15 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "type": "int64",
                                             "name": "raft_log_size",
                                             "id": 6
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "util.hlc.Timestamp",
+                                            "name": "last_verification_deprecated",
+                                            "id": 4,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
                                         }
                                     ]
                                 }
