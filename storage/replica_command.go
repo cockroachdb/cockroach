@@ -1104,7 +1104,7 @@ func (r *Replica) RangeLookup(
 	if len(reply.Ranges) == 0 {
 		// No matching results were returned from the scan. This should
 		// never happen with the above logic.
-		panic(fmt.Sprintf("RangeLookup dispatched to correct range, but no matching RangeDescriptor was found: %s", args.Key))
+		log.Fatalf(ctx, "RangeLookup dispatched to correct range, but no matching RangeDescriptor was found: %q", args.Key)
 	} else if preCount := int64(len(reply.PrefetchedRanges)); 1+preCount > rangeCount {
 		// We've possibly picked up an extra descriptor if we're in reverse
 		// mode due to the initial forward scan.
