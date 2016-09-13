@@ -81,7 +81,7 @@ type pgNumeric struct {
 
 func typeForDatum(d parser.Datum) pgType {
 	if d == parser.DNull {
-		return pgType{}
+		return pgType{oid: oid.T_unknown}
 	}
 	switch d.(type) {
 	case *parser.DBool:
