@@ -1,4 +1,4 @@
-statement error table "foo" does not exist
+statement error pgcode 42P01 table "foo" does not exist
 ALTER TABLE foo RENAME TO bar
 
 statement ok
@@ -27,7 +27,7 @@ kv
 statement ok
 ALTER TABLE kv RENAME TO new_kv
 
-statement error table "kv" does not exist
+statement error pgcode 42P01 table "kv" does not exist
 SELECT * FROM kv
 
 query II

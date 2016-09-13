@@ -98,7 +98,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 			return &emptyNode{}, nil
 		}
 		// Key does not exist, but we want it to: error out.
-		return nil, fmt.Errorf("table %q does not exist", oldTn.String())
+		return nil, sqlbase.NewUndefinedTableError(oldTn.String())
 	}
 	if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
 		return nil, sqlbase.NewUndefinedTableError(oldTn.String())
