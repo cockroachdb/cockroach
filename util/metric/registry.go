@@ -18,7 +18,6 @@ package metric
 
 import (
 	"encoding/json"
-	"io"
 	"reflect"
 	"regexp"
 
@@ -28,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/gogo/protobuf/proto"
 	prometheusgo "github.com/prometheus/client_model/go"
-	"github.com/prometheus/common/expfmt"
 )
 
 const sep = "-"
@@ -161,40 +159,4 @@ func exportedName(name string) string {
 // exportedLabel takes a metric name and generates a valid prometheus name.
 func exportedLabel(name string) string {
 	return prometheusLabelReplaceRE.ReplaceAllString(name, "_")
-}
-
-// PrintAsText outputs all metrics in text format.
-func (r *Registry) PrintAsText(w io.Writer) error {
-	var metricFamily prometheusgo.MetricFamily
-	var ret error
-	labels := r.getLabels()
-	for _, metric := range r.tracked {
-		metric.Inspect(func(v interface{}) {
-			if ret != nil {
-				return
-			}
-			if prom, ok := v.(PrometheusExportable); ok {
-				metricFamily.Reset()
-				metricFamily.Name = proto.String(exportedName(metric.GetName()))
-				metricFamily.Help = proto.String(metric.GetHelp())
-				prom.FillPrometheusMetric(&metricFamily)
-				if len(labels) != 0 {
-					// Set labels from registry. We only set one metric in the slice, but loop anyway.
-					for _, m := range metricFamily.Metric {
-						m.Label = labels
-					}
-				}
-				if l := prom.GetLabels(); len(l) != 0 {
-					// Append per-metric labels.
-					for _, m := range metricFamily.Metric {
-						m.Label = append(m.Label, l...)
-					}
-				}
-				if _, err := expfmt.MetricFamilyToText(w, &metricFamily); err != nil {
-					ret = err
-				}
-			}
-		})
-	}
-	return ret
 }
