@@ -119,6 +119,9 @@ vols="${vols} --volume=${gopath0}/bin/docker_amd64:/go/bin"
 vols="${vols} --volume=${HOME}/.jspm:${container_home}/.jspm"
 vols="${vols} --volume=${HOME}/.npm:${container_home}/.npm"
 vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach"
+# Add ssh key for terraform tests.
+vols="${vols} --volume=${HOME}/.ssh/google_compute_engine.pub:${container_home}/.ssh/google_compute_engine.pub"
+vols="${vols} --volume=${HOME}/.ssh/google_compute_engine:${container_home}/.ssh/google_compute_engine"
 
 backtrace_dir="${cockroach_toplevel}/../../cockroachlabs/backtrace"
 if test -d "${backtrace_dir}"; then
