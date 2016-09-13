@@ -803,9 +803,8 @@ func (node *FuncExpr) GetAggregateConstructor() func() AggregateFunc {
 
 // GetWindowConstructor returns a window function constructor if the
 // FuncExpr is a built-in window function.
-func (node *FuncExpr) GetWindowConstructor() func() {
-	// TODO(nvanbenschoten) Support built-in window functions.
-	return nil
+func (node *FuncExpr) GetWindowConstructor() func() WindowFunc {
+	return node.fn.WindowFunc
 }
 
 // IsWindowFunctionApplication returns if the function is being applied as a window function.

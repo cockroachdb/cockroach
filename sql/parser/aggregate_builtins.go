@@ -39,13 +39,17 @@ func init() {
 				panic(fmt.Sprintf("aggregate functions should have AggregateFunc constructors, "+
 					"found %v", a))
 			}
+			if a.WindowFunc == nil {
+				panic(fmt.Sprintf("aggregate functions should have WindowFunc constructors, "+
+					"found %v", a))
+			}
 		}
 		Builtins[strings.ToUpper(k)] = v
 		Builtins[strings.ToLower(k)] = v
 	}
 }
 
-// AggregateFunc accumulates the result of a some function of a Datum.
+// AggregateFunc accumulates the result of a function of a Datum.
 type AggregateFunc interface {
 	// Add accumulates the passed datum into the AggregateFunc.
 	Add(Datum)
@@ -56,89 +60,10 @@ type AggregateFunc interface {
 	Result() Datum
 }
 
-var _ Visitor = &IsAggregateVisitor{}
-
-// IsAggregateVisitor checks if walked expressions contain aggregate functions.
-type IsAggregateVisitor struct {
-	Aggregated bool
-}
-
-// VisitPre satisfies the Visitor interface.
-func (v *IsAggregateVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
-	switch t := expr.(type) {
-	case *FuncExpr:
-		if t.IsWindowFunctionApplication() {
-			// A window function application of an aggregate builtin is not an
-			// aggregate function, but it can contain aggregate functions.
-			return true, expr
-		}
-		fn, err := t.Name.Normalize()
-		if err != nil {
-			return false, expr
-		}
-		if _, ok := aggregates[strings.ToLower(fn.Function())]; ok {
-			v.Aggregated = true
-			return false, expr
-		}
-	case *Subquery:
-		return false, expr
-	}
-
-	return true, expr
-}
-
-// VisitPost satisfies the Visitor interface.
-func (*IsAggregateVisitor) VisitPost(expr Expr) Expr { return expr }
-
-// Reset clear the IsAggregateVisitor's internal state.
-func (v *IsAggregateVisitor) Reset() {
-	v.Aggregated = false
-}
-
-// AggregateInExpr determines if an Expr contains an aggregate function.
-func (p *Parser) AggregateInExpr(expr Expr) bool {
-	if expr != nil {
-		defer p.isAggregateVisitor.Reset()
-		WalkExprConst(&p.isAggregateVisitor, expr)
-		if p.isAggregateVisitor.Aggregated {
-			return true
-		}
-	}
-	return false
-}
-
-// IsAggregate determines if SelectClause contains an aggregate function.
-func (p *Parser) IsAggregate(n *SelectClause) bool {
-	if n.Having != nil || len(n.GroupBy) > 0 {
-		return true
-	}
-
-	defer p.isAggregateVisitor.Reset()
-	for _, target := range n.Exprs {
-		WalkExprConst(&p.isAggregateVisitor, target.Expr)
-		if p.isAggregateVisitor.Aggregated {
-			return true
-		}
-	}
-	return false
-}
-
-// AssertNoAggregationOrWindowing checks if the provided expression contains either
-// aggregate functions or window functions, returning an error in either case.
-func (p *Parser) AssertNoAggregationOrWindowing(expr Expr, op string) error {
-	if p.AggregateInExpr(expr) {
-		return fmt.Errorf("aggregate functions are not allowed in %s", op)
-	}
-	if p.WindowFuncInExpr(expr) {
-		return fmt.Errorf("window functions are not allowed in %s", op)
-	}
-	return nil
-}
-
 // aggregates are a special class of builtin functions that are wrapped
 // at execution in a bucketing layer to combine (aggregate) the result
 // of the function being run over many rows.
-// See `aggregateFuncHolder` in the sql
+// See `aggregateFuncHolder` in the sql package.
 // In particular they must not be simplified during normalization
 // (and thus must be marked as impure), even when they are given a
 // constant argument (e.g. SUM(1)). This is because aggregate
@@ -193,6 +118,9 @@ func makeAggBuiltin(in, ret Datum, f func() AggregateFunc) Builtin {
 		Types:         ArgTypes{in},
 		ReturnType:    ret,
 		AggregateFunc: f,
+		WindowFunc: func() WindowFunc {
+			return newAggregateWindow(f())
+		},
 	}
 }
 
@@ -680,4 +608,83 @@ func (a *stddevAggregate) Result() Datum {
 		return t
 	}
 	panic(fmt.Sprintf("unexpected variance result type: %s", variance.Type()))
+}
+
+var _ Visitor = &IsAggregateVisitor{}
+
+// IsAggregateVisitor checks if walked expressions contain aggregate functions.
+type IsAggregateVisitor struct {
+	Aggregated bool
+}
+
+// VisitPre satisfies the Visitor interface.
+func (v *IsAggregateVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	switch t := expr.(type) {
+	case *FuncExpr:
+		if t.IsWindowFunctionApplication() {
+			// A window function application of an aggregate builtin is not an
+			// aggregate function, but it can contain aggregate functions.
+			return true, expr
+		}
+		fn, err := t.Name.Normalize()
+		if err != nil {
+			return false, expr
+		}
+		if _, ok := aggregates[strings.ToLower(fn.Function())]; ok {
+			v.Aggregated = true
+			return false, expr
+		}
+	case *Subquery:
+		return false, expr
+	}
+
+	return true, expr
+}
+
+// VisitPost satisfies the Visitor interface.
+func (*IsAggregateVisitor) VisitPost(expr Expr) Expr { return expr }
+
+// Reset clear the IsAggregateVisitor's internal state.
+func (v *IsAggregateVisitor) Reset() {
+	v.Aggregated = false
+}
+
+// AggregateInExpr determines if an Expr contains an aggregate function.
+func (p *Parser) AggregateInExpr(expr Expr) bool {
+	if expr != nil {
+		defer p.isAggregateVisitor.Reset()
+		WalkExprConst(&p.isAggregateVisitor, expr)
+		if p.isAggregateVisitor.Aggregated {
+			return true
+		}
+	}
+	return false
+}
+
+// IsAggregate determines if SelectClause contains an aggregate function.
+func (p *Parser) IsAggregate(n *SelectClause) bool {
+	if n.Having != nil || len(n.GroupBy) > 0 {
+		return true
+	}
+
+	defer p.isAggregateVisitor.Reset()
+	for _, target := range n.Exprs {
+		WalkExprConst(&p.isAggregateVisitor, target.Expr)
+		if p.isAggregateVisitor.Aggregated {
+			return true
+		}
+	}
+	return false
+}
+
+// AssertNoAggregationOrWindowing checks if the provided expression contains either
+// aggregate functions or window functions, returning an error in either case.
+func (p *Parser) AssertNoAggregationOrWindowing(expr Expr, op string) error {
+	if p.AggregateInExpr(expr) {
+		return fmt.Errorf("aggregate functions are not allowed in %s", op)
+	}
+	if p.WindowFuncInExpr(expr) {
+		return fmt.Errorf("window functions are not allowed in %s", op)
+	}
+	return nil
 }
