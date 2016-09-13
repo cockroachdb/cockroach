@@ -19,6 +19,8 @@ package parser
 import (
 	"fmt"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 func init() {
@@ -80,6 +82,14 @@ func (wf WindowFrame) firstInPeerGroup() bool {
 	return wf.RowIdx == wf.FirstPeerIdx
 }
 
+func (wf WindowFrame) args() []Datum {
+	return wf.argsWithRowOffset(0)
+}
+
+func (wf WindowFrame) argsWithRowOffset(offset int) []Datum {
+	return wf.Rows[wf.RowIdx+offset].Row[wf.ArgIdxStart : wf.ArgIdxStart+wf.ArgCount]
+}
+
 // WindowFunc performs a computation on each row using data from a provided WindowFrame.
 type WindowFunc interface {
 	// Compute computes the window function for the provided window frame, given the
@@ -88,7 +98,7 @@ type WindowFunc interface {
 	// because there is an implicit carried dependency between each row and all those
 	// that have come before it (like in an AggregateFunc). As such, this approach does
 	// not present any exploitable associativity/commutativity for optimization.
-	Compute(WindowFrame) Datum
+	Compute(WindowFrame) (Datum, error)
 }
 
 // windows are a special class of builtin functions that can only be applied
@@ -110,6 +120,9 @@ var windows = map[string][]Builtin{
 	"cume_dist": {
 		makeWindowBuiltin(ArgTypes{}, TypeFloat, newCumulativeDistWindow),
 	},
+	"ntile": {
+		makeWindowBuiltin(ArgTypes{TypeInt}, TypeInt, newNtileWindow),
+	},
 }
 
 func makeWindowBuiltin(in ArgTypes, ret Datum, f func() WindowFunc) Builtin {
@@ -128,6 +141,7 @@ var _ WindowFunc = &rankWindow{}
 var _ WindowFunc = &denseRankWindow{}
 var _ WindowFunc = &percentRankWindow{}
 var _ WindowFunc = &cumulativeDistWindow{}
+var _ WindowFunc = &ntileWindow{}
 
 // aggregateWindowFunc aggregates over the the current row's window frame, using
 // the internal AggregateFunc to perform the aggregation.
@@ -140,22 +154,20 @@ func newAggregateWindow(agg AggregateFunc) WindowFunc {
 	return &aggregateWindowFunc{agg: agg}
 }
 
-func (w *aggregateWindowFunc) Compute(wf WindowFrame) Datum {
+func (w *aggregateWindowFunc) Compute(wf WindowFrame) (Datum, error) {
 	if !wf.firstInPeerGroup() {
-		return w.peerRes
+		return w.peerRes, nil
 	}
 
 	// Accumulate all values in the peer group at the same time, as these
 	// must return the same value.
 	for i := 0; i < wf.PeerRowCount; i++ {
-		row := wf.Rows[wf.RowIdx+i].Row
-		arg := row[wf.ArgIdxStart]
-		w.agg.Add(arg)
+		w.agg.Add(wf.argsWithRowOffset(i)[0])
 	}
 
 	// Retrieve the value for the entire peer group, save it, and return it.
 	w.peerRes = w.agg.Result()
-	return w.peerRes
+	return w.peerRes, nil
 }
 
 // rowNumberWindow computes the number of the current row within its partition,
@@ -166,8 +178,8 @@ func newRowNumberWindow() WindowFunc {
 	return &rowNumberWindow{}
 }
 
-func (rowNumberWindow) Compute(wf WindowFrame) Datum {
-	return NewDInt(DInt(wf.RowIdx + 1 /* one-indexed */))
+func (rowNumberWindow) Compute(wf WindowFrame) (Datum, error) {
+	return NewDInt(DInt(wf.RowIdx + 1 /* one-indexed */)), nil
 }
 
 // rankWindow computes the rank of the current row with gaps.
@@ -179,11 +191,11 @@ func newRankWindow() WindowFunc {
 	return &rankWindow{}
 }
 
-func (w *rankWindow) Compute(wf WindowFrame) Datum {
+func (w *rankWindow) Compute(wf WindowFrame) (Datum, error) {
 	if wf.firstInPeerGroup() {
 		w.peerRes = NewDInt(DInt(wf.rank()))
 	}
-	return w.peerRes
+	return w.peerRes, nil
 }
 
 // denseRankWindow computes the rank of the current row without gaps (it counts peer groups).
@@ -196,12 +208,12 @@ func newDenseRankWindow() WindowFunc {
 	return &denseRankWindow{}
 }
 
-func (w *denseRankWindow) Compute(wf WindowFrame) Datum {
+func (w *denseRankWindow) Compute(wf WindowFrame) (Datum, error) {
 	if wf.firstInPeerGroup() {
 		w.denseRank++
 		w.peerRes = NewDInt(DInt(w.denseRank))
 	}
-	return w.peerRes
+	return w.peerRes, nil
 }
 
 // percentRankWindow computes the relative rank of the current row using:
@@ -216,17 +228,17 @@ func newPercentRankWindow() WindowFunc {
 
 var dfloatZero = NewDFloat(0)
 
-func (w *percentRankWindow) Compute(wf WindowFrame) Datum {
+func (w *percentRankWindow) Compute(wf WindowFrame) (Datum, error) {
 	// Return zero if there's only one row, per spec.
 	if wf.rowCount() <= 1 {
-		return dfloatZero
+		return dfloatZero, nil
 	}
 
 	if wf.firstInPeerGroup() {
 		// (rank - 1) / (total rows - 1)
 		w.peerRes = NewDFloat(DFloat(wf.rank()-1) / DFloat(wf.rowCount()-1))
 	}
-	return w.peerRes
+	return w.peerRes, nil
 }
 
 // cumulativeDistWindow computes the relative rank of the current row using:
@@ -239,12 +251,71 @@ func newCumulativeDistWindow() WindowFunc {
 	return &cumulativeDistWindow{}
 }
 
-func (w *cumulativeDistWindow) Compute(wf WindowFrame) Datum {
+func (w *cumulativeDistWindow) Compute(wf WindowFrame) (Datum, error) {
 	if wf.firstInPeerGroup() {
 		// (number of rows preceding or peer with current row) / (total rows)
 		w.peerRes = NewDFloat(DFloat(wf.frameSize()) / DFloat(wf.rowCount()))
 	}
-	return w.peerRes
+	return w.peerRes, nil
+}
+
+// ntileWindow computes an integer ranging from 1 to the argument value, dividing
+// the partition as equally as possible.
+type ntileWindow struct {
+	ntile          *DInt // current result
+	curBucketCount int   // row number of current bucket
+	boundary       int   // how many rows should be in the bucket
+	remainder      int   // (total rows) % (bucket num)
+}
+
+func newNtileWindow() WindowFunc {
+	return &ntileWindow{}
+}
+
+var errInvalidArgumentForNtile = errors.Errorf("argument of ntile must be greater than zero")
+
+func (w *ntileWindow) Compute(wf WindowFrame) (Datum, error) {
+	if w.ntile == nil {
+		// If this is the first call to ntileWindow.Compute, set up the buckets.
+		total := wf.rowCount()
+
+		arg := wf.args()[0]
+		if arg == DNull {
+			// per spec: If argument is the null value, then the result is the null value.
+			return DNull, nil
+		}
+
+		nbuckets := int(*arg.(*DInt))
+		if nbuckets <= 0 {
+			// per spec: If argument is less than or equal to 0, then an error is returned.
+			return nil, errInvalidArgumentForNtile
+		}
+
+		w.ntile = NewDInt(1)
+		w.curBucketCount = 0
+		w.boundary = total / nbuckets
+		if w.boundary <= 0 {
+			w.boundary = 1
+		} else {
+			// If the total number is not divisible, add 1 row to leading buckets.
+			w.remainder = total % nbuckets
+			if w.remainder != 0 {
+				w.boundary++
+			}
+		}
+	}
+
+	w.curBucketCount++
+	if w.boundary < w.curBucketCount {
+		// Move to next ntile bucket.
+		if w.remainder != 0 && int(*w.ntile) == w.remainder {
+			w.remainder = 0
+			w.boundary--
+		}
+		w.ntile = NewDInt(*w.ntile + 1)
+		w.curBucketCount = 1
+	}
+	return w.ntile, nil
 }
 
 var _ Visitor = &ContainsWindowVisitor{}
