@@ -533,7 +533,10 @@ func (n *windowNode) computeWindows() error {
 
 				// Perform calculations on each row in the current peer group.
 				for ; frame.RowIdx < frame.FirstPeerIdx+frame.PeerRowCount; frame.RowIdx++ {
-					res := builtin.Compute(frame)
+					res, err := builtin.Compute(frame)
+					if err != nil {
+						return err
+					}
 
 					// This may overestimate, because WindowFuncs may perform internal caching.
 					sz, _ := res.Size()
