@@ -123,6 +123,41 @@ var windows = map[string][]Builtin{
 	"ntile": {
 		makeWindowBuiltin(ArgTypes{TypeInt}, TypeInt, newNtileWindow),
 	},
+	"lag": mergeBuiltinSlices(
+		collectWindowBuiltins(func(t Datum) Builtin {
+			return makeWindowBuiltin(ArgTypes{t}, t, makeLeadLagWindowConstructor(false, false, false))
+		}, anyElementTypes...),
+		collectWindowBuiltins(func(t Datum) Builtin {
+			return makeWindowBuiltin(ArgTypes{t, TypeInt}, t, makeLeadLagWindowConstructor(false, true, false))
+		}, anyElementTypes...),
+		collectWindowBuiltins(func(t Datum) Builtin {
+			return makeWindowBuiltin(ArgTypes{t, TypeInt, t}, t, makeLeadLagWindowConstructor(false, true, true))
+		}, anyElementTypes...),
+	),
+	"lead": mergeBuiltinSlices(
+		collectWindowBuiltins(func(t Datum) Builtin {
+			return makeWindowBuiltin(ArgTypes{t}, t, makeLeadLagWindowConstructor(true, false, false))
+		}, anyElementTypes...),
+		collectWindowBuiltins(func(t Datum) Builtin {
+			return makeWindowBuiltin(ArgTypes{t, TypeInt}, t, makeLeadLagWindowConstructor(true, true, false))
+		}, anyElementTypes...),
+		collectWindowBuiltins(func(t Datum) Builtin {
+			return makeWindowBuiltin(ArgTypes{t, TypeInt, t}, t, makeLeadLagWindowConstructor(true, true, true))
+		}, anyElementTypes...),
+	),
+}
+
+var anyElementTypes = []Datum{
+	TypeBool,
+	TypeInt,
+	TypeFloat,
+	TypeDecimal,
+	TypeString,
+	TypeBytes,
+	TypeDate,
+	TypeTimestamp,
+	TypeInterval,
+	TypeTuple,
 }
 
 func makeWindowBuiltin(in ArgTypes, ret Datum, f func() WindowFunc) Builtin {
@@ -135,6 +170,22 @@ func makeWindowBuiltin(in ArgTypes, ret Datum, f func() WindowFunc) Builtin {
 	}
 }
 
+func collectWindowBuiltins(f func(Datum) Builtin, types ...Datum) []Builtin {
+	r := make([]Builtin, len(types))
+	for i := range types {
+		r[i] = f(types[i])
+	}
+	return r
+}
+
+func mergeBuiltinSlices(s ...[]Builtin) []Builtin {
+	var r []Builtin
+	for _, bs := range s {
+		r = append(r, bs...)
+	}
+	return r
+}
+
 var _ WindowFunc = &aggregateWindowFunc{}
 var _ WindowFunc = &rowNumberWindow{}
 var _ WindowFunc = &rankWindow{}
@@ -142,6 +193,7 @@ var _ WindowFunc = &denseRankWindow{}
 var _ WindowFunc = &percentRankWindow{}
 var _ WindowFunc = &cumulativeDistWindow{}
 var _ WindowFunc = &ntileWindow{}
+var _ WindowFunc = &leadLagWindow{}
 
 // aggregateWindowFunc aggregates over the the current row's window frame, using
 // the internal AggregateFunc to perform the aggregation.
@@ -316,6 +368,51 @@ func (w *ntileWindow) Compute(wf WindowFrame) (Datum, error) {
 		w.curBucketCount = 1
 	}
 	return w.ntile, nil
+}
+
+type leadLagWindow struct {
+	forward     bool
+	withOffset  bool
+	withDefault bool
+}
+
+func newLeadLagWindow(forward, withOffset, withDefault bool) WindowFunc {
+	return &leadLagWindow{
+		forward:     forward,
+		withOffset:  withOffset,
+		withDefault: withDefault,
+	}
+}
+
+func makeLeadLagWindowConstructor(forward, withOffset, withDefault bool) func() WindowFunc {
+	return func() WindowFunc {
+		return newLeadLagWindow(forward, withOffset, withDefault)
+	}
+}
+
+func (w *leadLagWindow) Compute(wf WindowFrame) (Datum, error) {
+	offset := 1
+	if w.withOffset {
+		offsetArg := wf.args()[1]
+		if offsetArg == DNull {
+			return DNull, nil
+		}
+		offset = int(*offsetArg.(*DInt))
+	}
+	if !w.forward {
+		offset *= -1
+	}
+
+	if targetRow := wf.RowIdx + offset; targetRow < 0 || targetRow >= wf.rowCount() {
+		// Target row is out of the partition; supply default value if provided,
+		// otherwise return NULL.
+		if w.withDefault {
+			return wf.args()[2], nil
+		}
+		return DNull, nil
+	}
+
+	return wf.argsWithRowOffset(offset)[0], nil
 }
 
 var _ Visitor = &ContainsWindowVisitor{}
