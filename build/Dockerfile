@@ -15,12 +15,19 @@ RUN \
  iptables \
  nodejs \
  parallel \
+ unzip \
  && \
  apt-get clean autoclean && \
  apt-get autoremove -y && \
  git clone --depth 1 https://chromium.googlesource.com/chromium/src/tools/clang && \
  clang/scripts/update.py && \
  rm -rf /tmp/*
+
+RUN \
+  cd /usr/local/bin && \
+  curl -O --silent https://releases.hashicorp.com/terraform/0.7.3/terraform_0.7.3_linux_amd64.zip && \
+  unzip terraform_0.7.3_linux_amd64.zip && \
+  rm terraform_0.7.3_linux_amd64.zip
 
 ENV PATH=/opt/backtrace/bin:/third_party/llvm-build/Release+Asserts/bin:$PATH
 
