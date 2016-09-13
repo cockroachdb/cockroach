@@ -283,7 +283,6 @@ type Store struct {
 	rangeIDAlloc            *idAllocator             // Range ID allocator
 	gcQueue                 *gcQueue                 // Garbage collection queue
 	splitQueue              *splitQueue              // Range splitting queue
-	verifyQueue             *verifyQueue             // Checksum verification queue
 	replicateQueue          *replicateQueue          // Replication queue
 	replicaGCQueue          *replicaGCQueue          // Replica GC queue
 	raftLogQueue            *raftLogQueue            // Raft Log Truncation queue
@@ -665,11 +664,10 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 		s.scanner = newReplicaScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s))
 		s.gcQueue = newGCQueue(s, s.ctx.Gossip)
 		s.splitQueue = newSplitQueue(s, s.db, s.ctx.Gossip)
-		s.verifyQueue = newVerifyQueue(s, s.ctx.Gossip, s.ReplicaCount)
 		s.replicateQueue = newReplicateQueue(s, s.ctx.Gossip, s.allocator, s.ctx.Clock, s.ctx.AllocatorOptions)
 		s.replicaGCQueue = newReplicaGCQueue(s, s.db, s.ctx.Gossip)
 		s.raftLogQueue = newRaftLogQueue(s, s.db, s.ctx.Gossip)
-		s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)
+		s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)
 
 		// Add consistency check scanner.
 		s.consistencyScanner = newReplicaScanner(ctx.ConsistencyCheckInterval, 0, newStoreRangeSet(s))
@@ -1374,11 +1372,8 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	if err := engine.MVCCPutProto(ctx, batch, ms, keys.RangeDescriptorKey(desc.StartKey), now, nil, desc); err != nil {
 		return err
 	}
-	// Replica GC & Verification timestamps.
+	// Replica GC timestamp.
 	if err := engine.MVCCPutProto(ctx, batch, nil /* ms */, keys.RangeLastReplicaGCTimestampKey(desc.RangeID), hlc.ZeroTimestamp, nil, &now); err != nil {
-		return err
-	}
-	if err := engine.MVCCPutProto(ctx, batch, nil /* ms */, keys.RangeLastVerificationTimestampKey(desc.RangeID), hlc.ZeroTimestamp, nil, &now); err != nil {
 		return err
 	}
 	// Range addressing for meta2.

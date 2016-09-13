@@ -2514,22 +2514,15 @@ func (r *Replica) splitTrigger(
 	}
 	log.Trace(ctx, "computed stats for left hand side range")
 
-	// Copy the last replica GC and verification timestamps. These
-	// values are unreplicated, which is why the MVCC stats are set to
-	// nil on calls to MVCCPutProto.
+	// Copy the last replica GC timestamp. This value is unreplicated,
+	// which is why the MVCC stats are set to nil on calls to
+	// MVCCPutProto.
 	replicaGCTS, err := r.getLastReplicaGCTimestamp()
 	if err != nil {
 		return enginepb.MVCCStats{}, nil, errors.Wrap(err, "unable to fetch last replica GC timestamp")
 	}
 	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.ZeroTimestamp, nil, &replicaGCTS); err != nil {
 		return enginepb.MVCCStats{}, nil, errors.Wrap(err, "unable to copy last replica GC timestamp")
-	}
-	verifyTS, err := r.getLastVerificationTimestamp()
-	if err != nil {
-		return enginepb.MVCCStats{}, nil, errors.Wrap(err, "unable to fetch last verification timestamp")
-	}
-	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastVerificationTimestampKey(split.RightDesc.RangeID), hlc.ZeroTimestamp, nil, &verifyTS); err != nil {
-		return enginepb.MVCCStats{}, nil, errors.Wrap(err, "unable to copy last verification timestamp")
 	}
 
 	// Initialize the RHS range's abort cache by copying the LHS's.
