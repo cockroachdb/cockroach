@@ -119,7 +119,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			Lease: reqLease,
 		}
 	}
-	if replica.store.Stopper().RunAsyncTask(func() {
+	if replica.store.Stopper().RunAsyncTask(replica.store.Ctx(), func(ctx context.Context) {
 		// Propose a RequestLease command and wait for it to apply.
 		var execPErr *roachpb.Error
 		ba := roachpb.BatchRequest{}
@@ -139,7 +139,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			case c := <-ch:
 				if c.Err != nil {
 					if log.V(1) {
-						log.Infof(replica.store.Ctx(), "failed to acquire lease for replica %s: %s", replica, c.Err)
+						log.Infof(ctx, "failed to acquire lease for replica %s: %s", replica, c.Err)
 					}
 					execPErr = c.Err
 				}

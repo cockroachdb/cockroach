@@ -522,7 +522,7 @@ func (s *adminServer) TableStats(ctx context.Context, req *serverpb.TableStatsRe
 	defer cancel()
 	for nodeID := range nodeIDs {
 		nodeID := nodeID
-		if err := s.server.stopper.RunAsyncTask(func() {
+		if err := s.server.stopper.RunAsyncTask(nodeCtx, func(ctx context.Context) {
 			var spanResponse *serverpb.SpanStatsResponse
 			client, err := s.server.status.dialNode(nodeID)
 			if err == nil {
@@ -531,7 +531,7 @@ func (s *adminServer) TableStats(ctx context.Context, req *serverpb.TableStatsRe
 					EndKey:   endKey,
 					NodeID:   nodeID.String(),
 				}
-				spanResponse, err = client.SpanStats(nodeCtx, &req)
+				spanResponse, err = client.SpanStats(ctx, &req)
 			}
 
 			response := nodeResponse{
@@ -542,7 +542,7 @@ func (s *adminServer) TableStats(ctx context.Context, req *serverpb.TableStatsRe
 			select {
 			case responses <- response:
 				// Response processed.
-			case <-nodeCtx.Done():
+			case <-ctx.Done():
 				// Context completed, response no longer needed.
 			}
 		}); err != nil {
@@ -931,11 +931,12 @@ func (s *adminServer) waitForStoreFrozen(
 			// Run a limited, non-blocking task. That means the task simply
 			// won't run if the semaphore is full (or the node is draining).
 			// Both are handled by the surrounding retry loop.
-			if err := s.server.stopper.RunLimitedAsyncTask(sem, func() {
-				if err := action(); err != nil {
-					sendErr(err)
-				}
-			}); err != nil {
+			if err := s.server.stopper.RunLimitedAsyncTask(context.Background(), sem,
+				func(_ context.Context) {
+					if err := action(); err != nil {
+						sendErr(err)
+					}
+				}); err != nil {
 				// Node draining.
 				sendErr(err)
 				break
