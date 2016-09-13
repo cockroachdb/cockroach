@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -33,6 +33,10 @@ import (
 //   Notes: postgres requires TRUNCATE.
 //          mysql requires DROP (for mysql >= 5.1.16, DELETE before that).
 func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
+	// Since truncation may cascade to a given table any number of times, start by
+	// building the unique set (by ID) of tables to truncate.
+	toTruncate := make(map[sqlbase.ID]*sqlbase.TableDescriptor, len(n.Tables))
+
 	for _, name := range n.Tables {
 		tn, err := name.NormalizeTableName()
 		if err != nil {
@@ -50,22 +54,37 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 		if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
 			return nil, err
 		}
+		toTruncate[tableDesc.ID] = tableDesc
+	}
 
-		if err := truncateTable(tableDesc, p.txn); err != nil {
-			return nil, err
-		}
+	// Check that any referencing tables are contained in the set, or, if CASCADE
+	// requested, add them all to the set.
+	for _, tableDesc := range toTruncate {
+		for _, idx := range tableDesc.AllNonDropIndexes() {
+			for _, ref := range idx.ReferencedBy {
+				// Check if we're already truncating the referencing table.
+				if _, ok := toTruncate[ref.Table]; ok {
+					continue
+				}
 
-		fkTables := tablesNeededForFKs(*tableDesc, CheckDeletes)
-		if err := p.fillFKTableMap(fkTables); err != nil {
-			return nil, err
-		}
-		colMap := colIDtoRowIndexFromCols(tableDesc.Columns)
-		if helper, err := makeFKDeleteHelper(p.txn, *tableDesc, fkTables, colMap); err != nil {
-			return nil, err
-		} else if err = helper.checkAll(nil); err != nil {
-			if n.DropBehavior == parser.DropCascade {
-				return nil, util.UnimplementedWithIssueErrorf(8502, "CASCADE not yet supported: %s", err)
+				other, err := p.getTableLeaseByID(ref.Table)
+				if err != nil {
+					return nil, err
+				}
+
+				if n.DropBehavior != parser.DropCascade {
+					return nil, errors.Errorf("%q is referenced by foreign key from table %q", tableDesc.Name, other.Name)
+				}
+				if err := p.checkPrivilege(other, privilege.DROP); err != nil {
+					return nil, err
+				}
+				toTruncate[other.ID] = other
 			}
+		}
+	}
+
+	for _, tableDesc := range toTruncate {
+		if err := truncateTable(tableDesc, p.txn); err != nil {
 			return nil, err
 		}
 	}
