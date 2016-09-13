@@ -19,11 +19,11 @@ CREATE VIEW v3 (x) AS select * from t;
 statement error pgcode 42601 CREATE VIEW specifies 3 column names, but data source has 2 columns
 CREATE VIEW v4 (x, y, z) AS select * from t;
 
-statement ok
-CREATE VIEW v5 AS select * from v1;
-
 statement error pgcode 42P01 table "dne" does not exist
-CREATE VIEW v6 AS select * from dne;
+CREATE VIEW v5 AS select * from dne;
+
+# TODO(a-robinson): Add test that creates view by selecting from another
+# view once selecting from views is supported.
 
 statement error pgcode 42809 "v1" is not a table
 DROP TABLE v1;
@@ -39,9 +39,6 @@ DROP VIEW v1;
 
 statement ok
 DROP VIEW v2;
-
-statement ok
-DROP VIEW v5;
 
 statement ok
 DROP TABLE t;
