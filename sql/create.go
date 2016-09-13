@@ -859,7 +859,7 @@ func makeTableDescIfAs(
 	if err != nil {
 		return desc, err
 	}
-	desc.Name = tableName.String()
+	desc.Name = tableName.Table()
 	for i, colRes := range resultColumns {
 		colType, _ := parser.DatumTypeToColumnType(colRes.Typ)
 		columnTableDef := parser.ColumnTableDef{Name: parser.Name(colRes.Name), Type: colType}
@@ -882,11 +882,11 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 		FormatVersion: sqlbase.InterleavedFormatVersion,
 		Version:       1,
 	}
-	t, err := p.Table.Normalize()
+	tableName, err := p.Table.Normalize()
 	if err != nil {
 		return desc, err
 	}
-	desc.Name = string(t.TableName)
+	desc.Name = tableName.Table()
 
 	generatedNames := map[string]struct{}{}
 
