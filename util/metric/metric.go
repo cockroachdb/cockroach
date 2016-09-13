@@ -50,11 +50,13 @@ type PrometheusExportable interface {
 	GetName() string
 	// GetHelp is a method on Metadata
 	GetHelp() string
+	// GetType returns the prometheus type enum for this metric.
+	GetType() *prometheusgo.MetricType
 	// GetLabels is a method on Metadata
 	GetLabels() []*prometheusgo.LabelPair
-	// FillPrometheusMetric takes an initialized prometheus metric object and
-	// fills the appropriate fields for the metric type.
-	FillPrometheusMetric(promMetric *prometheusgo.MetricFamily)
+	// ToPrometheusMetric returns a filled-in prometheus metric of the right type
+	// for the given metric. It does not fill in labels.
+	ToPrometheusMetric() *prometheusgo.Metric
 }
 
 // Metadata holds metadata about a metric. It must be embedded in
@@ -157,6 +159,11 @@ func NewHistogram(metadata Metadata, duration time.Duration,
 	}
 }
 
+// GetType returns the prometheus type enum for this metric.
+func (h *Histogram) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_SUMMARY.Enum()
+}
+
 func (h *Histogram) tick() {
 	h.nextT = h.nextT.Add(h.duration / histWrapNum)
 	h.windowed.Rotate()
@@ -204,8 +211,8 @@ func (h *Histogram) Inspect(f func(interface{})) {
 	f(h)
 }
 
-// FillPrometheusMetric fills the appropriate metric fields.
-func (h *Histogram) FillPrometheusMetric(promMetric *prometheusgo.MetricFamily) {
+// ToPrometheusMetric returns a filled-in prometheus metric of the right type.
+func (h *Histogram) ToPrometheusMetric() *prometheusgo.Metric {
 	// TODO(mjibson): change to a Histogram once bucket counts are reasonable
 	sum := &prometheusgo.Summary{}
 
@@ -221,9 +228,8 @@ func (h *Histogram) FillPrometheusMetric(promMetric *prometheusgo.MetricFamily) 
 	sum.SampleCount = proto.Uint64(uint64(merged.TotalCount()))
 	h.mu.Unlock()
 
-	promMetric.Type = prometheusgo.MetricType_SUMMARY.Enum()
-	promMetric.Metric = []*prometheusgo.Metric{
-		{Summary: sum},
+	return &prometheusgo.Metric{
+		Summary: sum,
 	}
 }
 
@@ -238,6 +244,11 @@ func NewCounter(metadata Metadata) *Counter {
 	return &Counter{metadata, metrics.NewCounter()}
 }
 
+// GetType returns the prometheus type enum for this metric.
+func (c *Counter) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_COUNTER.Enum()
+}
+
 // Inspect calls the given closure with the empty string and itself.
 func (c *Counter) Inspect(f func(interface{})) { f(c) }
 
@@ -246,11 +257,10 @@ func (c *Counter) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.Counter.Count())
 }
 
-// FillPrometheusMetric fills the appropriate metric fields.
-func (c *Counter) FillPrometheusMetric(promMetric *prometheusgo.MetricFamily) {
-	promMetric.Type = prometheusgo.MetricType_COUNTER.Enum()
-	promMetric.Metric = []*prometheusgo.Metric{
-		{Counter: &prometheusgo.Counter{Value: proto.Float64(float64(c.Counter.Count()))}},
+// ToPrometheusMetric returns a filled-in prometheus metric of the right type.
+func (c *Counter) ToPrometheusMetric() *prometheusgo.Metric {
+	return &prometheusgo.Metric{
+		Counter: &prometheusgo.Counter{Value: proto.Float64(float64(c.Counter.Count()))},
 	}
 }
 
@@ -265,6 +275,11 @@ func NewGauge(metadata Metadata) *Gauge {
 	return &Gauge{metadata, metrics.NewGauge()}
 }
 
+// GetType returns the prometheus type enum for this metric.
+func (g *Gauge) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_GAUGE.Enum()
+}
+
 // Inspect calls the given closure with the empty string and itself.
 func (g *Gauge) Inspect(f func(interface{})) { f(g) }
 
@@ -273,11 +288,10 @@ func (g *Gauge) MarshalJSON() ([]byte, error) {
 	return json.Marshal(g.Gauge.Value())
 }
 
-// FillPrometheusMetric fills the appropriate metric fields.
-func (g *Gauge) FillPrometheusMetric(promMetric *prometheusgo.MetricFamily) {
-	promMetric.Type = prometheusgo.MetricType_GAUGE.Enum()
-	promMetric.Metric = []*prometheusgo.Metric{
-		{Gauge: &prometheusgo.Gauge{Value: proto.Float64(float64(g.Gauge.Value()))}},
+// ToPrometheusMetric returns a filled-in prometheus metric of the right type.
+func (g *Gauge) ToPrometheusMetric() *prometheusgo.Metric {
+	return &prometheusgo.Metric{
+		Gauge: &prometheusgo.Gauge{Value: proto.Float64(float64(g.Gauge.Value()))},
 	}
 }
 
@@ -292,6 +306,11 @@ func NewGaugeFloat64(metadata Metadata) *GaugeFloat64 {
 	return &GaugeFloat64{metadata, metrics.NewGaugeFloat64()}
 }
 
+// GetType returns the prometheus type enum for this metric.
+func (g *GaugeFloat64) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_GAUGE.Enum()
+}
+
 // Inspect calls the given closure with the empty string and itself.
 func (g *GaugeFloat64) Inspect(f func(interface{})) { f(g) }
 
@@ -300,11 +319,10 @@ func (g *GaugeFloat64) MarshalJSON() ([]byte, error) {
 	return json.Marshal(g.GaugeFloat64.Value())
 }
 
-// FillPrometheusMetric fills the appropriate metric fields.
-func (g *GaugeFloat64) FillPrometheusMetric(promMetric *prometheusgo.MetricFamily) {
-	promMetric.Type = prometheusgo.MetricType_GAUGE.Enum()
-	promMetric.Metric = []*prometheusgo.Metric{
-		{Gauge: &prometheusgo.Gauge{Value: proto.Float64(g.GaugeFloat64.Value())}},
+// ToPrometheusMetric returns a filled-in prometheus metric of the right type.
+func (g *GaugeFloat64) ToPrometheusMetric() *prometheusgo.Metric {
+	return &prometheusgo.Metric{
+		Gauge: &prometheusgo.Gauge{Value: proto.Float64(g.GaugeFloat64.Value())},
 	}
 }
 
