@@ -262,31 +262,6 @@ func (ls *Stores) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return rpl.Desc(), nil
 }
 
-// RangeLookup implements the RangeDescriptorDB interface.
-// This implementation of RangeDescriptorDB seems to only be used by
-// LocalTestCluster.
-func (ls *Stores) RangeLookup(
-	key roachpb.RKey, _ *roachpb.RangeDescriptor, considerIntents, useReverseScan bool,
-) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
-	ba := roachpb.BatchRequest{}
-	ba.ReadConsistency = roachpb.INCONSISTENT
-	ba.Add(&roachpb.RangeLookupRequest{
-		Span: roachpb.Span{
-			// key is a meta key, so it's guaranteed not local-prefixed.
-			Key: key.AsRawKey(),
-		},
-		MaxRanges:       1,
-		ConsiderIntents: considerIntents,
-		Reverse:         useReverseScan,
-	})
-	br, pErr := ls.Send(context.TODO(), ba)
-	if pErr != nil {
-		return nil, nil, pErr
-	}
-	resp := br.Responses[0].GetInner().(*roachpb.RangeLookupResponse)
-	return resp.Ranges, resp.PrefetchedRanges, nil
-}
-
 // ReadBootstrapInfo implements the gossip.Storage interface. Read
 // attempts to read gossip bootstrap info from every known store and
 // finds the most recent from all stores to initialize the bootstrap
