@@ -20,6 +20,8 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"hash/crc32"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -122,6 +124,7 @@ func Backup(
 
 	var dataSize int64
 	backupDescs := make([]sqlbase.BackupRangeDescriptor, len(rangeDescs))
+	crc := crc32.NewIEEE()
 	for i, rangeDesc := range rangeDescs {
 		backupDescs[i] = sqlbase.BackupRangeDescriptor{
 			StartKey:  rangeDesc.StartKey.AsRawKey(),
@@ -161,27 +164,47 @@ func Backup(
 			continue
 		}
 
-		sst := engine.MakeRocksDBSstFileWriter()
 		backupDescs[i].Path = filepath.Join(dir, dataSSTableName)
-		if err := sst.Open(backupDescs[i].Path); err != nil {
+
+		writeSST := func() (writeSSTErr error) {
+			// This is a function so the defered Close (and resultant flush) is
+			// called before the checksum is computed.
+			sst := engine.MakeRocksDBSstFileWriter()
+			if err := sst.Open(backupDescs[i].Path); err != nil {
+				return err
+			}
+			defer func() {
+				if closeErr := sst.Close(); closeErr != nil && writeSSTErr == nil {
+					writeSSTErr = closeErr
+				}
+			}()
+			// TODO(dan): Move all this iteration into cpp to avoid the cgo calls.
+			for _, kv := range kvs {
+				mvccKV := engine.MVCCKeyValue{
+					Key:   engine.MVCCKey{Key: kv.Key, Timestamp: kv.Value.Timestamp},
+					Value: kv.Value.RawBytes,
+				}
+				if err := sst.Add(mvccKV); err != nil {
+					return err
+				}
+			}
+			dataSize += sst.DataSize
+			return nil
+		}
+		if err := writeSST(); err != nil {
 			return sqlbase.BackupDescriptor{}, err
 		}
-		defer func() {
-			if err := sst.Close(); err != nil && retErr == nil {
-				retErr = err
-			}
-		}()
-		// TODO(dan): Move all this iteration into cpp to avoid the cgo calls.
-		for _, kv := range kvs {
-			mvccKV := engine.MVCCKeyValue{
-				Key:   engine.MVCCKey{Key: kv.Key, Timestamp: kv.Value.Timestamp},
-				Value: kv.Value.RawBytes,
-			}
-			if err := sst.Add(mvccKV); err != nil {
-				return sqlbase.BackupDescriptor{}, err
-			}
+
+		crc.Reset()
+		f, err := os.Open(backupDescs[i].Path)
+		if err != nil {
+			return sqlbase.BackupDescriptor{}, err
 		}
-		dataSize += sst.DataSize
+		defer f.Close()
+		if _, err := io.Copy(crc, f); err != nil {
+			return sqlbase.BackupDescriptor{}, err
+		}
+		backupDescs[i].CRC = crc.Sum32()
 	}
 
 	desc = sqlbase.BackupDescriptor{
@@ -209,6 +232,7 @@ func Ingest(
 	ctx context.Context,
 	txn *client.Txn,
 	path string,
+	checksum uint32,
 	startKey, endKey roachpb.Key,
 	newTableID sqlbase.ID,
 ) error {
@@ -218,6 +242,19 @@ func Ingest(
 
 	// TODO(dan): Check if the range being ingested into is empty. If newTableID
 	// is non-zero, it'll have to be derived from startKey and endKey.
+
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	crc := crc32.NewIEEE()
+	if _, err := io.Copy(crc, f); err != nil {
+		return nil
+	}
+	if c := crc.Sum32(); c != checksum {
+		return errors.Errorf("%s: checksum mismatch got %d expected %d", path, c, checksum)
+	}
 
 	sst, err := engine.MakeRocksDBSstFileReader()
 	if err != nil {
@@ -336,7 +373,7 @@ func restoreTable(
 			// TODO(dan): There's no SQL descriptors that point at this yet, so it
 			// should be possible to remove it from the one txn this is all currently
 			// run under. If we do that, make sure this data gets cleaned up on errors.
-			if err := Ingest(ctx, txn, r.Path, intersectBegin, intersectEnd, table.ID); err != nil {
+			if err := Ingest(ctx, txn, r.Path, r.CRC, intersectBegin, intersectEnd, table.ID); err != nil {
 				return err
 			}
 		}
