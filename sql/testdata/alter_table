@@ -504,3 +504,14 @@ ALTER TABLE nonexistent SPLIT AT (42)
 
 statement error table "nonexistent" does not exist
 ALTER INDEX nonexistent@noindex SPLIT AT (42)
+
+user root
+
+statement ok
+CREATE VIEW privsview AS SELECT * FROM privs
+
+statement error pgcode 42809 "privsview" is not a table
+ALTER TABLE privsview ADD d INT
+
+statement error pgcode 42809 "privsview" is not a table
+ALTER TABLE privsview SPLIT AT (42)

@@ -418,26 +418,6 @@ def            other_db            xyz                BASE TABLE   5
 user root
 
 statement ok
-GRANT SELECT ON other_db.abc TO testuser
-
-user testuser
-
-query TTTTI colnames
-SELECT * FROM information_schema.tables
-----
-TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME         TABLE_TYPE   VERSION
-def            information_schema  columns            SYSTEM VIEW  1
-def            information_schema  schema_privileges  SYSTEM VIEW  1
-def            information_schema  schemata           SYSTEM VIEW  1
-def            information_schema  table_constraints  SYSTEM VIEW  1
-def            information_schema  table_privileges   SYSTEM VIEW  1
-def            information_schema  tables             SYSTEM VIEW  1
-def            other_db            abc                VIEW         2
-def            other_db            xyz                BASE TABLE   5
-
-user root
-
-statement ok
 DROP DATABASE other_db
 
 
