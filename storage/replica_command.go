@@ -1047,7 +1047,7 @@ func (r *Replica) RangeLookup(
 	}
 
 	// Decode all scanned range descriptors which haven't been unmarshaled yet.
-	for i, kv := range kvs {
+	for _, kv := range kvs {
 		// TODO(tschottdorf) Candidate for a ReplicaCorruptionError.
 		rd, err := checkAndUnmarshal(kv.Value)
 		if err != nil {
@@ -1056,7 +1056,7 @@ func (r *Replica) RangeLookup(
 		if rd != nil {
 			// Add the first valid descriptor to the desired range descriptor
 			// list in the response, add all others to the prefetched list.
-			if i == 0 || len(reply.Ranges) == 0 {
+			if len(reply.Ranges) == 0 {
 				reply.Ranges = append(reply.Ranges, *rd)
 			} else {
 				reply.PrefetchedRanges = append(reply.PrefetchedRanges, *rd)
