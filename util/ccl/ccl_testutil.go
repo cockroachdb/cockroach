@@ -12,9 +12,14 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-// +build !ccl
-
 package ccl
 
-// NoCCL is true if CCL licenced code is available.
-const NoCCL = true
+import "testing"
+
+// SkipIfNoCCL skips a test or benchmark if CCL licenced code is not built into
+// this binary.
+func SkipIfNoCCL(t testing.TB) {
+	if NoCCL {
+		t.Skip("cannot pass without CCL licenced code")
+	}
+}

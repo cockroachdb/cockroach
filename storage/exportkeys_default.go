@@ -12,12 +12,24 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package ccl
+// +build !ccl
 
-import "testing"
+package storage
 
-func SkipIfNoCCL(t testing.TB) {
-	if NoCCL {
-		t.Skip("cannot pass without CCL licenced code")
-	}
+import (
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/pkg/errors"
+)
+
+// ExportKeys is a stub implementation.
+func (r *Replica) ExportKeys(
+	ctx context.Context,
+	batch engine.ReadWriter,
+	h roachpb.Header,
+	args roachpb.ExportKeysRequest,
+) (roachpb.ExportKeysResponse, *PostCommitTrigger, error) {
+	return roachpb.ExportKeysResponse{}, nil, errors.Errorf("not implemented: ExportKeys")
 }

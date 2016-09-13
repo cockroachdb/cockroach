@@ -18,9 +18,7 @@
 package sql
 
 import (
-	"fmt"
 	"io/ioutil"
-	"os"
 	"path/filepath"
 
 	"golang.org/x/net/context"
@@ -38,25 +36,8 @@ import (
 )
 
 const (
-	dataSSTableName      = "data.sst"
 	backupDescriptorName = "BACKUP"
 )
-
-func allRangeDescriptors(txn *client.Txn) ([]roachpb.RangeDescriptor, error) {
-	// TODO(dan): Iterate with some batch size.
-	rows, err := txn.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
-	if err != nil {
-		return nil, errors.Wrap(err, "unable to scan range descriptors")
-	}
-
-	rangeDescs := make([]roachpb.RangeDescriptor, len(rows))
-	for i, row := range rows {
-		if err := row.ValueProto(&rangeDescs[i]); err != nil {
-			return nil, errors.Wrapf(err, "%s: unable to unmarshal range descriptor", row.Key)
-		}
-	}
-	return rangeDescs, nil
-}
 
 func allSQLDescriptors(txn *client.Txn) ([]sqlbase.Descriptor, error) {
 	startKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
@@ -86,31 +67,23 @@ func allSQLDescriptors(txn *client.Txn) ([]sqlbase.Descriptor, error) {
 // TODO(dan): Bikeshed this directory structure and naming.
 func Backup(
 	ctx context.Context, db client.DB, base string, endTime hlc.Timestamp,
-) (desc sqlbase.BackupDescriptor, retErr error) {
-	// TODO(dan): Optionally take a start time for an incremental backup.
+) (sqlbase.BackupDescriptor, error) {
 	// TODO(dan): Take a uri for the path prefix and support various cloud storages.
 	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
 	// for grpc.
 
-	var rangeDescs []roachpb.RangeDescriptor
-	var sqlDescs []sqlbase.Descriptor
+	// TODO(dan): Optionally take a start time for an incremental backup.
+	startTime := hlc.ZeroTimestamp
 
-	opt := client.TxnExecOptions{
-		AutoRetry:  true,
-		AutoCommit: true,
-	}
+	var sqlDescs []sqlbase.Descriptor
 
 	{
 		// TODO(dan): Pick an appropriate end time and set it in the txn.
 		txn := client.NewTxn(ctx, db)
+		opt := client.TxnExecOptions{AutoRetry: true, AutoCommit: true}
 		err := txn.Exec(opt, func(txn *client.Txn, opt *client.TxnExecOptions) error {
 			var err error
 			setTxnTimestamps(txn, endTime)
-
-			rangeDescs, err = allRangeDescriptors(txn)
-			if err != nil {
-				return err
-			}
 			sqlDescs, err = allSQLDescriptors(txn)
 			return err
 		})
@@ -120,70 +93,41 @@ func Backup(
 	}
 
 	var dataSize int64
-	backupDescs := make([]sqlbase.BackupRangeDescriptor, len(rangeDescs))
-	for i, rangeDesc := range rangeDescs {
-		backupDescs[i] = sqlbase.BackupRangeDescriptor{
-			StartKey:  rangeDesc.StartKey.AsRawKey(),
-			EndKey:    rangeDesc.EndKey.AsRawKey(),
-			StartTime: hlc.Timestamp{},
+	var backupDescs []sqlbase.BackupRangeDescriptor
+	{
+		header := roachpb.Header{Timestamp: endTime}
+		req := &roachpb.ExportKeysRequest{
+			Span: roachpb.Span{
+				Key:    keys.LocalMax,
+				EndKey: keys.MaxKey,
+			},
+			Basepath:  base,
+			StartTime: startTime,
 		}
-		if backupDescs[i].StartKey.Compare(keys.LocalMax) < 0 {
-			backupDescs[i].StartKey = keys.LocalMax
-		}
-
-		nodeID := 0
-		dir := filepath.Join(base, fmt.Sprintf("%03d", nodeID))
-		dir = filepath.Join(dir, fmt.Sprintf("%x-%x", rangeDesc.StartKey, rangeDesc.EndKey))
-		if err := os.MkdirAll(dir, 0700); err != nil {
-			return sqlbase.BackupDescriptor{}, err
+		response, perr := client.SendWrappedWith(db.GetSender(), ctx, header, req)
+		if perr != nil {
+			return sqlbase.BackupDescriptor{}, perr.GoError()
 		}
 
-		var kvs []client.KeyValue
-
-		txn := client.NewTxn(ctx, db)
-		err := txn.Exec(opt, func(txn *client.Txn, opt *client.TxnExecOptions) error {
-			var err error
-			setTxnTimestamps(txn, endTime)
-
-			// TODO(dan): Iterate with some batch size.
-			kvs, err = txn.Scan(backupDescs[i].StartKey, backupDescs[i].EndKey, 0)
-			return err
-		})
-		if err != nil {
-			return sqlbase.BackupDescriptor{}, err
-		}
-		if len(kvs) == 0 {
-			if log.V(1) {
-				log.Infof(ctx, "skipping backup of empty range %s-%s",
-					backupDescs[i].StartKey, backupDescs[i].EndKey)
+		batches := response.(*roachpb.ExportKeysResponse).Batches
+		backupDescs = make([]sqlbase.BackupRangeDescriptor, len(batches))
+		for i, batch := range batches {
+			if batch.DataSize == 0 && log.V(1) {
+				log.Infof(ctx, "skipped backup of empty range %s-%s",
+					batch.Span.Key, batch.Span.EndKey)
+				continue
 			}
-			continue
-		}
-
-		sst := engine.MakeRocksDBSstFileWriter()
-		backupDescs[i].Path = filepath.Join(dir, dataSSTableName)
-		if err := sst.Open(backupDescs[i].Path); err != nil {
-			return sqlbase.BackupDescriptor{}, err
-		}
-		defer func() {
-			if err := sst.Close(); err != nil && retErr == nil {
-				retErr = err
+			backupDescs[i] = sqlbase.BackupRangeDescriptor{
+				StartKey:  batch.Span.Key,
+				EndKey:    batch.Span.EndKey,
+				StartTime: hlc.Timestamp{},
+				Path:      batch.Path,
 			}
-		}()
-		// TODO(dan): Move all this iteration into cpp to avoid the cgo calls.
-		for _, kv := range kvs {
-			mvccKV := engine.MVCCKeyValue{
-				Key:   engine.MVCCKey{Key: kv.Key, Timestamp: kv.Value.Timestamp},
-				Value: kv.Value.RawBytes,
-			}
-			if err := sst.Add(mvccKV); err != nil {
-				return sqlbase.BackupDescriptor{}, err
-			}
+			dataSize += batch.DataSize
 		}
-		dataSize += sst.DataSize
 	}
 
-	desc = sqlbase.BackupDescriptor{
+	desc := sqlbase.BackupDescriptor{
 		EndTime:  endTime,
 		Ranges:   backupDescs,
 		SQL:      sqlDescs,

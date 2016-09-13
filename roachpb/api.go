@@ -256,6 +256,20 @@ func (af *ChangeFrozenResponse) combine(c combinable) error {
 
 var _ combinable = &ChangeFrozenResponse{}
 
+// Combine implements the combinable interface.
+func (ekr *ExportKeysResponse) combine(c combinable) error {
+	if ekr != nil {
+		otherEKR := c.(*ExportKeysResponse)
+		if err := ekr.ResponseHeader.combine(otherEKR.Header()); err != nil {
+			return err
+		}
+		ekr.Batches = append(ekr.Batches, otherEKR.Batches...)
+	}
+	return nil
+}
+
+var _ combinable = &ExportKeysResponse{}
+
 // Header implements the Request interface.
 func (rh Span) Header() Span {
 	return rh
@@ -448,6 +462,9 @@ func (*ComputeChecksumRequest) Method() Method { return ComputeChecksum }
 // Method implements the Request interface.
 func (*VerifyChecksumRequest) Method() Method { return VerifyChecksum }
 
+// Method implements the Request interface.
+func (*ExportKeysRequest) Method() Method { return ExportKeys }
+
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
 	shallowCopy := *gr
@@ -628,6 +645,12 @@ func (vcr *VerifyChecksumRequest) ShallowCopy() Request {
 	return &shallowCopy
 }
 
+// ShallowCopy implements the Request interface.
+func (ekr *ExportKeysRequest) ShallowCopy() Request {
+	shallowCopy := *ekr
+	return &shallowCopy
+}
+
 func (*GetRequest) createReply() Response                { return &GetResponse{} }
 func (*PutRequest) createReply() Response                { return &PutResponse{} }
 func (*ConditionalPutRequest) createReply() Response     { return &ConditionalPutResponse{} }
@@ -658,6 +681,7 @@ func (*TransferLeaseRequest) createReply() Response      { return &RequestLeaseR
 func (*LeaseInfoRequest) createReply() Response          { return &LeaseInfoResponse{} }
 func (*ComputeChecksumRequest) createReply() Response    { return &ComputeChecksumResponse{} }
 func (*VerifyChecksumRequest) createReply() Response     { return &VerifyChecksumResponse{} }
+func (*ExportKeysRequest) createReply() Response         { return &ExportKeysResponse{} }
 
 // NewGet returns a Request initialized to get the value at key.
 func NewGet(key Key) Request {
@@ -848,3 +872,4 @@ func (*ComputeChecksumRequest) flags() int  { return isWrite | isNonKV }
 func (*VerifyChecksumRequest) flags() int   { return isWrite | isNonKV }
 func (*CheckConsistencyRequest) flags() int { return isAdmin | isRange }
 func (*ChangeFrozenRequest) flags() int     { return isWrite | isRange | isNonKV }
+func (*ExportKeysRequest) flags() int       { return isRead | isRange }

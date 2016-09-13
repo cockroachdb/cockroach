@@ -6,4 +6,5 @@
 
 package ccl
 
+// NoCCL is true if CCL licenced code is available.
 const NoCCL = false

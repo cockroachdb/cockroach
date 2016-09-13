@@ -290,6 +290,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 		noop               int
 		changeFrozen       int
 		leaseInfo          int
+		exportKeys         int
 	}
 	for _, union := range ba.Requests {
 		switch union.GetInner().(type) {
@@ -351,6 +352,8 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			counts.changeFrozen++
 		case *LeaseInfoRequest:
 			counts.leaseInfo++
+		case *ExportKeysRequest:
+			counts.exportKeys++
 		default:
 			panic(fmt.Sprintf("unsupported type %T", union.GetInner()))
 		}
@@ -386,6 +389,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 		noop               []NoopResponse
 		changeFrozen       []ChangeFrozenResponse
 		leaseInfo          []LeaseInfoResponse
+		exportKeys         []ExportKeysResponse
 	}
 	for i, union := range ba.Requests {
 		var reply Response
@@ -535,6 +539,11 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 				bufs.leaseInfo = make([]LeaseInfoResponse, counts.leaseInfo)
 			}
 			reply, bufs.leaseInfo = &bufs.leaseInfo[0], bufs.leaseInfo[1:]
+		case *ExportKeysRequest:
+			if bufs.exportKeys == nil {
+				bufs.exportKeys = make([]ExportKeysResponse, counts.exportKeys)
+			}
+			reply, bufs.exportKeys = &bufs.exportKeys[0], bufs.exportKeys[1:]
 		default:
 			panic(fmt.Sprintf("unsupported type %T", union.GetInner()))
 		}
