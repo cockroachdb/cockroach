@@ -1846,7 +1846,6 @@ func (r *Replica) handleRaftReady() error {
 			refreshReason == noReason {
 			refreshReason = reasonSnapshotApplied
 		}
-		// TODO(bdarnell): update coalesced heartbeat mapping with snapshot info.
 	}
 
 	if !uninitRaftLocked {
@@ -2028,6 +2027,7 @@ func (r *Replica) tickRaftMuLocked() (bool, error) {
 }
 
 var enableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_QUIESCENCE", false)
+var enableCoalescedHeartbeats = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_COALESCED_HEARBEATS", true)
 
 // maybeQuiesceLocked checks to see if the replica is quiescable and initiates
 // quiescence if it is. Returns true if the replica has been quiesced and false
@@ -2263,6 +2263,37 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 		return
 	}
 
+	if enableCoalescedHeartbeats && (msg.Type == raftpb.MsgHeartbeat || msg.Type == raftpb.MsgHeartbeatResp) {
+		beat := RaftHeartbeat{
+			RangeID:       r.RangeID,
+			ToReplicaID:   toReplica.ReplicaID,
+			FromReplicaID: fromReplica.ReplicaID,
+			Term:          msg.Term,
+			Commit:        msg.Commit,
+		}
+		toStore := roachpb.StoreIdent{
+			ClusterID: r.store.Ident.ClusterID,
+			StoreID:   toReplica.StoreID,
+			NodeID:    toReplica.NodeID,
+		}
+		r.store.coalesced.Lock()
+		if msg.Type == raftpb.MsgHeartbeat {
+			toSlice := r.store.coalesced.heartbeats[toStore]
+			if toSlice == nil {
+				r.store.coalesced.heartbeats[toStore] = []RaftHeartbeat{}
+			}
+			r.store.coalesced.heartbeats[toStore] = append(toSlice, beat)
+		} else if msg.Type == raftpb.MsgHeartbeatResp {
+			toSlice := r.store.coalesced.heartbeatResponses[toStore]
+			if toSlice == nil {
+				r.store.coalesced.heartbeatResponses[toStore] = []RaftHeartbeat{}
+			}
+			r.store.coalesced.heartbeatResponses[toStore] = append(toSlice, beat)
+		}
+		r.store.coalesced.Unlock()
+		return
+	}
+
 	if !r.sendRaftMessageRequest(&RaftMessageRequest{
 		RangeID:     r.RangeID,
 		ToReplica:   toReplica,
@@ -2277,6 +2308,14 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 			r.panic(err)
 		}
 	}
+}
+
+// reportUnreachable reports the remote replica as unreachable to the internal
+// raft group.
+func (r *Replica) reportUnreachable(remoteReplica roachpb.ReplicaID) {
+	r.mu.Lock()
+	r.mu.internalRaftGroup.ReportUnreachable(uint64(remoteReplica))
+	r.mu.Unlock()
 }
 
 // sendRaftMessageRequest sends a raft message, returning false if the message
