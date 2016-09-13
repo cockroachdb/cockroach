@@ -362,13 +362,8 @@ func (n *windowNode) Next() (bool, error) {
 	return n.values.Next()
 }
 
-type partitionEntry struct {
-	idx   int
-	datum parser.DTuple
-}
-
 type partitionSorter struct {
-	rows     []partitionEntry
+	rows     []parser.IndexedRow
 	ordering sqlbase.ColumnOrdering
 }
 
@@ -381,7 +376,7 @@ func (n *partitionSorter) Less(i, j int) bool { return n.Compare(i, j) < 0 }
 func (n *partitionSorter) InSameGroup(i, j int) bool { return n.Compare(i, j) == 0 }
 
 func (n *partitionSorter) Compare(i, j int) int {
-	ra, rb := n.rows[i].datum, n.rows[j].datum
+	ra, rb := n.rows[i].Row, n.rows[j].Row
 	for _, o := range n.ordering {
 		da := ra[o.ColIdx]
 		db := rb[o.ColIdx]
@@ -430,16 +425,16 @@ func (n *windowNode) computeWindows() error {
 	var scratch []byte
 	scratchDatum := make(parser.DTuple, 0, rowCount)
 	for windowIdx, windowFn := range n.funcs {
-		partitions := make(map[string][]partitionEntry)
+		partitions := make(map[string][]parser.IndexedRow)
 
 		if len(windowFn.partitionIdxs) == 0 {
 			// If no partition indexes are included for the window function, all
 			// rows are added to the same partition, which need to be pre-allocated.
-			sz := int64(uintptr(rowCount) * unsafe.Sizeof(partitionEntry{}))
+			sz := int64(uintptr(rowCount) * unsafe.Sizeof(parser.IndexedRow{}))
 			if err := acc.Grow(sz); err != nil {
 				return err
 			}
-			partitions[""] = make([]partitionEntry, rowCount)
+			partitions[""] = make([]parser.IndexedRow, rowCount)
 		}
 
 		scratchDatum = scratchDatum[:len(windowFn.partitionIdxs)]
@@ -452,7 +447,7 @@ func (n *windowNode) computeWindows() error {
 		// See Cao et al. [http://vldb.org/pvldb/vol5/p1244_yucao_vldb2012.pdf]
 		for rowI := 0; rowI < rowCount; rowI++ {
 			row := n.wrappedValues.At(rowI)
-			entry := partitionEntry{idx: rowI, datum: row}
+			entry := parser.IndexedRow{Idx: rowI, Row: row}
 			if len(windowFn.partitionIdxs) == 0 {
 				// If no partition indexes are included for the window function, all
 				// rows are added to the same partition.
@@ -495,10 +490,7 @@ func (n *windowNode) computeWindows() error {
 			// peer. Without ORDER BY, all rows of the partition are included in the window frame,
 			// since all rows become peers of the current row. Once we add better framing support,
 			// we should flesh this logic out more.
-			//
-			// TODO(nvanbenschoten) Handle built-in window functions in addtition to
-			// aggregate functions.
-			agg := windowFn.expr.GetAggregateConstructor()()
+			builtin := windowFn.expr.GetWindowConstructor()()
 
 			// Since we only support two types of window frames (see TODO above), we only
 			// need two possible types of peerGroupChecker's to help determine peer groups
@@ -521,34 +513,37 @@ func (n *windowNode) computeWindows() error {
 				peerGrouper = allPeers{}
 			}
 
-			// Iterate over peer groups within partition.
-			rowIdx := 0
-			for rowIdx < len(partition) {
-				// Compute the size of a peer group while accumulating in aggregate.
-				peerGroupSize := 0
-				for ; rowIdx < len(partition); rowIdx++ {
-					if peerGroupSize > 0 {
-						if !peerGrouper.InSameGroup(rowIdx-1, rowIdx) {
-							break
-						}
+			// Iterate over peer groups within partition using a window frame.
+			frame := parser.WindowFrame{
+				Rows:        partition,
+				ArgIdxStart: windowFn.argIdxStart,
+				ArgCount:    windowFn.argCount,
+				RowIdx:      0,
+			}
+			for frame.RowIdx < len(partition) {
+				// Compute the size of the current peer group.
+				frame.FirstPeerIdx = frame.RowIdx
+				frame.PeerRowCount = 1
+				for ; frame.FirstPeerIdx+frame.PeerRowCount < len(partition); frame.PeerRowCount++ {
+					cur := frame.FirstPeerIdx + frame.PeerRowCount
+					if !peerGrouper.InSameGroup(cur, cur-1) {
+						break
 					}
-					row := partition[rowIdx]
-					args := row.datum[windowFn.argIdxStart : windowFn.argIdxStart+windowFn.argCount]
-					agg.Add(args[0])
-					peerGroupSize++
 				}
 
-				// Set aggregate result for entire peer group.
-				res := agg.Result()
+				// Perform calculations on each row in the current peer group.
+				for ; frame.RowIdx < frame.FirstPeerIdx+frame.PeerRowCount; frame.RowIdx++ {
+					res := builtin.Compute(frame)
 
-				sz, _ := res.Size()
-				if err := acc.Grow(int64(sz)); err != nil {
-					return err
-				}
+					// This may overestimate, because WindowFuncs may perform internal caching.
+					sz, _ := res.Size()
+					if err := acc.Grow(int64(sz)); err != nil {
+						return err
+					}
 
-				for ; peerGroupSize > 0; peerGroupSize-- {
-					row := partition[rowIdx-peerGroupSize]
-					n.windowValues[row.idx][windowIdx] = res
+					// Save result into n.windowValues, indexed by original row index.
+					valRowIdx := partition[frame.RowIdx].Idx
+					n.windowValues[valRowIdx][windowIdx] = res
 				}
 			}
 		}

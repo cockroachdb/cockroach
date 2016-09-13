@@ -94,6 +94,7 @@ type Builtin struct {
 	category string
 
 	AggregateFunc func() AggregateFunc
+	WindowFunc    func() WindowFunc
 	fn            func(*EvalContext, DTuple) (Datum, error)
 }
 
