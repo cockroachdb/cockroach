@@ -1571,15 +1571,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                         },
                                         {
                                             "rule": "optional",
-                                            "type": "util.hlc.Timestamp",
-                                            "name": "last_verification",
-                                            "id": 4,
-                                            "options": {
-                                                "(gogoproto.nullable)": false
-                                            }
-                                        },
-                                        {
-                                            "rule": "optional",
                                             "type": "uint64",
                                             "name": "num_dropped",
                                             "id": 5
