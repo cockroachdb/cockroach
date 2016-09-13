@@ -1763,62 +1763,53 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 		return errors.Errorf("cannot remove replica %s; replica ID has changed (%s >= %s)",
 			rep, repDesc.ReplicaID, origDesc.NextReplicaID)
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 
+	s.mu.Lock()
 	if _, ok := s.mu.replicas[rep.RangeID]; !ok {
+		s.mu.Unlock()
 		return errors.New("replica not found")
 	}
-
-	delete(s.mu.replicas, rep.RangeID)
-	delete(s.mu.replicaPlaceholders, rep.RangeID)
-	delete(s.mu.replicaQueues, rep.RangeID)
-	delete(s.mu.uninitReplicas, rep.RangeID)
-	if s.mu.replicasByKey.Delete(rep) == nil {
+	if s.getOverlappingKeyRangeLocked(desc) != rep {
 		// This is a fatal error because returning at this point will
 		// leave the Store in an inconsistent state (we've already deleted
 		// from s.mu.replicas), and uninitialized replicas shouldn't make
 		// it this far anyway. This method will need some changes when we
 		// introduce GC of uninitialized replicas.
+		//
+		// TODO(peter): The above comment is out of date: we could return an error
+		// here but are not doing so yet in the name of conservatism.
+		s.mu.Unlock()
 		log.Fatalf(context.TODO(), "replica %s found by id but not by key", rep)
 	}
-	s.scanner.RemoveReplica(rep)
-	s.consistencyScanner.RemoveReplica(rep)
-
 	// Adjust stats before calling Destroy. This can be called before or after
 	// Destroy, but this configuration helps avoid races in stat verification
 	// tests.
 	s.metrics.subtractMVCCStats(rep.GetMVCCStats())
 	s.metrics.ReplicaCount.Dec(1)
+	s.mu.Unlock()
 
-	// TODO(bdarnell): Destroying the on-disk data is fairly expensive to do
-	// under store.Mutex, but doing it outside the lock is tricky due to the risk
-	// that a replica gets recreated by an incoming raft message.
-	return rep.Destroy(origDesc, destroyData)
-}
-
-// destroyReplicaData deletes all data associated with a replica, leaving a tombstone.
-// If a Replica object exists, use Replica.Destroy instead of this method.
-func (s *Store) destroyReplicaData(desc *roachpb.RangeDescriptor) error {
-	iter := NewReplicaDataIterator(desc, s.Engine(), false /* !replicatedOnly */)
-	defer iter.Close()
-	batch := s.Engine().NewBatch()
-	defer batch.Close()
-	for ; iter.Valid(); iter.Next() {
-		_ = batch.Clear(iter.Key())
-	}
-
-	// Save a tombstone. The range cannot be re-replicated onto this
-	// node without having a replica ID of at least desc.NextReplicaID.
-	tombstoneKey := keys.RaftTombstoneKey(desc.RangeID)
-	tombstone := &roachpb.RaftTombstone{
-		NextReplicaID: desc.NextReplicaID,
-	}
-	if err := engine.MVCCPutProto(context.Background(), batch, nil, tombstoneKey, hlc.ZeroTimestamp, nil, tombstone); err != nil {
+	// Mark the replica as destroyed and (optionally) destroy the on-disk data
+	// while not holding Store.mu. This is safe because we're holding
+	// Replica.raftMu and the replica is present in Store.mu.replicasByKey
+	// (preventing any concurrent access to the replica's key range).
+	if err := rep.Destroy(origDesc, destroyData); err != nil {
 		return err
 	}
 
-	return batch.Commit()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.mu.replicas, rep.RangeID)
+	delete(s.mu.replicaPlaceholders, rep.RangeID)
+	delete(s.mu.replicaQueues, rep.RangeID)
+	delete(s.mu.uninitReplicas, rep.RangeID)
+	if s.mu.replicasByKey.Delete(rep) == nil {
+		// We already checked that our replica was present in replicasByKey
+		// above. Nothing should have been able to change that.
+		log.Fatalf(context.TODO(), "replica %s found by id but not by key", rep)
+	}
+	s.scanner.RemoveReplica(rep)
+	s.consistencyScanner.RemoveReplica(rep)
+	return nil
 }
 
 // processRangeDescriptorUpdate should be called whenever a replica's range

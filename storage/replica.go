@@ -574,7 +574,32 @@ func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor, destroyData bool) er
 	if !destroyData {
 		return nil
 	}
-	return r.store.destroyReplicaData(desc)
+	return r.destroyDataRaftMuLocked()
+}
+
+// destroyData deletes all data associated with a replica, leaving a
+// tombstone. Requires that Replica.raftMu is held.
+func (r *Replica) destroyDataRaftMuLocked() error {
+	desc := r.Desc()
+	iter := NewReplicaDataIterator(desc, r.store.Engine(), false /* !replicatedOnly */)
+	defer iter.Close()
+	batch := r.store.Engine().NewBatch()
+	defer batch.Close()
+	for ; iter.Valid(); iter.Next() {
+		_ = batch.Clear(iter.Key())
+	}
+
+	// Save a tombstone. The range cannot be re-replicated onto this
+	// node without having a replica ID of at least desc.NextReplicaID.
+	tombstoneKey := keys.RaftTombstoneKey(desc.RangeID)
+	tombstone := &roachpb.RaftTombstone{
+		NextReplicaID: desc.NextReplicaID,
+	}
+	if err := engine.MVCCPutProto(context.Background(), batch, nil, tombstoneKey, hlc.ZeroTimestamp, nil, tombstone); err != nil {
+		return err
+	}
+
+	return batch.Commit()
 }
 
 func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
