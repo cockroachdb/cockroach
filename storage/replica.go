@@ -734,23 +734,6 @@ func newNotLeaseHolderError(
 	return err
 }
 
-// newNotLeaseHolderErrorWithGuess creates a NotLeaseHolderError initialized
-// with a guess about who the leader is.
-// This is to be used instead of newNotLeaseHolderError when the current lease
-// is not known.
-func newNotLeaseHolderErrorWithGuess(
-	rangeID roachpb.RangeID,
-	origin roachpb.ReplicaDescriptor,
-	leaseHolder roachpb.ReplicaDescriptor,
-) error {
-	return &roachpb.NotLeaseHolderError{
-		RangeID:     rangeID,
-		Replica:     roachpb.ReplicaDescriptor{},
-		LeaseHolder: &leaseHolder,
-		Lease:       nil,
-	}
-}
-
 // redirectOnOrAcquireLease checks whether this replica has the lease at the
 // current timestamp. If it does, returns success. If another replica currently
 // holds the lease, redirects by returning NotLeaseHolderError. If the lease is
@@ -929,16 +912,6 @@ func (r *Replica) getReplicaDescriptorLocked() (roachpb.ReplicaDescriptor, error
 		return repDesc, nil
 	}
 	return roachpb.ReplicaDescriptor{}, roachpb.NewRangeNotFoundError(r.RangeID)
-}
-
-func (r *Replica) mustGetReplicaID() roachpb.ReplicaID {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.mu.replicaID == 0 {
-		panic("the replica's raft group has not yet been configured (i.e. the replica " +
-			"was created from a preemptive snapshot)")
-	}
-	return r.mu.replicaID
 }
 
 // setLastReplicaDescriptors sets the the most recently seen replica
