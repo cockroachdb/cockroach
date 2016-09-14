@@ -2011,7 +2011,7 @@ func (r *Replica) tickRaftMuLocked() (bool, error) {
 	return true, nil
 }
 
-var enableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_QUIESCENCE", true)
+var enableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_QUIESCENCE", false)
 
 // maybeQuiesceLocked checks to see if the replica is quiescable and initiates
 // quiescence if it is. Returns true if the replica has been quiesced and false
