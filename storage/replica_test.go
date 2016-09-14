@@ -4707,15 +4707,16 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
+	splitRangeBefore := roachpb.RangeDescriptor{RangeID: 3, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("h")}
+	splitRangeLHS := roachpb.RangeDescriptor{RangeID: 3, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("f")}
+	splitRangeRHS := roachpb.RangeDescriptor{RangeID: 5, StartKey: roachpb.RKey("f"), EndKey: roachpb.RKey("h")}
+
 	// Test ranges: ["a","c"), ["c","f"), ["f","h") and ["h","y").
 	testRanges := []roachpb.RangeDescriptor{
 		{RangeID: 2, StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},
-		{RangeID: 3, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("f")},
-		{RangeID: 4, StartKey: roachpb.RKey("f"), EndKey: roachpb.RKey("h")},
-		{RangeID: 5, StartKey: roachpb.RKey("h"), EndKey: roachpb.RKey("y")},
+		splitRangeBefore,
+		{RangeID: 4, StartKey: roachpb.RKey("h"), EndKey: roachpb.RKey("y")},
 	}
-	// The range ["f","h") has dangling intent in meta2.
-	withIntentRangeIndex := 2
 
 	testCases := []struct {
 		key      string
@@ -4727,7 +4728,7 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 		{key: "c", expected: testRanges[0]},
 		{key: "d", expected: testRanges[1]},
 		{key: "f", expected: testRanges[1]},
-		{key: "j", expected: testRanges[3]},
+		{key: "j", expected: testRanges[2]},
 		// testRanges[2] has an intent, so the inconsistent scan will read
 		// an old value (nil). Since we're in reverse mode, testRanges[1]
 		// is the result.
@@ -4735,9 +4736,9 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 		{key: "h", expected: testRanges[1]},
 	}
 
-	txn := newTransaction("test", roachpb.Key{}, 1, enginepb.SERIALIZABLE, tc.clock)
-	for i, r := range testRanges {
-		if i != withIntentRangeIndex {
+	{
+		txn := newTransaction("test", roachpb.Key{}, 1, enginepb.SERIALIZABLE, tc.clock)
+		for _, r := range testRanges {
 			// Write the new descriptor as an intent.
 			data, err := protoutil.Marshal(&r)
 			if err != nil {
@@ -4750,19 +4751,19 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 				t.Fatal(pErr)
 			}
 		}
-	}
 
-	// Resolve the intents.
-	rArgs := &roachpb.ResolveIntentRangeRequest{
-		Span: roachpb.Span{
-			Key:    keys.RangeMetaKey(roachpb.RKey("a")),
-			EndKey: keys.RangeMetaKey(roachpb.RKey("z")),
-		},
-		IntentTxn: txn.TxnMeta,
-		Status:    roachpb.COMMITTED,
-	}
-	if _, pErr := tc.SendWrapped(rArgs); pErr != nil {
-		t.Fatal(pErr)
+		// Resolve the intents.
+		rArgs := &roachpb.ResolveIntentRangeRequest{
+			Span: roachpb.Span{
+				Key:    keys.RangeMetaKey(roachpb.RKey("a")),
+				EndKey: keys.RangeMetaKey(roachpb.RKey("z")),
+			},
+			IntentTxn: txn.TxnMeta,
+			Status:    roachpb.COMMITTED,
+		}
+		if _, pErr := tc.SendWrapped(rArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
 	}
 
 	// Get original meta2 descriptor.
@@ -4789,16 +4790,20 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 		}
 	}
 
-	// Write the new descriptor as an intent.
-	intentRange := testRanges[withIntentRangeIndex]
-	data, err := protoutil.Marshal(&intentRange)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(intentRange.EndKey)), data)
-	txn2 := newTransaction("test", roachpb.Key{}, 1, enginepb.SERIALIZABLE, tc.clock)
-	if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn2}, &pArgs); pErr != nil {
-		t.Fatal(pErr)
+	// Write the new descriptors as intents.
+	txn := newTransaction("test", roachpb.Key{}, 1, enginepb.SERIALIZABLE, tc.clock)
+	for _, r := range []roachpb.RangeDescriptor{splitRangeLHS, splitRangeRHS} {
+		// Write the new descriptor as an intent.
+		data, err := protoutil.Marshal(&r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(r.EndKey)), data)
+
+		txn.Sequence++
+		if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
 	}
 
 	// Test ReverseScan with intents.
@@ -4819,7 +4824,7 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 	}
 }
 
-func TestReplicaLookup(t *testing.T) {
+func TestRangeLookup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
