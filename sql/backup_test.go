@@ -71,6 +71,52 @@ func testingTempDir(t testing.TB, depth int) (string, func()) {
 	return dir, cleanup
 }
 
+func TestIntersectHalfOpen(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	b1 := []byte{1}
+	b2 := []byte{2}
+	b3 := []byte{3}
+	b4 := []byte{4}
+
+	tests := []struct {
+		start1 []byte
+		end1   []byte
+		start2 []byte
+		end2   []byte
+		starti []byte
+		endi   []byte
+	}{
+		{b1, b2, b2, b3,
+			nil, nil},
+		{b1, b2, b3, b4,
+			nil, nil},
+		{b1, b3, b2, b3,
+			b2, b3},
+		{b1, b4, b2, b3,
+			b2, b3},
+
+		{b2, b3, b1, b2,
+			nil, nil},
+		{b3, b4, b1, b2,
+			nil, nil},
+		{b2, b3, b1, b3,
+			b2, b3},
+		{b2, b3, b1, b4,
+			b2, b3},
+
+		{b1, b4, b1, b4,
+			b1, b4},
+	}
+
+	for i, test := range tests {
+		s, e := sql.IntersectHalfOpen(test.start1, test.end1, test.start2, test.end2)
+		if !bytes.Equal(s, test.starti) || !bytes.Equal(e, test.endi) {
+			t.Errorf("%d: got (%x, %x) expected (%x, %x)", i, s, e, test.starti, test.endi)
+		}
+	}
+}
+
 // setupBackupRestoreDB creates a table and inserts `count` rows. It then splits
 // the kv ranges for the table as evenly as possible into `rangeCount` ranges.
 func setupBackupRestoreDB(
