@@ -18,7 +18,6 @@ syntax = "proto2";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
-import "cockroach/roachpb/data.proto";
 import "cockroach/roachpb/metadata.proto";
 import "cockroach/util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
