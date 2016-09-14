@@ -2959,7 +2959,7 @@ func (s *Store) updateReplicationGauges() error {
 		rep.mu.Lock()
 		raftStatus := rep.raftStatusLocked()
 		lease := rep.mu.state.Lease
-		if rep.mu.quiescent {
+		if rep.mu.quiescent || rep.mu.internalRaftGroup == nil {
 			quiescentCount++
 		}
 		rep.mu.Unlock()
