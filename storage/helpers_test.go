@@ -188,6 +188,13 @@ func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
 	return r.mu.tsCache.lowWater
 }
 
+// IsQuiescent returns whether the replica is quiescent or not.
+func (r *Replica) IsQuiescent() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.quiescent
+}
+
 func GetGCQueueTxnCleanupThreshold() time.Duration {
 	return txnCleanupThreshold
 }
