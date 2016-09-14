@@ -117,7 +117,9 @@ var newTracer = func() opentracing.Tracer {
 			return lsTr
 		}
 		basicTr := basictracer.NewWithOptions(defaultOptions(func(_ basictracer.RawSpan) {}))
-		return NewTeeTracer(basicTr, lsTr)
+		// The TeeTracer uses the first tracer for serialization of span contexts;
+		// lightspan needs to be first because it correlates spans between nodes.
+		return NewTeeTracer(lsTr, basicTr)
 	}
 	return basictracer.NewWithOptions(defaultOptions(func(_ basictracer.RawSpan) {}))
 }

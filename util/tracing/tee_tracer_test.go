@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -57,12 +58,12 @@ func TestTeeTracer(t *testing.T) {
 	}
 	span2 := tr.StartSpan("y", opentracing.FollowsFrom(decodedCtx))
 	span2.LogEvent("event2")
-	assert.Equal(t, "baggage-value", span.BaggageItem("baggage"))
+	assert.Equal(t, "baggage-value", span2.BaggageItem("baggage"))
 	span.Finish()
 	span2.Finish()
 
 	for _, spans := range [][]basictracer.RawSpan{r1.GetSpans(), r2.GetSpans()} {
-		assert.Equal(t, 2, len(spans))
+		require.Equal(t, 2, len(spans))
 
 		assert.Equal(t, "x", spans[0].Operation)
 		assert.Equal(t, opentracing.Tags{"tag": "value"}, spans[0].Tags)
@@ -74,5 +75,33 @@ func TestTeeTracer(t *testing.T) {
 		assert.Equal(t, opentracing.Tags(nil), spans[1].Tags)
 		assert.Equal(t, "event2", spans[1].Logs[0].Event)
 		assert.Equal(t, 1, len(spans[1].Context.Baggage))
+	}
+}
+
+// TestTeeTracerSpanRefs verifies that ChildOf/FollowsFrom relations are
+// reflected correctly in the underlying spans.
+func TestTeeTracerSpanRefs(t *testing.T) {
+	r1 := basictracer.NewInMemoryRecorder()
+	t1 := basictracer.NewWithOptions(basictracer.Options{
+		Recorder:     r1,
+		ShouldSample: func(traceID uint64) bool { return true }, // always sample
+	})
+	r2 := basictracer.NewInMemoryRecorder()
+	t2 := basictracer.NewWithOptions(basictracer.Options{
+		Recorder:     r2,
+		ShouldSample: func(traceID uint64) bool { return true }, // always sample
+	})
+	tr := NewTeeTracer(t1, t2)
+
+	root := tr.StartSpan("x")
+	child := tr.StartSpan("x", opentracing.ChildOf(root.Context()))
+	child.Finish()
+	root.Finish()
+
+	for _, spans := range [][]basictracer.RawSpan{r1.GetSpans(), r2.GetSpans()} {
+		require.Equal(t, 2, len(spans))
+
+		assert.Equal(t, spans[0].Context.TraceID, spans[1].Context.TraceID)
+		assert.Equal(t, spans[1].Context.SpanID, spans[0].ParentSpanID)
 	}
 }
