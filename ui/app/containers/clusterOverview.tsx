@@ -126,7 +126,7 @@ class ClusterMain extends React.Component<ClusterMainProps, {}> {
                      tooltip="The average amount of SQL client network traffic in bytes per second across all nodes.">
             <Axis format={ Bytes }>
               <Metric name="cr.node.sql.bytesin" title="Bytes In" nonNegativeRate />
-              <Metric name="cr.node.sql.inserts" title="Bytes Out" nonNegativeRate />
+              <Metric name="cr.node.sql.bytesout" title="Bytes Out" nonNegativeRate />
             </Axis>
           </LineGraph>
 

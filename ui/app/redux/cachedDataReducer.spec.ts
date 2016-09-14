@@ -60,7 +60,6 @@ describe("basic cachedDataReducer", function () {
 
       it("should correctly dispatch receiveData", function () {
         let expectedResponse = new Response(null);
-
         state = reducer(state, testReducerObj.receiveData(expectedResponse, null));
         expected = new CachedDataReducerState<Response>();
         expected.valid = true;
