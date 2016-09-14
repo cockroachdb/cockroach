@@ -117,6 +117,12 @@ func (*CreateTable) StatementType() StatementType { return DDL }
 func (*CreateTable) StatementTag() string { return "CREATE TABLE" }
 
 // StatementType implements the Statement interface.
+func (*CreateView) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CreateView) StatementTag() string { return "CREATE VIEW" }
+
+// StatementType implements the Statement interface.
 func (*Deallocate) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -151,6 +157,12 @@ func (*DropTable) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*DropTable) StatementTag() string { return "DROP TABLE" }
+
+// StatementType implements the Statement interface.
+func (*DropView) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*DropView) StatementTag() string { return "DROP VIEW" }
 
 // StatementType implements the Statement interface.
 func (*Execute) StatementType() StatementType { return Unknown }
@@ -370,11 +382,13 @@ func (n *CopyFrom) String() string                 { return AsString(n) }
 func (n *CreateDatabase) String() string           { return AsString(n) }
 func (n *CreateIndex) String() string              { return AsString(n) }
 func (n *CreateTable) String() string              { return AsString(n) }
+func (n *CreateView) String() string               { return AsString(n) }
 func (n *Deallocate) String() string               { return AsString(n) }
 func (n *Delete) String() string                   { return AsString(n) }
 func (n *DropDatabase) String() string             { return AsString(n) }
 func (n *DropIndex) String() string                { return AsString(n) }
 func (n *DropTable) String() string                { return AsString(n) }
+func (n *DropView) String() string                 { return AsString(n) }
 func (n *Execute) String() string                  { return AsString(n) }
 func (n *Explain) String() string                  { return AsString(n) }
 func (n *Grant) String() string                    { return AsString(n) }
