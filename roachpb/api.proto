@@ -652,22 +652,23 @@ message ComputeChecksumResponse {
 }
 
 message DeprecatedVerifyChecksumRequest {
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional NoopRequest deprecated = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// A VerifyChecksumResponse is the response to a VerifyChecksum() operation.
 message DeprecatedVerifyChecksumResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional NoopResponse deprecated = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A RequestUnion contains exactly one of the optional requests.
 // The values added here must match those in ResponseUnion.
 //
-// WARNING: Do not remove fields from the RequestUnion. Instead, clear
-// out the contents of the message and add a "deprecated" prefix. See
-// DeprecatedVerifyChecksumRequest for an example. Be cautious about
-// deprecating fields as doing so can lead to inconsistencies between
-// replicas.
+// WARNING: Do not remove fields from RequestUnion. Instead, replace the
+// contents of the deprecated field's type with an embedded NoopRequest and
+// prepend the type's name with "Deprecated". See
+// DeprecatedVerifyChecksumRequest for an example.
+//
+// Be cautious about deprecating fields as doing so can lead to inconsistencies
+// between replicas.
 message RequestUnion {
   option (gogoproto.onlyone) = true;
 
@@ -705,11 +706,13 @@ message RequestUnion {
 // A ResponseUnion contains exactly one of the optional responses.
 // The values added here must match those in RequestUnion.
 //
-// WARNING: Do not remove fields from the ResponseUnion. Instead,
-// clear out the contents of the message and add a "deprecated"
-// prefix. See DeprecatedVerifyChecksumResponse for an example. Be
-// cautious about deprecating fields as doing so can lead to
-// inconsistencies between replicas.
+// WARNING: Do not remove fields from ResponseUnion. Instead, replace the
+// contents of the deprecated field's type with an embedded NoopResponse and
+// prepend the type's name with "Deprecated". See
+// DeprecatedVerifyChecksumResponse for an example.
+//
+// Be cautious about deprecating fields as doing so can lead to inconsistencies
+// between replicas.
 message ResponseUnion {
   option (gogoproto.onlyone) = true;
 

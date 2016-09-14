@@ -6287,3 +6287,17 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 	}
 	checkReservations(t, 0)
 }
+
+func TestDeprecatedRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	if reply, err := tc.SendWrapped(&roachpb.DeprecatedVerifyChecksumRequest{}); err != nil {
+		t.Fatal(err)
+	} else if _, ok := reply.(*roachpb.DeprecatedVerifyChecksumResponse); !ok {
+		t.Fatalf("expected %T but got %T", &roachpb.DeprecatedVerifyChecksumResponse{}, reply)
+	}
+}
