@@ -73,6 +73,8 @@ func (wf WindowFrame) rowCount() int {
 	return len(wf.Rows)
 }
 
+// TODO(nvanbenschoten): This definition only holds while we don't support
+// frame specification (RANGE or ROWS) in the OVER clause.
 func (wf WindowFrame) frameSize() int {
 	return wf.FirstPeerIdx + wf.PeerRowCount
 }
@@ -145,6 +147,15 @@ var windows = map[string][]Builtin{
 			return makeWindowBuiltin(ArgTypes{t, TypeInt, t}, t, makeLeadLagWindowConstructor(true, true, true))
 		}, anyElementTypes...),
 	),
+	"first_value": collectWindowBuiltins(func(t Datum) Builtin {
+		return makeWindowBuiltin(ArgTypes{t}, t, newFirstValueWindow)
+	}, anyElementTypes...),
+	"last_value": collectWindowBuiltins(func(t Datum) Builtin {
+		return makeWindowBuiltin(ArgTypes{t}, t, newLastValueWindow)
+	}, anyElementTypes...),
+	"nth_value": collectWindowBuiltins(func(t Datum) Builtin {
+		return makeWindowBuiltin(ArgTypes{t, TypeInt}, t, newNthValueWindow)
+	}, anyElementTypes...),
 }
 
 var anyElementTypes = []Datum{
@@ -194,6 +205,9 @@ var _ WindowFunc = &percentRankWindow{}
 var _ WindowFunc = &cumulativeDistWindow{}
 var _ WindowFunc = &ntileWindow{}
 var _ WindowFunc = &leadLagWindow{}
+var _ WindowFunc = &firstValueWindow{}
+var _ WindowFunc = &lastValueWindow{}
+var _ WindowFunc = &nthValueWindow{}
 
 // aggregateWindowFunc aggregates over the the current row's window frame, using
 // the internal AggregateFunc to perform the aggregation.
@@ -413,6 +427,57 @@ func (w *leadLagWindow) Compute(wf WindowFrame) (Datum, error) {
 	}
 
 	return wf.argsWithRowOffset(offset)[0], nil
+}
+
+// firstValueWindow returns value evaluated at the row that is the first row of the window frame.
+type firstValueWindow struct{}
+
+func newFirstValueWindow() WindowFunc {
+	return &firstValueWindow{}
+}
+
+func (firstValueWindow) Compute(wf WindowFrame) (Datum, error) {
+	return wf.Rows[0].Row[wf.ArgIdxStart], nil
+}
+
+// lastValueWindow returns value evaluated at the row that is the last row of the window frame.
+type lastValueWindow struct{}
+
+func newLastValueWindow() WindowFunc {
+	return &lastValueWindow{}
+}
+
+func (lastValueWindow) Compute(wf WindowFrame) (Datum, error) {
+	return wf.Rows[wf.frameSize()-1].Row[wf.ArgIdxStart], nil
+}
+
+// nthValueWindow returns value evaluated at the row that is the nth row of the window frame
+// (counting from 1). Returns null if no such row.
+type nthValueWindow struct{}
+
+func newNthValueWindow() WindowFunc {
+	return &nthValueWindow{}
+}
+
+var errInvalidArgumentForNthValue = errors.Errorf("argument of nth_value must be greater than zero")
+
+func (nthValueWindow) Compute(wf WindowFrame) (Datum, error) {
+	arg := wf.args()[1]
+	if arg == DNull {
+		return DNull, nil
+	}
+
+	nth := int(*arg.(*DInt))
+	if nth <= 0 {
+		return nil, errInvalidArgumentForNthValue
+	}
+
+	// per spec: Only consider the rows within the "window frame", which by default contains
+	// the rows from the start of the partition through the last peer of the current row.
+	if nth > wf.frameSize() {
+		return DNull, nil
+	}
+	return wf.Rows[nth-1].Row[wf.ArgIdxStart], nil
 }
 
 var _ Visitor = &ContainsWindowVisitor{}
