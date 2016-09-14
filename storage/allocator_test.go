@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/testutils/gossiputil"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -451,6 +453,109 @@ func TestAllocatorRebalance(t *testing.T) {
 		result := a.shouldRebalance(desc, sl)
 		if expResult := (i >= 2); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
+		}
+	}
+}
+
+// TestAllocatorRebalanceThrashing tests that the rebalancer does not thrash
+// when replica counts are balanced, within the appropriate thresholds, across
+// stores.
+func TestAllocatorRebalanceThrashing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper, g, _, a, _ := createTestAllocator()
+	a.options.Deterministic = true
+	defer stopper.Stop()
+
+	stores := []*roachpb.StoreDescriptor{
+		{
+			StoreID:  1,
+			Node:     roachpb.NodeDescriptor{NodeID: 1},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 100},
+		},
+		{
+			StoreID:  2,
+			Node:     roachpb.NodeDescriptor{NodeID: 2},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 100},
+		},
+		{
+			StoreID:  3,
+			Node:     roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 100},
+		},
+		{
+			StoreID:  4,
+			Node:     roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 100},
+		},
+	}
+
+	type testReplica struct {
+		rangeCount          int32
+		shouldRebalanceFrom bool
+	}
+
+	// Returns an array of replicas with the specified mean. One replica will have
+	// a range count that's above the target range count for the rebalancer, so it
+	// should be rebalanced from.
+	oneReplicaAboveRebalanceTarget := func(mean int32) [4]testReplica {
+		var replicas [4]testReplica
+		for i := range replicas {
+			replicas[i].rangeCount = mean
+		}
+		thresholdDelta := int32(float64(mean)*rebalanceThreshold + 1)
+		replicas[0].rangeCount -= thresholdDelta
+		replicas[len(replicas)-1].rangeCount += thresholdDelta
+		replicas[len(replicas)-1].shouldRebalanceFrom = true
+		return replicas
+	}
+
+	testCases := [][4]testReplica{
+		// An evenly balanced cluster should not rebalance.
+		{{5, false}, {5, false}, {5, false}, {5, false}},
+		// A very nearly balanced cluster should not rebalance.
+		{{5, false}, {5, false}, {5, false}, {6, false}},
+		// Adding an empty node to a 3-node cluster triggers rebalancing from
+		// existing nodes.
+		{{100, true}, {100, true}, {100, true}, {0, false}},
+		// A cluster where all range counts are within rebalanceThreshold should
+		// not rebalance. This assumes rebalanceThreshold > 2%.
+		{{98, false}, {99, false}, {101, false}, {102, false}},
+		oneReplicaAboveRebalanceTarget(100),
+		oneReplicaAboveRebalanceTarget(1000),
+		oneReplicaAboveRebalanceTarget(10000),
+		// TODO(cuongdo): Once we've tweaked our rebalancer heuristics, we need to
+		// test the case where 3 nodes are above the mean but below the rebalancer's
+		// target range count but one node is well below the mean. We still want to
+		// rebalance to severely underused stores.
+	}
+	for i, tc := range testCases {
+		t.Logf("test case %d: %v", i, tc)
+		// Initialize range counts for stores.
+		for j, store := range stores {
+			store.Capacity.RangeCount = tc[j].rangeCount
+		}
+		gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
+		// Ensure gossiped store descriptor changes have propagated.
+		util.SucceedsSoon(t, func() error {
+			sl, _, _ := a.storePool.getStoreList(roachpb.Attributes{}, true)
+			for j, s := range sl.stores {
+				if a, e := s.Capacity.RangeCount, tc[j].rangeCount; a != e {
+					return errors.Errorf("tc %d: range count for %d = %d != expected %d", i, j, a, e)
+				}
+			}
+			return nil
+		})
+		sl, _, _ := a.storePool.getStoreList(roachpb.Attributes{}, true)
+
+		// Verify shouldRebalance returns the expected value.
+		for j, store := range stores {
+			desc, ok := a.storePool.getStoreDescriptor(store.StoreID)
+			if !ok {
+				t.Fatalf("[tc %d,store %d]: unable to get store %d descriptor", i, j, store.StoreID)
+			}
+			if a, e := a.shouldRebalance(desc, sl), tc[j].shouldRebalanceFrom; a != e {
+				t.Errorf("[tc %d,store %d]: shouldRebalance %t != expected %t", i, j, a, e)
+			}
 		}
 	}
 }
