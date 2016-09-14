@@ -17,6 +17,8 @@
 package tracing
 
 import (
+	"fmt"
+
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 )
@@ -29,35 +31,100 @@ type TeeTracer struct {
 var _ opentracing.Tracer = &TeeTracer{}
 
 // NewTeeTracer creates a Tracer that sends events to multiple Tracers.
+//
+// Note that only the span from the first tracer is used for serialization
+// purposes (Inject/Extract).
 func NewTeeTracer(tracers ...opentracing.Tracer) opentracing.Tracer {
 	return &TeeTracer{tracers: tracers}
+}
+
+// option is a wrapper for opentracing.StartSpanOptions that
+// implements opentracing.StartSpanOption. This is the only way to pass options
+// to StartSpan.
+type option opentracing.StartSpanOptions
+
+var _ opentracing.StartSpanOption = &option{}
+
+// Apply is part of the StartSpanOption interface.
+func (o *option) Apply(sso *opentracing.StartSpanOptions) {
+	*sso = opentracing.StartSpanOptions(*o)
 }
 
 // StartSpan is part of the opentracing.Tracer interface.
 func (t *TeeTracer) StartSpan(
 	operationName string, opts ...opentracing.StartSpanOption,
 ) opentracing.Span {
+	// Form the StartSpanOptions from the opts.
+	sso := opentracing.StartSpanOptions{}
+	for _, o := range opts {
+		o.Apply(&sso)
+	}
+
 	spans := make([]opentracing.Span, len(t.tracers))
 	for i := 0; i < len(t.tracers); i++ {
-		spans[i] = t.tracers[i].StartSpan(operationName, opts...)
+		o := option(sso)
+		// Replace any references to the TeeSpanContext with the corresponding
+		// SpanContext for tracer i.
+		o.References = make([]opentracing.SpanReference, len(sso.References))
+		for j := range sso.References {
+			tsc := sso.References[j].ReferencedContext.(TeeSpanContext)
+			o.References[j].ReferencedContext = tsc.contexts[i]
+		}
+		spans[i] = t.tracers[i].StartSpan(operationName, &o)
 	}
 	return &TeeSpan{tracer: t, spans: spans}
 }
 
 // Inject is part of the opentracing.Tracer interface.
 func (t *TeeTracer) Inject(
-	sm opentracing.SpanContext, format interface{}, carrier interface{},
+	sc opentracing.SpanContext, format interface{}, carrier interface{},
 ) error {
-	// We use the fact that any tracers we use make use of basictracer spans, so
-	// the SpanContexts should be the same.
-	return t.tracers[0].Inject(sm, format, carrier)
+	tsc, ok := sc.(TeeSpanContext)
+	if !ok {
+		return fmt.Errorf("SpanContext type %T incompatible with TeeTracer", sc)
+	}
+	// TODO(radu): we only serialize the span for the first tracer. Ideally we
+	// would produce our own format that includes serializations for all the
+	// underlying spans.
+	return t.tracers[0].Inject(tsc.contexts[0], format, carrier)
 }
 
 // Extract is part of the opentracing.Tracer interface.
 func (t *TeeTracer) Extract(
 	format interface{}, carrier interface{},
 ) (opentracing.SpanContext, error) {
-	return t.tracers[0].Extract(format, carrier)
+	decoded, err := t.tracers[0].Extract(format, carrier)
+	if err != nil {
+		return nil, err
+	}
+	contexts := make([]opentracing.SpanContext, len(t.tracers))
+	contexts[0] = decoded
+	// We use the fact that we only use tracers based on basictracer spans and
+	// duplicate the same span.
+	ctxBasic := decoded.(basictracer.SpanContext)
+	for i := 1; i < len(contexts); i++ {
+		ctxCopy := ctxBasic
+		ctxCopy.Baggage = make(map[string]string)
+		for k, v := range ctxBasic.Baggage {
+			ctxCopy.Baggage[k] = v
+		}
+		contexts[i] = ctxCopy
+	}
+	return TeeSpanContext{contexts: contexts}, nil
+}
+
+// TeeSpanContext is an opentracing.SpanContext that keeps track of SpanContexts
+// from multiple tracers.
+type TeeSpanContext struct {
+	contexts []opentracing.SpanContext
+}
+
+var _ opentracing.SpanContext = TeeSpanContext{}
+
+// ForeachBaggageItem is part of the opentracing.SpanContext interface.
+func (tsc TeeSpanContext) ForeachBaggageItem(handler func(k, v string) bool) {
+	// All underlying SpanContexts have the same baggage.
+	tsc.contexts[0].ForeachBaggageItem(handler)
 }
 
 // TeeSpan is the opentracing.Span implementation used by the TeeTracer.
@@ -84,14 +151,13 @@ func (ts *TeeSpan) FinishWithOptions(opts opentracing.FinishOptions) {
 
 // Context is part of the opentracing.Span interface.
 func (ts *TeeSpan) Context() opentracing.SpanContext {
-	// We are using the fact that underlying tracers are using
-	// basictracer.SpanContext, which allows us to use one span's
-	// context instead of making our own "composite" context.
-	// Verify this assumption.
-	for _, sp := range ts.spans {
-		_ = sp.Context().(basictracer.SpanContext)
+	// Build a composite context.
+	ctx := TeeSpanContext{}
+	ctx.contexts = make([]opentracing.SpanContext, len(ts.spans))
+	for i := range ts.spans {
+		ctx.contexts[i] = ts.spans[i].Context()
 	}
-	return ts.spans[0].Context()
+	return ctx
 }
 
 // SetOperationName is part of the opentracing.Span interface.
