@@ -421,6 +421,31 @@ func RangeMetaKey(key roachpb.RKey) roachpb.Key {
 	return buf
 }
 
+// UserKey returns an ordinary key for the given range metadata (meta1, meta2)
+// indexing key.
+//
+// - For an ordinary key, the input key is returned.
+// - For a meta2 key, an ordinary key is returned.
+// - For a meta1 key, a meta2 key is returned.
+// - For RKeyMin, a meta1 key is returned.
+func UserKey(key roachpb.RKey) roachpb.RKey {
+	var prefix roachpb.Key
+	switch {
+	case key.Equal(roachpb.RKeyMin):
+		prefix = Meta1Prefix
+	case bytes.HasPrefix(key, Meta1Prefix):
+		prefix = Meta2Prefix
+		key = key[len(Meta1Prefix):]
+	case bytes.HasPrefix(key, Meta2Prefix):
+		key = key[len(Meta2Prefix):]
+	}
+
+	buf := make(roachpb.RKey, 0, len(prefix)+len(key))
+	buf = append(buf, prefix...)
+	buf = append(buf, key...)
+	return buf
+}
+
 // validateRangeMetaKey validates that the given key is a valid Range Metadata
 // key. This checks only the constraints common to forward and backwards scans:
 // correct prefix and not exceeding KeyMax.
