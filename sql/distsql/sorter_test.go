@@ -41,34 +41,9 @@ func TestSorter(t *testing.T) {
 		expected sqlbase.EncDatumRows
 	}{
 		{
+			// No specified input ordering and unspecified limit.
 			spec: SorterSpec{
-				Ordering: convertToSpecOrdering(
-					sqlbase.ColumnOrdering{
-						{ColIdx: 0, Direction: asc},
-						{ColIdx: 1, Direction: asc},
-					}),
-			},
-			input: sqlbase.EncDatumRows{
-				{v[0], v[1], v[4]},
-				{v[0], v[1], v[2]},
-				{v[0], v[2], v[3]},
-				{v[1], v[1], v[3]},
-				{v[1], v[0], v[4]},
-				{v[0], v[0], v[0]},
-				{v[4], v[4], v[4]},
-			},
-			expected: sqlbase.EncDatumRows{
-				{v[0], v[0], v[0]},
-				{v[0], v[1], v[4]},
-				{v[0], v[1], v[2]},
-				{v[0], v[2], v[3]},
-				{v[1], v[0], v[4]},
-				{v[1], v[1], v[3]},
-				{v[4], v[4], v[4]},
-			},
-		}, {
-			spec: SorterSpec{
-				Ordering: convertToSpecOrdering(
+				OutputOrdering: convertToSpecOrdering(
 					sqlbase.ColumnOrdering{
 						{ColIdx: 0, Direction: asc},
 						{ColIdx: 1, Direction: desc},
@@ -92,6 +67,98 @@ func TestSorter(t *testing.T) {
 				{v[3], v[2], v[0]},
 				{v[4], v[4], v[4]},
 				{v[4], v[4], v[5]},
+			},
+		}, {
+			// No specified input ordering but specified limit.
+			spec: SorterSpec{
+				Limit: 4,
+				OutputOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 0, Direction: asc},
+						{ColIdx: 1, Direction: asc},
+						{ColIdx: 2, Direction: asc},
+					}),
+			},
+			input: sqlbase.EncDatumRows{
+				{v[3], v[3], v[0]},
+				{v[3], v[4], v[1]},
+				{v[1], v[0], v[4]},
+				{v[0], v[0], v[0]},
+				{v[4], v[4], v[4]},
+				{v[4], v[4], v[5]},
+				{v[3], v[2], v[0]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0], v[0], v[0]},
+				{v[1], v[0], v[4]},
+				{v[3], v[2], v[0]},
+				{v[3], v[3], v[0]},
+			},
+		}, {
+			// Specified match ordering length but no specified limit.
+			spec: SorterSpec{
+				OrderingMatchLen: 2,
+				OutputOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 0, Direction: asc},
+						{ColIdx: 1, Direction: asc},
+						{ColIdx: 2, Direction: asc},
+					}),
+			},
+			input: sqlbase.EncDatumRows{
+				{v[0], v[1], v[2]},
+				{v[0], v[1], v[0]},
+				{v[1], v[0], v[5]},
+				{v[1], v[1], v[5]},
+				{v[1], v[1], v[4]},
+				{v[3], v[4], v[3]},
+				{v[3], v[4], v[2]},
+				{v[3], v[5], v[1]},
+				{v[4], v[4], v[5]},
+				{v[4], v[4], v[4]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0], v[1], v[0]},
+				{v[0], v[1], v[2]},
+				{v[1], v[0], v[5]},
+				{v[1], v[1], v[4]},
+				{v[1], v[1], v[5]},
+				{v[3], v[4], v[2]},
+				{v[3], v[4], v[3]},
+				{v[3], v[5], v[1]},
+				{v[4], v[4], v[4]},
+				{v[4], v[4], v[5]},
+			},
+		}, {
+			// Specified input ordering but no specified limit.
+			spec: SorterSpec{
+				OrderingMatchLen: 2,
+				OutputOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 1, Direction: asc},
+						{ColIdx: 2, Direction: asc},
+						{ColIdx: 3, Direction: asc},
+					}),
+			},
+			input: sqlbase.EncDatumRows{
+				{v[1], v[1], v[2], v[5]},
+				{v[0], v[1], v[2], v[4]},
+				{v[0], v[1], v[2], v[3]},
+				{v[1], v[1], v[2], v[2]},
+				{v[1], v[2], v[2], v[5]},
+				{v[0], v[2], v[2], v[4]},
+				{v[0], v[2], v[2], v[3]},
+				{v[1], v[2], v[2], v[2]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[1], v[1], v[2], v[2]},
+				{v[0], v[1], v[2], v[3]},
+				{v[0], v[1], v[2], v[4]},
+				{v[1], v[1], v[2], v[5]},
+				{v[1], v[2], v[2], v[2]},
+				{v[0], v[2], v[2], v[3]},
+				{v[0], v[2], v[2], v[4]},
+				{v[1], v[2], v[2], v[5]},
 			},
 		},
 	}
