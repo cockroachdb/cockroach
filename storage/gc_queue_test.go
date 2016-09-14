@@ -329,11 +329,6 @@ func TestGCQueueProcess(t *testing.T) {
 			log.Infof(context.Background(), "%d: %s", i, kv.Key)
 		}
 	}
-
-	// Verify that the last verification timestamp was updated as whole range was scanned.
-	if _, err := tc.rng.getLastVerificationTimestamp(); err != nil {
-		t.Fatal(err)
-	}
 }
 
 func TestGCQueueTransactionTable(t *testing.T) {

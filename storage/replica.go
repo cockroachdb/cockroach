@@ -983,23 +983,6 @@ func (r *Replica) setLastReplicaGCTimestamp(timestamp hlc.Timestamp) error {
 	return engine.MVCCPutProto(r.ctx, r.store.Engine(), nil, key, hlc.ZeroTimestamp, nil, &timestamp)
 }
 
-// getLastVerificationTimestamp reads the timestamp at which the replica's
-// data was last verified.
-func (r *Replica) getLastVerificationTimestamp() (hlc.Timestamp, error) {
-	key := keys.RangeLastVerificationTimestampKey(r.RangeID)
-	timestamp := hlc.Timestamp{}
-	_, err := engine.MVCCGetProto(r.ctx, r.store.Engine(), key, hlc.ZeroTimestamp, true, nil, &timestamp)
-	if err != nil {
-		return hlc.ZeroTimestamp, err
-	}
-	return timestamp, nil
-}
-
-func (r *Replica) setLastVerificationTimestamp(timestamp hlc.Timestamp) error {
-	key := keys.RangeLastVerificationTimestampKey(r.RangeID)
-	return engine.MVCCPutProto(r.ctx, r.store.Engine(), nil, key, hlc.ZeroTimestamp, nil, &timestamp)
-}
-
 // RaftStatus returns the current raft status of the replica. It returns nil
 // if the Raft group has not been initialized yet.
 func (r *Replica) RaftStatus() *raft.Status {
@@ -1025,10 +1008,6 @@ func (r *Replica) State() storagebase.RangeInfo {
 	ri.LastIndex = r.mu.lastIndex
 	ri.NumPending = uint64(len(r.mu.pendingCmds))
 	ri.RaftLogSize = r.mu.raftLogSize
-	var err error
-	if ri.LastVerification, err = r.getLastVerificationTimestamp(); err != nil {
-		log.Warningf(r.ctx, "%v", err)
-	}
 	ri.NumDropped = uint64(r.mu.droppedMessages)
 
 	return ri
