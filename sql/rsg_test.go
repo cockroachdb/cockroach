@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/internal/rsg"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -49,12 +50,18 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 
 	testRandomSyntax(t, nil, func(db *gosql.DB, r *rsg.RSG) bool {
 		s := r.Generate(rootStmt, 20)
+		// Don't start transactions since closing them is tricky. Just issuing a
+		// ROLLBACK after all queries doesn't work due to the parellel uses of db,
+		// which can start another immediately after the ROLLBACK and cause problems
+		// for the following statement. The CREATE DATABASE below would fail with
+		// errors about an aborted transaction and thus panic.
+		if strings.HasPrefix(s, "BEGIN") || strings.HasPrefix(s, "START") {
+			return false
+		}
 		// TODO(mjibson): figure out why these run slowly. May be a bug.
 		if strings.HasPrefix(s, "REVOKE") || strings.HasPrefix(s, "GRANT") {
 			return false
 		}
-		// The rollback may fail; it's here in case the stmt started a transaction.
-		_, _ = db.Exec(`ROLLBACK`)
 		// But the create should always succeed.
 		_, err := db.Exec(`CREATE DATABASE IF NOT EXISTS ident`)
 		if err != nil {
@@ -108,8 +115,8 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				var v interface{}
 				switch typ.(type) {
 				case *parser.DInt:
-					i := r.Intn(math.MaxInt64)
-					i -= r.Intn(math.MaxInt64)
+					i := int64(r.Intn(math.MaxInt64))
+					i -= int64(r.Intn(math.MaxInt64))
 					v = i
 				case *parser.DFloat, *parser.DDecimal:
 					v = r.Float64()
@@ -120,6 +127,24 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				case *parser.DTimestamp:
 					t := time.Unix(0, int64(r.Intn(math.MaxInt64)))
 					v = fmt.Sprintf(`'%s'`, t.Format(time.RFC3339Nano))
+				case *parser.DBool:
+					if r.Intn(2) == 0 {
+						v = "false"
+					} else {
+						v = "true"
+					}
+				case *parser.DDate:
+					i := int64(r.Intn(math.MaxInt64))
+					i -= int64(r.Intn(math.MaxInt64))
+					d := parser.NewDDate(parser.DDate(i))
+					v = fmt.Sprintf(`'%s'`, d)
+					fmt.Println("DATE", v)
+				case *parser.DInterval:
+					d := duration.Duration{Nanos: int64(r.Intn(math.MaxInt64))}
+					v = fmt.Sprintf(`'%s'`, &parser.DInterval{d})
+					fmt.Println("INTERVAL", v)
+				case *parser.DTuple:
+					v = "NULL"
 				default:
 					panic(fmt.Errorf("unknown arg type: %T", typ))
 				}
