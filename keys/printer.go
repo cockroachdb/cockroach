@@ -148,7 +148,7 @@ var (
 		{name: "RaftTruncatedState", suffix: LocalRaftTruncatedStateSuffix},
 		{name: "RaftLastIndex", suffix: LocalRaftLastIndexSuffix},
 		{name: "RangeLastReplicaGCTimestamp", suffix: LocalRangeLastReplicaGCTimestampSuffix},
-		{name: "RangeLastVerificationTimestamp", suffix: LocalRangeLastVerificationTimestampSuffix},
+		{name: "RangeLastVerificationTimestamp", suffix: LocalRangeLastVerificationTimestampSuffixDeprecated},
 		{name: "RangeLease", suffix: LocalRangeLeaseSuffix},
 		{name: "RangeStats", suffix: LocalRangeStatsSuffix},
 		{name: "RangeFrozenStatus", suffix: LocalRangeFrozenStatusSuffix},
