@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -226,11 +225,27 @@ func TestComputeSplits(t *testing.T) {
 	// Real SQL system tables plus some user stuff.
 	userSql := append(schema.GetInitialValues(),
 		descriptor(start), descriptor(start+1), descriptor(start+5))
-	// Real SQL system with reserved non-system tables.
-	priv := sqlbase.NewDefaultPrivilegeDescriptor()
-	desc1 := sql.CreateTableDescriptor(reservedStart+1, keys.SystemDatabaseID, "CREATE TABLE system.test1 (i INT PRIMARY KEY)", priv)
+	col := sqlbase.ColumnDescriptor{
+		ID: 1, Name: "i", Nullable: false, Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
+	}
+	base := sqlbase.TableDescriptor{
+		ParentID: keys.SystemDatabaseID,
+		Columns:  []sqlbase.ColumnDescriptor{col},
+		PrimaryIndex: sqlbase.IndexDescriptor{
+			ColumnIDs: []sqlbase.ColumnID{col.ID}, ColumnNames: []string{col.Name},
+		},
+		Privileges: sqlbase.NewDefaultPrivilegeDescriptor(),
+	}
+
+	desc1 := base
+	desc2 := base
+
+	desc1.ID = reservedStart + 1
+	desc1.Name = "test1"
+	desc2.ID = reservedStart + 2
+	desc2.Name = "test2"
+
 	schema.AddDescriptor(keys.SystemDatabaseID, &desc1)
-	desc2 := sql.CreateTableDescriptor(reservedStart+2, keys.SystemDatabaseID, "CREATE TABLE system.test2 (i INT PRIMARY KEY)", priv)
 	schema.AddDescriptor(keys.SystemDatabaseID, &desc2)
 	reservedSql := schema.GetInitialValues()
 	// Real SQL system with reserved non-system and user database.

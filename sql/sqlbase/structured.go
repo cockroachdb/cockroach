@@ -346,6 +346,29 @@ func (desc *TableDescriptor) maybeUpgradeToFamilyFormatVersion() bool {
 // AllocateIDs allocates column, family, and index ids for any column, family,
 // or index which has an ID of 0.
 func (desc *TableDescriptor) AllocateIDs() error {
+	if len(desc.PrimaryIndex.ColumnNames) == 0 && desc.HasPrimaryKey() {
+		// Ensure a Primary Key exists.
+		s := "unique_rowid()"
+		col := ColumnDescriptor{
+			Name: "rowid",
+			Type: ColumnType{
+				Kind: ColumnType_INT,
+			},
+			DefaultExpr: &s,
+			Hidden:      true,
+			Nullable:    false,
+		}
+		desc.AddColumn(col)
+		idx := IndexDescriptor{
+			Unique:           true,
+			ColumnNames:      []string{col.Name},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+		}
+		if err := desc.AddIndex(idx, true); err != nil {
+			return err
+		}
+	}
+
 	if desc.NextColumnID == 0 {
 		desc.NextColumnID = 1
 	}
@@ -715,6 +738,11 @@ func (desc *TableDescriptor) ValidateTable() error {
 	}
 	if desc.ID == 0 {
 		return fmt.Errorf("invalid table ID %d", desc.ID)
+	}
+
+	// TODO(dt, nathan): virtual descs don't validate (missing privs, PK, etc).
+	if desc.ID == keys.VirtualDescriptorID {
+		return nil
 	}
 
 	// ParentID is the ID of the database holding this table.
