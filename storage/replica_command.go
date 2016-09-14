@@ -1117,6 +1117,17 @@ func (r *Replica) RangeLookup(
 		reply.PrefetchedRanges = reply.PrefetchedRanges[:rangeCount-1]
 	}
 
+	userKey := keys.UserKey(key)
+	containsFn := roachpb.RangeDescriptor.ContainsKey
+	if args.Reverse {
+		containsFn = roachpb.RangeDescriptor.ContainsExclusiveEndKey
+	}
+	for _, rd := range reply.Ranges {
+		if !containsFn(rd, userKey) {
+			log.Fatalf(ctx, "range lookup of meta key %q resulted in descriptor %s which does not contain non-meta key %q", key, rd, userKey)
+		}
+	}
+
 	return reply, intentsToTrigger(intents, &args), nil
 }
 
