@@ -167,6 +167,7 @@ func (r *Replica) executeCmd(
 	case *roachpb.ComputeChecksumRequest:
 		resp := reply.(*roachpb.ComputeChecksumResponse)
 		*resp, trigger, err = r.ComputeChecksum(ctx, batch, ms, h, *tArgs)
+	case *roachpb.DeprecatedVerifyChecksumRequest:
 	case *roachpb.ChangeFrozenRequest:
 		resp := reply.(*roachpb.ChangeFrozenResponse)
 		*resp, trigger, err = r.ChangeFrozen(ctx, batch, ms, h, *tArgs)
