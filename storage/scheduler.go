@@ -182,16 +182,20 @@ func (s *raftScheduler) worker(stopper *stop.Stopper) {
 			s.mu.state[id] = stateQueued
 			s.mu.Unlock()
 
-			// Process the range ID.
+			// Process requests first. This avoids a scenario where a tick and a
+			// "quiesce" message are processed in the same iteration and intervening
+			// raft ready processing unquiesced the replica. Note that request
+			// processing could also occur last, it just shouldn't occur in between
+			// ticking and ready processing.
+			if state&stateRaftRequest != 0 {
+				s.processor.processRequestQueue(id)
+			}
 			if state&stateRaftTick != 0 {
 				// processRaftTick returns true if the range should perform ready
 				// processing. Do not reorder this below the call to processRaftReady.
 				if s.processor.processTick(id) {
 					state |= stateRaftReady
 				}
-			}
-			if state&stateRaftRequest != 0 {
-				s.processor.processRequestQueue(id)
 			}
 			if state&stateRaftReady != 0 {
 				s.processor.processReady(id)

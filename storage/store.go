@@ -1597,11 +1597,11 @@ func splitTriggerPostCommit(
 				return
 			}
 
-			if err := replica.withRaftGroup(func(raftGroup *raft.RawNode) error {
+			if err := replica.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 				if err := raftGroup.Campaign(); err != nil {
 					log.Warningf(ctx, "%s: error %v", r, err)
 				}
-				return nil
+				return true, nil
 			}); err != nil {
 				panic(err)
 			}
@@ -2339,7 +2339,7 @@ func (s *Store) processRaftRequest(
 		}
 		status := r.RaftStatus()
 		if status != nil && status.Term == req.Message.Term && status.Commit == req.Message.Commit {
-			r.setQuiescent(true)
+			r.quiesce()
 			return
 		}
 	}
@@ -2542,8 +2542,11 @@ func (s *Store) processRaftRequest(
 			r.store.StoreID(), req.RangeID)
 	}
 
-	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
-		return raftGroup.Step(req.Message)
+	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+		// We're processing a message from another replica which means that the
+		// other replica is not quiesced, so we don't need to wake the leader.
+		r.unquiesceLocked()
+		return false /* !unquiesce */, raftGroup.Step(req.Message)
 	}); err != nil {
 		return roachpb.NewError(err)
 	}
