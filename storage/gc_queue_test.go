@@ -542,6 +542,20 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		t.Fatalf("expected the %d external transaction entries to remain untouched, "+
 			"but only %d are left", exp, count)
 	}
+
+	batch := tc.engine.NewSnapshot()
+	defer batch.Close()
+	tc.rng.assertState(batch) // check that in-mem and on-disk state were updated
+
+	tc.rng.mu.Lock()
+	txnSpanThreshold := tc.rng.mu.state.TxnSpanThreshold
+	tc.rng.mu.Unlock()
+
+	// Verify that the new TxnSpanThreshold has reached the Replica.
+	if expWT := int64(gcTxnAndAC); txnSpanThreshold.WallTime != expWT {
+		t.Fatalf("expected TxnSpanThreshold.Walltime %d, got timestamp %s",
+			expWT, txnSpanThreshold)
+	}
 }
 
 // TestGCQueueIntentResolution verifies intent resolution with many

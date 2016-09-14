@@ -1541,6 +1541,15 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "type": "bool",
                                             "name": "frozen",
                                             "id": 8
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "util.hlc.Timestamp",
+                                            "name": "txn_span_threshold",
+                                            "id": 9,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
                                         }
                                     ]
                                 },

@@ -71,10 +71,11 @@ type proposalResult struct {
 type PostCommitTrigger struct {
 	noConcurrentReads bool
 
-	gcThreshold    *hlc.Timestamp
-	truncatedState *roachpb.RaftTruncatedState
-	raftLogSize    *int64
-	frozen         *bool
+	gcThreshold      *hlc.Timestamp
+	txnSpanThreshold *hlc.Timestamp
+	truncatedState   *roachpb.RaftTruncatedState
+	raftLogSize      *int64
+	frozen           *bool
 
 	// intents stores any intents encountered but not conflicted with. They
 	// should be handed off to asynchronous intent processing so that an
@@ -108,6 +109,9 @@ func updateTrigger(old, new *PostCommitTrigger) *PostCommitTrigger {
 	} else if new != nil {
 		if new.gcThreshold != nil {
 			old.gcThreshold = new.gcThreshold
+		}
+		if new.txnSpanThreshold != nil {
+			old.txnSpanThreshold = new.txnSpanThreshold
 		}
 		if new.truncatedState != nil {
 			old.truncatedState = new.truncatedState
@@ -373,6 +377,13 @@ func (r *Replica) handleTrigger(
 		r.mu.state.GCThreshold = *trigger.gcThreshold
 		r.mu.Unlock()
 	}
+
+	if trigger.txnSpanThreshold != nil {
+		r.mu.Lock()
+		r.mu.state.TxnSpanThreshold = *trigger.txnSpanThreshold
+		r.mu.Unlock()
+	}
+
 	if trigger.truncatedState != nil {
 		r.mu.Lock()
 		r.mu.state.TruncatedState = trigger.truncatedState

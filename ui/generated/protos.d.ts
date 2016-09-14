@@ -2511,6 +2511,15 @@ getFrozen?() : boolean;
 
 
 
+txn_span_threshold?: util.hlc.Timestamp;
+		
+
+getTxnSpanThreshold?() : util.hlc.Timestamp;
+		setTxnSpanThreshold?(txnSpanThreshold : util.hlc.Timestamp): void;
+		
+
+
+
 }
 
 	export interface ReplicaStateMessage extends ReplicaState {

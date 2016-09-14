@@ -289,11 +289,17 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				// the primary way our Push leads to aborting intents is that
 				// of the transaction having timed out (and thus presumably no
 				// client being around any more, though at the time of writing
-				// we don't guarantee that). But there's another path in which
-				// the Push comes back successful, namely that of the
-				// transaction already having been aborted by someone else, in
-				// which case the client may still be running. Thus, we must
-				// poison.
+				// we don't guarantee that). But there's others paths in which
+				// the Push comes back successful while the coordinating client
+				// may still be active. Examples of this are when
+				//
+				// - the transaction was aborted by someone else, but the
+				//   coordinating client may still be running.
+				// - the transaction entry wasn't written yet, which at the
+				//   time of writing has our push abort it, leading to the
+				//   same situation as above.
+				//
+				// Thus, we must poison.
 				if err := ir.resolveIntents(ctxWithTimeout, resolveIntents,
 					true /* wait */, true /* poison */); err != nil {
 					log.Warningf(ctx, "%s: failed to resolve intents: %s", r, err)

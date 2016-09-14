@@ -467,6 +467,20 @@ func (r *Replica) BeginTransaction(
 		}
 	}
 
+	r.mu.Lock()
+	threshold := r.mu.state.TxnSpanThreshold
+	r.mu.Unlock()
+
+	// Disallow a transaction record to be created if it's at a timestamp below
+	// the TxnSpanThreshold, as in that case our transaction may already have
+	// been aborted by a concurrent actor which encountered one of our intents
+	// (which may have been written before this entry).
+	//
+	// See #9265.
+	if txn.LastActive().Less(threshold) {
+		return reply, roachpb.NewTransactionAbortedError()
+	}
+
 	// Write the txn record.
 	reply.Txn.Writing = true
 	return reply, engine.MVCCPutProto(ctx, batch, ms, key, hlc.ZeroTimestamp, nil, reply.Txn)
@@ -1195,13 +1209,27 @@ func (r *Replica) GC(
 
 	r.mu.Lock()
 	newThreshold := r.mu.state.GCThreshold
+	newTxnSpanThreshold := r.mu.state.TxnSpanThreshold
+	// Protect against multiple GC requests arriving out of order; we track
+	// the maximum timestamps.
 	newThreshold.Forward(args.Threshold)
+	newTxnSpanThreshold.Forward(args.TxnSpanThreshold)
 	r.mu.Unlock()
 
 	trigger := &PostCommitTrigger{
-		gcThreshold: &newThreshold,
+		gcThreshold:      &newThreshold,
+		txnSpanThreshold: &newTxnSpanThreshold,
 	}
-	return reply, trigger, setGCThreshold(ctx, batch, ms, r.Desc().RangeID, &newThreshold)
+
+	if err := setGCThreshold(ctx, batch, ms, r.Desc().RangeID, &newThreshold); err != nil {
+		return reply, nil, err
+	}
+
+	if err := setTxnSpanThreshold(ctx, batch, ms, r.Desc().RangeID, &newTxnSpanThreshold); err != nil {
+		return reply, nil, err
+	}
+
+	return reply, trigger, nil
 }
 
 // PushTxn resolves conflicts between concurrent txns (or
@@ -1297,6 +1325,8 @@ func (r *Replica) PushTxn(
 	if !ok {
 		// If getting an update for a transaction record which doesn't yet
 		// exist, return empty Pushee.
+		//
+		// TODO(tschottdorf): Explain why PUSH_TOUCH is not special-cased.
 		if args.PushType == roachpb.PUSH_QUERY {
 			return reply, nil
 		}
@@ -1308,9 +1338,11 @@ func (r *Replica) PushTxn(
 		// TODO(tschottdorf): double-check for problems emanating from
 		// using a trivial Transaction proto here. Maybe some fields ought
 		// to receive dummy values.
+		reply.PusheeTxn.Status = roachpb.ABORTED
 		reply.PusheeTxn.TxnMeta = args.PusheeTxn
 		reply.PusheeTxn.Timestamp = args.Now // see method comment
-		reply.PusheeTxn.Status = roachpb.ABORTED
+		// Setting OrigTimestamp bumps LastActive(); see #9265.
+		reply.PusheeTxn.OrigTimestamp = args.Now
 		return reply, engine.MVCCPutProto(ctx, batch, ms, key, hlc.ZeroTimestamp, nil, &reply.PusheeTxn)
 	}
 	// Start with the persisted transaction record as final transaction.

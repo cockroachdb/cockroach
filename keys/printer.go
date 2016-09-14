@@ -151,6 +151,7 @@ var (
 		{name: "RangeLastVerificationTimestamp", suffix: LocalRangeLastVerificationTimestampSuffixDeprecated},
 		{name: "RangeLease", suffix: LocalRangeLeaseSuffix},
 		{name: "RangeStats", suffix: LocalRangeStatsSuffix},
+		{name: "RangeTxnSpanThreshold", suffix: LocalTxnSpanThresholdSuffix},
 		{name: "RangeFrozenStatus", suffix: LocalRangeFrozenStatusSuffix},
 		{name: "RangeLastGC", suffix: LocalRangeLastGCSuffix},
 	}

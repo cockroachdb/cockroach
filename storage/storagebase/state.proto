@@ -51,6 +51,11 @@ message ReplicaState {
                                       (gogoproto.customname) = "GCThreshold"];
   storage.engine.enginepb.MVCCStats stats = 7 [(gogoproto.nullable) = false];
   bool frozen = 8;
+  // txn_span_threshold is the (maximum) timestamp below which transaction
+  // records may have been garbage collected (as measured by txn.LastActive()).
+  // Transaction at lower timestamps must not be allowed to write their initial
+  // transaction entry.
+  util.hlc.Timestamp txn_span_threshold = 9 [(gogoproto.nullable) = false];
 }
 
 message RangeInfo {

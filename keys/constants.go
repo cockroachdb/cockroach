@@ -106,6 +106,9 @@ var (
 	LocalLeaseAppliedIndexSuffix = []byte("rlla")
 	// localRangeStatsSuffix is the suffix for range statistics.
 	LocalRangeStatsSuffix = []byte("stat")
+	// LocalTxnSpanThresholdSuffix is the suffix for the last txn span GC's
+	// threshold.
+	LocalTxnSpanThresholdSuffix = []byte("tst-")
 
 	// localRangeIDUnreplicatedInfix is the post-Range ID specifier for all
 	// per-range data that is not fully Raft replicated. By appending this
