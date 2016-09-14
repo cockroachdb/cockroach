@@ -688,6 +688,28 @@ message VerifyChecksumResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// ExportKeysRequest is the argument to the ExportKey() method, to dump a
+// keyrange into files under a basepath.
+message ExportKeysRequest {
+  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional string basepath = 2 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
+}
+
+// ExportKeysBatch describes a keyrange that has been dumped to a file at the
+// given path.
+message ExportKeysBatch {
+  optional Span span = 1 [(gogoproto.nullable) = false];
+  optional string path = 2 [(gogoproto.nullable) = false];
+  optional int64 data_size = 3 [(gogoproto.nullable) = false];
+}
+
+// ExportKeysResponse is the response to a ExportKeys() operation.
+message ExportKeysResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  repeated ExportKeysBatch batches = 2 [(gogoproto.nullable) = false];
+}
+
 // A RequestUnion contains exactly one of the optional requests.
 // The values added here must match those in ResponseUnion.
 message RequestUnion {
@@ -723,6 +745,7 @@ message RequestUnion {
   optional ChangeFrozenRequest change_frozen = 27;
   optional TransferLeaseRequest transfer_lease = 28;
   optional LeaseInfoRequest lease_info = 30;
+  optional ExportKeysRequest export_keys = 31;
 }
 
 // A ResponseUnion contains exactly one of the optional responses.
@@ -760,6 +783,7 @@ message ResponseUnion {
   optional ChangeFrozenResponse change_frozen = 27;
   reserved 28; // TransferLease and RequestLease both use RequestLeaseResponse
   optional LeaseInfoResponse lease_info = 30;
+  optional ExportKeysResponse export_keys = 31;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary

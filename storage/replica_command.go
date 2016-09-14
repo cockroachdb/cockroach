@@ -179,6 +179,9 @@ func (r *Replica) executeCmd(
 	case *roachpb.ChangeFrozenRequest:
 		resp := reply.(*roachpb.ChangeFrozenResponse)
 		*resp, trigger, err = r.ChangeFrozen(ctx, batch, ms, h, *tArgs)
+	case *roachpb.ExportKeysRequest:
+		resp := reply.(*roachpb.ExportKeysResponse)
+		*resp, trigger, err = r.ExportKeys(ctx, batch, h, *tArgs)
 	default:
 		err = errors.Errorf("unrecognized command %s", args.Method())
 	}

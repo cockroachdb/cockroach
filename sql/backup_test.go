@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/caller"
+	"github.com/cockroachdb/cockroach/util/ccl"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -163,6 +164,7 @@ func setupReplicationAndLeases(
 
 func TestBackupRestore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ccl.SkipIfNoCCL(t)
 	ctx := context.Background()
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
 	defer sql.TestDisableTableLeases()()
@@ -278,6 +280,7 @@ func startBankTransfers(t testing.TB, stopper *stop.Stopper, sqlDB *gosql.DB, nu
 
 func TestBackupRestoreBank(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ccl.SkipIfNoCCL(t)
 	ctx := context.Background()
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
 	defer sql.TestDisableTableLeases()()
@@ -369,6 +372,7 @@ func BenchmarkClusterBackup_100(b *testing.B)  { runBenchmarkClusterBackup(b, 3,
 func BenchmarkClusterBackup_1000(b *testing.B) { runBenchmarkClusterBackup(b, 3, 1000) }
 func runBenchmarkClusterBackup(b *testing.B, clusterSize int, count int) {
 	defer tracing.Disable()()
+	ccl.SkipIfNoCCL(b)
 	ctx := context.Background()
 
 	tc := testcluster.StartTestCluster(b, clusterSize, base.TestClusterArgs{
@@ -399,6 +403,7 @@ func BenchmarkClusterRestore_1000(b *testing.B)  { runBenchmarkClusterRestore(b,
 func BenchmarkClusterRestore_10000(b *testing.B) { runBenchmarkClusterRestore(b, 3, 10000) }
 func runBenchmarkClusterRestore(b *testing.B, clusterSize int, count int) {
 	defer tracing.Disable()()
+	ccl.SkipIfNoCCL(b)
 	ctx := context.Background()
 
 	tc := testcluster.StartTestCluster(b, clusterSize, base.TestClusterArgs{
