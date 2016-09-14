@@ -329,6 +329,8 @@ func (n *sortNode) Next() (bool, error) {
 		// TODO(andrei): If we're scanning an index with a prefix matching an
 		// ordering prefix, we should only accumulate values for equal fields
 		// in this prefix, then sort the accumulated chunk and output.
+		// TODO(irfansharif): matching column ordering speed-ups from distsql,
+		// when implemented, could be repurposed and used here.
 		next, err := n.plan.Next()
 		if err != nil {
 			return false, err
