@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
@@ -1573,4 +1574,108 @@ func writeRandomTimeSeriesDataToRange(
 	midKey := append([]byte(nil), keyPrefix...)
 	midKey = encoding.EncodeVarintAscending(midKey, 100*r.KeyDuration())
 	return keys.MakeRowSentinelKey(midKey)
+}
+
+// TestStoreSplitBeginTxnPushMetaIntentRace prevents regression of
+// #9265. It splits a range and blocks the update to the LHS range
+// descriptor (and associated BeginTransaction request). Prior to the
+// fix in #9287, holding up the BeginTransaction would allow the
+// updates to meta addressing records to proceed. Because the test
+// performs an initial split at the SystemPrefix, the dist sender ends
+// up issuing a range lookup request after failing to send the entire
+// txn to one range. The range lookup encounters the meta2 intents and
+// trivially aborts the txn by writing an ABORTED txn record, because
+// it doesn't exist. The meta2 intents are deleted. We then run a GC
+// which cleans up the aborted txn. When the BeginTransaction
+// proceeds, it succeeds and the rest of the txn runs to completion.
+//
+// This test verifies that the meta records are intact.
+func TestStoreSplitBeginTxnPushMetaIntentRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	splitKey := roachpb.RKey("a")
+
+	sCtx := storage.TestStoreContext()
+	sCtx.TestingKnobs.DisableSplitQueue = true
+	store, stopper, manual := createTestStoreWithContext(t, sCtx)
+	defer stopper.Stop()
+
+	// Advance the clock past the transaction cleanup expiration.
+	manual.Increment(storage.GetGCQueueTxnCleanupThreshold().Nanoseconds() + 1)
+
+	// First, create a split after addressing records.
+	args := adminSplitArgs(roachpb.KeyMin, keys.SystemPrefix)
+	if _, pErr := client.SendWrapped(rg1(store), nil, &args); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	startTime := timeutil.Now()
+	wroteMeta2 := make(chan struct{}, 1)
+	store.TestingKnobs().TestingCommandFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+		if _, ok := filterArgs.Req.(*roachpb.BeginTransactionRequest); ok {
+			// Return a node unavailable error for BeginTransaction request
+			// in the event we haven't waited 20ms.
+			if timeutil.Since(startTime) < 20*time.Millisecond {
+				return roachpb.NewError(&roachpb.NodeUnavailableError{})
+			}
+			if log.V(1) {
+				log.Infof(context.TODO(), "allowing BeginTransaction to proceed after 20ms")
+			}
+		} else if filterArgs.Req.Method() == roachpb.Put &&
+			filterArgs.Req.Header().Key.Equal(keys.RangeMetaKey(splitKey)) {
+			select {
+			case wroteMeta2 <- struct{}{}:
+			default:
+			}
+		}
+		return nil
+	}
+
+	// Initiate split at splitKey in a goroutine.
+	doneSplit := make(chan *roachpb.Error, 1)
+	go func() {
+		if log.V(1) {
+			log.Infof(context.TODO(), "splitting at %s", splitKey)
+		}
+		args := adminSplitArgs(keys.SystemMax, splitKey.AsRawKey())
+		_, pErr := client.SendWrappedWith(store, nil, roachpb.Header{
+			RangeID: store.LookupReplica(splitKey, nil).RangeID,
+		}, &args)
+		doneSplit <- pErr
+	}()
+
+	// Wait for the write to the meta2 key to be initiated.
+	<-wroteMeta2
+
+	// Wait for 5ms to allow meta2 write to finish.
+	time.Sleep(5 * time.Millisecond)
+
+	// GC the replica containing the range descriptor records.
+	if err := store.ManualReplicaGC(store.LookupReplica(splitKey, nil)); err != nil {
+		// TODO(spencer): test fatal here after the gc queue correctly
+		// uses dist sender, because there is a chance the gc spans ranges.
+		//t.Fatal(err)
+		log.Errorf(context.TODO(), "failed gc queue: %s", err)
+	}
+
+	// Wait for the split to complete.
+	if pErr := <-doneSplit; pErr != nil {
+		t.Fatalf("failed split at %s: %s", splitKey, pErr)
+	}
+
+	// Now verify that the meta2/splitKey meta2 record is present; do this
+	// within a SucceedSoon in order to give the intents time to resolve.
+	util.SucceedsSoon(t, func() error {
+		val, intents, err := engine.MVCCGet(context.Background(), store.Engine(),
+			keys.RangeMetaKey(splitKey), hlc.MaxTimestamp, true, nil)
+		if err != nil {
+			return err
+		}
+		if val == nil {
+			t.Errorf("expected meta2 record for %s", keys.RangeMetaKey(splitKey))
+		}
+		if len(intents) > 0 {
+			t.Errorf("expected no intents; got %+v", intents)
+		}
+		return nil
+	})
 }
