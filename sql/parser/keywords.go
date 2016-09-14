@@ -249,6 +249,7 @@ var keywords = map[string]int{
 	"VARCHAR":           VARCHAR,
 	"VARIADIC":          VARIADIC,
 	"VARYING":           VARYING,
+	"VIEW":              VIEW,
 	"WHEN":              WHEN,
 	"WHERE":             WHERE,
 	"WINDOW":            WINDOW,

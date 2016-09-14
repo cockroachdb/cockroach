@@ -226,6 +226,130 @@ func (n *createIndexNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "create index", "", nil
 }
 
+type createViewNode struct {
+	p          *planner
+	n          *parser.CreateView
+	dbDesc     *sqlbase.DatabaseDescriptor
+	sourcePlan planNode
+}
+
+// CreateView creates a view.
+// Privileges: CREATE on underlying table(s).
+//   notes: postgres requires CREATE on database plus SELECT on all the
+//						selected columns.
+//          mysql requires CREATE VIEW plus SELECT on all the selected columns.
+func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
+	name, err := n.Name.NormalizeWithDatabaseName(p.session.Database)
+	if err != nil {
+		return nil, err
+	}
+
+	dbDesc, err := p.mustGetDatabaseDesc(name.Database())
+	if err != nil {
+		return nil, err
+	}
+
+	if err := p.checkPrivilege(dbDesc, privilege.CREATE); err != nil {
+		return nil, err
+	}
+
+	sourcePlan, err := p.Select(n.AsSource, []parser.Datum{}, false)
+	if err != nil {
+		return nil, err
+	}
+
+	numColNames := len(n.ColumnNames)
+	numColumns := len(sourcePlan.Columns())
+	if numColNames != 0 && numColNames != numColumns {
+		return nil, sqlbase.NewSyntaxError(fmt.Sprintf(
+			"CREATE VIEW specifies %d column name%s, but data source has %d column%s",
+			numColNames, util.Pluralize(int64(numColNames)),
+			numColumns, util.Pluralize(int64(numColumns))))
+	}
+
+	return &createViewNode{p: p, n: n, dbDesc: dbDesc, sourcePlan: sourcePlan}, nil
+}
+
+func (n *createViewNode) expandPlan() error {
+	return nil
+}
+
+func (n *createViewNode) Start() error {
+	tKey := tableKey{parentID: n.dbDesc.ID, name: n.n.Name.TableName().Table()}
+	key := tKey.Key()
+	if exists, err := n.p.descExists(key); err == nil && exists {
+		// TODO(a-robinson): Support CREATE OR REPLACE commands.
+		return sqlbase.NewRelationAlreadyExistsError(tKey.Name())
+	} else if err != nil {
+		return err
+	}
+
+	id, err := generateUniqueDescID(n.p.txn)
+	if err != nil {
+		return nil
+	}
+
+	// Inherit permissions from the database descriptor.
+	privs := n.dbDesc.GetPrivileges()
+
+	desc, err := makeViewTableDesc(n.n, n.dbDesc.ID, id, n.sourcePlan.Columns(), privs)
+	if err != nil {
+		return err
+	}
+
+	// Bookkeeping references are made after the descriptor is otherwise
+	// complete and IDs have been allocated since the IDs are needed in the
+	// references.
+	// TODO(a-robinson): Create and validate bookkeeping references.
+
+	err = desc.ValidateTable()
+	if err != nil {
+		return err
+	}
+
+	err = n.p.createDescriptorWithID(key, id, &desc)
+	if err != nil {
+		return err
+	}
+
+	if desc.Adding() {
+		n.p.notifySchemaChange(desc.ID, sqlbase.InvalidMutationID)
+	}
+	if err := desc.Validate(n.p.txn); err != nil {
+		return err
+	}
+
+	// Log Create View event. This is an auditable log event and is
+	// recorded in the same transaction as the table descriptor update.
+	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
+		EventLogCreateView,
+		int32(desc.ID),
+		int32(n.p.evalCtx.NodeID),
+		struct {
+			ViewName  string
+			Statement string
+			User      string
+		}{n.n.Name.String(), n.n.String(), n.p.session.User},
+	); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (n *createViewNode) Next() (bool, error)                 { return false, nil }
+func (n *createViewNode) Close()                              {}
+func (n *createViewNode) Columns() ResultColumns              { return make(ResultColumns, 0) }
+func (n *createViewNode) Ordering() orderingInfo              { return orderingInfo{} }
+func (n *createViewNode) Values() parser.DTuple               { return parser.DTuple{} }
+func (n *createViewNode) DebugValues() debugValues            { return debugValues{} }
+func (n *createViewNode) ExplainTypes(_ func(string, string)) {}
+func (n *createViewNode) SetLimitHint(_ int64, _ bool)        {}
+func (n *createViewNode) MarkDebug(mode explainMode)          {}
+func (n *createViewNode) ExplainPlan(v bool) (string, string, []planNode) {
+	return "create view", "", nil
+}
+
 type createTableNode struct {
 	p          *planner
 	n          *parser.CreateTable
@@ -752,6 +876,45 @@ func (p *planner) finalizeInterleave(
 	return nil
 }
 
+// makeViewTableDesc returns the table descriptor for a new view.
+func makeViewTableDesc(
+	p *parser.CreateView,
+	parentID sqlbase.ID, id sqlbase.ID,
+	resultColumns []ResultColumn,
+	privileges *sqlbase.PrivilegeDescriptor,
+) (sqlbase.TableDescriptor, error) {
+	desc := sqlbase.TableDescriptor{
+		ID:            id,
+		ParentID:      parentID,
+		FormatVersion: sqlbase.FamilyFormatVersion,
+		Version:       1,
+		Privileges:    privileges,
+	}
+	viewName, err := p.Name.Normalize()
+	if err != nil {
+		return desc, err
+	}
+	desc.Name = viewName.Table()
+	for i, colRes := range resultColumns {
+		colType, _ := parser.DatumTypeToColumnType(colRes.Typ)
+		columnTableDef := parser.ColumnTableDef{Name: parser.Name(colRes.Name), Type: colType}
+		if len(p.ColumnNames) > i {
+			columnTableDef.Name = p.ColumnNames[i]
+		}
+		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef)
+		if err != nil {
+			return desc, err
+		}
+		desc.AddColumn(*col)
+	}
+
+	var buf bytes.Buffer
+	p.AsSource.Format(&buf, parser.FmtSimple)
+	desc.ViewQuery = buf.String()
+
+	return desc, desc.AllocateIDs()
+}
+
 // makeTableDescIfAs is the MakeTableDesc method for when we have a table
 // that is created with the CREATE AS format.
 func makeTableDescIfAs(
@@ -918,7 +1081,7 @@ func (p *planner) makeTableDesc(
 	// constraints and qualifications.
 	// FKs are resolved after the descriptor is otherwise complete and IDs have
 	// been allocated since the FKs will reference those IDs. Resolution also
-	// accumulated updates to other tables (adding backreferences) in the passed
+	// accumulates updates to other tables (adding backreferences) in the passed
 	// map -- anything in that map should be saved when the table is created.
 	generatedNames := map[string]struct{}{}
 	for _, def := range n.Defs {
