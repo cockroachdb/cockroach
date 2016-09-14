@@ -631,9 +631,10 @@ message LeaseInfoRequest{
 // LeaseInfoResponse is the response to a LeaseInfo() operation.
 message LeaseInfoResponse{
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // The current lease. It can also be the tentative future lease, if a lease
-  // transfer is in progress.
-  optional Lease lease = 2 [(gogoproto.nullable) = false];
+  // The last lease known by the replica serving the request. It can also be the
+  // tentative future lease, if a lease transfer is in progress. It will be
+  // missing if the replica wasn't aware of any lease.
+  optional Lease lease = 2 [(gogoproto.nullable) = true];
 }
 
 // A RequestLeaseResponse is the response to a RequestLease() or TransferLease()
