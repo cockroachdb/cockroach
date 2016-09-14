@@ -1,6 +1,8 @@
 import * as React from "react";
 import * as d3 from "d3";
 import _ from "lodash";
+import * as protos from "../js/protos";
+import Long from "long";
 
 type TSResponseMessage = Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryResponseMessage;
 
@@ -44,6 +46,12 @@ export interface AxisProps {
   range?: number[];
   yLow?: number;
   yHigh?: number;
+}
+
+// SeenTimestamps is used to track which timestamps have been included in the
+// current dataset and which are missing
+interface SeenTimestamps {
+  [key: number]: boolean;
 }
 
 /**
@@ -93,6 +101,23 @@ class AxisDomain {
 let colors: d3.scale.Ordinal<string, string> = d3.scale.category10();
 
 /**
+ * getTimestamps is a helper function that takes graph data from the server and
+ * returns a SeenTimestamps object with all the values set to false. This object
+ * is used to track missing timestamps for each individual dataset.
+ */
+function getTimestamps(metrics: React.ReactElement<MetricProps>[], data: TSResponseMessage): SeenTimestamps {
+  return _(metrics)
+     // Get all the datapoints from all series in a single array.
+    .flatMap((s, idx) => data.results[idx].datapoints)
+    // Create a map keyed by the datapoint timestamps.
+    .keyBy((d) => d.timestamp_nanos.toNumber())
+    // Set all values to false, since we only want the keys.
+    .mapValues(() => false)
+    // Unwrap the lodash object.
+    .value();
+}
+
+/**
  * ProcessDataPoints is a helper function to process graph data from the server
  * into a format appropriate for display on an NVD3 graph. This includes the
  * computation of domains and ticks for all axes.
@@ -104,14 +129,31 @@ export function ProcessDataPoints(metrics: React.ReactElement<MetricProps>[],
   let xAxisDomain = new AxisDomain();
 
   let formattedData: any[] = [];
+
+  // timestamps has a key for all the timestamps present across all datasets
+  let timestamps = getTimestamps(metrics, data);
+
   _.each(metrics, (s, idx) => {
     let result = data.results[idx];
     if (result) {
       yAxisDomain.addPoints(_.map(result.datapoints, (dp) => dp.value));
       xAxisDomain.addPoints(_.map(result.datapoints, (dp) => dp.timestamp_nanos.toNumber()));
 
+      let datapoints = _.clone(result.datapoints);
+      let seenTimestamps: SeenTimestamps = _.clone(timestamps);
+      _.each(datapoints, (d) => seenTimestamps[d.timestamp_nanos.toNumber()] = true);
+
+      _.each(seenTimestamps, (seen, ts) => {
+        if (!seen) {
+          datapoints.push(new protos.cockroach.ts.tspb.TimeSeriesDatapoint({
+            timestamp_nanos: Long.fromString(ts),
+            value: null,
+          }));
+        }
+      });
+
       formattedData.push({
-        values: result.datapoints || [],
+        values: datapoints || [],
         key: s.props.title || s.props.name,
         color: colors(s.props.name),
         area: true,

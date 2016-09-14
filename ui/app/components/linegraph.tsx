@@ -93,7 +93,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     }
   }
 
-  drawChart() {
+  drawChart = () => {
     // If the document is not visible (e.g. if the window is minimized) we don't
     // attempt to redraw the chart. Redrawing the chart uses
     // requestAnimationFrame, which isn't called when the tab is in the
@@ -126,11 +126,14 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
         this.chart.yAxis.tickValues(yAxisDomain.ticks());
         this.chart.xAxis.tickValues(xAxisDomain.ticks((n) => new Date(NanoToMilli(n))));
       }
-
-      d3.select(this.svgEl)
-        .datum(formattedData)
-        .transition().duration(500)
-        .call(this.chart);
+      try {
+        d3.select(this.svgEl)
+          .datum(formattedData)
+          .transition().duration(500)
+          .call(this.chart);
+      } catch (e) {
+        console.log("Error rendering graph: ", e);
+      }
     }
   }
 
