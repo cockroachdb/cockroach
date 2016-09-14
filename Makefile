@@ -198,7 +198,7 @@ ifneq ($(SKIP_BOOTSTRAP),1)
 # so we ask git for the location.
 #
 # Note that `git rev-parse --git-path hooks` requires git 2.5+.
-GITHOOKSDIR := $(shell test -d .git && echo '.git/hooks' || git rev-parse —git-path hooks)
+GITHOOKSDIR := $(shell test -d .git && echo '.git/hooks' || git rev-parse --git-path hooks)
 GITHOOKS := $(subst githooks/,$(GITHOOKSDIR)/,$(wildcard githooks/*))
 $(GITHOOKSDIR)/%: githooks/%
 	@echo installing $<
