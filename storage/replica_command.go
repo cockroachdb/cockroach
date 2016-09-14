@@ -930,7 +930,7 @@ func (r *Replica) RangeLookup(
 
 	rangeCount := int64(args.MaxRanges)
 	if rangeCount < 1 {
-		return reply, nil, errors.Errorf("Range lookup specified invalid maximum range count %d: must be > 0", rangeCount)
+		return reply, nil, errors.Errorf("range lookup specified invalid maximum range count %d: must be > 0", rangeCount)
 	}
 	consistent := h.ReadConsistency != roachpb.INCONSISTENT
 	if consistent && args.ConsiderIntents {
@@ -2279,31 +2279,50 @@ func (r *Replica) AdminSplit(
 		// Update existing range descriptor for left hand side of
 		// split. Note that we mutate the descriptor for the left hand
 		// side of the split first to locate the txn record there.
-		b := &client.Batch{}
-		leftDescKey := keys.RangeDescriptorKey(leftDesc.StartKey)
-		if err := updateRangeDescriptor(b, leftDescKey, desc, &leftDesc); err != nil {
+		{
+			b := txn.NewBatch()
+			leftDescKey := keys.RangeDescriptorKey(leftDesc.StartKey)
+			if err := updateRangeDescriptor(b, leftDescKey, desc, &leftDesc); err != nil {
+				return err
+			}
+			// Commit this batch first to ensure that the transaction record
+			// is created in the right place (our triggers rely on this),
+			// but also to ensure the transaction record is created _before_
+			// intents for the RHS range descriptor or addressing records.
+			// This prevents cases where splits are aborted early due to
+			// conflicts with meta intents before the txn record has been
+			// written (see #9265).
+			log.Trace(ctx, "updating left descriptor")
+			if err := txn.Run(b); err != nil {
+				if _, ok := err.(*roachpb.ConditionFailedError); ok {
+					return errors.Errorf("conflict updating range descriptors")
+				}
+				return err
+			}
+		}
+
+		// Log the split into the range event log.
+		// TODO(spencer): event logging API should accept a batch
+		// instead of a transaction; there's no reason this logging
+		// shouldn't be done in parallel via the batch with the updated
+		// range addressing.
+		if err := r.store.logSplit(txn, leftDesc, *rightDesc); err != nil {
 			return err
 		}
+
+		b := txn.NewBatch()
+
 		// Create range descriptor for right hand side of the split.
 		rightDescKey := keys.RangeDescriptorKey(rightDesc.StartKey)
 		if err := updateRangeDescriptor(b, rightDescKey, nil, rightDesc); err != nil {
 			return err
 		}
+
 		// Update range descriptor addressing record(s).
 		if err := splitRangeAddressing(b, rightDesc, &leftDesc); err != nil {
 			return err
 		}
-		if err := txn.Run(b); err != nil {
-			if _, ok := err.(*roachpb.ConditionFailedError); ok {
-				return errors.Errorf("conflict updating range descriptors")
-			}
-			return err
-		}
-		// Log the split into the range event log.
-		if err := r.store.logSplit(txn, leftDesc, *rightDesc); err != nil {
-			return err
-		}
-		b = &client.Batch{}
+
 		// End the transaction manually, instead of letting RunTransaction
 		// loop do it, in order to provide a split trigger.
 		b.AddRawRequest(&roachpb.EndTransactionRequest{
@@ -2315,8 +2334,16 @@ func (r *Replica) AdminSplit(
 				},
 			},
 		})
-		log.Trace(ctx, "attempting commit")
-		return txn.Run(b)
+
+		// Commit txn with final batch (RHS desc and meta).
+		log.Trace(ctx, "commit txn with batch containing RHS descriptor and meta records")
+		if err := txn.Run(b); err != nil {
+			if _, ok := err.(*roachpb.ConditionFailedError); ok {
+				return errors.Errorf("conflict updating range descriptors")
+			}
+			return err
+		}
+		return nil
 	}); err != nil {
 		return reply, roachpb.NewErrorf("split at key %s failed: %s", splitKey, err)
 	}
@@ -2731,7 +2758,7 @@ func (r *Replica) AdminMerge(
 		log.Trace(ctx, "merge closure begins")
 		// Update the range descriptor for the receiving range.
 		{
-			b := &client.Batch{}
+			b := txn.NewBatch()
 			leftDescKey := keys.RangeDescriptorKey(updatedLeftDesc.StartKey)
 			if err := updateRangeDescriptor(b, leftDescKey, origLeftDesc, &updatedLeftDesc); err != nil {
 				return err
@@ -2765,7 +2792,7 @@ func (r *Replica) AdminMerge(
 			return errors.Errorf("ranges not collocated")
 		}
 
-		b := &client.Batch{}
+		b := txn.NewBatch()
 
 		// Remove the range descriptor for the deleted range.
 		b.Del(rightDescKey)
@@ -3170,12 +3197,7 @@ func (r *Replica) ChangeReplicas(
 				return err
 			}
 
-			// Update range descriptor addressing record(s).
-			if err := updateRangeAddressing(b, &updatedDesc); err != nil {
-				return err
-			}
-
-			// Run transaction up to this point.
+			// Run transaction up to this point to create txn record early (see #9265).
 			if err := txn.Run(b); err != nil {
 				return err
 			}
@@ -3188,23 +3210,27 @@ func (r *Replica) ChangeReplicas(
 
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a commit trigger.
-		{
-			b := txn.NewBatch()
-			b.AddRawRequest(&roachpb.EndTransactionRequest{
-				Commit: true,
-				InternalCommitTrigger: &roachpb.InternalCommitTrigger{
-					ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{
-						ChangeType:      changeType,
-						Replica:         repDesc,
-						UpdatedReplicas: updatedDesc.Replicas,
-						NextReplicaID:   updatedDesc.NextReplicaID,
-					},
+		b := txn.NewBatch()
+
+		// Update range descriptor addressing record(s).
+		if err := updateRangeAddressing(b, &updatedDesc); err != nil {
+			return err
+		}
+
+		b.AddRawRequest(&roachpb.EndTransactionRequest{
+			Commit: true,
+			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+				ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{
+					ChangeType:      changeType,
+					Replica:         repDesc,
+					UpdatedReplicas: updatedDesc.Replicas,
+					NextReplicaID:   updatedDesc.NextReplicaID,
 				},
-			})
-			if err := txn.Run(b); err != nil {
-				log.Trace(ctx, err.Error())
-				return err
-			}
+			},
+		})
+		if err := txn.Run(b); err != nil {
+			log.Trace(ctx, err.Error())
+			return err
 		}
 
 		if oldDesc.RangeID != 0 && !reflect.DeepEqual(oldDesc, desc) {
