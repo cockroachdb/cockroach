@@ -22,6 +22,9 @@
 package storage
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
@@ -146,6 +149,15 @@ func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 	s.enqueueRaftUpdateCheck(rangeID)
 }
 
+// ManualReplicaGC processes the specified replica using the store's GC queue.
+func (s *Store) ManualReplicaGC(repl *Replica) error {
+	cfg, ok := s.Gossip().GetSystemConfig()
+	if !ok {
+		return fmt.Errorf("%s: system config not yet available", s)
+	}
+	return s.gcQueue.process(s.Ctx(), s.Clock().Now(), repl, cfg)
+}
+
 func (r *Replica) RaftLock() bool {
 	return r.raftLock()
 }
@@ -172,4 +184,8 @@ func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.mu.tsCache.lowWater
+}
+
+func GetGCQueueTxnCleanupThreshold() time.Duration {
+	return txnCleanupThreshold
 }
