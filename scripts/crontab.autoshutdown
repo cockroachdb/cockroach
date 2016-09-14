@@ -1,0 +1,19 @@
+# This is a crontab file that (when installed as root) auto shuts down a host
+# if no remote session is detected for 10 minutes.
+#
+# To disable auto-shutdown, `sudo touch /.active`
+#
+# Also, when installing this crontab for the first time it will go into effect
+# only after a reboot or when a remote session is detected. To make it go into
+# effect right away, run `/sbin/shutdown --no-wall -h +10`
+
+
+# As long as we detect a remote session, we (re)schedule a shutdown in 10
+# minutes. Scheduling a shutdown cancels any previous shutdown.
+#
+# Once a shutdown is close enough, ssh logins are not allowed any more; hence we
+# preventively remove the /etc/nologin file.
+#
+# Note: this is invoked via `sh -c`, and so no `bash` features must be used.
+* * * * * rm -f /etc/nologin; (test -f /.active && /sbin/shutdown -c --no-wall || w -hs | grep -q pts && /sbin/shutdown --no-wall -h +10) >> /root/idle.log 2>&1
+@reboot test -f /.active || /sbin/shutdown --no-wall -h +10
