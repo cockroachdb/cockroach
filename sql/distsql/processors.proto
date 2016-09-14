@@ -98,7 +98,22 @@ message JoinReaderSpec {
 // order guarantee regardless of the input ordering. The output ordering is
 // according to a configurable set of columns.
 message SorterSpec {
-  optional Ordering ordering = 1 [(gogoproto.nullable) = false];
+  // Current ordering of table can be optionally specified for possible
+  // speed-ups taking advantage of partial orderings.
+  message OrderingInfo {
+    optional Ordering ordering = 1 [(gogoproto.nullable) = false];
+
+    // true if we know that all the value tuples for the columns in `ordering`
+    // are distinct, allowing for further optimizations.
+    optional bool unique = 2 [(gogoproto.nullable) = false];
+  }
+
+  optional Ordering outputOrdering = 1 [(gogoproto.nullable) = false];
+  optional OrderingInfo inputOrderingInfo = 2 [(gogoproto.nullable) = false];
+
+  // Limits can be optionally specified to allow for further optimizations
+  // taking advantage of the fact that only the top 'k' results are needed.
+  optional int64 limit = 3 [(gogoproto.nullable) = false];
 }
 
 message ProcessorCoreUnion {
