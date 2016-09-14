@@ -2096,6 +2096,10 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			return nil, pErr
 		}
 		if !rng.IsInitialized() {
+			rng.mu.Lock()
+			replicaID := rng.mu.replicaID
+			rng.mu.Unlock()
+
 			// If we have an uninitialized copy of the range, then we are
 			// probably a valid member of the range, we're just in the
 			// process of getting our snapshot. If we returned
@@ -2103,18 +2107,17 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			// but we can be smarter: the replica that caused our
 			// uninitialized replica to be created is most likely the
 			// leader.
-			return nil, roachpb.NewError(newNotLeaseHolderErrorWithGuess(
-				ba.RangeID,
+			return nil, roachpb.NewError(&roachpb.NotLeaseHolderError{
+				RangeID:     ba.RangeID,
+				LeaseHolder: rng.creatingReplica,
 				// The replica doesn't have a range descriptor yet, so we have to build
 				// a ReplicaDescriptor manually.
-				roachpb.ReplicaDescriptor{
-					NodeID:  rng.store.nodeDesc.NodeID,
-					StoreID: rng.store.StoreID(),
-					// The replica must have a ReplicaID, even though it's uninitialized.
-					// Otherwise, it would mean that it's not part of a Raft group which
-					// would mean that we wouldn't have routed a request to it.
-					ReplicaID: rng.mustGetReplicaID(),
-				}, *rng.creatingReplica))
+				Replica: roachpb.ReplicaDescriptor{
+					NodeID:    rng.store.nodeDesc.NodeID,
+					StoreID:   rng.store.StoreID(),
+					ReplicaID: replicaID,
+				},
+			})
 		}
 		rng.assert5725(ba)
 		br, pErr = rng.Send(ctx, ba)
