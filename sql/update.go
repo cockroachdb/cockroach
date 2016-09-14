@@ -44,6 +44,11 @@ func (p *planner) makeEditNode(tn *parser.TableName, autoCommit bool, priv privi
 	if err != nil {
 		return editNodeBase{}, err
 	}
+	// We don't support update on views, only real tables.
+	if !tableDesc.IsTable() {
+		return editNodeBase{},
+			errors.Errorf("cannot run %s on view %q - views are not updateable", priv, tn)
+	}
 
 	if err := p.checkPrivilege(tableDesc, priv); err != nil {
 		return editNodeBase{}, err
