@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -45,6 +46,10 @@ func (p *planner) Truncate(n *parser.Truncate) (planNode, error) {
 		tableDesc, err := p.getTableLease(tn)
 		if err != nil {
 			return nil, err
+		}
+		// We don't support truncation on views, only real tables.
+		if !tableDesc.IsTable() {
+			return nil, errors.Errorf("cannot run TRUNCATE on view %q - views are not updateable", tn)
 		}
 
 		if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
