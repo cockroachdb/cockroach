@@ -3211,8 +3211,6 @@ func updateRangeDescriptor(
 }
 
 // LeaseInfo returns information about the lease holder for the range.
-// If there's no active lease (or at least this replica is not yet aware of
-// one), the replica tries to acquire the lease.
 func (r *Replica) LeaseInfo(
 	ctx context.Context, args roachpb.LeaseInfoRequest,
 ) (roachpb.LeaseInfoResponse, error) {
@@ -3221,33 +3219,9 @@ func (r *Replica) LeaseInfo(
 	if nextLease != nil {
 		// If there's a lease request in progress, speculatively return that future
 		// lease.
-		reply.Lease = *nextLease
-		return reply, nil
+		reply.Lease = nextLease
+	} else if lease != nil {
+		reply.Lease = lease
 	}
-	if lease.Covers(r.store.Clock().Now()) {
-		reply.Lease = *lease
-		return reply, nil
-	}
-	if pErr := r.redirectOnOrAcquireLease(ctx); pErr != nil {
-		if nlhe, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok {
-			// If we got information about the lease, return it.
-			// Otherwise, a NotLeaseHolderError (most likely with an unknown lease
-			// holder) will be propagated to the client.
-			if nlhe.Lease != nil {
-				reply.Lease = *nlhe.Lease
-				return reply, nil
-			}
-		}
-		return reply, pErr.GoError()
-	}
-	// We got a lease.
-	// Ignore the unlikely nextLease ret val for code simplicity. If we just
-	// acquired a new lease, it's unlikely there's another lease request in
-	// progress.
-	lease, _ = r.getLease()
-	if !lease.Covers(r.store.Clock().Now()) {
-		return reply, errors.Errorf("recently acquired lease no longer valid?")
-	}
-	reply.Lease = *lease
 	return reply, nil
 }
