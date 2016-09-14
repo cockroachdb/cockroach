@@ -27,7 +27,7 @@ package storage
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_roachpb2 "github.com/cockroachdb/cockroach/roachpb"
+import cockroach_roachpb1 "github.com/cockroachdb/cockroach/roachpb"
 import cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 
 import github_com_cockroachdb_cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
@@ -132,7 +132,7 @@ type CollectChecksumResponse struct {
 	Checksum []byte `protobuf:"bytes,1,opt,name=checksum,proto3" json:"checksum,omitempty"`
 	// snapshot is set if the roachpb.ComputeChecksumRequest had snapshot = true
 	// and the response checksum is different from the request checksum.
-	Snapshot *cockroach_roachpb2.RaftSnapshotData `protobuf:"bytes,2,opt,name=snapshot" json:"snapshot,omitempty"`
+	Snapshot *cockroach_roachpb1.RaftSnapshotData `protobuf:"bytes,2,opt,name=snapshot" json:"snapshot,omitempty"`
 }
 
 func (m *CollectChecksumResponse) Reset()                    { *m = CollectChecksumResponse{} }
@@ -1470,7 +1470,7 @@ func (m *CollectChecksumResponse) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Snapshot == nil {
-				m.Snapshot = &cockroach_roachpb2.RaftSnapshotData{}
+				m.Snapshot = &cockroach_roachpb1.RaftSnapshotData{}
 			}
 			if err := m.Snapshot.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
