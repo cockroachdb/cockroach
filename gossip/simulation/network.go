@@ -162,7 +162,7 @@ func (n *Network) GetNodeFromID(nodeID roachpb.NodeID) (*Node, bool) {
 func (n *Network) SimulateNetwork(simCallback func(cycle int, network *Network) bool) {
 	n.Start()
 	nodes := n.Nodes
-	for cycle := 1; simCallback(cycle, n); cycle++ {
+	for cycle := 1; ; cycle++ {
 		// Node 0 gossips sentinel & cluster ID every cycle.
 		if err := nodes[0].Gossip.AddInfo(
 			gossip.KeySentinel,
@@ -188,6 +188,14 @@ func (n *Network) SimulateNetwork(simCallback func(cycle int, network *Network) 
 				log.Fatal(context.TODO(), err)
 			}
 			node.Gossip.SimulationCycle()
+		}
+		// If the simCallback returns false, we're done with the
+		// simulation; exit the loop. This condition is tested here
+		// instead of in the for statement in order to guarantee
+		// we run at least one iteration of this loop in order to
+		// gossip the cluster ID and sentinel.
+		if !simCallback(cycle, n) {
+			break
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
