@@ -18,9 +18,9 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 import cockroach_storage_engine_enginepb "github.com/cockroachdb/cockroach/storage/engine/enginepb"
-import cockroach_roachpb2 "github.com/cockroachdb/cockroach/roachpb"
-import cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/roachpb"
+import cockroach_roachpb "github.com/cockroachdb/cockroach/roachpb"
+import cockroach_roachpb2 "github.com/cockroachdb/cockroach/roachpb"
 import cockroach_util_hlc "github.com/cockroachdb/cockroach/util/hlc"
 
 import io "io"
@@ -51,9 +51,9 @@ type ReplicaState struct {
 	// (*Replica).setDesc* methods.
 	Desc *cockroach_roachpb.RangeDescriptor `protobuf:"bytes,3,opt,name=desc" json:"desc,omitempty"`
 	// The latest lease, if any.
-	Lease *cockroach_roachpb1.Lease `protobuf:"bytes,4,opt,name=lease" json:"lease,omitempty"`
+	Lease *cockroach_roachpb2.Lease `protobuf:"bytes,4,opt,name=lease" json:"lease,omitempty"`
 	// The truncation state of the Raft log.
-	TruncatedState *cockroach_roachpb2.RaftTruncatedState `protobuf:"bytes,5,opt,name=truncated_state,json=truncatedState" json:"truncated_state,omitempty"`
+	TruncatedState *cockroach_roachpb1.RaftTruncatedState `protobuf:"bytes,5,opt,name=truncated_state,json=truncatedState" json:"truncated_state,omitempty"`
 	// gcThreshold is the GC threshold of the Range, typically updated when keys
 	// are garbage collected. Reads and writes at timestamps <= this time will
 	// not be served.
@@ -435,7 +435,7 @@ func (m *ReplicaState) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Lease == nil {
-				m.Lease = &cockroach_roachpb1.Lease{}
+				m.Lease = &cockroach_roachpb2.Lease{}
 			}
 			if err := m.Lease.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
@@ -468,7 +468,7 @@ func (m *ReplicaState) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.TruncatedState == nil {
-				m.TruncatedState = &cockroach_roachpb2.RaftTruncatedState{}
+				m.TruncatedState = &cockroach_roachpb1.RaftTruncatedState{}
 			}
 			if err := m.TruncatedState.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err

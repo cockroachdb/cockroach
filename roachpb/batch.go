@@ -254,6 +254,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 		leaseTransfer      int
 		reverseScan        int
 		computeChecksum    int
+		verifyChecksum     int
 		checkConsistency   int
 		noop               int
 		changeFrozen       int
@@ -308,6 +309,8 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			counts.reverseScan++
 		case *ComputeChecksumRequest:
 			counts.computeChecksum++
+		case *DeprecatedVerifyChecksumRequest:
+			counts.verifyChecksum++
 		case *CheckConsistencyRequest:
 			counts.checkConsistency++
 		case *NoopRequest:
@@ -344,6 +347,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 		leaseTransfer      []RequestLeaseResponse
 		reverseScan        []ReverseScanResponse
 		computeChecksum    []ComputeChecksumResponse
+		verifyChecksum     []DeprecatedVerifyChecksumResponse
 		checkConsistency   []CheckConsistencyResponse
 		noop               []NoopResponse
 		changeFrozen       []ChangeFrozenResponse
@@ -471,6 +475,11 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 				bufs.computeChecksum = make([]ComputeChecksumResponse, counts.computeChecksum)
 			}
 			reply, bufs.computeChecksum = &bufs.computeChecksum[0], bufs.computeChecksum[1:]
+		case *DeprecatedVerifyChecksumRequest:
+			if bufs.verifyChecksum == nil {
+				bufs.verifyChecksum = make([]DeprecatedVerifyChecksumResponse, counts.verifyChecksum)
+			}
+			reply, bufs.verifyChecksum = &bufs.verifyChecksum[0], bufs.verifyChecksum[1:]
 		case *CheckConsistencyRequest:
 			if bufs.checkConsistency == nil {
 				bufs.checkConsistency = make([]CheckConsistencyResponse, counts.checkConsistency)
