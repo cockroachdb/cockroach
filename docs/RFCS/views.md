@@ -68,8 +68,9 @@ support unless we have reason not to.
 * Now that there will be references to underlying tables and indexes, we
   will have to support the `RESTRICT` option (and eventually `CASCADE`)
   on various other `DROP` commands as well.
-* Postgres notably does not support inserts/updates through views. I
-  propose that we don't either for now.
+* [Postgres started supporting inserts/updates/deletes through what they call "simple" views](https://www.postgresql.org/docs/9.3/static/sql-createview.html)
+  as of version 9.3 (from late 2013). I propose that we put off supporting them
+  for now.
 * [For historical reasons](https://www.postgresql.org/docs/9.4/static/sql-alterview.html),
   Postgres allows for `ALTER TABLE` to be used on views, but I propose that
   we avoid supporting that for as long as possible.
