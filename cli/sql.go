@@ -60,8 +60,49 @@ const (
 	cliProcessQuery = 2 // Regular query to send to the server.
 )
 
+type namedBuiltin struct {
+	name string
+	impl parser.Builtin
+}
+
 // printCliHelp prints a short inline help about the CLI.
-func printCliHelp() {
+func printCliHelp(cmd []string) {
+	if len(cmd) == 1 {
+		name := strings.ToLower(cmd[0])
+		found := make(map[string][]namedBuiltin)
+		for f, matches := range parser.Builtins {
+			if strings.Contains(f, name) {
+				for _, match := range matches {
+					found[match.Category()] = append(found[match.Category()], namedBuiltin{f, match})
+				}
+			}
+		}
+		var aggs []namedBuiltin
+		for f, matches := range parser.Aggregates {
+			if strings.Contains(f, name) {
+				for _, match := range matches {
+					aggs = append(aggs, namedBuiltin{f, match})
+				}
+			}
+		}
+		if len(aggs) > 0 {
+			found["Aggregate"] = aggs
+		}
+		if len(found) == 0 {
+			fmt.Printf("unknown function: %s\n\n", name)
+			return
+		}
+		// TODO(dt): sort by edit distance?
+		for cat, matches := range found {
+			fmt.Printf("\n*** %s Functions ***\n", cat)
+			for _, f := range matches {
+				fmt.Printf("\n%s(%s) -> %s\n", f.name, f.impl.Types.String(f.impl.ArgNames), f.impl.ReturnType.Type())
+			}
+		}
+		fmt.Print("\n")
+		return
+	}
+
 	fmt.Print(`You are using 'cockroach sql', CockroachDB's lightweight SQL client.
 Type: \q to exit (Ctrl+C/Ctrl+D also supported)
       \! to run an external command and print its results on standard output.
@@ -93,21 +134,16 @@ func addHistory(ins *readline.Instance, line string) {
 // by the user at the prompt and decides what to do: either
 // run a client-side command, print some help or continue with
 // a regular query.
-func handleInputLine(ins *readline.Instance, stmt *[]string, line string, syntax parser.Syntax) (status int, hasSet bool) {
+func handleInputLine(
+	ins *readline.Instance, stmt *[]string, line string, syntax parser.Syntax,
+) (status int, hasSet bool) {
 	if len(*stmt) == 0 {
-		// Special case: first line of multi-line statement.
-		// In this case ignore empty lines, and recognize "help" specially.
-		switch line {
-		case "":
-			return cliNextLine, false
-		case "help":
-			printCliHelp()
+		if line == "" {
 			return cliNextLine, false
 		}
 
-		if len(line) > 0 && line[0] == '\\' {
+		if (len(line) > 0 && line[0] == '\\') || (len(line) >= 4 && strings.EqualFold(line[:4], "help")) {
 			// Client-side commands: process locally.
-
 			addHistory(ins, line)
 
 			cmd := strings.Fields(line)
@@ -120,8 +156,8 @@ func handleInputLine(ins *readline.Instance, stmt *[]string, line string, syntax
 				status = pipeSyscmd(stmt, line)
 				_, hasSet = isEndOfStatement(syntax, stmt)
 				return status, hasSet
-			case `\`, `\?`:
-				printCliHelp()
+			case `\`, `\?`, `help`, `HELP`:
+				printCliHelp(cmd[1:])
 			default:
 				fmt.Fprintf(osStderr, "Invalid command: %s. Try \\? for help.\n", line)
 			}

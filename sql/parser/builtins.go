@@ -82,6 +82,7 @@ const (
 // Builtin is a built-in function.
 type Builtin struct {
 	Types      typeList
+	ArgNames   []string
 	ReturnType Datum
 
 	// Set to true when a function potentially returns a different value
@@ -359,7 +360,7 @@ var Builtins = map[string][]Builtin{
 
 	"replace": {stringBuiltin3(func(s, from, to string) (Datum, error) {
 		return NewDString(strings.Replace(s, from, to, -1)), nil
-	}, TypeString)},
+	}, TypeString, []string{"s", "from", "to"})},
 
 	"translate": {stringBuiltin3(func(s, from, to string) (Datum, error) {
 		const deletionRune = utf8.MaxRune + 1
@@ -385,7 +386,7 @@ var Builtins = map[string][]Builtin{
 			}
 		}
 		return NewDString(string(runes)), nil
-	}, TypeString)},
+	}, TypeString, []string{"s", "from", "to"})},
 
 	"regexp_extract": {
 		Builtin{
@@ -1164,13 +1165,18 @@ func stringBuiltin2(f func(string, string) (Datum, error), returnType Datum) Bui
 	}
 }
 
-func stringBuiltin3(f func(string, string, string) (Datum, error), returnType Datum) Builtin {
+func stringBuiltin3(
+	f func(string, string, string) (Datum, error),
+	returnType Datum,
+	names []string,
+) Builtin {
 	return Builtin{
 		Types:      ArgTypes{TypeString, TypeString, TypeString},
 		ReturnType: returnType,
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 			return f(string(*args[0].(*DString)), string(*args[1].(*DString)), string(*args[2].(*DString)))
 		},
+		ArgNames: names,
 	}
 }
 
