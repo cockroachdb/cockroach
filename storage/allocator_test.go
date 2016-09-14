@@ -20,10 +20,12 @@ package storage
 
 import (
 	"fmt"
+	"math"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -32,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/testutils/gossiputil"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -451,6 +454,130 @@ func TestAllocatorRebalance(t *testing.T) {
 		result := a.shouldRebalance(desc, sl)
 		if expResult := (i >= 2); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
+		}
+	}
+}
+
+// TestAllocatorRebalanceThrashing tests that the rebalancer does not thrash
+// when replica counts are balanced, within the appropriate thresholds, across
+// stores.
+func TestAllocatorRebalanceThrashing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type testStore struct {
+		rangeCount          int32
+		shouldRebalanceFrom bool
+	}
+
+	// Returns a slice of stores with the specified mean. The first replica will
+	// have a range count that's above the target range count for the rebalancer,
+	// so it should be rebalanced from.
+	oneStoreAboveRebalanceTarget := func(mean int32, numStores int) []testStore {
+		stores := make([]testStore, numStores)
+		for i := range stores {
+			stores[i].rangeCount = mean
+		}
+		surplus := int32(math.Ceil(float64(mean)*rebalanceThreshold + 1))
+		stores[0].rangeCount += surplus
+		stores[0].shouldRebalanceFrom = true
+		for i := 1; i < len(stores); i++ {
+			stores[i].rangeCount -= int32(math.Ceil(float64(surplus) / float64(len(stores)-1)))
+		}
+		return stores
+	}
+
+	// Returns a slice of stores with the specified mean such that the first store
+	// has few enough replicas to make it a rebalance target.
+	oneUnderusedStore := func(mean int32, numStores int) []testStore {
+		stores := make([]testStore, numStores)
+		for i := range stores {
+			stores[i].rangeCount = mean
+		}
+		// Subtract enough ranges from the first store to make it a suitable
+		// rebalance target. To maintain the specified mean, we then add that delta
+		// back to the rest of the replicas.
+		deficit := int32(math.Ceil(float64(mean)*rebalanceThreshold + 1))
+		stores[0].rangeCount -= deficit
+		for i := 1; i < len(stores); i++ {
+			stores[i].rangeCount += int32(math.Ceil(float64(deficit) / float64(len(stores)-1)))
+			// TODO(cuongdo): The following must be changed to true when the allocator
+			// starts consistently rebalancing to severely underused stores.
+			stores[i].shouldRebalanceFrom = false
+		}
+		return stores
+	}
+
+	// Each test case defines the range counts for the test stores and whether we
+	// should rebalance from the store.
+	testCases := [][]testStore{
+		// An evenly balanced cluster should not rebalance.
+		{{5, false}, {5, false}, {5, false}, {5, false}},
+		// A very nearly balanced cluster should not rebalance.
+		{{5, false}, {5, false}, {5, false}, {6, false}},
+		// Adding an empty node to a 3-node cluster triggers rebalancing from
+		// existing nodes.
+		{{100, true}, {100, true}, {100, true}, {0, false}},
+		// A cluster where all range counts are within rebalanceThreshold should
+		// not rebalance. This assumes rebalanceThreshold > 2%.
+		{{98, false}, {99, false}, {101, false}, {102, false}},
+
+		// 5-nodes, each with a single store above the rebalancer target range
+		// count.
+		oneStoreAboveRebalanceTarget(100, 5),
+		oneStoreAboveRebalanceTarget(1000, 5),
+		oneStoreAboveRebalanceTarget(10000, 5),
+
+		oneUnderusedStore(1000, 5),
+		oneUnderusedStore(1000, 10),
+	}
+	for i, tc := range testCases {
+		t.Logf("test case %d: %v", i, tc)
+
+		// It doesn't make sense to test sets of stores containing fewer than 4
+		// stores, because 4 stores is the minimum number of stores needed to
+		// trigger rebalancing with the default replication factor of 3. Also, the
+		// above local functions need a minimum number of stores to properly create
+		// the desired distribution of range counts.
+		const minStores = 4
+		if numStores := len(tc); numStores < minStores {
+			t.Fatalf("%d: numStores %d < min %d", i, numStores, minStores)
+		}
+		stopper, g, _, a, _ := createTestAllocator()
+		a.options.Deterministic = true
+		defer stopper.Stop()
+
+		// Create stores with the range counts from the test case and gossip them.
+		var stores []*roachpb.StoreDescriptor
+		for j, store := range tc {
+			stores = append(stores, &roachpb.StoreDescriptor{
+				StoreID:  roachpb.StoreID(j + 1),
+				Node:     roachpb.NodeDescriptor{NodeID: roachpb.NodeID(j + 1)},
+				Capacity: roachpb.StoreCapacity{Capacity: 1, Available: 1, RangeCount: store.rangeCount},
+			})
+		}
+		gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
+
+		// Ensure gossiped store descriptor changes have propagated.
+		util.SucceedsSoon(t, func() error {
+			sl, _, _ := a.storePool.getStoreList(roachpb.Attributes{}, true)
+			for j, s := range sl.stores {
+				if a, e := s.Capacity.RangeCount, tc[j].rangeCount; a != e {
+					return errors.Errorf("tc %d: range count for %d = %d != expected %d", i, j, a, e)
+				}
+			}
+			return nil
+		})
+		sl, _, _ := a.storePool.getStoreList(roachpb.Attributes{}, true)
+
+		// Verify shouldRebalance returns the expected value.
+		for j, store := range stores {
+			desc, ok := a.storePool.getStoreDescriptor(store.StoreID)
+			if !ok {
+				t.Fatalf("[tc %d,store %d]: unable to get store %d descriptor", i, j, store.StoreID)
+			}
+			if a, e := a.shouldRebalance(desc, sl), tc[j].shouldRebalanceFrom; a != e {
+				t.Errorf("[tc %d,store %d]: shouldRebalance %t != expected %t", i, store.StoreID, a, e)
+			}
 		}
 	}
 }
