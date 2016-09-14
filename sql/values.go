@@ -268,7 +268,7 @@ func (n *valuesNode) InitMaxHeap() {
 	heap.Init(n)
 }
 
-// InitMaxHeap initializes the valuesNode.rows slice as a min-heap.
+// InitMinHeap initializes the valuesNode.rows slice as a min-heap.
 func (n *valuesNode) InitMinHeap() {
 	n.invertSorting = false
 	heap.Init(n)

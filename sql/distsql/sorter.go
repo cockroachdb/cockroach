@@ -17,7 +17,6 @@
 package distsql
 
 import (
-	"sort"
 	"sync"
 
 	"golang.org/x/net/context"
@@ -26,119 +25,33 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// sorter sorts the input rows according to the column ordering specified by
-// 'ordering'. Note that this is a no-grouping aggregator and therefore it does
-// not produce a global ordering but simply guarantees an intra-stream ordering
-// on the physical output stream.
+// sorter sorts the input rows according to the column ordering specified by ordering. Note
+// that this is a no-grouping aggregator and therefore it does not produce a global ordering but
+// simply guarantees an intra-stream ordering on the physical output stream.
 type sorter struct {
-	input  RowSource
-	output RowReceiver
-	ctx    context.Context
-
-	// This additional level of indirection is added so as to avoid having to
-	// copy/move entire rows while sorting and instead operating on their
-	// positions within the rows array.
-	rowIndex []int
-
-	// err can be set by the Less function.
-	err error
-
+	input    RowSource
+	output   RowReceiver
 	ordering sqlbase.ColumnOrdering
-	alloc    sqlbase.DatumAlloc
-	rows     sqlbase.EncDatumRows
+	matchLen uint32
+	limit    int64
+	ctx      context.Context
 }
 
 var _ processor = &sorter{}
-var _ sort.Interface = &sorter{}
-
-// Len is part of sort.Interface and is only meant to be used internally.
-func (s *sorter) Len() int {
-	return len(s.rows)
-}
-
-// Less is part of sort.Interface and is only meant to be used internally.
-func (s *sorter) Less(i, j int) bool {
-	ri := s.rows[s.rowIndex[i]]
-	rj := s.rows[s.rowIndex[j]]
-	cmp, err := ri.Compare(&s.alloc, s.ordering, rj)
-	if err != nil {
-		s.err = err
-		return false
-	}
-
-	return cmp < 0
-}
-
-// Swap is part of sort.Interface and is only meant to be used internally.
-func (s *sorter) Swap(i, j int) {
-	s.rowIndex[i], s.rowIndex[j] = s.rowIndex[j], s.rowIndex[i]
-}
-
-// sort buffers in all rows from the input RowSource into memory and sorts them
-// by rearranging their corresponding indexes in rowIndex to reflect the new
-// sorted ordering.
-func (s *sorter) sort() error {
-	for i := 0; ; i++ {
-		row, err := s.input.NextRow()
-		if err != nil {
-			s.err = err
-			return err
-		}
-		if row == nil {
-			break
-		}
-		s.rows = append(s.rows, row)
-		s.rowIndex = append(s.rowIndex, i)
-	}
-
-	sort.Sort(s)
-	return s.err
-}
-
-func (s *sorter) nextRow() (sqlbase.EncDatumRow, error) {
-	if len(s.rowIndex) == 0 {
-		return nil, nil
-	}
-
-	idx := s.rowIndex[0]
-	s.rowIndex = s.rowIndex[1:]
-	return s.rows[idx], s.err
-}
-
-// flush streams out the sorted rows in order to the output RowReceiver.
-func (s *sorter) flush() error {
-	for {
-		outRow, err := s.nextRow()
-		if err != nil {
-			return err
-		}
-		if outRow == nil {
-			return nil
-		}
-
-		if log.V(3) {
-			log.Infof(s.ctx, "pushing row %s\n", outRow)
-		}
-
-		// Push the row to the output; stop if they don't need more rows.
-		if !s.output.PushRow(outRow) {
-			if log.V(2) {
-				log.Infof(s.ctx, "no more rows required")
-			}
-			return nil
-		}
-	}
-}
 
 func newSorter(
-	flowCtx *FlowCtx, spec *SorterSpec, input RowSource, output RowReceiver,
+	flowCtx *FlowCtx,
+	spec *SorterSpec,
+	input RowSource,
+	output RowReceiver,
 ) *sorter {
 	return &sorter{
-		input:  input,
-		output: output,
-		ctx:    log.WithLogTag(flowCtx.Context, "Sorter", nil),
-
-		ordering: convertToColumnOrdering(spec.Ordering),
+		input:    input,
+		output:   output,
+		ordering: convertToColumnOrdering(spec.OutputOrdering),
+		matchLen: spec.OrderingMatchLen,
+		limit:    spec.Limit,
+		ctx:      log.WithLogTag(flowCtx.Context, "Sorter", nil),
 	}
 }
 
@@ -153,15 +66,53 @@ func (s *sorter) Run(wg *sync.WaitGroup) {
 		defer log.Infof(s.ctx, "exiting sorter run")
 	}
 
-	if err := s.sort(); err != nil {
-		log.Errorf(s.ctx, "error sorting rows: %s", err)
-		s.output.Close(err)
-	}
+	switch {
+	case s.matchLen == 0 && s.limit == 0:
+		// No specified ordering match length and unspecified limit, no optimizations possible so we
+		// simply load all rows into memory and sort all values in-place. It has a worst-case time
+		// complexity of O(n*log(n)) and a worst-case space complexity of O(n).
+		ss := newSortAllStrategy(
+			&sorterValues{
+				ordering: s.ordering,
+			})
+		err := ss.Execute(s)
+		if err != nil {
+			log.Errorf(s.ctx, "error sorting rows in memory: %s", err)
+		}
 
-	if err := s.flush(); err != nil {
-		log.Errorf(s.ctx, "error flushing results: %s", err)
 		s.output.Close(err)
-	}
+	case s.matchLen == 0:
+		// No specified ordering match length but specified limit, we can optimize our sort procedure by
+		// maintaining a max-heap populated with only the top k rows seen. It has a worst-case time
+		// complexity of O(n*log(k)) and a worst-case space complexity of O(k).
+		ss := newSortTopKStrategy(
+			&sorterValues{
+				ordering: s.ordering,
+			}, s.limit)
+		err := ss.Execute(s)
+		if err != nil {
+			log.Errorf(s.ctx, "error sorting rows: %s", err)
+		}
 
-	s.output.Close(nil)
+		s.output.Close(err)
+	case s.matchLen != 0:
+		// Ordering match length is specified, but no specified limit. We will be able to use
+		// existing ordering in order to avoid loading all the rows into memory. If we're scanning
+		// an index with a prefix matching an ordering prefix, we can only accumulate values for
+		// equal fields in this prefix, sort the accumulated chunk and then output.
+		ss := newSortChunksStrategy(
+			&sorterValues{
+				ordering: s.ordering,
+			})
+		err := ss.Execute(s)
+		if err != nil {
+			log.Errorf(s.ctx, "error sorting rows: %s", err)
+		}
+
+		s.output.Close(err)
+	default:
+		// TODO(irfansharif): Add optimization for case where both ordering match length and limit is
+		// specified.
+		panic("optimization no implemented yet")
+	}
 }
