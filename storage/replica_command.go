@@ -449,6 +449,20 @@ func (r *Replica) BeginTransaction(
 		}
 	}
 
+	r.mu.Lock()
+	threshold := r.mu.state.TxnSpanGCThreshold
+	r.mu.Unlock()
+
+	// Disallow creation of a transaction record if it's at a timestamp before
+	// the TxnSpanGCThreshold, as in that case our transaction may already have
+	// been aborted by a concurrent actor which encountered one of our intents
+	// (which may have been written before this entry).
+	//
+	// See #9265.
+	if txn.LastActive().Less(threshold) {
+		return reply, roachpb.NewTransactionAbortedError()
+	}
+
 	// Write the txn record.
 	reply.Txn.Writing = true
 	return reply, engine.MVCCPutProto(ctx, batch, ms, key, hlc.ZeroTimestamp, nil, reply.Txn)
@@ -1029,8 +1043,14 @@ func (r *Replica) RangeLookup(
 		intents = append(intents, revIntents...)
 	}
 
+	userKey := keys.UserKey(key)
+	containsFn := roachpb.RangeDescriptor.ContainsKey
+	if args.Reverse {
+		containsFn = roachpb.RangeDescriptor.ContainsExclusiveEndKey
+	}
+
 	// Decode all scanned range descriptors which haven't been unmarshaled yet.
-	for i, kv := range kvs {
+	for _, kv := range kvs {
 		// TODO(tschottdorf) Candidate for a ReplicaCorruptionError.
 		rd, err := checkAndUnmarshal(kv.Value)
 		if err != nil {
@@ -1039,7 +1059,7 @@ func (r *Replica) RangeLookup(
 		if rd != nil {
 			// Add the first valid descriptor to the desired range descriptor
 			// list in the response, add all others to the prefetched list.
-			if i == 0 || len(reply.Ranges) == 0 {
+			if len(reply.Ranges) == 0 && containsFn(*rd, userKey) {
 				reply.Ranges = append(reply.Ranges, *rd)
 			} else {
 				reply.PrefetchedRanges = append(reply.PrefetchedRanges, *rd)
@@ -1047,7 +1067,7 @@ func (r *Replica) RangeLookup(
 		}
 	}
 
-	if args.ConsiderIntents && len(intents) > 0 {
+	if args.ConsiderIntents || len(reply.Ranges) == 0 {
 		// NOTE (subtle): dangling intents on meta records are peculiar: It's not
 		// clear whether the intent or the previous value point to the correct
 		// location of the Range. It gets even more complicated when there are
@@ -1075,11 +1095,11 @@ func (r *Replica) RangeLookup(
 			if err != nil {
 				return reply, nil, err
 			}
-			// If this is a descriptor we're allowed to return, add that
-			// to the lookup response slice and stop searching in intents.
 			if rd != nil {
-				reply.Ranges = append(reply.Ranges, *rd)
-				break
+				if containsFn(*rd, userKey) {
+					reply.Ranges = append(reply.Ranges, *rd)
+					break
+				}
 			}
 		}
 	}
@@ -1087,7 +1107,7 @@ func (r *Replica) RangeLookup(
 	if len(reply.Ranges) == 0 {
 		// No matching results were returned from the scan. This should
 		// never happen with the above logic.
-		panic(fmt.Sprintf("RangeLookup dispatched to correct range, but no matching RangeDescriptor was found: %s", args.Key))
+		log.Fatalf(ctx, "RangeLookup dispatched to correct range, but no matching RangeDescriptor was found: %q", args.Key)
 	} else if preCount := int64(len(reply.PrefetchedRanges)); 1+preCount > rangeCount {
 		// We've possibly picked up an extra descriptor if we're in reverse
 		// mode due to the initial forward scan.
@@ -1098,6 +1118,12 @@ func (r *Replica) RangeLookup(
 		// only get multiple desired range descriptors when prefetching is disabled
 		// anyway (see above), so this should never actually matter.
 		reply.PrefetchedRanges = reply.PrefetchedRanges[:rangeCount-1]
+	}
+
+	for _, rd := range reply.Ranges {
+		if !containsFn(rd, userKey) {
+			log.Fatalf(ctx, "range lookup of meta key %q resulted in descriptor %s which does not contain non-meta key %q", key, rd, userKey)
+		}
 	}
 
 	return reply, intentsToTrigger(intents, &args), nil
@@ -1178,13 +1204,27 @@ func (r *Replica) GC(
 
 	r.mu.Lock()
 	newThreshold := r.mu.state.GCThreshold
+	newTxnSpanGCThreshold := r.mu.state.TxnSpanGCThreshold
+	// Protect against multiple GC requests arriving out of order; we track
+	// the maximum timestamps.
 	newThreshold.Forward(args.Threshold)
+	newTxnSpanGCThreshold.Forward(args.TxnSpanGCThreshold)
 	r.mu.Unlock()
 
 	trigger := &PostCommitTrigger{
-		gcThreshold: &newThreshold,
+		gcThreshold:        &newThreshold,
+		txnSpanGCThreshold: &newTxnSpanGCThreshold,
 	}
-	return reply, trigger, setGCThreshold(ctx, batch, ms, r.Desc().RangeID, &newThreshold)
+
+	if err := setGCThreshold(ctx, batch, ms, r.Desc().RangeID, &newThreshold); err != nil {
+		return reply, nil, err
+	}
+
+	if err := setTxnSpanGCThreshold(ctx, batch, ms, r.Desc().RangeID, &newTxnSpanGCThreshold); err != nil {
+		return reply, nil, err
+	}
+
+	return reply, trigger, nil
 }
 
 // PushTxn resolves conflicts between concurrent txns (or
@@ -1279,7 +1319,12 @@ func (r *Replica) PushTxn(
 	// has open intents (which is likely if someone pushes it).
 	if !ok {
 		// If getting an update for a transaction record which doesn't yet
-		// exist, return empty Pushee.
+		// exist, return empty Pushee, except when querying.
+		//
+		// Note that we *do* abort the transaction in PUSH_TOUCH mode. This
+		// leaves transactions which write intents before their txn entry
+		// vulnerable, but the alternative is having more intents never cleaned
+		// up eagerly.
 		if args.PushType == roachpb.PUSH_QUERY {
 			return reply, nil
 		}
@@ -1291,9 +1336,11 @@ func (r *Replica) PushTxn(
 		// TODO(tschottdorf): double-check for problems emanating from
 		// using a trivial Transaction proto here. Maybe some fields ought
 		// to receive dummy values.
+		reply.PusheeTxn.Status = roachpb.ABORTED
 		reply.PusheeTxn.TxnMeta = args.PusheeTxn
 		reply.PusheeTxn.Timestamp = args.Now // see method comment
-		reply.PusheeTxn.Status = roachpb.ABORTED
+		// Setting OrigTimestamp bumps LastActive(); see #9265.
+		reply.PusheeTxn.OrigTimestamp = args.Now
 		return reply, engine.MVCCPutProto(ctx, batch, ms, key, hlc.ZeroTimestamp, nil, &reply.PusheeTxn)
 	}
 	// Start with the persisted transaction record as final transaction.
