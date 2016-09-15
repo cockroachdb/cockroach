@@ -317,7 +317,7 @@ func (gcq *gcQueue) process(
 	// goes to the queue's EventLog and one which goes to tracing for this
 	// operation.
 	log.Infof(gcq.ctx, "completed with stats %+v", info)
-	log.Tracef(ctx, "completed with stats %+v", info)
+	log.Eventf(ctx, "completed with stats %+v", info)
 
 	var ba roachpb.BatchRequest
 	var gcArgs roachpb.GCRequest

@@ -794,7 +794,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 				// Return a nil chan to signal that we have a valid lease.
 				return nil, nil
 			}
-			log.Tracef(ctx, "request range lease (attempt #%d)", attempt)
+			log.Eventf(ctx, "request range lease (attempt #%d)", attempt)
 
 			// No active lease: Request renewal if a renewal is not already pending.
 			return r.requestLeaseLocked(timestamp), nil
@@ -1061,13 +1061,13 @@ func (r *Replica) Send(
 	// Differentiate between admin, read-only and write.
 	var pErr *roachpb.Error
 	if ba.IsWrite() {
-		log.Trace(ctx, "read-write path")
+		log.Event(ctx, "read-write path")
 		br, pErr = r.addWriteCmd(ctx, ba)
 	} else if ba.IsReadOnly() {
-		log.Trace(ctx, "read-only path")
+		log.Event(ctx, "read-only path")
 		br, pErr = r.addReadOnlyCmd(ctx, ba)
 	} else if ba.IsAdmin() {
-		log.Trace(ctx, "admin path")
+		log.Event(ctx, "admin path")
 		br, pErr = r.addAdminCmd(ctx, ba)
 	} else if len(ba.Requests) == 0 {
 		// empty batch; shouldn't happen (we could handle it, but it hints
@@ -1083,7 +1083,7 @@ func (r *Replica) Send(
 		pErr = roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
 	}
 	if pErr != nil {
-		log.Tracef(ctx, "replica.Send got error: %s", pErr)
+		log.Eventf(ctx, "replica.Send got error: %s", pErr)
 	}
 	return br, pErr
 }
@@ -1158,7 +1158,7 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func
 		ctxDone := ctx.Done()
 		numChans := len(chans)
 		if numChans > 0 {
-			log.Tracef(ctx, "waiting for %d overlapping requests", len(chans))
+			log.Eventf(ctx, "waiting for %d overlapping requests", len(chans))
 		}
 		for _, ch := range chans {
 			select {
@@ -1184,10 +1184,10 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func
 			}
 		}
 		if numChans > 0 {
-			log.Tracef(ctx, "waited %s for overlapping requests", timeutil.Since(beforeWait))
+			log.Eventf(ctx, "waited %s for overlapping requests", timeutil.Since(beforeWait))
 		}
 	} else {
-		log.Trace(ctx, "operation accepts inconsistent results")
+		log.Event(ctx, "operation accepts inconsistent results")
 	}
 
 	// Update the incoming timestamp if unset. Wait until after any
@@ -1413,7 +1413,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 	if !ba.IsSingleNonKVRequest() {
 		// Add the read to the command queue to gate subsequent
 		// overlapping commands until this command completes.
-		log.Trace(ctx, "command queue")
+		log.Event(ctx, "command queue")
 		var err error
 		endCmdsFunc, err = r.beginCmds(ctx, &ba)
 		if err != nil {
@@ -1427,7 +1427,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 		}
 	}
 
-	log.Trace(ctx, "waiting for read lock")
+	log.Event(ctx, "waiting for read lock")
 	r.readOnlyCmdMu.RLock()
 	defer r.readOnlyCmdMu.RUnlock()
 
@@ -1453,13 +1453,13 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 		pErr = r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn)
 	}
 	if trigger != nil && len(trigger.intents) > 0 {
-		log.Tracef(ctx, "submitting %d intents to asynchronous processing", len(trigger.intents))
+		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(trigger.intents))
 		r.store.intentResolver.processIntentsAsync(r, trigger.intents)
 	}
 	if pErr != nil {
 		log.ErrEvent(ctx, pErr.String())
 	} else {
-		log.Trace(ctx, "read completed")
+		log.Event(ctx, "read completed")
 	}
 	return br, pErr
 }
@@ -1489,7 +1489,7 @@ func (r *Replica) addWriteCmd(
 		// done before getting the max timestamp for the key(s), as
 		// timestamp cache is only updated after preceding commands have
 		// been run to successful completion.
-		log.Trace(ctx, "command queue")
+		log.Event(ctx, "command queue")
 		endCmdsFunc, err := r.beginCmds(ctx, &ba)
 		if err != nil {
 			return nil, roachpb.NewError(err)
@@ -1528,7 +1528,7 @@ func (r *Replica) addWriteCmd(
 		}
 	}
 
-	log.Trace(ctx, "raft")
+	log.Event(ctx, "raft")
 
 	ch, tryAbandon, err := r.proposeRaftCommand(ctx, ba)
 
@@ -2463,7 +2463,7 @@ func (r *Replica) processRaftCommand(
 	}
 	r.mu.Unlock()
 
-	log.Trace(ctx, "applying batch")
+	log.Event(ctx, "applying batch")
 	// applyRaftCommand will return "expected" errors, but may also indicate
 	// replica corruption (as of now, signaled by a replicaCorruptionError).
 	// We feed its return through maybeSetCorrupt to act when that happens.
@@ -3096,7 +3096,7 @@ func (r *Replica) gossipFirstRangeLocked(ctx context.Context) {
 	if r.store.Gossip() == nil {
 		return
 	}
-	log.Trace(ctx, "gossiping sentinel and first range")
+	log.Event(ctx, "gossiping sentinel and first range")
 	if log.V(1) {
 		log.Infof(ctx, "gossiping sentinel from store %d, range %d", r.store.StoreID(), r.RangeID)
 	}

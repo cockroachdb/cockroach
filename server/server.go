@@ -353,7 +353,7 @@ func (s *Server) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	log.Tracef(ctx, "listening on port %s", s.ctx.Addr)
+	log.Eventf(ctx, "listening on port %s", s.ctx.Addr)
 	unresolvedAddr, err := officialAddr(s.ctx.Addr, ln.Addr())
 	if err != nil {
 		return err
@@ -453,12 +453,12 @@ func (s *Server) Start(ctx context.Context) error {
 	s.mux.HandleFunc(debugEndpoint, http.HandlerFunc(handleDebug))
 
 	s.gossip.Start(unresolvedAddr)
-	log.Trace(ctx, "started gossip")
+	log.Event(ctx, "started gossip")
 
 	if err := s.node.start(ctx, unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
 		return err
 	}
-	log.Trace(ctx, "started node")
+	log.Event(ctx, "started node")
 
 	// Set the NodeID in the base context (which was inherited by the
 	// various components of the server).
@@ -495,7 +495,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.stopper.RunWorker(func() {
 		netutil.FatalIfUnexpected(m.Serve())
 	})
-	log.Trace(ctx, "accepting connections")
+	log.Event(ctx, "accepting connections")
 
 	// Initialize grpc-gateway mux and context.
 	jsonpb := &util.JSONPb{
@@ -556,12 +556,12 @@ func (s *Server) Start(ctx context.Context) error {
 	s.mux.Handle(ts.URLPrefix, gwMux)
 	s.mux.Handle(statusPrefix, s.status)
 	s.mux.Handle(healthEndpoint, s.status)
-	log.Trace(ctx, "added http endpoints")
+	log.Event(ctx, "added http endpoints")
 
 	if err := sdnotify.Ready(); err != nil {
 		log.Errorf(s.Ctx(), "failed to signal readiness using systemd protocol: %s", err)
 	}
-	log.Trace(ctx, "server ready")
+	log.Event(ctx, "server ready")
 
 	return nil
 }
