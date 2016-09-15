@@ -432,6 +432,10 @@ message GCRequest {
   repeated GCKey keys = 3 [(gogoproto.nullable) = false];
   // Threshold is the expiration timestamp.
   optional util.hlc.Timestamp threshold = 4 [(gogoproto.nullable) = false];
+  // TxnSpanGCThreshold is the timestamp below which inactive transactions were
+  // considered for GC (and thus might have been removed).
+  optional util.hlc.Timestamp txn_span_gc_threshold = 5 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "TxnSpanGCThreshold"];
 }
 
 // A GCResponse is the return value from the GC() method.

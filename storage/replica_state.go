@@ -55,6 +55,10 @@ func loadState(
 		return storagebase.ReplicaState{}, err
 	}
 
+	if s.TxnSpanGCThreshold, err = loadTxnSpanGCThreshold(ctx, reader, desc.RangeID); err != nil {
+		return storagebase.ReplicaState{}, err
+	}
+
 	if s.RaftAppliedIndex, s.LeaseAppliedIndex, err = loadAppliedIndex(
 		ctx, reader, desc.RangeID,
 	); err != nil {
@@ -101,6 +105,9 @@ func saveState(
 		return enginepb.MVCCStats{}, err
 	}
 	if err := setGCThreshold(ctx, eng, ms, rangeID, &state.GCThreshold); err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+	if err := setTxnSpanGCThreshold(ctx, eng, ms, rangeID, &state.TxnSpanGCThreshold); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	if err := setTruncatedState(ctx, eng, ms, rangeID, *state.TruncatedState); err != nil {
@@ -243,6 +250,26 @@ func setGCThreshold(
 ) error {
 	return engine.MVCCPutProto(ctx, eng, ms,
 		keys.RangeLastGCKey(rangeID), hlc.ZeroTimestamp, nil, threshold)
+}
+
+func loadTxnSpanGCThreshold(
+	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
+) (hlc.Timestamp, error) {
+	var t hlc.Timestamp
+	_, err := engine.MVCCGetProto(ctx, reader, keys.RangeTxnSpanGCThresholdKey(rangeID),
+		hlc.ZeroTimestamp, true, nil, &t)
+	return t, err
+}
+
+func setTxnSpanGCThreshold(
+	ctx context.Context,
+	eng engine.ReadWriter,
+	ms *enginepb.MVCCStats,
+	rangeID roachpb.RangeID,
+	threshold *hlc.Timestamp,
+) error {
+	return engine.MVCCPutProto(ctx, eng, ms,
+		keys.RangeTxnSpanGCThresholdKey(rangeID), hlc.ZeroTimestamp, nil, threshold)
 }
 
 func loadMVCCStats(

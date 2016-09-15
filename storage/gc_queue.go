@@ -244,8 +244,7 @@ func processAbortCache(
 	ctx context.Context,
 	snap engine.Reader,
 	rangeID roachpb.RangeID,
-	now hlc.Timestamp,
-	minAge time.Duration,
+	threshold hlc.Timestamp,
 	infoMu *lockableGCInfo,
 	pushTxn pushFunc,
 ) []roachpb.GCRequest_GCKey {
@@ -255,7 +254,7 @@ func processAbortCache(
 	defer infoMu.Unlock()
 	abortCache.Iterate(ctx, snap, func(key []byte, txnIDPtr *uuid.UUID, v roachpb.AbortCacheEntry) {
 		infoMu.AbortSpanTotal++
-		if v.Timestamp.Add(int64(minAge), 0).Less(now) {
+		if v.Timestamp.Less(threshold) {
 			infoMu.AbortSpanGCNum++
 			gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: key})
 		}
@@ -326,6 +325,7 @@ func (gcq *gcQueue) process(
 	gcArgs.EndKey = desc.EndKey.AsRawKey()
 	gcArgs.Keys = gcKeys
 	gcArgs.Threshold = info.Threshold
+	gcArgs.TxnSpanGCThreshold = info.TxnSpanGCThreshold
 
 	// Technically not needed since we're talking directly to the Range.
 	ba.RangeID = desc.RangeID
@@ -352,6 +352,9 @@ type GCInfo struct {
 	// Summary of transactions which were found GCable (assuming that
 	// potentially necessary intent resolutions did not fail).
 	TransactionSpanGCAborted, TransactionSpanGCCommitted, TransactionSpanGCPending int
+	// TxnSpanGCThreshold is the cutoff for transaction span GC. Transactions
+	// with a smaller LastActive() were considered for GC.
+	TxnSpanGCThreshold hlc.Timestamp
 	// AbortSpanTotal is the total number of transactions present in the abort cache.
 	AbortSpanTotal int
 	// AbortSpanConsidered is the number of abort cache entries old enough to be
@@ -421,17 +424,18 @@ func RunGC(
 		}
 	}
 
-	gc := engine.MakeGarbageCollector(now, policy)
-	infoMu.Threshold = gc.Threshold
-
-	var gcKeys []roachpb.GCRequest_GCKey
-
 	// Compute intent expiration (intent age at which we attempt to resolve).
 	intentExp := now
 	intentExp.WallTime -= intentAgeThreshold.Nanoseconds()
 	txnExp := now
 	txnExp.WallTime -= txnCleanupThreshold.Nanoseconds()
+	abortSpanGCThreshold := now.Add(-int64(abortCacheAgeThreshold), 0)
 
+	gc := engine.MakeGarbageCollector(now, policy)
+	infoMu.Threshold = gc.Threshold
+	infoMu.TxnSpanGCThreshold = txnExp
+
+	var gcKeys []roachpb.GCRequest_GCKey
 	var expBaseKey roachpb.Key
 	var keys []engine.MVCCKey
 	var vals [][]byte
@@ -559,8 +563,8 @@ func RunGC(
 	}
 
 	// Clean up the abort cache.
-	gcKeys = append(gcKeys, processAbortCache(ctx, snap, desc.RangeID, now,
-		abortCacheAgeThreshold, &infoMu, pushTxnFn)...)
+	gcKeys = append(gcKeys, processAbortCache(
+		ctx, snap, desc.RangeID, abortSpanGCThreshold, &infoMu, pushTxnFn)...)
 	return gcKeys, infoMu.GCInfo, nil
 }
 

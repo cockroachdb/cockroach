@@ -23,6 +23,18 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
+// These constants are single bytes for performance. They allow single-byte
+// comparisons which are considerably faster than bytes.HasPrefix.
+const (
+	localPrefixByte  = '\x01'
+	localMaxByte     = '\x02'
+	meta1PrefixByte  = localMaxByte
+	meta2PrefixByte  = '\x03'
+	metaMaxByte      = '\x04'
+	systemPrefixByte = metaMaxByte
+	systemMaxByte    = '\x05'
+)
+
 // Constants for system-reserved keys in the KV map.
 //
 // Note: preserve group-wise ordering when adding new constants.
@@ -48,10 +60,10 @@ var (
 	// stored as MVCC values and are addressable as part of distributed
 	// transactions, such as range metadata, range-spanning binary tree
 	// node pointers, and message queues.
-	localPrefix = []byte("\x01")
+	localPrefix = roachpb.Key{localPrefixByte}
 	// LocalMax is the end of the local key range. It is itself a global
 	// key.
-	LocalMax = roachpb.Key("\x02")
+	LocalMax = roachpb.Key{localMaxByte}
 
 	// localSuffixLength specifies the length in bytes of all local
 	// key suffixes.
@@ -106,6 +118,9 @@ var (
 	LocalLeaseAppliedIndexSuffix = []byte("rlla")
 	// localRangeStatsSuffix is the suffix for range statistics.
 	LocalRangeStatsSuffix = []byte("stat")
+	// LocalTxnSpanGCThresholdSuffix is the suffix for the last txn span GC's
+	// threshold.
+	LocalTxnSpanGCThresholdSuffix = []byte("tst-")
 
 	// localRangeIDUnreplicatedInfix is the post-Range ID specifier for all
 	// per-range data that is not fully Raft replicated. By appending this
@@ -153,10 +168,10 @@ var (
 	// Meta1Prefix is the first level of key addressing. It is selected such that
 	// all range addressing records sort before any system tables which they
 	// might describe. The value is a RangeDescriptor struct.
-	Meta1Prefix = roachpb.Key("\x02")
+	Meta1Prefix = roachpb.Key{meta1PrefixByte}
 	// Meta2Prefix is the second level of key addressing. The value is a
 	// RangeDescriptor struct.
-	Meta2Prefix = roachpb.Key("\x03")
+	Meta2Prefix = roachpb.Key{meta2PrefixByte}
 	// Meta1KeyMax is the end of the range of the first level of key addressing.
 	// The value is a RangeDescriptor struct.
 	Meta1KeyMax = roachpb.Key(makeKey(Meta1Prefix, roachpb.RKeyMax))
@@ -167,12 +182,12 @@ var (
 	// MetaMin is the start of the range of addressing keys.
 	MetaMin = Meta1Prefix
 	// MetaMax is the end of the range of addressing keys.
-	MetaMax = roachpb.Key("\x04")
+	MetaMax = roachpb.Key{metaMaxByte}
 
 	// SystemPrefix indicates the beginning of the key range for
 	// global, system data which are replicated across the cluster.
-	SystemPrefix = roachpb.Key("\x04")
-	SystemMax    = roachpb.Key("\x05")
+	SystemPrefix = roachpb.Key{systemPrefixByte}
+	SystemMax    = roachpb.Key{systemMaxByte}
 
 	// DescIDGenerator is the global descriptor ID generator sequence used for
 	// table and namespace IDs.
