@@ -2287,13 +2287,19 @@ func (r *Replica) AdminSplit(
 				return err
 			}
 			// Commit this batch first to ensure that the transaction record
-			// is created in the right place (our triggers rely on this),
+			// is created in the right place (split trigger relies on this),
 			// but also to ensure the transaction record is created _before_
 			// intents for the RHS range descriptor or addressing records.
-			// This prevents cases where splits are aborted early due to
-			// conflicts with meta intents before the txn record has been
-			// written (see #9265).
-			log.Trace(ctx, "updating left descriptor")
+			// Keep in mind that the BeginTransaction request is injected
+			// to accompany the first write request, but if part of a batch
+			// which spans ranges, the dist sender does not guarantee the
+			// order which parts of the split batch arrive.
+			//
+			// Sending the batch containing only the first write guarantees
+			// the transaction record is written first, preventing cases
+			// where splits are aborted early due to conflicts with meta
+			// intents (see #9265).
+			log.Trace(ctx, "updating LHS descriptor")
 			if err := txn.Run(b); err != nil {
 				if _, ok := err.(*roachpb.ConditionFailedError); ok {
 					return errors.Errorf("conflict updating range descriptors")
@@ -2336,7 +2342,7 @@ func (r *Replica) AdminSplit(
 			},
 		})
 
-		// Commit txn with final batch (RHS desc and meta).
+		// Commit txn with final batch (RHS descriptor and meta).
 		log.Trace(ctx, "commit txn with batch containing RHS descriptor and meta records")
 		if err := txn.Run(b); err != nil {
 			if _, ok := err.(*roachpb.ConditionFailedError); ok {
