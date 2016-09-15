@@ -67,9 +67,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
-// Check that Stores implements the RangeDescriptorDB interface.
-var _ kv.RangeDescriptorDB = &storage.Stores{}
-
 // rg1 returns a wrapping sender that changes all requests to range 0 to
 // requests to range 1.
 // This function is DEPRECATED. Send your requests to the right range by
@@ -132,10 +129,9 @@ func createTestStoreWithEngine(
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	distSender := kv.NewDistSender(&kv.DistSenderConfig{
-		Clock:             clock,
-		TransportFactory:  kv.SenderTransportFactory(tracer, stores),
-		RPCRetryOptions:   &retryOpts,
-		RangeDescriptorDB: stores, // for descriptor lookup
+		Clock:            clock,
+		TransportFactory: kv.SenderTransportFactory(tracer, stores),
+		RPCRetryOptions:  &retryOpts,
 	}, sCtx.Gossip)
 
 	sender := kv.NewTxnCoordSender(sCtx.Ctx, distSender, clock, false, stopper,

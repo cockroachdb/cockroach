@@ -23,17 +23,10 @@ case ${1-} in
 
     gcloud compute copy-files "$(dirname "${0}")" "${name}:scripts"
     gcloud compute ssh "${name}" --ssh-flag="-A" --command="GOVERSION=${GOVERSION} ./scripts/bootstrap-debian.sh"
+
     # Install automatic shutdown after ten minutes of operation without a
     # logged in user. To disable this, `sudo touch /.active`.
-    # This is much more intricate than it looks. A few complications which
-    # are addressed in these few commands:
-    # - Once a shutdown is close enough, ssh logins are not allowed any more;
-    #   hence we preventively remove the /etc/nologin file.
-    # - calling shutdown with a later date cancels the previous shutdown, so
-    #   we keep scheduling shutdowns in the future while users are logged in.
-    # - This is invoked via `sh -c`, and so no `bash` features must be used.
-    gcloud compute ssh "${name}" \
-      "echo '* * * * * rm -f /etc/nologin; (test -f /.active && /sbin/shutdown -c --no-wall || w -hs | grep -q pts && /sbin/shutdown --no-wall -h +10) >> /root/idle.log 2>&1' | sudo crontab -"
+    gcloud compute ssh "${name}" --command="sudo cp scripts/autoshutdown.cron.sh /root/; echo '* * * * * /root/autoshutdown.cron.sh 10' | sudo crontab -i -"
 
     ;;
     start)
