@@ -1175,6 +1175,8 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func
 				return nil, err
 			}
 		}
+	} else {
+		log.Trace(ctx, "operation accepts inconsistent results")
 	}
 
 	// Update the incoming timestamp if unset. Wait until after any
