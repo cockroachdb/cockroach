@@ -89,17 +89,17 @@ func (*splitQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
 func (sq *splitQueue) process(
 	ctx context.Context,
 	now hlc.Timestamp,
-	rng *Replica,
+	r *Replica,
 	sysCfg config.SystemConfig,
 ) error {
 	// First handle case of splitting due to zone config maps.
-	desc := rng.Desc()
+	desc := r.Desc()
 	splitKeys := sysCfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)
 	if len(splitKeys) > 0 {
 		log.Infof(ctx, "splitting at keys %v", splitKeys)
 		for _, splitKey := range splitKeys {
 			if err := sq.db.AdminSplit(splitKey.AsRawKey()); err != nil {
-				return errors.Errorf("unable to split %s at key %q: %s", rng, splitKey, err)
+				return errors.Errorf("unable to split %s at key %q: %s", r, splitKey, err)
 			}
 		}
 		return nil
@@ -110,11 +110,11 @@ func (sq *splitQueue) process(
 	if err != nil {
 		return err
 	}
-	size := rng.GetMVCCStats().Total()
+	size := r.GetMVCCStats().Total()
 	// FIXME: why is this implementation not the same as the one above?
 	if float64(size)/float64(zone.RangeMaxBytes) > 1 {
 		log.Infof(ctx, "splitting size=%d max=%d", size, zone.RangeMaxBytes)
-		if _, pErr := client.SendWrappedWith(rng, ctx, roachpb.Header{
+		if _, pErr := client.SendWrappedWith(r, ctx, roachpb.Header{
 			Timestamp: now,
 		}, &roachpb.AdminSplitRequest{
 			Span: roachpb.Span{Key: desc.StartKey.AsRawKey()},

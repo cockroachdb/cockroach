@@ -163,7 +163,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	txn := NewTxn(context.Background(), *db)
 
 	for testIdx = range testCases {
-		if _, pErr := txn.db.sender.Send(context.Background(), ba); pErr != nil {
+		if _, pErr := txn.sendInternal(ba); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}
@@ -177,7 +177,7 @@ func TestTxnResetTxnOnAbort(t *testing.T) {
 	}, nil))
 
 	txn := NewTxn(context.Background(), *db)
-	_, pErr := txn.db.sender.Send(context.Background(), testPut())
+	_, pErr := txn.sendInternal(testPut())
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
 		t.Fatalf("expected TransactionAbortedError, got %v", pErr)
 	}
@@ -339,7 +339,7 @@ func TestBeginTransactionErrorIndex(t *testing.T) {
 	_ = db.Txn(context.TODO(), func(txn *Txn) error {
 		b := txn.NewBatch()
 		b.Put("a", "b")
-		_, err := runOneResult(txn, b)
+		err := getOneErr(txn.Run(b), b)
 		pErr := b.MustPErr()
 		// Verify that the original error type is preserved, but the error index is unset.
 		if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
@@ -764,7 +764,7 @@ func TestSetPriority(t *testing.T) {
 	if err := txn.SetUserPriority(expected); err != nil {
 		t.Fatal(err)
 	}
-	if _, pErr := txn.db.sender.Send(context.Background(), roachpb.BatchRequest{}); pErr != nil {
+	if _, pErr := txn.sendInternal(roachpb.BatchRequest{}); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -772,7 +772,7 @@ func TestSetPriority(t *testing.T) {
 	expected = roachpb.UserPriority(-13)
 	txn = NewTxn(context.Background(), *db)
 	txn.InternalSetPriority(13)
-	if _, pErr := txn.db.sender.Send(context.Background(), roachpb.BatchRequest{}); pErr != nil {
+	if _, pErr := txn.sendInternal(roachpb.BatchRequest{}); pErr != nil {
 		t.Fatal(pErr)
 	}
 }
@@ -821,7 +821,7 @@ func TestBatchMixRawRequest(t *testing.T) {
 	b := &Batch{}
 	b.AddRawRequest(&roachpb.EndTransactionRequest{})
 	b.Put("x", "y")
-	if err := db.Run(b); !testutils.IsError(err, "non-raw operations") {
+	if err := db.Run(context.TODO(), b); !testutils.IsError(err, "non-raw operations") {
 		t.Fatal(err)
 	}
 }

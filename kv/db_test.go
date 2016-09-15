@@ -195,7 +195,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 		}
 		b := &client.Batch{}
 		b.AddRawRequest(args)
-		err := db.Run(b)
+		err := db.Run(context.TODO(), b)
 		if !testutils.IsError(err, "contains an internal request|contains commit trigger") {
 			t.Errorf("%d: unexpected error for %s: %v", i, args.Method(), err)
 		}
@@ -262,7 +262,7 @@ func TestAuthentication(t *testing.T) {
 	// Create a node user client and call Run() on it which lets us build our own
 	// request, specifying the user.
 	db1 := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.NodeUser)
-	if err := db1.Run(b1); err != nil {
+	if err := db1.Run(context.TODO(), b1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -272,7 +272,7 @@ func TestAuthentication(t *testing.T) {
 	// Try again, but this time with certs for a non-node user (even the root
 	// user has no KV permissions).
 	db2 := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.RootUser)
-	if err := db2.Run(b2); !testutils.IsError(err, "is not allowed") {
+	if err := db2.Run(context.TODO(), b2); !testutils.IsError(err, "is not allowed") {
 		t.Fatal(err)
 	}
 }

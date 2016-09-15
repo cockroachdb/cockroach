@@ -178,7 +178,15 @@ func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
 	}
 
 	go func() {
-		reply, err := client.client.Batch(gt.opts.ctx, &client.args)
+		// HACK: GRPC leaks if client calls are made with a context which
+		// is cancelable but doesn't actually get canceled. Insulate this
+		// call from our outer context, which may last for the lifetime of
+		// a client session.
+		// TODO(bdarnell): remove after https://github.com/grpc/grpc-go/issues/888
+		// is fixed.
+		ctx, cancel := context.WithCancel(gt.opts.ctx)
+		defer cancel()
+		reply, err := client.client.Batch(ctx, &client.args)
 		if reply != nil {
 			for i := range reply.Responses {
 				if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {

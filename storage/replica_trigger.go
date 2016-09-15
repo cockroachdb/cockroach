@@ -17,15 +17,13 @@
 package storage
 
 import (
-	"bytes"
+	"time"
 
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
-	"github.com/cockroachdb/cockroach/util/uuid"
 	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -96,7 +94,6 @@ type PostCommitTrigger struct {
 	addToReplicaGCQueue     bool
 
 	computeChecksum *roachpb.ComputeChecksumRequest
-	verifyChecksum  *roachpb.VerifyChecksumRequest
 }
 
 // updateTrigger takes a previous and new commit trigger and combines their
@@ -165,11 +162,17 @@ func updateTrigger(old, new *PostCommitTrigger) *PostCommitTrigger {
 		if new.computeChecksum != nil {
 			old.computeChecksum = new.computeChecksum
 		}
-		if new.verifyChecksum != nil {
-			old.verifyChecksum = new.verifyChecksum
-		}
 	}
 	return old
+}
+
+func (r *Replica) gcOldChecksumEntriesLocked(now time.Time) {
+	for id, val := range r.mu.checksums {
+		// The timestamp is valid only if set.
+		if !val.gcTimestamp.IsZero() && now.After(val.gcTimestamp) {
+			delete(r.mu.checksums, id)
+		}
+	}
 }
 
 func (r *Replica) computeChecksumTrigger(
@@ -179,26 +182,23 @@ func (r *Replica) computeChecksumTrigger(
 	id := args.ChecksumID
 	now := timeutil.Now()
 	r.mu.Lock()
-	if _, ok := r.mu.checksums[id]; ok {
+	var notify chan struct{}
+	if c, ok := r.mu.checksums[id]; !ok {
+		// There is no record of this ID. Make a new notification.
+		notify = make(chan struct{})
+	} else if !c.started {
+		// A CollectChecksumRequest is waiting on the existing notification.
+		notify = c.notify
+	} else {
 		// A previous attempt was made to compute the checksum.
 		r.mu.Unlock()
 		return
 	}
 
-	// GC old entries.
-	var oldEntries []uuid.UUID
-	for id, val := range r.mu.checksums {
-		// The timestamp is only valid when the checksum is set.
-		if val.checksum != nil && now.After(val.gcTimestamp) {
-			oldEntries = append(oldEntries, id)
-		}
-	}
-	for _, id := range oldEntries {
-		delete(r.mu.checksums, id)
-	}
+	r.gcOldChecksumEntriesLocked(now)
 
 	// Create an entry with checksum == nil and gcTimestamp unset.
-	r.mu.checksums[id] = replicaChecksum{notify: make(chan struct{})}
+	r.mu.checksums[id] = replicaChecksum{started: true, notify: notify}
 	desc := *r.mu.state.Desc
 	r.mu.Unlock()
 	snap := r.store.NewSnapshot()
@@ -218,69 +218,9 @@ func (r *Replica) computeChecksumTrigger(
 		r.computeChecksumDone(context.Background(), id, sha, snapshot)
 	}); err != nil {
 		defer snap.Close()
+		log.Error(ctx, errors.Wrapf(err, "could not run async checksum computation (ID = %s)", id))
 		// Set checksum to nil.
 		r.computeChecksumDone(ctx, id, nil, nil)
-	}
-}
-
-func (r *Replica) verifyChecksumTrigger(
-	ctx context.Context, args roachpb.VerifyChecksumRequest,
-) {
-	id := args.ChecksumID
-	c, ok := r.getChecksum(ctx, id)
-	if !ok {
-		log.Errorf(ctx, "consistency check skipped: checksum for id = %v doesn't exist", id)
-		// Return success because a checksum might be missing only on
-		// this replica. A checksum might be missing because of a
-		// number of reasons: GC-ed, server restart, and ComputeChecksum
-		// version incompatibility.
-		return
-	}
-	if c.checksum != nil && !bytes.Equal(c.checksum, args.Checksum) {
-		// Replication consistency problem!
-		logFunc := log.Errorf
-
-		// Collect some more debug information.
-		if args.Snapshot == nil {
-			// No debug information; run another consistency check to deliver
-			// more debug information.
-			if err := r.store.stopper.RunAsyncTask(func() {
-				log.Errorf(ctx, "%s: consistency check failed; fetching details", r)
-				desc := r.Desc()
-				startKey := desc.StartKey.AsRawKey()
-				// Can't use a start key less than LocalMax.
-				if bytes.Compare(startKey, keys.LocalMax) < 0 {
-					startKey = keys.LocalMax
-				}
-				if err := r.store.db.CheckConsistency(startKey, desc.EndKey.AsRawKey(), true /* withDiff */); err != nil {
-					log.Errorf(ctx, "couldn't rerun consistency check: %s", err)
-				}
-			}); err != nil {
-				log.Error(ctx, errors.Wrap(err, "could not rerun consistency check"))
-			}
-		} else {
-			// Compute diff.
-			diff := diffRange(args.Snapshot, c.snapshot)
-			if diff != nil {
-				for _, d := range diff {
-					l := "leader"
-					if d.LeaseHolder {
-						l = "replica"
-					}
-					log.Errorf(ctx, "consistency check failed: k:v = (%s (%x), %s, %x) not present on %s",
-						d.Key, d.Key, d.Timestamp, d.Value, l)
-				}
-			}
-			if r.store.ctx.ConsistencyCheckPanicOnFailure {
-				if p := r.store.ctx.TestingKnobs.BadChecksumPanic; p != nil {
-					p(diff)
-				} else {
-					logFunc = log.Fatalf
-				}
-			}
-		}
-
-		logFunc(ctx, "consistency check failed on replica: %s, checksum mismatch: e = %x, v = %x", args.Checksum, c.checksum)
 	}
 }
 
@@ -290,68 +230,91 @@ func (r *Replica) leasePostCommitTrigger(
 	replicaID roachpb.ReplicaID,
 	prevLease *roachpb.Lease, // TODO(tschottdorf): could this not be nil?
 ) {
-	if prevLease.Replica.StoreID != trigger.lease.Replica.StoreID {
-		// The lease is changing hands. Is this replica the new lease holder?
-		if trigger.lease.Replica.ReplicaID == replicaID {
-			// If this replica is a new holder of the lease, update the low water
-			// mark of the timestamp cache. Note that clock offset scenarios are
-			// handled via a stasis period inherent in the lease which is documented
-			// in on the Lease struct.
-			//
-			// The introduction of lease transfers implies that the previous lease
-			// may have been shortened and we are now applying a formally overlapping
-			// lease (since the old lease holder has promised not to serve any more
-			// requests, this is kosher). This means that we don't use the old
-			// lease's expiration but instead use the new lease's start to initialize
-			// the timestamp cache low water.
-			log.Infof(ctx, "new range lease %s following %s [physicalTime=%s]",
-				trigger.lease, prevLease, r.store.Clock().PhysicalTime())
-			r.mu.Lock()
-			r.mu.tsCache.SetLowWater(trigger.lease.Start)
-			r.mu.Unlock()
+	iAmTheLeaseHolder := trigger.lease.Replica.ReplicaID == replicaID
+	leaseChangingHands := prevLease.Replica.StoreID != trigger.lease.Replica.StoreID
 
-			// Gossip the first range whenever its lease is acquired. We check to
-			// make sure the lease is active so that a trailing replica won't process
-			// an old lease request and attempt to gossip the first range.
-			if r.IsFirstRange() && trigger.lease.Covers(r.store.Clock().Now()) {
-				func() {
-					r.mu.Lock()
-					defer r.mu.Unlock()
-					r.gossipFirstRangeLocked(ctx)
-				}()
-			}
-		} else {
-			// We're not the lease holder, reset our timestamp cache, releasing
-			// anything currently cached. The timestamp cache is only used by the
-			// lease holder. Note that we'll call SetLowWater when we next acquire
-			// the lease.
-			r.mu.Lock()
-			r.mu.tsCache.Clear(r.store.Clock())
-			r.mu.Unlock()
+	if leaseChangingHands && iAmTheLeaseHolder {
+		// If this replica is a new holder of the lease, update the low water
+		// mark of the timestamp cache. Note that clock offset scenarios are
+		// handled via a stasis period inherent in the lease which is documented
+		// in on the Lease struct.
+		//
+		// The introduction of lease transfers implies that the previous lease
+		// may have been shortened and we are now applying a formally overlapping
+		// lease (since the old lease holder has promised not to serve any more
+		// requests, this is kosher). This means that we don't use the old
+		// lease's expiration but instead use the new lease's start to initialize
+		// the timestamp cache low water.
+		log.Infof(ctx, "new range lease %s following %s [physicalTime=%s]",
+			trigger.lease, prevLease, r.store.Clock().PhysicalTime())
+		r.mu.Lock()
+		r.mu.tsCache.SetLowWater(trigger.lease.Start)
+		r.mu.Unlock()
 
-			if trigger.lease.Covers(r.store.Clock().Now()) {
-				if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
-					if raftGroup.Status().RaftState == raft.StateLeader {
-						// If this replica is the raft leader but it is not the new lease
-						// holder, then try to transfer the raft leadership to match the
-						// lease.
-						log.Infof(ctx, "range %v: replicaID %v transfer raft leadership to replicaID %v",
-							r.RangeID, replicaID, trigger.lease.Replica.ReplicaID)
-						raftGroup.TransferLeader(uint64(trigger.lease.Replica.ReplicaID))
-					}
-					return nil
-				}); err != nil {
-					// An error here indicates that this Replica has been destroyed
-					// while lacking the necessary synchronization (or even worse, it
-					// fails spuriously - could be a storage error), and so we avoid
-					// sweeping that under the rug.
-					//
-					// TODO(tschottdorf): this error is not handled any more
-					// at this level.
-					log.Fatal(ctx, NewReplicaCorruptionError(err))
-				}
-			}
+		// Gossip the first range whenever its lease is acquired. We check to
+		// make sure the lease is active so that a trailing replica won't process
+		// an old lease request and attempt to gossip the first range.
+		if r.IsFirstRange() && trigger.lease.Covers(r.store.Clock().Now()) {
+			func() {
+				r.mu.Lock()
+				defer r.mu.Unlock()
+				r.gossipFirstRangeLocked(ctx)
+			}()
 		}
+	}
+	if leaseChangingHands && !iAmTheLeaseHolder {
+		// We're not the lease holder, reset our timestamp cache, releasing
+		// anything currently cached. The timestamp cache is only used by the
+		// lease holder. Note that we'll call SetLowWater when we next acquire
+		// the lease.
+		r.mu.Lock()
+		r.mu.tsCache.Clear(r.store.Clock())
+		r.mu.Unlock()
+	}
+
+	if !iAmTheLeaseHolder && trigger.lease.Covers(r.store.Clock().Now()) {
+		// If this replica is the raft leader but it is not the new lease holder,
+		// then try to transfer the raft leadership to match the lease. We like it
+		// when leases and raft leadership are collocated because that facilitates
+		// quick command application (requests generally need to make it to both the
+		// lease holder and the raft leader before being applied by other replicas).
+		//
+		// TODO(andrei): We want to do this attempt when a lease changes hands, and
+		// then periodically check that the collocation is fine. So we keep checking
+		// it here on lease extensions, which happen periodically, but that's pretty
+		// arbitrary. There might be a more natural place elsewhere where this
+		// periodic check should happen.
+		r.maybeTransferRaftLeadership(ctx, replicaID, trigger.lease.Replica.ReplicaID)
+	}
+}
+
+// maybeTransferRaftLeadership attempts to transfer the leadership away from
+// this node to target, if this node is the current raft leader.
+// The transfer might silently fail, particularly (only?) if the transferee is
+// behind on applying the log.
+func (r *Replica) maybeTransferRaftLeadership(
+	ctx context.Context,
+	replicaID roachpb.ReplicaID,
+	target roachpb.ReplicaID,
+) {
+	err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
+		if raftGroup.Status().RaftState == raft.StateLeader {
+			// Only the raft leader can attempt a leadership transfer.
+			log.Infof(ctx, "range %s: transferring raft leadership to replica ID %v",
+				r, target)
+			raftGroup.TransferLeader(uint64(target))
+		}
+		return nil
+	})
+	if err != nil {
+		// An error here indicates that this Replica has been destroyed
+		// while lacking the necessary synchronization (or even worse, it
+		// fails spuriously - could be a storage error), and so we avoid
+		// sweeping that under the rug.
+		//
+		// TODO(tschottdorf): this error is not handled any more
+		// at this level.
+		log.Fatal(ctx, NewReplicaCorruptionError(err))
 	}
 }
 
@@ -503,9 +466,4 @@ func (r *Replica) handleTrigger(
 	if trigger.computeChecksum != nil {
 		r.computeChecksumTrigger(ctx, *trigger.computeChecksum)
 	}
-
-	if trigger.verifyChecksum != nil {
-		r.verifyChecksumTrigger(ctx, *trigger.verifyChecksum)
-	}
-
 }

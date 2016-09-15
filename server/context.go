@@ -60,6 +60,7 @@ const (
 	defaultTimeUntilStoreDead       = 5 * time.Minute
 	defaultStorePath                = "cockroach-data"
 	defaultReservationsEnabled      = true
+	defaultEventLogEnabled          = true
 
 	minimumNetworkFileDescriptors     = 256
 	recommendedNetworkFileDescriptors = 5000
@@ -168,6 +169,12 @@ type Context struct {
 
 	// Locality is a description of the topography of the server.
 	Locality roachpb.Locality
+
+	// EventLogEnabled is a switch which enables recording into cockroach's SQL
+	// event log tables. These tables record transactional events about changes
+	// to cluster metadata, such as DDL statements and range rebalancing
+	// actions.
+	EventLogEnabled bool
 }
 
 // GetTotalMemory returns either the total system memory or if possible the
@@ -340,6 +347,7 @@ func MakeContext() Context {
 		MetricsSampleInterval:    defaultMetricsSampleInterval,
 		TimeUntilStoreDead:       defaultTimeUntilStoreDead,
 		ReservationsEnabled:      defaultReservationsEnabled,
+		EventLogEnabled:          defaultEventLogEnabled,
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{{Path: defaultStorePath}},
 		},

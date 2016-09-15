@@ -227,7 +227,7 @@ func (ir *intentResolver) maybePushTransactions(
 	b := &client.Batch{}
 	b.AddRawRequest(pushReqs...)
 	var pErr *roachpb.Error
-	if err := ir.store.db.Run(b); err != nil {
+	if err := ir.store.db.Run(ctx, b); err != nil {
 		pErr = b.MustPErr()
 	}
 	ir.mu.Lock()
@@ -296,15 +296,15 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				// poison.
 				if err := ir.resolveIntents(ctxWithTimeout, resolveIntents,
 					true /* wait */, true /* poison */); err != nil {
-					log.Warningf(context.TODO(), "%s: failed to resolve intents: %s", r, err)
+					log.Warningf(ctx, "%s: failed to resolve intents: %s", r, err)
 					return
 				}
 				if pushErr != nil {
-					log.Warningf(context.TODO(), "%s: failed to push during intent resolution: %s", r, pushErr)
+					log.Warningf(ctx, "%s: failed to push during intent resolution: %s", r, pushErr)
 					return
 				}
 			}); err != nil {
-				log.Warningf(context.TODO(), "failed to resolve intents: %s", err)
+				log.Warningf(ctx, "failed to resolve intents: %s", err)
 				return
 			}
 		} else { // EndTransaction
@@ -322,7 +322,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				// not make it back to the client.
 				if err := ir.resolveIntents(ctxWithTimeout, item.intents,
 					true /* wait */, false /* !poison */); err != nil {
-					log.Warningf(context.TODO(), "%s: failed to resolve intents: %s", r, err)
+					log.Warningf(ctx, "%s: failed to resolve intents: %s", r, err)
 					return
 				}
 
@@ -363,16 +363,13 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 					Key: txnKey,
 				})
 				b.AddRawRequest(&gcArgs)
-				if err := ir.store.db.Run(b); err != nil {
-					log.Warningf(
-						context.TODO(),
-						"could not GC completed transaction anchored at %s: %s",
-						roachpb.Key(txn.Key), err,
-					)
+				if err := ir.store.db.Run(ctx, b); err != nil {
+					log.Warningf(ctx, "could not GC completed transaction anchored at %s: %s",
+						roachpb.Key(txn.Key), err)
 					return
 				}
 			}); err != nil {
-				log.Warningf(context.TODO(), "failed to resolve intents: %s", err)
+				log.Warningf(ctx, "failed to resolve intents: %s", err)
 				return
 			}
 		}
@@ -433,7 +430,7 @@ func (ir *intentResolver) resolveIntents(ctx context.Context,
 		b.AddRawRequest(reqs...)
 		action := func() error {
 			// TODO(tschottdorf): no tracing here yet.
-			return ir.store.DB().Run(b)
+			return ir.store.DB().Run(ctx, b)
 		}
 		if wait || ir.store.Stopper().RunLimitedAsyncTask(ir.sem, func() {
 			if err := action(); err != nil {

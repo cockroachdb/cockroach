@@ -134,7 +134,7 @@ type Node struct {
 	initialBoot bool // True if this is the first time this node has started.
 	txnMetrics  kv.TxnMetrics
 
-	storesServer storage.StoresServer
+	storesServer storage.Server
 }
 
 // allocateNodeID increments the node id generator key to allocate
@@ -567,6 +567,18 @@ func (n *Node) connectGossip() {
 // information. Starts a goroutine to loop until the node is closed.
 func (n *Node) startGossip(ctx context.Context, stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
+		// This should always return immediately and acts as a sanity check that we
+		// don't try to gossip before we're connected.
+		select {
+		case <-n.ctx.Gossip.Connected:
+		default:
+			panic(fmt.Sprintf("%s: not connected to gossip", n))
+		}
+		// Verify we've already gossiped our node descriptor.
+		if _, err := n.ctx.Gossip.GetNodeDescriptor(n.Descriptor.NodeID); err != nil {
+			panic(err)
+		}
+
 		gossipStoresInterval := envutil.EnvOrDefaultDuration("COCKROACH_GOSSIP_STORES_INTERVAL",
 			gossip.DefaultGossipStoresInterval)
 		statusTicker := time.NewTicker(gossipStatusInterval)

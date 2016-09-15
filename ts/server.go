@@ -17,11 +17,14 @@
 package ts
 
 import (
-	"github.com/cockroachdb/cockroach/ts/tspb"
-	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"golang.org/x/net/context"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+
+	"github.com/cockroachdb/cockroach/ts/tspb"
+	"github.com/cockroachdb/cockroach/util/log"
+	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 )
 
 const (
@@ -32,14 +35,17 @@ const (
 
 // Server handles incoming external requests related to time series data.
 type Server struct {
-	db *DB
+	ctx context.Context
+	db  *DB
 }
 
 // MakeServer instantiates a new Server which services requests with data from
 // the supplied DB.
-func MakeServer(db *DB) Server {
+func MakeServer(ctx context.Context, db *DB) Server {
+	ctx = log.WithLogTag(ctx, "ts-srv", nil)
 	return Server{
-		db: db,
+		ctx: ctx,
+		db:  db,
 	}
 }
 
@@ -58,11 +64,18 @@ func (s *Server) RegisterGateway(
 	return tspb.RegisterTimeSeriesHandler(ctx, mux, conn)
 }
 
+// logContext applies the log tags from the Server's context to the given
+// context.
+func (s *Server) logContext(ctx context.Context) context.Context {
+	return log.WithLogTagsFromCtx(ctx, s.ctx)
+}
+
 // Query is an endpoint that returns data for one or more metrics over a
 // specific time span.
 func (s *Server) Query(
 	ctx context.Context, request *tspb.TimeSeriesQueryRequest,
 ) (*tspb.TimeSeriesQueryResponse, error) {
+	ctx = s.logContext(ctx)
 	if len(request.Queries) == 0 {
 		return nil, grpc.Errorf(codes.InvalidArgument, "Queries cannot be empty")
 	}
@@ -78,6 +91,7 @@ func (s *Server) Query(
 	}
 	for _, query := range request.Queries {
 		datapoints, sources, err := s.db.Query(
+			ctx,
 			query,
 			Resolution10s,
 			sampleNanos,
