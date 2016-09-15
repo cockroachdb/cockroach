@@ -787,7 +787,10 @@ func (*AdminTransferLeaseRequest) flags() int { return isAdmin | isAlone }
 func (*HeartbeatTxnRequest) flags() int       { return isWrite | isTxn }
 func (*GCRequest) flags() int                 { return isWrite | isRange }
 func (*PushTxnRequest) flags() int            { return isWrite }
-func (*RangeLookupRequest) flags() int        { return isRead | isTxn }
+
+// TODO(tschottdorf): why does RangeLookupRequest have the isTxn flag?
+func (*RangeLookupRequest) flags() int { return isRead | isTxn }
+
 func (*ResolveIntentRequest) flags() int      { return isWrite }
 func (*ResolveIntentRangeRequest) flags() int { return isWrite | isRange }
 func (*NoopRequest) flags() int               { return isRead } // slightly special
