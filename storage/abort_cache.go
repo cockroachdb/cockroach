@@ -41,6 +41,10 @@ var errEmptyTxnID = errors.New("empty Transaction ID used in abort cache")
 //
 // A AbortCache is not thread safe. Access to it is serialized
 // through Raft.
+//
+// TODO(tschottdorf): we seem to have made a half-hearted attempt at naming
+// this the "AbortSpan" instead, but large parts of the code still call this
+// "AbortCache". We should settle for one and rename everything post-yellow.
 type AbortCache struct {
 	rangeID roachpb.RangeID
 }
