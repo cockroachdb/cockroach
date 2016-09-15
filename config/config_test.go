@@ -220,35 +220,9 @@ func TestComputeSplits(t *testing.T) {
 	)
 
 	schema := sqlbase.MakeMetadataSchema()
-	// Real SQL system tables only.
+	// Real system tables only.
 	baseSql := schema.GetInitialValues()
-	// Real SQL system tables plus some user stuff.
-	userSql := append(schema.GetInitialValues(),
-		descriptor(start), descriptor(start+1), descriptor(start+5))
-	col := sqlbase.ColumnDescriptor{
-		ID: 1, Name: "i", Nullable: false, Type: sqlbase.ColumnType{Kind: sqlbase.ColumnType_INT},
-	}
-	base := sqlbase.TableDescriptor{
-		ParentID: keys.SystemDatabaseID,
-		Columns:  []sqlbase.ColumnDescriptor{col},
-		PrimaryIndex: sqlbase.IndexDescriptor{
-			ColumnIDs: []sqlbase.ColumnID{col.ID}, ColumnNames: []string{col.Name},
-		},
-		Privileges: sqlbase.NewDefaultPrivilegeDescriptor(),
-	}
-
-	desc1 := base
-	desc2 := base
-
-	desc1.ID = reservedStart + 1
-	desc1.Name = "test1"
-	desc2.ID = reservedStart + 2
-	desc2.Name = "test2"
-
-	schema.AddDescriptor(keys.SystemDatabaseID, &desc1)
-	schema.AddDescriptor(keys.SystemDatabaseID, &desc2)
-	reservedSql := schema.GetInitialValues()
-	// Real SQL system with reserved non-system and user database.
+	// Real system tables plus some user stuff.
 	allSql := append(schema.GetInitialValues(),
 		descriptor(start), descriptor(start+1), descriptor(start+5))
 	sort.Sort(roachpb.KeyValueByKey(allSql))
@@ -272,44 +246,37 @@ func TestComputeSplits(t *testing.T) {
 		{nil, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), nil},
 		{nil, roachpb.RKeyMin, keys.MakeTablePrefix(start + 10), nil},
 
-		// No user data.
+		// Reserved descriptors.
 		{baseSql, roachpb.RKeyMin, roachpb.RKeyMax, allReservedSplits},
 		{baseSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, nil},
 		{baseSql, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), nil},
 		{baseSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 10), allReservedSplits},
-
-		// User descriptors.
-		{userSql, keys.MakeTablePrefix(start - 1), roachpb.RKeyMax, allUserSplits},
-		{userSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, allUserSplits[1:]},
-		{userSql, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), allUserSplits[1:]},
-		{userSql, keys.MakeTablePrefix(start - 1), keys.MakeTablePrefix(start + 10), allUserSplits},
-		{userSql, keys.MakeTablePrefix(start + 4), keys.MakeTablePrefix(start + 10), allUserSplits[5:]},
-		{userSql, keys.MakeTablePrefix(start + 5), keys.MakeTablePrefix(start + 10), nil},
-		{userSql, keys.MakeTablePrefix(start + 6), keys.MakeTablePrefix(start + 10), nil},
-		{userSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
-			keys.MakeTablePrefix(start + 10), allUserSplits[1:]},
-		{userSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
-			keys.MakeTablePrefix(start + 5), allUserSplits[1:5]},
-		{userSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
-			testutils.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("bar")), allUserSplits[1:5]},
-		{userSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
-			testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("morefoo")), nil},
-
-		// Reserved descriptors.
-		{reservedSql, roachpb.RKeyMin, roachpb.RKeyMax, allReservedSplits},
-		{reservedSql, keys.MakeTablePrefix(reservedStart), roachpb.RKeyMax, allReservedSplits[1:]},
-		{reservedSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, nil},
-		{reservedSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(start + 10), allReservedSplits[1:]},
-		{reservedSql, roachpb.RKeyMin, keys.MakeTablePrefix(reservedStart + 2), allReservedSplits[:2]},
-		{reservedSql, roachpb.RKeyMin, keys.MakeTablePrefix(reservedStart + 10), allReservedSplits},
-		{reservedSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(reservedStart + 2), allReservedSplits[1:2]},
-		{reservedSql, testutils.MakeKey(keys.MakeTablePrefix(reservedStart), roachpb.RKey("foo")),
+		{baseSql, keys.MakeTablePrefix(reservedStart), roachpb.RKeyMax, allReservedSplits[1:]},
+		{baseSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(start + 10), allReservedSplits[1:]},
+		{baseSql, roachpb.RKeyMin, keys.MakeTablePrefix(reservedStart + 2), allReservedSplits[:2]},
+		{baseSql, roachpb.RKeyMin, keys.MakeTablePrefix(reservedStart + 10), allReservedSplits},
+		{baseSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(reservedStart + 2), allReservedSplits[1:2]},
+		{baseSql, testutils.MakeKey(keys.MakeTablePrefix(reservedStart), roachpb.RKey("foo")),
 			testutils.MakeKey(keys.MakeTablePrefix(start+10), roachpb.RKey("foo")), allReservedSplits[1:]},
 
-		// Reserved/User mix.
+		// Reserved + User descriptors.
+		{allSql, keys.MakeTablePrefix(start - 1), roachpb.RKeyMax, allUserSplits},
+		{allSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, allUserSplits[1:]},
+		{allSql, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), allUserSplits[1:]},
+		{allSql, keys.MakeTablePrefix(start - 1), keys.MakeTablePrefix(start + 10), allUserSplits},
+		{allSql, keys.MakeTablePrefix(start + 4), keys.MakeTablePrefix(start + 10), allUserSplits[5:]},
+		{allSql, keys.MakeTablePrefix(start + 5), keys.MakeTablePrefix(start + 10), nil},
+		{allSql, keys.MakeTablePrefix(start + 6), keys.MakeTablePrefix(start + 10), nil},
+		{allSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
+			keys.MakeTablePrefix(start + 10), allUserSplits[1:]},
+		{allSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
+			keys.MakeTablePrefix(start + 5), allUserSplits[1:5]},
+		{allSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
+			testutils.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("bar")), allUserSplits[1:5]},
+		{allSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
+			testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("morefoo")), nil},
 		{allSql, roachpb.RKeyMin, roachpb.RKeyMax, allSplits},
 		{allSql, keys.MakeTablePrefix(reservedStart + 1), roachpb.RKeyMax, allSplits[2:]},
-		{allSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, allUserSplits[1:]},
 		{allSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(start + 10), allSplits[1:]},
 		{allSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 2), allSplits[:6]},
 		{allSql, testutils.MakeKey(keys.MakeTablePrefix(reservedStart), roachpb.RKey("foo")),
