@@ -33,6 +33,14 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
+func mustMeta(k roachpb.RKey) roachpb.RKey {
+	m, err := meta(k)
+	if err != nil {
+		panic(err)
+	}
+	return m
+}
+
 type testDescriptorDB struct {
 	data            llrb.Tree
 	cache           *rangeDescriptorCache
