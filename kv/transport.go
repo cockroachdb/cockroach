@@ -258,7 +258,7 @@ func (s *senderTransport) SendNext(done chan<- BatchCall) {
 	sp := s.tracer.StartSpan("node")
 	defer sp.Finish()
 	ctx := opentracing.ContextWithSpan(context.Background(), sp)
-	log.Trace(ctx, s.args.String())
+	log.Event(ctx, s.args.String())
 	br, pErr := s.sender.Send(ctx, s.args)
 	if br == nil {
 		br = &roachpb.BatchResponse{}
@@ -268,7 +268,7 @@ func (s *senderTransport) SendNext(done chan<- BatchCall) {
 	}
 	br.Error = pErr
 	if pErr != nil {
-		log.Trace(ctx, "error: "+pErr.String())
+		log.Event(ctx, "error: "+pErr.String())
 	}
 	done <- BatchCall{Reply: br}
 }
