@@ -183,7 +183,7 @@ func testBankWithNemesis(nemeses ...NemesisFn) configTestRunner {
 		}
 		for i := 0; i < concurrency; i++ {
 			localI := i
-			if err := s.RunAsyncTask(func() {
+			if err := s.RunAsyncTask(context.Background(), func(_ context.Context) {
 				for timeutil.Now().Before(deadline) {
 					select {
 					case <-s.ShouldQuiesce():
