@@ -208,7 +208,7 @@ func (r *Replica) computeChecksumTrigger(
 	snap := r.store.NewSnapshot()
 
 	// Compute SHA asynchronously and store it in a map by UUID.
-	if err := stopper.RunAsyncTask(func() {
+	if err := stopper.RunAsyncTask(ctx, func(ctx context.Context) {
 		defer snap.Close()
 		var snapshot *roachpb.RaftSnapshotData
 		if args.Snapshot {
@@ -219,7 +219,7 @@ func (r *Replica) computeChecksumTrigger(
 			log.Errorf(ctx, "%v", err)
 			sha = nil
 		}
-		r.computeChecksumDone(context.Background(), id, sha, snapshot)
+		r.computeChecksumDone(ctx, id, sha, snapshot)
 	}); err != nil {
 		defer snap.Close()
 		log.Error(ctx, errors.Wrapf(err, "could not run async checksum computation (ID = %s)", id))
@@ -430,16 +430,13 @@ func (r *Replica) handleTrigger(
 		// blocks waiting for the lease acquisition to finish but it can't finish
 		// because we're not processing raft messages due to holding
 		// processRaftMu (and running on the processRaft goroutine).
-		if err := r.store.Stopper().RunAsyncTask(func() {
-			// Create a new context because this is an asynchronous task and we
-			// don't want to share the trace.
-			ctxInner := context.Background()
-			if hasLease, pErr := r.getLeaseForGossip(ctxInner); hasLease {
+		if err := r.store.Stopper().RunAsyncTask(ctx, func(ctx context.Context) {
+			if hasLease, pErr := r.getLeaseForGossip(ctx); hasLease {
 				r.mu.Lock()
 				defer r.mu.Unlock()
-				r.gossipFirstRangeLocked(ctxInner)
+				r.gossipFirstRangeLocked(ctx)
 			} else {
-				log.Infof(ctxInner, "unable to gossip first range; hasLease=%t, err=%v", hasLease, pErr)
+				log.Infof(ctx, "unable to gossip first range; hasLease=%t, err=%v", hasLease, pErr)
 			}
 		}); err != nil {
 			log.Errorf(ctx, "unable to gossip first range: %+v", err)
