@@ -679,7 +679,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// things like malformed requests which we should have checked
 			// for before reaching this point.
 			if err != nil {
-				log.Trace(ctx, "range descriptor lookup failed: "+err.Error())
+				log.Event(ctx, "range descriptor lookup failed: "+err.Error())
 				if log.V(1) {
 					log.Warning(ctx, err)
 				}
@@ -726,7 +726,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				}
 				// On addressing errors, don't backoff; retry immediately.
 				r.Reset()
-				log.VTracef(1, ctx,
+				log.VEventf(1, ctx,
 					"addressing error: %s not appropriate for remaining range %s",
 					desc, rs)
 				continue
@@ -756,7 +756,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				break
 			}
 
-			log.VTracef(1, ctx, "reply error %s: %s", ba, pErr)
+			log.VEventf(1, ctx, "reply error %s: %s", ba, pErr)
 
 			// Error handling: If the error indicates that our range
 			// descriptor is out of date, evict it from the cache and try
@@ -810,10 +810,10 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 
 		// Immediately return if querying a range failed non-retryably.
 		if pErr != nil {
-			log.Tracef(ctx, "non-retryable failure: %s", pErr)
+			log.Eventf(ctx, "non-retryable failure: %s", pErr)
 			return nil, pErr, false
 		} else if !finished {
-			log.Trace(ctx, "DistSender gave up")
+			log.Event(ctx, "DistSender gave up")
 			select {
 			case <-ds.rpcRetryOptions.Closer:
 				return nil, roachpb.NewError(&roachpb.NodeUnavailableError{}), false
@@ -871,7 +871,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				// prepare the batch response after meeting the max key limit.
 				fillSkippedResponses(ba, br, rs)
 				// done, exit loop.
-				log.Trace(ctx, "request is saturated")
+				log.Event(ctx, "request is saturated")
 				return br, nil, false
 			}
 		}
@@ -886,7 +886,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			panic(fmt.Sprintf("start key %s is less than %s", rs.Key, rs.EndKey))
 		}
 
-		log.Trace(ctx, "querying next range")
+		log.Event(ctx, "querying next range")
 	}
 }
 
@@ -998,7 +998,7 @@ func (ds *DistSender) sendToReplicas(
 
 	// Send the first request.
 	pending := 1
-	log.VTracef(2, opts.ctx, "sending RPC for batch: %s", args)
+	log.VEventf(2, opts.ctx, "sending RPC for batch: %s", args)
 	transport.SendNext(done)
 
 	// Wait for completions. This loop will retry operations that fail
@@ -1013,7 +1013,7 @@ func (ds *DistSender) sendToReplicas(
 			sendNextTimer.Read = true
 			// On successive RPC timeouts, send to additional replicas if available.
 			if !transport.IsExhausted() {
-				log.VTracef(2, opts.ctx, "timeout, trying next peer")
+				log.VEventf(2, opts.ctx, "timeout, trying next peer")
 				pending++
 				transport.SendNext(done)
 			}
@@ -1046,12 +1046,12 @@ func (ds *DistSender) sendToReplicas(
 
 			// Send to additional replicas if available.
 			if !transport.IsExhausted() {
-				log.VTracef(2, opts.ctx, "error, trying next peer: %s", err)
+				log.VEventf(2, opts.ctx, "error, trying next peer: %s", err)
 				pending++
 				transport.SendNext(done)
 			}
 			if pending == 0 {
-				log.VTracef(2, opts.ctx,
+				log.VEventf(2, opts.ctx,
 					"sending to all %d replicas failed; last error: %s",
 					len(replicas), err)
 				return nil, roachpb.NewSendError(

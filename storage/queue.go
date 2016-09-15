@@ -493,7 +493,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 	ctx = repl.logContext(ctx)
 	ctx, cancel := context.WithTimeout(ctx, bq.processTimeout)
 	defer cancel()
-	log.Tracef(ctx, "processing replica")
+	log.Eventf(ctx, "processing replica")
 
 	// If the queue requires a replica to have the range lease in
 	// order to be processed, check whether this replica has range lease
@@ -507,7 +507,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 			}
 			return errors.Wrapf(err.GoError(), "%s: could not obtain lease", repl)
 		}
-		log.Trace(ctx, "got range lease")
+		log.Event(ctx, "got range lease")
 	}
 
 	log.VEventf(3, bq.ctx, "processing")
@@ -516,7 +516,7 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 		return err
 	}
 	log.VEventf(2, bq.ctx, "done: %s", timeutil.Since(start))
-	log.Trace(ctx, "done")
+	log.Event(ctx, "done")
 	return nil
 }
 

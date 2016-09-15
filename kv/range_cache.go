@@ -238,9 +238,9 @@ func (et *evictionToken) EvictAndReplace(ctx context.Context, newDescs ...roachp
 		if err == nil {
 			if len(newDescs) > 0 {
 				err = et.doReplace(newDescs...)
-				log.Tracef(ctx, "evicting cached range descriptor with %d replacements", len(newDescs))
+				log.Eventf(ctx, "evicting cached range descriptor with %d replacements", len(newDescs))
 			} else {
-				log.Trace(ctx, "evicting cached range descriptor")
+				log.Event(ctx, "evicting cached range descriptor")
 			}
 		}
 	})
@@ -304,7 +304,7 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 		returnToken := rdc.makeEvictionToken(desc, func() error {
 			return rdc.evictCachedRangeDescriptorLocked(key, desc, useReverseScan)
 		})
-		log.Trace(ctx, "looked up range descriptor from cache")
+		log.Event(ctx, "looked up range descriptor from cache")
 		return desc, returnToken, nil
 	}
 
@@ -326,7 +326,7 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 		doneWg()
 
 		res = <-resC
-		log.Trace(ctx, "looked up range descriptor with shared request")
+		log.Event(ctx, "looked up range descriptor with shared request")
 	} else {
 		rdc.lookupRequests.inflight[requestKey] = req
 		rdc.lookupRequests.Unlock()
@@ -392,7 +392,7 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 		delete(rdc.lookupRequests.inflight, requestKey)
 		rdc.lookupRequests.Unlock()
 		rdc.rangeCache.Unlock()
-		log.Trace(ctx, "looked up range descriptor")
+		log.Event(ctx, "looked up range descriptor")
 	}
 
 	// It rarely may be possible that we got grouped in with the wrong
