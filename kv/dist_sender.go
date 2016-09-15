@@ -459,8 +459,6 @@ func (ds *DistSender) getDescriptors(
 func (ds *DistSender) sendSingleRange(
 	ctx context.Context, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	log.Eventf(ctx, "sending RPC to [%s, %s)", desc.StartKey, desc.EndKey)
-
 	// Try to send the call.
 	replicas := newReplicaSlice(ds.gossip, desc)
 
