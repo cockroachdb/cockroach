@@ -392,7 +392,7 @@ func (txn *Txn) GetDeadline() *hlc.Timestamp {
 // The txn's status is set to ABORTED in case of error. txn is
 // considered finalized and cannot be used to send any more commands.
 func (txn *Txn) Rollback() error {
-	log.VTracef(2, txn.Context, "rolling back transaction")
+	log.VEventf(2, txn.Context, "rolling back transaction")
 	err := txn.sendEndTxnReq(false /* commit */, nil)
 	txn.finalized = true
 	return err
@@ -512,7 +512,7 @@ func (txn *Txn) Exec(
 		if err == nil && opt.AutoCommit && txn.Proto.Status == roachpb.PENDING {
 			// fn succeeded, but didn't commit.
 			err = txn.Commit()
-			log.Tracef(txn.Context, "client.Txn did AutoCommit. err: %v\ntxn: %+v", err, txn.Proto)
+			log.Eventf(txn.Context, "client.Txn did AutoCommit. err: %v\ntxn: %+v", err, txn.Proto)
 			if err != nil {
 				if _, retryable := err.(*roachpb.RetryableTxnError); !retryable {
 					// We can't retry, so let the caller know we tried to
@@ -539,7 +539,7 @@ func (txn *Txn) Exec(
 				r.Reset()
 			}
 		}
-		log.VTracef(2, txn.Context, "automatically retrying transaction: %s because of error: %s",
+		log.VEventf(2, txn.Context, "automatically retrying transaction: %s because of error: %s",
 			txn.DebugName(), err)
 	}
 
