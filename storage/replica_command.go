@@ -940,27 +940,16 @@ func (r *Replica) RangeLookup(
 ) (roachpb.RangeLookupResponse, *PostCommitTrigger, error) {
 	log.Event(ctx, "RangeLookup")
 	var reply roachpb.RangeLookupResponse
-	ts := h.Timestamp // all we're going to use from the header.
 	key, err := keys.Addr(args.Key)
 	if err != nil {
 		return reply, nil, err
 	}
 	if !key.Equal(args.Key) {
-		return reply, nil, errors.Errorf("illegal lookup of range-local key")
+		return reply, nil, errors.Errorf("illegal lookup of range-local key %q", args.Key)
 	}
-
-	rangeCount := int64(args.MaxRanges)
+	ts, txn, consistent, rangeCount := h.Timestamp, h.Txn, h.ReadConsistency != roachpb.INCONSISTENT, int64(args.MaxRanges)
 	if rangeCount < 1 {
 		return reply, nil, errors.Errorf("range lookup specified invalid maximum range count %d: must be > 0", rangeCount)
-	}
-	consistent := h.ReadConsistency != roachpb.INCONSISTENT
-	if consistent && args.ConsiderIntents {
-		return reply, nil, errors.Errorf("can not read consistently and special-case intents")
-	}
-	if args.ConsiderIntents {
-		// Disable prefetching; the caller only cares about a single intent,
-		// and the code below simplifies considerably.
-		rangeCount = 1
 	}
 
 	var checkAndUnmarshal func(roachpb.Value) (*roachpb.RangeDescriptor, error)
@@ -987,17 +976,25 @@ func (r *Replica) RangeLookup(
 		}
 
 		// Scan for descriptors.
-		kvs, intents, err = engine.MVCCScan(ctx, batch, startKey, endKey, rangeCount,
-			ts, consistent, h.Txn)
+		kvs, intents, err = engine.MVCCScan(
+			ctx,
+			batch,
+			startKey,
+			endKey,
+			rangeCount,
+			ts,
+			consistent,
+			txn,
+		)
 		if err != nil {
 			// An error here is likely a WriteIntentError when reading consistently.
 			return reply, nil, err
 		}
 	} else {
 		// Use MVCCScan to get the first range. There are three cases:
-		// 1. args.Key is not an endpoint of the range and
-		// 2a. The args.Key is the start/end key of the range.
-		// 2b. Even worse, the body of args.Key is roachpb.KeyMax.
+		// 1. args.Key is not an endpoint of the range.
+		// 2a. args.Key is the start/end key of the range.
+		// 2b. args.Key is roachpb.KeyMax.
 		// In the first case, we need use the MVCCScan() to get the first
 		// range descriptor, because ReverseScan can't do the work. If we
 		// have ranges [a,c) and [c,f) and the reverse scan request's key
@@ -1016,11 +1013,11 @@ func (r *Replica) RangeLookup(
 		// to weed out descriptors from the forward scan above, which could
 		// return a result or an intent we're not supposed to return.
 		checkAndUnmarshal = func(v roachpb.Value) (*roachpb.RangeDescriptor, error) {
-			var r roachpb.RangeDescriptor
-			if err := v.GetProto(&r); err != nil {
+			var rd roachpb.RangeDescriptor
+			if err := v.GetProto(&rd); err != nil {
 				return nil, err
 			}
-			startKeyAddr, err := keys.Addr(keys.RangeMetaKey(r.StartKey))
+			startKeyAddr, err := keys.Addr(keys.RangeMetaKey(rd.StartKey))
 			if err != nil {
 				return nil, err
 			}
@@ -1030,7 +1027,7 @@ func (r *Replica) RangeLookup(
 				return nil, nil
 			}
 			// We actually want this descriptor.
-			return &r, nil
+			return &rd, nil
 		}
 
 		if key.Less(roachpb.RKey(keys.Meta2KeyMax)) {
@@ -1039,12 +1036,19 @@ func (r *Replica) RangeLookup(
 				return reply, nil, err
 			}
 
-			kvs, intents, err = engine.MVCCScan(ctx, batch, startKey, endKey, 1,
-				ts, consistent, h.Txn)
+			kvs, intents, err = engine.MVCCScan(
+				ctx,
+				batch,
+				startKey,
+				endKey,
+				1,
+				ts,
+				consistent,
+				txn,
+			)
 			if err != nil {
 				return reply, nil, err
 			}
-
 		}
 		// We want to search for the metadata key just less or equal to
 		// args.Key. Scan in reverse order for both the requested key and the
@@ -1054,15 +1058,23 @@ func (r *Replica) RangeLookup(
 			return reply, nil, err
 		}
 		// Reverse scan for descriptors.
-		revKvs, revIntents, err := engine.MVCCReverseScan(ctx, batch, startKey, endKey, rangeCount,
-			ts, consistent, h.Txn)
+		revKVs, revIntents, err := engine.MVCCReverseScan(
+			ctx,
+			batch,
+			startKey,
+			endKey,
+			rangeCount,
+			ts,
+			consistent,
+			txn,
+		)
 		if err != nil {
 			// An error here is likely a WriteIntentError when reading consistently.
 			return reply, nil, err
 		}
 
 		// Merge the results, the total ranges may be bigger than rangeCount.
-		kvs = append(kvs, revKvs...)
+		kvs = append(kvs, revKVs...)
 		intents = append(intents, revIntents...)
 	}
 
@@ -1072,7 +1084,6 @@ func (r *Replica) RangeLookup(
 		containsFn = roachpb.RangeDescriptor.ContainsExclusiveEndKey
 	}
 
-	// Decode all scanned range descriptors which haven't been unmarshaled yet.
 	for _, kv := range kvs {
 		// TODO(tschottdorf) Candidate for a ReplicaCorruptionError.
 		rd, err := checkAndUnmarshal(kv.Value)
@@ -1090,39 +1101,41 @@ func (r *Replica) RangeLookup(
 		}
 	}
 
-	if args.ConsiderIntents || len(reply.Ranges) == 0 {
-		// NOTE (subtle): dangling intents on meta records are peculiar: It's not
-		// clear whether the intent or the previous value point to the correct
-		// location of the Range. It gets even more complicated when there are
-		// split-related intents or a txn record co-located with a replica
-		// involved in the split. Since we cannot know the correct answer, we
-		// reply with both the pre- and post- transaction values when the
-		// ConsiderIntents flag is set.
-		//
-		// This does not count against a maximum range count because they are
-		// possible versions of the same descriptor. In other words, both the
-		// current live descriptor and a potentially valid descriptor from
-		// observed intents could be returned when MaxRanges is set to 1 and
-		// the ConsiderIntents flag is set.
-		for _, intent := range intents {
-			val, _, err := engine.MVCCGetAsTxn(ctx, batch, intent.Key, intent.Txn.Timestamp, intent.Txn)
-			if err != nil {
-				return reply, nil, err
-			}
+	// NOTE (subtle): dangling intents on meta records are peculiar: It's not
+	// clear whether the intent or the previous value point to the correct
+	// location of the Range. It gets even more complicated when there are
+	// split-related intents or a txn record co-located with a replica
+	// involved in the split. Since we cannot know the correct answer, we
+	// reply with both the pre- and post- transaction values.
+	//
+	// This does not count against a maximum range count because they are
+	// possible versions of the same descriptor. In other words, both the
+	// current live descriptor and a potentially valid descriptor from
+	// observed intents could be returned.
+	for _, intent := range intents {
+		val, _, err := engine.MVCCGetAsTxn(
+			ctx,
+			batch,
+			intent.Key,
+			intent.Txn.Timestamp,
+			intent.Txn,
+		)
+		if err != nil {
+			return reply, nil, err
+		}
 
-			if val == nil {
-				// Intent is a deletion.
-				continue
-			}
-			rd, err := checkAndUnmarshal(*val)
-			if err != nil {
-				return reply, nil, err
-			}
-			if rd != nil {
-				if containsFn(*rd, userKey) {
-					reply.Ranges = append(reply.Ranges, *rd)
-					break
-				}
+		if val == nil {
+			// Intent is a deletion.
+			continue
+		}
+		rd, err := checkAndUnmarshal(*val)
+		if err != nil {
+			return reply, nil, err
+		}
+		if rd != nil {
+			if containsFn(*rd, userKey) {
+				reply.Ranges = append(reply.Ranges, *rd)
+				break
 			}
 		}
 	}
@@ -1130,8 +1143,10 @@ func (r *Replica) RangeLookup(
 	if len(reply.Ranges) == 0 {
 		// No matching results were returned from the scan. This should
 		// never happen with the above logic.
-		log.Fatalf(ctx, "RangeLookup dispatched to correct range, but no matching RangeDescriptor was found: %q", args.Key)
-	} else if preCount := int64(len(reply.PrefetchedRanges)); 1+preCount > rangeCount {
+		log.Fatalf(ctx, "range lookup of meta key %q found only non-matching ranges: %+v", args.Key, reply.PrefetchedRanges)
+	}
+
+	if preCount := int64(len(reply.PrefetchedRanges)); 1+preCount > rangeCount {
 		// We've possibly picked up an extra descriptor if we're in reverse
 		// mode due to the initial forward scan.
 		//
@@ -1141,12 +1156,6 @@ func (r *Replica) RangeLookup(
 		// only get multiple desired range descriptors when prefetching is disabled
 		// anyway (see above), so this should never actually matter.
 		reply.PrefetchedRanges = reply.PrefetchedRanges[:rangeCount-1]
-	}
-
-	for _, rd := range reply.Ranges {
-		if !containsFn(rd, userKey) {
-			log.Fatalf(ctx, "range lookup of meta key %q resulted in descriptor %s which does not contain non-meta key %q", key, rd, userKey)
-		}
 	}
 
 	return reply, intentsToTrigger(intents, &args), nil
