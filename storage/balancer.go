@@ -150,15 +150,28 @@ var rebalanceThreshold = envutil.EnvOrDefaultFloat("COCKROACH_REBALANCE_THRESHOL
 func (rcb rangeCountBalancer) shouldRebalance(
 	store roachpb.StoreDescriptor, sl StoreList,
 ) bool {
+	// Are there any stores with a range count below mean*(1-rebalanceThreshold)?
+	underfullThreshold := int32(math.Floor(sl.candidateCount.mean * (1 - rebalanceThreshold)))
+	underfullStore := false
+	for _, desc := range sl.stores {
+		if desc.Capacity.RangeCount < underfullThreshold {
+			underfullStore = true
+			break
+		}
+	}
+
 	// TODO(peter,bram,cuong): The FractionUsed check seems suspicious. When a
 	// node becomes fuller than maxFractionUsedThreshold we will always select it
 	// for rebalancing. This is currently utilized by tests.
 
-	// The store requires rebalancing if its range count is larger than
-	// mean*(1+rebalanceThreshold).
+	// The store requires rebalancing if one of the following conditions is true:
+	// 1. Its range count is larger than mean*(1+rebalanceThreshold)
+	// 2. Its range count is above the mean, and there exists another store whose
+	//    range count is smaller than mean*(1-rebalanceThreshold)
 	target := int32(math.Ceil(sl.candidateCount.mean * (1 + rebalanceThreshold)))
 	shouldRebalance := store.Capacity.FractionUsed() >= maxFractionUsedThreshold ||
-		store.Capacity.RangeCount > target
+		store.Capacity.RangeCount > target ||
+		(float64(store.Capacity.RangeCount) > sl.candidateCount.mean && underfullStore)
 	if shouldRebalance {
 		// Require that moving a replica from the given store makes its range count
 		// converge on the mean range count. This only affects clusters with a

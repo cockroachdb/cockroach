@@ -500,9 +500,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 		stores[0].rangeCount -= deficit
 		for i := 1; i < len(stores); i++ {
 			stores[i].rangeCount += int32(math.Ceil(float64(deficit) / float64(len(stores)-1)))
-			// TODO(cuongdo): The following must be changed to true when the allocator
-			// starts consistently rebalancing to severely underused stores.
-			stores[i].shouldRebalanceFrom = false
+			stores[i].shouldRebalanceFrom = true
 		}
 		return stores
 	}
