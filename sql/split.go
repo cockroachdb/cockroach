@@ -19,6 +19,8 @@ package sql
 import (
 	"strings"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
@@ -136,7 +138,7 @@ func (n *splitNode) Start() error {
 	// TODO(radu): we should find a way to prevent this error, like waiting for
 	// whatever condition we need to wait.
 	for r := retry.Start(retry.Options{MaxRetries: maxSplitRetries}); ; {
-		err := n.p.execCfg.DB.AdminSplit(n.key)
+		err := n.p.execCfg.DB.AdminSplit(context.TODO(), n.key)
 		if err != nil &&
 			strings.Contains(err.Error(), storage.ErrMsgConflictUpdatingRangeDesc) &&
 			r.Next() {

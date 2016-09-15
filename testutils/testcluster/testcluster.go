@@ -262,7 +262,7 @@ func (tc *TestCluster) SplitRange(
 
 	leftRangeDesc := new(roachpb.RangeDescriptor)
 	rightRangeDesc := new(roachpb.RangeDescriptor)
-	if err := tc.Servers[0].DB().GetProto(
+	if err := tc.Servers[0].DB().GetProto(context.TODO(),
 		keys.RangeDescriptorKey(origRangeDesc.StartKey), leftRangeDesc); err != nil {
 		return nil, nil, errors.Wrap(err, "could not look up left-hand side descriptor")
 	}
@@ -270,7 +270,7 @@ func (tc *TestCluster) SplitRange(
 	// adjusted slightly so we don't split in the middle of SQL rows). Update it
 	// to the real point.
 	splitRKey = leftRangeDesc.EndKey
-	if err := tc.Servers[0].DB().GetProto(
+	if err := tc.Servers[0].DB().GetProto(context.TODO(),
 		keys.RangeDescriptorKey(splitRKey), rightRangeDesc); err != nil {
 		return nil, nil, errors.Wrap(err, "could not look up right-hand side descriptor")
 	}
@@ -307,7 +307,7 @@ func (tc *TestCluster) changeReplicas(
 		// the previous ChangeReplicas call. By the time ChangeReplicas returns the
 		// raft leader is guaranteed to have the updated version, but followers are
 		// not.
-		if err := tc.Servers[0].DB().GetProto(
+		if err := tc.Servers[0].DB().GetProto(context.TODO(),
 			keys.RangeDescriptorKey(startKey), rangeDesc); err != nil {
 			return nil, err
 		}
@@ -333,7 +333,7 @@ func (tc *TestCluster) changeReplicas(
 			return nil, err
 		}
 	}
-	if err := tc.Servers[0].DB().GetProto(
+	if err := tc.Servers[0].DB().GetProto(context.TODO(),
 		keys.RangeDescriptorKey(startKey), rangeDesc); err != nil {
 		return nil, err
 	}
@@ -395,7 +395,8 @@ func (tc *TestCluster) RemoveReplicas(
 func (tc *TestCluster) TransferRangeLease(
 	rangeDesc *roachpb.RangeDescriptor, dest ReplicationTarget,
 ) error {
-	err := tc.Servers[0].DB().AdminTransferLease(rangeDesc.StartKey.AsRawKey(), dest.StoreID)
+	err := tc.Servers[0].DB().AdminTransferLease(context.TODO(),
+		rangeDesc.StartKey.AsRawKey(), dest.StoreID)
 	if err != nil {
 		return errors.Wrapf(err, "%q: transfer lease unexpected error", rangeDesc.StartKey)
 	}

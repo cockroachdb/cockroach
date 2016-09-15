@@ -227,7 +227,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 	// Put an initial value.
 	initVal := []byte("initVal")
-	err := store.DB().Put(key, initVal)
+	err := store.DB().Put(context.TODO(), key, initVal)
 	if err != nil {
 		t.Fatalf("failed to put: %s", err)
 	}

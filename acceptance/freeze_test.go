@@ -160,7 +160,7 @@ func testFreezeClusterInner(t *testing.T, c cluster.Cluster, cfg cluster.TestCon
 		db, dbStopper := c.NewClient(t, 0)
 		defer dbStopper.Stop()
 
-		if _, err := db.Scan(keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+		if _, err := db.Scan(context.TODO(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
 			t.Fatal(err)
 		}
 		return nil

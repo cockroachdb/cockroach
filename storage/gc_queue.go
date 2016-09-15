@@ -313,7 +313,11 @@ func (gcq *gcQueue) process(
 		return err
 	}
 
+	// We have the "luxury" of having two relevant contexts here: One which
+	// goes to the queue's EventLog and one which goes to tracing for this
+	// operation.
 	log.Infof(gcq.ctx, "completed with stats %+v", info)
+	log.Tracef(ctx, "completed with stats %+v", info)
 
 	var ba roachpb.BatchRequest
 	var gcArgs roachpb.GCRequest
@@ -332,6 +336,7 @@ func (gcq *gcQueue) process(
 	ba.Timestamp = now
 	ba.Add(&gcArgs)
 	if _, pErr := repl.Send(ctx, ba); pErr != nil {
+		log.ErrEvent(ctx, pErr.String())
 		return pErr.GoError()
 	}
 	return nil
