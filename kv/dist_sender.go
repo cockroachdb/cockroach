@@ -242,7 +242,7 @@ func NewDistSender(cfg *DistSenderConfig, g *gossip.Gossip) *DistSender {
 // retry logic here; this is not an issue since the lookup performs a
 // single inconsistent read only.
 func (ds *DistSender) RangeLookup(
-	key roachpb.RKey, desc *roachpb.RangeDescriptor, considerIntents, useReverseScan bool,
+	key roachpb.RKey, desc *roachpb.RangeDescriptor, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
@@ -252,9 +252,8 @@ func (ds *DistSender) RangeLookup(
 			// lookup; those are never local.
 			Key: key.AsRawKey(),
 		},
-		MaxRanges:       ds.rangeLookupMaxRanges,
-		ConsiderIntents: considerIntents,
-		Reverse:         useReverseScan,
+		MaxRanges: ds.rangeLookupMaxRanges,
+		Reverse:   useReverseScan,
 	})
 	replicas := newReplicaSlice(ds.gossip, desc)
 	replicas.Shuffle()
@@ -423,23 +422,9 @@ func (ds *DistSender) getDescriptors(
 		descKey = rs.EndKey
 	}
 
-	// When a previous descriptor has been used (when not warming
-	// the cache), allow [uncommitted] intents on range descriptor
-	// lookups to be returned in addition to live range descriptors.
-	// We cannot know with complete certainty whether a current
-	// intent or a previously committed value should be used to
-	// direct requests, but by looking up both, we can try both out
-	// without issuing a second lookup. This balances between
-	// the two cases where an intent's txn hasn't yet been
-	// committed (the previous value is correct), or an intent's
-	// txn has been committed (the intent value is correct).
-	//
-	// Note that with the current implementation of replica.RangeLookup,
-	// this will disable prefetching.
-	considerIntents := evictToken != nil
-
 	desc, returnToken, err := ds.rangeCache.LookupRangeDescriptor(
-		ctx, descKey, evictToken, considerIntents, useReverseScan)
+		ctx, descKey, evictToken, useReverseScan,
+	)
 	if err != nil {
 		return nil, false, returnToken, err
 	}
