@@ -470,6 +470,20 @@ func (r *Replica) BeginTransaction(
 		}
 	}
 
+	r.mu.Lock()
+	threshold := r.mu.state.TxnSpanGCThreshold
+	r.mu.Unlock()
+
+	// Disallow creation of a transaction record if it's at a timestamp before
+	// the TxnSpanGCThreshold, as in that case our transaction may already have
+	// been aborted by a concurrent actor which encountered one of our intents
+	// (which may have been written before this entry).
+	//
+	// See #9265.
+	if txn.LastActive().Less(threshold) {
+		return reply, roachpb.NewTransactionAbortedError()
+	}
+
 	// Write the txn record.
 	reply.Txn.Writing = true
 	return reply, engine.MVCCPutProto(ctx, batch, ms, key, hlc.ZeroTimestamp, nil, reply.Txn)
@@ -1211,13 +1225,27 @@ func (r *Replica) GC(
 
 	r.mu.Lock()
 	newThreshold := r.mu.state.GCThreshold
+	newTxnSpanGCThreshold := r.mu.state.TxnSpanGCThreshold
+	// Protect against multiple GC requests arriving out of order; we track
+	// the maximum timestamps.
 	newThreshold.Forward(args.Threshold)
+	newTxnSpanGCThreshold.Forward(args.TxnSpanGCThreshold)
 	r.mu.Unlock()
 
 	trigger := &PostCommitTrigger{
-		gcThreshold: &newThreshold,
+		gcThreshold:        &newThreshold,
+		txnSpanGCThreshold: &newTxnSpanGCThreshold,
 	}
-	return reply, trigger, setGCThreshold(ctx, batch, ms, r.Desc().RangeID, &newThreshold)
+
+	if err := setGCThreshold(ctx, batch, ms, r.Desc().RangeID, &newThreshold); err != nil {
+		return reply, nil, err
+	}
+
+	if err := setTxnSpanGCThreshold(ctx, batch, ms, r.Desc().RangeID, &newTxnSpanGCThreshold); err != nil {
+		return reply, nil, err
+	}
+
+	return reply, trigger, nil
 }
 
 // PushTxn resolves conflicts between concurrent txns (or
@@ -1312,7 +1340,12 @@ func (r *Replica) PushTxn(
 	// has open intents (which is likely if someone pushes it).
 	if !ok {
 		// If getting an update for a transaction record which doesn't yet
-		// exist, return empty Pushee.
+		// exist, return empty Pushee, except when querying.
+		//
+		// Note that we *do* abort the transaction in PUSH_TOUCH mode. This
+		// leaves transactions which write intents before their txn entry
+		// vulnerable, but the alternative is having more intents never cleaned
+		// up eagerly.
 		if args.PushType == roachpb.PUSH_QUERY {
 			return reply, nil
 		}
@@ -1324,9 +1357,11 @@ func (r *Replica) PushTxn(
 		// TODO(tschottdorf): double-check for problems emanating from
 		// using a trivial Transaction proto here. Maybe some fields ought
 		// to receive dummy values.
+		reply.PusheeTxn.Status = roachpb.ABORTED
 		reply.PusheeTxn.TxnMeta = args.PusheeTxn
 		reply.PusheeTxn.Timestamp = args.Now // see method comment
-		reply.PusheeTxn.Status = roachpb.ABORTED
+		// Setting OrigTimestamp bumps LastActive(); see #9265.
+		reply.PusheeTxn.OrigTimestamp = args.Now
 		return reply, engine.MVCCPutProto(ctx, batch, ms, key, hlc.ZeroTimestamp, nil, &reply.PusheeTxn)
 	}
 	// Start with the persisted transaction record as final transaction.
