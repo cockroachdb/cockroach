@@ -1050,8 +1050,14 @@ func (r *Replica) RangeLookup(
 		intents = append(intents, revIntents...)
 	}
 
+	userKey := keys.UserKey(key)
+	containsFn := roachpb.RangeDescriptor.ContainsKey
+	if args.Reverse {
+		containsFn = roachpb.RangeDescriptor.ContainsExclusiveEndKey
+	}
+
 	// Decode all scanned range descriptors which haven't been unmarshaled yet.
-	for i, kv := range kvs {
+	for _, kv := range kvs {
 		// TODO(tschottdorf) Candidate for a ReplicaCorruptionError.
 		rd, err := checkAndUnmarshal(kv.Value)
 		if err != nil {
@@ -1060,7 +1066,7 @@ func (r *Replica) RangeLookup(
 		if rd != nil {
 			// Add the first valid descriptor to the desired range descriptor
 			// list in the response, add all others to the prefetched list.
-			if i == 0 || len(reply.Ranges) == 0 {
+			if len(reply.Ranges) == 0 && containsFn(*rd, userKey) {
 				reply.Ranges = append(reply.Ranges, *rd)
 			} else {
 				reply.PrefetchedRanges = append(reply.PrefetchedRanges, *rd)
@@ -1068,7 +1074,7 @@ func (r *Replica) RangeLookup(
 		}
 	}
 
-	if args.ConsiderIntents && len(intents) > 0 {
+	if args.ConsiderIntents || len(reply.Ranges) == 0 {
 		// NOTE (subtle): dangling intents on meta records are peculiar: It's not
 		// clear whether the intent or the previous value point to the correct
 		// location of the Range. It gets even more complicated when there are
@@ -1096,11 +1102,11 @@ func (r *Replica) RangeLookup(
 			if err != nil {
 				return reply, nil, err
 			}
-			// If this is a descriptor we're allowed to return, add that
-			// to the lookup response slice and stop searching in intents.
 			if rd != nil {
-				reply.Ranges = append(reply.Ranges, *rd)
-				break
+				if containsFn(*rd, userKey) {
+					reply.Ranges = append(reply.Ranges, *rd)
+					break
+				}
 			}
 		}
 	}
@@ -1108,7 +1114,7 @@ func (r *Replica) RangeLookup(
 	if len(reply.Ranges) == 0 {
 		// No matching results were returned from the scan. This should
 		// never happen with the above logic.
-		panic(fmt.Sprintf("RangeLookup dispatched to correct range, but no matching RangeDescriptor was found: %s", args.Key))
+		log.Fatalf(ctx, "RangeLookup dispatched to correct range, but no matching RangeDescriptor was found: %q", args.Key)
 	} else if preCount := int64(len(reply.PrefetchedRanges)); 1+preCount > rangeCount {
 		// We've possibly picked up an extra descriptor if we're in reverse
 		// mode due to the initial forward scan.
@@ -1119,6 +1125,12 @@ func (r *Replica) RangeLookup(
 		// only get multiple desired range descriptors when prefetching is disabled
 		// anyway (see above), so this should never actually matter.
 		reply.PrefetchedRanges = reply.PrefetchedRanges[:rangeCount-1]
+	}
+
+	for _, rd := range reply.Ranges {
+		if !containsFn(rd, userKey) {
+			log.Fatalf(ctx, "range lookup of meta key %q resulted in descriptor %s which does not contain non-meta key %q", key, rd, userKey)
+		}
 	}
 
 	return reply, intentsToTrigger(intents, &args), nil
