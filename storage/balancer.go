@@ -24,6 +24,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -144,25 +145,36 @@ func (rcb rangeCountBalancer) improve(
 	return candidate
 }
 
+// RebalanceThreshold is the minimum ratio of a store's range surplus to the
+// mean range count that permits rebalances away from that store.
+var RebalanceThreshold = envutil.EnvOrDefaultFloat("COCKROACH_REBALANCE_THRESHOLD", 0.05)
+
 func (rcb rangeCountBalancer) shouldRebalance(
 	store roachpb.StoreDescriptor, sl StoreList,
 ) bool {
-	// Moving a replica from the given store makes its range count converge on
-	// the mean range count.
-	//
 	// TODO(peter,bram,cuong): The FractionUsed check seems suspicious. When a
 	// node becomes fuller than maxFractionUsedThreshold we will always select it
 	// for rebalancing. This is currently utilized by tests.
-	rebalanceNotNeeded := store.Capacity.FractionUsed() <= maxFractionUsedThreshold &&
-		(math.Abs(float64(store.Capacity.RangeCount-1)-sl.candidateCount.mean) >
-			math.Abs(float64(store.Capacity.RangeCount)-sl.candidateCount.mean))
-	shouldRebalance := !rebalanceNotNeeded
+
+	// The store requires rebalancing if its range count is larger than
+	// mean*(1+RebalanceThreshold).
+	target := int32(math.Ceil(sl.candidateCount.mean * (1 + RebalanceThreshold)))
+	shouldRebalance := store.Capacity.FractionUsed() >= maxFractionUsedThreshold ||
+		store.Capacity.RangeCount > target
+	if shouldRebalance {
+		// Require that moving a replica from the given store makes its range count
+		// converge on the mean range count. This only affects clusters with a
+		// small number of ranges.
+		shouldRebalance =
+			(math.Abs(float64(store.Capacity.RangeCount-1)-sl.candidateCount.mean) <
+				math.Abs(float64(store.Capacity.RangeCount)-sl.candidateCount.mean))
+	}
 
 	if log.V(2) {
 		log.Infof(context.TODO(),
-			"%d: should-rebalance=%t: fraction-used=%.2f range-count=%d (mean=%.1f)",
+			"%d: should-rebalance=%t: fraction-used=%.2f range-count=%d (mean=%.1f, target=%d)",
 			store.StoreID, shouldRebalance, store.Capacity.FractionUsed(),
-			store.Capacity.RangeCount, sl.candidateCount.mean)
+			store.Capacity.RangeCount, sl.candidateCount.mean, target)
 	}
 	return shouldRebalance
 }

@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/ts/tspb"
@@ -639,7 +641,7 @@ func (tm *testModel) assertQuery(
 		Derivative:       derivative,
 		Sources:          sources,
 	}
-	actualDatapoints, actualSources, err := tm.DB.Query(q, r, sampleDuration, start, end)
+	actualDatapoints, actualSources, err := tm.DB.Query(context.TODO(), q, r, sampleDuration, start, end)
 	if err != nil {
 		tm.t.Fatal(err)
 	}
@@ -960,7 +962,7 @@ func TestQueryDownsampling(t *testing.T) {
 	defer tm.Stop()
 
 	// Query with sampleDuration that is too small, expect error.
-	_, _, err := tm.DB.Query(tspb.Query{}, Resolution10s, 1, 0, 10000)
+	_, _, err := tm.DB.Query(context.TODO(), tspb.Query{}, Resolution10s, 1, 0, 10000)
 	if err == nil {
 		t.Fatal("expected query to fail with sampleDuration less than resolution allows.")
 	}
@@ -971,7 +973,7 @@ func TestQueryDownsampling(t *testing.T) {
 
 	// Query with sampleDuration which is not an even multiple of the resolution.
 	_, _, err = tm.DB.Query(
-		tspb.Query{}, Resolution10s, Resolution10s.SampleDuration()+1, 0, 10000,
+		context.TODO(), tspb.Query{}, Resolution10s, Resolution10s.SampleDuration()+1, 0, 10000,
 	)
 	if err == nil {
 		t.Fatal("expected query to fail with sampleDuration not an even multiple of the query resolution.")

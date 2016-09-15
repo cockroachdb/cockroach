@@ -769,7 +769,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 	kvDB1 := tc.Servers[1].DB()
 
 	key := []byte("a")
-	var rangeDesc *roachpb.RangeDescriptor = new(roachpb.RangeDescriptor)
+	rangeDesc := new(roachpb.RangeDescriptor)
 	var err error
 	*rangeDesc, err = tc.LookupRange(key)
 	if err != nil {

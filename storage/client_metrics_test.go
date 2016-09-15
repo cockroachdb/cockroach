@@ -17,6 +17,7 @@
 package storage_test
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/pkg/errors"
@@ -59,6 +61,19 @@ func verifyStats(t *testing.T, mtc *multiTestContext, storeIdxSlice ...int) {
 	}
 	mtc.mu.RUnlock()
 
+	// Sanity regression check for bug #4624: ensure intent count is zero.
+	// This may not be true immediately due to the asynchronous nature of
+	// non-local intent resolution.
+	for _, s := range stores {
+		m := s.Metrics()
+		util.SucceedsSoon(t, func() error {
+			if a := m.IntentCount.Value(); a != 0 {
+				return fmt.Errorf("expected intent count to be zero, was %d", a)
+			}
+			return nil
+		})
+	}
+
 	wg.Add(numStores)
 	// We actually stop *all* of the Stores. Stopping only a few is riddled
 	// with deadlocks since operations can span nodes, but stoppers don't
@@ -78,22 +93,19 @@ func verifyStats(t *testing.T, mtc *multiTestContext, storeIdxSlice ...int) {
 			prefix := s.Ident.String() + ": "
 			t.Fatalf(prefix+msg, args...)
 		}
-		// Compute real total MVCC statistics from store.
-		realStats, err := s.ComputeMVCCStats()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Sanity regression check for bug #4624: ensure intent count is zero.
-		if a := realStats.IntentCount; a != 0 {
-			fatalf("expected intent count to be zero, was %d", a)
-		}
 
 		m := s.Metrics()
+
 		// Sanity check: LiveBytes is not zero (ensures we don't have
 		// zeroed out structures.)
 		if liveBytes := m.LiveBytes.Value(); liveBytes == 0 {
 			fatalf("expected livebytes to be non-zero, was zero")
+		}
+
+		// Compute real total MVCC statistics from store.
+		realStats, err := s.ComputeMVCCStats()
+		if err != nil {
+			t.Fatal(err)
 		}
 
 		// Ensure that real MVCC stats match computed stats.
@@ -154,7 +166,8 @@ func verifyRocksDBStats(t *testing.T, s *storage.Store) {
 
 func TestStoreMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(mrtracy): #8437")
+	t.Skip("TODO(mrtracy): #9204")
+
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 

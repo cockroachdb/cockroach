@@ -122,9 +122,10 @@ var (
 	// localRangeLastReplicaGCTimestampSuffix is the suffix for a range's
 	// last replica GC timestamp (for GC of old replicas).
 	LocalRangeLastReplicaGCTimestampSuffix = []byte("rlrt")
-	// localRangeLastVerificationTimestampSuffix is the suffix for a range's
+	// localRangeLastVerificationTimestampSuffixDeprecated is the suffix for a range's
 	// last verification timestamp (for checking integrity of on-disk data).
-	LocalRangeLastVerificationTimestampSuffix = []byte("rlvt")
+	// Note: DEPRECATED.
+	LocalRangeLastVerificationTimestampSuffixDeprecated = []byte("rlvt")
 	// LocalRangeReplicaDestroyedErrorSuffix is the suffix for a range's replica
 	// destroyed error (for marking replicas as dead).
 	LocalRangeReplicaDestroyedErrorSuffix = []byte("rrde")

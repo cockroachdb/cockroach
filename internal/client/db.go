@@ -211,7 +211,7 @@ func NewDBWithContext(sender Sender, ctx DBContext) *DB {
 func (db *DB) Get(key interface{}) (KeyValue, error) {
 	b := &Batch{}
 	b.Get(key)
-	return runOneRow(db, b)
+	return getOneRow(db.Run(context.TODO(), b), b)
 }
 
 // GetProto retrieves the value for a key and decodes the result as a proto
@@ -233,8 +233,7 @@ func (db *DB) GetProto(key interface{}, msg proto.Message) error {
 func (db *DB) Put(key, value interface{}) error {
 	b := &Batch{}
 	b.Put(key, value)
-	_, err := runOneResult(db, b)
-	return err
+	return getOneErr(db.Run(context.TODO(), b), b)
 }
 
 // PutInline sets the value for a key, but does not maintain
@@ -247,8 +246,7 @@ func (db *DB) Put(key, value interface{}) error {
 func (db *DB) PutInline(key, value interface{}) error {
 	b := &Batch{}
 	b.PutInline(key, value)
-	_, err := runOneResult(db, b)
-	return err
+	return getOneErr(db.Run(context.TODO(), b), b)
 }
 
 // CPut conditionally sets the value for a key if the existing value is equal
@@ -261,8 +259,7 @@ func (db *DB) PutInline(key, value interface{}) error {
 func (db *DB) CPut(key, value, expValue interface{}) error {
 	b := &Batch{}
 	b.CPut(key, value, expValue)
-	_, err := runOneResult(db, b)
-	return err
+	return getOneErr(db.Run(context.TODO(), b), b)
 }
 
 // InitPut sets the first value for a key to value. An error is reported if a
@@ -274,8 +271,7 @@ func (db *DB) CPut(key, value, expValue interface{}) error {
 func (db *DB) InitPut(key, value interface{}) error {
 	b := &Batch{}
 	b.InitPut(key, value)
-	_, err := runOneResult(db, b)
-	return err
+	return getOneErr(db.Run(context.TODO(), b), b)
 }
 
 // Inc increments the integer value at key. If the key does not exist it will
@@ -286,7 +282,7 @@ func (db *DB) InitPut(key, value interface{}) error {
 func (db *DB) Inc(key interface{}, value int64) (KeyValue, error) {
 	b := &Batch{}
 	b.Inc(key, value)
-	return runOneRow(db, b)
+	return getOneRow(db.Run(context.TODO(), b), b)
 }
 
 func (db *DB) scan(
@@ -305,7 +301,7 @@ func (db *DB) scan(
 	} else {
 		b.ReverseScan(begin, end)
 	}
-	r, err := runOneResult(db, b)
+	r, err := getOneResult(db.Run(context.TODO(), b), b)
 	return r.Rows, err
 }
 
@@ -335,8 +331,7 @@ func (db *DB) ReverseScan(begin, end interface{}, maxRows int64) ([]KeyValue, er
 func (db *DB) Del(keys ...interface{}) error {
 	b := &Batch{}
 	b.Del(keys...)
-	_, err := runOneResult(db, b)
-	return err
+	return getOneErr(db.Run(context.TODO(), b), b)
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
@@ -347,8 +342,7 @@ func (db *DB) Del(keys ...interface{}) error {
 func (db *DB) DelRange(begin, end interface{}) error {
 	b := &Batch{}
 	b.DelRange(begin, end, false)
-	_, err := runOneResult(db, b)
-	return err
+	return getOneErr(db.Run(context.TODO(), b), b)
 }
 
 // AdminMerge merges the range containing key and the subsequent
@@ -360,8 +354,7 @@ func (db *DB) DelRange(begin, end interface{}) error {
 func (db *DB) AdminMerge(key interface{}) error {
 	b := &Batch{}
 	b.adminMerge(key)
-	_, err := runOneResult(db, b)
-	return err
+	return getOneErr(db.Run(context.TODO(), b), b)
 }
 
 // AdminSplit splits the range at splitkey.
@@ -370,8 +363,7 @@ func (db *DB) AdminMerge(key interface{}) error {
 func (db *DB) AdminSplit(splitKey interface{}) error {
 	b := &Batch{}
 	b.adminSplit(splitKey)
-	_, err := runOneResult(db, b)
-	return err
+	return getOneErr(db.Run(context.TODO(), b), b)
 }
 
 // AdminTransferLease transfers the lease for the range containing key to the
@@ -387,8 +379,7 @@ func (db *DB) AdminSplit(splitKey interface{}) error {
 func (db *DB) AdminTransferLease(key interface{}, target roachpb.StoreID) error {
 	b := &Batch{}
 	b.adminTransferLease(key, target)
-	_, err := runOneResult(db, b)
-	return err
+	return getOneErr(db.Run(context.TODO(), b), b)
 }
 
 // CheckConsistency runs a consistency check on all the ranges containing
@@ -397,8 +388,7 @@ func (db *DB) AdminTransferLease(key interface{}, target roachpb.StoreID) error 
 func (db *DB) CheckConsistency(begin, end interface{}, withDiff bool) error {
 	b := &Batch{}
 	b.CheckConsistency(begin, end, withDiff)
-	_, err := runOneResult(db, b)
-	return err
+	return getOneErr(db.Run(context.TODO(), b), b)
 }
 
 // sendAndFill is a helper which sends the given batch and fills its results,
@@ -432,12 +422,25 @@ func sendAndFill(
 	return nil
 }
 
-// Run implements Runner.Run(). See comments there.
-func (db *DB) Run(b *Batch) error {
+// Run executes the operations queued up within a batch. Before executing any
+// of the operations the batch is first checked to see if there were any errors
+// during its construction (e.g. failure to marshal a proto message).
+//
+// The operations within a batch are run in parallel and the order is
+// non-deterministic. It is an unspecified behavior to modify and retrieve the
+// same key within a batch.
+//
+// Upon completion, Batch.Results will contain the results for each
+// operation. The order of the results matches the order the operations were
+// added to the batch.
+func (db *DB) Run(ctx context.Context, b *Batch) error {
 	if err := b.prepare(); err != nil {
 		return err
 	}
-	return sendAndFill(db.send, b)
+	sendFn := func(br roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		return db.send(ctx, br)
+	}
+	return sendAndFill(sendFn, b)
 }
 
 // Txn executes retryable in the context of a distributed transaction. The
@@ -470,18 +473,13 @@ func (db *DB) Txn(ctx context.Context, retryable func(txn *Txn) error) error {
 	return err
 }
 
-// send runs the specified calls synchronously in a single batch and returns
-// any errors. Returns (nil, nil) for an empty batch.
-func (db *DB) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	if len(ba.Requests) == 0 {
-		return nil, nil
-	}
+func (db *DB) prepareToSend(ba *roachpb.BatchRequest) *roachpb.Error {
 	if ba.ReadConsistency == roachpb.INCONSISTENT {
 		for _, ru := range ba.Requests {
 			req := ru.GetInner()
 			if req.Method() != roachpb.Get && req.Method() != roachpb.Scan &&
 				req.Method() != roachpb.ReverseScan {
-				return nil, roachpb.NewErrorf("method %s not allowed with INCONSISTENT batch", req.Method)
+				return roachpb.NewErrorf("method %s not allowed with INCONSISTENT batch", req.Method)
 			}
 		}
 	}
@@ -491,49 +489,60 @@ func (db *DB) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Er
 	}
 
 	tracing.AnnotateTrace()
+	return nil
+}
 
-	br, pErr := db.sender.Send(context.TODO(), ba)
+// send runs the specified calls synchronously in a single batch and returns
+// any errors. Returns (nil, nil) for an empty batch.
+func (db *DB) send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	if len(ba.Requests) == 0 {
+		return nil, nil
+	}
+	if pErr := db.prepareToSend(&ba); pErr != nil {
+		return nil, pErr
+	}
+
+	br, pErr := db.sender.Send(ctx, ba)
 	if pErr != nil {
 		if log.V(1) {
-			log.Infof(context.TODO(), "failed batch: %s", pErr)
+			log.Infof(ctx, "failed batch: %s", pErr)
 		}
 		return nil, pErr
 	}
 	return br, nil
 }
 
-// Runner only exports the Run method on a batch of operations.
-type Runner interface {
-	// Run executes the operations queued up within a batch. Before executing any
-	// of the operations the batch is first checked to see if there were any errors
-	// during its construction (e.g. failure to marshal a proto message).
-	//
-	// The operations within a batch are run in parallel and the order is
-	// non-deterministic. It is an unspecified behavior to modify and retrieve the
-	// same key within a batch.
-	//
-	// Upon completion, Batch.Results will contain the results for each
-	// operation. The order of the results matches the order the operations were
-	// added to the batch.
-	Run(b *Batch) error
+// getOneErr returns the error for a single-request Batch that was run.
+// runErr is the error returned by Run, b is the Batch that was passed to Run.
+func getOneErr(runErr error, b *Batch) error {
+	if runErr != nil && len(b.Results) > 0 {
+		return b.Results[0].Err
+	}
+	return runErr
 }
 
-func runOneResult(r Runner, b *Batch) (Result, error) {
-	if err := r.Run(b); err != nil {
+// getOneResult returns the result for a single-request Batch that was run.
+// runErr is the error returned by Run, b is the Batch that was passed to Run.
+func getOneResult(runErr error, b *Batch) (Result, error) {
+	if runErr != nil {
 		if len(b.Results) > 0 {
 			return b.Results[0], b.Results[0].Err
 		}
-		return Result{Err: err}, err
+		return Result{Err: runErr}, runErr
 	}
 	res := b.Results[0]
 	if res.Err != nil {
-		panic("r.Run() succeeded even through the result has an error")
+		panic("run succeeded even through the result has an error")
 	}
 	return res, nil
 }
 
-func runOneRow(r Runner, b *Batch) (KeyValue, error) {
-	res, err := runOneResult(r, b)
+// getOneRow returns the first row for a single-request Batch that was run.
+// runErr is the error returned by Run, b is the Batch that was passed to Run.
+func getOneRow(runErr error, b *Batch) (KeyValue, error) {
+	res, err := getOneResult(runErr, b)
 	if err != nil {
 		return KeyValue{}, err
 	}

@@ -22,6 +22,8 @@ import (
 	"sort"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/ts/tspb"
@@ -678,7 +680,7 @@ func (ai aggregatingIterator) min() float64 {
 // the same time. The returned string slices contains a list of all sources for
 // the metric which were aggregated to produce the result.
 func (db *DB) Query(
-	query tspb.Query, queryResolution Resolution, sampleDuration, startNanos, endNanos int64,
+	ctx context.Context, query tspb.Query, queryResolution Resolution, sampleDuration, startNanos, endNanos int64,
 ) ([]tspb.TimeSeriesDatapoint, []string, error) {
 	// Verify that sampleDuration is a multiple of
 	// queryResolution.SampleDuration().
@@ -710,7 +712,7 @@ func (db *DB) Query(
 		b := &client.Batch{}
 		b.Scan(startKey, endKey)
 
-		if err := db.db.Run(b); err != nil {
+		if err := db.db.Run(ctx, b); err != nil {
 			return nil, nil, err
 		}
 		rows = b.Results[0].Rows
@@ -727,7 +729,7 @@ func (db *DB) Query(
 				b.Get(key)
 			}
 		}
-		err := db.db.Run(b)
+		err := db.db.Run(ctx, b)
 		if err != nil {
 			return nil, nil, err
 		}

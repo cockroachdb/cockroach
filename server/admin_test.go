@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/timeutil"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 func getAdminJSONProto(ts serverutils.TestServerInterface, path string, response proto.Message) error {
@@ -223,10 +224,10 @@ func TestAdminAPIDatabases(t *testing.T) {
 
 	// Test databases endpoint.
 	const testdb = "test"
+	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
 	session := sql.NewSession(
-		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
 	defer session.Finish()
-
 	query := "CREATE DATABASE " + testdb
 	createRes := ts.sqlExecutor.ExecuteStatements(session, query, nil)
 	defer createRes.Close()
@@ -374,10 +375,10 @@ func testAdminAPITableDetailsInner(t *testing.T, dbName, tblName string) {
 	escDBName := parser.Name(dbName).String()
 	escTblName := parser.Name(tblName).String()
 
+	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
 	session := sql.NewSession(
-		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
 	defer session.Finish()
-
 	setupQueries := []string{
 		fmt.Sprintf("CREATE DATABASE %s", escDBName),
 		fmt.Sprintf(`CREATE TABLE %s.%s (
@@ -551,9 +552,9 @@ func TestAdminAPITableDetailsForVirtualSchema(t *testing.T) {
 			showCreateTableQuery = "SHOW CREATE TABLE information_schema.schemata"
 			createTableCol       = "CreateTable"
 		)
-
+		ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
 		session := sql.NewSession(
-			context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+			ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
 		defer session.Finish()
 
 		resSet := ts.sqlExecutor.ExecuteStatements(session, showCreateTableQuery, nil)
@@ -584,10 +585,10 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	ts := s.(*TestServer)
 
 	// Create database and table.
+	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
 	session := sql.NewSession(
-		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
 	defer session.Finish()
-
 	setupQueries := []string{
 		"CREATE DATABASE test",
 		"CREATE TABLE test.tbl (val STRING)",
@@ -692,10 +693,10 @@ func TestAdminAPIUsers(t *testing.T) {
 	ts := s.(*TestServer)
 
 	// Create sample users.
+	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
 	session := sql.NewSession(
-		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
 	defer session.Finish()
-
 	query := `
 INSERT INTO system.users (username, hashedPassword)
 VALUES ('admin', 'abc'), ('bob', 'xyz')`
@@ -734,10 +735,10 @@ func TestAdminAPIEvents(t *testing.T) {
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
 
+	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
 	session := sql.NewSession(
-		context.Background(), sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
+		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil)
 	defer session.Finish()
-
 	setupQueries := []string{
 		"CREATE DATABASE api_test",
 		"CREATE TABLE api_test.tbl1 (a INT)",

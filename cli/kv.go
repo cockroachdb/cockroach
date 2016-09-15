@@ -126,7 +126,7 @@ func runPut(cmd *cobra.Command, args []string) {
 	kvDB, stopper := makeDBClient()
 	defer stopper.Stop()
 
-	if err := kvDB.Run(b); err != nil {
+	if err := kvDB.Run(context.Background(), b); err != nil {
 		panicf("put failed: %s", err)
 	}
 }
@@ -237,7 +237,7 @@ func runDel(cmd *cobra.Command, args []string) {
 	kvDB, stopper := makeDBClient()
 	defer stopper.Stop()
 
-	if err := kvDB.Run(b); err != nil {
+	if err := kvDB.Run(context.Background(), b); err != nil {
 		panicf("delete failed: %s", err)
 	}
 }
