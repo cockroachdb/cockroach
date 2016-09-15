@@ -209,6 +209,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	expectedVersion++
 	tableDesc.UpVersion = true
 	if err := kvDB.Put(
+		context.TODO(),
 		sqlbase.MakeDescMetadataKey(tableDesc.ID),
 		sqlbase.WrapDescriptor(tableDesc),
 	); err != nil {
@@ -276,6 +277,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 		tableDesc.Mutations[0].Direction = direction
 		expectedVersion++
 		if err := kvDB.Put(
+			context.TODO(),
 			sqlbase.MakeDescMetadataKey(tableDesc.ID),
 			sqlbase.WrapDescriptor(tableDesc),
 		); err != nil {
@@ -520,7 +522,7 @@ func runSchemaChangeWithOperations(
 	// change operations.
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 	tableEnd := tablePrefix.PrefixEnd()
-	if kvs, err := kvDB.Scan(tablePrefix, tableEnd, 0); err != nil {
+	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
 	} else if e := keyMultiple * (maxValue + numInserts + 1); len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
@@ -583,7 +585,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	tableEnd := tablePrefix.PrefixEnd()
 	// number of keys == 3 * number of rows; 2 column families and 1 index entry
 	// for each row.
-	if kvs, err := kvDB.Scan(tablePrefix, tableEnd, 0); err != nil {
+	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
 	} else if e := 3 * (maxValue + 1); len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
@@ -701,7 +703,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	wg.Wait()
 
 	// Ensure that the table data has been deleted.
-	if kvs, err := kvDB.Scan(tablePrefix, tableEnd, 0); err != nil {
+	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
 	} else if len(kvs) != 0 {
 		t.Fatalf("expected %d key value pairs, but got %d", 0, len(kvs))
@@ -882,7 +884,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	numGarbageValues := csql.IndexBackfillChunkSize
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 	tableEnd := tablePrefix.PrefixEnd()
-	if kvs, err := kvDB.Scan(tablePrefix, tableEnd, 0); err != nil {
+	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
 	} else if e := 1*(maxValue+2) + numGarbageValues; len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
@@ -902,7 +904,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	// No garbage left behind.
 	numGarbageValues = 0
-	if kvs, err := kvDB.Scan(tablePrefix, tableEnd, 0); err != nil {
+	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
 	} else if e := 1*(maxValue+2) + numGarbageValues; len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
@@ -1087,7 +1089,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	// Check that the number of k-v pairs is accurate.
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 	tableEnd := tablePrefix.PrefixEnd()
-	if kvs, err := kvDB.Scan(tablePrefix, tableEnd, 0); err != nil {
+	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
 		t.Fatal(err)
 	} else if e := 2 * (maxValue + 1); len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))

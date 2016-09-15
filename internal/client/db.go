@@ -208,18 +208,18 @@ func NewDBWithContext(sender Sender, ctx DBContext) *DB {
 //   // string(r.Key) == "a"
 //
 // key can be either a byte slice or a string.
-func (db *DB) Get(key interface{}) (KeyValue, error) {
+func (db *DB) Get(ctx context.Context, key interface{}) (KeyValue, error) {
 	b := &Batch{}
 	b.Get(key)
-	return getOneRow(db.Run(context.TODO(), b), b)
+	return getOneRow(db.Run(ctx, b), b)
 }
 
 // GetProto retrieves the value for a key and decodes the result as a proto
 // message.
 //
 // key can be either a byte slice or a string.
-func (db *DB) GetProto(key interface{}, msg proto.Message) error {
-	r, err := db.Get(key)
+func (db *DB) GetProto(ctx context.Context, key interface{}, msg proto.Message) error {
+	r, err := db.Get(ctx, key)
 	if err != nil {
 		return err
 	}
@@ -230,10 +230,10 @@ func (db *DB) GetProto(key interface{}, msg proto.Message) error {
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // proto.Message or any Go primitive type (bool, int, etc).
-func (db *DB) Put(key, value interface{}) error {
+func (db *DB) Put(ctx context.Context, key, value interface{}) error {
 	b := &Batch{}
 	b.Put(key, value)
-	return getOneErr(db.Run(context.TODO(), b), b)
+	return getOneErr(db.Run(ctx, b), b)
 }
 
 // PutInline sets the value for a key, but does not maintain
@@ -243,10 +243,10 @@ func (db *DB) Put(key, value interface{}) error {
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // proto.Message or any Go primitive type (bool, int, etc).
-func (db *DB) PutInline(key, value interface{}) error {
+func (db *DB) PutInline(ctx context.Context, key, value interface{}) error {
 	b := &Batch{}
 	b.PutInline(key, value)
-	return getOneErr(db.Run(context.TODO(), b), b)
+	return getOneErr(db.Run(ctx, b), b)
 }
 
 // CPut conditionally sets the value for a key if the existing value is equal
@@ -256,10 +256,10 @@ func (db *DB) PutInline(key, value interface{}) error {
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // proto.Message or any Go primitive type (bool, int, etc).
-func (db *DB) CPut(key, value, expValue interface{}) error {
+func (db *DB) CPut(ctx context.Context, key, value, expValue interface{}) error {
 	b := &Batch{}
 	b.CPut(key, value, expValue)
-	return getOneErr(db.Run(context.TODO(), b), b)
+	return getOneErr(db.Run(ctx, b), b)
 }
 
 // InitPut sets the first value for a key to value. An error is reported if a
@@ -268,10 +268,10 @@ func (db *DB) CPut(key, value, expValue interface{}) error {
 // key can be either a byte slice or a string. value can be any key type, a
 // proto.Message or any Go primitive type (bool, int, etc). It is illegal to
 // set value to nil.
-func (db *DB) InitPut(key, value interface{}) error {
+func (db *DB) InitPut(ctx context.Context, key, value interface{}) error {
 	b := &Batch{}
 	b.InitPut(key, value)
-	return getOneErr(db.Run(context.TODO(), b), b)
+	return getOneErr(db.Run(ctx, b), b)
 }
 
 // Inc increments the integer value at key. If the key does not exist it will
@@ -279,13 +279,14 @@ func (db *DB) InitPut(key, value interface{}) error {
 // key exists but was set using Put or CPut an error will be returned.
 //
 // key can be either a byte slice or a string.
-func (db *DB) Inc(key interface{}, value int64) (KeyValue, error) {
+func (db *DB) Inc(ctx context.Context, key interface{}, value int64) (KeyValue, error) {
 	b := &Batch{}
 	b.Inc(key, value)
-	return getOneRow(db.Run(context.TODO(), b), b)
+	return getOneRow(db.Run(ctx, b), b)
 }
 
 func (db *DB) scan(
+	ctx context.Context,
 	begin, end interface{},
 	maxRows int64,
 	isReverse bool,
@@ -301,7 +302,7 @@ func (db *DB) scan(
 	} else {
 		b.ReverseScan(begin, end)
 	}
-	r, err := getOneResult(db.Run(context.TODO(), b), b)
+	r, err := getOneResult(db.Run(ctx, b), b)
 	return r.Rows, err
 }
 
@@ -311,8 +312,8 @@ func (db *DB) scan(
 // The returned []KeyValue will contain up to maxRows elements.
 //
 // key can be either a byte slice or a string.
-func (db *DB) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
-	return db.scan(begin, end, maxRows, false, roachpb.CONSISTENT)
+func (db *DB) Scan(ctx context.Context, begin, end interface{}, maxRows int64) ([]KeyValue, error) {
+	return db.scan(ctx, begin, end, maxRows, false, roachpb.CONSISTENT)
 }
 
 // ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
@@ -321,17 +322,19 @@ func (db *DB) Scan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
 // The returned []KeyValue will contain up to maxRows elements.
 //
 // key can be either a byte slice or a string.
-func (db *DB) ReverseScan(begin, end interface{}, maxRows int64) ([]KeyValue, error) {
-	return db.scan(begin, end, maxRows, true, roachpb.CONSISTENT)
+func (db *DB) ReverseScan(
+	ctx context.Context, begin, end interface{}, maxRows int64,
+) ([]KeyValue, error) {
+	return db.scan(ctx, begin, end, maxRows, true, roachpb.CONSISTENT)
 }
 
 // Del deletes one or more keys.
 //
 // key can be either a byte slice or a string.
-func (db *DB) Del(keys ...interface{}) error {
+func (db *DB) Del(ctx context.Context, keys ...interface{}) error {
 	b := &Batch{}
 	b.Del(keys...)
-	return getOneErr(db.Run(context.TODO(), b), b)
+	return getOneErr(db.Run(ctx, b), b)
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
@@ -339,10 +342,10 @@ func (db *DB) Del(keys ...interface{}) error {
 // TODO(pmattis): Perhaps the result should return which rows were deleted.
 //
 // key can be either a byte slice or a string.
-func (db *DB) DelRange(begin, end interface{}) error {
+func (db *DB) DelRange(ctx context.Context, begin, end interface{}) error {
 	b := &Batch{}
 	b.DelRange(begin, end, false)
-	return getOneErr(db.Run(context.TODO(), b), b)
+	return getOneErr(db.Run(ctx, b), b)
 }
 
 // AdminMerge merges the range containing key and the subsequent
@@ -351,19 +354,19 @@ func (db *DB) DelRange(begin, end interface{}) error {
 // and the subsequent range will no longer exist.
 //
 // key can be either a byte slice or a string.
-func (db *DB) AdminMerge(key interface{}) error {
+func (db *DB) AdminMerge(ctx context.Context, key interface{}) error {
 	b := &Batch{}
 	b.adminMerge(key)
-	return getOneErr(db.Run(context.TODO(), b), b)
+	return getOneErr(db.Run(ctx, b), b)
 }
 
 // AdminSplit splits the range at splitkey.
 //
 // key can be either a byte slice or a string.
-func (db *DB) AdminSplit(splitKey interface{}) error {
+func (db *DB) AdminSplit(ctx context.Context, splitKey interface{}) error {
 	b := &Batch{}
 	b.adminSplit(splitKey)
-	return getOneErr(db.Run(context.TODO(), b), b)
+	return getOneErr(db.Run(ctx, b), b)
 }
 
 // AdminTransferLease transfers the lease for the range containing key to the
@@ -376,19 +379,19 @@ func (db *DB) AdminSplit(splitKey interface{}) error {
 // applied the new lease, but that's about it. It's not guaranteed that the new
 // lease holder has applied it (so it might not know immediately that it is the
 // new lease holder).
-func (db *DB) AdminTransferLease(key interface{}, target roachpb.StoreID) error {
+func (db *DB) AdminTransferLease(ctx context.Context, key interface{}, target roachpb.StoreID) error {
 	b := &Batch{}
 	b.adminTransferLease(key, target)
-	return getOneErr(db.Run(context.TODO(), b), b)
+	return getOneErr(db.Run(ctx, b), b)
 }
 
 // CheckConsistency runs a consistency check on all the ranges containing
 // the key span. It logs a diff of all the keys that are inconsistent
 // when withDiff is set to true.
-func (db *DB) CheckConsistency(begin, end interface{}, withDiff bool) error {
+func (db *DB) CheckConsistency(ctx context.Context, begin, end interface{}, withDiff bool) error {
 	b := &Batch{}
 	b.CheckConsistency(begin, end, withDiff)
-	return getOneErr(db.Run(context.TODO(), b), b)
+	return getOneErr(db.Run(ctx, b), b)
 }
 
 // sendAndFill is a helper which sends the given batch and fills its results,

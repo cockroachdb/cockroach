@@ -85,7 +85,7 @@ func runGet(cmd *cobra.Command, args []string) {
 	defer stopper.Stop()
 
 	key := roachpb.Key(unquoteArg(args[0], false))
-	r, err := kvDB.Get(key)
+	r, err := kvDB.Get(context.Background(), key)
 	if err != nil {
 		panicf("get failed: %s", err)
 	}
@@ -159,9 +159,9 @@ func runCPut(cmd *cobra.Command, args []string) {
 	value := unquoteArg(args[1], false)
 	var err error
 	if len(args) == 3 {
-		err = kvDB.CPut(key, value, unquoteArg(args[2], false))
+		err = kvDB.CPut(context.Background(), key, value, unquoteArg(args[2], false))
 	} else {
-		err = kvDB.CPut(key, value, nil)
+		err = kvDB.CPut(context.Background(), key, value, nil)
 	}
 
 	if err != nil {
@@ -203,7 +203,7 @@ func runInc(cmd *cobra.Command, args []string) {
 	}
 
 	key := roachpb.Key(unquoteArg(args[0], true /* disallow system keys */))
-	if r, err := kvDB.Inc(key, int64(amount)); err != nil {
+	if r, err := kvDB.Inc(context.TODO(), key, int64(amount)); err != nil {
 		panicf("increment failed: %s", err)
 	} else {
 		fmt.Printf("%d\n", r.ValueInt())
@@ -266,6 +266,7 @@ func runDelRange(cmd *cobra.Command, args []string) {
 	defer stopper.Stop()
 
 	if err := kvDB.DelRange(
+		context.TODO(),
 		unquoteArg(args[0], true /* disallow system keys */),
 		unquoteArg(args[1], true /* disallow system keys */),
 	); err != nil {
@@ -298,7 +299,7 @@ func runScan(cmd *cobra.Command, args []string) {
 	kvDB, stopper := makeDBClient()
 	defer stopper.Stop()
 
-	rows, err := kvDB.Scan(startKey, endKey, maxResults)
+	rows, err := kvDB.Scan(context.Background(), startKey, endKey, maxResults)
 	if err != nil {
 		panicf("scan failed: %s", err)
 	}
@@ -329,7 +330,7 @@ func runReverseScan(cmd *cobra.Command, args []string) {
 	kvDB, stopper := makeDBClient()
 	defer stopper.Stop()
 
-	rows, err := kvDB.ReverseScan(startKey, endKey, maxResults)
+	rows, err := kvDB.ReverseScan(context.TODO(), startKey, endKey, maxResults)
 	if err != nil {
 		panicf("reverse scan failed: %s", err)
 	}

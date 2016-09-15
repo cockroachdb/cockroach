@@ -234,7 +234,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	tds := kv.NewTxnCoordSender(ctx, ds, s.Clock(), ts.Ctx.Linearizable,
 		ts.stopper, kv.MakeTxnMetrics())
 
-	if err := ts.node.ctx.DB.AdminSplit("m"); err != nil {
+	if err := ts.node.ctx.DB.AdminSplit(context.TODO(), "m"); err != nil {
 		t.Fatal(err)
 	}
 	writes := []roachpb.Key{roachpb.Key("a"), roachpb.Key("z")}
@@ -333,7 +333,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 			ts.stopper, kv.MakeTxnMetrics())
 
 		for _, sk := range tc.splitKeys {
-			if err := ts.node.ctx.DB.AdminSplit(sk); err != nil {
+			if err := ts.node.ctx.DB.AdminSplit(context.TODO(), sk); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -372,6 +372,7 @@ func TestSystemConfigGossip(t *testing.T) {
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 	ts := s.(*TestServer)
+	ctx := context.TODO()
 
 	key := sqlbase.MakeDescMetadataKey(keys.MaxReservedDescID)
 	valAt := func(i int) *sqlbase.DatabaseDescriptor {
@@ -390,12 +391,12 @@ func TestSystemConfigGossip(t *testing.T) {
 	}
 
 	// Try a plain KV write first.
-	if err := kvDB.Put(key, valAt(0)); err != nil {
+	if err := kvDB.Put(ctx, key, valAt(0)); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now do it as part of a transaction, but without the trigger set.
-	if err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := kvDB.Txn(ctx, func(txn *client.Txn) error {
 		return txn.Put(key, valAt(1))
 	}); err != nil {
 		t.Fatal(err)
@@ -416,7 +417,7 @@ func TestSystemConfigGossip(t *testing.T) {
 	}
 
 	// This time mark the transaction as having a Gossip trigger.
-	if err := kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := kvDB.Txn(ctx, func(txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
 		return txn.Put(key, valAt(2))
 	}); err != nil {
