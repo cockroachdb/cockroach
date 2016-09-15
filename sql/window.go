@@ -405,6 +405,10 @@ type peerGroupChecker interface {
 // 2D-slice for each window function in n.funcs.
 func (n *windowNode) computeWindows() error {
 	rowCount := n.wrappedValues.Len()
+	if rowCount == 0 {
+		return nil
+	}
+
 	windowCount := len(n.funcs)
 	acc := n.windowsAcc.W(n.planner.session)
 
