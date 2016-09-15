@@ -78,6 +78,10 @@ func newReplicaGCQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *repl
 		maxSize:              replicaGCQueueMaxSize,
 		needsLease:           false,
 		acceptsUnsplitRanges: true,
+		successes:            store.metrics.ReplicaGCQueueSuccesses,
+		failures:             store.metrics.ReplicaGCQueueFailures,
+		pending:              store.metrics.ReplicaGCQueuePending,
+		processingTime:       store.metrics.ReplicaGCQueueTime,
 	})
 	return q
 }

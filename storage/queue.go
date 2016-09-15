@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -147,6 +148,16 @@ type queueConfig struct {
 	acceptsUnsplitRanges bool
 	// processTimeout is the timeout for processing a replica.
 	processTimeout time.Duration
+	// successes is a total count of replicas processed successfully.
+	successes *metric.Counter
+	// failures is a total count of replicas which failed processing.
+	failures *metric.Counter
+	// pending is a gauge measuring current replica count pending.
+	pending *metric.Gauge
+	// processingTime is a counter measuring total nanoseconds spent processing replicas.
+	processingTime *metric.Counter
+	// purgatory is a gauge measuring current replica count in purgatory.
+	purgatory *metric.Gauge
 }
 
 // baseQueue is the base implementation of the replicaQueue interface.
@@ -373,8 +384,7 @@ func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) (
 
 	log.VEventf(3, bq.ctx, "%s: adding: priority=%0.3f", repl, priority)
 	item = &replicaItem{value: repl.RangeID, priority: priority}
-	heap.Push(&bq.mu.priorityQ, item)
-	bq.mu.replicas[repl.RangeID] = item
+	bq.add(item)
 
 	// If adding this replica has pushed the queue past its maximum size,
 	// remove the lowest priority element.
@@ -511,11 +521,15 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 
 	log.VEventf(3, bq.ctx, "processing")
 	start := timeutil.Now()
-	if err := bq.impl.process(ctx, clock.Now(), repl, cfg); err != nil {
+	err := bq.impl.process(ctx, clock.Now(), repl, cfg)
+	duration := timeutil.Since(start)
+	bq.processingTime.Inc(duration.Nanoseconds())
+	if err != nil {
 		return err
 	}
-	log.VEventf(2, bq.ctx, "done: %s", timeutil.Since(start))
+	log.VEventf(2, bq.ctx, "done: %s", duration)
 	log.Trace(ctx, "done")
+	bq.successes.Inc(1)
 	return nil
 }
 
@@ -526,6 +540,9 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 // mechanism for signaling re-processing of replicas held in
 // purgatory.
 func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Clock, stopper *stop.Stopper) {
+	// Increment failures metric.
+	bq.failures.Inc(1)
+
 	// Check whether the failure is a purgatory error and whether the queue supports it.
 	if _, ok := err.(purgatoryError); !ok || bq.impl.purgatoryChan() == nil {
 		log.Errorf(bq.ctx, "on %s: %s", repl, err)
@@ -543,6 +560,10 @@ func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Cl
 
 	item := &replicaItem{value: repl.RangeID}
 	bq.mu.replicas[repl.RangeID] = item
+
+	defer func() {
+		bq.purgatory.Update(int64(len(bq.mu.purgatory)))
+	}()
 
 	// If purgatory already exists, just add to the map and we're done.
 	if bq.mu.purgatory != nil {
@@ -620,6 +641,7 @@ func (bq *baseQueue) pop() *Replica {
 		return nil
 	}
 	item := heap.Pop(&bq.mu.priorityQ).(*replicaItem)
+	bq.pending.Update(int64(bq.mu.priorityQ.Len()))
 	delete(bq.mu.replicas, item.value)
 	bq.mu.Unlock()
 
@@ -631,13 +653,22 @@ func (bq *baseQueue) pop() *Replica {
 	return repl
 }
 
+// add adds an element to the priority queue. Caller must hold mutex.
+func (bq *baseQueue) add(item *replicaItem) {
+	heap.Push(&bq.mu.priorityQ, item)
+	bq.pending.Update(int64(bq.mu.priorityQ.Len()))
+	bq.mu.replicas[item.value] = item
+}
+
 // remove removes an element from purgatory (if it's experienced an
 // error) or from the priority queue by index. Caller must hold mutex.
 func (bq *baseQueue) remove(item *replicaItem) {
 	if _, ok := bq.mu.purgatory[item.value]; ok {
 		delete(bq.mu.purgatory, item.value)
+		bq.purgatory.Update(int64(len(bq.mu.purgatory)))
 	} else {
 		heap.Remove(&bq.mu.priorityQ, item.index)
+		bq.pending.Update(int64(bq.mu.priorityQ.Len()))
 	}
 	delete(bq.mu.replicas, item.value)
 }
@@ -649,6 +680,7 @@ func (bq *baseQueue) DrainQueue(clock *hlc.Clock) {
 	repl := bq.pop()
 	for repl != nil {
 		if err := bq.processReplica(repl, clock); err != nil {
+			bq.failures.Inc(1)
 			log.Errorf(bq.ctx, "failed processing replica %s: %s", repl, err)
 		}
 		repl = bq.pop()
