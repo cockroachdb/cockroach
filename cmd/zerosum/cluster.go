@@ -181,7 +181,7 @@ func (c *cluster) waitForFullReplication() {
 
 func (c *cluster) isReplicated() (bool, string) {
 	db := c.clients[0]
-	rows, err := db.Scan(keys.Meta2Prefix, keys.Meta2Prefix.PrefixEnd(), 100000)
+	rows, err := db.Scan(context.Background(), keys.Meta2Prefix, keys.Meta2Prefix.PrefixEnd(), 100000)
 	if err != nil {
 		log.Fatalf(context.Background(), "scan failed: %s\n", err)
 	}
@@ -211,7 +211,7 @@ func (c *cluster) isReplicated() (bool, string) {
 }
 
 func (c *cluster) split(nodeIdx int, splitKey roachpb.Key) error {
-	return c.clients[nodeIdx].AdminSplit(splitKey)
+	return c.clients[nodeIdx].AdminSplit(context.Background(), splitKey)
 }
 
 func (c *cluster) transferLease(nodeIdx int, r *rand.Rand, key roachpb.Key) (bool, error) {
@@ -230,7 +230,7 @@ func (c *cluster) transferLease(nodeIdx int, r *rand.Rand, key roachpb.Key) (boo
 			break
 		}
 	}
-	if err := c.clients[nodeIdx].AdminTransferLease(key, target); err != nil {
+	if err := c.clients[nodeIdx].AdminTransferLease(context.Background(), key, target); err != nil {
 		return false, errors.Errorf("%s: transfer lease: %s", key, err)
 	}
 	return true, nil

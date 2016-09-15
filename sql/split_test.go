@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -33,7 +35,7 @@ import (
 
 // getRangeKeys returns the end keys of all ranges.
 func getRangeKeys(db *client.DB) ([]roachpb.Key, error) {
-	rows, err := db.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
+	rows, err := db.Scan(context.TODO(), keys.Meta2Prefix, keys.MetaMax, 0)
 	if err != nil {
 		return nil, err
 	}

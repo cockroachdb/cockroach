@@ -331,7 +331,7 @@ func compareNodeStatus(t *testing.T, ts *TestServer, expectedNodeStatus *status.
 	// ========================================
 	nodeStatusKey := keys.NodeStatusKey(int32(ts.node.Descriptor.NodeID))
 	nodeStatus := &status.NodeStatus{}
-	if err := ts.db.GetProto(nodeStatusKey, nodeStatus); err != nil {
+	if err := ts.db.GetProto(context.TODO(), nodeStatusKey, nodeStatus); err != nil {
 		t.Fatalf("%d: failure getting node status: %s", testNumber, err)
 	}
 
@@ -450,6 +450,7 @@ func TestStatusSummaries(t *testing.T) {
 	})
 	defer srv.Stopper().Stop()
 	ts := srv.(*TestServer)
+	ctx := context.TODO()
 
 	// Retrieve the first store from the Node.
 	s, err := ts.node.stores.GetStore(roachpb.StoreID(1))
@@ -463,7 +464,7 @@ func TestStatusSummaries(t *testing.T) {
 	leftKey := "a"
 
 	// Scan over all keys to "wake up" all replicas (force a lease holder election).
-	if _, err := kvDB.Scan(keys.MetaMax, keys.MaxKey, 0); err != nil {
+	if _, err := kvDB.Scan(context.TODO(), keys.MetaMax, keys.MaxKey, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -552,10 +553,10 @@ func TestStatusSummaries(t *testing.T) {
 	rightKey := "c"
 
 	// Write some values left and right of the proposed split key.
-	if err := ts.db.Put(leftKey, content); err != nil {
+	if err := ts.db.Put(ctx, leftKey, content); err != nil {
 		t.Fatal(err)
 	}
-	if err := ts.db.Put(rightKey, content); err != nil {
+	if err := ts.db.Put(ctx, rightKey, content); err != nil {
 		t.Fatal(err)
 	}
 
@@ -582,16 +583,16 @@ func TestStatusSummaries(t *testing.T) {
 	// ========================================
 
 	// Split the range.
-	if err := ts.db.AdminSplit(splitKey); err != nil {
+	if err := ts.db.AdminSplit(context.TODO(), splitKey); err != nil {
 		t.Fatal(err)
 	}
 
 	// Write on both sides of the split to ensure that the raft machinery
 	// is running.
-	if err := ts.db.Put(leftKey, content); err != nil {
+	if err := ts.db.Put(ctx, leftKey, content); err != nil {
 		t.Fatal(err)
 	}
-	if err := ts.db.Put(rightKey, content); err != nil {
+	if err := ts.db.Put(ctx, rightKey, content); err != nil {
 		t.Fatal(err)
 	}
 

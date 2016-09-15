@@ -527,7 +527,7 @@ func (s *adminServer) TableStats(ctx context.Context, req *serverpb.TableStatsRe
 
 	// Get current range descriptors for table. This is done by scanning over
 	// meta2 keys for the range.
-	rangeDescKVs, err := s.server.db.Scan(keys.RangeMetaKey(startKey), keys.RangeMetaKey(endKey), 0)
+	rangeDescKVs, err := s.server.db.Scan(ctx, keys.RangeMetaKey(startKey), keys.RangeMetaKey(endKey), 0)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
