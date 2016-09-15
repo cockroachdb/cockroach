@@ -150,6 +150,58 @@ var (
 
 	metaRaftEnqueuedPending = metric.Metadata{Name: "raft.enqueued.pending",
 		Help: "Number of pending outgoing messages in the Raft Transport queue"}
+
+	// Replica queue metrics.
+	metaGCQueueSuccesses = metric.Metadata{Name: "queue.gc.process.success",
+		Help: "Number of replicas successfully processed by the GC queue"}
+	metaGCQueueFailures = metric.Metadata{Name: "queue.gc.process.failure",
+		Help: "Number of replicas which failed processing in the GC queue"}
+	metaGCQueuePending = metric.Metadata{Name: "queue.gc.pending",
+		Help: "Number of pending replicas in the GC queue"}
+	metaGCQueueProcessingNanos = metric.Metadata{Name: "queue.gc.processingnanos",
+		Help: "Nanoseconds spent processing replicas in the GC queue"}
+	metaRaftLogQueueSuccesses = metric.Metadata{Name: "queue.raftlog.process.success",
+		Help: "Number of replicas successfully processed by the raft log queue"}
+	metaRaftLogQueueFailures = metric.Metadata{Name: "queue.raftlog.process.failure",
+		Help: "Number of replicas which failed processing in the raft log queue"}
+	metaRaftLogQueuePending = metric.Metadata{Name: "queue.raftlog.pending",
+		Help: "Number of pending replicas in the raft log queue"}
+	metaRaftLogQueueProcessingNanos = metric.Metadata{Name: "queue.raftlog.processingnanos",
+		Help: "Nanoseconds spent processing replicas in the raft log queue"}
+	metaConsistencyQueueSuccesses = metric.Metadata{Name: "queue.consistency.process.success",
+		Help: "Number of replicas successfully processed by the consistency checker queue"}
+	metaConsistencyQueueFailures = metric.Metadata{Name: "queue.consistency.process.failure",
+		Help: "Number of replicas which failed processing in the consistency checker queue"}
+	metaConsistencyQueuePending = metric.Metadata{Name: "queue.consistency.pending",
+		Help: "Number of pending replicas in the consistency checker queue"}
+	metaConsistencyQueueProcessingNanos = metric.Metadata{Name: "queue.consistency.processingnanos",
+		Help: "Nanoseconds spent processing replicas in the consistency checker queue"}
+	metaReplicaGCQueueSuccesses = metric.Metadata{Name: "queue.replicagc.process.success",
+		Help: "Number of replicas successfully processed by the replica GC queue"}
+	metaReplicaGCQueueFailures = metric.Metadata{Name: "queue.replicagc.process.failure",
+		Help: "Number of replicas which failed processing in the replica GC queue"}
+	metaReplicaGCQueuePending = metric.Metadata{Name: "queue.replicagc.pending",
+		Help: "Number of pending replicas in the replica GC queue"}
+	metaReplicaGCQueueProcessingNanos = metric.Metadata{Name: "queue.replicagc.processingnanos",
+		Help: "Nanoseconds spent processing replicas in the replica GC queue"}
+	metaReplicateQueueSuccesses = metric.Metadata{Name: "queue.replicate.process.success",
+		Help: "Number of replicas successfully processed by the replicate queue"}
+	metaReplicateQueueFailures = metric.Metadata{Name: "queue.replicate.process.failure",
+		Help: "Number of replicas which failed processing in the replicate queue"}
+	metaReplicateQueuePending = metric.Metadata{Name: "queue.replicate.pending",
+		Help: "Number of pending replicas in the replicate queue"}
+	metaReplicateQueueProcessingNanos = metric.Metadata{Name: "queue.replicate.processingnanos",
+		Help: "Nanoseconds spent processing replicas in the replicate queue"}
+	metaReplicateQueuePurgatory = metric.Metadata{Name: "queue.replicate.purgatory",
+		Help: "Number of replicas in the replicate queue's purgatory, awaiting allocation options"}
+	metaSplitQueueSuccesses = metric.Metadata{Name: "queue.split.process.success",
+		Help: "Number of replicas successfully processed by the split queue"}
+	metaSplitQueueFailures = metric.Metadata{Name: "queue.split.process.failure",
+		Help: "Number of replicas which failed processing in the split queue"}
+	metaSplitQueuePending = metric.Metadata{Name: "queue.split.pending",
+		Help: "Number of pending replicas in the split queue"}
+	metaSplitQueueProcessingNanos = metric.Metadata{Name: "queue.split.processingnanos",
+		Help: "Nanoseconds spent processing replicas in the split queue"}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -249,6 +301,33 @@ type StoreMetrics struct {
 
 	RaftEnqueuedPending *metric.Gauge
 
+	// Replica queue metrics.
+	GCQueueSuccesses                *metric.Counter
+	GCQueueFailures                 *metric.Counter
+	GCQueuePending                  *metric.Gauge
+	GCQueueProcessingNanos          *metric.Counter
+	RaftLogQueueSuccesses           *metric.Counter
+	RaftLogQueueFailures            *metric.Counter
+	RaftLogQueuePending             *metric.Gauge
+	RaftLogQueueProcessingNanos     *metric.Counter
+	ConsistencyQueueSuccesses       *metric.Counter
+	ConsistencyQueueFailures        *metric.Counter
+	ConsistencyQueuePending         *metric.Gauge
+	ConsistencyQueueProcessingNanos *metric.Counter
+	ReplicaGCQueueSuccesses         *metric.Counter
+	ReplicaGCQueueFailures          *metric.Counter
+	ReplicaGCQueuePending           *metric.Gauge
+	ReplicaGCQueueProcessingNanos   *metric.Counter
+	ReplicateQueueSuccesses         *metric.Counter
+	ReplicateQueueFailures          *metric.Counter
+	ReplicateQueuePending           *metric.Gauge
+	ReplicateQueueProcessingNanos   *metric.Counter
+	ReplicateQueuePurgatory         *metric.Gauge
+	SplitQueueSuccesses             *metric.Counter
+	SplitQueueFailures              *metric.Counter
+	SplitQueuePending               *metric.Gauge
+	SplitQueueProcessingNanos       *metric.Counter
+
 	// Stats for efficient merges.
 	mu struct {
 		syncutil.Mutex
@@ -343,6 +422,33 @@ func newStoreMetrics() *StoreMetrics {
 		raftRcvdMessages:          make(map[raftpb.MessageType]*metric.Counter, len(raftpb.MessageType_name)),
 
 		RaftEnqueuedPending: metric.NewGauge(metaRaftEnqueuedPending),
+
+		// Replica queue metrics.
+		GCQueueSuccesses:                metric.NewCounter(metaGCQueueSuccesses),
+		GCQueueFailures:                 metric.NewCounter(metaGCQueueFailures),
+		GCQueuePending:                  metric.NewGauge(metaGCQueuePending),
+		GCQueueProcessingNanos:          metric.NewCounter(metaGCQueueProcessingNanos),
+		RaftLogQueueSuccesses:           metric.NewCounter(metaRaftLogQueueSuccesses),
+		RaftLogQueueFailures:            metric.NewCounter(metaRaftLogQueueFailures),
+		RaftLogQueuePending:             metric.NewGauge(metaRaftLogQueuePending),
+		RaftLogQueueProcessingNanos:     metric.NewCounter(metaRaftLogQueueProcessingNanos),
+		ConsistencyQueueSuccesses:       metric.NewCounter(metaConsistencyQueueSuccesses),
+		ConsistencyQueueFailures:        metric.NewCounter(metaConsistencyQueueFailures),
+		ConsistencyQueuePending:         metric.NewGauge(metaConsistencyQueuePending),
+		ConsistencyQueueProcessingNanos: metric.NewCounter(metaConsistencyQueueProcessingNanos),
+		ReplicaGCQueueSuccesses:         metric.NewCounter(metaReplicaGCQueueSuccesses),
+		ReplicaGCQueueFailures:          metric.NewCounter(metaReplicaGCQueueFailures),
+		ReplicaGCQueuePending:           metric.NewGauge(metaReplicaGCQueuePending),
+		ReplicaGCQueueProcessingNanos:   metric.NewCounter(metaReplicaGCQueueProcessingNanos),
+		ReplicateQueueSuccesses:         metric.NewCounter(metaReplicateQueueSuccesses),
+		ReplicateQueueFailures:          metric.NewCounter(metaReplicateQueueFailures),
+		ReplicateQueuePending:           metric.NewGauge(metaReplicateQueuePending),
+		ReplicateQueueProcessingNanos:   metric.NewCounter(metaReplicateQueueProcessingNanos),
+		ReplicateQueuePurgatory:         metric.NewGauge(metaReplicateQueuePurgatory),
+		SplitQueueSuccesses:             metric.NewCounter(metaSplitQueueSuccesses),
+		SplitQueueFailures:              metric.NewCounter(metaSplitQueueFailures),
+		SplitQueuePending:               metric.NewGauge(metaSplitQueuePending),
+		SplitQueueProcessingNanos:       metric.NewCounter(metaSplitQueueProcessingNanos),
 	}
 
 	sm.raftRcvdMessages[raftpb.MsgProp] = sm.RaftRcvdMsgProp
