@@ -325,9 +325,9 @@ type Store struct {
 
 	// Locking notes: To avoid deadlocks, the following lock order must be
 	// obeyed: Replica.raftMu < Store.uninitRaftMu < Replica.readOnlyCmdMu <
-	// Store.mu.Mutex < Replica.mu.Mutex < Store.pendingRaftGroups.Mutex. (It is
-	// not required to acquire every lock in sequence, but when multiple locks
-	// are held at the same time, it is incorrect to acquire a lock with "lesser"
+	// Store.mu.Mutex < Replica.mu.Mutex < Store.scheduler.mu. (It is not
+	// required to acquire every lock in sequence, but when multiple locks are
+	// held at the same time, it is incorrect to acquire a lock with "lesser"
 	// value in this sequence after one with "greater" value)
 	//
 	// Methods of Store with a "Locked" suffix require that
@@ -390,10 +390,9 @@ type Store struct {
 	//   lock is held even though they do not follow our convention of
 	//   the "Locked" suffix.
 	//
-	// * Store.pendingRaftGroups.Mutex: Protects the set of Replicas
-	//   that need to be checked for raft changes on the next iteration.
-	//   It has its own lock because it is called from Replica while
-	//   holding Replica.mu.
+	// * Store.scheduler.mu: Protects the Raft scheduler internal
+	//   state. Callbacks from the scheduler are performed while not holding this
+	//   mutex in order to observe the above ordering constraints.
 	//
 	// Splits (and merges, but they're not finished and so will not be
 	// discussed here) deserve special consideration: they operate on
