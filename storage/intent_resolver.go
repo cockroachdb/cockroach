@@ -173,7 +173,7 @@ func (ir *intentResolver) maybePushTransactions(
 		}
 	}
 
-	log.Trace(ctx, "pushing transaction")
+	log.Event(ctx, "pushing transaction")
 
 	// Split intents into those we need to push and those which are good to
 	// resolve.
@@ -403,7 +403,7 @@ func (ir *intentResolver) resolveIntents(ctx context.Context,
 	// We're doing async stuff below; those need new traces.
 	ctx, cleanup := tracing.EnsureContext(ctx, ir.store.Tracer())
 	defer cleanup()
-	log.Tracef(ctx, "resolving intents [wait=%t]", wait)
+	log.Eventf(ctx, "resolving intents [wait=%t]", wait)
 
 	var reqs []roachpb.Request
 	for i := range intents {

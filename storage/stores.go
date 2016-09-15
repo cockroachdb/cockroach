@@ -173,7 +173,7 @@ func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.B
 			// The uncertainty window is [OrigTimestamp, maxTS), so if that window
 			// is empty, there won't be any uncertainty restarts.
 			if !ba.Txn.OrigTimestamp.Less(maxTS) {
-				log.Trace(ctx, "read has no clock uncertainty")
+				log.Event(ctx, "read has no clock uncertainty")
 			}
 			shallowTxn.MaxTimestamp.Backward(maxTS)
 			ba.Txn = &shallowTxn

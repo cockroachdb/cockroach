@@ -325,9 +325,9 @@ type Store struct {
 
 	// Locking notes: To avoid deadlocks, the following lock order must be
 	// obeyed: Replica.raftMu < Store.uninitRaftMu < Replica.readOnlyCmdMu <
-	// Store.mu.Mutex < Replica.mu.Mutex < Store.pendingRaftGroups.Mutex. (It is
-	// not required to acquire every lock in sequence, but when multiple locks
-	// are held at the same time, it is incorrect to acquire a lock with "lesser"
+	// Store.mu.Mutex < Replica.mu.Mutex < Store.scheduler.mu. (It is not
+	// required to acquire every lock in sequence, but when multiple locks are
+	// held at the same time, it is incorrect to acquire a lock with "lesser"
 	// value in this sequence after one with "greater" value)
 	//
 	// Methods of Store with a "Locked" suffix require that
@@ -390,10 +390,9 @@ type Store struct {
 	//   lock is held even though they do not follow our convention of
 	//   the "Locked" suffix.
 	//
-	// * Store.pendingRaftGroups.Mutex: Protects the set of Replicas
-	//   that need to be checked for raft changes on the next iteration.
-	//   It has its own lock because it is called from Replica while
-	//   holding Replica.mu.
+	// * Store.scheduler.mu: Protects the Raft scheduler internal
+	//   state. Callbacks from the scheduler are performed while not holding this
+	//   mutex in order to observe the above ordering constraints.
 	//
 	// Splits (and merges, but they're not finished and so will not be
 	// discussed here) deserve special consideration: they operate on
@@ -753,7 +752,7 @@ func (s *Store) IsStarted() bool {
 func IterateRangeDescriptors(ctx context.Context,
 	eng engine.Reader, fn func(desc roachpb.RangeDescriptor) (bool, error),
 ) error {
-	log.Trace(ctx, "beginning range descriptor iteration")
+	log.Event(ctx, "beginning range descriptor iteration")
 	// Iterator over all range-local key-based data.
 	start := keys.RangeDescriptorKey(roachpb.RKeyMin)
 	end := keys.RangeDescriptorKey(roachpb.RKeyMax)
@@ -782,7 +781,7 @@ func IterateRangeDescriptors(ctx context.Context,
 
 	_, err := engine.MVCCIterate(context.Background(), eng, start, end, hlc.MaxTimestamp, false /* !consistent */, nil, /* txn */
 		false /* !reverse */, kvToDesc)
-	log.Tracef(ctx, "iterated over %d keys to find %d range descriptors (by suffix: %v)",
+	log.Eventf(ctx, "iterated over %d keys to find %d range descriptors (by suffix: %v)",
 		allCount, matchCount, bySuffix)
 	return err
 }
@@ -825,7 +824,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			return &NotBootstrappedError{}
 		}
 	}
-	log.Trace(ctx, "read store identity")
+	log.Event(ctx, "read store identity")
 
 	// If the nodeID is 0, it has not be assigned yet.
 	if s.nodeDesc.NodeID != 0 && s.Ident.NodeID != s.nodeDesc.NodeID {
@@ -962,9 +961,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// loop figure it out.
 	select {
 	case <-doneUnfreezing:
-		log.Trace(ctx, "finished unfreezing")
+		log.Event(ctx, "finished unfreezing")
 	case <-time.After(10 * time.Second):
-		log.Trace(ctx, "gave up waiting for unfreezing; continuing in background")
+		log.Event(ctx, "gave up waiting for unfreezing; continuing in background")
 	}
 
 	// Gossip is only ever nil while bootstrapping a cluster and
@@ -1018,7 +1017,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		if err = s.ComputeMetrics(-1); err != nil {
 			log.Infof(ctx, "%s: failed initial metrics computation: %s", s, err)
 		}
-		log.Trace(ctx, "computed initial metrics")
+		log.Event(ctx, "computed initial metrics")
 	}
 
 	// Set the started flag (for unittests).
@@ -1526,7 +1525,7 @@ func splitTriggerPostCommit(
 	r.mu.tsCache.MergeInto(rightRng.mu.tsCache, true /* clear */)
 	rightRng.mu.Unlock()
 	r.mu.Unlock()
-	log.Trace(ctx, "copied timestamp cache")
+	log.Event(ctx, "copied timestamp cache")
 
 	// Add the RHS replica to the store. This step atomically updates
 	// the EndKey of the LHS replica and also adds the RHS replica
@@ -2116,9 +2115,9 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 	}
 
 	if log.V(1) {
-		log.Tracef(ctx, "executing %s", ba)
+		log.Eventf(ctx, "executing %s", ba)
 	} else {
-		log.Tracef(ctx, "executing %d requests", len(ba.Requests))
+		log.Eventf(ctx, "executing %d requests", len(ba.Requests))
 	}
 	// Backoff and retry loop for handling errors. Backoff times are measured
 	// in the Trace.
@@ -2127,7 +2126,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 	next := func(r *retry.Retry) bool {
 		if r.CurrentAttempt() > 0 {
 			ba.SetNewRequest()
-			log.Trace(ctx, "backoff")
+			log.Event(ctx, "backoff")
 		}
 		return r.Next()
 	}
@@ -2202,7 +2201,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			pErr.Index = index
 		}
 
-		log.Tracef(ctx, "error: %T", pErr.GetDetail())
+		log.Eventf(ctx, "error: %T", pErr.GetDetail())
 		switch t := pErr.GetDetail().(type) {
 		case *roachpb.WriteIntentError:
 			// If write intent error is resolved, exit retry/backoff loop to
@@ -2235,7 +2234,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 	// By default, retries are indefinite. However, some unittests set a
 	// maximum retry count; return txn retry error for transactional cases
 	// and the original error otherwise.
-	log.Trace(ctx, "store retry limit exceeded") // good to check for if tests fail
+	log.Event(ctx, "store retry limit exceeded") // good to check for if tests fail
 	if ba.Txn != nil {
 		pErr = roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(), ba.Txn)
 	}

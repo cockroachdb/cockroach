@@ -366,7 +366,7 @@ func (ta *TxnAborter) statementFilter(stmt string, res *sql.Result) {
 	if ri != nil {
 		ri.execCount++
 		if ri.restartCount == 0 {
-			log.VTracef(1, context.TODO(), "TxnAborter sees satisfied statement %q", stmt)
+			log.VEventf(1, context.TODO(), "TxnAborter sees satisfied statement %q", stmt)
 			ri.satisfied = true
 		}
 		if ri.restartCount > 0 && res.Err == nil {

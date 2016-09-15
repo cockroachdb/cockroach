@@ -139,7 +139,7 @@ func (rq *replicateQueue) process(
 
 	switch action {
 	case AllocatorAdd:
-		log.Trace(ctx, "adding a new replica")
+		log.Event(ctx, "adding a new replica")
 		newStore, err := rq.allocator.AllocateTarget(zone.Constraints, desc.Replicas, true)
 		if err != nil {
 			return err
@@ -149,19 +149,19 @@ func (rq *replicateQueue) process(
 			StoreID: newStore.StoreID,
 		}
 
-		log.VTracef(1, ctx, "adding replica to %+v due to under-replication", newReplica)
+		log.VEventf(1, ctx, "adding replica to %+v due to under-replication", newReplica)
 		if err = repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, newReplica, desc); err != nil {
 			return err
 		}
 	case AllocatorRemove:
-		log.Trace(ctx, "removing a replica")
+		log.Event(ctx, "removing a replica")
 		// We require the lease in order to process replicas, so
 		// repl.store.StoreID() corresponds to the lease-holder's store ID.
 		removeReplica, err := rq.allocator.RemoveTarget(desc.Replicas, repl.store.StoreID())
 		if err != nil {
 			return err
 		}
-		log.VTracef(1, ctx, "removing replica %+v due to over-replication", removeReplica)
+		log.VEventf(1, ctx, "removing replica %+v due to over-replication", removeReplica)
 		if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, removeReplica, desc); err != nil {
 			return err
 		}
@@ -170,7 +170,7 @@ func (rq *replicateQueue) process(
 			return nil
 		}
 	case AllocatorRemoveDead:
-		log.Trace(ctx, "removing a dead replica")
+		log.Event(ctx, "removing a dead replica")
 		if len(deadReplicas) == 0 {
 			if log.V(1) {
 				log.Warningf(ctx, "Range of replica %s was identified as having dead replicas, but no dead replicas were found.", repl)
@@ -178,12 +178,12 @@ func (rq *replicateQueue) process(
 			break
 		}
 		deadReplica := deadReplicas[0]
-		log.VTracef(1, ctx, "removing dead replica %+v from store", deadReplica)
+		log.VEventf(1, ctx, "removing dead replica %+v from store", deadReplica)
 		if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, deadReplica, desc); err != nil {
 			return err
 		}
 	case AllocatorNoop:
-		log.Trace(ctx, "considering a rebalance")
+		log.Event(ctx, "considering a rebalance")
 		// The Noop case will result if this replica was queued in order to
 		// rebalance. Attempt to find a rebalancing target.
 		//
@@ -192,7 +192,7 @@ func (rq *replicateQueue) process(
 		rebalanceStore := rq.allocator.RebalanceTarget(
 			zone.Constraints, desc.Replicas, repl.store.StoreID())
 		if rebalanceStore == nil {
-			log.VTracef(1, ctx, "no suitable rebalance target")
+			log.VEventf(1, ctx, "no suitable rebalance target")
 			// No action was necessary and no rebalance target was found. Return
 			// without re-queuing this replica.
 			return nil
@@ -201,7 +201,7 @@ func (rq *replicateQueue) process(
 			NodeID:  rebalanceStore.Node.NodeID,
 			StoreID: rebalanceStore.StoreID,
 		}
-		log.VTracef(1, ctx, "rebalancing to %+v", rebalanceReplica)
+		log.VEventf(1, ctx, "rebalancing to %+v", rebalanceReplica)
 		if err = repl.ChangeReplicas(ctx, roachpb.ADD_REPLICA, rebalanceReplica, desc); err != nil {
 			return err
 		}
