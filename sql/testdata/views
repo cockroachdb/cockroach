@@ -2,6 +2,9 @@ statement ok
 CREATE TABLE t (a INT PRIMARY KEY, b INT)
 
 statement ok
+INSERT INTO t VALUES (1, 99), (2, 98), (3, 97)
+
+statement ok
 CREATE VIEW v1 AS select * from t
 
 statement error pgcode 42P07 relation \"v1\" already exists
@@ -22,8 +25,58 @@ CREATE VIEW v4 (x, y, z) AS select * from t;
 statement error pgcode 42P01 table "dne" does not exist
 CREATE VIEW v5 AS select * from dne;
 
-# TODO(a-robinson): Add test that creates view by selecting from another
-# view once selecting from views is supported.
+statement ok
+CREATE VIEW v6 (x, y) AS select * from v1;
+
+query II colnames
+SELECT * FROM v1;
+----
+a b
+1 99
+2 98
+3 97
+
+query II colnames
+SELECT * FROM v2;
+----
+x y
+1 99
+2 98
+3 97
+
+query II colnames
+SELECT * FROM v6;
+----
+x y
+1 99
+2 98
+3 97
+
+query II
+SELECT * FROM v2 ORDER BY x DESC LIMIT 1;
+----
+3 97
+
+query I
+SELECT x FROM v2;
+----
+1
+2
+3
+
+query I
+SELECT y FROM v2;
+----
+99
+98
+97
+
+query IIII
+SELECT * FROM v1 AS v1 INNER JOIN v2 AS v2 ON v1.a = v2.x;
+----
+1 99 1 99
+2 98 2 98
+3 97 3 97
 
 statement error pgcode 42809 "v1" is not a table
 DROP TABLE v1;
@@ -39,6 +92,9 @@ DROP VIEW v1;
 
 statement ok
 DROP VIEW v2;
+
+statement ok
+DROP VIEW v6;
 
 statement ok
 DROP TABLE t;
