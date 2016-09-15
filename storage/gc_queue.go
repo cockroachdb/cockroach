@@ -315,6 +315,7 @@ func (gcq *gcQueue) process(
 	}
 
 	log.Infof(gcq.ctx, "completed with stats %+v", info)
+	log.Tracef(ctx, "completed with stats %+v", info)
 
 	var ba roachpb.BatchRequest
 	var gcArgs roachpb.GCRequest
@@ -332,6 +333,7 @@ func (gcq *gcQueue) process(
 	ba.Timestamp = now
 	ba.Add(&gcArgs)
 	if _, pErr := repl.Send(ctx, ba); pErr != nil {
+		log.Tracef(ctx, "error: %+v", pErr)
 		return pErr.GoError()
 	}
 	return nil
