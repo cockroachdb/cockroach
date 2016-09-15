@@ -222,8 +222,7 @@ func (tc *TestCluster) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, er
 		Span: roachpb.Span{
 			Key: keys.RangeMetaKey(keys.MustAddr(key)),
 		},
-		MaxRanges:       1,
-		ConsiderIntents: false,
+		MaxRanges: 1,
 	}
 	resp, pErr := client.SendWrapped(tc.Servers[0].GetDistSender(), nil, &rangeLookupReq)
 	if pErr != nil {
