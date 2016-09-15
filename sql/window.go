@@ -422,8 +422,8 @@ func (n *windowNode) computeWindows() error {
 		n.windowValues[i] = windowAlloc[i*windowCount : (i+1)*windowCount]
 	}
 
-	var scratch []byte
-	scratchDatum := make(parser.DTuple, 0, rowCount)
+	var scratchBytes []byte
+	var scratchDatum []parser.Datum
 	for windowIdx, windowFn := range n.funcs {
 		partitions := make(map[string][]parser.IndexedRow)
 
@@ -437,7 +437,11 @@ func (n *windowNode) computeWindows() error {
 			partitions[""] = make([]parser.IndexedRow, rowCount)
 		}
 
-		scratchDatum = scratchDatum[:len(windowFn.partitionIdxs)]
+		if n := len(windowFn.partitionIdxs); n > cap(scratchDatum) {
+			scratchDatum = make([]parser.Datum, n)
+		} else {
+			scratchDatum = scratchDatum[:n]
+		}
 
 		// Partition rows into separate partitions based on hash values of the
 		// window function's PARTITION BY attribute.
@@ -459,7 +463,7 @@ func (n *windowNode) computeWindows() error {
 					scratchDatum[i] = row[idx]
 				}
 
-				encoded, err := sqlbase.EncodeDTuple(scratch, scratchDatum)
+				encoded, err := sqlbase.EncodeDTuple(scratchBytes, scratchDatum)
 				if err != nil {
 					return err
 				}
@@ -469,7 +473,7 @@ func (n *windowNode) computeWindows() error {
 					return err
 				}
 				partitions[string(encoded)] = append(partitions[string(encoded)], entry)
-				scratch = encoded[:0]
+				scratchBytes = encoded[:0]
 			}
 		}
 

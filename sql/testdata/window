@@ -257,6 +257,19 @@ SELECT (avg(d) OVER (PARTITION BY v ORDER BY w) + avg(d) OVER (PARTITION BY w OR
    8.4500000000000000
   15.8000000000000000
 
+query R
+SELECT avg(d) OVER (PARTITION BY v) FROM kv WHERE FALSE ORDER BY 1
+----
+
+query R
+SELECT avg(d) OVER (PARTITION BY v, v, v, v, v, v, v, v, v, v) FROM kv WHERE FALSE ORDER BY 1
+----
+
+query R
+SELECT avg(d) OVER (PARTITION BY v, v, v, v, v, v, v, v, v, v) FROM kv WHERE k = 3 ORDER BY 1
+----
+8.0000000000000000
+
 query IB
 SELECT k, bool_and(b) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
 ----
