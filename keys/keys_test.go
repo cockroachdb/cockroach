@@ -168,6 +168,36 @@ func TestRangeMetaKey(t *testing.T) {
 	}
 }
 
+func TestUserKey(t *testing.T) {
+	testCases := []struct {
+		key, expKey roachpb.RKey
+	}{
+		{
+			key:    roachpb.RKeyMin,
+			expKey: roachpb.RKey(Meta1Prefix),
+		},
+		{
+			key:    roachpb.RKey("\x02\x04zonefoo"),
+			expKey: roachpb.RKey("\x03\x04zonefoo"),
+		},
+		{
+			key:    roachpb.RKey("\x03foo"),
+			expKey: roachpb.RKey("foo"),
+		},
+		{
+			key:    roachpb.RKey("foo"),
+			expKey: roachpb.RKey("foo"),
+		},
+	}
+	for i, test := range testCases {
+		result := UserKey(test.key)
+		if !bytes.Equal(result, test.expKey) {
+			t.Errorf("%d: expected range meta for key %q doesn't match %q (%q)",
+				i, test.key, test.expKey, result)
+		}
+	}
+}
+
 // TestMetaPrefixLen asserts that both levels of meta keys have the same prefix length,
 // as MetaScanBounds, MetaReverseScanBounds and validateRangeMetaKey depend on this fact.
 func TestMetaPrefixLen(t *testing.T) {

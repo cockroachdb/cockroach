@@ -21,9 +21,10 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/biogo/store/llrb"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/cache"
@@ -55,18 +56,6 @@ func mustMeta(k roachpb.RKey) roachpb.RKey {
 		panic(err)
 	}
 	return m
-}
-
-// A lookupMismatchError specifies that a range lookup resulted in an
-// incorrect RangeDescriptor for the given key.
-type lookupMismatchError struct {
-	desiredKey     roachpb.RKey
-	mismatchedDesc *roachpb.RangeDescriptor
-}
-
-// Error implements the error interface.
-func (l lookupMismatchError) Error() string {
-	return fmt.Sprintf("key %q not contained in range lookup's resulting descriptor %v", l.desiredKey, l.mismatchedDesc)
 }
 
 // RangeDescriptorDB is a type which can query range descriptors from an
@@ -406,15 +395,16 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 		log.Trace(ctx, "looked up range descriptor")
 	}
 
-	// It rarely may be possible that we somehow got grouped in with the
-	// wrong RangeLookup (eg. from a double split), so if we did, return
-	// a retryable lookupMismatchError with an unmodified eviction token.
-	if res.desc != nil {
-		if (!useReverseScan && !res.desc.ContainsKey(key)) || (useReverseScan && !res.desc.ContainsExclusiveEndKey(key)) {
-			return nil, evictToken, lookupMismatchError{
-				desiredKey:     key,
-				mismatchedDesc: res.desc,
-			}
+	// It rarely may be possible that we got grouped in with the wrong
+	// RangeLookup (eg. from a double split), so if we did, return an error with
+	// an unmodified eviction token.
+	if desc := res.desc; desc != nil {
+		containsFn := (*roachpb.RangeDescriptor).ContainsKey
+		if useReverseScan {
+			containsFn = (*roachpb.RangeDescriptor).ContainsExclusiveEndKey
+		}
+		if !containsFn(desc, key) {
+			return nil, evictToken, errors.Errorf("key %q not contained in range lookup's resulting descriptor %v", key, desc)
 		}
 	}
 	return res.desc, res.evictToken, res.err

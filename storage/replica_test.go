@@ -2436,6 +2436,82 @@ func TestEndTransactionDeadline(t *testing.T) {
 	}
 }
 
+// TestTxnSpanGCThreshold verifies that aborting transactions which haven't
+// written their initial txn record yet does not lead to anomalies. Precisely,
+// verify that if the GC queue could potentially have removed a txn record
+// created through a successful push (by a concurrent actor), the original
+// transaction's subsequent attempt to create its initial record fails.
+//
+// See #9265 for context.
+func TestEndTransactionTxnSpanGCThreshold(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	key := roachpb.Key("a")
+	desc := tc.rng.Desc()
+	// This test avoids a zero-timestamp regression (see LastActive() below),
+	// so avoid zero timestamps.
+	tc.manualClock.Increment(123)
+	pusher := &roachpb.Transaction{} // non-transactional pusher is enough
+
+	// This pushee should never be allowed to write a txn record because it
+	// will be aborted before it even tries.
+	pushee := newTransaction("foo", key, 1, enginepb.SERIALIZABLE, tc.clock)
+	pushReq := pushTxnArgs(pusher, pushee, roachpb.PUSH_TOUCH)
+	pushReq.Now = tc.clock.Now()
+	resp, pErr := tc.SendWrapped(&pushReq)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	abortedPushee := resp.(*roachpb.PushTxnResponse).PusheeTxn
+	if abortedPushee.Status != roachpb.ABORTED {
+		t.Fatalf("expected push to abort pushee, got %+v", abortedPushee)
+	}
+	if lastActive := abortedPushee.LastActive(); lastActive.Less(pushReq.Now) {
+		t.Fatalf("pushee has no recent activity: %s (expected >= %s): %+v",
+			lastActive, pushReq.Now, abortedPushee)
+	}
+
+	gcSpan := roachpb.Span{
+		Key:    desc.StartKey.AsRawKey(),
+		EndKey: desc.EndKey.AsRawKey(),
+	}
+
+	// Pretend that the GC queue removes the aborted transaction entry, as it
+	// would after a period of inactivity, while our pushee txn is unaware and
+	// may have written intents elsewhere.
+	{
+		gcReq := roachpb.GCRequest{
+			Span: gcSpan,
+			Keys: []roachpb.GCRequest_GCKey{
+				{Key: keys.TransactionKey(pushee.Key, pushee.ID)},
+			},
+			TxnSpanGCThreshold: tc.clock.Now(),
+		}
+		if _, pErr := tc.SendWrapped(&gcReq); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	// Try to let our transaction write its initial record. If this succeeds,
+	// we're in trouble because other written intents may have been aborted,
+	// i.e. the transaction might commit but lose some of its writes.
+	//
+	// It should not succeed because BeginTransaction checks the transaction's
+	// last activity against the persisted TxnSpanGCThreshold.
+	{
+		beginArgs, header := beginTxnArgs(key, pushee)
+		resp, pErr := tc.SendWrappedWith(header, &beginArgs)
+		if pErr == nil {
+			t.Fatalf("unexpected success: %+v", resp)
+		} else if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
+			t.Fatalf("expected txn aborted error, got %v and response %+v", pErr, resp)
+		}
+	}
+}
+
 // TestEndTransactionDeadline_1PC verifies that a transaction that
 // exceeded its deadline will be aborted even when one phase commit is
 // applicable.
@@ -2819,7 +2895,7 @@ func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 	args.IntentSpans = []roachpb.Span{{Key: key}}
 	resp, pErr := tc.SendWrappedWith(h, &args)
 	if pErr != nil {
-		t.Error(pErr)
+		t.Fatal(pErr)
 	}
 	reply := resp.(*roachpb.EndTransactionResponse)
 	if reply.Txn.Status != roachpb.ABORTED {
@@ -4707,15 +4783,16 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
+	splitRangeBefore := roachpb.RangeDescriptor{RangeID: 3, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("h")}
+	splitRangeLHS := roachpb.RangeDescriptor{RangeID: 3, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("f")}
+	splitRangeRHS := roachpb.RangeDescriptor{RangeID: 5, StartKey: roachpb.RKey("f"), EndKey: roachpb.RKey("h")}
+
 	// Test ranges: ["a","c"), ["c","f"), ["f","h") and ["h","y").
 	testRanges := []roachpb.RangeDescriptor{
 		{RangeID: 2, StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},
-		{RangeID: 3, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("f")},
-		{RangeID: 4, StartKey: roachpb.RKey("f"), EndKey: roachpb.RKey("h")},
-		{RangeID: 5, StartKey: roachpb.RKey("h"), EndKey: roachpb.RKey("y")},
+		splitRangeBefore,
+		{RangeID: 4, StartKey: roachpb.RKey("h"), EndKey: roachpb.RKey("y")},
 	}
-	// The range ["f","h") has dangling intent in meta2.
-	withIntentRangeIndex := 2
 
 	testCases := []struct {
 		key      string
@@ -4727,7 +4804,7 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 		{key: "c", expected: testRanges[0]},
 		{key: "d", expected: testRanges[1]},
 		{key: "f", expected: testRanges[1]},
-		{key: "j", expected: testRanges[3]},
+		{key: "j", expected: testRanges[2]},
 		// testRanges[2] has an intent, so the inconsistent scan will read
 		// an old value (nil). Since we're in reverse mode, testRanges[1]
 		// is the result.
@@ -4735,9 +4812,9 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 		{key: "h", expected: testRanges[1]},
 	}
 
-	txn := newTransaction("test", roachpb.Key{}, 1, enginepb.SERIALIZABLE, tc.clock)
-	for i, r := range testRanges {
-		if i != withIntentRangeIndex {
+	{
+		txn := newTransaction("test", roachpb.Key{}, 1, enginepb.SERIALIZABLE, tc.clock)
+		for _, r := range testRanges {
 			// Write the new descriptor as an intent.
 			data, err := protoutil.Marshal(&r)
 			if err != nil {
@@ -4750,19 +4827,19 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 				t.Fatal(pErr)
 			}
 		}
-	}
 
-	// Resolve the intents.
-	rArgs := &roachpb.ResolveIntentRangeRequest{
-		Span: roachpb.Span{
-			Key:    keys.RangeMetaKey(roachpb.RKey("a")),
-			EndKey: keys.RangeMetaKey(roachpb.RKey("z")),
-		},
-		IntentTxn: txn.TxnMeta,
-		Status:    roachpb.COMMITTED,
-	}
-	if _, pErr := tc.SendWrapped(rArgs); pErr != nil {
-		t.Fatal(pErr)
+		// Resolve the intents.
+		rArgs := &roachpb.ResolveIntentRangeRequest{
+			Span: roachpb.Span{
+				Key:    keys.RangeMetaKey(roachpb.RKey("a")),
+				EndKey: keys.RangeMetaKey(roachpb.RKey("z")),
+			},
+			IntentTxn: txn.TxnMeta,
+			Status:    roachpb.COMMITTED,
+		}
+		if _, pErr := tc.SendWrapped(rArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
 	}
 
 	// Get original meta2 descriptor.
@@ -4789,16 +4866,20 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 		}
 	}
 
-	// Write the new descriptor as an intent.
-	intentRange := testRanges[withIntentRangeIndex]
-	data, err := protoutil.Marshal(&intentRange)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(intentRange.EndKey)), data)
-	txn2 := newTransaction("test", roachpb.Key{}, 1, enginepb.SERIALIZABLE, tc.clock)
-	if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn2}, &pArgs); pErr != nil {
-		t.Fatal(pErr)
+	// Write the new descriptors as intents.
+	txn := newTransaction("test", roachpb.Key{}, 1, enginepb.SERIALIZABLE, tc.clock)
+	for _, r := range []roachpb.RangeDescriptor{splitRangeLHS, splitRangeRHS} {
+		// Write the new descriptor as an intent.
+		data, err := protoutil.Marshal(&r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(r.EndKey)), data)
+
+		txn.Sequence++
+		if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
 	}
 
 	// Test ReverseScan with intents.
@@ -4819,7 +4900,7 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 	}
 }
 
-func TestReplicaLookup(t *testing.T) {
+func TestRangeLookup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
