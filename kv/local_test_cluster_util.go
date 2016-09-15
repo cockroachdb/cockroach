@@ -63,12 +63,9 @@ func InitSenderForLocalTestCluster(
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	senderTransportFactory := SenderTransportFactory(tracer, stores)
 	distSender := NewDistSender(&DistSenderConfig{
-		Clock: clock,
-		RangeDescriptorCacheSize: defaultRangeDescriptorCacheSize,
-		RangeLookupMaxRanges:     defaultRangeLookupMaxRanges,
-		LeaseHolderCacheSize:     defaultLeaseHolderCacheSize,
-		RPCRetryOptions:          &retryOpts,
-		nodeDescriptor:           nodeDesc,
+		Clock:           clock,
+		RPCRetryOptions: &retryOpts,
+		nodeDescriptor:  nodeDesc,
 		TransportFactory: func(
 			opts SendOptions,
 			rpcContext *rpc.Context,
@@ -81,7 +78,6 @@ func InitSenderForLocalTestCluster(
 			}
 			return &localTestClusterTransport{transport, latency}, nil
 		},
-		RangeDescriptorDB: stores.(RangeDescriptorDB), // for descriptor lookup
 	}, gossip)
 
 	ctx := tracing.WithTracer(context.Background(), tracer)
