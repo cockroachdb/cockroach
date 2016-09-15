@@ -405,7 +405,7 @@ func (n *Node) initStores(
 	}
 	for _, e := range engines {
 		s := storage.NewStore(n.ctx, e, &n.Descriptor)
-		log.Tracef(ctx, "created store for engine: %s", e)
+		log.Eventf(ctx, "created store for engine: %s", e)
 		// Initialize each store in turn, handling un-bootstrapped errors by
 		// adding the store to the bootstraps list.
 		if err := s.Start(ctx, stopper); err != nil {
@@ -446,7 +446,7 @@ func (n *Node) initStores(
 	if err := n.validateStores(); err != nil {
 		return err
 	}
-	log.Trace(ctx, "validated stores")
+	log.Event(ctx, "validated stores")
 
 	// Set the stores map as the gossip persistent storage, so that
 	// gossip can bootstrap using the most recently persisted set of
@@ -458,14 +458,14 @@ func (n *Node) initStores(
 	// Connect gossip before starting bootstrap. For new nodes, connecting
 	// to the gossip network is necessary to get the cluster ID.
 	n.connectGossip()
-	log.Trace(ctx, "connected to gossip")
+	log.Event(ctx, "connected to gossip")
 
 	// If no NodeID has been assigned yet, allocate a new node ID by
 	// supplying 0 to initNodeID.
 	if n.Descriptor.NodeID == 0 {
 		n.initNodeID(0)
 		n.initialBoot = true
-		log.Tracef(ctx, "allocated node ID %d", n.Descriptor.NodeID)
+		log.Eventf(ctx, "allocated node ID %d", n.Descriptor.NodeID)
 	}
 
 	// Bootstrap any uninitialized stores asynchronously.
@@ -828,14 +828,14 @@ func (n *Node) Batch(
 		}
 		defer sp.Finish()
 		traceCtx := opentracing.ContextWithSpan(ctx, sp)
-		log.Tracef(traceCtx, "node "+strconv.Itoa(int(n.Descriptor.NodeID))) // could save allocs here.
+		log.Eventf(traceCtx, "node "+strconv.Itoa(int(n.Descriptor.NodeID))) // could save allocs here.
 
 		tStart := timeutil.Now()
 		var pErr *roachpb.Error
 		br, pErr = n.stores.Send(traceCtx, *args)
 		if pErr != nil {
 			br = &roachpb.BatchResponse{}
-			log.Tracef(traceCtx, "error: %T", pErr.GetDetail())
+			log.Eventf(traceCtx, "error: %T", pErr.GetDetail())
 		}
 		if br.Error != nil {
 			panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
