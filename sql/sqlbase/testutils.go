@@ -23,6 +23,8 @@ import (
 	"math/rand"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -35,7 +37,7 @@ import (
 // GetTableDescriptor retrieves a table descriptor directly from the KV layer.
 func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDescriptor {
 	dbNameKey := MakeNameMetadataKey(keys.RootNamespaceID, database)
-	gr, err := kvDB.Get(dbNameKey)
+	gr, err := kvDB.Get(context.TODO(), dbNameKey)
 	if err != nil {
 		panic(err)
 	}
@@ -45,7 +47,7 @@ func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDe
 	dbDescID := ID(gr.ValueInt())
 
 	tableNameKey := MakeNameMetadataKey(dbDescID, table)
-	gr, err = kvDB.Get(tableNameKey)
+	gr, err = kvDB.Get(context.TODO(), tableNameKey)
 	if err != nil {
 		panic(err)
 	}
@@ -55,7 +57,7 @@ func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDe
 
 	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
 	desc := &Descriptor{}
-	if err := kvDB.GetProto(descKey, desc); err != nil {
+	if err := kvDB.GetProto(context.TODO(), descKey, desc); err != nil {
 		panic("proto missing")
 	}
 	return desc.GetTable()
