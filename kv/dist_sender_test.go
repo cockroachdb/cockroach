@@ -300,7 +300,7 @@ func TestSendRPCOrder(t *testing.T) {
 
 	cfg := &DistSenderConfig{
 		TransportFactory: adaptLegacyTransport(testFn),
-		RangeDescriptorDB: MockRangeDescriptorDB(func(roachpb.RKey, bool, bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+		RangeDescriptorDB: MockRangeDescriptorDB(func(roachpb.RKey, bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 			return []roachpb.RangeDescriptor{descriptor}, nil, nil
 		}),
 	}
@@ -373,20 +373,20 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 }
 
-type MockRangeDescriptorDB func(roachpb.RKey, bool, bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error)
+type MockRangeDescriptorDB func(roachpb.RKey, bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error)
 
-func (mdb MockRangeDescriptorDB) RangeLookup(key roachpb.RKey, _ *roachpb.RangeDescriptor, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
-	return mdb(stripMeta(key), considerIntents, useReverseScan)
+func (mdb MockRangeDescriptorDB) RangeLookup(key roachpb.RKey, _ *roachpb.RangeDescriptor, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+	return mdb(stripMeta(key), useReverseScan)
 }
 func (mdb MockRangeDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
-	rs, _, err := mdb.RangeLookup(nil, nil, false /* considerIntents */, false /* useReverseScan */)
+	rs, _, err := mdb.RangeLookup(nil, nil, false /* useReverseScan */)
 	if err != nil || len(rs) == 0 {
 		return nil, err.GoError()
 	}
 	return &rs[0], nil
 }
 
-var defaultMockRangeDescriptorDB = MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+var defaultMockRangeDescriptorDB = MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 	if bytes.HasPrefix(key, keys.Meta2Prefix) {
 		return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
 	}
@@ -553,7 +553,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 
 	cfg := &DistSenderConfig{
 		TransportFactory: adaptLegacyTransport(testFn),
-		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 			// Return next error and truncate the prefix of the errors array.
 			var pErr *roachpb.Error
 			if key != nil {
@@ -628,7 +628,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 	}
 
 	var numFirstRange int32
-	rDB := MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) (
+	rDB := MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) (
 		[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error,
 	) {
 		if key.Equal(roachpb.KeyMin) {
@@ -651,7 +651,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 
 	call := func() {
 		if _, _, err := ds.rangeCache.LookupRangeDescriptor(
-			context.Background(), rAnyKey, nil, false, false,
+			context.Background(), rAnyKey, nil, false,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -988,7 +988,7 @@ func TestSendRPCRetry(t *testing.T) {
 	}
 	cfg := &DistSenderConfig{
 		TransportFactory: adaptLegacyTransport(testFn),
-		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 			if bytes.HasPrefix(key, keys.Meta2Prefix) {
 				return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
 			}
@@ -1095,7 +1095,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	}
 	cfg := &DistSenderConfig{
 		TransportFactory: adaptLegacyTransport(testFn),
-		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 			if bytes.HasPrefix(key, keys.Meta2Prefix) {
 				return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
 			}
@@ -1139,7 +1139,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 
 	cfg := &DistSenderConfig{
 		TransportFactory: adaptLegacyTransport(testFn),
-		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, considerIntents, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 			if len(key) > 0 && !useReverseScan {
 				t.Fatalf("expected UseReverseScan to be set")
 			}
@@ -1253,7 +1253,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 			},
 		},
 	}
-	descDB := MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+	descDB := MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 		if bytes.HasPrefix(key, keys.Meta2Prefix) {
 			return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
 		}
@@ -1374,7 +1374,7 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 		},
 	}
 
-	descDB := MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+	descDB := MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 		switch {
 		case bytes.HasPrefix(key, keys.Meta2Prefix):
 			return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
@@ -1548,7 +1548,7 @@ func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
 			},
 		},
 	}
-	descDB := MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+	descDB := MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 		if bytes.HasPrefix(key, keys.Meta2Prefix) {
 			return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
 		}
@@ -1680,7 +1680,7 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 			},
 		},
 	}
-	descDB := MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+	descDB := MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 		if bytes.HasPrefix(key, keys.Meta2Prefix) {
 			return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
 		}
@@ -1762,7 +1762,7 @@ func TestCountRanges(t *testing.T) {
 	}
 
 	// Mock out descriptor DB and sender function.
-	descDB := MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+	descDB := MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 		if bytes.HasPrefix(key, keys.Meta2Prefix) {
 			return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
 		}
@@ -1886,7 +1886,7 @@ func TestSlowLeaseHolderRetry(t *testing.T) {
 		rangeDescriptor.Replicas = append(rangeDescriptor.Replicas, roachpb.ReplicaDescriptor{NodeID: nodeID})
 	}
 
-	rangeDescDB := MockRangeDescriptorDB(func(key roachpb.RKey, _, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+	rangeDescDB := MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 		if bytes.HasPrefix(key, keys.Meta2Prefix) {
 			return []roachpb.RangeDescriptor{metaRangeDescriptor}, nil, nil
 		}
