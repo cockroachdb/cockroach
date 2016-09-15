@@ -24,7 +24,6 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
-	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -317,31 +316,30 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (raftpb.Snapshot, err
 	// reads from the channel, and can abandon the snapshot if it gets stale.
 	ch := make(chan (raftpb.Snapshot))
 
-	if r.store.Stopper().RunAsyncTask(func() {
+	if r.store.Stopper().RunAsyncTask(ctx, func(ctx context.Context) {
 		defer close(ch)
 		sp := r.store.Tracer().StartSpan("snapshot async")
-		ctxInner := opentracing.ContextWithSpan(context.Background(), sp)
 		defer sp.Finish()
 		snap := r.store.NewSnapshot()
-		log.Tracef(ctxInner, "new engine snapshot for replica %s", r)
+		log.Tracef(ctx, "new engine snapshot for replica %s", r)
 		defer snap.Close()
 		defer r.store.ReleaseRaftSnapshot()
 		// Delegate to a static function to make sure that we do not depend
 		// on any indirect calls to r.store.Engine() (or other in-memory
 		// state of the Replica). Everything must come from the snapshot.
-		snapData, err := snapshot(context.Background(), snap, rangeID, r.store.raftEntryCache, startKey)
+		snapData, err := snapshot(ctx, snap, rangeID, r.store.raftEntryCache, startKey)
 		if err != nil {
-			log.Errorf(ctxInner, "%s: error generating snapshot: %s", r, err)
+			log.Errorf(ctx, "%s: error generating snapshot: %s", r, err)
 		} else {
-			log.Trace(ctxInner, "snapshot generated")
+			log.Trace(ctx, "snapshot generated")
 			r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 			select {
 			case ch <- snapData:
-				log.Trace(ctxInner, "snapshot accepted")
+				log.Trace(ctx, "snapshot accepted")
 			case <-time.After(r.store.ctx.AsyncSnapshotMaxAge):
 				// If raft decides it doesn't need this snapshot any more (or
 				// just takes too long to use it), abandon it to save memory.
-				log.Infof(ctxInner, "%s: abandoning snapshot after %s", r, r.store.ctx.AsyncSnapshotMaxAge)
+				log.Infof(ctx, "%s: abandoning snapshot after %s", r, r.store.ctx.AsyncSnapshotMaxAge)
 			case <-r.store.Stopper().ShouldQuiesce():
 			}
 		}

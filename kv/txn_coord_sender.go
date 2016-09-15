@@ -669,15 +669,12 @@ func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
 		IntentSpans: intentSpans,
 	}
 	ba.Add(et)
-	if err := tc.stopper.RunAsyncTask(func() {
+	if err := tc.stopper.RunAsyncTask(tc.ctx, func(ctx context.Context) {
 		// Use the wrapped sender since the normal Sender does not allow
 		// clients to specify intents.
-		// TODO(tschottdorf): not using the existing context here since that
-		// leads to use-after-finish of the contained trace. Should fork off
-		// before the goroutine.
-		if _, pErr := tc.wrapped.Send(context.Background(), ba); pErr != nil {
+		if _, pErr := tc.wrapped.Send(ctx, ba); pErr != nil {
 			if log.V(1) {
-				log.Warningf(tc.ctx, "abort due to inactivity failed for %s: %s ", txn, pErr)
+				log.Warningf(ctx, "abort due to inactivity failed for %s: %s ", txn, pErr)
 			}
 		}
 	}); err != nil {
@@ -885,7 +882,7 @@ func (tc *TxnCoordSender) updateState(
 				}
 				tc.txns[txnID] = txnMeta
 
-				if err := tc.stopper.RunAsyncTask(func() {
+				if err := tc.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
 					tc.heartbeatLoop(ctx, txnID)
 				}); err != nil {
 					// The system is already draining and we can't start the
