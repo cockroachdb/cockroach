@@ -60,6 +60,10 @@ func newRaftLogQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *raftLo
 		maxSize:              raftLogQueueMaxSize,
 		needsLease:           false,
 		acceptsUnsplitRanges: true,
+		processedMetric:      store.metrics.RaftLogQueueProcessed,
+		failuresMetric:       store.metrics.RaftLogQueueFailures,
+		pendingMetric:        store.metrics.RaftLogQueuePending,
+		timeMetric:           store.metrics.RaftLogQueueTime,
 	})
 	return rlq
 }

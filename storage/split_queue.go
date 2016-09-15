@@ -53,6 +53,10 @@ func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQue
 		maxSize:              splitQueueMaxSize,
 		needsLease:           true,
 		acceptsUnsplitRanges: true,
+		processedMetric:      store.metrics.SplitQueueProcessed,
+		failuresMetric:       store.metrics.SplitQueueFailures,
+		pendingMetric:        store.metrics.SplitQueuePending,
+		timeMetric:           store.metrics.SplitQueueTime,
 	})
 	return sq
 }

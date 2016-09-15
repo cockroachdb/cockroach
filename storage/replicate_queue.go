@@ -59,6 +59,11 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator, cloc
 		maxSize:              replicateQueueMaxSize,
 		needsLease:           true,
 		acceptsUnsplitRanges: false,
+		processedMetric:      store.metrics.ReplicateQueueProcessed,
+		failuresMetric:       store.metrics.ReplicateQueueFailures,
+		pendingMetric:        store.metrics.ReplicateQueuePending,
+		timeMetric:           store.metrics.ReplicateQueueTime,
+		purgatoryMetric:      store.metrics.ReplicateQueuePurgatory,
 	})
 
 	if g != nil { // gossip is nil for some unittests

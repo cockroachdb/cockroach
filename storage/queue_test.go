@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/metric"
 )
 
 // testQueueImpl implements queueImpl with a closure for shouldQueue.
@@ -74,6 +75,21 @@ func (tq *testQueueImpl) timer() time.Duration {
 
 func (tq *testQueueImpl) purgatoryChan() <-chan struct{} {
 	return tq.pChan
+}
+
+func addMetrics(bq *baseQueue) (
+	*metric.Counter,
+	*metric.Counter,
+	*metric.Gauge,
+	*metric.Counter,
+	*metric.Gauge,
+) {
+	bq.processedMetric = metric.NewCounter(metric.Metadata{Name: "processed"})
+	bq.failuresMetric = metric.NewCounter(metric.Metadata{Name: "failures"})
+	bq.pendingMetric = metric.NewGauge(metric.Metadata{Name: "pending"})
+	bq.timeMetric = metric.NewCounter(metric.Metadata{Name: "time"})
+	bq.purgatoryMetric = metric.NewGauge(metric.Metadata{Name: "purgatory"})
+	return bq.processedMetric, bq.failuresMetric, bq.pendingMetric, bq.timeMetric, bq.purgatoryMetric
 }
 
 // TestQueuePriorityQueue verifies priority queue implementation.
@@ -154,16 +170,27 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 		},
 	}
 	bq := makeBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
+	_, _, pendingM, _, _ := addMetrics(&bq)
+
 	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
 	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
 	if bq.Length() != 2 {
 		t.Fatalf("expected length 2; got %d", bq.Length())
 	}
+	if v := pendingM.Value(); v != 2 {
+		t.Errorf("expected 2 pending replicas; got %d", v)
+	}
 	if bq.pop() != r2 {
 		t.Error("expected r2")
 	}
+	if v := pendingM.Value(); v != 1 {
+		t.Errorf("expected 1 pending replicas; got %d", v)
+	}
 	if bq.pop() != r1 {
 		t.Error("expected r1")
+	}
+	if v := pendingM.Value(); v != 0 {
+		t.Errorf("expected 0 pending replicas; got %d", v)
 	}
 	if r := bq.pop(); r != nil {
 		t.Errorf("expected empty queue; got %v", r)
@@ -177,7 +204,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 		t.Errorf("expected length 1; got %d", bq.Length())
 	}
 
-	// Try adding same range twice.
+	// Try adding same replica twice.
 	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
 	if bq.Length() != 1 {
 		t.Errorf("expected length 1; got %d", bq.Length())
@@ -209,8 +236,14 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	if bq.Length() != 1 {
 		t.Fatalf("expected length 1; got %d", bq.Length())
 	}
+	if v := pendingM.Value(); v != 1 {
+		t.Errorf("expected 1 pending replicas; got %d", v)
+	}
 	if bq.pop() != r1 {
 		t.Errorf("expected r1")
+	}
+	if v := pendingM.Value(); v != 0 {
+		t.Errorf("expected 0 pending replicas; got %d", v)
 	}
 }
 
@@ -285,6 +318,7 @@ func TestBaseQueueProcess(t *testing.T) {
 		},
 	}
 	bq := makeBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
+	processM, _, pendingM, _, _ := addMetrics(&bq)
 	bq.Start(tc.clock, tc.stopper)
 
 	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
@@ -292,11 +326,23 @@ func TestBaseQueueProcess(t *testing.T) {
 	if pc := testQueue.getProcessed(); pc != 0 {
 		t.Errorf("expected no processed ranges; got %d", pc)
 	}
+	if v := processM.Count(); v != 0 {
+		t.Errorf("expected 0 processed replicas; got %d", v)
+	}
+	if v := pendingM.Value(); v != 2 {
+		t.Errorf("expected 2 pending replicas; got %d", v)
+	}
 
 	testQueue.blocker <- struct{}{}
 	util.SucceedsSoon(t, func() error {
 		if pc := testQueue.getProcessed(); pc != 1 {
-			return errors.Errorf("expected %d processed replicas; got %d", 1, pc)
+			return errors.Errorf("expected 1 processed replicas; got %d", pc)
+		}
+		if v := processM.Count(); v != 1 {
+			return errors.Errorf("expected 1 processed replicas; got %d", v)
+		}
+		if v := pendingM.Value(); v != 1 {
+			return errors.Errorf("expected 1 pending replicas; got %d", v)
 		}
 		return nil
 	})
@@ -305,6 +351,12 @@ func TestBaseQueueProcess(t *testing.T) {
 	util.SucceedsSoon(t, func() error {
 		if pc := testQueue.getProcessed(); pc < 2 {
 			return errors.Errorf("expected >= %d processed replicas; got %d", 2, pc)
+		}
+		if v := processM.Count(); v != 2 {
+			return errors.Errorf("expected 2 processed replicas; got %d", v)
+		}
+		if v := pendingM.Value(); v != 0 {
+			return errors.Errorf("expected 0 pending replicas; got %d", v)
 		}
 		return nil
 	})
@@ -389,16 +441,15 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var queued int32
 	testQueue := &testQueueImpl{
 		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
 			// Always queue ranges if they make it past the base queue's logic.
-			atomic.AddInt32(&queued, 1)
 			return true, float64(r.RangeID)
 		},
 	}
 
 	bq := makeBaseQueue("test", testQueue, s, s.ctx.Gossip, queueConfig{maxSize: 2})
+	processM, _, pendingM, _, _ := addMetrics(&bq)
 	bq.Start(s.ctx.Clock, stopper)
 
 	// Check our config.
@@ -429,12 +480,15 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		if pc := testQueue.getProcessed(); pc != 2 {
 			return errors.Errorf("expected %d processed replicas; got %d", 2, pc)
 		}
+		// Check metrics.
+		if v := processM.Count(); v != 2 {
+			return errors.Errorf("expected 2 processed replicas; got %d", v)
+		}
+		if v := pendingM.Value(); v != 0 {
+			return errors.Errorf("expected 0 pending replicas; got %d", v)
+		}
 		return nil
 	})
-
-	if pc := atomic.LoadInt32(&queued); pc != 2 {
-		t.Errorf("expected queued count of 2; got %d", pc)
-	}
 
 	// Now add a user object, it will trigger a split.
 	// The range willSplit starts at the beginning of the user data range,
@@ -458,12 +512,15 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		if pc := testQueue.getProcessed(); pc != 3 {
 			return errors.Errorf("expected %d processed replicas; got %d", 3, pc)
 		}
+		// Check metrics.
+		if v := processM.Count(); v != 3 {
+			return errors.Errorf("expected 3 processed replicas; got %d", v)
+		}
+		if v := pendingM.Value(); v != 0 {
+			return errors.Errorf("expected 0 pending replicas; got %d", v)
+		}
 		return nil
 	})
-
-	if pc := atomic.LoadInt32(&queued); pc != 3 {
-		t.Errorf("expected queued count of 3; got %d", pc)
-	}
 }
 
 type testError struct{}
@@ -507,6 +564,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 
 	replicaCount := 10
 	bq := makeBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: replicaCount})
+	processM, failM, pendingM, _, purgM := addMetrics(&bq)
 	bq.Start(tc.clock, tc.stopper)
 
 	for i := 1; i <= replicaCount; i++ {
@@ -533,6 +591,19 @@ func TestBaseQueuePurgatory(t *testing.T) {
 		if l := bq.Length(); l != 0 {
 			return errors.Errorf("expected empty priorityQ; got %d", l)
 		}
+		// Check metrics.
+		if v := processM.Count(); v != 0 {
+			return errors.Errorf("expected 0 processed replicas; got %d", v)
+		}
+		if v := failM.Count(); v != int64(replicaCount) {
+			return errors.Errorf("expected %d failed replicas; got %d", replicaCount, v)
+		}
+		if v := pendingM.Value(); v != 0 {
+			return errors.Errorf("expected 0 pending replicas; got %d", v)
+		}
+		if v := purgM.Value(); v != int64(replicaCount) {
+			return errors.Errorf("expected %d purgatory replicas; got %d", replicaCount, v)
+		}
 		return nil
 	})
 
@@ -554,6 +625,19 @@ func TestBaseQueuePurgatory(t *testing.T) {
 		if l := bq.Length(); l != 0 {
 			return errors.Errorf("expected empty priorityQ; got %d", l)
 		}
+		// Check metrics.
+		if v := processM.Count(); v != 0 {
+			return errors.Errorf("expected 0 processed replicas; got %d", v)
+		}
+		if v := failM.Count(); v != int64(replicaCount*2) {
+			return errors.Errorf("expected %d failed replicas; got %d", replicaCount*2, v)
+		}
+		if v := pendingM.Value(); v != 0 {
+			return errors.Errorf("expected 0 pending replicas; got %d", v)
+		}
+		if v := purgM.Value(); v != int64(replicaCount) {
+			return errors.Errorf("expected %d purgatory replicas; got %d", replicaCount, v)
+		}
 		return nil
 	})
 
@@ -564,6 +648,19 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	util.SucceedsSoon(t, func() error {
 		if pc := testQueue.getProcessed(); pc != replicaCount*3 {
 			return errors.Errorf("expected %d processed replicas; got %d", replicaCount*3, pc)
+		}
+		// Check metrics.
+		if v := processM.Count(); v != int64(replicaCount) {
+			return errors.Errorf("expected %d processed replicas; got %d", replicaCount, v)
+		}
+		if v := failM.Count(); v != int64(replicaCount*2) {
+			return errors.Errorf("expected %d failed replicas; got %d", replicaCount*2, v)
+		}
+		if v := pendingM.Value(); v != 0 {
+			return errors.Errorf("expected 0 pending replicas; got %d", v)
+		}
+		if v := purgM.Value(); v != 0 {
+			return errors.Errorf("expected 0 purgatory replicas; got %d", v)
 		}
 		return nil
 	})
@@ -614,6 +711,7 @@ func TestBaseQueueProcessTimeout(t *testing.T) {
 	}
 	bq := makeBaseQueue("test", ptQueue, tc.store, tc.gossip,
 		queueConfig{maxSize: 1, processTimeout: 1 * time.Millisecond})
+	_, failM, _, _, _ := addMetrics(&bq)
 	bq.Start(tc.clock, tc.stopper)
 	bq.MaybeAdd(r, hlc.ZeroTimestamp)
 
@@ -625,6 +723,59 @@ func TestBaseQueueProcessTimeout(t *testing.T) {
 	util.SucceedsSoon(t, func() error {
 		if pc := ptQueue.getProcessed(); pc != 1 {
 			return errors.Errorf("expected 1 processed replicas; got %d", pc)
+		}
+		if v := failM.Count(); v != 1 {
+			return errors.Errorf("expected 1 failed replicas; got %d", v)
+		}
+		return nil
+	})
+}
+
+// processTimeQueueImpl spends 5ms on each process request.
+type processTimeQueueImpl struct {
+	testQueueImpl
+}
+
+func (pq *processTimeQueueImpl) process(
+	ctx context.Context,
+	now hlc.Timestamp,
+	r *Replica,
+	_ config.SystemConfig,
+) error {
+	time.Sleep(5 * time.Millisecond)
+	return nil
+}
+
+func TestBaseQueueTimeMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	r, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ptQueue := &processTimeQueueImpl{
+		testQueueImpl: testQueueImpl{
+			shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+				return true, 1.0
+			},
+		},
+	}
+	bq := makeBaseQueue("test", ptQueue, tc.store, tc.gossip,
+		queueConfig{maxSize: 1, processTimeout: 1 * time.Millisecond})
+	processM, _, _, timeM, _ := addMetrics(&bq)
+	bq.Start(tc.clock, tc.stopper)
+	bq.MaybeAdd(r, hlc.ZeroTimestamp)
+
+	util.SucceedsSoon(t, func() error {
+		if v := processM.Count(); v != 1 {
+			return errors.Errorf("expected 1 processed replicas; got %d", v)
+		}
+		if v := timeM.Count(); v < (5 * time.Millisecond).Nanoseconds() {
+			return errors.Errorf("expected >= 5e6 ns in processing time; got %d", v)
 		}
 		return nil
 	})
