@@ -4743,15 +4743,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 		t.Fatalf("expected WriteIntentError, not %s", pErr)
 	}
 
-	// Try a single lookup with ConsiderIntents. Expect to see both descriptors.
-	// First, try this consistently, which should not be allowed.
-	rlArgs.ConsiderIntents = true
-	_, pErr = tc.SendWrapped(rlArgs)
-	if !testutils.IsPError(pErr, "can not read consistently and special-case intents") {
-		t.Fatalf("wanted specific error, not %s", pErr)
-	}
-
-	// After changing back to inconsistent lookups, should be good to go.
+	// Try a single inconsistent lookup. Expect to see both descriptors.
 	var origSeen, newSeen bool
 	clonedRLArgs := *rlArgs
 	reply, pErr = tc.SendWrappedWith(roachpb.Header{
@@ -4926,7 +4918,7 @@ func TestRangeLookup(t *testing.T) {
 		{key: keys.MustAddr(keys.Meta2KeyMax), reverse: true, expected: expected},
 	}
 
-	for _, c := range testCases {
+	for i, c := range testCases {
 		resp, pErr := tc.SendWrapped(&roachpb.RangeLookupRequest{
 			Span: roachpb.Span{
 				Key: c.key.AsRawKey(),
@@ -4941,7 +4933,7 @@ func TestRangeLookup(t *testing.T) {
 		} else {
 			reply := resp.(*roachpb.RangeLookupResponse)
 			if !reflect.DeepEqual(reply.Ranges, c.expected) {
-				t.Fatalf("expected %+v, got %+v", c.expected, reply.Ranges)
+				t.Errorf("%d: expected %+v, got %+v", i, c.expected, reply.Ranges)
 			}
 		}
 	}
