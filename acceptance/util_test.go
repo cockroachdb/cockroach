@@ -42,7 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
-	_ "github.com/cockroachdb/pq"
+	_ "github.com/lib/pq"
 )
 
 type keepClusterVar string

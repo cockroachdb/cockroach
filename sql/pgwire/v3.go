@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/tracing"
-	"github.com/cockroachdb/pq/oid"
+	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 )
 
