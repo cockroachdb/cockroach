@@ -251,26 +251,13 @@ func (n *scanNode) ExplainTypes(regTypes func(string, string)) {
 	}
 }
 
-// Initializes a scanNode with a tableName. Returns the table or index name that can be used for
-// fully-qualified columns if an alias is not specified.
+// Initializes a scanNode with a table descriptor.
 func (n *scanNode) initTable(
 	p *planner,
-	tableName *parser.TableName,
+	desc *sqlbase.TableDescriptor,
 	indexHints *parser.IndexHints,
 	scanVisibility scanVisibility,
 ) error {
-	descFunc := p.getTableLease
-	if p.asOf {
-		// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
-		// specified time, and never lease anything. The proto transaction already
-		// has its timestamps set correctly so mustGetTableDesc will fetch with the
-		// correct timestamp.
-		descFunc = p.mustGetTableDesc
-	}
-	desc, err := descFunc(tableName)
-	if err != nil {
-		return err
-	}
 	n.desc = *desc
 
 	if err := p.checkPrivilege(&n.desc, privilege.SELECT); err != nil {

@@ -162,11 +162,6 @@ func (s LeaseStore) Acquire(
 	if tableDesc == nil {
 		return nil, errors.Errorf("ID %d is not a table", tableID)
 	}
-	// TODO(a-robinson): Allow taking leases on view descriptors once this
-	// method's callers know how to handle views.
-	if !tableDesc.IsTable() {
-		return nil, errors.Errorf("ID %d is a %s, not a table", tableID, tableDesc.TypeName())
-	}
 	if err := filterTableState(tableDesc); err != nil {
 		return nil, err
 	}
