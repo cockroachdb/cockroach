@@ -50,14 +50,6 @@ func meta(k roachpb.RKey) (roachpb.RKey, error) {
 	return keys.Addr(keys.RangeMetaKey(k))
 }
 
-func mustMeta(k roachpb.RKey) roachpb.RKey {
-	m, err := meta(k)
-	if err != nil {
-		panic(err)
-	}
-	return m
-}
-
 // RangeDescriptorDB is a type which can query range descriptors from an
 // underlying datastore. This interface is used by rangeDescriptorCache to
 // initially retrieve information which will be cached.
