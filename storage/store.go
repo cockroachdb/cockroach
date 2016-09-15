@@ -905,7 +905,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	s.processRaft()
 
 	doneUnfreezing := make(chan struct{})
-	if s.stopper.RunAsyncTask(func() {
+	if s.stopper.RunAsyncTask(s.Ctx(), func(ctx context.Context) {
 		defer close(doneUnfreezing)
 		sem := make(chan struct{}, 512)
 		var wg sync.WaitGroup // wait for unfreeze goroutines
@@ -918,7 +918,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 				return true
 			}
 			wg.Add(1)
-			if s.stopper.RunLimitedAsyncTask(sem, func() {
+			if s.stopper.RunLimitedAsyncTask(ctx, sem, func(ctx context.Context) {
 				defer wg.Done()
 				desc := r.Desc()
 				var ba roachpb.BatchRequest
@@ -931,8 +931,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 					MustVersion: build.GetInfo().Tag,
 				}
 				ba.Add(&fReq)
-				if _, pErr := r.Send(s.Ctx(), ba); pErr != nil {
-					log.Errorf(s.Ctx(), "%s: could not unfreeze Range %s on startup: %s", s, r, pErr)
+				if _, pErr := r.Send(ctx, ba); pErr != nil {
+					log.Errorf(ctx, "%s: could not unfreeze Range %s on startup: %s", s, r, pErr)
 				} else {
 					// We don't use the returned RangesAffected (0 or 1) for
 					// counting. One of the other Replicas may have beaten us
@@ -948,7 +948,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		})
 		wg.Wait()
 		if unfrozen > 0 {
-			log.Infof(s.Ctx(), "reactivated %d frozen Ranges", unfrozen)
+			log.Infof(ctx, "reactivated %d frozen Ranges", unfrozen)
 		}
 	}) != nil {
 		close(doneUnfreezing)
@@ -1578,7 +1578,7 @@ func splitTriggerPostCommit(
 		//
 		// Note: you must not use the context inside of this task since it may
 		// contain a finished trace by the time it runs.
-		if err := r.store.stopper.RunAsyncTask(func() {
+		if err := r.store.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
 			time.Sleep(10 * time.Millisecond)
 			// Make sure that rightRng hasn't been removed.
 			replica, err := r.store.GetReplica(rightRng.RangeID)
