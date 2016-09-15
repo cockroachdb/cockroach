@@ -132,6 +132,14 @@ func (r *RSG) Intn(n int) int {
 	return v
 }
 
+// Int63 returns a random int64.
+func (r *RSG) Int63() int64 {
+	r.lock.Lock()
+	v := r.src.Int63()
+	r.lock.Unlock()
+	return v
+}
+
 // Float64 returns a random float.
 func (r *RSG) Float64() float64 {
 	r.lock.Lock()
