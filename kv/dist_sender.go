@@ -670,7 +670,6 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// Get range descriptor (or, when spanning range, descriptors). Our
 			// error handling below may clear them on certain errors, so we
 			// refresh (likely from the cache) on every retry.
-			log.Trace(ctx, "meta descriptor lookup")
 			var err error
 			desc, needAnother, evictToken, err = ds.getDescriptors(ctx, rs, evictToken, isReverse)
 
