@@ -93,6 +93,26 @@ func NewTracerAndSpanFor7881(
 	return sp, tr, err
 }
 
+// ForkCtxSpan checks if ctx has a Span open; if it does, it creates a new Span
+// that follows from the original Span. This allows the resulting context to be
+// used in an async task that might outlive the original operation.
+//
+// Returns the new context and a function that closes the span.
+func ForkCtxSpan(ctx context.Context, opName string) (context.Context, func()) {
+	if span := opentracing.SpanFromContext(ctx); span != nil {
+		if span.BaggageItem(Snowball) == "1" {
+			// If we are doing snowball tracing, the span might outlive the snowball
+			// tracer (calling the record function when it is no longer legal to do
+			// so). Return a context with no span in this case.
+			return opentracing.ContextWithSpan(ctx, nil), func() {}
+		}
+		tr := span.Tracer()
+		newSpan := tr.StartSpan(opName, opentracing.FollowsFrom(span.Context()))
+		return opentracing.ContextWithSpan(ctx, newSpan), func() { newSpan.Finish() }
+	}
+	return ctx, func() {}
+}
+
 func defaultOptions(recorder func(basictracer.RawSpan)) basictracer.Options {
 	opts := basictracer.DefaultOptions()
 	opts.ShouldSample = func(traceID uint64) bool { return false }

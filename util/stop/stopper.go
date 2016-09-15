@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/syncutil"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 var errUnavailable = &roachpb.NodeUnavailableError{}
@@ -221,17 +222,21 @@ func (s *Stopper) RunTask(f func()) error {
 
 // RunAsyncTask runs function f in a goroutine. It returns an error when the
 // Stopper is quiescing, in which case the function is not executed.
-func (s *Stopper) RunAsyncTask(f func()) error {
+func (s *Stopper) RunAsyncTask(ctx context.Context, f func(context.Context)) error {
 	file, line, _ := caller.Lookup(1)
 	key := taskKey{file, line}
 	if !s.runPrelude(key) {
 		return errUnavailable
 	}
+
+	ctx, doneFn := tracing.ForkCtxSpan(ctx, fmt.Sprintf("%s:%d", file, line))
+
 	// Call f.
 	go func() {
 		defer s.Recover()
 		defer s.runPostlude(key)
-		f()
+		defer doneFn()
+		f(ctx)
 	}()
 	return nil
 }
@@ -242,7 +247,9 @@ func (s *Stopper) RunAsyncTask(f func()) error {
 // push back on callers that may be trying to create many tasks. Returns an
 // error if the Stopper is quiescing, in which case the function is not
 // executed.
-func (s *Stopper) RunLimitedAsyncTask(sem chan struct{}, f func()) error {
+func (s *Stopper) RunLimitedAsyncTask(
+	ctx context.Context, sem chan struct{}, f func(context.Context),
+) error {
 	file, line, _ := caller.Lookup(1)
 	key := taskKey{file, line}
 
@@ -265,11 +272,15 @@ func (s *Stopper) RunLimitedAsyncTask(sem chan struct{}, f func()) error {
 		<-sem
 		return errUnavailable
 	}
+
+	ctx, doneFn := tracing.ForkCtxSpan(ctx, fmt.Sprintf("%s:%d", file, line))
+
 	go func() {
 		defer s.Recover()
 		defer s.runPostlude(key)
 		defer func() { <-sem }()
-		f()
+		defer doneFn()
+		f(ctx)
 	}()
 	return nil
 }

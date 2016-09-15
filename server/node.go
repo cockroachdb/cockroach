@@ -458,8 +458,8 @@ func (n *Node) initStores(
 
 	// Bootstrap any uninitialized stores asynchronously.
 	if len(bootstraps) > 0 {
-		if err := stopper.RunAsyncTask(func() {
-			n.bootstrapStores(n.Ctx(), bootstraps, stopper)
+		if err := stopper.RunAsyncTask(n.Ctx(), func(ctx context.Context) {
+			n.bootstrapStores(ctx, bootstraps, stopper)
 		}); err != nil {
 			return err
 		}
