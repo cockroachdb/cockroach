@@ -18,6 +18,7 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -201,27 +202,36 @@ func Backup(
 	return desc, nil
 }
 
-// Import loads some data in sstables into an empty range. Only the keys between
-// startKey and endKey are loaded. If newTableID is non-zero, every row's key is
-// rewritten to be for that table.
-func Import(
+// Ingest loads some data in an sstable into an empty range. Only the keys
+// between startKey and endKey are loaded. If newTableID is non-zero, every
+// row's key is rewritten to be for that table.
+func Ingest(
 	ctx context.Context,
-	sst engine.RocksDBSstFileReader,
 	txn *client.Txn,
-	startKey, endKey engine.MVCCKey,
+	path string,
+	startKey, endKey roachpb.Key,
 	newTableID sqlbase.ID,
 ) error {
 	// TODO(mjibson): An appropriate value for this should be determined. The
 	// current value was guessed at but appears to work well.
 	const batchSize = 10000
 
-	// TODO(dan): Check if the range being imported into is empty. If newTableID
+	// TODO(dan): Check if the range being ingested into is empty. If newTableID
 	// is non-zero, it'll have to be derived from startKey and endKey.
+
+	sst, err := engine.MakeRocksDBSstFileReader()
+	if err != nil {
+		return err
+	}
+	defer sst.Close()
+	if err := sst.AddFile(path); err != nil {
+		return err
+	}
 
 	b := txn.NewBatch()
 	var v roachpb.Value
 	count := 0
-	importFunc := func(kv engine.MVCCKeyValue) (bool, error) {
+	ingestFunc := func(kv engine.MVCCKeyValue) (bool, error) {
 		v = roachpb.Value{RawBytes: kv.Value}
 		v.ClearChecksum()
 		if log.V(3) {
@@ -242,13 +252,29 @@ func Import(
 		// MakeRekeyMVCCKeyValFunc modifies the keys, but this is safe because
 		// the one we get back from rocksDBIterator.Key is a copy (not a
 		// reference to the mmaped file.)
-		importFunc = MakeRekeyMVCCKeyValFunc(newTableID, importFunc)
+		ingestFunc = MakeRekeyMVCCKeyValFunc(newTableID, ingestFunc)
 	}
-	err := sst.Iterate(startKey, endKey, importFunc)
-	if err != nil {
+	startKeyMVCC, endKeyMVCC := engine.MVCCKey{Key: startKey}, engine.MVCCKey{Key: endKey}
+	if err := sst.Iterate(startKeyMVCC, endKeyMVCC, ingestFunc); err != nil {
 		return err
 	}
 	return txn.Run(b)
+}
+
+// IntersectHalfOpen returns the common range between two key intervals or
+// (nil, nil) if there is no common range. Exported for testing.
+func IntersectHalfOpen(start1, end1, start2, end2 []byte) ([]byte, []byte) {
+	if bytes.Compare(start1, end2) < 0 && bytes.Compare(start2, end1) < 0 {
+		start, end := start1, end1
+		if bytes.Compare(start1, start2) < 0 {
+			start = start2
+		}
+		if bytes.Compare(end1, end2) > 0 {
+			end = end2
+		}
+		return start, end
+	}
+	return nil, nil
 }
 
 // restoreTable inserts the given DatabaseDescriptor. If the name conflicts with
@@ -256,10 +282,10 @@ func Import(
 // old data is deleted.
 func restoreTable(
 	ctx context.Context,
-	sst engine.RocksDBSstFileReader,
 	txn *client.Txn,
 	database sqlbase.DatabaseDescriptor,
 	table *sqlbase.TableDescriptor,
+	ranges []sqlbase.BackupRangeDescriptor,
 ) error {
 	log.Infof(ctx, "Restoring Table %q", table.Name)
 
@@ -280,10 +306,8 @@ func restoreTable(
 	table.ParentID = sqlbase.ID(newParentID)
 
 	// Create the iteration keys before we give the table its new ID.
-	tableStartKeyOld := engine.MVCCKey{
-		Key: roachpb.Key(sqlbase.MakeIndexKeyPrefix(table, table.PrimaryIndex.ID)),
-	}
-	tableEndKeyOld := engine.MVCCKey{Key: tableStartKeyOld.Key.PrefixEnd()}
+	tableStartKeyOld := roachpb.Key(sqlbase.MakeIndexKeyPrefix(table, table.PrimaryIndex.ID))
+	tableEndKeyOld := tableStartKeyOld.PrefixEnd()
 
 	// Assign a new ID for the table.
 	// TODO(dan): For now, we're always generating a new ID, but varints get
@@ -296,12 +320,26 @@ func restoreTable(
 	tableIDKey := tableKey{parentID: table.ParentID, name: table.Name}.Key()
 	tableDescKey := sqlbase.MakeDescMetadataKey(table.ID)
 
-	// Write the data under the new ID.
-	// TODO(dan): There's no SQL descriptors that point at this yet, so it
-	// should be possible to remove it from the one txn this is all currently
-	// run under. If we do that, make sure this data gets cleaned up on errors.
-	if err := Import(ctx, sst, txn, tableStartKeyOld, tableEndKeyOld, table.ID); err != nil {
-		return err
+	// This loop makes restoring multiple tables O(N*M), where N is the number
+	// of tables and M is the number of ranges. We could reduce this using an
+	// interval tree if necessary.
+	for _, r := range ranges {
+		if len(r.Path) == 0 {
+			// Empty path means empty range.
+			continue
+		}
+
+		intersectBegin, intersectEnd := IntersectHalfOpen(
+			r.StartKey, r.EndKey, tableStartKeyOld, tableEndKeyOld)
+		if intersectBegin != nil && intersectEnd != nil {
+			// Write the data under the new ID.
+			// TODO(dan): There's no SQL descriptors that point at this yet, so it
+			// should be possible to remove it from the one txn this is all currently
+			// run under. If we do that, make sure this data gets cleaned up on errors.
+			if err := Ingest(ctx, txn, r.Path, intersectBegin, intersectEnd, table.ID); err != nil {
+				return err
+			}
+		}
 	}
 
 	// Check for an existing table.
@@ -392,12 +430,6 @@ func Restore(
 	// TODO(dan): It's currently impossible to restore two interleaved tables
 	// because one of them won't be to an empty range.
 
-	sst, err := engine.MakeRocksDBSstFileReader()
-	if err != nil {
-		return nil, err
-	}
-	defer sst.Close()
-
 	descBytes, err := ioutil.ReadFile(filepath.Join(base, backupDescriptorName))
 	if err != nil {
 		return nil, err
@@ -405,14 +437,6 @@ func Restore(
 	var backupDesc sqlbase.BackupDescriptor
 	if err := backupDesc.Unmarshal(descBytes); err != nil {
 		return nil, err
-	}
-	for _, r := range backupDesc.Ranges {
-		if len(r.Path) == 0 {
-			continue
-		}
-		if err := sst.AddFile(r.Path); err != nil {
-			return nil, err
-		}
 	}
 
 	matches, err := userTablesAndDBsMatchingName(backupDesc.SQL, table)
@@ -440,7 +464,7 @@ func Restore(
 				if !ok {
 					return errors.Wrapf(err, "no database with ID %d", table.ParentID)
 				}
-				if err := restoreTable(ctx, sst, txn, *database, &table); err != nil {
+				if err := restoreTable(ctx, txn, *database, &table, backupDesc.Ranges); err != nil {
 					return err
 				}
 				restored = append(restored, table)
