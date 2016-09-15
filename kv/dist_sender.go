@@ -727,6 +727,9 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				}
 				// On addressing errors, don't backoff; retry immediately.
 				r.Reset()
+				log.VTracef(1, ctx,
+					"addressing error: %s not appropriate for remaining range %s",
+					desc, rs)
 				continue
 			}
 
@@ -808,8 +811,10 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 
 		// Immediately return if querying a range failed non-retryably.
 		if pErr != nil {
+			log.Tracef(ctx, "non-retryable failure: %s", pErr)
 			return nil, pErr, false
 		} else if !finished {
+			log.Trace(ctx, "DistSender gave up")
 			select {
 			case <-ds.rpcRetryOptions.Closer:
 				return nil, roachpb.NewError(&roachpb.NodeUnavailableError{}), false
@@ -867,6 +872,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				// prepare the batch response after meeting the max key limit.
 				fillSkippedResponses(ba, br, rs)
 				// done, exit loop.
+				log.Trace(ctx, "request is saturated")
 				return br, nil, false
 			}
 		}
