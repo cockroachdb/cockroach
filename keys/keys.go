@@ -198,6 +198,12 @@ func RangeLastGCKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDReplicatedKey(rangeID, LocalRangeLastGCSuffix, nil)
 }
 
+// RangeTxnSpanGCThresholdKey returns a system-local key for last used GC
+// threshold on the txn span.
+func RangeTxnSpanGCThresholdKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDReplicatedKey(rangeID, LocalTxnSpanGCThresholdSuffix, nil)
+}
+
 // MakeRangeIDUnreplicatedPrefix creates a range-local key prefix from
 // rangeID for all unreplicated data.
 func MakeRangeIDUnreplicatedPrefix(rangeID roachpb.RangeID) roachpb.Key {
