@@ -1153,7 +1153,12 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func
 		cmd = r.mu.cmdQ.add(readOnly, spans...)
 		r.mu.Unlock()
 
+		beforeWait := time.Now()
 		ctxDone := ctx.Done()
+		numChans := len(chans)
+		if numChans > 0 {
+			log.Tracef(ctx, "waiting for %d overlapping requests", len(chans))
+		}
 		for _, ch := range chans {
 			select {
 			case <-ch:
@@ -1161,7 +1166,7 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func
 				err := ctx.Err()
 				errStr := fmt.Sprintf("%s while in command queue: %s", err, ba)
 				log.Warning(ctx, errStr)
-				log.Trace(ctx, errStr)
+				log.ErrEvent(ctx, errStr)
 				go func() {
 					// The command is moot, so we don't need to bother executing.
 					// However, the command queue assumes that commands don't drop
@@ -1176,6 +1181,9 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func
 				}()
 				return nil, err
 			}
+		}
+		if numChans > 0 {
+			log.Tracef(ctx, "waited %s for overlapping requests", time.Since(beforeWait))
 		}
 	} else {
 		log.Trace(ctx, "operation accepts inconsistent results")
@@ -1418,6 +1426,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 		}
 	}
 
+	log.Trace(ctx, "waiting for read lock")
 	r.readOnlyCmdMu.RLock()
 	defer r.readOnlyCmdMu.RUnlock()
 
@@ -1443,7 +1452,13 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 		pErr = r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn)
 	}
 	if trigger != nil && len(trigger.intents) > 0 {
+		log.Tracef(ctx, "submitting %d intents to asynchronous processing", len(trigger.intents))
 		r.store.intentResolver.processIntentsAsync(r, trigger.intents)
+	}
+	if pErr != nil {
+		log.ErrEvent(ctx, pErr.String())
+	} else {
+		log.Trace(ctx, "read completed")
 	}
 	return br, pErr
 }
