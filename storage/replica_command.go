@@ -936,7 +936,7 @@ func (r *Replica) RangeLookup(
 	h roachpb.Header,
 	args roachpb.RangeLookupRequest,
 ) (roachpb.RangeLookupResponse, *PostCommitTrigger, error) {
-	log.Trace(ctx, "RangeLookup")
+	log.Event(ctx, "RangeLookup")
 	var reply roachpb.RangeLookupResponse
 	ts := h.Timestamp // all we're going to use from the header.
 	key, err := keys.Addr(args.Key)
@@ -2269,7 +2269,7 @@ func (r *Replica) AdminSplit(
 	// Determine split key if not provided with args. This scan is
 	// allowed to be relatively slow because admin commands don't block
 	// other commands.
-	log.Trace(ctx, "split begins")
+	log.Event(ctx, "split begins")
 	var splitKey roachpb.RKey
 	{
 		foundSplitKey := args.SplitKey
@@ -2310,7 +2310,7 @@ func (r *Replica) AdminSplit(
 	if desc.StartKey.Equal(splitKey) || desc.EndKey.Equal(splitKey) {
 		return reply, roachpb.NewErrorf("range is already split at key %s", splitKey)
 	}
-	log.Trace(ctx, "found split key")
+	log.Event(ctx, "found split key")
 
 	// Create right hand side range descriptor with the newly-allocated Range ID.
 	rightDesc, err := r.store.NewRangeDescriptor(splitKey, desc.EndKey, desc.Replicas)
@@ -2325,8 +2325,8 @@ func (r *Replica) AdminSplit(
 	log.Infof(ctx, "initiating a split of this range at key %s", splitKey)
 
 	if err := r.store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
-		log.Trace(ctx, "split closure begins")
-		defer log.Trace(ctx, "split closure ends")
+		log.Event(ctx, "split closure begins")
+		defer log.Event(ctx, "split closure ends")
 		// Update existing range descriptor for left hand side of
 		// split. Note that we mutate the descriptor for the left hand
 		// side of the split first to locate the txn record there.
@@ -2343,7 +2343,7 @@ func (r *Replica) AdminSplit(
 			// This prevents cases where splits are aborted early due to
 			// conflicts with meta intents before the txn record has been
 			// written (see #9265).
-			log.Trace(ctx, "updating left descriptor")
+			log.Event(ctx, "updating left descriptor")
 			if err := txn.Run(b); err != nil {
 				if _, ok := err.(*roachpb.ConditionFailedError); ok {
 					return errors.Errorf("conflict updating range descriptors")
@@ -2387,7 +2387,7 @@ func (r *Replica) AdminSplit(
 		})
 
 		// Commit txn with final batch (RHS desc and meta).
-		log.Trace(ctx, "commit txn with batch containing RHS descriptor and meta records")
+		log.Event(ctx, "commit txn with batch containing RHS descriptor and meta records")
 		if err := txn.Run(b); err != nil {
 			if _, ok := err.(*roachpb.ConditionFailedError); ok {
 				return errors.Errorf("conflict updating range descriptors")
@@ -2590,7 +2590,7 @@ func (r *Replica) splitTrigger(
 	if err != nil {
 		return enginepb.MVCCStats{}, nil, errors.Wrap(err, "unable to compute stats for LHS range after split")
 	}
-	log.Trace(ctx, "computed stats for left hand side range")
+	log.Event(ctx, "computed stats for left hand side range")
 
 	// Copy the last replica GC timestamp. This value is unreplicated,
 	// which is why the MVCC stats are set to nil on calls to
@@ -2609,7 +2609,7 @@ func (r *Replica) splitTrigger(
 		// TODO(tschottdorf): ReplicaCorruptionError.
 		return enginepb.MVCCStats{}, nil, errors.Wrap(err, "unable to copy abort cache to RHS split range")
 	}
-	log.Tracef(ctx, "copied abort cache (%d entries)", seqCount)
+	log.Eventf(ctx, "copied abort cache (%d entries)", seqCount)
 
 	// Initialize the right-hand lease to be the same as the left-hand lease.
 	// This looks like an innocuous performance improvement, but it's more than
@@ -2799,7 +2799,7 @@ func (r *Replica) AdminMerge(
 	}
 
 	if err := r.store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
-		log.Trace(ctx, "merge closure begins")
+		log.Event(ctx, "merge closure begins")
 		// Update the range descriptor for the receiving range.
 		{
 			b := txn.NewBatch()
@@ -2809,7 +2809,7 @@ func (r *Replica) AdminMerge(
 			}
 			// Commit this batch on its own to ensure that the transaction record
 			// is created in the right place (our triggers rely on this).
-			log.Trace(ctx, "updating left descriptor")
+			log.Event(ctx, "updating left descriptor")
 			if err := txn.Run(b); err != nil {
 				return err
 			}
@@ -2855,7 +2855,7 @@ func (r *Replica) AdminMerge(
 				},
 			},
 		})
-		log.Trace(ctx, "attempting commit")
+		log.Event(ctx, "attempting commit")
 		return txn.Run(b)
 	}); err != nil {
 		return reply, roachpb.NewErrorf("merge of range into %d failed: %s", origLeftDesc.RangeID, err)
@@ -3131,7 +3131,7 @@ func (r *Replica) ChangeReplicas(
 			return errors.Errorf("%s: unable to add replica %v which is already present", r, repDesc)
 		}
 
-		log.Trace(ctx, "requesting reservation")
+		log.Event(ctx, "requesting reservation")
 		// Before we try to add a new replica, we first need to secure a
 		// reservation for the replica on the receiving store.
 		if err := r.store.allocator.storePool.reserve(
@@ -3142,7 +3142,7 @@ func (r *Replica) ChangeReplicas(
 		); err != nil {
 			return errors.Wrapf(err, "%s: change replicas failed", r)
 		}
-		log.Trace(ctx, "reservation granted")
+		log.Event(ctx, "reservation granted")
 
 		// Prohibit premature raft log truncation. We set the pending index to 1
 		// here until we determine what it is below. This removes a small window of
@@ -3170,7 +3170,7 @@ func (r *Replica) ChangeReplicas(
 		// negate the benefits of pre-emptive snapshots, but that is a recoverable
 		// degradation, not a catastrophic failure.
 		snap, err := r.GetSnapshot(ctx)
-		log.Trace(ctx, "generated snapshot")
+		log.Event(ctx, "generated snapshot")
 		if err != nil {
 			return errors.Wrapf(err, "%s: change replicas failed", r)
 		}
@@ -3223,7 +3223,7 @@ func (r *Replica) ChangeReplicas(
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
 
 	if err := r.store.DB().Txn(ctx, func(txn *client.Txn) error {
-		log.Trace(ctx, "attempting txn")
+		log.Event(ctx, "attempting txn")
 		txn.Proto.Name = replicaChangeTxnName
 		// TODO(tschottdorf): oldDesc is used for sanity checks related to #7224.
 		// Remove when that has been solved. The failure mode is likely based on
@@ -3277,7 +3277,7 @@ func (r *Replica) ChangeReplicas(
 			},
 		})
 		if err := txn.Run(b); err != nil {
-			log.Trace(ctx, err.Error())
+			log.Event(ctx, err.Error())
 			return err
 		}
 
@@ -3289,10 +3289,10 @@ func (r *Replica) ChangeReplicas(
 		}
 		return nil
 	}); err != nil {
-		log.Trace(ctx, err.Error())
+		log.Event(ctx, err.Error())
 		return errors.Wrapf(err, "change replicas of range %d failed", rangeID)
 	}
-	log.Trace(ctx, "txn complete")
+	log.Event(ctx, "txn complete")
 	return nil
 }
 
