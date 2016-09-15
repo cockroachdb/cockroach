@@ -248,9 +248,9 @@ func TestClientRetryNonTxn(t *testing.T) {
 				go func() {
 					var err error
 					if _, ok := test.args.(*roachpb.GetRequest); ok {
-						_, err = db.Get(key)
+						_, err = db.Get(context.TODO(), key)
 					} else {
-						err = db.Put(key, "value")
+						err = db.Put(context.TODO(), key, "value")
 					}
 					doneCall <- errors.Wrapf(
 						err, "%d: expected success on non-txn call to %s",
@@ -285,7 +285,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 		}
 
 		// Get the current value to verify whether the txn happened first.
-		gr, err := db.Get(key)
+		gr, err := db.Get(context.TODO(), key)
 		if err != nil {
 			t.Fatalf("%d: expected success getting %q: %s", i, key, err)
 		}
@@ -330,7 +330,7 @@ func TestClientRunTransaction(t *testing.T) {
 				return err
 			}
 			// Attempt to read outside of txn.
-			if gr, err := db.Get(key); err != nil {
+			if gr, err := db.Get(context.TODO(), key); err != nil {
 				return err
 			} else if gr.Value != nil {
 				return errors.Errorf("expected nil value; got %+v", gr.Value)
@@ -354,7 +354,7 @@ func TestClientRunTransaction(t *testing.T) {
 		}
 
 		// Verify the value is now visible on commit == true, and not visible otherwise.
-		gr, err := db.Get(key)
+		gr, err := db.Get(context.TODO(), key)
 		if commit {
 			if err != nil || gr.Value == nil || !bytes.Equal(gr.ValueBytes(), value) {
 				t.Errorf("expected success reading value: %+v, %s", gr.Value, err)
@@ -385,12 +385,12 @@ func TestClientGetAndPutProto(t *testing.T) {
 	}
 
 	key := roachpb.Key(testUser + "/zone-config")
-	if err := db.Put(key, &zoneConfig); err != nil {
+	if err := db.Put(context.TODO(), key, &zoneConfig); err != nil {
 		t.Fatalf("unable to put proto: %s", err)
 	}
 
 	var readZoneConfig config.ZoneConfig
-	if err := db.GetProto(key, &readZoneConfig); err != nil {
+	if err := db.GetProto(context.TODO(), key, &readZoneConfig); err != nil {
 		t.Fatalf("unable to get proto: %s", err)
 	}
 	if !proto.Equal(&zoneConfig, &readZoneConfig) {
@@ -407,10 +407,10 @@ func TestClientGetAndPut(t *testing.T) {
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	value := []byte("value")
-	if err := db.Put(testUser+"/key", value); err != nil {
+	if err := db.Put(context.TODO(), testUser+"/key", value); err != nil {
 		t.Fatalf("unable to put value: %s", err)
 	}
-	gr, err := db.Get(testUser + "/key")
+	gr, err := db.Get(context.TODO(), testUser+"/key")
 	if err != nil {
 		t.Fatalf("unable to get value: %s", err)
 	}
@@ -429,10 +429,10 @@ func TestClientPutInline(t *testing.T) {
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	value := []byte("value")
-	if err := db.PutInline(testUser+"/key", value); err != nil {
+	if err := db.PutInline(context.TODO(), testUser+"/key", value); err != nil {
 		t.Fatalf("unable to put value: %s", err)
 	}
-	gr, err := db.Get(testUser + "/key")
+	gr, err := db.Get(context.TODO(), testUser+"/key")
 	if err != nil {
 		t.Fatalf("unable to get value: %s", err)
 	}
@@ -455,19 +455,19 @@ func TestClientEmptyValues(t *testing.T) {
 	defer s.Stopper().Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
-	if err := db.Put(testUser+"/a", []byte{}); err != nil {
+	if err := db.Put(context.TODO(), testUser+"/a", []byte{}); err != nil {
 		t.Error(err)
 	}
-	if gr, err := db.Get(testUser + "/a"); err != nil {
+	if gr, err := db.Get(context.TODO(), testUser+"/a"); err != nil {
 		t.Error(err)
 	} else if bytes := gr.ValueBytes(); bytes == nil || len(bytes) != 0 {
 		t.Errorf("expected non-nil empty byte slice; got %q", bytes)
 	}
 
-	if _, err := db.Inc(testUser+"/b", 0); err != nil {
+	if _, err := db.Inc(context.TODO(), testUser+"/b", 0); err != nil {
 		t.Error(err)
 	}
-	if gr, err := db.Get(testUser + "/b"); err != nil {
+	if gr, err := db.Get(context.TODO(), testUser+"/b"); err != nil {
 		t.Error(err)
 	} else if gr.Value == nil {
 		t.Errorf("expected non-nil integer")
@@ -610,7 +610,7 @@ func TestClientBatch(t *testing.T) {
 	// Induce a non-transactional failure.
 	{
 		key := roachpb.Key("conditionalPut")
-		if err := db.Put(key, "hello"); err != nil {
+		if err := db.Put(context.TODO(), key, "hello"); err != nil {
 			t.Fatal(err)
 		}
 
@@ -635,7 +635,7 @@ func TestClientBatch(t *testing.T) {
 	// Induce a transactional failure.
 	{
 		key := roachpb.Key("conditionalPut")
-		if err := db.Put(key, "hello"); err != nil {
+		if err := db.Put(context.TODO(), key, "hello"); err != nil {
 			t.Fatal(err)
 		}
 
@@ -714,7 +714,7 @@ func concurrentIncrements(db *client.DB, t *testing.T) {
 	results := []int64(nil)
 	for i := 0; i < 2; i++ {
 		readKey := []byte(fmt.Sprintf(testUser+"/value-%d", i))
-		gr, err := db.Get(readKey)
+		gr, err := db.Get(context.TODO(), readKey)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -743,7 +743,7 @@ func TestConcurrentIncrements(t *testing.T) {
 	// Convenience loop: Crank up this number for testing this
 	// more often. It'll increase test duration though.
 	for k := 0; k < 5; k++ {
-		if err := db.DelRange(testUser+"/value-0", testUser+"/value-1x"); err != nil {
+		if err := db.DelRange(context.TODO(), testUser+"/value-0", testUser+"/value-1x"); err != nil {
 			t.Fatalf("%d: unable to clean up: %s", k, err)
 		}
 		concurrentIncrements(db, t)
@@ -787,11 +787,11 @@ func TestClientPermissions(t *testing.T) {
 	value := []byte("value")
 	const matchErr = "is not allowed"
 	for tcNum, tc := range testCases {
-		err := tc.client.Put(tc.path, value)
+		err := tc.client.Put(context.TODO(), tc.path, value)
 		if (err == nil) != tc.allowed || (!tc.allowed && !testutils.IsError(err, matchErr)) {
 			t.Errorf("#%d: expected allowed=%t, got err=%v", tcNum, tc.allowed, err)
 		}
-		_, err = tc.client.Get(tc.path)
+		_, err = tc.client.Get(context.TODO(), tc.path)
 		if (err == nil) != tc.allowed || (!tc.allowed && !testutils.IsError(err, matchErr)) {
 			t.Errorf("#%d: expected allowed=%t, got err=%v", tcNum, tc.allowed, err)
 		}
@@ -861,7 +861,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	defer s.Stopper().Stop()
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
-	if err := db.Put("k", "v"); err != nil {
+	if err := db.Put(context.TODO(), "k", "v"); err != nil {
 		t.Fatal(err)
 	}
 

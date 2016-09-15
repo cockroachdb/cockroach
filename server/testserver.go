@@ -278,7 +278,7 @@ func WaitForInitialSplits(db *client.DB) error {
 	expectedRanges := ExpectedInitialRangeCount()
 	return util.RetryForDuration(initialSplitsTimeout, func() error {
 		// Scan all keys in the Meta2Prefix; we only need a count.
-		rows, err := db.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
+		rows, err := db.Scan(context.TODO(), keys.Meta2Prefix, keys.MetaMax, 0)
 		if err != nil {
 			return err
 		}

@@ -20,6 +20,8 @@ import (
 	"net"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -70,7 +72,8 @@ func Consistent(t *testing.T, c Cluster) {
 	defer kvStopper.Stop()
 	// Set withDiff to false because any failure results in a second consistency check
 	// being called with withDiff=true.
-	if pErr := kvClient.CheckConsistency(keys.LocalMax, keys.MaxKey, false /* withDiff*/); pErr != nil {
-		t.Fatal(pErr)
+	if err := kvClient.CheckConsistency(context.TODO(), keys.LocalMax,
+		keys.MaxKey, false /* withDiff*/); err != nil {
+		t.Fatal(err)
 	}
 }

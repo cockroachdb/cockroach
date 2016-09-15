@@ -1931,8 +1931,7 @@ func (r *Replica) CheckConsistency(
 			if bytes.Compare(key, keys.LocalMax) < 0 {
 				key = keys.LocalMax
 			}
-			if err := r.store.db.CheckConsistency(
-				key, endKey, true /* withDiff */); err != nil {
+			if err := r.store.db.CheckConsistency(ctx, key, endKey, true /* withDiff */); err != nil {
 				log.Error(ctx, errors.Wrap(err, "could not rerun consistency check"))
 			}
 		}); err != nil {

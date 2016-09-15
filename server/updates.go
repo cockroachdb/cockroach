@@ -121,9 +121,9 @@ func (s *Server) maybeCheckForUpdates() time.Duration {
 // Returns how long until `f` should be run next (i.e. when this method should
 // be called again).
 func (s *Server) maybeRunPeriodicCheck(op string, key roachpb.Key, f func()) time.Duration {
-	resp, err := s.db.Get(key)
+	resp, err := s.db.Get(s.Ctx(), key)
 	if err != nil {
-		log.Infof(context.TODO(), "Error reading %s time: %v", op, err)
+		log.Infof(s.Ctx(), "Error reading %s time: %v", op, err)
 		return updateCheckRetryFrequency
 	}
 
@@ -133,26 +133,26 @@ func (s *Server) maybeRunPeriodicCheck(op string, key roachpb.Key, f func()) tim
 	if resp.Exists() {
 		whenToCheck, pErr := resp.Value.GetTime()
 		if pErr != nil {
-			log.Warningf(context.TODO(), "Error decoding %s time: %v", op, err)
+			log.Warningf(s.Ctx(), "Error decoding %s time: %v", op, err)
 			return updateCheckRetryFrequency
 		} else if delay := whenToCheck.Sub(timeutil.Now()); delay > 0 {
 			return delay
 		}
 
 		nextRetry := whenToCheck.Add(updateCheckRetryFrequency)
-		if err := s.db.CPut(key, nextRetry, whenToCheck); err != nil {
+		if err := s.db.CPut(s.Ctx(), key, nextRetry, whenToCheck); err != nil {
 			if log.V(2) {
-				log.Infof(context.TODO(), "Could not set next version check time (maybe another node checked?): %v", err)
+				log.Infof(s.Ctx(), "Could not set next version check time (maybe another node checked?): %v", err)
 			}
 			return updateCheckRetryFrequency
 		}
 	} else {
-		log.Infof(context.TODO(), "No previous %s time.", op)
+		log.Infof(s.Ctx(), "No previous %s time.", op)
 		nextRetry := timeutil.Now().Add(updateCheckRetryFrequency)
 		// CPut with `nil` prev value to assert that no other node has checked.
-		if err := s.db.CPut(key, nextRetry, nil); err != nil {
+		if err := s.db.CPut(s.Ctx(), key, nextRetry, nil); err != nil {
 			if log.V(2) {
-				log.Infof(context.TODO(), "Could not set %s time (maybe another node checked?): %v", op, err)
+				log.Infof(s.Ctx(), "Could not set %s time (maybe another node checked?): %v", op, err)
 			}
 			return updateCheckRetryFrequency
 		}
@@ -160,8 +160,8 @@ func (s *Server) maybeRunPeriodicCheck(op string, key roachpb.Key, f func()) tim
 
 	f()
 
-	if err := s.db.Put(key, timeutil.Now().Add(updateCheckFrequency)); err != nil {
-		log.Infof(context.TODO(), "Error updating %s time: %v", op, err)
+	if err := s.db.Put(s.Ctx(), key, timeutil.Now().Add(updateCheckFrequency)); err != nil {
+		log.Infof(s.Ctx(), "Error updating %s time: %v", op, err)
 	}
 	return updateCheckFrequency
 }

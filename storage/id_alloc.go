@@ -95,7 +95,7 @@ func (ia *idAllocator) start() {
 				for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 					idKey := ia.idKey.Load().(roachpb.Key)
 					if err := ia.stopper.RunTask(func() {
-						res, err = ia.db.Inc(idKey, int64(ia.blockSize))
+						res, err = ia.db.Inc(context.TODO(), idKey, int64(ia.blockSize))
 					}); err != nil {
 						log.Warning(context.TODO(), err)
 						return

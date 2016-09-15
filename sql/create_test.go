@@ -19,6 +19,8 @@ package sql_test
 import (
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/server"
@@ -33,12 +35,13 @@ func TestDatabaseDescriptor(t *testing.T) {
 	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
+	ctx := context.TODO()
 
 	expectedCounter := int64(keys.MaxReservedDescID + 1)
 
 	// Test values before creating the database.
 	// descriptor ID counter.
-	if ir, err := kvDB.Get(keys.DescIDGenerator); err != nil {
+	if ir, err := kvDB.Get(ctx, keys.DescIDGenerator); err != nil {
 		t.Fatal(err)
 	} else if actual := ir.ValueInt(); actual != expectedCounter {
 		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
@@ -46,7 +49,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 
 	// Database name.
 	nameKey := sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, "test")
-	if gr, err := kvDB.Get(nameKey); err != nil {
+	if gr, err := kvDB.Get(ctx, nameKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
 		t.Fatal("expected non-existing key")
@@ -63,7 +66,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 			},
 		},
 	}
-	if err := kvDB.CPut(dbDescKey, dbDesc, nil); err != nil {
+	if err := kvDB.CPut(ctx, dbDescKey, dbDesc, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -72,14 +75,14 @@ func TestDatabaseDescriptor(t *testing.T) {
 		t.Fatalf("unexpected error %v", err)
 	}
 
-	if ir, err := kvDB.Get(keys.DescIDGenerator); err != nil {
+	if ir, err := kvDB.Get(ctx, keys.DescIDGenerator); err != nil {
 		t.Fatal(err)
 	} else if actual := ir.ValueInt(); actual != expectedCounter {
 		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
 	}
 
 	start := roachpb.Key(keys.MakeTablePrefix(uint32(keys.NamespaceTableID)))
-	if kvs, err := kvDB.Scan(start, start.PrefixEnd(), 0); err != nil {
+	if kvs, err := kvDB.Scan(ctx, start, start.PrefixEnd(), 0); err != nil {
 		t.Fatal(err)
 	} else {
 		if a, e := len(kvs), server.GetBootstrapSchema().SystemDescriptorCount(); a != e {
@@ -88,7 +91,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	}
 
 	// Remove the junk; allow database creation to proceed.
-	if err := kvDB.Del(dbDescKey); err != nil {
+	if err := kvDB.Del(ctx, dbDescKey); err != nil {
 		t.Fatal(err)
 	}
 
@@ -99,21 +102,21 @@ func TestDatabaseDescriptor(t *testing.T) {
 
 	// Check keys again.
 	// descriptor ID counter.
-	if ir, err := kvDB.Get(keys.DescIDGenerator); err != nil {
+	if ir, err := kvDB.Get(ctx, keys.DescIDGenerator); err != nil {
 		t.Fatal(err)
 	} else if actual := ir.ValueInt(); actual != expectedCounter {
 		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
 	}
 
 	// Database name.
-	if gr, err := kvDB.Get(nameKey); err != nil {
+	if gr, err := kvDB.Get(ctx, nameKey); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {
 		t.Fatal("key is missing")
 	}
 
 	// database descriptor.
-	if gr, err := kvDB.Get(dbDescKey); err != nil {
+	if gr, err := kvDB.Get(ctx, dbDescKey); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {
 		t.Fatal("key is missing")
@@ -126,21 +129,21 @@ func TestDatabaseDescriptor(t *testing.T) {
 
 	// Check keys again.
 	// descriptor ID counter.
-	if ir, err := kvDB.Get(keys.DescIDGenerator); err != nil {
+	if ir, err := kvDB.Get(ctx, keys.DescIDGenerator); err != nil {
 		t.Fatal(err)
 	} else if actual := ir.ValueInt(); actual != expectedCounter {
 		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
 	}
 
 	// Database name.
-	if gr, err := kvDB.Get(nameKey); err != nil {
+	if gr, err := kvDB.Get(ctx, nameKey); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {
 		t.Fatal("key is missing")
 	}
 
 	// database descriptor.
-	if gr, err := kvDB.Get(dbDescKey); err != nil {
+	if gr, err := kvDB.Get(ctx, dbDescKey); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {
 		t.Fatal("key is missing")
