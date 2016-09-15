@@ -403,7 +403,7 @@ func (t *multiTestContextKVTransport) SendNext(done chan<- kv.BatchCall) {
 	t.mtc.mu.RLock()
 	s := t.mtc.stoppers[nodeIndex]
 	t.mtc.mu.RUnlock()
-	if s == nil || s.RunAsyncTask(func() {
+	if s == nil || s.RunAsyncTask(t.ctx, func(ctx context.Context) {
 		t.mtc.mu.RLock()
 		sender := t.mtc.senders[nodeIndex]
 		t.mtc.mu.RUnlock()
@@ -413,7 +413,7 @@ func (t *multiTestContextKVTransport) SendNext(done chan<- kv.BatchCall) {
 			txnClone := baCopy.Txn.Clone()
 			baCopy.Txn = &txnClone
 		}
-		br, pErr := sender.Send(t.ctx, baCopy)
+		br, pErr := sender.Send(ctx, baCopy)
 		if br == nil {
 			br = &roachpb.BatchResponse{}
 		}
