@@ -256,7 +256,7 @@ func TestStopperNumTasks(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		c := make(chan bool)
 		tasks = append(tasks, c)
-		if err := s.RunAsyncTask(func() {
+		if err := s.RunAsyncTask(context.Background(), func(_ context.Context) {
 			// Wait for channel to close
 			<-c
 		}); err != nil {
@@ -319,12 +319,13 @@ func TestStopperRunTaskPanic(t *testing.T) {
 			_ = s.RunTask(explode)
 		},
 		func() {
-			_ = s.RunAsyncTask(explode)
+			_ = s.RunAsyncTask(context.Background(), func(_ context.Context) { explode() })
 		},
 		func() {
 			_ = s.RunLimitedAsyncTask(
+				context.Background(),
 				make(chan struct{}, 1),
-				explode,
+				func(_ context.Context) { explode() },
 			)
 		},
 		func() {
@@ -366,7 +367,7 @@ func TestStopperShouldQuiesce(t *testing.T) {
 	// Run an asynchronous task. A stopper which has been Stop()ed will not
 	// close it's ShouldStop() channel until all tasks have completed. This task
 	// will complete when the "runningTask" channel is closed.
-	if err := s.RunAsyncTask(func() {
+	if err := s.RunAsyncTask(context.Background(), func(_ context.Context) {
 		<-runningTask
 	}); err != nil {
 		t.Fatal(err)
@@ -423,7 +424,7 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 	peakConcurrency := 0
 	var wg sync.WaitGroup
 
-	f := func() {
+	f := func(_ context.Context) {
 		mu.Lock()
 		concurrency++
 		if concurrency > peakConcurrency {
@@ -439,7 +440,7 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 
 	for i := 0; i < maxConcurrency*3; i++ {
 		wg.Add(1)
-		if err := s.RunLimitedAsyncTask(sem, f); err != nil {
+		if err := s.RunLimitedAsyncTask(context.TODO(), sem, f); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -1860,7 +1860,7 @@ func (r *Replica) CheckConsistency(
 		}
 		wg.Add(1)
 		replica := replica // per-iteration copy
-		if err := r.store.Stopper().RunAsyncTask(func() {
+		if err := r.store.Stopper().RunAsyncTask(ctx, func(ctx context.Context) {
 			defer wg.Done()
 			addr, err := sp.resolver(replica.NodeID)
 			if err != nil {
@@ -1924,8 +1924,8 @@ func (r *Replica) CheckConsistency(
 		}
 		logFunc(ctx, "consistency check failed with %d inconsistent replicas", inconsistencyCount)
 	} else {
-		if err := r.store.stopper.RunAsyncTask(func() {
-			log.Errorf(r.ctx, "consistency check failed with %d inconsistent replicas; fetching details",
+		if err := r.store.stopper.RunAsyncTask(r.ctx, func(ctx context.Context) {
+			log.Errorf(ctx, "consistency check failed with %d inconsistent replicas; fetching details",
 				inconsistencyCount)
 			// Keep the request from crossing the local->global boundary.
 			if bytes.Compare(key, keys.LocalMax) < 0 {
@@ -1933,7 +1933,7 @@ func (r *Replica) CheckConsistency(
 			}
 			if err := r.store.db.CheckConsistency(
 				key, endKey, true /* withDiff */); err != nil {
-				log.Error(r.ctx, errors.Wrap(err, "could not rerun consistency check"))
+				log.Error(ctx, errors.Wrap(err, "could not rerun consistency check"))
 			}
 		}); err != nil {
 			log.Error(ctx, errors.Wrap(err, "could not rerun consistency check"))
