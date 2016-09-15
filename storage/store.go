@@ -421,8 +421,9 @@ type Store struct {
 	uninitRaftMu syncutil.Mutex
 
 	mu struct {
-		syncutil.Mutex                              // Protects all variables in the mu struct.
-		replicas       map[roachpb.RangeID]*Replica // Map of replicas by Range ID
+		syncutil.Mutex // Protects all variables in the mu struct.
+		// Map of replicas by Range ID. This includes `uninitReplicas`.
+		replicas       map[roachpb.RangeID]*Replica
 		replicasByKey  *btree.BTree                 // btree keyed by ranges end keys.
 		uninitReplicas map[roachpb.RangeID]*Replica // Map of uninitialized replicas by Range ID
 		// replicaPlaceholders is a map to access all placeholders, so they can
@@ -2141,6 +2142,10 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			return nil, pErr
 		}
 		if !rng.IsInitialized() {
+			rng.mu.Lock()
+			replicaID := rng.mu.replicaID
+			rng.mu.Unlock()
+
 			// If we have an uninitialized copy of the range, then we are
 			// probably a valid member of the range, we're just in the
 			// process of getting our snapshot. If we returned
@@ -2151,6 +2156,13 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			return nil, roachpb.NewError(&roachpb.NotLeaseHolderError{
 				RangeID:     ba.RangeID,
 				LeaseHolder: rng.creatingReplica,
+				// The replica doesn't have a range descriptor yet, so we have to build
+				// a ReplicaDescriptor manually.
+				Replica: roachpb.ReplicaDescriptor{
+					NodeID:    rng.store.nodeDesc.NodeID,
+					StoreID:   rng.store.StoreID(),
+					ReplicaID: replicaID,
+				},
 			})
 		}
 		rng.assert5725(ba)

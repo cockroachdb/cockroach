@@ -37,6 +37,10 @@ message NotLeaseHolderError {
   optional ReplicaDescriptor replica = 1 [(gogoproto.nullable) = false];
   // The lease holder, if known.
   optional ReplicaDescriptor lease_holder = 2;
+  // The current lease, if known. This might be nil even when lease_holder is
+  // set, as sometimes one can create this error without actually knowing the
+  // current lease, but having a guess about who the leader is.
+  optional Lease lease = 4;
   optional int64 range_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
 }

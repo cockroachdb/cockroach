@@ -164,6 +164,9 @@ func (r *Replica) executeCmd(
 	case *roachpb.TransferLeaseRequest:
 		resp := reply.(*roachpb.RequestLeaseResponse)
 		*resp, trigger, err = r.TransferLease(ctx, batch, ms, h, *tArgs)
+	case *roachpb.LeaseInfoRequest:
+		resp := reply.(*roachpb.LeaseInfoResponse)
+		*resp, err = r.LeaseInfo(ctx, *tArgs)
 	case *roachpb.ComputeChecksumRequest:
 		resp := reply.(*roachpb.ComputeChecksumResponse)
 		*resp, trigger, err = r.ComputeChecksum(ctx, batch, ms, h, *tArgs)
@@ -3312,4 +3315,20 @@ func updateRangeDescriptor(
 	}
 	b.CPut(descKey, newValue, oldValue)
 	return nil
+}
+
+// LeaseInfo returns information about the lease holder for the range.
+func (r *Replica) LeaseInfo(
+	ctx context.Context, args roachpb.LeaseInfoRequest,
+) (roachpb.LeaseInfoResponse, error) {
+	var reply roachpb.LeaseInfoResponse
+	lease, nextLease := r.getLease()
+	if nextLease != nil {
+		// If there's a lease request in progress, speculatively return that future
+		// lease.
+		reply.Lease = nextLease
+	} else if lease != nil {
+		reply.Lease = lease
+	}
+	return reply, nil
 }

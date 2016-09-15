@@ -160,7 +160,7 @@ func TestDeprecatedVerifyChecksumRequest(t *testing.T) {
 	// BatchRequest.GetArg() because of the removal of
 	// RequestUnion.VerifyChecksum. We've now re-added that member as
 	// RequestUnion.DeprecatedVerifyChecksum.
-	if ba.IsLease() {
+	if ba.IsLeaseRequest() {
 		t.Fatal("unexpected success")
 	}
 }
