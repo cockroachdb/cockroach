@@ -919,6 +919,7 @@ func (r *Replica) RangeLookup(
 	h roachpb.Header,
 	args roachpb.RangeLookupRequest,
 ) (roachpb.RangeLookupResponse, *PostCommitTrigger, error) {
+	log.Trace(ctx, "RangeLookup")
 	var reply roachpb.RangeLookupResponse
 	ts := h.Timestamp // all we're going to use from the header.
 	key, err := keys.Addr(args.Key)
