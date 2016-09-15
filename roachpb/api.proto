@@ -20,7 +20,6 @@ option go_package = "roachpb";
 
 import "cockroach/roachpb/data.proto";
 import "cockroach/roachpb/errors.proto";
-import "cockroach/roachpb/internal_raft.proto";
 import "cockroach/roachpb/metadata.proto";
 import "cockroach/storage/engine/enginepb/mvcc.proto";
 import "cockroach/util/tracing/span.proto";
@@ -213,9 +212,9 @@ message ReverseScanResponse {
 }
 
 // A CheckConsistencyRequest is the argument to the CheckConsistency() method.
-// It specifies the start and end keys for a span of ranges to which a consistency
-// check should be applied. A consistency check on a range involves running a
-// ComputeChecksum on the range followed by a VerifyChecksum.
+// It specifies the start and end keys for a span of ranges to which a
+// consistency check should be applied. A consistency check on a range involves
+// running a ComputeChecksum on the range followed by a storage.CollectChecksum.
 message CheckConsistencyRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // log a diff of inconsistencies if such inconsistencies are found.
@@ -645,21 +644,21 @@ message RequestLeaseResponse{
 }
 
 // A ComputeChecksumRequest is arguments to the ComputeChecksum() method, to
-// start computing the checksum for the specified range at the snapshot for
-// this request command. A response is returned without the checksum.
-// The computed checksum is later compared to the one supplied
-// through a VerifyChecksumRequest.
+// start computing the checksum for the specified range at the snapshot for this
+// request command. A response is returned without the checksum. The computed
+// checksum is retrieved via a storage.CollectChecksumRequest.
 message ComputeChecksumRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The version used to pick the checksum method. It allows us to use a
   // consistent checksumming method across replicas.
   optional uint32 version = 2 [(gogoproto.nullable) = false];
-  // A unique identifier to match a future VerifyChecksumRequest with this request.
+  // A unique identifier to match a future storage.CollectChecksumRequest with
+  // this request.
   optional bytes checksum_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ChecksumID",
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
-  // Compute a checksum along with a snapshot of the entire range, that will
-  // be used in logging a diff during checksum verification.
+  // Compute a checksum along with a snapshot of the entire range, that will be
+  // used in logging a diff during checksum verification.
   optional bool snapshot = 4 [(gogoproto.nullable) = false];
 }
 
@@ -668,29 +667,24 @@ message ComputeChecksumResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// A VerifyChecksumRequest is arguments to the VerifyChecksum() method, to
-// verify the checksum computed on the lease holder against the one requested
-// earlier through a ComputeChecksumRequest with the same checksum_id.
-message VerifyChecksumRequest {
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // The version used to pick the checksum method. It allows us to use a
-  // consistent checksumming method across replicas.
-  optional uint32 version = 2 [(gogoproto.nullable) = false];
-  optional bytes checksum_id = 3 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "ChecksumID",
-      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
-  optional bytes checksum = 4;
-  // Used when a diff is requested on observing a checksum mismatch.
-  optional RaftSnapshotData snapshot = 5;
+message DeprecatedVerifyChecksumRequest {
+  optional NoopRequest deprecated = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// A VerifyChecksumResponse is the response to a VerifyChecksum() operation.
-message VerifyChecksumResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+message DeprecatedVerifyChecksumResponse {
+  optional NoopResponse deprecated = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A RequestUnion contains exactly one of the optional requests.
 // The values added here must match those in ResponseUnion.
+//
+// WARNING: Do not remove fields from RequestUnion. Instead, replace the
+// contents of the deprecated field's type with an embedded NoopRequest and
+// prepend the type's name with "Deprecated". See
+// DeprecatedVerifyChecksumRequest for an example.
+//
+// Be cautious about deprecating fields as doing so can lead to inconsistencies
+// between replicas.
 message RequestUnion {
   option (gogoproto.onlyone) = true;
 
@@ -717,7 +711,7 @@ message RequestUnion {
   optional RequestLeaseRequest request_lease = 20;
   optional ReverseScanRequest reverse_scan = 21;
   optional ComputeChecksumRequest compute_checksum = 22;
-  optional VerifyChecksumRequest verify_checksum = 23;
+  optional DeprecatedVerifyChecksumRequest deprecated_verify_checksum = 23;
   optional CheckConsistencyRequest check_consistency = 24;
   optional NoopRequest noop = 25;
   optional InitPutRequest init_put = 26;
@@ -728,6 +722,14 @@ message RequestUnion {
 
 // A ResponseUnion contains exactly one of the optional responses.
 // The values added here must match those in RequestUnion.
+//
+// WARNING: Do not remove fields from ResponseUnion. Instead, replace the
+// contents of the deprecated field's type with an embedded NoopResponse and
+// prepend the type's name with "Deprecated". See
+// DeprecatedVerifyChecksumResponse for an example.
+//
+// Be cautious about deprecating fields as doing so can lead to inconsistencies
+// between replicas.
 message ResponseUnion {
   option (gogoproto.onlyone) = true;
 
@@ -754,7 +756,7 @@ message ResponseUnion {
   optional RequestLeaseResponse request_lease = 20;
   optional ReverseScanResponse reverse_scan = 21;
   optional ComputeChecksumResponse compute_checksum = 22;
-  optional VerifyChecksumResponse verify_checksum = 23;
+  optional DeprecatedVerifyChecksumResponse deprecated_verify_response = 23;
   optional CheckConsistencyResponse check_consistency = 24;
   optional NoopResponse noop = 25;
   optional InitPutResponse init_put = 26;

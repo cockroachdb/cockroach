@@ -34,6 +34,7 @@ var (
 		Help: "Total number of Replicas that are Raft leaders whose Range lease is held by another store.",
 	}
 	metaLeaseHolderCount = metric.Metadata{Name: "replicas.leaseholders"}
+	metaQuiescentCount   = metric.Metadata{Name: "replicas.quiescent"}
 
 	// Range metrics.
 	metaAvailableRangeCount = metric.Metadata{Name: "ranges.available"}
@@ -161,6 +162,7 @@ type StoreMetrics struct {
 	RaftLeaderCount               *metric.Gauge
 	RaftLeaderNotLeaseHolderCount *metric.Gauge
 	LeaseHolderCount              *metric.Gauge
+	QuiescentCount                *metric.Gauge
 
 	// Range metrics.
 	AvailableRangeCount *metric.Gauge
@@ -265,6 +267,7 @@ func newStoreMetrics() *StoreMetrics {
 		RaftLeaderCount:               metric.NewGauge(metaRaftLeaderCount),
 		RaftLeaderNotLeaseHolderCount: metric.NewGauge(metaRaftLeaderNotLeaseHolderCount),
 		LeaseHolderCount:              metric.NewGauge(metaLeaseHolderCount),
+		QuiescentCount:                metric.NewGauge(metaQuiescentCount),
 
 		// Range metrics.
 		AvailableRangeCount: metric.NewGauge(metaAvailableRangeCount),

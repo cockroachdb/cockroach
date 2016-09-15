@@ -18,6 +18,7 @@ syntax = "proto3";
 package cockroach.storage;
 option go_package = "storage";
 
+import "cockroach/roachpb/internal_raft.proto";
 import "cockroach/roachpb/metadata.proto";
 import "gogoproto/gogo.proto";
 
@@ -68,4 +69,28 @@ message ReservationResponse {
 service Stores {
   rpc PollFrozen (PollFrozenRequest) returns (PollFrozenResponse) {}
   rpc Reserve(ReservationRequest) returns (ReservationResponse) {}
+}
+
+// A CollectChecksumRequest asks the addressed replica for the result of a
+// roachpb.ComputeChecksumRequest.
+message CollectChecksumRequest {
+  StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  int64 range_id = 2 [(gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
+  // checksum_id identifies the corresponding roachpb.ComputeChecksumRequest.
+  bytes checksum_id = 3 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ChecksumID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
+  bytes checksum = 4;
+}
+
+message CollectChecksumResponse {
+  bytes checksum = 1;
+  // snapshot is set if the roachpb.ComputeChecksumRequest had snapshot = true
+  // and the response checksum is different from the request checksum.
+  roachpb.RaftSnapshotData snapshot = 2;
+}
+
+service Consistency {
+  rpc CollectChecksum(CollectChecksumRequest) returns (CollectChecksumResponse) {}
 }

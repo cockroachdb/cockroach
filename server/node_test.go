@@ -445,7 +445,9 @@ func TestStatusSummaries(t *testing.T) {
 	// ========================================
 	// Start test server and wait for full initialization.
 	// ========================================
-	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DisableEventLog: true,
+	})
 	defer srv.Stopper().Stop()
 	ts := srv.(*TestServer)
 

@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/syncutil"
+	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -159,14 +160,24 @@ func (s *adminServer) firstNotFoundError(results []sql.Result) error {
 	return nil
 }
 
+// NewSessionForRPC creates a SQL session on behalf of an RPC request.
+// It copies the Server's tracer into the Session's context.
+func (s *adminServer) NewSessionForRPC(
+	ctx context.Context, args sql.SessionArgs,
+) *sql.Session {
+	// TODO(radu): figure out a general way to merge the RPC context with the
+	// server's context.
+	ctx = tracing.WithTracer(ctx, tracing.TracerFromCtx(s.server.ctx.Ctx))
+	return sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+}
+
 // Databases is an endpoint that returns a list of databases.
 func (s *adminServer) Databases(
 	ctx context.Context, req *serverpb.DatabasesRequest,
 ) (*serverpb.DatabasesResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := s.NewSessionForRPC(ctx, args)
 	defer session.Finish()
-
 	r := s.server.sqlExecutor.ExecuteStatements(session, "SHOW DATABASES;", nil)
 	defer r.Close()
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
@@ -192,7 +203,7 @@ func (s *adminServer) DatabaseDetails(
 	ctx context.Context, req *serverpb.DatabaseDetailsRequest,
 ) (*serverpb.DatabaseDetailsResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := s.NewSessionForRPC(ctx, args)
 	defer session.Finish()
 
 	// Placeholders don't work with SHOW statements, so we need to manually
@@ -287,7 +298,7 @@ func (s *adminServer) TableDetails(
 	ctx context.Context, req *serverpb.TableDetailsRequest,
 ) (*serverpb.TableDetailsResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := s.NewSessionForRPC(ctx, args)
 	defer session.Finish()
 
 	// TODO(cdo): Use real placeholders for the table and database names when we've extended our SQL
@@ -606,9 +617,8 @@ func (s *adminServer) TableStats(ctx context.Context, req *serverpb.TableStatsRe
 // Users returns a list of users, stripped of any passwords.
 func (s *adminServer) Users(ctx context.Context, req *serverpb.UsersRequest) (*serverpb.UsersResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := s.NewSessionForRPC(ctx, args)
 	defer session.Finish()
-
 	query := "SELECT username FROM system.users"
 	r := s.server.sqlExecutor.ExecuteStatements(session, query, nil)
 	defer r.Close()
@@ -631,7 +641,7 @@ func (s *adminServer) Users(ctx context.Context, req *serverpb.UsersRequest) (*s
 // targetID=INT returns events for that have this targetID
 func (s *adminServer) Events(ctx context.Context, req *serverpb.EventsRequest) (*serverpb.EventsResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := s.NewSessionForRPC(ctx, args)
 	defer session.Finish()
 
 	// Execute the query.
@@ -747,7 +757,7 @@ func (s *adminServer) SetUIData(ctx context.Context, req *serverpb.SetUIDataRequ
 	}
 
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := s.NewSessionForRPC(ctx, args)
 	defer session.Finish()
 
 	for key, val := range req.KeyValues {
@@ -807,7 +817,7 @@ func (s *adminServer) SetUIData(ctx context.Context, req *serverpb.SetUIDataRequ
 // have the prefix `serverUIDataKeyPrefix`.
 func (s *adminServer) GetUIData(ctx context.Context, req *serverpb.GetUIDataRequest) (*serverpb.GetUIDataResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
-	session := sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
+	session := s.NewSessionForRPC(ctx, args)
 	defer session.Finish()
 
 	if len(req.Keys) == 0 {
@@ -1031,7 +1041,7 @@ func (s *adminServer) ClusterFreeze(
 		b := &client.Batch{}
 		fa := roachpb.NewChangeFrozen(from, to, req.Freeze, build.GetInfo().Tag)
 		b.AddRawRequest(fa)
-		if err := s.server.db.Run(b); err != nil {
+		if err := s.server.db.Run(context.TODO(), b); err != nil {
 			return nil, err
 		}
 		fr := b.RawResponse().Responses[0].GetInner().(*roachpb.ChangeFrozenResponse)

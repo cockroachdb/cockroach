@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
@@ -161,16 +162,17 @@ type pendingCmd struct {
 }
 
 type replicaChecksum struct {
+	// started is true if the checksum computation has started.
+	started bool
 	// Computed checksum. This is set to nil on error.
 	checksum []byte
-	// GC this checksum after this timestamp. The timestamp is valid only
-	// after the checksum has been computed.
+	// If gcTimestamp is nonzero, GC this checksum after gcTimestamp. gcTimestamp
+	// is zero if and only if the checksum computation is in progress.
 	gcTimestamp time.Time
 	// This channel is closed after the checksum is computed, and is used
 	// as a notification.
 	notify chan struct{}
-
-	// Some debug output that can be added to the VerifyChecksumRequest.
+	// Some debug output that can be added to the CollectChecksumResponse.
 	snapshot *roachpb.RaftSnapshotData
 }
 
@@ -257,6 +259,9 @@ type Replica struct {
 		// Corrupted persistently (across process restarts) indicates whether the
 		// replica has been corrupted.
 		corrupted bool
+		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
+		// whenever a Raft operation is performed.
+		quiescent bool
 		// The state of the Raft state machine.
 		state storagebase.ReplicaState
 		// Counter used for assigning lease indexes for proposals.
@@ -369,8 +374,10 @@ type KeyRange interface {
 var _ KeyRange = &Replica{}
 
 // withRaftGroupLocked calls the supplied function with the (lazily
-// initialized) Raft group. It assumes that the Replica lock is held.
-func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
+// initialized) Raft group. It assumes that the Replica lock is held. The
+// shouldCampaign argument indicates whether a new raft group should be
+// campaigned upon creation and is used to eagerly campaign idle replicas.
+func (r *Replica) withRaftGroupLocked(shouldCampaign bool, f func(r *raft.RawNode) error) error {
 	if r.mu.destroyed != nil {
 		// Silently ignore all operations on destroyed replicas. We can't return an
 		// error here as all errors returned from this method are considered fatal.
@@ -381,6 +388,13 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 		// The replica's raft group has not yet been configured (i.e. the replica
 		// was created from a preemptive snapshot).
 		return nil
+	}
+
+	if shouldCampaign {
+		// Special handling of idle replicas: we campaign their Raft group upon
+		// creation if we gossiped our store descriptor more than the election
+		// timeout in the past.
+		shouldCampaign = (r.mu.internalRaftGroup == nil) && r.store.canCampaignIdleReplica()
 	}
 
 	if r.mu.internalRaftGroup == nil {
@@ -396,28 +410,48 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 		}
 		r.mu.internalRaftGroup = raftGroup
 
-		// Automatically campaign and elect a leader for this group if there's
-		// exactly one known node for this group.
-		//
-		// A grey area for this being correct happens in the case when we're
-		// currently in the process of adding a second node to the group,
-		// with the change committed but not applied.
-		// Upon restarting, the first node would immediately elect itself and only
-		// then apply the config change, where really it should be applying
-		// first and then waiting for the majority (which would now require
-		// two votes, not only its own).
-		// However, in that special case, the second node has no chance to
-		// be elected leader while the first node restarts (as it's aware of the
-		// configuration and knows it needs two votes), so the worst that
-		// could happen is both nodes ending up in candidate state, timing
-		// out and then voting again. This is expected to be an extremely
-		// rare event.
-		if len(r.mu.state.Desc.Replicas) == 1 && r.mu.state.Desc.Replicas[0].ReplicaID == r.mu.replicaID {
+		if !shouldCampaign {
+			// Automatically campaign and elect a leader for this group if there's
+			// exactly one known node for this group.
+			//
+			// A grey area for this being correct happens in the case when we're
+			// currently in the process of adding a second node to the group, with
+			// the change committed but not applied.
+			//
+			// Upon restarting, the first node would immediately elect itself and
+			// only then apply the config change, where really it should be applying
+			// first and then waiting for the majority (which would now require two
+			// votes, not only its own).
+			//
+			// However, in that special case, the second node has no chance to be
+			// elected leader while the first node restarts (as it's aware of the
+			// configuration and knows it needs two votes), so the worst that could
+			// happen is both nodes ending up in candidate state, timing out and then
+			// voting again. This is expected to be an extremely rare event.
+			//
+			// TODO(peter): It would be more natural for this campaigning to only be
+			// done when proposing a command (see defaultProposeRaftCommandLocked).
+			// Unfortunately, we enqueue the right hand side of a split for Raft
+			// ready processing if the range only has a single replica (see
+			// splitTriggerPostCommit). Doing so implies we need to be campaigning
+			// that right hand side range when raft ready processing is
+			// performed. Perhaps we should move the logic for campaigning single
+			// replica ranges there so that normally we only eagerly campaign when
+			// proposing.
+			shouldCampaign = r.isSoloReplicaLocked()
+		}
+		if shouldCampaign {
+			if log.V(3) {
+				log.Infof(r.ctx, "campaigning")
+			}
 			if err := raftGroup.Campaign(); err != nil {
 				return err
 			}
 		}
 	}
+
+	// Any Raft operation moves the Replica out of quiescence.
+	r.setQuiescentLocked(false)
 
 	return f(r.mu.internalRaftGroup)
 }
@@ -428,7 +462,7 @@ func (r *Replica) withRaftGroupLocked(f func(r *raft.RawNode) error) error {
 func (r *Replica) withRaftGroup(f func(r *raft.RawNode) error) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.withRaftGroupLocked(f)
+	return r.withRaftGroupLocked(false, f)
 }
 
 var _ client.Sender = &Replica{}
@@ -573,7 +607,32 @@ func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor, destroyData bool) er
 	if !destroyData {
 		return nil
 	}
-	return r.store.destroyReplicaData(desc)
+	return r.destroyDataRaftMuLocked()
+}
+
+// destroyData deletes all data associated with a replica, leaving a
+// tombstone. Requires that Replica.raftMu is held.
+func (r *Replica) destroyDataRaftMuLocked() error {
+	desc := r.Desc()
+	iter := NewReplicaDataIterator(desc, r.store.Engine(), false /* !replicatedOnly */)
+	defer iter.Close()
+	batch := r.store.Engine().NewBatch()
+	defer batch.Close()
+	for ; iter.Valid(); iter.Next() {
+		_ = batch.Clear(iter.Key())
+	}
+
+	// Save a tombstone. The range cannot be re-replicated onto this
+	// node without having a replica ID of at least desc.NextReplicaID.
+	tombstoneKey := keys.RaftTombstoneKey(desc.RangeID)
+	tombstone := &roachpb.RaftTombstone{
+		NextReplicaID: desc.NextReplicaID,
+	}
+	if err := engine.MVCCPutProto(context.Background(), batch, nil, tombstoneKey, hlc.ZeroTimestamp, nil, tombstone); err != nil {
+		return err
+	}
+
+	return batch.Commit()
 }
 
 func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
@@ -673,23 +732,6 @@ func newNotLeaseHolderError(
 		}
 	}
 	return err
-}
-
-// newNotLeaseHolderErrorWithGuess creates a NotLeaseHolderError initialized
-// with a guess about who the leader is.
-// This is to be used instead of newNotLeaseHolderError when the current lease
-// is not known.
-func newNotLeaseHolderErrorWithGuess(
-	rangeID roachpb.RangeID,
-	origin roachpb.ReplicaDescriptor,
-	leaseHolder roachpb.ReplicaDescriptor,
-) error {
-	return &roachpb.NotLeaseHolderError{
-		RangeID:     rangeID,
-		Replica:     roachpb.ReplicaDescriptor{},
-		LeaseHolder: &leaseHolder,
-		Lease:       nil,
-	}
 }
 
 // redirectOnOrAcquireLease checks whether this replica has the lease at the
@@ -872,16 +914,6 @@ func (r *Replica) getReplicaDescriptorLocked() (roachpb.ReplicaDescriptor, error
 	return roachpb.ReplicaDescriptor{}, roachpb.NewRangeNotFoundError(r.RangeID)
 }
 
-func (r *Replica) mustGetReplicaID() roachpb.ReplicaID {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.mu.replicaID == 0 {
-		panic("the replica's raft group has not yet been configured (i.e. the replica " +
-			"was created from a preemptive snapshot)")
-	}
-	return r.mu.replicaID
-}
-
 // setLastReplicaDescriptors sets the the most recently seen replica
 // descriptors to those contained in the *RaftMessageRequest, acquiring r.mu
 // to do so.
@@ -953,23 +985,6 @@ func (r *Replica) setLastReplicaGCTimestamp(timestamp hlc.Timestamp) error {
 	return engine.MVCCPutProto(r.ctx, r.store.Engine(), nil, key, hlc.ZeroTimestamp, nil, &timestamp)
 }
 
-// getLastVerificationTimestamp reads the timestamp at which the replica's
-// data was last verified.
-func (r *Replica) getLastVerificationTimestamp() (hlc.Timestamp, error) {
-	key := keys.RangeLastVerificationTimestampKey(r.RangeID)
-	timestamp := hlc.Timestamp{}
-	_, err := engine.MVCCGetProto(r.ctx, r.store.Engine(), key, hlc.ZeroTimestamp, true, nil, &timestamp)
-	if err != nil {
-		return hlc.ZeroTimestamp, err
-	}
-	return timestamp, nil
-}
-
-func (r *Replica) setLastVerificationTimestamp(timestamp hlc.Timestamp) error {
-	key := keys.RangeLastVerificationTimestampKey(r.RangeID)
-	return engine.MVCCPutProto(r.ctx, r.store.Engine(), nil, key, hlc.ZeroTimestamp, nil, &timestamp)
-}
-
 // RaftStatus returns the current raft status of the replica. It returns nil
 // if the Raft group has not been initialized yet.
 func (r *Replica) RaftStatus() *raft.Status {
@@ -995,10 +1010,6 @@ func (r *Replica) State() storagebase.RangeInfo {
 	ri.LastIndex = r.mu.lastIndex
 	ri.NumPending = uint64(len(r.mu.pendingCmds))
 	ri.RaftLogSize = r.mu.raftLogSize
-	var err error
-	if ri.LastVerification, err = r.getLastVerificationTimestamp(); err != nil {
-		log.Warningf(r.ctx, "%v", err)
-	}
 	ri.NumDropped = uint64(r.mu.droppedMessages)
 
 	return ri
@@ -1166,6 +1177,8 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func
 				return nil, err
 			}
 		}
+	} else {
+		log.Trace(ctx, "operation accepts inconsistent results")
 	}
 
 	// Update the incoming timestamp if unset. Wait until after any
@@ -1361,7 +1374,7 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 		resp = &roachpb.AdminTransferLeaseResponse{}
 	case *roachpb.CheckConsistencyRequest:
 		var reply roachpb.CheckConsistencyResponse
-		reply, pErr = r.CheckConsistency(*tArgs, r.Desc())
+		reply, pErr = r.CheckConsistency(ctx, *tArgs, r.Desc())
 		resp = &reply
 	default:
 		return nil, roachpb.NewErrorf("unrecognized admin command: %T", args)
@@ -1632,6 +1645,11 @@ func (r *Replica) proposePendingCmdLocked(p *pendingCmd) error {
 	return defaultProposeRaftCommandLocked(r, p)
 }
 
+func (r *Replica) isSoloReplicaLocked() bool {
+	return len(r.mu.state.Desc.Replicas) == 1 &&
+		r.mu.state.Desc.Replicas[0].ReplicaID == r.mu.replicaID
+}
+
 func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 	if p.raftCmd.Cmd.Timestamp == hlc.ZeroTimestamp {
 		return errors.Errorf("can't propose Raft command with zero timestamp")
@@ -1663,7 +1681,7 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 				return err
 			}
 
-			return r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
+			return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) error {
 				return raftGroup.ProposeConfChange(raftpb.ConfChange{
 					Type:    changeTypeInternalToRaft[crt.ChangeType],
 					NodeID:  uint64(crt.Replica.ReplicaID),
@@ -1675,12 +1693,31 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 		hasSplit = ict.GetSplitTrigger() != nil
 	}
 
-	return r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
+	return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) error {
 		if log.V(4) {
 			log.Infof(r.ctx, "proposing command %x", p.idKey)
 		}
 		return raftGroup.Propose(encodeRaftCommand(string(p.idKey), data, hasSplit))
 	})
+}
+
+func (r *Replica) setQuiescent(v bool) {
+	r.mu.Lock()
+	r.setQuiescentLocked(v)
+	r.mu.Unlock()
+}
+
+func (r *Replica) setQuiescentLocked(v bool) {
+	if r.mu.quiescent != v {
+		r.mu.quiescent = v
+		if log.V(3) {
+			if r.mu.quiescent {
+				log.Infof(r.ctx, "quiescing")
+			} else {
+				log.Infof(r.ctx, "unquiescing")
+			}
+		}
+	}
 }
 
 // Lock the replica for Raft processing.
@@ -1722,7 +1759,7 @@ func (r *Replica) handleRaftReady() error {
 	lastIndex := r.mu.lastIndex // used for append below
 	raftLogSize := r.mu.raftLogSize
 	leaderID := r.mu.leaderID
-	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) error {
+	err := r.withRaftGroupLocked(false, func(raftGroup *raft.RawNode) error {
 		if hasReady = raftGroup.HasReady(); hasReady {
 			rd = raftGroup.Ready()
 		}
@@ -1949,6 +1986,12 @@ func (r *Replica) tickRaftMuLocked() (bool, error) {
 	if r.mu.internalRaftGroup == nil {
 		return false, nil
 	}
+	if r.mu.quiescent {
+		return false, nil
+	}
+	if r.maybeQuiesceLocked() {
+		return false, nil
+	}
 
 	r.mu.ticks++
 	r.mu.internalRaftGroup.Tick()
@@ -1966,6 +2009,138 @@ func (r *Replica) tickRaftMuLocked() (bool, error) {
 		}
 	}
 	return true, nil
+}
+
+var enableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_QUIESCENCE", false)
+
+// maybeQuiesceLocked checks to see if the replica is quiescable and initiates
+// quiescence if it is. Returns true if the replica has been quiesced and false
+// otherwise.
+//
+// A quiesced range is not ticked and thus doesn't create MsgHeartbeat requests
+// or cause elections. The Raft leader for a range checks various
+// pre-conditions: no pending raft commands, no pending raft ready, all of the
+// followers are up to date, etc. Quiescence is initiated by a special
+// MsgHeartbeat that is tagged as Quiesce. Upon receipt (see
+// Store.processRaftRequest), the follower checks to see if the term/commit
+// matches and marks the local replica as quiescent. If the term/commit do not
+// match the MsgHeartbeat is passed through to Raft which will generate a
+// MsgHeartbeatResp that will unquiesce the sender.
+//
+// Any Raft operation on the local replica will unquiesce the Replica. For
+// example, a Raft operation initiated on a follower will unquiesce the
+// follower which will send a MsgProp to the leader that will unquiesce the
+// leader. If the leader of a quiesced range dies, followers will not notice,
+// though any request directed to the range will eventually end up on a
+// follower which will unquiesce the follower and lead to an election.
+//
+// TODO(peter): When a node goes down, any range which has a replica on the
+// down node will not quiesce. This could be a significant performance
+// impact. Additionally, when the node comes back up we want to bring any
+// replicas it contains back up to date. Right now this will be handled because
+// those ranges never quiesce. One thought for handling both these scenarios is
+// to hook into the StorePool and its notion of "down" nodes. But that might
+// not be sensitive enough.
+func (r *Replica) maybeQuiesceLocked() bool {
+	if !enableQuiescence {
+		return false
+	}
+	if len(r.mu.pendingCmds) != 0 {
+		if log.V(4) {
+			log.Infof(r.ctx, "not quiescing: %d pending commands", len(r.mu.pendingCmds))
+		}
+		return false
+	}
+	status := r.mu.internalRaftGroup.Status()
+	if status.SoftState.RaftState != raft.StateLeader {
+		if log.V(4) {
+			log.Infof(r.ctx, "not quiescing: not leader")
+		}
+		return false
+	}
+	// We need all of Applied, Commit, LastIndex and Progress.Match indexes to be
+	// equal in order to quiesce.
+	if status.Applied != status.Commit {
+		if log.V(4) {
+			log.Infof(r.ctx, "not quiescing: applied (%d) != commit (%d)",
+				status.Applied, status.Commit)
+		}
+		return false
+	}
+	if status.Commit != r.mu.lastIndex {
+		if log.V(4) {
+			log.Infof(r.ctx, "not quiescing: commit (%d) != last-index (%d)",
+				status.Commit, r.mu.lastIndex)
+		}
+		return false
+	}
+	var foundSelf bool
+	for id, progress := range status.Progress {
+		if roachpb.ReplicaID(id) == r.mu.replicaID {
+			foundSelf = true
+		}
+		if progress.Match != status.Applied {
+			if log.V(4) {
+				log.Infof(r.ctx, "not quiescing: replica %d match (%d) != applied (%d)",
+					id, progress.Match, status.Applied)
+			}
+			return false
+		}
+	}
+	if !foundSelf {
+		if log.V(4) {
+			log.Infof(r.ctx, "not quiescing: %d not found in progress: %+v",
+				r.mu.replicaID, status.Progress)
+		}
+		return false
+	}
+	if r.mu.internalRaftGroup.HasReady() {
+		if log.V(4) {
+			log.Infof(r.ctx, "not quiescing: raft ready")
+		}
+		return false
+	}
+	fromReplica, fromErr := r.getReplicaDescriptorByIDLocked(r.mu.replicaID, r.mu.lastToReplica)
+	if fromErr != nil {
+		if log.V(4) {
+			log.Infof(r.ctx, "not quiescing: cannot find from replica (%d)", r.mu.replicaID)
+		}
+		return false
+	}
+	r.setQuiescentLocked(true)
+	for id := range status.Progress {
+		if roachpb.ReplicaID(id) == r.mu.replicaID {
+			continue
+		}
+		toReplica, toErr := r.getReplicaDescriptorByIDLocked(
+			roachpb.ReplicaID(id), r.mu.lastFromReplica)
+		if toErr != nil {
+			if log.V(4) {
+				log.Infof(r.ctx, "failed to quiesce: cannot find to replica (%d)", id)
+			}
+			r.setQuiescentLocked(false)
+			return false
+		}
+		if !r.sendRaftMessageRequest(&RaftMessageRequest{
+			RangeID:     r.RangeID,
+			ToReplica:   toReplica,
+			FromReplica: fromReplica,
+			Message: raftpb.Message{
+				From:   uint64(r.mu.replicaID),
+				To:     id,
+				Type:   raftpb.MsgHeartbeat,
+				Term:   status.Term,
+				Commit: status.Commit,
+			},
+			Quiesce: true,
+		}) {
+			r.setQuiescentLocked(false)
+			r.mu.droppedMessages++
+			r.mu.internalRaftGroup.ReportUnreachable(id)
+			return false
+		}
+	}
+	return true
 }
 
 // pendingCmdSlice sorts by increasing MaxLeaseIndex.
@@ -2056,8 +2231,6 @@ func (r *Replica) getReplicaDescriptorByIDLocked(
 }
 
 func (r *Replica) sendRaftMessage(msg raftpb.Message) {
-	rangeID := r.RangeID
-
 	r.mu.Lock()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
@@ -2065,15 +2238,35 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 
 	if fromErr != nil {
 		log.Warningf(r.ctx, "failed to look up sender replica %d in range %d while sending %s: %s",
-			msg.From, rangeID, msg.Type, fromErr)
+			msg.From, r.RangeID, msg.Type, fromErr)
 		return
 	}
 	if toErr != nil {
 		log.Warningf(r.ctx, "failed to look up recipient replica %d in range %d while sending %s: %s",
-			msg.To, rangeID, msg.Type, toErr)
+			msg.To, r.RangeID, msg.Type, toErr)
 		return
 	}
 
+	if !r.sendRaftMessageRequest(&RaftMessageRequest{
+		RangeID:     r.RangeID,
+		ToReplica:   toReplica,
+		FromReplica: fromReplica,
+		Message:     msg,
+	}) {
+		if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
+			r.mu.droppedMessages++
+			raftGroup.ReportUnreachable(msg.To)
+			return nil
+		}); err != nil {
+			r.panic(err)
+		}
+	}
+}
+
+// sendRaftMessageRequest sends a raft message, returning false if the message
+// was dropped. It is the caller's responsibility to call ReportUnreachable on
+// the Raft group.
+func (r *Replica) sendRaftMessageRequest(req *RaftMessageRequest) bool {
 	r.store.ctx.Transport.mu.Lock()
 	var queuedMsgs int64
 	for _, transportQueues := range r.store.ctx.Transport.mu.queues {
@@ -2084,23 +2277,7 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	r.store.ctx.Transport.mu.Unlock()
 	r.store.metrics.RaftEnqueuedPending.Update(queuedMsgs)
 
-	if !r.store.ctx.Transport.SendAsync(&RaftMessageRequest{
-		RangeID:     rangeID,
-		ToReplica:   toReplica,
-		FromReplica: fromReplica,
-		Message:     msg,
-	}) {
-		r.mu.Lock()
-		r.mu.droppedMessages++
-		r.mu.Unlock()
-
-		if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
-			raftGroup.ReportUnreachable(msg.To)
-			return nil
-		}); err != nil {
-			r.panic(err)
-		}
-	}
+	return r.store.ctx.Transport.SendAsync(req)
 }
 
 func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {

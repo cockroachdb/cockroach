@@ -707,7 +707,9 @@ func (m *multiTestContext) addStore(idx int) {
 
 	stores := storage.NewStores(clock)
 	stores.AddStore(store)
-	storage.RegisterStoresServer(grpcServer, storage.MakeServer(m.nodeDesc(nodeID), stores))
+	storesServer := storage.MakeServer(m.nodeDesc(nodeID), stores)
+	storage.RegisterStoresServer(grpcServer, storesServer)
+	storage.RegisterConsistencyServer(grpcServer, storesServer)
 
 	// Add newly created objects to the multiTestContext's collections.
 	// (these must be populated before the store is started so that
@@ -801,6 +803,12 @@ func (m *multiTestContext) restartStore(i int) {
 	}
 	// The sender is assumed to still exist.
 	m.senders[i].AddStore(m.stores[i])
+}
+
+func (m *multiTestContext) Store(i int) *storage.Store {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.stores[i]
 }
 
 // findStartKeyLocked returns the start key of the given range.

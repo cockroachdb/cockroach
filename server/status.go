@@ -361,7 +361,7 @@ func (s *statusServer) Nodes(ctx context.Context, req *serverpb.NodesRequest) (*
 
 	b := &client.Batch{}
 	b.Scan(startKey, endKey)
-	if err := s.db.Run(b); err != nil {
+	if err := s.db.Run(context.TODO(), b); err != nil {
 		log.Error(ctx, err)
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
@@ -389,7 +389,7 @@ func (s *statusServer) Node(ctx context.Context, req *serverpb.NodeRequest) (*st
 	key := keys.NodeStatusKey(int32(nodeID))
 	b := &client.Batch{}
 	b.Get(key)
-	if err := s.db.Run(b); err != nil {
+	if err := s.db.Run(context.TODO(), b); err != nil {
 		log.Error(ctx, err)
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
@@ -494,7 +494,7 @@ func (s *statusServer) RaftDebug(ctx context.Context, _ *serverpb.RaftDebugReque
 			}
 			if !containsNode {
 				rng.Errors = append(rng.Errors, serverpb.RaftRangeError{
-					Message: fmt.Sprintf("node %d not in replica and should be GCed", node.NodeID),
+					Message: fmt.Sprintf("node %d not in range descriptor and should be GCed", node.NodeID),
 				})
 			}
 

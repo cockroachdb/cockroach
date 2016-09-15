@@ -34,6 +34,15 @@ message RaftMessageRequest {
   optional roachpb.ReplicaDescriptor to_replica = 3 [(gogoproto.nullable) = false];
 
   optional raftpb.Message message = 4 [(gogoproto.nullable) = false];
+
+  // Is this a quiesce request? A quiesce request is a MsgHeartbeat
+  // which is requesting the recipient to stop ticking its local
+  // replica as long as the current Raft state matches the heartbeat
+  // Term/Commit. If the Term/Commit match, the recipient is marked as
+  // quiescent. If they don't match, the message is passed along to
+  // Raft which will generate a MsgHeartbeatResp that will unquiesce
+  // the sender.
+  optional bool quiesce = 5 [(gogoproto.nullable) = false];
 }
 
 message RaftMessageResponseUnion {

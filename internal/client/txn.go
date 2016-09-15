@@ -33,69 +33,18 @@ import (
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
-// txnSender implements the Sender interface and is used to keep the Send
-// method out of the Txn method set.
-type txnSender Txn
-
-// Send updates the transaction on error. Depending on the error type, the
-// transaction might be replaced by a new one.
-func (ts *txnSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	// Send call through wrapped sender.
-	ba.Txn = &ts.Proto
-	// For testing purposes, ts.UserPriority can be a negative value (see
-	// MakePriority).
-	if ts.UserPriority != 0 {
-		ba.UserPriority = ts.UserPriority
-	}
-
-	br, pErr := ts.wrapped.Send(ts.Context, ba)
-	if br != nil && br.Error != nil {
-		panic(roachpb.ErrorUnexpectedlySet(ts.wrapped, br))
-	}
-
-	if br != nil {
-		for _, encSp := range br.CollectedSpans {
-			var newSp basictracer.RawSpan
-			if err := tracing.DecodeRawSpan(encSp, &newSp); err != nil {
-				return nil, roachpb.NewError(err)
-			}
-			ts.CollectedSpans = append(ts.CollectedSpans, newSp)
-		}
-	}
-	// Only successful requests can carry an updated Txn in their response
-	// header. Any error (e.g. a restart) can have a Txn attached to them as
-	// well; those update our local state in the same way for the next attempt.
-	// The exception is if our transaction was aborted and needs to restart
-	// from scratch, in which case we do just that.
-	if pErr == nil {
-		ts.Proto.Update(br.Txn)
-		return br, nil
-	} else if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
-		// On Abort, reset the transaction so we start anew on restart.
-		ts.Proto = roachpb.Transaction{
-			TxnMeta: enginepb.TxnMeta{
-				Isolation: ts.Proto.Isolation,
-			},
-			Name: ts.Proto.Name,
-		}
-		// Acts as a minimum priority on restart.
-		if pErr.GetTxn() != nil {
-			ts.Proto.Priority = pErr.GetTxn().Priority
-		}
-	} else if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
-		ts.Proto.Update(pErr.GetTxn())
-	}
-	return nil, pErr
-}
-
 // Txn is an in-progress distributed database transaction. A Txn is not safe for
 // concurrent use by multiple goroutines.
 type Txn struct {
-	db             DB
-	wrapped        Sender
-	Proto          roachpb.Transaction
-	UserPriority   roachpb.UserPriority
-	Context        context.Context // must not be nil
+	db           DB
+	Proto        roachpb.Transaction
+	UserPriority roachpb.UserPriority
+	Context      context.Context // must not be nil
+	// CollectedSpans receives spans from remote hosts for "snowball" traces
+	// initiated on this host.
+	// It's also used by "EXPLAIN TRACE".
+	// Note that in SQL land there's also TxnState.CollectedSpans which
+	// should be used when we want to accumulate everything for a SQL txn.
 	CollectedSpans []basictracer.RawSpan
 	// systemConfigTrigger is set to true when modifying keys from the SystemConfig
 	// span. This sets the SystemConfigTrigger on EndTransactionRequest.
@@ -109,13 +58,10 @@ type Txn struct {
 
 // NewTxn returns a new txn.
 func NewTxn(ctx context.Context, db DB) *Txn {
-	txn := &Txn{
+	return &Txn{
 		db:      db,
-		wrapped: db.sender,
 		Context: ctx,
 	}
-	txn.db.sender = (*txnSender)(txn)
-	return txn
 }
 
 // IsFinalized returns true if this Txn has been finalized and should therefore
@@ -217,7 +163,7 @@ func (txn *Txn) NewBatch() *Batch {
 func (txn *Txn) Get(key interface{}) (KeyValue, error) {
 	b := txn.NewBatch()
 	b.Get(key)
-	return runOneRow(txn, b)
+	return getOneRow(txn.Run(b), b)
 }
 
 // GetProto retrieves the value for a key and decodes the result as a proto
@@ -239,8 +185,7 @@ func (txn *Txn) GetProto(key interface{}, msg proto.Message) error {
 func (txn *Txn) Put(key, value interface{}) error {
 	b := txn.NewBatch()
 	b.Put(key, value)
-	_, err := runOneResult(txn, b)
-	return err
+	return getOneErr(txn.Run(b), b)
 }
 
 // CPut conditionally sets the value for a key if the existing value is equal
@@ -253,8 +198,7 @@ func (txn *Txn) Put(key, value interface{}) error {
 func (txn *Txn) CPut(key, value, expValue interface{}) error {
 	b := txn.NewBatch()
 	b.CPut(key, value, expValue)
-	_, err := runOneResult(txn, b)
-	return err
+	return getOneErr(txn.Run(b), b)
 }
 
 // InitPut sets the first value for a key to value. An error is reported if a
@@ -266,8 +210,7 @@ func (txn *Txn) CPut(key, value, expValue interface{}) error {
 func (txn *Txn) InitPut(key, value interface{}) error {
 	b := txn.NewBatch()
 	b.InitPut(key, value)
-	_, err := runOneResult(txn, b)
-	return err
+	return getOneErr(txn.Run(b), b)
 }
 
 // Inc increments the integer value at key. If the key does not exist it will
@@ -281,7 +224,7 @@ func (txn *Txn) InitPut(key, value interface{}) error {
 func (txn *Txn) Inc(key interface{}, value int64) (KeyValue, error) {
 	b := txn.NewBatch()
 	b.Inc(key, value)
-	return runOneRow(txn, b)
+	return getOneRow(txn.Run(b), b)
 }
 
 func (txn *Txn) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]KeyValue, error) {
@@ -294,7 +237,7 @@ func (txn *Txn) scan(begin, end interface{}, maxRows int64, isReverse bool) ([]K
 	} else {
 		b.ReverseScan(begin, end)
 	}
-	r, err := runOneResult(txn, b)
+	r, err := getOneResult(txn.Run(b), b)
 	return r.Rows, err
 }
 
@@ -330,8 +273,7 @@ var _ = (*Txn)(nil).ReverseScan
 func (txn *Txn) Del(keys ...interface{}) error {
 	b := txn.NewBatch()
 	b.Del(keys...)
-	_, err := runOneResult(txn, b)
-	return err
+	return getOneErr(txn.Run(b), b)
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
@@ -343,11 +285,20 @@ func (txn *Txn) Del(keys ...interface{}) error {
 func (txn *Txn) DelRange(begin, end interface{}) error {
 	b := txn.NewBatch()
 	b.DelRange(begin, end, false)
-	_, err := runOneResult(txn, b)
-	return err
+	return getOneErr(txn.Run(b), b)
 }
 
-// Run implements Runner.Run(). See comments there.
+// Run executes the operations queued up within a batch. Before executing any
+// of the operations the batch is first checked to see if there were any errors
+// during its construction (e.g. failure to marshal a proto message).
+//
+// The operations within a batch are run in parallel and the order is
+// non-deterministic. It is an unspecified behavior to modify and retrieve the
+// same key within a batch.
+//
+// Upon completion, Batch.Results will contain the results for each
+// operation. The order of the results matches the order the operations were
+// added to the batch.
 func (txn *Txn) Run(b *Batch) error {
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
@@ -441,6 +392,7 @@ func (txn *Txn) GetDeadline() *hlc.Timestamp {
 // The txn's status is set to ABORTED in case of error. txn is
 // considered finalized and cannot be used to send any more commands.
 func (txn *Txn) Rollback() error {
+	log.VTracef(2, txn.Context, "rolling back transaction")
 	err := txn.sendEndTxnReq(false /* commit */, nil)
 	txn.finalized = true
 	return err
@@ -556,9 +508,17 @@ func (txn *Txn) Exec(
 		}
 
 		err = fn(txn, &opt)
+
+		// TODO(andrei): Until 7881 is fixed.
+		if err == nil && opt.AutoCommit && txn.Proto.Status == roachpb.ABORTED {
+			log.Errorf(txn.Context, "#7881: no err but aborted txn proto. opt: %+v, txn: %+v",
+				opt, txn)
+		}
+
 		if err == nil && opt.AutoCommit && txn.Proto.Status == roachpb.PENDING {
 			// fn succeeded, but didn't commit.
 			err = txn.Commit()
+			log.Tracef(txn.Context, "client.Txn did AutoCommit. err: %v\ntxn: %+v", err, txn.Proto)
 			if err != nil {
 				if _, retryable := err.(*roachpb.RetryableTxnError); !retryable {
 					// We can't retry, so let the caller know we tried to
@@ -585,13 +545,77 @@ func (txn *Txn) Exec(
 				r.Reset()
 			}
 		}
-		if log.V(2) {
-			log.Infof(context.TODO(), "automatically retrying transaction: %s because of error: %s",
-				txn.DebugName(), err)
-		}
+		log.VTracef(2, txn.Context, "automatically retrying transaction: %s because of error: %s",
+			txn.DebugName(), err)
 	}
 
 	return err
+}
+
+// sendInternal sends the batch and updates the transaction on error. Depending
+// on the error type, the transaction might be replaced by a new one.
+func (txn *Txn) sendInternal(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	if len(ba.Requests) == 0 {
+		return nil, nil
+	}
+	if pErr := txn.db.prepareToSend(&ba); pErr != nil {
+		return nil, pErr
+	}
+
+	// Send call through the DB's sender.
+	ba.Txn = &txn.Proto
+	// For testing purposes, txn.UserPriority can be a negative value (see
+	// MakePriority).
+	if txn.UserPriority != 0 {
+		ba.UserPriority = txn.UserPriority
+	}
+
+	// TODO(radu): when db.send supports a context, we can just use that (and
+	// remove the prepareToSend call above).
+	br, pErr := txn.db.sender.Send(txn.Context, ba)
+	if br != nil && br.Error != nil {
+		panic(roachpb.ErrorUnexpectedlySet(txn.db.sender, br))
+	}
+
+	if br != nil {
+		for _, encSp := range br.CollectedSpans {
+			var newSp basictracer.RawSpan
+			if err := tracing.DecodeRawSpan(encSp, &newSp); err != nil {
+				return nil, roachpb.NewError(err)
+			}
+			txn.CollectedSpans = append(txn.CollectedSpans, newSp)
+		}
+	}
+	// Only successful requests can carry an updated Txn in their response
+	// header. Any error (e.g. a restart) can have a Txn attached to them as
+	// well; those update our local state in the same way for the next attempt.
+	// The exception is if our transaction was aborted and needs to restart
+	// from scratch, in which case we do just that.
+	if pErr == nil {
+		txn.Proto.Update(br.Txn)
+		return br, nil
+	}
+
+	if log.V(1) {
+		log.Infof(txn.Context, "failed batch: %s", pErr)
+	}
+
+	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
+		// On Abort, reset the transaction so we start anew on restart.
+		txn.Proto = roachpb.Transaction{
+			TxnMeta: enginepb.TxnMeta{
+				Isolation: txn.Proto.Isolation,
+			},
+			Name: txn.Proto.Name,
+		}
+		// Acts as a minimum priority on restart.
+		if pErr.GetTxn() != nil {
+			txn.Proto.Priority = pErr.GetTxn().Priority
+		}
+	} else if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
+		txn.Proto.Update(pErr.GetTxn())
+	}
+	return nil, pErr
 }
 
 // send runs the specified calls synchronously in a single batch and
@@ -672,7 +696,7 @@ func (txn *Txn) send(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.
 		ba.Requests = ba.Requests[:lastIndex]
 	}
 
-	br, pErr := txn.db.send(ba)
+	br, pErr := txn.sendInternal(ba)
 	if elideEndTxn && pErr == nil {
 		// Check that read only transactions do not violate their deadline. This can NOT
 		// happen since the txn deadline is normally updated when it is about to expire

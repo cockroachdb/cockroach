@@ -456,6 +456,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	// continue.
 	switch {
 	case !ok:
+		log.VTracef(2, ctx, "rejecting unknown txn: %s", txn.ID)
 		// TODO(spencerkimball): Could add coordinator node ID to the
 		// transaction session so that we can definitively return the right
 		// error between these possible errors. Or update the code to make an

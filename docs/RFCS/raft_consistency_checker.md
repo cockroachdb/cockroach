@@ -1,5 +1,5 @@
 -   Feature Name: Raft consistency checker
--   Status: in-progress
+-   Status: completed
 -   Start Date: 2016-02-10
 -   Authors: Ben Darnell, David Eisenstat, Bram Gruneir, Vivek Menezes
 -   RFC PR: [#4317](https://github.com/cockroachdb/cockroach/pull/4317),
@@ -41,8 +41,9 @@ currently the lease holder.
 3.  If the initiator discovers an inconsistency, it immediately retries
     the check with the `snapshot` option set to true. In this mode,
     inconsistent replicas include their full snapshot in their
-    `CollectChecksum` response and then commit suicide. The initiator
-    retains its own snapshot long enough to log the diffs.
+    `CollectChecksum` response. The initiator retains its own snapshot
+    long enough to log the diffs and panic (so that someone
+    will notice).
 
 Details
 -------
