@@ -270,7 +270,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 
 	for _, item := range intents {
 		if item.args.Method() != roachpb.EndTransaction {
-			if err := stopper.RunLimitedAsyncTask(ir.sem, func() {
+			if err := stopper.RunLimitedAsyncTask(ctx, ir.sem, func(ctx context.Context) {
 				// Everything here is best effort; give up rather than waiting
 				// too long (helps avoid deadlocks during test shutdown,
 				// although this is imperfect due to the use of an
@@ -314,7 +314,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				return
 			}
 		} else { // EndTransaction
-			if err := stopper.RunLimitedAsyncTask(ir.sem, func() {
+			if err := stopper.RunLimitedAsyncTask(ctx, ir.sem, func(ctx context.Context) {
 				ctxWithTimeout, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
 				defer cancel()
 
@@ -438,7 +438,7 @@ func (ir *intentResolver) resolveIntents(ctx context.Context,
 			// TODO(tschottdorf): no tracing here yet.
 			return ir.store.DB().Run(ctx, b)
 		}
-		if wait || ir.store.Stopper().RunLimitedAsyncTask(ir.sem, func() {
+		if wait || ir.store.Stopper().RunLimitedAsyncTask(ctx, ir.sem, func(ctx context.Context) {
 			if err := action(); err != nil {
 				log.Warningf(ctx, "unable to resolve external intents: %s", err)
 			}
