@@ -26,6 +26,8 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coreos/etcd/raft/raftpb"
@@ -173,9 +175,7 @@ func (r *Replica) executeCmd(
 	case *roachpb.ComputeChecksumRequest:
 		resp := reply.(*roachpb.ComputeChecksumResponse)
 		*resp, trigger, err = r.ComputeChecksum(ctx, batch, ms, h, *tArgs)
-	case *roachpb.VerifyChecksumRequest:
-		resp := reply.(*roachpb.VerifyChecksumResponse)
-		*resp, trigger, err = r.VerifyChecksum(ctx, batch, ms, h, *tArgs)
+	case *roachpb.DeprecatedVerifyChecksumRequest:
 	case *roachpb.ChangeFrozenRequest:
 		resp := reply.(*roachpb.ChangeFrozenResponse)
 		*resp, trigger, err = r.ChangeFrozen(ctx, batch, ms, h, *tArgs)
@@ -901,6 +901,7 @@ func (r *Replica) RangeLookup(
 	h roachpb.Header,
 	args roachpb.RangeLookupRequest,
 ) (roachpb.RangeLookupResponse, *PostCommitTrigger, error) {
+	log.Trace(ctx, "RangeLookup")
 	var reply roachpb.RangeLookupResponse
 	ts := h.Timestamp // all we're going to use from the header.
 	key, err := keys.Addr(args.Key)
@@ -913,7 +914,7 @@ func (r *Replica) RangeLookup(
 
 	rangeCount := int64(args.MaxRanges)
 	if rangeCount < 1 {
-		return reply, nil, errors.Errorf("Range lookup specified invalid maximum range count %d: must be > 0", rangeCount)
+		return reply, nil, errors.Errorf("range lookup specified invalid maximum range count %d: must be > 0", rangeCount)
 	}
 	consistent := h.ReadConsistency != roachpb.INCONSISTENT
 	if consistent && args.ConsiderIntents {
@@ -1359,7 +1360,9 @@ func (r *Replica) PushTxn(
 		if !pusherWins {
 			s = "failed to push"
 		}
-		log.Infof(ctx, "%s "+s+" %s: %s", args.PusherTxn.ID.Short(), reply.PusheeTxn.ID.Short(), reason)
+		log.Infof(ctx, "%s "+s+" %s: %s (pushee last active: %s)",
+			args.PusherTxn.ID.Short(), reply.PusheeTxn.ID.Short(), reason,
+			reply.PusheeTxn.LastActive())
 	}
 
 	if !pusherWins {
@@ -1735,19 +1738,18 @@ func (r *Replica) applyNewLeaseLocked(
 	return reply, trigger, nil
 }
 
-// CheckConsistency runs a consistency check on the range. It first applies
-// a ComputeChecksum command on the range. It then applies a VerifyChecksum
-// command passing along a locally computed checksum for the range.
+// CheckConsistency runs a consistency check on the range. It first applies a
+// ComputeChecksum command on the range. It then issues CollectChecksum commands
+// to the other replicas.
 func (r *Replica) CheckConsistency(
+	ctx context.Context,
 	args roachpb.CheckConsistencyRequest,
 	desc *roachpb.RangeDescriptor,
 ) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
-	ctx := context.TODO()
 	key := desc.StartKey.AsRawKey()
 	endKey := desc.EndKey.AsRawKey()
 	id := uuid.MakeV4()
 	// Send a ComputeChecksum to all the replicas of the range.
-	start := timeutil.Now()
 	{
 		var ba roachpb.BatchRequest
 		ba.RangeID = r.Desc().RangeID
@@ -1769,37 +1771,104 @@ func (r *Replica) CheckConsistency(
 	}
 
 	// Get local checksum. This might involving waiting for it.
-	c, ok := r.getChecksum(ctx, id)
-	if !ok || c.checksum == nil {
-		return roachpb.CheckConsistencyResponse{}, roachpb.NewErrorf("unable to compute checksum for range [%v, %v]", key, endKey)
+	c, err := r.getChecksum(ctx, id)
+	if err != nil {
+		return roachpb.CheckConsistencyResponse{}, roachpb.NewError(
+			errors.Wrapf(err, "could not compute checksum for range [%s, %s]", key, endKey))
 	}
 
-	// Wait for a bit to improve the probability that all
-	// the replicas have computed their checksum. We do this
-	// because VerifyChecksum blocks on every replica until the
-	// computed checksum is available.
-	computeChecksumDuration := timeutil.Since(start)
-	time.Sleep(computeChecksumDuration)
-
-	// Send a VerifyChecksum to all the replicas of the range.
-	{
-		var ba roachpb.BatchRequest
-		ba.RangeID = r.Desc().RangeID
-		checkArgs := &roachpb.VerifyChecksumRequest{
-			Span: roachpb.Span{
-				Key:    key,
-				EndKey: endKey,
-			},
-			Version:    replicaChecksumVersion,
-			ChecksumID: id,
-			Checksum:   c.checksum,
-			Snapshot:   c.snapshot,
+	// Get remote checksums.
+	localReplica, err := r.GetReplicaDescriptor()
+	if err != nil {
+		return roachpb.CheckConsistencyResponse{},
+			roachpb.NewError(errors.Wrap(err, "could not get replica descriptor"))
+	}
+	var inconsistencyCount uint32
+	var wg sync.WaitGroup
+	sp := r.store.ctx.StorePool
+	for _, replica := range r.Desc().Replicas {
+		if replica == localReplica {
+			continue
 		}
-		ba.Add(checkArgs)
-		ba.Timestamp = r.store.Clock().Now()
-		_, pErr := r.Send(ctx, ba)
-		if pErr != nil {
-			return roachpb.CheckConsistencyResponse{}, pErr
+		wg.Add(1)
+		replica := replica // per-iteration copy
+		if err := r.store.Stopper().RunAsyncTask(func() {
+			defer wg.Done()
+			addr, err := sp.resolver(replica.NodeID)
+			if err != nil {
+				log.Error(ctx, errors.Wrapf(err, "could not resolve node ID %d", replica.NodeID))
+				return
+			}
+			conn, err := sp.rpcContext.GRPCDial(addr.String())
+			if err != nil {
+				log.Error(ctx,
+					errors.Wrapf(err, "could not dial node ID %d address %s", replica.NodeID, addr))
+				return
+			}
+			client := NewConsistencyClient(conn)
+			req := &CollectChecksumRequest{
+				StoreRequestHeader{NodeID: replica.NodeID, StoreID: replica.StoreID},
+				r.RangeID,
+				id,
+				c.checksum,
+			}
+			resp, err := client.CollectChecksum(ctx, req)
+			if err != nil {
+				log.Error(ctx, errors.Wrapf(err, "could not CollectChecksum from replica %s", replica))
+				return
+			}
+			if bytes.Equal(c.checksum, resp.Checksum) {
+				return
+			}
+			atomic.AddUint32(&inconsistencyCount, 1)
+			var buf bytes.Buffer
+			_, _ = fmt.Fprintf(&buf, "replica %s is inconsistent: expected checksum %x, got %x",
+				replica, c.checksum, resp.Checksum)
+			if c.snapshot != nil && resp.Snapshot != nil {
+				diff := diffRange(c.snapshot, resp.Snapshot)
+				if report := r.store.ctx.TestingKnobs.BadChecksumReportDiff; report != nil {
+					report(r.store.Ident, diff)
+				}
+				for _, d := range diff {
+					otherSide := "lease holder"
+					if d.LeaseHolder {
+						otherSide = "replica"
+					}
+					_, _ = fmt.Fprintf(&buf, "\nk:v = (%q (%x), %s, %.1024x) not present on %s",
+						d.Key, d.Key, d.Timestamp, d.Value, otherSide)
+				}
+			}
+			log.Errorf(ctx, buf.String())
+		}); err != nil {
+			log.Error(ctx, errors.Wrap(err, "could not run async CollectChecksum"))
+			wg.Done()
+		}
+	}
+	wg.Wait()
+
+	if inconsistencyCount == 0 {
+	} else if args.WithDiff {
+		logFunc := log.Errorf
+		if p := r.store.TestingKnobs().BadChecksumPanic; p != nil {
+			p(r.store.Ident)
+		} else if r.store.ctx.ConsistencyCheckPanicOnFailure {
+			logFunc = log.Fatalf
+		}
+		logFunc(ctx, "consistency check failed with %d inconsistent replicas", inconsistencyCount)
+	} else {
+		if err := r.store.stopper.RunAsyncTask(func() {
+			log.Errorf(r.ctx, "consistency check failed with %d inconsistent replicas; fetching details",
+				inconsistencyCount)
+			// Keep the request from crossing the local->global boundary.
+			if bytes.Compare(key, keys.LocalMax) < 0 {
+				key = keys.LocalMax
+			}
+			if err := r.store.db.CheckConsistency(
+				key, endKey, true /* withDiff */); err != nil {
+				log.Error(r.ctx, errors.Wrap(err, "could not rerun consistency check"))
+			}
+		}); err != nil {
+			log.Error(ctx, errors.Wrap(err, "could not rerun consistency check"))
 		}
 	}
 
@@ -1807,7 +1876,7 @@ func (r *Replica) CheckConsistency(
 }
 
 const (
-	replicaChecksumVersion    = 1
+	replicaChecksumVersion    = 2
 	replicaChecksumGCInterval = time.Hour
 )
 
@@ -1817,23 +1886,43 @@ const (
 func (r *Replica) getChecksum(
 	ctx context.Context,
 	id uuid.UUID,
-) (replicaChecksum, bool) {
-	r.mu.Lock()
-	c, ok := r.mu.checksums[id]
-	r.mu.Unlock()
-	if !ok {
-		return replicaChecksum{}, false
-	}
-	// Wait
+) (replicaChecksum, error) {
 	now := timeutil.Now()
-	<-c.notify
+	r.mu.Lock()
+	r.gcOldChecksumEntriesLocked(now)
+	c, ok := r.mu.checksums[id]
+	if !ok {
+		if d, dOk := ctx.Deadline(); dOk {
+			c.gcTimestamp = d
+		}
+		c.notify = make(chan struct{})
+		r.mu.checksums[id] = c
+	}
+	r.mu.Unlock()
+	// Wait
+	select {
+	case <-r.store.Stopper().ShouldStop():
+		return replicaChecksum{},
+			errors.Errorf("store has stopped while waiting for compute checksum (ID = %s)", id)
+	case <-ctx.Done():
+		return replicaChecksum{},
+			errors.Wrapf(ctx.Err(), "while waiting for compute checksum (ID = %s)", id)
+	case <-c.notify:
+	}
 	if log.V(1) {
 		log.Infof(ctx, "waited for compute checksum for %s", timeutil.Since(now))
 	}
 	r.mu.Lock()
 	c, ok = r.mu.checksums[id]
 	r.mu.Unlock()
-	return c, ok
+	if !ok {
+		return replicaChecksum{}, errors.Errorf("no map entry for checksum (ID = %s)", id)
+	}
+	if c.checksum == nil {
+		return replicaChecksum{}, errors.Errorf(
+			"checksum is nil, most likely because the async computation could not be run (ID = %s)", id)
+	}
+	return c, nil
 }
 
 // computeChecksumDone adds the computed checksum, sets a deadline for GCing the
@@ -1857,13 +1946,13 @@ func (r *Replica) computeChecksumDone(
 		// ComputeChecksum adds an entry into the map, and the entry can
 		// only be GCed once the gcTimestamp is set above. Something
 		// really bad happened.
-		log.Errorf(ctx, "no checksum for id = %v", id)
+		log.Errorf(ctx, "no map entry for checksum (ID = %s)", id)
 	}
 }
 
-// ComputeChecksum starts the process of computing a checksum on the
-// replica at a particular snapshot. The checksum is later verified
-// through the VerifyChecksum request.
+// ComputeChecksum starts the process of computing a checksum on the replica at
+// a particular snapshot. The checksum is later verified through a
+// CollectChecksumRequest.
 func (r *Replica) ComputeChecksum(
 	ctx context.Context,
 	batch engine.ReadWriter,
@@ -1921,32 +2010,6 @@ func (r *Replica) sha512(
 	}
 	sha := make([]byte, 0, sha512.Size)
 	return hasher.Sum(sha), nil
-}
-
-// VerifyChecksum verifies the checksum that was computed through a
-// ComputeChecksum request. This command is marked as IsWrite so that
-// it executes on every replica, but it actually doesn't modify the
-// persistent state on the replica.
-//
-// Raft commands need to consistently execute on all replicas. An error
-// seen on a particular replica should be returned here only if it is
-// guaranteed to be seen on other replicas. In other words, a command needs
-// to be consistent both in success and failure.
-func (r *Replica) VerifyChecksum(
-	ctx context.Context,
-	batch engine.ReadWriter,
-	ms *enginepb.MVCCStats,
-	h roachpb.Header,
-	args roachpb.VerifyChecksumRequest,
-) (roachpb.VerifyChecksumResponse, *PostCommitTrigger, error) {
-	if args.Version != replicaChecksumVersion {
-		log.Errorf(ctx, "consistency check skipped: incompatible versions: e=%d, v=%d",
-			replicaChecksumVersion, args.Version)
-		// Return success because version incompatibility might only
-		// be seen on this replica.
-		return roachpb.VerifyChecksumResponse{}, nil, nil
-	}
-	return roachpb.VerifyChecksumResponse{}, &PostCommitTrigger{verifyChecksum: &args}, nil
 }
 
 // ChangeFrozen freezes or unfreezes the Replica idempotently.
@@ -2200,31 +2263,50 @@ func (r *Replica) AdminSplit(
 		// Update existing range descriptor for left hand side of
 		// split. Note that we mutate the descriptor for the left hand
 		// side of the split first to locate the txn record there.
-		b := &client.Batch{}
-		leftDescKey := keys.RangeDescriptorKey(leftDesc.StartKey)
-		if err := updateRangeDescriptor(b, leftDescKey, desc, &leftDesc); err != nil {
+		{
+			b := txn.NewBatch()
+			leftDescKey := keys.RangeDescriptorKey(leftDesc.StartKey)
+			if err := updateRangeDescriptor(b, leftDescKey, desc, &leftDesc); err != nil {
+				return err
+			}
+			// Commit this batch first to ensure that the transaction record
+			// is created in the right place (our triggers rely on this),
+			// but also to ensure the transaction record is created _before_
+			// intents for the RHS range descriptor or addressing records.
+			// This prevents cases where splits are aborted early due to
+			// conflicts with meta intents before the txn record has been
+			// written (see #9265).
+			log.Trace(ctx, "updating left descriptor")
+			if err := txn.Run(b); err != nil {
+				if _, ok := err.(*roachpb.ConditionFailedError); ok {
+					return errors.New(ErrMsgConflictUpdatingRangeDesc)
+				}
+				return err
+			}
+		}
+
+		// Log the split into the range event log.
+		// TODO(spencer): event logging API should accept a batch
+		// instead of a transaction; there's no reason this logging
+		// shouldn't be done in parallel via the batch with the updated
+		// range addressing.
+		if err := r.store.logSplit(txn, leftDesc, *rightDesc); err != nil {
 			return err
 		}
+
+		b := txn.NewBatch()
+
 		// Create range descriptor for right hand side of the split.
 		rightDescKey := keys.RangeDescriptorKey(rightDesc.StartKey)
 		if err := updateRangeDescriptor(b, rightDescKey, nil, rightDesc); err != nil {
 			return err
 		}
+
 		// Update range descriptor addressing record(s).
 		if err := splitRangeAddressing(b, rightDesc, &leftDesc); err != nil {
 			return err
 		}
-		if err := txn.Run(b); err != nil {
-			if _, ok := err.(*roachpb.ConditionFailedError); ok {
-				return errors.New(ErrMsgConflictUpdatingRangeDesc)
-			}
-			return err
-		}
-		// Log the split into the range event log.
-		if err := r.store.logSplit(txn, leftDesc, *rightDesc); err != nil {
-			return err
-		}
-		b = &client.Batch{}
+
 		// End the transaction manually, instead of letting RunTransaction
 		// loop do it, in order to provide a split trigger.
 		b.AddRawRequest(&roachpb.EndTransactionRequest{
@@ -2236,8 +2318,16 @@ func (r *Replica) AdminSplit(
 				},
 			},
 		})
-		log.Trace(ctx, "attempting commit")
-		return txn.Run(b)
+
+		// Commit txn with final batch (RHS desc and meta).
+		log.Trace(ctx, "commit txn with batch containing RHS descriptor and meta records")
+		if err := txn.Run(b); err != nil {
+			if _, ok := err.(*roachpb.ConditionFailedError); ok {
+				return errors.New(ErrMsgConflictUpdatingRangeDesc)
+			}
+			return err
+		}
+		return nil
 	}); err != nil {
 		return reply, roachpb.NewErrorf("split at key %s failed: %s", splitKey, err)
 	}
@@ -2435,22 +2525,15 @@ func (r *Replica) splitTrigger(
 	}
 	log.Trace(ctx, "computed stats for left hand side range")
 
-	// Copy the last replica GC and verification timestamps. These
-	// values are unreplicated, which is why the MVCC stats are set to
-	// nil on calls to MVCCPutProto.
+	// Copy the last replica GC timestamp. This value is unreplicated,
+	// which is why the MVCC stats are set to nil on calls to
+	// MVCCPutProto.
 	replicaGCTS, err := r.getLastReplicaGCTimestamp()
 	if err != nil {
 		return enginepb.MVCCStats{}, nil, errors.Wrap(err, "unable to fetch last replica GC timestamp")
 	}
 	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.ZeroTimestamp, nil, &replicaGCTS); err != nil {
 		return enginepb.MVCCStats{}, nil, errors.Wrap(err, "unable to copy last replica GC timestamp")
-	}
-	verifyTS, err := r.getLastVerificationTimestamp()
-	if err != nil {
-		return enginepb.MVCCStats{}, nil, errors.Wrap(err, "unable to fetch last verification timestamp")
-	}
-	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastVerificationTimestampKey(split.RightDesc.RangeID), hlc.ZeroTimestamp, nil, &verifyTS); err != nil {
-		return enginepb.MVCCStats{}, nil, errors.Wrap(err, "unable to copy last verification timestamp")
 	}
 
 	// Initialize the RHS range's abort cache by copying the LHS's.
@@ -2652,7 +2735,7 @@ func (r *Replica) AdminMerge(
 		log.Trace(ctx, "merge closure begins")
 		// Update the range descriptor for the receiving range.
 		{
-			b := &client.Batch{}
+			b := txn.NewBatch()
 			leftDescKey := keys.RangeDescriptorKey(updatedLeftDesc.StartKey)
 			if err := updateRangeDescriptor(b, leftDescKey, origLeftDesc, &updatedLeftDesc); err != nil {
 				return err
@@ -2686,7 +2769,7 @@ func (r *Replica) AdminMerge(
 			return errors.Errorf("ranges not collocated")
 		}
 
-		b := &client.Batch{}
+		b := txn.NewBatch()
 
 		// Remove the range descriptor for the deleted range.
 		b.Del(rightDescKey)
@@ -2746,6 +2829,10 @@ func (r *Replica) mergeTrigger(
 		// TODO(peter,tschottdorf): This is necessary but likely not
 		// sufficient. The right hand side of the merge can still race on
 		// reads. See #8630.
+		//
+		// TODO(peter): We need to hold the subsumed range's raftMu until the
+		// Store.MergeRange is invoked. Currently we release it when this method
+		// returns which isn't correct.
 		subsumedRng, err := r.store.GetReplica(rightRangeID)
 		if err != nil {
 			panic(err)
@@ -3068,7 +3155,7 @@ func (r *Replica) ChangeReplicas(
 
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
 
-	if err := r.store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := r.store.DB().Txn(ctx, func(txn *client.Txn) error {
 		log.Trace(ctx, "attempting txn")
 		txn.Proto.Name = replicaChangeTxnName
 		// TODO(tschottdorf): oldDesc is used for sanity checks related to #7224.
@@ -3091,12 +3178,7 @@ func (r *Replica) ChangeReplicas(
 				return err
 			}
 
-			// Update range descriptor addressing record(s).
-			if err := updateRangeAddressing(b, &updatedDesc); err != nil {
-				return err
-			}
-
-			// Run transaction up to this point.
+			// Run transaction up to this point to create txn record early (see #9265).
 			if err := txn.Run(b); err != nil {
 				return err
 			}
@@ -3109,23 +3191,27 @@ func (r *Replica) ChangeReplicas(
 
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a commit trigger.
-		{
-			b := txn.NewBatch()
-			b.AddRawRequest(&roachpb.EndTransactionRequest{
-				Commit: true,
-				InternalCommitTrigger: &roachpb.InternalCommitTrigger{
-					ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{
-						ChangeType:      changeType,
-						Replica:         repDesc,
-						UpdatedReplicas: updatedDesc.Replicas,
-						NextReplicaID:   updatedDesc.NextReplicaID,
-					},
+		b := txn.NewBatch()
+
+		// Update range descriptor addressing record(s).
+		if err := updateRangeAddressing(b, &updatedDesc); err != nil {
+			return err
+		}
+
+		b.AddRawRequest(&roachpb.EndTransactionRequest{
+			Commit: true,
+			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+				ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{
+					ChangeType:      changeType,
+					Replica:         repDesc,
+					UpdatedReplicas: updatedDesc.Replicas,
+					NextReplicaID:   updatedDesc.NextReplicaID,
 				},
-			})
-			if err := txn.Run(b); err != nil {
-				log.Trace(ctx, err.Error())
-				return err
-			}
+			},
+		})
+		if err := txn.Run(b); err != nil {
+			log.Trace(ctx, err.Error())
+			return err
 		}
 
 		if oldDesc.RangeID != 0 && !reflect.DeepEqual(oldDesc, desc) {

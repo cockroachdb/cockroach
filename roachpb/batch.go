@@ -62,15 +62,14 @@ func (ba *BatchRequest) UpdateTxn(otherTxn *Transaction) {
 }
 
 // IsConsistencyRelated returns whether the batch consists of a single
-// ComputeChecksum or VerifyChecksum or CheckConsistency request.
+// ComputeChecksum or CheckConsistency request.
 func (ba *BatchRequest) IsConsistencyRelated() bool {
 	if !ba.IsSingleRequest() {
 		return false
 	}
 	_, ok1 := ba.GetArg(ComputeChecksum)
-	_, ok2 := ba.GetArg(VerifyChecksum)
-	_, ok3 := ba.GetArg(CheckConsistency)
-	return ok1 || ok2 || ok3
+	_, ok2 := ba.GetArg(CheckConsistency)
+	return ok1 || ok2
 }
 
 // IsFreeze returns whether the batch consists of a single ChangeFrozen request.
@@ -177,6 +176,7 @@ func (ba *BatchRequest) GetArg(method Method) (Request, bool) {
 
 func (br *BatchResponse) String() string {
 	var str []string
+	str = append(str, fmt.Sprintf("(err: %v)", br.Error))
 	for _, union := range br.Responses {
 		str = append(str, fmt.Sprintf("%T", union.GetInner()))
 	}
@@ -341,7 +341,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			counts.reverseScan++
 		case *ComputeChecksumRequest:
 			counts.computeChecksum++
-		case *VerifyChecksumRequest:
+		case *DeprecatedVerifyChecksumRequest:
 			counts.verifyChecksum++
 		case *CheckConsistencyRequest:
 			counts.checkConsistency++
@@ -381,7 +381,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 		leaseTransfer      []RequestLeaseResponse
 		reverseScan        []ReverseScanResponse
 		computeChecksum    []ComputeChecksumResponse
-		verifyChecksum     []VerifyChecksumResponse
+		verifyChecksum     []DeprecatedVerifyChecksumResponse
 		checkConsistency   []CheckConsistencyResponse
 		noop               []NoopResponse
 		changeFrozen       []ChangeFrozenResponse
@@ -510,9 +510,9 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 				bufs.computeChecksum = make([]ComputeChecksumResponse, counts.computeChecksum)
 			}
 			reply, bufs.computeChecksum = &bufs.computeChecksum[0], bufs.computeChecksum[1:]
-		case *VerifyChecksumRequest:
+		case *DeprecatedVerifyChecksumRequest:
 			if bufs.verifyChecksum == nil {
-				bufs.verifyChecksum = make([]VerifyChecksumResponse, counts.verifyChecksum)
+				bufs.verifyChecksum = make([]DeprecatedVerifyChecksumResponse, counts.verifyChecksum)
 			}
 			reply, bufs.verifyChecksum = &bufs.verifyChecksum[0], bufs.verifyChecksum[1:]
 		case *CheckConsistencyRequest:
@@ -599,6 +599,9 @@ func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 // See #2198.
 func (ba BatchRequest) String() string {
 	var str []string
+	if ba.Txn != nil {
+		str = append(str, fmt.Sprintf("[txn: %s]", ba.Txn.ID.Short()))
+	}
 	for count, arg := range ba.Requests {
 		// Limit the strings to provide just a summary. Without this limit
 		// a log message with a BatchRequest can be very long.

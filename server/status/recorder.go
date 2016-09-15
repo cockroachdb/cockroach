@@ -93,6 +93,10 @@ type MetricsRecorder struct {
 		clock           *hlc.Clock
 		stores          map[roachpb.StoreID]storeMetrics
 
+		// prometheusExporter merges metrics into families and generates the
+		// prometheus text format.
+		prometheusExporter metric.PrometheusExporter
+
 		// Counts to help optimize slice allocation.
 		lastDataCount        int
 		lastSummaryCount     int
@@ -107,6 +111,7 @@ func NewMetricsRecorder(clock *hlc.Clock) *MetricsRecorder {
 	mr := &MetricsRecorder{}
 	mr.mu.storeRegistries = make(map[roachpb.StoreID]*metric.Registry)
 	mr.mu.stores = make(map[roachpb.StoreID]storeMetrics)
+	mr.mu.prometheusExporter = metric.MakePrometheusExporter()
 	mr.mu.clock = clock
 	return mr
 }
@@ -174,15 +179,11 @@ func (mr *MetricsRecorder) PrintAsText(w io.Writer) error {
 		return nil
 	}
 
-	if err := mr.mu.nodeRegistry.PrintAsText(w); err != nil {
-		return err
-	}
+	mr.mu.prometheusExporter.AddMetricsFromRegistry(mr.mu.nodeRegistry)
 	for _, reg := range mr.mu.storeRegistries {
-		if err := reg.PrintAsText(w); err != nil {
-			return err
-		}
+		mr.mu.prometheusExporter.AddMetricsFromRegistry(reg)
 	}
-	return nil
+	return mr.mu.prometheusExporter.Export(w)
 }
 
 // GetTimeSeriesData serializes registered metrics for consumption by

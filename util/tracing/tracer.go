@@ -63,6 +63,8 @@ func JoinOrNew(tr opentracing.Tracer, carrier *Span, opName string) (opentracing
 // JoinOrNewSnowball returns a Span which records directly via the specified
 // callback. If the given DelegatingCarrier is nil, a new Span is created.
 // otherwise, the created Span is a child.
+// TODO(andrei): JoinOrNewSnowball creates a new tracer, which is not kosher.
+// Also this can't use the lightstep tracer.
 func JoinOrNewSnowball(opName string, carrier *Span, callback func(sp basictracer.RawSpan)) (opentracing.Span, error) {
 	tr := basictracer.NewWithOptions(defaultOptions(callback))
 	sp, err := JoinOrNew(tr, carrier, opName)
@@ -73,6 +75,22 @@ func JoinOrNewSnowball(opName string, carrier *Span, callback func(sp basictrace
 		sp.SetBaggageItem(Snowball, "1")
 	}
 	return sp, err
+}
+
+// NewTracerAndSpanFor7881 creates a new tracer and a root span. The tracer is
+// to be used for tracking down #7881; it runs a callback for each finished span
+// (and the callback used accumulates the spans in a SQL txn).
+func NewTracerAndSpanFor7881(
+	callback func(sp basictracer.RawSpan),
+) (opentracing.Span, opentracing.Tracer, error) {
+	opts := defaultOptions(callback)
+	// Don't trim the logs in "unsampled" spans". Note that this tracer does not
+	// use sampling; instead it uses an ad-hoc mechanism for marking spans of
+	// interest.
+	opts.TrimUnsampledSpans = false
+	tr := basictracer.NewWithOptions(opts)
+	sp, err := JoinOrNew(tr, nil, "sql txn")
+	return sp, tr, err
 }
 
 func defaultOptions(recorder func(basictracer.RawSpan)) basictracer.Options {
@@ -87,12 +105,21 @@ func defaultOptions(recorder func(basictracer.RawSpan)) basictracer.Options {
 
 var lightstepToken = envutil.EnvOrDefaultString("COCKROACH_LIGHTSTEP_TOKEN", "")
 
+// By default, if a lightstep token is specified we trace to both Lightstep and
+// net/trace. If this flag is enabled, we will only trace to Lightstep.
+var lightstepOnly = envutil.EnvOrDefaultBool("COCKROACH_LIGHTSTEP_ONLY", false)
+
 // newTracer implements NewTracer and allows that function to be mocked out via Disable().
 var newTracer = func() opentracing.Tracer {
 	if lightstepToken != "" {
-		return lightstep.NewTracer(lightstep.Options{
-			AccessToken: lightstepToken,
-		})
+		lsTr := lightstep.NewTracer(lightstep.Options{AccessToken: lightstepToken})
+		if lightstepOnly {
+			return lsTr
+		}
+		basicTr := basictracer.NewWithOptions(defaultOptions(func(_ basictracer.RawSpan) {}))
+		// The TeeTracer uses the first tracer for serialization of span contexts;
+		// lightspan needs to be first because it correlates spans between nodes.
+		return NewTeeTracer(lsTr, basicTr)
 	}
 	return basictracer.NewWithOptions(defaultOptions(func(_ basictracer.RawSpan) {}))
 }

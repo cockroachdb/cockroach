@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/syncutil"
+	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -277,6 +278,9 @@ type ExecutorTestingKnobs struct {
 // NewExecutor creates an Executor and registers a callback on the
 // system config.
 func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
+	if tracing.TracerFromCtx(cfg.Context) == nil {
+		panic("ExecutorConfig.Ctx must have a tracer in it")
+	}
 	exec := &Executor{
 		cfg:     cfg,
 		reCache: parser.NewRegexpCache(512),
@@ -315,7 +319,8 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 
 // NewDummyExecutor creates an empty Executor that is used for certain tests.
 func NewDummyExecutor() *Executor {
-	return &Executor{cfg: ExecutorConfig{Context: context.Background()}}
+	return &Executor{cfg: ExecutorConfig{
+		Context: tracing.WithTracer(context.Background(), tracing.NewTracer())}}
 }
 
 // Ctx returns the Context associated with this Executor.
@@ -382,6 +387,9 @@ func (e *Executor) Prepare(
 
 	// Prepare needs a transaction because it needs to retrieve db/table
 	// descriptors for type checking.
+	// TODO(andrei): is this OK? If we're preparing as part of a SQL txn, how do
+	// we check that they're reading descriptors consistent with the txn in which
+	// they'll be used?
 	txn := client.NewTxn(session.Ctx(), *e.cfg.DB)
 	txn.Proto.Isolation = session.DefaultIsolationLevel
 	session.planner.setTxn(txn)
@@ -547,8 +555,7 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 					}()
 				}
 			}
-			txnState.reset(session.Ctx(), e, session)
-			txnState.State = Open
+			txnState.resetForNewSQLTxn(e, session)
 			txnState.autoRetry = true
 			txnState.sqlTimestamp = e.cfg.Clock.PhysicalTime()
 			if execOpt.AutoCommit {
@@ -581,6 +588,15 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 
 			var err error
 			results, remainingStmts, err = runTxnAttempt(e, planMaker, origState, txnState, opt, stmtsToExec)
+
+			// TODO(andrei): Until #7881 fixed.
+			if err == nil && txnState.State == Aborted {
+				log.Errorf(session.Ctx(),
+					"7881: txnState is Aborted without an error propagating. stmtsToExec: %s, "+
+						"results: %+v, remainingStmts: %s, txnState: %+v", stmtsToExec, results,
+					remainingStmts, txnState)
+			}
+
 			return err
 		}
 		// This is where the magic happens - we ask db to run a KV txn and possibly retry it.
@@ -593,11 +609,18 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 		if err != nil {
 			lastResult := &results[len(results)-1]
 			if aErr, ok := err.(*client.AutoCommitError); ok {
-				// Until #7881 fixed.
-				if txn == nil {
-					log.Errorf(session.Ctx(), "AutoCommitError on nil txn: %+v, "+
-						"txnState %+v, execOpt %+v, stmts %+v, remaining %+v",
-						err, txnState, execOpt, stmts, remainingStmts)
+				// TODO(andrei): Until #7881 fixed.
+				{
+					log.Tracef(session.Ctx(), "executor got AutoCommitError: %s\n"+
+						"txn: %+v\nexecOpt.AutoRetry %t, execOpt.AutoCommit:%t, stmts %+v, remaining %+v",
+						aErr, txnState.txn.Proto, execOpt.AutoRetry, execOpt.AutoCommit, stmts,
+						remainingStmts)
+					if txnState.txn == nil {
+						log.Errorf(session.Ctx(), "7881: AutoCommitError on nil txn: %s, "+
+							"txnState %+v, execOpt %+v, stmts %+v, remaining %+v",
+							aErr, txnState, execOpt, stmts, remainingStmts)
+						txnState.sp.SetBaggageItem(keyFor7881Sample, "sample me please")
+					}
 				}
 				lastResult.Err = aErr
 				e.TxnAbortCount.Inc(1)
@@ -626,6 +649,12 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 			// If execOpt.AutoCommit was set, then the txn no longer exists at this point.
 			txnState.resetStateAndTxn(NoTxn)
 		}
+
+		// If we're no longer in a transaction, finish the trace.
+		if txnState.State == NoTxn {
+			txnState.finishSQLTxn()
+		}
+
 		// If the txn is in any state but Open, exec the schema changes. They'll
 		// short-circuit themselves if the mutation that queued them has been
 		// rolled back from the table descriptor.
@@ -752,11 +781,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 
 	for i, stmt := range stmts {
 		ctx := planMaker.session.Ctx()
-		if log.V(2) {
-			log.Infof(ctx, "executing %d/%d: %s", i+1, len(stmts), stmt)
-		} else if traceSQL {
-			log.Tracef(ctx, "executing %d/%d: %s", i+1, len(stmts), stmt)
-		}
+		log.VTracef(2, ctx, "executing %d/%d: %s", i+1, len(stmts), stmt)
 		txnState.schemaChangers.curStatementIdx = i
 
 		var stmtStrBefore string
@@ -1125,13 +1150,11 @@ func commitSQLTransaction(
 		switch commitType {
 		case release:
 			// We'll now be waiting for a COMMIT.
-			txnState.State = CommitWait
+			txnState.resetStateAndTxn(CommitWait)
 		case commit:
 			// We're done with this txn.
-			txnState.State = NoTxn
+			txnState.resetStateAndTxn(NoTxn)
 		}
-		txnState.dumpTrace()
-		txnState.txn = nil
 	}
 	// Reset transaction to prevent running further commands on this planner.
 	p.resetTxn()

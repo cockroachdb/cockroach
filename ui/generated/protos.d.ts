@@ -2670,15 +2670,6 @@ getNumPending?() : Long;
 
 
 
-last_verification?: util.hlc.Timestamp;
-		
-
-getLastVerification?() : util.hlc.Timestamp;
-		setLastVerification?(lastVerification : util.hlc.Timestamp): void;
-		
-
-
-
 num_dropped?: Long;
 		
 

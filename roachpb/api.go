@@ -129,7 +129,6 @@ type Request interface {
 	Method() Method
 	// ShallowCopy returns a shallow copy of the receiver.
 	ShallowCopy() Request
-	createReply() Response
 	flags() int
 }
 
@@ -446,7 +445,7 @@ func (*LeaseInfoRequest) Method() Method { return LeaseInfo }
 func (*ComputeChecksumRequest) Method() Method { return ComputeChecksum }
 
 // Method implements the Request interface.
-func (*VerifyChecksumRequest) Method() Method { return VerifyChecksum }
+func (*DeprecatedVerifyChecksumRequest) Method() Method { return Noop }
 
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
@@ -623,41 +622,10 @@ func (ccr *ComputeChecksumRequest) ShallowCopy() Request {
 }
 
 // ShallowCopy implements the Request interface.
-func (vcr *VerifyChecksumRequest) ShallowCopy() Request {
-	shallowCopy := *vcr
+func (dvcr *DeprecatedVerifyChecksumRequest) ShallowCopy() Request {
+	shallowCopy := *dvcr
 	return &shallowCopy
 }
-
-func (*GetRequest) createReply() Response                { return &GetResponse{} }
-func (*PutRequest) createReply() Response                { return &PutResponse{} }
-func (*ConditionalPutRequest) createReply() Response     { return &ConditionalPutResponse{} }
-func (*InitPutRequest) createReply() Response            { return &InitPutResponse{} }
-func (*IncrementRequest) createReply() Response          { return &IncrementResponse{} }
-func (*DeleteRequest) createReply() Response             { return &DeleteResponse{} }
-func (*DeleteRangeRequest) createReply() Response        { return &DeleteRangeResponse{} }
-func (*ScanRequest) createReply() Response               { return &ScanResponse{} }
-func (*ReverseScanRequest) createReply() Response        { return &ReverseScanResponse{} }
-func (*CheckConsistencyRequest) createReply() Response   { return &CheckConsistencyResponse{} }
-func (*ChangeFrozenRequest) createReply() Response       { return &ChangeFrozenResponse{} }
-func (*BeginTransactionRequest) createReply() Response   { return &BeginTransactionResponse{} }
-func (*EndTransactionRequest) createReply() Response     { return &EndTransactionResponse{} }
-func (*AdminSplitRequest) createReply() Response         { return &AdminSplitResponse{} }
-func (*AdminMergeRequest) createReply() Response         { return &AdminMergeResponse{} }
-func (*AdminTransferLeaseRequest) createReply() Response { return &AdminTransferLeaseResponse{} }
-func (*HeartbeatTxnRequest) createReply() Response       { return &HeartbeatTxnResponse{} }
-func (*GCRequest) createReply() Response                 { return &GCResponse{} }
-func (*PushTxnRequest) createReply() Response            { return &PushTxnResponse{} }
-func (*RangeLookupRequest) createReply() Response        { return &RangeLookupResponse{} }
-func (*ResolveIntentRequest) createReply() Response      { return &ResolveIntentResponse{} }
-func (*ResolveIntentRangeRequest) createReply() Response { return &ResolveIntentRangeResponse{} }
-func (*NoopRequest) createReply() Response               { return &NoopResponse{} }
-func (*MergeRequest) createReply() Response              { return &MergeResponse{} }
-func (*TruncateLogRequest) createReply() Response        { return &TruncateLogResponse{} }
-func (*RequestLeaseRequest) createReply() Response       { return &RequestLeaseResponse{} }
-func (*TransferLeaseRequest) createReply() Response      { return &RequestLeaseResponse{} }
-func (*LeaseInfoRequest) createReply() Response          { return &LeaseInfoResponse{} }
-func (*ComputeChecksumRequest) createReply() Response    { return &ComputeChecksumResponse{} }
-func (*VerifyChecksumRequest) createReply() Response     { return &VerifyChecksumResponse{} }
 
 // NewGet returns a Request initialized to get the value at key.
 func NewGet(key Key) Request {
@@ -844,7 +812,7 @@ func (*TransferLeaseRequest) flags() int {
 	// holder.
 	return isWrite | isAlone | isNonKV | skipLeaseCheck
 }
-func (*ComputeChecksumRequest) flags() int  { return isWrite | isNonKV }
-func (*VerifyChecksumRequest) flags() int   { return isWrite | isNonKV }
-func (*CheckConsistencyRequest) flags() int { return isAdmin | isRange }
-func (*ChangeFrozenRequest) flags() int     { return isWrite | isRange | isNonKV }
+func (*ComputeChecksumRequest) flags() int          { return isWrite | isNonKV }
+func (*DeprecatedVerifyChecksumRequest) flags() int { return isWrite }
+func (*CheckConsistencyRequest) flags() int         { return isAdmin | isRange }
+func (*ChangeFrozenRequest) flags() int             { return isWrite | isRange | isNonKV }

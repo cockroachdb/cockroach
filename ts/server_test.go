@@ -39,7 +39,7 @@ func TestServerQuery(t *testing.T) {
 
 	// Populate data directly.
 	tsdb := tsrv.TsDB()
-	if err := tsdb.StoreData(ts.Resolution10s, []tspb.TimeSeriesData{
+	if err := tsdb.StoreData(context.TODO(), ts.Resolution10s, []tspb.TimeSeriesData{
 		{
 			Name:   "test.metric",
 			Source: "source1",

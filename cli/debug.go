@@ -306,7 +306,7 @@ func tryRangeIDKey(kv engine.MVCCKeyValue) (string, error) {
 		}
 		return strconv.FormatInt(i, 10), nil
 
-	case bytes.Equal(suffix, keys.LocalRangeLastVerificationTimestampSuffix):
+	case bytes.Equal(suffix, keys.LocalRangeLastVerificationTimestampSuffixDeprecated):
 		msg = &hlc.Timestamp{}
 
 	case bytes.Equal(suffix, keys.LocalRangeLastReplicaGCTimestampSuffix):
