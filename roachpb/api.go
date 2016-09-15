@@ -81,6 +81,14 @@ const (
 	isRange                // range commands may span multiple keys
 	isReverse              // reverse commands traverse ranges in descending direction
 	isAlone                // requests which must be alone in a batch
+	// Some commands can skip interacting with the command queue and the timestamp
+	// cache. For example, RequestLeaseRequest is sequenced exclusively by Raft.
+	// These requests still have keys in their header, but those keys are used
+	// exclusively for routing the request to the right range.
+	isNonKV
+	// Requests for acquiring a lease skip the (proposal-time) check that the
+	// proposing replica has a valid lease.
+	skipLeaseCheck
 )
 
 // GetTxnID returns the transaction ID if the header has a transaction
@@ -431,6 +439,9 @@ func (*RequestLeaseRequest) Method() Method { return RequestLease }
 func (*TransferLeaseRequest) Method() Method { return TransferLease }
 
 // Method implements the Request interface.
+func (*LeaseInfoRequest) Method() Method { return LeaseInfo }
+
+// Method implements the Request interface.
 func (*ComputeChecksumRequest) Method() Method { return ComputeChecksum }
 
 // Method implements the Request interface.
@@ -594,6 +605,12 @@ func (llr *RequestLeaseRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (lt *TransferLeaseRequest) ShallowCopy() Request {
+	shallowCopy := *lt
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (lt *LeaseInfoRequest) ShallowCopy() Request {
 	shallowCopy := *lt
 	return &shallowCopy
 }
@@ -775,13 +792,27 @@ func (*ResolveIntentRequest) flags() int      { return isWrite }
 func (*ResolveIntentRangeRequest) flags() int { return isWrite | isRange }
 func (*NoopRequest) flags() int               { return isRead } // slightly special
 func (*MergeRequest) flags() int              { return isWrite }
-func (*TruncateLogRequest) flags() int        { return isWrite }
+func (*TruncateLogRequest) flags() int        { return isWrite | isNonKV }
 
-// TODO(tschottdorf): consider setting isAlone on RequestLeaseRequest and
-// LeaseTransferRequest.
-func (*RequestLeaseRequest) flags() int             { return isWrite }
-func (*TransferLeaseRequest) flags() int            { return isWrite }
-func (*ComputeChecksumRequest) flags() int          { return isWrite }
+func (*RequestLeaseRequest) flags() int {
+	return isWrite | isAlone | isNonKV | skipLeaseCheck
+}
+
+// LeaseInfoRequest is usually executed in an INCONSISTENT batch, which has the
+// effect of the `skipLeaseCheck` flag that lease write operations have.
+func (*LeaseInfoRequest) flags() int { return isRead | isNonKV | isAlone }
+func (*TransferLeaseRequest) flags() int {
+	// TransferLeaseRequest requires the lease, which is checked in
+	// `AdminTransferLease()` at proposal time and in the usual way for write
+	// commands at apply time.
+	// But it can't be checked at propose time through the
+	// `redirectOnOrAcquireLease` call because, by the time that call is made, the
+	// replica has registered that a transfer is in progress and
+	// `redirectOrAcquire` already tentatively redirects to the future lease
+	// holder.
+	return isWrite | isAlone | isNonKV | skipLeaseCheck
+}
+func (*ComputeChecksumRequest) flags() int          { return isWrite | isNonKV }
 func (*DeprecatedVerifyChecksumRequest) flags() int { return isWrite }
 func (*CheckConsistencyRequest) flags() int         { return isAdmin | isRange }
-func (*ChangeFrozenRequest) flags() int             { return isWrite | isRange }
+func (*ChangeFrozenRequest) flags() int             { return isWrite | isRange | isNonKV }

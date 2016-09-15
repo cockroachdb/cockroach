@@ -61,18 +61,32 @@ func (ba *BatchRequest) UpdateTxn(otherTxn *Transaction) {
 	ba.Txn = &clonedTxn
 }
 
+// IsConsistencyRelated returns whether the batch consists of a single
+// ComputeChecksum or CheckConsistency request.
+func (ba *BatchRequest) IsConsistencyRelated() bool {
+	if !ba.IsSingleRequest() {
+		return false
+	}
+	_, ok1 := ba.GetArg(ComputeChecksum)
+	_, ok2 := ba.GetArg(CheckConsistency)
+	return ok1 || ok2
+}
+
 // IsFreeze returns whether the batch consists of a single ChangeFrozen request.
 func (ba *BatchRequest) IsFreeze() bool {
-	if len(ba.Requests) != 1 {
+	if !ba.IsSingleRequest() {
 		return false
 	}
 	_, ok := ba.GetArg(ChangeFrozen)
 	return ok
 }
 
-// IsLease returns whether the batch consists of a single RequestLease request.
-func (ba *BatchRequest) IsLease() bool {
-	if len(ba.Requests) != 1 {
+// IsLeaseRequest returns whether the batch consists of a single RequestLease
+// request. Note that TransferLease requests return false.
+// RequestLease requests are special because they're the only type of requests a
+// non-lease-holder can propose.
+func (ba *BatchRequest) IsLeaseRequest() bool {
+	if !ba.IsSingleRequest() {
 		return false
 	}
 	_, ok := ba.GetArg(RequestLease)
@@ -108,6 +122,23 @@ func (ba *BatchRequest) IsPossibleTransaction() bool {
 // IsTransactionWrite returns true iff the BatchRequest contains a txn write.
 func (ba *BatchRequest) IsTransactionWrite() bool {
 	return ba.hasFlag(isTxnWrite)
+}
+
+// IsSingleRequest returns true iff the BatchRequest contains a single request.
+func (ba *BatchRequest) IsSingleRequest() bool {
+	return len(ba.Requests) == 1
+}
+
+// IsSingleNonKVRequest returns true iff the batch contains a single
+// request, and that request has the non-KV flag set.
+func (ba *BatchRequest) IsSingleNonKVRequest() bool {
+	return ba.IsSingleRequest() && ba.hasFlag(isNonKV)
+}
+
+// IsSingleSkipLeaseCheckRequest returns true iff the batch contains a single
+// request, and that request has the skipLeaseCheck flag set.
+func (ba *BatchRequest) IsSingleSkipLeaseCheckRequest() bool {
+	return ba.IsSingleRequest() && ba.hasFlag(skipLeaseCheck)
 }
 
 // hasFlag returns true iff one of the requests within the batch contains the
@@ -258,6 +289,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 		checkConsistency   int
 		noop               int
 		changeFrozen       int
+		leaseInfo          int
 	}
 	for _, union := range ba.Requests {
 		switch union.GetInner().(type) {
@@ -317,6 +349,8 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			counts.noop++
 		case *ChangeFrozenRequest:
 			counts.changeFrozen++
+		case *LeaseInfoRequest:
+			counts.leaseInfo++
 		default:
 			panic(fmt.Sprintf("unsupported type %T", union.GetInner()))
 		}
@@ -351,6 +385,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 		checkConsistency   []CheckConsistencyResponse
 		noop               []NoopResponse
 		changeFrozen       []ChangeFrozenResponse
+		leaseInfo          []LeaseInfoResponse
 	}
 	for i, union := range ba.Requests {
 		var reply Response
@@ -495,6 +530,11 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 				bufs.changeFrozen = make([]ChangeFrozenResponse, counts.changeFrozen)
 			}
 			reply, bufs.changeFrozen = &bufs.changeFrozen[0], bufs.changeFrozen[1:]
+		case *LeaseInfoRequest:
+			if bufs.leaseInfo == nil {
+				bufs.leaseInfo = make([]LeaseInfoResponse, counts.leaseInfo)
+			}
+			reply, bufs.leaseInfo = &bufs.leaseInfo[0], bufs.leaseInfo[1:]
 		default:
 			panic(fmt.Sprintf("unsupported type %T", union.GetInner()))
 		}
