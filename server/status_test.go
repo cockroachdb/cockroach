@@ -163,7 +163,7 @@ func startServer(t *testing.T) *TestServer {
 
 	// Make sure the range is spun up with an arbitrary read command. We do not
 	// expect a specific response.
-	if _, err := kvDB.Get("a"); err != nil {
+	if _, err := kvDB.Get(context.TODO(), "a"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -379,7 +379,7 @@ func TestMetricsRecording(t *testing.T) {
 	checkTimeSeriesKey := func(now int64, keyName string) error {
 		key := ts.MakeDataKey(keyName, "", ts.Resolution10s, now)
 		data := roachpb.InternalTimeSeriesData{}
-		return kvDB.GetProto(key, &data)
+		return kvDB.GetProto(context.TODO(), key, &data)
 	}
 
 	// Verify that metrics for the current timestamp are recorded. This should
@@ -415,7 +415,7 @@ func TestRangesResponse(t *testing.T) {
 	defer ts.Stopper().Stop()
 
 	// Perform a scan to ensure that all the raft groups are initialized.
-	if _, err := ts.db.Scan(keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+	if _, err := ts.db.Scan(context.TODO(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
 		t.Fatal(err)
 	}
 

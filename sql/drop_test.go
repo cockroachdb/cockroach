@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
@@ -39,6 +41,7 @@ func TestDropDatabase(t *testing.T) {
 	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
+	ctx := context.TODO()
 
 	// Fix the column families so the key counts below don't change if the
 	// family heuristics are updated.
@@ -51,7 +54,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	dbNameKey := sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, "t")
-	r, err := kvDB.Get(dbNameKey)
+	r, err := kvDB.Get(ctx, dbNameKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,13 +63,13 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 	dbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(r.ValueInt()))
 	desc := &sqlbase.Descriptor{}
-	if err := kvDB.GetProto(dbDescKey, desc); err != nil {
+	if err := kvDB.GetProto(ctx, dbDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
 	dbDesc := desc.GetDatabase()
 
 	tbNameKey := sqlbase.MakeNameMetadataKey(dbDesc.ID, "kv")
-	gr, err := kvDB.Get(tbNameKey)
+	gr, err := kvDB.Get(ctx, tbNameKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +77,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf(`table "kv" does not exist`)
 	}
 	tbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
-	if err := kvDB.GetProto(tbDescKey, desc); err != nil {
+	if err := kvDB.GetProto(ctx, tbDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
 	tbDesc := desc.GetTable()
@@ -94,12 +97,12 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 
 	tbZoneKey := sqlbase.MakeZoneKey(tbDesc.ID)
 	dbZoneKey := sqlbase.MakeZoneKey(dbDesc.ID)
-	if gr, err := kvDB.Get(tbZoneKey); err != nil {
+	if gr, err := kvDB.Get(ctx, tbZoneKey); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {
 		t.Fatalf("table zone config entry not found")
 	}
-	if gr, err := kvDB.Get(dbZoneKey); err != nil {
+	if gr, err := kvDB.Get(ctx, dbZoneKey); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {
 		t.Fatalf("database zone config entry not found")
@@ -108,7 +111,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	tablePrefix := keys.MakeTablePrefix(uint32(tbDesc.ID))
 	tableStartKey := roachpb.Key(tablePrefix)
 	tableEndKey := tableStartKey.PrefixEnd()
-	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
+	if kvs, err := kvDB.Scan(ctx, tableStartKey, tableEndKey, 0); err != nil {
 		t.Fatal(err)
 	} else if l := 6; len(kvs) != l {
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
@@ -118,43 +121,43 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	if kvs, err := kvDB.Scan(tableStartKey, tableEndKey, 0); err != nil {
+	if kvs, err := kvDB.Scan(ctx, tableStartKey, tableEndKey, 0); err != nil {
 		t.Fatal(err)
 	} else if l := 0; len(kvs) != l {
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
 	}
 
-	if gr, err := kvDB.Get(tbDescKey); err != nil {
+	if gr, err := kvDB.Get(ctx, tbDescKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
 		t.Fatalf("table descriptor still exists after database is dropped: %q", tbDescKey)
 	}
 
-	if gr, err := kvDB.Get(tbNameKey); err != nil {
+	if gr, err := kvDB.Get(ctx, tbNameKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
 		t.Fatalf("table descriptor key still exists after database is dropped")
 	}
 
-	if gr, err := kvDB.Get(dbDescKey); err != nil {
+	if gr, err := kvDB.Get(ctx, dbDescKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
 		t.Fatalf("database descriptor still exists after database is dropped")
 	}
 
-	if gr, err := kvDB.Get(dbNameKey); err != nil {
+	if gr, err := kvDB.Get(ctx, dbNameKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
 		t.Fatalf("database descriptor key still exists after database is dropped")
 	}
 
-	if gr, err := kvDB.Get(tbZoneKey); err != nil {
+	if gr, err := kvDB.Get(ctx, tbZoneKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
 		t.Fatalf("table zone config entry still exists after the database is dropped")
 	}
 
-	if gr, err := kvDB.Get(dbZoneKey); err != nil {
+	if gr, err := kvDB.Get(ctx, dbZoneKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
 		t.Fatalf("database zone config entry still exists after the database is dropped")
@@ -162,7 +165,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 }
 
 func checkKeyCount(t *testing.T, kvDB *client.DB, prefix roachpb.Key, numKeys int) {
-	if kvs, err := kvDB.Scan(prefix, prefix.PrefixEnd(), 0); err != nil {
+	if kvs, err := kvDB.Scan(context.TODO(), prefix, prefix.PrefixEnd(), 0); err != nil {
 		t.Fatal(err)
 	} else if l := numKeys; len(kvs) != l {
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
@@ -296,13 +299,14 @@ func TestDropTable(t *testing.T) {
 	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
+	ctx := context.TODO()
 
 	numRows := 2*sql.TableTruncateChunkSize + 1
 	createKVTable(t, sqlDB, numRows)
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
 	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
-	gr, err := kvDB.Get(nameKey)
+	gr, err := kvDB.Get(ctx, nameKey)
 
 	if err != nil {
 		t.Fatal(err)
@@ -325,7 +329,7 @@ func TestDropTable(t *testing.T) {
 	}
 
 	zoneKey := sqlbase.MakeZoneKey(tableDesc.ID)
-	if gr, err := kvDB.Get(zoneKey); err != nil {
+	if gr, err := kvDB.Get(ctx, zoneKey); err != nil {
 		t.Fatal(err)
 	} else if !gr.Exists() {
 		t.Fatalf("zone config entry not found")
@@ -345,19 +349,19 @@ func TestDropTable(t *testing.T) {
 		t.Fatalf("different error than expected: %v", err)
 	}
 
-	if gr, err := kvDB.Get(descKey); err != nil {
+	if gr, err := kvDB.Get(ctx, descKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
 		t.Fatalf("table descriptor still exists after the table is dropped")
 	}
 
-	if gr, err := kvDB.Get(nameKey); err != nil {
+	if gr, err := kvDB.Get(ctx, nameKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
 		t.Fatalf("table namekey still exists after the table is dropped")
 	}
 
-	if gr, err := kvDB.Get(zoneKey); err != nil {
+	if gr, err := kvDB.Get(ctx, zoneKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
 		t.Fatalf("zone config entry still exists after the table is dropped")

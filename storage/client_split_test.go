@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -159,10 +160,10 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 	col2Key := keys.MakeFamilyKey(append([]byte(nil), rowKey...), 2)
 
 	// We don't care about the value, so just store any old thing.
-	if err := store.DB().Put(col1Key, "column 1"); err != nil {
+	if err := store.DB().Put(context.TODO(), col1Key, "column 1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.DB().Put(col2Key, "column 2"); err != nil {
+	if err := store.DB().Put(context.TODO(), col2Key, "column 2"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -837,7 +838,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		expKeys = append(expKeys, testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax))
 
 		util.SucceedsSoonDepth(1, t, func() error {
-			rows, err := store.DB().Scan(keys.Meta2Prefix, keys.MetaMax, 0)
+			rows, err := store.DB().Scan(context.TODO(), keys.Meta2Prefix, keys.MetaMax, 0)
 			if err != nil {
 				return err
 			}
@@ -1223,7 +1224,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 
 	// Another client comes along at a higher timestamp, touching everything on
 	// the right of the (soon-to-be) split key.
-	if _, err := db.Scan(splitKey, rightKey, 0); err != nil {
+	if _, err := db.Scan(ctx, splitKey, rightKey, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1588,27 +1589,28 @@ func TestStoreSplitBeginTxnPushMetaIntentRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	splitKey := roachpb.RKey("a")
 
-	sCtx := storage.TestStoreContext()
-	sCtx.TestingKnobs.DisableSplitQueue = true
-	store, stopper, manual := createTestStoreWithContext(t, sCtx)
-	defer stopper.Stop()
-
-	// Advance the clock past the transaction cleanup expiration.
-	manual.Increment(storage.GetGCQueueTxnCleanupThreshold().Nanoseconds() + 1)
-
-	// First, create a split after addressing records.
-	args := adminSplitArgs(roachpb.KeyMin, keys.SystemPrefix)
-	if _, pErr := client.SendWrapped(rg1(store), nil, &args); pErr != nil {
-		t.Fatal(pErr)
+	var startMu struct {
+		syncutil.Mutex
+		time time.Time
 	}
 
-	startTime := timeutil.Now()
 	wroteMeta2 := make(chan struct{}, 1)
-	store.TestingKnobs().TestingCommandFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+
+	sCtx := storage.TestStoreContext()
+	sCtx.TestingKnobs.DisableSplitQueue = true
+	sCtx.TestingKnobs.TestingCommandFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+		startMu.Lock()
+		start := startMu.time
+		startMu.Unlock()
+
+		if start.IsZero() {
+			return nil
+		}
+
 		if _, ok := filterArgs.Req.(*roachpb.BeginTransactionRequest); ok {
 			// Return a node unavailable error for BeginTransaction request
 			// in the event we haven't waited 20ms.
-			if timeutil.Since(startTime) < 20*time.Millisecond {
+			if timeutil.Since(start) < 20*time.Millisecond {
 				return roachpb.NewError(&roachpb.NodeUnavailableError{})
 			}
 			if log.V(1) {
@@ -1623,6 +1625,22 @@ func TestStoreSplitBeginTxnPushMetaIntentRace(t *testing.T) {
 		}
 		return nil
 	}
+	store, stopper, manual := createTestStoreWithContext(t, sCtx)
+	defer stopper.Stop()
+
+	// Advance the clock past the transaction cleanup expiration.
+	manual.Increment(storage.GetGCQueueTxnCleanupThreshold().Nanoseconds() + 1)
+
+	// First, create a split after addressing records.
+	args := adminSplitArgs(roachpb.KeyMin, keys.SystemPrefix)
+	if _, pErr := client.SendWrapped(rg1(store), nil, &args); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Begin blocking BeginTransaction calls and signaling meta2 writes.
+	startMu.Lock()
+	startMu.time = timeutil.Now()
+	startMu.Unlock()
 
 	// Initiate split at splitKey in a goroutine.
 	doneSplit := make(chan *roachpb.Error, 1)

@@ -19,6 +19,8 @@ package cli
 import (
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 
@@ -58,7 +60,7 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 
 	kvDB, stopper := makeDBClient()
 	defer stopper.Stop()
-	rows, err := kvDB.Scan(startKey, endKey, maxResults)
+	rows, err := kvDB.Scan(context.Background(), startKey, endKey, maxResults)
 	if err != nil {
 		panicf("scan failed: %s\n", err)
 	}
@@ -98,7 +100,7 @@ func runSplitRange(cmd *cobra.Command, args []string) {
 	key := roachpb.Key(args[0])
 	kvDB, stopper := makeDBClient()
 	defer stopper.Stop()
-	if err := kvDB.AdminSplit(key); err != nil {
+	if err := kvDB.AdminSplit(context.Background(), key); err != nil {
 		panicf("split failed: %s\n", err)
 	}
 }

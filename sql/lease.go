@@ -248,7 +248,7 @@ func (s LeaseStore) waitForOneVersion(tableID sqlbase.ID, retryOpts retry.Option
 		// Get the current version of the table descriptor non-transactionally.
 		//
 		// TODO(pmattis): Do an inconsistent read here?
-		if err := s.db.GetProto(descKey, desc); err != nil {
+		if err := s.db.GetProto(context.TODO(), descKey, desc); err != nil {
 			return 0, err
 		}
 		tableDesc = desc.GetTable()

@@ -19,6 +19,8 @@ package storage_test
 import (
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
@@ -57,7 +59,7 @@ func TestComputeStatsForKeySpan(t *testing.T) {
 	// Create some keys across the ranges.
 	incKeys := []string{"b", "bb", "bbb", "d", "dd", "h"}
 	for _, k := range incKeys {
-		if _, err := mtc.dbs[0].Inc([]byte(k), 5); err != nil {
+		if _, err := mtc.dbs[0].Inc(context.TODO(), []byte(k), 5); err != nil {
 			t.Fatal(err)
 		}
 	}
