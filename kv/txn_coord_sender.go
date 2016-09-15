@@ -378,7 +378,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 
 		if hasET && log.V(1) {
 			for _, intent := range et.IntentSpans {
-				log.Tracef(ctx, "intent: [%s,%s)", intent.Key, intent.EndKey)
+				log.Eventf(ctx, "intent: [%s,%s)", intent.Key, intent.EndKey)
 			}
 		}
 	}
@@ -396,7 +396,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		}
 
 		if pErr = tc.updateState(startNS, ctx, ba, br, pErr); pErr != nil {
-			log.Tracef(ctx, "error: %s", pErr)
+			log.Eventf(ctx, "error: %s", pErr)
 			return nil, pErr
 		}
 	}
@@ -456,7 +456,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	// continue.
 	switch {
 	case !ok:
-		log.VTracef(2, ctx, "rejecting unknown txn: %s", txn.ID)
+		log.VEventf(2, ctx, "rejecting unknown txn: %s", txn.ID)
 		// TODO(spencerkimball): Could add coordinator node ID to the
 		// transaction session so that we can definitively return the right
 		// error between these possible errors. Or update the code to make an
@@ -535,7 +535,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(ba *roachpb.BatchRequest) error {
 // is updated and the heartbeat goroutine signaled to clean up the transaction
 // gracefully.
 func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context, txn roachpb.Transaction) {
-	log.Trace(ctx, "coordinator stops")
+	log.Event(ctx, "coordinator stops")
 	txnMeta, ok := tc.txns[*txn.ID]
 	// The heartbeat might've already removed the record. Or we may have already
 	// closed txnEnd but we are racing with the heartbeat cleanup.
@@ -718,7 +718,7 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 	hb.Key = txn.Key
 	ba.Add(hb)
 
-	log.Trace(ctx, "heartbeat")
+	log.Event(ctx, "heartbeat")
 	br, pErr := tc.wrapped.Send(ctx, ba)
 
 	// Correctness mandates that when we can't heartbeat the transaction, we
@@ -871,7 +871,7 @@ func (tc *TxnCoordSender) updateState(
 			// we expect it to be committed/aborted at some point in the
 			// future.
 			if _, isEnding := ba.GetArg(roachpb.EndTransaction); pErr != nil || !isEnding {
-				log.Trace(ctx, "coordinator spawns")
+				log.Event(ctx, "coordinator spawns")
 				txnMeta = &txnMetadata{
 					txn:              newTxn,
 					keys:             keys,

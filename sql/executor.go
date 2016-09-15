@@ -334,7 +334,7 @@ func (e *Executor) Prepare(
 	if log.V(2) {
 		log.Infof(session.Ctx(), "preparing: %s", query)
 	} else if traceSQL {
-		log.Tracef(session.Ctx(), "preparing: %s", query)
+		log.Eventf(session.Ctx(), "preparing: %s", query)
 	}
 	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
 	if err != nil {
@@ -546,7 +546,7 @@ func (e *Executor) execRequest(session *Session, sql string) StatementResults {
 			if aErr, ok := err.(*client.AutoCommitError); ok {
 				// TODO(andrei): Until #7881 fixed.
 				{
-					log.Tracef(session.Ctx(), "executor got AutoCommitError: %s\n"+
+					log.Eventf(session.Ctx(), "executor got AutoCommitError: %s\n"+
 						"txn: %+v\nexecOpt.AutoRetry %t, execOpt.AutoCommit:%t, stmts %+v, remaining %+v",
 						aErr, txnState.txn.Proto, execOpt.AutoRetry, execOpt.AutoCommit, stmts,
 						remainingStmts)
@@ -716,7 +716,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 
 	for i, stmt := range stmts {
 		ctx := planMaker.session.Ctx()
-		log.VTracef(2, ctx, "executing %d/%d: %s", i+1, len(stmts), stmt)
+		log.VEventf(2, ctx, "executing %d/%d: %s", i+1, len(stmts), stmt)
 		txnState.schemaChangers.curStatementIdx = i
 
 		var stmtStrBefore string

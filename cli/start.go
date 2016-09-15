@@ -334,7 +334,7 @@ func runStart(_ *cobra.Command, args []string) error {
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		return err
 	}
-	log.Tracef(startCtx, "created log directory %s", logDir)
+	log.Eventf(startCtx, "created log directory %s", logDir)
 
 	// We log build information to stdout (for the short summary), but also
 	// to stderr to coincide with the full logs.
@@ -349,7 +349,7 @@ func runStart(_ *cobra.Command, args []string) error {
 	serverCtx.User = security.NodeUser
 
 	stopper := initBacktrace(logDir)
-	log.Trace(startCtx, "initialized profiles")
+	log.Event(startCtx, "initialized profiles")
 
 	if err := serverCtx.InitStores(stopper); err != nil {
 		return fmt.Errorf("failed to initialize stores: %s", err)

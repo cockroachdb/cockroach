@@ -194,23 +194,3 @@ func VEventf(level level, ctx context.Context, format string, args ...interface{
 		eventInternal(ctx, false /*isErr*/, true /*withTags*/, format, args...)
 	}
 }
-
-// Trace is a DEPRECATED alias for Event.
-func Trace(ctx context.Context, msg string) {
-	Event(ctx, msg)
-}
-
-// Tracef is a DEPRECATED alias for Eventf.
-func Tracef(ctx context.Context, format string, args ...interface{}) {
-	Eventf(ctx, format, args...)
-}
-
-// VTracef is a DEPRECATED alias for VEventf.
-func VTracef(level level, ctx context.Context, format string, args ...interface{}) {
-	if VDepth(level, 1) {
-		// Log to INFO (which also logs an event).
-		logDepth(ctx, 1, InfoLog, format, args)
-	} else {
-		eventInternal(ctx, false /*isErr*/, true /*withTags*/, format, args...)
-	}
-}
