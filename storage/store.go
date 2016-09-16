@@ -2192,6 +2192,16 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 			// after our operation started. This allows us to not have to
 			// restart for uncertainty as we come back and read.
 			h.Timestamp.Forward(now)
+			// We are going to hand the header (and thus the transaction proto)
+			// to the RPC framework, after which it must not be changed (since
+			// that could race). Since the subsequent execution of the original
+			// request might mutate the transaction, make a copy here.
+			//
+			// See #9130.
+			if h.Txn != nil {
+				clonedTxn := h.Txn.Clone()
+				h.Txn = &clonedTxn
+			}
 			pErr = s.intentResolver.processWriteIntentError(ctx, pErr, args, h, pushType)
 			// Preserve the error index.
 			pErr.Index = index
