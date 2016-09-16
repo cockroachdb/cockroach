@@ -177,3 +177,34 @@ func TestPrettyPrint(t *testing.T) {
 		}
 	}
 }
+
+func TestPrettyPrintRange(t *testing.T) {
+	//  /Table/42/1222
+	tableKey := makeKey(MakeTablePrefix(61), encoding.EncodeVarintAscending(nil, 4))
+	tableKey2 := makeKey(MakeTablePrefix(61), encoding.EncodeVarintAscending(nil, 500))
+
+	testCases := []struct {
+		start, end roachpb.Key
+		maxChars   int
+		expected   string
+	}{
+		{MinKey, tableKey, 8, "/{M…-T…}"},
+		{MinKey, tableKey, 15, "/{Min-Tabl…}"},
+		{MinKey, tableKey, 20, "/{Min-Table/6…}"},
+		{MinKey, tableKey, 25, "/{Min-Table/61/4}"},
+		{tableKey, tableKey2, 8, "/Table/…"},
+		{tableKey, tableKey2, 15, "/Table/61/…"},
+		{tableKey, tableKey2, 20, "/Table/61/{4-500}"},
+		{tableKey, MaxKey, 10, "/{Ta…-Max}"},
+		{tableKey, MaxKey, 20, "/{Table/6…-Max}"},
+		{tableKey, MaxKey, 25, "/{Table/61/4-Max}"},
+	}
+
+	for i, tc := range testCases {
+		var buf bytes.Buffer
+		PrettyPrintRange(&buf, tc.start, tc.end, tc.maxChars)
+		if str := buf.String(); str != tc.expected {
+			t.Errorf("%d: expected \"%s\", got \"%s\"", i, tc.expected, str)
+		}
+	}
+}
