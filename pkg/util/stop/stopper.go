@@ -17,6 +17,7 @@
 package stop
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -31,6 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
+
+// ErrThrottled is returned from RunLimitedAsyncTask in the event that there
+// is no more capacity for async tasks, as limited by the semaphore.
+var ErrThrottled = errors.New("throttled on async limiting semaphore")
 
 var errUnavailable = &roachpb.NodeUnavailableError{}
 
@@ -241,14 +246,16 @@ func (s *Stopper) RunAsyncTask(ctx context.Context, f func(context.Context)) err
 	return nil
 }
 
-// RunLimitedAsyncTask runs function f in a goroutine, using the given channel
-// as a semaphore to limit the number of tasks that are run concurrently to
-// the channel's capacity. Blocks until the semaphore is available in order to
-// push back on callers that may be trying to create many tasks. Returns an
-// error if the Stopper is quiescing, in which case the function is not
-// executed.
+// RunLimitedAsyncTask runs function f in a goroutine, using the given
+// channel as a semaphore to limit the number of tasks that are run
+// concurrently to the channel's capacity. If wait is true, blocks
+// until the semaphore is available in order to push back on callers
+// that may be trying to create many tasks. If wait is false, returns
+// immediately with an error if the semaphore is not
+// available. Returns an error if the Stopper is quiescing, in which
+// case the function is not executed.
 func (s *Stopper) RunLimitedAsyncTask(
-	ctx context.Context, sem chan struct{}, f func(context.Context),
+	ctx context.Context, sem chan struct{}, wait bool, f func(context.Context),
 ) error {
 	file, line, _ := caller.Lookup(1)
 	key := taskKey{file, line}
@@ -259,6 +266,9 @@ func (s *Stopper) RunLimitedAsyncTask(
 	case <-s.ShouldQuiesce():
 		return errUnavailable
 	default:
+		if !wait {
+			return ErrThrottled
+		}
 		log.Infof(context.TODO(), "stopper throttling task from %s:%d due to semaphore", file, line)
 		// Retry the select without the default.
 		select {
