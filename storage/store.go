@@ -569,6 +569,9 @@ type StoreTestingKnobs struct {
 	// process ranges that need to be split, for use in tests that use
 	// the replication queue but disable the split queue.
 	ReplicateQueueAcceptsUnsplit bool
+	// NumKeysEvaluatedForRangeIntentResolution is set by the stores to the
+	// number of keys evaluated for range intent resolution.
+	NumKeysEvaluatedForRangeIntentResolution *int64
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}
