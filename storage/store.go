@@ -582,6 +582,9 @@ type StoreTestingKnobs struct {
 	DisableRefreshReasonTicks bool
 	// DisableProcessRaft disables the process raft loop.
 	DisableProcessRaft bool
+	// NumKeysEvaluatedForRangeIntentResolution is set by the stores to the
+	// number of keys evaluated for range intent resolution.
+	NumKeysEvaluatedForRangeIntentResolution *int64
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}

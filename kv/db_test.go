@@ -18,8 +18,10 @@ package kv_test
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -29,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
@@ -276,4 +280,83 @@ func TestAuthentication(t *testing.T) {
 	if err := db2.Run(context.TODO(), b2); !testutils.IsError(err, "is not allowed") {
 		t.Fatal(err)
 	}
+}
+
+// TestTxnDelRangeIntentResolutionCounts ensures that intents left behind by a
+// DelRange with a MaxSpanRequestKeys limit are resolved correctly and by
+// using the minimal span of keys.
+func TestTxnDelRangeIntentResolutionCounts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var intentResolutionCount int64
+	params := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				NumKeysEvaluatedForRangeIntentResolution: &intentResolutionCount,
+			},
+		},
+	}
+	s, _, db := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+
+	for _, abortTxn := range []bool{false, true} {
+		spanSize := int64(10)
+		for i := int64(0); i < spanSize; i++ {
+			prefixes := []string{"a", "b", "c"}
+			for _, prefix := range prefixes {
+				if err := db.Put(context.TODO(), fmt.Sprintf("%s%d", prefix, i), "v"); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+
+		atomic.StoreInt64(&intentResolutionCount, 0)
+		limit := spanSize * 3 / 2
+		if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+			var b client.Batch
+			// Fully deleted.
+			b.DelRange("a", "b", false)
+			// Partially deleted.
+			b.DelRange("b", "c", false)
+			// Not deleted.
+			b.DelRange("c", "d", false)
+			b.Header.MaxSpanRequestKeys = limit
+			if err := txn.Run(&b); err != nil {
+				return err
+			}
+			// Check the number of intents left behind.
+			if c := intentCount(t, s); c != limit {
+				t.Fatal("%d intents present, expected: %d", c, limit)
+			}
+			if abortTxn {
+				return errors.New("aborting txn")
+			}
+			return nil
+		}); err != nil && !abortTxn {
+			t.Fatal(err)
+		}
+
+		// Ensure no intents are left behind.
+		if c := intentCount(t, s); c != 0 {
+			t.Fatalf("abortTxn: %v, %d intents left over", abortTxn, c)
+		}
+
+		// Ensure that the correct number of keys were evaluated for intents.
+		if numKeys := atomic.LoadInt64(&intentResolutionCount); numKeys != limit {
+			t.Fatalf("abortTxn: %v, resolved %d keys, expected %d", abortTxn, numKeys, limit)
+		}
+	}
+}
+
+// intentCount returns the number of current unresolved intents.
+func intentCount(t *testing.T, s serverutils.TestServerInterface) int64 {
+	stores := s.(*server.TestServer).Stores()
+	var count int64
+	if err := stores.VisitStores(func(store *storage.Store) error {
+		m := store.Metrics()
+		count += m.IntentCount.Value()
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return count
 }
