@@ -412,11 +412,9 @@ func (n *windowNode) computeWindows() error {
 	windowCount := len(n.funcs)
 	acc := n.windowsAcc.W(n.planner.session)
 
-	sz := int64(uintptr(rowCount) *
-		(unsafe.Sizeof([][]parser.Datum{}) /* windowValues */ +
-			uintptr(windowCount)*unsafe.Sizeof([]parser.Datum{}) /* windowAlloc */ +
-			unsafe.Sizeof(parser.Datum(nil)) /* scratchDatum */))
-	if err := acc.Grow(sz); err != nil {
+	winValSz := uintptr(rowCount) * unsafe.Sizeof([]parser.Datum{})
+	winAllocSz := uintptr(rowCount*windowCount) * unsafe.Sizeof(parser.Datum(nil))
+	if err := acc.Grow(int64(winValSz + winAllocSz)); err != nil {
 		return err
 	}
 
@@ -442,6 +440,10 @@ func (n *windowNode) computeWindows() error {
 		}
 
 		if n := len(windowFn.partitionIdxs); n > cap(scratchDatum) {
+			sz := int64(uintptr(n) * unsafe.Sizeof(parser.Datum(nil)))
+			if err := acc.Grow(sz); err != nil {
+				return err
+			}
 			scratchDatum = make([]parser.Datum, n)
 		} else {
 			scratchDatum = scratchDatum[:n]
