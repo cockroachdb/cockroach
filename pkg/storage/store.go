@@ -1051,30 +1051,31 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 				return true
 			}
 			wg.Add(1)
-			if s.stopper.RunLimitedAsyncTask(ctx, sem, func(ctx context.Context) {
-				defer wg.Done()
-				desc := r.Desc()
-				var ba roachpb.BatchRequest
-				fReq := roachpb.ChangeFrozenRequest{
-					Span: roachpb.Span{
-						Key:    desc.StartKey.AsRawKey(),
-						EndKey: desc.EndKey.AsRawKey(),
-					},
-					Frozen:      false,
-					MustVersion: build.GetInfo().Tag,
-				}
-				ba.Add(&fReq)
-				if _, pErr := r.Send(ctx, ba); pErr != nil {
-					log.Errorf(ctx, "%s: could not unfreeze Range %s on startup: %s", s, r, pErr)
-				} else {
-					// We don't use the returned RangesAffected (0 or 1) for
-					// counting. One of the other Replicas may have beaten us
-					// to it, but it is still fair to count this as "our"
-					// success; otherwise, the logged count will be distributed
-					// across various nodes' logs.
-					atomic.AddInt64(&unfrozen, 1)
-				}
-			}) != nil {
+			if s.stopper.RunLimitedAsyncTask(
+				ctx, sem, true /* wait */, func(ctx context.Context) {
+					defer wg.Done()
+					desc := r.Desc()
+					var ba roachpb.BatchRequest
+					fReq := roachpb.ChangeFrozenRequest{
+						Span: roachpb.Span{
+							Key:    desc.StartKey.AsRawKey(),
+							EndKey: desc.EndKey.AsRawKey(),
+						},
+						Frozen:      false,
+						MustVersion: build.GetInfo().Tag,
+					}
+					ba.Add(&fReq)
+					if _, pErr := r.Send(ctx, ba); pErr != nil {
+						log.Errorf(ctx, "%s: could not unfreeze Range %s on startup: %s", s, r, pErr)
+					} else {
+						// We don't use the returned RangesAffected (0 or 1) for
+						// counting. One of the other Replicas may have beaten us
+						// to it, but it is still fair to count this as "our"
+						// success; otherwise, the logged count will be distributed
+						// across various nodes' logs.
+						atomic.AddInt64(&unfrozen, 1)
+					}
+				}) != nil {
 				wg.Done()
 			}
 			return true

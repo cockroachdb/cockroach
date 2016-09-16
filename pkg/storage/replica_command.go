@@ -174,10 +174,19 @@ func (r *Replica) executeCmd(
 		err = errors.Errorf("unrecognized command %s", args.Method())
 	}
 
-	// Set the ResumeSpan and NumKeys.
+	// Set the ResumeSpan, NumKeys, and range info.
 	header := reply.Header()
 	header.NumKeys = num
 	header.ResumeSpan = span
+	lease, _ := r.getLease()
+	if h.ReturnRangeInfo {
+		header.RangeInfos = []roachpb.RangeInfo{
+			{
+				Desc:  *r.Desc(),
+				Lease: *lease,
+			},
+		}
+	}
 	reply.SetHeader(header)
 
 	// TODO(peter): We'd like to assert that the hlc clock is always updated

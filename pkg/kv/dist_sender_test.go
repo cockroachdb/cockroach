@@ -29,11 +29,6 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/gossip/simulation"
-	"github.com/cockroachdb/cockroach/internal/client"
-	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/simulation"
@@ -49,26 +44,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/hlc"
-	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/metric"
-	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/cockroach/util/syncutil"
-	"github.com/cockroachdb/cockroach/util/tracing"
-	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 var testMetaRangeDescriptor = roachpb.RangeDescriptor{
 	RangeID:  1,
-	StartKey: testutils.MakeKey(keys.Meta2Prefix, roachpb.RKey("a")),
-	EndKey:   testutils.MakeKey(keys.Meta2Prefix, roachpb.RKey("z")),
+	StartKey: testutils.MakeKey(keys.Meta2Prefix, roachpb.RKey(roachpb.KeyMin)),
+	EndKey:   testutils.MakeKey(keys.Meta2Prefix, roachpb.RKey(roachpb.KeyMax)),
 	Replicas: []roachpb.ReplicaDescriptor{
 		{
 			NodeID:  1,
@@ -1627,9 +1611,9 @@ func (s batchMethodsSlice) Less(i, j int) bool {
 	return s[i].sequence < s[j].sequence && s[i].methods[0] != roachpb.EndTransaction
 }
 
-// TestMultiRangeSplitEndTransaction verifies that when a chunk of batch looks
-// like it's going to be dispatched to more than one range, it will be split
-// up if it it contains EndTransaction.
+// TestMultiRangeSplitEndTransaction verifies that when a chunk of
+// batch looks like it's going to be dispatched to more than one
+// range, it will be split up if it contains an EndTransaction.
 func TestMultiRangeSplitEndTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
@@ -1826,7 +1810,7 @@ func TestCountRanges(t *testing.T) {
 		{roachpb.RKeyMin, roachpb.RKeyMax, numDescriptors},
 	}
 	for i, tc := range testcases {
-		count, pErr := ds.CountRanges(roachpb.RSpan{Key: tc.key, EndKey: tc.endKey})
+		count, pErr := ds.CountRanges(context.Background(), roachpb.RSpan{Key: tc.key, EndKey: tc.endKey})
 		if pErr != nil {
 			t.Fatalf("%d: %s", i, pErr)
 		}

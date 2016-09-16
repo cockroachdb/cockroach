@@ -792,6 +792,55 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	}
 }
 
+// TestParallelSender splits the keyspace 10 times and verifies that a
+// scan across all and 10 puts to each range both use parallelizing
+// dist sender.
+func TestParallelSender(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop()
+	ctx := context.TODO()
+
+	db := createTestClient(t, s.Stopper(), s.ServingAddr())
+
+	// Split into multiple ranges.
+	splitKeys := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"}
+	for _, key := range splitKeys {
+		if err := db.AdminSplit(context.TODO(), key); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	psCount := s.DistSender().GetParallelSendCount()
+
+	// Batch writes to each range.
+	if err := db.Txn(ctx, func(txn *client.Txn) error {
+		b := txn.NewBatch()
+		for _, key := range splitKeys {
+			b.Put(key, "val")
+		}
+		return txn.CommitInBatch(b)
+	}); err != nil {
+		t.Errorf("unexpected error on batch put: %s", err)
+	}
+	newPSCount := s.DistSender().GetParallelSendCount()
+	if c := newPSCount - psCount; c < 9 {
+		t.Errorf("expected at least 9 parallel sends; got %d", c)
+	}
+	psCount = newPSCount
+
+	// Scan across all rows.
+	if rows, err := db.Scan(context.TODO(), "a", "z", 0); err != nil {
+		t.Fatalf("unexpected error on Scan: %s", err)
+	} else if l := len(rows); l != len(splitKeys) {
+		t.Fatalf("expected %d rows; got %d", len(splitKeys), l)
+	}
+	newPSCount = s.DistSender().GetParallelSendCount()
+	if c := newPSCount - psCount; c < 9 {
+		t.Errorf("expected at least 9 parallel sends; got %d", c)
+	}
+}
+
 func initReverseScanTestEnv(s serverutils.TestServerInterface, t *testing.T) *client.DB {
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 

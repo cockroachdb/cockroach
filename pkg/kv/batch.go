@@ -32,7 +32,7 @@ var noopRequest = roachpb.NoopRequest{}
 // span, inserting NoopRequest appropriately to replace requests which
 // are left without a key range to operate on. The number of non-noop
 // requests after truncation is returned.
-func truncate(ba *roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, int, error) {
+func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, int, error) {
 	truncateOne := func(args roachpb.Request) (bool, roachpb.Span, error) {
 		if _, ok := args.(*roachpb.NoopRequest); ok {
 			return true, emptySpan, nil
@@ -99,7 +99,7 @@ func truncate(ba *roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest,
 	}
 
 	var numNoop int
-	truncBA := *ba
+	truncBA := ba
 	truncBA.Requests = make([]roachpb.RequestUnion, len(ba.Requests))
 	for pos, arg := range ba.Requests {
 		hasRequest, newHeader, err := truncateOne(arg.GetInner())
@@ -131,7 +131,7 @@ func truncate(ba *roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest,
 // affect keys larger than the given key.
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'roachpb'.
-func prev(ba *roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
+func prev(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
 	candidate := roachpb.RKeyMin
 	for _, union := range ba.Requests {
 		h := union.GetInner().Header()
@@ -166,7 +166,7 @@ func prev(ba *roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
 // affect keys less than the given key.
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'proto'.
-func next(ba *roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
+func next(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
 	candidate := roachpb.RKeyMax
 	for _, union := range ba.Requests {
 		h := union.GetInner().Header()
