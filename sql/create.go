@@ -271,7 +271,7 @@ func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
 }
 
 func (n *createViewNode) expandPlan() error {
-	return nil
+	return n.sourcePlan.expandPlan()
 }
 
 func (n *createViewNode) Start() error {
@@ -292,15 +292,11 @@ func (n *createViewNode) Start() error {
 	// Inherit permissions from the database descriptor.
 	privs := n.dbDesc.GetPrivileges()
 
-	desc, err := makeViewTableDesc(n.n, n.dbDesc.ID, id, n.sourcePlan.Columns(), privs)
+	affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+	desc, err := n.makeViewTableDesc(n.n, n.dbDesc.ID, id, n.sourcePlan.Columns(), privs, affected)
 	if err != nil {
 		return err
 	}
-
-	// Bookkeeping references are made after the descriptor is otherwise
-	// complete and IDs have been allocated since the IDs are needed in the
-	// references.
-	// TODO(a-robinson): Create and validate bookkeeping references.
 
 	err = desc.ValidateTable()
 	if err != nil {
@@ -312,6 +308,12 @@ func (n *createViewNode) Start() error {
 		return err
 	}
 
+	// Persist the back-references in all referenced table descriptors.
+	for _, updated := range affected {
+		if err := n.p.saveNonmutationAndNotify(updated); err != nil {
+			return err
+		}
+	}
 	if desc.Adding() {
 		n.p.notifySchemaChange(desc.ID, sqlbase.InvalidMutationID)
 	}
@@ -877,12 +879,13 @@ func (p *planner) finalizeInterleave(
 }
 
 // makeViewTableDesc returns the table descriptor for a new view.
-func makeViewTableDesc(
+func (n *createViewNode) makeViewTableDesc(
 	p *parser.CreateView,
 	parentID sqlbase.ID,
 	id sqlbase.ID,
 	resultColumns []ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
+	affected map[sqlbase.ID]*sqlbase.TableDescriptor,
 ) (sqlbase.TableDescriptor, error) {
 	desc := sqlbase.TableDescriptor{
 		ID:            id,
@@ -908,6 +911,8 @@ func makeViewTableDesc(
 		}
 		desc.AddColumn(*col)
 	}
+
+	n.resolveViewDependencies(&desc, affected)
 
 	var buf bytes.Buffer
 	p.AsSource.Format(&buf, parser.FmtSimple)
@@ -1222,4 +1227,63 @@ func CreateTestTableDescriptor(
 	}
 	var p planner
 	return p.makeTableDesc(stmt.(*parser.CreateTable), parentID, id, privileges, nil)
+}
+
+// resolveViewDependencies looks up the tables included in a view's query
+// and adds metadata representing those dependencies to both the new view's
+// descriptor and the dependend-upon tables' descriptors. The modified table
+// descriptors are put into the backrefs map of other tables so that they can
+// be updated when this view is created.
+func (n *createViewNode) resolveViewDependencies(
+	tbl *sqlbase.TableDescriptor, backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
+) {
+	var scanNodes []*scanNode
+	resolveScanNodes(n.sourcePlan, &scanNodes)
+
+	// Add the necessary back-references to the descriptor for each referenced
+	// table / view.
+	for _, scan := range scanNodes {
+		desc, ok := backrefs[scan.desc.ID]
+		if !ok {
+			desc = &scan.desc
+			backrefs[desc.ID] = desc
+		}
+
+		ref := sqlbase.TableDescriptor_Reference{
+			ID:        tbl.ID,
+			ColumnIDs: make([]sqlbase.ColumnID, len(scan.cols)),
+		}
+		if scan.specifiedIndex != nil {
+			ref.IndexID = scan.specifiedIndex.ID
+		}
+		for i := range scan.cols {
+			ref.ColumnIDs[i] = scan.cols[i].ID
+		}
+		desc.DependedOnBy = append(desc.DependedOnBy, ref)
+	}
+
+	// Also create the forward references in the new view's descriptor.
+	tbl.DependsOn = make([]sqlbase.ID, 0, len(backrefs))
+	for _, backref := range backrefs {
+		tbl.DependsOn = append(tbl.DependsOn, backref.ID)
+	}
+}
+
+// TODO(a-robinson): How do we detect planDataSource nodes that contain a view?
+// TODO(a-robinson): What if the scanNode references the view being created?
+func resolveScanNodes(plan planNode, scanNodes *[]*scanNode) {
+	// I was initially concerned about doing type assertions on every node in
+	// the tree, but it's actually faster than a string comparison on the name
+	// returned by ExplainPlan, judging by a mini-benchmark run on my laptop
+	// with go 1.7.1.
+	if scan, ok := plan.(*scanNode); ok {
+		*scanNodes = append(*scanNodes, scan)
+	}
+
+	// We have to use the verbose version of ExplainPlan because the non-verbose
+	// form skips over some layers of the tree (e.g. selectTopNode, selectNode).
+	_, _, children := plan.ExplainPlan(true)
+	for _, child := range children {
+		resolveScanNodes(child, scanNodes)
+	}
 }
