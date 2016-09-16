@@ -196,8 +196,11 @@ func (d *atomicRangeDesc) String() string {
 	if !inconsistentDesc.IsInitialized() {
 		return fmt.Sprintf("%d{-}", inconsistentDesc.RangeID)
 	}
-	return fmt.Sprintf("%d{%s-%s}",
-		inconsistentDesc.RangeID, inconsistentDesc.StartKey, inconsistentDesc.EndKey)
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "%d:", inconsistentDesc.RangeID)
+	keys.PrettyPrintRange(&buf, roachpb.Key(inconsistentDesc.StartKey),
+		roachpb.Key(inconsistentDesc.EndKey), 30)
+	return buf.String()
 }
 
 // A Replica is a contiguous keyspace with writes managed via an
