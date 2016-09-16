@@ -183,7 +183,16 @@ func (s *Stopper) Recover() {
 
 // RunWorker runs the supplied function as a "worker" to be stopped
 // by the stopper. The function <f> is run in a goroutine.
+//
+// Once Stop() has been invoked, RunWorker is a no-op.
 func (s *Stopper) RunWorker(f func()) {
+	s.mu.Lock()
+	quiescing := s.mu.quiescing
+	s.mu.Unlock()
+	if quiescing {
+		return
+	}
+
 	s.stop.Add(1)
 	go func() {
 		defer s.Recover()
@@ -196,6 +205,12 @@ func (s *Stopper) RunWorker(f func()) {
 func (s *Stopper) AddCloser(c Closer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	select {
+	case <-s.stopped:
+		c.Close()
+		return
+	default:
+	}
 	s.mu.closers = append(s.mu.closers, c)
 }
 
