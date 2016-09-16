@@ -151,28 +151,45 @@ func (rcb rangeCountBalancer) shouldRebalance(
 	store roachpb.StoreDescriptor, sl StoreList,
 ) bool {
 	// TODO(peter,bram,cuong): The FractionUsed check seems suspicious. When a
-	// node becomes fuller than maxFractionUsedThreshold we will always select it
+	// node becomes fuller than maxCapacityUsedThreshold we will always select it
 	// for rebalancing. This is currently utilized by tests.
+	maxCapacityUsed := store.Capacity.FractionUsed() >= maxFractionUsedThreshold
 
-	// The store requires rebalancing if its range count is larger than
+	// Rebalance if we're above the rebalance target, which is
 	// mean*(1+rebalanceThreshold).
 	target := int32(math.Ceil(sl.candidateCount.mean * (1 + rebalanceThreshold)))
-	shouldRebalance := store.Capacity.FractionUsed() >= maxFractionUsedThreshold ||
-		store.Capacity.RangeCount > target
-	if shouldRebalance {
-		// Require that moving a replica from the given store makes its range count
-		// converge on the mean range count. This only affects clusters with a
-		// small number of ranges.
-		shouldRebalance =
-			(math.Abs(float64(store.Capacity.RangeCount-1)-sl.candidateCount.mean) <
-				math.Abs(float64(store.Capacity.RangeCount)-sl.candidateCount.mean))
+	rangeCountAboveTarget := store.Capacity.RangeCount > target
+
+	// Rebalance if the candidate store has a range count above the mean, and
+	// there exists another store that is underfull: its range count is smaller
+	// than mean*(1-rebalanceThreshold).
+	var rebalanceToUnderfullStore bool
+	if float64(store.Capacity.RangeCount) > sl.candidateCount.mean {
+		underfullThreshold := int32(math.Floor(sl.candidateCount.mean * (1 - rebalanceThreshold)))
+		for _, desc := range sl.stores {
+			if desc.Capacity.RangeCount < underfullThreshold {
+				rebalanceToUnderfullStore = true
+				break
+			}
+		}
 	}
 
+	// Require that moving a replica from the given store makes its range count
+	// converge on the mean range count. This only affects clusters with a
+	// small number of ranges.
+	rebalanceConvergesOnMean :=
+		(math.Abs(float64(store.Capacity.RangeCount-1)-sl.candidateCount.mean) <
+			math.Abs(float64(store.Capacity.RangeCount)-sl.candidateCount.mean))
+
+	shouldRebalance :=
+		(maxCapacityUsed || rangeCountAboveTarget || rebalanceToUnderfullStore) && rebalanceConvergesOnMean
 	if log.V(2) {
 		log.Infof(context.TODO(),
-			"%d: should-rebalance=%t: fraction-used=%.2f range-count=%d (mean=%.1f, target=%d)",
+			"%d: should-rebalance=%t: fraction-used=%.2f range-count=%d "+
+				"(mean=%.1f, target=%d, fraction-used=%t, above-target=%t, underfull=%t, converges=%t)",
 			store.StoreID, shouldRebalance, store.Capacity.FractionUsed(),
-			store.Capacity.RangeCount, sl.candidateCount.mean, target)
+			store.Capacity.RangeCount, sl.candidateCount.mean, target,
+			maxCapacityUsed, rangeCountAboveTarget, rebalanceToUnderfullStore, rebalanceConvergesOnMean)
 	}
 	return shouldRebalance
 }
