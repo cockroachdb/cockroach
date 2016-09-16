@@ -405,14 +405,16 @@ type peerGroupChecker interface {
 // 2D-slice for each window function in n.funcs.
 func (n *windowNode) computeWindows() error {
 	rowCount := n.wrappedValues.Len()
+	if rowCount == 0 {
+		return nil
+	}
+
 	windowCount := len(n.funcs)
 	acc := n.windowsAcc.W(n.planner.session)
 
-	sz := int64(uintptr(rowCount) *
-		(unsafe.Sizeof([][]parser.Datum{}) /* windowValues */ +
-			uintptr(windowCount)*unsafe.Sizeof([]parser.Datum{}) /* windowAlloc */ +
-			unsafe.Sizeof(parser.Datum(nil)) /* scratchDatum */))
-	if err := acc.Grow(sz); err != nil {
+	winValSz := uintptr(rowCount) * unsafe.Sizeof([]parser.Datum{})
+	winAllocSz := uintptr(rowCount*windowCount) * unsafe.Sizeof(parser.Datum(nil))
+	if err := acc.Grow(int64(winValSz + winAllocSz)); err != nil {
 		return err
 	}
 
@@ -422,8 +424,8 @@ func (n *windowNode) computeWindows() error {
 		n.windowValues[i] = windowAlloc[i*windowCount : (i+1)*windowCount]
 	}
 
-	var scratch []byte
-	scratchDatum := make(parser.DTuple, 0, rowCount)
+	var scratchBytes []byte
+	var scratchDatum []parser.Datum
 	for windowIdx, windowFn := range n.funcs {
 		partitions := make(map[string][]parser.IndexedRow)
 
@@ -437,7 +439,15 @@ func (n *windowNode) computeWindows() error {
 			partitions[""] = make([]parser.IndexedRow, rowCount)
 		}
 
-		scratchDatum = scratchDatum[:len(windowFn.partitionIdxs)]
+		if n := len(windowFn.partitionIdxs); n > cap(scratchDatum) {
+			sz := int64(uintptr(n) * unsafe.Sizeof(parser.Datum(nil)))
+			if err := acc.Grow(sz); err != nil {
+				return err
+			}
+			scratchDatum = make([]parser.Datum, n)
+		} else {
+			scratchDatum = scratchDatum[:n]
+		}
 
 		// Partition rows into separate partitions based on hash values of the
 		// window function's PARTITION BY attribute.
@@ -459,7 +469,7 @@ func (n *windowNode) computeWindows() error {
 					scratchDatum[i] = row[idx]
 				}
 
-				encoded, err := sqlbase.EncodeDTuple(scratch, scratchDatum)
+				encoded, err := sqlbase.EncodeDTuple(scratchBytes, scratchDatum)
 				if err != nil {
 					return err
 				}
@@ -469,7 +479,7 @@ func (n *windowNode) computeWindows() error {
 					return err
 				}
 				partitions[string(encoded)] = append(partitions[string(encoded)], entry)
-				scratch = encoded[:0]
+				scratchBytes = encoded[:0]
 			}
 		}
 
