@@ -746,7 +746,10 @@ func (r *Replica) resolveLocalIntents(
 			}
 			if inSpan != nil {
 				intent.Span = *inSpan
-				_, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, batch, iterAndBuf, ms, intent, math.MaxInt64)
+				num, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, batch, iterAndBuf, ms, intent, math.MaxInt64)
+				if r.store.ctx.TestingKnobs.NumKeysEvaluatedForRangeIntentResolution != nil {
+					atomic.AddInt64(r.store.ctx.TestingKnobs.NumKeysEvaluatedForRangeIntentResolution, num)
+				}
 				return err
 			}
 			return nil
