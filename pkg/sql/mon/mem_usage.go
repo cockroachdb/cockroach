@@ -82,8 +82,10 @@ func (mm *MemoryUsageMonitor) reserveMemory(ctx context.Context, x int64) error 
 		// is to limit the amount of log messages when a size blowup is
 		// caused by many small allocations.
 		if util.RoundUpPowerOfTwo(mm.curAllocated) != util.RoundUpPowerOfTwo(mm.curAllocated-x) {
-			log.Infof(ctx, "memory usage increases to %s (+%d)",
-				humanizeutil.IBytes(mm.curAllocated), x)
+			/*
+				log.Infof(ctx, "memory usage increases to %s (+%d)",
+					humanizeutil.IBytes(mm.curAllocated), x)
+			*/
 		}
 	}
 

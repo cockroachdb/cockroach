@@ -325,6 +325,7 @@ func TestStopperRunTaskPanic(t *testing.T) {
 			_ = s.RunLimitedAsyncTask(
 				context.Background(),
 				make(chan struct{}, 1),
+				true, /* wait */
 				func(_ context.Context) { explode() },
 			)
 		},
@@ -440,7 +441,9 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 
 	for i := 0; i < maxConcurrency*3; i++ {
 		wg.Add(1)
-		if err := s.RunLimitedAsyncTask(context.TODO(), sem, f); err != nil {
+		if err := s.RunLimitedAsyncTask(
+			context.TODO(), sem, true /* wait */, f,
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -451,6 +454,16 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 	if peakConcurrency != maxConcurrency {
 		t.Fatalf("expected peak concurrency %d to equal max concurrency %d",
 			peakConcurrency, maxConcurrency)
+	}
+
+	sem = make(chan struct{}, 1)
+	sem <- struct{}{}
+	err := s.RunLimitedAsyncTask(
+		context.TODO(), sem, false /* wait */, func(_ context.Context) {
+		},
+	)
+	if _, ok := err.(*roachpb.NodeUnavailableError); !ok {
+		t.Fatalf("expected node unavailable error; got %v", err)
 	}
 }
 

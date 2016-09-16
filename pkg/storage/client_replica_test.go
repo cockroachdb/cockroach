@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -900,5 +901,160 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 	)
 	if !testutils.IsPError(pErr, "injected error") {
 		t.Fatalf("expected error %q, got: %s", "injected error", pErr)
+	}
+}
+
+func TestRangeInfo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := startMultiTestContext(t, 2)
+	defer mtc.Stop()
+
+	// Upreplicate to two ranges.
+	mtc.replicateRange(mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil).RangeID, 1)
+
+	// Split the key space at key "a".
+	splitKey := roachpb.RKey("a")
+	splitArgs := adminSplitArgs(splitKey.AsRawKey(), splitKey.AsRawKey())
+	if _, pErr := client.SendWrapped(
+		context.Background(), rg1(mtc.stores[0]), &splitArgs,
+	); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Get the replicas for each side of the split. This is done within
+	// a SucceedsSoon loop to ensure the split completes.
+	var lhsReplica0, lhsReplica1, rhsReplica0, rhsReplica1 *storage.Replica
+	util.SucceedsSoon(t, func() error {
+		lhsReplica0 = mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
+		lhsReplica1 = mtc.stores[1].LookupReplica(roachpb.RKeyMin, nil)
+		rhsReplica0 = mtc.stores[0].LookupReplica(splitKey, nil)
+		rhsReplica1 = mtc.stores[1].LookupReplica(splitKey, nil)
+		if lhsReplica0 == rhsReplica0 || lhsReplica1 == rhsReplica1 {
+			return errors.Errorf("replicas not post-split %v, %v, %v, %v",
+				lhsReplica0, rhsReplica0, rhsReplica0, rhsReplica1)
+		}
+		return nil
+	})
+	lhsLease, _ := lhsReplica0.GetLease()
+	rhsLease, _ := rhsReplica0.GetLease()
+
+	// Verify range info is not set if unrequested.
+	getArgs := getArgs(splitKey.AsRawKey())
+	reply, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], &getArgs)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	if len(reply.Header().RangeInfos) > 0 {
+		t.Errorf("expected empty range infos if unrequested; got %v", reply.Header().RangeInfos)
+	}
+
+	// Verify range info on a get request.
+	h := roachpb.Header{
+		ReturnRangeInfo: true,
+	}
+	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &getArgs)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	expRangeInfos := []roachpb.RangeInfo{
+		{
+			Desc:  *rhsReplica0.Desc(),
+			Lease: *rhsLease,
+		},
+	}
+	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
+		t.Errorf("on get reply, expected %+v; got %+v", expRangeInfos, reply.Header().RangeInfos)
+	}
+
+	// Verify range info on a put request.
+	putArgs := putArgs(splitKey.AsRawKey(), []byte("foo"))
+	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &putArgs)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
+		t.Errorf("on put reply, expected %+v; got %+v", expRangeInfos, reply.Header().RangeInfos)
+	}
+
+	// Verify multiple range infos on a scan request.
+	scanArgs := roachpb.ScanRequest{
+		Span: roachpb.Span{
+			Key:    keys.SystemMax,
+			EndKey: roachpb.KeyMax,
+		},
+	}
+	h.Txn = roachpb.NewTransaction("test", roachpb.KeyMin, 1, enginepb.SERIALIZABLE, mtc.clock.Now(), 0)
+	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &scanArgs)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	expRangeInfos = []roachpb.RangeInfo{
+		{
+			Desc:  *lhsReplica0.Desc(),
+			Lease: *lhsLease,
+		},
+		{
+			Desc:  *rhsReplica0.Desc(),
+			Lease: *rhsLease,
+		},
+	}
+	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
+		t.Errorf("on scan reply, expected %+v; got %+v", expRangeInfos, reply.Header().RangeInfos)
+	}
+
+	// Verify multiple range infos and order on a reverse scan request.
+	revScanArgs := roachpb.ReverseScanRequest{
+		Span: roachpb.Span{
+			Key:    keys.SystemMax,
+			EndKey: roachpb.KeyMax,
+		},
+	}
+	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &revScanArgs)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	expRangeInfos = []roachpb.RangeInfo{
+		{
+			Desc:  *rhsReplica0.Desc(),
+			Lease: *rhsLease,
+		},
+		{
+			Desc:  *lhsReplica0.Desc(),
+			Lease: *lhsLease,
+		},
+	}
+	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
+		t.Errorf("on reverse scan reply, expected %+v; got %+v", expRangeInfos, reply.Header().RangeInfos)
+	}
+
+	// Change lease holders for both ranges and re-scan.
+	for _, r := range []*storage.Replica{lhsReplica1, rhsReplica1} {
+		replDesc, err := r.GetReplicaDescriptor()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = mtc.dbs[0].AdminTransferLease(context.TODO(),
+			r.Desc().StartKey.AsRawKey(), replDesc.StoreID); err != nil {
+			t.Fatalf("unable to transfer lease to replica %s: %s", r, err)
+		}
+	}
+	reply, pErr = client.SendWrappedWith(context.Background(), mtc.distSenders[0], h, &scanArgs)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	lhsLease, _ = lhsReplica1.GetLease()
+	rhsLease, _ = rhsReplica1.GetLease()
+	expRangeInfos = []roachpb.RangeInfo{
+		{
+			Desc:  *lhsReplica1.Desc(),
+			Lease: *lhsLease,
+		},
+		{
+			Desc:  *rhsReplica1.Desc(),
+			Lease: *rhsLease,
+		},
+	}
+	if !reflect.DeepEqual(reply.Header().RangeInfos, expRangeInfos) {
+		t.Errorf("on scan reply, expected %+v; got %+v", expRangeInfos, reply.Header().RangeInfos)
 	}
 }
