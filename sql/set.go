@@ -81,6 +81,20 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 	case `EXTRA_FLOAT_DIGITS`:
 		// These settings are sent by the JDBC driver but we silently ignore them.
 
+	case `DIST_SQL`:
+		s, err := p.getStringVal(name, typedValues)
+		if err != nil {
+			return nil, err
+		}
+		switch sqlbase.NormalizeName(parser.Name(s)) {
+		case sqlbase.ReNormalizeName("sync"):
+			p.session.DistSQLMode = distSQLSync
+		case sqlbase.ReNormalizeName("async"):
+			p.session.DistSQLMode = distSQLAsync
+		default:
+			return nil, fmt.Errorf("%s: \"%s\" not supported", name, s)
+		}
+
 	default:
 		return nil, fmt.Errorf("unknown variable: %q", name)
 	}
