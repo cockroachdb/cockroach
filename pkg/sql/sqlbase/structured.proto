@@ -388,9 +388,40 @@ message TableDescriptor {
   // use mostly the same fields as tables, but need to track the actual
   // query from the view definition as well.
   //
+  // For now we only track a string representation of the query. This prevents
+  // us from easily supporting things like renames of the dependencies of a
+  // view. Eventually we'll want to switch to a semantic encoding of the query
+  // that relies on IDs rather than names so that we can support renames of
+  // fields relied on by the query, as Postgres does.
+  //
   // Note: The presence of this field is used to determine whether or not
   // a TableDescriptor represents a view.
   optional string view_query = 24 [(gogoproto.nullable) = false];
+
+  // The IDs of all relations that this depends on.
+  // Only ever populated if this descriptor is for a view.
+  repeated uint32 dependsOn = 25 [(gogoproto.customname) = "DependsOn",
+           (gogoproto.casttype) = "ID"];
+
+  message Reference {
+    // The ID of the relation that depends on this one.
+    optional uint32 id = 1 [(gogoproto.nullable) = false,
+             (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+    // If applicable, the ID of this table's index that is refenced by the
+    // dependent relation.
+    optional uint32 index_id = 2 [(gogoproto.nullable) = false,
+             (gogoproto.customname) = "IndexID", (gogoproto.casttype) = "IndexID"];
+    // The IDs of this table's columns that are referenced by the dependent
+    // relation.
+    repeated uint32 column_ids = 3 [(gogoproto.customname) = "ColumnIDs",
+             (gogoproto.casttype) = "ColumnID"];
+  }
+
+  // All references to this table/view from other views in the system, tracked
+  // down to the column/index so that we can restrict changes to them while
+  // they're still being referred to.
+  repeated Reference dependedOnBy = 26 [(gogoproto.nullable) = false,
+           (gogoproto.customname) = "DependedOnBy"];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
