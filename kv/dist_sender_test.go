@@ -50,8 +50,8 @@ import (
 
 var testMetaRangeDescriptor = roachpb.RangeDescriptor{
 	RangeID:  1,
-	StartKey: testutils.MakeKey(keys.Meta2Prefix, roachpb.RKey("a")),
-	EndKey:   testutils.MakeKey(keys.Meta2Prefix, roachpb.RKey("z")),
+	StartKey: testutils.MakeKey(keys.Meta2Prefix, roachpb.RKey(roachpb.KeyMin)),
+	EndKey:   testutils.MakeKey(keys.Meta2Prefix, roachpb.RKey(roachpb.KeyMax)),
 	Replicas: []roachpb.ReplicaDescriptor{
 		{
 			NodeID:  1,
@@ -1295,9 +1295,9 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	}
 	ds := NewDistSender(cfg, g)
 
-	// Send a batch request contains two puts. In the first
+	// Send a batch request containing two puts. In the first
 	// attempt, the range of the descriptor found in the cache is
-	// ["a", "b"). The request is truncated to contain only the put
+	// [Min, "b"). The request is truncated to contain only the put
 	// on "a".
 	//
 	// In the second attempt, The range of the descriptor found in
