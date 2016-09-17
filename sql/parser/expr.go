@@ -941,7 +941,7 @@ var (
 	decimalCastTypes   = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
 	stringCastTypes    = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeTimestamp, TypeTimestampTZ}
 	bytesCastTypes     = []Datum{DNull, TypeString, TypeBytes}
-	dateCastTypes      = []Datum{DNull, TypeString, TypeDate, TypeTimestamp}
+	dateCastTypes      = []Datum{DNull, TypeString, TypeDate, TypeTimestamp, TypeTimestampTZ}
 	timestampCastTypes = []Datum{DNull, TypeString, TypeDate, TypeTimestamp, TypeTimestampTZ}
 	intervalCastTypes  = []Datum{DNull, TypeString, TypeInt, TypeInterval}
 )
