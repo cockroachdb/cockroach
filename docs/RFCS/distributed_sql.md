@@ -620,7 +620,7 @@ Processors are generally made up of three components:
    * unsynchronized: passes rows from all input streams, arbitrarily
      interleaved.
    * ordered: the input physical streams have an ordering guarantee (namely the
-     guarantee of the corresponding locical stream); the synchronizer is careful
+     guarantee of the corresponding logical stream); the synchronizer is careful
      to interleave the streams so that the merged stream has the same guarantee.
 
 2. The *data processor* core implements the data transformation or aggregation
