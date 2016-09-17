@@ -50,6 +50,10 @@ func JoinOrNew(tr opentracing.Tracer, carrier *Span, opName string) (opentracing
 		switch err {
 		case nil:
 			sp := tr.StartSpan(opName, opentracing.FollowsFrom(wireContext))
+
+			// Copy baggage items to tags so they show up in the Lightstep UI.
+			sp.Context().ForeachBaggageItem(func(k, v string) bool { sp.SetTag(k, v); return true })
+
 			sp.LogEvent(opName)
 			return sp, nil
 		case opentracing.ErrSpanContextNotFound:
