@@ -189,7 +189,7 @@ func mustParseDDate(t *testing.T, s string) Datum {
 	return d
 }
 func mustParseDTimestamp(t *testing.T, s string) Datum {
-	d, err := ParseDTimestamp(s, time.UTC, time.Millisecond)
+	d, err := ParseDTimestamp(s, time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}

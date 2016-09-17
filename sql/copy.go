@@ -230,7 +230,7 @@ func (n *copyNode) addRow(line []byte) error {
 			if err != nil {
 				break
 			}
-			d, err = parser.ParseDTimestamp(s, n.p.session.Location, time.Microsecond)
+			d, err = parser.ParseDTimestamp(s, time.Microsecond)
 		case *parser.DTimestampTZ:
 			s, err = decodeCopy(s)
 			if err != nil {

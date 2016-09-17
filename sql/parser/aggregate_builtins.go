@@ -87,8 +87,8 @@ var aggregates = map[string][]Builtin{
 
 	"count": countImpls(),
 
-	"max": makeAggBuiltins(newMaxAggregate, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeInterval),
-	"min": makeAggBuiltins(newMinAggregate, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeInterval),
+	"max": makeAggBuiltins(newMaxAggregate, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInterval),
+	"min": makeAggBuiltins(newMinAggregate, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInterval),
 
 	"sum": {
 		makeAggBuiltin(TypeInt, TypeDecimal, newIntSumAggregate),
@@ -133,7 +133,7 @@ func makeAggBuiltins(f func() AggregateFunc, types ...Datum) []Builtin {
 }
 
 func countImpls() []Builtin {
-	types := ArgTypes{TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeInterval, TypeTuple}
+	types := ArgTypes{TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInterval, TypeTuple}
 	r := make([]Builtin, len(types))
 	for i := range types {
 		r[i] = makeAggBuiltin(types[i], TypeInt, newCountAggregate)

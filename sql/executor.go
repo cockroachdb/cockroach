@@ -1414,7 +1414,7 @@ func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.
 	}
 	// Allow nanosecond precision because the timestamp is only used by the
 	// system and won't be returned to the user over pgwire.
-	dt, err := parser.ParseDTimestamp(string(*ds), planMaker.session.Location, time.Nanosecond)
+	dt, err := parser.ParseDTimestamp(string(*ds), time.Nanosecond)
 	if err != nil {
 		return nil, err
 	}
