@@ -1702,6 +1702,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return ParseDDate(string(*d), ctx.GetLocation())
 		case *DDate:
 			return d, nil
+		case *DTimestampTZ:
+			return NewDDateFromTime(d.Time, ctx.GetLocation()), nil
 		case *DTimestamp:
 			return NewDDateFromTime(d.Time, ctx.GetLocation()), nil
 		}
@@ -1712,7 +1714,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return ParseDTimestamp(string(*d), ctx.GetLocation(), time.Microsecond)
 		case *DDate:
 			year, month, day := time.Unix(int64(*d)*secondsInDay, 0).UTC().Date()
-			return MakeDTimestamp(time.Date(year, month, day, 0, 0, 0, 0, ctx.GetLocation()), time.Microsecond), nil
+			return MakeDTimestamp(time.Date(year, month, day, 0, 0, 0, 0, time.UTC), time.Microsecond), nil
 		case *DTimestamp:
 			return d, nil
 		case *DTimestampTZ:

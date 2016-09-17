@@ -31,6 +31,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/duration"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -828,21 +829,50 @@ var timeFormats = []string{
 	timestampFormat,
 	timestampWithNamedZoneFormat,
 	timestampRFC3339NanoWithoutZoneFormat,
+	timestampNodeFormat,
 }
 
 func parseTimestampInLocation(s string, loc *time.Location) (time.Time, error) {
 	for _, format := range timeFormats {
 		if t, err := time.ParseInLocation(format, s, loc); err == nil {
+			if err := checkForMissingZone(t, loc); err != nil {
+				return time.Time{}, makeParseError(s, TypeTimestamp.Type(), err)
+			}
 			return t, nil
 		}
 	}
 	return time.Time{}, makeParseError(s, TypeTimestamp.Type(), nil)
 }
 
+// Unfortunately Go is very strict when parsing abbreviated zone names -- with
+// the exception of 'UTC' and 'GMT', it only supports abbreviations that are
+// defined in the local in which it is parsing. Worse, it doesn't return any
+// sort of error for unresolved zones, but rather simply pretends they have a
+// zero offset. This means changing the session zone such that an abbreviation
+// like 'CET' stops being resolved *silently* changes the offsets of parsed
+// strings with 'CET' offsets to zero.
+// We attempt to detect when this has happened and return an error instead.
+//
+// Postgres does its own parsing and just maintains a list of zone abbreviations
+// that are always recognized, regardless of the session location. If this check
+// ends up catching too many users, we may need to do the same.
+func checkForMissingZone(t time.Time, parseLoc *time.Location) error {
+	if z, off := t.Zone(); off == 0 && t.Location() != parseLoc && z != "UTC" && !strings.HasPrefix(z, "GMT") {
+		return errors.Errorf("unknown zone %q", z)
+	}
+	return nil
+}
+
 // ParseDTimestamp parses and returns the *DTimestamp Datum value represented by
 // the provided string in the provided location, or an error if parsing is unsuccessful.
 func ParseDTimestamp(s string, loc *time.Location, precision time.Duration) (*DTimestamp, error) {
-	t, err := parseTimestampInLocation(s, loc)
+	// `ParseInLocation` uses the location provided both for resolving an explicit
+	// abbreviated zone as well as for the default zone if not specified
+	// explicitly. For non-'WITH TIME ZONE' strings, we do not want to add a
+	// non-UTC zone if one is not explicitly stated, so we use time.UTC rather
+	// than the sesion location. Unfortunately this also means we do not use the
+	// session zone for resolving abbreviations.
+	t, err := parseTimestampInLocation(s, time.UTC)
 	if err != nil {
 		return nil, err
 	}
