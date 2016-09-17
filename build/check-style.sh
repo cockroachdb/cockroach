@@ -3,6 +3,7 @@
 set -euo pipefail
 
 export PKG=${PKG:-./...}
+export TAGS=${1:-"''"}
 
 TestCopyrightHeaders() {
   echo "checking for missing license headers"
@@ -107,7 +108,7 @@ TestReturnCheck() {
 }
 
 TestVet() {
-  ! go tool vet -all -shadow -printfuncs Info:1,Infof:1,InfofDepth:2,Warning:1,Warningf:1,WarningfDepth:2,Error:1,Errorf:1,ErrorfDepth:2,Fatal:1,Fatalf:1,FatalfDepth:2,UnimplementedWithIssueErrorf:1 . 2>&1 | \
+  ! go tool vet -tags "$TAGS" -all -shadow -printfuncs Info:1,Infof:1,InfofDepth:2,Warning:1,Warningf:1,WarningfDepth:2,Error:1,Errorf:1,ErrorfDepth:2,Fatal:1,Fatalf:1,FatalfDepth:2,UnimplementedWithIssueErrorf:1 . 2>&1 | \
     grep -vE 'declaration of "?(pE|e)rr"? shadows' | \
     grep -vE '\.pb\.gw\.go:[0-9]+: declaration of "?ctx"? shadows' | \
     grep -vE '^vet: cannot process directory \.git'
