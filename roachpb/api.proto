@@ -45,6 +45,13 @@ enum ReadConsistencyType {
   INCONSISTENT = 2;
 }
 
+// RangeInfo describes a range which executed a request. It contains
+// the range descriptor and lease information at the time of execution.
+message RangeInfo {
+  optional RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
+  optional Lease lease = 2 [(gogoproto.nullable) = false];
+}
+
 // ResponseHeader is returned with every storage node response.
 message ResponseHeader {
   // txn is non-nil if the request specified a non-nil transaction.
@@ -60,6 +67,8 @@ message ResponseHeader {
   optional Span resume_span = 4;
   // The number of keys operated on.
   optional int64 num_keys = 5 [(gogoproto.nullable) = false];
+  // Range or list of ranges used to execute the request.
+  repeated RangeInfo range_infos = 6 [(gogoproto.nullable) = false];
 }
 
 // A GetRequest is the argument for the Get() method.

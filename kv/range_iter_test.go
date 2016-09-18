@@ -18,9 +18,10 @@ package kv
 
 import (
 	"bytes"
-	"context"
 	"reflect"
 	"testing"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -90,7 +91,7 @@ func TestRangeIterForward(t *testing.T) {
 	i := 0
 	for ri.Seek(ctx, roachpb.RKey(roachpb.KeyMin)); ri.Valid(); ri.Next(ctx) {
 		if !reflect.DeepEqual(alphaRangeDescriptors[i], ri.Desc()) {
-			t.Fatalf("%d: expected %v; got %v", alphaRangeDescriptors[i], ri.Desc())
+			t.Fatalf("%d: expected %v; got %v", i, alphaRangeDescriptors[i], ri.Desc())
 		}
 		i++
 		if !ri.NeedAnother(roachpb.RSpan{
@@ -118,7 +119,7 @@ func TestRangeIterSeekForward(t *testing.T) {
 	i := 0
 	for ri.Seek(ctx, roachpb.RKey(roachpb.KeyMin)); ri.Valid(); {
 		if !reflect.DeepEqual(alphaRangeDescriptors[i], ri.Desc()) {
-			t.Fatalf("%d: expected %v; got %v", alphaRangeDescriptors[i], ri.Desc())
+			t.Fatalf("%d: expected %v; got %v", i, alphaRangeDescriptors[i], ri.Desc())
 		}
 		i += 2
 		// Skip even ranges.
@@ -128,6 +129,9 @@ func TestRangeIterSeekForward(t *testing.T) {
 		}
 		seekKey := roachpb.RKey([]byte{nextByte})
 		ri.Seek(ctx, seekKey)
+		if !ri.Key().Equal(seekKey) {
+			t.Errorf("expected iterator key %s; got %s", seekKey, ri.Key())
+		}
 	}
 }
 
@@ -176,7 +180,7 @@ func TestRangeIterSeekReverse(t *testing.T) {
 	i := len(alphaRangeDescriptors) - 1
 	for ri.Seek(ctx, roachpb.RKey([]byte{'z'})); ri.Valid(); {
 		if !reflect.DeepEqual(alphaRangeDescriptors[i], ri.Desc()) {
-			t.Fatalf("%d: expected %v; got %v", alphaRangeDescriptors[i], ri.Desc())
+			t.Fatalf("%d: expected %v; got %v", i, alphaRangeDescriptors[i], ri.Desc())
 		}
 		i -= 2
 		// Skip every other range.
@@ -186,5 +190,8 @@ func TestRangeIterSeekReverse(t *testing.T) {
 		}
 		seekKey := roachpb.RKey([]byte{nextByte})
 		ri.Seek(ctx, seekKey)
+		if !ri.Key().Equal(seekKey) {
+			t.Errorf("expected iterator key %s; got %s", seekKey, ri.Key())
+		}
 	}
 }

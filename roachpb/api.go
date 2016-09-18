@@ -162,6 +162,9 @@ func (rh *ResponseHeader) combine(otherRH ResponseHeader) error {
 	}
 	rh.ResumeSpan = otherRH.ResumeSpan
 	rh.NumKeys += otherRH.NumKeys
+	if len(otherRH.RangeInfos) > 0 {
+		rh.RangeInfos = append(rh.RangeInfos, otherRH.RangeInfos...)
+	}
 	return nil
 }
 

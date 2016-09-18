@@ -178,10 +178,17 @@ func (r *Replica) executeCmd(
 		err = errors.Errorf("unrecognized command %s", args.Method())
 	}
 
-	// Set the ResumeSpan and NumKeys.
+	// Set the ResumeSpan, NumKeys, and range info.
 	header := reply.Header()
 	header.NumKeys = num
 	header.ResumeSpan = span
+	lease, _ := r.getLease()
+	header.RangeInfos = []roachpb.RangeInfo{
+		{
+			Desc:  *r.Desc(),
+			Lease: *lease,
+		},
+	}
 	reply.SetHeader(header)
 
 	if log.V(2) {
