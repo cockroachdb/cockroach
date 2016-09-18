@@ -28,6 +28,7 @@ var informationSchema = virtualSchema{
 	name: "information_schema",
 	tables: []virtualSchemaTable{
 		informationSchemaColumnsTable,
+		informationSchemaKeyColumnUsageTable,
 		informationSchemaSchemataTable,
 		informationSchemaSchemataTablePrivileges,
 		informationSchemaTableConstraintTable,
@@ -155,34 +156,66 @@ func datetimePrecision(colType sqlbase.ColumnType) parser.Datum {
 	return parser.DNull
 }
 
-var informationSchemaTablePrivileges = virtualSchemaTable{
+var informationSchemaKeyColumnUsageTable = virtualSchemaTable{
 	schema: `
-CREATE TABLE information_schema.table_privileges (
-	GRANTOR STRING NOT NULL DEFAULT '',
-	GRANTEE STRING NOT NULL DEFAULT '',
-	TABLE_CATALOG STRING NOT NULL DEFAULT '',
-	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
-	TABLE_NAME STRING NOT NULL DEFAULT '',
-	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
-	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE,
-	WITH_HIERARCHY BOOL NOT NULL DEFAULT FALSE
-);
-`,
-	desc: sqlbase.TableDescriptor{Name: "table_privileges", ID: 0xffffffff, Version: 0x1, Columns: []sqlbase.ColumnDescriptor{{Name: "GRANTOR", ID: 0x1, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "GRANTEE", ID: 0x2, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "TABLE_CATALOG", ID: 0x3, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "TABLE_SCHEMA", ID: 0x4, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "TABLE_NAME", ID: 0x5, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "PRIVILEGE_TYPE", ID: 0x6, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "IS_GRANTABLE", ID: 0x7, Type: sqlbase.ColumnType{Kind: 0}, DefaultExpr: &falseStr}, {Name: "WITH_HIERARCHY", ID: 0x8, Type: sqlbase.ColumnType{Kind: 0}, DefaultExpr: &falseStr}}, NextColumnID: 0x9, PrimaryIndex: sqlbase.IndexDescriptor{Name: "", ID: 0x0}, NextIndexID: 0x0, Privileges: emptyPrivileges, NextMutationID: 0x1, FormatVersion: 0x3},
+CREATE TABLE information_schema.key_column_usage (
+  CONSTRAINT_CATALOG STRING DEFAULT '',
+  CONSTRAINT_SCHEMA STRING DEFAULT '',
+  CONSTRAINT_NAME STRING DEFAULT '',
+  TABLE_CATALOG STRING NOT NULL DEFAULT '',
+  TABLE_SCHEMA STRING NOT NULL DEFAULT '',
+  TABLE_NAME STRING NOT NULL DEFAULT '',
+  COLUMN_NAME STRING NOT NULL DEFAULT '',
+  ORDINAL_POSITION INT NOT NULL DEFAULT 0,
+  POSITION_IN_UNIQUE_CONSTRAINT INT
+);`,
+	desc: sqlbase.TableDescriptor{Name: "key_column_usage", ID: 0xffffffff, Version: 0x1, Columns: []sqlbase.ColumnDescriptor{{Name: "CONSTRAINT_CATALOG", ID: 0x1, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: &emptyStr, Hidden: false}, {Name: "CONSTRAINT_SCHEMA", ID: 0x2, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: &emptyStr, Hidden: false}, {Name: "CONSTRAINT_NAME", ID: 0x3, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: &emptyStr, Hidden: false}, {Name: "TABLE_CATALOG", ID: 0x4, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: false, DefaultExpr: &emptyStr, Hidden: false}, {Name: "TABLE_SCHEMA", ID: 0x5, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: false, DefaultExpr: &emptyStr, Hidden: false}, {Name: "TABLE_NAME", ID: 0x6, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: false, DefaultExpr: &emptyStr, Hidden: false}, {Name: "COLUMN_NAME", ID: 0x7, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: false, DefaultExpr: &emptyStr, Hidden: false}, {Name: "ORDINAL_POSITION", ID: 0x8, Type: sqlbase.ColumnType{Kind: 1, Width: 0, Precision: 0}, Nullable: false, DefaultExpr: &zeroStr, Hidden: false}, {Name: "POSITION_IN_UNIQUE_CONSTRAINT", ID: 0x9, Type: sqlbase.ColumnType{Kind: 1, Width: 0, Precision: 0}, Nullable: true, Hidden: false}}, NextColumnID: 0xa, PrimaryIndex: sqlbase.IndexDescriptor{Name: "", ID: 0x0}, NextIndexID: 0x0, Privileges: emptyPrivileges, NextMutationID: 0x1, FormatVersion: 0x3},
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		return forEachTableDesc(p,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-				for _, u := range table.Privileges.Show() {
-					for _, privilege := range u.Privileges {
+				type keyColumn struct {
+					name        string
+					columnNames []string
+					primaryKey  bool
+					foreignKey  bool
+					unique      bool
+				}
+				var columns []keyColumn
+				if table.IsPhysicalTable() {
+					columns = append(columns, keyColumn{
+						name:        table.PrimaryIndex.Name,
+						columnNames: table.PrimaryIndex.ColumnNames,
+						primaryKey:  true,
+					})
+				}
+				for _, index := range table.Indexes {
+					col := keyColumn{
+						name:        index.Name,
+						columnNames: index.ColumnNames,
+						unique:      index.Unique,
+						foreignKey:  index.ForeignKey.IsSet(),
+					}
+					if col.unique || col.foreignKey {
+						columns = append(columns, col)
+					}
+				}
+				for _, c := range columns {
+					for pos, column := range c.columnNames {
+						ordinalPos := parser.NewDInt(parser.DInt(pos + 1))
+						uniquePos := parser.DNull
+						if c.foreignKey {
+							uniquePos = ordinalPos
+						}
 						if err := addRow(
-							parser.DNull,                  // grantor
-							parser.NewDString(u.User),     // grantee
-							defString,                     // table_catalog,
+							defString,                     // constraint_catalog
+							parser.NewDString(db.Name),    // constraint_schema
+							dStringOrNull(c.name),         // constraint_name
+							defString,                     // table_catalog
 							parser.NewDString(db.Name),    // table_schema
 							parser.NewDString(table.Name), // table_name
-							parser.NewDString(privilege),  // privilege_type
-							parser.DNull,                  // is_grantable
-							parser.DNull,                  // with_hierarchy
+							parser.NewDString(column),     // column_name
+							ordinalPos,                    // ordinal_position, 1-indexed
+							uniquePos,                     // position_in_unique_constraint
 						); err != nil {
 							return err
 						}
@@ -306,6 +339,45 @@ CREATE TABLE information_schema.table_constraints (
 						c.typ, // constraint_type
 					); err != nil {
 						return err
+					}
+				}
+				return nil
+			},
+		)
+	},
+}
+
+var informationSchemaTablePrivileges = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.table_privileges (
+	GRANTOR STRING NOT NULL DEFAULT '',
+	GRANTEE STRING NOT NULL DEFAULT '',
+	TABLE_CATALOG STRING NOT NULL DEFAULT '',
+	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
+	TABLE_NAME STRING NOT NULL DEFAULT '',
+	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
+	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE,
+	WITH_HIERARCHY BOOL NOT NULL DEFAULT FALSE
+);
+`,
+	desc: sqlbase.TableDescriptor{Name: "table_privileges", ID: 0xffffffff, Version: 0x1, Columns: []sqlbase.ColumnDescriptor{{Name: "GRANTOR", ID: 0x1, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "GRANTEE", ID: 0x2, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "TABLE_CATALOG", ID: 0x3, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "TABLE_SCHEMA", ID: 0x4, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "TABLE_NAME", ID: 0x5, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "PRIVILEGE_TYPE", ID: 0x6, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "IS_GRANTABLE", ID: 0x7, Type: sqlbase.ColumnType{Kind: 0}, DefaultExpr: &falseStr}, {Name: "WITH_HIERARCHY", ID: 0x8, Type: sqlbase.ColumnType{Kind: 0}, DefaultExpr: &falseStr}}, NextColumnID: 0x9, PrimaryIndex: sqlbase.IndexDescriptor{Name: "", ID: 0x0}, NextIndexID: 0x0, Privileges: emptyPrivileges, NextMutationID: 0x1, FormatVersion: 0x3},
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		return forEachTableDesc(p,
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				for _, u := range table.Privileges.Show() {
+					for _, privilege := range u.Privileges {
+						if err := addRow(
+							parser.DNull,                  // grantor
+							parser.NewDString(u.User),     // grantee
+							defString,                     // table_catalog,
+							parser.NewDString(db.Name),    // table_schema
+							parser.NewDString(table.Name), // table_name
+							parser.NewDString(privilege),  // privilege_type
+							parser.DNull,                  // is_grantable
+							parser.DNull,                  // with_hierarchy
+						); err != nil {
+							return err
+						}
 					}
 				}
 				return nil
