@@ -680,10 +680,16 @@ func (s *statusServer) Ranges(ctx context.Context, req *serverpb.RangesRequest) 
 		// because it's already exported.
 		err := storage.IterateRangeDescriptors(ctx, store.Engine(),
 			func(desc roachpb.RangeDescriptor) (bool, error) {
-				rep, err := store.GetReplica(desc.RangeID)
+				rp, err := store.GetReplica(desc.RangeID)
 				if err != nil {
 					return true, err
 				}
+				rep, release, err := rp.Acquire()
+				defer release()
+				if err != nil {
+					return true, err
+				}
+
 				output.Ranges = append(output.Ranges, serverpb.RangeInfo{
 					Span: serverpb.PrettySpan{
 						StartKey: desc.StartKey.String(),

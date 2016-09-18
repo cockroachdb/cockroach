@@ -38,7 +38,7 @@ import (
 
 // testQueueImpl implements queueImpl with a closure for shouldQueue.
 type testQueueImpl struct {
-	shouldQueueFn func(hlc.Timestamp, *Replica) (bool, float64)
+	shouldQueueFn func(hlc.Timestamp, ReplicaPromise) (bool, float64)
 	processed     int32
 	duration      time.Duration
 	blocker       chan struct{} // timer() blocks on this if not nil
@@ -46,14 +46,14 @@ type testQueueImpl struct {
 	err           error // always returns this error on process
 }
 
-func (tq *testQueueImpl) shouldQueue(now hlc.Timestamp, r *Replica, _ config.SystemConfig) (bool, float64) {
-	return tq.shouldQueueFn(now, r)
+func (tq *testQueueImpl) shouldQueue(now hlc.Timestamp, rp ReplicaPromise, _ config.SystemConfig) (bool, float64) {
+	return tq.shouldQueueFn(now, rp)
 }
 
 func (tq *testQueueImpl) process(
 	_ context.Context,
 	now hlc.Timestamp,
-	r *Replica,
+	_ ReplicaPromise,
 	_ config.SystemConfig,
 ) error {
 	atomic.AddInt32(&tq.processed, 1)
@@ -140,34 +140,35 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	defer tc.Stop()
 
 	// Remove replica for range 1 since it encompasses the entire keyspace.
-	rng1, err := tc.store.GetReplica(1)
+	rp1, err := tc.store.GetReplica(1)
 	if err != nil {
 		t.Error(err)
 	}
-	if err := tc.store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+
+	if err := tc.store.RemoveReplica(rp1, *rp1.Desc(), true, false); err != nil {
 		t.Error(err)
 	}
 
-	r1 := createReplica(tc.store, 1001, roachpb.RKey("1001"), roachpb.RKey("1001/end"))
+	r1 := createReplica(tc.store, 1001, roachpb.RKey("1001"), roachpb.RKey("1001/end")).AsPromise()
 	if err := tc.store.AddReplicaTest(r1); err != nil {
 		t.Fatal(err)
 	}
-	r2 := createReplica(tc.store, 1002, roachpb.RKey("1002"), roachpb.RKey("1002/end"))
+	r2 := createReplica(tc.store, 1002, roachpb.RKey("1002"), roachpb.RKey("1002/end")).AsPromise()
 	if err := tc.store.AddReplicaTest(r2); err != nil {
 		t.Fatal(err)
 	}
 
-	shouldAddMap := map[*Replica]bool{
+	shouldAddMap := map[ReplicaPromise]bool{
 		r1: true,
 		r2: true,
 	}
-	priorityMap := map[*Replica]float64{
+	priorityMap := map[ReplicaPromise]float64{
 		r1: 1.0,
 		r2: 2.0,
 	}
 	testQueue := &testQueueImpl{
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
-			return shouldAddMap[r], priorityMap[r]
+		shouldQueueFn: func(now hlc.Timestamp, rp ReplicaPromise) (shouldQueue bool, priority float64) {
+			return shouldAddMap[rp], priorityMap[rp]
 		},
 	}
 	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
@@ -180,20 +181,20 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	if v := bq.pending.Value(); v != 2 {
 		t.Errorf("expected 2 pending replicas; got %d", v)
 	}
-	if bq.pop() != r2 {
-		t.Error("expected r2")
+	if replica := bq.pop(); replica != r2 {
+		t.Errorf("expected %s, got %s", r2, replica)
 	}
 	if v := bq.pending.Value(); v != 1 {
 		t.Errorf("expected 1 pending replicas; got %d", v)
 	}
-	if bq.pop() != r1 {
-		t.Error("expected r1")
+	if replica := bq.pop(); replica != r1 {
+		t.Errorf("expected %s, got %s", r1, replica)
 	}
 	if v := bq.pending.Value(); v != 0 {
 		t.Errorf("expected 0 pending replicas; got %d", v)
 	}
 	if r := bq.pop(); r != nil {
-		t.Errorf("expected empty queue; got %v", r)
+		t.Errorf("expected empty queue; got %s", r)
 	}
 
 	// Add again, but this time r2 shouldn't add.
@@ -261,7 +262,7 @@ func TestBaseQueueAdd(t *testing.T) {
 	}
 
 	testQueue := &testQueueImpl{
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.Timestamp, r ReplicaPromise) (shouldQueue bool, priority float64) {
 			return false, 0.0
 		},
 	}
@@ -296,24 +297,24 @@ func TestBaseQueueProcess(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := tc.store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+	if err := tc.store.RemoveReplica(rng1, *rng1.Desc(), true, false); err != nil {
 		t.Error(err)
 	}
 
-	r1 := createReplica(tc.store, 1001, roachpb.RKey("1001"), roachpb.RKey("1001/end"))
+	r1 := createReplica(tc.store, 1001, roachpb.RKey("1001"), roachpb.RKey("1001/end")).AsPromise()
 	if err := tc.store.AddReplicaTest(r1); err != nil {
 		t.Fatal(err)
 	}
-	r2 := createReplica(tc.store, 1002, roachpb.RKey("1002"), roachpb.RKey("1002/end"))
+	r2 := createReplica(tc.store, 1002, roachpb.RKey("1002"), roachpb.RKey("1002/end")).AsPromise()
 	if err := tc.store.AddReplicaTest(r2); err != nil {
 		t.Fatal(err)
 	}
 
 	testQueue := &testQueueImpl{
 		blocker: make(chan struct{}, 1),
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.Timestamp, rp ReplicaPromise) (shouldQueue bool, priority float64) {
 			shouldQueue = true
-			priority = float64(r.RangeID)
+			priority = float64(rp.Desc().RangeID)
 			return
 		},
 	}
@@ -380,7 +381,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 
 	testQueue := &testQueueImpl{
 		blocker: make(chan struct{}, 1),
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.Timestamp, r ReplicaPromise) (shouldQueue bool, priority float64) {
 			shouldQueue = true
 			priority = 1.0
 			return
@@ -424,26 +425,26 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := s.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+	if err := s.RemoveReplica(rng1, *rng1.Desc(), true, false); err != nil {
 		t.Error(err)
 	}
 
 	// This range can never be split due to zone configs boundaries.
-	neverSplits := createReplica(s, 2, roachpb.RKeyMin, dataMaxAddr)
+	neverSplits := createReplica(s, 2, roachpb.RKeyMin, dataMaxAddr).AsPromise()
 	if err := s.AddReplicaTest(neverSplits); err != nil {
 		t.Fatal(err)
 	}
 
 	// This range will need to be split after user db/table entries are created.
-	willSplit := createReplica(s, 3, dataMaxAddr, roachpb.RKeyMax)
+	willSplit := createReplica(s, 3, dataMaxAddr, roachpb.RKeyMax).AsPromise()
 	if err := s.AddReplicaTest(willSplit); err != nil {
 		t.Fatal(err)
 	}
 
 	testQueue := &testQueueImpl{
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.Timestamp, r ReplicaPromise) (shouldQueue bool, priority float64) {
 			// Always queue ranges if they make it past the base queue's logic.
-			return true, float64(r.RangeID)
+			return true, float64(r.Desc().RangeID)
 		},
 	}
 
@@ -542,9 +543,9 @@ func TestBaseQueuePurgatory(t *testing.T) {
 
 	testQueue := &testQueueImpl{
 		duration: time.Nanosecond,
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(_ hlc.Timestamp, rp ReplicaPromise) (shouldQueue bool, priority float64) {
 			shouldQueue = true
-			priority = float64(r.RangeID)
+			priority = float64(rp.Desc().RangeID)
 			return
 		},
 		pChan: make(chan struct{}, 1),
@@ -556,7 +557,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := tc.store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+	if err := tc.store.RemoveReplica(rng1, *rng1.Desc(), true, false); err != nil {
 		t.Error(err)
 	}
 
@@ -566,7 +567,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 
 	for i := 1; i <= replicaCount; i++ {
 		r := createReplica(tc.store, roachpb.RangeID(i+1000),
-			roachpb.RKey(fmt.Sprintf("%d", i)), roachpb.RKey(fmt.Sprintf("%d/end", i)))
+			roachpb.RKey(fmt.Sprintf("%d", i)), roachpb.RKey(fmt.Sprintf("%d/end", i))).AsPromise()
 		if err := tc.store.AddReplicaTest(r); err != nil {
 			t.Fatal(err)
 		}
@@ -679,7 +680,7 @@ type processTimeoutQueueImpl struct {
 func (pq *processTimeoutQueueImpl) process(
 	ctx context.Context,
 	now hlc.Timestamp,
-	r *Replica,
+	_ ReplicaPromise,
 	_ config.SystemConfig,
 ) error {
 	<-ctx.Done()
@@ -701,7 +702,7 @@ func TestBaseQueueProcessTimeout(t *testing.T) {
 	ptQueue := &processTimeoutQueueImpl{
 		testQueueImpl: testQueueImpl{
 			blocker: make(chan struct{}, 1),
-			shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+			shouldQueueFn: func(now hlc.Timestamp, _ ReplicaPromise) (shouldQueue bool, priority float64) {
 				return true, 1.0
 			},
 		},
@@ -735,7 +736,7 @@ type processTimeQueueImpl struct {
 func (pq *processTimeQueueImpl) process(
 	_ context.Context,
 	_ hlc.Timestamp,
-	_ *Replica,
+	_ ReplicaPromise,
 	_ config.SystemConfig,
 ) error {
 	time.Sleep(5 * time.Millisecond)
@@ -755,7 +756,7 @@ func TestBaseQueueTimeMetric(t *testing.T) {
 
 	ptQueue := &processTimeQueueImpl{
 		testQueueImpl: testQueueImpl{
-			shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+			shouldQueueFn: func(now hlc.Timestamp, _ ReplicaPromise) (shouldQueue bool, priority float64) {
 				return true, 1.0
 			},
 		},

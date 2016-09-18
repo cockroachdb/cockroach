@@ -201,9 +201,14 @@ func (ls *Stores) LookupReplica(
 	var repDesc roachpb.ReplicaDescriptor
 	var repDescFound bool
 	for _, store := range ls.storeMap {
-		replica := store.LookupReplica(start, nil)
-		if replica == nil {
+		rp := store.LookupReplica(start, nil)
+		if rp == nil {
 			continue
+		}
+		replica, release, err := rp.Acquire()
+		defer release()
+		if err != nil {
+			return 0, roachpb.ReplicaDescriptor{}, err
 		}
 
 		// Verify that the descriptor contains the entire range.
@@ -216,7 +221,6 @@ func (ls *Stores) LookupReplica(
 
 		rangeID = replica.RangeID
 
-		var err error
 		repDesc, err = replica.GetReplicaDescriptor()
 		if err != nil {
 			if _, ok := err.(*roachpb.RangeNotFoundError); ok {

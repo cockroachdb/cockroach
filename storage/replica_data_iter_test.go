@@ -157,11 +157,11 @@ func TestReplicaDataIterator(t *testing.T) {
 	}
 	// Create two more ranges, one before the test range and one after.
 	preRng := createReplica(tc.store, 2, roachpb.RKeyMin, roachpb.RKey("b"))
-	if err := tc.store.AddReplicaTest(preRng); err != nil {
+	if err := tc.store.AddReplicaTest(preRng.AsPromise()); err != nil {
 		t.Fatal(err)
 	}
 	postRng := createReplica(tc.store, 3, roachpb.RKey("c"), roachpb.RKeyMax)
-	if err := tc.store.AddReplicaTest(postRng); err != nil {
+	if err := tc.store.AddReplicaTest(postRng.AsPromise()); err != nil {
 		t.Fatal(err)
 	}
 

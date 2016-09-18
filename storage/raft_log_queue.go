@@ -71,7 +71,13 @@ func newRaftLogQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *raftLo
 // getTruncatableIndexes returns the number of truncatable indexes and the
 // oldest index that cannot be truncated for the replica.
 // See computeTruncatableIndex.
-func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
+func getTruncatableIndexes(rp ReplicaPromise) (uint64, uint64, error) {
+	r, release, err := rp.Acquire()
+	defer release()
+	if err != nil {
+		return 0, 0, err
+	}
+
 	rangeID := r.RangeID
 	raftStatus := r.RaftStatus()
 	if raftStatus == nil {
@@ -177,9 +183,9 @@ func getBehindIndex(raftStatus *raft.Status) uint64 {
 // is true only if the replica is the raft leader and if the total number of
 // the range's raft log's stale entries exceeds RaftLogQueueStaleThreshold.
 func (*raftLogQueue) shouldQueue(
-	now hlc.Timestamp, r *Replica, _ config.SystemConfig,
+	now hlc.Timestamp, rp ReplicaPromise, _ config.SystemConfig,
 ) (shouldQ bool, priority float64) {
-	truncatableIndexes, _, err := getTruncatableIndexes(r)
+	truncatableIndexes, _, err := getTruncatableIndexes(rp)
 	if err != nil {
 		log.Warning(context.TODO(), err)
 		return false, 0
@@ -194,13 +200,15 @@ func (*raftLogQueue) shouldQueue(
 func (rlq *raftLogQueue) process(
 	ctx context.Context,
 	now hlc.Timestamp,
-	r *Replica,
+	rp ReplicaPromise,
 	_ config.SystemConfig,
 ) error {
-	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(r)
+	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(rp)
 	if err != nil {
 		return err
 	}
+
+	desc := rp.Desc()
 
 	// Can and should the raft logs be truncated?
 	if truncatableIndexes >= RaftLogQueueStaleThreshold {
@@ -208,9 +216,9 @@ func (rlq *raftLogQueue) process(
 			oldestIndex-truncatableIndexes, oldestIndex)
 		b := &client.Batch{}
 		b.AddRawRequest(&roachpb.TruncateLogRequest{
-			Span:    roachpb.Span{Key: r.Desc().StartKey.AsRawKey()},
+			Span:    roachpb.Span{Key: desc.StartKey.AsRawKey()},
 			Index:   oldestIndex,
-			RangeID: r.RangeID,
+			RangeID: desc.RangeID, // TODO(tschottdorf): this has no place here
 		})
 		return rlq.db.Run(ctx, b)
 	}

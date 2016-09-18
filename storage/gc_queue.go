@@ -117,8 +117,15 @@ type resolveFunc func([]roachpb.Intent, bool, bool) error
 // collection, and if so, at what priority. Returns true for shouldQ
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
-func (*gcQueue) shouldQueue(now hlc.Timestamp, repl *Replica,
+func (*gcQueue) shouldQueue(now hlc.Timestamp, rp ReplicaPromise,
 	sysCfg config.SystemConfig) (shouldQ bool, priority float64) {
+
+	repl, release, err := rp.Acquire()
+	defer release()
+	if err != nil {
+		return false, 0
+	}
+
 	desc := repl.Desc()
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
@@ -292,9 +299,15 @@ func processAbortCache(
 func (gcq *gcQueue) process(
 	ctx context.Context,
 	now hlc.Timestamp,
-	repl *Replica,
+	rp ReplicaPromise,
 	sysCfg config.SystemConfig,
 ) error {
+	repl, release, err := rp.Acquire()
+	defer release()
+	if err != nil {
+		return err
+	}
+
 	snap := repl.store.Engine().NewSnapshot()
 	desc := repl.Desc()
 	defer snap.Close()

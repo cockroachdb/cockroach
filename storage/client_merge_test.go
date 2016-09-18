@@ -180,9 +180,9 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 
 	content := roachpb.Key("testing!")
 
-	aDesc, bDesc, err := createSplitRanges(store)
-	if err != nil {
-		t.Fatal(err)
+	aDesc, bDesc, pErr := createSplitRanges(store)
+	if pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	// Write some values left and right of the proposed split key.
@@ -231,8 +231,19 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	}
 
 	// Verify the merge by looking up keys from both ranges.
-	rangeA := store.LookupReplica([]byte("a"), nil)
-	rangeB := store.LookupReplica([]byte("c"), nil)
+	rpA := store.LookupReplica([]byte("a"), nil)
+	rangeA, release, err := rpA.Acquire()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rpB := store.LookupReplica([]byte("c"), nil)
+	rangeB, release, err := rpB.Acquire()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	rangeADesc := rangeA.Desc()
 	rangeBDesc := rangeB.Desc()
 
@@ -332,11 +343,26 @@ func TestStoreRangeMergeNonCollocated(t *testing.T) {
 		t.Fatalf("Can't split range %s", pErr)
 	}
 
-	rangeA := store.LookupReplica([]byte("a"), nil)
+	rpA := store.LookupReplica([]byte("a"), nil)
+	rangeA, release, err := rpA.Acquire()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
+	}
 	rangeADesc := rangeA.Desc()
-	rangeB := store.LookupReplica([]byte("c"), nil)
+	rpB := store.LookupReplica([]byte("c"), nil)
+	rangeB, release, err := rpB.Acquire()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
+	}
 	rangeBDesc := rangeB.Desc()
-	rangeC := store.LookupReplica([]byte("e"), nil)
+	rpC := store.LookupReplica([]byte("e"), nil)
+	rangeC, release, err := rpC.Acquire()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
+	}
 	rangeCDesc := rangeC.Desc()
 
 	if bytes.Equal(rangeADesc.StartKey, rangeBDesc.StartKey) {
@@ -374,9 +400,9 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	defer stopper.Stop()
 
 	// Split the range.
-	aDesc, bDesc, err := createSplitRanges(store)
-	if err != nil {
-		t.Fatal(err)
+	aDesc, bDesc, pErr := createSplitRanges(store)
+	if pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	// Write some values left and right of the proposed split key.
@@ -406,10 +432,15 @@ func TestStoreRangeMergeStats(t *testing.T) {
 
 	// Merge the b range back into the a range.
 	args := adminMergeArgs(roachpb.KeyMin)
-	if _, err := client.SendWrapped(rg1(store), nil, &args); err != nil {
+	if _, pErr := client.SendWrapped(rg1(store), nil, &args); pErr != nil {
+		t.Fatal(pErr)
+	}
+	rp := store.LookupReplica(aDesc.StartKey, nil)
+	rngMerged, release, err := rp.Acquire()
+	defer release()
+	if err != nil {
 		t.Fatal(err)
 	}
-	rngMerged := store.LookupReplica(aDesc.StartKey, nil)
 
 	// Get the range stats for the merged range and verify.
 	snap = store.Engine().NewSnapshot()
