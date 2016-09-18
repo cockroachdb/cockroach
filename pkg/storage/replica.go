@@ -1836,13 +1836,7 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 		ec.repl.store.tsCacheMu.Unlock()
 	}
 
-	ec.repl.cmdQMu.Lock()
-	for i := SpanAccess(0); i < numSpanAccess; i++ {
-		for j := spanScope(0); j < numSpanScope; j++ {
-			ec.repl.cmdQMu.queues[j].remove(ec.cmds[i][j])
-		}
-	}
-	ec.repl.cmdQMu.Unlock()
+	ec.repl.removeCmdsFromCommandQueue(ec.cmds)
 }
 
 func makeCacheRequest(
@@ -1967,17 +1961,16 @@ func collectSpans(desc roachpb.RangeDescriptor, ba *roachpb.BatchRequest) (*Span
 func (r *Replica) beginCmds(
 	ctx context.Context, ba *roachpb.BatchRequest, spans *SpanSet,
 ) (*endCmds, error) {
-	var cmds batchCmdSet
+	var newCmds batchCmdSet
 	clocklessReads := r.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
 
 		// Check for context cancellation before inserting into the
 		// command queue (and check again afterward). Once we're in the
-		// command queue we're committed to waiting on our prerequisites
-		// (which costs a goroutine, and slightly increases the cost of
-		// other commands that might wait on our keys), so it's good to
-		// bail out early if we can.
+		// command queue we'll need to transfer our prerequisites to all
+		// dependent commands if we want to cancel, so it's good to bail
+		// out early if we can.
 		if err := ctx.Err(); err != nil {
 			errStr := fmt.Sprintf("%s before command queue: %s", err, ba.Summary())
 			log.Warning(ctx, errStr)
@@ -2001,90 +1994,140 @@ func (r *Replica) beginCmds(
 			case spanLocal:
 				return hlc.Timestamp{}
 			}
-			panic("unexpected scope")
+			panic(fmt.Sprintf("unexpected scope %d", scope))
 		}
 
 		r.cmdQMu.Lock()
-		var chans []<-chan struct{}
+		var prereqs [numSpanAccess][numSpanScope][]*cmd
+		var prereqCount int
 		// Collect all the channels to wait on before adding this batch to the
 		// command queue.
 		for i := SpanAccess(0); i < numSpanAccess; i++ {
 			// With clockless reads, everything is treated as writing.
 			readOnly := i == SpanReadOnly && !clocklessReads
 			for j := spanScope(0); j < numSpanScope; j++ {
-				chans = append(chans, r.cmdQMu.queues[j].getWait(readOnly, scopeTS(j), spans.getSpans(i, j))...)
+				prereqs[i][j] = r.cmdQMu.queues[j].getPrereqs(readOnly, scopeTS(j), spans.getSpans(i, j))
+				prereqCount += len(prereqs[i][j])
 			}
 		}
 		for i := SpanAccess(0); i < numSpanAccess; i++ {
 			readOnly := i == SpanReadOnly && !clocklessReads // ditto above
 			for j := spanScope(0); j < numSpanScope; j++ {
-				cmds[i][j] = r.cmdQMu.queues[j].add(readOnly, scopeTS(j), spans.getSpans(i, j))
+				newCmds[i][j] = r.cmdQMu.queues[j].add(readOnly, scopeTS(j), prereqs[i][j], spans.getSpans(i, j))
 			}
 		}
 		r.cmdQMu.Unlock()
 
-		beforeWait := timeutil.Now()
 		ctxDone := ctx.Done()
-		numChans := len(chans)
-		if numChans > 0 {
-			log.Eventf(ctx, "waiting for %d overlapping requests", len(chans))
+		beforeWait := timeutil.Now()
+		if prereqCount > 0 {
+			log.Eventf(ctx, "waiting for %d overlapping requests", prereqCount)
 		}
-		for _, ch := range chans {
-			select {
-			case <-ch:
-			case <-ctxDone:
-				err := ctx.Err()
-				errStr := fmt.Sprintf("%s while in command queue: %s", err, ba)
-				log.Warning(ctx, errStr)
-				log.ErrEvent(ctx, errStr)
-				// TODO(tamird): This should use r.store.stopper.RunAsyncTask, though
-				// be careful about such a change as the code paths here are not well
-				// tested.
-				go func() {
-					// The command is moot, so we don't need to bother executing.
-					// However, the command queue assumes that commands don't drop
-					// out before their prerequisites, so we still have to wait it
-					// out.
-					slowTimer := timeutil.NewTimer()
-					defer slowTimer.Stop()
-					slowTimer.Reset(base.SlowRequestThreshold)
-					for _, ch := range chans {
-						select {
-						case <-ch:
-						case <-slowTimer.C:
-							r.cmdQMu.Lock()
-							g := r.cmdQMu.queues[spanGlobal].String()
-							l := r.cmdQMu.queues[spanLocal].String()
-							r.cmdQMu.Unlock()
-							log.Warningf(r.AnnotateCtx(context.Background()),
-								"have been waiting %s for dependencies: cmds:\n%+v\nglobal:\n%s\n"+
-									"local:%s\n",
-								base.SlowRequestThreshold, cmds, g, l)
-							r.store.metrics.SlowCommandQueueRequests.Inc(1)
-							defer r.store.metrics.SlowCommandQueueRequests.Dec(1)
-						case <-r.store.stopper.ShouldQuiesce():
-							// If the process is shutting down, we return without
-							// removing this command from queue. This avoids
-							// dropping out before prerequisites.
-							return
+
+		for _, accessCmds := range newCmds {
+			for _, newCmd := range accessCmds {
+				// If newCmd is nil it means that the BatchRequest contains no spans for this
+				// SpanAccess/spanScope permutation.
+				if newCmd == nil {
+					continue
+				}
+				// Loop over each command's prereqs. This cannot be a for-range loop, because we
+				// may grow the newCmd.prereqs slice with transitive dependencies of cancelled
+				// prerequisites.
+				for i := 0; i < len(newCmd.prereqs); i++ {
+					prereq := newCmd.prereqs[i]
+					select {
+					case <-prereq.pending:
+						// Either the prerequisite command finished executing or it was cancelled.
+						// If the command finished cleanly, there's nothing for us to do except wait
+						// for the next prerequisite to finish. However, if the command was
+						// cancelled, we have to handle the cancellation here. This check does not
+						// need to be synchronized, because prereq.cancelled will only ever be set
+						// on the other side of the prereq.pending closing (see below), which the Go
+						// Memory Model promises is safe. Similarly, a command's prereqs will only
+						// ever be mutated on the other side of the prereq.pending closing.
+						if prereq.cancelled {
+							// Migrate transitive dependencies from cancelled prerequisite to
+							// current command. All prerequisites of the prerequisite that was just
+							// cancelled are now this command's direct prerequisites.
+							//
+							// While it may be possible that some of these transitive dependencies
+							// no longer overlap the current command, they are still required,
+							// because they themselves might be dependent on a command that overlaps
+							// both the current and prerequisite command.
+							//
+							// For instance, take the following dependency graph, where command 3
+							// was cancelled. We need to set command 2 as a prerequisite of command
+							// 4 even though they do not overlap because command 2 has a dependency
+							// on command 1, which does overlap command 4. We could try to catch
+							// this situation and set command 1 as a prerequisite of command 4
+							// directly, but this approach would require much more complexity and
+							// would need to traverse all the way up the dependency graph in the
+							// worst case.
+							//
+							//  cmd 1:   -------------
+							//                     |
+							//  cmd 2:           -----
+							//                     |
+							//  cmd 3:     xxxxxxxxxxx
+							//              |
+							//  cmd 4:   -----
+							//
+							// It is also be possible that some of the transitive dependencies are
+							// unnecessary and that we're being pessimistic here. An example case
+							// for this is shown in the following dependency graph, where a write
+							// separating two reads is cancelled. During the cancellation, command 3
+							// will take command 1 as it's prerequisite even though reads do not
+							// need to wait on other reads. We could be smarter here and detect
+							// these cases, but the pessimism does not affect correctness.
+							//
+							// cmd 1 [R]:   -----
+							//                |
+							// cmd 2 [W]:   xxxxx
+							//                |
+							// cmd 3 [R]:   -----
+							//
+							// The interaction between commands' timestamps and their resulting
+							// dependencies (see rules in command_queue.go) will work as expected
+							// with regard to properly transferring dependencies. This is because
+							// these timestamp rules all exhibit a transitive relationship.
+							newCmd.prereqs = append(newCmd.prereqs, prereq.prereqs...)
 						}
-					}
-					r.cmdQMu.Lock()
-					for i := SpanAccess(0); i < numSpanAccess; i++ {
-						for j := spanScope(0); j < numSpanScope; j++ {
-							r.cmdQMu.queues[j].remove(cmds[i][j])
+					case <-ctxDone:
+						err := ctx.Err()
+						errStr := fmt.Sprintf("%s while in command queue: %s", err, ba)
+						log.Warning(ctx, errStr)
+						log.ErrEvent(ctx, errStr)
+
+						// Truncate the cancelled command's prerequisite list to only those
+						// prerequisites that have not yet been waited on. Before doing so,
+						// nil out prefix of slice to allow GC of all prerequisite commands
+						// that have already completed. This prevents us from leaking large
+						// chunks of the dependency graph.
+						for j := range newCmd.prereqs[:i] {
+							newCmd.prereqs[j] = nil
 						}
+						newCmd.prereqs = newCmd.prereqs[i:]
+						newCmd.cancelled = true
+
+						// Remove the command from the command queue immediately. Dependents will
+						// transfer transitive dependencies when they try to block on this command.
+						// New commands that would have established a dependency on this command
+						// will never see it, which is fine.
+						r.removeCmdsFromCommandQueue(newCmds)
+						return nil, err
+					case <-r.store.stopper.ShouldQuiesce():
+						// While shutting down, commands may have been added to the
+						// command queue that will never finish.
+						return nil, &roachpb.NodeUnavailableError{}
 					}
-					r.cmdQMu.Unlock()
-				}()
-				return nil, err
-			case <-r.store.stopper.ShouldQuiesce():
-				// While shutting down, commands may have been added to the
-				// command queue that will never finish.
-				return nil, &roachpb.NodeUnavailableError{}
+				}
+
+				// Set prereqs to nil so that the prereq slice and all referenced commands can be GCed.
+				newCmd.prereqs = nil
 			}
 		}
-		if numChans > 0 {
+		if prereqCount > 0 {
 			log.Eventf(ctx, "waited %s for overlapping requests", timeutil.Since(beforeWait))
 		}
 	} else {
@@ -2109,10 +2152,22 @@ func (r *Replica) beginCmds(
 
 	ec := &endCmds{
 		repl: r,
-		cmds: cmds,
+		cmds: newCmds,
 		ba:   *ba,
 	}
 	return ec, nil
+}
+
+// removeCmdsFromCommandQueue removes a batch's set of commands for the
+// replica's command queue.
+func (r *Replica) removeCmdsFromCommandQueue(cmds batchCmdSet) {
+	r.cmdQMu.Lock()
+	for _, accessCmds := range cmds {
+		for scope, cmd := range accessCmds {
+			r.cmdQMu.queues[scope].remove(cmd)
+		}
+	}
+	r.cmdQMu.Unlock()
 }
 
 // applyTimestampCache moves the batch timestamp forward depending on
