@@ -32,18 +32,20 @@ import (
 // executing commands. New commands affecting keys or key ranges must
 // wait on already-executing commands which overlap their key range.
 //
-// Before executing, a command invokes getWait() to acquire a slice of
-// channels belonging to overlapping commands which are already
-// running. Each channel is waited on by the caller for confirmation
-// that all overlapping, pending commands have completed and the
-// pending command can proceed.
+// Before executing, a command invokes getPrereqs() to acquire a slice of
+// references to overlapping commands that are already in the command queue.
+// After determining its prerequisite commands, the command is added to the
+// queue via add(). getPrereqs() and add() accept a parameter indicating whether
+// the command is read-only. Read-only commands don't need to wait on other
+// read-only commands, so the commands returned via getPrereqs() don't include
+// read-only on read-only overlapping commands as an optimization. Both getPrereqs()
+// and add() must see an atomic view of the command queue, so in a concurrent setting,
+// their execution must be synchronized under the same lock.
 //
-// After waiting, a command is added to the queue's already-executing
-// set via add(). add accepts a parameter indicating whether the
-// command is read-only. Read-only commands don't need to wait on other
-// read-only commands, so the channels returned via getWait() don't
-// include read-only on read-only overlapping commands as an
-// optimization.
+// After determining prerequisite commands and adding the new command to the
+// command queue, the new command should wait on each prerequisite command's
+// pending channel for confirmation that all overlapping commands have completed
+// and that the new command can proceed.
 //
 // Once commands complete, remove() is invoked to remove the executing
 // command and close its channel, possibly signaling waiting commands
@@ -55,8 +57,8 @@ type CommandQueue struct {
 	reads       interval.Tree
 	writes      interval.Tree
 	idAlloc     int64
-	wRg, rwRg   interval.RangeGroup // avoids allocating in getWait
-	oHeap       overlapHeap         // avoids allocating in getWait
+	wRg, rwRg   interval.RangeGroup // avoids allocating in getPrereqs
+	oHeap       overlapHeap         // avoids allocating in getPrereqs
 	overlaps    []*cmd              // avoids allocating in getOverlaps
 
 	coveringOptimization bool // if true, use covering span optimization
@@ -75,10 +77,14 @@ type cmd struct {
 	key       interval.Range
 	readOnly  bool
 	timestamp hlc.Timestamp
-	expanded  bool          // have the children been added
-	buffered  bool          // is this cmd buffered in readsBuffer
+
+	buffered bool // is this cmd buffered in readsBuffer
+	expanded bool // have the children been added
+	children []cmd
+
+	prereqs   []*cmd
 	pending   chan struct{} // closed when complete
-	children  []cmd
+	cancelled bool
 }
 
 // ID implements interval.Interface.
@@ -212,20 +218,22 @@ func (cq *CommandQueue) expand(c *cmd, isInserted bool) bool {
 	return true
 }
 
-// getWait returns a slice of the pending channels of executing
-// commands which overlap the specified key ranges. The caller
-// should then invoke add() to add the keys to the command queue and
-// then wait for confirmation that all gating commands have completed
-// or failed. readOnly is true if the requester is a read-only
-// command; false for read-write. The provided timestamp, if non-zero,
-// is used to allow reads to proceed if they are at earlier timestamps
-// than pending writes, and writes to proceed if they are at later
-// timestamps than pending reads.
-func (cq *CommandQueue) getWait(
+// getPrereqs returns a slice of the prerequisite commands which overlap the
+// specified key ranges. The caller should invoke add() to add the keys to the
+// command queue and then wait for confirmation that all gating commands have
+// completed or failed by waiting for each of their pending channels to close.
+//
+// readOnly is true if the requester is a read-only command; false for read-write.
+// The provided timestamp, if non-zero, is used to allow reads to proceed if they
+// are at earlier timestamps than pending writes, and writes to proceed if they are
+// at later timestamps than pending reads.
+func (cq *CommandQueue) getPrereqs(
 	readOnly bool, timestamp hlc.Timestamp, spans []roachpb.Span,
-) (chans []<-chan struct{}) {
+) (prereqs []*cmd) {
 	prepareSpans(spans)
 
+	// Loop over all spans. This cannot be a for-range loop, because the
+	// loop counter may be adjusted within the loop.
 	for i := 0; i < len(spans); i++ {
 		span := spans[i]
 		if span.EndKey == nil {
@@ -253,17 +261,16 @@ func (cq *CommandQueue) getWait(
 
 		// Sort overlapping commands by command ID and iterate from latest to earliest,
 		// adding the commands' ranges to the RangeGroup to determine gating keyspace
-		// command dependencies. Because all commands are given WaitGroup dependencies
-		// to the most recent commands that they are dependent on, and because of the
-		// causality provided by the strictly increasing command ID allocation, this
-		// approach will construct a DAG-like dependency graph between WaitGroups with
-		// overlapping keys. This comes as an alternative to creating explicit WaitGroups
+		// command dependencies. Because all commands are given dependencies to the most
+		// recent commands that they are dependent on, and because of the causality provided
+		// by the strictly increasing command ID allocation, this approach will construct
+		// a DAG-like dependency graph between returned prerequisite commands with
+		// overlapping keys. This comes as an alternative to returning explicit prerequisite
 		// dependencies to all gating commands for each new command, which could result
 		// in an exponential dependency explosion.
 		//
 		// For example, consider the following 5 write commands, each with key ranges
-		// represented on the x axis and WaitGroup dependencies represented by vertical
-		// lines:
+		// represented on the x axis and dependencies represented by vertical lines:
 		//
 		// cmd 1:   --------------
 		//           |      |
@@ -278,9 +285,28 @@ func (cq *CommandQueue) getWait(
 		// Instead of having each command establish explicit dependencies on all previous
 		// overlapping commands, each command only needs to establish explicit dependencies
 		// on the set of overlapping commands closest to the new command that together span
-		// the new command's overlapped range. Following this strategy, the other dependencies
+		// the new command's key range. Following this strategy, the other dependencies
 		// will be implicitly enforced, which reduces memory utilization and synchronization
 		// costs.
+		//
+		// This approach is improved further by noting that dependencies on overlapping
+		// commands (even those that cover additional portions of the new command) that are
+		// transitive dependencies of commands that we have already established a dependency
+		// on can be safely ignored. This is safe because dependencies will be transitively
+		// enforced. Following this strategy, all command dependencies will be enforced
+		// without the need for the majority of dependencies to be held explicitly, which
+		// reduces memory utilization and synchronization costs. All together, the final
+		// dependency graph will look something like:
+		//
+		// cmd 1:   --------------
+		//                  |
+		// cmd 2:       -------------
+		//                |
+		// cmd 3:    -------
+		//                |
+		// cmd 4:         -------
+		//                   |
+		// cmd 5:         -------
 		//
 		// The exception are existing reads: since reads don't wait for each other, an incoming
 		// write must wait for reads even when they are covered by a "later" read (since that
@@ -353,7 +379,7 @@ func (cq *CommandQueue) getWait(
 					if cmd.pending == nil {
 						cmd.pending = make(chan struct{})
 					}
-					chans = append(chans, cmd.pending)
+					prereqs = append(prereqs, cmd)
 				}
 			} else {
 				if cmdHasTimestamp {
@@ -385,7 +411,7 @@ func (cq *CommandQueue) getWait(
 					if cmd.pending == nil {
 						cmd.pending = make(chan struct{})
 					}
-					chans = append(chans, cmd.pending)
+					prereqs = append(prereqs, cmd)
 				}
 
 				// The current command is a write, so add it to the write RangeGroup.
@@ -406,11 +432,11 @@ func (cq *CommandQueue) getWait(
 		cq.wRg.Clear()
 		cq.rwRg.Clear()
 	}
-	return chans
+	return prereqs
 }
 
 // getOverlaps returns a slice of values which overlap the specified
-// interval. The slice is only valid until the next call to GetOverlaps.
+// interval. The slice is only valid until the next call to getOverlaps.
 func (cq *CommandQueue) getOverlaps(
 	readOnly bool, timestamp hlc.Timestamp, rng interval.Range,
 ) []*cmd {
@@ -454,8 +480,7 @@ func (cq *CommandQueue) getOverlaps(
 	return overlaps
 }
 
-// overlapHeap is a max-heap of cache.Overlaps, sorting the elements
-// in decreasing Value.(*cmd).id order.
+// overlapHeap is a max-heap ordered by cmd.id.
 type overlapHeap []*cmd
 
 func (o overlapHeap) Len() int { return len(o) }
@@ -489,19 +514,17 @@ func (o *overlapHeap) PopOverlap() *cmd {
 	return x.(*cmd)
 }
 
-// add adds commands to the queue which affect the specified key ranges. Ranges
-// without an end key affect only the start key. The returned interface is the
-// key for the command queue and must be re-supplied on subsequent invocation
-// of remove().
+// add adds commands to the queue which affect the specified key ranges with the provided
+// prerequisites, determined by getPrereqs(). Ranges without an end key affect only the
+// start key. The returned command must be re-supplied on subsequent invocation of remove().
 //
 // Either all supplied spans must be range-global or range-local. Failure to
 // obey with this restriction results in a fatal error.
 //
 // Returns a nil `cmd` when no spans are given.
-//
-// add should be invoked after waiting on already-executing, overlapping
-// commands via the WaitGroup initialized through getWait().
-func (cq *CommandQueue) add(readOnly bool, timestamp hlc.Timestamp, spans []roachpb.Span) *cmd {
+func (cq *CommandQueue) add(
+	readOnly bool, timestamp hlc.Timestamp, prereqs []*cmd, spans []roachpb.Span,
+) *cmd {
 	if len(spans) == 0 {
 		return nil
 	}
@@ -543,8 +566,9 @@ func (cq *CommandQueue) add(readOnly bool, timestamp hlc.Timestamp, spans []roac
 	cmd.key = coveringSpan.AsRange()
 	cmd.readOnly = readOnly
 	cmd.timestamp = timestamp
-	cmd.expanded = false
+	cmd.prereqs = prereqs
 
+	cmd.expanded = false
 	if len(spans) > 1 {
 		// Populate the covering entry's children.
 		cmd.children = cmds[1:]
