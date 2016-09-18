@@ -158,12 +158,12 @@ func (s *Store) ManualReplicaGC(repl *Replica) error {
 	return s.gcQueue.process(s.Ctx(), s.Clock().Now(), repl, cfg)
 }
 
-func (r *Replica) RaftLock() bool {
-	return r.raftLock()
+func (r *Replica) RaftLock() {
+	r.raftMu.Lock()
 }
 
-func (r *Replica) RaftUnlock(uninitRaftLocked bool) {
-	r.raftUnlock(uninitRaftLocked)
+func (r *Replica) RaftUnlock() {
+	r.raftMu.Unlock()
 }
 
 // GetLastIndex is the same function as LastIndex but it does not require
