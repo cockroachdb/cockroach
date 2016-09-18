@@ -25,34 +25,35 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func getWait(cq *CommandQueue, from, to roachpb.Key, readOnly bool) []<-chan struct{} {
-	return cq.getWait(readOnly, roachpb.Span{Key: from, EndKey: to})
+func getPrereqs(cq *CommandQueue, from, to roachpb.Key, readOnly bool) []*cmd {
+	return cq.getPrereqs(readOnly, roachpb.Span{Key: from, EndKey: to})
 }
 
-func add(cq *CommandQueue, from, to roachpb.Key, readOnly bool) *cmd {
-	return cq.add(readOnly, roachpb.Span{Key: from, EndKey: to})
+func add(cq *CommandQueue, from, to roachpb.Key, readOnly bool, prereqs []*cmd) *cmd {
+	return cq.add(readOnly, prereqs, roachpb.Span{Key: from, EndKey: to})
 }
 
-func getWaitAndAdd(cq *CommandQueue, from, to roachpb.Key, readOnly bool) ([]<-chan struct{}, *cmd) {
-	return getWait(cq, from, to, readOnly), add(cq, from, to, readOnly)
+func getPrereqsAndAdd(cq *CommandQueue, from, to roachpb.Key, readOnly bool) ([]*cmd, *cmd) {
+	prereqs := getPrereqs(cq, from, to, readOnly)
+	return prereqs, add(cq, from, to, readOnly, prereqs)
 }
 
-func waitCmdDone(chans []<-chan struct{}) {
-	for _, ch := range chans {
-		<-ch
+func waitCmdDone(prereqs []*cmd) {
+	for _, prereq := range prereqs {
+		<-prereq.pending
 	}
 }
 
-// testCmdDone waits for the cmdDone channel to be closed for at most
-// the specified wait duration. Returns true if the command finished in
+// testCmdDone waits for the prereqs' pending channels to be closed for at
+// most the specified wait duration. Returns true if the command finished in
 // the allotted time, false otherwise.
-func testCmdDone(chans []<-chan struct{}, wait time.Duration) bool {
+func testCmdDone(prereqs []*cmd, wait time.Duration) bool {
 	t := time.After(wait)
-	for _, ch := range chans {
+	for _, prereq := range prereqs {
 		select {
 		case <-t:
 			return false
-		case <-ch:
+		case <-prereq.pending:
 		}
 	}
 	return true
@@ -63,17 +64,17 @@ func TestCommandQueue(t *testing.T) {
 	cq := NewCommandQueue()
 
 	// Try a command with no overlapping already-running commands.
-	waitCmdDone(getWait(cq, roachpb.Key("a"), nil, false))
-	waitCmdDone(getWait(cq, roachpb.Key("a"), roachpb.Key("b"), false))
+	waitCmdDone(getPrereqs(cq, roachpb.Key("a"), nil, false))
+	waitCmdDone(getPrereqs(cq, roachpb.Key("a"), roachpb.Key("b"), false))
 
 	// Add a command and verify dependency on it.
-	wk := add(cq, roachpb.Key("a"), nil, false)
-	chans := getWait(cq, roachpb.Key("a"), nil, false)
-	if testCmdDone(chans, 1*time.Millisecond) {
+	wk := add(cq, roachpb.Key("a"), nil, false, nil)
+	prereqs := getPrereqs(cq, roachpb.Key("a"), nil, false)
+	if testCmdDone(prereqs, 1*time.Millisecond) {
 		t.Fatal("command should not finish with command outstanding")
 	}
 	cq.remove(wk)
-	if !testCmdDone(chans, 5*time.Millisecond) {
+	if !testCmdDone(prereqs, 5*time.Millisecond) {
 		t.Fatal("command should finish with no commands outstanding")
 	}
 }
@@ -87,13 +88,13 @@ func TestCommandQueueWriteWaitForNonAdjacentRead(t *testing.T) {
 	cq := NewCommandQueue()
 	key := roachpb.Key("a")
 	// Add a read-only command.
-	wk1 := add(cq, key, nil, true)
+	wk1 := add(cq, key, nil, true, nil)
 	// Add another one on top.
-	wk2 := add(cq, key, nil, true)
+	wk2 := add(cq, key, nil, true, nil)
 
 	// A write should have to wait for **both** reads, not only the second
 	// one.
-	chans := getWait(cq, key, nil, false /* !readOnly */)
+	prereqs := getPrereqs(cq, key, nil, false /* !readOnly */)
 
 	assert := func(blocked bool) {
 		d := time.Millisecond
@@ -101,7 +102,7 @@ func TestCommandQueueWriteWaitForNonAdjacentRead(t *testing.T) {
 			d *= 5
 		}
 		f, l, _ := caller.Lookup(1)
-		if testCmdDone(chans, d) {
+		if testCmdDone(prereqs, d) {
 			if blocked {
 				t.Fatalf("%s:%d: command should not finish with command outstanding", f, l)
 			}
@@ -130,16 +131,16 @@ func TestCommandQueueNoWaitOnReadOnly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	cq := NewCommandQueue()
 	// Add a read-only command.
-	chans1, wk := getWaitAndAdd(cq, roachpb.Key("a"), nil, true)
+	prereqs1, wk := getPrereqsAndAdd(cq, roachpb.Key("a"), nil, true)
 	// Verify no wait on another read-only command.
-	waitCmdDone(chans1)
+	waitCmdDone(prereqs1)
 	// Verify wait with a read-write command.
-	chans2 := getWait(cq, roachpb.Key("a"), nil, false)
-	if testCmdDone(chans2, 1*time.Millisecond) {
+	prereqs2 := getPrereqs(cq, roachpb.Key("a"), nil, false)
+	if testCmdDone(prereqs2, 1*time.Millisecond) {
 		t.Fatal("command should not finish with command outstanding")
 	}
 	cq.remove(wk)
-	if !testCmdDone(chans2, 5*time.Millisecond) {
+	if !testCmdDone(prereqs2, 5*time.Millisecond) {
 		t.Fatal("command should finish with no commands outstanding")
 	}
 }
@@ -149,20 +150,20 @@ func TestCommandQueueMultipleExecutingCommands(t *testing.T) {
 	cq := NewCommandQueue()
 
 	// Add multiple commands and add a command which overlaps them all.
-	wk1 := add(cq, roachpb.Key("a"), nil, false)
-	wk2 := add(cq, roachpb.Key("b"), roachpb.Key("c"), false)
-	wk3 := add(cq, roachpb.Key("0"), roachpb.Key("d"), false)
-	chans := getWait(cq, roachpb.Key("a"), roachpb.Key("cc"), false)
+	wk1 := add(cq, roachpb.Key("a"), nil, false, nil)
+	wk2 := add(cq, roachpb.Key("b"), roachpb.Key("c"), false, nil)
+	wk3 := add(cq, roachpb.Key("0"), roachpb.Key("d"), false, nil)
+	prereqs := getPrereqs(cq, roachpb.Key("a"), roachpb.Key("cc"), false)
 	cq.remove(wk1)
-	if testCmdDone(chans, 1*time.Millisecond) {
+	if testCmdDone(prereqs, 1*time.Millisecond) {
 		t.Fatal("command should not finish with two commands outstanding")
 	}
 	cq.remove(wk2)
-	if testCmdDone(chans, 1*time.Millisecond) {
+	if testCmdDone(prereqs, 1*time.Millisecond) {
 		t.Fatal("command should not finish with one command outstanding")
 	}
 	cq.remove(wk3)
-	if !testCmdDone(chans, 5*time.Millisecond) {
+	if !testCmdDone(prereqs, 5*time.Millisecond) {
 		t.Fatal("command should finish with no commands outstanding")
 	}
 }
@@ -172,29 +173,29 @@ func TestCommandQueueMultiplePendingCommands(t *testing.T) {
 	cq := NewCommandQueue()
 
 	// Add a command which will overlap all commands.
-	wk0 := add(cq, roachpb.Key("a"), roachpb.Key("d"), false)
-	chans1, wk1 := getWaitAndAdd(cq, roachpb.Key("a"), roachpb.Key("b").Next(), false)
-	chans2 := getWait(cq, roachpb.Key("b"), nil, false)
-	chans3 := getWait(cq, roachpb.Key("c"), nil, false)
+	wk0 := add(cq, roachpb.Key("a"), roachpb.Key("d"), false, nil)
+	prereqs1, wk1 := getPrereqsAndAdd(cq, roachpb.Key("a"), roachpb.Key("b").Next(), false)
+	prereqs2 := getPrereqs(cq, roachpb.Key("b"), nil, false)
+	prereqs3 := getPrereqs(cq, roachpb.Key("c"), nil, false)
 
-	for i, chans := range [][]<-chan struct{}{chans1, chans2, chans3} {
-		if testCmdDone(chans, 1*time.Millisecond) {
+	for i, prereqs := range [][]*cmd{prereqs1, prereqs2, prereqs3} {
+		if testCmdDone(prereqs, 1*time.Millisecond) {
 			t.Fatalf("command %d should not finish with command 0 outstanding", i+1)
 		}
 	}
 
 	cq.remove(wk0)
-	if !testCmdDone(chans1, 5*time.Millisecond) {
+	if !testCmdDone(prereqs1, 5*time.Millisecond) {
 		t.Fatal("command 1 should finish")
 	}
-	if !testCmdDone(chans3, 5*time.Millisecond) {
+	if !testCmdDone(prereqs3, 5*time.Millisecond) {
 		t.Fatal("command 3 should finish")
 	}
-	if testCmdDone(chans2, 5*time.Millisecond) {
+	if testCmdDone(prereqs2, 5*time.Millisecond) {
 		t.Fatal("command 2 should remain outstanding")
 	}
 	cq.remove(wk1)
-	if !testCmdDone(chans2, 5*time.Millisecond) {
+	if !testCmdDone(prereqs2, 5*time.Millisecond) {
 		t.Fatal("command 2 should finish with no commands outstanding")
 	}
 }
@@ -204,37 +205,37 @@ func TestCommandQueueRemove(t *testing.T) {
 	cq := NewCommandQueue()
 
 	// Add multiple commands and commands which access each.
-	wk1 := add(cq, roachpb.Key("a"), nil, false)
-	wk2 := add(cq, roachpb.Key("b"), nil, false)
-	chans1 := getWait(cq, roachpb.Key("a"), nil, false)
-	chans2 := getWait(cq, roachpb.Key("b"), nil, false)
+	wk1 := add(cq, roachpb.Key("a"), nil, false, nil)
+	wk2 := add(cq, roachpb.Key("b"), nil, false, nil)
+	prereqs1 := getPrereqs(cq, roachpb.Key("a"), nil, false)
+	prereqs2 := getPrereqs(cq, roachpb.Key("b"), nil, false)
 
 	// Remove the commands from the queue and verify both commands are signaled.
 	cq.remove(wk1)
 	cq.remove(wk2)
 
-	for i, chans := range [][]<-chan struct{}{chans1, chans2} {
-		if !testCmdDone(chans, 5*time.Millisecond) {
+	for i, prereqs := range [][]*cmd{prereqs1, prereqs2} {
+		if !testCmdDone(prereqs, 5*time.Millisecond) {
 			t.Fatalf("command %d should finish with clearing queue", i+1)
 		}
 	}
 }
 
 // TestCommandQueueExclusiveEnd verifies that an end key is treated as
-// an exclusive end when GetWait calculates overlapping commands. Test
-// it by calling GetWait with a command whose start key is equal to
+// an exclusive end when GetPrereqs calculates overlapping commands. Test
+// it by calling GetPrereqs with a command whose start key is equal to
 // the end key of a previous command.
 func TestCommandQueueExclusiveEnd(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	cq := NewCommandQueue()
-	add(cq, roachpb.Key("a"), roachpb.Key("b"), false)
+	add(cq, roachpb.Key("a"), roachpb.Key("b"), false, nil)
 
 	// Verify no wait on the second writer command on "b" since
 	// it does not overlap with the first command on ["a", "b").
-	waitCmdDone(getWait(cq, roachpb.Key("b"), nil, false))
+	waitCmdDone(getPrereqs(cq, roachpb.Key("b"), nil, false))
 }
 
-// TestCommandQueueSelfOverlap makes sure that GetWait adds all of the
+// TestCommandQueueSelfOverlap makes sure that GetPrereqs adds all of the
 // key ranges simultaneously. If that weren't the case, all but the first
 // span would wind up waiting on overlapping previous spans, resulting
 // in deadlock.
@@ -242,10 +243,10 @@ func TestCommandQueueSelfOverlap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	cq := NewCommandQueue()
 	a := roachpb.Key("a")
-	k := add(cq, a, roachpb.Key("b"), false)
-	chans := cq.getWait(false, []roachpb.Span{{Key: a}, {Key: a}, {Key: a}}...)
+	k := add(cq, a, roachpb.Key("b"), false, nil)
+	prereqs := cq.getPrereqs(false, []roachpb.Span{{Key: a}, {Key: a}, {Key: a}}...)
 	cq.remove(k)
-	waitCmdDone(chans)
+	waitCmdDone(prereqs)
 }
 
 func TestCommandQueueCovering(t *testing.T) {
@@ -258,17 +259,17 @@ func TestCommandQueueCovering(t *testing.T) {
 
 	{
 		// Test adding a covering entry and then not expanding it.
-		wk := cq.add(false, a, b)
-		waitCmdDone(cq.getWait(false, c))
+		wk := cq.add(false, nil, a, b)
+		waitCmdDone(cq.getPrereqs(false, c))
 		cq.remove(wk)
 	}
 
 	{
 		// Test adding a covering entry and expanding it.
-		wk := cq.add(false, a, b)
-		chans := cq.getWait(false, a)
+		wk := cq.add(false, nil, a, b)
+		prereqs := cq.getPrereqs(false, a)
 		cq.remove(wk)
-		waitCmdDone(chans)
+		waitCmdDone(prereqs)
 	}
 }
 
@@ -298,17 +299,17 @@ func TestCommandQueueIssue6495(t *testing.T) {
 		mkSpan("\xbb\x89\x8a\x8a\x89", "\xbb\x89\x8a\x8a\x89\x00"),
 	}
 
-	cq.getWait(false, spans1998...)
-	cmd1998 := cq.add(false, spans1998...)
+	cq.getPrereqs(false, spans1998...)
+	cmd1998 := cq.add(false, nil, spans1998...)
 
-	cq.getWait(true, spans1999...)
-	cmd1999 := cq.add(true, spans1999...)
+	cq.getPrereqs(true, spans1999...)
+	cmd1999 := cq.add(true, nil, spans1999...)
 
-	cq.getWait(true, spans2002...)
-	cq.add(true, spans2002...)
+	cq.getPrereqs(true, spans2002...)
+	cq.add(true, nil, spans2002...)
 
-	cq.getWait(false, spans2003...)
-	cq.add(false, spans2003...)
+	cq.getPrereqs(false, spans2003...)
+	cq.add(false, nil, spans2003...)
 
 	cq.remove(cmd1998)
 	cq.remove(cmd1999)
