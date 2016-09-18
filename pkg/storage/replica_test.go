@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -2255,21 +2256,171 @@ func TestReplicaCommandQueueInconsistent(t *testing.T) {
 	// Success.
 }
 
+type cancellationTestInstruction struct {
+	span   roachpb.Span
+	cancel bool
+}
+
 // TestReplicaCommandQueueCancellation verifies that commands which are
-// waiting on the command queue do not execute if their context is cancelled.
+// waiting on the command queue do not execute or deadlock if their context
+// is cancelled, and that commands dependent on cancelled commands execute
+// correctly.
 func TestReplicaCommandQueueCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// Intercept commands with matching command IDs and block them.
-	blockingStart := make(chan struct{})
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	keyC := roachpb.Key("c")
+	keyD := roachpb.Key("d")
+	keyE := roachpb.Key("e")
+	keyF := roachpb.Key("e")
+
+	makeSpan := func(start, end roachpb.Key) roachpb.Span {
+		return roachpb.Span{Key: start, EndKey: end.Next()}
+	}
+	spanAB := makeSpan(keyA, keyB)
+	spanAC := makeSpan(keyA, keyC)
+	spanAF := makeSpan(keyA, keyF)
+	spanBE := makeSpan(keyB, keyE)
+	spanCD := makeSpan(keyC, keyD)
+	spanDF := makeSpan(keyD, keyF)
+	spanEF := makeSpan(keyE, keyF)
+
+	testCases := []struct {
+		name   string
+		instrs []cancellationTestInstruction
+	}{
+		//  -----      -----     -----      xxxxx
+		//    |    ->    |    &    |    ->    |    etc.
+		//  -----      xxxxx     -----      -----
+		{name: "SingleDependency", instrs: []cancellationTestInstruction{
+			{span: spanAF},
+			{span: spanAF},
+		}},
+		//  --------      xxxxxxxx      --------      xxxxxxxx     --------      --------
+		//   |    |   ->   |    |    &   |    |   ->   |    |   &   |    |   ->   |    |   etc.
+		//  ---  ---      ---  ---      ---  ---      xxx  xxx     ---  ---      xxx  xxx
+		{name: "MultipleDependencies", instrs: []cancellationTestInstruction{
+			{span: spanAF},
+			{span: spanAC},
+			{span: spanDF},
+		}},
+		//  -----      -----       -----      xxxxx       -----      xxxxx
+		//    |          |           |          |           |          |
+		//  -----  ->  xxxxx   &   -----  ->  xxxxx   &   -----  ->  xxxxx  etc.
+		//    |          |           |          |           |          |
+		//  -----      -----       -----      -----       -----      xxxxx
+		{name: "DependencyChain", instrs: []cancellationTestInstruction{
+			{span: spanAF},
+			{span: spanAF},
+			{span: spanAF},
+		}},
+		//  ---     ---      ---     ---     ---     ---      xxx     xxx
+		//   |       |        |       |       |       |        |       |
+		//  -----------  ->  xxxxxxxxxxx  &  -----------  ->  -----------  etc.
+		//       |                |               |                |
+		//      ---              ---             ---              xxx
+		{name: "SplitDependencyChain", instrs: []cancellationTestInstruction{
+			{span: spanAB},
+			{span: spanEF},
+			{span: spanAF},
+			{span: spanCD},
+		}},
+		//  -------------      -------------     -------------      -------------
+		//            |                  |                 |                  |
+		//          -----              -----             -----              xxxxx
+		//           |     ->           |     &           |     ->           |     etc.
+		//    ---------          xxxxxxxxx         ---------          ---------
+		//     |                  |                 |                  |
+		//  -----              -----             -----              xxxxx
+		{name: "NonOverlappingDependencyChain", instrs: []cancellationTestInstruction{
+			{span: spanAF},
+			{span: spanDF},
+			{span: spanBE},
+			{span: spanAC},
+		}},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Run every permutation of command cancellation as a separate subtest
+			// for the current instruction configuration.
+			var permuteTestInstrs func(pre, post []cancellationTestInstruction)
+			permuteTestInstrs = func(pre, post []cancellationTestInstruction) {
+				if len(post) == 0 {
+					// Create a name for this permutation.
+					// C = cancel
+					// R = run
+					var permName bytes.Buffer
+					for _, instr := range pre {
+						if instr.cancel {
+							permName.WriteByte('C')
+						} else {
+							permName.WriteByte('R')
+						}
+					}
+
+					t.Run(permName.String(), func(t *testing.T) {
+						testReplicaCommandQueueCancellationInstrs(t, pre)
+					})
+					return
+				}
+
+				instr := post[0]
+				rest := post[1:]
+				instr.cancel = false
+				permuteTestInstrs(append(pre, instr), rest)
+				instr.cancel = true
+				permuteTestInstrs(append(pre, instr), rest)
+			}
+			permuteTestInstrs(nil, tc.instrs)
+		})
+	}
+}
+
+// TestReplicaCommandQueueCancellationRandom verifies that commands in a random
+// which dependency graph are waiting on the command queue do not execute
+// or deadlock if their context is cancelled, and that commands dependent
+// on cancelled commands execute correctly.
+func TestReplicaCommandQueueCancellationRandom(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	rng, seed := randutil.NewPseudoRand()
+	randKey := func() roachpb.Key {
+		return roachpb.Key(randutil.RandBytes(rng, 1))
+	}
+	randBool := func() bool {
+		return rng.Int31n(2) == 0
+	}
+	t.Logf("running with seed %d", seed)
+
+	const trials = 25
+	for i := 0; i < trials; i++ {
+		commandCount := randutil.RandIntInRange(rng, 0, 25)
+		instructions := make([]cancellationTestInstruction, commandCount)
+		for j := range instructions {
+			startKey := randKey()
+			endKey := randKey()
+			if startKey.Compare(endKey) >= 0 {
+				endKey = startKey.Next()
+			}
+			instructions[j] = cancellationTestInstruction{
+				span:   roachpb.Span{Key: startKey, EndKey: endKey},
+				cancel: randBool(),
+			}
+		}
+		testReplicaCommandQueueCancellationInstrs(t, instructions)
+	}
+}
+
+func testReplicaCommandQueueCancellationInstrs(t *testing.T, instrs []cancellationTestInstruction) {
+	// Intercept DeleteRangeRequests and block them.
 	blockingDone := make(chan struct{})
 
 	tc := testContext{}
 	tsc := TestStoreConfig(nil)
 	tsc.TestingKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-			if filterArgs.Hdr.UserPriority == 42 {
-				log.Infof(context.Background(), "starting to block %s", filterArgs.Req)
-				blockingStart <- struct{}{}
+			if _, ok := filterArgs.Req.(*roachpb.DeleteRangeRequest); ok {
 				<-blockingDone
 			}
 			return nil
@@ -2278,22 +2429,17 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.StartWithStoreConfig(t, stopper, tsc)
 
-	defer close(blockingDone) // make sure teardown can happen
-
-	startBlockingCmd := func(ctx context.Context, keys ...roachpb.Key) <-chan *roachpb.Error {
+	// startBlockingCmd will create a goroutine to send a read-write request
+	// over the given span. It returns a channel that will be given the result
+	// of the request when it completes.
+	startBlockingCmd := func(ctx context.Context, span roachpb.Span) <-chan *roachpb.Error {
 		done := make(chan *roachpb.Error)
 
 		if err := stopper.RunAsyncTask(context.Background(), "test", func(_ context.Context) {
-			ba := roachpb.BatchRequest{
-				Header: roachpb.Header{
-					UserPriority: 42,
-				},
-			}
-			for _, key := range keys {
-				args := putArgs(key, nil)
-				ba.Add(&args)
-			}
-
+			ba := roachpb.BatchRequest{}
+			ba.Add(&roachpb.DeleteRangeRequest{
+				Span: span,
+			})
 			_, pErr := tc.Sender().Send(ctx, ba)
 			done <- pErr
 		}); err != nil {
@@ -2303,49 +2449,87 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 		return done
 	}
 
-	key1 := roachpb.Key("one")
-	key2 := roachpb.Key("two")
+	// We always add an initial instruction that will block all commands to
+	// prevent leading cancelled commands from immediately executing. This is
+	// used to build up a dependency configuration in the CommandQueue before
+	// cancelling some instructions and releasing the gate (the blockingDone chan)
+	// to let the others through.
+	initial := cancellationTestInstruction{
+		span:   roachpb.Span{Key: keys.SystemMax, EndKey: keys.TableDataMin},
+		cancel: false,
+	}
+	instrs = append([]cancellationTestInstruction{initial}, instrs...)
 
-	// Wait until the command queue is blocked.
-	cmd1Done := startBlockingCmd(context.Background(), key1)
-	<-blockingStart
+	type cancellation struct {
+		cancel context.CancelFunc
+		done   <-chan *roachpb.Error
+	}
+	var cancellations []cancellation
+	var completions []<-chan *roachpb.Error
 
-	// Start a command that is already cancelled. It will return immediately.
-	{
+	for i, instruction := range instrs {
+		if !instruction.span.Overlaps(initial.span) {
+			t.Fatalf("all instruction spans should overlap the initial span; found %v",
+				instruction.span)
+		}
+
+		// Send a command for the instruction with a new context.
 		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-		done := startBlockingCmd(ctx, key1, key2)
-		if pErr := <-done; !testutils.IsPError(pErr, context.Canceled.Error()) {
-			t.Fatalf("unexpected error %v", pErr)
+		cmdDone := startBlockingCmd(ctx, instruction.span)
+
+		// Wait until the new command is in the command queue.
+		testutils.SucceedsSoon(t, func() error {
+			tc.repl.cmdQMu.Lock()
+			l := tc.repl.cmdQMu.queues[spanGlobal].treeSize()
+			tc.repl.cmdQMu.Unlock()
+			if e := i + 1; l != e {
+				return errors.Errorf("%d of %d commands in the command queue", l, e)
+			}
+			return nil
+		})
+
+		// Maintain a handle to check when the command completes, as well as
+		// a cancellation function for commands that should be cancelled.
+		if instruction.cancel {
+			cancellations = append(cancellations, cancellation{
+				cancel: cancel,
+				done:   cmdDone,
+			})
+		} else {
+			completions = append(completions, cmdDone)
 		}
 	}
 
-	// Start a third command which will wait for the first.
-	ctx, cancel := context.WithCancel(context.Background())
-	cmd3Done := startBlockingCmd(ctx, key1, key2)
+	// Cancel all commands that should be cancelled, in a non-deterministic order.
+	perm := rand.Perm(len(cancellations))
+	for _, idx := range perm {
+		cancellation := cancellations[idx]
+		cancellation.cancel()
 
-	// Wait until both commands are in the command queue.
-	testutils.SucceedsSoon(t, func() error {
-		tc.repl.cmdQMu.Lock()
-		chans := tc.repl.cmdQMu.queues[spanGlobal].getWait(false, hlc.Timestamp{}, []roachpb.Span{{Key: key1}, {Key: key2}})
-		tc.repl.cmdQMu.Unlock()
-		if a, e := len(chans), 2; a < e {
-			return errors.Errorf("%d of %d commands in the command queue", a, e)
+		// If this deadlocks, the command has unexpectedly begun executing and was
+		// trapped in the command filter. Indeed, the absence of such a deadlock is
+		// what's being tested here.
+		if pErr := <-cancellation.done; !testutils.IsPError(pErr, context.Canceled.Error()) {
+			t.Fatal(pErr)
 		}
-		return nil
-	})
-
-	// Cancel the third command; it will finish even though it is still
-	// blocked by the command queue.
-	cancel()
-	if pErr := <-cmd3Done; !testutils.IsPError(pErr, context.Canceled.Error()) {
-		t.Fatal(pErr)
 	}
 
-	// Now unblock the first command to allow the test to clean up.
-	blockingDone <- struct{}{}
-	if pErr := <-cmd1Done; pErr != nil {
-		t.Fatal(pErr)
+	// Release all remaining commands and allow them to complete, this time in-order.
+	// If this deadlocks, it is a sign that a dependency on a cancelled command was
+	// not correctly handled.
+	close(blockingDone)
+	for _, done := range completions {
+		if pErr := <-done; pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	// Assert that the command queue is empty and that both successful and cancelled
+	// commands were cleaned up.
+	tc.repl.cmdQMu.Lock()
+	defer tc.repl.cmdQMu.Unlock()
+	if l := tc.repl.cmdQMu.queues[spanGlobal].treeSize(); l != 0 {
+		t.Fatalf("expected command queue to be empty, found %d remaining commands", l)
 	}
 }
 
