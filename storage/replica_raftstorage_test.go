@@ -96,33 +96,3 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 		)
 	}
 }
-
-func TestRaftCommandHasSplit(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	testCases := []struct {
-		encoded  []byte
-		hasSplit bool
-	}{
-		{nil, false},
-		{encodeRaftCommand("abcdefgh", nil, false), false},
-		{encodeRaftCommand("abcdefgh", nil, true), true},
-	}
-	for _, c := range testCases {
-		if v := raftCommandHasSplit(c.encoded); c.hasSplit != v {
-			t.Fatalf("expected hasSplit=%t, but found hasSplit=%t", c.hasSplit, v)
-		}
-		if len(c.encoded) > 0 {
-			if c.hasSplit {
-				// For backward compatibility, the hasSplit indication is encoded as a
-				// "no split" value of 0 in the first byte of the encoded raft command.
-				if raftCommandEncodingVersion != c.encoded[0] {
-					t.Fatalf("expected %x, but found %x", raftCommandEncodingVersion, c.encoded[0])
-				}
-			} else {
-				if e := raftCommandEncodingVersion | raftCommandNoSplitBit; e != c.encoded[0] {
-					t.Fatalf("expected %x, but found %x", e, c.encoded[0])
-				}
-			}
-		}
-	}
-}

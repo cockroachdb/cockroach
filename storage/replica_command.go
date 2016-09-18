@@ -2884,21 +2884,6 @@ func (r *Replica) mergeTrigger(
 		return nil, errors.Errorf("RHS range ID must be provided: %d", rightRangeID)
 	}
 
-	{
-		// TODO(peter,tschottdorf): This is necessary but likely not
-		// sufficient. The right hand side of the merge can still race on
-		// reads. See #8630.
-		//
-		// TODO(peter): We need to hold the subsumed range's raftMu until the
-		// Store.MergeRange is invoked. Currently we release it when this method
-		// returns which isn't correct.
-		subsumedRng, err := r.store.GetReplica(rightRangeID)
-		if err != nil {
-			panic(err)
-		}
-		defer subsumedRng.raftUnlock(subsumedRng.raftLock())
-	}
-
 	// Compute stats for premerged range, including current transaction.
 	var mergedMS = r.GetMVCCStats()
 	mergedMS.Add(*ms)
