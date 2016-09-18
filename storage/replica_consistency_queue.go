@@ -43,6 +43,10 @@ func newReplicaConsistencyQueue(store *Store, gossip *gossip.Gossip) *replicaCon
 		maxSize:              replicaConsistencyQueueSize,
 		needsLease:           true,
 		acceptsUnsplitRanges: true,
+		successes:            store.metrics.ConsistencyQueueSuccesses,
+		failures:             store.metrics.ConsistencyQueueFailures,
+		pending:              store.metrics.ConsistencyQueuePending,
+		processingNanos:      store.metrics.ConsistencyQueueProcessingNanos,
 	})
 	return rcq
 }

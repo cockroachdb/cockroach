@@ -2095,7 +2095,7 @@ func TestReplicaLazyLoad(t *testing.T) {
 
 	// Wait for a bunch of raft ticks.
 	ticks := mtc.stores[0].Metrics().RaftTicks.Count
-	for targetTicks := ticks() + 5; targetTicks < ticks(); {
+	for targetTicks := ticks() + 5; ticks() < targetTicks; {
 		time.Sleep(time.Millisecond)
 	}
 
@@ -2493,7 +2493,7 @@ func TestRaftBlockedReplica(t *testing.T) {
 
 	// Verify that we're still ticking the non-blocked replica.
 	ticks := mtc.stores[0].Metrics().RaftTicks.Count
-	for targetTicks := ticks() + 5; targetTicks < ticks(); {
+	for targetTicks := ticks() + 5; ticks() < targetTicks; {
 		time.Sleep(time.Millisecond)
 	}
 
@@ -2503,4 +2503,73 @@ func TestRaftBlockedReplica(t *testing.T) {
 		t.Fatal(err)
 	}
 	mtc.waitForValues(roachpb.Key("a"), []int64{5, 5, 5})
+}
+
+// Test that ranges quiesce and if a follower unquiesces the leader is woken
+// up.
+func TestRangeQuiescence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sc := storage.TestStoreContext()
+	sc.RaftTickInterval = 1 * time.Millisecond
+	sc.RaftHeartbeatIntervalTicks = 2
+	sc.RaftElectionTimeoutTicks = 10
+	sc.TestingKnobs.DisableScanner = true
+	mtc := multiTestContext{storeContext: &sc}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+
+	// Replica range 1 to all 3 nodes.
+	mtc.replicateRange(1, 1, 2)
+
+	waitForQuiescence := func(rangeID roachpb.RangeID) {
+		util.SucceedsSoon(t, func() error {
+			for _, s := range mtc.stores {
+				rep, err := s.GetReplica(rangeID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !rep.IsQuiescent() {
+					return errors.Errorf("%s not quiescent", rep)
+				}
+			}
+			return nil
+		})
+	}
+
+	// Wait for the range to quiesce.
+	waitForQuiescence(1)
+
+	// Find the leader replica.
+	var rep *storage.Replica
+	var leaderIdx int
+	for leaderIdx = range mtc.stores {
+		var err error
+		if rep, err = mtc.stores[leaderIdx].GetReplica(1); err != nil {
+			t.Fatal(err)
+		}
+		if rep.RaftStatus().SoftState.RaftState == raft.StateLeader {
+			break
+		}
+	}
+
+	// Unquiesce a follower range, this should "wake the leader" and not result
+	// in an election.
+	followerIdx := (leaderIdx + 1) % len(mtc.stores)
+	mtc.stores[followerIdx].EnqueueRaftUpdateCheck(1)
+
+	// Wait for a bunch of ticks to occur which will allow the follower time to
+	// campaign.
+	ticks := mtc.stores[followerIdx].Metrics().RaftTicks.Count
+	for targetTicks := ticks() + int64(2*sc.RaftElectionTimeoutTicks); ticks() < targetTicks; {
+		time.Sleep(time.Millisecond)
+	}
+
+	// Wait for the range to quiesce again.
+	waitForQuiescence(1)
+
+	// The leadership should not have changed.
+	if state := rep.RaftStatus().SoftState.RaftState; state != raft.StateLeader {
+		t.Fatalf("%s should be the leader: %s", rep, state)
+	}
 }
