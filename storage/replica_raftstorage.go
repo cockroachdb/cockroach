@@ -763,33 +763,23 @@ const (
 	// The prescribed length for each command ID.
 	raftCommandIDLen                = 8
 	raftCommandEncodingVersion byte = 0
-	raftCommandNoSplitBit           = 1 << 7
-	raftCommandNoSplitMask          = raftCommandNoSplitBit - 1
+	// The no-split bit is now unused, but we still apply the mask to the first
+	// byte of the command for backward compatibility.
+	raftCommandNoSplitBit  = 1 << 7
+	raftCommandNoSplitMask = raftCommandNoSplitBit - 1
 )
 
 // encode a command ID, an encoded roachpb.RaftCommand, and whether the command
-// contains a split. The hasSplit parameter indicates whether the command
-// contains an EndTransaction containing a split trigger. We store this info in
-// the first byte of the encoded data so that we can quickly determine whether
-// a raft command contains a split before decoding the command. Splits require
-// additional synchronization which must be obtained before the command is
-// decoded. See Replica.handleRaftReady.
-func encodeRaftCommand(commandID string, command []byte, hasSplit bool) []byte {
+// contains a split.
+func encodeRaftCommand(commandID string, command []byte) []byte {
 	if len(commandID) != raftCommandIDLen {
 		log.Fatalf(context.TODO(), "invalid command ID length; %d != %d", len(commandID), raftCommandIDLen)
 	}
 	x := make([]byte, 1, 1+raftCommandIDLen+len(command))
 	x[0] = raftCommandEncodingVersion
-	if !hasSplit {
-		x[0] |= raftCommandNoSplitBit
-	}
 	x = append(x, []byte(commandID)...)
 	x = append(x, command...)
 	return x
-}
-
-func raftCommandHasSplit(data []byte) bool {
-	return len(data) > 0 && (data[0]&raftCommandNoSplitBit) == 0
 }
 
 // DecodeRaftCommand splits a raftpb.Entry.Data into its commandID and

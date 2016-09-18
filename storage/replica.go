@@ -238,22 +238,10 @@ type Replica struct {
 	// All updates to state.Desc should be duplicated here.
 	rangeStr atomicDescString
 
-	// raftMu protects Raft processing the replica. Note that Raft processing for
-	// uninitialized replicas is also protected by Store.uninitRaftMu, but that
-	// detail is encapsulated in Replica.raft{Lock,Unlock}() which should be used
-	// for acquiring and releasing raftMu.
+	// raftMu protects Raft processing the replica.
 	//
-	// Locking notes: Replica.raftMu < Store.uninitRaftMu < Replica.mu
-	raftMu struct {
-		syncutil.Mutex
-		// Is the Replica initialized or not? This mirrors the value returned by
-		// Replica.IsInitialized() (which is protected by Replica.mu). It is also
-		// mostly consistent with the presence of the replica in
-		// Store.mu.uninitReplicas, though there are tiny time windows when
-		// inconsistencies could occur due to using different locks to update the
-		// values.
-		initialized bool
-	}
+	// Locking notes: Replica.raftMu < Replica.mu
+	raftMu syncutil.Mutex
 
 	mu struct {
 		// Protects all fields in the mu struct.
@@ -495,11 +483,6 @@ func NewReplica(
 	if err := r.init(desc, store.Clock(), replicaID); err != nil {
 		return nil, err
 	}
-	// Safe to do without holding raftMu because nothing has a reference to the
-	// new Replica yet. We can't perform this initialization in
-	// Replica.initLocked() because that method is sometimes called without
-	// Replica.raftMu held (see splitTriggerPostCommit).
-	r.raftMu.initialized = r.IsInitialized()
 
 	r.maybeGossipSystemConfig()
 	return r, nil
@@ -899,8 +882,6 @@ func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
 
 	r.rangeStr.store(desc)
 	r.mu.state.Desc = desc
-
-	r.raftMu.initialized = r.isInitializedLocked()
 }
 
 // GetReplicaDescriptor returns the replica for this range from the range
@@ -1691,7 +1672,6 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 	}
 	defer r.store.enqueueRaftUpdateCheck(r.RangeID)
 
-	var hasSplit bool
 	if union, ok := p.raftCmd.Cmd.GetArg(roachpb.EndTransaction); ok {
 		ict := union.(*roachpb.EndTransactionRequest).InternalCommitTrigger
 		if crt := ict.GetChangeReplicasTrigger(); crt != nil {
@@ -1723,8 +1703,6 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 					})
 			})
 		}
-
-		hasSplit = ict.GetSplitTrigger() != nil
 	}
 
 	return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
@@ -1735,7 +1713,7 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 		// were quiesced.
 		r.unquiesceLocked()
 		return false, /* !unquiesceAndWakeLeader */
-			raftGroup.Propose(encodeRaftCommand(string(p.idKey), data, hasSplit))
+			raftGroup.Propose(encodeRaftCommand(string(p.idKey), data))
 	})
 }
 
@@ -1776,36 +1754,12 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 	}
 }
 
-// Lock the replica for Raft processing.
-func (r *Replica) raftLock() (uninitRaftLocked bool) {
-	r.raftMu.Lock()
-	if r.raftMu.initialized {
-		return false
-	}
-	r.store.uninitRaftMu.Lock()
-	return true
-}
-
-// Unlock the replica for Raft processing.
-func (r *Replica) raftUnlock(uninitRaftLocked bool) {
-	if uninitRaftLocked {
-		r.store.uninitRaftMu.Unlock()
-	}
-	r.raftMu.Unlock()
-}
-
 // handleRaftReady processes a raft.Ready containing entries and messages that
 // are ready to read, be saved to stable storage, committed or sent to other
 // peers.
 func (r *Replica) handleRaftReady() error {
-	uninitRaftLocked := r.raftLock()
-	// We overwrite uninitRaftLocked below (in case a raft command contains a
-	// split), which requires using a separate closure to capture
-	// uninitRaftLocked rather than having it evaluated at the point of the defer
-	// statement.
-	defer func() {
-		r.raftUnlock(uninitRaftLocked)
-	}()
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
 
 	ctx := r.ctx
 	var hasReady bool
@@ -1887,27 +1841,6 @@ func (r *Replica) handleRaftReady() error {
 			refreshReason = reasonSnapshotApplied
 		}
 		// TODO(bdarnell): update coalesced heartbeat mapping with snapshot info.
-	}
-
-	if !uninitRaftLocked {
-		// Block processing of uninitialized replicas if any of the committed
-		// entries contains a split. We need to grab Store.uninitRaftMu before
-		// creating the batch (more precisely, before reading from the batch) in
-		// order to provide proper synchronization with uninitialized replicas. If
-		// we locked uninitRaftMu after reading from the batch (i.e. in
-		// Replica.splitTrigger) we could be reading stale data that a concurrent
-		// operation (on an uninitialized Replica) is updating.
-		for _, e := range rd.CommittedEntries {
-			if e.Type != raftpb.EntryNormal {
-				// Only normal entries can contain splits.
-				continue
-			}
-			if raftCommandHasSplit(e.Data) {
-				r.store.uninitRaftMu.Lock()
-				uninitRaftLocked = true
-				break
-			}
-		}
 	}
 
 	batch := r.store.Engine().NewBatch()
@@ -2029,7 +1962,8 @@ func (r *Replica) handleRaftReady() error {
 // tick the Raft group, returning any error and true if the raft group exists
 // and false otherwise.
 func (r *Replica) tick() (bool, error) {
-	defer r.raftUnlock(r.raftLock())
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
 	return r.tickRaftMuLocked()
 }
 
@@ -2382,7 +2316,8 @@ func (r *Replica) sendRaftMessageRequest(req *RaftMessageRequest) bool {
 }
 
 func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
-	defer r.raftUnlock(r.raftLock())
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
 
 	snapStatus := raft.SnapshotFinish
 	if snapErr != nil {
@@ -2426,7 +2361,7 @@ func (r *Replica) refurbishPendingCmdLocked(cmd *pendingCmd) *roachpb.Error {
 // updating only the applied index.
 func (r *Replica) processRaftCommand(
 	idKey storagebase.CmdIDKey, index uint64, raftCmd roachpb.RaftCommand,
-) *roachpb.Error {
+) (pErr *roachpb.Error) {
 	if index == 0 {
 		log.Fatalf(r.ctx, "processRaftCommand requires a non-zero index")
 	}
@@ -2548,6 +2483,12 @@ func (r *Replica) processRaftCommand(
 	}
 	r.mu.Unlock()
 
+	if splitMergeUnlock := r.acquireSplitMergeLock(raftCmd.Cmd); splitMergeUnlock != nil {
+		defer func() {
+			splitMergeUnlock(pErr)
+		}()
+	}
+
 	log.Event(ctx, "applying batch")
 	// applyRaftCommand will return "expected" errors, but may also indicate
 	// replica corruption (as of now, signaled by a replicaCorruptionError).
@@ -2592,6 +2533,76 @@ func (r *Replica) processRaftCommand(
 	}
 
 	return pErr
+}
+
+func (r *Replica) acquireSplitMergeLock(ba roachpb.BatchRequest) func(pErr *roachpb.Error) {
+	arg, ok := ba.GetArg(roachpb.EndTransaction)
+	if !ok {
+		return nil
+	}
+	ict := arg.(*roachpb.EndTransactionRequest).InternalCommitTrigger
+	if split := ict.GetSplitTrigger(); split != nil {
+		return r.acquireSplitLock(split)
+	}
+	if merge := ict.GetMergeTrigger(); merge != nil {
+		return r.acquireMergeLock(merge)
+	}
+	return nil
+}
+
+func (r *Replica) acquireSplitLock(split *roachpb.SplitTrigger) func(pErr *roachpb.Error) {
+	rightRng, err := r.store.getOrCreateReplica(split.RightDesc.RangeID, 0, nil)
+	if err != nil {
+		return nil
+	}
+
+	if rightRng.IsInitialized() {
+		// TODO(peter,tschottdorf): TestStoreRangeSplitRaceUninitializedRHS sets
+		// up a situation where one of the stores has already processed the
+		// split. We can see this by noticing that there is an initialized
+		// replica for the right hand side. This seems funky, but the magic in
+		// TestStoreRangeSplitRaceUninitializedRHS is too advanced for me to
+		// deciper. Avoiding locking (and re-initializing) the right hand side
+		// range allows the batch to error when Replica.checkCmdHeader determines
+		// that one of the requests in the batch is trying to operate on keys
+		// outside of the Replica's key range. This results in an "error
+		// executing raft command:" message that can be seen by enabling
+		// -vmodule=replica=1.
+		rightRng.raftMu.Unlock()
+		return nil
+	}
+
+	return func(pErr *roachpb.Error) {
+		if pErr != nil {
+			// An error occurred during processing of the split. Mark the RHS
+			// destroyed and remove it from the replica's map as it is likely in an
+			// inconsistent state. One reason this can occur is when concurrent
+			// splits on the same key are executed.
+			rightRng.mu.Lock()
+			rightRng.mu.destroyed = errors.Errorf("%s: failed to initialize", rightRng)
+			rightRng.mu.Unlock()
+			r.store.mu.Lock()
+			delete(r.store.mu.replicas, rightRng.RangeID)
+			delete(r.store.mu.replicaQueues, rightRng.RangeID)
+			delete(r.store.mu.uninitReplicas, rightRng.RangeID)
+			r.store.mu.Unlock()
+		}
+		rightRng.raftMu.Unlock()
+	}
+}
+
+func (r *Replica) acquireMergeLock(merge *roachpb.MergeTrigger) func(pErr *roachpb.Error) {
+	rightRng, err := r.store.GetReplica(merge.RightDesc.RangeID)
+	if err != nil {
+		log.Fatalf(r.ctx, "unable to find merge RHS replica: %s", err)
+	}
+
+	// TODO(peter,tschottdorf): This is necessary but likely not sufficient. The
+	// right hand side of the merge can still race on reads. See #8630.
+	rightRng.raftMu.Lock()
+	return func(_ *roachpb.Error) {
+		rightRng.raftMu.Unlock()
+	}
 }
 
 // applyRaftCommand applies a raft command from the replicated log to the

@@ -6121,7 +6121,8 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	// test is ticking the replica manually and doesn't want the store to be
 	// doing so concurrently.
 	r := tc.rng
-	defer r.raftUnlock(r.raftLock())
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
 
 	repDesc, err := r.GetReplicaDescriptor()
 	if err != nil {
