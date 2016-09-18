@@ -54,7 +54,7 @@ metadata:
   name: cockroachdb
 spec:
   serviceName: "cockroachdb"
-  replicas: 6
+  replicas: 5
   template:
     metadata:
       labels:
