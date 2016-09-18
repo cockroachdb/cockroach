@@ -1141,7 +1141,7 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 // commands are done and can be removed from the queue, and whose returned
 // error is to be used in place of the supplied error.
 func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func(*roachpb.BatchResponse, *roachpb.Error) *roachpb.Error, error) {
-	var cmd *cmd
+	var newCmd *cmd
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
 		readOnly := ba.IsReadOnly()
@@ -1150,42 +1150,87 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func
 			spans[i] = union.GetInner().Header()
 		}
 		r.mu.Lock()
-		chans := r.mu.cmdQ.getWait(readOnly, spans...)
-		cmd = r.mu.cmdQ.add(readOnly, spans...)
+		prereqs := r.mu.cmdQ.getPrereqs(readOnly, spans...)
+		newCmd = r.mu.cmdQ.add(readOnly, prereqs, spans...)
 		r.mu.Unlock()
 
-		beforeWait := timeutil.Now()
 		ctxDone := ctx.Done()
-		numChans := len(chans)
-		if numChans > 0 {
-			log.Eventf(ctx, "waiting for %d overlapping requests", len(chans))
+		beforeWait := timeutil.Now()
+		numPrereqs := len(newCmd.prereqs)
+		if numPrereqs > 0 {
+			log.Eventf(ctx, "waiting for %d overlapping requests", numPrereqs)
 		}
-		for _, ch := range chans {
+
+		// Loop over command's prereqs. This cannot be a for-range loop, because we may grow
+		// the newCmd.prereqs slice with transitive dependencies of cancelled prerequisites.
+		for i := 0; i < len(newCmd.prereqs); i++ {
+			prereq := newCmd.prereqs[i]
 			select {
-			case <-ch:
+			case <-prereq.pending:
+				// Either the prerequisite command finished executing or it was cancelled.
+				// If the command finished cleanly, there's nothing for us to do except wait
+				// for the next prerequisite to finish. However, if the command was cancelled,
+				// we have to handle the cancellation here. This check does not need to be
+				// synchonized, because prereq.cancelled will only ever be set on the other
+				// side of the prereq.pending closing (see below), which the Go Memory Model
+				// promises is safe.
+				if prereq.cancelled {
+					// Migrate transitive dependencies from cancelled prerequisite to
+					// current command. All prerequisites of the prerequisite that was
+					// just cancelled are now this command's direct prerequisites.
+					//
+					// While it may be possible that some of these transitive dependencies
+					// no longer overlap the current command, they are still required, because
+					// they themselves might be dependent on a command that overlaps both the
+					// current and prerequisite command.
+					//
+					// For instance, take the following dependency graph, where command 3 was
+					// cancelled. We need to set command 2 as a prerequisite of command 4 even
+					// though they do not overlap because command 2 has a dependency on command 1,
+					// which does overlap command 4. We could try to catch this situation and
+					// set command 1 as a prerequisite of command 4 directly, but this approach
+					// would require much more complexity and would need to traverse all
+					// the way up the dependency graph in the worst case.
+					//
+					//  cmd 1:   -------------
+					//                     |
+					//  cmd 2:           -----
+					//                     |
+					//  cmd 3:     xxxxxxxxxxx
+					//              |
+					//  cmd 4:   -----
+					//
+					newCmd.prereqs = append(newCmd.prereqs, prereq.prereqs...)
+				}
 			case <-ctxDone:
 				err := ctx.Err()
 				errStr := fmt.Sprintf("%s while in command queue: %s", err, ba)
 				log.Warning(ctx, errStr)
 				log.ErrEvent(ctx, errStr)
-				go func() {
-					// The command is moot, so we don't need to bother executing.
-					// However, the command queue assumes that commands don't drop
-					// out before their prerequisites, so we still have to wait it
-					// out.
-					for _, ch := range chans {
-						<-ch
-					}
-					r.mu.Lock()
-					r.mu.cmdQ.remove(cmd)
-					r.mu.Unlock()
-				}()
+
+				// Truncate the cancelled command's prerequisite list to only those
+				// prerequisites that have not yet been waited on. Truncate capacity
+				// to allow GC of all prerequisite commands that have already completed.
+				prs := len(newCmd.prereqs)
+				newCmd.prereqs = newCmd.prereqs[i:prs:prs]
+				newCmd.cancelled = true
+
+				// Remove the command from the command queue immediately. Dependents will
+				// transfer transitive dependencies when they try to block on this command.
+				// New commands that would have established a dependency on this command will
+				// never see it, which is fine.
+				r.mu.Lock()
+				r.mu.cmdQ.remove(newCmd)
+				r.mu.Unlock()
 				return nil, err
 			}
 		}
-		if numChans > 0 {
+		if numPrereqs > 0 {
 			log.Eventf(ctx, "waited %s for overlapping requests", timeutil.Since(beforeWait))
 		}
+
+		// Set prereqs to nil so that the prereq slice and all referenced commands can be GCed.
+		newCmd.prereqs = nil
 	} else {
 		log.Event(ctx, "operation accepts inconsistent results")
 	}
@@ -1207,7 +1252,7 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func
 	}
 
 	return func(br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
-		return r.endCmds(cmd, ba, br, pErr)
+		return r.endCmds(newCmd, ba, br, pErr)
 	}, nil
 }
 
@@ -1248,7 +1293,10 @@ func (r *Replica) endCmds(cmd *cmd, ba *roachpb.BatchRequest, br *roachpb.BatchR
 
 		r.mu.tsCache.AddRequest(cr)
 	}
-	r.mu.cmdQ.remove(cmd)
+	if cmd != nil {
+		// For inconsistent reads we will never have added a command to the command queue.
+		r.mu.cmdQ.remove(cmd)
+	}
 	return pErr
 }
 

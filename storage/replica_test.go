@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/protoutil"
+	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -1937,12 +1938,17 @@ func TestReplicaCommandQueueInconsistent(t *testing.T) {
 	// Success.
 }
 
-// TestReplicaCommandQueueCancellation verifies that commands which are
-// waiting on the command queue do not execute if their context is cancelled.
-func TestReplicaCommandQueueCancellation(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+type commandInstruction struct {
+	span   roachpb.Span
+	cancel bool
+}
+
+// testReplicaCommandQueueCancellation verifies that commands which are
+// waiting on the command queue do not execute or deadlock if their context
+// is cancelled, and that commands dependent on cancelled commands execute
+// correctly.
+func testReplicaCommandQueueCancellation(t *testing.T, instructions []commandInstruction) {
 	// Intercept commands with matching command IDs and block them.
-	blockingStart := make(chan struct{})
 	blockingDone := make(chan struct{})
 
 	tc := testContext{}
@@ -1950,7 +1956,6 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Hdr.UserPriority == 42 {
-				blockingStart <- struct{}{}
 				<-blockingDone
 			}
 			return nil
@@ -1958,9 +1963,7 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 	tc.StartWithStoreContext(t, tsc)
 	defer tc.Stop()
 
-	defer close(blockingDone) // make sure teardown can happen
-
-	startBlockingCmd := func(ctx context.Context, keys ...roachpb.Key) <-chan *roachpb.Error {
+	startBlockingCmd := func(ctx context.Context, span roachpb.Span) <-chan *roachpb.Error {
 		done := make(chan *roachpb.Error)
 
 		if err := tc.stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
@@ -1969,11 +1972,10 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 					UserPriority: 42,
 				},
 			}
-			for _, key := range keys {
-				args := putArgs(key, nil)
-				ba.Add(&args)
-			}
-
+			ba.Add(&roachpb.PutRequest{
+				Span:  span,
+				Value: roachpb.MakeValueFromBytes(nil),
+			})
 			_, pErr := tc.Sender().Send(ctx, ba)
 			done <- pErr
 		}); err != nil {
@@ -1983,42 +1985,308 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 		return done
 	}
 
-	key1 := roachpb.Key("one")
-	key2 := roachpb.Key("two")
+	// We always add an initial instruction that will block all commands to
+	// prevent leading cancelled commands from immediately executing.
+	initial := commandInstruction{
+		span: keys.UserDataSpan,
+		cancel: false,
+	}
+	instructions = append([]commandInstruction{initial}, instructions...)
 
-	// Wait until the command queue is blocked.
-	cmd1Done := startBlockingCmd(context.Background(), key1)
-	<-blockingStart
+	type cancellation struct {
+		cancel context.CancelFunc
+		done   <-chan *roachpb.Error
+	}
+	var cancellations []cancellation
+	var completions []<-chan *roachpb.Error
 
-	// Put a cancelled blocking command in the command queue. This command will
-	// block on the previous command, but will not itself reach the filter since
-	// its context is cancelled.
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	cmd2Done := startBlockingCmd(ctx, key1, key2)
-
-	// Wait until both commands are in the command queue.
-	util.SucceedsSoon(t, func() error {
-		tc.rng.mu.Lock()
-		chans := tc.rng.mu.cmdQ.getWait(false, roachpb.Span{Key: key1}, roachpb.Span{Key: key2})
-		tc.rng.mu.Unlock()
-		if a, e := len(chans), 2; a < e {
-			return errors.Errorf("%d of %d commands in the command queue", a, e)
+	for i, instruction := range instructions {
+		if i > 0 && !instruction.span.Overlaps(initial.span) {
+			t.Fatalf("all instruction spans should overlap the initial span; found %v",
+				instruction.span)
 		}
-		return nil
-	})
 
-	// If this deadlocks, the command has unexpectedly begun executing and was
-	// trapped in the command filter. Indeed, the absence of such a deadlock is
-	// what's being tested here.
-	if pErr := <-cmd2Done; !testutils.IsPError(pErr, context.Canceled.Error()) {
-		t.Fatal(pErr)
+		ctx, cancel := context.WithCancel(context.Background())
+		cmdDone := startBlockingCmd(ctx, instruction.span)
+
+		if instruction.cancel {
+			cancellations = append(cancellations, cancellation{
+				cancel: cancel,
+				done:   cmdDone,
+			})
+		} else {
+			completions = append(completions, cmdDone)
+		}
+
+		// Wait until the new command is in the command queue.
+		util.SucceedsSoon(t, func() error {
+			tc.rng.mu.Lock()
+			l := tc.rng.mu.cmdQ.tree.Len()
+			tc.rng.mu.Unlock()
+			if e := i + 1; l != e {
+				return errors.Errorf("%d of %d commands in the command queue", l, e)
+			}
+			return nil
+		})
 	}
 
-	// Finish the previous command, allowing the test to shut down.
-	blockingDone <- struct{}{}
-	if pErr := <-cmd1Done; pErr != nil {
-		t.Fatal(pErr)
+	// Cancel all commands that should be cancelled in a non-deterministic order.
+	perm := rand.Perm(len(cancellations))
+	for _, idx := range perm {
+		cancellation := cancellations[idx]
+		cancellation.cancel()
+
+		// If this deadlocks, the command has unexpectedly begun executing and was
+		// trapped in the command filter. Indeed, the absence of such a deadlock is
+		// what's being tested here.
+		if pErr := <-cancellation.done; !testutils.IsPError(pErr, context.Canceled.Error()) {
+			t.Fatal(pErr)
+		}
+	}
+
+	// Release all commands and allow them to complete, this time in-order. If
+	// this deadlocks, it is a sign that a dependency on a cancelled command was
+	// not correctly handled.
+	close(blockingDone)
+	for _, done := range completions {
+		if pErr := <-done; pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	// Assert that the command queue is empty and that both successful and cancelled
+	// commands were cleaned up.
+	tc.rng.mu.Lock()
+	defer tc.rng.mu.Unlock()
+	if l := tc.rng.mu.cmdQ.tree.Len(); l != 0 {
+		t.Fatalf("expected command queue to be empty, found %d remaining commands", l)
+	}
+}
+
+// Test the cancellation of a single dependent command:
+//
+//  -----      -----
+//    |    ->    |
+//  -----      xxxxx
+//
+func TestReplicaCommandQueueCancelSingleDependent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	key1 := roachpb.Key("one")
+	span1 := roachpb.Span{Key: key1, EndKey: key1.Next()}
+	testReplicaCommandQueueCancellation(t, []commandInstruction{
+		{
+			span:   span1,
+			cancel: false,
+		},
+		{
+			span:   span1,
+			cancel: true,
+		},
+	})
+}
+
+// Test the cancellation of a single prerequisite command:
+//
+//  -----      xxxxx
+//    |    ->    |
+//  -----      -----
+//
+func TestReplicaCommandQueueCancelSinglePrerequisite(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	key1 := roachpb.Key("one")
+	span1 := roachpb.Span{Key: key1, EndKey: key1.Next()}
+	testReplicaCommandQueueCancellation(t, []commandInstruction{
+		{
+			span:   span1,
+			cancel: true,
+		},
+		{
+			span:   span1,
+			cancel: false,
+		},
+	})
+}
+
+// Test the cancellation of a prerequisite command with multiple dependencies:
+//
+//  ----------      xxxxxxxxxx       ----------      xxxxxxxxxx       ----------      ----------
+//    |    |    ->    |    |     &     |    |    ->    |    |     &     |    |    ->    |    |
+//   ---  ---        ---  ---         ---  ---        xxx  xxx         ---  ---        xxx  xxx
+//
+func TestReplicaCommandQueueCancelMultipleDependencies(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	key1 := roachpb.Key("one")
+	key2 := roachpb.Key("two")
+	setup := []commandInstruction{
+		{
+			span:   roachpb.Span{Key: key1, EndKey: key2.Next()},
+			cancel: true,
+		},
+		{
+			span:   roachpb.Span{Key: key1, EndKey: key1.Next()},
+			cancel: false,
+		},
+		{
+			span:   roachpb.Span{Key: key2, EndKey: key2.Next()},
+			cancel: false,
+		},
+	}
+
+	testReplicaCommandQueueCancellation(t, setup)
+
+	setup[1].cancel = true
+	setup[2].cancel = true
+	testReplicaCommandQueueCancellation(t, setup)
+
+	setup[0].cancel = false
+	testReplicaCommandQueueCancellation(t, setup)
+}
+
+// Test the cancellation of commands in a dependency chain:
+//
+//  -----      -----       -----      xxxxx       -----      xxxxx       -----      xxxxx
+//    |          |           |          |           |          |           |          |
+//  -----  ->  xxxxx   &   -----  ->  xxxxx   &   -----  ->  xxxxx   &   -----  ->  -----
+//    |          |           |          |           |          |           |          |
+//  -----      -----       -----      -----       -----      xxxxx       -----      xxxxx
+//
+func TestReplicaCommandQueueCancelChain(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	key1 := roachpb.Key("one")
+	span1 := roachpb.Span{Key: key1, EndKey: key1.Next()}
+	chain := []commandInstruction{
+		{
+			span:   span1,
+			cancel: false,
+		},
+		{
+			span:   span1,
+			cancel: true,
+		},
+		{
+			span:   span1,
+			cancel: false,
+		},
+	}
+
+	testReplicaCommandQueueCancellation(t, chain)
+
+	chain[0].cancel = true
+	testReplicaCommandQueueCancellation(t, chain)
+
+	chain[2].cancel = true
+	testReplicaCommandQueueCancellation(t, chain)
+
+	chain[1].cancel = false
+	testReplicaCommandQueueCancellation(t, chain)
+}
+
+// Test the cancellation of commands in a split dependency chain:
+//
+//  ---     ---      ---     ---
+//   |       |        |       |
+//  -----------  ->  xxxxxxxxxxx
+//       |                |
+//      ---              ---
+//
+func TestReplicaCommandQueueCancelSplitChain(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	key1 := roachpb.Key("one")
+	key2 := roachpb.Key("ppp")
+	key3 := roachpb.Key("two")
+	testReplicaCommandQueueCancellation(t, []commandInstruction{
+		{
+			span:   roachpb.Span{Key: key1, EndKey: key1.Next()},
+			cancel: false,
+		},
+		{
+			span:   roachpb.Span{Key: key3, EndKey: key3.Next()},
+			cancel: false,
+		},
+		{
+			span:   roachpb.Span{Key: key1, EndKey: key3.Next()},
+			cancel: true,
+		},
+		{
+			span:   roachpb.Span{Key: key2, EndKey: key2.Next()},
+			cancel: false,
+		},
+	})
+}
+
+// Test the cancellation of commands in a non-overlapping dependency chain:
+//
+//  -------------      -------------
+//            |                  |
+//          -----              -----
+//           |     ->           |
+//    ---------          xxxxxxxxx
+//     |                  |
+//  -----              -----
+//
+func TestReplicaCommandQueueCancelNonOverlappingChain(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	keyC := roachpb.Key("c")
+	keyD := roachpb.Key("d")
+	keyE := roachpb.Key("e")
+	keyF := roachpb.Key("f")
+	testReplicaCommandQueueCancellation(t, []commandInstruction{
+		{
+			span:   roachpb.Span{Key: keyA, EndKey: keyF.Next()},
+			cancel: false,
+		},
+		{
+			span:   roachpb.Span{Key: keyD, EndKey: keyF.Next()},
+			cancel: false,
+		},
+		{
+			span:   roachpb.Span{Key: keyB, EndKey: keyE.Next()},
+			cancel: true,
+		},
+		{
+			span:   roachpb.Span{Key: keyA, EndKey: keyC.Next()},
+			cancel: false,
+		},
+	})
+}
+
+// Test the cancellation of commands in a random dependency graph.
+func TestReplicaCommandQueueCancelRandom(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	rng, seed := randutil.NewPseudoRand()
+	randKey := func() roachpb.Key {
+		return roachpb.Key(randutil.RandBytes(rng, 1))
+	}
+	randBool := func() bool {
+		return rng.Int31n(2) == 0
+	}
+	t.Logf("running with seed %d", seed)
+
+	const trials = 25
+	for i := 0; i < trials; i++ {
+		commandCount := randutil.RandIntInRange(rng, 0, 25)
+		instructions := make([]commandInstruction, commandCount)
+		for j := range instructions {
+			startKey := randKey()
+			endKey := randKey()
+			if startKey.Compare(endKey) >= 0 {
+				endKey = nil
+			}
+			instructions[j] = commandInstruction{
+				span:   roachpb.Span{Key: startKey, EndKey: endKey},
+				cancel: randBool(),
+			}
+		}
+		testReplicaCommandQueueCancellation(t, instructions)
 	}
 }
 
