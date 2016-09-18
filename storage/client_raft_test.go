@@ -2489,7 +2489,8 @@ func TestRaftBlockedReplica(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rep.RaftUnlock(rep.RaftLock())
+	rep.RaftLock()
+	defer rep.RaftUnlock()
 
 	// Verify that we're still ticking the non-blocked replica.
 	ticks := mtc.stores[0].Metrics().RaftTicks.Count
