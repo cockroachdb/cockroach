@@ -102,6 +102,10 @@ func newGCQueue(store *Store, gossip *gossip.Gossip) *gcQueue {
 		maxSize:              gcQueueMaxSize,
 		needsLease:           true,
 		acceptsUnsplitRanges: false,
+		successes:            store.metrics.GCQueueSuccesses,
+		failures:             store.metrics.GCQueueFailures,
+		pending:              store.metrics.GCQueuePending,
+		processingNanos:      store.metrics.GCQueueProcessingNanos,
 	})
 	return gcq
 }

@@ -266,36 +266,17 @@ func (tc *TxnCoordSender) startStats() {
 // write intents; they're tagged to an outgoing EndTransaction request, with
 // the receiving replica in charge of resolving them.
 func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	{
-		// Start new or pick up active trace and embed its trace metadata into
-		// header for use by RPC recipients. From here on, there's always an active
-		// Trace, though its overhead is small unless it's sampled.
-		sp := opentracing.SpanFromContext(ctx)
-		// TODO(radu): once contexts are plumbed correctly, we should use the Tracer
-		// from ctx.
-		tracer := tracing.TracerFromCtx(tc.ctx)
-		if sp == nil {
-			sp = tracer.StartSpan(opTxnCoordSender)
-			defer sp.Finish()
-			ctx = opentracing.ContextWithSpan(ctx, sp)
-		}
-		// TODO(tschottdorf): To get rid of the spurious alloc below we need to
-		// implement the carrier interface on ba.Header or make Span non-nullable,
-		// both of which force all of ba on the Heap. It's already there, so may
-		// not be a big deal, but ba should live on the stack. Also not easy to use
-		// a buffer pool here since anything that goes into the RPC layer could be
-		// used by goroutines we didn't wait for.
-		if ba.Header.Trace == nil {
-			ba.Header.Trace = &tracing.Span{}
-		} else {
-			// We didn't make this object but are about to mutate it, so we
-			// have to take a copy - the original might already have been
-			// passed to the RPC layer.
-			ba.Header.Trace = protoutil.Clone(ba.Header.Trace).(*tracing.Span)
-		}
-		if err := tracer.Inject(sp.Context(), basictracer.Delegator, ba.Trace); err != nil {
-			return nil, roachpb.NewError(err)
-		}
+	// Start new or pick up active trace. From here on, there's always an active
+	// Trace, though its overhead is small unless it's sampled.
+	sp := opentracing.SpanFromContext(ctx)
+	var tracer opentracing.Tracer
+	if sp == nil {
+		tracer = tracing.TracerFromCtx(tc.ctx)
+		sp = tracer.StartSpan(opTxnCoordSender)
+		defer sp.Finish()
+		ctx = opentracing.ContextWithSpan(ctx, sp)
+	} else {
+		tracer = sp.Tracer()
 	}
 
 	startNS := tc.clock.PhysicalNow()
@@ -305,6 +286,14 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 		if err := tc.maybeBeginTxn(&ba); err != nil {
 			return nil, roachpb.NewError(err)
 		}
+
+		// Associate the txnID with the trace. We need to do this after the
+		// maybeBeginTxn call. We set both a baggage item and a tag because only
+		// tags show up in the LIghtstep UI.
+		txnIDStr := ba.Txn.ID.String()
+		sp.SetTag("txnID", txnIDStr)
+		sp.SetBaggageItem("txnID", txnIDStr)
+
 		var et *roachpb.EndTransactionRequest
 		var hasET bool
 		{
@@ -381,6 +370,26 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 				log.Eventf(ctx, "intent: [%s,%s)", intent.Key, intent.EndKey)
 			}
 		}
+	}
+
+	// Embed the trace metadata into the header for use by RPC recipients. We need
+	// to do this after the maybeBeginTxn call above.
+	// TODO(tschottdorf): To get rid of the spurious alloc below we need to
+	// implement the carrier interface on ba.Header or make Span non-nullable,
+	// both of which force all of ba on the Heap. It's already there, so may
+	// not be a big deal, but ba should live on the stack. Also not easy to use
+	// a buffer pool here since anything that goes into the RPC layer could be
+	// used by goroutines we didn't wait for.
+	if ba.Trace == nil {
+		ba.Trace = &tracing.Span{}
+	} else {
+		// We didn't make this object but are about to mutate it, so we
+		// have to take a copy - the original might already have been
+		// passed to the RPC layer.
+		ba.Trace = protoutil.Clone(ba.Trace).(*tracing.Span)
+	}
+	if err := tracer.Inject(sp.Context(), basictracer.Delegator, ba.Trace); err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	// Send the command through wrapped sender, taking appropriate measures
