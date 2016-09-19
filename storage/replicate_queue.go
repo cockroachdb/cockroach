@@ -142,6 +142,15 @@ func (rq *replicateQueue) process(
 		return errors.Errorf("range requires a replication change, but lacks a quorum of live nodes.")
 	}
 
+	// Note that allocation decisions are made in the context of a range, not a
+	// store. Allocation decisions are only made by the lease holder for a
+	// range. In the switch below we are adding / removing replicas to a range,
+	// not necessarily to the local store. This should be somewhat obvious for
+	// addition (we already have a replica on the local store or we wouldn't be
+	// processing the range), but it is important to remember for removal as
+	// well: we might be removing either the local replica (because the local
+	// store is overfull) or a remote replica.
+
 	switch action {
 	case AllocatorAdd:
 		log.Event(ctx, "adding a new replica")
@@ -160,19 +169,32 @@ func (rq *replicateQueue) process(
 		}
 	case AllocatorRemove:
 		log.Event(ctx, "removing a replica")
-		// We require the lease in order to process replicas, so
-		// repl.store.StoreID() corresponds to the lease-holder's store ID.
-		removeReplica, err := rq.allocator.RemoveTarget(desc.Replicas, repl.store.StoreID())
+		// If the lease holder (our local store) is on an overfull store allow
+		// transferring the lease away. Note that this instance of overfull refers
+		// to leases, not replica counts.
+		leaseHolderID := repl.store.StoreID()
+		if rq.allocator.TransferLeaseSource(zone.ReplicaAttrs[0], leaseHolderID) {
+			leaseHolderID = 0
+		}
+		removeReplica, err := rq.allocator.RemoveTarget(desc.Replicas, leaseHolderID)
 		if err != nil {
 			return err
 		}
-		log.VEventf(1, ctx, "removing replica %+v due to over-replication", removeReplica)
-		if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, removeReplica, desc); err != nil {
-			return err
-		}
-		// Do not requeue if we removed ourselves.
 		if removeReplica.StoreID == repl.store.StoreID() {
-			return nil
+			target := rq.allocator.TransferLeaseTarget(desc.Replicas, repl.store.StoreID())
+			if target.StoreID != 0 {
+				log.VEventf(1, ctx, "transferring lease to s%d", target.StoreID)
+				if err := repl.AdminTransferLease(target.StoreID); err != nil {
+					return errors.Wrapf(err, "%s: unable to transfer lease", repl)
+				}
+				// Do not requeue as we transferred our lease away.
+				return nil
+			}
+		} else {
+			log.VEventf(1, ctx, "removing replica %+v due to over-replication", removeReplica)
+			if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, removeReplica, desc); err != nil {
+				return err
+			}
 		}
 	case AllocatorRemoveDead:
 		log.Event(ctx, "removing a dead replica")

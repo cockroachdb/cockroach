@@ -1629,6 +1629,7 @@ static ::std::string* MutableUnknownFieldsForStoreCapacity(
 const int StoreCapacity::kCapacityFieldNumber;
 const int StoreCapacity::kAvailableFieldNumber;
 const int StoreCapacity::kRangeCountFieldNumber;
+const int StoreCapacity::kLeaseHolderCountFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 StoreCapacity::StoreCapacity()
@@ -1656,6 +1657,7 @@ void StoreCapacity::SharedCtor() {
   capacity_ = GOOGLE_LONGLONG(0);
   available_ = GOOGLE_LONGLONG(0);
   range_count_ = 0;
+  lease_holder_count_ = 0;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -1717,7 +1719,7 @@ void StoreCapacity::Clear() {
            ZR_HELPER_(last) - ZR_HELPER_(first) + sizeof(last));\
 } while (0)
 
-  ZR_(capacity_, range_count_);
+  ZR_(capacity_, lease_holder_count_);
 
 #undef ZR_HELPER_
 #undef ZR_
@@ -1782,6 +1784,21 @@ bool StoreCapacity::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(32)) goto parse_lease_holder_count;
+        break;
+      }
+
+      // optional int32 lease_holder_count = 4;
+      case 4: {
+        if (tag == 32) {
+         parse_lease_holder_count:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &lease_holder_count_)));
+          set_has_lease_holder_count();
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -1826,6 +1843,11 @@ void StoreCapacity::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt32(3, this->range_count(), output);
   }
 
+  // optional int32 lease_holder_count = 4;
+  if (has_lease_holder_count()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(4, this->lease_holder_count(), output);
+  }
+
   output->WriteRaw(unknown_fields().data(),
                    static_cast<int>(unknown_fields().size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.StoreCapacity)
@@ -1835,7 +1857,7 @@ int StoreCapacity::ByteSize() const {
 // @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.StoreCapacity)
   int total_size = 0;
 
-  if (_has_bits_[0 / 32] & 7u) {
+  if (_has_bits_[0 / 32] & 15u) {
     // optional int64 capacity = 1;
     if (has_capacity()) {
       total_size += 1 +
@@ -1855,6 +1877,13 @@ int StoreCapacity::ByteSize() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::Int32Size(
           this->range_count());
+    }
+
+    // optional int32 lease_holder_count = 4;
+    if (has_lease_holder_count()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->lease_holder_count());
     }
 
   }
@@ -1886,6 +1915,9 @@ void StoreCapacity::MergeFrom(const StoreCapacity& from) {
     if (from.has_range_count()) {
       set_range_count(from.range_count());
     }
+    if (from.has_lease_holder_count()) {
+      set_lease_holder_count(from.lease_holder_count());
+    }
   }
   if (!from.unknown_fields().empty()) {
     mutable_unknown_fields()->append(from.unknown_fields());
@@ -1912,6 +1944,7 @@ void StoreCapacity::InternalSwap(StoreCapacity* other) {
   std::swap(capacity_, other->capacity_);
   std::swap(available_, other->available_);
   std::swap(range_count_, other->range_count_);
+  std::swap(lease_holder_count_, other->lease_holder_count_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _unknown_fields_.Swap(&other->_unknown_fields_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -1994,6 +2027,30 @@ void StoreCapacity::clear_range_count() {
   set_has_range_count();
   range_count_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreCapacity.range_count)
+}
+
+// optional int32 lease_holder_count = 4;
+bool StoreCapacity::has_lease_holder_count() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+void StoreCapacity::set_has_lease_holder_count() {
+  _has_bits_[0] |= 0x00000008u;
+}
+void StoreCapacity::clear_has_lease_holder_count() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+void StoreCapacity::clear_lease_holder_count() {
+  lease_holder_count_ = 0;
+  clear_has_lease_holder_count();
+}
+ ::google::protobuf::int32 StoreCapacity::lease_holder_count() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreCapacity.lease_holder_count)
+  return lease_holder_count_;
+}
+ void StoreCapacity::set_lease_holder_count(::google::protobuf::int32 value) {
+  set_has_lease_holder_count();
+  lease_holder_count_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreCapacity.lease_holder_count)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
