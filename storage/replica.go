@@ -376,9 +376,13 @@ var _ KeyRange = &Replica{}
 
 // withRaftGroupLocked calls the supplied function with the (lazily
 // initialized) Raft group. It assumes that the Replica lock is held. The
+// supplied function should return true for the unquiesceAndWakeLeader argument
+// if the replica should be unquiesced (and the leader awoken). See
+// handleRaftReady for an instance of where this value varies. The
 // shouldCampaign argument indicates whether a new raft group should be
 // campaigned upon creation and is used to eagerly campaign idle replicas.
-func (r *Replica) withRaftGroupLocked(shouldCampaign bool, f func(r *raft.RawNode) error) error {
+func (r *Replica) withRaftGroupLocked(
+	shouldCampaign bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error)) error {
 	if r.mu.destroyed != nil {
 		// Silently ignore all operations on destroyed replicas. We can't return an
 		// error here as all errors returned from this method are considered fatal.
@@ -451,16 +455,17 @@ func (r *Replica) withRaftGroupLocked(shouldCampaign bool, f func(r *raft.RawNod
 		}
 	}
 
-	// Any Raft operation moves the Replica out of quiescence.
-	r.setQuiescentLocked(false)
-
-	return f(r.mu.internalRaftGroup)
+	unquiesce, err := f(r.mu.internalRaftGroup)
+	if unquiesce {
+		r.unquiesceAndWakeLeaderLocked()
+	}
+	return err
 }
 
 // withRaftGroup calls the supplied function with the (lazily initialized)
 // Raft group. It acquires and releases the Replica lock, so r.mu must not be
 // held (or acquired by the supplied function).
-func (r *Replica) withRaftGroup(f func(r *raft.RawNode) error) error {
+func (r *Replica) withRaftGroup(f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error)) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.withRaftGroupLocked(false, f)
@@ -1559,6 +1564,14 @@ func (r *Replica) addWriteCmd(
 				} else {
 					log.Warningf(ctx, "unable to cancel expired Raft command %s", ba)
 				}
+			case <-r.store.stopper.ShouldQuiesce():
+				// If we can't abandon this command, the surrounding loop will
+				// run hot on this path, but not being able to abandon implies
+				// that the request is being processed and should be available
+				// momentarily.
+				if tryAbandon() {
+					pErr = roachpb.NewError(&roachpb.NodeUnavailableError{})
+				}
 			}
 		}
 	} else {
@@ -1697,42 +1710,68 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 				return err
 			}
 
-			return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) error {
-				return raftGroup.ProposeConfChange(raftpb.ConfChange{
-					Type:    changeTypeInternalToRaft[crt.ChangeType],
-					NodeID:  uint64(crt.Replica.ReplicaID),
-					Context: encodedCtx,
-				})
+			return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
+				// We're proposing a command here so there is no need to wake the
+				// leader if we were quiesced.
+				r.unquiesceLocked()
+				return false, /* !unquiesceAndWakeLeader */
+					raftGroup.ProposeConfChange(raftpb.ConfChange{
+						Type:    changeTypeInternalToRaft[crt.ChangeType],
+						NodeID:  uint64(crt.Replica.ReplicaID),
+						Context: encodedCtx,
+					})
 			})
 		}
 
 		hasSplit = ict.GetSplitTrigger() != nil
 	}
 
-	return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) error {
+	return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		if log.V(4) {
 			log.Infof(r.ctx, "proposing command %x", p.idKey)
 		}
-		return raftGroup.Propose(encodeRaftCommand(string(p.idKey), data, hasSplit))
+		// We're proposing a command so there is no need to wake the leader if we
+		// were quiesced.
+		r.unquiesceLocked()
+		return false, /* !unquiesceAndWakeLeader */
+			raftGroup.Propose(encodeRaftCommand(string(p.idKey), data, hasSplit))
 	})
 }
 
-func (r *Replica) setQuiescent(v bool) {
+func (r *Replica) quiesce() {
 	r.mu.Lock()
-	r.setQuiescentLocked(v)
+	r.quiesceLocked()
 	r.mu.Unlock()
 }
 
-func (r *Replica) setQuiescentLocked(v bool) {
-	if r.mu.quiescent != v {
-		r.mu.quiescent = v
+func (r *Replica) quiesceLocked() {
+	if !r.mu.quiescent {
 		if log.V(3) {
-			if r.mu.quiescent {
-				log.Infof(r.ctx, "quiescing")
-			} else {
-				log.Infof(r.ctx, "unquiescing")
-			}
+			log.Infof(r.ctx, "quiescing")
 		}
+		r.mu.quiescent = true
+	}
+}
+
+func (r *Replica) unquiesceLocked() {
+	if r.mu.quiescent {
+		if log.V(3) {
+			log.Infof(r.ctx, "unquiescing")
+		}
+		r.mu.quiescent = false
+	}
+}
+
+func (r *Replica) unquiesceAndWakeLeaderLocked() {
+	if r.mu.quiescent {
+		if log.V(3) {
+			log.Infof(r.ctx, "unquiescing: waking leader")
+		}
+		r.mu.quiescent = false
+		// Send an empty proposal which will wake the leader. Empty proposals also
+		// trigger reproposal of pending commands, but this is expected to be a
+		// very rare situation.
+		_ = r.mu.internalRaftGroup.Propose(nil)
 	}
 }
 
@@ -1775,11 +1814,11 @@ func (r *Replica) handleRaftReady() error {
 	lastIndex := r.mu.lastIndex // used for append below
 	raftLogSize := r.mu.raftLogSize
 	leaderID := r.mu.leaderID
-	err := r.withRaftGroupLocked(false, func(raftGroup *raft.RawNode) error {
+	err := r.withRaftGroupLocked(false, func(raftGroup *raft.RawNode) (bool, error) {
 		if hasReady = raftGroup.HasReady(); hasReady {
 			rd = raftGroup.Ready()
 		}
-		return nil
+		return hasReady /* unquiesceAndWakeLeader */, nil
 	})
 	r.mu.Unlock()
 	if err != nil {
@@ -1958,9 +1997,9 @@ func (r *Replica) handleRaftReady() error {
 				cc = raftpb.ConfChange{}
 			}
 			// TODO(bdarnell): update coalesced heartbeat mapping on success.
-			if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
+			if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 				raftGroup.ApplyConfChange(cc)
-				return nil
+				return true, nil
 			}); err != nil {
 				return err
 			}
@@ -1980,9 +2019,9 @@ func (r *Replica) handleRaftReady() error {
 	// TODO(bdarnell): need to check replica id and not Advance if it
 	// has changed. Or do we need more locking to guarantee that replica
 	// ID cannot change during handleRaftReady?
-	return r.withRaftGroup(func(raftGroup *raft.RawNode) error {
+	return r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.Advance(rd)
-		return nil
+		return true, nil
 	})
 }
 
@@ -2047,7 +2086,7 @@ func (r *Replica) tickRaftMuLocked() (bool, error) {
 	return true, nil
 }
 
-var enableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_QUIESCENCE", false)
+var enableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_QUIESCENCE", true)
 
 // maybeQuiesceLocked checks to see if the replica is quiescable and initiates
 // quiescence if it is. Returns true if the replica has been quiesced and false
@@ -2068,7 +2107,32 @@ var enableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_QUIESCENCE", f
 // follower which will send a MsgProp to the leader that will unquiesce the
 // leader. If the leader of a quiesced range dies, followers will not notice,
 // though any request directed to the range will eventually end up on a
-// follower which will unquiesce the follower and lead to an election.
+// follower which will unquiesce the follower and lead to an election. When a
+// follower unquiesces for a reason other than receiving a raft message or
+// proposing a raft command (for example the concurrent enqueuing of a tick),
+// it wakes the leader by sending an empty message proposal. This avoids
+// unnecessary elections due to bugs in which a follower is left unquiesced
+// while the leader is quiesced.
+//
+// Note that both the quiesce and wake-the-leader messages can be dropped or
+// reordered by the transport. The wake-the-leader message is termless so it
+// won't affect elections and, while it triggers reproprosals that won't cause
+// problems on reorderin. If the wake-the-leader message is dropped the leader
+// won't be woken and the follower will eventually call an election.
+//
+// If the quiesce message is dropped the follower which missed it will not
+// quiesce and will eventually cause an election. The quiesce message is tagged
+// with the current term and commit index. If the quiesce message is reordered
+// it will either still apply to the recipient or the recipient will have moved
+// forward and the quiesce message will fall back to being a heartbeat.
+//
+// TODO(peter): There remains a scenario in which a follower is left unquiesced
+// while the leader is quiesced: the follower's receive queue is full and the
+// "quiesce" message is dropped. This seems very very unlikely because if the
+// follower isn't keeping up with raft messages it is unlikely that the leader
+// would quiesce. The fallout from this situation are undesirable raft
+// elections which will cause throughput hiccups to the range, but not
+// correctness issues.
 //
 // TODO(peter): When a node goes down, any range which has a replica on the
 // down node will not quiesce. This could be a significant performance
@@ -2143,7 +2207,7 @@ func (r *Replica) maybeQuiesceLocked() bool {
 		}
 		return false
 	}
-	r.setQuiescentLocked(true)
+	r.quiesceLocked()
 	for id := range status.Progress {
 		if roachpb.ReplicaID(id) == r.mu.replicaID {
 			continue
@@ -2154,7 +2218,7 @@ func (r *Replica) maybeQuiesceLocked() bool {
 			if log.V(4) {
 				log.Infof(r.ctx, "failed to quiesce: cannot find to replica (%d)", id)
 			}
-			r.setQuiescentLocked(false)
+			r.unquiesceLocked()
 			return false
 		}
 		if !r.sendRaftMessageRequest(&RaftMessageRequest{
@@ -2170,7 +2234,7 @@ func (r *Replica) maybeQuiesceLocked() bool {
 			},
 			Quiesce: true,
 		}) {
-			r.setQuiescentLocked(false)
+			r.unquiesceLocked()
 			r.mu.droppedMessages++
 			r.mu.internalRaftGroup.ReportUnreachable(id)
 			return false
@@ -2289,10 +2353,10 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 		FromReplica: fromReplica,
 		Message:     msg,
 	}) {
-		if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
+		if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 			r.mu.droppedMessages++
 			raftGroup.ReportUnreachable(msg.To)
-			return nil
+			return true, nil
 		}); err != nil {
 			r.panic(err)
 		}
@@ -2324,9 +2388,9 @@ func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
 		snapStatus = raft.SnapshotFailure
 	}
 
-	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
+	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.ReportSnapshot(to, snapStatus)
-		return nil
+		return true, nil
 	}); err != nil {
 		r.panic(err)
 	}

@@ -194,6 +194,13 @@ func (sp *StorePool) GetStoreList(constraints config.Constraints, deterministic 
 	return sp.getStoreList(constraints, deterministic)
 }
 
+// IsQuiescent returns whether the replica is quiescent or not.
+func (r *Replica) IsQuiescent() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.quiescent
+}
+
 func GetGCQueueTxnCleanupThreshold() time.Duration {
 	return txnCleanupThreshold
 }

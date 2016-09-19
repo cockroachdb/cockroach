@@ -38,7 +38,7 @@ stderr_logfile_backups=10
 
 [program:block_writer]
 directory=%(here)s
-command=%(here)s/block_writer --concurrency 5 --tolerate-errors --benchmark-name ${benchmark_name} 'postgres://root@$localhost:${cockroach_port}/?sslmode=disable'
+command=%(here)s/block_writer --tolerate-errors --min-block-bytes=8 --max-block-bytes=128 --benchmark-name ${benchmark_name} 'postgres://root@$localhost:${cockroach_port}/?sslmode=disable'
 process_name=%(program_name)s
 numprocs=1
 autostart=false

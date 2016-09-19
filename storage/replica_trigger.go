@@ -302,14 +302,14 @@ func (r *Replica) maybeTransferRaftLeadership(
 	replicaID roachpb.ReplicaID,
 	target roachpb.ReplicaID,
 ) {
-	err := r.withRaftGroup(func(raftGroup *raft.RawNode) error {
+	err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 		if raftGroup.Status().RaftState == raft.StateLeader {
 			// Only the raft leader can attempt a leadership transfer.
 			log.Infof(ctx, "range %s: transferring raft leadership to replica ID %v",
 				r, target)
 			raftGroup.TransferLeader(uint64(target))
 		}
-		return nil
+		return true, nil
 	})
 	if err != nil {
 		// An error here indicates that this Replica has been destroyed
