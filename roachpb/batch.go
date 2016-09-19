@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
+//go:generate go run -tags gen-batch-summary gen_batch_summary.go
+
 // SetActiveTimestamp sets the correct timestamp at which the request is to be
 // carried out. For transactional requests, ba.Timestamp must be zero initially
 // and it will be set to txn.OrigTimestamp. For non-transactional requests, if
