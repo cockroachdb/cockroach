@@ -2022,6 +2022,7 @@ func (s *Store) Descriptor() (*roachpb.StoreDescriptor, error) {
 		return nil, err
 	}
 	capacity.RangeCount = int32(s.ReplicaCount())
+	capacity.LeaseHolderCount = int32(s.LeaseHolderCount())
 	// Initialize the store descriptor.
 	return &roachpb.StoreDescriptor{
 		StoreID:  s.Ident.StoreID,
@@ -2064,6 +2065,26 @@ func (s *Store) ReplicaCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.mu.replicas)
+}
+
+// LeaseHolderCount returns the number of replicas this store holds leases for.
+func (s *Store) LeaseHolderCount() int {
+	now := s.cfg.Clock.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var leaseHolderCount int
+	for _, r := range s.mu.replicas {
+		r.mu.Lock()
+		lease := r.mu.state.Lease
+		r.mu.Unlock()
+
+		if lease.OwnedBy(s.Ident.StoreID) && lease.Covers(now) {
+			leaseHolderCount++
+		}
+	}
+	return leaseHolderCount
 }
 
 // Send fetches a range based on the header's replica, assembles method, args &

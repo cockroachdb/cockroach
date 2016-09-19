@@ -697,7 +697,10 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	const maxBytes = 1 << 16
 	// Set max bytes.
 	descID := uint32(keys.MaxReservedDescID + 1)
-	config.TestingSetZoneConfig(descID, config.ZoneConfig{RangeMaxBytes: maxBytes})
+	config.TestingSetZoneConfig(descID, config.ZoneConfig{
+		ReplicaAttrs:  []roachpb.Attributes{{}},
+		RangeMaxBytes: maxBytes,
+	})
 
 	// Trigger gossip callback.
 	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {
@@ -754,7 +757,10 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	// Set max bytes.
 	const maxBytes = 1 << 16
 	descID := uint32(keys.MaxReservedDescID + 1)
-	config.TestingSetZoneConfig(descID, config.ZoneConfig{RangeMaxBytes: maxBytes})
+	config.TestingSetZoneConfig(descID, config.ZoneConfig{
+		ReplicaAttrs:  []roachpb.Attributes{{}},
+		RangeMaxBytes: maxBytes,
+	})
 
 	// Trigger gossip callback.
 	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {

@@ -443,21 +443,26 @@ func (s *stat) update(x float64) {
 // StoreList holds a list of store descriptors and associated count and used
 // stats for those stores.
 type StoreList struct {
-	stores      []roachpb.StoreDescriptor
-	count, used stat
+	stores []roachpb.StoreDescriptor
 
 	// candidateCount tracks range count stats for stores that are eligible to
 	// be rebalance targets (their used capacity percentage must be lower than
 	// maxFractionUsedThreshold).
 	candidateCount stat
+
+	// candidateLeases tracks range lease stats for stores that are eligible to
+	// be rebalance targets.
+	candidateLeases stat
 }
 
 func (sl StoreList) String() string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "  candidate-count: mean=%v\n", sl.candidateCount.mean)
+	fmt.Fprintf(&buf, "  candidate: avg-ranges=%v avg-leases=%v\n",
+		sl.candidateCount.mean, sl.candidateLeases.mean)
 	for _, desc := range sl.stores {
-		fmt.Fprintf(&buf, "  %d: range-count=%d fraction-used=%.2f\n",
-			desc.StoreID, desc.Capacity.RangeCount, desc.Capacity.FractionUsed())
+		fmt.Fprintf(&buf, "  %d: range-count=%d lease-holder-count=%d fraction-used=%.2f\n",
+			desc.StoreID, desc.Capacity.RangeCount,
+			desc.Capacity.LeaseHolderCount, desc.Capacity.FractionUsed())
 	}
 	return buf.String()
 }
@@ -466,10 +471,9 @@ func (sl StoreList) String() string {
 // maintained statistics.
 func (sl *StoreList) add(s roachpb.StoreDescriptor) {
 	sl.stores = append(sl.stores, s)
-	sl.count.update(float64(s.Capacity.RangeCount))
-	sl.used.update(s.Capacity.FractionUsed())
 	if s.Capacity.FractionUsed() <= maxFractionUsedThreshold {
 		sl.candidateCount.update(float64(s.Capacity.RangeCount))
+		sl.candidateLeases.update(float64(s.Capacity.LeaseHolderCount))
 	}
 }
 

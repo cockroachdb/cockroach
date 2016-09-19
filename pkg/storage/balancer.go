@@ -151,9 +151,9 @@ func (rangeCountBalancer) shouldRebalance(store roachpb.StoreDescriptor, sl Stor
 	maxCapacityUsed := store.Capacity.FractionUsed() >= maxFractionUsedThreshold
 
 	// Rebalance if we're above the rebalance target, which is
-	// mean*(1+RebalanceThreshold).
-	target := int32(math.Ceil(sl.candidateCount.mean * (1 + RebalanceThreshold)))
-	rangeCountAboveTarget := store.Capacity.RangeCount > target
+	// mean*(1+rebalanceThreshold).
+	overfullThreshold := int32(math.Ceil(sl.candidateCount.mean * (1 + RebalanceThreshold)))
+	rebalanceFromOverfullStore := store.Capacity.RangeCount > overfullThreshold
 
 	// Rebalance if the candidate store has a range count above the mean, and
 	// there exists another store that is underfull: its range count is smaller
@@ -175,14 +175,15 @@ func (rangeCountBalancer) shouldRebalance(store roachpb.StoreDescriptor, sl Stor
 	rebalanceConvergesOnMean := float64(store.Capacity.RangeCount) > sl.candidateCount.mean+0.5
 
 	shouldRebalance :=
-		(maxCapacityUsed || rangeCountAboveTarget || rebalanceToUnderfullStore) && rebalanceConvergesOnMean
+		(maxCapacityUsed || rebalanceFromOverfullStore || rebalanceToUnderfullStore) &&
+			rebalanceConvergesOnMean
 	if log.V(2) {
 		log.Infof(context.TODO(),
 			"%d: should-rebalance=%t: fraction-used=%.2f range-count=%d "+
-				"(mean=%.1f, target=%d, fraction-used=%t, above-target=%t, underfull=%t, converges=%t)",
+				"(mean=%.1f, fraction-used=%t, overfull=%t, underfull=%t, converges=%t)",
 			store.StoreID, shouldRebalance, store.Capacity.FractionUsed(),
-			store.Capacity.RangeCount, sl.candidateCount.mean, target,
-			maxCapacityUsed, rangeCountAboveTarget, rebalanceToUnderfullStore, rebalanceConvergesOnMean)
+			store.Capacity.RangeCount, sl.candidateCount.mean, maxCapacityUsed,
+			rebalanceFromOverfullStore, rebalanceToUnderfullStore, rebalanceConvergesOnMean)
 	}
 	return shouldRebalance
 }
