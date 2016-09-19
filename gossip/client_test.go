@@ -41,7 +41,7 @@ import (
 
 // startGossip creates and starts a gossip instance.
 func startGossip(nodeID roachpb.NodeID, stopper *stop.Stopper, t *testing.T, registry *metric.Registry) *Gossip {
-	return startGossipAtAddr(nodeID, util.TestAddr, stopper, t, registry)
+	return startGossipAtAddr(nodeID, util.IsolatedTestAddr, stopper, t, registry)
 }
 
 func startGossipAtAddr(nodeID roachpb.NodeID, addr net.Addr, stopper *stop.Stopper, t *testing.T, registry *metric.Registry) *Gossip {
@@ -109,7 +109,7 @@ func startFakeServerGossips(t *testing.T) (*Gossip, *fakeGossipServer, *stop.Sto
 
 	lserver := rpc.NewServer(lRPCContext)
 	local := New(context.TODO(), lRPCContext, lserver, nil, stopper, metric.NewRegistry())
-	lln, err := netutil.ListenAndServeGRPC(stopper, lserver, util.TestAddr)
+	lln, err := netutil.ListenAndServeGRPC(stopper, lserver, util.IsolatedTestAddr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func startFakeServerGossips(t *testing.T) (*Gossip, *fakeGossipServer, *stop.Sto
 	rRPCContext := rpc.NewContext(context.TODO(), &base.Context{Insecure: true}, nil, stopper)
 
 	rserver := rpc.NewServer(rRPCContext)
-	rln, err := netutil.ListenAndServeGRPC(stopper, rserver, util.TestAddr)
+	rln, err := netutil.ListenAndServeGRPC(stopper, rserver, util.IsolatedTestAddr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -399,7 +399,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		RPCContext := rpc.NewContext(context.TODO(), &base.Context{Insecure: true}, nil, stopper)
 
 		server := rpc.NewServer(RPCContext)
-		ln, err := netutil.ListenAndServeGRPC(stopper, server, util.TestAddr)
+		ln, err := netutil.ListenAndServeGRPC(stopper, server, util.IsolatedTestAddr)
 		if err != nil {
 			t.Fatal(err)
 		}
