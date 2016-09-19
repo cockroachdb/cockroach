@@ -93,7 +93,7 @@ func doJSONRequest(httpClient http.Client, req *http.Request, response proto.Mes
 	defer resp.Body.Close()
 	if contentType := resp.Header.Get(ContentTypeHeader); !(resp.StatusCode == http.StatusOK && contentType == JSONContentType) {
 		b, err := ioutil.ReadAll(resp.Body)
-		return errors.Errorf("status: %s, content-type: %s, body: %s, error: %s", resp.Status, contentType, b, err)
+		return errors.Errorf("status: %s, content-type: %s, body: %s, error: %v", resp.Status, contentType, b, err)
 	}
 	return jsonpb.Unmarshal(resp.Body, response)
 }
@@ -122,7 +122,7 @@ func StreamJSON(
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		b, err := ioutil.ReadAll(resp.Body)
-		return errors.Errorf("status: %s, body: %s, error: %s", resp.Status, b, err)
+		return errors.Errorf("status: %s, body: %s, error: %v", resp.Status, b, err)
 	}
 
 	// grpc-gw/runtime's JSONpb {en,de}coder is pretty half-baked. Essentially
