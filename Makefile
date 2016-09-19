@@ -100,20 +100,20 @@ testbuild:
 # tests.
 .PHONY: test
 test:
-	$(GO) test -v $(GOFLAGS) -i $(PKG)
-	$(GO) test $(GOFLAGS) -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
+	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -i $(PKG)
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: testslow
 testslow: TESTFLAGS += -v
 testslow:
-	$(GO) test -v $(GOFLAGS) -i $(PKG)
-	$(GO) test $(GOFLAGS) -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
+	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -i $(PKG)
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
 
 .PHONY: testraceslow
 testraceslow: TESTFLAGS += -v
 testraceslow:
-	$(GO) test -v $(GOFLAGS) -race -i $(PKG)
-	$(GO) test $(GOFLAGS) -race -run "$(TESTS)" -timeout $(RACETIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
+	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -race -i $(PKG)
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -race -run "$(TESTS)" -timeout $(RACETIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
 
 # "go test -i" builds dependencies and installs them into GOPATH/pkg, but does not run the
 # tests. Run it as a part of "testrace" since race-enabled builds are not covered by
@@ -121,18 +121,18 @@ testraceslow:
 # slow-to-compile cgo packages).
 .PHONY: testrace
 testrace:
-	$(GO) test -v $(GOFLAGS) -race -i $(PKG)
-	$(GO) test $(GOFLAGS) -race -run "$(TESTS)" -timeout $(RACETIMEOUT) $(PKG) $(TESTFLAGS)
+	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -race -i $(PKG)
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -race -run "$(TESTS)" -timeout $(RACETIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: bench
 bench:
-	$(GO) test -v $(GOFLAGS) -i $(PKG)
-	$(GO) test $(GOFLAGS) -run - -bench "$(TESTS)" -timeout $(BENCHTIMEOUT) $(PKG) $(TESTFLAGS)
+	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -i $(PKG)
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run - -bench "$(TESTS)" -timeout $(BENCHTIMEOUT) $(PKG) $(TESTFLAGS)
 
 .PHONY: coverage
 coverage:
-	$(GO) test -v $(GOFLAGS) -i $(PKG)
-	$(GO) test $(GOFLAGS) -cover -run "$(TESTS)" $(PKG) $(TESTFLAGS)
+	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -i $(PKG)
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -cover -run "$(TESTS)" $(PKG) $(TESTFLAGS)
 
 .PHONY: upload-coverage
 upload-coverage:
@@ -143,12 +143,12 @@ upload-coverage:
 # given all tests in the package will be run).
 .PHONY: stress
 stress:
-	$(GO) test -v $(GOFLAGS) -i -c $(PKG) -o $(PKG)/stress.test
+	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -i -c $(PKG) -o $(PKG)/stress.test
 	cd $(PKG) && stress $(STRESSFLAGS) ./stress.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 .PHONY: stressrace
 stressrace:
-	$(GO) test -v $(GOFLAGS) -i -c $(PKG) -o $(PKG)/stress.test -race
+	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -i -c $(PKG) -o $(PKG)/stress.test -race
 	cd $(PKG) && stress $(STRESSFLAGS) ./stress.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 .PHONY: acceptance
@@ -169,7 +169,7 @@ dupl:
 check:
 	# compile everything; go vet sometimes reports incorrect errors if
 	# the build artifacts are stale.
-	$(GO) test -i ./...
+	$(GO) test -i -tags '$(TAGS)' ./...
 	@build/check-style.sh
 
 .PHONY: clean

@@ -362,7 +362,7 @@ func TestReplicaContains(t *testing.T) {
 	// This test really only needs a hollow shell of a Replica.
 	r := &Replica{}
 	r.mu.state.Desc = desc
-	r.rangeDesc.store(desc)
+	r.rangeStr.store(desc)
 
 	if statsKey := keys.RangeStatsKey(desc.RangeID); !r.ContainsKey(statsKey) {
 		t.Errorf("expected range to contain range stats key %q", statsKey)

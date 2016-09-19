@@ -21,9 +21,27 @@ import (
 	"net"
 )
 
-// TestAddr is an address to use for test servers. Listening on port 0 causes
-// the kernel to allocate an unused port.
+// TestAddr is an address to use for test servers. Listening on port 0
+// causes the kernel to allocate an unused port.
 var TestAddr = NewUnresolvedAddr("tcp", "127.0.0.1:0")
+
+// IsolatedTestAddr is initialized in testaddr_*.go
+
+// IsolatedTestAddr is an address to use for tests that need extra
+// isolation by using more addresses than 127.0.0.1 (support for this
+// is platform-specific and only enabled on Linux). Both TestAddr and
+// IsolatedTestAddr guarantee that the chosen port is not in use when
+// allocated, but IsolatedTestAddr draws from a larger pool of
+// addresses so that when tests are run in a tight loop the system is
+// less likely to run out of available ports or give a port to one
+// test immediately after it was closed by another.
+//
+// IsolatedTestAddr should be used for tests that open and close a
+// large number of sockets, or tests which stop a server and rely on
+// seeing a "connection refused" error afterwards. It cannot be used
+// with tests that operate in secure mode since our test certificates
+// are only valid for 127.0.0.1.
+var IsolatedTestAddr *UnresolvedAddr
 
 // MakeUnresolvedAddr populates an UnresolvedAddr from a network and raw
 // address string.
