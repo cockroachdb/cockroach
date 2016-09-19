@@ -164,3 +164,56 @@ func TestDeprecatedVerifyChecksumRequest(t *testing.T) {
 		t.Fatal("unexpected success")
 	}
 }
+
+func TestBatchRequestSummary(t *testing.T) {
+	// The Summary function is generated automatically, so the tests don't need to
+	// be exhaustive.
+	testCases := []struct {
+		reqs     []interface{}
+		expected string
+	}{
+		{
+			reqs:     []interface{}{},
+			expected: "empty batch",
+		},
+		{
+			reqs:     []interface{}{&GetRequest{}},
+			expected: "1 Get",
+		},
+		{
+			reqs:     []interface{}{&PutRequest{}},
+			expected: "1 Put",
+		},
+		{
+			reqs:     []interface{}{&ConditionalPutRequest{}},
+			expected: "1 CPut",
+		},
+		{
+			reqs:     []interface{}{&ReverseScanRequest{}},
+			expected: "1 RevScan",
+		},
+		{
+			reqs: []interface{}{
+				&GetRequest{}, &GetRequest{}, &PutRequest{}, &ScanRequest{}, &ScanRequest{},
+			},
+			expected: "2 Get, 1 Put, 2 Scan",
+		},
+		{
+			reqs: []interface{}{
+				&CheckConsistencyRequest{}, &InitPutRequest{}, &TruncateLogRequest{},
+			},
+			expected: "1 TruncLog, 1 ChkConsistency, 1 InitPut",
+		},
+	}
+	for i, tc := range testCases {
+		var br BatchRequest
+		for _, v := range tc.reqs {
+			var ru RequestUnion
+			ru.SetValue(v)
+			br.Requests = append(br.Requests, ru)
+		}
+		if str := br.Summary(); str != tc.expected {
+			t.Errorf("%d: got '%s', expected '%s', batch: %+v", i, str, tc.expected, br)
+		}
+	}
+}
