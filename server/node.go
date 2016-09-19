@@ -136,8 +136,8 @@ type Node struct {
 
 // allocateNodeID increments the node id generator key to allocate
 // a new, unique node id.
-func allocateNodeID(db *client.DB) (roachpb.NodeID, error) {
-	r, err := db.Inc(context.TODO(), keys.NodeIDGenerator, 1)
+func allocateNodeID(ctx context.Context, db *client.DB) (roachpb.NodeID, error) {
+	r, err := db.Inc(ctx, keys.NodeIDGenerator, 1)
 	if err != nil {
 		return 0, errors.Errorf("unable to allocate node ID: %s", err)
 	}
@@ -147,8 +147,10 @@ func allocateNodeID(db *client.DB) (roachpb.NodeID, error) {
 // allocateStoreIDs increments the store id generator key for the
 // specified node to allocate "inc" new, unique store ids. The
 // first ID in a contiguous range is returned on success.
-func allocateStoreIDs(nodeID roachpb.NodeID, inc int64, db *client.DB) (roachpb.StoreID, error) {
-	r, err := db.Inc(context.TODO(), keys.StoreIDGenerator, inc)
+func allocateStoreIDs(
+	ctx context.Context, nodeID roachpb.NodeID, inc int64, db *client.DB,
+) (roachpb.StoreID, error) {
+	r, err := db.Inc(ctx, keys.StoreIDGenerator, inc)
 	if err != nil {
 		return 0, errors.Errorf("unable to allocate %d store IDs for node %d: %s", inc, nodeID, err)
 	}
@@ -233,12 +235,12 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics kv.TxnMetrics) (uuid.U
 
 		// Initialize node and store ids.  Only initialize the node once.
 		if i == 0 {
-			if nodeID, err := allocateNodeID(ctx.DB); nodeID != sIdent.NodeID || err != nil {
+			if nodeID, err := allocateNodeID(ctx.Ctx, ctx.DB); nodeID != sIdent.NodeID || err != nil {
 				return uuid.UUID{}, errors.Errorf("expected to initialize node id allocator to %d, got %d: %s",
 					sIdent.NodeID, nodeID, err)
 			}
 		}
-		if storeID, err := allocateStoreIDs(sIdent.NodeID, 1, ctx.DB); storeID != sIdent.StoreID || err != nil {
+		if storeID, err := allocateStoreIDs(ctx.Ctx, sIdent.NodeID, 1, ctx.DB); storeID != sIdent.StoreID || err != nil {
 			return uuid.UUID{}, errors.Errorf("expected to initialize store id allocator to %d, got %d: %s",
 				sIdent.StoreID, storeID, err)
 		}
@@ -305,7 +307,7 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 	}
 	var err error
 	if id == 0 {
-		id, err = allocateNodeID(n.ctx.DB)
+		id, err = allocateNodeID(n.Ctx(), n.ctx.DB)
 		if err != nil {
 			log.Fatal(n.Ctx(), err)
 		}
@@ -514,7 +516,7 @@ func (n *Node) bootstrapStores(ctx context.Context, bootstraps []*storage.Store,
 	// Bootstrap all waiting stores by allocating a new store id for
 	// each and invoking store.Bootstrap() to persist.
 	inc := int64(len(bootstraps))
-	firstID, err := allocateStoreIDs(n.Descriptor.NodeID, inc, n.ctx.DB)
+	firstID, err := allocateStoreIDs(n.Ctx(), n.Descriptor.NodeID, inc, n.ctx.DB)
 	if err != nil {
 		log.Fatal(ctx, err)
 	}
