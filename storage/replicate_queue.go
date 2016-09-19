@@ -160,19 +160,31 @@ func (rq *replicateQueue) process(
 		}
 	case AllocatorRemove:
 		log.Event(ctx, "removing a replica")
-		// We require the lease in order to process replicas, so
-		// repl.store.StoreID() corresponds to the lease-holder's store ID.
-		removeReplica, err := rq.allocator.RemoveTarget(desc.Replicas, repl.store.StoreID())
+		// If the lease holder is on an overfull store allow transferring the lease
+		// away.
+		leaseHolderID := repl.store.StoreID()
+		if rq.allocator.TransferLeaseSource(zone.ReplicaAttrs[0], leaseHolderID) {
+			leaseHolderID = 0
+		}
+		removeReplica, err := rq.allocator.RemoveTarget(desc.Replicas, leaseHolderID)
 		if err != nil {
 			return err
 		}
-		log.VEventf(1, ctx, "removing replica %+v due to over-replication", removeReplica)
-		if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, removeReplica, desc); err != nil {
-			return err
-		}
-		// Do not requeue if we removed ourselves.
 		if removeReplica.StoreID == repl.store.StoreID() {
-			return nil
+			target := rq.allocator.TransferLeaseTarget(desc.Replicas, repl.store.StoreID())
+			if target.StoreID != 0 {
+				log.VEventf(1, ctx, "transferring lease to s%d", target.StoreID)
+				if err := repl.AdminTransferLease(target.StoreID); err != nil {
+					return errors.Wrapf(err, "%s: unable to transfer lease", repl)
+				}
+				// Do not requeue as we transferred our lease away.
+				return nil
+			}
+		} else {
+			log.VEventf(1, ctx, "removing replica %+v due to over-replication", removeReplica)
+			if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, removeReplica, desc); err != nil {
+				return err
+			}
 		}
 	case AllocatorRemoveDead:
 		log.Event(ctx, "removing a dead replica")

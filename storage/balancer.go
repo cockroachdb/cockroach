@@ -155,10 +155,7 @@ func (rcb rangeCountBalancer) shouldRebalance(
 	// for rebalancing. This is currently utilized by tests.
 	maxCapacityUsed := store.Capacity.FractionUsed() >= maxFractionUsedThreshold
 
-	// Rebalance if we're above the rebalance target, which is
-	// mean*(1+rebalanceThreshold).
-	target := int32(math.Ceil(sl.candidateCount.mean * (1 + rebalanceThreshold)))
-	rangeCountAboveTarget := store.Capacity.RangeCount > target
+	rebalanceFromOverfullStore := rcb.overfull(store, sl)
 
 	// Rebalance if the candidate store has a range count above the mean, and
 	// there exists another store that is underfull: its range count is smaller
@@ -182,16 +179,26 @@ func (rcb rangeCountBalancer) shouldRebalance(
 			math.Abs(float64(store.Capacity.RangeCount)-sl.candidateCount.mean))
 
 	shouldRebalance :=
-		(maxCapacityUsed || rangeCountAboveTarget || rebalanceToUnderfullStore) && rebalanceConvergesOnMean
+		(maxCapacityUsed || rebalanceFromOverfullStore || rebalanceToUnderfullStore) &&
+			rebalanceConvergesOnMean
 	if log.V(2) {
 		log.Infof(context.TODO(),
 			"%d: should-rebalance=%t: fraction-used=%.2f range-count=%d "+
-				"(mean=%.1f, target=%d, fraction-used=%t, above-target=%t, underfull=%t, converges=%t)",
+				"(mean=%.1f, fraction-used=%t, overfull=%t, underfull=%t, converges=%t)",
 			store.StoreID, shouldRebalance, store.Capacity.FractionUsed(),
-			store.Capacity.RangeCount, sl.candidateCount.mean, target,
-			maxCapacityUsed, rangeCountAboveTarget, rebalanceToUnderfullStore, rebalanceConvergesOnMean)
+			store.Capacity.RangeCount, sl.candidateCount.mean, maxCapacityUsed,
+			rebalanceFromOverfullStore, rebalanceToUnderfullStore, rebalanceConvergesOnMean)
 	}
 	return shouldRebalance
+}
+
+func (rcb rangeCountBalancer) overfull(
+	store roachpb.StoreDescriptor, sl StoreList,
+) bool {
+	// Rebalance if we're above the rebalance target, which is
+	// mean*(1+rebalanceThreshold).
+	overfullThreshold := int32(math.Ceil(sl.candidateCount.mean * (1 + rebalanceThreshold)))
+	return store.Capacity.RangeCount > overfullThreshold
 }
 
 // selectRandom chooses up to count random store descriptors from the given
