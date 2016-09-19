@@ -20,6 +20,7 @@ package storage
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 
 	"golang.org/x/net/context"
@@ -317,6 +318,47 @@ func (a Allocator) RebalanceTarget(
 	return a.improve(sl, existingNodes)
 }
 
+// TransferLeaseTarget returns a suitable replica to transfer the range lease
+// to from the provided list. It excludes the current lease holder replica.
+func (a *Allocator) TransferLeaseTarget(
+	existing []roachpb.ReplicaDescriptor,
+	leaseStoreID roachpb.StoreID,
+) roachpb.ReplicaDescriptor {
+	var bestDesc roachpb.ReplicaDescriptor
+	bestRangeCount := int32(math.MaxInt32)
+	for _, repl := range existing {
+		if leaseStoreID == repl.StoreID {
+			continue
+		}
+		storeDesc, ok := a.storePool.getStoreDescriptor(repl.StoreID)
+		if !ok {
+			continue
+		}
+		if bestRangeCount > storeDesc.Capacity.RangeCount {
+			bestRangeCount = storeDesc.Capacity.RangeCount
+			bestDesc = repl
+		}
+	}
+	return bestDesc
+}
+
+// TransferLeaseSource returns true if the specified store is overfull with
+// respect to the other stores matching the specified attributes.
+func (a *Allocator) TransferLeaseSource(
+	required roachpb.Attributes,
+	leaseStoreID roachpb.StoreID,
+) bool {
+	storeDesc, ok := a.storePool.getStoreDescriptor(leaseStoreID)
+	if !ok {
+		return false
+	}
+	sl, _, _ := a.storePool.getStoreList(required, a.options.Deterministic)
+	if log.V(3) {
+		log.Infof(context.TODO(), "transfer-lease-source (lease-holder=%d):\n%s", leaseStoreID, sl)
+	}
+	return a.overfull(storeDesc, sl)
+}
+
 // ShouldRebalance returns whether the specified store should attempt to
 // rebalance a replica to another store.
 //
@@ -368,6 +410,15 @@ func (a Allocator) shouldRebalance(
 ) bool {
 	rcb := rangeCountBalancer{a.randGen}
 	return rcb.shouldRebalance(store, sl)
+}
+
+// overfull returns whether the specified store is overfull with respect to the
+// given candidate store list.
+func (a Allocator) overfull(
+	store roachpb.StoreDescriptor, sl StoreList,
+) bool {
+	rcb := rangeCountBalancer{a.randGen}
+	return rcb.overfull(store, sl)
 }
 
 // computeQuorum computes the quorum value for the given number of nodes.
