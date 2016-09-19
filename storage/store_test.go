@@ -165,6 +165,13 @@ func createTestStoreWithoutStart(t testing.TB, ctx *StoreContext) (*Store, *hlc.
 
 func createTestStore(t testing.TB) (*Store, *hlc.ManualClock, *stop.Stopper) {
 	ctx := TestStoreContext()
+	// Many tests using this test harness (as opposed to higher-level
+	// ones like multiTestContext or TestServer) want to micro-manage
+	// replicas and the background queues just get in the way. The
+	// scanner doesn't run frequently enough to expose races reliably,
+	// so just disable the scanner for all tests that use this function
+	// instead of figuring out exactly which tests need it.
+	ctx.TestingKnobs.DisableScanner = true
 	return createTestStoreWithContext(t, &ctx)
 }
 
@@ -280,6 +287,11 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	}
 }
 
+// create a Replica and add it to the store. Note that replicas
+// created in this way do not have their raft groups fully initialized
+// so most KV operations will not work on them. This function is
+// deprecated; new tests should create replicas by splitting from a
+// properly-bootstrapped initial range.
 func createReplica(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *Replica {
 	desc := &roachpb.RangeDescriptor{
 		RangeID:  rangeID,
