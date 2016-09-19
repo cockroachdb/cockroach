@@ -24,6 +24,8 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+//go:generate go run gen/gen-batch-summary.go
+
 // UserPriority is a custom type for transaction's user priority.
 type UserPriority float64
 
