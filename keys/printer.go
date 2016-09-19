@@ -632,3 +632,52 @@ func MassagePrettyPrintedSpanForTest(span string, dirs []encoding.Direction) str
 	}
 	return r
 }
+
+// PrettyPrintRange pretty prints a compact representation of a key range. The
+// output is of the form:
+//    commonPrefix{remainingStart-remainingEnd}
+// It prints at most maxChars, truncating components as needed. See
+// TestPrettyPrintRange for some examples.
+func PrettyPrintRange(
+	b *bytes.Buffer,
+	start, end roachpb.Key,
+	maxChars int,
+) {
+	const ellipsis = '\u2026'
+	if maxChars < 8 {
+		maxChars = 8
+	}
+	prettyStart := PrettyPrint(start)
+	prettyEnd := PrettyPrint(end)
+	i := 0
+	// Find the common prefix.
+	for ; i < len(prettyStart) && i < len(prettyEnd) && prettyStart[i] == prettyEnd[i]; i++ {
+	}
+	// If we don't have space for at least '{a…-b…}' after the prefix, only print
+	// the prefix (or part of it).
+	if i > maxChars-7 {
+		if i > maxChars-1 {
+			i = maxChars - 1
+		}
+		b.WriteString(prettyStart[:i])
+		b.WriteRune(ellipsis)
+		return
+	}
+	b.WriteString(prettyStart[:i])
+	remaining := (maxChars - i - 3) / 2
+
+	printTrunc := func(b *bytes.Buffer, what string, maxChars int) {
+		if len(what) <= maxChars {
+			b.WriteString(what)
+		} else {
+			b.WriteString(what[:maxChars-1])
+			b.WriteRune(ellipsis)
+		}
+	}
+
+	b.WriteByte('{')
+	printTrunc(b, prettyStart[i:], remaining)
+	b.WriteByte('-')
+	printTrunc(b, prettyEnd[i:], remaining)
+	b.WriteByte('}')
+}
