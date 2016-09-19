@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -42,6 +43,7 @@ const (
 // additional replica to their range.
 type replicateQueue struct {
 	baseQueue
+	db         *client.DB
 	allocator  Allocator
 	clock      *hlc.Clock
 	updateChan chan struct{}
@@ -51,6 +53,7 @@ type replicateQueue struct {
 func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator, clock *hlc.Clock,
 	options AllocatorOptions) *replicateQueue {
 	rq := &replicateQueue{
+		db:         store.db,
 		allocator:  allocator,
 		clock:      clock,
 		updateChan: make(chan struct{}, 1),
@@ -162,17 +165,31 @@ func (rq *replicateQueue) process(
 		log.Event(ctx, "removing a replica")
 		// We require the lease in order to process replicas, so
 		// repl.store.StoreID() corresponds to the lease-holder's store ID.
-		removeReplica, err := rq.allocator.RemoveTarget(desc.Replicas, repl.store.StoreID())
+		removeReplica, err := rq.allocator.RemoveTarget(desc.Replicas, 0)
 		if err != nil {
 			return err
 		}
-		log.VEventf(1, ctx, "removing replica %+v due to over-replication", removeReplica)
-		if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, removeReplica, desc); err != nil {
-			return err
-		}
-		// Do not requeue if we removed ourselves.
 		if removeReplica.StoreID == repl.store.StoreID() {
-			return nil
+			var targetID roachpb.StoreID
+			for _, replica := range desc.Replicas {
+				if replica.StoreID != repl.store.StoreID() {
+					targetID = replica.StoreID
+					break
+				}
+			}
+			if targetID != 0 {
+				log.VEventf(1, ctx, "transferring lease to s%d", removeReplica, targetID)
+				if err := rq.db.AdminTransferLease(ctx, desc.StartKey.AsRawKey(), targetID); err != nil {
+					return errors.Wrapf(err, "%s: unable to transfer lease")
+				}
+				// Do not requeue as we transferred our lease away.
+				return nil
+			}
+		} else {
+			log.VEventf(1, ctx, "removing replica %+v due to over-replication", removeReplica)
+			if err = repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, removeReplica, desc); err != nil {
+				return err
+			}
 		}
 	case AllocatorRemoveDead:
 		log.Event(ctx, "removing a dead replica")
