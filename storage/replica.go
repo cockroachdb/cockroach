@@ -177,27 +177,30 @@ type replicaChecksum struct {
 	snapshot *roachpb.RaftSnapshotData
 }
 
-type atomicRangeDesc struct {
-	descPtr unsafe.Pointer
+type atomicDescString struct {
+	strPtr unsafe.Pointer
 }
 
-func (d *atomicRangeDesc) store(desc *roachpb.RangeDescriptor) {
-	atomic.StorePointer(&d.descPtr, unsafe.Pointer(desc))
-}
+// store atomically updates d.strPtr with the string representation of desc.
+func (d *atomicDescString) store(desc *roachpb.RangeDescriptor) {
+	const maxRangeChars = 30
+	var str string
+	if !desc.IsInitialized() {
+		str = fmt.Sprintf("%d:{-}", desc.RangeID)
+	} else {
+		var buf bytes.Buffer
+		fmt.Fprintf(&buf, "%d:", desc.RangeID)
+		keys.PrettyPrintRange(&buf, roachpb.Key(desc.StartKey), roachpb.Key(desc.EndKey), maxRangeChars)
+		str = buf.String()
+	}
 
-func (d *atomicRangeDesc) load() *roachpb.RangeDescriptor {
-	return (*roachpb.RangeDescriptor)(atomic.LoadPointer(&d.descPtr))
+	atomic.StorePointer(&d.strPtr, unsafe.Pointer(&str))
 }
 
 // String returns the string representation of the range; since we are not
 // using a lock, the copy might be inconsistent.
-func (d *atomicRangeDesc) String() string {
-	inconsistentDesc := d.load()
-	if !inconsistentDesc.IsInitialized() {
-		return fmt.Sprintf("%d{-}", inconsistentDesc.RangeID)
-	}
-	return fmt.Sprintf("%d{%s-%s}",
-		inconsistentDesc.RangeID, inconsistentDesc.StartKey, inconsistentDesc.EndKey)
+func (d *atomicDescString) String() string {
+	return *(*string)(atomic.LoadPointer(&d.strPtr))
 }
 
 // A Replica is a contiguous keyspace with writes managed via an
@@ -230,10 +233,10 @@ type Replica struct {
 	// RWMutex.
 	readOnlyCmdMu syncutil.RWMutex
 
-	// rangeDesc is a *RangeDescriptor that can be atomically read from in
-	// replica.Desc() without needing to acquire the replica.mu lock. All
-	// updates to state.Desc should be duplicated here
-	rangeDesc atomicRangeDesc
+	// rangeStr is a string representation of a RangeDescriptor that cam be
+	// atomically read and updated without needing to acquire the replica.mu lock.
+	// All updates to state.Desc should be duplicated here.
+	rangeStr atomicDescString
 
 	// raftMu protects Raft processing the replica. Note that Raft processing for
 	// uninitialized replicas is also protected by Store.uninitRaftMu, but that
@@ -535,15 +538,15 @@ func (r *Replica) initLocked(
 	if r.mu.state, err = loadState(ctx, r.store.Engine(), desc); err != nil {
 		return err
 	}
-	r.rangeDesc.store(r.mu.state.Desc)
+	r.rangeStr.store(r.mu.state.Desc)
 
 	r.mu.lastIndex, err = loadLastIndex(ctx, r.store.Engine(), r.RangeID)
 	if err != nil {
 		return err
 	}
 
-	// Add replica log tags - the value is rangeDesc.String().
-	ctx = log.WithLogTag(ctx, "r", &r.rangeDesc)
+	// Add replica log tags - the value is rangeStr.String().
+	ctx = log.WithLogTag(ctx, "r", &r.rangeStr)
 	r.ctx = ctx
 
 	pErr, err := loadReplicaDestroyedError(ctx, r.store.Engine(), r.RangeID)
@@ -583,7 +586,7 @@ func (r *Replica) logContext(ctx context.Context) context.Context {
 // require a lock and its output may not be atomic with other ongoing work in
 // the replica. This is done to prevent deadlocks in logging sites.
 func (r *Replica) String() string {
-	return fmt.Sprintf("[n%d,s%d,r%s]", r.store.Ident.NodeID, r.store.Ident.StoreID, &r.rangeDesc)
+	return fmt.Sprintf("[n%d,s%d,r%s]", r.store.Ident.NodeID, r.store.Ident.StoreID, &r.rangeStr)
 }
 
 // Destroy clears pending command queue by sending each pending
@@ -894,9 +897,7 @@ func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
 			r.mu.state.Desc, desc)
 	}
 
-	// NB: If we used rangeDesc for anything but informational purposes, the
-	// order here would be crucial.
-	r.rangeDesc.store(desc)
+	r.rangeStr.store(desc)
 	r.mu.state.Desc = desc
 
 	r.raftMu.initialized = r.isInitializedLocked()
@@ -1059,7 +1060,7 @@ func (r *Replica) Send(
 		return nil, roachpb.NewError(err)
 	}
 	// Add the range log tag.
-	ctx = log.WithLogTag(ctx, "r", &r.rangeDesc)
+	ctx = log.WithLogTag(ctx, "r", &r.rangeStr)
 	ctx, cleanup := tracing.EnsureContext(ctx, r.store.Tracer())
 	defer cleanup()
 
