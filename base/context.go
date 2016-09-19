@@ -87,8 +87,13 @@ type Context struct {
 	// the server is running or the user passed in client calls.
 	User string
 
-	// Addr is the server's public address.
+	// Addr is the address the server is listening on.
 	Addr string
+
+	// AdvertiseAddr is the address advertised by the server to other nodes
+	// in the cluster. It should be reachable by all other nodes and should
+	// route to an interface that Addr is listening on.
+	AdvertiseAddr string
 
 	// HTTPAddr is server's public HTTP address.
 	//
@@ -113,6 +118,7 @@ func (ctx *Context) InitDefaults() {
 	ctx.Insecure = defaultInsecure
 	ctx.User = defaultUser
 	ctx.Addr = defaultAddr
+	ctx.AdvertiseAddr = ctx.Addr
 	ctx.HTTPAddr = defaultHTTPAddr
 }
 
@@ -169,7 +175,7 @@ func (ctx *Context) PGURL(user string) (*url.URL, error) {
 	return &url.URL{
 		Scheme:   "postgresql",
 		User:     url.User(user),
-		Host:     ctx.Addr,
+		Host:     ctx.AdvertiseAddr,
 		RawQuery: options.Encode(),
 	}, nil
 }
