@@ -543,7 +543,7 @@ func (n *Node) bootstrapStores(ctx context.Context, bootstraps []*storage.Store,
 	}
 	// write a new status summary after all stores have been bootstrapped; this
 	// helps the UI remain responsive when new nodes are added.
-	if err := n.writeSummaries(); err != nil {
+	if err := n.writeSummaries(ctx); err != nil {
 		log.Warningf(ctx, "error writing node summary after store bootstrap: %s", err)
 	}
 }
@@ -669,20 +669,21 @@ func (n *Node) computePeriodicMetrics(tick int) error {
 // startWriteSummaries begins periodically persisting status summaries for the
 // node and its stores.
 func (n *Node) startWriteSummaries(frequency time.Duration) {
+	ctx := log.WithLogTag(n.Ctx(), "summaries", nil)
 	// Immediately record summaries once on server startup.
 	n.stopper.RunWorker(func() {
 		// Write a status summary immediately; this helps the UI remain
 		// responsive when new nodes are added.
-		if err := n.writeSummaries(); err != nil {
-			log.Warningf(n.Ctx(), "error recording initial status summaries: %s", err)
+		if err := n.writeSummaries(ctx); err != nil {
+			log.Warningf(ctx, "error recording initial status summaries: %s", err)
 		}
 		ticker := time.NewTicker(frequency)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				if err := n.writeSummaries(); err != nil {
-					log.Warningf(n.Ctx(), "error recording status summaries: %s", err)
+				if err := n.writeSummaries(ctx); err != nil {
+					log.Warningf(ctx, "error recording status summaries: %s", err)
 				}
 			case <-n.stopper.ShouldStop():
 				return
@@ -693,7 +694,7 @@ func (n *Node) startWriteSummaries(frequency time.Duration) {
 
 // writeSummaries retrieves status summaries from the supplied
 // NodeStatusRecorder and persists them to the cockroach data store.
-func (n *Node) writeSummaries() error {
+func (n *Node) writeSummaries(ctx context.Context) error {
 	var err error
 	if runErr := n.stopper.RunTask(func() {
 		nodeStatus := n.recorder.GetStatusSummary()
@@ -706,15 +707,15 @@ func (n *Node) writeSummaries() error {
 			// node status, writing one of these every 10s will generate
 			// more versions than will easily fit into a range over the
 			// course of a day.
-			if err = n.ctx.DB.PutInline(n.Ctx(), key, nodeStatus); err != nil {
+			if err = n.ctx.DB.PutInline(ctx, key, nodeStatus); err != nil {
 				return
 			}
 			if log.V(2) {
 				statusJSON, err := json.Marshal(nodeStatus)
 				if err != nil {
-					log.Errorf(n.Ctx(), "error marshaling nodeStatus to json: %s", err)
+					log.Errorf(ctx, "error marshaling nodeStatus to json: %s", err)
 				}
-				log.Infof(n.Ctx(), "node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
+				log.Infof(ctx, "node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
 			}
 		}
 	}); runErr != nil {
