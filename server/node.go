@@ -356,7 +356,7 @@ func (n *Node) start(
 	n.startedAt = n.ctx.Clock.Now().WallTime
 
 	n.startComputePeriodicMetrics(n.stopper)
-	n.startGossip(ctx, n.stopper)
+	n.startGossip(n.stopper)
 
 	// Record node started event.
 	n.recordJoinEvent()
@@ -577,8 +577,9 @@ func (n *Node) connectGossip() {
 
 // startGossip loops on a periodic ticker to gossip node-related
 // information. Starts a goroutine to loop until the node is closed.
-func (n *Node) startGossip(ctx context.Context, stopper *stop.Stopper) {
+func (n *Node) startGossip(stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
+		ctx := n.Ctx()
 		// This should always return immediately and acts as a sanity check that we
 		// don't try to gossip before we're connected.
 		select {
