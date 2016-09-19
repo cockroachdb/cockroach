@@ -242,7 +242,10 @@ func NewDistSender(cfg *DistSenderConfig, g *gossip.Gossip) *DistSender {
 // retry logic here; this is not an issue since the lookup performs a
 // single inconsistent read only.
 func (ds *DistSender) RangeLookup(
-	key roachpb.RKey, desc *roachpb.RangeDescriptor, useReverseScan bool,
+	ctx context.Context,
+	key roachpb.RKey,
+	desc *roachpb.RangeDescriptor,
+	useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
@@ -257,10 +260,7 @@ func (ds *DistSender) RangeLookup(
 	})
 	replicas := newReplicaSlice(ds.gossip, desc)
 	replicas.Shuffle()
-	// TODO(tschottdorf): Ideally we would use the trace of the request which
-	// caused this lookup.
-	_ = context.TODO()
-	br, err := ds.sendRPC(ds.Ctx, desc.RangeID, replicas, ba)
+	br, err := ds.sendRPC(ctx, desc.RangeID, replicas, ba)
 	if err != nil {
 		return nil, nil, roachpb.NewError(err)
 	}

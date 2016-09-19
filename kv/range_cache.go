@@ -60,7 +60,10 @@ type RangeDescriptorDB interface {
 	// which contain the given key (possibly from intents), and the second holds
 	// prefetched adjacent descriptors.
 	RangeLookup(
-		key roachpb.RKey, desc *roachpb.RangeDescriptor, useReverseScan bool,
+		ctx context.Context,
+		key roachpb.RKey,
+		desc *roachpb.RangeDescriptor,
+		useReverseScan bool,
 	) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error)
 	// FirstRange returns the descriptor for the first Range. This is the
 	// Range containing all \x00\x00meta1 entries.
@@ -432,7 +435,9 @@ func (rdc *rangeDescriptorCache) performRangeLookup(
 			return nil, nil, err
 		}
 	}
-	descs, prefetched, pErr := rdc.db.RangeLookup(metadataKey, desc, useReverseScan)
+	// Tag inner operations.
+	ctx = log.WithLogTag(ctx, "range-lookup", nil)
+	descs, prefetched, pErr := rdc.db.RangeLookup(ctx, metadataKey, desc, useReverseScan)
 	return descs, prefetched, pErr.GoError()
 }
 
