@@ -596,7 +596,7 @@ func (u *sqlSymUnion) window() Window {
 
 %token <str>   GRANT GRANTS GREATEST GROUP GROUPING
 
-%token <str>   HAVING HIGH HOUR
+%token <str>   HAVING HELP HIGH HOUR
 
 %token <str>   IF IFNULL ILIKE IN INTERLEAVE
 %token <str>   INDEX INDEXES INITIALLY
@@ -1510,6 +1510,10 @@ show_stmt:
 | SHOW CREATE TABLE var_name
   {
     $$.val = &ShowCreateTable{Table: $4.normalizableTableName()}
+  }
+| SHOW HELP unrestricted_name
+  {
+    $$.val = &ShowHelp{Name: Name($3)}
   }
 
 on_privilege_target_clause:
@@ -4585,6 +4589,7 @@ unreserved_keyword:
 | FOLLOWING
 | FORCE_INDEX
 | GRANTS
+| HELP
 | HIGH
 | HOUR
 | INDEXES

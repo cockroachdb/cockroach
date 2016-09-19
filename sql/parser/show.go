@@ -55,6 +55,17 @@ func (node *ShowDatabases) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW DATABASES")
 }
 
+// ShowHelp represents a SHOW CONSTRAINTS statement.
+type ShowHelp struct {
+	Name Name
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowHelp) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("SHOW HELP ")
+	FormatNode(buf, f, node.Name)
+}
+
 // ShowIndex represents a SHOW INDEX statement.
 type ShowIndex struct {
 	Table NormalizableTableName

@@ -327,6 +327,12 @@ func (*ShowIndex) StatementType() StatementType { return Rows }
 func (*ShowIndex) StatementTag() string { return "SHOW INDEX" }
 
 // StatementType implements the Statement interface.
+func (*ShowHelp) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowHelp) StatementTag() string { return "SHOW HELP" }
+
+// StatementType implements the Statement interface.
 func (*ShowConstraints) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -415,6 +421,7 @@ func (n *ShowColumns) String() string              { return AsString(n) }
 func (n *ShowCreateTable) String() string          { return AsString(n) }
 func (n *ShowDatabases) String() string            { return AsString(n) }
 func (n *ShowGrants) String() string               { return AsString(n) }
+func (n *ShowHelp) String() string                 { return AsString(n) }
 func (n *ShowIndex) String() string                { return AsString(n) }
 func (n *ShowConstraints) String() string          { return AsString(n) }
 func (n *ShowTables) String() string               { return AsString(n) }
