@@ -284,7 +284,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	s.tsServer = ts.MakeServer(s.Ctx(), s.tsDB)
 
 	s.admin = makeAdminServer(s)
-	s.status = newStatusServer(s.db, s.gossip, s.recorder, s.ctx.Context, s.rpcContext, s.node.stores)
+	s.status = newStatusServer(s.Ctx(), s.db, s.gossip, s.recorder, s.rpcContext, s.node.stores)
 	for _, gw := range []grpcGatewayServer{&s.admin, s.status, &s.tsServer} {
 		gw.RegisterService(s.grpc)
 	}
