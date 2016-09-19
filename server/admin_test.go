@@ -37,6 +37,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/config"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server/serverpb"
 	"github.com/cockroachdb/cockroach/sql"
@@ -544,6 +545,7 @@ func TestAdminAPITableDetailsZone(t *testing.T) {
 
 	// Apply zone configuration to database and check again.
 	dbZone := config.ZoneConfig{
+		ReplicaAttrs:  []roachpb.Attributes{{}},
 		RangeMinBytes: 456,
 	}
 	setZone(dbZone, idPath[1])
@@ -551,6 +553,7 @@ func TestAdminAPITableDetailsZone(t *testing.T) {
 
 	// Apply zone configuration to table and check again.
 	tblZone := config.ZoneConfig{
+		ReplicaAttrs:  []roachpb.Attributes{{}},
 		RangeMinBytes: 789,
 	}
 	setZone(tblZone, idPath[2])
