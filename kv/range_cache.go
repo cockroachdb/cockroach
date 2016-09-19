@@ -70,6 +70,7 @@ type RangeDescriptorDB interface {
 	// adjacent descriptors.
 	// TODO(andrei): Should this return error instead of pErr?
 	RangeLookup(
+		ctx context.Context,
 		key roachpb.RKey, desc *roachpb.RangeDescriptor,
 		considerIntents bool, useReverseScan bool,
 	) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error)
@@ -449,7 +450,10 @@ func (rdc *rangeDescriptorCache) performRangeLookup(
 			return nil, nil, err
 		}
 	}
-	descs, prefetched, pErr := rdc.db.RangeLookup(metadataKey, desc, considerIntents, useReverseScan)
+	// Tag inner operations.
+	ctx = log.WithLogTag(ctx, "range-lookup", nil)
+	descs, prefetched, pErr :=
+		rdc.db.RangeLookup(ctx, metadataKey, desc, considerIntents, useReverseScan)
 	return descs, prefetched, pErr.GoError()
 }
 

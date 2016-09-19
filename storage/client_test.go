@@ -509,12 +509,15 @@ func (m *multiTestContext) FirstRange() (*roachpb.RangeDescriptor, error) {
 // RangeLookup implements the RangeDescriptorDB interface. It looks up the
 // descriptors for the given (meta) key.
 func (m *multiTestContext) RangeLookup(
-	key roachpb.RKey, desc *roachpb.RangeDescriptor, considerIntents, useReverseScan bool,
+	ctx context.Context,
+	key roachpb.RKey,
+	desc *roachpb.RangeDescriptor,
+	considerIntents, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 	// DistSender's RangeLookup function will work correctly, as long as
 	// multiTestContext's FirstRange() method returns the correct descriptor for the
 	// first range.
-	return m.distSenders[0].RangeLookup(key, desc, considerIntents, useReverseScan)
+	return m.distSenders[0].RangeLookup(ctx, key, desc, considerIntents, useReverseScan)
 }
 
 func (m *multiTestContext) makeContext(i int) storage.StoreContext {
