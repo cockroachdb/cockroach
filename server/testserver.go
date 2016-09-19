@@ -82,6 +82,7 @@ func makeTestContext() Context {
 	// makeTestContextFromParams). Call TestServer.ServingAddr() for the
 	// full address (including bound port).
 	ctx.Addr = util.TestAddr.String()
+	ctx.AdvertiseAddr = util.TestAddr.String()
 	ctx.HTTPAddr = util.TestAddr.String()
 	// Set standard user for intra-cluster traffic.
 	ctx.User = security.NodeUser
@@ -307,7 +308,7 @@ func (ts *TestServer) Stores() *storage.Stores {
 
 // ServingAddr returns the server's address. Should be used by clients.
 func (ts *TestServer) ServingAddr() string {
-	return ts.ctx.Addr
+	return ts.ctx.AdvertiseAddr
 }
 
 // ServingHost returns the host portion of the rpc server's address.

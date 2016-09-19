@@ -132,6 +132,7 @@ func initInsecure() error {
 		}
 	} else {
 		serverCtx.Addr = net.JoinHostPort("localhost", connPort)
+		serverCtx.AdvertiseAddr = net.JoinHostPort("localhost", connPort)
 		serverCtx.HTTPAddr = net.JoinHostPort("localhost", httpPort)
 	}
 	return nil
@@ -480,7 +481,7 @@ func getGRPCConn() (*grpc.ClientConn, *stop.Stopper, error) {
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(context.TODO(), serverCtx.Context, hlc.NewClock(hlc.UnixNano),
 		stopper)
-	conn, err := rpcContext.GRPCDial(serverCtx.Addr)
+	conn, err := rpcContext.GRPCDial(serverCtx.AdvertiseAddr)
 	if err != nil {
 		return nil, nil, err
 	}

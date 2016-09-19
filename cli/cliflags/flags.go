@@ -156,13 +156,20 @@ An unspecified type means ip address or dns. Type is one of:
 		Name: "host",
 		Description: `
 The address to listen on. The node will also advertise itself using this
-hostname; it must resolve from other nodes in the cluster.`,
+hostname if advertise-host is not specified.`,
 	}
 
 	ServerPort = FlagInfo{
 		Name:        "port",
 		Shorthand:   "p",
 		Description: `The port to bind to.`,
+	}
+
+	AdvertiseHost = FlagInfo{
+		Name: "advertise-host",
+		Description: `
+The address to advertise to other CockroachDB nodes for intra-cluster
+communication; it must resolve from other nodes in the cluster.`,
 	}
 
 	ServerHTTPPort = FlagInfo{

@@ -42,7 +42,8 @@ import (
 var maxResults int64
 
 var connURL string
-var connUser, connHost, connPort, httpPort, httpAddr, connDBName, zoneConfig string
+var connUser, connHost, connPort, advertiseHost, httpPort, httpAddr, connDBName, zoneConfig string
+var zoneDisableReplication bool
 var startBackground bool
 var undoFreezeCluster bool
 
@@ -290,6 +291,7 @@ func init() {
 		// Server flags.
 		stringFlag(f, &connHost, cliflags.ServerHost, "")
 		stringFlag(f, &connPort, cliflags.ServerPort, base.DefaultPort)
+		stringFlag(f, &advertiseHost, cliflags.AdvertiseHost, "")
 		stringFlag(f, &httpPort, cliflags.ServerHTTPPort, base.DefaultHTTPPort)
 		stringFlag(f, &httpAddr, cliflags.ServerHTTPAddr, "")
 		stringFlag(f, &serverCtx.Attrs, cliflags.Attrs, serverCtx.Attrs)
@@ -429,5 +431,9 @@ func extraFlagInit() {
 	if httpAddr == "" {
 		httpAddr = connHost
 	}
+	if advertiseHost == "" {
+		advertiseHost = connHost
+	}
+	serverCtx.AdvertiseAddr = net.JoinHostPort(advertiseHost, connPort)
 	serverCtx.HTTPAddr = net.JoinHostPort(httpAddr, httpPort)
 }

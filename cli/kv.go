@@ -44,7 +44,8 @@ func makeDBClient() (*client.DB, *stop.Stopper) {
 		SSLCertKey: baseCtx.SSLCertKey,
 		Insecure:   baseCtx.Insecure,
 	}
-	sender, err := client.NewSender(rpc.NewContext(context.TODO(), ctx, nil, stopper), baseCtx.Addr)
+	sender, err := client.NewSender(
+		rpc.NewContext(context.TODO(), ctx, nil, stopper), baseCtx.AdvertiseAddr)
 	if err != nil {
 		stopper.Stop()
 		panicf("failed to initialize KV client: %s", err)
