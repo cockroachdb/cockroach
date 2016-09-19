@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"strconv"
 	"time"
 
 	"google.golang.org/grpc/credentials"
@@ -278,6 +277,14 @@ func (n *Node) String() string {
 // Ctx returns the base context for the node.
 func (n *Node) Ctx() context.Context {
 	return n.ctx.Ctx
+}
+
+// logContext adds the node log tag to a context. Used to
+// personalize an operation context with this Server's identity.
+func (n *Node) logContext(ctx context.Context) context.Context {
+	// Copy the log tags from the base context. This allows us to opaquely set the
+	// log tags that were passed by the upper layers.
+	return log.WithLogTagsFromCtx(ctx, n.ctx.Ctx)
 }
 
 // initDescriptor initializes the node descriptor with the server
@@ -765,6 +772,7 @@ func (n *Node) recordJoinEvent() {
 func (n *Node) Batch(
 	ctx context.Context, args *roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, err error) {
+	ctx = n.logContext(ctx)
 	// TODO(marc,bdarnell): this code is duplicated in server/node.go,
 	// which should be fixed.
 	defer func() {
@@ -832,14 +840,14 @@ func (n *Node) Batch(
 		}
 		defer sp.Finish()
 		traceCtx := opentracing.ContextWithSpan(ctx, sp)
-		log.Eventf(traceCtx, "node "+strconv.Itoa(int(n.Descriptor.NodeID))) // could save allocs here.
+		log.Event(traceCtx, args.Summary())
 
 		tStart := timeutil.Now()
 		var pErr *roachpb.Error
 		br, pErr = n.stores.Send(traceCtx, *args)
 		if pErr != nil {
 			br = &roachpb.BatchResponse{}
-			log.Eventf(traceCtx, "error: %T", pErr.GetDetail())
+			log.ErrEventf(traceCtx, "%T", pErr.GetDetail())
 		}
 		if br.Error != nil {
 			panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
