@@ -124,3 +124,14 @@ func (node *ShowCreateTable) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW CREATE TABLE ")
 	FormatNode(buf, f, node.Table)
 }
+
+// Help represents a HELP statement.
+type Help struct {
+	Name Name
+}
+
+// Format implements the NodeFormatter interface.
+func (node *Help) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("HELP ")
+	FormatNode(buf, f, node.Name)
+}

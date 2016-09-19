@@ -101,6 +101,7 @@ var keywords = map[string]int{
 	"GROUP":             GROUP,
 	"GROUPING":          GROUPING,
 	"HAVING":            HAVING,
+	"HELP":              HELP,
 	"HIGH":              HIGH,
 	"HOUR":              HOUR,
 	"IF":                IF,
