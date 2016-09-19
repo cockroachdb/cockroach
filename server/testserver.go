@@ -78,10 +78,11 @@ func makeTestContext() Context {
 	ctx.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey)
 
 	// Addr defaults to localhost with port set at time of call to
-	// Start() to an available port.
-	// Call TestServer.ServingAddr() for the full address (including bound port).
-	ctx.Addr = "127.0.0.1:0"
-	ctx.HTTPAddr = "127.0.0.1:0"
+	// Start() to an available port. May be overridden later (as in
+	// makeTestContextFromParams). Call TestServer.ServingAddr() for the
+	// full address (including bound port).
+	ctx.Addr = util.TestAddr.String()
+	ctx.HTTPAddr = util.TestAddr.String()
 	// Set standard user for intra-cluster traffic.
 	ctx.User = security.NodeUser
 
@@ -122,6 +123,16 @@ func makeTestContextFromParams(params base.TestServerArgs) Context {
 		ctx.EventLogEnabled = false
 	}
 	ctx.JoinList = []string{params.JoinAddr}
+	if ctx.Insecure {
+		// Whenever we can (i.e. in insecure mode), use IsolatedTestAddr
+		// to prevent issues that can occur when running a test under
+		// stress.
+		ctx.Addr = util.IsolatedTestAddr.String()
+		ctx.HTTPAddr = util.IsolatedTestAddr.String()
+	} else {
+		ctx.Addr = util.TestAddr.String()
+		ctx.HTTPAddr = util.TestAddr.String()
+	}
 	return ctx
 }
 
