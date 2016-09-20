@@ -446,8 +446,8 @@ func TestRangeLookupUseReverse(t *testing.T) {
 
 		rlReply := resp.(*roachpb.RangeLookupResponse)
 		// Checks the results count.
-		if int32(len(rlReply.Ranges))+int32(len(rlReply.PrefetchedRanges)) != test.request.MaxRanges {
-			t.Fatalf("%d: returned results count, expected %d,but got %d", testIdx, test.request.MaxRanges, len(rlReply.Ranges))
+		if rsCount, preRSCount := len(rlReply.Ranges), len(rlReply.PrefetchedRanges); int32(rsCount+preRSCount) != test.request.MaxRanges {
+			t.Fatalf("%d: returned results count, expected %d, but got %d+%d", testIdx, test.request.MaxRanges, rsCount, preRSCount)
 		}
 		// Checks the range descriptors.
 		for _, rngSlice := range []struct {
@@ -458,7 +458,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 		} {
 			for i, rng := range rngSlice.expect {
 				if !(rng.StartKey.Equal(rngSlice.reply[i].StartKey) && rng.EndKey.Equal(rngSlice.reply[i].EndKey)) {
-					t.Fatalf("%d: returned range is not correct, expected %v ,but got %v", testIdx, rng, rngSlice.reply[i])
+					t.Fatalf("%d: returned range is not correct, expected %v, but got %v", testIdx, rng, rngSlice.reply[i])
 				}
 			}
 		}
@@ -769,7 +769,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 	kvDB1 := tc.Servers[1].DB()
 
 	key := []byte("a")
-	var rangeDesc *roachpb.RangeDescriptor = new(roachpb.RangeDescriptor)
+	rangeDesc := new(roachpb.RangeDescriptor)
 	var err error
 	*rangeDesc, err = tc.LookupRange(key)
 	if err != nil {
