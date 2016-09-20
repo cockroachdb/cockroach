@@ -1246,7 +1246,7 @@ func TestRequestToUninitializedRange(t *testing.T) {
 		Clock:      s.Clock(),
 		RPCContext: s.RPCContext(),
 		RangeDescriptorDB: kv.MockRangeDescriptorDB(
-			func(key roachpb.RKey, considerIntents, useReverseScan bool,
+			func(key roachpb.RKey, useReverseScan bool,
 			) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 				if key.Equal(roachpb.RKeyMin) {
 					// Pass through requests for the first range to the real sender.
