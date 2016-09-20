@@ -40,7 +40,13 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 
 	visitor := newStoreRangeSet(s)
 	now := s.Clock().PhysicalNow()
-	visitor.Visit(func(r *Replica) bool {
+	visitor.Visit(func(ref ReplicaRef) bool {
+		r, release, err := ref.Acquire()
+		defer release()
+		if err != nil {
+			return true // continue
+		}
+
 		var stats enginepb.MVCCStats
 		stats, err = ComputeStatsForRange(r.Desc(), s.Engine(), now)
 		if err != nil {
@@ -55,11 +61,10 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 // ForceReplicationScanAndProcess iterates over all ranges and
 // enqueues any that need to be replicated.
 func (s *Store) ForceReplicationScanAndProcess() {
-	s.mu.Lock()
-	for _, r := range s.mu.replicas {
-		s.replicateQueue.MaybeAdd(r, s.ctx.Clock.Now())
-	}
-	s.mu.Unlock()
+	newStoreRangeSet(s).Visit(func(ref ReplicaRef) bool {
+		s.replicateQueue.MaybeAdd(ref, s.ctx.Clock.Now())
+		return true
+	})
 
 	s.replicateQueue.DrainQueue(s.ctx.Clock)
 }
@@ -67,11 +72,10 @@ func (s *Store) ForceReplicationScanAndProcess() {
 // ForceReplicaGCScanAndProcess iterates over all ranges and enqueues any that
 // may need to be GC'd.
 func (s *Store) ForceReplicaGCScanAndProcess() {
-	s.mu.Lock()
-	for _, r := range s.mu.replicas {
-		s.replicaGCQueue.MaybeAdd(r, s.ctx.Clock.Now())
-	}
-	s.mu.Unlock()
+	newStoreRangeSet(s).Visit(func(ref ReplicaRef) bool {
+		s.replicaGCQueue.MaybeAdd(ref, s.ctx.Clock.Now())
+		return true
+	})
 
 	s.replicaGCQueue.DrainQueue(s.ctx.Clock)
 }
@@ -90,7 +94,7 @@ func (s *Store) ForceRaftLogScanAndProcess() {
 
 	// Add each replica to the queue.
 	for _, r := range replicas {
-		s.raftLogQueue.MaybeAdd(r, s.ctx.Clock.Now())
+		s.raftLogQueue.MaybeAdd(r.AsRef(), s.ctx.Clock.Now())
 	}
 
 	s.raftLogQueue.DrainQueue(s.ctx.Clock)
@@ -150,12 +154,12 @@ func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 }
 
 // ManualReplicaGC processes the specified replica using the store's GC queue.
-func (s *Store) ManualReplicaGC(repl *Replica) error {
+func (s *Store) ManualReplicaGC(ref ReplicaRef) error {
 	cfg, ok := s.Gossip().GetSystemConfig()
 	if !ok {
 		return fmt.Errorf("%s: system config not yet available", s)
 	}
-	return s.gcQueue.process(s.Ctx(), s.Clock().Now(), repl, cfg)
+	return s.gcQueue.process(s.Ctx(), s.Clock().Now(), ref, cfg)
 }
 
 func (r *Replica) RaftLock() bool {
@@ -171,7 +175,7 @@ func (r *Replica) RaftUnlock(uninitRaftLocked bool) {
 func (r *Replica) GetLastIndex() (uint64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.LastIndex()
+	return r.storageLastIndex()
 }
 
 // GetLease exposes replica.getLease for tests.

@@ -33,7 +33,12 @@ func BenchmarkReplicaSnapshot(b *testing.B) {
 	// We want to manually control the size of the raft log.
 	store.SetRaftLogQueueActive(false)
 
-	rep, err := store.GetReplica(rangeID)
+	rp, err := store.GetReplica(rangeID)
+	if err != nil {
+		b.Fatal(err)
+	}
+	rep, release, err := rp.Acquire()
+	defer release()
 	if err != nil {
 		b.Fatal(err)
 	}

@@ -114,12 +114,12 @@ type queueImpl interface {
 	// shouldQueue accepts current time, a replica, and the system config
 	// and returns whether it should be queued and if so, at what priority.
 	// The Replica is guaranteed to be initialized.
-	shouldQueue(hlc.Timestamp, *Replica, config.SystemConfig) (shouldQueue bool, priority float64)
+	shouldQueue(hlc.Timestamp, ReplicaRef, config.SystemConfig) (shouldQueue bool, priority float64)
 
 	// process accepts current time, a replica, and the system config
 	// and executes queue-specific work on it. The Replica is guaranteed
 	// to be initialized.
-	process(context.Context, hlc.Timestamp, *Replica, config.SystemConfig) error
+	process(context.Context, hlc.Timestamp, ReplicaRef, config.SystemConfig) error
 
 	// timer returns a duration to wait between processing the next item
 	// from the queue.
@@ -282,7 +282,7 @@ func (bq *baseQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 // (true, nil) if the replica was added, (false, nil) if the replica
 // was already present, and (false, err) if the replica could not be
 // added for any other reason.
-func (bq *baseQueue) Add(repl *Replica, priority float64) (bool, error) {
+func (bq *baseQueue) Add(repl ReplicaRef, priority float64) (bool, error) {
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
 	return bq.addInternal(repl, true, priority)
@@ -293,10 +293,10 @@ func (bq *baseQueue) Add(repl *Replica, priority float64) (bool, error) {
 // returned by bq.shouldQueue. If the queue is too full, the replica may
 // not be added, as the replica with the lowest priority will be
 // dropped.
-func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
+func (bq *baseQueue) MaybeAdd(ref ReplicaRef, now hlc.Timestamp) {
 	// Load the system config.
 	cfg, cfgOk := bq.gossip.GetSystemConfig()
-	requiresSplit := cfgOk && bq.requiresSplit(cfg, repl)
+	requiresSplit := cfgOk && bq.requiresSplit(cfg, ref)
 
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
@@ -305,7 +305,7 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 		return
 	}
 
-	if !repl.IsInitialized() {
+	if !ref.Desc().IsInitialized() {
 		return
 	}
 
@@ -317,17 +317,23 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 	if requiresSplit {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
-		log.VEventf(1, bq.ctx, "%s: split needed; not adding", repl)
+		log.VEventf(1, bq.ctx, "%s: split needed; not adding", ref)
 		return
 	}
 
-	should, priority := bq.impl.shouldQueue(now, repl, cfg)
-	if _, err := bq.addInternal(repl, should, priority); !isExpectedQueueError(err) {
-		log.Errorf(bq.ctx, "unable to add %s: %s", repl, err)
+	should, priority := bq.impl.shouldQueue(now, ref, cfg)
+	if _, err := bq.addInternal(ref, should, priority); !isExpectedQueueError(err) {
+		log.Errorf(bq.ctx, "unable to add %s: %s", ref, err)
 	}
 }
 
-func (bq *baseQueue) requiresSplit(cfg config.SystemConfig, repl *Replica) bool {
+func (bq *baseQueue) requiresSplit(cfg config.SystemConfig, ref ReplicaRef) bool {
+	repl, release, err := ref.Acquire()
+	defer release()
+	if err != nil {
+		return false
+	}
+
 	if bq.acceptsUnsplitRanges {
 		return false
 	}
@@ -344,7 +350,13 @@ func (bq *baseQueue) requiresSplit(cfg config.SystemConfig, repl *Replica) bool 
 // addInternal adds the replica the queue with specified priority. If
 // the replica is already queued, updates the existing
 // priority. Expects the queue lock is held by caller.
-func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) (bool, error) {
+func (bq *baseQueue) addInternal(ref ReplicaRef, should bool, priority float64) (bool, error) {
+	repl, release, err := ref.Acquire()
+	defer release()
+	if err != nil {
+		return false, err
+	}
+
 	if bq.mu.stopped {
 		return false, errQueueStopped
 	}
@@ -401,15 +413,18 @@ func (bq *baseQueue) addInternal(repl *Replica, should bool, priority float64) (
 }
 
 // MaybeRemove removes the specified replica from the queue if enqueued.
-func (bq *baseQueue) MaybeRemove(repl *Replica) {
+func (bq *baseQueue) MaybeRemove(ref ReplicaRef) {
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
 
-	if bq.mu.stopped {
+	// Note that no attempt at unboxing `rp` is made. Especially if the replica
+	// has been deleted, we still want to remove it from the queue.
+	desc := ref.Desc()
+	if bq.mu.stopped || desc == nil {
 		return
 	}
 
-	if item, ok := bq.mu.replicas[repl.RangeID]; ok {
+	if item, ok := bq.mu.replicas[desc.RangeID]; ok {
 		log.VEventf(3, bq.ctx, "%s: removing", item.value)
 		bq.remove(item)
 	}
@@ -454,12 +469,12 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 				}
 			// Process replicas as the timer expires.
 			case <-nextTime:
-				repl := bq.pop()
-				if repl != nil {
+				ref := bq.pop()
+				if ref != nil {
 					if stopper.RunTask(func() {
-						if err := bq.processReplica(repl, clock); err != nil {
+						if err := bq.processReplica(ref, clock); err != nil {
 							// Maybe add failing replica to purgatory if the queue supports it.
-							bq.maybeAddToPurgatory(repl, err, clock, stopper)
+							bq.maybeAddToPurgatory(ref, err, clock, stopper)
 						}
 					}) != nil {
 						return
@@ -478,7 +493,7 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 // processReplica processes a single replica. This should not be
 // called externally to the queue. bq.mu.Lock should not be held
 // while calling this method.
-func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
+func (bq *baseQueue) processReplica(ref ReplicaRef, clock *hlc.Clock) error {
 	bq.processMu.Lock()
 	defer bq.processMu.Unlock()
 
@@ -489,39 +504,57 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 		return nil
 	}
 
-	if bq.requiresSplit(cfg, repl) {
+	if bq.requiresSplit(cfg, ref) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
-		log.VEventf(3, bq.ctx, "%s: split needed; skipping", repl)
+		log.VEventf(3, bq.ctx, "%s: split needed; skipping", ref)
 		return nil
 	}
 
-	sp := repl.store.Tracer().StartSpan(bq.name)
+	sp := bq.store.Tracer().StartSpan(bq.name)
 	defer sp.Finish()
-	ctx := opentracing.ContextWithSpan(context.Background(), sp)
-	ctx = repl.logContext(ctx)
-	ctx, cancel := context.WithTimeout(ctx, bq.processTimeout)
+	ctx, cancel := context.WithTimeout(
+		opentracing.ContextWithSpan(context.Background(), sp),
+		bq.processTimeout,
+	)
 	defer cancel()
-	log.Eventf(ctx, "processing replica")
 
-	// If the queue requires a replica to have the range lease in
-	// order to be processed, check whether this replica has range lease
-	// and renew or acquire if necessary.
-	if bq.needsLease {
-		// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
-		if err := repl.redirectOnOrAcquireLease(ctx); err != nil {
-			if _, harmless := err.GetDetail().(*roachpb.NotLeaseHolderError); harmless {
-				log.VEventf(3, bq.ctx, "not holding lease; skipping")
-				return nil
-			}
-			return errors.Wrapf(err.GoError(), "%s: could not obtain lease", repl)
+	if pErr := func() *roachpb.Error {
+		repl, release, err := ref.Acquire()
+		defer release()
+		if err != nil {
+			return roachpb.NewError(roachpb.NewRangeNotFoundError(ref.Desc().RangeID))
 		}
-		log.Event(ctx, "got range lease")
+
+		ctx = repl.logContext(ctx)
+		log.Eventf(ctx, "processing replica")
+
+		// If the queue requires a replica to have the range lease in
+		// order to be processed, check whether this replica has range lease
+		// and renew or acquire if necessary.
+		if bq.needsLease {
+			// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
+			if pErr := repl.redirectOnOrAcquireLease(ctx); pErr != nil {
+				return pErr
+			}
+			log.Event(ctx, "got range lease")
+		}
+		return nil
+	}(); pErr != nil {
+		switch pErr.GetDetail().(type) {
+		case *roachpb.NotLeaseHolderError:
+			log.VEventf(3, bq.ctx, "not holding lease; skipping")
+			return nil
+		case *roachpb.RangeNotFoundError:
+			log.VEventf(3, bq.ctx, "range was removed; skipping")
+		default:
+			return errors.Wrapf(pErr.GoError(), "%s: could not obtain lease", ref)
+		}
 	}
 
 	log.VEventf(3, bq.ctx, "processing")
 	start := timeutil.Now()
-	err := bq.impl.process(ctx, clock.Now(), repl, cfg)
+	err := bq.impl.process(ctx, clock.Now(), ref, cfg)
 	duration := timeutil.Since(start)
 	bq.processingNanos.Inc(duration.Nanoseconds())
 	if err != nil {
@@ -539,14 +572,20 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 // purgatoryError and the queue implementation must have its own
 // mechanism for signaling re-processing of replicas held in
 // purgatory.
-func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Clock, stopper *stop.Stopper) {
+func (bq *baseQueue) maybeAddToPurgatory(ref ReplicaRef, triggeringErr error, clock *hlc.Clock, stopper *stop.Stopper) {
+	repl, release, err := ref.Acquire()
+	defer release()
+	if err != nil {
+		return
+	}
+
 	// Increment failures metric here to capture all error returns from
 	// process().
 	bq.failures.Inc(1)
 
 	// Check whether the failure is a purgatory error and whether the queue supports it.
-	if _, ok := err.(purgatoryError); !ok || bq.impl.purgatoryChan() == nil {
-		log.Errorf(bq.ctx, "on %s: %s", repl, err)
+	if _, ok := triggeringErr.(purgatoryError); !ok || bq.impl.purgatoryChan() == nil {
+		log.Errorf(bq.ctx, "on %s: %s", repl, triggeringErr)
 		return
 	}
 	bq.mu.Lock()
@@ -557,7 +596,7 @@ func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Cl
 		return
 	}
 
-	log.Errorf(bq.ctx, "(purgatory) on %s: %s", repl, err)
+	log.Errorf(bq.ctx, "(purgatory) on %s: %s", repl, triggeringErr)
 
 	item := &replicaItem{value: repl.RangeID}
 	bq.mu.replicas[repl.RangeID] = item
@@ -568,13 +607,13 @@ func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Cl
 
 	// If purgatory already exists, just add to the map and we're done.
 	if bq.mu.purgatory != nil {
-		bq.mu.purgatory[repl.RangeID] = err
+		bq.mu.purgatory[repl.RangeID] = triggeringErr
 		return
 	}
 
 	// Otherwise, create purgatory and start processing.
 	bq.mu.purgatory = map[roachpb.RangeID]error{
-		repl.RangeID: err,
+		repl.RangeID: triggeringErr,
 	}
 
 	stopper.RunWorker(func() {
@@ -634,7 +673,7 @@ func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Cl
 // pop dequeues the highest priority replica in the queue. Returns the
 // replica if not empty; otherwise, returns nil. Expects mutex to be
 // locked.
-func (bq *baseQueue) pop() *Replica {
+func (bq *baseQueue) pop() ReplicaRef {
 	bq.mu.Lock()
 
 	if bq.mu.priorityQ.Len() == 0 {

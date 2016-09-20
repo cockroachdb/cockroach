@@ -67,10 +67,17 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 	cfg.RangeMaxBytes = snapSize
 	defer config.TestingSetDefaultZoneConfig(cfg)()
 
-	rep, err := store.GetReplica(rangeID)
+	rp, err := store.GetReplica(rangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	rep, release, err := rp.Acquire()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	rep.SetMaxBytes(snapSize)
 
 	if pErr := rep.redirectOnOrAcquireLease(context.Background()); pErr != nil {
@@ -85,7 +92,7 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 
 	fillTestRange(t, rep, snapSize*2)
 
-	if _, err := rep.Snapshot(); err != raft.ErrSnapshotTemporarilyUnavailable {
+	if _, err := rep.storageSnapshot(); err != raft.ErrSnapshotTemporarilyUnavailable {
 		rep.mu.Lock()
 		after := rep.mu.state.Stats.Total()
 		rep.mu.Unlock()

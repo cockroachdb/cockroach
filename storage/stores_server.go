@@ -91,10 +91,16 @@ func (is Server) CollectChecksum(
 	resp := &CollectChecksumResponse{}
 	err := is.execStoreCommand(req.StoreRequestHeader,
 		func(s *Store) error {
-			r, err := s.GetReplica(req.RangeID)
+			rp, err := s.GetReplica(req.RangeID)
 			if err != nil {
 				return err
 			}
+			r, release, err := rp.Acquire()
+			defer release()
+			if err != nil {
+				return err
+			}
+
 			c, err := r.getChecksum(ctx, req.ChecksumID)
 			if err != nil {
 				return err

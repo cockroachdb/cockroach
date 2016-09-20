@@ -161,7 +161,7 @@ func TestStoresLookupReplica(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := s[i].AddReplicaTest(newRng); err != nil {
+		if err := s[i].AddReplicaTest(newRng.AsRef()); err != nil {
 			t.Error(err)
 		}
 		ls.AddStore(s[i])

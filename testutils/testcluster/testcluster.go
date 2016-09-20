@@ -326,10 +326,16 @@ func (tc *TestCluster) changeReplicas(
 		if err != nil {
 			return nil, err
 		}
-		replica, err := store.GetReplica(rangeDesc.RangeID)
+		rp, err := store.GetReplica(rangeDesc.RangeID)
 		if err != nil {
 			return nil, err
 		}
+		replica, release, err := rp.Acquire()
+		defer release()
+		if err != nil {
+			return nil, err
+		}
+
 		err = replica.ChangeReplicas(context.Background(),
 			action,
 			roachpb.ReplicaDescriptor{
