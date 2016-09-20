@@ -1326,25 +1326,42 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	storeCtx.RaftTickInterval = 50 * time.Millisecond
 	storeCtx.RaftElectionTimeoutTicks = 2
 	currentTrigger := make(chan *roachpb.SplitTrigger, 1)
+	var seen struct {
+		syncutil.Mutex
+		sids map[storagebase.CmdIDKey][2]bool
+	}
+	seen.sids = make(map[storagebase.CmdIDKey][2]bool)
+
 	storeCtx.TestingKnobs.TestingCommandFilter = func(args storagebase.FilterArgs) *roachpb.Error {
 		et, ok := args.Req.(*roachpb.EndTransactionRequest)
 		if !ok || et.InternalCommitTrigger == nil {
 			return nil
 		}
 		trigger := protoutil.Clone(et.InternalCommitTrigger.GetSplitTrigger()).(*roachpb.SplitTrigger)
+		// The first time the trigger arrives (on each of the two stores),
+		// return a transaction retry. This allows us to pass the trigger to
+		// the goroutine creating faux incoming messages for the yet
+		// nonexistent right-hand-side, giving it a head start. This code looks
+		// fairly complicated since it wants to ensure that the two replicas
+		// don't diverge.
 		if trigger != nil && len(trigger.RightDesc.Replicas) == 2 && args.Hdr.Txn.Epoch == 0 {
+			seen.Lock()
+			defer seen.Unlock()
+			sid, sl := int(args.Sid)-1, seen.sids[args.CmdID]
+			if !sl[sid] {
+				sl[sid] = true
+				seen.sids[args.CmdID] = sl
+			} else {
+				return nil
+			}
 			select {
-			// We want to know the split trigger early (to give it to the other
-			// goroutine with a head start), so we grab it here (once) and then
-			// let the command restart. Note that this produces identical
-			// "results" on all nodes (no injected error).
 			case currentTrigger <- trigger:
-				return roachpb.NewError(
-					roachpb.NewReadWithinUncertaintyIntervalError(
-						args.Hdr.Timestamp, args.Hdr.Timestamp,
-					))
 			default:
 			}
+			return roachpb.NewError(
+				roachpb.NewReadWithinUncertaintyIntervalError(
+					args.Hdr.Timestamp, args.Hdr.Timestamp,
+				))
 		}
 		return nil
 	}
