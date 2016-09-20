@@ -714,13 +714,14 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// descriptor. Example revscan [a,g), first desc lookup for "g"
 			// returns descriptor [c,d) -> [d,g) is never scanned.
 			// We evict and retry in such a case.
-			includesFrontOfCurSpan := func(rd *roachpb.RangeDescriptor) bool {
-				if isReverse {
-					return desc.ContainsExclusiveEndKey(rs.EndKey)
-				}
-				return desc.ContainsKey(rs.Key)
+			frontOfCurSpan := rs.Key
+			containsFn := (*roachpb.RangeDescriptor).ContainsKey
+			if isReverse {
+				frontOfCurSpan = rs.EndKey
+				containsFn = (*roachpb.RangeDescriptor).ContainsExclusiveEndKey
 			}
-			if !includesFrontOfCurSpan(desc) {
+
+			if !containsFn(desc, frontOfCurSpan) {
 				if err := evictToken.Evict(ctx); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
@@ -789,7 +790,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 					replacements = append(replacements, *tErr.MismatchedRange)
 				}
 				if tErr.SuggestedRange != nil && different(tErr.SuggestedRange) {
-					if includesFrontOfCurSpan(tErr.SuggestedRange) {
+					if containsFn(tErr.SuggestedRange, frontOfCurSpan) {
 						replacements = append(replacements, *tErr.SuggestedRange)
 
 					}
