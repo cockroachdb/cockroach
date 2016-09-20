@@ -1296,8 +1296,8 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	}
 	ds := NewDistSender(cfg, g)
 
-	// Send a batch request contains two puts. In the first
-	// attempt, the range of the descriptor found in the cache is
+	// Send a batch request containing two puts. In the first
+	// attempt, the span of the descriptor found in the cache is
 	// ["a", "b"). The request is truncated to contain only the put
 	// on "a".
 	//
@@ -1306,10 +1306,14 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	// present. The request is truncated to contain only the put on "b".
 	ba := roachpb.BatchRequest{}
 	ba.Txn = &roachpb.Transaction{Name: "test"}
-	val := roachpb.MakeValueFromString("val")
-	ba.Add(roachpb.NewPut(keys.MakeRangeKeyPrefix(roachpb.RKey("a")), val))
-	val = roachpb.MakeValueFromString("val")
-	ba.Add(roachpb.NewPut(keys.MakeRangeKeyPrefix(roachpb.RKey("b")), val))
+	{
+		val := roachpb.MakeValueFromString("val")
+		ba.Add(roachpb.NewPut(keys.MakeRangeKeyPrefix(roachpb.RKey("a")), val))
+	}
+	{
+		val := roachpb.MakeValueFromString("val")
+		ba.Add(roachpb.NewPut(keys.MakeRangeKeyPrefix(roachpb.RKey("b")), val))
+	}
 
 	if _, pErr := ds.Send(context.Background(), ba); pErr != nil {
 		t.Fatal(pErr)

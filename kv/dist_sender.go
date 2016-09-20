@@ -17,12 +17,12 @@
 package kv
 
 import (
-	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
 	"unsafe"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
