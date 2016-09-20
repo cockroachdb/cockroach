@@ -65,25 +65,36 @@ export class Axis extends React.Component<AxisProps, {}> {
 
 /**
  * AxisDomain is a helper class used to compute the domain of a set of numbers.
- * It can also be used to
  */
 class AxisDomain {
-  min: number;
-  max: number;
-  constructor() {
-    this.min = Infinity;
-    this.max = -Infinity;
-  }
+  min: number = Infinity;
+  max: number = -Infinity;
+  stackedSum: { [key: number]: number } = {};
 
+  // domain returns the current min and max as an array.
   domain(): [number, number] {
     return [this.min, this.max];
   }
 
+  // addPoints adds values. It will extend the max/min of the domain if any
+  // values are lower/higher than the current max/min respectively.
   addPoints(values: number[]) {
     this.min = Math.min(this.min, ...values);
     this.max = Math.max(this.max, ...values);
   }
+  // addStacked adds keyed values. It sums the values by key and then extends
+  // the max/min of the domain if any sum is higher/lower than the current
+  // max/min respectively.
+  addStackedPoints(keyedValues: {key: number, value: number}[]) {
+    _.each(keyedValues, (v: {key: number, value: number}) => {
+      this.stackedSum[v.key] = _.sum([this.stackedSum[v.key], v.value]);
+    });
 
+    this.min = _.min(_.values<number>(this.stackedSum));
+    this.max = _.max(_.values<number>(this.stackedSum));
+  }
+
+  // ticks computes 3 tick values for a graph given the current max/min.
   ticks(transform: (n: number) => any = _.identity): number[] {
     return _.map(_.uniq([this.min, (this.min + this.max) / 2, this.max]), transform);
   }
@@ -99,7 +110,8 @@ let colors: d3.scale.Ordinal<string, string> = d3.scale.category10();
  */
 export function ProcessDataPoints(metrics: React.ReactElement<MetricProps>[],
                                   axis: React.ReactElement<AxisProps>,
-                                  data: TSResponseMessage) {
+                                  data: TSResponseMessage,
+                                  stacked = false) {
   let yAxisDomain = new AxisDomain();
   let xAxisDomain = new AxisDomain();
 
@@ -107,7 +119,11 @@ export function ProcessDataPoints(metrics: React.ReactElement<MetricProps>[],
   _.each(metrics, (s, idx) => {
     let result = data.results[idx];
     if (result) {
-      yAxisDomain.addPoints(_.map(result.datapoints, (dp) => dp.value));
+      if (!stacked) {
+        yAxisDomain.addPoints(_.map(result.datapoints, (dp) => dp.value));
+      } else {
+        yAxisDomain.addStackedPoints(_.map(result.datapoints, (dp) => { return { key: dp.timestamp_nanos.toNumber(), value: dp.value }; }));
+      }
       xAxisDomain.addPoints(_.map(result.datapoints, (dp) => dp.timestamp_nanos.toNumber()));
 
       formattedData.push({
