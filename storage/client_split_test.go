@@ -1325,23 +1325,26 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	// or race tests never make any progress.
 	storeCtx.RaftTickInterval = 50 * time.Millisecond
 	storeCtx.RaftElectionTimeoutTicks = 2
-	currentTrigger := make(chan *roachpb.SplitTrigger)
-	seen := make(map[storagebase.CmdIDKey]struct{})
+	currentTrigger := make(chan *roachpb.SplitTrigger, 1)
 	storeCtx.TestingKnobs.TestingCommandFilter = func(args storagebase.FilterArgs) *roachpb.Error {
 		et, ok := args.Req.(*roachpb.EndTransactionRequest)
 		if !ok || et.InternalCommitTrigger == nil {
 			return nil
 		}
 		trigger := protoutil.Clone(et.InternalCommitTrigger.GetSplitTrigger()).(*roachpb.SplitTrigger)
-		if trigger != nil && len(trigger.RightDesc.Replicas) == 2 && args.Hdr.Txn.Epoch == 0 && args.Sid == mtc.stores[0].StoreID() {
-			if _, ok := seen[args.CmdID]; ok {
-				return nil
+		if trigger != nil && len(trigger.RightDesc.Replicas) == 2 && args.Hdr.Txn.Epoch == 0 {
+			select {
+			// We want to know the split trigger early (to give it to the other
+			// goroutine with a head start), so we grab it here (once) and then
+			// let the command restart. Note that this produces identical
+			// "results" on all nodes (no injected error).
+			case currentTrigger <- trigger:
+				return roachpb.NewError(
+					roachpb.NewReadWithinUncertaintyIntervalError(
+						args.Hdr.Timestamp, args.Hdr.Timestamp,
+					))
+			default:
 			}
-			// Without replay protection, a single reproposal locks up the
-			// test.
-			seen[args.CmdID] = struct{}{}
-			currentTrigger <- trigger
-			return roachpb.NewError(roachpb.NewReadWithinUncertaintyIntervalError(args.Hdr.Timestamp, args.Hdr.Timestamp))
 		}
 		return nil
 	}
