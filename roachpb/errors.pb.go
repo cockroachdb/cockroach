@@ -112,21 +112,12 @@ type RangeKeyMismatchError struct {
 	RequestStartKey Key `protobuf:"bytes,1,opt,name=request_start_key,json=requestStartKey,casttype=Key" json:"request_start_key,omitempty"`
 	RequestEndKey   Key `protobuf:"bytes,2,opt,name=request_end_key,json=requestEndKey,casttype=Key" json:"request_end_key,omitempty"`
 	// mismatched_range is the range that the command was incorrectly sent to.
-	// This descriptor will be populated in either of two scenarios:
-	// - the command specified a RangeID in its header but the corresponding
-	//   range did not fully contain the request's key(s). If so, that specified
-	//   range's descriptor will be returned.
-	// - the command did not specify a RangeID in its header and the store
-	//   it was sent to was not able to find a corresponding range that
-	//   fully contained the request. If no range contains the request's
-	//   start key, mismatched_range will be nil. If a range contains the
-	//   request's start key but the request spans multiple ranges,
-	//   mismatched_range will be the descriptor of the range which contains
-	//   the start_key of the request.
+	// It is used to update the sender's range cache without an additional range
+	// lookup.
 	MismatchedRange *RangeDescriptor `protobuf:"bytes,3,opt,name=mismatched_range,json=mismatchedRange" json:"mismatched_range,omitempty"`
 	// suggested_range is a hint to the sender of a command about the range
-	// they may be looking for. This suggestion should be the result of a
-	// best effort lookup, and makes no guarantees about correctness.
+	// they may be looking for. It is only populated when the recipient has
+	// authoritative knowledge of the range requested by the sender.
 	SuggestedRange *RangeDescriptor `protobuf:"bytes,4,opt,name=suggested_range,json=suggestedRange" json:"suggested_range,omitempty"`
 }
 
