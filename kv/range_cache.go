@@ -540,8 +540,13 @@ func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key roachpb.RKey
 	metaEndKey := k.(rangeCacheKey)
 	rd := v.(*roachpb.RangeDescriptor)
 
+	containsFn := (*roachpb.RangeDescriptor).ContainsKey
+	if inclusive {
+		containsFn = (*roachpb.RangeDescriptor).ContainsExclusiveEndKey
+	}
+
 	// Return nil if the key does not belong to the range.
-	if (!inclusive && !rd.ContainsKey(key)) || (inclusive && !rd.ContainsExclusiveEndKey(key)) {
+	if !containsFn(rd, key) {
 		return nil, nil, nil
 	}
 	return metaEndKey, rd, nil
