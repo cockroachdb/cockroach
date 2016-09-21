@@ -22,6 +22,7 @@ cmd honnef.co/go/simple/cmd/gosimple
 cmd honnef.co/go/staticcheck/cmd/staticcheck
 cmd honnef.co/go/unused/cmd/unused
 cloud.google.com/go 9696460acdaa8a7b2505fa6230ac54b4e97a9961
+github.com/Azure/go-ansiterm fa152c58bc15761d0200cb75fe958b89a9d4888e
 github.com/Microsoft/go-winio ce2922f643c8fd76b46cadc7f404a06282678b34
 github.com/Sirupsen/logrus 08a8a7c27e3d058a8989316a850daad1c10bf4ab
 github.com/StackExchange/wmi 771c736650b4aabf956d9103ba5bf439414f79f9
@@ -102,7 +103,7 @@ github.com/shurcooL/sanitized_anchor_name 10ef21a441db47d8b13ebcc5fd2310f636973c
 github.com/spf13/cobra 7c674d9e72017ed25f6d2b5e497a1368086b6a6f
 github.com/spf13/pflag f676131e2660dc8cd88de99f7486d34aa8172635
 github.com/stretchr/testify d77da356e56a7428ad25149ca77381849a6a5232
-github.com/tebeka/go2xunit aeab35ab3263fc37dc7664e8ea1b3aea87f98205
+github.com/tebeka/go2xunit cb8eb3dedfac9cf4cb1f2d8988f3390f2d0cf2e7
 github.com/termie/go-shutil bcacb06fecaeec8dc42af03c87c6949f4a05c74c
 github.com/wadey/gocovmerge b5bfa59ec0adc420475f97f89b58045c721d761c
 golang.org/x/crypto a548aac93ed489257b9d959b40fe1e8c1e20778c
