@@ -182,7 +182,15 @@ func TestWaitForFullReplication(t *testing.T) {
 func TestStopServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	tc := StartTestCluster(t, 3, base.TestClusterArgs{ReplicationMode: base.ReplicationAuto})
+	// Use insecure mode so our servers listen on util.IsolatedTestAddr
+	// and they fail cleanly instead of interfering with other tests.
+	// See https://github.com/cockroachdb/cockroach/issues/9256
+	tc := StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Insecure: true,
+		},
+		ReplicationMode: base.ReplicationAuto,
+	})
 	defer tc.Stopper().Stop()
 	if err := tc.WaitForFullReplication(); err != nil {
 		t.Fatal(err)

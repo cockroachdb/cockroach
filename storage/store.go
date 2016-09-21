@@ -91,7 +91,8 @@ var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeTy
 	roachpb.REMOVE_REPLICA: raftpb.ConfChangeRemoveNode,
 }
 
-var storeSchedulerConcurrency = 2 * runtime.NumCPU()
+var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
+	"COCKROACH_SCHEDULER_CONCURRENCY", 2*runtime.NumCPU())
 
 // TestStoreContext has some fields initialized with values relevant in tests.
 func TestStoreContext() StoreContext {

@@ -107,10 +107,8 @@ TestReturnCheck() {
 }
 
 TestVet() {
-  ! go tool vet -all -shadow -printfuncs Info:1,Infof:1,InfofDepth:2,Warning:1,Warningf:1,WarningfDepth:2,Error:1,Errorf:1,ErrorfDepth:2,Fatal:1,Fatalf:1,FatalfDepth:2,UnimplementedWithIssueErrorf:1 . 2>&1 | \
-    grep -vE 'declaration of "?(pE|e)rr"? shadows' | \
-    grep -vE '\.pb\.gw\.go:[0-9]+: declaration of "?ctx"? shadows' | \
-    grep -vE '^vet: cannot process directory \.git'
+  local vet=$(go tool vet -all -shadow -printfuncs Info:1,Infof:1,InfofDepth:2,Warning:1,Warningf:1,WarningfDepth:2,Error:1,Errorf:1,ErrorfDepth:2,Fatal:1,Fatalf:1,FatalfDepth:2,UnimplementedWithIssueErrorf:1 . 2>&1)
+  ! echo "$vet" | grep -vE 'declaration of "?(pE|e)rr"? shadows' | grep -vE '\.pb\.gw\.go:[0-9]+: declaration of "?ctx"? shadows' | grep -vE '^vet: cannot process directory \.git'
 }
 
 TestGolint() {
