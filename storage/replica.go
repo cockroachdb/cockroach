@@ -25,6 +25,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"runtime"
 	"sort"
 	"sync/atomic"
 	"time"
@@ -255,6 +256,19 @@ type Replica struct {
 		initialized bool
 	}
 
+	// refMu is always held when the *Replica object is in scope in any
+	// goroutine. All operations hold a read lock while they hold on to
+	// a reference to this Replica with the exception of replica removal,
+	// which holds an exclusive lock.
+	//
+	// This struct must only be accessed through the ReplicaRef interface
+	// (see AsRef).
+	refMu struct {
+		syncutil.RWMutex
+		count     int32 // updated atomically
+		destroyed error
+	}
+
 	mu struct {
 		// Protects all fields in the mu struct.
 		syncutil.Mutex
@@ -367,6 +381,16 @@ type Replica struct {
 	}
 }
 
+// AsRef wraps the reference in a ReplicaRef.
+//
+// It is an anti-pattern to pass AsRef() to synchronous function invocations
+// as this leads to a re-entrant read lock, which guarantees deadlock if an
+// exclusive reference acquisition on another goroutine interleaves
+// appropriately.
+func (r *Replica) AsRef() ReplicaRef {
+	return replicaRef{replica: r}
+}
+
 // KeyRange is an interface type for the replicasByKey BTree, to compare
 // Replica and ReplicaPlaceholder.
 type KeyRange interface {
@@ -408,7 +432,7 @@ func (r *Replica) withRaftGroupLocked(
 
 	if r.mu.internalRaftGroup == nil {
 		raftGroup, err := raft.NewRawNode(newRaftConfig(
-			raft.Storage(r),
+			raft.Storage(r.AsRef()),
 			uint64(r.mu.replicaID),
 			r.mu.state.RaftAppliedIndex,
 			r.store.ctx,
@@ -512,6 +536,11 @@ func NewReplica(
 	r.raftMu.initialized = r.IsInitialized()
 
 	r.maybeGossipSystemConfig()
+	runtime.SetFinalizer(r, func(replica *Replica) {
+		if num := replica.refMu.count; num != 0 {
+			log.Fatalf(context.Background(), "*Replica eligible for (runtime) gc, but refcount is %d: %s", num, replica)
+		}
+	})
 	return r, nil
 }
 
@@ -599,29 +628,13 @@ func (r *Replica) String() string {
 	return fmt.Sprintf("[n%d,s%d,r%s]", r.store.Ident.NodeID, r.store.Ident.StoreID, &r.rangeStr)
 }
 
-// Destroy clears pending command queue by sending each pending
-// command an error and cleans up all data associated with this range.
+// Destroy cleans up all data associated with this range.
 func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor, destroyData bool) error {
 	desc := r.Desc()
 	if repDesc, ok := desc.GetReplicaDescriptor(r.store.StoreID()); ok && repDesc.ReplicaID >= origDesc.NextReplicaID {
 		return errors.Errorf("cannot destroy replica %s; replica ID has changed (%s >= %s)",
 			r, repDesc.ReplicaID, origDesc.NextReplicaID)
 	}
-
-	r.mu.Lock()
-	// Clear the pending command queue.
-	for _, p := range r.mu.pendingCmds {
-		p.done <- roachpb.ResponseWithError{
-			Reply: &roachpb.BatchResponse{},
-			Err:   roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID)),
-		}
-	}
-	// Clear the map.
-	r.mu.pendingCmds = map[storagebase.CmdIDKey]*pendingCmd{}
-	r.mu.internalRaftGroup = nil
-	r.mu.destroyed = errors.Errorf("replica %d (range %d) was garbage collected",
-		r.mu.replicaID, r.RangeID)
-	r.mu.Unlock()
 
 	if !destroyData {
 		return nil
@@ -1111,7 +1124,13 @@ func (r *Replica) checkCmdHeader(header roachpb.Span) error {
 		// even the start key of the request went to the wrong range.
 		if !r.ContainsKey(header.Key) {
 			if keyAddr, err := keys.Addr(header.Key); err == nil {
-				if repl := r.store.LookupReplica(keyAddr, nil); repl != nil {
+				if ref := r.store.LookupReplica(keyAddr, nil); ref != nil {
+					repl, release, err := ref.Acquire()
+					defer release()
+					if err != nil {
+						return err
+					}
+
 					// Only return the correct range descriptor as a hint
 					// if we know the current lease holder for that range, which
 					// indicates that our knowledge is not stale.
@@ -3206,49 +3225,44 @@ func (r *Replica) executeBatch(
 }
 
 // getLeaseForGossip tries to obtain a range lease. Only one of the replicas
-// should gossip; the bool returned indicates whether it's us.
+// should gossip; the returned boolean is true (and the error nil) if it's
+// this one.
 func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) {
 	// If no Gossip available (some tests) or range too fresh, noop.
 	if r.store.Gossip() == nil || !r.IsInitialized() {
 		return false, roachpb.NewErrorf("no gossip or range not initialized")
 	}
-	var hasLease bool
-	var pErr *roachpb.Error
-	if err := r.store.Stopper().RunTask(func() {
-		// Check for or obtain the lease, if none active.
-		pErr = r.redirectOnOrAcquireLease(ctx)
-		hasLease = pErr == nil
-		if pErr != nil {
-			switch e := pErr.GetDetail().(type) {
-			case *roachpb.NotLeaseHolderError:
-				// NotLeaseHolderError means there is an active lease, but only if
-				// the lease holder is set; otherwise, it's likely a timeout.
-				if e.LeaseHolder != nil {
-					pErr = nil
-				}
-			case *roachpb.RangeFrozenError:
-				storeID := r.store.StoreID()
-				// Let the replica with the smallest StoreID gossip.
-				// TODO(tschottdorf): this is silly and hopefully not necessary
-				// after #6722 (which prevents Raft reproposals from spuriously
-				// re-freezing ranges unfrozen at node startup)
-				hasLease = true
-				for _, replica := range r.Desc().Replicas {
-					if storeID < replica.StoreID {
-						hasLease = false
-						break
-					}
-				}
-				if hasLease {
-					pErr = nil
-				}
-			default:
-				// Any other error is worth being logged visibly.
-				log.Warningf(ctx, "could not acquire lease for range gossip: %s", e)
+	// Check for or obtain the lease, if none active.
+	pErr := r.redirectOnOrAcquireLease(ctx)
+	hasLease := pErr == nil
+	if pErr != nil {
+		switch e := pErr.GetDetail().(type) {
+		case *roachpb.NotLeaseHolderError:
+			// NotLeaseHolderError means there is an active lease, but only if
+			// the lease holder is set; otherwise, it's likely a timeout.
+			if e.LeaseHolder != nil {
+				pErr = nil
 			}
+		case *roachpb.RangeFrozenError:
+			storeID := r.store.StoreID()
+			// Let the replica with the smallest StoreID gossip.
+			// TODO(tschottdorf): this is silly and hopefully not necessary
+			// after #6722 (which prevents Raft reproposals from spuriously
+			// re-freezing ranges unfrozen at node startup)
+			hasLease = true
+			for _, replica := range r.Desc().Replicas {
+				if storeID < replica.StoreID {
+					hasLease = false
+					break
+				}
+			}
+			if hasLease {
+				pErr = nil
+			}
+		default:
+			// Any other error is worth being logged visibly.
+			log.Warningf(ctx, "could not acquire lease for range gossip: %s", e)
 		}
-	}); err != nil {
-		pErr = roachpb.NewError(err)
 	}
 	return hasLease, pErr
 }
@@ -3260,6 +3274,7 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 	if !r.IsFirstRange() {
 		return nil
 	}
+	ctx := r.logContext(context.Background())
 
 	// When multiple nodes are initialized with overlapping Gossip addresses, they all
 	// will attempt to gossip their cluster ID. This is a fairly obvious misconfiguration,
@@ -3282,13 +3297,23 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 	if err := r.store.Gossip().AddInfo(gossip.KeyClusterID, r.store.ClusterID().GetBytes(), 0*time.Second); err != nil {
 		log.Errorf(r.ctx, "failed to gossip cluster ID: %s", err)
 	}
-	if hasLease, pErr := r.getLeaseForGossip(r.ctx); hasLease {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		r.gossipFirstRangeLocked(r.ctx)
-	} else {
-		return pErr
+	ref := r.AsRef()
+	r, release, err := ref.Acquire()
+	defer release()
+	if err != nil {
+		return roachpb.NewError(err)
 	}
+
+	hasLease, pErr := r.getLeaseForGossip(r.ctx)
+	if pErr != nil {
+		log.Warning(ctx, errors.Wrap(pErr.GoError(), "while trying to gossip first range"))
+		return pErr
+	} else if !hasLease {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.gossipFirstRangeLocked(r.ctx)
 	return nil
 }
 
@@ -3449,18 +3474,22 @@ func (r *Replica) exceedsDoubleSplitSizeLocked() bool {
 // maybeAddToSplitQueue checks whether the current size of the range
 // exceeds the max size specified in the zone config. If yes, the
 // range is added to the split queue.
+//
+// TODO(tschottdorf): unnecessary to have this on *Replica.
 func (r *Replica) maybeAddToSplitQueue() {
 	if r.needsSplitBySize() {
-		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
+		r.store.splitQueue.MaybeAdd(r.AsRef(), r.store.Clock().Now())
 	}
 }
 
 // maybeAddToRaftLogQueue checks whether the raft log is a candidate for
 // truncation. If yes, the range is added to the raft log queue.
+//
+// TODO(tschottdorf): unnecessary to have this on *Replica.
 func (r *Replica) maybeAddToRaftLogQueue(appliedIndex uint64) {
 	const raftLogCheckFrequency = 1 + RaftLogQueueStaleThreshold/4
 	if appliedIndex%raftLogCheckFrequency == 0 {
-		r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
+		r.store.raftLogQueue.MaybeAdd(r.AsRef(), r.store.Clock().Now())
 	}
 }
 

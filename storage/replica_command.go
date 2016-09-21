@@ -1570,7 +1570,7 @@ func (r *Replica) TruncateLog(
 	}
 
 	// Have we already truncated this log? If so, just return without an error.
-	firstIndex, err := r.FirstIndex()
+	firstIndex, err := r.storageFirstIndex()
 	if err != nil {
 		return reply, nil, err
 	}
@@ -1584,7 +1584,7 @@ func (r *Replica) TruncateLog(
 	}
 
 	// args.Index is the first index to keep.
-	term, err := r.Term(args.Index - 1)
+	term, err := r.storageTerm(args.Index - 1)
 	if err != nil {
 		return reply, nil, err
 	}
@@ -1795,6 +1795,8 @@ func (r *Replica) applyNewLeaseLocked(
 // CheckConsistency runs a consistency check on the range. It first applies a
 // ComputeChecksum command on the range. It then issues CollectChecksum commands
 // to the other replicas.
+//
+// TODO(tschottdorf): We should call this AdminCheckConsistency.
 func (r *Replica) CheckConsistency(
 	ctx context.Context,
 	args roachpb.CheckConsistencyRequest,
@@ -2892,7 +2894,12 @@ func (r *Replica) mergeTrigger(
 		// TODO(peter): We need to hold the subsumed range's raftMu until the
 		// Store.MergeRange is invoked. Currently we release it when this method
 		// returns which isn't correct.
-		subsumedRng, err := r.store.GetReplica(rightRangeID)
+		subsumedRef, err := r.store.GetReplica(rightRangeID)
+		if err != nil {
+			panic(err)
+		}
+		subsumedRng, release, err := subsumedRef.Acquire()
+		defer release()
 		if err != nil {
 			panic(err)
 		}

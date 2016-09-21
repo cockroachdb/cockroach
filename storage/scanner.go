@@ -40,9 +40,9 @@ type replicaQueue interface {
 	// MaybeAdd adds the replica to the queue if the replica meets
 	// the queue's inclusion criteria and the queue is not already
 	// too full, etc.
-	MaybeAdd(*Replica, hlc.Timestamp)
+	MaybeAdd(ReplicaRef, hlc.Timestamp)
 	// MaybeRemove removes the replica from the queue if it is present.
-	MaybeRemove(*Replica)
+	MaybeRemove(ReplicaRef)
 }
 
 // A replicaSet provides access to a sequence of replicas to consider
@@ -51,7 +51,7 @@ type replicaQueue interface {
 type replicaSet interface {
 	// Visit calls the given function for every replica in the set btree
 	// until the function returns false.
-	Visit(func(*Replica) bool)
+	Visit(func(ReplicaRef) bool)
 	// EstimatedCount returns the number of replicas estimated to remain
 	// in the iteration. This value does not need to be exact.
 	EstimatedCount() int
@@ -63,12 +63,12 @@ type replicaSet interface {
 // interval).  Each replica is tested for inclusion in a sequence of
 // prioritized replica queues.
 type replicaScanner struct {
-	targetInterval time.Duration  // Target duration interval for scan loop
-	maxIdleTime    time.Duration  // Max idle time for scan loop
-	waitTimer      timeutil.Timer // Shared timer to avoid allocations.
-	replicas       replicaSet     // Replicas to be scanned
-	queues         []replicaQueue // Replica queues managed by this scanner
-	removed        chan *Replica  // Replicas to remove from queues
+	targetInterval time.Duration   // Target duration interval for scan loop
+	maxIdleTime    time.Duration   // Max idle time for scan loop
+	waitTimer      timeutil.Timer  // Shared timer to avoid allocations.
+	replicas       replicaSet      // Replicas to be scanned
+	queues         []replicaQueue  // Replica queues managed by this scanner
+	removed        chan ReplicaRef // Replicas to remove from queues
 	// Count of times and total duration through the scanning loop.
 	mu struct {
 		syncutil.Mutex
@@ -94,7 +94,7 @@ func newReplicaScanner(targetInterval, maxIdleTime time.Duration, replicas repli
 		targetInterval: targetInterval,
 		maxIdleTime:    maxIdleTime,
 		replicas:       replicas,
-		removed:        make(chan *Replica, 10),
+		removed:        make(chan ReplicaRef, 10),
 		setDisabledCh:  make(chan struct{}, 1),
 	}
 	if targetInterval == 0 {
@@ -162,8 +162,8 @@ func (rs *replicaScanner) avgScan() time.Duration {
 // RemoveReplica removes a replica from any replica queues the scanner may
 // have placed it in. This method should be called by the Store
 // when a replica is removed (e.g. rebalanced or merged).
-func (rs *replicaScanner) RemoveReplica(repl *Replica) {
-	rs.removed <- repl
+func (rs *replicaScanner) RemoveReplica(ref ReplicaRef) {
+	rs.removed <- ref
 }
 
 // paceInterval returns a duration between iterations to allow us to pace
@@ -190,7 +190,7 @@ func (rs *replicaScanner) paceInterval(start, now time.Time) time.Duration {
 // to be stopped. The method also removes a replica from queues when it
 // is signaled via the removed channel.
 func (rs *replicaScanner) waitAndProcess(
-	start time.Time, clock *hlc.Clock, stopper *stop.Stopper, repl *Replica,
+	start time.Time, clock *hlc.Clock, stopper *stop.Stopper, ref ReplicaRef,
 ) bool {
 	waitInterval := rs.paceInterval(start, timeutil.Now())
 	rs.waitTimer.Reset(waitInterval)
@@ -204,19 +204,19 @@ func (rs *replicaScanner) waitAndProcess(
 				log.Infof(context.TODO(), "wait timer fired")
 			}
 			rs.waitTimer.Read = true
-			if repl == nil {
+			if ref == nil {
 				return false
 			}
 
 			return nil != stopper.RunTask(func() {
 				// Try adding replica to all queues.
 				for _, q := range rs.queues {
-					q.MaybeAdd(repl, clock.Now())
+					q.MaybeAdd(ref, clock.Now())
 				}
 			})
 
-		case repl := <-rs.removed:
-			rs.removeReplica(repl)
+		case ref := <-rs.removed:
+			rs.removeReplica(ref)
 
 		case <-stopper.ShouldStop():
 			return true
@@ -224,14 +224,14 @@ func (rs *replicaScanner) waitAndProcess(
 	}
 }
 
-func (rs *replicaScanner) removeReplica(repl *Replica) {
+func (rs *replicaScanner) removeReplica(ref ReplicaRef) {
 	// Remove replica from all queues as applicable. Note that we still
 	// process removals while disabled.
 	for _, q := range rs.queues {
-		q.MaybeRemove(repl)
+		q.MaybeRemove(ref)
 	}
 	if log.V(6) {
-		log.Infof(context.TODO(), "removed replica %s", repl)
+		log.Infof(context.TODO(), "removed replica %s", ref)
 	}
 }
 
@@ -254,9 +254,9 @@ func (rs *replicaScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 			}
 			var shouldStop bool
 			count := 0
-			rs.replicas.Visit(func(repl *Replica) bool {
+			rs.replicas.Visit(func(ref ReplicaRef) bool {
 				count++
-				shouldStop = rs.waitAndProcess(start, clock, stopper, repl)
+				shouldStop = rs.waitAndProcess(start, clock, stopper, ref)
 				return !shouldStop
 			})
 			if count == 0 {

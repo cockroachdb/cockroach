@@ -74,7 +74,7 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 	return rs
 }
 
-func (rs *testRangeSet) Visit(visitor func(*Replica) bool) {
+func (rs *testRangeSet) Visit(visitor func(ReplicaRef) bool) {
 	rs.Lock()
 	defer rs.Unlock()
 	rs.visited = 0
@@ -82,7 +82,7 @@ func (rs *testRangeSet) Visit(visitor func(*Replica) bool) {
 		rs.visited++
 		rs.Unlock()
 		defer rs.Lock()
-		return visitor(i.(*Replica))
+		return visitor(i.(*Replica).AsRef())
 	})
 }
 
@@ -112,7 +112,7 @@ func (rs *testRangeSet) remove(index int, t *testing.T) *Replica {
 // internal slice.
 type testQueue struct {
 	syncutil.Mutex // Protects ranges, done & processed count
-	ranges         []*Replica
+	ranges         []ReplicaRef
 	done           bool
 	processed      int
 	disabled       bool
@@ -146,18 +146,18 @@ func (tq *testQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 	})
 }
 
-func (tq *testQueue) MaybeAdd(rng *Replica, now hlc.Timestamp) {
+func (tq *testQueue) MaybeAdd(ref ReplicaRef, now hlc.Timestamp) {
 	tq.Lock()
 	defer tq.Unlock()
-	if index := tq.indexOf(rng); index == -1 {
-		tq.ranges = append(tq.ranges, rng)
+	if index := tq.indexOf(ref); index == -1 {
+		tq.ranges = append(tq.ranges, ref)
 	}
 }
 
-func (tq *testQueue) MaybeRemove(rng *Replica) {
+func (tq *testQueue) MaybeRemove(ref ReplicaRef) {
 	tq.Lock()
 	defer tq.Unlock()
-	if index := tq.indexOf(rng); index != -1 {
+	if index := tq.indexOf(ref); index != -1 {
 		tq.ranges = append(tq.ranges[:index], tq.ranges[index+1:]...)
 	}
 }
@@ -168,9 +168,9 @@ func (tq *testQueue) count() int {
 	return len(tq.ranges)
 }
 
-func (tq *testQueue) indexOf(rng *Replica) int {
+func (tq *testQueue) indexOf(ref ReplicaRef) int {
 	for i, r := range tq.ranges {
-		if r == rng {
+		if r == ref {
 			return i
 		}
 	}
@@ -214,7 +214,7 @@ func TestScannerAddToQueues(t *testing.T) {
 		// This is intentionally inside the loop, otherwise this test races as
 		// our removal of the range may be processed before a stray re-queue.
 		// Removing on each attempt makes sure we clean this up as we retry.
-		s.RemoveReplica(rng)
+		s.RemoveReplica(rng.AsRef())
 		c1 := q1.count()
 		c2 := q2.count()
 		if c1 != count-1 || c2 != count-1 {
@@ -341,8 +341,8 @@ func TestScannerDisabled(t *testing.T) {
 	lastScannerCount := s.scanCount()
 
 	// Remove the replicas and verify the scanner still removes them while disabled.
-	ranges.Visit(func(repl *Replica) bool {
-		s.RemoveReplica(repl)
+	ranges.Visit(func(ref ReplicaRef) bool {
+		s.RemoveReplica(ref)
 		return true
 	})
 

@@ -82,9 +82,15 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator, cloc
 
 func (rq *replicateQueue) shouldQueue(
 	now hlc.Timestamp,
-	repl *Replica,
+	ref ReplicaRef,
 	sysCfg config.SystemConfig,
 ) (shouldQ bool, priority float64) {
+	repl, release, err := ref.Acquire()
+	defer release()
+	if err != nil {
+		return false, 0
+	}
+
 	if !repl.store.splitQueue.Disabled() && repl.needsSplitBySize() {
 		// If the range exceeds the split threshold, let that finish first.
 		// Ranges must fit in memory on both sender and receiver nodes while
@@ -122,10 +128,16 @@ func (rq *replicateQueue) shouldQueue(
 func (rq *replicateQueue) process(
 	ctx context.Context,
 	now hlc.Timestamp,
-	repl *Replica,
+	ref ReplicaRef,
 	sysCfg config.SystemConfig,
 ) error {
-	desc := repl.Desc()
+	repl, release, err := ref.Acquire()
+	defer release()
+	if err != nil {
+		return err
+	}
+
+	desc := ref.Desc()
 	// Find the zone config for this range.
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
@@ -135,7 +147,7 @@ func (rq *replicateQueue) process(
 
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.
-	deadReplicas := rq.allocator.storePool.deadReplicas(repl.RangeID, desc.Replicas)
+	deadReplicas := rq.allocator.storePool.deadReplicas(desc.RangeID, desc.Replicas)
 	quorum := computeQuorum(len(desc.Replicas))
 	liveReplicaCount := len(desc.Replicas) - len(deadReplicas)
 	if liveReplicaCount < quorum {
@@ -162,7 +174,7 @@ func (rq *replicateQueue) process(
 		log.Event(ctx, "removing a replica")
 		// We require the lease in order to process replicas, so
 		// repl.store.StoreID() corresponds to the lease-holder's store ID.
-		removeReplica, err := rq.allocator.RemoveTarget(desc.Replicas, repl.store.StoreID())
+		removeReplica, err := rq.allocator.RemoveTarget(desc.Replicas, rq.store.StoreID())
 		if err != nil {
 			return err
 		}
@@ -213,7 +225,7 @@ func (rq *replicateQueue) process(
 	}
 
 	// Enqueue this replica again to see if there are more changes to be made.
-	rq.MaybeAdd(repl, rq.clock.Now())
+	rq.MaybeAdd(ref, rq.clock.Now())
 	return nil
 }
 

@@ -214,15 +214,24 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := tc.store.AddReplicaTest(rng); err != nil {
+			if err := tc.store.AddReplicaTest(rng.AsRef()); err != nil {
 				t.Fatal(err)
 			}
 		}
 		var err error
-		tc.rng, err = tc.store.GetReplica(1)
+		ref, err := tc.store.GetReplica(1)
+
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		var release func()
+		tc.rng, release, err = ref.Acquire()
+		defer release()
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		tc.rangeID = tc.rng.RangeID
 	}
 
@@ -529,7 +538,13 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 	defer tc.Stop()
 
 	key := roachpb.RKey("a")
-	firstRng := tc.store.LookupReplica(key, nil)
+	firstRef := tc.store.LookupReplica(key, nil)
+	firstRng, release, err := firstRef.Acquire()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	newRng := splitTestRange(tc.store, key, key, t)
 	if pErr := newRng.redirectOnOrAcquireLease(context.Background()); pErr != nil {
 		t.Fatal(pErr)
@@ -4440,7 +4455,7 @@ func TestTruncateLog(t *testing.T) {
 
 	// We can still get what remains of the log.
 	tc.rng.mu.Lock()
-	entries, err := tc.rng.Entries(indexes[5], indexes[9], math.MaxUint64)
+	entries, err := tc.rng.storageEntries(indexes[5], indexes[9], math.MaxUint64)
 	tc.rng.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
@@ -4451,7 +4466,7 @@ func TestTruncateLog(t *testing.T) {
 
 	// But any range that includes the truncated entries returns an error.
 	tc.rng.mu.Lock()
-	_, err = tc.rng.Entries(indexes[4], indexes[9], math.MaxUint64)
+	_, err = tc.rng.storageEntries(indexes[4], indexes[9], math.MaxUint64)
 	tc.rng.mu.Unlock()
 	if err != raft.ErrCompacted {
 		t.Errorf("expected ErrCompacted, got %s", err)
@@ -4459,7 +4474,7 @@ func TestTruncateLog(t *testing.T) {
 
 	// The term of the last truncated entry is still available.
 	tc.rng.mu.Lock()
-	term, err := tc.rng.Term(indexes[4])
+	term, err := tc.rng.storageTerm(indexes[4])
 	tc.rng.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
@@ -4470,7 +4485,7 @@ func TestTruncateLog(t *testing.T) {
 
 	// The terms of older entries are gone.
 	tc.rng.mu.Lock()
-	_, err = tc.rng.Term(indexes[3])
+	_, err = tc.rng.storageTerm(indexes[3])
 	tc.rng.mu.Unlock()
 	if err != raft.ErrCompacted {
 		t.Errorf("expected ErrCompacted, got %s", err)
@@ -4492,7 +4507,7 @@ func TestTruncateLog(t *testing.T) {
 
 	tc.rng.mu.Lock()
 	// The term of the last truncated entry is still available.
-	term, err = tc.rng.Term(indexes[4])
+	term, err = tc.rng.storageTerm(indexes[4])
 	tc.rng.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
@@ -4638,7 +4653,13 @@ func TestReplicaCorruption(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := tc.store.LookupReplica(rkey, rkey)
+	ref := tc.store.LookupReplica(rkey, rkey)
+	r, release, err := ref.Acquire()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.mu.destroyed.Error() != pErr.GetDetail().Error() {
@@ -5108,9 +5129,14 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rng := tc.store.LookupReplica(scStartSddr, nil)
-	if rng == nil {
+	ref := tc.store.LookupReplica(scStartSddr, nil)
+	if ref == nil {
 		t.Fatalf("no replica contains the SystemConfig span")
+	}
+	rng, release, err := ref.Acquire()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	// Create a transaction and write an intent to the system
@@ -5165,7 +5191,13 @@ func TestReplicaDestroy(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	rep, err := tc.store.GetReplica(1)
+	ref, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rep, release, err := ref.Acquire()
+	defer release()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -5309,7 +5341,7 @@ func TestEntries(t *testing.T) {
 			t.Errorf("%d: expected cache count %d, got %d", i, tc.expCacheCount, len(cacheEntries))
 		}
 		rng.mu.Lock()
-		ents, err := rng.Entries(tc.lo, tc.hi, tc.maxBytes)
+		ents, err := rng.storageEntries(tc.lo, tc.hi, tc.maxBytes)
 		rng.mu.Unlock()
 		if tc.expError == nil && err != nil {
 			t.Errorf("%d: expected no error, got %s", i, err)
@@ -5325,7 +5357,7 @@ func TestEntries(t *testing.T) {
 
 	// Case 23: Lo must be less than or equal to hi.
 	rng.mu.Lock()
-	if _, err := rng.Entries(indexes[9], indexes[5], 0); err == nil {
+	if _, err := rng.storageEntries(indexes[9], indexes[5], 0); err == nil {
 		t.Errorf("23: error expected, got none")
 	}
 	rng.mu.Unlock()
@@ -5338,12 +5370,12 @@ func TestEntries(t *testing.T) {
 
 	rng.mu.Lock()
 	defer rng.mu.Unlock()
-	if _, err := rng.Entries(indexes[5], indexes[9], 0); err == nil {
+	if _, err := rng.storageEntries(indexes[5], indexes[9], 0); err == nil {
 		t.Errorf("24: error expected, got none")
 	}
 
 	// Case 25: don't hit the gap due to maxBytes.
-	ents, err := rng.Entries(indexes[5], indexes[9], 1)
+	ents, err := rng.storageEntries(indexes[5], indexes[9], 1)
 	if err != nil {
 		t.Errorf("25: expected no error, got %s", err)
 	}
@@ -5352,7 +5384,7 @@ func TestEntries(t *testing.T) {
 	}
 
 	// Case 26: don't hit the gap due to truncation.
-	if _, err := rng.Entries(indexes[4], indexes[9], 0); err != raft.ErrCompacted {
+	if _, err := rng.storageEntries(indexes[4], indexes[9], 0); err != raft.ErrCompacted {
 		t.Errorf("26: expected error %s , got %s", raft.ErrCompacted, err)
 	}
 }
@@ -5391,7 +5423,7 @@ func TestTerm(t *testing.T) {
 	rng.mu.Lock()
 	defer rng.mu.Unlock()
 
-	firstIndex, err := rng.FirstIndex()
+	firstIndex, err := rng.storageFirstIndex()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -5400,20 +5432,20 @@ func TestTerm(t *testing.T) {
 	}
 
 	// Truncated logs should return an ErrCompacted error.
-	if _, err := tc.rng.Term(indexes[1]); err != raft.ErrCompacted {
+	if _, err := tc.rng.storageTerm(indexes[1]); err != raft.ErrCompacted {
 		t.Errorf("expected ErrCompacted, got %s", err)
 	}
-	if _, err := tc.rng.Term(indexes[3]); err != raft.ErrCompacted {
+	if _, err := tc.rng.storageTerm(indexes[3]); err != raft.ErrCompacted {
 		t.Errorf("expected ErrCompacted, got %s", err)
 	}
 
 	// FirstIndex-1 should return the term of firstIndex.
-	firstIndexTerm, err := tc.rng.Term(firstIndex)
+	firstIndexTerm, err := tc.rng.storageTerm(firstIndex)
 	if err != nil {
 		t.Errorf("expect no error, got %s", err)
 	}
 
-	term, err := tc.rng.Term(indexes[4])
+	term, err := tc.rng.storageTerm(indexes[4])
 	if err != nil {
 		t.Errorf("expect no error, got %s", err)
 	}
@@ -5421,21 +5453,21 @@ func TestTerm(t *testing.T) {
 		t.Errorf("expected firstIndex-1's term:%d to equal that of firstIndex:%d", term, firstIndexTerm)
 	}
 
-	lastIndex, err := rng.LastIndex()
+	lastIndex, err := rng.storageLastIndex()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Last index should return correctly.
-	if _, err := tc.rng.Term(lastIndex); err != nil {
+	if _, err := tc.rng.storageTerm(lastIndex); err != nil {
 		t.Errorf("expected no error, got %s", err)
 	}
 
 	// Terms for after the last index should return ErrUnavailable.
-	if _, err := tc.rng.Term(lastIndex + 1); err != raft.ErrUnavailable {
+	if _, err := tc.rng.storageTerm(lastIndex + 1); err != raft.ErrUnavailable {
 		t.Errorf("expected ErrUnavailable, got %s", err)
 	}
-	if _, err := tc.rng.Term(indexes[9] + 1000); err != raft.ErrUnavailable {
+	if _, err := tc.rng.storageTerm(indexes[9] + 1000); err != raft.ErrUnavailable {
 		t.Errorf("expected ErrUnavailable, got %s", err)
 	}
 }
@@ -5682,7 +5714,7 @@ func TestSyncSnapshot(t *testing.T) {
 	// With enough time in BlockingSnapshotDuration, we succeed on the
 	// first try.
 	tc.rng.mu.Lock()
-	snap, err := tc.rng.Snapshot()
+	snap, err := tc.rng.storageSnapshot()
 	tc.rng.mu.Unlock()
 	tc.rng.CloseOutSnap()
 
@@ -6286,7 +6318,13 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 	}
 
 	key := roachpb.RKey("a")
-	firstRng := tc.store.LookupReplica(key, nil)
+	ref := tc.store.LookupReplica(key, nil)
+	firstRng, release, err := ref.Acquire()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	snap, err := firstRng.GetSnapshot(context.Background())
 	if err != nil {
 		t.Fatal(err)
