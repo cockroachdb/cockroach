@@ -175,9 +175,24 @@ func (p *planner) Insert(
 			if err != nil {
 				return nil, err
 			}
-			updateCols, err := p.processColumns(en.tableDesc, names)
-			if err != nil {
-				return nil, err
+			// Also include columns that are inactive because they should be
+			// updated.
+			updateCols := make([]sqlbase.ColumnDescriptor, len(names))
+			for i, n := range names {
+				c, err := n.NormalizeUnqualifiedColumnItem()
+				if err != nil {
+					return nil, err
+				}
+
+				status, idx, err := en.tableDesc.FindColumnByName(c.ColumnName)
+				if err != nil {
+					return nil, err
+				}
+				if status == sqlbase.DescriptorActive {
+					updateCols[i] = en.tableDesc.Columns[idx]
+				} else {
+					updateCols[i] = *en.tableDesc.Mutations[idx].GetColumn()
+				}
 			}
 
 			helper, err := p.makeUpsertHelper(tn, en.tableDesc, ri.insertCols, updateCols, updateExprs, conflictIndex)

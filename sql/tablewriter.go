@@ -271,6 +271,9 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 		if err != nil {
 			return err
 		}
+		// The fetchCols can also contain columns undergoing mutation; update
+		// requestCols.
+		requestedCols = tu.ru.fetchCols
 		tu.fetchColIDtoRowIndex = tu.ru.fetchColIDtoRowIndex
 
 		tu.updateColIDtoRowIndex = make(map[sqlbase.ColumnID]int)
@@ -279,15 +282,16 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 		}
 	}
 
-	valNeededForCol := make([]bool, len(tu.tableDesc.Columns))
-	for i := range valNeededForCol {
-		if _, ok := tu.fetchColIDtoRowIndex[tu.tableDesc.Columns[i].ID]; ok {
+	valNeededForCol := make([]bool, len(requestedCols))
+	for i, col := range requestedCols {
+		if _, ok := tu.fetchColIDtoRowIndex[col.ID]; ok {
 			valNeededForCol[i] = true
 		}
 	}
+
 	return tu.fetcher.Init(
 		tu.tableDesc, tu.fetchColIDtoRowIndex, &tu.tableDesc.PrimaryIndex, false, false,
-		tu.tableDesc.Columns, valNeededForCol)
+		requestedCols, valNeededForCol)
 }
 
 func (tu *tableUpserter) row(ctx context.Context, row parser.DTuple) (parser.DTuple, error) {
