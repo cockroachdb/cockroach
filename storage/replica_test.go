@@ -214,15 +214,24 @@ func (tc *testContext) StartWithStoreContext(t testing.TB, ctx StoreContext) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := tc.store.AddReplicaTest(rng); err != nil {
+			if err := tc.store.AddReplicaTest(rng.AsRef()); err != nil {
 				t.Fatal(err)
 			}
 		}
 		var err error
-		tc.rng, err = tc.store.GetReplica(1)
+		ref, err := tc.store.GetReplica(1)
+
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		var release func()
+		tc.rng, release, err = ref.Acquire()
+		defer release()
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		tc.rangeID = tc.rng.RangeID
 	}
 
@@ -529,7 +538,13 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 	defer tc.Stop()
 
 	key := roachpb.RKey("a")
-	firstRng := tc.store.LookupReplica(key, nil)
+	firstRef := tc.store.LookupReplica(key, nil)
+	firstRng, release, err := firstRef.Acquire()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	newRng := splitTestRange(tc.store, key, key, t)
 	if pErr := newRng.redirectOnOrAcquireLease(context.Background()); pErr != nil {
 		t.Fatal(pErr)
@@ -4638,7 +4653,13 @@ func TestReplicaCorruption(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := tc.store.LookupReplica(rkey, rkey)
+	ref := tc.store.LookupReplica(rkey, rkey)
+	r, release, err := ref.Acquire()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.mu.destroyed.Error() != pErr.GetDetail().Error() {
@@ -5108,9 +5129,14 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rng := tc.store.LookupReplica(scStartSddr, nil)
-	if rng == nil {
+	ref := tc.store.LookupReplica(scStartSddr, nil)
+	if ref == nil {
 		t.Fatalf("no replica contains the SystemConfig span")
+	}
+	rng, release, err := ref.Acquire()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	// Create a transaction and write an intent to the system
@@ -5165,7 +5191,13 @@ func TestReplicaDestroy(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	rep, err := tc.store.GetReplica(1)
+	ref, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rep, release, err := ref.Acquire()
+	defer release()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -6286,7 +6318,13 @@ func TestReserveAndApplySnapshot(t *testing.T) {
 	}
 
 	key := roachpb.RKey("a")
-	firstRng := tc.store.LookupReplica(key, nil)
+	ref := tc.store.LookupReplica(key, nil)
+	firstRng, release, err := ref.Acquire()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	snap, err := firstRng.GetSnapshot(context.Background())
 	if err != nil {
 		t.Fatal(err)

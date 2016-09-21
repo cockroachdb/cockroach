@@ -260,11 +260,7 @@ func (r *Replica) leasePostCommitTrigger(
 		// make sure the lease is active so that a trailing replica won't process
 		// an old lease request and attempt to gossip the first range.
 		if r.IsFirstRange() && trigger.lease.Covers(r.store.Clock().Now()) {
-			func() {
-				r.mu.Lock()
-				defer r.mu.Unlock()
-				r.gossipFirstRangeLocked(ctx)
-			}()
+			r.gossipFirstRange(ctx)
 		}
 	}
 	if leaseChangingHands && !iAmTheLeaseHolder {
@@ -431,28 +427,48 @@ func (r *Replica) handleTrigger(
 		// blocks waiting for the lease acquisition to finish but it can't finish
 		// because we're not processing raft messages due to holding
 		// processRaftMu (and running on the processRaft goroutine).
+		ref := r.AsRef()
 		if err := r.store.Stopper().RunAsyncTask(ctx, func(ctx context.Context) {
-			if hasLease, pErr := r.getLeaseForGossip(ctx); hasLease {
-				r.mu.Lock()
-				defer r.mu.Unlock()
-				r.gossipFirstRangeLocked(ctx)
-			} else {
-				log.Infof(ctx, "unable to gossip first range; hasLease=%t, err=%v", hasLease, pErr)
+			repl, release, err := ref.Acquire()
+			defer release()
+			if err != nil {
+				return
 			}
+
+			hasLease, pErr := repl.getLeaseForGossip(ctx)
+
+			if pErr != nil {
+				log.Infof(ctx, "unable to gossip first range; hasLease=%t, err=%v", hasLease, pErr)
+			} else if !hasLease {
+				return
+			}
+			repl.gossipFirstRange(ctx)
 		}); err != nil {
-			log.Errorf(ctx, "unable to gossip first range: %+v", err)
+			log.Infof(ctx, "unable to gossip first range: %+v", err)
 		}
 	}
 
 	if trigger.addToReplicaGCQueue {
-		if _, err := r.store.replicaGCQueue.Add(r, replicaGCPriorityRemoved); err != nil {
-			// Log the error; the range should still be GC'd eventually.
-			log.Errorf(ctx, "unable to add to GC queue: %s", err)
+		// Must run this asynchronously due to lock order - see the lock
+		// ordering notes in store.go.
+		if err := r.store.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
+			if _, err := r.store.replicaGCQueue.Add(r.AsRef(), replicaGCPriorityRemoved); err != nil {
+				// Log the error; the range should still be GC'd eventually.
+				log.Errorf(ctx, "unable to add to replica GC queue: %s", err)
+			}
+		}); err != nil {
+			log.Infof(ctx, "unable to add to replica GC queue: %s", err)
 		}
 	}
 
 	if trigger.maybeAddToSplitQueue {
-		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
+		// Must run this asynchronously due to lock order - see the lock
+		// ordering notes in store.go.
+		if err := r.store.stopper.RunAsyncTask(ctx, func(_ context.Context) {
+			r.store.splitQueue.MaybeAdd(r.AsRef(), r.store.Clock().Now())
+		}); err != nil {
+			log.Infof(ctx, "unable to add to split queue: %s", err)
+		}
 	}
 
 	if trigger.maybeGossipSystemConfig {
