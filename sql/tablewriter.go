@@ -216,6 +216,7 @@ type tableUpserter struct {
 	ru                    rowUpdater
 	updateColIDtoRowIndex map[sqlbase.ColumnID]int
 	a                     sqlbase.DatumAlloc
+	fetchCols             []sqlbase.ColumnDescriptor
 	fetchColIDtoRowIndex  map[sqlbase.ColumnID]int
 	fetcher               sqlbase.RowFetcher
 
@@ -262,6 +263,7 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	requestedCols := tu.tableDesc.Columns
 
 	if len(tu.updateCols) == 0 {
+		tu.fetchCols = requestedCols
 		tu.fetchColIDtoRowIndex = colIDtoRowIndexFromCols(requestedCols)
 	} else {
 		var err error
@@ -271,6 +273,8 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 		if err != nil {
 			return err
 		}
+		// t.ru.fetchCols can also contain columns undergoing mutation.
+		tu.fetchCols = tu.ru.fetchCols
 		tu.fetchColIDtoRowIndex = tu.ru.fetchColIDtoRowIndex
 
 		tu.updateColIDtoRowIndex = make(map[sqlbase.ColumnID]int)
@@ -279,15 +283,16 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 		}
 	}
 
-	valNeededForCol := make([]bool, len(tu.tableDesc.Columns))
-	for i := range valNeededForCol {
-		if _, ok := tu.fetchColIDtoRowIndex[tu.tableDesc.Columns[i].ID]; ok {
+	valNeededForCol := make([]bool, len(tu.fetchCols))
+	for i, col := range tu.fetchCols {
+		if _, ok := tu.fetchColIDtoRowIndex[col.ID]; ok {
 			valNeededForCol[i] = true
 		}
 	}
+
 	return tu.fetcher.Init(
 		tu.tableDesc, tu.fetchColIDtoRowIndex, &tu.tableDesc.PrimaryIndex, false, false,
-		tu.tableDesc.Columns, valNeededForCol)
+		tu.fetchCols, valNeededForCol)
 }
 
 func (tu *tableUpserter) row(ctx context.Context, row parser.DTuple) (parser.DTuple, error) {
