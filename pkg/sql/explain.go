@@ -107,7 +107,12 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 
 	if mode == explainTrace {
 		sp, err := tracing.JoinOrNewSnowball("coordinator", nil, func(sp basictracer.RawSpan) {
-			p.txn.CollectedSpans = append(p.txn.CollectedSpans, sp)
+			// Some things are done async wrt running the statement (e.g. the
+			// TxnCoordSender heartbeat loop), and these things might finish spans
+			// after the txn is completed. We ignore them.
+			if p.txn != nil {
+				p.txn.CollectedSpans = append(p.txn.CollectedSpans, sp)
+			}
 		})
 		if err != nil {
 			return nil, err

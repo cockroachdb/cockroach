@@ -20,7 +20,6 @@ import (
 	"bytes"
 	gosql "database/sql"
 	"fmt"
-	"reflect"
 	"sort"
 	"testing"
 	"text/tabwriter"
@@ -94,7 +93,7 @@ func TestExplainTrace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expParts := []string{"coordinator", "node.Batch"}
+	expParts := []string{"grpcTransport SendNext", "node.Batch"}
 	var parts []string
 
 	pretty := rowsToStrings(rows)
@@ -109,7 +108,16 @@ func TestExplainTrace(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(expParts, parts) {
-		t.Fatalf("expected %v, got %v\n\nResults:\n%v", expParts, parts, prettyPrint(pretty))
+	for _, exp := range expParts {
+		found := false
+		for _, part := range parts {
+			if part == exp {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected at least %v, got %v\n\nResults:\n%v", expParts, parts, prettyPrint(pretty))
+		}
 	}
 }
