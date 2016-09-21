@@ -172,6 +172,9 @@ func createTestStore(t testing.TB) (*Store, *hlc.ManualClock, *stop.Stopper) {
 	// so just disable the scanner for all tests that use this function
 	// instead of figuring out exactly which tests need it.
 	ctx.TestingKnobs.DisableScanner = true
+	// The scanner affects background operations; we must also disable
+	// the split queue separately to cover event-driven splits.
+	ctx.TestingKnobs.DisableSplitQueue = true
 	return createTestStoreWithContext(t, &ctx)
 }
 
