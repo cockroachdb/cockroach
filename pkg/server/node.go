@@ -25,9 +25,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
 
-	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -49,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -800,57 +797,17 @@ func (n *Node) batchInternal(
 
 	var br *roachpb.BatchResponse
 
-	type snowballInfo struct {
-		syncutil.Mutex
-		collectedSpans [][]byte
-		done           bool
-	}
-	var snowball *snowballInfo
-
 	if err := n.stopper.RunTaskWithErr(func() error {
-		const opName = "node.Batch"
-		sp, err := tracing.JoinOrNew(n.storeCfg.AmbientCtx.Tracer, args.TraceContext, opName)
-		if err != nil {
-			return err
-		}
-		// If this is a snowball span, it gets special treatment: It skips the
-		// regular tracing machinery, and we instead send the collected spans
-		// back with the response. This is more expensive, but then again,
-		// those are individual requests traced by users, so they can be.
-		if sp.BaggageItem(tracing.Snowball) != "" {
-			sp.LogFields(otlog.String("event", "delegating to snowball tracing"))
-			sp.Finish()
-
-			snowball = new(snowballInfo)
-			recorder := func(rawSpan basictracer.RawSpan) {
-				snowball.Lock()
-				defer snowball.Unlock()
-				if snowball.done {
-					// This is a late span that we must discard because the request was
-					// already completed.
-					return
-				}
-				encSp, err := tracing.EncodeRawSpan(&rawSpan, nil)
-				if err != nil {
-					log.Warning(ctx, err)
-				}
-				snowball.collectedSpans = append(snowball.collectedSpans, encSp)
-			}
-
-			if sp, err = tracing.JoinOrNewSnowball(opName, args.TraceContext, recorder); err != nil {
-				return err
-			}
-		}
-		defer sp.Finish()
-		traceCtx := opentracing.ContextWithSpan(ctx, sp)
-		log.Event(traceCtx, args.Summary())
+		opCtx, finishSpan := n.setupSpanForIncomingRPC(ctx, args.TraceContext)
+		defer finishSpan(br)
+		log.Event(opCtx, args.Summary())
 
 		tStart := timeutil.Now()
 		var pErr *roachpb.Error
-		br, pErr = n.stores.Send(traceCtx, *args)
+		br, pErr = n.stores.Send(opCtx, *args)
 		if pErr != nil {
 			br = &roachpb.BatchResponse{}
-			log.ErrEventf(traceCtx, "%T", pErr.GetDetail())
+			log.ErrEventf(opCtx, "%T", pErr.GetDetail())
 		}
 		if br.Error != nil {
 			panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
@@ -861,14 +818,6 @@ func (n *Node) batchInternal(
 	}); err != nil {
 		return nil, err
 	}
-
-	if snowball != nil {
-		snowball.Lock()
-		br.CollectedSpans = snowball.collectedSpans
-		snowball.done = true
-		snowball.Unlock()
-	}
-
 	return br, nil
 }
 
@@ -897,6 +846,69 @@ func (n *Node) Batch(
 		br.Error = roachpb.NewError(err)
 	}
 	return br, nil
+}
+
+// setupSpanForIncomingRPC takes a context and returns a derived context with a
+// new span in it. Depending on input context, that span might be a root span or
+// a child span. If it is a child span, it might be a child span of a local or a
+// remote span. Note that supporting both the "child of local span" and "child
+// of remote span" cases are important, as this RPC can be called either through
+// the network of directly if the caller is local.
+//
+// remoteTranceContext represents the span context of this remote call. Can be
+// nil if this call is not remote.
+//
+// It returns the derived context and a cleanup function to be called when
+// servicing the RPC is done. The cleanup function will close the span and, in
+// case the span was the child of a remote span and "snowball tracing" was
+// enabled on that parent span, it serializes the local trace into the
+// BatchResponse.
+func (n *Node) setupSpanForIncomingRPC(
+	ctx context.Context, remoteTraceContext *tracing.SpanContextCarrier,
+) (context.Context, func(br *roachpb.BatchResponse)) {
+	const opName = "node.Batch"
+	tr := n.storeCfg.AmbientCtx.Tracer
+	opCtx := n.storeCfg.AmbientCtx.AnnotateCtx(ctx)
+	isSnowball := false
+	if sp := opentracing.SpanFromContext(opCtx); sp != nil {
+		// Child span of local parent.
+		opCtx, _ = tracing.ChildSpan(ctx, opName)
+	} else {
+		if remoteTraceContext == nil {
+			// Root span.
+			opCtx = opentracing.ContextWithSpan(opCtx, tr.StartSpan(opName))
+		} else {
+			// Child span of remote parent.
+			var err error
+			opCtx, err = tracing.JoinRemoteTrace(opCtx, tr, *remoteTraceContext, opName)
+			if err == nil {
+				isSnowball = true
+			} else {
+				// Fallback to root span.
+				log.Warningf(opCtx, "failed to join remote trace: %s", err)
+				opCtx = opentracing.ContextWithSpan(opCtx, tr.StartSpan(opName))
+			}
+		}
+	}
+
+	finishSpan := func(br *roachpb.BatchResponse) {
+		opentracing.SpanFromContext(opCtx).Finish()
+		// If this is a "snowball trace", we'll need to encode all the recorded
+		// spans in the BatchResponse at the end of the request.
+		if isSnowball {
+			// Encode all the spans into the BatchResponse.
+			recorder := tracing.RecorderFromCtx(opCtx)
+			recorder.Done()
+			for _, rawSpan := range recorder.GetSpans() {
+				encSp, err := tracing.EncodeRawSpan(&rawSpan, nil)
+				if err != nil {
+					log.Warning(ctx, err)
+				}
+				br.CollectedSpans = append(br.CollectedSpans, encSp)
+			}
+		}
+	}
+	return opCtx, finishSpan
 }
 
 var growStackGlobal = false

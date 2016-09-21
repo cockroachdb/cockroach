@@ -177,6 +177,22 @@ func (p *planner) ctx() context.Context {
 	return p.session.Ctx()
 }
 
+// hijackCtx changes the current transaction's context to the provided one and
+// returns a cleanup function to be used to restore the original context when
+// the hijack is no longer needed.
+// TODO(andrei): delete this when EXPLAIN(TRACE) goes away
+func (p *planner) hijackCtx(ctx context.Context) func() {
+	if p.session.TxnState.State != Open {
+		// This hijacking is dubious to begin with. Let's at least assert it's being
+		// done when the TxnState is in an expected state. In particular, if the
+		// state would be NoTxn, then we'd need to hijack session.Ctx instead of the
+		// txnState's context.
+		log.Fatalf(p.session.Ctx(), "can only hijack while a SQL txn is Open. txnState: %+v",
+			&p.session.TxnState)
+	}
+	return p.session.TxnState.hijackCtx(ctx)
+}
+
 // setTxn implements the queryRunner interface.
 func (p *planner) setTxn(txn *client.Txn) {
 	p.txn = txn
