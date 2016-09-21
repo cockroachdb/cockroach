@@ -602,7 +602,6 @@ func (r *RocksDB) GetSSTables() SSTableInfos {
 	// We can't index into tables because it is a pointer, not a slice. The
 	// hackery below treats the pointer as an array and then constructs a slice
 	// from it.
-	const maxLen = 0x7fffffff
 	tableSlice := (*[maxLen]C.DBSSTable)(unsafe.Pointer(tables))[:n:n]
 
 	res := make(SSTableInfos, n)
@@ -1308,7 +1307,6 @@ func cSliceToUnsafeGoBytes(s C.DBSlice) []byte {
 	// Go limits arrays to a length that will fit in a (signed) 32-bit
 	// integer. Fall back to using cSliceToGoBytes if our slice is
 	// larger.
-	const maxLen = 0x7fffffff
 	if s.len > maxLen {
 		return cSliceToGoBytes(s)
 	}
