@@ -331,10 +331,10 @@ func (bq *baseQueue) requiresSplit(cfg config.SystemConfig, repl *Replica) bool 
 	if bq.acceptsUnsplitRanges {
 		return false
 	}
-	// If there's no store (as is the case in some narrow unit tests), or if
-	// the store's split queue is disabled, the "required" split will never
-	// come. In that case, pretend we don't require the split.
-	if store := repl.store; store == nil || store.splitQueue.Disabled() {
+	// If there's no store (as is the case in some narrow unit tests),
+	// the "required" split will never come. In that case, pretend we
+	// don't require the split.
+	if store := repl.store; store == nil {
 		return false
 	}
 	desc := repl.Desc()
