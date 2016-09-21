@@ -565,6 +565,10 @@ type StoreTestingKnobs struct {
 	DisableRefreshReasonTicks bool
 	// DisableProcessRaft disables the process raft loop.
 	DisableProcessRaft bool
+	// ReplicateQueueAcceptsUnsplit allows the replication queue to
+	// process ranges that need to be split, for use in tests that use
+	// the replication queue but disable the split queue.
+	ReplicateQueueAcceptsUnsplit bool
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}

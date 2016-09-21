@@ -58,7 +58,7 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator, cloc
 	rq.baseQueue = makeBaseQueue("replicate", rq, store, g, queueConfig{
 		maxSize:              replicateQueueMaxSize,
 		needsLease:           true,
-		acceptsUnsplitRanges: false,
+		acceptsUnsplitRanges: store.TestingKnobs().ReplicateQueueAcceptsUnsplit,
 		successes:            store.metrics.ReplicateQueueSuccesses,
 		failures:             store.metrics.ReplicateQueueFailures,
 		pending:              store.metrics.ReplicateQueuePending,
