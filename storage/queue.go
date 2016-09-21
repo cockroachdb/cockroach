@@ -498,7 +498,9 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 
 	sp := repl.store.Tracer().StartSpan(bq.name)
 	defer sp.Finish()
-	ctx := opentracing.ContextWithSpan(context.Background(), sp)
+	// Putting a span in ctx means that events will no longer go to the event log.
+	// Use bq.ctx for events that are intended for the event log.
+	ctx := opentracing.ContextWithSpan(bq.ctx, sp)
 	ctx = repl.logContext(ctx)
 	ctx, cancel := context.WithTimeout(ctx, bq.processTimeout)
 	defer cancel()

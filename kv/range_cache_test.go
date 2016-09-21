@@ -107,7 +107,12 @@ func (db *testDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return nil, nil
 }
 
-func (db *testDescriptorDB) RangeLookup(key roachpb.RKey, _ *roachpb.RangeDescriptor, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+func (db *testDescriptorDB) RangeLookup(
+	_ context.Context,
+	key roachpb.RKey,
+	_ *roachpb.RangeDescriptor,
+	useReverseScan bool,
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 	<-db.pauseChan
 	atomic.AddInt64(&db.lookupCount, 1)
 	return db.getDescriptors(stripMeta(key), useReverseScan)
