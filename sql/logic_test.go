@@ -438,14 +438,6 @@ func (t *logicTest) setUser(user string) func() {
 	return cleanupFunc
 }
 
-func (t *logicTest) run(path string) {
-	defer t.close()
-	t.setup()
-	if err := t.processTestFile(path); err != nil {
-		t.Error(err)
-	}
-}
-
 func (t *logicTest) setup() {
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
@@ -1076,21 +1068,23 @@ func TestLogic(t *testing.T) {
 	total := 0
 	totalFail := 0
 	totalUnsupported := 0
-	verbose := testing.Verbose() || log.V(1)
 	lastProgress := timeutil.Now()
 	l := logicTest{
 		T:               t,
-		verbose:         verbose,
+		verbose:         testing.Verbose() || log.V(1),
 		perErrorSummary: make(map[string][]string),
 	}
 	if *printErrorSummary {
 		defer l.printErrorSummary()
 	}
-	for _, p := range paths {
-		if verbose {
-			fmt.Printf("--- input: %s\n", p)
-		}
-		l.run(p)
+	for _, path := range paths {
+		t.Run(path, func(_ *testing.T) {
+			defer l.close()
+			l.setup()
+			if err := l.processTestFile(path); err != nil {
+				t.Error(err)
+			}
+		})
 
 		total += l.progress
 		totalFail += l.failures
