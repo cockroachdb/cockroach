@@ -241,8 +241,7 @@ func (c *cluster) lookupRange(nodeIdx int, key roachpb.Key) (*roachpb.RangeDescr
 		Span: roachpb.Span{
 			Key: keys.RangeMetaKey(keys.MustAddr(key)),
 		},
-		MaxRanges:       1,
-		ConsiderIntents: false,
+		MaxRanges: 1,
 	}
 	sender := c.clients[nodeIdx].GetSender()
 	resp, pErr := client.SendWrapped(sender, nil, req)

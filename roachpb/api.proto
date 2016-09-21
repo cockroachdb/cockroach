@@ -253,7 +253,7 @@ message ChangeFrozenResponse {
   // a Replica on which the command should execute, even when already
   // frozen).
   map<int32, int32> stores = 4 [(gogoproto.nullable) = false,
-      (gogoproto.castkey) = "StoreID", (gogoproto.castvalue) = "NodeID" ];
+      (gogoproto.castkey) = "StoreID", (gogoproto.castvalue) = "NodeID"];
 }
 
 // A BeginTransactionRequest is the argument to the BeginTransaction() method.
@@ -381,11 +381,7 @@ message AdminTransferLeaseResponse {
 message RangeLookupRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional int32 max_ranges = 2 [(gogoproto.nullable) = false];
-  // consider_intents indicates whether or not intents encountered
-  // while looking up the range info should be returned to the caller.
-  // This is intended to be used when retrying due to range addressing
-  // errors.
-  optional bool consider_intents = 3 [(gogoproto.nullable) = false];
+  reserved 3;
   // Use a reverse scan to pre-fill the range descriptor cache instead
   // of an ascending scan.
   optional bool reverse = 4 [(gogoproto.nullable) = false];
