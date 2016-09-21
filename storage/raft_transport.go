@@ -530,9 +530,25 @@ func (t *RaftTransport) processQueue(
 		case err := <-errCh:
 			return err
 		case req := <-ch:
-			batch.Requests = batch.Requests[:0]
 			batch.Requests = append(batch.Requests, *req)
+
+			if req.Message.Type != raftpb.MsgSnap {
+				// Pull off as many queued requests as possible.
+				//
+				// TODO(peter): Think about limiting the size of the batch we send.
+				for done := false; !done; {
+					select {
+					case req := <-ch:
+						batch.Requests = append(batch.Requests, *req)
+					default:
+						done = true
+					}
+				}
+			}
+
 			err := stream.Send(batch)
+			batch.Requests = batch.Requests[:0]
+
 			atomic.AddInt64(&stats.clientSent, 1)
 			if req.Message.Type == raftpb.MsgSnap {
 				select {
