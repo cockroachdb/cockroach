@@ -179,8 +179,7 @@ func LookupRange(ds *kv.DistSender, key roachpb.Key) (roachpb.RangeDescriptor, e
 		Span: roachpb.Span{
 			Key: keys.RangeMetaKey(keys.MustAddr(key)),
 		},
-		MaxRanges:       1,
-		ConsiderIntents: false,
+		MaxRanges: 1,
 	}
 	resp, pErr := client.SendWrapped(ds, nil, &rangeLookupReq)
 	if pErr != nil {

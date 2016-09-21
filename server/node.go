@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"strconv"
 	"time"
 
 	"google.golang.org/grpc/credentials"
@@ -139,8 +138,8 @@ type Node struct {
 
 // allocateNodeID increments the node id generator key to allocate
 // a new, unique node id.
-func allocateNodeID(db *client.DB) (roachpb.NodeID, error) {
-	r, err := db.Inc(context.TODO(), keys.NodeIDGenerator, 1)
+func allocateNodeID(ctx context.Context, db *client.DB) (roachpb.NodeID, error) {
+	r, err := db.Inc(ctx, keys.NodeIDGenerator, 1)
 	if err != nil {
 		return 0, errors.Errorf("unable to allocate node ID: %s", err)
 	}
@@ -150,8 +149,10 @@ func allocateNodeID(db *client.DB) (roachpb.NodeID, error) {
 // allocateStoreIDs increments the store id generator key for the
 // specified node to allocate "inc" new, unique store ids. The
 // first ID in a contiguous range is returned on success.
-func allocateStoreIDs(nodeID roachpb.NodeID, inc int64, db *client.DB) (roachpb.StoreID, error) {
-	r, err := db.Inc(context.TODO(), keys.StoreIDGenerator, inc)
+func allocateStoreIDs(
+	ctx context.Context, nodeID roachpb.NodeID, inc int64, db *client.DB,
+) (roachpb.StoreID, error) {
+	r, err := db.Inc(ctx, keys.StoreIDGenerator, inc)
 	if err != nil {
 		return 0, errors.Errorf("unable to allocate %d store IDs for node %d: %s", inc, nodeID, err)
 	}
@@ -221,12 +222,12 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics kv.TxnMetrics) (uuid.U
 
 		// Initialize node and store ids.  Only initialize the node once.
 		if i == 0 {
-			if nodeID, err := allocateNodeID(ctx.DB); nodeID != sIdent.NodeID || err != nil {
+			if nodeID, err := allocateNodeID(ctx.Ctx, ctx.DB); nodeID != sIdent.NodeID || err != nil {
 				return uuid.UUID{}, errors.Errorf("expected to initialize node id allocator to %d, got %d: %s",
 					sIdent.NodeID, nodeID, err)
 			}
 		}
-		if storeID, err := allocateStoreIDs(sIdent.NodeID, 1, ctx.DB); storeID != sIdent.StoreID || err != nil {
+		if storeID, err := allocateStoreIDs(ctx.Ctx, sIdent.NodeID, 1, ctx.DB); storeID != sIdent.StoreID || err != nil {
 			return uuid.UUID{}, errors.Errorf("expected to initialize store id allocator to %d, got %d: %s",
 				sIdent.StoreID, storeID, err)
 		}
@@ -266,6 +267,14 @@ func (n *Node) Ctx() context.Context {
 	return n.ctx.Ctx
 }
 
+// logContext adds the node log tag to a context. Used to
+// personalize an operation context with this Server's identity.
+func (n *Node) logContext(ctx context.Context) context.Context {
+	// Copy the log tags from the base context. This allows us to opaquely set the
+	// log tags that were passed by the upper layers.
+	return log.WithLogTagsFromCtx(ctx, n.ctx.Ctx)
+}
+
 // initDescriptor initializes the node descriptor with the server
 // address and the node attributes.
 func (n *Node) initDescriptor(addr net.Addr, attrs roachpb.Attributes) {
@@ -293,7 +302,7 @@ func (n *Node) initNodeID(id roachpb.NodeID) {
 	}
 	var err error
 	if id == 0 {
-		id, err = allocateNodeID(n.ctx.DB)
+		id, err = allocateNodeID(n.Ctx(), n.ctx.DB)
 		if err != nil {
 			log.Fatal(n.Ctx(), err)
 		}
@@ -344,7 +353,7 @@ func (n *Node) start(
 	n.startedAt = n.ctx.Clock.Now().WallTime
 
 	n.startComputePeriodicMetrics(n.stopper)
-	n.startGossip(ctx, n.stopper)
+	n.startGossip(n.stopper)
 
 	// Record node started event.
 	n.recordJoinEvent()
@@ -502,7 +511,7 @@ func (n *Node) bootstrapStores(ctx context.Context, bootstraps []*storage.Store,
 	// Bootstrap all waiting stores by allocating a new store id for
 	// each and invoking store.Bootstrap() to persist.
 	inc := int64(len(bootstraps))
-	firstID, err := allocateStoreIDs(n.Descriptor.NodeID, inc, n.ctx.DB)
+	firstID, err := allocateStoreIDs(n.Ctx(), n.Descriptor.NodeID, inc, n.ctx.DB)
 	if err != nil {
 		log.Fatal(ctx, err)
 	}
@@ -529,7 +538,7 @@ func (n *Node) bootstrapStores(ctx context.Context, bootstraps []*storage.Store,
 	}
 	// write a new status summary after all stores have been bootstrapped; this
 	// helps the UI remain responsive when new nodes are added.
-	if err := n.writeSummaries(); err != nil {
+	if err := n.writeSummaries(ctx); err != nil {
 		log.Warningf(ctx, "error writing node summary after store bootstrap: %s", err)
 	}
 }
@@ -565,8 +574,9 @@ func (n *Node) connectGossip() {
 
 // startGossip loops on a periodic ticker to gossip node-related
 // information. Starts a goroutine to loop until the node is closed.
-func (n *Node) startGossip(ctx context.Context, stopper *stop.Stopper) {
+func (n *Node) startGossip(stopper *stop.Stopper) {
 	stopper.RunWorker(func() {
+		ctx := n.Ctx()
 		// This should always return immediately and acts as a sanity check that we
 		// don't try to gossip before we're connected.
 		select {
@@ -654,20 +664,21 @@ func (n *Node) computePeriodicMetrics(tick int) error {
 // startWriteSummaries begins periodically persisting status summaries for the
 // node and its stores.
 func (n *Node) startWriteSummaries(frequency time.Duration) {
+	ctx := log.WithLogTag(n.Ctx(), "summaries", nil)
 	// Immediately record summaries once on server startup.
 	n.stopper.RunWorker(func() {
 		// Write a status summary immediately; this helps the UI remain
 		// responsive when new nodes are added.
-		if err := n.writeSummaries(); err != nil {
-			log.Warningf(n.Ctx(), "error recording initial status summaries: %s", err)
+		if err := n.writeSummaries(ctx); err != nil {
+			log.Warningf(ctx, "error recording initial status summaries: %s", err)
 		}
 		ticker := time.NewTicker(frequency)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				if err := n.writeSummaries(); err != nil {
-					log.Warningf(n.Ctx(), "error recording status summaries: %s", err)
+				if err := n.writeSummaries(ctx); err != nil {
+					log.Warningf(ctx, "error recording status summaries: %s", err)
 				}
 			case <-n.stopper.ShouldStop():
 				return
@@ -678,7 +689,7 @@ func (n *Node) startWriteSummaries(frequency time.Duration) {
 
 // writeSummaries retrieves status summaries from the supplied
 // NodeStatusRecorder and persists them to the cockroach data store.
-func (n *Node) writeSummaries() error {
+func (n *Node) writeSummaries(ctx context.Context) error {
 	var err error
 	if runErr := n.stopper.RunTask(func() {
 		nodeStatus := n.recorder.GetStatusSummary()
@@ -691,15 +702,15 @@ func (n *Node) writeSummaries() error {
 			// node status, writing one of these every 10s will generate
 			// more versions than will easily fit into a range over the
 			// course of a day.
-			if err = n.ctx.DB.PutInline(n.Ctx(), key, nodeStatus); err != nil {
+			if err = n.ctx.DB.PutInline(ctx, key, nodeStatus); err != nil {
 				return
 			}
 			if log.V(2) {
 				statusJSON, err := json.Marshal(nodeStatus)
 				if err != nil {
-					log.Errorf(n.Ctx(), "error marshaling nodeStatus to json: %s", err)
+					log.Errorf(ctx, "error marshaling nodeStatus to json: %s", err)
 				}
-				log.Infof(n.Ctx(), "node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
+				log.Infof(ctx, "node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
 			}
 		}
 	}); runErr != nil {
@@ -749,6 +760,7 @@ func (n *Node) recordJoinEvent() {
 func (n *Node) Batch(
 	ctx context.Context, args *roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, err error) {
+	ctx = n.logContext(ctx)
 	// TODO(marc,bdarnell): this code is duplicated in server/node.go,
 	// which should be fixed.
 	defer func() {
@@ -816,14 +828,14 @@ func (n *Node) Batch(
 		}
 		defer sp.Finish()
 		traceCtx := opentracing.ContextWithSpan(ctx, sp)
-		log.Eventf(traceCtx, "node "+strconv.Itoa(int(n.Descriptor.NodeID))) // could save allocs here.
+		log.Event(traceCtx, args.Summary())
 
 		tStart := timeutil.Now()
 		var pErr *roachpb.Error
 		br, pErr = n.stores.Send(traceCtx, *args)
 		if pErr != nil {
 			br = &roachpb.BatchResponse{}
-			log.Eventf(traceCtx, "error: %T", pErr.GetDetail())
+			log.ErrEventf(traceCtx, "%T", pErr.GetDetail())
 		}
 		if br.Error != nil {
 			panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
