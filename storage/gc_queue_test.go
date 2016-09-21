@@ -273,7 +273,7 @@ func TestGCQueueProcess(t *testing.T) {
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(context.Background(), tc.clock.Now(), tc.rng, cfg); err != nil {
+	if err := gcQ.process(context.Background(), tc.clock.Now(), tc.rng.AsRef(), cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -489,7 +489,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		t.Fatal("config not set")
 	}
 
-	if err := gcQ.process(context.Background(), tc.clock.Now(), tc.rng, cfg); err != nil {
+	if err := gcQ.process(context.Background(), tc.clock.Now(), tc.rng.AsRef(), cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -601,7 +601,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(context.Background(), tc.clock.Now(), tc.rng, cfg); err != nil {
+	if err := gcQ.process(context.Background(), tc.clock.Now(), tc.rng.AsRef(), cfg); err != nil {
 		t.Fatal(err)
 	}
 

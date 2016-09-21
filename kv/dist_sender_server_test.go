@@ -1230,9 +1230,17 @@ func TestRequestToUninitializedRange(t *testing.T) {
 		t.Fatal(err)
 	}
 	util.SucceedsSoon(t, func() error {
-		if replica, err := store1.GetReplica(rangeID); err != nil {
+		rp, err := store1.GetReplica(rangeID)
+		if err != nil {
 			return errors.Errorf("failed to look up replica: %s", err)
-		} else if replica.IsInitialized() {
+		}
+		replica, release, err := rp.Acquire()
+		defer release()
+		if err != nil {
+			return err
+		}
+
+		if replica.IsInitialized() {
 			return errors.Errorf("expected replica to be uninitialized")
 		}
 		return nil

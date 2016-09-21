@@ -200,7 +200,7 @@ func TestStoreMetrics(t *testing.T) {
 
 	// Replicate the "right" range to the other stores.
 	replica := mtc.stores[0].LookupReplica(roachpb.RKey("z"), nil)
-	mtc.replicateRange(replica.RangeID, 1, 2)
+	mtc.replicateRange(replica.Desc().RangeID, 1, 2)
 
 	// Verify stats on store1 after replication.
 	verifyStats(t, mtc, 1)
@@ -230,7 +230,7 @@ func TestStoreMetrics(t *testing.T) {
 	checkCounter(t, mtc.stores[0].Metrics().ReplicaCount, 2)
 
 	// Unreplicate range from the first store.
-	mtc.unreplicateRange(replica.RangeID, 0)
+	mtc.unreplicateRange(replica.Desc().RangeID, 0)
 
 	// Force GC Scan on store 0 in order to fully remove range.
 	mtc.stores[1].ForceReplicaGCScanAndProcess()

@@ -177,9 +177,9 @@ func getBehindIndex(raftStatus *raft.Status) uint64 {
 // is true only if the replica is the raft leader and if the total number of
 // the range's raft log's stale entries exceeds RaftLogQueueStaleThreshold.
 func (*raftLogQueue) shouldQueue(
-	now hlc.Timestamp, r *Replica, _ config.SystemConfig,
+	now hlc.Timestamp, rpl *Replica, _ config.SystemConfig,
 ) (shouldQ bool, priority float64) {
-	truncatableIndexes, _, err := getTruncatableIndexes(r)
+	truncatableIndexes, _, err := getTruncatableIndexes(rpl)
 	if err != nil {
 		log.Warning(context.TODO(), err)
 		return false, 0
@@ -194,13 +194,20 @@ func (*raftLogQueue) shouldQueue(
 func (rlq *raftLogQueue) process(
 	ctx context.Context,
 	now hlc.Timestamp,
-	r *Replica,
+	ref *ReplicaRef,
 	_ config.SystemConfig,
 ) error {
-	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(r)
+	repl, release, err := ref.Acquire()
+	release()
 	if err != nil {
 		return err
 	}
+	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(repl)
+	if err != nil {
+		return err
+	}
+
+	desc := repl.Desc()
 
 	// Can and should the raft logs be truncated?
 	if truncatableIndexes >= RaftLogQueueStaleThreshold {
@@ -208,9 +215,9 @@ func (rlq *raftLogQueue) process(
 			oldestIndex-truncatableIndexes, oldestIndex)
 		b := &client.Batch{}
 		b.AddRawRequest(&roachpb.TruncateLogRequest{
-			Span:    roachpb.Span{Key: r.Desc().StartKey.AsRawKey()},
+			Span:    roachpb.Span{Key: desc.StartKey.AsRawKey()},
 			Index:   oldestIndex,
-			RangeID: r.RangeID,
+			RangeID: desc.RangeID,
 		})
 		return rlq.db.Run(ctx, b)
 	}
