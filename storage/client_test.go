@@ -764,7 +764,7 @@ func (m *multiTestContext) findStartKeyLocked(rangeID roachpb.RangeID) roachpb.R
 	// key never changes.
 	for _, s := range m.stores {
 		rep, err := s.GetReplica(rangeID)
-		if err == nil && rep.IsInitialized() {
+		if err == nil && rep.Desc().IsInitialized() {
 			return rep.Desc().StartKey
 		}
 	}
@@ -801,8 +801,7 @@ func (m *multiTestContext) restart() {
 	}
 }
 
-// replicateRange replicates the given range onto the given stores.
-func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int) {
+func (m *multiTestContext) tryReplicateRange(rangeID roachpb.RangeID, dests ...int) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -816,16 +815,22 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 		// not.
 		var desc roachpb.RangeDescriptor
 		if err := m.dbs[0].GetProto(context.TODO(), keys.RangeDescriptorKey(startKey), &desc); err != nil {
-			m.t.Fatal(err)
+			return err
 		}
 
-		rep, err := m.findMemberStoreLocked(desc).GetReplica(rangeID)
+		ref, err := m.findMemberStoreLocked(desc).GetReplica(rangeID)
 		if err != nil {
-			m.t.Fatal(err)
+			return err
+		}
+
+		rep, release, err := ref.Acquire()
+		defer release()
+		if err != nil {
+			return err
 		}
 
 		if dest >= len(m.stores) {
-			m.t.Fatalf("store index %d out of range; there's only %d of them", dest, len(m.stores))
+			return errors.Errorf("store index %d out of range; there's only %d of them", dest, len(m.stores))
 		}
 
 		if err := rep.ChangeReplicas(
@@ -837,7 +842,7 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 			},
 			&desc,
 		); err != nil {
-			m.t.Fatal(err)
+			return err
 		}
 	}
 
@@ -852,6 +857,14 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 		}
 		return nil
 	})
+	return nil
+}
+
+// replicateRange replicates the given range onto the given stores.
+func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int) {
+	if err := m.tryReplicateRange(rangeID, dests...); err != nil {
+		m.t.Fatal(err)
+	}
 }
 
 // unreplicateRange removes a replica of the range from the dest store.
@@ -866,7 +879,13 @@ func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
 		m.t.Fatal(err)
 	}
 
-	rep, err := m.findMemberStoreLocked(desc).GetReplica(rangeID)
+	ref, err := m.findMemberStoreLocked(desc).GetReplica(rangeID)
+	if err != nil {
+		m.t.Fatal(err)
+	}
+
+	rep, release, err := ref.Acquire()
+	defer release()
 	if err != nil {
 		m.t.Fatal(err)
 	}
@@ -934,8 +953,8 @@ func (m *multiTestContext) expireLeases() {
 
 // getRaftLeader returns the replica that is the current raft leader for the
 // specified rangeID.
-func (m *multiTestContext) getRaftLeader(rangeID roachpb.RangeID) *storage.Replica {
-	var raftLeaderRepl *storage.Replica
+func (m *multiTestContext) getRaftLeader(rangeID roachpb.RangeID) *storage.ReplicaRef {
+	var raftLeaderRepl *storage.ReplicaRef
 	util.SucceedsSoonDepth(1, m.t, func() error {
 		m.mu.RLock()
 		defer m.mu.RUnlock()
