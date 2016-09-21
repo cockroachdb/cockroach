@@ -116,7 +116,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	store.SetRaftLogQueueActive(false)
 
 	// Test on a new range which should not have a raft group yet.
-	rngNew := createReplica(store, 100, roachpb.RKey("a"), roachpb.RKey("c"))
+	rngNew := createReplica(store, 100, roachpb.RKey("a"), roachpb.RKey("c")).AsRef()
 	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(rngNew)
 	if err != nil {
 		t.Errorf("expected no error, got %s", err)
@@ -128,7 +128,13 @@ func TestGetTruncatableIndexes(t *testing.T) {
 		t.Errorf("expected 0 for oldest index, got %d", oldestIndex)
 	}
 
-	r, err := store.GetReplica(1)
+	ref, err := store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r, release, err := ref.Acquire()
+	defer release()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +155,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 		}
 	}
 
-	truncatableIndexes, oldestIndex, err = getTruncatableIndexes(r)
+	truncatableIndexes, oldestIndex, err = getTruncatableIndexes(ref)
 	if err != nil {
 		t.Errorf("expected no error, got %s", err)
 	}
@@ -208,7 +214,13 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 
 	store.SetReplicaScannerActive(false)
 
-	r, err := store.GetReplica(1)
+	ref, err := store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r, release, err := ref.Acquire()
+	defer release()
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -764,7 +764,7 @@ func (m *multiTestContext) findStartKeyLocked(rangeID roachpb.RangeID) roachpb.R
 	// key never changes.
 	for _, s := range m.stores {
 		rep, err := s.GetReplica(rangeID)
-		if err == nil && rep.IsInitialized() {
+		if err == nil && rep.Desc().IsInitialized() {
 			return rep.Desc().StartKey
 		}
 	}
@@ -819,7 +819,13 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 			m.t.Fatal(err)
 		}
 
-		rep, err := m.findMemberStoreLocked(desc).GetReplica(rangeID)
+		ref, err := m.findMemberStoreLocked(desc).GetReplica(rangeID)
+		if err != nil {
+			m.t.Fatal(err)
+		}
+
+		rep, release, err := ref.Acquire()
+		defer release()
 		if err != nil {
 			m.t.Fatal(err)
 		}
@@ -866,7 +872,13 @@ func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
 		m.t.Fatal(err)
 	}
 
-	rep, err := m.findMemberStoreLocked(desc).GetReplica(rangeID)
+	ref, err := m.findMemberStoreLocked(desc).GetReplica(rangeID)
+	if err != nil {
+		m.t.Fatal(err)
+	}
+
+	rep, release, err := ref.Acquire()
+	defer release()
 	if err != nil {
 		m.t.Fatal(err)
 	}
@@ -934,8 +946,8 @@ func (m *multiTestContext) expireLeases() {
 
 // getRaftLeader returns the replica that is the current raft leader for the
 // specified rangeID.
-func (m *multiTestContext) getRaftLeader(rangeID roachpb.RangeID) *storage.Replica {
-	var raftLeaderRepl *storage.Replica
+func (m *multiTestContext) getRaftLeader(rangeID roachpb.RangeID) storage.ReplicaRef {
+	var raftLeaderRepl storage.ReplicaRef
 	util.SucceedsSoonDepth(1, m.t, func() error {
 		m.mu.RLock()
 		defer m.mu.RUnlock()
