@@ -461,7 +461,7 @@ func (t *RaftTransport) connectAndProcess(
 		client := NewMultiRaftClient(conn)
 		ctx, cancel := context.WithCancel(context.TODO())
 		defer cancel()
-		stream, err := client.RaftMessage(ctx)
+		stream, err := client.RaftMessageBatch(ctx)
 		if err != nil {
 			return err
 		}
@@ -486,7 +486,7 @@ func (t *RaftTransport) processQueue(
 	nodeID roachpb.NodeID,
 	ch chan *RaftMessageRequest,
 	stats *raftTransportStats,
-	stream MultiRaft_RaftMessageClient,
+	stream MultiRaft_RaftMessageBatchClient,
 ) error {
 	errCh := make(chan error, 1)
 
@@ -518,6 +518,7 @@ func (t *RaftTransport) processQueue(
 
 	var raftIdleTimer timeutil.Timer
 	defer raftIdleTimer.Stop()
+	batch := &RaftMessageRequestBatch{}
 	for {
 		raftIdleTimer.Reset(raftIdleTimeout)
 		select {
@@ -529,7 +530,9 @@ func (t *RaftTransport) processQueue(
 		case err := <-errCh:
 			return err
 		case req := <-ch:
-			err := stream.Send(req)
+			batch.Requests = batch.Requests[:0]
+			batch.Requests = append(batch.Requests, *req)
+			err := stream.Send(batch)
 			atomic.AddInt64(&stats.clientSent, 1)
 			if req.Message.Type == raftpb.MsgSnap {
 				select {
