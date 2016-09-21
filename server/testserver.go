@@ -336,7 +336,7 @@ func (ts *TestServer) ServingPort() (string, error) {
 
 // WriteSummaries implements TestServerInterface.
 func (ts *TestServer) WriteSummaries() error {
-	return ts.node.writeSummaries()
+	return ts.node.writeSummaries(context.TODO())
 }
 
 // AdminURL implements TestServerInterface.
