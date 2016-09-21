@@ -166,6 +166,10 @@ func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 
 	// Fork the original context as this async send may outlast the
 	// caller's context.
+	// TODO(andrei): It's sketchy that these spans can outlast the caller's
+	// context. Instead, DistSender should wait on all the RPCs that it sends and
+	// it should also have the ability to cancel them when it received the first
+	// result.
 	ctx, sp := tracing.ForkCtxSpan(ctx, "grpcTransport SendNext")
 	go func() {
 		defer tracing.FinishSpan(sp)

@@ -94,7 +94,7 @@ func TestExplainTrace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expParts := []string{"coordinator", "node.Batch"}
+	expParts := []string{"coordinator", "grpcTransport SendNext", "node.Batch"}
 	var parts []string
 
 	pretty := rowsToStrings(rows)

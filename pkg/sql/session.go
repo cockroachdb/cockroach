@@ -417,6 +417,26 @@ func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) {
 	}
 }
 
+// hijackCtx changes the transaction's context to the provided one and returns a
+// cleanup function to be used to restore the original context when the hijack
+// is no longer needed.
+// TODO(andrei): delete this when EXPLAIN(TRACE) goes away.
+func (ts *txnState) hijackCtx(ctx context.Context) func() {
+	origCtx := ts.Ctx
+	ts.Ctx = ctx
+	if ts.txn != nil {
+		// TODO(andrei): We shouldn't need to hijack the txn's Context like this
+		// because the txn shouldn't have a member Context to begin with.
+		ts.txn.Context = ctx
+	}
+	return func() {
+		ts.Ctx = origCtx
+		if ts.txn != nil {
+			ts.txn.Context = origCtx
+		}
+	}
+}
+
 type schemaChangerCollection struct {
 	// A schemaChangerCollection accumulates schemaChangers from potentially
 	// multiple user requests, part of the same SQL transaction. We need to

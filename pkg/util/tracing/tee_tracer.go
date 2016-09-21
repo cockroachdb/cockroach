@@ -21,7 +21,8 @@ import (
 
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/opentracing/opentracing-go/log"
+	otlog "github.com/opentracing/opentracing-go/log"
+	"github.com/pkg/errors"
 )
 
 // TeeTracer is an opentracing.Tracer that sends events to multiple Tracers.
@@ -35,7 +36,7 @@ var _ opentracing.Tracer = &TeeTracer{}
 //
 // Note that only the span from the first tracer is used for serialization
 // purposes (Inject/Extract).
-func NewTeeTracer(tracers ...opentracing.Tracer) opentracing.Tracer {
+func NewTeeTracer(tracers ...opentracing.Tracer) *TeeTracer {
 	return &TeeTracer{tracers: tracers}
 }
 
@@ -61,7 +62,7 @@ func (t *TeeTracer) StartSpan(
 		o.Apply(&sso)
 	}
 
-	spans := make([]opentracing.Span, len(t.tracers))
+	spans := make([]spanWithOpt, len(t.tracers))
 	for i := 0; i < len(t.tracers); i++ {
 		o := option(sso)
 		// Replace any references to the TeeSpanContext with the corresponding
@@ -71,7 +72,31 @@ func (t *TeeTracer) StartSpan(
 			tsc := sso.References[j].ReferencedContext.(TeeSpanContext)
 			o.References[j].ReferencedContext = tsc.contexts[i]
 		}
-		spans[i] = t.tracers[i].StartSpan(operationName, &o)
+		spans[i] = spanWithOpt{
+			Span:  t.tracers[i].StartSpan(operationName, &o),
+			Owned: true}
+	}
+	return &TeeSpan{tracer: t, spans: spans}
+}
+
+type spanWithOpt struct {
+	opentracing.Span
+	// If Owned is set, the span needs to be Finish()ed by the TeeSpan that
+	// contains it.
+	Owned bool
+}
+
+// CreateSpanFrom creates a TeeSpan that will contains the passed-in spans.
+// Depending on span.Owner, the TeeSpan takes ownership of some of the child
+// spans.
+func (t *TeeTracer) CreateSpanFrom(spans ...spanWithOpt) *TeeSpan {
+	if len(spans) != len(t.tracers) {
+		panic("non-matching spans for TeeTracer")
+	}
+	for i, tracer := range t.tracers {
+		if tracer != spans[i].Tracer() {
+			panic(fmt.Sprintf("non-matching span at position: %d", i))
+		}
 	}
 	return &TeeSpan{tracer: t, spans: spans}
 }
@@ -82,7 +107,7 @@ func (t *TeeTracer) Inject(
 ) error {
 	tsc, ok := sc.(TeeSpanContext)
 	if !ok {
-		return fmt.Errorf("SpanContext type %T incompatible with TeeTracer", sc)
+		return errors.Errorf("SpanContext type %T incompatible with TeeTracer", sc)
 	}
 	// TODO(radu): we only serialize the span for the first tracer. Ideally we
 	// would produce our own format that includes serializations for all the
@@ -131,7 +156,7 @@ func (tsc TeeSpanContext) ForeachBaggageItem(handler func(k, v string) bool) {
 // TeeSpan is the opentracing.Span implementation used by the TeeTracer.
 type TeeSpan struct {
 	tracer *TeeTracer
-	spans  []opentracing.Span
+	spans  []spanWithOpt
 }
 
 var _ opentracing.Span = &TeeSpan{}
@@ -139,7 +164,9 @@ var _ opentracing.Span = &TeeSpan{}
 // Finish is part of the opentracing.Span interface.
 func (ts *TeeSpan) Finish() {
 	for _, sp := range ts.spans {
-		sp.Finish()
+		if sp.Owned {
+			sp.Finish()
+		}
 	}
 }
 
@@ -178,7 +205,7 @@ func (ts *TeeSpan) SetTag(key string, value interface{}) opentracing.Span {
 }
 
 // LogFields is part of the opentracing.Span interface.
-func (ts *TeeSpan) LogFields(fields ...log.Field) {
+func (ts *TeeSpan) LogFields(fields ...otlog.Field) {
 	for _, sp := range ts.spans {
 		sp.LogFields(fields...)
 	}
