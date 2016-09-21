@@ -37,7 +37,6 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/build"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/internal/client"
@@ -119,6 +118,7 @@ type metricMarshaler interface {
 
 // A statusServer provides a RESTful status API.
 type statusServer struct {
+	ctx          context.Context
 	db           *client.DB
 	gossip       *gossip.Gossip
 	metricSource metricMarshaler
@@ -129,14 +129,16 @@ type statusServer struct {
 
 // newStatusServer allocates and returns a statusServer.
 func newStatusServer(
+	ctx context.Context,
 	db *client.DB,
 	gossip *gossip.Gossip,
 	metricSource metricMarshaler,
-	ctx *base.Context,
 	rpcCtx *rpc.Context,
 	stores *storage.Stores,
 ) *statusServer {
+	ctx = log.WithLogTag(ctx, "status", nil)
 	server := &statusServer{
+		ctx:          ctx,
 		db:           db,
 		gossip:       gossip,
 		metricSource: metricSource,
@@ -482,7 +484,7 @@ func (s *statusServer) Nodes(ctx context.Context, req *serverpb.NodesRequest) (*
 
 	b := &client.Batch{}
 	b.Scan(startKey, endKey)
-	if err := s.db.Run(context.TODO(), b); err != nil {
+	if err := s.db.Run(s.ctx, b); err != nil {
 		log.Error(ctx, err)
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
@@ -510,7 +512,7 @@ func (s *statusServer) Node(ctx context.Context, req *serverpb.NodeRequest) (*st
 	key := keys.NodeStatusKey(int32(nodeID))
 	b := &client.Batch{}
 	b.Get(key)
-	if err := s.db.Run(context.TODO(), b); err != nil {
+	if err := s.db.Run(s.ctx, b); err != nil {
 		log.Error(ctx, err)
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}

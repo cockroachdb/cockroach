@@ -375,11 +375,16 @@ func TestSendRPCOrder(t *testing.T) {
 
 type MockRangeDescriptorDB func(roachpb.RKey, bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error)
 
-func (mdb MockRangeDescriptorDB) RangeLookup(key roachpb.RKey, _ *roachpb.RangeDescriptor, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+func (mdb MockRangeDescriptorDB) RangeLookup(
+	_ context.Context,
+	key roachpb.RKey,
+	_ *roachpb.RangeDescriptor,
+	useReverseScan bool,
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 	return mdb(stripMeta(key), useReverseScan)
 }
 func (mdb MockRangeDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
-	rs, _, err := mdb.RangeLookup(nil, nil, false /* useReverseScan */)
+	rs, _, err := mdb.RangeLookup(context.Background(), nil, nil, false /* useReverseScan */)
 	if err != nil || len(rs) == 0 {
 		return nil, err.GoError()
 	}

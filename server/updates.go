@@ -120,10 +120,15 @@ func (s *Server) maybeCheckForUpdates() time.Duration {
 // executes the timestamp is set to the next execution time.
 // Returns how long until `f` should be run next (i.e. when this method should
 // be called again).
-func (s *Server) maybeRunPeriodicCheck(op string, key roachpb.Key, f func()) time.Duration {
-	resp, err := s.db.Get(s.Ctx(), key)
+func (s *Server) maybeRunPeriodicCheck(
+	op string, key roachpb.Key, f func(context.Context),
+) time.Duration {
+	// Add the op name to the log context.
+	ctx := log.WithLogTag(s.Ctx(), op, nil)
+
+	resp, err := s.db.Get(ctx, key)
 	if err != nil {
-		log.Infof(s.Ctx(), "Error reading %s time: %v", op, err)
+		log.Infof(ctx, "error reading time: %s", err)
 		return updateCheckRetryFrequency
 	}
 
@@ -133,40 +138,40 @@ func (s *Server) maybeRunPeriodicCheck(op string, key roachpb.Key, f func()) tim
 	if resp.Exists() {
 		whenToCheck, pErr := resp.Value.GetTime()
 		if pErr != nil {
-			log.Warningf(s.Ctx(), "Error decoding %s time: %v", op, err)
+			log.Warningf(ctx, "error decoding time: %s", err)
 			return updateCheckRetryFrequency
 		} else if delay := whenToCheck.Sub(timeutil.Now()); delay > 0 {
 			return delay
 		}
 
 		nextRetry := whenToCheck.Add(updateCheckRetryFrequency)
-		if err := s.db.CPut(s.Ctx(), key, nextRetry, whenToCheck); err != nil {
+		if err := s.db.CPut(ctx, key, nextRetry, whenToCheck); err != nil {
 			if log.V(2) {
-				log.Infof(s.Ctx(), "Could not set next version check time (maybe another node checked?): %v", err)
+				log.Infof(ctx, "could not set next version check time (maybe another node checked?): %s", err)
 			}
 			return updateCheckRetryFrequency
 		}
 	} else {
-		log.Infof(s.Ctx(), "No previous %s time.", op)
+		log.Infof(ctx, "No previous %s time.", op)
 		nextRetry := timeutil.Now().Add(updateCheckRetryFrequency)
 		// CPut with `nil` prev value to assert that no other node has checked.
-		if err := s.db.CPut(s.Ctx(), key, nextRetry, nil); err != nil {
+		if err := s.db.CPut(ctx, key, nextRetry, nil); err != nil {
 			if log.V(2) {
-				log.Infof(s.Ctx(), "Could not set %s time (maybe another node checked?): %v", op, err)
+				log.Infof(ctx, "Could not set %s time (maybe another node checked?): %v", op, err)
 			}
 			return updateCheckRetryFrequency
 		}
 	}
 
-	f()
+	f(ctx)
 
-	if err := s.db.Put(s.Ctx(), key, timeutil.Now().Add(updateCheckFrequency)); err != nil {
-		log.Infof(s.Ctx(), "Error updating %s time: %v", op, err)
+	if err := s.db.Put(ctx, key, timeutil.Now().Add(updateCheckFrequency)); err != nil {
+		log.Infof(ctx, "Error updating %s time: %v", op, err)
 	}
 	return updateCheckFrequency
 }
 
-func (s *Server) checkForUpdates() {
+func (s *Server) checkForUpdates(ctx context.Context) {
 	q := updatesURL.Query()
 	q.Set("version", build.GetInfo().Tag)
 	q.Set("uuid", s.node.ClusterID.String())
@@ -177,7 +182,7 @@ func (s *Server) checkForUpdates() {
 		// This is probably going to be relatively common in production
 		// environments where network access is usually curtailed.
 		if log.V(2) {
-			log.Warning(context.TODO(), "Failed to check for updates: ", err)
+			log.Warning(ctx, "Failed to check for updates: ", err)
 		}
 		return
 	}
@@ -185,7 +190,7 @@ func (s *Server) checkForUpdates() {
 
 	if res.StatusCode != http.StatusOK {
 		b, err := ioutil.ReadAll(res.Body)
-		log.Warningf(context.TODO(), "Failed to check for updates: status: %s, body: %s, error: %v",
+		log.Warningf(ctx, "Failed to check for updates: status: %s, body: %s, error: %v",
 			res.Status, b, err)
 		return
 	}
@@ -197,22 +202,21 @@ func (s *Server) checkForUpdates() {
 
 	err = decoder.Decode(&r)
 	if err != nil && err != io.EOF {
-		log.Warning(context.TODO(), "Error decoding updates info: ", err)
+		log.Warning(ctx, "Error decoding updates info: ", err)
 		return
 	}
 
 	for _, v := range r.Details {
-		log.Infof(context.TODO(), "A new version is available: %s, details: %s", v.Version, v.Details)
+		log.Infof(ctx, "A new version is available: %s, details: %s", v.Version, v.Details)
 	}
 }
 
 func (s *Server) usageReportingEnabled() bool {
 	// Grab the optin value from the database.
-	ctx := context.TODO()
 	req := &serverpb.GetUIDataRequest{Keys: []string{optinKey}}
-	resp, err := s.admin.GetUIData(ctx, req)
+	resp, err := s.admin.GetUIData(s.Ctx(), req)
 	if err != nil {
-		log.Warning(ctx, err)
+		log.Warning(s.Ctx(), err)
 		return false
 	}
 
@@ -223,7 +227,7 @@ func (s *Server) usageReportingEnabled() bool {
 	}
 	optin, err := strconv.ParseBool(string(val.Value))
 	if err != nil {
-		log.Warningf(ctx, "could not parse optin value (%q): %v", val.Value, err)
+		log.Warningf(s.Ctx(), "could not parse optin value (%q): %v", val.Value, err)
 		return false
 	}
 	return optin
@@ -238,7 +242,8 @@ func (s *Server) maybeReportUsage(running time.Duration) time.Duration {
 	if !s.usageReportingEnabled() {
 		return updateCheckFrequency
 	}
-	return s.maybeRunPeriodicCheck("metrics reporting", keys.NodeLastUsageReportKey(int32(s.node.Descriptor.NodeID)), s.reportUsage)
+	return s.maybeRunPeriodicCheck("metrics reporting",
+		keys.NodeLastUsageReportKey(int32(s.node.Descriptor.NodeID)), s.reportUsage)
 }
 
 func (s *Server) getReportingInfo() reportingInfo {
@@ -261,10 +266,10 @@ func (s *Server) getReportingInfo() reportingInfo {
 	return reportingInfo{summary, stores}
 }
 
-func (s *Server) reportUsage() {
+func (s *Server) reportUsage(ctx context.Context) {
 	b := new(bytes.Buffer)
 	if err := json.NewEncoder(b).Encode(s.getReportingInfo()); err != nil {
-		log.Warning(context.TODO(), err)
+		log.Warning(ctx, err)
 		return
 	}
 
@@ -277,13 +282,13 @@ func (s *Server) reportUsage() {
 	if err != nil && log.V(2) {
 		// This is probably going to be relatively common in production
 		// environments where network access is usually curtailed.
-		log.Warning(context.TODO(), "Failed to report node usage metrics: ", err)
+		log.Warning(ctx, "Failed to report node usage metrics: ", err)
 		return
 	}
 
 	if res.StatusCode != http.StatusOK {
 		b, err := ioutil.ReadAll(res.Body)
-		log.Warningf(context.TODO(), "Failed to report node usage metrics: status: %s, body: %s, "+
+		log.Warningf(ctx, "Failed to report node usage metrics: status: %s, body: %s, "+
 			"error: %v", res.Status, b, err)
 	}
 }
