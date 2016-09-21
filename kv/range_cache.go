@@ -50,28 +50,20 @@ func meta(k roachpb.RKey) (roachpb.RKey, error) {
 	return keys.Addr(keys.RangeMetaKey(k))
 }
 
-func mustMeta(k roachpb.RKey) roachpb.RKey {
-	m, err := meta(k)
-	if err != nil {
-		panic(err)
-	}
-	return m
-}
-
 // RangeDescriptorDB is a type which can query range descriptors from an
 // underlying datastore. This interface is used by rangeDescriptorCache to
 // initially retrieve information which will be cached.
 type RangeDescriptorDB interface {
-	// rangeLookup takes a meta key to look up descriptors for, for example
-	// \x00\x00meta1aa or \x00\x00meta2f. The two booleans are considerIntents
-	// and useReverseScan respectively. Two slices of range descriptors are
-	// returned. The first of these slices holds descriptors which contain
-	// the given key (possibly from intents), and the second being prefetched
-	// adjacent descriptors.
-	// TODO(andrei): Should this return error instead of pErr?
+	// RangeLookup takes a meta key to look up descriptors for and a descriptor
+	// of the range believed to hold the meta key. Two slices of range
+	// descriptors are returned. The first of these slices holds descriptors
+	// which contain the given key (possibly from intents), and the second holds
+	// prefetched adjacent descriptors.
 	RangeLookup(
-		key roachpb.RKey, desc *roachpb.RangeDescriptor,
-		considerIntents bool, useReverseScan bool,
+		ctx context.Context,
+		key roachpb.RKey,
+		desc *roachpb.RangeDescriptor,
+		useReverseScan bool,
 	) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error)
 	// FirstRange returns the descriptor for the first Range. This is the
 	// Range containing all \x00\x00meta1 entries.
@@ -118,9 +110,8 @@ type lookupResult struct {
 }
 
 type lookupRequestKey struct {
-	key             string
-	considerIntents bool
-	useReverseScan  bool
+	key            string
+	useReverseScan bool
 }
 
 // makeLookupRequestKey constructs a lookupRequestKey with the goal of
@@ -154,7 +145,7 @@ type lookupRequestKey struct {
 //
 // Note that the above description assumes that useReverseScan is false for simplicity.
 // If useReverseScan is true, we need to use the end key of the stale descriptor instead.
-func makeLookupRequestKey(key roachpb.RKey, evictToken *evictionToken, considerIntents, useReverseScan bool) lookupRequestKey {
+func makeLookupRequestKey(key roachpb.RKey, evictToken *evictionToken, useReverseScan bool) lookupRequestKey {
 	if evictToken != nil {
 		if useReverseScan {
 			key = evictToken.prevDesc.EndKey
@@ -163,9 +154,8 @@ func makeLookupRequestKey(key roachpb.RKey, evictToken *evictionToken, considerI
 		}
 	}
 	return lookupRequestKey{
-		key:             string(key),
-		considerIntents: considerIntents,
-		useReverseScan:  useReverseScan,
+		key:            string(key),
+		useReverseScan: useReverseScan,
 	}
 }
 
@@ -268,10 +258,9 @@ func (rdc *rangeDescriptorCache) LookupRangeDescriptor(
 	ctx context.Context,
 	key roachpb.RKey,
 	evictToken *evictionToken,
-	considerIntents bool,
 	useReverseScan bool,
 ) (*roachpb.RangeDescriptor, *evictionToken, error) {
-	return rdc.lookupRangeDescriptorInternal(ctx, key, evictToken, considerIntents, useReverseScan, nil)
+	return rdc.lookupRangeDescriptorInternal(ctx, key, evictToken, useReverseScan, nil)
 }
 
 // lookupRangeDescriptorInternal is called from LookupRangeDescriptor or from tests.
@@ -283,7 +272,6 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 	ctx context.Context,
 	key roachpb.RKey,
 	evictToken *evictionToken,
-	considerIntents bool,
 	useReverseScan bool,
 	wg *sync.WaitGroup,
 ) (*roachpb.RangeDescriptor, *evictionToken, error) {
@@ -315,7 +303,7 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 	}
 
 	var res lookupResult
-	requestKey := makeLookupRequestKey(key, evictToken, considerIntents, useReverseScan)
+	requestKey := makeLookupRequestKey(key, evictToken, useReverseScan)
 	rdc.lookupRequests.Lock()
 	if req, inflight := rdc.lookupRequests.inflight[requestKey]; inflight {
 		resC := make(chan lookupResult, 1)
@@ -333,7 +321,7 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 		rdc.rangeCache.RUnlock()
 		doneWg()
 
-		rs, preRs, err := rdc.performRangeLookup(ctx, key, considerIntents, useReverseScan)
+		rs, preRs, err := rdc.performRangeLookup(ctx, key, useReverseScan)
 		if err != nil {
 			res = lookupResult{err: err}
 		} else {
@@ -349,9 +337,6 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 					}),
 				}
 			case 2:
-				if !considerIntents {
-					panic(fmt.Sprintf("more than 1 matching range descriptor returned for %s when not considering intents: %v", key, rs))
-				}
 				desc := &rs[0]
 				nextDesc := rs[1]
 				res = lookupResult{
@@ -413,7 +398,7 @@ func (rdc *rangeDescriptorCache) lookupRangeDescriptorInternal(
 // performRangeLookup handles delegating the range lookup to the cache's
 // RangeDescriptorDB.
 func (rdc *rangeDescriptorCache) performRangeLookup(
-	ctx context.Context, key roachpb.RKey, considerIntents, useReverseScan bool,
+	ctx context.Context, key roachpb.RKey, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	// metadataKey is sent to RangeLookup to find the RangeDescriptor
 	// which contains key.
@@ -444,12 +429,15 @@ func (rdc *rangeDescriptorCache) performRangeLookup(
 		// Look up desc from the cache, which will recursively call into
 		// this function if it is not cached.
 		var err error
-		if desc, _, err = rdc.LookupRangeDescriptor(ctx, metadataKey, nil, considerIntents,
-			useReverseScan); err != nil {
+		if desc, _, err = rdc.LookupRangeDescriptor(
+			ctx, metadataKey, nil, useReverseScan,
+		); err != nil {
 			return nil, nil, err
 		}
 	}
-	descs, prefetched, pErr := rdc.db.RangeLookup(metadataKey, desc, considerIntents, useReverseScan)
+	// Tag inner operations.
+	ctx = log.WithLogTag(ctx, "range-lookup", nil)
+	descs, prefetched, pErr := rdc.db.RangeLookup(ctx, metadataKey, desc, useReverseScan)
 	return descs, prefetched, pErr.GoError()
 }
 
@@ -548,8 +536,13 @@ func (rdc *rangeDescriptorCache) getCachedRangeDescriptorLocked(key roachpb.RKey
 	metaEndKey := k.(rangeCacheKey)
 	rd := v.(*roachpb.RangeDescriptor)
 
+	containsFn := (*roachpb.RangeDescriptor).ContainsKey
+	if inclusive {
+		containsFn = (*roachpb.RangeDescriptor).ContainsExclusiveEndKey
+	}
+
 	// Return nil if the key does not belong to the range.
-	if (!inclusive && !rd.ContainsKey(key)) || (inclusive && !rd.ContainsExclusiveEndKey(key)) {
+	if !containsFn(rd, key) {
 		return nil, nil, nil
 	}
 	return metaEndKey, rd, nil

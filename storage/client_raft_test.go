@@ -619,6 +619,64 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 	mtc.waitForValues(key, []int64{incAB, incAB, incAB})
 }
 
+// TestConcurrentRaftSnapshots tests that snapshots still work correctly when
+// Raft requests multiple non-preemptive snapshots at the same time. This
+// situation occurs when two replicas need snapshots at the same time.
+func TestConcurrentRaftSnapshots(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := startMultiTestContext(t, 5)
+	defer mtc.Stop()
+	rng, err := mtc.stores[0].GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	key := roachpb.Key("a")
+	incA := int64(5)
+	incB := int64(7)
+	incAB := incA + incB
+
+	// Set up a key to replicate across the cluster. We're going to modify this
+	// key and truncate the raft logs from that command after killing one of the
+	// nodes to check that it gets the new value after it comes up.
+	incArgs := incrementArgs(key, incA)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	mtc.replicateRange(1, 1, 2, 3, 4)
+	mtc.waitForValues(key, []int64{incA, incA, incA, incA, incA})
+
+	// Now kill stores 1 + 2, increment the key on the other stores and
+	// truncate their logs to make sure that when store 1 + 2 comes back up
+	// they will require a non-preemptive snapshot from Raft.
+	mtc.stopStore(1)
+	mtc.stopStore(2)
+
+	incArgs = incrementArgs(key, incB)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	mtc.waitForValues(key, []int64{incAB, incA, incA, incAB, incAB})
+
+	index, err := rng.GetLastIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Truncate the log at index+1 (log entries < N are removed, so this
+	// includes the increment).
+	truncArgs := truncateLogArgs(index+1, 1)
+	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &truncArgs); err != nil {
+		t.Fatal(err)
+	}
+	mtc.restartStore(1)
+	mtc.restartStore(2)
+
+	mtc.waitForValues(key, []int64{incAB, incAB, incAB, incAB, incAB})
+}
+
 // Test various mechanism for refreshing pending commands.
 func TestRefreshPendingCommands(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -1525,12 +1583,16 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 					t.Fatal("failed to look up min range")
 				} else if _, err := rng.GetSnapshot(context.Background()); err != nil {
 					t.Fatalf("failed to snapshot min range: %s", err)
+				} else {
+					rng.CloseOutSnap()
 				}
 
 				if rng := mtc.stores[0].LookupReplica(roachpb.RKey("Z"), nil); rng == nil {
 					t.Fatal("failed to look up max range")
 				} else if _, err := rng.GetSnapshot(context.Background()); err != nil {
 					t.Fatalf("failed to snapshot max range: %s", err)
+				} else {
+					rng.CloseOutSnap()
 				}
 			}
 		}
