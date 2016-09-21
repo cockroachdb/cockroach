@@ -74,6 +74,9 @@ var (
 
 // Server is the cockroach server node.
 type Server struct {
+	// Must align to 8-bytes for atomic int64 updates.
+	nodeLogTagVal log.DynamicIntValue
+
 	ctx            Context
 	mux            *http.ServeMux
 	clock          *hlc.Clock
@@ -99,8 +102,6 @@ type Server struct {
 	stopper        *stop.Stopper
 	sqlExecutor    *sql.Executor
 	leaseMgr       *sql.LeaseManager
-
-	nodeLogTagVal log.DynamicIntValue
 }
 
 // NewServer creates a Server from a server.Context.

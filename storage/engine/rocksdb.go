@@ -602,19 +602,25 @@ func (r *RocksDB) GetSSTables() SSTableInfos {
 	// We can't index into tables because it is a pointer, not a slice. The
 	// hackery below treats the pointer as an array and then constructs a slice
 	// from it.
-	const maxLen = 0x7fffffff
-	tableSlice := (*[maxLen]C.DBSSTable)(unsafe.Pointer(tables))[:n:n]
+
+	tablesPtr := uintptr(unsafe.Pointer(tables))
+	tableSize := unsafe.Sizeof(C.DBSSTable{})
+	tableVal := func(i int) C.DBSSTable {
+		return *(*C.DBSSTable)(unsafe.Pointer(tablesPtr + uintptr(i)*tableSize))
+	}
 
 	res := make(SSTableInfos, n)
-	for i := 0; i < int(n); i++ {
-		res[i].Level = int(tableSlice[i].level)
-		res[i].Size = int64(tableSlice[i].size)
-		res[i].Start = cToGoKey(tableSlice[i].start_key)
-		res[i].End = cToGoKey(tableSlice[i].end_key)
-		if ptr := tableSlice[i].start_key.key.data; ptr != nil {
+	for i := range res {
+		r := &res[i]
+		tv := tableVal(i)
+		r.Level = int(tv.level)
+		r.Size = int64(tv.size)
+		r.Start = cToGoKey(tv.start_key)
+		r.End = cToGoKey(tv.end_key)
+		if ptr := tv.start_key.key.data; ptr != nil {
 			C.free(unsafe.Pointer(ptr))
 		}
-		if ptr := tableSlice[i].end_key.key.data; ptr != nil {
+		if ptr := tv.end_key.key.data; ptr != nil {
 			C.free(unsafe.Pointer(ptr))
 		}
 	}
@@ -1305,14 +1311,8 @@ func cSliceToUnsafeGoBytes(s C.DBSlice) []byte {
 	if s.data == nil {
 		return nil
 	}
-	// Go limits arrays to a length that will fit in a (signed) 32-bit
-	// integer. Fall back to using cSliceToGoBytes if our slice is
-	// larger.
-	const maxLen = 0x7fffffff
-	if s.len > maxLen {
-		return cSliceToGoBytes(s)
-	}
-	return (*[maxLen]byte)(unsafe.Pointer(s.data))[:s.len:s.len]
+	// Interpret the C pointer as a pointer to a Go array, then slice.
+	return (*[maxArrayLen]byte)(unsafe.Pointer(s.data))[:s.len:s.len]
 }
 
 func statusToError(s C.DBStatus) error {
