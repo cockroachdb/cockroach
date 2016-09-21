@@ -45,6 +45,10 @@ message RaftMessageRequest {
   optional bool quiesce = 5 [(gogoproto.nullable) = false];
 }
 
+message RaftMessageRequestBatch {
+  repeated RaftMessageRequest requests = 1 [(gogoproto.nullable) = false];
+}
+
 message RaftMessageResponseUnion {
   option (gogoproto.onlyone) = true;
 
@@ -126,5 +130,6 @@ message ConfChangeContext {
 
 service MultiRaft {
   rpc RaftMessage (stream RaftMessageRequest) returns (stream RaftMessageResponse) {}
+  rpc RaftMessageBatch (stream RaftMessageRequestBatch) returns (stream RaftMessageResponse) {}
   rpc RaftSnapshot (stream SnapshotRequest) returns (stream SnapshotResponse) {}
 }
