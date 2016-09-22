@@ -1976,7 +1976,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 			if err := cc.Unmarshal(e.Data); err != nil {
 				return err
 			}
-			ctx := ConfChangeContext{}
+			var ctx ConfChangeContext
 			if err := ctx.Unmarshal(cc.Context); err != nil {
 				return err
 			}
