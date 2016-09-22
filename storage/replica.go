@@ -2497,7 +2497,7 @@ func (r *Replica) processRaftCommand(
 	}
 
 	r.mu.Lock()
-	cmd := r.mu.pendingCmds[idKey]
+	cmd, cmdProposedLocally := r.mu.pendingCmds[idKey]
 
 	isLeaseError := func() bool {
 		l, ba, origin := r.mu.state.Lease, raftCmd.Cmd, raftCmd.OriginReplica
@@ -2525,12 +2525,13 @@ func (r *Replica) processRaftCommand(
 
 	// TODO(tschottdorf): consider the Trace situation here.
 	ctx := r.ctx
-	if cmd != nil {
+	if cmdProposedLocally {
 		// We initiated this command, so use the caller-supplied context.
 		ctx = cmd.ctx
 		delete(r.mu.pendingCmds, idKey)
 	}
 	leaseIndex := r.mu.state.LeaseAppliedIndex
+	sendToClient := cmdProposedLocally
 
 	var forcedErr *roachpb.Error
 	if idKey == "" {
@@ -2573,7 +2574,7 @@ func (r *Replica) processRaftCommand(
 			"command observed at lease index %d, but required < %d", leaseIndex, raftCmd.MaxLeaseIndex,
 		)
 
-		if cmd != nil {
+		if cmdProposedLocally {
 			// Only refurbish when no earlier incarnation of this command has
 			// already gone through the trouble of doing so (which would have
 			// changed our local copy of the pending command). We want to error
@@ -2604,7 +2605,7 @@ func (r *Replica) processRaftCommand(
 				// The client should get the actual execution, not this one. We
 				// keep the context (which is fine since the client will only
 				// finish it when the "real" incarnation applies).
-				cmd = nil
+				sendToClient = false
 			}
 		}
 	}
@@ -2657,7 +2658,7 @@ func (r *Replica) processRaftCommand(
 		}
 	}
 
-	if cmd != nil {
+	if sendToClient {
 		cmd.done <- roachpb.ResponseWithError{Reply: br, Err: pErr}
 		close(cmd.done)
 	} else if pErr != nil {
