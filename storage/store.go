@@ -1539,6 +1539,8 @@ func splitTriggerPostCommit(
 	// Copy the timestamp cache into the RHS range.
 	r.mu.Lock()
 	rightRng.mu.Lock()
+	// TODO(andrei): We should truncate the entries in both LHS and RHS' timestamp
+	// caches to the respective spans of these new ranges.
 	r.mu.tsCache.MergeInto(rightRng.mu.tsCache, true /* clear */)
 	rightRng.mu.Unlock()
 	r.mu.Unlock()
@@ -1655,6 +1657,10 @@ func (s *Store) MergeRange(
 			subsumedDesc.Replicas, subsumingDesc.Replicas)
 	}
 
+	if err := s.maybeMergeTimestampCaches(subsumingRng, subsumedRng); err != nil {
+		return err
+	}
+
 	// Remove and destroy the subsumed range. Note that we were called
 	// (indirectly) from raft processing so we must call removeReplicaImpl
 	// directly to avoid deadlocking on Replica.raftMu.
@@ -1666,6 +1672,34 @@ func (s *Store) MergeRange(
 	copy := *subsumingDesc
 	copy.EndKey = updatedEndKey
 	return subsumingRng.setDesc(&copy)
+}
+
+// If the subsuming replica has the range lease, then we update its timestamp
+// cache with the entries from the subsumed. Otherwise, then the timestamp cache
+// doesn't matter (in fact it should be empty, to save memory).
+func (s *Store) maybeMergeTimestampCaches(subsumingRep *Replica, subsumedRep *Replica) error {
+	subsumingRep.mu.Lock()
+	defer subsumingRep.mu.Unlock()
+	subsumingLease := subsumingRep.mu.state.Lease
+
+	subsumedRep.mu.Lock()
+	defer subsumedRep.mu.Unlock()
+	subsumedLease := subsumedRep.mu.state.Lease
+
+	// Merge support is currently incomplete. In particular, the lease holders
+	// must be colocated and/or the subsumed range appropriately quiesced. See
+	// also #2433.
+	if subsumedLease.Covers(s.Clock().Now()) &&
+		subsumingLease.Replica.StoreID != subsumedLease.Replica.StoreID {
+		return errors.Errorf("cannot merge ranges with non-colocated leases. "+
+			"Subsuming lease: %s. Subsumed lease: %s.", subsumingLease, subsumedLease)
+	}
+
+	if subsumingLease.Covers(s.Clock().Now()) &&
+		subsumingLease.OwnedBy(s.StoreID()) {
+		subsumedRep.mu.tsCache.MergeInto(subsumingRep.mu.tsCache, false /* clear */)
+	}
+	return nil
 }
 
 // AddReplicaTest adds the replica to the store's replica map and to the sorted

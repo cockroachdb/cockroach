@@ -118,19 +118,6 @@ func TestRejectFutureCommand(t *testing.T) {
 	mtc.Start(t, 1)
 	defer mtc.Stop()
 
-	// First do a write. The first write will advance the clock by MaxOffset
-	// because of the read cache's low water mark.
-	getArgs := putArgs([]byte("b"), []byte("b"))
-	if _, err := client.SendWrapped(rg1(mtc.stores[0]), nil, &getArgs); err != nil {
-		t.Fatal(err)
-	}
-	if now := clock.Now(); now.WallTime != int64(maxOffset) {
-		t.Fatalf("expected clock to advance to 100ms; got %s", now)
-	}
-	// The logical clock has advanced past the physical clock; increment
-	// the "physical" clock to catch up.
-	manual.Increment(int64(maxOffset))
-
 	startTime := manual.UnixNano()
 
 	// Commands with a future timestamp that is within the MaxOffset
@@ -142,8 +129,8 @@ func TestRejectFutureCommand(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if now := clock.Now(); now.WallTime != int64(190*time.Millisecond) {
-		t.Fatalf("expected clock to advance to 190ms; got %s", now)
+	if now := clock.Now(); now.WallTime != int64(90*time.Millisecond) {
+		t.Fatalf("expected clock to advance to 90ms; got %s", now)
 	}
 
 	// Once the accumulated offset reaches MaxOffset, commands will be rejected.
@@ -153,9 +140,9 @@ func TestRejectFutureCommand(t *testing.T) {
 		t.Fatalf("expected clock offset error but got nil")
 	}
 
-	// The clock remained at 190ms and the final command was not executed.
-	if now := clock.Now(); now.WallTime != int64(190*time.Millisecond) {
-		t.Errorf("expected clock to advance to 190ms; got %s", now)
+	// The clock remained at 90ms and the final command was not executed.
+	if now := clock.Now(); now.WallTime != int64(90*time.Millisecond) {
+		t.Errorf("expected clock to stay at 90ms; got %s", now)
 	}
 	val, _, err := engine.MVCCGet(context.Background(), mtc.engines[0], roachpb.Key("a"), clock.Now(), true, nil)
 	if err != nil {
