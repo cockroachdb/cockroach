@@ -307,7 +307,7 @@ func (r *Replica) leasePostApply(
 		// lease holder. Note that we'll call SetLowWater when we next acquire
 		// the lease.
 		r.mu.Lock()
-		r.mu.tsCache.Clear(r.store.Clock())
+		r.mu.tsCache.Clear(r.store.Clock().Now())
 		r.mu.Unlock()
 	}
 
@@ -410,11 +410,7 @@ func (r *Replica) handleProposalData(
 	}
 
 	if pd.Merge != nil {
-		r.mu.Lock()
-		r.mu.tsCache.Clear(r.store.Clock())
-		r.mu.Unlock()
-
-		if err := r.store.MergeRange(r, pd.Merge.LeftDesc.EndKey,
+		if err := r.store.MergeRange(ctx, r, pd.Merge.LeftDesc.EndKey,
 			pd.Merge.RightDesc.RangeID,
 		); err != nil {
 			// Our in-memory state has diverged from the on-disk state.

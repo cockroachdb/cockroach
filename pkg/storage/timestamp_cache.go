@@ -143,22 +143,18 @@ func newTimestampCache(clock *hlc.Clock) *timestampCache {
 		wCache:                cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
 		evictionSizeThreshold: defaultEvictionSizeThreshold,
 	}
-	tc.Clear(clock)
+	tc.Clear(clock.Now())
 	tc.rCache.Config.ShouldEvict = tc.shouldEvict
 	tc.wCache.Config.ShouldEvict = tc.shouldEvict
 	return tc
 }
 
-// Clear clears the cache and resets the low water mark to the
-// current time plus the maximum clock offset.
-func (tc *timestampCache) Clear(clock *hlc.Clock) {
+// Clear clears the cache and resets the low-water mark.
+func (tc *timestampCache) Clear(lowWater hlc.Timestamp) {
 	tc.requests = btree.New(btreeDegree)
 	tc.rCache.Clear()
 	tc.wCache.Clear()
-	tc.lowWater = clock.Now()
-	// TODO(tschottdorf): It's dangerous to inject timestamps (which will make
-	// it into the HLC) like that.
-	tc.lowWater.WallTime += clock.MaxOffset().Nanoseconds()
+	tc.lowWater = lowWater
 	tc.latest = tc.lowWater
 }
 
@@ -643,11 +639,8 @@ func (tc *timestampCache) getMax(
 // before merging in the source.
 func (tc *timestampCache) MergeInto(dest *timestampCache, clear bool) {
 	if clear {
-		dest.rCache.Clear()
-		dest.wCache.Clear()
-		dest.lowWater = tc.lowWater
+		dest.Clear(tc.lowWater)
 		dest.latest = tc.latest
-		dest.requests = btree.New(btreeDegree)
 		dest.reqIDAlloc = 0
 
 		// Because we just cleared the destination cache, we can directly

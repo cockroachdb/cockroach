@@ -860,12 +860,14 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 // is set on the timestamp cache when the node is granted the lease holder
 // lease after not holding it and it is not set when the node is
 // granted the range lease when it was the last holder.
+// TODO(andrei): rewrite this test to use a TestCluster so we can test that the
+// cache gets the correct timestamp on all the replicas that get the lease at
+// some point; now we're just testing the cache on the first replica.
 func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	tc.clock.SetMaxOffset(maxClockOffset)
 	// Disable raft log truncation which confuses this test.
 	tc.store.SetRaftLogQueueActive(false)
 
@@ -887,17 +889,13 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	tc.rng.mu.Lock()
 	baseRTS, _, _ := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil /* end */)
 	tc.rng.mu.Unlock()
-	// TODO(tschottdorf): this value is zero, which seems ripe for producing
-	// test cases that do not test anything.
 	baseLowWater := baseRTS.WallTime
-
-	newLowWater := now.WallTime + baseLowWater + int64(maxClockOffset)
 
 	testCases := []struct {
 		storeID     roachpb.StoreID
 		start       hlc.Timestamp
 		expiration  hlc.Timestamp
-		expLowWater int64
+		expLowWater int64 // 0 for not expecting anything
 		expErr      string
 	}{
 		// Grant the lease fresh.
@@ -917,16 +915,15 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 		// The other store tries again, this time without the overlap.
 		{storeID: tc.store.StoreID() + 1,
 			start: now.Add(31, 0), expiration: now.Add(50, 0),
-			expLowWater: newLowWater},
-		// Lease is regranted to this replica. Store clock moves forward avoid
-		// influencing the result.
+			// The cache now moves to this other store, and we can't query that.
+			expLowWater: 0},
+		// Lease is regranted to this replica. The low-water mark is updated to the
+		// beginning of the lease.
 		{storeID: tc.store.StoreID(),
 			start: now.Add(60, 0), expiration: now.Add(70, 0),
-			expLowWater: newLowWater},
-		// Lease is held by another once more.
-		{storeID: tc.store.StoreID() + 1,
-			start: now.Add(70, 0), expiration: now.Add(90, 0),
-			expLowWater: newLowWater},
+			// We expect 50, not 60, because the new lease is wound back to the end
+			// of the previous lease.
+			expLowWater: now.Add(50, 0).WallTime + baseLowWater},
 	}
 
 	for i, test := range testCases {
@@ -947,6 +944,10 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 		rTS, _, _ := tc.rng.mu.tsCache.GetMaxRead(roachpb.Key("a"), nil)
 		wTS, _, _ := tc.rng.mu.tsCache.GetMaxWrite(roachpb.Key("a"), nil)
 		tc.rng.mu.Unlock()
+
+		if test.expLowWater == 0 {
+			continue
+		}
 		if rTS.WallTime != test.expLowWater || wTS.WallTime != test.expLowWater {
 			t.Errorf("%d: expected low water %d; got maxRead=%d, maxWrite=%d", i, test.expLowWater, rTS.WallTime, wTS.WallTime)
 		}
