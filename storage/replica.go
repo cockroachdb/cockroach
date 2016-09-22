@@ -1733,8 +1733,7 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 		// We're proposing a command so there is no need to wake the leader if we
 		// were quiesced.
 		r.unquiesceLocked()
-		return false, /* !unquiesceAndWakeLeader */
-			raftGroup.Propose(encodeRaftCommand(string(p.idKey), data))
+		return false /* !unquiesceAndWakeLeader */, raftGroup.Propose(encodeRaftCommand(p.idKey, data))
 	})
 }
 
@@ -1941,7 +1940,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 		switch e.Type {
 		case raftpb.EntryNormal:
 
-			var commandID string
+			var commandID storagebase.CmdIDKey
 			var command roachpb.RaftCommand
 
 			// Process committed entries. etcd raft occasionally adds a nil entry
@@ -1969,7 +1968,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 
 			// Discard errors from processRaftCommand. The error has been sent
 			// to the client that originated it, where it will be handled.
-			_ = r.processRaftCommand(storagebase.CmdIDKey(commandID), e.Index, command)
+			_ = r.processRaftCommand(commandID, e.Index, command)
 
 		case raftpb.EntryConfChange:
 			var cc raftpb.ConfChange
