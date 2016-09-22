@@ -454,7 +454,7 @@ func main() {
 		os.Exit(1)
 	}()
 
-	c.start("zerosum", flag.Args())
+	c.start("zerosum", *workers, flag.Args())
 	c.waitForFullReplication()
 
 	z := newZeroSum(c, *numAccounts, *chaosType)
