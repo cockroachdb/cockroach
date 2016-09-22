@@ -47,7 +47,8 @@ func interestingGoroutines() (gs []string) {
 			strings.Contains(stack, "signal.signal_recv") ||
 			strings.Contains(stack, "sigterm.handler") ||
 			strings.Contains(stack, "runtime_mcall") ||
-			strings.Contains(stack, "goroutine in C code") {
+			strings.Contains(stack, "goroutine in C code") ||
+			strings.Contains(stack, "runtime.CPUProfile") {
 			continue
 		}
 		gs = append(gs, g)
