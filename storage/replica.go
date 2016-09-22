@@ -1646,9 +1646,9 @@ func (r *Replica) proposeRaftCommand(
 	if r.mu.destroyed != nil {
 		return nil, nil, r.mu.destroyed
 	}
-	repDesc, ok := r.mu.state.Desc.GetReplicaDescriptor(r.store.StoreID())
-	if !ok {
-		return nil, nil, roachpb.NewRangeNotFoundError(r.RangeID)
+	repDesc, err := r.getReplicaDescriptorLocked()
+	if err != nil {
+		return nil, nil, err
 	}
 	pCmd := r.prepareRaftCommandLocked(ctx, makeIDKey(), repDesc, ba)
 	r.insertRaftCommandLocked(pCmd)
