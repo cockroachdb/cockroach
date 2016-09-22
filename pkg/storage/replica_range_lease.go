@@ -285,10 +285,6 @@ func (r *Replica) AdminTransferLease(target roachpb.StoreID) error {
 		}
 		// No extension in progress; start a transfer.
 		nextLeaseBegin := r.store.Clock().Now()
-		// Don't transfer immediately after a node restart since we might have
-		// served higher timestamps before the restart.
-		nextLeaseBegin.Forward(
-			hlc.ZeroTimestamp.Add(r.store.startedAt+int64(r.store.Clock().MaxOffset()), 0))
 		transfer := r.mu.pendingLeaseRequest.InitOrJoinRequest(
 			r, nextLeaseHolder, nextLeaseBegin,
 			desc.StartKey.AsRawKey(), true /* transfer */)
