@@ -585,6 +585,7 @@ func (m *multiTestContext) makeContext(i int) storage.StoreContext {
 	ctx.Gossip = m.gossips[i]
 	ctx.StorePool = m.storePools[i]
 	ctx.TestingKnobs.DisableSplitQueue = true
+	ctx.TestingKnobs.ReplicateQueueAcceptsUnsplit = true
 	return ctx
 }
 
