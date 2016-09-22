@@ -231,9 +231,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	if err := eng.Flush(); err != nil {
 		t.Fatal(err)
 	}
-	if value, _, err := engine.MVCCGet(context.Background(), eng, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil); err != nil {
-		t.Fatal(err)
-	} else if value == nil {
+	if _, err := ReadStoreIdent(context.Background(), eng); err != nil {
 		t.Fatalf("unable to read store ident")
 	}
 

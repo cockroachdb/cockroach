@@ -181,7 +181,8 @@ type Engine interface {
 	// by invoking Close(). Note that snapshots must not be used after the
 	// original engine has been stopped.
 	NewSnapshot() Reader
-	// Open initializes the engine.
+	// Open initializes the engine. Calling Open() on an already Open()ed engine
+	// is a no-op.
 	Open() error
 }
 

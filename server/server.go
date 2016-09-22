@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/sdnotify"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
@@ -348,6 +349,8 @@ func (s *Server) Start(ctx context.Context) error {
 	// Copy log tags from s.Ctx()
 	ctx = log.WithLogTagsFromCtx(ctx, s.Ctx())
 
+	startTime := timeutil.Now()
+
 	tlsConfig, err := s.ctx.GetServerTLSConfig()
 	if err != nil {
 		return err
@@ -491,6 +494,22 @@ func (s *Server) Start(ctx context.Context) error {
 	s.gossip.Start(unresolvedAdvertAddr)
 	log.Event(ctx, "started gossip")
 
+	anyStoreBootstrapped := false
+	for _, e := range s.ctx.Engines {
+		if err := e.Open(); err != nil {
+			return err
+		}
+		if _, err := storage.ReadStoreIdent(ctx, e); err != nil {
+			// NotBootstrappedError is expected.
+			if _, ok := err.(*storage.NotBootstrappedError); !ok {
+				return err
+			}
+		} else {
+			anyStoreBootstrapped = true
+			break
+		}
+	}
+
 	err = s.node.start(ctx, unresolvedAdvertAddr, s.ctx.Engines, s.ctx.NodeAttributes)
 	if err != nil {
 		return err
@@ -533,6 +552,28 @@ func (s *Server) Start(ctx context.Context) error {
 	s.stopper.RunWorker(func() {
 		netutil.FatalIfUnexpected(m.Serve())
 	})
+
+	// We might have to sleep a bit to protect against this node producing
+	// non-monotonic timestamps. Before restarting, its clock might have been
+	// driven by other nodes' fast clocks, but when we restarted, we lost all this
+	// information. For example, a client might have written a value at a
+	// timestamp that's in the future of the restarted node's clock, and if we
+	// don't do something, the same client's read would not return it.
+	// So, we wait up to MaxOffset. We assume we couldn't have served timestamps
+	// more than MaxOffset in the future.
+	//
+	// As an optimization for tests, we don't sleep if all the stores are brand
+	// new. In this case, the node will not serve anything anyway until it
+	// synchronizes with other nodes.
+	if anyStoreBootstrapped {
+		sleepDuration := s.clock.MaxOffset() - timeutil.Since(startTime)
+		if sleepDuration > 0 {
+			log.VEventf(2, ctx,
+				"sleeping for %s to guarantee HLC monotonicity", sleepDuration)
+			time.Sleep(sleepDuration)
+		}
+	}
+
 	log.Event(ctx, "accepting connections")
 
 	// Initialize grpc-gateway mux and context.
