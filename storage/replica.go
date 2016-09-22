@@ -156,9 +156,10 @@ func updatesTimestampCache(r roachpb.Request) bool {
 // via the done channel.
 type pendingCmd struct {
 	ctx context.Context
-	// TODO(tschottdorf): idKey is legacy at this point: We could easily key
+	// TODO(andreimatei): idKey is legacy at this point: We could easily key
 	// commands by their MaxLeaseIndex, and doing so should be ok with a stop-
-	// the-world migration. However, requires adapting tryAbandon.
+	// the-world migration. However, various test facilities depend on the
+	// command ID for e.g. replay protection.
 	idKey           storagebase.CmdIDKey
 	proposedAtTicks int
 	raftCmd         roachpb.RaftCommand
