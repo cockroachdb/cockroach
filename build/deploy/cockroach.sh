@@ -4,7 +4,7 @@ set -eu
 
 if [ "${1-}" = "shell" ]; then
   shift
-  /bin/sh "$@"
+  exec /bin/sh "$@"
 else
-  /cockroach/cockroach "$@"
+  exec /cockroach/cockroach "$@"
 fi
