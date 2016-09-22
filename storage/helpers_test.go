@@ -40,7 +40,13 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 
 	visitor := newStoreRangeSet(s)
 	now := s.Clock().PhysicalNow()
-	visitor.Visit(func(r *Replica) bool {
+	visitor.Visit(func(ref *ReplicaRef) bool {
+		r, release, err := ref.Acquire()
+		defer release()
+		if err != nil {
+			return true // continue
+		}
+
 		var stats enginepb.MVCCStats
 		stats, err = ComputeStatsForRange(r.Desc(), s.Engine(), now)
 		if err != nil {
@@ -52,48 +58,36 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 	return totalStats, err
 }
 
+func forceScanAndProcess(s *Store, q baseQueue) {
+	newStoreRangeSet(s).Visit(func(ref *ReplicaRef) bool {
+		repl, release, err := ref.Acquire()
+		defer release()
+		if err != nil {
+			return true
+		}
+		q.MaybeAdd(repl, s.ctx.Clock.Now())
+		return true
+	})
+
+	q.DrainQueue(s.ctx.Clock)
+}
+
 // ForceReplicationScanAndProcess iterates over all ranges and
 // enqueues any that need to be replicated.
 func (s *Store) ForceReplicationScanAndProcess() {
-	s.mu.Lock()
-	for _, r := range s.mu.replicas {
-		s.replicateQueue.MaybeAdd(r, s.ctx.Clock.Now())
-	}
-	s.mu.Unlock()
-
-	s.replicateQueue.DrainQueue(s.ctx.Clock)
+	forceScanAndProcess(s, s.replicateQueue.baseQueue)
 }
 
 // ForceReplicaGCScanAndProcess iterates over all ranges and enqueues any that
 // may need to be GC'd.
 func (s *Store) ForceReplicaGCScanAndProcess() {
-	s.mu.Lock()
-	for _, r := range s.mu.replicas {
-		s.replicaGCQueue.MaybeAdd(r, s.ctx.Clock.Now())
-	}
-	s.mu.Unlock()
-
-	s.replicaGCQueue.DrainQueue(s.ctx.Clock)
+	forceScanAndProcess(s, s.replicaGCQueue.baseQueue)
 }
 
 // ForceRaftLogScanAndProcess iterates over all ranges and enqueues any that
 // need their raft logs truncated and then process each of them.
 func (s *Store) ForceRaftLogScanAndProcess() {
-	// Gather the list of replicas to call MaybeAdd on to avoid locking the
-	// Mutex twice.
-	s.mu.Lock()
-	replicas := make([]*Replica, 0, len(s.mu.replicas))
-	for _, r := range s.mu.replicas {
-		replicas = append(replicas, r)
-	}
-	s.mu.Unlock()
-
-	// Add each replica to the queue.
-	for _, r := range replicas {
-		s.raftLogQueue.MaybeAdd(r, s.ctx.Clock.Now())
-	}
-
-	s.raftLogQueue.DrainQueue(s.ctx.Clock)
+	forceScanAndProcess(s, s.raftLogQueue.baseQueue)
 }
 
 // GetDeadReplicas exports s.deadReplicas for tests.
@@ -150,12 +144,12 @@ func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 }
 
 // ManualReplicaGC processes the specified replica using the store's GC queue.
-func (s *Store) ManualReplicaGC(repl *Replica) error {
+func (s *Store) ManualReplicaGC(ref *ReplicaRef) error {
 	cfg, ok := s.Gossip().GetSystemConfig()
 	if !ok {
 		return fmt.Errorf("%s: system config not yet available", s)
 	}
-	return s.gcQueue.process(s.Ctx(), s.Clock().Now(), repl, cfg)
+	return s.gcQueue.process(s.Ctx(), s.Clock().Now(), ref, cfg)
 }
 
 func (r *Replica) RaftLock() {

@@ -27,6 +27,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -235,6 +236,11 @@ func TestGCQueueProcess(t *testing.T) {
 	}
 
 	for i, datum := range data {
+		// TODO(tschottdorf): Fixing up the SendWrappedWith calls below to
+		// use tc.SendWrappedWith makes this test fail. The change requires
+		// to remove the timestamp from the header (since that of the Txn
+		// already specifies it), and somehow this changes the results.
+		// This is odd - should investigate.
 		if datum.del {
 			dArgs := deleteArgs(datum.key)
 			var txn *roachpb.Transaction
@@ -243,10 +249,11 @@ func TestGCQueueProcess(t *testing.T) {
 				txn.OrigTimestamp = datum.ts
 				txn.Timestamp = datum.ts
 			}
-			if _, err := tc.SendWrappedWith(roachpb.Header{
-				Timestamp: datum.ts,
-				Txn:       txn,
-			}, &dArgs); err != nil {
+			if _, err := client.SendWrappedWith(tc.rng, context.TODO(),
+				roachpb.Header{
+					Txn:       txn,
+					Timestamp: datum.ts,
+				}, &dArgs); err != nil {
 				t.Fatalf("%d: could not delete data: %s", i, err)
 			}
 		} else {
@@ -257,10 +264,11 @@ func TestGCQueueProcess(t *testing.T) {
 				txn.OrigTimestamp = datum.ts
 				txn.Timestamp = datum.ts
 			}
-			if _, err := tc.SendWrappedWith(roachpb.Header{
-				Timestamp: datum.ts,
-				Txn:       txn,
-			}, &pArgs); err != nil {
+			if _, err := client.SendWrappedWith(tc.rng, context.TODO(),
+				roachpb.Header{
+					Txn:       txn,
+					Timestamp: datum.ts,
+				}, &pArgs); err != nil {
 				t.Fatalf("%d: could not put data: %s", i, err)
 			}
 		}
@@ -273,7 +281,7 @@ func TestGCQueueProcess(t *testing.T) {
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(context.Background(), tc.clock.Now(), tc.rng, cfg); err != nil {
+	if err := gcQ.process(context.Background(), tc.clock.Now(), tc.rng.AsRef(), cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -489,7 +497,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		t.Fatal("config not set")
 	}
 
-	if err := gcQ.process(context.Background(), tc.clock.Now(), tc.rng, cfg); err != nil {
+	if err := gcQ.process(context.Background(), tc.clock.Now(), tc.rng.AsRef(), cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -601,7 +609,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(context.Background(), tc.clock.Now(), tc.rng, cfg); err != nil {
+	if err := gcQ.process(context.Background(), tc.clock.Now(), tc.rng.AsRef(), cfg); err != nil {
 		t.Fatal(err)
 	}
 

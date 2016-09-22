@@ -422,7 +422,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	}
 	gArgs = getArgs([]byte("x"))
 	if reply, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
-		RangeID: newRng.RangeID,
+		RangeID: newRng.Desc().RangeID,
 	}, &gArgs); pErr != nil {
 		t.Fatal(pErr)
 	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
@@ -443,7 +443,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	// Send out the same increment copied from above (same txn/sequence), but
 	// now to the newly created range (which should hold that key).
 	_, pErr = client.SendWrappedWith(rg1(store), nil, roachpb.Header{
-		RangeID: newRng.RangeID,
+		RangeID: newRng.Desc().RangeID,
 		Txn:     &rTxn,
 	}, &rIncArgs)
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
@@ -457,7 +457,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 		t.Fatal(err)
 	}
 	lKeyBytes, lValBytes := left.KeyBytes, left.ValBytes
-	if err := engine.MVCCGetRangeStats(context.Background(), store.Engine(), newRng.RangeID, &right); err != nil {
+	if err := engine.MVCCGetRangeStats(context.Background(), store.Engine(), newRng.Desc().RangeID, &right); err != nil {
 		t.Fatal(err)
 	}
 	rKeyBytes, rValBytes := right.KeyBytes, right.ValBytes
@@ -496,22 +496,28 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		t.Fatal(pErr)
 	}
 	// Verify empty range has empty stats.
-	rng := store.LookupReplica(keyPrefix, nil)
+	ref := store.LookupReplica(keyPrefix, nil)
+	rng, release, err := ref.Acquire()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// NOTE that this value is expected to change over time, depending on what
 	// we store in the sys-local keyspace. Update it accordingly for this test.
 	empty := enginepb.MVCCStats{LastUpdateNanos: manual.UnixNano()}
-	if err := verifyRangeStats(store.Engine(), rng.RangeID, empty); err != nil {
+	if err := verifyRangeStats(store.Engine(), rng.Desc().RangeID, empty); err != nil {
 		t.Fatal(err)
 	}
 
 	// Write random data.
-	midKey := writeRandomDataToRange(t, store, rng.RangeID, keyPrefix)
+	midKey := writeRandomDataToRange(t, store, rng.Desc().RangeID, keyPrefix)
 
 	// Get the range stats now that we have data.
 	snap := store.Engine().NewSnapshot()
 	defer snap.Close()
 	var ms enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(context.Background(), snap, rng.RangeID, &ms); err != nil {
+	if err := engine.MVCCGetRangeStats(context.Background(), snap, rng.Desc().RangeID, &ms); err != nil {
 		t.Fatal(err)
 	}
 	if err := verifyRecomputedStats(snap, rng.Desc(), ms, manual.UnixNano()); err != nil {
@@ -526,7 +532,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	// Split the range at approximate halfway point.
 	args = adminSplitArgs(keyPrefix, midKey)
 	if _, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
-		RangeID: rng.RangeID,
+		RangeID: rng.Desc().RangeID,
 	}, &args); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -534,11 +540,11 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	snap = store.Engine().NewSnapshot()
 	defer snap.Close()
 	var msLeft, msRight enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(context.Background(), snap, rng.RangeID, &msLeft); err != nil {
+	if err := engine.MVCCGetRangeStats(context.Background(), snap, rng.Desc().RangeID, &msLeft); err != nil {
 		t.Fatal(err)
 	}
 	rngRight := store.LookupReplica(midKey, nil)
-	if err := engine.MVCCGetRangeStats(context.Background(), snap, rngRight.RangeID, &msRight); err != nil {
+	if err := engine.MVCCGetRangeStats(context.Background(), snap, rngRight.Desc().RangeID, &msRight); err != nil {
 		t.Fatal(err)
 	}
 
@@ -607,18 +613,18 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	// NOTE that this value is expected to change over time, depending on what
 	// we store in the sys-local keyspace. Update it accordingly for this test.
 	empty := enginepb.MVCCStats{LastUpdateNanos: manual.UnixNano()}
-	if err := verifyRangeStats(store.Engine(), rng.RangeID, empty); err != nil {
+	if err := verifyRangeStats(store.Engine(), rng.Desc().RangeID, empty); err != nil {
 		t.Fatal(err)
 	}
 
 	// Write random TimeSeries data.
-	midKey := writeRandomTimeSeriesDataToRange(t, store, rng.RangeID, keyPrefix)
+	midKey := writeRandomTimeSeriesDataToRange(t, store, rng.Desc().RangeID, keyPrefix)
 	manual.Increment(100)
 
 	// Split the range at approximate halfway point.
 	args = adminSplitArgs(keyPrefix, midKey)
 	if _, pErr := client.SendWrappedWith(rg1(store), nil, roachpb.Header{
-		RangeID: rng.RangeID,
+		RangeID: rng.Desc().RangeID,
 	}, &args); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -626,11 +632,11 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	snap := store.Engine().NewSnapshot()
 	defer snap.Close()
 	var msLeft, msRight enginepb.MVCCStats
-	if err := engine.MVCCGetRangeStats(context.Background(), snap, rng.RangeID, &msLeft); err != nil {
+	if err := engine.MVCCGetRangeStats(context.Background(), snap, rng.Desc().RangeID, &msLeft); err != nil {
 		t.Fatal(err)
 	}
 	rngRight := store.LookupReplica(midKey, nil)
-	if err := engine.MVCCGetRangeStats(context.Background(), snap, rngRight.RangeID, &msRight); err != nil {
+	if err := engine.MVCCGetRangeStats(context.Background(), snap, rngRight.Desc().RangeID, &msRight); err != nil {
 		t.Fatal(err)
 	}
 
@@ -706,17 +712,23 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	tableBoundary := keys.MakeTablePrefix(descID)
 
 	{
-		var rng *storage.Replica
+		var ref *storage.ReplicaRef
 
 		// Wait for the range to be split along table boundaries.
 		expectedRSpan := roachpb.RSpan{Key: roachpb.RKey(tableBoundary), EndKey: roachpb.RKeyMax}
 		util.SucceedsSoon(t, func() error {
-			rng = store.LookupReplica(tableBoundary, nil)
-			if actualRSpan := rng.Desc().RSpan(); !actualRSpan.Equal(expectedRSpan) {
-				return errors.Errorf("expected range %s to span %s", rng, expectedRSpan)
+			ref = store.LookupReplica(tableBoundary, nil)
+			if actualRSpan := ref.Desc().RSpan(); !actualRSpan.Equal(expectedRSpan) {
+				return errors.Errorf("expected range %s to span %s", ref, expectedRSpan)
 			}
 			return nil
 		})
+
+		rng, release, err := ref.Acquire()
+		defer release()
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		// Check range's max bytes settings.
 		if actualMaxBytes := rng.GetMaxBytes(); actualMaxBytes != maxBytes {
@@ -748,7 +760,12 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	config.TestingSetupZoneConfigHook(stopper)
 	defer stopper.Stop()
 
-	origRng := store.LookupReplica(roachpb.RKeyMin, nil)
+	origRef := store.LookupReplica(roachpb.RKeyMin, nil)
+	origRng, release, err := origRef.Acquire()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Set max bytes.
 	const maxBytes = 1 << 16
@@ -762,7 +779,12 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 
 	// Verify that the range is split and the new range has the correct max bytes.
 	util.SucceedsSoon(t, func() error {
-		newRng := store.LookupReplica(keys.MakeTablePrefix(descID), nil)
+		newRef := store.LookupReplica(keys.MakeTablePrefix(descID), nil)
+		newRng, release, err := newRef.Acquire()
+		defer release()
+		if err != nil {
+			t.Fatal(err)
+		}
 		if newRng.RangeID == origRng.RangeID {
 			return errors.Errorf("expected new range created by split")
 		}
@@ -922,7 +944,7 @@ func runSetupSplitSnapshotRace(t *testing.T, testFn func(*multiTestContext, roac
 	// Get the left range's ID. This is currently 2, but using
 	// LookupReplica is more future-proof (and see below for
 	// rightRangeID).
-	leftRangeID := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil).RangeID
+	leftRangeID := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil).Desc().RangeID
 
 	// Replicate the left range onto nodes 1-3 and remove it from node 0.
 	mtc.replicateRange(leftRangeID, 1, 2, 3)
@@ -946,7 +968,7 @@ func runSetupSplitSnapshotRace(t *testing.T, testFn func(*multiTestContext, roac
 	// 1, it is currently 11 and not 3 as might be expected.
 	var rightRangeID roachpb.RangeID
 	util.SucceedsSoon(t, func() error {
-		rightRangeID = mtc.stores[1].LookupReplica(roachpb.RKey("z"), nil).RangeID
+		rightRangeID = mtc.stores[1].LookupReplica(roachpb.RKey("z"), nil).Desc().RangeID
 		if rightRangeID == leftRangeID {
 			return errors.Errorf("store 1 hasn't processed split yet")
 		}
@@ -1153,7 +1175,7 @@ func TestStoreSplitTimestampCacheReadRace(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		h.RangeID = store.LookupReplica(keyAddr, nil).RangeID
+		h.RangeID = store.LookupReplica(keyAddr, nil).Desc().RangeID
 		_, respH, pErr := storage.SendWrapped(store, context.Background(), h, &args)
 		if pErr != nil {
 			t.Fatal(pErr)
@@ -1375,7 +1397,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	// Replicate the left range onto the second node. We don't wait since we
 	// don't actually care what the second node does. All we want is that the
 	// first node isn't surprised by messages from that node.
-	mtc.replicateRange(leftRange.RangeID, 1)
+	mtc.replicateRange(leftRange.Desc().RangeID, 1)
 
 	for i := 0; i < 10; i++ {
 		var wg sync.WaitGroup
@@ -1676,7 +1698,7 @@ func TestStoreSplitBeginTxnPushMetaIntentRace(t *testing.T) {
 		}
 		args := adminSplitArgs(keys.SystemMax, splitKey.AsRawKey())
 		_, pErr := client.SendWrappedWith(store, nil, roachpb.Header{
-			RangeID: store.LookupReplica(splitKey, nil).RangeID,
+			RangeID: store.LookupReplica(splitKey, nil).Desc().RangeID,
 		}, &args)
 		doneSplit <- pErr
 	}()
