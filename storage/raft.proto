@@ -129,7 +129,6 @@ message ConfChangeContext {
 }
 
 service MultiRaft {
-  rpc RaftMessage (stream RaftMessageRequest) returns (stream RaftMessageResponse) {}
   rpc RaftMessageBatch (stream RaftMessageRequestBatch) returns (stream RaftMessageResponse) {}
   rpc RaftSnapshot (stream SnapshotRequest) returns (stream SnapshotResponse) {}
 }

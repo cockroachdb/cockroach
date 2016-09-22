@@ -284,49 +284,8 @@ func (t *RaftTransport) getStats(nodeID roachpb.NodeID) *raftTransportStats {
 	return stats
 }
 
-// RaftMessage proxies the incoming requests to the listening server interface.
-func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err error) {
-	errCh := make(chan error, 1)
-
-	// Node stopping error is caught below in the select.
-	if err := t.rpcContext.Stopper.RunTask(func() {
-		t.rpcContext.Stopper.RunWorker(func() {
-			errCh <- func() error {
-				var stats *raftTransportStats
-				for {
-					req, err := stream.Recv()
-					if err != nil {
-						return err
-					}
-
-					if stats == nil {
-						stats = t.getStats(req.FromReplica.NodeID)
-					}
-					atomic.AddInt64(&stats.serverRecv, 1)
-
-					if pErr := t.handleRaftRequest(stream.Context(), req, stream); pErr != nil {
-						atomic.AddInt64(&stats.serverSent, 1)
-						if err := stream.Send(newRaftMessageResponse(req, pErr)); err != nil {
-							return err
-						}
-					}
-				}
-			}()
-		})
-	}); err != nil {
-		return err
-	}
-
-	select {
-	case err := <-errCh:
-		return err
-	case <-t.rpcContext.Stopper.ShouldQuiesce():
-		return nil
-	}
-}
-
 // RaftMessageBatch proxies the incoming requests to the listening server interface.
-func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer) (err error) {
+func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer) error {
 	errCh := make(chan error, 1)
 
 	// Node stopping error is caught below in the select.
@@ -346,10 +305,10 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 					if stats == nil {
 						stats = t.getStats(batch.Requests[0].FromReplica.NodeID)
 					}
-					atomic.AddInt64(&stats.serverRecv, int64(len(batch.Requests)))
 
 					for i := range batch.Requests {
 						req := &batch.Requests[i]
+						atomic.AddInt64(&stats.serverRecv, 1)
 						if pErr := t.handleRaftRequest(stream.Context(), req, stream); pErr != nil {
 							atomic.AddInt64(&stats.serverSent, 1)
 							if err := stream.Send(newRaftMessageResponse(req, pErr)); err != nil {
