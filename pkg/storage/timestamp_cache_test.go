@@ -19,7 +19,6 @@ package storage
 import (
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -27,42 +26,40 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-const (
-	maxClockOffset = 250 * time.Millisecond
-)
-
 func TestTimestampCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	clock.SetMaxOffset(maxClockOffset)
+	baseTS := int64(100)
+	manual.Set(baseTS)
 	tc := newTimestampCache(clock)
+	tc.SetLowWater(hlc.ZeroTimestamp.Add(baseTS, 0))
 
-	// First simulate a read of just "a" at time 0.
-	tc.add(roachpb.Key("a"), nil, clock.Now(), nil, true)
-	// Although we added "a" at time 0, the internal cache should still
-	// be empty because the t=0 < lowWater.
+	// First simulate a read of just "a" at time 50.
+	tc.add(roachpb.Key("a"), nil, hlc.ZeroTimestamp.Add(50, 0), nil, true)
+	// Although we added "a" at time 50, the internal cache should still
+	// be empty because the t=50 < baseTS.
 	if tc.rCache.Len() > 0 {
 		t.Errorf("expected cache to be empty, but contains %d elements", tc.rCache.Len())
 	}
-	// Verify GetMax returns the lowWater mark which is maxClockOffset.
-	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("a"), nil); rTS.WallTime != maxClockOffset.Nanoseconds() || ok {
-		t.Errorf("expected maxClockOffset for key \"a\"; ok=%t", ok)
+	// Verify GetMax returns the lowWater mark.
+	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("a"), nil); rTS.WallTime != baseTS || ok {
+		t.Errorf("expected baseTS for key \"a\"; ok=%t", ok)
 	}
-	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("notincache"), nil); rTS.WallTime != maxClockOffset.Nanoseconds() || ok {
-		t.Errorf("expected maxClockOffset for key \"notincache\"; ok=%t", ok)
+	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("notincache"), nil); rTS.WallTime != baseTS || ok {
+		t.Errorf("expected baseTS for key \"notincache\"; ok=%t", ok)
 	}
 
 	// Advance the clock and verify same low water mark.
-	manual.Set(maxClockOffset.Nanoseconds() + 1)
-	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("a"), nil); rTS.WallTime != maxClockOffset.Nanoseconds() || ok {
-		t.Errorf("expected maxClockOffset for key \"a\"; ok=%t", ok)
+	manual.Set(200)
+	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("a"), nil); rTS.WallTime != baseTS || ok {
+		t.Errorf("expected baseTS for key \"a\"; ok=%t", ok)
 	}
-	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("notincache"), nil); rTS.WallTime != maxClockOffset.Nanoseconds() || ok {
-		t.Errorf("expected maxClockOffset for key \"notincache\"; ok=%t", ok)
+	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("notincache"), nil); rTS.WallTime != baseTS || ok {
+		t.Errorf("expected baseTS for key \"notincache\"; ok=%t", ok)
 	}
 
-	// Sim a read of "b"-"c" at time maxClockOffset + 1.
+	// Sim a read of "b"-"c" at a time above the low-water mark.
 	ts := clock.Now()
 	tc.add(roachpb.Key("b"), roachpb.Key("c"), ts, nil, true)
 
@@ -73,8 +70,8 @@ func TestTimestampCache(t *testing.T) {
 	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("bb"), nil); !rTS.Equal(ts) || !ok {
 		t.Errorf("expected current time for key \"bb\"; ok=%t", ok)
 	}
-	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("c"), nil); rTS.WallTime != maxClockOffset.Nanoseconds() || ok {
-		t.Errorf("expected maxClockOffset for key \"c\"; ok=%t", ok)
+	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("c"), nil); rTS.WallTime != baseTS || ok {
+		t.Errorf("expected baseTS for key \"c\"; ok=%t", ok)
 	}
 	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("b"), roachpb.Key("c")); !rTS.Equal(ts) || !ok {
 		t.Errorf("expected current time for key \"b\"-\"c\"; ok=%t", ok)
@@ -82,8 +79,8 @@ func TestTimestampCache(t *testing.T) {
 	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("bb"), roachpb.Key("bz")); !rTS.Equal(ts) || !ok {
 		t.Errorf("expected current time for key \"bb\"-\"bz\"; ok=%t", ok)
 	}
-	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("a"), roachpb.Key("b")); rTS.WallTime != maxClockOffset.Nanoseconds() || ok {
-		t.Errorf("expected maxClockOffset for key \"a\"-\"b\"; ok=%t", ok)
+	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("a"), roachpb.Key("b")); rTS.WallTime != baseTS || ok {
+		t.Errorf("expected baseTS for key \"a\"-\"b\"; ok=%t", ok)
 	}
 	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("a"), roachpb.Key("bb")); !rTS.Equal(ts) || !ok {
 		t.Errorf("expected current time for key \"a\"-\"bb\"; ok=%t", ok)
@@ -97,8 +94,8 @@ func TestTimestampCache(t *testing.T) {
 	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("bz"), roachpb.Key("d")); !rTS.Equal(ts) || !ok {
 		t.Errorf("expected current time for key \"bz\"-\"d\"; ok=%t", ok)
 	}
-	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("c"), roachpb.Key("d")); rTS.WallTime != maxClockOffset.Nanoseconds() || ok {
-		t.Errorf("expected maxClockOffset for key \"c\"-\"d\"; ok=%t", ok)
+	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("c"), roachpb.Key("d")); rTS.WallTime != baseTS || ok {
+		t.Errorf("expected baseTS for key \"c\"-\"d\"; ok=%t", ok)
 	}
 }
 
@@ -108,11 +105,10 @@ func TestTimestampCacheSetLowWater(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	clock.SetMaxOffset(maxClockOffset)
 	tc := newTimestampCache(clock)
 
-	// Increment time to the maxClockOffset low water mark + 10.
-	manual.Set(maxClockOffset.Nanoseconds() + 10)
+	// Increment time to the low water mark + 10.
+	manual.Set(10)
 	aTS := clock.Now()
 	tc.add(roachpb.Key("a"), nil, aTS, nil, true)
 
@@ -158,12 +154,11 @@ func TestTimestampCacheEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	clock.SetMaxOffset(maxClockOffset)
 	tc := newTimestampCache(clock)
 	tc.evictionSizeThreshold = 0
 
-	// Increment time to the maxClockOffset low water mark + 1.
-	manual.Set(maxClockOffset.Nanoseconds() + 1)
+	// Increment time to the low water mark + 1.
+	manual.Set(1)
 	aTS := clock.Now()
 	tc.add(roachpb.Key("a"), nil, aTS, nil, true)
 
@@ -184,11 +179,10 @@ func TestTimestampCacheNoEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	clock.SetMaxOffset(maxClockOffset)
 	tc := newTimestampCache(clock)
 
-	// Increment time to the maxClockOffset low water mark + 1.
-	manual.Set(maxClockOffset.Nanoseconds() + 1)
+	// Increment time to the low water mark + 1.
+	manual.Set(1)
 	aTS := clock.Now()
 	tc.add(roachpb.Key("a"), nil, aTS, nil, true)
 	tc.AddRequest(cacheRequest{
@@ -222,7 +216,7 @@ func TestTimestampCacheMergeInto(t *testing.T) {
 		{true, 4},
 		{false, 7},
 	}
-	for _, test := range testCases {
+	for i, test := range testCases {
 		tc1 := newTimestampCache(clock)
 		tc2 := newTimestampCache(clock)
 
@@ -244,10 +238,10 @@ func TestTimestampCacheMergeInto(t *testing.T) {
 		tc1.MergeInto(tc2, test.useClear)
 
 		if tc2.rCache.Len() != test.expLen {
-			t.Errorf("expected merged length of %d; got %d", test.expLen, tc2.rCache.Len())
+			t.Errorf("%d: expected merged length of %d; got %d", i, test.expLen, tc2.rCache.Len())
 		}
 		if !tc2.latest.Equal(tc1.latest) {
-			t.Errorf("expected latest to be updated to %s; got %s", tc1.latest, tc2.latest)
+			t.Errorf("%d: expected latest to be updated to %s; got %s", i, tc1.latest, tc2.latest)
 		}
 
 		if rTS, _, ok := tc2.GetMaxRead(roachpb.Key("a"), nil); !rTS.Equal(adTS) || !ok {
@@ -466,7 +460,6 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	clock.SetMaxOffset(0)
 	tc := newTimestampCache(clock)
 
 	// Run each test case in several configurations.
@@ -511,7 +504,7 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 						}
 					}
 
-					tc.Clear(clock)
+					tc.Clear(clock.Now())
 					if simultaneous {
 						now := clock.Now()
 						for i := range txns {
@@ -543,21 +536,18 @@ func TestTimestampCacheClear(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	clock.SetMaxOffset(maxClockOffset)
 	tc := newTimestampCache(clock)
 
-	// Increment time to the maxClockOffset low water mark + 1.
-	manual.Set(maxClockOffset.Nanoseconds() + 1)
+	manual.Set(5000000)
 	ts := clock.Now()
 	tc.add(roachpb.Key("a"), nil, ts, nil, true)
 
 	// Clear the cache, which will reset the low water mark to
-	// the current time + maxClockOffset.
-	tc.Clear(clock)
+	// the current time.
+	tc.Clear(clock.Now())
 
-	// Fetching any keys should give current time + maxClockOffset
+	// Fetching any keys should give current time.
 	expTS := clock.Timestamp()
-	expTS.WallTime += maxClockOffset.Nanoseconds()
 	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("a"), nil); !rTS.Equal(expTS) || ok {
 		t.Errorf("expected \"a\" to have cleared timestamp; exp ok=false; got %t", ok)
 	}
@@ -634,7 +624,7 @@ func BenchmarkTimestampCacheInsertion(b *testing.B) {
 	tc := newTimestampCache(clock)
 
 	for i := 0; i < b.N; i++ {
-		tc.Clear(clock)
+		tc.Clear(clock.Now())
 
 		cdTS := clock.Now()
 		tc.add(roachpb.Key("c"), roachpb.Key("d"), cdTS, nil, true)
