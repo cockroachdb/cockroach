@@ -817,6 +817,21 @@ func (s *Store) migrate(ctx context.Context, desc roachpb.RangeDescriptor) {
 	}
 }
 
+// ReadStoreIdent reads the StoreIdent from the store.
+// It returns *NotBootstrappedError if the ident is missing (meaning that the
+// store needs to be bootstrapped).
+func ReadStoreIdent(ctx context.Context, eng engine.Engine) (roachpb.StoreIdent, error) {
+	var ident roachpb.StoreIdent
+	ok, err := engine.MVCCGetProto(
+		ctx, eng, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil, &ident)
+	if err != nil {
+		return roachpb.StoreIdent{}, err
+	} else if !ok {
+		return roachpb.StoreIdent{}, &NotBootstrappedError{}
+	}
+	return ident, err
+}
+
 // Start the engine, set the GC and read the StoreIdent.
 func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	s.stopper = stopper
@@ -837,11 +852,10 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		}
 
 		// Read store ident and return a not-bootstrapped error if necessary.
-		ok, err := engine.MVCCGetProto(ctx, s.engine, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil, &s.Ident)
+		var err error
+		s.Ident, err = ReadStoreIdent(ctx, s.engine)
 		if err != nil {
 			return err
-		} else if !ok {
-			return &NotBootstrappedError{}
 		}
 	}
 	log.Event(ctx, "read store identity")
@@ -1249,18 +1263,21 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 		return errors.Errorf("store %s: unable to access: %s", s.engine, err)
 	} else if len(kvs) > 0 {
 		// See if this is an already-bootstrapped store.
-		if ok, err := engine.MVCCGetProto(
-			s.Ctx(), s.engine, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil, &s.Ident,
-		); err != nil {
-			return errors.Errorf("store %s is non-empty but cluster ID could not be determined: %s", s.engine, err)
-		} else if ok {
-			return errors.Errorf("store %s already belongs to cockroach cluster %s", s.engine, s.Ident.ClusterID)
+		s.Ident, err = ReadStoreIdent(s.Ctx(), s.engine)
+		if err != nil {
+			if _, ok := err.(*NotBootstrappedError); ok {
+				return errors.Errorf("can't bootstap non-empty store %s; it also hasn't previously been bootstrapped",
+					s.engine)
+			}
+			return errors.Errorf("can't bootstap non-empty store %s; couldn't determine the cluster it used to "+
+				"belong too: %s", s.engine, err)
 		}
 		keyVals := []string{}
 		for _, kv := range kvs {
 			keyVals = append(keyVals, fmt.Sprintf("%s: %q", kv.Key, kv.Value))
 		}
-		return errors.Errorf("store %s is non-empty but does not contain store metadata (first %d key/values: %s)", s.engine, len(keyVals), keyVals)
+		return errors.Errorf("can't bootstap non-empty store %s (clusterID: %d, first %d key/values: %s)",
+			s.engine, s.Ident.ClusterID, len(keyVals), keyVals)
 	}
 	err = engine.MVCCPutProto(s.Ctx(), s.engine, nil,
 		keys.StoreIdentKey(), hlc.ZeroTimestamp, nil, &s.Ident)
