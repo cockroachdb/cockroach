@@ -886,12 +886,12 @@ func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
 	defer r.mu.Unlock()
 
 	if desc.RangeID != r.RangeID {
-		r.panicf("range descriptor ID (%d) does not match replica's range ID (%d)",
+		log.Fatalf(r.ctx, "range descriptor ID (%d) does not match replica's range ID (%d)",
 			desc.RangeID, r.RangeID)
 	}
 	if r.mu.state.Desc != nil && r.mu.state.Desc.IsInitialized() &&
 		(desc == nil || !desc.IsInitialized()) {
-		r.panicf("cannot replace initialized descriptor with uninitialized one: %+v -> %+v",
+		log.Fatalf(r.ctx, "cannot replace initialized descriptor with uninitialized one: %+v -> %+v",
 			r.mu.state.Desc, desc)
 	}
 
@@ -1032,7 +1032,7 @@ func (r *Replica) assertState(reader engine.Reader) {
 func (r *Replica) assertStateLocked(reader engine.Reader) {
 	diskState, err := loadState(r.ctx, reader, r.mu.state.Desc)
 	if err != nil {
-		r.panic(err)
+		log.Fatal(r.ctx, err)
 	}
 	if !reflect.DeepEqual(diskState, r.mu.state) {
 		log.Fatalf(r.ctx, "on-disk and in-memory state diverged:\n%+v\n%+v", diskState, r.mu.state)
@@ -1075,9 +1075,9 @@ func (r *Replica) Send(
 		// empty batch; shouldn't happen (we could handle it, but it hints
 		// at someone doing weird things, and once we drop the key range
 		// from the header it won't be clear how to route those requests).
-		r.panicf("empty batch")
+		log.Fatalf(ctx, "empty batch")
 	} else {
-		r.panicf("don't know how to handle command %s", ba)
+		log.Fatalf(ctx, "don't know how to handle command %s", ba)
 	}
 	if _, ok := pErr.GetDetail().(*roachpb.RaftGroupDeletedError); ok {
 		// This error needs to be converted appropriately so that
@@ -2422,7 +2422,7 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 			raftGroup.ReportUnreachable(msg.To)
 			return true, nil
 		}); err != nil {
-			r.panic(err)
+			log.Fatal(r.ctx, err)
 		}
 	}
 }
@@ -2455,7 +2455,7 @@ func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
 		raftGroup.ReportSnapshot(to, snapStatus)
 		return true, nil
 	}); err != nil {
-		r.panic(err)
+		log.Fatal(r.ctx, err)
 	}
 }
 
@@ -3098,7 +3098,7 @@ func optimizePuts(batch engine.ReadWriter, reqs []roachpb.RequestUnion, distinct
 			case *roachpb.ConditionalPutRequest:
 				t.Blind = true
 			default:
-				panic(fmt.Sprintf("unexpected non-put request: %s", t))
+				log.Fatalf(context.TODO(), "unexpected non-put request: %s", t)
 			}
 		}
 	}
@@ -3203,7 +3203,7 @@ func (r *Replica) executeBatch(
 		if maxKeys != math.MaxInt64 {
 			retResults := reply.Header().NumKeys
 			if retResults > maxKeys {
-				r.panicf("received %d results, limit was %d", retResults, maxKeys)
+				log.Fatalf(ctx, "received %d results, limit was %d", retResults, maxKeys)
 			}
 			maxKeys -= retResults
 		}
@@ -3501,12 +3501,4 @@ func (r *Replica) endKey() roachpb.RKey {
 // Less implements the btree.Item interface.
 func (r *Replica) Less(i btree.Item) bool {
 	return r.endKey().Less(i.(rangeKeyItem).endKey())
-}
-
-func (r *Replica) panic(err error) {
-	panic(r.String() + ": " + err.Error())
-}
-
-func (r *Replica) panicf(format string, vals ...interface{}) {
-	panic(r.String() + ": " + fmt.Sprintf(format, vals...))
 }
