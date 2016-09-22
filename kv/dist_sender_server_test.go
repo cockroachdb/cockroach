@@ -1207,17 +1207,21 @@ func TestRequestToUninitializedRange(t *testing.T) {
 	raftClient := storage.NewMultiRaftClient(conn)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stream, err := raftClient.RaftMessage(ctx)
+	stream, err := raftClient.RaftMessageBatch(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	msg := storage.RaftMessageRequest{
-		RangeID:     rangeID,
-		ToReplica:   replica1,
-		FromReplica: replica2,
-		Message: raftpb.Message{
-			Type: raftpb.MsgApp,
-			To:   1,
+	msg := storage.RaftMessageRequestBatch{
+		Requests: []storage.RaftMessageRequest{
+			{
+				RangeID:     rangeID,
+				ToReplica:   replica1,
+				FromReplica: replica2,
+				Message: raftpb.Message{
+					Type: raftpb.MsgApp,
+					To:   1,
+				},
+			},
 		},
 	}
 	if err := stream.Send(&msg); err != nil {
