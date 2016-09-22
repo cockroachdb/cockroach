@@ -269,7 +269,7 @@ func (r *Replica) leasePostCommitTrigger(
 		// lease holder. Note that we'll call SetLowWater when we next acquire
 		// the lease.
 		r.mu.Lock()
-		r.mu.tsCache.Clear(r.store.Clock())
+		r.mu.tsCache.Clear(r.store.Clock().Now())
 		r.mu.Unlock()
 	}
 
@@ -355,10 +355,6 @@ func (r *Replica) handleTrigger(
 		)
 	}
 	if trigger.merge != nil {
-		r.mu.Lock()
-		r.mu.tsCache.Clear(r.store.Clock())
-		r.mu.Unlock()
-
 		if err := r.store.MergeRange(r, trigger.merge.LeftDesc.EndKey,
 			trigger.merge.RightDesc.RangeID,
 		); err != nil {
