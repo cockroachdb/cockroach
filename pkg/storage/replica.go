@@ -1306,7 +1306,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
 					return roachpb.NewError(roachpb.NewTransactionReplayError())
 				} else if !wTS.Less(ba.Txn.Timestamp) {
 					// This is a crucial bit of code. The timestamp cache is
-					// reset with the current time + max offset as the low water
+					// reset with the current time as the low-water
 					// mark, so if this replica recently obtained the lease,
 					// this case will be true for new txns, even if they're not
 					// a replay. We move the timestamp forward and return retry.

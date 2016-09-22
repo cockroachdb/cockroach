@@ -2977,10 +2977,6 @@ func (r *Replica) mergeTrigger(
 	mergedMS.Subtract(r.GetMVCCStats())
 	*ms = mergedMS
 
-	r.mu.Lock()
-	r.mu.tsCache.Clear(r.store.Clock())
-	r.mu.Unlock()
-
 	var pd ProposalData
 	pd.BlockReads = true
 	pd.ReplicatedProposalData.Merge = &storagebase.Merge{

@@ -73,6 +73,39 @@ func TestHealth(t *testing.T) {
 	}
 }
 
+// TestServerStartClock tests that a server's clock is not pushed out of thin
+// air. This used to happen - the simple act of starting was causing a server's
+// clock to be pushed because we were introducing bogus future timestamps into
+// our system.
+func TestServerStartClock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Set a high max-offset so that, if the server's clock is pushed by
+	// MaxOffset, we don't hide that under the latency of the Start operation
+	// which would allow the physical clock to catch up to the pushed one.
+	params := base.TestServerArgs{
+		MaxOffset: time.Second,
+	}
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+
+	// Run a command so that we are sure to touch the timestamp cache. This is
+	// actually not needed because other commands run during server
+	// initialization, but we cannot guarantee that's going to stay that way.
+	if err := s.(*TestServer).node.storeCfg.DB.AdminSplit(context.TODO(), "m"); err != nil {
+		t.Fatal(err)
+	}
+
+	now := s.Clock().Now()
+	// We rely on s.Clock() having been initialized from hlc.UnixNano(), which is a
+	// bit fragile.
+	physicalNow := hlc.UnixNano()
+	serverClockWasPushed := (now.Logical > 0) || (now.WallTime > physicalNow)
+	if serverClockWasPushed {
+		t.Fatalf("time: server %s vs actual %d", now, physicalNow)
+	}
+}
+
 // TestPlainHTTPServer verifies that we can serve plain http and talk to it.
 // This is controlled by -cert=""
 func TestPlainHTTPServer(t *testing.T) {
