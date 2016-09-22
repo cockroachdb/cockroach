@@ -1513,6 +1513,8 @@ func splitTriggerPostCommit(
 	// Copy the timestamp cache into the RHS range.
 	r.mu.Lock()
 	rightRng.mu.Lock()
+	// TODO(andrei): We should truncate the entries in both LHS and RHS' timestamp
+	// caches to the respective spans of these new ranges.
 	r.mu.tsCache.MergeInto(rightRng.mu.tsCache, true /* clear */)
 	rightRng.mu.Unlock()
 	r.mu.Unlock()
@@ -1688,6 +1690,10 @@ func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, su
 			subsumedDesc.Replicas, subsumingDesc.Replicas)
 	}
 
+	if err := s.maybeMergeTimestampCaches(subsumingRng, subsumedRng); err != nil {
+		return err
+	}
+
 	// Remove and destroy the subsumed range. Note that we were called
 	// (indirectly) from raft processing so we must call removeReplicaImpl
 	// directly to avoid deadlocking on Replica.raftMu.
@@ -1699,6 +1705,42 @@ func (s *Store) MergeRange(subsumingRng *Replica, updatedEndKey roachpb.RKey, su
 	copy := *subsumingDesc
 	copy.EndKey = updatedEndKey
 	return subsumingRng.setDesc(&copy)
+}
+
+// If the subsuming replica has the range lease, then we update its timestamp
+// cache with the entries from the subsumed. If it's not the lease holder,
+// then the timestamp cache doesn't matter (in fact it should be empty, to
+// save memory).
+func (s *Store) maybeMergeTimestampCaches(
+	subsumingRng *Replica,
+	subsumedRng *Replica,
+) error {
+	subsumingRng.mu.Lock()
+	defer subsumingRng.mu.Unlock()
+	subsumingLease := subsumingRng.mu.state.Lease
+
+	subsumedRng.mu.Lock()
+	defer subsumedRng.mu.Unlock()
+	subsumedLease := subsumedRng.mu.state.Lease
+
+	// TODO(andrei): I think checking the subsumed leases like this is incorrect,
+	// since the stores of the different replicas of subsuming can have different
+	// state for subsumed? Unless the subsumed range has been quiesced somehow.
+	if subsumedLease.Covers(s.Clock().Now()) &&
+		subsumingLease.Replica.StoreID != subsumedLease.Replica.StoreID {
+		// TODO(andrei): What should we do if we're not the lease holder for
+		// subsumed? The lease holder might have served commands that are in our
+		// future, so we can't start serving commands on the merged range
+		// immediately.
+		return errors.Errorf("cannot merge ranges with different lease holders. "+
+			"Subsuming lease: %s. Subsumed lease: %s.", subsumingLease, subsumedLease)
+	}
+
+	if subsumingLease.Covers(s.Clock().Now()) &&
+		subsumingLease.OwnedBy(s.StoreID()) {
+		subsumedRng.mu.tsCache.MergeInto(subsumingRng.mu.tsCache, false /* clear */)
+	}
+	return nil
 }
 
 // AddReplicaTest adds the replica to the store's replica map and to the sorted

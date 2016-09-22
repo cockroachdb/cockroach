@@ -2954,10 +2954,6 @@ func (r *Replica) mergeTrigger(
 	mergedMS.Subtract(r.GetMVCCStats())
 	*ms = mergedMS
 
-	r.mu.Lock()
-	r.mu.tsCache.Clear(r.store.Clock())
-	r.mu.Unlock()
-
 	trigger := &PostCommitTrigger{
 		// This makes sure that no reads are happening in parallel; see #3148.
 		noConcurrentReads: true,
