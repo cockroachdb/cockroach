@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/sdnotify"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
@@ -318,6 +319,8 @@ func (s *Server) Start(ctx context.Context) error {
 	// Copy log tags from s.Ctx()
 	ctx = log.WithLogTagsFromCtx(ctx, s.Ctx())
 
+	startTime := timeutil.Now()
+
 	tlsConfig, err := s.ctx.GetServerTLSConfig()
 	if err != nil {
 		return err
@@ -495,6 +498,27 @@ func (s *Server) Start(ctx context.Context) error {
 	s.stopper.RunWorker(func() {
 		netutil.FatalIfUnexpected(m.Serve())
 	})
+
+	// We might have to sleep a bit to protect against transferring leases too
+	// soon after startup: immediately after startup, it's not OK to transfer
+	// leases away because we can't compute a proper start timestamp for the
+	// transferred lease. This timestamp needs to be higher than all the reads
+	// that have been served by this node. The problem is that, after a restart,
+	// we don't know what reads we've served before the restart - we might have
+	// served reads in the future of this node's clock because we might have been
+	// using logical timestamp coming from other nodes with a faster clock. When
+	// we restarted, our (logical) clock is reset.
+	// So, we wait up to MaxOffset. We assume we couldn't have served timestamps
+	// more than MaxOffset in the future.
+	now := timeutil.Now()
+	minStartTime := startTime.Add(s.clock.MaxOffset())
+	if now.Before(minStartTime) {
+		sleepDuration := minStartTime.Sub(now)
+		log.VEventf(2, ctx,
+			"sleeping for %s to protect against transferring leases", sleepDuration)
+		time.Sleep(sleepDuration)
+	}
+
 	log.Event(ctx, "accepting connections")
 
 	// Initialize grpc-gateway mux and context.
