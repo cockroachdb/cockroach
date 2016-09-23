@@ -24,13 +24,19 @@ kubectl run cockroachdb --image=cockroachdb/cockroach --restart=Never -- start
 
 ### PetSet limitations
 
-Standard PetSet limitations apply: There is currently no possibility to use
-node-local storage (outside of single-node tests), and so there is likely
-a performance hit associated with running CockroachDB on some external storage.
-Note that CockroachDB already does replication and thus, for better performance,
-should not be deployed on a persistent volume which already replicates internally.
-High-performance use cases on a private Kubernetes cluster should consider
-a DaemonSet deployment.
+PetSets are an alpha feature as of Kubernetes version 1.4. As such, they may
+not be available in certain hosted environments, such as Google's Container
+Engine service.
+
+Also, there is currently no possibility to use node-local storage (outside of
+single-node tests), and so there is likely a performance hit associated with
+running CockroachDB on some external storage. Note that CockroachDB already
+does replication and thus, for better performance, should not be deployed on a
+persistent volume which already replicates internally. High-performance use
+cases on a private Kubernetes cluster may want to consider a
+[DaemonSet](http://kubernetes.io/docs/admin/daemons/) deployment until PetSets
+support node-local storage
+([open issue here](https://github.com/kubernetes/kubernetes/issues/7562)).
 
 ### Recovery after persistent storage failure
 
@@ -42,16 +48,40 @@ first node is special in that the administrator must manually prepopulate the
 parameter. If this is not done, the first node will bootstrap a new cluster,
 which will lead to a lot of trouble.
 
-### Dynamic provisioning
+### Dynamic volume provisioning
 
-The deployment is written for a use case in which dynamic provisioning is
+The deployment is written for a use case in which dynamic volume provisioning is
 available. When that is not the case, the persistent volume claims need
 to be created manually. See [minikube.sh](minikube.sh) for the necessary
-steps.
+steps. If you're on GCE or AWS, where dynamic provisioning is supported, no
+manual work is needed to create the persistent volumes.
 
 ## Testing locally on minikube
 
-Follow the steps in [minikube.sh](minikube.sh) (or simply run that file).
+Set up your minikube cluster following the
+[instructions provided in the Kubernetes docs](http://kubernetes.io/docs/getting-started-guides/minikube/).
+
+Then once you have a Kubernetes cluster running on minikube, follow the steps
+in [minikube.sh](minikube.sh) (or simply run that file) to create your
+cockroachdb cluster.
+
+## Testing in the cloud on AWS
+
+Set up your cluster following the
+[instructions provided in the Kubernetes docs](http://kubernetes.io/docs/getting-started-guides/aws/).
+
+Then once you have a Kubernetes cluster running, either run the
+[aws.sh](aws.sh) script or just run `kubectl create -f cockroachdb-petset.yaml`
+to create your cockroachdb cluster.
+
+## Testing in the cloud on GCE
+
+Set up your cluster following the
+[instructions provided in the Kubernetes docs](http://kubernetes.io/docs/getting-started-guides/gce/).
+
+Then once you have a Kubernetes cluster running, either run the
+[gce.sh](gce.sh) script or just run `kubectl create -f cockroachdb-petset.yaml`
+to create your cockroachdb cluster.
 
 ## Accessing the database
 
@@ -92,10 +122,17 @@ database and ensuring the other replicas have all data that was written.
 
 ## Scaling up or down
 
-Simply edit the PetSet (but note that you may need to create a new persistent
-volume claim first). If you ran `minikube.sh`, there's a spare volume so you
-can immediately scale up by one. Convince yourself that the new node
-immediately serves reads and writes.
+Simply patch the PetSet by running
+
+```shell
+kubectl patch petset cockroachdb -p '{"spec":{"replicas":6}}'
+```
+
+Note that you may need to create a new persistent volume claim first. If you
+ran `minikube.sh`, there's a spare volume so you can immediately scale up by
+one. If you're running on GCE or AWS, you can scale up by as many as you want
+because new volumes will automatically be created for you. Convince yourself
+that the new node immediately serves reads and writes.
 
 ## Cleaning up when you're done
 
