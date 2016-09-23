@@ -284,8 +284,8 @@ func (t *RaftTransport) getStats(nodeID roachpb.NodeID) *raftTransportStats {
 	return stats
 }
 
-// RaftMessage proxies the incoming requests to the listening server interface.
-func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err error) {
+// RaftMessageBatch proxies the incoming requests to the listening server interface.
+func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer) error {
 	errCh := make(chan error, 1)
 
 	// Node stopping error is caught below in the select.
@@ -294,20 +294,26 @@ func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err err
 			errCh <- func() error {
 				var stats *raftTransportStats
 				for {
-					req, err := stream.Recv()
+					batch, err := stream.Recv()
 					if err != nil {
 						return err
 					}
+					if len(batch.Requests) == 0 {
+						continue
+					}
 
 					if stats == nil {
-						stats = t.getStats(req.FromReplica.NodeID)
+						stats = t.getStats(batch.Requests[0].FromReplica.NodeID)
 					}
-					atomic.AddInt64(&stats.serverRecv, 1)
 
-					if pErr := t.handleRaftRequest(stream.Context(), req, stream); pErr != nil {
-						atomic.AddInt64(&stats.serverSent, 1)
-						if err := stream.Send(newRaftMessageResponse(req, pErr)); err != nil {
-							return err
+					for i := range batch.Requests {
+						req := &batch.Requests[i]
+						atomic.AddInt64(&stats.serverRecv, 1)
+						if pErr := t.handleRaftRequest(stream.Context(), req, stream); pErr != nil {
+							atomic.AddInt64(&stats.serverSent, 1)
+							if err := stream.Send(newRaftMessageResponse(req, pErr)); err != nil {
+								return err
+							}
 						}
 					}
 				}
@@ -414,7 +420,7 @@ func (t *RaftTransport) connectAndProcess(
 		client := NewMultiRaftClient(conn)
 		ctx, cancel := context.WithCancel(context.TODO())
 		defer cancel()
-		stream, err := client.RaftMessage(ctx)
+		stream, err := client.RaftMessageBatch(ctx)
 		if err != nil {
 			return err
 		}
@@ -439,7 +445,7 @@ func (t *RaftTransport) processQueue(
 	nodeID roachpb.NodeID,
 	ch chan *RaftMessageRequest,
 	stats *raftTransportStats,
-	stream MultiRaft_RaftMessageClient,
+	stream MultiRaft_RaftMessageBatchClient,
 ) error {
 	errCh := make(chan error, 1)
 
@@ -471,6 +477,7 @@ func (t *RaftTransport) processQueue(
 
 	var raftIdleTimer timeutil.Timer
 	defer raftIdleTimer.Stop()
+	batch := &RaftMessageRequestBatch{}
 	for {
 		raftIdleTimer.Reset(raftIdleTimeout)
 		select {
@@ -482,7 +489,25 @@ func (t *RaftTransport) processQueue(
 		case err := <-errCh:
 			return err
 		case req := <-ch:
-			err := stream.Send(req)
+			batch.Requests = append(batch.Requests, *req)
+
+			if req.Message.Type != raftpb.MsgSnap {
+				// Pull off as many queued requests as possible.
+				//
+				// TODO(peter): Think about limiting the size of the batch we send.
+				for done := false; !done; {
+					select {
+					case req = <-ch:
+						batch.Requests = append(batch.Requests, *req)
+					default:
+						done = true
+					}
+				}
+			}
+
+			err := stream.Send(batch)
+			batch.Requests = batch.Requests[:0]
+
 			atomic.AddInt64(&stats.clientSent, 1)
 			if req.Message.Type == raftpb.MsgSnap {
 				select {
