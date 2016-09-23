@@ -227,7 +227,11 @@ func New(
 
 	registry.AddMetric(g.outgoing.gauge)
 	g.clientsMu.breakers = map[string]*circuit.Breaker{}
-	log.Infof(g.ctx, "initial resolvers: %s", resolvers)
+	resolverAddrs := make([]string, len(resolvers))
+	for i, resolver := range resolvers {
+		resolverAddrs[i] = resolver.Addr()
+	}
+	log.Infof(g.ctx, "initial resolvers: %v", resolverAddrs)
 	g.SetResolvers(resolvers)
 
 	g.mu.Lock()
