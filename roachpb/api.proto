@@ -288,16 +288,11 @@ message EndTransactionRequest {
 // and timestamp will be updated to reflect final committed
 // values. Clients may propagate the transaction timestamp as the
 // final txn commit timestamp in order to preserve causal ordering
-// between subsequent transactions. CommitWait specifies the commit
-// wait, which is the remaining time the client MUST wait before
-// signalling completion of the transaction to another distributed
-// node to maintain consistency.
+// between subsequent transactions.
 message EndTransactionResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // Remaining time (ns).
-  optional int64 commit_wait = 2 [(gogoproto.nullable) = false]; // TODO(tschottdorf): remove this
-  // Obsolete tag. Removed in #5966.
-  repeated bytes DEPRECATED_resolved = 3;
+  reserved 2;
+  reserved 3;
   // True if the transaction committed on the one phase commit path.
   // This means that all writes which were part of the transaction
   // were written as a single, atomic write batch to just one range.
