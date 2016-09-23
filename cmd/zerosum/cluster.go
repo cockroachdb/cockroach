@@ -77,7 +77,7 @@ func newCluster(size int) *cluster {
 	}
 }
 
-func (c *cluster) start(db string, args []string) {
+func (c *cluster) start(db string, numWorkers int, args []string) {
 	c.started = timeutil.Now()
 
 	baseCtx := &base.Context{
@@ -89,7 +89,7 @@ func (c *cluster) start(db string, args []string) {
 	for i := range c.nodes {
 		c.nodes[i] = c.makeNode(i, args)
 		c.clients[i] = c.makeClient(i)
-		c.db[i] = c.makeDB(i, db)
+		c.db[i] = c.makeDB(i, numWorkers, db)
 	}
 
 	log.Infof(context.Background(), "started %.3fs", timeutil.Since(c.started).Seconds())
@@ -153,13 +153,18 @@ func (c *cluster) makeClient(nodeIdx int) *client.DB {
 	return client.NewDB(sender)
 }
 
-func (c *cluster) makeDB(nodeIdx int, dbName string) *gosql.DB {
+func (c *cluster) makeDB(nodeIdx, numWorkers int, dbName string) *gosql.DB {
 	url := fmt.Sprintf("postgresql://root@localhost:%d/%s?sslmode=disable",
 		c.rpcPort(nodeIdx), dbName)
 	conn, err := gosql.Open("postgres", url)
 	if err != nil {
 		log.Fatal(context.Background(), err)
 	}
+	if numWorkers == 0 {
+		numWorkers = 1
+	}
+	conn.SetMaxOpenConns(numWorkers)
+	conn.SetMaxIdleConns(numWorkers)
 	return conn
 }
 

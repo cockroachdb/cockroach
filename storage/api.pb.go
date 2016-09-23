@@ -18,6 +18,7 @@
 		CollectChecksumRequest
 		CollectChecksumResponse
 		RaftMessageRequest
+		RaftMessageRequestBatch
 		RaftMessageResponseUnion
 		RaftMessageResponse
 		SnapshotRequest
