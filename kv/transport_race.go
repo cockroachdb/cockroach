@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 var running int32 // atomically updated
@@ -40,10 +41,15 @@ func init() {
 	incoming = make(chan *roachpb.BatchRequest, 100)
 }
 
-func jitter() time.Duration {
-	// Prevent the goroutine from spinning too hot as this lets CI times
-	// skyrocket.
-	return time.Duration(rand.Int63n(int64(300 * time.Microsecond)))
+const defaultRaceInterval = 150 * time.Microsecond
+
+func jitter(avgInterval time.Duration) time.Duration {
+	// Use defaultRaceInterval as a minimum to limit how much time
+	// we spend here.
+	if avgInterval < defaultRaceInterval {
+		avgInterval = defaultRaceInterval
+	}
+	return time.Duration(rand.Int63n(int64(2 * avgInterval)))
 }
 
 // grpcTransportFactory during race builds wraps the implementation and
@@ -73,7 +79,20 @@ func grpcTransportFactory(
 			bas := make([]*roachpb.BatchRequest, size)
 			encoder := gob.NewEncoder(ioutil.Discard)
 			for {
-				jittered := time.After(jitter())
+				iters++
+				start := timeutil.Now()
+				for _, ba := range bas {
+					if ba != nil {
+						if err := encoder.Encode(ba); err != nil {
+							panic(err)
+						}
+					}
+				}
+				// Prevent the goroutine from spinning too hot as this lets CI
+				// times skyrocket. Sleep on average for as long as we worked
+				// on the last iteration so we spend no more than half our CPU
+				// time on this task.
+				jittered := time.After(jitter(timeutil.Since(start)))
 				// Collect incoming requests until the jittered timer fires,
 				// then access everything we have.
 				for {
@@ -87,14 +106,6 @@ func grpcTransportFactory(
 					case <-jittered:
 					}
 					break
-				}
-				iters++
-				for _, ba := range bas {
-					if ba != nil {
-						if err := encoder.Encode(ba); err != nil {
-							panic(err)
-						}
-					}
 				}
 			}
 		})
