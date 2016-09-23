@@ -24,13 +24,19 @@ kubectl run cockroachdb --image=cockroachdb/cockroach --restart=Never -- start
 
 ### PetSet limitations
 
-Standard PetSet limitations apply: There is currently no possibility to use
-node-local storage (outside of single-node tests), and so there is likely
-a performance hit associated with running CockroachDB on some external storage.
-Note that CockroachDB already does replication and thus, for better performance,
-should not be deployed on a persistent volume which already replicates internally.
-High-performance use cases on a private Kubernetes cluster should consider
-a DaemonSet deployment.
+PetSets are an alpha feature as of Kubernetes version 1.4. As such, they may
+not be available in certain hosted environments, such as Google's Container
+Engine service.
+
+Also, there is currently no possibility to use node-local storage (outside of
+single-node tests), and so there is likely a performance hit associated with
+running CockroachDB on some external storage. Note that CockroachDB already
+does replication and thus, for better performance, should not be deployed on a
+persistent volume which already replicates internally. High-performance use
+cases on a private Kubernetes cluster may want to consider a
+[DaemonSet](http://kubernetes.io/docs/admin/daemons/) deployment until PetSets
+support node-local storage
+([open issue here](https://github.com/kubernetes/kubernetes/issues/7562)).
 
 ### Recovery after persistent storage failure
 
@@ -47,7 +53,8 @@ which will lead to a lot of trouble.
 The deployment is written for a use case in which dynamic provisioning is
 available. When that is not the case, the persistent volume claims need
 to be created manually. See [minikube.sh](minikube.sh) for the necessary
-steps.
+steps. If you're on GCE or AWS, where dynamic provisioning is supported, no
+manual work is needed to create the persistent volumes.
 
 ## Testing locally on minikube
 
@@ -94,8 +101,9 @@ database and ensuring the other replicas have all data that was written.
 
 Simply edit the PetSet (but note that you may need to create a new persistent
 volume claim first). If you ran `minikube.sh`, there's a spare volume so you
-can immediately scale up by one. Convince yourself that the new node
-immediately serves reads and writes.
+can immediately scale up by one. If you're running on GCE or AWS, you can scale
+up by as many as you want because new volumes will automatically be created for
+you. Convince yourself that the new node immediately serves reads and writes.
 
 ## Cleaning up when you're done
 
