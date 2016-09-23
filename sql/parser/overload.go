@@ -16,7 +16,10 @@
 
 package parser
 
-import "fmt"
+import (
+	"bytes"
+	"fmt"
+)
 
 // overloadImpl is an implementation of an overloaded function. It provides
 // access to the parameter type list  and the return type of the implementation.
@@ -36,6 +39,8 @@ type typeList interface {
 	// getAt returns the type at the given index in the typeList, or nil if the typeList
 	// cannot have a parameter at index i.
 	getAt(i int) Datum
+	// human readable signature
+	String() string
 }
 
 var _ typeList = ArgTypes{}
@@ -77,6 +82,20 @@ func (a ArgTypes) getAt(i int) Datum {
 	return a[i]
 }
 
+func (a ArgTypes) String() string {
+	var s bytes.Buffer
+	first := true
+	for i := range a {
+		if first {
+			first = false
+		} else {
+			s.WriteString(", ")
+		}
+		s.WriteString(a[i].Type())
+	}
+	return s.String()
+}
+
 // AnyType is a typeList implementation that accepts any arguments.
 type AnyType struct{}
 
@@ -94,6 +113,10 @@ func (AnyType) matchLen(l int) bool {
 
 func (AnyType) getAt(i int) Datum {
 	panic("getAt called on AnyType")
+}
+
+func (AnyType) String() string {
+	return "*"
 }
 
 // VariadicType is a typeList implementation which accepts any number of
@@ -122,6 +145,10 @@ func (v VariadicType) matchLen(l int) bool {
 
 func (v VariadicType) getAt(i int) Datum {
 	return v.Typ
+}
+
+func (v VariadicType) String() string {
+	return v.Typ.Type() + "..."
 }
 
 // SingleType is a typeList implementation which accepts a single
@@ -154,6 +181,10 @@ func (s SingleType) getAt(i int) Datum {
 		return nil
 	}
 	return s.Typ
+}
+
+func (s SingleType) String() string {
+	return s.Typ.Type()
 }
 
 // typeCheckOverloadedExprs determines the correct overload to use for the given set of
