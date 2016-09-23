@@ -12,7 +12,7 @@ case ${1-} in
     create)
     gcloud compute instances \
            create "${name}" \
-           --machine-type "custom-32-32768" \
+           --machine-type "custom-24-32768" \
            --network "default" \
            --maintenance-policy "MIGRATE" \
            --image "/ubuntu-os-cloud/ubuntu-1604-xenial-v20160830" \
