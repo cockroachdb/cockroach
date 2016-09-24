@@ -138,6 +138,7 @@ func createTestStoreWithEngine(
 	sCtx.Clock = clock
 	sCtx.DB = client.NewDB(sender)
 	sCtx.StorePool = storage.NewStorePool(
+		context.TODO(),
 		sCtx.Gossip,
 		clock,
 		rpcContext,
@@ -554,6 +555,7 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 
 func (m *multiTestContext) populateStorePool(idx int, stopper *stop.Stopper) {
 	m.storePools[idx] = storage.NewStorePool(
+		context.TODO(),
 		m.gossips[idx],
 		m.clock,
 		m.rpcContext,
