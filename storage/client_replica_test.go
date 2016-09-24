@@ -525,7 +525,7 @@ func TestRangeTransferLease(t *testing.T) {
 		// Transferring the lease to ourself should be a no-op.
 		origLeasePtr, _ := replica0.GetLease()
 		origLease := *origLeasePtr
-		if err := replica0.AdminTransferLease(replica0Desc.StoreID); err != nil {
+		if err := replica0.AdminTransferLease(context.Background(), replica0Desc.StoreID); err != nil {
 			t.Fatal(err)
 		}
 		newLeasePtr, _ := replica0.GetLease()
@@ -537,7 +537,8 @@ func TestRangeTransferLease(t *testing.T) {
 	{
 		// An invalid target should result in an error.
 		const expected = "unable to find store .* in range"
-		if err := replica0.AdminTransferLease(1000); !testutils.IsError(err, expected) {
+		if err := replica0.AdminTransferLease(
+			context.Background(), 1000); !testutils.IsError(err, expected) {
 			t.Fatalf("expected %s, but found %v", expected, err)
 		}
 	}
@@ -550,7 +551,7 @@ func TestRangeTransferLease(t *testing.T) {
 		return err
 	})
 
-	if err := replica0.AdminTransferLease(newHolderDesc.StoreID); err != nil {
+	if err := replica0.AdminTransferLease(context.Background(), newHolderDesc.StoreID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -635,7 +636,7 @@ func TestRangeTransferLease(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		// Transfer back from replica1 to replica0.
-		if err := replica1.AdminTransferLease(replica0Desc.StoreID); err != nil {
+		if err := replica1.AdminTransferLease(context.Background(), replica0Desc.StoreID); err != nil {
 			panic(err)
 		}
 	}()
@@ -656,6 +657,101 @@ func TestRangeTransferLease(t *testing.T) {
 	filter = nil
 	filterMu.Unlock()
 	wg.Wait()
+}
+
+// Test that, upon a lease transfer, the stasis of the current lease is
+// persisted in the store. See Store.MaybeUpdateSafeStart() for details about
+// why this is done.
+func TestLeaseTransferIsPersisted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testcluster.StartTestCluster(t, 3,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop()
+
+	key := []byte("a")
+	rangeDesc := new(roachpb.RangeDescriptor)
+	var err error
+	*rangeDesc, err = tc.LookupRange(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rangeDesc, err = tc.AddReplicas(
+		rangeDesc.StartKey.AsRawKey(), tc.Target(1), tc.Target(2),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rangeDesc.Replicas) != 3 {
+		t.Fatalf("expected 3 replicas, got %+v", rangeDesc.Replicas)
+	}
+	replicas := make([]roachpb.ReplicaDescriptor, 3)
+	for i := 0; i < 3; i++ {
+		var ok bool
+		replicas[i], ok = rangeDesc.GetReplicaDescriptor(tc.Servers[i].GetFirstStoreID())
+		if !ok {
+			t.Fatalf("expected to find replica on server %d", i)
+		}
+	}
+
+	// Run a LeaseInfoRequest to get the stasis, so we can assert it in the read
+	// value below.
+	leaseReq := roachpb.LeaseInfoRequest{
+		Span: roachpb.Span{
+			Key: rangeDesc.StartKey.AsRawKey(),
+		},
+	}
+	leaseResp, pErr := client.SendWrappedWith(
+		tc.Servers[0].DB().GetSender(), nil,
+		roachpb.Header{
+			ReadConsistency: roachpb.INCONSISTENT,
+		},
+		&leaseReq)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	lease := leaseResp.(*roachpb.LeaseInfoResponse).Lease
+	if lease == nil || !lease.Covers(tc.Servers[0].Clock().Now()) {
+		t.Fatalf("no active lease")
+	}
+
+	args := roachpb.AdminTransferLeaseRequest{
+		Span: roachpb.Span{
+			Key: key,
+		},
+		Target: tc.Servers[1].GetFirstStoreID(),
+	}
+	store0ID := tc.Servers[0].GetFirstStoreID()
+	repDesc, ok := rangeDesc.GetReplicaDescriptor(store0ID)
+	if !ok {
+		t.Fatalf("failed to find replica on server 0")
+	}
+	hdr := roachpb.Header{Replica: repDesc}
+	// Send directly through the store (as opposed to going through a DistSender)
+	// so we get an error if this store is not the lease holder. We need to assert
+	// in this way that server 0 is the lease holder, since we'll read directly
+	// from its engine below.
+	_, pErr = client.SendWrappedWith(
+		tc.Servers[0].Stores(), context.Background(), hdr, &args)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	store0, err := tc.Servers[0].Stores().GetStore(store0ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts, err := store0.GetSafeStartTimestamp(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if ts != lease.StartStasis {
+		t.Fatalf("expected store to have persisted ts: %s, found %s",
+			lease.StartStasis, ts)
+	}
 }
 
 // Test that a lease extension (a RequestLeaseRequest that doesn't change the

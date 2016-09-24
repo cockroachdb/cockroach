@@ -231,16 +231,17 @@ func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Er
 // even serve reads or propose commands with timestamps lower than the start of
 // the new lease because it could lead to read your own write violations (see
 // comments on the stasis period in the Lease proto). We could, in principle,
-// serve reads more than the maximum clock offset in the past.
+// serve reads more than the maximum clock offset in the past. After a transfer
+// is initiated, Replica.mu.pendingLeaseRequest.TransferInProgress() will start
+// returning true.
 //
 // The method waits for any in-progress lease extension to be done, and it also
 // blocks until the transfer is done. If a transfer is already in progress,
 // this method joins in waiting for it to complete if it's transferring to the
 // same replica. Otherwise, a NotLeaderError is returned.
-//
-// TODO(andrei): figure out how to persist the "not serving" state across node
-// restarts.
-func (r *Replica) AdminTransferLease(target roachpb.StoreID) error {
+func (r *Replica) AdminTransferLease(
+	ctx context.Context, target roachpb.StoreID,
+) error {
 	// initTransferHelper inits a transfer if no extension is in progress.
 	// It returns a channel for waiting for the result of a pending
 	// extension (if any is in progress) and a channel for waiting for the
@@ -286,6 +287,11 @@ func (r *Replica) AdminTransferLease(target roachpb.StoreID) error {
 		// served higher timestamps before the restart.
 		nextLeaseBegin.Forward(
 			hlc.ZeroTimestamp.Add(r.store.startedAt+int64(r.store.Clock().MaxOffset()), 0))
+
+		if err := r.store.MaybeUpdateSafeStart(ctx, lease); err != nil {
+			return nil, nil, errors.Wrap(err, "error persisting lease transfer")
+		}
+
 		transfer := r.mu.pendingLeaseRequest.InitOrJoinRequest(
 			r, nextLeaseHolder, nextLeaseBegin,
 			desc.StartKey.AsRawKey(), true /* transfer */)

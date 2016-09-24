@@ -68,6 +68,12 @@ func NodeLastUsageReportKey(nodeID int32) roachpb.Key {
 	return encoding.EncodeUvarintAscending(prefix, uint64(nodeID))
 }
 
+// StoreSafeStartKey returns a store-local key containing the minimum timestamp
+// when it's safe for a store to start serving commands after a restart.
+func StoreSafeStartKey() roachpb.Key {
+	return MakeStoreKey(localStoreSafeStartSuffix, nil)
+}
+
 func makePrefixWithRangeID(prefix []byte, rangeID roachpb.RangeID, infix roachpb.RKey) roachpb.Key {
 	// Size the key buffer so that it is large enough for most callers.
 	key := make(roachpb.Key, 0, 32)

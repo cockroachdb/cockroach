@@ -448,6 +448,9 @@ type Store struct {
 		// raft.
 		droppedPlaceholders int32
 	}
+
+	// safeStartMu serializes access to the engine's "safe start" key.
+	safeStartMu syncutil.Mutex
 }
 
 var _ client.Sender = &Store{}
@@ -3330,6 +3333,59 @@ func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDesc
 // Reserve requests a reservation from the store's bookie.
 func (s *Store) Reserve(ctx context.Context, req ReservationRequest) ReservationResponse {
 	return s.bookie.Reserve(ctx, req, s.deadReplicas().Replicas)
+}
+
+// GetSafeStartTimestamp returns the timestamp at or after which it's safe for
+// this store to start serving. If no restrictions exist, the zero value is
+// returned.
+func (s *Store) GetSafeStartTimestamp(ctx context.Context) (hlc.Timestamp, error) {
+	s.safeStartMu.Lock()
+	defer s.safeStartMu.Unlock()
+
+	var val hlc.Timestamp
+	_, err := engine.MVCCGetProto(
+		ctx, s.Engine(), keys.StoreSafeStartKey(), hlc.ZeroTimestamp,
+		true /* consistent */, nil /* transaction*/, &val)
+	return val, err
+}
+
+// MaybeUpdateSafeStart updates the store's "safe start" timestamp (the minimum
+// timestamp at which it's safe to start serving after a restart) if the new
+// value is higher than the existing one.
+// In particular, on lease transfers, we need to persist to disk the fact that
+// the current lease (`lease`) has been transferred, so that the lease is no
+// longer used for serving in case the node restarts (the lease is not used for
+// serving before the restart through another mechanism).
+//
+// Instead of keeping track of specifically which leases have been transferred,
+// we keep track of the highest expiration of a transferred lease in a local key
+// and, upon restart, we don't serve anything until this timestamp (technically,
+// we keep track of the start of the stasis periods, since leases are not used
+// during their stasis).
+// If writing to this shared (per-store) key becomes contentious, we can improve
+// the situation by either splitting the single key into k keys, or using the
+// engine's merge (max) operator instead of read-modify-write operations.
+func (s *Store) MaybeUpdateSafeStart(ctx context.Context, lease *roachpb.Lease) error {
+	if !lease.OwnedBy(s.StoreID()) {
+		return errors.Errorf("Trying to save transferred state for a lease the store "+
+			"doesn't own. What the hell is going on? Lease: %s. Store: %s.", lease, s)
+	}
+	s.safeStartMu.Lock()
+	defer s.safeStartMu.Unlock()
+
+	var oldVal hlc.Timestamp
+	_, err := engine.MVCCGetProto(
+		ctx, s.Engine(), keys.StoreSafeStartKey(), hlc.ZeroTimestamp,
+		true /* consistent */, nil /* transaction*/, &oldVal)
+	if err != nil {
+		return err
+	}
+	if oldVal.Less(lease.StartStasis) {
+		err = engine.MVCCPutProto(
+			ctx, s.engine, nil, keys.StoreSafeStartKey(),
+			hlc.ZeroTimestamp, nil, &lease.StartStasis)
+	}
+	return nil
 }
 
 // The methods below can be used to control a store's queues. Stopping a queue

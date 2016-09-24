@@ -492,6 +492,31 @@ func (s *Server) Start(ctx context.Context) error {
 		log.Infof(s.Ctx(), "starting postgres server at unix:%s", s.ctx.SocketFile)
 	}
 
+	// We might have to wait a bit: we might have proposed lease transfers
+	// before restarting, and stopped before applying that transfer. See
+	// Store.MaybeUpdateSafeStart() for details.
+	var safeStart hlc.Timestamp
+	err = s.node.stores.VisitStores(func(s *storage.Store) error {
+		ts, err := s.GetSafeStartTimestamp(ctx)
+		if err != nil {
+			return err
+		}
+		if safeStart.Less(ts) {
+			safeStart = ts
+		}
+		return nil
+	})
+	if err != nil {
+		return errors.Wrap(err, "error reading stores' safe start")
+	}
+	if s.clock.Now().Less(safeStart) {
+		log.Infof(ctx, "waiting for engines' safe start timestamp...")
+		time.Sleep(
+			// Add 1 nanosecond because we're ignoring the logical part.
+			time.Duration(safeStart.WallTime-s.clock.PhysicalNow()+1) * time.Nanosecond)
+		log.Infof(ctx, "waiting for engines' safe start timestamp... done")
+	}
+
 	s.stopper.RunWorker(func() {
 		netutil.FatalIfUnexpected(m.Serve())
 	})

@@ -80,6 +80,9 @@ var (
 	// localStoreGossipSuffix stores gossip bootstrap metadata for this
 	// store, updated any time new gossip hosts are encountered.
 	localStoreGossipSuffix = []byte("goss")
+	// localStoreSafeStartSuffix stores the minimum timestamp when it's safe for
+	// the store to start serving after a restart.
+	localStoreSafeStartSuffix = []byte("safe-start")
 
 	// LocalRangeIDPrefix is the prefix identifying per-range data
 	// indexed by Range ID. The Range ID is appended to this prefix,
