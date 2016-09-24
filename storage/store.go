@@ -648,16 +648,22 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 
 	if s.ctx.Gossip != nil {
 		// Add range scanner and configure with queues.
-		s.scanner = newReplicaScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s))
+		s.scanner = newReplicaScanner(
+			ctx.Ctx, ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s),
+		)
 		s.gcQueue = newGCQueue(s, s.ctx.Gossip)
 		s.splitQueue = newSplitQueue(s, s.db, s.ctx.Gossip)
-		s.replicateQueue = newReplicateQueue(s, s.ctx.Gossip, s.allocator, s.ctx.Clock, s.ctx.AllocatorOptions)
+		s.replicateQueue = newReplicateQueue(
+			s, s.ctx.Gossip, s.allocator, s.ctx.Clock, s.ctx.AllocatorOptions,
+		)
 		s.replicaGCQueue = newReplicaGCQueue(s, s.db, s.ctx.Gossip)
 		s.raftLogQueue = newRaftLogQueue(s, s.db, s.ctx.Gossip)
 		s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)
 
 		// Add consistency check scanner.
-		s.consistencyScanner = newReplicaScanner(ctx.ConsistencyCheckInterval, 0, newStoreRangeSet(s))
+		s.consistencyScanner = newReplicaScanner(
+			ctx.Ctx, ctx.ConsistencyCheckInterval, 0, newStoreRangeSet(s),
+		)
 		s.replicaConsistencyQueue = newReplicaConsistencyQueue(s, s.ctx.Gossip)
 		s.consistencyScanner.AddQueues(s.replicaConsistencyQueue)
 	}
