@@ -825,8 +825,13 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.ctx.Gossip.SetNodeID(s.Ident.NodeID)
 	}
 
+	// Set the store ID for logging.
+	s.ctx.Ctx = log.WithLogTagInt(s.ctx.Ctx, "s", int(s.StoreID()))
+
 	// Create ID allocators.
-	idAlloc, err := newIDAllocator(keys.RangeIDGenerator, s.db, 2 /* min ID */, rangeIDAllocCount, s.stopper)
+	idAlloc, err := newIDAllocator(
+		s.ctx.Ctx, keys.RangeIDGenerator, s.db, 2 /* min ID */, rangeIDAllocCount, s.stopper,
+	)
 	if err != nil {
 		return err
 	}
@@ -834,9 +839,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	now := s.ctx.Clock.Now()
 	s.startedAt = now.WallTime
-
-	// Set the store ID for logging.
-	s.ctx.Ctx = log.WithLogTagInt(s.ctx.Ctx, "s", int(s.StoreID()))
 
 	// Iterate over all range descriptors, ignoring uncommitted versions
 	// (consistent=false). Uncommitted intents which have been abandoned
