@@ -285,6 +285,9 @@ func (r *Replica) leasePostCommitTrigger(
 		// periodic check should happen.
 		r.maybeTransferRaftLeadership(ctx, replicaID, trigger.lease.Replica.ReplicaID)
 	}
+	r.mu.Lock()
+	r.mu.pendingLeaseRequest.SignalLeaseApplied(ctx, *trigger.lease, nil /* pErr */)
+	r.mu.Unlock()
 }
 
 // maybeTransferRaftLeadership attempts to transfer the leadership away from

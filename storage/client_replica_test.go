@@ -525,7 +525,7 @@ func TestRangeTransferLease(t *testing.T) {
 		// Transferring the lease to ourself should be a no-op.
 		origLeasePtr, _ := replica0.GetLease()
 		origLease := *origLeasePtr
-		if err := replica0.AdminTransferLease(replica0Desc.StoreID); err != nil {
+		if err := replica0.AdminTransferLease(context.Background(), replica0Desc.StoreID); err != nil {
 			t.Fatal(err)
 		}
 		newLeasePtr, _ := replica0.GetLease()
@@ -537,7 +537,8 @@ func TestRangeTransferLease(t *testing.T) {
 	{
 		// An invalid target should result in an error.
 		const expected = "unable to find store .* in range"
-		if err := replica0.AdminTransferLease(1000); !testutils.IsError(err, expected) {
+		if err := replica0.AdminTransferLease(
+			context.Background(), 1000); !testutils.IsError(err, expected) {
 			t.Fatalf("expected %s, but found %v", expected, err)
 		}
 	}
@@ -550,7 +551,7 @@ func TestRangeTransferLease(t *testing.T) {
 		return err
 	})
 
-	if err := replica0.AdminTransferLease(newHolderDesc.StoreID); err != nil {
+	if err := replica0.AdminTransferLease(context.Background(), newHolderDesc.StoreID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -635,7 +636,7 @@ func TestRangeTransferLease(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		// Transfer back from replica1 to replica0.
-		if err := replica1.AdminTransferLease(replica0Desc.StoreID); err != nil {
+		if err := replica1.AdminTransferLease(context.Background(), replica0Desc.StoreID); err != nil {
 			panic(err)
 		}
 	}()
@@ -736,27 +737,6 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 	}
 }
 
-// LeaseInfo runs a LeaseInfoRequest using the specified server.
-func LeaseInfo(
-	t *testing.T,
-	db *client.DB,
-	rangeDesc roachpb.RangeDescriptor,
-	readConsistency roachpb.ReadConsistencyType,
-) roachpb.LeaseInfoResponse {
-	leaseInfoReq := &roachpb.LeaseInfoRequest{
-		Span: roachpb.Span{
-			Key: rangeDesc.StartKey.AsRawKey(),
-		},
-	}
-	reply, pErr := client.SendWrappedWith(db.GetSender(), nil, roachpb.Header{
-		ReadConsistency: readConsistency,
-	}, leaseInfoReq)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-	return *(reply.(*roachpb.LeaseInfoResponse))
-}
-
 func TestLeaseInfoRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testcluster.StartTestCluster(t, 3,
@@ -795,7 +775,8 @@ func TestLeaseInfoRequest(t *testing.T) {
 	}
 
 	// Lease should start on Server 0, since nobody told it to move.
-	leaseHolderReplica := LeaseInfo(t, kvDB0, *rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+	leaseHolderReplica := storage.LeaseInfo(
+		t, kvDB0, *rangeDesc, roachpb.INCONSISTENT).Lease.Replica
 	if leaseHolderReplica != replicas[0] {
 		t.Fatalf("lease holder should be replica %+v, but is: %+v", replicas[0], leaseHolderReplica)
 	}
@@ -809,7 +790,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 	// An inconsistent LeaseInfoReqeust on the old lease holder should give us the
 	// right answer immediately, since the old holder has definitely applied the
 	// transfer before TransferRangeLease returned.
-	leaseHolderReplica = LeaseInfo(t, kvDB0, *rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+	leaseHolderReplica = storage.LeaseInfo(t, kvDB0, *rangeDesc, roachpb.INCONSISTENT).Lease.Replica
 	if leaseHolderReplica != replicas[1] {
 		t.Fatalf("lease holder should be replica %+v, but is: %+v",
 			replicas[1], leaseHolderReplica)
@@ -822,7 +803,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 		// from the supposed lease holder, because this node might initially be
 		// unaware of the new lease and so the request might bounce around for a
 		// while (see #8816).
-		leaseHolderReplica = LeaseInfo(t, kvDB1, *rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+		leaseHolderReplica = storage.LeaseInfo(t, kvDB1, *rangeDesc, roachpb.INCONSISTENT).Lease.Replica
 		if leaseHolderReplica != replicas[1] {
 			return errors.Errorf("lease holder should be replica %+v, but is: %+v",
 				replicas[1], leaseHolderReplica)
@@ -836,7 +817,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	leaseHolderReplica = LeaseInfo(t, kvDB1, *rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+	leaseHolderReplica = storage.LeaseInfo(t, kvDB1, *rangeDesc, roachpb.INCONSISTENT).Lease.Replica
 	if leaseHolderReplica != replicas[2] {
 		t.Fatalf("lease holder should be replica %+v, but is: %+v", replicas[2], leaseHolderReplica)
 	}

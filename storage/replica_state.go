@@ -147,6 +147,31 @@ func setLease(
 		hlc.ZeroTimestamp, nil, lease)
 }
 
+func loadNextLease(
+	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
+) (roachpb.Lease, error) {
+	lease := &roachpb.Lease{}
+	_, err := engine.MVCCGetProto(ctx, reader,
+		keys.ReplicaNextLeaseKey(rangeID), hlc.ZeroTimestamp,
+		true, nil, lease)
+	if err != nil {
+		return roachpb.Lease{}, err
+	}
+	return *lease, nil
+}
+
+func setNextLease(
+	ctx context.Context,
+	eng engine.ReadWriter,
+	rangeID roachpb.RangeID,
+	lease roachpb.Lease,
+) error {
+	return engine.MVCCPutProto(
+		ctx, eng, nil, /* ms */
+		keys.ReplicaNextLeaseKey(rangeID),
+		hlc.ZeroTimestamp, nil, &lease)
+}
+
 // loadAppliedIndex returns the Raft applied index and the lease applied index.
 func loadAppliedIndex(
 	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
@@ -403,9 +428,9 @@ func loadHardState(
 func setHardState(
 	ctx context.Context, batch engine.ReadWriter, rangeID roachpb.RangeID, st raftpb.HardState,
 ) error {
-	return engine.MVCCPutProto(ctx, batch, nil,
+	return engine.MVCCPutProto(ctx, batch, nil, /* ms */
 		keys.RaftHardStateKey(rangeID),
-		hlc.ZeroTimestamp, nil, &st)
+		hlc.ZeroTimestamp, nil /* txn */, &st)
 }
 
 // synthesizeHardState synthesizes a HardState from the given ReplicaState and

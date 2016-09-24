@@ -1459,7 +1459,7 @@ func (s *Store) StoreID() roachpb.StoreID { return s.Ident.StoreID }
 // Clock accessor.
 func (s *Store) Clock() *hlc.Clock { return s.cfg.Clock }
 
-// Engine accessor.
+// Engine accessor. Part of TestStoreInterface.
 func (s *Store) Engine() engine.Engine { return s.engine }
 
 // DB accessor.

@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/syncutil"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
@@ -312,8 +313,8 @@ func (m *multiTestContext) Stop() {
 		// deadlocks.
 		var wg sync.WaitGroup
 		wg.Add(len(m.stoppers))
-		for _, s := range m.stoppers {
-			go func(s *stop.Stopper) {
+		for i, s := range m.stoppers {
+			go func(i int, s *stop.Stopper) {
 				defer wg.Done()
 				// Some Stoppers may be nil if stopStore has been called
 				// without restartStore.
@@ -325,7 +326,7 @@ func (m *multiTestContext) Stop() {
 					// getting stuck in addWriteCommand.
 					s.Quiesce()
 				}
-			}(s)
+			}(i, s)
 		}
 		wg.Wait()
 
@@ -353,7 +354,7 @@ func (m *multiTestContext) Stop() {
 		if m.t.Failed() {
 			m.t.Error("timed out during shutdown")
 		} else {
-			panic("timed out during shutdown")
+			panic(fmt.Sprintf("timed out during shutdown. current time: %s.", timeutil.Now()))
 		}
 	}
 }
@@ -1049,7 +1050,7 @@ func (m *multiTestContext) transferLease(rangeID roachpb.RangeID, destStore *sto
 		return err
 	}
 
-	return origRepl.AdminTransferLease(destStore.Ident.StoreID)
+	return origRepl.AdminTransferLease(context.Background(), destStore.Ident.StoreID)
 }
 
 // getArgs returns a GetRequest and GetResponse pair addressed to

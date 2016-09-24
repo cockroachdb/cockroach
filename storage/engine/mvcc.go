@@ -441,12 +441,12 @@ func MVCCSetRangeStats(
 	return MVCCPutProto(ctx, engine, nil, keys.RangeStatsKey(rangeID), hlc.ZeroTimestamp, nil, ms)
 }
 
-// MVCCGetProto fetches the value at the specified key and unmarshals
-// it using a protobuf decoder. Returns true on success or false if
-// the key was not found. In the event of a WriteIntentError when
-// consistent=false, we return the error and the decoded result; for
-// all other errors (or when consistent=true) the decoded value is
-// invalid.
+// MVCCGetProto fetches the value at the specified key and unmarshals it using a
+// protobuf decoder. Returns true on success or false if the key was not found
+// (in which case `msg` is not modified).
+// In the event of a WriteIntentError when consistent=false, we return the error
+// and the decoded result; for all other errors (or when consistent=true) the
+// decoded value is invalid.
 func MVCCGetProto(
 	ctx context.Context,
 	engine Reader,
@@ -476,7 +476,7 @@ func MVCCGetProto(
 func MVCCPutProto(
 	ctx context.Context,
 	engine ReadWriter,
-	ms *enginepb.MVCCStats,
+	ms *enginepb.MVCCStats, // can be nil is the key is unreplicated and doesn't affect stats
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	txn *roachpb.Transaction,
