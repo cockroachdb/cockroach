@@ -203,7 +203,9 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		s.stopper, txnMetrics)
 	s.db = client.NewDB(s.txnCoordSender)
 
-	s.raftTransport = storage.NewRaftTransport(storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext)
+	s.raftTransport = storage.NewRaftTransport(
+		s.Ctx(), storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext,
+	)
 
 	s.kvDB = kv.NewDBServer(s.ctx.Context, s.txnCoordSender, s.stopper)
 	roachpb.RegisterExternalServer(s.grpc, s.kvDB)

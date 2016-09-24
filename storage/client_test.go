@@ -587,7 +587,9 @@ func (m *multiTestContext) addStore(idx int) {
 	}
 	grpcServer := rpc.NewServer(m.rpcContext)
 	m.grpcServers[idx] = grpcServer
-	m.transports[idx] = storage.NewRaftTransport(m.getNodeIDAddress, grpcServer, m.rpcContext)
+	m.transports[idx] = storage.NewRaftTransport(
+		context.TODO(), m.getNodeIDAddress, grpcServer, m.rpcContext,
+	)
 
 	stopper := stop.NewStopper()
 
