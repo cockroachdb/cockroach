@@ -1746,9 +1746,9 @@ func (s *Store) removePlaceholderLocked(rngID roachpb.RangeID) bool {
 		delete(s.mu.replicaPlaceholders, rngID)
 		return true
 	case nil:
-		log.Fatalf(context.TODO(), "%s range=%d: placeholder not found", s, rngID)
+		log.Fatalf(s.Ctx(), "range=%d: placeholder not found", rngID)
 	default:
-		log.Fatalf(context.TODO(), "%s range=%d: expected placeholder, got %T", s, rngID, exRng)
+		log.Fatalf(s.Ctx(), "range=%d: expected placeholder, got %T", rngID, exRng)
 	}
 	return false // appease the compiler
 }
@@ -1800,7 +1800,7 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 		// TODO(peter): The above comment is out of date: we could return an error
 		// here but are not doing so yet in the name of conservatism.
 		s.mu.Unlock()
-		log.Fatalf(context.TODO(), "replica %s found by id but not by key", rep)
+		log.Fatalf(s.Ctx(), "replica %s found by id but not by key", rep)
 	}
 	// Adjust stats before calling Destroy. This can be called before or after
 	// Destroy, but this configuration helps avoid races in stat verification
@@ -1826,7 +1826,7 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 	if s.mu.replicasByKey.Delete(rep) == nil {
 		// We already checked that our replica was present in replicasByKey
 		// above. Nothing should have been able to change that.
-		log.Fatalf(context.TODO(), "replica %s found by id but not by key", rep)
+		log.Fatalf(s.Ctx(), "replica %s found by id but not by key", rep)
 	}
 	s.scanner.RemoveReplica(rep)
 	s.consistencyScanner.RemoveReplica(rep)
@@ -2237,7 +2237,7 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now hlc.Timesta
 		PusheeTxn: txn.TxnMeta,
 		PushType:  roachpb.PUSH_QUERY,
 	})
-	if err := s.db.Run(context.TODO(), b); err != nil {
+	if err := s.db.Run(s.Ctx(), b); err != nil {
 		// TODO(tschottdorf):
 		// We shouldn't catch an error here (unless it's from the abort cache, in
 		// which case we would not get the crucial information that we've been
