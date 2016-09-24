@@ -135,6 +135,7 @@ func (s raftTransportStatsSlice) Less(i, j int) bool { return s[i].nodeID < s[j]
 // outbound message which caused the remote to hang up; all that is known is
 // which remote hung up.
 type RaftTransport struct {
+	ctx                context.Context
 	resolver           NodeAddressResolver
 	rpcContext         *rpc.Context
 	SnapshotStatusChan chan RaftSnapshotStatus
@@ -155,13 +156,19 @@ type RaftTransport struct {
 // NewDummyRaftTransport returns a dummy raft transport for use in tests which
 // need a non-nil raft transport that need not function.
 func NewDummyRaftTransport() *RaftTransport {
-	return NewRaftTransport(nil, nil, nil)
+	return NewRaftTransport(context.Background(), nil, nil, nil)
 }
 
 // NewRaftTransport creates a new RaftTransport with specified resolver and grpc server.
 // Callers are responsible for monitoring RaftTransport.SnapshotStatusChan.
-func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpcContext *rpc.Context) *RaftTransport {
+func NewRaftTransport(
+	ctx context.Context,
+	resolver NodeAddressResolver,
+	grpcServer *grpc.Server,
+	rpcContext *rpc.Context,
+) *RaftTransport {
 	t := &RaftTransport{
+		ctx:                ctx,
 		resolver:           resolver,
 		rpcContext:         rpcContext,
 		SnapshotStatusChan: make(chan RaftSnapshotStatus),
@@ -229,7 +236,7 @@ func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpc
 						lastStats[s.nodeID] = cur
 					}
 					lastTime = now
-					log.Infof(context.TODO(), "stats:\n%s", buf.String())
+					log.Infof(ctx, "stats:\n%s", buf.String())
 				case <-t.rpcContext.Stopper.ShouldStop():
 					return
 				}
@@ -418,19 +425,19 @@ func (t *RaftTransport) connectAndProcess(
 			return err
 		}
 		client := NewMultiRaftClient(conn)
-		ctx, cancel := context.WithCancel(context.TODO())
+		ctx, cancel := context.WithCancel(t.ctx)
 		defer cancel()
 		stream, err := client.RaftMessageBatch(ctx)
 		if err != nil {
 			return err
 		}
 		if successes == 0 || consecFailures > 0 {
-			log.Infof(context.TODO(), "raft transport stream to node %d established", nodeID)
+			log.Infof(t.ctx, "raft transport stream to node %d established", nodeID)
 		}
 		return t.processQueue(nodeID, ch, stats, stream)
 	}, 0); err != nil {
 		if consecFailures == 0 {
-			log.Warningf(context.TODO(), "raft transport stream to node %d failed: %s", nodeID, err)
+			log.Warningf(t.ctx, "raft transport stream to node %d failed: %s", nodeID, err)
 		}
 		return
 	}
@@ -463,7 +470,7 @@ func (t *RaftTransport) processQueue(
 					handler, ok := t.recvMu.handlers[resp.ToReplica.StoreID]
 					t.recvMu.Unlock()
 					if !ok {
-						log.Warningf(context.TODO(), "no handler found for store %s in response %s",
+						log.Warningf(t.ctx, "no handler found for store %s in response %s",
 							resp.ToReplica.StoreID, resp)
 						continue
 					}
