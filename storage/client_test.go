@@ -119,7 +119,7 @@ func createTestStoreWithEngine(
 	sCtx.ScanMaxIdleTime = 1 * time.Second
 	tracer := tracing.NewTracer()
 	sCtx.Ctx = tracing.WithTracer(context.Background(), tracer)
-	stores := storage.NewStores(clock)
+	stores := storage.NewStores(context.TODO(), clock)
 
 	if err := sCtx.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
 		t.Fatal(err)
@@ -657,7 +657,7 @@ func (m *multiTestContext) addStore(idx int) {
 		m.t.Fatalf("node %d already listening", nodeID)
 	}
 
-	stores := storage.NewStores(clock)
+	stores := storage.NewStores(context.TODO(), clock)
 	stores.AddStore(store)
 	storesServer := storage.MakeServer(m.nodeDesc(nodeID), stores)
 	storage.RegisterStoresServer(grpcServer, storesServer)
@@ -669,7 +669,7 @@ func (m *multiTestContext) addStore(idx int) {
 	m.mu.Lock()
 	m.stores[idx] = store
 	m.stoppers[idx] = stopper
-	sender := storage.NewStores(clock)
+	sender := storage.NewStores(context.TODO(), clock)
 	sender.AddStore(store)
 	m.senders[idx] = sender
 	// Save the store identities for later so we can use them in
