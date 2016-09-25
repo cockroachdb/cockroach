@@ -105,6 +105,14 @@ var (
 			}},
 		},
 		{name: "/System", start: SystemPrefix, end: SystemMax, entries: []dictEntry{
+			{name: "/NodeLiveness", prefix: NodeLivenessPrefix,
+				ppFunc: decodeKeyPrint,
+				psFunc: parseUnsupported,
+			},
+			{name: "/NodeLivenessMax", prefix: NodeLivenessKeyMax,
+				ppFunc: decodeKeyPrint,
+				psFunc: parseUnsupported,
+			},
 			{name: "/StatusNode", prefix: StatusNodePrefix,
 				ppFunc: decodeKeyPrint,
 				psFunc: parseUnsupported,
@@ -481,6 +489,7 @@ func prettyPrintInternal(key roachpb.Key) (string, bool) {
 // /Meta1/[key]                                   "\x02"+[key]
 // /Meta2/[key]                                   "\x03"+[key]
 // /System/...                                    "\x04"
+//		/NodeLiveness/[key]                         "\x04\0x00liveness-"+[key]
 //		/StatusNode/[key]                           "\x04status-node-"+[key]
 // /System/Max                                    "\x05"
 //

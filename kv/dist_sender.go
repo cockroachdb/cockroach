@@ -64,15 +64,6 @@ func (f firstRangeMissingError) Error() string {
 	return "the descriptor for the first range is not available via gossip"
 }
 
-// A noNodesAvailError specifies that no node addresses in a replica set
-// were available via the gossip network.
-type noNodeAddrsAvailError struct{}
-
-// Error implements the error interface.
-func (n noNodeAddrsAvailError) Error() string {
-	return "no replica node addresses available via gossip"
-}
-
 // A DistSender provides methods to access Cockroach's monolithic,
 // distributed key value store. Each method invocation triggers a
 // lookup or lookups to find replica metadata for implicated key
@@ -213,10 +204,10 @@ func NewDistSender(cfg *DistSenderConfig, g *gossip.Gossip) *DistSender {
 				if log.V(1) {
 					var desc roachpb.RangeDescriptor
 					if err := value.GetProto(&desc); err != nil {
-						log.Errorf(ds.Ctx, "unable to parse gossipped first range descriptor: %s", err)
+						log.Errorf(ds.Ctx, "unable to parse gossiped first range descriptor: %s", err)
 					} else {
 						log.Infof(ds.Ctx,
-							"gossipped first range descriptor: %+v", desc.Replicas)
+							"gossiped first range descriptor: %+v", desc.Replicas)
 					}
 				}
 				err := ds.rangeCache.EvictCachedRangeDescriptor(roachpb.RKeyMin, nil, false)
@@ -347,7 +338,8 @@ func (ds *DistSender) sendRPC(
 	ctx context.Context, rangeID roachpb.RangeID, replicas ReplicaSlice, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
 	if len(replicas) == 0 {
-		return nil, noNodeAddrsAvailError{}
+		return nil, roachpb.NewSendError(
+			fmt.Sprintf("no replica node addresses available via gossip for range %d", rangeID))
 	}
 
 	// TODO(pmattis): This needs to be tested. If it isn't set we'll
