@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
@@ -261,9 +260,9 @@ type txnState struct {
 	schemaChangers schemaChangerCollection
 
 	sp opentracing.Span
-	// When COCKROACH_TRACE_SQL is enabled, CollectedSpans accumulates spans as
+	// When COCKROACH_TRACE_SQL is enabled, trace accumulates spans as
 	// they're closed. All the spans pertain to the current txn.
-	CollectedSpans []basictracer.RawSpan
+	trace *tracing.RecordedTrace
 
 	// The timestamp to report for current_timestamp(), now() etc.
 	// This must be constant for the lifetime of a SQL transaction.
@@ -290,31 +289,25 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 	ts.retryIntent = false
 	ts.autoRetry = false
 	ts.commitSeen = false
-	// Discard previously collected spans. We start collecting anew on
-	// every fresh SQL txn.
-	ts.CollectedSpans = nil
 
 	// Create a context for this transaction. It will include a
 	// root span that will contain everything executed as part of the
 	// upcoming SQL txn, including (automatic or user-directed) retries.
 	// The span is closed by finishSQLTxn().
-	// TODO(andrei): figure out how to close these spans on server shutdown?
+	// TODO(andrei): figure out how to close these spans on server shutdown? Ties
+	// into a larger discussion about how to drain SQL and rollback open txns.
 	ctx := s.context
 	var sp opentracing.Span
 	if traceSQL {
 		var err error
-		sp, err = tracing.JoinOrNewSnowball("coordinator", nil, func(sp basictracer.RawSpan) {
-			ts.CollectedSpans = append(ts.CollectedSpans, sp)
-		})
+		ctx, ts.trace, err = tracing.StartSnowballTrace(ctx, "traceSQL")
 		if err != nil {
 			log.Warningf(ctx, "unable to create snowball tracer: %s", err)
 			return
 		}
 	} else if traceSQLFor7881 {
 		var err error
-		sp, _, err = tracing.NewTracerAndSpanFor7881(func(sp basictracer.RawSpan) {
-			ts.CollectedSpans = append(ts.CollectedSpans, sp)
-		})
+		ctx, ts.trace, err = tracing.NewTracerAndSpanFor7881(ctx)
 		if err != nil {
 			log.Fatalf(ctx, "couldn't create a tracer for debugging #7881: %s", err)
 		}
@@ -361,14 +354,6 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 			"attempting to move SQL txn to state %s inconsistent with KV txn state: %s "+
 				"(finalized: %t)", state, ts.txn.Proto.Status, ts.txn.IsFinalized()))
 	}
-
-	if ts.txn != nil {
-		if len(ts.CollectedSpans) == 0 {
-			ts.CollectedSpans = ts.txn.CollectedSpans
-		} else {
-			ts.CollectedSpans = append(ts.CollectedSpans, ts.txn.CollectedSpans...)
-		}
-	}
 	ts.State = state
 	ts.txn = nil
 }
@@ -387,7 +372,7 @@ func (ts *txnState) finishSQLTxn(sessionCtx context.Context) {
 	ts.sp = nil
 	if (traceSQL && timeutil.Since(ts.sqlTimestamp) >= traceSQLDuration) ||
 		(traceSQLFor7881 && sampledFor7881) {
-		dump := tracing.FormatRawSpans(ts.CollectedSpans)
+		dump := tracing.FormatRawSpans(ts.trace.GetSpans())
 		if len(dump) > 0 {
 			log.Infof(sessionCtx, "SQL trace:\n%s", dump)
 		}
