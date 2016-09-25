@@ -22,14 +22,22 @@ var (
 	// Meta1Span holds all first level addressing.
 	Meta1Span = roachpb.Span{Key: roachpb.KeyMin, EndKey: Meta2Prefix}
 
-	// UserDataSpan is the non-meta and non-structured portion of the key space.
-	UserDataSpan = roachpb.Span{Key: SystemMax, EndKey: TableDataMin}
+	// NodeLivenessSpan holds the liveness records for nodes in the cluster.
+	NodeLivenessSpan = roachpb.Span{Key: NodeLivenessPrefix, EndKey: NodeLivenessKeyMax}
 
 	// SystemConfigSpan is the range of system objects which will be gossiped.
 	SystemConfigSpan = roachpb.Span{Key: TableDataMin, EndKey: SystemConfigTableDataMax}
 
+	// UserDataSpan is the non-meta and non-structured portion of the key space.
+	UserDataSpan = roachpb.Span{Key: SystemMax, EndKey: TableDataMin}
+
+	// GossipedSystemSpans are spans which contain system data which needs to be
+	// shared with other nodes in the system via gossip.
+	GossipedSystemSpans = []roachpb.Span{NodeLivenessSpan, SystemConfigSpan}
+
 	// NoSplitSpans describes the ranges that should never be split.
 	// Meta1Span: needed to find other ranges.
+	// NodeLivenessSpan: liveness information on nodes in the cluster.
 	// SystemConfigSpan: system objects which will be gossiped.
-	NoSplitSpans = []roachpb.Span{Meta1Span, SystemConfigSpan}
+	NoSplitSpans = []roachpb.Span{Meta1Span, NodeLivenessSpan, SystemConfigSpan}
 )
