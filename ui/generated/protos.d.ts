@@ -1324,6 +1324,15 @@ getSystemConfigSpan?() : boolean;
 
 
 
+node_liveness_span?: Span;
+		
+
+getNodeLivenessSpan?() : Span;
+		setNodeLivenessSpan?(nodeLivenessSpan : Span): void;
+		
+
+
+
 }
 
 	export interface ModifiedSpanTriggerMessage extends ModifiedSpanTrigger {

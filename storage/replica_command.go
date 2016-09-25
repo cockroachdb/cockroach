@@ -895,6 +895,11 @@ func (r *Replica) runCommitTrigger(
 					})
 				}
 			}
+			if nlSpan := ct.ModifiedSpanTrigger.NodeLivenessSpan; nlSpan != nil {
+				trigger = updateTrigger(trigger, &PostCommitTrigger{
+					maybeGossipNodeLiveness: nlSpan,
+				})
+			}
 		}
 		return nil
 	}(); err != nil {
@@ -1791,6 +1796,7 @@ func (r *Replica) applyNewLeaseLocked(
 		// lease holder has changed. However, it's likely not a big deal to
 		// do it always.
 		maybeGossipSystemConfig: true,
+		maybeGossipNodeLiveness: &keys.NodeLivenessSpan,
 	}
 
 	return reply, trigger, nil
