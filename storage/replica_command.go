@@ -2310,7 +2310,7 @@ func (r *Replica) AdminSplit(
 
 	log.Infof(ctx, "initiating a split of this range at key %s", splitKey)
 
-	if err := r.store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := r.store.DB().Txn(ctx, func(txn *client.Txn) error {
 		log.Event(ctx, "split closure begins")
 		defer log.Event(ctx, "split closure ends")
 		// Update existing range descriptor for left hand side of
@@ -2790,7 +2790,7 @@ func (r *Replica) AdminMerge(
 		log.Infof(ctx, "initiating a merge of %s into this range", rightRng)
 	}
 
-	if err := r.store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := r.store.DB().Txn(ctx, func(txn *client.Txn) error {
 		log.Event(ctx, "merge closure begins")
 		// Update the range descriptor for the receiving range.
 		{
