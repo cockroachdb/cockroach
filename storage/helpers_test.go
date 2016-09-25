@@ -103,7 +103,7 @@ func (s *Store) LeaseExpiration(clock *hlc.Clock) int64 {
 	// Due to lease extensions, the remaining interval can be longer than just
 	// the sum of the offset (=length of stasis period) and the active
 	// duration, but definitely not by 2x.
-	return 2 * int64(s.cfg.rangeLeaseActiveDuration+clock.MaxOffset())
+	return 2 * int64(s.cfg.RangeLeaseActiveDuration+clock.MaxOffset())
 }
 
 // LogReplicaChangeTest adds a fake replica change event to the log for the

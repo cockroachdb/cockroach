@@ -7,6 +7,7 @@
 
 	It is generated from these files:
 		cockroach/storage/api.proto
+		cockroach/storage/liveness.proto
 		cockroach/storage/raft.proto
 
 	It has these top-level messages:
@@ -17,6 +18,7 @@
 		ReservationResponse
 		CollectChecksumRequest
 		CollectChecksumResponse
+		Liveness
 		RaftMessageRequest
 		RaftMessageRequestBatch
 		RaftMessageResponseUnion
