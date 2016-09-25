@@ -97,19 +97,26 @@ func JoinOrNewSnowball(
 }
 
 // NewTracerAndSpanFor7881 creates a new tracer and a root span. The tracer is
-// to be used for tracking down #7881; it runs a callback for each finished span
-// (and the callback used accumulates the spans in a SQL txn).
-func NewTracerAndSpanFor7881(
-	callback func(sp basictracer.RawSpan),
-) (opentracing.Span, opentracing.Tracer, error) {
-	opts := basictracerOptions(callback)
-	// Don't trim the logs in "unsampled" spans". Note that this tracer does not
-	// use sampling; instead it uses an ad-hoc mechanism for marking spans of
-	// interest.
-	opts.TrimUnsampledSpans = false
-	tr := basictracer.NewWithOptions(opts)
-	sp, err := JoinOrNew(tr, nil, "sql txn")
-	return sp, tr, err
+// to be used for tracking down #7881.
+// Note that this is not a "snowball" trace; otherwise this function mirrors
+// StartSnowballTrace().
+func NewTracerAndSpanFor7881(ctx context.Context) (context.Context, *RecordedTrace, error) {
+	if RecorderFromCtx(ctx) != nil {
+		// Unclear what to do if there's already a recorder. Are we intending to
+		// overwrite it or should we record spans to both of them? For now, we don't
+		// support multiple snowballs on the same trace.
+		return ctx, nil, errors.Errorf("there's already a recorder in the ctx.")
+	}
+	if span := opentracing.SpanFromContext(ctx); span != nil {
+		teeSp, recorder := createTeeSpanWithRecorder(
+			span, false /* adopt */, "root-for-7881", false /* snowball*/)
+		return opentracing.ContextWithSpan(
+			WithRecorder(ctx, recorder), teeSp), recorder, nil
+	}
+	recordingTr, recorder := NewRecordingTracer()
+	sp := recordingTr.StartSpan("root-for-7881")
+	return opentracing.ContextWithSpan(
+		WithRecorder(ctx, recorder), sp), recorder, nil
 }
 
 // FinishSpan closes the given span (if not nil). It is a convenience wrapper
@@ -419,8 +426,10 @@ func NewRecordingTracer() (opentracing.Tracer, *RecordedTrace) {
 // it's enough to Finish() the returned TeeSpan. If not set, then the TeeSpan
 // does not take ownership of the passed-in span and so someone else remains in
 // charge of Finish()ing it.
+//
+// snowball specifies if the new span should be snowballed.
 func createTeeSpanWithRecorder(
-	span opentracing.Span, adopt bool, opName string,
+	span opentracing.Span, adopt bool, opName string, snowball bool,
 ) (opentracing.Span, *RecordedTrace) {
 	// We'll create a TeeTracer, having the existing tracer on the left and a
 	// RecordingTracer on the right. We'll then use the TeeTracer to create a new
@@ -438,18 +447,57 @@ func createTeeSpanWithRecorder(
 		spanWithOpt{
 			Span:  recordingSpan,
 			Owned: true})
-	// We want to sample a Snowball trace because otherwise the logged events
-	// are dropped. This must be set *before* SetBaggageItem, as that will
-	// otherwise be ignored. This is a bit subtle: in principle we don't need
-	// `span` to be sampled necessarily, we just need recordingSpan to be
-	// sampled, and we need any remote child spans to be sampled. But to get the
-	// remote spans to be sampled, we need to SetBaggageItem(Snowball) on
-	// `span`, and for that call to work we need `span` to be sampled. So, we
-	// just make `teeSpan` sampled, which will propagate to all constituent
-	// spans.
-	otext.SamplingPriority.Set(teeSpan, 1)
-	teeSpan.SetBaggageItem(Snowball, "1")
+	if snowball {
+		// We want to sample a Snowball trace because otherwise the logged events
+		// are dropped. This must be set *before* SetBaggageItem, as that will
+		// otherwise be ignored. This is a bit subtle: in principle we don't need
+		// `span` to be sampled necessarily, we just need recordingSpan to be
+		// sampled, and we need any remote child spans to be sampled. But to get the
+		// remote spans to be sampled, we need to SetBaggageItem(Snowball) on
+		// `span`, and for that call to work we need `span` to be sampled. So, we
+		// just make `teeSpan` sampled, which will propagate to all constituent
+		// spans.
+		otext.SamplingPriority.Set(teeSpan, 1)
+		teeSpan.SetBaggageItem(Snowball, "1")
+	}
 	return teeSpan, recorder
+}
+
+// StartSnowballTrace takes in a context and returns a derived one with a
+// "snowball span" in it. The caller takes ownership of this span from the
+// returned context and is in charge of Finish()ing it. A recorder that will
+// receive both local and remote child spans is also returned.
+//
+// If there's already a span in the passed-in context, then a per-request
+// TeeTracer will be used for creating this new snowball span; the existing span
+// thus continues to be in effect. Note that ownership of the existing span is
+// not transferred in any way - it will not be Finish()ed when the TeeSpan is
+// Finish()ed.
+func StartSnowballTrace(
+	ctx context.Context, opName string,
+) (context.Context, *RecordedTrace, error) {
+	if RecorderFromCtx(ctx) != nil {
+		// Unclear what to do if there's already a recorder. Are we intending to
+		// overwrite it or should we record spans to both of them? For now, we don't
+		// support multiple snowballs on the same trace.
+		return ctx, nil, errors.Errorf("there's already a recorder in the ctx.")
+	}
+	if span := opentracing.SpanFromContext(ctx); span != nil {
+		// We're in the context of a span; we'll create a TeeTracer.
+		teeSpan, recorder := createTeeSpanWithRecorder(
+			span, false /* adopt */, opName, true /* snowball */)
+		return opentracing.ContextWithSpan(
+			WithRecorder(ctx, recorder), teeSpan), recorder, nil
+	}
+	// There's no active trace so no need for a TeeTracer.
+	tracer, recorder := NewRecordingTracer()
+	rootSp := tracer.StartSpan(opName)
+	// We definitely want to sample a Snowball trace.
+	// This must be set *before* SetBaggageItem, as that will otherwise be ignored.
+	otext.SamplingPriority.Set(rootSp, 1)
+	rootSp.SetBaggageItem(Snowball, "1")
+	return opentracing.ContextWithSpan(
+		WithRecorder(ctx, recorder), rootSp), recorder, nil
 }
 
 // JoinRemoteTrace takes a Context and returns a derived one with a Span that's
@@ -497,7 +545,27 @@ func JoinRemoteTrace(
 		// support multiple snowballs on the same trace.
 		return ctx, nil, errors.Errorf("there's already a recorder in the ctx")
 	}
-	teeSpan, recorder := createTeeSpanWithRecorder(sp, true /* adopt */, opName)
+	teeSpan, recorder := createTeeSpanWithRecorder(
+		sp, true /* adopt */, opName, true /* snowball */)
 	return opentracing.ContextWithSpan(
 		WithRecorder(ctx, recorder), teeSpan), recorder, nil
+}
+
+// IngestRemoteSpans takes a bunch of encoded spans and passes them to a
+// Recorder in the Context.
+func IngestRemoteSpans(ctx context.Context, remoteSpans [][]byte) error {
+	rec := RecorderFromCtx(ctx)
+	if rec == nil {
+		return errors.Errorf("asked to IngestRemoteSpan with a context without " +
+			"a Recorder... Why did we get some spans to ingest if we weren't setup " +
+			"for snowball tracing?")
+	}
+	for _, encSp := range remoteSpans {
+		var newSp basictracer.RawSpan
+		if err := DecodeRawSpan(encSp, &newSp); err != nil {
+			return err
+		}
+		rec.addSpan(newSp)
+	}
+	return nil
 }
