@@ -702,6 +702,12 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "options": {
                                         "(gogoproto.nullable)": false
                                     }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "Span",
+                                    "name": "node_liveness_span",
+                                    "id": 2
                                 }
                             ]
                         },

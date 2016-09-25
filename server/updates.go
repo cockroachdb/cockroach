@@ -243,7 +243,7 @@ func (s *Server) maybeReportUsage(running time.Duration) time.Duration {
 		return updateCheckFrequency
 	}
 	return s.maybeRunPeriodicCheck("metrics reporting",
-		keys.NodeLastUsageReportKey(int32(s.node.Descriptor.NodeID)), s.reportUsage)
+		keys.NodeLastUsageReportKey(s.node.Descriptor.NodeID), s.reportUsage)
 }
 
 func (s *Server) getReportingInfo() reportingInfo {

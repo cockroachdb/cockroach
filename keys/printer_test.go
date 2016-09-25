@@ -78,6 +78,7 @@ func TestPrettyPrint(t *testing.T) {
 		{makeKey(Meta1Prefix, roachpb.Key("foo")), `/Meta1/"foo"`},
 		{RangeMetaKey(roachpb.RKey("f")), `/Meta2/"f"`},
 
+		{NodeLivenessKey(10033), "/System/NodeLiveness/10033"},
 		{NodeStatusKey(1111), "/System/StatusNode/1111"},
 
 		{SystemMax, "/System/Max"},

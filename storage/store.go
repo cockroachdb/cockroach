@@ -95,6 +95,24 @@ var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeTy
 var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_SCHEDULER_CONCURRENCY", 2*runtime.NumCPU())
 
+// RaftElectionTimeout returns the default raft election timeout, as
+// computed from the specified tick interval and the default number of
+// election timeout ticks.
+func RaftElectionTimeout(raftTickInterval time.Duration) time.Duration {
+	return time.Duration(defaultRaftElectionTimeoutTicks) * raftTickInterval
+}
+
+// RangeLeaseDurations computes durations for range lease expiration
+// and renewal based on a default multiple of Raft election timeout.
+func RangeLeaseDurations(raftElectionTimeout time.Duration) (
+	rangeLeaseActive time.Duration,
+	rangeLeaseRenewal time.Duration,
+) {
+	rangeLeaseActive = rangeLeaseRaftElectionTimeoutMultiplier * raftElectionTimeout
+	rangeLeaseRenewal = rangeLeaseActive / rangeLeaseRenewalDivisor
+	return
+}
+
 // TestStoreContext has some fields initialized with values relevant in tests.
 func TestStoreContext() StoreContext {
 	return StoreContext{
@@ -451,11 +469,12 @@ type StoreContext struct {
 	// have a Tracer set.
 	Ctx context.Context
 
-	Clock     *hlc.Clock
-	DB        *client.DB
-	Gossip    *gossip.Gossip
-	StorePool *StorePool
-	Transport *RaftTransport
+	Clock        *hlc.Clock
+	DB           *client.DB
+	Gossip       *gossip.Gossip
+	NodeLiveness *NodeLiveness
+	StorePool    *StorePool
+	Transport    *RaftTransport
 
 	// SQLExecutor is used by the store to execute SQL statements in a way that
 	// is more direct than using a sql.Executor.
@@ -513,15 +532,15 @@ type StoreContext struct {
 
 	TestingKnobs StoreTestingKnobs
 
-	// rangeLeaseActiveDuration is the duration of the active period of leader
+	// RangeLeaseActiveDuration is the duration of the active period of leader
 	// leases requested.
-	rangeLeaseActiveDuration time.Duration
+	RangeLeaseActiveDuration time.Duration
 
-	// rangeLeaseRenewalDuration specifies a time interval at the end of the
+	// RangeLeaseRenewalDuration specifies a time interval at the end of the
 	// active lease interval (i.e. bounded to the right by the start of the stasis
 	// period) during which operations will trigger an asynchronous renewal of the
 	// lease.
-	rangeLeaseRenewalDuration time.Duration
+	RangeLeaseRenewalDuration time.Duration
 }
 
 // StoreTestingKnobs is a part of the context used to control parts of the system.
@@ -611,9 +630,14 @@ func (sc *StoreContext) setDefaults() {
 		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
 	}
 
-	raftElectionTimeout := time.Duration(sc.RaftElectionTimeoutTicks) * sc.RaftTickInterval
-	sc.rangeLeaseActiveDuration = rangeLeaseRaftElectionTimeoutMultiplier * raftElectionTimeout
-	sc.rangeLeaseRenewalDuration = sc.rangeLeaseActiveDuration / rangeLeaseRenewalDivisor
+	rangeLeaseActiveDuration, rangeLeaseRenewalDuration :=
+		RangeLeaseDurations(time.Duration(sc.RaftElectionTimeoutTicks) * sc.RaftTickInterval)
+	if sc.RangeLeaseActiveDuration == 0 {
+		sc.RangeLeaseActiveDuration = rangeLeaseActiveDuration
+	}
+	if sc.RangeLeaseRenewalDuration == 0 {
+		sc.RangeLeaseRenewalDuration = rangeLeaseRenewalDuration
+	}
 }
 
 // NewStore returns a new instance of a store.
@@ -713,7 +737,7 @@ func (s *Store) DrainLeases(drain bool) error {
 		return nil
 	}
 
-	return util.RetryForDuration(10*s.ctx.rangeLeaseActiveDuration, func() error {
+	return util.RetryForDuration(10*s.ctx.RangeLeaseActiveDuration, func() error {
 		var err error
 		now := s.Clock().Now()
 		newStoreRangeSet(s).Visit(func(r *Replica) bool {
@@ -1054,8 +1078,8 @@ func (s *Store) startGossip() {
 	})
 
 	s.stopper.RunWorker(func() {
-		if err := s.maybeGossipSystemConfig(); err != nil {
-			log.Warningf(s.Ctx(), "error gossiping system config: %s", err)
+		if err := s.maybeGossipSystemData(); err != nil {
+			log.Warningf(s.Ctx(), "error gossiping system data: %s", err)
 		}
 		s.initComplete.Done()
 		ticker := time.NewTicker(configGossipInterval)
@@ -1063,8 +1087,8 @@ func (s *Store) startGossip() {
 		for {
 			select {
 			case <-ticker.C:
-				if err := s.maybeGossipSystemConfig(); err != nil {
-					log.Warningf(s.Ctx(), "error gossiping system config: %s", err)
+				if err := s.maybeGossipSystemData(); err != nil {
+					log.Warningf(s.Ctx(), "error gossiping system data: %s", err)
 				}
 			case <-s.stopper.ShouldStop():
 				return
@@ -1098,20 +1122,25 @@ func (s *Store) maybeGossipFirstRange() error {
 	return nil
 }
 
-// maybeGossipSystemConfig looks for the range containing SystemConfig keys and
-// lets that range gossip them.
-func (s *Store) maybeGossipSystemConfig() error {
-	rng := s.LookupReplica(roachpb.RKey(keys.SystemConfigSpan.Key), nil)
-	if rng == nil {
-		// This store has no range with this configuration.
-		return nil
+// maybeGossipSystemData looks for the ranges containing system data
+// and acquires the range lease for them which in turn will trigger
+// Replica.maybeGossipSystemConfig and Replica.maybeGossipNodeLiveness.
+func (s *Store) maybeGossipSystemData() error {
+	for _, span := range keys.GossipedSystemSpans {
+		rng := s.LookupReplica(roachpb.RKey(span.Key), nil)
+		if rng == nil {
+			// This store has no range with this configuration.
+			continue
+		}
+		// Wake up the replica. If it acquires a fresh lease, it will
+		// gossip. If an unexpected error occurs (i.e. nobody else seems to
+		// have an active lease but we still failed to obtain it), return
+		// that error.
+		if _, pErr := rng.getLeaseForGossip(s.Ctx()); pErr != nil {
+			return pErr.GoError()
+		}
 	}
-	// Wake up the replica. If it acquires a fresh lease, it will
-	// gossip. If an unexpected error occurs (i.e. nobody else seems to
-	// have an active lease but we still failed to obtain it), return
-	// that error.
-	_, pErr := rng.getLeaseForGossip(s.Ctx())
-	return pErr.GoError()
+	return nil
 }
 
 // systemGossipUpdate is a callback for gossip updates to
@@ -1156,7 +1185,7 @@ func (s *Store) GossipStore(ctx context.Context) error {
 	// normal Raft election timeout.
 	//
 	// Note that computing this timestamp here is conservative. We really care
-	// that the node descriptor has been gossipped as that is how remote nodes
+	// that the node descriptor has been gossiped as that is how remote nodes
 	// locate this one to send Raft messages. The initialization sequence is:
 	//   1. gossip node descriptor
 	//   2. wait for gossip to be connected
