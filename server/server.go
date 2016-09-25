@@ -79,6 +79,7 @@ type Server struct {
 	rpcContext     *rpc.Context
 	grpc           *grpc.Server
 	gossip         *gossip.Gossip
+	nodeLiveness   *storage.NodeLiveness
 	storePool      *storage.StorePool
 	txnCoordSender *kv.TxnCoordSender
 	distSender     *kv.DistSender
@@ -201,6 +202,8 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		s.stopper, txnMetrics)
 	s.db = client.NewDB(s.txnCoordSender)
 
+	s.nodeLiveness = storage.NewNodeLiveness(s.clock, s.db, s.gossip)
+
 	s.raftTransport = storage.NewRaftTransport(storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext)
 
 	s.kvDB = kv.NewDBServer(s.ctx.Context, s.txnCoordSender, s.stopper)
@@ -250,6 +253,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		Clock:                          s.clock,
 		DB:                             s.db,
 		Gossip:                         s.gossip,
+		NodeLiveness:                   s.nodeLiveness,
 		Transport:                      s.raftTransport,
 		RaftTickInterval:               s.ctx.RaftTickInterval,
 		ScanInterval:                   s.ctx.ScanInterval,
@@ -459,6 +463,8 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	log.Event(ctx, "started node")
+
+	s.nodeLiveness.StartHeartbeat(ctx, s.stopper)
 
 	// Set the NodeID in the base context (which was inherited by the
 	// various components of the server).

@@ -180,14 +180,15 @@ type multiTestContext struct {
 	// The per-store clocks slice normally contains aliases of
 	// multiTestContext.clock, but it may be populated before Start() to
 	// use distinct clocks per store.
-	clocks      []*hlc.Clock
-	engines     []engine.Engine
-	grpcServers []*grpc.Server
-	transports  []*storage.RaftTransport
-	distSenders []*kv.DistSender
-	dbs         []*client.DB
-	gossips     []*gossip.Gossip
-	storePools  []*storage.StorePool
+	clocks         []*hlc.Clock
+	engines        []engine.Engine
+	grpcServers    []*grpc.Server
+	transports     []*storage.RaftTransport
+	distSenders    []*kv.DistSender
+	dbs            []*client.DB
+	gossips        []*gossip.Gossip
+	nodeLivenesses []*storage.NodeLiveness
+	storePools     []*storage.StorePool
 	// We use multiple stoppers so we can restart different parts of the
 	// test individually. transportStopper is for 'transports', and the
 	// 'stoppers' slice corresponds to the 'stores'.
@@ -253,6 +254,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	m.grpcServers = make([]*grpc.Server, numStores)
 	m.transports = make([]*storage.RaftTransport, numStores)
 	m.gossips = make([]*gossip.Gossip, numStores)
+	m.nodeLivenesses = make([]*storage.NodeLiveness, numStores)
 
 	if m.manualClock == nil {
 		m.manualClock = hlc.NewManualClock(0)
@@ -484,6 +486,9 @@ func (m *multiTestContext) FirstRange() (*roachpb.RangeDescriptor, error) {
 		// Find every version of the RangeDescriptor for the first range by
 		// querying all stores; it may not be present on all stores, but the
 		// current version is guaranteed to be present on one of them.
+		if str == nil {
+			continue
+		}
 		if err := str.VisitStores(func(s *storage.Store) error {
 			firstRng := s.LookupReplica(roachpb.RKeyMin, nil)
 			if firstRng != nil {
@@ -531,6 +536,7 @@ func (m *multiTestContext) makeContext(i int) storage.StoreContext {
 	ctx.Transport = m.transports[i]
 	ctx.DB = m.dbs[i]
 	ctx.Gossip = m.gossips[i]
+	ctx.NodeLiveness = m.nodeLivenesses[i]
 	ctx.StorePool = m.storePools[i]
 	ctx.TestingKnobs.DisableSplitQueue = true
 	return ctx
@@ -613,6 +619,7 @@ func (m *multiTestContext) addStore(idx int) {
 
 	m.populateStorePool(idx, stopper)
 	m.populateDB(idx, stopper)
+	m.nodeLivenesses[idx] = storage.NewNodeLiveness(m.clocks[idx], m.dbs[idx], m.gossips[idx])
 
 	ctx := m.makeContext(idx)
 	nodeID := roachpb.NodeID(idx + 1)
@@ -682,6 +689,7 @@ func (m *multiTestContext) addStore(idx int) {
 	}
 
 	m.gossips[idx].Start(ln.Addr())
+	m.nodeLivenesses[idx].StartHeartbeat(context.Background(), stopper)
 
 	if err := store.Start(context.Background(), stopper); err != nil {
 		m.t.Fatal(err)
@@ -717,7 +725,7 @@ func (m *multiTestContext) stopStore(i int) {
 	//
 	// SendNext[hold RLock] -> Raft[want RLock]
 	//             ʌ               /
-	//               \            v
+	//              \             v
 	//             stopStore[want Lock]
 	//
 	// Instead, we only acquire a read lock to fetch the stopper, and are

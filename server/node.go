@@ -706,7 +706,7 @@ func (n *Node) writeSummaries(ctx context.Context) error {
 	if runErr := n.stopper.RunTask(func() {
 		nodeStatus := n.recorder.GetStatusSummary()
 		if nodeStatus != nil {
-			key := keys.NodeStatusKey(int32(nodeStatus.Desc.NodeID))
+			key := keys.NodeStatusKey(nodeStatus.Desc.NodeID)
 			// We use PutInline to store only a single version of the node
 			// status. There's not much point in keeping the historical
 			// versions as we keep all of the constituent data as
