@@ -152,6 +152,7 @@ message ChangeReplicasTrigger {
 // This can be used to trigger scan-and-gossip for the given span.
 message ModifiedSpanTrigger {
   optional bool system_config_span = 1 [(gogoproto.nullable) = false];
+  optional Span node_liveness_span = 2;
 }
 
 // InternalCommitTrigger encapsulates all of the internal-only commit triggers.
@@ -318,8 +319,9 @@ message Lease {
   // basis that its timestamp falls within the stasis period.
   optional util.hlc.Timestamp start_stasis = 4 [(gogoproto.nullable) = false];
 
-  // The expiration is a timestamp at which the lease expires. This means that
-  // a new lease can be granted for a later timestamp.
+  // The expiration is a timestamp at which the lease expires. This
+  // means that a new lease can be granted for a later timestamp. If
+  // this value is non-zero, the epoch is ignored.
   optional util.hlc.Timestamp expiration = 2 [(gogoproto.nullable) = false];
 
   // The address of the would-be lease holder.

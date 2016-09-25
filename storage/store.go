@@ -451,11 +451,12 @@ type StoreContext struct {
 	// have a Tracer set.
 	Ctx context.Context
 
-	Clock     *hlc.Clock
-	DB        *client.DB
-	Gossip    *gossip.Gossip
-	StorePool *StorePool
-	Transport *RaftTransport
+	Clock        *hlc.Clock
+	DB           *client.DB
+	Gossip       *gossip.Gossip
+	NodeLiveness *NodeLiveness
+	StorePool    *StorePool
+	Transport    *RaftTransport
 
 	// SQLExecutor is used by the store to execute SQL statements in a way that
 	// is more direct than using a sql.Executor.
@@ -1046,8 +1047,8 @@ func (s *Store) startGossip() {
 	})
 
 	s.stopper.RunWorker(func() {
-		if err := s.maybeGossipSystemConfig(); err != nil {
-			log.Warningf(s.Ctx(), "error gossiping system config: %s", err)
+		if err := s.maybeGossipSystemData(); err != nil {
+			log.Warningf(s.Ctx(), "error gossiping system data: %s", err)
 		}
 		s.initComplete.Done()
 		ticker := time.NewTicker(configGossipInterval)
@@ -1055,8 +1056,8 @@ func (s *Store) startGossip() {
 		for {
 			select {
 			case <-ticker.C:
-				if err := s.maybeGossipSystemConfig(); err != nil {
-					log.Warningf(s.Ctx(), "error gossiping system config: %s", err)
+				if err := s.maybeGossipSystemData(); err != nil {
+					log.Warningf(s.Ctx(), "error gossiping system data: %s", err)
 				}
 			case <-s.stopper.ShouldStop():
 				return
@@ -1090,20 +1091,25 @@ func (s *Store) maybeGossipFirstRange() error {
 	return nil
 }
 
-// maybeGossipSystemConfig looks for the range containing SystemConfig keys and
-// lets that range gossip them.
-func (s *Store) maybeGossipSystemConfig() error {
-	rng := s.LookupReplica(roachpb.RKey(keys.SystemConfigSpan.Key), nil)
-	if rng == nil {
-		// This store has no range with this configuration.
-		return nil
+// maybeGossipSystemData looks for the ranges containing system data
+// and acquires the leader lease for them which in turn will trigger
+// Replica.maybeGossipSystemConfig and Replica.maybeGossipNodeLiveness.
+func (s *Store) maybeGossipSystemData() error {
+	for _, span := range keys.SystemDataSpans {
+		rng := s.LookupReplica(roachpb.RKey(span.Key), nil)
+		if rng == nil {
+			// This store has no range with this configuration.
+			continue
+		}
+		// Wake up the replica. If it acquires a fresh lease, it will
+		// gossip. If an unexpected error occurs (i.e. nobody else seems to
+		// have an active lease but we still failed to obtain it), return
+		// that error.
+		if _, pErr := rng.getLeaseForGossip(s.Ctx()); pErr != nil {
+			return pErr.GoError()
+		}
 	}
-	// Wake up the replica. If it acquires a fresh lease, it will
-	// gossip. If an unexpected error occurs (i.e. nobody else seems to
-	// have an active lease but we still failed to obtain it), return
-	// that error.
-	_, pErr := rng.getLeaseForGossip(s.Ctx())
-	return pErr.GoError()
+	return nil
 }
 
 // systemGossipUpdate is a callback for gossip updates to
@@ -1148,7 +1154,7 @@ func (s *Store) GossipStore(ctx context.Context) error {
 	// normal Raft election timeout.
 	//
 	// Note that computing this timestamp here is conservative. We really care
-	// that the node descriptor has been gossipped as that is how remote nodes
+	// that the node descriptor has been gossiped as that is how remote nodes
 	// locate this one to send Raft messages. The initialization sequence is:
 	//   1. gossip node descriptor
 	//   2. wait for gossip to be connected
