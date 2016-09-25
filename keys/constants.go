@@ -189,6 +189,17 @@ var (
 	SystemPrefix = roachpb.Key{systemPrefixByte}
 	SystemMax    = roachpb.Key{systemMaxByte}
 
+	// NodeLivenessPrefix specifies the key prefix for the node liveness
+	// table.  Note that this should sort before the rest of the system
+	// keyspace in order to limit the number of ranges which must use
+	// expiration-based range leases instead of the more efficient
+	// node-liveness epoch-based range leases (see
+	// https://github.com/cockroachdb/cockroach/blob/develop/docs/RFCS/range_leases.md)
+	NodeLivenessPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("\x00liveness-")))
+
+	// NodeLivenessKeyMax is the maximum value for any node liveness key.
+	NodeLivenessKeyMax = NodeLivenessPrefix.PrefixEnd()
+
 	// DescIDGenerator is the global descriptor ID generator sequence used for
 	// table and namespace IDs.
 	DescIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("desc-idgen")))

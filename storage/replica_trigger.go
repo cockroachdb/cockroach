@@ -95,6 +95,8 @@ type PostCommitTrigger struct {
 	maybeAddToSplitQueue    bool
 	addToReplicaGCQueue     bool
 
+	maybeGossipNodeLiveness *roachpb.Span
+
 	computeChecksum *roachpb.ComputeChecksumRequest
 }
 
@@ -162,6 +164,10 @@ func updateTrigger(old, new *PostCommitTrigger) *PostCommitTrigger {
 		}
 		if new.addToReplicaGCQueue {
 			old.addToReplicaGCQueue = true
+		}
+
+		if new.maybeGossipNodeLiveness != nil {
+			old.maybeGossipNodeLiveness = new.maybeGossipNodeLiveness
 		}
 
 		if new.computeChecksum != nil {
@@ -470,6 +476,10 @@ func (r *Replica) handleTrigger(
 	// separate the part of the trigger which also applies on errors.
 	if originReplica.StoreID == r.store.StoreID() {
 		r.store.intentResolver.processIntentsAsync(r, trigger.intents)
+	}
+
+	if trigger.maybeGossipNodeLiveness != nil {
+		r.maybeGossipNodeLiveness(*trigger.maybeGossipNodeLiveness)
 	}
 
 	if trigger.computeChecksum != nil {
