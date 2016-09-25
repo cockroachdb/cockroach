@@ -53,6 +53,9 @@ const (
 	// string address of the node. E.g. node:1 => 127.0.0.1:24001
 	KeyNodeIDPrefix = "node"
 
+	// KeyNodeLivenessPrefix is the key prefix for gossiping node liveness info.
+	KeyNodeLivenessPrefix = "liveness"
+
 	// KeySentinel is a key for gossip which must not expire or
 	// else the node considers itself partitioned and will retry with
 	// bootstrap hosts.  The sentinel is gossiped by the node that holds
@@ -89,6 +92,11 @@ func MakePrefixPattern(prefix string) string {
 // MakeNodeIDKey returns the gossip key for node ID info.
 func MakeNodeIDKey(nodeID roachpb.NodeID) string {
 	return MakeKey(KeyNodeIDPrefix, nodeID.String())
+}
+
+// MakeNodeLivenessKey returns the gossip key for node liveness info.
+func MakeNodeLivenessKey(nodeID roachpb.NodeID) string {
+	return MakeKey(KeyNodeLivenessPrefix, nodeID.String())
 }
 
 // MakeStoreKey returns the gossip key for the given store.

@@ -126,6 +126,10 @@ type Context struct {
 	// RaftTickInterval is the resolution of the Raft timer.
 	RaftTickInterval time.Duration
 
+	// RaftElectionTimeoutTicks is the number of raft ticks before the
+	// previous election expires.
+	RaftElectionTimeoutTicks int
+
 	// MetricsSamplePeriod determines the time between records of
 	// server internal metrics.
 	// Environment Variable: COCKROACH_METRICS_SAMPLE_INTERVAL

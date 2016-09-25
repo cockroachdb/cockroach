@@ -181,14 +181,15 @@ type multiTestContext struct {
 	// The per-store clocks slice normally contains aliases of
 	// multiTestContext.clock, but it may be populated before Start() to
 	// use distinct clocks per store.
-	clocks      []*hlc.Clock
-	engines     []engine.Engine
-	grpcServers []*grpc.Server
-	transports  []*storage.RaftTransport
-	distSenders []*kv.DistSender
-	dbs         []*client.DB
-	gossips     []*gossip.Gossip
-	storePools  []*storage.StorePool
+	clocks         []*hlc.Clock
+	engines        []engine.Engine
+	grpcServers    []*grpc.Server
+	transports     []*storage.RaftTransport
+	distSenders    []*kv.DistSender
+	dbs            []*client.DB
+	gossips        []*gossip.Gossip
+	nodeLivenesses []*storage.NodeLiveness
+	storePools     []*storage.StorePool
 	// We use multiple stoppers so we can restart different parts of the
 	// test individually. transportStopper is for 'transports', and the
 	// 'stoppers' slice corresponds to the 'stores'.
@@ -254,6 +255,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	m.grpcServers = make([]*grpc.Server, numStores)
 	m.transports = make([]*storage.RaftTransport, numStores)
 	m.gossips = make([]*gossip.Gossip, numStores)
+	m.nodeLivenesses = make([]*storage.NodeLiveness, numStores)
 
 	if m.manualClock == nil {
 		m.manualClock = hlc.NewManualClock(0)
@@ -482,6 +484,11 @@ func (m *multiTestContext) FirstRange() (*roachpb.RangeDescriptor, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	for _, str := range m.senders {
+		// Node liveness heartbeats start quickly, sometimes before the first
+		// range would be available here and before we've added all ranges.
+		if str == nil {
+			continue
+		}
 		// Find every version of the RangeDescriptor for the first range by
 		// querying all stores; it may not be present on all stores, but the
 		// current version is guaranteed to be present on one of them.
@@ -532,6 +539,7 @@ func (m *multiTestContext) makeContext(i int) storage.StoreContext {
 	ctx.Transport = m.transports[i]
 	ctx.DB = m.dbs[i]
 	ctx.Gossip = m.gossips[i]
+	ctx.NodeLiveness = m.nodeLivenesses[i]
 	ctx.StorePool = m.storePools[i]
 	ctx.TestingKnobs.DisableSplitQueue = true
 	ctx.TestingKnobs.ReplicateQueueAcceptsUnsplit = true
@@ -619,8 +627,14 @@ func (m *multiTestContext) addStore(idx int) {
 	m.populateStorePool(idx, stopper)
 	m.populateDB(idx, stopper)
 
-	ctx := m.makeContext(idx)
+	active, renewal := storage.RangeLeaseDurations(
+		storage.RaftElectionTimeout(base.DefaultRaftTickInterval, 0 /* use default */))
+	m.nodeLivenesses[idx] = storage.NewNodeLiveness(m.clocks[idx], m.dbs[idx], m.gossips[idx], active, renewal)
+
 	nodeID := roachpb.NodeID(idx + 1)
+	ctx := m.makeContext(idx)
+	ctx.RangeLeaseActiveDuration = active
+	ctx.RangeLeaseRenewalDuration = renewal
 	store := storage.NewStore(ctx, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
 	if needBootstrap {
 		err := store.Bootstrap(roachpb.StoreIdent{
@@ -695,6 +709,8 @@ func (m *multiTestContext) addStore(idx int) {
 		m.t.Fatal(err)
 	}
 	store.WaitForInit()
+
+	m.nodeLivenesses[idx].StartHeartbeat(context.Background(), stopper)
 }
 
 func (m *multiTestContext) nodeDesc(nodeID roachpb.NodeID) *roachpb.NodeDescriptor {
@@ -722,7 +738,7 @@ func (m *multiTestContext) stopStore(i int) {
 	//
 	// SendNext[hold RLock] -> Raft[want RLock]
 	//             ʌ               /
-	//               \            v
+	//              \             v
 	//             stopStore[want Lock]
 	//
 	// Instead, we only acquire a read lock to fetch the stopper, and are

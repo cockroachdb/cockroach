@@ -159,6 +159,14 @@ export default class extends React.Component<IInjectedProps, {}> {
               </Axis>
             </StackedAreaGraph>
 
+            <StackedAreaGraph title="Node Liveness" sources={sources}>
+              <Axis label="Count" format={ d3.format(".1f") }>
+                <Metric name="cr.node.liveness.heartbeatsuccesses" title="Heartbeat Successes" nonNegativeRate />
+                <Metric name="cr.node.liveness.heartbeatfailures" title="Heartbeat Failures" nonNegativeRate />
+                <Metric name="cr.node.liveness.epochincrements" title="Epoch Increments" nonNegativeRate />
+              </Axis>
+            </StackedAreaGraph>
+
             <LineGraph title="Engine Memory Usage" sources={sources}>
               <Axis format={ Bytes }>
                 <Metric name="cr.store.rocksdb.block.cache.usage" title="Block Cache" />
