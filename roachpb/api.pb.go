@@ -1054,7 +1054,7 @@ func (*RequestLeaseRequest) Descriptor() ([]byte, []int) { return fileDescriptor
 //
 // Like a RequestLeaseRequest, this request has the effect of instituting a new
 // lease. The difference is that the new lease is allowed to overlap the
-// existing one. It is a separate request because the LeaderLeaseRequest is
+// existing one. It is a separate request because the RequestLeaseRequest is
 // special - it's not subject to the same replay protection restrictions as
 // other requests, instead being protected from replays by the fact that leases
 // are not generally allowed to overlap. The TransferLeaseRequest is not

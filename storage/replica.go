@@ -495,6 +495,7 @@ func NewReplica(
 	}
 
 	r.maybeGossipSystemConfig()
+	r.maybeGossipNodeLiveness(keys.NodeLivenessSpan)
 	return r, nil
 }
 
@@ -782,7 +783,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 
 				// Should we extend the lease?
 				if _, ok := r.mu.pendingLeaseRequest.RequestPending(); !ok &&
-					!timestamp.Less(lease.StartStasis.Add(-int64(r.store.ctx.rangeLeaseRenewalDuration), 0)) {
+					!timestamp.Less(lease.StartStasis.Add(-int64(r.store.ctx.RangeLeaseRenewalDuration), 0)) {
 					if log.V(2) {
 						log.Warningf(ctx, "extending lease %s at %s", lease, timestamp)
 					}
@@ -3374,6 +3375,61 @@ func (r *Replica) maybeGossipSystemConfig() {
 
 	// Successfully gossiped. Update tracking hash.
 	r.systemDBHash = hash
+}
+
+// maybeGossipNodeLiveness gossips information for all node liveness
+// records stored on this range. To scan and gossip, this replica
+// must hold the lease to a range which contains some or all of the
+// node liveness records. After scanning the records, it checks
+// against what's already in gossip and only gossips records which
+// are out of date.
+func (r *Replica) maybeGossipNodeLiveness(span roachpb.Span) {
+	if r.store.Gossip() == nil || !r.IsInitialized() {
+		return
+	}
+
+	if !r.ContainsKeyRange(span.Key, span.EndKey) {
+		return
+	}
+
+	if lease, _ := r.getLease(); !lease.OwnedBy(r.store.StoreID()) || !lease.Covers(r.store.Clock().Now()) {
+		// Do not gossip when a range lease is not held.
+		return
+	}
+
+	ba := roachpb.BatchRequest{}
+	ba.Timestamp = r.store.Clock().Now()
+	ba.Add(&roachpb.ScanRequest{Span: span})
+	br, trigger, pErr :=
+		r.executeBatch(r.ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba)
+	if pErr != nil {
+		log.Errorf(r.ctx, "couldn't scan node liveness records in span %s: %s", span, pErr.GoError())
+		return
+	}
+	if trigger != nil && len(trigger.intents) > 0 {
+		log.Errorf(r.ctx, "unexpected intents on node liveness span %s: %+v", span, trigger.intents)
+		return
+	}
+	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
+	log.VEventf(1, r.ctx, "gossiping %d node liveness record(s) from span %s", len(kvs), span)
+	for _, kv := range kvs {
+		var liveness, exLiveness Liveness
+		if err := kv.Value.GetProto(&liveness); err != nil {
+			log.Errorf(r.ctx, "failed to unmarshal liveness value %s: %s", kv.Key, err)
+			continue
+		}
+		key := gossip.MakeNodeLivenessKey(liveness.NodeID)
+		// Look up liveness from gossip; skip gossiping anew if unchanged.
+		if err := r.store.Gossip().GetInfoProto(key, &exLiveness); err == nil {
+			if exLiveness == liveness {
+				continue
+			}
+		}
+		if err := r.store.Gossip().AddInfoProto(key, &liveness, 0); err != nil {
+			log.Errorf(r.ctx, "failed to gossip node liveness (%+v): %s", liveness, err)
+			continue
+		}
+	}
 }
 
 // NewReplicaCorruptionError creates a new error indicating a corrupt replica,

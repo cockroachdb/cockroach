@@ -152,6 +152,7 @@ message ChangeReplicasTrigger {
 // This can be used to trigger scan-and-gossip for the given span.
 message ModifiedSpanTrigger {
   optional bool system_config_span = 1 [(gogoproto.nullable) = false];
+  optional Span node_liveness_span = 2;
 }
 
 // InternalCommitTrigger encapsulates all of the internal-only commit triggers.
