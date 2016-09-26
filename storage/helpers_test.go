@@ -158,6 +158,12 @@ func (s *Store) ManualReplicaGC(repl *Replica) error {
 	return s.gcQueue.process(s.Ctx(), s.Clock().Now(), repl, cfg)
 }
 
+func (s *Store) AllowIdleReplicaCampaign() {
+	s.idleReplicaElectionTime.Lock()
+	s.idleReplicaElectionTime.at = s.Clock().PhysicalTime()
+	s.idleReplicaElectionTime.Unlock()
+}
+
 func (r *Replica) RaftLock() {
 	r.raftMu.Lock()
 }

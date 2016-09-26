@@ -635,6 +635,7 @@ func (m *multiTestContext) addStore(idx int) {
 			}
 		}
 	}
+	store.AllowIdleReplicaCampaign()
 
 	ln, err := netutil.ListenAndServeGRPC(m.transportStopper, grpcServer, util.TestAddr)
 	if err != nil {
