@@ -98,7 +98,16 @@ message JoinReaderSpec {
 // order guarantee regardless of the input ordering. The output ordering is
 // according to a configurable set of columns.
 message SorterSpec {
-  optional Ordering ordering = 1 [(gogoproto.nullable) = false];
+  optional Ordering output_ordering = 1 [(gogoproto.nullable) = false];
+
+  // Ordering match length, specifying that the input is already sorted by the
+  // first 'n' output ordering columns, can be optionally specified for
+  // possible speed-ups taking advantage of the partial orderings.
+  optional uint32 ordering_match_len = 2 [(gogoproto.nullable) = false];
+
+  // Limits can be optionally specified to allow for further optimizations
+  // taking advantage of the fact that only the top 'k' results are needed.
+  optional int64 limit = 3 [(gogoproto.nullable) = false];
 }
 
 message ProcessorCoreUnion {
