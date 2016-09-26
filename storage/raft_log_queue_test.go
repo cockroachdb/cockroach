@@ -21,6 +21,8 @@ import (
 	"reflect"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
@@ -117,7 +119,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 
 	// Test on a new range which should not have a raft group yet.
 	rngNew := createReplica(store, 100, roachpb.RKey("a"), roachpb.RKey("c"))
-	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(rngNew)
+	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(context.TODO(), rngNew)
 	if err != nil {
 		t.Errorf("expected no error, got %s", err)
 	}
@@ -149,7 +151,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 		}
 	}
 
-	truncatableIndexes, oldestIndex, err = getTruncatableIndexes(r)
+	truncatableIndexes, oldestIndex, err = getTruncatableIndexes(context.TODO(), r)
 	if err != nil {
 		t.Errorf("expected no error, got %s", err)
 	}
@@ -185,7 +187,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 	// client_raft_log_queue_test.
 	util.SucceedsSoon(t, func() error {
 		store.ForceRaftLogScanAndProcess()
-		truncatableIndexes, oldestIndex, err := getTruncatableIndexes(rngNew)
+		truncatableIndexes, oldestIndex, err := getTruncatableIndexes(context.TODO(), rngNew)
 		if err != nil {
 			return errors.Errorf("expected no error, got %s", err)
 		}

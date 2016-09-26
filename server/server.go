@@ -164,8 +164,10 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 
 	s.registry = metric.NewRegistry()
 	s.gossip = gossip.New(
-		s.Ctx(), s.rpcContext, s.grpc, s.ctx.GossipBootstrapResolvers, s.stopper, s.registry)
+		s.Ctx(), s.rpcContext, s.grpc, s.ctx.GossipBootstrapResolvers, s.stopper, s.registry,
+	)
 	s.storePool = storage.NewStorePool(
+		s.Ctx(),
 		s.gossip,
 		s.clock,
 		s.rpcContext,
@@ -201,7 +203,9 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		s.stopper, txnMetrics)
 	s.db = client.NewDB(s.txnCoordSender)
 
-	s.raftTransport = storage.NewRaftTransport(storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext)
+	s.raftTransport = storage.NewRaftTransport(
+		s.Ctx(), storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext,
+	)
 
 	s.kvDB = kv.NewDBServer(s.ctx.Context, s.txnCoordSender, s.stopper)
 	roachpb.RegisterExternalServer(s.grpc, s.kvDB)

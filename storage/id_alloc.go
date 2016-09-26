@@ -35,6 +35,7 @@ import (
 // An idAllocator is used to increment a key in allocation blocks
 // of arbitrary size starting at a minimum ID.
 type idAllocator struct {
+	ctx       context.Context
 	idKey     atomic.Value
 	db        *client.DB
 	minID     uint32      // Minimum ID to return
@@ -49,7 +50,12 @@ type idAllocator struct {
 // allocated IDs starting at minID. Allocated IDs are positive
 // integers.
 func newIDAllocator(
-	idKey roachpb.Key, db *client.DB, minID uint32, blockSize uint32, stopper *stop.Stopper,
+	ctx context.Context,
+	idKey roachpb.Key,
+	db *client.DB,
+	minID uint32,
+	blockSize uint32,
+	stopper *stop.Stopper,
 ) (*idAllocator, error) {
 	// minID can't be the zero value because reads from closed channels return
 	// the zero value.
@@ -60,6 +66,7 @@ func newIDAllocator(
 		return nil, errors.Errorf("blockSize must be a positive integer: %d", blockSize)
 	}
 	ia := &idAllocator{
+		ctx:       ctx,
 		db:        db,
 		minID:     minID,
 		blockSize: blockSize,
@@ -95,9 +102,9 @@ func (ia *idAllocator) start() {
 				for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 					idKey := ia.idKey.Load().(roachpb.Key)
 					if err := ia.stopper.RunTask(func() {
-						res, err = ia.db.Inc(context.TODO(), idKey, int64(ia.blockSize))
+						res, err = ia.db.Inc(ia.ctx, idKey, int64(ia.blockSize))
 					}); err != nil {
-						log.Warning(context.TODO(), err)
+						log.Warning(ia.ctx, err)
 						return
 					}
 					if err == nil {
@@ -105,7 +112,7 @@ func (ia *idAllocator) start() {
 						break
 					}
 
-					log.Warningf(context.TODO(), "unable to allocate %d ids from %s: %s", ia.blockSize, idKey, err)
+					log.Warningf(ia.ctx, "unable to allocate %d ids from %s: %s", ia.blockSize, idKey, err)
 				}
 				if err != nil {
 					panic(fmt.Sprintf("unexpectedly exited id allocation retry loop: %s", err))

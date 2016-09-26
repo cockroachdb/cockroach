@@ -49,22 +49,25 @@ func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQue
 	sq := &splitQueue{
 		db: db,
 	}
-	sq.baseQueue = makeBaseQueue("split", sq, store, gossip, queueConfig{
-		maxSize:              splitQueueMaxSize,
-		needsLease:           true,
-		acceptsUnsplitRanges: true,
-		successes:            store.metrics.SplitQueueSuccesses,
-		failures:             store.metrics.SplitQueueFailures,
-		pending:              store.metrics.SplitQueuePending,
-		processingNanos:      store.metrics.SplitQueueProcessingNanos,
-	})
+	sq.baseQueue = makeBaseQueue(
+		store.Ctx(), "split", sq, store, gossip,
+		queueConfig{
+			maxSize:              splitQueueMaxSize,
+			needsLease:           true,
+			acceptsUnsplitRanges: true,
+			successes:            store.metrics.SplitQueueSuccesses,
+			failures:             store.metrics.SplitQueueFailures,
+			pending:              store.metrics.SplitQueuePending,
+			processingNanos:      store.metrics.SplitQueueProcessingNanos,
+		},
+	)
 	return sq
 }
 
 // shouldQueue determines whether a range should be queued for
 // splitting. This is true if the range is intersected by a zone config
 // prefix or if the range's size in bytes exceeds the limit for the zone.
-func (*splitQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
+func (sq *splitQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
 	sysCfg config.SystemConfig) (shouldQ bool, priority float64) {
 
 	desc := rng.Desc()
@@ -78,7 +81,7 @@ func (*splitQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
 	// size for the zone it's in.
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		log.Error(context.TODO(), err)
+		log.Error(sq.ctx, err)
 		return
 	}
 

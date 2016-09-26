@@ -55,16 +55,19 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator, cloc
 		clock:      clock,
 		updateChan: make(chan struct{}, 1),
 	}
-	rq.baseQueue = makeBaseQueue("replicate", rq, store, g, queueConfig{
-		maxSize:              replicateQueueMaxSize,
-		needsLease:           true,
-		acceptsUnsplitRanges: store.TestingKnobs().ReplicateQueueAcceptsUnsplit,
-		successes:            store.metrics.ReplicateQueueSuccesses,
-		failures:             store.metrics.ReplicateQueueFailures,
-		pending:              store.metrics.ReplicateQueuePending,
-		processingNanos:      store.metrics.ReplicateQueueProcessingNanos,
-		purgatory:            store.metrics.ReplicateQueuePurgatory,
-	})
+	rq.baseQueue = makeBaseQueue(
+		store.Ctx(), "replicate", rq, store, g,
+		queueConfig{
+			maxSize:              replicateQueueMaxSize,
+			needsLease:           true,
+			acceptsUnsplitRanges: store.TestingKnobs().ReplicateQueueAcceptsUnsplit,
+			successes:            store.metrics.ReplicateQueueSuccesses,
+			failures:             store.metrics.ReplicateQueueFailures,
+			pending:              store.metrics.ReplicateQueuePending,
+			processingNanos:      store.metrics.ReplicateQueueProcessingNanos,
+			purgatory:            store.metrics.ReplicateQueuePurgatory,
+		},
+	)
 
 	if g != nil { // gossip is nil for some unittests
 		// Register a gossip callback to signal queue that replicas in
@@ -101,7 +104,7 @@ func (rq *replicateQueue) shouldQueue(
 	desc := repl.Desc()
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		log.Error(context.TODO(), err)
+		log.Error(rq.ctx, err)
 		return
 	}
 

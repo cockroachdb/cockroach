@@ -139,6 +139,7 @@ func createTestStoreWithoutStart(t testing.TB, ctx *StoreContext) (*Store, *hlc.
 	manual := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
 	ctx.StorePool = NewStorePool(
+		context.TODO(),
 		ctx.Gossip,
 		ctx.Clock,
 		rpcContext,

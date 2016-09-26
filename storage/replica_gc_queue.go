@@ -74,15 +74,18 @@ func newReplicaGCQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *repl
 	q := &replicaGCQueue{
 		db: db,
 	}
-	q.baseQueue = makeBaseQueue("replicaGC", q, store, gossip, queueConfig{
-		maxSize:              replicaGCQueueMaxSize,
-		needsLease:           false,
-		acceptsUnsplitRanges: true,
-		successes:            store.metrics.ReplicaGCQueueSuccesses,
-		failures:             store.metrics.ReplicaGCQueueFailures,
-		pending:              store.metrics.ReplicaGCQueuePending,
-		processingNanos:      store.metrics.ReplicaGCQueueProcessingNanos,
-	})
+	q.baseQueue = makeBaseQueue(
+		store.Ctx(), "replicaGC", q, store, gossip,
+		queueConfig{
+			maxSize:              replicaGCQueueMaxSize,
+			needsLease:           false,
+			acceptsUnsplitRanges: true,
+			successes:            store.metrics.ReplicaGCQueueSuccesses,
+			failures:             store.metrics.ReplicaGCQueueFailures,
+			pending:              store.metrics.ReplicaGCQueuePending,
+			processingNanos:      store.metrics.ReplicaGCQueueProcessingNanos,
+		},
+	)
 	return q
 }
 
@@ -92,10 +95,12 @@ func newReplicaGCQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *repl
 // ReplicaGCQueueInactivityThreshold. Further, the last replica GC
 // check must have occurred more than ReplicaGCQueueInactivityThreshold
 // in the past.
-func (*replicaGCQueue) shouldQueue(now hlc.Timestamp, rng *Replica, _ config.SystemConfig) (bool, float64) {
+func (q *replicaGCQueue) shouldQueue(
+	now hlc.Timestamp, rng *Replica, _ config.SystemConfig,
+) (bool, float64) {
 	lastCheck, err := rng.getLastReplicaGCTimestamp()
 	if err != nil {
-		log.Errorf(context.TODO(), "could not read last replica GC timestamp: %s", err)
+		log.Errorf(q.ctx, "could not read last replica GC timestamp: %s", err)
 		return false, 0
 	}
 

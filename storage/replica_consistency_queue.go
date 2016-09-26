@@ -39,15 +39,18 @@ type replicaConsistencyQueue struct {
 // newReplicaConsistencyQueue returns a new instance of replicaConsistencyQueue.
 func newReplicaConsistencyQueue(store *Store, gossip *gossip.Gossip) *replicaConsistencyQueue {
 	rcq := &replicaConsistencyQueue{}
-	rcq.baseQueue = makeBaseQueue("replica consistency checker", rcq, store, gossip, queueConfig{
-		maxSize:              replicaConsistencyQueueSize,
-		needsLease:           true,
-		acceptsUnsplitRanges: true,
-		successes:            store.metrics.ConsistencyQueueSuccesses,
-		failures:             store.metrics.ConsistencyQueueFailures,
-		pending:              store.metrics.ConsistencyQueuePending,
-		processingNanos:      store.metrics.ConsistencyQueueProcessingNanos,
-	})
+	rcq.baseQueue = makeBaseQueue(
+		store.Ctx(), "replica consistency checker", rcq, store, gossip,
+		queueConfig{
+			maxSize:              replicaConsistencyQueueSize,
+			needsLease:           true,
+			acceptsUnsplitRanges: true,
+			successes:            store.metrics.ConsistencyQueueSuccesses,
+			failures:             store.metrics.ConsistencyQueueFailures,
+			pending:              store.metrics.ConsistencyQueuePending,
+			processingNanos:      store.metrics.ConsistencyQueueProcessingNanos,
+		},
+	)
 	return rcq
 }
 

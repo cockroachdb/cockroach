@@ -211,6 +211,7 @@ type baseQueue struct {
 // limits the total size. Higher priority replicas can still be
 // added; their addition simply removes the lowest priority replica.
 func makeBaseQueue(
+	ctx context.Context,
 	name string,
 	impl queueImpl,
 	store *Store,
@@ -221,7 +222,13 @@ func makeBaseQueue(
 	if cfg.processTimeout == 0 {
 		cfg.processTimeout = defaultProcessTimeout
 	}
+
+	// Prepend [name] to logs.
+	ctx = log.WithLogTag(ctx, name, nil)
+	ctx = log.WithEventLog(ctx, name, name)
+
 	bq := baseQueue{
+		ctx:         ctx,
 		name:        name,
 		impl:        impl,
 		store:       store,
@@ -231,11 +238,6 @@ func makeBaseQueue(
 	}
 	bq.mu.Locker = new(syncutil.Mutex)
 	bq.mu.replicas = map[roachpb.RangeID]*replicaItem{}
-
-	bq.ctx = context.TODO()
-	// Prepend [name] to logs.
-	bq.ctx = log.WithLogTag(bq.ctx, name, nil)
-	bq.ctx = log.WithEventLog(bq.ctx, name, name)
 
 	bq.processMu = new(syncutil.Mutex)
 	return bq
