@@ -715,6 +715,58 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	}
 }
 
+func TestAllocatorTransferLeaseTarget(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper, g, _, a, _ := createTestAllocator()
+	defer stopper.Stop()
+
+	// 3 stores where the range count for each store is equal to the store
+	// ID. This makes the store ID equivalent to the preference for that store as
+	// a lease transfer target.
+	var stores []*roachpb.StoreDescriptor
+	for i := 1; i <= 3; i++ {
+		stores = append(stores, &roachpb.StoreDescriptor{
+			StoreID:  roachpb.StoreID(i),
+			Node:     roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i)},
+			Capacity: roachpb.StoreCapacity{RangeCount: int32(i)},
+		})
+	}
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(stores, t)
+
+	makeReplicaDescs := func(storeIDs ...roachpb.StoreID) []roachpb.ReplicaDescriptor {
+		var res []roachpb.ReplicaDescriptor
+		for _, id := range storeIDs {
+			res = append(res, roachpb.ReplicaDescriptor{
+				StoreID: id,
+			})
+		}
+		return res
+	}
+
+	testCases := []struct {
+		existing       []roachpb.ReplicaDescriptor
+		leaseStoreID   roachpb.StoreID
+		expectedTarget roachpb.StoreID
+	}{
+		// No existing lease holder, prefer the least loaded replica.
+		{makeReplicaDescs(1, 2, 3), 0, 1},
+		// No existing lease holder, prefer the least loaded replica (existing
+		// order doesn't matter).
+		{makeReplicaDescs(3, 2, 1), 0, 1},
+		// Store 1 is the lease holder.
+		{makeReplicaDescs(1, 2, 3), 1, 2},
+		// Store 2 is the lease holder.
+		{makeReplicaDescs(1, 2, 3), 2, 1},
+	}
+	for i, c := range testCases {
+		target := a.TransferLeaseTarget(c.existing, c.leaseStoreID)
+		if c.expectedTarget != target.StoreID {
+			t.Fatalf("%d: expected %d, but found %d", i, c.expectedTarget, target.StoreID)
+		}
+	}
+}
+
 func TestAllocatorComputeAction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, _, sp, a, _ := createTestAllocator()

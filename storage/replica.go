@@ -2280,6 +2280,7 @@ func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason, refreshAtDe
 		}
 		delete(r.mu.pendingCmds, idKey)
 		// The command can be refurbished.
+		log.VEventf(4, p.ctx, "refurbishing command %x; %s", p.idKey, reason)
 		if pErr := r.refurbishPendingCmdLocked(p); pErr != nil {
 			p.done <- roachpb.ResponseWithError{Err: pErr}
 		}
@@ -2299,6 +2300,7 @@ func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason, refreshAtDe
 	// the right place. Reproposing in order is definitely required, however.
 	sort.Sort(reproposals)
 	for _, p := range reproposals {
+		log.VEventf(4, p.ctx, "reproposing command %x; %s", p.idKey, reason)
 		if err := r.proposePendingCmdLocked(p); err != nil {
 			return err
 		}

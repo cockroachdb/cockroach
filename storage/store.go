@@ -1546,33 +1546,34 @@ func splitTriggerPostCommit(
 		//
 		// Note: you must not use the context inside of this task since it may
 		// contain a finished trace by the time it runs.
-		if err := r.store.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
-			time.Sleep(10 * time.Millisecond)
-			// Make sure that rightRng hasn't been removed.
-			replica, err := r.store.GetReplica(rightRng.RangeID)
-			if err != nil {
-				if _, ok := err.(*roachpb.RangeNotFoundError); ok {
-					log.Infof(ctx, "%s: RHS replica %d removed before campaigning",
-						r, r.mu.replicaID)
-				} else {
-					log.Infof(ctx, "%s: RHS replica %d unable to campaign: %s",
-						r, r.mu.replicaID, err)
-				}
-				return
-			}
+		// if err := r.store.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
+		// 	time.Sleep(10 * time.Millisecond)
+		// 	// Make sure that rightRng hasn't been removed.
+		// 	replica, err := r.store.GetReplica(rightRng.RangeID)
+		// 	if err != nil {
+		// 		if _, ok := err.(*roachpb.RangeNotFoundError); ok {
+		// 			log.Infof(ctx, "%s: RHS replica %d removed before campaigning",
+		// 				r, r.mu.replicaID)
+		// 		} else {
+		// 			log.Infof(ctx, "%s: RHS replica %d unable to campaign: %s",
+		// 				r, r.mu.replicaID, err)
+		// 		}
+		// 		return
+		// 	}
 
-			if err := replica.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
-				if err := raftGroup.Campaign(); err != nil {
-					log.Warningf(ctx, "%s: error %v", r, err)
-				}
-				return true, nil
-			}); err != nil {
-				panic(err)
-			}
-		}); err != nil {
-			log.Warningf(ctx, "%s: error %v", r, err)
-			return
-		}
+		// 	if err := replica.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+		// 		log.Infof(replica.ctx, "campaigning after split")
+		// 		if err := raftGroup.Campaign(); err != nil {
+		// 			log.Warningf(ctx, "%s: error %v", r, err)
+		// 		}
+		// 		return true, nil
+		// 	}); err != nil {
+		// 		panic(err)
+		// 	}
+		// }); err != nil {
+		// 	log.Warningf(ctx, "%s: error %v", r, err)
+		// 	return
+		// }
 	} else if len(split.RightDesc.Replicas) == 1 {
 		// TODO(peter): In single-node clusters, we enqueue the right-hand side of
 		// the split (the new range) for Raft processing so that the corresponding
@@ -1927,6 +1928,7 @@ func (s *Store) Descriptor() (*roachpb.StoreDescriptor, error) {
 		return nil, err
 	}
 	capacity.RangeCount = int32(s.ReplicaCount())
+	capacity.LeaseHolderCount = int32(s.LeaseHolderCount())
 	// Initialize the store descriptor.
 	return &roachpb.StoreDescriptor{
 		StoreID:  s.Ident.StoreID,
@@ -1970,6 +1972,26 @@ func (s *Store) ReplicaCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.mu.replicas)
+}
+
+// LeaseHolderCount returns the number of replicas this store holds leases for.
+func (s *Store) LeaseHolderCount() int {
+	now := s.ctx.Clock.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var leaseHolderCount int
+	for _, r := range s.mu.replicas {
+		r.mu.Lock()
+		lease := r.mu.state.Lease
+		r.mu.Unlock()
+
+		if lease.OwnedBy(s.Ident.StoreID) && lease.Covers(now) {
+			leaseHolderCount++
+		}
+	}
+	return leaseHolderCount
 }
 
 // Send fetches a range based on the header's replica, assembles method, args &
