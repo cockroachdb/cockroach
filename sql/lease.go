@@ -188,9 +188,7 @@ func (s LeaseStore) Acquire(
 	// there is no harm in that as no other transaction will be attempting to
 	// modify the descriptor and even if the descriptor is never created we'll
 	// just have a dangling lease entry which will eventually get GC'd.
-	ctx := txn.Context // propagate context/trace to new transaction
-	err = s.db.Txn(context.TODO(), func(txn *client.Txn) error {
-		txn.Context = ctx
+	err = s.db.Txn(txn.Context, func(txn *client.Txn) error {
 		p := makeInternalPlanner(txn, security.RootUser)
 		const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
 			`VALUES ($1, $2, $3, $4)`
@@ -210,7 +208,7 @@ func (s LeaseStore) Acquire(
 func (s LeaseStore) Release(lease *LeaseState) error {
 	err := s.db.Txn(context.TODO(), func(txn *client.Txn) error {
 		if log.V(2) {
-			log.Infof(context.TODO(), "LeaseStore releasing lease %s", lease)
+			log.Infof(txn.Context, "LeaseStore releasing lease %s", lease)
 		}
 		p := makeInternalPlanner(txn, security.RootUser)
 		const deleteLease = `DELETE FROM system.lease ` +
@@ -316,7 +314,7 @@ func (s LeaseStore) Publish(
 				// The version changed out from under us. Someone else must be
 				// performing a schema change operation.
 				if log.V(3) {
-					log.Infof(context.TODO(), "publish (version changed): %d != %d", expectedVersion, tableDesc.Version)
+					log.Infof(txn.Context, "publish (version changed): %d != %d", expectedVersion, tableDesc.Version)
 				}
 				return errLeaseVersionChanged
 			}
@@ -331,7 +329,7 @@ func (s LeaseStore) Publish(
 			now := s.clock.Now()
 			tableDesc.ModificationTime = now
 			if log.V(3) {
-				log.Infof(context.TODO(), "publish: descID=%d (%s) version=%d mtime=%s",
+				log.Infof(txn.Context, "publish: descID=%d (%s) version=%d mtime=%s",
 					tableDesc.ID, tableDesc.Name, tableDesc.Version, now.GoTime())
 			}
 			if err := tableDesc.ValidateTable(); err != nil {
@@ -1033,7 +1031,7 @@ func (m *LeaseManager) AcquireByName(
 		// resolve the current or the old name.
 
 		if err := m.Release(lease); err != nil {
-			log.Warningf(context.TODO(), "error releasing lease: %s", err)
+			log.Warningf(txn.Context, "error releasing lease: %s", err)
 		}
 		lease, err = m.acquireFreshestFromStore(txn, tableID)
 		if err != nil {
@@ -1043,7 +1041,7 @@ func (m *LeaseManager) AcquireByName(
 			// If the name we had doesn't match the newest descriptor in the DB, then
 			// we're trying to use an old name.
 			if err := m.Release(lease); err != nil {
-				log.Warningf(context.TODO(), "error releasing lease: %s", err)
+				log.Warningf(txn.Context, "error releasing lease: %s", err)
 			}
 			return nil, sqlbase.ErrDescriptorNotFound
 		}
