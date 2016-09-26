@@ -2308,7 +2308,8 @@ func (r *Replica) AdminSplit(
 	leftDesc := *desc
 	leftDesc.EndKey = splitKey
 
-	log.Infof(ctx, "initiating a split of this range at key %s", splitKey)
+	log.Infof(ctx, "initiating a split of this range at key %s [r%d]",
+		splitKey, rightDesc.RangeID)
 
 	if err := r.store.DB().Txn(ctx, func(txn *client.Txn) error {
 		log.Event(ctx, "split closure begins")
