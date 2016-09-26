@@ -2443,6 +2443,8 @@ func TestTransferRaftLeadership(t *testing.T) {
 	}
 	mtc.Start(t, numStores)
 	defer mtc.Stop()
+	store0 := mtc.Store(0)
+	store1 := mtc.Store(1)
 
 	key := roachpb.Key("a")
 
@@ -2454,14 +2456,14 @@ func TestTransferRaftLeadership(t *testing.T) {
 		}
 	}
 
-	rng := mtc.stores[0].LookupReplica(keys.MustAddr(key), nil)
+	rng := store0.LookupReplica(keys.MustAddr(key), nil)
 	if rng == nil {
 		t.Fatalf("no replica found for key '%s'", key)
 	}
 	mtc.replicateRange(rng.RangeID, 1, 2)
 
 	getArgs := getArgs([]byte("a"))
-	if _, pErr := client.SendWrappedWith(mtc.stores[0], context.Background(), roachpb.Header{RangeID: rng.RangeID}, &getArgs); pErr != nil {
+	if _, pErr := client.SendWrappedWith(store0, context.Background(), roachpb.Header{RangeID: rng.RangeID}, &getArgs); pErr != nil {
 		t.Fatalf("expect get nil, actual get %v ", pErr)
 	}
 
@@ -2473,20 +2475,22 @@ func TestTransferRaftLeadership(t *testing.T) {
 	// Force a read on Store 2 to request a new lease. Other moving parts in
 	// the system could have requested another lease as well, so we
 	// expire-request in a loop until we get our foot in the door.
-	var pErr *roachpb.Error
 	for {
 		mtc.expireLeases()
-		if _, pErr = client.SendWrappedWith(
-			mtc.stores[1],
+		if _, pErr := client.SendWrappedWith(
+			store1,
 			context.Background(),
 			roachpb.Header{RangeID: rng.RangeID},
 			&getArgs,
-		); testutils.IsPError(pErr, "not lease holder") {
-			continue
-		} else if pErr != nil {
-			t.Fatal(pErr)
+		); pErr == nil {
+			break
+		} else {
+			switch pErr.GetDetail().(type) {
+			case *roachpb.NotLeaseHolderError, *roachpb.RangeNotFoundError:
+			default:
+				t.Fatal(pErr)
+			}
 		}
-		break
 	}
 	// Wait for raft leadership transferring to be finished.
 	util.SucceedsSoon(t, func() error {
