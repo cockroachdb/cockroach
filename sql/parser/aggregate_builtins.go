@@ -181,7 +181,7 @@ func (a *identAggregate) Result() Datum {
 
 type avgAggregate struct {
 	agg   AggregateFunc
-	count int
+	count int64
 }
 
 func newIntAvgAggregate() AggregateFunc {
@@ -273,7 +273,7 @@ func (a *boolOrAggregate) Result() Datum {
 }
 
 type countAggregate struct {
-	count int
+	count int64
 }
 
 func newCountAggregate() AggregateFunc {
@@ -496,7 +496,7 @@ func (a *intVarianceAggregate) Result() Datum {
 }
 
 type floatVarianceAggregate struct {
-	count   int
+	count   int64
 	mean    float64
 	sqrDiff float64
 }
