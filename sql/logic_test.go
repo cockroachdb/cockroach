@@ -47,7 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/timeutil"
-	"github.com/cockroachdb/pq"
+	"github.com/lib/pq"
 )
 
 // This file is home to TestLogic, a general-purpose engine for

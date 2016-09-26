@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
-	"github.com/cockroachdb/pq"
+	"github.com/lib/pq"
 )
 
 type failureRecord struct {
