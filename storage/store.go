@@ -2822,7 +2822,7 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 		// campaigning.
 		var warnDuration = 10 * s.ctx.RaftTickInterval
 		if elapsed >= warnDuration {
-			log.Warningf(s.Ctx(), "%s: handle raft ready: %.1fs", r, elapsed.Seconds())
+			log.Warningf(r.ctx, "handle raft ready: %.1fs", elapsed.Seconds())
 		}
 		if !r.IsInitialized() {
 			// Only an uninitialized replica can have a placeholder since, by
