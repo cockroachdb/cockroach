@@ -147,9 +147,14 @@ var (
 		Name: "raft.rcvd.dropped",
 		Help: "Number of dropped incoming Raft messages",
 	}
-
-	metaRaftEnqueuedPending = metric.Metadata{Name: "raft.enqueued.pending",
-		Help: "Number of pending outgoing messages in the Raft Transport queue"}
+	metaRaftEnqueuedPending = metric.Metadata{
+		Name: "raft.enqueued.pending",
+		Help: "Number of pending outgoing messages in the Raft Transport queue",
+	}
+	metaRaftCoalescedHeartbeatsPending = metric.Metadata{
+		Name: "raft.heartbeats.pending",
+		Help: "Number of pending heartbeats and responses waiting to be coalesced",
+	}
 
 	// Replica queue metrics.
 	metaGCQueueSuccesses = metric.Metadata{Name: "queue.gc.process.success",
@@ -299,7 +304,8 @@ type StoreMetrics struct {
 	// TODO(arjun): eliminate this duplication.
 	raftRcvdMessages map[raftpb.MessageType]*metric.Counter
 
-	RaftEnqueuedPending *metric.Gauge
+	RaftEnqueuedPending            *metric.Gauge
+	RaftCoalescedHeartbeatsPending *metric.Gauge
 
 	// Replica queue metrics.
 	GCQueueSuccesses                *metric.Counter
@@ -421,7 +427,8 @@ func newStoreMetrics() *StoreMetrics {
 		RaftRcvdMsgDropped:        metric.NewCounter(metaRaftRcvdDropped),
 		raftRcvdMessages:          make(map[raftpb.MessageType]*metric.Counter, len(raftpb.MessageType_name)),
 
-		RaftEnqueuedPending: metric.NewGauge(metaRaftEnqueuedPending),
+		RaftEnqueuedPending:            metric.NewGauge(metaRaftEnqueuedPending),
+		RaftCoalescedHeartbeatsPending: metric.NewGauge(metaRaftCoalescedHeartbeatsPending),
 
 		// Replica queue metrics.
 		GCQueueSuccesses:                metric.NewCounter(metaGCQueueSuccesses),
