@@ -293,6 +293,12 @@ type Store struct {
 	metrics                 *StoreMetrics
 	intentResolver          *intentResolver
 	raftEntryCache          *raftEntryCache
+
+	coalescedMu struct {
+		syncutil.Mutex
+		heartbeats         map[roachpb.StoreIdent][]RaftHeartbeat
+		heartbeatResponses map[roachpb.StoreIdent][]RaftHeartbeat
+	}
 	// 1 if the store was started, 0 if it wasn't. To be accessed using atomic
 	// ops.
 	started int32
@@ -640,6 +646,11 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	s.raftEntryCache = newRaftEntryCache(ctx.RaftEntryCacheSize)
 	s.drainLeases.Store(false)
 	s.scheduler = newRaftScheduler(ctx.Ctx, s, storeSchedulerConcurrency)
+
+	s.coalescedMu.Lock()
+	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]RaftHeartbeat{}
+	s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]RaftHeartbeat{}
+	s.coalescedMu.Unlock()
 
 	s.mu.Lock()
 	s.mu.replicas = map[roachpb.RangeID]*Replica{}
@@ -2353,6 +2364,75 @@ func (s *Store) HandleSnapshot(
 // requires that s.mu is not held.
 func (s *Store) HandleRaftRequest(
 	ctx context.Context, req *RaftMessageRequest, respStream RaftMessageResponseStream) *roachpb.Error {
+	if len(req.Heartbeats) > 0 {
+		for _, beat := range req.Heartbeats {
+			msg := raftpb.Message{
+				Type:   raftpb.MsgHeartbeat,
+				From:   uint64(beat.FromReplicaID),
+				To:     uint64(beat.ToReplicaID),
+				Term:   beat.Term,
+				Commit: beat.Commit,
+			}
+			beatReq := &RaftMessageRequest{
+				RangeID: beat.RangeID,
+				FromReplica: roachpb.ReplicaDescriptor{
+					NodeID:    req.FromReplica.NodeID,
+					StoreID:   req.FromReplica.StoreID,
+					ReplicaID: beat.FromReplicaID,
+				},
+				ToReplica: roachpb.ReplicaDescriptor{
+					NodeID:    req.ToReplica.NodeID,
+					StoreID:   req.ToReplica.StoreID,
+					ReplicaID: beat.ToReplicaID,
+				},
+				Message: msg,
+			}
+			// This recursion is safe as long as it is called only on len
+			// (req.Heartbeats) > 0, and this recursive call
+			// back into HandleRaftRequest has len(...) == 0.
+			if err := s.HandleRaftRequest(ctx, beatReq, respStream); err != nil {
+				log.Errorf(s.Ctx(), "could not send coalescedHeartbeat %s", err)
+			}
+		}
+		return nil
+	}
+
+	if len(req.HeartbeatResps) > 0 {
+		for _, resp := range req.HeartbeatResps {
+			msg := raftpb.Message{
+				Type:   raftpb.MsgHeartbeatResp,
+				From:   uint64(resp.FromReplicaID),
+				To:     uint64(resp.ToReplicaID),
+				Term:   resp.Term,
+				Commit: resp.Commit,
+			}
+			respReq := &RaftMessageRequest{
+				RangeID: resp.RangeID,
+				FromReplica: roachpb.ReplicaDescriptor{
+					NodeID:    req.FromReplica.NodeID,
+					StoreID:   req.FromReplica.StoreID,
+					ReplicaID: resp.FromReplicaID,
+				},
+				ToReplica: roachpb.ReplicaDescriptor{
+					NodeID:    req.ToReplica.NodeID,
+					StoreID:   req.ToReplica.StoreID,
+					ReplicaID: resp.ToReplicaID,
+				},
+				Message: msg,
+			}
+			// This recursion is safe as long as it is called only on len
+			// (req.HeartbeatResps) > 0, and this
+			// recursive call back into HandleRaftRequest has len(...) == 0.
+			if err := s.HandleRaftRequest(ctx, respReq, respStream); err != nil {
+				log.Errorf(ctx, "could not send coalescedHeartbeat %s", err)
+			}
+		}
+		return nil
+	}
+
+	// HandleRaftRequest is called on locally uncoalesced heartbeats (which are
+	// not sent over the network if the environment variable is set) so do not
+	// count them.
 	s.metrics.raftRcvdMessages[req.Message.Type].Inc(1)
 
 	if respStream == nil {
@@ -2888,8 +2968,8 @@ func (s *Store) raftTickLoop() {
 				}
 				s.mu.Unlock()
 
+				s.sendQueuedHeartbeats()
 				s.scheduler.EnqueueRaftTick(rangeIDs...)
-
 				s.metrics.RaftTicks.Inc(1)
 
 			case <-s.stopper.ShouldStop():
@@ -2897,6 +2977,74 @@ func (s *Store) raftTickLoop() {
 			}
 		}
 	})
+}
+
+// sendQueuedHeartbeatsToNode requires that the s.coalescedMu lock is held.
+func (s *Store) sendQueuedHeartbeatsToNode(
+	beats, resps []RaftHeartbeat,
+	to roachpb.StoreIdent,
+	accum int,
+) int {
+
+	var msgType raftpb.MessageType
+
+	if len(beats) == 0 && len(resps) == 0 {
+		return accum
+	} else if len(resps) == 0 {
+		msgType = raftpb.MsgHeartbeat
+	} else if len(beats) == 0 {
+		msgType = raftpb.MsgHeartbeatResp
+	} else {
+		panic("cannot coalesce both heartbeats and responses")
+	}
+
+	chReq := &RaftMessageRequest{
+		RangeID: 0,
+		ToReplica: roachpb.ReplicaDescriptor{
+			NodeID:    to.NodeID,
+			StoreID:   to.StoreID,
+			ReplicaID: 0,
+		},
+		Message: raftpb.Message{
+			Type: msgType,
+		},
+		Heartbeats:     beats,
+		HeartbeatResps: resps,
+	}
+
+	if !s.ctx.Transport.SendAsync(chReq) {
+		s.mu.Lock()
+		for _, beat := range beats {
+			replica := s.mu.replicas[beat.RangeID]
+			replica.reportUnreachable(beat.ToReplicaID)
+		}
+		for _, resp := range resps {
+			replica := s.mu.replicas[resp.RangeID]
+			replica.reportUnreachable(resp.ToReplicaID)
+		}
+		s.mu.Unlock()
+	}
+	return accum + len(beats) + len(resps)
+}
+
+func (s *Store) sendQueuedHeartbeats() {
+	s.coalescedMu.Lock()
+	s.sendQueuedHeartbeatsLocked()
+	s.coalescedMu.Unlock()
+}
+
+func (s *Store) sendQueuedHeartbeatsLocked() {
+	var beatsSent int
+
+	for to, beats := range s.coalescedMu.heartbeats {
+		beatsSent = s.sendQueuedHeartbeatsToNode(beats, nil, to, beatsSent)
+	}
+	for to, resps := range s.coalescedMu.heartbeatResponses {
+		beatsSent = s.sendQueuedHeartbeatsToNode(nil, resps, to, beatsSent)
+	}
+	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]RaftHeartbeat{}
+	s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]RaftHeartbeat{}
+	s.metrics.RaftCoalescedHeartbeatsPending.Update(int64(beatsSent))
 }
 
 func (s *Store) raftSnapshotStatusLoop() {

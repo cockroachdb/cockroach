@@ -1691,6 +1691,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		return nil
 	})
 
+	// Test that a coalesced heartbeat is ingested correctly
 	replica1 := roachpb.ReplicaDescriptor{
 		ReplicaID: roachpb.ReplicaID(mtc.stores[1].StoreID()),
 		NodeID:    roachpb.NodeID(mtc.stores[1].StoreID()),
@@ -1702,13 +1703,18 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		StoreID:   mtc.stores[2].StoreID(),
 	}
 	mtc.transports[2].SendAsync(&storage.RaftMessageRequest{
-		RangeID:     0, // TODO(bdarnell): wtf is this testing?
+		RangeID:     0,
 		ToReplica:   replica1,
 		FromReplica: replica2,
 		Message: raftpb.Message{
-			From: uint64(replica2.ReplicaID),
-			To:   uint64(replica1.ReplicaID),
 			Type: raftpb.MsgHeartbeat,
+		},
+		Heartbeats: []storage.RaftHeartbeat{
+			{
+				RangeID:       rangeID,
+				FromReplicaID: replica2.ReplicaID,
+				ToReplicaID:   replica1.ReplicaID,
+			},
 		},
 	})
 	// Execute another replica change to ensure that raft has processed

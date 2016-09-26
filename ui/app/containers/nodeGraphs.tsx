@@ -240,6 +240,12 @@ export default class extends React.Component<IInjectedProps, {}> {
               </Axis>
             </LineGraph>
 
+            <LineGraph title="Coalesced Heartbeat Queue Pending Count" sources={sources}>
+              <Axis format={ d3.format(".1f") }>
+                <Metric name="cr.store.raft.heartbeats.pending" title="Outstanding message count in the Raft Transport queue" />
+              </Axis>
+            </LineGraph>
+
             <LineGraph title="Replicas: Details" sources={sources}>
               <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.store.replicas.leaders" title="Leaders" />
