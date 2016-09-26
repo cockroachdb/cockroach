@@ -39,3 +39,83 @@ SET DATABASE = test
 query T
 SHOW TABLES FROM pg_catalog
 ----
+pg_namespace
+
+query TT colnames
+SHOW CREATE TABLE pg_catalog.pg_namespace
+----
+Table                  CreateTable
+pg_catalog.pg_namespace  CREATE TABLE "pg_catalog.pg_namespace" (
+                           oid INT NULL,
+                           nspname STRING NOT NULL DEFAULT '',
+                           nspowner INT NULL,
+                           aclitem STRING NULL
+                       )
+
+query TTBT colnames
+SHOW COLUMNS FROM pg_catalog.pg_namespace
+----
+Field     Type    Null  Default
+oid       INT     true   NULL
+nspname   STRING  false  ''
+nspowner  INT     true   NULL
+aclitem   STRING  true   NULL
+
+query TTTTTTT colnames
+SHOW INDEXES FROM pg_catalog.pg_namespace
+----
+Table  Name  Unique  Seq  Column  Direction  Storing
+
+query TTTTT colnames
+SHOW CONSTRAINTS FROM pg_catalog.pg_namespace
+----
+Table         Name     Type  Column(s)  Details
+pg_namespace  PRIMARY  KEY   NULL         NULL
+
+query TTT colnames
+SHOW GRANTS ON pg_catalog.pg_namespace
+----
+Table  User  Privileges
+
+
+# Verify selecting from pg_catalog.
+
+statement ok
+CREATE DATABASE constraint_db
+
+statement ok
+CREATE TABLE constraint_db.t1 (
+  p FLOAT PRIMARY KEY,
+  a INT UNIQUE,
+  b INT,
+  c INT DEFAULT 12,
+  UNIQUE INDEX index_key(b, c)
+)
+
+statement ok
+CREATE TABLE constraint_db.t2 (
+    t1_ID INT,
+    CONSTRAINT fk FOREIGN KEY (t1_ID) REFERENCES constraint_db.t1(a),
+    INDEX (t1_ID)
+)
+
+statement ok
+CREATE TABLE constraint_db.t3 (
+    a INT,
+    b INT CHECK (b > 11),
+    c STRING DEFAULT 'FOO',
+    CONSTRAINT fk FOREIGN KEY (a, b) REFERENCES constraint_db.t1(b, c),
+    INDEX (a, b)
+)
+
+## pg_catalog.pg_namespace
+
+query ITIT colnames
+SELECT * FROM pg_catalog.pg_namespace
+----
+oid         nspname             nspowner  aclitem
+3061586988  constraint_db       NULL      NULL
+3816276882  information_schema  NULL      NULL
+3178318485  pg_catalog          NULL      NULL
+1793492844  system              NULL      NULL
+2091240128  test                NULL      NULL
