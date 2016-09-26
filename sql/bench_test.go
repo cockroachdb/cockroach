@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/util/tracing"
-	_ "github.com/cockroachdb/pq"
+	_ "github.com/lib/pq"
 )
 
 func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {

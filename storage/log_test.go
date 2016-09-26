@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	_ "github.com/cockroachdb/pq"
+	_ "github.com/lib/pq"
 )
 
 func TestLogSplits(t *testing.T) {
