@@ -158,7 +158,7 @@ Table  User  Privileges
 query TTTTI colnames
 SELECT table_catalog, table_schema, table_name, column_name, ordinal_position
 FROM information_schema.columns
-WHERE table_schema != 'information_schema'
+WHERE table_schema != 'information_schema' AND table_schema != 'pg_catalog'
 ----
 table_catalog  table_schema        table_name  column_name               ordinal_position
 def            system              descriptor  id                        1
@@ -334,6 +334,7 @@ table_privileges
 tables
 abc
 xyz
+pg_namespace
 descriptor
 eventlog
 lease
@@ -356,6 +357,7 @@ table_constraints
 schemata
 schema_privileges
 rangelog
+pg_namespace
 namespace
 
 query TTTTI colnames
@@ -371,6 +373,7 @@ def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
 def            other_db            abc                VIEW         1
 def            other_db            xyz                BASE TABLE   1
+def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            system              descriptor         BASE TABLE   1
 def            system              eventlog           BASE TABLE   1
 def            system              lease              BASE TABLE   1
@@ -402,6 +405,7 @@ def            information_schema  schemata           SYSTEM VIEW  1
 def            information_schema  table_constraints  SYSTEM VIEW  1
 def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
+def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 
 user root
 
@@ -422,6 +426,7 @@ def            information_schema  table_constraints  SYSTEM VIEW  1
 def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
 def            other_db            xyz                BASE TABLE   5
+def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 
 user root
 
