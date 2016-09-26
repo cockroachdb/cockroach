@@ -410,10 +410,10 @@ The zone config format has the following YAML schema:
     ttlseconds: <time-in-seconds>
 
 For example, to set the zone config for the system database, run:
-cockroach zone set system "replicas:
+echo "replicas:
 - attrs: [us-east-1a, ssd]
 - attrs: [us-east-1b, ssd]
-- attrs: [us-west-1b, ssd]"
+- attrs: [us-west-1b, ssd]" | cockroach zone set system --file=-
 
 Note that the specified zone config is merged with the existing zone config for
 the database or table.
