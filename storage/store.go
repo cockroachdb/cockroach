@@ -648,16 +648,22 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 
 	if s.ctx.Gossip != nil {
 		// Add range scanner and configure with queues.
-		s.scanner = newReplicaScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s))
+		s.scanner = newReplicaScanner(
+			ctx.Ctx, ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s),
+		)
 		s.gcQueue = newGCQueue(s, s.ctx.Gossip)
 		s.splitQueue = newSplitQueue(s, s.db, s.ctx.Gossip)
-		s.replicateQueue = newReplicateQueue(s, s.ctx.Gossip, s.allocator, s.ctx.Clock, s.ctx.AllocatorOptions)
+		s.replicateQueue = newReplicateQueue(
+			s, s.ctx.Gossip, s.allocator, s.ctx.Clock, s.ctx.AllocatorOptions,
+		)
 		s.replicaGCQueue = newReplicaGCQueue(s, s.db, s.ctx.Gossip)
 		s.raftLogQueue = newRaftLogQueue(s, s.db, s.ctx.Gossip)
 		s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)
 
 		// Add consistency check scanner.
-		s.consistencyScanner = newReplicaScanner(ctx.ConsistencyCheckInterval, 0, newStoreRangeSet(s))
+		s.consistencyScanner = newReplicaScanner(
+			ctx.Ctx, ctx.ConsistencyCheckInterval, 0, newStoreRangeSet(s),
+		)
 		s.replicaConsistencyQueue = newReplicaConsistencyQueue(s, s.ctx.Gossip)
 		s.consistencyScanner.AddQueues(s.replicaConsistencyQueue)
 	}
@@ -819,8 +825,13 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.ctx.Gossip.SetNodeID(s.Ident.NodeID)
 	}
 
+	// Set the store ID for logging.
+	s.ctx.Ctx = log.WithLogTagInt(s.ctx.Ctx, "s", int(s.StoreID()))
+
 	// Create ID allocators.
-	idAlloc, err := newIDAllocator(keys.RangeIDGenerator, s.db, 2 /* min ID */, rangeIDAllocCount, s.stopper)
+	idAlloc, err := newIDAllocator(
+		s.ctx.Ctx, keys.RangeIDGenerator, s.db, 2 /* min ID */, rangeIDAllocCount, s.stopper,
+	)
 	if err != nil {
 		return err
 	}
@@ -828,9 +839,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	now := s.ctx.Clock.Now()
 	s.startedAt = now.WallTime
-
-	// Set the store ID for logging.
-	s.ctx.Ctx = log.WithLogTagInt(s.ctx.Ctx, "s", int(s.StoreID()))
 
 	// Iterate over all range descriptors, ignoring uncommitted versions
 	// (consistent=false). Uncommitted intents which have been abandoned
@@ -1738,9 +1746,9 @@ func (s *Store) removePlaceholderLocked(rngID roachpb.RangeID) bool {
 		delete(s.mu.replicaPlaceholders, rngID)
 		return true
 	case nil:
-		log.Fatalf(context.TODO(), "%s range=%d: placeholder not found", s, rngID)
+		log.Fatalf(s.Ctx(), "range=%d: placeholder not found", rngID)
 	default:
-		log.Fatalf(context.TODO(), "%s range=%d: expected placeholder, got %T", s, rngID, exRng)
+		log.Fatalf(s.Ctx(), "range=%d: expected placeholder, got %T", rngID, exRng)
 	}
 	return false // appease the compiler
 }
@@ -1792,7 +1800,7 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 		// TODO(peter): The above comment is out of date: we could return an error
 		// here but are not doing so yet in the name of conservatism.
 		s.mu.Unlock()
-		log.Fatalf(context.TODO(), "replica %s found by id but not by key", rep)
+		log.Fatalf(s.Ctx(), "replica %s found by id but not by key", rep)
 	}
 	// Adjust stats before calling Destroy. This can be called before or after
 	// Destroy, but this configuration helps avoid races in stat verification
@@ -1818,7 +1826,7 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 	if s.mu.replicasByKey.Delete(rep) == nil {
 		// We already checked that our replica was present in replicasByKey
 		// above. Nothing should have been able to change that.
-		log.Fatalf(context.TODO(), "replica %s found by id but not by key", rep)
+		log.Fatalf(s.Ctx(), "replica %s found by id but not by key", rep)
 	}
 	s.scanner.RemoveReplica(rep)
 	s.consistencyScanner.RemoveReplica(rep)
@@ -2229,7 +2237,7 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now hlc.Timesta
 		PusheeTxn: txn.TxnMeta,
 		PushType:  roachpb.PUSH_QUERY,
 	})
-	if err := s.db.Run(context.TODO(), b); err != nil {
+	if err := s.db.Run(s.Ctx(), b); err != nil {
 		// TODO(tschottdorf):
 		// We shouldn't catch an error here (unless it's from the abort cache, in
 		// which case we would not get the crucial information that we've been

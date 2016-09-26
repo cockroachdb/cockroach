@@ -98,15 +98,18 @@ type gcQueue struct {
 // newGCQueue returns a new instance of gcQueue.
 func newGCQueue(store *Store, gossip *gossip.Gossip) *gcQueue {
 	gcq := &gcQueue{}
-	gcq.baseQueue = makeBaseQueue("gc", gcq, store, gossip, queueConfig{
-		maxSize:              gcQueueMaxSize,
-		needsLease:           true,
-		acceptsUnsplitRanges: false,
-		successes:            store.metrics.GCQueueSuccesses,
-		failures:             store.metrics.GCQueueFailures,
-		pending:              store.metrics.GCQueuePending,
-		processingNanos:      store.metrics.GCQueueProcessingNanos,
-	})
+	gcq.baseQueue = makeBaseQueue(
+		store.Ctx(), "gc", gcq, store, gossip,
+		queueConfig{
+			maxSize:              gcQueueMaxSize,
+			needsLease:           true,
+			acceptsUnsplitRanges: false,
+			successes:            store.metrics.GCQueueSuccesses,
+			failures:             store.metrics.GCQueueFailures,
+			pending:              store.metrics.GCQueuePending,
+			processingNanos:      store.metrics.GCQueueProcessingNanos,
+		},
+	)
 	return gcq
 }
 
@@ -117,12 +120,12 @@ type resolveFunc func([]roachpb.Intent, bool, bool) error
 // collection, and if so, at what priority. Returns true for shouldQ
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
-func (*gcQueue) shouldQueue(now hlc.Timestamp, repl *Replica,
+func (gcq *gcQueue) shouldQueue(now hlc.Timestamp, repl *Replica,
 	sysCfg config.SystemConfig) (shouldQ bool, priority float64) {
 	desc := repl.Desc()
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		log.Errorf(context.TODO(), "could not find zone config for range %s: %s", repl, err)
+		log.Errorf(gcq.ctx, "could not find zone config for range %s: %s", repl, err)
 		return
 	}
 

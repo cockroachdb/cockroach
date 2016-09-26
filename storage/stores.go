@@ -41,6 +41,7 @@ import (
 // persisted consistently to every store and the most recent bootstrap
 // information to be read at node startup.
 type Stores struct {
+	ctx        context.Context
 	clock      *hlc.Clock
 	mu         syncutil.RWMutex           // Protects storeMap and addrs
 	storeMap   map[roachpb.StoreID]*Store // Map from StoreID to Store
@@ -53,8 +54,9 @@ var _ gossip.Storage = &Stores{} // Stores implements the gossip.Storage interfa
 
 // NewStores returns a local-only sender which directly accesses
 // a collection of stores.
-func NewStores(clock *hlc.Clock) *Stores {
+func NewStores(ctx context.Context, clock *hlc.Clock) *Stores {
 	return &Stores{
+		ctx:      ctx,
 		clock:    clock,
 		storeMap: map[roachpb.StoreID]*Store{},
 	}
@@ -99,7 +101,7 @@ func (ls *Stores) AddStore(s *Store) {
 	// all stores have the most recent values.
 	if !ls.biLatestTS.Equal(hlc.ZeroTimestamp) {
 		if err := ls.updateBootstrapInfo(ls.latestBI); err != nil {
-			log.Errorf(context.TODO(), "failed to update bootstrap info on newly added store: %s", err)
+			log.Errorf(ls.ctx, "failed to update bootstrap info on newly added store: %s", err)
 		}
 	}
 }
@@ -208,7 +210,7 @@ func (ls *Stores) LookupReplica(
 
 		// Verify that the descriptor contains the entire range.
 		if desc := replica.Desc(); !desc.ContainsKeyRange(start, end) {
-			log.Warningf(context.TODO(), "range not contained in one range: [%s,%s), but have [%s,%s)",
+			log.Warningf(ls.ctx, "range not contained in one range: [%s,%s), but have [%s,%s)",
 				start, end, desc.StartKey, desc.EndKey)
 			err := roachpb.NewRangeKeyMismatchError(start.AsRawKey(), end.AsRawKey(), desc)
 			return 0, roachpb.ReplicaDescriptor{}, err
@@ -285,7 +287,7 @@ func (ls *Stores) ReadBootstrapInfo(bi *gossip.BootstrapInfo) error {
 			*bi = storeBI
 		}
 	}
-	log.Infof(context.TODO(), "read %d node addresses from persistent storage", len(bi.Addresses))
+	log.Infof(ls.ctx, "read %d node addresses from persistent storage", len(bi.Addresses))
 	return ls.updateBootstrapInfo(bi)
 }
 
@@ -300,7 +302,7 @@ func (ls *Stores) WriteBootstrapInfo(bi *gossip.BootstrapInfo) error {
 	if err := ls.updateBootstrapInfo(bi); err != nil {
 		return err
 	}
-	log.Infof(context.TODO(), "wrote %d node addresses to persistent storage", len(bi.Addresses))
+	log.Infof(ls.ctx, "wrote %d node addresses to persistent storage", len(bi.Addresses))
 	return nil
 }
 

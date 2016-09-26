@@ -60,6 +60,7 @@ const (
 )
 
 type storeDetail struct {
+	ctx         context.Context
 	desc        *roachpb.StoreDescriptor
 	dead        bool
 	timesDied   int
@@ -80,7 +81,9 @@ func (sd *storeDetail) markDead(foundDeadOn hlc.Timestamp) {
 	if sd.desc != nil {
 		// sd.desc can still be nil if it was markedAlive and enqueued in getStoreDetailLocked
 		// and never markedAlive again.
-		log.Warningf(context.TODO(), "store %s on node %s is now considered offline", sd.desc.StoreID, sd.desc.Node.NodeID)
+		log.Warningf(
+			sd.ctx, "store %s on node %s is now considered offline", sd.desc.StoreID, sd.desc.Node.NodeID,
+		)
 	}
 }
 
@@ -191,6 +194,7 @@ func (pq *storePoolPQ) dequeue() *storeDetail {
 // StorePool maintains a list of all known stores in the cluster and
 // information on their health.
 type StorePool struct {
+	ctx                         context.Context
 	clock                       *hlc.Clock
 	timeUntilStoreDead          time.Duration
 	rpcContext                  *rpc.Context
@@ -211,6 +215,7 @@ type StorePool struct {
 // NewStorePool creates a StorePool and registers the store updating callback
 // with gossip.
 func NewStorePool(
+	ctx context.Context,
 	g *gossip.Gossip,
 	clock *hlc.Clock,
 	rpcContext *rpc.Context,
@@ -219,6 +224,7 @@ func NewStorePool(
 	stopper *stop.Stopper,
 ) *StorePool {
 	sp := &StorePool{
+		ctx:                 ctx,
 		clock:               clock,
 		timeUntilStoreDead:  timeUntilStoreDead,
 		rpcContext:          rpcContext,
@@ -276,7 +282,7 @@ func (sp *StorePool) String() string {
 func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	var storeDesc roachpb.StoreDescriptor
 	if err := content.GetProto(&storeDesc); err != nil {
-		log.Error(context.TODO(), err)
+		log.Error(sp.ctx, err)
 		return
 	}
 
@@ -292,7 +298,7 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 func (sp *StorePool) deadReplicasGossipUpdate(_ string, content roachpb.Value) {
 	var replicas roachpb.StoreDeadReplicas
 	if err := content.GetProto(&replicas); err != nil {
-		log.Error(context.TODO(), err)
+		log.Error(sp.ctx, err)
 		return
 	}
 
@@ -349,8 +355,9 @@ func (sp *StorePool) start(stopper *stop.Stopper) {
 
 // newStoreDetail makes a new storeDetail struct. It sets index to be -1 to
 // ensure that it will be processed by a queue immediately.
-func newStoreDetail() *storeDetail {
+func newStoreDetail(ctx context.Context) *storeDetail {
 	return &storeDetail{
+		ctx:          ctx,
 		index:        -1,
 		deadReplicas: make(map[roachpb.RangeID][]roachpb.ReplicaDescriptor),
 	}
@@ -367,7 +374,7 @@ func (sp *StorePool) getStoreDetailLocked(storeID roachpb.StoreID) *storeDetail 
 		// network). The first time this occurs, presume the store is
 		// alive, but start the clock so it will become dead if enough
 		// time passes without updates from gossip.
-		detail = newStoreDetail()
+		detail = newStoreDetail(sp.ctx)
 		sp.mu.stores[storeID] = detail
 		detail.markAlive(sp.clock.Now(), nil)
 		sp.mu.queue.enqueue(detail)
@@ -547,10 +554,10 @@ func (sp *StorePool) reserve(
 	}
 
 	if log.V(2) {
-		log.Infof(context.TODO(), "proposing new reservation:%+v", req)
+		log.Infof(sp.ctx, "proposing new reservation:%+v", req)
 	}
 
-	ctxWithTimeout, cancel := context.WithTimeout(context.TODO(), sp.reserveRPCTimeout)
+	ctxWithTimeout, cancel := context.WithTimeout(sp.ctx, sp.reserveRPCTimeout)
 	defer cancel()
 	resp, err := client.Reserve(ctxWithTimeout, req)
 
@@ -561,7 +568,7 @@ func (sp *StorePool) reserve(
 	if err != nil {
 		detail.throttledUntil = sp.clock.Now().GoTime().Add(sp.failedReservationsTimeout)
 		if log.V(2) {
-			log.Infof(context.TODO(), "reservation failed, store:%s will be throttled for %s until %s",
+			log.Infof(sp.ctx, "reservation failed, store:%s will be throttled for %s until %s",
 				toStoreID, sp.failedReservationsTimeout, detail.throttledUntil)
 		}
 		return errors.Wrapf(err, "reservation failed:%+v", req)
@@ -571,14 +578,14 @@ func (sp *StorePool) reserve(
 	if !resp.Reserved {
 		detail.throttledUntil = sp.clock.Now().GoTime().Add(sp.declinedReservationsTimeout)
 		if log.V(2) {
-			log.Infof(context.TODO(), "reservation failed, store:%s will be throttled for %s until %s",
+			log.Infof(sp.ctx, "reservation failed, store:%s will be throttled for %s until %s",
 				toStoreID, sp.declinedReservationsTimeout, detail.throttledUntil)
 		}
 		return errors.Errorf("reservation declined:%+v", req)
 	}
 
 	if log.V(2) {
-		log.Infof(context.TODO(), "reservation was approved:%+v", req)
+		log.Infof(sp.ctx, "reservation was approved:%+v", req)
 	}
 	return nil
 }

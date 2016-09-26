@@ -56,27 +56,30 @@ func newRaftLogQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *raftLo
 	rlq := &raftLogQueue{
 		db: db,
 	}
-	rlq.baseQueue = makeBaseQueue("raftlog", rlq, store, gossip, queueConfig{
-		maxSize:              raftLogQueueMaxSize,
-		needsLease:           false,
-		acceptsUnsplitRanges: true,
-		successes:            store.metrics.RaftLogQueueSuccesses,
-		failures:             store.metrics.RaftLogQueueFailures,
-		pending:              store.metrics.RaftLogQueuePending,
-		processingNanos:      store.metrics.RaftLogQueueProcessingNanos,
-	})
+	rlq.baseQueue = makeBaseQueue(
+		store.Ctx(), "raftlog", rlq, store, gossip,
+		queueConfig{
+			maxSize:              raftLogQueueMaxSize,
+			needsLease:           false,
+			acceptsUnsplitRanges: true,
+			successes:            store.metrics.RaftLogQueueSuccesses,
+			failures:             store.metrics.RaftLogQueueFailures,
+			pending:              store.metrics.RaftLogQueuePending,
+			processingNanos:      store.metrics.RaftLogQueueProcessingNanos,
+		},
+	)
 	return rlq
 }
 
 // getTruncatableIndexes returns the number of truncatable indexes and the
 // oldest index that cannot be truncated for the replica.
 // See computeTruncatableIndex.
-func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
+func getTruncatableIndexes(ctx context.Context, r *Replica) (uint64, uint64, error) {
 	rangeID := r.RangeID
 	raftStatus := r.RaftStatus()
 	if raftStatus == nil {
 		if log.V(6) {
-			log.Infof(context.TODO(), "the raft group doesn't exist for range %d", rangeID)
+			log.Infof(ctx, "the raft group doesn't exist for range %d", rangeID)
 		}
 		return 0, 0, nil
 	}
@@ -176,12 +179,12 @@ func getBehindIndex(raftStatus *raft.Status) uint64 {
 // shouldQueue determines whether a range should be queued for truncating. This
 // is true only if the replica is the raft leader and if the total number of
 // the range's raft log's stale entries exceeds RaftLogQueueStaleThreshold.
-func (*raftLogQueue) shouldQueue(
+func (rlq *raftLogQueue) shouldQueue(
 	now hlc.Timestamp, r *Replica, _ config.SystemConfig,
 ) (shouldQ bool, priority float64) {
-	truncatableIndexes, _, err := getTruncatableIndexes(r)
+	truncatableIndexes, _, err := getTruncatableIndexes(rlq.ctx, r)
 	if err != nil {
-		log.Warning(context.TODO(), err)
+		log.Warning(rlq.ctx, err)
 		return false, 0
 	}
 
@@ -197,7 +200,7 @@ func (rlq *raftLogQueue) process(
 	r *Replica,
 	_ config.SystemConfig,
 ) error {
-	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(r)
+	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(rlq.ctx, r)
 	if err != nil {
 		return err
 	}

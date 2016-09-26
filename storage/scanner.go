@@ -63,6 +63,7 @@ type replicaSet interface {
 // interval).  Each replica is tested for inclusion in a sequence of
 // prioritized replica queues.
 type replicaScanner struct {
+	ctx            context.Context
 	targetInterval time.Duration  // Target duration interval for scan loop
 	maxIdleTime    time.Duration  // Max idle time for scan loop
 	waitTimer      timeutil.Timer // Shared timer to avoid allocations.
@@ -86,11 +87,14 @@ type replicaScanner struct {
 // loop intervals, replica set, and replica queues.  If scanFn is not
 // nil, after a complete loop that function will be called. If the
 // targetInterval is 0, the scanner is disabled.
-func newReplicaScanner(targetInterval, maxIdleTime time.Duration, replicas replicaSet) *replicaScanner {
+func newReplicaScanner(
+	ctx context.Context, targetInterval, maxIdleTime time.Duration, replicas replicaSet,
+) *replicaScanner {
 	if targetInterval < 0 {
-		log.Fatalf(context.TODO(), "scanner interval must be greater than or equal to zero")
+		log.Fatalf(ctx, "scanner interval must be greater than or equal to zero")
 	}
 	rs := &replicaScanner{
+		ctx:            ctx,
 		targetInterval: targetInterval,
 		maxIdleTime:    maxIdleTime,
 		replicas:       replicas,
@@ -195,13 +199,13 @@ func (rs *replicaScanner) waitAndProcess(
 	waitInterval := rs.paceInterval(start, timeutil.Now())
 	rs.waitTimer.Reset(waitInterval)
 	if log.V(6) {
-		log.Infof(context.TODO(), "wait timer interval set to %s", waitInterval)
+		log.Infof(rs.ctx, "wait timer interval set to %s", waitInterval)
 	}
 	for {
 		select {
 		case <-rs.waitTimer.C:
 			if log.V(6) {
-				log.Infof(context.TODO(), "wait timer fired")
+				log.Infof(rs.ctx, "wait timer fired")
 			}
 			rs.waitTimer.Read = true
 			if repl == nil {
@@ -231,7 +235,7 @@ func (rs *replicaScanner) removeReplica(repl *Replica) {
 		q.MaybeRemove(repl)
 	}
 	if log.V(6) {
-		log.Infof(context.TODO(), "removed replica %s", repl)
+		log.Infof(rs.ctx, "removed replica %s", repl)
 	}
 }
 
@@ -271,7 +275,7 @@ func (rs *replicaScanner) scanLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 				rs.mu.scanCount++
 				rs.mu.total += timeutil.Since(start)
 				if log.V(6) {
-					log.Infof(context.TODO(), "reset replica scan iteration")
+					log.Infof(rs.ctx, "reset replica scan iteration")
 				}
 
 				// Reset iteration and start time.
