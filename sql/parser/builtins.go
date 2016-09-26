@@ -133,6 +133,14 @@ func (b Builtin) Category() string {
 	return ""
 }
 
+func argToInt(d Datum) (int, error) {
+	a := d.(*DInt)
+	if *a > math.MaxInt32 {
+		return 0, errArgTooBig
+	}
+	return int(*a), nil
+}
+
 // Builtins contains the built-in functions indexed by name.
 var Builtins = map[string][]Builtin{
 	// Keep the list of functions sorted.
@@ -217,7 +225,10 @@ var Builtins = map[string][]Builtin{
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				text := string(*args[0].(*DString))
 				sep := string(*args[1].(*DString))
-				field := int(*args[2].(*DInt))
+				field, err := argToInt(args[2])
+				if err != nil {
+					return DNull, fmt.Errorf("field position %s", err)
+				}
 
 				if field <= 0 {
 					return DNull, fmt.Errorf("field position %d must be greater than zero", field)
@@ -238,7 +249,10 @@ var Builtins = map[string][]Builtin{
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, args DTuple) (_ Datum, err error) {
 				s := string(*args[0].(*DString))
-				count := int(*args[1].(*DInt))
+				count, err := argToInt(args[1])
+				if err != nil {
+					return DNull, fmt.Errorf("field count %s", err)
+				}
 				if count < 0 {
 					count = 0
 				}
@@ -301,7 +315,10 @@ var Builtins = map[string][]Builtin{
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				s := string(*args[0].(*DString))
 				to := string(*args[1].(*DString))
-				pos := int(*args[2].(*DInt))
+				pos, err := argToInt(args[2])
+				if err != nil {
+					return DNull, fmt.Errorf("field position %s", err)
+				}
 				size := utf8.RuneCountInString(to)
 				return overlay(s, to, pos, size)
 			},
@@ -312,8 +329,14 @@ var Builtins = map[string][]Builtin{
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				s := string(*args[0].(*DString))
 				to := string(*args[1].(*DString))
-				pos := int(*args[2].(*DInt))
-				size := int(*args[3].(*DInt))
+				pos, err := argToInt(args[2])
+				if err != nil {
+					return DNull, fmt.Errorf("field position %s", err)
+				}
+				size, err := argToInt(args[3])
+				if err != nil {
+					return DNull, fmt.Errorf("field size %s", err)
+				}
 				return overlay(s, to, pos, size)
 			},
 		},
@@ -433,7 +456,10 @@ var Builtins = map[string][]Builtin{
 			ReturnType: TypeBytes,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				bytes := []byte(*args[0].(*DBytes))
-				n := int(*args[1].(*DInt))
+				n, err := argToInt(args[1])
+				if err != nil {
+					return DNull, fmt.Errorf("field n %s", err)
+				}
 
 				if n < -len(bytes) {
 					n = 0
@@ -450,7 +476,10 @@ var Builtins = map[string][]Builtin{
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				runes := []rune(string(*args[0].(*DString)))
-				n := int(*args[1].(*DInt))
+				n, err := argToInt(args[1])
+				if err != nil {
+					return DNull, fmt.Errorf("field n %s", err)
+				}
 
 				if n < -len(runes) {
 					n = 0
@@ -470,7 +499,10 @@ var Builtins = map[string][]Builtin{
 			ReturnType: TypeBytes,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				bytes := []byte(*args[0].(*DBytes))
-				n := int(*args[1].(*DInt))
+				n, err := argToInt(args[1])
+				if err != nil {
+					return DNull, fmt.Errorf("field n %s", err)
+				}
 
 				if n < -len(bytes) {
 					n = 0
@@ -487,7 +519,10 @@ var Builtins = map[string][]Builtin{
 			ReturnType: TypeString,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				runes := []rune(string(*args[0].(*DString)))
-				n := int(*args[1].(*DInt))
+				n, err := argToInt(args[1])
+				if err != nil {
+					return DNull, fmt.Errorf("field n %s", err)
+				}
 
 				if n < -len(runes) {
 					n = 0
@@ -979,8 +1014,11 @@ var substringImpls = []Builtin{
 		ReturnType: TypeString,
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 			runes := []rune(string(*args[0].(*DString)))
-			// SQL strings are 1-indexed.
-			start := int(*args[1].(*DInt)) - 1
+			start, err := argToInt(args[1])
+			if err != nil {
+				return DNull, fmt.Errorf("field start %s", err)
+			}
+			start-- // SQL strings are 1-indexed.
 
 			if start < 0 {
 				start = 0
@@ -996,9 +1034,15 @@ var substringImpls = []Builtin{
 		ReturnType: TypeString,
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 			runes := []rune(string(*args[0].(*DString)))
-			// SQL strings are 1-indexed.
-			start := int(*args[1].(*DInt)) - 1
-			length := int(*args[2].(*DInt))
+			start, err := argToInt(args[1])
+			if err != nil {
+				return DNull, fmt.Errorf("field start %s", err)
+			}
+			length, err := argToInt(args[2])
+			if err != nil {
+				return DNull, fmt.Errorf("field length %s", err)
+			}
+			start-- // SQL strings are 1-indexed.
 
 			if length < 0 {
 				return DNull, fmt.Errorf("negative substring length %d not allowed", length)
