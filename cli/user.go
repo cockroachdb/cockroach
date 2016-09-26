@@ -30,9 +30,9 @@ var password string
 // A getUserCmd command displays the config for the specified username.
 var getUserCmd = &cobra.Command{
 	Use:   "get [options] <username>",
-	Short: "fetches and displays a user config",
+	Short: "fetches and displays a user",
 	Long: `
-Fetches and displays the user configuration for <username>.
+Fetches and displays the user for <username>.
 `,
 	SilenceUsage: true,
 	RunE:         panicGuard(runGetUser),
@@ -55,12 +55,12 @@ func runGetUser(cmd *cobra.Command, args []string) {
 	}
 }
 
-// A lsUsersCmd command displays a list of user configs.
+// A lsUsersCmd command displays a list of users.
 var lsUsersCmd = &cobra.Command{
 	Use:   "ls [options]",
-	Short: "list all user configs",
+	Short: "list all users",
 	Long: `
-List all user configs.
+List all users.
 `,
 	SilenceUsage: true,
 	RunE:         panicGuard(runLsUsers),
@@ -83,12 +83,12 @@ func runLsUsers(cmd *cobra.Command, args []string) {
 	}
 }
 
-// A rmUserCmd command removes the user config for the specified username.
+// A rmUserCmd command removes the user for the specified username.
 var rmUserCmd = &cobra.Command{
 	Use:   "rm [options] <username>",
-	Short: "remove a user config",
+	Short: "remove a user",
 	Long: `
-Remove an existing user config by username.
+Remove an existing user by username.
 `,
 	SilenceUsage: true,
 	RunE:         panicGuard(runRmUser),
@@ -111,12 +111,12 @@ func runRmUser(cmd *cobra.Command, args []string) {
 	}
 }
 
-// A setUserCmd command creates a new or updates an existing user config.
+// A setUserCmd command creates a new or updates an existing user.
 var setUserCmd = &cobra.Command{
 	Use:   "set [options] <username>",
-	Short: "create or update a user config for key prefix",
+	Short: "create or update a user",
 	Long: `
-Create or update a user config for the specified username, prompting
+Create or update a user for the specified username, prompting
 for the password.
 `,
 	SilenceUsage: true,
@@ -125,7 +125,7 @@ for the password.
 
 // runSetUser prompts for a password, then inserts the user and hash
 // into the system.users table.
-// TODO(marc): once we have more fields in the user config, we will need
+// TODO(marc): once we have more fields in the user, we will need
 // to allow changing just some of them (eg: change email, but leave password).
 func runSetUser(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
