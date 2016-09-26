@@ -1538,33 +1538,34 @@ func splitTriggerPostCommit(
 		//
 		// Note: you must not use the context inside of this task since it may
 		// contain a finished trace by the time it runs.
-		if err := r.store.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
-			time.Sleep(10 * time.Millisecond)
-			// Make sure that rightRng hasn't been removed.
-			replica, err := r.store.GetReplica(rightRng.RangeID)
-			if err != nil {
-				if _, ok := err.(*roachpb.RangeNotFoundError); ok {
-					log.Infof(ctx, "%s: RHS replica %d removed before campaigning",
-						r, r.mu.replicaID)
-				} else {
-					log.Infof(ctx, "%s: RHS replica %d unable to campaign: %s",
-						r, r.mu.replicaID, err)
-				}
-				return
-			}
+		// if err := r.store.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
+		// 	time.Sleep(10 * time.Millisecond)
+		// 	// Make sure that rightRng hasn't been removed.
+		// 	replica, err := r.store.GetReplica(rightRng.RangeID)
+		// 	if err != nil {
+		// 		if _, ok := err.(*roachpb.RangeNotFoundError); ok {
+		// 			log.Infof(ctx, "%s: RHS replica %d removed before campaigning",
+		// 				r, r.mu.replicaID)
+		// 		} else {
+		// 			log.Infof(ctx, "%s: RHS replica %d unable to campaign: %s",
+		// 				r, r.mu.replicaID, err)
+		// 		}
+		// 		return
+		// 	}
 
-			if err := replica.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
-				if err := raftGroup.Campaign(); err != nil {
-					log.Warningf(ctx, "%s: error %v", r, err)
-				}
-				return true, nil
-			}); err != nil {
-				panic(err)
-			}
-		}); err != nil {
-			log.Warningf(ctx, "%s: error %v", r, err)
-			return
-		}
+		// 	if err := replica.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+		// 		log.Infof(replica.ctx, "campaigning after split")
+		// 		if err := raftGroup.Campaign(); err != nil {
+		// 			log.Warningf(ctx, "%s: error %v", r, err)
+		// 		}
+		// 		return true, nil
+		// 	}); err != nil {
+		// 		panic(err)
+		// 	}
+		// }); err != nil {
+		// 	log.Warningf(ctx, "%s: error %v", r, err)
+		// 	return
+		// }
 	} else if len(split.RightDesc.Replicas) == 1 {
 		// TODO(peter): In single-node clusters, we enqueue the right-hand side of
 		// the split (the new range) for Raft processing so that the corresponding
