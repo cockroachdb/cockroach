@@ -357,7 +357,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			for j := len(row); j < len(oldValues); j++ {
 				oldValues[j] = parser.DNull
 			}
-			if _, err := ru.updateRow(context.TODO(), writeBatch, oldValues, updateValues); err != nil {
+			if _, err := ru.updateRow(txn.Context, writeBatch, oldValues, updateValues); err != nil {
 				return err
 			}
 		}
@@ -408,7 +408,7 @@ func (sc *SchemaChanger) truncateIndexes(
 					return err
 				}
 				resume, err = td.deleteIndex(
-					context.TODO(), &desc, resumeAt, IndexBackfillChunkSize,
+					txn.Context, &desc, resumeAt, IndexBackfillChunkSize,
 				)
 				done = resume.Key == nil
 				return err
@@ -528,7 +528,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 				}
 				for _, secondaryIndexEntry := range secondaryIndexEntries {
 					if log.V(2) {
-						log.Infof(context.TODO(), "InitPut %s -> %v", secondaryIndexEntry.Key,
+						log.Infof(txn.Context, "InitPut %s -> %v", secondaryIndexEntry.Key,
 							secondaryIndexEntry.Value)
 					}
 					b.InitPut(secondaryIndexEntry.Key, &secondaryIndexEntry.Value)

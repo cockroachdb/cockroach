@@ -2511,6 +2511,17 @@ func TestEndTransactionTxnSpanGCThreshold(t *testing.T) {
 			t.Fatalf("expected txn aborted error, got %v and response %+v", pErr, resp)
 		}
 	}
+
+	// A transaction which starts later (i.e. at a higher timestamp) should not
+	// be prevented from writing its record.
+	// See #9522.
+	{
+		txn := newTransaction("foo", key, 1, enginepb.SERIALIZABLE, tc.clock)
+		beginArgs, header := beginTxnArgs(key, txn)
+		if _, pErr := tc.SendWrappedWith(header, &beginArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
 }
 
 // TestEndTransactionDeadline_1PC verifies that a transaction that
