@@ -148,7 +148,7 @@ type planNode interface {
 
 	// Next performs one unit of work, returning false if an error is
 	// encountered or if there is no more work to do. For statements
-	// that return a result set, the Value() method will return one row
+	// that return a result set, the Values() method will return one row
 	// of results each time that Next() returns true.
 	// See executor.go: countRowsAffected() and execStmt() for an example.
 	//
