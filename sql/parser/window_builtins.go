@@ -266,7 +266,7 @@ func (w *rankWindow) Compute(wf WindowFrame) (Datum, error) {
 
 // denseRankWindow computes the rank of the current row without gaps (it counts peer groups).
 type denseRankWindow struct {
-	denseRank int
+	denseRank int64
 	peerRes   *DInt
 }
 
@@ -329,9 +329,9 @@ func (w *cumulativeDistWindow) Compute(wf WindowFrame) (Datum, error) {
 // the partition as equally as possible.
 type ntileWindow struct {
 	ntile          *DInt // current result
-	curBucketCount int   // row number of current bucket
-	boundary       int   // how many rows should be in the bucket
-	remainder      int   // (total rows) % (bucket num)
+	curBucketCount int64 // row number of current bucket
+	boundary       int64 // how many rows should be in the bucket
+	remainder      int64 // (total rows) % (bucket num)
 }
 
 func newNtileWindow() WindowFunc {
@@ -343,15 +343,14 @@ var errInvalidArgumentForNtile = errors.Errorf("argument of ntile must be greate
 func (w *ntileWindow) Compute(wf WindowFrame) (Datum, error) {
 	if w.ntile == nil {
 		// If this is the first call to ntileWindow.Compute, set up the buckets.
-		total := wf.rowCount()
+		total := int64(wf.rowCount())
 
 		arg := wf.args()[0]
 		if arg == DNull {
 			// per spec: If argument is the null value, then the result is the null value.
 			return DNull, nil
 		}
-
-		nbuckets := int(*arg.(*DInt))
+		nbuckets := int64(*arg.(*DInt))
 		if nbuckets <= 0 {
 			// per spec: If argument is less than or equal to 0, then an error is returned.
 			return nil, errInvalidArgumentForNtile
@@ -374,7 +373,7 @@ func (w *ntileWindow) Compute(wf WindowFrame) (Datum, error) {
 	w.curBucketCount++
 	if w.boundary < w.curBucketCount {
 		// Move to next ntile bucket.
-		if w.remainder != 0 && int(*w.ntile) == w.remainder {
+		if w.remainder != 0 && int64(*w.ntile) == w.remainder {
 			w.remainder = 0
 			w.boundary--
 		}
