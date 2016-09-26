@@ -959,6 +959,9 @@ func (e *Executor) execStmtInOpenTxn(
 	planMaker.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
 	planMaker.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
 
+	session := planMaker.session
+	log.Event(session.context, stmt.String())
+
 	// TODO(cdo): Figure out how to not double count on retries.
 	e.updateStmtCounts(stmt)
 	switch s := stmt.(type) {
@@ -1057,9 +1060,6 @@ func (e *Executor) execStmtInOpenTxn(
 		}
 		return Result{PGTag: s.StatementTag()}, nil
 	}
-
-	session := planMaker.session
-	log.Event(session.context, stmt.String())
 
 	autoCommit := implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
 	result, err := e.execStmt(stmt, planMaker, autoCommit)

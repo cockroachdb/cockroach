@@ -413,25 +413,25 @@ func (r *Replica) BeginTransaction(
 	reply.Txn = &clonedTxn
 
 	// Verify transaction does not already exist.
-	txn := roachpb.Transaction{}
-	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.ZeroTimestamp, true, nil, &txn)
+	tmpTxn := roachpb.Transaction{}
+	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.ZeroTimestamp, true, nil, &tmpTxn)
 	if err != nil {
 		return reply, err
 	}
 	if ok {
-		switch txn.Status {
+		switch tmpTxn.Status {
 		case roachpb.ABORTED:
 			// Check whether someone has come in ahead and already aborted the
 			// txn.
 			return reply, roachpb.NewTransactionAbortedError()
 
 		case roachpb.PENDING:
-			if h.Txn.Epoch > txn.Epoch {
+			if h.Txn.Epoch > tmpTxn.Epoch {
 				// On a transaction retry there will be an extant txn record
 				// but this run should have an upgraded epoch. The extant txn
 				// record may have been pushed or otherwise updated, so update
 				// this command's txn and rewrite the record.
-				reply.Txn.Update(&txn)
+				reply.Txn.Update(&tmpTxn)
 			} else {
 				// Our txn record already exists. This is either a client error, sending
 				// a duplicate BeginTransaction, or it's an artefact of DistSender
@@ -441,12 +441,12 @@ func (r *Replica) BeginTransaction(
 
 		case roachpb.COMMITTED:
 			return reply, roachpb.NewTransactionStatusError(
-				fmt.Sprintf("BeginTransaction can't overwrite %s", txn),
+				fmt.Sprintf("BeginTransaction can't overwrite %s", tmpTxn),
 			)
 
 		default:
 			return reply, roachpb.NewTransactionStatusError(
-				fmt.Sprintf("bad txn state: %s", txn),
+				fmt.Sprintf("bad txn state: %s", tmpTxn),
 			)
 		}
 	}
@@ -461,7 +461,7 @@ func (r *Replica) BeginTransaction(
 	// (which may have been written before this entry).
 	//
 	// See #9265.
-	if txn.LastActive().Less(threshold) {
+	if reply.Txn.LastActive().Less(threshold) {
 		return reply, roachpb.NewTransactionAbortedError()
 	}
 
@@ -2289,7 +2289,7 @@ func (r *Replica) AdminSplit(
 
 	log.Infof(ctx, "initiating a split of this range at key %s", splitKey)
 
-	if err := r.store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := r.store.DB().Txn(ctx, func(txn *client.Txn) error {
 		log.Event(ctx, "split closure begins")
 		defer log.Event(ctx, "split closure ends")
 		// Update existing range descriptor for left hand side of
@@ -2769,7 +2769,7 @@ func (r *Replica) AdminMerge(
 		log.Infof(ctx, "initiating a merge of %s into this range", rightRng)
 	}
 
-	if err := r.store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
+	if err := r.store.DB().Txn(ctx, func(txn *client.Txn) error {
 		log.Event(ctx, "merge closure begins")
 		// Update the range descriptor for the receiving range.
 		{
