@@ -17,6 +17,7 @@
 		ReservationResponse
 		CollectChecksumRequest
 		CollectChecksumResponse
+		RaftHeartbeat
 		RaftMessageRequest
 		RaftMessageRequestBatch
 		RaftMessageResponseUnion
