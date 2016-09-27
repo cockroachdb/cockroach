@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -97,15 +98,18 @@ type ServerMetrics struct {
 	Conns          *metric.Counter
 	ConnMemMetrics sql.MemoryMetrics
 	SQLMemMetrics  sql.MemoryMetrics
+
+	internalMemMetrics *sql.MemoryMetrics
 }
 
-func makeServerMetrics() ServerMetrics {
+func makeServerMetrics(internalMemMetrics *sql.MemoryMetrics) ServerMetrics {
 	return ServerMetrics{
-		Conns:          metric.NewCounter(MetaConns),
-		BytesInCount:   metric.NewCounter(MetaBytesIn),
-		BytesOutCount:  metric.NewCounter(MetaBytesOut),
-		ConnMemMetrics: sql.MakeMemMetrics("conns"),
-		SQLMemMetrics:  sql.MakeMemMetrics("client"),
+		Conns:              metric.NewCounter(MetaConns),
+		BytesInCount:       metric.NewCounter(MetaBytesIn),
+		BytesOutCount:      metric.NewCounter(MetaBytesOut),
+		ConnMemMetrics:     sql.MakeMemMetrics("conns"),
+		SQLMemMetrics:      sql.MakeMemMetrics("client"),
+		internalMemMetrics: internalMemMetrics,
 	}
 }
 
@@ -121,13 +125,17 @@ var noteworthyConnMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWO
 
 // MakeServer creates a Server.
 func MakeServer(
-	ambientCtx log.AmbientContext, cfg *base.Config, executor *sql.Executor, maxSQLMem int64,
+	ambientCtx log.AmbientContext,
+	cfg *base.Config,
+	executor *sql.Executor,
+	internalMemMetrics *sql.MemoryMetrics,
+	maxSQLMem int64,
 ) *Server {
 	server := &Server{
 		AmbientCtx: ambientCtx,
 		cfg:        cfg,
 		executor:   executor,
-		metrics:    makeServerMetrics(),
+		metrics:    makeServerMetrics(internalMemMetrics),
 	}
 	server.sqlMemoryPool = mon.MakeMonitor("sql",
 		server.metrics.SQLMemMetrics.CurBytesCount,
@@ -268,6 +276,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		if v3conn.sessionArgs, err = parseOptions(buf.msg); err != nil {
 			return v3conn.sendInternalError(err.Error())
 		}
+
 		if errSSLRequired {
 			return v3conn.sendInternalError(ErrSSLRequired)
 		}
@@ -277,6 +286,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 			return v3conn.sendInternalError(ErrDraining)
 		}
 
+		v3conn.sessionArgs.User = parser.Name(v3conn.sessionArgs.User).Normalize()
 		if err := v3conn.handleAuthentication(ctx, s.cfg.Insecure); err != nil {
 			return v3conn.sendInternalError(err.Error())
 		}

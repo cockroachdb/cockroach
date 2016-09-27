@@ -285,7 +285,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.registry.AddMetricStruct(s.sqlExecutor)
 
 	s.pgServer = pgwire.MakeServer(
-		s.cfg.AmbientCtx, s.cfg.Config, s.sqlExecutor, s.cfg.SQLMemoryPoolSize,
+		s.cfg.AmbientCtx, s.cfg.Config, s.sqlExecutor, &s.internalMemMetrics, s.cfg.SQLMemoryPoolSize,
 	)
 	s.registry.AddMetricStruct(s.pgServer.Metrics())
 

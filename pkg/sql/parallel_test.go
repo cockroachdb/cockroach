@@ -28,6 +28,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -90,8 +91,8 @@ func (t *parallelTest) getClient(nodeIdx, clientIdx int) *gosql.DB {
 		// Add a client.
 		pgURL, cleanupFunc := sqlutils.PGUrl(t.T,
 			t.cluster.Server(nodeIdx).ServingAddr(),
-			security.RootUser,
-			"TestParallel")
+			"TestParallel",
+			url.User(security.RootUser))
 		db, err := gosql.Open("postgres", pgURL.String())
 		if err != nil {
 			t.Fatal(err)

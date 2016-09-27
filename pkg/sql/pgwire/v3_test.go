@@ -30,7 +30,7 @@ import (
 )
 
 func makeTestV3Conn(c net.Conn) v3Conn {
-	metrics := makeServerMetrics()
+	metrics := makeServerMetrics(nil)
 	mon := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, 1000)
 	return makeV3Conn(
 		context.Background(),
