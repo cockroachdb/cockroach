@@ -47,20 +47,22 @@ implementation takes advantage of this and deletes the MVCC metadata
 when possible.
 
 Each MVCC version key/value pair has a key which is also
-binary-encoded, but is suffixed with a decreasing, big-endian
-encoding of the timestamp (8 bytes for the nanosecond wall time,
-followed by 4 bytes for the logical time). The MVCC version value is
+binary-encoded, but is suffixed with a decreasing, big-endian encoding
+of the timestamp (eight bytes for the nanosecond wall time, followed
+by four bytes for the logical time except for meta key value pairs,
+for which the timestamp is implicit). The MVCC version value is
 a message of type roachpb.Value. A deletion is is indicated by an
-empty value. Note that an empty roachpb.Value will encode to a
-non-empty byte slice. The decreasing encoding on the timestamp sorts
-the most recent version directly after the metadata key. This
-increases the likelihood that an Engine.Get() of the MVCC metadata
-will get the same block containing the most recent version, even if
-there are many versions. We rely on getting the MVCC metadata
-key/value and then using it to directly get the MVCC version using
-the metadata's most recent version timestamp. This avoids using an
-expensive merge iterator to scan the most recent version. It also
-allows us to leverage RocksDB's bloom filters.
+empty value. Note that an empty roachpb.Value will encode to
+a non-empty byte slice. The decreasing encoding on the timestamp sorts
+the most recent version directly after the metadata key, which is
+treated specially by the RocksDB comparator (by making the zero
+timestamp sort first). This increases the likelihood that an
+Engine.Get() of the MVCC metadata will get the same block containing
+the most recent version, even if there are many versions. We rely on
+getting the MVCC metadata key/value and then using it to directly get
+the MVCC version using the metadata's most recent version timestamp.
+This avoids using an expensive merge iterator to scan the most recent
+version. It also allows us to leverage RocksDB's bloom filters.
 
 The binary encoding used on the MVCC keys allows arbitrary keys to be
 stored in the map (no restrictions on intermediate nil-bytes, for
