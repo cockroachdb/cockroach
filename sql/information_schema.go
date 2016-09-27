@@ -106,12 +106,9 @@ CREATE TABLE information_schema.columns (
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 				// Table descriptors already holds columns in-order.
 				visible := 0
-				for _, column := range table.Columns {
-					if column.Hidden {
-						continue
-					}
+				return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
 					visible++
-					if err := addRow(
+					return addRow(
 						defString,                                    // table_catalog
 						parser.NewDString(db.Name),                   // table_schema
 						parser.NewDString(table.Name),                // table_name
@@ -125,11 +122,8 @@ CREATE TABLE information_schema.columns (
 						numericPrecision(column.Type),                // numeric_precision
 						numericScale(column.Type),                    // numeric_scale
 						datetimePrecision(column.Type),               // datetime_precision
-					); err != nil {
-						return err
-					}
-				}
-				return nil
+					)
+				})
 			},
 		)
 	},
@@ -555,6 +549,40 @@ func forEachIndexInTable(
 	for i := range table.Indexes {
 		if err := fn(&table.Indexes[i]); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func forEachColumnInTable(
+	table *sqlbase.TableDescriptor,
+	fn func(*sqlbase.ColumnDescriptor) error,
+) error {
+	// Table descriptors already holds columns in-order.
+	for i := range table.Columns {
+		if !table.Columns[i].Hidden {
+			if err := fn(&table.Columns[i]); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func forEachColumnInIndex(
+	table *sqlbase.TableDescriptor,
+	index *sqlbase.IndexDescriptor,
+	fn func(*sqlbase.ColumnDescriptor) error,
+) error {
+	colMap := make(map[sqlbase.ColumnID]*sqlbase.ColumnDescriptor, len(table.Columns))
+	for i, column := range table.Columns {
+		colMap[column.ID] = &table.Columns[i]
+	}
+	for _, columnID := range index.ColumnIDs {
+		if column := colMap[columnID]; !column.Hidden {
+			if err := fn(column); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
