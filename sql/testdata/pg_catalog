@@ -39,6 +39,7 @@ SET DATABASE = test
 query T
 SHOW TABLES FROM pg_catalog
 ----
+pg_class
 pg_namespace
 pg_tables
 
@@ -109,6 +110,9 @@ CREATE TABLE constraint_db.t3 (
     INDEX (a, b)
 )
 
+statement ok
+CREATE VIEW constraint_db.v1 AS SELECT * FROM constraint_db.t1;
+
 ## pg_catalog.pg_namespace
 
 query ITIT colnames
@@ -138,3 +142,81 @@ tablename          hasindexes
 table_constraints  false
 table_privileges   false
 tables             false
+
+## pg_catalog.pg_class
+
+query ITIIIIII colnames
+SELECT c.oid, relname, relnamespace, reltype, relowner, relam, relfilenode, reltablespace
+FROM pg_catalog.pg_class c 
+JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+WHERE n.nspname = 'constraint_db'
+----
+oid         relname       relnamespace  reltype  relowner  relam  relfilenode  reltablespace
+2265044713  t1            3061586988    0        NULL      NULL   0            0
+1759889455  primary       3061586988    0        NULL      NULL   0            0
+1759889452  t1_a_key      3061586988    0        NULL      NULL   0            0
+1759889453  index_key     3061586988    0        NULL      NULL   0            0
+2030599329  t2            3061586988    0        NULL      NULL   0            0
+559702615   primary       3061586988    0        NULL      NULL   0            0
+559702612   t2_t1_ID_idx  3061586988    0        NULL      NULL   0            0
+2064007441  t3            3061586988    0        NULL      NULL   0            0
+4171047647  primary       3061586988    0        NULL      NULL   0            0
+4171047644  t3_a_b_idx    3061586988    0        NULL      NULL   0            0
+2332993830  v1            3061586988    0        NULL      NULL   0            0
+
+query TIRIIBB colnames
+SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared
+FROM pg_catalog.pg_class c 
+JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+WHERE n.nspname = 'constraint_db'
+----
+relname       relpages  reltuples  relallvisible  reltoastrelid  relhasindex  relisshared
+t1            NULL      NULL       0              0              true         false
+primary       NULL      NULL       0              0              false        false
+t1_a_key      NULL      NULL       0              0              false        false
+index_key     NULL      NULL       0              0              false        false
+t2            NULL      NULL       0              0              true         false
+primary       NULL      NULL       0              0              false        false
+t2_t1_ID_idx  NULL      NULL       0              0              false        false
+t3            NULL      NULL       0              0              true         false
+primary       NULL      NULL       0              0              false        false
+t3_a_b_idx    NULL      NULL       0              0              false        false
+v1            NULL      NULL       0              0              false        false
+
+query TBTIIBB colnames
+SELECT relname, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey
+FROM pg_catalog.pg_class c 
+JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+WHERE n.nspname = 'constraint_db'
+----
+relname       relistemp  relkind  relnatts  relchecks  relhasoids  relhaspkey
+t1            false      r        4         0          false       true
+primary       false      i        1         0          false       false
+t1_a_key      false      i        1         0          false       false
+index_key     false      i        2         0          false       false
+t2            false      r        2         0          false       true
+primary       false      i        1         0          false       false
+t2_t1_ID_idx  false      i        1         0          false       false
+t3            false      r        4         1          false       true
+primary       false      i        1         0          false       false
+t3_a_b_idx    false      i        2         0          false       false
+v1            false      v        4         0          false       false
+
+query TBBBITT colnames
+SELECT relname, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions
+FROM pg_catalog.pg_class c 
+JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+WHERE n.nspname = 'constraint_db'
+----
+relname       relhasrules  relhastriggers  relhassubclass  relfrozenxid  relacl  reloptions
+t1            false        false           false           0             NULL    NULL
+primary       false        false           false           0             NULL    NULL
+t1_a_key      false        false           false           0             NULL    NULL
+index_key     false        false           false           0             NULL    NULL
+t2            false        false           false           0             NULL    NULL
+primary       false        false           false           0             NULL    NULL
+t2_t1_ID_idx  false        false           false           0             NULL    NULL
+t3            false        false           false           0             NULL    NULL
+primary       false        false           false           0             NULL    NULL
+t3_a_b_idx    false        false           false           0             NULL    NULL
+v1            false        false           false           0             NULL    NULL
