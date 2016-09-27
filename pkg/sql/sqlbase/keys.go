@@ -55,14 +55,20 @@ var normalize = unicode.SpecialCase{
 	},
 }
 
-// NormalizeName normalizes to lowercase and Unicode Normalization Form C
+// NormalizeString normalizes to lowercase and Unicode Normalization Form C
 // (NFC).
-func NormalizeName(name parser.Name) string {
-	lower := strings.Map(normalize.ToLower, string(name))
+func NormalizeString(s string) string {
+	lower := strings.Map(normalize.ToLower, s)
 	if isASCII(lower) {
 		return lower
 	}
 	return norm.NFC.String(lower)
+}
+
+// NormalizeName normalizes to lowercase and Unicode Normalization Form C
+// (NFC).
+func NormalizeName(name parser.Name) string {
+	return NormalizeString(string(name))
 }
 
 // ReNormalizeName performs the same work as NormalizeName but when

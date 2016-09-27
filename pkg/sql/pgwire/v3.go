@@ -53,6 +53,7 @@ const (
 	clientMsgExecute     clientMessageType = 'E'
 	clientMsgFlush       clientMessageType = 'H'
 	clientMsgParse       clientMessageType = 'P'
+	clientMsgPassword    clientMessageType = 'p'
 	clientMsgSimpleQuery clientMessageType = 'Q'
 	clientMsgSync        clientMessageType = 'S'
 	clientMsgTerminate   clientMessageType = 'X'
@@ -95,7 +96,8 @@ const (
 )
 
 const (
-	authOK int32 = 0
+	authOK                int32 = 0
+	authCleartextPassword int32 = 3
 )
 
 // preparedStatementMeta is pgwire-specific metadata which is attached to each
@@ -203,6 +205,7 @@ func (c *v3Conn) serve(ctx context.Context, authenticationHook func(string, bool
 			return c.sendInternalError(err.Error())
 		}
 	}
+
 	c.writeBuf.initMsg(serverMsgAuth)
 	c.writeBuf.putInt32(authOK)
 	if err := c.writeBuf.finishMsg(c.wr); err != nil {
@@ -318,6 +321,31 @@ func (c *v3Conn) serve(ctx context.Context, authenticationHook func(string, bool
 			return err
 		}
 	}
+}
+
+// sendAuthPasswordRequest requests a cleartext password from the client and
+// returns it.
+func (c *v3Conn) sendAuthPasswordRequest() (string, error) {
+	c.writeBuf.initMsg(serverMsgAuth)
+	c.writeBuf.putInt32(authCleartextPassword)
+	if err := c.writeBuf.finishMsg(c.wr); err != nil {
+		return "", err
+	}
+	if err := c.wr.Flush(); err != nil {
+		return "", err
+	}
+
+	typ, n, err := c.readBuf.readTypedMsg(c.rd)
+	c.metrics.BytesInCount.Inc(int64(n))
+	if err != nil {
+		return "", err
+	}
+
+	if typ != clientMsgPassword {
+		return "", errors.Errorf("invalid response to authentication request: %s", typ)
+	}
+
+	return c.readBuf.getString()
 }
 
 func (c *v3Conn) handleSimpleQuery(ctx context.Context, buf *readBuffer) error {

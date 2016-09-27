@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -223,6 +224,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		// the args, the connection will only be used to send a report of that
 		// error.
 		v3conn := makeV3Conn(ctx, conn, s.executor, s.metrics, sessionArgs)
+		v3conn.session.User = sqlbase.NormalizeString(v3conn.session.User)
 		defer v3conn.finish(ctx)
 		if argsErr != nil {
 			return v3conn.sendInternalError(argsErr.Error())
@@ -237,10 +239,35 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		}
 
 		if tlsConn, ok := conn.(*tls.Conn); ok {
-			tlsState := tlsConn.ConnectionState()
-			authenticationHook, err := security.UserAuthHook(s.cfg.Insecure, &tlsState)
+			var authenticationHook security.UserAuthHook
+
+			// Check that the requested user exists and retrieve the hashed
+			// password in case password authentication is needed.
+			hashedPassword, err := sql.GetUserHashedPassword(
+				v3conn.session.User, v3conn.session, v3conn.executor)
 			if err != nil {
 				return v3conn.sendInternalError(err.Error())
+			}
+
+			tlsState := tlsConn.ConnectionState()
+			// If no certificates are provided, default to password
+			// authentication.
+			if len(tlsState.PeerCertificates) == 0 {
+				password, err := v3conn.sendAuthPasswordRequest()
+				if err != nil {
+					return v3conn.sendInternalError(err.Error())
+				}
+				authenticationHook = security.UserAuthPasswordHook(
+					s.cfg.Insecure, password, hashedPassword)
+			} else {
+				// Normalize the username contained in the certificate.
+				tlsState.PeerCertificates[0].Subject.CommonName = sqlbase.NormalizeString(
+					tlsState.PeerCertificates[0].Subject.CommonName)
+				var err error
+				authenticationHook, err = security.UserAuthCertHook(s.cfg.Insecure, &tlsState)
+				if err != nil {
+					return v3conn.sendInternalError(err.Error())
+				}
 			}
 			return v3conn.serve(ctx, authenticationHook)
 		}

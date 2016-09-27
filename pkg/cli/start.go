@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -327,7 +328,7 @@ func runStart(_ *cobra.Command, args []string) error {
 		s.PeriodicallyCheckForUpdates()
 	}
 
-	pgURL, err := serverCfg.PGURL(connUser)
+	pgURL, err := serverCfg.PGURL(url.User(connUser))
 	if err != nil {
 		return err
 	}

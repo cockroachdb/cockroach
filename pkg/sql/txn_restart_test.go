@@ -201,7 +201,7 @@ func checkRestarts(t *testing.T, magicVals *filterVals) {
 //		s, sqlDB, _ := serverutils.StartServer(t, params)
 //		defer s.Stopper().Stop()
 //		{
-//			pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestTxnAutoRetry")
+//			pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestTxnAutoRetry", url.User(security.RootUser)
 //			defer cleanup()
 //			if err := aborter.Init(pgURL); err != nil {
 //				t.Fatal(err)
@@ -435,7 +435,7 @@ func TestTxnAutoRetry(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 	{
-		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestTxnAutoRetry")
+		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestTxnAutoRetry", url.User(security.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
 			t.Fatal(err)
@@ -581,7 +581,7 @@ func TestAbortedTxnOnlyRetriedOnce(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 	{
-		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestAbortedTxnOnlyRetriedOnce")
+		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestAbortedTxnOnlyRetriedOnce", url.User(security.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
 			t.Fatal(err)
@@ -710,7 +710,7 @@ func TestTxnUserRestart(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 	{
-		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestTxnUserRestart")
+		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestTxnUserRestart", url.User(security.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
 			t.Fatal(err)
@@ -843,7 +843,7 @@ func TestErrorOnCommitFinalizesTxn(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 	{
-		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestErrorOnCommitFinalizesTxn")
+		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestErrorOnCommitFinalizesTxn", url.User(security.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
 			t.Fatal(err)
@@ -1007,7 +1007,7 @@ func TestRollbackInRestartWait(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 	{
-		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestRollbackInRestartWait")
+		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestRollbackInRestartWait", url.User(security.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
 			t.Fatal(err)
