@@ -202,6 +202,34 @@ var (
 		Help: "Number of pending replicas in the split queue"}
 	metaSplitQueueProcessingNanos = metric.Metadata{Name: "queue.split.processingnanos",
 		Help: "Nanoseconds spent processing replicas in the split queue"}
+
+	// GCInfo cumulative totals.
+	metaGCGCKeys = metric.Metadata{Name: "queue.gc.info.gckeys",
+		Help: "Number of keys with GC'able data"}
+	metaGCIntentsConsidered = metric.Metadata{Name: "queue.gc.info.intentsconsidered",
+		Help: "Number of 'old' intents"}
+	metaGCIntentTxns = metric.Metadata{Name: "queue.gc.info.intenttxns",
+		Help: "Number of associated distinct transactions"}
+	metaGCTransactionSpanTotal = metric.Metadata{Name: "queue.gc.info.transactionspantotal",
+		Help: "Total number of entries in the transaction span"}
+	metaGCTransactionSpanGCAborted = metric.Metadata{Name: "queue.gc.info.transactionspangcaborted",
+		Help: "Number of GC'able entries corresponding to aborted txns"}
+	metaGCTransactionSpanGCCommitted = metric.Metadata{Name: "queue.gc.info.transactionspangccommitted",
+		Help: "Number of GC'able entries corresponding to commited txns"}
+	metaGCTransactionSpanGCPending = metric.Metadata{Name: "queue.gc.info.transactionspangcpending",
+		Help: "Number of GC'able entries corresponding to pending txns"}
+	metaGCAbortSpanTotal = metric.Metadata{Name: "queue.gc.info.abortspantotal",
+		Help: "Total number of transactions present in the abort cache"}
+	metaGCAbortSpanConsidered = metric.Metadata{Name: "queue.gc.info.abortspanconsidered",
+		Help: "Number of abort cache entries old enough to be considered for removal"}
+	metaGCAbortSpanGCNum = metric.Metadata{Name: "queue.gc.info.abortspangcnum",
+		Help: "Number of abort cache entries fit for removal"}
+	metaGCPushTxn = metric.Metadata{Name: "queue.gc.info.pushtxn",
+		Help: "Total number of attempted pushes"}
+	metaGCResolveTotal = metric.Metadata{Name: "queue.gc.info.resolvetotal",
+		Help: "Total number of attempted intent resolutions"}
+	metaGCResolveSuccess = metric.Metadata{Name: "queue.gc.info.resolvesuccess",
+		Help: "Number of successful intent resolutions"}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -328,6 +356,21 @@ type StoreMetrics struct {
 	SplitQueuePending               *metric.Gauge
 	SplitQueueProcessingNanos       *metric.Counter
 
+	// GCInfo cumulative totals.
+	GCGCKeys                     *metric.Counter
+	GCIntentsConsidered          *metric.Counter
+	GCIntentTxns                 *metric.Counter
+	GCTransactionSpanTotal       *metric.Counter
+	GCTransactionSpanGCAborted   *metric.Counter
+	GCTransactionSpanGCCommitted *metric.Counter
+	GCTransactionSpanGCPending   *metric.Counter
+	GCAbortSpanTotal             *metric.Counter
+	GCAbortSpanConsidered        *metric.Counter
+	GCAbortSpanGCNum             *metric.Counter
+	GCPushTxn                    *metric.Counter
+	GCResolveTotal               *metric.Counter
+	GCResolveSuccess             *metric.Counter
+
 	// Stats for efficient merges.
 	mu struct {
 		syncutil.Mutex
@@ -449,6 +492,21 @@ func newStoreMetrics() *StoreMetrics {
 		SplitQueueFailures:              metric.NewCounter(metaSplitQueueFailures),
 		SplitQueuePending:               metric.NewGauge(metaSplitQueuePending),
 		SplitQueueProcessingNanos:       metric.NewCounter(metaSplitQueueProcessingNanos),
+
+		// GCInfo cumulative totals.
+		GCGCKeys:                     metric.NewCounter(metaGCGCKeys),
+		GCIntentsConsidered:          metric.NewCounter(metaGCIntentsConsidered),
+		GCIntentTxns:                 metric.NewCounter(metaGCIntentTxns),
+		GCTransactionSpanTotal:       metric.NewCounter(metaGCTransactionSpanTotal),
+		GCTransactionSpanGCAborted:   metric.NewCounter(metaGCTransactionSpanGCAborted),
+		GCTransactionSpanGCCommitted: metric.NewCounter(metaGCTransactionSpanGCCommitted),
+		GCTransactionSpanGCPending:   metric.NewCounter(metaGCTransactionSpanGCPending),
+		GCAbortSpanTotal:             metric.NewCounter(metaGCAbortSpanTotal),
+		GCAbortSpanConsidered:        metric.NewCounter(metaGCAbortSpanConsidered),
+		GCAbortSpanGCNum:             metric.NewCounter(metaGCAbortSpanGCNum),
+		GCPushTxn:                    metric.NewCounter(metaGCPushTxn),
+		GCResolveTotal:               metric.NewCounter(metaGCResolveTotal),
+		GCResolveSuccess:             metric.NewCounter(metaGCResolveSuccess),
 	}
 
 	sm.raftRcvdMessages[raftpb.MsgProp] = sm.RaftRcvdMsgProp
