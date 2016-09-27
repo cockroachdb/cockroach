@@ -335,6 +335,7 @@ tables
 abc
 xyz
 pg_namespace
+pg_tables
 descriptor
 eventlog
 lease
@@ -357,6 +358,7 @@ table_constraints
 schemata
 schema_privileges
 rangelog
+pg_tables
 pg_namespace
 namespace
 
@@ -374,6 +376,7 @@ def            information_schema  tables             SYSTEM VIEW  1
 def            other_db            abc                VIEW         1
 def            other_db            xyz                BASE TABLE   1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
+def            pg_catalog          pg_tables          SYSTEM VIEW  1
 def            system              descriptor         BASE TABLE   1
 def            system              eventlog           BASE TABLE   1
 def            system              lease              BASE TABLE   1
@@ -406,6 +409,7 @@ def            information_schema  table_constraints  SYSTEM VIEW  1
 def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
+def            pg_catalog          pg_tables          SYSTEM VIEW  1
 
 user root
 
@@ -427,6 +431,7 @@ def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
 def            other_db            xyz                BASE TABLE   5
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
+def            pg_catalog          pg_tables          SYSTEM VIEW  1
 
 user root
 
