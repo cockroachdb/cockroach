@@ -94,8 +94,10 @@ func TestPGWire(t *testing.T) {
 
 		pgBaseURL := url.URL{
 			Scheme: "postgres",
+			User:   url.User(security.RootUser),
 			Host:   net.JoinHostPort(host, port),
 		}
+
 		if err := trivialQuery(pgBaseURL); err != nil {
 			if insecure {
 				if err != pq.ErrSSLNotSupported {
@@ -153,7 +155,9 @@ func TestPGWire(t *testing.T) {
 					}
 				} else {
 					if optUser == server.TestUser {
-						if err != nil {
+						// The user TestUser has not been created so password
+						// authentication should fail.
+						if !testutils.IsError(err, fmt.Sprintf("pq: user %s does not exist", server.TestUser)) {
 							t.Error(err)
 						}
 					} else {
@@ -178,16 +182,7 @@ func TestPGWireDrainClient(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
-	host, port, err := net.SplitHostPort(s.ServingAddr())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	pgBaseURL := url.URL{
-		Scheme:   "postgres",
-		Host:     net.JoinHostPort(host, port),
-		RawQuery: "sslmode=disable",
-	}
+	pgBaseURL := sqlutils.PGBaseUrl(t, s.ServingAddr(), url.User(security.RootUser))
 
 	on := []serverpb.DrainMode{serverpb.DrainMode_CLIENT}
 
@@ -214,7 +209,7 @@ func TestPGWireDBName(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPGWireDBName")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), "TestPGWireDBName", url.User(security.RootUser))
 	pgURL.Path = "foo"
 	defer cleanupFn()
 	{
@@ -249,7 +244,7 @@ func TestPGPrepareFail(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPGPrepareFail")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), "TestPGPrepareFail", url.User(security.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -546,7 +541,7 @@ func TestPGPreparedQuery(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPGPreparedQuery")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), "TestPGPreparedQuery", url.User(security.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -830,7 +825,7 @@ func TestPGPreparedExec(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPGPreparedExec")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), "TestPGPreparedExec", url.User(security.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -895,7 +890,7 @@ func TestPGPrepareNameQual(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPGPrepareNameQual")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), "TestPGPrepareNameQual", url.User(security.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -945,8 +940,8 @@ func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser,
-		"TestCmdCompleteVsEmptyStatements")
+	pgURL, cleanupFn := sqlutils.PGUrl(
+		t, s.ServingAddr(), "TestCmdCompleteVsEmptyStatements", url.User(security.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -989,7 +984,7 @@ func TestPGCommandTags(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPGCommandTags")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), "TestPGCommandTags", url.User(security.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -1111,8 +1106,8 @@ func TestSQLNetworkMetrics(t *testing.T) {
 	defer s.Stopper().Stop()
 
 	// Setup pgwire client.
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser,
-		"TestSQLNetworkMetrics")
+	pgURL, cleanupFn := sqlutils.PGUrl(
+		t, s.ServingAddr(), "TestSQLNetworkMetrics", url.User(security.RootUser))
 	defer cleanupFn()
 
 	const minbytes = 20
@@ -1178,7 +1173,7 @@ func TestPrepareSyntax(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestPrepareSyntax")
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), "TestPrepareSyntax", url.User(security.RootUser))
 	defer cleanupFn()
 
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -1238,11 +1233,93 @@ func TestPGWireOverUnixSocket(t *testing.T) {
 	}
 	pgURL := url.URL{
 		Scheme:   "postgres",
+		User:     url.User(security.RootUser),
 		Host:     ":123456",
 		RawQuery: options.Encode(),
 	}
 	t.Logf("PGURL: %s", pgURL.String())
 	if err := trivialQuery(pgURL); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPGWireAuth(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := createTestServerParams()
+	params.Insecure = true
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+
+	pgBaseUrl := sqlutils.PGBaseUrl(t, s.ServingAddr(), url.User(""))
+
+	{
+		// Try to perform authentication with server.TestUser not in
+		// system.users table.
+		testUserPgUrl := pgBaseUrl
+		testUserPgUrl.User = url.User(server.TestUser)
+		if err := trivialQuery(testUserPgUrl); !testutils.IsError(err, fmt.Sprintf("pq: user %s does not exist", server.TestUser)) {
+			t.Fatal(err)
+		}
+	}
+
+	{
+		unicodeUser := "♫"
+
+		{
+			// Authenticate as root and expect success because root authentication
+			// is not yet implemented.
+			rootPgUrl := pgBaseUrl
+			rootPgUrl.User = url.User(security.RootUser)
+			if err := trivialQuery(rootPgUrl); err != nil {
+				t.Fatal(err)
+			}
+
+			// Create server.TestUser with a unicode password and a user with a
+			// unicode username for later tests.
+			// Only root is allowed to create users.
+			db, err := gosql.Open("postgres", rootPgUrl.String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+
+			if _, err := db.Exec(fmt.Sprintf("CREATE USER %s WITH PASSWORD '蟑螂';", server.TestUser)); err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := db.Exec(fmt.Sprintf("CREATE USER %s WITH PASSWORD '蟑♫螂';", unicodeUser)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		{
+			unicodeUserPgUrl := pgBaseUrl
+			unicodeUserPgUrl.User = url.User(unicodeUser)
+			if err := trivialQuery(unicodeUserPgUrl); !testutils.IsError(err, "pq: invalid password") {
+				t.Fatal(err)
+			}
+
+			// Supply correct password.
+			unicodeUserPgUrl.User = url.UserPassword(unicodeUser, "蟑♫螂")
+			if err := trivialQuery(unicodeUserPgUrl); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	{
+		// Try to perform authentication with server.TestUser and no password.
+		// This case is equivalent to supplying a wrong password.
+		testUserPgUrl := pgBaseUrl
+		testUserPgUrl.User = url.User(server.TestUser)
+		if err := trivialQuery(testUserPgUrl); !testutils.IsError(err, "pq: invalid password") {
+			t.Fatal(err)
+		}
+
+		// Supply correct password.
+		testUserPgUrl.User = url.UserPassword(server.TestUser, "蟑螂")
+		if err := trivialQuery(testUserPgUrl); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

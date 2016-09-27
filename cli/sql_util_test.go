@@ -18,6 +18,7 @@ package cli
 
 import (
 	"bytes"
+	"net/url"
 	"reflect"
 	"testing"
 
@@ -33,7 +34,7 @@ func TestRunQuery(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	url, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestRunQuery")
+	url, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestRunQuery", url.User(security.RootUser))
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())

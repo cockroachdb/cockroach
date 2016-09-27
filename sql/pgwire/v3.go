@@ -19,6 +19,7 @@ package pgwire
 
 import (
 	"bufio"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"reflect"
@@ -26,8 +27,10 @@ import (
 
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/pgwire/pgerror"
@@ -53,6 +56,7 @@ const (
 	clientMsgExecute     clientMessageType = 'E'
 	clientMsgFlush       clientMessageType = 'H'
 	clientMsgParse       clientMessageType = 'P'
+	clientMsgPassword    clientMessageType = 'p'
 	clientMsgSimpleQuery clientMessageType = 'Q'
 	clientMsgSync        clientMessageType = 'S'
 	clientMsgTerminate   clientMessageType = 'X'
@@ -95,7 +99,8 @@ const (
 )
 
 const (
-	authOK int32 = 0
+	authOK                int32 = 0
+	authCleartextPassword int32 = 3
 )
 
 // preparedStatementMeta is pgwire-specific metadata which is attached to each
@@ -201,6 +206,15 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 			return c.sendInternalError(err.Error())
 		}
 	}
+
+	// TODO(asubiotto): This is temporary until we set up root user during
+	// bootstrap by inserting into system.users.
+	if c.session.User != security.RootUser {
+		if err := c.performClientAuthentication(); err != nil {
+			return err
+		}
+	}
+
 	c.writeBuf.initMsg(serverMsgAuth)
 	c.writeBuf.putInt32(authOK)
 	if err := c.writeBuf.finishMsg(c.wr); err != nil {
@@ -316,6 +330,72 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 			return err
 		}
 	}
+}
+
+// performClientAuthentication requests the client to send a cleartext password.
+func (c *v3Conn) performClientAuthentication() error {
+	c.writeBuf.initMsg(serverMsgAuth)
+	c.writeBuf.putInt32(authCleartextPassword)
+	if err := c.writeBuf.finishMsg(c.wr); err != nil {
+		return err
+	}
+	if err := c.wr.Flush(); err != nil {
+		return err
+	}
+
+	typ, n, err := c.readBuf.readTypedMsg(c.rd)
+	c.metrics.BytesInCount.Inc(int64(n))
+	if err != nil {
+		return err
+	}
+
+	if typ != clientMsgPassword {
+		return errors.Errorf("invalid response to authentication request %s", typ)
+	}
+
+	return c.handleAuthentication(&c.readBuf)
+}
+
+// handleAuthentication checks that the provided readBuffer contains a password
+// whose hash matches the password hash stored in the system.users table.
+func (c *v3Conn) handleAuthentication(buf *readBuffer) error {
+	passwordMessage, err := buf.getString()
+	if err != nil {
+		return err
+	}
+
+	placeholderInfo := parser.NewPlaceholderInfo()
+	placeholderInfo.SetValue("1", parser.NewDString(c.session.User))
+
+	// The current session's user has to be changed to security.RootUser to
+	// ensure SELECT privilege on the system.users table.
+	requestedUser := c.session.User
+	c.session.User = security.RootUser
+	r := c.executor.ExecuteStatements(
+		c.session, "SELECT hashedPassword FROM system.users WHERE username=$1;", placeholderInfo,
+	)
+	c.session.User = requestedUser
+	defer r.Close()
+
+	if len(r.ResultList) != 1 || r.ResultList[0].Err != nil {
+		fmt.Printf("Error: %v\n", r.ResultList[0].Err)
+		return c.sendInternalError(fmt.Sprintf("error looking up user %s", c.session.User))
+	} else if r.ResultList[0].Rows.Len() != 1 {
+		return c.sendErrorWithCode(pgerror.CodeNoDataFoundError, sqlbase.MakeSrcCtx(0),
+			fmt.Sprintf("user %s does not exist", c.session.User))
+	}
+
+	hashedPassword := string(*(r.ResultList[0].Rows.At(0)[0].(*parser.DBytes)))
+	hashedPasswordBytes, err := hex.DecodeString(hashedPassword)
+	if err != nil {
+		return err
+	}
+	if err := bcrypt.CompareHashAndPassword(hashedPasswordBytes, []byte(passwordMessage)); err != nil {
+		return c.sendErrorWithCode(pgerror.CodeInvalidPasswordError, sqlbase.MakeSrcCtx(0),
+			"invalid password")
+	}
+
+	return nil
 }
 
 func (c *v3Conn) handleSimpleQuery(ctx context.Context, buf *readBuffer) error {
