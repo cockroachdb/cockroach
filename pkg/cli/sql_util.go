@@ -21,6 +21,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 	"text/tabwriter"
 	"unicode"
@@ -30,6 +31,7 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pq"
@@ -180,7 +182,22 @@ func makeSQLConn(url string) *sqlConn {
 func makeSQLClient() (*sqlConn, error) {
 	sqlURL := connURL
 	if len(connURL) == 0 {
-		u, err := sqlCtx.PGURL(connUser)
+		var user *url.Userinfo
+		if !baseCfg.Insecure {
+			// Only users that aren't security.RootUser and have not provided
+			// any certificates will need a password for authentication.
+			if connUser != security.RootUser && baseCfg.SSLCert == "" && baseCfg.SSLCertKey == "" {
+				pwd, err := security.PromptForPassword()
+				if err != nil {
+					return nil, err
+				}
+				user = url.UserPassword(connUser, pwd)
+			} else {
+				user = url.User(connUser)
+			}
+		}
+
+		u, err := sqlCtx.PGURL(user)
 		if err != nil {
 			return nil, err
 		}

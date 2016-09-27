@@ -30,6 +30,10 @@ const (
 	RootUser = "root"
 )
 
+// UserAuthHook is an authentication hook that uses a specific form of
+// authentication depending on how it was constructed.
+type UserAuthHook func(string, bool) error
+
 // GetCertificateUser extract the username from a client certificate.
 func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
 	if tlsState == nil {
@@ -57,7 +61,7 @@ type RequestWithUser interface {
 func ProtoAuthHook(
 	insecureMode bool, tlsState *tls.ConnectionState,
 ) (func(proto.Message, bool) error, error) {
-	userHook, err := UserAuthHook(insecureMode, tlsState)
+	userHook, err := UserAuthCertHook(insecureMode, tlsState)
 	if err != nil {
 		return nil, err
 	}
@@ -76,11 +80,9 @@ func ProtoAuthHook(
 	}, nil
 }
 
-// UserAuthHook builds an authentication hook based on the security
+// UserAuthCertHook builds an authentication hook based on the security
 // mode and client certificate.
-func UserAuthHook(
-	insecureMode bool, tlsState *tls.ConnectionState,
-) (func(string, bool) error, error) {
+func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAuthHook, error) {
 	var certUser string
 
 	if !insecureMode {
@@ -115,4 +117,32 @@ func UserAuthHook(
 
 		return nil
 	}, nil
+}
+
+// UserAuthPasswordHook builds an authentication hook based on the security
+// mode, password, and its potentially matching hash.
+func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []byte) UserAuthHook {
+	return func(requestedUser string, public bool) error {
+		if len(requestedUser) == 0 {
+			return errors.Errorf("user is missing")
+		}
+
+		if !public {
+			return errors.Errorf("password authentication is only available for public connections")
+		}
+
+		if insecureMode {
+			return nil
+		}
+
+		if requestedUser == RootUser {
+			return errors.Errorf("user %s cannot authenticate using a password", RootUser)
+		}
+
+		if err := compareHashAndPassword(hashedPassword, password); err != nil {
+			return errors.Errorf("invalid password")
+		}
+
+		return nil
+	}
 }

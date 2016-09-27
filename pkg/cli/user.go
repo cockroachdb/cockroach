@@ -18,7 +18,6 @@ package cli
 
 import (
 	"bufio"
-	"errors"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -131,41 +130,40 @@ func runSetUser(cmd *cobra.Command, args []string) error {
 	case "-":
 		scanner := bufio.NewScanner(os.Stdin)
 		if scanner.Scan() {
-			if b := scanner.Bytes(); len(b) > 0 {
-				hashed, err = security.HashPassword(b)
-				if err != nil {
-					return err
-				}
-				if scanner.Scan() {
-					return errors.New("multiline passwords are not permitted")
-				}
-				if err := scanner.Err(); err != nil {
-					return err
-				}
-
-				break // Success.
+			hashed, err = security.HashPassword(scanner.Text())
+			if err != nil {
+				panic(err)
 			}
+			if scanner.Scan() {
+				panic("multiline passwords are not permitted")
+			}
+			if err := scanner.Err(); err != nil {
+				panic(err)
+			}
+
+			break // Success.
 		} else {
 			if err := scanner.Err(); err != nil {
 				return err
 			}
 		}
-
-		panic("empty passwords are not permitted")
 	default:
-		hashed, err = security.HashPassword([]byte(password))
+		hashed, err = security.HashPassword(password)
 		if err != nil {
 			return err
 		}
 	}
+
+	// Only security.RootUser can set passwords.
+	// TODO(asubiotto): Implement appropriate server-side authorization rules
+	// for users to be able to change their own passwords.
 	conn, err := makeSQLClient()
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
-	// TODO(marc): switch to UPSERT.
 	return runQueryAndFormatResults(conn, os.Stdout,
-		makeQuery(`INSERT INTO system.users VALUES ($1, $2)`, args[0], hashed), cliCtx.prettyFmt)
+		makeQuery(`UPSERT INTO system.users VALUES ($1, $2)`, args[0], hashed), cliCtx.prettyFmt)
 }
 
 var userCmds = []*cobra.Command{
