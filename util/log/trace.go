@@ -120,6 +120,7 @@ func eventInternal(ctx context.Context, isErr, withTags bool, format string, arg
 		}
 
 		if sp != nil {
+			// TODO(radu): use sp.LogFields with "event" or "error" key.
 			sp.LogEvent(msg)
 			if isErr {
 				// TODO(radu): figure out a way to signal that this is an error. We
