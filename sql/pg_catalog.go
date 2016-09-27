@@ -30,6 +30,7 @@ var pgCatalog = virtualSchema{
 	name: "pg_catalog",
 	tables: []virtualSchemaTable{
 		pgCatalogNamespaceTable,
+		pgCatalogTablesTable,
 	},
 }
 
@@ -53,6 +54,38 @@ CREATE TABLE pg_catalog.pg_namespace (
 				parser.DNull,               // aclitem
 			)
 		})
+	},
+}
+
+var pgCatalogTablesTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_tables (
+	schemaname STRING,
+	tablename STRING,
+	tableowner STRING,
+	tablespace STRING,
+	hasindexes BOOL,
+	hasrules BOOL,
+	hastriggers BOOL,
+	rowsecurity BOOL
+);
+`,
+	desc: sqlbase.TableDescriptor{Name: "pg_tables", ID: 0xffffffff, ParentID: 0x0, Version: 0x1, UpVersion: false, ModificationTime: hlc.Timestamp{WallTime: 0, Logical: 0}, Columns: []sqlbase.ColumnDescriptor{{Name: "schemaname", ID: 0x1, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "tablename", ID: 0x2, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "tableowner", ID: 0x3, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "tablespace", ID: 0x4, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "hasindexes", ID: 0x5, Type: sqlbase.ColumnType{Kind: 0, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "hasrules", ID: 0x6, Type: sqlbase.ColumnType{Kind: 0, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "hastriggers", ID: 0x7, Type: sqlbase.ColumnType{Kind: 0, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "rowsecurity", ID: 0x8, Type: sqlbase.ColumnType{Kind: 0, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}}, NextColumnID: 0x9, Families: []sqlbase.ColumnFamilyDescriptor(nil), NextFamilyID: 0x0, PrimaryIndex: sqlbase.IndexDescriptor{Name: "", ID: 0x0, Unique: false, ColumnNames: []string(nil), ColumnDirections: []sqlbase.IndexDescriptor_Direction(nil), StoreColumnNames: []string(nil), ColumnIDs: []sqlbase.ColumnID(nil), ImplicitColumnIDs: []sqlbase.ColumnID(nil), ForeignKey: sqlbase.ForeignKeyReference{Table: 0x0, Index: 0x0, Name: "", Validity: 0}, ReferencedBy: []sqlbase.ForeignKeyReference(nil), Interleave: sqlbase.InterleaveDescriptor{Ancestors: []sqlbase.InterleaveDescriptor_Ancestor(nil)}, InterleavedBy: []sqlbase.ForeignKeyReference(nil)}, Indexes: []sqlbase.IndexDescriptor(nil), NextIndexID: 0x0, Privileges: emptyPrivileges, Mutations: []sqlbase.DescriptorMutation(nil), Lease: (*sqlbase.TableDescriptor_SchemaChangeLease)(nil), NextMutationID: 0x1, FormatVersion: 0x3, State: 0, Checks: []*sqlbase.TableDescriptor_CheckConstraint(nil), Renames: []sqlbase.TableDescriptor_RenameInfo(nil), ViewQuery: ""},
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		return forEachTableDesc(p,
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				return addRow(
+					parser.NewDString(db.Name),    // schemaname
+					parser.NewDString(table.Name), // tablename
+					parser.DNull,                  // tableowner
+					parser.DNull,                  // tablespace
+					parser.MakeDBool(parser.DBool(table.IsPhysicalTable())), // hasindexes
+					parser.MakeDBool(false),                                 // hasrules
+					parser.MakeDBool(false),                                 // hastriggers
+					parser.MakeDBool(false),                                 // rowsecurity
+				)
+			},
+		)
 	},
 }
 
