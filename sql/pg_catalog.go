@@ -25,12 +25,131 @@ import (
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
 
+var (
+	oidZero = parser.NewDInt(0)
+	zeroVal = oidZero
+)
+
 // pgCatalog contains a set of system tables mirroring PostgreSQL's pg_catalog schema.
 var pgCatalog = virtualSchema{
 	name: "pg_catalog",
 	tables: []virtualSchemaTable{
+		pgCatalogClassTable,
 		pgCatalogNamespaceTable,
 		pgCatalogTablesTable,
+	},
+}
+
+var (
+	relKindTable = parser.NewDString("r")
+	relKindIndex = parser.NewDString("i")
+	relKindView  = parser.NewDString("v")
+)
+
+var pgCatalogClassTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_class (
+	oid INT,
+	relname STRING NOT NULL DEFAULT '',
+	relnamespace INT,
+	reltype INT,
+	relowner INT,
+	relam INT,
+	relfilenode INT,
+	reltablespace INT,
+	relpages INT,
+	reltuples FLOAT,
+	relallvisible INT,
+	reltoastrelid INT,
+	relhasindex BOOL,
+	relisshared BOOL,
+	relistemp BOOL,
+	relkind CHAR,
+	relnatts INT,
+	relchecks INT,
+	relhasoids BOOL,
+	relhaspkey BOOL,
+	relhasrules BOOL,
+	relhastriggers BOOL,
+	relhassubclass BOOL,
+	relfrozenxid INT,
+	relacl STRING,
+	reloptions STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		h := makeOidHasher()
+		return forEachTableDesc(p,
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				// Table.
+				relKind := relKindTable
+				if table.IsView() {
+					relKind = relKindView
+				}
+				if err := addRow(
+					h.TableOid(db, table),         // oid
+					parser.NewDString(table.Name), // relname
+					h.DBOid(db),                   // relnamespace
+					oidZero,                       // reltype (PG creates a composite type in pg_type for each table)
+					parser.DNull,                  // relowner
+					parser.DNull,                  // relam
+					oidZero,                       // relfilenode
+					oidZero,                       // reltablespace
+					parser.DNull,                  // relpages
+					parser.DNull,                  // reltuples
+					oidZero,                       // relallvisible
+					oidZero,                       // reltoastrelid
+					parser.MakeDBool(parser.DBool(table.IsPhysicalTable())), // relhasindex
+					parser.MakeDBool(false),                                 // relisshared
+					parser.MakeDBool(false),                                 // relistemp
+					relKind,                                                 // relkind
+					parser.NewDInt(parser.DInt(len(table.Columns))),         // relnatts
+					parser.NewDInt(parser.DInt(len(table.Checks))),          // relchecks
+					parser.MakeDBool(false),                                 // relhasoids
+					parser.MakeDBool(parser.DBool(table.IsPhysicalTable())), // relhaspkey
+					parser.MakeDBool(false),                                 // relhasrules
+					parser.MakeDBool(false),                                 // relhastriggers
+					parser.MakeDBool(false),                                 // relhassubclass
+					zeroVal,                                                 // relfrozenxid
+					parser.DNull,                                            // relacl
+					parser.DNull,                                            // reloptions
+				); err != nil {
+					return err
+				}
+
+				// Indexes.
+				return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
+					return addRow(
+						h.IndexOid(db, table, index),  // oid
+						parser.NewDString(index.Name), // relname
+						h.DBOid(db),                   // relnamespace
+						oidZero,                       // reltype
+						parser.DNull,                  // relowner
+						parser.DNull,                  // relam
+						oidZero,                       // relfilenode
+						oidZero,                       // reltablespace
+						parser.DNull,                  // relpages
+						parser.DNull,                  // reltuples
+						oidZero,                       // relallvisible
+						oidZero,                       // reltoastrelid
+						parser.MakeDBool(false),       // relhasindex
+						parser.MakeDBool(false),       // relisshared
+						parser.MakeDBool(false),       // relistemp
+						relKindIndex,                  // relkind
+						parser.NewDInt(parser.DInt(len(index.ColumnNames))), // relnatts
+						zeroVal,                 // relchecks
+						parser.MakeDBool(false), // relhasoids
+						parser.MakeDBool(false), // relhaspkey
+						parser.MakeDBool(false), // relhasrules
+						parser.MakeDBool(false), // relhastriggers
+						parser.MakeDBool(false), // relhassubclass
+						zeroVal,                 // relfrozenxid
+						parser.DNull,            // relacl
+						parser.DNull,            // reloptions
+					)
+				})
+			},
+		)
 	},
 }
 
@@ -72,6 +191,9 @@ CREATE TABLE pg_catalog.pg_tables (
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		return forEachTableDesc(p,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				if table.IsView() {
+					return nil
+				}
 				return addRow(
 					parser.NewDString(db.Name),    // schemaname
 					parser.NewDString(table.Name), // tablename
@@ -120,6 +242,8 @@ type oidTypeTag uint8
 const (
 	_ oidTypeTag = iota
 	databaseTypeTag
+	tableTypeTag
+	indexTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -137,8 +261,39 @@ func (h oidHasher) writeDB(db *sqlbase.DatabaseDescriptor) {
 	h.writeStr(db.Name)
 }
 
+func (h oidHasher) writeTable(table *sqlbase.TableDescriptor) {
+	h.writeUInt32(uint32(table.ID))
+	h.writeStr(table.Name)
+}
+
+func (h oidHasher) writeIndex(index *sqlbase.IndexDescriptor) {
+	h.writeUInt32(uint32(index.ID))
+}
+
 func (h oidHasher) DBOid(db *sqlbase.DatabaseDescriptor) *parser.DInt {
 	h.writeTypeTag(databaseTypeTag)
 	h.writeDB(db)
+	return h.getOid()
+}
+
+func (h oidHasher) TableOid(
+	db *sqlbase.DatabaseDescriptor,
+	table *sqlbase.TableDescriptor,
+) *parser.DInt {
+	h.writeTypeTag(tableTypeTag)
+	h.writeDB(db)
+	h.writeTable(table)
+	return h.getOid()
+}
+
+func (h oidHasher) IndexOid(
+	db *sqlbase.DatabaseDescriptor,
+	table *sqlbase.TableDescriptor,
+	index *sqlbase.IndexDescriptor,
+) *parser.DInt {
+	h.writeTypeTag(indexTypeTag)
+	h.writeDB(db)
+	h.writeTable(table)
+	h.writeIndex(index)
 	return h.getOid()
 }
