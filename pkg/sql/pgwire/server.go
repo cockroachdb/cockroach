@@ -232,10 +232,32 @@ func (s *Server) ServeConn(conn net.Conn) error {
 		}
 
 		if tlsConn, ok := conn.(*tls.Conn); ok {
-			tlsState := tlsConn.ConnectionState()
-			authenticationHook, err := security.UserAuthHook(s.context.Insecure, &tlsState)
+			var authenticationHook security.UserAuthHook
+
+			// Check that the requested user exists and retrieve the hashed
+			// password in case password authentication is needed.
+			hashedPassword, err := sql.GetUserHashedPassword(
+				v3conn.session.User, v3conn.session, v3conn.executor)
 			if err != nil {
 				return v3conn.sendInternalError(err.Error())
+			}
+
+			tlsState := tlsConn.ConnectionState()
+			// If no certificates are provided, default to password
+			// authentication.
+			if len(tlsState.PeerCertificates) == 0 {
+				password, err := v3conn.sendAuthPasswordRequest()
+				if err != nil {
+					return v3conn.sendInternalError(err.Error())
+				}
+				authenticationHook = security.UserAuthPasswordHook(
+					s.context.Insecure, password, hashedPassword)
+			} else {
+				var err error
+				authenticationHook, err = security.UserAuthCertHook(s.context.Insecure, &tlsState)
+				if err != nil {
+					return v3conn.sendInternalError(err.Error())
+				}
 			}
 			return v3conn.serve(authenticationHook)
 		}

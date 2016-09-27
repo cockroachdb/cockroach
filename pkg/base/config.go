@@ -136,7 +136,7 @@ func (cfg *Config) AdminURL() string {
 }
 
 // PGURL returns the URL for the postgres endpoint.
-func (cfg *Config) PGURL(user string) (*url.URL, error) {
+func (cfg *Config) PGURL(user *url.Userinfo) (*url.URL, error) {
 	// Try to convert path to an absolute path. Failing to do so return path
 	// unchanged.
 	absPath := func(path string) string {
@@ -151,8 +151,21 @@ func (cfg *Config) PGURL(user string) (*url.URL, error) {
 	if cfg.Insecure {
 		options.Add("sslmode", "disable")
 	} else {
+		if cfg.SSLCA == "" {
+			return nil, fmt.Errorf("missing --%s flag", cliflags.CACert.Name)
+		}
+
+		// Check that cfg.SSLCert and cfg.SSLCertKey are either both empty or
+		// both non-empty.
+		if cfg.SSLCert == "" && cfg.SSLCertKey != "" {
+			return nil, fmt.Errorf("missing --%s flag", cliflags.Cert.Name)
+		}
+		if cfg.SSLCertKey == "" && cfg.SSLCert != "" {
+			return nil, fmt.Errorf("missing --%s flag", cliflags.Key.Name)
+		}
+
 		options.Add("sslmode", "verify-full")
-		requiredFlags := []struct {
+		sslFlags := []struct {
 			name     string
 			value    string
 			flagName string
@@ -161,9 +174,10 @@ func (cfg *Config) PGURL(user string) (*url.URL, error) {
 			{"sslkey", cfg.SSLCertKey, cliflags.Key.Name},
 			{"sslrootcert", cfg.SSLCA, cliflags.CACert.Name},
 		}
-		for _, c := range requiredFlags {
+
+		for _, c := range sslFlags {
 			if c.value == "" {
-				return nil, fmt.Errorf("missing --%s flag", c.flagName)
+				continue
 			}
 			path := absPath(c.value)
 			if _, err := os.Stat(path); err != nil {
@@ -174,7 +188,7 @@ func (cfg *Config) PGURL(user string) (*url.URL, error) {
 	}
 	return &url.URL{
 		Scheme:   "postgresql",
-		User:     url.User(user),
+		User:     user,
 		Host:     cfg.AdvertiseAddr,
 		RawQuery: options.Encode(),
 	}, nil

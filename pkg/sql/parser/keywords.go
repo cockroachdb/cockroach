@@ -170,6 +170,7 @@ var keywords = map[string]int{
 	"PARENT":            PARENT,
 	"PARTIAL":           PARTIAL,
 	"PARTITION":         PARTITION,
+	"PASSWORD":          PASSWORD,
 	"PLACING":           PLACING,
 	"POSITION":          POSITION,
 	"PRECEDING":         PRECEDING,

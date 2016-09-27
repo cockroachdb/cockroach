@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"fmt"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
@@ -131,7 +132,7 @@ func TestDumpBytes(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	url, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestDumpBytes")
+	url, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestDumpBytes", url.User(security.RootUser))
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())
@@ -195,7 +196,7 @@ func TestDumpRandom(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	url, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestDumpRandom")
+	url, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestDumpRandom", url.User(security.RootUser))
 	defer cleanup()
 
 	conn := makeSQLConn(url.String())
