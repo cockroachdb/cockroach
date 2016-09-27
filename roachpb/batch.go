@@ -17,6 +17,7 @@
 package roachpb
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"strings"
@@ -186,14 +187,35 @@ func (br *BatchResponse) String() string {
 }
 
 // IntentSpanIterate calls the passed method with the key ranges of the
-// transactional writes contained in the batch.
-func (ba *BatchRequest) IntentSpanIterate(fn func(key, endKey Key)) {
-	for _, arg := range ba.Requests {
+// transactional writes contained in the batch. Usually the key spans
+// contained in the requests are used, but when a response contains a
+// ResumeSpan the ResumeSpan is subtracted from the request span to provide a
+// more minimal span of keys affected by the request.
+func (ba *BatchRequest) IntentSpanIterate(
+	br *BatchResponse, fn func(key, endKey Key),
+) {
+	for i, arg := range ba.Requests {
 		req := arg.GetInner()
 		if !IsTransactionWrite(req) {
 			continue
 		}
 		h := req.Header()
+		if br != nil {
+			resumeSpan := br.Responses[i].GetInner().Header().ResumeSpan
+			// If a resume span exists we need to cull the span.
+			if resumeSpan != nil {
+				if bytes.Equal(resumeSpan.Key, h.Key) {
+					if bytes.Equal(resumeSpan.EndKey, h.EndKey) {
+						// Nothing was written.
+						continue
+					}
+					fn(resumeSpan.EndKey, h.EndKey)
+				} else {
+					fn(h.Key, resumeSpan.Key)
+				}
+				continue
+			}
+		}
 		fn(h.Key, h.EndKey)
 	}
 }

@@ -167,3 +167,61 @@ func TestBatchRequestSummary(t *testing.T) {
 		}
 	}
 }
+
+func TestIntentSpanIterate(t *testing.T) {
+	testCases := []struct {
+		req    Request
+		resp   Response
+		span   Span
+		resume Span
+	}{
+		{&ScanRequest{}, &ScanResponse{},
+			Span{Key("a"), Key("c")}, Span{Key("b"), Key("c")}},
+		{&ReverseScanRequest{}, &ReverseScanResponse{},
+			Span{Key("d"), Key("f")}, Span{Key("d"), Key("e")}},
+		{&DeleteRangeRequest{}, &DeleteRangeResponse{},
+			Span{Key("g"), Key("i")}, Span{Key("h"), Key("i")}},
+	}
+
+	// A batch request with a batch response with no ResumeSpan.
+	ba := BatchRequest{}
+	br := BatchResponse{}
+	for _, tc := range testCases {
+		tc.req.SetHeader(tc.span)
+		ba.Add(tc.req)
+		br.Add(tc.resp)
+	}
+
+	var spans []Span
+	fn := func(key, endKey Key) {
+		spans = append(spans, Span{Key: key, EndKey: endKey})
+	}
+	ba.IntentSpanIterate(&br, fn)
+	// Only DeleteRangeResponse is a write request.
+	if e := 1; len(spans) != e {
+		t.Fatalf("unexpected number of spans: e = %d, found = %d", e, len(spans))
+	}
+	if e := testCases[2].span; !reflect.DeepEqual(e, spans[0]) {
+		t.Fatalf("unexpected spans: e = %+v, found = %+v", e, spans[0])
+	}
+
+	// A batch request with a batch response with a ResumeSpan.
+	ba = BatchRequest{}
+	br = BatchResponse{}
+	for _, tc := range testCases {
+		tc.req.SetHeader(tc.span)
+		ba.Add(tc.req)
+		tc.resp.SetHeader(ResponseHeader{ResumeSpan: &tc.resume})
+		br.Add(tc.resp)
+	}
+
+	spans = []Span{}
+	ba.IntentSpanIterate(&br, fn)
+	// Only DeleteRangeResponse is a write request.
+	if e := 1; len(spans) != e {
+		t.Fatalf("unexpected number of spans: e = %d, found = %d", e, len(spans))
+	}
+	if e := (Span{Key("g"), Key("h")}); !reflect.DeepEqual(e, spans[0]) {
+		t.Fatalf("unexpected spans: e = %+v, found = %+v", e, spans[0])
+	}
+}

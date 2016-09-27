@@ -337,7 +337,12 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 				// spans optimization to 1pc transactions.
 				distinctSpans = len(txnMeta.keys) == 0
 			}
-			ba.IntentSpanIterate(func(key, endKey roachpb.Key) {
+			// We can't pass in a batch response here to better limit the key
+			// spans as we don't know what is going to be affected. This will
+			// affect queries such as `DELETE FROM my.table LIMIT 10` when
+			// executed as a 1PC transaction. e.g.: a (BeginTransaction,
+			// DeleteRange, EndTransaction) batch.
+			ba.IntentSpanIterate(nil, func(key, endKey roachpb.Key) {
 				et.IntentSpans = append(et.IntentSpans, roachpb.Span{
 					Key:    key,
 					EndKey: endKey,
@@ -860,7 +865,7 @@ func (tc *TxnCoordSender) updateState(
 		if txnMeta != nil {
 			keys = txnMeta.keys
 		}
-		ba.IntentSpanIterate(func(key, endKey roachpb.Key) {
+		ba.IntentSpanIterate(br, func(key, endKey roachpb.Key) {
 			keys = append(keys, roachpb.Span{
 				Key:    key,
 				EndKey: endKey,
