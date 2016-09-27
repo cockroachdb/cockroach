@@ -543,6 +543,23 @@ func forEachTableDesc(
 	return nil
 }
 
+func forEachIndexInTable(
+	table *sqlbase.TableDescriptor,
+	fn func(*sqlbase.IndexDescriptor) error,
+) error {
+	if table.IsPhysicalTable() {
+		if err := fn(&table.PrimaryIndex); err != nil {
+			return err
+		}
+	}
+	for i := range table.Indexes {
+		if err := fn(&table.Indexes[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func userCanSeeDatabase(db *sqlbase.DatabaseDescriptor, user string) bool {
 	return userCanSeeDescriptor(db, user)
 }
