@@ -26,17 +26,100 @@ import (
 )
 
 var (
-	oidZero = parser.NewDInt(0)
-	zeroVal = oidZero
+	oidZero   = parser.NewDInt(0)
+	zeroVal   = oidZero
+	negOneVal = parser.NewDInt(-1)
 )
 
 // pgCatalog contains a set of system tables mirroring PostgreSQL's pg_catalog schema.
 var pgCatalog = virtualSchema{
 	name: "pg_catalog",
 	tables: []virtualSchemaTable{
+		pgCatalogAttributeTable,
 		pgCatalogClassTable,
 		pgCatalogNamespaceTable,
 		pgCatalogTablesTable,
+	},
+}
+
+var pgCatalogAttributeTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_attribute (
+	attrelid INT,
+	attname STRING,
+	atttypid INT,
+	attstattarget INT,
+	attlen INT,
+	attnum INT,
+	attndims INT,
+	attcacheoff INT,
+	atttypmod INT,
+	attbyval BOOL,
+	attstorage CHAR,
+	attalign CHAR,
+	attnotnull BOOL,
+	atthasdef BOOL,
+	attisdropped BOOL,
+	attislocal BOOL,
+	attinhcount INT,
+	attacl STRING,
+	attoptions STRING,
+	attfdwoptions STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		h := makeOidHasher()
+		return forEachTableDesc(p,
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				addColumn := func(column *sqlbase.ColumnDescriptor, attRelID parser.Datum, colNum int) error {
+					colTyp := column.Type.ToDatumType()
+					return addRow(
+						attRelID,                            // attrelid
+						parser.NewDString(column.Name),      // attname
+						h.TypeOid(colTyp),                   // atttypid
+						zeroVal,                             // attstattarget
+						typLen(colTyp),                      // attlen
+						parser.NewDInt(parser.DInt(colNum)), // attnum
+						zeroVal,      // attndims
+						negOneVal,    // attcacheoff
+						negOneVal,    // atttypmod
+						parser.DNull, // attbyval (see pg_type.typbyval)
+						parser.DNull, // attstorage
+						parser.DNull, // attalign
+						parser.MakeDBool(parser.DBool(!column.Nullable)),          // attnotnull
+						parser.MakeDBool(parser.DBool(column.DefaultExpr != nil)), // atthasdef
+						parser.MakeDBool(false),                                   // attisdropped
+						parser.MakeDBool(true),                                    // attislocal
+						zeroVal,                                                   // attinhcount
+						parser.DNull,                                              // attacl
+						parser.DNull,                                              // attoptions
+						parser.DNull,                                              // attfdwoptions
+					)
+				}
+
+				// Columns for table.
+				colNum := 0
+				if err := forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
+					colNum++
+					tableID := h.TableOid(db, table)
+					return addColumn(column, tableID, colNum)
+				}); err != nil {
+					return err
+				}
+
+				// Columns for each index.
+				return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
+					colNum := 0
+					return forEachColumnInIndex(table, index,
+						func(column *sqlbase.ColumnDescriptor) error {
+							colNum++
+							idxID := h.IndexOid(db, table, index)
+							return addColumn(column, idxID, colNum)
+						},
+					)
+				})
+			},
+		)
 	},
 }
 
@@ -209,6 +292,13 @@ CREATE TABLE pg_catalog.pg_tables (
 	},
 }
 
+func typLen(typ parser.Datum) parser.Datum {
+	if sz, variable := typ.Size(); !variable {
+		return parser.NewDInt(parser.DInt(sz))
+	}
+	return negOneVal
+}
+
 // oidHasher provides a consistent hashing mechanism for object identifiers in
 // pg_catalog tables, allowing for reliable joins across tables.
 type oidHasher struct {
@@ -244,6 +334,7 @@ const (
 	databaseTypeTag
 	tableTypeTag
 	indexTypeTag
+	typeTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -268,6 +359,10 @@ func (h oidHasher) writeTable(table *sqlbase.TableDescriptor) {
 
 func (h oidHasher) writeIndex(index *sqlbase.IndexDescriptor) {
 	h.writeUInt32(uint32(index.ID))
+}
+
+func (h oidHasher) writeType(typ parser.Datum) {
+	h.writeStr(typ.Type())
 }
 
 func (h oidHasher) DBOid(db *sqlbase.DatabaseDescriptor) *parser.DInt {
@@ -295,5 +390,11 @@ func (h oidHasher) IndexOid(
 	h.writeDB(db)
 	h.writeTable(table)
 	h.writeIndex(index)
+	return h.getOid()
+}
+
+func (h oidHasher) TypeOid(typ parser.Datum) *parser.DInt {
+	h.writeTypeTag(typeTypeTag)
+	h.writeType(typ)
 	return h.getOid()
 }
