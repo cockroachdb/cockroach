@@ -1587,6 +1587,12 @@ func (r *Replica) prepareRaftCommandLocked(
 		log.Infof(ctx, "prepared command %x: maxLeaseIndex=%d leaseAppliedIndex=%d",
 			idKey, r.mu.lastAssignedLeaseIndex, r.mu.state.LeaseAppliedIndex)
 	}
+
+	// Create a child span (the pendingCmd can outlive the span in the context).
+	// The span must be closed via cleanupCmdCtx when we are done with the
+	// command.
+	ctx, _ = tracing.ForkCtxSpan(ctx, "raft")
+
 	return &pendingCmd{
 		ctx:   ctx,
 		idKey: idKey,
@@ -1597,6 +1603,12 @@ func (r *Replica) prepareRaftCommandLocked(
 			Cmd:           ba,
 			MaxLeaseIndex: r.mu.lastAssignedLeaseIndex,
 		},
+	}
+}
+
+func cleanupCmdCtx(pCmd *pendingCmd) {
+	if span := opentracing.SpanFromContext(pCmd.ctx); span != nil {
+		span.Finish()
 	}
 }
 
@@ -1638,17 +1650,22 @@ func (r *Replica) proposeRaftCommand(
 	if !ok {
 		return nil, nil, roachpb.NewRangeNotFoundError(r.RangeID)
 	}
+
 	pCmd := r.prepareRaftCommandLocked(ctx, makeIDKey(), repDesc, ba)
 	r.insertRaftCommandLocked(pCmd)
 
 	if err := r.proposePendingCmdLocked(pCmd); err != nil {
 		delete(r.mu.pendingCmds, pCmd.idKey)
+		cleanupCmdCtx(pCmd)
 		return nil, nil, err
 	}
 	tryAbandon := func() bool {
 		r.mu.Lock()
-		_, ok := r.mu.pendingCmds[pCmd.idKey]
-		delete(r.mu.pendingCmds, pCmd.idKey)
+		p, ok := r.mu.pendingCmds[pCmd.idKey]
+		if ok {
+			delete(r.mu.pendingCmds, pCmd.idKey)
+			cleanupCmdCtx(p)
+		}
 		r.mu.Unlock()
 		return ok
 	}
@@ -2282,6 +2299,7 @@ func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason, refreshAtDe
 		// The command can be refurbished.
 		log.Eventf(p.ctx, "refurbishing command %x; %s", p.idKey, reason)
 		if pErr := r.refurbishPendingCmdLocked(p); pErr != nil {
+			cleanupCmdCtx(p)
 			p.done <- roachpb.ResponseWithError{Err: pErr}
 		}
 		refurbished++
@@ -2464,6 +2482,7 @@ func (r *Replica) refurbishPendingCmdLocked(cmd *pendingCmd) *roachpb.Error {
 	r.insertRaftCommandLocked(newPCmd)
 	if err := r.proposePendingCmdLocked(newPCmd); err != nil {
 		delete(r.mu.pendingCmds, newPCmd.idKey)
+		cleanupCmdCtx(newPCmd)
 		return roachpb.NewError(err)
 	}
 	return nil
@@ -2596,6 +2615,7 @@ func (r *Replica) processRaftCommand(
 				// keep the context (which is fine since the client will only
 				// finish it when the "real" incarnation applies).
 				cmd = nil
+				ctx = r.ctx
 			}
 		}
 	}
@@ -2646,6 +2666,7 @@ func (r *Replica) processRaftCommand(
 	if cmd != nil {
 		cmd.done <- roachpb.ResponseWithError{Reply: br, Err: pErr}
 		close(cmd.done)
+		cleanupCmdCtx(cmd)
 	} else if pErr != nil {
 		log.VEventf(1, ctx, "error executing raft command: %s", pErr)
 	}
