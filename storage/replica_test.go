@@ -5611,6 +5611,9 @@ func TestNewReplicaCorruptionError(t *testing.T) {
 func TestDiffRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// TODO(tschottdorf): this test should really pass the data through a
+	// RocksDB engine to verify that the original snapshots sort correctly.
+
 	if diff := diffRange(nil, nil); diff != nil {
 		t.Fatalf("diff of nils =  %v", diff)
 	}
@@ -5625,17 +5628,26 @@ func TestDiffRange(t *testing.T) {
 			{Key: []byte("abc"), Timestamp: timestamp, Value: value},
 			{Key: []byte("abcd"), Timestamp: timestamp, Value: value},
 			{Key: []byte("abcde"), Timestamp: timestamp, Value: value},
+			// Timestamps sort in descending order, with the notable exception
+			// of the zero timestamp, which sorts first.
+			{Key: []byte("abcdefg"), Timestamp: hlc.ZeroTimestamp, Value: value},
 			{Key: []byte("abcdefg"), Timestamp: timestamp, Value: value},
 			{Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, -1), Value: value},
 			{Key: []byte("abcdefgh"), Timestamp: timestamp, Value: value},
 			{Key: []byte("x"), Timestamp: timestamp, Value: value},
 			{Key: []byte("y"), Timestamp: timestamp, Value: value},
+			// Both 'zeroleft' and 'zeroright' share the version at (1,1), but
+			// a zero timestamp (=meta) key pair exists on the leader or
+			// follower, respectively.
+			{Key: []byte("zeroleft"), Timestamp: hlc.ZeroTimestamp, Value: value},
+			{Key: []byte("zeroleft"), Timestamp: hlc.ZeroTimestamp.Add(1, 1), Value: value},
+			{Key: []byte("zeroright"), Timestamp: hlc.ZeroTimestamp.Add(1, 1), Value: value},
 		},
 	}
 
 	// No diff works.
 	if diff := diffRange(leaderSnapshot, leaderSnapshot); diff != nil {
-		t.Fatalf("diff of similar snapshots = %v", diff)
+		t.Fatalf("diff of equal snapshots = %v", diff)
 	}
 
 	replicaSnapshot := &roachpb.RaftSnapshotData{
@@ -5644,16 +5656,20 @@ func TestDiffRange(t *testing.T) {
 			{Key: []byte("abc"), Timestamp: timestamp, Value: value},
 			{Key: []byte("abcde"), Timestamp: timestamp, Value: value},
 			{Key: []byte("abcdef"), Timestamp: timestamp, Value: value},
+			{Key: []byte("abcdefg"), Timestamp: hlc.ZeroTimestamp, Value: value},
 			{Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, 1), Value: value},
 			{Key: []byte("abcdefg"), Timestamp: timestamp, Value: value},
 			{Key: []byte("abcdefgh"), Timestamp: timestamp, Value: value},
 			{Key: []byte("x"), Timestamp: timestamp, Value: []byte("bar")},
 			{Key: []byte("z"), Timestamp: timestamp, Value: value},
+			{Key: []byte("zeroleft"), Timestamp: hlc.ZeroTimestamp.Add(1, 1), Value: value},
+			{Key: []byte("zeroright"), Timestamp: hlc.ZeroTimestamp, Value: value},
+			{Key: []byte("zeroright"), Timestamp: hlc.ZeroTimestamp.Add(1, 1), Value: value},
 		},
 	}
 
 	// The expected diff.
-	eDiff := []ReplicaSnapshotDiff{
+	eDiff := ReplicaSnapshotDiffSlice{
 		{LeaseHolder: true, Key: []byte("a"), Timestamp: timestamp, Value: value},
 		{LeaseHolder: false, Key: []byte("ab"), Timestamp: timestamp, Value: value},
 		{LeaseHolder: true, Key: []byte("abcd"), Timestamp: timestamp, Value: value},
@@ -5664,21 +5680,51 @@ func TestDiffRange(t *testing.T) {
 		{LeaseHolder: false, Key: []byte("x"), Timestamp: timestamp, Value: []byte("bar")},
 		{LeaseHolder: true, Key: []byte("y"), Timestamp: timestamp, Value: value},
 		{LeaseHolder: false, Key: []byte("z"), Timestamp: timestamp, Value: value},
+		{LeaseHolder: true, Key: []byte("zeroleft"), Timestamp: hlc.ZeroTimestamp, Value: value},
+		{LeaseHolder: false, Key: []byte("zeroright"), Timestamp: hlc.ZeroTimestamp, Value: value},
 	}
 
 	diff := diffRange(leaderSnapshot, replicaSnapshot)
-	if diff == nil {
-		t.Fatalf("differing snapshots didn't reveal diff %v", diff)
-	}
-	if len(eDiff) != len(diff) {
-		t.Fatalf("expected diff length different from diff (%d vs %d) , %v vs %v", len(eDiff), len(diff), eDiff, diff)
-	}
 
 	for i, e := range eDiff {
 		v := diff[i]
 		if e.LeaseHolder != v.LeaseHolder || !bytes.Equal(e.Key, v.Key) || !e.Timestamp.Equal(v.Timestamp) || !bytes.Equal(e.Value, v.Value) {
-			t.Fatalf("diff varies at row %d, %v vs %v", i, e, v)
+			t.Fatalf("diff varies at row %d, want %v and got %v\n\ngot:\n%s\nexpected:\n%s", i, e, v, diff, eDiff)
 		}
+	}
+
+	// Document the stringifed output. This is what the consistency checker
+	// will actually print.
+	stringDiff := append(eDiff[:4],
+		ReplicaSnapshotDiff{Key: []byte("foo"), Value: value},
+	)
+
+	const expDiff = `--- leaseholder
++++ follower
+-0.000001729,1 "a"
+-  ts:1969-12-31 19:00:00.000001729 -0500 EST
+-  value:foo
+-  raw_key:"a" raw_value:666f6f
++0.000001729,1 "ab"
++  ts:1969-12-31 19:00:00.000001729 -0500 EST
++  value:foo
++  raw_key:"ab" raw_value:666f6f
+-0.000001729,1 "abcd"
+-  ts:1969-12-31 19:00:00.000001729 -0500 EST
+-  value:foo
+-  raw_key:"abcd" raw_value:666f6f
++0.000001729,1 "abcdef"
++  ts:1969-12-31 19:00:00.000001729 -0500 EST
++  value:foo
++  raw_key:"abcdef" raw_value:666f6f
++0.000000000,0 "foo"
++  ts:<zero>
++  value:foo
++  raw_key:"foo" raw_value:666f6f
+`
+
+	if diff := stringDiff.String(); diff != expDiff {
+		t.Fatalf("expected:\n%s\ngot:\n%s", expDiff, diff)
 	}
 }
 
