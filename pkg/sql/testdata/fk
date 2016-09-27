@@ -19,8 +19,14 @@ CREATE TABLE missing_with_col (customer INT REFERENCES customerz (id))
 statement error column "idz" does not exist
 CREATE TABLE missing_col (customer INT REFERENCES customers (idz))
 
-statement error foreign key columns \("customer"\) must be the prefix of an index
+statement ok
 CREATE TABLE unindexed (customer INT REFERENCES customers)
+
+query TTBITTB
+SHOW INDEXES FROM unindexed
+----
+unindexed  primary                                         true    1    rowid     ASC        false
+unindexed  unindexed_auto_index_fk_customer_ref_customers  false   1    customer  ASC        false
 
 statement error foreign key requires table "products" have a unique index on \("vendor"\)
 CREATE TABLE non_unique (product STRING REFERENCES products (vendor))
@@ -329,14 +335,41 @@ statement error 2 columns must reference exactly 2 columns in referenced table \
 CREATE TABLE refpairs (a INT, b STRING, CONSTRAINT fk FOREIGN KEY (a, b) REFERENCES pairs)
 
 # TODO(dt): remove ordering constraint on matching index
-statement error foreign key columns \("a", "b"\) must be the prefix of an index
-CREATE TABLE refpairs (a INT, b STRING, FOREIGN KEY (a, b) REFERENCES pairs (src, dest), INDEX (b, a))
+statement ok
+CREATE TABLE refpairs_wrong_order (a INT, b STRING, FOREIGN KEY (a, b) REFERENCES pairs (src, dest), INDEX (b, a))
 
-statement error foreign key columns \("a", "b"\) must be the prefix of an index
-CREATE TABLE refpairs (a INT, b STRING, c INT, FOREIGN KEY (a, b) REFERENCES pairs (src, dest), INDEX (a, c, b))
+query TTBITTB
+SHOW INDEXES FROM refpairs_wrong_order
+----
+refpairs_wrong_order  primary                                            true    1    rowid   ASC        false
+refpairs_wrong_order  refpairs_wrong_order_b_a_idx                       false   1    b       ASC        false
+refpairs_wrong_order  refpairs_wrong_order_b_a_idx                       false   2    a       ASC        false
+refpairs_wrong_order  refpairs_wrong_order_auto_index_fk_a_ref_pairs     false   1    a       ASC        false
+refpairs_wrong_order  refpairs_wrong_order_auto_index_fk_a_ref_pairs     false   2    b       ASC        false
+
+statement ok
+CREATE TABLE refpairs_c_between (a INT, b STRING, c INT, FOREIGN KEY (a, b) REFERENCES pairs (src, dest), INDEX (a, c, b))
+
+query TTBITTB
+SHOW INDEXES FROM refpairs_c_between
+----
+refpairs_c_between  primary                                            true    1    rowid   ASC        false
+refpairs_c_between  refpairs_c_between_a_c_b_idx                       false   1    a       ASC        false
+refpairs_c_between  refpairs_c_between_a_c_b_idx                       false   2    c       ASC        false
+refpairs_c_between  refpairs_c_between_a_c_b_idx                       false   3    b       ASC        false
+refpairs_c_between  refpairs_c_between_auto_index_fk_a_ref_pairs       false   1    a       ASC        false
+refpairs_c_between  refpairs_c_between_auto_index_fk_a_ref_pairs       false   2    b       ASC        false
 
 statement ok
 CREATE TABLE refpairs (a INT, b STRING, c INT, FOREIGN KEY (a, b) REFERENCES pairs (src, dest), INDEX (a, b, c))
+
+query TTBITTB
+SHOW INDEXES FROM refpairs
+----
+refpairs  primary             true    1    rowid   ASC        false
+refpairs  refpairs_a_b_c_idx  false   1    a       ASC        false
+refpairs  refpairs_a_b_c_idx  false   2    b       ASC        false
+refpairs  refpairs_a_b_c_idx  false   3    c       ASC        false
 
 statement error foreign key violation: value \[100 'two'\] not found in pairs@pairs_src_dest_key \[src dest\]
 INSERT INTO refpairs VALUES (100, 'two'), (200, 'two')
