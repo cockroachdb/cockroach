@@ -71,16 +71,22 @@ func (n Name) Format(buf *bytes.Buffer, f FmtFlags) {
 // Normalize normalizes to lowercase and Unicode Normalization Form C
 // (NFC).
 func (n Name) Normalize() string {
-	lower := strings.Map(normalize.ToLower, string(n))
-	if isASCII(lower) {
-		return lower
-	}
-	return norm.NFC.String(lower)
+	return NormalizeString(string(n))
 }
 
 // Equal returns true iff the normalizations of a and b are equal.
 func (n Name) Equal(b Name) bool {
 	return n.Normalize() == b.Normalize()
+}
+
+// NormalizeString normalizes to lowercase and Unicode Normalization Form C
+// (NFC).
+func NormalizeString(s string) string {
+	lower := strings.Map(normalize.ToLower, s)
+	if isASCII(lower) {
+		return lower
+	}
+	return norm.NFC.String(lower)
 }
 
 // ReNormalizeName performs the same work as NormalizeName but when

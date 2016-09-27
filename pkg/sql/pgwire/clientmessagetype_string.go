@@ -12,6 +12,7 @@ const (
 	_clientMessageType_name_4 = "clientMsgTerminate"
 	_clientMessageType_name_5 = "clientMsgCopyDoneclientMsgCopyData"
 	_clientMessageType_name_6 = "clientMsgCopyFail"
+	_clientMessageType_name_7 = "clientMsgPassword"
 )
 
 var (
@@ -22,6 +23,7 @@ var (
 	_clientMessageType_index_4 = [...]uint8{0, 18}
 	_clientMessageType_index_5 = [...]uint8{0, 17, 34}
 	_clientMessageType_index_6 = [...]uint8{0, 17}
+	_clientMessageType_index_7 = [...]uint8{0, 17}
 )
 
 func (i clientMessageType) String() string {
@@ -43,6 +45,8 @@ func (i clientMessageType) String() string {
 		return _clientMessageType_name_5[_clientMessageType_index_5[i]:_clientMessageType_index_5[i+1]]
 	case i == 102:
 		return _clientMessageType_name_6
+	case i == 112:
+		return _clientMessageType_name_7
 	default:
 		return fmt.Sprintf("clientMessageType(%d)", i)
 	}
