@@ -27,17 +27,101 @@ import (
 )
 
 var (
-	oidZero = parser.NewDInt(0)
-	zeroVal = oidZero
+	oidZero   = parser.NewDInt(0)
+	zeroVal   = oidZero
+	negOneVal = parser.NewDInt(-1)
 )
 
 // pgCatalog contains a set of system tables mirroring PostgreSQL's pg_catalog schema.
 var pgCatalog = virtualSchema{
 	name: "pg_catalog",
 	tables: []virtualSchemaTable{
+		pgCatalogAttributeTable,
 		pgCatalogClassTable,
 		pgCatalogNamespaceTable,
 		pgCatalogTablesTable,
+	},
+}
+
+var pgCatalogAttributeTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_attribute (
+	attrelid INT,
+	attname STRING,
+	atttypid INT,
+	attstattarget INT,
+	attlen INT,
+	attnum INT,
+	attndims INT,
+	attcacheoff INT,
+	atttypmod INT,
+	attbyval BOOL,
+	attstorage CHAR,
+	attalign CHAR,
+	attnotnull BOOL,
+	atthasdef BOOL,
+	attisdropped BOOL,
+	attislocal BOOL,
+	attinhcount INT,
+	attacl STRING,
+	attoptions STRING,
+	attfdwoptions STRING
+);
+`,
+	desc: sqlbase.TableDescriptor{Name: "pg_attribute", ID: 0xffffffff, ParentID: 0x0, Version: 0x1, UpVersion: false, ModificationTime: hlc.Timestamp{WallTime: 0, Logical: 0}, Columns: []sqlbase.ColumnDescriptor{{Name: "attrelid", ID: 0x1, Type: sqlbase.ColumnType{Kind: 1, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "attname", ID: 0x2, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "atttypid", ID: 0x3, Type: sqlbase.ColumnType{Kind: 1, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "attstattarget", ID: 0x4, Type: sqlbase.ColumnType{Kind: 1, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "attlen", ID: 0x5, Type: sqlbase.ColumnType{Kind: 1, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "attnum", ID: 0x6, Type: sqlbase.ColumnType{Kind: 1, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "attndims", ID: 0x7, Type: sqlbase.ColumnType{Kind: 1, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "attcacheoff", ID: 0x8, Type: sqlbase.ColumnType{Kind: 1, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "atttypmod", ID: 0x9, Type: sqlbase.ColumnType{Kind: 1, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "attbyval", ID: 0xa, Type: sqlbase.ColumnType{Kind: 0, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "attstorage", ID: 0xb, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "attalign", ID: 0xc, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "attnotnull", ID: 0xd, Type: sqlbase.ColumnType{Kind: 0, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "atthasdef", ID: 0xe, Type: sqlbase.ColumnType{Kind: 0, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "attisdropped", ID: 0xf, Type: sqlbase.ColumnType{Kind: 0, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "attislocal", ID: 0x10, Type: sqlbase.ColumnType{Kind: 0, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "attinhcount", ID: 0x11, Type: sqlbase.ColumnType{Kind: 1, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "attacl", ID: 0x12, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "attoptions", ID: 0x13, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "attfdwoptions", ID: 0x14, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}}, NextColumnID: 0x15, Families: []sqlbase.ColumnFamilyDescriptor(nil), NextFamilyID: 0x0, PrimaryIndex: sqlbase.IndexDescriptor{Name: "", ID: 0x0, Unique: false, ColumnNames: []string(nil), ColumnDirections: []sqlbase.IndexDescriptor_Direction(nil), StoreColumnNames: []string(nil), ColumnIDs: []sqlbase.ColumnID(nil), ImplicitColumnIDs: []sqlbase.ColumnID(nil), ForeignKey: sqlbase.ForeignKeyReference{Table: 0x0, Index: 0x0, Name: "", Validity: 0}, ReferencedBy: []sqlbase.ForeignKeyReference(nil), Interleave: sqlbase.InterleaveDescriptor{Ancestors: []sqlbase.InterleaveDescriptor_Ancestor(nil)}, InterleavedBy: []sqlbase.ForeignKeyReference(nil)}, Indexes: []sqlbase.IndexDescriptor(nil), NextIndexID: 0x0, Privileges: emptyPrivileges, Mutations: []sqlbase.DescriptorMutation(nil), Lease: (*sqlbase.TableDescriptor_SchemaChangeLease)(nil), NextMutationID: 0x1, FormatVersion: 0x3, State: 0, Checks: []*sqlbase.TableDescriptor_CheckConstraint(nil), Renames: []sqlbase.TableDescriptor_RenameInfo(nil), ViewQuery: ""},
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		h := makeOidHasher()
+		return forEachTableDesc(p,
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				addColumn := func(column *sqlbase.ColumnDescriptor, attRelID parser.Datum, colNum int) error {
+					colTyp := column.Type.ToDatumType()
+					return addRow(
+						attRelID,                            // attrelid
+						parser.NewDString(column.Name),      // attname
+						h.TypeOid(colTyp),                   // atttypid
+						zeroVal,                             // attstattarget
+						typLen(colTyp),                      // attlen
+						parser.NewDInt(parser.DInt(colNum)), // attnum
+						zeroVal,      // attndims
+						negOneVal,    // attcacheoff
+						negOneVal,    // atttypmod
+						parser.DNull, // attbyval (see pg_type.typbyval)
+						parser.DNull, // attstorage
+						parser.DNull, // attalign
+						parser.MakeDBool(parser.DBool(!column.Nullable)),          // attnotnull
+						parser.MakeDBool(parser.DBool(column.DefaultExpr != nil)), // atthasdef
+						parser.MakeDBool(false),                                   // attisdropped
+						parser.MakeDBool(true),                                    // attislocal
+						zeroVal,                                                   // attinhcount
+						parser.DNull,                                              // attacl
+						parser.DNull,                                              // attoptions
+						parser.DNull,                                              // attfdwoptions
+					)
+				}
+
+				// Columns for table.
+				colNum := 0
+				if err := forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
+					colNum++
+					tableID := h.TableOid(db, table)
+					return addColumn(column, tableID, colNum)
+				}); err != nil {
+					return err
+				}
+
+				// Columns for each index.
+				return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
+					colNum := 0
+					return forEachColumnInIndex(table, index,
+						func(column *sqlbase.ColumnDescriptor) error {
+							colNum++
+							idxID := h.IndexOid(db, table, index)
+							return addColumn(column, idxID, colNum)
+						},
+					)
+				})
+			},
+		)
 	},
 }
 
@@ -213,6 +297,13 @@ CREATE TABLE pg_catalog.pg_tables (
 	},
 }
 
+func typLen(typ parser.Datum) parser.Datum {
+	if sz, variable := typ.Size(); !variable {
+		return parser.NewDInt(parser.DInt(sz))
+	}
+	return negOneVal
+}
+
 // oidHasher provides a consistent hashing mechanism for object identifiers in
 // pg_catalog tables, allowing for reliable joins across tables.
 type oidHasher struct {
@@ -248,6 +339,7 @@ const (
 	databaseTypeTag
 	tableTypeTag
 	indexTypeTag
+	typeTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -272,6 +364,10 @@ func (h oidHasher) writeTable(table *sqlbase.TableDescriptor) {
 
 func (h oidHasher) writeIndex(index *sqlbase.IndexDescriptor) {
 	h.writeUInt32(uint32(index.ID))
+}
+
+func (h oidHasher) writeType(typ parser.Datum) {
+	h.writeStr(typ.Type())
 }
 
 func (h oidHasher) DBOid(db *sqlbase.DatabaseDescriptor) *parser.DInt {
@@ -299,5 +395,11 @@ func (h oidHasher) IndexOid(
 	h.writeDB(db)
 	h.writeTable(table)
 	h.writeIndex(index)
+	return h.getOid()
+}
+
+func (h oidHasher) TypeOid(typ parser.Datum) *parser.DInt {
+	h.writeTypeTag(typeTypeTag)
+	h.writeType(typ)
 	return h.getOid()
 }

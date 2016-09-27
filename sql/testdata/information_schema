@@ -334,6 +334,7 @@ table_privileges
 tables
 abc
 xyz
+pg_attribute
 pg_class
 pg_namespace
 pg_tables
@@ -362,6 +363,7 @@ rangelog
 pg_tables
 pg_namespace
 pg_class
+pg_attribute
 namespace
 
 query TTTTI colnames
@@ -377,6 +379,7 @@ def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
 def            other_db            abc                VIEW         1
 def            other_db            xyz                BASE TABLE   1
+def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
@@ -411,6 +414,7 @@ def            information_schema  schemata           SYSTEM VIEW  1
 def            information_schema  table_constraints  SYSTEM VIEW  1
 def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
+def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
@@ -434,6 +438,7 @@ def            information_schema  table_constraints  SYSTEM VIEW  1
 def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
 def            other_db            xyz                BASE TABLE   5
+def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
 def            pg_catalog          pg_namespace       SYSTEM VIEW  1
 def            pg_catalog          pg_tables          SYSTEM VIEW  1
