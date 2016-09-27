@@ -18,8 +18,10 @@ package kv_test
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -29,7 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -275,5 +279,89 @@ func TestAuthentication(t *testing.T) {
 	db2 := createTestClientForUser(t, s.Stopper(), s.ServingAddr(), security.RootUser)
 	if err := db2.Run(context.TODO(), b2); !testutils.IsError(err, "is not allowed") {
 		t.Fatal(err)
+	}
+}
+
+// TestTxnDelRangeIntentResolutionCounts ensures that intents left behind by a
+// DelRange with a MaxSpanRequestKeys limit are resolved correctly and by
+// using the minimal span of keys.
+func TestTxnDelRangeIntentResolutionCounts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var intentResolutionCount int64
+	var resolveIntentCount int64
+	params := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				NumKeysEvaluatedForRangeIntentResolution: &intentResolutionCount,
+				TestingCommandFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+					_, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest)
+					if ok {
+						atomic.AddInt64(&resolveIntentCount, 1)
+					}
+					return nil
+				},
+			},
+		},
+	}
+	s, _, db := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop()
+
+	for _, abortTxn := range []bool{false, true} {
+		spanSize := int64(10)
+		prefixes := []string{"a", "b", "c"}
+		for i := int64(0); i < spanSize; i++ {
+			for _, prefix := range prefixes {
+				if err := db.Put(context.TODO(), fmt.Sprintf("%s%d", prefix, i), "v"); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		totalNumKeys := int64(len(prefixes)) * spanSize
+
+		atomic.StoreInt64(&intentResolutionCount, 0)
+		limit := totalNumKeys / 2
+		if err := db.Txn(context.TODO(), func(txn *client.Txn) error {
+			var b client.Batch
+			// Fully deleted.
+			b.DelRange("a", "b", false)
+			// Partially deleted.
+			b.DelRange("b", "c", false)
+			// Not deleted.
+			b.DelRange("c", "d", false)
+			b.Header.MaxSpanRequestKeys = limit
+			if err := txn.Run(&b); err != nil {
+				return err
+			}
+			if abortTxn {
+				return errors.New("aborting txn")
+			}
+			return nil
+		}); err != nil && !abortTxn {
+			t.Fatal(err)
+		}
+
+		// Ensure that the correct number of keys were evaluated for intents.
+		if numKeys := atomic.LoadInt64(&intentResolutionCount); numKeys != limit {
+			t.Fatalf("abortTxn: %v, resolved %d keys, expected %d", abortTxn, numKeys, limit)
+		}
+
+		// Ensure no intents are left behind. Scan the entire span to resolve
+		// any intents that were left behind.
+		atomic.StoreInt64(&resolveIntentCount, 0)
+		kvs, err := db.Scan(context.TODO(), "a", "d", totalNumKeys)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c := atomic.LoadInt64(&resolveIntentCount); c != 0 {
+			t.Errorf("abortTxn: %v, %d intents left over", abortTxn, c)
+		}
+		expectedNumKeys := totalNumKeys / 2
+		if abortTxn {
+			expectedNumKeys = totalNumKeys
+		}
+		if int64(len(kvs)) != expectedNumKeys {
+			t.Errorf("abortTxn: %v, %d keys left behind, expected=%d",
+				abortTxn, len(kvs), expectedNumKeys)
+		}
 	}
 }
