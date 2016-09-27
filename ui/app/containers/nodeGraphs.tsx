@@ -234,6 +234,24 @@ export default class extends React.Component<IInjectedProps, {}> {
               </Axis>
             </StackedAreaGraph>
 
+            <LineGraph title="GCInfo metrics" sources={sources}>
+              <Axis label="Count" format={ d3.format(".1f") }>
+                <Metric name="cr.store.queue.gc.info.numkeysaffected" title="NumKeysAffected" nonNegativeRate />
+                <Metric name="cr.store.queue.gc.info.intentsconsidered" title="IntentsConsidered" nonNegativeRate />
+                <Metric name="cr.store.queue.gc.info.intenttxns" title="IntentTxns" nonNegativeRate />
+                <Metric name="cr.store.queue.gc.info.transactionspanscanned" title="TransactionSpanScanned" nonNegativeRate />
+                <Metric name="cr.store.queue.gc.info.transactionspangcaborted" title="TransactionSpanGCAborted" nonNegativeRate />
+                <Metric name="cr.store.queue.gc.info.transactionspangccommitted" title="TransactionSpanGCCommitted" nonNegativeRate />
+                <Metric name="cr.store.queue.gc.info.transactionspangcpending" title="TransactionSpanGCPending" nonNegativeRate />
+                <Metric name="cr.store.queue.gc.info.abortspanscanned" title="AbortSpanScanned" nonNegativeRate />
+                <Metric name="cr.store.queue.gc.info.abortspanconsidered" title="AbortSpanConsidered" nonNegativeRate />
+                <Metric name="cr.store.queue.gc.info.abortspangcnum" title="AbortSpanGCNum" nonNegativeRate />
+                <Metric name="cr.store.queue.gc.info.pushtxn" title="PushTxn" nonNegativeRate />
+                <Metric name="cr.store.queue.gc.info.resolvetotal" title="ResolveTotal" nonNegativeRate />
+                <Metric name="cr.store.queue.gc.info.resovlesuccess" title="ResolveSuccess" nonNegativeRate />
+              </Axis>
+            </LineGraph>
+
             <LineGraph title="Raft Transport Queue Pending Count" sources={sources}>
               <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.store.raft.enqueued.pending" title="Outstanding message count in the Raft Transport queue" />
