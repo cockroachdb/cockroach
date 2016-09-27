@@ -303,20 +303,20 @@ func (p *planner) newPlan(
 		return p.SetDefaultIsolation(n)
 	case *parser.Show:
 		return p.Show(n)
+	case *parser.ShowColumns:
+		return p.ShowColumns(n)
+	case *parser.ShowConstraints:
+		return p.ShowConstraints(n)
 	case *parser.ShowCreateTable:
 		return p.ShowCreateTable(n)
 	case *parser.ShowCreateView:
 		return p.ShowCreateView(n)
-	case *parser.ShowColumns:
-		return p.ShowColumns(n)
 	case *parser.ShowDatabases:
 		return p.ShowDatabases(n)
 	case *parser.ShowGrants:
 		return p.ShowGrants(n)
 	case *parser.ShowIndex:
 		return p.ShowIndex(n)
-	case *parser.ShowConstraints:
-		return p.ShowConstraints(n)
 	case *parser.ShowTables:
 		return p.ShowTables(n)
 	case *parser.Split:

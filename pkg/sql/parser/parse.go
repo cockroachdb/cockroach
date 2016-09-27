@@ -178,7 +178,7 @@ func parseExprs(exprs []string, syntax Syntax) (Exprs, error) {
 	return set.Values, nil
 }
 
-// ParseExprsTraditional is a short-hand for parseExprs(Traditional, sql)
+// ParseExprsTraditional is a short-hand for parseExprs(sql, Traditional)
 func ParseExprsTraditional(sql []string) (Exprs, error) {
 	if len(sql) == 0 {
 		return Exprs{}, nil
@@ -186,7 +186,7 @@ func ParseExprsTraditional(sql []string) (Exprs, error) {
 	return parseExprs(sql, Traditional)
 }
 
-// ParseExprTraditional is a short-hand for parseExprs(Traditional, []string{sql})
+// ParseExprTraditional is a short-hand for parseExprs([]string{sql}, Traditional)
 func ParseExprTraditional(sql string) (Expr, error) {
 	exprs, err := parseExprs([]string{sql}, Traditional)
 	if err != nil {
