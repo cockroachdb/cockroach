@@ -216,7 +216,7 @@ func (mrc *MultiplexedRowChannel) NextRow() (sqlbase.EncDatumRow, error) {
 }
 
 // RowBuffer is an implementation of RowReceiver that buffers (accumulates)
-// results in memory, as well as an implementation of rowSender that returns
+// results in memory, as well as an implementation of RowSource that returns
 // rows from a row buffer.
 type RowBuffer struct {
 	rows sqlbase.EncDatumRows

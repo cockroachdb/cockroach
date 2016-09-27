@@ -185,34 +185,34 @@ type planNodeFastPath interface {
 	FastPathResults() (int, bool)
 }
 
-var _ planNode = &distinctNode{}
-var _ planNode = &groupNode{}
-var _ planNode = &indexJoinNode{}
-var _ planNode = &limitNode{}
-var _ planNode = &scanNode{}
-var _ planNode = &sortNode{}
-var _ planNode = &valuesNode{}
-var _ planNode = &selectTopNode{}
-var _ planNode = &selectNode{}
-var _ planNode = &unionNode{}
-var _ planNode = &emptyNode{}
-var _ planNode = &explainDebugNode{}
-var _ planNode = &explainTraceNode{}
-var _ planNode = &insertNode{}
-var _ planNode = &updateNode{}
-var _ planNode = &deleteNode{}
+var _ planNode = &alterTableNode{}
 var _ planNode = &createDatabaseNode{}
+var _ planNode = &createIndexNode{}
 var _ planNode = &createTableNode{}
 var _ planNode = &createViewNode{}
-var _ planNode = &createIndexNode{}
+var _ planNode = &delayedNode{}
+var _ planNode = &deleteNode{}
+var _ planNode = &distSQLNode{}
+var _ planNode = &distinctNode{}
 var _ planNode = &dropDatabaseNode{}
 var _ planNode = &dropIndexNode{}
 var _ planNode = &dropTableNode{}
 var _ planNode = &dropViewNode{}
-var _ planNode = &alterTableNode{}
+var _ planNode = &emptyNode{}
+var _ planNode = &explainDebugNode{}
+var _ planNode = &explainTraceNode{}
+var _ planNode = &groupNode{}
+var _ planNode = &indexJoinNode{}
+var _ planNode = &insertNode{}
 var _ planNode = &joinNode{}
-var _ planNode = &distSQLNode{}
-var _ planNode = &delayedNode{}
+var _ planNode = &limitNode{}
+var _ planNode = &scanNode{}
+var _ planNode = &selectNode{}
+var _ planNode = &selectTopNode{}
+var _ planNode = &sortNode{}
+var _ planNode = &unionNode{}
+var _ planNode = &updateNode{}
+var _ planNode = &valuesNode{}
 
 // makePlan implements the Planner interface.
 func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, error) {
@@ -303,20 +303,20 @@ func (p *planner) newPlan(
 		return p.SetDefaultIsolation(n)
 	case *parser.Show:
 		return p.Show(n)
+	case *parser.ShowColumns:
+		return p.ShowColumns(n)
+	case *parser.ShowConstraints:
+		return p.ShowConstraints(n)
 	case *parser.ShowCreateTable:
 		return p.ShowCreateTable(n)
 	case *parser.ShowCreateView:
 		return p.ShowCreateView(n)
-	case *parser.ShowColumns:
-		return p.ShowColumns(n)
 	case *parser.ShowDatabases:
 		return p.ShowDatabases(n)
 	case *parser.ShowGrants:
 		return p.ShowGrants(n)
 	case *parser.ShowIndex:
 		return p.ShowIndex(n)
-	case *parser.ShowConstraints:
-		return p.ShowConstraints(n)
 	case *parser.ShowTables:
 		return p.ShowTables(n)
 	case *parser.Split:

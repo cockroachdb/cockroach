@@ -284,7 +284,7 @@ func (n *unionNode) Close() {
 }
 
 // unionNodeEmit represents the emitter logic for one of the six combinations of
-// UNION/INTERSECT/EXCEPT and ALL/DISTINCE. As right and then left are iterated,
+// UNION/INTERSECT/EXCEPT and ALL/DISTINCT. As right and then left are iterated,
 // state is kept and used to compute the set operation as well as distinctness.
 type unionNodeEmit interface {
 	emitRight([]byte) bool
