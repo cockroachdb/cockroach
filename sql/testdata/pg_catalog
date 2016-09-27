@@ -39,6 +39,7 @@ SET DATABASE = test
 query T
 SHOW TABLES FROM pg_catalog
 ----
+pg_attrdef
 pg_attribute
 pg_class
 pg_namespace
@@ -307,3 +308,16 @@ v1            p        false         true        0            NULL    NULL      
 v1            a        false         true        0            NULL    NULL        NULL
 v1            b        false         true        0            NULL    NULL        NULL
 v1            c        false         true        0            NULL    NULL        NULL
+
+## pg_catalog.pg_attrdef
+
+query ITIITT colnames
+SELECT ad.oid, c.relname, adrelid, adnum, adbin, adsrc
+FROM pg_catalog.pg_attrdef ad
+JOIN pg_catalog.pg_class c ON ad.adrelid = c.oid
+JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+WHERE n.nspname = 'constraint_db'
+----
+oid         relname  adrelid     adnum  adbin  adsrc
+1889966686  t1       2265044713  4      12     12
+390509283   t3       2064007441  3      'FOO'  'FOO'

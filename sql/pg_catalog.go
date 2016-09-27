@@ -36,10 +36,46 @@ var (
 var pgCatalog = virtualSchema{
 	name: "pg_catalog",
 	tables: []virtualSchemaTable{
+		pgCatalogAttrDefTable,
 		pgCatalogAttributeTable,
 		pgCatalogClassTable,
 		pgCatalogNamespaceTable,
 		pgCatalogTablesTable,
+	},
+}
+
+var pgCatalogAttrDefTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_attrdef (
+	oid INT,
+	adrelid INT,
+	adnum INT,
+	adbin STRING,
+	adsrc STRING
+);
+`,
+	desc: sqlbase.TableDescriptor{Name: "pg_attrdef", ID: 0xffffffff, ParentID: 0x0, Version: 0x1, UpVersion: false, ModificationTime: hlc.Timestamp{WallTime: 0, Logical: 0}, Columns: []sqlbase.ColumnDescriptor{{Name: "oid", ID: 0x1, Type: sqlbase.ColumnType{Kind: 1, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "adrelid", ID: 0x2, Type: sqlbase.ColumnType{Kind: 1, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "adnum", ID: 0x3, Type: sqlbase.ColumnType{Kind: 1, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "adbin", ID: 0x4, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}, {Name: "adsrc", ID: 0x5, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: (*string)(nil), Hidden: false}}, NextColumnID: 0x6, Families: []sqlbase.ColumnFamilyDescriptor(nil), NextFamilyID: 0x0, PrimaryIndex: sqlbase.IndexDescriptor{Name: "", ID: 0x0, Unique: false, ColumnNames: []string(nil), ColumnDirections: []sqlbase.IndexDescriptor_Direction(nil), StoreColumnNames: []string(nil), ColumnIDs: []sqlbase.ColumnID(nil), ImplicitColumnIDs: []sqlbase.ColumnID(nil), ForeignKey: sqlbase.ForeignKeyReference{Table: 0x0, Index: 0x0, Name: "", Validity: 0}, ReferencedBy: []sqlbase.ForeignKeyReference(nil), Interleave: sqlbase.InterleaveDescriptor{Ancestors: []sqlbase.InterleaveDescriptor_Ancestor(nil)}, InterleavedBy: []sqlbase.ForeignKeyReference(nil)}, Indexes: []sqlbase.IndexDescriptor(nil), NextIndexID: 0x0, Privileges: emptyPrivileges, Mutations: []sqlbase.DescriptorMutation(nil), Lease: (*sqlbase.TableDescriptor_SchemaChangeLease)(nil), NextMutationID: 0x1, FormatVersion: 0x3, State: 0, Checks: []*sqlbase.TableDescriptor_CheckConstraint(nil), Renames: []sqlbase.TableDescriptor_RenameInfo(nil), ViewQuery: ""},
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		h := makeOidHasher()
+		return forEachTableDesc(p,
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				colNum := 0
+				return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
+					colNum++
+					if column.DefaultExpr == nil {
+						return nil
+					}
+					defSrc := parser.NewDString(*column.DefaultExpr)
+					return addRow(
+						h.ColumnOid(db, table, column),      // oid
+						h.TableOid(db, table),               // adrelid
+						parser.NewDInt(parser.DInt(colNum)), // adnum
+						defSrc, // adbin
+						defSrc, // adsrc
+					)
+				})
+			},
+		)
 	},
 }
 
@@ -339,6 +375,7 @@ const (
 	databaseTypeTag
 	tableTypeTag
 	indexTypeTag
+	columnTypeTag
 	typeTypeTag
 )
 
@@ -364,6 +401,11 @@ func (h oidHasher) writeTable(table *sqlbase.TableDescriptor) {
 
 func (h oidHasher) writeIndex(index *sqlbase.IndexDescriptor) {
 	h.writeUInt32(uint32(index.ID))
+}
+
+func (h oidHasher) writeColumn(column *sqlbase.ColumnDescriptor) {
+	h.writeUInt32(uint32(column.ID))
+	h.writeStr(column.Name)
 }
 
 func (h oidHasher) writeType(typ parser.Datum) {
@@ -395,6 +437,18 @@ func (h oidHasher) IndexOid(
 	h.writeDB(db)
 	h.writeTable(table)
 	h.writeIndex(index)
+	return h.getOid()
+}
+
+func (h oidHasher) ColumnOid(
+	db *sqlbase.DatabaseDescriptor,
+	table *sqlbase.TableDescriptor,
+	column *sqlbase.ColumnDescriptor,
+) *parser.DInt {
+	h.writeTypeTag(columnTypeTag)
+	h.writeDB(db)
+	h.writeTable(table)
+	h.writeColumn(column)
 	return h.getOid()
 }
 
