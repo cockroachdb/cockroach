@@ -21,6 +21,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 	"text/tabwriter"
 	"unicode"
@@ -30,6 +31,7 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/pq"
@@ -180,7 +182,20 @@ func makeSQLConn(url string) *sqlConn {
 func makeSQLClient() (*sqlConn, error) {
 	sqlURL := connURL
 	if len(connURL) == 0 {
-		u, err := sqlCtx.PGURL(connUser)
+		// TODO(asubiotto): Remove RootUser backdoor once we have addition of
+		// RootUser to system.users at bootstrap.
+		var user *url.Userinfo
+		if connUser == security.RootUser {
+			user = url.User(connUser)
+		} else {
+			password, err := security.PromptForPassword()
+			if err != nil {
+				return nil, err
+			}
+			user = url.UserPassword(connUser, password)
+		}
+
+		u, err := sqlCtx.PGURL(user)
 		if err != nil {
 			return nil, err
 		}

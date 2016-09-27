@@ -106,7 +106,8 @@ func BenchmarkPgbenchExec_Cockroach(b *testing.B) {
 	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{Insecure: true})
 	defer s.Stopper().Stop()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(b, s.ServingAddr(), security.RootUser, "benchmarkCockroach")
+	pgUrl, cleanupFn := sqlutils.PGUrl(
+		b, s.ServingAddr(), "benchmarkCockroach", url.User(security.RootUser))
 	pgUrl.RawQuery = "sslmode=disable"
 	defer cleanupFn()
 

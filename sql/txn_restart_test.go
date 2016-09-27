@@ -20,6 +20,7 @@ import (
 	"bytes"
 	gosql "database/sql"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strconv"
 	"sync/atomic"
@@ -259,7 +260,7 @@ func (ta *TxnAborter) InitConn(t testing.TB, s serverutils.TestServerInterface) 
 	// TODO(andrei): remove this if we ever move to using libpq conns directly.
 	// See TODOs around on SetMaxOpenConns.
 	pgURL, cleanupDB := sqlutils.PGUrl(
-		t, s.ServingAddr(), security.RootUser, "SecondConnPool")
+		t, s.ServingAddr(), "SecondConnPool", url.User(security.RootUser))
 	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
 		cleanupDB()

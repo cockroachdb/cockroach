@@ -17,11 +17,13 @@
 package cli
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/chzyer/readline"
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
@@ -35,7 +37,7 @@ func TestSQLLex(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	defer s.Stopper().Stop()
 
-	pgurl, err := s.(*server.TestServer).Ctx.PGURL("")
+	pgurl, err := s.(*server.TestServer).Ctx.PGURL(url.User(security.RootUser))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -17,7 +17,6 @@
 package cli
 
 import (
-	"bufio"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -132,52 +131,29 @@ func runSetUser(cmd *cobra.Command, args []string) {
 		mustUsage(cmd)
 		return
 	}
+	username := args[0]
+
 	var err error
-	var hashed []byte
-	switch password {
-	case "":
-		hashed, err = security.PromptForPasswordAndHash()
+	var hashed string
+	if password == "" {
+		hashed, err = security.PromptForPasswordAndHash(username)
 		if err != nil {
 			panic(err)
 		}
-	case "-":
-		scanner := bufio.NewScanner(os.Stdin)
-		if scanner.Scan() {
-			if b := scanner.Bytes(); len(b) > 0 {
-				hashed, err = security.HashPassword(b)
-				if err != nil {
-					panic(err)
-				}
-				if scanner.Scan() {
-					panic("multiline passwords are not permitted")
-				}
-				if err := scanner.Err(); err != nil {
-					panic(err)
-				}
-
-				break // Success.
-			}
-		} else {
-			if err := scanner.Err(); err != nil {
-				panic(err)
-			}
-		}
-
-		panic("empty passwords are not permitted")
-	default:
-		hashed, err = security.HashPassword([]byte(password))
-		if err != nil {
-			panic(err)
-		}
+	} else {
+		hashed = security.MD5Hash(password + username)
 	}
+
+	// TODO(asubiotto): Only have privilege to change password for a certain
+	// user if we're connecting as security.RootUser. We might want to change
+	// this once we have row security policies.
 	conn, err := makeSQLClient()
 	if err != nil {
 		panic(err)
 	}
 	defer conn.Close()
-	// TODO(marc): switch to UPSERT.
 	err = runQueryAndFormatResults(conn, os.Stdout,
-		makeQuery(`INSERT INTO system.users VALUES ($1, $2)`, args[0], hashed), cliCtx.prettyFmt)
+		makeQuery(`UPSERT INTO system.users VALUES ($1, $2)`, username, hashed), cliCtx.prettyFmt)
 	if err != nil {
 		panic(err)
 	}

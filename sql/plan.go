@@ -256,6 +256,8 @@ func (p *planner) newPlan(
 		return p.CreateIndex(n)
 	case *parser.CreateTable:
 		return p.CreateTable(n)
+	case *parser.CreateUser:
+		return p.CreateUser(n)
 	case *parser.CreateView:
 		return p.CreateView(n)
 	case *parser.Delete:

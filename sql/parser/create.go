@@ -592,6 +592,22 @@ func (node *CreateTable) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+// CreateUser represents a CREATE USER statement.
+type CreateUser struct {
+	Name     Name
+	Password *StrVal
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CreateUser) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("CREATE USER ")
+	FormatNode(buf, f, node.Name)
+	if node.Password != nil {
+		buf.WriteString(" WITH PASSWORD ")
+		node.Password.Format(buf, f)
+	}
+}
+
 // CreateView represents a CREATE VIEW statement.
 type CreateView struct {
 	Name        NormalizableTableName

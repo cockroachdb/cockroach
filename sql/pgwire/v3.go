@@ -23,11 +23,13 @@ import (
 	"net"
 	"reflect"
 	"strconv"
+	"strings"
 
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/pgwire/pgerror"
@@ -53,6 +55,7 @@ const (
 	clientMsgExecute     clientMessageType = 'E'
 	clientMsgFlush       clientMessageType = 'H'
 	clientMsgParse       clientMessageType = 'P'
+	clientMsgPassword    clientMessageType = 'p'
 	clientMsgSimpleQuery clientMessageType = 'Q'
 	clientMsgSync        clientMessageType = 'S'
 	clientMsgTerminate   clientMessageType = 'X'
@@ -95,8 +98,11 @@ const (
 )
 
 const (
-	authOK int32 = 0
+	authOK  int32 = 0
+	authMD5 int32 = 5
 )
+
+const saltNumBytes = 4
 
 // preparedStatementMeta is pgwire-specific metadata which is attached to each
 // sql.PreparedStatement on a v3Conn's sql.Session.
@@ -201,6 +207,15 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 			return c.sendInternalError(err.Error())
 		}
 	}
+
+	// TODO(asubiotto): This is temporary until we set up root user during
+	// bootstrap by inserting into system.users.
+	if c.session.User != security.RootUser {
+		if err := c.performClientAuthentication(); err != nil {
+			return err
+		}
+	}
+
 	c.writeBuf.initMsg(serverMsgAuth)
 	c.writeBuf.putInt32(authOK)
 	if err := c.writeBuf.finishMsg(c.wr); err != nil {
@@ -316,6 +331,86 @@ func (c *v3Conn) serve(authenticationHook func(string, bool) error) error {
 			return err
 		}
 	}
+}
+
+// performClientAuthentication challenges the client to provide an md5 salted
+// password for the user trying to connect.
+func (c *v3Conn) performClientAuthentication() error {
+	salt, err := security.GetSalt(saltNumBytes)
+	if err != nil {
+		return err
+	}
+
+	// MD5 authentication by default.
+	c.writeBuf.initMsg(serverMsgAuth)
+	c.writeBuf.putInt32(authMD5)
+	c.writeBuf.write(salt)
+	if err = c.writeBuf.finishMsg(c.wr); err != nil {
+		return err
+	}
+	if err = c.wr.Flush(); err != nil {
+		return err
+	}
+
+	typ, n, err := c.readBuf.readTypedMsg(c.rd)
+	c.metrics.BytesInCount.Inc(int64(n))
+	if err != nil {
+		return err
+	}
+
+	if typ != clientMsgPassword {
+		return errors.New("invalid response to authentication request")
+	}
+	if err = c.handleAuthentication(&c.readBuf, salt); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// handleAuthentication checks that the provided readBuffer contains a password
+// hashed with a given salt that matches the password stored in the
+// system.users table.
+func (c *v3Conn) handleAuthentication(buf *readBuffer, salt []byte) error {
+	passwordMessage, err := buf.getString()
+	if err != nil {
+		return err
+	}
+
+	// PasswordMessage is computed by the client as:
+	// concat('md5', md5(concat(md5(concat(password, username)), random-salt)))
+	if !strings.HasPrefix(passwordMessage, "md5") || len(passwordMessage) == 3 {
+		return c.sendErrorWithCode(pgerror.CodeProtocolViolationError, sqlbase.MakeSrcCtx(0),
+			"malformed PasswordMessage")
+	}
+
+	placeholderInfo := parser.NewPlaceholderInfo()
+	placeholderInfo.SetValue("1", parser.NewDString(c.session.User))
+
+	// Execute select for requested user as root because other users do not
+	// have SELECT privilege on the system.users table.
+	requestedUser := c.session.User
+	c.session.User = security.RootUser
+	r := c.executor.ExecuteStatements(
+		c.session, "SELECT hashedPassword FROM system.users WHERE username=$1;", placeholderInfo,
+	)
+	c.session.User = requestedUser
+	defer r.Close()
+
+	if len(r.ResultList) != 1 || r.ResultList[0].Err != nil {
+		return c.sendInternalError(fmt.Sprintf("error looking up user %s", c.session.User))
+	} else if r.ResultList[0].Rows.Len() != 1 {
+		return c.sendErrorWithCode(pgerror.CodeNoDataFoundError, sqlbase.MakeSrcCtx(0),
+			"user does not exist")
+	}
+
+	hashedPassword := string(*(r.ResultList[0].Rows.At(0)[0].(*parser.DBytes)))
+	if security.MD5Hash(hashedPassword+string(salt)) != passwordMessage[3:] {
+		return c.sendErrorWithCode(pgerror.CodeInvalidPasswordError, sqlbase.MakeSrcCtx(0),
+			"invalid password")
+	}
+
+	return nil
 }
 
 func (c *v3Conn) handleSimpleQuery(ctx context.Context, buf *readBuffer) error {

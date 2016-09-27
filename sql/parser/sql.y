@@ -334,6 +334,7 @@ func (u *sqlSymUnion) window() Window {
 %type <Statement> create_index_stmt
 %type <Statement> create_table_stmt
 %type <Statement> create_table_as_stmt
+%type <Statement> create_user_stmt
 %type <Statement> create_view_stmt
 %type <Statement> delete_stmt
 %type <Statement> drop_stmt
@@ -376,6 +377,8 @@ func (u *sqlSymUnion) window() Window {
 %type <ValidationBehavior> opt_validate_behavior
 
 %type <*StrVal> opt_encoding_clause
+
+%type <*StrVal> opt_password
 
 %type <IsolationLevel> transaction_iso_level
 %type <UserPriority>  transaction_user_priority
@@ -531,7 +534,7 @@ func (u *sqlSymUnion) window() Window {
 %type <Expr>  func_application func_expr_common_subexpr
 %type <Expr>  func_expr func_expr_windowless
 %type <empty> common_table_expr
-%type <empty> with_clause opt_with_clause
+%type <empty> with_clause opt_with opt_with_clause
 %type <empty> cte_list
 
 %type <empty> within_group_clause
@@ -621,7 +624,7 @@ func (u *sqlSymUnion) window() Window {
 %token <str>   OF OFF OFFSET ON ONLY OR
 %token <str>   ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY
 
-%token <str>   PARENT PARTIAL PARTITION PLACING POSITION
+%token <str>   PARENT PARTIAL PARTITION PASSWORD PLACING POSITION
 %token <str>   PRECEDING PRECISION PREPARE PRIMARY PRIORITY
 
 %token <str>   RANGE READ REAL RECURSIVE REF REFERENCES
@@ -947,6 +950,7 @@ create_stmt:
 | create_index_stmt
 | create_table_stmt
 | create_table_as_stmt
+| create_user_stmt
 | create_view_stmt
 
 // DELETE FROM query
@@ -1881,6 +1885,22 @@ truncate_stmt:
     $$.val = &Truncate{Tables: $3.tableNameReferences(), DropBehavior: $4.dropBehavior()}
   }
 
+// CREATE USER
+create_user_stmt:
+  CREATE USER name opt_with opt_password
+  {
+    $$.val = &CreateUser{Name: Name($3), Password: $5.strVal()}
+  }
+
+opt_password:
+  PASSWORD SCONST
+  {
+    $$.val = &StrVal{s: $2}
+  }
+| /* EMPTY */ {
+    $$.val = (*StrVal)(nil)
+  }
+
 // CREATE VIEW relname
 create_view_stmt:
   CREATE VIEW any_name opt_column_list AS select_stmt
@@ -2473,6 +2493,10 @@ cte_list:
 
 common_table_expr:
   name opt_name_list AS '(' preparable_stmt ')' { unimplemented() }
+
+opt_with:
+  WITH {}
+| /* EMPTY */ {}
 
 opt_with_clause:
   with_clause { unimplemented() }
@@ -4635,6 +4659,7 @@ unreserved_keyword:
 | PARENT
 | PARTIAL
 | PARTITION
+| PASSWORD
 | PRECEDING
 | PREPARE
 | PRIORITY

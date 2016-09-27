@@ -22,6 +22,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -30,7 +31,9 @@ func makeTestV3Conn(c net.Conn) v3Conn {
 	return makeV3Conn(c,
 		sql.NewDummyExecutor(),
 		makeServerMetrics(),
-		sql.SessionArgs{},
+		sql.SessionArgs{
+			User: security.RootUser,
+		},
 	)
 }
 

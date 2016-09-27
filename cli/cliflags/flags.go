@@ -229,11 +229,9 @@ server to listen on an external address in insecure mode.`,
 	}
 
 	Password = FlagInfo{
-		Name:   "password",
-		EnvVar: "COCKROACH_PASSWORD",
-		Description: `
-The created user's password. If provided, disables prompting. Pass '-' to
-provide the password on standard input.`,
+		Name:        "password",
+		EnvVar:      "COCKROACH_PASSWORD",
+		Description: `The created user's password. If provided, disables prompting.`,
 	}
 
 	CACert = FlagInfo{
