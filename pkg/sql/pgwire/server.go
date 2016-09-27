@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -268,6 +269,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		if v3conn.sessionArgs, err = parseOptions(buf.msg); err != nil {
 			return v3conn.sendInternalError(err.Error())
 		}
+
 		if errSSLRequired {
 			return v3conn.sendInternalError(ErrSSLRequired)
 		}
@@ -277,6 +279,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 			return v3conn.sendInternalError(ErrDraining)
 		}
 
+		v3conn.sessionArgs.User = parser.ReNormalizeName(v3conn.sessionArgs.User)
 		if err := v3conn.handleAuthentication(ctx, s.cfg.Insecure); err != nil {
 			return v3conn.sendInternalError(err.Error())
 		}

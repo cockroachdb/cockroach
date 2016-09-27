@@ -355,7 +355,7 @@ func preparePrompts(dbURL string) (fullPrompt string, continuePrompt string) {
 	if parsedURL, err := url.Parse(dbURL); err == nil {
 		// If parsing fails, we keep the entire URL. The Open call succeeded, and that
 		// is the important part.
-		fullPrompt = fmt.Sprintf("%s@%s", parsedURL.User, parsedURL.Host)
+		fullPrompt = fmt.Sprintf("%s@%s", parsedURL.User.Username(), parsedURL.Host)
 	}
 
 	if len(fullPrompt) == 0 {
@@ -836,11 +836,17 @@ func runTerm(cmd *cobra.Command, args []string) error {
 		return usageAndError(cmd)
 	}
 
-	conn, err := makeSQLClient()
+	conn, err := getPasswordAndMakeSQLClient()
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
+
+	// Open the connection to make sure everything is OK before running any
+	// statements. Performs authentication.
+	if err := conn.ensureConn(); err != nil {
+		return err
+	}
 
 	if len(sqlCtx.execStmts) > 0 {
 		// Single-line sql; run as simple as possible, without noise on stdout.
