@@ -832,7 +832,32 @@ func (p *planner) resolveFK(
 			return nil
 		}
 	}
-	return fmt.Errorf("foreign key columns %s must be the prefix of an index", colNames(srcCols))
+	// No existing index for the referencing columns found, so we add one.
+	idx := sqlbase.IndexDescriptor{
+		Name:             fmt.Sprintf("%s_auto_index_%s", tbl.Name, constraintName),
+		ColumnNames:      make([]string, len(srcCols)),
+		ColumnDirections: make([]sqlbase.IndexDescriptor_Direction, len(srcCols)),
+		ForeignKey:       ref,
+	}
+	for i, c := range srcCols {
+		idx.ColumnDirections[i] = sqlbase.IndexDescriptor_ASC
+		idx.ColumnNames[i] = c.Name
+	}
+	if err := tbl.AddIndex(idx, false); err != nil {
+		return err
+	}
+	if err := tbl.AllocateIDs(); err != nil {
+		return err
+	}
+	// Since we just added the index, we can assume it is the last one rather than
+	// searching all the indexes again. That said, we sanity check that it matches
+	// in case a refactor ever violates that assumption.
+	if !matchesIndex(srcCols, tbl.Indexes[len(tbl.Indexes)-1], matchPrefix) {
+		return errors.Errorf("no matching index and auto-generated index failed to match")
+	}
+	backref.Index = tbl.Indexes[len(tbl.Indexes)-1].ID
+	targetIdx.ReferencedBy = append(targetIdx.ReferencedBy, backref)
+	return nil
 }
 
 // colNames converts a []colDesc to a human-readable string for use in error messages.
