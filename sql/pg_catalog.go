@@ -35,10 +35,45 @@ var (
 var pgCatalog = virtualSchema{
 	name: "pg_catalog",
 	tables: []virtualSchemaTable{
+		pgCatalogAttrDefTable,
 		pgCatalogAttributeTable,
 		pgCatalogClassTable,
 		pgCatalogNamespaceTable,
 		pgCatalogTablesTable,
+	},
+}
+
+var pgCatalogAttrDefTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_attrdef (
+	oid INT,
+	adrelid INT,
+	adnum INT,
+	adbin STRING,
+	adsrc STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		h := makeOidHasher()
+		return forEachTableDesc(p,
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				colNum := 0
+				return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
+					colNum++
+					if column.DefaultExpr == nil {
+						return nil
+					}
+					defSrc := parser.NewDString(*column.DefaultExpr)
+					return addRow(
+						h.ColumnOid(db, table, column),      // oid
+						h.TableOid(db, table),               // adrelid
+						parser.NewDInt(parser.DInt(colNum)), // adnum
+						defSrc, // adbin
+						defSrc, // adsrc
+					)
+				})
+			},
+		)
 	},
 }
 
@@ -334,6 +369,7 @@ const (
 	databaseTypeTag
 	tableTypeTag
 	indexTypeTag
+	columnTypeTag
 	typeTypeTag
 )
 
@@ -359,6 +395,11 @@ func (h oidHasher) writeTable(table *sqlbase.TableDescriptor) {
 
 func (h oidHasher) writeIndex(index *sqlbase.IndexDescriptor) {
 	h.writeUInt32(uint32(index.ID))
+}
+
+func (h oidHasher) writeColumn(column *sqlbase.ColumnDescriptor) {
+	h.writeUInt32(uint32(column.ID))
+	h.writeStr(column.Name)
 }
 
 func (h oidHasher) writeType(typ parser.Datum) {
@@ -390,6 +431,18 @@ func (h oidHasher) IndexOid(
 	h.writeDB(db)
 	h.writeTable(table)
 	h.writeIndex(index)
+	return h.getOid()
+}
+
+func (h oidHasher) ColumnOid(
+	db *sqlbase.DatabaseDescriptor,
+	table *sqlbase.TableDescriptor,
+	column *sqlbase.ColumnDescriptor,
+) *parser.DInt {
+	h.writeTypeTag(columnTypeTag)
+	h.writeDB(db)
+	h.writeTable(table)
+	h.writeColumn(column)
 	return h.getOid()
 }
 
