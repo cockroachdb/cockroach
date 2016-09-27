@@ -203,37 +203,35 @@ func (ls *Stores) LookupReplica(
 	var repDesc roachpb.ReplicaDescriptor
 	var repDescFound bool
 	for _, store := range ls.storeMap {
-		replica := store.LookupReplica(start, nil)
-		if replica == nil {
+		ref := store.LookupReplica(start, nil)
+		if ref == nil {
 			continue
 		}
+		desc := ref.Desc()
 
 		// Verify that the descriptor contains the entire range.
-		if desc := replica.Desc(); !desc.ContainsKeyRange(start, end) {
+		if !desc.ContainsKeyRange(start, end) {
 			log.Warningf(ls.ctx, "range not contained in one range: [%s,%s), but have [%s,%s)",
 				start, end, desc.StartKey, desc.EndKey)
 			err := roachpb.NewRangeKeyMismatchError(start.AsRawKey(), end.AsRawKey(), desc)
 			return 0, roachpb.ReplicaDescriptor{}, err
 		}
 
-		rangeID = replica.RangeID
+		rangeID = desc.RangeID
 
-		var err error
-		repDesc, err = replica.GetReplicaDescriptor()
-		if err != nil {
-			if _, ok := err.(*roachpb.RangeNotFoundError); ok {
-				// We are not holding a lock across this block; the replica could have
-				// been removed from the range (via down-replication) between the
-				// LookupReplica and the GetReplicaDescriptor calls. In this case just
-				// ignore this replica.
-				continue
-			}
-			return 0, roachpb.ReplicaDescriptor{}, err
+		var ok bool
+		repDesc, ok = desc.GetReplicaDescriptor(store.StoreID())
+		if !ok {
+			// We are not holding a lock across this block; the replica could have
+			// been removed from the range (via down-replication) between the
+			// LookupReplica and the GetReplicaDescriptor calls. In this case just
+			// ignore this replica.
+			continue
 		}
 
 		if repDescFound {
 			// We already found the range; this should never happen outside of tests.
-			err := errors.Errorf("range %+v exists on additional store: %+v", replica, store)
+			err := errors.Errorf("replica %+v exists on additional store: %+v", desc, store)
 			return 0, roachpb.ReplicaDescriptor{}, err
 		}
 

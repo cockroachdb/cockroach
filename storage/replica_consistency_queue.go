@@ -54,7 +54,7 @@ func newReplicaConsistencyQueue(store *Store, gossip *gossip.Gossip) *replicaCon
 	return rcq
 }
 
-func (*replicaConsistencyQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
+func (*replicaConsistencyQueue) shouldQueue(_ hlc.Timestamp, _ *Replica,
 	_ config.SystemConfig) (bool, float64) {
 	return true, 1.0
 }
@@ -63,11 +63,16 @@ func (*replicaConsistencyQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
 func (q *replicaConsistencyQueue) process(
 	ctx context.Context,
 	_ hlc.Timestamp,
-	r *Replica,
+	ref *ReplicaRef,
 	_ config.SystemConfig,
 ) error {
+	repl, release, err := ref.Acquire()
+	defer release()
+	if err != nil {
+		return err
+	}
 	req := roachpb.CheckConsistencyRequest{}
-	_, pErr := r.CheckConsistency(ctx, req, r.Desc())
+	_, pErr := repl.CheckConsistency(ctx, req, repl.Desc())
 	if pErr != nil {
 		log.Error(ctx, pErr.GoError())
 	}

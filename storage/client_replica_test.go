@@ -503,13 +503,25 @@ func TestRangeTransferLease(t *testing.T) {
 	}
 
 	// Get the left range's ID.
-	rangeID := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil).RangeID
+	rangeID := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil).Desc().RangeID
 
 	// Replicate the left range onto node 1.
 	mtc.replicateRange(rangeID, 1)
 
-	replica0 := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil)
-	replica1 := mtc.stores[1].LookupReplica(roachpb.RKey("a"), nil)
+	rp0 := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil)
+	rp1 := mtc.stores[1].LookupReplica(roachpb.RKey("a"), nil)
+
+	replica0, release, err := rp0.AcquireHack()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
+	}
+	replica1, release, err := rp1.AcquireHack()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	gArgs := getArgs(leftKey)
 	replica0Desc, err := replica0.GetReplicaDescriptor()
 	if err != nil {

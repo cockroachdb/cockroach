@@ -19,6 +19,7 @@ package kv
 
 import (
 	"sort"
+	"sync"
 	"time"
 
 	"golang.org/x/net/context"
@@ -259,18 +260,32 @@ func (s *senderTransport) SendNext(done chan<- BatchCall) {
 	defer sp.Finish()
 	ctx := opentracing.ContextWithSpan(context.Background(), sp)
 	log.Event(ctx, s.args.String())
-	br, pErr := s.sender.Send(ctx, s.args)
-	if br == nil {
-		br = &roachpb.BatchResponse{}
-	}
-	if br.Error != nil {
-		panic(roachpb.ErrorUnexpectedlySet(s.sender, br))
-	}
-	br.Error = pErr
-	if pErr != nil {
-		log.Event(ctx, "error: "+pErr.String())
-	}
-	done <- BatchCall{Reply: br}
+	// Start a goroutine here to avoid inconsistent lock ordering - this is
+	// used in tests and in particular with the call stack
+	// client.SendWrappedWith -> ... -> Store.Send -> ... -> AdminSplit
+	// -> ... -> Txn.Exec -> senderTransport.SendNext -> Store.Send
+	// which means that without this goroutine, we'd double-acquire a
+	// reference in this goroutine.
+	// Unfortunately, this is kind of a hack as this could happen in
+	// reality with the local server optimization in the GRPC transport.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		br, pErr := s.sender.Send(ctx, s.args)
+		if br == nil {
+			br = &roachpb.BatchResponse{}
+		}
+		if br.Error != nil {
+			panic(roachpb.ErrorUnexpectedlySet(s.sender, br))
+		}
+		br.Error = pErr
+		if pErr != nil {
+			log.Event(ctx, "error: "+pErr.String())
+		}
+		done <- BatchCall{Reply: br}
+	}()
+	wg.Wait()
 }
 
 func (s *senderTransport) Close() {

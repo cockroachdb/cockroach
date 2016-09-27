@@ -295,9 +295,14 @@ func processAbortCache(
 func (gcq *gcQueue) process(
 	ctx context.Context,
 	now hlc.Timestamp,
-	repl *Replica,
+	ref *ReplicaRef,
 	sysCfg config.SystemConfig,
 ) error {
+	repl, release, err := ref.Acquire()
+	defer release()
+	if err != nil {
+		return err
+	}
 	snap := repl.store.Engine().NewSnapshot()
 	desc := repl.Desc()
 	defer snap.Close()

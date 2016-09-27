@@ -156,13 +156,13 @@ func replicaGCShouldQueueImpl(
 func (q *replicaGCQueue) process(
 	ctx context.Context,
 	now hlc.Timestamp,
-	rng *Replica,
+	ref *ReplicaRef,
 	_ config.SystemConfig,
 ) error {
 	// Note that the Replicas field of desc is probably out of date, so
 	// we should only use `desc` for its static fields like RangeID and
 	// StartKey (and avoid rng.GetReplica() for the same reason).
-	desc := rng.Desc()
+	desc := ref.Desc()
 
 	// Calls to RangeLookup typically use inconsistent reads, but we
 	// want to do a consistent read here. This is important when we are
@@ -186,10 +186,20 @@ func (q *replicaGCQueue) process(
 	}
 
 	replyDesc := reply.Ranges[0]
-	if _, currentMember := replyDesc.GetReplicaDescriptor(rng.store.StoreID()); !currentMember {
+	if _, currentMember := replyDesc.GetReplicaDescriptor(q.store.StoreID()); !currentMember {
 		// We are no longer a member of this range; clean up our local data.
 		log.VEventf(1, ctx, "destroying local data")
-		if err := rng.store.RemoveReplica(rng, replyDesc, true); err != nil {
+		ref.RefuseProposals()
+		rng, release, err := ref.AcquireExclusive()
+		defer release()
+		if err != nil {
+			return err
+		}
+		rng.raftMu.Lock()
+		defer rng.raftMu.Unlock()
+		if err := q.store.RemoveReplica(
+			rng, replyDesc, true, /* destroy */
+		); err != nil {
 			return err
 		}
 	} else if desc.RangeID != replyDesc.RangeID {
@@ -198,13 +208,29 @@ func (q *replicaGCQueue) process(
 		// subsuming range. Shut down raft processing for the former range
 		// and delete any remaining metadata, but do not delete the data.
 		log.VEventf(1, ctx, "removing merged range")
-		if err := rng.store.RemoveReplica(rng, replyDesc, false); err != nil {
+		ref.RefuseProposals()
+		rng, release, err := ref.AcquireExclusive()
+		defer release()
+		if err != nil {
+			return err
+		}
+		rng.raftMu.Lock()
+		defer rng.raftMu.Unlock()
+		if err := q.store.RemoveReplica(
+			rng, replyDesc, false, /* !destroy */
+		); err != nil {
 			return err
 		}
 
 		// TODO(bdarnell): remove raft logs and other metadata (while leaving a
 		// tombstone). Add tests for GC of merged ranges.
 	} else {
+		rng, release, err := ref.Acquire()
+		defer release()
+		if err != nil {
+			return err
+		}
+
 		// This replica is a current member of the raft group. Set the last replica
 		// GC check time to avoid re-processing for another check interval.
 		//

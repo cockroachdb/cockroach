@@ -197,13 +197,20 @@ func (rlq *raftLogQueue) shouldQueue(
 func (rlq *raftLogQueue) process(
 	ctx context.Context,
 	now hlc.Timestamp,
-	r *Replica,
+	ref *ReplicaRef,
 	_ config.SystemConfig,
 ) error {
-	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(rlq.ctx, r)
+	repl, release, err := ref.Acquire()
+	defer release()
 	if err != nil {
 		return err
 	}
+	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(rlq.ctx, repl)
+	if err != nil {
+		return err
+	}
+
+	desc := repl.Desc()
 
 	// Can and should the raft logs be truncated?
 	if truncatableIndexes >= RaftLogQueueStaleThreshold {
@@ -211,9 +218,9 @@ func (rlq *raftLogQueue) process(
 			oldestIndex-truncatableIndexes, oldestIndex)
 		b := &client.Batch{}
 		b.AddRawRequest(&roachpb.TruncateLogRequest{
-			Span:    roachpb.Span{Key: r.Desc().StartKey.AsRawKey()},
+			Span:    roachpb.Span{Key: desc.StartKey.AsRawKey()},
 			Index:   oldestIndex,
-			RangeID: r.RangeID,
+			RangeID: desc.RangeID,
 		})
 		return rlq.db.Run(ctx, b)
 	}
