@@ -130,7 +130,13 @@ func TestGetTruncatableIndexes(t *testing.T) {
 		t.Errorf("expected 0 for oldest index, got %d", oldestIndex)
 	}
 
-	r, err := store.GetReplica(1)
+	ref, err := store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r, release, err := ref.AcquireHack()
+	defer release()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +216,13 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 
 	store.SetReplicaScannerActive(false)
 
-	r, err := store.GetReplica(1)
+	ref, err := store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r, release, err := ref.AcquireHack()
+	defer release()
 	if err != nil {
 		t.Fatal(err)
 	}

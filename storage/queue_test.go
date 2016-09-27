@@ -46,14 +46,14 @@ type testQueueImpl struct {
 	err           error // always returns this error on process
 }
 
-func (tq *testQueueImpl) shouldQueue(now hlc.Timestamp, r *Replica, _ config.SystemConfig) (bool, float64) {
-	return tq.shouldQueueFn(now, r)
+func (tq *testQueueImpl) shouldQueue(now hlc.Timestamp, rpl *Replica, _ config.SystemConfig) (bool, float64) {
+	return tq.shouldQueueFn(now, rpl)
 }
 
 func (tq *testQueueImpl) process(
 	_ context.Context,
 	now hlc.Timestamp,
-	r *Replica,
+	_ *ReplicaRef,
 	_ config.SystemConfig,
 ) error {
 	atomic.AddInt32(&tq.processed, 1)
@@ -140,11 +140,17 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	defer tc.Stop()
 
 	// Remove replica for range 1 since it encompasses the entire keyspace.
-	rng1, err := tc.store.GetReplica(1)
+	rp1, err := tc.store.GetReplica(1)
 	if err != nil {
 		t.Error(err)
 	}
-	if err := tc.store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
+	rep1, release, err := rp1.AcquireExclusive()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tc.store.RemoveReplica(rep1, *rp1.Desc(), true); err != nil {
 		t.Error(err)
 	}
 
@@ -157,17 +163,17 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	shouldAddMap := map[*Replica]bool{
-		r1: true,
-		r2: true,
+	shouldAddMap := map[*ReplicaRef]bool{
+		r1.AsRef(): true,
+		r2.AsRef(): true,
 	}
-	priorityMap := map[*Replica]float64{
-		r1: 1.0,
-		r2: 2.0,
+	priorityMap := map[*ReplicaRef]float64{
+		r1.AsRef(): 1.0,
+		r2.AsRef(): 2.0,
 	}
 	testQueue := &testQueueImpl{
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
-			return shouldAddMap[r], priorityMap[r]
+		shouldQueueFn: func(now hlc.Timestamp, repl *Replica) (shouldQueue bool, priority float64) {
+			return shouldAddMap[repl.AsRef()], priorityMap[repl.AsRef()]
 		},
 	}
 	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
@@ -180,24 +186,24 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	if v := bq.pending.Value(); v != 2 {
 		t.Errorf("expected 2 pending replicas; got %d", v)
 	}
-	if bq.pop() != r2 {
-		t.Error("expected r2")
+	if replica := bq.pop(); replica != r2.AsRef() {
+		t.Errorf("expected %s, got %s", r2, replica)
 	}
 	if v := bq.pending.Value(); v != 1 {
 		t.Errorf("expected 1 pending replicas; got %d", v)
 	}
-	if bq.pop() != r1 {
-		t.Error("expected r1")
+	if replica := bq.pop(); replica != r1.AsRef() {
+		t.Errorf("expected %s, got %s", r1, replica)
 	}
 	if v := bq.pending.Value(); v != 0 {
 		t.Errorf("expected 0 pending replicas; got %d", v)
 	}
 	if r := bq.pop(); r != nil {
-		t.Errorf("expected empty queue; got %v", r)
+		t.Errorf("expected empty queue; got %s", r)
 	}
 
 	// Add again, but this time r2 shouldn't add.
-	shouldAddMap[r2] = false
+	shouldAddMap[r2.AsRef()] = false
 	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
 	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
 	if bq.Length() != 1 {
@@ -211,17 +217,17 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	}
 
 	// Re-add r2 and update priority of r1.
-	shouldAddMap[r2] = true
-	priorityMap[r1] = 3.0
+	shouldAddMap[r2.AsRef()] = true
+	priorityMap[r1.AsRef()] = 3.0
 	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
 	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
 	if bq.Length() != 2 {
 		t.Fatalf("expected length 2; got %d", bq.Length())
 	}
-	if bq.pop() != r1 {
+	if bq.pop() != r1.AsRef() {
 		t.Error("expected r1")
 	}
-	if bq.pop() != r2 {
+	if bq.pop() != r2.AsRef() {
 		t.Error("expected r2")
 	}
 	if r := bq.pop(); r != nil {
@@ -231,7 +237,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	// Set !shouldAdd for r2 and add it; this has effect of removing it.
 	bq.MaybeAdd(r1, hlc.ZeroTimestamp)
 	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
-	shouldAddMap[r2] = false
+	shouldAddMap[r2.AsRef()] = false
 	bq.MaybeAdd(r2, hlc.ZeroTimestamp)
 	if bq.Length() != 1 {
 		t.Fatalf("expected length 1; got %d", bq.Length())
@@ -239,7 +245,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	if v := bq.pending.Value(); v != 1 {
 		t.Errorf("expected 1 pending replicas; got %d", v)
 	}
-	if bq.pop() != r1 {
+	if bq.pop() != r1.AsRef() {
 		t.Errorf("expected r1")
 	}
 	if v := bq.pending.Value(); v != 0 {
@@ -255,13 +261,18 @@ func TestBaseQueueAdd(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	r, err := tc.store.GetReplica(1)
+	ref, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, release, err := ref.AcquireHack()
+	defer release()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	testQueue := &testQueueImpl{
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.Timestamp, _ *Replica) (shouldQueue bool, priority float64) {
 			return false, 0.0
 		},
 	}
@@ -292,9 +303,14 @@ func TestBaseQueueProcess(t *testing.T) {
 	defer tc.Stop()
 
 	// Remove replica for range 1 since it encompasses the entire keyspace.
-	rng1, err := tc.store.GetReplica(1)
+	ref1, err := tc.store.GetReplica(1)
 	if err != nil {
 		t.Error(err)
+	}
+	rng1, release, err := ref1.AcquireExclusive()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
 	}
 	if err := tc.store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
 		t.Error(err)
@@ -311,9 +327,9 @@ func TestBaseQueueProcess(t *testing.T) {
 
 	testQueue := &testQueueImpl{
 		blocker: make(chan struct{}, 1),
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.Timestamp, repl *Replica) (shouldQueue bool, priority float64) {
 			shouldQueue = true
-			priority = float64(r.RangeID)
+			priority = float64(repl.Desc().RangeID)
 			return
 		},
 	}
@@ -373,14 +389,19 @@ func TestBaseQueueAddRemove(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	r, err := tc.store.GetReplica(1)
+	ref, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, release, err := ref.AcquireHack()
+	defer release()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	testQueue := &testQueueImpl{
 		blocker: make(chan struct{}, 1),
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(now hlc.Timestamp, _ *Replica) (shouldQueue bool, priority float64) {
 			shouldQueue = true
 			priority = 1.0
 			return
@@ -392,7 +413,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 	bq.Start(clock, tc.stopper)
 
 	bq.MaybeAdd(r, hlc.ZeroTimestamp)
-	bq.MaybeRemove(r)
+	bq.MaybeRemove(r.Desc().RangeID)
 
 	// Wake the queue
 	close(testQueue.blocker)
@@ -420,9 +441,14 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	}
 
 	// Remove replica for range 1 since it encompasses the entire keyspace.
-	rng1, err := s.GetReplica(1)
+	ref1, err := s.GetReplica(1)
 	if err != nil {
 		t.Error(err)
+	}
+	rng1, release, err := ref1.AcquireExclusive()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
 	}
 	if err := s.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
 		t.Error(err)
@@ -443,7 +469,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	testQueue := &testQueueImpl{
 		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
 			// Always queue ranges if they make it past the base queue's logic.
-			return true, float64(r.RangeID)
+			return true, float64(r.Desc().RangeID)
 		},
 	}
 
@@ -542,9 +568,9 @@ func TestBaseQueuePurgatory(t *testing.T) {
 
 	testQueue := &testQueueImpl{
 		duration: time.Nanosecond,
-		shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+		shouldQueueFn: func(_ hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
 			shouldQueue = true
-			priority = float64(r.RangeID)
+			priority = float64(r.Desc().RangeID)
 			return
 		},
 		pChan: make(chan struct{}, 1),
@@ -552,9 +578,15 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	}
 
 	// Remove replica for range 1 since it encompasses the entire keyspace.
-	rng1, err := tc.store.GetReplica(1)
+	ref1, err := tc.store.GetReplica(1)
 	if err != nil {
 		t.Error(err)
+	}
+
+	rng1, release, err := ref1.AcquireExclusive()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
 	}
 	if err := tc.store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
 		t.Error(err)
@@ -679,7 +711,7 @@ type processTimeoutQueueImpl struct {
 func (pq *processTimeoutQueueImpl) process(
 	ctx context.Context,
 	now hlc.Timestamp,
-	r *Replica,
+	_ *ReplicaRef,
 	_ config.SystemConfig,
 ) error {
 	<-ctx.Done()
@@ -693,7 +725,12 @@ func TestBaseQueueProcessTimeout(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	r, err := tc.store.GetReplica(1)
+	ref, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, release, err := ref.AcquireHack()
+	defer release()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -701,7 +738,7 @@ func TestBaseQueueProcessTimeout(t *testing.T) {
 	ptQueue := &processTimeoutQueueImpl{
 		testQueueImpl: testQueueImpl{
 			blocker: make(chan struct{}, 1),
-			shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+			shouldQueueFn: func(now hlc.Timestamp, _ *Replica) (shouldQueue bool, priority float64) {
 				return true, 1.0
 			},
 		},
@@ -735,7 +772,7 @@ type processTimeQueueImpl struct {
 func (pq *processTimeQueueImpl) process(
 	_ context.Context,
 	_ hlc.Timestamp,
-	_ *Replica,
+	_ *ReplicaRef,
 	_ config.SystemConfig,
 ) error {
 	time.Sleep(5 * time.Millisecond)
@@ -748,14 +785,19 @@ func TestBaseQueueTimeMetric(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	r, err := tc.store.GetReplica(1)
+	ref, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, release, err := ref.AcquireHack()
+	defer release()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	ptQueue := &processTimeQueueImpl{
 		testQueueImpl: testQueueImpl{
-			shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+			shouldQueueFn: func(now hlc.Timestamp, _ *Replica) (shouldQueue bool, priority float64) {
 				return true, 1.0
 			},
 		},

@@ -180,9 +180,9 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 
 	content := roachpb.Key("testing!")
 
-	aDesc, bDesc, err := createSplitRanges(store)
-	if err != nil {
-		t.Fatal(err)
+	aDesc, bDesc, pErr := createSplitRanges(store)
+	if pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	// Write some values left and right of the proposed split key.
@@ -231,8 +231,19 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	}
 
 	// Verify the merge by looking up keys from both ranges.
-	rangeA := store.LookupReplica([]byte("a"), nil)
-	rangeB := store.LookupReplica([]byte("c"), nil)
+	rpA := store.LookupReplica([]byte("a"), nil)
+	rangeA, release, err := rpA.AcquireHack()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rpB := store.LookupReplica([]byte("c"), nil)
+	rangeB, release, err := rpB.AcquireHack()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	rangeADesc := rangeA.Desc()
 	rangeBDesc := rangeB.Desc()
 
@@ -332,12 +343,12 @@ func TestStoreRangeMergeNonCollocated(t *testing.T) {
 		t.Fatalf("Can't split range %s", pErr)
 	}
 
-	rangeA := store.LookupReplica([]byte("a"), nil)
-	rangeADesc := rangeA.Desc()
-	rangeB := store.LookupReplica([]byte("c"), nil)
-	rangeBDesc := rangeB.Desc()
-	rangeC := store.LookupReplica([]byte("e"), nil)
-	rangeCDesc := rangeC.Desc()
+	rpA := store.LookupReplica([]byte("a"), nil)
+	rangeADesc := rpA.Desc()
+	rpB := store.LookupReplica([]byte("c"), nil)
+	rangeBDesc := rpB.Desc()
+	rpC := store.LookupReplica([]byte("e"), nil)
+	rangeCDesc := rpC.Desc()
 
 	if bytes.Equal(rangeADesc.StartKey, rangeBDesc.StartKey) {
 		log.Errorf(context.TODO(), "split ranges keys are equal %q!=%q", rangeADesc.StartKey, rangeBDesc.StartKey)
@@ -351,15 +362,15 @@ func TestStoreRangeMergeNonCollocated(t *testing.T) {
 
 	// Replicate the ranges to different sets of stores. Ranges A and C
 	// are collocated, but B is different.
-	mtc.replicateRange(rangeA.RangeID, 1, 2)
-	mtc.replicateRange(rangeB.RangeID, 1, 3)
-	mtc.replicateRange(rangeC.RangeID, 1, 2)
+	mtc.replicateRange(rangeADesc.RangeID, 1, 2)
+	mtc.replicateRange(rangeBDesc.RangeID, 1, 3)
+	mtc.replicateRange(rangeCDesc.RangeID, 1, 2)
 
 	// Attempt to merge.
-	rangeADesc = rangeA.Desc()
+	rangeADesc = rpA.Desc()
 	argsMerge := adminMergeArgs(roachpb.Key(rangeADesc.StartKey))
-	if _, pErr := rangeA.AdminMerge(context.Background(), argsMerge, rangeADesc); !testutils.IsPError(pErr, "ranges not collocated") {
-		t.Fatalf("did not got expected error; got %s", pErr)
+	if _, pErr := client.SendWrapped(mtc.distSenders[0], nil, &argsMerge); !testutils.IsPError(pErr, "ranges not collocated") {
+		t.Fatalf("Can't split range %s", pErr)
 	}
 }
 
@@ -374,9 +385,9 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	defer stopper.Stop()
 
 	// Split the range.
-	aDesc, bDesc, err := createSplitRanges(store)
-	if err != nil {
-		t.Fatal(err)
+	aDesc, bDesc, pErr := createSplitRanges(store)
+	if pErr != nil {
+		t.Fatal(pErr)
 	}
 
 	// Write some values left and right of the proposed split key.
@@ -406,10 +417,15 @@ func TestStoreRangeMergeStats(t *testing.T) {
 
 	// Merge the b range back into the a range.
 	args := adminMergeArgs(roachpb.KeyMin)
-	if _, err := client.SendWrapped(rg1(store), nil, &args); err != nil {
+	if _, pErr := client.SendWrapped(rg1(store), nil, &args); pErr != nil {
+		t.Fatal(pErr)
+	}
+	ref := store.LookupReplica(aDesc.StartKey, nil)
+	rngMerged, release, err := ref.AcquireHack()
+	defer release()
+	if err != nil {
 		t.Fatal(err)
 	}
-	rngMerged := store.LookupReplica(aDesc.StartKey, nil)
 
 	// Get the range stats for the merged range and verify.
 	snap = store.Engine().NewSnapshot()
