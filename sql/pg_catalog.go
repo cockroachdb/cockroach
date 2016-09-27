@@ -30,6 +30,7 @@ var pgCatalog = virtualSchema{
 	name: "pg_catalog",
 	tables: []virtualSchemaTable{
 		pgCatalogNamespaceTable,
+		pgCatalogTablesTable,
 	},
 }
 
@@ -52,6 +53,37 @@ CREATE TABLE pg_catalog.pg_namespace (
 				parser.DNull,               // aclitem
 			)
 		})
+	},
+}
+
+var pgCatalogTablesTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_tables (
+	schemaname STRING,
+	tablename STRING,
+	tableowner STRING,
+	tablespace STRING,
+	hasindexes BOOL,
+	hasrules BOOL,
+	hastriggers BOOL,
+	rowsecurity BOOL
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		return forEachTableDesc(p,
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				return addRow(
+					parser.NewDString(db.Name),    // schemaname
+					parser.NewDString(table.Name), // tablename
+					parser.DNull,                  // tableowner
+					parser.DNull,                  // tablespace
+					parser.MakeDBool(parser.DBool(table.IsPhysicalTable())), // hasindexes
+					parser.MakeDBool(false),                                 // hasrules
+					parser.MakeDBool(false),                                 // hastriggers
+					parser.MakeDBool(false),                                 // rowsecurity
+				)
+			},
+		)
 	},
 }
 

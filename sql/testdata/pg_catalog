@@ -40,6 +40,7 @@ query T
 SHOW TABLES FROM pg_catalog
 ----
 pg_namespace
+pg_tables
 
 query TT colnames
 SHOW CREATE TABLE pg_catalog.pg_namespace
@@ -119,3 +120,21 @@ oid         nspname             nspowner  aclitem
 3178318485  pg_catalog          NULL      NULL
 1793492844  system              NULL      NULL
 2091240128  test                NULL      NULL
+
+## pg_catalog.pg_tables
+
+query TTTTBBBB colnames
+SELECT * FROM pg_catalog.pg_tables WHERE schemaname = 'constraint_db'
+----
+schemaname     tablename  tableowner  tablespace  hasindexes  hasrules  hastriggers  rowsecurity
+constraint_db  t1         NULL        NULL        true        false     false        false
+constraint_db  t2         NULL        NULL        true        false     false        false
+constraint_db  t3         NULL        NULL        true        false     false        false
+
+query TB colnames
+SELECT tablename, hasindexes FROM pg_catalog.pg_tables WHERE schemaname = 'information_schema' AND tablename LIKE '%table%'
+----
+tablename          hasindexes
+table_constraints  false
+table_privileges   false
+tables             false
