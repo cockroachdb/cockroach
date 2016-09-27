@@ -21,6 +21,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 	"text/tabwriter"
 	"unicode"
@@ -30,6 +31,7 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pq"
@@ -177,10 +179,31 @@ func makeSQLConn(url string) *sqlConn {
 	}
 }
 
-func makeSQLClient() (*sqlConn, error) {
+// getPasswordAndMakeSQLClient prompts for a password if running in secure mode
+// and no certificates have been supplied. security.RootUser won't be prompted
+// for a password as the only authentication method available for this user is
+// certificate authentication.
+func getPasswordAndMakeSQLClient() (*sqlConn, error) {
+	if len(connURL) != 0 {
+		return makeSQLConn(connURL), nil
+	}
+	var user *url.Userinfo
+	if !baseCfg.Insecure && connUser != security.RootUser && baseCfg.SSLCert == "" && baseCfg.SSLCertKey == "" {
+		pwd, err := security.PromptForPassword()
+		if err != nil {
+			return nil, err
+		}
+		user = url.UserPassword(connUser, pwd)
+	} else {
+		user = url.User(connUser)
+	}
+	return makeSQLClient(user)
+}
+
+func makeSQLClient(user *url.Userinfo) (*sqlConn, error) {
 	sqlURL := connURL
 	if len(connURL) == 0 {
-		u, err := sqlCtx.PGURL(connUser)
+		u, err := sqlCtx.PGURL(user)
 		if err != nil {
 			return nil, err
 		}

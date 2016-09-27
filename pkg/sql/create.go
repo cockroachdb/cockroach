@@ -227,6 +227,91 @@ func (n *createIndexNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "create index", "", nil
 }
 
+type createUserNode struct {
+	p        *planner
+	n        *parser.CreateUser
+	password string
+}
+
+// CreateUser creates a user.
+// Privileges: INSERT on system.users.
+//   notes: postgres allows the creation of users with an empty password. We do
+//          as well, but disallow password authentication for these users.
+func (p *planner) CreateUser(n *parser.CreateUser) (planNode, error) {
+	if n.Name == "" {
+		return nil, errors.New("no username specified")
+	}
+
+	tDesc, err := p.getTableDesc(&parser.TableName{DatabaseName: "system", TableName: "users"})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := p.checkPrivilege(tDesc, privilege.INSERT); err != nil {
+		return nil, err
+	}
+
+	var resolvedPassword string
+	if n.Password != nil {
+		password, err := n.Password.ResolveAsType(&p.semaCtx, parser.TypeString)
+		if err != nil {
+			return nil, err
+		}
+
+		resolvedPassword = string(*password.(*parser.DString))
+	}
+
+	return &createUserNode{p: p, n: n, password: resolvedPassword}, nil
+}
+
+func (n *createUserNode) expandPlan() error {
+	return nil
+}
+
+func (n *createUserNode) Start() error {
+	hashedPassword, err := security.HashPassword(n.password)
+	if err != nil {
+		return err
+	}
+
+	normalizedUsername := n.n.Name.Normalize()
+
+	internalExecutor := InternalExecutor{LeaseManager: n.p.leaseMgr}
+	rowsAffected, err := internalExecutor.ExecuteStatementInTransaction(
+		"create-user",
+		n.p.txn,
+		"INSERT INTO system.users VALUES ($1, $2);",
+		normalizedUsername,
+		hashedPassword,
+	)
+	if err != nil {
+		if _, ok := err.(*sqlbase.ErrUniquenessConstraintViolation); ok {
+			err = fmt.Errorf("user %s already exists", normalizedUsername)
+		}
+
+		return err
+	} else if rowsAffected != 1 {
+		return errors.Errorf(
+			"%d rows affected by user creation; expected exactly one row affected", rowsAffected,
+		)
+	}
+
+	return nil
+}
+
+func (n *createUserNode) Next() (bool, error)                 { return false, nil }
+func (n *createUserNode) Close()                              {}
+func (n *createUserNode) Columns() ResultColumns              { return make(ResultColumns, 0) }
+func (n *createUserNode) Ordering() orderingInfo              { return orderingInfo{} }
+func (n *createUserNode) Values() parser.DTuple               { return parser.DTuple{} }
+func (n *createUserNode) DebugValues() debugValues            { return debugValues{} }
+func (n *createUserNode) ExplainTypes(_ func(string, string)) {}
+func (n *createUserNode) SetLimitHint(_ int64, _ bool)        {}
+func (n *createUserNode) MarkDebug(mode explainMode)          {}
+func (n *createUserNode) ExplainPlan(v bool) (string, string, []planNode) {
+	return "create user", "", nil
+}
+
 type createViewNode struct {
 	p          *planner
 	n          *parser.CreateView

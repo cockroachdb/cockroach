@@ -30,6 +30,10 @@ const (
 	RootUser = "root"
 )
 
+// UserAuthHook authenticates a user based on their username and whether their
+// connection originates from a client or another node in the cluster.
+type UserAuthHook func(string, bool) error
+
 // GetCertificateUser extract the username from a client certificate.
 func GetCertificateUser(tlsState *tls.ConnectionState) (string, error) {
 	if tlsState == nil {
@@ -57,30 +61,28 @@ type RequestWithUser interface {
 func ProtoAuthHook(
 	insecureMode bool, tlsState *tls.ConnectionState,
 ) (func(proto.Message, bool) error, error) {
-	userHook, err := UserAuthHook(insecureMode, tlsState)
+	userHook, err := UserAuthCertHook(insecureMode, tlsState)
 	if err != nil {
 		return nil, err
 	}
 
-	return func(request proto.Message, public bool) error {
+	return func(request proto.Message, clientConnection bool) error {
 		// RequestWithUser must be implemented.
 		requestWithUser, ok := request.(RequestWithUser)
 		if !ok {
 			return errors.Errorf("unknown request type: %T", request)
 		}
 
-		if err := userHook(requestWithUser.GetUser(), public); err != nil {
+		if err := userHook(requestWithUser.GetUser(), clientConnection); err != nil {
 			return errors.Errorf("%s error in request: %s", err, request)
 		}
 		return nil
 	}, nil
 }
 
-// UserAuthHook builds an authentication hook based on the security
+// UserAuthCertHook builds an authentication hook based on the security
 // mode and client certificate.
-func UserAuthHook(
-	insecureMode bool, tlsState *tls.ConnectionState,
-) (func(string, bool) error, error) {
+func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAuthHook, error) {
 	var certUser string
 
 	if !insecureMode {
@@ -91,13 +93,13 @@ func UserAuthHook(
 		}
 	}
 
-	return func(requestedUser string, public bool) error {
+	return func(requestedUser string, clientConnection bool) error {
 		// TODO(marc): we may eventually need stricter user syntax rules.
 		if len(requestedUser) == 0 {
-			return errors.Errorf("user is missing")
+			return errors.New("user is missing")
 		}
 
-		if !public && requestedUser != NodeUser {
+		if !clientConnection && requestedUser != NodeUser {
 			return errors.Errorf("user %s is not allowed", requestedUser)
 		}
 
@@ -115,4 +117,33 @@ func UserAuthHook(
 
 		return nil
 	}, nil
+}
+
+// UserAuthPasswordHook builds an authentication hook based on the security
+// mode, password, and its potentially matching hash.
+func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []byte) UserAuthHook {
+	return func(requestedUser string, clientConnection bool) error {
+		if len(requestedUser) == 0 {
+			return errors.New("user is missing")
+		}
+
+		if !clientConnection {
+			return errors.New("password authentication is only available for client connections")
+		}
+
+		if insecureMode {
+			return nil
+		}
+
+		if requestedUser == RootUser {
+			return errors.Errorf("user %s cannot authenticate using a password", RootUser)
+		}
+
+		// If the requested user has an empty password, disallow authentication.
+		if len(password) == 0 || compareHashAndPassword(hashedPassword, password) != nil {
+			return errors.New("invalid password")
+		}
+
+		return nil
+	}
 }

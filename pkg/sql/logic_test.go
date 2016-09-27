@@ -25,6 +25,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -423,7 +424,7 @@ func (t *logicTest) setUser(user string) func() {
 		return func() {}
 	}
 
-	pgURL, cleanupFunc := sqlutils.PGUrl(t.T, t.srv.ServingAddr(), user, "TestLogic")
+	pgURL, cleanupFunc := sqlutils.PGUrl(t.T, t.srv.ServingAddr(), "TestLogic", url.User(user))
 	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
@@ -465,6 +466,10 @@ func (t *logicTest) setup() {
 CREATE DATABASE test;
 SET DATABASE = test;
 `); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := t.db.Exec(fmt.Sprintf("CREATE USER %s;", server.TestUser)); err != nil {
 		t.Fatal(err)
 	}
 
