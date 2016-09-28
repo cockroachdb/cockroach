@@ -2280,6 +2280,7 @@ func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason, refreshAtDe
 		}
 		delete(r.mu.pendingCmds, idKey)
 		// The command can be refurbished.
+		log.Eventf(p.ctx, "refurbishing command %x; %s", p.idKey, reason)
 		if pErr := r.refurbishPendingCmdLocked(p); pErr != nil {
 			p.done <- roachpb.ResponseWithError{Err: pErr}
 		}
@@ -2299,6 +2300,7 @@ func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason, refreshAtDe
 	// the right place. Reproposing in order is definitely required, however.
 	sort.Sort(reproposals)
 	for _, p := range reproposals {
+		log.Eventf(p.ctx, "reproposing command %x; %s", p.idKey, reason)
 		if err := r.proposePendingCmdLocked(p); err != nil {
 			return err
 		}
@@ -2389,10 +2391,8 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 
 	r.store.ctx.Transport.mu.Lock()
 	var queuedMsgs int64
-	for _, transportQueues := range r.store.ctx.Transport.mu.queues {
-		for _, queue := range transportQueues {
-			queuedMsgs += int64(len(queue))
-		}
+	for _, queue := range r.store.ctx.Transport.mu.queues {
+		queuedMsgs += int64(len(queue))
 	}
 	r.store.ctx.Transport.mu.Unlock()
 	r.store.metrics.RaftEnqueuedPending.Update(queuedMsgs)
@@ -2419,16 +2419,17 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 func (r *Replica) sendRaftMessageRequest(req *RaftMessageRequest) bool {
 	r.store.ctx.Transport.mu.Lock()
 	var queuedMsgs int64
-	for _, transportQueues := range r.store.ctx.Transport.mu.queues {
-		for _, queue := range transportQueues {
-			queuedMsgs += int64(len(queue))
-		}
+	for _, queue := range r.store.ctx.Transport.mu.queues {
+		queuedMsgs += int64(len(queue))
 	}
 	r.store.ctx.Transport.mu.Unlock()
 	r.store.metrics.RaftEnqueuedPending.Update(queuedMsgs)
 
 	return r.store.ctx.Transport.SendAsync(req)
 }
+
+// TODO(jordanlewis): remove this when #9592 is fixed.
+var _ = (*Replica)(nil).reportSnapshotStatus
 
 func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
 	r.raftMu.Lock()
@@ -2530,10 +2531,10 @@ func (r *Replica) processRaftCommand(
 		// properties like key range are undefined).
 		forcedErr = roachpb.NewErrorf("no-op on empty Raft entry")
 	} else if isLeaseError() {
-		if log.V(1) {
-			log.Warningf(r.ctx, "command proposed from replica %+v (lease at %v): %s",
-				raftCmd.OriginReplica, r.mu.state.Lease.Replica, raftCmd.Cmd)
-		}
+		log.VEventf(
+			1, ctx, "command proposed from replica %+v (lease at %v): %s",
+			raftCmd.OriginReplica, r.mu.state.Lease.Replica, raftCmd.Cmd,
+		)
 		forcedErr = roachpb.NewError(newNotLeaseHolderError(
 			r.mu.state.Lease, raftCmd.OriginReplica.StoreID, r.mu.state.Desc))
 	} else if raftCmd.Cmd.IsLeaseRequest() {
@@ -2558,8 +2559,9 @@ func (r *Replica) processRaftCommand(
 		// The command is trying to apply at a past log position. That's
 		// unfortunate and hopefully rare; we will refurbish on the proposer.
 		// Note that in this situation, the leaseIndex does not advance.
-		forcedErr = roachpb.NewErrorf("command observed at lease index %d, "+
-			"but required < %d", leaseIndex, raftCmd.MaxLeaseIndex)
+		forcedErr = roachpb.NewErrorf(
+			"command observed at lease index %d, but required < %d", leaseIndex, raftCmd.MaxLeaseIndex,
+		)
 
 		if cmd != nil {
 			// Only refurbish when no earlier incarnation of this command has
@@ -2570,10 +2572,10 @@ func (r *Replica) processRaftCommand(
 			// Note that we keep the context to avoid hiding these internal
 			// cycles from traces.
 			if localMaxLeaseIndex := cmd.raftCmd.MaxLeaseIndex; localMaxLeaseIndex <= raftCmd.MaxLeaseIndex {
-				if log.V(1) {
-					log.Infof(r.ctx, "refurbishing command for <= %d observed at %d",
-						raftCmd.MaxLeaseIndex, leaseIndex)
-				}
+				log.VEventf(
+					1, ctx, "refurbishing command %x; <= %d observed at %d", cmd.idKey,
+					raftCmd.MaxLeaseIndex, leaseIndex,
+				)
 
 				if pErr := r.refurbishPendingCmdLocked(cmd); pErr == nil {
 					cmd.done = make(chan roachpb.ResponseWithError, 1)
@@ -2581,7 +2583,7 @@ func (r *Replica) processRaftCommand(
 					// We could try to send the error to the client instead,
 					// but to avoid even the appearance of Replica divergence,
 					// let's not.
-					log.Warningf(r.ctx, "unable to refurbish: %s", pErr)
+					log.Warningf(ctx, "unable to refurbish: %s", pErr)
 				}
 			} else {
 				// The refurbishment is already in flight, so we better get cmd back
@@ -2604,14 +2606,14 @@ func (r *Replica) processRaftCommand(
 		}()
 	}
 
-	log.Event(ctx, "applying batch")
 	// applyRaftCommand will return "expected" errors, but may also indicate
 	// replica corruption (as of now, signaled by a replicaCorruptionError).
 	// We feed its return through maybeSetCorrupt to act when that happens.
-	if log.V(1) && forcedErr != nil {
-		log.Infof(r.ctx, "applying command with forced error: %v", forcedErr)
+	if forcedErr != nil {
+		log.VEventf(1, ctx, "applying command with forced error: %s", forcedErr)
+	} else {
+		log.Event(ctx, "applying command")
 	}
-
 	br, propResult, pErr := r.applyRaftCommand(idKey, ctx, index, leaseIndex,
 		raftCmd.OriginReplica, raftCmd.Cmd, forcedErr)
 	pErr = r.maybeSetCorrupt(ctx, pErr)
@@ -2643,8 +2645,8 @@ func (r *Replica) processRaftCommand(
 	if cmd != nil {
 		cmd.done <- roachpb.ResponseWithError{Reply: br, Err: pErr}
 		close(cmd.done)
-	} else if pErr != nil && log.V(1) {
-		log.Errorf(r.ctx, "error executing raft command: %s", pErr)
+	} else if pErr != nil {
+		log.VEventf(1, ctx, "error executing raft command: %s", pErr)
 	}
 
 	return pErr

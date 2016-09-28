@@ -106,8 +106,8 @@ type Server struct {
 
 // NewServer creates a Server from a server.Context.
 func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
-	if _, err := net.ResolveTCPAddr("tcp", srvCtx.Addr); err != nil {
-		return nil, errors.Errorf("unable to resolve RPC address %q: %v", srvCtx.Addr, err)
+	if _, err := net.ResolveTCPAddr("tcp", srvCtx.AdvertiseAddr); err != nil {
+		return nil, errors.Errorf("unable to resolve RPC address %q: %v", srvCtx.AdvertiseAddr, err)
 	}
 
 	if srvCtx.Ctx == nil {
@@ -166,8 +166,10 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 
 	s.registry = metric.NewRegistry()
 	s.gossip = gossip.New(
-		s.Ctx(), s.rpcContext, s.grpc, s.ctx.GossipBootstrapResolvers, s.stopper, s.registry)
+		s.Ctx(), s.rpcContext, s.grpc, s.ctx.GossipBootstrapResolvers, s.stopper, s.registry,
+	)
 	s.storePool = storage.NewStorePool(
+		s.Ctx(),
 		s.gossip,
 		s.clock,
 		s.rpcContext,
@@ -203,7 +205,9 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		s.stopper, txnMetrics)
 	s.db = client.NewDB(s.txnCoordSender)
 
-	s.raftTransport = storage.NewRaftTransport(storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext)
+	s.raftTransport = storage.NewRaftTransport(
+		s.Ctx(), storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext,
+	)
 
 	s.kvDB = kv.NewDBServer(s.ctx.Context, s.txnCoordSender, s.stopper)
 	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
@@ -374,11 +378,17 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	log.Eventf(ctx, "listening on port %s", s.ctx.Addr)
-	unresolvedAddr, err := officialAddr(s.ctx.Addr, ln.Addr())
+	unresolvedListenAddr, err := officialAddr(s.ctx.Addr, ln.Addr())
 	if err != nil {
 		return err
 	}
-	s.ctx.Addr = unresolvedAddr.String()
+	s.ctx.Addr = unresolvedListenAddr.String()
+	unresolvedAdvertAddr, err := officialAddr(s.ctx.AdvertiseAddr, ln.Addr())
+	if err != nil {
+		return err
+	}
+	s.ctx.AdvertiseAddr = unresolvedAdvertAddr.String()
+
 	s.rpcContext.SetLocalInternalServer(s.node)
 
 	m := cmux.New(ln)
@@ -472,10 +482,11 @@ func (s *Server) Start(ctx context.Context) error {
 	// apply it for all web endpoints.
 	s.mux.HandleFunc(debugEndpoint, http.HandlerFunc(handleDebug))
 
-	s.gossip.Start(unresolvedAddr)
+	s.gossip.Start(unresolvedAdvertAddr)
 	log.Event(ctx, "started gossip")
 
-	if err := s.node.start(ctx, unresolvedAddr, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
+	err = s.node.start(ctx, unresolvedAdvertAddr, s.ctx.Engines, s.ctx.NodeAttributes)
+	if err != nil {
 		return err
 	}
 	log.Event(ctx, "started node")
@@ -507,7 +518,8 @@ func (s *Server) Start(ctx context.Context) error {
 	sql.NewSchemaChangeManager(testingKnobs, *s.db, s.gossip, s.leaseMgr).Start(s.stopper)
 
 	log.Infof(s.Ctx(), "starting %s server at %s", s.ctx.HTTPRequestScheme(), unresolvedHTTPAddr)
-	log.Infof(s.Ctx(), "starting grpc/postgres server at %s", unresolvedAddr)
+	log.Infof(s.Ctx(), "starting grpc/postgres server at %s", unresolvedListenAddr)
+	log.Infof(s.Ctx(), "advertising CockroachDB node at %s", unresolvedAdvertAddr)
 	if len(s.ctx.SocketFile) != 0 {
 		log.Infof(s.Ctx(), "starting postgres server at unix:%s", s.ctx.SocketFile)
 	}

@@ -44,7 +44,7 @@ import (
 
 	"github.com/pkg/errors"
 	// Import postgres driver.
-	_ "github.com/cockroachdb/pq"
+	_ "github.com/lib/pq"
 	"golang.org/x/net/context"
 )
 

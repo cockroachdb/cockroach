@@ -1070,13 +1070,23 @@ func (s *adminServer) ClusterFreeze(
 			keys.LocalMax,    // freeze first range (meta1)
 		}
 
-		for _, freezeFrom := range freezeFroms {
+		for i, freezeFrom := range freezeFroms {
+			if err := stream.Send(&serverpb.ClusterFreezeResponse{
+				Message: fmt.Sprintf("freezing meta ranges [stage %d]", i+1),
+			}); err != nil {
+				return err
+			}
 			var err error
 			if freezeTo, err = process(freezeFrom, freezeTo); err != nil {
 				return err
 			}
 		}
 	} else {
+		if err := stream.Send(&serverpb.ClusterFreezeResponse{
+			Message: fmt.Sprintf("unfreezing ranges"),
+		}); err != nil {
+			return err
+		}
 		// When unfreezing, we walk in opposite order and try the first range
 		// first. We should be able to get there if the first range manages to
 		// gossip. From that, we can talk to the second level replicas, and

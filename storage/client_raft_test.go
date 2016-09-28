@@ -1523,6 +1523,23 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 			}
 
 			replica2 := store0.LookupReplica(roachpb.RKey(key2), nil)
+
+			rg2 := func(s *storage.Store) client.Sender {
+				return client.Wrap(s, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
+					if ba.RangeID == 0 {
+						ba.RangeID = replica2.RangeID
+					}
+					return ba
+				})
+			}
+
+			// Raft processing is initialized lazily; issue a no-op write request to
+			// ensure that the Raft group has been started.
+			incArgs := incrementArgs(key2, 0)
+			if _, err := client.SendWrapped(rg2(store0), nil, &incArgs); err != nil {
+				t.Fatal(err)
+			}
+
 			if td.remove {
 				// Simulate second replica being transferred by removing it.
 				if err := store0.RemoveReplica(replica2, *replica2.Desc(), true); err != nil {

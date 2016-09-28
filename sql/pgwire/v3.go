@@ -24,7 +24,7 @@ import (
 	"reflect"
 	"strconv"
 
-	"github.com/cockroachdb/pq/oid"
+	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
