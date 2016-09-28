@@ -548,6 +548,8 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 	// node. We fail fast if the breaker is open to drop the raft
 	// message and have the caller mark the raft group as unreachable.
 	if !t.GetCircuitBreaker(toNodeID).Ready() {
+		stats := t.getStats(toNodeID)
+		atomic.AddInt64(&stats.clientDropped, 1)
 		return false
 	}
 
