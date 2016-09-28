@@ -210,7 +210,6 @@ func TestSendAndReceive(t *testing.T) {
 	}
 
 	messageTypes := []raftpb.MessageType{
-		raftpb.MsgSnap,
 		raftpb.MsgHeartbeat,
 	}
 
