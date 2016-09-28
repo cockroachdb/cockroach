@@ -2471,6 +2471,10 @@ func TestCanCampaignIdleReplica(t *testing.T) {
 	s := tc.store
 	ctx := context.Background()
 
+	s.idleReplicaElectionTime.Lock()
+	s.idleReplicaElectionTime.at = time.Time{}
+	s.idleReplicaElectionTime.Unlock()
+
 	// Bump the clock by the election timeout. Idle replicas can't campaign
 	// eagerly yet because we haven't gossiped the store descriptor.
 	electionTimeout := int64(s.ctx.RaftTickInterval * time.Duration(s.ctx.RaftElectionTimeoutTicks))

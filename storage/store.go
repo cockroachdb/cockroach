@@ -1235,8 +1235,18 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 		}
 		return errors.Errorf("store %s is non-empty but does not contain store metadata (first %d key/values: %s)", s.engine, len(keyVals), keyVals)
 	}
-	err = engine.MVCCPutProto(context.Background(), s.engine, nil, keys.StoreIdentKey(), hlc.ZeroTimestamp, nil, &s.Ident)
-	return err
+	err = engine.MVCCPutProto(context.Background(), s.engine, nil,
+		keys.StoreIdentKey(), hlc.ZeroTimestamp, nil, &s.Ident)
+	if err != nil {
+		return err
+	}
+
+	// If we're bootstrapping the store we can campaign idle replicas
+	// immediately. This primarily affects tests.
+	s.idleReplicaElectionTime.Lock()
+	s.idleReplicaElectionTime.at = s.Clock().PhysicalTime()
+	s.idleReplicaElectionTime.Unlock()
+	return nil
 }
 
 // GetReplica fetches a replica by Range ID. Returns an error if no replica is found.
@@ -1515,68 +1525,7 @@ func splitTriggerPostCommit(
 	r.store.replicateQueue.MaybeAdd(r, now)
 	r.store.replicateQueue.MaybeAdd(rightRng, now)
 
-	// To avoid leaving the RHS range unavailable as it waits to elect
-	// its leader, one (and only one) of the nodes should start an
-	// election as soon as the split is processed.
-	//
-	// If there is only one replica, raft instantly makes it the leader.
-	// Otherwise, we must trigger a campaign here.
-	//
-	// TODO(bdarnell): The asynchronous campaign can cause a problem
-	// with merges, by recreating a replica that should have been
-	// destroyed. This will probably be addressed as a part of the
-	// general work to be done for merges
-	// (https://github.com/cockroachdb/cockroach/issues/2433), but for
-	// now we're safe because we only perform the asynchronous
-	// campaign when there are multiple replicas, and we only perform
-	// merges in testing scenarios with a single replica.
-	// Note that in multi-node scenarios the async campaign is safe
-	// because it has exactly the same behavior as an incoming message
-	// from another node; the problem here is only with merges.
-	rightRng.mu.Lock()
-	shouldCampaign := rightRng.mu.state.Lease.OwnedBy(r.store.StoreID())
-	rightRng.mu.Unlock()
-	if len(split.RightDesc.Replicas) > 1 && shouldCampaign {
-		// Schedule the campaign a short time in the future. As
-		// followers process the split, they destroy and recreate their
-		// raft groups, which can cause messages to be dropped. In
-		// general a shorter delay (perhaps all the way down to zero) is
-		// better in production, because the race is rare and the worst
-		// case scenario is that we simply wait for an election timeout.
-		// However, the test for this feature disables election timeouts
-		// and relies solely on this campaign trigger, so it is unacceptably
-		// flaky without a bit of a delay.
-		//
-		// Note: you must not use the context inside of this task since it may
-		// contain a finished trace by the time it runs.
-		if err := r.store.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
-			time.Sleep(10 * time.Millisecond)
-			// Make sure that rightRng hasn't been removed.
-			replica, err := r.store.GetReplica(rightRng.RangeID)
-			if err != nil {
-				if _, ok := err.(*roachpb.RangeNotFoundError); ok {
-					log.Infof(ctx, "%s: RHS replica %d removed before campaigning",
-						r, r.mu.replicaID)
-				} else {
-					log.Infof(ctx, "%s: RHS replica %d unable to campaign: %s",
-						r, r.mu.replicaID, err)
-				}
-				return
-			}
-
-			if err := replica.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
-				if err := raftGroup.Campaign(); err != nil {
-					log.Warningf(ctx, "%s: error %v", r, err)
-				}
-				return true, nil
-			}); err != nil {
-				panic(err)
-			}
-		}); err != nil {
-			log.Warningf(ctx, "%s: error %v", r, err)
-			return
-		}
-	} else if len(split.RightDesc.Replicas) == 1 {
+	if len(split.RightDesc.Replicas) == 1 {
 		// TODO(peter): In single-node clusters, we enqueue the right-hand side of
 		// the split (the new range) for Raft processing so that the corresponding
 		// Raft group is created. This shouldn't be necessary for correctness, but
