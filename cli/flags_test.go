@@ -93,7 +93,7 @@ func TestRaftTickIntervalFlagValue(t *testing.T) {
 	}
 }
 
-func TestHttpAddrFlagValue(t *testing.T) {
+func TestHttpHostFlagValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	f := startCmd.Flags()
@@ -101,17 +101,30 @@ func TestHttpAddrFlagValue(t *testing.T) {
 		args     []string
 		expected string
 	}{
+		{[]string{"start", "--" + cliflags.ServerHTTPHost.Name, "127.0.0.1"}, "127.0.0.1:" + base.DefaultHTTPPort},
+		{[]string{"start", "--" + cliflags.ServerHTTPHost.Name, "192.168.0.111"}, "192.168.0.111:" + base.DefaultHTTPPort},
+		// confirm hostnames will work
+		{[]string{"start", "--" + cliflags.ServerHTTPHost.Name, "my.host.name"}, "my.host.name:" + base.DefaultHTTPPort},
+		{[]string{"start", "--" + cliflags.ServerHTTPHost.Name, "myhostname"}, "myhostname:" + base.DefaultHTTPPort},
+		// confirm IPv6 works too
+		{[]string{"start", "--" + cliflags.ServerHTTPHost.Name, "::1"}, "[::1]:" + base.DefaultHTTPPort},
+		{[]string{"start", "--" + cliflags.ServerHTTPHost.Name, "2622:6221:e663:4922:fc2b:788b:fadd:7b48"}, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultHTTPPort},
+		// confirm that http-addr still works
 		{[]string{"start", "--" + cliflags.ServerHTTPAddr.Name, "127.0.0.1"}, "127.0.0.1:" + base.DefaultHTTPPort},
 		{[]string{"start", "--" + cliflags.ServerHTTPAddr.Name, "192.168.0.111"}, "192.168.0.111:" + base.DefaultHTTPPort},
-		// confirm hostnames will work
 		{[]string{"start", "--" + cliflags.ServerHTTPAddr.Name, "my.host.name"}, "my.host.name:" + base.DefaultHTTPPort},
 		{[]string{"start", "--" + cliflags.ServerHTTPAddr.Name, "myhostname"}, "myhostname:" + base.DefaultHTTPPort},
-		// confirm IPv6 works too
 		{[]string{"start", "--" + cliflags.ServerHTTPAddr.Name, "::1"}, "[::1]:" + base.DefaultHTTPPort},
 		{[]string{"start", "--" + cliflags.ServerHTTPAddr.Name, "2622:6221:e663:4922:fc2b:788b:fadd:7b48"}, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultHTTPPort},
+		// confirm that http-host is preferred over http-addr
+		{[]string{"start", "--" + cliflags.ServerHTTPHost.Name, "127.0.0.1", "--" + cliflags.ServerHTTPAddr.Name, "192.168.0.111"}, "127.0.0.1:" + base.DefaultHTTPPort},
 	}
 
 	for i, td := range testData {
+		// Ensure each test case starts with empty package-level variables
+		httpHost = ""
+		httpAddr = ""
+
 		if err := f.Parse(td.args); err != nil {
 			t.Fatal(err)
 		}
