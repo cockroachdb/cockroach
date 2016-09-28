@@ -77,6 +77,8 @@ var (
 	// TypePlaceholder is the type family of a placeholder. CANNOT be compared
 	// with ==.
 	TypePlaceholder Type = TPlaceholder{}
+	// TypeArray is the type family of a DArray. Can be compared with ==.
+	TypeArray Type = tArray{TypeString}
 )
 
 // Do not instantiate the tXxx types elsewhere. The variables above are intended
@@ -232,3 +234,24 @@ func (TPlaceholder) FamilyEqual(other Type) bool {
 
 // Size implements the Type interface.
 func (t TPlaceholder) Size() (uintptr, bool) { panic("TPlaceholder.Size() is undefined") }
+
+// TArray is the type of a DArray. For now, this only supports arrays of
+// strings.
+type tArray struct{ Typ Type }
+
+func (a tArray) String() string { return a.Typ.String() + "[]" }
+
+// Equal implements the Type interface.
+func (tArray) Equal(other Type) bool {
+	return other == TypeArray
+}
+
+// FamilyEqual implements the Type interface.
+func (tArray) FamilyEqual(other Type) bool {
+	return other == TypeArray
+}
+
+// Size implements the Type interface.
+func (tArray) Size() (uintptr, bool) {
+	return unsafe.Sizeof(DString("")), variableSize
+}
