@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // Set sets session variables.
@@ -142,10 +143,7 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 	switch v := d.(type) {
 	case *parser.DString:
 		location := string(*v)
-		if location == "DEFAULT" || location == "LOCAL" {
-			location = "UTC"
-		}
-		loc, err := time.LoadLocation(location)
+		loc, err := timeutil.LoadLocation(location)
 		if err != nil {
 			return nil, fmt.Errorf("cannot find time zone %q: %v", location, err)
 		}
