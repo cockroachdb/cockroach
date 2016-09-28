@@ -1627,8 +1627,7 @@ func makeIDKey() storagebase.CmdIDKey {
 //   which case the other returned values are zero.
 func (r *Replica) proposeRaftCommand(
 	ctx context.Context, ba roachpb.BatchRequest,
-) (
-	chan roachpb.ResponseWithError, func() bool, error) {
+) (chan roachpb.ResponseWithError, func() bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.mu.destroyed != nil {
