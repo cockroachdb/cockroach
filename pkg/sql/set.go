@@ -64,6 +64,7 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 			}
 		}
 		p.session.Database = dbName
+		p.evalCtx.Database = dbName
 
 	case `SYNTAX`:
 		s, err := p.getStringVal(name, typedValues)
