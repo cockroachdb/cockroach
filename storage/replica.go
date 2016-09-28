@@ -2381,6 +2381,9 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 					}, snap, r.store.Engine().NewBatch); err != nil {
 					log.Warningf(r.ctx, "range=%d: failed to send snapshot: %s", r.Desc().RangeID, err)
 				}
+				// Report the snapshot status to Raft, which expects us to do this once
+				// we finish attempting to send the snapshot.
+				r.reportSnapshotStatus(msg.To, err)
 			})
 		}); err != nil {
 			log.Warningf(r.ctx, "range=%d: failed to send snapshot: %s", r.Desc().RangeID, err)
