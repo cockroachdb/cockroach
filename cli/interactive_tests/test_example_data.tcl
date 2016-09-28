@@ -34,6 +34,7 @@ eexpect "42"
 eexpect "1 row"
 eexpect ":/# "
 
+# Clean up.
 send "exit 0\r"
 eexpect eof
 

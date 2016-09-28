@@ -14,7 +14,7 @@ eexpect root@
 
 # Test that last line can be recalled with arrow-up
 send "\033\[A"
-eexpect "select 1;"
+eexpect "SELECT 1;"
 
 # Test that recalled last line can be executed
 send "\r"
@@ -25,8 +25,8 @@ eexpect root@
 send "foo;\r"
 eexpect "syntax error"
 eexpect root@
-send "\022sel"
-eexpect "select 1;"
+send "\022SEL"
+eexpect "SELECT 1;"
 
 # Test that recalled previous line can be executed
 send "\r"
@@ -35,7 +35,7 @@ eexpect root@
 
 # Test that last recalled line becomes top of history
 send "\033\[A"
-eexpect "select 1;"
+eexpect "SELECT 1;"
 
 # Test that client cannot terminate with Ctrl+D while cursor
 # is on recalled line
@@ -52,7 +52,7 @@ eexpect eof
 spawn ./cockroach sql
 eexpect root@
 send "\033\[A"
-eexpect "select 1;"
+eexpect "SELECT 1;"
 
 # Finally terminate with Ctrl+C
 send "\003"
