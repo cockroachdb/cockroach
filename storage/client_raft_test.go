@@ -2593,6 +2593,7 @@ func TestRaftBlockedReplica(t *testing.T) {
 // up.
 func TestRangeQuiescence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#9471")
 
 	sc := storage.TestStoreContext()
 	sc.RaftTickInterval = 1 * time.Millisecond
