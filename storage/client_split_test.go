@@ -1319,6 +1319,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 // and the uninitialized replica reacting to messages.
 func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#9602")
 	mtc := &multiTestContext{}
 	storeCtx := storage.TestStoreContext()
 	// An aggressive tick interval lets groups communicate more and thus
