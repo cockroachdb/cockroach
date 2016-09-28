@@ -2278,6 +2278,11 @@ func (t *DTuple) Eval(_ *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
+func (t *DArray) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
 func (node *Placeholder) Eval(_ *EvalContext) (Datum, error) {
 	return nil, fmt.Errorf("no value provided for placeholder: $%s", node.Name)
 }

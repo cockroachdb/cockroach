@@ -422,6 +422,9 @@ func (expr *DTimestampTZ) Walk(_ Visitor) Expr { return expr }
 // Walk implements the Expr interface.
 func (expr *DTuple) Walk(_ Visitor) Expr { return expr }
 
+// Walk implements the Expr interface.
+func (expr *DArray) Walk(_ Visitor) Expr { return expr }
+
 // WalkExpr traverses the nodes in an expression.
 //
 // NOTE: Do not count on the WalkStmt/WalkExpr machinery to visit all
