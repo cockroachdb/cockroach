@@ -17,6 +17,8 @@
 package rpc
 
 import (
+	"fmt"
+	"regexp"
 	"testing"
 	"time"
 
@@ -102,4 +104,32 @@ func TestManualHeartbeat(t *testing.T) {
 		t.Errorf("expected ServerTime %d, instead %d",
 			manualResponse.ServerTime, regularResponse.ServerTime)
 	}
+}
+
+func TestClockOffsetMismatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println(r)
+			if match, _ := regexp.MatchString("clock max offset mismatch", r.(string)); !match {
+				t.Errorf("expected clock mismatch error")
+			}
+		}
+	}()
+
+	clock := hlc.NewClock(hlc.UnixNano)
+	clock.SetMaxOffset(250 * time.Millisecond)
+	hs := &HeartbeatService{
+		clock:              clock,
+		remoteClockMonitor: newRemoteClockMonitor(context.TODO(), clock, time.Hour),
+	}
+
+	request := &PingRequest{
+		Ping:           "testManual",
+		Addr:           "test",
+		MaxOffsetNanos: (500 * time.Millisecond).Nanoseconds(),
+	}
+	ctx := context.Background()
+	_, _ = hs.Ping(ctx, request)
+	t.Fatal("should not reach")
 }

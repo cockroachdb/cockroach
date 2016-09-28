@@ -62,6 +62,13 @@ type HeartbeatService struct {
 // The requester should also estimate its offset from this server along
 // with the requester's address.
 func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingResponse, error) {
+	// Enforce that clock max offsets are identical between nodes.
+	// Commit suicide in the event that this is ever untrue.
+	// This check is ignored if either offset is set to 0 (for unittests).
+	mo, amo := hs.clock.MaxOffset(), time.Duration(args.MaxOffsetNanos)
+	if mo != 0 && amo != 0 && mo != amo {
+		panic(fmt.Sprintf("clock max offset mismatch node=%s vs %s=%s", mo, args.Addr, amo))
+	}
 	serverOffset := args.Offset
 	// The server offset should be the opposite of the client offset.
 	serverOffset.Offset = -serverOffset.Offset

@@ -285,7 +285,10 @@ func (ctx *Context) IsConnHealthy(remoteAddr string) bool {
 }
 
 func (ctx *Context) runHeartbeat(cc *grpc.ClientConn, remoteAddr string) error {
-	request := PingRequest{Addr: ctx.Addr}
+	request := PingRequest{
+		Addr:           ctx.Addr,
+		MaxOffsetNanos: ctx.localClock.MaxOffset().Nanoseconds(),
+	}
 	heartbeatClient := NewHeartbeatClient(cc)
 
 	var heartbeatTimer timeutil.Timer
