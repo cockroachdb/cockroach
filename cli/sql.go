@@ -54,6 +54,28 @@ Open a sql shell running against a cockroach database.
 	SilenceUsage: true,
 }
 
+// options store the client-side options that a user of the sql cli
+// can configure with \set and \unset.
+// TODO(knz) For now these are booleans but eventually we may need
+// to support arbitrary strings.
+var options = map[string]bool{
+	// The following defaults apply for the interactive shell.
+	// These defaults are overridden for non-interactive shells below.
+
+	// Determines whether to stop the client upon encountering an error.
+	"errexit": false,
+
+	// Determines whether to perform client-side syntax checking.
+	"check_syntax": true,
+
+	// Determines whether to store normalized syntax in the shell history
+	// when check_syntax is set.
+	// TODO(knz) this can possibly be set back to false by default when
+	// the upstream readline library handles multi-line history entries
+	// properly.
+	"normalize_history": true,
+}
+
 const (
 	cliNextLine     = 0 // Done with this line, ask for another line.
 	cliExit         = 1 // User requested to exit.
@@ -64,9 +86,11 @@ const (
 func printCliHelp() {
 	fmt.Print(`You are using 'cockroach sql', CockroachDB's lightweight SQL client.
 Type: \q to exit (Ctrl+C/Ctrl+D also supported)
-      \! to run an external command and print its results on standard output.
-      \| to run an external command and run its output as SQL statements.
-      \? or "help" to print this help.
+  \! CMD            run an external command and print its results on standard output.
+  \| CMD            run an external command and run its output as SQL statements.
+  \set [NAME]       set a client-side flag or (without argument) print the current settings.
+  \unset NAME       unset a flag.
+  \? or "help"      print this help.
 
 More documentation about our SQL dialect is available online:
 http://www.cockroachlabs.com/docs/
@@ -87,6 +111,33 @@ func addHistory(ins *readline.Instance, line string) {
 		cfg.HistoryFile = ""
 		ins.SetConfig(cfg)
 	}
+}
+
+// handleSet supports the \set client-side command.
+func handleSet(args []string) {
+	if len(args) > 1 {
+		fmt.Fprintf(osStderr, "Invalid command: \\set %s. Try \\? for help.\n", strings.Join(args, " "))
+		return
+	}
+	if len(args) == 0 {
+		for k, v := range options {
+			fmt.Printf("%s = %v\n", strings.ToUpper(k), v)
+		}
+		return
+	}
+
+	opt := strings.ToLower(args[0])
+	options[opt] = true
+}
+
+// handleUnset supports the \unset client-side command.
+func handleUnset(args []string) {
+	if len(args) != 1 {
+		fmt.Fprintf(osStderr, "Invalid command: \\unset %s. Try \\? for help.\n", strings.Join(args, " "))
+		return
+	}
+	opt := strings.ToLower(args[0])
+	options[opt] = false
 }
 
 // handleInputLine looks at a single line of text entered
@@ -124,6 +175,10 @@ func handleInputLine(
 				return status, hasSet, isEmpty
 			case `\`, `\?`:
 				printCliHelp()
+			case `\set`:
+				handleSet(cmd[1:])
+			case `\unset`:
+				handleUnset(cmd[1:])
 			default:
 				fmt.Fprintf(osStderr, "Invalid command: %s. Try \\? for help.\n", line)
 			}
@@ -269,23 +324,26 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 			cfg.HistoryFile = histFile
 			ins.SetConfig(cfg)
 		}
-	}
-
-	if isInteractive {
 		fmt.Print(infoMessage)
+	} else {
+		// When running non-interactive, by default we want errors to stop
+		// further processing and all syntax checking to be done
+		// server-side.
+		options["errexit"] = true
+		options["check_syntax"] = false
 	}
 
 	var stmt []string
 	syntax := parser.Traditional
 
 	for isFinished := false; !isFinished; {
-		thisPrompt := fullPrompt
-		if !isInteractive {
-			thisPrompt = ""
-		} else if len(stmt) > 0 {
-			thisPrompt = continuePrompt
+		if isInteractive {
+			thisPrompt := fullPrompt
+			if len(stmt) > 0 {
+				thisPrompt = continuePrompt
+			}
+			ins.SetPrompt(thisPrompt)
 		}
-		ins.SetPrompt(thisPrompt)
 		l, err := ins.Readline()
 
 		if !isInteractive && err == io.EOF {
@@ -305,19 +363,18 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 		status, hasSet, isEmpty := handleInputLine(ins, &stmt, l, syntax)
 		if status == cliExit {
 			break
-		} else if isEmpty || (status == cliNextLine && !isFinished) {
+		}
+		if isEmpty || (status == cliNextLine && !isFinished) {
 			// Ask for more input unless we reached EOF.
 			continue
-		} else if isFinished && len(stmt) == 0 {
+		}
+		if isFinished && len(stmt) == 0 {
 			// Exit if we reached EOF and the currently built-up statement is empty.
 			break
 		}
 
 		// We join the statements back together with newlines in case
-		// there is a significant newline inside a string literal. However
-		// we join with spaces for keeping history, because otherwise a
-		// history recall will only pull one line from a multi-line
-		// statement.
+		// there is a significant newline inside a string literal.
 		fullStmt := strings.TrimRight(strings.Join(stmt, "\n"), " \n\t\f")
 
 		// Ensure the statement is terminated with a semicolon. This
@@ -335,6 +392,32 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 			return fmt.Errorf("last statement was not executed")
 		}
 
+		// Clear the saved statement.
+		stmt = stmt[:0]
+
+		skipStmt := false
+		exitIfErr, _ := options["errexit"]
+
+		// If client-side syntax checking is enabled, parse the statement
+		// before sending it to the server. If it fails to parse, inform
+		// the user then stop processing if the `errexit` option is set.
+		// Otherwise, pretty-print the resulting AST to populate the
+		// history.
+		if doCheck, _ := options["check_syntax"]; doCheck {
+			var parser parser.Parser
+			stmts, err := parser.Parse(fullStmt, syntax)
+			if err != nil {
+				fmt.Fprintf(osStderr, "statement not sent to server: %v", err)
+				exitErr = err
+				if exitIfErr {
+					break
+				}
+				skipStmt = true
+			} else if normalizeHistory, _ := options["normalize_history"]; normalizeHistory {
+				fullStmt = stmts.String() + ";"
+			}
+		}
+
 		if isInteractive {
 			// We save the history between each statement, This enables
 			// reusing history in another SQL shell without closing the
@@ -342,12 +425,19 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 			addHistory(ins, fullStmt)
 		}
 
+		if skipStmt {
+			// If a syntax error was detected client-side, don't try to go
+			// to the server and simply try again.
+			continue
+		}
+
 		if exitErr = runQueryAndFormatResults(conn, os.Stdout, makeQuery(fullStmt), cliCtx.prettyFmt); exitErr != nil {
 			fmt.Fprintln(osStderr, exitErr)
 		}
 
-		// Clear the saved statement.
-		stmt = stmt[:0]
+		if exitErr != nil && exitIfErr {
+			break
+		}
 
 		if hasSet {
 			newSyntax, err := getSyntax(conn)
