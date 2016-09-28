@@ -71,7 +71,7 @@ func InitTestClusterFactory(impl TestClusterFactory) {
 // StartTestCluster starts up a TestCluster made up of numNodes in-memory
 // testing servers. The cluster should be stopped using Stopper().Stop().
 func StartTestCluster(t testing.TB, numNodes int, args base.TestClusterArgs) TestClusterInterface {
-	if srvFactoryImpl == nil {
+	if clusterFactoryImpl == nil {
 		panic("TestClusterFactory not initialized. One needs to be injected " +
 			"from the package's TestMain()")
 	}
