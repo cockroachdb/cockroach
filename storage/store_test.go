@@ -139,6 +139,7 @@ func createTestStoreWithoutStart(t testing.TB, ctx *StoreContext) (*Store, *hlc.
 	manual := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
 	ctx.StorePool = NewStorePool(
+		context.TODO(),
 		ctx.Gossip,
 		ctx.Clock,
 		rpcContext,
@@ -2469,6 +2470,10 @@ func TestCanCampaignIdleReplica(t *testing.T) {
 	defer tc.Stop()
 	s := tc.store
 	ctx := context.Background()
+
+	s.idleReplicaElectionTime.Lock()
+	s.idleReplicaElectionTime.at = time.Time{}
+	s.idleReplicaElectionTime.Unlock()
 
 	// Bump the clock by the election timeout. Idle replicas can't campaign
 	// eagerly yet because we haven't gossiped the store descriptor.

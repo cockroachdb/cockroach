@@ -17,6 +17,7 @@
 package storage
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
@@ -527,7 +528,7 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 	if !ok {
 		// This could be before the system config was ever gossiped,
 		// or it expired. Let the gossip callback set the info.
-		log.Warningf(context.TODO(), "%s: no system config available, cannot determine range MaxBytes", r)
+		log.Warningf(r.ctx, "%s: no system config available, cannot determine range MaxBytes", r)
 		return nil
 	}
 
@@ -714,7 +715,7 @@ const (
 // contains a split.
 func encodeRaftCommand(commandID string, command []byte) []byte {
 	if len(commandID) != raftCommandIDLen {
-		log.Fatalf(context.TODO(), "invalid command ID length; %d != %d", len(commandID), raftCommandIDLen)
+		panic(fmt.Sprintf("invalid command ID length; %d != %d", len(commandID), raftCommandIDLen))
 	}
 	x := make([]byte, 1, 1+raftCommandIDLen+len(command))
 	x[0] = raftCommandEncodingVersion
@@ -730,7 +731,7 @@ func encodeRaftCommand(commandID string, command []byte) []byte {
 // but is exported for use by debugging tools.
 func DecodeRaftCommand(data []byte) (commandID string, command []byte) {
 	if data[0]&raftCommandNoSplitMask != raftCommandEncodingVersion {
-		log.Fatalf(context.TODO(), "unknown command encoding version %v", data[0])
+		panic(fmt.Sprintf("unknown command encoding version %v", data[0]))
 	}
 	return string(data[1 : 1+raftCommandIDLen]), data[1+raftCommandIDLen:]
 }

@@ -212,6 +212,7 @@ type baseQueue struct {
 // limits the total size. Higher priority replicas can still be
 // added; their addition simply removes the lowest priority replica.
 func makeBaseQueue(
+	ctx context.Context,
 	name string,
 	impl queueImpl,
 	store *Store,
@@ -222,7 +223,13 @@ func makeBaseQueue(
 	if cfg.processTimeout == 0 {
 		cfg.processTimeout = defaultProcessTimeout
 	}
+
+	// Prepend [name] to logs.
+	ctx = log.WithLogTag(ctx, name, nil)
+	ctx = log.WithEventLog(ctx, name, name)
+
 	bq := baseQueue{
+		ctx:         ctx,
 		name:        name,
 		impl:        impl,
 		store:       store,

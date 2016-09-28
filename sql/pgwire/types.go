@@ -28,15 +28,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/pq"
-	"github.com/cockroachdb/pq/oid"
-	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/duration"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/lib/pq"
+	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
 )
 
 //go:generate stringer -type=formatCode
@@ -308,8 +308,8 @@ func (b *writeBuffer) writeBinaryDatum(d parser.Datum, sessionLoc *time.Location
 const pgTimeStampFormatNoOffset = "2006-01-02 15:04:05.999999"
 const pgTimeStampFormat = pgTimeStampFormatNoOffset + "-07:00"
 
-// formatTs formats t into a format cockroachdb/pq understands.
-// Mostly cribbed from github.com/cockroachdb/pq.
+// formatTs formats t into a format lib/pq understands.
+// Mostly cribbed from github.com/lib/pq.
 func formatTs(t time.Time, offset *time.Location) (b []byte) {
 	// Need to send dates before 0001 A.D. with " BC" suffix, instead of the
 	// minus sign preferred by Go.

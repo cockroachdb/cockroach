@@ -120,7 +120,7 @@ export class StackedAreaGraph extends React.Component<StackedAreaGraphProps, {}>
       let formattedData: any[] = [];
 
       if (this.props.data) {
-        let processed = ProcessDataPoints(metrics, axis, this.props.data);
+        let processed = ProcessDataPoints(metrics, axis, this.props.data, true);
         formattedData = processed.formattedData;
         let {yAxisDomain, xAxisDomain } = processed;
 

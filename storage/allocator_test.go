@@ -182,12 +182,12 @@ func mockStorePool(storePool *StorePool, aliveStoreIDs, deadStoreIDs []roachpb.S
 
 	storePool.mu.stores = make(map[roachpb.StoreID]*storeDetail)
 	for _, storeID := range aliveStoreIDs {
-		detail := newStoreDetail()
+		detail := newStoreDetail(context.TODO())
 		detail.desc = &roachpb.StoreDescriptor{StoreID: storeID}
 		storePool.mu.stores[storeID] = detail
 	}
 	for _, storeID := range deadStoreIDs {
-		detail := newStoreDetail()
+		detail := newStoreDetail(context.TODO())
 		detail.dead = true
 		detail.desc = &roachpb.StoreDescriptor{StoreID: storeID}
 		storePool.mu.stores[storeID] = detail
@@ -1162,6 +1162,7 @@ func Example_rebalancing() {
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	sp := NewStorePool(
+		context.TODO(),
 		g,
 		hlc.NewClock(hlc.UnixNano),
 		nil,

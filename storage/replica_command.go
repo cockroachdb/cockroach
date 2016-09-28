@@ -24,6 +24,7 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"math"
 	"reflect"
 	"sync"
@@ -725,7 +726,10 @@ func (r *Replica) resolveLocalIntents(
 			}
 			if inSpan != nil {
 				intent.Span = *inSpan
-				_, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, batch, iterAndBuf, ms, intent, math.MaxInt64)
+				num, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, batch, iterAndBuf, ms, intent, math.MaxInt64)
+				if r.store.ctx.TestingKnobs.NumKeysEvaluatedForRangeIntentResolution != nil {
+					atomic.AddInt64(r.store.ctx.TestingKnobs.NumKeysEvaluatedForRangeIntentResolution, num)
+				}
 				return err
 			}
 			return nil
@@ -1862,16 +1866,9 @@ func (r *Replica) CheckConsistency(
 				if report := r.store.ctx.TestingKnobs.BadChecksumReportDiff; report != nil {
 					report(r.store.Ident, diff)
 				}
-				for _, d := range diff {
-					otherSide := "lease holder"
-					if d.LeaseHolder {
-						otherSide = "replica"
-					}
-					_, _ = fmt.Fprintf(&buf, "\nk:v = (%q (%x), %s, %.1024x) not present on %s",
-						d.Key, d.Key, d.Timestamp, d.Value, otherSide)
-				}
+				_, _ = diff.WriteTo(&buf)
 			}
-			log.Errorf(ctx, buf.String())
+			log.Error(ctx, "\n", buf.String())
 		}); err != nil {
 			log.Error(ctx, errors.Wrap(err, "could not run async CollectChecksum"))
 			wg.Done()
@@ -2136,8 +2133,57 @@ type ReplicaSnapshotDiff struct {
 	Value       []byte
 }
 
+// ReplicaSnapshotDiffSlice groups multiple ReplicaSnapshotDiff records and
+// exposes a formatting helper.
+type ReplicaSnapshotDiffSlice []ReplicaSnapshotDiff
+
+// WriteTo writes a string representation of itself to the given writer.
+func (rsds ReplicaSnapshotDiffSlice) WriteTo(w io.Writer) (int64, error) {
+	n, err := w.Write([]byte("--- leaseholder\n+++ follower\n"))
+	if err != nil {
+		return 0, err
+	}
+	for _, d := range rsds {
+		prefix := "+"
+		if d.LeaseHolder {
+			// follower (RHS) has something proposer (LHS) does not have
+			prefix = "-"
+		}
+		ts := d.Timestamp
+		const format = `%s%d.%09d,%d %s
+%s  ts:%s
+%s  value:%s
+%s  raw_key:%x raw_value:%x
+`
+		// TODO(tschottdorf): add pretty-printed value. We have the code in
+		// cli/debug.go (printKeyValue).
+		var prettyTime string
+		if d.Timestamp == hlc.ZeroTimestamp {
+			prettyTime = "<zero>"
+		} else {
+			prettyTime = d.Timestamp.GoTime().UTC().String()
+		}
+		num, err := fmt.Fprintf(w, format,
+			prefix, ts.WallTime/1E9, ts.WallTime%1E9, ts.Logical, d.Key,
+			prefix, prettyTime,
+			prefix, d.Value,
+			prefix, d.Key, d.Value)
+		if err != nil {
+			return 0, err
+		}
+		n += num
+	}
+	return int64(n), nil
+}
+
+func (rsds ReplicaSnapshotDiffSlice) String() string {
+	var buf bytes.Buffer
+	_, _ = rsds.WriteTo(&buf)
+	return buf.String()
+}
+
 // diffs the two k:v dumps between the lease holder and the replica.
-func diffRange(l, r *roachpb.RaftSnapshotData) []ReplicaSnapshotDiff {
+func diffRange(l, r *roachpb.RaftSnapshotData) ReplicaSnapshotDiffSlice {
 	if l == nil || r == nil {
 		return nil
 	}
@@ -2152,7 +2198,7 @@ func diffRange(l, r *roachpb.RaftSnapshotData) []ReplicaSnapshotDiff {
 			v = r.KV[j]
 		}
 
-		addLeader := func() {
+		addLeaseHolder := func() {
 			diff = append(diff, ReplicaSnapshotDiff{LeaseHolder: true, Key: e.Key, Timestamp: e.Timestamp, Value: e.Value})
 			i++
 		}
@@ -2182,17 +2228,23 @@ func diffRange(l, r *roachpb.RaftSnapshotData) []ReplicaSnapshotDiff {
 		}
 		switch comp {
 		case -1:
-			addLeader()
+			addLeaseHolder()
 
 		case 0:
+			// Timestamp sorting is weird. ZeroTimestamp sorts first, the
+			// remainder sort in descending order. See storage/engine/doc.go.
 			if !e.Timestamp.Equal(v.Timestamp) {
-				if v.Timestamp.Less(e.Timestamp) {
-					addLeader()
+				if e.Timestamp.Equal(hlc.ZeroTimestamp) {
+					addLeaseHolder()
+				} else if v.Timestamp.Equal(hlc.ZeroTimestamp) {
+					addReplica()
+				} else if v.Timestamp.Less(e.Timestamp) {
+					addLeaseHolder()
 				} else {
 					addReplica()
 				}
 			} else if !bytes.Equal(e.Value, v.Value) {
-				addLeader()
+				addLeaseHolder()
 				addReplica()
 			} else {
 				// No diff; skip.
@@ -2287,7 +2339,8 @@ func (r *Replica) AdminSplit(
 	leftDesc := *desc
 	leftDesc.EndKey = splitKey
 
-	log.Infof(ctx, "initiating a split of this range at key %s", splitKey)
+	log.Infof(ctx, "initiating a split of this range at key %s [r%d]",
+		splitKey, rightDesc.RangeID)
 
 	if err := r.store.DB().Txn(ctx, func(txn *client.Txn) error {
 		log.Event(ctx, "split closure begins")

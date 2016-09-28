@@ -47,6 +47,8 @@ var (
 	metaCPUSysNS       = metric.Metadata{Name: "sys.cpu.sys.ns", Help: "Total system cpu time in nanoseconds"}
 	metaCPUSysPercent  = metric.Metadata{Name: "sys.cpu.sys.percent", Help: "Current system cpu percentage"}
 	metaRSS            = metric.Metadata{Name: "sys.rss", Help: "Current process RSS"}
+	metaFDOpen         = metric.Metadata{Name: "sys.fd.open", Help: "Process open file descriptors"}
+	metaFDSoftLimit    = metric.Metadata{Name: "sys.fd.softlimit", Help: "Process open FD soft limit"}
 	metaUptime         = metric.Metadata{Name: "sys.uptime", Help: "Process uptime in seconds"}
 
 	// Build information. Placed here for lack of a better location.
@@ -79,6 +81,9 @@ type RuntimeStatSampler struct {
 	lastCgoCall   int64
 	lastNumGC     uint32
 
+	// Only show "not implemented" errors once, we don't need the log spam.
+	fdUsageNotImplemented bool
+
 	// Metric gauges maintained by the sampler.
 	CgoCalls       *metric.Gauge
 	Goroutines     *metric.Gauge
@@ -94,6 +99,8 @@ type RuntimeStatSampler struct {
 	CPUSysNS       *metric.Gauge
 	CPUSysPercent  *metric.GaugeFloat64
 	Rss            *metric.Gauge
+	FDOpen         *metric.Gauge
+	FDSoftLimit    *metric.Gauge
 	Uptime         *metric.Gauge // We use a gauge to be able to call Update.
 	BuildTimestamp *metric.Gauge
 }
@@ -132,6 +139,8 @@ func MakeRuntimeStatSampler(clock *hlc.Clock) RuntimeStatSampler {
 		CPUSysNS:       metric.NewGauge(metaCPUSysNS),
 		CPUSysPercent:  metric.NewGaugeFloat64(metaCPUSysPercent),
 		Rss:            metric.NewGauge(metaRSS),
+		FDOpen:         metric.NewGauge(metaFDOpen),
+		FDSoftLimit:    metric.NewGauge(metaFDSoftLimit),
 		Uptime:         metric.NewGauge(metaUptime),
 		BuildTimestamp: buildTimestamp,
 	}
@@ -168,6 +177,18 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 	cpu := gosigar.ProcTime{}
 	if err := cpu.Get(pid); err != nil {
 		log.Errorf(context.TODO(), "unable to get cpu usage: %v", err)
+	}
+
+	fds := gosigar.ProcFDUsage{}
+	if err := fds.Get(pid); err != nil {
+		if _, ok := err.(gosigar.ErrNotImplemented); ok {
+			if !rsr.fdUsageNotImplemented {
+				rsr.fdUsageNotImplemented = true
+				log.Errorf(context.TODO(), "unable to get file descriptor usage (will not try again): %s", err)
+			}
+		} else {
+			log.Errorf(context.TODO(), "unable to get file descriptor usage: %s", err)
+		}
 	}
 
 	// Time statistics can be compared to the total elapsed time to create a
@@ -224,6 +245,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment() {
 	rsr.CPUUserPercent.Update(uPerc)
 	rsr.CPUSysNS.Update(newStime)
 	rsr.CPUSysPercent.Update(sPerc)
+	rsr.FDOpen.Update(int64(fds.Open))
+	rsr.FDSoftLimit.Update(int64(fds.SoftLimit))
 	rsr.Rss.Update(int64(mem.Resident))
 	rsr.Uptime.Update((now - rsr.startTimeNanos) / 1e9)
 }

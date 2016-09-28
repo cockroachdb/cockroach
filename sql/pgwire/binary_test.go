@@ -30,12 +30,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/pq/oid"
-
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/lib/pq/oid"
 )
 
 type binaryTest struct {
