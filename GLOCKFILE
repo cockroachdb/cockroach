@@ -74,7 +74,7 @@ github.com/kkaneda/returncheck bf081fa7155e3a27df1f056a49d50685edfa5b1b
 github.com/kr/pretty 737b74a46c4bf788349f72cb256fed10aea4d0ac
 github.com/kr/text 7cafcd837844e784b526369c9bce262804aebc60
 github.com/lib/pq 80f8150043c80fb52dee6bc863a709cdac7ec8f8
-github.com/lightstep/lightstep-tracer-go 8d59645adbb3c85f28ae340a055a9349cdd99fe7
+github.com/lightstep/lightstep-tracer-go 7ec5005048fddb1fc15627e1bf58796ce01d919e
 github.com/mattn/go-isatty 66b8e73f3f5cda9f96b69efd03dd3d7fc4a5cdb8
 github.com/mattn/go-runewidth d6bea18f789704b5f83375793155289da36a3c7f
 github.com/mattn/goveralls f4d273b02ce1b4e48acf3662b717aa987bfc4118
@@ -85,7 +85,7 @@ github.com/montanaflynn/stats 60dcacf48f43d6dd654d0ed94120ff5806c5ca5c
 github.com/olekukonko/tablewriter daf2955e742cf123959884fdff4685aa79b63135
 github.com/opencontainers/runc ae7a92e352116f38bce3f7cb3aa2bc590a7e3f65
 github.com/opennota/check 5b00aacd5639507d2b039245a278ec9f5505509f
-github.com/opentracing/basictracer-go 6dea169035b81f39f8f157256225ba02ca7104ab
+github.com/opentracing/basictracer-go 1b32af207119a14b1b231d451df3ed04a72efebf
 github.com/opentracing/opentracing-go 30dda9350627161ff15581c0bdc504e32ec9a536
 github.com/pborman/uuid c55201b036063326c5b1b89ccfe45a184973d073
 github.com/peterbourgon/g2s 5767a0b2078638d14800683fd0fe425604883f63
