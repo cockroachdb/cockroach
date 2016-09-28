@@ -650,6 +650,10 @@ func (d *DTuple) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) { r
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
+func (d *DArray) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
 func (d dNull) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent

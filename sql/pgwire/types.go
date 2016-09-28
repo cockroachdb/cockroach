@@ -114,6 +114,9 @@ func typeForDatum(d parser.Datum) pgType {
 	case *parser.DInterval:
 		return pgType{oid.T_interval, 8}
 
+	case *parser.DArray:
+		return pgType{oid.T__text, -1}
+
 	default:
 		panic(fmt.Sprintf("unsupported type %T", d))
 	}
@@ -186,6 +189,18 @@ func (b *writeBuffer) writeTextDatum(d parser.Datum, sessionLoc *time.Location) 
 
 	case *parser.DInterval:
 		b.writeLengthPrefixedString(v.String())
+
+	case *parser.DArray:
+		var tb bytes.Buffer
+		tb.WriteString("{")
+		for i, d := range *v {
+			if i > 0 {
+				tb.WriteString(",")
+			}
+			tb.WriteString(d.String())
+		}
+		tb.WriteString("}")
+		b.writeLengthPrefixedString(tb.String())
 
 	default:
 		b.setError(errors.Errorf("unsupported type %T", d))
