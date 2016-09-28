@@ -88,8 +88,9 @@ type TestServerArgs struct {
 //
 // The zero value means "ReplicationAuto".
 type TestClusterArgs struct {
-	// ServerArgs will be copied to each constituent TestServer. Used for all the
-	// servers not overridden in ServerArgsPerNode.
+	// ServerArgs will be copied and potentially adjusted according to the
+	// ReplicationMode for each constituent TestServer. Used for all the servers
+	// not overridden in ServerArgsPerNode.
 	ServerArgs TestServerArgs
 	// ReplicationMode controls how replication is to be done in the cluster.
 	ReplicationMode TestClusterReplicationMode
@@ -98,6 +99,9 @@ type TestClusterArgs struct {
 	// map. The map's key is an index within TestCluster.Servers. If there is
 	// no entry in the map for a particular server, the default ServerArgs are
 	// used.
+	//
+	// A copy of an entry from this map will be copied to each individual server
+	// and potentially adjusted according to ReplicationMode.
 	ServerArgsPerNode map[int]TestServerArgs
 }
 
@@ -110,6 +114,8 @@ var DefaultTestStoreSpec = StoreSpec{
 
 // TestClusterReplicationMode represents the replication settings for a TestCluster.
 type TestClusterReplicationMode int
+
+//go:generate stringer -type=TestClusterReplicationMode
 
 const (
 	// ReplicationAuto means that ranges are replicated according to the
