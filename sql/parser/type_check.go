@@ -47,6 +47,8 @@ var (
 	TypeInterval Datum = &DInterval{}
 	// TypeTuple is the type of a DTuple.
 	TypeTuple Datum = &DTuple{}
+	// TypeArray is the type of a DArray.
+	TypeArray Datum = &DArray{}
 )
 
 // SemaContext defines the context in which to perform semantic analysis on an
@@ -647,6 +649,10 @@ func (d *DInterval) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
 func (d *DTuple) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
+func (d *DArray) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.

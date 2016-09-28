@@ -1399,6 +1399,165 @@ func (d *DTuple) SortedDifference(other *DTuple) *DTuple {
 	return &r
 }
 
+// DArray is the array Datum. Currently, all arrays are text arrays. Any Datum
+// inserted into a DArray are treated as text during serialization. This is
+// probably sufficient to provide basic ORM (ActiveRecord) support, but we'll
+// need to support different array types (e.g. int[]) when we implement
+// persistent storage and other features of arrays.
+type DArray []Datum
+
+// ReturnType implements the TypedExpr interface.
+func (d *DArray) ReturnType() Datum {
+	return d
+}
+
+// Type implements the Datum interface.
+func (*DArray) Type() string {
+	return "string[]"
+}
+
+// TypeEqual implements the Datum interface.
+func (d *DArray) TypeEqual(other Datum) bool {
+	t, ok := other.(*DArray)
+	if !ok {
+		return false
+	}
+	if len(*d) != len(*t) {
+		return false
+	}
+	for i := 0; i < len(*d); i++ {
+		if !(*d)[i].TypeEqual((*t)[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// Compare implements the Datum interface.
+func (d *DArray) Compare(other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	v, ok := other.(*DArray)
+	if !ok {
+		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+	}
+	n := len(*d)
+	if n > len(*v) {
+		n = len(*v)
+	}
+	for i := 0; i < n; i++ {
+		c := (*d)[i].Compare((*v)[i])
+		if c != 0 {
+			return c
+		}
+	}
+	if len(*d) < len(*v) {
+		return -1
+	}
+	if len(*d) > len(*v) {
+		return 1
+	}
+	return 0
+}
+
+// HasPrev implements the Datum interface.
+func (d *DArray) HasPrev() bool {
+	for i := len(*d) - 1; i >= 0; i-- {
+		if (*d)[i].HasPrev() {
+			return true
+		}
+	}
+	return false
+}
+
+// Prev implements the Datum interface.
+func (d *DArray) Prev() Datum {
+	n := make(DArray, len(*d))
+	copy(n, *d)
+	for i := len(n) - 1; i >= 0; i-- {
+		if n[i].HasPrev() {
+			n[i] = n[i].Prev()
+			return &n
+		}
+	}
+	panic(fmt.Errorf("Prev() cannot be computed on a tuple whose datum does not support it"))
+}
+
+// HasNext implements the Datum interface.
+func (d *DArray) HasNext() bool {
+	for i := len(*d) - 1; i >= 0; i-- {
+		if (*d)[i].HasNext() {
+			return true
+		}
+	}
+	return false
+}
+
+// Next implements the Datum interface.
+func (d *DArray) Next() Datum {
+	n := make(DArray, len(*d))
+	copy(n, *d)
+	for i := len(n) - 1; i >= 0; i-- {
+		if n[i].HasNext() {
+			n[i] = n[i].Next()
+			return &n
+		}
+	}
+	panic(fmt.Errorf("Next() cannot be computed on a tuple whose datum does not support it"))
+}
+
+// IsMax implements the Datum interface.
+func (*DArray) IsMax() bool {
+	// Unimplemented for DArray. Seems possible to provide an implementation
+	// which called IsMax for each of the elements, but currently this isn't
+	// needed.
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (*DArray) IsMin() bool {
+	// Unimplemented for DArray. Seems possible to provide an implementation
+	// which called IsMin for each of the elements, but currently this isn't
+	// needed.
+	return false
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DArray) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteByte('{')
+	for i, v := range *d {
+		if i > 0 {
+			buf.WriteString(",")
+		}
+		FormatNode(buf, f, v)
+	}
+	buf.WriteByte('}')
+}
+
+func (d *DArray) Len() int {
+	return len(*d)
+}
+
+func (d *DArray) Less(i, j int) bool {
+	return (*d)[i].Compare((*d)[j]) < 0
+}
+
+func (d *DArray) Swap(i, j int) {
+	(*d)[i], (*d)[j] = (*d)[j], (*d)[i]
+}
+
+// Size implements the Datum interface.
+func (d *DArray) Size() (uintptr, bool) {
+	sz := unsafe.Sizeof(*d)
+	for _, e := range *d {
+		dsz, _ := e.Size()
+		sz += dsz
+	}
+	return sz, true
+}
+
 type dNull struct{}
 
 // ReturnType implements the TypedExpr interface.
