@@ -608,6 +608,27 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 	}
 }
 
+type snapshotClientWithBreaker struct {
+	MultiRaft_RaftSnapshotClient
+	breaker *circuit.Breaker
+}
+
+func (c snapshotClientWithBreaker) Send(m *SnapshotRequest) error {
+	err := c.MultiRaft_RaftSnapshotClient.Send(m)
+	if err != nil {
+		c.breaker.Fail()
+	}
+	return err
+}
+
+func (c snapshotClientWithBreaker) Recv() (*SnapshotResponse, error) {
+	m, err := c.MultiRaft_RaftSnapshotClient.Recv()
+	if err != nil {
+		c.breaker.Fail()
+	}
+	return m, err
+}
+
 // SendSnapshot streams the given outgoing snapshot. The caller is responsible for closing the
 // OutgoingSnapshot with snap.Close.
 func (t *RaftTransport) SendSnapshot(
@@ -616,9 +637,10 @@ func (t *RaftTransport) SendSnapshot(
 	snap *OutgoingSnapshot,
 	newBatch func() engine.Batch,
 ) error {
+	var stream MultiRaft_RaftSnapshotClient
 	nodeID := header.RaftMessageRequest.ToReplica.NodeID
 	breaker := t.GetCircuitBreaker(nodeID)
-	return breaker.Call(func() error {
+	if err := breaker.Call(func() error {
 		addr, err := t.resolver(nodeID)
 		if err != nil {
 			return err
@@ -628,15 +650,19 @@ func (t *RaftTransport) SendSnapshot(
 			return err
 		}
 		client := NewMultiRaftClient(conn)
-		stream, err := client.RaftSnapshot(ctx)
-		if err != nil {
-			return err
+		stream, err = client.RaftSnapshot(ctx)
+		return err
+	}, 0); err != nil {
+		return err
+	}
+	defer func() {
+		if err := stream.CloseSend(); err != nil {
+			log.Warningf(ctx, "failed to close snapshot stream: %s", err)
+			breaker.Fail()
 		}
-		defer func() {
-			if err := stream.CloseSend(); err != nil {
-				log.Warningf(ctx, "failed to close snapshot stream: %s", err)
-			}
-		}()
-		return sendSnapshot(stream, header, snap, newBatch)
-	}, 0)
+	}()
+	return sendSnapshot(snapshotClientWithBreaker{
+		MultiRaft_RaftSnapshotClient: stream,
+		breaker: breaker,
+	}, header, snap, newBatch)
 }
