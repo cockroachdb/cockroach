@@ -222,7 +222,15 @@ func getRequestProto(t *testing.T, ts serverutils.TestServerInterface, path stri
 // the scan to complete, and return the server. The caller is
 // responsible for stopping the server.
 func startServer(t *testing.T) serverutils.TestServerInterface {
-	ts, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{StoresPerNode: 3})
+	tsI, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		StoreSpecs: []base.StoreSpec{
+			base.DefaultTestStoreSpec,
+			base.DefaultTestStoreSpec,
+			base.DefaultTestStoreSpec,
+		},
+	})
+
+	ts := tsI.(*TestServer)
 
 	// Make sure the range is spun up with an arbitrary read command. We do not
 	// expect a specific response.
@@ -233,7 +241,7 @@ func startServer(t *testing.T) serverutils.TestServerInterface {
 	// Make sure the node status is available. This is done by forcing stores to
 	// publish their status, synchronizing to the event feed with a canary
 	// event, and then forcing the server to write summaries immediately.
-	if err := ts.(*TestServer).node.computePeriodicMetrics(0); err != nil {
+	if err := ts.node.computePeriodicMetrics(0); err != nil {
 		t.Fatalf("error publishing store statuses: %s", err)
 	}
 
