@@ -278,6 +278,10 @@ type ExecutorTestingKnobs struct {
 	// StatementFilter; otherwise, the statement commits immediately after
 	// execution so there'll be nothing left to abort by the time the filter runs.
 	DisableAutoCommit bool
+
+	// DisableSchemaChangeBackfillBackoff turns off the backoff between schema
+	// change backfill incremental updates.
+	DisableSchemaChangeBackfillBackoff bool
 }
 
 // NewExecutor creates an Executor and registers a callback on the

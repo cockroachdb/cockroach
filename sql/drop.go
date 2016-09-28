@@ -729,9 +729,12 @@ func (p *planner) dropViewImpl(tableDesc *sqlbase.TableDescriptor) error {
 // can even eliminate the need to use a transaction for each chunk at a later
 // stage if it proves inefficient).
 func truncateAndDropTable(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *client.DB,
+	ctx context.Context,
+	tableDesc *sqlbase.TableDescriptor,
+	db *client.DB,
+	testingKnobs *ExecutorTestingKnobs,
 ) error {
-	if err := truncateTableInChunks(ctx, tableDesc, db); err != nil {
+	if err := truncateTableInChunks(ctx, tableDesc, db, testingKnobs); err != nil {
 		return err
 	}
 

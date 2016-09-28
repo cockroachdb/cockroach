@@ -538,7 +538,6 @@ func runSchemaChangeWithOperations(
 // that run simultaneously.
 func TestRaceWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	var backfillNotification chan bool
 	params, _ := createTestServerParams()
 	// Disable asynchronous schema change execution to allow synchronous path
@@ -553,6 +552,7 @@ func TestRaceWithBackfill(t *testing.T) {
 				}
 				return nil
 			},
+			DisableSchemaChangeBackfillBackoff: true,
 		},
 		SQLSchemaChangeManager: &csql.SchemaChangeManagerTestingKnobs{
 			AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
@@ -791,7 +791,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // Test schema change purge failure doesn't leave DB in a bad state.
 func TestSchemaChangePurgeFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	params, _ := createTestServerParams()
 	// Disable the async schema changer.
 	var enableAsyncSchemaChanges uint32
@@ -807,6 +806,7 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 				}
 				return nil
 			},
+			DisableSchemaChangeBackfillBackoff: true,
 		},
 		SQLSchemaChangeManager: &csql.SchemaChangeManagerTestingKnobs{
 			AsyncSchemaChangerExecNotification: func() error {
@@ -924,6 +924,7 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 			SyncSchemaChangersFilter: func(tscc csql.TestingSchemaChangerCollection) {
 				tscc.ClearSchemaChangers()
 			},
+			DisableSchemaChangeBackfillBackoff: true,
 		},
 		SQLSchemaChangeManager: &csql.SchemaChangeManagerTestingKnobs{
 			AsyncSchemaChangerExecNotification: func() error {

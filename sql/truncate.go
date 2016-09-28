@@ -19,13 +19,16 @@ package sql
 import (
 	"math"
 
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/pkg/errors"
-	"golang.org/x/net/context"
+	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // Truncate deletes all rows from a table.
@@ -120,11 +123,19 @@ const TableTruncateChunkSize = 1000
 // truncateTableInChunks truncates the data of a table in chunks. It deletes a
 // range of data for the table, which includes the PK and all indexes.
 func truncateTableInChunks(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *client.DB,
+	ctx context.Context,
+	tableDesc *sqlbase.TableDescriptor,
+	db *client.DB,
+	testingKnobs *ExecutorTestingKnobs,
 ) error {
 	var resume roachpb.Span
+	last := timeutil.Now()
 	for done := false; !done; {
 		resumeAt := resume
+		if timeutil.Since(last) > logBackfillProgressInterval {
+			log.Infof(ctx, "table truncate at span: %s", resume)
+			last = timeutil.Now()
+		}
 		if err := db.Txn(ctx, func(txn *client.Txn) error {
 			rd, err := makeRowDeleter(txn, tableDesc, nil, nil, false)
 			if err != nil {
@@ -140,6 +151,7 @@ func truncateTableInChunks(
 			return err
 		}
 		done = resume.Key == nil
+		backoffDuringBackfill(done, testingKnobs)
 	}
 	return nil
 }

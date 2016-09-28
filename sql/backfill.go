@@ -17,7 +17,9 @@
 package sql
 
 import (
+	"math/rand"
 	"sort"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -99,7 +101,10 @@ func convertBackfillError(tableDesc *sqlbase.TableDescriptor, b *client.Batch) e
 }
 
 // runBackfill runs the backfill for the schema changer.
-func (sc *SchemaChanger) runBackfill(lease *sqlbase.TableDescriptor_SchemaChangeLease) error {
+func (sc *SchemaChanger) runBackfill(
+	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	testingKnobs *ExecutorTestingKnobs,
+) error {
 	l, err := sc.ExtendLease(*lease)
 	if err != nil {
 		return err
@@ -152,19 +157,19 @@ func (sc *SchemaChanger) runBackfill(lease *sqlbase.TableDescriptor_SchemaChange
 	// First drop indexes, then add/drop columns, and only then add indexes.
 
 	// Drop indexes.
-	if err := sc.truncateIndexes(lease, droppedIndexDescs); err != nil {
+	if err := sc.truncateIndexes(lease, droppedIndexDescs, testingKnobs); err != nil {
 		return err
 	}
 
 	// Add and drop columns.
 	if err := sc.truncateAndBackfillColumns(
-		lease, addedColumnDescs, droppedColumnDescs,
+		lease, addedColumnDescs, droppedColumnDescs, testingKnobs,
 	); err != nil {
 		return err
 	}
 
 	// Add new indexes.
-	if err := sc.backfillIndexes(lease, addedIndexDescs); err != nil {
+	if err := sc.backfillIndexes(lease, addedIndexDescs, testingKnobs); err != nil {
 		return err
 	}
 
@@ -188,18 +193,44 @@ func (sc *SchemaChanger) getTableSpan() (roachpb.Span, error) {
 	}, nil
 }
 
+// backoffDurationDuringBackfill is the approximate time that the backfill
+// suspends activity between steps of the backfill. This value was picked
+// through some experimentation:
+// 1. Run block-writer against a 3 node cluster on GCE.
+// 2. Run create/drop index, create/drop column schema changes.
+var backoffDurationDuringBackfill = 75 * time.Millisecond
+
+// Slow down the backfill so that it doesn't rob all the processing power.
+// Do not backoff when backfillHasCompleted.
+func backoffDuringBackfill(backfillHasCompleted bool, testingKnobs *ExecutorTestingKnobs) {
+	if !backfillHasCompleted && !testingKnobs.DisableSchemaChangeBackfillBackoff {
+		delay := time.Duration(float64(backoffDurationDuringBackfill) * (0.75 + 0.5*rand.Float64()))
+		time.Sleep(delay)
+	}
+}
+
+// logBackfillProgressInterval is the duration after which a schema change
+// backfill will log its progress.
+var logBackfillProgressInterval time.Duration = 10 * time.Second
+
+func (sc *SchemaChanger) logBackfillProgress(last time.Time, sp roachpb.Span) time.Time {
+	if timeutil.Since(last) > logBackfillProgressInterval {
+		log.Infof(
+			context.TODO(), "schema change (%d, %d) at span: %s", sc.tableID, sc.mutationID, sp)
+		return timeutil.Now()
+	}
+	return last
+}
+
 // ColumnTruncateAndBackfillChunkSize is the maximum number of rows of keys
 // processed per chunk during the column truncate or backfill.
-//
-// TODO(vivek): Run some experiments to set this value to something sensible
-// or adjust it dynamically. Also add in a sleep after every chunk is
-// processed to slow down the backfill and reduce its CPU usage.
-const ColumnTruncateAndBackfillChunkSize = 600
+const ColumnTruncateAndBackfillChunkSize = 800
 
 func (sc *SchemaChanger) truncateAndBackfillColumns(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	added []sqlbase.ColumnDescriptor,
 	dropped []sqlbase.ColumnDescriptor,
+	testingKnobs *ExecutorTestingKnobs,
 ) error {
 	// Set the eval context timestamps.
 	pTime := timeutil.Now()
@@ -227,7 +258,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 		if err != nil {
 			return err
 		}
-
+		last := timeutil.Now()
 		// Run through the entire table key space adding and deleting columns.
 		for done := false; !done; {
 			// First extend the schema change lease.
@@ -237,6 +268,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 			}
 			*lease = l
 
+			last = sc.logBackfillProgress(last, sp)
 			// Add and delete columns for a chunk of the key space.
 			sp.Key, done, err = sc.truncateAndBackfillColumnsChunk(
 				added, dropped, defaultExprs, &sc.evalCtx, sp,
@@ -244,6 +276,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 			if err != nil {
 				return err
 			}
+			backoffDuringBackfill(done, testingKnobs)
 		}
 	}
 	return nil
@@ -373,12 +406,18 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 	return curIndexKey.PrefixEnd(), done, err
 }
 
+// IndexTruncateChunkSize is the maximum number of rows processed per chunk
+// during an index truncation.
+const IndexTruncateChunkSize = 1000
+
 func (sc *SchemaChanger) truncateIndexes(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	dropped []sqlbase.IndexDescriptor,
+	testingKnobs *ExecutorTestingKnobs,
 ) error {
 	for _, desc := range dropped {
 		var resume roachpb.Span
+		last := timeutil.Now()
 		for done := false; !done; {
 			// First extend the schema change lease.
 			l, err := sc.ExtendLease(*lease)
@@ -388,6 +427,7 @@ func (sc *SchemaChanger) truncateIndexes(
 			*lease = l
 
 			resumeAt := resume
+			last = sc.logBackfillProgress(last, resume)
 			if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
 				tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
 				if err != nil {
@@ -408,29 +448,27 @@ func (sc *SchemaChanger) truncateIndexes(
 					return err
 				}
 				resume, err = td.deleteIndex(
-					txn.Context, &desc, resumeAt, IndexBackfillChunkSize,
+					txn.Context, &desc, resumeAt, IndexTruncateChunkSize,
 				)
 				done = resume.Key == nil
 				return err
 			}); err != nil {
 				return err
 			}
+			backoffDuringBackfill(done, testingKnobs)
 		}
 	}
 	return nil
 }
 
 // IndexBackfillChunkSize is the maximum number of rows processed per chunk
-// during the index backfill.
-//
-// TODO(vivek) Run some experiments to set this value to something sensible or
-// adjust it dynamically. Also add in a sleep after every chunk is processed,
-// to slow down the backfill and not have it interfere with OLTP commands.
-const IndexBackfillChunkSize = 100
+// during an index backfill.
+const IndexBackfillChunkSize = 400
 
 func (sc *SchemaChanger) backfillIndexes(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	added []sqlbase.IndexDescriptor,
+	testingKnobs *ExecutorTestingKnobs,
 ) error {
 	if len(added) == 0 {
 		return nil
@@ -443,6 +481,7 @@ func (sc *SchemaChanger) backfillIndexes(
 	}
 
 	// Backfill the index entries for all the rows.
+	last := timeutil.Now()
 	for done := false; !done; {
 		// First extend the schema change lease.
 		l, err := sc.ExtendLease(*lease)
@@ -450,11 +489,12 @@ func (sc *SchemaChanger) backfillIndexes(
 			return err
 		}
 		*lease = l
-
+		last = sc.logBackfillProgress(last, sp)
 		sp.Key, done, err = sc.backfillIndexesChunk(added, sp)
 		if err != nil {
 			return err
 		}
+		backoffDuringBackfill(done, testingKnobs)
 	}
 	return nil
 }
