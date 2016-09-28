@@ -986,6 +986,7 @@ func TestUnreplicateFirstRange(t *testing.T) {
 // over-replicated ranges and remove replicas from them.
 func TestStoreRangeDownReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#9603")
 	mtc := startMultiTestContext(t, 5)
 	defer mtc.Stop()
 	store0 := mtc.stores[0]
