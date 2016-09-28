@@ -3198,6 +3198,7 @@ func (s *Store) ComputeMetrics(tick int) error {
 	// If we're using RocksDB, log the sstable overview.
 	if rocksdb, ok := s.engine.(*engine.RocksDB); ok {
 		sstables := rocksdb.GetSSTables()
+		s.metrics.RdbNumSSTables.Update(int64(sstables.Len()))
 		readAmp := sstables.ReadAmplification()
 		s.metrics.RdbReadAmplification.Update(int64(readAmp))
 		// Log this metric infrequently.

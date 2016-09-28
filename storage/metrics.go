@@ -81,6 +81,10 @@ var (
 	metaRdbCompactions              = metric.Metadata{Name: "rocksdb.compactions"}
 	metaRdbTableReadersMemEstimate  = metric.Metadata{Name: "rocksdb.table-readers-mem-estimate"}
 	metaRdbReadAmplification        = metric.Metadata{Name: "rocksdb.read-amplification"}
+	metaRdbNumSSTables              = metric.Metadata{
+		Name: "rocksdb.num-sstables",
+		Help: "Number of rocksdb SSTables",
+	}
 
 	// Range event metrics.
 	metaRangeSplits                     = metric.Metadata{Name: "range.splits"}
@@ -289,6 +293,7 @@ type StoreMetrics struct {
 	RdbCompactions              *metric.Gauge
 	RdbTableReadersMemEstimate  *metric.Gauge
 	RdbReadAmplification        *metric.Gauge
+	RdbNumSSTables              *metric.Gauge
 
 	// TODO(mrtracy): This should be removed as part of #4465. This is only
 	// maintained to keep the current structure of StatusSummaries; it would be
@@ -436,6 +441,7 @@ func newStoreMetrics() *StoreMetrics {
 		RdbCompactions:              metric.NewGauge(metaRdbCompactions),
 		RdbTableReadersMemEstimate:  metric.NewGauge(metaRdbTableReadersMemEstimate),
 		RdbReadAmplification:        metric.NewGauge(metaRdbReadAmplification),
+		RdbNumSSTables:              metric.NewGauge(metaRdbNumSSTables),
 
 		// Range event metrics.
 		RangeSplits:                     metric.NewCounter(metaRangeSplits),
