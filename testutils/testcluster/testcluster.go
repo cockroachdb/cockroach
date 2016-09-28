@@ -123,31 +123,48 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 	if nodes < 1 {
 		t.Fatal("invalid cluster size: ", nodes)
 	}
-	if args.ServerArgs.JoinAddr != "" {
-		t.Fatal("can't specify a join addr when starting a cluster")
-	}
-	if args.ServerArgs.Stopper != nil {
-		t.Fatal("can't set individual server stoppers when starting a cluster")
-	}
-	storeKnobs := args.ServerArgs.Knobs.Store
-	if storeKnobs != nil &&
-		(storeKnobs.(*storage.StoreTestingKnobs).DisableSplitQueue ||
-			storeKnobs.(*storage.StoreTestingKnobs).DisableReplicateQueue) {
-		t.Fatal("can't disable an individual server's queues when starting a cluster; " +
-			"the cluster controls replication")
-	}
 
-	switch args.ReplicationMode {
-	case base.ReplicationAuto:
-	case base.ReplicationManual:
-		if args.ServerArgs.Knobs.Store == nil {
-			args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{}
+	// Sanity-check and initialize all ServerArgs to work for a cluster.
+	// To treat the default args and the per-server args uniformly, we'll copy
+	// them into a map of pointers and the copy them back.
+	allArgs := make(map[int]*base.TestServerArgs)
+	allArgs[-1] = &args.ServerArgs // -1 is a marker so that we don't copy back the value
+	for nodeIdx, sargs := range args.ServerArgsPerNode {
+		allArgs[nodeIdx] = &sargs
+	}
+	for _, sargs := range allArgs {
+		if sargs.JoinAddr != "" {
+			t.Fatal("can't specify a join addr when starting a cluster")
 		}
-		storeKnobs := args.ServerArgs.Knobs.Store.(*storage.StoreTestingKnobs)
-		storeKnobs.DisableSplitQueue = true
-		storeKnobs.DisableReplicateQueue = true
-	default:
-		t.Fatal("unexpected replication mode")
+		if sargs.Stopper != nil {
+			t.Fatal("can't set individual server stoppers when starting a cluster")
+		}
+		storeKnobs := sargs.Knobs.Store
+		if storeKnobs != nil &&
+			(storeKnobs.(*storage.StoreTestingKnobs).DisableSplitQueue ||
+				storeKnobs.(*storage.StoreTestingKnobs).DisableReplicateQueue) {
+			t.Fatal("can't disable an individual server's queues when starting a cluster; " +
+				"the cluster controls replication")
+		}
+
+		switch args.ReplicationMode {
+		case base.ReplicationAuto:
+		case base.ReplicationManual:
+			if sargs.Knobs.Store == nil {
+				sargs.Knobs.Store = &storage.StoreTestingKnobs{}
+			}
+			storeKnobs := sargs.Knobs.Store.(*storage.StoreTestingKnobs)
+			storeKnobs.DisableSplitQueue = true
+			storeKnobs.DisableReplicateQueue = true
+		default:
+			t.Fatal("unexpected replication mode")
+		}
+	}
+	// Copy the possibly-modified args back into `args`.
+	for nodeIdx, sargs := range allArgs {
+		if nodeIdx >= 0 {
+			args.ServerArgsPerNode[nodeIdx] = *sargs
+		}
 	}
 
 	tc := &TestCluster{}
