@@ -36,6 +36,9 @@ import (
 // Snowball is set as Baggage on traces which are used for snowball tracing.
 const Snowball = "sb"
 
+// maxLogsPerSpan limits the number of logs in a Span; use a comfortable limit.
+const maxLogsPerSpan = 1000
+
 // A CallbackRecorder immediately invokes itself on received trace spans.
 type CallbackRecorder func(sp basictracer.RawSpan)
 
@@ -69,10 +72,15 @@ func JoinOrNew(tr opentracing.Tracer, carrier *Span, opName string) (opentracing
 // JoinOrNewSnowball returns a Span which records directly via the specified
 // callback. If the given DelegatingCarrier is nil, a new Span is created.
 // otherwise, the created Span is a child.
+//
+// The recorder should be nil if we don't need to record spans.
+//
 // TODO(andrei): JoinOrNewSnowball creates a new tracer, which is not kosher.
 // Also this can't use the lightstep tracer.
-func JoinOrNewSnowball(opName string, carrier *Span, callback func(sp basictracer.RawSpan)) (opentracing.Span, error) {
-	tr := basictracer.NewWithOptions(defaultOptions(callback))
+func JoinOrNewSnowball(
+	opName string, carrier *Span, recorder func(sp basictracer.RawSpan),
+) (opentracing.Span, error) {
+	tr := basictracer.NewWithOptions(basictracerOptions(recorder))
 	sp, err := JoinOrNew(tr, carrier, opName)
 	if err == nil {
 		// We definitely want to sample a Snowball trace.
@@ -89,7 +97,7 @@ func JoinOrNewSnowball(opName string, carrier *Span, callback func(sp basictrace
 func NewTracerAndSpanFor7881(
 	callback func(sp basictracer.RawSpan),
 ) (opentracing.Span, opentracing.Tracer, error) {
-	opts := defaultOptions(callback)
+	opts := basictracerOptions(callback)
 	// Don't trim the logs in "unsampled" spans". Note that this tracer does not
 	// use sampling; instead it uses an ad-hoc mechanism for marking spans of
 	// interest.
@@ -119,13 +127,24 @@ func ForkCtxSpan(ctx context.Context, opName string) (context.Context, func()) {
 	return ctx, func() {}
 }
 
-func defaultOptions(recorder func(basictracer.RawSpan)) basictracer.Options {
+// basciTracerOptions initializes options for basictracer.
+// The recorder should be nil if we don't need to record spans.
+func basictracerOptions(recorder func(basictracer.RawSpan)) basictracer.Options {
 	opts := basictracer.DefaultOptions()
 	opts.ShouldSample = func(traceID uint64) bool { return false }
 	opts.TrimUnsampledSpans = true
-	opts.Recorder = CallbackRecorder(recorder)
 	opts.NewSpanEventListener = events.NetTraceIntegrator
 	opts.DebugAssertUseAfterFinish = true // provoke crash on use-after-Finish
+	if recorder == nil {
+		opts.Recorder = CallbackRecorder(func(_ basictracer.RawSpan) {})
+		// If we are not recording the spans, there is no need to keep them in
+		// memory. Events still get passed to the NetTraceIntegrator.
+		opts.DropAllLogs = true
+	} else {
+		opts.Recorder = CallbackRecorder(recorder)
+		// Set a comfortable limit of log events per span.
+		opts.MaxLogsPerSpan = maxLogsPerSpan
+	}
 	return opts
 }
 
@@ -138,16 +157,17 @@ var lightstepOnly = envutil.EnvOrDefaultBool("COCKROACH_LIGHTSTEP_ONLY", false)
 // newTracer implements NewTracer and allows that function to be mocked out via Disable().
 var newTracer = func() opentracing.Tracer {
 	if lightstepToken != "" {
+		// TODO(radu): set maxLogsPerSpan in lightstep when it is available.
 		lsTr := lightstep.NewTracer(lightstep.Options{AccessToken: lightstepToken})
 		if lightstepOnly {
 			return lsTr
 		}
-		basicTr := basictracer.NewWithOptions(defaultOptions(func(_ basictracer.RawSpan) {}))
+		basicTr := basictracer.NewWithOptions(basictracerOptions(nil))
 		// The TeeTracer uses the first tracer for serialization of span contexts;
 		// lightspan needs to be first because it correlates spans between nodes.
 		return NewTeeTracer(lsTr, basicTr)
 	}
-	return basictracer.NewWithOptions(defaultOptions(func(_ basictracer.RawSpan) {}))
+	return basictracer.NewWithOptions(basictracerOptions(nil))
 }
 
 // NewTracer creates a Tracer which records to the net/trace
