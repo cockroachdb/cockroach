@@ -124,31 +124,16 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 	if nodes < 1 {
 		t.Fatal("invalid cluster size: ", nodes)
 	}
-	if args.ServerArgs.JoinAddr != "" {
-		t.Fatal("can't specify a join addr when starting a cluster")
-	}
-	if args.ServerArgs.Stopper != nil {
-		t.Fatal("can't set individual server stoppers when starting a cluster")
-	}
-	storeKnobs := args.ServerArgs.Knobs.Store
-	if storeKnobs != nil &&
-		(storeKnobs.(*storage.StoreTestingKnobs).DisableSplitQueue ||
-			storeKnobs.(*storage.StoreTestingKnobs).DisableReplicateQueue) {
-		t.Fatal("can't disable an individual server's queues when starting a cluster; " +
-			"the cluster controls replication")
-	}
 
-	switch args.ReplicationMode {
-	case base.ReplicationAuto:
-	case base.ReplicationManual:
-		if args.ServerArgs.Knobs.Store == nil {
-			args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{}
+	if err := initServerArgsForCluster(&args.ServerArgs, args.ReplicationMode); err != nil {
+		t.Fatal(err)
+	}
+	for nodeIdx, sargs := range args.ServerArgsPerNode {
+		err := initServerArgsForCluster(&sargs, args.ReplicationMode)
+		if err != nil {
+			t.Fatal(err)
 		}
-		storeKnobs := args.ServerArgs.Knobs.Store.(*storage.StoreTestingKnobs)
-		storeKnobs.DisableSplitQueue = true
-		storeKnobs.DisableReplicateQueue = true
-	default:
-		t.Fatal("unexpected replication mode")
+		args.ServerArgsPerNode[nodeIdx] = sargs
 	}
 
 	tc := &TestCluster{}
@@ -182,6 +167,39 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 		}
 	}
 	return tc
+}
+
+// Sanity-check and initialize ServerArgs to work for a cluster.
+func initServerArgsForCluster(
+	args *base.TestServerArgs, replicationMode base.TestClusterReplicationMode,
+) error {
+	if args.JoinAddr != "" {
+		return errors.Errorf("can't specify a join addr when starting a cluster")
+	}
+	if args.Stopper != nil {
+		return errors.Errorf("can't set individual server stoppers when starting a cluster")
+	}
+	storeKnobs := args.Knobs.Store
+	if storeKnobs != nil &&
+		(storeKnobs.(*storage.StoreTestingKnobs).DisableSplitQueue ||
+			storeKnobs.(*storage.StoreTestingKnobs).DisableReplicateQueue) {
+		return errors.Errorf("can't disable an individual server's queues when starting a cluster; " +
+			"the cluster controls replication")
+	}
+
+	switch replicationMode {
+	case base.ReplicationAuto:
+	case base.ReplicationManual:
+		if args.Knobs.Store == nil {
+			args.Knobs.Store = &storage.StoreTestingKnobs{}
+		}
+		storeKnobs := args.Knobs.Store.(*storage.StoreTestingKnobs)
+		storeKnobs.DisableSplitQueue = true
+		storeKnobs.DisableReplicateQueue = true
+	default:
+		return errors.Errorf("unexpected replication mode")
+	}
+	return nil
 }
 
 // AddServer creates a server with the specified arguments and appends it to
