@@ -28,7 +28,7 @@ import (
 )
 
 type traceLogData struct {
-	opentracing.LogData
+	opentracing.LogRecord
 	depth int
 }
 
@@ -72,7 +72,7 @@ func FormatRawSpans(spans []basictracer.RawSpan) string {
 		}
 		d := depth(sp.ParentSpanID)
 		for _, e := range sp.Logs {
-			logs = append(logs, traceLogData{LogData: e, depth: d})
+			logs = append(logs, traceLogData{LogRecord: e, depth: d})
 		}
 	}
 	sort.Sort(logs)
@@ -83,12 +83,17 @@ func FormatRawSpans(spans []basictracer.RawSpan) string {
 		last = logs[0].Timestamp
 	}
 	for _, entry := range logs {
-		fmt.Fprintf(&buf, "% 10.3fms % 10.3fms%s%s\n",
+		fmt.Fprintf(&buf, "% 10.3fms % 10.3fms%s",
 			1000*entry.Timestamp.Sub(start).Seconds(),
 			1000*entry.Timestamp.Sub(last).Seconds(),
-			strings.Repeat("    ", entry.depth+1),
-			entry.Event)
-		last = entry.Timestamp
+			strings.Repeat("    ", entry.depth+1))
+		for i, f := range entry.Fields {
+			if i != 0 {
+				buf.WriteByte(' ')
+			}
+			fmt.Fprintf(&buf, "%s:%v", f.Key(), f.Value())
+		}
+		buf.WriteByte('\n')
 	}
 	return buf.String()
 }

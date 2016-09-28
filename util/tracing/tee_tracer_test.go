@@ -41,7 +41,7 @@ func TestTeeTracer(t *testing.T) {
 	tr := NewTeeTracer(t1, t2)
 
 	span := tr.StartSpan("x")
-	span.LogEventWithPayload("event", "payload")
+	span.LogKV("k1", "v1", "k2", "v2")
 	span.SetTag("tag", "value")
 	span.SetBaggageItem("baggage", "baggage-value")
 	assert.Equal(t, "baggage-value", span.BaggageItem("baggage"))
@@ -67,13 +67,13 @@ func TestTeeTracer(t *testing.T) {
 
 		assert.Equal(t, "x", spans[0].Operation)
 		assert.Equal(t, opentracing.Tags{"tag": "value"}, spans[0].Tags)
-		assert.Equal(t, "event", spans[0].Logs[0].Event)
-		assert.Equal(t, "payload", spans[0].Logs[0].Payload)
+		assert.Equal(t, "k1:v1", spans[0].Logs[0].Fields[0].String())
+		assert.Equal(t, "k2:v2", spans[0].Logs[0].Fields[1].String())
 		assert.Equal(t, 1, len(spans[0].Context.Baggage))
 
 		assert.Equal(t, "y", spans[1].Operation)
 		assert.Equal(t, opentracing.Tags(nil), spans[1].Tags)
-		assert.Equal(t, "event2", spans[1].Logs[0].Event)
+		assert.Equal(t, "event:event2", spans[1].Logs[0].Fields[0].String())
 		assert.Equal(t, 1, len(spans[1].Context.Baggage))
 	}
 }

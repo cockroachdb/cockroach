@@ -21,6 +21,7 @@ import (
 
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/log"
 )
 
 // TeeTracer is an opentracing.Tracer that sends events to multiple Tracers.
@@ -174,6 +175,20 @@ func (ts *TeeSpan) SetTag(key string, value interface{}) opentracing.Span {
 		sp.SetTag(key, value)
 	}
 	return ts
+}
+
+// LogFields is part of the opentracing.Span interface.
+func (ts *TeeSpan) LogFields(fields ...log.Field) {
+	for _, sp := range ts.spans {
+		sp.LogFields(fields...)
+	}
+}
+
+// LogKV is part of the opentracing.Span interface.
+func (ts *TeeSpan) LogKV(alternatingKeyValues ...interface{}) {
+	for _, sp := range ts.spans {
+		sp.LogKV(alternatingKeyValues...)
+	}
 }
 
 // LogEvent is part of the opentracing.Span interface.
