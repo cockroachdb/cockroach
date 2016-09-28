@@ -483,8 +483,41 @@ SELECT '2015-08-24 23:45:45.53453-05:00'::timestamptz
 ----
 2015-08-24 23:45:45.53453 -0500 -0500
 
-statement error cannot find time zone "foobar":.*
+statement error cannot find time zone "foobar": timezone data cannot be found
 SET TIME ZONE 'foobar'
+
+statement ok
+SET TIME ZONE default
+
+query T
+SELECT '2015-08-24 21:45:45.53453'::timestamptz
+----
+2015-08-24 21:45:45.53453 +0000 +0000
+
+statement ok
+SET TIME ZONE local
+
+query T
+SELECT '2015-08-24 21:45:45.53453'::timestamptz
+----
+2015-08-24 21:45:45.53453 +0000 +0000
+
+statement ok
+SET TIME ZONE 'DEFAULT'
+
+query T
+SELECT '2015-08-24 21:45:45.53453'::timestamptz
+----
+2015-08-24 21:45:45.53453 +0000 +0000
+
+statement ok
+SET TIME ZONE ''
+
+query T
+SELECT '2015-08-24 21:45:45.53453'::timestamptz
+----
+2015-08-24 21:45:45.53453 +0000 +0000
+
 
 statement ok
 SET TIME ZONE INTERVAL '-7h'
