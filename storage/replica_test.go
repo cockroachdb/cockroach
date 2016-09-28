@@ -1620,14 +1620,18 @@ func TestLeaseConcurrent(t *testing.T) {
 				}
 				go func() {
 					wg.Wait()
+					tc.rng.mu.Lock()
+					defer tc.rng.mu.Unlock()
 					if withError {
+						// When we complete the command, we have to remove it from the map;
+						// otherwise its context (and tracing span) may be used after the
+						// client cleaned up.
+						delete(tc.rng.mu.pendingCmds, cmd.idKey)
 						cmd.done <- roachpb.ResponseWithError{
 							Err: roachpb.NewErrorf(origMsg),
 						}
 						return
 					}
-					tc.rng.mu.Lock()
-					defer tc.rng.mu.Unlock()
 					if err := defaultProposeRaftCommandLocked(tc.rng, cmd); err != nil {
 						panic(err) // unlikely, so punt on proper handling
 					}
