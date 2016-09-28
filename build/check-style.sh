@@ -107,7 +107,32 @@ TestReturnCheck() {
 }
 
 TestVet() {
-  local vet=$(go tool vet -all -shadow -printfuncs Info:1,Infof:1,InfofDepth:2,Warning:1,Warningf:1,WarningfDepth:2,Error:1,Errorf:1,ErrorfDepth:2,Fatal:1,Fatalf:1,FatalfDepth:2,UnimplementedWithIssueErrorf:1 . 2>&1)
+  local printFuncs="
+    Info:1,
+    Infof:1,
+    InfofDepth:2,
+    Warning:1,
+    Warningf:1,
+    WarningfDepth:2,
+    Error:1,
+    Errorf:1,
+    ErrorfDepth:2,
+    Fatal:1,
+    Fatalf:1,
+    FatalfDepth:2,
+    Event:1,
+    Eventf:1,
+    ErrEvent:1,
+    ErrEventf:1,
+    VEvent:2,
+    VEventf:2,
+    UnimplementedWithIssueErrorf:1"
+  local printFuncsStr=""
+  # Concatenate the lines above with no spaces.
+  for i in $printFuncs; do
+    printFuncsStr=$(echo $printFuncsStr$i)
+  done
+  local vet=$(go tool vet -all -shadow -printfuncs $printFuncsStr . 2>&1)
   ! echo "$vet" | grep -vE 'declaration of "?(pE|e)rr"? shadows' | grep -vE '\.pb\.gw\.go:[0-9]+: declaration of "?ctx"? shadows' | grep -vE '^vet: cannot process directory \.git'
 }
 

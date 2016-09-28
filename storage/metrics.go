@@ -81,6 +81,10 @@ var (
 	metaRdbCompactions              = metric.Metadata{Name: "rocksdb.compactions"}
 	metaRdbTableReadersMemEstimate  = metric.Metadata{Name: "rocksdb.table-readers-mem-estimate"}
 	metaRdbReadAmplification        = metric.Metadata{Name: "rocksdb.read-amplification"}
+	metaRdbNumSSTables              = metric.Metadata{
+		Name: "rocksdb.num-sstables",
+		Help: "Number of rocksdb SSTables",
+	}
 
 	// Range event metrics.
 	metaRangeSplits                     = metric.Metadata{Name: "range.splits"}
@@ -202,6 +206,34 @@ var (
 		Help: "Number of pending replicas in the split queue"}
 	metaSplitQueueProcessingNanos = metric.Metadata{Name: "queue.split.processingnanos",
 		Help: "Nanoseconds spent processing replicas in the split queue"}
+
+	// GCInfo cumulative totals.
+	metaGCNumKeysAffected = metric.Metadata{Name: "queue.gc.info.numkeysaffected",
+		Help: "Number of keys with GC'able data"}
+	metaGCIntentsConsidered = metric.Metadata{Name: "queue.gc.info.intentsconsidered",
+		Help: "Number of 'old' intents"}
+	metaGCIntentTxns = metric.Metadata{Name: "queue.gc.info.intenttxns",
+		Help: "Number of associated distinct transactions"}
+	metaGCTransactionSpanScanned = metric.Metadata{Name: "queue.gc.info.transactionspanscanned",
+		Help: "Total number of entries in the transaction span scanned from the engine"}
+	metaGCTransactionSpanGCAborted = metric.Metadata{Name: "queue.gc.info.transactionspangcaborted",
+		Help: "Number of GC'able entries corresponding to aborted txns"}
+	metaGCTransactionSpanGCCommitted = metric.Metadata{Name: "queue.gc.info.transactionspangccommitted",
+		Help: "Number of GC'able entries corresponding to committed txns"}
+	metaGCTransactionSpanGCPending = metric.Metadata{Name: "queue.gc.info.transactionspangcpending",
+		Help: "Number of GC'able entries corresponding to pending txns"}
+	metaGCAbortSpanScanned = metric.Metadata{Name: "queue.gc.info.abortspanscanned",
+		Help: "Total number of transactions present in the abort cache scanned from the engine"}
+	metaGCAbortSpanConsidered = metric.Metadata{Name: "queue.gc.info.abortspanconsidered",
+		Help: "Number of abort cache entries old enough to be considered for removal"}
+	metaGCAbortSpanGCNum = metric.Metadata{Name: "queue.gc.info.abortspangcnum",
+		Help: "Number of abort cache entries fit for removal"}
+	metaGCPushTxn = metric.Metadata{Name: "queue.gc.info.pushtxn",
+		Help: "Total number of attempted pushes"}
+	metaGCResolveTotal = metric.Metadata{Name: "queue.gc.info.resolvetotal",
+		Help: "Total number of attempted intent resolutions"}
+	metaGCResolveSuccess = metric.Metadata{Name: "queue.gc.info.resolvesuccess",
+		Help: "Number of successful intent resolutions"}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -261,6 +293,7 @@ type StoreMetrics struct {
 	RdbCompactions              *metric.Gauge
 	RdbTableReadersMemEstimate  *metric.Gauge
 	RdbReadAmplification        *metric.Gauge
+	RdbNumSSTables              *metric.Gauge
 
 	// TODO(mrtracy): This should be removed as part of #4465. This is only
 	// maintained to keep the current structure of StatusSummaries; it would be
@@ -328,6 +361,21 @@ type StoreMetrics struct {
 	SplitQueuePending               *metric.Gauge
 	SplitQueueProcessingNanos       *metric.Counter
 
+	// GCInfo cumulative totals.
+	GCNumKeysAffected            *metric.Counter
+	GCIntentsConsidered          *metric.Counter
+	GCIntentTxns                 *metric.Counter
+	GCTransactionSpanScanned     *metric.Counter
+	GCTransactionSpanGCAborted   *metric.Counter
+	GCTransactionSpanGCCommitted *metric.Counter
+	GCTransactionSpanGCPending   *metric.Counter
+	GCAbortSpanScanned           *metric.Counter
+	GCAbortSpanConsidered        *metric.Counter
+	GCAbortSpanGCNum             *metric.Counter
+	GCPushTxn                    *metric.Counter
+	GCResolveTotal               *metric.Counter
+	GCResolveSuccess             *metric.Counter
+
 	// Stats for efficient merges.
 	mu struct {
 		syncutil.Mutex
@@ -393,6 +441,7 @@ func newStoreMetrics() *StoreMetrics {
 		RdbCompactions:              metric.NewGauge(metaRdbCompactions),
 		RdbTableReadersMemEstimate:  metric.NewGauge(metaRdbTableReadersMemEstimate),
 		RdbReadAmplification:        metric.NewGauge(metaRdbReadAmplification),
+		RdbNumSSTables:              metric.NewGauge(metaRdbNumSSTables),
 
 		// Range event metrics.
 		RangeSplits:                     metric.NewCounter(metaRangeSplits),
@@ -449,6 +498,21 @@ func newStoreMetrics() *StoreMetrics {
 		SplitQueueFailures:              metric.NewCounter(metaSplitQueueFailures),
 		SplitQueuePending:               metric.NewGauge(metaSplitQueuePending),
 		SplitQueueProcessingNanos:       metric.NewCounter(metaSplitQueueProcessingNanos),
+
+		// GCInfo cumulative totals.
+		GCNumKeysAffected:            metric.NewCounter(metaGCNumKeysAffected),
+		GCIntentsConsidered:          metric.NewCounter(metaGCIntentsConsidered),
+		GCIntentTxns:                 metric.NewCounter(metaGCIntentTxns),
+		GCTransactionSpanScanned:     metric.NewCounter(metaGCTransactionSpanScanned),
+		GCTransactionSpanGCAborted:   metric.NewCounter(metaGCTransactionSpanGCAborted),
+		GCTransactionSpanGCCommitted: metric.NewCounter(metaGCTransactionSpanGCCommitted),
+		GCTransactionSpanGCPending:   metric.NewCounter(metaGCTransactionSpanGCPending),
+		GCAbortSpanScanned:           metric.NewCounter(metaGCAbortSpanScanned),
+		GCAbortSpanConsidered:        metric.NewCounter(metaGCAbortSpanConsidered),
+		GCAbortSpanGCNum:             metric.NewCounter(metaGCAbortSpanGCNum),
+		GCPushTxn:                    metric.NewCounter(metaGCPushTxn),
+		GCResolveTotal:               metric.NewCounter(metaGCResolveTotal),
+		GCResolveSuccess:             metric.NewCounter(metaGCResolveSuccess),
 	}
 
 	sm.raftRcvdMessages[raftpb.MsgProp] = sm.RaftRcvdMsgProp

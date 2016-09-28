@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/pq"
+	"github.com/lib/pq"
 	"github.com/pkg/errors"
 )
 

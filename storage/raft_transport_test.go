@@ -135,7 +135,7 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 	if err != nil {
 		rttc.t.Fatal(err)
 	}
-	transport := storage.NewRaftTransport(storage.GossipAddressResolver(rttc.gossip),
+	transport := storage.NewRaftTransport(context.TODO(), storage.GossipAddressResolver(rttc.gossip),
 		grpcServer, rttc.nodeRPCContext)
 	rttc.transports[nodeID] = transport
 	return transport, ln.Addr()
@@ -209,25 +209,14 @@ func TestSendAndReceive(t *testing.T) {
 		5: 1,
 	}
 
-	messageTypes := []raftpb.MessageType{
-		raftpb.MsgSnap,
-		raftpb.MsgHeartbeat,
+	messageTypes := map[raftpb.MessageType]struct{}{
+		raftpb.MsgHeartbeat: {},
 	}
 
 	for nodeIndex := 0; nodeIndex < numNodes; nodeIndex++ {
 		nodeID := nextNodeID
 		nextNodeID++
 		transports[nodeID] = rttc.AddNode(nodeID)
-
-		// This channel is normally unbuffered, but it is also normally serviced by
-		// the raft goroutine. Since we don't have that goroutine in this test, we
-		// must buffer the channel to prevent snapshots from blocking while we
-		// iterate through the recipients in an order that may differ from the
-		// sending order.
-		sendersPerNode := storesPerNode
-		recipientsPerSender := numNodes * storesPerNode
-		outboundSnapshotsPerNode := sendersPerNode * recipientsPerSender
-		transports[nodeID].SnapshotStatusChan = make(chan storage.RaftSnapshotStatus, outboundSnapshotsPerNode)
 
 		for storeIndex := 0; storeIndex < storesPerNode; storeIndex++ {
 			storeID := nextStoreID
@@ -265,7 +254,7 @@ func TestSendAndReceive(t *testing.T) {
 				},
 			}
 
-			for _, messageType := range messageTypes {
+			for messageType := range messageTypes {
 				req := baseReq
 				req.Message.Type = messageType
 
@@ -282,38 +271,27 @@ func TestSendAndReceive(t *testing.T) {
 	// transports, so we just verify that the right number of messages
 	// end up in each channel.
 	for toStoreID := range storeNodes {
-		func() {
-			for len(messageTypeCounts[toStoreID]) > 0 {
-				req := <-channels[toStoreID].ch
-				if req.Message.To != uint64(toStoreID) {
-					t.Errorf("got unexpected message %v on channel %d", req, toStoreID)
-				}
-
-				// Each MsgSnap should have a corresponding entry on the
-				// sender's SnapshotStatusChan.
-				if req.Message.Type == raftpb.MsgSnap {
-					st := <-transports[req.FromReplica.NodeID].SnapshotStatusChan
-					if st.Err != nil {
-						t.Errorf("unexpected error sending snapshot: %s", st.Err)
-					}
-				}
-
-				if typeCounts, ok := messageTypeCounts[toStoreID]; ok {
-					if _, ok := typeCounts[req.Message.Type]; ok {
-						typeCounts[req.Message.Type]--
-						if typeCounts[req.Message.Type] == 0 {
-							delete(typeCounts, req.Message.Type)
-						}
-					} else {
-						t.Errorf("expected %v to have key %v, but it did not", typeCounts, req.Message.Type)
-					}
-				} else {
-					t.Errorf("expected %v to have key %v, but it did not", messageTypeCounts, toStoreID)
-				}
+		for len(messageTypeCounts[toStoreID]) > 0 {
+			req := <-channels[toStoreID].ch
+			if req.Message.To != uint64(toStoreID) {
+				t.Errorf("got unexpected message %v on channel %d", req, toStoreID)
 			}
 
-			delete(messageTypeCounts, toStoreID)
-		}()
+			if typeCounts, ok := messageTypeCounts[toStoreID]; ok {
+				if _, ok := typeCounts[req.Message.Type]; ok {
+					typeCounts[req.Message.Type]--
+					if typeCounts[req.Message.Type] == 0 {
+						delete(typeCounts, req.Message.Type)
+					}
+				} else {
+					t.Errorf("expected %v to have key %v, but it did not", typeCounts, req.Message.Type)
+				}
+			} else {
+				t.Errorf("expected %v to have key %v, but it did not", messageTypeCounts, toStoreID)
+			}
+		}
+
+		delete(messageTypeCounts, toStoreID)
 
 		select {
 		case req := <-channels[toStoreID].ch:
