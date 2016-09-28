@@ -27,6 +27,7 @@ import (
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
+	"github.com/rubyist/circuitbreaker"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
@@ -37,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/timeutil"
-	"github.com/rubyist/circuitbreaker"
 )
 
 const (
@@ -48,8 +48,7 @@ const (
 	// Store.HandleRaftRequest can block applying a preemptive snapshot for a
 	// long enough period of time that grpc flow control kicks in and messages
 	// are dropped on the sending side.
-	raftNormalSendBufferSize   = 10000
-	raftSnapshotSendBufferSize = 10
+	raftSendBufferSize = 10000
 
 	// When no message has been queued for this duration, the corresponding
 	// instance of processQueue will shut down.
@@ -98,13 +97,6 @@ func GossipAddressResolver(gossip *gossip.Gossip) NodeAddressResolver {
 	}
 }
 
-// RaftSnapshotStatus contains a MsgSnap message and its resulting
-// error, for asynchronous notification of completion.
-type RaftSnapshotStatus struct {
-	Req *RaftMessageRequest
-	Err error
-}
-
 type raftTransportStats struct {
 	nodeID        roachpb.NodeID
 	queue         int
@@ -135,14 +127,13 @@ func (s raftTransportStatsSlice) Less(i, j int) bool { return s[i].nodeID < s[j]
 // outbound message which caused the remote to hang up; all that is known is
 // which remote hung up.
 type RaftTransport struct {
-	ctx                context.Context
-	resolver           NodeAddressResolver
-	rpcContext         *rpc.Context
-	SnapshotStatusChan chan RaftSnapshotStatus
+	ctx        context.Context
+	resolver   NodeAddressResolver
+	rpcContext *rpc.Context
 
 	mu struct {
 		syncutil.Mutex
-		queues   map[bool]map[roachpb.NodeID]chan *RaftMessageRequest
+		queues   map[roachpb.NodeID]chan *RaftMessageRequest
 		stats    map[roachpb.NodeID]*raftTransportStats
 		breakers map[roachpb.NodeID]*circuit.Breaker
 	}
@@ -159,8 +150,7 @@ func NewDummyRaftTransport() *RaftTransport {
 	return NewRaftTransport(context.Background(), nil, nil, nil)
 }
 
-// NewRaftTransport creates a new RaftTransport with specified resolver and grpc server.
-// Callers are responsible for monitoring RaftTransport.SnapshotStatusChan.
+// NewRaftTransport creates a new RaftTransport.
 func NewRaftTransport(
 	ctx context.Context,
 	resolver NodeAddressResolver,
@@ -168,12 +158,11 @@ func NewRaftTransport(
 	rpcContext *rpc.Context,
 ) *RaftTransport {
 	t := &RaftTransport{
-		ctx:                ctx,
-		resolver:           resolver,
-		rpcContext:         rpcContext,
-		SnapshotStatusChan: make(chan RaftSnapshotStatus),
+		ctx:        ctx,
+		resolver:   resolver,
+		rpcContext: rpcContext,
 	}
-	t.mu.queues = make(map[bool]map[roachpb.NodeID]chan *RaftMessageRequest)
+	t.mu.queues = make(map[roachpb.NodeID]chan *RaftMessageRequest)
 	t.mu.stats = make(map[roachpb.NodeID]*raftTransportStats)
 	t.mu.breakers = make(map[roachpb.NodeID]*circuit.Breaker)
 
@@ -199,10 +188,8 @@ func NewRaftTransport(
 						stats = append(stats, s)
 						s.queue = 0
 					}
-					for _, isSnap := range []bool{false, true} {
-						for nodeID, ch := range t.mu.queues[isSnap] {
-							t.mu.stats[nodeID].queue += len(ch)
-						}
+					for nodeID, ch := range t.mu.queues {
+						t.mu.stats[nodeID].queue += len(ch)
 					}
 					t.mu.Unlock()
 
@@ -498,17 +485,15 @@ func (t *RaftTransport) processQueue(
 		case req := <-ch:
 			batch.Requests = append(batch.Requests, *req)
 
-			if req.Message.Type != raftpb.MsgSnap {
-				// Pull off as many queued requests as possible.
-				//
-				// TODO(peter): Think about limiting the size of the batch we send.
-				for done := false; !done; {
-					select {
-					case req = <-ch:
-						batch.Requests = append(batch.Requests, *req)
-					default:
-						done = true
-					}
+			// Pull off as many queued requests as possible.
+			//
+			// TODO(peter): Think about limiting the size of the batch we send.
+			for done := false; !done; {
+				select {
+				case req = <-ch:
+					batch.Requests = append(batch.Requests, *req)
+				default:
+					done = true
 				}
 			}
 
@@ -516,13 +501,6 @@ func (t *RaftTransport) processQueue(
 			batch.Requests = batch.Requests[:0]
 
 			atomic.AddInt64(&stats.clientSent, 1)
-			if req.Message.Type == raftpb.MsgSnap {
-				select {
-				case <-t.rpcContext.Stopper.ShouldStop():
-					return nil
-				case t.SnapshotStatusChan <- RaftSnapshotStatus{req, err}:
-				}
-			}
 			if err != nil {
 				return err
 			}
@@ -541,7 +519,9 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 		// needs an explicit range ID.
 		panic("only heartbeat messages may be sent to range ID 0")
 	}
-	isSnap := req.Message.Type == raftpb.MsgSnap
+	if req.Message.Type == raftpb.MsgSnap {
+		panic("snapshots must be sent using SendSnapshot")
+	}
 	toNodeID := req.ToReplica.NodeID
 
 	// First, check the circuit breaker for connections to the outgoing
@@ -559,28 +539,17 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 		stats = &raftTransportStats{nodeID: toNodeID}
 		t.mu.stats[toNodeID] = stats
 	}
-	// We use two queues; one will be used for snapshots, the other for all other
-	// traffic. This is done to prevent snapshots from blocking other traffic.
-	queues, ok := t.mu.queues[isSnap]
+	ch, ok := t.mu.queues[toNodeID]
 	if !ok {
-		queues = make(map[roachpb.NodeID]chan *RaftMessageRequest)
-		t.mu.queues[isSnap] = queues
-	}
-	ch, ok := queues[toNodeID]
-	if !ok {
-		size := raftNormalSendBufferSize
-		if isSnap {
-			size = raftSnapshotSendBufferSize
-		}
-		ch = make(chan *RaftMessageRequest, size)
-		queues[toNodeID] = ch
+		ch = make(chan *RaftMessageRequest, raftSendBufferSize)
+		t.mu.queues[toNodeID] = ch
 	}
 	t.mu.Unlock()
 
 	if !ok {
 		deleteQueue := func() {
 			t.mu.Lock()
-			delete(queues, toNodeID)
+			delete(t.mu.queues, toNodeID)
 			t.mu.Unlock()
 		}
 		// Starting workers in a task prevents data races during shutdown.
