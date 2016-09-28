@@ -131,7 +131,7 @@ func (n *explainTraceNode) Next() (bool, error) {
 		if len(n.txn.CollectedSpans) == 0 {
 			if !n.exhausted {
 				n.txn.CollectedSpans = append(n.txn.CollectedSpans, basictracer.RawSpan{
-					Logs: []opentracing.LogData{{Timestamp: n.lastTS}},
+					Logs: []opentracing.LogRecord{{Timestamp: n.lastTS}},
 				})
 			}
 			basePos = n.lastPos + 1
@@ -154,12 +154,26 @@ func (n *explainTraceNode) Next() (bool, error) {
 				if i > 0 {
 					duration = fmt.Sprintf("%.3fms", entry.Timestamp.Sub(n.lastTS).Seconds()*1000)
 				}
+				// Extract the message of the event, which is either in an "event" or
+				// "error" field.
+				var msg string
+				for _, f := range entry.Fields {
+					key := f.Key()
+					if key == "event" {
+						msg = fmt.Sprint(f.Value())
+						break
+					}
+					if key == "error" {
+						msg = fmt.Sprint("error:", f.Value())
+						break
+					}
+				}
 				cols := append(parser.DTuple{
 					parser.NewDString(commulativeDuration),
 					parser.NewDString(duration),
 					parser.NewDInt(parser.DInt(basePos + i)),
 					parser.NewDString(sp.Operation),
-					parser.NewDString(entry.Event),
+					parser.NewDString(msg),
 				}, vals.AsRow()...)
 
 				// Timestamp is added for sorting, but will be removed after sort.
