@@ -2123,7 +2123,8 @@ DBString DBGetUserProperties(DBEngine* db) {
 }
 
 DBStatus DBEngineAddFile(DBEngine* db, DBSlice path) {
-  rocksdb::Status status = db->rep->AddFile(ToString(path));
+  const std::vector<std::string> paths = { ToString(path) };
+  rocksdb::Status status = db->rep->AddFile(paths);
   if (!status.ok()) {
     return ToDBStatus(status);
   }
@@ -2132,13 +2133,11 @@ DBStatus DBEngineAddFile(DBEngine* db, DBSlice path) {
 
 struct DBSstFileWriter {
   std::unique_ptr<rocksdb::Options> options;
-  rocksdb::ImmutableCFOptions ioptions;
   rocksdb::SstFileWriter rep;
 
   DBSstFileWriter(rocksdb::Options* o)
       : options(o),
-        ioptions(*o),
-        rep(rocksdb::EnvOptions(), ioptions, o->comparator) {
+        rep(rocksdb::EnvOptions(), *o, o->comparator) {
   }
   virtual ~DBSstFileWriter() { }
 };

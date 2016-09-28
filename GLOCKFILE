@@ -38,7 +38,7 @@ github.com/chzyer/readline 25c2772d5fd908077927228597b084a1f1a0e66d
 github.com/client9/misspell 9a1fc2456ac9e8c9b4cbe9d005b6e7adac0d357f
 github.com/cockroachdb/c-jemalloc 42e6a32cd7a4dff9c70d80323681d46d046181ef
 github.com/cockroachdb/c-protobuf 070b64667a22925d971878b61e4f0c1df31e8599
-github.com/cockroachdb/c-rocksdb b5ca031b93fde49bfa2ba99aba423136aebf3c06
+github.com/cockroachdb/c-rocksdb 894d369c4ea259b65f75563feeb06bea322a8450
 github.com/cockroachdb/c-snappy d4e7b428fe7fc09e93573df3448567a62df8c9fa
 github.com/cockroachdb/cmux b64f5908f4945f4b11ed4a0a9d3cc1e23350866d
 github.com/cockroachdb/cockroach-go 31611c0501c812f437d4861d87d117053967c955
