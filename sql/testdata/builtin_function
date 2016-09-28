@@ -1113,3 +1113,22 @@ SELECT nonexistent.* IS NOT TRUE
 
 query error cannot use "foo.\*" in this context
 SELECT foo.* IS NOT TRUE FROM (VALUES (1)) AS foo(x)
+
+query T
+SELECT CURRENT_SCHEMAS(true)
+----
+{'test','pg_catalog'}
+
+query T
+SELECT CURRENT_SCHEMAS(false)
+----
+{'test'}
+
+query error pq: unknown signature for CURRENT_SCHEMAS: CURRENT_SCHEMAS()
+SELECT CURRENT_SCHEMAS()
+
+query T
+SELECT CURRENT_SCHEMAS(NULL::bool)
+----
+NULL
+
