@@ -2813,7 +2813,6 @@ func (s *Store) processRaft() {
 	}
 	s.scheduler.Start(s.stopper)
 	s.raftTickLoop()
-	s.raftSnapshotStatusLoop()
 }
 
 func (s *Store) raftTickLoop() {
@@ -2840,35 +2839,6 @@ func (s *Store) raftTickLoop() {
 				s.scheduler.EnqueueRaftTick(rangeIDs...)
 
 				s.metrics.RaftTicks.Inc(1)
-
-			case <-s.stopper.ShouldStop():
-				return
-			}
-		}
-	})
-}
-
-func (s *Store) raftSnapshotStatusLoop() {
-	s.stopper.RunWorker(func() {
-		// We use a single goroutine for processing snapshot reporting. This
-		// goroutine needs to grab Replica.raftMu which means that it can block
-		// waiting for other raft processing on the range to complete. But note that
-		// the replica we're reporting the snapshot status on is the one which
-		// generated the snapshot (i.e. the leader). It is very unlikely that it will
-		// be doing expensive raft processing elsewhere in the system.
-		for {
-			select {
-			case st := <-s.ctx.Transport.SnapshotStatusChan:
-				s.mu.Lock()
-				r, ok := s.mu.replicas[st.Req.RangeID]
-				s.mu.Unlock()
-
-				if ok {
-					// Similar to the locking for Replica.handleRaftReady(), if the
-					// replica has been removed, Replica.mu.destroyed will be non-nil
-					// causing Replica.reportSnapshotStatus() to be a no-op.
-					r.reportSnapshotStatus(st.Req.Message.To, st.Err)
-				}
 
 			case <-s.stopper.ShouldStop():
 				return
