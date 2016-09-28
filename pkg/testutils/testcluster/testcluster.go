@@ -126,21 +126,17 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 	if nodes < 1 {
 		t.Fatal("invalid cluster size: ", nodes)
 	}
-	if args.ServerArgs.JoinAddr != "" {
-		t.Fatal("can't specify a join addr when starting a cluster")
+
+	if err := checkServerArgsForCluster(
+		args.ServerArgs, args.ReplicationMode, disallowJoinAddr,
+	); err != nil {
+		t.Fatal(err)
 	}
-	if args.ServerArgs.Stopper != nil {
-		t.Fatal("can't set individual server stoppers when starting a cluster")
-	}
-	storeKnobs := args.ServerArgs.Knobs.Store
-	if storeKnobs != nil &&
-		(storeKnobs.(*storage.StoreTestingKnobs).DisableSplitQueue ||
-			storeKnobs.(*storage.StoreTestingKnobs).DisableReplicateQueue) {
-		t.Fatal("can't disable an individual server's queues when starting a cluster; " +
-			"the cluster controls replication")
-	}
-	if args.ReplicationMode != base.ReplicationAuto && args.ReplicationMode != base.ReplicationManual {
-		t.Fatal("unexpected replication mode")
+	for _, sargs := range args.ServerArgsPerNode {
+		err := checkServerArgsForCluster(sargs, args.ReplicationMode, disallowJoinAddr)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	tc := &TestCluster{
@@ -160,7 +156,9 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 		if i > 0 {
 			serverArgs.JoinAddr = tc.Servers[0].ServingAddr()
 		}
-		tc.AddServer(t, serverArgs)
+		if err := tc.doAddServer(t, serverArgs, true /* initialClusterStart */); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Create a closer that will stop the individual server stoppers when the
@@ -177,9 +175,64 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 	return tc
 }
 
+type checkType int
+
+const (
+	disallowJoinAddr checkType = iota
+	allowJoinAddr
+)
+
+// checkServerArgsForCluster sanity-checks ServerArgs to work for a cluster
+// with a given replicationMode.
+func checkServerArgsForCluster(
+	args base.TestServerArgs, replicationMode base.TestClusterReplicationMode, checkType checkType,
+) error {
+	if checkType == disallowJoinAddr && args.JoinAddr != "" {
+		return errors.Errorf("can't specify a join addr when starting a cluster: %s",
+			args.JoinAddr)
+	}
+	if args.Stopper != nil {
+		return errors.Errorf("can't set individual server stoppers when starting a cluster")
+	}
+	if args.Knobs.Store != nil {
+		storeKnobs := args.Knobs.Store.(*storage.StoreTestingKnobs)
+		if storeKnobs.DisableSplitQueue || storeKnobs.DisableReplicateQueue {
+			return errors.Errorf("can't disable an individual server's queues when starting a cluster; " +
+				"the cluster controls replication")
+		}
+	}
+
+	if replicationMode != base.ReplicationAuto && replicationMode != base.ReplicationManual {
+		return errors.Errorf("unexpected replication mode")
+	}
+
+	return nil
+}
+
 // AddServer creates a server with the specified arguments and appends it to
 // the TestCluster.
-func (tc *TestCluster) AddServer(t testing.TB, serverArgs base.TestServerArgs) {
+//
+// The new Server's copy of serverArgs might be changed according to the
+// cluster's ReplicationMode.
+func (tc *TestCluster) AddServer(t testing.TB, serverArgs base.TestServerArgs) error {
+	return tc.doAddServer(t, serverArgs, false /* initialClusterStart */)
+}
+
+func (tc *TestCluster) doAddServer(
+	t testing.TB, serverArgs base.TestServerArgs, initialClusterStart bool,
+) error {
+	if !initialClusterStart {
+		if err := checkServerArgsForCluster(
+			serverArgs,
+			tc.replicationMode,
+			// Allow JoinAddr here; servers being added after the TestCluster has been
+			// started are allowed to specify a JoinAddr, as we might be testing
+			// bootstrapping and they might want to talk to a specific other node.
+			allowJoinAddr,
+		); err != nil {
+			return err
+		}
+	}
 	serverArgs.Stopper = stop.NewStopper()
 	if tc.replicationMode == base.ReplicationManual {
 		if serverArgs.Knobs.Store == nil {
@@ -196,6 +249,7 @@ func (tc *TestCluster) AddServer(t testing.TB, serverArgs base.TestServerArgs) {
 	tc.mu.Lock()
 	tc.mu.serverStoppers = append(tc.mu.serverStoppers, serverArgs.Stopper)
 	tc.mu.Unlock()
+	return nil
 }
 
 // WaitForStores waits for all of the store descriptors to be gossiped. Servers
