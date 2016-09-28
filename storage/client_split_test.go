@@ -1171,6 +1171,7 @@ func TestStoreSplitTimestampCacheReadRace(t *testing.T) {
 // for writes which invalidated reads previously served by the pre-split lease.
 func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#9598")
 
 	leftKey := roachpb.Key("a")
 	splitKey := roachpb.Key("b")
