@@ -1458,6 +1458,8 @@ type EvalContext struct {
 	clusterTimestamp hlc.Timestamp
 	// Location references the *Location on the current Session.
 	Location **time.Location
+	// Database is the database in the current Session.
+	Database string
 
 	ReCache *RegexpCache
 	tmpDec  inf.Dec
