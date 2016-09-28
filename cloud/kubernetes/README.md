@@ -25,8 +25,7 @@ kubectl run cockroachdb --image=cockroachdb/cockroach --restart=Never -- start
 ### PetSet limitations
 
 PetSets are an alpha feature as of Kubernetes version 1.4. As such, they may
-not be available in certain hosted environments, such as Google's Container
-Engine service.
+not be available in some production-ready hosting environments.
 
 Also, there is currently no possibility to use node-local storage (outside of
 single-node tests), and so there is likely a performance hit associated with
@@ -76,8 +75,14 @@ to create your cockroachdb cluster.
 
 ## Testing in the cloud on GCE
 
-Set up your cluster following the
-[instructions provided in the Kubernetes docs](http://kubernetes.io/docs/getting-started-guides/gce/).
+You can either set up your cluster following the
+[instructions provided in the Kubernetes docs](http://kubernetes.io/docs/getting-started-guides/gce/)
+or by creating a special
+[Container Engine alpha cluster](https://cloud.google.com/container-engine/docs/alpha-clusters):
+
+```shell
+gcloud alpha container clusters create NAME --enable-kubernetes-alpha
+```
 
 Then once you have a Kubernetes cluster running, either run the
 [gce.sh](gce.sh) script or just run `kubectl create -f cockroachdb-petset.yaml`
