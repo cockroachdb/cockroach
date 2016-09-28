@@ -900,6 +900,32 @@ var Builtins = map[string][]Builtin{
 		}),
 	},
 
+	// For now, schemas are the same as databases. So, current_schemas returns the
+	// current database (if one has been set by the user) and, if the passed in
+	// parameter is true, the session's database search path.
+	"current_schemas": {
+		Builtin{
+			Types:      ArgTypes{TypeBool},
+			ReturnType: TypeArray,
+			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
+				if args[0] == DNull {
+					return DNull, nil
+				}
+				var schemas DArray
+				showImplicitSchemas := args[0].(*DBool)
+				if showImplicitSchemas == DBoolTrue {
+					for _, p := range ctx.SearchPath {
+						schemas = append(schemas, NewDString(p))
+					}
+				}
+				if len(ctx.Database) != 0 {
+					schemas = append(schemas, NewDString(ctx.Database))
+				}
+				return &schemas, nil
+			},
+		},
+	},
+
 	"degrees": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(180.0 * x / math.Pi)), nil
