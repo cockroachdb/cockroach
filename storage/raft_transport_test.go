@@ -209,9 +209,8 @@ func TestSendAndReceive(t *testing.T) {
 		5: 1,
 	}
 
-	messageTypes := []raftpb.MessageType{
-		raftpb.MsgSnap,
-		raftpb.MsgHeartbeat,
+	messageTypes := map[raftpb.MessageType]struct{}{
+		raftpb.MsgHeartbeat: {},
 	}
 
 	for nodeIndex := 0; nodeIndex < numNodes; nodeIndex++ {
@@ -226,7 +225,10 @@ func TestSendAndReceive(t *testing.T) {
 		// sending order.
 		sendersPerNode := storesPerNode
 		recipientsPerSender := numNodes * storesPerNode
-		outboundSnapshotsPerNode := sendersPerNode * recipientsPerSender
+		outboundSnapshotsPerNode := 0
+		if _, ok := messageTypes[raftpb.MsgSnap]; ok {
+			outboundSnapshotsPerNode = sendersPerNode * recipientsPerSender
+		}
 		transports[nodeID].SnapshotStatusChan = make(chan storage.RaftSnapshotStatus, outboundSnapshotsPerNode)
 
 		for storeIndex := 0; storeIndex < storesPerNode; storeIndex++ {
@@ -265,7 +267,7 @@ func TestSendAndReceive(t *testing.T) {
 				},
 			}
 
-			for _, messageType := range messageTypes {
+			for messageType := range messageTypes {
 				req := baseReq
 				req.Message.Type = messageType
 

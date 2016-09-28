@@ -2391,10 +2391,8 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 
 	r.store.ctx.Transport.mu.Lock()
 	var queuedMsgs int64
-	for _, transportQueues := range r.store.ctx.Transport.mu.queues {
-		for _, queue := range transportQueues {
-			queuedMsgs += int64(len(queue))
-		}
+	for _, queue := range r.store.ctx.Transport.mu.queues {
+		queuedMsgs += int64(len(queue))
 	}
 	r.store.ctx.Transport.mu.Unlock()
 	r.store.metrics.RaftEnqueuedPending.Update(queuedMsgs)
@@ -2421,10 +2419,8 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 func (r *Replica) sendRaftMessageRequest(req *RaftMessageRequest) bool {
 	r.store.ctx.Transport.mu.Lock()
 	var queuedMsgs int64
-	for _, transportQueues := range r.store.ctx.Transport.mu.queues {
-		for _, queue := range transportQueues {
-			queuedMsgs += int64(len(queue))
-		}
+	for _, queue := range r.store.ctx.Transport.mu.queues {
+		queuedMsgs += int64(len(queue))
 	}
 	r.store.ctx.Transport.mu.Unlock()
 	r.store.metrics.RaftEnqueuedPending.Update(queuedMsgs)
