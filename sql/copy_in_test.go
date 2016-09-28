@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/pq"
+	"github.com/lib/pq"
 )
 
 func TestCopyNullInfNaN(t *testing.T) {

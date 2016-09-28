@@ -90,7 +90,7 @@ func makeTestBaseQueue(
 	cfg.pending = metric.NewGauge(metric.Metadata{Name: "pending"})
 	cfg.processingNanos = metric.NewCounter(metric.Metadata{Name: "processingnanos"})
 	cfg.purgatory = metric.NewGauge(metric.Metadata{Name: "purgatory"})
-	return makeBaseQueue(name, impl, store, gossip, cfg)
+	return makeBaseQueue(context.TODO(), name, impl, store, gossip, cfg)
 }
 
 // TestQueuePriorityQueue verifies priority queue implementation.

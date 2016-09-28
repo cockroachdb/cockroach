@@ -98,15 +98,18 @@ type gcQueue struct {
 // newGCQueue returns a new instance of gcQueue.
 func newGCQueue(store *Store, gossip *gossip.Gossip) *gcQueue {
 	gcq := &gcQueue{}
-	gcq.baseQueue = makeBaseQueue("gc", gcq, store, gossip, queueConfig{
-		maxSize:              gcQueueMaxSize,
-		needsLease:           true,
-		acceptsUnsplitRanges: false,
-		successes:            store.metrics.GCQueueSuccesses,
-		failures:             store.metrics.GCQueueFailures,
-		pending:              store.metrics.GCQueuePending,
-		processingNanos:      store.metrics.GCQueueProcessingNanos,
-	})
+	gcq.baseQueue = makeBaseQueue(
+		store.Ctx(), "gc", gcq, store, gossip,
+		queueConfig{
+			maxSize:              gcQueueMaxSize,
+			needsLease:           true,
+			acceptsUnsplitRanges: false,
+			successes:            store.metrics.GCQueueSuccesses,
+			failures:             store.metrics.GCQueueFailures,
+			pending:              store.metrics.GCQueuePending,
+			processingNanos:      store.metrics.GCQueueProcessingNanos,
+		},
+	)
 	return gcq
 }
 
@@ -117,12 +120,12 @@ type resolveFunc func([]roachpb.Intent, bool, bool) error
 // collection, and if so, at what priority. Returns true for shouldQ
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
-func (*gcQueue) shouldQueue(now hlc.Timestamp, repl *Replica,
+func (gcq *gcQueue) shouldQueue(now hlc.Timestamp, repl *Replica,
 	sysCfg config.SystemConfig) (shouldQ bool, priority float64) {
 	desc := repl.Desc()
 	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 	if err != nil {
-		log.Errorf(context.TODO(), "could not find zone config for range %s: %s", repl, err)
+		log.Errorf(gcq.ctx, "could not find zone config for range %s: %s", repl, err)
 		return
 	}
 
@@ -323,6 +326,8 @@ func (gcq *gcQueue) process(
 	log.Infof(gcq.ctx, "completed with stats %+v", info)
 	log.Eventf(ctx, "completed with stats %+v", info)
 
+	info.updateMetrics(gcq.store.metrics)
+
 	var ba roachpb.BatchRequest
 	var gcArgs roachpb.GCRequest
 	// TODO(tschottdorf): This is one of these instances in which we want
@@ -355,7 +360,7 @@ type GCInfo struct {
 	// Stats about the userspace key-values considered, namely the number of
 	// keys with GC'able data, the number of "old" intents and the number of
 	// associated distinct transactions.
-	GCKeys, IntentsConsidered, IntentTxns int
+	NumKeysAffected, IntentsConsidered, IntentTxns int
 	// TransactionSpanTotal is the total number of entries in the transaction span.
 	TransactionSpanTotal int
 	// Summary of transactions which were found GCable (assuming that
@@ -382,6 +387,22 @@ type GCInfo struct {
 	ResolveSuccess int
 	// Threshold is the computed expiration timestamp. Equal to `Now - Policy`.
 	Threshold hlc.Timestamp
+}
+
+func (info *GCInfo) updateMetrics(metrics *StoreMetrics) {
+	metrics.GCNumKeysAffected.Inc(int64(info.NumKeysAffected))
+	metrics.GCIntentsConsidered.Inc(int64(info.IntentsConsidered))
+	metrics.GCIntentTxns.Inc(int64(info.IntentTxns))
+	metrics.GCTransactionSpanScanned.Inc(int64(info.TransactionSpanTotal))
+	metrics.GCTransactionSpanGCAborted.Inc(int64(info.TransactionSpanGCAborted))
+	metrics.GCTransactionSpanGCCommitted.Inc(int64(info.TransactionSpanGCCommitted))
+	metrics.GCTransactionSpanGCPending.Inc(int64(info.TransactionSpanGCPending))
+	metrics.GCAbortSpanScanned.Inc(int64(info.AbortSpanTotal))
+	metrics.GCAbortSpanConsidered.Inc(int64(info.AbortSpanConsidered))
+	metrics.GCAbortSpanGCNum.Inc(int64(info.AbortSpanGCNum))
+	metrics.GCPushTxn.Inc(int64(info.PushTxn))
+	metrics.GCResolveTotal.Inc(int64(info.ResolveTotal))
+	metrics.GCResolveSuccess.Inc(int64(info.ResolveSuccess))
 }
 
 type lockableGCInfo struct {
@@ -522,7 +543,7 @@ func RunGC(
 	processKeysAndValues()
 
 	infoMu.IntentTxns = len(txnMap)
-	infoMu.GCKeys = len(gcKeys)
+	infoMu.NumKeysAffected = len(gcKeys)
 
 	txnKeys, err := processTransactionTable(ctx, snap, desc, txnMap, txnExp, &infoMu, resolveIntentsFn)
 	if err != nil {

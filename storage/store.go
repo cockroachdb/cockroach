@@ -572,6 +572,9 @@ type StoreTestingKnobs struct {
 	// process ranges that need to be split, for use in tests that use
 	// the replication queue but disable the split queue.
 	ReplicateQueueAcceptsUnsplit bool
+	// NumKeysEvaluatedForRangeIntentResolution is set by the stores to the
+	// number of keys evaluated for range intent resolution.
+	NumKeysEvaluatedForRangeIntentResolution *int64
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}
@@ -651,16 +654,22 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 
 	if s.ctx.Gossip != nil {
 		// Add range scanner and configure with queues.
-		s.scanner = newReplicaScanner(ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s))
+		s.scanner = newReplicaScanner(
+			ctx.Ctx, ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s),
+		)
 		s.gcQueue = newGCQueue(s, s.ctx.Gossip)
 		s.splitQueue = newSplitQueue(s, s.db, s.ctx.Gossip)
-		s.replicateQueue = newReplicateQueue(s, s.ctx.Gossip, s.allocator, s.ctx.Clock, s.ctx.AllocatorOptions)
+		s.replicateQueue = newReplicateQueue(
+			s, s.ctx.Gossip, s.allocator, s.ctx.Clock, s.ctx.AllocatorOptions,
+		)
 		s.replicaGCQueue = newReplicaGCQueue(s, s.db, s.ctx.Gossip)
 		s.raftLogQueue = newRaftLogQueue(s, s.db, s.ctx.Gossip)
 		s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue, s.raftLogQueue)
 
 		// Add consistency check scanner.
-		s.consistencyScanner = newReplicaScanner(ctx.ConsistencyCheckInterval, 0, newStoreRangeSet(s))
+		s.consistencyScanner = newReplicaScanner(
+			ctx.Ctx, ctx.ConsistencyCheckInterval, 0, newStoreRangeSet(s),
+		)
 		s.replicaConsistencyQueue = newReplicaConsistencyQueue(s, s.ctx.Gossip)
 		s.consistencyScanner.AddQueues(s.replicaConsistencyQueue)
 	}
@@ -822,8 +831,13 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.ctx.Gossip.SetNodeID(s.Ident.NodeID)
 	}
 
+	// Set the store ID for logging.
+	s.ctx.Ctx = log.WithLogTagInt(s.ctx.Ctx, "s", int(s.StoreID()))
+
 	// Create ID allocators.
-	idAlloc, err := newIDAllocator(keys.RangeIDGenerator, s.db, 2 /* min ID */, rangeIDAllocCount, s.stopper)
+	idAlloc, err := newIDAllocator(
+		s.ctx.Ctx, keys.RangeIDGenerator, s.db, 2 /* min ID */, rangeIDAllocCount, s.stopper,
+	)
 	if err != nil {
 		return err
 	}
@@ -831,9 +845,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	now := s.ctx.Clock.Now()
 	s.startedAt = now.WallTime
-
-	// Set the store ID for logging.
-	s.ctx.Ctx = log.WithLogTagInt(s.ctx.Ctx, "s", int(s.StoreID()))
 
 	// Iterate over all range descriptors, ignoring uncommitted versions
 	// (consistent=false). Uncommitted intents which have been abandoned
@@ -1227,8 +1238,18 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 		}
 		return errors.Errorf("store %s is non-empty but does not contain store metadata (first %d key/values: %s)", s.engine, len(keyVals), keyVals)
 	}
-	err = engine.MVCCPutProto(context.Background(), s.engine, nil, keys.StoreIdentKey(), hlc.ZeroTimestamp, nil, &s.Ident)
-	return err
+	err = engine.MVCCPutProto(context.Background(), s.engine, nil,
+		keys.StoreIdentKey(), hlc.ZeroTimestamp, nil, &s.Ident)
+	if err != nil {
+		return err
+	}
+
+	// If we're bootstrapping the store we can campaign idle replicas
+	// immediately. This primarily affects tests.
+	s.idleReplicaElectionTime.Lock()
+	s.idleReplicaElectionTime.at = s.Clock().PhysicalTime()
+	s.idleReplicaElectionTime.Unlock()
+	return nil
 }
 
 // GetReplica fetches a replica by Range ID. Returns an error if no replica is found.
@@ -1507,68 +1528,7 @@ func splitTriggerPostCommit(
 	r.store.replicateQueue.MaybeAdd(r, now)
 	r.store.replicateQueue.MaybeAdd(rightRng, now)
 
-	// To avoid leaving the RHS range unavailable as it waits to elect
-	// its leader, one (and only one) of the nodes should start an
-	// election as soon as the split is processed.
-	//
-	// If there is only one replica, raft instantly makes it the leader.
-	// Otherwise, we must trigger a campaign here.
-	//
-	// TODO(bdarnell): The asynchronous campaign can cause a problem
-	// with merges, by recreating a replica that should have been
-	// destroyed. This will probably be addressed as a part of the
-	// general work to be done for merges
-	// (https://github.com/cockroachdb/cockroach/issues/2433), but for
-	// now we're safe because we only perform the asynchronous
-	// campaign when there are multiple replicas, and we only perform
-	// merges in testing scenarios with a single replica.
-	// Note that in multi-node scenarios the async campaign is safe
-	// because it has exactly the same behavior as an incoming message
-	// from another node; the problem here is only with merges.
-	rightRng.mu.Lock()
-	shouldCampaign := rightRng.mu.state.Lease.OwnedBy(r.store.StoreID())
-	rightRng.mu.Unlock()
-	if len(split.RightDesc.Replicas) > 1 && shouldCampaign {
-		// Schedule the campaign a short time in the future. As
-		// followers process the split, they destroy and recreate their
-		// raft groups, which can cause messages to be dropped. In
-		// general a shorter delay (perhaps all the way down to zero) is
-		// better in production, because the race is rare and the worst
-		// case scenario is that we simply wait for an election timeout.
-		// However, the test for this feature disables election timeouts
-		// and relies solely on this campaign trigger, so it is unacceptably
-		// flaky without a bit of a delay.
-		//
-		// Note: you must not use the context inside of this task since it may
-		// contain a finished trace by the time it runs.
-		if err := r.store.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
-			time.Sleep(10 * time.Millisecond)
-			// Make sure that rightRng hasn't been removed.
-			replica, err := r.store.GetReplica(rightRng.RangeID)
-			if err != nil {
-				if _, ok := err.(*roachpb.RangeNotFoundError); ok {
-					log.Infof(ctx, "%s: RHS replica %d removed before campaigning",
-						r, r.mu.replicaID)
-				} else {
-					log.Infof(ctx, "%s: RHS replica %d unable to campaign: %s",
-						r, r.mu.replicaID, err)
-				}
-				return
-			}
-
-			if err := replica.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
-				if err := raftGroup.Campaign(); err != nil {
-					log.Warningf(ctx, "%s: error %v", r, err)
-				}
-				return true, nil
-			}); err != nil {
-				panic(err)
-			}
-		}); err != nil {
-			log.Warningf(ctx, "%s: error %v", r, err)
-			return
-		}
-	} else if len(split.RightDesc.Replicas) == 1 {
+	if len(split.RightDesc.Replicas) == 1 {
 		// TODO(peter): In single-node clusters, we enqueue the right-hand side of
 		// the split (the new range) for Raft processing so that the corresponding
 		// Raft group is created. This shouldn't be necessary for correctness, but
@@ -1741,9 +1701,9 @@ func (s *Store) removePlaceholderLocked(rngID roachpb.RangeID) bool {
 		delete(s.mu.replicaPlaceholders, rngID)
 		return true
 	case nil:
-		log.Fatalf(context.TODO(), "%s range=%d: placeholder not found", s, rngID)
+		log.Fatalf(s.Ctx(), "range=%d: placeholder not found", rngID)
 	default:
-		log.Fatalf(context.TODO(), "%s range=%d: expected placeholder, got %T", s, rngID, exRng)
+		log.Fatalf(s.Ctx(), "range=%d: expected placeholder, got %T", rngID, exRng)
 	}
 	return false // appease the compiler
 }
@@ -1795,7 +1755,7 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 		// TODO(peter): The above comment is out of date: we could return an error
 		// here but are not doing so yet in the name of conservatism.
 		s.mu.Unlock()
-		log.Fatalf(context.TODO(), "replica %s found by id but not by key", rep)
+		log.Fatalf(s.Ctx(), "replica %s found by id but not by key", rep)
 	}
 	// Adjust stats before calling Destroy. This can be called before or after
 	// Destroy, but this configuration helps avoid races in stat verification
@@ -1821,7 +1781,7 @@ func (s *Store) removeReplicaImpl(rep *Replica, origDesc roachpb.RangeDescriptor
 	if s.mu.replicasByKey.Delete(rep) == nil {
 		// We already checked that our replica was present in replicasByKey
 		// above. Nothing should have been able to change that.
-		log.Fatalf(context.TODO(), "replica %s found by id but not by key", rep)
+		log.Fatalf(s.Ctx(), "replica %s found by id but not by key", rep)
 	}
 	s.scanner.RemoveReplica(rep)
 	s.consistencyScanner.RemoveReplica(rep)
@@ -2233,7 +2193,7 @@ func (s *Store) maybeUpdateTransaction(txn *roachpb.Transaction, now hlc.Timesta
 		PusheeTxn: txn.TxnMeta,
 		PushType:  roachpb.PUSH_QUERY,
 	})
-	if err := s.db.Run(context.TODO(), b); err != nil {
+	if err := s.db.Run(s.Ctx(), b); err != nil {
 		// TODO(tschottdorf):
 		// We shouldn't catch an error here (unless it's from the abort cache, in
 		// which case we would not get the crucial information that we've been
@@ -2818,7 +2778,7 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 		// campaigning.
 		var warnDuration = 10 * s.ctx.RaftTickInterval
 		if elapsed >= warnDuration {
-			log.Warningf(s.Ctx(), "%s: handle raft ready: %.1fs", r, elapsed.Seconds())
+			log.Warningf(r.ctx, "handle raft ready: %.1fs", elapsed.Seconds())
 		}
 		if !r.IsInitialized() {
 			// Only an uninitialized replica can have a placeholder since, by
@@ -2857,7 +2817,6 @@ func (s *Store) processRaft() {
 	}
 	s.scheduler.Start(s.stopper)
 	s.raftTickLoop()
-	s.raftSnapshotStatusLoop()
 }
 
 func (s *Store) raftTickLoop() {
@@ -2884,35 +2843,6 @@ func (s *Store) raftTickLoop() {
 				s.scheduler.EnqueueRaftTick(rangeIDs...)
 
 				s.metrics.RaftTicks.Inc(1)
-
-			case <-s.stopper.ShouldStop():
-				return
-			}
-		}
-	})
-}
-
-func (s *Store) raftSnapshotStatusLoop() {
-	s.stopper.RunWorker(func() {
-		// We use a single goroutine for processing snapshot reporting. This
-		// goroutine needs to grab Replica.raftMu which means that it can block
-		// waiting for other raft processing on the range to complete. But note that
-		// the replica we're reporting the snapshot status on is the one which
-		// generated the snapshot (i.e. the leader). It is very unlikely that it will
-		// be doing expensive raft processing elsewhere in the system.
-		for {
-			select {
-			case st := <-s.ctx.Transport.SnapshotStatusChan:
-				s.mu.Lock()
-				r, ok := s.mu.replicas[st.Req.RangeID]
-				s.mu.Unlock()
-
-				if ok {
-					// Similar to the locking for Replica.handleRaftReady(), if the
-					// replica has been removed, Replica.mu.destroyed will be non-nil
-					// causing Replica.reportSnapshotStatus() to be a no-op.
-					r.reportSnapshotStatus(st.Req.Message.To, st.Err)
-				}
 
 			case <-s.stopper.ShouldStop():
 				return
@@ -3242,6 +3172,7 @@ func (s *Store) ComputeMetrics(tick int) error {
 	// If we're using RocksDB, log the sstable overview.
 	if rocksdb, ok := s.engine.(*engine.RocksDB); ok {
 		sstables := rocksdb.GetSSTables()
+		s.metrics.RdbNumSSTables.Update(int64(sstables.Len()))
 		readAmp := sstables.ReadAmplification()
 		s.metrics.RdbReadAmplification.Update(int64(readAmp))
 		// Log this metric infrequently.
