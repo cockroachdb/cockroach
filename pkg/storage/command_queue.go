@@ -232,6 +232,13 @@ func (cq *CommandQueue) getPrereqs(
 ) (prereqs []*cmd) {
 	prepareSpans(spans)
 
+	addPrereq := func(prereq *cmd) {
+		if prereq.pending == nil {
+			prereq.pending = make(chan struct{})
+		}
+		prereqs = append(prereqs, prereq)
+	}
+
 	// Loop over all spans. This cannot be a for-range loop, because the
 	// loop counter may be adjusted within the loop.
 	for i := 0; i < len(spans); i++ {
@@ -376,10 +383,7 @@ func (cq *CommandQueue) getPrereqs(
 				// this current command to the combined RangeGroup.
 				cq.rwRg.Add(keyRange)
 				if mustWait || !cq.wRg.Overlaps(keyRange) {
-					if cmd.pending == nil {
-						cmd.pending = make(chan struct{})
-					}
-					prereqs = append(prereqs, cmd)
+					addPrereq(cmd)
 				}
 			} else {
 				if cmdHasTimestamp {
@@ -408,10 +412,7 @@ func (cq *CommandQueue) getPrereqs(
 				// dependency established with a dependent of the current overlap, meaning we already established
 				// an implicit transitive dependency to the current overlap.
 				if mustWait || !overlapRg.Overlaps(keyRange) {
-					if cmd.pending == nil {
-						cmd.pending = make(chan struct{})
-					}
-					prereqs = append(prereqs, cmd)
+					addPrereq(cmd)
 				}
 
 				// The current command is a write, so add it to the write RangeGroup.
