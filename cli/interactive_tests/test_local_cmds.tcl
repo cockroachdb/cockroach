@@ -47,7 +47,7 @@ send "\\h\r"
 eexpect " ->"
 
 send "1;\r"
-eexpect "pq: syntax error*\\h"
+eexpect "syntax error*\\h"
 eexpect root@
 
 # Check that a built-in command in the middle of a token (eg a string)
