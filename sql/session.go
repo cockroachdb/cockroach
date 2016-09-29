@@ -453,10 +453,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 			} else if done {
 				break
 			}
-			if err := sc.exec(
-				e.cfg.TestingKnobs.SchemaChangersStartBackfillNotification,
-				e.cfg.TestingKnobs.SyncSchemaChangersRenameOldNameNotInUseNotification,
-			); err != nil {
+			if err := sc.exec(e.cfg.TestingKnobs); err != nil {
 				if isSchemaChangeRetryError(err) {
 					// Try again
 					continue

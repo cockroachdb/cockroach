@@ -196,10 +196,7 @@ func isSchemaChangeRetryError(err error) bool {
 
 // Execute the entire schema change in steps. startBackfillNotification is
 // called before the backfill starts; it can be nil.
-func (sc SchemaChanger) exec(
-	startBackfillNotification func() error,
-	oldNameNotInUseNotification func(),
-) error {
+func (sc SchemaChanger) exec(testingKnobs *ExecutorTestingKnobs) error {
 	// Acquire lease.
 	lease, err := sc.AcquireLease()
 	if err != nil {
@@ -278,8 +275,8 @@ func (sc SchemaChanger) exec(
 			return err
 		}
 
-		if oldNameNotInUseNotification != nil {
-			oldNameNotInUseNotification()
+		if testingKnobs.SyncSchemaChangersRenameOldNameNotInUseNotification != nil {
+			testingKnobs.SyncSchemaChangersRenameOldNameNotInUseNotification()
 		}
 		// Free up the old name(s).
 		err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
@@ -322,7 +319,7 @@ func (sc SchemaChanger) exec(
 	// but we're no longer responsible for taking care of that.
 
 	// Run through mutation state machine and backfill.
-	err = sc.runStateMachineAndBackfill(&lease, startBackfillNotification)
+	err = sc.runStateMachineAndBackfill(&lease, testingKnobs)
 
 	// Purge the mutations if the application of the mutations failed due to
 	// an integrity constraint violation. All other errors are transient
@@ -339,9 +336,7 @@ func (sc SchemaChanger) exec(
 
 		// After this point the schema change has been reversed and any retry
 		// of the schema change will act upon the reversed schema change.
-		if errPurge := sc.runStateMachineAndBackfill(
-			&lease, startBackfillNotification,
-		); errPurge != nil {
+		if errPurge := sc.runStateMachineAndBackfill(&lease, testingKnobs); errPurge != nil {
 			// Don't return this error because we do want the caller to know
 			// that an integrity constraint was violated with the original
 			// schema change. The reversed schema change will be
@@ -484,15 +479,15 @@ func (sc *SchemaChanger) done() (*sqlbase.Descriptor, error) {
 // runStateMachineAndBackfill runs the schema change state machine followed by
 // the backfill.
 func (sc *SchemaChanger) runStateMachineAndBackfill(
-	lease *sqlbase.TableDescriptor_SchemaChangeLease, startBackfillNotification func() error,
+	lease *sqlbase.TableDescriptor_SchemaChangeLease, testingKnobs *ExecutorTestingKnobs,
 ) error {
 	// Run through mutation state machine before backfill.
 	if err := sc.RunStateMachineBeforeBackfill(); err != nil {
 		return err
 	}
 
-	if startBackfillNotification != nil {
-		if err := startBackfillNotification(); err != nil {
+	if testingKnobs.SchemaChangersStartBackfillNotification != nil {
+		if err := testingKnobs.SchemaChangersStartBackfillNotification(); err != nil {
 			return err
 		}
 	}
@@ -793,7 +788,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				}
 				for tableID, sc := range s.schemaChangers {
 					if timeutil.Since(sc.execAfter) > 0 {
-						err := sc.exec(nil, nil)
+						err := sc.exec(&ExecutorTestingKnobs{})
 						if err != nil {
 							if err == errExistingSchemaChangeLease {
 							} else if err == sqlbase.ErrDescriptorNotFound {
