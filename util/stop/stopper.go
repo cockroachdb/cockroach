@@ -170,7 +170,7 @@ func NewStopper(options ...Option) *Stopper {
 // of Stopper.
 func (s *Stopper) Recover() {
 	if r := recover(); r != nil {
-		if s.onPanic != nil {
+		if s != nil && s.onPanic != nil {
 			s.onPanic(r)
 			return
 		}

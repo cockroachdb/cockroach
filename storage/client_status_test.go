@@ -40,7 +40,7 @@ func TestComputeStatsForKeySpan(t *testing.T) {
 		repl := mtc.stores[0].LookupReplica(key, roachpb.RKeyMin)
 		args := adminSplitArgs(key, key)
 		header := roachpb.Header{
-			RangeID: repl.RangeID,
+			RangeID: repl.Desc().RangeID,
 		}
 		if _, err := client.SendWrappedWith(mtc.stores[0], nil, header, &args); err != nil {
 			t.Fatal(err)

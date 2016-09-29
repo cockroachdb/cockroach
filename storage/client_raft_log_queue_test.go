@@ -61,11 +61,18 @@ func TestRaftLogQueue(t *testing.T) {
 	}
 
 	// Get the raft leader (and ensure one exists).
-	rangeID := mtc.stores[0].LookupReplica([]byte("a"), nil).RangeID
-	raftLeaderRepl := mtc.getRaftLeader(rangeID)
-	if raftLeaderRepl == nil {
+	rangeID := mtc.stores[0].LookupReplica([]byte("a"), nil).Desc().RangeID
+	ref := mtc.getRaftLeader(rangeID)
+	if ref == nil {
 		t.Fatalf("could not find raft leader replica for range %d", rangeID)
 	}
+
+	raftLeaderRepl, release, err := ref.AcquireHack()
+	defer release()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	originalIndex, err := raftLeaderRepl.GetFirstIndex()
 	if err != nil {
 		t.Fatal(err)
