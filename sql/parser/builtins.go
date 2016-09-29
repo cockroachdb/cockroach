@@ -84,6 +84,8 @@ type Builtin struct {
 	Types      typeList
 	ReturnType Datum
 
+	preferredOverload bool
+
 	// Set to true when a function potentially returns a different value
 	// when called in the same statement with the same parameters.
 	// e.g.: random(), clock_timestamp(). Some functions like now()

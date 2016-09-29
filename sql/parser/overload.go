@@ -438,5 +438,11 @@ func typeCheckOverloadedExprs(
 	if err := defaultTypeCheck(len(overloads) > 0); err != nil {
 		return nil, nil, err
 	}
+
+	for _, c := range overloads {
+		if c, ok := c.(Builtin); ok && c.preferredOverload {
+			return typedExprs, c, nil
+		}
+	}
 	return typedExprs, nil, nil
 }
