@@ -717,20 +717,26 @@ func (s *Store) DrainLeases(drain bool) error {
 	}
 
 	return util.RetryForDuration(10*s.ctx.rangeLeaseActiveDuration, func() error {
-		var err error
+		var drainingLease *roachpb.Lease
 		now := s.Clock().Now()
 		newStoreRangeSet(s).Visit(func(r *Replica) bool {
 			lease, nextLease := r.getLease()
 			// If we own an active lease or we're trying to obtain a lease
 			// (and that request is fresh enough), wait.
-			if (lease.OwnedBy(s.StoreID()) && lease.Covers(now)) ||
-				(nextLease != nil && nextLease.Covers(now)) {
-
-				err = fmt.Errorf("replica %s still has an active lease", r)
+			switch {
+			case lease.OwnedBy(s.StoreID()) && lease.Covers(now):
+				drainingLease = lease
+			case nextLease != nil && nextLease.OwnedBy(s.StoreID()) && nextLease.Covers(now):
+				drainingLease = nextLease
+			default:
+				return true
 			}
-			return err == nil // break on error
+			return false // stop
 		})
-		return err
+		if drainingLease != nil {
+			return errors.Errorf("lease %s is still active", drainingLease)
+		}
+		return nil
 	})
 }
 
