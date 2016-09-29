@@ -160,7 +160,9 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
         dispatch(this.receiveData(data, req));
       }).catch((error: Error) => {
         // If an error occurred during the fetch, it to the store.
-        dispatch(this.errorData(error, req));
+         // Wait 1s to record the error to avoid spamming errors.
+        // TODO: Fix error handling more comprehensively. Tracked in #8699
+        setTimeout(() => dispatch(this.errorData(error, req)), 1000);
       }).then(() => {
         // Invalidate data after the invalidation period if one exists.
         if (this.invalidationPeriod) {
