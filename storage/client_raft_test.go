@@ -1982,16 +1982,30 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	startWG.Add(1)
 	var finishWG sync.WaitGroup
 	finishWG.Add(1)
+
+	rep, err := mtc.stores[2].GetReplica(raftID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replicaDesc, ok := rep.Desc().GetReplicaDescriptor(mtc.stores[2].StoreID())
+	if !ok {
+		t.Fatalf("ReplicaID %d not found", raftID)
+	}
 	go func() {
-		rng, err := mtc.stores[2].GetReplica(raftID)
-		if err != nil {
-			t.Fatal(err)
-		}
 		incArgs := incrementArgs([]byte("a"), 23)
 		startWG.Done()
 		defer finishWG.Done()
-		if _, err := client.SendWrappedWith(rng, nil, roachpb.Header{Timestamp: mtc.stores[2].Clock().Now()}, &incArgs); err == nil {
-			t.Fatal("expected error during shutdown")
+		_, pErr := client.SendWrappedWith(
+			mtc.stores[2], nil, roachpb.Header{
+				Replica:   replicaDesc,
+				Timestamp: mtc.stores[2].Clock().Now(),
+			}, &incArgs,
+		)
+		if _, ok := pErr.GetDetail().(*roachpb.RangeNotFoundError); !ok {
+			// We're on a goroutine and passing the error out is awkward since
+			// it would only surface at shutdown time. A panic ought to be good
+			// enough to get visibility.
+			panic(fmt.Sprintf("unexpected error: %v", pErr))
 		}
 	}()
 	startWG.Wait()
