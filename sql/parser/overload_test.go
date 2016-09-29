@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"go/constant"
 	"go/token"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -81,6 +82,17 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 	binaryStringFloatFn2 := makeTestOverload(TypeFloat, TypeString, TypeFloat)
 	binaryIntDateFn := makeTestOverload(TypeDate, TypeInt, TypeDate)
 
+	now := make([]overloadImpl, 0, len(Builtins["now"]))
+	for _, c := range Builtins["now"] {
+		now = append(now, c)
+	}
+
+	badnow := make([]overloadImpl, 0, len(Builtins["now"]))
+	for _, c := range Builtins["now"] {
+		c.preferredOverload = true
+		badnow = append(badnow, c)
+	}
+
 	testData := []struct {
 		ptypes           PlaceholderTypes
 		desired          Datum
@@ -98,7 +110,9 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		{nil, nil, []Expr{strConst("PT12H2M")}, []overloadImpl{unaryIntervalFn}, unaryIntervalFn},
 		{nil, nil, []Expr{strConst("PT12H2M")}, []overloadImpl{unaryIntervalFn, unaryStringFn}, unaryStringFn},
 		{nil, nil, []Expr{strConst("PT12H2M")}, []overloadImpl{unaryIntervalFn, unaryTimestampFn}, nil}, // Limitation.
-		{nil, nil, []Expr{strConst("PT12H2M")}, []overloadImpl{unaryIntervalFn, unaryIntFn}, nil},       // Limitation.
+		{nil, nil, []Expr{}, now, now[0]},
+		{nil, nil, []Expr{}, badnow, nil},
+		{nil, nil, []Expr{strConst("PT12H2M")}, []overloadImpl{unaryIntervalFn, unaryIntFn}, nil}, // Limitation.
 		// Unary unresolved Placeholders.
 		{nil, nil, []Expr{Placeholder{"a"}}, []overloadImpl{unaryStringFn, unaryIntFn}, nil},
 		{nil, nil, []Expr{Placeholder{"a"}}, []overloadImpl{unaryStringFn, binaryIntFn}, unaryStringFn},
@@ -160,8 +174,10 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		if d.expectedOverload != nil {
 			if err != nil {
 				t.Errorf("%d: unexpected error returned from typeCheckOverloadedExprs when type checking %s: %v", i, d.exprs, err)
-			} else if fn != d.expectedOverload {
-				t.Errorf("%d: expected overload %s to be chosen when type checking %s, found %v", i, d.expectedOverload, d.exprs, fn)
+			} else if !reflect.DeepEqual(fn, d.expectedOverload) {
+				if b, ok := d.expectedOverload.(Builtin); !(ok && b.preferredOverload) {
+					t.Errorf("%d: expected overload %v to be chosen when type checking %s, found %v", i, d.expectedOverload, d.exprs, fn)
+				}
 			}
 		} else if fn != nil {
 			t.Errorf("%d: expected no matching overloads to be found when type checking %s, found %s", i, d.exprs, fn)

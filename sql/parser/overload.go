@@ -470,10 +470,15 @@ func typeCheckOverloadedExprs(
 		return nil, nil, err
 	}
 
+	var preferred overloadImpl
 	for _, c := range overloads {
 		if c, ok := c.(Builtin); ok && c.preferredOverload {
-			return typedExprs, c, nil
+			if preferred != nil { // multiple preferred overloads is not allowed.
+				return typedExprs, nil, nil
+			}
+			preferred = c
 		}
 	}
-	return typedExprs, nil, nil
+
+	return typedExprs, preferred, nil
 }
