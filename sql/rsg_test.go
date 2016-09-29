@@ -123,7 +123,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 					v = `'string'`
 				case *parser.DBytes:
 					v = `b'bytes'`
-				case *parser.DTimestamp:
+				case *parser.DTimestamp, *parser.DTimestampTZ:
 					t := time.Unix(0, r.Int63())
 					v = fmt.Sprintf(`'%s'`, t.Format(time.RFC3339Nano))
 				case *parser.DBool:
@@ -137,11 +137,9 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 					i -= r.Int63()
 					d := parser.NewDDate(parser.DDate(i))
 					v = fmt.Sprintf(`'%s'`, d)
-					fmt.Println("DATE", v)
 				case *parser.DInterval:
 					d := duration.Duration{Nanos: r.Int63()}
 					v = fmt.Sprintf(`'%s'`, &parser.DInterval{Duration: d})
-					fmt.Println("INTERVAL", v)
 				case *parser.DTuple:
 					v = "NULL"
 				default:
