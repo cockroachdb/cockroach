@@ -233,7 +233,7 @@ func (ls *Stores) LookupReplica(
 
 		if repDescFound {
 			// We already found the range; this should never happen outside of tests.
-			err := errors.Errorf("range %+v exists on additional store: %+v", replica, store)
+			err := errors.Errorf("replica %+v exists on additional store: %+v", replica.Desc(), store)
 			return 0, roachpb.ReplicaDescriptor{}, err
 		}
 
