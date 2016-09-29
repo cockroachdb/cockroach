@@ -38,7 +38,7 @@ resource "google_compute_instance" "example_block_writer" {
 
   connection {
     user = "ubuntu"
-    key_file = "~/.ssh/${var.key_name}"
+    private_key = "${file(format("~/.ssh/%s", var.key_name))}"
   }
 
   service_account {

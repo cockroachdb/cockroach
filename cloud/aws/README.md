@@ -39,7 +39,7 @@ To see the actions expected to be performed by terraform, use `plan` instead of 
 #### Create a cockroach cluster with 3 nodes
 
 ```
-$ terraform apply --var=num_instances=3
+$ terraform apply --var=num_instances=\"3\"
 
 Outputs:
   example_block_writer =
