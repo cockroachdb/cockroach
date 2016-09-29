@@ -565,14 +565,14 @@ var Builtins = map[string][]Builtin{
 
 	"age": {
 		Builtin{
-			Types:      ArgTypes{TypeTimestamp},
+			Types:      ArgTypes{TypeTimestampTZ},
 			ReturnType: TypeInterval,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return timestampMinusBinOp.fn(ctx, ctx.GetTxnTimestamp(time.Microsecond), args[0])
 			},
 		},
 		Builtin{
-			Types:      ArgTypes{TypeTimestamp, TypeTimestamp},
+			Types:      ArgTypes{TypeTimestampTZ, TypeTimestampTZ},
 			ReturnType: TypeInterval,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return timestampMinusBinOp.fn(ctx, args[0], args[1])
@@ -598,7 +598,7 @@ var Builtins = map[string][]Builtin{
 	"statement_timestamp": {
 		Builtin{
 			Types:      ArgTypes{},
-			ReturnType: TypeTimestamp,
+			ReturnType: TypeTimestampTZ,
 			impure:     true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return ctx.GetStmtTimestamp(), nil
@@ -621,10 +621,10 @@ var Builtins = map[string][]Builtin{
 	"clock_timestamp": {
 		Builtin{
 			Types:      ArgTypes{},
-			ReturnType: TypeTimestamp,
+			ReturnType: TypeTimestampTZ,
 			impure:     true,
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
-				return MakeDTimestamp(timeutil.Now(), time.Microsecond), nil
+				return MakeDTimestampTZ(timeutil.Now(), time.Microsecond), nil
 			},
 		},
 	},
@@ -1067,7 +1067,7 @@ var ceilImpl = []Builtin{
 
 var txnTSImpl = Builtin{
 	Types:      ArgTypes{},
-	ReturnType: TypeTimestamp,
+	ReturnType: TypeTimestampTZ,
 	impure:     true,
 	fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 		return ctx.GetTxnTimestamp(time.Microsecond), nil

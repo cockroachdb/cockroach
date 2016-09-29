@@ -167,7 +167,7 @@ BEGIN TRANSACTION
 statement ok
 CREATE TABLE kv (
   k CHAR PRIMARY KEY,
-  v TIMESTAMP
+  v TIMESTAMP WITH TIME ZONE
 )
 
 statement ok
@@ -319,7 +319,6 @@ SELECT k FROM kv ORDER BY v
 4
 5
 6
-
 
 query I
 SELECT extract(year from '2001-04-10 12:04:59')
@@ -615,9 +614,6 @@ query I
 SELECT a FROM tz WHERE c < d
 ----
 2
-
-query error unsupported comparison operator: <timestamp> = <timestamptz>
-SELECT a FROM tz WHERE b = c
 
 query I
 SELECT a FROM tz WHERE b = c::timestamp
