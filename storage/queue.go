@@ -163,9 +163,6 @@ type queueConfig struct {
 // baseQueue is the base implementation of the replicaQueue interface.
 // Queue implementations should embed a baseQueue and implement queueImpl.
 //
-// baseQueue is not thread safe and is intended for usage only from
-// the scanner's goroutine.
-//
 // In addition to normal processing of replicas via the replica
 // scanner, queues have an optional notion of purgatory, where
 // replicas which fail queue processing with a retryable error may be
@@ -204,20 +201,20 @@ type baseQueue struct {
 	processMu sync.Locker
 }
 
-// makeBaseQueue returns a new instance of baseQueue with the
-// specified shouldQueue function to determine which replicas to queue
-// and maxSize to limit the growth of the queue. Note that
-// maxSize doesn't prevent new replicas from being added, it just
-// limits the total size. Higher priority replicas can still be
-// added; their addition simply removes the lowest priority replica.
-func makeBaseQueue(
+// newBaseQueue returns a new instance of baseQueue with the specified
+// shouldQueue function to determine which replicas to queue and maxSize to
+// limit the growth of the queue. Note that maxSize doesn't prevent new
+// replicas from being added, it just limits the total size. Higher priority
+// replicas can still be added; their addition simply removes the lowest
+// priority replica.
+func newBaseQueue(
 	ctx context.Context,
 	name string,
 	impl queueImpl,
 	store *Store,
 	gossip *gossip.Gossip,
 	cfg queueConfig,
-) baseQueue {
+) *baseQueue {
 	// Use the default process timeout if none specified.
 	if cfg.processTimeout == 0 {
 		cfg.processTimeout = defaultProcessTimeout
@@ -240,7 +237,7 @@ func makeBaseQueue(
 	bq.mu.replicas = map[roachpb.RangeID]*replicaItem{}
 
 	bq.processMu = new(syncutil.Mutex)
-	return bq
+	return &bq
 }
 
 // Length returns the current size of the queue.

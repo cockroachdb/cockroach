@@ -52,7 +52,7 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 	return totalStats, err
 }
 
-func forceScanAndProcess(s *Store, q baseQueue) {
+func forceScanAndProcess(s *Store, q *baseQueue) {
 	newStoreRangeSet(s).Visit(func(repl *Replica) bool {
 		q.MaybeAdd(repl, s.ctx.Clock.Now())
 		return true
