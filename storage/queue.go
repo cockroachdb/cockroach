@@ -544,14 +544,14 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 // purgatoryError and the queue implementation must have its own
 // mechanism for signaling re-processing of replicas held in
 // purgatory.
-func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Clock, stopper *stop.Stopper) {
+func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, triggeringErr error, clock *hlc.Clock, stopper *stop.Stopper) {
 	// Increment failures metric here to capture all error returns from
 	// process().
 	bq.failures.Inc(1)
 
 	// Check whether the failure is a purgatory error and whether the queue supports it.
-	if _, ok := err.(purgatoryError); !ok || bq.impl.purgatoryChan() == nil {
-		log.Errorf(bq.ctx, "on %s: %s", repl, err)
+	if _, ok := triggeringErr.(purgatoryError); !ok || bq.impl.purgatoryChan() == nil {
+		log.Errorf(bq.ctx, "on %s: %s", repl, triggeringErr)
 		return
 	}
 	bq.mu.Lock()
@@ -562,7 +562,7 @@ func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Cl
 		return
 	}
 
-	log.Errorf(bq.ctx, "(purgatory) on %s: %s", repl, err)
+	log.Errorf(bq.ctx, "(purgatory) on %s: %s", repl, triggeringErr)
 
 	item := &replicaItem{value: repl.RangeID}
 	bq.mu.replicas[repl.RangeID] = item
@@ -573,13 +573,13 @@ func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, err error, clock *hlc.Cl
 
 	// If purgatory already exists, just add to the map and we're done.
 	if bq.mu.purgatory != nil {
-		bq.mu.purgatory[repl.RangeID] = err
+		bq.mu.purgatory[repl.RangeID] = triggeringErr
 		return
 	}
 
 	// Otherwise, create purgatory and start processing.
 	bq.mu.purgatory = map[roachpb.RangeID]error{
-		repl.RangeID: err,
+		repl.RangeID: triggeringErr,
 	}
 
 	stopper.RunWorker(func() {
