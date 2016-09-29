@@ -41,7 +41,7 @@ const (
 // replicateQueue manages a queue of replicas which may need to add an
 // additional replica to their range.
 type replicateQueue struct {
-	baseQueue
+	*baseQueue
 	allocator  Allocator
 	clock      *hlc.Clock
 	updateChan chan struct{}
@@ -55,7 +55,7 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator, cloc
 		clock:      clock,
 		updateChan: make(chan struct{}, 1),
 	}
-	rq.baseQueue = makeBaseQueue(
+	rq.baseQueue = newBaseQueue(
 		store.Ctx(), "replicate", rq, store, g,
 		queueConfig{
 			maxSize:              replicateQueueMaxSize,

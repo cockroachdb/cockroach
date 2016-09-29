@@ -40,7 +40,7 @@ const (
 // splitQueue manages a queue of ranges slated to be split due to size
 // or along intersecting zone config boundaries.
 type splitQueue struct {
-	baseQueue
+	*baseQueue
 	db *client.DB
 }
 
@@ -49,7 +49,7 @@ func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQue
 	sq := &splitQueue{
 		db: db,
 	}
-	sq.baseQueue = makeBaseQueue(
+	sq.baseQueue = newBaseQueue(
 		store.Ctx(), "split", sq, store, gossip,
 		queueConfig{
 			maxSize:              splitQueueMaxSize,

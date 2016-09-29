@@ -84,13 +84,13 @@ func makeTestBaseQueue(
 	store *Store,
 	gossip *gossip.Gossip,
 	cfg queueConfig,
-) baseQueue {
+) *baseQueue {
 	cfg.successes = metric.NewCounter(metric.Metadata{Name: "processed"})
 	cfg.failures = metric.NewCounter(metric.Metadata{Name: "failures"})
 	cfg.pending = metric.NewGauge(metric.Metadata{Name: "pending"})
 	cfg.processingNanos = metric.NewCounter(metric.Metadata{Name: "processingnanos"})
 	cfg.purgatory = metric.NewGauge(metric.Metadata{Name: "purgatory"})
-	return makeBaseQueue(context.TODO(), name, impl, store, gossip, cfg)
+	return newBaseQueue(context.TODO(), name, impl, store, gossip, cfg)
 }
 
 // TestQueuePriorityQueue verifies priority queue implementation.
