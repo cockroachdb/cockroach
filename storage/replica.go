@@ -250,6 +250,8 @@ type Replica struct {
 		destroyed error
 		// Corrupted persistently (across process restarts) indicates whether the
 		// replica has been corrupted.
+		//
+		// TODO(tschottdorf): remove/refactor this field.
 		corrupted bool
 		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
 		// whenever a Raft operation is performed.
@@ -3462,14 +3464,21 @@ func (r *Replica) exceedsDoubleSplitSizeLocked() bool {
 // maybeAddToSplitQueue checks whether the current size of the range
 // exceeds the max size specified in the zone config. If yes, the
 // range is added to the split queue.
+//
+// TODO(tschottdorf): unnecessary to have this on *Replica; it should be on
+// the Store.
 func (r *Replica) maybeAddToSplitQueue() {
 	if r.needsSplitBySize() {
+		// TODO(tschottdorf): illegal to pass itself out as a reference.
 		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
 }
 
 // maybeAddToRaftLogQueue checks whether the raft log is a candidate for
 // truncation. If yes, the range is added to the raft log queue.
+//
+// TODO(tschottdorf): unnecessary to have this on *Replica; it should be on
+// the Store.
 func (r *Replica) maybeAddToRaftLogQueue(appliedIndex uint64) {
 	const raftLogCheckFrequency = 1 + RaftLogQueueStaleThreshold/4
 	if appliedIndex%raftLogCheckFrequency == 0 {
