@@ -19,6 +19,7 @@ eexpect "bad connection"
 eexpect root@
 
 send "select 1;\r"
+eexpect "opening new connection"
 eexpect "connection refused"
 eexpect root@
 
@@ -26,6 +27,7 @@ eexpect root@
 start_server $argv
 
 send "select 1;\r"
+eexpect "opening new connection"
 eexpect "1 row"
 eexpect root@
 
