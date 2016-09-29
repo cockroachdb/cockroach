@@ -4,8 +4,6 @@ source [file join [file dirname $argv0] common.tcl]
 
 start_server $argv
 
-set timeout 5
-
 spawn /bin/bash
 send "PS1=':''/# '\r"
 eexpect ":/# "

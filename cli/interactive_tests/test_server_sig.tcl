@@ -2,8 +2,6 @@
 
 source [file join [file dirname $argv0] common.tcl]
 
-set timeout 15
-
 spawn /bin/bash
 send "PS1='\\h:''/# '\r"
 eexpect ":/# "
@@ -37,7 +35,6 @@ eexpect "1\r\n"
 eexpect ":/# "
 
 # Check that the server shuts down fast upon receiving Ctrl+C twice.
-set timeout 1
 send "$argv start & echo $! >server_pid; fg\r"
 eexpect "restarted"
 
