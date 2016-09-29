@@ -1615,6 +1615,10 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 
 // TestRangeDescriptorSnapshotRace calls Snapshot() repeatedly while
 // transactions are performed on the range descriptor.
+//
+// TODO(tamird): Refactor test so that snapshots are generated in the main
+// goroutine and  random splits are in the non-main goroutines. that gives the
+// test a more natural stopping condition.
 func TestRangeDescriptorSnapshotRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -1637,7 +1641,7 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 			return errors.Errorf("failed to look up replica for %s", key)
 		}
 		if _, err := rng.GetSnapshot(context.Background()); err != nil {
-			return errors.Wrapf(err, "failed to snapshot range %s: %s", key)
+			return errors.Wrapf(err, "failed to snapshot range %s: %s", rng, key)
 		} else {
 			rng.CloseOutSnap()
 		}
@@ -1982,16 +1986,30 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	startWG.Add(1)
 	var finishWG sync.WaitGroup
 	finishWG.Add(1)
+
+	rep, err := mtc.stores[2].GetReplica(raftID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replicaDesc, ok := rep.Desc().GetReplicaDescriptor(mtc.stores[2].StoreID())
+	if !ok {
+		t.Fatalf("ReplicaID %d not found", raftID)
+	}
 	go func() {
-		rng, err := mtc.stores[2].GetReplica(raftID)
-		if err != nil {
-			t.Fatal(err)
-		}
 		incArgs := incrementArgs([]byte("a"), 23)
 		startWG.Done()
 		defer finishWG.Done()
-		if _, err := client.SendWrappedWith(rng, nil, roachpb.Header{Timestamp: mtc.stores[2].Clock().Now()}, &incArgs); err == nil {
-			t.Fatal("expected error during shutdown")
+		_, pErr := client.SendWrappedWith(
+			mtc.stores[2], nil, roachpb.Header{
+				Replica:   replicaDesc,
+				Timestamp: mtc.stores[2].Clock().Now(),
+			}, &incArgs,
+		)
+		if _, ok := pErr.GetDetail().(*roachpb.RangeNotFoundError); !ok {
+			// We're on a goroutine and passing the error out is awkward since
+			// it would only surface at shutdown time. A panic ought to be good
+			// enough to get visibility.
+			panic(fmt.Sprintf("unexpected error: %v", pErr))
 		}
 	}()
 	startWG.Wait()
