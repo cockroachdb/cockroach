@@ -54,7 +54,7 @@ func newReplicaConsistencyQueue(store *Store, gossip *gossip.Gossip) *replicaCon
 	return rcq
 }
 
-func (*replicaConsistencyQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
+func (*replicaConsistencyQueue) shouldQueue(_ hlc.Timestamp, _ *Replica,
 	_ config.SystemConfig) (bool, float64) {
 	return true, 1.0
 }

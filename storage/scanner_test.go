@@ -149,15 +149,15 @@ func (tq *testQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
 func (tq *testQueue) MaybeAdd(rng *Replica, now hlc.Timestamp) {
 	tq.Lock()
 	defer tq.Unlock()
-	if index := tq.indexOf(rng); index == -1 {
+	if index := tq.indexOf(rng.RangeID); index == -1 {
 		tq.ranges = append(tq.ranges, rng)
 	}
 }
 
-func (tq *testQueue) MaybeRemove(rng *Replica) {
+func (tq *testQueue) MaybeRemove(rangeID roachpb.RangeID) {
 	tq.Lock()
 	defer tq.Unlock()
-	if index := tq.indexOf(rng); index != -1 {
+	if index := tq.indexOf(rangeID); index != -1 {
 		tq.ranges = append(tq.ranges[:index], tq.ranges[index+1:]...)
 	}
 }
@@ -168,9 +168,9 @@ func (tq *testQueue) count() int {
 	return len(tq.ranges)
 }
 
-func (tq *testQueue) indexOf(rng *Replica) int {
-	for i, r := range tq.ranges {
-		if r == rng {
+func (tq *testQueue) indexOf(rangeID roachpb.RangeID) int {
+	for i, repl := range tq.ranges {
+		if rangeID == repl.RangeID {
 			return i
 		}
 	}

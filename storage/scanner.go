@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -42,7 +43,7 @@ type replicaQueue interface {
 	// too full, etc.
 	MaybeAdd(*Replica, hlc.Timestamp)
 	// MaybeRemove removes the replica from the queue if it is present.
-	MaybeRemove(*Replica)
+	MaybeRemove(roachpb.RangeID)
 }
 
 // A replicaSet provides access to a sequence of replicas to consider
@@ -212,6 +213,7 @@ func (rs *replicaScanner) waitAndProcess(
 				return false
 			}
 
+			// TODO(tschottdorf): why this task?
 			return nil != stopper.RunTask(func() {
 				// Try adding replica to all queues.
 				for _, q := range rs.queues {
@@ -231,8 +233,9 @@ func (rs *replicaScanner) waitAndProcess(
 func (rs *replicaScanner) removeReplica(repl *Replica) {
 	// Remove replica from all queues as applicable. Note that we still
 	// process removals while disabled.
+	rangeID := repl.RangeID
 	for _, q := range rs.queues {
-		q.MaybeRemove(repl)
+		q.MaybeRemove(rangeID)
 	}
 	if log.V(6) {
 		log.Infof(rs.ctx, "removed replica %s", repl)

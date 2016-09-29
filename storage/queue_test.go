@@ -392,7 +392,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 	bq.Start(clock, tc.stopper)
 
 	bq.MaybeAdd(r, hlc.ZeroTimestamp)
-	bq.MaybeRemove(r)
+	bq.MaybeRemove(r.RangeID)
 
 	// Wake the queue
 	close(testQueue.blocker)
