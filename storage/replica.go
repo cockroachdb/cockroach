@@ -250,6 +250,8 @@ type Replica struct {
 		destroyed error
 		// Corrupted persistently (across process restarts) indicates whether the
 		// replica has been corrupted.
+		//
+		// TODO(tschottdorf): remove/refactor this field.
 		corrupted bool
 		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
 		// whenever a Raft operation is performed.
@@ -1954,9 +1956,15 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 				}
 			}
 
-			// Discard errors from processRaftCommand. The error has been sent
-			// to the client that originated it, where it will be handled.
-			_ = r.processRaftCommand(storagebase.CmdIDKey(commandID), e.Index, command)
+			// Errors which are not ReplicaCorruption are ignored; they have
+			// been sent to the client waiting on the command on the Replica on
+			// which it entered Raft. When the Replica is corrupt, we drop
+			// everything and return the error (i.e. tell the Store about it).
+			if err, corrupt := r.processRaftCommand(
+				storagebase.CmdIDKey(commandID), e.Index, command,
+			).GetDetail().(*roachpb.ReplicaCorruptionError); corrupt {
+				return err
+			}
 
 		case raftpb.EntryConfChange:
 			var cc raftpb.ConfChange
@@ -2527,8 +2535,8 @@ func (r *Replica) processRaftCommand(
 		// to trigger reproposals or during concurrent configuration changes).
 		// Nothing to do here except making sure that the corresponding batch
 		// (which is bogus) doesn't get executed (for it is empty and so
-		// properties like key range are undefined).
-		forcedErr = roachpb.NewErrorf("no-op on empty Raft entry")
+		// properties like key range are undefined) but the applied index is.
+		forcedErr = roachpb.NewErrorf("no-op on empty Raft entry at index %d", index)
 	} else if isLeaseError() {
 		log.VEventf(
 			1, ctx, "command proposed from replica %+v (lease at %v): %s",
@@ -2607,7 +2615,7 @@ func (r *Replica) processRaftCommand(
 
 	// applyRaftCommand will return "expected" errors, but may also indicate
 	// replica corruption (as of now, signaled by a replicaCorruptionError).
-	// We feed its return through maybeSetCorrupt to act when that happens.
+	// These are handled by the Store.
 	if forcedErr != nil {
 		log.VEventf(1, ctx, "applying command with forced error: %s", forcedErr)
 	} else {
@@ -2615,7 +2623,6 @@ func (r *Replica) processRaftCommand(
 	}
 	br, propResult, pErr := r.applyRaftCommand(idKey, ctx, index, leaseIndex,
 		raftCmd.OriginReplica, raftCmd.Cmd, forcedErr)
-	pErr = r.maybeSetCorrupt(ctx, pErr)
 
 	// Handle all returned side effects. This must happen after commit but
 	// before returning to the client.
@@ -2669,7 +2676,7 @@ func (r *Replica) maybeAcquireSplitMergeLock(ba roachpb.BatchRequest) func(pErr 
 func (r *Replica) acquireSplitLock(split *roachpb.SplitTrigger) func(pErr *roachpb.Error) {
 	rightRng, created, err := r.store.getOrCreateReplica(split.RightDesc.RangeID, 0, nil)
 	if err != nil {
-		return nil
+		log.Fatalf(r.logContext(context.TODO()), "unable to get replica %s: %s", split.RightDesc, err)
 	}
 
 	// It would be nice to assert that rightRng is not initialized
@@ -2752,7 +2759,12 @@ func (r *Replica) applyRaftCommand(
 		// If we have an out of order index, there's corruption. No sense in
 		// trying to update anything or running the command. Simply return
 		// a corruption error.
-		return nil, proposalResult{}, roachpb.NewError(NewReplicaCorruptionError(errors.Errorf("applied index jumped from %d to %d", oldIndex, index)))
+		return nil, proposalResult{}, roachpb.NewError(NewReplicaCorruptionError(
+			errors.Errorf(
+				"applied index jumped from %d to %d",
+				oldIndex, index,
+			),
+		))
 	}
 
 	// Call the helper, which returns a batch containing data written
@@ -3273,6 +3285,7 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 	if !r.IsFirstRange() {
 		return nil
 	}
+	ctx := r.ctx
 
 	// When multiple nodes are initialized with overlapping Gossip addresses, they all
 	// will attempt to gossip their cluster ID. This is a fairly obvious misconfiguration,
@@ -3295,17 +3308,21 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 	if err := r.store.Gossip().AddInfo(gossip.KeyClusterID, r.store.ClusterID().GetBytes(), 0*time.Second); err != nil {
 		log.Errorf(r.ctx, "failed to gossip cluster ID: %s", err)
 	}
-	if hasLease, pErr := r.getLeaseForGossip(r.ctx); hasLease {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		r.gossipFirstRangeLocked(r.ctx)
-	} else {
+
+	hasLease, pErr := r.getLeaseForGossip(r.ctx)
+	if pErr != nil {
+		log.Warning(ctx, errors.Wrap(pErr.GoError(), "while trying to gossip first range"))
 		return pErr
+	} else if !hasLease {
+		return nil
 	}
+	r.gossipFirstRange(r.ctx)
 	return nil
 }
 
-func (r *Replica) gossipFirstRangeLocked(ctx context.Context) {
+func (r *Replica) gossipFirstRange(ctx context.Context) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	// Gossip is not provided for the bootstrap store and for some tests.
 	if r.store.Gossip() == nil {
 		return
@@ -3383,40 +3400,6 @@ func NewReplicaCorruptionError(err error) *roachpb.ReplicaCorruptionError {
 	return &roachpb.ReplicaCorruptionError{ErrorMsg: err.Error()}
 }
 
-// maybeSetCorrupt is a stand-in for proper handling of failing replicas. Such a
-// failure is indicated by a call to maybeSetCorrupt with a ReplicaCorruptionError.
-// Currently any error is passed through, but prospectively it should stop the
-// range from participating in progress, trigger a rebalance operation and
-// decide on an error-by-error basis whether the corruption is limited to the
-// range, store, node or cluster with corresponding actions taken.
-//
-// TODO(d4l3k): when marking a Replica corrupt, must subtract its stats from
-// r.store.metrics. Errors which happen between committing a batch and sending
-// a stats delta from the store are going to be particularly tricky and the
-// best bet is to not have any of those.
-// @bdarnell remarks: Corruption errors should be rare so we may want the store
-// to just recompute its stats in the background when one occurs.
-func (r *Replica) maybeSetCorrupt(ctx context.Context, pErr *roachpb.Error) *roachpb.Error {
-	if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-
-		log.Errorf(ctx, "stalling replica due to: %s", cErr.ErrorMsg)
-		cErr.Processed = true
-		r.mu.destroyed = cErr
-		r.mu.corrupted = true
-		pErr = roachpb.NewError(cErr)
-
-		// Try to persist the destroyed error message. If the underlying store is
-		// corrupted the error won't be processed and a panic will occur.
-		if err := setReplicaDestroyedError(ctx, r.store.Engine(), r.RangeID, pErr); err != nil {
-			cErr.Processed = false
-			return roachpb.NewError(cErr)
-		}
-	}
-	return pErr
-}
-
 var errSystemConfigIntent = errors.New("must retry later due to intent on SystemConfigSpan")
 
 // loadSystemConfigSpan scans the entire SystemConfig span and returns the full
@@ -3462,14 +3445,20 @@ func (r *Replica) exceedsDoubleSplitSizeLocked() bool {
 // maybeAddToSplitQueue checks whether the current size of the range
 // exceeds the max size specified in the zone config. If yes, the
 // range is added to the split queue.
+//
+// TODO(tschottdorf): unnecessary to have this on *Replica; it should be on
+// the Store.
 func (r *Replica) maybeAddToSplitQueue() {
 	if r.needsSplitBySize() {
+		// TODO(tschottdorf): illegal to pass itself out as a reference.
 		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
 }
 
 // maybeAddToRaftLogQueue checks whether the raft log is a candidate for
 // truncation. If yes, the range is added to the raft log queue.
+//
+// TODO(tschottdorf): unnecessary to have this on *Replica.
 func (r *Replica) maybeAddToRaftLogQueue(appliedIndex uint64) {
 	const raftLogCheckFrequency = 1 + RaftLogQueueStaleThreshold/4
 	if appliedIndex%raftLogCheckFrequency == 0 {
