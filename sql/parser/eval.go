@@ -64,6 +64,10 @@ func (op UnaryOp) returnType() Datum {
 	return op.ReturnType
 }
 
+func (UnaryOp) preferred() bool {
+	return false
+}
+
 func init() {
 	for op, overload := range UnaryOps {
 		for i, impl := range overload {
@@ -159,6 +163,10 @@ func (op BinOp) matchParams(l, r Datum) bool {
 
 func (op BinOp) returnType() Datum {
 	return op.ReturnType
+}
+
+func (BinOp) preferred() bool {
+	return false
 }
 
 func init() {
@@ -820,6 +828,10 @@ func (op CmpOp) matchParams(l, r Datum) bool {
 
 func (op CmpOp) returnType() Datum {
 	return TypeBool
+}
+
+func (CmpOp) preferred() bool {
+	return false
 }
 
 func init() {
