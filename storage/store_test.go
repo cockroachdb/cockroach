@@ -1980,19 +1980,19 @@ func TestStoreBadRequests(t *testing.T) {
 // fakeRangeQueue implements the rangeQueue interface and
 // records which range is passed to MaybeRemove.
 type fakeRangeQueue struct {
-	maybeRemovedRngs chan *Replica
+	maybeRemovedRngs chan roachpb.RangeID
 }
 
-func (fq *fakeRangeQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
+func (fq *fakeRangeQueue) Start(_ *hlc.Clock, _ *stop.Stopper) {
 	// Do nothing
 }
 
-func (fq *fakeRangeQueue) MaybeAdd(rng *Replica, t hlc.Timestamp) {
+func (fq *fakeRangeQueue) MaybeAdd(_ *Replica, _ hlc.Timestamp) {
 	// Do nothing
 }
 
-func (fq *fakeRangeQueue) MaybeRemove(rng *Replica) {
-	fq.maybeRemovedRngs <- rng
+func (fq *fakeRangeQueue) MaybeRemove(rangeID roachpb.RangeID) {
+	fq.maybeRemovedRngs <- rangeID
 }
 
 // TestMaybeRemove tests that MaybeRemove is called when a range is removed.
@@ -2005,7 +2005,7 @@ func TestMaybeRemove(t *testing.T) {
 	// Add a queue to the scanner before starting the store and running the scanner.
 	// This is necessary to avoid data race.
 	fq := &fakeRangeQueue{
-		maybeRemovedRngs: make(chan *Replica),
+		maybeRemovedRngs: make(chan roachpb.RangeID),
 	}
 	store.scanner.AddQueues(fq)
 
@@ -2023,7 +2023,7 @@ func TestMaybeRemove(t *testing.T) {
 	}
 	// MaybeRemove is called.
 	removedRng := <-fq.maybeRemovedRngs
-	if removedRng != rng {
+	if removedRng != rng.RangeID {
 		t.Errorf("Unexpected removed range %v", removedRng)
 	}
 }
@@ -2203,6 +2203,11 @@ func TestStoreGCThreshold(t *testing.T) {
 	}
 
 	gcr := roachpb.GCRequest{
+		// Bogus span to make it a valid request.
+		Span: roachpb.Span{
+			Key:    roachpb.Key("a"),
+			EndKey: roachpb.Key("b"),
+		},
 		Threshold: threshold,
 	}
 	if _, pErr := tc.SendWrapped(&gcr); pErr != nil {
