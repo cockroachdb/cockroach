@@ -27,7 +27,7 @@ resource "aws_instance" "example_block_writer" {
 
   connection {
     user = "ubuntu"
-    key_file = "~/.ssh/${var.key_name}.pem"
+    private_key = "${file(format("~/.ssh/%s.pem", var.key_name))}"
   }
 
   provisioner "file" {
