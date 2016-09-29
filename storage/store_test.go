@@ -395,8 +395,11 @@ func TestReplicasByKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	rep.mu.Lock()
-	rep.mu.state.Desc.EndKey = roachpb.RKey("e")
+	desc := *rep.mu.state.Desc // shallow copy to replace desc wholesale
+	desc.EndKey = roachpb.RKey("e")
+	rep.mu.state.Desc = &desc
 	rep.mu.Unlock()
 
 	// Ensure that this shrinkage is recognized by future additions to replicasByKey.
