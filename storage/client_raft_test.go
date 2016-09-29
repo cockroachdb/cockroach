@@ -1618,32 +1618,44 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 func TestRangeDescriptorSnapshotRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	errCh := make(chan error, 1)
+	defer func() {
+		if err := <-errCh; err != nil {
+			t.Fatal(err)
+		}
+	}()
+
 	mtc := startMultiTestContext(t, 1)
 	defer mtc.Stop()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	// Call Snapshot() in a loop and ensure it never fails.
+	work := func(key roachpb.RKey) error {
+		rng := mtc.stores[0].LookupReplica(key, nil)
+		if rng == nil {
+			return errors.Errorf("failed to look up replica for %s", key)
+		}
+		if _, err := rng.GetSnapshot(context.Background()); err != nil {
+			return errors.Wrapf(err, "failed to snapshot range %s: %s", key)
+		} else {
+			rng.CloseOutSnap()
+		}
+		return nil
+	}
+
 	stopper.RunWorker(func() {
+		defer close(errCh)
 		for {
 			select {
-			case <-stopper.ShouldStop():
+			case <-stopper.ShouldQuiesce():
 				return
 			default:
-				if rng := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil); rng == nil {
-					t.Fatal("failed to look up min range")
-				} else if _, err := rng.GetSnapshot(context.Background()); err != nil {
-					t.Fatalf("failed to snapshot min range: %s", err)
-				} else {
-					rng.CloseOutSnap()
-				}
-
-				if rng := mtc.stores[0].LookupReplica(roachpb.RKey("Z"), nil); rng == nil {
-					t.Fatal("failed to look up max range")
-				} else if _, err := rng.GetSnapshot(context.Background()); err != nil {
-					t.Fatalf("failed to snapshot max range: %s", err)
-				} else {
-					rng.CloseOutSnap()
+			}
+			for _, key := range []roachpb.RKey{roachpb.RKeyMin, roachpb.RKey("Z")} {
+				if err := work(key); err != nil {
+					errCh <- err
+					return
 				}
 			}
 		}
