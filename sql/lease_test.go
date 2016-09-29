@@ -410,17 +410,15 @@ func TestCantLeaseDeletedTable(testingT *testing.T) {
 
 	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		SQLExecutor: &csql.ExecutorTestingKnobs{
-			SyncSchemaChangersFilter: func(tscc csql.TestingSchemaChangerCollection) {
+		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc csql.TestingSchemaChangerCollection) {
 				mu.Lock()
 				defer mu.Unlock()
 				if clearSchemaChangers {
 					tscc.ClearSchemaChangers()
 				}
 			},
-		},
-		SQLSchemaChangeManager: &csql.SchemaChangeManagerTestingKnobs{
-			AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
 
@@ -498,15 +496,6 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 
 	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		SQLExecutor: &csql.ExecutorTestingKnobs{
-			SyncSchemaChangersFilter: func(tscc csql.TestingSchemaChangerCollection) {
-				mu.Lock()
-				defer mu.Unlock()
-				if clearSchemaChangers {
-					tscc.ClearSchemaChangers()
-				}
-			},
-		},
 		SQLLeaseManager: &csql.LeaseManagerTestingKnobs{
 			TestingLeasesRefreshedEvent: func(cfg config.SystemConfig) {
 				mu.Lock()
@@ -519,8 +508,15 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 				}
 			},
 		},
-		SQLSchemaChangeManager: &csql.SchemaChangeManagerTestingKnobs{
-			AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc csql.TestingSchemaChangerCollection) {
+				mu.Lock()
+				defer mu.Unlock()
+				if clearSchemaChangers {
+					tscc.ClearSchemaChangers()
+				}
+			},
+			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
 	s, db, kvDB := serverutils.StartServer(t, params)
