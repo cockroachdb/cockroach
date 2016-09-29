@@ -26,6 +26,8 @@ import (
 type overloadImpl interface {
 	params() typeList
 	returnType() Datum
+	// allows manually resolving preference between multiple compatible overloads
+	preferred() bool
 }
 
 // typeList is a list of types representing a function parameter list.
@@ -521,5 +523,15 @@ func typeCheckOverloadedExprs(
 	if err := defaultTypeCheck(len(overloads) > 0); err != nil {
 		return nil, nil, err
 	}
-	return typedExprs, nil, nil
+
+	var preferred overloadImpl
+	for _, c := range overloads {
+		if c.preferred() {
+			if preferred != nil {
+				return typedExprs, nil, nil
+			}
+			preferred = c
+		}
+	}
+	return typedExprs, preferred, nil
 }

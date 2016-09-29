@@ -27,6 +27,7 @@ import (
 type testOverload struct {
 	paramTypes ArgTypes
 	retType    Datum
+	pref       bool
 }
 
 func (to *testOverload) params() typeList {
@@ -35,6 +36,10 @@ func (to *testOverload) params() typeList {
 
 func (to *testOverload) returnType() Datum {
 	return to.retType
+}
+
+func (to testOverload) preferred() bool {
+	return to.pref
 }
 
 func (to *testOverload) String() string {
@@ -67,6 +72,7 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 	}
 
 	unaryIntFn := makeTestOverload(TypeInt, TypeInt)
+	unaryIntFnPref := &testOverload{retType: TypeInt, paramTypes: ArgTypes{}, pref: true}
 	unaryFloatFn := makeTestOverload(TypeFloat, TypeFloat)
 	unaryDecimalFn := makeTestOverload(TypeDecimal, TypeDecimal)
 	unaryStringFn := makeTestOverload(TypeString, TypeString)
@@ -98,7 +104,9 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		{nil, nil, []Expr{strConst("PT12H2M")}, []overloadImpl{unaryIntervalFn}, unaryIntervalFn},
 		{nil, nil, []Expr{strConst("PT12H2M")}, []overloadImpl{unaryIntervalFn, unaryStringFn}, unaryStringFn},
 		{nil, nil, []Expr{strConst("PT12H2M")}, []overloadImpl{unaryIntervalFn, unaryTimestampFn}, nil}, // Limitation.
-		{nil, nil, []Expr{strConst("PT12H2M")}, []overloadImpl{unaryIntervalFn, unaryIntFn}, nil},       // Limitation.
+		{nil, nil, []Expr{}, []overloadImpl{unaryIntFn, unaryIntFnPref}, unaryIntFnPref},
+		{nil, nil, []Expr{}, []overloadImpl{unaryIntFnPref, unaryIntFnPref}, nil},
+		{nil, nil, []Expr{strConst("PT12H2M")}, []overloadImpl{unaryIntervalFn, unaryIntFn}, nil}, // Limitation.
 		// Unary unresolved Placeholders.
 		{nil, nil, []Expr{Placeholder{"a"}}, []overloadImpl{unaryStringFn, unaryIntFn}, nil},
 		{nil, nil, []Expr{Placeholder{"a"}}, []overloadImpl{unaryStringFn, binaryIntFn}, unaryStringFn},
