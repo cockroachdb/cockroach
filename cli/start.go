@@ -307,6 +307,11 @@ func runStart(_ *cobra.Command, args []string) error {
 		return rerunBackground()
 	}
 
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, os.Interrupt)
+	// TODO(spencer): move this behind a build tag.
+	signal.Notify(signalCh, syscall.SIGTERM, syscall.SIGQUIT)
+
 	tracer := tracing.NewTracer()
 	startCtx := tracing.WithTracer(context.Background(), tracer)
 	sp := tracer.StartSpan("server start")
@@ -419,11 +424,6 @@ func runStart(_ *cobra.Command, args []string) error {
 	if err := tw.Flush(); err != nil {
 		return err
 	}
-
-	signalCh := make(chan os.Signal, 1)
-	signal.Notify(signalCh, os.Interrupt)
-	// TODO(spencer): move this behind a build tag.
-	signal.Notify(signalCh, syscall.SIGTERM, syscall.SIGQUIT)
 
 	var returnErr error
 
