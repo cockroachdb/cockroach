@@ -127,9 +127,29 @@ SELECT now() - timestamp '2015-06-13' > interval '100h'
 true
 
 query B
-SELECT now()::timestamptz - current_date()::timestamptz < interval '24h10s'
+SELECT now() - current_date()::timestamptz < interval '24h10s'
 ----
 true
+
+query TT
+SELECT now()::timestamp - now(), now() - now()::timestamp
+----
+0s  0s
+
+query BB
+SELECT now() = now()::timestamp, now()::timestamp = now()
+----
+true true
+
+query BB
+SELECT now()::timestamp < now(), now() < now()::timestamp
+----
+false false
+
+query BB
+SELECT now()::timestamp <= now(), now() <= now()::timestamp
+----
+true true
 
 query B
 SELECT current_date - current_date() = 0
@@ -167,7 +187,7 @@ BEGIN TRANSACTION
 statement ok
 CREATE TABLE kv (
   k CHAR PRIMARY KEY,
-  v TIMESTAMP
+  v TIMESTAMP WITH TIME ZONE
 )
 
 statement ok
@@ -319,7 +339,6 @@ SELECT k FROM kv ORDER BY v
 4
 5
 6
-
 
 query I
 SELECT extract(year from '2001-04-10 12:04:59')
@@ -648,9 +667,6 @@ query I
 SELECT a FROM tz WHERE c < d
 ----
 2
-
-query error unsupported comparison operator: <timestamp> = <timestamptz>
-SELECT a FROM tz WHERE b = c
 
 query I
 SELECT a FROM tz WHERE b = c::timestamp

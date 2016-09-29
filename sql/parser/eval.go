@@ -425,6 +425,24 @@ var BinOps = map[BinaryOperator]binOpOverload{
 		},
 		BinOp{
 			LeftType:   TypeTimestamp,
+			RightType:  TypeTimestampTZ,
+			ReturnType: TypeInterval,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				nanos := left.(*DTimestamp).Sub(right.(*DTimestampTZ).Time).Nanoseconds()
+				return &DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
+			},
+		},
+		BinOp{
+			LeftType:   TypeTimestampTZ,
+			RightType:  TypeTimestamp,
+			ReturnType: TypeInterval,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				nanos := left.(*DTimestampTZ).Sub(right.(*DTimestamp).Time).Nanoseconds()
+				return &DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
+			},
+		},
+		BinOp{
+			LeftType:   TypeTimestamp,
 			RightType:  TypeInterval,
 			ReturnType: TypeTimestamp,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
@@ -799,7 +817,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 var timestampMinusBinOp BinOp
 
 func init() {
-	timestampMinusBinOp, _ = BinOps[Minus].lookupImpl(TypeTimestamp, TypeTimestamp)
+	timestampMinusBinOp, _ = BinOps[Minus].lookupImpl(TypeTimestampTZ, TypeTimestampTZ)
 }
 
 // CmpOp is a comparison operator.
@@ -963,6 +981,20 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			},
 		},
 		CmpOp{
+			LeftType:  TypeTimestamp,
+			RightType: TypeTimestampTZ,
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
+				return DBool(left.(*DTimestamp).Equal(right.(*DTimestampTZ).Time)), nil
+			},
+		},
+		CmpOp{
+			LeftType:  TypeTimestampTZ,
+			RightType: TypeTimestamp,
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
+				return DBool(left.(*DTimestampTZ).Equal(right.(*DTimestamp).Time)), nil
+			},
+		},
+		CmpOp{
 			LeftType:  TypeInterval,
 			RightType: TypeInterval,
 			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
@@ -1096,6 +1128,20 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			},
 		},
 		CmpOp{
+			LeftType:  TypeTimestamp,
+			RightType: TypeTimestampTZ,
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
+				return DBool(left.(*DTimestamp).Before(right.(*DTimestampTZ).Time)), nil
+			},
+		},
+		CmpOp{
+			LeftType:  TypeTimestampTZ,
+			RightType: TypeTimestamp,
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
+				return DBool(left.(*DTimestampTZ).Before(right.(*DTimestamp).Time)), nil
+			},
+		},
+		CmpOp{
 			LeftType:  TypeInterval,
 			RightType: TypeInterval,
 			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
@@ -1226,6 +1272,20 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			RightType: TypeTimestampTZ,
 			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
 				return !DBool(right.(*DTimestampTZ).Before(left.(*DTimestampTZ).Time)), nil
+			},
+		},
+		CmpOp{
+			LeftType:  TypeTimestampTZ,
+			RightType: TypeTimestamp,
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
+				return !DBool(right.(*DTimestamp).Before(left.(*DTimestampTZ).Time)), nil
+			},
+		},
+		CmpOp{
+			LeftType:  TypeTimestamp,
+			RightType: TypeTimestampTZ,
+			fn: func(_ *EvalContext, left Datum, right Datum) (DBool, error) {
+				return !DBool(right.(*DTimestampTZ).Before(left.(*DTimestamp).Time)), nil
 			},
 		},
 		CmpOp{
@@ -1402,13 +1462,13 @@ type EvalContext struct {
 
 // GetStmtTimestamp retrieves the current statement timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
-func (ctx *EvalContext) GetStmtTimestamp() *DTimestamp {
+func (ctx *EvalContext) GetStmtTimestamp() *DTimestampTZ {
 	// TODO(knz) a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
 	if !ctx.PrepareOnly && ctx.stmtTimestamp.IsZero() {
 		panic("zero statement timestamp in EvalContext")
 	}
-	return MakeDTimestamp(ctx.stmtTimestamp, time.Microsecond)
+	return MakeDTimestampTZ(ctx.stmtTimestamp, time.Microsecond)
 }
 
 // GetClusterTimestamp retrieves the current cluster timestamp as per
@@ -1439,7 +1499,18 @@ func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
 
 // GetTxnTimestamp retrieves the current transaction timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
-func (ctx *EvalContext) GetTxnTimestamp(precision time.Duration) *DTimestamp {
+func (ctx *EvalContext) GetTxnTimestamp(precision time.Duration) *DTimestampTZ {
+	// TODO(knz) a zero timestamp should never be read, even during
+	// Prepare. This will need to be addressed.
+	if !ctx.PrepareOnly && ctx.txnTimestamp.IsZero() {
+		panic("zero transaction timestamp in EvalContext")
+	}
+	return MakeDTimestampTZ(ctx.txnTimestamp, precision)
+}
+
+// GetTxnTimestampNoZone retrieves the current transaction timestamp as per
+// the evaluation context. The timestamp is guaranteed to be nonzero.
+func (ctx *EvalContext) GetTxnTimestampNoZone(precision time.Duration) *DTimestamp {
 	// TODO(knz) a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
 	if !ctx.PrepareOnly && ctx.txnTimestamp.IsZero() {

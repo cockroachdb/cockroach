@@ -421,7 +421,7 @@ SELECT a,b FROM add_default WHERE d > c AND d - c < interval '10s'
 
 # Add a column with a default statement_timestamp()
 statement ok
-ALTER TABLE add_default ADD COLUMN e TIMESTAMP DEFAULT statement_timestamp()
+ALTER TABLE add_default ADD COLUMN e TIMESTAMPTZ DEFAULT statement_timestamp()
 
 query II
 SELECT a,b FROM add_default WHERE e > d AND e - d < interval '10s'
