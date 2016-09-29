@@ -315,12 +315,9 @@ type Store struct {
 	// drainLeases holds a bool which indicates whether Replicas should be
 	// allowed to acquire or extend range leases; see DrainLeases().
 	//
-	// TODO(bdarnell,tschottdorf): Would look better inside of `mu`. However,
-	// deadlocks loom: For example, `systemGossipUpdate` holds `s.mu` while
-	// iterating over `s.mu.replicas` and, still under `s.mu`, calls `r.Desc()`
-	// but that needs the replica Mutex which may be held by a Replica while
-	// calling out to r.store.IsDrainingLeases` (so it would deadlock if
-	// that required `s.mu` as well).
+	// TODO(bdarnell,tschottdorf): Would look better inside of `mu`, which at
+	// the time of its creation was riddled with deadlock (but that situation
+	// has likely improved).
 	drainLeases atomic.Value
 
 	// Locking notes: To avoid deadlocks, the following lock order must be
@@ -412,8 +409,11 @@ type Store struct {
 		// TODO(peter): evaluate runtime overhead of the timed mutex.
 		syncutil.TimedMutex // Protects all variables in the mu struct.
 		// Map of replicas by Range ID. This includes `uninitReplicas`.
-		replicas       map[roachpb.RangeID]*Replica
-		replicasByKey  *btree.BTree                 // btree keyed by ranges end keys.
+		replicas map[roachpb.RangeID]*Replica
+		// A btree key containing objects of type *Replica or
+		// *ReplicaPlaceholder (both of which have an associated key range, on
+		// the EndKey of which the btree is keyed)
+		replicasByKey  *btree.BTree
 		uninitReplicas map[roachpb.RangeID]*Replica // Map of uninitialized replicas by Range ID
 		// replicaPlaceholders is a map to access all placeholders, so they can
 		// be directly accessed and cleared after stepping all raft groups.
