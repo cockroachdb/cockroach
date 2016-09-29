@@ -3297,17 +3297,21 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 	if err := r.store.Gossip().AddInfo(gossip.KeyClusterID, r.store.ClusterID().GetBytes(), 0*time.Second); err != nil {
 		log.Errorf(r.ctx, "failed to gossip cluster ID: %s", err)
 	}
-	if hasLease, pErr := r.getLeaseForGossip(r.ctx); hasLease {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		r.gossipFirstRangeLocked(r.ctx)
-	} else {
+
+	hasLease, pErr := r.getLeaseForGossip(r.ctx)
+	if pErr != nil {
+		log.Warning(r.ctx, errors.Wrap(pErr.GoError(), "while trying to gossip first range"))
 		return pErr
+	} else if !hasLease {
+		return nil
 	}
+	r.gossipFirstRange(r.ctx)
 	return nil
 }
 
-func (r *Replica) gossipFirstRangeLocked(ctx context.Context) {
+func (r *Replica) gossipFirstRange(ctx context.Context) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	// Gossip is not provided for the bootstrap store and for some tests.
 	if r.store.Gossip() == nil {
 		return
