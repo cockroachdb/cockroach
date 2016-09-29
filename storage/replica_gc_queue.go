@@ -65,7 +65,7 @@ const (
 // collections. The GC process asynchronously removes local data for
 // ranges that have been rebalanced away from this store.
 type replicaGCQueue struct {
-	baseQueue
+	*baseQueue
 	db *client.DB
 }
 
@@ -74,7 +74,7 @@ func newReplicaGCQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *repl
 	q := &replicaGCQueue{
 		db: db,
 	}
-	q.baseQueue = makeBaseQueue(
+	q.baseQueue = newBaseQueue(
 		store.Ctx(), "replicaGC", q, store, gossip,
 		queueConfig{
 			maxSize:              replicaGCQueueMaxSize,

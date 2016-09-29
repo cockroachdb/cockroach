@@ -33,13 +33,13 @@ const (
 )
 
 type replicaConsistencyQueue struct {
-	baseQueue
+	*baseQueue
 }
 
 // newReplicaConsistencyQueue returns a new instance of replicaConsistencyQueue.
 func newReplicaConsistencyQueue(store *Store, gossip *gossip.Gossip) *replicaConsistencyQueue {
 	rcq := &replicaConsistencyQueue{}
-	rcq.baseQueue = makeBaseQueue(
+	rcq.baseQueue = newBaseQueue(
 		store.Ctx(), "replica consistency checker", rcq, store, gossip,
 		queueConfig{
 			maxSize:              replicaConsistencyQueueSize,

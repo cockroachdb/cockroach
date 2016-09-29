@@ -47,7 +47,7 @@ const (
 // raftLogQueue manages a queue of replicas slated to have their raft logs
 // truncated by removing unneeded entries.
 type raftLogQueue struct {
-	baseQueue
+	*baseQueue
 	db *client.DB
 }
 
@@ -56,7 +56,7 @@ func newRaftLogQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *raftLo
 	rlq := &raftLogQueue{
 		db: db,
 	}
-	rlq.baseQueue = makeBaseQueue(
+	rlq.baseQueue = newBaseQueue(
 		store.Ctx(), "raftlog", rlq, store, gossip,
 		queueConfig{
 			maxSize:              raftLogQueueMaxSize,
