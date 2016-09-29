@@ -651,14 +651,14 @@ var Builtins = map[string][]Builtin{
 
 	"age": {
 		Builtin{
-			Types:      ArgTypes{TypeTimestamp},
+			Types:      ArgTypes{TypeTimestampTZ},
 			ReturnType: TypeInterval,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return timestampMinusBinOp.fn(ctx, ctx.GetTxnTimestamp(time.Microsecond), args[0])
 			},
 		},
 		Builtin{
-			Types:      ArgTypes{TypeTimestamp, TypeTimestamp},
+			Types:      ArgTypes{TypeTimestampTZ, TypeTimestampTZ},
 			ReturnType: TypeInterval,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				return timestampMinusBinOp.fn(ctx, args[0], args[1])
@@ -677,17 +677,26 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
-	"now":                   {txnTSImpl},
-	"current_timestamp":     {txnTSImpl},
-	"transaction_timestamp": {txnTSImpl},
+	"now":                   txnTSImpl,
+	"current_timestamp":     txnTSImpl,
+	"transaction_timestamp": txnTSImpl,
 
 	"statement_timestamp": {
+		Builtin{
+			Types:             ArgTypes{},
+			ReturnType:        TypeTimestampTZ,
+			preferredOverload: true,
+			impure:            true,
+			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
+				return MakeDTimestampTZ(ctx.GetStmtTimestamp(), time.Microsecond), nil
+			},
+		},
 		Builtin{
 			Types:      ArgTypes{},
 			ReturnType: TypeTimestamp,
 			impure:     true,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-				return ctx.GetStmtTimestamp(), nil
+				return MakeDTimestamp(ctx.GetStmtTimestamp(), time.Microsecond), nil
 			},
 		},
 	},
@@ -705,6 +714,15 @@ var Builtins = map[string][]Builtin{
 	},
 
 	"clock_timestamp": {
+		Builtin{
+			Types:             ArgTypes{},
+			ReturnType:        TypeTimestampTZ,
+			preferredOverload: true,
+			impure:            true,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				return MakeDTimestampTZ(timeutil.Now(), time.Microsecond), nil
+			},
+		},
 		Builtin{
 			Types:      ArgTypes{},
 			ReturnType: TypeTimestamp,
@@ -1183,12 +1201,23 @@ var ceilImpl = []Builtin{
 	}),
 }
 
-var txnTSImpl = Builtin{
-	Types:      ArgTypes{},
-	ReturnType: TypeTimestamp,
-	impure:     true,
-	fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-		return ctx.GetTxnTimestamp(time.Microsecond), nil
+var txnTSImpl = []Builtin{
+	{
+		Types:             ArgTypes{},
+		ReturnType:        TypeTimestampTZ,
+		preferredOverload: true,
+		impure:            true,
+		fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
+			return ctx.GetTxnTimestamp(time.Microsecond), nil
+		},
+	},
+	{
+		Types:      ArgTypes{},
+		ReturnType: TypeTimestamp,
+		impure:     true,
+		fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
+			return ctx.GetTxnTimestampNoZone(time.Microsecond), nil
+		},
 	},
 }
 
