@@ -2598,17 +2598,24 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 	case *roachpb.Error:
 		switch val.GetDetail().(type) {
 		case *roachpb.ReplicaTooOldError:
-			s.mu.Lock()
-			rep, ok := s.mu.replicas[resp.RangeID]
-			s.mu.Unlock()
-			if ok {
-				if added, err := s.replicaGCQueue.Add(rep, replicaGCPriorityRemoved); err != nil {
-					log.Errorf(ctx, "%s: unable to add replica %d to GC queue: %s", rep, resp.ToReplica, err)
-				} else if added {
-					log.Infof(ctx, "%s: replica %s too old, added to replica GC queue", rep, resp.ToReplica)
-				}
+			repl, err := s.GetReplica(resp.RangeID)
+			if err != nil {
+				return // not unexpected
 			}
-
+			added, err := s.replicaGCQueue.Add(
+				repl, replicaGCPriorityRemoved,
+			)
+			if err != nil {
+				log.Errorf(
+					ctx, "%s: unable to add replica %d to GC queue: %s",
+					repl, resp.ToReplica, err,
+				)
+			} else if added {
+				log.Infof(
+					ctx, "%s: added to replica GC queue (peer suggestion)",
+					repl,
+				)
+			}
 		default:
 			log.Warningf(ctx, "got error from range %d, replica %s: %s",
 				resp.RangeID, resp.FromReplica, val)
