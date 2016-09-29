@@ -45,9 +45,11 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 	// that determination is made during validation, which will require matching
 	// expressions.
 	for i := range groupBy {
-		if err := p.parser.AssertNoAggregationOrWindowing(groupBy[i], "GROUP BY"); err != nil {
-			return nil, err
-		}
+		// Hold on to the original raw GROUP BY expression, which will be replaced by the
+		// original raw SELECT expression in the case of a GROUP BY <ordinal>. We will
+		// perform some verification on this which requires that the expression has not
+		// been modified by upper layers.
+		rawExpr := groupBy[i]
 
 		// We do not need to fully analyze the GROUP BY expression here
 		// (as per analyzeExpr) because this is taken care of by addRender
@@ -65,8 +67,13 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 			return nil, err
 		} else if col >= 0 {
 			groupBy[i] = s.render[col]
+			rawExpr = n.Exprs[col].Expr
 		} else {
 			groupBy[i] = resolved
+		}
+
+		if err := p.parser.AssertNoAggregationOrWindowing(rawExpr, "GROUP BY"); err != nil {
+			return nil, err
 		}
 	}
 
