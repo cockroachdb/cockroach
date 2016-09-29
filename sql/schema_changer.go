@@ -56,7 +56,8 @@ type SchemaChanger struct {
 	evalCtx    parser.EvalContext
 	// The SchemaChangeManager can attempt to execute this schema
 	// changer after this time.
-	execAfter time.Time
+	execAfter    time.Time
+	testingKnobs *SchemaChangerTestingKnobs
 }
 
 func (sc *SchemaChanger) truncateAndDropTable(
@@ -197,9 +198,7 @@ func isSchemaChangeRetryError(err error) bool {
 
 // Execute the entire schema change in steps. startBackfillNotification is
 // called before the backfill starts; it can be nil.
-func (sc SchemaChanger) exec(
-	startBackfillNotification func() error, oldNameNotInUseNotification func(),
-) error {
+func (sc SchemaChanger) exec() error {
 	// Acquire lease.
 	lease, err := sc.AcquireLease()
 	if err != nil {
@@ -278,8 +277,8 @@ func (sc SchemaChanger) exec(
 			return err
 		}
 
-		if oldNameNotInUseNotification != nil {
-			oldNameNotInUseNotification()
+		if sc.testingKnobs.RenameOldNameNotInUseNotification != nil {
+			sc.testingKnobs.RenameOldNameNotInUseNotification()
 		}
 		// Free up the old name(s).
 		err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
@@ -322,7 +321,7 @@ func (sc SchemaChanger) exec(
 	// but we're no longer responsible for taking care of that.
 
 	// Run through mutation state machine and backfill.
-	err = sc.runStateMachineAndBackfill(&lease, startBackfillNotification)
+	err = sc.runStateMachineAndBackfill(&lease)
 
 	// Purge the mutations if the application of the mutations failed due to
 	// an integrity constraint violation. All other errors are transient
@@ -339,9 +338,7 @@ func (sc SchemaChanger) exec(
 
 		// After this point the schema change has been reversed and any retry
 		// of the schema change will act upon the reversed schema change.
-		if errPurge := sc.runStateMachineAndBackfill(
-			&lease, startBackfillNotification,
-		); errPurge != nil {
+		if errPurge := sc.runStateMachineAndBackfill(&lease); errPurge != nil {
 			// Don't return this error because we do want the caller to know
 			// that an integrity constraint was violated with the original
 			// schema change. The reversed schema change will be
@@ -484,15 +481,15 @@ func (sc *SchemaChanger) done() (*sqlbase.Descriptor, error) {
 // runStateMachineAndBackfill runs the schema change state machine followed by
 // the backfill.
 func (sc *SchemaChanger) runStateMachineAndBackfill(
-	lease *sqlbase.TableDescriptor_SchemaChangeLease, startBackfillNotification func() error,
+	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 ) error {
 	// Run through mutation state machine before backfill.
 	if err := sc.RunStateMachineBeforeBackfill(); err != nil {
 		return err
 	}
 
-	if startBackfillNotification != nil {
-		if err := startBackfillNotification(); err != nil {
+	if sc.testingKnobs.StartBackfillNotification != nil {
+		if err := sc.testingKnobs.StartBackfillNotification(); err != nil {
 			return err
 		}
 	}
@@ -627,20 +624,59 @@ func (sc *SchemaChanger) IsDone() (bool, error) {
 	return done, err
 }
 
-// SchemaChangeManagerTestingKnobs for the SchemaChangeManager.
-type SchemaChangeManagerTestingKnobs struct {
-	// AsyncSchemaChangersExecNotification is a function called before running
-	// a schema change asynchronously. Returning an error will prevent the
-	// asynchronous execution path from running.
-	AsyncSchemaChangerExecNotification func() error
+// TestingSchemaChangerCollection is an exported (for testing) version of
+// schemaChangerCollection.
+// TODO(andrei): get rid of this type once we can have tests internal to the sql
+// package (as of April 2016 we can't because sql can't import server).
+type TestingSchemaChangerCollection struct {
+	scc *schemaChangerCollection
+}
 
-	// AsyncSchemaChangerExecQuickly executes queued schema changes as soon as
-	// possible.
-	AsyncSchemaChangerExecQuickly bool
+// ClearSchemaChangers clears the schema changers from the collection.
+// If this is called from a SyncSchemaChangersFilter, no schema changer will be
+// run.
+func (tscc TestingSchemaChangerCollection) ClearSchemaChangers() {
+	tscc.scc.schemaChangers = tscc.scc.schemaChangers[:0]
+}
+
+// SyncSchemaChangersFilter is the type of a hook to be installed through the
+// ExecutorContext for blocking or otherwise manipulating schema changers run
+// through the sync schema changers path.
+type SyncSchemaChangersFilter func(TestingSchemaChangerCollection)
+
+// SchemaChangerTestingKnobs for testing the schema change execution path
+// through both the synchronous and asynchronous paths.
+type SchemaChangerTestingKnobs struct {
+	// SyncFilter is called before running schema changers synchronously (at
+	// the end of a txn). The function can be used to clear the schema
+	// changers (if the test doesn't want them run using the synchronous path)
+	// or to temporarily block execution. Note that this has nothing to do
+	// with the async path for running schema changers. To block that, set
+	// AsyncExecNotification.
+	SyncFilter SyncSchemaChangersFilter
+
+	// StartBackfillNotification is called before applying the backfill for a
+	// schema change operation. It returns error to stop the backfill and
+	// return an error to the caller of the SchemaChanger.exec().
+	StartBackfillNotification func() error
+
+	// RenameOldNameNotInUseNotification is called during a rename schema
+	// change, after all leases on the version of the descriptor with the old
+	// name are gone, and just before the mapping of the old name to the
+	// descriptor id is about to be deleted.
+	RenameOldNameNotInUseNotification func()
+
+	// AsyncExecNotification is a function called before running a schema
+	// change asynchronously. Returning an error will prevent the asynchronous
+	// execution path from running.
+	AsyncExecNotification func() error
+
+	// AsyncExecQuickly executes queued schema changes as soon as possible.
+	AsyncExecQuickly bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
-func (*SchemaChangeManagerTestingKnobs) ModuleTestingKnobs() {}
+func (*SchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 
 // SchemaChangeManager processes pending schema changes seen in gossip
 // updates. Most schema changes are executed synchronously by the node
@@ -651,14 +687,14 @@ type SchemaChangeManager struct {
 	db           client.DB
 	gossip       *gossip.Gossip
 	leaseMgr     *LeaseManager
-	testingKnobs *SchemaChangeManagerTestingKnobs
+	testingKnobs *SchemaChangerTestingKnobs
 	// Create a schema changer for every outstanding schema change seen.
 	schemaChangers map[sqlbase.ID]SchemaChanger
 }
 
 // NewSchemaChangeManager returns a new SchemaChangeManager.
 func NewSchemaChangeManager(
-	testingKnobs *SchemaChangeManagerTestingKnobs,
+	testingKnobs *SchemaChangerTestingKnobs,
 	db client.DB,
 	gossip *gossip.Gossip,
 	leaseMgr *LeaseManager,
@@ -698,7 +734,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 		gossipUpdateC := s.gossip.RegisterSystemConfigChannel()
 		timer := &time.Timer{}
 		delay := 360 * time.Second
-		if s.testingKnobs.AsyncSchemaChangerExecQuickly {
+		if s.testingKnobs.AsyncExecQuickly {
 			delay = 20 * time.Millisecond
 		}
 		for {
@@ -710,9 +746,10 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					log.Info(context.TODO(), "received a new config")
 				}
 				schemaChanger := SchemaChanger{
-					nodeID:   roachpb.NodeID(s.leaseMgr.nodeID),
-					db:       s.db,
-					leaseMgr: s.leaseMgr,
+					nodeID:       roachpb.NodeID(s.leaseMgr.nodeID),
+					db:           s.db,
+					leaseMgr:     s.leaseMgr,
+					testingKnobs: s.testingKnobs,
 				}
 				// Keep track of existing schema changers.
 				oldSchemaChangers := make(map[sqlbase.ID]struct{}, len(s.schemaChangers))
@@ -786,14 +823,14 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				timer = s.newTimer()
 
 			case <-timer.C:
-				if s.testingKnobs.AsyncSchemaChangerExecNotification != nil &&
-					s.testingKnobs.AsyncSchemaChangerExecNotification() != nil {
+				if s.testingKnobs.AsyncExecNotification != nil &&
+					s.testingKnobs.AsyncExecNotification() != nil {
 					timer = s.newTimer()
 					continue
 				}
 				for tableID, sc := range s.schemaChangers {
 					if timeutil.Since(sc.execAfter) > 0 {
-						err := sc.exec(nil, nil)
+						err := sc.exec()
 						if err != nil {
 							if err == errExistingSchemaChangeLease {
 							} else if err == sqlbase.ErrDescriptorNotFound {

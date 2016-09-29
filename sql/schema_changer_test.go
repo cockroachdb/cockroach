@@ -45,10 +45,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-// schemaChangeManagerDisabled can be used to disable asynchronous processing
+// asyncSchemaChangerDisabled can be used to disable asynchronous processing
 // of schema changes.
-func schemaChangeManagerDisabled() error {
-	return errors.New("async schema changes are disabled")
+func asyncSchemaChangerDisabled() error {
+	return errors.New("async schema changer disabled")
 }
 
 func TestSchemaChangeLease(t *testing.T) {
@@ -161,8 +161,8 @@ func TestSchemaChangeProcess(t *testing.T) {
 
 	params, _ := createTestServerParams()
 	// Disable external processing of mutations.
-	params.Knobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
-		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+	params.Knobs.SQLSchemaChanger = &csql.SchemaChangerTestingKnobs{
+		AsyncExecNotification: asyncSchemaChangerDisabled,
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
@@ -325,13 +325,11 @@ func TestAsyncSchemaChanger(t *testing.T) {
 	// changer executes all schema changes.
 	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		SQLExecutor: &csql.ExecutorTestingKnobs{
-			SyncSchemaChangersFilter: func(tscc csql.TestingSchemaChangerCollection) {
+		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc csql.TestingSchemaChangerCollection) {
 				tscc.ClearSchemaChangers()
 			},
-		},
-		SQLSchemaChangeManager: &csql.SchemaChangeManagerTestingKnobs{
-			AsyncSchemaChangerExecQuickly: true,
+			AsyncExecQuickly: true,
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -538,14 +536,13 @@ func runSchemaChangeWithOperations(
 // that run simultaneously.
 func TestRaceWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	var backfillNotification chan bool
 	params, _ := createTestServerParams()
 	// Disable asynchronous schema change execution to allow synchronous path
 	// to trigger start of backfill notification.
 	params.Knobs = base.TestingKnobs{
-		SQLExecutor: &csql.ExecutorTestingKnobs{
-			SchemaChangersStartBackfillNotification: func() error {
+		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
+			StartBackfillNotification: func() error {
 				if backfillNotification != nil {
 					// Close channel to notify that the backfill has started.
 					close(backfillNotification)
@@ -553,9 +550,7 @@ func TestRaceWithBackfill(t *testing.T) {
 				}
 				return nil
 			},
-		},
-		SQLSchemaChangeManager: &csql.SchemaChangeManagerTestingKnobs{
-			AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -717,8 +712,8 @@ func TestSchemaChangeRetry(t *testing.T) {
 	params, _ := createTestServerParams()
 	attempts := 0
 	params.Knobs = base.TestingKnobs{
-		SQLExecutor: &csql.ExecutorTestingKnobs{
-			SchemaChangersStartBackfillNotification: func() error {
+		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
+			StartBackfillNotification: func() error {
 				attempts++
 				// Return a deadline exceeded error once.
 				if attempts == 1 {
@@ -726,11 +721,9 @@ func TestSchemaChangeRetry(t *testing.T) {
 				}
 				return nil
 			},
-		},
-		// Disable asynchronous schema change execution to allow synchronous
-		// path to run schema changes.
-		SQLSchemaChangeManager: &csql.SchemaChangeManagerTestingKnobs{
-			AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+			// Disable asynchronous schema change execution to allow
+			// synchronous path to run schema changes.
+			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -791,14 +784,13 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // Test schema change purge failure doesn't leave DB in a bad state.
 func TestSchemaChangePurgeFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	params, _ := createTestServerParams()
 	// Disable the async schema changer.
 	var enableAsyncSchemaChanges uint32
 	attempts := 0
 	params.Knobs = base.TestingKnobs{
-		SQLExecutor: &csql.ExecutorTestingKnobs{
-			SchemaChangersStartBackfillNotification: func() error {
+		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
+			StartBackfillNotification: func() error {
 				attempts++
 				// Return a deadline exceeded error during the second attempt
 				// which attempts to clean up the schema change.
@@ -807,9 +799,7 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 				}
 				return nil
 			},
-		},
-		SQLSchemaChangeManager: &csql.SchemaChangeManagerTestingKnobs{
-			AsyncSchemaChangerExecNotification: func() error {
+			AsyncExecNotification: func() error {
 				if enable := atomic.LoadUint32(&enableAsyncSchemaChanges); enable == 0 {
 					return errors.New("async schema changes are disabled")
 				}
@@ -817,7 +807,7 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 			},
 			// Speed up evaluation of async schema changes so that it
 			// processes a purged schema change quickly.
-			AsyncSchemaChangerExecQuickly: true,
+			AsyncExecQuickly: true,
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -920,19 +910,17 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 	// processed asynchronously.
 	var enableAsyncSchemaChanges uint32
 	params.Knobs = base.TestingKnobs{
-		SQLExecutor: &csql.ExecutorTestingKnobs{
-			SyncSchemaChangersFilter: func(tscc csql.TestingSchemaChangerCollection) {
+		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc csql.TestingSchemaChangerCollection) {
 				tscc.ClearSchemaChangers()
 			},
-		},
-		SQLSchemaChangeManager: &csql.SchemaChangeManagerTestingKnobs{
-			AsyncSchemaChangerExecNotification: func() error {
+			AsyncExecNotification: func() error {
 				if enable := atomic.LoadUint32(&enableAsyncSchemaChanges); enable == 0 {
 					return errors.New("async schema changes are disabled")
 				}
 				return nil
 			},
-			AsyncSchemaChangerExecQuickly: true,
+			AsyncExecQuickly: true,
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)

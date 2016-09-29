@@ -244,7 +244,12 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	} else {
 		execCfg.TestingKnobs = &sql.ExecutorTestingKnobs{}
 	}
-
+	if srvCtx.TestingKnobs.SQLSchemaChanger != nil {
+		execCfg.SchemaChangerTestingKnobs =
+			srvCtx.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)
+	} else {
+		execCfg.SchemaChangerTestingKnobs = &sql.SchemaChangerTestingKnobs{}
+	}
 	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper)
 	s.registry.AddMetricStruct(s.sqlExecutor)
 
@@ -512,9 +517,9 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Create and start the schema change manager only after a NodeID
 	// has been assigned.
-	testingKnobs := new(sql.SchemaChangeManagerTestingKnobs)
-	if s.ctx.TestingKnobs.SQLSchemaChangeManager != nil {
-		testingKnobs = s.ctx.TestingKnobs.SQLSchemaChangeManager.(*sql.SchemaChangeManagerTestingKnobs)
+	testingKnobs := &sql.SchemaChangerTestingKnobs{}
+	if s.ctx.TestingKnobs.SQLSchemaChanger != nil {
+		testingKnobs = s.ctx.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)
 	}
 	sql.NewSchemaChangeManager(testingKnobs, *s.db, s.gossip, s.leaseMgr).Start(s.stopper)
 

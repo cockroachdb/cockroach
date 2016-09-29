@@ -437,14 +437,15 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 	}
 	// Release the leases once a transaction is complete.
 	planMaker.releaseLeases()
-	if e.cfg.TestingKnobs.SyncSchemaChangersFilter != nil {
-		e.cfg.TestingKnobs.SyncSchemaChangersFilter(TestingSchemaChangerCollection{scc})
+	if e.cfg.SchemaChangerTestingKnobs.SyncFilter != nil {
+		e.cfg.SchemaChangerTestingKnobs.SyncFilter(TestingSchemaChangerCollection{scc})
 	}
 	// Execute any schema changes that were scheduled, in the order of the
 	// statements that scheduled them.
 	for _, scEntry := range scc.schemaChangers {
 		sc := &scEntry.sc
 		sc.db = *e.cfg.DB
+		sc.testingKnobs = e.cfg.SchemaChangerTestingKnobs
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 			if done, err := sc.IsDone(); err != nil {
 				log.Warning(e.cfg.Context, err)
@@ -452,10 +453,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 			} else if done {
 				break
 			}
-			if err := sc.exec(
-				e.cfg.TestingKnobs.SchemaChangersStartBackfillNotification,
-				e.cfg.TestingKnobs.SyncSchemaChangersRenameOldNameNotInUseNotification,
-			); err != nil {
+			if err := sc.exec(); err != nil {
 				if isSchemaChangeRetryError(err) {
 					// Try again
 					continue

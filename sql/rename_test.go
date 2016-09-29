@@ -133,8 +133,8 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 	renameUnblocked := make(chan interface{})
 	serverParams := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			SQLExecutor: &ExecutorTestingKnobs{
-				SyncSchemaChangersRenameOldNameNotInUseNotification: func() {
+			SQLSchemaChanger: &SchemaChangerTestingKnobs{
+				RenameOldNameNotInUseNotification: func() {
 					<-renameUnblocked
 				},
 			},

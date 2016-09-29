@@ -200,33 +200,14 @@ type ExecutorConfig struct {
 	Clock        *hlc.Clock
 	DistSQLSrv   *distsql.ServerImpl
 
-	TestingKnobs *ExecutorTestingKnobs
+	TestingKnobs              *ExecutorTestingKnobs
+	SchemaChangerTestingKnobs *SchemaChangerTestingKnobs
 }
 
 var _ base.ModuleTestingKnobs = &ExecutorTestingKnobs{}
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*ExecutorTestingKnobs) ModuleTestingKnobs() {}
-
-// TestingSchemaChangerCollection is an exported (for testing) version of
-// schemaChangerCollection.
-// TODO(andrei): get rid of this type once we can have tests internal to the sql
-// package (as of April 2016 we can't because sql can't import server).
-type TestingSchemaChangerCollection struct {
-	scc *schemaChangerCollection
-}
-
-// ClearSchemaChangers clears the schema changers from the collection.
-// If this is called from a SyncSchemaChangersFilter, no schema changer will be
-// run.
-func (tscc TestingSchemaChangerCollection) ClearSchemaChangers() {
-	tscc.scc.schemaChangers = tscc.scc.schemaChangers[:0]
-}
-
-// SyncSchemaChangersFilter is the type of a hook to be installed through the
-// ExecutorContext for blocking or otherwise manipulating schema changers run
-// through the sync schema changers path.
-type SyncSchemaChangersFilter func(TestingSchemaChangerCollection)
 
 // StatementFilter is the type of callback that
 // ExecutorTestingKnobs.StatementFilter takes.
@@ -246,25 +227,6 @@ type ExecutorTestingKnobs struct {
 	// FixTxnPriority causes transaction priority values to be hardcoded (for
 	// each priority level) to avoid the randomness in the normal generation.
 	FixTxnPriority bool
-
-	// SyncSchemaChangersFilter is called before running schema changers
-	// synchronously (at the end of a txn). The function can be used to clear the
-	// schema changers (if the test doesn't want them run using the synchronous
-	// path) or to temporarily block execution.
-	// Note that this has nothing to do with the async path for running schema
-	// changers. To block that, see TestDisableAsyncSchemaChangeExec().
-	SyncSchemaChangersFilter SyncSchemaChangersFilter
-
-	// SchemaChangersStartBackfillNotification is called before applying the
-	// backfill for a schema change operation. It returns error to stop the
-	// backfill and return an error to the caller of the SchemaChanger.exec().
-	SchemaChangersStartBackfillNotification func() error
-
-	//SyncSchemaChangersRenameOldNameNotInUseNotification is called during a rename
-	//schema change, after all leases on the version of the descriptor with the
-	//old name are gone, and just before the mapping of the old name to the
-	//descriptor id is about to be deleted.
-	SyncSchemaChangersRenameOldNameNotInUseNotification func()
 
 	// StatementFilter can be used to trap execution of SQL statements and
 	// optionally change their results. The filter function is invoked after each

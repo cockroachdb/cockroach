@@ -35,8 +35,8 @@ func TestAsOfTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	params, _ := createTestServerParams()
-	params.Knobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
-		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+	params.Knobs.SQLSchemaChanger = &csql.SchemaChangerTestingKnobs{
+		AsyncExecNotification: asyncSchemaChangerDisabled,
 	}
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
