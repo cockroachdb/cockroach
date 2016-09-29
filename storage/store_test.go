@@ -2201,6 +2201,11 @@ func TestStoreGCThreshold(t *testing.T) {
 	}
 
 	gcr := roachpb.GCRequest{
+		// Bogus span to make it a valid request.
+		Span: roachpb.Span{
+			Key:    roachpb.Key("a"),
+			EndKey: roachpb.Key("b"),
+		},
 		Threshold: threshold,
 	}
 	if _, pErr := tc.SendWrapped(&gcr); pErr != nil {

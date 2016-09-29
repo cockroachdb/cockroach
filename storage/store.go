@@ -2326,6 +2326,43 @@ func (s *Store) HandleRaftRequest(
 	return nil
 }
 
+// maybeSetCorrupt is a stand-in for proper handling of failing replicas. Such a
+// failure is indicated by a call to maybeSetCorrupt with a ReplicaCorruptionError.
+// Currently any error is passed through, but prospectively it should stop the
+// range from participating in progress, trigger a rebalance operation and
+// decide on an error-by-error basis whether the corruption is limited to the
+// range, store, node or cluster with corresponding actions taken.
+//
+// TODO(tschottdorf): when marking a Replica corrupt, must subtract its stats
+// from r.store.metrics. Errors which happen between committing a batch and
+// sending a stats delta from the store are going to be particularly tricky and
+// the best bet is to not have any of those. @bdarnell remarks: Corruption
+// errors should be rare so we may want the store to just recompute its stats
+// in the background when one occurs.
+func (s *Store) maybeSetCorrupt(
+	ctx context.Context, r *Replica, processErr error,
+) {
+	cErr, ok := processErr.(*roachpb.ReplicaCorruptionError)
+	if !ok {
+		return
+	}
+
+	log.Errorf(ctx, "stalling replica due to: %s", cErr.ErrorMsg)
+	r.mu.Lock()
+	r.mu.corrupted = true // TODO
+	r.mu.destroyed = cErr
+	r.mu.Unlock()
+
+	// Try to persist the destroyed error message. If the underlying store is
+	// corrupted the error won't be processed and a panic will occur.
+	if err := setReplicaDestroyedError(ctx, r.store.Engine(), r.RangeID, roachpb.NewError(cErr)); err != nil {
+		// TODO(tschottdorf): this may not be the best course of action as the
+		// initial reason for the corruption is likely a failure of the
+		// underlying storage.
+		log.Fatalf(ctx, "unable to persist corruption: %s", err)
+	}
+}
+
 func (s *Store) processRaftRequest(
 	ctx context.Context,
 	req *RaftMessageRequest,
@@ -2567,6 +2604,7 @@ func (s *Store) processRaftRequest(
 		// Force the replica to deal with this snapshot right now.
 		if err := r.handleRaftReadyRaftMuLocked(inSnap); err != nil {
 			// mimic the behavior in processRaft.
+			// TODO(tschottdorf): handle corruption in this path.
 			panic(err)
 		}
 		removePlaceholder = false
@@ -2758,13 +2796,14 @@ func (s *Store) processRequestQueue(rangeID roachpb.RangeID) {
 func (s *Store) processReady(rangeID roachpb.RangeID) {
 	start := timeutil.Now()
 
-	s.mu.Lock()
-	r, ok := s.mu.replicas[rangeID]
-	s.mu.Unlock()
+	r, err := s.GetReplica(rangeID)
+	if err != nil {
+		return // TODO(bdarnell)
+	}
 
-	if ok {
+	s.maybeSetCorrupt(s.Ctx(), r, func() error {
 		if err := r.handleRaftReady(IncomingSnapshot{}); err != nil {
-			panic(err) // TODO(bdarnell)
+			return err
 		}
 		elapsed := timeutil.Since(start)
 		s.metrics.RaftWorkingDurationNanos.Inc(elapsed.Nanoseconds())
@@ -2786,7 +2825,8 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 				atomic.AddInt32(&s.counts.droppedPlaceholders, 1)
 			}
 		}
-	}
+		return nil
+	}())
 }
 
 func (s *Store) processTick(rangeID roachpb.RangeID) bool {

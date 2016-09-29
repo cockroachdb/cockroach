@@ -382,10 +382,14 @@ func loadReplicaDestroyedError(
 // setReplicaDestroyedError sets an error indicating that the replica has been
 // destroyed.
 func setReplicaDestroyedError(
-	ctx context.Context, eng engine.ReadWriter, rangeID roachpb.RangeID, err *roachpb.Error,
+	ctx context.Context,
+	eng engine.ReadWriter,
+	rangeID roachpb.RangeID,
+	cErr *roachpb.Error,
 ) error {
 	return engine.MVCCPutProto(ctx, eng, nil,
-		keys.RangeReplicaDestroyedErrorKey(rangeID), hlc.ZeroTimestamp, nil /* txn */, err)
+		keys.RangeReplicaDestroyedErrorKey(rangeID),
+		hlc.ZeroTimestamp, nil /* txn */, cErr)
 }
 
 func loadHardState(
