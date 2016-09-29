@@ -177,6 +177,12 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 	tc.stopper.AddCloser(stop.CloserFn(tc.stopServers))
 
 	tc.waitForStores(t)
+
+	// TODO(tamird): consider removing this when #8081 is addressed.
+	if err := tc.WaitForFullReplication(); err != nil {
+		t.Fatal(err)
+	}
+
 	return tc
 }
 
