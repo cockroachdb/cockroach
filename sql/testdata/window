@@ -22,6 +22,9 @@ INSERT INTO kv VALUES
 query error window functions are not allowed in GROUP BY
 SELECT * FROM kv GROUP BY v, COUNT(w) OVER ()
 
+query error window functions are not allowed in GROUP BY
+SELECT COUNT(w) OVER () FROM kv GROUP BY 1
+
 query error window functions are not allowed in RETURNING
 INSERT INTO kv (k, v) VALUES (99, 100) RETURNING sum(v) OVER ()
 
