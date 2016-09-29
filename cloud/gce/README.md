@@ -43,7 +43,7 @@ The following variables can be modified if necessary:
 #### Create a cockroach cluster with 3 nodes
 
 ```
-$ terraform apply --var=num_instances=3
+$ terraform apply --var=num_instances=\"3\"
 
 
 Outputs:
