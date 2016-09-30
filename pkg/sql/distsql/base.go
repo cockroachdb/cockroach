@@ -232,6 +232,7 @@ type RowBuffer struct {
 }
 
 var _ RowReceiver = &RowBuffer{}
+var _ RowSource = &RowBuffer{}
 
 // PushRow is part of the RowReceiver interface.
 func (rb *RowBuffer) PushRow(row sqlbase.EncDatumRow) bool {
