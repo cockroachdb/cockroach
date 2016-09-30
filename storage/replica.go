@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -82,6 +83,9 @@ const (
 	optimizePutThreshold = 10
 
 	replicaChangeTxnName = "change-replica"
+
+	defaultReplicaRaftMuWarnThreshold = 500 * time.Second
+	defaultReplicaMuWarnThreshold     = 500 * time.Second
 )
 
 // This flag controls whether Transaction entries are automatically gc'ed
@@ -241,11 +245,15 @@ type Replica struct {
 	// raftMu protects Raft processing the replica.
 	//
 	// Locking notes: Replica.raftMu < Replica.mu
-	raftMu syncutil.Mutex
+	//
+	// TODO(peter): evaluate runtime overhead the timed mutex.
+	raftMu util.TimedMutex
 
 	mu struct {
 		// Protects all fields in the mu struct.
-		syncutil.Mutex
+		//
+		// TODO(peter): evaluate runtime overhead the timed mutex.
+		util.TimedMutex
 		// Has the replica been destroyed.
 		destroyed error
 		// Corrupted persistently (across process restarts) indicates whether the
@@ -477,6 +485,9 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		store:      store,
 		abortCache: NewAbortCache(rangeID),
 	}
+	// TODO(radu): we can do better than store.Ctx() here.
+	r.raftMu = util.MakeTimedMutex(store.Ctx(), defaultReplicaRaftMuWarnThreshold)
+	r.mu.TimedMutex = util.MakeTimedMutex(store.Ctx(), defaultReplicaMuWarnThreshold)
 	r.mu.outSnapDone = initialOutSnapDone
 	return r
 }
@@ -2802,7 +2813,7 @@ func (r *Replica) applyRaftCommand(
 		log.Fatalf(ctx, "setting mvcc stats in a batch should never fail: %s", err)
 	}
 
-	// TODO(petermattis): We did not close the writer in an earlier version of
+	// TODO(peter): We did not close the writer in an earlier version of
 	// the code, which went undetected even though we used the batch after
 	// (though only to commit it). We should add an assertion to prevent that in
 	// the future.

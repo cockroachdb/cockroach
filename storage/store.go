@@ -85,6 +85,10 @@ const (
 	// replicaRequestQueueSize specifies the maximum number of requests to queue
 	// for a replica.
 	replicaRequestQueueSize = 100
+
+	// TODO(peter): change this to zero to avoid runtime overhead if
+	// that proves relevant.
+	defaultStoreMutexWarnThreshold = 100 * time.Millisecond
 )
 
 var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeType{
@@ -410,7 +414,8 @@ type Store struct {
 	// modified by a concurrent HandleRaftRequest. (#4476)
 
 	mu struct {
-		syncutil.Mutex // Protects all variables in the mu struct.
+		// TODO(peter): evaluate runtime overhead of the timed mutex.
+		util.TimedMutex // Protects all variables in the mu struct.
 		// Map of replicas by Range ID. This includes `uninitReplicas`.
 		replicas       map[roachpb.RangeID]*Replica
 		replicasByKey  *btree.BTree                 // btree keyed by ranges end keys.
@@ -636,11 +641,13 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 		nodeDesc:  nodeDesc,
 		metrics:   newStoreMetrics(),
 	}
+
 	s.intentResolver = newIntentResolver(s)
 	s.raftEntryCache = newRaftEntryCache(ctx.RaftEntryCacheSize)
 	s.drainLeases.Store(false)
 	s.scheduler = newRaftScheduler(ctx.Ctx, s, storeSchedulerConcurrency)
 
+	s.mu.TimedMutex = util.MakeTimedMutex(s.Ctx(), defaultStoreMutexWarnThreshold)
 	s.mu.Lock()
 	s.mu.replicas = map[roachpb.RangeID]*Replica{}
 	s.mu.replicaPlaceholders = map[roachpb.RangeID]*ReplicaPlaceholder{}
