@@ -30,6 +30,7 @@
 		JoinReaderSpec
 		SorterSpec
 		EvaluatorSpec
+		AggregatorSpec
 		ProcessorCoreUnion
 		ProcessorSpec
 		FlowSpec

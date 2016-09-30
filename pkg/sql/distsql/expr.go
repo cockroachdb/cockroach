@@ -171,3 +171,12 @@ func (eh *exprHelper) eval(row sqlbase.EncDatumRow) (parser.Datum, error) {
 		return eh.expr.Eval(eh.evalCtx)
 	}
 }
+
+func (eh *exprHelper) indexToExpr(idx int) parser.Expr {
+	p := parser.Placeholder{Name: strconv.Itoa(idx)}
+
+	// Convert Placeholders to IndexedVars
+	v := valArgsConvert{h: &eh.vars, err: nil}
+	expr, _ := parser.WalkExpr(&v, p)
+	return expr
+}
