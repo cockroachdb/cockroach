@@ -6,9 +6,9 @@ by Spencer Kimball from early 2014.
 
 CockroachDB is a distributed SQL database. The primary design goals
 are **scalability**, **strong consistency** and **survivability**
-(hence the name). Cockroach aims to tolerate disk, machine, rack, and
+(hence the name). CockroachDB aims to tolerate disk, machine, rack, and
 even **datacenter failures** with minimal latency disruption and **no
-manual intervention**. Cockroach nodes are symmetric; a design goal is
+manual intervention**. CockroachDB nodes are symmetric; a design goal is
 **homogeneous deployment** (one binary) with minimal configuration and
 no required external dependencies.
 
@@ -27,7 +27,8 @@ LevelDB). Range data is replicated to a configurable number of
 additional CockroachDB nodes. Ranges are merged and split to maintain
 a target size, by default `64M`. The relatively small size facilitates
 quick repair and rebalancing to address node failures, new capacity
-and even read/write load.
+and even read/write load. However, the size must be balanced against
+the pressure on the system from having more ranges to manage.
 
 CockroachDB achieves horizontally scalability:
 - adding more nodes increases the capacity of the cluster by the
@@ -35,14 +36,12 @@ CockroachDB achieves horizontally scalability:
   replication factor), theoretically up to 4 exabytes (4E) of logical
   data;
 - client queries can be sent to any node in the cluster, and queries
-  can operate fully independently from each other, meaning that
-  overall throughput is a linear factor of the number of nodes in the
-  cluster.
+  can operate independently (w/o conflicts), meaning that overall
+  throughput is a linear factor of the number of nodes in the cluster.
 - queries are distributed (ref: distributed SQL) so that the overall
-  throughput of single queries can also be increased by adding more
-  nodes.
+  throughput of single queries can be increased by adding more nodes.
 
-CocroachDB achieves strong consistency:
+CockroachDB achieves strong consistency:
 - uses a distributed consensus protocol for synchronous replication of
   data in each key value range. We’ve chosen to use the [Raft
   consensus algorithm](https://raftconsensus.github.io); all consensus
@@ -56,7 +55,7 @@ CocroachDB achieves strong consistency:
 CockroachDB achieves survivability:
 - range replicas can be co-located within a single datacenter for low
   latency replication and survive disk or machine failures. They can
-  be located across racks to survive some network switch failures.
+  be distributed across racks to survive some network switch failures.
 - range replicas can be located in datacenters spanning increasingly
   disparate geographies to survive ever-greater failure scenarios from
   datacenter power or networking loss to regional power failures
@@ -64,20 +63,20 @@ CockroachDB achieves survivability:
   Japan }`, `{ Ireland, US-East, US-West}`, `{ Ireland, US-East,
   US-West, Japan, Australia }`).
 
-Cockroach provides [snapshot isolation](http://en.wikipedia.org/wiki/Snapshot_isolation) (SI) and
+CockroachDB provides [snapshot isolation](http://en.wikipedia.org/wiki/Snapshot_isolation) (SI) and
 serializable snapshot isolation (SSI) semantics, allowing **externally
 consistent, lock-free reads and writes**--both from a historical
 snapshot timestamp and from the current wall clock time. SI provides
 lock-free reads and writes but still allows write skew. SSI eliminates
 write skew, but introduces a performance hit in the case of a
 contentious system. SSI is the default isolation; clients must
-consciously decide to trade correctness for performance. Cockroach
+consciously decide to trade correctness for performance. CockroachDB
 implements [a limited form of linearizability](#linearizability),
 providing ordering for any observer or chain of observers.
 
 Similar to
 [Spanner](http://static.googleusercontent.com/media/research.google.com/en/us/archive/spanner-osdi2012.pdf)
-directories, Cockroach allows configuration of arbitrary zones of data.
+directories, CockroachDB allows configuration of arbitrary zones of data.
 This allows replication factor, storage device type, and/or datacenter
 location to be chosen to optimize performance and/or availability.
 Unlike Spanner, zones are monolithic and don’t allow movement of fine
@@ -85,7 +84,7 @@ grained data on the level of entity groups.
 
 # Architecture
 
-Cockroach implements a layered architecture. The highest level of
+CockroachDB implements a layered architecture. The highest level of
 abstraction is the SQL layer (currently unspecified in this document).
 It depends directly on the [*structured data
 API*](#structured-data-api), which provides familiar relational concepts
