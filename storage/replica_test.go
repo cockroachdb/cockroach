@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/syncutil"
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
@@ -362,6 +363,7 @@ func TestReplicaContains(t *testing.T) {
 
 	// This test really only needs a hollow shell of a Replica.
 	r := &Replica{}
+	r.mu.Locker = syncutil.NewTimedMutex(0)
 	r.mu.state.Desc = desc
 	r.rangeStr.store(desc)
 

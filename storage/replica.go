@@ -26,6 +26,7 @@ import (
 	"math/rand"
 	"reflect"
 	"sort"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -82,6 +83,11 @@ const (
 	optimizePutThreshold = 10
 
 	replicaChangeTxnName = "change-replica"
+
+	// TODO(petermattis): change this to zero to avoid runtime overhead if
+	// that proves relevant.
+	defaultReplicaRaftMuWarnThreshold = 500 * time.Second
+	defaultReplicaMuWarnThreshold     = 500 * time.Second
 )
 
 // This flag controls whether Transaction entries are automatically gc'ed
@@ -241,11 +247,11 @@ type Replica struct {
 	// raftMu protects Raft processing the replica.
 	//
 	// Locking notes: Replica.raftMu < Replica.mu
-	raftMu syncutil.Mutex
+	raftMu sync.Locker
 
 	mu struct {
 		// Protects all fields in the mu struct.
-		syncutil.Mutex
+		sync.Locker
 		// Has the replica been destroyed.
 		destroyed error
 		// Corrupted persistently (across process restarts) indicates whether the
@@ -477,6 +483,8 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		store:      store,
 		abortCache: NewAbortCache(rangeID),
 	}
+	r.raftMu = syncutil.NewTimedMutex(defaultReplicaRaftMuWarnThreshold)
+	r.mu.Locker = syncutil.NewTimedMutex(defaultReplicaMuWarnThreshold)
 	r.mu.outSnapDone = initialOutSnapDone
 	return r
 }

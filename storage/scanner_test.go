@@ -57,6 +57,7 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 		rng := &Replica{
 			RangeID: desc.RangeID,
 		}
+		rng.mu.Locker = syncutil.NewTimedMutex(0)
 		rng.mu.state.Stats = enginepb.MVCCStats{
 			KeyBytes:  1,
 			ValBytes:  2,
