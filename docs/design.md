@@ -209,27 +209,27 @@ on a node is at a timestamp < next HLC time.
 
 Transactions are executed in two phases:
 
-1. Start the transaction by writing a new entry to the system
-   transaction table (keys prefixed by *\0tx*) with state “PENDING”. In
+1. Start the transaction by selecting a range which is likely to be
+   heavily involved in the transaction and writing a new transaction
+   record to a reserved area of that range with state "PENDING". In
    parallel write an "intent" value for each datum being written as part
    of the transaction. These are normal MVCC values, with the addition of
    a special flag (i.e. “intent”) indicating that the value may be
    committed after the transaction itself commits. In addition,
    the transaction id (unique and chosen at tx start time by client)
-   is stored with intent values. The tx id is used to refer to the
-   transaction table when there are conflicts and to make
+   is stored with intent values. The txn id is used to refer to the
+   transaction record when there are conflicts and to make
    tie-breaking decisions on ordering between identical timestamps.
    Each node returns the timestamp used for the write (which is the
    original candidate timestamp in the absence of read/write conflicts);
    the client selects the maximum from amongst all write timestamps as the
    final commit timestamp.
 
-2. Commit the transaction by updating its entry in the system
-   transaction table (keys prefixed by *\0tx*). The value of the
-   commit entry contains the candidate timestamp (increased as
-   necessary to accommodate any latest read timestamps). Note that
-   the transaction is considered fully committed at this point and
-   control may be returned to the client.
+2. Commit the transaction by updating its transaction record. The value
+   of the commit entry contains the candidate timestamp (increased as
+   necessary to accommodate any latest read timestamps). Note that the
+   transaction is considered fully committed at this point and control
+   may be returned to the client.
 
    In the case of an SI transaction, a commit timestamp which was
    increased to accommodate concurrent readers is perfectly
@@ -267,7 +267,7 @@ encounter data that necessitate conflict resolution
 
 When a transaction restarts, it changes its priority and/or moves its
 timestamp forward depending on data tied to the conflict, and
-begins anew reusing the same tx id. The prior run of the transaction might
+begins anew reusing the same txn id. The prior run of the transaction might
 have written some write intents, which need to be deleted before the
 transaction commits, so as to not be included as part of the transaction.
 These stale write intent deletions are done during the reexecution of the
@@ -281,12 +281,12 @@ a NOOP.
 ***Transaction abort:***
 
 This is the case in which a transaction, upon reading its transaction
-table entry, finds that it has been aborted. In this case, the
-transaction can not reuse its intents; it returns control to the client
-before cleaning them up (other readers and writers would clean up
-dangling intents as they encounter them) but will make an effort to
-clean up after itself. The next attempt (if applicable) then runs as a
-new transaction with **a new tx id**.
+record, finds that it has been aborted. In this case, the transaction
+can not reuse its intents; it returns control to the client before
+cleaning them up (other readers and writers would clean up dangling
+intents as they encounter them) but will make an effort to clean up
+after itself. The next attempt (if applicable) then runs as a new
+transaction with **a new txn id**.
 
 ***Transaction interactions:***
 
@@ -313,7 +313,7 @@ There are several scenarios in which transactions interact:
   stamp" below.
 
 - **Reader encounters write intent with older timestamp**: the reader
-  must follow the intent’s transaction id to the transaction table.
+  must follow the intent’s transaction id to the transaction record.
   If the transaction has already been committed, then the reader can
   just read the value. If the write transaction has not yet been
   committed, then the reader has two options. If the write conflict
@@ -363,9 +363,9 @@ are upgraded to committed. In the event a transaction is aborted, all written
 intents are deleted. The client proxy doesn’t guarantee it will resolve intents.
 
 In the event the client proxy restarts before the pending transaction is
-committed, the dangling transaction would continue to live in the
-transaction table until aborted by another transaction. Transactions
-heartbeat the transaction table every five seconds by default.
+committed, the dangling transaction would continue to "live" until
+aborted by another transaction. Transactions periodically heartbeat
+their transaction record to maintain liveness.
 Transactions encountered by readers or writers with dangling intents
 which haven’t been heartbeat within the required interval are aborted.
 In the event the proxy restarts after a transaction commits but before
@@ -377,7 +377,7 @@ An exploration of retries with contention and abort times with abandoned
 transaction is
 [here](https://docs.google.com/document/d/1kBCu4sdGAnvLqpT-_2vaTbomNmX3_saayWEGYu1j7mQ/edit?usp=sharing).
 
-**Transaction Table**
+**Transaction Records**
 
 Please see [roachpb/data.proto](https://github.com/cockroachdb/cockroach/blob/master/roachpb/data.proto) for the up-to-date structures, the best entry point being `message Transaction`.
 
@@ -389,7 +389,7 @@ Please see [roachpb/data.proto](https://github.com/cockroachdb/cockroach/blob/ma
   abort.
 - Lower latency than traditional 2PC commit protocol (w/o contention)
   because second phase requires only a single write to the
-  transaction table instead of a synchronous round to all
+  transaction record instead of a synchronous round to all
   transaction participants.
 - Priorities avoid starvation for arbitrarily long transactions and
   always pick a winner from between contending transactions (no
