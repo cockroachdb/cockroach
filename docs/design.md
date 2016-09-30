@@ -87,9 +87,9 @@ grained data on the level of entity groups.
 
 Cockroach implements a layered architecture. The highest level of
 abstraction is the SQL layer (currently unspecified in this document).
-It depends directly on the [*structured data
-API*](#structured-data-api), which provides familiar relational concepts
-such as schemas, tables, columns, and indexes. The structured data API
+It depends directly on the [*SQL layer*](#sql),
+which provides familiar relational concepts
+such as schemas, tables, columns, and indexes. The SQL layer
 in turn depends on the [distributed key value store](#key-value-api),
 which handles the details of range addressing to provide the abstraction
 of a single, monolithic key value store. The distributed KV store
@@ -1194,6 +1194,123 @@ existing zones for its ranges against the zone configuration. If
 it discovers differences, it reconfigures ranges in the same way
 that it rebalances away from busy nodes, via special-case 1:1
 split to a duplicate range comprising the new configuration.
+
+# SQL
+
+Each node in a cluster can accept SQL client connections. CockroachDB
+supports the PostgreSQL wire protocol, to enable reuse of native
+PostgreSQL client drivers. Connections using SSL and authenticated
+using client certificates are supported and even encouraged over
+unencrypted (insecure) and password-based connections.
+
+Each connection is associated with a SQL session which holds the
+server-side state of the connection. Over the lifespan of a session
+the client can send SQL to open/close transactions, issue statements
+or queries or configure session parameters, much like with any other
+SQL database.
+
+## Language support
+
+CockroachDB also attempts to emulate the flavor of SQL supported by
+PostgreSQL, although it also diverges in significant ways:
+
+- CockroachDB exclusively implements MVCC-based consistency for
+  transactions, and thus only supports SQL's isolation levels SNAPSHOT
+  and SERIALIZABLE.  The other traditional SQL isolation levels are
+  internally mapped to either SNAPSHOT or SERIALIZABLE.
+
+- CockroachDB implements its own [SQL type system](RFCS/typing.md)
+  which only supports a limited form of implicit coercions between
+  types compared to PostgreSQL. The rationale is to keep the
+  implementation simple and efficient, capitalizing on the observation
+  that 1) most SQL code in clients is automatically generated with
+  coherent typing already and 2) existing SQL code for other databases
+  will need to be massaged for CockroachDB anyways.
+
+## SQL architecture
+
+Client connections over the network are handled in each node by a
+pgwire server process (goroutine). This handles the stream of incoming
+commands and sends back responses including query/statement results.
+The pgwire server also handles pgwire-level prepared statements,
+binding prepared statements to arguments and looking up prepared
+statements for execution.
+
+Meanwhile the state of a SQL connection is maintained by a Session
+object and a monolithic `planner` object (one per connection) which
+coordinates execution between the session, the current SQL transaction
+state and the underlying KV store.
+
+Upon receiving a query/statement (either directly or via an execute
+command for a previously prepared statement) the pgwire server forwards
+the SQL text to the `planner` associated with the connection. The SQL
+code is then transformed into a SQL query plan.
+The query plan is implemented as a tree of objects which describe the
+high-level data operations needed to resolve the query, for example
+"join", "index join", "scan", "group", etc.
+
+The query plan objects currently also embed the run-time state needed
+for the execution of the query plan. Once the SQL query plan is ready,
+methods on these objects then carry the execution out in the fashion
+of "generators" in other programming languages: each node *starts* its
+children nodes and from that point forward each child node serves as a
+*generator* for a stream of result rows, which the parent node can
+consume and transform incrementally and present to its own parent node
+also as a generator.
+
+The top-level planner consumes the data produced by the top node of
+the query plan and returns it to the client via pgwire.
+
+## Data mapping between the SQL model and KV
+
+Every SQL table has a primary key in CockroachDB. (If a table is created
+without one, an implicit primary key is provided automatically.)
+The table identifier, followed by the value of the primary key for
+each row, are encoded as the *prefix* of a key in the underlying KV
+store.
+
+Each remaining column or *column family* in the table is then encoded
+as a value in the underlying KV store, and the column/family identifier
+is appended as *suffix* to the KV key.
+
+For example:
+
+- after table `customers` is created in a database `mydb` with a
+primary key column `name` and normal columns `address` and `URL`, the KV pairs
+to store the schema would be:
+
+| Key                          | Values |
+| ---------------------------- | ------ |
+| `/system/databases/mydb/id`  | 51     |
+| `/system/tables/customer/id` | 42     |
+| `/system/desc/51/42/address` | 69     |
+| `/system/desc/51/42/url`     | 66     |
+
+(The numeric values on the right are chosen arbitrarily for the
+example; the structure of the schema keys on the left is simplified
+for the example and subject to change.)  Each database/table/column
+name is mapped to a spontaneously generated identifier, so as to
+simplify renames.
+
+Then for a single row in this table:
+
+| Key               | Values                           |
+| ----------------- | -------------------------------- |
+| `/51/42/Apple/69` | `1 Infinite Loop, Cupertino, CA` |
+| `/51/42/Apple/66` | `http://apple.com/`              | 
+
+Each key has the table prefix `/51/42` followed by the primary key
+prefix `/Apple` followed by the column/family suffix (`/66`,
+`/69`). The KV value is directly encoded from the SQL value.
+
+Efficient storage for the keys is guaranteed by the underlying RocksDB engine
+by means of prefix compression.
+
+Finally, for SQL indexes, the KV key is formed using the SQL value of the
+indexed columns, and the KV value is the KV key prefix of the rest of
+the indexed row.
+
+# References
 
 [0]: http://rocksdb.org/
 [1]: https://github.com/google/leveldb
