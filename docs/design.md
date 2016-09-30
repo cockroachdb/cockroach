@@ -4,42 +4,65 @@ by Spencer Kimball from early 2014.
 
 # Overview
 
-Cockroach is a distributed key:value datastore (SQL and structured
-data layers of cockroach have yet to be defined) which supports **ACID
-transactional semantics** and **versioned values** as first-class
-features. The primary design goal is **global consistency and
-survivability**, hence the name. Cockroach aims to tolerate disk,
-machine, rack, and even **datacenter failures** with minimal latency
-disruption and **no manual intervention**. Cockroach nodes are
-symmetric; a design goal is **homogeneous deployment** (one binary) with
-minimal configuration.
+CockroachDB is a distributed SQL database. The primary design goals
+are **scalability**, **strong consistency** and **survivability**
+(hence the name). Cockroach aims to tolerate disk, machine, rack, and
+even **datacenter failures** with minimal latency disruption and **no
+manual intervention**. Cockroach nodes are symmetric; a design goal is
+**homogeneous deployment** (one binary) with minimal configuration and
+no required external dependencies.
 
-Cockroach implements a **single, monolithic sorted map** from key to
-value where both keys and values are byte strings (not unicode).
-Cockroach **scales linearly** (theoretically up to 4 exabytes (4E) of
-logical data). The map is composed of one or more ranges and each range
-is backed by data stored in [RocksDB](http://rocksdb.org/) (a
-variant of LevelDB), and is replicated to a total of three or more
-cockroach servers. Ranges are defined by start and end keys. Ranges are
-merged and split to maintain total byte size within a globally
-configurable min/max size interval. Range sizes default to target `64M` in
-order to facilitate quick splits and merges and to distribute load at
-hotspots within a key range. Range replicas are intended to be located
-in disparate datacenters for survivability (e.g. `{ US-East, US-West,
-Japan }`, `{ Ireland, US-East, US-West}`, `{ Ireland, US-East, US-West,
-Japan, Australia }`).
+The entry point for database clients is the SQL interface. Every node
+in a CockroachDB cluster can act as a client SQL gateway. A SQL
+gateway transforms and executes client SQL statements to key-value
+(KV) operations, which the gateway distributes across the cluster as
+necessary and returns results to the client. CockroachDB implements a
+**single, monolithic sorted map** from key to value where both keys
+and values are byte strings.
 
-Single mutations to ranges are mediated via an instance of a distributed
-consensus algorithm to ensure consistency. We’ve chosen to use the
-[Raft consensus algorithm](https://raftconsensus.github.io); all consensus
-state is stored in RocksDB.
+The KV map is logically composed of smaller segments of the keyspace
+called ranges. Each range is backed by data stored in a local KV
+storage engine (we use [RocksDB](http://rocksdb.org/), a variant of
+LevelDB). Range data is replicated to a configurable number of
+additional CockroachDB nodes. Ranges are merged and split to maintain
+a target size, by default `64M`. The relatively small size facilitates
+quick repair and rebalancing to address node failures, new capacity
+and even read/write load.
 
-A single logical mutation may affect multiple key/value pairs. Logical
-mutations have ACID transactional semantics. If all keys affected by a
-logical mutation fall within the same range, atomicity and consistency
-are guaranteed by Raft; this is the **fast commit path**. Otherwise, a
-**non-locking distributed commit** protocol is employed between affected
-ranges.
+CockroachDB achieves horizontally scalability:
+- adding more nodes increases the capacity of the cluster by the
+  amount of storage on each node (divided by a configurable
+  replication factor), theoretically up to 4 exabytes (4E) of logical
+  data;
+- client queries can be sent to any node in the cluster, and queries
+  can operate fully independently from each other, meaning that
+  overall throughput is a linear factor of the number of nodes in the
+  cluster.
+- queries are distributed (ref: distributed SQL) so that the overall
+  throughput of single queries can also be increased by adding more
+  nodes.
+
+CocroachDB achieves strong consistency:
+- uses a distributed consensus protocol for synchronous replication of
+  data in each key value range. We’ve chosen to use the [Raft
+  consensus algorithm](https://raftconsensus.github.io); all consensus
+  state is stored in RocksDB.
+- single or batched mutations to a single range are mediated via the
+  range's Raft instance. Raft guarantees ACID semantics.
+- logical mutations which affect multiple ranges employ distributed
+  transactions for ACID semantics. CockroachDB uses an efficient
+  **non-locking distributed commit** protocol.
+
+CockroachDB achieves survivability:
+- range replicas can be co-located within a single datacenter for low
+  latency replication and survive disk or machine failures. They can
+  be located across racks to survive some network switch failures.
+- range replicas can be located in datacenters spanning increasingly
+  disparate geographies to survive ever-greater failure scenarios from
+  datacenter power or networking loss to regional power failures
+  (e.g. `{ US-East-1a, US-East-1b, US-East-1c }, `{ US-East, US-West,
+  Japan }`, `{ Ireland, US-East, US-West}`, `{ Ireland, US-East,
+  US-West, Japan, Australia }`).
 
 Cockroach provides [snapshot isolation](http://en.wikipedia.org/wiki/Snapshot_isolation) (SI) and
 serializable snapshot isolation (SSI) semantics, allowing **externally
@@ -1224,140 +1247,6 @@ existing zones for its ranges against the zone configuration. If
 it discovers differences, it reconfigures ranges in the same way
 that it rebalances away from busy nodes, via special-case 1:1
 split to a duplicate range comprising the new configuration.
-
-# Key-Value API
-
-see the protobufs in [roachpb/](https://github.com/cockroachdb/cockroach/blob/master/roachpb),
-in particular [roachpb/api.proto](https://github.com/cockroachdb/cockroach/blob/master/roachpb/api.proto) and the comments within.
-
-# Structured Data API
-
-A preliminary design can be found in the [Go source documentation](https://godoc.org/github.com/cockroachdb/cockroach/sql).
-
-# Appendix
-
-## Datastore Goal Articulation
-
-There are other important axes involved in data-stores which are less
-well understood and/or explained. There is lots of cross-dependency,
-but it's safe to segregate two more of them as (a) scan efficiency,
-and (b) read vs write optimization.
-
-### Datastore Scan Efficiency Spectrum
-
-Scan efficiency refers to the number of IO ops required to scan a set
-of sorted adjacent rows matching a criteria. However, it's a
-complicated topic, because of the options (or lack of options) for
-controlling physical order in different systems.
-
-* Some designs either default to or only support "heap organized"
-  physical records (Oracle, MySQL, Postgres, SQLite, MongoDB). In this
-  design, a naive sorted-scan of an index involves one IO op per
-  record.
-* In these systems it's possible to "fully cover" a sorted-query in an
-  index with some write-amplification.
-* In some systems it's possible to put the primary record data in a
-  sorted btree instead of a heap-table (default in MySQL/Innodb,
-  option in Oracle).
-* Sorted-order LSM NoSQL could be considered index-organized-tables,
-  with efficient scans by the row-key. (HBase).
-* Some NoSQL is not optimized for sorted-order retrieval, because of
-  hash-bucketing, primarily based on the Dynamo design. (Cassandra,
-  Riak)
-
-![Datastore Scan Efficiency Spectrum](/resource/doc/scan-efficiency.png?raw=true)
-
-### Read vs. Write Optimization Spectrum
-
-Read vs write optimization is a product of the underlying sorted-order
-data-structure used. Btrees are read-optimized. Hybrid write-deferred
-trees are a balance of read-and-write optimizations (shuttle-trees,
-fractal-trees, stratified-trees). LSM separates write-incorporation
-into a separate step, offering a tunable amount of read-to-write
-optimization. An "ideal" LSM at 0%-write-incorporation is a log, and
-at 100%-write-incorporation is a btree.
-
-The topic of LSM is confused by the fact that LSM is not an algorithm,
-but a design pattern, and usage of LSM is hindered by the lack of a
-de-facto optimal LSM design. LevelDB/RocksDB is one of the more
-practical LSM implementations, but it is far from optimal. Popular
-text-indicies like Lucene are non-general purpose instances of
-write-optimized LSM.
-
-Further, there is a dependency between access pattern
-(read-modify-write vs blind-write and write-fraction), cache-hitrate,
-and ideal sorted-order algorithm selection. At a certain
-write-fraction and read-cache-hitrate, systems achieve higher total
-throughput with write-optimized designs, at the cost of increased
-worst-case read latency. As either write-fraction or
-read-cache-hitrate approaches 1.0, write-optimized designs provide
-dramatically better sustained system throughput when record-sizes are
-small relative to IO sizes.
-
-Given this information, data-stores can be sliced by their
-sorted-order storage algorithm selection. Btree stores are
-read-optimized (Oracle, SQLServer, Postgres, SQLite2, MySQL, MongoDB,
-CouchDB), hybrid stores are read-optimized with better
-write-throughput (Tokutek MySQL/MongoDB), while LSM-variants are
-write-optimized (HBase, Cassandra, SQLite3/LSM, CockroachDB).
-
-![Read vs. Write Optimization Spectrum](/resource/doc/read-vs-write.png?raw=true)
-
-## Architecture
-
-CockroachDB implements a layered architecture, with various
-subdirectories implementing layers as appropriate. The highest level of
-abstraction is the [SQL layer][5], which depends
-directly on the structured data API. The structured
-data API provides familiar relational concepts such as schemas,
-tables, columns, and indexes. The structured data API in turn depends
-on the [distributed key value store][7] ([kv/][8]). The distributed key
-value store handles the details of range addressing to provide the
-abstraction of a single, monolithic key value store. It communicates
-with any number of [RoachNodes][9] ([server/][10]), storing the actual
-data. Each node contains one or more [stores][11] ([storage/][12]), one per
-physical device.
-
-![CockroachDB Architecture](/resource/doc/architecture.png?raw=true)
-
-Each store contains potentially many ranges, the lowest-level unit of
-key-value data. Ranges are replicated using the [Raft][2] consensus
-protocol. The diagram below is a blown up version of stores from four
-of the five nodes in the previous diagram. Each range is replicated
-three ways using raft. The color coding shows associated range
-replicas.
-
-![Range Architecture Blowup](/resource/doc/architecture-blowup.png?raw=true)
-
-## Client Architecture
-
-RoachNodes serve client traffic using a fully-featured SQL API which accepts requests as either application/x-protobuf or
-application/json. Client implementations consist of an HTTP sender
-(transport) and a transactional sender which implements a simple
-exponential backoff / retry protocol, depending on CockroachDB error
-codes.
-
-The DB client gateway accepts incoming requests and sends them
-through a transaction coordinator, which handles transaction
-heartbeats on behalf of clients, provides optimization pathways, and
-resolves write intents on transaction commit or abort. The transaction
-coordinator passes requests onto a distributed sender, which looks up
-index metadata, caches the results, and routes internode RPC traffic
-based on where the index metadata indicates keys are located in the
-distributed cluster.
-
-In addition to the gateway for external DB client traffic, each RoachNode provides the full key/value API (including all internal methods) via
-a Go RPC server endpoint. The RPC server endpoint forwards requests to one
-or more local stores depending on the specified key range.
-
-Internally, each RoachNode uses the Go implementation of the
-CockroachDB client in order to transactionally update system key/value
-data; for example during split and merge operations to update index
-metadata records. Unlike an external application, the internal client
-eschews the HTTP sender and instead directly shares the transaction
-coordinator and distributed sender used by the DB client gateway.
-
-![Client Architecture](/resource/doc/client-architecture.png?raw=true)
 
 [0]: http://rocksdb.org/
 [1]: https://github.com/google/leveldb
