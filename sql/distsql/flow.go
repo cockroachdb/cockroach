@@ -162,9 +162,20 @@ func (f *Flow) setupRouter(spec *OutputRouterSpec) (RowReceiver, error) {
 }
 
 func checkNumInOut(inputs []RowSource, outputs []RowReceiver, numIn, numOut int) error {
+	if err := checkNumIn(inputs, numIn); err != nil {
+		return err
+	}
+	return checkNumOut(outputs, numOut)
+}
+
+func checkNumIn(inputs []RowSource, numIn int) error {
 	if len(inputs) != numIn {
 		return errors.Errorf("expected %d input(s), got %d", numIn, len(inputs))
 	}
+	return nil
+}
+
+func checkNumOut(outputs []RowReceiver, numOut int) error {
 	if len(outputs) != numOut {
 		return errors.Errorf("expected %d output(s), got %d", numOut, len(outputs))
 	}
@@ -206,6 +217,12 @@ func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (processor, 
 			return nil, err
 		}
 		return newSorter(&f.FlowCtx, ps.Core.Sorter, inputs[0], outputs[0]), nil
+	}
+	if ps.Core.Aggregator != nil {
+		if err := checkNumOut(outputs, 1); err != nil {
+			return nil, err
+		}
+		return newAggregator(&f.FlowCtx, ps.Core.Aggregator, inputs, outputs[0])
 	}
 	return nil, errors.Errorf("unsupported processor %s", ps)
 }

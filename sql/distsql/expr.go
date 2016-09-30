@@ -142,3 +142,12 @@ func (eh *exprHelper) evalFilter(row sqlbase.EncDatumRow) (bool, error) {
 	eh.row = row
 	return sqlbase.RunFilter(eh.expr, eh.evalCtx)
 }
+
+func (eh *exprHelper) indexToExpr(idx int) parser.Expr {
+	p := parser.Placeholder{Name: strconv.Itoa(idx)}
+
+	// Convert Placeholders to IndexedVars
+	v := valArgsConvert{h: &eh.vars, err: nil}
+	expr, _ := parser.WalkExpr(&v, p)
+	return expr
+}

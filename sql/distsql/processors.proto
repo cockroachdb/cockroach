@@ -110,6 +110,56 @@ message SorterSpec {
   optional int64 limit = 3 [(gogoproto.nullable) = false];
 }
 
+// AggregatorSpec is the specification for an "aggregator" (processor core
+// type, not the logical plan computation stage). An aggregator performs
+// 'aggregation' in the SQL sense in that it groups rows and computes an aggregate
+// for each group. The group is configured using the group key. The aggregator
+// can be configured with one or more of the following aggregation functions:
+//    SUM
+//    COUNT
+//    MIN
+//    MAX
+//    AVG
+//    DISTINCT
+//    COUNT DISTINCT
+// The aggregator's output schema consists of the group key, plus a
+// configurable subset of the generated aggregated values.
+message AggregatorSpec {
+  // These mirror the aggregate functions supported by sql/parser. See
+  // sql/parser/aggregate_builtins.go.
+  enum Func {
+    // The identity function is set to be the default zero-value function,
+    // returning the last value added.
+    IDENT = 0;
+
+    AVG = 1;
+    BOOL_AND = 2;
+    BOOL_OR = 3;
+    CONCAT_AGG = 4;
+    COUNT = 5;
+    MAX = 7;
+    MIN = 8;
+    STDDEV = 9;
+    SUM = 10;
+    VARIANCE = 11;
+  }
+
+  message SelectExpr {
+    optional Func func = 1 [(gogoproto.nullable) = false];
+    optional bool distinct = 2 [(gogoproto.nullable) = false];
+    optional uint32 col_idx = 3 [(gogoproto.nullable) = false];
+  }
+
+  repeated sqlbase.ColumnType.Kind types = 1 [(gogoproto.nullable) = false];
+
+  // GroupKey is a subset of the columns in the input stream schema on the
+  // basis of which we define our groups.
+  repeated uint32 group_key = 2 [(gogoproto.nullable) = false];
+
+  // SelectExprs represents the SELECT expressions.
+  repeated SelectExpr select_exprs = 3 [(gogoproto.nullable) = false];
+}
+
 message ProcessorCoreUnion {
   option (gogoproto.onlyone) = true;
 
@@ -117,8 +167,9 @@ message ProcessorCoreUnion {
   optional TableReaderSpec tableReader = 2;
   optional JoinReaderSpec joinReader = 3;
   optional SorterSpec sorter = 4;
+  optional AggregatorSpec aggregator = 5;
   // TODO(radu): other "processor core" types will go here.
-  // TODO(irfansharif): add aggregation, join, etc. from #7587
+  // TODO(irfansharif): add program, join, etc. from #7587
 }
 
 message ProcessorSpec {

@@ -29,6 +29,7 @@
 		TableReaderSpec
 		JoinReaderSpec
 		SorterSpec
+		AggregatorSpec
 		ProcessorCoreUnion
 		ProcessorSpec
 		FlowSpec
