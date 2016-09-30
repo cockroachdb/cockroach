@@ -40,7 +40,7 @@ resource "google_compute_instance" "cockroach" {
 
   connection {
     user = "ubuntu"
-    key_file = "~/.ssh/${var.key_name}"
+    private_key = "${file(format("~/.ssh/%s", var.key_name))}"
   }
 
   service_account {
@@ -70,7 +70,7 @@ resource "null_resource" "cockroach-runner" {
 
   connection {
     user = "ubuntu"
-    key_file = "~/.ssh/${var.key_name}"
+    private_key = "${file(format("~/.ssh/%s", var.key_name))}"
     host = "${element(google_compute_instance.cockroach.*.network_interface.0.access_config.0.assigned_nat_ip, count.index)}"
   }
 

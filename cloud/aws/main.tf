@@ -35,7 +35,7 @@ resource "null_resource" "cockroach-runner" {
   count = "${var.num_instances}"
   connection {
     user = "ubuntu"
-    key_file = "~/.ssh/${var.key_name}.pem"
+    private_key = "${file(format("~/.ssh/%s.pem", var.key_name))}"
     host = "${element(aws_instance.cockroach.*.public_ip, count.index)}"
   }
 

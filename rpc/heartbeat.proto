@@ -49,6 +49,8 @@ message PingRequest {
   optional RemoteOffset offset = 2 [(gogoproto.nullable) = false];
   // The address of the client.
   optional string addr = 3 [(gogoproto.nullable) = false];
+  // The configured maximum clock offset (in nanoseconds) on the server.
+  optional int64 max_offset_nanos = 4 [(gogoproto.nullable) = false];
 }
 
 // A PingResponse contains the echoed ping request string.

@@ -2381,6 +2381,9 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 					}, snap, r.store.Engine().NewBatch); err != nil {
 					log.Warningf(r.ctx, "range=%d: failed to send snapshot: %s", r.Desc().RangeID, err)
 				}
+				// Report the snapshot status to Raft, which expects us to do this once
+				// we finish attempting to send the snapshot.
+				r.reportSnapshotStatus(msg.To, err)
 			})
 		}); err != nil {
 			log.Warningf(r.ctx, "range=%d: failed to send snapshot: %s", r.Desc().RangeID, err)
@@ -2426,9 +2429,6 @@ func (r *Replica) sendRaftMessageRequest(req *RaftMessageRequest) bool {
 
 	return r.store.ctx.Transport.SendAsync(req)
 }
-
-// TODO(jordanlewis): remove this when #9592 is fixed.
-var _ = (*Replica)(nil).reportSnapshotStatus
 
 func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
 	r.raftMu.Lock()
