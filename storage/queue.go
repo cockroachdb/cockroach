@@ -638,25 +638,22 @@ func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, triggeringErr error, clo
 	})
 }
 
-// pop dequeues the highest priority replica in the queue. Returns the
-// replica if not empty; otherwise, returns nil. Expects mutex to be
-// locked.
+// pop dequeues the highest priority replica, if any, in the queue. Expects
+// mutex to be locked.
 func (bq *baseQueue) pop() *Replica {
-	bq.mu.Lock()
+	var repl *Replica
+	for repl == nil {
+		bq.mu.Lock()
 
-	if bq.mu.priorityQ.Len() == 0 {
+		if bq.mu.priorityQ.Len() == 0 {
+			bq.mu.Unlock()
+			return nil
+		}
+		item := heap.Pop(&bq.mu.priorityQ).(*replicaItem)
+		bq.pending.Update(int64(bq.mu.priorityQ.Len()))
+		delete(bq.mu.replicas, item.value)
 		bq.mu.Unlock()
-		return nil
-	}
-	item := heap.Pop(&bq.mu.priorityQ).(*replicaItem)
-	bq.pending.Update(int64(bq.mu.priorityQ.Len()))
-	delete(bq.mu.replicas, item.value)
-	bq.mu.Unlock()
-
-	repl, err := bq.store.GetReplica(item.value)
-	if err != nil {
-		log.Errorf(bq.ctx, "range %s no longer exists on store: %s", item.value, err)
-		return nil
+		repl, _ = bq.store.GetReplica(item.value)
 	}
 	return repl
 }
