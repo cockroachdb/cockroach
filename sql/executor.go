@@ -156,9 +156,10 @@ type ResultColumns []ResultColumn
 // An Executor executes SQL statements.
 // Executor is thread-safe.
 type Executor struct {
-	nodeID  roachpb.NodeID
-	cfg     ExecutorConfig
-	reCache *parser.RegexpCache
+	nodeID         roachpb.NodeID
+	cfg            ExecutorConfig
+	reCache        *parser.RegexpCache
+	virtualSchemas virtualSchemaMap
 
 	// Transient stats.
 	Latency       metric.Histograms
@@ -318,6 +319,11 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 			}
 		}
 	})
+
+	startupSession := NewSession(cfg.Context, SessionArgs{}, exec, nil)
+	if err := exec.virtualSchemas.init(&startupSession.planner); err != nil {
+		panic(err)
+	}
 
 	return exec
 }

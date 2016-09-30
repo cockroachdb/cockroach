@@ -78,10 +78,6 @@ func dIntFnOrNull(fn func() (int32, bool)) parser.Datum {
 	return parser.DNull
 }
 
-var zeroStr = "0"
-var emptyStr = "''"
-var falseStr = "false"
-
 var informationSchemaColumnsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.columns (
@@ -100,7 +96,6 @@ CREATE TABLE information_schema.columns (
   DATETIME_PRECISION INT
 );
 `,
-	desc: sqlbase.TableDescriptor{Name: "columns", ID: 0xffffffff, Version: 0x1, Columns: []sqlbase.ColumnDescriptor{{Name: "TABLE_CATALOG", ID: 0x1, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "TABLE_SCHEMA", ID: 0x2, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "TABLE_NAME", ID: 0x3, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "COLUMN_NAME", ID: 0x4, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "ORDINAL_POSITION", ID: 0x5, Type: sqlbase.ColumnType{Kind: 1}, DefaultExpr: &zeroStr}, {Name: "COLUMN_DEFAULT", ID: 0x6, Type: sqlbase.ColumnType{Kind: 7}, Nullable: true, DefaultExpr: (*string)(nil)}, {Name: "IS_NULLABLE", ID: 0x7, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "DATA_TYPE", ID: 0x8, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "CHARACTER_MAXIMUM_LENGTH", ID: 0x9, Type: sqlbase.ColumnType{Kind: 1}, Nullable: true, DefaultExpr: (*string)(nil)}, {Name: "CHARACTER_OCTET_LENGTH", ID: 0xa, Type: sqlbase.ColumnType{Kind: 1}, Nullable: true, DefaultExpr: (*string)(nil)}, {Name: "NUMERIC_PRECISION", ID: 0xb, Type: sqlbase.ColumnType{Kind: 1}, Nullable: true, DefaultExpr: (*string)(nil)}, {Name: "NUMERIC_SCALE", ID: 0xc, Type: sqlbase.ColumnType{Kind: 1}, Nullable: true, DefaultExpr: (*string)(nil)}, {Name: "DATETIME_PRECISION", ID: 0xd, Type: sqlbase.ColumnType{Kind: 1}, Nullable: true, DefaultExpr: (*string)(nil)}}, NextColumnID: 0xe, PrimaryIndex: sqlbase.IndexDescriptor{Name: "", ID: 0x0, Unique: false, ColumnNames: []string(nil), ColumnDirections: []sqlbase.IndexDescriptor_Direction(nil), StoreColumnNames: []string(nil), ColumnIDs: []sqlbase.ColumnID(nil), ImplicitColumnIDs: []sqlbase.ColumnID(nil), Interleave: sqlbase.InterleaveDescriptor{Ancestors: []sqlbase.InterleaveDescriptor_Ancestor(nil)}, InterleavedBy: []sqlbase.ForeignKeyReference(nil)}, Indexes: []sqlbase.IndexDescriptor(nil), NextIndexID: 0x0, Privileges: emptyPrivileges, NextMutationID: 0x1, FormatVersion: 0x3},
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		return forEachTableDesc(p,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
@@ -169,7 +164,6 @@ CREATE TABLE information_schema.key_column_usage (
   ORDINAL_POSITION INT NOT NULL DEFAULT 0,
   POSITION_IN_UNIQUE_CONSTRAINT INT
 );`,
-	desc: sqlbase.TableDescriptor{Name: "key_column_usage", ID: 0xffffffff, Version: 0x1, Columns: []sqlbase.ColumnDescriptor{{Name: "CONSTRAINT_CATALOG", ID: 0x1, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: &emptyStr, Hidden: false}, {Name: "CONSTRAINT_SCHEMA", ID: 0x2, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: &emptyStr, Hidden: false}, {Name: "CONSTRAINT_NAME", ID: 0x3, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: true, DefaultExpr: &emptyStr, Hidden: false}, {Name: "TABLE_CATALOG", ID: 0x4, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: false, DefaultExpr: &emptyStr, Hidden: false}, {Name: "TABLE_SCHEMA", ID: 0x5, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: false, DefaultExpr: &emptyStr, Hidden: false}, {Name: "TABLE_NAME", ID: 0x6, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: false, DefaultExpr: &emptyStr, Hidden: false}, {Name: "COLUMN_NAME", ID: 0x7, Type: sqlbase.ColumnType{Kind: 7, Width: 0, Precision: 0}, Nullable: false, DefaultExpr: &emptyStr, Hidden: false}, {Name: "ORDINAL_POSITION", ID: 0x8, Type: sqlbase.ColumnType{Kind: 1, Width: 0, Precision: 0}, Nullable: false, DefaultExpr: &zeroStr, Hidden: false}, {Name: "POSITION_IN_UNIQUE_CONSTRAINT", ID: 0x9, Type: sqlbase.ColumnType{Kind: 1, Width: 0, Precision: 0}, Nullable: true, Hidden: false}}, NextColumnID: 0xa, PrimaryIndex: sqlbase.IndexDescriptor{Name: "", ID: 0x0}, NextIndexID: 0x0, Privileges: emptyPrivileges, NextMutationID: 0x1, FormatVersion: 0x3},
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		return forEachTableDesc(p,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
@@ -235,7 +229,6 @@ CREATE TABLE information_schema.schemata (
   DEFAULT_CHARACTER_SET_NAME STRING NOT NULL DEFAULT '',
   SQL_PATH STRING
 );`,
-	desc: sqlbase.TableDescriptor{Name: "schemata", ID: 0xffffffff, Version: 0x1, Columns: []sqlbase.ColumnDescriptor{{Name: "CATALOG_NAME", ID: 0x1, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "SCHEMA_NAME", ID: 0x2, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "DEFAULT_CHARACTER_SET_NAME", ID: 0x3, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "SQL_PATH", ID: 0x4, Type: sqlbase.ColumnType{Kind: 7}, Nullable: true, DefaultExpr: (*string)(nil)}}, NextColumnID: 0x5, PrimaryIndex: sqlbase.IndexDescriptor{Name: "", ID: 0x0}, NextIndexID: 0x0, Privileges: emptyPrivileges, NextMutationID: 0x1, FormatVersion: 0x3},
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		return forEachDatabaseDesc(p, func(db *sqlbase.DatabaseDescriptor) error {
 			return addRow(
@@ -258,7 +251,6 @@ CREATE TABLE information_schema.schema_privileges (
 	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE
 );
 `,
-	desc: sqlbase.TableDescriptor{Name: "schema_privileges", ID: 0xffffffff, Version: 0x1, Columns: []sqlbase.ColumnDescriptor{{Name: "GRANTEE", ID: 0x1, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "TABLE_CATALOG", ID: 0x2, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "TABLE_SCHEMA", ID: 0x3, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "PRIVILEGE_TYPE", ID: 0x4, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "IS_GRANTABLE", ID: 0x5, Type: sqlbase.ColumnType{Kind: 0}, DefaultExpr: &falseStr}}, NextColumnID: 0x6, PrimaryIndex: sqlbase.IndexDescriptor{Name: "", ID: 0x0}, NextIndexID: 0x0, Privileges: emptyPrivileges, NextMutationID: 0x1, FormatVersion: 0x3},
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		return forEachDatabaseDesc(p, func(db *sqlbase.DatabaseDescriptor) error {
 			for _, u := range db.Privileges.Show() {
@@ -297,7 +289,6 @@ CREATE TABLE information_schema.table_constraints (
   TABLE_NAME STRING NOT NULL DEFAULT '',
   CONSTRAINT_TYPE STRING NOT NULL DEFAULT ''
 );`,
-	desc: sqlbase.TableDescriptor{Name: "table_constraints", ID: 0xffffffff, Version: 0x1, Columns: []sqlbase.ColumnDescriptor{{Name: "CONSTRAINT_CATALOG", ID: 0x1, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "CONSTRAINT_SCHEMA", ID: 0x2, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "CONSTRAINT_NAME", ID: 0x3, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "TABLE_SCHEMA", ID: 0x4, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "TABLE_NAME", ID: 0x5, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "CONSTRAINT_TYPE", ID: 0x6, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}}, NextColumnID: 0x7, PrimaryIndex: sqlbase.IndexDescriptor{Name: "", ID: 0x0}, NextIndexID: 0x0, Privileges: emptyPrivileges, NextMutationID: 0x1, FormatVersion: 0x3},
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		return forEachTableDesc(p,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
@@ -360,7 +351,6 @@ CREATE TABLE information_schema.table_privileges (
 	WITH_HIERARCHY BOOL NOT NULL DEFAULT FALSE
 );
 `,
-	desc: sqlbase.TableDescriptor{Name: "table_privileges", ID: 0xffffffff, Version: 0x1, Columns: []sqlbase.ColumnDescriptor{{Name: "GRANTOR", ID: 0x1, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "GRANTEE", ID: 0x2, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "TABLE_CATALOG", ID: 0x3, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "TABLE_SCHEMA", ID: 0x4, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "TABLE_NAME", ID: 0x5, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "PRIVILEGE_TYPE", ID: 0x6, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "IS_GRANTABLE", ID: 0x7, Type: sqlbase.ColumnType{Kind: 0}, DefaultExpr: &falseStr}, {Name: "WITH_HIERARCHY", ID: 0x8, Type: sqlbase.ColumnType{Kind: 0}, DefaultExpr: &falseStr}}, NextColumnID: 0x9, PrimaryIndex: sqlbase.IndexDescriptor{Name: "", ID: 0x0}, NextIndexID: 0x0, Privileges: emptyPrivileges, NextMutationID: 0x1, FormatVersion: 0x3},
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		return forEachTableDesc(p,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
@@ -401,7 +391,6 @@ CREATE TABLE information_schema.tables (
   TABLE_TYPE STRING NOT NULL DEFAULT '',
   VERSION INT
 );`,
-	desc: sqlbase.TableDescriptor{Name: "tables", ID: 0xffffffff, Version: 0x1, Columns: []sqlbase.ColumnDescriptor{{Name: "TABLE_CATALOG", ID: 0x1, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "TABLE_SCHEMA", ID: 0x2, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "TABLE_NAME", ID: 0x3, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "TABLE_TYPE", ID: 0x4, Type: sqlbase.ColumnType{Kind: 7}, DefaultExpr: &emptyStr}, {Name: "VERSION", ID: 0x5, Type: sqlbase.ColumnType{Kind: 1}, Nullable: true, DefaultExpr: (*string)(nil)}}, NextColumnID: 0x6, PrimaryIndex: sqlbase.IndexDescriptor{Name: "", ID: 0x0}, NextIndexID: 0x0, Privileges: emptyPrivileges, NextMutationID: 0x1, FormatVersion: 0x3},
 	populate: func(p *planner, addRow func(...parser.Datum) error) error {
 		return forEachTableDesc(p,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
@@ -445,7 +434,7 @@ func forEachDatabaseDesc(
 	}
 
 	// Handle virtual schemas.
-	for _, schema := range virtualSchemaMap {
+	for _, schema := range p.virtualSchemas() {
 		dbDescs = append(dbDescs, schema.desc)
 	}
 
@@ -505,7 +494,7 @@ func forEachTableDesc(
 	}
 
 	// Handle virtual schemas.
-	for dbName, schema := range virtualSchemaMap {
+	for dbName, schema := range p.virtualSchemas() {
 		dbTables := make(map[string]*sqlbase.TableDescriptor, len(schema.tables))
 		for tableName, entry := range schema.tables {
 			dbTables[tableName] = entry.desc

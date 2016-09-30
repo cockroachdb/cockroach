@@ -436,7 +436,7 @@ func (s *adminServer) TableDetails(
 	}
 
 	// Range and ZoneConfig information is not applicable to virtual schemas.
-	if !sql.IsVirtualDatabase(req.Database) {
+	if !s.server.sqlExecutor.IsVirtualDatabase(req.Database) {
 		// Get the number of ranges in the table. We get the key span for the table
 		// data. Then, we count the number of ranges that make up that key span.
 		{
