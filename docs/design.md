@@ -629,27 +629,50 @@ There are some additional system entries sprinkled amongst the
 non-system keys. See the Key-Prefix Accounting section in this document
 for further details.
 
-# Node Storage
+# Stores and Storage
 
-Nodes maintain a separate instance of RocksDB for each disk. Each
-RocksDB instance hosts any number of ranges. RPCs arriving at a
-RoachNode are multiplexed based on the disk name to the appropriate
-RocksDB instance. A single instance per disk is used to avoid
-contention. If every range maintained its own RocksDB, global management
-of available cache memory would be impossible and writers for each range
-would compete for non-contiguous writes to multiple RocksDB logs.
+Nodes contain one ore more stores. And each of those stores should be on a
+unique disk and contains an instance of RocksDB. And these stores in turn have
+a collection of range replicas. More than one replica for a range will never
+occur on the same store or even the same node.
 
-In addition to the key/value pairs of the range itself, various range
-metadata is maintained.
+Early on, when a cluster is first initialized, the few default starting ranges
+will only have a single replica, but as soon as other nodes are available they
+will replicate to them until they've reached their desired replication factor,
+the default being 3. Ranges can have different replication factors and when set
+they will up or down replicate to the appropriate number of replicas. Since
+ranges are only created via splits, all replicas for a range split at the same
+time so the replication factors rarely need to be adjusted.
 
--   participating replicas
+# Self Repair
 
--   consensus metadata
+If a store has not been heard from (gossiped their descriptors) in some time,
+the default setting being 5 minutes, the cluster will consider this store to be
+dead. When this happens, all ranges that have replicas on that store are
+determined to be unavailable and removed. These ranges will then upreplicate
+themselves to other available stores until their desired replication factor is
+again met. If 50% or more of the replicas are unavailable at the same time,
+there is no quorum and the whole range will be considered unavailable until at
+least greater than 50% of the replicas are again available.
 
--   split/merge activity
+# Rebalancing
 
-A really good reference on tuning Linux installations with RocksDB is
-[here](http://docs.basho.com/riak/latest/ops/advanced/backends/leveldb/).
+As more data are added to the system, some stores may grow faster than others.
+To combat this and to spread the overall load across the full cluster, replicas
+will be moved between stores maintaining the desired replication factor. The
+heuristics used to perform this rebalancing are in flux, but they take into
+account a number of different factors:
+
+- the number of replicas per store
+- the total size of the data used per store
+- free space available per store
+
+In the future, some other factors that might be considered include:
+
+- cpu/network load per store
+- ranges that are used together often in queries
+- number of active ranges per store
+- ranges that already have some overlap (to decrease the chance of data loss)
 
 # Range Metadata
 
