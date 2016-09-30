@@ -33,6 +33,7 @@
 		DistinctSpec
 		MergeJoinerSpec
 		HashJoinerSpec
+		AggregatorSpec
 		ProcessorCoreUnion
 		ProcessorSpec
 		FlowSpec

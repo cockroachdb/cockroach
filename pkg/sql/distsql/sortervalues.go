@@ -25,12 +25,12 @@ import (
 // sorterValues is the internal wrapper around the collection of rows added to
 // a sorter strategy, it is at this level that the rows to be sorted are stored.
 type sorterValues struct {
+	rows          sqlbase.EncDatumRows
 	err           error // err can be set by the RowLess function.
 	invertSorting bool  // Inverts the sorting predicate.
 	ordering      sqlbase.ColumnOrdering
 	tmpRow        sqlbase.EncDatumRow // Used to store temporary rows.
 	alloc         sqlbase.DatumAlloc
-	rows          sqlbase.EncDatumRows
 }
 
 var _ heap.Interface = &sorterValues{}
@@ -64,15 +64,6 @@ func (sv *sorterValues) Swap(i, j int) {
 	sv.rows[i], sv.rows[j] = sv.rows[j], sv.rows[i]
 }
 
-// Peek returns the first element without removing.
-func (sv *sorterValues) Peek() sqlbase.EncDatumRow {
-	if len(sv.rows) == 0 {
-		return nil
-	}
-
-	return sv.rows[0]
-}
-
 // Pop implements the heap.Interface interface.
 func (sv *sorterValues) Pop() interface{} {
 	idx := len(sv.rows) - 1
@@ -83,8 +74,8 @@ func (sv *sorterValues) Pop() interface{} {
 	return x
 }
 
-// PopRow returns the first row from the heap representation of sorterValues.
-func (sv *sorterValues) PopRow() sqlbase.EncDatumRow {
+// Next returns the first row from the heap representation of sorterValues.
+func (sv *sorterValues) NextRow() sqlbase.EncDatumRow {
 	if len(sv.rows) == 0 {
 		return nil
 	}
@@ -98,7 +89,7 @@ func (sv *sorterValues) Push(x interface{}) {
 	sv.rows = append(sv.rows, sv.tmpRow)
 }
 
-// PushRow pushes the given row into the heap representation
+// Add pushes the given row into the heap representation
 // of the sorterValues.
 func (sv *sorterValues) PushRow(row sqlbase.EncDatumRow) {
 	// Avoid passing slice through interface{} to avoid allocation.

@@ -124,12 +124,8 @@ func (ev *evaluator) eval(row sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) 
 	}
 
 	outRow := ev.rowAlloc.AllocRow(len(ev.tuple))
-	for i, datum := range ev.tuple {
-		encDatum, err := sqlbase.DatumToEncDatum(datum)
-		if err != nil {
-			return nil, err
-		}
-		outRow[i] = encDatum
+	if err := sqlbase.DTupleToEncDatumRow(outRow, ev.tuple); err != nil {
+		return nil, err
 	}
 	return outRow, nil
 }
