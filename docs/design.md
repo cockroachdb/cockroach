@@ -571,7 +571,7 @@ timestamps such thats<sub>1</sub> \< s<sub>2</sub>.
 # Logical Map Content
 
 Logically, the map contains a series of reserved system key / value
-pairs covering accounting, range metadata and node accounting 
+pairs covering accounting, range metadata and node accounting
 before the actual key / value pairs for non-system data
 (e.g. the actual meat of the map).
 
@@ -589,7 +589,6 @@ before the actual key / value pairs for non-system data
 - `\0node<node-address0>`: Accounting data for node 0.
 - ...
 - `\0node<node-addressN>`: Accounting data for node N.
-- `\0tree_root`: Range key for root of range-spanning tree.
 - `\0tx<tx-id0>`: Transaction record for transaction 0.
 - ...
 - `\0tx<tx-idN>`: Transaction record for transaction N.
@@ -619,8 +618,6 @@ would compete for non-contiguous writes to multiple RocksDB logs.
 
 In addition to the key/value pairs of the range itself, various range
 metadata is maintained.
-
--   range-spanning tree node links
 
 -   participating replicas
 
@@ -979,56 +976,6 @@ of the worst in the cluster based on gossipped load stats. A node with
 spare capacity is chosen in the same datacenter and a special-case split
 is done which simply duplicates the data 1:1 and resets the range
 configuration metadata.
-
-# Range-Spanning Binary Tree
-
-A crucial enhancement to the organization of range metadata is to
-augment the bi-level range metadata lookup with a minimum spanning tree,
-implemented as a left-leaning red-black tree over all ranges in the map.
-This tree structure allows the system to start at any key prefix and
-efficiently traverse an arbitrary key range with minimal RPC traffic,
-minimal fan-in and fan-out, and with bounded time complexity equal to
-`2*log N` steps, where `N` is the total number of ranges in the system.
-
-Unlike the range metadata rows prefixed with `\0\0meta[1|2]`, the
-metadata for the range-spanning tree (e.g. parent range and left / right
-child ranges) is stored directly at the ranges as non-map metadata. The
-metadata for each node of the tree (e.g. links to parent range, left
-child range, and right child range) is stored with the range metadata.
-In effect, the tree metadata is stored implicitly. In order to traverse
-the tree, for example, you’d need to query each range in turn for its
-metadata.
-
-Any time a range is split or merged, both the bi-level range lookup
-metadata and the per-range binary tree metadata are updated as part of
-the same distributed transaction. The total number of nodes involved in
-the update is bounded by 2 + log N (i.e. 2 updates for meta1 and
-meta2, and up to log N updates to balance the range-spanning tree).
-The range corresponding to the root node of the tree is stored in
-*\0tree_root*.
-
-As an example, consider the following set of nine ranges and their
-associated range-spanning tree:
-
-R0: `aa - cc`, R1: `*cc - lll`, R2: `*lll - llr`, R3: `*llr - nn`, R4: `*nn - rr`, R5: `*rr - ssss`, R6: `*ssss - sst`, R7: `*sst - vvv`, R8: `*vvv - zzzz`.
-
-![Range Tree](media/rangetree.png)
-
-The range-spanning tree has many beneficial uses in Cockroach. It
-provides a ready made solution to scheduling mappers and sorting /
-reducing during map-reduce operations. It also provides a mechanism
-for visiting every Raft replica range which comprises a logical key
-range. This is used to periodically find the oldest extant write
-intent over the entire system.
-
-The range-spanning tree provides a convenient mechanism for planning
-and executing parallel queries. These provide the basis for
-[Dremel](http://static.googleusercontent.com/media/research.google.com/en/us/pubs/archive/36632.pdf)-like
-query execution trees and it’s easy to imagine supporting a subset of
-SQL or even javascript-based user functions for complex data analysis
-tasks.
-
-
 
 # Node Allocation (via Gossip)
 
