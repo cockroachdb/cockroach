@@ -192,7 +192,7 @@ func (p *planner) getSources(
 // getVirtualDataSource attempts to find a virtual table with the
 // given name.
 func (p *planner) getVirtualDataSource(tn *parser.TableName) (planDataSource, bool, error) {
-	virtual, err := getVirtualTableEntry(tn)
+	virtual, err := p.virtualSchemas().getVirtualTableEntry(tn)
 	if err != nil {
 		return planDataSource{}, false, err
 	}
