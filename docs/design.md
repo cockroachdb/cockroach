@@ -83,9 +83,12 @@ raft. The color coding shows associated range replicas.
 
 ![Ranges](media/ranges.png)
 
-Each physical node exports a RoachNode service. Each RoachNode exports
-one or more key ranges. RoachNodes are symmetric. Each has the same
-binary and assumes identical roles.
+Each physical node exports two RPC-based key value API: one for
+external clients and one for internal clients (exposing sensitive
+operational features). Both services accept batches of KV requests and
+return batches of KV responses. Nodes are symmetric in capabilties and
+exported interfaces. Each has the same binary and may assume any
+roles.
 
 Nodes and the ranges they provide access to can be arranged with various
 physical network topologies to make trade offs between reliability and
@@ -610,12 +613,12 @@ for further details.
 # Node Storage
 
 Nodes maintain a separate instance of RocksDB for each disk. Each
-RocksDB instance hosts any number of ranges. RPCs arriving at a
-RoachNode are multiplexed based on the disk name to the appropriate
-RocksDB instance. A single instance per disk is used to avoid
-contention. If every range maintained its own RocksDB, global management
-of available cache memory would be impossible and writers for each range
-would compete for non-contiguous writes to multiple RocksDB logs.
+RocksDB instance hosts any number of ranges. RPCs arriving at a node
+are multiplexed based on the disk name to the appropriate RocksDB
+instance. A single instance per disk is used to avoid contention. If
+every range maintained its own RocksDB, global management of available
+cache memory would be impossible and writers for each range would
+compete for non-contiguous writes to multiple RocksDB logs.
 
 In addition to the key/value pairs of the range itself, various range
 metadata is maintained.
@@ -859,16 +862,16 @@ transitions.
 
 ## Command Execution Flow
 
-This subsection describes how a lease holder replica processes a read/write
-command in more details. Each command specifies (1) a key (or a range
-of keys) that the command accesses and (2) the ID of a range which the
-key(s) belongs to. When receiving a command, a RoachNode looks up a
-range by the specified Range ID and checks if the range is still
-responsible for the supplied keys. If any of the keys do not belong to the
-range, the RoachNode returns an error so that the client will retry
-and send a request to a correct range.
+This subsection describes how a lease holder replica processes a
+read/write command in more details. Each command specifies (1) a key
+(or a range of keys) that the command accesses and (2) the ID of a
+range which the key(s) belongs to. When receiving a command, a node
+looks up a range by the specified Range ID and checks if the range is
+still responsible for the supplied keys. If any of the keys do not
+belong to the range, the node returns an error so that the client will
+retry and send a request to a correct range.
 
-When all the keys belong to the range, the RoachNode attempts to
+When all the keys belong to the range, the node attempts to
 process the command. If the command is an inconsistent read-only
 command, it is processed immediately. If the command is a consistent
 read or a write, the command is executed when both of the following
@@ -903,7 +906,7 @@ expired, the command will be rejected by the replica.
 
 # Splitting / Merging Ranges
 
-RoachNodes split or merge ranges based on whether they exceed maximum or
+Nodes split or merge ranges based on whether they exceed maximum or
 minimum thresholds for capacity or load. Ranges exceeding maximums for
 either capacity or load are split; ranges below minimums for *both*
 capacity and load are merged.
@@ -966,7 +969,7 @@ else if rebalancing || recovering
   remove old range replica(s)
 ```
 
-RoachNodes split ranges when the total data in a range exceeds a
+Nodes split ranges when the total data in a range exceeds a
 configurable maximum threshold. Similarly, ranges are merged when the
 total data falls below a configurable minimum threshold.
 
@@ -1033,7 +1036,7 @@ tasks.
 # Node Allocation (via Gossip)
 
 New nodes must be allocated when a range is split. Instead of requiring
-every RoachNode to know about the status of all or even a large number
+every node to know about the status of all or even a large number
 of peer nodes --or-- alternatively requiring a specialized curator or
 master with sufficiently global knowledge, we use a gossip protocol to
 efficiently communicate only interesting information between all of the
@@ -1131,7 +1134,7 @@ the accounting system table. The format of accounting table keys is:
 
 `\0acct<key-prefix>`
 
-In practice, we assume each RoachNode capable of caching the
+In practice, we assume each node is capable of caching the
 entire accounting table as it is likely to be relatively small.
 
 Accounting is kept for key prefix ranges with eventual consistency for
@@ -1189,7 +1192,7 @@ Accounting keys for system state have the form:
 character. It’s meant to sort the root level account AFTER any other
 system tables. They must increment the same underlying values as they
 are permanent counts, and not transient activity. Logic at the
-RoachNode takes care of snapshotting the value into an appropriately
+node takes care of snapshotting the value into an appropriately
 suffixed (e.g. with timestamp hour) multi-value time series entry.
 
 Keys for perf/load metrics:
@@ -1219,7 +1222,7 @@ the zone must be chosen.
 
 Please see [config/config.proto](https://github.com/cockroachdb/cockroach/blob/master/config/config.proto) for up-to-date data structures used, the best entry point being `message ZoneConfig`.
 
-If zones are modified in situ, each RoachNode verifies the
+If zones are modified in situ, each node verifies the
 existing zones for its ranges against the zone configuration. If
 it discovers differences, it reconfigures ranges in the same way
 that it rebalances away from busy nodes, via special-case 1:1
@@ -1314,7 +1317,7 @@ tables, columns, and indexes. The structured data API in turn depends
 on the [distributed key value store][7] ([kv/][8]). The distributed key
 value store handles the details of range addressing to provide the
 abstraction of a single, monolithic key value store. It communicates
-with any number of [RoachNodes][9] ([server/][10]), storing the actual
+with any number of [nodes][9] ([server/][10]), storing the actual
 data. Each node contains one or more [stores][11] ([storage/][12]), one per
 physical device.
 
@@ -1331,7 +1334,7 @@ replicas.
 
 ## Client Architecture
 
-RoachNodes serve client traffic using a fully-featured SQL API which accepts requests as either application/x-protobuf or
+Nodes serve client traffic using a fully-featured SQL API which accepts requests as either application/x-protobuf or
 application/json. Client implementations consist of an HTTP sender
 (transport) and a transactional sender which implements a simple
 exponential backoff / retry protocol, depending on CockroachDB error
@@ -1346,11 +1349,11 @@ index metadata, caches the results, and routes internode RPC traffic
 based on where the index metadata indicates keys are located in the
 distributed cluster.
 
-In addition to the gateway for external DB client traffic, each RoachNode provides the full key/value API (including all internal methods) via
+In addition to the gateway for external DB client traffic, each Node provides the full key/value API (including all internal methods) via
 a Go RPC server endpoint. The RPC server endpoint forwards requests to one
 or more local stores depending on the specified key range.
 
-Internally, each RoachNode uses the Go implementation of the
+Internally, each Node uses the Go implementation of the
 CockroachDB client in order to transactionally update system key/value
 data; for example during split and merge operations to update index
 metadata records. Unlike an external application, the internal client
