@@ -56,6 +56,11 @@ GOBINDATA_TARGET = embedded.go
 .PHONY: all
 all: lint test $(GOBINDATA_TARGET)
 
+# Running `go generate` will call this target. Update this if you add new
+# generated files.
+.PHONY: generate
+generate: $(GOBINDATA_TARGET)
+
 # TODO(tamird): is there a way to not repeat this here? It's already in protobuf.mk
 app/js/protos.js generated/protos.json generated/protos.d.ts: $(addprefix $(REPO_ROOT)/, $(sort $(shell cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.proto')))
 	$(MAKE) -C $(ORG_ROOT) -f cockroach/build/protobuf.mk
