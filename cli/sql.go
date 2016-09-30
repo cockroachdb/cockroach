@@ -380,7 +380,7 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 		// Ensure the statement is terminated with a semicolon. This
 		// catches cases where the last line before EOF was not terminated
 		// properly.
-		if len(fullStmt) > 0 && !strings.HasSuffix(fullStmt, ";") {
+		if len(fullStmt) > 0 && !strings.HasSuffix(fullStmt, ";") && !strings.Contains(fullStmt, ";") {
 			if strings.TrimSpace(fullStmt) == "" {
 				// Only whitespace. Nothing to do really.
 				continue
