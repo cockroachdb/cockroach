@@ -109,7 +109,7 @@ raft. The color coding shows associated range replicas.
 Each physical node exports two RPC-based key value APIs: one for
 external clients and one for internal clients (exposing sensitive
 operational features). Both services accept batches of requests and
-return batches of responses. Nodes are symmetric in capabilties and
+return batches of responses. Nodes are symmetric in capabilities and
 exported interfaces; each has the same binary and may assume any
 role.
 
