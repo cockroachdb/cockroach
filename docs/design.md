@@ -4,6 +4,9 @@ by Spencer Kimball from early 2014.
 
 # Overview
 
+[Spencer to edit overview. This stuff is so ripe it's starting to
+stink: "structured data? WTF is that?]
+
 Cockroach is a distributed key:value datastore (SQL and structured
 data layers of cockroach have yet to be defined) which supports **ACID
 transactional semantics** and **versioned values** as first-class
@@ -13,6 +16,10 @@ machine, rack, and even **datacenter failures** with minimal latency
 disruption and **no manual intervention**. Cockroach nodes are
 symmetric; a design goal is **homogeneous deployment** (one binary) with
 minimal configuration.
+
+[Start at top of the new stack here: SQL, mention of distributed SQL,
+then talk about decomponsition into KV commands, then to monolithic
+sorted map, etc. Use diagram]
 
 Cockroach implements a **single, monolithic sorted map** from key to
 value where both keys and values are byte strings (not unicode).
@@ -29,6 +36,7 @@ in disparate datacenters for survivability (e.g. `{ US-East, US-West,
 Japan }`, `{ Ireland, US-East, US-West}`, `{ Ireland, US-East, US-West,
 Japan, Australia }`).
 
+[Batches, update?]
 Single mutations to ranges are mediated via an instance of a distributed
 consensus algorithm to ensure consistency. We’ve chosen to use the
 [Raft consensus algorithm](https://raftconsensus.github.io); all consensus
@@ -40,6 +48,7 @@ logical mutation fall within the same range, atomicity and consistency
 are guaranteed by Raft; this is the **fast commit path**. Otherwise, a
 **non-locking distributed commit** protocol is employed between affected
 ranges.
+[Link to blog post]
 
 Cockroach provides [snapshot isolation](http://en.wikipedia.org/wiki/Snapshot_isolation) (SI) and
 serializable snapshot isolation (SSI) semantics, allowing **externally
@@ -55,6 +64,7 @@ providing ordering for any observer or chain of observers.
 Similar to
 [Spanner](http://static.googleusercontent.com/media/research.google.com/en/us/archive/spanner-osdi2012.pdf)
 directories, Cockroach allows configuration of arbitrary zones of data.
+[locality info, GC prefs, etc...]
 This allows replication factor, storage device type, and/or datacenter
 location to be chosen to optimize performance and/or availability.
 Unlike Spanner, zones are monolithic and don’t allow movement of fine
@@ -64,14 +74,24 @@ grained data on the level of entity groups.
 
 Cockroach implements a layered architecture. The highest level of
 abstraction is the SQL layer (currently unspecified in this document).
+[FIX]
 It depends directly on the [*structured data
 API*](#structured-data-api), which provides familiar relational concepts
+[Blend these structured data concepts into the SQL description]
 such as schemas, tables, columns, and indexes. The structured data API
 in turn depends on the [distributed key value store](#key-value-api),
 which handles the details of range addressing to provide the abstraction
 of a single, monolithic key value store. The distributed KV store
 communicates with any number of physical cockroach nodes. Each node
 contains one or more stores, one per physical device.
+
+![SQL]
+
+
+
+![Distributed SQL]
+
+
 
 ![Architecture](media/architecture.png)
 
@@ -83,6 +103,7 @@ raft. The color coding shows associated range replicas.
 
 ![Ranges](media/ranges.png)
 
+[Update RoachNode concept]
 Each physical node exports a RoachNode service. Each RoachNode exports
 one or more key ranges. RoachNodes are symmetric. Each has the same
 binary and assumes identical roles.
@@ -101,12 +122,14 @@ Up to `F` failures can be tolerated, where the total number of replicas `N = 2F 
 
 # Cockroach Client
 
+[Woah, big update required here!]
 In order to support diverse client usage, Cockroach clients connect to
 any node via HTTPS using protocol buffers or JSON. The connected node
 proxies involved client work including key lookups and write buffering.
 
 # Keys
 
+[Update referencing concepts in keys/constants.go required here]
 Cockroach keys are arbitrary byte arrays. If textual data is used in
 keys, utf8 encoding is recommended (this helps for cleaner display of
 values in debugging tools). User-supplied keys are encoded using an
@@ -124,7 +147,8 @@ time to return the most recent writes prior to the snapshot timestamp.
 Older versions of values are garbage collected by the system during
 compaction according to a user-specified expiration interval. In order
 to support long-running scans (e.g. for MapReduce), all versions have a
-minimum expiration.
+minimum expiration of 1 day, though arbitrary key ranges can set the
+GC TTL value as necessary.
 
 Versioned values are supported via modifications to RocksDB to record
 commit timestamps and GC expirations per key.
@@ -137,6 +161,30 @@ the low water mark of the cache appropriately. If a new range lease holder
 is elected, it sets the low water mark for the cache to the current
 wall time + ε (ε = 99th percentile clock skew).
 
+**Time in CockroachDB**
+
+Each cockroach node maintains a hybrid logical clock (HLC) as discussed
+in the [Hybrid Logical Clock paper](http://www.cse.buffalo.edu/tech-reports/2014-04.pdf).
+HLC time uses timestamps which are composed of a physical component (thought of
+as and always close to local wall time) and a logical component (used to
+distinguish between events with the same physical component). HLC allows
+tracking causality for related events, similarly to vector clocks, but with less
+overhead. In practice, it works much like other logical clocks: When events
+are received by a node, the event's timestamp (provided by the sender) is
+used to update the receiving node's HLC clock.
+
+For a more in depth description of HLC please read the paper. Our
+implementation is [here](https://github.com/cockroachdb/cockroach/blob/master/util/hlc/hlc.go).
+
+Cockroach picks a Timestamp for a transaction using HLC time. Throughout this
+document, *timestamp* always refers to the HLC time which is a singleton
+on each node. The HLC is updated by every read/write event on the node, and
+the HLC time >= wall time. A read/write timestamp received in a cockroach request
+from another node is not only used to version the operation, but also updates
+the HLC on the node. This is useful in guaranteeing that all data read/written
+on a node is at a timestamp < next HLC time.
+
+[Matt to review following two sections]
 # Lock-Free Distributed Transactions
 
 Cockroach provides distributed transactions without locks. Cockroach
@@ -180,30 +228,6 @@ distributed nodes, the candidate timestamp may be increased, but will
 never be decreased. The core difference between the two isolation levels
 SI and SSI is that the former allows the transaction's candidate
 timestamp to increase and the latter does not.
-
-**Hybrid Logical Clock**
-
-Each cockroach node maintains a hybrid logical clock (HLC) as discussed
-in the [Hybrid Logical Clock paper](http://www.cse.buffalo.edu/tech-reports/2014-04.pdf).
-HLC time uses timestamps which are composed of a physical component (thought of
-as and always close to local wall time) and a logical component (used to
-distinguish between events with the same physical component). It allows us to
-track causality for related events similar to vector clocks, but with less
-overhead. In practice, it works much like other logical clocks: When events
-are received by a node, it informs the local HLC about the timestamp supplied
-with the event by the sender, and when events are sent a timestamp generated by
-the local HLC is attached.
-
-For a more in depth description of HLC please read the paper. Our
-implementation is [here](https://github.com/cockroachdb/cockroach/blob/master/util/hlc/hlc.go).
-
-Cockroach picks a Timestamp for a transaction using HLC time. Throughout this
-document, *timestamp* always refers to the HLC time which is a singleton
-on each node. The HLC is updated by every read/write event on the node, and
-the HLC time >= wall time. A read/write timestamp received in a cockroach request
-from another node is not only used to version the operation, but also updates
-the HLC on the node. This is useful in guaranteeing that all data read/written
-on a node is at a timestamp < next HLC time.
 
 **Transaction execution flow**
 
@@ -377,6 +401,7 @@ An exploration of retries with contention and abort times with abandoned
 transaction is
 [here](https://docs.google.com/document/d/1kBCu4sdGAnvLqpT-_2vaTbomNmX3_saayWEGYu1j7mQ/edit?usp=sharing).
 
+[Update (conceptually) s/table/records/g]
 **Transaction Table**
 
 Please see [roachpb/data.proto](https://github.com/cockroachdb/cockroach/blob/master/roachpb/data.proto) for the up-to-date structures, the best entry point being `message Transaction`.
@@ -418,6 +443,7 @@ Please see [roachpb/data.proto](https://github.com/cockroachdb/cockroach/blob/ma
   two phase locking. Aborts and retries increase read and write
   traffic, increase latency and decrease throughput.
 
+[refurbish next two sections]
 **Choosing a Timestamp**
 
 A key challenge of reading data in a distributed system with clock skew
@@ -568,10 +594,13 @@ T<sub>2</sub> (T<sub>2</sub><sup>start</sup>) after the completion of
 transaction T<sub>1</sub> (T<sub>1</sub><sup>end</sup>), will have commit
 timestamps such thats<sub>1</sub> \< s<sub>2</sub>.
 
+[Link to "Living Without Atomic Clocks" blog post.]
+
 # Logical Map Content
 
+[Update the system info]
 Logically, the map contains a series of reserved system key / value
-pairs covering accounting, range metadata and node accounting 
+pairs covering accounting, range metadata and node accounting
 before the actual key / value pairs for non-system data
 (e.g. the actual meat of the map).
 
@@ -609,6 +638,7 @@ for further details.
 
 # Node Storage
 
+[Updates necessary below]
 Nodes maintain a separate instance of RocksDB for each disk. Each
 RocksDB instance hosts any number of ranges. RPCs arriving at a
 RoachNode are multiplexed based on the disk name to the appropriate
@@ -633,6 +663,7 @@ A really good reference on tuning Linux installations with RocksDB is
 
 # Range Metadata
 
+[Peter: did you actually have numbers for the size of meta2 records?]
 The default approximate size of a range is 64M (2\^26 B). In order to
 support 1P (2\^50 B) of logical data, metadata is needed for roughly
 2\^(50 - 26) = 2\^24 ranges. A reasonable upper bound on range metadata
@@ -660,6 +691,7 @@ is sparse, the successor key is defined as the next key which is present. The
 found using the same process. The *meta2* record identifies the range
 containing `key1`, which is again found the same way (see examples below).
 
+[Updates required below]
 Concretely, metadata keys are prefixed by `\0\0meta{1,2}`; the two null
 characters provide for the desired sorting behaviour. Thus, `key1`'s
 *meta1* record will reside at the successor key to `\0\0\meta1<key1>`.
@@ -671,6 +703,7 @@ key *after* the meta indexing record we’re looking for, which would
 result in having to back the iterator up, an option which is both less
 efficient and not available in all cases.
 
+[Review and cleanup required below?]
 The following example shows the directory structure for a map with
 three ranges worth of data. Ellipses indicate additional key/value pairs to
 fill an entire range of data. Except for the fact that splitting ranges
@@ -776,6 +809,7 @@ client evicts the stale entries and possibly does a new lookup.
 
 # Raft - Consistency of Range Replicas
 
+[Raft experts review this nonsense below]
 Each range is configured to consist of three or more replicas, as specified by
 their ZoneConfig. The replicas in a range maintain their own instance of a
 distributed consensus algorithm. We use the [*Raft consensus algorithm*](https://raftconsensus.github.io)
@@ -805,6 +839,7 @@ Future optimizations may include two-phase elections and quiescent ranges
 
 # Range Leases
 
+[Cleanup, add section on epoch-based range leases and motivation & link to range lease RFC]
 As outlined in the Raft section, the replicas of a Range are organized as a
 Raft group and execute commands from their shared commit log. Going through
 Raft is an expensive operation though, and there are tasks which should only be
@@ -840,6 +875,7 @@ offset.
 
 ## Relationship to Raft leadership
 
+[Is this all still accurate?]
 The range lease is completely separate from Raft leadership, and so without
 further efforts, Raft leadership and the Range lease may not be represented by the same
 replica most of the time. This is convenient semantically since it decouples
@@ -859,6 +895,8 @@ transitions.
 
 ## Command Execution Flow
 
+[background on motivation here necessary. Did we already explain why you
+need the command queue? Is it well explained below?]
 This subsection describes how a lease holder replica processes a read/write
 command in more details. Each command specifies (1) a key (or a range
 of keys) that the command accesses and (2) the ID of a range which the
@@ -903,6 +941,7 @@ expired, the command will be rejected by the replica.
 
 # Splitting / Merging Ranges
 
+[Accurate still? Needs review.]
 RoachNodes split or merge ranges based on whether they exceed maximum or
 minimum thresholds for capacity or load. Ranges exceeding maximums for
 either capacity or load are split; ranges below minimums for *both*
@@ -980,8 +1019,11 @@ spare capacity is chosen in the same datacenter and a special-case split
 is done which simply duplicates the data 1:1 and resets the range
 configuration metadata.
 
+[NEED a section on snapshots]
+
 # Range-Spanning Binary Tree
 
+[Remove this section I think.]
 A crucial enhancement to the organization of range metadata is to
 augment the bi-level range metadata lookup with a minimum spanning tree,
 implemented as a left-leaning red-black tree over all ranges in the map.
@@ -1032,6 +1074,9 @@ tasks.
 
 # Node Allocation (via Gossip)
 
+[This section is a damn mess. Need to at least make it accurate for
+current code base. Ultimately need to incorporate the ideas behind
+Tristan's changes.]
 New nodes must be allocated when a range is split. Instead of requiring
 every RoachNode to know about the status of all or even a large number
 of peer nodes --or-- alternatively requiring a specialized curator or
@@ -1091,6 +1136,8 @@ The gossip protocol itself contains two primary components:
 
 # Node Accounting
 
+[Replace with description of MVCC, store-level aggregation, recorder,
+and time series merging]
 The gossip protocol discussed in the previous section is useful to
 quickly communicate fragments of important information in a
 decentralized manner. However, complete accounting for each node is also
@@ -1111,6 +1158,9 @@ fanout)) + 1`.
 
 # Key-prefix Accounting and Zones
 
+[Key prefix accounting no longer a reality; nix all references. Zone
+configs might already be mentioned enough elsewhere. Probably delete
+section -- needs review.]
 Arbitrarily fine-grained accounting is specified via
 key prefixes. Key prefixes can overlap, as is necessary for capturing
 hierarchical relationships. For illustrative purposes, let’s say keys
@@ -1225,6 +1275,7 @@ it discovers differences, it reconfigures ranges in the same way
 that it rebalances away from busy nodes, via special-case 1:1
 split to a duplicate range comprising the new configuration.
 
+[Rest of this document is tossable]
 # Key-Value API
 
 see the protobufs in [roachpb/](https://github.com/cockroachdb/cockroach/blob/master/roachpb),
@@ -1305,6 +1356,7 @@ write-optimized (HBase, Cassandra, SQLite3/LSM, CockroachDB).
 
 ## Architecture
 
+[Keep this diagram; update if necessary]
 CockroachDB implements a layered architecture, with various
 subdirectories implementing layers as appropriate. The highest level of
 abstraction is the [SQL layer][5], which depends
@@ -1331,6 +1383,7 @@ replicas.
 
 ## Client Architecture
 
+[Update this diagram]
 RoachNodes serve client traffic using a fully-featured SQL API which accepts requests as either application/x-protobuf or
 application/json. Client implementations consist of an HTTP sender
 (transport) and a transactional sender which implements a simple
