@@ -13,6 +13,7 @@
 // permissions and limitations under the License.
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
+// Author: Irfan Sharif (irfansharif@cockroachlabs.com)
 
 package distsql
 
@@ -206,6 +207,12 @@ func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (processor, 
 			return nil, err
 		}
 		return newSorter(&f.FlowCtx, ps.Core.Sorter, inputs[0], outputs[0]), nil
+	}
+	if ps.Core.Evaluator != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newEvaluator(&f.FlowCtx, ps.Core.Evaluator, inputs[0], outputs[0])
 	}
 	return nil, errors.Errorf("unsupported processor %s", ps)
 }

@@ -19,6 +19,7 @@ package sqlbase
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -222,6 +223,19 @@ func (r EncDatumRow) String() string {
 	var b bytes.Buffer
 	r.stringToBuf(&DatumAlloc{}, &b)
 	return b.String()
+}
+
+// DatumToEncDatum converts a parser.Datum to an EncDatum.
+func DatumToEncDatum(datum parser.Datum) (EncDatum, error) {
+	dType, ok := ColumnType_Kind_value[strings.ToUpper(datum.Type())]
+	if !ok {
+		return EncDatum{}, errors.Errorf(
+			"Unknown type %s, could not convert to EncDatum", datum.Type())
+	}
+	return EncDatum{
+		Type:  (ColumnType_Kind)(dType),
+		Datum: datum,
+	}, nil
 }
 
 // Compare returns the relative ordering of two EncDatumRows according to a
