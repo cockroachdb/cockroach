@@ -1342,9 +1342,9 @@ restricted set of conceptual constructs.
 
 To run SQL statements in a distributed fashion, we introduce a couple of concepts:
 - _logical plan_ - similar on the surface to the `planNode` tree described in
-  the [SQL](#sql) section, it represents the abstract data flow through
-  computation stages.
-- _physical plan_ - a physical plan is conceptuall a mapping of the _logical
+  the [SQL](#sql) section, it represents the abstract (non-distributed) data flow
+  through computation stages.
+- _physical plan_ - a physical plan is conceptually a mapping of the _logical
   plan_ nodes to CockroachDB nodes. Logical plan nodes are duplicated and
   specialized depending on the cluster topology. The components of the physical
   plan are scheduled and run on the cluster.
@@ -1408,12 +1408,11 @@ To run SQL statements in a distributed fashion, we introduce a couple of concept
     arbitrarily.
   - `JOIN` performs a join on two streams, with equality constraints between
     certain columns. The aggregator is grouped on the columns that are
-    constrained to be equal. See [Stream joins](#stream-joins).
+    constrained to be equal.
   - `JOIN READER` performs point-lookups for rows with the keys indicated by the
     input stream. It can do so by performing (potentially remote) KV reads, or by
-    setting up remote flows. See [Join-by-lookup](#join-by-lookup) and
-    [On-the-fly flows setup](#on-the-fly-flows-setup).
-  - `MUTATE` performs insertions/deletions/updates to KV. See section TODO.
+    setting up remote flows.
+  - `MUTATE` performs insertions/deletions/updates to KV.
   - `SET OPERATION` takes several inputs and performs set arithmetic on them
     (union, difference).
   - `AGGREGATOR` is the one that does "aggregation" in the SQL sense. It groups
