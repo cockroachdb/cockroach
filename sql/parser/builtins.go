@@ -586,7 +586,7 @@ var Builtins = map[string][]Builtin{
 			ReturnType: TypeDate,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				t := ctx.GetTxnTimestamp(time.Microsecond).Time
-				return NewDDateFromTime(t, ctx.GetLocation()), nil
+				return NewDDateFromTime(t, time.UTC), nil
 			},
 		},
 	},
