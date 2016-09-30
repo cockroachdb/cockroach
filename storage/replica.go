@@ -2639,8 +2639,13 @@ func (r *Replica) processRaftCommand(
 	// On successful write commands handle write-related triggers including
 	// splitting and raft log truncation.
 	if pErr == nil && raftCmd.Cmd.IsWrite() {
-		r.maybeAddToSplitQueue()
-		r.maybeAddToRaftLogQueue(index)
+		if r.needsSplitBySize() {
+			r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
+		}
+		const raftLogCheckFrequency = 1 + RaftLogQueueStaleThreshold/4
+		if index%raftLogCheckFrequency == 0 {
+			r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
+		}
 	}
 
 	if cmd != nil {
@@ -3462,31 +3467,6 @@ func (r *Replica) exceedsDoubleSplitSizeLocked() bool {
 	maxBytes := r.mu.maxBytes
 	size := r.mu.state.Stats.Total()
 	return maxBytes > 0 && size > maxBytes*2
-}
-
-// maybeAddToSplitQueue checks whether the current size of the range
-// exceeds the max size specified in the zone config. If yes, the
-// range is added to the split queue.
-//
-// TODO(tschottdorf): unnecessary to have this on *Replica; it should be on
-// the Store.
-func (r *Replica) maybeAddToSplitQueue() {
-	if r.needsSplitBySize() {
-		// TODO(tschottdorf): illegal to pass itself out as a reference.
-		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
-	}
-}
-
-// maybeAddToRaftLogQueue checks whether the raft log is a candidate for
-// truncation. If yes, the range is added to the raft log queue.
-//
-// TODO(tschottdorf): unnecessary to have this on *Replica; it should be on
-// the Store.
-func (r *Replica) maybeAddToRaftLogQueue(appliedIndex uint64) {
-	const raftLogCheckFrequency = 1 + RaftLogQueueStaleThreshold/4
-	if appliedIndex%raftLogCheckFrequency == 0 {
-		r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
-	}
 }
 
 func (r *Replica) setPendingSnapshotIndex(index uint64) error {
