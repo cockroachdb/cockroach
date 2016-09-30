@@ -13,6 +13,7 @@
 // permissions and limitations under the License.
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
+// Author: Irfan Sharif (irfansharif@cockroachlabs.com)
 
 package distsql
 
@@ -141,4 +142,34 @@ func (eh *exprHelper) init(
 func (eh *exprHelper) evalFilter(row sqlbase.EncDatumRow) (bool, error) {
 	eh.row = row
 	return sqlbase.RunFilter(eh.expr, eh.evalCtx)
+}
+
+// Given a row, extract evaluates the wrapped expression and returns the resulting datum needed for
+// rendering. For example given a row (1, 2, 3, 4, 5):
+//  '$1' would return '2'
+//  '$1 + $4' would return '7'
+//  '$0' would return '1'
+//  '$1 + 10' would return '12'
+func (eh *exprHelper) extract(row sqlbase.EncDatumRow) (parser.Datum, error) {
+	eh.row = row
+
+	//  TODO(irfansharif): extract here is very permissive, if expr is of type *parser.FuncExpr for
+	//  example expr.Eval doesn't make sense therefore is explicitly tested for. There may very well be
+	//  other expression types where the same holds true but are not yet checked for.
+	//  The set of verified parser expressions are:
+	//  ComparisonExpr, FuncExpr, AndExpr, BinaryExpr, NotExpr, OrExpr, ParenExpr, UnaryExpr.
+	//
+	//  The list of unverified parser expressions are:
+	//  IsOfTypeExpr, AnnotateTypeExpr, CaseExpr, CastExpr, CoalesceExpr, ExistsExpr, IfExpr,
+	//  NullIfExpr.
+	//
+	//  TODO(irfansharif): We need to determine when exactly the 'argument extraction' takes place,
+	//  i.e. if the original SQL expression contains 'SUM($1 + $2)', we would on some level need to
+	//  extract the sub expression '$1 + $2'.
+	switch eh.expr.(type) {
+	case *parser.FuncExpr:
+		return nil, errors.Errorf("aggregate functions not allowed")
+	default:
+		return eh.expr.Eval(eh.evalCtx)
+	}
 }
