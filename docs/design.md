@@ -473,100 +473,39 @@ which would be feasible for smaller, geographically-proximate clusters.
 
 # Linearizability
 
-First a word about [***Spanner***](http://research.google.com/archive/spanner.html).
-By combining judicious use of wait intervals with accurate time signals,
-Spanner provides a global ordering between any two non-overlapping transactions
-(in absolute time) with \~14ms latencies. Put another way:
-Spanner guarantees that if a transaction T<sub>1</sub> commits (in absolute time)
-before another transaction T<sub>2</sub> starts, then T<sub>1</sub>'s assigned commit
-timestamp is smaller than T<sub>2</sub>'s. Using atomic clocks and GPS receivers,
-Spanner reduces their clock skew uncertainty to \< 10ms (`ε`). To make
-good on the promised guarantee, transactions must take at least double
-the clock skew uncertainty interval to commit (`2ε`). See [*this
-article*](http://www.cs.cornell.edu/~ie53/publications/DC-col51-Sep13.pdf)
-for a helpful overview of Spanner’s concurrency control.
+Roughly speaking, the gap between linearizability and CockroachDB's default
+isolation level (which gives serializable transactions) is that with
+linearizable transactions, a phenomenon called <i>temporal reverse</i> is
+prevented. This anomaly typically occurs when clocks across a distributed
+system are not synchronized. For example, consider two transactions which
+are run back to back, the first creating a user, and the second creating
+a posting for that user. Both of those write data to the system at certain
+logical timestamps; naively one would expect that the first timestamp is
+less than the second, but that may not hold.
 
-Cockroach could make the same guarantees without specialized hardware,
-at the expense of longer wait times. If servers in the cluster were
-configured to work only with NTP, transaction wait times would likely to
-be in excess of 150ms. For wide-area zones, this would be somewhat
-mitigated by overlap from cross datacenter link latencies. If clocks
-were made more accurate, the minimal limit for commit latencies would
-improve.
+The reason for that is essentially that both transactions might touch very
+different parts of the system, and so the clocks which are used may emit
+timestamps that are out of order.
 
-However, let’s take a step back and evaluate whether Spanner’s external
-consistency guarantee is worth the automatic commit wait. First, if the
-commit wait is omitted completely, the system still yields a consistent
-view of the map at an arbitrary timestamp. However with clock skew, it
-would become possible for commit timestamps on non-overlapping but
-causally related transactions to suffer temporal reverse. In other
-words, the following scenario is possible for a client without global
-ordering:
+In practice, in CockroachDB many transactional workloads are actually
+linearizable, though the precise conditions are a bit too involved to
+outline them here.
 
--   Start transaction T<sub>1</sub> to modify value `x` with commit time s<sub>1</sub>
+Causality (i.e. absence of temporal reverse) is typically not required
+for many transactions, and so it is advantageous to pay for it only
+when it *is* needed. CockroachDB implements this via <i>causality tokens</i>:
+When committing a transaction, a causality token can be retrieved and
+passed to the next transaction, ensuring that these two transactions
+get assigned increasing logical timestamps.
 
--   On commit of T<sub>1</sub>, start T<sub>2</sub> to modify value `y` with commit time
-    s<sub>2</sub>
+Additionally, as better synchronized clocks become a standard commodity offered
+by cloud providers, CockroachDB can provide global linearizability by doing
+much the same that Google's Spanner does: wait out the maximum clock offset
+after committing, but before returning to the client.
 
--   Read `x` and `y` and discover that s<sub>1</sub> \> s<sub>2</sub> (**!**)
+See the blog post below for much more in-depth information.
 
-The external consistency which Spanner guarantees is referred to as
-**linearizability**. It goes beyond serializability by preserving
-information about the causality inherent in how external processes
-interacted with the database. The strength of Spanner’s guarantee can be
-formulated as follows: any two processes, with clock skew within
-expected bounds, may independently record their wall times for the
-completion of transaction T<sub>1</sub> (T<sub>1</sub><sup>end</sup>) and start of transaction
-T<sub>2</sub> (T<sub>2</sub><sup>start</sup>) respectively, and if later
-compared such that T<sub>1</sub><sup>end</sup> \< T<sub>2</sub><sup>start</sup>,
-then commit timestamps s<sub>1</sub> \< s<sub>2</sub>.
-This guarantee is broad enough to completely cover all cases of explicit
-causality, in addition to covering any and all imaginable scenarios of implicit
-causality.
-
-Our contention is that causality is chiefly important from the
-perspective of a single client or a chain of successive clients (*if a
-tree falls in the forest and nobody hears…*). As such, Cockroach
-provides two mechanisms to provide linearizability for the vast majority
-of use cases without a mandatory transaction commit wait or an elaborate
-system to minimize clock skew.
-
-1. Clients provide the highest transaction commit timestamp with
-   successive transactions. This allows node clocks from previous
-   transactions to effectively participate in the formulation of the
-   commit timestamp for the current transaction. This guarantees
-   linearizability for transactions committed by this client.
-
-   Newly launched clients wait at least 2 \* ε from process start
-   time before beginning their first transaction. This preserves the
-   same property even on client restart, and the wait will be
-   mitigated by process initialization.
-
-   All causally-related events within Cockroach maintain
-   linearizability.
-
-2. Committed transactions respond with a commit wait parameter which
-   represents the remaining time in the nominal commit wait. This
-   will typically be less than the full commit wait as the consensus
-   write at the coordinator accounts for a portion of it.
-
-   Clients taking any action outside of another Cockroach transaction
-   (e.g. writing to another distributed system component) can either
-   choose to wait the remaining interval before proceeding, or
-   alternatively, pass the wait and/or commit timestamp to the
-   execution of the outside action for its consideration. This pushes
-   the burden of linearizability to clients, but is a useful tool in
-   mitigating commit latencies if the clock skew is potentially
-   large. This functionality can be used for ordering in the face of
-   backchannel dependencies as mentioned in the
-   [AugmentedTime](http://www.cse.buffalo.edu/~demirbas/publications/augmentedTime.pdf)
-   paper.
-
-Using these mechanisms in place of commit wait, Cockroach’s guarantee can be
-formulated as follows: any process which signals the start of transaction
-T<sub>2</sub> (T<sub>2</sub><sup>start</sup>) after the completion of
-transaction T<sub>1</sub> (T<sub>1</sub><sup>end</sup>), will have commit
-timestamps such thats<sub>1</sub> \< s<sub>2</sub>.
+https://www.cockroachlabs.com/blog/living-without-atomic-clocks/
 
 # Logical Map Content
 
