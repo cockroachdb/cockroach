@@ -151,14 +151,6 @@ minimum expiration.
 Versioned values are supported via modifications to RocksDB to record
 commit timestamps and GC expirations per key.
 
-Each range maintains a small (i.e. latest 10s of read timestamps),
-*in-memory* cache from key to the latest timestamp at which the
-key was read. This *read timestamp cache* is updated every time a key
-is read. The cache’s entries are evicted oldest timestamp first, updating
-the low water mark of the cache appropriately. If a new range lease holder
-is elected, it sets the low water mark for the cache to the current
-wall time + ε (ε = 99th percentile clock skew).
-
 # Lock-Free Distributed Transactions
 
 Cockroach provides distributed transactions without locks. Cockroach
@@ -188,6 +180,17 @@ For a discussion of SSI implemented by preventing read-write conflicts
 (in contrast to detecting them, called write-snapshot isolation), see
 the [Yabandeh paper](https://drive.google.com/file/d/0B9GCVTp_FHJIMjJ2U2t6aGpHLTFUVHFnMTRUbnBwc2pLa1RN/edit?usp=sharing),
 which is the source of much inspiration for Cockroach’s SSI.
+
+Both SI and SSI require that the outcome of reads must be preserved, i.e.
+a write of a key at a lower timestamp than a previous read must not succeed. To
+this end, each range maintains a small (i.e. latest 10s of read timestamps),
+*in-memory* cache from key range to the latest timestamp at which it was read.
+
+Most updates to this *timestamp cache* correspond to keys being read, though
+the timestamp cache also protects the outcome of some writes (notably range
+deletions) which consequently must also populate the cache. The cache’s entries
+are evicted oldest timestamp first, updating the low water mark of the cache
+appropriately.
 
 Each Cockroach transaction is assigned a random priority and a
 "candidate timestamp" at start. The candidate timestamp is the
@@ -828,6 +831,8 @@ As outlined in the Raft section, the replicas of a Range are organized as a
 Raft group and execute commands from their shared commit log. Going through
 Raft is an expensive operation though, and there are tasks which should only be
 carried out by a single replica at a time (as opposed to all of them).
+In particular, it is desirable to serve authoritative reads from a single
+Replica (ideally from more than one, but that is far more difficult).
 
 For these reasons, Cockroach introduces the concept of **Range Leases**:
 This is a lease held for a slice of (database, i.e. hybrid logical) time and is
@@ -853,28 +858,28 @@ overhead of going through Raft.
 Since reads bypass Raft, a new lease holder will, among other things, ascertain
 that its timestamp cache does not report timestamps smaller than the previous
 lease holder's (so that it's compatible with reads which may have occurred on
-the former lease holder). This is accomplished by setting the low water mark of the
-timestamp cache to the expiration of the previous lease plus the maximum clock
-offset.
+the former lease holder). This is accomplished by letting leases enter
+a <i>stasis period</i> (which is just the expiration minus the maximum clock
+offset) before the actual expiration of the lease, so that all the next lease
+holder has to do is set the low water mark of the timestamp cache to its
+new lease's start time.
 
-## Relationship to Raft leadership
+As a lease enters its stasis period, no more reads or writes are served, which
+is undesirable. However, this would only happen in practice if a node became
+unavailable. In almost all practical situations, no unavailability results
+since leases are usually long-lived (and/or eagerly extended, which can avoid
+the stasis period) or proactively transferred away from the lease holder, which
+can also avoid the stasis period by promising not to serve any further reads
+until the next lease goes into effect.
+
+## Colocation with Raft leadership
 
 The range lease is completely separate from Raft leadership, and so without
-further efforts, Raft leadership and the Range lease may not be represented by the same
-replica most of the time. This is convenient semantically since it decouples
-these two types of leadership and allows the use of Raft as a "black box", but
-for reasons of performance, it is desirable to have both on the same replica.
-Otherwise, sending a command through Raft always incurs the overhead of being
-proposed to the Range lease holder's Raft instance first, which must relay it to the
-Raft leader, which finally commits it into the log and updates its followers,
-including the Range lease holder. This yields correct results but wastes several
-round-trip delays, and so we will make sure that in the vast majority of cases
-Range lease and Raft leadership coincide. A fairly easy method for achieving this is
-to have each new lease period (extension or new) be accompanied by a
-stipulation to the lease holder's replica to start Raft elections (unless it's
-already leading), though some care should be taken that Range lease holdership is
-relatively stable and long-lived to avoid a large number of Raft leadership
-transitions.
+further efforts, Raft leadership and the Range lease may not be held by the
+same Replica. Since it's expensive to not have these two roles colocated (the
+lease holder has to forward each proposal to the leader, adding costly RPC
+round-trips), each lease renewal or transfer also attempts to colocate them.
+In practice, that means that the mismatch is rare and self-corrects quickly.
 
 ## Command Execution Flow
 
