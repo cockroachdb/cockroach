@@ -570,41 +570,21 @@ timestamps such thats<sub>1</sub> \< s<sub>2</sub>.
 
 # Logical Map Content
 
-Logically, the map contains a series of reserved system key / value
-pairs covering accounting, range metadata and node accounting
-before the actual key / value pairs for non-system data
-(e.g. the actual meat of the map).
+Logically, the map contains a series of reserved system key/value
+pairs preceding the actual user data (which is managed by the SQL
+subsystem).
 
-- `\0\0meta1` Range metadata for location of `\0\0meta2`.
-- `\0\0meta1<key1>` Range metadata for location of `\0\0meta2<key1>`.
+- `\x02<key1>`: Range metadata for range ending `\x03<key1>`. This a "meta1" key.
 - ...
-- `\0\0meta1<keyN>`: Range metadata for location of `\0\0meta2<keyN>`.
-- `\0\0meta2`: Range metadata for location of first non-range metadata key.
-- `\0\0meta2<key1>`: Range metadata for location of `<key1>`.
+- `\x02<keyN>`: Range metadata for range ending `\x03<keyN>`. This a "meta1" key.
+- `\x03<key1>`: Range metadata for range ending `<key1>`. This a "meta2" key.
 - ...
-- `\0\0meta2<keyN>`: Range metadata for location of `<keyN>`.
-- `\0acct<key0>`: Accounting for key prefix key0.
-- ...
-- `\0acct<keyN>`: Accounting for key prefix keyN.
-- `\0node<node-address0>`: Accounting data for node 0.
-- ...
-- `\0node<node-addressN>`: Accounting data for node N.
-- `\0tx<tx-id0>`: Transaction record for transaction 0.
-- ...
-- `\0tx<tx-idN>`: Transaction record for transaction N.
-- `\0zone<key0>`: Zone information for key prefix key0.
-- ...
-- `\0zone<keyN>`: Zone information for key prefix keyN.
-- `<>acctd<metric0>`: Accounting data for Metric 0 for empty key prefix.
-- ...
-- `<>acctd<metricN>`: Accounting data for Metric N for empty key prefix.
-- `<key0>`: `<value0>` The first user data key.**
-- ...
-- `<keyN>`: `<valueN>` The last user data key.**
-
-There are some additional system entries sprinkled amongst the
-non-system keys. See the Key-Prefix Accounting section in this document
-for further details.
+- `\x03<keyN>`: Range metadata for range ending `<keyN>`. This a "meta2" key.
+- `\x04{desc,node,range,store}-idegen`: ID generation oracles for various component types.
+- `\x04status-node-<varint encoded Store ID>`: Store runtime metadata.
+- `\x04tsd<key>`: Time-series data key.
+- `<key>`: A user key. In practice, these keys are managed by the SQL
+  subsystem, which employs its own key anatomy.
 
 # Node Storage
 
