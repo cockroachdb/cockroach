@@ -1310,6 +1310,265 @@ Finally, for SQL indexes, the KV key is formed using the SQL value of the
 indexed columns, and the KV value is the KV key prefix of the rest of
 the indexed row.
 
+## Distributed SQL
+
+Dist-SQL is a new execution framework being developed as of Q3 2016 with the
+goal of distributing the processing of SQL queries.
+See the [Distributed SQL
+RFC](https://github.com/cockroachdb/cockroach/blob/develop/docs/RFCS/distributed_sql.md)
+for a detailed design of the subsystem; this section will serve as a summary.
+
+Distributing the processing is desirable for multiple reasons:
+- Remote-side filtering: when querying for a set of rows that match a filtering
+  expression, instead of querying all the keys in certain ranges and processing
+  the filters after receiving the data on the gateway node over the network.
+  We want the filtering expression to be processed by the lease holder
+  or remote node, saving on network traffic and related processing.
+- For statements like `UPDATE .. WHERE` and `DELETE .. WHERE` we want to
+  perform the query and the updates on the node which has the data (as opposed
+  to receiving results at the gateway over the network, and then performing the
+  update or deletion there, which involves too many round-trips).
+- Parallelize SQL computation: when significant computation is required, we
+  want to distribute it too multiple node, so that it scales with the amount of
+  data involved. This applies to `JOINs`, aggregation, sorting.
+
+The approach we took  was originally inspired by
+[Sawzall](https://cloud.google.com/dataflow/model/programming-model) - a
+project by Rob Pike et al. at Google that proposes a "shell" (high-level
+language interpreter) to ease the exploitation of MapReduce. It provides a
+clear separation between "local" processes which process a limited amount of
+data and distributed computations, which are abstracted away behind a
+restricted set of conceptual constructs.
+
+To run SQL statements in a distributed fashion, we introduce a couple of concepts:
+- _logical plan_ - similar on the surface to the `planNode` tree described in
+  the [SQL](#sql) section, it represents the abstract data flow through
+  computation stages.
+- _physical plan_ - a physical plan is conceptuall a mapping of the _logical
+  plan_ nodes to CockroachDB nodes. Logical plan nodes are duplicated and
+  specialized depending on the cluster topology. The components of the physical
+  plan are scheduled and run on the cluster.
+
+## Logical planning
+
+  The logical plan is made up of _aggregators_. Each _aggregator_ consumes an
+  _input stream_ of rows (or more streams for joins) and produces an _output
+  stream_ of rows. Both the input and the
+  output streams have a set schema. The streams are a logical concept and might
+  not map to a single data stream in the actual computation. An aggregator
+  defines a _grouping_ on the data that flows through it, expressing which rows
+  need to be processed on the same node (this mechanism constraints rows
+  matching in a subset of columns to be processed on the same node). This
+  concept is useful for aggregators that need to see some set of rows for
+  producing output - e.g. the SQL aggregation functions. An aggregator with no
+  grouping is a special but important case in which we are not aggregating
+  multiple pieces of data, but we may be filtering, transforming, or reordering
+  individual pieces of data.
+
+  Aggregators can make use of SQL expressions, evaluating them with various
+  inputs as part of their work. In particular, all aggregators can optionally
+  use an output filter expression - a boolean function that is used to discard
+  elements that would have otherwise been part of the output stream.
+
+  Special **table reader** aggregators with no inputs are used as data sources; a
+  table reader can be configured to output only certain columns, as needed.
+  A special **final** aggregator with no outputs is used for the results of the
+  query/statement.
+
+  Some aggregators (`final`, `limit`) have an **ordering requirement** on the input
+  stream (a list of columns with corresponding ascending/descending requirements).
+  Some aggregators (like `table readers`) can guarantee a certain ordering on their
+  output stream, called an **ordering guarantee**. All aggregators have an
+  associated **ordering characterization** function `ord(input_order) ->
+  output_order` that maps `input_order` (an ordering guarantee on the input
+  stream) into `output_order` (an ordering guarantee for the output stream) -
+  meaning that if the rows in the input stream are ordered according to
+  `input_order`, then the rows in the output stream will be ordered according
+  to `output_order`.
+
+  The ordering guarantee of the table readers along with the characterization
+  functions can be used to propagate ordering information across the logical plan.
+  When there is a mismatch (an aggregator has an ordering requirement that is not
+  matched by a guarantee), we insert a **sorting aggregator** - this is a
+  non-grouping aggregator with output schema identical to the input schema that
+  reorders the elements in the input stream providing a certain output order
+  guarantee regardless of the input ordering. We can perform optimizations wrt
+  sorting at the logical plan level - we could potentially put the sorting
+  aggregator earlier in the pipeline, or split it into multiple nodes (one of
+  which performs preliminary sorting in an earlier stage).
+
+### Types of aggregators
+
+  - `TABLE READER` is a special aggregator, with no input stream. It's configured
+    with spans of a table or index and the schema that it needs to read.
+    Like every other aggregator, it can be configured with a programmable output
+    filter.
+  - `PROGRAM` is a fully programmable no-grouping aggregator. It runs a "program"
+    on each individual row. The program can drop the row, or modify it
+    arbitrarily.
+  - `JOIN` performs a join on two streams, with equality constraints between
+    certain columns. The aggregator is grouped on the columns that are
+    constrained to be equal. See [Stream joins](#stream-joins).
+  - `JOIN READER` performs point-lookups for rows with the keys indicated by the
+    input stream. It can do so by performing (potentially remote) KV reads, or by
+    setting up remote flows. See [Join-by-lookup](#join-by-lookup) and
+    [On-the-fly flows setup](#on-the-fly-flows-setup).
+  - `MUTATE` performs insertions/deletions/updates to KV. See section TODO.
+  - `SET OPERATION` takes several inputs and performs set arithmetic on them
+    (union, difference).
+  - `AGGREGATOR` is the one that does "aggregation" in the SQL sense. It groups
+    rows and computes an aggregate for each group. The group is configured using
+    the group key. `AGGREGATOR` can be configured with one or more aggregation
+    functions:
+    - `SUM`
+    - `COUNT`
+    - `COUNT DISTINCT`
+    - `DISTINCT`
+
+    `AGGREGATOR`'s output schema consists of the group key, plus a configurable
+    subset of the generated aggregated values. The optional output filter has
+    access to the group key and all the aggregagated values (i.e. it can use even
+    values that are not ultimately outputted).
+  - `SORT` sorts the input according to a configurable set of columns. Note that
+    this is a no-grouping aggregator, hence it can be distributed arbitrarily to
+    the data producers. This means, of course, that it doesn't produce a global
+    ordering, instead it just guarantees an intra-stream ordering on each
+    physical output streams). The global ordering, when needed, is achieved by an
+    input synchronizer of a grouped processor (such as `LIMIT` or `FINAL`).
+  - `LIMIT` is a single-group aggregator that stops after reading so many input
+    rows.
+  - `INTENT-COLLECTOR` is a single-group aggregator, scheduled on the gateway,
+    that receives all the intents generated by a `MUTATE` and keeps track of them
+    in memory until the transaction is committed.
+  - `FINAL` is a single-group aggregator, scheduled on the gateway, that collects
+    the results of the query. This aggregator will be hooked up to the pgwire
+    connection to the client.
+
+## Physical planning
+
+### Processors
+
+When turning a _logical plan_ into a _physical plan_, its nodes are turned into
+_processors_. Processors are generally made up of three components:
+
+![Processor](RFCS/distributed_sql_processor.png?raw=true "Processor")
+
+1. The *input synchronizer* merges the input streams into a single stream of
+   data. Types:
+   * single-input (pass-through)
+   * unsynchronized: passes rows from all input streams, arbitrarily
+     interleaved.
+   * ordered: the input physical streams have an ordering guarantee (namely the
+     guarantee of the corresponding logical stream); the synchronizer is careful
+     to interleave the streams so that the merged stream has the same guarantee.
+
+2. The *data processor* core implements the data transformation or aggregation
+   logic (and in some cases performs KV operations).
+
+3. The *output router* splits the data processor's output to multiple streams;
+   types:
+   * single-output (pass-through)
+   * mirror: every row is sent to all output streams
+   * hashing: each row goes to a single output stream, chosen according
+     to a hash function applied on certain elements of the data tuples.
+   * by range: the router is configured with range information (relating to a
+     certain table) and is able to send rows to the nodes that are lease holders for
+     the respective ranges (useful for `JoinReader` nodes (taking index values
+     to the node responsible for the PK) and `INSERT` (taking new rows to their
+     lease holder-to-be)).
+
+## Execution infrastructure
+
+Once a physical plan has been generated, the system needs to divvy it up
+between the nodes and send it around for execution. Each node is responsible
+for locally scheduling data processors and input synchronizers. Nodes also
+communicate with each other for connecting output routers to input
+synchronizers through a streaming interface.
+
+### Creating a local plan: the `ScheduleFlows` RPC
+
+Distributed execution starts with the gateway making a request to every node
+that's supposed to execute part of the plan asking the node to schedule the
+sub-plan(s) it's responsible for (modulo "on-the-fly" flows, see design doc). A
+node might be responsible for multiple disparate pieces of the overall DAG.
+Let's call each of them a *flow*. A flow is described by the sequence of
+physical plan nodes in it, the connections between them (input synchronizers,
+output routers) plus identifiers for the input streams of the top node in the
+plan and the output streams of the (possibly multiple) bottom nodes. A node
+might be responsible for multiple heterogeneous flows. More commonly, when a
+node is the lease holder for multiple ranges from the same table involved in
+the query, it will be run a `TableReader` configured with all the spans to be
+read across all the ranges local to the node.
+
+A node therefore implements a `ScheduleFlows` RPC which takes a set of flows,
+sets up the input and output mailboxes (see below), creates the local
+processors and starts their execution.
+
+### Local scheduling of flows
+
+The simplest way to schedule the different processors locally on a node is
+concurrently: each data processor, synchronizer and router runs as a goroutine,
+with channels between them. The channels are buffered to synchronize producers
+and consumers to a controllable degree.
+
+### Mailboxes
+
+Flows on different nodes communicate with each other over GRPC streams. To
+allow the producer and the consumer to start at different times,
+`ScheduleFlows` creates named mailboxes for all the input and output streams.
+These message boxes will hold some number of tuples in an internal queue until
+a GRPC stream is established for transporting them. From that moment on, GRPC
+flow control is used to synchronize the producer and consumer.  A GRPC stream
+is established by the consumer using the `StreamMailbox` RPC, taking a mailbox
+id (the same one that's been already used in the flows passed to
+`ScheduleFlows`).
+
+A diagram of a simple query using mailboxes for its execution:
+![Mailboxes](RFCS/distributed_sql_mailboxes.png?raw=true)
+
+## A complex example: Daily Promotion
+
+To give a visual intuition of all the concepts presented, we draw the physical plan of a relatively involved query. The
+point of the query is to help with a promotion that goes out daily, targeting
+customers that have spent over $1000 in the last year. We'll insert into the
+`DailyPromotion` table rows representing each such customer and the sum of her
+recent orders.
+
+```SQL
+TABLE DailyPromotion (
+  Email TEXT,
+  Name TEXT,
+  OrderCount INT
+)
+
+TABLE Customers (
+  CustomerID INT PRIMARY KEY,
+  Email TEXT,
+  Name TEXT
+)
+
+TABLE Orders (
+  CustomerID INT,
+  Date DATETIME,
+  Value INT,
+
+  PRIMARY KEY (CustomerID, Date),
+  INDEX date (Date)
+)
+
+INSERT INTO DailyPromotion
+(SELECT c.Email, c.Name, os.OrderCount FROM
+      Customers AS c
+    INNER JOIN
+      (SELECT CustomerID, COUNT(*) as OrderCount FROM Orders
+        WHERE Date >= '2015-01-01'
+        GROUP BY CustomerID HAVING SUM(Value) >= 1000) AS os
+    ON c.CustomerID = os.CustomerID)
+```
+
+A possible physical plan:
+![Physical plan](RFCS/distributed_sql_daily_promotion_physical_plan.png?raw=true)
+
 # References
 
 [0]: http://rocksdb.org/
