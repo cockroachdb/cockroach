@@ -11,7 +11,7 @@ TestCopyrightHeaders() {
 
 TestTimeutil() {
   echo "checking for time.Now and time.Since calls (use timeutil instead)"
-  ! git grep -nE 'time\.(Now|Since)' -- '*.go' | grep -vE '^util/(log|timeutil)/\w+\.go\b'
+  ! git grep -nE 'time\.(Now|Since)' -- '*.go' | grep -vE '^util/(log|syncutil|timeutil)/\w+\.go\b'
 }
 
 TestEnvutil() {
