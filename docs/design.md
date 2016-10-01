@@ -981,25 +981,20 @@ The gossip protocol itself contains two primary components:
   node has seen. Each round of gossip communicates only the delta
   containing new items.
 
-# Node Accounting
+# Node and Cluster Metrics
 
-The gossip protocol discussed in the previous section is useful to
-quickly communicate fragments of important information in a
-decentralized manner. However, complete accounting for each node is also
-stored to a central location, available to any dashboard process. This
-is done using the map itself. Each node periodically writes its state to
-the map with keys prefixed by `\0node`, similar to the first level of
-range metadata, but with an ‘`node`’ suffix. Each value is a protobuf
-containing the full complement of node statistics--everything
-communicated normally via the gossip protocol plus other useful, but
-non-critical data.
+Every component of the system is responsible for exporting interesting
+metrics about itself. These could be histograms, throughput counters, or
+gauges.
 
-The range containing the first key in the node accounting table is
-responsible for gossiping the total count of nodes. This total count is
-used by the gossip network to most efficiently organize itself. In
-particular, the maximum number of hops for gossipped information to take
-before reaching a node is given by `ceil(log(node count) / log(max
-fanout)) + 1`.
+These metrics are exported for external monitoring systems (such as Prometheus)
+via a HTTP endpoint, but CockroachDB also implements an internal timeseries
+database which is stored in the replicated key-value map.
+
+Time series are stored at Store granularity and allow the admin dashboard
+to efficiently gain visibility into a universe of information at the Cluster,
+Node or Store level. A [periodic background process](RFCS/time_series_culling.md)
+culls older timeseries data, downsampling and eventually discarding it.
 
 # Key-prefix Accounting and Zones
 
