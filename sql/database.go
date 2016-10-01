@@ -130,7 +130,7 @@ var _ DatabaseAccessor = &planner{}
 
 // getDatabaseDesc implements the DatabaseAccessor interface.
 func (p *planner) getDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
-	if virtual := getVirtualDatabaseDesc(name); virtual != nil {
+	if virtual := p.virtualSchemas().getVirtualDatabaseDesc(name); virtual != nil {
 		return virtual, nil
 	}
 	desc := &sqlbase.DatabaseDescriptor{}
@@ -207,7 +207,7 @@ func (p *planner) getAllDatabaseDescs() ([]*sqlbase.DatabaseDescriptor, error) {
 
 // getDatabaseID implements the DatabaseAccessor interface.
 func (p *planner) getDatabaseID(name string) (sqlbase.ID, error) {
-	if virtual := getVirtualDatabaseDesc(name); virtual != nil {
+	if virtual := p.virtualSchemas().getVirtualDatabaseDesc(name); virtual != nil {
 		return virtual.GetID(), nil
 	}
 
@@ -236,7 +236,7 @@ func (p *planner) getDatabaseID(name string) (sqlbase.ID, error) {
 
 // createDatabase implements the DatabaseAccessor interface.
 func (p *planner) createDatabase(desc *sqlbase.DatabaseDescriptor, ifNotExists bool) (bool, error) {
-	if IsVirtualDatabase(desc.Name) {
+	if p.virtualSchemas().isVirtualDatabase(desc.Name) {
 		if ifNotExists {
 			// Noop.
 			return false, nil
@@ -252,7 +252,7 @@ func (p *planner) renameDatabase(oldDesc *sqlbase.DatabaseDescriptor, newName st
 		return fmt.Errorf("the new database name %q already exists", newName)
 	}
 
-	if IsVirtualDatabase(newName) {
+	if p.virtualSchemas().isVirtualDatabase(newName) {
 		return onAlreadyExists()
 	}
 
