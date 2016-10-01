@@ -484,9 +484,15 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		store:      store,
 		abortCache: NewAbortCache(rangeID),
 	}
-	// TODO(radu): we can do better than store.Ctx() here.
-	r.raftMu = syncutil.MakeTimedMutex(store.Ctx(), defaultReplicaRaftMuWarnThreshold)
-	r.mu.TimedMutex = syncutil.MakeTimedMutex(store.Ctx(), defaultReplicaMuWarnThreshold)
+
+	// Init rangeStr with the range ID.
+	r.rangeStr.store(&roachpb.RangeDescriptor{RangeID: rangeID})
+
+	// Add replica log tag - the value is rangeStr.String().
+	r.ctx = log.WithLogTag(store.Ctx(), "r", &r.rangeStr)
+
+	r.raftMu = syncutil.MakeTimedMutex(r.ctx, defaultReplicaRaftMuWarnThreshold)
+	r.mu.TimedMutex = syncutil.MakeTimedMutex(r.ctx, defaultReplicaMuWarnThreshold)
 	r.mu.outSnapDone = initialOutSnapDone
 	return r
 }
@@ -520,7 +526,7 @@ func (r *Replica) initLocked(
 	desc *roachpb.RangeDescriptor, clock *hlc.Clock, replicaID roachpb.ReplicaID,
 ) error {
 	if r.mu.state.Desc != nil && r.isInitializedLocked() {
-		log.Fatalf(r.store.Ctx(), "r%d: cannot reinitialize an initialized replica", desc.RangeID)
+		log.Fatalf(r.ctx, "r%d: cannot reinitialize an initialized replica", desc.RangeID)
 	}
 	if desc.IsInitialized() && replicaID != 0 {
 		return errors.Errorf("replicaID must be 0 when creating an initialized replica")
@@ -536,23 +542,18 @@ func (r *Replica) initLocked(
 	r.mu.internalRaftGroup = nil
 
 	var err error
-	ctx := r.store.Ctx()
 
-	if r.mu.state, err = loadState(ctx, r.store.Engine(), desc); err != nil {
+	if r.mu.state, err = loadState(r.ctx, r.store.Engine(), desc); err != nil {
 		return err
 	}
 	r.rangeStr.store(r.mu.state.Desc)
 
-	r.mu.lastIndex, err = loadLastIndex(ctx, r.store.Engine(), r.RangeID)
+	r.mu.lastIndex, err = loadLastIndex(r.ctx, r.store.Engine(), r.RangeID)
 	if err != nil {
 		return err
 	}
 
-	// Add replica log tags - the value is rangeStr.String().
-	ctx = log.WithLogTag(ctx, "r", &r.rangeStr)
-	r.ctx = ctx
-
-	pErr, err := loadReplicaDestroyedError(ctx, r.store.Engine(), r.RangeID)
+	pErr, err := loadReplicaDestroyedError(r.ctx, r.store.Engine(), r.RangeID)
 	if err != nil {
 		return err
 	}
