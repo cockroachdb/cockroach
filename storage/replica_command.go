@@ -811,7 +811,7 @@ func intersectSpan(
 	}
 	if bytes.Compare(span.Key, keys.LocalRangeMax) < 0 {
 		if bytes.Compare(span.EndKey, keys.LocalRangeMax) >= 0 {
-			log.Fatalf(context.Background(), "a local intent range may not have a non-local portion: %s", span)
+			panic(fmt.Sprintf("a local intent range may not have a non-local portion: %s", span))
 		}
 		if containsKeyRange(desc, span.Key, span.EndKey) {
 			return &span, nil
