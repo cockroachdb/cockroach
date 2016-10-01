@@ -641,7 +641,7 @@ func (r *Replica) destroyDataRaftMuLocked() error {
 	tombstone := &roachpb.RaftTombstone{
 		NextReplicaID: desc.NextReplicaID,
 	}
-	if err := engine.MVCCPutProto(context.Background(), batch, nil, tombstoneKey, hlc.ZeroTimestamp, nil, tombstone); err != nil {
+	if err := engine.MVCCPutProto(r.ctx, batch, nil, tombstoneKey, hlc.ZeroTimestamp, nil, tombstone); err != nil {
 		return err
 	}
 
@@ -2377,7 +2377,7 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 			r.store.Stopper().RunWorker(func() {
 				defer r.CloseOutSnap()
 				if err := r.store.ctx.Transport.SendSnapshot(
-					context.Background(),
+					r.ctx,
 					SnapshotRequest_Header{
 						RangeDescriptor: *r.Desc(),
 						RaftMessageRequest: RaftMessageRequest{

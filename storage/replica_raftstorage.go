@@ -54,7 +54,7 @@ var _ raft.Storage = (*Replica)(nil)
 // InitialState implements the raft.Storage interface.
 // InitialState requires that the replica lock be held.
 func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
-	hs, err := loadHardState(context.Background(), r.store.Engine(), r.RangeID)
+	hs, err := loadHardState(r.ctx, r.store.Engine(), r.RangeID)
 	// For uninitialized ranges, membership is unknown at this point.
 	if raft.IsEmptyHardState(hs) || err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
@@ -74,7 +74,7 @@ func (r *Replica) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 func (r *Replica) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	snap := r.store.NewSnapshot()
 	defer snap.Close()
-	return entries(context.Background(), snap, r.RangeID, r.store.raftEntryCache, lo, hi, maxBytes)
+	return entries(r.ctx, snap, r.RangeID, r.store.raftEntryCache, lo, hi, maxBytes)
 }
 
 func entries(
@@ -251,7 +251,7 @@ func (r *Replica) raftTruncatedStateLocked(ctx context.Context) (roachpb.RaftTru
 // FirstIndex implements the raft.Storage interface.
 // FirstIndex requires that the replica lock is held.
 func (r *Replica) FirstIndex() (uint64, error) {
-	ts, err := r.raftTruncatedStateLocked(context.Background())
+	ts, err := r.raftTruncatedStateLocked(r.ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -269,7 +269,7 @@ func (r *Replica) GetFirstIndex() (uint64, error) {
 // Snapshot implements the raft.Storage interface.
 // Snapshot requires that the replica lock is held.
 func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
-	snap, err := r.SnapshotWithContext(context.Background())
+	snap, err := r.SnapshotWithContext(r.ctx)
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
@@ -306,7 +306,7 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (*OutgoingSnapshot, e
 	startKey := r.mu.state.Desc.StartKey
 
 	sp := r.store.Tracer().StartSpan("snapshot")
-	ctxInner := opentracing.ContextWithSpan(context.Background(), sp)
+	ctxInner := opentracing.ContextWithSpan(r.ctx, sp)
 	defer sp.Finish()
 	snap := r.store.NewSnapshot()
 	log.Eventf(ctxInner, "new engine snapshot for replica %s", r)
@@ -314,7 +314,7 @@ func (r *Replica) SnapshotWithContext(ctx context.Context) (*OutgoingSnapshot, e
 	// Delegate to a static function to make sure that we do not depend
 	// on any indirect calls to r.store.Engine() (or other in-memory
 	// state of the Replica). Everything must come from the snapshot.
-	snapData, err := snapshot(context.Background(), snap, rangeID, r.store.raftEntryCache, startKey)
+	snapData, err := snapshot(r.ctx, snap, rangeID, r.store.raftEntryCache, startKey)
 	if err != nil {
 		log.Errorf(ctxInner, "%s: error generating snapshot: %s", r, err)
 		return nil, err

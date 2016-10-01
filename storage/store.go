@@ -777,7 +777,7 @@ func IterateRangeDescriptors(ctx context.Context,
 		return fn(desc)
 	}
 
-	_, err := engine.MVCCIterate(context.Background(), eng, start, end, hlc.MaxTimestamp, false /* !consistent */, nil, /* txn */
+	_, err := engine.MVCCIterate(ctx, eng, start, end, hlc.MaxTimestamp, false /* !consistent */, nil, /* txn */
 		false /* !reverse */, kvToDesc)
 	log.Eventf(ctx, "iterated over %d keys to find %d range descriptors (by suffix: %v)",
 		allCount, matchCount, bySuffix)
@@ -1227,11 +1227,11 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 		return errors.Errorf("store %s: unable to access: %s", s.engine, err)
 	} else if len(kvs) > 0 {
 		// See if this is an already-bootstrapped store.
-		ok, err := engine.MVCCGetProto(context.Background(), s.engine, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil, &s.Ident)
-		if err != nil {
+		if ok, err := engine.MVCCGetProto(
+			s.Ctx(), s.engine, keys.StoreIdentKey(), hlc.ZeroTimestamp, true, nil, &s.Ident,
+		); err != nil {
 			return errors.Errorf("store %s is non-empty but cluster ID could not be determined: %s", s.engine, err)
-		}
-		if ok {
+		} else if ok {
 			return errors.Errorf("store %s already belongs to cockroach cluster %s", s.engine, s.Ident.ClusterID)
 		}
 		keyVals := []string{}
@@ -1240,7 +1240,7 @@ func (s *Store) Bootstrap(ident roachpb.StoreIdent, stopper *stop.Stopper) error
 		}
 		return errors.Errorf("store %s is non-empty but does not contain store metadata (first %d key/values: %s)", s.engine, len(keyVals), keyVals)
 	}
-	err = engine.MVCCPutProto(context.Background(), s.engine, nil,
+	err = engine.MVCCPutProto(s.Ctx(), s.engine, nil,
 		keys.StoreIdentKey(), hlc.ZeroTimestamp, nil, &s.Ident)
 	if err != nil {
 		return err
@@ -2926,7 +2926,9 @@ func (s *Store) tryGetOrCreateReplica(
 	// a stale message.
 	tombstoneKey := keys.RaftTombstoneKey(rangeID)
 	var tombstone roachpb.RaftTombstone
-	if ok, err := engine.MVCCGetProto(context.Background(), s.Engine(), tombstoneKey, hlc.ZeroTimestamp, true, nil, &tombstone); err != nil {
+	if ok, err := engine.MVCCGetProto(
+		s.Ctx(), s.Engine(), tombstoneKey, hlc.ZeroTimestamp, true, nil, &tombstone,
+	); err != nil {
 		return nil, false, err
 	} else if ok {
 		if replicaID != 0 && replicaID < tombstone.NextReplicaID {

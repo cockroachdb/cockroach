@@ -351,10 +351,8 @@ func (r *Replica) handleTrigger(
 			}
 		}
 
-		// TODO(radu): we should provide a base context that contains the
-		// node and range IDs.
 		splitTriggerPostCommit(
-			context.Background(),
+			r.ctx,
 			trigger.split.RightDeltaMS,
 			&trigger.split.SplitTrigger,
 			r,
