@@ -15,6 +15,7 @@ SHOW DATABASES
 ----
 Database
 information_schema
+pg_catalog
 a
 system
 test
@@ -35,6 +36,7 @@ query T
 SHOW DATABASES
 ----
 information_schema
+pg_catalog
 a
 b
 c
@@ -74,6 +76,7 @@ SHOW DATABASES
 ----
 Database
 information_schema
+pg_catalog
 a
 c
 system

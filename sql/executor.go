@@ -159,7 +159,7 @@ type Executor struct {
 	nodeID         roachpb.NodeID
 	cfg            ExecutorConfig
 	reCache        *parser.RegexpCache
-	virtualSchemas virtualSchemaMap
+	virtualSchemas virtualSchemaHolder
 
 	// Transient stats.
 	Latency       metric.Histograms
