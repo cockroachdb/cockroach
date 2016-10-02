@@ -67,10 +67,14 @@ const (
 
 	// DefaultMaxOpenFiles is the default value for rocksDB's max_open_files
 	// option.
-	DefaultMaxOpenFiles = 5000
+	DefaultMaxOpenFiles = -1
+	// RecommendedMaxOpenFiles is the recommended value for rocksDB's
+	// max_open_files option. If more file descriptors are available than the
+	// recommended number, than the default value is used.
+	RecommendedMaxOpenFiles = 10000
 	// MinimumMaxOpenFiles is The minimum value that rocksDB's max_open_files
 	// option can be set to.
-	MinimumMaxOpenFiles = 256
+	MinimumMaxOpenFiles = 2000
 )
 
 func init() {

@@ -239,8 +239,8 @@ func GetTotalMemory() (int64, error) {
 // the soft and hard limits respectively.
 func setOpenFileLimit(physicalStoreCount int) (int, error) {
 	minimumOpenFileLimit := uint64(physicalStoreCount*engine.MinimumMaxOpenFiles + minimumNetworkFileDescriptors)
-	networkConstrainedFileLimit := uint64(physicalStoreCount*engine.DefaultMaxOpenFiles + minimumNetworkFileDescriptors)
-	recommendedOpenFileLimit := uint64(physicalStoreCount*engine.DefaultMaxOpenFiles + recommendedNetworkFileDescriptors)
+	networkConstrainedFileLimit := uint64(physicalStoreCount*engine.RecommendedMaxOpenFiles + minimumNetworkFileDescriptors)
+	recommendedOpenFileLimit := uint64(physicalStoreCount*engine.RecommendedMaxOpenFiles + recommendedNetworkFileDescriptors)
 	// TODO(bram): Test this out on windows.
 	var rLimit syscall.Rlimit
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit); err != nil {
