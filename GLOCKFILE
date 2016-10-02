@@ -111,7 +111,7 @@ golang.org/x/net 07b51741c1d6423d4a6abab1c49940ec09cb1aaf
 golang.org/x/oauth2 4784bb855e56a530f1ce5d788959359ed6cb4a16
 golang.org/x/sys a646d33e2ee3172a661fc09bca23bb4889a41bc8
 golang.org/x/text 2910a502d2bf9e43193af9d68ca516529614eed3
-golang.org/x/tools 0e9f43fcb67267967af8c15d7dc54b373e341d20
+golang.org/x/tools fc2b74b64ef08c618146ebc92062f6499db5314c
 google.golang.org/appengine e951d3868b377b14f4e60efa3a301532ee3c1ebf
 google.golang.org/grpc 79b7c349179cdd6efd8bac4a1ce7f01b98c16e9b
 gopkg.in/check.v1 4f90aeace3a26ad7021961c297b22c42160c7b25
