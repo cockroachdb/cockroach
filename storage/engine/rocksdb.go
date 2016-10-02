@@ -27,8 +27,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"sync"
+	"time"
 	"unsafe"
 
 	"golang.org/x/net/context"
@@ -46,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // #cgo darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
@@ -860,6 +863,8 @@ type rocksDBBatch struct {
 	parent             *RocksDB
 	batch              *C.DBEngine
 	flushes            int
+	flushedCount       int
+	flushedSize        int
 	prefixIter         rocksDBBatchIterator
 	normalIter         rocksDBBatchIterator
 	builder            rocksDBBatchBuilder
@@ -985,6 +990,10 @@ func (r *rocksDBBatch) Commit() error {
 		panic("this batch was already committed")
 	}
 
+	start := timeutil.Now()
+	var count int
+	var size int
+
 	r.distinctOpen = false
 	if r.flushes > 0 {
 		// We've previously flushed mutations to the C++ batch, so we have to flush
@@ -993,12 +1002,21 @@ func (r *rocksDBBatch) Commit() error {
 		if err := statusToError(C.DBCommitBatch(r.batch)); err != nil {
 			return err
 		}
+		count, size = r.flushedCount, r.flushedSize
 	} else if r.builder.count > 0 {
+		count, size = r.builder.count, len(r.builder.repr)
+
 		// Fast-path which avoids flushing mutations to the C++ batch. Instead, we
 		// directly apply the mutations to the database.
 		if err := r.parent.ApplyBatchRepr(r.builder.Finish()); err != nil {
 			return err
 		}
+	}
+
+	const batchCommitWarnThreshold = 500 * time.Millisecond
+	if elapsed := timeutil.Since(start); elapsed >= batchCommitWarnThreshold {
+		log.Warningf(context.TODO(), "batch [%d/%d/%d] commit took %s (>%s):\n%s",
+			count, size, r.flushes, elapsed, batchCommitWarnThreshold, debug.Stack())
 	}
 
 	C.DBClose(r.batch)
@@ -1033,6 +1051,8 @@ func (r *rocksDBBatch) flushMutations() {
 	}
 	r.distinctNeedsFlush = false
 	r.flushes++
+	r.flushedCount += r.builder.count
+	r.flushedSize += len(r.builder.repr)
 	if err := r.ApplyBatchRepr(r.builder.Finish()); err != nil {
 		panic(err)
 	}
