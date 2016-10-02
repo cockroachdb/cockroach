@@ -260,7 +260,7 @@ func (p *planner) ShowDatabases(n *parser.ShowDatabases) (planNode, error) {
 		return nil, err
 	}
 	v := p.newContainerValuesNode(ResultColumns{{Name: "Database", Typ: parser.TypeString}}, 0)
-	for db := range p.virtualSchemas() {
+	for _, db := range p.virtualSchemas().orderedNames {
 		if err := v.rows.AddRow(parser.DTuple{parser.NewDString(db)}); err != nil {
 			v.rows.Close()
 			return nil, err
