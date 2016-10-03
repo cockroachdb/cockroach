@@ -19,14 +19,16 @@ package acceptance
 import (
 	"fmt"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/acceptance/cluster"
 )
 
 func runReferenceTestWithScript(
 	t *testing.T,
 	script string,
 ) {
-	if err := testDockerOneShot(t, "reference", []string{"/cockroach", "version"}); err != nil {
-		t.Skipf(`TODO(dt): No /cockroach binary in one-shot container, see #6086: %s`, err)
+	if err := testDockerOneShot(t, "reference", []string{"stat", cluster.CockroachBinaryInContainer}); err != nil {
+		t.Skipf(`TODO(dt): No binary in one-shot container, see #6086: %s`, err)
 	}
 
 	if err := testDockerOneShot(t, "reference", []string{"/bin/bash", "-c", script}); err != nil {
@@ -69,7 +71,7 @@ $bin sql -d old -e "INSERT INTO testing_old values (2, false, 'world', decimal '
 $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_old" > old.everything
 $bin quit && wait # wait will block until all background jobs finish.
 
-bin=/cockroach
+bin=/cockroach/cockroach
 $bin start --background --alsologtostderr &> newout
 echo "Read data written by reference version using new binary"
 $bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_old" > new.everything
@@ -135,7 +137,7 @@ $bin quit && wait
 func TestDockerMigration_7429(t *testing.T) {
 	script := `
 set -eux
-bin=/cockroach
+bin=/cockroach/cockroach
 
 touch out
 function finish() {

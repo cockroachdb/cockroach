@@ -49,7 +49,7 @@ send "\004"
 eexpect eof
 
 # Test that history is preserved across runs
-spawn ./cockroach sql
+spawn /cockroach/cockroach sql
 eexpect root@
 send "\033\[A"
 eexpect "SELECT 1;"
