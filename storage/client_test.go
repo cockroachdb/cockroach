@@ -363,6 +363,7 @@ func (m *multiTestContext) Stop() {
 func (m *multiTestContext) gossipStores() {
 	timestamps := make(map[string]int64)
 	for i := 0; i < len(m.stores); i++ {
+		<-m.gossips[i].Connected
 		if err := m.stores[i].GossipStore(context.Background()); err != nil {
 			m.t.Fatal(err)
 		}
