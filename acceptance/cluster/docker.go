@@ -307,8 +307,11 @@ type resilientDockerClient struct {
 }
 
 func (cli resilientDockerClient) ContainerCreate(
-	ctx context.Context, config *container.Config, hostConfig *container.HostConfig,
-	networkingConfig *network.NetworkingConfig, containerName string,
+	ctx context.Context,
+	config *container.Config,
+	hostConfig *container.HostConfig,
+	networkingConfig *network.NetworkingConfig,
+	containerName string,
 ) (types.ContainerCreateResponse, error) {
 	response, err := cli.APIClient.ContainerCreate(ctx, config, hostConfig, networkingConfig, containerName)
 	if err != nil && strings.Contains(err.Error(), "already in use") {
@@ -352,7 +355,9 @@ func (cli resilientDockerClient) ContainerCreate(
 	return response, err
 }
 
-func (cli resilientDockerClient) ContainerRemove(ctx context.Context, container string, options types.ContainerRemoveOptions) error {
+func (cli resilientDockerClient) ContainerRemove(
+	ctx context.Context, container string, options types.ContainerRemoveOptions,
+) error {
 	err := cli.APIClient.ContainerRemove(ctx, container, options)
 
 	if os.Getenv("CIRCLECI") == "true" {
@@ -429,14 +434,18 @@ func (cli retryingDockerClient) ContainerCreate(
 	return ret, err
 }
 
-func (cli retryingDockerClient) ContainerStart(ctx context.Context, container string, options types.ContainerStartOptions) error {
+func (cli retryingDockerClient) ContainerStart(
+	ctx context.Context, container string, options types.ContainerStartOptions,
+) error {
 	return retry(ctx, cli.attempts, cli.timeout, "ContainerStart", matchNone,
 		func(timeoutCtx context.Context) error {
 			return cli.resilientDockerClient.ContainerStart(timeoutCtx, container, options)
 		})
 }
 
-func (cli retryingDockerClient) ContainerRemove(ctx context.Context, container string, options types.ContainerRemoveOptions) error {
+func (cli retryingDockerClient) ContainerRemove(
+	ctx context.Context, container string, options types.ContainerRemoveOptions,
+) error {
 	return retry(ctx, cli.attempts, cli.timeout, "ContainerRemove", "No such container",
 		func(timeoutCtx context.Context) error {
 			return cli.resilientDockerClient.ContainerRemove(timeoutCtx, container, options)

@@ -90,10 +90,7 @@ type bookie struct {
 
 // newBookie creates a reservations system and starts its timeout queue.
 func newBookie(
-	clock *hlc.Clock,
-	stopper *stop.Stopper,
-	metrics *StoreMetrics,
-	reservationTimeout time.Duration,
+	clock *hlc.Clock, stopper *stop.Stopper, metrics *StoreMetrics, reservationTimeout time.Duration,
 ) *bookie {
 	b := &bookie{
 		clock:              clock,

@@ -59,7 +59,9 @@ func newTestServer(t *testing.T, ctx *rpc.Context) (*grpc.Server, net.Listener) 
 
 type Node time.Duration
 
-func (n Node) Batch(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+func (n Node) Batch(
+	ctx context.Context, args *roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
 	if n > 0 {
 		time.Sleep(time.Duration(n))
 	}
@@ -559,7 +561,9 @@ func makeReplicas(addrs ...net.Addr) ReplicaSlice {
 }
 
 // sendBatch sends Batch requests to specified addresses using send.
-func sendBatch(opts SendOptions, addrs []net.Addr, rpcContext *rpc.Context) (*roachpb.BatchResponse, error) {
+func sendBatch(
+	opts SendOptions, addrs []net.Addr, rpcContext *rpc.Context,
+) (*roachpb.BatchResponse, error) {
 	ds := &DistSender{Ctx: context.Background()}
 	return ds.sendToReplicas(opts, 0, makeReplicas(addrs...), roachpb.BatchRequest{}, rpcContext)
 }

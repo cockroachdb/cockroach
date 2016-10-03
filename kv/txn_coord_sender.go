@@ -265,7 +265,9 @@ func (tc *TxnCoordSender) startStats() {
 // transaction's interval tree of key ranges for eventual cleanup via resolved
 // write intents; they're tagged to an outgoing EndTransaction request, with
 // the receiving replica in charge of resolving them.
-func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+func (tc *TxnCoordSender) Send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Start new or pick up active trace. From here on, there's always an active
 	// Trace, though its overhead is small unless it's sampled.
 	sp := opentracing.SpanFromContext(ctx)
@@ -455,8 +457,7 @@ func (tc *TxnCoordSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*r
 // state that prevents it from continuing, such as the coordinator having
 // considered the client abandoned, or a heartbeat having reported an error.
 func (tc *TxnCoordSender) maybeRejectClientLocked(
-	ctx context.Context,
-	txn roachpb.Transaction,
+	ctx context.Context, txn roachpb.Transaction,
 ) *roachpb.Error {
 
 	if !txn.Writing {
@@ -569,8 +570,9 @@ func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context, txn roachpb.Tran
 // and collects its stats. It assumes the lock is held. Returns
 // the duration, restarts, finalized txn status, and whether the
 // transaction committed on the 1PC fast path.
-func (tc *TxnCoordSender) unregisterTxnLocked(txnID uuid.UUID) (
-	duration, restarts int64, status roachpb.TransactionStatus) {
+func (tc *TxnCoordSender) unregisterTxnLocked(
+	txnID uuid.UUID,
+) (duration, restarts int64, status roachpb.TransactionStatus) {
 	txnMeta := tc.txns[txnID] // guaranteed to exist
 	if txnMeta == nil {
 		panic(fmt.Sprintf("attempt to unregister non-existent transaction: %s", txnID))
@@ -950,7 +952,9 @@ func (tc *TxnCoordSender) updateState(
 // give this error back to the client, our options are limited. We'll have to
 // run the whole thing for them, or any restart will still end up at the client
 // which will not be prepared to be handed a Txn.
-func (tc *TxnCoordSender) resendWithTxn(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+func (tc *TxnCoordSender) resendWithTxn(
+	ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Run a one-off transaction with that single command.
 	if log.V(1) {
 		log.Infof(tc.ctx, "%s: auto-wrapping in txn and re-executing: ", ba)
@@ -981,7 +985,9 @@ func (tc *TxnCoordSender) resendWithTxn(ba roachpb.BatchRequest) (*roachpb.Batch
 }
 
 // updateStats updates transaction metrics after a transaction finishes.
-func (tc *TxnCoordSender) updateStats(duration, restarts int64, status roachpb.TransactionStatus, onePC bool) {
+func (tc *TxnCoordSender) updateStats(
+	duration, restarts int64, status roachpb.TransactionStatus, onePC bool,
+) {
 	tc.metrics.Durations.RecordValue(duration)
 	tc.metrics.Restarts.RecordValue(restarts)
 	switch status {

@@ -50,11 +50,15 @@ import (
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
-func getAdminJSONProto(ts serverutils.TestServerInterface, path string, response proto.Message) error {
+func getAdminJSONProto(
+	ts serverutils.TestServerInterface, path string, response proto.Message,
+) error {
 	return serverutils.GetJSONProto(ts, adminPrefix+path, response)
 }
 
-func postAdminJSONProto(ts serverutils.TestServerInterface, path string, request, response proto.Message) error {
+func postAdminJSONProto(
+	ts serverutils.TestServerInterface, path string, request, response proto.Message,
+) error {
 	return serverutils.PostJSONProto(ts, adminPrefix+path, request, response)
 }
 

@@ -288,7 +288,9 @@ func (s *starDatum) String() string { return parser.AsString(s) }
 func (s *starDatum) Walk(v parser.Visitor) parser.Expr { return s }
 
 // TypeCheck implements the Expr interface.
-func (s *starDatum) TypeCheck(_ *parser.SemaContext, desired parser.Datum) (parser.TypedExpr, error) {
+func (s *starDatum) TypeCheck(
+	_ *parser.SemaContext, desired parser.Datum,
+) (parser.TypedExpr, error) {
 	return s, nil
 }
 

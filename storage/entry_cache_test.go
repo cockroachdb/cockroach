@@ -41,7 +41,14 @@ func addEntries(rec *raftEntryCache, rangeID roachpb.RangeID, lo, hi uint64) []r
 	return ents
 }
 
-func verifyGet(t *testing.T, rec *raftEntryCache, rangeID roachpb.RangeID, lo, hi uint64, expEnts []raftpb.Entry, expNextIndex uint64) {
+func verifyGet(
+	t *testing.T,
+	rec *raftEntryCache,
+	rangeID roachpb.RangeID,
+	lo, hi uint64,
+	expEnts []raftpb.Entry,
+	expNextIndex uint64,
+) {
 	ents, _, nextIndex := rec.getEntries(rangeID, lo, hi, 0)
 	if !(len(expEnts) == 0 && len(ents) == 0) && !reflect.DeepEqual(expEnts, ents) {
 		t.Fatalf("expected entries %+v; got %+v", expEnts, ents)

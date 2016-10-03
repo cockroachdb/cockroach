@@ -190,8 +190,7 @@ func (n *windowNode) constructWindowDefinitions(sc *parser.SelectClause, s *sele
 // modification. If the provided WindowDef does reference a named window spec, then the
 // referenced spec will be overridden with any extra clauses from the WindowDef and returned.
 func constructWindowDef(
-	def parser.WindowDef,
-	namedWindowSpecs map[string]*parser.WindowDef,
+	def parser.WindowDef, namedWindowSpecs map[string]*parser.WindowDef,
 ) (parser.WindowDef, error) {
 	modifyRef := false
 	var refName string
@@ -764,7 +763,9 @@ func (v *extractWindowFuncsVisitor) VisitPost(expr parser.Expr) parser.Expr {
 // - Window functions can wrap aggregates.
 // Invalid:    `SELECT NOW() OVER () FROM kv`
 // - NOW() is not an aggregate or a window function.
-func (v extractWindowFuncsVisitor) extract(typedExpr parser.TypedExpr) (parser.TypedExpr, int, error) {
+func (v extractWindowFuncsVisitor) extract(
+	typedExpr parser.TypedExpr,
+) (parser.TypedExpr, int, error) {
 	expr, _ := parser.WalkExpr(&v, typedExpr)
 	if v.err != nil {
 		return nil, 0, v.err
@@ -800,7 +801,9 @@ func (w *windowFuncHolder) String() string { return parser.AsString(w) }
 
 func (w *windowFuncHolder) Walk(v parser.Visitor) parser.Expr { return w }
 
-func (w *windowFuncHolder) TypeCheck(_ *parser.SemaContext, desired parser.Datum) (parser.TypedExpr, error) {
+func (w *windowFuncHolder) TypeCheck(
+	_ *parser.SemaContext, desired parser.Datum,
+) (parser.TypedExpr, error) {
 	return w, nil
 }
 

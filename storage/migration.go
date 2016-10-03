@@ -39,7 +39,9 @@ import (
 // mean that the replica was further ahead or had voted, and so there's no
 // guarantee that this will be correct. But it will be correct in the majority
 // of cases, and some state *has* to be recovered.
-func migrate7310And6991(ctx context.Context, batch engine.ReadWriter, desc roachpb.RangeDescriptor) error {
+func migrate7310And6991(
+	ctx context.Context, batch engine.ReadWriter, desc roachpb.RangeDescriptor,
+) error {
 	state, err := loadState(ctx, batch, &desc)
 	if err != nil {
 		return errors.Wrap(err, "could not migrate TruncatedState: %s")

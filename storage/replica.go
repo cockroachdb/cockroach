@@ -383,7 +383,8 @@ var _ KeyRange = &Replica{}
 // shouldCampaign argument indicates whether a new raft group should be
 // campaigned upon creation and is used to eagerly campaign idle replicas.
 func (r *Replica) withRaftGroupLocked(
-	shouldCampaign bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error)) error {
+	shouldCampaign bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
+) error {
 	if r.mu.destroyed != nil {
 		// Silently ignore all operations on destroyed replicas. We can't return an
 		// error here as all errors returned from this method are considered fatal.
@@ -466,7 +467,9 @@ func (r *Replica) withRaftGroupLocked(
 // withRaftGroup calls the supplied function with the (lazily initialized)
 // Raft group. It acquires and releases the Replica lock, so r.mu must not be
 // held (or acquired by the supplied function).
-func (r *Replica) withRaftGroup(f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error)) error {
+func (r *Replica) withRaftGroup(
+	f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
+) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.withRaftGroupLocked(false, f)
@@ -725,9 +728,7 @@ func (r *Replica) getLease() (*roachpb.Lease, *roachpb.Lease) {
 // Note that this error can be generated on the Raft processing goroutine, so
 // its output should be completely determined by its parameters.
 func newNotLeaseHolderError(
-	l *roachpb.Lease,
-	originStoreID roachpb.StoreID,
-	rangeDesc *roachpb.RangeDescriptor,
+	l *roachpb.Lease, originStoreID roachpb.StoreID, rangeDesc *roachpb.RangeDescriptor,
 ) error {
 	err := &roachpb.NotLeaseHolderError{
 		RangeID: rangeDesc.RangeID,
@@ -1149,7 +1150,9 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 // already in the queue. Returns a cleanup function to be called when the
 // commands are done and can be removed from the queue, and whose returned
 // error is to be used in place of the supplied error.
-func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func(*roachpb.BatchResponse, *roachpb.Error) *roachpb.Error, error) {
+func (r *Replica) beginCmds(
+	ctx context.Context, ba *roachpb.BatchRequest,
+) (func(*roachpb.BatchResponse, *roachpb.Error) *roachpb.Error, error) {
 	var cmd *cmd
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
@@ -1223,7 +1226,9 @@ func (r *Replica) beginCmds(ctx context.Context, ba *roachpb.BatchRequest) (func
 // endCmds removes pending commands from the command queue and updates
 // the timestamp cache using the final timestamp of each command.
 // The returned error replaces the supplied error.
-func (r *Replica) endCmds(cmd *cmd, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) (rErr *roachpb.Error) {
+func (r *Replica) endCmds(
+	cmd *cmd, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
+) (rErr *roachpb.Error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -1357,7 +1362,9 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
 // are not meant to consistently access or modify the underlying data.
 // Admin commands must run on the lease holder replica. Batch support here is
 // limited to single-element batches; everything else catches an error.
-func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+func (r *Replica) addAdminCmd(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
 	if len(ba.Requests) != 1 {
 		return nil, roachpb.NewErrorf("only single-element admin batches allowed")
 	}
@@ -1410,7 +1417,9 @@ func (r *Replica) addAdminCmd(ctx context.Context, ba roachpb.BatchRequest) (*ro
 // addReadOnlyCmd updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the command queue.
-func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
+func (r *Replica) addReadOnlyCmd(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// If the read is consistent, the read requires the range lease.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
 		if pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
@@ -2321,8 +2330,7 @@ func (r *Replica) refreshPendingCmdsLocked(reason refreshRaftReason, refreshAtDe
 }
 
 func (r *Replica) getReplicaDescriptorByIDLocked(
-	replicaID roachpb.ReplicaID,
-	fallback roachpb.ReplicaDescriptor,
+	replicaID roachpb.ReplicaID, fallback roachpb.ReplicaDescriptor,
 ) (roachpb.ReplicaDescriptor, error) {
 	if repDesc, ok := r.mu.state.Desc.GetReplicaDescriptorByID(replicaID); ok {
 		return repDesc, nil
@@ -2863,12 +2871,7 @@ func (r *Replica) applyRaftCommandInBatch(
 	idKey storagebase.CmdIDKey,
 	originReplica roachpb.ReplicaDescriptor,
 	ba roachpb.BatchRequest,
-) (
-	engine.Batch,
-	enginepb.MVCCStats,
-	*roachpb.BatchResponse,
-	*PostCommitTrigger, *roachpb.Error,
-) {
+) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, *PostCommitTrigger, *roachpb.Error) {
 	// Check whether this txn has been aborted. Only applies to transactional
 	// requests which write intents (for example HeartbeatTxn does not get
 	// hindered by this).
@@ -2958,12 +2961,8 @@ type intentsWithArg struct {
 // cannot all be completed at the intended timestamp, the batch's
 // txn is restored and it's re-executed as transactional.
 func (r *Replica) executeWriteBatch(
-	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest) (
-	engine.Batch,
-	enginepb.MVCCStats,
-	*roachpb.BatchResponse,
-	*PostCommitTrigger, *roachpb.Error,
-) {
+	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest,
+) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, *PostCommitTrigger, *roachpb.Error) {
 	batch := r.store.Engine().NewBatch()
 	ms := enginepb.MVCCStats{}
 	// If not transactional or there are indications that the batch's txn
@@ -3115,9 +3114,12 @@ func optimizePuts(batch engine.ReadWriter, reqs []roachpb.RequestUnion, distinct
 
 // TODO(tschottdorf): Reliance on mutating `ba.Txn` should be dealt with.
 func (r *Replica) executeBatch(
-	ctx context.Context, idKey storagebase.CmdIDKey,
-	batch engine.ReadWriter, ms *enginepb.MVCCStats, ba roachpb.BatchRequest) (
-	*roachpb.BatchResponse, *PostCommitTrigger, *roachpb.Error) {
+	ctx context.Context,
+	idKey storagebase.CmdIDKey,
+	batch engine.ReadWriter,
+	ms *enginepb.MVCCStats,
+	ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *PostCommitTrigger, *roachpb.Error) {
 	br := ba.CreateReply()
 	var trigger *PostCommitTrigger
 

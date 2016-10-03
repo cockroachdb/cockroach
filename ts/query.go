@@ -411,11 +411,7 @@ type interpolatingIterator struct {
 // returned by the iterator will be generated from samples using the supplied
 // downsampleFn.
 func newInterpolatingIterator(
-	ds dataSpan,
-	startOffset int32,
-	sampleNanos int64,
-	extractFn extractFn,
-	downsampleFn downsampleFn,
+	ds dataSpan, startOffset int32, sampleNanos int64, extractFn extractFn, downsampleFn downsampleFn,
 ) interpolatingIterator {
 	if len(ds.datas) == 0 {
 		return interpolatingIterator{}
@@ -680,7 +676,10 @@ func (ai aggregatingIterator) min() float64 {
 // the same time. The returned string slices contains a list of all sources for
 // the metric which were aggregated to produce the result.
 func (db *DB) Query(
-	ctx context.Context, query tspb.Query, queryResolution Resolution, sampleDuration, startNanos, endNanos int64,
+	ctx context.Context,
+	query tspb.Query,
+	queryResolution Resolution,
+	sampleDuration, startNanos, endNanos int64,
 ) ([]tspb.TimeSeriesDatapoint, []string, error) {
 	// Verify that sampleDuration is a multiple of
 	// queryResolution.SampleDuration().

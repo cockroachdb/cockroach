@@ -180,9 +180,7 @@ func (r *Replica) gcOldChecksumEntriesLocked(now time.Time) {
 	}
 }
 
-func (r *Replica) computeChecksumTrigger(
-	ctx context.Context, args roachpb.ComputeChecksumRequest,
-) {
+func (r *Replica) computeChecksumTrigger(ctx context.Context, args roachpb.ComputeChecksumRequest) {
 	stopper := r.store.Stopper()
 	id := args.ChecksumID
 	now := timeutil.Now()
@@ -233,7 +231,7 @@ func (r *Replica) leasePostCommitTrigger(
 	ctx context.Context,
 	trigger PostCommitTrigger,
 	replicaID roachpb.ReplicaID,
-	prevLease *roachpb.Lease, // TODO(tschottdorf): could this not be nil?
+	prevLease *roachpb.Lease,
 ) {
 	iAmTheLeaseHolder := trigger.lease.Replica.ReplicaID == replicaID
 	leaseChangingHands := prevLease.Replica.StoreID != trigger.lease.Replica.StoreID
@@ -294,9 +292,7 @@ func (r *Replica) leasePostCommitTrigger(
 // The transfer might silently fail, particularly (only?) if the transferee is
 // behind on applying the log.
 func (r *Replica) maybeTransferRaftLeadership(
-	ctx context.Context,
-	replicaID roachpb.ReplicaID,
-	target roachpb.ReplicaID,
+	ctx context.Context, replicaID roachpb.ReplicaID, target roachpb.ReplicaID,
 ) {
 	err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 		if raftGroup.Status().RaftState == raft.StateLeader {
@@ -320,9 +316,7 @@ func (r *Replica) maybeTransferRaftLeadership(
 }
 
 func (r *Replica) handleTrigger(
-	ctx context.Context,
-	originReplica roachpb.ReplicaDescriptor,
-	trigger PostCommitTrigger,
+	ctx context.Context, originReplica roachpb.ReplicaDescriptor, trigger PostCommitTrigger,
 ) {
 	if trigger.noConcurrentReads {
 		r.readOnlyCmdMu.Lock()

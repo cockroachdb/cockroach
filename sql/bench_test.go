@@ -148,10 +148,7 @@ func BenchmarkSelect1_MySQL(b *testing.B) {
 }
 
 func runBenchmarkSelectWithTargetsAndFilter(
-	b *testing.B,
-	db *gosql.DB,
-	targets, filter string,
-	args ...interface{},
+	b *testing.B, db *gosql.DB, targets, filter string, args ...interface{},
 ) {
 	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.select`); err != nil {
 		b.Fatal(err)
@@ -822,7 +819,9 @@ func BenchmarkScan1000Limit100_Postgres(b *testing.B) {
 }
 
 // runBenchmarkScanFilter benchmarks scanning (w/filter) from a table containing count1 * count2 rows.
-func runBenchmarkScanFilter(b *testing.B, db *gosql.DB, count1, count2 int, limit int, filter string) {
+func runBenchmarkScanFilter(
+	b *testing.B, db *gosql.DB, count1, count2 int, limit int, filter string,
+) {
 	if _, err := db.Exec(`DROP TABLE IF EXISTS bench.scan2`); err != nil {
 		b.Fatal(err)
 	}

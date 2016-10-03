@@ -73,7 +73,9 @@ func get(t *testing.T, base, rel string) []byte {
 // checkNode checks all the endpoints of the status server hosted by node and
 // requests info for the node with otherNodeID. That node could be the same
 // other node, the same node or "local".
-func checkNode(t *testing.T, c cluster.Cluster, i int, nodeID, otherNodeID, expectedNodeID roachpb.NodeID) {
+func checkNode(
+	t *testing.T, c cluster.Cluster, i int, nodeID, otherNodeID, expectedNodeID roachpb.NodeID,
+) {
 	urlIDs := []string{otherNodeID.String()}
 	if nodeID == otherNodeID {
 		urlIDs = append(urlIDs, "local")

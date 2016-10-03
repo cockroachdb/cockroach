@@ -47,7 +47,9 @@ func (ie InternalExecutor) ExecuteStatementInTransaction(
 }
 
 // GetTableSpan gets the key span for a SQL table, including any indices.
-func (ie InternalExecutor) GetTableSpan(user string, txn *client.Txn, dbName, tableName string) (roachpb.Span, error) {
+func (ie InternalExecutor) GetTableSpan(
+	user string, txn *client.Txn, dbName, tableName string,
+) (roachpb.Span, error) {
 	// Lookup the table ID.
 	p := makeInternalPlanner(txn, user)
 	p.leaseMgr = ie.LeaseManager
