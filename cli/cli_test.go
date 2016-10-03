@@ -859,13 +859,13 @@ Available Commands:
   debug          debugging commands
 
 Flags:
-      --alsologtostderr Severity[=INFO]   logs at or above this threshold go to stderr
-      --log-backtrace-at traceLocation    when logging hits line file:N, emit a stack trace
-      --log-dir string                    if non-empty, write log files in this directory
+      --alsologtostderr Severity[=INFO]   logs at or above this threshold go to stderr (default NONE)
+      --log-backtrace-at traceLocation    when logging hits line file:N, emit a stack trace (default :0)
+      --log-dir string                    if non-empty, write log files in this directory (default "")
       --logtostderr                       log to standard error instead of files
       --no-color                          disable standard error log colorization
-      --verbosity level                   log level for V logs
-      --vmodule moduleSpec                comma-separated list of pattern=N settings for file-filtered logging
+      --verbosity level                   log level for V logs (default 0)
+      --vmodule moduleSpec                comma-separated list of pattern=N settings for file-filtered logging (default )
 
 Use "cockroach [command] --help" for more information about a command.
 `
