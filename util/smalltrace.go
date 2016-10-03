@@ -21,27 +21,19 @@ import (
 	"strings"
 )
 
-// GetTopCallers populates an array with the names of the topmost 5
-// caller functions in the stack after skipping a given number of
-// frames. We use this to provide context to allocations in the logs
-// with high verbosity.
-func GetTopCallers(callers []string, skip int) {
-	var pc [5]uintptr
-	nCallers := runtime.Callers(skip+1, pc[:])
-	for i := 0; i < nCallers; i++ {
-		name := runtime.FuncForPC(pc[i]).Name()
-		const crl = "github.com/cockroachdb/cockroach/"
-		if strings.HasPrefix(name, crl) {
-			name = name[len(crl):]
-		}
-		callers[i] = name
-	}
-}
-
 // GetSmallTrace produces a ":"-separated single line containing the
 // topmost 5 callers from a given skip level.
 func GetSmallTrace(skip int) string {
-	var callers [5]string
-	GetTopCallers(callers[0:], skip+2)
-	return strings.Join(callers[0:], ":")
+	pc := make([]uintptr, 5)
+	nCallers := runtime.Callers(skip, pc[:])
+	callers := make([]string, nCallers)
+
+	for i := range callers {
+		callers[i] = strings.TrimPrefix(
+			runtime.FuncForPC(pc[i]).Name(),
+			"github.com/cockroachdb/cockroach/",
+		)
+	}
+
+	return strings.Join(callers, ":")
 }

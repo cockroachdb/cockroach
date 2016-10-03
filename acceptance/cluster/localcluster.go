@@ -588,32 +588,26 @@ func (l *LocalCluster) monitor() {
 			fmt.Sprintf("label=Acceptance-cluster-id=%s", l.clusterID), filters.NewArgs())
 		maybePanic(err)
 
-		rc, err := l.client.Events(l.monitorCtx, types.EventsOptions{
+		eventq, errq := l.client.Events(l.monitorCtx, types.EventsOptions{
 			Filters: args,
 		})
-		maybePanic(err)
-		defer rc.Close()
-		dec := json.NewDecoder(rc)
 		for {
-			var event events.Message
-			if err := dec.Decode(&event); err != nil {
+			select {
+			case err := <-errq:
 				log.Infof(context.Background(), "event stream done, resetting...: %s", err)
 				// Sometimes we get a random string-wrapped EOF error back.
 				// Hard to assert on, so we just let this goroutine spin.
 				return true
-			}
-
-			// Currently, the only events generated (and asserted against) are "die"
-			// and "restart", to maximize compatibility across different versions of
-			// Docker.
-			switch event.Status {
-			case eventDie, eventRestart:
-			default:
-				continue
-			}
-
-			if !l.processEvent(event) {
-				return false
+			case event := <-eventq:
+				// Currently, the only events generated (and asserted against) are "die"
+				// and "restart", to maximize compatibility across different versions of
+				// Docker.
+				switch event.Status {
+				case eventDie, eventRestart:
+					if !l.processEvent(event) {
+						return false
+					}
+				}
 			}
 		}
 	}
