@@ -167,6 +167,8 @@ func captureOutput(f func()) (out string, err error) {
 
 func (c cliTest) RunWithArgs(a []string) {
 	sqlCtx.execStmts = nil
+	zoneConfig = ""
+	zoneDisableReplication = false
 
 	var args []string
 	args = append(args, a[0])
@@ -497,18 +499,19 @@ func Example_zone() {
 	c.Run("zone rm .default")
 	c.Run("zone set .default --file=./testdata/zone_range_max_bytes.yaml")
 	c.Run("zone get system")
+	c.Run("zone set .default --disable-replication")
+	c.Run("zone get system")
 
 	// Output:
 	// zone ls
 	// .default
 	// zone set system --file=./testdata/zone_attrs.yaml
-	// INSERT 1
-	// replicas:
-	// - attrs: [us-east-1a, ssd]
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
 	// gc:
 	//   ttlseconds: 86400
+	// num_replicas: 1
+	// constraints: [us-east-1a, ssd]
 	// zone ls
 	// .default
 	// system
@@ -516,28 +519,27 @@ func Example_zone() {
 	// system.nonexistent not found
 	// zone get system.lease
 	// system
-	// replicas:
-	// - attrs: [us-east-1a, ssd]
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
 	// gc:
 	//   ttlseconds: 86400
+	// num_replicas: 1
+	// constraints: [us-east-1a, ssd]
 	// zone set system --file=./testdata/zone_range_max_bytes.yaml
-	// UPDATE 1
-	// replicas:
-	// - attrs: [us-east-1a, ssd]
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 86400
+	// num_replicas: 3
+	// constraints: [us-east-1a, ssd]
 	// zone get system
 	// system
-	// replicas:
-	// - attrs: [us-east-1a, ssd]
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 86400
+	// num_replicas: 3
+	// constraints: [us-east-1a, ssd]
 	// zone rm system
 	// DELETE 1
 	// zone ls
@@ -545,21 +547,35 @@ func Example_zone() {
 	// zone rm .default
 	// unable to remove .default
 	// zone set .default --file=./testdata/zone_range_max_bytes.yaml
-	// UPDATE 1
-	// replicas:
-	// - attrs: []
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 86400
+	// num_replicas: 3
+	// constraints: []
 	// zone get system
 	// .default
-	// replicas:
-	// - attrs: []
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 86400
+	// num_replicas: 3
+	// constraints: []
+	// zone set .default --disable-replication
+	// range_min_bytes: 1048576
+	// range_max_bytes: 134217728
+	// gc:
+	//   ttlseconds: 86400
+	// num_replicas: 1
+	// constraints: []
+	// zone get system
+	// .default
+	// range_min_bytes: 1048576
+	// range_max_bytes: 134217728
+	// gc:
+	//   ttlseconds: 86400
+	// num_replicas: 1
+	// constraints: []
 }
 
 func Example_sql() {
@@ -595,9 +611,10 @@ func Example_sql() {
 	// x	y
 	// 42	69
 	// sql --execute=show databases
-	// 3 rows
+	// 4 rows
 	// Database
 	// information_schema
+	// pg_catalog
 	// system
 	// t
 	// sql -e explain select 3
@@ -657,11 +674,14 @@ func Example_sql_escape() {
 	// sql -e insert into t.t values (e'\xdc\x88\x38\x35', 'UTF8 string with RTL char')
 	// INSERT 1
 	// sql -e insert into t.t values (e'\xc3\x28', 'non-UTF8 string')
-	// INSERT 1
+	// pq: invalid UTF-8 byte sequence
+	// insert into t.t values (e'\xc3\x28', 'non-UTF8 string')
+	//                         ^
+	//
 	// sql -e insert into t.t values (e'a\tb\tc\n12\t123123213\t12313', 'tabs')
 	// INSERT 1
 	// sql -e select * from t.t
-	// 10 rows
+	// 9 rows
 	// s	d
 	// foo	printable ASCII
 	// "\"foo"	printable ASCII with quotes
@@ -671,7 +691,6 @@ func Example_sql_escape() {
 	// "\u00f1"	printable UTF8 using escapes
 	// "\x01"	non-printable UTF8 string
 	// "\u070885"	UTF8 string with RTL char
-	// "\xc3("	non-UTF8 string
 	// "a\tb\tc\n12\t123123213\t12313"	tabs
 	// sql -e create table t.u ("""foo" int, "\foo" int, "foo
 	// bar" int, "κόσμε" int, "܈85" int)
@@ -704,11 +723,10 @@ func Example_sql_escape() {
 	// | ñ                              | printable UTF8 using escapes   |
 	// | "\x01"                         | non-printable UTF8 string      |
 	// | ܈85                            | UTF8 string with RTL char      |
-	// | "\xc3("                        | non-UTF8 string                |
 	// | a   b         c␤               | tabs                           |
 	// | 12  123123213 12313            |                                |
 	// +--------------------------------+--------------------------------+
-	// (10 rows)
+	// (9 rows)
 	// sql --pretty -e show columns from t.u
 	// +----------+------+-------+----------------+
 	// |  Field   | Type | Null  |    Default     |
@@ -836,19 +854,18 @@ Available Commands:
   node           list nodes and show their status
   dump           dump sql tables
 
-  gen            generate manpages and bash completion file
+  gen            generate auxiliary files
   version        output version information
   debug          debugging commands
 
 Flags:
-      --alsologtostderr value[=INFO]   logs at or above this threshold go to stderr (default NONE)
-      --duration-random value          duration for randomized dump test to run (default 1s)
-      --log-backtrace-at value         when logging hits line file:N, emit a stack trace (default :0)
-      --log-dir value                  if non-empty, write log files in this directory
-      --logtostderr                    log to standard error instead of files
-      --no-color value                 disable standard error log colorization
-      --verbosity value                log level for V logs
-      --vmodule value                  comma-separated list of pattern=N settings for file-filtered logging
+      --alsologtostderr Severity[=INFO]   logs at or above this threshold go to stderr
+      --log-backtrace-at traceLocation    when logging hits line file:N, emit a stack trace
+      --log-dir string                    if non-empty, write log files in this directory
+      --logtostderr                       log to standard error instead of files
+      --no-color                          disable standard error log colorization
+      --verbosity level                   log level for V logs
+      --vmodule moduleSpec                comma-separated list of pattern=N settings for file-filtered logging
 
 Use "cockroach [command] --help" for more information about a command.
 `

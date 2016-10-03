@@ -697,7 +697,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 				Key: key,
 			},
 		}
-		if _, pErr := client.SendWrappedWith(s.GetDistSender(), nil,
+		if _, pErr := client.SendWrappedWith(s.DistSender(), nil,
 			roachpb.Header{UserPriority: 42},
 			&getReq); pErr != nil {
 			errChan <- pErr.GoError()
@@ -728,7 +728,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 				Replica:     repDesc,
 			},
 		}
-		if _, pErr := client.SendWrapped(s.GetDistSender(), nil, &leaseReq); pErr != nil {
+		if _, pErr := client.SendWrapped(s.DistSender(), nil, &leaseReq); pErr != nil {
 			t.Fatal(pErr)
 		}
 		// Unblock the read.
@@ -879,7 +879,7 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 		},
 	}
 	_, pErr := client.SendWrappedWith(
-		s.GetDistSender(), nil, roachpb.Header{UserPriority: 42}, &leaseReq)
+		s.DistSender(), nil, roachpb.Header{UserPriority: 42}, &leaseReq)
 	if !testutils.IsPError(pErr, "injected error") {
 		t.Fatalf("expected error %q, got: %s", "injected error", pErr)
 	}

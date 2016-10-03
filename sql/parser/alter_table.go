@@ -60,12 +60,13 @@ type AlterTableCmd interface {
 	alterTableCmd()
 }
 
-func (*AlterTableAddColumn) alterTableCmd()      {}
-func (*AlterTableAddConstraint) alterTableCmd()  {}
-func (*AlterTableDropColumn) alterTableCmd()     {}
-func (*AlterTableDropConstraint) alterTableCmd() {}
-func (*AlterTableSetDefault) alterTableCmd()     {}
-func (*AlterTableDropNotNull) alterTableCmd()    {}
+func (*AlterTableAddColumn) alterTableCmd()          {}
+func (*AlterTableAddConstraint) alterTableCmd()      {}
+func (*AlterTableDropColumn) alterTableCmd()         {}
+func (*AlterTableDropConstraint) alterTableCmd()     {}
+func (*AlterTableDropNotNull) alterTableCmd()        {}
+func (*AlterTableSetDefault) alterTableCmd()         {}
+func (*AlterTableValidateConstraint) alterTableCmd() {}
 
 // ColumnMutationCmd is the subset of AlterTableCmds that modify an
 // existing column.
@@ -93,15 +94,29 @@ func (node *AlterTableAddColumn) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, node.ColumnDef)
 }
 
+// ValidationBehavior specifies whether or not a constraint is validated.
+type ValidationBehavior int
+
+const (
+	// ValidationDefault is the default validation behavior (immediate).
+	ValidationDefault ValidationBehavior = iota
+	// ValidationSkip skips validation of any existing data.
+	ValidationSkip
+)
+
 // AlterTableAddConstraint represents an ADD CONSTRAINT command.
 type AlterTableAddConstraint struct {
-	ConstraintDef ConstraintTableDef
+	ConstraintDef      ConstraintTableDef
+	ValidationBehavior ValidationBehavior
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTableAddConstraint) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("ADD ")
 	FormatNode(buf, f, node.ConstraintDef)
+	if node.ValidationBehavior == ValidationSkip {
+		buf.WriteString(" NOT VALID")
+	}
 }
 
 // AlterTableDropColumn represents a DROP COLUMN command.
@@ -144,6 +159,17 @@ func (node *AlterTableDropConstraint) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.DropBehavior != DropDefault {
 		fmt.Fprintf(buf, " %s", node.DropBehavior)
 	}
+}
+
+// AlterTableValidateConstraint represents a VALIDATE CONSTRAINT command.
+type AlterTableValidateConstraint struct {
+	Constraint Name
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableValidateConstraint) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("VALIDATE CONSTRAINT ")
+	FormatNode(buf, f, node.Constraint)
 }
 
 // AlterTableSetDefault represents an ALTER COLUMN SET DEFAULT

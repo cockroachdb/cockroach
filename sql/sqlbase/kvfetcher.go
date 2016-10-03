@@ -22,23 +22,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 )
-
-// Span represents a span that is part of a scan.
-type Span struct {
-	Start roachpb.Key // inclusive key
-	End   roachpb.Key // exclusive key
-}
-
-// Spans is a slice of spans.
-type Spans []Span
-
-// implement Sort.Interface
-func (a Spans) Len() int           { return len(a) }
-func (a Spans) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a Spans) Less(i, j int) bool { return a[i].Start.Compare(a[j].Start) < 0 }
 
 // prettyKey pretty-prints the specified key, skipping over the first `skip`
 // fields. The pretty printed key looks like:
@@ -62,14 +50,14 @@ func prettyKey(key roachpb.Key, skip int) string {
 }
 
 // PrettySpan returns a human-readable representation of a span.
-func PrettySpan(span Span, skip int) string {
+func PrettySpan(span roachpb.Span, skip int) string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s-%s", prettyKey(span.Start, skip), prettyKey(span.End, skip))
+	fmt.Fprintf(&buf, "%s-%s", prettyKey(span.Key, skip), prettyKey(span.EndKey, skip))
 	return buf.String()
 }
 
 // PrettySpans returns a human-readable description of the spans.
-func PrettySpans(spans []Span, skip int) string {
+func PrettySpans(spans []roachpb.Span, skip int) string {
 	var buf bytes.Buffer
 	for i, span := range spans {
 		if i > 0 {
@@ -81,8 +69,8 @@ func PrettySpans(spans []Span, skip int) string {
 }
 
 // kvBatchSize is the number of keys we request at a time.
-// On a single node, 1000 was enough to avoid any performance degradation. On multi-node clusters,
-// we want bigger chunks to make up for the higher latency.
+// On a single node, 1000 was enough to avoid any performance degradation. On
+// multi-node clusters, we want bigger chunks to make up for the higher latency.
 // TODO(radu): parameters like this should be configurable
 var kvBatchSize int64 = 10000
 
@@ -97,8 +85,9 @@ func SetKVBatchSize(val int64) func() {
 type kvFetcher struct {
 	// "Constant" fields, provided by the caller.
 	txn             *client.Txn
-	spans           Spans
+	spans           roachpb.Spans
 	reverse         bool
+	useBatchLimit   bool
 	firstBatchLimit int64
 
 	batchIdx     int
@@ -110,6 +99,9 @@ type kvFetcher struct {
 
 // getBatchSize returns the max size of the next batch.
 func (f *kvFetcher) getBatchSize() int64 {
+	if !f.useBatchLimit {
+		return 0
+	}
 	if f.firstBatchLimit == 0 || f.firstBatchLimit >= kvBatchSize {
 		return kvBatchSize
 	}
@@ -147,13 +139,48 @@ func (f *kvFetcher) getBatchSize() int64 {
 	}
 }
 
-// makeKVFetcher initializes a kvFetcher for the given spans. If non-zero, firstBatchLimit limits
-// the size of the first batch (subsequent batches use the default size).
-func makeKVFetcher(txn *client.Txn, spans Spans, reverse bool, firstBatchLimit int64) kvFetcher {
-	if firstBatchLimit < 0 {
-		panic(fmt.Sprintf("invalid batch limit %d", firstBatchLimit))
+// makeKVFetcher initializes a kvFetcher for the given spans.
+//
+// If useBatchLimit is true, batches are limited to kvBatchSize. If
+// firstBatchLimit is also set, the first batch is limited to that value.
+// Subsequent batches are larger, up to kvBatchSize.
+//
+// Batch limits can only be used if the spans are ordered.
+func makeKVFetcher(
+	txn *client.Txn, spans roachpb.Spans, reverse bool, useBatchLimit bool, firstBatchLimit int64,
+) (kvFetcher, error) {
+	if firstBatchLimit < 0 || (!useBatchLimit && firstBatchLimit != 0) {
+		return kvFetcher{}, errors.Errorf("invalid batch limit %d (useBatchLimit: %t)",
+			firstBatchLimit, useBatchLimit)
 	}
-	return kvFetcher{txn: txn, spans: spans, reverse: reverse, firstBatchLimit: firstBatchLimit}
+
+	if useBatchLimit {
+		// Verify the spans are ordered if a batch limit is used.
+		for i := 1; i < len(spans); i++ {
+			if spans[i].Key.Compare(spans[i-1].EndKey) < 0 {
+				return kvFetcher{}, errors.Errorf("unordered spans (%s %s)", spans[i-1], spans[i])
+			}
+		}
+	}
+
+	// Make a copy of the spans because we update them.
+	copySpans := make(roachpb.Spans, len(spans))
+	for i := range spans {
+		if reverse {
+			// Reverse scans receive the spans in decreasing order.
+			copySpans[len(spans)-i-1] = spans[i]
+		} else {
+			copySpans[i] = spans[i]
+		}
+	}
+
+	return kvFetcher{
+		txn:             txn,
+		spans:           copySpans,
+		reverse:         reverse,
+		useBatchLimit:   useBatchLimit,
+		firstBatchLimit: firstBatchLimit,
+	}, nil
 }
 
 // fetch retrieves spans from the kv
@@ -163,61 +190,15 @@ func (f *kvFetcher) fetch() error {
 	b := &client.Batch{}
 	b.Header.MaxSpanRequestKeys = batchSize
 
-	var resumeKey roachpb.Key
-	if len(f.kvs) > 0 {
-		resumeKey = f.kvs[len(f.kvs)-1].Key
-		// To resume forward scans we will set the (inclusive) scan start to the Next of the last
-		// received key. To resume reverse scans we will set the (exclusive) scan end to the last
-		// received key.
-		if !f.reverse {
-			resumeKey = resumeKey.Next()
+	for _, span := range f.spans {
+		if f.reverse {
+			b.ReverseScan(span.Key, span.EndKey)
+		} else {
+			b.Scan(span.Key, span.EndKey)
 		}
 	}
-
-	atEnd := true
-	if !f.reverse {
-		for i := 0; i < len(f.spans); i++ {
-			start := f.spans[i].Start
-			if resumeKey != nil {
-				if resumeKey.Compare(f.spans[i].End) >= 0 {
-					// We are resuming from a key after this span.
-					continue
-				}
-				if resumeKey.Compare(start) > 0 {
-					// We are resuming from a key inside this span.
-					// In this case we should technically reduce the max count for the span; but
-					// since this count is only an optimization it's not incorrect to retrieve more
-					// keys for the span.
-					start = resumeKey
-				}
-			}
-			atEnd = false
-			b.Scan(start, f.spans[i].End)
-		}
-	} else {
-		for i := len(f.spans) - 1; i >= 0; i-- {
-			end := f.spans[i].End
-			if resumeKey != nil {
-				if resumeKey.Compare(f.spans[i].Start) <= 0 {
-					// We are resuming from a key before this span.
-					continue
-				}
-				if resumeKey.Compare(end) < 0 {
-					// We resume from a key inside this span.
-					end = resumeKey
-				}
-			}
-			atEnd = false
-			b.ReverseScan(f.spans[i].Start, end)
-		}
-	}
-
-	if atEnd {
-		// The last scan happened to finish just at the end of the last span.
-		f.kvs = nil
-		f.fetchEnd = true
-		return nil
-	}
+	// Reset spans and add resume-spans later.
+	f.spans = f.spans[:0]
 
 	if err := f.txn.Run(b); err != nil {
 		return err
@@ -233,17 +214,32 @@ func (f *kvFetcher) fetch() error {
 		f.kvs = f.kvs[:0]
 	}
 
+	// Set end to true until disproved.
+	f.fetchEnd = true
+	var sawResumeSpan bool
 	for _, result := range b.Results {
-		f.kvs = append(f.kvs, result.Rows...)
+		if result.ResumeSpan.Key != nil {
+			// A span needs to be resumed.
+			f.fetchEnd = false
+			f.spans = append(f.spans, result.ResumeSpan)
+		}
+		if len(result.Rows) > 0 {
+			if sawResumeSpan {
+				return errors.Errorf(
+					"span with results after resume span; new spans: %s",
+					PrettySpans(f.spans, 0))
+			}
+			f.kvs = append(f.kvs, result.Rows...)
+		}
+		if result.ResumeSpan.Key != nil {
+			// Verify we don't receive results for any remaining spans.
+			sawResumeSpan = true
+		}
 	}
 
 	f.batchIdx++
 	f.totalFetched += int64(len(f.kvs))
 	f.kvIndex = 0
-
-	if int64(len(f.kvs)) < batchSize {
-		f.fetchEnd = true
-	}
 
 	// TODO(radu): We should fetch the next chunk in the background instead of waiting for the next
 	// call to fetch(). We can use a pool of workers to issue the KV ops which will also limit the

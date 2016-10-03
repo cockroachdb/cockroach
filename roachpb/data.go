@@ -973,6 +973,14 @@ func (s Span) Overlaps(o Span) bool {
 	return bytes.Compare(s.EndKey, o.Key) > 0 && bytes.Compare(s.Key, o.EndKey) < 0
 }
 
+// Spans is a slice of spans.
+type Spans []Span
+
+// implement Sort.Interface
+func (a Spans) Len() int           { return len(a) }
+func (a Spans) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a Spans) Less(i, j int) bool { return a[i].Key.Compare(a[j].Key) < 0 }
+
 // RSpan is a key range with an inclusive start RKey and an exclusive end RKey.
 type RSpan struct {
 	Key, EndKey RKey

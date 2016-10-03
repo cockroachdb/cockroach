@@ -45,9 +45,9 @@ TestMissingLeakTest() {
 }
 
 TestMisspell() {
-  # https://github.com/client9/misspell/issues/62
-  # https://github.com/client9/misspell/issues/63
-  ! git ls-files | xargs misspell | grep -vE 'found "(computable|duplicative)" a misspelling of'
+  misspellings=$(git ls-files | xargs misspell)
+  echo "${misspellings}"
+  [[ -z "${misspellings}" ]]
 }
 
 TestTabsInShellScripts() {
@@ -154,7 +154,9 @@ TestGofmtSimplify() {
 }
 
 TestGoimports() {
-  ! goimports -l . | read
+  badimports=$(goimports -l .)
+  echo "${badimports}"
+  [[ -z "${badimports}" ]]
 }
 
 TestUnconvert() {

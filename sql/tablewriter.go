@@ -216,6 +216,7 @@ type tableUpserter struct {
 	ru                    rowUpdater
 	updateColIDtoRowIndex map[sqlbase.ColumnID]int
 	a                     sqlbase.DatumAlloc
+	fetchCols             []sqlbase.ColumnDescriptor
 	fetchColIDtoRowIndex  map[sqlbase.ColumnID]int
 	fetcher               sqlbase.RowFetcher
 
@@ -262,6 +263,7 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	requestedCols := tu.tableDesc.Columns
 
 	if len(tu.updateCols) == 0 {
+		tu.fetchCols = requestedCols
 		tu.fetchColIDtoRowIndex = colIDtoRowIndexFromCols(requestedCols)
 	} else {
 		var err error
@@ -271,6 +273,8 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 		if err != nil {
 			return err
 		}
+		// t.ru.fetchCols can also contain columns undergoing mutation.
+		tu.fetchCols = tu.ru.fetchCols
 		tu.fetchColIDtoRowIndex = tu.ru.fetchColIDtoRowIndex
 
 		tu.updateColIDtoRowIndex = make(map[sqlbase.ColumnID]int)
@@ -279,15 +283,16 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 		}
 	}
 
-	valNeededForCol := make([]bool, len(tu.tableDesc.Columns))
-	for i := range valNeededForCol {
-		if _, ok := tu.fetchColIDtoRowIndex[tu.tableDesc.Columns[i].ID]; ok {
+	valNeededForCol := make([]bool, len(tu.fetchCols))
+	for i, col := range tu.fetchCols {
+		if _, ok := tu.fetchColIDtoRowIndex[col.ID]; ok {
 			valNeededForCol[i] = true
 		}
 	}
+
 	return tu.fetcher.Init(
 		tu.tableDesc, tu.fetchColIDtoRowIndex, &tu.tableDesc.PrimaryIndex, false, false,
-		tu.tableDesc.Columns, valNeededForCol)
+		tu.fetchCols, valNeededForCol)
 }
 
 func (tu *tableUpserter) row(ctx context.Context, row parser.DTuple) (parser.DTuple, error) {
@@ -423,11 +428,11 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.DTuple, er
 		return nil, err
 	}
 
-	pkSpans := make(sqlbase.Spans, 0, len(primaryKeys))
+	pkSpans := make(roachpb.Spans, 0, len(primaryKeys))
 	rowIdxForPrimaryKey := make(map[string]int, len(primaryKeys))
 	for i, primaryKey := range primaryKeys {
 		if primaryKey != nil {
-			pkSpans = append(pkSpans, sqlbase.Span{Start: primaryKey, End: primaryKey.PrefixEnd()})
+			pkSpans = append(pkSpans, roachpb.Span{Key: primaryKey, EndKey: primaryKey.PrefixEnd()})
 			if _, ok := rowIdxForPrimaryKey[string(primaryKey)]; ok {
 				return nil, fmt.Errorf("UPSERT/ON CONFLICT DO UPDATE command cannot affect row a second time")
 			}
@@ -439,7 +444,8 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context) ([]parser.DTuple, er
 		return make([]parser.DTuple, len(primaryKeys)), nil
 	}
 
-	if err := tu.fetcher.StartScan(tu.txn, pkSpans, int64(len(pkSpans))); err != nil {
+	// We don't limit batches here because the spans are unordered.
+	if err := tu.fetcher.StartScan(tu.txn, pkSpans, false /* no batch limits */, 0); err != nil {
 		return nil, err
 	}
 
@@ -542,9 +548,9 @@ func (td *tableDeleter) fastPathAvailable(ctx context.Context) bool {
 func (td *tableDeleter) fastDelete(ctx context.Context, scan *scanNode) (rowCount int, err error) {
 	for _, span := range scan.spans {
 		if log.V(2) {
-			log.Infof(ctx, "Skipping scan and just deleting %s - %s", span.Start, span.End)
+			log.Infof(ctx, "Skipping scan and just deleting %s - %s", span.Key, span.EndKey)
 		}
-		td.b.DelRange(span.Start, span.End, true)
+		td.b.DelRange(span.Key, span.EndKey, true)
 	}
 
 	err = td.finalize(ctx)
@@ -581,40 +587,60 @@ func (td *tableDeleter) fastDelete(ctx context.Context, scan *scanNode) (rowCoun
 
 // deleteAllRows runs the kv operations necessary to delete all sql rows in the
 // table passed at construction. This may require a scan.
-func (td *tableDeleter) deleteAllRows(ctx context.Context) error {
+//
+// resume is the resume-span which should be used for the table deletion when
+// the table deletion is chunked. The first call to this method should use a
+// zero resume-span. After a chunk is deleted a new resume-span is returned.
+//
+// limit is a limit on either the number of keys or table-rows (for
+// interleaved tables) deleted in the operation.
+func (td *tableDeleter) deleteAllRows(
+	ctx context.Context, resume roachpb.Span, limit int64,
+) (roachpb.Span, error) {
 	if td.rd.helper.tableDesc.IsInterleaved() {
 		if log.V(2) {
 			log.Info(ctx, "delete forced to scan: table is interleaved")
 		}
-		return td.deleteAllRowsScan(ctx)
+		return td.deleteAllRowsScan(ctx, resume, limit)
 	}
-	return td.deleteAllRowsFast(ctx)
+	return td.deleteAllRowsFast(ctx, resume, limit)
 }
 
-func (td *tableDeleter) deleteAllRowsFast(ctx context.Context) error {
-	var tablePrefix []byte
-	// TODO(dan): This should be moved into keys.MakeTablePrefix, but updating
-	// all the uses of that will be a pain.
-	if interleave := td.rd.helper.tableDesc.PrimaryIndex.Interleave; len(interleave.Ancestors) > 0 {
-		tablePrefix = encoding.EncodeUvarintAscending(nil, uint64(interleave.Ancestors[0].TableID))
+func (td *tableDeleter) deleteAllRowsFast(
+	ctx context.Context, resume roachpb.Span, limit int64,
+) (roachpb.Span, error) {
+	if resume.Key == nil {
+		tablePrefix := roachpb.Key(
+			encoding.EncodeUvarintAscending(nil, uint64(td.rd.helper.tableDesc.ID)),
+		)
+		// Delete rows and indexes starting with the table's prefix.
+		resume = roachpb.Span{
+			Key:    tablePrefix,
+			EndKey: tablePrefix.PrefixEnd(),
+		}
 	}
-	tablePrefix = encoding.EncodeUvarintAscending(nil, uint64(td.rd.helper.tableDesc.ID))
-
-	// Delete rows and indexes starting with the table's prefix.
-	tableStartKey := roachpb.Key(tablePrefix)
-	tableEndKey := tableStartKey.PrefixEnd()
 	if log.V(2) {
-		log.Infof(ctx, "DelRange %s - %s", tableStartKey, tableEndKey)
+		log.Infof(ctx, "DelRange %s - %s", resume.Key, resume.EndKey)
 	}
-	td.b.DelRange(tableStartKey, tableEndKey, false)
-	return td.finalize(ctx)
+	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
+	td.b.Header.MaxSpanRequestKeys = limit
+	if err := td.finalize(ctx); err != nil {
+		return resume, err
+	}
+	if l := len(td.b.Results); l != 1 {
+		panic(fmt.Sprintf("%d results returned", l))
+	}
+	return td.b.Results[0].ResumeSpan, nil
 }
 
-func (td *tableDeleter) deleteAllRowsScan(ctx context.Context) error {
-	tablePrefix := sqlbase.MakeIndexKeyPrefix(
-		td.rd.helper.tableDesc, td.rd.helper.tableDesc.PrimaryIndex.ID)
-	span := sqlbase.Span{Start: roachpb.Key(tablePrefix), End: roachpb.Key(tablePrefix).PrefixEnd()}
-
+func (td *tableDeleter) deleteAllRowsScan(
+	ctx context.Context, resume roachpb.Span, limit int64,
+) (roachpb.Span, error) {
+	if resume.Key == nil {
+		tablePrefix := sqlbase.MakeIndexKeyPrefix(
+			td.rd.helper.tableDesc, td.rd.helper.tableDesc.PrimaryIndex.ID)
+		resume = roachpb.Span{Key: roachpb.Key(tablePrefix), EndKey: roachpb.Key(tablePrefix).PrefixEnd()}
+	}
 	valNeededForCol := make([]bool, len(td.rd.helper.tableDesc.Columns))
 	for _, idx := range td.rd.fetchColIDtoRowIndex {
 		valNeededForCol[idx] = true
@@ -625,58 +651,88 @@ func (td *tableDeleter) deleteAllRowsScan(ctx context.Context) error {
 		td.rd.helper.tableDesc, td.rd.fetchColIDtoRowIndex, &td.rd.helper.tableDesc.PrimaryIndex,
 		false, false, td.rd.fetchCols, valNeededForCol)
 	if err != nil {
-		return err
+		return resume, err
 	}
-	if err := rf.StartScan(td.txn, sqlbase.Spans{span}, 0); err != nil {
-		return err
+	if err := rf.StartScan(td.txn, roachpb.Spans{resume}, true /* limit batches */, 0); err != nil {
+		return resume, err
 	}
 
-	for {
+	for i := int64(0); i < limit; i++ {
 		row, err := rf.NextRow()
 		if err != nil {
-			return err
+			return resume, err
 		}
 		if row == nil {
-			// Done deleting rows.
+			// Done deleting all rows.
+			resume = roachpb.Span{}
 			break
 		}
 		_, err = td.row(ctx, row)
 		if err != nil {
-			return err
+			return resume, err
 		}
 	}
-	return td.finalize(ctx)
+	if resume.Key != nil {
+		// Update the resume start key for the next iteration.
+		resume.Key = rf.Key()
+	}
+	return resume, td.finalize(ctx)
 }
 
 // deleteIndex runs the kv operations necessary to delete all kv entries in the
 // given index. This may require a scan.
-func (td *tableDeleter) deleteIndex(ctx context.Context, idx *sqlbase.IndexDescriptor) error {
+//
+// resume is the resume-span which should be used for the index deletion
+// when the index deletion is chunked. The first call to this method should
+// use a zero resume-span. After a chunk of the index is deleted a new resume-
+// span is returned.
+//
+// limit is a limit on the number of index entries deleted in the operation.
+func (td *tableDeleter) deleteIndex(
+	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64,
+) (roachpb.Span, error) {
 	if len(idx.Interleave.Ancestors) > 0 || len(idx.InterleavedBy) > 0 {
 		if log.V(2) {
 			log.Info(ctx, "delete forced to scan: table is interleaved")
 		}
-		return td.deleteIndexScan(ctx, idx)
+		return td.deleteIndexScan(ctx, idx, resume, limit)
 	}
-	return td.deleteIndexFast(ctx, idx)
+	return td.deleteIndexFast(ctx, idx, resume, limit)
 }
 
-func (td *tableDeleter) deleteIndexFast(ctx context.Context, idx *sqlbase.IndexDescriptor) error {
-	indexPrefix := sqlbase.MakeIndexKeyPrefix(td.rd.helper.tableDesc, idx.ID)
-	indexStartKey := roachpb.Key(indexPrefix)
-	indexEndKey := indexStartKey.PrefixEnd()
+func (td *tableDeleter) deleteIndexFast(
+	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64,
+) (roachpb.Span, error) {
+	if resume.Key == nil {
+		indexPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(td.rd.helper.tableDesc, idx.ID))
+		resume = roachpb.Span{
+			Key:    indexPrefix,
+			EndKey: indexPrefix.PrefixEnd(),
+		}
+	}
 
 	if log.V(2) {
-		log.Infof(ctx, "DelRange %s - %s", indexStartKey, indexEndKey)
+		log.Infof(ctx, "DelRange %s - %s", resume.Key, resume.EndKey)
 	}
-	td.b.DelRange(indexStartKey, indexEndKey, false)
-	return td.finalize(ctx)
+	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
+	td.b.Header.MaxSpanRequestKeys = limit
+	if err := td.finalize(ctx); err != nil {
+		return resume, err
+	}
+	if l := len(td.b.Results); l != 1 {
+		panic(fmt.Sprintf("%d results returned, expected 1", l))
+	}
+	return td.b.Results[0].ResumeSpan, nil
 }
 
-func (td *tableDeleter) deleteIndexScan(ctx context.Context, idx *sqlbase.IndexDescriptor) error {
-	tablePrefix := sqlbase.MakeIndexKeyPrefix(
-		td.rd.helper.tableDesc, td.rd.helper.tableDesc.PrimaryIndex.ID)
-	span := sqlbase.Span{Start: roachpb.Key(tablePrefix), End: roachpb.Key(tablePrefix).PrefixEnd()}
-
+func (td *tableDeleter) deleteIndexScan(
+	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64,
+) (roachpb.Span, error) {
+	if resume.Key == nil {
+		tablePrefix := sqlbase.MakeIndexKeyPrefix(
+			td.rd.helper.tableDesc, td.rd.helper.tableDesc.PrimaryIndex.ID)
+		resume = roachpb.Span{Key: roachpb.Key(tablePrefix), EndKey: roachpb.Key(tablePrefix).PrefixEnd()}
+	}
 	valNeededForCol := make([]bool, len(td.rd.helper.tableDesc.Columns))
 	for _, idx := range td.rd.fetchColIDtoRowIndex {
 		valNeededForCol[idx] = true
@@ -687,24 +743,29 @@ func (td *tableDeleter) deleteIndexScan(ctx context.Context, idx *sqlbase.IndexD
 		td.rd.helper.tableDesc, td.rd.fetchColIDtoRowIndex, &td.rd.helper.tableDesc.PrimaryIndex,
 		false, false, td.rd.fetchCols, valNeededForCol)
 	if err != nil {
-		return err
+		return resume, err
 	}
-	if err := rf.StartScan(td.txn, sqlbase.Spans{span}, 0); err != nil {
-		return err
+	if err := rf.StartScan(td.txn, roachpb.Spans{resume}, true /* limit batches */, 0); err != nil {
+		return resume, err
 	}
 
-	for {
+	for i := int64(0); i < limit; i++ {
 		row, err := rf.NextRow()
 		if err != nil {
-			return err
+			return resume, err
 		}
 		if row == nil {
-			// Done deleting rows.
+			// Done deleting all rows.
+			resume = roachpb.Span{}
 			break
 		}
 		if err := td.rd.deleteIndexRow(ctx, td.b, idx, row); err != nil {
-			return err
+			return resume, err
 		}
 	}
-	return td.finalize(ctx)
+	if resume.Key != nil {
+		// Update the resume start key for the next iteration.
+		resume.Key = rf.Key()
+	}
+	return resume, td.finalize(ctx)
 }

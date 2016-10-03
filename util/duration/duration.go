@@ -244,3 +244,63 @@ func int64Min(a int64, b int64) int64 {
 	}
 	return b
 }
+
+const (
+	minTimeDuration time.Duration = -1 << 63
+	maxTimeDuration time.Duration = 1<<63 - 1
+)
+
+// DiffMicros computes the microsecond difference between two time values. The reason
+// this function is necessary even though time.Sub(time) exists is that time.Duration
+// can only hold values up to ~290 years, because it stores duration at the nanosecond
+// resolution. This function should be used if a difference of more than 290 years is
+// possible between time values, and a microsecond resolution is acceptable.
+func DiffMicros(t1, t2 time.Time) int64 {
+	micros := int64(0)
+	nanos := time.Duration(0)
+	for {
+		// time.Sub(time) can overflow for durations larger than ~290 years, so
+		// we need to perform this diff iteratively. If this method overflows,
+		// it will return either minTimeDuration or maxTimeDuration.
+		d := t1.Sub(t2)
+		overflow := d == minTimeDuration || d == maxTimeDuration
+		if d == minTimeDuration {
+			// We use -maxTimeDuration here because -minTimeDuration would overflow.
+			d = -maxTimeDuration
+		}
+		micros += int64(d / time.Microsecond)
+		nanos += d % time.Microsecond
+		if !overflow {
+			break
+		}
+		t1 = t1.Add(-d)
+	}
+	micros += int64(nanos / time.Microsecond)
+	nanoRem := nanos % time.Microsecond
+	if nanoRem >= time.Microsecond/2 {
+		micros++
+	} else if nanoRem <= -time.Microsecond/2 {
+		micros--
+	}
+	return micros
+}
+
+// AddMicros adds the microsecond delta to the provided time value. The reason
+// this function is necessary even though time.Add(duration) exists is that time.Duration
+// can only hold values up to ~290 years, because it stores duration at the nanosecond
+// resolution. This function makes it possible to add more than 290 years to a time.Time,
+// at the tradeoff of working on a microsecond resolution.
+func AddMicros(t time.Time, d int64) time.Time {
+	negMult := time.Duration(1)
+	if d < 0 {
+		negMult = -1
+		d = -d
+	}
+	const maxMicroDur = int64(maxTimeDuration / time.Microsecond)
+	for d > maxMicroDur {
+		const maxWholeNanoDur = time.Duration(maxMicroDur) * time.Microsecond
+		t = t.Add(negMult * maxWholeNanoDur)
+		d -= maxMicroDur
+	}
+	return t.Add(negMult * time.Duration(d) * time.Microsecond)
+}

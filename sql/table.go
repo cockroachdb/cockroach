@@ -76,10 +76,22 @@ type SchemaAccessor interface {
 	// returns the list of matching tables.
 	expandTableGlob(expr parser.TablePattern) (parser.TableNames, error)
 
-	// getTableDesc returns a table descriptor, or nil if the descriptor
-	// is not found. If you want the "not found" condition to return an error,
-	// use mustGetTableDesc() instead.
+	// getTableOrViewDesc returns a table descriptor for either a table or view,
+	// or nil if the descriptor is not found.
+	getTableOrViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error)
+
+	// getTableDesc returns a table descriptor for a table, or nil if the
+	// descriptor is not found. If you want the "not found" condition to
+	// return an error, use mustGetTableDesc() instead.
+	// Returns an error if the underlying table descriptor actually
+	// represents a view rather than a table.
 	getTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error)
+
+	// getViewDesc returns a table descriptor for a table, or nil if the
+	// descriptor is not found.
+	// Returns an error if the underlying table descriptor actually
+	// represents a table rather than a view.
+	getViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error)
 
 	// mustGetTableDesc returns a table descriptor, or an error if the descriptor
 	// is not found.
@@ -107,9 +119,9 @@ type SchemaAccessor interface {
 
 var _ SchemaAccessor = &planner{}
 
-// getTableDesc implements the SchemaAccessor interface.
-func (p *planner) getTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
-	virtual, err := getVirtualTableDesc(tn)
+// getTableOrViewDesc implements the SchemaAccessor interface.
+func (p *planner) getTableOrViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
+	virtual, err := p.virtualSchemas().getVirtualTableDesc(tn)
 	if err != nil || virtual != nil {
 		return virtual, err
 	}
@@ -128,6 +140,30 @@ func (p *planner) getTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, 
 		return nil, nil
 	}
 	return &desc, nil
+}
+
+// getTableDesc implements the SchemaAccessor interface.
+func (p *planner) getTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
+	desc, err := p.getTableOrViewDesc(tn)
+	if err != nil {
+		return desc, err
+	}
+	if desc != nil && !desc.IsTable() {
+		return nil, sqlbase.NewWrongObjectTypeError(tn.String(), "table")
+	}
+	return desc, nil
+}
+
+// getViewDesc implements the SchemaAccessor interface.
+func (p *planner) getViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
+	desc, err := p.getTableOrViewDesc(tn)
+	if err != nil {
+		return desc, err
+	}
+	if desc != nil && !desc.IsView() {
+		return nil, sqlbase.NewWrongObjectTypeError(tn.String(), "view")
+	}
+	return desc, nil
 }
 
 // mustGetTableDesc implements the SchemaAccessor interface.
@@ -167,7 +203,7 @@ func (p *planner) getTableLease(tn *parser.TableName) (*sqlbase.TableDescriptor,
 	}
 
 	isSystemDB := tn.Database() == sqlbase.SystemDB.Name
-	isVirtualDB := isVirtualDatabase(tn.Database())
+	isVirtualDB := p.virtualSchemas().isVirtualDatabase(tn.Database())
 	if isSystemDB || isVirtualDB || testDisableTableLeases {
 		// We don't go through the normal lease mechanism for:
 		// - system tables. The system.lease and system.descriptor table, in
@@ -315,7 +351,7 @@ func (p *planner) removeLeaseIfExpiring(lease *LeaseState) bool {
 
 // getTableNames implements the SchemaAccessor interface.
 func (p *planner) getTableNames(dbDesc *sqlbase.DatabaseDescriptor) (parser.TableNames, error) {
-	if e, ok := getVirtualSchemaEntry(dbDesc.Name); ok {
+	if e, ok := p.virtualSchemas().getVirtualSchemaEntry(dbDesc.Name); ok {
 		return e.tableNames(), nil
 	}
 

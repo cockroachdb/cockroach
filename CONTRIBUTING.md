@@ -19,7 +19,9 @@
 3.  Run `make build`, `make test`, or anything else our Makefile offers. Note
 that at least 4GB of RAM is required to build from source and run tests. Also,
 the first time you run `make`, it can take some time to download and install
-various dependencies.
+various dependencies. After running `make build`, the `cockroach` executable
+will be in your current directory and can be run as shown in the
+[README](README.md).
 
 Note that if you edit a `.proto` or `.ts` file, you will need to manually
 regenerate the associated `.pb.{go,cc,h}` or `.js` files using `go generate

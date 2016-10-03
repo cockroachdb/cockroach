@@ -43,7 +43,7 @@ type scanNode struct {
 	// The table columns, possibly including ones currently in schema changes.
 	cols []sqlbase.ColumnDescriptor
 	// There is a 1-1 correspondence between cols and resultColumns.
-	resultColumns []ResultColumn
+	resultColumns ResultColumns
 	// Contains values for the current row. There is a 1-1 correspondence
 	// between resultColumns and values in row.
 	row parser.DTuple
@@ -54,7 +54,7 @@ type scanNode struct {
 	// Map used to get the index for columns in cols.
 	colIdxMap map[sqlbase.ColumnID]int
 
-	spans            []sqlbase.Span
+	spans            []roachpb.Span
 	isSecondaryIndex bool
 	reverse          bool
 	ordering         orderingInfo
@@ -71,15 +71,16 @@ type scanNode struct {
 	scanInitialized bool
 	fetcher         sqlbase.RowFetcher
 
-	limitHint int64
-	limitSoft bool
+	limitHint          int64
+	limitSoft          bool
+	disableBatchLimits bool
 }
 
 func (p *planner) Scan() *scanNode {
 	return &scanNode{p: p}
 }
 
-func (n *scanNode) Columns() []ResultColumn {
+func (n *scanNode) Columns() ResultColumns {
 	return n.resultColumns
 }
 
@@ -108,12 +109,20 @@ func (n *scanNode) DebugValues() debugValues {
 func (n *scanNode) SetLimitHint(numRows int64, soft bool) {
 	// Either a limitNode or EXPLAIN is pushing a limit down onto this
 	// node. The special value math.MaxInt64 means "no limit".
-	if numRows != math.MaxInt64 {
+	if !n.disableBatchLimits && numRows != math.MaxInt64 {
 		n.limitHint = numRows
 		// If we have a filter, some of the rows we retrieve may not pass the
 		// filter so the limit becomes "soft".
 		n.limitSoft = soft || n.filter != nil
 	}
+}
+
+// disableBatchLimit disables the kvfetcher batch limits. Used for index-join,
+// where we scan batches of unordered spans.
+func (n *scanNode) disableBatchLimit() {
+	n.disableBatchLimits = true
+	n.limitHint = 0
+	n.limitSoft = false
 }
 
 func (n *scanNode) expandPlan() error {
@@ -130,6 +139,8 @@ func (n *scanNode) Start() error {
 	return n.p.startSubqueryPlans(n.filter)
 }
 
+func (n *scanNode) Close() {}
+
 // initScan sets up the rowFetcher and starts a scan.
 func (n *scanNode) initScan() error {
 	if len(n.spans) == 0 {
@@ -137,7 +148,7 @@ func (n *scanNode) initScan() error {
 		// index key prefix. This isn't needed for the fetcher, but it is for
 		// other external users of n.spans.
 		start := roachpb.Key(sqlbase.MakeIndexKeyPrefix(&n.desc, n.index.ID))
-		n.spans = append(n.spans, sqlbase.Span{Start: start, End: start.PrefixEnd()})
+		n.spans = append(n.spans, roachpb.Span{Key: start, EndKey: start.PrefixEnd()})
 	}
 
 	limitHint := n.limitHint
@@ -146,7 +157,7 @@ func (n *scanNode) initScan() error {
 		limitHint *= 2
 	}
 
-	if err := n.fetcher.StartScan(n.p.txn, n.spans, limitHint); err != nil {
+	if err := n.fetcher.StartScan(n.p.txn, n.spans, !n.disableBatchLimits, limitHint); err != nil {
 		return err
 	}
 	n.scanInitialized = true
@@ -240,26 +251,13 @@ func (n *scanNode) ExplainTypes(regTypes func(string, string)) {
 	}
 }
 
-// Initializes a scanNode with a tableName. Returns the table or index name that can be used for
-// fully-qualified columns if an alias is not specified.
+// Initializes a scanNode with a table descriptor.
 func (n *scanNode) initTable(
 	p *planner,
-	tableName *parser.TableName,
+	desc *sqlbase.TableDescriptor,
 	indexHints *parser.IndexHints,
 	scanVisibility scanVisibility,
 ) error {
-	descFunc := p.getTableLease
-	if p.asOf {
-		// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
-		// specified time, and never lease anything. The proto transaction already
-		// has its timestamps set correctly so mustGetTableDesc will fetch with the
-		// correct timestamp.
-		descFunc = p.mustGetTableDesc
-	}
-	desc, err := descFunc(tableName)
-	if err != nil {
-		return err
-	}
 	n.desc = *desc
 
 	if err := p.checkPrivilege(&n.desc, privilege.SELECT); err != nil {

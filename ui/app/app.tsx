@@ -29,13 +29,6 @@
  *  the Common graph component would include the part of `initGraph` and
  *  `drawGraph` that are different for these two chart types.
  *
- *  - It is possible to create race conditions using the time scale selector.
- *  The issue: a user selects a new time scale, which immediately initiates a
- *  server query. Before that query completes, change the time scale again,
- *  initiating another query to the server. The order in which these queries
- *  complete is indeterminate, and could result in the charts displaying data
- *  for the wrong time scale.
- *
  */
 
 import "nvd3/build/nv.d3.min.css!";
@@ -68,6 +61,15 @@ import NodeGraphs from "./containers/nodeGraphs";
 import NodeLogs from "./containers/nodeLogs";
 import Raft from "./containers/raft";
 import RaftRanges from "./containers/raftRanges";
+
+// tslint:disable-next-line:variable-name
+const DOMNode = document.getElementById("react-layout");
+
+// Voodoo to force react-router to reload stuff when directed by livereload.
+// See https://github.com/capaj/systemjs-hot-reloader.
+export function __unload() {
+  ReactDOM.unmountComponentAtNode(DOMNode);
+}
 
 ReactDOM.render(
   <Provider store={store}>
@@ -122,5 +124,5 @@ ReactDOM.render(
       </Route>
     </Router>
   </Provider>,
-  document.getElementById("react-layout")
+  DOMNode
 );

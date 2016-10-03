@@ -93,6 +93,15 @@ t     b_asc   false  2   c      DESC       false
 statement ok
 INSERT INTO t VALUES (1,1,1)
 
+statement error pgcode 42P01 table "foo" does not exist
+CREATE INDEX fail ON foo (b DESC)
+
+statement ok
+CREATE VIEW v AS SELECT * FROM t
+
+statement error pgcode 42809 "v" is not a table
+CREATE INDEX failview ON v (b DESC)
+
 statement ok
 CREATE TABLE privs (a INT PRIMARY KEY, b INT)
 

@@ -20,6 +20,14 @@ with the environment variable `COCKROACH_DEBUG_UI` set to a truthy value, e.g.
 [strconv.ParseBool](https://godoc.org/strconv#ParseBool) will work) and
 navigating to the web console.
 
+### Visual Studio Code
+
+To get autocomplete and type-checking working in Visual Studio Code, you may
+need to manually configure your typescript version. Typescript 2 is already
+installed by npm, but you'll need to configure your project/workspace to point
+to it. See
+https://code.visualstudio.com/docs/languages/typescript#_using-newer-typescript-versions.
+
 ## Modification
 
 As mentioned above, be sure to run the CockroachDB server in UI debug mode
@@ -39,6 +47,12 @@ do this will result in wasted time waiting for the build.
 
 We commit the generated file so that CockroachDB can be compiled with minimal
 [non-go dependencies](#dependencies).
+
+## Live Reload
+
+The UI also supports live reload in debug mode. To take advantage of this, run
+`make livereload` from this directory - the UI will automatically reload files
+as you modify them, taking advantage of TypeScript's incremental compilation.
 
 ## Dependencies
 

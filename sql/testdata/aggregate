@@ -82,6 +82,9 @@ SELECT COUNT(*), k FROM kv GROUP BY 2
 query error aggregate functions are not allowed in GROUP BY
 SELECT * FROM kv GROUP BY v, COUNT(DISTINCT w)
 
+query error aggregate functions are not allowed in GROUP BY
+SELECT COUNT(DISTINCT w) FROM kv GROUP BY 1
+
 query error aggregate functions are not allowed in RETURNING
 INSERT INTO kv (k, v) VALUES (99, 100) RETURNING sum(v)
 
@@ -384,6 +387,11 @@ query I
 SELECT COUNT(k)+COUNT(kv.v) FROM kv
 ----
 11
+
+query II
+SELECT COUNT(NULL::int), COUNT((NULL, NULL))
+----
+0 1
 
 query IIII
 SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM kv

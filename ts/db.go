@@ -122,7 +122,7 @@ func (db *DB) StoreData(ctx context.Context, r Resolution, data []tspb.TimeSerie
 	// Process data collection: data is converted to internal format, and a key
 	// is generated for each internal message.
 	for _, d := range data {
-		idatas, err := d.ToInternal(r.KeyDuration(), r.SampleDuration())
+		idatas, err := d.ToInternal(r.SlabDuration(), r.SampleDuration())
 		if err != nil {
 			return err
 		}

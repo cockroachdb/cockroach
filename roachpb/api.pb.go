@@ -129,6 +129,8 @@
 		NodeDescriptor
 		StoreDescriptor
 		StoreDeadReplicas
+		Locality
+		Tier
 */
 package roachpb
 
@@ -1296,6 +1298,12 @@ type Header struct {
 	// by span requests in the batch. Span requests are requests like
 	// Scan, ReverseScan, and DelRange. If two requests touch the
 	// same key it is double counted.
+	//
+	// If a batch limit is used with Scan requests, the spans for the requests
+	// must be non-overlapping and in increasing order.
+	//
+	// If a batch limit is used with ReverseScan requests, the spans for the
+	// requests must be non-overlapping and in decreasing order.
 	MaxSpanRequestKeys int64 `protobuf:"varint,8,opt,name=max_span_request_keys,json=maxSpanRequestKeys" json:"max_span_request_keys"`
 	// if set, all of the spans in the batch are distinct. Note that the
 	// calculation of distinct spans does not include intents in an

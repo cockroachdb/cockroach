@@ -1,4 +1,4 @@
-import _ = require("lodash");
+import _ from "lodash";
 import { combineReducers } from "redux";
 import moment = require("moment");
 
@@ -56,6 +56,9 @@ export const refreshTableDetails = tableDetailsReducerObj.refresh;
 const tableStatsReducerObj = new KeyedCachedDataReducer(api.getTableStats, "tableStats", tableRequestToID);
 export const refreshTableStats = tableStatsReducerObj.refresh;
 
+const logsReducerObj = new CachedDataReducer(api.getLogs, "logs", moment.duration(10, "s"));
+export const refreshLogs = logsReducerObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
@@ -67,6 +70,7 @@ export interface APIReducersState {
   databaseDetails: KeyedCachedDataReducerState<api.DatabaseDetailsResponseMessage>;
   tableDetails: KeyedCachedDataReducerState<api.TableDetailsResponseMessage>;
   tableStats: KeyedCachedDataReducerState<api.TableStatsResponseMessage>;
+  logs: CachedDataReducerState<api.LogEntriesResponseMessage>;
 }
 
 export default combineReducers<APIReducersState>({
@@ -80,6 +84,7 @@ export default combineReducers<APIReducersState>({
   [databaseDetailsReducerObj.actionNamespace]: databaseDetailsReducerObj.reducer,
   [tableDetailsReducerObj.actionNamespace]: tableDetailsReducerObj.reducer,
   [tableStatsReducerObj.actionNamespace]: tableStatsReducerObj.reducer,
+  [logsReducerObj.actionNamespace]: logsReducerObj.reducer,
 });
 
 export {CachedDataReducerState, KeyedCachedDataReducerState};

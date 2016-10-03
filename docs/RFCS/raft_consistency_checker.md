@@ -2,8 +2,10 @@
 -   Status: completed
 -   Start Date: 2016-02-10
 -   Authors: Ben Darnell, David Eisenstat, Bram Gruneir, Vivek Menezes
--   RFC PR: (PR #8032 after acceptance of initial draft)
--   Cockroach Issues: #837, #7739
+-   RFC PR: [#4317](https://github.com/cockroachdb/cockroach/pull/4317),
+            [#8032](https://github.com/cockroachdb/cockroach/pull/8032)
+-   Cockroach Issues: [#837](https://github.com/cockroachdb/cockroach/issues/837),
+                      [#7739](https://github.com/cockroachdb/cockroach/issues/7739)
 
 Summary
 =======

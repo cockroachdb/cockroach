@@ -95,7 +95,7 @@ func (jr *joinReader) mainLoop() error {
 	primaryKeyPrefix := sqlbase.MakeIndexKeyPrefix(&jr.desc, jr.index.ID)
 
 	var alloc sqlbase.DatumAlloc
-	spans := make(sqlbase.Spans, 0, joinReaderBatchSize)
+	spans := make(roachpb.Spans, 0, joinReaderBatchSize)
 
 	if log.V(2) {
 		log.Infof(jr.ctx, "starting (filter: %s)", jr.filter)
@@ -122,13 +122,13 @@ func (jr *joinReader) mainLoop() error {
 				return err
 			}
 
-			spans = append(spans, sqlbase.Span{
-				Start: key,
-				End:   key.PrefixEnd(),
+			spans = append(spans, roachpb.Span{
+				Key:    key,
+				EndKey: key.PrefixEnd(),
 			})
 		}
 
-		err := jr.fetcher.StartScan(jr.flowCtx.txn, spans, 0)
+		err := jr.fetcher.StartScan(jr.flowCtx.txn, spans, false /* no batch limits */, 0)
 		if err != nil {
 			log.Errorf(jr.ctx, "scan error: %s", err)
 			return err
@@ -168,9 +168,10 @@ func (jr *joinReader) mainLoop() error {
 
 // Run is part of the processor interface.
 func (jr *joinReader) Run(wg *sync.WaitGroup) {
+	if wg != nil {
+		defer wg.Done()
+	}
+
 	err := jr.mainLoop()
 	jr.output.Close(err)
-	if wg != nil {
-		wg.Done()
-	}
 }

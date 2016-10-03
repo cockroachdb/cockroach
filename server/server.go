@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/sdnotify"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
 var (
@@ -73,6 +74,9 @@ var (
 
 // Server is the cockroach server node.
 type Server struct {
+	// Must align to 8-bytes for atomic int64 updates.
+	nodeLogTagVal log.DynamicIntValue
+
 	ctx            Context
 	mux            *http.ServeMux
 	clock          *hlc.Clock
@@ -98,8 +102,6 @@ type Server struct {
 	stopper        *stop.Stopper
 	sqlExecutor    *sql.Executor
 	leaseMgr       *sql.LeaseManager
-
-	nodeLogTagVal log.DynamicIntValue
 }
 
 // NewServer creates a Server from a server.Context.
@@ -223,6 +225,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		Context:    s.Ctx(),
 		DB:         s.db,
 		RPCContext: s.rpcContext,
+		Stopper:    s.stopper,
 	}
 	s.distSQLServer = distsql.NewServer(distSQLCfg)
 	distsql.RegisterDistSQLServer(s.grpc, s.distSQLServer)
@@ -268,6 +271,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		AllocatorOptions: storage.AllocatorOptions{
 			AllowRebalance: true,
 		},
+		Locality: srvCtx.Locality,
 	}
 	if srvCtx.TestingKnobs.Store != nil {
 		nCtx.TestingKnobs = *srvCtx.TestingKnobs.Store.(*storage.StoreTestingKnobs)
@@ -299,6 +303,22 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 // Ctx returns the base context for the server.
 func (s *Server) Ctx() context.Context {
 	return s.ctx.Ctx
+}
+
+// ClusterID returns the ID of the cluster this server is a part of.
+func (s *Server) ClusterID() uuid.UUID {
+	return s.node.ClusterID
+}
+
+// NodeID returns the ID of this node within its cluster.
+func (s *Server) NodeID() roachpb.NodeID {
+	return s.node.Descriptor.NodeID
+}
+
+// InitialBoot returns whether this is the first time the node has booted.
+// Only intended to help print debugging info during server startup.
+func (s *Server) InitialBoot() bool {
+	return s.node.initialBoot
 }
 
 // grpcGatewayServer represents a grpc service with HTTP endpoints through GRPC
@@ -564,10 +584,11 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// TODO(marc): when cookie-based authentication exists,
 	// apply it for all web endpoints.
-	s.mux.Handle(adminEndpoint, gwMux)
+	s.mux.Handle(adminPrefix, gwMux)
 	s.mux.Handle(ts.URLPrefix, gwMux)
-	s.mux.Handle(statusPrefix, s.status)
-	s.mux.Handle(healthEndpoint, s.status)
+	s.mux.Handle(statusPrefix, gwMux)
+	s.mux.Handle("/health", gwMux)
+	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 	log.Event(ctx, "added http endpoints")
 
 	if err := sdnotify.Ready(); err != nil {

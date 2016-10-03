@@ -52,11 +52,12 @@ func (p *planner) makeIndexJoin(origScan *scanNode, exactPrefix int) (resultPlan
 	// at a starting point to build the new indexScan node.
 	indexScan = origScan
 
-	// Create a new table scan node with the primary index.
+	// Create a new scanNode that will be used with the primary index.
 	table := p.Scan()
 	table.desc = origScan.desc
 	table.initDescDefaults(publicColumns)
 	table.initOrdering(0)
+	table.disableBatchLimit()
 
 	colIDtoRowIndex := map[sqlbase.ColumnID]int{}
 	for _, colID := range table.desc.PrimaryIndex.ColumnIDs {
@@ -117,7 +118,7 @@ func (p *planner) makeIndexJoin(origScan *scanNode, exactPrefix int) (resultPlan
 	}, indexScan
 }
 
-func (n *indexJoinNode) Columns() []ResultColumn {
+func (n *indexJoinNode) Columns() ResultColumns {
 	return n.table.Columns()
 }
 
@@ -215,9 +216,9 @@ func (n *indexJoinNode) Next() (bool, error) {
 				return false, err
 			}
 			key := roachpb.Key(primaryIndexKey)
-			n.table.spans = append(n.table.spans, sqlbase.Span{
-				Start: key,
-				End:   key.PrefixEnd(),
+			n.table.spans = append(n.table.spans, roachpb.Span{
+				Key:    key,
+				EndKey: key.PrefixEnd(),
 			})
 
 			if n.explain == explainDebug {
@@ -242,4 +243,9 @@ func (n *indexJoinNode) ExplainTypes(_ func(string, string)) {}
 
 func (n *indexJoinNode) SetLimitHint(numRows int64, soft bool) {
 	n.index.SetLimitHint(numRows, soft)
+}
+
+func (n *indexJoinNode) Close() {
+	n.index.Close()
+	n.table.Close()
 }

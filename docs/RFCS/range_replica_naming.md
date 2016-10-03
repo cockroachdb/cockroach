@@ -1,7 +1,7 @@
 - Feature Name: range_replica_naming
 - Status: completed
 - Start Date: 2015-07-29
-- RFC PR: #1864
+- RFC PR: [#1864](https://github.com/cockroachdb/cockroach/pull/1864)
 - Cockroach Issue:
 
 # Summary

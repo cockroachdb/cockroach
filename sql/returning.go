@@ -17,8 +17,6 @@
 package sql
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
@@ -28,7 +26,7 @@ import (
 type returningHelper struct {
 	p *planner
 	// Expected columns.
-	columns []ResultColumn
+	columns ResultColumns
 	// Processed copies of expressions from ReturningExprs.
 	exprs    []parser.TypedExpr
 	qvals    qvalMap
@@ -50,12 +48,12 @@ func (p *planner) makeReturningHelper(
 	}
 
 	for _, e := range r {
-		if p.parser.AggregateInExpr(e.Expr) {
-			return rh, fmt.Errorf("aggregate functions are not allowed in RETURNING")
+		if err := p.parser.AssertNoAggregationOrWindowing(e.Expr, "RETURNING"); err != nil {
+			return rh, err
 		}
 	}
 
-	rh.columns = make([]ResultColumn, 0, len(r))
+	rh.columns = make(ResultColumns, 0, len(r))
 	aliasTableName := parser.TableName{TableName: parser.Name(alias)}
 	rh.source = newSourceInfoForSingleTable(aliasTableName, makeResultColumns(tablecols))
 	rh.qvals = make(qvalMap)

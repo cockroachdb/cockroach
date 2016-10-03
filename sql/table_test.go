@@ -111,13 +111,8 @@ func TestMakeTableDescColumns(t *testing.T) {
 		},
 	}
 	for i, d := range testData {
-		stmt, err := parser.ParseOneTraditional(
-			"CREATE TABLE foo.test (a " + d.sqlType + " PRIMARY KEY, b " + d.sqlType + ")")
-		if err != nil {
-			t.Fatalf("%d: %v", i, err)
-		}
-		create := stmt.(*parser.CreateTable)
-		schema, err := MakeTableDesc(create, 1)
+		s := "CREATE TABLE foo.test (a " + d.sqlType + " PRIMARY KEY, b " + d.sqlType + ")"
+		schema, err := CreateTestTableDescriptor(1, 100, s, sqlbase.NewDefaultPrivilegeDescriptor())
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
@@ -148,8 +143,10 @@ func TestMakeTableDescIndexes(t *testing.T) {
 			"a INT PRIMARY KEY",
 			sqlbase.IndexDescriptor{
 				Name:             sqlbase.PrimaryKeyIndexName,
+				ID:               1,
 				Unique:           true,
 				ColumnNames:      []string{"a"},
+				ColumnIDs:        []sqlbase.ColumnID{1},
 				ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
 			},
 			[]sqlbase.IndexDescriptor{},
@@ -158,16 +155,21 @@ func TestMakeTableDescIndexes(t *testing.T) {
 			"a INT UNIQUE, b INT PRIMARY KEY",
 			sqlbase.IndexDescriptor{
 				Name:             "primary",
+				ID:               1,
 				Unique:           true,
 				ColumnNames:      []string{"b"},
+				ColumnIDs:        []sqlbase.ColumnID{2},
 				ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
 			},
 			[]sqlbase.IndexDescriptor{
 				{
-					Name:             "",
-					Unique:           true,
-					ColumnNames:      []string{"a"},
-					ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
+					Name:              "test_a_key",
+					ID:                2,
+					Unique:            true,
+					ColumnNames:       []string{"a"},
+					ColumnIDs:         []sqlbase.ColumnID{1},
+					ImplicitColumnIDs: []sqlbase.ColumnID{2},
+					ColumnDirections:  []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
 				},
 			},
 		},
@@ -175,8 +177,10 @@ func TestMakeTableDescIndexes(t *testing.T) {
 			"a INT, b INT, CONSTRAINT c PRIMARY KEY (a, b)",
 			sqlbase.IndexDescriptor{
 				Name:             "c",
+				ID:               1,
 				Unique:           true,
 				ColumnNames:      []string{"a", "b"},
+				ColumnIDs:        []sqlbase.ColumnID{1, 2},
 				ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC, sqlbase.IndexDescriptor_ASC},
 			},
 			[]sqlbase.IndexDescriptor{},
@@ -185,16 +189,21 @@ func TestMakeTableDescIndexes(t *testing.T) {
 			"a INT, b INT, CONSTRAINT c UNIQUE (b), PRIMARY KEY (a, b)",
 			sqlbase.IndexDescriptor{
 				Name:             "primary",
+				ID:               1,
 				Unique:           true,
 				ColumnNames:      []string{"a", "b"},
+				ColumnIDs:        []sqlbase.ColumnID{1, 2},
 				ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC, sqlbase.IndexDescriptor_ASC},
 			},
 			[]sqlbase.IndexDescriptor{
 				{
-					Name:             "c",
-					Unique:           true,
-					ColumnNames:      []string{"b"},
-					ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
+					Name:              "c",
+					ID:                2,
+					Unique:            true,
+					ColumnNames:       []string{"b"},
+					ColumnIDs:         []sqlbase.ColumnID{2},
+					ImplicitColumnIDs: []sqlbase.ColumnID{1},
+					ColumnDirections:  []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
 				},
 			},
 		},
@@ -202,20 +211,18 @@ func TestMakeTableDescIndexes(t *testing.T) {
 			"a INT, b INT, PRIMARY KEY (a, b)",
 			sqlbase.IndexDescriptor{
 				Name:             sqlbase.PrimaryKeyIndexName,
+				ID:               1,
 				Unique:           true,
 				ColumnNames:      []string{"a", "b"},
+				ColumnIDs:        []sqlbase.ColumnID{1, 2},
 				ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC, sqlbase.IndexDescriptor_ASC},
 			},
 			[]sqlbase.IndexDescriptor{},
 		},
 	}
 	for i, d := range testData {
-		stmt, err := parser.ParseOneTraditional("CREATE TABLE foo.test (" + d.sql + ")")
-		if err != nil {
-			t.Fatalf("%d (%s): %v", i, d.sql, err)
-		}
-		create := stmt.(*parser.CreateTable)
-		schema, err := MakeTableDesc(create, 1)
+		s := "CREATE TABLE foo.test (" + d.sql + ")"
+		schema, err := CreateTestTableDescriptor(1, 100, s, sqlbase.NewDefaultPrivilegeDescriptor())
 		if err != nil {
 			t.Fatalf("%d (%s): %v", i, d.sql, err)
 		}
@@ -231,17 +238,14 @@ func TestMakeTableDescIndexes(t *testing.T) {
 
 func TestPrimaryKeyUnspecified(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stmt, err := parser.ParseOneTraditional(
-		"CREATE TABLE foo.test (a INT, b INT, CONSTRAINT c UNIQUE (b))")
+	s := "CREATE TABLE foo.test (a INT, b INT, CONSTRAINT c UNIQUE (b))"
+	desc, err := CreateTestTableDescriptor(1, 100, s, sqlbase.NewDefaultPrivilegeDescriptor())
 	if err != nil {
 		t.Fatal(err)
 	}
-	create := stmt.(*parser.CreateTable)
-	desc, err := MakeTableDesc(create, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = desc.AllocateIDs()
+	desc.PrimaryIndex = sqlbase.IndexDescriptor{}
+
+	err = desc.ValidateTable()
 	if !testutils.IsError(err, sqlbase.ErrMissingPrimaryKey.Error()) {
 		t.Fatalf("unexpected error: %v", err)
 	}

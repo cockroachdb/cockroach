@@ -122,7 +122,7 @@ type planNode interface {
 	// Stable after expandPlan() (or makePlan).
 	// Available after newPlan(), but may change on intermediate plan
 	// nodes during expandPlan() due to index selection.
-	Columns() []ResultColumn
+	Columns() ResultColumns
 
 	// The indexes of the columns the output is ordered by.
 	//
@@ -148,7 +148,7 @@ type planNode interface {
 
 	// Next performs one unit of work, returning false if an error is
 	// encountered or if there is no more work to do. For statements
-	// that return a result set, the Value() method will return one row
+	// that return a result set, the Values() method will return one row
 	// of results each time that Next() returns true.
 	// See executor.go: countRowsAffected() and execStmt() for an example.
 	//
@@ -171,6 +171,9 @@ type planNode interface {
 	// Available after Next() and MarkDebug(explainDebug), see
 	// explain.go.
 	DebugValues() debugValues
+
+	// Close terminates the planNode execution and releases its resources.
+	Close()
 }
 
 // planNodeFastPath is implemented by nodes that can perform all their
@@ -200,12 +203,15 @@ var _ planNode = &updateNode{}
 var _ planNode = &deleteNode{}
 var _ planNode = &createDatabaseNode{}
 var _ planNode = &createTableNode{}
+var _ planNode = &createViewNode{}
 var _ planNode = &createIndexNode{}
 var _ planNode = &dropDatabaseNode{}
-var _ planNode = &dropTableNode{}
 var _ planNode = &dropIndexNode{}
+var _ planNode = &dropTableNode{}
+var _ planNode = &dropViewNode{}
 var _ planNode = &alterTableNode{}
 var _ planNode = &joinNode{}
+var _ planNode = &distSQLNode{}
 
 // makePlan implements the Planner interface.
 func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, error) {
@@ -238,12 +244,18 @@ func (p *planner) newPlan(stmt parser.Statement, desiredTypes []parser.Datum, au
 		return p.AlterTable(n)
 	case *parser.BeginTransaction:
 		return p.BeginTransaction(n)
+	case CopyDataBlock:
+		return p.CopyData(n, autoCommit)
+	case *parser.CopyFrom:
+		return p.CopyFrom(n, autoCommit)
 	case *parser.CreateDatabase:
 		return p.CreateDatabase(n)
 	case *parser.CreateIndex:
 		return p.CreateIndex(n)
 	case *parser.CreateTable:
 		return p.CreateTable(n)
+	case *parser.CreateView:
+		return p.CreateView(n)
 	case *parser.Delete:
 		return p.Delete(n, desiredTypes, autoCommit)
 	case *parser.DropDatabase:
@@ -252,10 +264,14 @@ func (p *planner) newPlan(stmt parser.Statement, desiredTypes []parser.Datum, au
 		return p.DropIndex(n)
 	case *parser.DropTable:
 		return p.DropTable(n)
+	case *parser.DropView:
+		return p.DropView(n)
 	case *parser.Explain:
 		return p.Explain(n, autoCommit)
 	case *parser.Grant:
 		return p.Grant(n)
+	case *parser.Help:
+		return p.Help(n)
 	case *parser.Insert:
 		return p.Insert(n, desiredTypes, autoCommit)
 	case *parser.ParenSelect:
@@ -298,6 +314,8 @@ func (p *planner) newPlan(stmt parser.Statement, desiredTypes []parser.Datum, au
 		return p.ShowConstraints(n)
 	case *parser.ShowTables:
 		return p.ShowTables(n)
+	case *parser.Split:
+		return p.Split(n)
 	case *parser.Truncate:
 		return p.Truncate(n)
 	case *parser.UnionClause:
@@ -315,6 +333,8 @@ func (p *planner) prepare(stmt parser.Statement) (planNode, error) {
 	switch n := stmt.(type) {
 	case *parser.Delete:
 		return p.Delete(n, nil, false)
+	case *parser.Help:
+		return p.Help(n)
 	case *parser.Insert:
 		return p.Insert(n, nil, false)
 	case *parser.Select:
@@ -337,6 +357,8 @@ func (p *planner) prepare(stmt parser.Statement) (planNode, error) {
 		return p.ShowConstraints(n)
 	case *parser.ShowTables:
 		return p.ShowTables(n)
+	case *parser.Split:
+		return p.Split(n)
 	case *parser.Update:
 		return p.Update(n, nil, false)
 	default:

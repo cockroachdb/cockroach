@@ -404,7 +404,7 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("hashedPassword", "BYTES", true, gosql.NullBool{}),
 		},
 		"SHOW DATABASES": {
-			baseTest.Results("information_schema").Results("d").Results("system"),
+			baseTest.Results("information_schema").Results("pg_catalog").Results("d").Results("system"),
 		},
 		"SHOW GRANTS ON system.users": {
 			baseTest.Results("users", security.RootUser, "DELETE,GRANT,INSERT,SELECT,UPDATE"),
@@ -697,7 +697,7 @@ func TestPGPreparedExec(t *testing.T) {
 			"CREATE TABLE d.t (i INT, s STRING, d INT)",
 			[]preparedExecTest{
 				baseTest,
-				baseTest.Error(`pq: table "t" already exists`),
+				baseTest.Error(`pq: relation "t" already exists`),
 			},
 		},
 		{

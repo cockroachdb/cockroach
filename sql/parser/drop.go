@@ -98,3 +98,23 @@ func (node *DropTable) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteString(node.DropBehavior.String())
 	}
 }
+
+// DropView represents a DROP VIEW statement.
+type DropView struct {
+	Names        TableNameReferences
+	IfExists     bool
+	DropBehavior DropBehavior
+}
+
+// Format implements the NodeFormatter interface.
+func (node *DropView) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("DROP VIEW ")
+	if node.IfExists {
+		buf.WriteString("IF EXISTS ")
+	}
+	FormatNode(buf, f, node.Names)
+	if node.DropBehavior != DropDefault {
+		buf.WriteByte(' ')
+		buf.WriteString(node.DropBehavior.String())
+	}
+}

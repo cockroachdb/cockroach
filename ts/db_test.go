@@ -86,7 +86,7 @@ func (tm *testModel) getActualData() map[string]roachpb.Value {
 	// Scan over all TS Keys stored in the engine
 	startKey := keys.TimeseriesPrefix
 	endKey := startKey.PrefixEnd()
-	keyValues, _, err := engine.MVCCScan(context.Background(), tm.Eng, startKey, endKey, math.MaxInt64, tm.Clock.Now(), true, nil)
+	keyValues, _, _, err := engine.MVCCScan(context.Background(), tm.Eng, startKey, endKey, math.MaxInt64, tm.Clock.Now(), true, nil)
 	if err != nil {
 		tm.t.Fatalf("error scanning TS data from engine: %s", err.Error())
 	}
@@ -165,7 +165,7 @@ func (tm *testModel) storeInModel(r Resolution, data tspb.TimeSeriesData) {
 	tm.seenSources[data.Source] = struct{}{}
 
 	// Process and store data in the model.
-	internalData, err := data.ToInternal(r.KeyDuration(), r.SampleDuration())
+	internalData, err := data.ToInternal(r.SlabDuration(), r.SampleDuration())
 	if err != nil {
 		tm.t.Fatalf("test could not convert time series to internal format: %s", err.Error())
 	}

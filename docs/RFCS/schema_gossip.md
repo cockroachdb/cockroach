@@ -1,7 +1,7 @@
 - Feature Name: schema_distribution
 - Status: unstarted
 - Start Date: TBD
-- RFC PR: #1743
+- RFC PR: [#1743](https://github.com/cockroachdb/cockroach/pull/1743)
 - Cockroach Issue:
 
 # Summary

@@ -22,8 +22,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/internal/client"
-	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/pkg/errors"
@@ -37,17 +35,24 @@ const (
 	EventLogCreateDatabase EventLogType = "create_database"
 	// EventLogDropDatabase is recorded when a database is dropped.
 	EventLogDropDatabase EventLogType = "drop_database"
+
 	// EventLogCreateTable is recorded when a table is created.
 	EventLogCreateTable EventLogType = "create_table"
 	// EventLogDropTable is recorded when a table is dropped.
 	EventLogDropTable EventLogType = "drop_table"
-
 	// EventLogAlterTable is recorded when a table is altered.
 	EventLogAlterTable EventLogType = "alter_table"
+
 	// EventLogCreateIndex is recorded when an index is created.
 	EventLogCreateIndex EventLogType = "create_index"
-	// EventLogDropIndex is recorded when an index is created.
+	// EventLogDropIndex is recorded when an index is dropped.
 	EventLogDropIndex EventLogType = "drop_index"
+
+	// EventLogCreateView is recorded when a view is created.
+	EventLogCreateView EventLogType = "create_view"
+	// EventLogDropView is recorded when a view is dropped.
+	EventLogDropView EventLogType = "drop_view"
+
 	// EventLogReverseSchemaChange is recorded when an in-progress schema change
 	// encounters a problem and is reversed.
 	EventLogReverseSchemaChange EventLogType = "reverse_schema_change"
@@ -61,30 +66,6 @@ const (
 	// after being offline.
 	EventLogNodeRestart EventLogType = "node_restart"
 )
-
-// eventTableSchema describes the schema of the event log table.
-const eventTableSchema = `
-CREATE TABLE system.eventlog (
-  timestamp    TIMESTAMP  NOT NULL,
-  eventType    STRING     NOT NULL,
-  targetID     INT        NOT NULL,
-  reportingID  INT        NOT NULL,
-  info         STRING,
-  uniqueID     BYTES      DEFAULT experimental_unique_bytes(),
-  PRIMARY KEY (timestamp, uniqueID)
-);`
-
-// AddEventLogToMetadataSchema adds the event log table to the supplied
-// MetadataSchema.
-func AddEventLogToMetadataSchema(schema *sqlbase.MetadataSchema) {
-	desc := CreateTableDescriptor(
-		keys.EventLogTableID,
-		keys.SystemDatabaseID,
-		eventTableSchema,
-		sqlbase.NewDefaultPrivilegeDescriptor(),
-	)
-	schema.AddDescriptor(keys.SystemDatabaseID, &desc)
-}
 
 // An EventLogger exposes methods used to record events to the event table.
 type EventLogger struct {

@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
@@ -186,6 +187,11 @@ func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.mu.tsCache.lowWater
+}
+
+// GetStoreList is the same function as GetStoreList exposed for tests only.
+func (sp *StorePool) GetStoreList(constraints config.Constraints, deterministic bool) (StoreList, int, int) {
+	return sp.getStoreList(constraints, deterministic)
 }
 
 // IsQuiescent returns whether the replica is quiescent or not.

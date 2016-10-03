@@ -20,9 +20,7 @@ package server
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"reflect"
 	"regexp"
@@ -31,6 +29,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -46,13 +46,13 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
-	"github.com/gogo/protobuf/jsonpb"
-	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
 )
+
+func getStatusJSONProto(ts serverutils.TestServerInterface, path string, response proto.Message) error {
+	return serverutils.GetJSONProto(ts, statusPrefix+path, response)
+}
 
 // TestStatusLocalStacks verifies that goroutine stack traces are available
 // via the /_status/stacks/local endpoint.
@@ -64,16 +64,14 @@ func TestStatusLocalStacks(t *testing.T) {
 	// Verify match with at least two goroutine stacks.
 	re := regexp.MustCompile("(?s)goroutine [0-9]+.*goroutine [0-9]+.*")
 
-	if body, err := getText(s.AdminURL() + "/_status/stacks/local"); err != nil {
-		t.Fatal(err)
-	} else if !re.Match(body) {
-		t.Errorf("expected %s to match %s", body, re)
-	}
-
-	if body, err := getText(s.AdminURL() + "/_status/stacks/1"); err != nil {
-		t.Fatal(err)
-	} else if !re.Match(body) {
-		t.Errorf("expected %s to match %s", body, re)
+	var stacks serverpb.JSONResponse
+	for _, nodeID := range []string{"local", "1"} {
+		if err := getStatusJSONProto(s, "stacks/"+nodeID, &stacks); err != nil {
+			t.Fatal(err)
+		}
+		if !re.Match(stacks.Data) {
+			t.Errorf("expected %s to match %s", stacks.Data, re)
+		}
 	}
 }
 
@@ -93,7 +91,7 @@ func TestStatusJson(t *testing.T) {
 
 	var nodes serverpb.NodesResponse
 	util.SucceedsSoon(t, func() error {
-		if err := getRequestProto(t, s, statusNodesPrefix, &nodes); err != nil {
+		if err := getStatusJSONProto(s, "nodes", &nodes); err != nil {
 			t.Fatal(err)
 		}
 
@@ -105,11 +103,11 @@ func TestStatusJson(t *testing.T) {
 
 	for _, path := range []string{
 		"/health",
-		"/_status/details/local",
-		"/_status/details/" + strconv.FormatUint(uint64(nodeID), 10),
+		statusPrefix + "details/local",
+		statusPrefix + "details/" + strconv.FormatUint(uint64(nodeID), 10),
 	} {
 		var details serverpb.DetailsResponse
-		if err := getRequestProto(t, s, path, &details); err != nil {
+		if err := serverutils.GetJSONProto(s, path, &details); err != nil {
 			t.Fatal(err)
 		}
 		if a, e := details.NodeID, nodeID; a != e {
@@ -132,7 +130,7 @@ func TestStatusGossipJson(t *testing.T) {
 	defer s.Stopper().Stop()
 
 	var data gossip.InfoStatus
-	if err := getRequestProto(t, s, "/_status/gossip/local", &data); err != nil {
+	if err := getStatusJSONProto(s, "gossip/local", &data); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := data.Infos["first-range"]; !ok {
@@ -149,79 +147,10 @@ func TestStatusGossipJson(t *testing.T) {
 	}
 }
 
-var retryOptions = retry.Options{
-	InitialBackoff: 100 * time.Millisecond,
-	MaxRetries:     4,
-	Multiplier:     2,
-}
-
-// getRequestReader returns the io.ReadCloser from a get request to the test
-// server with the given path. The returned closer should be closed by the
-// caller.
-func getRequestReader(t *testing.T, ts serverutils.TestServerInterface, path string) io.ReadCloser {
-	httpClient, err := ts.GetHTTPClient()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	url := ts.AdminURL() + path
-	for r := retry.Start(retryOptions); r.Next(); {
-		req, err := http.NewRequest("GET", url, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		req.Header.Set(util.AcceptHeader, util.JSONContentType)
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			log.Infof(context.Background(), "could not GET %s - %s", url, err)
-			continue
-		}
-		if resp.StatusCode != http.StatusOK {
-			body, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				log.Infof(context.Background(), "could not read body for %s - %s", url, err)
-				continue
-			}
-			log.Infof(context.Background(), "could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
-			continue
-		}
-		returnedContentType := resp.Header.Get(util.ContentTypeHeader)
-		if returnedContentType != util.JSONContentType {
-			log.Infof(context.Background(), "unexpected content type: %v", returnedContentType)
-			continue
-		}
-		log.Infof(context.Background(), "OK response from %s", url)
-		return resp.Body
-	}
-	t.Fatalf("There was an error retrieving %s", url)
-	return nil
-}
-
-// getRequest returns the results of a get request to the test server with
-// the given path. It returns the contents of the body of the result.
-func getRequest(t *testing.T, ts serverutils.TestServerInterface, path string) []byte {
-	respBody := getRequestReader(t, ts, path)
-	defer respBody.Close()
-	body, err := ioutil.ReadAll(respBody)
-	if err != nil {
-		log.Infof(context.Background(), "could not read body for %s - %s", path, err)
-		return nil
-	}
-	return body
-}
-
-// getRequestProto unmarshals the result of a get request to the test server
-// with the given path.
-func getRequestProto(t *testing.T, ts serverutils.TestServerInterface, path string, v proto.Message) error {
-	respBody := getRequestReader(t, ts, path)
-	defer respBody.Close()
-	return jsonpb.Unmarshal(respBody, v)
-}
-
 // startServer will start a server with a short scan interval, wait for
 // the scan to complete, and return the server. The caller is
 // responsible for stopping the server.
-func startServer(t *testing.T) serverutils.TestServerInterface {
+func startServer(t *testing.T) *TestServer {
 	tsI, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		StoreSpecs: []base.StoreSpec{
 			base.DefaultTestStoreSpec,
@@ -285,7 +214,7 @@ func TestStatusLocalLogs(t *testing.T) {
 	timestampEWI := timeutil.Now().UnixNano()
 
 	var wrapper serverpb.LogFilesListResponse
-	if err := getRequestProto(t, ts, "/_status/logfiles/local", &wrapper); err != nil {
+	if err := getStatusJSONProto(ts, "logfiles/local", &wrapper); err != nil {
 		t.Fatal(err)
 	}
 	if a, e := len(wrapper.Files), 3; a != e {
@@ -301,7 +230,7 @@ func TestStatusLocalLogs(t *testing.T) {
 	var foundInfo, foundWarning, foundError bool
 	for _, file := range wrapper.Files {
 		var wrapper serverpb.LogEntriesResponse
-		if err := getRequestProto(t, ts, fmt.Sprintf("/_status/logfiles/local/%s", file.Name), &wrapper); err != nil {
+		if err := getStatusJSONProto(ts, "logfiles/local/"+file.Name, &wrapper); err != nil {
 			t.Fatal(err)
 		}
 		for _, entry := range wrapper.Entries {
@@ -320,51 +249,53 @@ func TestStatusLocalLogs(t *testing.T) {
 		t.Errorf("expected to find test messages in %v", wrapper.Files)
 	}
 
+	type levelPresence struct {
+		Error, Warning, Info bool
+	}
+
 	testCases := []struct {
-		Level           log.Severity
-		MaxEntities     int
-		StartTimestamp  int64
-		EndTimestamp    int64
-		Pattern         string
-		ExpectedError   bool
-		ExpectedWarning bool
-		ExpectedInfo    bool
+		Level          log.Severity
+		MaxEntities    int
+		StartTimestamp int64
+		EndTimestamp   int64
+		Pattern        string
+		levelPresence
 	}{
 		// Test filtering by log severity.
-		{log.InfoLog, 0, 0, 0, "", true, true, true},
-		{log.WarningLog, 0, 0, 0, "", true, true, false},
-		{log.ErrorLog, 0, 0, 0, "", true, false, false},
-		// Test entry limit. Ignore Info/Warning/Error filters.
-		{log.InfoLog, 1, timestamp, timestampEWI, "", false, false, false},
-		{log.InfoLog, 2, timestamp, timestampEWI, "", false, false, false},
-		{log.InfoLog, 3, timestamp, timestampEWI, "", false, false, false},
+		{log.Severity_INFO, 0, 0, 0, "", levelPresence{true, true, true}},
+		{log.Severity_WARNING, 0, 0, 0, "", levelPresence{true, true, false}},
+		{log.Severity_ERROR, 0, 0, 0, "", levelPresence{true, false, false}},
+		// // Test entry limit. Ignore Info/Warning/Error filters.
+		{log.Severity_INFO, 1, timestamp, timestampEWI, "", levelPresence{false, false, false}},
+		{log.Severity_INFO, 2, timestamp, timestampEWI, "", levelPresence{false, false, false}},
+		{log.Severity_INFO, 3, timestamp, timestampEWI, "", levelPresence{false, false, false}},
 		// Test filtering in different timestamp windows.
-		{log.InfoLog, 0, timestamp, timestamp, "", false, false, false},
-		{log.InfoLog, 0, timestamp, timestampE, "", true, false, false},
-		{log.InfoLog, 0, timestampE, timestampEW, "", false, true, false},
-		{log.InfoLog, 0, timestampEW, timestampEWI, "", false, false, true},
-		{log.InfoLog, 0, timestamp, timestampEW, "", true, true, false},
-		{log.InfoLog, 0, timestampE, timestampEWI, "", false, true, true},
-		{log.InfoLog, 0, timestamp, timestampEWI, "", true, true, true},
+		{log.Severity_INFO, 0, timestamp, timestamp, "", levelPresence{false, false, false}},
+		{log.Severity_INFO, 0, timestamp, timestampE, "", levelPresence{true, false, false}},
+		{log.Severity_INFO, 0, timestampE, timestampEW, "", levelPresence{false, true, false}},
+		{log.Severity_INFO, 0, timestampEW, timestampEWI, "", levelPresence{false, false, true}},
+		{log.Severity_INFO, 0, timestamp, timestampEW, "", levelPresence{true, true, false}},
+		{log.Severity_INFO, 0, timestampE, timestampEWI, "", levelPresence{false, true, true}},
+		{log.Severity_INFO, 0, timestamp, timestampEWI, "", levelPresence{true, true, true}},
 		// Test filtering by regexp pattern.
-		{log.InfoLog, 0, 0, 0, "Info", false, false, true},
-		{log.InfoLog, 0, 0, 0, "Warning", false, true, false},
-		{log.InfoLog, 0, 0, 0, "Error", true, false, false},
-		{log.InfoLog, 0, 0, 0, "Info|Error|Warning", true, true, true},
-		{log.InfoLog, 0, 0, 0, "Nothing", false, false, false},
+		{log.Severity_INFO, 0, 0, 0, "Info", levelPresence{false, false, true}},
+		{log.Severity_INFO, 0, 0, 0, "Warning", levelPresence{false, true, false}},
+		{log.Severity_INFO, 0, 0, 0, "Error", levelPresence{true, false, false}},
+		{log.Severity_INFO, 0, 0, 0, "Info|Error|Warning", levelPresence{true, true, true}},
+		{log.Severity_INFO, 0, 0, 0, "Nothing", levelPresence{false, false, false}},
 	}
 
 	for i, testCase := range testCases {
 		var url bytes.Buffer
-		fmt.Fprintf(&url, "/_status/logs/local?level=%s", testCase.Level.Name())
+		fmt.Fprintf(&url, "logs/local?level=%s", testCase.Level.Name())
 		if testCase.MaxEntities > 0 {
 			fmt.Fprintf(&url, "&max=%d", testCase.MaxEntities)
 		}
 		if testCase.StartTimestamp > 0 {
-			fmt.Fprintf(&url, "&starttime=%d", testCase.StartTimestamp)
+			fmt.Fprintf(&url, "&start_time=%d", testCase.StartTimestamp)
 		}
 		if testCase.StartTimestamp > 0 {
-			fmt.Fprintf(&url, "&endtime=%d", testCase.EndTimestamp)
+			fmt.Fprintf(&url, "&end_time=%d", testCase.EndTimestamp)
 		}
 		if len(testCase.Pattern) > 0 {
 			fmt.Fprintf(&url, "&pattern=%s", testCase.Pattern)
@@ -372,7 +303,7 @@ func TestStatusLocalLogs(t *testing.T) {
 
 		var wrapper serverpb.LogEntriesResponse
 		path := url.String()
-		if err := getRequestProto(t, ts, path, &wrapper); err != nil {
+		if err := getStatusJSONProto(ts, path, &wrapper); err != nil {
 			t.Fatal(err)
 		}
 
@@ -381,34 +312,23 @@ func TestStatusLocalLogs(t *testing.T) {
 				t.Errorf("%d expected %d entries, got %d: \n%+v", i, e, a, wrapper.Entries)
 			}
 		} else {
-			var actualInfo, actualWarning, actualError bool
-			var formats bytes.Buffer
+			var actual levelPresence
+			var logsBuf bytes.Buffer
 			for _, entry := range wrapper.Entries {
-				fmt.Fprintf(&formats, "%s\n", entry.Message)
+				fmt.Fprintln(&logsBuf, entry.Message)
 
 				switch entry.Message {
 				case "TestStatusLocalLogFile test message-Error":
-					actualError = true
+					actual.Error = true
 				case "TestStatusLocalLogFile test message-Warning":
-					actualWarning = true
+					actual.Warning = true
 				case "TestStatusLocalLogFile test message-Info":
-					actualInfo = true
+					actual.Info = true
 				}
 			}
 
-			if !(testCase.ExpectedInfo == actualInfo &&
-				testCase.ExpectedWarning == actualWarning &&
-				testCase.ExpectedError == actualError) {
-
-				t.Errorf(
-					"%d: expected info, warning, error: (%t, %t, %t) from %s, got:\n%s",
-					i,
-					testCase.ExpectedInfo,
-					testCase.ExpectedWarning,
-					testCase.ExpectedError,
-					path,
-					formats.String(),
-				)
+			if testCase.levelPresence != actual {
+				t.Errorf("%d: expected %+v at %s, got:\n%s", i, testCase, path, logsBuf.String())
 			}
 		}
 	}
@@ -420,11 +340,10 @@ func TestNodeStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := startServer(t)
 	defer s.Stopper().Stop()
-	ts := s.(*TestServer)
 
 	// First fetch all the node statuses.
 	wrapper := serverpb.NodesResponse{}
-	if err := getRequestProto(t, s, statusNodesPrefix, &wrapper); err != nil {
+	if err := getStatusJSONProto(s, "nodes", &wrapper); err != nil {
 		t.Fatal(err)
 	}
 	nodeStatuses := wrapper.Nodes
@@ -432,19 +351,19 @@ func TestNodeStatusResponse(t *testing.T) {
 	if len(nodeStatuses) != 1 {
 		t.Errorf("too many node statuses returned - expected:1 actual:%d", len(nodeStatuses))
 	}
-	if !reflect.DeepEqual(ts.node.Descriptor, nodeStatuses[0].Desc) {
-		t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", ts.node.Descriptor, nodeStatuses[0].Desc)
+	if !reflect.DeepEqual(s.node.Descriptor, nodeStatuses[0].Desc) {
+		t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", s.node.Descriptor, nodeStatuses[0].Desc)
 	}
 
 	// Now fetch each one individually. Loop through the nodeStatuses to use the
 	// ids only.
 	for _, oldNodeStatus := range nodeStatuses {
 		nodeStatus := status.NodeStatus{}
-		if err := getRequestProto(t, s, PathForNodeStatus(oldNodeStatus.Desc.NodeID.String()), &nodeStatus); err != nil {
+		if err := getStatusJSONProto(s, "nodes/"+oldNodeStatus.Desc.NodeID.String(), &nodeStatus); err != nil {
 			t.Fatal(err)
 		}
-		if !reflect.DeepEqual(ts.node.Descriptor, nodeStatus.Desc) {
-			t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", ts.node.Descriptor, nodeStatus.Desc)
+		if !reflect.DeepEqual(s.node.Descriptor, nodeStatus.Desc) {
+			t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", s.node.Descriptor, nodeStatus.Desc)
 		}
 	}
 }
@@ -485,9 +404,9 @@ func TestMetricsEndpoint(t *testing.T) {
 	s := startServer(t)
 	defer s.Stopper().Stop()
 
-	nodeID := s.(*TestServer).Gossip().GetNodeID()
-	url := fmt.Sprintf("%s/%s", statusMetricsPrefix, nodeID)
-	getRequest(t, s, url)
+	if _, err := getText(s, s.AdminURL()+statusPrefix+"metrics/"+s.Gossip().GetNodeID().String()); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestRangesResponse(t *testing.T) {
@@ -496,12 +415,12 @@ func TestRangesResponse(t *testing.T) {
 	defer ts.Stopper().Stop()
 
 	// Perform a scan to ensure that all the raft groups are initialized.
-	if _, err := ts.(*TestServer).db.Scan(context.TODO(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+	if _, err := ts.db.Scan(context.TODO(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
 		t.Fatal(err)
 	}
 
 	var response serverpb.RangesResponse
-	if err := getRequestProto(t, ts, statusRangesPrefix+"local", &response); err != nil {
+	if err := getStatusJSONProto(ts, "ranges/local", &response); err != nil {
 		t.Fatal(err)
 	}
 	if len(response.Ranges) == 0 {
@@ -536,7 +455,7 @@ func TestRaftDebug(t *testing.T) {
 	defer s.Stopper().Stop()
 
 	var resp serverpb.RaftDebugResponse
-	if err := getRequestProto(t, s, statusRaftEndpoint, &resp); err != nil {
+	if err := getStatusJSONProto(s, "raft", &resp); err != nil {
 		t.Fatal(err)
 	}
 	if len(resp.Ranges) == 0 {
@@ -551,7 +470,7 @@ func TestStatusVars(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	if body, err := getText(s.AdminURL() + "/_status/vars"); err != nil {
+	if body, err := getText(s, s.AdminURL()+statusPrefix+"vars"); err != nil {
 		t.Fatal(err)
 	} else if !bytes.Contains(body, []byte("# TYPE sql_bytesout counter\nsql_bytesout")) {
 		t.Errorf("expected sql_bytesout, got: %s", body)

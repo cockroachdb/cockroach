@@ -2,7 +2,7 @@
 - Status: rejected
 - Start Date: 2016-04-10
 - Authors: Tobias Schottdorf
-- RFC PR: #5985
+- RFC PR: [#5985](https://github.com/cockroachdb/cockroach/pull/5985)
 - Cockroach Issue:
 
 # Rejection notes

@@ -85,6 +85,11 @@ func (f *Farmer) Nodes() (hosts []string) {
 	return append(hosts, f.nodes...)
 }
 
+// Hostname implements the Cluster interface.
+func (f *Farmer) Hostname(i int) string {
+	return f.Nodes()[i]
+}
+
 // NumNodes returns the number of nodes.
 func (f *Farmer) NumNodes() int {
 	return len(f.Nodes())
@@ -178,8 +183,8 @@ func (f *Farmer) Destroy(t *testing.T) error {
 	if (t.Failed() && f.KeepCluster == KeepClusterFailed) ||
 		f.KeepCluster == KeepClusterAlways {
 
-		t.Logf("not destroying; run:\n(cd %s && terraform destroy -force -state %s)",
-			baseDir, f.StateFile)
+		t.Logf("not destroying; run:\n(cd %s && terraform destroy -force -state %s && rm %s)",
+			baseDir, f.StateFile, f.StateFile)
 		return nil
 	}
 

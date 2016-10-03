@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/pkg/errors"
 )
 
@@ -36,6 +37,7 @@ type ServerConfig struct {
 	Context    context.Context
 	DB         *client.DB
 	RPCContext *rpc.Context
+	Stopper    *stop.Stopper
 }
 
 // ServerImpl implements the server for the distributed SQL APIs.
@@ -112,11 +114,14 @@ func (ds *ServerImpl) RunSimpleFlow(
 	}
 	mbox.setFlowCtx(&f.FlowCtx)
 
-	// TODO(radu): this stuff should probably be run through a stopper.
-	mbox.start(&f.waitGroup)
-	f.Start()
-	f.Wait()
-	f.Cleanup()
+	if err := ds.Stopper.RunTask(func() {
+		mbox.start(&f.waitGroup)
+		f.Start()
+		f.Wait()
+		f.Cleanup()
+	}); err != nil {
+		return err
+	}
 	return mbox.err
 }
 
@@ -144,10 +149,10 @@ func (ds *ServerImpl) SetupFlow(ctx context.Context, req *SetupFlowRequest) (
 	f.Start()
 	// TODO(radu): firing off a goroutine just to call Cleanup is temporary. We
 	// will have a flow scheduler that will be notified when the flow completes.
-	go func() {
+	ds.Stopper.RunWorker(func() {
 		f.Wait()
 		f.Cleanup()
-	}()
+	})
 	return &SimpleResponse{}, nil
 }
 
@@ -179,7 +184,7 @@ func (ds *ServerImpl) flowStreamInt(stream DistSQL_FlowStreamServer) error {
 func (ds *ServerImpl) FlowStream(stream DistSQL_FlowStreamServer) error {
 	err := ds.flowStreamInt(stream)
 	if err != nil {
-		log.Errorf(ds.Context, err.Error(), "", err)
+		log.Error(ds.Context, err)
 	}
 	return err
 }

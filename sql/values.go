@@ -31,16 +31,24 @@ import (
 type valuesNode struct {
 	n        *parser.ValuesClause
 	p        *planner
-	columns  []ResultColumn
+	columns  ResultColumns
 	ordering sqlbase.ColumnOrdering
 	tuples   [][]parser.TypedExpr
-	rows     []parser.DTuple
+	rows     *RowContainer
 
 	desiredTypes []parser.Datum // This can be removed when we only type check once.
 
 	nextRow       int           // The index of the next row.
 	invertSorting bool          // Inverts the sorting predicate.
 	tmpValues     parser.DTuple // Used to store temporary values.
+	err           error         // Used to propagate errors during heap operations.
+}
+
+func (p *planner) newContainerValuesNode(columns ResultColumns, capacity int) *valuesNode {
+	return &valuesNode{
+		columns: columns,
+		rows:    p.NewRowContainer(columns, capacity),
+	}
 }
 
 func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Datum) (planNode, error) {
@@ -58,7 +66,7 @@ func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Dat
 	v.tuples = make([][]parser.TypedExpr, 0, len(n.Tuples))
 	tupleBuf := make([]parser.TypedExpr, len(n.Tuples)*numCols)
 
-	v.columns = make([]ResultColumn, 0, numCols)
+	v.columns = make(ResultColumns, 0, numCols)
 
 	for num, tuple := range n.Tuples {
 		if a, e := len(tuple.Exprs), numCols; a != e {
@@ -70,8 +78,8 @@ func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Dat
 		tupleBuf = tupleBuf[numCols:]
 
 		for i, expr := range tuple.Exprs {
-			if p.parser.AggregateInExpr(expr) {
-				return nil, fmt.Errorf("aggregate functions are not allowed in VALUES")
+			if err := p.parser.AssertNoAggregationOrWindowing(expr, "VALUES"); err != nil {
+				return nil, err
 			}
 
 			desired := parser.NoTypePreference
@@ -128,8 +136,9 @@ func (n *valuesNode) Start() error {
 	// others that create a valuesNode internally for storing results
 	// from other planNodes), so its expressions need evaluting.
 	// This may run subqueries.
+	n.rows = n.p.NewRowContainer(n.columns, len(n.n.Tuples))
+
 	numCols := len(n.columns)
-	n.rows = make([]parser.DTuple, 0, len(n.n.Tuples))
 	rowBuf := make([]parser.Datum, len(n.n.Tuples)*numCols)
 	for _, tupleRow := range n.tuples {
 		// Chop off prefix of rowBuf and limit its capacity.
@@ -147,13 +156,15 @@ func (n *valuesNode) Start() error {
 				return err
 			}
 		}
-		n.rows = append(n.rows, row)
+		if err := n.rows.AddRow(row); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-func (n *valuesNode) Columns() []ResultColumn {
+func (n *valuesNode) Columns() ResultColumns {
 	return n.columns
 }
 
@@ -162,37 +173,45 @@ func (n *valuesNode) Ordering() orderingInfo {
 }
 
 func (n *valuesNode) Values() parser.DTuple {
-	return n.rows[n.nextRow-1]
+	return n.rows.At(n.nextRow - 1)
 }
 
 func (*valuesNode) MarkDebug(_ explainMode) {}
 
 func (n *valuesNode) DebugValues() debugValues {
+	val := n.rows.At(n.nextRow - 1)
 	return debugValues{
 		rowIdx: n.nextRow - 1,
 		key:    fmt.Sprintf("%d", n.nextRow-1),
-		value:  n.rows[n.nextRow-1].String(),
+		value:  val.String(),
 		output: debugValueRow,
 	}
 }
 
 func (n *valuesNode) Next() (bool, error) {
-	if n.nextRow >= len(n.rows) {
+	if n.nextRow >= n.rows.Len() {
 		return false, nil
 	}
 	n.nextRow++
 	return true, nil
 }
 
+func (n *valuesNode) Close() {
+	if n.rows != nil {
+		n.rows.Close()
+		n.rows = nil
+	}
+}
+
 func (n *valuesNode) Len() int {
-	return len(n.rows)
+	return n.rows.Len()
 }
 
 func (n *valuesNode) Less(i, j int) bool {
 	// TODO(pmattis): An alternative to this type of field-based comparison would
 	// be to construct a sort-key per row using encodeTableKey(). Using a
 	// sort-key approach would likely fit better with a disk-based sort.
-	ra, rb := n.rows[i], n.rows[j]
+	ra, rb := n.rows.At(i), n.rows.At(j)
 	return n.invertSorting != n.ValuesLess(ra, rb)
 }
 
@@ -222,31 +241,28 @@ func (n *valuesNode) ValuesLess(ra, rb parser.DTuple) bool {
 }
 
 func (n *valuesNode) Swap(i, j int) {
-	n.rows[i], n.rows[j] = n.rows[j], n.rows[i]
+	n.rows.Swap(i, j)
 }
 
 var _ heap.Interface = (*valuesNode)(nil)
 
 // Push implements the heap.Interface interface.
 func (n *valuesNode) Push(x interface{}) {
-	n.rows = append(n.rows, n.tmpValues)
+	n.err = n.rows.AddRow(n.tmpValues)
 }
 
 // PushValues pushes the given DTuple value into the heap representation
 // of the valuesNode.
-func (n *valuesNode) PushValues(values parser.DTuple) {
+func (n *valuesNode) PushValues(values parser.DTuple) error {
 	// Avoid passing slice through interface{} to avoid allocation.
 	n.tmpValues = values
 	heap.Push(n, nil)
+	return n.err
 }
 
 // Pop implements the heap.Interface interface.
 func (n *valuesNode) Pop() interface{} {
-	idx := len(n.rows) - 1
-	// Returning a pointer to avoid an allocation when storing the slice in an interface{}.
-	x := &(n.rows)[idx]
-	n.rows = n.rows[:idx]
-	return x
+	return n.rows.PseudoPop()
 }
 
 // PopValues pops the top DTuple value off the heap representation
@@ -268,7 +284,7 @@ func (n *valuesNode) InitMaxHeap() {
 	heap.Init(n)
 }
 
-// InitMaxHeap initializes the valuesNode.rows slice as a min-heap.
+// InitMinHeap initializes the valuesNode.rows slice as a min-heap.
 func (n *valuesNode) InitMinHeap() {
 	n.invertSorting = false
 	heap.Init(n)
@@ -278,7 +294,15 @@ func (n *valuesNode) ExplainPlan(_ bool) (name, description string, children []p
 	name = "values"
 	description = fmt.Sprintf("%d column%s",
 		len(n.columns), util.Pluralize(int64(len(n.columns))))
-	return name, description, nil
+
+	var subplans []planNode
+	for _, tuple := range n.tuples {
+		for _, expr := range tuple {
+			subplans = n.p.collectSubqueryPlans(expr, subplans)
+		}
+	}
+
+	return name, description, subplans
 }
 
 func (n *valuesNode) ExplainTypes(regTypes func(string, string)) {

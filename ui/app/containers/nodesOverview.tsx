@@ -1,15 +1,15 @@
 import * as React from "react";
-import _ = require("lodash");
+import _ from "lodash";
 import { Link } from "react-router";
 import { connect } from "react-redux";
-import { createSelector } from "reselect";
 import * as d3 from "d3";
-import * as moment from "moment";
+import moment from "moment";
 
 import { AdminUIState } from "../redux/state";
 import { refreshNodes } from "../redux/apiReducers";
 import { setUISetting } from "../redux/ui";
-import { SortableTable, SortableColumn, SortSetting } from "../components/sortabletable";
+import { SortSetting } from "../components/sortabletable";
+import { SortedTable } from "../components/sortedtable";
 import { NanoToMilli } from "../util/convert";
 import { BytesToUnitValue } from "../util/format";
 import { NodeStatus, MetricConstants, TotalCpu, BytesUsed } from  "../util/proto";
@@ -17,172 +17,24 @@ import { NodeStatus, MetricConstants, TotalCpu, BytesUsed } from  "../util/proto
 // Constant used to store sort settings in the redux UI store.
 const UI_NODES_SORT_SETTING_KEY = "nodes/sort_setting";
 
-/******************************
- *      COLUMN DEFINITION
- */
-
-/**
- * NodesTableColumn provides an enumeration value for each column in the nodes table.
- */
-enum NodesTableColumn {
-  Health = 1,
-  NodeID,
-  StartedAt,
-  Bytes,
-  Replicas,
-  Connections,
-  CPU,
-  MemUsage,
-  Logs,
-}
-
-/**
- * NodesColumnDescriptor is used to describe metadata about an individual column
- * in the Nodes table.
- */
-interface NodeColumnDescriptor {
-  // Enumeration key to distinguish this column from others.
-  key: NodesTableColumn;
-  // Title string that should appear in the header column.
-  title: string;
-  // Function which generates the contents of an individual cell in this table.
-  cell: (ns: NodeStatus) => React.ReactNode;
-  // Function which returns a value that can be used to sort a collection of
-  // NodeStatus. This will be used to sort the table according to the data in
-  // this column.
-  sort?: (ns: NodeStatus) => any;
-  // Function that generates a "rollup" value for this column from all statuses
-  // in a collection. This is used to display an appropriate "total" value for
-  // each column.
-  rollup?: (ns: NodeStatus[]) => React.ReactNode;
-  // className to be applied to the td elements
-  className?: string;
-}
-
-/**
- * columnDescriptors describes all columns that appear in the nodes table.
- * Columns are displayed in the same order they do in this collection, from left
- * to right.
- */
-let columnDescriptors: NodeColumnDescriptor[] = [
-  // Health column - a simple red/yellow/green status indicator.
-  {
-    key: NodesTableColumn.Health,
-    title: "",
-    cell: (ns) => {
-      let lastUpdate = moment(NanoToMilli(ns.updated_at.toNumber()));
-      let s = staleStatus(lastUpdate);
-      return <div className={"status icon-circle-filled " + s}/>;
-    },
-  },
-  // Node column - displays the node ID, links to the node-specific page for
-  // this node.
-  {
-    key: NodesTableColumn.NodeID,
-    title: "Node",
-    cell: (ns) => <Link to={"/nodes/" + ns.desc.node_id}>{ns.desc.address.address_field}</Link>,
-    sort: (ns) => ns.desc.node_id,
-    rollup: (rows) => {
-      interface StatusTotals {
-        missing?: number;
-        stale?: number;
-        healthy?: number;
-      }
-      let statuses: StatusTotals = _.countBy(rows, (row) => staleStatus(moment(NanoToMilli(row.updated_at.toNumber()))));
-
-      return <div className="node-counts">
-        <span className="healthy">{statuses.healthy || 0}</span>
-        <span>/</span>
-        <span className="stale">{statuses.stale || 0}</span>
-        <span>/</span>
-        <span className="missing">{statuses.missing || 0}</span>
-      </div>;
-    },
-    className: "expand-link",
-  },
-  // Started at - displays the time that the node started.
-  {
-    key: NodesTableColumn.StartedAt,
-    title: "Started",
-    cell: (ns) => {
-      return moment(NanoToMilli(ns.started_at.toNumber())).fromNow();
-    },
-    sort: (ns) => ns.started_at,
-  },
-  // Bytes - displays the total persisted bytes maintained by the node.
-  {
-    key: NodesTableColumn.Bytes,
-    title: "Bytes",
-    cell: (ns) => formatBytes(BytesUsed(ns)),
-    sort: (ns) => BytesUsed(ns),
-    rollup: (rows) => formatBytes(_.sumBy(rows, (row) => BytesUsed(row))),
-  },
-  // Replicas - displays the total number of replicas on the node.
-  {
-    key: NodesTableColumn.Replicas,
-    title: "Replicas",
-    cell: (ns) => ns.metrics.get(MetricConstants.replicas).toString(),
-    sort: (ns) => ns.metrics.get(MetricConstants.replicas),
-    rollup: (rows) => _.sumBy(rows, (row) => row.metrics.get(MetricConstants.replicas)).toString(),
-  },
-  // Connections - the total number of open connections on the node.
-  {
-    key: NodesTableColumn.Connections,
-    title: "Connections",
-    cell: (ns) => ns.metrics.get(MetricConstants.sqlConns).toString(),
-    sort: (ns) => ns.metrics.get(MetricConstants.sqlConns),
-    rollup: (rows) => _.sumBy(rows, (row) => row.metrics.get(MetricConstants.sqlConns)).toString(),
-  },
-  // CPU - total CPU being used on this node.
-  {
-    key: NodesTableColumn.CPU,
-    title: "CPU Usage",
-    cell: (ns) => d3.format(".2%")(TotalCpu(ns)),
-    sort: (ns) => TotalCpu(ns),
-    rollup: (rows) => d3.format(".2%")(_.sumBy(rows, (row) => TotalCpu(row))),
-  },
-  // Mem Usage - total memory being used on this node.
-  {
-    key: NodesTableColumn.MemUsage,
-    title: "Mem Usage",
-    cell: (ns) => formatBytes(ns.metrics.get(MetricConstants.rss)),
-    sort: (ns) => ns.metrics.get(MetricConstants.rss),
-    rollup: (rows) => formatBytes(_.sumBy(rows, (row) => row.metrics.get(MetricConstants.rss))),
-  },
-  // Logs - a link to the logs data for this node.
-  {
-    key: NodesTableColumn.Logs,
-    title: "Logs",
-    cell: (ns) => <Link to={"/nodes/" + ns.desc.node_id + "/logs"}>Logs</Link>,
-    className: "expand-link",
-  },
-];
-
-/**
- * NodeStatusRollups contains rollups for each column in a table, organized by
- * key.
- */
-interface NodeStatusRollups {
-  [key: number]: React.ReactNode;
-}
-
-/******************************
- *   NODES MAIN COMPONENT
- */
+// Specialization of generic SortedTable component:
+//   https://github.com/Microsoft/TypeScript/issues/3960
+//
+// The variable name must start with a capital letter or TSX will not recognize
+// it as a component.
+// tslint:disable-next-line:variable-name
+const NodeSortedTable = SortedTable as new () => SortedTable<Proto2TypeScript.cockroach.server.status.NodeStatus>;
 
 /**
  * NodesMainData are the data properties which should be passed to the NodesMain
  * container.
  */
 interface NodesMainData {
-  // Current sort setting for the table. Incoming rows will already be sorted
-  // according to this setting.
+  // Current sort setting for the table, which is passed on to the sorted table
+  // component.
   sortSetting: SortSetting;
-  // A list of store statuses to display, which are possibly sorted according to
-  // sortSetting.
-  sortedStatuses: NodeStatus[];
-  // Per-column rollups computed for the current statuses.
-  statusRollups: NodeStatusRollups;
+  // A list of store statuses to display.
+  statuses: NodeStatus[];
   // True if current status results are still valid. Needed so that this
   // component refreshes status query when it becomes invalid.
   statusesValid: boolean;
@@ -210,25 +62,6 @@ type NodesMainProps = NodesMainData & NodesMainActions;
  * of all nodes.
  */
 class NodesMain extends React.Component<NodesMainProps, {}> {
-  /**
-   * columns is a selector which computes the input Columns to our data table,
-   * based our columnDescriptors and the current sorted data
-   */
-  columns = createSelector(
-    (props: NodesMainProps) => props.sortedStatuses,
-    (props: NodesMainProps) => props.statusRollups,
-    (statuses: NodeStatus[], rollups: NodeStatusRollups) => {
-      return _.map(columnDescriptors, (cd): SortableColumn => {
-        return {
-          title: cd.title,
-          cell: (index) => cd.cell(statuses[index]),
-          sortKey: cd.sort ? cd.key : undefined,
-          rollup: rollups[cd.key],
-          className: cd.className,
-        };
-      });
-    });
-
   // Callback when the user elects to change the sort setting.
   changeSortSetting(setting: SortSetting) {
     this.props.setUISetting(UI_NODES_SORT_SETTING_KEY, setting);
@@ -246,23 +79,99 @@ class NodesMain extends React.Component<NodesMainProps, {}> {
   }
 
   render() {
-    let { sortedStatuses: statuses, sortSetting } = this.props;
-    let content: React.ReactNode = null;
-
-    if (statuses) {
-      content = <SortableTable count={statuses.length}
-                       sortSetting={sortSetting}
-                       onChangeSortSetting={(setting) => this.changeSortSetting(setting)}>
-        {this.columns(this.props)}
-      </SortableTable>;
-    } else {
-      content = <div>No results.</div>;
-    }
+    let { statuses, sortSetting } = this.props;
 
     return <div className="section table node-overview">
       { this.props.children }
       <div className="stats-table">
-        { content }
+        <NodeSortedTable
+          data={statuses}
+          sortSetting={sortSetting}
+          onChangeSortSetting={(setting) => this.changeSortSetting(setting) }
+          columns={[
+            // Health column - a simple red/yellow/green status indicator.
+            {
+              title: "",
+              cell: (ns) => {
+                let lastUpdate = moment(NanoToMilli(ns.updated_at.toNumber()));
+                let s = staleStatus(lastUpdate);
+                return <div className={"status icon-circle-filled " + s}/>;
+              },
+            },
+            // Node column - displays the node ID, links to the node-specific page for
+            // this node.
+            {
+              title: "Node",
+              cell: (ns) => <Link to={"/nodes/" + ns.desc.node_id}>{ns.desc.address.address_field}</Link>,
+              sort: (ns) => ns.desc.node_id,
+              rollup: (rows) => {
+                interface StatusTotals {
+                  missing?: number;
+                  stale?: number;
+                  healthy?: number;
+                }
+                let healthTotals: StatusTotals = _.countBy(rows, (row) => staleStatus(moment(NanoToMilli(row.updated_at.toNumber()))));
+
+                return <div className="node-counts">
+                  <span className="healthy">{healthTotals.healthy || 0}</span>
+                  <span>/</span>
+                  <span className="stale">{healthTotals.stale || 0}</span>
+                  <span>/</span>
+                  <span className="missing">{healthTotals.missing || 0}</span>
+                </div>;
+              },
+              className: "expand-link",
+            },
+            // Started at - displays the time that the node started.
+            {
+              title: "Started",
+              cell: (ns) => {
+                return moment(NanoToMilli(ns.started_at.toNumber())).fromNow();
+              },
+              sort: (ns) => ns.started_at,
+            },
+            // Bytes - displays the total persisted bytes maintained by the node.
+            {
+              title: "Bytes",
+              cell: (ns) => formatBytes(BytesUsed(ns)),
+              sort: (ns) => BytesUsed(ns),
+              rollup: (rows) => formatBytes(_.sumBy(rows, (row) => BytesUsed(row))),
+            },
+            // Replicas - displays the total number of replicas on the node.
+            {
+              title: "Replicas",
+              cell: (ns) => ns.metrics.get(MetricConstants.replicas).toString(),
+              sort: (ns) => ns.metrics.get(MetricConstants.replicas),
+              rollup: (rows) => _.sumBy(rows, (row) => row.metrics.get(MetricConstants.replicas)).toString(),
+            },
+            // Connections - the total number of open connections on the node.
+            {
+              title: "Connections",
+              cell: (ns) => ns.metrics.get(MetricConstants.sqlConns).toString(),
+              sort: (ns) => ns.metrics.get(MetricConstants.sqlConns),
+              rollup: (rows) => _.sumBy(rows, (row) => row.metrics.get(MetricConstants.sqlConns)).toString(),
+            },
+            // CPU - total CPU being used on this node.
+            {
+              title: "CPU Usage",
+              cell: (ns) => d3.format(".2%")(TotalCpu(ns)),
+              sort: (ns) => TotalCpu(ns),
+              rollup: (rows) => d3.format(".2%")(_.sumBy(rows, (row) => TotalCpu(row))),
+            },
+            // Mem Usage - total memory being used on this node.
+            {
+              title: "Mem Usage",
+              cell: (ns) => formatBytes(ns.metrics.get(MetricConstants.rss)),
+              sort: (ns) => ns.metrics.get(MetricConstants.rss),
+              rollup: (rows) => formatBytes(_.sumBy(rows, (row) => row.metrics.get(MetricConstants.rss))),
+            },
+            // Logs - a link to the logs data for this node.
+            {
+              title: "Logs",
+              cell: (ns) => <Link to={"/nodes/" + ns.desc.node_id + "/logs"}>Logs</Link>,
+              className: "expand-link",
+            },
+          ]}/>
       </div>
     </div>;
   }
@@ -277,56 +186,11 @@ let nodeQueryValid = (state: AdminUIState): boolean => state.cachedData.nodes.va
 let nodeStatuses = (state: AdminUIState): NodeStatus[] => state.cachedData.nodes.data;
 let sortSetting = (state: AdminUIState): SortSetting => state.ui[UI_NODES_SORT_SETTING_KEY] || {};
 
-// Selector which sorts statuses according to current sort setting.
-let sortFunctionLookup = _.reduce(
-  columnDescriptors,
-  (memo, cd) => {
-    if (cd.sort) {
-      memo[cd.key] = cd.sort;
-    }
-    return memo;
-  },
-  {} as {[key: number]: (ns: NodeStatus) => any}
-);
-
-let sortedStatuses = createSelector(
-  nodeStatuses,
-  sortSetting,
-  (statuses, sort) => {
-    if (!sort) {
-      return statuses;
-    }
-    let sortFn = sortFunctionLookup[sort.sortKey];
-    if (!sortFn) {
-      return statuses;
-    }
-    let result = _.chain(statuses);
-    result = result.sortBy(sortFn);
-    if (sort.ascending) {
-      result = result.reverse();
-    }
-    return result.value();
-  });
-
-// Selector which computes status rollups for the current node status set.
-let rollupStatuses = createSelector(
-  nodeStatuses,
-  (statuses) => {
-    let rollups: NodeStatusRollups = {};
-    _.map(columnDescriptors, (c) => {
-      if (c.rollup) {
-        rollups[c.key] = c.rollup(statuses);
-      }
-    });
-    return rollups;
-  });
-
 // Connect the NodesMain class with our redux store.
 let nodesMainConnected = connect(
   (state: AdminUIState) => {
     return {
-      sortedStatuses: sortedStatuses(state),
-      statusRollups: rollupStatuses(state),
+      statuses: nodeStatuses(state),
       sortSetting: sortSetting(state),
       statusesValid: nodeQueryValid(state),
     };

@@ -167,6 +167,9 @@ type Context struct {
 	// context.Background() will be used.
 	Ctx context.Context
 
+	// Locality is a description of the topography of the server.
+	Locality roachpb.Locality
+
 	// EventLogEnabled is a switch which enables recording into cockroach's SQL
 	// event log tables. These tables record transactional events about changes
 	// to cluster metadata, such as DDL statements and range rebalancing

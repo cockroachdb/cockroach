@@ -2,8 +2,9 @@
 - Status: in-progress
 - Start Date: 2016-07-19
 - Authors: Nathan VanBenschoten
-- RFC PR: #7965
-- Cockroach Issue: #5194, #5583
+- RFC PR: [#7965](https://github.com/cockroachdb/cockroach/pull/7965)
+- Cockroach Issue: [#5194](https://github.com/cockroachdb/cockroach/issues/5194),
+                   [#5583](https://github.com/cockroachdb/cockroach/issues/5583)
 
 
 # Summary

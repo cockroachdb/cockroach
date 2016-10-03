@@ -175,7 +175,7 @@ func runMVCCScan(emk engineMaker, numRows, numVersions, valueSize int, b *testin
 		startKey := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(keyIdx)))
 		walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 		ts := makeTS(walltime, 0)
-		kvs, _, err := MVCCScan(context.Background(), eng, startKey, keyMax, int64(numRows), ts, true, nil)
+		kvs, _, _, err := MVCCScan(context.Background(), eng, startKey, keyMax, int64(numRows), ts, true, nil)
 		if err != nil {
 			b.Fatalf("failed scan: %s", err)
 		}
