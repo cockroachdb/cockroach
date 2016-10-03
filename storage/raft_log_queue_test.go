@@ -109,6 +109,7 @@ func TestComputeTruncatableIndex(t *testing.T) {
 // removed.
 func TestGetTruncatableIndexes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#9445 Skipped due to flakiness")
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 	if _, err := store.GetReplica(0); err == nil {
