@@ -1180,6 +1180,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 		if !argOK || !descOK || !bytes.Equal(leaseReq.Key, splitKey) {
 			return nil
 		}
+		log.Infof(context.TODO(), "received lease request %+v", leaseReq)
 		atomic.AddInt32(&numLeases, 1)
 		if !reflect.DeepEqual(*forbiddenDesc, leaseReq.Lease.Replica) {
 			return nil

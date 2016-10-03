@@ -20,6 +20,10 @@ package syncutil
 
 import deadlock "github.com/sasha-s/go-deadlock"
 
+func init() {
+	deadlock.Opts.DeadlockTimeout = 0
+}
+
 // A Mutex is a mutual exclusion lock.
 type Mutex struct {
 	deadlock.Mutex

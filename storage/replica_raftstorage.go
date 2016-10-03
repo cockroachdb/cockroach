@@ -258,8 +258,8 @@ func (r *Replica) FirstIndex() (uint64, error) {
 	return ts.Index + 1, nil
 }
 
-// GetFirstIndex is the same function as FirstIndex but it does not require
-// that the replica lock is held.
+// GetFirstIndex is the same function as FirstIndex but it does not
+// require that the replica lock is held.
 func (r *Replica) GetFirstIndex() (uint64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -276,8 +276,8 @@ func (r *Replica) Snapshot() (raftpb.Snapshot, error) {
 	return snap.RaftSnap, err
 }
 
-// SnapshotWithContext is main implementation for Snapshot() but it takes a
-// context to allow tracing. If this method returns without error, callers
+// SnapshotWithContext is the main implementation for Snapshot() but it takes
+// a context to allow tracing. If this method returns without error, callers
 // must eventually call CloseOutSnap to ready this replica for more snapshots.
 func (r *Replica) SnapshotWithContext(ctx context.Context) (*OutgoingSnapshot, error) {
 	rangeID := r.RangeID

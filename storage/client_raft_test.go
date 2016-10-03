@@ -1581,8 +1581,19 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 
 // TestRangeDescriptorSnapshotRace calls Snapshot() repeatedly while
 // transactions are performed on the range descriptor.
+//
+// TODO(tamird): Refactor test so that snapshots are generated in the main
+// goroutine and  random splits are in the non-main goroutines. that gives the
+// test a more natural stopping condition.
 func TestRangeDescriptorSnapshotRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	errCh := make(chan error, 1)
+	defer func() {
+		if err := <-errCh; err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	mtc := startMultiTestContext(t, 1)
 	defer mtc.Stop()
@@ -1590,26 +1601,31 @@ func TestRangeDescriptorSnapshotRace(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	// Call Snapshot() in a loop and ensure it never fails.
+	work := func(key roachpb.RKey) error {
+		rng := mtc.stores[0].LookupReplica(key, nil)
+		if rng == nil {
+			return errors.Errorf("failed to look up replica for %s", key)
+		}
+		if _, err := rng.GetSnapshot(context.Background()); err != nil {
+			return errors.Wrapf(err, "failed to snapshot range %s: %s", rng, key)
+		} else {
+			rng.CloseOutSnap()
+		}
+		return nil
+	}
+
 	stopper.RunWorker(func() {
+		defer close(errCh)
 		for {
 			select {
-			case <-stopper.ShouldStop():
+			case <-stopper.ShouldQuiesce():
 				return
 			default:
-				if rng := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil); rng == nil {
-					t.Fatal("failed to look up min range")
-				} else if _, err := rng.GetSnapshot(context.Background()); err != nil {
-					t.Fatalf("failed to snapshot min range: %s", err)
-				} else {
-					rng.CloseOutSnap()
-				}
-
-				if rng := mtc.stores[0].LookupReplica(roachpb.RKey("Z"), nil); rng == nil {
-					t.Fatal("failed to look up max range")
-				} else if _, err := rng.GetSnapshot(context.Background()); err != nil {
-					t.Fatalf("failed to snapshot max range: %s", err)
-				} else {
-					rng.CloseOutSnap()
+			}
+			for _, key := range []roachpb.RKey{roachpb.RKeyMin, roachpb.RKey("Z")} {
+				if err := work(key); err != nil {
+					errCh <- err
+					return
 				}
 			}
 		}
@@ -1970,16 +1986,30 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	startWG.Add(1)
 	var finishWG sync.WaitGroup
 	finishWG.Add(1)
+
+	rep, err := mtc.stores[2].GetReplica(raftID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replicaDesc, ok := rep.Desc().GetReplicaDescriptor(mtc.stores[2].StoreID())
+	if !ok {
+		t.Fatalf("ReplicaID %d not found", raftID)
+	}
 	go func() {
-		rng, err := mtc.stores[2].GetReplica(raftID)
-		if err != nil {
-			t.Fatal(err)
-		}
 		incArgs := incrementArgs([]byte("a"), 23)
 		startWG.Done()
 		defer finishWG.Done()
-		if _, err := client.SendWrappedWith(rng, nil, roachpb.Header{Timestamp: mtc.stores[2].Clock().Now()}, &incArgs); err == nil {
-			t.Fatal("expected error during shutdown")
+		_, pErr := client.SendWrappedWith(
+			mtc.stores[2], nil, roachpb.Header{
+				Replica:   replicaDesc,
+				Timestamp: mtc.stores[2].Clock().Now(),
+			}, &incArgs,
+		)
+		if _, ok := pErr.GetDetail().(*roachpb.RangeNotFoundError); !ok {
+			// We're on a goroutine and passing the error out is awkward since
+			// it would only surface at shutdown time. A panic ought to be good
+			// enough to get visibility.
+			panic(fmt.Sprintf("unexpected error: %v", pErr))
 		}
 	}()
 	startWG.Wait()

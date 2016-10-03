@@ -257,6 +257,8 @@ type Replica struct {
 		destroyed error
 		// Corrupted persistently (across process restarts) indicates whether the
 		// replica has been corrupted.
+		//
+		// TODO(tschottdorf): remove/refactor this field.
 		corrupted bool
 		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
 		// whenever a Raft operation is performed.
@@ -2648,8 +2650,13 @@ func (r *Replica) processRaftCommand(
 	// On successful write commands handle write-related triggers including
 	// splitting and raft log truncation.
 	if pErr == nil && raftCmd.Cmd.IsWrite() {
-		r.maybeAddToSplitQueue()
-		r.maybeAddToRaftLogQueue(index)
+		if r.needsSplitBySize() {
+			r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
+		}
+		const raftLogCheckFrequency = 1 + RaftLogQueueStaleThreshold/4
+		if index%raftLogCheckFrequency == 0 {
+			r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
+		}
 	}
 
 	if cmd != nil {
@@ -3306,17 +3313,20 @@ func (r *Replica) maybeGossipFirstRange() *roachpb.Error {
 	if err := r.store.Gossip().AddInfo(gossip.KeyClusterID, r.store.ClusterID().GetBytes(), 0*time.Second); err != nil {
 		log.Errorf(r.ctx, "failed to gossip cluster ID: %s", err)
 	}
-	if hasLease, pErr := r.getLeaseForGossip(r.ctx); hasLease {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		r.gossipFirstRangeLocked(r.ctx)
-	} else {
+
+	hasLease, pErr := r.getLeaseForGossip(r.ctx)
+	if pErr != nil {
 		return pErr
+	} else if !hasLease {
+		return nil
 	}
+	r.gossipFirstRange(r.ctx)
 	return nil
 }
 
-func (r *Replica) gossipFirstRangeLocked(ctx context.Context) {
+func (r *Replica) gossipFirstRange(ctx context.Context) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	// Gossip is not provided for the bootstrap store and for some tests.
 	if r.store.Gossip() == nil {
 		return
@@ -3468,24 +3478,6 @@ func (r *Replica) exceedsDoubleSplitSizeLocked() bool {
 	maxBytes := r.mu.maxBytes
 	size := r.mu.state.Stats.Total()
 	return maxBytes > 0 && size > maxBytes*2
-}
-
-// maybeAddToSplitQueue checks whether the current size of the range
-// exceeds the max size specified in the zone config. If yes, the
-// range is added to the split queue.
-func (r *Replica) maybeAddToSplitQueue() {
-	if r.needsSplitBySize() {
-		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
-	}
-}
-
-// maybeAddToRaftLogQueue checks whether the raft log is a candidate for
-// truncation. If yes, the range is added to the raft log queue.
-func (r *Replica) maybeAddToRaftLogQueue(appliedIndex uint64) {
-	const raftLogCheckFrequency = 1 + RaftLogQueueStaleThreshold/4
-	if appliedIndex%raftLogCheckFrequency == 0 {
-		r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
-	}
 }
 
 func (r *Replica) setPendingSnapshotIndex(index uint64) error {
