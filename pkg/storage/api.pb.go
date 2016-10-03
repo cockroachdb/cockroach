@@ -130,7 +130,7 @@ var _ grpc.ClientConn
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion3
+const _ = grpc.SupportPackageIsVersion4
 
 // Client API for Freeze service
 
@@ -193,7 +193,7 @@ var _Freeze_serviceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: fileDescriptorApi,
+	Metadata: "cockroach/pkg/storage/api.proto",
 }
 
 // Client API for Consistency service
@@ -257,7 +257,7 @@ var _Consistency_serviceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: fileDescriptorApi,
+	Metadata: "cockroach/pkg/storage/api.proto",
 }
 
 func (m *StoreRequestHeader) Marshal() (dAtA []byte, err error) {

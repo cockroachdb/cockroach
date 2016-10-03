@@ -238,7 +238,7 @@ var _ grpc.ClientConn
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion3
+const _ = grpc.SupportPackageIsVersion4
 
 // Client API for MultiRaft service
 
@@ -398,7 +398,7 @@ var _MultiRaft_serviceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
-	Metadata: fileDescriptorRaft,
+	Metadata: "cockroach/pkg/storage/raft.proto",
 }
 
 func (m *RaftHeartbeat) Marshal() (dAtA []byte, err error) {
