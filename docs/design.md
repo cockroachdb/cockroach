@@ -132,14 +132,37 @@ proxies involved client work including key lookups and write buffering.
 
 # Keys
 
-Cockroach keys are arbitrary byte arrays. If textual data is used in
-keys, utf8 encoding is recommended (this helps for cleaner display of
-values in debugging tools). User-supplied keys are encoded using an
-ordered code. System keys are either prefixed with null characters (`\0`
-or `\0\0`) for system tables, or take the form of
-`<user-key><system-suffix>` to sort user-key-range specific system
-keys immediately after the user keys they refer to. Null characters are
-used in system key prefixes to guarantee that they sort first.
+Cockroach keys are arbitrary byte arrays. Keys come in two flavors:
+system keys and table data keys. System keys are used by Cockroach for
+internal data structures and metadata. Table data keys contain SQL
+table data (as well as index data). System and table data keys are
+prefixed in such a way that all system keys sort before any table data
+keys.
+
+System keys come in several subtypes:
+
+- **Global** keys store cluster-wide data such as the "meta1" and
+    "meta2" keys as well as various other system-wide keys such as the
+    node and store ID allocators.
+- **Store local** keys are used for unreplicated store metadata
+    (e.g. the `StoreIdent` structure). "Unreplicated" indicates that
+    these values are not replicated across multiple stores because the
+    data they hold is tied to the lifetime of the store they are
+    present on.
+- **Range local** keys store range metadata that is associated with a
+    global key. For example, transaction records are range local keys.
+- **Replicated Range ID local** keys store range metadata that is
+    present on all of the replicas for a range. These keys are updated
+    via Raft operations. Examples include the range lease state and
+    abort cache entries.
+- **Unreplicated Range ID local** keys store range metadata that is
+    local to a replica. The primary examples of such keys are the Raft
+    state and Raft log.
+
+Table data keys are used to store all SQL data. Table data keys
+contain internal structure as described in the section on [mapping
+data between the SQL model and
+KV](#data-mapping-between-the-sql-model-and-kv).
 
 # Versioned Values
 
