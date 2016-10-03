@@ -103,7 +103,9 @@ func (ss *notifyingSender) reset(notify chan struct{}) {
 	ss.notify = notify
 }
 
-func (ss *notifyingSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+func (ss *notifyingSender) Send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
 	br, pErr := ss.wrapped.Send(ctx, ba)
 	if br != nil && br.Error != nil {
 		panic(roachpb.ErrorUnexpectedlySet(ss.wrapped, br))
@@ -122,10 +124,7 @@ func createTestClient(t *testing.T, stopper *stop.Stopper, addr string) *client.
 }
 
 func createTestClientForUser(
-	t *testing.T,
-	stopper *stop.Stopper,
-	addr, user string,
-	dbCtx client.DBContext,
+	t *testing.T, stopper *stop.Stopper, addr, user string, dbCtx client.DBContext,
 ) *client.DB {
 	rpcContext := rpc.NewContext(context.TODO(), &base.Context{
 		User:       user,
@@ -142,7 +141,9 @@ func createTestClientForUser(
 
 // createTestNotifyClient creates a new client which connects using an HTTP
 // sender to the server at addr. It contains a waitgroup to allow waiting.
-func createTestNotifyClient(t *testing.T, stopper *stop.Stopper, addr string, priority roachpb.UserPriority) (*client.DB, *notifyingSender) {
+func createTestNotifyClient(
+	t *testing.T, stopper *stop.Stopper, addr string, priority roachpb.UserPriority,
+) (*client.DB, *notifyingSender) {
 	db := createTestClient(t, stopper, addr)
 	sender := &notifyingSender{wrapped: db.GetSender()}
 	dbCtx := client.DefaultDBContext()

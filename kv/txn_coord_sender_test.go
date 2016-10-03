@@ -47,7 +47,9 @@ import (
 type senderFn func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 
 // Send implements batch.Sender.
-func (f senderFn) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+func (f senderFn) Send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
 	return f(ctx, ba)
 }
 
@@ -1108,8 +1110,12 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 // checkTxnMetrics verifies that the provided Sender's transaction metrics match the expected
 // values. This is done through a series of retries with increasing backoffs, to work around
 // the TxnCoordSender's asynchronous updating of metrics after a transaction ends.
-func checkTxnMetrics(t *testing.T, sender *TxnCoordSender, name string,
-	commits, commits1PC, abandons, aborts, restarts int64) {
+func checkTxnMetrics(
+	t *testing.T,
+	sender *TxnCoordSender,
+	name string,
+	commits, commits1PC, abandons, aborts, restarts int64,
+) {
 	metrics := sender.metrics
 
 	util.SucceedsSoon(t, func() error {

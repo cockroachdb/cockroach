@@ -54,8 +54,9 @@ type RequestWithUser interface {
 // ProtoAuthHook builds an authentication hook based on the security
 // mode and client certificate.
 // The proto.Message passed to the hook must implement RequestWithUser.
-func ProtoAuthHook(insecureMode bool, tlsState *tls.ConnectionState) (
-	func(proto.Message, bool) error, error) {
+func ProtoAuthHook(
+	insecureMode bool, tlsState *tls.ConnectionState,
+) (func(proto.Message, bool) error, error) {
 	userHook, err := UserAuthHook(insecureMode, tlsState)
 	if err != nil {
 		return nil, err
@@ -77,8 +78,9 @@ func ProtoAuthHook(insecureMode bool, tlsState *tls.ConnectionState) (
 
 // UserAuthHook builds an authentication hook based on the security
 // mode and client certificate.
-func UserAuthHook(insecureMode bool, tlsState *tls.ConnectionState) (
-	func(string, bool) error, error) {
+func UserAuthHook(
+	insecureMode bool, tlsState *tls.ConnectionState,
+) (func(string, bool) error, error) {
 	var certUser string
 
 	if !insecureMode {

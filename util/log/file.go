@@ -324,8 +324,9 @@ func selectFiles(logFiles []FileInfo, severity Severity, endTimestamp int64) []F
 // exceeds 'maxEntries'. Log entries are further filtered by the regexp
 // 'pattern' if provided. The logs entries are returned in reverse chronological
 // order.
-func FetchEntriesFromFiles(severity Severity, startTimestamp, endTimestamp int64, maxEntries int,
-	pattern *regexp.Regexp) ([]Entry, error) {
+func FetchEntriesFromFiles(
+	severity Severity, startTimestamp, endTimestamp int64, maxEntries int, pattern *regexp.Regexp,
+) ([]Entry, error) {
 	logFiles, err := ListLogFiles()
 	if err != nil {
 		return nil, err
@@ -364,8 +365,9 @@ func FetchEntriesFromFiles(severity Severity, startTimestamp, endTimestamp int64
 // 'startTimestamp' to inform the caller that no more log files need to be
 // processed. If the number of entries returned exceeds 'maxEntries' then
 // processing of new entries is stopped immediately.
-func readAllEntriesFromFile(file FileInfo, startTimestamp, endTimestamp int64, maxEntries int,
-	pattern *regexp.Regexp) ([]Entry, bool, error) {
+func readAllEntriesFromFile(
+	file FileInfo, startTimestamp, endTimestamp int64, maxEntries int, pattern *regexp.Regexp,
+) ([]Entry, bool, error) {
 	reader, err := GetLogReader(file.Name, true /* restricted */)
 	if reader == nil || err != nil {
 		return nil, false, err

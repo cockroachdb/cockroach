@@ -91,7 +91,9 @@ type ManualHeartbeatService struct {
 }
 
 // Ping waits until the heartbeat service is ready to respond to a Heartbeat.
-func (mhs *ManualHeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingResponse, error) {
+func (mhs *ManualHeartbeatService) Ping(
+	ctx context.Context, args *PingRequest,
+) (*PingResponse, error) {
 	select {
 	case <-mhs.ready:
 	case <-mhs.stopper.ShouldStop():

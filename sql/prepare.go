@@ -67,10 +67,7 @@ func (ps PreparedStatements) Exists(name string) bool {
 // query string, using the given PlaceholderTypes hints to assist in inferring
 // placeholder types.
 func (ps PreparedStatements) New(
-	ctx context.Context,
-	e *Executor,
-	name, query string,
-	placeholderHints parser.PlaceholderTypes,
+	ctx context.Context, e *Executor, name, query string, placeholderHints parser.PlaceholderTypes,
 ) (*PreparedStatement, error) {
 	stmt := &PreparedStatement{}
 
@@ -186,7 +183,8 @@ func (pp PreparedPortals) Exists(name string) bool {
 
 // New creates a new PreparedPortal with the provided name and corresponding
 // PreparedStatement, binding the statement using the given QueryArguments.
-func (pp PreparedPortals) New(name string, stmt *PreparedStatement, qargs parser.QueryArguments,
+func (pp PreparedPortals) New(
+	name string, stmt *PreparedStatement, qargs parser.QueryArguments,
 ) (*PreparedPortal, error) {
 	portal := &PreparedPortal{
 		Stmt:  stmt,

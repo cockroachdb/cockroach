@@ -51,7 +51,9 @@ func makeReplicatedKeyRanges(d *roachpb.RangeDescriptor) []keyRange {
 	return makeReplicaKeyRanges(d, keys.MakeRangeIDReplicatedPrefix)
 }
 
-func makeReplicaKeyRanges(d *roachpb.RangeDescriptor, metaFunc func(roachpb.RangeID) roachpb.Key) []keyRange {
+func makeReplicaKeyRanges(
+	d *roachpb.RangeDescriptor, metaFunc func(roachpb.RangeID) roachpb.Key,
+) []keyRange {
 	// The first range in the keyspace starts at KeyMin, which includes the
 	// node-local space. We need the original StartKey to find the range
 	// metadata, but the actual data starts at LocalMax.

@@ -467,7 +467,9 @@ func (*WriteTooOldError) canRestartTransaction() TransactionRestart {
 // NewReadWithinUncertaintyIntervalError creates a new uncertainty retry error.
 // The read and existing timestamps are purely informational and used for
 // formatting the error message.
-func NewReadWithinUncertaintyIntervalError(readTS, existingTS hlc.Timestamp) *ReadWithinUncertaintyIntervalError {
+func NewReadWithinUncertaintyIntervalError(
+	readTS, existingTS hlc.Timestamp,
+) *ReadWithinUncertaintyIntervalError {
 	return &ReadWithinUncertaintyIntervalError{
 		ReadTimestamp:     readTS,
 		ExistingTimestamp: existingTS,

@@ -236,9 +236,9 @@ func (s LeaseStore) Release(lease *LeaseState) error {
 // returned version. Lease acquisition (see acquire()) maintains the
 // invariant that no new leases for desc.Version-1 will be granted once
 // desc.Version exists.
-func (s LeaseStore) waitForOneVersion(tableID sqlbase.ID, retryOpts retry.Options) (
-	sqlbase.DescriptorVersion, error,
-) {
+func (s LeaseStore) waitForOneVersion(
+	tableID sqlbase.ID, retryOpts retry.Options,
+) (sqlbase.DescriptorVersion, error) {
 	desc := &sqlbase.Descriptor{}
 	descKey := sqlbase.MakeDescMetadataKey(tableID)
 	var tableDesc *sqlbase.TableDescriptor
@@ -282,9 +282,7 @@ var errDidntUpdateDescriptor = errors.New("didn't update the table descriptor")
 // not have side effects.
 // Returns the updated version of the descriptor.
 func (s LeaseStore) Publish(
-	tableID sqlbase.ID,
-	update func(*sqlbase.TableDescriptor) error,
-	logEvent func(*client.Txn) error,
+	tableID sqlbase.ID, update func(*sqlbase.TableDescriptor) error, logEvent func(*client.Txn) error,
 ) (*sqlbase.Descriptor, error) {
 	errLeaseVersionChanged := errors.New("lease version changed")
 	// Retry while getting errLeaseVersionChanged.
@@ -436,14 +434,18 @@ func (l *leaseSet) remove(s *LeaseState) {
 	l.data = append(l.data[:i], l.data[i+1:]...)
 }
 
-func (l *leaseSet) find(version sqlbase.DescriptorVersion, expiration parser.DTimestamp) *LeaseState {
+func (l *leaseSet) find(
+	version sqlbase.DescriptorVersion, expiration parser.DTimestamp,
+) *LeaseState {
 	if i, match := l.findIndex(version, expiration); match {
 		return l.data[i]
 	}
 	return nil
 }
 
-func (l *leaseSet) findIndex(version sqlbase.DescriptorVersion, expiration parser.DTimestamp) (int, bool) {
+func (l *leaseSet) findIndex(
+	version sqlbase.DescriptorVersion, expiration parser.DTimestamp,
+) (int, bool) {
 	i := sort.Search(len(l.data), func(i int) bool {
 		s := l.data[i]
 		if s.Version == version {
@@ -563,9 +565,7 @@ func (t *tableState) checkLease(
 // acquireFromStoreLocked acquires a new lease from the store and inserts it
 // into the active set. t.mu must be locked.
 func (t *tableState) acquireFromStoreLocked(
-	txn *client.Txn,
-	version sqlbase.DescriptorVersion,
-	store LeaseStore,
+	txn *client.Txn, version sqlbase.DescriptorVersion, store LeaseStore,
 ) error {
 	// Ensure there is no lease acquisition in progress.
 	if t.acquireWait() {
@@ -594,9 +594,7 @@ func (t *tableState) acquireFromStoreLocked(
 //
 // t.mu must be locked.
 func (t *tableState) acquireFreshestFromStoreLocked(
-	txn *client.Txn,
-	version sqlbase.DescriptorVersion,
-	store LeaseStore,
+	txn *client.Txn, version sqlbase.DescriptorVersion, store LeaseStore,
 ) error {
 	// Ensure there is no lease acquisition in progress.
 	t.acquireWait()
@@ -847,9 +845,7 @@ type tableNameCache struct {
 // This method handles normalizing the table name.
 // The lease's refcount is incremented before returning, so the caller is
 // responsible for releasing it to the leaseManager.
-func (c *tableNameCache) get(
-	dbID sqlbase.ID, tableName string, clock *hlc.Clock,
-) *LeaseState {
+func (c *tableNameCache) get(dbID sqlbase.ID, tableName string, clock *hlc.Clock) *LeaseState {
 	c.mu.Lock()
 	lease, ok := c.tables[makeTableNameCacheKey(dbID, tableName)]
 	c.mu.Unlock()

@@ -27,9 +27,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func makeRouter(spec *OutputRouterSpec, streams []RowReceiver) (
-	RowReceiver, error,
-) {
+func makeRouter(spec *OutputRouterSpec, streams []RowReceiver) (RowReceiver, error) {
 	switch len(streams) {
 	case 0:
 		return nil, errors.Errorf("no streams in router")

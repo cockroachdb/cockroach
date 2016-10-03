@@ -33,8 +33,7 @@ const allocatorRandomCount = 10
 type nodeIDSet map[roachpb.NodeID]struct{}
 
 func formatCandidates(
-	selected *roachpb.StoreDescriptor,
-	candidates []roachpb.StoreDescriptor,
+	selected *roachpb.StoreDescriptor, candidates []roachpb.StoreDescriptor,
 ) string {
 	var buf bytes.Buffer
 	_, _ = buf.WriteString("[")
@@ -76,9 +75,7 @@ func (rangeCountBalancer) selectBest(sl StoreList) *roachpb.StoreDescriptor {
 	return best
 }
 
-func (rcb rangeCountBalancer) selectGood(
-	sl StoreList, excluded nodeIDSet,
-) *roachpb.StoreDescriptor {
+func (rcb rangeCountBalancer) selectGood(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
 	// Consider a random sample of stores from the store list.
 	sl.stores = selectRandom(rcb.rand, allocatorRandomCount, sl, excluded)
 	good := rcb.selectBest(sl)
@@ -113,9 +110,7 @@ func (rangeCountBalancer) selectBad(sl StoreList) *roachpb.StoreDescriptor {
 // improve returns a candidate StoreDescriptor to rebalance a replica to. The
 // strategy is to always converge on the mean range count. If that isn't
 // possible, we don't return any candidate.
-func (rcb rangeCountBalancer) improve(
-	sl StoreList, excluded nodeIDSet,
-) *roachpb.StoreDescriptor {
+func (rcb rangeCountBalancer) improve(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
 	// Attempt to select a better candidate from the supplied list.
 	sl.stores = selectRandom(rcb.rand, allocatorRandomCount, sl, excluded)
 	candidate := rcb.selectBest(sl)
@@ -149,9 +144,7 @@ func (rcb rangeCountBalancer) improve(
 // mean range count that permits rebalances away from that store.
 var RebalanceThreshold = envutil.EnvOrDefaultFloat("COCKROACH_REBALANCE_THRESHOLD", 0.05)
 
-func (rangeCountBalancer) shouldRebalance(
-	store roachpb.StoreDescriptor, sl StoreList,
-) bool {
+func (rangeCountBalancer) shouldRebalance(store roachpb.StoreDescriptor, sl StoreList) bool {
 	// TODO(peter,bram,cuong): The FractionUsed check seems suspicious. When a
 	// node becomes fuller than maxFractionUsedThreshold we will always select it
 	// for rebalancing. This is currently utilized by tests.

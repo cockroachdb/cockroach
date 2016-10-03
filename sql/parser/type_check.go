@@ -771,7 +771,9 @@ type indexedExpr struct {
 // typeCheckSameTypedExprs type checks a list of expressions, asserting that all
 // resolved TypeExprs have the same type. An optional desired type can be provided,
 // which will hint that type which the expressions should resolve to, if possible.
-func typeCheckSameTypedExprs(ctx *SemaContext, desired Datum, exprs ...Expr) ([]TypedExpr, Datum, error) {
+func typeCheckSameTypedExprs(
+	ctx *SemaContext, desired Datum, exprs ...Expr,
+) ([]TypedExpr, Datum, error) {
 	switch len(exprs) {
 	case 0:
 		return nil, nil, nil
@@ -948,7 +950,9 @@ func typeCheckSameTypedExprs(ctx *SemaContext, desired Datum, exprs ...Expr) ([]
 // expressions are tuples, and will return a sane error if they are not. An optional
 // desired type can be provided, which will hint that type which the expressions should
 // resolve to, if possible.
-func typeCheckSameTypedTupleExprs(ctx *SemaContext, desired Datum, exprs ...Expr) ([]TypedExpr, Datum, error) {
+func typeCheckSameTypedTupleExprs(
+	ctx *SemaContext, desired Datum, exprs ...Expr,
+) ([]TypedExpr, Datum, error) {
 	// Hold the resolved type expressions of the provided exprs, in order.
 	// TODO(nvanbenschoten) Look into reducing allocations here.
 	typedExprs := make([]TypedExpr, len(exprs))

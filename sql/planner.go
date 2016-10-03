@@ -274,8 +274,7 @@ func (p *planner) blockConfigUpdatesMaybe(e *Executor) func() {
 }
 
 // checkTestingVerifyMetadataInitialOrDie implements the queryRunner interface.
-func (p *planner) checkTestingVerifyMetadataInitialOrDie(
-	e *Executor, stmts parser.StatementList) {
+func (p *planner) checkTestingVerifyMetadataInitialOrDie(e *Executor, stmts parser.StatementList) {
 	if !p.execCfg.TestingKnobs.WaitForGossipUpdate {
 		return
 	}
@@ -293,8 +292,7 @@ func (p *planner) checkTestingVerifyMetadataInitialOrDie(
 }
 
 // checkTestingVerifyMetadataOrDie implements the queryRunner interface.
-func (p *planner) checkTestingVerifyMetadataOrDie(
-	e *Executor, stmts parser.StatementList) {
+func (p *planner) checkTestingVerifyMetadataOrDie(e *Executor, stmts parser.StatementList) {
 	if !p.execCfg.TestingKnobs.WaitForGossipUpdate ||
 		p.testingVerifyMetadataFn == nil {
 		return

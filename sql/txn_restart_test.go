@@ -67,9 +67,7 @@ type filterVals struct {
 	failedValues map[string]failureRecord
 }
 
-func createFilterVals(
-	restartCounts map[string]int,
-	abortCounts map[string]int) *filterVals {
+func createFilterVals(restartCounts map[string]int, abortCounts map[string]int) *filterVals {
 	return &filterVals{
 		restartCounts: restartCounts,
 		abortCounts:   abortCounts,
@@ -106,11 +104,7 @@ func checkCorrectTxn(value string, magicVals *filterVals, txn *roachpb.Transacti
 	delete(magicVals.failedValues, value)
 }
 
-func injectErrors(
-	req roachpb.Request,
-	hdr roachpb.Header,
-	magicVals *filterVals,
-) error {
+func injectErrors(req roachpb.Request, hdr roachpb.Header, magicVals *filterVals) error {
 	magicVals.Lock()
 	defer magicVals.Unlock()
 
@@ -343,9 +337,7 @@ func (ta *TxnAborter) GetExecCount(stmt string) (int, bool) {
 
 // HookupToExecutor returns a modified ExecutorTestingKnobs with the
 // StatementFilter hooked up to the TxnAborter.
-func (ta *TxnAborter) HookupToExecutor(
-	knobs sql.ExecutorTestingKnobs,
-) base.ModuleTestingKnobs {
+func (ta *TxnAborter) HookupToExecutor(knobs sql.ExecutorTestingKnobs) base.ModuleTestingKnobs {
 	if !knobs.FixTxnPriority || !knobs.DisableAutoCommit {
 		panic("TxnAborter can only be installed when " +
 			"FixTxnPriority and DisableAutoCommit are both specified")

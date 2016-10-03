@@ -39,12 +39,7 @@ type sorter struct {
 
 var _ processor = &sorter{}
 
-func newSorter(
-	flowCtx *FlowCtx,
-	spec *SorterSpec,
-	input RowSource,
-	output RowReceiver,
-) *sorter {
+func newSorter(flowCtx *FlowCtx, spec *SorterSpec, input RowSource, output RowReceiver) *sorter {
 	return &sorter{
 		input:    input,
 		output:   output,

@@ -239,10 +239,7 @@ func NewDistSender(cfg *DistSenderConfig, g *gossip.Gossip) *DistSender {
 // retry logic here; this is not an issue since the lookup performs a
 // single inconsistent read only.
 func (ds *DistSender) RangeLookup(
-	ctx context.Context,
-	key roachpb.RKey,
-	desc *roachpb.RangeDescriptor,
-	useReverseScan bool,
+	ctx context.Context, key roachpb.RKey, desc *roachpb.RangeDescriptor, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
@@ -347,10 +344,7 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 // The replicas are assume to have been ordered by preference, closer ones (if
 // any) at the front.
 func (ds *DistSender) sendRPC(
-	ctx context.Context,
-	rangeID roachpb.RangeID,
-	replicas ReplicaSlice,
-	ba roachpb.BatchRequest,
+	ctx context.Context, rangeID roachpb.RangeID, replicas ReplicaSlice, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
 	if len(replicas) == 0 {
 		return nil, noNodeAddrsAvailError{}
@@ -489,7 +483,9 @@ func (ds *DistSender) sendSingleRange(
 // request, thus opening up a window of time during which there may be intents
 // of a transaction, but no entry. Pushing such a transaction will succeed, and
 // may lead to the transaction being aborted early.
-func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+func (ds *DistSender) Send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
 	tracing.AnnotateTrace()
 
 	// In the event that timestamp isn't set and read consistency isn't
@@ -610,7 +606,9 @@ func (ds *DistSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roach
 // correspond to client.Sender with the exception of the returned boolean,
 // which is true when indicating that the caller should retry but needs to send
 // EndTransaction in a separate request.
-func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error, bool) {
+func (ds *DistSender) sendChunk(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error, bool) {
 	isReverse := ba.IsReverse()
 
 	// TODO(radu): when contexts are properly plumbed, we should be able to get
@@ -1071,8 +1069,7 @@ func (ds *DistSender) handlePerReplicaError(rangeID roachpb.RangeID, pErr *roach
 
 // updateLeaseHolderCache updates the cached lease holder for the given range.
 func (ds *DistSender) updateLeaseHolderCache(
-	rangeID roachpb.RangeID,
-	newLeaseHolder roachpb.ReplicaDescriptor,
+	rangeID roachpb.RangeID, newLeaseHolder roachpb.ReplicaDescriptor,
 ) {
 	if log.V(1) {
 		if oldLeaseHolder, ok := ds.leaseHolderCache.Lookup(rangeID); ok {

@@ -582,8 +582,7 @@ type aggregateFuncHolder struct {
 }
 
 func (n *groupNode) newAggregateFuncHolder(
-	expr, arg parser.TypedExpr,
-	create func() parser.AggregateFunc,
+	expr, arg parser.TypedExpr, create func() parser.AggregateFunc,
 ) *aggregateFuncHolder {
 	res := &aggregateFuncHolder{
 		expr:          expr,
@@ -641,7 +640,9 @@ func (a *aggregateFuncHolder) String() string { return parser.AsString(a) }
 
 func (a *aggregateFuncHolder) Walk(v parser.Visitor) parser.Expr { return a }
 
-func (a *aggregateFuncHolder) TypeCheck(_ *parser.SemaContext, desired parser.Datum) (parser.TypedExpr, error) {
+func (a *aggregateFuncHolder) TypeCheck(
+	_ *parser.SemaContext, desired parser.Datum,
+) (parser.TypedExpr, error) {
 	return a, nil
 }
 

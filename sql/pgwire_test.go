@@ -1045,8 +1045,7 @@ func TestPGCommandTags(t *testing.T) {
 // checkSQLNetworkMetrics returns the server's pgwire bytesIn/bytesOut and an
 // error if the bytesIn/bytesOut don't satisfy the given minimums and maximums.
 func checkSQLNetworkMetrics(
-	s serverutils.TestServerInterface,
-	minBytesIn, minBytesOut, maxBytesIn, maxBytesOut int64,
+	s serverutils.TestServerInterface, minBytesIn, minBytesOut, maxBytesIn, maxBytesOut int64,
 ) (int64, int64, error) {
 	if err := s.WriteSummaries(); err != nil {
 		return -1, -1, err

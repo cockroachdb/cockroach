@@ -914,7 +914,9 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 
 // getRangeMetadata retrieves the current range descriptor for the target
 // range.
-func getRangeMetadata(key roachpb.RKey, mtc *multiTestContext, t *testing.T) roachpb.RangeDescriptor {
+func getRangeMetadata(
+	key roachpb.RKey, mtc *multiTestContext, t *testing.T,
+) roachpb.RangeDescriptor {
 	// Calls to RangeLookup typically use inconsistent reads, but we
 	// want to do a consistent read here. This is important when we are
 	// considering one of the metadata ranges: we must not do an

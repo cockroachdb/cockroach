@@ -46,7 +46,9 @@ func adminMergeArgs(key roachpb.Key) roachpb.AdminMergeRequest {
 	}
 }
 
-func createSplitRanges(store *storage.Store) (*roachpb.RangeDescriptor, *roachpb.RangeDescriptor, *roachpb.Error) {
+func createSplitRanges(
+	store *storage.Store,
+) (*roachpb.RangeDescriptor, *roachpb.RangeDescriptor, *roachpb.Error) {
 	args := adminSplitArgs(roachpb.KeyMin, []byte("b"))
 	if _, err := client.SendWrapped(rg1(store), nil, &args); err != nil {
 		return nil, nil, err

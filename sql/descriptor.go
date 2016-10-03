@@ -70,7 +70,9 @@ type DescriptorAccessor interface {
 var _ DescriptorAccessor = &planner{}
 
 // checkPrivilege implements the DescriptorAccessor interface.
-func (p *planner) checkPrivilege(descriptor sqlbase.DescriptorProto, privilege privilege.Kind) error {
+func (p *planner) checkPrivilege(
+	descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
+) error {
 	if descriptor.GetPrivileges().CheckPrivilege(p.session.User, privilege) {
 		return nil
 	}
@@ -186,7 +188,8 @@ func (p *planner) createDescriptorWithID(
 }
 
 // getDescriptor implements the DescriptorAccessor interface.
-func (p *planner) getDescriptor(plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto,
+func (p *planner) getDescriptor(
+	plainKey sqlbase.DescriptorKey, descriptor sqlbase.DescriptorProto,
 ) (bool, error) {
 	gr, err := p.txn.Get(plainKey.Key())
 	if err != nil {
@@ -258,8 +261,9 @@ func (p *planner) getAllDescriptors() ([]sqlbase.DescriptorProto, error) {
 }
 
 // getDescriptorsFromTargetList implements the DescriptorAccessor interface.
-func (p *planner) getDescriptorsFromTargetList(targets parser.TargetList) (
-	[]sqlbase.DescriptorProto, error) {
+func (p *planner) getDescriptorsFromTargetList(
+	targets parser.TargetList,
+) ([]sqlbase.DescriptorProto, error) {
 	if targets.Databases != nil {
 		if len(targets.Databases) == 0 {
 			return nil, errNoDatabase

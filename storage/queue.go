@@ -349,7 +349,9 @@ func (bq *baseQueue) requiresSplit(cfg config.SystemConfig, repl *Replica) bool 
 // addInternal adds the replica the queue with specified priority. If
 // the replica is already queued, updates the existing
 // priority. Expects the queue lock to be held by caller.
-func (bq *baseQueue) addInternal(desc *roachpb.RangeDescriptor, should bool, priority float64) (bool, error) {
+func (bq *baseQueue) addInternal(
+	desc *roachpb.RangeDescriptor, should bool, priority float64,
+) (bool, error) {
 	if bq.mu.stopped {
 		return false, errQueueStopped
 	}
@@ -546,7 +548,9 @@ func (bq *baseQueue) processReplica(repl *Replica, clock *hlc.Clock) error {
 // purgatoryError and the queue implementation must have its own
 // mechanism for signaling re-processing of replicas held in
 // purgatory.
-func (bq *baseQueue) maybeAddToPurgatory(repl *Replica, triggeringErr error, clock *hlc.Clock, stopper *stop.Stopper) {
+func (bq *baseQueue) maybeAddToPurgatory(
+	repl *Replica, triggeringErr error, clock *hlc.Clock, stopper *stop.Stopper,
+) {
 	// Increment failures metric here to capture all error returns from
 	// process().
 	bq.failures.Inc(1)

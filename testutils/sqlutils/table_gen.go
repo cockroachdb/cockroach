@@ -50,9 +50,7 @@ func genValues(w io.Writer, firstRow, lastRow int, fn GenRowFn) {
 
 // CreateTable creates a table in the "test" database with the given number of
 // rows and using the given row generation function.
-func CreateTable(
-	t *testing.T, sqlDB *gosql.DB, tableName, schema string, numRows int, fn GenRowFn,
-) {
+func CreateTable(t *testing.T, sqlDB *gosql.DB, tableName, schema string, numRows int, fn GenRowFn) {
 	r := MakeSQLRunner(t, sqlDB)
 	stmt := `CREATE DATABASE IF NOT EXISTS test;`
 	stmt += fmt.Sprintf(`CREATE TABLE test.%s (%s);`, tableName, schema)

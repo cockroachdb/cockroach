@@ -33,7 +33,9 @@ type Sender interface {
 type SenderFunc func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 
 // Send calls f(ctx, c).
-func (f SenderFunc) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+func (f SenderFunc) Send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
 	return f(ctx, ba)
 }
 
@@ -65,7 +67,9 @@ func SendWrappedWith(
 // SendWrapped is identical to SendWrappedWith with a zero header.
 // TODO(tschottdorf): should move this to testutils and merge with
 // other helpers which are used, for example, in `storage`.
-func SendWrapped(sender Sender, ctx context.Context, args roachpb.Request) (roachpb.Response, *roachpb.Error) {
+func SendWrapped(
+	sender Sender, ctx context.Context, args roachpb.Request,
+) (roachpb.Response, *roachpb.Error) {
 	return SendWrappedWith(sender, ctx, roachpb.Header{}, args)
 }
 

@@ -236,9 +236,7 @@ func NewRaftTransport(
 
 // handleRaftRequest proxies a request to the listening server interface.
 func (t *RaftTransport) handleRaftRequest(
-	ctx context.Context,
-	req *RaftMessageRequest,
-	respStream RaftMessageResponseStream,
+	ctx context.Context, req *RaftMessageRequest, respStream RaftMessageResponseStream,
 ) *roachpb.Error {
 	t.recvMu.Lock()
 	handler, ok := t.recvMu.handlers[req.ToReplica.StoreID]
@@ -395,9 +393,7 @@ func (t *RaftTransport) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breake
 // breaker is used to allow fast failures in SendAsync which will drop
 // incoming raft messages and report unreachable status to the raft group.
 func (t *RaftTransport) connectAndProcess(
-	nodeID roachpb.NodeID,
-	ch chan *RaftMessageRequest,
-	stats *raftTransportStats,
+	nodeID roachpb.NodeID, ch chan *RaftMessageRequest, stats *raftTransportStats,
 ) {
 	breaker := t.GetCircuitBreaker(nodeID)
 	successes := breaker.Successes()

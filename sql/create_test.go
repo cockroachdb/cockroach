@@ -193,7 +193,8 @@ func createTestTable(
 // verifyTables ensures that the correct number of tables were created and that
 // they all correspond to individual table descriptor IDs in the correct range
 // of values.
-func verifyTables(t *testing.T,
+func verifyTables(
+	t *testing.T,
 	tc *testcluster.TestCluster,
 	completed chan int,
 	expectedNumOfTables int,

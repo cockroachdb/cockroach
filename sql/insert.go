@@ -344,8 +344,9 @@ func (n *insertNode) Next() (bool, error) {
 	return true, nil
 }
 
-func (p *planner) processColumns(tableDesc *sqlbase.TableDescriptor,
-	node parser.UnresolvedNames) ([]sqlbase.ColumnDescriptor, error) {
+func (p *planner) processColumns(
+	tableDesc *sqlbase.TableDescriptor, node parser.UnresolvedNames,
+) ([]sqlbase.ColumnDescriptor, error) {
 	if node == nil {
 		// VisibleColumns is used here to prevent INSERT INTO <table> VALUES (...)
 		// (as opposed to INSERT INTO <table> (...) VALUES (...)) from writing
@@ -381,8 +382,9 @@ func (p *planner) processColumns(tableDesc *sqlbase.TableDescriptor,
 	return cols, nil
 }
 
-func (p *planner) fillDefaults(defaultExprs []parser.TypedExpr,
-	cols []sqlbase.ColumnDescriptor, n *parser.Insert) (parser.SelectStatement, error) {
+func (p *planner) fillDefaults(
+	defaultExprs []parser.TypedExpr, cols []sqlbase.ColumnDescriptor, n *parser.Insert,
+) (parser.SelectStatement, error) {
 	if n.DefaultValues() {
 		row := make(parser.Exprs, 0, len(cols))
 		for i := range cols {

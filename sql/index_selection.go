@@ -370,8 +370,9 @@ func (v *indexInfo) analyzeExprs(exprs []parser.TypedExprs) {
 //
 // If preferOrderMatching is true, we prefer an index that matches the desired
 // ordering completely, even if it is not a covering index.
-func (v *indexInfo) analyzeOrdering(scan *scanNode, analyzeOrdering analyzeOrderingFn,
-	preferOrderMatching bool) {
+func (v *indexInfo) analyzeOrdering(
+	scan *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatching bool,
+) {
 	// Compute the prefix of the index for which we have exact constraints. This
 	// prefix is inconsequential for ordering because the values are identical.
 	v.exactPrefix = v.constraints.exactPrefix()
@@ -827,8 +828,7 @@ func encodeStartConstraintAscending(spans []roachpb.Span, c *parser.ComparisonEx
 	}
 }
 
-func encodeStartConstraintDescending(
-	spans []roachpb.Span, c *parser.ComparisonExpr) {
+func encodeStartConstraintDescending(spans []roachpb.Span, c *parser.ComparisonExpr) {
 	switch c.Operator {
 	case parser.Is:
 		// An IS NULL expressions allows us to constrain the start of the range
@@ -947,8 +947,8 @@ func encodeEndConstraintDescending(
 // The key is a span end key, which is exclusive, but `val` needs to
 // be inclusive. So if datum is the last end constraint, we transform it accordingly.
 func encodeInclusiveEndValue(
-	key roachpb.Key, datum parser.Datum, dir encoding.Direction,
-	isLastEndConstraint bool) roachpb.Key {
+	key roachpb.Key, datum parser.Datum, dir encoding.Direction, isLastEndConstraint bool,
+) roachpb.Key {
 	// Since the end of a span is exclusive, if the last constraint is an
 	// inclusive one, we might need to make the key exclusive by applying a
 	// PrefixEnd().  We normally avoid doing this by transforming "a = x" to
@@ -1343,7 +1343,9 @@ func (oic orIndexConstraints) exactPrefix() int {
 // constraint is "a = 1", the expression is simplified to "b > 2".
 //
 // Note that applyConstraints currently only handles simple cases.
-func applyIndexConstraints(typedExpr parser.TypedExpr, constraints orIndexConstraints) parser.TypedExpr {
+func applyIndexConstraints(
+	typedExpr parser.TypedExpr, constraints orIndexConstraints,
+) parser.TypedExpr {
 	if len(constraints) != 1 {
 		// We only support simplifying the expressions if there aren't multiple
 		// disjunctions (top-level OR branches).

@@ -51,7 +51,9 @@ func (p *planner) newContainerValuesNode(columns ResultColumns, capacity int) *v
 	}
 }
 
-func (p *planner) ValuesClause(n *parser.ValuesClause, desiredTypes []parser.Datum) (planNode, error) {
+func (p *planner) ValuesClause(
+	n *parser.ValuesClause, desiredTypes []parser.Datum,
+) (planNode, error) {
 	v := &valuesNode{
 		p:            p,
 		n:            n,

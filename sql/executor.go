@@ -372,9 +372,7 @@ func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 // populate the missing types. The column result types are returned (or
 // nil if there are no results).
 func (e *Executor) Prepare(
-	query string,
-	session *Session,
-	pinfo parser.PlaceholderTypes,
+	query string, session *Session, pinfo parser.PlaceholderTypes,
 ) (ResultColumns, error) {
 	if log.V(2) {
 		log.Infof(session.Ctx(), "preparing: %s", query)
@@ -950,11 +948,7 @@ func (e *Executor) execStmtInCommitWaitTxn(
 // - a Result
 // - an error, if any. In case of error, the result returned also reflects this error.
 func (e *Executor) execStmtInOpenTxn(
-	stmt parser.Statement,
-	planMaker *planner,
-	implicitTxn bool,
-	firstInTxn bool,
-	txnState *txnState,
+	stmt parser.Statement, planMaker *planner, implicitTxn bool, firstInTxn bool, txnState *txnState,
 ) (Result, error) {
 	if txnState.State != Open {
 		panic("execStmtInOpenTxn called outside of an open txn")

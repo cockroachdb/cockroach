@@ -98,7 +98,9 @@ func joinAndExprs(exprs parser.TypedExprs) parser.TypedExpr {
 	})
 }
 
-func joinExprs(exprs parser.TypedExprs, joinExprsFn func(left, right parser.TypedExpr) parser.TypedExpr) parser.TypedExpr {
+func joinExprs(
+	exprs parser.TypedExprs, joinExprsFn func(left, right parser.TypedExpr) parser.TypedExpr,
+) parser.TypedExpr {
 	switch len(exprs) {
 	case 0:
 		return nil
@@ -1607,10 +1609,8 @@ func makeIsNotNull(left parser.TypedExpr) parser.TypedExpr {
 // as a result.
 func (p *planner) analyzeExpr(
 	raw parser.Expr,
-	/* arguments for name resolution */
 	sources multiSourceInfo,
 	qvals qvalMap,
-	/* arguments for type checking */
 	expectedType parser.Datum,
 	requireType bool,
 	typingContext string,

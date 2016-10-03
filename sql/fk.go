@@ -79,7 +79,10 @@ type fkInsertHelper map[sqlbase.IndexID][]baseFKHelper
 var errSkipUnsedFK = errors.New("no columns involved in FK included in writer")
 
 func makeFKInsertHelper(
-	txn *client.Txn, table sqlbase.TableDescriptor, otherTables tableLookupsByID, colMap map[sqlbase.ColumnID]int,
+	txn *client.Txn,
+	table sqlbase.TableDescriptor,
+	otherTables tableLookupsByID,
+	colMap map[sqlbase.ColumnID]int,
 ) (fkInsertHelper, error) {
 	var fks fkInsertHelper
 	for _, idx := range table.AllNonDropIndexes() {
@@ -141,7 +144,10 @@ func (fks fkInsertHelper) checkIdx(idx sqlbase.IndexID, row parser.DTuple) error
 type fkDeleteHelper map[sqlbase.IndexID][]baseFKHelper
 
 func makeFKDeleteHelper(
-	txn *client.Txn, table sqlbase.TableDescriptor, otherTables tableLookupsByID, colMap map[sqlbase.ColumnID]int,
+	txn *client.Txn,
+	table sqlbase.TableDescriptor,
+	otherTables tableLookupsByID,
+	colMap map[sqlbase.ColumnID]int,
 ) (fkDeleteHelper, error) {
 	var fks fkDeleteHelper
 	for _, idx := range table.AllNonDropIndexes() {
@@ -205,7 +211,10 @@ type fkUpdateHelper struct {
 }
 
 func makeFKUpdateHelper(
-	txn *client.Txn, table sqlbase.TableDescriptor, otherTables tableLookupsByID, colMap map[sqlbase.ColumnID]int,
+	txn *client.Txn,
+	table sqlbase.TableDescriptor,
+	otherTables tableLookupsByID,
+	colMap map[sqlbase.ColumnID]int,
 ) (fkUpdateHelper, error) {
 	ret := fkUpdateHelper{}
 	var err error
@@ -239,7 +248,7 @@ func makeBaseFKHelper(
 	otherTables tableLookupsByID,
 	writeIdx sqlbase.IndexDescriptor,
 	ref sqlbase.ForeignKeyReference,
-	colMap map[sqlbase.ColumnID]int, // col ids (for idx being written) to row offset.
+	colMap map[sqlbase.ColumnID]int,
 ) (baseFKHelper, error) {
 	b := baseFKHelper{txn: txn, writeIdx: writeIdx, searchTable: otherTables[ref.Table].table}
 	if b.searchTable == nil {

@@ -261,8 +261,9 @@ type collectSubqueryPlansVisitor struct {
 
 var _ parser.Visitor = &collectSubqueryPlansVisitor{}
 
-func (v *collectSubqueryPlansVisitor) VisitPre(expr parser.Expr) (
-	recurse bool, newExpr parser.Expr) {
+func (v *collectSubqueryPlansVisitor) VisitPre(
+	expr parser.Expr,
+) (recurse bool, newExpr parser.Expr) {
 	if sq, ok := expr.(*subquery); ok {
 		if sq.plan == nil {
 			panic("cannot collect the sub-plans before they were expanded")

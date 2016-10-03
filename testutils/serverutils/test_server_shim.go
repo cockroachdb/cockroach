@@ -114,9 +114,9 @@ func InitTestServerFactory(impl TestServerFactory) {
 
 // StartServer creates a test server and sets up a gosql DB connection.
 // The server should be stopped by calling server.Stopper().Stop().
-func StartServer(t testing.TB, params base.TestServerArgs) (
-	TestServerInterface, *gosql.DB, *client.DB,
-) {
+func StartServer(
+	t testing.TB, params base.TestServerArgs,
+) (TestServerInterface, *gosql.DB, *client.DB) {
 	server, err := StartServerRaw(params)
 	if err != nil {
 		t.Fatal(err)

@@ -721,7 +721,9 @@ func (c *v3Conn) sendErrorWithCode(errCode string, errCtx sqlbase.SrcCtx, errToS
 }
 
 // sendResponse sends the results as a query response.
-func (c *v3Conn) sendResponse(results sql.ResultList, formatCodes []formatCode, sendDescription bool, limit int) error {
+func (c *v3Conn) sendResponse(
+	results sql.ResultList, formatCodes []formatCode, sendDescription bool, limit int,
+) error {
 	if len(results) == 0 {
 		return c.sendCommandComplete(nil)
 	}
