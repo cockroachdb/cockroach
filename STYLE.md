@@ -58,6 +58,9 @@ on a line with no type (confusing and brittle when edited).
 
 ### Wrapping Function Calls
 
+Note: the guidelines in this section are suggestions; they are not required and
+they should not be demanded in code reviews.
+
 When wrapping function calls that do not fit on one line, put the arguments on a
 separate line, with the closing `)` on a separate line:
 
@@ -106,9 +109,9 @@ A complex example:
                           }
 ### fmt Verbs
 
-Prefer the most specific verb for your use. In other words, prefer to avoid %v
-when possible. However, %v is to be used when formatting bindings which might
-be nil and which do not already handle nil formatting. Notably, nil errors
-formatted as %s will render as "%!s(<nil>)" while nil errors formatted as %v
-will render as "<nil>". Therefore, prefer %v when formatting errors which are
-not known to be non-nil.
+Prefer the most specific verb for your use. In other words, prefer to avoid `%v`
+when possible. However, `%v` is to be used when formatting bindings which might
+be `nil` and which do not already handle `nil` formatting. Notably, `nil` errors
+formatted as `%s` will render as `%!s(<nil>)` while `nil` errors formatted as `%v`
+will render as `<nil>`. Therefore, prefer `%v` when formatting errors which are
+not known to be non-`nil`.
