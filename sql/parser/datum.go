@@ -20,15 +20,18 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"math/big"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/duration"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -82,6 +85,11 @@ type Datum interface {
 	// IsMin returns true if the datum is equal to the minimum value the datum
 	// type can hold.
 	IsMin() bool
+
+	// Size returns a lower bound on the Datum's size, in bytes.  The
+	// second return value indicates whether the size is dependent on
+	// the particular value.
+	Size() (uintptr, bool)
 }
 
 // DBool is the boolean Datum.
@@ -199,6 +207,11 @@ func (d *DBool) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(strconv.FormatBool(bool(*d)))
 }
 
+// Size implements the Datum interface.
+func (d *DBool) Size() (uintptr, bool) {
+	return unsafe.Sizeof(*d), false
+}
+
 // DInt is the int Datum.
 type DInt int64
 
@@ -289,6 +302,11 @@ func (d *DInt) IsMin() bool {
 // Format implements the NodeFormatter interface.
 func (d *DInt) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(strconv.FormatInt(int64(*d), 10))
+}
+
+// Size implements the Datum interface.
+func (d *DInt) Size() (uintptr, bool) {
+	return unsafe.Sizeof(*d), false
 }
 
 // DFloat is the float Datum.
@@ -392,6 +410,11 @@ func (d *DFloat) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+// Size implements the Datum interface.
+func (d *DFloat) Size() (uintptr, bool) {
+	return unsafe.Sizeof(*d), false
+}
+
 // DDecimal is the decimal Datum.
 type DDecimal struct {
 	inf.Dec
@@ -475,6 +498,12 @@ func (d *DDecimal) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(d.Dec.String())
 }
 
+// Size implements the Datum interface.
+func (d *DDecimal) Size() (uintptr, bool) {
+	intVal := d.Dec.UnscaledBig()
+	return unsafe.Sizeof(*d) + unsafe.Sizeof(*intVal) + uintptr(cap(intVal.Bits()))*unsafe.Sizeof(big.Word(0)), true
+}
+
 // DString is the string Datum.
 type DString string
 
@@ -555,6 +584,11 @@ func (d *DString) Format(buf *bytes.Buffer, f FmtFlags) {
 	encodeSQLString(buf, string(*d))
 }
 
+// Size implements the Datum interface.
+func (d *DString) Size() (uintptr, bool) {
+	return unsafe.Sizeof(*d) + uintptr(len(*d)), true
+}
+
 // DBytes is the bytes Datum. The underlying type is a string because we want
 // the immutability, but this may contain arbitrary bytes.
 type DBytes string
@@ -633,6 +667,11 @@ func (d *DBytes) IsMin() bool {
 // Format implements the NodeFormatter interface.
 func (d *DBytes) Format(buf *bytes.Buffer, f FmtFlags) {
 	encodeSQLBytes(buf, string(*d))
+}
+
+// Size implements the Datum interface.
+func (d *DBytes) Size() (uintptr, bool) {
+	return unsafe.Sizeof(*d) + uintptr(len(*d)), true
 }
 
 // DDate is the date Datum represented as the number of days after
@@ -756,6 +795,11 @@ func (d *DDate) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(time.Unix(int64(*d)*secondsInDay, 0).UTC().Format(dateFormat))
 }
 
+// Size implements the Datum interface.
+func (d *DDate) Size() (uintptr, bool) {
+	return unsafe.Sizeof(*d), false
+}
+
 // DTimestamp is the timestamp Datum.
 type DTimestamp struct {
 	time.Time
@@ -769,36 +813,66 @@ func MakeDTimestamp(t time.Time, precision time.Duration) *DTimestamp {
 // time.Time formats.
 const (
 	timestampFormat                       = "2006-01-02 15:04:05"
-	timestampWithOffsetZoneFormat         = timestampFormat + "-07:00"
+	timestampWithOffsetZoneFormat         = timestampFormat + "-07"
+	timestampWithOffsetSecondsZoneFormat  = timestampWithOffsetZoneFormat + ":00"
 	timestampWithNamedZoneFormat          = timestampFormat + " MST"
 	timestampRFC3339NanoWithoutZoneFormat = "2006-01-02T15:04:05"
 
 	timestampNodeFormat = timestampFormat + ".999999-07:00"
-	timestampFormatNS   = timestampFormat + ".999999999"
 )
 
 var timeFormats = []string{
 	dateFormat,
 	time.RFC3339Nano,
 	timestampWithOffsetZoneFormat,
+	timestampWithOffsetSecondsZoneFormat,
 	timestampFormat,
 	timestampWithNamedZoneFormat,
 	timestampRFC3339NanoWithoutZoneFormat,
+	timestampNodeFormat,
 }
 
 func parseTimestampInLocation(s string, loc *time.Location) (time.Time, error) {
 	for _, format := range timeFormats {
 		if t, err := time.ParseInLocation(format, s, loc); err == nil {
+			if err := checkForMissingZone(t, loc); err != nil {
+				return time.Time{}, makeParseError(s, TypeTimestamp.Type(), err)
+			}
 			return t, nil
 		}
 	}
 	return time.Time{}, makeParseError(s, TypeTimestamp.Type(), nil)
 }
 
+// Unfortunately Go is very strict when parsing abbreviated zone names -- with
+// the exception of 'UTC' and 'GMT', it only supports abbreviations that are
+// defined in the local in which it is parsing. Worse, it doesn't return any
+// sort of error for unresolved zones, but rather simply pretends they have a
+// zero offset. This means changing the session zone such that an abbreviation
+// like 'CET' stops being resolved *silently* changes the offsets of parsed
+// strings with 'CET' offsets to zero.
+// We attempt to detect when this has happened and return an error instead.
+//
+// Postgres does its own parsing and just maintains a list of zone abbreviations
+// that are always recognized, regardless of the session location. If this check
+// ends up catching too many users, we may need to do the same.
+func checkForMissingZone(t time.Time, parseLoc *time.Location) error {
+	if z, off := t.Zone(); off == 0 && t.Location() != parseLoc && z != "UTC" && !strings.HasPrefix(z, "GMT") {
+		return errors.Errorf("unknown zone %q", z)
+	}
+	return nil
+}
+
 // ParseDTimestamp parses and returns the *DTimestamp Datum value represented by
-// the provided string in the provided location, or an error if parsing is unsuccessful.
-func ParseDTimestamp(s string, loc *time.Location, precision time.Duration) (*DTimestamp, error) {
-	t, err := parseTimestampInLocation(s, loc)
+// the provided string in UTC, or an error if parsing is unsuccessful.
+func ParseDTimestamp(s string, precision time.Duration) (*DTimestamp, error) {
+	// `ParseInLocation` uses the location provided both for resolving an explicit
+	// abbreviated zone as well as for the default zone if not specified
+	// explicitly. For non-'WITH TIME ZONE' strings (which this is used to parse),
+	// we do not want to add a non-UTC zone if one is not explicitly stated, so we
+	// use time.UTC rather than the sesion location. Unfortunately this also means
+	// we do not use the session zone for resolving abbreviations.
+	t, err := parseTimestampInLocation(s, time.UTC)
 	if err != nil {
 		return nil, err
 	}
@@ -875,6 +949,11 @@ func (d *DTimestamp) IsMin() bool {
 // Format implements the NodeFormatter interface.
 func (d *DTimestamp) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(d.UTC().Format(timestampNodeFormat))
+}
+
+// Size implements the Datum interface.
+func (d *DTimestamp) Size() (uintptr, bool) {
+	return unsafe.Sizeof(*d), false
 }
 
 // DTimestampTZ is the timestamp Datum that is rendered with session offset.
@@ -971,6 +1050,11 @@ func (d *DTimestampTZ) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(d.UTC().Format(timestampNodeFormat))
 }
 
+// Size implements the Datum interface.
+func (d *DTimestampTZ) Size() (uintptr, bool) {
+	return unsafe.Sizeof(*d), false
+}
+
 // DInterval is the interval Datum.
 type DInterval struct {
 	duration.Duration
@@ -1006,14 +1090,44 @@ func ParseDInterval(s string) (*DInterval, error) {
 			return nil, makeParseError(s, TypeInterval.Type(), err)
 		}
 		return &DInterval{Duration: dur}, nil
-	} else {
-		// Fallback to golang durations.
-		dur, err := time.ParseDuration(s)
+	} else if strings.ContainsRune(s, ':') {
+		// Colon-separated intervals in Postgres are odd. They have day, hour,
+		// minute, or second parts depending on number of fields and if the field
+		// is an int or float.
+		//
+		// Instead of supporting unit changing based on int or float, use the
+		// following rules:
+		// - One field is S.
+		// - Two fields is H:M.
+		// - Three fields is H:M:S.
+		// - All fields support both int and float.
+		parts := strings.Split(s, ":")
+		var err error
+		var dur time.Duration
+		switch len(parts) {
+		case 2:
+			dur, err = time.ParseDuration(parts[0] + "h" + parts[1] + "m")
+		case 3:
+			dur, err = time.ParseDuration(parts[0] + "h" + parts[1] + "m" + parts[2] + "s")
+		default:
+			return nil, makeParseError(s, TypeInterval.Type(), fmt.Errorf("unknown format"))
+		}
 		if err != nil {
 			return nil, makeParseError(s, TypeInterval.Type(), err)
 		}
 		return &DInterval{Duration: duration.Duration{Nanos: dur.Nanoseconds()}}, nil
 	}
+
+	// An interval that's just a number is seconds.
+	if _, err := strconv.ParseFloat(s, 64); err == nil {
+		s += "s"
+	}
+	// Fallback to golang durations.
+	dur, err := time.ParseDuration(s)
+	if err != nil {
+		return nil, makeParseError(s, TypeInterval.Type(), err)
+	}
+	return &DInterval{Duration: duration.Duration{Nanos: dur.Nanoseconds()}}, nil
 }
 
 // ReturnType implements the TypedExpr interface.
@@ -1082,6 +1196,11 @@ func (d *DInterval) Format(buf *bytes.Buffer, f FmtFlags) {
 	} else {
 		buf.WriteString((time.Duration(d.Duration.Nanos) * time.Nanosecond).String())
 	}
+}
+
+// Size implements the Datum interface.
+func (d *DInterval) Size() (uintptr, bool) {
+	return unsafe.Sizeof(*d), false
 }
 
 // DTuple is the tuple Datum.
@@ -1249,6 +1368,16 @@ func (d *DTuple) makeUnique() {
 	*d = (*d)[:n]
 }
 
+// Size implements the Datum interface.
+func (d *DTuple) Size() (uintptr, bool) {
+	sz := unsafe.Sizeof(*d)
+	for _, e := range *d {
+		dsz, _ := e.Size()
+		sz += dsz
+	}
+	return sz, true
+}
+
 // SortedDifference finds the elements of d which are not in other,
 // assuming that d and other are already sorted.
 func (d *DTuple) SortedDifference(other *DTuple) *DTuple {
@@ -1331,6 +1460,11 @@ func (dNull) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("NULL")
 }
 
+// Size implements the Datum interface.
+func (d dNull) Size() (uintptr, bool) {
+	return unsafe.Sizeof(d), false
+}
+
 var _ VariableExpr = &DPlaceholder{}
 
 // DPlaceholder is the named placeholder Datum.
@@ -1405,6 +1539,11 @@ func (*DPlaceholder) IsMin() bool {
 func (d *DPlaceholder) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte('$')
 	buf.WriteString(d.name)
+}
+
+// Size implements the Datum interface.
+func (d *DPlaceholder) Size() (uintptr, bool) {
+	return unsafe.Sizeof(*d) + uintptr(len(d.name)), true
 }
 
 // Temporary workaround for #3633, allowing comparisons between

@@ -259,6 +259,7 @@ export interface logBuilder {
 	Entry: log.EntryBuilder;
 	FileDetails: log.FileDetailsBuilder;
 	FileInfo: log.FileInfoBuilder;
+	Severity: log.Severity;
 	
 }
 
@@ -270,11 +271,11 @@ declare module Proto2TypeScript.cockroach.util.log {
 
 		
 
-severity?: Long;
+severity?: Severity;
 		
 
-getSeverity?() : Long;
-		setSeverity?(severity : Long): void;
+getSeverity?() : Severity;
+		setSeverity?(severity : Severity): void;
 		
 
 
@@ -378,11 +379,11 @@ getUserName?() : string;
 
 
 
-severity?: Long;
+severity?: Severity;
 		
 
-getSeverity?() : Long;
-		setSeverity?(severity : Long): void;
+getSeverity?() : Severity;
+		setSeverity?(severity : Severity): void;
 		
 
 
@@ -489,6 +490,18 @@ export interface FileInfoBuilder {
 }
 
 
+declare module Proto2TypeScript.cockroach.util.log {
+	export const enum Severity {
+		UNKNOWN = 0,
+		INFO = 1,
+		WARNING = 2,
+		ERROR = 3,
+		FATAL = 4,
+		NONE = 5,
+		
+}
+}
+
 
 
 declare module Proto2TypeScript.cockroach {
@@ -520,6 +533,8 @@ export interface roachpbBuilder {
 	NodeDescriptor: roachpb.NodeDescriptorBuilder;
 	StoreDescriptor: roachpb.StoreDescriptorBuilder;
 	StoreDeadReplicas: roachpb.StoreDeadReplicasBuilder;
+	Locality: roachpb.LocalityBuilder;
+	Tier: roachpb.TierBuilder;
 	Span: roachpb.SpanBuilder;
 	Value: roachpb.ValueBuilder;
 	KeyValue: roachpb.KeyValueBuilder;
@@ -901,6 +916,15 @@ getCapacity?() : StoreCapacity;
 
 
 
+locality?: Locality;
+		
+
+getLocality?() : Locality;
+		setLocality?(locality : Locality): void;
+		
+
+
+
 }
 
 	export interface StoreDescriptorMessage extends StoreDescriptor {
@@ -961,6 +985,87 @@ export interface StoreDeadReplicasBuilder {
 	decode(buffer: ArrayBuffer) : StoreDeadReplicasMessage;
 	decode(buffer: ByteBuffer) : StoreDeadReplicasMessage;
 	decode64(buffer: string) : StoreDeadReplicasMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.cockroach.roachpb {
+
+	export interface Locality {
+
+		
+
+tiers?: Tier[];
+		
+
+getTiers?() : Tier[];
+		setTiers?(tiers : Tier[]): void;
+		
+
+
+
+}
+
+	export interface LocalityMessage extends Locality {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface LocalityBuilder {
+	new(data?: Locality): LocalityMessage;
+	decode(buffer: ArrayBuffer) : LocalityMessage;
+	decode(buffer: ByteBuffer) : LocalityMessage;
+	decode64(buffer: string) : LocalityMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.cockroach.roachpb {
+
+	export interface Tier {
+
+		
+
+key?: string;
+		
+
+getKey?() : string;
+		setKey?(key : string): void;
+		
+
+
+
+value?: string;
+		
+
+getValue?() : string;
+		setValue?(value : string): void;
+		
+
+
+
+}
+
+	export interface TierMessage extends Tier {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface TierBuilder {
+	new(data?: Tier): TierMessage;
+	decode(buffer: ArrayBuffer) : TierMessage;
+	decode(buffer: ByteBuffer) : TierMessage;
+	decode64(buffer: string) : TierMessage;
 	
 }
 
@@ -2600,6 +2705,8 @@ export interface configBuilder {
 	decode(buffer: ByteBuffer) : configMessage;
 	decode64(buffer: string) : configMessage;
 	GCPolicy: config.GCPolicyBuilder;
+	Constraint: config.ConstraintBuilder;
+	Constraints: config.ConstraintsBuilder;
 	ZoneConfig: config.ZoneConfigBuilder;
 	SystemConfig: config.SystemConfigBuilder;
 	
@@ -2645,6 +2752,106 @@ export interface GCPolicyBuilder {
 
 declare module Proto2TypeScript.cockroach.config {
 
+	export interface Constraint {
+
+		
+
+type?: Constraint.Type;
+		
+
+getType?() : Constraint.Type;
+		setType?(type : Constraint.Type): void;
+		
+
+
+
+key?: string;
+		
+
+getKey?() : string;
+		setKey?(key : string): void;
+		
+
+
+
+value?: string;
+		
+
+getValue?() : string;
+		setValue?(value : string): void;
+		
+
+
+
+}
+
+	export interface ConstraintMessage extends Constraint {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ConstraintBuilder {
+	new(data?: Constraint): ConstraintMessage;
+	decode(buffer: ArrayBuffer) : ConstraintMessage;
+	decode(buffer: ByteBuffer) : ConstraintMessage;
+	decode64(buffer: string) : ConstraintMessage;
+	Type: Constraint.Type;
+	
+}
+
+}
+
+declare module Proto2TypeScript.cockroach.config.Constraint {
+	export const enum Type {
+		POSITIVE = 0,
+		REQUIRED = 1,
+		PROHIBITED = 2,
+		
+}
+}
+
+
+declare module Proto2TypeScript.cockroach.config {
+
+	export interface Constraints {
+
+		
+
+constraints?: Constraint[];
+		
+
+getConstraints?() : Constraint[];
+		setConstraints?(constraints : Constraint[]): void;
+		
+
+
+
+}
+
+	export interface ConstraintsMessage extends Constraints {
+	toArrayBuffer(): ArrayBuffer;
+	encode(): ByteBuffer;
+	encodeJSON(): string;
+	toBase64(): string;
+	toString(): string;
+}
+
+export interface ConstraintsBuilder {
+	new(data?: Constraints): ConstraintsMessage;
+	decode(buffer: ArrayBuffer) : ConstraintsMessage;
+	decode(buffer: ByteBuffer) : ConstraintsMessage;
+	decode64(buffer: string) : ConstraintsMessage;
+	
+}
+
+}
+
+
+declare module Proto2TypeScript.cockroach.config {
+
 	export interface ZoneConfig {
 
 		
@@ -2681,6 +2888,24 @@ gc?: GCPolicy;
 
 getGc?() : GCPolicy;
 		setGc?(gc : GCPolicy): void;
+		
+
+
+
+num_replicas?: number;
+		
+
+getNumReplicas?() : number;
+		setNumReplicas?(numReplicas : number): void;
+		
+
+
+
+constraints?: Constraints;
+		
+
+getConstraints?() : Constraints;
+		setConstraints?(constraints : Constraints): void;
 		
 
 
@@ -2972,6 +3197,33 @@ getTableNames?() : string[];
 
 
 
+descriptor_id?: Long;
+		
+
+getDescriptorId?() : Long;
+		setDescriptorId?(descriptorId : Long): void;
+		
+
+
+
+zone_config?: config.ZoneConfig;
+		
+
+getZoneConfig?() : config.ZoneConfig;
+		setZoneConfig?(zoneConfig : config.ZoneConfig): void;
+		
+
+
+
+zone_config_level?: ZoneConfigurationLevel;
+		
+
+getZoneConfigLevel?() : ZoneConfigurationLevel;
+		setZoneConfigLevel?(zoneConfigLevel : ZoneConfigurationLevel): void;
+		
+
+
+
 }
 
 	export interface DatabaseDetailsResponseMessage extends DatabaseDetailsResponse {
@@ -3149,6 +3401,15 @@ zone_config_level?: ZoneConfigurationLevel;
 
 getZoneConfigLevel?() : ZoneConfigurationLevel;
 		setZoneConfigLevel?(zoneConfigLevel : ZoneConfigurationLevel): void;
+		
+
+
+
+descriptor_id?: Long;
+		
+
+getDescriptorId?() : Long;
+		setDescriptorId?(descriptorId : Long): void;
 		
 
 
@@ -5377,6 +5638,15 @@ getRanges?() : ProtoBufMap<Long, RaftRangeStatus>;
 
 
 
+errors?: RaftRangeError[];
+		
+
+getErrors?() : RaftRangeError[];
+		setErrors?(errors : RaftRangeError[]): void;
+		
+
+
+
 }
 
 	export interface RaftDebugResponseMessage extends RaftDebugResponse {
@@ -6424,6 +6694,15 @@ queries?: Query[];
 
 getQueries?() : Query[];
 		setQueries?(queries : Query[]): void;
+		
+
+
+
+sample_nanos?: Long;
+		
+
+getSampleNanos?() : Long;
+		setSampleNanos?(sampleNanos : Long): void;
 		
 
 

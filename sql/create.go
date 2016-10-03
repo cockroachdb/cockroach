@@ -21,14 +21,11 @@ import (
 	"fmt"
 	"strings"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -98,7 +95,8 @@ func (n *createDatabaseNode) Start() error {
 }
 
 func (n *createDatabaseNode) Next() (bool, error)                 { return false, nil }
-func (n *createDatabaseNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
+func (n *createDatabaseNode) Close()                              {}
+func (n *createDatabaseNode) Columns() ResultColumns              { return make(ResultColumns, 0) }
 func (n *createDatabaseNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (n *createDatabaseNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *createDatabaseNode) DebugValues() debugValues            { return debugValues{} }
@@ -216,7 +214,8 @@ func (n *createIndexNode) Start() error {
 }
 
 func (n *createIndexNode) Next() (bool, error)                 { return false, nil }
-func (n *createIndexNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
+func (n *createIndexNode) Close()                              {}
+func (n *createIndexNode) Columns() ResultColumns              { return make(ResultColumns, 0) }
 func (n *createIndexNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (n *createIndexNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *createIndexNode) DebugValues() debugValues            { return debugValues{} }
@@ -227,10 +226,136 @@ func (n *createIndexNode) ExplainPlan(v bool) (string, string, []planNode) {
 	return "create index", "", nil
 }
 
+type createViewNode struct {
+	p          *planner
+	n          *parser.CreateView
+	dbDesc     *sqlbase.DatabaseDescriptor
+	sourcePlan planNode
+}
+
+// CreateView creates a view.
+// Privileges: CREATE on underlying table(s).
+//   notes: postgres requires CREATE on database plus SELECT on all the
+//						selected columns.
+//          mysql requires CREATE VIEW plus SELECT on all the selected columns.
+func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
+	name, err := n.Name.NormalizeWithDatabaseName(p.session.Database)
+	if err != nil {
+		return nil, err
+	}
+
+	dbDesc, err := p.mustGetDatabaseDesc(name.Database())
+	if err != nil {
+		return nil, err
+	}
+
+	if err := p.checkPrivilege(dbDesc, privilege.CREATE); err != nil {
+		return nil, err
+	}
+
+	sourcePlan, err := p.Select(n.AsSource, []parser.Datum{}, false)
+	if err != nil {
+		return nil, err
+	}
+
+	numColNames := len(n.ColumnNames)
+	numColumns := len(sourcePlan.Columns())
+	if numColNames != 0 && numColNames != numColumns {
+		return nil, sqlbase.NewSyntaxError(fmt.Sprintf(
+			"CREATE VIEW specifies %d column name%s, but data source has %d column%s",
+			numColNames, util.Pluralize(int64(numColNames)),
+			numColumns, util.Pluralize(int64(numColumns))))
+	}
+
+	return &createViewNode{p: p, n: n, dbDesc: dbDesc, sourcePlan: sourcePlan}, nil
+}
+
+func (n *createViewNode) expandPlan() error {
+	return nil
+}
+
+func (n *createViewNode) Start() error {
+	tKey := tableKey{parentID: n.dbDesc.ID, name: n.n.Name.TableName().Table()}
+	key := tKey.Key()
+	if exists, err := n.p.descExists(key); err == nil && exists {
+		// TODO(a-robinson): Support CREATE OR REPLACE commands.
+		return sqlbase.NewRelationAlreadyExistsError(tKey.Name())
+	} else if err != nil {
+		return err
+	}
+
+	id, err := generateUniqueDescID(n.p.txn)
+	if err != nil {
+		return nil
+	}
+
+	// Inherit permissions from the database descriptor.
+	privs := n.dbDesc.GetPrivileges()
+
+	desc, err := makeViewTableDesc(n.n, n.dbDesc.ID, id, n.sourcePlan.Columns(), privs)
+	if err != nil {
+		return err
+	}
+
+	// Bookkeeping references are made after the descriptor is otherwise
+	// complete and IDs have been allocated since the IDs are needed in the
+	// references.
+	// TODO(a-robinson): Create and validate bookkeeping references.
+
+	err = desc.ValidateTable()
+	if err != nil {
+		return err
+	}
+
+	err = n.p.createDescriptorWithID(key, id, &desc)
+	if err != nil {
+		return err
+	}
+
+	if desc.Adding() {
+		n.p.notifySchemaChange(desc.ID, sqlbase.InvalidMutationID)
+	}
+	if err := desc.Validate(n.p.txn); err != nil {
+		return err
+	}
+
+	// Log Create View event. This is an auditable log event and is
+	// recorded in the same transaction as the table descriptor update.
+	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
+		EventLogCreateView,
+		int32(desc.ID),
+		int32(n.p.evalCtx.NodeID),
+		struct {
+			ViewName  string
+			Statement string
+			User      string
+		}{n.n.Name.String(), n.n.String(), n.p.session.User},
+	); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (n *createViewNode) Next() (bool, error)                 { return false, nil }
+func (n *createViewNode) Close()                              {}
+func (n *createViewNode) Columns() ResultColumns              { return make(ResultColumns, 0) }
+func (n *createViewNode) Ordering() orderingInfo              { return orderingInfo{} }
+func (n *createViewNode) Values() parser.DTuple               { return parser.DTuple{} }
+func (n *createViewNode) DebugValues() debugValues            { return debugValues{} }
+func (n *createViewNode) ExplainTypes(_ func(string, string)) {}
+func (n *createViewNode) SetLimitHint(_ int64, _ bool)        {}
+func (n *createViewNode) MarkDebug(mode explainMode)          {}
+func (n *createViewNode) ExplainPlan(v bool) (string, string, []planNode) {
+	return "create view", "", nil
+}
+
 type createTableNode struct {
-	p      *planner
-	n      *parser.CreateTable
-	dbDesc *sqlbase.DatabaseDescriptor
+	p          *planner
+	n          *parser.CreateTable
+	dbDesc     *sqlbase.DatabaseDescriptor
+	insertPlan planNode
+	sourcePlan planNode
 }
 
 // CreateTable creates a table.
@@ -251,14 +376,9 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		return nil, err
 	}
 
+	hoistConstraints(n)
 	for _, def := range n.Defs {
 		switch t := def.(type) {
-		case *parser.ColumnTableDef:
-			if t.References.Table.TableNameReference != nil {
-				if _, err := t.References.Table.NormalizeWithDatabaseName(p.session.Database); err != nil {
-					return nil, err
-				}
-			}
 		case *parser.ForeignKeyConstraintTableDef:
 			if _, err := t.Table.NormalizeWithDatabaseName(p.session.Database); err != nil {
 				return nil, err
@@ -266,127 +386,93 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		}
 	}
 
-	return &createTableNode{p: p, n: n, dbDesc: dbDesc}, nil
+	var sourcePlan planNode
+	if n.As() {
+		// The sourcePlan is needed to determine the set of columns to use
+		// to populate the new table descriptor in Start() below. We
+		// instantiate the sourcePlan as early as here so that EXPLAIN has
+		// something useful to show about CREATE TABLE .. AS ...
+		sourcePlan, err = p.Select(n.AsSource, []parser.Datum{}, false)
+		if err != nil {
+			return nil, err
+		}
+		numColNames := len(n.AsColumnNames)
+		numColumns := len(sourcePlan.Columns())
+		if numColNames != 0 && numColNames != numColumns {
+			return nil, sqlbase.NewSyntaxError(fmt.Sprintf(
+				"CREATE TABLE specifies %d column name%s, but data source has %d column%s",
+				numColNames, util.Pluralize(int64(numColNames)),
+				numColumns, util.Pluralize(int64(numColumns))))
+		}
+	}
+
+	return &createTableNode{p: p, n: n, dbDesc: dbDesc, sourcePlan: sourcePlan}, nil
 }
 
 func hoistConstraints(n *parser.CreateTable) {
 	for _, d := range n.Defs {
 		if col, ok := d.(*parser.ColumnTableDef); ok {
 			if col.CheckExpr.Expr != nil {
-				def := &parser.CheckConstraintTableDef{Expr: col.CheckExpr.Expr}
-				if col.CheckExpr.ConstraintName != "" {
-					def.Name = col.CheckExpr.ConstraintName
-				}
-				n.Defs = append(n.Defs, def)
+				n.Defs = append(n.Defs,
+					&parser.CheckConstraintTableDef{
+						Expr: col.CheckExpr.Expr,
+						Name: col.CheckExpr.ConstraintName,
+					},
+				)
 				col.CheckExpr.Expr = nil
+			}
+			if col.References.Table.TableNameReference != nil {
+				var targetCol parser.NameList
+				if col.References.Col != "" {
+					targetCol = append(targetCol, col.References.Col)
+				}
+				n.Defs = append(n.Defs, &parser.ForeignKeyConstraintTableDef{
+					Table:    col.References.Table,
+					FromCols: parser.NameList{col.Name},
+					ToCols:   targetCol,
+					Name:     col.References.ConstraintName,
+				})
+				col.References.Table = parser.NormalizableTableName{}
 			}
 		}
 	}
 }
 
 func (n *createTableNode) expandPlan() error {
+	if n.n.As() {
+		return n.sourcePlan.expandPlan()
+	}
 	return nil
 }
 
 func (n *createTableNode) Start() error {
-	hoistConstraints(n.n)
-	desc, err := MakeTableDesc(n.n, n.dbDesc.ID)
-	if err != nil {
-		return err
-	}
-
-	tableKey := tableKey{parentID: n.dbDesc.ID, name: n.n.Table.TableName().Table()}
-	key := tableKey.Key()
+	tKey := tableKey{parentID: n.dbDesc.ID, name: n.n.Table.TableName().Table()}
+	key := tKey.Key()
 	if exists, err := n.p.descExists(key); err == nil && exists {
 		if n.n.IfNotExists {
 			return nil
 		}
-		return descriptorAlreadyExistsErr{&desc, tableKey.Name()}
+		return sqlbase.NewRelationAlreadyExistsError(tKey.Name())
 	} else if err != nil {
 		return err
 	}
 
-	// Inherit permissions from the database descriptor.
-	desc.Privileges = n.dbDesc.GetPrivileges()
-
-	if len(desc.PrimaryIndex.ColumnNames) == 0 {
-		// Ensure a Primary Key exists.
-		s := "unique_rowid()"
-		col := sqlbase.ColumnDescriptor{
-			Name: "rowid",
-			Type: sqlbase.ColumnType{
-				Kind: sqlbase.ColumnType_INT,
-			},
-			DefaultExpr: &s,
-			Hidden:      true,
-			Nullable:    false,
-		}
-		desc.AddColumn(col)
-		idx := sqlbase.IndexDescriptor{
-			Unique:           true,
-			ColumnNames:      []string{col.Name},
-			ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
-		}
-		if err := desc.AddIndex(idx, true); err != nil {
-			return err
-		}
-	}
-
-	id, err := n.p.generateUniqueDescID()
+	id, err := generateUniqueDescID(n.p.txn)
 	if err != nil {
 		return err
 	}
-	desc.SetID(id)
 
-	if err := desc.AllocateIDs(); err != nil {
+	privs := n.dbDesc.GetPrivileges()
+	var desc sqlbase.TableDescriptor
+	var affected map[sqlbase.ID]*sqlbase.TableDescriptor
+	if n.n.As() {
+		desc, err = makeTableDescIfAs(n.n, n.dbDesc.ID, id, n.sourcePlan.Columns(), privs)
+	} else {
+		affected = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+		desc, err = n.p.makeTableDesc(n.n, n.dbDesc.ID, id, privs, affected)
+	}
+	if err != nil {
 		return err
-	}
-
-	if n.n.Interleave != nil {
-		if err := n.p.addInterleave(&desc, &desc.PrimaryIndex, n.n.Interleave); err != nil {
-			return err
-		}
-	}
-
-	// FKs are resolved after the descriptor is otherwise complete and IDs have
-	// been allocated since the FKs will reference those IDs. Resolution also
-	// accumulated updates to other tables (adding backreferences) in the passed
-	// map -- anything in that map should be saved when the table is created.
-	affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
-	for _, def := range n.n.Defs {
-		switch d := def.(type) {
-		case *parser.ColumnTableDef:
-			if d.References.Table.TableNameReference != nil {
-				var targetCol parser.NameList
-				if d.References.Col != "" {
-					targetCol = append(targetCol, d.References.Col)
-				}
-				err := n.resolveFK(&desc, parser.NameList{d.Name},
-					d.References.Table.TableName(), targetCol, d.References.ConstraintName, affected)
-				if err != nil {
-					return err
-				}
-			}
-		case *parser.ForeignKeyConstraintTableDef:
-			err := n.resolveFK(&desc, d.FromCols, d.Table.TableName(), d.ToCols, d.Name, affected)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	// Multiple FKs from the same column would potentially result in ambiguous or
-	// unexpected behavior with conflicting CASCADE/RESTRICT/etc behaviors.
-	colsInFKs := make(map[sqlbase.ColumnID]struct{})
-	for _, idx := range desc.Indexes {
-		if idx.ForeignKey.IsSet() {
-			for i := range idx.ColumnIDs {
-				if _, ok := colsInFKs[idx.ColumnIDs[i]]; ok {
-					return errors.Errorf("column %q cannot be used by multiple foreign key constraints", idx.ColumnNames[i])
-				}
-				colsInFKs[idx.ColumnIDs[i]] = struct{}{}
-			}
-		}
 	}
 
 	// We need to validate again after adding the FKs.
@@ -397,54 +483,98 @@ func (n *createTableNode) Start() error {
 		return err
 	}
 
-	created, err := n.p.createDescriptorWithID(key, id, &desc)
-	if err != nil {
+	if err := n.p.createDescriptorWithID(key, id, &desc); err != nil {
 		return err
 	}
 
-	if created {
-		for _, updated := range affected {
-			if err := n.p.saveNonmutationAndNotify(updated); err != nil {
-				return err
-			}
-		}
-		if desc.Adding() {
-			n.p.notifySchemaChange(desc.ID, sqlbase.InvalidMutationID)
-		}
-
-		for _, index := range desc.AllNonDropIndexes() {
-			if len(index.Interleave.Ancestors) > 0 {
-				if err := n.p.finalizeInterleave(&desc, index); err != nil {
-					return err
-				}
-			}
-		}
-
-		if err := desc.Validate(n.p.txn); err != nil {
-			return err
-		}
-
-		// Log Create Table event. This is an auditable log event and is
-		// recorded in the same transaction as the table descriptor update.
-		if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
-			EventLogCreateTable,
-			int32(desc.ID),
-			int32(n.p.evalCtx.NodeID),
-			struct {
-				TableName string
-				Statement string
-				User      string
-			}{n.n.Table.String(), n.n.String(), n.p.session.User},
-		); err != nil {
+	for _, updated := range affected {
+		if err := n.p.saveNonmutationAndNotify(updated); err != nil {
 			return err
 		}
 	}
+	if desc.Adding() {
+		n.p.notifySchemaChange(desc.ID, sqlbase.InvalidMutationID)
+	}
 
+	for _, index := range desc.AllNonDropIndexes() {
+		if len(index.Interleave.Ancestors) > 0 {
+			if err := n.p.finalizeInterleave(&desc, index); err != nil {
+				return err
+			}
+		}
+	}
+
+	if err := desc.Validate(n.p.txn); err != nil {
+		return err
+	}
+
+	// Log Create Table event. This is an auditable log event and is
+	// recorded in the same transaction as the table descriptor update.
+	if err := MakeEventLogger(n.p.leaseMgr).InsertEventRecord(n.p.txn,
+		EventLogCreateTable,
+		int32(desc.ID),
+		int32(n.p.evalCtx.NodeID),
+		struct {
+			TableName string
+			Statement string
+			User      string
+		}{n.n.Table.String(), n.n.String(), n.p.session.User},
+	); err != nil {
+		return err
+	}
+
+	if n.n.As() {
+		resultColumns := n.sourcePlan.Columns()
+		if err != nil {
+			return err
+		}
+
+		// TODO(knz): Ideally we would want to plug the sourcePlan which
+		// was already computed as a data source into the insertNode. Now
+		// unfortunately this is not so easy: when this point is reached,
+		// sourcePlan.expandPlan() has already been called, and
+		// insertPlan.expandPlan() below would cause a 2nd invocation and
+		// cause a panic. So instead we close this sourcePlan and let the
+		// insertNode create it anew from the AsSource syntax node.
+		n.sourcePlan.Close()
+		n.sourcePlan = nil
+
+		desiredTypesFromSelect := make([]parser.Datum, len(resultColumns))
+		for i, col := range resultColumns {
+			desiredTypesFromSelect[i] = col.Typ
+		}
+		insert := &parser.Insert{Table: &n.n.Table, Rows: n.n.AsSource}
+		insertPlan, err := n.p.Insert(insert, desiredTypesFromSelect, false)
+		if err != nil {
+			return err
+		}
+		n.insertPlan = insertPlan
+		if err := insertPlan.expandPlan(); err != nil {
+			return err
+		}
+		if err = insertPlan.Start(); err != nil {
+			return err
+		}
+		// This loop is done here instead of in the Next method
+		// since CREATE TABLE is a DDL statement and Executor only
+		// runs Next() for statements with type "Rows".
+		for done := true; done; done, err = insertPlan.Next() {
+			if err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
+func (n *createTableNode) Close() {
+	if n.insertPlan != nil {
+		n.insertPlan.Close()
+	}
+}
+
 func (n *createTableNode) Next() (bool, error)                 { return false, nil }
-func (n *createTableNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
+func (n *createTableNode) Columns() ResultColumns              { return make(ResultColumns, 0) }
 func (n *createTableNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (n *createTableNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *createTableNode) DebugValues() debugValues            { return debugValues{} }
@@ -452,6 +582,9 @@ func (n *createTableNode) ExplainTypes(_ func(string, string)) {}
 func (n *createTableNode) SetLimitHint(_ int64, _ bool)        {}
 func (n *createTableNode) MarkDebug(mode explainMode)          {}
 func (n *createTableNode) ExplainPlan(v bool) (string, string, []planNode) {
+	if n.n.As() {
+		return "create table", "create table as", []planNode{n.sourcePlan}
+	}
 	return "create table", "", nil
 }
 
@@ -459,15 +592,18 @@ func (n *createTableNode) ExplainPlan(v bool) (string, string, []planNode) {
 // constraint and adds metadata representing that constraint to the descriptor.
 // It may, in doing so, add to or alter descriptors in the passed in `backrefs`
 // map of other tables that need to be updated when this table is created.
-func (n *createTableNode) resolveFK(
+// Constraints that are not known to hold for existing data are created
+// "unvalidated", but when table is empty (e.g. during creation), no existing
+// data imples no existing violations, and thus the constraint can be created
+// without the unvalidated flag.
+func (p *planner) resolveFK(
 	tbl *sqlbase.TableDescriptor,
-	fromColNames parser.NameList,
-	targetTable *parser.TableName,
-	targetColNames parser.NameList,
-	constraintName parser.Name,
+	d *parser.ForeignKeyConstraintTableDef,
 	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
+	mode sqlbase.ConstraintValidity,
 ) error {
-	target, err := n.p.getTableDesc(targetTable)
+	targetTable := d.Table.TableName()
+	target, err := p.getTableDesc(targetTable)
 	if err != nil {
 		return err
 	}
@@ -484,9 +620,11 @@ func (n *createTableNode) resolveFK(
 		// Since this FK is referencing another table, this table must be created in
 		// a non-public "ADD" state and made public only after all leases on the
 		// other table are updated to include the backref.
-		tbl.State = sqlbase.TableDescriptor_ADD
-		if err := tbl.SetUpVersion(); err != nil {
-			return err
+		if mode == sqlbase.ConstraintValidity_Validated {
+			tbl.State = sqlbase.TableDescriptor_ADD
+			if err := tbl.SetUpVersion(); err != nil {
+				return err
+			}
 		}
 
 		// If we resolve the same table more than once, we only want to edit a
@@ -498,11 +636,12 @@ func (n *createTableNode) resolveFK(
 		}
 	}
 
-	srcCols, err := tbl.FindActiveColumnsByNames(fromColNames)
+	srcCols, err := tbl.FindActiveColumnsByNames(d.FromCols)
 	if err != nil {
 		return err
 	}
 
+	targetColNames := d.ToCols
 	// If no columns are specified, attempt to default to PK.
 	if len(targetColNames) == 0 {
 		targetColNames = make(parser.NameList, len(target.PrimaryIndex.ColumnNames))
@@ -552,8 +691,9 @@ func (n *createTableNode) resolveFK(
 		return true
 	}
 
+	constraintName := string(d.Name)
 	if constraintName == "" {
-		constraintName = parser.Name(fmt.Sprintf("fk_%s_ref_%s", fromColNames[0], target.Name))
+		constraintName = fmt.Sprintf("fk_%s_ref_%s", d.FromCols[0], target.Name)
 	}
 
 	var targetIdx *sqlbase.IndexDescriptor
@@ -574,7 +714,10 @@ func (n *createTableNode) resolveFK(
 		}
 	}
 
-	ref := sqlbase.ForeignKeyReference{Table: target.ID, Index: targetIdx.ID, Name: string(constraintName)}
+	ref := sqlbase.ForeignKeyReference{Table: target.ID, Index: targetIdx.ID, Name: constraintName}
+	if mode == sqlbase.ConstraintValidity_Unvalidated {
+		ref.Validity = sqlbase.ConstraintValidity_Unvalidated
+	}
 	backref := sqlbase.ForeignKeyReference{Table: tbl.ID}
 
 	if matchesIndex(srcCols, tbl.PrimaryIndex, matchPrefix) {
@@ -733,47 +876,103 @@ func (p *planner) finalizeInterleave(
 	return nil
 }
 
-// CreateTableDescriptor turns a schema string into a TableDescriptor.
-func CreateTableDescriptor(
-	id, parentID sqlbase.ID, schema string, privileges *sqlbase.PrivilegeDescriptor,
-) sqlbase.TableDescriptor {
-	stmt, err := parser.ParseOneTraditional(schema)
-	if err != nil {
-		log.Fatal(context.TODO(), err)
+// makeViewTableDesc returns the table descriptor for a new view.
+func makeViewTableDesc(
+	p *parser.CreateView,
+	parentID sqlbase.ID, id sqlbase.ID,
+	resultColumns []ResultColumn,
+	privileges *sqlbase.PrivilegeDescriptor,
+) (sqlbase.TableDescriptor, error) {
+	desc := sqlbase.TableDescriptor{
+		ID:            id,
+		ParentID:      parentID,
+		FormatVersion: sqlbase.FamilyFormatVersion,
+		Version:       1,
+		Privileges:    privileges,
 	}
-
-	desc, err := MakeTableDesc(stmt.(*parser.CreateTable), parentID)
-	if err != nil {
-		log.Fatal(context.TODO(), err)
-	}
-
-	desc.Privileges = privileges
-
-	desc.ID = id
-	if err := desc.AllocateIDs(); err != nil {
-		log.Fatalf(context.TODO(), "%s: %v", desc.Name, err)
-	}
-
-	return desc
-}
-
-// MakeTableDesc creates a table descriptor from a CreateTable statement.
-func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDescriptor, error) {
-	desc := sqlbase.TableDescriptor{}
-	t, err := p.Table.Normalize()
+	viewName, err := p.Name.Normalize()
 	if err != nil {
 		return desc, err
 	}
-	desc.Name = string(t.TableName)
-	desc.ParentID = parentID
-	desc.FormatVersion = sqlbase.FamilyFormatVersion
-	// We don't use version 0.
-	desc.Version = 1
+	desc.Name = viewName.Table()
+	for i, colRes := range resultColumns {
+		colType, _ := parser.DatumTypeToColumnType(colRes.Typ)
+		columnTableDef := parser.ColumnTableDef{Name: parser.Name(colRes.Name), Type: colType}
+		if len(p.ColumnNames) > i {
+			columnTableDef.Name = p.ColumnNames[i]
+		}
+		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef)
+		if err != nil {
+			return desc, err
+		}
+		desc.AddColumn(*col)
+	}
 
-	var primaryIndexColumnSet map[string]struct{}
-	for _, def := range p.Defs {
-		switch d := def.(type) {
-		case *parser.ColumnTableDef:
+	var buf bytes.Buffer
+	p.AsSource.Format(&buf, parser.FmtSimple)
+	desc.ViewQuery = buf.String()
+
+	return desc, desc.AllocateIDs()
+}
+
+// makeTableDescIfAs is the MakeTableDesc method for when we have a table
+// that is created with the CREATE AS format.
+func makeTableDescIfAs(
+	p *parser.CreateTable,
+	parentID, id sqlbase.ID,
+	resultColumns []ResultColumn,
+	privileges *sqlbase.PrivilegeDescriptor,
+) (sqlbase.TableDescriptor, error) {
+	desc := sqlbase.TableDescriptor{
+		ID:            id,
+		ParentID:      parentID,
+		FormatVersion: sqlbase.InterleavedFormatVersion,
+		Version:       1,
+		Privileges:    privileges,
+	}
+	tableName, err := p.Table.Normalize()
+	if err != nil {
+		return desc, err
+	}
+	desc.Name = tableName.Table()
+	for i, colRes := range resultColumns {
+		colType, _ := parser.DatumTypeToColumnType(colRes.Typ)
+		columnTableDef := parser.ColumnTableDef{Name: parser.Name(colRes.Name), Type: colType}
+		if len(p.AsColumnNames) > i {
+			columnTableDef.Name = p.AsColumnNames[i]
+		}
+		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef)
+		if err != nil {
+			return desc, err
+		}
+		desc.AddColumn(*col)
+	}
+
+	return desc, desc.AllocateIDs()
+}
+
+// MakeTableDesc creates a table descriptor from a CreateTable statement.
+func (p *planner) makeTableDesc(
+	n *parser.CreateTable,
+	parentID, id sqlbase.ID,
+	privileges *sqlbase.PrivilegeDescriptor,
+	affected map[sqlbase.ID]*sqlbase.TableDescriptor,
+) (sqlbase.TableDescriptor, error) {
+	desc := sqlbase.TableDescriptor{
+		ID:            id,
+		ParentID:      parentID,
+		FormatVersion: sqlbase.InterleavedFormatVersion,
+		Version:       1,
+		Privileges:    privileges,
+	}
+	tableName, err := n.Table.Normalize()
+	if err != nil {
+		return desc, err
+	}
+	desc.Name = tableName.Table()
+
+	for _, def := range n.Defs {
+		if d, ok := def.(*parser.ColumnTableDef); ok {
 			col, idx, err := sqlbase.MakeColumnDefDescs(d)
 			if err != nil {
 				return desc, err
@@ -793,6 +992,14 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 					return desc, err
 				}
 			}
+		}
+	}
+
+	var primaryIndexColumnSet map[string]struct{}
+	for _, def := range n.Defs {
+		switch d := def.(type) {
+		case *parser.ColumnTableDef:
+			// pass, handled above.
 
 		case *parser.IndexTableDef:
 			idx := sqlbase.IndexDescriptor{
@@ -806,7 +1013,7 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 				return desc, err
 			}
 			if d.Interleave != nil {
-				return desc, util.UnimplementedWithIssueErrorf(2972, "interleaving is not yet supported")
+				return desc, util.UnimplementedWithIssueErrorf(9148, "use CREATE INDEX to make interleaved indexes")
 			}
 		case *parser.UniqueConstraintTableDef:
 			idx := sqlbase.IndexDescriptor{
@@ -827,73 +1034,11 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 				}
 			}
 			if d.Interleave != nil {
-				return desc, util.UnimplementedWithIssueErrorf(2972, "interleaving is not yet supported")
-			}
-		case *parser.CheckConstraintTableDef:
-			// CHECK expressions seem to vary across databases. Wikipedia's entry on
-			// Check_constraint (https://en.wikipedia.org/wiki/Check_constraint) says
-			// that if the constraint refers to a single column only, it is possible to
-			// specify the constraint as part of the column definition. Postgres allows
-			// specifying them anywhere about any columns, but it moves all constraints to
-			// the table level (i.e., columns never have a check constraint themselves). We
-			// will adhere to the stricter definition.
-
-			preFn := func(expr parser.Expr) (err error, recurse bool, newExpr parser.Expr) {
-				vBase, ok := expr.(parser.VarName)
-				if !ok {
-					// Not a VarName, don't do anything to this node.
-					return nil, true, expr
-				}
-
-				v, err := vBase.NormalizeVarName()
-				if err != nil {
-					return err, false, nil
-				}
-
-				c, ok := v.(*parser.ColumnItem)
-				if !ok {
-					return nil, true, expr
-				}
-
-				col, err := desc.FindActiveColumnByName(c.ColumnName)
-				if err != nil {
-					return fmt.Errorf("column %q not found for constraint %q",
-						c.ColumnName, d.Expr.String()), false, nil
-				}
-				// Convert to a dummy datum of the correct type.
-				return nil, false, col.Type.ToDatumType()
+				return desc, util.UnimplementedWithIssueErrorf(9148, "use CREATE INDEX to make interleaved indexes")
 			}
 
-			expr, err := parser.SimpleVisit(d.Expr, preFn)
-			if err != nil {
-				return desc, err
-			}
-
-			var p parser.Parser
-			if p.AggregateInExpr(expr) {
-				return desc, fmt.Errorf("aggregate functions are not allowed in CHECK expressions")
-			}
-
-			if err := sqlbase.SanitizeVarFreeExpr(expr, parser.TypeBool, "CHECK"); err != nil {
-				return desc, err
-			}
-
-			check := &sqlbase.TableDescriptor_CheckConstraint{Expr: d.Expr.String()}
-			if len(d.Name) > 0 {
-				check.Name = string(d.Name)
-			}
-			desc.Checks = append(desc.Checks, check)
-
-		case *parser.FamilyTableDef:
-			fam := sqlbase.ColumnFamilyDescriptor{
-				Name:        string(d.Name),
-				ColumnNames: d.Columns.ToStrings(),
-			}
-			desc.AddFamily(fam)
-
-		case *parser.ForeignKeyConstraintTableDef:
-			// Pass for now since FKs can reference other elements and thus are
-			// resolved only after the rest of the desc is constructed.
+		case *parser.CheckConstraintTableDef, *parser.ForeignKeyConstraintTableDef, *parser.FamilyTableDef:
+			// pass, handled below.
 
 		default:
 			return desc, errors.Errorf("unsupported table def: %T", def)
@@ -909,5 +1054,171 @@ func MakeTableDesc(p *parser.CreateTable, parentID sqlbase.ID) (sqlbase.TableDes
 		}
 	}
 
-	return desc, nil
+	// Now that all columns are in place, add any explicit families (this is done
+	// here, rather than in the constraint pass below since we want to pick up
+	// explicit allocations before AllocateIDs adds implicit ones).
+	for _, def := range n.Defs {
+		if d, ok := def.(*parser.FamilyTableDef); ok {
+			fam := sqlbase.ColumnFamilyDescriptor{
+				Name:        string(d.Name),
+				ColumnNames: d.Columns.ToStrings(),
+			}
+			desc.AddFamily(fam)
+		}
+	}
+
+	if err := desc.AllocateIDs(); err != nil {
+		return desc, err
+	}
+
+	if n.Interleave != nil {
+		if err := p.addInterleave(&desc, &desc.PrimaryIndex, n.Interleave); err != nil {
+			return desc, err
+		}
+	}
+
+	// With all structural elements in place and IDs allocated, we can resolve the
+	// constraints and qualifications.
+	// FKs are resolved after the descriptor is otherwise complete and IDs have
+	// been allocated since the FKs will reference those IDs. Resolution also
+	// accumulates updates to other tables (adding backreferences) in the passed
+	// map -- anything in that map should be saved when the table is created.
+	generatedNames := map[string]struct{}{}
+	for _, def := range n.Defs {
+		switch d := def.(type) {
+		case *parser.ColumnTableDef, *parser.IndexTableDef, *parser.UniqueConstraintTableDef, *parser.FamilyTableDef:
+			// pass, handled above.
+
+		case *parser.CheckConstraintTableDef:
+			ck, err := makeCheckConstraint(desc, d, generatedNames)
+			if err != nil {
+				return desc, err
+			}
+			desc.Checks = append(desc.Checks, ck)
+
+		case *parser.ForeignKeyConstraintTableDef:
+			err := p.resolveFK(&desc, d, affected, sqlbase.ConstraintValidity_Validated)
+			if err != nil {
+				return desc, err
+			}
+		default:
+			return desc, errors.Errorf("unsupported table def: %T", def)
+		}
+	}
+
+	// Multiple FKs from the same column would potentially result in ambiguous or
+	// unexpected behavior with conflicting CASCADE/RESTRICT/etc behaviors.
+	colsInFKs := make(map[sqlbase.ColumnID]struct{})
+	for _, idx := range desc.Indexes {
+		if idx.ForeignKey.IsSet() {
+			for i := range idx.ColumnIDs {
+				if _, ok := colsInFKs[idx.ColumnIDs[i]]; ok {
+					return desc, errors.Errorf("column %q cannot be used by multiple foreign key constraints", idx.ColumnNames[i])
+				}
+				colsInFKs[idx.ColumnIDs[i]] = struct{}{}
+			}
+		}
+	}
+
+	return desc, desc.AllocateIDs()
+}
+
+func makeCheckConstraint(
+	desc sqlbase.TableDescriptor, d *parser.CheckConstraintTableDef, inuseNames map[string]struct{},
+) (*sqlbase.TableDescriptor_CheckConstraint, error) {
+	// CHECK expressions seem to vary across databases. Wikipedia's entry on
+	// Check_constraint (https://en.wikipedia.org/wiki/Check_constraint) says
+	// that if the constraint refers to a single column only, it is possible to
+	// specify the constraint as part of the column definition. Postgres allows
+	// specifying them anywhere about any columns, but it moves all constraints to
+	// the table level (i.e., columns never have a check constraint themselves). We
+	// will adhere to the stricter definition.
+
+	var nameBuf bytes.Buffer
+	name := string(d.Name)
+
+	generateName := name == ""
+	if generateName {
+		nameBuf.WriteString("check")
+	}
+
+	preFn := func(expr parser.Expr) (err error, recurse bool, newExpr parser.Expr) {
+		vBase, ok := expr.(parser.VarName)
+		if !ok {
+			// Not a VarName, don't do anything to this node.
+			return nil, true, expr
+		}
+
+		v, err := vBase.NormalizeVarName()
+		if err != nil {
+			return err, false, nil
+		}
+
+		c, ok := v.(*parser.ColumnItem)
+		if !ok {
+			return nil, true, expr
+		}
+
+		col, err := desc.FindActiveColumnByName(c.ColumnName)
+		if err != nil {
+			return fmt.Errorf("column %q not found for constraint %q",
+				c.ColumnName, d.Expr.String()), false, nil
+		}
+		if generateName {
+			nameBuf.WriteByte('_')
+			nameBuf.WriteString(col.Name)
+		}
+		// Convert to a dummy datum of the correct type.
+		return nil, false, col.Type.ToDatumType()
+	}
+
+	expr, err := parser.SimpleVisit(d.Expr, preFn)
+	if err != nil {
+		return nil, err
+	}
+
+	var p parser.Parser
+	if err := p.AssertNoAggregationOrWindowing(expr, "CHECK expressions"); err != nil {
+		return nil, err
+	}
+
+	if err := sqlbase.SanitizeVarFreeExpr(expr, parser.TypeBool, "CHECK"); err != nil {
+		return nil, err
+	}
+	if generateName {
+		name = nameBuf.String()
+
+		// If generated name isn't unique, attempt to add a number to the end to
+		// get a unique name.
+		if _, ok := inuseNames[name]; ok {
+			i := 1
+			for {
+				appended := fmt.Sprintf("%s%d", name, i)
+				if _, ok := inuseNames[appended]; !ok {
+					name = appended
+					break
+				}
+				i++
+			}
+		}
+		if inuseNames != nil {
+			inuseNames[name] = struct{}{}
+		}
+	}
+	return &sqlbase.TableDescriptor_CheckConstraint{Expr: d.Expr.String(), Name: name}, nil
+}
+
+// CreateTestTableDescriptor converts a SQL string to a table for test purposes.
+// Will fail on complex tables where that operation requires e.g. looking up
+// other tables or otherwise utilizing a planner, since the planner used here is
+// just a zero value placeholder.
+func CreateTestTableDescriptor(
+	parentID, id sqlbase.ID, schema string, privileges *sqlbase.PrivilegeDescriptor,
+) (sqlbase.TableDescriptor, error) {
+	stmt, err := parser.ParseOneTraditional(schema)
+	if err != nil {
+		return sqlbase.TableDescriptor{}, err
+	}
+	var p planner
+	return p.makeTableDesc(stmt.(*parser.CreateTable), parentID, id, privileges, nil)
 }

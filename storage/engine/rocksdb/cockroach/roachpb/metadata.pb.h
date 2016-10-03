@@ -37,6 +37,7 @@ void protobuf_AssignDesc_cockroach_2froachpb_2fmetadata_2eproto();
 void protobuf_ShutdownFile_cockroach_2froachpb_2fmetadata_2eproto();
 
 class Attributes;
+class Locality;
 class NodeDescriptor;
 class RangeDescriptor;
 class ReplicaDescriptor;
@@ -44,6 +45,7 @@ class ReplicaIdent;
 class StoreCapacity;
 class StoreDeadReplicas;
 class StoreDescriptor;
+class Tier;
 
 // ===================================================================
 
@@ -921,6 +923,15 @@ class StoreDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::cockroach::roachpb::StoreCapacity* release_capacity();
   void set_allocated_capacity(::cockroach::roachpb::StoreCapacity* capacity);
 
+  // optional .cockroach.roachpb.Locality locality = 5;
+  bool has_locality() const;
+  void clear_locality();
+  static const int kLocalityFieldNumber = 5;
+  const ::cockroach::roachpb::Locality& locality() const;
+  ::cockroach::roachpb::Locality* mutable_locality();
+  ::cockroach::roachpb::Locality* release_locality();
+  void set_allocated_locality(::cockroach::roachpb::Locality* locality);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.StoreDescriptor)
  private:
   inline void set_has_store_id();
@@ -931,6 +942,8 @@ class StoreDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   inline void clear_has_node();
   inline void set_has_capacity();
   inline void clear_has_capacity();
+  inline void set_has_locality();
+  inline void clear_has_locality();
 
   ::google::protobuf::internal::ArenaStringPtr _unknown_fields_;
   ::google::protobuf::Arena* _arena_ptr_;
@@ -940,6 +953,7 @@ class StoreDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::cockroach::roachpb::Attributes* attrs_;
   ::cockroach::roachpb::NodeDescriptor* node_;
   ::cockroach::roachpb::StoreCapacity* capacity_;
+  ::cockroach::roachpb::Locality* locality_;
   ::google::protobuf::int32 store_id_;
   #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fmetadata_2eproto_impl();
@@ -1069,6 +1083,239 @@ class StoreDeadReplicas : public ::google::protobuf::MessageLite /* @@protoc_ins
 
   void InitAsDefaultInstance();
   static StoreDeadReplicas* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class Locality : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.Locality) */ {
+ public:
+  Locality();
+  virtual ~Locality();
+
+  Locality(const Locality& from);
+
+  inline Locality& operator=(const Locality& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::std::string& unknown_fields() const {
+    return _unknown_fields_.GetNoArena(
+        &::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+
+  inline ::std::string* mutable_unknown_fields() {
+    return _unknown_fields_.MutableNoArena(
+        &::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+
+  static const Locality& default_instance();
+
+  #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
+  // Returns the internal default instance pointer. This function can
+  // return NULL thus should not be used by the user. This is intended
+  // for Protobuf internal code. Please use default_instance() declared
+  // above instead.
+  static inline const Locality* internal_default_instance() {
+    return default_instance_;
+  }
+  #endif
+
+  void Swap(Locality* other);
+
+  // implements Message ----------------------------------------------
+
+  inline Locality* New() const { return New(NULL); }
+
+  Locality* New(::google::protobuf::Arena* arena) const;
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from);
+  void CopyFrom(const Locality& from);
+  void MergeFrom(const Locality& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  void DiscardUnknownFields();
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(Locality* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _arena_ptr_;
+  }
+  inline ::google::protobuf::Arena* MaybeArenaPtr() const {
+    return _arena_ptr_;
+  }
+  public:
+
+  ::std::string GetTypeName() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // repeated .cockroach.roachpb.Tier tiers = 1;
+  int tiers_size() const;
+  void clear_tiers();
+  static const int kTiersFieldNumber = 1;
+  const ::cockroach::roachpb::Tier& tiers(int index) const;
+  ::cockroach::roachpb::Tier* mutable_tiers(int index);
+  ::cockroach::roachpb::Tier* add_tiers();
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Tier >*
+      mutable_tiers();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Tier >&
+      tiers() const;
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.Locality)
+ private:
+
+  ::google::protobuf::internal::ArenaStringPtr _unknown_fields_;
+  ::google::protobuf::Arena* _arena_ptr_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Tier > tiers_;
+  #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
+  friend void  protobuf_AddDesc_cockroach_2froachpb_2fmetadata_2eproto_impl();
+  #else
+  friend void  protobuf_AddDesc_cockroach_2froachpb_2fmetadata_2eproto();
+  #endif
+  friend void protobuf_AssignDesc_cockroach_2froachpb_2fmetadata_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2froachpb_2fmetadata_2eproto();
+
+  void InitAsDefaultInstance();
+  static Locality* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class Tier : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.Tier) */ {
+ public:
+  Tier();
+  virtual ~Tier();
+
+  Tier(const Tier& from);
+
+  inline Tier& operator=(const Tier& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::std::string& unknown_fields() const {
+    return _unknown_fields_.GetNoArena(
+        &::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+
+  inline ::std::string* mutable_unknown_fields() {
+    return _unknown_fields_.MutableNoArena(
+        &::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+
+  static const Tier& default_instance();
+
+  #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
+  // Returns the internal default instance pointer. This function can
+  // return NULL thus should not be used by the user. This is intended
+  // for Protobuf internal code. Please use default_instance() declared
+  // above instead.
+  static inline const Tier* internal_default_instance() {
+    return default_instance_;
+  }
+  #endif
+
+  void Swap(Tier* other);
+
+  // implements Message ----------------------------------------------
+
+  inline Tier* New() const { return New(NULL); }
+
+  Tier* New(::google::protobuf::Arena* arena) const;
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from);
+  void CopyFrom(const Tier& from);
+  void MergeFrom(const Tier& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  void DiscardUnknownFields();
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(Tier* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _arena_ptr_;
+  }
+  inline ::google::protobuf::Arena* MaybeArenaPtr() const {
+    return _arena_ptr_;
+  }
+  public:
+
+  ::std::string GetTypeName() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional string key = 1;
+  bool has_key() const;
+  void clear_key();
+  static const int kKeyFieldNumber = 1;
+  const ::std::string& key() const;
+  void set_key(const ::std::string& value);
+  void set_key(const char* value);
+  void set_key(const char* value, size_t size);
+  ::std::string* mutable_key();
+  ::std::string* release_key();
+  void set_allocated_key(::std::string* key);
+
+  // optional string value = 2;
+  bool has_value() const;
+  void clear_value();
+  static const int kValueFieldNumber = 2;
+  const ::std::string& value() const;
+  void set_value(const ::std::string& value);
+  void set_value(const char* value);
+  void set_value(const char* value, size_t size);
+  ::std::string* mutable_value();
+  ::std::string* release_value();
+  void set_allocated_value(::std::string* value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.Tier)
+ private:
+  inline void set_has_key();
+  inline void clear_has_key();
+  inline void set_has_value();
+  inline void clear_has_value();
+
+  ::google::protobuf::internal::ArenaStringPtr _unknown_fields_;
+  ::google::protobuf::Arena* _arena_ptr_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::internal::ArenaStringPtr key_;
+  ::google::protobuf::internal::ArenaStringPtr value_;
+  #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
+  friend void  protobuf_AddDesc_cockroach_2froachpb_2fmetadata_2eproto_impl();
+  #else
+  friend void  protobuf_AddDesc_cockroach_2froachpb_2fmetadata_2eproto();
+  #endif
+  friend void protobuf_AssignDesc_cockroach_2froachpb_2fmetadata_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2froachpb_2fmetadata_2eproto();
+
+  void InitAsDefaultInstance();
+  static Tier* default_instance_;
 };
 // ===================================================================
 
@@ -1847,6 +2094,54 @@ inline void StoreDescriptor::set_allocated_capacity(::cockroach::roachpb::StoreC
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.StoreDescriptor.capacity)
 }
 
+// optional .cockroach.roachpb.Locality locality = 5;
+inline bool StoreDescriptor::has_locality() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void StoreDescriptor::set_has_locality() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void StoreDescriptor::clear_has_locality() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void StoreDescriptor::clear_locality() {
+  if (locality_ != NULL) locality_->::cockroach::roachpb::Locality::Clear();
+  clear_has_locality();
+}
+inline const ::cockroach::roachpb::Locality& StoreDescriptor::locality() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreDescriptor.locality)
+#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
+  return locality_ != NULL ? *locality_ : *default_instance().locality_;
+#else
+  return locality_ != NULL ? *locality_ : *default_instance_->locality_;
+#endif
+}
+inline ::cockroach::roachpb::Locality* StoreDescriptor::mutable_locality() {
+  set_has_locality();
+  if (locality_ == NULL) {
+    locality_ = new ::cockroach::roachpb::Locality;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.StoreDescriptor.locality)
+  return locality_;
+}
+inline ::cockroach::roachpb::Locality* StoreDescriptor::release_locality() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.StoreDescriptor.locality)
+  clear_has_locality();
+  ::cockroach::roachpb::Locality* temp = locality_;
+  locality_ = NULL;
+  return temp;
+}
+inline void StoreDescriptor::set_allocated_locality(::cockroach::roachpb::Locality* locality) {
+  delete locality_;
+  locality_ = locality;
+  if (locality) {
+    set_has_locality();
+  } else {
+    clear_has_locality();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.StoreDescriptor.locality)
+}
+
 // -------------------------------------------------------------------
 
 // StoreDeadReplicas
@@ -1905,7 +2200,157 @@ StoreDeadReplicas::replicas() const {
   return replicas_;
 }
 
+// -------------------------------------------------------------------
+
+// Locality
+
+// repeated .cockroach.roachpb.Tier tiers = 1;
+inline int Locality::tiers_size() const {
+  return tiers_.size();
+}
+inline void Locality::clear_tiers() {
+  tiers_.Clear();
+}
+inline const ::cockroach::roachpb::Tier& Locality::tiers(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Locality.tiers)
+  return tiers_.Get(index);
+}
+inline ::cockroach::roachpb::Tier* Locality::mutable_tiers(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Locality.tiers)
+  return tiers_.Mutable(index);
+}
+inline ::cockroach::roachpb::Tier* Locality::add_tiers() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.Locality.tiers)
+  return tiers_.Add();
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Tier >*
+Locality::mutable_tiers() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.Locality.tiers)
+  return &tiers_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Tier >&
+Locality::tiers() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.Locality.tiers)
+  return tiers_;
+}
+
+// -------------------------------------------------------------------
+
+// Tier
+
+// optional string key = 1;
+inline bool Tier::has_key() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void Tier::set_has_key() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void Tier::clear_has_key() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void Tier::clear_key() {
+  key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_key();
+}
+inline const ::std::string& Tier::key() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Tier.key)
+  return key_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void Tier::set_key(const ::std::string& value) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Tier.key)
+}
+inline void Tier::set_key(const char* value) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Tier.key)
+}
+inline void Tier::set_key(const char* value, size_t size) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.Tier.key)
+}
+inline ::std::string* Tier::mutable_key() {
+  set_has_key();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Tier.key)
+  return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* Tier::release_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Tier.key)
+  clear_has_key();
+  return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void Tier::set_allocated_key(::std::string* key) {
+  if (key != NULL) {
+    set_has_key();
+  } else {
+    clear_has_key();
+  }
+  key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Tier.key)
+}
+
+// optional string value = 2;
+inline bool Tier::has_value() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void Tier::set_has_value() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void Tier::clear_has_value() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void Tier::clear_value() {
+  value_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_value();
+}
+inline const ::std::string& Tier::value() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Tier.value)
+  return value_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void Tier::set_value(const ::std::string& value) {
+  set_has_value();
+  value_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Tier.value)
+}
+inline void Tier::set_value(const char* value) {
+  set_has_value();
+  value_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Tier.value)
+}
+inline void Tier::set_value(const char* value, size_t size) {
+  set_has_value();
+  value_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.Tier.value)
+}
+inline ::std::string* Tier::mutable_value() {
+  set_has_value();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Tier.value)
+  return value_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* Tier::release_value() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Tier.value)
+  clear_has_value();
+  return value_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void Tier::set_allocated_value(::std::string* value) {
+  if (value != NULL) {
+    set_has_value();
+  } else {
+    clear_has_value();
+  }
+  value_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Tier.value)
+}
+
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

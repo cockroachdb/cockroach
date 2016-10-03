@@ -1,4 +1,4 @@
-statement error table "foo" does not exist
+statement error pgcode 42P01 table "foo" does not exist
 ALTER TABLE foo RENAME TO bar
 
 statement ok
@@ -27,7 +27,7 @@ kv
 statement ok
 ALTER TABLE kv RENAME TO new_kv
 
-statement error table "kv" does not exist
+statement error pgcode 42P01 table "kv" does not exist
 SELECT * FROM kv
 
 query II
@@ -144,3 +144,12 @@ SELECT * FROM test2.t2
 ----
 4 16
 5 25
+
+statement ok
+CREATE VIEW test2.v1 AS SELECT * FROM test2.t2
+
+statement error pgcode 42809 "test2.v1" is not a table
+ALTER TABLE test2.v1 RENAME TO test2.v2
+
+statement error pgcode 42809 "test2.v1" is not a table
+ALTER TABLE test2.v1 RENAME TO test2.v1

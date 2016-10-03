@@ -1,8 +1,10 @@
 - Feature Name: Store Pool
-- Status: Completed
+- Status: completed
 - Start Date: 2015-08-20
-- RFC PR: #2286 #2336
-- Cockroach Issue: #2149 and #620
+- RFC PR: [#2286](https://github.com/cockroachdb/cockroach/pull/2286),
+          [#2336](https://github.com/cockroachdb/cockroach/pull/2336)
+- Cockroach Issue: [#2149](https://github.com/cockroachdb/cockroach/issues/2149),
+                   [#620](https://github.com/cockroachdb/cockroach/issues/620)
 
 # Summary
 

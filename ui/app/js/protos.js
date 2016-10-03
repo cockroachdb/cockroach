@@ -95,12 +95,9 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "fields": [
                                         {
                                             "rule": "optional",
-                                            "type": "int64",
+                                            "type": "Severity",
                                             "name": "severity",
-                                            "id": 1,
-                                            "options": {
-                                                "(gogoproto.casttype)": "Severity"
-                                            }
+                                            "id": 1
                                         },
                                         {
                                             "rule": "optional",
@@ -157,12 +154,9 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                         },
                                         {
                                             "rule": "optional",
-                                            "type": "int64",
+                                            "type": "Severity",
                                             "name": "severity",
-                                            "id": 4,
-                                            "options": {
-                                                "(gogoproto.casttype)": "Severity"
-                                            }
+                                            "id": 4
                                         },
                                         {
                                             "rule": "optional",
@@ -210,6 +204,37 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "options": {
                                                 "(gogoproto.nullable)": false
                                             }
+                                        }
+                                    ]
+                                }
+                            ],
+                            "enums": [
+                                {
+                                    "name": "Severity",
+                                    "values": [
+                                        {
+                                            "name": "UNKNOWN",
+                                            "id": 0
+                                        },
+                                        {
+                                            "name": "INFO",
+                                            "id": 1
+                                        },
+                                        {
+                                            "name": "WARNING",
+                                            "id": 2
+                                        },
+                                        {
+                                            "name": "ERROR",
+                                            "id": 3
+                                        },
+                                        {
+                                            "name": "FATAL",
+                                            "id": 4
+                                        },
+                                        {
+                                            "name": "NONE",
+                                            "id": 5
                                         }
                                     ]
                                 }
@@ -467,6 +492,15 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "options": {
                                         "(gogoproto.nullable)": false
                                     }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "Locality",
+                                    "name": "locality",
+                                    "id": 5,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
                                 }
                             ]
                         },
@@ -488,6 +522,49 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "rule": "repeated",
                                     "type": "ReplicaIdent",
                                     "name": "replicas",
+                                    "id": 2,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Locality",
+                            "options": {
+                                "(gogoproto.goproto_stringer)": false
+                            },
+                            "fields": [
+                                {
+                                    "rule": "repeated",
+                                    "type": "Tier",
+                                    "name": "tiers",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Tier",
+                            "options": {
+                                "(gogoproto.goproto_stringer)": false
+                            },
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "key",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "value",
                                     "id": 2,
                                     "options": {
                                         "(gogoproto.nullable)": false
@@ -1606,6 +1683,74 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                             ]
                         },
                         {
+                            "name": "Constraint",
+                            "options": {
+                                "(gogoproto.goproto_stringer)": false
+                            },
+                            "fields": [
+                                {
+                                    "rule": "optional",
+                                    "type": "Type",
+                                    "name": "type",
+                                    "id": 1,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "key",
+                                    "id": 2,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "string",
+                                    "name": "value",
+                                    "id": 3,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ],
+                            "enums": [
+                                {
+                                    "name": "Type",
+                                    "values": [
+                                        {
+                                            "name": "POSITIVE",
+                                            "id": 0
+                                        },
+                                        {
+                                            "name": "REQUIRED",
+                                            "id": 1
+                                        },
+                                        {
+                                            "name": "PROHIBITED",
+                                            "id": 2
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Constraints",
+                            "fields": [
+                                {
+                                    "rule": "repeated",
+                                    "type": "Constraint",
+                                    "name": "constraints",
+                                    "id": 6,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
+                                }
+                            ]
+                        },
+                        {
                             "name": "ZoneConfig",
                             "fields": [
                                 {
@@ -1614,8 +1759,9 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "name": "replica_attrs",
                                     "id": 1,
                                     "options": {
+                                        "deprecated": true,
                                         "(gogoproto.nullable)": false,
-                                        "(gogoproto.moretags)": "yaml:\\\"replicas,omitempty\\\""
+                                        "(gogoproto.moretags)": "yaml:\\\",omitempty\\\""
                                     }
                                 },
                                 {
@@ -1646,6 +1792,26 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "options": {
                                         "(gogoproto.nullable)": false,
                                         "(gogoproto.customname)": "GC"
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "int32",
+                                    "name": "num_replicas",
+                                    "id": 5,
+                                    "options": {
+                                        "(gogoproto.nullable)": false,
+                                        "(gogoproto.moretags)": "yaml:\\\"num_replicas\\\""
+                                    }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "Constraints",
+                                    "name": "constraints",
+                                    "id": 6,
+                                    "options": {
+                                        "(gogoproto.nullable)": false,
+                                        "(gogoproto.moretags)": "yaml:\\\"constraints,flow\\\""
                                     }
                                 }
                             ]
@@ -1720,6 +1886,30 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "type": "string",
                                             "name": "table_names",
                                             "id": 2
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "int64",
+                                            "name": "descriptor_id",
+                                            "id": 3,
+                                            "options": {
+                                                "(gogoproto.customname)": "DescriptorID"
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "config.ZoneConfig",
+                                            "name": "zone_config",
+                                            "id": 4,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "ZoneConfigurationLevel",
+                                            "name": "zone_config_level",
+                                            "id": 5
                                         }
                                     ],
                                     "messages": [
@@ -1815,6 +2005,15 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "type": "ZoneConfigurationLevel",
                                             "name": "zone_config_level",
                                             "id": 7
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "int64",
+                                            "name": "descriptor_id",
+                                            "id": 8,
+                                            "options": {
+                                                "(gogoproto.customname)": "DescriptorID"
+                                            }
                                         }
                                     ],
                                     "messages": [
@@ -2736,6 +2935,15 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                                 "(gogoproto.nullable)": false,
                                                 "(gogoproto.castkey)": "github.com/cockroachdb/cockroach/roachpb.RangeID"
                                             }
+                                        },
+                                        {
+                                            "rule": "repeated",
+                                            "type": "RaftRangeError",
+                                            "name": "errors",
+                                            "id": 2,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
                                         }
                                     ]
                                 },
@@ -2997,27 +3205,37 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                         "Stacks": {
                                             "request": "StacksRequest",
                                             "response": "JSONResponse",
-                                            "options": {}
+                                            "options": {
+                                                "(google.api.http).get": "/_status/stacks/{node_id}"
+                                            }
                                         },
                                         "Metrics": {
                                             "request": "MetricsRequest",
                                             "response": "JSONResponse",
-                                            "options": {}
+                                            "options": {
+                                                "(google.api.http).get": "/_status/metrics/{node_id}"
+                                            }
                                         },
                                         "LogFilesList": {
                                             "request": "LogFilesListRequest",
                                             "response": "LogFilesListResponse",
-                                            "options": {}
+                                            "options": {
+                                                "(google.api.http).get": "/_status/logfiles/{node_id}"
+                                            }
                                         },
                                         "LogFile": {
                                             "request": "LogFileRequest",
                                             "response": "LogEntriesResponse",
-                                            "options": {}
+                                            "options": {
+                                                "(google.api.http).get": "/_status/logfiles/{node_id}/{file}"
+                                            }
                                         },
                                         "Logs": {
                                             "request": "LogsRequest",
                                             "response": "LogEntriesResponse",
-                                            "options": {}
+                                            "options": {
+                                                "(google.api.http).get": "/_status/logs/{node_id}"
+                                            }
                                         }
                                     }
                                 }
@@ -3537,6 +3755,15 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "type": "Query",
                                             "name": "queries",
                                             "id": 3,
+                                            "options": {
+                                                "(gogoproto.nullable)": false
+                                            }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "int64",
+                                            "name": "sample_nanos",
+                                            "id": 4,
                                             "options": {
                                                 "(gogoproto.nullable)": false
                                             }

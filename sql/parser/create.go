@@ -553,10 +553,18 @@ func (node *InterleaveDef) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
-	IfNotExists bool
-	Table       NormalizableTableName
-	Interleave  *InterleaveDef
-	Defs        TableDefs
+	IfNotExists   bool
+	Table         NormalizableTableName
+	Interleave    *InterleaveDef
+	Defs          TableDefs
+	AsSource      *Select
+	AsColumnNames NameList // Only to be used in conjunction with AsSource
+}
+
+// As returns true if this table represents a CREATE TABLE ... AS statement,
+// false otherwise.
+func (node *CreateTable) As() bool {
+	return node.AsSource != nil
 }
 
 // Format implements the NodeFormatter interface.
@@ -566,10 +574,43 @@ func (node *CreateTable) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteString("IF NOT EXISTS ")
 	}
 	FormatNode(buf, f, node.Table)
-	buf.WriteString(" (")
-	FormatNode(buf, f, node.Defs)
-	buf.WriteByte(')')
-	if node.Interleave != nil {
-		FormatNode(buf, f, node.Interleave)
+	if node.As() {
+		if len(node.AsColumnNames) > 0 {
+			buf.WriteString(" (")
+			FormatNode(buf, f, node.AsColumnNames)
+			buf.WriteByte(')')
+		}
+		buf.WriteString(" AS ")
+		FormatNode(buf, f, node.AsSource)
+	} else {
+		buf.WriteString(" (")
+		FormatNode(buf, f, node.Defs)
+		buf.WriteByte(')')
+		if node.Interleave != nil {
+			FormatNode(buf, f, node.Interleave)
+		}
 	}
+}
+
+// CreateView represents a CREATE VIEW statement.
+type CreateView struct {
+	Name        NormalizableTableName
+	ColumnNames NameList
+	AsSource    *Select
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CreateView) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("CREATE VIEW ")
+	FormatNode(buf, f, node.Name)
+
+	if len(node.ColumnNames) > 0 {
+		buf.WriteByte(' ')
+		buf.WriteByte('(')
+		FormatNode(buf, f, node.ColumnNames)
+		buf.WriteByte(')')
+	}
+
+	buf.WriteString(" AS ")
+	FormatNode(buf, f, node.AsSource)
 }

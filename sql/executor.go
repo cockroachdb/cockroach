@@ -70,10 +70,15 @@ var (
 )
 
 // TODO(radu): experimental code for testing distSQL flows.
-//    0 : disabled
-//    1 : enabled, sync mode
-//    2 : enabled, async mode
-const testDistSQL int = 0
+type distSQLExecMode int
+
+const (
+	distSQLDisabled distSQLExecMode = iota
+	//The plan does not instantiate any goroutines internally.
+	distSQLSync
+	distSQLAsync
+)
+const testDistSQL distSQLExecMode = distSQLDisabled
 
 type traceResult struct {
 	tag   string
@@ -99,6 +104,13 @@ type StatementResults struct {
 	Empty bool
 }
 
+// Close ensures that the resources claimed by the results are released.
+func (s *StatementResults) Close() {
+	for _, r := range s.ResultList {
+		r.Close()
+	}
+}
+
 // Result corresponds to the execution of a single SQL statement.
 type Result struct {
 	Err error
@@ -112,11 +124,20 @@ type Result struct {
 	// the names and types of the columns returned in the result set in the order
 	// specified in the SQL statement. The number of columns will equal the number
 	// of values in each Row.
-	Columns []ResultColumn
+	Columns ResultColumns
 	// Rows will be populated if the statement type is "Rows". It will contain
 	// the result set of the result.
 	// TODO(nvanbenschoten): Can this be streamed from the planNode?
-	Rows []ResultRow
+	Rows *RowContainer
+}
+
+// Close ensures that the resources claimed by the result are released.
+func (r *Result) Close() {
+	// The Rows pointer may be nil if the statement returned no rows or
+	// if an error occurred.
+	if r.Rows != nil {
+		r.Rows.Close()
+	}
 }
 
 // ResultColumn contains the name and type of a SQL "cell".
@@ -128,17 +149,17 @@ type ResultColumn struct {
 	hidden bool
 }
 
-// ResultRow is a collection of values representing a row in a result.
-type ResultRow struct {
-	Values []parser.Datum
-}
+// ResultColumns is the type used throughout the sql module to
+// describe the column types of a table.
+type ResultColumns []ResultColumn
 
 // An Executor executes SQL statements.
 // Executor is thread-safe.
 type Executor struct {
-	nodeID  roachpb.NodeID
-	cfg     ExecutorConfig
-	reCache *parser.RegexpCache
+	nodeID         roachpb.NodeID
+	cfg            ExecutorConfig
+	reCache        *parser.RegexpCache
+	virtualSchemas virtualSchemaHolder
 
 	// Transient stats.
 	Latency       metric.Histograms
@@ -207,6 +228,10 @@ func (tscc TestingSchemaChangerCollection) ClearSchemaChangers() {
 // through the sync schema changers path.
 type SyncSchemaChangersFilter func(TestingSchemaChangerCollection)
 
+// StatementFilter is the type of callback that
+// ExecutorTestingKnobs.StatementFilter takes.
+type StatementFilter func(stms string, res *Result)
+
 // ExecutorTestingKnobs is part of the context used to control parts of the
 // system during testing.
 type ExecutorTestingKnobs struct {
@@ -240,6 +265,20 @@ type ExecutorTestingKnobs struct {
 	//old name are gone, and just before the mapping of the old name to the
 	//descriptor id is about to be deleted.
 	SyncSchemaChangersRenameOldNameNotInUseNotification func()
+
+	// StatementFilter can be used to trap execution of SQL statements and
+	// optionally change their results. The filter function is invoked after each
+	// statement has been executed.
+	StatementFilter StatementFilter
+
+	// DisableAutoCommit, if set, disables the auto-commit functionality of some
+	// SQL statements. That functionality allows some statements to commit
+	// directly when they're executed in an implicit SQL txn, without waiting for
+	// the Executor to commit the implicit txn.
+	// This has to be set in tests that need to abort such statements using a
+	// StatementFilter; otherwise, the statement commits immediately after
+	// execution so there'll be nothing left to abort by the time the filter runs.
+	DisableAutoCommit bool
 }
 
 // NewExecutor creates an Executor and registers a callback on the
@@ -280,6 +319,12 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 			}
 		}
 	})
+
+	startupSession := NewSession(cfg.Context, SessionArgs{}, exec, nil)
+	if err := exec.virtualSchemas.init(&startupSession.planner); err != nil {
+		panic(err)
+	}
+	startupSession.Finish()
 
 	return exec
 }
@@ -330,7 +375,7 @@ func (e *Executor) Prepare(
 	query string,
 	session *Session,
 	pinfo parser.PlaceholderTypes,
-) ([]ResultColumn, error) {
+) (ResultColumns, error) {
 	if log.V(2) {
 		log.Infof(session.Ctx(), "preparing: %s", query)
 	} else if traceSQL {
@@ -378,6 +423,7 @@ func (e *Executor) Prepare(
 	if plan == nil {
 		return nil, nil
 	}
+	defer plan.Close()
 	cols := plan.Columns()
 	for _, c := range cols {
 		if err := checkResultDatum(c.Typ); err != nil {
@@ -391,13 +437,35 @@ func (e *Executor) Prepare(
 func (e *Executor) ExecuteStatements(
 	session *Session, stmts string, pinfo *parser.PlaceholderInfo,
 ) StatementResults {
-
 	session.planner.resetForBatch(e)
 	session.planner.semaCtx.Placeholders.Assign(pinfo)
 
+	defer func() {
+		if r := recover(); r != nil {
+			// On a panic, prepend the executed SQL.
+			panic(fmt.Errorf("%s: %s", stmts, r))
+		}
+	}()
+
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	return e.execRequest(session, stmts)
+	return e.execRequest(session, stmts, copyMsgNone)
+}
+
+// CopyData adds data to the COPY buffer and executes if there are enough rows.
+func (e *Executor) CopyData(session *Session, data string) StatementResults {
+	return e.execRequest(session, data, copyMsgData)
+}
+
+// CopyDone executes the buffered COPY data.
+func (e *Executor) CopyDone(session *Session) StatementResults {
+	return e.execRequest(session, "", copyMsgDone)
+}
+
+// CopyEnd ends the COPY mode. Any buffered data is discarded.
+func (session *Session) CopyEnd() {
+	session.planner.copyFrom.Close()
+	session.planner.copyFrom = nil
 }
 
 // blockConfigUpdates blocks any gossip updates to the system config
@@ -432,11 +500,20 @@ func (e *Executor) waitForConfigUpdate() {
 // Args:
 //  txnState: State about about ongoing transaction (if any). The state will be
 //   updated.
-func (e *Executor) execRequest(session *Session, sql string) StatementResults {
+func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) StatementResults {
 	var res StatementResults
 	txnState := &session.TxnState
 	planMaker := &session.planner
-	stmts, err := planMaker.parser.Parse(sql, parser.Syntax(session.Syntax))
+	var stmts parser.StatementList
+	var err error
+
+	if session.planner.copyFrom != nil {
+		stmts, err = session.planner.ProcessCopyData(sql, copymsg)
+	} else if copymsg != copyMsgNone {
+		err = fmt.Errorf("unexpected copy command")
+	} else {
+		stmts, err = planMaker.parser.Parse(sql, parser.Syntax(session.Syntax))
+	}
 	if err != nil {
 		// A parse error occurred: we can't determine if there were multiple
 		// statements or only one, so just pretend there was one.
@@ -467,18 +544,18 @@ func (e *Executor) execRequest(session *Session, sql string) StatementResults {
 		// If protoTS is set, the transaction proto sets its Orig and Max timestamps
 		// to it each retry.
 		var protoTS *hlc.Timestamp
+		execOpt.Clock = e.cfg.Clock
 		// We can AutoRetry the next batch of statements if we're in a clean state
 		// (i.e. the next statements we're going to see are the first statements in
 		// a transaction).
 		if !inTxn {
-			execOpt.MinInitialTimestamp = e.cfg.Clock.Now()
 			// Detect implicit transactions.
 			if _, isBegin := stmts[0].(*parser.BeginTransaction); !isBegin {
 				execOpt.AutoCommit = true
 				stmtsToExec = stmtsToExec[:1]
 				// Check for AS OF SYSTEM TIME. If it is present but not detected here,
 				// it will raise an error later on.
-				protoTS, err = isAsOf(planMaker, stmtsToExec[0], execOpt.MinInitialTimestamp)
+				protoTS, err = isAsOf(planMaker, stmtsToExec[0], e.cfg.Clock.Now())
 				if err != nil {
 					res.ResultList = append(res.ResultList, Result{Err: err})
 					return res
@@ -722,7 +799,11 @@ func (e *Executor) execStmtsInCurrentTxn(
 		var stmtStrBefore string
 		// TODO(nvanbenschoten) Constant literals can change their representation (1.0000 -> 1) when type checking,
 		// so we need to reconsider how this works.
-		if e.cfg.TestingKnobs.CheckStmtStringChange && false {
+		if (e.cfg.TestingKnobs.CheckStmtStringChange && false) ||
+			(e.cfg.TestingKnobs.StatementFilter != nil) {
+			// We do "statement string change" if a StatementFilter is installed,
+			// because the StatementFilter relies on the textual representation of
+			// statements to not change from what the client sends.
 			stmtStrBefore = stmt.String()
 		}
 		var res Result
@@ -739,13 +820,17 @@ func (e *Executor) execStmtsInCurrentTxn(
 		default:
 			panic(fmt.Sprintf("unexpected txn state: %s", txnState.State))
 		}
-		if e.cfg.TestingKnobs.CheckStmtStringChange && false {
+		if (e.cfg.TestingKnobs.CheckStmtStringChange && false) ||
+			(e.cfg.TestingKnobs.StatementFilter != nil) {
 			if after := stmt.String(); after != stmtStrBefore {
 				panic(fmt.Sprintf("statement changed after exec; before:\n    %s\nafter:\n    %s",
 					stmtStrBefore, after))
 			}
 		}
 		res.Err = convertToErrWithPGCode(res.Err)
+		if e.cfg.TestingKnobs.StatementFilter != nil {
+			e.cfg.TestingKnobs.StatementFilter(stmt.String(), &res)
+		}
 		results = append(results, res)
 		if err != nil {
 			// After an error happened, skip executing all the remaining statements
@@ -983,8 +1068,13 @@ func (e *Executor) execStmtInOpenTxn(
 		return Result{PGTag: s.StatementTag()}, nil
 	}
 
-	result, err := e.execStmt(stmt, planMaker, implicitTxn /* autoCommit */)
+	autoCommit := implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
+	result, err := e.execStmt(stmt, planMaker, autoCommit)
 	if err != nil {
+		if result.Rows != nil {
+			result.Rows.Close()
+			result.Rows = nil
+		}
 		if traceSQL {
 			log.ErrEventf(txnState.txn.Context, "ERROR: %v", err)
 		}
@@ -998,7 +1088,7 @@ func (e *Executor) execStmtInOpenTxn(
 	case parser.RowsAffected:
 		tResult.count = result.RowsAffected
 	case parser.Rows:
-		tResult.count = len(result.Rows)
+		tResult.count = result.Rows.Len()
 	}
 	if traceSQL {
 		log.Eventf(txnState.txn.Context, "%s done", tResult)
@@ -1093,8 +1183,14 @@ func (e *Executor) execStmt(
 		return result, err
 	}
 
-	if testDistSQL != 0 {
-		if err := hackPlanToUseDistSQL(plan, testDistSQL == 1); err != nil {
+	defer plan.Close()
+
+	distSQLMode := testDistSQL
+	if planMaker.session.DistSQLMode != distSQLDisabled {
+		distSQLMode = planMaker.session.DistSQLMode
+	}
+	if distSQLMode != distSQLDisabled {
+		if err := hackPlanToUseDistSQL(plan, distSQLMode); err != nil {
 			return result, err
 		}
 	}
@@ -1121,9 +1217,10 @@ func (e *Executor) execStmt(
 				return result, err
 			}
 		}
+		result.Rows = planMaker.NewRowContainer(result.Columns, 0)
 
 		// valuesAlloc is used to allocate the backing storage for the
-		// ResultRow.Values slices in chunks.
+		// result row slices in chunks.
 		var valuesAlloc []parser.Datum
 		const maxChunkSize = 64 // Arbitrary, could use tuning.
 		chunkSize := 4          // Arbitrary as well.
@@ -1135,21 +1232,23 @@ func (e *Executor) execStmt(
 
 			n := len(values)
 			if len(valuesAlloc) < n {
-				valuesAlloc = make([]parser.Datum, len(result.Columns)*chunkSize)
+				valuesAlloc = make(parser.DTuple, len(result.Columns)*chunkSize)
 				if chunkSize < maxChunkSize {
 					chunkSize *= 2
 				}
 			}
-			row := ResultRow{Values: valuesAlloc[:0:n]}
+			row := valuesAlloc[:0:n]
 			valuesAlloc = valuesAlloc[n:]
 
 			for _, val := range values {
 				if err := checkResultDatum(val); err != nil {
 					return result, err
 				}
-				row.Values = append(row.Values, val)
+				row = append(row, val)
 			}
-			result.Rows = append(result.Rows, row)
+			if err := result.Rows.AddRow(row); err != nil {
+				return result, err
+			}
 		}
 		if err != nil {
 			return result, err
@@ -1274,8 +1373,8 @@ func checkResultDatum(datum parser.Datum) error {
 }
 
 // makeResultColumns converts sqlbase.ColumnDescriptors to ResultColumns.
-func makeResultColumns(colDescs []sqlbase.ColumnDescriptor) []ResultColumn {
-	cols := make([]ResultColumn, 0, len(colDescs))
+func makeResultColumns(colDescs []sqlbase.ColumnDescriptor) ResultColumns {
+	cols := make(ResultColumns, 0, len(colDescs))
 	for _, colDesc := range colDescs {
 		// Convert the sqlbase.ColumnDescriptor to ResultColumn.
 		typ := colDesc.Type.ToDatumType()
@@ -1293,6 +1392,9 @@ func makeResultColumns(colDescs []sqlbase.ColumnDescriptor) []ResultColumn {
 // since that requires the transaction to be started already. If the returned
 // timestamp is not nil, it is the timestamp to which a transaction should
 // be set.
+//
+// max is a lower bound on what the transaction's timestamp will be. Used to
+// check that the user didn't specify a timestamp in the future.
 func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.Timestamp, error) {
 	s, ok := stmt.(*parser.Select)
 	if !ok {
@@ -1319,7 +1421,7 @@ func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.
 	}
 	// Allow nanosecond precision because the timestamp is only used by the
 	// system and won't be returned to the user over pgwire.
-	dt, err := parser.ParseDTimestamp(string(*ds), planMaker.session.Location, time.Nanosecond)
+	dt, err := parser.ParseDTimestamp(string(*ds), time.Nanosecond)
 	if err != nil {
 		return nil, err
 	}

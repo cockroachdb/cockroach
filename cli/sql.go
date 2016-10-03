@@ -54,6 +54,28 @@ Open a sql shell running against a cockroach database.
 	SilenceUsage: true,
 }
 
+// options store the client-side options that a user of the sql cli
+// can configure with \set and \unset.
+// TODO(knz) For now these are booleans but eventually we may need
+// to support arbitrary strings.
+var options = map[string]bool{
+	// The following defaults apply for the interactive shell.
+	// These defaults are overridden for non-interactive shells below.
+
+	// Determines whether to stop the client upon encountering an error.
+	"errexit": false,
+
+	// Determines whether to perform client-side syntax checking.
+	"check_syntax": true,
+
+	// Determines whether to store normalized syntax in the shell history
+	// when check_syntax is set.
+	// TODO(knz) this can possibly be set back to false by default when
+	// the upstream readline library handles multi-line history entries
+	// properly.
+	"normalize_history": true,
+}
+
 const (
 	cliNextLine     = 0 // Done with this line, ask for another line.
 	cliExit         = 1 // User requested to exit.
@@ -64,9 +86,11 @@ const (
 func printCliHelp() {
 	fmt.Print(`You are using 'cockroach sql', CockroachDB's lightweight SQL client.
 Type: \q to exit (Ctrl+C/Ctrl+D also supported)
-      \! to run an external command and print its results on standard output.
-      \| to run an external command and run its output as SQL statements.
-      \? or "help" to print this help.
+  \! CMD            run an external command and print its results on standard output.
+  \| CMD            run an external command and run its output as SQL statements.
+  \set [NAME]       set a client-side flag or (without argument) print the current settings.
+  \unset NAME       unset a flag.
+  \? or "help"      print this help.
 
 More documentation about our SQL dialect is available online:
 http://www.cockroachlabs.com/docs/
@@ -89,20 +113,49 @@ func addHistory(ins *readline.Instance, line string) {
 	}
 }
 
+// handleSet supports the \set client-side command.
+func handleSet(args []string) {
+	if len(args) > 1 {
+		fmt.Fprintf(osStderr, "Invalid command: \\set %s. Try \\? for help.\n", strings.Join(args, " "))
+		return
+	}
+	if len(args) == 0 {
+		for k, v := range options {
+			fmt.Printf("%s = %v\n", strings.ToUpper(k), v)
+		}
+		return
+	}
+
+	opt := strings.ToLower(args[0])
+	options[opt] = true
+}
+
+// handleUnset supports the \unset client-side command.
+func handleUnset(args []string) {
+	if len(args) != 1 {
+		fmt.Fprintf(osStderr, "Invalid command: \\unset %s. Try \\? for help.\n", strings.Join(args, " "))
+		return
+	}
+	opt := strings.ToLower(args[0])
+	options[opt] = false
+}
+
 // handleInputLine looks at a single line of text entered
 // by the user at the prompt and decides what to do: either
 // run a client-side command, print some help or continue with
 // a regular query.
-func handleInputLine(ins *readline.Instance, stmt *[]string, line string, syntax parser.Syntax) (status int, hasSet bool) {
+func handleInputLine(
+	ins *readline.Instance, stmt *[]string, line string, syntax parser.Syntax,
+) (status int, hasSet bool, isEmpty bool) {
 	if len(*stmt) == 0 {
 		// Special case: first line of multi-line statement.
 		// In this case ignore empty lines, and recognize "help" specially.
 		switch line {
 		case "":
-			return cliNextLine, false
+			return cliNextLine, false, true
 		case "help":
 			printCliHelp()
-			return cliNextLine, false
+			return cliNextLine, false, true
 		}
 
 		if len(line) > 0 && line[0] == '\\' {
@@ -113,15 +166,19 @@ func handleInputLine(ins *readline.Instance, stmt *[]string, line string, syntax
 			cmd := strings.Fields(line)
 			switch cmd[0] {
 			case `\q`:
-				return cliExit, false
+				return cliExit, false, true
 			case `\!`:
-				return runSyscmd(line), false
+				return runSyscmd(line), false, true
 			case `\|`:
 				status = pipeSyscmd(stmt, line)
-				_, hasSet = isEndOfStatement(syntax, stmt)
-				return status, hasSet
+				isEmpty, _, hasSet = isEndOfStatement(syntax, stmt)
+				return status, hasSet, isEmpty
 			case `\`, `\?`:
 				printCliHelp()
+			case `\set`:
+				handleSet(cmd[1:])
+			case `\unset`:
+				handleUnset(cmd[1:])
 			default:
 				fmt.Fprintf(osStderr, "Invalid command: %s. Try \\? for help.\n", line)
 			}
@@ -131,31 +188,33 @@ func handleInputLine(ins *readline.Instance, stmt *[]string, line string, syntax
 				fmt.Fprint(osStderr, "Suggestion: use the SQL SHOW statement to inspect your schema.\n")
 			}
 
-			return cliNextLine, false
+			return cliNextLine, false, true
 		}
 	}
 
 	*stmt = append(*stmt, line)
-	isEnd, hasSet := isEndOfStatement(syntax, stmt)
-	if isEnd {
+	isEmpty, isEnd, hasSet := isEndOfStatement(syntax, stmt)
+	if isEmpty || isEnd {
 		status = cliProcessQuery
 	} else {
 		status = cliNextLine
 	}
-	return status, hasSet
+	return status, hasSet, isEmpty
 }
 
-func isEndOfStatement(syntax parser.Syntax, stmt *[]string) (isEnd, hasSet bool) {
+func isEndOfStatement(syntax parser.Syntax, stmt *[]string) (isEmpty, isEnd, hasSet bool) {
 	fullStmt := strings.Join(*stmt, "\n")
 	sc := parser.MakeScanner(fullStmt, syntax)
+	isEmpty = true
 	var last int
 	sc.Tokens(func(t int) {
+		isEmpty = false
 		last = t
 		if t == parser.SET {
 			hasSet = true
 		}
 	})
-	return last == ';', hasSet
+	return isEmpty, last == ';', hasSet
 }
 
 // execSyscmd executes system commands.
@@ -236,6 +295,8 @@ func preparePrompts(dbURL string) (fullPrompt string, continuePrompt string) {
 	return fullPrompt, continuePrompt
 }
 
+var cmdHistFile = envutil.EnvOrDefaultString("COCKROACH_SQL_CLI_HISTORY", ".cockroachdb_history")
+
 // runInteractive runs the SQL client interactively, presenting
 // a prompt to the user for each statement.
 func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
@@ -245,6 +306,7 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 	if err != nil {
 		return err
 	}
+	defer func() { _ = ins.Close() }()
 
 	if isInteractive {
 		// We only enable history management when the terminal is actually
@@ -257,28 +319,31 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 				log.Info(context.TODO(), "cannot load or save the command-line history")
 			}
 		} else {
-			histFile := filepath.Join(userAcct.HomeDir, ".cockroachdb_history")
+			histFile := filepath.Join(userAcct.HomeDir, cmdHistFile)
 			cfg := ins.Config.Clone()
 			cfg.HistoryFile = histFile
 			ins.SetConfig(cfg)
 		}
-	}
-
-	if isInteractive {
 		fmt.Print(infoMessage)
+	} else {
+		// When running non-interactive, by default we want errors to stop
+		// further processing and all syntax checking to be done
+		// server-side.
+		options["errexit"] = true
+		options["check_syntax"] = false
 	}
 
 	var stmt []string
 	syntax := parser.Traditional
 
 	for isFinished := false; !isFinished; {
-		thisPrompt := fullPrompt
-		if !isInteractive {
-			thisPrompt = ""
-		} else if len(stmt) > 0 {
-			thisPrompt = continuePrompt
+		if isInteractive {
+			thisPrompt := fullPrompt
+			if len(stmt) > 0 {
+				thisPrompt = continuePrompt
+			}
+			ins.SetPrompt(thisPrompt)
 		}
-		ins.SetPrompt(thisPrompt)
 		l, err := ins.Readline()
 
 		if !isInteractive && err == io.EOF {
@@ -295,30 +360,62 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 
 		// Check if this is a request for help or a client-side command.
 		// If so, process it directly and skip query processing below.
-		status, hasSet := handleInputLine(ins, &stmt, l, syntax)
+		status, hasSet, isEmpty := handleInputLine(ins, &stmt, l, syntax)
 		if status == cliExit {
 			break
-		} else if status == cliNextLine && !isFinished {
+		}
+		if isEmpty || (status == cliNextLine && !isFinished) {
 			// Ask for more input unless we reached EOF.
 			continue
-		} else if isFinished && len(stmt) == 0 {
+		}
+		if isFinished && len(stmt) == 0 {
 			// Exit if we reached EOF and the currently built-up statement is empty.
 			break
 		}
 
 		// We join the statements back together with newlines in case
-		// there is a significant newline inside a string literal. However
-		// we join with spaces for keeping history, because otherwise a
-		// history recall will only pull one line from a multi-line
-		// statement.
-		fullStmt := strings.Join(stmt, "\n")
+		// there is a significant newline inside a string literal.
+		fullStmt := strings.TrimRight(strings.Join(stmt, "\n"), " \n\t\f")
 
 		// Ensure the statement is terminated with a semicolon. This
 		// catches cases where the last line before EOF was not terminated
 		// properly.
 		if len(fullStmt) > 0 && !strings.HasSuffix(fullStmt, ";") {
-			fmt.Fprintln(osStderr, "no semicolon at end of statement; statement ignored")
-			continue
+			if strings.TrimSpace(fullStmt) == "" {
+				// Only whitespace. Nothing to do really.
+				continue
+			}
+
+			// That was the last line of input but some statement bits
+			// were accumulated. Report an error.
+			fmt.Fprintf(osStderr, "missing semicolon at end of statement: %q\n", fullStmt)
+			return fmt.Errorf("last statement was not executed")
+		}
+
+		// Clear the saved statement.
+		stmt = stmt[:0]
+
+		skipStmt := false
+		exitIfErr, _ := options["errexit"]
+
+		// If client-side syntax checking is enabled, parse the statement
+		// before sending it to the server. If it fails to parse, inform
+		// the user then stop processing if the `errexit` option is set.
+		// Otherwise, pretty-print the resulting AST to populate the
+		// history.
+		if doCheck, _ := options["check_syntax"]; doCheck {
+			var parser parser.Parser
+			stmts, err := parser.Parse(fullStmt, syntax)
+			if err != nil {
+				fmt.Fprintf(osStderr, "statement not sent to server: %v", err)
+				exitErr = err
+				if exitIfErr {
+					break
+				}
+				skipStmt = true
+			} else if normalizeHistory, _ := options["normalize_history"]; normalizeHistory {
+				fullStmt = stmts.String() + ";"
+			}
 		}
 
 		if isInteractive {
@@ -328,12 +425,19 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 			addHistory(ins, fullStmt)
 		}
 
+		if skipStmt {
+			// If a syntax error was detected client-side, don't try to go
+			// to the server and simply try again.
+			continue
+		}
+
 		if exitErr = runQueryAndFormatResults(conn, os.Stdout, makeQuery(fullStmt), cliCtx.prettyFmt); exitErr != nil {
 			fmt.Fprintln(osStderr, exitErr)
 		}
 
-		// Clear the saved statement.
-		stmt = stmt[:0]
+		if exitErr != nil && exitIfErr {
+			break
+		}
 
 		if hasSet {
 			newSyntax, err := getSyntax(conn)

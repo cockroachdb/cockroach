@@ -17,6 +17,7 @@
 package sql_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/keys"
@@ -31,7 +32,7 @@ import (
 func TestInitialKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const nonSystemDesc = 2
+	const nonSystemDesc = 4
 	const keysPerDesc = 2
 	const nonDescKeys = 2
 
@@ -43,7 +44,15 @@ func TestInitialKeys(t *testing.T) {
 	}
 
 	// Add an additional table.
-	desc := sql.CreateTableDescriptor(keys.MaxSystemConfigDescID+1, keys.SystemDatabaseID, "CREATE TABLE testdb.x (val INTEGER PRIMARY KEY)", sqlbase.NewDefaultPrivilegeDescriptor())
+	desc, err := sql.CreateTestTableDescriptor(
+		keys.SystemDatabaseID,
+		keys.MaxSystemConfigDescID+1,
+		"CREATE TABLE testdb.x (val INTEGER PRIMARY KEY)",
+		sqlbase.NewDefaultPrivilegeDescriptor(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
 	ms.AddDescriptor(keys.SystemDatabaseID, &desc)
 	kv = ms.GetInitialValues()
 	expected = nonDescKeys + keysPerDesc*ms.SystemDescriptorCount()
@@ -101,8 +110,15 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.UsersTableID, sqlbase.UsersTableSchema, sqlbase.UsersTable},
 		{keys.ZonesTableID, sqlbase.ZonesTableSchema, sqlbase.ZonesTable},
 	} {
-		gen := sql.CreateTableDescriptor(test.id, keys.SystemDatabaseID, test.schema,
-			sqlbase.NewPrivilegeDescriptor(security.RootUser, sqlbase.SystemConfigAllowedPrivileges[test.id]))
+		gen, err := sql.CreateTestTableDescriptor(
+			keys.SystemDatabaseID,
+			test.id,
+			test.schema,
+			sqlbase.NewPrivilegeDescriptor(security.RootUser, sqlbase.SystemConfigAllowedPrivileges[test.id]),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if !proto.Equal(&test.pkg, &gen) {
 			t.Fatalf(
 				"mismatch between re-generated version and pkg version of %s:\npkg:\n\t%#v\ngenerated\n\t%#v",
@@ -112,13 +128,27 @@ func TestSystemTableLiterals(t *testing.T) {
 	// test the tables with non-specific NewDefaultPrivilegeDescriptor
 	for _, test := range []testcase{
 		{keys.LeaseTableID, sqlbase.LeaseTableSchema, sqlbase.LeaseTable},
+		{keys.EventLogTableID, sqlbase.EventLogTableSchema, sqlbase.EventLogTable},
+		{keys.RangeEventTableID, sqlbase.RangeEventTableSchema, sqlbase.RangeEventTable},
 		{keys.UITableID, sqlbase.UITableSchema, sqlbase.UITable},
 	} {
-		gen := sql.CreateTableDescriptor(test.id, keys.SystemDatabaseID, test.schema, sqlbase.NewDefaultPrivilegeDescriptor())
+		gen, err := sql.CreateTestTableDescriptor(
+			keys.SystemDatabaseID, test.id, test.schema, sqlbase.NewDefaultPrivilegeDescriptor(),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if !proto.Equal(&test.pkg, &gen) {
-			t.Fatalf(
-				"mismatch between re-generated version and pkg version of %s:\npkg:\n\t%#v\ngenerated\n\t%#v",
-				test.pkg.Name, test.pkg, gen)
+			s1 := fmt.Sprintf("%#v", test.pkg)
+			s2 := fmt.Sprintf("%#v", gen)
+			for i := range s1 {
+				if s1[i] != s2[i] {
+					t.Fatalf(
+						"mismatch between %sv:\npkg:\n\t%#v\npartial-gen\n\t%#v\ngen\n\t%#v",
+						test.pkg.Name, s1[:i+3], s2[:i+3], gen)
+				}
+			}
+			panic("did not locate mismatch between re-generated version and pkg version")
 		}
 	}
 }

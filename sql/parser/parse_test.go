@@ -22,6 +22,7 @@ import (
 	"go/constant"
 	"reflect"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/testutils"
 	_ "github.com/cockroachdb/cockroach/util/log" // for flags
@@ -119,6 +120,29 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a.b (b INT)`},
 		{`CREATE TABLE IF NOT EXISTS a (b INT)`},
 
+		{`CREATE TABLE a AS SELECT * FROM b`},
+		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b`},
+		{`CREATE TABLE a AS SELECT * FROM b ORDER BY c`},
+		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b ORDER BY c`},
+		{`CREATE TABLE a AS SELECT * FROM b LIMIT 3`},
+		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b LIMIT 3`},
+		{`CREATE TABLE a AS VALUES ('one', 1), ('two', 2), ('three', 3)`},
+		{`CREATE TABLE IF NOT EXISTS a AS VALUES ('one', 1), ('two', 2), ('three', 3)`},
+		{`CREATE TABLE a (str, num) AS VALUES ('one', 1), ('two', 2), ('three', 3)`},
+		{`CREATE TABLE IF NOT EXISTS a (str, num) AS VALUES ('one', 1), ('two', 2), ('three', 3)`},
+		{`CREATE TABLE a AS SELECT * FROM b UNION SELECT * FROM c`},
+		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION SELECT * FROM c`},
+		{`CREATE TABLE a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5`},
+		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5`},
+
+		{`CREATE VIEW a AS SELECT * FROM b`},
+		{`CREATE VIEW a AS SELECT b.* FROM b LIMIT 5`},
+		{`CREATE VIEW a AS (SELECT c, d FROM b WHERE c > 0 ORDER BY c)`},
+		{`CREATE VIEW a (x, y) AS SELECT c, d FROM b`},
+		{`CREATE VIEW a AS VALUES (1, 'one'), (2, 'two')`},
+		{`CREATE VIEW a (x, y) AS VALUES (1, 'one'), (2, 'two')`},
+		{`CREATE VIEW a AS TABLE b`},
+
 		{`DELETE FROM a`},
 		{`DELETE FROM a.b`},
 		{`DELETE FROM a WHERE a = b`},
@@ -146,11 +170,22 @@ func TestParse(t *testing.T) {
 		{`DROP INDEX IF EXISTS a.b@c, d@f`},
 		{`DROP INDEX a.b@c CASCADE`},
 		{`DROP INDEX IF EXISTS a.b@c RESTRICT`},
+		{`DROP VIEW a`},
+		{`DROP VIEW a.b`},
+		{`DROP VIEW a, b`},
+		{`DROP VIEW IF EXISTS a`},
+		{`DROP VIEW a RESTRICT`},
+		{`DROP VIEW IF EXISTS a, b RESTRICT`},
+		{`DROP VIEW a.b CASCADE`},
+		{`DROP VIEW a, b CASCADE`},
 
 		{`EXPLAIN SELECT 1`},
 		{`EXPLAIN EXPLAIN SELECT 1`},
 		{`EXPLAIN (DEBUG) SELECT 1`},
 		{`EXPLAIN (A, B, C) SELECT 1`},
+
+		{`HELP count`},
+		{`HELP VARCHAR`},
 
 		{`SHOW BARFOO`},
 		{`SHOW DATABASE`},
@@ -388,6 +423,22 @@ func TestParse(t *testing.T) {
 
 		{`SELECT a FROM t HAVING a = b`},
 
+		{`SELECT a FROM t WINDOW w AS ()`},
+		{`SELECT a FROM t WINDOW w AS (w2)`},
+		{`SELECT a FROM t WINDOW w AS (PARTITION BY b)`},
+		{`SELECT a FROM t WINDOW w AS (PARTITION BY b, 1 + 2)`},
+		{`SELECT a FROM t WINDOW w AS (ORDER BY c)`},
+		{`SELECT a FROM t WINDOW w AS (ORDER BY c, 1 + 2)`},
+		{`SELECT a FROM t WINDOW w AS (PARTITION BY b ORDER BY c)`},
+
+		{`SELECT avg(1) OVER w FROM t`},
+		{`SELECT avg(1) OVER () FROM t`},
+		{`SELECT avg(1) OVER (w) FROM t`},
+		{`SELECT avg(1) OVER (PARTITION BY b) FROM t`},
+		{`SELECT avg(1) OVER (ORDER BY c) FROM t`},
+		{`SELECT avg(1) OVER (PARTITION BY b ORDER BY c) FROM t`},
+		{`SELECT avg(1) OVER (w PARTITION BY b ORDER BY c) FROM t`},
+
 		{`SELECT a FROM t UNION SELECT 1 FROM t`},
 		{`SELECT a FROM t UNION SELECT 1 FROM t UNION SELECT 1 FROM t`},
 		{`SELECT a FROM t UNION ALL SELECT 1 FROM t`},
@@ -475,7 +526,7 @@ func TestParse(t *testing.T) {
 		{`ALTER TABLE IF EXISTS a ADD b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
 		{`ALTER TABLE IF EXISTS a ADD IF NOT EXISTS b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
 		{`ALTER TABLE a ADD COLUMN b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
-		{`ALTER TABLE a ADD COLUMN IF NOT EXISTS b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
+		{`ALTER TABLE a ADD COLUMN IF NOT EXISTS b INT, ADD CONSTRAINT a_idx UNIQUE (a) NOT VALID`},
 		{`ALTER TABLE IF EXISTS a ADD COLUMN b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
 		{`ALTER TABLE IF EXISTS a ADD COLUMN IF NOT EXISTS b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
 		{`ALTER TABLE a ADD b INT FAMILY fam_a`},
@@ -495,12 +546,21 @@ func TestParse(t *testing.T) {
 		{`ALTER TABLE a DROP COLUMN b RESTRICT`},
 		{`ALTER TABLE a DROP CONSTRAINT b CASCADE`},
 		{`ALTER TABLE a DROP CONSTRAINT IF EXISTS b RESTRICT`},
+		{`ALTER TABLE a VALIDATE CONSTRAINT a`},
 
 		{`ALTER TABLE a ALTER COLUMN b SET DEFAULT 42`},
 		{`ALTER TABLE a ALTER COLUMN b SET DEFAULT NULL`},
 		{`ALTER TABLE a ALTER COLUMN b DROP DEFAULT`},
 		{`ALTER TABLE a ALTER COLUMN b DROP NOT NULL`},
 		{`ALTER TABLE a ALTER b DROP NOT NULL`},
+
+		{`COPY t FROM STDIN`},
+		{`COPY t (a, b, c) FROM STDIN`},
+
+		{`ALTER TABLE a SPLIT AT (1)`},
+		{`ALTER TABLE d.a SPLIT AT ('b', 2)`},
+		{`ALTER INDEX a@i SPLIT AT (1)`},
+		{`ALTER INDEX d.a@i SPLIT AT (2)`},
 	}
 	for _, d := range testData {
 		stmts, err := parseTraditional(d.sql)
@@ -631,9 +691,8 @@ func TestParse2(t *testing.T) {
 		{`SELECT '1'::INT`,
 			`SELECT CAST('1' AS INT)`},
 		// Shorthand type annotation.
-		// TODO(nvanbenschoten) introduce a shorthand type annotation notation.
-		// {`SELECT '1'!INT`,
-		// 	`SELECT ANNOTATE_TYPE('1', INT)`},
+		{`SELECT '1':::INT`,
+			`SELECT ANNOTATE_TYPE('1', INT)`},
 		// Double negation. See #1800.
 		{`SELECT *,-/* comment */-5`,
 			`SELECT *, - (- 5)`},
@@ -836,6 +895,16 @@ CREATE DATABASE a b c
 			`syntax error at or near ")"
 CREATE INDEX ON a (b) STORING ()
                                ^
+`},
+		{`CREATE VIEW a`,
+			`syntax error at or near "EOF"
+CREATE VIEW a
+             ^
+`},
+		{`CREATE VIEW a () AS select * FROM b`,
+			`syntax error at or near ")"
+CREATE VIEW a () AS select * FROM b
+               ^
 `},
 		{`SELECT FROM t`,
 			`syntax error at or near "FROM"
@@ -1185,19 +1254,23 @@ func BenchmarkParse(b *testing.B) {
 }
 
 func TestEncodeSQLBytes(t *testing.T) {
-	testEncodeSQL(t, encodeSQLBytes)
+	testEncodeSQL(t, encodeSQLBytes, false)
 }
 
 func TestEncodeSQLString(t *testing.T) {
-	testEncodeSQL(t, encodeSQLString)
+	testEncodeSQL(t, encodeSQLString, true)
 }
 
-func testEncodeSQL(t *testing.T, encode func(*bytes.Buffer, string)) {
+func testEncodeSQL(t *testing.T, encode func(*bytes.Buffer, string), forceUTF8 bool) {
 	type entry struct{ i, j int }
 	seen := make(map[string]entry)
 	for i := 0; i < 256; i++ {
 		for j := 0; j < 256; j++ {
-			s := string([]byte{byte(i), byte(j)})
+			bytepair := []byte{byte(i), byte(j)}
+			if forceUTF8 && !utf8.Valid(bytepair) {
+				continue
+			}
+			s := string(bytepair)
 			var buf bytes.Buffer
 			encode(&buf, s)
 			sql := fmt.Sprintf("SELECT %s", buf.String())

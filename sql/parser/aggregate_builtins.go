@@ -15,28 +15,599 @@
 package parser
 
 import (
+	"fmt"
 	"math"
 	"strings"
 
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/util/decimal"
-	"github.com/pkg/errors"
 )
 
 func init() {
-	for k, v := range Aggregates {
-		for i := range v {
-			v[i].impure = true
+	// Add all aggregates to the Builtins map after a few sanity checks.
+	for k, v := range aggregates {
+		for _, a := range v {
+			if !a.impure {
+				panic(fmt.Sprintf("aggregate functions should all be impure, found %v", a))
+			}
+			if a.class != AggregateClass {
+				panic(fmt.Sprintf("aggregate functions should be marked with the AggregateClass "+
+					"function class, found %v", a))
+			}
+			if a.AggregateFunc == nil {
+				panic(fmt.Sprintf("aggregate functions should have AggregateFunc constructors, "+
+					"found %v", a))
+			}
+			if a.WindowFunc == nil {
+				panic(fmt.Sprintf("aggregate functions should have WindowFunc constructors, "+
+					"found %v", a))
+			}
 		}
-		Aggregates[strings.ToUpper(k)] = v
+		Builtins[strings.ToUpper(k)] = v
+		Builtins[strings.ToLower(k)] = v
 	}
 }
 
-// AggregateFunc accumulates the result of a some function of a Datum.
+// AggregateFunc accumulates the result of a function of a Datum.
 type AggregateFunc interface {
-	Add(Datum) error
-	Result() (Datum, error)
+	// Add accumulates the passed datum into the AggregateFunc.
+	Add(Datum)
+
+	// Result returns the current value of the accumulation. This value
+	// will be a deep copy of any AggregateFunc internal state, so that
+	// it will not be mutated by additional calls to Add.
+	Result() Datum
+}
+
+// aggregates are a special class of builtin functions that are wrapped
+// at execution in a bucketing layer to combine (aggregate) the result
+// of the function being run over many rows.
+// See `aggregateFuncHolder` in the sql package.
+// In particular they must not be simplified during normalization
+// (and thus must be marked as impure), even when they are given a
+// constant argument (e.g. SUM(1)). This is because aggregate
+// functions must return NULL when they are no rows in the source
+// table, so their evaluation must always be delayed until query
+// execution.
+var aggregates = map[string][]Builtin{
+	"avg": {
+		makeAggBuiltin(TypeInt, TypeDecimal, newIntAvgAggregate),
+		makeAggBuiltin(TypeFloat, TypeFloat, newFloatAvgAggregate),
+		makeAggBuiltin(TypeDecimal, TypeDecimal, newDecimalAvgAggregate),
+	},
+
+	"bool_and": {
+		makeAggBuiltin(TypeBool, TypeBool, newBoolAndAggregate),
+	},
+
+	"bool_or": {
+		makeAggBuiltin(TypeBool, TypeBool, newBoolOrAggregate),
+	},
+
+	"count": countImpls(),
+
+	"max": makeAggBuiltins(newMaxAggregate, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInterval),
+	"min": makeAggBuiltins(newMinAggregate, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInterval),
+
+	"sum": {
+		makeAggBuiltin(TypeInt, TypeDecimal, newIntSumAggregate),
+		makeAggBuiltin(TypeFloat, TypeFloat, newFloatSumAggregate),
+		makeAggBuiltin(TypeDecimal, TypeDecimal, newDecimalSumAggregate),
+	},
+
+	"variance": {
+		makeAggBuiltin(TypeInt, TypeDecimal, newIntVarianceAggregate),
+		makeAggBuiltin(TypeDecimal, TypeDecimal, newDecimalVarianceAggregate),
+		makeAggBuiltin(TypeFloat, TypeFloat, newFloatVarianceAggregate),
+	},
+
+	"stddev": {
+		makeAggBuiltin(TypeInt, TypeDecimal, newIntStddevAggregate),
+		makeAggBuiltin(TypeDecimal, TypeDecimal, newDecimalStddevAggregate),
+		makeAggBuiltin(TypeFloat, TypeFloat, newFloatStddevAggregate),
+	},
+}
+
+func makeAggBuiltin(in, ret Datum, f func() AggregateFunc) Builtin {
+	return Builtin{
+		// See the comment about aggregate functions in the definitions
+		// of the Builtins array above.
+		impure:        true,
+		class:         AggregateClass,
+		Types:         ArgTypes{in},
+		ReturnType:    ret,
+		AggregateFunc: f,
+		WindowFunc: func() WindowFunc {
+			return newAggregateWindow(f())
+		},
+	}
+}
+
+func makeAggBuiltins(f func() AggregateFunc, types ...Datum) []Builtin {
+	ret := make([]Builtin, len(types))
+	for i := range types {
+		ret[i] = makeAggBuiltin(types[i], types[i], f)
+	}
+	return ret
+}
+
+func countImpls() []Builtin {
+	types := ArgTypes{TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInterval, TypeTuple}
+	r := make([]Builtin, len(types))
+	for i := range types {
+		r[i] = makeAggBuiltin(types[i], TypeInt, newCountAggregate)
+	}
+	return r
+}
+
+var _ AggregateFunc = &avgAggregate{}
+var _ AggregateFunc = &countAggregate{}
+var _ AggregateFunc = &MaxAggregate{}
+var _ AggregateFunc = &MinAggregate{}
+var _ AggregateFunc = &intSumAggregate{}
+var _ AggregateFunc = &decimalSumAggregate{}
+var _ AggregateFunc = &floatSumAggregate{}
+var _ AggregateFunc = &stddevAggregate{}
+var _ AggregateFunc = &intVarianceAggregate{}
+var _ AggregateFunc = &floatVarianceAggregate{}
+var _ AggregateFunc = &decimalVarianceAggregate{}
+var _ AggregateFunc = &identAggregate{}
+
+// In order to render the unaggregated (i.e. grouped) fields, during aggregation,
+// the values for those fields have to be stored for each bucket.
+// The `identAggregate` provides an "aggregate" function that actually
+// just returns the last value passed to `add`, unchanged. For accumulating
+// and rendering though it behaves like the other aggregate functions,
+// allowing both those steps to avoid special-casing grouped vs aggregated fields.
+type identAggregate struct {
+	val Datum
+}
+
+// NewIdentAggregate returns an identAggregate (see comment on struct).
+func NewIdentAggregate() AggregateFunc {
+	return &identAggregate{}
+}
+
+// Add sets the value to the passed datum.
+func (a *identAggregate) Add(datum Datum) {
+	a.val = datum
+}
+
+// Result returns the value most recently passed to Add.
+func (a *identAggregate) Result() Datum {
+	return a.val
+}
+
+type avgAggregate struct {
+	agg   AggregateFunc
+	count int
+}
+
+func newIntAvgAggregate() AggregateFunc {
+	return &avgAggregate{agg: newIntSumAggregate()}
+}
+func newFloatAvgAggregate() AggregateFunc {
+	return &avgAggregate{agg: newFloatSumAggregate()}
+}
+func newDecimalAvgAggregate() AggregateFunc {
+	return &avgAggregate{agg: newDecimalSumAggregate()}
+}
+
+// Add accumulates the passed datum into the average.
+func (a *avgAggregate) Add(datum Datum) {
+	if datum == DNull {
+		return
+	}
+	a.agg.Add(datum)
+	a.count++
+}
+
+// Result returns the average of all datums passed to Add.
+func (a *avgAggregate) Result() Datum {
+	sum := a.agg.Result()
+	if sum == DNull {
+		return sum
+	}
+	switch t := sum.(type) {
+	case *DFloat:
+		return NewDFloat(*t / DFloat(a.count))
+	case *DDecimal:
+		count := inf.NewDec(int64(a.count), 0)
+		t.QuoRound(&t.Dec, count, decimal.Precision, inf.RoundHalfUp)
+		return t
+	default:
+		panic(fmt.Sprintf("unexpected SUM result type: %s", t.Type()))
+	}
+}
+
+type boolAndAggregate struct {
+	sawNonNull bool
+	result     bool
+}
+
+func newBoolAndAggregate() AggregateFunc {
+	return &boolAndAggregate{}
+}
+
+func (a *boolAndAggregate) Add(datum Datum) {
+	if datum == DNull {
+		return
+	}
+	if !a.sawNonNull {
+		a.sawNonNull = true
+		a.result = true
+	}
+	a.result = a.result && bool(*datum.(*DBool))
+}
+
+func (a *boolAndAggregate) Result() Datum {
+	if !a.sawNonNull {
+		return DNull
+	}
+	return MakeDBool(DBool(a.result))
+}
+
+type boolOrAggregate struct {
+	sawNonNull bool
+	result     bool
+}
+
+func newBoolOrAggregate() AggregateFunc {
+	return &boolOrAggregate{}
+}
+
+func (a *boolOrAggregate) Add(datum Datum) {
+	if datum == DNull {
+		return
+	}
+	a.sawNonNull = true
+	a.result = a.result || bool(*datum.(*DBool))
+}
+
+func (a *boolOrAggregate) Result() Datum {
+	if !a.sawNonNull {
+		return DNull
+	}
+	return MakeDBool(DBool(a.result))
+}
+
+type countAggregate struct {
+	count int
+}
+
+func newCountAggregate() AggregateFunc {
+	return &countAggregate{}
+}
+
+func (a *countAggregate) Add(datum Datum) {
+	if datum == DNull {
+		return
+	}
+	a.count++
+	return
+}
+
+func (a *countAggregate) Result() Datum {
+	return NewDInt(DInt(a.count))
+}
+
+// MaxAggregate keeps track of the largest value passed to Add.
+type MaxAggregate struct {
+	max Datum
+}
+
+func newMaxAggregate() AggregateFunc {
+	return &MaxAggregate{}
+}
+
+// Add sets the max to the larger of the current max or the passed datum.
+func (a *MaxAggregate) Add(datum Datum) {
+	if datum == DNull {
+		return
+	}
+	if a.max == nil {
+		a.max = datum
+		return
+	}
+	c := a.max.Compare(datum)
+	if c < 0 {
+		a.max = datum
+	}
+}
+
+// Result returns the largest value passed to Add.
+func (a *MaxAggregate) Result() Datum {
+	if a.max == nil {
+		return DNull
+	}
+	return a.max
+}
+
+// MinAggregate keeps track of the smallest value passed to Add.
+type MinAggregate struct {
+	min Datum
+}
+
+func newMinAggregate() AggregateFunc {
+	return &MinAggregate{}
+}
+
+// Add sets the min to the smaller of the current min or the passed datum.
+func (a *MinAggregate) Add(datum Datum) {
+	if datum == DNull {
+		return
+	}
+	if a.min == nil {
+		a.min = datum
+		return
+	}
+	c := a.min.Compare(datum)
+	if c > 0 {
+		a.min = datum
+	}
+}
+
+// Result returns the smallest value passed to Add.
+func (a *MinAggregate) Result() Datum {
+	if a.min == nil {
+		return DNull
+	}
+	return a.min
+}
+
+type intSumAggregate struct {
+	// Either the `intSum` and `decSum` fields contains the
+	// result. Which one is used is determined by the `large` field
+	// below.
+	intSum      int64
+	decSum      DDecimal
+	tmpDec      inf.Dec
+	large       bool
+	seenNonNull bool
+}
+
+func newIntSumAggregate() AggregateFunc {
+	return &intSumAggregate{}
+}
+
+// Add adds the value of the passed datum to the sum.
+func (a *intSumAggregate) Add(datum Datum) {
+	if datum == DNull {
+		return
+	}
+
+	t := int64(*datum.(*DInt))
+	if t != 0 {
+		// The sum can be computed using a single int64 as long as the
+		// result of the addition does not overflow.  However since Go
+		// does not provide checked addition, we have to check for the
+		// overflow explicitly.
+		if !a.large &&
+			((t < 0 && a.intSum < math.MinInt64-t) ||
+				(t > 0 && a.intSum > math.MaxInt64-t)) {
+			// And overflow was detected; go to large integers, but keep the
+			// sum computed so far.
+			a.large = true
+			a.decSum.SetUnscaled(a.intSum)
+		}
+
+		if a.large {
+			a.tmpDec.SetUnscaled(t)
+			a.decSum.Add(&a.decSum.Dec, &a.tmpDec)
+		} else {
+			a.intSum += t
+		}
+	}
+	a.seenNonNull = true
+}
+
+// Result returns the sum.
+func (a *intSumAggregate) Result() Datum {
+	if !a.seenNonNull {
+		return DNull
+	}
+	dd := &DDecimal{}
+	if a.large {
+		dd.Set(&a.decSum.Dec)
+	} else {
+		dd.SetUnscaled(a.intSum)
+	}
+	return dd
+}
+
+type decimalSumAggregate struct {
+	sum        inf.Dec
+	sawNonNull bool
+}
+
+func newDecimalSumAggregate() AggregateFunc {
+	return &decimalSumAggregate{}
+}
+
+// Add adds the value of the passed datum to the sum.
+func (a *decimalSumAggregate) Add(datum Datum) {
+	if datum == DNull {
+		return
+	}
+	t := datum.(*DDecimal)
+	a.sum.Add(&a.sum, &t.Dec)
+	a.sawNonNull = true
+}
+
+// Result returns the sum.
+func (a *decimalSumAggregate) Result() Datum {
+	if !a.sawNonNull {
+		return DNull
+	}
+	dd := &DDecimal{}
+	dd.Set(&a.sum)
+	return dd
+}
+
+type floatSumAggregate struct {
+	sum        float64
+	sawNonNull bool
+}
+
+func newFloatSumAggregate() AggregateFunc {
+	return &floatSumAggregate{}
+}
+
+// Add adds the value of the passed datum to the sum.
+func (a *floatSumAggregate) Add(datum Datum) {
+	if datum == DNull {
+		return
+	}
+	t := datum.(*DFloat)
+	a.sum += float64(*t)
+	a.sawNonNull = true
+}
+
+// Result returns the sum.
+func (a *floatSumAggregate) Result() Datum {
+	if !a.sawNonNull {
+		return DNull
+	}
+	return NewDFloat(DFloat(a.sum))
+}
+
+type intVarianceAggregate struct {
+	agg decimalVarianceAggregate
+	// Used for passing int64s as *inf.Dec values.
+	tmpDec DDecimal
+}
+
+func newIntVarianceAggregate() AggregateFunc {
+	return &intVarianceAggregate{}
+}
+
+func (a *intVarianceAggregate) Add(datum Datum) {
+	if datum == DNull {
+		return
+	}
+
+	a.tmpDec.SetUnscaled(int64(*datum.(*DInt)))
+	a.agg.Add(&a.tmpDec)
+}
+
+func (a *intVarianceAggregate) Result() Datum {
+	return a.agg.Result()
+}
+
+type floatVarianceAggregate struct {
+	count   int
+	mean    float64
+	sqrDiff float64
+}
+
+func newFloatVarianceAggregate() AggregateFunc {
+	return &floatVarianceAggregate{}
+}
+
+func (a *floatVarianceAggregate) Add(datum Datum) {
+	if datum == DNull {
+		return
+	}
+	f := float64(*datum.(*DFloat))
+
+	// Uses the Knuth/Welford method for accurately computing variance online in a
+	// single pass. See http://www.johndcook.com/blog/standard_deviation/ and
+	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm.
+	a.count++
+	delta := f - a.mean
+	a.mean += delta / float64(a.count)
+	a.sqrDiff += delta * (f - a.mean)
+}
+
+func (a *floatVarianceAggregate) Result() Datum {
+	if a.count < 2 {
+		return DNull
+	}
+	return NewDFloat(DFloat(a.sqrDiff / (float64(a.count) - 1)))
+}
+
+type decimalVarianceAggregate struct {
+	// Variables used across iterations.
+	count   inf.Dec
+	mean    inf.Dec
+	sqrDiff inf.Dec
+
+	// Variables used as scratch space within iterations.
+	delta inf.Dec
+	tmp   inf.Dec
+}
+
+func newDecimalVarianceAggregate() AggregateFunc {
+	return &decimalVarianceAggregate{}
+}
+
+// Read-only constants used for compuation.
+var (
+	decimalOne = inf.NewDec(1, 0)
+	decimalTwo = inf.NewDec(2, 0)
+)
+
+func (a *decimalVarianceAggregate) Add(datum Datum) {
+	if datum == DNull {
+		return
+	}
+	d := &datum.(*DDecimal).Dec
+
+	// Uses the Knuth/Welford method for accurately computing variance online in a
+	// single pass. See http://www.johndcook.com/blog/standard_deviation/ and
+	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm.
+	a.count.Add(&a.count, decimalOne)
+	a.delta.Sub(d, &a.mean)
+	a.tmp.QuoRound(&a.delta, &a.count, decimal.Precision, inf.RoundHalfUp)
+	a.mean.Add(&a.mean, &a.tmp)
+	a.tmp.Sub(d, &a.mean)
+	a.sqrDiff.Add(&a.sqrDiff, a.delta.Mul(&a.delta, &a.tmp))
+}
+
+func (a *decimalVarianceAggregate) Result() Datum {
+	if a.count.Cmp(decimalTwo) < 0 {
+		return DNull
+	}
+	a.tmp.Sub(&a.count, decimalOne)
+	dd := &DDecimal{}
+	dd.QuoRound(&a.sqrDiff, &a.tmp, decimal.Precision, inf.RoundHalfUp)
+	return dd
+}
+
+type stddevAggregate struct {
+	agg AggregateFunc
+}
+
+func newIntStddevAggregate() AggregateFunc {
+	return &stddevAggregate{agg: newIntVarianceAggregate()}
+}
+func newFloatStddevAggregate() AggregateFunc {
+	return &stddevAggregate{agg: newFloatVarianceAggregate()}
+}
+func newDecimalStddevAggregate() AggregateFunc {
+	return &stddevAggregate{agg: newDecimalVarianceAggregate()}
+}
+
+// Add implements the AggregateFunc interface.
+func (a *stddevAggregate) Add(datum Datum) {
+	a.agg.Add(datum)
+}
+
+// Result computes the square root of the variance.
+func (a *stddevAggregate) Result() Datum {
+	variance := a.agg.Result()
+	if variance == DNull {
+		return variance
+	}
+	switch t := variance.(type) {
+	case *DFloat:
+		return NewDFloat(DFloat(math.Sqrt(float64(*t))))
+	case *DDecimal:
+		decimal.Sqrt(&t.Dec, &t.Dec, decimal.Precision)
+		return t
+	}
+	panic(fmt.Sprintf("unexpected variance result type: %s", variance.Type()))
 }
 
 var _ Visitor = &IsAggregateVisitor{}
@@ -50,11 +621,16 @@ type IsAggregateVisitor struct {
 func (v *IsAggregateVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	switch t := expr.(type) {
 	case *FuncExpr:
+		if t.IsWindowFunctionApplication() {
+			// A window function application of an aggregate builtin is not an
+			// aggregate function, but it can contain aggregate functions.
+			return true, expr
+		}
 		fn, err := t.Name.Normalize()
 		if err != nil {
 			return false, expr
 		}
-		if _, ok := Aggregates[strings.ToLower(fn.Function())]; ok {
+		if _, ok := aggregates[strings.ToLower(fn.Function())]; ok {
 			v.Aggregated = true
 			return false, expr
 		}
@@ -101,529 +677,14 @@ func (p *Parser) IsAggregate(n *SelectClause) bool {
 	return false
 }
 
-// Aggregates are a special class of builtin functions that are wrapped
-// at execution in a bucketing layer to combine (aggregate) the result
-// of the function being run over many rows.
-// See `aggregateFuncHolder` in the sql
-// In particular they must not be simplified during normalization
-// (and thus must be marked as impure), even when they are given a
-// constant argument (e.g. SUM(1)). This is because aggregate
-// functions must return NULL when they are no rows in the source
-// table, so their evaluation must always be delayed until query
-// execution.
-var Aggregates = map[string][]Builtin{
-	"avg": {
-		makeAggBuiltin(TypeInt, TypeDecimal, newAvgAggregate),
-		makeAggBuiltin(TypeFloat, TypeFloat, newAvgAggregate),
-		makeAggBuiltin(TypeDecimal, TypeDecimal, newAvgAggregate),
-	},
-
-	"bool_and": {
-		makeAggBuiltin(TypeBool, TypeBool, newBoolAndAggregate),
-	},
-
-	"bool_or": {
-		makeAggBuiltin(TypeBool, TypeBool, newBoolOrAggregate),
-	},
-
-	"count": countImpls(),
-
-	"max": makeAggBuiltins(newMaxAggregate, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeInterval),
-	"min": makeAggBuiltins(newMinAggregate, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeInterval),
-
-	"sum": {
-		makeAggBuiltin(TypeInt, TypeDecimal, newSumAggregate),
-		makeAggBuiltin(TypeFloat, TypeFloat, newSumAggregate),
-		makeAggBuiltin(TypeDecimal, TypeDecimal, newSumAggregate),
-	},
-
-	"variance": {
-		makeAggBuiltin(TypeInt, TypeDecimal, newVarianceAggregate),
-		makeAggBuiltin(TypeDecimal, TypeDecimal, newVarianceAggregate),
-		makeAggBuiltin(TypeFloat, TypeFloat, newVarianceAggregate),
-	},
-
-	"stddev": {
-		makeAggBuiltin(TypeInt, TypeDecimal, newStddevAggregate),
-		makeAggBuiltin(TypeDecimal, TypeDecimal, newStddevAggregate),
-		makeAggBuiltin(TypeFloat, TypeFloat, newStddevAggregate),
-	},
-}
-
-func makeAggBuiltin(in, ret Datum, f func() AggregateFunc) Builtin {
-	return Builtin{
-		// See the comment about aggregate functions in the definitions
-		// of the Builtins array above.
-		impure:        true,
-		Types:         ArgTypes{in},
-		ReturnType:    ret,
-		AggregateFunc: f,
+// AssertNoAggregationOrWindowing checks if the provided expression contains either
+// aggregate functions or window functions, returning an error in either case.
+func (p *Parser) AssertNoAggregationOrWindowing(expr Expr, op string) error {
+	if p.AggregateInExpr(expr) {
+		return fmt.Errorf("aggregate functions are not allowed in %s", op)
 	}
-}
-func makeAggBuiltins(f func() AggregateFunc, types ...Datum) []Builtin {
-	ret := make([]Builtin, len(types))
-	for i := range types {
-		ret[i] = makeAggBuiltin(types[i], types[i], f)
-	}
-	return ret
-}
-
-func countImpls() []Builtin {
-	types := ArgTypes{TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeInterval, TypeTuple}
-	r := make([]Builtin, len(types))
-	for i := range types {
-		r[i] = makeAggBuiltin(types[i], TypeInt, newCountAggregate)
-	}
-	return r
-}
-
-var _ AggregateFunc = &avgAggregate{}
-var _ AggregateFunc = &countAggregate{}
-var _ AggregateFunc = &MaxAggregate{}
-var _ AggregateFunc = &MinAggregate{}
-var _ AggregateFunc = &sumAggregate{}
-var _ AggregateFunc = &stddevAggregate{}
-var _ AggregateFunc = &varianceAggregate{}
-var _ AggregateFunc = &floatVarianceAggregate{}
-var _ AggregateFunc = &decimalVarianceAggregate{}
-var _ AggregateFunc = &identAggregate{}
-
-// In order to render the unaggregated (i.e. grouped) fields, during aggregation,
-// the values for those fields have to be stored for each bucket.
-// The `identAggregate` provides an "aggregate" function that actually
-// just returns the last value passed to `add`, unchanged. For accumulating
-// and rendering though it behaves like the other aggregate functions,
-// allowing both those steps to avoid special-casing grouped vs aggregated fields.
-type identAggregate struct {
-	val Datum
-}
-
-// NewIdentAggregate returns an identAggregate (see comment on struct).
-func NewIdentAggregate() AggregateFunc {
-	return &identAggregate{}
-}
-
-// Add sets the value to the passed datum.
-func (a *identAggregate) Add(datum Datum) error {
-	a.val = datum
-	return nil
-}
-
-// Result returns the value most recently passed to Add.
-func (a *identAggregate) Result() (Datum, error) {
-	return a.val, nil
-}
-
-type avgAggregate struct {
-	sumAggregate
-	count int
-}
-
-func newAvgAggregate() AggregateFunc {
-	return &avgAggregate{}
-}
-
-// Add accumulates the passed datum into the average.
-func (a *avgAggregate) Add(datum Datum) error {
-	if datum == DNull {
-		return nil
-	}
-	if err := a.sumAggregate.Add(datum); err != nil {
-		return err
-	}
-	a.count++
-	return nil
-}
-
-// Result returns the average of all datums passed to Add.
-func (a *avgAggregate) Result() (Datum, error) {
-	sum, err := a.sumAggregate.Result()
-	if err != nil {
-		return nil, err
-	}
-	if sum == DNull {
-		return sum, nil
-	}
-	switch t := sum.(type) {
-	case *DFloat:
-		return NewDFloat(*t / DFloat(a.count)), nil
-	case *DDecimal:
-		count := inf.NewDec(int64(a.count), 0)
-		t.QuoRound(&t.Dec, count, decimal.Precision, inf.RoundHalfUp)
-		return t, nil
-	default:
-		return nil, errors.Errorf("unexpected SUM result type: %s", t.Type())
-	}
-}
-
-type boolAndAggregate struct {
-	sawNonNull bool
-	sawFalse   bool
-}
-
-func newBoolAndAggregate() AggregateFunc {
-	return &boolAndAggregate{}
-}
-
-func (a *boolAndAggregate) Add(datum Datum) error {
-	if datum == DNull {
-		return nil
-	}
-	a.sawNonNull = true
-	switch t := datum.(type) {
-	case *DBool:
-		if !a.sawFalse {
-			a.sawFalse = !bool(*t)
-		}
-		return nil
-	default:
-		return errors.Errorf("unexpected BOOL_AND argument type: %s", t.Type())
-	}
-}
-
-func (a *boolAndAggregate) Result() (Datum, error) {
-	if !a.sawNonNull {
-		return DNull, nil
-	}
-	return MakeDBool(DBool(!a.sawFalse)), nil
-}
-
-type boolOrAggregate struct {
-	sawNonNull bool
-	sawTrue    bool
-}
-
-func newBoolOrAggregate() AggregateFunc {
-	return &boolOrAggregate{}
-}
-
-func (a *boolOrAggregate) Add(datum Datum) error {
-	if datum == DNull {
-		return nil
-	}
-	a.sawNonNull = true
-	switch t := datum.(type) {
-	case *DBool:
-		if !a.sawTrue {
-			a.sawTrue = bool(*t)
-		}
-		return nil
-	default:
-		return errors.Errorf("unexpected BOOL_OR argument type: %s", t.Type())
-	}
-}
-
-func (a *boolOrAggregate) Result() (Datum, error) {
-	if !a.sawNonNull {
-		return DNull, nil
-	}
-	return MakeDBool(DBool(a.sawTrue)), nil
-}
-
-type countAggregate struct {
-	count int
-}
-
-func newCountAggregate() AggregateFunc {
-	return &countAggregate{}
-}
-
-func (a *countAggregate) Add(datum Datum) error {
-	if datum == DNull {
-		return nil
-	}
-	switch t := datum.(type) {
-	case *DTuple:
-		for _, d := range *t {
-			if d != DNull {
-				a.count++
-				break
-			}
-		}
-	default:
-		a.count++
+	if p.WindowFuncInExpr(expr) {
+		return fmt.Errorf("window functions are not allowed in %s", op)
 	}
 	return nil
-}
-
-func (a *countAggregate) Result() (Datum, error) {
-	return NewDInt(DInt(a.count)), nil
-}
-
-// MaxAggregate keeps track of the largest value passed to Add.
-type MaxAggregate struct {
-	max Datum
-}
-
-func newMaxAggregate() AggregateFunc {
-	return &MaxAggregate{}
-}
-
-// Add sets the max to the larger of the current max or the passed datum.
-func (a *MaxAggregate) Add(datum Datum) error {
-	if datum == DNull {
-		return nil
-	}
-	if a.max == nil {
-		a.max = datum
-		return nil
-	}
-	c := a.max.Compare(datum)
-	if c < 0 {
-		a.max = datum
-	}
-	return nil
-}
-
-// Result returns the largest value passed to Add.
-func (a *MaxAggregate) Result() (Datum, error) {
-	if a.max == nil {
-		return DNull, nil
-	}
-	return a.max, nil
-}
-
-// MinAggregate keeps track of the smallest value passed to Add.
-type MinAggregate struct {
-	min Datum
-}
-
-func newMinAggregate() AggregateFunc {
-	return &MinAggregate{}
-}
-
-// Add sets the min to the smaller of the current min or the passed datum.
-func (a *MinAggregate) Add(datum Datum) error {
-	if datum == DNull {
-		return nil
-	}
-	if a.min == nil {
-		a.min = datum
-		return nil
-	}
-	c := a.min.Compare(datum)
-	if c > 0 {
-		a.min = datum
-	}
-	return nil
-}
-
-// Result returns the smallest value passed to Add.
-func (a *MinAggregate) Result() (Datum, error) {
-	if a.min == nil {
-		return DNull, nil
-	}
-	return a.min, nil
-}
-
-type sumAggregate struct {
-	sumType  Datum
-	sumFloat DFloat
-	sumDec   inf.Dec
-	tmpDec   inf.Dec
-}
-
-func newSumAggregate() AggregateFunc {
-	return &sumAggregate{}
-}
-
-// Add adds the value of the passed datum to the sum.
-func (a *sumAggregate) Add(datum Datum) error {
-	if datum == DNull {
-		return nil
-	}
-	switch t := datum.(type) {
-	case *DFloat:
-		a.sumFloat += *t
-	case *DInt:
-		a.tmpDec.SetUnscaled(int64(*t))
-		a.sumDec.Add(&a.sumDec, &a.tmpDec)
-	case *DDecimal:
-		a.sumDec.Add(&a.sumDec, &t.Dec)
-	default:
-		return errors.Errorf("unexpected SUM argument type: %s", datum.Type())
-	}
-	if a.sumType == nil {
-		a.sumType = datum
-	}
-	return nil
-}
-
-// Result returns the sum.
-func (a *sumAggregate) Result() (Datum, error) {
-	if a.sumType == nil {
-		return DNull, nil
-	}
-	switch {
-	case a.sumType.TypeEqual(TypeFloat):
-		return NewDFloat(a.sumFloat), nil
-	case a.sumType.TypeEqual(TypeInt), a.sumType.TypeEqual(TypeDecimal):
-		dd := &DDecimal{}
-		dd.Set(&a.sumDec)
-		return dd, nil
-	default:
-		panic("unreachable")
-	}
-}
-
-type varianceAggregate struct {
-	typedAggregate AggregateFunc
-	// Used for passing int64s as *inf.Dec values.
-	tmpDec DDecimal
-}
-
-func newVarianceAggregate() AggregateFunc {
-	return &varianceAggregate{}
-}
-
-func (a *varianceAggregate) Add(datum Datum) error {
-	if datum == DNull {
-		return nil
-	}
-
-	const unexpectedErrFormat = "unexpected VARIANCE argument type: %s"
-	switch t := datum.(type) {
-	case *DFloat:
-		if a.typedAggregate == nil {
-			a.typedAggregate = newFloatVarianceAggregate()
-		} else {
-			switch a.typedAggregate.(type) {
-			case *floatVarianceAggregate:
-			default:
-				return errors.Errorf(unexpectedErrFormat, datum.Type())
-			}
-		}
-		return a.typedAggregate.Add(t)
-	case *DInt:
-		if a.typedAggregate == nil {
-			a.typedAggregate = newDecimalVarianceAggregate()
-		} else {
-			switch a.typedAggregate.(type) {
-			case *decimalVarianceAggregate:
-			default:
-				return errors.Errorf(unexpectedErrFormat, datum.Type())
-			}
-		}
-		a.tmpDec.SetUnscaled(int64(*t))
-		return a.typedAggregate.Add(&a.tmpDec)
-	case *DDecimal:
-		if a.typedAggregate == nil {
-			a.typedAggregate = newDecimalVarianceAggregate()
-		} else {
-			switch a.typedAggregate.(type) {
-			case *decimalVarianceAggregate:
-			default:
-				return errors.Errorf(unexpectedErrFormat, datum.Type())
-			}
-		}
-		return a.typedAggregate.Add(t)
-	default:
-		return errors.Errorf(unexpectedErrFormat, datum.Type())
-	}
-}
-
-func (a *varianceAggregate) Result() (Datum, error) {
-	if a.typedAggregate == nil {
-		return DNull, nil
-	}
-	return a.typedAggregate.Result()
-}
-
-type floatVarianceAggregate struct {
-	count   int
-	mean    float64
-	sqrDiff float64
-}
-
-func newFloatVarianceAggregate() AggregateFunc {
-	return &floatVarianceAggregate{}
-}
-
-func (a *floatVarianceAggregate) Add(datum Datum) error {
-	f := float64(*datum.(*DFloat))
-
-	// Uses the Knuth/Welford method for accurately computing variance online in a
-	// single pass. See http://www.johndcook.com/blog/standard_deviation/ and
-	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm.
-	a.count++
-	delta := f - a.mean
-	a.mean += delta / float64(a.count)
-	a.sqrDiff += delta * (f - a.mean)
-	return nil
-}
-
-func (a *floatVarianceAggregate) Result() (Datum, error) {
-	if a.count < 2 {
-		return DNull, nil
-	}
-	return NewDFloat(DFloat(a.sqrDiff / (float64(a.count) - 1))), nil
-}
-
-type decimalVarianceAggregate struct {
-	// Variables used across iterations.
-	count   inf.Dec
-	mean    inf.Dec
-	sqrDiff inf.Dec
-
-	// Variables used as scratch space within iterations.
-	delta inf.Dec
-	tmp   inf.Dec
-}
-
-func newDecimalVarianceAggregate() AggregateFunc {
-	return &decimalVarianceAggregate{}
-}
-
-// Read-only constants used for compuation.
-var (
-	decimalOne = inf.NewDec(1, 0)
-	decimalTwo = inf.NewDec(2, 0)
-)
-
-func (a *decimalVarianceAggregate) Add(datum Datum) error {
-	d := datum.(*DDecimal).Dec
-
-	// Uses the Knuth/Welford method for accurately computing variance online in a
-	// single pass. See http://www.johndcook.com/blog/standard_deviation/ and
-	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm.
-	a.count.Add(&a.count, decimalOne)
-	a.delta.Sub(&d, &a.mean)
-	a.tmp.QuoRound(&a.delta, &a.count, decimal.Precision, inf.RoundHalfUp)
-	a.mean.Add(&a.mean, &a.tmp)
-	a.tmp.Sub(&d, &a.mean)
-	a.sqrDiff.Add(&a.sqrDiff, a.delta.Mul(&a.delta, &a.tmp))
-	return nil
-}
-
-func (a *decimalVarianceAggregate) Result() (Datum, error) {
-	if a.count.Cmp(decimalTwo) < 0 {
-		return DNull, nil
-	}
-	a.tmp.Sub(&a.count, decimalOne)
-	dd := &DDecimal{}
-	dd.QuoRound(&a.sqrDiff, &a.tmp, decimal.Precision, inf.RoundHalfUp)
-	return dd, nil
-}
-
-type stddevAggregate struct {
-	varianceAggregate
-}
-
-func newStddevAggregate() AggregateFunc {
-	return &stddevAggregate{varianceAggregate: *newVarianceAggregate().(*varianceAggregate)}
-}
-
-func (a *stddevAggregate) Result() (Datum, error) {
-	variance, err := a.varianceAggregate.Result()
-	if err != nil || variance == DNull {
-		return variance, err
-	}
-	switch t := variance.(type) {
-	case *DFloat:
-		return NewDFloat(DFloat(math.Sqrt(float64(*t)))), nil
-	case *DDecimal:
-		decimal.Sqrt(&t.Dec, &t.Dec, decimal.Precision)
-		return t, nil
-	}
-	return nil, errors.Errorf("unexpected variance result type: %s", variance.Type())
 }

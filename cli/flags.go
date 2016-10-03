@@ -43,6 +43,7 @@ var maxResults int64
 
 var connURL, connUser, connHost, connPort, advertiseHost string
 var httpHost, httpPort, httpAddr, connDBName, zoneConfig string
+var zoneDisableReplication bool
 var startBackground bool
 var undoFreezeCluster bool
 
@@ -295,6 +296,7 @@ func init() {
 		stringFlag(f, &httpPort, cliflags.ServerHTTPPort, base.DefaultHTTPPort)
 		stringFlag(f, &httpAddr, cliflags.ServerHTTPAddr, "")
 		stringFlag(f, &serverCtx.Attrs, cliflags.Attrs, serverCtx.Attrs)
+		varFlag(f, &serverCtx.Locality, cliflags.Locality)
 
 		varFlag(f, &serverCtx.Stores, cliflags.Store)
 		durationFlag(f, &serverCtx.RaftTickInterval, cliflags.RaftTickInterval, base.DefaultRaftTickInterval)
@@ -345,7 +347,7 @@ func init() {
 	clientCmds = append(clientCmds, userCmds...)
 	clientCmds = append(clientCmds, zoneCmds...)
 	clientCmds = append(clientCmds, nodeCmds...)
-	clientCmds = append(clientCmds, backupCmds...)
+	clientCmds = append(clientCmds, backupCmd, restoreCmd)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
 		stringFlag(f, &connHost, cliflags.ClientHost, "")
@@ -365,7 +367,9 @@ func init() {
 		boolFlag(f, &cliCtx.prettyFmt, cliflags.Pretty, isInteractive)
 	}
 
-	stringFlag(setZoneCmd.Flags(), &zoneConfig, cliflags.ZoneConfig, "")
+	zf := setZoneCmd.Flags()
+	stringFlag(zf, &zoneConfig, cliflags.ZoneConfig, "")
+	boolFlag(zf, &zoneDisableReplication, cliflags.ZoneDisableReplication, false)
 
 	varFlag(sqlShellCmd.Flags(), &sqlCtx.execStmts, cliflags.Execute)
 

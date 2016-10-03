@@ -1,8 +1,10 @@
 - Feature Name: replica_tombstone
 - Status: completed
 - Start Date: 2015-07-29
-- RFC PR: #1865
-- Cockroach Issue: #768, #1878, #2798
+- RFC PR: [#1865](https://github.com/cockroachdb/cockroach/pull/1865)
+- Cockroach Issue: [#768](https://github.com/cockroachdb/cockroach/issues/768),
+                   [#1878](https://github.com/cockroachdb/cockroach/issues/1878),
+                   [#2798](https://github.com/cockroachdb/cockroach/pull/2798)
 
 # Summary
 

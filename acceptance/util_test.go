@@ -398,7 +398,7 @@ func testDockerSuccess(t *testing.T, name string, cmd []string) {
 
 const (
 	// NB: postgresTestTag is grepped for in circle-deps.sh, so don't rename it.
-	postgresTestTag = "20160705-1326"
+	postgresTestTag = "20160913-0941"
 	// Iterating against a locally built version of the docker image can be done
 	// by changing postgresTestImage to the hash of the container.
 	postgresTestImage = "cockroachdb/postgres-test:" + postgresTestTag
@@ -417,12 +417,14 @@ func testDocker(t *testing.T, num int32, name string, cmd []string) error {
 	containerConfig := container.Config{
 		Image: postgresTestImage,
 		Env: []string{
-			"PGHOST=roach0",
 			fmt.Sprintf("PGPORT=%s", base.DefaultPort),
 			"PGSSLCERT=/certs/node.crt",
 			"PGSSLKEY=/certs/node.key",
 		},
 		Cmd: cmd,
+	}
+	if len(l.Nodes) > 0 {
+		containerConfig.Env = append(containerConfig.Env, "PGHOST="+l.Hostname(0))
 	}
 	hostConfig := container.HostConfig{NetworkMode: "host"}
 	return l.OneShot(postgresTestImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name)

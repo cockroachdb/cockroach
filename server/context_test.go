@@ -118,6 +118,7 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		if err := os.Unsetenv("COCKROACH_RESERVATIONS_ENABLED"); err != nil {
 			t.Fatal(err)
 		}
+		envutil.ClearEnvCache()
 	}
 	defer resetEnvVar()
 

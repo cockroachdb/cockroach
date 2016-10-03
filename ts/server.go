@@ -72,17 +72,32 @@ func (s *Server) logContext(ctx context.Context) context.Context {
 
 // Query is an endpoint that returns data for one or more metrics over a
 // specific time span.
-func (s *Server) Query(ctx context.Context, request *tspb.TimeSeriesQueryRequest) (*tspb.TimeSeriesQueryResponse, error) {
+func (s *Server) Query(
+	ctx context.Context, request *tspb.TimeSeriesQueryRequest,
+) (*tspb.TimeSeriesQueryResponse, error) {
 	ctx = s.logContext(ctx)
 	if len(request.Queries) == 0 {
 		return nil, grpc.Errorf(codes.InvalidArgument, "Queries cannot be empty")
+	}
+
+	// If not set, sampleNanos should default to ten second resolution.
+	sampleNanos := request.SampleNanos
+	if sampleNanos == 0 {
+		sampleNanos = Resolution10s.SampleDuration()
 	}
 
 	response := tspb.TimeSeriesQueryResponse{
 		Results: make([]tspb.TimeSeriesQueryResponse_Result, 0, len(request.Queries)),
 	}
 	for _, query := range request.Queries {
-		datapoints, sources, err := s.db.Query(ctx, query, Resolution10s, request.StartNanos, request.EndNanos)
+		datapoints, sources, err := s.db.Query(
+			ctx,
+			query,
+			Resolution10s,
+			sampleNanos,
+			request.StartNanos,
+			request.EndNanos,
+		)
 		if err != nil {
 			return nil, grpc.Errorf(codes.Internal, err.Error())
 		}

@@ -105,6 +105,10 @@ type DatabaseAccessor interface {
 	// TODO(nvanbenschoten) This method doesn't belong in the interface.
 	getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error)
 
+	// getAllDatabaseDescs looks up and returns all available database
+	// descriptors.
+	getAllDatabaseDescs() ([]*sqlbase.DatabaseDescriptor, error)
+
 	// getDatabaseID returns the ID of a database given its name.  It
 	// uses the descriptor cache if possible, otherwise falls back to KV
 	// operations.
@@ -126,7 +130,7 @@ var _ DatabaseAccessor = &planner{}
 
 // getDatabaseDesc implements the DatabaseAccessor interface.
 func (p *planner) getDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
-	if virtual := getVirtualDatabaseDesc(name); virtual != nil {
+	if virtual := p.virtualSchemas().getVirtualDatabaseDesc(name); virtual != nil {
 		return virtual, nil
 	}
 	desc := &sqlbase.DatabaseDescriptor{}
@@ -185,9 +189,25 @@ func (p *planner) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescripto
 	return database, database.Validate()
 }
 
+// getAllDatabaseDescs implements the DatabaseAccessor interface.
+func (p *planner) getAllDatabaseDescs() ([]*sqlbase.DatabaseDescriptor, error) {
+	descs, err := p.getAllDescriptors()
+	if err != nil {
+		return nil, err
+	}
+
+	var dbDescs []*sqlbase.DatabaseDescriptor
+	for _, desc := range descs {
+		if dbDesc, ok := desc.(*sqlbase.DatabaseDescriptor); ok {
+			dbDescs = append(dbDescs, dbDesc)
+		}
+	}
+	return dbDescs, nil
+}
+
 // getDatabaseID implements the DatabaseAccessor interface.
 func (p *planner) getDatabaseID(name string) (sqlbase.ID, error) {
-	if virtual := getVirtualDatabaseDesc(name); virtual != nil {
+	if virtual := p.virtualSchemas().getVirtualDatabaseDesc(name); virtual != nil {
 		return virtual.GetID(), nil
 	}
 
@@ -216,7 +236,7 @@ func (p *planner) getDatabaseID(name string) (sqlbase.ID, error) {
 
 // createDatabase implements the DatabaseAccessor interface.
 func (p *planner) createDatabase(desc *sqlbase.DatabaseDescriptor, ifNotExists bool) (bool, error) {
-	if isVirtualDatabase(desc.Name) {
+	if p.virtualSchemas().isVirtualDatabase(desc.Name) {
 		if ifNotExists {
 			// Noop.
 			return false, nil
@@ -232,7 +252,7 @@ func (p *planner) renameDatabase(oldDesc *sqlbase.DatabaseDescriptor, newName st
 		return fmt.Errorf("the new database name %q already exists", newName)
 	}
 
-	if isVirtualDatabase(newName) {
+	if p.virtualSchemas().isVirtualDatabase(newName) {
 		return onAlreadyExists()
 	}
 

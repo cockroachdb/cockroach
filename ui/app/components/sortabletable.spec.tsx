@@ -1,5 +1,5 @@
 import * as React from "react";
-import _ = require("lodash");
+import _ from "lodash";
 import { assert } from "chai";
 import { shallow } from "enzyme";
 import * as sinon from "sinon";
@@ -27,9 +27,8 @@ function makeTable(count: number, sortSetting?: SortSetting,
                    onChangeSortSetting?: (ss: SortSetting) => void) {
   return shallow(<SortableTable count={count}
                                 sortSetting={sortSetting}
-                                onChangeSortSetting={onChangeSortSetting}>
-                    { columns }
-                 </SortableTable>);
+                                onChangeSortSetting={onChangeSortSetting}
+                                columns={columns}/>);
 }
 
 describe("<SortableTable>", () => {

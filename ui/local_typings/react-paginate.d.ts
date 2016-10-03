@@ -1,2 +1,2 @@
-let noTypeInfoYet: any;
+declare const noTypeInfoYet: {(_: any): any};
 export = noTypeInfoYet;

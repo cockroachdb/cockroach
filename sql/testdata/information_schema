@@ -97,6 +97,7 @@ query T
 SHOW DATABASES
 ----
 information_schema
+pg_catalog
 system
 test
 
@@ -104,6 +105,11 @@ query T
 SHOW TABLES FROM information_schema
 ----
 columns
+key_column_usage
+schema_privileges
+schemata
+table_constraints
+table_privileges
 tables
 
 query TT colnames
@@ -137,7 +143,7 @@ query TTTTT colnames
 SHOW CONSTRAINTS FROM information_schema.tables
 ----
 Table   Name     Type  Column(s)  Details
-tables  PRIMARY  KEY   []         NULL
+tables  PRIMARY  KEY   NULL         NULL
 
 query TTT colnames
 SHOW GRANTS ON information_schema.tables
@@ -152,7 +158,7 @@ Table  User  Privileges
 query TTTTI colnames
 SELECT table_catalog, table_schema, table_name, column_name, ordinal_position
 FROM information_schema.columns
-WHERE table_schema != 'information_schema'
+WHERE table_schema != 'information_schema' AND table_schema != 'pg_catalog'
 ----
 table_catalog  table_schema        table_name  column_name               ordinal_position
 def            system              descriptor  id                        1
@@ -278,6 +284,33 @@ num_prec    g            NULL               NULL           NULL
 statement ok
 DROP TABLE num_prec
 
+## information_schema.schemata
+
+query TTTT colnames
+SELECT * FROM information_schema.schemata
+----
+CATALOG_NAME  SCHEMA_NAME         DEFAULT_CHARACTER_SET_NAME  SQL_PATH
+def           information_schema  NULL                        NULL
+def           pg_catalog          NULL                        NULL
+def           system              NULL                        NULL
+def           test                NULL                        NULL
+
+statement ok
+CREATE DATABASE other_db
+
+query TTTT colnames
+SELECT * FROM information_schema.schemata
+----
+CATALOG_NAME  SCHEMA_NAME         DEFAULT_CHARACTER_SET_NAME  SQL_PATH
+def           information_schema  NULL                        NULL
+def           other_db            NULL                        NULL
+def           pg_catalog          NULL                        NULL
+def           system              NULL                        NULL
+def           test                NULL                        NULL
+
+statement ok
+DROP DATABASE other_db
+
 ## information_schema.tables
 
 statement ok
@@ -286,12 +319,26 @@ CREATE DATABASE other_db
 statement ok
 CREATE TABLE other_db.xyz (i INT)
 
+statement ok
+CREATE VIEW other_db.abc AS SELECT * from other_db.xyz
+
 query T
 SELECT table_name FROM information_schema.tables
 ----
 columns
+key_column_usage
+schema_privileges
+schemata
+table_constraints
+table_privileges
 tables
+abc
 xyz
+pg_attrdef
+pg_attribute
+pg_class
+pg_namespace
+pg_tables
 descriptor
 eventlog
 lease
@@ -309,24 +356,44 @@ xyz
 users
 ui
 tables
+table_privileges
+table_constraints
+schemata
+schema_privileges
 rangelog
+pg_tables
+pg_namespace
+pg_class
+pg_attribute
+pg_attrdef
 namespace
 
 query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
-TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME  TABLE_TYPE   VERSION
-def            information_schema  columns      SYSTEM VIEW  1
-def            information_schema  tables      SYSTEM VIEW  1
-def            other_db            xyz         BASE TABLE   1
-def            system              descriptor  BASE TABLE   1
-def            system              eventlog    BASE TABLE   1
-def            system              lease       BASE TABLE   1
-def            system              namespace   BASE TABLE   1
-def            system              rangelog    BASE TABLE   1
-def            system              ui          BASE TABLE   1
-def            system              users       BASE TABLE   1
-def            system              zones       BASE TABLE   1
+TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME         TABLE_TYPE   VERSION
+def            information_schema  columns            SYSTEM VIEW  1
+def            information_schema  key_column_usage   SYSTEM VIEW  1
+def            information_schema  schema_privileges  SYSTEM VIEW  1
+def            information_schema  schemata           SYSTEM VIEW  1
+def            information_schema  table_constraints  SYSTEM VIEW  1
+def            information_schema  table_privileges   SYSTEM VIEW  1
+def            information_schema  tables             SYSTEM VIEW  1
+def            other_db            abc                VIEW         1
+def            other_db            xyz                BASE TABLE   1
+def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
+def            pg_catalog          pg_attribute       SYSTEM VIEW  1
+def            pg_catalog          pg_class           SYSTEM VIEW  1
+def            pg_catalog          pg_namespace       SYSTEM VIEW  1
+def            pg_catalog          pg_tables          SYSTEM VIEW  1
+def            system              descriptor         BASE TABLE   1
+def            system              eventlog           BASE TABLE   1
+def            system              lease              BASE TABLE   1
+def            system              namespace          BASE TABLE   1
+def            system              rangelog           BASE TABLE   1
+def            system              ui                 BASE TABLE   1
+def            system              users              BASE TABLE   1
+def            system              zones              BASE TABLE   1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -342,9 +409,19 @@ user testuser
 query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
-TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME  TABLE_TYPE   VERSION
-def            information_schema  columns     SYSTEM VIEW  1
-def            information_schema  tables      SYSTEM VIEW  1
+TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME         TABLE_TYPE   VERSION
+def            information_schema  columns            SYSTEM VIEW  1
+def            information_schema  key_column_usage   SYSTEM VIEW  1
+def            information_schema  schema_privileges  SYSTEM VIEW  1
+def            information_schema  schemata           SYSTEM VIEW  1
+def            information_schema  table_constraints  SYSTEM VIEW  1
+def            information_schema  table_privileges   SYSTEM VIEW  1
+def            information_schema  tables             SYSTEM VIEW  1
+def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
+def            pg_catalog          pg_attribute       SYSTEM VIEW  1
+def            pg_catalog          pg_class           SYSTEM VIEW  1
+def            pg_catalog          pg_namespace       SYSTEM VIEW  1
+def            pg_catalog          pg_tables          SYSTEM VIEW  1
 
 user root
 
@@ -356,12 +433,210 @@ user testuser
 query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
-TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME  TABLE_TYPE   VERSION
-def            information_schema  columns     SYSTEM VIEW  1
-def            information_schema  tables      SYSTEM VIEW  1
-def            other_db            xyz         BASE TABLE   5
+TABLE_CATALOG  TABLE_SCHEMA        TABLE_NAME         TABLE_TYPE   VERSION
+def            information_schema  columns            SYSTEM VIEW  1
+def            information_schema  key_column_usage   SYSTEM VIEW  1
+def            information_schema  schema_privileges  SYSTEM VIEW  1
+def            information_schema  schemata           SYSTEM VIEW  1
+def            information_schema  table_constraints  SYSTEM VIEW  1
+def            information_schema  table_privileges   SYSTEM VIEW  1
+def            information_schema  tables             SYSTEM VIEW  1
+def            other_db            xyz                BASE TABLE   5
+def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
+def            pg_catalog          pg_attribute       SYSTEM VIEW  1
+def            pg_catalog          pg_class           SYSTEM VIEW  1
+def            pg_catalog          pg_namespace       SYSTEM VIEW  1
+def            pg_catalog          pg_tables          SYSTEM VIEW  1
 
 user root
+
+statement ok
+DROP DATABASE other_db
+
+
+## information_schema.table_constraints
+## This test case will be moved up into the correct order when #8497 is fixed.
+
+query TTTTTT colnames
+SELECT * FROM information_schema.table_constraints
+----
+CONSTRAINT_CATALOG  CONSTRAINT_SCHEMA  CONSTRAINT_NAME  TABLE_SCHEMA  TABLE_NAME  CONSTRAINT_TYPE
+def                 system             primary          system        descriptor  PRIMARY KEY
+def                 system             primary          system        eventlog    PRIMARY KEY
+def                 system             primary          system        lease       PRIMARY KEY
+def                 system             primary          system        namespace   PRIMARY KEY
+def                 system             primary          system        rangelog    PRIMARY KEY
+def                 system             primary          system        ui          PRIMARY KEY
+def                 system             primary          system        users       PRIMARY KEY
+def                 system             primary          system        zones       PRIMARY KEY
+
+statement ok
+CREATE DATABASE constraint_db
+
+statement ok
+CREATE TABLE constraint_db.t1 (
+  p FLOAT PRIMARY KEY,
+  a INT UNIQUE CHECK (a > 4),
+  CONSTRAINT c2 CHECK (a < 99)
+)
+
+statement ok
+CREATE TABLE constraint_db.t2 (
+    t1_ID INT,
+    CONSTRAINT fk FOREIGN KEY (t1_ID) REFERENCES constraint_db.t1(a),
+    INDEX (t1_ID)
+)
+
+query TTTTTT colnames
+SELECT * FROM information_schema.table_constraints WHERE constraint_schema = 'constraint_db'
+----
+CONSTRAINT_CATALOG  CONSTRAINT_SCHEMA  CONSTRAINT_NAME  TABLE_SCHEMA   TABLE_NAME  CONSTRAINT_TYPE
+def                 constraint_db      primary          constraint_db  t1          PRIMARY KEY
+def                 constraint_db      t1_a_key         constraint_db  t1          UNIQUE
+def                 constraint_db      c2               constraint_db  t1          CHECK
+def                 constraint_db      check_a          constraint_db  t1          CHECK
+def                 constraint_db      primary          constraint_db  t2          PRIMARY KEY
+def                 constraint_db      t2_t1_ID_idx     constraint_db  t2          FOREIGN KEY
+
+# TODO(nvanbenschoten) blocked on #8497.
+#statement ok
+#DROP DATABASE constraint_db
+
+
+## information_schema.key_column_usage
+
+statement ok
+CREATE DATABASE constraint_column
+
+statement ok
+CREATE TABLE constraint_column.t1 (
+  p FLOAT PRIMARY KEY,
+  a INT UNIQUE,
+  b INT,
+  c INT,
+  UNIQUE INDEX index_key(b, c) 
+)
+
+statement ok
+CREATE TABLE constraint_column.t2 (
+    t1_ID INT,
+    CONSTRAINT fk FOREIGN KEY (t1_ID) REFERENCES constraint_column.t1(a),
+    INDEX (t1_ID)
+)
+
+statement ok
+CREATE TABLE constraint_column.t3 (
+    a INT,
+    b INT,
+    CONSTRAINT fk FOREIGN KEY (a, b) REFERENCES constraint_column.t1(b, c),
+    INDEX (a, b)
+)
+
+query TTTTTTTII colnames
+SELECT * FROM information_schema.key_column_usage WHERE constraint_schema = 'constraint_column'
+----
+CONSTRAINT_CATALOG  CONSTRAINT_SCHEMA  CONSTRAINT_NAME  TABLE_CATALOG  TABLE_SCHEMA       TABLE_NAME  COLUMN_NAME  ORDINAL_POSITION  POSITION_IN_UNIQUE_CONSTRAINT
+def                 constraint_column  primary          def            constraint_column  t1          p            1                 NULL
+def                 constraint_column  t1_a_key         def            constraint_column  t1          a            1                 NULL
+def                 constraint_column  index_key        def            constraint_column  t1          b            1                 NULL
+def                 constraint_column  index_key        def            constraint_column  t1          c            2                 NULL
+def                 constraint_column  primary          def            constraint_column  t2          rowid        1                 NULL
+def                 constraint_column  t2_t1_ID_idx     def            constraint_column  t2          t1_ID        1                 1
+def                 constraint_column  primary          def            constraint_column  t3          rowid        1                 NULL
+def                 constraint_column  t3_a_b_idx       def            constraint_column  t3          a            1                 1
+def                 constraint_column  t3_a_b_idx       def            constraint_column  t3          b            2                 2
+
+#statement ok
+#DROP DATABASE constraint_column
+
+
+## information_schema.schema_privileges
+statement ok
+CREATE DATABASE other_db
+
+query TTTTT colnames
+SELECT * FROM information_schema.schema_privileges
+----
+GRANTEE  TABLE_CATALOG  TABLE_SCHEMA       PRIVILEGE_TYPE  IS_GRANTABLE
+root     def            constraint_column  ALL             NULL
+root     def            constraint_db      ALL             NULL
+root     def            other_db           ALL             NULL
+root     def            system             GRANT           NULL
+root     def            system             SELECT          NULL
+root     def            test               ALL             NULL
+
+statement ok
+GRANT SELECT ON DATABASE other_db TO testuser
+
+query TTTTT colnames
+SELECT * FROM information_schema.schema_privileges
+----
+GRANTEE   TABLE_CATALOG  TABLE_SCHEMA       PRIVILEGE_TYPE  IS_GRANTABLE
+root      def            constraint_column  ALL             NULL
+root      def            constraint_db      ALL             NULL
+root      def            other_db           ALL             NULL
+testuser  def            other_db           SELECT          NULL
+root      def            system             GRANT           NULL
+root      def            system             SELECT          NULL
+root      def            test               ALL             NULL
+
+## information_schema.table_privileges
+query TTTTTTTT colnames
+SELECT * FROM information_schema.table_privileges
+----
+GRANTOR  GRANTEE  TABLE_CATALOG  TABLE_SCHEMA       TABLE_NAME  PRIVILEGE_TYPE  IS_GRANTABLE  WITH_HIERARCHY
+NULL     root     def            constraint_column  t1          ALL             NULL          NULL
+NULL     root     def            constraint_column  t2          ALL             NULL          NULL
+NULL     root     def            constraint_column  t3          ALL             NULL          NULL
+NULL     root     def            constraint_db      t1          ALL             NULL          NULL
+NULL     root     def            constraint_db      t2          ALL             NULL          NULL
+NULL     root     def            system             descriptor  GRANT           NULL          NULL
+NULL     root     def            system             descriptor  SELECT          NULL          NULL
+NULL     root     def            system             eventlog    ALL             NULL          NULL
+NULL     root     def            system             lease       ALL             NULL          NULL
+NULL     root     def            system             namespace   GRANT           NULL          NULL
+NULL     root     def            system             namespace   SELECT          NULL          NULL
+NULL     root     def            system             rangelog    ALL             NULL          NULL
+NULL     root     def            system             ui          ALL             NULL          NULL
+NULL     root     def            system             users       DELETE          NULL          NULL
+NULL     root     def            system             users       GRANT           NULL          NULL
+NULL     root     def            system             users       INSERT          NULL          NULL
+NULL     root     def            system             users       SELECT          NULL          NULL
+NULL     root     def            system             users       UPDATE          NULL          NULL
+NULL     root     def            system             zones       DELETE          NULL          NULL
+NULL     root     def            system             zones       GRANT           NULL          NULL
+NULL     root     def            system             zones       INSERT          NULL          NULL
+NULL     root     def            system             zones       SELECT          NULL          NULL
+NULL     root     def            system             zones       UPDATE          NULL          NULL
+
+statement ok
+CREATE TABLE other_db.xyz (i INT)
+
+statement ok
+CREATE VIEW other_db.abc AS SELECT * from other_db.xyz
+
+query TTTTTTTT colnames
+SELECT * FROM information_schema.table_privileges WHERE TABLE_SCHEMA = 'other_db'
+----
+GRANTOR  GRANTEE   TABLE_CATALOG  TABLE_SCHEMA  TABLE_NAME  PRIVILEGE_TYPE  IS_GRANTABLE  WITH_HIERARCHY
+NULL     root      def            other_db      abc         ALL             NULL          NULL
+NULL     testuser  def            other_db      abc         SELECT          NULL          NULL
+NULL     root      def            other_db      xyz         ALL             NULL          NULL
+NULL     testuser  def            other_db      xyz         SELECT          NULL          NULL
+
+
+statement ok
+GRANT UPDATE ON other_db.xyz TO testuser
+
+query TTTTTTTT colnames
+SELECT * FROM information_schema.table_privileges WHERE TABLE_SCHEMA = 'other_db'
+----
+GRANTOR  GRANTEE   TABLE_CATALOG  TABLE_SCHEMA  TABLE_NAME  PRIVILEGE_TYPE  IS_GRANTABLE  WITH_HIERARCHY
+NULL     root      def            other_db      abc         ALL             NULL          NULL
+NULL     testuser  def            other_db      abc         SELECT          NULL          NULL
+NULL     root      def            other_db      xyz         ALL             NULL          NULL
+NULL     testuser  def            other_db      xyz         SELECT          NULL          NULL
+NULL     testuser  def            other_db      xyz         UPDATE          NULL          NULL
 
 statement ok
 DROP DATABASE other_db

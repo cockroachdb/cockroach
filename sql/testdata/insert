@@ -406,6 +406,24 @@ statement error compound types not supported yet: "x\[1\]"
 INSERT INTO return VALUES (1, 2) RETURNING x[1]
 
 statement ok
+CREATE VIEW kview AS VALUES ('a', 'b'), ('c', 'd')
+
+query TT
+SELECT * FROM kview
+----
+a b
+c d
+
+statement error cannot run INSERT on view "kview" - views are not updateable
+INSERT INTO kview VALUES ('e', 'f')
+
+query TT
+SELECT * FROM kview
+----
+a b
+c d
+
+statement ok
 CREATE TABLE abc (
   a INT,
   b INT,

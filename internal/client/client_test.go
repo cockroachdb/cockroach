@@ -204,7 +204,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 	}
 	// Lay down a write intent using a txn and attempt to access the same
 	// key from our test client, with priorities set up so that the Push
-	// succeeds iff the test dicates that it do.
+	// succeeds iff the test dictates that it do.
 	for i, test := range testCases {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
 		var txnPri int32 = 1
@@ -376,10 +376,8 @@ func TestClientGetAndPutProto(t *testing.T) {
 	db := createTestClient(t, s.Stopper(), s.ServingAddr())
 
 	zoneConfig := config.ZoneConfig{
-		ReplicaAttrs: []roachpb.Attributes{
-			{Attrs: []string{"dc1", "mem"}},
-			{Attrs: []string{"dc2", "mem"}},
-		},
+		NumReplicas:   2,
+		Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "mem"}}},
 		RangeMinBytes: 1 << 10, // 1k
 		RangeMaxBytes: 1 << 18, // 256k
 	}

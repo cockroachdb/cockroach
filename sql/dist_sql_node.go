@@ -25,12 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/sql/distsql"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 // distSQLNode is a planNode that receives results from a distsql flow (through
 // a RowChannel).
 type distSQLNode struct {
-	columns  []ResultColumn
+	columns  ResultColumns
 	ordering orderingInfo
 
 	// syncMode indicates the mode in which we run the associated flow. If true,
@@ -62,12 +63,15 @@ func (n *distSQLNode) expandPlan() error                           { return nil 
 func (n *distSQLNode) MarkDebug(explainMode)                       {}
 func (n *distSQLNode) DebugValues() debugValues                    { return debugValues{} }
 func (n *distSQLNode) Start() error                                { return nil }
+func (n *distSQLNode) Close() {
+	// TODO(RaduBerinde) close the stream / release resources.
+}
 
 func (n *distSQLNode) ExplainPlan(verbose bool) (name, description string, children []planNode) {
 	return "distsql", "", nil
 }
 
-func (n *distSQLNode) Columns() []ResultColumn {
+func (n *distSQLNode) Columns() ResultColumns {
 	return n.columns
 }
 
@@ -76,7 +80,7 @@ func (n *distSQLNode) Ordering() orderingInfo {
 }
 
 func newDistSQLNode(
-	columns []ResultColumn,
+	columns ResultColumns,
 	colMapping []uint32,
 	ordering orderingInfo,
 	srv *distsql.ServerImpl,
@@ -161,8 +165,7 @@ func scanNodeToTableReaderSpec(n *scanNode) *distsql.TableReaderSpec {
 	}
 	s.Spans = make([]distsql.TableReaderSpan, len(n.spans))
 	for i, span := range n.spans {
-		s.Spans[i].Span.Key = span.Start
-		s.Spans[i].Span.EndKey = span.End
+		s.Spans[i].Span = span
 	}
 	s.OutputColumns = make([]uint32, 0, len(n.resultColumns))
 	for i := range n.resultColumns {
@@ -183,7 +186,7 @@ func scanNodeToTableReaderSpec(n *scanNode) *distsql.TableReaderSpec {
 		// refer to columns. We temporarily rename the scanNode columns to
 		// (literally) "$0", "$1", ... and convert to a string.
 		tmp := n.resultColumns
-		n.resultColumns = make([]ResultColumn, len(tmp))
+		n.resultColumns = make(ResultColumns, len(tmp))
 		for i, orig := range tmp {
 			n.resultColumns[i].Name = fmt.Sprintf("$%d", i)
 			n.resultColumns[i].Typ = orig.Typ
@@ -221,15 +224,16 @@ func scanNodeToDistSQL(n *scanNode, syncMode bool) (*distSQLNode, error) {
 
 // hackPlanToUseDistSQL goes through a planNode tree and replaces each scanNode with
 // a distSQLNode and a corresponding flow.
-// If syncMode is true, the plan does not instantiate any goroutines
-// internally.
-func hackPlanToUseDistSQL(plan planNode, syncMode bool) error {
+func hackPlanToUseDistSQL(plan planNode, syncMode distSQLExecMode) error {
+	if syncMode != distSQLSync && syncMode != distSQLAsync {
+		return errors.Errorf("unsupported DistSql mode: %d", syncMode)
+	}
 	// Trigger limit propagation.
 	plan.SetLimitHint(math.MaxInt64, true)
 
 	if sel, ok := plan.(*selectNode); ok {
 		if scan, ok := sel.source.plan.(*scanNode); ok {
-			distNode, err := scanNodeToDistSQL(scan, syncMode)
+			distNode, err := scanNodeToDistSQL(scan, syncMode == distSQLSync)
 			if err != nil {
 				return err
 			}

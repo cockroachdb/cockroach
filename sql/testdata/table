@@ -10,7 +10,7 @@ CREATE TABLE test."" (id INT PRIMARY KEY)
 statement ok
 CREATE TABLE test.a (id INT PRIMARY KEY)
 
-statement error table "a" already exists
+statement error pgcode 42P07 relation "a" already exists
 CREATE TABLE test.a (id INT PRIMARY KEY)
 
 statement ok
@@ -19,7 +19,7 @@ SET DATABASE = test
 statement error empty table name
 CREATE TABLE "" (id INT PRIMARY KEY)
 
-statement error table "a" already exists
+statement error pgcode 42P07 relation "a" already exists
 CREATE TABLE a (id INT PRIMARY KEY)
 
 statement error duplicate column name: "id"
@@ -167,10 +167,10 @@ users bar     true   1   id     ASC       false
 users bar     true   2   name   ASC       false
 
 statement error invalid NUMERIC precision 0
-CREATE TABLE test.d (x DECIMAL(0, 2))
+CREATE TABLE test.precision (x DECIMAL(0, 2))
 
 statement error NUMERIC scale 4 must be between 0 and precision 2
-CREATE TABLE test.d (x DECIMAL(2, 4))
+CREATE TABLE test.precision (x DECIMAL(2, 4))
 
 query TT
 SHOW CREATE TABLE test.users
@@ -190,9 +190,27 @@ test.users CREATE TABLE "test.users"
   FAMILY fam_1_title (title),
   FAMILY fam_2_nickname (nickname),
   FAMILY fam_3_username_email (username, email),
-  CHECK (LENGTH(nickname) < LENGTH(name)),
-  CHECK (LENGTH(nickname) < 10)
+  CONSTRAINT check_nickname_name CHECK (LENGTH(nickname) < LENGTH(name)),
+  CONSTRAINT check_nickname CHECK (LENGTH(nickname) < 10)
 )
+
+statement ok
+CREATE TABLE test.dupe_generated (
+  foo INT CHECK (foo > 1),
+  bar INT CHECK (bar > 2),
+  CHECK (foo > 2),
+  CHECK (foo < 10)
+)
+
+query TTTTT colnames
+SHOW CONSTRAINTS FROM test.dupe_generated
+----
+Table           Name        Type         Column(s)   Details
+dupe_generated  check_bar   CHECK        NULL       bar > 2
+dupe_generated  check_foo   CHECK        NULL       foo > 2
+dupe_generated  check_foo1  CHECK        NULL       foo < 10
+dupe_generated  check_foo2  CHECK        NULL       foo > 1
+dupe_generated  primary     PRIMARY KEY  rowid      NULL
 
 statement ok
 CREATE TABLE test.named_constraints (
@@ -213,10 +231,10 @@ SHOW CREATE TABLE test.named_constraints
 ----
 test.named_constraints  CREATE TABLE "test.named_constraints" (
                         id INT NOT NULL,
-                        name STRING CONSTRAINT notnull NOT NULL,
-                        title STRING NULL CONSTRAINT def DEFAULT 'VP of Something',
+                        name STRING NOT NULL,
+                        title STRING NULL DEFAULT 'VP of Something',
                         nickname STRING NULL,
-                        username STRING(10) CONSTRAINT nl NULL,
+                        username STRING(10) NULL,
                         email STRING(100) NULL,
                         CONSTRAINT pk PRIMARY KEY (id),
                         UNIQUE INDEX uq (email),
@@ -235,52 +253,120 @@ query TTTTT colnames
 SHOW CONSTRAINTS FROM test.named_constraints
 ----
 Table              Name     Type         Column(s)   Details
-named_constraints  bar      UNIQUE       [id name]   NULL
-named_constraints  ck1      CHECK        NULL        LENGTH(nickname) < 10
-named_constraints  ck2      CHECK        NULL        LENGTH(nickname) < LENGTH(name)
-named_constraints  def      DEFAULT      title       'VP of Something'
-named_constraints  nl       NULL         username    NULL
-named_constraints  notnull  NOT NULL     name        NULL
-named_constraints  pk       PRIMARY KEY  [id]        NULL
-named_constraints  uq       UNIQUE       [email]     NULL
-named_constraints  uq2      UNIQUE       [username]  NULL
+named_constraints  bar      UNIQUE       id, name   NULL
+named_constraints  ck1      CHECK        NULL       LENGTH(nickname) < 10
+named_constraints  ck2      CHECK        NULL       LENGTH(nickname) < LENGTH(name)
+named_constraints  pk       PRIMARY KEY  id         NULL
+named_constraints  uq       UNIQUE       email      NULL
+named_constraints  uq2      UNIQUE       username   NULL
 
 statement error duplicate constraint name: "pk"
 CREATE TABLE test.dupe_named_constraints (
   id        INT CONSTRAINT pk PRIMARY KEY,
-  title     VARCHAR CONSTRAINT def DEFAULT 'blah',
-  name      VARCHAR CONSTRAINT pk NOT NULL
+  title     VARCHAR CONSTRAINT one CHECK (1>1),
+  name      VARCHAR CONSTRAINT pk UNIQUE
 )
 
-statement error duplicate constraint name: "def"
+statement error duplicate constraint name: "one"
 CREATE TABLE test.dupe_named_constraints (
   id        INT CONSTRAINT pk PRIMARY KEY,
-  title     VARCHAR CONSTRAINT def DEFAULT 'blah',
-  name      VARCHAR CONSTRAINT def NOT NULL
+  title     VARCHAR CONSTRAINT one CHECK (1>1),
+  name      VARCHAR CONSTRAINT one UNIQUE
 )
 
-statement error duplicate constraint name: "def"
+statement error duplicate constraint name: "one"
 CREATE TABLE test.dupe_named_constraints (
   id        INT CONSTRAINT pk PRIMARY KEY,
-  title     VARCHAR CONSTRAINT def DEFAULT 'blah',
-  name      VARCHAR CONSTRAINT def CHECK (1>1)
-)
-
-statement error duplicate constraint name: "def"
-CREATE TABLE test.dupe_named_constraints (
-  id        INT CONSTRAINT pk PRIMARY KEY,
-  title     VARCHAR CONSTRAINT def DEFAULT 'blah',
-  name      VARCHAR CONSTRAINT def UNIQUE
-)
-
-
-statement error duplicate constraint name: "def"
-CREATE TABLE test.dupe_named_constraints (
-  id        INT CONSTRAINT pk PRIMARY KEY,
-  title     VARCHAR CONSTRAINT def DEFAULT 'blah',
-  name      VARCHAR CONSTRAINT def REFERENCES test.named_constraints (username),
+  title     VARCHAR CONSTRAINT one CHECK (1>1),
+  name      VARCHAR CONSTRAINT one REFERENCES test.named_constraints (username),
   INDEX (name)
 )
+
+statement ok
+CREATE TABLE test.alltypes (
+  a BOOL,
+  b INT,
+  c INT8,
+  d INT64,
+  e INTEGER,
+  f SMALLINT,
+  g BIGINT,
+  h SERIAL,
+  i SMALLSERIAL,
+  j BIGSERIAL,
+  k BIT,
+  l BIT(12),
+  m CHAR,
+  n CHAR(12),
+  o VARCHAR,
+  p VARCHAR(12),
+  q REAL,
+  r FLOAT,
+  s DOUBLE PRECISION,
+  t DEC,
+  u DEC(1),
+  v DEC(2,1),
+  w DECIMAL,
+  x DECIMAL(1),
+  y DECIMAL(2,1),
+  z NUMERIC,
+  aa NUMERIC(1),
+  ab NUMERIC(2,1),
+  ac DATE,
+  ad TIMESTAMP,
+  ae TIMESTAMP WITH TIME ZONE,
+  af STRING,
+  ag STRING(12),
+  ah TEXT,
+  ai BLOB,
+  aj BYTES,
+  ak BYTEA,
+  al INTERVAL
+  )
+
+query TTBT colnames
+SHOW COLUMNS FROM test.alltypes
+----
+Field       Type        Null    Default
+a      BOOL                      true   NULL
+b      INT                       true   NULL
+c      INT                       true   NULL
+d      INT                       true   NULL
+e      INT                       true   NULL
+f      INT                       true   NULL
+g      INT                       true   NULL
+h      INT                       true   unique_rowid()
+i      INT                       true   unique_rowid()
+j      INT                       true   unique_rowid()
+k      BIT(1)                    true   NULL
+l      BIT(12)                   true   NULL
+m      STRING                    true   NULL
+n      STRING(12)                true   NULL
+o      STRING                    true   NULL
+p      STRING(12)                true   NULL
+q      FLOAT                     true   NULL
+r      FLOAT                     true   NULL
+s      FLOAT                     true   NULL
+t      DECIMAL                   true   NULL
+u      DECIMAL(1)                true   NULL
+v      DECIMAL(2,1)              true   NULL
+w      DECIMAL                   true   NULL
+x      DECIMAL(1)                true   NULL
+y      DECIMAL(2,1)              true   NULL
+z      DECIMAL                   true   NULL
+aa      DECIMAL(1)                true   NULL
+ab     DECIMAL(2,1)              true   NULL
+ac     DATE                      true   NULL
+ad     TIMESTAMP                 true   NULL
+ae     TIMESTAMP WITH TIME ZONE  true   NULL
+af     STRING                    true   NULL
+ag     STRING(12)                true   NULL
+ah     STRING                    true   NULL
+ai     BYTES                     true   NULL
+aj     BYTES                     true   NULL
+ak     BYTES                     true   NULL
+al     INTERVAL                  true   NULL
+rowid  INT                       false  unique_rowid()
 
 statement ok
 CREATE DATABASE IF NOT EXISTS smtng;

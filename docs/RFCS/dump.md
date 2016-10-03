@@ -2,8 +2,8 @@
 - Status: completed
 - Start Date: 2016-04-14
 - Authors: Matt Jibson
-- RFC PR: #6058
-
+- RFC PR: [#6058](https://github.com/cockroachdb/cockroach/pull/6058)
+- Cockroach Issue:
 
 # Summary
 
@@ -63,10 +63,10 @@ the same timestamp. Issuing a `BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT`
 will do this for a specific connection.
 
 Since large backups will take more time, they have a higher chance of losing
-their connection for whatever reason, and thus ends the transaction. We ergo
+their connection for whatever reason, which ends the transaction. We ergo
 need a way to resume a dump from the last place and time that it started. This
-could be achieved using a time travel query
-([#5963](https://github.com/cockroachdb/cockroach/issues/5963)) which
+could be achieved using a time travel query.
+([#5963](https://github.com/cockroachdb/cockroach/issues/5963))
 discusses many possible solutions.
 
 # Alternatives

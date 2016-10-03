@@ -433,7 +433,7 @@ Please see [roachpb/data.proto](https://github.com/cockroachdb/cockroach/blob/ma
 **Cons**
 
 - Reads from non-lease holder replicas still require a ping to the lease holder
-  update *read timestamp cache*.
+  to update the *read timestamp cache*.
 - Abandoned transactions may block contending writers for up to the
   heartbeat interval, though average wait is likely to be
   considerably shorter (see [graph in link](https://docs.google.com/document/d/1kBCu4sdGAnvLqpT-_2vaTbomNmX3_saayWEGYu1j7mQ/edit?usp=sharing)).

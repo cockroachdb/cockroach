@@ -5,7 +5,7 @@
  * in the reducer by a unique ID.
  */
 
-import _ = require("lodash");
+import _ from "lodash";
 import { Dispatch } from "redux";
 
 import * as protos from  "../js/protos";
@@ -79,10 +79,13 @@ function metricsQueryReducer(state: MetricsQuery, action: Action) {
     // Results for a previous request have been received from the server.
     case RECEIVE:
       let { payload: response } = action as PayloadAction<WithID<RequestWithResponse>>;
-      state = _.clone(state);
-      state.data = response.data.response;
-      state.request = response.data.request;
-      state.error = undefined;
+      if (response.data.request === state.nextRequest) {
+        state = _.clone(state);
+        state.data = response.data.response;
+        state.request = response.data.request;
+        state.nextRequest = undefined;
+        state.error = undefined;
+      }
       return state;
 
     // The previous query for metrics for this component encountered an error.

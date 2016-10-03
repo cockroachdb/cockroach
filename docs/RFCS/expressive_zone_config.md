@@ -2,9 +2,8 @@
 - Status: in-progress
 - Start Date: 2016-07-06
 - Authors: @d4l3k
-- RFC PR: #7660
-- Cockroach Issue: #4868
-
+- RFC PR: [#7660](https://github.com/cockroachdb/cockroach/pull/7660)
+- Cockroach Issue: [#4868](https://github.com/cockroachdb/cockroach/issues/4868)
 
 # Summary
 

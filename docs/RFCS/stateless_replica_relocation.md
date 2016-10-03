@@ -1,8 +1,8 @@
 - Feature Name: Stateless Replica Relocation
-- Status: complete
+- Status: completed
 - Start Date: 2015-08-19
-- RFC PR:
-- Cockroach Issue: #620
+- RFC PR: [#2171](https://github.com/cockroachdb/cockroach/pull/2171)
+- Cockroach Issue: [#620](https://github.com/cockroachdb/cockroach/issues/620)
 
 # Summary
 A relocation is, conceptually, the transfer of a single replica from one store to

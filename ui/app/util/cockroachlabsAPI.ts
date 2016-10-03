@@ -26,7 +26,7 @@ function timeoutFetch<T extends BodyInit, R>(url: string, req?: T, timeout?: mom
     if (!res.ok) {
       throw Error(res.statusText);
     }
-    return res.json<R>();
+    return res.json();
   });
 }
 

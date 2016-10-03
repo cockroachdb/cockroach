@@ -2,7 +2,7 @@ import * as React from "react";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { IInjectedProps } from "react-router";
-import _ = require("lodash");
+import _ from "lodash";
 
 import { nodeIDAttr } from "./../util/constants";
 import { AdminUIState } from "../redux/state";

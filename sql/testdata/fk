@@ -122,9 +122,6 @@ INSERT INTO scans (scanned) VALUES ('867072000006'), ('missing'), ('885155001450
 statement error foreign key violation: values \['867072000006'\] in columns \[upc\] referenced in table "scans"
 DELETE FROM products WHERE sku = 'VP-W9QH-W44L'
 
-statement error foreign key violation: non-empty
-TRUNCATE products
-
 # Blanking a field nobody cares about is fine.
 statement ok
 UPDATE products SET vendor = '' WHERE sku = '780'
@@ -146,7 +143,32 @@ statement error foreign key violation: values \['885155001450'\] in columns \[up
 UPDATE products SET upc = 'blah' WHERE sku = '780'
 
 statement ok
-TRUNCATE orders
+ALTER TABLE scans DROP CONSTRAINT fk_scanned_ref_products
+
+statement ok
+UPDATE products SET upc = 'blah' WHERE sku = '780'
+
+statement ok
+ALTER TABLE scans ADD FOREIGN KEY (scanned) REFERENCES products (upc)
+
+query TTTTT
+SHOW CONSTRAINTS FROM scans
+----
+scans  fk_scanned_ref_products  FOREIGN KEY (UNVALIDATED)  scanned  products.[upc]
+scans  primary                  PRIMARY KEY                rowid    NULL
+
+statement error validating FOREIGN KEY constraint "fk_scanned_ref_products" unsupported
+ALTER TABLE scans VALIDATE CONSTRAINT fk_scanned_ref_products
+
+statement ok
+UPDATE products SET upc = '885155001450' WHERE sku = '780'
+
+# Changing referenced non-pk index fails once again with constraint re-added.
+statement error foreign key violation: values \['885155001450'\] in columns \[upc\] referenced in table "scans"
+UPDATE products SET upc = 'blah' WHERE sku = '780'
+
+statement ok
+TRUNCATE orders, reviews
 
 # Changing now non-referenced and secondary field is fine.
 statement ok
@@ -159,22 +181,32 @@ UPDATE products SET sku = '780', upc = 'blah' WHERE sku = '750'
 statement error foreign key violation: values \['885155001450'\] in columns \[upc\] referenced in table "scans"
 DELETE FROM products WHERE sku = '750'
 
-statement error foreign key violation: non-empty columns \[upc\] referenced in table "scans"
+statement error "products" is referenced by foreign key from table "orders"
 TRUNCATE products
 
-statement ok
-TRUNCATE scans
+query I
+SELECT COUNT(*) FROM scans
+----
+4
 
 statement ok
-TRUNCATE products
+TRUNCATE products CASCADE
+
+query I
+SELECT COUNT(*) FROM scans
+----
+0
+
+statement ok
+TRUNCATE scans, products, orders, reviews
 
 query TTTTT colnames
 SHOW CONSTRAINTS FROM orders
 ----
 Table   Name                        Type         Column(s)   Details
-orders  fk_product_ref_products     FOREIGN KEY  [product]   products.[sku]
-orders  primary                     PRIMARY KEY  [id]        NULL
-orders  valid_customer              FOREIGN KEY  [customer]  customers.[id]
+orders  fk_product_ref_products     FOREIGN KEY  product     products.[sku]
+orders  primary                     PRIMARY KEY  id          NULL
+orders  valid_customer              FOREIGN KEY  customer    customers.[id]
 
 statement error "products_upc_key" is referenced by foreign key from table "scans"
 DROP INDEX products@products_upc_key

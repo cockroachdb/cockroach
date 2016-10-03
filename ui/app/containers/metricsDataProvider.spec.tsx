@@ -1,23 +1,26 @@
 import * as React from "react";
 import { assert } from "chai";
 import { shallow } from "enzyme";
-import _ = require("lodash");
-import Long = require("long");
+import _ from "lodash";
+import Long from "long";
 import * as sinon from "sinon";
 
 import * as protos from  "../js/protos";
 import { TextGraph, Axis, Metric } from "../components/graphs";
-import { MetricsDataProviderUnconnected as MetricsDataProvider } from "./metricsDataProvider";
-import { TimeSeriesQueryAggregator, TimeSeriesQueryDerivative } from "./metricsDataProvider";
+import {
+  MetricsDataProviderUnconnected as MetricsDataProvider,
+  QueryTimeInfo,
+} from "./metricsDataProvider";
+import { TimeSeriesQueryAggregator, TimeSeriesQueryDerivative } from "../util/protoEnums";
 import { MetricsQuery } from "../redux/metrics";
 
 type TSRequestMessage = Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
 
 function makeDataProvider(id: string,
                           metrics: MetricsQuery,
-                          timeSpan: Long[],
-                          queryMetrics: (id: string, request: TSRequestMessage) => void) {
-  return shallow(<MetricsDataProvider id={id} metrics={metrics} timeSpan={timeSpan} queryMetrics={queryMetrics}>
+                          timeInfo: QueryTimeInfo,
+                          queryMetrics: (id: string, request: TSRequestMessage) => any) {
+  return shallow(<MetricsDataProvider id={id} metrics={metrics} timeInfo={timeInfo} queryMetrics={queryMetrics}>
     <TextGraph>
       <Axis>
         <Metric name="test.metric.1" />
@@ -30,10 +33,11 @@ function makeDataProvider(id: string,
   </MetricsDataProvider>);
 }
 
-function makeMetricsRequest(timeSpan: Long[], sources?: string[]) {
+function makeMetricsRequest(timeInfo: QueryTimeInfo, sources?: string[]) {
   return new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
-    start_nanos: timeSpan[0],
-    end_nanos: timeSpan[1],
+    start_nanos: timeInfo.start,
+    end_nanos: timeInfo.end,
+    sample_nanos: timeInfo.sampleDuration,
     queries: [
       {
         name: "test.metric.1",
@@ -60,7 +64,7 @@ function makeMetricsRequest(timeSpan: Long[], sources?: string[]) {
   });
 }
 
-function makeMetricsQuery(id: string, timeSpan: Long[], sources?: string[]): MetricsQuery {
+function makeMetricsQuery(id: string, timeSpan: QueryTimeInfo, sources?: string[]): MetricsQuery {
   let request = makeMetricsRequest(timeSpan, sources);
   let data = new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
     results: _(request.queries).map((q) => {
@@ -81,8 +85,16 @@ function makeMetricsQuery(id: string, timeSpan: Long[], sources?: string[]): Met
 
 describe("<MetricsDataProvider>", function() {
   let spy: sinon.SinonSpy;
-  let timespan1 = [Long.fromNumber(0), Long.fromNumber(100)];
-  let timespan2 = [Long.fromNumber(100), Long.fromNumber(200)];
+  let timespan1: QueryTimeInfo = {
+    start: Long.fromNumber(0),
+    end: Long.fromNumber(100),
+    sampleDuration: Long.fromNumber(300),
+  };
+  let timespan2: QueryTimeInfo = {
+    start: Long.fromNumber(100),
+    end: Long.fromNumber(200),
+    sampleDuration: Long.fromNumber(300),
+  };
   let graphid = "testgraph";
 
   beforeEach(function() {
@@ -123,7 +135,7 @@ describe("<MetricsDataProvider>", function() {
       let provider = makeDataProvider(graphid, makeMetricsQuery(graphid, timespan1), timespan1, spy);
       assert.isTrue(spy.notCalled);
       provider.setProps({
-        timeSpan: timespan2,
+        timeInfo: timespan2,
       });
       assert.isTrue(spy.called);
       assert.isTrue(spy.calledWith(graphid, makeMetricsRequest(timespan2)));
@@ -168,7 +180,7 @@ describe("<MetricsDataProvider>", function() {
         shallow(
           <MetricsDataProvider id="id"
                                metrics={null}
-                               timeSpan={timespan1}
+                               timeInfo={timespan1}
                                queryMetrics={spy}>
             <TextGraph>
               <Axis>

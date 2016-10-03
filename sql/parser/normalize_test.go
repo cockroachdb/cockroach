@@ -113,6 +113,7 @@ func TestNormalizeExpr(t *testing.T) {
 		{`s=lower('FOO')`, `s = 'foo'`},
 		{`lower(s)='foo'`, `lower(s) = 'foo'`},
 		{`random()`, `random()`},
+		{`a=count('FOO') OVER ()`, `a = count('FOO') OVER ()`},
 		{`9223372036854775808`, `9223372036854775808`},
 		{`-9223372036854775808`, `-9223372036854775808`},
 		{`(1, 2, 3) = (1, 2, 3)`, `true`},

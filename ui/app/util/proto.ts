@@ -1,4 +1,4 @@
-import _ = require("lodash");
+import _ from "lodash";
 
 type NodeStatus = Proto2TypeScript.cockroach.server.status.NodeStatus;
 type StatusMetrics = Proto2TypeScript.ProtoBufMap<string, number>;
