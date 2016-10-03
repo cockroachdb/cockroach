@@ -20,8 +20,13 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/tracing"
+	basictracer "github.com/opentracing/basictracer-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 const rowChannelBufSize = 16
@@ -253,4 +258,17 @@ func (rb *RowBuffer) NextRow() (sqlbase.EncDatumRow, error) {
 	row := rb.rows[0]
 	rb.rows = rb.rows[1:]
 	return row, nil
+}
+
+// SetFlowRequestTrace populates req.Trace with the context of the current Span
+// in the context (if any).
+func SetFlowRequestTrace(ctx context.Context, req *SetupFlowRequest) error {
+	if sp := opentracing.SpanFromContext(ctx); sp != nil {
+		req.Trace = &tracing.Span{}
+		tracer := sp.Tracer()
+		if err := tracer.Inject(sp.Context(), basictracer.Delegator, req.Trace); err != nil {
+			return err
+		}
+	}
+	return nil
 }
