@@ -55,11 +55,11 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 
 func forceScanAndProcess(s *Store, q *baseQueue) {
 	newStoreRangeSet(s).Visit(func(repl *Replica) bool {
-		q.MaybeAdd(repl, s.ctx.Clock.Now())
+		q.MaybeAdd(repl, s.cfg.Clock.Now())
 		return true
 	})
 
-	q.DrainQueue(s.ctx.Clock)
+	q.DrainQueue(s.cfg.Clock)
 }
 
 // ForceReplicationScanAndProcess iterates over all ranges and
@@ -91,7 +91,7 @@ func (s *Store) LeaseExpiration(clock *hlc.Clock) int64 {
 	// Due to lease extensions, the remaining interval can be longer than just
 	// the sum of the offset (=length of stasis period) and the active
 	// duration, but definitely not by 2x.
-	return 2 * int64(s.ctx.rangeLeaseActiveDuration+clock.MaxOffset())
+	return 2 * int64(s.cfg.rangeLeaseActiveDuration+clock.MaxOffset())
 }
 
 // LogReplicaChangeTest adds a fake replica change event to the log for the

@@ -281,9 +281,9 @@ func TestBaseQueueAdd(t *testing.T) {
 // processed according to the timer function.
 func TestBaseQueueProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tsc := TestStoreContext()
+	tsc := TestStoreConfig()
 	tc := testContext{}
-	tc.StartWithStoreContext(t, tsc)
+	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()
 
 	// Remove replica for range 1 since it encompasses the entire keyspace.
@@ -442,14 +442,14 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		},
 	}
 
-	bq := makeTestBaseQueue("test", testQueue, s, s.ctx.Gossip, queueConfig{maxSize: 2})
-	bq.Start(s.ctx.Clock, stopper)
+	bq := makeTestBaseQueue("test", testQueue, s, s.cfg.Gossip, queueConfig{maxSize: 2})
+	bq.Start(s.cfg.Clock, stopper)
 
 	// Check our config.
 	var sysCfg config.SystemConfig
 	util.SucceedsSoon(t, func() error {
 		var ok bool
-		sysCfg, ok = s.ctx.Gossip.GetSystemConfig()
+		sysCfg, ok = s.cfg.Gossip.GetSystemConfig()
 		if !ok {
 			return errors.New("system config not yet present")
 		}
@@ -530,9 +530,9 @@ func (*testError) purgatoryErrorMarker() {
 // the purgatory channel causes the replicas to be reprocessed.
 func TestBaseQueuePurgatory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tsc := TestStoreContext()
+	tsc := TestStoreConfig()
 	tc := testContext{}
-	tc.StartWithStoreContext(t, tsc)
+	tc.StartWithStoreConfig(t, tsc)
 	defer tc.Stop()
 
 	testQueue := &testQueueImpl{

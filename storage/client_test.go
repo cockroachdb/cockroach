@@ -83,11 +83,11 @@ func rg1(s *storage.Store) client.Sender {
 // createTestStore creates a test store using an in-memory
 // engine. The caller is responsible for stopping the stopper on exit.
 func createTestStore(t testing.TB) (*storage.Store, *stop.Stopper, *hlc.ManualClock) {
-	return createTestStoreWithContext(t, storage.TestStoreContext())
+	return createTestStoreWithConfig(t, storage.TestStoreConfig())
 }
 
-func createTestStoreWithContext(
-	t testing.TB, sCtx storage.StoreContext,
+func createTestStoreWithConfig(
+	t testing.TB, storeCfg storage.StoreConfig,
 ) (*storage.Store, *stop.Stopper, *hlc.ManualClock) {
 	stopper := stop.NewStopper()
 	manual := hlc.NewManualClock(123)
@@ -95,34 +95,34 @@ func createTestStoreWithContext(
 		engine.NewInMem(roachpb.Attributes{}, 10<<20, stopper),
 		hlc.NewClock(manual.UnixNano),
 		true,
-		sCtx,
+		storeCfg,
 		stopper,
 	)
 	return store, stopper, manual
 }
 
 // createTestStoreWithEngine creates a test store using the given engine and clock.
-// TestStoreContext() can be used for creating a context suitable for most
+// TestStoreConfig() can be used for creating a config suitable for most
 // tests.
 func createTestStoreWithEngine(
 	t testing.TB,
 	eng engine.Engine,
 	clock *hlc.Clock,
 	bootstrap bool,
-	sCtx storage.StoreContext,
+	storeCfg storage.StoreConfig,
 	stopper *stop.Stopper,
 ) *storage.Store {
 	rpcContext := rpc.NewContext(context.TODO(), &base.Context{Insecure: true}, clock, stopper)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 	server := rpc.NewServer(rpcContext) // never started
-	sCtx.Gossip = gossip.New(context.TODO(), rpcContext, server, nil, stopper, metric.NewRegistry())
-	sCtx.Gossip.SetNodeID(nodeDesc.NodeID)
-	sCtx.ScanMaxIdleTime = 1 * time.Second
+	storeCfg.Gossip = gossip.New(context.TODO(), rpcContext, server, nil, stopper, metric.NewRegistry())
+	storeCfg.Gossip.SetNodeID(nodeDesc.NodeID)
+	storeCfg.ScanMaxIdleTime = 1 * time.Second
 	tracer := tracing.NewTracer()
-	sCtx.Ctx = tracing.WithTracer(context.Background(), tracer)
+	storeCfg.Ctx = tracing.WithTracer(context.Background(), tracer)
 	stores := storage.NewStores(context.TODO(), clock)
 
-	if err := sCtx.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
+	if err := storeCfg.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
 		t.Fatal(err)
 	}
 
@@ -132,24 +132,24 @@ func createTestStoreWithEngine(
 		Clock:            clock,
 		TransportFactory: kv.SenderTransportFactory(tracer, stores),
 		RPCRetryOptions:  &retryOpts,
-	}, sCtx.Gossip)
+	}, storeCfg.Gossip)
 
-	sender := kv.NewTxnCoordSender(sCtx.Ctx, distSender, clock, false, stopper,
+	sender := kv.NewTxnCoordSender(storeCfg.Ctx, distSender, clock, false, stopper,
 		kv.MakeTxnMetrics())
-	sCtx.Clock = clock
-	sCtx.DB = client.NewDB(sender)
-	sCtx.StorePool = storage.NewStorePool(
+	storeCfg.Clock = clock
+	storeCfg.DB = client.NewDB(sender)
+	storeCfg.StorePool = storage.NewStorePool(
 		context.TODO(),
-		sCtx.Gossip,
+		storeCfg.Gossip,
 		clock,
 		rpcContext,
 		/* reservationsEnabled */ true,
 		storage.TestTimeUntilStoreDeadOff,
 		stopper,
 	)
-	sCtx.Transport = storage.NewDummyRaftTransport()
+	storeCfg.Transport = storage.NewDummyRaftTransport()
 	// TODO(bdarnell): arrange to have the transport closed.
-	store := storage.NewStore(sCtx, eng, nodeDesc)
+	store := storage.NewStore(storeCfg, eng, nodeDesc)
 	if bootstrap {
 		if err := store.Bootstrap(roachpb.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
 			t.Fatal(err)
@@ -169,11 +169,11 @@ func createTestStoreWithEngine(
 }
 
 type multiTestContext struct {
-	t            *testing.T
-	storeContext *storage.StoreContext
-	manualClock  *hlc.ManualClock
-	clock        *hlc.Clock
-	rpcContext   *rpc.Context
+	t           *testing.T
+	storeConfig *storage.StoreConfig
+	manualClock *hlc.ManualClock
+	clock       *hlc.Clock
+	rpcContext  *rpc.Context
 	// This enables the reservation system which by default is disabled.
 	reservationsEnabled bool
 
@@ -232,7 +232,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		// starts up, so fail early if anything else was set (as we'd likely
 		// override it and the test wouldn't get what it wanted).
 		mCopy := *m
-		mCopy.storeContext = nil
+		mCopy.storeConfig = nil
 		mCopy.clocks = nil
 		mCopy.clock = nil
 		mCopy.timeUntilStoreDead = 0
@@ -568,21 +568,21 @@ func (m *multiTestContext) RangeLookup(
 	return m.distSenders[0].RangeLookup(ctx, key, desc, useReverseScan)
 }
 
-func (m *multiTestContext) makeContext(i int) storage.StoreContext {
-	var ctx storage.StoreContext
-	if m.storeContext != nil {
-		ctx = *m.storeContext
+func (m *multiTestContext) makeStoreConfig(i int) storage.StoreConfig {
+	var cfg storage.StoreConfig
+	if m.storeConfig != nil {
+		cfg = *m.storeConfig
 	} else {
-		ctx = storage.TestStoreContext()
+		cfg = storage.TestStoreConfig()
 	}
-	ctx.Clock = m.clocks[i]
-	ctx.Transport = m.transports[i]
-	ctx.DB = m.dbs[i]
-	ctx.Gossip = m.gossips[i]
-	ctx.StorePool = m.storePools[i]
-	ctx.TestingKnobs.DisableSplitQueue = true
-	ctx.TestingKnobs.ReplicateQueueAcceptsUnsplit = true
-	return ctx
+	cfg.Clock = m.clocks[i]
+	cfg.Transport = m.transports[i]
+	cfg.DB = m.dbs[i]
+	cfg.Gossip = m.gossips[i]
+	cfg.StorePool = m.storePools[i]
+	cfg.TestingKnobs.DisableSplitQueue = true
+	cfg.TestingKnobs.ReplicateQueueAcceptsUnsplit = true
+	return cfg
 }
 
 func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
@@ -666,9 +666,9 @@ func (m *multiTestContext) addStore(idx int) {
 	m.populateStorePool(idx, stopper)
 	m.populateDB(idx, stopper)
 
-	ctx := m.makeContext(idx)
+	cfg := m.makeStoreConfig(idx)
 	nodeID := roachpb.NodeID(idx + 1)
-	store := storage.NewStore(ctx, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
+	store := storage.NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
 	if needBootstrap {
 		err := store.Bootstrap(roachpb.StoreIdent{
 			NodeID:  roachpb.NodeID(idx + 1),
@@ -796,8 +796,8 @@ func (m *multiTestContext) restartStore(i int) {
 	m.populateDB(i, m.stoppers[i])
 	m.populateStorePool(i, m.stoppers[i])
 
-	ctx := m.makeContext(i)
-	m.stores[i] = storage.NewStore(ctx, m.engines[i], &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)})
+	cfg := m.makeStoreConfig(i)
+	m.stores[i] = storage.NewStore(cfg, m.engines[i], &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)})
 	if err := m.stores[i].Start(context.Background(), m.stoppers[i]); err != nil {
 		m.t.Fatal(err)
 	}
