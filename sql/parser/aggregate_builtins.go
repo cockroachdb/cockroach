@@ -26,7 +26,7 @@ import (
 
 func init() {
 	// Add all aggregates to the Builtins map after a few sanity checks.
-	for k, v := range aggregates {
+	for k, v := range Aggregates {
 		for _, a := range v {
 			if !a.impure {
 				panic(fmt.Sprintf("aggregate functions should all be impure, found %v", a))
@@ -60,7 +60,7 @@ type AggregateFunc interface {
 	Result() Datum
 }
 
-// aggregates are a special class of builtin functions that are wrapped
+// Aggregates are a special class of builtin functions that are wrapped
 // at execution in a bucketing layer to combine (aggregate) the result
 // of the function being run over many rows.
 // See `aggregateFuncHolder` in the sql package.
@@ -70,7 +70,8 @@ type AggregateFunc interface {
 // functions must return NULL when they are no rows in the source
 // table, so their evaluation must always be delayed until query
 // execution.
-var aggregates = map[string][]Builtin{
+// Exported for use in documentation.
+var Aggregates = map[string][]Builtin{
 	"avg": {
 		makeAggBuiltin(TypeInt, TypeDecimal, newIntAvgAggregate),
 		makeAggBuiltin(TypeFloat, TypeFloat, newFloatAvgAggregate),
@@ -630,7 +631,7 @@ func (v *IsAggregateVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 		if err != nil {
 			return false, expr
 		}
-		if _, ok := aggregates[strings.ToLower(fn.Function())]; ok {
+		if _, ok := Aggregates[strings.ToLower(fn.Function())]; ok {
 			v.Aggregated = true
 			return false, expr
 		}
