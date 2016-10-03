@@ -550,7 +550,7 @@ func (sp *StorePool) reserve(
 		return errors.Wrapf(err, "failed to dial store %+v, addr %q, node %+v", toStoreID, addr, detail.desc.Node)
 	}
 
-	client := NewStoresClient(conn)
+	client := NewReservationClient(conn)
 	req := &ReservationRequest{
 		StoreRequestHeader: StoreRequestHeader{
 			NodeID:  detail.desc.Node.NodeID,

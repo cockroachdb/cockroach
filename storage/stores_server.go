@@ -26,13 +26,19 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// Server implements the storage parts of the StoresServer interface.
+// StoresServer handles store-addressed RPCs.
+type StoresServer interface {
+	FreezeServer
+	ReservationServer
+}
+
+var _ StoresServer = Server{}
+
+// Server implements StoresServer.
 type Server struct {
 	descriptor *roachpb.NodeDescriptor
 	stores     *Stores
 }
-
-var _ StoresServer = Server{}
 
 // MakeServer returns a new instance of Server.
 func MakeServer(
