@@ -115,8 +115,8 @@ func TestEntryCacheEviction(t *testing.T) {
 	rec := newRaftEntryCache(100)
 	rec.addEntries(rangeID, []raftpb.Entry{newEntry(1, 40), newEntry(2, 40)})
 	ents, _, hi := rec.getEntries(rangeID, 1, 3, 0)
-	if len(ents) != 2 {
-		t.Errorf("expected both entries; got %+v", ents)
+	if len(ents) != 2 || hi != 3 {
+		t.Errorf("expected both entries; got %+v, %d", ents, hi)
 	}
 	// Add another entry to evict first.
 	rec.addEntries(rangeID, []raftpb.Entry{newEntry(3, 40)})

@@ -498,7 +498,6 @@ func DecodeIndexKeyPrefix(
 		if tableID == desc.ID {
 			// Once desc's table id has been decoded, there can be no more
 			// interleaves.
-			remaining = key
 			break
 		}
 
@@ -569,6 +568,9 @@ func DecodeIndexKey(
 
 			length := int(ancestor.SharedPrefixLen)
 			key, err = DecodeKeyVals(a, valTypes[:length], vals[:length], colDirs[:length], key)
+			if err != nil {
+				return nil, false, err
+			}
 			valTypes, vals, colDirs = valTypes[length:], vals[length:], colDirs[length:]
 
 			// We reuse NotNullDescending as the interleave sentinel, consume it.

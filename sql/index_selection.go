@@ -380,8 +380,14 @@ func (v *indexInfo) analyzeOrdering(
 	// Analyze the ordering provided by the index (either forward or reverse).
 	fwdIndexOrdering := scan.computeOrdering(v.index, v.exactPrefix, false)
 	revIndexOrdering := scan.computeOrdering(v.index, v.exactPrefix, true)
-	fwdMatch, orderCols := analyzeOrdering(fwdIndexOrdering)
-	revMatch, orderCols := analyzeOrdering(revIndexOrdering)
+	fwdMatch, fwdOrderCols := analyzeOrdering(fwdIndexOrdering)
+	revMatch, revOrderCols := analyzeOrdering(revIndexOrdering)
+
+	if fwdOrderCols != revOrderCols {
+		panic(fmt.Sprintf("fwdOrderCols(%d) != revOrderCols(%d)", fwdOrderCols, revOrderCols))
+	}
+
+	orderCols := fwdOrderCols
 
 	// Weigh the cost by how much of the ordering matched.
 	//

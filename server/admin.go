@@ -969,10 +969,10 @@ func (s *adminServer) waitForStoreFrozen(
 							delete(mu.oks, storeID)
 						}
 						mu.Unlock()
-						err = stream.Send(&serverpb.ClusterFreezeResponse{
-							Message: message,
-						})
 					}
+					err = stream.Send(&serverpb.ClusterFreezeResponse{
+						Message: message,
+					})
 				}()
 				conn, err := s.server.rpcContext.GRPCDial(addr)
 				if err != nil {
