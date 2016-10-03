@@ -226,12 +226,11 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	var delTS hlc.Timestamp
 	for i, k := range writes {
 		put := roachpb.NewPut(k, roachpb.MakeValueFromBytes(k))
-		reply, err := client.SendWrapped(tds, nil, put)
-		if err != nil {
+		if _, err := client.SendWrapped(tds, nil, put); err != nil {
 			t.Fatal(err)
 		}
 		scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next())
-		reply, err = client.SendWrapped(tds, nil, scan)
+		reply, err := client.SendWrapped(tds, nil, scan)
 		if err != nil {
 			t.Fatal(err)
 		}

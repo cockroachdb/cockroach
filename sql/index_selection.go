@@ -380,7 +380,7 @@ func (v *indexInfo) analyzeOrdering(
 	// Analyze the ordering provided by the index (either forward or reverse).
 	fwdIndexOrdering := scan.computeOrdering(v.index, v.exactPrefix, false)
 	revIndexOrdering := scan.computeOrdering(v.index, v.exactPrefix, true)
-	fwdMatch, orderCols := analyzeOrdering(fwdIndexOrdering)
+	fwdMatch, _ := analyzeOrdering(fwdIndexOrdering) // TODO(radu): why is the second return being ignored?
 	revMatch, orderCols := analyzeOrdering(revIndexOrdering)
 
 	// Weigh the cost by how much of the ordering matched.

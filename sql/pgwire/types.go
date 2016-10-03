@@ -692,14 +692,15 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 		case formatText:
 			ts, err := parseTs(string(b))
 			if err != nil {
-				if res, err := parser.ParseDDate(string(b), time.UTC); err == nil {
-					d = res
-				} else {
+				res, err := parser.ParseDDate(string(b), time.UTC)
+				if err != nil {
 					return d, errors.Errorf("could not parse string %q as date", b)
 				}
+				d = res
+			} else {
+				daysSinceEpoch := ts.Unix() / secondsInDay
+				d = parser.NewDDate(parser.DDate(daysSinceEpoch))
 			}
-			daysSinceEpoch := ts.Unix() / secondsInDay
-			d = parser.NewDDate(parser.DDate(daysSinceEpoch))
 		case formatBinary:
 			if len(b) < 4 {
 				return d, errors.Errorf("date requires 4 bytes for binary format")

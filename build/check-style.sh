@@ -95,7 +95,7 @@ TestImportNames() {
 }
 
 TestIneffassign() {
-  ! ineffassign . | grep -vF '.pb.go' # https://github.com/gogo/protobuf/issues/149
+  ! ineffassign . | grep -vF 'ineffectual assignment to sqlDollar' | grep -vF '.pb.go' # https://github.com/gogo/protobuf/issues/149
 }
 
 TestErrcheck() {
