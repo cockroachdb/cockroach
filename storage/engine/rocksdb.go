@@ -57,10 +57,7 @@ import (
 import "C"
 
 const (
-	// Small values for minMemtableBudget trigger assertions in debug
-	// builds of rocksdb.
-	minMemtableBudget = 10 << 20 // 10 MB
-	defaultBlockSize  = 32 << 10 // 32KB (rocksdb default is 4KB)
+	defaultBlockSize = 32 << 10 // 32KB (rocksdb default is 4KB)
 
 	// DefaultMaxOpenFiles is the default value for rocksDB's max_open_files
 	// option.
@@ -261,15 +258,14 @@ func (c RocksDBCache) Release() {
 
 // RocksDB is a wrapper around a RocksDB database instance.
 type RocksDB struct {
-	rdb            *C.DBEngine
-	attrs          roachpb.Attributes // Attributes for this engine
-	dir            string             // The data directory
-	cache          RocksDBCache       // Shared cache.
-	memtableBudget int64              // Memory to use for the memory table.
-	maxSize        int64              // Used for calculating rebalancing and free space.
-	maxOpenFiles   int                // The maximum number of open files this instance will use.
-	stopper        *stop.Stopper
-	deallocated    chan struct{} // Closed when the underlying handle is deallocated.
+	rdb          *C.DBEngine
+	attrs        roachpb.Attributes // Attributes for this engine
+	dir          string             // The data directory
+	cache        RocksDBCache       // Shared cache.
+	maxSize      int64              // Used for calculating rebalancing and free space.
+	maxOpenFiles int                // The maximum number of open files this instance will use.
+	stopper      *stop.Stopper
+	deallocated  chan struct{} // Closed when the underlying handle is deallocated.
 }
 
 var _ Engine = &RocksDB{}
@@ -279,7 +275,7 @@ func NewRocksDB(
 	attrs roachpb.Attributes,
 	dir string,
 	cache RocksDBCache,
-	memtableBudget, maxSize int64,
+	maxSize int64,
 	maxOpenFiles int,
 	stopper *stop.Stopper,
 ) *RocksDB {
@@ -287,31 +283,29 @@ func NewRocksDB(
 		panic("dir must be non-empty")
 	}
 	return &RocksDB{
-		attrs:          attrs,
-		dir:            dir,
-		cache:          cache.ref(),
-		memtableBudget: memtableBudget,
-		maxSize:        maxSize,
-		maxOpenFiles:   maxOpenFiles,
-		stopper:        stopper,
-		deallocated:    make(chan struct{}),
+		attrs:        attrs,
+		dir:          dir,
+		cache:        cache.ref(),
+		maxSize:      maxSize,
+		maxOpenFiles: maxOpenFiles,
+		stopper:      stopper,
+		deallocated:  make(chan struct{}),
 	}
 }
 
 func newMemRocksDB(
 	attrs roachpb.Attributes,
 	cache RocksDBCache,
-	memtableBudget int64,
+	maxSize int64,
 	stopper *stop.Stopper,
 ) *RocksDB {
 	return &RocksDB{
 		attrs: attrs,
 		// dir: empty dir == "mem" RocksDB instance.
-		cache:          cache.ref(),
-		memtableBudget: memtableBudget,
-		maxSize:        memtableBudget,
-		stopper:        stopper,
-		deallocated:    make(chan struct{}),
+		cache:       cache.ref(),
+		maxSize:     maxSize,
+		stopper:     stopper,
+		deallocated: make(chan struct{}),
 	}
 }
 
@@ -330,11 +324,6 @@ func (r *RocksDB) String() string {
 func (r *RocksDB) Open() error {
 	if r.rdb != nil {
 		return nil
-	}
-
-	if r.memtableBudget < minMemtableBudget {
-		return errors.Errorf("memtable budget must be at least %s: %s",
-			humanize.IBytes(minMemtableBudget), humanizeutil.IBytes(r.memtableBudget))
 	}
 
 	var ver storageVersion
@@ -365,7 +354,6 @@ func (r *RocksDB) Open() error {
 	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.dir)),
 		C.DBOptions{
 			cache:           r.cache.cache,
-			memtable_budget: C.uint64_t(r.memtableBudget),
 			block_size:      C.uint64_t(blockSize),
 			wal_ttl_seconds: C.uint64_t(walTTL),
 			allow_os_buffer: C.bool(true),
@@ -1461,7 +1449,7 @@ func MakeRocksDBSstFileReader() (RocksDBSstFileReader, error) {
 	// less magic.
 	cache := NewRocksDBCache(1 << 20)
 	rocksDB := NewRocksDB(
-		roachpb.Attributes{}, dir, cache, 512<<20, 512<<20, DefaultMaxOpenFiles, stopper)
+		roachpb.Attributes{}, dir, cache, 512<<20, DefaultMaxOpenFiles, stopper)
 	if err := rocksDB.Open(); err != nil {
 		return RocksDBSstFileReader{}, err
 	}
