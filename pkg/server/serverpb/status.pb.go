@@ -383,7 +383,7 @@ var _ grpc.ClientConn
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion3
+const _ = grpc.SupportPackageIsVersion4
 
 // Client API for Status service
 
@@ -819,7 +819,7 @@ var _Status_serviceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: fileDescriptorStatus,
+	Metadata: "cockroach/pkg/server/serverpb/status.proto",
 }
 
 func (m *DetailsRequest) Marshal() (dAtA []byte, err error) {
