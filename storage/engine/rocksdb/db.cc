@@ -1418,11 +1418,35 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
   options.max_open_files = db_opts.max_open_files;
 
-  const uint64_t memtable_budget = 32 << 20; // 32 MB
-  options.max_write_buffer_number = 4;
-  options.write_buffer_size = memtable_budget / options.max_write_buffer_number;
+  // The write buffer size is the size of the in memory structure that
+  // will be flushed to create L0 files. Note that 8 MB is larger than
+  // 4 MB (the target L0 file size), but that reflects the
+  // uncompressed nature of the MemTable vs SSTables.
+  options.write_buffer_size = 8 << 20; // 8 MB
+  // How much memory should be allotted to memtables? Note that this
+  // is a peak setting, steady state should be lower. We set this
+  // relatively high to account for bursts of writes (e.g. due to a
+  // range deletion). In particular, we want this to be somewhat
+  // larger than than typical range size so that deletion of a range
+  // does not cause write stalls.
+  //
+  // TODO(peter): Will deletion of a range that is larger than this
+  // cause write stalls?
+  const uint64_t memtable_budget = 128 << 20; // 128 MB
+  options.max_write_buffer_number =
+      std::max<int>(memtable_budget / options.write_buffer_size, 2);
+  // Number of files to trigger L0 compaction. We set this low so that
+  // we quickly move files out of L0 as each L0 file increases read
+  // amplification.
   options.level0_file_num_compaction_trigger = 1;
+  // Soft limit on number of L0 files. Writes are slowed down when
+  // this number is reached.
+  //
+  // TODO(peter): untuned.
   options.level0_slowdown_writes_trigger = 16;
+  // Maximum number of L0 files. Writes are stopped at this point.
+  //
+  // TODO(peter): untuned.
   options.level0_stop_writes_trigger = 17;
   // Flush write buffers to L0 as soon as they are full. A higher
   // value could be beneficial if there are duplicate records in each
