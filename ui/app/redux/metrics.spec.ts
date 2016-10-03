@@ -123,7 +123,6 @@ describe("metrics reducer", function() {
       assert.lengthOf(_.keys(state.queries), 1);
       assert.equal(state.queries[componentID].data, response);
       assert.equal(state.queries[componentID].request, request);
-      assert.isUndefined(state.queries[componentID].nextRequest);
       assert.isUndefined(state.queries[componentID].error);
     });
 
