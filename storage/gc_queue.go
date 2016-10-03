@@ -92,13 +92,13 @@ const (
 // The shouldQueue function combines the need for the above tasks into a
 // single priority. If any task is overdue, shouldQueue returns true.
 type gcQueue struct {
-	baseQueue
+	*baseQueue
 }
 
 // newGCQueue returns a new instance of gcQueue.
 func newGCQueue(store *Store, gossip *gossip.Gossip) *gcQueue {
 	gcq := &gcQueue{}
-	gcq.baseQueue = makeBaseQueue(
+	gcq.baseQueue = newBaseQueue(
 		store.Ctx(), "gc", gcq, store, gossip,
 		queueConfig{
 			maxSize:              gcQueueMaxSize,

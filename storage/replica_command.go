@@ -1778,6 +1778,8 @@ func (r *Replica) applyNewLeaseLocked(
 // CheckConsistency runs a consistency check on the range. It first applies a
 // ComputeChecksum command on the range. It then issues CollectChecksum commands
 // to the other replicas.
+//
+// TODO(tschottdorf): We should call this AdminCheckConsistency.
 func (r *Replica) CheckConsistency(
 	ctx context.Context,
 	args roachpb.CheckConsistencyRequest,

@@ -40,7 +40,7 @@ const (
 // splitQueue manages a queue of ranges slated to be split due to size
 // or along intersecting zone config boundaries.
 type splitQueue struct {
-	baseQueue
+	*baseQueue
 	db *client.DB
 }
 
@@ -49,7 +49,7 @@ func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQue
 	sq := &splitQueue{
 		db: db,
 	}
-	sq.baseQueue = makeBaseQueue(
+	sq.baseQueue = newBaseQueue(
 		store.Ctx(), "split", sq, store, gossip,
 		queueConfig{
 			maxSize:              splitQueueMaxSize,
@@ -67,9 +67,9 @@ func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQue
 // shouldQueue determines whether a range should be queued for
 // splitting. This is true if the range is intersected by a zone config
 // prefix or if the range's size in bytes exceeds the limit for the zone.
-func (sq *splitQueue) shouldQueue(now hlc.Timestamp, rng *Replica,
-	sysCfg config.SystemConfig) (shouldQ bool, priority float64) {
-
+func (sq *splitQueue) shouldQueue(
+	now hlc.Timestamp, rng *Replica, sysCfg config.SystemConfig,
+) (shouldQ bool, priority float64) {
 	desc := rng.Desc()
 	if len(sysCfg.ComputeSplitKeys(desc.StartKey, desc.EndKey)) > 0 {
 		// Set priority to 1 in the event the range is split by zone configs.
