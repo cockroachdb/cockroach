@@ -124,12 +124,6 @@ each replica located on different:
 
 Up to `F` failures can be tolerated, where the total number of replicas `N = 2F + 1` (e.g. with 3x replication, one failure can be tolerated; with 5x replication, two failures, and so on).
 
-# Cockroach Client
-
-In order to support diverse client usage, Cockroach clients connect to
-any node via HTTPS using protocol buffers or JSON. The connected node
-proxies involved client work including key lookups and write buffering.
-
 # Keys
 
 Cockroach keys are arbitrary byte arrays. Keys come in two flavors:
