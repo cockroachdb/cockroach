@@ -335,6 +335,9 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 
 			curIndexKey, _, err = sqlbase.EncodeIndexKey(
 				tableDesc, &tableDesc.PrimaryIndex, colIDtoRowIndex, row, indexKeyPrefix)
+			if err != nil {
+				return err
+			}
 
 			for j, col := range added {
 				if defaultExprs == nil || defaultExprs[j] == nil {

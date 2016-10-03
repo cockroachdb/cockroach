@@ -323,7 +323,7 @@ func loadFrozenStatus(
 func loadLastIndex(
 	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
 ) (uint64, error) {
-	lastIndex := uint64(0)
+	var lastIndex uint64
 	v, _, err := engine.MVCCGet(ctx, reader,
 		keys.RaftLastIndexKey(rangeID),
 		hlc.ZeroTimestamp, true /* consistent */, nil)

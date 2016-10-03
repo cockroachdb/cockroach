@@ -92,7 +92,7 @@ func TestGetZoneConfig(t *testing.T) {
 	defer srv.Stopper().Stop()
 	s := srv.(*server.TestServer)
 
-	expectedCounter := uint32(keys.MaxReservedDescID + 1)
+	expectedCounter := uint32(keys.MaxReservedDescID)
 
 	defaultZoneConfig := config.DefaultZoneConfig()
 	defaultZoneConfig.RangeMinBytes = 1 << 20
@@ -114,41 +114,41 @@ func TestGetZoneConfig(t *testing.T) {
 	// db1 has tables tb11 and tb12
 	// db2 has tables tb21 and tb22
 
+	expectedCounter++
 	db1 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE DATABASE db1`); err != nil {
 		t.Fatal(err)
 	}
-	expectedCounter++
 
+	expectedCounter++
 	db2 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE DATABASE db2`); err != nil {
 		t.Fatal(err)
 	}
-	expectedCounter++
 
+	expectedCounter++
 	tb11 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db1.tb1 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
-	expectedCounter++
 
+	expectedCounter++
 	tb12 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db1.tb2 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
-	expectedCounter++
 
+	expectedCounter++
 	tb21 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db2.tb1 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
-	expectedCounter++
 
+	expectedCounter++
 	tb22 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db2.tb2 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
-	expectedCounter++
 
 	{
 		cfg := forceNewConfig(t, s)

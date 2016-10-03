@@ -376,8 +376,7 @@ func TestMVCCPutOutOfOrder(t *testing.T) {
 
 	// Another put operation with earlier logical time. Will NOT be ignored.
 	txn.Sequence++
-	err = MVCCPut(context.Background(), engine, nil, testKey1, makeTS(2, 0), value2, &txn)
-	if err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(2, 0), value2, &txn); err != nil {
 		t.Fatal(err)
 	}
 
@@ -462,8 +461,7 @@ func TestMVCCIncrementOldTimestamp(t *testing.T) {
 
 	// Override value.
 	val.SetInt(2)
-	err = MVCCPut(context.Background(), engine, nil, testKey1, makeTS(3, 0), val, nil)
-	if err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(3, 0), val, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -501,8 +499,7 @@ func TestMVCCUpdateExistingKey(t *testing.T) {
 			value1.RawBytes, value.RawBytes)
 	}
 
-	err = MVCCPut(context.Background(), engine, nil, testKey1, makeTS(2, 0), value2, nil)
-	if err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(2, 0), value2, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -533,18 +530,15 @@ func TestMVCCUpdateExistingKeyOldVersion(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 1), value1, nil)
-	if err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 1), value1, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Earlier wall time.
-	err = MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value2, nil)
-	if err == nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 1), value2, nil); err == nil {
 		t.Fatal("expected error on old version")
 	}
 	// Earlier logical time.
-	err = MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value2, nil)
-	if err == nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value2, nil); err == nil {
 		t.Fatal("expected error on old version")
 	}
 }
@@ -599,8 +593,12 @@ func TestMVCCGetNoMoreOldVersion(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(3, 0), value1, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, nil)
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(3, 0), value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, nil); err != nil {
+		t.Fatal(err)
+	}
 
 	value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(2, 0), true, nil)
 	if err != nil {
@@ -686,7 +684,9 @@ func TestMVCCGetAndDelete(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil)
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+		t.Fatal(err)
+	}
 	value, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(2, 0), true, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -1146,14 +1146,30 @@ func TestMVCCScan(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey1, makeTS(2, 0), value4, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey2, makeTS(3, 0), value3, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey3, makeTS(4, 0), value2, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey4, makeTS(5, 0), value1, nil)
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(2, 0), value4, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(3, 0), value3, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(4, 0), value2, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey4, makeTS(5, 0), value1, nil); err != nil {
+		t.Fatal(err)
+	}
 
 	kvs, resumeSpan, _, err := MVCCScan(context.Background(), engine, testKey2, testKey4, math.MaxInt64, makeTS(1, 0), true, nil)
 	if err != nil {
@@ -1198,7 +1214,9 @@ func TestMVCCScan(t *testing.T) {
 		t.Fatalf("resumeSpan = %+v", resumeSpan)
 	}
 
-	_, _, err = MVCCGet(context.Background(), engine, testKey1, makeTS(1, 0), true, txn2)
+	if _, _, err := MVCCGet(context.Background(), engine, testKey1, makeTS(1, 0), true, txn2); err != nil {
+		t.Fatal(err)
+	}
 	kvs, _, _, err = MVCCScan(context.Background(), engine, keyMin, testKey2, math.MaxInt64, makeTS(1, 0), true, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -1216,10 +1234,18 @@ func TestMVCCScanMaxNum(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil)
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil); err != nil {
+		t.Fatal(err)
+	}
 
 	kvs, resumeSpan, _, err := MVCCScan(context.Background(), engine, testKey2, testKey4, 1, makeTS(1, 0), true, nil)
 	if err != nil {
@@ -1263,11 +1289,21 @@ func TestMVCCScanWithKeyPrefix(t *testing.T) {
 	// b<T=5>
 	// In this case, if we scan from "a"-"b", we wish to skip
 	// a<T=2> and a<T=1> and find "aa'.
-	err := MVCCPut(context.Background(), engine, nil, roachpb.Key("/a"), makeTS(1, 0), value1, nil)
-	err = MVCCPut(context.Background(), engine, nil, roachpb.Key("/a"), makeTS(2, 0), value2, nil)
-	err = MVCCPut(context.Background(), engine, nil, roachpb.Key("/aa"), makeTS(2, 0), value2, nil)
-	err = MVCCPut(context.Background(), engine, nil, roachpb.Key("/aa"), makeTS(3, 0), value3, nil)
-	err = MVCCPut(context.Background(), engine, nil, roachpb.Key("/b"), makeTS(1, 0), value3, nil)
+	if err := MVCCPut(context.Background(), engine, nil, roachpb.Key("/a"), makeTS(1, 0), value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, roachpb.Key("/a"), makeTS(2, 0), value2, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, roachpb.Key("/aa"), makeTS(2, 0), value2, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, roachpb.Key("/aa"), makeTS(3, 0), value3, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, roachpb.Key("/b"), makeTS(1, 0), value3, nil); err != nil {
+		t.Fatal(err)
+	}
 
 	kvs, _, _, err := MVCCScan(context.Background(), engine, roachpb.Key("/a"), roachpb.Key("/b"), math.MaxInt64, makeTS(2, 0), true, nil)
 	if err != nil {
@@ -1400,12 +1436,24 @@ func TestMVCCDeleteRange(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey5, makeTS(1, 0), value5, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey6, makeTS(1, 0), value6, nil)
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey5, makeTS(1, 0), value5, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey6, makeTS(1, 0), value6, nil); err != nil {
+		t.Fatal(err)
+	}
 
 	// Attempt to delete two keys.
 	deleted, resumeSpan, num, err := MVCCDeleteRange(
@@ -1514,12 +1562,24 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey5, makeTS(1, 0), value5, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey6, makeTS(1, 0), value6, nil)
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey5, makeTS(1, 0), value5, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey6, makeTS(1, 0), value6, nil); err != nil {
+		t.Fatal(err)
+	}
 
 	// Attempt to delete two keys.
 	deleted, resumeSpan, num, err := MVCCDeleteRange(
@@ -1647,21 +1707,27 @@ func TestMVCCDeleteRangeFailed(t *testing.T) {
 	engine := createTestEngine(stopper)
 
 	txn := *txn1
-	err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil)
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+		t.Fatal(err)
+	}
 	txn.Sequence++
-	err = MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, &txn)
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, &txn); err != nil {
+		t.Fatal(err)
+	}
 	txn.Sequence++
-	err = MVCCPut(context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, &txn)
-	err = MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil)
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(1, 0), value3, &txn); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil); err != nil {
+		t.Fatal(err)
+	}
 
-	_, _, _, err = MVCCDeleteRange(context.Background(), engine, nil, testKey2, testKey4, math.MaxInt64, makeTS(1, 0), nil, false)
-	if err == nil {
+	if _, _, _, err := MVCCDeleteRange(context.Background(), engine, nil, testKey2, testKey4, math.MaxInt64, makeTS(1, 0), nil, false); err == nil {
 		t.Fatal("expected error on uncommitted write intent")
 	}
 
 	txn.Sequence++
-	_, _, _, err = MVCCDeleteRange(context.Background(), engine, nil, testKey2, testKey4, math.MaxInt64, makeTS(1, 0), &txn, false)
-	if err != nil {
+	if _, _, _, err := MVCCDeleteRange(context.Background(), engine, nil, testKey2, testKey4, math.MaxInt64, makeTS(1, 0), &txn, false); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1672,13 +1738,20 @@ func TestMVCCDeleteRangeConcurrentTxn(t *testing.T) {
 	defer stopper.Stop()
 	engine := createTestEngine(stopper)
 
-	err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil)
-	err = MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, txn1)
-	err = MVCCPut(context.Background(), engine, nil, testKey3, makeTS(2, 0), value3, txn2)
-	err = MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil)
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(1, 0), value2, txn1); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(2, 0), value3, txn2); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey4, makeTS(1, 0), value4, nil); err != nil {
+		t.Fatal(err)
+	}
 
-	_, _, _, err = MVCCDeleteRange(context.Background(), engine, nil, testKey2, testKey4, math.MaxInt64, makeTS(1, 0), txn1, false)
-	if err == nil {
+	if _, _, _, err := MVCCDeleteRange(context.Background(), engine, nil, testKey2, testKey4, math.MaxInt64, makeTS(1, 0), txn1, false); err == nil {
 		t.Fatal("expected error on uncommitted write intent")
 	}
 }

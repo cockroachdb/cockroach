@@ -2633,6 +2633,9 @@ func sendSnapshot(
 	}
 	// Wait until we get a response from the server.
 	resp, err := stream.Recv()
+	if err != nil {
+		return err
+	}
 	switch resp.Status {
 	case SnapshotResponse_DECLINED:
 		if header.CanDecline {

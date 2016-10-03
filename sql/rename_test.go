@@ -39,26 +39,24 @@ func TestRenameTable(t *testing.T) {
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop()
 
-	counter := int64(keys.MaxReservedDescID + 1)
+	counter := int64(keys.MaxReservedDescID)
 
-	// Table creation should fail, and nothing should have been written.
+	counter++
 	oldDBID := sqlbase.ID(counter)
 	if _, err := db.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
 	}
-	counter++
 
 	// Create table in 'test'.
-	tableCounter := counter
+	counter++
 	oldName := "foo"
 	if _, err := db.Exec(`CREATE TABLE test.foo (k INT PRIMARY KEY, v int)`); err != nil {
 		t.Fatal(err)
 	}
-	counter++
 
 	// Check the table descriptor.
 	desc := &sqlbase.Descriptor{}
-	tableDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(tableCounter))
+	tableDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(counter))
 	if err := kvDB.GetProto(context.TODO(), tableDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
@@ -71,11 +69,11 @@ func TestRenameTable(t *testing.T) {
 	}
 
 	// Create database test2.
+	counter++
 	newDBID := sqlbase.ID(counter)
 	if _, err := db.Exec(`CREATE DATABASE test2`); err != nil {
 		t.Fatal(err)
 	}
-	counter++
 
 	// Move table to test2 and change its name as well.
 	newName := "bar"
