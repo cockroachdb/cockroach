@@ -1886,7 +1886,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 			refreshReason == noReason {
 			refreshReason = reasonSnapshotApplied
 		}
-		// TODO(bdarnell): update coalesced heartbeat mapping with snapshot info.
 	}
 
 	batch := r.store.Engine().NewBatch()
@@ -1997,7 +1996,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 				// If processRaftCommand failed, tell raft that the config change was aborted.
 				cc = raftpb.ConfChange{}
 			}
-			// TODO(bdarnell): update coalesced heartbeat mapping on success.
 			if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 				raftGroup.ApplyConfChange(cc)
 				return true, nil
@@ -2232,19 +2230,28 @@ func (r *Replica) maybeQuiesceLocked() bool {
 			r.unquiesceLocked()
 			return false
 		}
-		if !r.sendRaftMessageRequest(&RaftMessageRequest{
+		msg := raftpb.Message{
+			From:   uint64(r.mu.replicaID),
+			To:     id,
+			Type:   raftpb.MsgHeartbeat,
+			Term:   status.Term,
+			Commit: status.Commit,
+		}
+		if r.store.ctx.enableCoalescedHeartbeats {
+			if !r.maybeCoalesceHeartbeat(msg, toReplica, fromReplica, true) {
+				r.unquiesceLocked()
+				return false
+			}
+		}
+
+		req := &RaftMessageRequest{
 			RangeID:     r.RangeID,
 			ToReplica:   toReplica,
 			FromReplica: fromReplica,
-			Message: raftpb.Message{
-				From:   uint64(r.mu.replicaID),
-				To:     id,
-				Type:   raftpb.MsgHeartbeat,
-				Term:   status.Term,
-				Commit: status.Commit,
-			},
-			Quiesce: true,
-		}) {
+			Message:     msg,
+			Quiesce:     true,
+		}
+		if !r.sendRaftMessageRequest(req) {
 			r.unquiesceLocked()
 			r.mu.droppedMessages++
 			r.mu.internalRaftGroup.ReportUnreachable(id)
@@ -2342,6 +2349,40 @@ func (r *Replica) getReplicaDescriptorByIDLocked(
 		errors.Errorf("replica %d not present in %v, %v", replicaID, fallback, r.mu.state.Desc.Replicas)
 }
 
+func (r *Replica) maybeCoalesceHeartbeat(
+	msg raftpb.Message, toReplica, fromReplica roachpb.ReplicaDescriptor, quiesce bool,
+) bool {
+	if r.store.ctx.enableCoalescedHeartbeats {
+		var hbMap map[roachpb.StoreIdent][]RaftHeartbeat
+		switch msg.Type {
+		case raftpb.MsgHeartbeat:
+			r.store.coalescedMu.Lock()
+			hbMap = r.store.coalescedMu.heartbeats
+		case raftpb.MsgHeartbeatResp:
+			r.store.coalescedMu.Lock()
+			hbMap = r.store.coalescedMu.heartbeatResponses
+		default:
+			return false
+		}
+		beat := RaftHeartbeat{
+			RangeID:       r.RangeID,
+			ToReplicaID:   toReplica.ReplicaID,
+			FromReplicaID: fromReplica.ReplicaID,
+			Term:          msg.Term,
+			Commit:        msg.Commit,
+			Quiesce:       quiesce,
+		}
+		toStore := roachpb.StoreIdent{
+			StoreID: toReplica.StoreID,
+			NodeID:  toReplica.NodeID,
+		}
+		hbMap[toStore] = append(hbMap[toStore], beat)
+		r.store.coalescedMu.Unlock()
+		return true
+	}
+	return false
+}
+
 func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	r.mu.Lock()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
@@ -2395,6 +2436,7 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 							FromReplica: fromReplica,
 							ToReplica:   toReplica,
 							Message:     msg,
+							Quiesce:     false,
 						},
 						// TODO(jordan) set this size accurately
 						RangeSize:  0,
@@ -2420,6 +2462,10 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 	r.store.ctx.Transport.mu.Unlock()
 	r.store.metrics.RaftEnqueuedPending.Update(queuedMsgs)
 
+	if r.maybeCoalesceHeartbeat(msg, toReplica, fromReplica, false) {
+		return
+	}
+
 	if !r.sendRaftMessageRequest(&RaftMessageRequest{
 		RangeID:     r.RangeID,
 		ToReplica:   toReplica,
@@ -2434,6 +2480,14 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 			r.panic(err)
 		}
 	}
+}
+
+// reportUnreachable reports the remote replica as unreachable to the internal
+// raft group.
+func (r *Replica) reportUnreachable(remoteReplica roachpb.ReplicaID) {
+	r.mu.Lock()
+	r.mu.internalRaftGroup.ReportUnreachable(uint64(remoteReplica))
+	r.mu.Unlock()
 }
 
 // sendRaftMessageRequest sends a raft message, returning false if the message
