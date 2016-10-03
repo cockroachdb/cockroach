@@ -270,6 +270,8 @@ func (p *planner) newPlan(stmt parser.Statement, desiredTypes []parser.Datum, au
 		return p.Explain(n, autoCommit)
 	case *parser.Grant:
 		return p.Grant(n)
+	case *parser.Help:
+		return p.Help(n)
 	case *parser.Insert:
 		return p.Insert(n, desiredTypes, autoCommit)
 	case *parser.ParenSelect:
@@ -331,6 +333,8 @@ func (p *planner) prepare(stmt parser.Statement) (planNode, error) {
 	switch n := stmt.(type) {
 	case *parser.Delete:
 		return p.Delete(n, nil, false)
+	case *parser.Help:
+		return p.Help(n)
 	case *parser.Insert:
 		return p.Insert(n, nil, false)
 	case *parser.Select:

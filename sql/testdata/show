@@ -7,3 +7,15 @@ query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 SERIALIZABLE
+
+query TTTT colnames
+HELP replace
+----
+Function    Signature                           Category            Details
+replace     string, string, string -> string    String and Byte
+
+
+query TTTT colnames
+HELP missing
+----
+Function    Signature                           Category            Details
