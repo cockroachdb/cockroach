@@ -273,6 +273,16 @@ SELECT avg(d) OVER (PARTITION BY v, v, v, v, v, v, v, v, v, v) FROM kv WHERE k =
 ----
 8.0000000000000000
 
+query IT
+SELECT k, concat_agg(s) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
+----
+1   bab
+3   Aa
+5   NULL
+6   bab
+7   b
+8   A
+
 query IB
 SELECT k, bool_and(b) OVER (PARTITION BY v ORDER BY w) FROM kv ORDER BY 1
 ----
