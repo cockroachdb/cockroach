@@ -74,7 +74,6 @@ func openStore(cmd *cobra.Command, dir string, stopper *stop.Stopper) (*engine.R
 		roachpb.Attributes{},
 		dir,
 		cache,
-		10<<20,
 		0,
 		maxOpenFiles,
 		stopper,

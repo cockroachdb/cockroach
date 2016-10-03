@@ -1418,8 +1418,9 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
   options.max_open_files = db_opts.max_open_files;
 
+  const uint64_t memtable_budget = 32 << 20; // 32 MB
   options.max_write_buffer_number = 4;
-  options.write_buffer_size = db_opts.memtable_budget / options.max_write_buffer_number;
+  options.write_buffer_size = memtable_budget / options.max_write_buffer_number;
   options.level0_file_num_compaction_trigger = 1;
   options.level0_slowdown_writes_trigger = 16;
   options.level0_stop_writes_trigger = 17;

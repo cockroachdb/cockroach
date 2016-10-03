@@ -43,16 +43,9 @@ import (
 
 // Context defaults.
 const (
-	defaultCGroupMemPath = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
-	defaultMaxOffset     = 250 * time.Millisecond
-	defaultCacheSize     = 512 << 20 // 512 MB
-	// defaultMemtableBudget controls how much memory can be used for memory
-	// tables. The way we initialize RocksDB, 100% (32 MB) of this setting can be
-	// used for memory tables and each memory table will be 25% of the size (8
-	// MB). This corresponds to the default RocksDB memtable size. Note that
-	// larger values do not necessarily improve performance, so benchmark any
-	// changes to this value.
-	defaultMemtableBudget           = 32 << 20 // 32 MB
+	defaultCGroupMemPath            = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+	defaultMaxOffset                = 250 * time.Millisecond
+	defaultCacheSize                = 512 << 20 // 512 MB
 	defaultScanInterval             = 10 * time.Minute
 	defaultConsistencyCheckInterval = 24 * time.Hour
 	defaultScanMaxIdleTime          = 5 * time.Second
@@ -92,11 +85,6 @@ type Context struct {
 	// CacheSize is the amount of memory in bytes to use for caching data.
 	// The value is split evenly between the stores if there are more than one.
 	CacheSize int64
-
-	// MemtableBudget is the amount of memory, per store, in bytes to use for
-	// the memory table.
-	// This value is no longer settable by the end user.
-	MemtableBudget int64
 
 	// Parsed values.
 
@@ -337,7 +325,6 @@ func MakeContext() Context {
 		Context:                  new(base.Context),
 		MaxOffset:                defaultMaxOffset,
 		CacheSize:                defaultCacheSize,
-		MemtableBudget:           defaultMemtableBudget,
 		ScanInterval:             defaultScanInterval,
 		ScanMaxIdleTime:          defaultScanMaxIdleTime,
 		ConsistencyCheckInterval: defaultConsistencyCheckInterval,
@@ -402,7 +389,6 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 					spec.Attributes,
 					spec.Path,
 					cache,
-					ctx.MemtableBudget,
 					sizeInBytes,
 					openFileLimitPerStore,
 					stopper,
