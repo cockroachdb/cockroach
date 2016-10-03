@@ -45,6 +45,28 @@ statement error compound types not supported yet: "k\.v"
 UPDATE kv SET k.v = 9
 
 statement ok
+CREATE VIEW kview as SELECT * from kv
+
+query II
+SELECT * FROM kview
+----
+1 10
+3 12
+5 11
+7 15
+
+statement error cannot run UPDATE on view "kview" - views are not updateable
+UPDATE kview SET v = 99 WHERE k IN (1, 3)
+
+query II
+SELECT * FROM kview
+----
+1 10
+3 12
+5 11
+7 15
+
+statement ok
 CREATE TABLE kv2 (
   k CHAR PRIMARY KEY,
   v CHAR,

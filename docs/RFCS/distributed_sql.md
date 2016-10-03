@@ -1,9 +1,9 @@
 - Feature Name: Distributing SQL queries
-- Status: draft
+- Status: in-progress
 - Start Date: 2015/02/12
 - Authors: andreimatei, knz, RaduBerinde
-- RFC PR: (PR # after acceptance of initial draft)
-- Cockroach Issue: (one or more # from the issue tracker)
+- RFC PR: [#6067](https://github.com/cockroachdb/cockroach/pull/6067)
+- Cockroach Issue:
 
 # Table of Contents
 
@@ -578,11 +578,11 @@ PROGRAM sortval
   }
 ```
 
-![Logical plan](distributed_sql_logical_plan.png?raw=true "Logical Plan")
+![Logical plan](images/distributed_sql_logical_plan.png?raw=true "Logical Plan")
 
 This logical plan above could be instantiated as the following physical plan:
 
-![Physical plan](distributed_sql_physical_plan.png?raw=true "Physical Plan")
+![Physical plan](images/distributed_sql_physical_plan.png?raw=true "Physical Plan")
 
 Each box in the physical plan is a *processor*:
  - `src` is a table reader and performs KV Get operations and forms rows; it is
@@ -604,7 +604,7 @@ Note that the second stage of the `summer` aggregator doesn't need to run on the
 same nodes; for example, an alternate physical plan could use a single stage 2
 processor:
 
-![Alternate physical plan](distributed_sql_physical_plan_2.png?raw=true "Alternate physical Plan")
+![Alternate physical plan](images/distributed_sql_physical_plan_2.png?raw=true "Alternate physical Plan")
 
 The processors always form a directed acyclic graph.
 
@@ -612,7 +612,7 @@ The processors always form a directed acyclic graph.
 
 Processors are generally made up of three components:
 
-![Processor](distributed_sql_processor.png?raw=true "Processor")
+![Processor](images/distributed_sql_processor.png?raw=true "Processor")
 
 1. The *input synchronizer* merges the input streams into a single stream of
    data. Types:
@@ -620,7 +620,7 @@ Processors are generally made up of three components:
    * unsynchronized: passes rows from all input streams, arbitrarily
      interleaved.
    * ordered: the input physical streams have an ordering guarantee (namely the
-     guarantee of the corresponding locical stream); the synchronizer is careful
+     guarantee of the corresponding logical stream); the synchronizer is careful
      to interleave the streams so that the merged stream has the same guarantee.
 
 2. The *data processor* core implements the data transformation or aggregation
@@ -767,7 +767,7 @@ AGGREGATOR final
   Input schema: First:STRING, Last:STRING, Age:INT, College:STRING
 ```
 
-![Logical plan for join](distributed_sql_join_logical.png?raw=true "Logical plan for join")
+![Logical plan for join](images/distributed_sql_join_logical.png?raw=true "Logical plan for join")
 
 At the heart of the physical implementation of the stream join aggregators sits
 the join processor which (in general) puts all the rows from one stream in a
@@ -784,7 +784,7 @@ routers:
    in a group reach the same instance, achieving a hash-join. An example
    physical plan:
 
-   ![Physical plan for hash join](distributed_sql_join_physical.png?raw=true "Physical plan for hash join")
+   ![Physical plan for hash join](images/distributed_sql_join_physical.png?raw=true "Physical plan for hash join")
 
  - the routers can *duplicate* all rows from the physical streams for one table
    and distribute copies to all processor instances; the streams for the other
@@ -795,7 +795,7 @@ routers:
    For the query above, if we expect few results from `src2`, this plan would
    be more efficient:
 
-   ![Physical plan for dup join](distributed_sql_join_physical2.png?raw=true "Physical plan for dup join")
+   ![Physical plan for dup join](images/distributed_sql_join_physical2.png?raw=true "Physical plan for dup join")
 
    The difference in this case is that the streams for the first table stay on
    the same node, and the routers after the `src2` table readers are configured
@@ -941,7 +941,7 @@ tagging to the different streams entering the mailbox, so that the inter-stream
 ordering property can still be used by the consumer.
 
 A diagram of a simple query using mailboxes for its execution:
-![Mailboxes](distributed_sql_mailboxes.png?raw=true)
+![Mailboxes](images/distributed_sql_mailboxes.png?raw=true)
 
 ### On-the-fly flows setup
 
@@ -1098,7 +1098,7 @@ order-by-date -> orders -> count-and-sum -> customers -> inserter -> intent-coll
 ```
 
 A possible physical plan:
-![Physical plan](distributed_sql_daily_promotion_physical_plan.png?raw=true)
+![Physical plan](images/distributed_sql_daily_promotion_physical_plan.png?raw=true)
 
 # Implementation strategy
 

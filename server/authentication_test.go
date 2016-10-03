@@ -113,40 +113,35 @@ func TestSSLEnforcement(t *testing.T) {
 		{"GET", "/index.html", nil, nodeCertsContext, true, http.StatusOK},
 		{"GET", "/index.html", nil, testCertsContext, true, http.StatusOK},
 		{"GET", "/index.html", nil, noCertsContext, true, http.StatusOK},
-		// TODO(tamird): s/308/http.StatusPermanentRedirect/ when it exists.
-		{"GET", "/index.html", nil, insecureContext, true, 308},
+		{"GET", "/index.html", nil, insecureContext, true, http.StatusPermanentRedirect},
 
 		// /_admin/: server.adminServer: no auth.
-		{"GET", healthPath, nil, rootCertsContext, true, http.StatusOK},
-		{"GET", healthPath, nil, nodeCertsContext, true, http.StatusOK},
-		{"GET", healthPath, nil, testCertsContext, true, http.StatusOK},
-		{"GET", healthPath, nil, noCertsContext, true, http.StatusOK},
-		// TODO(tamird): s/308/http.StatusPermanentRedirect/ when it exists.
-		{"GET", healthPath, nil, insecureContext, true, 308},
+		{"GET", adminPrefix + "health", nil, rootCertsContext, true, http.StatusOK},
+		{"GET", adminPrefix + "health", nil, nodeCertsContext, true, http.StatusOK},
+		{"GET", adminPrefix + "health", nil, testCertsContext, true, http.StatusOK},
+		{"GET", adminPrefix + "health", nil, noCertsContext, true, http.StatusOK},
+		{"GET", adminPrefix + "health", nil, insecureContext, true, http.StatusPermanentRedirect},
 
 		// /debug/: server.adminServer: no auth.
 		{"GET", debugEndpoint + "vars", nil, rootCertsContext, true, http.StatusOK},
 		{"GET", debugEndpoint + "vars", nil, nodeCertsContext, true, http.StatusOK},
 		{"GET", debugEndpoint + "vars", nil, testCertsContext, true, http.StatusOK},
 		{"GET", debugEndpoint + "vars", nil, noCertsContext, true, http.StatusOK},
-		// TODO(tamird): s/308/http.StatusPermanentRedirect/ when it exists.
-		{"GET", debugEndpoint + "vars", nil, insecureContext, true, 308},
+		{"GET", debugEndpoint + "vars", nil, insecureContext, true, http.StatusPermanentRedirect},
 
 		// /_status/nodes: server.statusServer: no auth.
-		{"GET", statusNodesPrefix, nil, rootCertsContext, true, http.StatusOK},
-		{"GET", statusNodesPrefix, nil, nodeCertsContext, true, http.StatusOK},
-		{"GET", statusNodesPrefix, nil, testCertsContext, true, http.StatusOK},
-		{"GET", statusNodesPrefix, nil, noCertsContext, true, http.StatusOK},
-		// TODO(tamird): s/308/http.StatusPermanentRedirect/ when it exists.
-		{"GET", statusNodesPrefix, nil, insecureContext, true, 308},
+		{"GET", statusPrefix + "nodes", nil, rootCertsContext, true, http.StatusOK},
+		{"GET", statusPrefix + "nodes", nil, nodeCertsContext, true, http.StatusOK},
+		{"GET", statusPrefix + "nodes", nil, testCertsContext, true, http.StatusOK},
+		{"GET", statusPrefix + "nodes", nil, noCertsContext, true, http.StatusOK},
+		{"GET", statusPrefix + "nodes", nil, insecureContext, true, http.StatusPermanentRedirect},
 
 		// /ts/: ts.Server: no auth.
 		{"GET", ts.URLPrefix, nil, rootCertsContext, true, http.StatusNotFound},
 		{"GET", ts.URLPrefix, nil, nodeCertsContext, true, http.StatusNotFound},
 		{"GET", ts.URLPrefix, nil, testCertsContext, true, http.StatusNotFound},
 		{"GET", ts.URLPrefix, nil, noCertsContext, true, http.StatusNotFound},
-		// TODO(tamird): s/308/http.StatusPermanentRedirect/ when it exists.
-		{"GET", ts.URLPrefix, nil, insecureContext, true, 308},
+		{"GET", ts.URLPrefix, nil, insecureContext, true, http.StatusPermanentRedirect},
 	}
 
 	for tcNum, tc := range testCases {

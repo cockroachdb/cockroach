@@ -1,5 +1,5 @@
 import { assert } from "chai";
-import _ = require("lodash");
+import _ from "lodash";
 import { CachedDataReducer, CachedDataReducerState, KeyedCachedDataReducer, KeyedCachedDataReducerState } from "./cachedDataReducer";
 import { Action } from "../interfaces/action";
 
@@ -60,7 +60,6 @@ describe("basic cachedDataReducer", function () {
 
       it("should correctly dispatch receiveData", function () {
         let expectedResponse = new Response(null);
-
         state = reducer(state, testReducerObj.receiveData(expectedResponse, null));
         expected = new CachedDataReducerState<Response>();
         expected.valid = true;

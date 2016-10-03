@@ -17,10 +17,12 @@
 package util
 
 import (
+	"bytes"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/gogo/protobuf/jsonpb"
@@ -55,33 +57,43 @@ const (
 // GetJSON uses the supplied client to GET the URL specified by the parameters
 // and unmarshals the result into response.
 func GetJSON(httpClient http.Client, path string, response proto.Message) error {
-	resp, err := httpClient.Get(path)
+	req, err := http.NewRequest("GET", path, nil)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		b, _ := ioutil.ReadAll(resp.Body)
-		return errors.Errorf("status: %s, body: %s", resp.Status, b)
-	}
-	return jsonpb.Unmarshal(resp.Body, response)
+	return doJSONRequest(httpClient, req, response)
 }
 
 // PostJSON uses the supplied client to POST request to the URL specified by
-// the parameters and unmarshals the result into response .
+// the parameters and unmarshals the result into response.
 func PostJSON(httpClient http.Client, path string, request, response proto.Message) error {
-	str, err := (&jsonpb.Marshaler{}).MarshalToString(request)
+	// Hack to avoid upsetting TestProtoMarshal().
+	marshalFn := (&jsonpb.Marshaler{}).Marshal
+
+	var buf bytes.Buffer
+	if err := marshalFn(&buf, request); err != nil {
+		return err
+	}
+	req, err := http.NewRequest("POST", path, &buf)
 	if err != nil {
 		return err
 	}
-	resp, err := httpClient.Post(path, JSONContentType, strings.NewReader(str))
+	return doJSONRequest(httpClient, req, response)
+}
+
+func doJSONRequest(httpClient http.Client, req *http.Request, response proto.Message) error {
+	if timeout := httpClient.Timeout; timeout > 0 {
+		req.Header.Set("Grpc-Timeout", strconv.FormatInt(timeout.Nanoseconds(), 10)+"n")
+	}
+	req.Header.Set(AcceptHeader, JSONContentType)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	if contentType := resp.Header.Get(ContentTypeHeader); !(resp.StatusCode == http.StatusOK && contentType == JSONContentType) {
 		b, err := ioutil.ReadAll(resp.Body)
-		return errors.Errorf("status: %s, body: %s, error: %s", resp.Status, b, err)
+		return errors.Errorf("status: %s, content-type: %s, body: %s, error: %v", resp.Status, contentType, b, err)
 	}
 	return jsonpb.Unmarshal(resp.Body, response)
 }
@@ -110,7 +122,7 @@ func StreamJSON(
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		b, err := ioutil.ReadAll(resp.Body)
-		return errors.Errorf("status: %s, body: %s, error: %s", resp.Status, b, err)
+		return errors.Errorf("status: %s, body: %s, error: %v", resp.Status, b, err)
 	}
 
 	// grpc-gw/runtime's JSONpb {en,de}coder is pretty half-baked. Essentially

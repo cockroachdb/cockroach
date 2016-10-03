@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -302,7 +301,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 			// concurrently, the range is already split at the specified key or the
 			// split key is outside of the bounds for the range.
 			expected := strings.Join([]string{
-				"conflict updating range descriptors",
+				storage.ErrMsgConflictUpdatingRangeDesc,
 				"range is already split at key",
 				"key range .* outside of bounds of range",
 			}, "|")
@@ -823,12 +822,8 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	verifySplitsAtTablePrefixes := func(maxTableID int) {
 		// We expect splits at each of the user tables, but not at the system
 		// tables boundaries.
-		expKeys := make([]roachpb.Key, 0, maxTableID+2)
-
-		// We can't simply set numReservedTables to schema.TableCount(), because
-		// some system tables are created at cluster bootstrap time. So, before the
-		// cluster bootstrap, TableCount() will return a value that's too low.
-		numReservedTables := schema.MaxTableID() - keys.MaxSystemConfigDescID
+		numReservedTables := schema.SystemDescriptorCount() - schema.SystemConfigDescriptorCount()
+		expKeys := make([]roachpb.Key, 0, maxTableID+numReservedTables)
 		for i := 1; i <= int(numReservedTables); i++ {
 			expKeys = append(expKeys,
 				testutils.MakeKey(keys.Meta2Prefix,
@@ -860,9 +855,8 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 
 	verifySplitsAtTablePrefixes(userTableMax)
 
-	numTotalValues := keys.MaxSystemConfigDescID + server.ExpectedInitialRangeCount()
-
-	// Write another, disjoint descriptor for a user table.
+	// Write another, disjoint (+3) descriptor for a user table.
+	numTotalValues := userTableMax + 3
 	if err := store.DB().Txn(context.TODO(), func(txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
 		// This time, only write the last table descriptor. Splits
@@ -1561,14 +1555,14 @@ func writeRandomTimeSeriesDataToRange(
 			}
 			for k := int64(0); k <= src.Int63n(10); k++ {
 				d.Datapoints = append(d.Datapoints, tspb.TimeSeriesDatapoint{
-					TimestampNanos: src.Int63n(200) * r.KeyDuration(),
+					TimestampNanos: src.Int63n(200) * r.SlabDuration(),
 					Value:          src.Float64(),
 				})
 			}
 			data = append(data, d)
 		}
 		for _, d := range data {
-			idatas, err := d.ToInternal(r.KeyDuration(), r.SampleDuration())
+			idatas, err := d.ToInternal(r.SlabDuration(), r.SampleDuration())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1593,7 +1587,7 @@ func writeRandomTimeSeriesDataToRange(
 	}
 	// Return approximate midway point (100 is midway between random timestamps in range [0,200)).
 	midKey := append([]byte(nil), keyPrefix...)
-	midKey = encoding.EncodeVarintAscending(midKey, 100*r.KeyDuration())
+	midKey = encoding.EncodeVarintAscending(midKey, 100*r.SlabDuration())
 	return keys.MakeRowSentinelKey(midKey)
 }
 

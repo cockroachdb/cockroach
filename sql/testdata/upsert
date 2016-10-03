@@ -113,13 +113,42 @@ statement ok
 DELETE FROM abc where a = 1
 
 statement ok
+UPSERT INTO abc VALUES (1, 2)
+
+query III
+SELECT * FROM abc ORDER BY (a, b, c)
+----
+1 2 7
+7 8 6
+
+statement ok
+UPSERT INTO abc VALUES (1, 2, 5)
+
+query III
+SELECT * FROM abc ORDER BY (a, b, c)
+----
+1 2 5
+7 8 6
+
+statement ok
+UPSERT INTO abc VALUES (1, 2)
+
+query III
+SELECT * FROM abc ORDER BY (a, b, c)
+----
+1 2 7
+7 8 6
+
+statement ok
+DELETE FROM abc where a = 1
+
+statement ok
 INSERT INTO abc VALUES (7, 8, 9) ON CONFLICT (a, b) DO UPDATE SET c = DEFAULT
 
 query III
 SELECT * FROM abc ORDER BY (a, b, c)
 ----
 7 8 7
-
 
 statement ok
 CREATE TABLE excluded (a INT PRIMARY KEY, b INT)

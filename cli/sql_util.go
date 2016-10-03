@@ -43,16 +43,21 @@ type sqlConnI interface {
 }
 
 type sqlConn struct {
-	url  string
-	conn sqlConnI
+	url          string
+	conn         sqlConnI
+	reconnecting bool
 }
 
 func (c *sqlConn) ensureConn() error {
 	if c.conn == nil {
+		if c.reconnecting && isInteractive {
+			fmt.Fprintf(osStderr, "connection lost; opening new connection and resetting session parameters...\n")
+		}
 		conn, err := pq.Open(c.url)
 		if err != nil {
 			return err
 		}
+		c.reconnecting = false
 		c.conn = conn.(sqlConnI)
 	}
 	return nil
@@ -72,6 +77,7 @@ func (c *sqlConn) Query(query string, args []driver.Value) (*sqlRows, error) {
 	}
 	rows, err := c.conn.Query(query, args)
 	if err == driver.ErrBadConn {
+		c.reconnecting = true
 		c.Close()
 	}
 	if err != nil {
@@ -86,6 +92,7 @@ func (c *sqlConn) Next() (*sqlRows, error) {
 	}
 	rows, err := c.conn.Next()
 	if err == driver.ErrBadConn {
+		c.reconnecting = true
 		c.Close()
 	}
 	if err != nil {
@@ -153,6 +160,7 @@ func (r *sqlRows) Close() error {
 func (r *sqlRows) Next(values []driver.Value) error {
 	err := r.rows.Next(values)
 	if err == driver.ErrBadConn {
+		r.conn.reconnecting = true
 		r.conn.Close()
 	}
 	for i, v := range values {

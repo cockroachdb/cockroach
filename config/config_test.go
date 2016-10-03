@@ -22,11 +22,11 @@ import (
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
+	"gopkg.in/yaml.v2"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -220,19 +220,9 @@ func TestComputeSplits(t *testing.T) {
 	)
 
 	schema := sqlbase.MakeMetadataSchema()
-	// Real SQL system tables only.
+	// Real system tables only.
 	baseSql := schema.GetInitialValues()
-	// Real SQL system tables plus some user stuff.
-	userSql := append(schema.GetInitialValues(),
-		descriptor(start), descriptor(start+1), descriptor(start+5))
-	// Real SQL system with reserved non-system tables.
-	priv := sqlbase.NewDefaultPrivilegeDescriptor()
-	desc1 := sql.CreateTableDescriptor(reservedStart+1, keys.SystemDatabaseID, "CREATE TABLE system.test1 (i INT PRIMARY KEY)", priv)
-	schema.AddDescriptor(keys.SystemDatabaseID, &desc1)
-	desc2 := sql.CreateTableDescriptor(reservedStart+2, keys.SystemDatabaseID, "CREATE TABLE system.test2 (i INT PRIMARY KEY)", priv)
-	schema.AddDescriptor(keys.SystemDatabaseID, &desc2)
-	reservedSql := schema.GetInitialValues()
-	// Real SQL system with reserved non-system and user database.
+	// Real system tables plus some user stuff.
 	allSql := append(schema.GetInitialValues(),
 		descriptor(start), descriptor(start+1), descriptor(start+5))
 	sort.Sort(roachpb.KeyValueByKey(allSql))
@@ -256,44 +246,37 @@ func TestComputeSplits(t *testing.T) {
 		{nil, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), nil},
 		{nil, roachpb.RKeyMin, keys.MakeTablePrefix(start + 10), nil},
 
-		// No user data.
+		// Reserved descriptors.
 		{baseSql, roachpb.RKeyMin, roachpb.RKeyMax, allReservedSplits},
 		{baseSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, nil},
 		{baseSql, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), nil},
 		{baseSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 10), allReservedSplits},
-
-		// User descriptors.
-		{userSql, keys.MakeTablePrefix(start - 1), roachpb.RKeyMax, allUserSplits},
-		{userSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, allUserSplits[1:]},
-		{userSql, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), allUserSplits[1:]},
-		{userSql, keys.MakeTablePrefix(start - 1), keys.MakeTablePrefix(start + 10), allUserSplits},
-		{userSql, keys.MakeTablePrefix(start + 4), keys.MakeTablePrefix(start + 10), allUserSplits[5:]},
-		{userSql, keys.MakeTablePrefix(start + 5), keys.MakeTablePrefix(start + 10), nil},
-		{userSql, keys.MakeTablePrefix(start + 6), keys.MakeTablePrefix(start + 10), nil},
-		{userSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
-			keys.MakeTablePrefix(start + 10), allUserSplits[1:]},
-		{userSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
-			keys.MakeTablePrefix(start + 5), allUserSplits[1:5]},
-		{userSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
-			testutils.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("bar")), allUserSplits[1:5]},
-		{userSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
-			testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("morefoo")), nil},
-
-		// Reserved descriptors.
-		{reservedSql, roachpb.RKeyMin, roachpb.RKeyMax, allReservedSplits},
-		{reservedSql, keys.MakeTablePrefix(reservedStart), roachpb.RKeyMax, allReservedSplits[1:]},
-		{reservedSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, nil},
-		{reservedSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(start + 10), allReservedSplits[1:]},
-		{reservedSql, roachpb.RKeyMin, keys.MakeTablePrefix(reservedStart + 2), allReservedSplits[:2]},
-		{reservedSql, roachpb.RKeyMin, keys.MakeTablePrefix(reservedStart + 10), allReservedSplits},
-		{reservedSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(reservedStart + 2), allReservedSplits[1:2]},
-		{reservedSql, testutils.MakeKey(keys.MakeTablePrefix(reservedStart), roachpb.RKey("foo")),
+		{baseSql, keys.MakeTablePrefix(reservedStart), roachpb.RKeyMax, allReservedSplits[1:]},
+		{baseSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(start + 10), allReservedSplits[1:]},
+		{baseSql, roachpb.RKeyMin, keys.MakeTablePrefix(reservedStart + 2), allReservedSplits[:2]},
+		{baseSql, roachpb.RKeyMin, keys.MakeTablePrefix(reservedStart + 10), allReservedSplits},
+		{baseSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(reservedStart + 2), allReservedSplits[1:2]},
+		{baseSql, testutils.MakeKey(keys.MakeTablePrefix(reservedStart), roachpb.RKey("foo")),
 			testutils.MakeKey(keys.MakeTablePrefix(start+10), roachpb.RKey("foo")), allReservedSplits[1:]},
 
-		// Reserved/User mix.
+		// Reserved + User descriptors.
+		{allSql, keys.MakeTablePrefix(start - 1), roachpb.RKeyMax, allUserSplits},
+		{allSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, allUserSplits[1:]},
+		{allSql, keys.MakeTablePrefix(start), keys.MakeTablePrefix(start + 10), allUserSplits[1:]},
+		{allSql, keys.MakeTablePrefix(start - 1), keys.MakeTablePrefix(start + 10), allUserSplits},
+		{allSql, keys.MakeTablePrefix(start + 4), keys.MakeTablePrefix(start + 10), allUserSplits[5:]},
+		{allSql, keys.MakeTablePrefix(start + 5), keys.MakeTablePrefix(start + 10), nil},
+		{allSql, keys.MakeTablePrefix(start + 6), keys.MakeTablePrefix(start + 10), nil},
+		{allSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
+			keys.MakeTablePrefix(start + 10), allUserSplits[1:]},
+		{allSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
+			keys.MakeTablePrefix(start + 5), allUserSplits[1:5]},
+		{allSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
+			testutils.MakeKey(keys.MakeTablePrefix(start+5), roachpb.RKey("bar")), allUserSplits[1:5]},
+		{allSql, testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("foo")),
+			testutils.MakeKey(keys.MakeTablePrefix(start), roachpb.RKey("morefoo")), nil},
 		{allSql, roachpb.RKeyMin, roachpb.RKeyMax, allSplits},
 		{allSql, keys.MakeTablePrefix(reservedStart + 1), roachpb.RKeyMax, allSplits[2:]},
-		{allSql, keys.MakeTablePrefix(start), roachpb.RKeyMax, allUserSplits[1:]},
 		{allSql, keys.MakeTablePrefix(reservedStart), keys.MakeTablePrefix(start + 10), allSplits[1:]},
 		{allSql, roachpb.RKeyMin, keys.MakeTablePrefix(start + 2), allSplits[:6]},
 		{allSql, testutils.MakeKey(keys.MakeTablePrefix(reservedStart), roachpb.RKey("foo")),
@@ -332,26 +315,26 @@ func TestZoneConfigValidate(t *testing.T) {
 		},
 		{
 			config.ZoneConfig{
-				ReplicaAttrs: make([]roachpb.Attributes, 2),
+				NumReplicas: 2,
 			},
 			"at least 3 replicas are required for multi-replica configurations",
 		},
 		{
 			config.ZoneConfig{
-				ReplicaAttrs: make([]roachpb.Attributes, 1),
+				NumReplicas: 1,
 			},
 			"RangeMaxBytes 0 less than minimum allowed",
 		},
 		{
 			config.ZoneConfig{
-				ReplicaAttrs:  make([]roachpb.Attributes, 1),
+				NumReplicas:   1,
 				RangeMaxBytes: config.DefaultZoneConfig().RangeMaxBytes,
 			},
 			"",
 		},
 		{
 			config.ZoneConfig{
-				ReplicaAttrs:  make([]roachpb.Attributes, 1),
+				NumReplicas:   1,
 				RangeMinBytes: config.DefaultZoneConfig().RangeMaxBytes,
 				RangeMaxBytes: config.DefaultZoneConfig().RangeMaxBytes,
 			},
@@ -367,5 +350,62 @@ func TestZoneConfigValidate(t *testing.T) {
 		} else if !testutils.IsError(err, c.expected) {
 			t.Fatalf("%d: expected %s, but got %v", i, c.expected, err)
 		}
+	}
+}
+
+// TestZoneConfigMarshalYAML makes sure that ZoneConfig is correctly marshaled
+// to YAML and back.
+func TestZoneConfigMarshalYAML(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	original := config.ZoneConfig{
+		RangeMinBytes: 1,
+		RangeMaxBytes: 1,
+		GC: config.GCPolicy{
+			TTLSeconds: 1,
+		},
+		NumReplicas: 1,
+		Constraints: config.Constraints{
+			Constraints: []config.Constraint{
+				{
+					Type:  config.Constraint_POSITIVE,
+					Value: "foo",
+				},
+				{
+					Type:  config.Constraint_REQUIRED,
+					Key:   "duck",
+					Value: "foo",
+				},
+				{
+					Type:  config.Constraint_PROHIBITED,
+					Key:   "duck",
+					Value: "foo",
+				},
+			},
+		},
+	}
+
+	expected := `range_min_bytes: 1
+range_max_bytes: 1
+gc:
+  ttlseconds: 1
+num_replicas: 1
+constraints: [foo, +duck=foo, -duck=foo]
+`
+
+	body, err := yaml.Marshal(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != expected {
+		t.Fatalf("yaml.Marshal(%+v) = %s; not %s", original, body, expected)
+	}
+
+	var unmarshaled config.ZoneConfig
+	if err := yaml.Unmarshal(body, &unmarshaled); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(unmarshaled, original) {
+		t.Errorf("yaml.Unmarshal(%q) = %+v; not %+v", body, unmarshaled, original)
 	}
 }

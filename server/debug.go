@@ -115,7 +115,7 @@ table tr td {
 <a href="./pprof/heap?debug=1">heap</a><br />
 <a href="./pprof/profile?debug=1">profile</a><br />
 <a href="./pprof/block?debug=1">block</a><br />
-<a href="./pprof/trace?debug=1">heap</a><br />
+<a href="./pprof/trace?debug=1">trace</a><br />
 <a href="./pprof/threadcreate?debug=1">threadcreate</a><br />
 <a href="./pprof/goroutine?debug=1">goroutine</a> (<a href="./pprof/goroutine?debug=2">all</a>)<br />
 </td>

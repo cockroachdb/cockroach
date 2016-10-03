@@ -13,14 +13,18 @@ For multi-user cooperation, please see [Terraform's documentation on remote stat
 
 ## One-time setup steps
 1. Have a [Google Cloud Platform](https://cloud.google.com/compute/) account
-2. [Download terraform](https://terraform.io/downloads.html), *version 0.6.7 or greater*, unzip, and add to your `PATH`.
+2. [Download terraform](https://terraform.io/downloads.html), *version 0.7.2 or greater*, unzip, and add to your `PATH`.
 3. [Create and download GCE credentials](https://developers.google.com/identity/protocols/application-default-credentials#howtheywork).
 4. Set your credentials in environment variables:
 ```
 $ export GOOGLE_CREDENTIALS="contents of json credentials file"
 $ export GOOGLE_PROJECT="my-google-project"
-5. Save your GCE key as `~/.ssh/google_compute_engine`, or adjust the `key_name` variable.
 ```
+5. Create a new pair of ssh keys `ssh-keygen -t rsa -C "your-email"` for GCE and save them in `~/.ssh/google_compute_engine`,
+or use an existing pair and adjust the `key_name` variable described below. Do not use a passphrase while generating the keys
+or else your private key will be encrypted. You have to use an unencrypted private key with terraform. If you already have a
+key and it is encrypted, you can [decrypt](http://support.citrix.com/article/CTX122930) it.
+6. Add the contents of your public key `~/.ssh/google_compute_engine.pub` to GCE using the web UI `Compute Engine > Metadata > ssh-keys`.
 
 ## Variables
 

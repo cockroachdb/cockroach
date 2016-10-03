@@ -33,8 +33,10 @@ type Set struct {
 // Format implements the NodeFormatter interface.
 func (node *Set) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SET ")
-	FormatNode(buf, f, node.Name)
-	buf.WriteString(" = ")
+	if node.Name != nil {
+		FormatNode(buf, f, node.Name)
+		buf.WriteString(" = ")
+	}
 	if node.Values == nil {
 		buf.WriteString("DEFAULT")
 	} else {

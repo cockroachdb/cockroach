@@ -923,8 +923,8 @@ func (r *Replica) getReplicaDescriptorLocked() (roachpb.ReplicaDescriptor, error
 }
 
 // setLastReplicaDescriptors sets the the most recently seen replica
-// descriptors to those contained in the *RaftMessageRequest, acquiring r.mu to
-// do so.
+// descriptors to those contained in the *RaftMessageRequest, acquiring r.mu
+// to do so.
 func (r *Replica) setLastReplicaDescriptors(req *RaftMessageRequest) {
 	r.mu.Lock()
 	r.mu.lastFromReplica = req.FromReplica

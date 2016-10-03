@@ -525,6 +525,9 @@ type StoreContext struct {
 	// period) during which operations will trigger an asynchronous renewal of the
 	// lease.
 	rangeLeaseRenewalDuration time.Duration
+
+	// Locality is a description of the topography of the store.
+	Locality roachpb.Locality
 }
 
 // StoreTestingKnobs is a part of the context used to control parts of the system.
@@ -1890,6 +1893,7 @@ func (s *Store) Descriptor() (*roachpb.StoreDescriptor, error) {
 		Attrs:    s.Attrs(),
 		Node:     *s.nodeDesc,
 		Capacity: capacity,
+		Locality: s.ctx.Locality,
 	}, nil
 }
 
@@ -2547,7 +2551,7 @@ func (s *Store) processRaftRequest(
 		// getOrCreateReplica disallows moving the replica ID backward, so the only
 		// way we can get here is if the replica did not previously exist.
 		if log.V(1) {
-			log.Infof(s.Ctx(), "refusing incoming Raft message %s for range %d from %+v to %+v",
+			log.Infof(ctx, "refusing incoming Raft message %s for range %d from %+v to %+v",
 				req.Message.Type, req.RangeID, req.FromReplica, req.ToReplica)
 		}
 		return roachpb.NewErrorf("cannot recreate replica that is not a member of its range (StoreID %s not found in range %d)",

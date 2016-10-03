@@ -63,7 +63,7 @@ class TableMain extends React.Component<TableMainProps, {}> {
     if (tableDetails) {
       let ranges = tableDetails.range_count.toNumber();
       let createTableStatement = tableDetails.create_table_statement;
-      let replicationFactor = tableDetails.zone_config.replica_attrs.length;
+      let replicationFactor = tableDetails.zone_config.num_replicas;
       let targetRangeSize = tableDetails.zone_config.range_max_bytes.toNumber();
       let tableSize = tableStats && (tableStats.stats.live_bytes.toNumber() + tableStats.stats.key_bytes.toNumber());
 
@@ -73,22 +73,22 @@ class TableMain extends React.Component<TableMainProps, {}> {
             title={ (ranges === 1) ? "Range" : "Ranges" }
             tooltip="The total number of ranges this table spans.">
             <div className="visualization">
-              <div style={{zoom:"100%"}} className="number">{ d3.format("s")(ranges) }</div>
+              <div style={{zoom:1.0}} className="number">{ d3.format("s")(ranges) }</div>
             </div>
           </Visualization>
           <Visualization title="Table Size" tooltip="Not yet implemented.">
             <div className="visualization">
-              <div style={{zoom:"40%"}} className="number">{ Bytes(tableSize) }</div>
+              <div style={{zoom:0.4}} className="number">{ Bytes(tableSize) }</div>
             </div>
           </Visualization>
           <Visualization title="Replication Factor" tooltip="Not yet implemented.">
             <div className="visualization">
-              <div style={{zoom:"100%"}} className="number">{ d3.format("s")(replicationFactor) }</div>
+              <div style={{zoom:1.0}} className="number">{ d3.format("s")(replicationFactor) }</div>
             </div>
           </Visualization>
           <Visualization title="Target Range Size" tooltip="Not yet implemented.">
             <div className="visualization">
-              <div style={{zoom:"40%"}} className="number">{ Bytes(targetRangeSize) }</div>
+              <div style={{zoom:0.4}} className="number">{ Bytes(targetRangeSize) }</div>
             </div>
           </Visualization>
         </div>

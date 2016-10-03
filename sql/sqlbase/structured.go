@@ -234,12 +234,48 @@ func (desc *TableDescriptor) SetID(id ID) {
 
 // TypeName returns the plain type of this descriptor.
 func (desc *TableDescriptor) TypeName() string {
+	if desc.IsView() {
+		return "view"
+	}
 	return "table"
 }
 
 // SetName implements the DescriptorProto interface.
 func (desc *TableDescriptor) SetName(name string) {
 	desc.Name = name
+}
+
+// IsEmpty checks if the descriptor is uninitialized.
+func (desc *TableDescriptor) IsEmpty() bool {
+	// Valid tables cannot have an ID of 0.
+	return desc.ID == 0
+}
+
+// IsTable returns true if the TableDescriptor actually describes a
+// Table resource, as opposed to a different resource (like a View).
+func (desc *TableDescriptor) IsTable() bool {
+	return !desc.IsView()
+}
+
+// IsView returns true if the TableDescriptor actually describes a
+// View resource rather than a Table.
+func (desc *TableDescriptor) IsView() bool {
+	return desc.ViewQuery != ""
+}
+
+// IsVirtualTable returns true if the TableDescriptor describes a
+// virtual Table (like the information_schema tables) and thus doesn't
+// need to be physically stored.
+func (desc *TableDescriptor) IsVirtualTable() bool {
+	return desc.ID == keys.VirtualDescriptorID
+}
+
+// IsPhysicalTable returns true if the TableDescriptor actually describes a
+// physical Table that needs to be stored in the kv layer, as opposed to a
+// different resource like a view or a virtual table. Physical tables have
+// primary keys, column families, and indexes (unlike virtual tables).
+func (desc *TableDescriptor) IsPhysicalTable() bool {
+	return desc.IsTable() && !desc.IsVirtualTable()
 }
 
 // allNonDropColumns returns all the columns, including those being added
@@ -287,6 +323,15 @@ func generatedFamilyName(familyID FamilyID, columnNames []string) string {
 // FormatVersion (if it's not already there) and returns true if any changes
 // were made.
 func (desc *TableDescriptor) MaybeUpgradeFormatVersion() bool {
+	if desc.FormatVersion >= InterleavedFormatVersion {
+		return false
+	}
+	desc.maybeUpgradeToFamilyFormatVersion()
+	desc.FormatVersion = InterleavedFormatVersion
+	return true
+}
+
+func (desc *TableDescriptor) maybeUpgradeToFamilyFormatVersion() bool {
 	if desc.FormatVersion >= FamilyFormatVersion {
 		return false
 	}
@@ -337,19 +382,15 @@ func (desc *TableDescriptor) MaybeUpgradeFormatVersion() bool {
 // AllocateIDs allocates column, family, and index ids for any column, family,
 // or index which has an ID of 0.
 func (desc *TableDescriptor) AllocateIDs() error {
+	// Only physical tables can have / need a primary key.
+	if desc.IsPhysicalTable() {
+		if err := desc.ensurePrimaryKey(); err != nil {
+			return err
+		}
+	}
+
 	if desc.NextColumnID == 0 {
 		desc.NextColumnID = 1
-	}
-	if desc.NextFamilyID == 0 {
-		if len(desc.Families) == 0 {
-			desc.Families = []ColumnFamilyDescriptor{
-				{ID: 0, Name: "primary"},
-			}
-		}
-		desc.NextFamilyID = 1
-	}
-	if desc.NextIndexID == 0 {
-		desc.NextIndexID = 1
 	}
 	if desc.Version == 0 {
 		desc.Version = 1
@@ -375,6 +416,57 @@ func (desc *TableDescriptor) AllocateIDs() error {
 		if c := m.GetColumn(); c != nil {
 			fillColumnID(c)
 		}
+	}
+
+	// Only physical tables can have / need indexes and column families.
+	if desc.IsPhysicalTable() {
+		if err := desc.allocateIndexIDs(columnNames); err != nil {
+			return err
+		}
+		desc.allocateColumnFamilyIDs(columnNames)
+	}
+
+	// This is sort of ugly. If the descriptor does not have an ID, we hack one in
+	// to pass the table ID check. We use a non-reserved ID, reserved ones being set
+	// before AllocateIDs.
+	savedID := desc.ID
+	if desc.ID == 0 {
+		desc.ID = keys.MaxReservedDescID + 1
+	}
+	err := desc.ValidateTable()
+	desc.ID = savedID
+	return err
+}
+
+func (desc *TableDescriptor) ensurePrimaryKey() error {
+	if len(desc.PrimaryIndex.ColumnNames) == 0 && desc.IsPhysicalTable() {
+		// Ensure a Primary Key exists.
+		s := "unique_rowid()"
+		col := ColumnDescriptor{
+			Name: "rowid",
+			Type: ColumnType{
+				Kind: ColumnType_INT,
+			},
+			DefaultExpr: &s,
+			Hidden:      true,
+			Nullable:    false,
+		}
+		desc.AddColumn(col)
+		idx := IndexDescriptor{
+			Unique:           true,
+			ColumnNames:      []string{col.Name},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+		}
+		if err := desc.AddIndex(idx, true); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) error {
+	if desc.NextIndexID == 0 {
+		desc.NextIndexID = 1
 	}
 
 	// Keep track of unnamed indexes.
@@ -449,10 +541,17 @@ func (desc *TableDescriptor) AllocateIDs() error {
 			}
 		}
 	}
+	return nil
+}
 
-	primaryIndexColIDs := make(map[ColumnID]struct{}, len(desc.PrimaryIndex.ColumnIDs))
-	for _, colID := range desc.PrimaryIndex.ColumnIDs {
-		primaryIndexColIDs[colID] = struct{}{}
+func (desc *TableDescriptor) allocateColumnFamilyIDs(columnNames map[string]ColumnID) {
+	if desc.NextFamilyID == 0 {
+		if len(desc.Families) == 0 {
+			desc.Families = []ColumnFamilyDescriptor{
+				{ID: 0, Name: "primary"},
+			}
+		}
+		desc.NextFamilyID = 1
 	}
 
 	columnsInFamilies := make(map[ColumnID]struct{}, len(desc.Columns))
@@ -473,6 +572,11 @@ func (desc *TableDescriptor) AllocateIDs() error {
 		}
 
 		desc.Families[i] = family
+	}
+
+	primaryIndexColIDs := make(map[ColumnID]struct{}, len(desc.PrimaryIndex.ColumnIDs))
+	for _, colID := range desc.PrimaryIndex.ColumnIDs {
+		primaryIndexColIDs[colID] = struct{}{}
 	}
 
 	ensureColumnInFamily := func(col *ColumnDescriptor) {
@@ -546,17 +650,6 @@ func (desc *TableDescriptor) AllocateIDs() error {
 
 		desc.Families[i] = family
 	}
-
-	// This is sort of ugly. If the descriptor does not have an ID, we hack one in
-	// to pass the table ID check. We use a non-reserved ID, reserved ones being set
-	// before AllocateIDs.
-	savedID := desc.ID
-	if desc.ID == 0 {
-		desc.ID = keys.MaxReservedDescID + 1
-	}
-	err := desc.ValidateTable()
-	desc.ID = savedID
-	return err
 }
 
 // Validate validates that the table descriptor is well formed. Checks include
@@ -708,6 +801,11 @@ func (desc *TableDescriptor) ValidateTable() error {
 		return fmt.Errorf("invalid table ID %d", desc.ID)
 	}
 
+	// TODO(dt, nathan): virtual descs don't validate (missing privs, PK, etc).
+	if desc.IsVirtualTable() {
+		return nil
+	}
+
 	// ParentID is the ID of the database holding this table.
 	// It is often < ID, except when a table gets moved across databases.
 	if desc.ParentID == 0 {
@@ -734,22 +832,8 @@ func (desc *TableDescriptor) ValidateTable() error {
 		return ErrMissingColumns
 	}
 
-	constraintNames := make(map[string]struct{}, len(desc.Columns))
-	uniqConstraint := func(s string) error {
-		s = strings.ToLower(s)
-		if s != "" {
-			if _, ok := constraintNames[s]; ok {
-				return fmt.Errorf("duplicate constraint name: %q", s)
-			}
-			constraintNames[s] = struct{}{}
-		}
-		return nil
-	}
-
-	for _, check := range desc.Checks {
-		if err := uniqConstraint(check.Name); err != nil {
-			return err
-		}
+	if err := desc.CheckUniqueConstraints(); err != nil {
+		return err
 	}
 
 	columnNames := make(map[string]ColumnID, len(desc.Columns))
@@ -778,12 +862,6 @@ func (desc *TableDescriptor) ValidateTable() error {
 			return fmt.Errorf("column \"%s\" invalid ID (%d) > next column ID (%d)",
 				column.Name, column.ID, desc.NextColumnID)
 		}
-		if err := uniqConstraint(column.DefaultExprConstraintName); err != nil {
-			return err
-		}
-		if err := uniqConstraint(column.NullableConstraintName); err != nil {
-			return err
-		}
 	}
 
 	for _, m := range desc.Mutations {
@@ -807,11 +885,30 @@ func (desc *TableDescriptor) ValidateTable() error {
 
 	// TODO(dt): Validate each column only appears at-most-once in any FKs.
 
+	// Only validate column families and indexes if this is actually a table, not
+	// if it's just a view.
+	if desc.IsPhysicalTable() {
+		colIDToFamilyID, err := desc.validateColumnFamilies(columnIDs)
+		if err != nil {
+			return err
+		}
+		if err := desc.validateTableIndexes(columnNames, colIDToFamilyID); err != nil {
+			return err
+		}
+	}
+
+	// Validate the privilege descriptor.
+	return desc.Privileges.Validate(desc.GetID())
+}
+
+func (desc *TableDescriptor) validateColumnFamilies(
+	columnIDs map[ColumnID]string,
+) (map[ColumnID]FamilyID, error) {
 	if len(desc.Families) < 1 {
-		return fmt.Errorf("at least 1 column family must be specified")
+		return nil, fmt.Errorf("at least 1 column family must be specified")
 	}
 	if desc.Families[0].ID != FamilyID(0) {
-		return fmt.Errorf("the 0th family must have ID 0")
+		return nil, fmt.Errorf("the 0th family must have ID 0")
 	}
 
 	familyNames := map[string]struct{}{}
@@ -819,55 +916,60 @@ func (desc *TableDescriptor) ValidateTable() error {
 	colIDToFamilyID := map[ColumnID]FamilyID{}
 	for _, family := range desc.Families {
 		if err := validateName(family.Name, "family"); err != nil {
-			return err
+			return nil, err
 		}
 
 		normName := ReNormalizeName(family.Name)
 		if _, ok := familyNames[normName]; ok {
-			return fmt.Errorf("duplicate family name: \"%s\"", family.Name)
+			return nil, fmt.Errorf("duplicate family name: \"%s\"", family.Name)
 		}
 		familyNames[normName] = struct{}{}
 
 		if other, ok := familyIDs[family.ID]; ok {
-			return fmt.Errorf("family \"%s\" duplicate ID of family \"%s\": %d",
+			return nil, fmt.Errorf("family \"%s\" duplicate ID of family \"%s\": %d",
 				family.Name, other, family.ID)
 		}
 		familyIDs[family.ID] = family.Name
 
 		if family.ID >= desc.NextFamilyID {
-			return fmt.Errorf("family \"%s\" invalid family ID (%d) > next family ID (%d)",
+			return nil, fmt.Errorf("family \"%s\" invalid family ID (%d) > next family ID (%d)",
 				family.Name, family.ID, desc.NextFamilyID)
 		}
 
 		if len(family.ColumnIDs) != len(family.ColumnNames) {
-			return fmt.Errorf("mismatched column ID size (%d) and name size (%d)",
+			return nil, fmt.Errorf("mismatched column ID size (%d) and name size (%d)",
 				len(family.ColumnIDs), len(family.ColumnNames))
 		}
 
 		for i, colID := range family.ColumnIDs {
 			name, ok := columnIDs[colID]
 			if !ok {
-				return fmt.Errorf("family \"%s\" contains unknown column \"%d\"", family.Name, colID)
+				return nil, fmt.Errorf("family \"%s\" contains unknown column \"%d\"", family.Name, colID)
 			}
 			if ReNormalizeName(name) != ReNormalizeName(family.ColumnNames[i]) {
-				return fmt.Errorf("family \"%s\" column %d should have name %q, but found name %q",
+				return nil, fmt.Errorf("family \"%s\" column %d should have name %q, but found name %q",
 					family.Name, colID, name, family.ColumnNames[i])
 			}
 		}
 
 		for _, colID := range family.ColumnIDs {
 			if famID, ok := colIDToFamilyID[colID]; ok {
-				return fmt.Errorf("column %d is in both family %d and %d", colID, famID, family.ID)
+				return nil, fmt.Errorf("column %d is in both family %d and %d", colID, famID, family.ID)
 			}
 			colIDToFamilyID[colID] = family.ID
 		}
 	}
 	for colID := range columnIDs {
 		if _, ok := colIDToFamilyID[colID]; !ok {
-			return fmt.Errorf("column %d is not in any column family", colID)
+			return nil, fmt.Errorf("column %d is not in any column family", colID)
 		}
 	}
+	return colIDToFamilyID, nil
+}
 
+func (desc *TableDescriptor) validateTableIndexes(
+	columnNames map[string]ColumnID, colIDToFamilyID map[ColumnID]FamilyID,
+) error {
 	// TODO(pmattis): Check that the indexes are unique. That is, no 2 indexes
 	// should contain identical sets of columns.
 	if len(desc.PrimaryIndex.ColumnIDs) == 0 {
@@ -889,19 +991,6 @@ func (desc *TableDescriptor) ValidateTable() error {
 			return fmt.Errorf("duplicate index name: \"%s\"", index.Name)
 		}
 		indexNames[normName] = struct{}{}
-
-		if index.Unique {
-			// TODO(dt): Should probably add a separate constraintName to the idx.
-			if err := uniqConstraint(index.Name); err != nil {
-				return err
-			}
-		}
-
-		if index.ForeignKey.IsSet() {
-			if err := uniqConstraint(index.ForeignKey.Name); err != nil {
-				return err
-			}
-		}
 
 		if other, ok := indexIDs[index.ID]; ok {
 			return fmt.Errorf("index \"%s\" duplicate ID of index \"%s\": %d",
@@ -946,8 +1035,7 @@ func (desc *TableDescriptor) ValidateTable() error {
 		}
 	}
 
-	// Validate the privilege descriptor.
-	return desc.Privileges.Validate(desc.GetID())
+	return nil
 }
 
 // FamilyHeuristicTargetBytes is the target total byte size of columns that the
@@ -1412,16 +1500,16 @@ func ColumnsSelectors(cols []ColumnDescriptor) parser.SelectExprs {
 	return exprs
 }
 
-// IsEmpty checks if the descriptor is uninitialized.
-func (desc *TableDescriptor) IsEmpty() bool {
-	// Valid tables cannot have an ID of 0.
-	return desc.ID == 0
-}
-
 // SQLString returns the SQL string corresponding to the type.
 func (c *ColumnType) SQLString() string {
 	switch c.Kind {
-	case ColumnType_INT, ColumnType_STRING:
+	case ColumnType_INT:
+		if c.Width > 0 {
+			// A non-zero width indicates a bit array. The syntax "INT(N)"
+			// is invalid so be sure to use "BIT".
+			return fmt.Sprintf("BIT(%d)", c.Width)
+		}
+	case ColumnType_STRING:
 		if c.Width > 0 {
 			return fmt.Sprintf("%s(%d)", c.Kind.String(), c.Width)
 		}

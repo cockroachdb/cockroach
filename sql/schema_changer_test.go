@@ -434,18 +434,6 @@ ALTER INDEX t.test@foo RENAME TO ufo
 	}
 }
 
-func runSQLWithRetry(t *testing.T, db *gosql.DB, sql string) {
-	for {
-		_, err := db.Exec(sql)
-		if err == nil {
-			break
-		} else if !testutils.IsSQLRetryError(err) {
-			t.Fatal(err)
-		}
-		t.Logf("retry %s on err: %s", sql, err)
-	}
-}
-
 // Run a particular schema change and run some OLTP operations in parallel, as
 // soon as the schema change starts executing its backfill.
 func runSchemaChangeWithOperations(
@@ -489,31 +477,41 @@ func runSchemaChangeWithOperations(
 	for i := 0; i < 10; i++ {
 		k := rand.Intn(maxValue)
 		v := maxValue + i + 1
-		runSQLWithRetry(t, sqlDB, fmt.Sprintf(`UPDATE t.test SET v = %d WHERE k = %d`, v, k))
+		if _, err := sqlDB.Exec(`UPDATE t.test SET v = $1 WHERE k = $2`, v, k); err != nil {
+			t.Error(err)
+		}
 		updatedKeys = append(updatedKeys, k)
 	}
 
 	// Reupdate updated values back to what they were before.
 	for _, k := range updatedKeys {
-		runSQLWithRetry(t, sqlDB, fmt.Sprintf(`UPDATE t.test SET v = %d WHERE k = %d`, maxValue-k, k))
+		if _, err := sqlDB.Exec(`UPDATE t.test SET v = $1 WHERE k = $2`, maxValue-k, k); err != nil {
+			t.Error(err)
+		}
 	}
 
 	// Delete some rows.
 	deleteStartKey := rand.Intn(maxValue - 10)
 	for i := 0; i < 10; i++ {
-		runSQLWithRetry(t, sqlDB, fmt.Sprintf(`DELETE FROM t.test WHERE k = %d`, deleteStartKey+i))
+		if _, err := sqlDB.Exec(`DELETE FROM t.test WHERE k = $1`, deleteStartKey+i); err != nil {
+			t.Error(err)
+		}
 	}
 	// Reinsert deleted rows.
 	for i := 0; i < 10; i++ {
 		k := deleteStartKey + i
-		runSQLWithRetry(t, sqlDB, fmt.Sprintf(`INSERT INTO t.test VALUES(%d, %d)`, k, maxValue-k))
+		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $2)`, k, maxValue-k); err != nil {
+			t.Error(err)
+		}
 	}
 
 	// Insert some new rows.
 	numInserts := 10
 	for i := 0; i < numInserts; i++ {
 		k := maxValue + i + 1
-		runSQLWithRetry(t, sqlDB, fmt.Sprintf(`INSERT INTO t.test VALUES(%d, %d)`, k, k))
+		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $1)`, k); err != nil {
+			t.Error(err)
+		}
 	}
 
 	wg.Wait() // for schema change to complete.
@@ -530,7 +528,9 @@ func runSchemaChangeWithOperations(
 
 	// Delete the rows inserted.
 	for i := 0; i < numInserts; i++ {
-		runSQLWithRetry(t, sqlDB, fmt.Sprintf(`DELETE FROM t.test WHERE k = %d`, maxValue+i+1))
+		if _, err := sqlDB.Exec(`DELETE FROM t.test WHERE k = $1`, maxValue+i+1); err != nil {
+			t.Error(err)
+		}
 	}
 }
 

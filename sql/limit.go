@@ -59,8 +59,8 @@ func (p *planner) Limit(n *parser.Limit) (*limitNode, error) {
 
 	for _, datum := range data {
 		if datum.src != nil {
-			if p.parser.AggregateInExpr(datum.src) {
-				return nil, fmt.Errorf("aggregate functions are not allowed in %s", datum.name)
+			if err := p.parser.AssertNoAggregationOrWindowing(datum.src, datum.name); err != nil {
+				return nil, err
 			}
 
 			normalized, err := p.analyzeExpr(datum.src, nil, nil, parser.TypeInt, true, datum.name)
@@ -200,7 +200,7 @@ func (n *limitNode) setTop(top *selectTopNode) {
 	}
 }
 
-func (n *limitNode) Columns() []ResultColumn {
+func (n *limitNode) Columns() ResultColumns {
 	if n.plan != nil {
 		return n.plan.Columns()
 	}
@@ -279,6 +279,10 @@ func (n *limitNode) ExplainPlan(_ bool) (string, string, []planNode) {
 		subplans = n.p.collectSubqueryPlans(n.offsetExpr, subplans)
 	}
 	return "limit", buf.String(), subplans
+}
+
+func (n *limitNode) Close() {
+	n.plan.Close()
 }
 
 // getLimit computes the actual number of rows to request from the

@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/keys"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -57,20 +58,20 @@ func TestMergeAndSortSpans(t *testing.T) {
 		//  - we verify that after we unset all areas covered by the merged
 		//    spans, there are no bits that remain set.
 		bitmap := make([]bool, 100)
-		var s sqlbase.Spans
+		var s roachpb.Spans
 		for _, v := range tc {
 			start := v[0]
 			end := v[1]
 			for j := start; j < end; j++ {
 				bitmap[j] = true
 			}
-			s = append(s, sqlbase.Span{Start: []byte{byte(start)}, End: []byte{byte(end)}})
+			s = append(s, roachpb.Span{Key: []byte{byte(start)}, EndKey: []byte{byte(end)}})
 		}
 
-		printSpans := func(s sqlbase.Spans, title string) {
+		printSpans := func(s roachpb.Spans, title string) {
 			fmt.Printf("%s:", title)
 			for _, span := range s {
-				fmt.Printf(" %d-%d", span.Start[0], span.End[0])
+				fmt.Printf(" %d-%d", span.Key[0], span.EndKey[0])
 			}
 			fmt.Printf("\n")
 		}
@@ -87,8 +88,8 @@ func TestMergeAndSortSpans(t *testing.T) {
 
 		last := -1
 		for i := range s {
-			start := int(s[i].Start[0])
-			end := int(s[i].End[0])
+			start := int(s[i].Key[0])
+			end := int(s[i].EndKey[0])
 			if start >= end {
 				t.Fatalf("invalid span %d-%d", start, end)
 			}
@@ -520,11 +521,11 @@ func TestMakeSpans(t *testing.T) {
 			`/7/3/0-/7/3/1 /7/2/0-/7/2/1 /7/1/0-/7/1/1`},
 		// Test different directions for te columns inside a tuple.
 		{`(a,b,j) IN ((1,2,3), (4,5,6))`, `a-,b,j-`, `/4/5/6-/4/5/5 /1/2/3-/1/2/2`},
-		{`i = E'\xff'`, `i`, `/"\xff"-/"\xff\x00"`},
+		{`k = b'\xff'`, `k`, `/"\xff"-/"\xff\x00"`},
 		// Test that limits on bytes work correctly: when encoding a descending limit for bytes,
 		// we need to go outside the bytes encoding.
 		// "\xaa" is encoded as [bytesDescMarker, ^0xaa, <term escape sequence>]
-		{`i = E'\xaa'`, `i-`,
+		{`k = b'\xaa'`, `k-`,
 			fmt.Sprintf("raw:%c%c\xff\xfe-%c%c\xff\xff",
 				encoding.BytesDescMarker, ^byte(0xaa), encoding.BytesDescMarker, ^byte(0xaa))},
 
@@ -545,8 +546,8 @@ func TestMakeSpans(t *testing.T) {
 			d.expected = d.expected[4:]
 			// Trim the index prefix from the span.
 			prefix := string(sqlbase.MakeIndexKeyPrefix(desc, index.ID))
-			got = strings.TrimPrefix(string(span.Start), prefix) + "-" +
-				strings.TrimPrefix(string(span.End), prefix)
+			got = strings.TrimPrefix(string(span.Key), prefix) + "-" +
+				strings.TrimPrefix(string(span.EndKey), prefix)
 		} else {
 			got = keys.MassagePrettyPrintedSpanForTest(sqlbase.PrettySpans(spans, 2),
 				indexToDirs(index))

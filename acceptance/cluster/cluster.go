@@ -59,6 +59,8 @@ type Cluster interface {
 	URL(int) string
 	// Addr returns the host and port from the node in the format HOST:PORT.
 	Addr(i int, port string) string
+	// Hostname returns a node's hostname.
+	Hostname(i int) string
 }
 
 // Consistent performs a replication consistency check on all the ranges

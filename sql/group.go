@@ -45,9 +45,11 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 	// that determination is made during validation, which will require matching
 	// expressions.
 	for i := range groupBy {
-		if p.parser.AggregateInExpr(groupBy[i]) {
-			return nil, fmt.Errorf("aggregate functions are not allowed in GROUP BY")
-		}
+		// Hold on to the original raw GROUP BY expression, which will be replaced by the
+		// original raw SELECT expression in the case of a GROUP BY <ordinal>. We will
+		// perform some verification on this which requires that the expression has not
+		// been modified by upper layers.
+		rawExpr := groupBy[i]
 
 		// We do not need to fully analyze the GROUP BY expression here
 		// (as per analyzeExpr) because this is taken care of by addRender
@@ -65,8 +67,13 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 			return nil, err
 		} else if col >= 0 {
 			groupBy[i] = s.render[col]
+			rawExpr = n.Exprs[col].Expr
 		} else {
 			groupBy[i] = resolved
+		}
+
+		if err := p.parser.AssertNoAggregationOrWindowing(rawExpr, "GROUP BY"); err != nil {
+			return nil, err
 		}
 	}
 
@@ -190,7 +197,7 @@ type groupNode struct {
 	explain explainMode
 }
 
-func (n *groupNode) Columns() []ResultColumn {
+func (n *groupNode) Columns() ResultColumns {
 	return n.values.Columns()
 }
 
@@ -276,10 +283,10 @@ func (n *groupNode) Next() (bool, error) {
 			}
 		}
 		if !next {
+			n.populated = true
 			if err := n.computeAggregates(); err != nil {
 				return false, err
 			}
-			n.populated = true
 			break
 		}
 		if n.explain == explainDebug && n.plan.DebugValues().output != debugValueRow {
@@ -303,7 +310,7 @@ func (n *groupNode) Next() (bool, error) {
 
 		// Feed the aggregateFuncHolders for this bucket the non-grouped values.
 		for i, value := range aggregatedValues {
-			if err := n.funcs[i].add(encoded, value); err != nil {
+			if err := n.funcs[i].add(n.planner.session, encoded, value); err != nil {
 				return false, err
 			}
 		}
@@ -325,11 +332,8 @@ func (n *groupNode) computeAggregates() error {
 		n.buckets[""] = struct{}{}
 	}
 
-	// Since this controls Eval behavior of aggregateFuncHolder, it is not set until init is complete.
-	n.populated = true
-
 	// Render the results.
-	n.values.rows = make([]parser.DTuple, 0, len(n.buckets))
+	n.values.rows = n.planner.NewRowContainer(n.values.Columns(), len(n.buckets))
 	for k := range n.buckets {
 		n.currentBucket = k
 
@@ -354,7 +358,9 @@ func (n *groupNode) computeAggregates() error {
 			row = append(row, res)
 		}
 
-		n.values.rows = append(n.values.rows, row)
+		if err := n.values.rows.AddRow(row); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -392,6 +398,15 @@ func (n *groupNode) ExplainTypes(regTypes func(string, string)) {
 }
 
 func (*groupNode) SetLimitHint(_ int64, _ bool) {}
+
+func (n *groupNode) Close() {
+	n.plan.Close()
+	for _, f := range n.funcs {
+		f.close(n.planner.session)
+	}
+	n.values.Close()
+	n.buckets = nil
+}
 
 // wrap the supplied planNode with the groupNode if grouping/aggregation is required.
 func (n *groupNode) wrap(plan planNode) planNode {
@@ -487,34 +502,24 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 
 	switch t := expr.(type) {
 	case *parser.FuncExpr:
-		fn, err := t.Name.Normalize()
-		if err != nil {
-			v.err = err
-			return false, expr
-		}
-
-		if impl, ok := parser.Aggregates[strings.ToLower(fn.Function())]; ok {
+		if agg := t.GetAggregateConstructor(); agg != nil {
 			if len(t.Exprs) != 1 {
 				// Type checking has already run on these expressions thus
 				// if an aggregate function of the wrong arity gets here,
 				// something has gone really wrong.
-				panic(fmt.Sprintf("%q has %d arguments (expected 1)", fn, len(t.Exprs)))
+				panic(fmt.Sprintf("%q has %d arguments (expected 1)", t.Name, len(t.Exprs)))
 			}
 
+			argExpr := t.Exprs[0]
+
 			defer v.subAggregateVisitor.Reset()
-			parser.WalkExprConst(&v.subAggregateVisitor, t.Exprs[0])
+			parser.WalkExprConst(&v.subAggregateVisitor, argExpr)
 			if v.subAggregateVisitor.Aggregated {
 				v.err = fmt.Errorf("aggregate function calls cannot be nested under %s", t.Name)
 				return false, expr
 			}
 
-			f := &aggregateFuncHolder{
-				expr:    t,
-				arg:     t.Exprs[0].(parser.TypedExpr),
-				create:  impl[0].AggregateFunc,
-				group:   v.n,
-				buckets: make(map[string]parser.AggregateFunc),
-			}
+			f := v.n.newAggregateFuncHolder(t, argExpr.(parser.TypedExpr), agg)
 			if t.Type == parser.Distinct {
 				f.seen = make(map[string]struct{})
 			}
@@ -527,13 +532,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 				t.colRef.get().Name)
 			return true, expr
 		}
-		f := &aggregateFuncHolder{
-			expr:    t,
-			arg:     t,
-			create:  parser.NewIdentAggregate,
-			group:   v.n,
-			buckets: make(map[string]parser.AggregateFunc),
-		}
+		f := v.n.newAggregateFuncHolder(t, t, parser.NewIdentAggregate)
 		v.n.funcs = append(v.n.funcs, f)
 		return false, f
 	}
@@ -573,15 +572,38 @@ var _ parser.TypedExpr = &aggregateFuncHolder{}
 var _ parser.VariableExpr = &aggregateFuncHolder{}
 
 type aggregateFuncHolder struct {
-	expr    parser.TypedExpr
-	arg     parser.TypedExpr
-	create  func() parser.AggregateFunc
-	group   *groupNode
-	buckets map[string]parser.AggregateFunc
-	seen    map[string]struct{}
+	expr          parser.TypedExpr
+	arg           parser.TypedExpr
+	create        func() parser.AggregateFunc
+	group         *groupNode
+	buckets       map[string]parser.AggregateFunc
+	bucketsMemAcc WrappableMemoryAccount
+	seen          map[string]struct{}
 }
 
-func (a *aggregateFuncHolder) add(bucket []byte, d parser.Datum) error {
+func (n *groupNode) newAggregateFuncHolder(
+	expr, arg parser.TypedExpr,
+	create func() parser.AggregateFunc,
+) *aggregateFuncHolder {
+	res := &aggregateFuncHolder{
+		expr:          expr,
+		arg:           arg,
+		create:        create,
+		group:         n,
+		buckets:       make(map[string]parser.AggregateFunc),
+		bucketsMemAcc: n.planner.session.OpenAccount(),
+	}
+	return res
+}
+
+func (a *aggregateFuncHolder) close(s *Session) {
+	a.buckets = nil
+	a.seen = nil
+	a.group = nil
+	a.bucketsMemAcc.W(s).Close()
+}
+
+func (a *aggregateFuncHolder) add(s *Session, bucket []byte, d parser.Datum) error {
 	// NB: the compiler *should* optimize `myMap[string(myBytes)]`. See:
 	// https://github.com/golang/go/commit/f5f5a8b6209f84961687d993b93ea0d397f5d5bf
 
@@ -594,6 +616,9 @@ func (a *aggregateFuncHolder) add(bucket []byte, d parser.Datum) error {
 			// skip
 			return nil
 		}
+		if err := a.bucketsMemAcc.W(s).Grow(int64(len(encoded))); err != nil {
+			return err
+		}
 		a.seen[string(encoded)] = struct{}{}
 	}
 
@@ -603,7 +628,8 @@ func (a *aggregateFuncHolder) add(bucket []byte, d parser.Datum) error {
 		a.buckets[string(bucket)] = impl
 	}
 
-	return impl.Add(d)
+	impl.Add(d)
+	return nil
 }
 
 func (*aggregateFuncHolder) Variable() {}
@@ -620,25 +646,14 @@ func (a *aggregateFuncHolder) TypeCheck(_ *parser.SemaContext, desired parser.Da
 }
 
 func (a *aggregateFuncHolder) Eval(ctx *parser.EvalContext) (parser.Datum, error) {
-	// During init of the group buckets, grouped expressions (i.e. wrapped
-	// qvalues) are Eval()'ed to determine the bucket for a row, so pass these
-	// calls through to the underlying `arg` expr Eval until init is done.
-	if !a.group.populated {
-		return a.arg.Eval(ctx)
-	}
-
 	found, ok := a.buckets[a.group.currentBucket]
 	if !ok {
 		found = a.create()
 	}
 
-	datum, err := found.Result()
-	if err != nil {
-		return nil, err
-	}
+	datum := found.Result()
 
-	// This is almost certainly the identity. Oh well.
-	return datum.Eval(ctx)
+	return datum, nil
 }
 
 func (a *aggregateFuncHolder) ReturnType() parser.Datum {

@@ -1,8 +1,8 @@
 - Feature Name: txn-gc
 - Status: in-progress
 - Start Date: 2015-11-12
-- RFC PR: #3100
-- Cockroach Issue: #2062
+- RFC PR: [#3100](https://github.com/cockroachdb/cockroach/pull/3100)
+- Cockroach Issue: [#2062](https://github.com/cockroachdb/cockroach/issues/2062)
 
 # Summary
 

@@ -118,7 +118,7 @@ func (rq *replicateQueue) shouldQueue(
 		leaseStoreID = lease.Replica.StoreID
 	}
 	target := rq.allocator.RebalanceTarget(
-		zone.ReplicaAttrs[0], desc.Replicas, leaseStoreID)
+		zone.Constraints, desc.Replicas, leaseStoreID)
 	return target != nil, 0
 }
 
@@ -148,7 +148,7 @@ func (rq *replicateQueue) process(
 	switch action {
 	case AllocatorAdd:
 		log.Event(ctx, "adding a new replica")
-		newStore, err := rq.allocator.AllocateTarget(zone.ReplicaAttrs[0], desc.Replicas, true)
+		newStore, err := rq.allocator.AllocateTarget(zone.Constraints, desc.Replicas, true)
 		if err != nil {
 			return err
 		}
@@ -198,7 +198,7 @@ func (rq *replicateQueue) process(
 		// We require the lease in order to process replicas, so
 		// repl.store.StoreID() corresponds to the lease-holder's store ID.
 		rebalanceStore := rq.allocator.RebalanceTarget(
-			zone.ReplicaAttrs[0], desc.Replicas, repl.store.StoreID())
+			zone.Constraints, desc.Replicas, repl.store.StoreID())
 		if rebalanceStore == nil {
 			log.VEventf(1, ctx, "no suitable rebalance target")
 			// No action was necessary and no rebalance target was found. Return

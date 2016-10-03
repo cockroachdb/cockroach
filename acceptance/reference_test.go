@@ -126,7 +126,7 @@ trap finish EXIT
 $bin start & &> out
 until $bin sql -e "SELECT 1"; do sleep 1; done
 # grep returns non-zero if it didn't match anything. With set -e above, that would exit here.
-$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_new" 2>&1 | grep "is encoded using using version 2, but this client only supports version 1"
+$bin sql -d old -e "SELECT i, b, s, d, f, v, extract(epoch FROM t) FROM testing_new" 2>&1 | grep "is encoded using using version 3, but this client only supports version 1"
 $bin quit && wait
 `
 	runReadWriteReferenceTest(t, `forward-reference-version`, backwardReferenceTest)

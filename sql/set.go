@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
 // Set sets session variables.
@@ -81,6 +82,20 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 	case `EXTRA_FLOAT_DIGITS`:
 		// These settings are sent by the JDBC driver but we silently ignore them.
 
+	case `DIST_SQL`:
+		s, err := p.getStringVal(name, typedValues)
+		if err != nil {
+			return nil, err
+		}
+		switch sqlbase.NormalizeName(parser.Name(s)) {
+		case sqlbase.ReNormalizeName("sync"):
+			p.session.DistSQLMode = distSQLSync
+		case sqlbase.ReNormalizeName("async"):
+			p.session.DistSQLMode = distSQLAsync
+		default:
+			return nil, fmt.Errorf("%s: \"%s\" not supported", name, s)
+		}
+
 	default:
 		return nil, fmt.Errorf("unknown variable: %q", name)
 	}
@@ -128,10 +143,7 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 	switch v := d.(type) {
 	case *parser.DString:
 		location := string(*v)
-		if location == "DEFAULT" || location == "LOCAL" {
-			location = "UTC"
-		}
-		loc, err := time.LoadLocation(location)
+		loc, err := timeutil.LoadLocation(location)
 		if err != nil {
 			return nil, fmt.Errorf("cannot find time zone %q: %v", location, err)
 		}

@@ -178,7 +178,7 @@ func ErrEventf(ctx context.Context, format string, args ...interface{}) {
 func VEvent(level level, ctx context.Context, msg string) {
 	if VDepth(level, 1) {
 		// Log to INFO (which also logs an event).
-		logDepth(ctx, 1, InfoLog, "", []interface{}{msg})
+		logDepth(ctx, 1, Severity_INFO, "", []interface{}{msg})
 	} else {
 		eventInternal(ctx, false /*isErr*/, true /*withTags*/, "%s", msg)
 	}
@@ -190,7 +190,7 @@ func VEvent(level level, ctx context.Context, msg string) {
 func VEventf(level level, ctx context.Context, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		// Log to INFO (which also logs an event).
-		logDepth(ctx, 1, InfoLog, format, args)
+		logDepth(ctx, 1, Severity_INFO, format, args)
 	} else {
 		eventInternal(ctx, false /*isErr*/, true /*withTags*/, format, args...)
 	}

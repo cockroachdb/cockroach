@@ -1,5 +1,5 @@
 import * as React from "react";
-import _ = require("lodash");
+import _ from "lodash";
 import { connect } from "react-redux";
 
 import { AdminUIState } from "../redux/state";
@@ -34,7 +34,7 @@ export class HelpUs extends React.Component<HelpUsProps, OptInAttributes> {
   }
 
   makeOnChange = (f: (o: OptInAttributes, newVal: any) => void) => {
-    return (e: Event) => {
+    return (e: React.FormEvent) => {
       let target = e.target as HTMLInputElement;
       let value = target.type === "checkbox" ? target.checked : target.value;
       let newState = _.clone(this.state);
@@ -43,7 +43,7 @@ export class HelpUs extends React.Component<HelpUsProps, OptInAttributes> {
     };
   }
 
-  submit = (e: Event) => {
+  submit = (e: React.FormEvent) => {
     e.preventDefault();
     let target = e.target as HTMLFormElement;
     // TODO: add "saving..." text and show/hide the required text
@@ -67,27 +67,27 @@ export class HelpUs extends React.Component<HelpUsProps, OptInAttributes> {
           <span className="status"></span>
           <input name="lastname" placeholder="Last Name" value={attributes.lastname} onChange={this.makeOnChange((o, v) => o.lastname = v)} />
           <span className="status"></span>
-          <input name="email" type="email" required="true" placeholder="Email*" value={attributes.email} onChange={this.makeOnChange((o, v) => o.email = v)} />
+          <input name="email" type="email" required={true} placeholder="Email*" value={attributes.email} onChange={this.makeOnChange((o, v) => o.email = v)} />
           <span className="status"></span>
           <input name="company" placeholder="Company" value={attributes.company} onChange={this.makeOnChange((o, v) => o.company = v)} />
           <span className="status"></span>
           <div>
             <input type="checkbox" name="optin" id="optin" checked={attributes.optin} onChange={this.makeOnChange((o, v) => o.optin = v)} />
-            <label for="optin">Share data with Cockroach Labs</label>
+            <label htmlFor="optin">Share data with Cockroach Labs</label>
             <div className="optin-text">
                   By enabling this feature, you are agreeing to send us anonymous,
                   aggregate information about your running CockroachDB cluster,
                   which may include capacity and usage, server and storage device metadata, basic network topology,
                   and other information that helps us improve our products and services. We never collect any of
                   the actual data that you store in your CockroachDB cluster.
-                  Except as set out above, our <a href="/assets/privacyPolicy.html target="_blank>"Privacy Policy")</a> governs our collection
+                  Except as set out above, our <a href="/assets/privacyPolicy.html" target="_blank">"Privacy Policy")</a> governs our collection
                   and use of information from users of our products and services.
             </div>
           </div>
           <div>
             <div>
               <input type="checkbox" name="updates" id="updates" checked={attributes.updates} onChange={this.makeOnChange((o, v) => o.updates = v)} />
-              <label for="updates">Send me product and feature updates</label>
+              <label htmlFor="updates">Send me product and feature updates</label>
             </div>
           </div>
           <button className="right">Submit</button>

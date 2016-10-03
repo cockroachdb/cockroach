@@ -59,7 +59,7 @@ type selectNode struct {
 	// groupNode copies/extends the render array defined by initTargets()
 	// will add extra selectNode renders for the aggregation sources.
 	render  []parser.TypedExpr
-	columns []ResultColumn
+	columns ResultColumns
 
 	// The number of initial columns - before adding any internal render
 	// targets for grouping, filtering or ordering. The original columns
@@ -88,10 +88,7 @@ type selectNode struct {
 	row parser.DTuple
 }
 
-func (s *selectNode) Columns() []ResultColumn {
-	if s.explain == explainDebug {
-		return debugColumns
-	}
+func (s *selectNode) Columns() ResultColumns {
 	return s.columns
 }
 
@@ -215,6 +212,10 @@ func (s *selectNode) SetLimitHint(numRows int64, soft bool) {
 	s.source.plan.SetLimitHint(numRows, soft || s.filter != nil)
 }
 
+func (s *selectNode) Close() {
+	s.source.plan.Close()
+}
+
 // Select selects rows from a SELECT/UNION/VALUES, ordering and/or limiting them.
 func (p *planner) Select(n *parser.Select, desiredTypes []parser.Datum, autoCommit bool) (planNode, error) {
 	wrapped := n.Select
@@ -304,8 +305,13 @@ func (p *planner) SelectClause(
 		return nil, err
 	}
 
-	// NB: both orderBy and groupBy are passed and can modify the selectNode but orderBy must do so first.
+	// NB: orderBy, window, and groupBy are passed and can modify the selectNode,
+	// but must do so in that order.
 	sort, err := p.orderBy(orderBy, s)
+	if err != nil {
+		return nil, err
+	}
+	window, err := p.window(parsed, s)
 	if err != nil {
 		return nil, err
 	}
@@ -328,6 +334,7 @@ func (p *planner) SelectClause(
 	result := &selectTopNode{
 		source:   s,
 		group:    group,
+		window:   window,
 		sort:     sort,
 		distinct: distinctPlan,
 		limit:    limitPlan,
@@ -479,10 +486,10 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 		return err
 	}
 
-	// Make sure there are no aggregation functions in the filter (after subqueries have been
-	// expanded).
-	if s.planner.parser.AggregateInExpr(s.filter) {
-		return fmt.Errorf("aggregate functions are not allowed in WHERE")
+	// Make sure there are no aggregation/window functions in the filter
+	// (after subqueries have been expanded).
+	if err := s.planner.parser.AssertNoAggregationOrWindowing(s.filter, "WHERE"); err != nil {
+		return err
 	}
 
 	return nil
@@ -496,7 +503,7 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 // returned for each column.
 func checkRenderStar(
 	target parser.SelectExpr, src *dataSourceInfo, qvals qvalMap,
-) (isStar bool, columns []ResultColumn, exprs []parser.TypedExpr, err error) {
+) (isStar bool, columns ResultColumns, exprs []parser.TypedExpr, err error) {
 	v, ok := target.Expr.(parser.VarName)
 	if !ok {
 		return false, nil, nil, nil

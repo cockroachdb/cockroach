@@ -59,6 +59,9 @@ type planner struct {
 	// table descriptor is not leased, only fetched at the correct time.
 	asOf bool
 
+	// If set, contains the in progress COPY FROM columns.
+	copyFrom *copyNode
+
 	// Avoid allocations by embedding commonly used visitors.
 	subqueryVisitor             subqueryVisitor
 	subqueryPlanVisitor         subqueryPlanVisitor
@@ -217,10 +220,13 @@ func (p *planner) query(sql string, args ...interface{}) (planNode, error) {
 
 // queryRow implements the queryRunner interface.
 func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, error) {
+	p.session.mon.StartMonitor()
+	defer p.session.mon.StopMonitor(p.ctx())
 	plan, err := p.query(sql, args...)
 	if err != nil {
 		return nil, err
 	}
+	defer plan.Close()
 	if err := plan.Start(); err != nil {
 		return nil, err
 	}
@@ -240,10 +246,13 @@ func (p *planner) queryRow(sql string, args ...interface{}) (parser.DTuple, erro
 
 // exec implements the queryRunner interface.
 func (p *planner) exec(sql string, args ...interface{}) (int, error) {
+	p.session.mon.StartMonitor()
+	defer p.session.mon.StopMonitor(p.ctx())
 	plan, err := p.query(sql, args...)
 	if err != nil {
 		return 0, err
 	}
+	defer plan.Close()
 	if err := plan.Start(); err != nil {
 		return 0, err
 	}
@@ -313,4 +322,11 @@ func (p *planner) fillFKTableMap(m tableLookupsByID) error {
 		m[tableID] = tableLookup{table: table}
 	}
 	return nil
+}
+
+func (p *planner) virtualSchemas() *virtualSchemaHolder {
+	if p.session.executor == nil {
+		return nil
+	}
+	return &p.session.executor.virtualSchemas
 }

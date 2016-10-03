@@ -29,6 +29,11 @@ import "cockroach/sql/sqlbase/encoded_datum.proto";
 import "cockroach/sql/distsql/data.proto";
 import "gogoproto/gogo.proto";
 
+// NoopCoreSpec indicates a "no-op" processor core. This is used when only a
+// synchronizer is required, e.g. at the final endpoint.
+message NoopCoreSpec {
+}
+
 message TableReaderSpan {
   // TODO(radu): the dist_sql APIs should be agnostic to how we map tables to
   // KVs. The span should be described as starting and ending lists of values
@@ -36,7 +41,7 @@ message TableReaderSpan {
   optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
 }
 
-// TableReaderSpec is the specification for a table reader. A table reader
+// TableReaderSpec is the specification for a "table reader". A table reader
 // performs KV operations to retrieve rows for a table and outputs the desired
 // columns of the rows that pass a filter expression.
 message TableReaderSpec {
@@ -88,12 +93,32 @@ message JoinReaderSpec {
   // through values that aren't used for the lookup.
 }
 
+// SorterSpec is the specification for a "sorting aggregator". A sorting
+// aggregator sorts elements in the input stream providing a certain output
+// order guarantee regardless of the input ordering. The output ordering is
+// according to a configurable set of columns.
+message SorterSpec {
+  optional Ordering output_ordering = 1 [(gogoproto.nullable) = false];
+
+  // Ordering match length, specifying that the input is already sorted by the
+  // first 'n' output ordering columns, can be optionally specified for
+  // possible speed-ups taking advantage of the partial orderings.
+  optional uint32 ordering_match_len = 2 [(gogoproto.nullable) = false];
+
+  // Limits can be optionally specified to allow for further optimizations
+  // taking advantage of the fact that only the top 'k' results are needed.
+  optional int64 limit = 3 [(gogoproto.nullable) = false];
+}
+
 message ProcessorCoreUnion {
   option (gogoproto.onlyone) = true;
 
-  optional TableReaderSpec tableReader = 1;
-  optional JoinReaderSpec joinReader = 2;
+  optional NoopCoreSpec noop = 1;
+  optional TableReaderSpec tableReader = 2;
+  optional JoinReaderSpec joinReader = 3;
+  optional SorterSpec sorter = 4;
   // TODO(radu): other "processor core" types will go here.
+  // TODO(irfansharif): add aggregation, join, etc. from #7587
 }
 
 message ProcessorSpec {

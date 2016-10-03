@@ -112,7 +112,7 @@ import (
 type dataSourceInfo struct {
 	// sourceColumns match the plan.Columns() 1-to-1. However the column
 	// names might be different if the statement renames them using AS.
-	sourceColumns []ResultColumn
+	sourceColumns ResultColumns
 
 	// sourceAliases indicates to which table alias column ranges
 	// belong.
@@ -153,7 +153,7 @@ func fillColumnRange(firstIdx, lastIdx int) columnRange {
 
 // newSourceInfoForSingleTable creates a simple dataSourceInfo
 // which maps the same tableAlias to all columns.
-func newSourceInfoForSingleTable(tn parser.TableName, columns []ResultColumn) *dataSourceInfo {
+func newSourceInfoForSingleTable(tn parser.TableName, columns ResultColumns) *dataSourceInfo {
 	norm := sqlbase.NormalizeTableName(tn)
 	return &dataSourceInfo{
 		sourceColumns: columns,
@@ -192,7 +192,7 @@ func (p *planner) getSources(
 // getVirtualDataSource attempts to find a virtual table with the
 // given name.
 func (p *planner) getVirtualDataSource(tn *parser.TableName) (planDataSource, bool, error) {
-	virtual, err := getVirtualTableEntry(tn)
+	virtual, err := p.virtualSchemas().getVirtualTableEntry(tn)
 	if err != nil {
 		return planDataSource{}, false, err
 	}
@@ -237,28 +237,10 @@ func (p *planner) getDataSource(
 		if foundVirtual {
 			return ds, nil
 		}
-
-		// This name designates a real table.
-		scan := p.Scan()
-		if err := scan.initTable(p, tn, hints, scanVisibility); err != nil {
-			return planDataSource{}, err
-		}
-
-		return planDataSource{
-			info: newSourceInfoForSingleTable(*tn, scan.Columns()),
-			plan: scan,
-		}, nil
+		return p.getTableScanOrViewPlan(tn, hints, scanVisibility)
 
 	case *parser.Subquery:
-		// We have a subquery (this includes a simple "VALUES").
-		plan, err := p.newPlan(t.Select, nil, false)
-		if err != nil {
-			return planDataSource{}, err
-		}
-		return planDataSource{
-			info: newSourceInfoForSingleTable(parser.TableName{}, plan.Columns()),
-			plan: plan,
-		}, nil
+		return p.getSubqueryPlan(t.Select, nil)
 
 	case *parser.JoinTableExpr:
 		// Joins: two sources.
@@ -294,7 +276,7 @@ func (p *planner) getDataSource(
 
 		if len(colAlias) > 0 {
 			// Make a copy of the slice since we are about to modify the contents.
-			src.info.sourceColumns = append([]ResultColumn(nil), src.info.sourceColumns...)
+			src.info.sourceColumns = append(ResultColumns(nil), src.info.sourceColumns...)
 
 			// The column aliases can only refer to explicit columns.
 			for colIdx, aliasIdx := 0, 0; aliasIdx < len(colAlias); colIdx++ {
@@ -324,13 +306,93 @@ func (p *planner) getDataSource(
 	}
 }
 
+// getTableScanOrViewPlan builds a planDataSource from a single data source
+// clause (either a table or a view) in a SelectClause, expanding views out
+// into subqueries.
+func (p *planner) getTableScanOrViewPlan(
+	tn *parser.TableName,
+	hints *parser.IndexHints,
+	scanVisibility scanVisibility,
+) (planDataSource, error) {
+	descFunc := p.getTableLease
+	if p.asOf {
+		// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
+		// specified time, and never lease anything. The proto transaction already
+		// has its timestamps set correctly so mustGetTableDesc will fetch with the
+		// correct timestamp.
+		descFunc = p.mustGetTableDesc
+	}
+	desc, err := descFunc(tn)
+	if err != nil {
+		return planDataSource{}, err
+	}
+
+	if desc.IsView() {
+		return p.getViewPlan(tn, desc)
+	} else if !desc.IsTable() {
+		return planDataSource{},
+			errors.Errorf("unexpected table descriptor of type %s for %q", desc.TypeName(), tn)
+	}
+
+	// This name designates a real table.
+	scan := p.Scan()
+	if err := scan.initTable(p, desc, hints, scanVisibility); err != nil {
+		return planDataSource{}, err
+	}
+
+	return planDataSource{
+		info: newSourceInfoForSingleTable(*tn, scan.Columns()),
+		plan: scan,
+	}, nil
+}
+
+// getViewPlan builds a planDataSource for the view specified by the
+// table name and descriptor, expanding out its subquery plan.
+func (p *planner) getViewPlan(
+	tn *parser.TableName, desc *sqlbase.TableDescriptor,
+) (planDataSource, error) {
+	// Parse the query as Traditional syntax because we know the query was
+	// saved in the descriptor by printing it with parser.Format.
+	stmt, err := parser.ParseOneTraditional(desc.ViewQuery)
+	if err != nil {
+		return planDataSource{}, errors.Wrapf(err, "failed to parse underlying query from view %q", tn)
+	}
+	sel, ok := stmt.(*parser.Select)
+	if !ok {
+		return planDataSource{},
+			errors.Errorf("failed to parse underlying query from view %q as a select", tn)
+	}
+	// TODO(a-robinson): Support ORDER BY and LIMIT in views. Is it as simple as
+	// just passing the entire select here or will inserting an ORDER BY in the
+	// middle of a query plan break things?
+	return p.getSubqueryPlan(sel.Select, makeResultColumns(desc.Columns))
+}
+
+// getSubqueryPlan builds a planDataSource for a select statement, including
+// for simple VALUES statements.
+func (p *planner) getSubqueryPlan(
+	sel parser.SelectStatement, cols ResultColumns,
+) (planDataSource, error) {
+	plan, err := p.newPlan(sel, nil, false)
+	if err != nil {
+		return planDataSource{}, err
+	}
+	if len(cols) == 0 {
+		cols = plan.Columns()
+	}
+	return planDataSource{
+		info: newSourceInfoForSingleTable(parser.TableName{}, cols),
+		plan: plan,
+	}, nil
+}
+
 // expandStar returns the array of column metadata and name
 // expressions that correspond to the expansion of a star.
 func (src *dataSourceInfo) expandStar(
 	v parser.VarName, qvals qvalMap,
-) (columns []ResultColumn, exprs []parser.TypedExpr, err error) {
+) (columns ResultColumns, exprs []parser.TypedExpr, err error) {
 	if len(src.sourceColumns) == 0 {
-		return nil, nil, fmt.Errorf("cannot use \"%s\" without a FROM clause", v)
+		return nil, nil, fmt.Errorf("cannot use %q without a FROM clause", v)
 	}
 
 	colSel := func(idx int) {
@@ -402,7 +464,7 @@ func (p *planDataSource) findUnaliasedColumn(
 		col := planColumns[idx]
 		if sqlbase.ReNormalizeName(col.Name) == colName {
 			if colIdx != invalidColIdx {
-				return invalidColIdx, fmt.Errorf("column reference \"%s\" is ambiguous", parser.AsString(c))
+				return invalidColIdx, fmt.Errorf("column reference %q is ambiguous", c)
 			}
 			colIdx = idx
 		}
@@ -598,7 +660,7 @@ func concatDataSourceInfos(left *dataSourceInfo, right *dataSourceInfo) (*dataSo
 		aliases[k] = v
 	}
 
-	columns := make([]ResultColumn, 0, len(left.sourceColumns)+len(right.sourceColumns))
+	columns := make(ResultColumns, 0, len(left.sourceColumns)+len(right.sourceColumns))
 	columns = append(columns, left.sourceColumns...)
 	columns = append(columns, right.sourceColumns...)
 
