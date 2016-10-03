@@ -562,8 +562,8 @@ type DrainRequest struct {
 	// proxying enum fields (yet:
 	// https://github.com/grpc-ecosystem/grpc-gateway/issues/5) and it fails in
 	// pretty dramatic ways (panics the server).
-	On  []int32 `protobuf:"varint,1,rep,name=on" json:"on,omitempty"`
-	Off []int32 `protobuf:"varint,2,rep,name=off" json:"off,omitempty"`
+	On  []int32 `protobuf:"varint,1,rep,packed,name=on" json:"on,omitempty"`
+	Off []int32 `protobuf:"varint,2,rep,packed,name=off" json:"off,omitempty"`
 	// When true, terminates the process after the given drain modes have been
 	// activated.
 	Shutdown bool `protobuf:"varint,3,opt,name=shutdown,proto3" json:"shutdown,omitempty"`
@@ -577,7 +577,7 @@ func (*DrainRequest) Descriptor() ([]byte, []int) { return fileDescriptorAdmin, 
 // DrainResponse is the response to a successful DrainRequest and lists the
 // modes which are activated after having processing the request.
 type DrainResponse struct {
-	On []int32 `protobuf:"varint,1,rep,name=on" json:"on,omitempty"`
+	On []int32 `protobuf:"varint,1,rep,packed,name=on" json:"on,omitempty"`
 }
 
 func (m *DrainResponse) Reset()                    { *m = DrainResponse{} }
@@ -2259,18 +2259,40 @@ func (m *DrainRequest) MarshalTo(data []byte) (int, error) {
 	var l int
 	_ = l
 	if len(m.On) > 0 {
-		for _, num := range m.On {
-			data[i] = 0x8
-			i++
-			i = encodeVarintAdmin(data, i, uint64(num))
+		data8 := make([]byte, len(m.On)*10)
+		var j7 int
+		for _, num1 := range m.On {
+			num := uint64(num1)
+			for num >= 1<<7 {
+				data8[j7] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j7++
+			}
+			data8[j7] = uint8(num)
+			j7++
 		}
+		data[i] = 0xa
+		i++
+		i = encodeVarintAdmin(data, i, uint64(j7))
+		i += copy(data[i:], data8[:j7])
 	}
 	if len(m.Off) > 0 {
-		for _, num := range m.Off {
-			data[i] = 0x10
-			i++
-			i = encodeVarintAdmin(data, i, uint64(num))
+		data10 := make([]byte, len(m.Off)*10)
+		var j9 int
+		for _, num1 := range m.Off {
+			num := uint64(num1)
+			for num >= 1<<7 {
+				data10[j9] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j9++
+			}
+			data10[j9] = uint8(num)
+			j9++
 		}
+		data[i] = 0x12
+		i++
+		i = encodeVarintAdmin(data, i, uint64(j9))
+		i += copy(data[i:], data10[:j9])
 	}
 	if m.Shutdown {
 		data[i] = 0x18
@@ -2301,11 +2323,22 @@ func (m *DrainResponse) MarshalTo(data []byte) (int, error) {
 	var l int
 	_ = l
 	if len(m.On) > 0 {
-		for _, num := range m.On {
-			data[i] = 0x8
-			i++
-			i = encodeVarintAdmin(data, i, uint64(num))
+		data12 := make([]byte, len(m.On)*10)
+		var j11 int
+		for _, num1 := range m.On {
+			num := uint64(num1)
+			for num >= 1<<7 {
+				data12[j11] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j11++
+			}
+			data12[j11] = uint8(num)
+			j11++
 		}
+		data[i] = 0xa
+		i++
+		i = encodeVarintAdmin(data, i, uint64(j11))
+		i += copy(data[i:], data12[:j11])
 	}
 	return i, nil
 }
@@ -2854,14 +2887,18 @@ func (m *DrainRequest) Size() (n int) {
 	var l int
 	_ = l
 	if len(m.On) > 0 {
+		l = 0
 		for _, e := range m.On {
-			n += 1 + sovAdmin(uint64(e))
+			l += sovAdmin(uint64(e))
 		}
+		n += 1 + sovAdmin(uint64(l)) + l
 	}
 	if len(m.Off) > 0 {
+		l = 0
 		for _, e := range m.Off {
-			n += 1 + sovAdmin(uint64(e))
+			l += sovAdmin(uint64(e))
 		}
+		n += 1 + sovAdmin(uint64(l)) + l
 	}
 	if m.Shutdown {
 		n += 2
@@ -2873,9 +2910,11 @@ func (m *DrainResponse) Size() (n int) {
 	var l int
 	_ = l
 	if len(m.On) > 0 {
+		l = 0
 		for _, e := range m.On {
-			n += 1 + sovAdmin(uint64(e))
+			l += sovAdmin(uint64(e))
 		}
+		n += 1 + sovAdmin(uint64(l)) + l
 	}
 	return n
 }
@@ -6142,45 +6181,129 @@ func (m *DrainRequest) Unmarshal(data []byte) error {
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 0 {
+			if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowAdmin
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					packedLen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthAdmin
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				for iNdEx < postIndex {
+					var v int32
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowAdmin
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := data[iNdEx]
+						iNdEx++
+						v |= (int32(b) & 0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.On = append(m.On, v)
+				}
+			} else if wireType == 0 {
+				var v int32
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowAdmin
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					v |= (int32(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.On = append(m.On, v)
+			} else {
 				return fmt.Errorf("proto: wrong wireType = %d for field On", wireType)
 			}
-			var v int32
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowAdmin
+		case 2:
+			if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowAdmin
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					packedLen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
 				}
-				if iNdEx >= l {
+				if packedLen < 0 {
+					return ErrInvalidLengthAdmin
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
-				iNdEx++
-				v |= (int32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
+				for iNdEx < postIndex {
+					var v int32
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowAdmin
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := data[iNdEx]
+						iNdEx++
+						v |= (int32(b) & 0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.Off = append(m.Off, v)
 				}
-			}
-			m.On = append(m.On, v)
-		case 2:
-			if wireType != 0 {
+			} else if wireType == 0 {
+				var v int32
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowAdmin
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					v |= (int32(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.Off = append(m.Off, v)
+			} else {
 				return fmt.Errorf("proto: wrong wireType = %d for field Off", wireType)
 			}
-			var v int32
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowAdmin
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				v |= (int32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			m.Off = append(m.Off, v)
 		case 3:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Shutdown", wireType)
@@ -6252,25 +6375,67 @@ func (m *DrainResponse) Unmarshal(data []byte) error {
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field On", wireType)
-			}
-			var v int32
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowAdmin
+			if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowAdmin
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					packedLen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
 				}
-				if iNdEx >= l {
+				if packedLen < 0 {
+					return ErrInvalidLengthAdmin
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex > l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
-				iNdEx++
-				v |= (int32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
+				for iNdEx < postIndex {
+					var v int32
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowAdmin
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := data[iNdEx]
+						iNdEx++
+						v |= (int32(b) & 0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.On = append(m.On, v)
 				}
+			} else if wireType == 0 {
+				var v int32
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowAdmin
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := data[iNdEx]
+					iNdEx++
+					v |= (int32(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.On = append(m.On, v)
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field On", wireType)
 			}
-			m.On = append(m.On, v)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipAdmin(data[iNdEx:])
