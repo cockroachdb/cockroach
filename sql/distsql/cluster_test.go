@@ -34,7 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 func TestClusterFlow(t *testing.T) {
@@ -77,6 +79,14 @@ func TestClusterFlow(t *testing.T) {
 	// Note that the ranges won't necessarily be local to the table readers, but
 	// that doesn't matter for the purposes of this test.
 
+	// Start a span (useful to look at spans using Lighstep).
+	sp, err := tracing.JoinOrNew(tracing.NewTracer(), nil, "cluster test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := opentracing.ContextWithSpan(context.Background(), sp)
+	defer sp.Finish()
+
 	tr1 := TableReaderSpec{
 		Table:         *desc,
 		IndexIdx:      1,
@@ -103,7 +113,7 @@ func TestClusterFlow(t *testing.T) {
 		OutputColumns: []uint32{2},
 	}
 
-	txn := client.NewTxn(context.Background(), *kvDB)
+	txn := client.NewTxn(ctx, *kvDB)
 	fid := FlowID{uuid.MakeV4()}
 
 	req1 := &SetupFlowRequest{Txn: txn.Proto}
@@ -165,6 +175,16 @@ func TestClusterFlow(t *testing.T) {
 		},
 	}
 
+	if err := SetFlowRequestTrace(ctx, req1); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetFlowRequestTrace(ctx, req2); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetFlowRequestTrace(ctx, req3); err != nil {
+		t.Fatal(err)
+	}
+
 	var clients []DistSQLClient
 	for i := 0; i < 3; i++ {
 		s := tc.Server(i)
@@ -175,12 +195,10 @@ func TestClusterFlow(t *testing.T) {
 		clients = append(clients, NewDistSQLClient(conn))
 	}
 
-	ctx := context.Background()
-
 	if log.V(1) {
 		log.Infof(ctx, "Setting up flow on 0")
 	}
-	if resp, err := clients[0].SetupFlow(context.Background(), req1); err != nil {
+	if resp, err := clients[0].SetupFlow(ctx, req1); err != nil {
 		t.Fatal(err)
 	} else if resp.Error != nil {
 		t.Fatal(resp.Error)
@@ -189,7 +207,7 @@ func TestClusterFlow(t *testing.T) {
 	if log.V(1) {
 		log.Infof(ctx, "Setting up flow on 1")
 	}
-	if resp, err := clients[1].SetupFlow(context.Background(), req2); err != nil {
+	if resp, err := clients[1].SetupFlow(ctx, req2); err != nil {
 		t.Fatal(err)
 	} else if resp.Error != nil {
 		t.Fatal(resp.Error)
@@ -198,7 +216,7 @@ func TestClusterFlow(t *testing.T) {
 	if log.V(1) {
 		log.Infof(ctx, "Running flow on 2")
 	}
-	stream, err := clients[2].RunSimpleFlow(context.Background(), req3)
+	stream, err := clients[2].RunSimpleFlow(ctx, req3)
 	if err != nil {
 		t.Fatal(err)
 	}

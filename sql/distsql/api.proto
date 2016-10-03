@@ -24,11 +24,14 @@ import "cockroach/roachpb/data.proto";
 import "cockroach/roachpb/errors.proto";
 import "cockroach/sql/distsql/data.proto";
 import "cockroach/sql/distsql/processors.proto";
+import "cockroach/util/tracing/span.proto";
 import "gogoproto/gogo.proto";
 
 message SetupFlowRequest {
   optional roachpb.Transaction txn = 1 [(gogoproto.nullable) = false];
-  optional FlowSpec flow = 2 [(gogoproto.nullable) = false];
+  // trace, if set, holds the data for a tracing span context.
+  optional util.tracing.Span trace = 2;
+  optional FlowSpec flow = 3 [(gogoproto.nullable) = false];
 }
 
 message SimpleResponse {
