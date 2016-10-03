@@ -624,9 +624,10 @@ is sparse, the successor key is defined as the next key which is present. The
 found using the same process. The *meta2* record identifies the range
 containing `key1`, which is again found the same way (see examples below).
 
-Concretely, metadata keys are prefixed by `\0\0meta{1,2}`; the two null
-characters provide for the desired sorting behaviour. Thus, `key1`'s
-*meta1* record will reside at the successor key to `\0\0\meta1<key1>`.
+Concretely, metadata keys are prefixed by `\x02` (meta1) and `\x03`
+(meta2); the prefixes `\x02` and `\x03` provide for the desired
+sorting behaviour. Thus, `key1`'s *meta1* record will reside at the
+successor key to `\x02<key1>`.
 
 Note: we append the end key of each range to meta{1,2} records because
 the RocksDB iterator only supports a Seek() interface which acts as a
@@ -636,18 +637,20 @@ result in having to back the iterator up, an option which is both less
 efficient and not available in all cases.
 
 The following example shows the directory structure for a map with
-three ranges worth of data. Ellipses indicate additional key/value pairs to
-fill an entire range of data. Except for the fact that splitting ranges
-requires updates to the range metadata with knowledge of the metadata layout,
-the range metadata itself requires no special treatment or bootstrapping.
+three ranges worth of data. Ellipses indicate additional key/value
+pairs to fill an entire range of data. For clarity, the examples use
+`meta1` and `meta2` to refer to the prefixes `\x02` and `\x03`. Except
+for the fact that splitting ranges requires updates to the range
+metadata with knowledge of the metadata layout, the range metadata
+itself requires no special treatment or bootstrapping.
 
 **Range 0** (located on servers `dcrama1:8000`, `dcrama2:8000`,
   `dcrama3:8000`)
 
-- `\0\0meta1\xff`: `dcrama1:8000`, `dcrama2:8000`, `dcrama3:8000`
-- `\0\0meta2<lastkey0>`: `dcrama1:8000`, `dcrama2:8000`, `dcrama3:8000`
-- `\0\0meta2<lastkey1>`: `dcrama4:8000`, `dcrama5:8000`, `dcrama6:8000`
-- `\0\0meta2\xff`: `dcrama7:8000`, `dcrama8:8000`, `dcrama9:8000`
+- `meta1\xff`: `dcrama1:8000`, `dcrama2:8000`, `dcrama3:8000`
+- `meta2<lastkey0>`: `dcrama1:8000`, `dcrama2:8000`, `dcrama3:8000`
+- `meta2<lastkey1>`: `dcrama4:8000`, `dcrama5:8000`, `dcrama6:8000`
+- `meta2\xff`: `dcrama7:8000`, `dcrama8:8000`, `dcrama9:8000`
 - ...
 - `<lastkey0>`: `<lastvalue0>`
 
@@ -670,8 +673,8 @@ located in the same range:
 **Range 0** (located on servers `dcrama1:8000`, `dcrama2:8000`,
 `dcrama3:8000`)*
 
-- `\0\0meta1\xff`: `dcrama1:8000`, `dcrama2:8000`, `dcrama3:8000`
-- `\0\0meta2\xff`: `dcrama1:8000`, `dcrama2:8000`, `dcrama3:8000`
+- `meta1\xff`: `dcrama1:8000`, `dcrama2:8000`, `dcrama3:8000`
+- `meta2\xff`: `dcrama1:8000`, `dcrama2:8000`, `dcrama3:8000`
 - `<key0>`: `<value0>`
 - `...`
 
@@ -681,20 +684,20 @@ example is simplified to just show range indexes):
 
 **Range 0**
 
-- `\0\0meta1<lastkeyN-1>`: Range 0
-- `\0\0meta1\xff`: Range 1
-- `\0\0meta2<lastkey1>`:  Range 1
-- `\0\0meta2<lastkey2>`:  Range 2
-- `\0\0meta2<lastkey3>`:  Range 3
+- `meta1<lastkeyN-1>`: Range 0
+- `meta1\xff`: Range 1
+- `meta2<lastkey1>`:  Range 1
+- `meta2<lastkey2>`:  Range 2
+- `meta2<lastkey3>`:  Range 3
 - ...
-- `\0\0meta2<lastkeyN-1>`: Range 262143
+- `meta2<lastkeyN-1>`: Range 262143
 
 **Range 1**
 
-- `\0\0meta2<lastkeyN>`: Range 262144
-- `\0\0meta2<lastkeyN+1>`: Range 262145
+- `meta2<lastkeyN>`: Range 262144
+- `meta2<lastkeyN+1>`: Range 262145
 - ...
-- `\0\0meta2\xff`: Range 500,000
+- `meta2\xff`: Range 500,000
 - ...
 - `<lastkey1>`: `<lastvalue1>`
 
@@ -727,8 +730,8 @@ versa.
 From the examples above it’s clear that key location lookups require at
 most three reads to get the value for `<key>`:
 
-1. lower bound of `\0\0meta1<key>`
-2. lower bound of `\0\0meta2<key>`,
+1. lower bound of `meta1<key>`
+2. lower bound of `meta2<key>`,
 3. `<key>`.
 
 For small maps, the entire lookup is satisfied in a single RPC to Range 0. Maps
