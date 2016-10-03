@@ -431,9 +431,7 @@ type testServerFactoryImpl struct{}
 var TestServerFactory = testServerFactoryImpl{}
 
 // New is part of TestServerFactory interface.
-func (testServerFactoryImpl) New(
-	params base.TestServerArgs,
-) interface{} {
+func (testServerFactoryImpl) New(params base.TestServerArgs) interface{} {
 	ctx := makeTestContextFromParams(params)
 	return &TestServer{Ctx: &ctx}
 }

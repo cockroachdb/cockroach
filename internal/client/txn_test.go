@@ -41,7 +41,9 @@ var (
 
 // TestSender mocks out some of the txn coordinator sender's
 // functionality. It responds to PutRequests using testPutResp.
-func newTestSender(pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)) SenderFunc {
+func newTestSender(
+	pre, post func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error),
+) SenderFunc {
 	txnID := uuid.NewV4()
 
 	return func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {

@@ -66,10 +66,7 @@ func TransitiveImports(importPath string, cgo bool) (map[string]struct{}, error)
 // If GOPATH isn't set, it is an indication that the source is not available and
 // the test is skipped.
 func VerifyNoImports(
-	t testing.TB,
-	pkgPath string,
-	cgo bool,
-	forbiddenPkgs, forbiddenPrefixes []string,
+	t testing.TB, pkgPath string, cgo bool, forbiddenPkgs, forbiddenPrefixes []string,
 ) {
 	// Skip test if source is not available.
 	if build.Default.GOPATH == "" {

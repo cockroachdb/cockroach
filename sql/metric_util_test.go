@@ -26,17 +26,13 @@ import (
 	"github.com/pkg/errors"
 )
 
-func checkCounterEQ(
-	t *testing.T, s serverutils.TestServerInterface, meta metric.Metadata, e int64,
-) {
+func checkCounterEQ(t *testing.T, s serverutils.TestServerInterface, meta metric.Metadata, e int64) {
 	if a := s.MustGetSQLCounter(meta.Name); a != e {
 		t.Error(errors.Errorf("stat %s: actual %d != expected %d", meta.Name, a, e))
 	}
 }
 
-func checkCounterGE(
-	t *testing.T, s serverutils.TestServerInterface, meta metric.Metadata, e int64,
-) {
+func checkCounterGE(t *testing.T, s serverutils.TestServerInterface, meta metric.Metadata, e int64) {
 	if a := s.MustGetSQLCounter(meta.Name); a < e {
 		t.Error(errors.Errorf("stat %s: expected: actual %d >= %d", meta.Name, a, e))
 	}

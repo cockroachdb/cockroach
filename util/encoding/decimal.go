@@ -396,7 +396,9 @@ func findDecimalTerminator(buf []byte) (int, error) {
 	return -1, errors.Errorf("did not find terminator %#x in buffer %#x", decimalTerminator, buf)
 }
 
-func decodeSmallNumber(negative bool, buf []byte, tmp []byte) (e int, m []byte, rest []byte, newTmp []byte, err error) {
+func decodeSmallNumber(
+	negative bool, buf []byte, tmp []byte,
+) (e int, m []byte, rest []byte, newTmp []byte, err error) {
 	var ex uint64
 	var r []byte
 	if negative {
@@ -429,7 +431,9 @@ func decodeSmallNumber(negative bool, buf []byte, tmp []byte) (e int, m []byte, 
 	return int(-ex), m, r[idx+1:], tmp, nil
 }
 
-func decodeMediumNumber(negative bool, buf []byte, tmp []byte) (e int, m []byte, rest []byte, newTmp []byte, err error) {
+func decodeMediumNumber(
+	negative bool, buf []byte, tmp []byte,
+) (e int, m []byte, rest []byte, newTmp []byte, err error) {
 	idx, err := findDecimalTerminator(buf[1:])
 	if err != nil {
 		return 0, nil, nil, nil, err
@@ -454,7 +458,9 @@ func decodeMediumNumber(negative bool, buf []byte, tmp []byte) (e int, m []byte,
 	return e, m, buf[idx+2:], tmp, nil
 }
 
-func decodeLargeNumber(negative bool, buf []byte, tmp []byte) (e int, m []byte, rest []byte, newTmp []byte, err error) {
+func decodeLargeNumber(
+	negative bool, buf []byte, tmp []byte,
+) (e int, m []byte, rest []byte, newTmp []byte, err error) {
 	var ex uint64
 	var r []byte
 	if negative {

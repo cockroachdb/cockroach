@@ -134,9 +134,7 @@ func getTruncatableIndexes(ctx context.Context, r *Replica) (uint64, uint64, err
 // and thus require another snapshot, likely entering a never ending loop of
 // snapshots. See #8629.
 func computeTruncatableIndex(
-	raftStatus *raft.Status,
-	raftLogSize, targetSize int64,
-	firstIndex, pendingSnapshotIndex uint64,
+	raftStatus *raft.Status, raftLogSize, targetSize int64, firstIndex, pendingSnapshotIndex uint64,
 ) uint64 {
 	truncatableIndex := raftStatus.Commit
 	if raftLogSize <= targetSize {
@@ -195,10 +193,7 @@ func (rlq *raftLogQueue) shouldQueue(
 // leader and if the total number of the range's raft log's stale entries
 // exceeds RaftLogQueueStaleThreshold.
 func (rlq *raftLogQueue) process(
-	ctx context.Context,
-	now hlc.Timestamp,
-	r *Replica,
-	_ config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, r *Replica, _ config.SystemConfig,
 ) error {
 	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(rlq.ctx, r)
 	if err != nil {

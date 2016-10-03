@@ -23,10 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 )
 
-func runReferenceTestWithScript(
-	t *testing.T,
-	script string,
-) {
+func runReferenceTestWithScript(t *testing.T, script string) {
 	if err := testDockerOneShot(t, "reference", []string{"stat", cluster.CockroachBinaryInContainer}); err != nil {
 		t.Skipf(`TODO(dt): No binary in one-shot container, see #6086: %s`, err)
 	}
@@ -36,11 +33,7 @@ func runReferenceTestWithScript(
 	}
 }
 
-func runReadWriteReferenceTest(
-	t *testing.T,
-	referenceBinPath string,
-	backwardReferenceTest string,
-) {
+func runReadWriteReferenceTest(t *testing.T, referenceBinPath string, backwardReferenceTest string) {
 	referenceTestScript := fmt.Sprintf(`
 set -xe
 mkdir /old

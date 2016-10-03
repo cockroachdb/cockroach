@@ -30,9 +30,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-func makeColIDtoRowIndex(row planNode, desc *sqlbase.TableDescriptor) (
-	map[sqlbase.ColumnID]int, error,
-) {
+func makeColIDtoRowIndex(
+	row planNode, desc *sqlbase.TableDescriptor,
+) (map[sqlbase.ColumnID]int, error) {
 	columns := row.Columns()
 	colIDtoRowIndex := make(map[sqlbase.ColumnID]int, len(columns))
 	for i, column := range columns {
@@ -374,8 +374,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 }
 
 func (sc *SchemaChanger) truncateIndexes(
-	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	dropped []sqlbase.IndexDescriptor,
+	lease *sqlbase.TableDescriptor_SchemaChangeLease, dropped []sqlbase.IndexDescriptor,
 ) error {
 	for _, desc := range dropped {
 		var resume roachpb.Span
@@ -429,8 +428,7 @@ func (sc *SchemaChanger) truncateIndexes(
 const IndexBackfillChunkSize = 100
 
 func (sc *SchemaChanger) backfillIndexes(
-	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	added []sqlbase.IndexDescriptor,
+	lease *sqlbase.TableDescriptor_SchemaChangeLease, added []sqlbase.IndexDescriptor,
 ) error {
 	if len(added) == 0 {
 		return nil
@@ -460,8 +458,7 @@ func (sc *SchemaChanger) backfillIndexes(
 }
 
 func (sc *SchemaChanger) backfillIndexesChunk(
-	added []sqlbase.IndexDescriptor,
-	sp roachpb.Span,
+	added []sqlbase.IndexDescriptor, sp roachpb.Span,
 ) (roachpb.Key, bool, error) {
 	var nextKey roachpb.Key
 	done := false

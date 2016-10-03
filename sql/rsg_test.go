@@ -179,7 +179,9 @@ func TestRandomSyntaxFuncCommon(t *testing.T) {
 }
 
 // testRandomSyntax performs all of the RSG setup and teardown for common random syntax testing operations. It takes f, a closure where the random expression should be generated and executed. It returns a boolean indicating if the statement executed successfully. This is used to verify that at least 1 success occurs (otherwise it is likely a bad test).
-func testRandomSyntax(t *testing.T, setup func(db *gosql.DB) error, f func(db *gosql.DB, r *rsg.RSG) (success bool)) {
+func testRandomSyntax(
+	t *testing.T, setup func(db *gosql.DB) error, f func(db *gosql.DB, r *rsg.RSG) (success bool),
+) {
 	if *flagRSGTime == 0 {
 		t.Skip("enable with '-rsg <duration>'")
 	}

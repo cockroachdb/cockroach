@@ -409,8 +409,7 @@ type schemaChangerCollection struct {
 	}
 }
 
-func (scc *schemaChangerCollection) queueSchemaChanger(
-	schemaChanger SchemaChanger) {
+func (scc *schemaChangerCollection) queueSchemaChanger(schemaChanger SchemaChanger) {
 	scc.schemaChangers = append(
 		scc.schemaChangers,
 		struct {

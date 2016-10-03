@@ -41,15 +41,11 @@ type Server struct {
 }
 
 // MakeServer returns a new instance of Server.
-func MakeServer(
-	descriptor *roachpb.NodeDescriptor, stores *Stores,
-) Server {
+func MakeServer(descriptor *roachpb.NodeDescriptor, stores *Stores) Server {
 	return Server{descriptor, stores}
 }
 
-func (is Server) execStoreCommand(
-	h StoreRequestHeader, f func(*Store) error,
-) error {
+func (is Server) execStoreCommand(h StoreRequestHeader, f func(*Store) error) error {
 	if h.NodeID != is.descriptor.NodeID {
 		return errors.Errorf("request for NodeID %d cannot be served by NodeID %d",
 			h.NodeID, is.descriptor.NodeID)

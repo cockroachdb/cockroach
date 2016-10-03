@@ -56,10 +56,7 @@ func jitter(avgInterval time.Duration) time.Duration {
 // intercepts all BatchRequests, reading them in a tight loop. This allows the
 // race detector to catch any mutations of a batch passed to the transport.
 func grpcTransportFactory(
-	opts SendOptions,
-	rpcContext *rpc.Context,
-	replicas ReplicaSlice,
-	args roachpb.BatchRequest,
+	opts SendOptions, rpcContext *rpc.Context, replicas ReplicaSlice, args roachpb.BatchRequest,
 ) (Transport, error) {
 	if atomic.AddInt32(&running, 1) <= 1 {
 		rpcContext.Stopper.RunWorker(func() {

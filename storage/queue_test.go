@@ -46,15 +46,14 @@ type testQueueImpl struct {
 	err           error // always returns this error on process
 }
 
-func (tq *testQueueImpl) shouldQueue(now hlc.Timestamp, r *Replica, _ config.SystemConfig) (bool, float64) {
+func (tq *testQueueImpl) shouldQueue(
+	now hlc.Timestamp, r *Replica, _ config.SystemConfig,
+) (bool, float64) {
 	return tq.shouldQueueFn(now, r)
 }
 
 func (tq *testQueueImpl) process(
-	_ context.Context,
-	now hlc.Timestamp,
-	r *Replica,
-	_ config.SystemConfig,
+	_ context.Context, now hlc.Timestamp, r *Replica, _ config.SystemConfig,
 ) error {
 	atomic.AddInt32(&tq.processed, 1)
 	return tq.err
@@ -79,11 +78,7 @@ func (tq *testQueueImpl) purgatoryChan() <-chan struct{} {
 }
 
 func makeTestBaseQueue(
-	name string,
-	impl queueImpl,
-	store *Store,
-	gossip *gossip.Gossip,
-	cfg queueConfig,
+	name string, impl queueImpl, store *Store, gossip *gossip.Gossip, cfg queueConfig,
 ) *baseQueue {
 	cfg.successes = metric.NewCounter(metric.Metadata{Name: "processed"})
 	cfg.failures = metric.NewCounter(metric.Metadata{Name: "failures"})
@@ -677,10 +672,7 @@ type processTimeoutQueueImpl struct {
 }
 
 func (pq *processTimeoutQueueImpl) process(
-	ctx context.Context,
-	now hlc.Timestamp,
-	r *Replica,
-	_ config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, r *Replica, _ config.SystemConfig,
 ) error {
 	<-ctx.Done()
 	atomic.AddInt32(&pq.processed, 1)
@@ -733,10 +725,7 @@ type processTimeQueueImpl struct {
 }
 
 func (pq *processTimeQueueImpl) process(
-	_ context.Context,
-	_ hlc.Timestamp,
-	_ *Replica,
-	_ config.SystemConfig,
+	_ context.Context, _ hlc.Timestamp, _ *Replica, _ config.SystemConfig,
 ) error {
 	time.Sleep(5 * time.Millisecond)
 	return nil

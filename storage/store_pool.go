@@ -405,7 +405,9 @@ func (sp *StorePool) getStoreDescriptor(storeID roachpb.StoreID) (roachpb.StoreD
 
 // deadReplicas returns any replicas from the supplied slice that are
 // located on dead stores or dead replicas for the provided rangeID.
-func (sp *StorePool) deadReplicas(rangeID roachpb.RangeID, repls []roachpb.ReplicaDescriptor) []roachpb.ReplicaDescriptor {
+func (sp *StorePool) deadReplicas(
+	rangeID roachpb.RangeID, repls []roachpb.ReplicaDescriptor,
+) []roachpb.ReplicaDescriptor {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 
@@ -484,7 +486,9 @@ func (sl *StoreList) add(s roachpb.StoreDescriptor) {
 // TODO(embark, spencer): consider using a reverse index map from
 // Attr->stores, for efficiency. Ensure that entries in this map still
 // have an opportunity to be garbage collected.
-func (sp *StorePool) getStoreList(constraints config.Constraints, deterministic bool) (StoreList, int, int) {
+func (sp *StorePool) getStoreList(
+	constraints config.Constraints, deterministic bool,
+) (StoreList, int, int) {
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
 
@@ -527,10 +531,7 @@ func (sp *StorePool) getStoreList(constraints config.Constraints, deterministic 
 // TODO(bram): consider moving the nodeID to the store pool during
 // NewStorePool.
 func (sp *StorePool) reserve(
-	curIdent roachpb.StoreIdent,
-	toStoreID roachpb.StoreID,
-	rangeID roachpb.RangeID,
-	rangeSize int64,
+	curIdent roachpb.StoreIdent, toStoreID roachpb.StoreID, rangeID roachpb.RangeID, rangeSize int64,
 ) error {
 	if !sp.reservationsEnabled {
 		return nil

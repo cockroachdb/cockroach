@@ -120,11 +120,7 @@ func TestIntersectHalfOpen(t *testing.T) {
 // setupBackupRestoreDB creates a table and inserts `count` rows. It then splits
 // the kv ranges for the table as evenly as possible into `rangeCount` ranges.
 func setupBackupRestoreDB(
-	t testing.TB,
-	ctx context.Context,
-	tc *testcluster.TestCluster,
-	count int,
-	rangeCount int,
+	t testing.TB, ctx context.Context, tc *testcluster.TestCluster, count int, rangeCount int,
 ) []*roachpb.RangeDescriptor {
 	rng, _ := randutil.NewPseudoRand()
 
@@ -187,10 +183,7 @@ func setupBackupRestoreDB(
 }
 
 func setupReplicationAndLeases(
-	t testing.TB,
-	tc *testcluster.TestCluster,
-	ranges []*roachpb.RangeDescriptor,
-	clusterSize int,
+	t testing.TB, tc *testcluster.TestCluster, ranges []*roachpb.RangeDescriptor, clusterSize int,
 ) {
 	targets := make([]testcluster.ReplicationTarget, clusterSize-1)
 	for i := 1; i < clusterSize; i++ {

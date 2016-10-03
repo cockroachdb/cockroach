@@ -152,7 +152,9 @@ type completeDatapoint struct {
 
 // generateComplexData generates more complicated InternalTimeSeriesData, where
 // each contained point may have an explicit max and min.
-func generateComplexData(startTimestamp, sampleDuration int64, dps []completeDatapoint) roachpb.InternalTimeSeriesData {
+func generateComplexData(
+	startTimestamp, sampleDuration int64, dps []completeDatapoint,
+) roachpb.InternalTimeSeriesData {
 	result := roachpb.InternalTimeSeriesData{
 		StartTimestampNanos: startTimestamp,
 		SampleDurationNanos: sampleDuration,

@@ -50,7 +50,9 @@ import (
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
-func getStatusJSONProto(ts serverutils.TestServerInterface, path string, response proto.Message) error {
+func getStatusJSONProto(
+	ts serverutils.TestServerInterface, path string, response proto.Message,
+) error {
 	return serverutils.GetJSONProto(ts, statusPrefix+path, response)
 }
 

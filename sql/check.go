@@ -28,7 +28,9 @@ type checkHelper struct {
 	cols  []sqlbase.ColumnDescriptor
 }
 
-func (c *checkHelper) init(p *planner, tn *parser.TableName, tableDesc *sqlbase.TableDescriptor) error {
+func (c *checkHelper) init(
+	p *planner, tn *parser.TableName, tableDesc *sqlbase.TableDescriptor,
+) error {
 	if len(tableDesc.Checks) == 0 {
 		return nil
 	}
@@ -92,9 +94,7 @@ func (c *checkHelper) check(ctx *parser.EvalContext) error {
 }
 
 func (p *planner) validateCheckExpr(
-	exprStr string,
-	tableName parser.TableExpr,
-	tableDesc *sqlbase.TableDescriptor,
+	exprStr string, tableName parser.TableExpr, tableDesc *sqlbase.TableDescriptor,
 ) error {
 	expr, err := parser.ParseExprTraditional(exprStr)
 	if err != nil {

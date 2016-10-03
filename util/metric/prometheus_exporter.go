@@ -46,7 +46,9 @@ func MakePrometheusExporter() PrometheusExporter {
 }
 
 // find the family for the passed-in metric, or create and return it if not found.
-func (pm *PrometheusExporter) findOrCreateFamily(prom PrometheusExportable) *prometheusgo.MetricFamily {
+func (pm *PrometheusExporter) findOrCreateFamily(
+	prom PrometheusExportable,
+) *prometheusgo.MetricFamily {
 	familyName := exportedName(prom.GetName())
 	if family, ok := pm.families[familyName]; ok {
 		return family
