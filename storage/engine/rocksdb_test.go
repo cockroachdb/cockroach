@@ -26,11 +26,14 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -412,6 +415,87 @@ func TestReadAmplification(t *testing.T) {
 	}
 	if a, e := tables3.ReadAmplification(), 7; a != e {
 		t.Errorf("got %d, expected %d", a, e)
+	}
+}
+
+func TestConcurrentBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	dir, err := ioutil.TempDir("", "TestConcurrentBatch")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.RemoveAll(dir); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+
+	db := NewRocksDB(roachpb.Attributes{}, dir, RocksDBCache{},
+		0, DefaultMaxOpenFiles, stopper)
+	if err := db.Open(); err != nil {
+		t.Fatalf("could not create new rocksdb db instance at %s: %v", dir, err)
+	}
+
+	// Prepare 16 4 MB batches containing non-overlapping contents.
+	var batches []Batch
+	for i := 0; i < 16; i++ {
+		batch := db.NewBatch()
+		for j := 0; true; j++ {
+			key := encoding.EncodeUvarintAscending([]byte("bar"), uint64(i))
+			key = encoding.EncodeUvarintAscending(key, uint64(j))
+			if err := batch.Put(MakeMVCCMetadataKey(key), nil); err != nil {
+				t.Fatal(err)
+			}
+			if len(batch.Repr()) >= 4<<20 {
+				break
+			}
+		}
+		batches = append(batches, batch)
+	}
+
+	// Concurrently write all the batches.
+	start := timeutil.Now()
+	var wg sync.WaitGroup
+	wg.Add(len(batches))
+	for _, batch := range batches {
+		go func(batch Batch) {
+			if err := batch.Commit(); err != nil {
+				t.Fatal(err)
+			}
+			wg.Done()
+		}(batch)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		fmt.Printf("%d batches committed: %0.1fs\n", len(batches), timeutil.Since(start).Seconds())
+		close(done)
+	}()
+
+	// While the batch writes are in progress, try to write another key.
+	time.Sleep(100 * time.Millisecond)
+	for i := 0; true; i++ {
+		select {
+		case <-done:
+			return
+		default:
+		}
+
+		// This write can get delayed excessively if we hit the max memtable count
+		// or the L0 stop writes threshold.
+		start := timeutil.Now()
+		key := encoding.EncodeUvarintAscending([]byte("foo"), uint64(i))
+		if err := db.Put(MakeMVCCMetadataKey(key), nil); err != nil {
+			t.Fatal(err)
+		}
+		if elapsed := timeutil.Since(start); elapsed >= 10*time.Second {
+			t.Fatalf("write took %0.1fs\n", elapsed.Seconds())
+		}
 	}
 }
 
