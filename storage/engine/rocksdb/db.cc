@@ -1398,7 +1398,7 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
 
   // Use the rocksdb options builder to configure the base options
   // using our memtable budget.
-  rocksdb::Options options(rocksdb::GetOptions(db_opts.memtable_budget));
+  rocksdb::Options options;
   // Increase parallelism for compactions based on the number of
   // cpus. This will use 1 high priority thread for flushes and
   // num_cpu-1 low priority threads for compactions. Always use at
@@ -1418,6 +1418,11 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
   options.max_open_files = db_opts.max_open_files;
 
+  options.max_write_buffer_number = 4;
+  options.write_buffer_size = db_opts.memtable_budget / options.max_write_buffer_number;
+  options.level0_file_num_compaction_trigger = 1;
+  options.level0_slowdown_writes_trigger = 16;
+  options.level0_stop_writes_trigger = 17;
   // Merge two memtables when flushing to L0.
   options.min_write_buffer_number_to_merge = 2;
   // Enable dynamic level sizing which reduces both size and write
@@ -1426,8 +1431,7 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   options.level_compaction_dynamic_level_bytes = true;
   // Follow the RocksDB recommendation to configure the size of L1 to
   // be the same as the estimated size of L0.
-  options.max_bytes_for_level_base = options.write_buffer_size *
-      options.min_write_buffer_number_to_merge * options.level0_file_num_compaction_trigger;
+  options.max_bytes_for_level_base = 16 << 20; // 16 MB
   options.max_bytes_for_level_multiplier = 10;
   // Target the base file size as 1/4 of the base size which will give
   // us ~4 files in the base level (level 0). Each additional level
