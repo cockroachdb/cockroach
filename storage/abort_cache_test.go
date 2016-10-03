@@ -58,7 +58,9 @@ func init() {
 
 // createTestAbortCache creates an in-memory engine and
 // returns a abort cache using the supplied Range ID.
-func createTestAbortCache(t *testing.T, rangeID roachpb.RangeID, stopper *stop.Stopper) (*AbortCache, engine.Engine) {
+func createTestAbortCache(
+	t *testing.T, rangeID roachpb.RangeID, stopper *stop.Stopper,
+) (*AbortCache, engine.Engine) {
 	return NewAbortCache(rangeID), engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
 }
 

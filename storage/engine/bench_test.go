@@ -74,7 +74,9 @@ type engineMaker func(testing.TB, string) (Engine, *stop.Stopper)
 // numbers of versions. The database is persisted between runs and stored in
 // the current directory as "mvcc_scan_<versions>_<keys>_<valueBytes>" (which
 // is also returned).
-func setupMVCCData(emk engineMaker, numVersions, numKeys, valueBytes int, b *testing.B) (Engine, string, *stop.Stopper) {
+func setupMVCCData(
+	emk engineMaker, numVersions, numKeys, valueBytes int, b *testing.B,
+) (Engine, string, *stop.Stopper) {
 	loc := fmt.Sprintf("mvcc_data_%d_%d_%d", numVersions, numKeys, valueBytes)
 
 	exists := true

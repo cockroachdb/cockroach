@@ -255,9 +255,9 @@ func (rf *RowFetcher) ReadIndexKey(k roachpb.Key) (remaining []byte, ok bool, er
 // ProcessKV processes the given key/value, setting values in the row
 // accordingly. If debugStrings is true, returns pretty printed key and value
 // information in prettyKey/prettyValue (otherwise they are empty strings).
-func (rf *RowFetcher) ProcessKV(kv client.KeyValue, debugStrings bool) (
-	prettyKey string, prettyValue string, err error,
-) {
+func (rf *RowFetcher) ProcessKV(
+	kv client.KeyValue, debugStrings bool,
+) (prettyKey string, prettyValue string, err error) {
 	if debugStrings {
 		prettyKey = fmt.Sprintf("/%s/%s%s", rf.desc.Name, rf.index.Name, prettyDatums(rf.keyVals))
 	}
@@ -491,9 +491,7 @@ func (rf *RowFetcher) NextRow() (parser.DTuple, error) {
 // NextKeyDebug processes one key at a time and returns a pretty printed key and
 // value. If we completed a row, the row is returned as well (see nextRow). If
 // there are no more keys, prettyKey is "".
-func (rf *RowFetcher) NextKeyDebug() (
-	prettyKey string, prettyValue string, row parser.DTuple, err error,
-) {
+func (rf *RowFetcher) NextKeyDebug() (prettyKey string, prettyValue string, row parser.DTuple, err error) {
 	if rf.kvEnd {
 		return "", "", nil, nil
 	}

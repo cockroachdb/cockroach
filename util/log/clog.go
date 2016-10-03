@@ -438,7 +438,9 @@ type flushSyncWriter interface {
 // 	file             The file name
 // 	line             The line number
 // 	msg              The user-supplied message
-func formatHeader(s Severity, now time.Time, gid int, file string, line int, colors *colorProfile) *buffer {
+func formatHeader(
+	s Severity, now time.Time, gid int, file string, line int, colors *colorProfile,
+) *buffer {
 	buf := logging.getBuffer()
 	if line < 0 {
 		line = 0 // not a real line number, but acceptable to someDigits

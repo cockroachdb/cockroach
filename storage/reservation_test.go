@@ -32,9 +32,7 @@ import (
 
 // createTestBookie creates a new bookie, stopper and manual clock for testing.
 func createTestBookie(
-	reservationTimeout time.Duration,
-	maxReservations int,
-	maxReservedBytes int64,
+	reservationTimeout time.Duration, maxReservations int, maxReservedBytes int64,
 ) (*stop.Stopper, *hlc.ManualClock, *bookie) {
 	stopper := stop.NewStopper()
 	mc := hlc.NewManualClock(0)

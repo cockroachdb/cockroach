@@ -417,10 +417,7 @@ func (dbs sortedDBDescs) Less(i, j int) bool { return dbs[i].Name < dbs[j].Name 
 // forEachTableDesc retrieves all database descriptors and iterates through them in
 // lexicographical order with respect to their name. For each database, the function
 // will call fn with its descriptor.
-func forEachDatabaseDesc(
-	p *planner,
-	fn func(*sqlbase.DatabaseDescriptor) error,
-) error {
+func forEachDatabaseDesc(p *planner, fn func(*sqlbase.DatabaseDescriptor) error) error {
 	// Handle real schemas
 	dbDescs, err := p.getAllDatabaseDescs()
 	if err != nil {
@@ -448,8 +445,7 @@ func forEachDatabaseDesc(
 // to table name. For each table, the function will call fn with its respective
 // database and table descriptor.
 func forEachTableDesc(
-	p *planner,
-	fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor) error,
+	p *planner, fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor) error,
 ) error {
 	type dbDescTables struct {
 		desc   *sqlbase.DatabaseDescriptor
@@ -527,8 +523,7 @@ func forEachTableDesc(
 }
 
 func forEachIndexInTable(
-	table *sqlbase.TableDescriptor,
-	fn func(*sqlbase.IndexDescriptor) error,
+	table *sqlbase.TableDescriptor, fn func(*sqlbase.IndexDescriptor) error,
 ) error {
 	if table.IsPhysicalTable() {
 		if err := fn(&table.PrimaryIndex); err != nil {
@@ -544,8 +539,7 @@ func forEachIndexInTable(
 }
 
 func forEachColumnInTable(
-	table *sqlbase.TableDescriptor,
-	fn func(*sqlbase.ColumnDescriptor) error,
+	table *sqlbase.TableDescriptor, fn func(*sqlbase.ColumnDescriptor) error,
 ) error {
 	// Table descriptors already hold columns in-order.
 	for i := range table.Columns {

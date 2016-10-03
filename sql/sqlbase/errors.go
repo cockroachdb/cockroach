@@ -178,9 +178,7 @@ func (e *ErrNonNullViolation) SrcContext() SrcCtx {
 
 // NewUniquenessConstraintViolationError creates a new
 // ErrUniquenessConstrainViolation.
-func NewUniquenessConstraintViolationError(
-	index *IndexDescriptor, vals []parser.Datum,
-) error {
+func NewUniquenessConstraintViolationError(index *IndexDescriptor, vals []parser.Datum) error {
 	return &ErrUniquenessConstraintViolation{
 		ctx:   MakeSrcCtx(1),
 		index: index,

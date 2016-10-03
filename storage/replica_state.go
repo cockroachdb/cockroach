@@ -34,8 +34,7 @@ import (
 // RangeDescriptor under the convention that that is the latest committed
 // version.
 func loadState(
-	ctx context.Context,
-	reader engine.Reader, desc *roachpb.RangeDescriptor,
+	ctx context.Context, reader engine.Reader, desc *roachpb.RangeDescriptor,
 ) (storagebase.ReplicaState, error) {
 	var s storagebase.ReplicaState
 	// TODO(tschottdorf): figure out whether this is always synchronous with
@@ -137,7 +136,7 @@ func setLease(
 	eng engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	rangeID roachpb.RangeID,
-	lease *roachpb.Lease, // TODO(tschottdorf): better if this is never nil
+	lease *roachpb.Lease,
 ) error {
 	if lease == nil {
 		return nil

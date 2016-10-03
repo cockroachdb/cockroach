@@ -94,10 +94,7 @@ func (sq *splitQueue) shouldQueue(
 
 // process synchronously invokes admin split for each proposed split key.
 func (sq *splitQueue) process(
-	ctx context.Context,
-	now hlc.Timestamp,
-	r *Replica,
-	sysCfg config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, r *Replica, sysCfg config.SystemConfig,
 ) error {
 	// First handle case of splitting due to zone config maps.
 	desc := r.Desc()

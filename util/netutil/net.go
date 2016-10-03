@@ -38,9 +38,7 @@ import (
 // ListenAndServeGRPC creates a listener and serves the specified grpc Server
 // on it, closing the listener when signalled by the stopper.
 func ListenAndServeGRPC(
-	stopper *stop.Stopper,
-	server *grpc.Server,
-	addr net.Addr,
+	stopper *stop.Stopper, server *grpc.Server, addr net.Addr,
 ) (net.Listener, error) {
 	ln, err := net.Listen(addr.Network(), addr.String())
 	if err != nil {

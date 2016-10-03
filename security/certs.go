@@ -47,8 +47,9 @@ func loadCACertAndKey(sslCA, sslCAKey string) (*x509.Certificate, crypto.Private
 // writeCertificateAndKey takes a x509 certificate and key and writes
 // them out to the individual files.
 // TODO(marc): figure out how to include the plaintext certificate in the .crt file.
-func writeCertificateAndKey(certFilePath, keyFilePath string,
-	certificate []byte, key crypto.PrivateKey) error {
+func writeCertificateAndKey(
+	certFilePath, keyFilePath string, certificate []byte, key crypto.PrivateKey,
+) error {
 	// Get PEM blocks for certificate and private key.
 	certBlock, err := certificatePEMBlock(certificate)
 	if err != nil {
@@ -112,7 +113,9 @@ func RunCreateCACert(sslCA, sslCAKey string, keySize int) error {
 // - sslCAKey: path to the CA key
 // - sslCert: path to the node certificate
 // - sslCertKey: path to the node key
-func RunCreateNodeCert(sslCA, sslCAKey, sslCert, sslCertKey string, keySize int, hosts []string) error {
+func RunCreateNodeCert(
+	sslCA, sslCAKey, sslCert, sslCertKey string, keySize int, hosts []string,
+) error {
 	if len(hosts) == 0 {
 		return errors.Errorf("no hosts specified. Need at least one")
 	}
@@ -139,7 +142,9 @@ func RunCreateNodeCert(sslCA, sslCAKey, sslCert, sslCertKey string, keySize int,
 // - sslCAKey: path to the CA key
 // - sslCert: path to the node certificate
 // - sslCertKey: path to the node key
-func RunCreateClientCert(sslCA, sslCAKey, sslCert, sslCertKey string, keySize int, username string) error {
+func RunCreateClientCert(
+	sslCA, sslCAKey, sslCert, sslCertKey string, keySize int, username string,
+) error {
 	if len(username) == 0 {
 		return errors.Errorf("no username specified.")
 	}

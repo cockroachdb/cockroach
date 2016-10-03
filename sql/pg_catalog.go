@@ -413,8 +413,7 @@ func (h oidHasher) DBOid(db *sqlbase.DatabaseDescriptor) *parser.DInt {
 }
 
 func (h oidHasher) TableOid(
-	db *sqlbase.DatabaseDescriptor,
-	table *sqlbase.TableDescriptor,
+	db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor,
 ) *parser.DInt {
 	h.writeTypeTag(tableTypeTag)
 	h.writeDB(db)
@@ -423,9 +422,7 @@ func (h oidHasher) TableOid(
 }
 
 func (h oidHasher) IndexOid(
-	db *sqlbase.DatabaseDescriptor,
-	table *sqlbase.TableDescriptor,
-	index *sqlbase.IndexDescriptor,
+	db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
 ) *parser.DInt {
 	h.writeTypeTag(indexTypeTag)
 	h.writeDB(db)
@@ -435,9 +432,7 @@ func (h oidHasher) IndexOid(
 }
 
 func (h oidHasher) ColumnOid(
-	db *sqlbase.DatabaseDescriptor,
-	table *sqlbase.TableDescriptor,
-	column *sqlbase.ColumnDescriptor,
+	db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor, column *sqlbase.ColumnDescriptor,
 ) *parser.DInt {
 	h.writeTypeTag(columnTypeTag)
 	h.writeDB(db)

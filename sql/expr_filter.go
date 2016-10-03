@@ -161,7 +161,9 @@ func makeNot(expr parser.TypedExpr) parser.TypedExpr {
 //  - If weaker is false:
 //       E(x) = (RES(x) OR REM(x))
 //    This implies RES(x) => E(x), i.e. RES is "stronger"
-func splitBoolExpr(expr parser.TypedExpr, conv varConvertFunc, weaker bool) (restricted, remainder parser.TypedExpr) {
+func splitBoolExpr(
+	expr parser.TypedExpr, conv varConvertFunc, weaker bool,
+) (restricted, remainder parser.TypedExpr) {
 	// If the expression only contains "restricted" vars, the split is trivial.
 	if exprCheckVars(expr, conv) {
 		// An "empty" filter is always true in the weaker (normal) case (where the filter is

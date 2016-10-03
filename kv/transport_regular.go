@@ -25,10 +25,7 @@ import (
 )
 
 func grpcTransportFactory(
-	opts SendOptions,
-	rpcContext *rpc.Context,
-	replicas ReplicaSlice,
-	args roachpb.BatchRequest,
+	opts SendOptions, rpcContext *rpc.Context, replicas ReplicaSlice, args roachpb.BatchRequest,
 ) (Transport, error) {
 	return grpcTransportFactoryImpl(opts, rpcContext, replicas, args)
 }

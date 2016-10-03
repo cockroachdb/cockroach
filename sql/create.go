@@ -879,7 +879,8 @@ func (p *planner) finalizeInterleave(
 // makeViewTableDesc returns the table descriptor for a new view.
 func makeViewTableDesc(
 	p *parser.CreateView,
-	parentID sqlbase.ID, id sqlbase.ID,
+	parentID sqlbase.ID,
+	id sqlbase.ID,
 	resultColumns []ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
 ) (sqlbase.TableDescriptor, error) {

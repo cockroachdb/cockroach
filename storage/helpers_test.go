@@ -96,7 +96,12 @@ func (s *Store) LeaseExpiration(clock *hlc.Clock) int64 {
 
 // LogReplicaChangeTest adds a fake replica change event to the log for the
 // range which contains the given key.
-func (s *Store) LogReplicaChangeTest(txn *client.Txn, changeType roachpb.ReplicaChangeType, replica roachpb.ReplicaDescriptor, desc roachpb.RangeDescriptor) error {
+func (s *Store) LogReplicaChangeTest(
+	txn *client.Txn,
+	changeType roachpb.ReplicaChangeType,
+	replica roachpb.ReplicaDescriptor,
+	desc roachpb.RangeDescriptor,
+) error {
 	return s.logChange(txn, changeType, replica, desc)
 }
 
@@ -173,7 +178,9 @@ func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
 }
 
 // GetStoreList is the same function as GetStoreList exposed for tests only.
-func (sp *StorePool) GetStoreList(constraints config.Constraints, deterministic bool) (StoreList, int, int) {
+func (sp *StorePool) GetStoreList(
+	constraints config.Constraints, deterministic bool,
+) (StoreList, int, int) {
 	return sp.getStoreList(constraints, deterministic)
 }
 

@@ -32,8 +32,12 @@ import (
 	"github.com/pkg/errors"
 )
 
-func testBasicEncodeDecode32(encFunc func([]byte, uint32) []byte,
-	decFunc func([]byte) ([]byte, uint32, error), descending bool, t *testing.T) {
+func testBasicEncodeDecode32(
+	encFunc func([]byte, uint32) []byte,
+	decFunc func([]byte) ([]byte, uint32, error),
+	descending bool,
+	t *testing.T,
+) {
 	testCases := []uint32{
 		0, 1,
 		1<<8 - 1, 1 << 8,
@@ -71,8 +75,9 @@ type testCaseUint32 struct {
 	expEnc []byte
 }
 
-func testCustomEncodeUint32(testCases []testCaseUint32,
-	encFunc func([]byte, uint32) []byte, t *testing.T) {
+func testCustomEncodeUint32(
+	testCases []testCaseUint32, encFunc func([]byte, uint32) []byte, t *testing.T,
+) {
 	for _, test := range testCases {
 		enc := encFunc(nil, test.value)
 		if !bytes.Equal(enc, test.expEnc) {
@@ -218,8 +223,9 @@ type testCaseInt64 struct {
 	expEnc []byte
 }
 
-func testCustomEncodeInt64(testCases []testCaseInt64,
-	encFunc func([]byte, int64) []byte, t *testing.T) {
+func testCustomEncodeInt64(
+	testCases []testCaseInt64, encFunc func([]byte, int64) []byte, t *testing.T,
+) {
 	for _, test := range testCases {
 		enc := encFunc(nil, test.value)
 		if !bytes.Equal(enc, test.expEnc) {
@@ -233,8 +239,9 @@ type testCaseUint64 struct {
 	expEnc []byte
 }
 
-func testCustomEncodeUint64(testCases []testCaseUint64,
-	encFunc func([]byte, uint64) []byte, t *testing.T) {
+func testCustomEncodeUint64(
+	testCases []testCaseUint64, encFunc func([]byte, uint64) []byte, t *testing.T,
+) {
 	for _, test := range testCases {
 		enc := encFunc(nil, test.value)
 		if !bytes.Equal(enc, test.expEnc) {

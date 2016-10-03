@@ -199,11 +199,7 @@ func (r *Replica) Term(i uint64) (uint64, error) {
 }
 
 func term(
-	ctx context.Context,
-	eng engine.Reader,
-	rangeID roachpb.RangeID,
-	eCache *raftEntryCache,
-	i uint64,
+	ctx context.Context, eng engine.Reader, rangeID roachpb.RangeID, eCache *raftEntryCache, i uint64,
 ) (uint64, error) {
 	ents, err := entries(ctx, eng, rangeID, eCache, i, i+1, 0)
 	if err == raft.ErrCompacted {

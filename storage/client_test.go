@@ -418,10 +418,7 @@ type multiTestContextKVTransport struct {
 }
 
 func (m *multiTestContext) kvTransportFactory(
-	_ kv.SendOptions,
-	_ *rpc.Context,
-	replicas kv.ReplicaSlice,
-	args roachpb.BatchRequest,
+	_ kv.SendOptions, _ *rpc.Context, replicas kv.ReplicaSlice, args roachpb.BatchRequest,
 ) (kv.Transport, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &multiTestContextKVTransport{
@@ -562,10 +559,7 @@ func (m *multiTestContext) FirstRange() (*roachpb.RangeDescriptor, error) {
 // RangeLookup implements the RangeDescriptorDB interface. It looks up the
 // descriptors for the given (meta) key.
 func (m *multiTestContext) RangeLookup(
-	ctx context.Context,
-	key roachpb.RKey,
-	desc *roachpb.RangeDescriptor,
-	useReverseScan bool,
+	ctx context.Context, key roachpb.RKey, desc *roachpb.RangeDescriptor, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
 	// DistSender's RangeLookup function will work correctly, as long as
 	// multiTestContext's FirstRange() method returns the correct descriptor for the

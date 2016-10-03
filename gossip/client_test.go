@@ -40,11 +40,19 @@ import (
 )
 
 // startGossip creates and starts a gossip instance.
-func startGossip(nodeID roachpb.NodeID, stopper *stop.Stopper, t *testing.T, registry *metric.Registry) *Gossip {
+func startGossip(
+	nodeID roachpb.NodeID, stopper *stop.Stopper, t *testing.T, registry *metric.Registry,
+) *Gossip {
 	return startGossipAtAddr(nodeID, util.IsolatedTestAddr, stopper, t, registry)
 }
 
-func startGossipAtAddr(nodeID roachpb.NodeID, addr net.Addr, stopper *stop.Stopper, t *testing.T, registry *metric.Registry) *Gossip {
+func startGossipAtAddr(
+	nodeID roachpb.NodeID,
+	addr net.Addr,
+	stopper *stop.Stopper,
+	t *testing.T,
+	registry *metric.Registry,
+) *Gossip {
 	rpcContext := rpc.NewContext(context.TODO(), &base.Context{Insecure: true}, nil, stopper)
 
 	server := rpc.NewServer(rpcContext)
@@ -128,7 +136,13 @@ func startFakeServerGossips(t *testing.T) (*Gossip, *fakeGossipServer, *stop.Sto
 	return local, remote, stopper
 }
 
-func gossipSucceedsSoon(t *testing.T, stopper *stop.Stopper, disconnected chan *client, gossip map[*client]*Gossip, f func() error) {
+func gossipSucceedsSoon(
+	t *testing.T,
+	stopper *stop.Stopper,
+	disconnected chan *client,
+	gossip map[*client]*Gossip,
+	f func() error,
+) {
 	// Use an insecure context since we don't need a valid cert.
 	rpcContext := rpc.NewContext(context.TODO(), &base.Context{Insecure: true}, nil, stopper)
 

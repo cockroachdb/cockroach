@@ -25,7 +25,9 @@ import (
 )
 
 // UnionClause constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
-func (p *planner) UnionClause(n *parser.UnionClause, desiredTypes []parser.Datum, autoCommit bool) (planNode, error) {
+func (p *planner) UnionClause(
+	n *parser.UnionClause, desiredTypes []parser.Datum, autoCommit bool,
+) (planNode, error) {
 	var emitAll = false
 	var emit unionNodeEmit
 	switch n.Type {
