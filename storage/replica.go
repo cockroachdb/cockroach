@@ -409,7 +409,7 @@ func (r *Replica) withRaftGroupLocked(
 			raft.Storage(r),
 			uint64(r.mu.replicaID),
 			r.mu.state.RaftAppliedIndex,
-			r.store.ctx,
+			r.store.cfg,
 			&raftLogger{ctx: r.ctx},
 		), nil)
 		if err != nil {
@@ -796,7 +796,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 
 				// Should we extend the lease?
 				if _, ok := r.mu.pendingLeaseRequest.RequestPending(); !ok &&
-					!timestamp.Less(lease.StartStasis.Add(-int64(r.store.ctx.rangeLeaseRenewalDuration), 0)) {
+					!timestamp.Less(lease.StartStasis.Add(-int64(r.store.cfg.rangeLeaseRenewalDuration), 0)) {
 					if log.V(2) {
 						log.Warningf(ctx, "extending lease %s at %s", lease, timestamp)
 					}
@@ -2073,7 +2073,7 @@ func (r *Replica) tickRaftMuLocked() (bool, error) {
 	r.mu.ticks++
 	r.mu.internalRaftGroup.Tick()
 	if !r.store.TestingKnobs().DisableRefreshReasonTicks &&
-		r.mu.ticks%r.store.ctx.RaftElectionTimeoutTicks == 0 {
+		r.mu.ticks%r.store.cfg.RaftElectionTimeoutTicks == 0 {
 		// RaftElectionTimeoutTicks is a reasonable approximation of how long we
 		// should wait before deciding that our previous proposal didn't go
 		// through. Note that the combination of the above condition and passing
@@ -2081,7 +2081,7 @@ func (r *Replica) tickRaftMuLocked() (bool, error) {
 		// will be refreshed when they have been pending for 1 to 2 election
 		// cycles.
 		if err := r.refreshPendingCmdsLocked(
-			reasonTicks, r.store.ctx.RaftElectionTimeoutTicks); err != nil {
+			reasonTicks, r.store.cfg.RaftElectionTimeoutTicks); err != nil {
 			return true, err
 		}
 	}
@@ -2386,7 +2386,7 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 			beganStreaming = true
 			r.store.Stopper().RunWorker(func() {
 				defer r.CloseOutSnap()
-				if err := r.store.ctx.Transport.SendSnapshot(
+				if err := r.store.cfg.Transport.SendSnapshot(
 					r.ctx,
 					SnapshotRequest_Header{
 						RangeDescriptor: *r.Desc(),
@@ -2412,12 +2412,12 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 		return
 	}
 
-	r.store.ctx.Transport.mu.Lock()
+	r.store.cfg.Transport.mu.Lock()
 	var queuedMsgs int64
-	for _, queue := range r.store.ctx.Transport.mu.queues {
+	for _, queue := range r.store.cfg.Transport.mu.queues {
 		queuedMsgs += int64(len(queue))
 	}
-	r.store.ctx.Transport.mu.Unlock()
+	r.store.cfg.Transport.mu.Unlock()
 	r.store.metrics.RaftEnqueuedPending.Update(queuedMsgs)
 
 	if !r.sendRaftMessageRequest(&RaftMessageRequest{
@@ -2440,15 +2440,15 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 // was dropped. It is the caller's responsibility to call ReportUnreachable on
 // the Raft group.
 func (r *Replica) sendRaftMessageRequest(req *RaftMessageRequest) bool {
-	r.store.ctx.Transport.mu.Lock()
+	r.store.cfg.Transport.mu.Lock()
 	var queuedMsgs int64
-	for _, queue := range r.store.ctx.Transport.mu.queues {
+	for _, queue := range r.store.cfg.Transport.mu.queues {
 		queuedMsgs += int64(len(queue))
 	}
-	r.store.ctx.Transport.mu.Unlock()
+	r.store.cfg.Transport.mu.Unlock()
 	r.store.metrics.RaftEnqueuedPending.Update(queuedMsgs)
 
-	return r.store.ctx.Transport.SendAsync(req)
+	return r.store.cfg.Transport.SendAsync(req)
 }
 
 func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {

@@ -107,16 +107,16 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Context, initSen
 	}
 	ltc.DB = client.NewDBWithContext(ltc.Sender, *ltc.DBContext)
 	transport := storage.NewDummyRaftTransport()
-	ctx := storage.TestStoreContext()
+	cfg := storage.TestStoreConfig()
 	if ltc.RangeRetryOptions != nil {
-		ctx.RangeRetryOptions = *ltc.RangeRetryOptions
+		cfg.RangeRetryOptions = *ltc.RangeRetryOptions
 	}
-	ctx.Ctx = tracing.WithTracer(clusterCtx, tracer)
-	ctx.Clock = ltc.Clock
-	ctx.DB = ltc.DB
-	ctx.Gossip = ltc.Gossip
-	ctx.Transport = transport
-	ltc.Store = storage.NewStore(ctx, ltc.Eng, nodeDesc)
+	cfg.Ctx = tracing.WithTracer(clusterCtx, tracer)
+	cfg.Clock = ltc.Clock
+	cfg.DB = ltc.DB
+	cfg.Gossip = ltc.Gossip
+	cfg.Transport = transport
+	ltc.Store = storage.NewStore(cfg, ltc.Eng, nodeDesc)
 	if err := ltc.Store.Bootstrap(roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}, ltc.Stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}

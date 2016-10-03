@@ -105,7 +105,7 @@ VALUES(
 		s.metrics.RangeRemoves.Inc(1)
 	}
 
-	rows, err := s.ctx.SQLExecutor.ExecuteStatementInTransaction(txn, insertEventTableStmt, args...)
+	rows, err := s.cfg.SQLExecutor.ExecuteStatementInTransaction(txn, insertEventTableStmt, args...)
 	if err != nil {
 		return err
 	}
@@ -121,7 +121,7 @@ VALUES(
 // TODO(mrtracy): There are several different reasons that a replica split
 // could occur, and that information should be logged.
 func (s *Store) logSplit(txn *client.Txn, updatedDesc, newDesc roachpb.RangeDescriptor) error {
-	if !s.ctx.LogRangeEvents {
+	if !s.cfg.LogRangeEvents {
 		return nil
 	}
 	info := struct {
@@ -153,7 +153,7 @@ func (s *Store) logChange(
 	replica roachpb.ReplicaDescriptor,
 	desc roachpb.RangeDescriptor,
 ) error {
-	if !s.ctx.LogRangeEvents {
+	if !s.cfg.LogRangeEvents {
 		return nil
 	}
 
