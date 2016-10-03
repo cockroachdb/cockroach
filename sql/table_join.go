@@ -125,7 +125,9 @@ type crossPredicate struct{}
 func (p *crossPredicate) eval(_, _ parser.DTuple) (bool, error) {
 	return true, nil
 }
-func (p *crossPredicate) prepareRow(result parser.DTuple, leftRow parser.DTuple, rightRow parser.DTuple) {
+func (p *crossPredicate) prepareRow(
+	result parser.DTuple, leftRow parser.DTuple, rightRow parser.DTuple,
+) {
 	prepareRowConcat(result, leftRow, rightRow)
 }
 func (p *crossPredicate) start() error                        { return nil }
@@ -157,7 +159,9 @@ func (p *onPredicate) eval(leftRow parser.DTuple, rightRow parser.DTuple) (bool,
 	return sqlbase.RunFilter(p.filter, &p.p.evalCtx)
 }
 
-func (p *onPredicate) prepareRow(result parser.DTuple, leftRow parser.DTuple, rightRow parser.DTuple) {
+func (p *onPredicate) prepareRow(
+	result parser.DTuple, leftRow parser.DTuple, rightRow parser.DTuple,
+) {
 	prepareRowConcat(result, leftRow, rightRow)
 }
 
@@ -267,7 +271,9 @@ func (p *usingPredicate) eval(leftRow parser.DTuple, rightRow parser.DTuple) (bo
 // clauses and CROSS JOIN: a result row contains first the values for
 // the USING columns; then the non-USING values from the left input
 // row, then the non-USING values from the right input row.
-func (p *usingPredicate) prepareRow(result parser.DTuple, leftRow parser.DTuple, rightRow parser.DTuple) {
+func (p *usingPredicate) prepareRow(
+	result parser.DTuple, leftRow parser.DTuple, rightRow parser.DTuple,
+) {
 	d := 0
 	for k, j := range p.leftUsingIndices {
 		// The result for USING columns must be computed as per COALESCE().
@@ -442,10 +448,7 @@ func commonColumns(left, right *dataSourceInfo) parser.NameList {
 // The tableInfo field from the left node is taken over (overwritten)
 // by the new node.
 func (p *planner) makeJoin(
-	astJoinType string,
-	left planDataSource,
-	right planDataSource,
-	cond parser.JoinCond,
+	astJoinType string, left planDataSource, right planDataSource, cond parser.JoinCond,
 ) (planDataSource, error) {
 	leftInfo, rightInfo := left.info, right.info
 

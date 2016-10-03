@@ -182,10 +182,7 @@ func (tc *timestampCache) SetLowWater(lowWater hlc.Timestamp) {
 // whether the command adding this timestamp should update the read
 // timestamp; false to update the write timestamp cache.
 func (tc *timestampCache) add(
-	start, end roachpb.Key,
-	timestamp hlc.Timestamp,
-	txnID *uuid.UUID,
-	readTSCache bool,
+	start, end roachpb.Key, timestamp hlc.Timestamp, txnID *uuid.UUID, readTSCache bool,
 ) {
 	// This gives us a memory-efficient end key if end is empty.
 	if len(end) == 0 {
@@ -613,7 +610,9 @@ func (tc *timestampCache) GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, *u
 	return tc.getMax(start, end, false)
 }
 
-func (tc *timestampCache) getMax(start, end roachpb.Key, readTSCache bool) (hlc.Timestamp, *uuid.UUID, bool) {
+func (tc *timestampCache) getMax(
+	start, end roachpb.Key, readTSCache bool,
+) (hlc.Timestamp, *uuid.UUID, bool) {
 	if len(end) == 0 {
 		end = start.Next()
 	}

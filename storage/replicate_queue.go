@@ -48,8 +48,9 @@ type replicateQueue struct {
 }
 
 // newReplicateQueue returns a new instance of replicateQueue.
-func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator, clock *hlc.Clock,
-	options AllocatorOptions) *replicateQueue {
+func newReplicateQueue(
+	store *Store, g *gossip.Gossip, allocator Allocator, clock *hlc.Clock, options AllocatorOptions,
+) *replicateQueue {
 	rq := &replicateQueue{
 		allocator:  allocator,
 		clock:      clock,
@@ -84,9 +85,7 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator, cloc
 }
 
 func (rq *replicateQueue) shouldQueue(
-	now hlc.Timestamp,
-	repl *Replica,
-	sysCfg config.SystemConfig,
+	now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	if !repl.store.splitQueue.Disabled() && repl.needsSplitBySize() {
 		// If the range exceeds the split threshold, let that finish first.
@@ -123,10 +122,7 @@ func (rq *replicateQueue) shouldQueue(
 }
 
 func (rq *replicateQueue) process(
-	ctx context.Context,
-	now hlc.Timestamp,
-	repl *Replica,
-	sysCfg config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
 ) error {
 	desc := repl.Desc()
 	// Find the zone config for this range.

@@ -62,7 +62,8 @@ type SchemaChanger struct {
 func (sc *SchemaChanger) truncateAndDropTable(
 	ctx context.Context,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	tableDesc *sqlbase.TableDescriptor) error {
+	tableDesc *sqlbase.TableDescriptor,
+) error {
 
 	l, err := sc.ExtendLease(*lease)
 	if err != nil {
@@ -197,8 +198,7 @@ func isSchemaChangeRetryError(err error) bool {
 // Execute the entire schema change in steps. startBackfillNotification is
 // called before the backfill starts; it can be nil.
 func (sc SchemaChanger) exec(
-	startBackfillNotification func() error,
-	oldNameNotInUseNotification func(),
+	startBackfillNotification func() error, oldNameNotInUseNotification func(),
 ) error {
 	// Acquire lease.
 	lease, err := sc.AcquireLease()

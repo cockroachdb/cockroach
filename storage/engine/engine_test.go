@@ -35,7 +35,9 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-func ensureRangeEqual(t *testing.T, sortedKeys []string, keyMap map[string][]byte, keyvals []MVCCKeyValue) {
+func ensureRangeEqual(
+	t *testing.T, sortedKeys []string, keyMap map[string][]byte, keyvals []MVCCKeyValue,
+) {
 	if len(keyvals) != len(sortedKeys) {
 		t.Errorf("length mismatch. expected %s, got %s", sortedKeys, keyvals)
 	}

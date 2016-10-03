@@ -86,7 +86,8 @@ func (c *CommandFilters) runFiltersInternal(args storagebase.FilterArgs) *roachp
 // Returns a closure that the client must run for doing cleanup when the
 // filter should be deregistered.
 func (c *CommandFilters) AppendFilter(
-	filter storagebase.ReplicaCommandFilter, idempotent bool) func() {
+	filter storagebase.ReplicaCommandFilter, idempotent bool,
+) func() {
 
 	c.Lock()
 	defer c.Unlock()

@@ -163,7 +163,9 @@ func isSysLocal(key roachpb.Key) bool {
 // These are simpler as they don't involve intents or multiple
 // versions.
 func updateStatsForInline(
-	ms *enginepb.MVCCStats, key roachpb.Key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize int64,
+	ms *enginepb.MVCCStats,
+	key roachpb.Key,
+	origMetaKeySize, origMetaValSize, metaKeySize, metaValSize int64,
 ) {
 	sys := isSysLocal(key)
 	// Remove counts for this key if the original size is non-zero.
@@ -222,8 +224,12 @@ func updateStatsOnMerge(key roachpb.Key, valSize, nowNanos int64) enginepb.MVCCS
 // versioned value's key & value bytes. If the value is not a
 // deletion tombstone, updates the live stat counters as well.
 // If this value is an intent, updates the intent counters.
-func updateStatsOnPut(key roachpb.Key, origMetaKeySize, origMetaValSize,
-	metaKeySize, metaValSize int64, orig, meta *enginepb.MVCCMetadata) enginepb.MVCCStats {
+func updateStatsOnPut(
+	key roachpb.Key,
+	origMetaKeySize, origMetaValSize,
+	metaKeySize, metaValSize int64,
+	orig, meta *enginepb.MVCCMetadata,
+) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
 	sys := isSysLocal(key)
 
@@ -290,8 +296,13 @@ func updateStatsOnPut(key roachpb.Key, origMetaKeySize, origMetaValSize,
 // between the original and new metadata sizes. The size of the
 // resolved value (key & bytes) are subtracted from the intents
 // counters if commit=true.
-func updateStatsOnResolve(key roachpb.Key, origMetaKeySize, origMetaValSize,
-	metaKeySize, metaValSize int64, orig, meta enginepb.MVCCMetadata, commit bool) enginepb.MVCCStats {
+func updateStatsOnResolve(
+	key roachpb.Key,
+	origMetaKeySize, origMetaValSize,
+	metaKeySize, metaValSize int64,
+	orig, meta enginepb.MVCCMetadata,
+	commit bool,
+) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
 	// In this case, we're only removing the contribution from having the
 	// meta key around from orig.Timestamp to meta.Timestamp.
@@ -326,9 +337,13 @@ func updateStatsOnResolve(key roachpb.Key, origMetaKeySize, origMetaValSize,
 // aborted value's key and value byte sizes. If an earlier version
 // was restored, the restored values are added to live bytes and
 // count if the restored value isn't a deletion tombstone.
-func updateStatsOnAbort(key roachpb.Key, origMetaKeySize, origMetaValSize,
-	restoredMetaKeySize, restoredMetaValSize int64, orig, restored *enginepb.MVCCMetadata,
-	restoredNanos, txnNanos int64) enginepb.MVCCStats {
+func updateStatsOnAbort(
+	key roachpb.Key,
+	origMetaKeySize, origMetaValSize,
+	restoredMetaKeySize, restoredMetaValSize int64,
+	orig, restored *enginepb.MVCCMetadata,
+	restoredNanos, txnNanos int64,
+) enginepb.MVCCStats {
 	sys := isSysLocal(key)
 
 	var ms enginepb.MVCCStats
@@ -413,20 +428,15 @@ func updateStatsOnGC(
 // MVCCGetRangeStats reads stat counters for the specified range and
 // sets the values in the enginepb.MVCCStats struct.
 func MVCCGetRangeStats(
-	ctx context.Context,
-	engine Reader,
-	rangeID roachpb.RangeID,
-	ms *enginepb.MVCCStats,
+	ctx context.Context, engine Reader, rangeID roachpb.RangeID, ms *enginepb.MVCCStats,
 ) error {
 	_, err := MVCCGetProto(ctx, engine, keys.RangeStatsKey(rangeID), hlc.ZeroTimestamp, true, nil, ms)
 	return err
 }
 
 // MVCCSetRangeStats sets stat counters for specified range.
-func MVCCSetRangeStats(ctx context.Context,
-	engine ReadWriter,
-	rangeID roachpb.RangeID,
-	ms *enginepb.MVCCStats,
+func MVCCSetRangeStats(
+	ctx context.Context, engine ReadWriter, rangeID roachpb.RangeID, ms *enginepb.MVCCStats,
 ) error {
 	return MVCCPutProto(ctx, engine, nil, keys.RangeStatsKey(rangeID), hlc.ZeroTimestamp, nil, ms)
 }
@@ -608,9 +618,7 @@ func MVCCGetAsTxn(
 // used by the Blind{Put,ConditionalPut} operations to avoid seeking when the
 // metadata is known not to exist.
 func mvccGetMetadata(
-	iter Iterator,
-	metaKey MVCCKey,
-	meta *enginepb.MVCCMetadata,
+	iter Iterator, metaKey MVCCKey, meta *enginepb.MVCCMetadata,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	if iter == nil {
 		return false, 0, 0, nil
@@ -1394,7 +1402,9 @@ func getScanMeta(iter Iterator, encEndKey MVCCKey, meta *enginepb.MVCCMetadata) 
 // pointed at (reconstructing it if the metadata is implicit). Note that the
 // returned MVCCKey is unsafe and will be invalidated by the next call to
 // Iterator.{Next,Prev,Seek,SeekReverse,Close}.
-func getReverseScanMeta(iter Iterator, encEndKey MVCCKey, meta *enginepb.MVCCMetadata) (MVCCKey, error) {
+func getReverseScanMeta(
+	iter Iterator, encEndKey MVCCKey, meta *enginepb.MVCCMetadata,
+) (MVCCKey, error) {
 	metaKey := iter.unsafeKey()
 	// The metaKey < encEndKey is exceeding the boundary.
 	if metaKey.Less(encEndKey) {
@@ -1512,7 +1522,8 @@ func MVCCReverseScan(
 // iteration, f() is invoked with the current key/value pair. If f returns
 // true (done) or an error, the iteration stops and the error is propagated.
 // If the reverse is flag set the iterator will be moved in reverse order.
-func MVCCIterate(ctx context.Context,
+func MVCCIterate(
+	ctx context.Context,
 	engine Reader,
 	startKey,
 	endKey roachpb.Key,
@@ -1700,10 +1711,8 @@ func MVCCIterate(ctx context.Context,
 // its original timestamp after laying down intents at higher timestamps.
 // Doesn't look like this code here caught that. Shouldn't resolve intents
 // when they're not at the timestamp the Txn mandates them to be.
-func MVCCResolveWriteIntent(ctx context.Context,
-	engine ReadWriter,
-	ms *enginepb.MVCCStats,
-	intent roachpb.Intent,
+func MVCCResolveWriteIntent(
+	ctx context.Context, engine ReadWriter, ms *enginepb.MVCCStats, intent roachpb.Intent,
 ) error {
 	buf := newPutBuffer()
 	iter := engine.NewIterator(true)

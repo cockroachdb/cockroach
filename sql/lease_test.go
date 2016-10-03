@@ -106,7 +106,9 @@ func (t *leaseTest) expectLeases(descID sqlbase.ID, expected string) {
 	}
 }
 
-func (t *leaseTest) acquire(nodeID uint32, descID sqlbase.ID, version sqlbase.DescriptorVersion) (*csql.LeaseState, error) {
+func (t *leaseTest) acquire(
+	nodeID uint32, descID sqlbase.ID, version sqlbase.DescriptorVersion,
+) (*csql.LeaseState, error) {
 	var lease *csql.LeaseState
 	err := t.kvDB.Txn(context.TODO(), func(txn *client.Txn) error {
 		var err error
@@ -116,7 +118,9 @@ func (t *leaseTest) acquire(nodeID uint32, descID sqlbase.ID, version sqlbase.De
 	return lease, err
 }
 
-func (t *leaseTest) mustAcquire(nodeID uint32, descID sqlbase.ID, version sqlbase.DescriptorVersion) *csql.LeaseState {
+func (t *leaseTest) mustAcquire(
+	nodeID uint32, descID sqlbase.ID, version sqlbase.DescriptorVersion,
+) *csql.LeaseState {
 	lease, err := t.acquire(nodeID, descID, version)
 	if err != nil {
 		t.Fatal(err)
@@ -133,9 +137,7 @@ func (t *leaseTest) release(nodeID uint32, lease *csql.LeaseState) error {
 // store (i.e. it's not expired and it's not for an old descriptor version),
 // this shouldn't be set.
 func (t *leaseTest) mustRelease(
-	nodeID uint32,
-	lease *csql.LeaseState,
-	leaseRemovalTracker *csql.LeaseRemovalTracker,
+	nodeID uint32, lease *csql.LeaseState, leaseRemovalTracker *csql.LeaseRemovalTracker,
 ) {
 	var tracker csql.RemovalTracker
 	if leaseRemovalTracker != nil {
@@ -470,7 +472,9 @@ func isDeleted(tableID sqlbase.ID, cfg config.SystemConfig) bool {
 	return table.Deleted()
 }
 
-func acquire(s *server.TestServer, descID sqlbase.ID, version sqlbase.DescriptorVersion) (*csql.LeaseState, error) {
+func acquire(
+	s *server.TestServer, descID sqlbase.ID, version sqlbase.DescriptorVersion,
+) (*csql.LeaseState, error) {
 	var lease *csql.LeaseState
 	err := s.DB().Txn(context.TODO(), func(txn *client.Txn) error {
 		var err error

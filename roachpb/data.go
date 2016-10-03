@@ -636,8 +636,14 @@ func (v Value) PrettyPrint() string {
 // randomly chosen value to yield a final priority, used to settle
 // write conflicts in a way that avoids starvation of long-running
 // transactions (see Replica.PushTxn).
-func NewTransaction(name string, baseKey Key, userPriority UserPriority,
-	isolation enginepb.IsolationType, now hlc.Timestamp, maxOffset int64) *Transaction {
+func NewTransaction(
+	name string,
+	baseKey Key,
+	userPriority UserPriority,
+	isolation enginepb.IsolationType,
+	now hlc.Timestamp,
+	maxOffset int64,
+) *Transaction {
 	// Compute priority by adjusting based on userPriority factor.
 	priority := MakePriority(userPriority)
 	// Compute timestamp and max timestamp.
@@ -799,7 +805,9 @@ func TxnIDEqual(a, b *uuid.UUID) bool {
 // incremented for an in-place restart. The timestamp of the
 // transaction on restart is set to the maximum of the transaction's
 // timestamp and the specified timestamp.
-func (t *Transaction) Restart(userPriority UserPriority, upgradePriority int32, timestamp hlc.Timestamp) {
+func (t *Transaction) Restart(
+	userPriority UserPriority, upgradePriority int32, timestamp hlc.Timestamp,
+) {
 	t.Epoch++
 	if t.Timestamp.Less(timestamp) {
 		t.Timestamp = timestamp

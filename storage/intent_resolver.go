@@ -71,9 +71,13 @@ func newIntentResolver(store *Store) *intentResolver {
 // retry behavior (if the transaction is pushed, the Resolved flag is
 // set to tell the client to retry immediately; otherwise it is false
 // to cause the client to back off).
-func (ir *intentResolver) processWriteIntentError(ctx context.Context,
-	wiPErr *roachpb.Error, args roachpb.Request, h roachpb.Header,
-	pushType roachpb.PushTxnType) *roachpb.Error {
+func (ir *intentResolver) processWriteIntentError(
+	ctx context.Context,
+	wiPErr *roachpb.Error,
+	args roachpb.Request,
+	h roachpb.Header,
+	pushType roachpb.PushTxnType,
+) *roachpb.Error {
 	wiErr, ok := wiPErr.GetDetail().(*roachpb.WriteIntentError)
 	if !ok {
 		return roachpb.NewErrorf("not a WriteIntentError: %v", wiPErr)
@@ -393,8 +397,9 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 // the same intents again (in the absence of #8360, we provide this
 // guarantee by resolving the intents synchronously regardless of the
 // `wait` argument).
-func (ir *intentResolver) resolveIntents(ctx context.Context,
-	intents []roachpb.Intent, wait bool, poison bool) error {
+func (ir *intentResolver) resolveIntents(
+	ctx context.Context, intents []roachpb.Intent, wait bool, poison bool,
+) error {
 	// Force synchronous operation; see above TODO.
 	wait = true
 	if len(intents) == 0 {

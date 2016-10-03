@@ -136,8 +136,9 @@ func GenerateCA(keySize int) ([]byte, crypto.PrivateKey, error) {
 // well as the private key used to generate the certificate.
 // Takes in the CA cert and key, the size of the key to generate, and the list
 // of hosts/ip addresses this certificate applies to.
-func GenerateServerCert(caCert *x509.Certificate, caKey crypto.PrivateKey, keySize int, hosts []string) (
-	[]byte, crypto.PrivateKey, error) {
+func GenerateServerCert(
+	caCert *x509.Certificate, caKey crypto.PrivateKey, keySize int, hosts []string,
+) ([]byte, crypto.PrivateKey, error) {
 	privateKey, publicKey, err := generateKeyPair(keySize)
 	if err != nil {
 		return nil, nil, err
@@ -172,8 +173,9 @@ func GenerateServerCert(caCert *x509.Certificate, caKey crypto.PrivateKey, keySi
 // well as the private key used to generate the certificate.
 // The CA cert and private key should be passed in.
 // 'user' is the unique username stored in the Subject.CommonName field.
-func GenerateClientCert(caCert *x509.Certificate, caKey crypto.PrivateKey, keySize int, name string) (
-	[]byte, crypto.PrivateKey, error) {
+func GenerateClientCert(
+	caCert *x509.Certificate, caKey crypto.PrivateKey, keySize int, name string,
+) ([]byte, crypto.PrivateKey, error) {
 
 	privateKey, publicKey, err := generateKeyPair(keySize)
 	if err != nil {

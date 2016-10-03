@@ -379,7 +379,9 @@ func (db *DB) AdminSplit(ctx context.Context, splitKey interface{}) error {
 // applied the new lease, but that's about it. It's not guaranteed that the new
 // lease holder has applied it (so it might not know immediately that it is the
 // new lease holder).
-func (db *DB) AdminTransferLease(ctx context.Context, key interface{}, target roachpb.StoreID) error {
+func (db *DB) AdminTransferLease(
+	ctx context.Context, key interface{}, target roachpb.StoreID,
+) error {
 	b := &Batch{}
 	b.adminTransferLease(key, target)
 	return getOneErr(db.Run(ctx, b), b)
@@ -398,8 +400,7 @@ func (db *DB) CheckConsistency(ctx context.Context, begin, end interface{}, with
 // returning the appropriate error which is either from the first failing call,
 // or an "internal" error.
 func sendAndFill(
-	send func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error),
-	b *Batch,
+	send func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error), b *Batch,
 ) error {
 	// Errors here will be attached to the results, so we will get them from
 	// the call to fillResults in the regular case in which an individual call

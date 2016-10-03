@@ -321,7 +321,9 @@ func (is *infoStore) visitInfos(visitInfo func(string, *Info) error) error {
 // All hop distances on infos are incremented to indicate they've
 // arrived from an external source. Returns the count of "fresh"
 // infos in the provided delta.
-func (is *infoStore) combine(infos map[string]*Info, nodeID roachpb.NodeID) (freshCount int, err error) {
+func (is *infoStore) combine(
+	infos map[string]*Info, nodeID roachpb.NodeID,
+) (freshCount int, err error) {
 	for key, i := range infos {
 		infoCopy := *i
 		infoCopy.Hops++

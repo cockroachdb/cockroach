@@ -39,7 +39,8 @@ type ReplayProtectionFilterWrapper struct {
 // WrapFilterForReplayProtection wraps a filter into another one that adds Raft
 // replay protection.
 func WrapFilterForReplayProtection(
-	filter storagebase.ReplicaCommandFilter) storagebase.ReplicaCommandFilter {
+	filter storagebase.ReplicaCommandFilter,
+) storagebase.ReplicaCommandFilter {
 	wrapper := ReplayProtectionFilterWrapper{
 		processedCommands: make(map[raftCmdIDAndIndex]*roachpb.Error),
 		filter:            filter,

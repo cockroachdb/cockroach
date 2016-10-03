@@ -503,7 +503,9 @@ func (n *Node) validateStores() error {
 // and node IDs have been established for this node. Store IDs are
 // allocated via a sequence id generator stored at a system key per
 // node.
-func (n *Node) bootstrapStores(ctx context.Context, bootstraps []*storage.Store, stopper *stop.Stopper) {
+func (n *Node) bootstrapStores(
+	ctx context.Context, bootstraps []*storage.Store, stopper *stop.Stopper,
+) {
 	if n.ClusterID == *uuid.EmptyUUID {
 		panic("ClusterID missing during store bootstrap of auxiliary store")
 	}

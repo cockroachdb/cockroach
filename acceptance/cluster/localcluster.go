@@ -155,7 +155,9 @@ type LocalCluster struct {
 // CreateLocal creates a new local cockroach cluster. The stopper is used to
 // gracefully shutdown the channel (e.g. when a signal arrives). The cluster
 // must be started before being used.
-func CreateLocal(cfg TestConfig, logDir string, privileged bool, stopper chan struct{}) *LocalCluster {
+func CreateLocal(
+	cfg TestConfig, logDir string, privileged bool, stopper chan struct{},
+) *LocalCluster {
 	select {
 	case <-stopper:
 		// The stopper was already closed, exit early.

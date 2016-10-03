@@ -41,7 +41,9 @@ func TestFreezeCluster(t *testing.T) {
 	runTestOnConfigs(t, testFreezeClusterInner)
 }
 
-func postFreeze(c cluster.Cluster, freeze bool, timeout time.Duration) (serverpb.ClusterFreezeResponse, error) {
+func postFreeze(
+	c cluster.Cluster, freeze bool, timeout time.Duration,
+) (serverpb.ClusterFreezeResponse, error) {
 	httpClient := cluster.HTTPClient
 	httpClient.Timeout = timeout
 

@@ -39,7 +39,9 @@ type Store struct {
 
 // newStore returns a new store with using the passed in ID and node
 // descriptor.
-func newStore(storeID roachpb.StoreID, nodeDesc roachpb.NodeDescriptor, gossip *gossip.Gossip) *Store {
+func newStore(
+	storeID roachpb.StoreID, nodeDesc roachpb.NodeDescriptor, gossip *gossip.Gossip,
+) *Store {
 	return &Store{
 		desc: roachpb.StoreDescriptor{
 			StoreID: storeID,

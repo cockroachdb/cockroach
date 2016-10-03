@@ -217,7 +217,9 @@ func (s *selectNode) Close() {
 }
 
 // Select selects rows from a SELECT/UNION/VALUES, ordering and/or limiting them.
-func (p *planner) Select(n *parser.Select, desiredTypes []parser.Datum, autoCommit bool) (planNode, error) {
+func (p *planner) Select(
+	n *parser.Select, desiredTypes []parser.Datum, autoCommit bool,
+) (planNode, error) {
 	wrapped := n.Select
 	limit := n.Limit
 	orderBy := n.OrderBy

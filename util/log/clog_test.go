@@ -63,7 +63,9 @@ func (f *flushBuffer) Sync() error {
 }
 
 // swap sets the log writers and returns the old array.
-func (l *loggingT) swap(writers [Severity_NONE]flushSyncWriter) (old [Severity_NONE]flushSyncWriter) {
+func (l *loggingT) swap(
+	writers [Severity_NONE]flushSyncWriter,
+) (old [Severity_NONE]flushSyncWriter) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	old = l.file

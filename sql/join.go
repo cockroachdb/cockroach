@@ -47,7 +47,9 @@ type indexJoinNode struct {
 // is created separately as a member of the resulting index join node.
 // The new index scan node is also returned alongside the new index join
 // node.
-func (p *planner) makeIndexJoin(origScan *scanNode, exactPrefix int) (resultPlan *indexJoinNode, indexScan *scanNode) {
+func (p *planner) makeIndexJoin(
+	origScan *scanNode, exactPrefix int,
+) (resultPlan *indexJoinNode, indexScan *scanNode) {
 	// Reuse the input argument's scanNode and its initialized parameters
 	// at a starting point to build the new indexScan node.
 	indexScan = origScan

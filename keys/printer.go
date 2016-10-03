@@ -638,11 +638,7 @@ func MassagePrettyPrintedSpanForTest(span string, dirs []encoding.Direction) str
 //    commonPrefix{remainingStart-remainingEnd}
 // It prints at most maxChars, truncating components as needed. See
 // TestPrettyPrintRange for some examples.
-func PrettyPrintRange(
-	b *bytes.Buffer,
-	start, end roachpb.Key,
-	maxChars int,
-) {
+func PrettyPrintRange(b *bytes.Buffer, start, end roachpb.Key, maxChars int) {
 	const ellipsis = '\u2026'
 	if maxChars < 8 {
 		maxChars = 8

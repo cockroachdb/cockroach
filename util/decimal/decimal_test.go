@@ -74,7 +74,12 @@ type decimalTwoArgsTestCase struct {
 	expected string
 }
 
-func testDecimalSingleArgFunc(t *testing.T, f func(*inf.Dec, *inf.Dec, inf.Scale) *inf.Dec, s inf.Scale, tests []decimalOneArgTestCase) {
+func testDecimalSingleArgFunc(
+	t *testing.T,
+	f func(*inf.Dec, *inf.Dec, inf.Scale) *inf.Dec,
+	s inf.Scale,
+	tests []decimalOneArgTestCase,
+) {
 	for i, tc := range tests {
 		x, exp := new(inf.Dec), new(inf.Dec)
 		x.SetString(tc.input)
@@ -102,7 +107,12 @@ func testDecimalSingleArgFunc(t *testing.T, f func(*inf.Dec, *inf.Dec, inf.Scale
 	}
 }
 
-func testDecimalDoubleArgFunc(t *testing.T, f func(*inf.Dec, *inf.Dec, *inf.Dec, inf.Scale) *inf.Dec, s inf.Scale, tests []decimalTwoArgsTestCase) {
+func testDecimalDoubleArgFunc(
+	t *testing.T,
+	f func(*inf.Dec, *inf.Dec, *inf.Dec, inf.Scale) *inf.Dec,
+	s inf.Scale,
+	tests []decimalTwoArgsTestCase,
+) {
 	for i, tc := range tests {
 		x, y, exp := new(inf.Dec), new(inf.Dec), new(inf.Dec)
 		x.SetString(tc.input1)

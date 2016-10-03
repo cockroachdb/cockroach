@@ -293,9 +293,7 @@ func (tc *TestCluster) Target(serverIdx int) ReplicationTarget {
 }
 
 func (tc *TestCluster) changeReplicas(
-	action roachpb.ReplicaChangeType,
-	startKey roachpb.RKey,
-	targets ...ReplicationTarget,
+	action roachpb.ReplicaChangeType, startKey roachpb.RKey, targets ...ReplicationTarget,
 ) (*roachpb.RangeDescriptor, error) {
 	rangeDesc := &roachpb.RangeDescriptor{}
 
@@ -413,8 +411,7 @@ func (tc *TestCluster) TransferRangeLease(
 // different hints can yield different results. The one server that's guaranteed
 // to have applied the transfer is the previous lease holder.
 func (tc *TestCluster) FindRangeLeaseHolder(
-	rangeDesc *roachpb.RangeDescriptor,
-	hint *ReplicationTarget,
+	rangeDesc *roachpb.RangeDescriptor, hint *ReplicationTarget,
 ) (ReplicationTarget, error) {
 	if hint != nil {
 		var ok bool
@@ -466,9 +463,7 @@ func (tc *TestCluster) FindRangeLeaseHolder(
 }
 
 // findMemberStore returns the store containing a given replica.
-func (tc *TestCluster) findMemberStore(
-	storeID roachpb.StoreID,
-) (*storage.Store, error) {
+func (tc *TestCluster) findMemberStore(storeID roachpb.StoreID) (*storage.Store, error) {
 	for _, server := range tc.Servers {
 		if server.Stores().HasStore(storeID) {
 			store, err := server.Stores().GetStore(storeID)

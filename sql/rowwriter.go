@@ -57,11 +57,7 @@ type rowHelper struct {
 // encodeSecondaryIndexes.
 func (rh *rowHelper) encodeIndexes(
 	colIDtoRowIndex map[sqlbase.ColumnID]int, values []parser.Datum,
-) (
-	primaryIndexKey []byte,
-	secondaryIndexEntries []sqlbase.IndexEntry,
-	err error,
-) {
+) (primaryIndexKey []byte, secondaryIndexEntries []sqlbase.IndexEntry, err error) {
 	if rh.primaryIndexKeyPrefix == nil {
 		rh.primaryIndexKeyPrefix = sqlbase.MakeIndexKeyPrefix(rh.tableDesc,
 			rh.tableDesc.PrimaryIndex.ID)
@@ -83,10 +79,7 @@ func (rh *rowHelper) encodeIndexes(
 // encodeSecondaryIndexes.
 func (rh *rowHelper) encodeSecondaryIndexes(
 	colIDtoRowIndex map[sqlbase.ColumnID]int, values []parser.Datum,
-) (
-	secondaryIndexEntries []sqlbase.IndexEntry,
-	err error,
-) {
+) (secondaryIndexEntries []sqlbase.IndexEntry, err error) {
 	if len(rh.indexEntries) != len(rh.indexes) {
 		rh.indexEntries = make([]sqlbase.IndexEntry, len(rh.indexes))
 	}
@@ -520,10 +513,7 @@ func makeRowUpdater(
 //
 // The return value is only good until the next call to UpdateRow.
 func (ru *rowUpdater) updateRow(
-	ctx context.Context,
-	b *client.Batch,
-	oldValues []parser.Datum,
-	updateValues []parser.Datum,
+	ctx context.Context, b *client.Batch, oldValues []parser.Datum, updateValues []parser.Datum,
 ) ([]parser.Datum, error) {
 	if len(oldValues) != len(ru.fetchCols) {
 		return nil, errors.Errorf("got %d values but expected %d", len(oldValues), len(ru.fetchCols))

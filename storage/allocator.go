@@ -147,8 +147,9 @@ func MakeAllocator(storePool *StorePool, options AllocatorOptions) Allocator {
 // range, as governed by the supplied zone configuration. It returns the
 // required action that should be taken and a replica on which the action should
 // be performed.
-func (a *Allocator) ComputeAction(zone config.ZoneConfig, desc *roachpb.RangeDescriptor) (
-	AllocatorAction, float64) {
+func (a *Allocator) ComputeAction(
+	zone config.ZoneConfig, desc *roachpb.RangeDescriptor,
+) (AllocatorAction, float64) {
 	if a.storePool == nil {
 		// Do nothing if storePool is nil for some unittests.
 		return AllocatorNoop, 0
@@ -190,9 +191,7 @@ func (a *Allocator) ComputeAction(zone config.ZoneConfig, desc *roachpb.RangeDes
 // will be relaxed as necessary, from least specific to most specific, in order
 // to allocate a target.
 func (a *Allocator) AllocateTarget(
-	constraints config.Constraints,
-	existing []roachpb.ReplicaDescriptor,
-	relaxConstraints bool,
+	constraints config.Constraints, existing []roachpb.ReplicaDescriptor, relaxConstraints bool,
 ) (*roachpb.StoreDescriptor, error) {
 	existingNodes := make(nodeIDSet, len(existing))
 	for _, repl := range existing {
@@ -235,7 +234,9 @@ func (a *Allocator) AllocateTarget(
 // the zone config associated with the provided replicas. This will allow it to
 // make correct decisions in the case of ranges with heterogeneous replica
 // requirements (i.e. multiple data centers).
-func (a Allocator) RemoveTarget(existing []roachpb.ReplicaDescriptor, leaseStoreID roachpb.StoreID) (roachpb.ReplicaDescriptor, error) {
+func (a Allocator) RemoveTarget(
+	existing []roachpb.ReplicaDescriptor, leaseStoreID roachpb.StoreID,
+) (roachpb.ReplicaDescriptor, error) {
 	if len(existing) == 0 {
 		return roachpb.ReplicaDescriptor{}, errors.Errorf("must supply at least one replica to allocator.RemoveTarget()")
 	}
@@ -282,9 +283,7 @@ func (a Allocator) RemoveTarget(existing []roachpb.ReplicaDescriptor, leaseStore
 // rebalance. This helps prevent a stampeding herd targeting an abnormally
 // under-utilized store.
 func (a Allocator) RebalanceTarget(
-	constraints config.Constraints,
-	existing []roachpb.ReplicaDescriptor,
-	leaseStoreID roachpb.StoreID,
+	constraints config.Constraints, existing []roachpb.ReplicaDescriptor, leaseStoreID roachpb.StoreID,
 ) *roachpb.StoreDescriptor {
 	if !a.options.AllowRebalance {
 		return nil
@@ -338,18 +337,14 @@ func (a Allocator) selectBad(sl StoreList) *roachpb.StoreDescriptor {
 // stores in the given store list. Any nodes in the supplied 'exclude' list
 // will be disqualified from selection. Returns the selected store, or nil if
 // no such store can be found.
-func (a Allocator) improve(
-	sl StoreList, excluded nodeIDSet,
-) *roachpb.StoreDescriptor {
+func (a Allocator) improve(sl StoreList, excluded nodeIDSet) *roachpb.StoreDescriptor {
 	rcb := rangeCountBalancer{a.randGen}
 	return rcb.improve(sl, excluded)
 }
 
 // shouldRebalance returns whether the specified store is a candidate for
 // having a replica removed from it given the candidate store list.
-func (a Allocator) shouldRebalance(
-	store roachpb.StoreDescriptor, sl StoreList,
-) bool {
+func (a Allocator) shouldRebalance(store roachpb.StoreDescriptor, sl StoreList) bool {
 	rcb := rangeCountBalancer{a.randGen}
 	return rcb.shouldRebalance(store, sl)
 }

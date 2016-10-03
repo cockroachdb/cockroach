@@ -585,8 +585,7 @@ func (n *dropTableNode) ExplainPlan(v bool) (string, string, []planNode) {
 // the deleted bit set, meaning the lease manager will not hand out
 // new leases for it and existing leases are released).
 // If the table does not exist, this function returns a nil descriptor.
-func (p *planner) dropTableOrViewPrepare(name *parser.TableName,
-) (*sqlbase.TableDescriptor, error) {
+func (p *planner) dropTableOrViewPrepare(name *parser.TableName) (*sqlbase.TableDescriptor, error) {
 	tableDesc, err := p.getTableOrViewDesc(name)
 	if err != nil {
 		return nil, err

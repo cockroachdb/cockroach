@@ -45,8 +45,8 @@ var _ processor = &tableReader{}
 
 // newTableReader creates a tableReader.
 func newTableReader(
-	flowCtx *FlowCtx, spec *TableReaderSpec, output RowReceiver) (*tableReader, error,
-) {
+	flowCtx *FlowCtx, spec *TableReaderSpec, output RowReceiver,
+) (*tableReader, error) {
 	tr := &tableReader{
 		output:    output,
 		hardLimit: spec.HardLimit,
