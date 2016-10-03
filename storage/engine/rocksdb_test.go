@@ -39,24 +39,6 @@ import (
 
 const testCacheSize = 1 << 30 // 1 GB
 
-func TestMinMemtableBudget(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	rocksdb := NewRocksDB(
-		roachpb.Attributes{},
-		".",
-		RocksDBCache{},
-		0,
-		0,
-		DefaultMaxOpenFiles,
-		stop.NewStopper(),
-	)
-	const expected = "memtable budget must be at least"
-	if err := rocksdb.Open(); !testutils.IsError(err, expected) {
-		t.Fatalf("expected %s, but got %v", expected, err)
-	}
-}
-
 func TestBatchIterReadOwnWrite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -249,7 +231,6 @@ func openRocksDBWithVersion(t *testing.T, hasVersionFile bool, ver Version) erro
 		roachpb.Attributes{},
 		dir,
 		RocksDBCache{},
-		minMemtableBudget,
 		0,
 		DefaultMaxOpenFiles,
 		stopper,
@@ -279,7 +260,6 @@ func TestCheckpoint(t *testing.T) {
 			roachpb.Attributes{},
 			dir,
 			RocksDBCache{},
-			minMemtableBudget,
 			0,
 			DefaultMaxOpenFiles,
 			stopper,
@@ -314,7 +294,6 @@ func TestCheckpoint(t *testing.T) {
 			roachpb.Attributes{},
 			dir,
 			RocksDBCache{},
-			minMemtableBudget,
 			0,
 			DefaultMaxOpenFiles,
 			stopper,
