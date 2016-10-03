@@ -827,7 +827,7 @@ func TestFlagUsage(t *testing.T) {
 	<-done
 
 	// Filter out all test flags.
-	testFlagRE := regexp.MustCompile(`--test\.`)
+	testFlagRE := regexp.MustCompile(`--(test\.|verbosity|vmodule)`)
 	lines := strings.Split(buf.String(), "\n")
 	final := []string{}
 	for _, l := range lines {
@@ -864,8 +864,6 @@ Flags:
       --log-dir string                    if non-empty, write log files in this directory (default "")
       --logtostderr                       log to standard error instead of files
       --no-color                          disable standard error log colorization
-      --verbosity level                   log level for V logs (default 0)
-      --vmodule moduleSpec                comma-separated list of pattern=N settings for file-filtered logging (default )
 
 Use "cockroach [command] --help" for more information about a command.
 `
