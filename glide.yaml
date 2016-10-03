@@ -45,7 +45,6 @@ import:
 - package: github.com/elazarl/go-bindata-assetfs
 - package: github.com/facebookgo/clock
 - package: github.com/gogo/protobuf
-  version: ccdc7fbcb4cd13f34b76d7262805e58316faaaf4
   subpackages:
   - jsonpb
   - proto
@@ -121,7 +120,6 @@ import:
   - language
   - unicode/norm
 - package: google.golang.org/grpc
-  version: 79b7c349179cdd6efd8bac4a1ce7f01b98c16e9b
   subpackages:
   - codes
   - credentials

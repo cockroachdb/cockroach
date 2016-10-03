@@ -1,5 +1,5 @@
-hash: 638d0ab13b3ebe6c328d403f9fbc3ea8ca8ceb755c8c4047023fb53e4a2bb8f0
-updated: 2016-12-01T20:35:23.065303599-05:00
+hash: 3b8ff7c019c60cd323c13fa46ba2dbdfbd1613783510f1ce0b7c979b2854efc3
+updated: 2016-12-01T21:02:09.291011402-05:00
 imports:
 - name: github.com/abourget/teamcity
   version: 6dde447fa54bc5b08b1a7bb1b85e39089cf27fb1
@@ -111,7 +111,7 @@ imports:
   subpackages:
   - oleutil
 - name: github.com/gogo/protobuf
-  version: ccdc7fbcb4cd13f34b76d7262805e58316faaaf4
+  version: 70d0d0c9d3f673c850388c410e27ebb77ee21578
   subpackages:
   - gogoproto
   - jsonpb
@@ -344,7 +344,7 @@ imports:
   - internal/urlfetch
   - urlfetch
 - name: google.golang.org/grpc
-  version: 79b7c349179cdd6efd8bac4a1ce7f01b98c16e9b
+  version: 777daa17ff9b5daef1cfdf915088a2ada3332bf0
   subpackages:
   - codes
   - credentials

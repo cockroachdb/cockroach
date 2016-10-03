@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/opentracing/opentracing-go"
-	"google.golang.org/grpc"
 )
 
 // Allow local calls to be dispatched directly to the local server without
@@ -168,7 +168,20 @@ func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
 		log.Infof(gt.opts.ctx, "sending request to %s: %+v", addr, client.args)
 	}
 
+	batchFn := func(ctx context.Context, args *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+		reply, err := client.client.Batch(ctx, args)
+		if reply != nil {
+			for i := range reply.Responses {
+				if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {
+					log.Error(gt.opts.ctx, err)
+				}
+			}
+		}
+		return reply, err
+	}
 	if localServer := gt.rpcContext.GetLocalInternalServerForAddr(addr); enableLocalCalls && localServer != nil {
+		batchFn = localServer.Batch
+
 		// Clone the request. At the time of writing, Replica may mutate it
 		// during command execution which can lead to data races.
 		//
@@ -180,24 +193,10 @@ func (gt *grpcTransport) SendNext(done chan<- BatchCall) {
 			clonedTxn := origTxn.Clone()
 			client.args.Txn = &clonedTxn
 		}
-
-		go func() {
-			reply, err := localServer.Batch(gt.opts.ctx, &client.args)
-			gt.setPending(client.args.Replica, false)
-			done <- BatchCall{Reply: reply, Err: err}
-		}()
-		return
 	}
 
 	go func() {
-		reply, err := client.client.Batch(gt.opts.ctx, &client.args)
-		if reply != nil {
-			for i := range reply.Responses {
-				if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {
-					log.Error(gt.opts.ctx, err)
-				}
-			}
-		}
+		reply, err := batchFn(gt.opts.ctx, &client.args)
 		gt.setPending(client.args.Replica, false)
 		done <- BatchCall{Reply: reply, Err: err}
 	}()
