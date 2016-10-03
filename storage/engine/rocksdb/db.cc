@@ -1423,8 +1423,11 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   options.level0_file_num_compaction_trigger = 1;
   options.level0_slowdown_writes_trigger = 16;
   options.level0_stop_writes_trigger = 17;
-  // Merge two memtables when flushing to L0.
-  options.min_write_buffer_number_to_merge = 2;
+  // Flush write buffers to L0 as soon as they are full. A higher
+  // value could be beneficial if there are duplicate records in each
+  // of the individual write buffers, but perf testing hasn't shown
+  // any benefit so far.
+  options.min_write_buffer_number_to_merge = 1;
   // Enable dynamic level sizing which reduces both size and write
   // amplification. This causes RocksDB to pick the target size of
   // each level dynamically.
