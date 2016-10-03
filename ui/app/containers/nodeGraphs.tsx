@@ -255,6 +255,7 @@ export default class extends React.Component<IInjectedProps, {}> {
             <LineGraph title="Raft Transport Queue Pending Count" sources={sources}>
               <Axis format={ d3.format(".1f") }>
                 <Metric name="cr.store.raft.enqueued.pending" title="Outstanding message count in the Raft Transport queue" />
+                <Metric name="cr.store.raft.heartbeats.pending" title="Outstanding coalesced heartbeats in the Raft Transport queue" />
               </Axis>
             </LineGraph>
 
