@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -35,7 +36,11 @@ var cmdBase = []string{
 	"/usr/bin/expect",
 }
 
-func TestDockerCli(t *testing.T) {
+func TestDockerCLI(t *testing.T) {
+	if err := testDockerOneShot(t, "cli_test", []string{"stat", cluster.CockroachBinaryInContainer}); err != nil {
+		t.Skipf(`TODO(dt): No binary in one-shot container, see #6086: %s`, err)
+	}
+
 	paths, err := filepath.Glob(testGlob)
 	if err != nil {
 		t.Fatal(err)
@@ -56,9 +61,9 @@ func TestDockerCli(t *testing.T) {
 		if verbose {
 			cmd = append(cmd, "-d")
 		}
-		cmd = append(cmd, "-f", testPath, "/cockroach")
+		cmd = append(cmd, "-f", testPath, cluster.CockroachBinaryInContainer)
 
-		if err := testDocker(t, 0, "cli_test", cmd); err != nil {
+		if err := testDockerOneShot(t, "cli_test", cmd); err != nil {
 			fmt.Printf("--- %s FAIL\n", testFile)
 			t.Fatal(err)
 		}

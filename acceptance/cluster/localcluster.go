@@ -66,8 +66,12 @@ const (
 const DefaultTCP nat.Port = base.DefaultPort + "/tcp"
 const defaultHTTP nat.Port = base.DefaultHTTPPort + "/tcp"
 
+// CockroachBinaryInContainer is the container-side path to the CockroachDB
+// binary.
+const CockroachBinaryInContainer = "/cockroach/cockroach"
+
 var cockroachImage = flag.String("i", builderImageFull, "the docker image to run")
-var cockroachBinary = flag.String("b", defaultBinary(), "the binary to run (if image == "+builderImage+")")
+var cockroachBinary = flag.String("b", defaultBinary(), "the host-side binary to run (if image == "+builderImage+")")
 var cockroachEntry = flag.String("e", "", "the entry point for the image")
 var waitOnStop = flag.Bool("w", false, "wait for the user to interrupt before tearing down the cluster")
 var pwd = filepath.Clean(os.ExpandEnv("${PWD}"))
@@ -336,7 +340,7 @@ func (l *LocalCluster) initCluster() {
 	if *cockroachImage == builderImageFull {
 		path, err := filepath.Abs(*cockroachBinary)
 		maybePanic(err)
-		binds = append(binds, path+":/"+filepath.Base(*cockroachBinary))
+		binds = append(binds, path+":"+CockroachBinaryInContainer)
 	}
 
 	l.Nodes = []*testNode{}
@@ -412,7 +416,7 @@ func (l *LocalCluster) createRoach(node *testNode, vols *Container, env []string
 	log.Infof(context.Background(), "creating docker container with name: %s", hostname)
 	var entrypoint []string
 	if *cockroachImage == builderImageFull {
-		entrypoint = append(entrypoint, "/"+filepath.Base(*cockroachBinary))
+		entrypoint = append(entrypoint, CockroachBinaryInContainer)
 	} else if *cockroachEntry != "" {
 		entrypoint = append(entrypoint, *cockroachEntry)
 	}
