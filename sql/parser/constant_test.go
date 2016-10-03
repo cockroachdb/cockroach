@@ -17,7 +17,6 @@
 package parser
 
 import (
-	"fmt"
 	"go/constant"
 	"go/token"
 	"reflect"
@@ -117,7 +116,7 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 					d := new(inf.Dec)
 					if !strings.ContainsAny(test.str, "eE") {
 						if _, ok := d.SetString(test.str); !ok {
-							t.Fatal(fmt.Sprintf("could not set %q on decimal", test.str))
+							t.Fatalf("could not set %q on decimal", test.str)
 						}
 					} else {
 						f, err := strconv.ParseFloat(test.str, 64)
@@ -190,7 +189,7 @@ func mustParseDDate(t *testing.T, s string) Datum {
 	return d
 }
 func mustParseDTimestamp(t *testing.T, s string) Datum {
-	d, err := ParseDTimestamp(s, time.UTC, time.Millisecond)
+	d, err := ParseDTimestamp(s, time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}

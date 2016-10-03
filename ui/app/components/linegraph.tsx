@@ -2,7 +2,7 @@ import * as React from "react";
 import * as nvd3 from "nvd3";
 import * as d3 from "d3";
 import { createSelector } from "reselect";
-import _ = require("lodash");
+import _ from "lodash";
 
 import { findChildrenOfType } from "../util/find";
 import { NanoToMilli } from "../util/convert";
@@ -126,11 +126,14 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
         this.chart.yAxis.tickValues(yAxisDomain.ticks());
         this.chart.xAxis.tickValues(xAxisDomain.ticks((n) => new Date(NanoToMilli(n))));
       }
-
-      d3.select(this.svgEl)
-        .datum(formattedData)
-        .transition().duration(500)
-        .call(this.chart);
+      try {
+        d3.select(this.svgEl)
+          .datum(formattedData)
+          .transition().duration(500)
+          .call(this.chart);
+      } catch (e) {
+        console.log("Error rendering graph: ", e);
+      }
     }
   }
 

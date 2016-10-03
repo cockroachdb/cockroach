@@ -1,7 +1,7 @@
 - Feature Name: dismantle_multiraft
-- Status: in-progress
+- Status: completed
 - Start Date: 2015-12-13
-- RFC PR: #3431
+- RFC PR: [#3431](https://github.com/cockroachdb/cockroach/pull/3431)
 - Cockroach Issue:
 
 # Summary

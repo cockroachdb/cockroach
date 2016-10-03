@@ -152,12 +152,14 @@ func (rf *RowFetcher) Init(
 
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
-func (rf *RowFetcher) StartScan(txn *client.Txn, spans Spans, limitHint int64) error {
+func (rf *RowFetcher) StartScan(
+	txn *client.Txn, spans roachpb.Spans, limitBatches bool, limitHint int64,
+) error {
 	if len(spans) == 0 {
 		// If no spans were specified retrieve all of the keys that start with our
 		// index key prefix.
 		start := roachpb.Key(MakeIndexKeyPrefix(rf.desc, rf.index.ID))
-		spans = []Span{{Start: start, End: start.PrefixEnd()}}
+		spans = []roachpb.Span{{Key: start, EndKey: start.PrefixEnd()}}
 	}
 
 	rf.indexKey = nil
@@ -177,10 +179,14 @@ func (rf *RowFetcher) StartScan(txn *client.Txn, spans Spans, limitHint int64) e
 		firstBatchLimit++
 	}
 
-	rf.kvFetcher = makeKVFetcher(txn, spans, rf.reverse, firstBatchLimit)
+	var err error
+	rf.kvFetcher, err = makeKVFetcher(txn, spans, rf.reverse, limitBatches, firstBatchLimit)
+	if err != nil {
+		return err
+	}
 
 	// Retrieve the first key.
-	_, err := rf.NextKey()
+	_, err = rf.NextKey()
 	return err
 }
 

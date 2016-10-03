@@ -44,7 +44,7 @@ type virtualSchema struct {
 // virtualSchemaTable represents a table within a virtualSchema.
 type virtualSchemaTable struct {
 	schema   string
-	populate func(p *planner, addRow func(...parser.Datum)) error
+	populate func(p *planner, addRow func(...parser.Datum) error) error
 }
 
 // virtualSchemas holds a slice of statically registered virtualSchema objects.
@@ -53,19 +53,23 @@ type virtualSchemaTable struct {
 // add that object to this slice.
 var virtualSchemas = []virtualSchema{
 	informationSchema,
+	pgCatalog,
 }
 
 //
 // SQL-layer interface to work with virtual schemas.
 //
 
-// Statically populated map used to provide convenient access to virtual
-// database and table descriptors. virtualSchemaMap, virtualSchemaEntry,
-// and virtualTableEntry make up the statically generated data structure
-// which the virtualSchemas slice is mapped to. Because of this, they
-// should not be created directly, but instead will be populated in the
-// init function below.
-var virtualSchemaMap map[string]virtualSchemaEntry
+// virtualSchemaHolder is a type used to provide convenient access to virtual
+// database and table descriptors. virtualSchemaHolder, virtualSchemaEntry,
+// and virtualTableEntry make up the generated data structure which the
+// virtualSchemas slice is mapped to. Because of this, they should not be
+// created directly, but instead will be populated in a post-startup hook
+// on an Executor.
+type virtualSchemaHolder struct {
+	entries      map[string]virtualSchemaEntry
+	orderedNames []string
+}
 
 type virtualSchemaEntry struct {
 	desc              *sqlbase.DatabaseDescriptor
@@ -93,48 +97,59 @@ type virtualTableEntry struct {
 // getValuesNode returns a new valuesNode for the virtual table using the
 // provided planner.
 func (e virtualTableEntry) getValuesNode(p *planner) (*valuesNode, error) {
-	v := &valuesNode{}
+	var columns ResultColumns
 	for _, col := range e.desc.Columns {
-		v.columns = append(v.columns, ResultColumn{
+		columns = append(columns, ResultColumn{
 			Name: col.Name,
 			Typ:  col.Type.ToDatumType(),
 		})
 	}
+	v := p.newContainerValuesNode(columns, 0)
 
-	err := e.tableDef.populate(p, func(datum ...parser.Datum) {
+	err := e.tableDef.populate(p, func(datum ...parser.Datum) error {
 		if r, c := len(datum), len(v.columns); r != c {
 			panic(fmt.Sprintf("datum row count and column count differ: %d vs %d", r, c))
 		}
-		v.rows = append(v.rows, datum)
+		return v.rows.AddRow(datum)
 	})
 	if err != nil {
+		v.Close()
 		return nil, err
 	}
 	return v, nil
 }
 
-func init() {
-	virtualSchemaMap = make(map[string]virtualSchemaEntry, len(virtualSchemas))
-	for _, schema := range virtualSchemas {
+func (vs *virtualSchemaHolder) init(p *planner) error {
+	*vs = virtualSchemaHolder{
+		entries:      make(map[string]virtualSchemaEntry, len(virtualSchemas)),
+		orderedNames: make([]string, len(virtualSchemas)),
+	}
+	for i, schema := range virtualSchemas {
 		dbName := schema.name
 		dbDesc := initVirtualDatabaseDesc(dbName)
 		tables := make(map[string]virtualTableEntry, len(schema.tables))
 		orderedTableNames := make([]string, 0, len(schema.tables))
 		for _, table := range schema.tables {
-			tableDesc := initVirtualTableDesc(table)
+			tableDesc, err := initVirtualTableDesc(p, table)
+			if err != nil {
+				return err
+			}
 			tables[tableDesc.Name] = virtualTableEntry{
 				tableDef: table,
-				desc:     tableDesc,
+				desc:     &tableDesc,
 			}
 			orderedTableNames = append(orderedTableNames, tableDesc.Name)
 		}
 		sort.Strings(orderedTableNames)
-		virtualSchemaMap[dbName] = virtualSchemaEntry{
+		vs.entries[dbName] = virtualSchemaEntry{
 			desc:              dbDesc,
 			tables:            tables,
 			orderedTableNames: orderedTableNames,
 		}
+		vs.orderedNames[i] = dbName
 	}
+	sort.Strings(vs.orderedNames)
+	return nil
 }
 
 // Virtual databases and tables each have an empty set of privileges. In practice,
@@ -152,47 +167,51 @@ func initVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
 	}
 }
 
-func initVirtualTableDesc(t virtualSchemaTable) *sqlbase.TableDescriptor {
+func initVirtualTableDesc(p *planner, t virtualSchemaTable) (sqlbase.TableDescriptor, error) {
 	stmt, err := parser.ParseOneTraditional(t.schema)
 	if err != nil {
-		panic(err)
+		return sqlbase.TableDescriptor{}, err
 	}
-	desc, err := MakeTableDesc(stmt.(*parser.CreateTable), 0)
-	if err != nil {
-		panic(err)
-	}
-	desc.ID = keys.VirtualDescriptorID
-	desc.Privileges = emptyPrivileges
-	return &desc
+	create := stmt.(*parser.CreateTable)
+	return p.makeTableDesc(create, 0, keys.VirtualDescriptorID, emptyPrivileges, nil)
 }
 
 // getVirtualSchemaEntry retrieves a virtual schema entry given a database name.
-func getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool) {
-	e, ok := virtualSchemaMap[name]
+func (vs *virtualSchemaHolder) getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool) {
+	if vs == nil {
+		return virtualSchemaEntry{}, false
+	}
+	e, ok := vs.entries[name]
 	return e, ok
 }
 
 // getVirtualDatabaseDesc checks if the provided name matches a virtual database,
 // and if so, returns that database's descriptor.
-func getVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
-	if e, ok := getVirtualSchemaEntry(name); ok {
+func (vs *virtualSchemaHolder) getVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
+	if e, ok := vs.getVirtualSchemaEntry(name); ok {
 		return e.desc
 	}
 	return nil
 }
 
 // isVirtualDatabase checks if the provided name corresponds to a virtual database.
-func isVirtualDatabase(name string) bool {
-	_, ok := getVirtualSchemaEntry(name)
+func (vs *virtualSchemaHolder) isVirtualDatabase(name string) bool {
+	_, ok := vs.getVirtualSchemaEntry(name)
 	return ok
+}
+
+// IsVirtualDatabase checks if the provided name corresponds to a virtual database,
+// exposing this information on the Executor object itself.
+func (e *Executor) IsVirtualDatabase(name string) bool {
+	return e.virtualSchemas.isVirtualDatabase(name)
 }
 
 // getVirtualTableEntry checks if the provided name matches a virtual database/table
 // pair. The function will return the table's virtual table entry if the name matches
 // a specific table. It will return an error if the name references a virtual database
 // but the table is non-existent.
-func getVirtualTableEntry(tn *parser.TableName) (virtualTableEntry, error) {
-	if db, ok := getVirtualSchemaEntry(tn.Database()); ok {
+func (vs *virtualSchemaHolder) getVirtualTableEntry(tn *parser.TableName) (virtualTableEntry, error) {
+	if db, ok := vs.getVirtualSchemaEntry(tn.Database()); ok {
 		if t, ok := db.tables[sqlbase.NormalizeName(tn.TableName)]; ok {
 			return t, nil
 		}
@@ -203,8 +222,8 @@ func getVirtualTableEntry(tn *parser.TableName) (virtualTableEntry, error) {
 
 // getVirtualTableDesc checks if the provided name matches a virtual database/table
 // pair, and returns its descriptor if it does.
-func getVirtualTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
-	t, err := getVirtualTableEntry(tn)
+func (vs *virtualSchemaHolder) getVirtualTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
+	t, err := vs.getVirtualTableEntry(tn)
 	if err != nil {
 		return nil, err
 	}

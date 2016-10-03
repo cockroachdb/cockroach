@@ -30,12 +30,15 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 )
 
 func TestValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	p := makePlanner()
+	p.session.mon.StartMonitor()
+	defer p.session.mon.StopMonitor(context.Background())
 
 	vInt := int64(5)
 	vNum := 3.14159
@@ -119,6 +122,7 @@ func TestValues(t *testing.T) {
 			t.Errorf("%d: error_expected=%t, but got error %v", i, tc.ok, err)
 		}
 		if plan != nil {
+			defer plan.Close()
 			if err := plan.expandPlan(); err != nil {
 				t.Errorf("%d: unexpected error in expandPlan: %v", i, err)
 				continue

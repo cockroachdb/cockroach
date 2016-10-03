@@ -1,0 +1,323 @@
+# Verify pg_catalog database handles mutation statements correctly.
+
+query error user root does not have DROP privilege on database pg_catalog
+ALTER DATABASE pg_catalog RENAME TO not_pg_catalog
+
+statement error user root does not have CREATE privilege on database pg_catalog
+CREATE TABLE pg_catalog.t (x INT)
+
+query error user root does not have DROP privilege on database pg_catalog
+DROP DATABASE pg_catalog
+
+
+# Verify other databases can't be called "pg_catalog".
+
+statement ok
+CREATE DATABASE other_db
+
+statement error the new database name "pg_catalog" already exists
+ALTER DATABASE other_db RENAME TO pg_catalog
+
+statement error database "pg_catalog" already exists
+CREATE DATABASE pg_catalog
+
+statement ok
+DROP DATABASE other_db
+
+
+# Verify pg_catalog can be used like a normal database.
+
+statement ok
+SET DATABASE = pg_catalog
+
+statement ok
+SET DATABASE = test
+
+
+# Verify pg_catalog handles reflection correctly.
+
+query T
+SHOW TABLES FROM pg_catalog
+----
+pg_attrdef
+pg_attribute
+pg_class
+pg_namespace
+pg_tables
+
+query TT colnames
+SHOW CREATE TABLE pg_catalog.pg_namespace
+----
+Table                  CreateTable
+pg_catalog.pg_namespace  CREATE TABLE "pg_catalog.pg_namespace" (
+                           oid INT NULL,
+                           nspname STRING NOT NULL DEFAULT '',
+                           nspowner INT NULL,
+                           aclitem STRING NULL
+                       )
+
+query TTBT colnames
+SHOW COLUMNS FROM pg_catalog.pg_namespace
+----
+Field     Type    Null  Default
+oid       INT     true   NULL
+nspname   STRING  false  ''
+nspowner  INT     true   NULL
+aclitem   STRING  true   NULL
+
+query TTTTTTT colnames
+SHOW INDEXES FROM pg_catalog.pg_namespace
+----
+Table  Name  Unique  Seq  Column  Direction  Storing
+
+query TTTTT colnames
+SHOW CONSTRAINTS FROM pg_catalog.pg_namespace
+----
+Table         Name     Type  Column(s)  Details
+pg_namespace  PRIMARY  KEY   NULL         NULL
+
+query TTT colnames
+SHOW GRANTS ON pg_catalog.pg_namespace
+----
+Table  User  Privileges
+
+
+# Verify selecting from pg_catalog.
+
+statement ok
+CREATE DATABASE constraint_db
+
+statement ok
+CREATE TABLE constraint_db.t1 (
+  p FLOAT PRIMARY KEY,
+  a INT UNIQUE,
+  b INT,
+  c INT DEFAULT 12,
+  UNIQUE INDEX index_key(b, c)
+)
+
+statement ok
+CREATE TABLE constraint_db.t2 (
+    t1_ID INT,
+    CONSTRAINT fk FOREIGN KEY (t1_ID) REFERENCES constraint_db.t1(a),
+    INDEX (t1_ID)
+)
+
+statement ok
+CREATE TABLE constraint_db.t3 (
+    a INT,
+    b INT CHECK (b > 11),
+    c STRING DEFAULT 'FOO',
+    CONSTRAINT fk FOREIGN KEY (a, b) REFERENCES constraint_db.t1(b, c),
+    INDEX (a, b)
+)
+
+statement ok
+CREATE VIEW constraint_db.v1 AS SELECT * FROM constraint_db.t1;
+
+## pg_catalog.pg_namespace
+
+query ITIT colnames
+SELECT * FROM pg_catalog.pg_namespace
+----
+oid         nspname             nspowner  aclitem
+3061586988  constraint_db       NULL      NULL
+3816276882  information_schema  NULL      NULL
+3178318485  pg_catalog          NULL      NULL
+1793492844  system              NULL      NULL
+2091240128  test                NULL      NULL
+
+## pg_catalog.pg_tables
+
+query TTTTBBBB colnames
+SELECT * FROM pg_catalog.pg_tables WHERE schemaname = 'constraint_db'
+----
+schemaname     tablename  tableowner  tablespace  hasindexes  hasrules  hastriggers  rowsecurity
+constraint_db  t1         NULL        NULL        true        false     false        false
+constraint_db  t2         NULL        NULL        true        false     false        false
+constraint_db  t3         NULL        NULL        true        false     false        false
+
+query TB colnames
+SELECT tablename, hasindexes FROM pg_catalog.pg_tables WHERE schemaname = 'information_schema' AND tablename LIKE '%table%'
+----
+tablename          hasindexes
+table_constraints  false
+table_privileges   false
+tables             false
+
+## pg_catalog.pg_class
+
+query ITIIIIII colnames
+SELECT c.oid, relname, relnamespace, reltype, relowner, relam, relfilenode, reltablespace
+FROM pg_catalog.pg_class c 
+JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+WHERE n.nspname = 'constraint_db'
+----
+oid         relname       relnamespace  reltype  relowner  relam  relfilenode  reltablespace
+2265044713  t1            3061586988    0        NULL      NULL   0            0
+1759889455  primary       3061586988    0        NULL      NULL   0            0
+1759889452  t1_a_key      3061586988    0        NULL      NULL   0            0
+1759889453  index_key     3061586988    0        NULL      NULL   0            0
+2030599329  t2            3061586988    0        NULL      NULL   0            0
+559702615   primary       3061586988    0        NULL      NULL   0            0
+559702612   t2_t1_ID_idx  3061586988    0        NULL      NULL   0            0
+2064007441  t3            3061586988    0        NULL      NULL   0            0
+4171047647  primary       3061586988    0        NULL      NULL   0            0
+4171047644  t3_a_b_idx    3061586988    0        NULL      NULL   0            0
+2332993830  v1            3061586988    0        NULL      NULL   0            0
+
+query TIRIIBB colnames
+SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared
+FROM pg_catalog.pg_class c 
+JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+WHERE n.nspname = 'constraint_db'
+----
+relname       relpages  reltuples  relallvisible  reltoastrelid  relhasindex  relisshared
+t1            NULL      NULL       0              0              true         false
+primary       NULL      NULL       0              0              false        false
+t1_a_key      NULL      NULL       0              0              false        false
+index_key     NULL      NULL       0              0              false        false
+t2            NULL      NULL       0              0              true         false
+primary       NULL      NULL       0              0              false        false
+t2_t1_ID_idx  NULL      NULL       0              0              false        false
+t3            NULL      NULL       0              0              true         false
+primary       NULL      NULL       0              0              false        false
+t3_a_b_idx    NULL      NULL       0              0              false        false
+v1            NULL      NULL       0              0              false        false
+
+query TBTIIBB colnames
+SELECT relname, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey
+FROM pg_catalog.pg_class c 
+JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+WHERE n.nspname = 'constraint_db'
+----
+relname       relistemp  relkind  relnatts  relchecks  relhasoids  relhaspkey
+t1            false      r        4         0          false       true
+primary       false      i        1         0          false       false
+t1_a_key      false      i        1         0          false       false
+index_key     false      i        2         0          false       false
+t2            false      r        2         0          false       true
+primary       false      i        1         0          false       false
+t2_t1_ID_idx  false      i        1         0          false       false
+t3            false      r        4         1          false       true
+primary       false      i        1         0          false       false
+t3_a_b_idx    false      i        2         0          false       false
+v1            false      v        4         0          false       false
+
+query TBBBITT colnames
+SELECT relname, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions
+FROM pg_catalog.pg_class c 
+JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+WHERE n.nspname = 'constraint_db'
+----
+relname       relhasrules  relhastriggers  relhassubclass  relfrozenxid  relacl  reloptions
+t1            false        false           false           0             NULL    NULL
+primary       false        false           false           0             NULL    NULL
+t1_a_key      false        false           false           0             NULL    NULL
+index_key     false        false           false           0             NULL    NULL
+t2            false        false           false           0             NULL    NULL
+primary       false        false           false           0             NULL    NULL
+t2_t1_ID_idx  false        false           false           0             NULL    NULL
+t3            false        false           false           0             NULL    NULL
+primary       false        false           false           0             NULL    NULL
+t3_a_b_idx    false        false           false           0             NULL    NULL
+v1            false        false           false           0             NULL    NULL
+
+## pg_catalog.pg_attribute
+
+query ITTIIIIII colnames
+SELECT attrelid, c.relname, attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff
+FROM pg_catalog.pg_attribute a
+JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
+JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+WHERE n.nspname = 'constraint_db'
+----
+attrelid    relname       attname  atttypid    attstattarget  attlen  attnum  attndims  attcacheoff
+2265044713  t1            p        290627148   0              8       1       0         -1
+2265044713  t1            a        739628165   0              8       2       0         -1
+2265044713  t1            b        739628165   0              8       3       0         -1
+2265044713  t1            c        739628165   0              8       4       0         -1
+1759889455  primary       p        290627148   0              8       1       0         -1
+1759889452  t1_a_key      a        739628165   0              8       1       0         -1
+1759889453  index_key     b        739628165   0              8       1       0         -1
+1759889453  index_key     c        739628165   0              8       2       0         -1
+2030599329  t2            t1_ID    739628165   0              8       1       0         -1
+559702612   t2_t1_ID_idx  t1_ID    739628165   0              8       1       0         -1
+2064007441  t3            a        739628165   0              8       1       0         -1
+2064007441  t3            b        739628165   0              8       2       0         -1
+2064007441  t3            c        4126817477  0              -1      3       0         -1
+4171047644  t3_a_b_idx    a        739628165   0              8       1       0         -1
+4171047644  t3_a_b_idx    b        739628165   0              8       2       0         -1
+2332993830  v1            p        290627148   0              8       1       0         -1
+2332993830  v1            a        739628165   0              8       2       0         -1
+2332993830  v1            b        739628165   0              8       3       0         -1
+2332993830  v1            c        739628165   0              8       4       0         -1
+
+query TTIBTTBB colnames
+SELECT c.relname, attname, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef
+FROM pg_catalog.pg_attribute a
+JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
+JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+WHERE n.nspname = 'constraint_db'
+----
+relname       attname  atttypmod  attbyval  attstorage  attalign  attnotnull  atthasdef
+t1            p        -1         NULL      NULL        NULL      true        false
+t1            a        -1         NULL      NULL        NULL      false       false
+t1            b        -1         NULL      NULL        NULL      false       false
+t1            c        -1         NULL      NULL        NULL      false       true
+primary       p        -1         NULL      NULL        NULL      true        false
+t1_a_key      a        -1         NULL      NULL        NULL      false       false
+index_key     b        -1         NULL      NULL        NULL      false       false
+index_key     c        -1         NULL      NULL        NULL      false       true
+t2            t1_ID    -1         NULL      NULL        NULL      false       false
+t2_t1_ID_idx  t1_ID    -1         NULL      NULL        NULL      false       false
+t3            a        -1         NULL      NULL        NULL      false       false
+t3            b        -1         NULL      NULL        NULL      false       false
+t3            c        -1         NULL      NULL        NULL      false       true
+t3_a_b_idx    a        -1         NULL      NULL        NULL      false       false
+t3_a_b_idx    b        -1         NULL      NULL        NULL      false       false
+v1            p        -1         NULL      NULL        NULL      true        false
+v1            a        -1         NULL      NULL        NULL      true        false
+v1            b        -1         NULL      NULL        NULL      true        false
+v1            c        -1         NULL      NULL        NULL      true        false
+
+query TTBBITTT colnames
+SELECT c.relname, attname, attisdropped, attislocal, attinhcount, attacl, attoptions, attfdwoptions
+FROM pg_catalog.pg_attribute a
+JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
+JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+WHERE n.nspname = 'constraint_db'
+----
+relname       attname  attisdropped  attislocal  attinhcount  attacl  attoptions  attfdwoptions
+t1            p        false         true        0            NULL    NULL        NULL
+t1            a        false         true        0            NULL    NULL        NULL
+t1            b        false         true        0            NULL    NULL        NULL
+t1            c        false         true        0            NULL    NULL        NULL
+primary       p        false         true        0            NULL    NULL        NULL
+t1_a_key      a        false         true        0            NULL    NULL        NULL
+index_key     b        false         true        0            NULL    NULL        NULL
+index_key     c        false         true        0            NULL    NULL        NULL
+t2            t1_ID    false         true        0            NULL    NULL        NULL
+t2_t1_ID_idx  t1_ID    false         true        0            NULL    NULL        NULL
+t3            a        false         true        0            NULL    NULL        NULL
+t3            b        false         true        0            NULL    NULL        NULL
+t3            c        false         true        0            NULL    NULL        NULL
+t3_a_b_idx    a        false         true        0            NULL    NULL        NULL
+t3_a_b_idx    b        false         true        0            NULL    NULL        NULL
+v1            p        false         true        0            NULL    NULL        NULL
+v1            a        false         true        0            NULL    NULL        NULL
+v1            b        false         true        0            NULL    NULL        NULL
+v1            c        false         true        0            NULL    NULL        NULL
+
+## pg_catalog.pg_attrdef
+
+query ITIITT colnames
+SELECT ad.oid, c.relname, adrelid, adnum, adbin, adsrc
+FROM pg_catalog.pg_attrdef ad
+JOIN pg_catalog.pg_class c ON ad.adrelid = c.oid
+JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+WHERE n.nspname = 'constraint_db'
+----
+oid         relname  adrelid     adnum  adbin  adsrc
+1889966686  t1       2265044713  4      12     12
+390509283   t3       2064007441  3      'FOO'  'FOO'

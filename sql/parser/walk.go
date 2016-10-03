@@ -530,14 +530,24 @@ func (stmt *ParenSelect) WalkStmt(v Visitor) Statement {
 	return stmt
 }
 
+func walkOrderBy(v Visitor, order OrderBy) (OrderBy, bool) {
+	copied := false
+	for i := range order {
+		e, changed := WalkExpr(v, order[i].Expr)
+		if changed {
+			if !copied {
+				order = append(OrderBy(nil), order...)
+				copied = true
+			}
+			order[i].Expr = e
+		}
+	}
+	return order, copied
+}
+
 // CopyNode makes a copy of this Expr without recursing in any child Exprs.
 func (stmt *Select) CopyNode() *Select {
 	stmtCopy := *stmt
-	stmtCopy.OrderBy = make([]*Order, len(stmt.OrderBy))
-	for i, o := range stmt.OrderBy {
-		oCopy := *o
-		stmtCopy.OrderBy[i] = &oCopy
-	}
 	if stmt.Limit != nil {
 		lCopy := *stmt.Limit
 		stmtCopy.Limit = &lCopy
@@ -553,14 +563,12 @@ func (stmt *Select) WalkStmt(v Visitor) Statement {
 		ret = stmt.CopyNode()
 		ret.Select = sel.(SelectStatement)
 	}
-	for i, expr := range stmt.OrderBy {
-		e, changed := WalkExpr(v, expr.Expr)
-		if changed {
-			if ret == stmt {
-				ret = stmt.CopyNode()
-			}
-			ret.OrderBy[i].Expr = e
+	order, changed := walkOrderBy(v, stmt.OrderBy)
+	if changed {
+		if ret == stmt {
+			ret = stmt.CopyNode()
 		}
+		ret.OrderBy = order
 	}
 	if stmt.Limit != nil {
 		if stmt.Limit.Offset != nil {
@@ -656,6 +664,27 @@ func (stmt *SelectClause) WalkStmt(v Visitor) Statement {
 				ret = stmt.CopyNode()
 			}
 			ret.Having.Expr = e
+		}
+	}
+
+	for i, windowDef := range stmt.Window {
+		if windowDef.Partitions != nil {
+			exprs, changed := walkExprSlice(v, windowDef.Partitions)
+			if changed {
+				if ret == stmt {
+					ret = stmt.CopyNode()
+				}
+				ret.Window[i].Partitions = exprs
+			}
+		}
+		if windowDef.OrderBy != nil {
+			order, changed := walkOrderBy(v, windowDef.OrderBy)
+			if changed {
+				if ret == stmt {
+					ret = stmt.CopyNode()
+				}
+				ret.Window[i].OrderBy = order
+			}
 		}
 	}
 	return ret

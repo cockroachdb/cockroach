@@ -1,10 +1,11 @@
 import { assert } from "chai";
-import _ = require("lodash");
-import Long = require("long");
-import * as fetchMock from "../util/fetch-mock";
+import _ from "lodash";
+import Long from "long";
+import fetchMock from "../util/fetch-mock";
 
 import * as protos from "../js/protos";
-import reducer, * as metrics from "./metrics";
+import * as metrics from "./metrics";
+import reducer from "./metrics";
 import { Action } from "../interfaces/action";
 
 type TSRequestMessage = Proto2TypeScript.cockroach.ts.tspb.TimeSeriesQueryRequestMessage;
@@ -70,7 +71,7 @@ describe("metrics reducer", function() {
       assert.isUndefined(state.queries[componentID].error);
     });
 
-    it("should correctly dispatch receiveMetrics", function() {
+    it("should correctly dispatch receiveMetrics with an unmatching nextRequest", function() {
       let response = new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
         results: [
           {
@@ -87,6 +88,35 @@ describe("metrics reducer", function() {
           },
         ],
       });
+      state = reducer(state, metrics.receiveMetrics(componentID, request, response));
+      assert.isDefined(state.queries);
+      assert.isDefined(state.queries[componentID]);
+      assert.lengthOf(_.keys(state.queries), 1);
+      assert.equal(state.queries[componentID].data, null);
+      assert.equal(state.queries[componentID].request, null);
+      assert.isUndefined(state.queries[componentID].nextRequest);
+      assert.isUndefined(state.queries[componentID].error);
+    });
+
+    it("should correctly dispatch receiveMetrics with a matching nextRequest", function() {
+      let response = new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
+        results: [
+          {
+            datapoints: [],
+          },
+        ],
+      });
+      let request = new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
+        start_nanos: Long.fromInt(0),
+        end_nanos: Long.fromInt(10),
+        queries: [
+          {
+            name: "test.metric.1",
+          },
+        ],
+      });
+      // populate nextRequest
+      state = reducer(state, metrics.requestMetrics(componentID, request));
       state = reducer(state, metrics.receiveMetrics(componentID, request, response));
       assert.isDefined(state.queries);
       assert.isDefined(state.queries[componentID]);

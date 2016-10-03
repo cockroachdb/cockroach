@@ -68,7 +68,7 @@ type RaftMessageResponseStream interface {
 // RaftMessageHandler is the interface that must be implemented by
 // arguments to RaftTransport.Listen.
 type RaftMessageHandler interface {
-	// HandleRaftRequest is called for each Raft incoming message. If it returns
+	// HandleRaftRequest is called for each incoming Raft message. If it returns
 	// an error it will be streamed back to the sender of the message as a
 	// RaftMessageResponse. If the stream parameter is nil the request should be
 	// processed synchronously. If the stream is non-nil the request can be

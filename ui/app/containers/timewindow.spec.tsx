@@ -2,8 +2,8 @@ import * as React from "react";
 import { assert } from "chai";
 import { shallow } from "enzyme";
 import * as sinon from "sinon";
-import moment = require("moment");
-import _ = require("lodash");
+import moment from "moment";
+import _ from "lodash";
 
 import { TimeWindowManagerUnconnected as TimeWindowManager } from "./timewindow";
 import * as timewindow from "../redux/timewindow";
@@ -86,6 +86,8 @@ describe("<TimeWindowManager>", function() {
     });
   });
 
+  // TODO (maxlang): Fix this test to actually change the state to catch the
+  // issue that caused #7590. Tracked in #8595.
   it("has only a single timeout at a time.", function() {
     state.currentWindow = {
       start: now().subtract(state.scale.windowSize),

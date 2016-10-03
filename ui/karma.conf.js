@@ -12,7 +12,7 @@ module.exports = function (config) {
       ],
       serveFiles: [
         { pattern: 'app/**/*' },
-        { pattern: 'tsconfig.json' },
+        { pattern: 'tsconfig.build.json' },
         { pattern: 'typings/**/*.d.ts' },
       ],
     },

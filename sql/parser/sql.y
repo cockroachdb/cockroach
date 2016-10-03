@@ -22,9 +22,9 @@ package parser
 import (
     "go/constant"
     "go/token"
-  
+
     "github.com/pkg/errors"
-  
+
     "github.com/cockroachdb/cockroach/sql/privilege"
     "github.com/cockroachdb/cockroach/util"
 )
@@ -300,8 +300,17 @@ func (u *sqlSymUnion) idxElems() IndexElemList {
 func (u *sqlSymUnion) dropBehavior() DropBehavior {
     return u.val.(DropBehavior)
 }
+func (u *sqlSymUnion) validationBehavior() ValidationBehavior {
+    return u.val.(ValidationBehavior)
+}
 func (u *sqlSymUnion) interleave() *InterleaveDef {
     return u.val.(*InterleaveDef)
+}
+func (u *sqlSymUnion) windowDef() *WindowDef {
+    return u.val.(*WindowDef)
+}
+func (u *sqlSymUnion) window() Window {
+    return u.val.(Window)
 }
 
 %}
@@ -319,14 +328,18 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %type <Statement> stmt
 
 %type <Statement> alter_table_stmt
+%type <Statement> copy_from_stmt
 %type <Statement> create_stmt
 %type <Statement> create_database_stmt
 %type <Statement> create_index_stmt
 %type <Statement> create_table_stmt
+%type <Statement> create_table_as_stmt
+%type <Statement> create_view_stmt
 %type <Statement> delete_stmt
 %type <Statement> drop_stmt
 %type <Statement> explain_stmt
 %type <Statement> explainable_stmt
+%type <Statement> help_stmt
 %type <Statement> prepare_stmt
 %type <Statement> preparable_stmt
 %type <Statement> execute_stmt
@@ -340,6 +353,7 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %type <Statement> savepoint_stmt
 %type <Statement> set_stmt
 %type <Statement> show_stmt
+%type <Statement> split_stmt
 %type <Statement> transaction_stmt
 %type <Statement> truncate_stmt
 %type <Statement> update_stmt
@@ -357,6 +371,9 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %type <empty> opt_collate_clause
 
 %type <DropBehavior> opt_drop_behavior
+%type <DropBehavior> opt_interleave_drop_behavior
+
+%type <ValidationBehavior> opt_validate_behavior
 
 %type <*StrVal> opt_encoding_clause
 
@@ -494,7 +511,7 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %type <Expr>  opt_boolean_or_string
 %type <Exprs> var_list
 %type <UnresolvedName> var_name
-%type <str>   col_label type_function_name
+%type <str>   unrestricted_name type_function_name
 %type <str>   non_reserved_word
 %type <Expr>  non_reserved_word_or_sconst
 %type <Expr>  var_value
@@ -519,10 +536,11 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 
 %type <empty> within_group_clause
 %type <empty> filter_clause
-%type <empty> window_clause window_definition_list opt_partition_clause
-%type <empty> window_definition over_clause window_specification
+%type <Exprs> opt_partition_clause
+%type <Window> window_clause window_definition_list
+%type <*WindowDef> window_definition over_clause window_specification
+%type <str> opt_existing_window_name
 %type <empty> opt_frame_clause frame_extent frame_bound
-%type <empty> opt_existing_window_name
 
 %type <TargetList>    privilege_target
 %type <*TargetList> on_privilege_target_clause
@@ -540,7 +558,7 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %token <str>   IDENT SCONST BCONST
 %token <*NumVal> ICONST FCONST
 %token <str>   PLACEHOLDER
-%token <str>   TYPECAST DOT_DOT
+%token <str>   TYPECAST TYPEANNOTATE DOT_DOT
 %token <str>   LESS_EQUALS GREATER_EQUALS NOT_EQUALS
 %token <str>   NOT_REGMATCH REGIMATCH NOT_REGIMATCH
 %token <str>   ERROR
@@ -562,7 +580,7 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %token <str>   CHARACTER CHARACTERISTICS CHECK
 %token <str>   COALESCE COLLATE COLLATION COLUMN COLUMNS COMMIT
 %token <str>   COMMITTED CONCAT CONFLICT CONSTRAINT CONSTRAINTS
-%token <str>   COVERING CREATE
+%token <str>   COPY COVERING CREATE
 %token <str>   CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE
 %token <str>   CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str>   CURRENT_USER CYCLE
@@ -579,11 +597,11 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 
 %token <str>   GRANT GRANTS GREATEST GROUP GROUPING
 
-%token <str>   HAVING HIGH HOUR
+%token <str>   HAVING HELP HIGH HOUR
 
 %token <str>   IF IFNULL ILIKE IN INTERLEAVE
 %token <str>   INDEX INDEXES INITIALLY
-%token <str>   INNER INSERT INT INT64 INTEGER
+%token <str>   INNER INSERT INT INT8 INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO IS ISOLATION
 
 %token <str>   JOIN
@@ -613,8 +631,8 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 
 %token <str>   SAVEPOINT SEARCH SECOND SELECT
 %token <str>   SERIAL SERIALIZABLE SESSION SESSION_USER SET SHOW
-%token <str>   SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SQL
-%token <str>   START STRICT STRING STORING SUBSTRING
+%token <str>   SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
+%token <str>   START STDIN STRICT STRING STORING SUBSTRING
 %token <str>   SYMMETRIC SYSTEM
 
 %token <str>   TABLE TABLES TEXT THEN
@@ -624,7 +642,7 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %token <str>   UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
 %token <str>   UPDATE UPSERT USER USING
 
-%token <str>   VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VARYING
+%token <str>   VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VIEW VARYING
 
 %token <str>   WHEN WHERE WINDOW WITH WITHIN WITHOUT
 
@@ -694,8 +712,7 @@ func (u *sqlSymUnion) interleave() *InterleaveDef {
 %left      '~'
 %left      '[' ']'
 %left      '(' ')'
-// TODO(nvanbenschoten) introduce a shorthand type annotation notation.
-// %left      '!' TYPECAST
+%left      TYPEANNOTATE
 %left      TYPECAST
 %left      '.'
 // These might seem to be low-precedence, but actually they are not part
@@ -731,10 +748,12 @@ stmt_list:
 
 stmt:
   alter_table_stmt
+| copy_from_stmt
 | create_stmt
 | delete_stmt
 | drop_stmt
 | explain_stmt
+| help_stmt
 | prepare_stmt
 | execute_stmt
 | deallocate_stmt
@@ -749,6 +768,7 @@ stmt:
   }
 | set_stmt
 | show_stmt
+| split_stmt
 | transaction_stmt
 | release_stmt
 | truncate_stmt
@@ -828,16 +848,24 @@ alter_table_cmd:
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> [SET DATA] TYPE <typename>
   //     [ USING <expression> ]
-| ALTER opt_column name opt_set_data TYPE typename opt_collate_clause alter_using {}
+| ALTER opt_column name opt_set_data TYPE typename opt_collate_clause alter_using { unimplemented() }
   // ALTER TABLE <name> ADD CONSTRAINT ...
-| ADD table_constraint
+| ADD table_constraint opt_validate_behavior
   {
-    $$.val = &AlterTableAddConstraint{ConstraintDef: $2.constraintDef()}
+    $$.val = &AlterTableAddConstraint{
+      ConstraintDef: $2.constraintDef(),
+      ValidationBehavior: $3.validationBehavior(),
+    }
   }
   // ALTER TABLE <name> ALTER CONSTRAINT ...
 | ALTER CONSTRAINT name { unimplemented() }
   // ALTER TABLE <name> VALIDATE CONSTRAINT ...
-| VALIDATE CONSTRAINT name { unimplemented() }
+| VALIDATE CONSTRAINT name
+  {
+    $$.val = &AlterTableValidateConstraint{
+      Constraint: Name($3),
+    }
+  }
   // ALTER TABLE <name> DROP CONSTRAINT IF EXISTS <name> [RESTRICT|CASCADE]
 | DROP CONSTRAINT IF EXISTS name opt_drop_behavior
   {
@@ -881,6 +909,16 @@ opt_drop_behavior:
     $$.val = DropDefault
   }
 
+opt_validate_behavior:
+  NOT VALID
+  {
+    $$.val = ValidationSkip
+  }
+| /* EMPTY */
+  {
+    $$.val = ValidationDefault
+  }
+
 opt_collate_clause:
   COLLATE any_name { unimplementedWithIssue(2473) }
 | /* EMPTY */ {}
@@ -889,11 +927,27 @@ alter_using:
   USING a_expr { unimplemented() }
 | /* EMPTY */ {}
 
-// CREATE [DATABASE|INDEX|TABLE|TABLE AS]
+copy_from_stmt:
+  COPY qualified_name FROM STDIN
+  {
+    $$.val = &CopyFrom{Table: $2.normalizableTableName(), Stdin: true}
+  }
+| COPY qualified_name '(' ')' FROM STDIN
+  {
+    $$.val = &CopyFrom{Table: $2.normalizableTableName(), Stdin: true}
+  }
+| COPY qualified_name '(' qualified_name_list ')' FROM STDIN
+  {
+    $$.val = &CopyFrom{Table: $2.normalizableTableName(), Columns: $4.unresolvedNames(), Stdin: true}
+  }
+
+// CREATE [DATABASE|INDEX|TABLE|TABLE AS|VIEW]
 create_stmt:
   create_database_stmt
 | create_index_stmt
 | create_table_stmt
+| create_table_as_stmt
+| create_view_stmt
 
 // DELETE FROM query
 delete_stmt:
@@ -936,6 +990,14 @@ drop_stmt:
   {
     $$.val = &DropTable{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
+| DROP VIEW table_name_list opt_drop_behavior
+  {
+    $$.val = &DropView{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
+  }
+| DROP VIEW IF EXISTS table_name_list opt_drop_behavior
+  {
+    $$.val = &DropView{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
+  }
 
 table_name_list:
   any_name
@@ -958,11 +1020,11 @@ any_name:
   }
 
 attrs:
-  '.' col_label
+  '.' unrestricted_name
   {
     $$.val = UnresolvedName{Name($2)}
   }
-| attrs '.' col_label
+| attrs '.' unrestricted_name
   {
     $$.val = append($1.unresolvedName(), Name($3))
   }
@@ -1452,6 +1514,12 @@ show_stmt:
     $$.val = &ShowCreateTable{Table: $4.normalizableTableName()}
   }
 
+help_stmt:
+  HELP unrestricted_name
+  {
+    $$.val = &Help{Name: Name($2)}
+  }
+
 on_privilege_target_clause:
   ON privilege_target
   {
@@ -1473,15 +1541,35 @@ for_grantee_clause:
     $$.val = NameList(nil)
   }
 
+split_stmt:
+  ALTER TABLE qualified_name SPLIT AT '(' expr_list ')'
+  {
+    $$.val = &Split{Table: $3.normalizableTableName(), Exprs: $7.exprs()}
+  }
+| ALTER INDEX table_name_with_index SPLIT AT '(' expr_list ')'
+  {
+    $$.val = &Split{Index: $3.tableWithIdx(), Exprs: $7.exprs()}
+  }
+
 // CREATE TABLE relname
 create_table_stmt:
   CREATE TABLE any_name '(' opt_table_elem_list ')' opt_interleave
   {
-    $$.val = &CreateTable{Table: $3.normalizableTableName(), IfNotExists: false, Interleave: $7.interleave(), Defs: $5.tblDefs()}
+    $$.val = &CreateTable{Table: $3.normalizableTableName(), IfNotExists: false, Interleave: $7.interleave(), Defs: $5.tblDefs(), AsSource: nil, AsColumnNames: nil}
   }
 | CREATE TABLE IF NOT EXISTS any_name '(' opt_table_elem_list ')' opt_interleave
   {
-    $$.val = &CreateTable{Table: $6.normalizableTableName(), IfNotExists: true, Interleave: $10.interleave(), Defs: $8.tblDefs()}
+    $$.val = &CreateTable{Table: $6.normalizableTableName(), IfNotExists: true, Interleave: $10.interleave(), Defs: $8.tblDefs(), AsSource: nil, AsColumnNames: nil}
+  }
+
+create_table_as_stmt:
+  CREATE TABLE any_name opt_column_list AS select_stmt
+  {
+    $$.val = &CreateTable{Table: $3.normalizableTableName(), IfNotExists: false, Interleave: nil, Defs: nil, AsSource: $6.slct(), AsColumnNames: $4.nameList()}
+  }
+| CREATE TABLE IF NOT EXISTS any_name opt_column_list AS select_stmt
+  {
+    $$.val = &CreateTable{Table: $6.normalizableTableName(), IfNotExists: true, Interleave: nil, Defs: nil, AsSource: $9.slct(), AsColumnNames: $7.nameList()}
   }
 
 opt_table_elem_list:
@@ -1514,9 +1602,8 @@ table_elem:
   }
 
 opt_interleave:
-  INTERLEAVE IN PARENT name '(' name_list ')' opt_drop_behavior
+  INTERLEAVE IN PARENT name '(' name_list ')' opt_interleave_drop_behavior
   {
-    /* SKIP DOC */
     $$.val = &InterleaveDef{
                Parent: NormalizableTableName{UnresolvedName{Name($4)}},
                Fields: $6.nameList(),
@@ -1526,6 +1613,23 @@ opt_interleave:
 | /* EMPTY */
   {
     $$.val = (*InterleaveDef)(nil)
+  }
+
+// TODO(dan): This can be removed in favor of opt_drop_behavior when #7854 is fixed.
+opt_interleave_drop_behavior:
+  CASCADE
+  {
+    /* SKIP DOC */
+    $$.val = DropCascade
+  }
+| RESTRICT
+  {
+    /* SKIP DOC */
+    $$.val = DropRestrict
+  }
+| /* EMPTY */
+  {
+    $$.val = DropDefault
   }
 
 column_def:
@@ -1776,6 +1880,19 @@ truncate_stmt:
   {
     $$.val = &Truncate{Tables: $3.tableNameReferences(), DropBehavior: $4.dropBehavior()}
   }
+
+// CREATE VIEW relname
+create_view_stmt:
+  CREATE VIEW any_name opt_column_list AS select_stmt
+  {
+    $$.val = &CreateView{
+      Name: $3.normalizableTableName(),
+      ColumnNames: $4.nameList(),
+      AsSource: $6.slct(),
+    }
+  }
+
+// TODO(a-robinson): CREATE OR REPLACE and ALTER VIEW support (#2971).
 
 // CREATE INDEX
 create_index_stmt:
@@ -2283,6 +2400,7 @@ simple_select:
       Where:   newWhere(astWhere, $5.expr()),
       GroupBy: $6.groupBy(),
       Having:  newWhere(astHaving, $7.expr()),
+      Window:  $8.window(),
     }
   }
 | SELECT distinct_clause target_list
@@ -2296,6 +2414,7 @@ simple_select:
       Where:    newWhere(astWhere, $5.expr()),
       GroupBy:  $6.groupBy(),
       Having:   newWhere(astHaving, $7.expr()),
+      Window:   $8.window(),
     }
   }
 | values_clause
@@ -2566,7 +2685,7 @@ from_list:
   }
 
 index_hints_param:
-  FORCE_INDEX '=' col_label
+  FORCE_INDEX '=' unrestricted_name
   {
      $$.val = &IndexHints{Index: Name($3)}
   }
@@ -2602,7 +2721,7 @@ index_hints_param_list:
   }
 
 opt_index_hints:
-  '@' col_label
+  '@' unrestricted_name
   {
     $$.val = &IndexHints{Index: Name($2)}
   }
@@ -2914,6 +3033,10 @@ numeric:
   {
     $$.val = intColTypeInt
   }
+| INT8
+  {
+    $$.val = intColTypeInt8
+  }
 | INT64
   {
     $$.val = intColTypeInt64
@@ -3154,11 +3277,10 @@ a_expr:
   {
     $$.val = &CastExpr{Expr: $1.expr(), Type: $3.colType()}
   }
-// TODO(nvanbenschoten) introduce a shorthand type annotation notation.
-//| a_expr '!' typename
-//  {
-//    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType()}
-//  }
+| a_expr TYPEANNOTATE typename
+  {
+    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType()}
+  }
 | a_expr COLLATE any_name { unimplemented() }
 | a_expr AT TIME ZONE a_expr %prec AT { unimplemented() }
   // These operators must be called out explicitly in order to make use of
@@ -3402,11 +3524,10 @@ b_expr:
   {
     $$.val = &CastExpr{Expr: $1.expr(), Type: $3.colType()}
   }
-// TODO(nvanbenschoten) introduce a shorthand type annotation notation.
-//| b_expr '!' typename
-//  {
-//    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType()}
-//  }
+| b_expr TYPEANNOTATE typename
+  {
+    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType()}
+  }
 | '+' b_expr %prec UMINUS
   {
     $$.val = &UnaryExpr{Operator: UnaryPlus, Expr: $2.expr()}
@@ -3597,7 +3718,9 @@ func_application:
 func_expr:
   func_application within_group_clause filter_clause over_clause
   {
-    $$.val = $1.expr()
+    f := $1.expr().(*FuncExpr)
+    f.WindowDef = $4.windowDef()
+    $$.val = f
   }
 | func_expr_common_subexpr
   {
@@ -3712,24 +3835,57 @@ filter_clause:
 
 // Window Definitions
 window_clause:
-  WINDOW window_definition_list { unimplemented() }
-| /* EMPTY */ {}
+  WINDOW window_definition_list
+  {
+    $$.val = $2.window()
+  }
+| /* EMPTY */
+  {
+    $$.val = Window(nil)
+  }
 
 window_definition_list:
-  window_definition { unimplemented() }
-| window_definition_list ',' window_definition { unimplemented() }
+  window_definition
+  {
+    $$.val = Window{$1.windowDef()}
+  }
+| window_definition_list ',' window_definition
+  {
+    $$.val = append($1.window(), $3.windowDef())
+  }
 
 window_definition:
-  name AS window_specification { unimplemented() }
+  name AS window_specification
+  {
+    n := $3.windowDef()
+    n.Name = Name($1)
+    $$.val = n
+  }
 
 over_clause:
-  OVER window_specification { unimplemented() }
-| OVER name { unimplemented() }
-| /* EMPTY */ {}
+  OVER window_specification
+  {
+    $$.val = $2.windowDef()
+  }
+| OVER name
+  {
+    $$.val = &WindowDef{Name: Name($2)}
+  }
+| /* EMPTY */
+  {
+    $$.val = (*WindowDef)(nil)
+  }
 
 window_specification:
   '(' opt_existing_window_name opt_partition_clause
-    opt_sort_clause opt_frame_clause ')' { unimplemented() }
+    opt_sort_clause opt_frame_clause ')'
+  {
+    $$.val = &WindowDef{
+      RefName: Name($2),
+      Partitions: $3.exprs(),
+      OrderBy: $4.orderBy(),
+    }
+  }
 
 // If we see PARTITION, RANGE, or ROWS as the first token after the '(' of a
 // window_specification, we want the assumption to be that there is no
@@ -3740,12 +3896,21 @@ window_specification:
 // keywords are thus precluded from being an existing_window_name but are not
 // reserved for any other purpose.
 opt_existing_window_name:
-  name { unimplemented() }
-| /* EMPTY */ %prec CONCAT {}
+  name
+| /* EMPTY */ %prec CONCAT
+  {
+    $$ = ""
+  }
 
 opt_partition_clause:
-  PARTITION BY expr_list { unimplemented() }
-| /* EMPTY */ {}
+  PARTITION BY expr_list
+  {
+    $$.val = $3.exprs()
+  }
+| /* EMPTY */
+  {
+    $$.val = Exprs(nil)
+  }
 
 // For frame clauses, we return a WindowDef, but only some fields are used:
 // frameOptions, startOffset, and endOffset.
@@ -4075,7 +4240,7 @@ indirection_elem:
   }
 
 name_indirection:
-  '.' col_label
+  '.' unrestricted_name
   {
     $$.val = Name($2)
   }
@@ -4141,7 +4306,7 @@ target_list:
   }
 
 target_elem:
-  a_expr AS col_label
+  a_expr AS unrestricted_name
   {
     $$.val = SelectExpr{Expr: $1.expr(), As: Name($3)}
   }
@@ -4372,9 +4537,9 @@ non_reserved_word:
 | col_name_keyword
 | type_func_name_keyword
 
-// Column label --- allowed labels in "AS" clauses. This presently includes
-// *all* Postgres keywords.
-col_label:
+// Unrestricted name --- allowed labels in "AS" clauses. This presently
+// includes *all* Postgres keywords.
+unrestricted_name:
   IDENT
 | unreserved_keyword
 | col_name_keyword
@@ -4407,6 +4572,7 @@ unreserved_keyword:
 | COMMITTED
 | CONFLICT
 | CONSTRAINTS
+| COPY
 | COVERING
 | CUBE
 | CURRENT
@@ -4427,6 +4593,7 @@ unreserved_keyword:
 | FOLLOWING
 | FORCE_INDEX
 | GRANTS
+| HELP
 | HIGH
 | HOUR
 | INDEXES
@@ -4482,8 +4649,10 @@ unreserved_keyword:
 | SNAPSHOT
 | SQL
 | START
+| STDIN
 | STORING
 | STRICT
+| SPLIT
 | SYSTEM
 | TABLES
 | TEXT
@@ -4538,6 +4707,7 @@ col_name_keyword:
 | IF
 | IFNULL
 | INT
+| INT8
 | INT64
 | INTEGER
 | INTERVAL
@@ -4588,7 +4758,7 @@ type_func_name_keyword:
 | RIGHT
 | SIMILAR
 
-// Reserved keyword --- these keywords are usable only as a col_label.
+// Reserved keyword --- these keywords are usable only as a unrestricted_name.
 //
 // Keywords appear here if they could not be distinguished from variable, type,
 // or function names in some contexts. Don't put things here unless forced to.
@@ -4668,6 +4838,7 @@ reserved_keyword:
 | USER
 | USING
 | VARIADIC
+| VIEW
 | WHEN
 | WHERE
 | WINDOW

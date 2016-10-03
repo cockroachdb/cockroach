@@ -2,9 +2,9 @@
 - Status: draft
 - Start Date: 2016-02-10
 - Authors: Ben Darnell, Spencer Kimball
-- RFC PR: (PR # after acceptance of initial draft)
-- Cockroach Issue:
-
+- RFC PR: [#4288](https://github.com/cockroachdb/cockroach/pull/4288)
+- Cockroach Issue: [#315](https://github.com/cockroachdb/cockroach/issues/315),
+                   [#6107](https://github.com/cockroachdb/cockroach/issues/6107)
 
 # Summary
 

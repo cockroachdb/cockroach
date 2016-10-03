@@ -106,10 +106,13 @@ message TimeSeriesQueryRequest {
   // A timestamp in nanoseconds which defines the late bound of the time span
   // for this query. Must be greater than start_nanos.
   optional int64 end_nanos = 2 [(gogoproto.nullable) = false];
-
   // A set of Queries for this request. A request must have at least one
   // Query.
   repeated Query queries = 3 [(gogoproto.nullable) = false];
+  // Duration of requested sample period in nanoseconds. Returned data for each
+  // query will be downsampled into periods of the supplied length. The
+  // supplied duration must be a multiple of ten seconds.
+  optional int64 sample_nanos = 4 [(gogoproto.nullable) = false];
 }
 
 // TimeSeriesQueryResponse is the standard response for time series queries

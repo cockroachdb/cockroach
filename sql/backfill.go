@@ -172,19 +172,19 @@ func (sc *SchemaChanger) runBackfill(lease *sqlbase.TableDescriptor_SchemaChange
 }
 
 // getTableSpan returns a span containing the start and end key for a table.
-func (sc *SchemaChanger) getTableSpan() (sqlbase.Span, error) {
+func (sc *SchemaChanger) getTableSpan() (roachpb.Span, error) {
 	var tableDesc *sqlbase.TableDescriptor
 	if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
 		var err error
 		tableDesc, err = sqlbase.GetTableDescFromID(txn, sc.tableID)
 		return err
 	}); err != nil {
-		return sqlbase.Span{}, err
+		return roachpb.Span{}, err
 	}
 	prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID))
-	return sqlbase.Span{
-		Start: prefix,
-		End:   prefix.PrefixEnd(),
+	return roachpb.Span{
+		Key:    prefix,
+		EndKey: prefix.PrefixEnd(),
 	}, nil
 }
 
@@ -238,7 +238,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 			*lease = l
 
 			// Add and delete columns for a chunk of the key space.
-			sp.Start, done, err = sc.truncateAndBackfillColumnsChunk(
+			sp.Key, done, err = sc.truncateAndBackfillColumnsChunk(
 				added, dropped, defaultExprs, &sc.evalCtx, sp,
 			)
 			if err != nil {
@@ -254,7 +254,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 	dropped []sqlbase.ColumnDescriptor,
 	defaultExprs []parser.TypedExpr,
 	evalCtx *parser.EvalContext,
-	sp sqlbase.Span,
+	sp roachpb.Span,
 ) (roachpb.Key, bool, error) {
 	var curIndexKey roachpb.Key
 	done := false
@@ -313,8 +313,8 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		if err != nil {
 			return err
 		}
-		// StartScan uses 0 as a sentinal for the default limit of entries scanned.
-		if err := rf.StartScan(txn, sqlbase.Spans{sp}, 0); err != nil {
+		err = rf.StartScan(txn, roachpb.Spans{sp}, true /* limit batches */, 0 /* no limit hint */)
+		if err != nil {
 			return err
 		}
 
@@ -378,33 +378,43 @@ func (sc *SchemaChanger) truncateIndexes(
 	dropped []sqlbase.IndexDescriptor,
 ) error {
 	for _, desc := range dropped {
-		// First extend the schema change lease.
-		l, err := sc.ExtendLease(*lease)
-		if err != nil {
-			return err
-		}
-		*lease = l
-		if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
-			tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
+		var resume roachpb.Span
+		for done := false; !done; {
+			// First extend the schema change lease.
+			l, err := sc.ExtendLease(*lease)
 			if err != nil {
 				return err
 			}
-			// Short circuit the truncation if the table has been deleted.
-			if tableDesc.Deleted() {
-				return nil
-			}
+			*lease = l
 
-			rd, err := makeRowDeleter(txn, tableDesc, nil, nil, false)
-			if err != nil {
+			resumeAt := resume
+			if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
+				tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
+				if err != nil {
+					return err
+				}
+				// Short circuit the truncation if the table has been deleted.
+				if tableDesc.Deleted() {
+					done = true
+					return nil
+				}
+
+				rd, err := makeRowDeleter(txn, tableDesc, nil, nil, false)
+				if err != nil {
+					return err
+				}
+				td := tableDeleter{rd: rd}
+				if err := td.init(txn); err != nil {
+					return err
+				}
+				resume, err = td.deleteIndex(
+					txn.Context, &desc, resumeAt, IndexBackfillChunkSize,
+				)
+				done = resume.Key == nil
+				return err
+			}); err != nil {
 				return err
 			}
-			td := tableDeleter{rd: rd}
-			if err := td.init(txn); err != nil {
-				return err
-			}
-			return td.deleteIndex(txn.Context, &desc)
-		}); err != nil {
-			return err
 		}
 	}
 	return nil
@@ -441,7 +451,7 @@ func (sc *SchemaChanger) backfillIndexes(
 		}
 		*lease = l
 
-		sp.Start, done, err = sc.backfillIndexesChunk(added, sp)
+		sp.Key, done, err = sc.backfillIndexesChunk(added, sp)
 		if err != nil {
 			return err
 		}
@@ -451,7 +461,7 @@ func (sc *SchemaChanger) backfillIndexes(
 
 func (sc *SchemaChanger) backfillIndexesChunk(
 	added []sqlbase.IndexDescriptor,
-	sp sqlbase.Span,
+	sp roachpb.Span,
 ) (roachpb.Key, bool, error) {
 	var nextKey roachpb.Key
 	done := false
@@ -480,7 +490,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		planner.setTxn(txn)
 		scan := planner.Scan()
 		scan.desc = *tableDesc
-		scan.spans = []sqlbase.Span{sp}
+		scan.spans = []roachpb.Span{sp}
 		scan.initDescDefaults(publicAndNonPublicColumns)
 		rows, err := selectIndex(scan, nil, false)
 		if err != nil {

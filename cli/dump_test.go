@@ -19,13 +19,14 @@ package cli
 import (
 	"bytes"
 	"database/sql/driver"
-	"flag"
 	"fmt"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
+	"github.com/spf13/pflag"
 	"gopkg.in/inf.v0"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -175,7 +176,13 @@ func TestDumpBytes(t *testing.T) {
 	}
 }
 
-var randomTestTime = flag.Duration("duration-random", time.Second, "duration for randomized dump test to run")
+const durationRandom = "duration-random"
+
+var randomTestTime = pflag.Duration(durationRandom, time.Second, "duration for randomized dump test to run")
+
+func init() {
+	pflag.Lookup(durationRandom).Hidden = true
+}
 
 // TestDumpRandom generates a random number of random rows with all data
 // types. This data is dumped, inserted, and dumped again. The two dumps
@@ -235,9 +242,17 @@ func TestDumpRandom(t *testing.T) {
 			n := time.Duration(rnd.Int63()).String()
 			o := rnd.Intn(2) == 1
 			e := strings.TrimRight(inf.NewDec(rnd.Int63(), inf.Scale(rnd.Int31n(20)-10)).String(), ".0")
-			s := make([]byte, rnd.Intn(500))
-			if _, err := rnd.Read(s); err != nil {
+			sr := make([]byte, rnd.Intn(500))
+			if _, err := rnd.Read(sr); err != nil {
 				t.Fatal(err)
+			}
+			s := make([]byte, 0, len(sr))
+			for _, b := range sr {
+				r := rune(b)
+				if !utf8.ValidRune(r) {
+					continue
+				}
+				s = append(s, []byte(string(r))...)
 			}
 			b := make([]byte, rnd.Intn(500))
 			if _, err := rnd.Read(b); err != nil {

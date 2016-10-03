@@ -29,6 +29,7 @@ import (
 
 const eof = -1
 const errUnterminated = "unterminated string"
+const errInvalidUTF8 = "invalid UTF-8 byte sequence"
 const errInvalidHexNumeric = "invalid hexadecimal numeric literal"
 const singleQuote = '\''
 
@@ -197,21 +198,21 @@ func (s *Scanner) scan(lval *sqlSymType) {
 
 	case s.identQuote:
 		// "[^"]"
-		if s.scanString(lval, s.identQuote, false) {
+		if s.scanString(lval, s.identQuote, false, true) {
 			lval.id = IDENT
 		}
 		return
 
 	case singleQuote:
 		// '[^']'
-		if s.scanString(lval, ch, s.syntax == Modern) {
+		if s.scanString(lval, ch, s.syntax == Modern, true) {
 			lval.id = SCONST
 		}
 		return
 
 	case s.stringQuote:
 		// '[^']'
-		if s.scanString(lval, s.stringQuote, s.syntax == Modern) {
+		if s.scanString(lval, s.stringQuote, s.syntax == Modern, true) {
 			lval.id = SCONST
 		}
 		return
@@ -221,7 +222,7 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		if t := s.peek(); t == singleQuote || t == s.stringQuote {
 			// [bB]'[^']'
 			s.pos++
-			if s.scanString(lval, t, true) {
+			if s.scanString(lval, t, true, false) {
 				lval.id = BCONST
 			}
 			return
@@ -230,7 +231,7 @@ func (s *Scanner) scan(lval *sqlSymType) {
 			if t := s.peekN(1); t == singleQuote || t == s.stringQuote {
 				// [rRbB]'[^']'
 				s.pos += 2
-				if s.scanString(lval, t, false) {
+				if s.scanString(lval, t, false, false) {
 					lval.id = BCONST
 				}
 				return
@@ -245,7 +246,7 @@ func (s *Scanner) scan(lval *sqlSymType) {
 			if t := s.peek(); t == singleQuote || t == s.stringQuote {
 				// [rR]'[^']'
 				s.pos++
-				if s.scanString(lval, t, false) {
+				if s.scanString(lval, t, false, true) {
 					lval.id = SCONST
 				}
 				return
@@ -254,7 +255,7 @@ func (s *Scanner) scan(lval *sqlSymType) {
 				if t := s.peekN(1); t == singleQuote || t == s.stringQuote {
 					// [bBrR]'[^']'
 					s.pos += 2
-					if s.scanString(lval, t, false) {
+					if s.scanString(lval, t, false, false) {
 						lval.id = BCONST
 					}
 					return
@@ -269,7 +270,7 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		if t := s.peek(); t == singleQuote || t == s.stringQuote {
 			// [eE]'[^']'
 			s.pos++
-			if s.scanString(lval, t, true) {
+			if s.scanString(lval, t, true, true) {
 				lval.id = SCONST
 			}
 			return
@@ -282,13 +283,18 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		if t := s.peek(); t == singleQuote || t == s.stringQuote {
 			// [xX]'[a-f0-9]'
 			s.pos++
-			if s.scanString(lval, t, false) {
+			if s.scanString(lval, t, false, false) {
 				stringBytes, err := hex.DecodeString(lval.str)
 				if err != nil {
 					// Either the string has an odd number of characters or contains one or
 					// more invalid bytes.
 					lval.id = ERROR
 					lval.str = "invalid hexadecimal string literal"
+					return
+				}
+				if !utf8.Valid(stringBytes) {
+					lval.id = ERROR
+					lval.str = errInvalidUTF8
 					return
 				}
 				lval.id = SCONST
@@ -363,6 +369,12 @@ func (s *Scanner) scan(lval *sqlSymType) {
 	case ':':
 		switch s.peek() {
 		case ':': // ::
+			if s.peekN(1) == ':' {
+				// :::
+				s.pos += 2
+				lval.id = TYPEANNOTATE
+				return
+			}
 			s.pos++
 			lval.id = TYPECAST
 			return
@@ -656,7 +668,7 @@ func (s *Scanner) scanPlaceholder(lval *sqlSymType) {
 	lval.id = PLACEHOLDER
 }
 
-func (s *Scanner) scanString(lval *sqlSymType, ch int, allowEscapes bool) bool {
+func (s *Scanner) scanString(lval *sqlSymType, ch int, allowEscapes, requireUTF8 bool) bool {
 	var buf []byte
 	var runeTmp [utf8.UTFMax]byte
 	start := s.pos
@@ -770,6 +782,12 @@ outer:
 			lval.str = errUnterminated
 			return false
 		}
+	}
+
+	if requireUTF8 && !utf8.Valid(buf) {
+		lval.id = ERROR
+		lval.str = errInvalidUTF8
+		return false
 	}
 
 	lval.str = string(buf)

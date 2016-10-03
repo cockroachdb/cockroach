@@ -62,6 +62,9 @@ const (
 	// publishStatusInterval is the interval for publishing periodic statistics
 	// from stores to the internal event feed.
 	publishStatusInterval = 10 * time.Second
+
+	// FirstNodeID is the node ID of the first node in a new cluster.
+	FirstNodeID = 1
 )
 
 // Metric names.
@@ -159,22 +162,7 @@ func allocateStoreIDs(
 // GetBootstrapSchema returns the schema which will be used to bootstrap a new
 // server.
 func GetBootstrapSchema() sqlbase.MetadataSchema {
-	schema := sqlbase.MakeMetadataSchema()
-	AddEventLogToMetadataSchema(&schema)
-	sql.AddEventLogToMetadataSchema(&schema)
-	return schema
-}
-
-// AddEventLogToMetadataSchema adds the range event log table to the supplied
-// MetadataSchema.
-func AddEventLogToMetadataSchema(schema *sqlbase.MetadataSchema) {
-	desc := sql.CreateTableDescriptor(
-		keys.RangeEventTableID,
-		keys.SystemDatabaseID,
-		storage.RangeEventTableSchema,
-		sqlbase.NewDefaultPrivilegeDescriptor(),
-	)
-	schema.AddDescriptor(keys.SystemDatabaseID, &desc)
+	return sqlbase.MakeMetadataSchema()
 }
 
 // bootstrapCluster bootstraps a multiple stores using the provided
@@ -200,13 +188,13 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics kv.TxnMetrics) (uuid.U
 	for i, eng := range engines {
 		sIdent := roachpb.StoreIdent{
 			ClusterID: clusterID,
-			NodeID:    1,
+			NodeID:    FirstNodeID,
 			StoreID:   roachpb.StoreID(i + 1),
 		}
 
 		// The bootstrapping store will not connect to other nodes so its
 		// StoreConfig doesn't really matter.
-		s := storage.NewStore(ctx, eng, &roachpb.NodeDescriptor{NodeID: 1})
+		s := storage.NewStore(ctx, eng, &roachpb.NodeDescriptor{NodeID: FirstNodeID})
 
 		// Verify the store isn't already part of a cluster.
 		if s.Ident.ClusterID != *uuid.EmptyUUID {
@@ -641,7 +629,7 @@ func (n *Node) gossipStores(ctx context.Context) {
 	}
 }
 
-// startComputePeriodidMetrics starts a loop which periodically instructs each
+// startComputePeriodicMetrics starts a loop which periodically instructs each
 // store to compute the value of metrics which cannot be incrementally
 // maintained.
 func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper) {

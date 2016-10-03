@@ -1,8 +1,8 @@
 import * as React from "react";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
-import moment = require("moment");
-import _ = require("lodash");
+import moment from "moment";
+import _ from "lodash";
 
 import Banner from "./banner";
 import { AdminUIState } from "../../redux/state";

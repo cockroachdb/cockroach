@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/randutil"
 )
 
@@ -82,6 +83,7 @@ func testRowStream(t *testing.T, rng *rand.Rand, rows sqlbase.EncDatumRows, trai
 // TestStreamEncodeDecode generates random streams of EncDatums and passes them
 // through a StreamEncoder and a StreamDecoder
 func TestStreamEncodeDecode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	rng, _ := randutil.NewPseudoRand()
 	for test := 0; test < 100; test++ {
 		rowLen := 1 + rng.Intn(20)
@@ -103,5 +105,23 @@ func TestStreamEncodeDecode(t *testing.T) {
 			trailerErr = fmt.Errorf("test error %d", rng.Intn(100))
 		}
 		testRowStream(t, rng, rows, trailerErr)
+	}
+}
+
+func TestEmptyStreamEncodeDecode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var se StreamEncoder
+	var sd StreamDecoder
+	msg := se.FormMessage(true /*final*/, nil /*error*/)
+	if err := sd.AddMessage(msg); err != nil {
+		t.Fatal(err)
+	}
+	if msg.Header == nil {
+		t.Errorf("no header in first message")
+	}
+	if row, err := sd.GetRow(nil); err != nil {
+		t.Fatal(err)
+	} else if row != nil {
+		t.Errorf("received bogus row %s", row)
 	}
 }

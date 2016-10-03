@@ -54,13 +54,9 @@ import (
 )
 
 const (
-	// adminEndpoint is the prefix for RESTful endpoints used to
-	// provide an administrative interface to the cockroach cluster.
-	adminEndpoint = "/_admin/"
-	// apiEndpoint is the prefix for the RESTful API used by the admin UI.
-	apiEndpoint = adminEndpoint + "v1/"
-	// healthPath is the health endpoint.
-	healthPath = apiEndpoint + "health"
+	// adminPrefix is the prefix for RESTful endpoints used to provide an
+	// administrative interface to the cockroach cluster.
+	adminPrefix = "/_admin/v1/"
 
 	// eventLimit is the maximum number of events returned by any endpoints
 	// returning events.
@@ -181,16 +177,19 @@ func (s *adminServer) Databases(
 ) (*serverpb.DatabasesResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
 	session := s.NewSessionForRPC(ctx, args)
+	defer session.Finish()
 	r := s.server.sqlExecutor.ExecuteStatements(session, "SHOW DATABASES;", nil)
+	defer r.Close()
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return nil, s.serverError(err)
 	}
 
 	var resp serverpb.DatabasesResponse
-	for _, row := range r.ResultList[0].Rows {
-		dbname, ok := row.Values[0].(*parser.DString)
+	for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
+		row := r.ResultList[0].Rows.At(i)
+		dbname, ok := row[0].(*parser.DString)
 		if !ok {
-			return nil, s.serverErrorf("type assertion failed on db name: %T", row.Values[0])
+			return nil, s.serverErrorf("type assertion failed on db name: %T", row[0])
 		}
 		resp.Databases = append(resp.Databases, string(*dbname))
 	}
@@ -205,6 +204,7 @@ func (s *adminServer) DatabaseDetails(
 ) (*serverpb.DatabaseDetailsResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
 	session := s.NewSessionForRPC(ctx, args)
+	defer session.Finish()
 
 	// Placeholders don't work with SHOW statements, so we need to manually
 	// escape the database name.
@@ -213,6 +213,7 @@ func (s *adminServer) DatabaseDetails(
 	escDBName := parser.Name(req.Database).String()
 	query := fmt.Sprintf("SHOW GRANTS ON DATABASE %s; SHOW TABLES FROM %s;", escDBName, escDBName)
 	r := s.server.sqlExecutor.ExecuteStatements(session, query, nil)
+	defer r.Close()
 	if err := s.firstNotFoundError(r.ResultList); err != nil {
 		return nil, grpc.Errorf(codes.NotFound, "%s", err)
 	}
@@ -229,7 +230,8 @@ func (s *adminServer) DatabaseDetails(
 		)
 
 		scanner := makeResultScanner(r.ResultList[0].Columns)
-		for _, row := range r.ResultList[0].Rows {
+		for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
+			row := r.ResultList[0].Rows.At(i)
 			// Marshal grant, splitting comma-separated privileges into a proper slice.
 			var grant serverpb.DatabaseDetailsResponse_Grant
 			var privileges string
@@ -251,12 +253,39 @@ func (s *adminServer) DatabaseDetails(
 		if a, e := len(r.ResultList[1].Columns), 1; a != e {
 			return nil, s.serverErrorf("show tables columns mismatch: %d != expected %d", a, e)
 		}
-		for _, row := range r.ResultList[1].Rows {
+		for i, nRows := 0, r.ResultList[1].Rows.Len(); i < nRows; i++ {
+			row := r.ResultList[1].Rows.At(i)
 			var tableName string
 			if err := scanner.Scan(row, tableCol, &tableName); err != nil {
 				return nil, err
 			}
 			resp.TableNames = append(resp.TableNames, tableName)
+		}
+	}
+
+	// Query the descriptor ID and zone configuration for this database.
+	{
+		path, err := s.queryDescriptorIDPath(session, []string{req.Database})
+		if err != nil {
+			return nil, s.serverError(err)
+		}
+		resp.DescriptorID = int64(path[1])
+
+		id, zone, zoneExists, err := s.queryZonePath(session, path)
+		if err != nil {
+			return nil, s.serverError(err)
+		}
+
+		if !zoneExists {
+			zone = config.DefaultZoneConfig()
+		}
+		resp.ZoneConfig = zone
+
+		switch id {
+		case path[1]:
+			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_DATABASE
+		default:
+			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_CLUSTER
 		}
 	}
 
@@ -270,6 +299,7 @@ func (s *adminServer) TableDetails(
 ) (*serverpb.TableDetailsResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
 	session := s.NewSessionForRPC(ctx, args)
+	defer session.Finish()
 
 	// TODO(cdo): Use real placeholders for the table and database names when we've extended our SQL
 	// grammar to allow that.
@@ -279,6 +309,7 @@ func (s *adminServer) TableDetails(
 	query := fmt.Sprintf("SHOW COLUMNS FROM %s; SHOW INDEX FROM %s; SHOW GRANTS ON TABLE %s; SHOW CREATE TABLE %s;",
 		escQualTable, escQualTable, escQualTable, escQualTable)
 	r := s.server.sqlExecutor.ExecuteStatements(session, query, nil)
+	defer r.Close()
 	if err := s.firstNotFoundError(r.ResultList); err != nil {
 		return nil, grpc.Errorf(codes.NotFound, "%s", err)
 	}
@@ -302,7 +333,8 @@ func (s *adminServer) TableDetails(
 			defaultCol = "Default"
 		)
 		scanner := makeResultScanner(r.ResultList[0].Columns)
-		for _, row := range r.ResultList[0].Rows {
+		for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
+			row := r.ResultList[0].Rows.At(i)
 			var col serverpb.TableDetailsResponse_Column
 			if err := scanner.Scan(row, fieldCol, &col.Name); err != nil {
 				return nil, err
@@ -337,7 +369,8 @@ func (s *adminServer) TableDetails(
 			storingCol   = "Storing"
 		)
 		scanner := makeResultScanner(r.ResultList[1].Columns)
-		for _, row := range r.ResultList[1].Rows {
+		for i, nRows := 0, r.ResultList[1].Rows.Len(); i < nRows; i++ {
+			row := r.ResultList[1].Rows.At(i)
 			// Marshal grant, splitting comma-separated privileges into a proper slice.
 			var index serverpb.TableDetailsResponse_Index
 			if err := scanner.Scan(row, nameCol, &index.Name); err != nil {
@@ -369,7 +402,8 @@ func (s *adminServer) TableDetails(
 			privilegesCol = "Privileges"
 		)
 		scanner := makeResultScanner(r.ResultList[2].Columns)
-		for _, row := range r.ResultList[2].Rows {
+		for i, nRows := 0, r.ResultList[2].Rows.Len(); i < nRows; i++ {
+			row := r.ResultList[2].Rows.At(i)
 			// Marshal grant, splitting comma-separated privileges into a proper slice.
 			var grant serverpb.TableDetailsResponse_Grant
 			var privileges string
@@ -388,72 +422,78 @@ func (s *adminServer) TableDetails(
 	{
 		const createTableCol = "CreateTable"
 		showResult := r.ResultList[3]
-		if len(showResult.Rows) != 1 {
+		if showResult.Rows.Len() != 1 {
 			return nil, s.serverErrorf("CreateTable response not available.")
 		}
 
 		scanner := makeResultScanner(showResult.Columns)
 		var createStmt string
-		if err := scanner.Scan(showResult.Rows[0], createTableCol, &createStmt); err != nil {
+		if err := scanner.Scan(showResult.Rows.At(0), createTableCol, &createStmt); err != nil {
 			return nil, err
 		}
 
 		resp.CreateTableStatement = createStmt
 	}
 
-	// Get the number of ranges in the table. We get the key span for the table
-	// data. Then, we count the number of ranges that make up that key span.
-	{
-		var iexecutor sql.InternalExecutor
-		var tableSpan roachpb.Span
-		if err := s.server.db.Txn(ctx, func(txn *client.Txn) error {
+	// Range and ZoneConfig information is not applicable to virtual schemas.
+	if !s.server.sqlExecutor.IsVirtualDatabase(req.Database) {
+		// Get the number of ranges in the table. We get the key span for the table
+		// data. Then, we count the number of ranges that make up that key span.
+		{
+			var iexecutor sql.InternalExecutor
+			var tableSpan roachpb.Span
+			if err := s.server.db.Txn(ctx, func(txn *client.Txn) error {
+				var err error
+				tableSpan, err = iexecutor.GetTableSpan(
+					s.getUser(req), txn, req.Database, req.Table,
+				)
+				return err
+			}); err != nil {
+				return nil, s.serverError(err)
+			}
+			tableRSpan := roachpb.RSpan{}
 			var err error
-			tableSpan, err = iexecutor.GetTableSpan(s.getUser(req), txn, escDBName, escTableName)
-			return err
-		}); err != nil {
-			return nil, s.serverError(err)
-		}
-		tableRSpan := roachpb.RSpan{}
-		var err error
-		tableRSpan.Key, err = keys.Addr(tableSpan.Key)
-		if err != nil {
-			return nil, s.serverError(err)
-		}
-		tableRSpan.EndKey, err = keys.Addr(tableSpan.EndKey)
-		if err != nil {
-			return nil, s.serverError(err)
-		}
-		rangeCount, err := s.server.distSender.CountRanges(tableRSpan)
-		if err != nil {
-			return nil, s.serverError(err)
-		}
-		resp.RangeCount = rangeCount
-	}
-
-	// Query the zone configuration for this table.
-	{
-		path, err := s.queryDescriptorIDPath(session, []string{escDBName, escTableName})
-		if err != nil {
-			return nil, s.serverError(err)
+			tableRSpan.Key, err = keys.Addr(tableSpan.Key)
+			if err != nil {
+				return nil, s.serverError(err)
+			}
+			tableRSpan.EndKey, err = keys.Addr(tableSpan.EndKey)
+			if err != nil {
+				return nil, s.serverError(err)
+			}
+			rangeCount, err := s.server.distSender.CountRanges(tableRSpan)
+			if err != nil {
+				return nil, s.serverError(err)
+			}
+			resp.RangeCount = rangeCount
 		}
 
-		id, zone, zoneExists, err := s.queryZonePath(session, path)
-		if err != nil {
-			return nil, s.serverError(err)
-		}
+		// Query the descriptor ID and zone configuration for this table.
+		{
+			path, err := s.queryDescriptorIDPath(session, []string{req.Database, req.Table})
+			if err != nil {
+				return nil, s.serverError(err)
+			}
+			resp.DescriptorID = int64(path[2])
 
-		if !zoneExists {
-			zone = config.DefaultZoneConfig()
-		}
-		resp.ZoneConfig = zone
+			id, zone, zoneExists, err := s.queryZonePath(session, path)
+			if err != nil {
+				return nil, s.serverError(err)
+			}
 
-		switch id {
-		case path[1]:
-			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_DATABASE
-		case path[2]:
-			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_TABLE
-		default:
-			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_CLUSTER
+			if !zoneExists {
+				zone = config.DefaultZoneConfig()
+			}
+			resp.ZoneConfig = zone
+
+			switch id {
+			case path[1]:
+				resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_DATABASE
+			case path[2]:
+				resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_TABLE
+			default:
+				resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_CLUSTER
+			}
 		}
 	}
 
@@ -578,15 +618,18 @@ func (s *adminServer) TableStats(ctx context.Context, req *serverpb.TableStatsRe
 func (s *adminServer) Users(ctx context.Context, req *serverpb.UsersRequest) (*serverpb.UsersResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
 	session := s.NewSessionForRPC(ctx, args)
+	defer session.Finish()
 	query := "SELECT username FROM system.users"
 	r := s.server.sqlExecutor.ExecuteStatements(session, query, nil)
+	defer r.Close()
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return nil, s.serverError(err)
 	}
 
 	var resp serverpb.UsersResponse
-	for _, row := range r.ResultList[0].Rows {
-		resp.Users = append(resp.Users, serverpb.UsersResponse_User{Username: string(*row.Values[0].(*parser.DString))})
+	for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
+		row := r.ResultList[0].Rows.At(i)
+		resp.Users = append(resp.Users, serverpb.UsersResponse_User{Username: string(*row[0].(*parser.DString))})
 	}
 	return &resp, nil
 }
@@ -599,6 +642,7 @@ func (s *adminServer) Users(ctx context.Context, req *serverpb.UsersRequest) (*s
 func (s *adminServer) Events(ctx context.Context, req *serverpb.EventsRequest) (*serverpb.EventsResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
 	session := s.NewSessionForRPC(ctx, args)
+	defer session.Finish()
 
 	// Execute the query.
 	q := makeSQLQuery()
@@ -617,6 +661,7 @@ func (s *adminServer) Events(ctx context.Context, req *serverpb.EventsRequest) (
 		return nil, s.serverErrors(q.Errors())
 	}
 	r := s.server.sqlExecutor.ExecuteStatements(session, q.String(), q.QueryArguments())
+	defer r.Close()
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return nil, s.serverError(err)
 	}
@@ -624,7 +669,8 @@ func (s *adminServer) Events(ctx context.Context, req *serverpb.EventsRequest) (
 	// Marshal response.
 	var resp serverpb.EventsResponse
 	scanner := makeResultScanner(r.ResultList[0].Columns)
-	for _, row := range r.ResultList[0].Rows {
+	for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
+		row := r.ResultList[0].Rows.At(i)
 		var event serverpb.EventsResponse_Event
 		var ts time.Time
 		if err := scanner.ScanIndex(row, 0, &ts); err != nil {
@@ -673,24 +719,26 @@ func (s *adminServer) getUIData(session *sql.Session, user string, keys []string
 		return nil, s.serverErrorf("error constructing query: %v", err)
 	}
 	r := s.server.sqlExecutor.ExecuteStatements(session, query.String(), query.QueryArguments())
+	defer r.Close()
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return nil, s.serverError(err)
 	}
 
 	// Marshal results.
 	resp := serverpb.GetUIDataResponse{KeyValues: make(map[string]serverpb.GetUIDataResponse_Value)}
-	for _, row := range r.ResultList[0].Rows {
-		dKey, ok := row.Values[0].(*parser.DString)
+	for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
+		row := r.ResultList[0].Rows.At(i)
+		dKey, ok := row[0].(*parser.DString)
 		if !ok {
-			return nil, s.serverErrorf("unexpected type for UI key: %T", row.Values[0])
+			return nil, s.serverErrorf("unexpected type for UI key: %T", row[0])
 		}
-		dValue, ok := row.Values[1].(*parser.DBytes)
+		dValue, ok := row[1].(*parser.DBytes)
 		if !ok {
-			return nil, s.serverErrorf("unexpected type for UI value: %T", row.Values[1])
+			return nil, s.serverErrorf("unexpected type for UI value: %T", row[1])
 		}
-		dLastUpdated, ok := row.Values[2].(*parser.DTimestamp)
+		dLastUpdated, ok := row[2].(*parser.DTimestamp)
 		if !ok {
-			return nil, s.serverErrorf("unexpected type for UI lastUpdated: %T", row.Values[2])
+			return nil, s.serverErrorf("unexpected type for UI lastUpdated: %T", row[2])
 		}
 
 		resp.KeyValues[string(*dKey)] = serverpb.GetUIDataResponse_Value{
@@ -710,11 +758,13 @@ func (s *adminServer) SetUIData(ctx context.Context, req *serverpb.SetUIDataRequ
 
 	args := sql.SessionArgs{User: s.getUser(req)}
 	session := s.NewSessionForRPC(ctx, args)
+	defer session.Finish()
 
 	for key, val := range req.KeyValues {
 		// Do an upsert of the key. We update each key in a separate transaction to
 		// avoid long-running transactions and possible deadlocks.
 		br := s.server.sqlExecutor.ExecuteStatements(session, "BEGIN;", nil)
+		defer br.Close()
 		if err := s.checkQueryResults(br.ResultList, 1); err != nil {
 			return nil, s.serverError(err)
 		}
@@ -733,6 +783,7 @@ func (s *adminServer) SetUIData(ctx context.Context, req *serverpb.SetUIDataRequ
 			qargs.SetValue(`1`, parser.NewDString(string(val)))
 			qargs.SetValue(`2`, parser.NewDString(key))
 			r := s.server.sqlExecutor.ExecuteStatements(session, query, qargs)
+			defer r.Close()
 			if err := s.checkQueryResults(r.ResultList, 2); err != nil {
 				return nil, s.serverError(err)
 			}
@@ -745,6 +796,7 @@ func (s *adminServer) SetUIData(ctx context.Context, req *serverpb.SetUIDataRequ
 			qargs.SetValue(`1`, parser.NewDString(key))
 			qargs.SetValue(`2`, parser.NewDBytes(parser.DBytes(val)))
 			r := s.server.sqlExecutor.ExecuteStatements(session, query, qargs)
+			defer r.Close()
 			if err := s.checkQueryResults(r.ResultList, 2); err != nil {
 				return nil, s.serverError(err)
 			}
@@ -766,6 +818,7 @@ func (s *adminServer) SetUIData(ctx context.Context, req *serverpb.SetUIDataRequ
 func (s *adminServer) GetUIData(ctx context.Context, req *serverpb.GetUIDataRequest) (*serverpb.GetUIDataResponse, error) {
 	args := sql.SessionArgs{User: s.getUser(req)}
 	session := s.NewSessionForRPC(ctx, args)
+	defer session.Finish()
 
 	if len(req.Keys) == 0 {
 		return nil, grpc.Errorf(codes.InvalidArgument, "keys cannot be empty")
@@ -1147,17 +1200,17 @@ func makeResultScanner(cols []sql.ResultColumn) resultScanner {
 
 // IsNull returns whether the specified column of the given row contains
 // a SQL NULL value.
-func (rs resultScanner) IsNull(row sql.ResultRow, col string) (bool, error) {
+func (rs resultScanner) IsNull(row parser.DTuple, col string) (bool, error) {
 	idx, ok := rs.colNameToIdx[col]
 	if !ok {
 		return false, errors.Errorf("result is missing column %s", col)
 	}
-	return row.Values[idx] == parser.DNull, nil
+	return row[idx] == parser.DNull, nil
 }
 
 // ScanIndex scans the given column index of the given row into dst.
-func (rs resultScanner) ScanIndex(row sql.ResultRow, index int, dst interface{}) error {
-	src := row.Values[index]
+func (rs resultScanner) ScanIndex(row parser.DTuple, index int, dst interface{}) error {
+	src := row[index]
 
 	switch d := dst.(type) {
 	case *string:
@@ -1219,7 +1272,7 @@ func (rs resultScanner) ScanIndex(row sql.ResultRow, index int, dst interface{})
 }
 
 // Scan scans the column with the given name from the given row into dst.
-func (rs resultScanner) Scan(row sql.ResultRow, colName string, dst interface{}) error {
+func (rs resultScanner) Scan(row parser.DTuple, colName string, dst interface{}) error {
 	idx, ok := rs.colNameToIdx[colName]
 	if !ok {
 		return errors.Errorf("result is missing column %s", colName)
@@ -1246,18 +1299,19 @@ func (s *adminServer) queryZone(
 	params := parser.NewPlaceholderInfo()
 	params.SetValue(`1`, parser.NewDInt(parser.DInt(id)))
 	r := s.server.sqlExecutor.ExecuteStatements(session, query, params)
+	defer r.Close()
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return config.ZoneConfig{}, false, err
 	}
 
 	result := r.ResultList[0]
-	if len(result.Rows) == 0 {
+	if result.Rows.Len() == 0 {
 		return config.ZoneConfig{}, false, nil
 	}
 
 	var zoneBytes []byte
 	scanner := resultScanner{}
-	err := scanner.ScanIndex(result.Rows[0], 0, &zoneBytes)
+	err := scanner.ScanIndex(result.Rows.At(0), 0, &zoneBytes)
 	if err != nil {
 		return config.ZoneConfig{}, false, err
 	}
@@ -1294,18 +1348,19 @@ func (s *adminServer) queryNamespaceID(
 	params.SetValue(`1`, parser.NewDInt(parser.DInt(parentID)))
 	params.SetValue(`2`, parser.NewDString(name))
 	r := s.server.sqlExecutor.ExecuteStatements(session, query, params)
+	defer r.Close()
 	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
 		return 0, err
 	}
 
 	result := r.ResultList[0]
-	if len(result.Rows) == 0 {
+	if result.Rows.Len() == 0 {
 		return 0, errors.Errorf("namespace %s with ParentID %d not found", name, parentID)
 	}
 
 	var id int64
 	scanner := resultScanner{}
-	err := scanner.ScanIndex(result.Rows[0], 0, &id)
+	err := scanner.ScanIndex(result.Rows.At(0), 0, &id)
 	if err != nil {
 		return 0, err
 	}

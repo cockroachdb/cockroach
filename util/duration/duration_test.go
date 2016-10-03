@@ -19,6 +19,7 @@ package duration
 import (
 	"math"
 	"testing"
+	"time"
 
 	_ "github.com/cockroachdb/cockroach/util/log"
 )
@@ -126,6 +127,135 @@ func TestNormalize(t *testing.T) {
 		if normalized.Nanos > nanosInDay && normalized.Days != math.MaxInt64 ||
 			normalized.Nanos < -nanosInDay && normalized.Days != math.MinInt64 {
 			t.Errorf("%d nanos were not normalized [%s]", i, normalized)
+		}
+	}
+}
+
+func TestDiffMicros(t *testing.T) {
+	tests := []struct {
+		t1, t2  time.Time
+		expDiff int64
+	}{
+		{
+			t1:      time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+			t2:      time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+			expDiff: 0,
+		},
+		{
+			t1:      time.Date(1, 8, 15, 12, 30, 45, 0, time.UTC),
+			t2:      time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+			expDiff: -63062710155000000,
+		},
+		{
+			t1:      time.Date(1994, 8, 15, 12, 30, 45, 0, time.UTC),
+			t2:      time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+			expDiff: -169730955000000,
+		},
+		{
+			t1:      time.Date(2012, 8, 15, 12, 30, 45, 0, time.UTC),
+			t2:      time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+			expDiff: 398349045000000,
+		},
+		{
+			t1:      time.Date(8012, 8, 15, 12, 30, 45, 0, time.UTC),
+			t2:      time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+			expDiff: 189740061045000000,
+		},
+		// Test if the nanoseconds round correctly.
+		{
+			t1:      time.Date(2000, 1, 1, 0, 0, 0, 499, time.UTC),
+			t2:      time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+			expDiff: 0,
+		},
+		{
+			t1:      time.Date(1999, 12, 31, 23, 59, 59, 999999501, time.UTC),
+			t2:      time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+			expDiff: 0,
+		},
+		{
+			t1:      time.Date(2000, 1, 1, 0, 0, 0, 500, time.UTC),
+			t2:      time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+			expDiff: 1,
+		},
+		{
+			t1:      time.Date(1999, 12, 31, 23, 59, 59, 999999500, time.UTC),
+			t2:      time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+			expDiff: -1,
+		},
+	}
+
+	for i, test := range tests {
+		if res := DiffMicros(test.t1, test.t2); res != test.expDiff {
+			t.Errorf("%d: expected DiffMicros(%v, %v) = %d, found %d",
+				i, test.t1, test.t2, test.expDiff, res)
+		} else {
+			// Swap order and make sure the results are mirrored.
+			exp := -test.expDiff
+			if res := DiffMicros(test.t2, test.t1); res != exp {
+				t.Errorf("%d: expected DiffMicros(%v, %v) = %d, found %d",
+					i, test.t2, test.t1, exp, res)
+			}
+		}
+	}
+}
+
+func TestAddMicros(t *testing.T) {
+	tests := []struct {
+		t   time.Time
+		d   int64
+		exp time.Time
+	}{
+		{
+			t:   time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+			d:   0,
+			exp: time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			t:   time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+			d:   123456789,
+			exp: time.Date(2000, 1, 1, 0, 2, 3, 456789000, time.UTC),
+		},
+		{
+			t:   time.Date(2000, 1, 1, 0, 0, 0, 999, time.UTC),
+			d:   123456789,
+			exp: time.Date(2000, 1, 1, 0, 2, 3, 456789999, time.UTC),
+		},
+		{
+			t:   time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+			d:   12345678987654321,
+			exp: time.Date(2391, 03, 21, 19, 16, 27, 654321000, time.UTC),
+		},
+		{
+			t:   time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+			d:   math.MaxInt64 / 10,
+			exp: time.Date(31227, 9, 14, 2, 48, 05, 477580000, time.UTC),
+		},
+		{
+			t:   time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+			d:   -123456789,
+			exp: time.Date(1999, 12, 31, 23, 57, 56, 543211000, time.UTC),
+		},
+		{
+			t:   time.Date(2000, 1, 1, 0, 0, 0, 999, time.UTC),
+			d:   -123456789,
+			exp: time.Date(1999, 12, 31, 23, 57, 56, 543211999, time.UTC),
+		},
+		{
+			t:   time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+			d:   -12345678987654321,
+			exp: time.Date(1608, 10, 12, 04, 43, 32, 345679000, time.UTC),
+		},
+		{
+			t:   time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+			d:   -math.MaxInt64 / 10,
+			exp: time.Date(-27228, 04, 18, 21, 11, 54, 522420000, time.UTC),
+		},
+	}
+
+	for i, test := range tests {
+		if res := AddMicros(test.t, test.d); !test.exp.Equal(res) {
+			t.Errorf("%d: expected AddMicros(%v, %d) = %v, found %v",
+				i, test.t, test.d, test.exp, res)
 		}
 	}
 }

@@ -210,7 +210,7 @@ const (
 	CodeDuplicateFunctionError                  = "42723"
 	CodeDuplicatePreparedStatementError         = "42P05"
 	CodeDuplicateSchemaError                    = "42P06"
-	CodeDuplicateTableError                     = "42P07"
+	CodeDuplicateRelationError                  = "42P07"
 	CodeDuplicateAliasError                     = "42712"
 	CodeDuplicateObjectError                    = "42710"
 	CodeAmbiguousColumnError                    = "42702"

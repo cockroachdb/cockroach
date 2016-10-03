@@ -39,7 +39,7 @@ Time series data is organized on disk according to two basic, sortable propertie
 + Timestamp
 
 This is optimized for querying data for a single series over multiple
-timestamps: data for the same series with different timestamps is stored
+timestamps: data for the same series at different timestamps is stored
 contiguously.
 
 
@@ -60,14 +60,14 @@ multiple data points for a series fall in the same slot, only the most recent
 sample is kept.
 
 
-Key Space Slabbing
+Slab Storage
 
 In order to use key space efficiently, we pack data for multiple contiguous
 samples into "slab" values, with data for each slab stored in a CockroachDB key.
 This is done by again dividing time into contiguous slots, but with a longer
-duration; this is known as the "key duration". For example, CockroachDB downsamples
-its internal data at a resolution of 10 seconds, but stores it with a
-"key duration" of 1 hour, meaning that all samples that fall in the same hour
+duration; this is known as the "slab duration". For example, CockroachDB
+downsamples its internal data at a resolution of 10 seconds, but stores it with
+a "slab duration" of 1 hour, meaning that all samples that fall in the same hour
 are stored at the same key. This strategy helps reduce the number of keys
 scanned during a query.
 
@@ -104,13 +104,13 @@ year).
 
 A specific sample duration in CockroachDB is known as a Resolution. CockroachDB
 supports a fixed set of Resolutions; each Resolution has a fixed sample duration
-and a key duration. For example, the resolution "Resolution10s" has a sample
-duration of 10 seconds and a key duration of 1 hour.
+and a slab duration. For example, the resolution "Resolution10s" has a sample
+duration of 10 seconds and a slab duration of 1 hour.
 
 This feature was planned and slightly informs our key structure (resolution
 information is encoded in every time series key); however, all time series in
 CockroachDB are currently recorded at a downsample duration of 10 seconds, and a
-key duration of 1 hour.
+slab duration of 1 hour.
 
 
 Example

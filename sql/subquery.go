@@ -112,6 +112,7 @@ func (s *subquery) doEval() (parser.Datum, error) {
 		// For EXISTS expressions, all we want to know is if there is at least one
 		// result.
 		next, err := s.plan.Next()
+		s.plan.Close()
 		if s.err = err; err != nil {
 			return result, err
 		}
@@ -142,6 +143,7 @@ func (s *subquery) doEval() (parser.Datum, error) {
 				rows = append(rows, &valuesCopy)
 			}
 		}
+		s.plan.Close()
 		if s.err = err; err != nil {
 			return result, err
 		}
@@ -152,11 +154,14 @@ func (s *subquery) doEval() (parser.Datum, error) {
 
 	case execModeOneRow:
 		result = parser.DNull
-		next, err := s.plan.Next()
+		hasRow, err := s.plan.Next()
 		if s.err = err; err != nil {
+			s.plan.Close()
 			return result, err
 		}
-		if next {
+		if !hasRow {
+			s.plan.Close()
+		} else {
 			values := s.plan.Values()
 			switch len(values) {
 			case 1:
@@ -167,6 +172,7 @@ func (s *subquery) doEval() (parser.Datum, error) {
 				result = &valuesCopy
 			}
 			another, err := s.plan.Next()
+			s.plan.Close()
 			if s.err = err; err != nil {
 				return result, err
 			}

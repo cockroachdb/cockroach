@@ -43,13 +43,13 @@ INSERT INTO tb VALUES (3)
 statement ok
 INSERT INTO tb VALUES (7)
 
-statement error bit string too long for type INT\(3\) \(column "b"\)
+statement error bit string too long for type BIT\(3\) \(column "b"\)
 INSERT INTO tb VALUES (15)
 
 statement ok
 UPDATE tb SET b = 2 WHERE b = 7
 
-statement error bit string too long for type INT\(3\) \(column "b"\)
+statement error bit string too long for type BIT\(3\) \(column "b"\)
 UPDATE tb SET b = 16 WHERE b = 2
 
 statement ok

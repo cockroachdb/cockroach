@@ -42,18 +42,29 @@ var (
 	Attrs = FlagInfo{
 		Name: "attrs",
 		Description: `
-An ordered, colon-separated list of node attributes. Attributes are
-arbitrary strings specifying topography or machine
-capabilities. Topography might include datacenter designation
-(e.g. "us-west-1a", "us-west-1b", "us-east-1c"). Machine capabilities
-might include specialized hardware or number of cores (e.g. "gpu",
-"x16c"). The relative geographic proximity of two nodes is inferred
-from the common prefix of the attributes list, so topographic
-attributes should be specified first and in the same order for all
-nodes. For example:
+An ordered, colon-separated list of node attributes. Attributes are arbitrary
+strings specifying machine capabilities. Machine capabilities might include
+specialized hardware or number of cores (e.g. "gpu", "x16c"). For example:
 <PRE>
 
-  --attrs=us-west-1b:gpu`,
+  --attrs=x16c:gpu`,
+	}
+
+	Locality = FlagInfo{
+		Name: "locality",
+		Description: `
+Not fully implemented. https://github.com/cockroachdb/cockroach/issues/4868
+An ordered, comma-separated list of key-value pairs that describe the topography
+of the machine. Topography might include country, datacenter or rack
+designations. Data is automatically replicated to maximize diversities of each
+tier. The order of tiers is used to determine the priority of the diversity. The
+tiers and order must be the same on all nodes.  For example:
+<PRE>
+
+  --locality=country=us,region=us-west,datacenter=us-west-1b,rack=12
+  --locality=country=ca,region=ca-east,datacenter=ca-east-2,rack=4
+
+  --locality=planet=earth,province=manitoba,colo=secondary,power=3`,
 	}
 
 	ZoneConfig = FlagInfo{
@@ -61,6 +72,13 @@ nodes. For example:
 		Shorthand: "f",
 		Description: `
 File to read the zone configuration from. Specify "-" to read from standard input.`,
+	}
+
+	ZoneDisableReplication = FlagInfo{
+		Name: "disable-replication",
+		Description: `
+Disable replication in the zone by setting the desired replica count to 1.
+Equivalent to setting 'num_replicas: 1' via -f.`,
 	}
 
 	Background = FlagInfo{

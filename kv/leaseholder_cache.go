@@ -17,8 +17,11 @@
 package kv
 
 import (
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/cache"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 )
 
@@ -47,7 +50,13 @@ func (lc *leaseHolderCache) Lookup(rangeID roachpb.RangeID) (roachpb.ReplicaDesc
 	lc.mu.Lock()
 	defer lc.mu.Unlock()
 	if v, ok := lc.cache.Get(rangeID); ok {
+		if log.V(2) {
+			log.Infof(context.TODO(), "lookup lease holder for range %d: %s", rangeID, v)
+		}
 		return v.(roachpb.ReplicaDescriptor), true
+	}
+	if log.V(2) {
+		log.Infof(context.TODO(), "lookup lease holder for range %d: not found", rangeID)
 	}
 	return roachpb.ReplicaDescriptor{}, false
 }
@@ -59,8 +68,14 @@ func (lc *leaseHolderCache) Update(rangeID roachpb.RangeID, repDesc roachpb.Repl
 	lc.mu.Lock()
 	defer lc.mu.Unlock()
 	if (repDesc == roachpb.ReplicaDescriptor{}) {
+		if log.V(2) {
+			log.Infof(context.TODO(), "evicting lease holder for range %d", rangeID)
+		}
 		lc.cache.Del(rangeID)
 	} else {
+		if log.V(2) {
+			log.Infof(context.TODO(), "updating lease holder for range %d: %s", rangeID, repDesc)
+		}
 		lc.cache.Add(rangeID, repDesc)
 	}
 }

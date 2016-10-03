@@ -17,11 +17,13 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 type alterTableNode struct {
@@ -72,6 +74,12 @@ func (n *alterTableNode) Start() error {
 		switch t := cmd.(type) {
 		case *parser.AlterTableAddColumn:
 			d := t.ColumnDef
+			if d.CheckExpr.Expr != nil {
+				return errors.Errorf("adding a CHECK constraint via ALTER not supported")
+			}
+			if d.References.Table.TableNameReference != nil {
+				return errors.Errorf("adding a REFERENCES constraint via ALTER not supported")
+			}
 			col, idx, err := sqlbase.MakeColumnDefDescs(d)
 			if err != nil {
 				return err
@@ -102,6 +110,14 @@ func (n *alterTableNode) Start() error {
 			}
 
 		case *parser.AlterTableAddConstraint:
+			info, err := n.tableDesc.GetConstraintInfo(nil)
+			if err != nil {
+				return err
+			}
+			inuseNames := make(map[string]struct{}, len(info))
+			for k := range info {
+				inuseNames[k] = struct{}{}
+			}
 			switch d := t.ConstraintDef.(type) {
 			case *parser.UniqueConstraintTableDef:
 				if d.PrimaryKey {
@@ -123,6 +139,31 @@ func (n *alterTableNode) Start() error {
 					}
 				}
 				n.tableDesc.AddIndexMutation(idx, sqlbase.DescriptorMutation_ADD)
+
+			case *parser.CheckConstraintTableDef:
+				ck, err := makeCheckConstraint(*n.tableDesc, d, inuseNames)
+				if err != nil {
+					return err
+				}
+				ck.Validity = sqlbase.ConstraintValidity_Unvalidated
+				n.tableDesc.Checks = append(n.tableDesc.Checks, ck)
+				descriptorChanged = true
+
+			case *parser.ForeignKeyConstraintTableDef:
+				if _, err := d.Table.NormalizeWithDatabaseName(n.p.session.Database); err != nil {
+					return err
+				}
+				affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+				err := n.p.resolveFK(n.tableDesc, d, affected, sqlbase.ConstraintValidity_Unvalidated)
+				if err != nil {
+					return err
+				}
+				descriptorChanged = true
+				for _, updated := range affected {
+					if err := n.p.saveNonmutationAndNotify(updated); err != nil {
+						return err
+					}
+				}
 
 			default:
 				return fmt.Errorf("unsupported constraint: %T", t.ConstraintDef)
@@ -162,27 +203,81 @@ func (n *alterTableNode) Start() error {
 			}
 
 		case *parser.AlterTableDropConstraint:
-			status, i, err := n.tableDesc.FindIndexByName(t.Constraint)
+			info, err := n.tableDesc.GetConstraintInfo(nil)
 			if err != nil {
-				if t.IfExists {
-					// Noop.
-					continue
-				}
 				return err
 			}
-			switch status {
-			case sqlbase.DescriptorActive:
-				n.tableDesc.AddIndexMutation(n.tableDesc.Indexes[i], sqlbase.DescriptorMutation_DROP)
-				n.tableDesc.Indexes = append(n.tableDesc.Indexes[:i], n.tableDesc.Indexes[i+1:]...)
-
-			case sqlbase.DescriptorIncomplete:
-				switch n.tableDesc.Mutations[i].Direction {
-				case sqlbase.DescriptorMutation_ADD:
-					return fmt.Errorf("constraint %q in the middle of being added, try again later", t.Constraint)
-
-				case sqlbase.DescriptorMutation_DROP:
-					// Noop.
+			name := string(t.Constraint)
+			details, ok := info[name]
+			if !ok {
+				if t.IfExists {
+					continue
 				}
+				return errors.Errorf("constraint %q does not exist", t.Constraint)
+			}
+			switch details.Kind {
+			case sqlbase.ConstraintTypePK:
+				return errors.Errorf("cannot drop primary key")
+			case sqlbase.ConstraintTypeUnique:
+				return errors.Errorf("UNIQUE constraint depends on index %q, use DROP INDEX if you really want to drop it", t.Constraint)
+			case sqlbase.ConstraintTypeCheck:
+				for i := range n.tableDesc.Checks {
+					if n.tableDesc.Checks[i].Name == name {
+						n.tableDesc.Checks = append(n.tableDesc.Checks[:i], n.tableDesc.Checks[i+1:]...)
+						descriptorChanged = true
+						break
+					}
+				}
+			case sqlbase.ConstraintTypeFK:
+				for i, idx := range n.tableDesc.Indexes {
+					if idx.ForeignKey.Name == name {
+						if err := n.p.removeFKBackReference(n.tableDesc, idx); err != nil {
+							return err
+						}
+						n.tableDesc.Indexes[i].ForeignKey = sqlbase.ForeignKeyReference{}
+						descriptorChanged = true
+						break
+					}
+				}
+			default:
+				return errors.Errorf("dropping %s constraint %q unsupported", details.Kind, t.Constraint)
+			}
+
+		case *parser.AlterTableValidateConstraint:
+			info, err := n.tableDesc.GetConstraintInfo(nil)
+			if err != nil {
+				return err
+			}
+			name := string(t.Constraint)
+			constraint, ok := info[name]
+			if !ok {
+				return errors.Errorf("constraint %q does not exist", t.Constraint)
+			}
+			if !constraint.Unvalidated {
+				continue
+			}
+			switch constraint.Kind {
+			case sqlbase.ConstraintTypeCheck:
+				found := false
+				var idx int
+				for idx = range n.tableDesc.Checks {
+					if n.tableDesc.Checks[idx].Name == name {
+						found = true
+						break
+					}
+				}
+				if !found {
+					panic("constrint returned by GetConstraintInfo not found")
+				}
+				ck := n.tableDesc.Checks[idx]
+				if err := n.p.validateCheckExpr(ck.Expr, &n.n.Table, n.tableDesc); err != nil {
+					return err
+				}
+				n.tableDesc.Checks[idx].Validity = sqlbase.ConstraintValidity_Validated
+				descriptorChanged = true
+
+			default:
+				return errors.Errorf("validating %s constraint %q unsupported", constraint.Kind, t.Constraint)
 			}
 
 		case parser.ColumnMutationCmd:
@@ -266,7 +361,8 @@ func (n *alterTableNode) Start() error {
 }
 
 func (n *alterTableNode) Next() (bool, error)                 { return false, nil }
-func (n *alterTableNode) Columns() []ResultColumn             { return make([]ResultColumn, 0) }
+func (n *alterTableNode) Close()                              {}
+func (n *alterTableNode) Columns() ResultColumns              { return make(ResultColumns, 0) }
 func (n *alterTableNode) Ordering() orderingInfo              { return orderingInfo{} }
 func (n *alterTableNode) Values() parser.DTuple               { return parser.DTuple{} }
 func (n *alterTableNode) DebugValues() debugValues            { return debugValues{} }
@@ -295,4 +391,17 @@ func applyColumnMutation(col *sqlbase.ColumnDescriptor, mut parser.ColumnMutatio
 		col.Nullable = true
 	}
 	return nil
+}
+
+func labeledRowValues(cols []sqlbase.ColumnDescriptor, values parser.DTuple) string {
+	var s bytes.Buffer
+	for i := range cols {
+		if i != 0 {
+			s.WriteString(`, `)
+		}
+		s.WriteString(cols[i].Name)
+		s.WriteString(`=`)
+		s.WriteString(values[i].String())
+	}
+	return s.String()
 }

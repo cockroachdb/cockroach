@@ -4,8 +4,8 @@
  */
 
 import { Action, PayloadAction } from "../interfaces/action";
-import _ = require("lodash");
-import moment = require("moment");
+import _ from "lodash";
+import moment from "moment";
 
 export const SET_WINDOW = "cockroachui/timewindow/SET_WINDOW";
 export const SET_SCALE = "cockroachui/timewindow/SET_SCALE";
@@ -31,6 +31,8 @@ export interface TimeScale {
   // is invalid if now > (currentWindow.end + windowValid). Default is ten
   // seconds.
   windowValid: moment.Duration;
+  // The expected duration of individual samples for queries at this time scale.
+  sampleSize: moment.Duration;
 }
 
 export interface TimeScaleCollection {
@@ -45,22 +47,37 @@ export let availableTimeScales: TimeScaleCollection = {
   "10 min": {
     windowSize: moment.duration(10, "minutes"),
     windowValid: moment.duration(10, "seconds"),
+    sampleSize: moment.duration(10, "seconds"),
   },
   "1 hour": {
     windowSize: moment.duration(1, "hour"),
     windowValid: moment.duration(1, "minute"),
+    sampleSize: moment.duration(1, "minutes"),
   },
   "6 hours": {
     windowSize: moment.duration(6, "hours"),
     windowValid: moment.duration(5, "minutes"),
+    sampleSize: moment.duration(5, "minutes"),
   },
   "12 hours": {
     windowSize: moment.duration(12, "hours"),
     windowValid: moment.duration(10, "minutes"),
+    sampleSize: moment.duration(10, "minutes"),
   },
   "1 day": {
     windowSize: moment.duration(1, "day"),
     windowValid: moment.duration(10, "minutes"),
+    sampleSize: moment.duration(30, "minutes"),
+  },
+  "1 week": {
+    windowSize: moment.duration(7, "days"),
+    windowValid: moment.duration(10, "minutes"),
+    sampleSize: moment.duration(1, "hour"),
+  },
+  "1 month": {
+    windowSize: moment.duration(1, "month"),
+    windowValid: moment.duration(20, "minutes"),
+    sampleSize: moment.duration(2, "hours"),
   },
 };
 

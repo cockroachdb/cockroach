@@ -146,4 +146,6 @@ docker run -i ${tty-} ${rm} \
   --env="GOOGLE_PROJECT=${GOOGLE_PROJECT-}" \
   --env="GOOGLE_CREDENTIALS=${GOOGLE_CREDENTIALS-}" \
   --env="GOTRACEBACK=${GOTRACEBACK-all}" \
+  --env="COVERALLS_TOKEN=${COVERALLS_TOKEN-}" \
+  --env="CODECOV_TOKEN=${CODECOV_TOKEN-}" \
   "${image}:${version}" "$@"

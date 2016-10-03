@@ -61,6 +61,7 @@ func (node *BoolColType) Format(buf *bytes.Buffer, f FmtFlags) {
 var (
 	intColTypeBit         = &IntColType{Name: "BIT", N: 1, ImplicitWidth: true}
 	intColTypeInt         = &IntColType{Name: "INT"}
+	intColTypeInt8        = &IntColType{Name: "INT8"}
 	intColTypeInt64       = &IntColType{Name: "INT64"}
 	intColTypeInteger     = &IntColType{Name: "INTEGER"}
 	intColTypeSmallInt    = &IntColType{Name: "SMALLINT"}

@@ -28,7 +28,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v1"
+	"gopkg.in/yaml.v2"
 
 	"github.com/cockroachdb/cockroach/config"
 	"github.com/cockroachdb/cockroach/keys"
@@ -401,25 +401,43 @@ specified zone-config.
 
 The zone config format has the following YAML schema:
 
-  replicas:
-    - attrs: [comma-separated attribute list]
-    - attrs:  ...
+  num_replicas: <num>
+  constraints: [comma-separated attribute list]
   range_min_bytes: <size-in-bytes>
   range_max_bytes: <size-in-bytes>
   gc:
     ttlseconds: <time-in-seconds>
 
 For example, to set the zone config for the system database, run:
-echo "replicas:
-- attrs: [us-east-1a, ssd]
-- attrs: [us-east-1b, ssd]
-- attrs: [us-west-1b, ssd]" | cockroach zone set system --file=-
+$ cockroach zone set system -f - << EOF
+num_replicas: 3
+constraints: [ssd, -mem]
+EOF
 
 Note that the specified zone config is merged with the existing zone config for
 the database or table.
 `,
 	SilenceUsage: true,
 	RunE:         runSetZone,
+}
+
+func readZoneConfig() (conf []byte, err error) {
+	if zoneDisableReplication {
+		if zoneConfig != "" {
+			return nil, fmt.Errorf("cannot specify --disable-replication and -f at the same time")
+		}
+		conf = []byte("num_replicas: 1")
+	} else {
+		switch zoneConfig {
+		case "":
+			err = fmt.Errorf("no filename specified with -f")
+		case "-":
+			conf, err = ioutil.ReadAll(os.Stdin)
+		default:
+			conf, err = ioutil.ReadFile(zoneConfig)
+		}
+	}
+	return conf, err
 }
 
 // runSetZone parses the yaml input file, converts it to proto, and inserts it
@@ -454,30 +472,21 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	zoneID, zone, err := queryZonePath(conn, path)
+	_, zone, err := queryZonePath(conn, path)
 	if err != nil {
 		return err
 	}
 	// Convert it to proto and marshal it again to put into the table. This is a
 	// bit more tedious than taking protos directly, but yaml is a more widely
 	// understood format.
-	origReplicaAttrs := zone.ReplicaAttrs
-	zone.ReplicaAttrs = nil
 	// Read zoneConfig file to conf.
-	var conf []byte
-	if zoneConfig == "-" {
-		conf, err = ioutil.ReadAll(os.Stdin)
-	} else {
-		conf, err = ioutil.ReadFile(zoneConfig)
-	}
+
+	conf, err := readZoneConfig()
 	if err != nil {
 		return fmt.Errorf("error reading zone config: %s", err)
 	}
 	if err := yaml.Unmarshal(conf, &zone); err != nil {
 		return fmt.Errorf("unable to parse zoneConfig file: %s", err)
-	}
-	if zone.ReplicaAttrs == nil {
-		zone.ReplicaAttrs = origReplicaAttrs
 	}
 
 	if err := zone.Validate(); err != nil {
@@ -490,13 +499,9 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 	}
 
 	id := path[len(path)-1]
-	if id == zoneID {
-		err = runQueryAndFormatResults(conn, os.Stdout,
-			makeQuery(`UPDATE system.zones SET config = $2 WHERE id = $1`, id, buf), cliCtx.prettyFmt)
-	} else {
-		err = runQueryAndFormatResults(conn, os.Stdout,
-			makeQuery(`INSERT INTO system.zones VALUES ($1, $2)`, id, buf), cliCtx.prettyFmt)
-	}
+	_, _, _, err = runQuery(conn, makeQuery(
+		`UPSERT INTO system.zones (id, config) VALUES ($1, $2)`,
+		id, buf), false)
 	if err != nil {
 		return err
 	}

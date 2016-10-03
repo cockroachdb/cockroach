@@ -1,14 +1,20 @@
 statement ok
-CREATE TABLE t (a INT PRIMARY KEY)
+CREATE TABLE other (b INT PRIMARY KEY)
 
 statement ok
-INSERT INTO t VALUES (1)
+INSERT INTO other VALUES (9)
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY CHECK(a > 0), f INT REFERENCES other, INDEX (f))
+
+statement ok
+INSERT INTO t VALUES (1, 9)
 
 query ITTT colnames
 EXPLAIN (DEBUG) SELECT * FROM t
 ----
-RowIdx Key          Value Disposition
-0      /t/primary/1 NULL  ROW
+RowIdx Key            Value Disposition
+0      /t/primary/1/f /9     ROW
 
 statement error invalid table name
 ALTER TABLE t RENAME TO t.*
@@ -24,6 +30,7 @@ SHOW COLUMNS FROM t
 ----
 Field Type Null  Default
 a     INT  false NULL
+f     INT  true  NULL
 b     INT  true  NULL
 
 statement ok
@@ -34,7 +41,7 @@ EXPLAIN (DEBUG) SELECT b FROM t@foo
 ----
 0 /t/foo/NULL /1 ROW
 
-statement error duplicate index name: "foo"
+statement error duplicate constraint name: "foo"
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 
 statement error multiple primary keys for table "t" are not allowed
@@ -45,29 +52,101 @@ SHOW INDEXES FROM t
 ----
 Table  Name     Unique  Seq  Column  Direction  Storing
 t      primary  true    1    a       ASC        false
+t      t_f_idx  false   1    f       ASC        false
 t      foo      true    1    b       ASC        false
 
-query II
+query III
 SELECT * FROM t
 ----
-1 NULL
+1 9 NULL
 
 statement ok
 ALTER TABLE t ADD c INT
 
 statement ok
-INSERT INTO t VALUES (2, 1, 1), (3, 2, 1)
+INSERT INTO t VALUES (2, 9, 1, 1), (3, 9, 2, 1)
 
 statement error duplicate key value \(c\)=\(1\) violates unique constraint "bar"
 ALTER TABLE t ADD CONSTRAINT bar UNIQUE (c)
 
-query III colnames
+query IIII colnames
 SELECT * FROM t
 ----
-a b    c
-1 NULL NULL
-2 1    1
-3 2    1
+a f b    c
+1 9 NULL NULL
+2 9 1    1
+3 9 2    1
+
+query TTTTT
+SHOW CONSTRAINTS FROM t
+----
+t  check_a         CHECK        NULL  a > 0
+t  fk_f_ref_other  FOREIGN KEY  f  other.[b]
+t  foo             UNIQUE       b  NULL
+t  primary         PRIMARY KEY  a  NULL
+
+statement error CHECK
+INSERT INTO t (a, f) VALUES (-2, 9)
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT check_a
+
+statement ok
+INSERT INTO t (a, f) VALUES (-2, 9)
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
+
+statement error CHECK
+INSERT INTO t (a) VALUES (-3)
+
+query TTTTT
+SHOW CONSTRAINTS FROM t
+----
+t  check_a         CHECK (UNVALIDATED)  NULL  a > 0
+t  fk_f_ref_other  FOREIGN KEY          f  other.[b]
+t  foo             UNIQUE               b  NULL
+t  primary         PRIMARY KEY          a  NULL
+
+statement error duplicate constraint name
+ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
+
+# added constraints with generated names avoid name collisions.
+statement ok
+ALTER TABLE t ADD CHECK (a > 0)
+
+query TTTTT
+SHOW CONSTRAINTS FROM t
+----
+t  check_a         CHECK (UNVALIDATED)  NULL  a > 0
+t  check_a1        CHECK (UNVALIDATED)  NULL  a > 0
+t  fk_f_ref_other  FOREIGN KEY          f  other.[b]
+t  foo             UNIQUE               b  NULL
+t  primary         PRIMARY KEY          a  NULL
+
+statement error constraint "typo" does not exist
+ALTER TABLE t VALIDATE CONSTRAINT typo
+
+statement error validation of CHECK "a > 0" failed on row: a=-2, f=9, b=NULL, c=NULL
+ALTER TABLE t VALIDATE CONSTRAINT check_a
+
+statement ok
+DELETE FROM t WHERE a = -2
+
+statement ok
+ALTER TABLE t VALIDATE CONSTRAINT check_a
+
+query TTTTT
+SHOW CONSTRAINTS FROM t
+----
+t  check_a         CHECK                NULL  a > 0
+t  check_a1        CHECK (UNVALIDATED)  NULL  a > 0
+t  fk_f_ref_other  FOREIGN KEY          f  other.[b]
+t  foo             UNIQUE               b  NULL
+t  primary         PRIMARY KEY          a  NULL
+
+statement ok
+ALTER TABLE t DROP CONSTRAINT check_a, DROP CONSTRAINT check_a1
 
 statement error column "d" does not exist
 ALTER TABLE t DROP d
@@ -81,28 +160,32 @@ ALTER TABLE t DROP a
 statement error column "b" is referenced by existing index "foo"
 ALTER TABLE t DROP b
 
-statement error index "bar" does not exist
+statement error constraint "bar" does not exist
 ALTER TABLE t DROP CONSTRAINT bar
 
 statement ok
 ALTER TABLE t DROP CONSTRAINT IF EXISTS bar
 
-statement ok
+statement error UNIQUE constraint depends on index "foo", use DROP INDEX if you really want to drop it
 ALTER TABLE t DROP CONSTRAINT foo
+
+statement ok
+DROP INDEX t@foo
 
 query TTBITTB colnames
 SHOW INDEXES FROM t
 ----
 Table  Name     Unique  Seq  Column  Direction  Storing
 t      primary  true    1    a       ASC        false
+t      t_f_idx  false   1    f       ASC        false
 
 query ITTT colnames
 EXPLAIN (DEBUG) SELECT * FROM t
 ----
-RowIdx  Key             Value  Disposition
-0       /t/primary/1      NULL   ROW
-1       /t/primary/2/b/c  /1/1   ROW
-2       /t/primary/3/b/c  /2/1   ROW
+RowIdx  Key                 Value   Disposition
+0       /t/primary/1/f      /9      ROW
+1       /t/primary/2/f/b/c  /9/1/1  ROW
+2       /t/primary/3/f/b/c  /9/2/1  ROW
 
 statement ok
 ALTER TABLE t DROP b, DROP c
@@ -111,18 +194,18 @@ query ITTT colnames
 EXPLAIN (DEBUG) SELECT * FROM t
 ----
 RowIdx  Key             Value  Disposition
-0       /t/primary/1    NULL   ROW
-1       /t/primary/2    NULL   ROW
-2       /t/primary/3    NULL   ROW
+0       /t/primary/1/f  /9     ROW
+1       /t/primary/2/f  /9     ROW
+2       /t/primary/3/f  /9     ROW
 
 statement ok
 ALTER TABLE t ADD d INT UNIQUE
 
 statement ok
-INSERT INTO t VALUES (4, 1)
+INSERT INTO t VALUES (4, 9, 1)
 
 statement error duplicate key value \(d\)=\(1\) violates unique constraint \"t_d_key\"
-INSERT INTO t VALUES (5, 1)
+INSERT INTO t VALUES (5, 9, 1)
 
 # Add a column with no default value
 statement ok
@@ -140,7 +223,7 @@ statement ok
 ALTER TABLE t ADD COLUMN z DECIMAL DEFAULT (DECIMAL '1.4')
 
 statement ok
-INSERT INTO t VALUES (11, 12, DECIMAL '1.0')
+INSERT INTO t VALUES (11, 9, 12, DECIMAL '1.0')
 
 statement ok
 INSERT INTO t (a, d) VALUES (13, 14)
@@ -151,11 +234,26 @@ INSERT INTO t (a, d, y) VALUES (21, 22, DECIMAL '1.0')
 statement ok
 INSERT INTO t (a, d) VALUES (23, 24)
 
+statement error foreign key
+INSERT INTO t VALUES (31, 7, 32)
+
+statement error in use as a foreign key constraint
+DROP INDEX t@t_f_idx
+
 statement ok
-INSERT INTO t VALUES (31, 32)
+ALTER TABLE t DROP CONSTRAINT fk_f_ref_other
+
+statement  ok
+INSERT INTO t VALUES (31, 7, 32)
 
 statement ok
 INSERT INTO t (a, d, x, y, z) VALUES (33, 34, DECIMAL '2.0', DECIMAL '2.1', DECIMAL '2.2')
+
+statement ok
+DROP INDEX t@t_f_idx
+
+statement ok
+ALTER TABLE t DROP COLUMN f
 
 query IITTT colnames
 SELECT * FROM t
@@ -177,10 +275,16 @@ statement error column "d" is referenced by existing index "t_d_key"
 ALTER TABLE t DROP COLUMN d
 
 statement ok
-ALTER TABLE t DROP CONSTRAINT t_d_key
+DROP INDEX t@t_d_key
 
 statement ok
 ALTER TABLE t DROP COLUMN d
+
+statement error adding a CHECK constraint via ALTER not supported
+ALTER TABLE t ADD f INT CHECK (f>1)
+
+statement error adding a REFERENCES constraint via ALTER not supported
+ALTER TABLE t ADD f INT UNIQUE REFERENCES other
 
 # Test that more than one column with constraints can be added in the same
 # statement. The constraints added here are on columns that are new and both
@@ -202,6 +306,13 @@ a   x     y     z     d     e     f
 23  NULL  1.3   1.4   NULL  NULL  NULL
 31  NULL  1.3   1.4   NULL  NULL  NULL
 33  2     2.1   2.2   NULL  NULL  NULL
+
+query TTTTT
+SHOW CONSTRAINTS FROM t
+----
+t  primary  PRIMARY KEY  a  NULL
+t  t_d_key  UNIQUE       d  NULL
+t  t_e_key  UNIQUE       e  NULL
 
 # Subsequent operations succeed because the table is empty
 statement ok
@@ -387,3 +498,20 @@ Field Type Null  Default
 a     INT  false NULL
 b     INT  true  NULL
 c     INT  true  NULL
+
+statement error table "nonexistent" does not exist
+ALTER TABLE nonexistent SPLIT AT (42)
+
+statement error table "nonexistent" does not exist
+ALTER INDEX nonexistent@noindex SPLIT AT (42)
+
+user root
+
+statement ok
+CREATE VIEW privsview AS SELECT * FROM privs
+
+statement error pgcode 42809 "privsview" is not a table
+ALTER TABLE privsview ADD d INT
+
+statement error pgcode 42809 "privsview" is not a table
+ALTER TABLE privsview SPLIT AT (42)

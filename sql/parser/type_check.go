@@ -315,14 +315,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, err
 	// upper/lower case names.
 	candidates, ok := Builtins[name]
 	if !ok {
-		candidates, ok = Aggregates[name]
-	}
-	if !ok {
-		lowerName := strings.ToLower(name)
-		candidates, ok = Builtins[lowerName]
-		if !ok {
-			candidates, ok = Aggregates[lowerName]
-		}
+		candidates, ok = Builtins[strings.ToLower(name)]
 	}
 	if !ok {
 		return nil, fmt.Errorf("unknown function: %s", name)
@@ -348,10 +341,29 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, err
 			expr.Name, expr.Name, strings.Join(typeNames, ", "), desStr)
 	}
 
+	builtin := fn.(Builtin)
+	if expr.IsWindowFunctionApplication() {
+		// Make sure the window function application is of either a built-in window
+		// function or of a builtin aggregate function.
+		switch builtin.class {
+		case AggregateClass:
+		case WindowClass:
+		default:
+			return nil, fmt.Errorf("OVER specified, but %s is not a window function nor an "+
+				"aggregate function", expr.Name)
+		}
+	} else {
+		// Make sure the window function builtins are used as window function applications.
+		switch builtin.class {
+		case WindowClass:
+			return nil, fmt.Errorf("window function %s requires an OVER clause", expr.Name)
+		}
+	}
+
 	for i, subExpr := range typedSubExprs {
 		expr.Exprs[i] = subExpr
 	}
-	expr.fn = fn.(Builtin)
+	expr.fn = builtin
 	returnType := fn.returnType()
 	if _, ok = expr.fn.params().(AnyType); ok {
 		if len(typedSubExprs) > 0 {
