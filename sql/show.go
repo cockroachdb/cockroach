@@ -506,3 +506,38 @@ func (p *planner) ShowTables(n *parser.ShowTables) (planNode, error) {
 
 	return v, nil
 }
+
+// Help returns usage information for the builtin functions
+// Privileges: None
+func (p *planner) Help(n *parser.Help) (planNode, error) {
+	columns := ResultColumns{
+		{Name: "Function", Typ: parser.TypeString},
+		{Name: "Signature", Typ: parser.TypeString},
+		{Name: "Category", Typ: parser.TypeString},
+		{Name: "Details", Typ: parser.TypeString},
+	}
+	v := p.newContainerValuesNode(columns, 0)
+
+	name := strings.ToLower(n.Name.String())
+	matches, ok := parser.Builtins[name]
+	// TODO(dt): support fuzzy matching.
+	if !ok {
+		return v, nil
+	}
+
+	for _, f := range matches {
+		// TODO(dt): support naming args in signature
+		sig := fmt.Sprintf("%s -> %s", f.Types.String(), f.ReturnType.Type())
+		row := parser.DTuple{
+			parser.NewDString(name),
+			parser.NewDString(sig),
+			parser.NewDString(f.Category()),
+			parser.NewDString(f.Info),
+		}
+		if err := v.rows.AddRow(row); err != nil {
+			v.Close()
+			return nil, err
+		}
+	}
+	return v, nil
+}

@@ -89,9 +89,9 @@ type Builtin struct {
 	// e.g.: random(), clock_timestamp(). Some functions like now()
 	// return the same value in the same statement, but different values
 	// in separate statements, and should not be marked as impure.
-	impure   bool
-	class    FunctionClass
-	category string
+	impure         bool
+	class          FunctionClass
+	category, Info string
 
 	AggregateFunc func() AggregateFunc
 	WindowFunc    func() WindowFunc
