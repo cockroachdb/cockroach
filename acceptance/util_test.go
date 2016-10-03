@@ -31,10 +31,10 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	_ "github.com/lib/pq"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/acceptance/terrafarm"
@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
-	_ "github.com/lib/pq"
 )
 
 type keepClusterVar string
