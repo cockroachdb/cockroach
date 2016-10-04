@@ -322,6 +322,7 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 			histFile := filepath.Join(userAcct.HomeDir, cmdHistFile)
 			cfg := ins.Config.Clone()
 			cfg.HistoryFile = histFile
+			cfg.HistorySearchFold = true
 			ins.SetConfig(cfg)
 		}
 		fmt.Print(infoMessage)
@@ -344,8 +345,16 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 			}
 			ins.SetPrompt(thisPrompt)
 		}
+
 		l, err := ins.Readline()
 
+		if isInteractive && err == readline.ErrInterrupt && (len(stmt) > 0 || l != "") {
+			// In interactive mode, Ctrl+C after the beginning of a
+			// statement cancels the current statement entirely; only Ctrl+C
+			// at the beginning of a new statement terminates the shell.
+			stmt = stmt[:0]
+			continue
+		}
 		if !isInteractive && err == io.EOF {
 			// In non-interactive mode, we want EOF to finish the last statement.
 			err = nil
