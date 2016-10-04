@@ -164,7 +164,7 @@ TestUnconvert() {
 }
 
 TestUnused() {
-  ! unused -reflect=false -exported ./... | grep -vE '(\.pb\.go:|/C:|_string.go:|embedded.go:|parser/(yacc|sql.y)|util/interval/interval.go:|_cgo|Mutex|pgerror/codes.go)'
+  ! unused -reflect=false -exported ./... | grep -vE '(\.pb\.go:|/C:|_string.go:|embedded.go:|parser/(yacc|sql.y)|util/interval/interval.go:|_cgo|Mutex|noCopy|pgerror/codes.go)'
 }
 
 TestStaticcheck() {
