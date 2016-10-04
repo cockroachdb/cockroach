@@ -1237,18 +1237,46 @@ func CreateTestTableDescriptor(
 func (n *createViewNode) resolveViewDependencies(
 	tbl *sqlbase.TableDescriptor, backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
 ) {
-	var scanNodes []*scanNode
-	resolveScanNodes(n.sourcePlan, &scanNodes)
-
 	// Add the necessary back-references to the descriptor for each referenced
 	// table / view.
-	for _, scan := range scanNodes {
+	populateViewBackrefs(n.sourcePlan, tbl, backrefs)
+
+	// Also create the forward references in the new view's descriptor.
+	tbl.DependsOn = make([]sqlbase.ID, 0, len(backrefs))
+	for _, backref := range backrefs {
+		tbl.DependsOn = append(tbl.DependsOn, backref.ID)
+	}
+}
+
+func populateViewBackrefs(
+	plan planNode, tbl *sqlbase.TableDescriptor, backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
+) {
+	// I was initially concerned about doing type assertions on every node in
+	// the tree, but it's actually faster than a string comparison on the name
+	// returned by ExplainPlan, judging by a mini-benchmark run on my laptop
+	// with go 1.7.1.
+	if sel, ok := plan.(*selectNode); ok {
+		// If this is a view, we don't want to resolve the underlying scan(s).
+		// We instead prefer to track the dependency on the view itself rather
+		// than on its indirect dependencies.
+		if sel.source.info.viewDesc != nil {
+			desc, ok := backrefs[sel.source.info.viewDesc.ID]
+			if !ok {
+				desc = sel.source.info.viewDesc
+				backrefs[desc.ID] = desc
+			}
+			ref := sqlbase.TableDescriptor_Reference{ID: tbl.ID}
+			desc.DependedOnBy = append(desc.DependedOnBy, ref)
+
+			// Return early to avoid processing the view's underlying query.
+			return
+		}
+	} else if scan, ok := plan.(*scanNode); ok {
 		desc, ok := backrefs[scan.desc.ID]
 		if !ok {
 			desc = &scan.desc
 			backrefs[desc.ID] = desc
 		}
-
 		ref := sqlbase.TableDescriptor_Reference{
 			ID:        tbl.ID,
 			ColumnIDs: make([]sqlbase.ColumnID, len(scan.cols)),
@@ -1262,28 +1290,10 @@ func (n *createViewNode) resolveViewDependencies(
 		desc.DependedOnBy = append(desc.DependedOnBy, ref)
 	}
 
-	// Also create the forward references in the new view's descriptor.
-	tbl.DependsOn = make([]sqlbase.ID, 0, len(backrefs))
-	for _, backref := range backrefs {
-		tbl.DependsOn = append(tbl.DependsOn, backref.ID)
-	}
-}
-
-// TODO(a-robinson): How do we detect planDataSource nodes that contain a view?
-// TODO(a-robinson): What if the scanNode references the view being created?
-func resolveScanNodes(plan planNode, scanNodes *[]*scanNode) {
-	// I was initially concerned about doing type assertions on every node in
-	// the tree, but it's actually faster than a string comparison on the name
-	// returned by ExplainPlan, judging by a mini-benchmark run on my laptop
-	// with go 1.7.1.
-	if scan, ok := plan.(*scanNode); ok {
-		*scanNodes = append(*scanNodes, scan)
-	}
-
 	// We have to use the verbose version of ExplainPlan because the non-verbose
 	// form skips over some layers of the tree (e.g. selectTopNode, selectNode).
 	_, _, children := plan.ExplainPlan(true)
 	for _, child := range children {
-		resolveScanNodes(child, scanNodes)
+		populateViewBackrefs(child, tbl, backrefs)
 	}
 }

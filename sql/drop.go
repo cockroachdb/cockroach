@@ -802,7 +802,9 @@ func (p *planner) dropViewImpl(viewDesc *sqlbase.TableDescriptor) ([]string, err
 				errors.Errorf("error resolving dependency relation ID %d: %v", depID, err)
 		}
 		dependencyDesc.DependedOnBy = removeMatchingReferences(dependencyDesc.DependedOnBy, viewDesc.ID)
-		p.saveNonmutationAndNotify(dependencyDesc)
+		if err := p.saveNonmutationAndNotify(dependencyDesc); err != nil {
+			return cascadeDroppedViews, err
+		}
 	}
 	viewDesc.DependsOn = nil
 
@@ -814,7 +816,11 @@ func (p *planner) dropViewImpl(viewDesc *sqlbase.TableDescriptor) ([]string, err
 			return cascadeDroppedViews,
 				errors.Errorf("error resolving dependent view ID %d: %v", ref.ID, err)
 		}
-		p.dropViewImpl(dependentDesc)
+		cascadedViews, err := p.dropViewImpl(dependentDesc)
+		if err != nil {
+			return cascadeDroppedViews, err
+		}
+		cascadeDroppedViews = append(cascadeDroppedViews, cascadedViews...)
 		cascadeDroppedViews = append(cascadeDroppedViews, dependentDesc.Name)
 	}
 
