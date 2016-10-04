@@ -283,7 +283,9 @@ func (a Allocator) RemoveTarget(
 // rebalance. This helps prevent a stampeding herd targeting an abnormally
 // under-utilized store.
 func (a Allocator) RebalanceTarget(
-	constraints config.Constraints, existing []roachpb.ReplicaDescriptor, leaseStoreID roachpb.StoreID,
+	constraints config.Constraints,
+	existing []roachpb.ReplicaDescriptor,
+	leaseStoreID roachpb.StoreID,
 ) *roachpb.StoreDescriptor {
 	if !a.options.AllowRebalance {
 		return nil

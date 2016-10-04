@@ -1091,7 +1091,9 @@ func (a spanEvents) Less(i, j int) bool {
 // merging the spans for the disjunctions (top-level OR branches). The resulting
 // spans are non-overlapping and ordered.
 func makeSpans(
-	constraints orIndexConstraints, tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
+	constraints orIndexConstraints,
+	tableDesc *sqlbase.TableDescriptor,
+	index *sqlbase.IndexDescriptor,
 ) roachpb.Spans {
 	if len(constraints) == 0 {
 		return makeSpansForIndexConstraints(nil, tableDesc, index)
