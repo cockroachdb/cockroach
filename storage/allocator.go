@@ -58,6 +58,17 @@ const (
 	AllocatorRemoveDead
 )
 
+var allocatorActionNames = map[AllocatorAction]string{
+	AllocatorNoop:       "noop",
+	AllocatorRemove:     "remove",
+	AllocatorAdd:        "add",
+	AllocatorRemoveDead: "remove dead",
+}
+
+func (a AllocatorAction) String() string {
+	return allocatorActionNames[a]
+}
+
 // allocatorError indicates a retryable error condition which sends replicas
 // being processed through the replicate_queue into purgatory so that they
 // can be retried quickly as soon as new stores come online, or additional
