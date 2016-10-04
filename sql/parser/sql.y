@@ -3772,7 +3772,7 @@ func_expr_common_subexpr:
   }
 | OVERLAY '(' overlay_list ')'
   {
-    $$.val = &OverlayExpr{FuncExpr{Name: WrapQualifiedFunctionName($1), Exprs: $3.exprs()}}
+    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1), Exprs: $3.exprs()}
   }
 | POSITION '(' position_list ')'
   {
@@ -4059,6 +4059,10 @@ extract_list:
   {
     $$.val = Exprs{&StrVal{s: $1}, $3.expr()}
   }
+| expr_list
+  {
+    $$.val = $1.exprs()
+  }
 
 // TODO(vivek): Narrow down to just IDENT once the other
 // terms are not keywords.
@@ -4084,6 +4088,10 @@ overlay_list:
 | a_expr overlay_placing substr_from
   {
     $$.val = Exprs{$1.expr(), $2.expr(), $3.expr()}
+  }
+| expr_list
+  {
+    $$.val = $1.exprs()
   }
 
 overlay_placing:
