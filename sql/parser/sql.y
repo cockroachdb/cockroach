@@ -590,7 +590,7 @@ func (u *sqlSymUnion) window() Window {
 %token <str>   DISTINCT DO DOUBLE DROP
 
 %token <str>   ELSE ENCODING END ESCAPE EXCEPT
-%token <str>   EXISTS EXECUTE EXPLAIN EXTRACT
+%token <str>   EXISTS EXECUTE EXPLAIN EXTRACT EXTRACT_DURATION
 
 %token <str>   FALSE FAMILY FETCH FILTER FIRST FLOAT FLOORDIV FOLLOWING FOR
 %token <str>   FORCE_INDEX FOREIGN FROM FULL
@@ -3770,6 +3770,10 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1), Exprs: $3.exprs()}
   }
+| EXTRACT_DURATION '(' extract_list ')'
+  {
+    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1), Exprs: $3.exprs()}
+  }
 | OVERLAY '(' overlay_list ')'
   {
     $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1), Exprs: $3.exprs()}
@@ -4709,6 +4713,7 @@ col_name_keyword:
 | DECIMAL
 | EXISTS
 | EXTRACT
+| EXTRACT_DURATION
 | FLOAT
 | GREATEST
 | GROUPING

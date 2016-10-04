@@ -686,6 +686,38 @@ var Builtins = map[string][]Builtin{
 			},
 		},
 	},
+	"extract_duration": {
+		Builtin{
+			Types:      ArgTypes{TypeString, TypeInterval},
+			ReturnType: TypeInt,
+			category:   categoryDateAndTime,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				// extract timeSpan fromTime.
+				fromInterval := *args[1].(*DInterval)
+				timeSpan := strings.ToLower(string(*args[0].(*DString)))
+				switch timeSpan {
+				case "hour", "hours":
+					return NewDInt(DInt(fromInterval.Nanos / int64(time.Hour))), nil
+
+				case "minute", "minutes":
+					return NewDInt(DInt(fromInterval.Nanos / int64(time.Minute))), nil
+
+				case "second", "seconds":
+					return NewDInt(DInt(fromInterval.Nanos / int64(time.Second))), nil
+
+				case "millisecond", "milliseconds":
+					// This a PG extension not supported in MySQL.
+					return NewDInt(DInt(fromInterval.Nanos / int64(time.Millisecond))), nil
+
+				case "microsecond", "microseconds":
+					return NewDInt(DInt(fromInterval.Nanos / int64(time.Microsecond))), nil
+
+				default:
+					return DNull, fmt.Errorf("unsupported timespan: %s", timeSpan)
+				}
+			},
+		},
+	},
 
 	// Math functions
 
