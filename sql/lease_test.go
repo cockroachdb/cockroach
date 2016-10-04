@@ -590,7 +590,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 // to use a table descriptor with an expired lease.
 func TestTxnObeysLeaseExpiration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(vivek): #7031")
+
 	// Set the lease duration such that it expires quickly.
 	savedLeaseDuration, savedMinLeaseDuration := csql.LeaseDuration, csql.MinLeaseDuration
 	defer func() {
@@ -603,11 +603,7 @@ func TestTxnObeysLeaseExpiration(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
-INSERT INTO t.kv VALUES ('a', 'b');
-`); err != nil {
+	if _, err := sqlDB.Exec(`CREATE DATABASE t`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -618,13 +614,37 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	clock.SetMaxOffset(10 * csql.LeaseDuration)
 
 	// Run a number of sql operations and expire the lease they acquire.
-	runCommandAndExpireLease(t, clock, sqlDB, `INSERT INTO t.kv VALUES ('c', 'd')`)
-	runCommandAndExpireLease(t, clock, sqlDB, `UPDATE t.kv SET v = 'd' WHERE k = 'a'`)
-	runCommandAndExpireLease(t, clock, sqlDB, `DELETE FROM t.kv WHERE k = 'a'`)
-	runCommandAndExpireLease(t, clock, sqlDB, `TRUNCATE TABLE t.kv`)
+	operations := []string{
+		`INSERT INTO %s VALUES ('c', 'd')`,
+		`UPDATE %s SET v = 'd' WHERE k = 'a'`,
+		`DELETE FROM %s WHERE k = 'a'`,
+		`TRUNCATE TABLE %s`,
+	}
+
+	for i, sql := range operations {
+		runCommandAndExpireLease(t, clock, sqlDB, i, sql)
+	}
 }
 
-func runCommandAndExpireLease(t *testing.T, clock *hlc.Clock, sqlDB *gosql.DB, sql string) {
+func runCommandAndExpireLease(
+	t *testing.T, clock *hlc.Clock, sqlDB *gosql.DB, sequence int, sql string,
+) {
+	// We would ideally use one table for all the tests. Unfortunately when a
+	// sql operation fails on commit() below, the failure occasionally fails
+	// to perform the follow-up cleaning up of intents--its best effort. While
+	// this is valid, the left over intents can collide with another sql
+	// operation resulting in it getting pushed which is not the behavior we
+	// want here. We want transactions in this test to only get pushed by the
+	// SELECT read transaction below. Each sql operation is therefore run
+	// against a different table to isolate it from the others.
+	table := fmt.Sprintf("t.kv%d", sequence)
+	if _, err := sqlDB.Exec(fmt.Sprintf(`
+CREATE TABLE %s (k CHAR PRIMARY KEY, v CHAR);
+INSERT INTO %s VALUES ('a', 'b');
+`, table, table)); err != nil {
+		t.Fatal(err)
+	}
+
 	// Run a transaction that lets its table lease expire.
 	txn, err := sqlDB.Begin()
 	if err != nil {
@@ -635,7 +655,7 @@ func runCommandAndExpireLease(t *testing.T, clock *hlc.Clock, sqlDB *gosql.DB, s
 	if _, err := txn.Exec("SET TRANSACTION ISOLATION LEVEL SNAPSHOT"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := txn.Exec(sql); err != nil {
+	if _, err := txn.Exec(fmt.Sprintf(sql, table)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -643,7 +663,7 @@ func runCommandAndExpireLease(t *testing.T, clock *hlc.Clock, sqlDB *gosql.DB, s
 	_ = clock.Update(clock.Now().Add(int64(2*csql.LeaseDuration), 0))
 
 	// Run another transaction that pushes the above transaction.
-	if _, err := sqlDB.Query("SELECT * FROM t.kv"); err != nil {
+	if _, err := sqlDB.Query(fmt.Sprintf("SELECT * FROM %s", table)); err != nil {
 		t.Fatal(err)
 	}
 
