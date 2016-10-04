@@ -76,7 +76,7 @@ func tablesNeededForFKs(table sqlbase.TableDescriptor, usage FKCheck) tableLooku
 
 type fkInsertHelper map[sqlbase.IndexID][]baseFKHelper
 
-var errSkipUnsedFK = errors.New("no columns involved in FK included in writer")
+var errSkipUnusedFK = errors.New("no columns involved in FK included in writer")
 
 func makeFKInsertHelper(
 	txn *client.Txn,
@@ -88,7 +88,7 @@ func makeFKInsertHelper(
 	for _, idx := range table.AllNonDropIndexes() {
 		if idx.ForeignKey.IsSet() {
 			fk, err := makeBaseFKHelper(txn, otherTables, idx, idx.ForeignKey, colMap)
-			if err == errSkipUnsedFK {
+			if err == errSkipUnusedFK {
 				continue
 			}
 			if err != nil {
@@ -158,7 +158,7 @@ func makeFKDeleteHelper(
 				continue
 			}
 			fk, err := makeBaseFKHelper(txn, otherTables, idx, ref, colMap)
-			if err == errSkipUnsedFK {
+			if err == errSkipUnusedFK {
 				continue
 			}
 			if err != nil {
@@ -284,7 +284,7 @@ func makeBaseFKHelper(
 		}
 	}
 	if nulls {
-		return b, errSkipUnsedFK
+		return b, errSkipUnusedFK
 	}
 	return b, nil
 }
