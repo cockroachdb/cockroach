@@ -110,7 +110,7 @@ func (ds *ServerImpl) setupFlow(
 
 // SetupSimpleFlow sets up a simple flow, connecting the simple response output
 // stream to the given RowReceiver. The flow is not started.
-// The context will be associated with the flow.
+// The flow will be associated with the given context.
 func (ds *ServerImpl) SetupSimpleFlow(
 	ctx context.Context, req *SetupFlowRequest, output RowReceiver,
 ) (*Flow, error) {
