@@ -25,7 +25,7 @@ eexpect root@
 send "foo;\r"
 eexpect "syntax error"
 eexpect root@
-send "\022SEL"
+send "\022sel"
 eexpect "SELECT 1;"
 
 # Test that recalled previous line can be executed
@@ -49,10 +49,17 @@ send "\004"
 eexpect eof
 
 # Test that history is preserved across runs
-spawn /cockroach/cockroach sql
+spawn $argv sql
 eexpect root@
 send "\033\[A"
 eexpect "SELECT 1;"
+
+# Test that the client cannot terminate with Ctrl+C while
+# cursor is on recalled line
+send "\003"
+send "\rselect 1;\r"
+eexpect "1 row"
+eexpect root@
 
 # Finally terminate with Ctrl+C
 send "\003"

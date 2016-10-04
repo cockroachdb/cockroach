@@ -32,6 +32,14 @@ eexpect "root@"
 send "\033\[A"
 eexpect "SELECT 1, 2, 3;"
 
+# Test that Ctrl+C after the first line merely cancels the statement and presents the prompt.
+send "\r"
+eexpect root@
+send "SELECT\r"
+eexpect " ->"
+send "\003"
+eexpect root@
+
 send "\003"
 eexpect eof
 
