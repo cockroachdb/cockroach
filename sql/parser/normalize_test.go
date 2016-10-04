@@ -122,8 +122,8 @@ func TestNormalizeExpr(t *testing.T) {
 		{`ANNOTATE_TYPE(1, float)`, `1.0`},
 		// TODO(nvanbenschoten) introduce a shorthand type annotation notation.
 		// {`1!float`, `1.0`},
-		{`IF((true AND a < 0), (0 + a)::decimal, 2 / (1 - 1))`, `IF(a < 0, CAST(a AS DECIMAL), 2 / 0)`},
-		{`IF((true OR a < 0), (0 + a)::decimal, 2 / (1 - 1))`, `CAST(a AS DECIMAL)`},
+		{`IF((true AND a < 0), (0 + a)::decimal, 2 / (1 - 1))`, `IF(a < 0, a::DECIMAL, 2 / 0)`},
+		{`IF((true OR a < 0), (0 + a)::decimal, 2 / (1 - 1))`, `a::DECIMAL`},
 		{`COALESCE(NULL, (NULL < 3), a = 2 - 1, d)`, `COALESCE(a = 1, d)`},
 		{`COALESCE(NULL, a)`, `a`},
 	}
