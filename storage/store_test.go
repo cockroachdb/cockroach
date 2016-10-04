@@ -494,8 +494,18 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	}
 
 	const expected = "replica .* was garbage collected"
-	if _, _, err := rng1.proposeRaftCommand(context.Background(), roachpb.BatchRequest{}); !testutils.IsError(err, expected) {
-		t.Fatalf("expected error %s, but got %v", expected, err)
+	rng1.mu.Lock()
+	expErr := rng1.mu.destroyed
+	rng1.mu.Unlock()
+
+	if expErr == nil {
+		t.Fatal("replica was not marked as destroyed")
+	}
+
+	if _, _, err := rng1.proposeRaftCommand(
+		context.Background(), roachpb.BatchRequest{},
+	); err != expErr {
+		t.Fatalf("expected error %s, but got %v", expErr, err)
 	}
 }
 
