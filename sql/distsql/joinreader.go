@@ -101,7 +101,7 @@ func (jr *joinReader) mainLoop() error {
 	ctx, closeSpan := tracing.ChildSpan(jr.ctx, "join reader")
 	defer closeSpan()
 
-	log.VEventf(1, ctx, "starting (filter: %s)", jr.filter)
+	log.VEventf(1, ctx, "starting (filter: %s)", &jr.filter)
 	if log.V(1) {
 		defer log.Infof(ctx, "exiting")
 	}

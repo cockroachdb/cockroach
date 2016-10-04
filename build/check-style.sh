@@ -159,7 +159,7 @@ TestUnconvert() {
 }
 
 TestUnused() {
-  ! unused -reflect=false -exported ./... | grep -vE 'sql/(pgwire/pgerror/codes.go|(parser/yacc(par|tab)))'
+  ! unused -reflect=false -exported ./... | grep -vE 'sql/(pgwire/pgerror/codes.go|parser/yacc(par|tab))|(field|type) noCopy '
 }
 
 TestStaticcheck() {
