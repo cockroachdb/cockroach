@@ -1590,16 +1590,16 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 
 	// Replace the end key of the original range with the start key of
 	// the new range. Reinsert the range since the btree is keyed by range end keys.
-	if s.mu.replicasByKey.Delete(origRng) == nil {
-		return errors.Errorf("couldn't find range %s in replicasByKey btree", origRng)
+	if kr := s.mu.replicasByKey.Delete(origRng); kr != origRng {
+		return errors.Errorf("replicasByKey unexpectedly contains %v instead of replica %s", kr, origRng)
 	}
 
 	copyDesc := *origDesc
 	copyDesc.EndKey = append([]byte(nil), newDesc.StartKey...)
 	origRng.setDescWithoutProcessUpdate(&copyDesc)
 
-	if s.mu.replicasByKey.ReplaceOrInsert(origRng) != nil {
-		return errors.Errorf("couldn't insert range %v in replicasByKey btree", origRng)
+	if kr := s.mu.replicasByKey.ReplaceOrInsert(origRng); kr != nil {
+		return errors.Errorf("replicasByKey unexpectedly contains %s when inserting replica %s", kr, origRng)
 	}
 
 	if err := s.addReplicaInternalLocked(newRng); err != nil {
@@ -1760,17 +1760,12 @@ func (s *Store) removeReplicaImpl(
 		s.mu.Unlock()
 		return errors.New("replica not found")
 	}
-	if s.getOverlappingKeyRangeLocked(desc) != rep {
-		// This is a fatal error because returning at this point will
-		// leave the Store in an inconsistent state (we've already deleted
-		// from s.mu.replicas), and uninitialized replicas shouldn't make
-		// it this far anyway. This method will need some changes when we
-		// introduce GC of uninitialized replicas.
-		//
-		// TODO(peter): The above comment is out of date: we could return an error
-		// here but are not doing so yet in the name of conservatism.
+	if kr := s.getOverlappingKeyRangeLocked(desc); kr != rep {
+		// This is a fatal error because uninitialized replicas shouldn't make it
+		// this far. This method will need some changes when we introduce GC of
+		// uninitialized replicas.
 		s.mu.Unlock()
-		log.Fatalf(s.Ctx(), "replica %s found by id but not by key", rep)
+		log.Fatalf(s.Ctx(), "replica %s unexpectedly overlapped by %v", rep, kr)
 	}
 	// Adjust stats before calling Destroy. This can be called before or after
 	// Destroy, but this configuration helps avoid races in stat verification
@@ -1813,10 +1808,10 @@ func (s *Store) removeReplicaImpl(
 	delete(s.mu.replicaPlaceholders, rep.RangeID)
 	delete(s.mu.replicaQueues, rep.RangeID)
 	delete(s.mu.uninitReplicas, rep.RangeID)
-	if s.mu.replicasByKey.Delete(rep) == nil {
+	if kr := s.mu.replicasByKey.Delete(rep); kr != rep {
 		// We already checked that our replica was present in replicasByKey
 		// above. Nothing should have been able to change that.
-		log.Fatalf(s.Ctx(), "replica %s found by id but not by key", rep)
+		log.Fatalf(s.Ctx(), "replica %s unexpectedly overlapped by %v", rep, kr)
 	}
 	s.scanner.RemoveReplica(rep)
 	s.consistencyScanner.RemoveReplica(rep)
