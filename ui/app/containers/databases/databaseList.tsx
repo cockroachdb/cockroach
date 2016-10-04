@@ -7,11 +7,15 @@ import { createSelector } from "reselect";
 import * as protos from "../../js/protos";
 import { AdminUIState } from "../../redux/state";
 import { setUISetting } from "../../redux/ui";
-import { refreshDatabases, refreshDatabaseDetails, KeyedCachedDataReducerState } from "../../redux/apiReducers";
+import { refreshDatabases, refreshDatabaseDetails, refreshEvents, KeyedCachedDataReducerState } from "../../redux/apiReducers";
 import { SortSetting } from "../../components/sortabletable";
 import { SortedTable } from "../../components/sortedtable";
+import { TimestampToMoment } from "../../util/convert";
+import { isDatabaseEvent } from "../../util/eventTypes";
+import { Bytes } from "../../util/format";
 
 type DatabaseDetailsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.DatabaseDetailsResponseMessage;
+type Event = Proto2TypeScript.cockroach.server.serverpb.EventsResponse.Event;
 
 // Constant used to store sort settings in the redux UI store.
 const UI_DATABASES_SORT_SETTING_KEY = "databaseList/sort_setting";
@@ -19,7 +23,13 @@ const UI_DATABASES_SORT_SETTING_KEY = "databaseList/sort_setting";
 // DatabaseInfo is a structure that aggregates information from multiple backend
 // queries regarding the same database.
 class DatabaseInfo {
-  constructor(public name: string, public numTables: number) { };
+  constructor(
+    public name: string,
+    public id?: number,
+    public numTables?: number,
+    public replicationFactor?: number,
+    public targetRangeSize?: number
+  ) { };
 }
 
 // Specialization of generic SortedTable component:
@@ -38,9 +48,12 @@ interface DatabaseListData {
   // Current sort setting for the table. Incoming rows will already be sorted
   // according to this setting.
   sortSetting: SortSetting;
-  // A list of databases, which are possibly sorted according to
-  // sortSetting.
+  // A list of databases, which are possibly sorted according to sortSetting.
   databaseInfos: DatabaseInfo[];
+  // All events, which are sorted descending by timestamp.
+  events: Event[];
+  // Event counts by ID
+  eventCounts: { [id: number]: number };
 }
 
 /**
@@ -52,6 +65,7 @@ interface DatabaseListActions {
   setUISetting: typeof setUISetting;
   refreshDatabases: typeof refreshDatabases;
   refreshDatabaseDetails: typeof refreshDatabaseDetails;
+  refreshEvents: typeof refreshEvents;
 }
 
 /**
@@ -70,7 +84,7 @@ class DatabaseList extends React.Component<DatabaseListProps, {}> {
     this.props.setUISetting(UI_DATABASES_SORT_SETTING_KEY, setting);
   }
 
-  // loadDatabaseDetails loads detailed data for each database with no info in 
+  // loadDatabaseDetails loads detailed data for each database with no info in
   // the store.
   loadDatabaseDetails(props = this.props) {
     if (props.databaseInfos.length) {
@@ -86,6 +100,7 @@ class DatabaseList extends React.Component<DatabaseListProps, {}> {
 
   componentWillMount() {
     this.props.refreshDatabases();
+    this.props.refreshEvents();
     this.loadDatabaseDetails();
   }
 
@@ -94,7 +109,7 @@ class DatabaseList extends React.Component<DatabaseListProps, {}> {
   }
 
   render() {
-    let { databaseInfos, sortSetting } = this.props;
+    let { databaseInfos, sortSetting, events, eventCounts } = this.props;
 
     if (databaseInfos) {
       return <div className="sql-table">
@@ -116,19 +131,29 @@ class DatabaseList extends React.Component<DatabaseListProps, {}> {
             },
             {
               title: "Last Modified",
-              cell: (dbInfo) => "", // TODO (maxlang): Pending #8246
+              cell: (dbInfo) => {
+                let mostRecentEvent = _.find(events, (e) => e.target_id.toNumber() === dbInfo.id);
+                if (mostRecentEvent && mostRecentEvent.timestamp) {
+                  return TimestampToMoment(mostRecentEvent.timestamp).fromNow();
+                }
+                return "N/A";
+              },
+              sort: _.identity,
             },
             {
               title: "Events",
-              cell: (dbInfo) => "", // TODO (maxlang): Pending #8246
+              cell: (dbInfo) => eventCounts[dbInfo.id],
+              sort: _.identity,
             },
             {
               title: "Replication Factor",
-              cell: (dbInfo) => "", // TODO (maxlang): Pending #8248
+              cell: (dbInfo) => dbInfo.replicationFactor,
+              sort: _.identity,
             },
             {
               title: "Target Range Size",
-              cell: (dbInfo) => "", // TODO (maxlang): Pending #8248
+              cell: (dbInfo) => Bytes(dbInfo.targetRangeSize),
+              sort: _.identity,
             },
           ]} />
       </div>;
@@ -147,8 +172,33 @@ let databaseInfos = createSelector(
   databases,
   databaseDetails,
   (dbs: string[], details: KeyedCachedDataReducerState<DatabaseDetailsResponseMessage>): DatabaseInfo[] => {
-    return _.map(dbs, (db) => new DatabaseInfo(db, details[db] && details[db].data && details[db].data.table_names.length));
+    return _.map(dbs, (dbName) => {
+      let dbData = details[dbName] && (details[dbName].data as DatabaseDetailsResponseMessage);
+      if (dbData) {
+        return new DatabaseInfo(
+          dbName,
+          dbData.descriptor_id.toNumber(),
+          dbData.table_names.length,
+          dbData.zone_config.num_replicas,
+          dbData.zone_config.range_max_bytes.toNumber()
+        );
+      }
+      return new DatabaseInfo(dbName);
+    });
   }
+);
+
+// Events are sorted descending by timestamp on the server..
+export let events = (state: AdminUIState): Event[] => state.cachedData.events.data && state.cachedData.events.data.events;
+
+let databaseEvents = createSelector(
+  events,
+  (es: Event[]) => _.filter(es, isDatabaseEvent)
+);
+
+let eventCounts = createSelector(
+  databaseEvents,
+  (es: Event[]) => _.countBy(es, (e) => e.target_id.toNumber())
 );
 
 // Connect the DatabaseList class with our redux store.
@@ -157,12 +207,15 @@ let databaseListConnected = connect(
     return {
       databaseInfos: databaseInfos(state),
       sortSetting: sortSetting(state),
+      events: databaseEvents(state),
+      eventCounts: eventCounts(state),
     };
   },
   {
     setUISetting,
     refreshDatabases,
     refreshDatabaseDetails,
+    refreshEvents,
   }
 )(DatabaseList);
 
