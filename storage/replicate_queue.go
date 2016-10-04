@@ -109,6 +109,9 @@ func (rq *replicateQueue) shouldQueue(
 
 	action, priority := rq.allocator.ComputeAction(zone, desc)
 	if action != AllocatorNoop {
+		if log.V(2) {
+			log.Infof(rq.ctx, "enqueuing %s: repair needed", repl)
+		}
 		return true, priority
 	}
 	// See if there is a rebalancing opportunity present.
@@ -118,6 +121,13 @@ func (rq *replicateQueue) shouldQueue(
 	}
 	target := rq.allocator.RebalanceTarget(
 		zone.Constraints, desc.Replicas, leaseStoreID)
+	if log.V(2) {
+		if target != nil {
+			log.Infof(rq.ctx, "enqueuing %s: rebalance target found", repl)
+		} else {
+			log.Infof(rq.ctx, "not enqueuing %s: no rebalance target found", repl)
+		}
+	}
 	return target != nil, 0
 }
 
