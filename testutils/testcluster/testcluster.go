@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/retry"
 	"github.com/cockroachdb/cockroach/util/stop"
@@ -401,22 +402,16 @@ func (tc *TestCluster) TransferRangeLease(
 	return nil
 }
 
-// FindRangeLeaseHolder returns the current lease holder for the given range.
-// In particular, it returns one particular node's (the hint, if specified) view
-// of the current lease.
-// An error is returned if there's no active lease.
-//
-// Note that not all nodes have necessarily applied the latest lease,
-// particularly immediately after a TransferRangeLease() call. So specifying
-// different hints can yield different results. The one server that's guaranteed
-// to have applied the transfer is the previous lease holder.
-func (tc *TestCluster) FindRangeLeaseHolder(
+// FindRangeLease is similar to FindRangeLeaseHolder but returns a Lease proto
+// without verifying if the lease is still active. Instead, it returns a time-
+// stamp taken off the queried node's clock.
+func (tc *TestCluster) FindRangeLease(
 	rangeDesc *roachpb.RangeDescriptor, hint *ReplicationTarget,
-) (ReplicationTarget, error) {
+) (_ *roachpb.Lease, now hlc.Timestamp, _ error) {
 	if hint != nil {
 		var ok bool
 		if _, ok = rangeDesc.GetReplicaDescriptor(hint.StoreID); !ok {
-			return ReplicationTarget{}, errors.Errorf(
+			return nil, hlc.ZeroTimestamp, errors.Errorf(
 				"bad hint: %+v; store doesn't have a replica of the range", hint)
 		}
 	} else {
@@ -435,7 +430,7 @@ func (tc *TestCluster) FindRangeLeaseHolder(
 		}
 	}
 	if hintServer == nil {
-		return ReplicationTarget{}, errors.Errorf("bad hint: %+v; no such node", hint)
+		return nil, hlc.ZeroTimestamp, errors.Errorf("bad hint: %+v; no such node", hint)
 	}
 	leaseReq := roachpb.LeaseInfoRequest{
 		Span: roachpb.Span{
@@ -452,11 +447,29 @@ func (tc *TestCluster) FindRangeLeaseHolder(
 		},
 		&leaseReq)
 	if pErr != nil {
-		return ReplicationTarget{}, pErr.GoError()
+		return nil, hlc.ZeroTimestamp, pErr.GoError()
 	}
-	lease := leaseResp.(*roachpb.LeaseInfoResponse).Lease
-	if lease == nil || !lease.Covers(hintServer.Clock().Now()) {
-		return ReplicationTarget{}, errors.Errorf("no active lease")
+	return leaseResp.(*roachpb.LeaseInfoResponse).Lease, hintServer.Clock().Now(), nil
+}
+
+// FindRangeLeaseHolder returns the current lease holder for the given range.
+// In particular, it returns one particular node's (the hint, if specified) view
+// of the current lease.
+// An error is returned if there's no active lease.
+//
+// Note that not all nodes have necessarily applied the latest lease,
+// particularly immediately after a TransferRangeLease() call. So specifying
+// different hints can yield different results. The one server that's guaranteed
+// to have applied the transfer is the previous lease holder.
+func (tc *TestCluster) FindRangeLeaseHolder(
+	rangeDesc *roachpb.RangeDescriptor, hint *ReplicationTarget,
+) (ReplicationTarget, error) {
+	lease, now, err := tc.FindRangeLease(rangeDesc, hint)
+	if err != nil {
+		return ReplicationTarget{}, err
+	}
+	if lease == nil || !lease.Covers(now) {
+		return ReplicationTarget{}, errors.New("no active lease")
 	}
 	replicaDesc := lease.Replica
 	return ReplicationTarget{NodeID: replicaDesc.NodeID, StoreID: replicaDesc.StoreID}, nil
