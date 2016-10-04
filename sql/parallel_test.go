@@ -241,6 +241,7 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 
 func TestParallel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skipf("TODO(radu): #8089")
 
 	glob := string(*paralleltestdata)
 	paths, err := filepath.Glob(glob)
