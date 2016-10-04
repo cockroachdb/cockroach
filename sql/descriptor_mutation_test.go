@@ -201,8 +201,8 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 	defer csql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := createTestServerParams()
-	params.Knobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
-		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+	params.Knobs.SQLSchemaChanger = &csql.SchemaChangerTestingKnobs{
+		AsyncExecNotification: asyncSchemaChangerDisabled,
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop()
@@ -428,8 +428,8 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 	defer csql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := createTestServerParams()
-	params.Knobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
-		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+	params.Knobs.SQLSchemaChanger = &csql.SchemaChangerTestingKnobs{
+		AsyncExecNotification: asyncSchemaChangerDisabled,
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop()
@@ -575,8 +575,8 @@ func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 	defer csql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := createTestServerParams()
-	params.Knobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
-		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+	params.Knobs.SQLSchemaChanger = &csql.SchemaChangerTestingKnobs{
+		AsyncExecNotification: asyncSchemaChangerDisabled,
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop()
@@ -751,8 +751,8 @@ func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 	defer csql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := createTestServerParams()
-	params.Knobs.SQLSchemaChangeManager = &csql.SchemaChangeManagerTestingKnobs{
-		AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+	params.Knobs.SQLSchemaChanger = &csql.SchemaChangerTestingKnobs{
+		AsyncExecNotification: asyncSchemaChangerDisabled,
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop()
@@ -958,13 +958,11 @@ func TestTableMutationQueue(t *testing.T) {
 	// the mutations get queued up.
 	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		SQLExecutor: &csql.ExecutorTestingKnobs{
-			SyncSchemaChangersFilter: func(tscc csql.TestingSchemaChangerCollection) {
+		SQLSchemaChanger: &csql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc csql.TestingSchemaChangerCollection) {
 				tscc.ClearSchemaChangers()
 			},
-		},
-		SQLSchemaChangeManager: &csql.SchemaChangeManagerTestingKnobs{
-			AsyncSchemaChangerExecNotification: schemaChangeManagerDisabled,
+			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
