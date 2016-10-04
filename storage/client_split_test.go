@@ -1219,7 +1219,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 
 	// Make a context tied to the Stopper. The test works without, but this
 	// is cleaner since we won't properly terminate the transaction below.
-	ctx := tc.Server(0).Stopper().WithCancel(ctx)
+	ctx = tc.Server(0).Stopper().WithCancel(ctx)
 
 	// This transaction will try to write "under" a served read.
 	txnOld := client.NewTxn(ctx, *db)
