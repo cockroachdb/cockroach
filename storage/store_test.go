@@ -339,11 +339,11 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	}
 	// Create a new range (id=2).
 	rng2 := createReplica(store, 2, roachpb.RKey("a"), roachpb.RKey("b"))
-	if err := store.AddReplicaTest(rng2); err != nil {
+	if err := store.AddReplica(rng2); err != nil {
 		t.Fatal(err)
 	}
 	// Try to add the same range twice
-	err = store.AddReplicaTest(rng2)
+	err = store.AddReplica(rng2)
 	if err == nil {
 		t.Fatal("expected error re-adding same range")
 	}
@@ -353,12 +353,12 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	}
 	// Try to add a range with previously-used (but now removed) ID.
 	rng2Dup := createReplica(store, 1, roachpb.RKey("a"), roachpb.RKey("b"))
-	if err := store.AddReplicaTest(rng2Dup); err == nil {
+	if err := store.AddReplica(rng2Dup); err == nil {
 		t.Fatal("expected error inserting a duplicated range")
 	}
 	// Add another range with different key range and then test lookup.
 	rng3 := createReplica(store, 3, roachpb.RKey("c"), roachpb.RKey("d"))
-	if err := store.AddReplicaTest(rng3); err != nil {
+	if err := store.AddReplica(rng3); err != nil {
 		t.Fatal(err)
 	}
 
@@ -425,7 +425,7 @@ func TestReplicasByKey(t *testing.T) {
 
 	for i, desc := range reps {
 		desc.replica = createReplica(store, roachpb.RangeID(desc.id), desc.start, desc.end)
-		err := store.AddReplicaTest(desc.replica)
+		err := store.AddReplica(desc.replica)
 		if desc.expectedErrorOnAdd == "" {
 			if err != nil {
 				t.Fatalf("adding replica %d: expected success, but encountered %s", i, err)
@@ -516,7 +516,7 @@ func TestStoreRangeSet(t *testing.T) {
 	const newCount = 10
 	for i := 0; i < newCount; i++ {
 		rng := createReplica(store, roachpb.RangeID(i+1), roachpb.RKey(fmt.Sprintf("a%02d", i)), roachpb.RKey(fmt.Sprintf("a%02d", i+1)))
-		if err := store.AddReplicaTest(rng); err != nil {
+		if err := store.AddReplica(rng); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -632,7 +632,7 @@ func TestHasOverlappingReplica(t *testing.T) {
 
 	for _, desc := range rngDescs {
 		rng := createReplica(store, roachpb.RangeID(desc.id), desc.start, desc.end)
-		if err := store.AddReplicaTest(rng); err != nil {
+		if err := store.AddReplica(rng); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -675,7 +675,7 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 	}
 
 	rng := createReplica(store, roachpb.RangeID(2), roachpb.RKey("a"), roachpb.RKey("c"))
-	if err := store.AddReplicaTest(rng); err != nil {
+	if err := store.AddReplica(rng); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2251,7 +2251,7 @@ func TestStoreRangePlaceholders(t *testing.T) {
 
 	repID := roachpb.RangeID(2)
 	rep := createReplica(s, repID, roachpb.RKeyMin, roachpb.RKey("c"))
-	if err := s.AddReplicaTest(rep); err != nil {
+	if err := s.AddReplica(rep); err != nil {
 		t.Fatal(err)
 	}
 
