@@ -83,7 +83,6 @@ function metricsQueryReducer(state: MetricsQuery, action: Action) {
         state = _.clone(state);
         state.data = response.data.response;
         state.request = response.data.request;
-        state.nextRequest = undefined;
         state.error = undefined;
       }
       return state;
