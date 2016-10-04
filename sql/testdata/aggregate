@@ -715,6 +715,11 @@ SELECT BOOL_AND(b), BOOL_OR(b) FROM bools
 ----
 false false
 
+query T
+SELECT CONCAT_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
+----
+aabbA
+
 # Tests for the single-row optimization.
 statement OK
 CREATE TABLE ab (
