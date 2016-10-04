@@ -953,7 +953,7 @@ func mvccPutInternal(
 	iter Iterator,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp hlc.Timestamp,
+	readTimestamp hlc.Timestamp,
 	value []byte,
 	txn *roachpb.Transaction,
 	buf *putBuffer,
@@ -961,6 +961,20 @@ func mvccPutInternal(
 ) error {
 	if len(key) == 0 {
 		return emptyKeyError()
+	}
+
+	writeTimestamp := readTimestamp
+
+	// TODO(tschottdorf): Enabling this code causes
+	// TestSnapshotIsolationIncrement to fail because it doesn't get an expected
+	// write too old error. More worrisome, it causes:
+	//
+	// --- FAIL: TestTxnDBLostUpdateAnomaly (0.21s)
+	// 	txn_correctness_test.go:791: 37: iso=[1 0], pri=[1 2], history="R1(A) R2(A) I2(A) C2 I1(A) C1": actual="R1.1(A)[0] R2.1(A)[0] I2.1(A)[1] C2.1 I1.1(A)[1] C1.1", verify="R0.0(A)[1]": expected A=2, got 1
+	if txn != nil {
+		if writeTimestamp.Less(txn.Timestamp) {
+			writeTimestamp = txn.Timestamp
+		}
 	}
 
 	metaKey := MakeMVCCMetadataKey(key)
@@ -989,8 +1003,10 @@ func mvccPutInternal(
 		return valueFn(exVal)
 	}
 
-	// Verify we're not mixing inline and non-inline values.
-	putIsInline := timestamp.Equal(hlc.ZeroTimestamp)
+	// Verify we're not mixing inline and non-inline values. Note that an inline
+	// put is specified by the read timestamp being zero, not the write timestamp
+	// (which may have come from the transaction).
+	putIsInline := readTimestamp.Equal(hlc.ZeroTimestamp)
 	if ok && putIsInline != buf.meta.IsInline() {
 		return errors.Errorf("%q: put is inline=%t, but existing value is inline=%t",
 			metaKey, putIsInline, buf.meta.IsInline())
@@ -1001,7 +1017,7 @@ func mvccPutInternal(
 			return errors.Errorf("%q: inline writes not allowed within transactions", metaKey)
 		}
 		var metaKeySize, metaValSize int64
-		if value, err = maybeGetValue(ok, timestamp); err != nil {
+		if value, err = maybeGetValue(ok, readTimestamp); err != nil {
 			return err
 		}
 		if value == nil {
@@ -1040,20 +1056,20 @@ func mvccPutInternal(
 			// Make sure we process valueFn before clearing any earlier
 			// version.  For example, a conditional put within same
 			// transaction should read previous write.
-			if value, err = maybeGetValue(ok, timestamp); err != nil {
+			if value, err = maybeGetValue(ok, readTimestamp); err != nil {
 				return err
 			}
 			// We are replacing our own older write intent. If we are
 			// writing at the same timestamp we can simply overwrite it;
 			// otherwise we must explicitly delete the obsolete intent.
-			if !timestamp.Equal(meta.Timestamp) {
+			if !readTimestamp.Equal(meta.Timestamp) {
 				versionKey := metaKey
 				versionKey.Timestamp = meta.Timestamp
 				if err = engine.Clear(versionKey); err != nil {
 					return err
 				}
 			}
-		} else if !meta.Timestamp.Less(timestamp) {
+		} else if !meta.Timestamp.Less(writeTimestamp) {
 			// This is the case where we're trying to write under a
 			// committed value. Obviously we can't do that, but we can
 			// increment our timestamp to one logical tick past the existing
@@ -1061,32 +1077,34 @@ func mvccPutInternal(
 			// error indicating what the timestamp ended up being. This
 			// timestamp can then be used to increment the txn timestamp and
 			// be returned with the response.
-			actualTimestamp := meta.Timestamp.Next()
-			maybeTooOldErr = &roachpb.WriteTooOldError{Timestamp: timestamp, ActualTimestamp: actualTimestamp}
+			writeTimestamp = meta.Timestamp.Next()
+			maybeTooOldErr = &roachpb.WriteTooOldError{
+				Timestamp:       readTimestamp,
+				ActualTimestamp: writeTimestamp,
+			}
 			// If we're in a transaction, always get the value at the orig
 			// timestamp.
 			if txn != nil {
-				if value, err = maybeGetValue(ok, timestamp); err != nil {
+				if value, err = maybeGetValue(ok, readTimestamp); err != nil {
 					return err
 				}
 			} else {
 				// Outside of a transaction, read the latest value and advance
 				// the write timestamp to the latest value's timestamp + 1. The
 				// new timestamp is returned to the caller in maybeTooOldErr.
-				if value, err = maybeGetValue(ok, actualTimestamp); err != nil {
+				if value, err = maybeGetValue(ok, writeTimestamp); err != nil {
 					return err
 				}
 			}
-			timestamp = actualTimestamp
 		} else {
-			if value, err = maybeGetValue(ok, timestamp); err != nil {
+			if value, err = maybeGetValue(ok, readTimestamp); err != nil {
 				return err
 			}
 		}
 	} else {
 		// There is no existing value for this key. Even if the new value is
 		// nil write a deletion tombstone for the key.
-		if value, err = maybeGetValue(ok, timestamp); err != nil {
+		if value, err = maybeGetValue(ok, readTimestamp); err != nil {
 			return err
 		}
 	}
@@ -1095,12 +1113,12 @@ func mvccPutInternal(
 		if txn != nil {
 			txnMeta = &txn.TxnMeta
 		}
-		buf.newMeta = enginepb.MVCCMetadata{Txn: txnMeta, Timestamp: timestamp}
+		buf.newMeta = enginepb.MVCCMetadata{Txn: txnMeta, Timestamp: writeTimestamp}
 	}
 	newMeta := &buf.newMeta
 
 	versionKey := metaKey
-	versionKey.Timestamp = timestamp
+	versionKey.Timestamp = writeTimestamp
 	if err := engine.Put(versionKey, value); err != nil {
 		return err
 	}
