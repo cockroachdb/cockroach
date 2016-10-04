@@ -495,6 +495,7 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 
 	var waitTableID sqlbase.ID
 	deleted := make(chan bool)
+	deletedSignaled := false
 
 	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
@@ -512,8 +513,9 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 				mu.Lock()
 				defer mu.Unlock()
 				if waitTableID != 0 {
-					if isDeleted(waitTableID, cfg) {
+					if isDeleted(waitTableID, cfg) && !deletedSignaled {
 						close(deleted)
+						deletedSignaled = true
 						waitTableID = 0
 					}
 				}
