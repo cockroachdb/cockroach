@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"math/rand"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -215,6 +216,7 @@ type storeRangeSet struct {
 	store   *Store
 	repls   []*Replica // Replicas to be visited.
 	visited int        // Number of visited ranges, -1 before first call to Visit()
+	shuffle bool
 }
 
 func newStoreRangeSet(store *Store) *storeRangeSet {
@@ -222,6 +224,12 @@ func newStoreRangeSet(store *Store) *storeRangeSet {
 		store:   store,
 		visited: -1,
 	}
+}
+
+func newShuffledStoreRangeSet(store *Store) *storeRangeSet {
+	rs := newStoreRangeSet(store)
+	rs.shuffle = true
+	return rs
 }
 
 // Visit calls the visitor with each Replica until false is returned.
@@ -238,6 +246,19 @@ func (rs *storeRangeSet) Visit(visitor func(*Replica) bool) {
 		},
 	)
 	rs.store.mu.Unlock()
+
+	if rs.shuffle {
+		// Shuffle the replicas to prevent issues in tests where stores are
+		// scanning replicas in lock-step and one store is winning the race and
+		// getting a first crack at processing the replicas on its queues.
+		//
+		// TODO(peter): Re-evaluate whether this is necessary after we allow
+		// rebalancing away from the leaseholder. See TestRebalance_3To5Small.
+		for i := 1; i < len(rs.repls); i++ {
+			j := rand.Intn(i + 1)
+			rs.repls[i], rs.repls[j] = rs.repls[j], rs.repls[i]
+		}
+	}
 
 	rs.visited = 0
 	for _, repl := range rs.repls {
@@ -657,7 +678,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 	if s.ctx.Gossip != nil {
 		// Add range scanner and configure with queues.
 		s.scanner = newReplicaScanner(
-			ctx.Ctx, ctx.ScanInterval, ctx.ScanMaxIdleTime, newStoreRangeSet(s),
+			ctx.Ctx, ctx.ScanInterval, ctx.ScanMaxIdleTime, newShuffledStoreRangeSet(s),
 		)
 		s.gcQueue = newGCQueue(s, s.ctx.Gossip)
 		s.splitQueue = newSplitQueue(s, s.db, s.ctx.Gossip)
@@ -670,7 +691,7 @@ func NewStore(ctx StoreContext, eng engine.Engine, nodeDesc *roachpb.NodeDescrip
 
 		// Add consistency check scanner.
 		s.consistencyScanner = newReplicaScanner(
-			ctx.Ctx, ctx.ConsistencyCheckInterval, 0, newStoreRangeSet(s),
+			ctx.Ctx, ctx.ConsistencyCheckInterval, 0, newShuffledStoreRangeSet(s),
 		)
 		s.replicaConsistencyQueue = newReplicaConsistencyQueue(s, s.ctx.Gossip)
 		s.consistencyScanner.AddQueues(s.replicaConsistencyQueue)
