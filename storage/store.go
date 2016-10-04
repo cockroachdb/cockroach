@@ -1654,18 +1654,6 @@ func (s *Store) MergeRange(
 	return subsumingRng.setDesc(&copy)
 }
 
-// AddReplicaTest adds the replica to the store's replica map and to the sorted
-// replicasByKey slice. To be used only by unittests.
-func (s *Store) AddReplicaTest(rng *Replica) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := s.addReplicaInternalLocked(rng); err != nil {
-		return err
-	}
-	s.metrics.ReplicaCount.Inc(1)
-	return nil
-}
-
 // addReplicaInternalLocked adds the replica to the replicas map and the
 // replicasByKey btree. Returns an error if a replica with
 // the same Range ID or a KeyRange that overlaps has already been added to

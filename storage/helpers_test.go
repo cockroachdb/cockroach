@@ -32,6 +32,18 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
+// AddReplica adds the replica to the store's replica map and to the sorted
+// replicasByKey slice. To be used only by unittests.
+func (s *Store) AddReplica(rng *Replica) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.addReplicaInternalLocked(rng); err != nil {
+		return err
+	}
+	s.metrics.ReplicaCount.Inc(1)
+	return nil
+}
+
 // ComputeMVCCStats immediately computes correct total MVCC usage statistics
 // for the store, returning the computed values (but without modifying the
 // store).
