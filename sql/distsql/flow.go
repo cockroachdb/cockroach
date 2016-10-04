@@ -81,6 +81,9 @@ type Flow struct {
 }
 
 func newFlow(flowCtx FlowCtx, flowReg *flowRegistry, simpleFlowConsumer RowReceiver) *Flow {
+	if opentracing.SpanFromContext(flowCtx.Context) == nil {
+		panic("flow context has no span")
+	}
 	flowCtx.Context = log.WithLogTagStr(flowCtx.Context, "f", flowCtx.id.Short())
 	return &Flow{
 		FlowCtx:            flowCtx,

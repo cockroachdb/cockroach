@@ -263,12 +263,11 @@ func (rb *RowBuffer) NextRow() (sqlbase.EncDatumRow, error) {
 // SetFlowRequestTrace populates req.Trace with the context of the current Span
 // in the context (if any).
 func SetFlowRequestTrace(ctx context.Context, req *SetupFlowRequest) error {
-	if sp := opentracing.SpanFromContext(ctx); sp != nil {
-		req.Trace = &tracing.Span{}
-		tracer := sp.Tracer()
-		if err := tracer.Inject(sp.Context(), basictracer.Delegator, req.Trace); err != nil {
-			return err
-		}
+	sp := opentracing.SpanFromContext(ctx)
+	if sp == nil {
+		return nil
 	}
-	return nil
+	req.Trace = &tracing.Span{}
+	tracer := sp.Tracer()
+	return tracer.Inject(sp.Context(), basictracer.Delegator, req.Trace)
 }

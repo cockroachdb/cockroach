@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -98,15 +99,18 @@ func (tr *tableReader) Run(wg *sync.WaitGroup) {
 		defer wg.Done()
 	}
 
-	if log.V(2) {
-		log.Infof(tr.ctx, "starting (filter: %s)", tr.filter)
-		defer log.Infof(tr.ctx, "exiting")
+	ctx, closeSpan := tracing.ChildSpan(tr.ctx, "table reader")
+	defer closeSpan()
+
+	log.VEventf(1, ctx, "starting (filter: %s)", tr.filter)
+	if log.V(1) {
+		defer log.Infof(ctx, "exiting")
 	}
 
 	if err := tr.fetcher.StartScan(
 		tr.flowCtx.txn, tr.spans, true /* limit batches */, tr.getLimitHint(),
 	); err != nil {
-		log.Errorf(tr.ctx, "scan error: %s", err)
+		log.Errorf(ctx, "scan error: %s", err)
 		tr.output.Close(err)
 		return
 	}
@@ -118,14 +122,12 @@ func (tr *tableReader) Run(wg *sync.WaitGroup) {
 			return
 		}
 		if log.V(3) {
-			log.Infof(tr.ctx, "pushing row %s\n", outRow)
+			log.Infof(ctx, "pushing row %s\n", outRow)
 		}
 		// Push the row to the output RowReceiver; stop if they don't need more
 		// rows.
 		if !tr.output.PushRow(outRow) {
-			if log.V(2) {
-				log.Infof(tr.ctx, "no more rows required")
-			}
+			log.VEventf(1, ctx, "no more rows required")
 			tr.output.Close(nil)
 			return
 		}
