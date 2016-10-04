@@ -3770,6 +3770,10 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1), Exprs: $3.exprs()}
   }
+| EXTRACT '(' a_expr ',' a_expr ')'
+  {
+    $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1), Exprs: Exprs{$3.expr(), $5.expr()}}
+  }
 | OVERLAY '(' overlay_list ')'
   {
     $$.val = &OverlayExpr{FuncExpr{Name: WrapQualifiedFunctionName($1), Exprs: $3.exprs()}}
