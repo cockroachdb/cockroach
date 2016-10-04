@@ -619,35 +619,6 @@ func (r *Replica) String() string {
 	return fmt.Sprintf("[n%d,s%d,r%s]", r.store.Ident.NodeID, r.store.Ident.StoreID, &r.rangeStr)
 }
 
-// Destroy clears pending command queue by sending each pending
-// command an error and cleans up all data associated with this range.
-func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor, destroyData bool) error {
-	desc := r.Desc()
-	if repDesc, ok := desc.GetReplicaDescriptor(r.store.StoreID()); ok && repDesc.ReplicaID >= origDesc.NextReplicaID {
-		return errors.Errorf("cannot destroy replica %s; replica ID has changed (%s >= %s)",
-			r, repDesc.ReplicaID, origDesc.NextReplicaID)
-	}
-
-	r.mu.Lock()
-	// Clear the pending command queue.
-	for _, p := range r.mu.pendingCmds {
-		p.done <- roachpb.ResponseWithError{
-			Reply: &roachpb.BatchResponse{},
-			Err:   roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID)),
-		}
-	}
-	// Clear the map.
-	r.mu.pendingCmds = map[storagebase.CmdIDKey]*pendingCmd{}
-	r.mu.internalRaftGroup = nil
-	r.mu.destroyed = roachpb.NewRangeNotFoundError(r.RangeID)
-	r.mu.Unlock()
-
-	if !destroyData {
-		return nil
-	}
-	return r.destroyDataRaftMuLocked()
-}
-
 // destroyData deletes all data associated with a replica, leaving a
 // tombstone. Requires that Replica.raftMu is held.
 func (r *Replica) destroyDataRaftMuLocked() error {
