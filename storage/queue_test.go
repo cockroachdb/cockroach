@@ -144,11 +144,11 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	}
 
 	r1 := createReplica(tc.store, 1001, roachpb.RKey("1001"), roachpb.RKey("1001/end"))
-	if err := tc.store.AddReplicaTest(r1); err != nil {
+	if err := tc.store.AddReplica(r1); err != nil {
 		t.Fatal(err)
 	}
 	r2 := createReplica(tc.store, 1002, roachpb.RKey("1002"), roachpb.RKey("1002/end"))
-	if err := tc.store.AddReplicaTest(r2); err != nil {
+	if err := tc.store.AddReplica(r2); err != nil {
 		t.Fatal(err)
 	}
 
@@ -296,11 +296,11 @@ func TestBaseQueueProcess(t *testing.T) {
 	}
 
 	r1 := createReplica(tc.store, 1001, roachpb.RKey("1001"), roachpb.RKey("1001/end"))
-	if err := tc.store.AddReplicaTest(r1); err != nil {
+	if err := tc.store.AddReplica(r1); err != nil {
 		t.Fatal(err)
 	}
 	r2 := createReplica(tc.store, 1002, roachpb.RKey("1002"), roachpb.RKey("1002/end"))
-	if err := tc.store.AddReplicaTest(r2); err != nil {
+	if err := tc.store.AddReplica(r2); err != nil {
 		t.Fatal(err)
 	}
 
@@ -425,13 +425,13 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 
 	// This range can never be split due to zone configs boundaries.
 	neverSplits := createReplica(s, 2, roachpb.RKeyMin, dataMaxAddr)
-	if err := s.AddReplicaTest(neverSplits); err != nil {
+	if err := s.AddReplica(neverSplits); err != nil {
 		t.Fatal(err)
 	}
 
 	// This range will need to be split after user db/table entries are created.
 	willSplit := createReplica(s, 3, dataMaxAddr, roachpb.RKeyMax)
-	if err := s.AddReplicaTest(willSplit); err != nil {
+	if err := s.AddReplica(willSplit); err != nil {
 		t.Fatal(err)
 	}
 
@@ -562,7 +562,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	for i := 1; i <= replicaCount; i++ {
 		r := createReplica(tc.store, roachpb.RangeID(i+1000),
 			roachpb.RKey(fmt.Sprintf("%d", i)), roachpb.RKey(fmt.Sprintf("%d/end", i)))
-		if err := tc.store.AddReplicaTest(r); err != nil {
+		if err := tc.store.AddReplica(r); err != nil {
 			t.Fatal(err)
 		}
 		bq.MaybeAdd(r, hlc.ZeroTimestamp)

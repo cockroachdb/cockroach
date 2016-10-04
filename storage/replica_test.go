@@ -215,7 +215,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, cfg StoreConfig) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := tc.store.AddReplicaTest(rng); err != nil {
+			if err := tc.store.AddReplica(rng); err != nil {
 				t.Fatal(err)
 			}
 		}
