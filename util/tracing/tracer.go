@@ -127,6 +127,19 @@ func ForkCtxSpan(ctx context.Context, opName string) (context.Context, func()) {
 	return ctx, func() {}
 }
 
+// ChildSpan opens a span as a child of the current span in the context (if
+// there is one).
+//
+// Returns the new context and a function that closes the span.
+func ChildSpan(ctx context.Context, opName string) (context.Context, func()) {
+	span := opentracing.SpanFromContext(ctx)
+	if span == nil {
+		return ctx, func() {}
+	}
+	newSpan := span.Tracer().StartSpan(opName, opentracing.ChildOf(span.Context()))
+	return opentracing.ContextWithSpan(ctx, newSpan), func() { newSpan.Finish() }
+}
+
 // basicTracerOptions initializes options for basictracer.
 // The recorder should be nil if we don't need to record spans.
 func basictracerOptions(recorder func(basictracer.RawSpan)) basictracer.Options {

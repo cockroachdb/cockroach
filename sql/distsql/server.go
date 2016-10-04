@@ -28,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -55,6 +57,9 @@ var _ DistSQLServer = &ServerImpl{}
 
 // NewServer instantiates a DistSQLServer.
 func NewServer(cfg ServerConfig) *ServerImpl {
+	if tracing.TracerFromCtx(cfg.Context) == nil {
+		panic("Server Context should have a Tracer")
+	}
 	ds := &ServerImpl{
 		ServerConfig: cfg,
 		evalCtx: parser.EvalContext{
@@ -72,41 +77,57 @@ func (ds *ServerImpl) setupTxn(ctx context.Context, txnProto *roachpb.Transactio
 	return txn
 }
 
-// SetupSimpleFlow sets up a simple flow, connecting the simple response output
-// stream to the given RowReceiver. The flow is not started.
-func (ds *ServerImpl) SetupSimpleFlow(
-	ctx context.Context, req *SetupFlowRequest, output RowReceiver,
+func (ds *ServerImpl) logContext(ctx context.Context) context.Context {
+	return log.WithLogTagsFromCtx(ctx, ds.ServerConfig.Context)
+}
+
+func (ds *ServerImpl) setupFlow(
+	ctx context.Context, req *SetupFlowRequest, simpleFlowConsumer RowReceiver,
 ) (*Flow, error) {
+	sp, err := tracing.JoinOrNew(tracing.TracerFromCtx(ctx), req.Trace, "flow")
+	if err != nil {
+		return nil, err
+	}
+	ctx = opentracing.ContextWithSpan(ctx, sp)
+
 	txn := ds.setupTxn(ctx, &req.Txn)
 	flowCtx := FlowCtx{
-		Context: ds.ServerConfig.Context,
+		Context: ctx,
 		id:      req.Flow.FlowID,
 		evalCtx: &ds.evalCtx,
 		rpcCtx:  ds.RPCContext,
 		txn:     txn,
 	}
 
-	f := newFlow(flowCtx, ds.flowRegistry, output)
-	err := f.setupFlow(&req.Flow)
-	if err != nil {
-		log.Errorf(ds.Context, err.Error(), "", err)
+	f := newFlow(flowCtx, ds.flowRegistry, simpleFlowConsumer)
+	if err := f.setupFlow(&req.Flow); err != nil {
+		log.Error(ctx, err)
+		sp.Finish()
 		return nil, err
 	}
 	return f, nil
+}
+
+// SetupSimpleFlow sets up a simple flow, connecting the simple response output
+// stream to the given RowReceiver. The flow is not started.
+// The flow will be associated with the given context.
+func (ds *ServerImpl) SetupSimpleFlow(
+	ctx context.Context, req *SetupFlowRequest, output RowReceiver,
+) (*Flow, error) {
+	ctx = ds.logContext(ctx)
+	return ds.setupFlow(ctx, req, output)
 }
 
 // RunSimpleFlow is part of the DistSQLServer interface.
 func (ds *ServerImpl) RunSimpleFlow(
 	req *SetupFlowRequest, stream DistSQL_RunSimpleFlowServer,
 ) error {
-	cfg := ds.ServerConfig.Context
-
 	// Set up the outgoing mailbox for the stream.
 	mbox := newOutboxSimpleFlowStream(stream)
 
-	f, err := ds.SetupSimpleFlow(cfg, req, mbox)
+	f, err := ds.SetupSimpleFlow(ds.Context, req, mbox)
 	if err != nil {
-		log.Errorf(ds.Context, err.Error(), "", err)
+		log.Error(ds.Context, err)
 		return err
 	}
 	mbox.setFlowCtx(&f.FlowCtx)
@@ -123,24 +144,11 @@ func (ds *ServerImpl) RunSimpleFlow(
 }
 
 // SetupFlow is part of the DistSQLServer interface.
-func (ds *ServerImpl) SetupFlow(
-	ctx context.Context, req *SetupFlowRequest,
-) (*SimpleResponse, error) {
-	// Note: ctx will be canceled when the RPC completes, so we can't associate
-	// it with the transaction.
-
-	txn := ds.setupTxn(ds.ServerConfig.Context, &req.Txn)
-	flowCtx := FlowCtx{
-		Context: ds.ServerConfig.Context,
-		id:      req.Flow.FlowID,
-		evalCtx: &ds.evalCtx,
-		rpcCtx:  ds.RPCContext,
-		txn:     txn,
-	}
-	f := newFlow(flowCtx, ds.flowRegistry, nil)
-	err := f.setupFlow(&req.Flow)
+func (ds *ServerImpl) SetupFlow(_ context.Context, req *SetupFlowRequest) (*SimpleResponse, error) {
+	// Note: the passed context will be canceled when this RPC completes, so we
+	// can't associate it with the flow.
+	f, err := ds.setupFlow(ds.Context, req, nil)
 	if err != nil {
-		log.Errorf(ds.Context, err.Error(), "", err)
 		return nil, err
 	}
 	f.Start()

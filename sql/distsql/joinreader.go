@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -97,9 +98,12 @@ func (jr *joinReader) mainLoop() error {
 	var alloc sqlbase.DatumAlloc
 	spans := make(roachpb.Spans, 0, joinReaderBatchSize)
 
-	if log.V(2) {
-		log.Infof(jr.ctx, "starting (filter: %s)", jr.filter)
-		defer log.Infof(jr.ctx, "exiting")
+	ctx, closeSpan := tracing.ChildSpan(jr.ctx, "join reader")
+	defer closeSpan()
+
+	log.VEventf(1, ctx, "starting (filter: %s)", jr.filter)
+	if log.V(1) {
+		defer log.Infof(ctx, "exiting")
 	}
 
 	for {
@@ -130,7 +134,7 @@ func (jr *joinReader) mainLoop() error {
 
 		err := jr.fetcher.StartScan(jr.flowCtx.txn, spans, false /* no batch limits */, 0)
 		if err != nil {
-			log.Errorf(jr.ctx, "scan error: %s", err)
+			log.Errorf(ctx, "scan error: %s", err)
 			return err
 		}
 
@@ -147,14 +151,12 @@ func (jr *joinReader) mainLoop() error {
 				break
 			}
 			if log.V(3) {
-				log.Infof(jr.ctx, "pushing row %s\n", outRow)
+				log.Infof(ctx, "pushing row %s\n", outRow)
 			}
 			// Push the row to the output RowReceiver; stop if they don't need more
 			// rows.
 			if !jr.output.PushRow(outRow) {
-				if log.V(2) {
-					log.Infof(jr.ctx, "no more rows required")
-				}
+				log.VEventf(1, ctx, "no more rows required")
 				return nil
 			}
 		}
