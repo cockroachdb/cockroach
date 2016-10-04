@@ -64,6 +64,8 @@ func (r Range) OverlapExclusive(other Range) bool {
 	return r.End.Compare(other.Start) > 0 && r.Start.Compare(other.End) < 0
 }
 
+var _ = Range{}.Equal
+
 // Equal returns whether the two ranges are equal.
 func (r Range) Equal(other Range) bool {
 	return r.End.Equal(other.Start) && r.Start.Equal(other.End)
@@ -96,6 +98,8 @@ type Comparable []byte
 func (c Comparable) Compare(o Comparable) int {
 	return bytes.Compare(c, o)
 }
+
+var _ = Comparable(nil).Equal
 
 // Equal returns a boolean indicating if the given comparables are equal to
 // each other. Note that this has measurably better performance than
@@ -355,6 +359,8 @@ func (n *Node) insert(e Interface, min Comparable, id uintptr, fast bool) (root 
 	return
 }
 
+var _ = (*Tree)(nil).DeleteMin
+
 // DeleteMin deletes the left-most interval.
 func (t *Tree) DeleteMin(fast bool) {
 	if t.Root == nil {
@@ -385,6 +391,8 @@ func (n *Node) deleteMin(fast bool) (root *Node, d int) {
 
 	return
 }
+
+var _ = (*Tree)(nil).DeleteMax
 
 // DeleteMax deletes the right-most interval.
 func (t *Tree) DeleteMax(fast bool) {
@@ -478,6 +486,8 @@ func (n *Node) delete(min Comparable, id uintptr, fast bool) (root *Node, d int)
 	return
 }
 
+var _ = (*Tree)(nil).Min
+
 // Min returns the left-most interval stored in the tree.
 func (t *Tree) Min() Interface {
 	if t.Root == nil {
@@ -492,6 +502,8 @@ func (n *Node) min() *Node {
 	return n
 }
 
+var _ = (*Tree)(nil).Max
+
 // Max returns the right-most interval stored in the tree.
 func (t *Tree) Max() Interface {
 	if t.Root == nil {
@@ -505,6 +517,8 @@ func (n *Node) max() *Node {
 	}
 	return n
 }
+
+var _ = (*Tree)(nil).Floor
 
 // Floor returns the largest value equal to or less than the query q according to
 // q.Start.Compare(), with ties broken by comparison of ID() values.
@@ -544,6 +558,8 @@ func (n *Node) floor(m Comparable, id uintptr) *Node {
 	}
 	return n
 }
+
+var _ = (*Tree)(nil).Ceil
 
 // Ceil returns the smallest value equal to or greater than the query q according to
 // q.Start.Compare(), with ties broken by comparison of ID() values.
@@ -616,6 +632,8 @@ func (n *Node) do(fn Operation) (done bool) {
 	return
 }
 
+var _ = (*Tree)(nil).DoReverse
+
 // DoReverse performs fn on all intervals stored in the tree, but in reverse of sort order. A boolean
 // is returned indicating whether the Do traversal was interrupted by an Operation returning true.
 // If fn alters stored intervals' sort relationships, future tree operation behaviors are undefined.
@@ -675,6 +693,8 @@ func (n *Node) doMatch(fn Operation, r Range, overlaps func(Range, Range) bool) 
 	}
 	return
 }
+
+var _ = (*Tree)(nil).DoMatchingReverse
 
 // DoMatchingReverse performs fn on all intervals stored in the tree that match r according to
 // t.Overlapper, with Overlapper() used to guide tree traversal, so DoMatching() will outperform
