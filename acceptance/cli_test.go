@@ -17,7 +17,6 @@
 package acceptance
 
 import (
-	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -53,22 +52,15 @@ func TestDockerCLI(t *testing.T) {
 	for _, p := range paths {
 		testFile := filepath.Base(p)
 		testPath := filepath.Join(containerPath, testFile)
-		if verbose {
-			fmt.Printf("--- test: %s\n", testFile)
-		}
-
-		cmd := cmdBase
-		if verbose {
-			cmd = append(cmd, "-d")
-		}
-		cmd = append(cmd, "-f", testPath, cluster.CockroachBinaryInContainer)
-
-		if err := testDockerOneShot(t, "cli_test", cmd); err != nil {
-			fmt.Printf("--- %s FAIL\n", testFile)
-			t.Fatal(err)
-		}
-		if verbose {
-			fmt.Printf("--- %s SUCCESS\n", testFile)
-		}
+		t.Run(testFile, func(t *testing.T) {
+			cmd := cmdBase
+			if verbose {
+				cmd = append(cmd, "-d")
+			}
+			cmd = append(cmd, "-f", testPath, cluster.CockroachBinaryInContainer)
+			if err := testDockerOneShot(t, "cli_test", cmd); err != nil {
+				t.Error(err)
+			}
+		})
 	}
 }
