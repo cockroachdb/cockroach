@@ -213,6 +213,9 @@ func (rs *replicaScanner) waitAndProcess(
 				return false
 			}
 
+			if log.V(2) {
+				log.Infof(context.TODO(), "replica scanner processing %s", repl)
+			}
 			for _, q := range rs.queues {
 				q.MaybeAdd(repl, clock.Now())
 			}
