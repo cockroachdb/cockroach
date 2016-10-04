@@ -581,7 +581,7 @@ func (sp *StorePool) reserve(
 			log.Infof(sp.ctx, "reservation failed, store:%s will be throttled for %s until %s",
 				toStoreID, sp.failedReservationsTimeout, detail.throttledUntil)
 		}
-		return errors.Wrapf(err, "reservation failed:%+v", req)
+		return errors.Wrapf(err, "reservation failed: %+v", req)
 	}
 
 	detail.desc.Capacity.RangeCount = resp.RangeCount

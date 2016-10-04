@@ -1170,6 +1170,8 @@ func TestStoreSplitTimestampCacheReadRace(t *testing.T) {
 func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
+
 	leftKey := roachpb.Key("a")
 	splitKey := roachpb.Key("b")
 	rightKey := roachpb.Key("c")
@@ -1177,20 +1179,20 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	// This filter is better understood when reading the meat of the test
 	// below first.
 	var noLeaseForDesc atomic.Value
-	var numLeases int32
 	filter := func(args storagebase.FilterArgs) *roachpb.Error {
 		leaseReq, argOK := args.Req.(*roachpb.RequestLeaseRequest)
 		forbiddenDesc, descOK := noLeaseForDesc.Load().(*roachpb.ReplicaDescriptor)
 		if !argOK || !descOK || !bytes.Equal(leaseReq.Key, splitKey) {
 			return nil
 		}
-		log.Infof(context.TODO(), "received lease request %+v", leaseReq)
-		atomic.AddInt32(&numLeases, 1)
+		log.Infof(ctx, "received lease request (%s, %s)",
+			leaseReq.Span, leaseReq.Lease)
 		if !reflect.DeepEqual(*forbiddenDesc, leaseReq.Lease.Replica) {
 			return nil
 		}
-		log.Infof(context.TODO(), "refusing %+v because %+v held lease for LHS of split",
-			leaseReq, forbiddenDesc)
+		log.Infof(ctx,
+			"refusing lease request (%s, %s) because %+v held lease for LHS of split",
+			leaseReq.Span, leaseReq.Lease, forbiddenDesc)
 		return roachpb.NewError(&roachpb.NotLeaseHolderError{RangeID: args.Hdr.RangeID})
 	}
 
@@ -1217,7 +1219,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 
 	// Make a context tied to the Stopper. The test works without, but this
 	// is cleaner since we won't properly terminate the transaction below.
-	ctx := tc.Server(0).Stopper().WithCancel(context.Background())
+	ctx := tc.Server(0).Stopper().WithCancel(ctx)
 
 	// This transaction will try to write "under" a served read.
 	txnOld := client.NewTxn(ctx, *db)
@@ -1249,10 +1251,11 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		leaseHolder, err := tc.FindRangeLeaseHolder(&desc, nil)
+		lease, _, err := tc.FindRangeLease(&desc, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
+		leaseHolder := lease.Replica
 		replica, found := desc.GetReplicaDescriptor(leaseHolder.StoreID)
 		if !found {
 			t.Fatalf("no replica on store %d found in %+v", leaseHolder.StoreID, desc)
@@ -1260,6 +1263,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 		return replica
 	}
 	blacklistedLeaseHolder := leaseHolder(leftKey)
+	log.Infof(ctx, "blacklisting replica %+v for leases", blacklistedLeaseHolder)
 	noLeaseForDesc.Store(&blacklistedLeaseHolder)
 
 	// Pull the trigger. This actually also reads the RHS descriptor after the
@@ -1274,6 +1278,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	//
 	// In practice, this should only be possible if second-long delays occur
 	// just above this comment, and we assert against it below.
+	log.Infof(ctx, "splitting at %s", splitKey)
 	if _, _, err := tc.SplitRange(splitKey); err != nil {
 		t.Fatal(err)
 	}
@@ -1305,9 +1310,6 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 		rhsLease, blacklistedLeaseHolder,
 	) {
 		t.Errorf("expected LHS and RHS to have same lease holder")
-	}
-	if num := atomic.LoadInt32(&numLeases); num > 0 {
-		t.Errorf("expected to see no lease requests for the right-hand side")
 	}
 }
 
