@@ -20,7 +20,11 @@ eexpect root@
 
 send "select 1;\r"
 eexpect "opening new connection"
-eexpect "connection refused"
+expect {
+    "connection refused" {}
+    "connection reset by peer" {}
+    timeout {exit 1}
+}
 eexpect root@
 
 # Check that the client automatically reconnects when the server goes up again.
