@@ -111,6 +111,9 @@ func (p *planner) validateCheckExpr(
 	// would be marginal compared to the work of the actual query, so the added
 	// complexity seems unjustified.
 	rows, err := p.SelectClause(sel, nil, lim, nil, publicColumns)
+	if err != nil {
+		return err
+	}
 	if err := rows.expandPlan(); err != nil {
 		return err
 	}
