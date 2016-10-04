@@ -13,7 +13,6 @@ cmd github.com/kkaneda/returncheck
 cmd github.com/mattn/goveralls
 cmd github.com/mdempsky/unconvert
 cmd github.com/mibk/dupl
-cmd github.com/opennota/check/cmd/varcheck
 cmd github.com/robfig/glock
 cmd github.com/tebeka/go2xunit
 cmd github.com/wadey/gocovmerge
@@ -85,7 +84,6 @@ github.com/mibk/dupl d8ac57fa998861b7aeaa149bba1cb7fceeace18f
 github.com/montanaflynn/stats 60dcacf48f43d6dd654d0ed94120ff5806c5ca5c
 github.com/olekukonko/tablewriter bdcc175572fd7abece6c831e643891b9331bc9e7
 github.com/opencontainers/runc 02f8fa7863dd3f82909a73e2061897828460d52f
-github.com/opennota/check 5b00aacd5639507d2b039245a278ec9f5505509f
 github.com/opentracing/basictracer-go 1b32af207119a14b1b231d451df3ed04a72efebf
 github.com/opentracing/opentracing-go 30dda9350627161ff15581c0bdc504e32ec9a536
 github.com/pborman/uuid b984ec7fa9ff9e428bd0cf0abf429384dfbe3e37
