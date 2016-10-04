@@ -485,9 +485,6 @@ func TestParse(t *testing.T) {
 		{`SET TIME ZONE DEFAULT`},
 		{`SET TIME ZONE LOCAL`},
 
-		{`SELECT OVERLAY('w333333rce' PLACING 'resou' FROM 3)`},
-		{`SELECT OVERLAY('w333333rce' PLACING 'resou' FROM 3 FOR 5)`},
-
 		{`SELECT * FROM (VALUES (1, 2)) AS foo`},
 		{`SELECT * FROM (VALUES (1, 2)) AS foo (a, b)`},
 
@@ -737,6 +734,14 @@ func TestParse2(t *testing.T) {
 		// Special position syntax
 		{`SELECT POSITION('ig' in 'high')`,
 			`SELECT STRPOS('high', 'ig')`},
+		// Special overlay syntax
+		{`SELECT OVERLAY('w33333rce' PLACING 'resou' FROM 3)`,
+			`SELECT OVERLAY('w33333rce', 'resou', 3)`},
+		{`SELECT OVERLAY('w33333rce' PLACING 'resou' FROM 3 FOR 5)`,
+			`SELECT OVERLAY('w33333rce', 'resou', 3, 5)`},
+		// Special extract syntax
+		{`SELECT EXTRACT(second from now())`,
+			`SELECT EXTRACT('second', now())`},
 		// Special trim syntax
 		{`SELECT TRIM('xy' from 'xyxtrimyyx')`,
 			`SELECT BTRIM('xyxtrimyyx', 'xy')`},
