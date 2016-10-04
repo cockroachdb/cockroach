@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/uuid"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -80,6 +81,9 @@ type Flow struct {
 }
 
 func newFlow(flowCtx FlowCtx, flowReg *flowRegistry, simpleFlowConsumer RowReceiver) *Flow {
+	if opentracing.SpanFromContext(flowCtx.Context) == nil {
+		panic("flow context has no span")
+	}
 	flowCtx.Context = log.WithLogTagStr(flowCtx.Context, "f", flowCtx.id.Short())
 	return &Flow{
 		FlowCtx:            flowCtx,
@@ -104,7 +108,7 @@ func (f *Flow) setupInboundStream(spec StreamEndpointSpec, receiver RowReceiver)
 			f.inboundStreams = make(map[StreamID]RowReceiver)
 		}
 		if log.V(2) {
-			log.Infof(f.FlowCtx.Context, "Set up inbound stream %d", sid)
+			log.Infof(f.FlowCtx.Context, "set up inbound stream %d", sid)
 		}
 		f.inboundStreams[sid] = receiver
 		return nil
@@ -281,6 +285,9 @@ func (f *Flow) getInboundStream(sid StreamID) (RowReceiver, error) {
 
 // Start starts the flow (each processor runs in their own goroutine).
 func (f *Flow) Start() {
+	log.VEventf(
+		1, f.Context, "starting (%d processors, %d outboxes)", len(f.outboxes), len(f.processors),
+	)
 	f.status = FlowRunning
 	f.flowRegistry.RegisterFlow(f.id, f)
 	for _, o := range f.outboxes {
@@ -303,6 +310,11 @@ func (f *Flow) Cleanup() {
 	if f.status == FlowFinished {
 		panic("flow cleanup called twice")
 	}
+	if log.V(1) {
+		log.Infof(f.Context, "cleaning up")
+	}
+	sp := opentracing.SpanFromContext(f.Context)
+	sp.Finish()
 	if f.status != FlowNotStarted {
 		f.flowRegistry.UnregisterFlow(f.id)
 	}

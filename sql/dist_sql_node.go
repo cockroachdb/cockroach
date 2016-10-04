@@ -80,6 +80,7 @@ func (n *distSQLNode) Ordering() orderingInfo {
 }
 
 func newDistSQLNode(
+	ctx context.Context,
 	columns ResultColumns,
 	colMapping []uint32,
 	ordering orderingInfo,
@@ -106,7 +107,7 @@ func newDistSQLNode(
 		recv = rc
 	}
 
-	flow, err := srv.SetupSimpleFlow(context.Background(), flowReq, recv)
+	flow, err := srv.SetupSimpleFlow(ctx, flowReq, recv)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +220,14 @@ func scanNodeToDistSQL(n *scanNode, syncMode bool) (*distSQLNode, error) {
 	}
 
 	return newDistSQLNode(
-		n.resultColumns, tr.OutputColumns, n.ordering, n.p.execCfg.DistSQLSrv, &req, syncMode)
+		n.p.ctx(),
+		n.resultColumns,
+		tr.OutputColumns,
+		n.ordering,
+		n.p.execCfg.DistSQLSrv,
+		&req,
+		syncMode,
+	)
 }
 
 // hackPlanToUseDistSQL goes through a planNode tree and replaces each scanNode with
