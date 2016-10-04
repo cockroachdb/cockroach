@@ -200,12 +200,6 @@ communication; it must resolve from other nodes in the cluster.`,
 		Description: `The port to bind to for HTTP requests.`,
 	}
 
-	// TODO(#9516): Remove this.
-	ServerHTTPAddr = FlagInfo{
-		Name:        "http-addr",
-		Description: `DEPRECATED: Use http-host instead.`,
-	}
-
 	Socket = FlagInfo{
 		Name:   "socket",
 		EnvVar: "COCKROACH_SOCKET",
