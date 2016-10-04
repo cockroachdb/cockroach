@@ -96,28 +96,28 @@ CREATE TABLE information_schema.columns (
   DATETIME_PRECISION INT
 );
 `,
-	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(p *planner, addRow func(map[string]parser.Datum) error) error {
+		row := make(map[string]parser.Datum, 13)
 		return forEachTableDesc(p,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 				// Table descriptors already holds columns in-order.
 				visible := 0
 				return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
 					visible++
-					return addRow(
-						defString,                                    // table_catalog
-						parser.NewDString(db.Name),                   // table_schema
-						parser.NewDString(table.Name),                // table_name
-						parser.NewDString(column.Name),               // column_name
-						parser.NewDInt(parser.DInt(visible)),         // ordinal_position, 1-indexed
-						dStringPtrOrNull(column.DefaultExpr),         // column_default
-						yesOrNoDatum(column.Nullable),                // is_nullable
-						parser.NewDString(column.Type.Kind.String()), // data_type
-						characterMaximumLength(column.Type),          // character_maximum_length
-						characterOctetLength(column.Type),            // character_octet_length
-						numericPrecision(column.Type),                // numeric_precision
-						numericScale(column.Type),                    // numeric_scale
-						datetimePrecision(column.Type),               // datetime_precision
-					)
+					row["table_catalog"] = defString
+					row["table_schema"] = parser.NewDString(db.Name)
+					row["table_name"] = parser.NewDString(table.Name)
+					row["column_name"] = parser.NewDString(column.Name)
+					row["ordinal_position"] = parser.NewDInt(parser.DInt(visible)) // 1-indexed
+					row["column_default"] = dStringPtrOrNull(column.DefaultExpr)
+					row["is_nullable"] = yesOrNoDatum(column.Nullable)
+					row["data_type"] = parser.NewDString(column.Type.Kind.String())
+					row["character_maximum_length"] = characterMaximumLength(column.Type)
+					row["character_octet_length"] = characterOctetLength(column.Type)
+					row["numeric_precision"] = numericPrecision(column.Type)
+					row["numeric_scale"] = numericScale(column.Type)
+					row["datetime_precision"] = datetimePrecision(column.Type)
+					return addRow(row)
 				})
 			},
 		)
@@ -158,7 +158,8 @@ CREATE TABLE information_schema.key_column_usage (
   ORDINAL_POSITION INT NOT NULL DEFAULT 0,
   POSITION_IN_UNIQUE_CONSTRAINT INT
 );`,
-	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(p *planner, addRow func(map[string]parser.Datum) error) error {
+		row := make(map[string]parser.Datum, 9)
 		return forEachTableDesc(p,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 				type keyColumn struct {
@@ -194,17 +195,16 @@ CREATE TABLE information_schema.key_column_usage (
 						if c.foreignKey {
 							uniquePos = ordinalPos
 						}
-						if err := addRow(
-							defString,                     // constraint_catalog
-							parser.NewDString(db.Name),    // constraint_schema
-							dStringOrNull(c.name),         // constraint_name
-							defString,                     // table_catalog
-							parser.NewDString(db.Name),    // table_schema
-							parser.NewDString(table.Name), // table_name
-							parser.NewDString(column),     // column_name
-							ordinalPos,                    // ordinal_position, 1-indexed
-							uniquePos,                     // position_in_unique_constraint
-						); err != nil {
+						row["constraint_catalog"] = defString
+						row["constraint_schema"] = parser.NewDString(db.Name)
+						row["constraint_name"] = dStringOrNull(c.name)
+						row["table_catalog"] = defString
+						row["table_schema"] = parser.NewDString(db.Name)
+						row["table_name"] = parser.NewDString(table.Name)
+						row["column_name"] = parser.NewDString(column)
+						row["ordinal_position"] = ordinalPos // 1-indexed
+						row["position_in_unique_constraint"] = uniquePos
+						if err := addRow(row); err != nil {
 							return err
 						}
 					}
@@ -223,14 +223,14 @@ CREATE TABLE information_schema.schemata (
   DEFAULT_CHARACTER_SET_NAME STRING NOT NULL DEFAULT '',
   SQL_PATH STRING
 );`,
-	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(p *planner, addRow func(map[string]parser.Datum) error) error {
+		row := make(map[string]parser.Datum, 4)
 		return forEachDatabaseDesc(p, func(db *sqlbase.DatabaseDescriptor) error {
-			return addRow(
-				defString,                  // catalog_name
-				parser.NewDString(db.Name), // schema_name
-				parser.DNull,               // default_character_set_name
-				parser.DNull,               // sql_path
-			)
+			row["catalog_name"] = defString
+			row["schema_name"] = parser.NewDString(db.Name)
+			row["default_character_set_name"] = parser.DNull
+			row["sql_path"] = parser.DNull
+			return addRow(row)
 		})
 	},
 }
@@ -245,17 +245,17 @@ CREATE TABLE information_schema.schema_privileges (
 	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE
 );
 `,
-	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(p *planner, addRow func(map[string]parser.Datum) error) error {
+		row := make(map[string]parser.Datum, 5)
 		return forEachDatabaseDesc(p, func(db *sqlbase.DatabaseDescriptor) error {
 			for _, u := range db.Privileges.Show() {
 				for _, privilege := range u.Privileges {
-					if err := addRow(
-						parser.NewDString(u.User),    // grantee
-						defString,                    // table_catalog,
-						parser.NewDString(db.Name),   // table_schema
-						parser.NewDString(privilege), // privilege_type
-						parser.DNull,                 // is_grantable
-					); err != nil {
+					row["grantee"] = parser.NewDString(u.User)
+					row["table_catalog"] = defString
+					row["table_schema"] = parser.NewDString(db.Name)
+					row["privilege_type"] = parser.NewDString(privilege)
+					row["is_grantable"] = parser.DNull
+					if err := addRow(row); err != nil {
 						return err
 					}
 				}
@@ -283,7 +283,8 @@ CREATE TABLE information_schema.table_constraints (
   TABLE_NAME STRING NOT NULL DEFAULT '',
   CONSTRAINT_TYPE STRING NOT NULL DEFAULT ''
 );`,
-	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(p *planner, addRow func(map[string]parser.Datum) error) error {
+		row := make(map[string]parser.Datum, 6)
 		return forEachTableDesc(p,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 				type constraint struct {
@@ -315,14 +316,13 @@ CREATE TABLE information_schema.table_constraints (
 					})
 				}
 				for _, c := range constraints {
-					if err := addRow(
-						defString,                     // constraint_catalog
-						parser.NewDString(db.Name),    // constraint_schema
-						dStringOrNull(c.name),         // constraint_name
-						parser.NewDString(db.Name),    // table_schema
-						parser.NewDString(table.Name), // table_name
-						c.typ, // constraint_type
-					); err != nil {
+					row["constraint_catalog"] = defString
+					row["constraint_schema"] = parser.NewDString(db.Name)
+					row["constraint_name"] = dStringOrNull(c.name)
+					row["table_schema"] = parser.NewDString(db.Name)
+					row["table_name"] = parser.NewDString(table.Name)
+					row["constraint_type"] = c.typ
+					if err := addRow(row); err != nil {
 						return err
 					}
 				}
@@ -345,21 +345,21 @@ CREATE TABLE information_schema.table_privileges (
 	WITH_HIERARCHY BOOL NOT NULL DEFAULT FALSE
 );
 `,
-	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(p *planner, addRow func(map[string]parser.Datum) error) error {
+		row := make(map[string]parser.Datum, 8)
 		return forEachTableDesc(p,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 				for _, u := range table.Privileges.Show() {
 					for _, privilege := range u.Privileges {
-						if err := addRow(
-							parser.DNull,                  // grantor
-							parser.NewDString(u.User),     // grantee
-							defString,                     // table_catalog,
-							parser.NewDString(db.Name),    // table_schema
-							parser.NewDString(table.Name), // table_name
-							parser.NewDString(privilege),  // privilege_type
-							parser.DNull,                  // is_grantable
-							parser.DNull,                  // with_hierarchy
-						); err != nil {
+						row["grantor"] = parser.DNull
+						row["grantee"] = parser.NewDString(u.User)
+						row["table_catalog"] = defString
+						row["table_schema"] = parser.NewDString(db.Name)
+						row["table_name"] = parser.NewDString(table.Name)
+						row["privilege_type"] = parser.NewDString(privilege)
+						row["is_grantable"] = parser.DNull
+						row["with_hierarchy"] = parser.DNull
+						if err := addRow(row); err != nil {
 							return err
 						}
 					}
@@ -385,7 +385,8 @@ CREATE TABLE information_schema.tables (
   TABLE_TYPE STRING NOT NULL DEFAULT '',
   VERSION INT
 );`,
-	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(p *planner, addRow func(map[string]parser.Datum) error) error {
+		row := make(map[string]parser.Datum, 5)
 		return forEachTableDesc(p,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 				tableType := tableTypeBaseTable
@@ -394,13 +395,12 @@ CREATE TABLE information_schema.tables (
 				} else if table.IsView() {
 					tableType = tableTypeView
 				}
-				return addRow(
-					defString,                     // table_catalog
-					parser.NewDString(db.Name),    // table_schema
-					parser.NewDString(table.Name), // table_name
-					tableType,                     // table_type
-					parser.NewDInt(parser.DInt(table.Version)), // version
-				)
+				row["table_catalog"] = defString
+				row["table_schema"] = parser.NewDString(db.Name)
+				row["table_name"] = parser.NewDString(table.Name)
+				row["table_type"] = tableType
+				row["version"] = parser.NewDInt(parser.DInt(table.Version))
+				return addRow(row)
 			},
 		)
 	},

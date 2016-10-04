@@ -19,6 +19,7 @@ package sql
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -44,7 +45,7 @@ type virtualSchema struct {
 // virtualSchemaTable represents a table within a virtualSchema.
 type virtualSchemaTable struct {
 	schema   string
-	populate func(p *planner, addRow func(...parser.Datum) error) error
+	populate func(p *planner, addRow func(map[string]parser.Datum) error) error
 }
 
 // virtualSchemas holds a slice of statically registered virtualSchema objects.
@@ -106,11 +107,27 @@ func (e virtualTableEntry) getValuesNode(p *planner) (*valuesNode, error) {
 	}
 	v := p.newContainerValuesNode(columns, 0)
 
-	err := e.tableDef.populate(p, func(datum ...parser.Datum) error {
-		if r, c := len(datum), len(v.columns); r != c {
-			panic(fmt.Sprintf("datum row count and column count differ: %d vs %d", r, c))
+	err := e.tableDef.populate(p, func(rowDatums map[string]parser.Datum) error {
+		row := make([]parser.Datum, len(v.columns))
+		for i, col := range v.columns {
+			// TODO(nvanbenschoten) We should only use lower case column names in
+			// virtual descriptors so we can avoid this.
+			colName := strings.ToLower(col.Name)
+			datum, ok := rowDatums[colName]
+			if !ok {
+				panic(fmt.Sprintf("datum row missing column %q", colName))
+			}
+			if !(datum == parser.DNull || datum.TypeEqual(col.Typ)) {
+				panic(fmt.Sprintf("datum column %q expected to be type %s; found %s",
+					colName, col.Typ.Type(), datum.Type()))
+			}
+			row[i] = datum
+			delete(rowDatums, colName)
 		}
-		return v.rows.AddRow(datum)
+		if len(rowDatums) != 0 {
+			panic(fmt.Sprintf("found extra datums in rowDatums map: %q", rowDatums))
+		}
+		return v.rows.AddRow(row)
 	})
 	if err != nil {
 		v.Close()

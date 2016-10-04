@@ -53,7 +53,8 @@ CREATE TABLE pg_catalog.pg_attrdef (
 	adsrc STRING
 );
 `,
-	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(p *planner, addRow func(map[string]parser.Datum) error) error {
+		row := make(map[string]parser.Datum, 5)
 		h := makeOidHasher()
 		return forEachTableDesc(p,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
@@ -64,13 +65,12 @@ CREATE TABLE pg_catalog.pg_attrdef (
 						return nil
 					}
 					defSrc := parser.NewDString(*column.DefaultExpr)
-					return addRow(
-						h.ColumnOid(db, table, column),      // oid
-						h.TableOid(db, table),               // adrelid
-						parser.NewDInt(parser.DInt(colNum)), // adnum
-						defSrc, // adbin
-						defSrc, // adsrc
-					)
+					row["oid"] = h.ColumnOid(db, table, column)
+					row["adrelid"] = h.TableOid(db, table)
+					row["adnum"] = parser.NewDInt(parser.DInt(colNum))
+					row["adbin"] = defSrc
+					row["adsrc"] = defSrc
+					return addRow(row)
 				})
 			},
 		)
@@ -102,34 +102,34 @@ CREATE TABLE pg_catalog.pg_attribute (
 	attfdwoptions STRING
 );
 `,
-	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(p *planner, addRow func(map[string]parser.Datum) error) error {
+		row := make(map[string]parser.Datum, 20)
 		h := makeOidHasher()
 		return forEachTableDesc(p,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 				addColumn := func(column *sqlbase.ColumnDescriptor, attRelID parser.Datum, colNum int) error {
 					colTyp := column.Type.ToDatumType()
-					return addRow(
-						attRelID,                            // attrelid
-						parser.NewDString(column.Name),      // attname
-						h.TypeOid(colTyp),                   // atttypid
-						zeroVal,                             // attstattarget
-						typLen(colTyp),                      // attlen
-						parser.NewDInt(parser.DInt(colNum)), // attnum
-						zeroVal,      // attndims
-						negOneVal,    // attcacheoff
-						negOneVal,    // atttypmod
-						parser.DNull, // attbyval (see pg_type.typbyval)
-						parser.DNull, // attstorage
-						parser.DNull, // attalign
-						parser.MakeDBool(parser.DBool(!column.Nullable)),          // attnotnull
-						parser.MakeDBool(parser.DBool(column.DefaultExpr != nil)), // atthasdef
-						parser.MakeDBool(false),                                   // attisdropped
-						parser.MakeDBool(true),                                    // attislocal
-						zeroVal,                                                   // attinhcount
-						parser.DNull,                                              // attacl
-						parser.DNull,                                              // attoptions
-						parser.DNull,                                              // attfdwoptions
-					)
+					row["attrelid"] = attRelID
+					row["attname"] = parser.NewDString(column.Name)
+					row["atttypid"] = h.TypeOid(colTyp)
+					row["attstattarget"] = zeroVal
+					row["attlen"] = typLen(colTyp)
+					row["attnum"] = parser.NewDInt(parser.DInt(colNum))
+					row["attndims"] = zeroVal
+					row["attcacheoff"] = negOneVal
+					row["atttypmod"] = negOneVal
+					row["attbyval"] = parser.DNull // (see pg_type.typbyval)
+					row["attstorage"] = parser.DNull
+					row["attalign"] = parser.DNull
+					row["attnotnull"] = parser.MakeDBool(parser.DBool(!column.Nullable))
+					row["atthasdef"] = parser.MakeDBool(parser.DBool(column.DefaultExpr != nil))
+					row["attisdropped"] = parser.MakeDBool(false)
+					row["attislocal"] = parser.MakeDBool(true)
+					row["attinhcount"] = zeroVal
+					row["attacl"] = parser.DNull
+					row["attoptions"] = parser.DNull
+					row["attfdwoptions"] = parser.DNull
+					return addRow(row)
 				}
 
 				// Columns for table.
@@ -195,7 +195,8 @@ CREATE TABLE pg_catalog.pg_class (
 	reloptions STRING
 );
 `,
-	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(p *planner, addRow func(map[string]parser.Datum) error) error {
+		row := make(map[string]parser.Datum, 26)
 		h := makeOidHasher()
 		return forEachTableDesc(p,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
@@ -204,67 +205,65 @@ CREATE TABLE pg_catalog.pg_class (
 				if table.IsView() {
 					relKind = relKindView
 				}
-				if err := addRow(
-					h.TableOid(db, table),         // oid
-					parser.NewDString(table.Name), // relname
-					h.DBOid(db),                   // relnamespace
-					oidZero,                       // reltype (PG creates a composite type in pg_type for each table)
-					parser.DNull,                  // relowner
-					parser.DNull,                  // relam
-					oidZero,                       // relfilenode
-					oidZero,                       // reltablespace
-					parser.DNull,                  // relpages
-					parser.DNull,                  // reltuples
-					oidZero,                       // relallvisible
-					oidZero,                       // reltoastrelid
-					parser.MakeDBool(parser.DBool(table.IsPhysicalTable())), // relhasindex
-					parser.MakeDBool(false),                                 // relisshared
-					parser.MakeDBool(false),                                 // relistemp
-					relKind,                                                 // relkind
-					parser.NewDInt(parser.DInt(len(table.Columns))),         // relnatts
-					parser.NewDInt(parser.DInt(len(table.Checks))),          // relchecks
-					parser.MakeDBool(false),                                 // relhasoids
-					parser.MakeDBool(parser.DBool(table.IsPhysicalTable())), // relhaspkey
-					parser.MakeDBool(false),                                 // relhasrules
-					parser.MakeDBool(false),                                 // relhastriggers
-					parser.MakeDBool(false),                                 // relhassubclass
-					zeroVal,                                                 // relfrozenxid
-					parser.DNull,                                            // relacl
-					parser.DNull,                                            // reloptions
-				); err != nil {
+				row["oid"] = h.TableOid(db, table)
+				row["relname"] = parser.NewDString(table.Name)
+				row["relnamespace"] = h.DBOid(db)
+				row["reltype"] = oidZero // (PG creates a composite type in pg_type for each table)
+				row["relowner"] = parser.DNull
+				row["relam"] = parser.DNull
+				row["relfilenode"] = oidZero
+				row["reltablespace"] = oidZero
+				row["relpages"] = parser.DNull
+				row["reltuples"] = parser.DNull
+				row["relallvisible"] = oidZero
+				row["reltoastrelid"] = oidZero
+				row["relhasindex"] = parser.MakeDBool(parser.DBool(table.IsPhysicalTable()))
+				row["relisshared"] = parser.MakeDBool(false)
+				row["relistemp"] = parser.MakeDBool(false)
+				row["relkind"] = relKind
+				row["relnatts"] = parser.NewDInt(parser.DInt(len(table.Columns)))
+				row["relchecks"] = parser.NewDInt(parser.DInt(len(table.Checks)))
+				row["relhasoids"] = parser.MakeDBool(false)
+				row["relhaspkey"] = parser.MakeDBool(parser.DBool(table.IsPhysicalTable()))
+				row["relhasrules"] = parser.MakeDBool(false)
+				row["relhastriggers"] = parser.MakeDBool(false)
+				row["relhassubclass"] = parser.MakeDBool(false)
+				row["relfrozenxid"] = zeroVal
+				row["relacl"] = parser.DNull
+				row["reloptions"] = parser.DNull
+				if err := addRow(row); err != nil {
 					return err
 				}
 
 				// Indexes.
 				return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
-					return addRow(
-						h.IndexOid(db, table, index),  // oid
-						parser.NewDString(index.Name), // relname
-						h.DBOid(db),                   // relnamespace
-						oidZero,                       // reltype
-						parser.DNull,                  // relowner
-						parser.DNull,                  // relam
-						oidZero,                       // relfilenode
-						oidZero,                       // reltablespace
-						parser.DNull,                  // relpages
-						parser.DNull,                  // reltuples
-						oidZero,                       // relallvisible
-						oidZero,                       // reltoastrelid
-						parser.MakeDBool(false),       // relhasindex
-						parser.MakeDBool(false),       // relisshared
-						parser.MakeDBool(false),       // relistemp
-						relKindIndex,                  // relkind
-						parser.NewDInt(parser.DInt(len(index.ColumnNames))), // relnatts
-						zeroVal,                 // relchecks
-						parser.MakeDBool(false), // relhasoids
-						parser.MakeDBool(false), // relhaspkey
-						parser.MakeDBool(false), // relhasrules
-						parser.MakeDBool(false), // relhastriggers
-						parser.MakeDBool(false), // relhassubclass
-						zeroVal,                 // relfrozenxid
-						parser.DNull,            // relacl
-						parser.DNull,            // reloptions
-					)
+					row["oid"] = h.IndexOid(db, table, index)
+					row["relname"] = parser.NewDString(index.Name)
+					row["relnamespace"] = h.DBOid(db)
+					row["reltype"] = oidZero
+					row["relowner"] = parser.DNull
+					row["relam"] = parser.DNull
+					row["relfilenode"] = oidZero
+					row["reltablespace"] = oidZero
+					row["relpages"] = parser.DNull
+					row["reltuples"] = parser.DNull
+					row["relallvisible"] = oidZero
+					row["reltoastrelid"] = oidZero
+					row["relhasindex"] = parser.MakeDBool(false)
+					row["relisshared"] = parser.MakeDBool(false)
+					row["relistemp"] = parser.MakeDBool(false)
+					row["relkind"] = relKindIndex
+					row["relnatts"] = parser.NewDInt(parser.DInt(len(index.ColumnNames)))
+					row["relchecks"] = zeroVal
+					row["relhasoids"] = parser.MakeDBool(false)
+					row["relhaspkey"] = parser.MakeDBool(false)
+					row["relhasrules"] = parser.MakeDBool(false)
+					row["relhastriggers"] = parser.MakeDBool(false)
+					row["relhassubclass"] = parser.MakeDBool(false)
+					row["relfrozenxid"] = zeroVal
+					row["relacl"] = parser.DNull
+					row["reloptions"] = parser.DNull
+					return addRow(row)
 				})
 			},
 		)
@@ -280,15 +279,15 @@ CREATE TABLE pg_catalog.pg_namespace (
 	aclitem STRING
 );
 `,
-	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(p *planner, addRow func(map[string]parser.Datum) error) error {
+		row := make(map[string]parser.Datum, 4)
 		h := makeOidHasher()
 		return forEachDatabaseDesc(p, func(db *sqlbase.DatabaseDescriptor) error {
-			return addRow(
-				h.DBOid(db),                // oid
-				parser.NewDString(db.Name), // nspname
-				parser.DNull,               // nspowner
-				parser.DNull,               // aclitem
-			)
+			row["oid"] = h.DBOid(db)
+			row["nspname"] = parser.NewDString(db.Name)
+			row["nspowner"] = parser.DNull
+			row["aclitem"] = parser.DNull
+			return addRow(row)
 		})
 	},
 }
@@ -306,22 +305,22 @@ CREATE TABLE pg_catalog.pg_tables (
 	rowsecurity BOOL
 );
 `,
-	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+	populate: func(p *planner, addRow func(map[string]parser.Datum) error) error {
+		row := make(map[string]parser.Datum, 8)
 		return forEachTableDesc(p,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 				if table.IsView() {
 					return nil
 				}
-				return addRow(
-					parser.NewDString(db.Name),    // schemaname
-					parser.NewDString(table.Name), // tablename
-					parser.DNull,                  // tableowner
-					parser.DNull,                  // tablespace
-					parser.MakeDBool(parser.DBool(table.IsPhysicalTable())), // hasindexes
-					parser.MakeDBool(false),                                 // hasrules
-					parser.MakeDBool(false),                                 // hastriggers
-					parser.MakeDBool(false),                                 // rowsecurity
-				)
+				row["schemaname"] = parser.NewDString(db.Name)
+				row["tablename"] = parser.NewDString(table.Name)
+				row["tableowner"] = parser.DNull
+				row["tablespace"] = parser.DNull
+				row["hasindexes"] = parser.MakeDBool(parser.DBool(table.IsPhysicalTable()))
+				row["hasrules"] = parser.MakeDBool(false)
+				row["hastriggers"] = parser.MakeDBool(false)
+				row["rowsecurity"] = parser.MakeDBool(false)
+				return addRow(row)
 			},
 		)
 	},
