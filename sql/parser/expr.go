@@ -854,27 +854,6 @@ func (node *FuncExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
-// OverlayExpr represents an overlay function call.
-type OverlayExpr struct {
-	FuncExpr
-}
-
-// Format implements the NodeFormatter interface.
-func (node *OverlayExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	FormatNode(buf, f, node.Name)
-	buf.WriteByte('(')
-	FormatNode(buf, f, node.Exprs[0])
-	buf.WriteString(" PLACING ")
-	FormatNode(buf, f, node.Exprs[1])
-	buf.WriteString(" FROM ")
-	FormatNode(buf, f, node.Exprs[2])
-	if len(node.Exprs) == 4 {
-		buf.WriteString(" FOR ")
-		FormatNode(buf, f, node.Exprs[3])
-	}
-	buf.WriteByte(')')
-}
-
 // CaseExpr represents a CASE expression.
 type CaseExpr struct {
 	Expr  Expr
@@ -1036,7 +1015,6 @@ func (node *NotExpr) String() string          { return AsString(node) }
 func (node *NullIfExpr) String() string       { return AsString(node) }
 func (node *NumVal) String() string           { return AsString(node) }
 func (node *OrExpr) String() string           { return AsString(node) }
-func (node *OverlayExpr) String() string      { return AsString(node) }
 func (node *ParenExpr) String() string        { return AsString(node) }
 func (node *RangeCond) String() string        { return AsString(node) }
 func (node *StrVal) String() string           { return AsString(node) }

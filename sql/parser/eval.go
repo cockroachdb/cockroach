@@ -1840,11 +1840,6 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
-func (expr *OverlayExpr) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, errors.Errorf("unhandled type %T", expr)
-}
-
-// Eval implements the TypedExpr interface.
 func (expr *IfExpr) Eval(ctx *EvalContext) (Datum, error) {
 	cond, err := expr.Cond.(TypedExpr).Eval(ctx)
 	if err != nil {
