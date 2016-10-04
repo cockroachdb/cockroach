@@ -614,7 +614,7 @@ func encodeNonsortingDecimalValueWithoutExp(digits []big.Word, buf []byte) []byt
 // It will only modify the provided big.Int if copyOnWrite is not set, and
 // it will use the formatted representation of the big.Int if it is provided.
 func normalizeBigInt(bi *big.Int, copyOnWrite bool, formatted, tmp []byte) *big.Int {
-	tens := 0
+	var tens int
 	if formatted != nil {
 		tens = trailingZerosFromBytes(formatted)
 	} else {
