@@ -15,6 +15,7 @@
 package parser
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"strings"
@@ -84,6 +85,14 @@ var Aggregates = map[string][]Builtin{
 
 	"bool_or": {
 		makeAggBuiltin(TypeBool, TypeBool, newBoolOrAggregate),
+	},
+
+	"concat_agg": {
+		// TODO(knz) When CockroachDB supports STRING_AGG, CONCAT_AGG(X)
+		// should be substituted to STRING_AGG(X, '') and executed as
+		// such (no need for a separate implementation).
+		makeAggBuiltin(TypeString, TypeString, newStringConcatAggregate),
+		makeAggBuiltin(TypeBytes, TypeBytes, newBytesConcatAggregate),
 	},
 
 	"count": countImpls(),
@@ -220,6 +229,45 @@ func (a *avgAggregate) Result() Datum {
 	default:
 		panic(fmt.Sprintf("unexpected SUM result type: %s", t.Type()))
 	}
+}
+
+type concatAggregate struct {
+	forBytes   bool
+	sawNonNull bool
+	result     bytes.Buffer
+}
+
+func newBytesConcatAggregate() AggregateFunc {
+	return &concatAggregate{forBytes: true}
+}
+func newStringConcatAggregate() AggregateFunc {
+	return &concatAggregate{}
+}
+
+func (a *concatAggregate) Add(datum Datum) {
+	if datum == DNull {
+		return
+	}
+	a.sawNonNull = true
+	var arg string
+	if a.forBytes {
+		arg = string(*datum.(*DBytes))
+	} else {
+		arg = string(*datum.(*DString))
+	}
+	a.result.WriteString(arg)
+}
+
+func (a *concatAggregate) Result() Datum {
+	if !a.sawNonNull {
+		return DNull
+	}
+	if a.forBytes {
+		res := DBytes(a.result.String())
+		return &res
+	}
+	res := DString(a.result.String())
+	return &res
 }
 
 type boolAndAggregate struct {
