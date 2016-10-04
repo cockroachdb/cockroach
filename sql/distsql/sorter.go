@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
 // sorter sorts the input rows according to the column ordering specified by ordering. Note
@@ -56,9 +57,12 @@ func (s *sorter) Run(wg *sync.WaitGroup) {
 		defer wg.Done()
 	}
 
+	ctx, closeSpan := tracing.ChildSpan(s.ctx, "sorter")
+	defer closeSpan()
+
 	if log.V(2) {
-		log.Infof(s.ctx, "starting sorter run")
-		defer log.Infof(s.ctx, "exiting sorter run")
+		log.Infof(ctx, "starting sorter run")
+		defer log.Infof(ctx, "exiting sorter run")
 	}
 
 	switch {
@@ -72,7 +76,7 @@ func (s *sorter) Run(wg *sync.WaitGroup) {
 			})
 		err := ss.Execute(s)
 		if err != nil {
-			log.Errorf(s.ctx, "error sorting rows in memory: %s", err)
+			log.Errorf(ctx, "error sorting rows in memory: %s", err)
 		}
 
 		s.output.Close(err)
@@ -86,7 +90,7 @@ func (s *sorter) Run(wg *sync.WaitGroup) {
 			}, s.limit)
 		err := ss.Execute(s)
 		if err != nil {
-			log.Errorf(s.ctx, "error sorting rows: %s", err)
+			log.Errorf(ctx, "error sorting rows: %s", err)
 		}
 
 		s.output.Close(err)
@@ -101,7 +105,7 @@ func (s *sorter) Run(wg *sync.WaitGroup) {
 			})
 		err := ss.Execute(s)
 		if err != nil {
-			log.Errorf(s.ctx, "error sorting rows: %s", err)
+			log.Errorf(ctx, "error sorting rows: %s", err)
 		}
 
 		s.output.Close(err)
