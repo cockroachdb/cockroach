@@ -169,6 +169,64 @@ var Builtins = map[string][]Builtin{
 	"substr":    substringImpls,
 	"substring": substringImpls,
 
+	"to_char": {
+		Builtin{
+			Types:      ArgTypes{TypeTimestamp, TypeString},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				var buffer bytes.Buffer
+				var f FmtFlags
+				ts := args[0].(*DTimestamp)
+				ts.Format(&buffer, f)
+				return NewDString(buffer.String()), nil
+			},
+		},
+		Builtin{
+			Types:      ArgTypes{TypeInt, TypeString},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				var buffer bytes.Buffer
+				var f FmtFlags
+				di := args[0].(*DInt)
+				di.Format(&buffer, f)
+				return NewDString(buffer.String()), nil
+			},
+		},
+		Builtin{
+			Types:      ArgTypes{TypeInterval, TypeString},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				var buffer bytes.Buffer
+				var f FmtFlags
+				di := args[0].(*DInterval)
+				di.Format(&buffer, f)
+				return NewDString(buffer.String()), nil
+			},
+		},
+		Builtin{
+			Types:      ArgTypes{TypeFloat, TypeString},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				var buffer bytes.Buffer
+				var f FmtFlags
+				df := args[0].(*DFloat)
+				df.Format(&buffer, f)
+				return NewDString(buffer.String()), nil
+			},
+		},
+		Builtin{
+			Types:      ArgTypes{TypeDecimal, TypeString},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				var buffer bytes.Buffer
+				var f FmtFlags
+				de := args[0].(*DDecimal)
+				de.Format(&buffer, f)
+				return NewDString(buffer.String()), nil
+			},
+		},
+	},
+
 	// concat concatenates the text representations of all the arguments.
 	// NULL arguments are ignored.
 	"concat": {
