@@ -57,8 +57,8 @@ func (s *sorter) Run(wg *sync.WaitGroup) {
 		defer wg.Done()
 	}
 
-	ctx, closeSpan := tracing.ChildSpan(s.ctx, "sorter")
-	defer closeSpan()
+	ctx, span := tracing.ChildSpan(s.ctx, "sorter")
+	defer tracing.FinishSpan(span)
 
 	if log.V(2) {
 		log.Infof(ctx, "starting sorter run")
