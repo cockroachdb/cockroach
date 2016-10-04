@@ -2626,15 +2626,9 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 				repl, replicaGCPriorityRemoved,
 			)
 			if err != nil {
-				log.Errorf(
-					ctx, "%s: unable to add replica %d to GC queue: %s",
-					repl, resp.ToReplica, err,
-				)
+				log.Errorf(ctx, "%s: unable to add to replica GC queue: %s", repl, err)
 			} else if added {
-				log.Infof(
-					ctx, "%s: added to replica GC queue (peer suggestion)",
-					repl,
-				)
+				log.Infof(ctx, "%s: added to replica GC queue (peer suggestion)", repl)
 			}
 		default:
 			log.Warningf(ctx, "got error from range %d, replica %s: %s",
