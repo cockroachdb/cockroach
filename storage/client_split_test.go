@@ -93,9 +93,9 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 // UserTableDataMin and still gossip the SystemConfig properly.
 func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sCtx := storage.TestStoreContext()
-	sCtx.TestingKnobs.DisableSplitQueue = true
-	store, stopper, _ := createTestStoreWithContext(t, sCtx)
+	storeCfg := storage.TestStoreConfig()
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	store, stopper, _ := createTestStoreWithConfig(t, storeCfg)
 	defer stopper.Stop()
 
 	key := keys.MakeRowSentinelKey(append([]byte(nil), keys.UserTableDataMin...))
@@ -145,9 +145,9 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 // a table row will cause a split at a boundary between rows.
 func TestStoreRangeSplitInsideRow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sCtx := storage.TestStoreContext()
-	sCtx.TestingKnobs.DisableSplitQueue = true
-	store, stopper, _ := createTestStoreWithContext(t, sCtx)
+	storeCfg := storage.TestStoreConfig()
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	store, stopper, _ := createTestStoreWithConfig(t, storeCfg)
 	defer stopper.Stop()
 
 	// Manually create some the column keys corresponding to the table:
@@ -198,9 +198,9 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 // that all intents are cleared and the transaction record cleaned up.
 func TestStoreRangeSplitIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sCtx := storage.TestStoreContext()
-	sCtx.TestingKnobs.DisableSplitQueue = true
-	store, stopper, _ := createTestStoreWithContext(t, sCtx)
+	storeCfg := storage.TestStoreConfig()
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	store, stopper, _ := createTestStoreWithConfig(t, storeCfg)
 	defer stopper.Stop()
 
 	// First, write some values left and right of the proposed split key.
@@ -251,9 +251,9 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 // to split at the start of the newly split range.
 func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sCtx := storage.TestStoreContext()
-	sCtx.TestingKnobs.DisableSplitQueue = true
-	store, stopper, _ := createTestStoreWithContext(t, sCtx)
+	storeCfg := storage.TestStoreConfig()
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	store, stopper, _ := createTestStoreWithConfig(t, storeCfg)
 	defer stopper.Stop()
 
 	args := adminSplitArgs(roachpb.KeyMin, []byte("a"))
@@ -276,9 +276,9 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 // because the split key is invalid after the first split succeeds.
 func TestStoreRangeSplitConcurrent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sCtx := storage.TestStoreContext()
-	sCtx.TestingKnobs.DisableSplitQueue = true
-	store, stopper, _ := createTestStoreWithContext(t, sCtx)
+	storeCfg := storage.TestStoreConfig()
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	store, stopper, _ := createTestStoreWithConfig(t, storeCfg)
 	defer stopper.Stop()
 
 	splitKey := roachpb.Key("a")
@@ -335,9 +335,9 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 // can't be replayed.
 func TestStoreRangeSplitIdempotency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sCtx := storage.TestStoreContext()
-	sCtx.TestingKnobs.DisableSplitQueue = true
-	store, stopper, _ := createTestStoreWithContext(t, sCtx)
+	storeCfg := storage.TestStoreConfig()
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	store, stopper, _ := createTestStoreWithConfig(t, storeCfg)
 	defer stopper.Stop()
 	rangeID := roachpb.RangeID(1)
 	splitKey := roachpb.Key("m")
@@ -482,9 +482,9 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 // the pre-split.
 func TestStoreRangeSplitStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sCtx := storage.TestStoreContext()
-	sCtx.TestingKnobs.DisableSplitQueue = true
-	store, stopper, manual := createTestStoreWithContext(t, sCtx)
+	storeCfg := storage.TestStoreConfig()
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	store, stopper, manual := createTestStoreWithConfig(t, storeCfg)
 	defer stopper.Stop()
 
 	// Split the range after the last table data key.
@@ -589,9 +589,9 @@ func TestStoreRangeSplitStats(t *testing.T) {
 // requests' impact on MVCCStats are only estimated. See updateStatsOnMerge.
 func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sCtx := storage.TestStoreContext()
-	sCtx.TestingKnobs.DisableSplitQueue = true
-	store, stopper, manual := createTestStoreWithContext(t, sCtx)
+	storeCfg := storage.TestStoreConfig()
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	store, stopper, manual := createTestStoreWithConfig(t, storeCfg)
 	defer stopper.Stop()
 
 	// Split the range after the last table data key.
@@ -1087,9 +1087,9 @@ func TestStoreSplitTimestampCacheReadRace(t *testing.T) {
 
 	getContinues := make(chan struct{})
 	var getStarted sync.WaitGroup
-	sCtx := storage.TestStoreContext()
-	sCtx.TestingKnobs.DisableSplitQueue = true
-	sCtx.TestingKnobs.TestingCommandFilter =
+	storeCfg := storage.TestStoreConfig()
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	storeCfg.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok {
 				st := et.InternalCommitTrigger.GetSplitTrigger()
@@ -1104,7 +1104,7 @@ func TestStoreSplitTimestampCacheReadRace(t *testing.T) {
 			}
 			return nil
 		}
-	store, stopper, _ := createTestStoreWithContext(t, sCtx)
+	store, stopper, _ := createTestStoreWithConfig(t, storeCfg)
 	defer stopper.Stop()
 
 	now := store.Clock().Now()
@@ -1318,12 +1318,12 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	mtc := &multiTestContext{}
-	storeCtx := storage.TestStoreContext()
+	storeCfg := storage.TestStoreConfig()
 	// An aggressive tick interval lets groups communicate more and thus
 	// triggers test failures much more reliably. We can't go too aggressive
 	// or race tests never make any progress.
-	storeCtx.RaftTickInterval = 50 * time.Millisecond
-	storeCtx.RaftElectionTimeoutTicks = 2
+	storeCfg.RaftTickInterval = 50 * time.Millisecond
+	storeCfg.RaftElectionTimeoutTicks = 2
 	currentTrigger := make(chan *roachpb.SplitTrigger, 1)
 	var seen struct {
 		syncutil.Mutex
@@ -1331,7 +1331,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	}
 	seen.sids = make(map[storagebase.CmdIDKey][2]bool)
 
-	storeCtx.TestingKnobs.TestingCommandFilter = func(args storagebase.FilterArgs) *roachpb.Error {
+	storeCfg.TestingKnobs.TestingCommandFilter = func(args storagebase.FilterArgs) *roachpb.Error {
 		et, ok := args.Req.(*roachpb.EndTransactionRequest)
 		if !ok || et.InternalCommitTrigger == nil {
 			return nil
@@ -1365,7 +1365,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 		return nil
 	}
 
-	mtc.storeContext = &storeCtx
+	mtc.storeConfig = &storeCfg
 	mtc.Start(t, 2)
 	defer mtc.Stop()
 
@@ -1447,10 +1447,10 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 // elects a leader without waiting for an election timeout.
 func TestLeaderAfterSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeContext := storage.TestStoreContext()
-	storeContext.RaftElectionTimeoutTicks = 1000000
+	storeConfig := storage.TestStoreConfig()
+	storeConfig.RaftElectionTimeoutTicks = 1000000
 	mtc := &multiTestContext{
-		storeContext: &storeContext,
+		storeConfig: &storeConfig,
 	}
 	mtc.Start(t, 3)
 	defer mtc.Stop()
@@ -1479,9 +1479,9 @@ func TestLeaderAfterSplit(t *testing.T) {
 
 func BenchmarkStoreRangeSplit(b *testing.B) {
 	defer tracing.Disable()()
-	sCtx := storage.TestStoreContext()
-	sCtx.TestingKnobs.DisableSplitQueue = true
-	store, stopper, _ := createTestStoreWithContext(b, sCtx)
+	storeCfg := storage.TestStoreConfig()
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	store, stopper, _ := createTestStoreWithConfig(b, storeCfg)
 	defer stopper.Stop()
 
 	// Perform initial split of ranges.
@@ -1615,9 +1615,9 @@ func TestStoreSplitBeginTxnPushMetaIntentRace(t *testing.T) {
 
 	wroteMeta2 := make(chan struct{}, 1)
 
-	sCtx := storage.TestStoreContext()
-	sCtx.TestingKnobs.DisableSplitQueue = true
-	sCtx.TestingKnobs.TestingCommandFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+	storeCfg := storage.TestStoreConfig()
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	storeCfg.TestingKnobs.TestingCommandFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 		startMu.Lock()
 		start := startMu.time
 		startMu.Unlock()
@@ -1644,7 +1644,7 @@ func TestStoreSplitBeginTxnPushMetaIntentRace(t *testing.T) {
 		}
 		return nil
 	}
-	store, stopper, manual := createTestStoreWithContext(t, sCtx)
+	store, stopper, manual := createTestStoreWithConfig(t, storeCfg)
 	defer stopper.Stop()
 
 	// Advance the clock past the transaction cleanup expiration.

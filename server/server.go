@@ -257,7 +257,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	s.registry.AddMetricStruct(s.pgServer.Metrics())
 
 	// TODO(bdarnell): make StoreConfig configurable.
-	nCtx := storage.StoreContext{
+	storeCfg := storage.StoreConfig{
 		Ctx:                            s.Ctx(),
 		Clock:                          s.clock,
 		DB:                             s.db,
@@ -279,7 +279,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		Locality: srvCtx.Locality,
 	}
 	if srvCtx.TestingKnobs.Store != nil {
-		nCtx.TestingKnobs = *srvCtx.TestingKnobs.Store.(*storage.StoreTestingKnobs)
+		storeCfg.TestingKnobs = *srvCtx.TestingKnobs.Store.(*storage.StoreTestingKnobs)
 	}
 
 	s.recorder = status.NewMetricsRecorder(s.clock)
@@ -288,7 +288,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	s.runtime = status.MakeRuntimeStatSampler(s.clock)
 	s.registry.AddMetricStruct(s.runtime)
 
-	s.node = NewNode(nCtx, s.recorder, s.registry, s.stopper, txnMetrics, sql.MakeEventLogger(s.leaseMgr))
+	s.node = NewNode(storeCfg, s.recorder, s.registry, s.stopper, txnMetrics, sql.MakeEventLogger(s.leaseMgr))
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 	storage.RegisterConsistencyServer(s.grpc, s.node.storesServer)
 	storage.RegisterFreezeServer(s.grpc, s.node.storesServer)

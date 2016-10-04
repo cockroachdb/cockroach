@@ -95,7 +95,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 	// No request in progress. Let's propose a Lease command asynchronously.
 	// TODO(tschottdorf): get duration from configuration, either as a
 	// config flag or, later, dynamically adjusted.
-	startStasis := timestamp.Add(int64(replica.store.ctx.rangeLeaseActiveDuration), 0)
+	startStasis := timestamp.Add(int64(replica.store.cfg.rangeLeaseActiveDuration), 0)
 	expiration := startStasis.Add(int64(replica.store.Clock().MaxOffset()), 0)
 	reqSpan := roachpb.Span{
 		Key: startKey,

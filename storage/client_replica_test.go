@@ -202,8 +202,8 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	clock := hlc.NewClock(manualClock.UnixNano)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	ctx := storage.TestStoreContext()
-	ctx.TestingKnobs.TestingCommandFilter =
+	cfg := storage.TestStoreConfig()
+	cfg.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.GetRequest); ok &&
 				filterArgs.Req.Header().Key.Equal(roachpb.Key(key)) &&
@@ -222,7 +222,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		engine.NewInMem(roachpb.Attributes{}, 10<<20, stopper),
 		clock,
 		true,
-		ctx,
+		cfg,
 		stopper)
 
 	// Put an initial value.
@@ -332,9 +332,9 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 // are correct when scanning in reverse order.
 func TestRangeLookupUseReverse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sCtx := storage.TestStoreContext()
-	sCtx.TestingKnobs.DisableSplitQueue = true
-	store, stopper, _ := createTestStoreWithContext(t, sCtx)
+	storeCfg := storage.TestStoreConfig()
+	storeCfg.TestingKnobs.DisableSplitQueue = true
+	store, stopper, _ := createTestStoreWithConfig(t, storeCfg)
 	defer stopper.Stop()
 
 	// Init test ranges:
@@ -467,10 +467,10 @@ func TestRangeLookupUseReverse(t *testing.T) {
 
 func TestRangeTransferLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := storage.TestStoreContext()
+	cfg := storage.TestStoreConfig()
 	var filterMu syncutil.Mutex
 	var filter func(filterArgs storagebase.FilterArgs) *roachpb.Error
-	ctx.TestingKnobs.TestingCommandFilter =
+	cfg.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			filterMu.Lock()
 			filterCopy := filter
@@ -483,7 +483,7 @@ func TestRangeTransferLease(t *testing.T) {
 	var waitForTransferBlocked atomic.Value
 	waitForTransferBlocked.Store(false)
 	transferBlocked := make(chan struct{})
-	ctx.TestingKnobs.LeaseTransferBlockedOnExtensionEvent = func(
+	cfg.TestingKnobs.LeaseTransferBlockedOnExtensionEvent = func(
 		_ roachpb.ReplicaDescriptor) {
 		if waitForTransferBlocked.Load().(bool) {
 			transferBlocked <- struct{}{}
@@ -491,7 +491,7 @@ func TestRangeTransferLease(t *testing.T) {
 		}
 	}
 	mtc := &multiTestContext{}
-	mtc.storeContext = &ctx
+	mtc.storeConfig = &cfg
 	mtc.Start(t, 2)
 	defer mtc.Stop()
 

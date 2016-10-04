@@ -84,7 +84,7 @@ func (r *Replica) executeCmd(
 	}
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
-	if filter := r.store.ctx.TestingKnobs.TestingCommandFilter; filter != nil {
+	if filter := r.store.cfg.TestingKnobs.TestingCommandFilter; filter != nil {
 		filterArgs := storagebase.FilterArgs{Ctx: ctx, CmdID: raftCmdID, Index: index,
 			Sid: r.store.StoreID(), Req: args, Hdr: h}
 		if pErr := filter(filterArgs); pErr != nil {
@@ -724,8 +724,8 @@ func (r *Replica) resolveLocalIntents(
 			if inSpan != nil {
 				intent.Span = *inSpan
 				num, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, batch, iterAndBuf, ms, intent, math.MaxInt64)
-				if r.store.ctx.TestingKnobs.NumKeysEvaluatedForRangeIntentResolution != nil {
-					atomic.AddInt64(r.store.ctx.TestingKnobs.NumKeysEvaluatedForRangeIntentResolution, num)
+				if r.store.cfg.TestingKnobs.NumKeysEvaluatedForRangeIntentResolution != nil {
+					atomic.AddInt64(r.store.cfg.TestingKnobs.NumKeysEvaluatedForRangeIntentResolution, num)
 				}
 				return err
 			}
@@ -1815,7 +1815,7 @@ func (r *Replica) CheckConsistency(
 	}
 	var inconsistencyCount uint32
 	var wg sync.WaitGroup
-	sp := r.store.ctx.StorePool
+	sp := r.store.cfg.StorePool
 	for _, replica := range r.Desc().Replicas {
 		if replica == localReplica {
 			continue
@@ -1856,7 +1856,7 @@ func (r *Replica) CheckConsistency(
 				replica, c.checksum, resp.Checksum)
 			if c.snapshot != nil && resp.Snapshot != nil {
 				diff := diffRange(c.snapshot, resp.Snapshot)
-				if report := r.store.ctx.TestingKnobs.BadChecksumReportDiff; report != nil {
+				if report := r.store.cfg.TestingKnobs.BadChecksumReportDiff; report != nil {
 					report(r.store.Ident, diff)
 				}
 				_, _ = diff.WriteTo(&buf)
@@ -1874,7 +1874,7 @@ func (r *Replica) CheckConsistency(
 		logFunc := log.Errorf
 		if p := r.store.TestingKnobs().BadChecksumPanic; p != nil {
 			p(r.store.Ident)
-		} else if r.store.ctx.ConsistencyCheckPanicOnFailure {
+		} else if r.store.cfg.ConsistencyCheckPanicOnFailure {
 			logFunc = log.Fatalf
 		}
 		logFunc(ctx, "consistency check failed with %d inconsistent replicas", inconsistencyCount)
@@ -3202,7 +3202,7 @@ func (r *Replica) ChangeReplicas(
 			// Recipients can choose to decline preemptive snapshots.
 			CanDecline: true,
 		}
-		if err := r.store.ctx.Transport.SendSnapshot(ctx, req, snap, r.store.Engine().NewBatch); err != nil {
+		if err := r.store.cfg.Transport.SendSnapshot(ctx, req, snap, r.store.Engine().NewBatch); err != nil {
 			return errors.Wrapf(err, "%s: change replicas aborted due to failed preemptive snapshot", r)
 		}
 

@@ -131,10 +131,10 @@ func TestStoresLookupReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	ctx := TestStoreContext()
+	cfg := TestStoreConfig()
 	manualClock := hlc.NewManualClock(0)
-	ctx.Clock = hlc.NewClock(manualClock.UnixNano)
-	ls := NewStores(context.TODO(), ctx.Clock)
+	cfg.Clock = hlc.NewClock(manualClock.UnixNano)
+	ls := NewStores(context.TODO(), cfg.Clock)
 
 	// Create two new stores with ranges we care about.
 	var e [2]engine.Engine
@@ -149,8 +149,8 @@ func TestStoresLookupReplica(t *testing.T) {
 	}
 	for i, rng := range ranges {
 		e[i] = engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
-		ctx.Transport = NewDummyRaftTransport()
-		s[i] = NewStore(ctx, e[i], &roachpb.NodeDescriptor{NodeID: 1})
+		cfg.Transport = NewDummyRaftTransport()
+		s[i] = NewStore(cfg, e[i], &roachpb.NodeDescriptor{NodeID: 1})
 		s[i].Ident.StoreID = rng.storeID
 
 		d[i] = &roachpb.RangeDescriptor{
@@ -230,16 +230,16 @@ var storeIDAlloc roachpb.StoreID
 // createStores creates a slice of count stores.
 func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores, *stop.Stopper) {
 	stopper := stop.NewStopper()
-	ctx := TestStoreContext()
+	cfg := TestStoreConfig()
 	manualClock := hlc.NewManualClock(0)
-	ctx.Clock = hlc.NewClock(manualClock.UnixNano)
-	ls := NewStores(context.TODO(), ctx.Clock)
+	cfg.Clock = hlc.NewClock(manualClock.UnixNano)
+	ls := NewStores(context.TODO(), cfg.Clock)
 
 	// Create two stores with ranges we care about.
 	stores := []*Store{}
 	for i := 0; i < 2; i++ {
-		ctx.Transport = NewDummyRaftTransport()
-		s := NewStore(ctx, engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper), &roachpb.NodeDescriptor{NodeID: 1})
+		cfg.Transport = NewDummyRaftTransport()
+		s := NewStore(cfg, engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper), &roachpb.NodeDescriptor{NodeID: 1})
 		storeIDAlloc++
 		s.Ident.StoreID = storeIDAlloc
 		stores = append(stores, s)

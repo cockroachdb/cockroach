@@ -62,13 +62,13 @@ import (
 func createTestNode(
 	addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T,
 ) (*grpc.Server, net.Addr, *hlc.Clock, *Node, *stop.Stopper) {
-	ctx := storage.StoreContext{}
+	cfg := storage.StoreConfig{}
 
 	stopper := stop.NewStopper()
-	ctx.Clock = hlc.NewClock(hlc.UnixNano)
-	nodeRPCContext := rpc.NewContext(context.TODO(), nodeTestBaseContext, ctx.Clock, stopper)
-	ctx.ScanInterval = 10 * time.Hour
-	ctx.ConsistencyCheckInterval = 10 * time.Hour
+	cfg.Clock = hlc.NewClock(hlc.UnixNano)
+	nodeRPCContext := rpc.NewContext(context.TODO(), nodeTestBaseContext, cfg.Clock, stopper)
+	cfg.ScanInterval = 10 * time.Hour
+	cfg.ConsistencyCheckInterval = 10 * time.Hour
 	grpcServer := rpc.NewServer(nodeRPCContext)
 	serverCtx := makeTestContext()
 	g := gossip.New(
@@ -94,23 +94,23 @@ func createTestNode(
 		g.SetResolvers([]resolver.Resolver{r})
 		g.Start(ln.Addr())
 	}
-	ctx.Gossip = g
+	cfg.Gossip = g
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	distSender := kv.NewDistSender(&kv.DistSenderConfig{
-		Clock:           ctx.Clock,
+		Clock:           cfg.Clock,
 		RPCContext:      nodeRPCContext,
 		RPCRetryOptions: &retryOpts,
 	}, g)
-	ctx.Ctx = tracing.WithTracer(context.Background(), tracing.NewTracer())
-	sender := kv.NewTxnCoordSender(ctx.Ctx, distSender, ctx.Clock, false, stopper,
+	cfg.Ctx = tracing.WithTracer(context.Background(), tracing.NewTracer())
+	sender := kv.NewTxnCoordSender(cfg.Ctx, distSender, cfg.Clock, false, stopper,
 		kv.MakeTxnMetrics())
-	ctx.DB = client.NewDB(sender)
-	ctx.Transport = storage.NewDummyRaftTransport()
-	node := NewNode(ctx, status.NewMetricsRecorder(ctx.Clock), metric.NewRegistry(), stopper,
+	cfg.DB = client.NewDB(sender)
+	cfg.Transport = storage.NewDummyRaftTransport()
+	node := NewNode(cfg, status.NewMetricsRecorder(cfg.Clock), metric.NewRegistry(), stopper,
 		kv.MakeTxnMetrics(), sql.MakeEventLogger(nil))
 	roachpb.RegisterInternalServer(grpcServer, node)
-	return grpcServer, ln.Addr(), ctx.Clock, node, stopper
+	return grpcServer, ln.Addr(), cfg.Clock, node, stopper
 }
 
 // createAndStartTestNode creates a new test node and starts it. The server and node are returned.
@@ -121,7 +121,7 @@ func createAndStartTestNode(
 	if err := node.start(context.Background(), addr, engines, roachpb.Attributes{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := WaitForInitialSplits(node.ctx.DB); err != nil {
+	if err := WaitForInitialSplits(node.storeCfg.DB); err != nil {
 		t.Fatal(err)
 	}
 	return grpcServer, addr, node, stopper
@@ -259,14 +259,14 @@ func TestNodeJoin(t *testing.T) {
 	node2Key := gossip.MakeNodeIDKey(node2.Descriptor.NodeID)
 	util.SucceedsSoon(t, func() error {
 		var nodeDesc1 roachpb.NodeDescriptor
-		if err := node1.ctx.Gossip.GetInfoProto(node2Key, &nodeDesc1); err != nil {
+		if err := node1.storeCfg.Gossip.GetInfoProto(node2Key, &nodeDesc1); err != nil {
 			return err
 		}
 		if addr2Str, server2AddrStr := nodeDesc1.Address.String(), server2Addr.String(); addr2Str != server2AddrStr {
 			return errors.Errorf("addr2 gossip %s doesn't match addr2 address %s", addr2Str, server2AddrStr)
 		}
 		var nodeDesc2 roachpb.NodeDescriptor
-		if err := node2.ctx.Gossip.GetInfoProto(node1Key, &nodeDesc2); err != nil {
+		if err := node2.storeCfg.Gossip.GetInfoProto(node1Key, &nodeDesc2); err != nil {
 			return err
 		}
 		if addr1Str, server1AddrStr := nodeDesc2.Address.String(), server1Addr.String(); addr1Str != server1AddrStr {
