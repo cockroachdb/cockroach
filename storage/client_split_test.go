@@ -1185,7 +1185,6 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 		}
 		log.Infof(context.TODO(), "received lease request (%s, %s)",
 			leaseReq.Span, leaseReq.Lease)
-		debug.PrintStack()
 		if !reflect.DeepEqual(*forbiddenDesc, leaseReq.Lease.Replica) {
 			return nil
 		}

@@ -57,7 +57,7 @@ const (
 
 	// defaultReserveRPCTimeout is used for the rpc calls to Reserve on other
 	// nodes. It should be short as this may block calls to ChangeReplicas.
-	defaultReserveRPCTimeout = 1 * time.Second
+	defaultReserveRPCTimeout = 8 * time.Second
 )
 
 type storeDetail struct {
