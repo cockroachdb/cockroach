@@ -200,7 +200,7 @@ func setupReplicationAndLeases(
 	}
 }
 
-func TestBackupRestore(t *testing.T) {
+func TestBackupRestoreOnce(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
@@ -209,11 +209,7 @@ func TestBackupRestore(t *testing.T) {
 	dir, cleanupFn := testingTempDir(t, 1)
 	defer cleanupFn()
 
-	// TODO(dan): Increase this clusterSize to 3. It works if the test timeout
-	// is raised and with a util.SucceedsSoon wrapped around Backup, Restore,
-	// and every sql Exec, but it seems like we should be fixing the underlying
-	// issues.
-	const clusterSize = 1
+	const clusterSize = 3
 	const count = 1000
 
 	{
@@ -324,11 +320,7 @@ func TestBackupRestoreBank(t *testing.T) {
 	baseDir, cleanupFn := testingTempDir(t, 1)
 	defer cleanupFn()
 
-	// TODO(dan): Increase this clusterSize to 3. It works if the test timeout
-	// is raised and with a util.SucceedsSoon wrapped around Backup, Restore,
-	// and every sql Exec, but it seems like we should be fixing the underlying
-	// issues.
-	const clusterSize = 1
+	const clusterSize = 3
 	const numAccounts = 10
 	const backupRestoreIterations = 10
 
