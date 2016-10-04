@@ -5,6 +5,7 @@ import { AdminUIState } from "../redux/state";
 import { refreshEvents } from "../redux/apiReducers";
 import { connect } from "react-redux";
 import { TimestampToMoment } from "../util/convert";
+import * as eventTypes from "../util/eventTypes";
 
 type Event = Proto2TypeScript.cockroach.server.serverpb.EventsResponse.Event;
 
@@ -18,10 +19,10 @@ export function getEventInfo(e: Event) {
   let content: React.ReactNode;
 
   switch (e.event_type) {
-    case "create_database":
+    case eventTypes.CREATE_DATABASE:
       content = <span>User {info.User} <strong>created database</strong> {info.DatabaseName}</span>;
       break;
-    case "drop_database":
+    case eventTypes.DROP_DATABASE:
       let tableDropText: string = `${info.DroppedTables.length} tables were dropped: ${info.DroppedTables.join(", ")}`;
       if (info.DroppedTables.length === 0) {
         tableDropText = "No tables were dropped.";
@@ -30,16 +31,16 @@ export function getEventInfo(e: Event) {
       }
       content = <span>User {info.User} <strong>dropped database</strong> {info.DatabaseName}.{tableDropText}</span>;
       break;
-    case "create_table":
+    case eventTypes.CREATE_TABLE:
       content = <span>User {info.User} <strong>created table</strong> {info.TableName}</span>;
       break;
-    case "drop_table":
+    case eventTypes.DROP_TABLE:
       content = <span>User {info.User} <strong>dropped table</strong> {info.TableName}</span>;
       break;
-    case "node_join":
+    case eventTypes.NODE_JOIN:
       content = <span>Node {targetId} <strong>joined the cluster</strong></span>;
       break;
-    case "node_restart":
+    case eventTypes.NODE_RESTART:
       content = <span>Node {targetId} <strong>rejoined the cluster</strong></span>;
       break;
     default:

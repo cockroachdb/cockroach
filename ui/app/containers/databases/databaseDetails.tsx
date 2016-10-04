@@ -7,17 +7,22 @@ import { createSelector } from "reselect";
 
 import * as protos from "../../js/protos";
 import { databaseNameAttr } from "../../util/constants";
+import { TimestampToMoment } from "../../util/convert";
+import { isTableEvent } from "../../util/eventTypes";
 import { Bytes } from "../../util/format";
 import { AdminUIState } from "../../redux/state";
 import { setUISetting } from "../../redux/ui";
-import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats, generateTableID, KeyedCachedDataReducerState } from "../../redux/apiReducers";
+import { refreshDatabaseDetails, refreshTableDetails, refreshTableStats, refreshEvents, generateTableID, KeyedCachedDataReducerState } from "../../redux/apiReducers";
 import { SortSetting } from "../../components/sortabletable";
 import { SortedTable } from "../../components/sortedtable";
 import Visualization from "../../components/visualization";
 
+import { events } from "./databaseList";
+
 type DatabaseDetailsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.DatabaseDetailsResponseMessage;
 type TableDetailsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.TableDetailsResponseMessage;
 type TableStatsResponseMessage = Proto2TypeScript.cockroach.server.serverpb.TableStatsResponseMessage;
+type Event = Proto2TypeScript.cockroach.server.serverpb.EventsResponse.Event;
 
 // Constants used to store per-page sort settings in the redux UI store.
 const UI_DATABASE_TABLES_SORT_SETTING_KEY = "databaseDetails/sort_setting/tables";
@@ -27,6 +32,7 @@ const UI_DATABASE_TABLES_SORT_SETTING_KEY = "databaseDetails/sort_setting/tables
 class TableInfo {
   constructor(
     public name: string,
+    public id: number,
     public numColumns: number,
     public numIndices: number,
     public size: number
@@ -50,6 +56,9 @@ interface DatabaseDetailsData {
   tablesSortSetting: SortSetting;
   // A list of TableInfo for the tables in the selected database.
   tableInfos: TableInfo[];
+  dbResponse: DatabaseDetailsResponseMessage;
+  events: Event[];
+  eventCounts: { [id: number]: number };
 }
 
 /**
@@ -62,6 +71,7 @@ interface DatabaseDetailsActions {
   refreshDatabaseDetails: typeof refreshDatabaseDetails;
   refreshTableDetails: typeof refreshTableDetails;
   refreshTableStats: typeof refreshTableStats;
+  refreshEvents: typeof refreshEvents;
 }
 
 /**
@@ -102,6 +112,7 @@ class DatabaseDetails extends React.Component<DatabaseDetailsProps, {}> {
   // Refresh when the component is mounted.
   componentWillMount() {
     this.props.refreshDatabaseDetails(new protos.cockroach.server.serverpb.DatabaseDetailsRequest({ database: this.props.params[databaseNameAttr] }));
+    this.props.refreshEvents();
     this.loadTableDetails();
   }
 
@@ -110,7 +121,7 @@ class DatabaseDetails extends React.Component<DatabaseDetailsProps, {}> {
   }
 
   render() {
-    let { tableInfos, tablesSortSetting } = this.props;
+    let { tableInfos, tablesSortSetting, dbResponse, events } = this.props;
     let dbID = this.props.params[databaseNameAttr];
 
     let numTables = this.props.tableInfos.length;
@@ -134,12 +145,14 @@ class DatabaseDetails extends React.Component<DatabaseDetailsProps, {}> {
           </Visualization>
           <Visualization title="Replication Factor" tooltip="Not yet implemented.">
             <div className="visualization">
-              <div>Not Implemented</div> {/* TODO (maxlang): Pending #8248 */}
+              <div style={{zoom:1.0}} className="number">{ d3.format("s")(dbResponse && dbResponse.zone_config.num_replicas) }</div>
             </div>
           </Visualization>
           <Visualization title="Target Range Size" tooltip="Not yet implemented.">
             <div className="visualization">
-              <div>Not Implemented</div> {/* TODO (maxlang): Pending #8248 */}
+              <div style={{zoom:0.4}} className="number">
+                { Bytes(dbResponse && dbResponse.zone_config.range_max_bytes.toNumber()) }
+              </div>
             </div>
           </Visualization>
         </div>
@@ -168,13 +181,28 @@ class DatabaseDetails extends React.Component<DatabaseDetailsProps, {}> {
             },
             {
               title: "Last Modified",
-              cell: (tableInfo) => "", // TODO (maxlang): Pending #8246
+              cell: (tableInfo) => {
+                let lastEvent = _.find(events, (e) => e.target_id.toNumber() === tableInfo.id);
+                if (lastEvent && lastEvent.timestamp) {
+                  return TimestampToMoment(lastEvent.timestamp).fromNow();
+                }
+                return "N/A";
+              },
               sort: _.identity,
             },
             {
               title: "Last Modified By",
-              cell: (tableInfo) => "", // TODO (maxlang): Pending #8246
-              sort: _.identity,
+              cell: (tableInfo) => {
+                let lastEvent = _.find(events, (e) => e.target_id.toNumber() === tableInfo.id);
+                if (lastEvent && lastEvent.info) {
+                  try {
+                    return JSON.parse(lastEvent.info).User || "N/A";
+                  } catch (e) {
+                    console.warn("Error finding last event user for event: ", lastEvent, e);
+                  }
+                }
+                return "N/A";
+              },              sort: _.identity,
             },
             ]}/>
         </div>;
@@ -211,6 +239,7 @@ let tableInfos = createSelector(
         let curTableStats = tableStats[generateTableID(dbName, tableName)] && tableStats[generateTableID(dbName, tableName)].data;
         return new TableInfo(
           tableName,
+          curTableDetails && curTableDetails.descriptor_id.toNumber(),
           curTableDetails && curTableDetails.columns.length,
           curTableDetails && curTableDetails.indexes.length,
           curTableStats && (curTableStats.stats.val_bytes.toNumber() + curTableStats.stats.sys_bytes.toNumber())
@@ -219,12 +248,25 @@ let tableInfos = createSelector(
     }
 );
 
+let tableEvents = createSelector(
+  events,
+  (es: Event[]) => _.filter(es, isTableEvent)
+);
+
+let eventCounts = createSelector(
+  tableEvents,
+  (es: Event[]) => _.countBy(es, (e) => e.target_id.toNumber())
+);
+
 // Connect the DatabaseDetails class with our redux store.
 let databaseDetailsConnected = connect(
   (state: AdminUIState, ownProps: IInjectedProps) => {
     return {
       tableInfos: tableInfos(state, ownProps),
       tablesSortSetting: tablesSortSetting(state),
+      dbResponse: databaseDetails(state, ownProps),
+      events: tableEvents(state),
+      eventCounts: eventCounts(state),
     };
   },
   {
@@ -232,6 +274,7 @@ let databaseDetailsConnected = connect(
     refreshDatabaseDetails,
     refreshTableDetails,
     refreshTableStats,
+    refreshEvents,
   }
 )(DatabaseDetails);
 
