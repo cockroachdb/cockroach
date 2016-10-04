@@ -144,11 +144,6 @@ TestGoSimple() {
   ! gosimple "$PKG" | grep -vF 'embedded.go'
 }
 
-TestVarcheck() {
-  ! varcheck -e "$PKG" | \
-    grep -vE '(_string.go|sql/parser/(yacctab|sql\.y)|\.pb\.go|pgerror/codes.go)'
-}
-
 TestGofmtSimplify() {
   ! gofmt -s -d -l . 2>&1 | grep -vE '^\.git/'
 }
