@@ -53,6 +53,7 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 var testIdent = roachpb.StoreIdent{
@@ -148,7 +149,6 @@ func createTestStoreWithoutStart(
 		cfg.Gossip,
 		cfg.Clock,
 		rpcContext,
-		/* reservationsEnabled */ true,
 		TestTimeUntilStoreDeadOff,
 		stopper,
 	)
@@ -2527,4 +2527,107 @@ func TestCanCampaignIdleReplica(t *testing.T) {
 	if !s.canCampaignIdleReplica() {
 		t.Fatalf("idle replica unexpectedly cannot campaign")
 	}
+}
+
+// fakeSnapshotClient implements OutgoingSnapshotStream.
+type fakeSnapshotStream struct {
+	nextResp *SnapshotResponse
+	nextErr  error
+}
+
+func (c fakeSnapshotStream) Recv() (*SnapshotResponse, error) {
+	return c.nextResp, c.nextErr
+}
+
+func (c fakeSnapshotStream) Send(request *SnapshotRequest) error {
+	return nil
+}
+
+// fakeStorePool implements SnapshotStorePool.
+type fakeStorePool struct {
+	declinedThrottle     bool
+	failedThrottle       bool
+	updatedStoreCapacity bool
+}
+
+func (sp *fakeStorePool) throttle(reason throttleReason, toStoreID roachpb.StoreID) {
+	switch reason {
+	case declined:
+		sp.declinedThrottle = true
+	case failed:
+		sp.failedThrottle = true
+	}
+}
+
+func (sp *fakeStorePool) updateRemoteCapacityEstimate(
+	toStoreID roachpb.StoreID, capacity roachpb.StoreCapacity,
+) {
+	sp.updatedStoreCapacity = true
+}
+
+func (sp *fakeStorePool) clear() {
+	sp.declinedThrottle = false
+	sp.failedThrottle = false
+	sp.updatedStoreCapacity = false
+}
+
+// TestSendSnapshotThrottling tests the store pool throttling behavior of
+// store.sendSnapshot, ensuring that it properly updates the StorePool on
+// various exceptional conditions and new capacity estimates.
+func TestSendSnapshotThrottling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := engine.NewInMem(roachpb.Attributes{}, 1<<10, stopper)
+
+	ctx := context.Background()
+	sp := &fakeStorePool{}
+	header := SnapshotRequest_Header{CanDecline: true}
+	var snap *OutgoingSnapshot
+	newBatch := func() engine.Batch {
+		return e.NewBatch()
+	}
+
+	// Test that a failed Recv() fauses a fail throttle
+	c := fakeSnapshotStream{nil, errors.New("")}
+	err := sendSnapshot(ctx, c, sp, header, snap, newBatch)
+	assert.True(t, sp.failedThrottle)
+	assert.Error(t, err)
+
+	// Test that a declined snapshot causes a decline throttle, and that a nil
+	// storeCapacity doesn't cause an update to the store capacity estimate.
+	sp.clear()
+	resp := &SnapshotResponse{
+		StoreCapacity: nil,
+		Status:        SnapshotResponse_DECLINED,
+	}
+	c = fakeSnapshotStream{resp, nil}
+	err = sendSnapshot(ctx, c, sp, header, snap, newBatch)
+	assert.True(t, sp.declinedThrottle)
+	assert.False(t, sp.updatedStoreCapacity)
+	assert.Error(t, err)
+
+	// Test that a declined but required snapshot causes a fail throttle, and
+	// that a non-nil storeCapacity causes an update to the store capacity estimate.
+	sp.clear()
+	header.CanDecline = false
+	resp = &SnapshotResponse{
+		StoreCapacity: &roachpb.StoreCapacity{},
+		Status:        SnapshotResponse_DECLINED,
+	}
+	c = fakeSnapshotStream{resp, nil}
+	err = sendSnapshot(ctx, c, sp, header, snap, newBatch)
+	assert.True(t, sp.failedThrottle)
+	assert.True(t, sp.updatedStoreCapacity)
+	assert.Error(t, err)
+
+	// Test that an errored snapshot causes a fail throttle.
+	resp = &SnapshotResponse{
+		StoreCapacity: &roachpb.StoreCapacity{},
+		Status:        SnapshotResponse_ERROR,
+	}
+	c = fakeSnapshotStream{resp, nil}
+	err = sendSnapshot(ctx, c, sp, header, snap, newBatch)
+	assert.True(t, sp.failedThrottle)
+	assert.Error(t, err)
 }

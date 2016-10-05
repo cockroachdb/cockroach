@@ -184,19 +184,19 @@ func mockStorePool(
 	storePool.mu.Lock()
 	defer storePool.mu.Unlock()
 
-	storePool.mu.stores = make(map[roachpb.StoreID]*storeDetail)
+	storePool.mu.storeDetails = make(map[roachpb.StoreID]*storeDetail)
 	for _, storeID := range aliveStoreIDs {
 		detail := newStoreDetail(context.TODO())
 		detail.desc = &roachpb.StoreDescriptor{StoreID: storeID}
-		storePool.mu.stores[storeID] = detail
+		storePool.mu.storeDetails[storeID] = detail
 	}
 	for _, storeID := range deadStoreIDs {
 		detail := newStoreDetail(context.TODO())
 		detail.dead = true
 		detail.desc = &roachpb.StoreDescriptor{StoreID: storeID}
-		storePool.mu.stores[storeID] = detail
+		storePool.mu.storeDetails[storeID] = detail
 	}
-	for storeID, detail := range storePool.mu.stores {
+	for storeID, detail := range storePool.mu.storeDetails {
 		for _, replica := range deadReplicas {
 			if storeID != replica.Replica.StoreID {
 				continue
@@ -1120,7 +1120,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	// Finally, set that store to be throttled and ensure we don't send the
 	// replica to purgatory.
 	a.storePool.mu.Lock()
-	storeDetail, ok := a.storePool.mu.stores[singleStore[0].StoreID]
+	storeDetail, ok := a.storePool.mu.storeDetails[singleStore[0].StoreID]
 	if !ok {
 		t.Fatalf("store:%d was not found in the store pool", singleStore[0].StoreID)
 	}
@@ -1170,7 +1170,6 @@ func Example_rebalancing() {
 		g,
 		hlc.NewClock(hlc.UnixNano),
 		nil,
-		/* reservationsEnabled */ true,
 		TestTimeUntilStoreDeadOff,
 		stopper,
 	)
