@@ -77,6 +77,8 @@ func processExpression(exprSpec Expression, h *parser.IndexedVarHelper) (parser.
 // exprHelper implements the common logic around evaluating an expression that
 // depends on a set of values.
 type exprHelper struct {
+	noCopy noCopy
+
 	expr parser.TypedExpr
 	// vars is used to generate IndexedVars that are "backed" by
 	// the values in `row`.
@@ -89,7 +91,7 @@ type exprHelper struct {
 	datumAlloc sqlbase.DatumAlloc
 }
 
-func (eh exprHelper) String() string {
+func (eh *exprHelper) String() string {
 	if eh.expr == nil {
 		return "none"
 	}
@@ -138,3 +140,13 @@ func (eh *exprHelper) evalFilter(row sqlbase.EncDatumRow) (bool, error) {
 	eh.row = row
 	return sqlbase.RunFilter(eh.expr, eh.evalCtx)
 }
+
+// noCopy may be embedded into structs which must not be copied
+// after the first use.
+//
+// See https://github.com/golang/go/issues/8005#issuecomment-190753527
+// for details.
+type noCopy struct{}
+
+// Lock is a no-op used by -copylocks checker from `go vet`.
+func (*noCopy) Lock() {}
