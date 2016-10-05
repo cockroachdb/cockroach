@@ -112,7 +112,7 @@ func (p *planner) window(n *parser.SelectClause, s *selectNode) (*windowNode, er
 					s.render = append(s.render, arg)
 					s.columns = append(s.columns, ResultColumn{
 						Name: arg.String(),
-						Typ:  arg.ReturnType(),
+						Typ:  arg.ResolvedType(),
 					})
 				}
 			}
@@ -548,7 +548,7 @@ func (n *windowNode) computeWindows() error {
 					}
 
 					// This may overestimate, because WindowFuncs may perform internal caching.
-					sz, _ := res.Size()
+					sz := res.Size()
 					if err := acc.Grow(int64(sz)); err != nil {
 						return err
 					}
@@ -802,7 +802,7 @@ func (w *windowFuncHolder) String() string { return parser.AsString(w) }
 func (w *windowFuncHolder) Walk(v parser.Visitor) parser.Expr { return w }
 
 func (w *windowFuncHolder) TypeCheck(
-	_ *parser.SemaContext, desired parser.Datum,
+	_ *parser.SemaContext, desired parser.Type,
 ) (parser.TypedExpr, error) {
 	return w, nil
 }
@@ -814,6 +814,6 @@ func (w *windowFuncHolder) Eval(ctx *parser.EvalContext) (parser.Datum, error) {
 	return w.window.windowValues[w.window.curRowIdx][w.funcIdx].Eval(ctx)
 }
 
-func (w *windowFuncHolder) ReturnType() parser.Datum {
-	return w.expr.ReturnType()
+func (w *windowFuncHolder) ResolvedType() parser.Type {
+	return w.expr.ResolvedType()
 }

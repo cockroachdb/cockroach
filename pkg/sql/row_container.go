@@ -96,8 +96,7 @@ func (c *RowContainer) Close() {
 func (c *RowContainer) rowSize(row parser.DTuple) int64 {
 	rsz := c.fixedColsSize
 	for _, i := range c.varSizedColumns {
-		sz, _ := row[i].Size()
-		rsz += int64(sz)
+		rsz += int64(row[i].Size())
 	}
 	return rsz
 }

@@ -469,7 +469,7 @@ SELECT AVG(a) FROM abc
 query error unknown signature for AVG: AVG\(bool\)
 SELECT AVG(c) FROM abc
 
-query error unknown signature for AVG: AVG\(tuple\)
+query error unknown signature for AVG: AVG\(tuple{string, bool}\)
 SELECT AVG((a,c)) FROM abc
 
 query error unknown signature for SUM: SUM\(string\)
@@ -478,7 +478,7 @@ SELECT SUM(a) FROM abc
 query error unknown signature for SUM: SUM\(bool\)
 SELECT SUM(c) FROM abc
 
-query error unknown signature for SUM: SUM\(tuple\)
+query error unknown signature for SUM: SUM\(tuple{string, bool}\)
 SELECT SUM((a,c)) FROM abc
 
 statement ok

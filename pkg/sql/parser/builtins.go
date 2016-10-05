@@ -82,7 +82,7 @@ const (
 // Builtin is a built-in function.
 type Builtin struct {
 	Types      typeList
-	ReturnType Datum
+	ReturnType Type
 
 	// When multiple overloads are eligible based on types even after all of of
 	// the heuristics to pick one have been used, if one of the overloads is a
@@ -111,7 +111,7 @@ func (b Builtin) params() typeList {
 	return b.Types
 }
 
-func (b Builtin) returnType() Datum {
+func (b Builtin) returnType() Type {
 	return b.ReturnType
 }
 
@@ -119,7 +119,7 @@ func (b Builtin) preferred() bool {
 	return b.preferredOverload
 }
 
-func categorizeType(t Datum) string {
+func categorizeType(t Type) string {
 	switch t {
 	case TypeDate, TypeInterval, TypeTimestamp, TypeTimestampTZ:
 		return categoryDateAndTime
@@ -128,7 +128,7 @@ func categorizeType(t Datum) string {
 	case TypeString, TypeBytes:
 		return categoryString
 	default:
-		return strings.ToUpper(t.Type())
+		return strings.ToUpper(t.String())
 	}
 }
 
@@ -151,7 +151,7 @@ func (b Builtin) Signature() string {
 	if b.ReturnType == nil {
 		return "<T>... -> <T>" // Special-case for LEAST and GREATEST.
 	}
-	return fmt.Sprintf("(%s) -> %s", b.Types.String(), b.ReturnType.Type())
+	return fmt.Sprintf("(%s) -> %s", b.Types.String(), b.ReturnType)
 }
 
 // Builtins contains the built-in functions indexed by name.
@@ -216,7 +216,7 @@ var Builtins = map[string][]Builtin{
 			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 				dstr, ok := args[0].(*DString)
 				if !ok {
-					return DNull, fmt.Errorf("unknown signature for concat_ws: concat_ws(%s, ...)", args[0].Type())
+					return DNull, fmt.Errorf("unknown signature for concat_ws: concat_ws(%s, ...)", args[0])
 				}
 				sep := string(*dstr)
 				var ss []string
@@ -1290,7 +1290,7 @@ func decimalBuiltin2(f func(*inf.Dec, *inf.Dec) (Datum, error)) Builtin {
 	}
 }
 
-func stringBuiltin1(f func(string) (Datum, error), returnType Datum) Builtin {
+func stringBuiltin1(f func(string) (Datum, error), returnType Type) Builtin {
 	return Builtin{
 		Types:      ArgTypes{TypeString},
 		ReturnType: returnType,
@@ -1300,7 +1300,7 @@ func stringBuiltin1(f func(string) (Datum, error), returnType Datum) Builtin {
 	}
 }
 
-func stringBuiltin2(f func(string, string) (Datum, error), returnType Datum) Builtin {
+func stringBuiltin2(f func(string, string) (Datum, error), returnType Type) Builtin {
 	return Builtin{
 		Types:      ArgTypes{TypeString, TypeString},
 		ReturnType: returnType,
@@ -1312,7 +1312,7 @@ func stringBuiltin2(f func(string, string) (Datum, error), returnType Datum) Bui
 }
 
 func stringBuiltin3(
-	a, b, c string, f func(string, string, string) (Datum, error), returnType Datum, info string,
+	a, b, c string, f func(string, string, string) (Datum, error), returnType Type, info string,
 ) Builtin {
 	return Builtin{
 		Types:      NamedArgTypes{{a, TypeString}, {b, TypeString}, {c, TypeString}},
@@ -1324,7 +1324,7 @@ func stringBuiltin3(
 	}
 }
 
-func bytesBuiltin1(f func(string) (Datum, error), returnType Datum) Builtin {
+func bytesBuiltin1(f func(string) (Datum, error), returnType Type) Builtin {
 	return Builtin{
 		Types:      ArgTypes{TypeBytes},
 		ReturnType: returnType,

@@ -88,16 +88,16 @@ var singletonStarName VarName = UnqualifiedStar{}
 // StarExpr is a convenience function that represents an unqualified "*".
 func StarExpr() VarName { return singletonStarName }
 
-// ReturnType implements the TypedExpr interface.
-func (UnqualifiedStar) ReturnType() Datum {
+// ResolvedType implements the TypedExpr interface.
+func (UnqualifiedStar) ResolvedType() Type {
 	panic("unqualified stars ought to be replaced before this point")
 }
 
 // Variable implements the VariableExpr interface.
 func (UnqualifiedStar) Variable() {}
 
-// ReturnType implements the TypedExpr interface.
-func (UnresolvedName) ReturnType() Datum {
+// ResolvedType implements the TypedExpr interface.
+func (UnresolvedName) ResolvedType() Type {
 	panic("unresolved names ought to be replaced before this point")
 }
 
@@ -132,8 +132,8 @@ func (a *AllColumnsSelector) NormalizeVarName() (VarName, error) { return a, nil
 // VariableExpr interface is used.
 func (a *AllColumnsSelector) Variable() {}
 
-// ReturnType implements the TypedExpr interface.
-func (*AllColumnsSelector) ReturnType() Datum {
+// ResolvedType implements the TypedExpr interface.
+func (*AllColumnsSelector) ResolvedType() Type {
 	panic("all-columns selectors ought to be replaced before this point")
 }
 
@@ -182,8 +182,8 @@ func (c *ColumnItem) Column() string {
 // VariableExpr interface is used.
 func (c *ColumnItem) Variable() {}
 
-// ReturnType implements the TypedExpr interface.
-func (c *ColumnItem) ReturnType() Datum {
+// ResolvedType implements the TypedExpr interface.
+func (c *ColumnItem) ResolvedType() Type {
 	if presetTypesForTesting == nil {
 		return nil
 	}

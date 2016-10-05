@@ -1604,9 +1604,9 @@ func (c *ColumnType) NumericScale() (int32, bool) {
 	return 0, false
 }
 
-// ToDatumType converts the ColumnType_Kind to the correct type Datum, or
-// nil if there is no correspondence.
-func (k ColumnType_Kind) ToDatumType() parser.Datum {
+// ToDatumType converts the ColumnType_Kind to the correct type, or nil if there
+// is no correspondence.
+func (k ColumnType_Kind) ToDatumType() parser.Type {
 	switch k {
 	case ColumnType_BOOL:
 		return parser.TypeBool
@@ -1632,9 +1632,9 @@ func (k ColumnType_Kind) ToDatumType() parser.Datum {
 	return nil
 }
 
-// ToDatumType converts the ColumnType to the correct type Datum, or
-// nil if there is no correspondence.
-func (c *ColumnType) ToDatumType() parser.Datum {
+// ToDatumType converts the ColumnType to the correct type, or nil if there is
+// no correspondence.
+func (c *ColumnType) ToDatumType() parser.Type {
 	return c.Kind.ToDatumType()
 }
 
