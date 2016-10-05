@@ -526,16 +526,9 @@ func (p *planner) Help(n *parser.Help) (planNode, error) {
 	}
 
 	for _, f := range matches {
-		// TODO(dt): support naming args in signature
-		var sig string
-		if f.ReturnType == nil {
-			sig = "<T>... -> <T>" // Special-case for LEAST and GREATEST.
-		} else {
-			sig = fmt.Sprintf("%s -> %s", f.Types.String(), f.ReturnType.Type())
-		}
 		row := parser.DTuple{
 			parser.NewDString(name),
-			parser.NewDString(sig),
+			parser.NewDString(f.Signature()),
 			parser.NewDString(f.Category()),
 			parser.NewDString(f.Info),
 		}
