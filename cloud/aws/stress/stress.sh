@@ -32,6 +32,6 @@ function run_one_test {
   popd
 }
 
-for test in $(find cockroach/ -type f -name '*.test' | sort); do
+for test in $(find cockroach/ -type f -name '*.test*' | sort); do
   run_one_test ${test}
 done
