@@ -144,11 +144,6 @@ TestGoSimple() {
   ! gosimple "$PKG" | grep -vF 'embedded.go'
 }
 
-TestVarcheck() {
-  ! varcheck -e "$PKG" | \
-    grep -vE '(_string.go|sql/parser/(yacctab|sql\.y)|\.pb\.go|pgerror/codes.go)'
-}
-
 TestGofmtSimplify() {
   ! gofmt -s -d -l . 2>&1 | grep -vE '^\.git/'
 }
@@ -164,7 +159,7 @@ TestUnconvert() {
 }
 
 TestUnused() {
-  ! unused -reflect=false -exported ./... | grep -vE '(\.pb\.go:|/C:|_string.go:|embedded.go:|parser/(yacc|sql.y)|util/interval/interval.go:|_cgo|Mutex|pgerror/codes.go)'
+  ! unused -reflect=false -exported ./... | grep -vE 'sql/(pgwire/pgerror/codes.go|(parser/yacc(par|tab)))'
 }
 
 TestStaticcheck() {
