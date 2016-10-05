@@ -572,28 +572,53 @@ subsystem).
 - `<key>`: A user key. In practice, these keys are managed by the SQL
   subsystem, which employs its own key anatomy.
 
-# Node Storage
+# Stores and Storage
 
-Nodes maintain a separate instance of RocksDB for each store (physical
-or virtual storage device). Each RocksDB instance hosts any number of
-replicas. RPCs arriving at a node are routed based on the store ID to
-the appropriate RocksDB instance. A single instance per store is used
-to avoid contention. If every range maintained its own RocksDB, global
-management of available cache memory would be impossible and writers
-for each range would compete for non-contiguous writes to multiple
-RocksDB logs.
+Nodes contain one or more stores. Each store should be placed on a unique disk.
+Internally, each store contains a single instance of RocksDB with a block cache
+shared amongst all of the stores in a node. And these stores in turn have
+a collection of range replicas. More than one replica for a range will never
+be placed on the same store or even the same node.
 
-In addition to the key/value pairs of the range itself, various range
-metadata is maintained.
+Early on, when a cluster is first initialized, the few default starting ranges
+will only have a single replica, but as soon as other nodes are available they
+will replicate to them until they've reached their desired replication factor,
+the default being 3.
 
--   participating replicas
+Zone configs can be used to control a range's replication factor and add
+constraints as to where the range's replicas can be located. When there is a
+change in a range's zone config, the range will up or down replicate to the
+appropriate number of replicas and move its replicas to the appropriate stores
+based on zone config's constraints.
 
--   consensus metadata
+# Self Repair
 
--   split/merge activity
+If a store has not been heard from (gossiped their descriptors) in some time,
+the default setting being 5 minutes, the cluster will consider this store to be
+dead. When this happens, all ranges that have replicas on that store are
+determined to be unavailable and removed. These ranges will then upreplicate
+themselves to other available stores until their desired replication factor is
+again met. If 50% or more of the replicas are unavailable at the same time,
+there is no quorum and the whole range will be considered unavailable until at
+least greater than 50% of the replicas are again available.
 
-A really good reference on tuning Linux installations with RocksDB is
-[here](http://docs.basho.com/riak/latest/ops/advanced/backends/leveldb/).
+# Rebalancing
+
+As more data are added to the system, some stores may grow faster than others.
+To combat this and to spread the overall load across the full cluster, replicas
+will be moved between stores maintaining the desired replication factor. The
+heuristics used to perform this rebalancing include:
+
+- the number of replicas per store
+- the total size of the data used per store
+- free space available per store
+
+In the future, some other factors that might be considered include:
+
+- cpu/network load per store
+- ranges that are used together often in queries
+- number of active ranges per store
+- number of range leases held per store
 
 # Range Metadata
 
@@ -1241,7 +1266,7 @@ Then for a single row in this table:
 | Key               | Values                           |
 | ----------------- | -------------------------------- |
 | `/51/42/Apple/69` | `1 Infinite Loop, Cupertino, CA` |
-| `/51/42/Apple/66` | `http://apple.com/`              | 
+| `/51/42/Apple/66` | `http://apple.com/`              |
 
 Each key has the table prefix `/51/42` followed by the primary key
 prefix `/Apple` followed by the column/family suffix (`/66`,
