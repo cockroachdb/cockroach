@@ -940,14 +940,18 @@ func (node *CastExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 
 var (
-	boolCastTypes      = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
-	intCastTypes       = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
-	floatCastTypes     = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
-	decimalCastTypes   = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
-	stringCastTypes    = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeBytes, TypeTimestamp, TypeTimestampTZ}
+	boolCastTypes = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
+	intCastTypes  = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString,
+		TypeTimestamp, TypeTimestampTZ, TypeDate, TypeInterval}
+	floatCastTypes = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString,
+		TypeTimestamp, TypeTimestampTZ, TypeDate, TypeInterval}
+	decimalCastTypes = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString,
+		TypeTimestamp, TypeTimestampTZ, TypeDate, TypeInterval}
+	stringCastTypes = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString,
+		TypeBytes, TypeTimestamp, TypeTimestampTZ, TypeInterval, TypeDate}
 	bytesCastTypes     = []Datum{DNull, TypeString, TypeBytes}
-	dateCastTypes      = []Datum{DNull, TypeString, TypeDate, TypeTimestamp, TypeTimestampTZ}
-	timestampCastTypes = []Datum{DNull, TypeString, TypeDate, TypeTimestamp, TypeTimestampTZ}
+	dateCastTypes      = []Datum{DNull, TypeString, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInt}
+	timestampCastTypes = []Datum{DNull, TypeString, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInt}
 	intervalCastTypes  = []Datum{DNull, TypeString, TypeInt, TypeInterval}
 )
 

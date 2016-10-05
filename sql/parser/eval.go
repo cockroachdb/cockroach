@@ -1621,6 +1621,14 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return NewDInt(DInt(i)), nil
 		case *DString:
 			return ParseDInt(string(*v))
+		case *DTimestamp:
+			return NewDInt(DInt(v.Unix())), nil
+		case *DTimestampTZ:
+			return NewDInt(DInt(v.Unix())), nil
+		case *DDate:
+			return NewDInt(DInt(int64(*v))), nil
+		case *DInterval:
+			return NewDInt(DInt(v.Nanos / 1000000000)), nil
 		}
 
 	case *FloatColType:
@@ -1642,6 +1650,17 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return NewDFloat(DFloat(f)), nil
 		case *DString:
 			return ParseDFloat(string(*v))
+		case *DTimestamp:
+			micros := float64(v.Nanosecond() / int(time.Microsecond))
+			return NewDFloat(DFloat(float64(v.Unix()) + micros*1e-6)), nil
+		case *DTimestampTZ:
+			micros := float64(v.Nanosecond() / int(time.Microsecond))
+			return NewDFloat(DFloat(float64(v.Unix()) + micros*1e-6)), nil
+		case *DDate:
+			return NewDFloat(DFloat(float64(*v))), nil
+		case *DInterval:
+			micros := v.Nanos / 1000
+			return NewDFloat(DFloat(float64(micros) / 1e-6)), nil
 		}
 
 	case *DecimalColType:
@@ -1656,6 +1675,10 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			dd := &DDecimal{}
 			dd.SetUnscaled(int64(*v))
 			return dd, nil
+		case *DDate:
+			dd := &DDecimal{}
+			dd.SetUnscaled(int64(*v))
+			return dd, nil
 		case *DFloat:
 			dd := &DDecimal{}
 			decimal.SetFromFloat(&dd.Dec, float64(*v))
@@ -1664,12 +1687,36 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return d, nil
 		case *DString:
 			return ParseDDecimal(string(*v))
+		case *DTimestamp:
+			var res DDecimal
+			val := res.UnscaledBig()
+			val.SetInt64(v.Unix())
+			val.Mul(val, decimal.PowerOfTenInt(6))
+			micros := v.Nanosecond() / int(time.Microsecond)
+			val.Add(val, big.NewInt(int64(micros)))
+			res.Dec.SetScale(6)
+			return &res, nil
+		case *DTimestampTZ:
+			var res DDecimal
+			val := res.UnscaledBig()
+			val.SetInt64(v.Unix())
+			val.Mul(val, decimal.PowerOfTenInt(6))
+			micros := v.Nanosecond() / int(time.Microsecond)
+			val.Add(val, big.NewInt(int64(micros)))
+			res.Dec.SetScale(6)
+			return &res, nil
+		case *DInterval:
+			var res DDecimal
+			val := res.UnscaledBig()
+			val.SetInt64(v.Nanos / 1000)
+			res.Dec.SetScale(6)
+			return &res, nil
 		}
 
 	case *StringColType:
 		var s DString
 		switch t := d.(type) {
-		case *DBool, *DInt, *DFloat, *DDecimal, *DTimestamp, *DTimestampTZ, dNull:
+		case *DBool, *DInt, *DFloat, *DDecimal, *DTimestamp, *DTimestampTZ, *DDate, *DInterval, dNull:
 			s = DString(d.String())
 		case *DString:
 			s = *t
@@ -1702,6 +1749,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return ParseDDate(string(*d), ctx.GetLocation())
 		case *DDate:
 			return d, nil
+		case *DInt:
+			return NewDDate(DDate(int64(*d))), nil
 		case *DTimestampTZ:
 			return NewDDateFromTime(d.Time, ctx.GetLocation()), nil
 		case *DTimestamp:
@@ -1709,12 +1758,15 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		}
 
 	case *TimestampColType:
+		// TODO(knz) Timestamp from float, decimal.
 		switch d := d.(type) {
 		case *DString:
 			return ParseDTimestamp(string(*d), time.Microsecond)
 		case *DDate:
 			year, month, day := time.Unix(int64(*d)*secondsInDay, 0).UTC().Date()
 			return MakeDTimestamp(time.Date(year, month, day, 0, 0, 0, 0, time.UTC), time.Microsecond), nil
+		case *DInt:
+			return MakeDTimestamp(time.Unix(int64(*d), 0).UTC(), time.Second), nil
 		case *DTimestamp:
 			return d, nil
 		case *DTimestampTZ:
@@ -1722,6 +1774,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		}
 
 	case *TimestampTZColType:
+		// TODO(knz) TimestampTZ from float, decimal.
 		switch d := d.(type) {
 		case *DString:
 			return ParseDTimestampTZ(string(*d), ctx.GetLocation(), time.Microsecond)
@@ -1730,17 +1783,20 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return MakeDTimestampTZ(time.Date(year, month, day, 0, 0, 0, 0, ctx.GetLocation()), time.Microsecond), nil
 		case *DTimestamp:
 			return MakeDTimestampTZ(d.Time, time.Microsecond), nil
+		case *DInt:
+			return MakeDTimestampTZ(time.Unix(int64(*d), 0).UTC(), time.Second), nil
 		case *DTimestampTZ:
 			return d, nil
 		}
 
 	case *IntervalColType:
+		// TODO(knz) Interval from float, decimal.
 		switch v := d.(type) {
 		case *DString:
 			return ParseDInterval(string(*v))
 		case *DInt:
-			// An integer duration represents a duration in nanoseconds.
-			return &DInterval{Duration: duration.Duration{Nanos: int64(*v)}}, nil
+			// An integer duration represents a duration in microseconds.
+			return &DInterval{Duration: duration.Duration{Nanos: int64(*v) * 1000}}, nil
 		case *DInterval:
 			return d, nil
 		}
