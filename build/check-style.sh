@@ -95,7 +95,7 @@ TestImportNames() {
 }
 
 TestIneffassign() {
-  ! ineffassign . | grep -vF 'ineffectual assignment to sqlDollar' | grep -vF '.pb.go' # https://github.com/gogo/protobuf/issues/149
+  ! (ineffassign . || true) | grep -vF 'ineffectual assignment to sqlDollar' | grep -vF '.pb.go' # https://github.com/gogo/protobuf/issues/149
 }
 
 TestErrcheck() {
@@ -137,15 +137,15 @@ TestVet() {
 }
 
 TestGolint() {
-  ! golint "$PKG" | grep -vE '((\.pb|\.pb\.gw|embedded|_string)\.go|sql/parser/(yaccpar|sql\.y):)'
+  ! (golint "$PKG" || true) | grep -vE '((\.pb|\.pb\.gw|embedded|_string)\.go|sql/parser/(yaccpar|sql\.y):)'
 }
 
 TestGoSimple() {
-  ! gosimple "$PKG" | grep -vF 'embedded.go'
+  ! (gosimple "$PKG" || true) | grep -vF 'embedded.go'
 }
 
 TestGofmtSimplify() {
-  ! gofmt -s -d -l . 2>&1 | grep -vE '^\.git/'
+  ! (gofmt -s -d -l . 2>&1 || true) | grep -vE '^\.git/'
 }
 
 TestGoimports() {
@@ -155,11 +155,11 @@ TestGoimports() {
 }
 
 TestUnconvert() {
-  ! unconvert "$PKG" | grep -vF '.pb.go:'
+  ! (unconvert "$PKG" || true) | grep -vF '.pb.go:'
 }
 
 TestUnused() {
-  ! unused -reflect=false -exported ./... | grep -vE 'sql/(pgwire/pgerror/codes.go|parser/yacc(par|tab))|(field|type) noCopy '
+  ! (unused -reflect=false -exported ./... || true) | grep -vE 'sql/(pgwire/pgerror/codes.go|parser/yacc(par|tab))|(field|type) noCopy '
 }
 
 TestStaticcheck() {
@@ -174,6 +174,9 @@ TestCrlfmt() {
 # so we can use go2xunit to generate reports in CI.
 
 runcheck() {
+  # We need to set these options again due to the `parallel` magic.
+  set -euo pipefail
+
   local name="$1"
   shift
   echo "=== RUN $name"
