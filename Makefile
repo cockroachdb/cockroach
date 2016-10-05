@@ -81,6 +81,8 @@ install:
 	@echo $(GO) $(BUILDMODE) -v $(GOFLAGS)
 	@$(GO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LDFLAGS)'
 
+TESTBUILDPREFIX :=
+
 # Build, but do not run the tests.
 # PKG is expanded and all packages are built and moved to their directory.
 # If STATIC=1, tests are statically linked.
@@ -89,7 +91,7 @@ install:
 .PHONY: testbuild
 testbuild:
 	$(GO) list -tags '$(TAGS)' -f \
-	'$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LDFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/{{.Name}}.test' $(PKG) | \
+	'$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LDFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/$(TESTBUILDPREFIX){{.Name}}.test' $(PKG) | \
 	$(SHELL)
 
 .PHONY: ideps
