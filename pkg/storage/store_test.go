@@ -163,7 +163,6 @@ func createTestStoreWithoutStart(
 		cfg.Gossip,
 		cfg.Clock,
 		rpcContext,
-		/* reservationsEnabled */ true,
 		TestTimeUntilStoreDeadOff,
 		stopper,
 	)
@@ -2506,5 +2505,129 @@ func TestCanCampaignIdleReplica(t *testing.T) {
 	tc.manualClock.Increment(1)
 	if !s.canCampaignIdleReplica() {
 		t.Fatalf("idle replica unexpectedly cannot campaign")
+	}
+}
+
+type fakeSnapshotStream struct {
+	nextResp *SnapshotResponse
+	nextErr  error
+}
+
+func (c fakeSnapshotStream) Recv() (*SnapshotResponse, error) {
+	return c.nextResp, c.nextErr
+}
+
+func (c fakeSnapshotStream) Send(request *SnapshotRequest) error {
+	return nil
+}
+
+type fakeStorePool struct {
+	declinedThrottles    int
+	failedThrottles      int
+	updatedStoreCapacity *roachpb.StoreCapacity
+}
+
+func (sp *fakeStorePool) throttle(reason throttleReason, toStoreID roachpb.StoreID) {
+	switch reason {
+	case declined:
+		sp.declinedThrottles++
+	case failed:
+		sp.failedThrottles++
+	}
+}
+
+func (sp *fakeStorePool) updateRemoteCapacityEstimate(
+	toStoreID roachpb.StoreID, capacity roachpb.StoreCapacity,
+) {
+	sp.updatedStoreCapacity = &capacity
+}
+
+// TestSendSnapshotThrottling tests the store pool throttling behavior of
+// store.sendSnapshot, ensuring that it properly updates the StorePool on
+// various exceptional conditions and new capacity estimates.
+func TestSendSnapshotThrottling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	e := engine.NewInMem(roachpb.Attributes{}, 1<<10, stopper)
+
+	ctx := context.Background()
+	header := SnapshotRequest_Header{CanDecline: true}
+	var snap *OutgoingSnapshot
+	newBatch := e.NewBatch
+
+	// Test that a failed Recv() fauses a fail throttle
+	{
+		sp := &fakeStorePool{}
+		expectedErr := errors.New("")
+		c := fakeSnapshotStream{nil, expectedErr}
+		err := sendSnapshot(ctx, c, sp, header, snap, newBatch)
+		if sp.failedThrottles != 1 {
+			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
+		}
+		if err != expectedErr {
+			t.Fatalf("expected error %s, but found %s", err, expectedErr)
+		}
+	}
+
+	// Test that a declined snapshot causes a decline throttle, and that a nil
+	// storeCapacity doesn't cause an update to the store capacity estimate.
+	{
+		sp := &fakeStorePool{}
+		resp := &SnapshotResponse{
+			StoreCapacity: nil,
+			Status:        SnapshotResponse_DECLINED,
+		}
+		c := fakeSnapshotStream{resp, nil}
+		err := sendSnapshot(ctx, c, sp, header, snap, newBatch)
+		if sp.declinedThrottles != 1 {
+			t.Fatalf("expected 1 declined throttle, but found %d", sp.declinedThrottles)
+		}
+		if sp.updatedStoreCapacity != nil {
+			t.Fatalf("detected unexpected update to store capacity estimate")
+		}
+		if err == nil {
+			t.Fatalf("expected error, found nil")
+		}
+	}
+
+	// Test that a declined but required snapshot causes a fail throttle, and
+	// that a non-nil storeCapacity causes an update to the store capacity estimate.
+	{
+		sp := &fakeStorePool{}
+		header.CanDecline = false
+		storeCapacity := roachpb.StoreCapacity{Capacity: 50}
+		resp := &SnapshotResponse{
+			StoreCapacity: &storeCapacity,
+			Status:        SnapshotResponse_DECLINED,
+		}
+		c := fakeSnapshotStream{resp, nil}
+		err := sendSnapshot(ctx, c, sp, header, snap, newBatch)
+		if sp.failedThrottles != 1 {
+			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
+		}
+		if *sp.updatedStoreCapacity != storeCapacity {
+			t.Fatalf("expected storeCapacity %+v, found %+v", *sp.updatedStoreCapacity, storeCapacity)
+		}
+		if err == nil {
+			t.Fatalf("expected error, found nil")
+		}
+	}
+
+	// Test that an errored snapshot causes a fail throttle.
+	{
+		sp := &fakeStorePool{}
+		resp := &SnapshotResponse{
+			StoreCapacity: &roachpb.StoreCapacity{},
+			Status:        SnapshotResponse_ERROR,
+		}
+		c := fakeSnapshotStream{resp, nil}
+		err := sendSnapshot(ctx, c, sp, header, snap, newBatch)
+		if sp.failedThrottles != 1 {
+			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
+		}
+		if err == nil {
+			t.Fatalf("expected error, found nil")
+		}
 	}
 }

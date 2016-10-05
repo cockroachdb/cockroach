@@ -43,33 +43,8 @@ message PollFrozenResponse {
   repeated cockroach.roachpb.ReplicaDescriptor results = 1 [(gogoproto.nullable) = false];
 }
 
-// A ReservationRequest asks the addressed Store to reserve the space for a new
-// replica for the Range of RangeID reserving RangeSize bytes.
-message ReservationRequest {
-  StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  int32 from_node_id = 2 [(gogoproto.customname) = "FromNodeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
-  int32 from_store_id = 3 [(gogoproto.customname) = "FromStoreID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
-  int64 range_id = 4 [(gogoproto.customname) = "RangeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
-  int64 range_size = 5;
-}
-
-// A ReservationResponse is the response returned from a ReservationRequest.
-message ReservationResponse {
-  bool reserved = 1;
-  // The current number of ranges and reservations on the target
-  // store. This is returned even if the reservation isn't filled.
-  int32 range_count = 2;
-}
-
 service Freeze {
   rpc PollFrozen (PollFrozenRequest) returns (PollFrozenResponse) {}
-}
-
-service Reservation {
-  rpc Reserve(ReservationRequest) returns (ReservationResponse) {}
 }
 
 // A CollectChecksumRequest asks the addressed replica for the result of a
