@@ -89,7 +89,6 @@ func createCluster(
 		g,
 		clock,
 		rpcContext,
-		/* reservationsEnabled */ true,
 		storage.TestTimeUntilStoreDeadOff,
 		stopper,
 	)

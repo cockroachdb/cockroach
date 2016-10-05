@@ -824,8 +824,7 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	// Don't timeout raft leader.
 	sc.RaftElectionTimeoutTicks = 1000000
 	mtc := &multiTestContext{
-		reservationsEnabled: true,
-		storeConfig:         &sc,
+		storeConfig: &sc,
 	}
 	mtc.Start(t, numReplicas+extraStores)
 	defer mtc.Stop()
