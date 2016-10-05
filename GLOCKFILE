@@ -103,6 +103,8 @@ github.com/stretchr/testify 976c720a22c8eb4eb6a0b4348ad85ad12491a506
 github.com/tebeka/go2xunit cb8eb3dedfac9cf4cb1f2d8988f3390f2d0cf2e7
 github.com/termie/go-shutil bcacb06fecaeec8dc42af03c87c6949f4a05c74c
 github.com/wadey/gocovmerge b5bfa59ec0adc420475f97f89b58045c721d761c
+github.com/jeffjen/datefmt 6688647cfa0439b86e09b097cac96ed328d5fa34
+github.com/leekchan/timeutil 28917288c48df3d2c1cfe468c273e0b2adda0aa5
 golang.org/x/crypto 484eb34681af59703e639b971bc307019182c41f
 golang.org/x/net 0f2be02c5ddfa7c7936000ad519b04c6c795eab3
 golang.org/x/oauth2 3c3a985cb79f52a3190fbc056984415ca6763d01

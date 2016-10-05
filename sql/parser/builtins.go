@@ -563,6 +563,64 @@ var Builtins = map[string][]Builtin{
 
 	// Timestamp/Date functions.
 
+	"strftime": {
+		Builtin{
+			Types:      ArgTypes{TypeTimestamp, TypeString},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				fromTime := args[0].(*DTimestamp).Time
+				format := string(*args[1].(*DString))
+				t, err := timeutil.Strftime(fromTime, format)
+				if err != nil {
+					return nil, err
+				}
+				return NewDString(t), nil
+			},
+		},
+		Builtin{
+			Types:      ArgTypes{TypeDate, TypeString},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				fromTime := time.Unix(int64(*args[0].(*DDate))*secondsInDay, 0).UTC()
+				format := string(*args[1].(*DString))
+				t, err := timeutil.Strftime(fromTime, format)
+				if err != nil {
+					return nil, err
+				}
+				return NewDString(t), nil
+			},
+		},
+		Builtin{
+			Types:      ArgTypes{TypeTimestampTZ, TypeString},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				fromTime := args[0].(*DTimestampTZ).Time
+				format := string(*args[1].(*DString))
+				t, err := timeutil.Strftime(fromTime, format)
+				if err != nil {
+					return nil, err
+				}
+				return NewDString(t), nil
+			},
+		},
+	},
+
+	"strptime": {
+		Builtin{
+			Types:      ArgTypes{TypeString, TypeString},
+			ReturnType: TypeTimestampTZ,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				format := string(*args[0].(*DString))
+				toParse := string(*args[1].(*DString))
+				t, err := timeutil.Strptime(toParse, format)
+				if err != nil {
+					return nil, err
+				}
+				return MakeDTimestampTZ(t.UTC(), time.Microsecond), nil
+			},
+		},
+	},
+
 	"age": {
 		Builtin{
 			Types:      ArgTypes{TypeTimestamp},
