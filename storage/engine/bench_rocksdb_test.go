@@ -26,13 +26,11 @@ import (
 )
 
 func setupMVCCRocksDB(b testing.TB, loc string) (Engine, *stop.Stopper) {
-	const memtableBudget = 512 << 20 // 512 MB
 	stopper := stop.NewStopper()
 	rocksdb := NewRocksDB(
 		roachpb.Attributes{},
 		loc,
 		RocksDBCache{},
-		memtableBudget,
 		0,
 		DefaultMaxOpenFiles,
 		stopper,
