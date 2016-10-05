@@ -35,6 +35,7 @@ TESTFLAGS    :=
 STRESSFLAGS  := -stderr -maxfails 1
 DUPLFLAGS    := -t 100
 BUILDMODE    := install
+SUFFIX       :=
 export GOPATH := $(realpath ../../../..)
 # Prefer tools from $GOPATH/bin over those elsewhere on the path.
 # This ensures that we get the versions pinned in the GLOCKFILE.
@@ -69,7 +70,7 @@ endif
 all: build test check
 
 .PHONY: build
-build: GOFLAGS += -i -o cockroach
+build: GOFLAGS += -i -o cockroach$(SUFFIX)
 build: BUILDMODE = build
 build: install
 
@@ -89,7 +90,7 @@ install:
 .PHONY: testbuild
 testbuild:
 	$(GO) list -tags '$(TAGS)' -f \
-	'$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LDFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/{{.Name}}.test' $(PKG) | \
+	'$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LDFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/{{.Name}}.test$(SUFFIX)' $(PKG) | \
 	$(SHELL)
 
 .PHONY: ideps
@@ -163,7 +164,7 @@ check:
 .PHONY: clean
 clean:
 	$(GO) clean $(GOFLAGS) -i github.com/cockroachdb/...
-	find . -name '*.test' -type f -exec rm -f {} \;
+	find . -name '*.test*' -type f -exec rm -f {} \;
 	rm -f .bootstrap
 
 .PHONY: protobuf
