@@ -31,6 +31,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
@@ -1797,6 +1798,107 @@ func TestMVCCUncommittedDeleteRangeVisible(t *testing.T) {
 	kvs, _, _, _ := MVCCScan(context.Background(), engine, testKey1, testKey4, math.MaxInt64, makeTS(3, 0), true, &txn)
 	if e := 2; len(kvs) != e {
 		t.Fatalf("e = %d, got %d", e, len(kvs))
+	}
+}
+
+func TestMVCCDeleteRangeInline(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	engine := createTestEngine(stopper)
+
+	// Make five inline values (zero timestamp).
+	for i, kv := range []struct {
+		key   roachpb.Key
+		value roachpb.Value
+	}{
+		{testKey1, value1},
+		{testKey2, value2},
+		{testKey3, value3},
+		{testKey4, value4},
+		{testKey5, value5},
+	} {
+		if err := MVCCPut(context.Background(), engine, nil, kv.key, makeTS(0, 0), kv.value, nil); err != nil {
+			t.Fatalf("%d: %s", i, err)
+		}
+	}
+
+	// Create one non-inline value (non-zero timestamp).
+	if err := MVCCPut(context.Background(), engine, nil, testKey6, makeTS(1, 0), value6, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Attempt to delete two inline keys, should succeed.
+	deleted, resumeSpan, num, err := MVCCDeleteRange(
+		context.Background(), engine, nil, testKey2, testKey6, 2, makeTS(0, 0), nil, true,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expected := int64(2); num != expected {
+		t.Fatalf("got %d deleted keys, expected %d", num, expected)
+	}
+	if expected := []roachpb.Key{testKey2, testKey3}; !reflect.DeepEqual(deleted, expected) {
+		t.Fatalf("got deleted values = %v, expected = %v", deleted, expected)
+	}
+	if expected := (roachpb.Span{Key: testKey4, EndKey: testKey6}); !resumeSpan.Equal(expected) {
+		t.Fatalf("got resume span = %s, expected = %s", resumeSpan, expected)
+	}
+
+	const inlineMismatchErrString = "put is inline"
+
+	// Attempt to delete inline keys at a timestamp; should fail.
+	if _, _, _, err := MVCCDeleteRange(
+		context.Background(), engine, nil, testKey1, testKey6, 1, makeTS(2, 0), nil, true,
+	); !testutils.IsError(err, inlineMismatchErrString) {
+		t.Fatalf("got error %v, expected error with text '%s'", err, inlineMismatchErrString)
+	}
+
+	// Attempt to delete non-inline key at zero timestamp; should fail.
+	if _, _, _, err := MVCCDeleteRange(
+		context.Background(), engine, nil, testKey6, keyMax, 1, makeTS(0, 0), nil, true,
+	); !testutils.IsError(err, inlineMismatchErrString) {
+		t.Fatalf("got error %v, expected error with text '%s'", err, inlineMismatchErrString)
+	}
+
+	// Attempt to delete inline keys in a transaction; should fail.
+	if _, _, _, err := MVCCDeleteRange(
+		context.Background(), engine, nil, testKey2, testKey6, 2, makeTS(0, 0), txn1, true,
+	); !testutils.IsError(err, "writes not allowed within transactions") {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	// Verify final state of the engine.
+	expectedKvs := []roachpb.KeyValue{
+		{
+			Key:   testKey1,
+			Value: value1,
+		},
+		{
+			Key:   testKey4,
+			Value: value4,
+		},
+		{
+			Key:   testKey5,
+			Value: value5,
+		},
+		{
+			Key:   testKey6,
+			Value: value6,
+		},
+	}
+	kvs, _, _, _ := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, makeTS(2, 0), true, nil)
+	if a, e := len(kvs), len(expectedKvs); a != e {
+		t.Fatalf("engine scan found %d keys; expected %d", a, e)
+	}
+	kvs[3].Value.Timestamp = hlc.ZeroTimestamp
+	if !reflect.DeepEqual(expectedKvs, kvs) {
+		t.Fatalf(
+			"engine scan found key/values: %v; expected %v. Diff: %s",
+			kvs,
+			expectedKvs,
+			pretty.Diff(kvs, expectedKvs),
+		)
 	}
 }
 
