@@ -173,7 +173,6 @@ func TestReadEnvironmentVariables(t *testing.T) {
 	if err := os.Setenv("COCKROACH_RESERVATIONS_ENABLED", "false"); err != nil {
 		t.Fatal(err)
 	}
-	ctxExpected.ReservationsEnabled = false
 
 	envutil.ClearEnvCache()
 	ctx.readEnvironmentVariables()
