@@ -63,14 +63,21 @@ import (
 // epoch; it will be truncated to an exact multiple of the supplied
 // Resolution's KeyDuration.
 func MakeDataKey(name string, source string, r Resolution, timestamp int64) roachpb.Key {
+	k := makeDataKeySeriesPrefix(name, r)
+
 	// Normalize timestamp into a timeslot before recording.
 	timeslot := timestamp / r.SlabDuration()
+	k = encoding.EncodeVarintAscending(k, timeslot)
+	k = append(k, source...)
+	return k
+}
 
+// makeDataKeySeriesPrefix creates a key prefix for a time series at a specific
+// resolution.
+func makeDataKeySeriesPrefix(name string, r Resolution) roachpb.Key {
 	k := append(roachpb.Key(nil), keys.TimeseriesPrefix...)
 	k = encoding.EncodeBytesAscending(k, []byte(name))
 	k = encoding.EncodeVarintAscending(k, int64(r))
-	k = encoding.EncodeVarintAscending(k, timeslot)
-	k = append(k, source...)
 	return k
 }
 
@@ -78,7 +85,7 @@ func MakeDataKey(name string, source string, r Resolution, timestamp int64) roac
 func DecodeDataKey(key roachpb.Key) (string, string, Resolution, int64, error) {
 	// Detect and remove prefix.
 	remainder := key
-	if !bytes.HasPrefix(remainder, keys.TimeseriesPrefix) {
+	if !bytes.HasPrefix(key, keys.TimeseriesPrefix) {
 		return "", "", 0, 0, errors.Errorf("malformed time series data key %v: improper prefix", key)
 	}
 	remainder = remainder[len(keys.TimeseriesPrefix):]

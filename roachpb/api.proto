@@ -169,6 +169,10 @@ message DeleteRangeRequest {
   reserved 2;
   // return the keys that are deleted in the response.
   optional bool return_keys = 3 [(gogoproto.nullable) = false];
+  // specify as true to delete values without a corresponding
+  // timestamp. This option should be used with care as this precludes
+  // deleting the keys transactionally.
+  optional bool inline = 4 [(gogoproto.nullable) = false];
 }
 
 // A DeleteRangeResponse is the return value from the DeleteRange()
