@@ -2388,6 +2388,7 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 				defer r.CloseOutSnap()
 				if err := r.store.cfg.Transport.SendSnapshot(
 					r.ctx,
+					r.store.allocator.storePool,
 					SnapshotRequest_Header{
 						RangeDescriptor: *r.Desc(),
 						RaftMessageRequest: RaftMessageRequest{
@@ -2396,8 +2397,7 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 							ToReplica:   toReplica,
 							Message:     msg,
 						},
-						// TODO(jordan) set this size accurately
-						RangeSize:  0,
+						RangeSize:  r.GetMVCCStats().Total(),
 						CanDecline: false,
 					}, snap, r.store.Engine().NewBatch); err != nil {
 					log.Warningf(r.ctx, "range=%d: failed to send snapshot: %s", r.Desc().RangeID, err)

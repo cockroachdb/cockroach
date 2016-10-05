@@ -29,7 +29,6 @@ import (
 // StoresServer handles store-addressed RPCs.
 type StoresServer interface {
 	FreezeServer
-	ReservationServer
 }
 
 var _ StoresServer = Server{}
@@ -65,19 +64,6 @@ func (is Server) PollFrozen(
 	err := is.execStoreCommand(args.StoreRequestHeader,
 		func(s *Store) error {
 			resp.Results = s.FrozenStatus(args.CollectFrozen)
-			return nil
-		})
-	return resp, err
-}
-
-// Reserve implements the StoresServer interface.
-func (is Server) Reserve(
-	ctx context.Context, req *ReservationRequest,
-) (*ReservationResponse, error) {
-	resp := &ReservationResponse{}
-	err := is.execStoreCommand(req.StoreRequestHeader,
-		func(s *Store) error {
-			*resp = s.Reserve(ctx, *req)
 			return nil
 		})
 	return resp, err

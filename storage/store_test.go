@@ -148,7 +148,6 @@ func createTestStoreWithoutStart(
 		cfg.Gossip,
 		cfg.Clock,
 		rpcContext,
-		/* reservationsEnabled */ true,
 		TestTimeUntilStoreDeadOff,
 		stopper,
 	)

@@ -594,10 +594,11 @@ func (c snapshotClientWithBreaker) Recv() (*SnapshotResponse, error) {
 	return m, err
 }
 
-// SendSnapshot streams the given outgoing snapshot. The caller is responsible for closing the
-// OutgoingSnapshot with snap.Close.
+// SendSnapshot streams the given outgoing snapshot. The caller is responsible
+// for closing the OutgoingSnapshot with snap.Close.
 func (t *RaftTransport) SendSnapshot(
 	ctx context.Context,
+	storePool *StorePool,
 	header SnapshotRequest_Header,
 	snap *OutgoingSnapshot,
 	newBatch func() engine.Batch,
@@ -626,8 +627,9 @@ func (t *RaftTransport) SendSnapshot(
 			breaker.Fail()
 		}
 	}()
+
 	return sendSnapshot(snapshotClientWithBreaker{
 		MultiRaft_RaftSnapshotClient: stream,
 		breaker: breaker,
-	}, header, snap, newBatch)
+	}, storePool, header, snap, newBatch)
 }

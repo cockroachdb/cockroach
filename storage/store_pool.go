@@ -23,7 +23,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/config"
@@ -206,7 +205,6 @@ type StorePool struct {
 	clock                       *hlc.Clock
 	timeUntilStoreDead          time.Duration
 	rpcContext                  *rpc.Context
-	reservationsEnabled         bool
 	failedReservationsTimeout   time.Duration
 	declinedReservationsTimeout time.Duration
 	reserveRPCTimeout           time.Duration
@@ -215,8 +213,8 @@ type StorePool struct {
 		syncutil.RWMutex
 		// Each storeDetail is contained in both a map and a priorityQueue;
 		// pointers are used so that data can be kept in sync.
-		stores map[roachpb.StoreID]*storeDetail
-		queue  storePoolPQ
+		storeDetails map[roachpb.StoreID]*storeDetail
+		queue        storePoolPQ
 	}
 }
 
@@ -227,16 +225,14 @@ func NewStorePool(
 	g *gossip.Gossip,
 	clock *hlc.Clock,
 	rpcContext *rpc.Context,
-	reservationsEnabled bool,
 	timeUntilStoreDead time.Duration,
 	stopper *stop.Stopper,
 ) *StorePool {
 	sp := &StorePool{
-		ctx:                 ctx,
-		clock:               clock,
-		timeUntilStoreDead:  timeUntilStoreDead,
-		rpcContext:          rpcContext,
-		reservationsEnabled: reservationsEnabled,
+		ctx:                ctx,
+		clock:              clock,
+		timeUntilStoreDead: timeUntilStoreDead,
+		rpcContext:         rpcContext,
 		failedReservationsTimeout: envutil.EnvOrDefaultDuration("COCKROACH_FAILED_RESERVATION_TIMEOUT",
 			defaultFailedReservationsTimeout),
 		declinedReservationsTimeout: envutil.EnvOrDefaultDuration("COCKROACH_DECLINED_RESERVATION_TIMEOUT",
@@ -245,7 +241,7 @@ func NewStorePool(
 			defaultReserveRPCTimeout),
 		resolver: GossipAddressResolver(g),
 	}
-	sp.mu.stores = make(map[roachpb.StoreID]*storeDetail)
+	sp.mu.storeDetails = make(map[roachpb.StoreID]*storeDetail)
 	heap.Init(&sp.mu.queue)
 	storeRegex := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
 	g.RegisterCallback(storeRegex, sp.storeGossipUpdate)
@@ -260,8 +256,8 @@ func (sp *StorePool) String() string {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 
-	ids := make(roachpb.StoreIDSlice, 0, len(sp.mu.stores))
-	for id := range sp.mu.stores {
+	ids := make(roachpb.StoreIDSlice, 0, len(sp.mu.storeDetails))
+	for id := range sp.mu.storeDetails {
 		ids = append(ids, id)
 	}
 	sort.Sort(ids)
@@ -270,7 +266,7 @@ func (sp *StorePool) String() string {
 	now := timeutil.Now()
 
 	for _, id := range ids {
-		detail := sp.mu.stores[id]
+		detail := sp.mu.storeDetails[id]
 		fmt.Fprintf(&buf, "%d", id)
 		if detail.dead {
 			_, _ = buf.WriteString("*")
@@ -375,7 +371,7 @@ func newStoreDetail(ctx context.Context) *storeDetail {
 // The lock must be held *in write mode* even though this looks like a
 // read-only method.
 func (sp *StorePool) getStoreDetailLocked(storeID roachpb.StoreID) *storeDetail {
-	detail, ok := sp.mu.stores[storeID]
+	detail, ok := sp.mu.storeDetails[storeID]
 	if !ok {
 		// We don't have this store yet (this is normal when we're
 		// starting up and don't have full information from the gossip
@@ -383,7 +379,7 @@ func (sp *StorePool) getStoreDetailLocked(storeID roachpb.StoreID) *storeDetail 
 		// alive, but start the clock so it will become dead if enough
 		// time passes without updates from gossip.
 		detail = newStoreDetail(sp.ctx)
-		sp.mu.stores[storeID] = detail
+		sp.mu.storeDetails[storeID] = detail
 		detail.markAlive(sp.clock.Now(), nil)
 		sp.mu.queue.enqueue(detail)
 	}
@@ -397,7 +393,7 @@ func (sp *StorePool) getStoreDescriptor(storeID roachpb.StoreID) (roachpb.StoreD
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
 
-	if detail, ok := sp.mu.stores[storeID]; ok && detail.desc != nil {
+	if detail, ok := sp.mu.storeDetails[storeID]; ok && detail.desc != nil {
 		return *detail.desc, true
 	}
 	return roachpb.StoreDescriptor{}, false
@@ -493,7 +489,7 @@ func (sp *StorePool) getStoreList(
 	defer sp.mu.RUnlock()
 
 	var storeIDs roachpb.StoreIDSlice
-	for storeID := range sp.mu.stores {
+	for storeID := range sp.mu.storeDetails {
 		storeIDs = append(storeIDs, storeID)
 	}
 	// Sort the stores by key if deterministic is requested. This is only for
@@ -506,7 +502,7 @@ func (sp *StorePool) getStoreList(
 	var aliveStoreCount int
 	var throttledStoreCount int
 	for _, storeID := range storeIDs {
-		detail := sp.mu.stores[storeID]
+		detail := sp.mu.storeDetails[storeID]
 		// TODO(d4l3k): Sort by number of matches.
 		matched := detail.match(now, constraints)
 		switch matched {
@@ -523,79 +519,50 @@ func (sp *StorePool) getStoreList(
 	return sl, aliveStoreCount, throttledStoreCount
 }
 
-// reserve send a reservation request rpc to the node and store
-// based on the toStoreID. It returns an error if the reservation was not
-// successfully booked. When unsuccessful, the store is marked as having a
-// declined reservation so it will not be considered for up-replication or
-// rebalancing until after the configured timeout period has passed.
-// TODO(bram): consider moving the nodeID to the store pool during
-// NewStorePool.
-func (sp *StorePool) reserve(
-	curIdent roachpb.StoreIdent, toStoreID roachpb.StoreID, rangeID roachpb.RangeID, rangeSize int64,
-) error {
-	if !sp.reservationsEnabled {
-		return nil
-	}
+// throttle informs the store pool that the given remote store declined a
+// snapshot or failed to apply one, ensuring that it will not be considered
+// for up-replication or rebalancing until after the configured timeout period
+// has elapsed.
+func (sp *StorePool) throttle(declined bool, toStoreID roachpb.StoreID) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
-	detail, ok := sp.mu.stores[toStoreID]
+	detail, ok := sp.mu.storeDetails[toStoreID]
 	if !ok {
-		return errors.Errorf("store %d does not exist in the store pool", toStoreID)
-	}
-	addr, err := sp.resolver(detail.desc.Node.NodeID)
-	if err != nil {
-		return err
-	}
-	conn, err := sp.rpcContext.GRPCDial(addr.String())
-	if err != nil {
-		return errors.Wrapf(err, "failed to dial store %+v, addr %q, node %+v", toStoreID, addr, detail.desc.Node)
+		log.Warningf(sp.ctx, "store %d does not exist in the store pool", toStoreID)
+		return
 	}
 
-	client := NewReservationClient(conn)
-	req := &ReservationRequest{
-		StoreRequestHeader: StoreRequestHeader{
-			NodeID:  detail.desc.Node.NodeID,
-			StoreID: toStoreID,
-		},
-		FromNodeID:  curIdent.NodeID,
-		FromStoreID: curIdent.StoreID,
-		RangeSize:   rangeSize,
-		RangeID:     rangeID,
-	}
-
-	if log.V(2) {
-		log.Infof(sp.ctx, "proposing new reservation:%+v", req)
-	}
-
-	ctxWithTimeout, cancel := context.WithTimeout(sp.ctx, sp.reserveRPCTimeout)
-	defer cancel()
-	resp, err := client.Reserve(ctxWithTimeout, req)
-
-	// If a reservation is declined, be it due to an error or because it was
-	// rejected, we mark the store detail as having been rejected so it won't
+	// If a snapshot is declined, be it due to an error or because it was
+	// rejected, we mark the store detail as having been declined so it won't
 	// be considered as a candidate for new replicas until after the configured
 	// timeout period has passed.
-	if err != nil {
-		detail.throttledUntil = sp.clock.Now().GoTime().Add(sp.failedReservationsTimeout)
-		if log.V(2) {
-			log.Infof(sp.ctx, "reservation failed, store:%s will be throttled for %s until %s",
-				toStoreID, sp.failedReservationsTimeout, detail.throttledUntil)
-		}
-		return errors.Wrapf(err, "reservation failed:%+v", req)
-	}
-
-	detail.desc.Capacity.RangeCount = resp.RangeCount
-	if !resp.Reserved {
+	if declined {
 		detail.throttledUntil = sp.clock.Now().GoTime().Add(sp.declinedReservationsTimeout)
 		if log.V(2) {
-			log.Infof(sp.ctx, "reservation failed, store:%s will be throttled for %s until %s",
+			log.Infof(sp.ctx, "snapshot declined, store:%s will be throttled for %s until %s",
 				toStoreID, sp.declinedReservationsTimeout, detail.throttledUntil)
 		}
-		return errors.Errorf("reservation declined:%+v", req)
+	} else {
+		detail.throttledUntil = sp.clock.Now().GoTime().Add(sp.failedReservationsTimeout)
+		if log.V(2) {
+			log.Infof(sp.ctx, "snapshot failed, store:%s will be throttled for %s until %s",
+				toStoreID, sp.failedReservationsTimeout, detail.throttledUntil)
+		}
+	}
+}
+
+// updateRemoteCapacityEstimate updates the StorePool's estimate of the given
+// remote store's capacity.
+func (sp *StorePool) updateRemoteCapacityEstimate(
+	toStoreID roachpb.StoreID, capacity roachpb.StoreCapacity,
+) {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	detail, ok := sp.mu.storeDetails[toStoreID]
+	if !ok {
+		log.Warningf(sp.ctx, "store %d does not exist in the store pool", toStoreID)
+		return
 	}
 
-	if log.V(2) {
-		log.Infof(sp.ctx, "reservation was approved:%+v", req)
-	}
-	return nil
+	detail.desc.Capacity.RangeCount = capacity.RangeCount
 }
