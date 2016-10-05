@@ -17,7 +17,6 @@
 package storage
 
 import (
-	"net"
 	"reflect"
 	"sort"
 	"testing"
@@ -30,13 +29,11 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/metric"
-	"github.com/cockroachdb/cockroach/util/netutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/pkg/errors"
@@ -75,7 +72,6 @@ func createTestStorePool(
 		g,
 		clock,
 		rpcContext,
-		/* reservationsEnabled */ true,
 		timeUntilStoreDead,
 		stopper,
 	)
@@ -91,7 +87,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 
 	sp.mu.RLock()
-	if _, ok := sp.mu.stores[2]; ok {
+	if _, ok := sp.mu.storeDetails[2]; ok {
 		t.Fatalf("store 2 is already in the pool's store list")
 	}
 	sp.mu.RUnlock()
@@ -99,7 +95,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 	sg.GossipStores(uniqueStore, t)
 
 	sp.mu.RLock()
-	if _, ok := sp.mu.stores[2]; !ok {
+	if _, ok := sp.mu.storeDetails[2]; !ok {
 		t.Fatalf("store 2 isn't in the pool's store list")
 	}
 	if e, a := 1, sp.mu.queue.Len(); e > a {
@@ -118,7 +114,7 @@ func waitUntilDead(t *testing.T, mc *hlc.ManualClock, sp *StorePool, storeID roa
 
 		sp.mu.RLock()
 		defer sp.mu.RUnlock()
-		store, ok := sp.mu.stores[storeID]
+		store, ok := sp.mu.storeDetails[storeID]
 		if !ok {
 			t.Fatalf("store %s isn't in the pool's store list", storeID)
 		}
@@ -142,7 +138,7 @@ func TestStorePoolDies(t *testing.T) {
 
 	{
 		sp.mu.RLock()
-		store2, ok := sp.mu.stores[2]
+		store2, ok := sp.mu.storeDetails[2]
 		if !ok {
 			t.Fatalf("store 2 isn't in the pool's store list")
 		}
@@ -165,7 +161,7 @@ func TestStorePoolDies(t *testing.T) {
 	waitUntilDead(t, mc, sp, 2)
 	{
 		sp.mu.RLock()
-		store2, ok := sp.mu.stores[2]
+		store2, ok := sp.mu.storeDetails[2]
 		if !ok {
 			t.Fatalf("store 2 isn't in the pool's store list")
 		}
@@ -182,7 +178,7 @@ func TestStorePoolDies(t *testing.T) {
 
 	{
 		sp.mu.RLock()
-		store2, ok := sp.mu.stores[2]
+		store2, ok := sp.mu.storeDetails[2]
 		if !ok {
 			t.Fatalf("store 2 isn't in the pool's store list")
 		}
@@ -202,7 +198,7 @@ func TestStorePoolDies(t *testing.T) {
 	waitUntilDead(t, mc, sp, 2)
 	{
 		sp.mu.RLock()
-		store2, ok := sp.mu.stores[2]
+		store2, ok := sp.mu.storeDetails[2]
 		if !ok {
 			t.Fatalf("store 2 isn't in the pool's store list")
 		}
@@ -312,8 +308,8 @@ func TestStorePoolGetStoreList(t *testing.T) {
 
 	// Mark one store dead and one store declined.
 	sp.mu.Lock()
-	sp.mu.stores[deadStore.StoreID].markDead(sp.clock.Now())
-	sp.mu.stores[declinedStore.StoreID].throttledUntil = sp.clock.Now().GoTime().Add(time.Hour)
+	sp.mu.storeDetails[deadStore.StoreID].markDead(sp.clock.Now())
+	sp.mu.storeDetails[declinedStore.StoreID].throttledUntil = sp.clock.Now().GoTime().Add(time.Hour)
 	sp.mu.Unlock()
 
 	if err := verifyStoreList(sp, constraints, []int{
@@ -442,122 +438,5 @@ func TestStorePoolDefaultState(t *testing.T) {
 	}
 	if throttled != 0 {
 		t.Errorf("expected no live stores; got a throttled count of %d", throttled)
-	}
-}
-
-// fakeReservationServer is used for testing the Reserve() RPC.
-type fakeReservationServer struct {
-	reservationResponse bool
-	reservationErr      error
-}
-
-var _ ReservationServer = fakeReservationServer{}
-
-func (f fakeReservationServer) Reserve(
-	_ context.Context, _ *ReservationRequest,
-) (*ReservationResponse, error) {
-	return &ReservationResponse{Reserved: f.reservationResponse}, f.reservationErr
-}
-
-// newFakeNodeServer returns a fakeReservationServer designed to handle internal
-// node server RPCs, an rpc context used for the server and the fake server's
-// address.
-func newFakeNodeServer(stopper *stop.Stopper) (*fakeReservationServer, *rpc.Context, string, error) {
-	ctx := rpc.NewContext(context.TODO(), testutils.NewNodeTestBaseContext(), nil, stopper)
-	s := rpc.NewServer(ctx)
-	ln, err := netutil.ListenAndServeGRPC(ctx.Stopper, s, util.TestAddr)
-	if err != nil {
-		return nil, nil, "", err
-	}
-	stopper.AddCloser(stop.CloserFn(func() { _ = ln.Close() }))
-	f := &fakeReservationServer{}
-	RegisterReservationServer(s, f)
-	return f, ctx, ln.Addr().String(), nil
-}
-
-// TestStorePoolReserve tests that requestReservation performs correctly
-// when reservations are accepted, declined and when the Reserve RPC encounters
-// an error.
-func TestStorePoolReserve(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-
-	// Create a fake node server to generate responses for calls to Reserve.
-	f, rpcCtx, address, err := newFakeNodeServer(stopper)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Create a fake store pool.
-	mc := hlc.NewManualClock(0)
-	clock := hlc.NewClock(mc.UnixNano)
-	server := rpc.NewServer(rpcCtx) // never started
-	g := gossip.New(context.TODO(), rpcCtx, server, nil, stopper, metric.NewRegistry())
-	// Have to call g.SetNodeID before call g.AddInfo
-	g.SetNodeID(roachpb.NodeID(1))
-	storePool := NewStorePool(
-		context.TODO(),
-		g,
-		clock,
-		rpcCtx,
-		/* reservationsEnabled */ true,
-		TestTimeUntilStoreDeadOff,
-		stopper,
-	)
-	storePool.resolver = func(_ roachpb.NodeID) (net.Addr, error) {
-		return &util.UnresolvedAddr{
-			AddressField: address,
-		}, nil
-	}
-	sg := gossiputil.NewStoreGossiper(g)
-
-	// Gossip a fake store descriptor into the store pool so we can redirect
-	// the Reserve call to our fake server.
-	stores := []*roachpb.StoreDescriptor{
-		{
-			StoreID: 2,
-			Node: roachpb.NodeDescriptor{
-				NodeID: 2,
-			},
-		},
-	}
-	sg.GossipStores(stores, t)
-
-	testCases := []struct {
-		fakeResp bool
-		fakeErr  string
-		storeID  int
-		expErr   string
-	}{
-		// The reservation is successful.
-		{fakeResp: true, storeID: 2},
-		// The store is not in the StorePool.
-		{storeID: 3, expErr: "store 3 does not exist in the store pool"},
-		// The reservation is declined.
-		{fakeResp: false, storeID: 2, expErr: "reservation declined"},
-		// The reservation is with an error.
-		{fakeResp: false, fakeErr: "abcd", storeID: 2, expErr: "abcd"},
-	}
-
-	for i, testCase := range testCases {
-		f.reservationResponse = testCase.fakeResp
-		if len(testCase.fakeErr) != 0 {
-			f.reservationErr = errors.Errorf("%s", testCase.fakeErr)
-		} else {
-			f.reservationErr = nil
-		}
-		err := storePool.reserve(
-			roachpb.StoreIdent{
-				NodeID:  roachpb.NodeID(1),
-				StoreID: roachpb.StoreID(1),
-			},
-			roachpb.StoreID(testCase.storeID),
-			roachpb.RangeID(2),
-			100000,
-		)
-		if !(testCase.expErr == "" && err == nil || testutils.IsError(err, testCase.expErr)) {
-			t.Errorf("%d: expected error:%s, actual:%v", i, testCase.expErr, err)
-		}
 	}
 }

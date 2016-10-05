@@ -3119,19 +3119,6 @@ func (r *Replica) ChangeReplicas(
 			return errors.Errorf("%s: unable to add replica %v which is already present", r, repDesc)
 		}
 
-		log.Event(ctx, "requesting reservation")
-		// Before we try to add a new replica, we first need to secure a
-		// reservation for the replica on the receiving store.
-		if err := r.store.allocator.storePool.reserve(
-			r.store.Ident,
-			repDesc.StoreID,
-			rangeID,
-			r.GetMVCCStats().Total(),
-		); err != nil {
-			return errors.Wrapf(err, "%s: change replicas failed", r)
-		}
-		log.Event(ctx, "reservation granted")
-
 		// Prohibit premature raft log truncation. We set the pending index to 1
 		// here until we determine what it is below. This removes a small window of
 		// opportunity for the raft log to get truncated after the snapshot is
@@ -3197,12 +3184,12 @@ func (r *Replica) ChangeReplicas(
 					Snapshot: snap.RaftSnap,
 				},
 			},
-			// TODO(jordan) set this accurately
-			RangeSize: 0,
+			RangeSize: r.GetMVCCStats().Total(),
 			// Recipients can choose to decline preemptive snapshots.
 			CanDecline: true,
 		}
-		if err := r.store.cfg.Transport.SendSnapshot(ctx, req, snap, r.store.Engine().NewBatch); err != nil {
+		if err := r.store.cfg.Transport.SendSnapshot(
+			ctx, r.store.allocator.storePool, req, snap, r.store.Engine().NewBatch); err != nil {
 			return errors.Wrapf(err, "%s: change replicas aborted due to failed preemptive snapshot", r)
 		}
 
