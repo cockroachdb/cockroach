@@ -232,8 +232,8 @@ func (s *selectNode) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Da
 	return s.curSourceRow[idx].Eval(ctx)
 }
 
-// IndexedVarReturnType implements the parser.IndexedVarContainer interface.
-func (s *selectNode) IndexedVarReturnType(idx int) parser.Datum {
+// IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
+func (s *selectNode) IndexedVarResolvedType(idx int) parser.Type {
 	return s.sourceInfo[0].sourceColumns[idx].Typ
 }
 
@@ -244,7 +244,7 @@ func (s *selectNode) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx 
 
 // Select selects rows from a SELECT/UNION/VALUES, ordering and/or limiting them.
 func (p *planner) Select(
-	n *parser.Select, desiredTypes []parser.Datum, autoCommit bool,
+	n *parser.Select, desiredTypes []parser.Type, autoCommit bool,
 ) (planNode, error) {
 	wrapped := n.Select
 	limit := n.Limit
@@ -314,7 +314,7 @@ func (p *planner) SelectClause(
 	parsed *parser.SelectClause,
 	orderBy parser.OrderBy,
 	limit *parser.Limit,
-	desiredTypes []parser.Datum,
+	desiredTypes []parser.Type,
 	scanVisibility scanVisibility,
 ) (planNode, error) {
 	s := &selectNode{planner: p}
@@ -474,12 +474,12 @@ func (s *selectNode) initFrom(parsed *parser.SelectClause, scanVisibility scanVi
 	return nil
 }
 
-func (s *selectNode) initTargets(targets parser.SelectExprs, desiredTypes []parser.Datum) error {
+func (s *selectNode) initTargets(targets parser.SelectExprs, desiredTypes []parser.Type) error {
 	// Loop over the select expressions and expand them into the expressions
 	// we're going to use to generate the returned column set and the names for
 	// those columns.
 	for i, target := range targets {
-		var desiredType parser.Datum
+		var desiredType parser.Type
 		if len(desiredTypes) > i {
 			desiredType = desiredTypes[i]
 		}
@@ -563,7 +563,7 @@ func getRenderColName(target parser.SelectExpr) string {
 	return target.Expr.String()
 }
 
-func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datum) error {
+func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Type) error {
 	// Pre-normalize any VarName so the work is not done twice below.
 	if err := target.NormalizeTopLevelVarName(); err != nil {
 		return err
@@ -588,7 +588,7 @@ func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datu
 	}
 	s.render = append(s.render, normalized)
 
-	s.columns = append(s.columns, ResultColumn{Name: outputName, Typ: normalized.ReturnType()})
+	s.columns = append(s.columns, ResultColumn{Name: outputName, Typ: normalized.ResolvedType()})
 	return nil
 }
 

@@ -253,7 +253,7 @@ func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
 		return nil, err
 	}
 
-	sourcePlan, err := p.Select(n.AsSource, []parser.Datum{}, false)
+	sourcePlan, err := p.Select(n.AsSource, []parser.Type{}, false)
 	if err != nil {
 		return nil, err
 	}
@@ -392,7 +392,7 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		// to populate the new table descriptor in Start() below. We
 		// instantiate the sourcePlan as early as here so that EXPLAIN has
 		// something useful to show about CREATE TABLE .. AS ...
-		sourcePlan, err = p.Select(n.AsSource, []parser.Datum{}, false)
+		sourcePlan, err = p.Select(n.AsSource, []parser.Type{}, false)
 		if err != nil {
 			return nil, err
 		}
@@ -539,7 +539,7 @@ func (n *createTableNode) Start() error {
 		n.sourcePlan.Close()
 		n.sourcePlan = nil
 
-		desiredTypesFromSelect := make([]parser.Datum, len(resultColumns))
+		desiredTypesFromSelect := make([]parser.Type, len(resultColumns))
 		for i, col := range resultColumns {
 			desiredTypesFromSelect[i] = col.Typ
 		}
@@ -1124,6 +1124,42 @@ func (p *planner) makeTableDesc(
 	return desc, desc.AllocateIDs()
 }
 
+type dummyColumnItem struct {
+	typ parser.Type
+}
+
+// String implements the Stringer interface.
+func (d dummyColumnItem) String() string {
+	return fmt.Sprintf("<%s>", d.typ)
+}
+
+// Format implements the NodeFormatter interface.
+func (d dummyColumnItem) Format(buf *bytes.Buffer, _ parser.FmtFlags) {
+	buf.WriteString(d.String())
+}
+
+// Walk implements the Expr interface.
+func (d dummyColumnItem) Walk(_ parser.Visitor) parser.Expr {
+	return d
+}
+
+// TypeCheck implements the Expr interface.
+func (d dummyColumnItem) TypeCheck(
+	_ *parser.SemaContext, desired parser.Type,
+) (parser.TypedExpr, error) {
+	return d, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (dummyColumnItem) Eval(_ *parser.EvalContext) (parser.Datum, error) {
+	panic("dummyColumnItem.Eval() is undefined")
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (d dummyColumnItem) ResolvedType() parser.Type {
+	return d.typ
+}
+
 func makeCheckConstraint(
 	desc sqlbase.TableDescriptor, d *parser.CheckConstraintTableDef, inuseNames map[string]struct{},
 ) (*sqlbase.TableDescriptor_CheckConstraint, error) {
@@ -1169,8 +1205,8 @@ func makeCheckConstraint(
 			nameBuf.WriteByte('_')
 			nameBuf.WriteString(col.Name)
 		}
-		// Convert to a dummy datum of the correct type.
-		return nil, false, col.Type.ToDatumType()
+		// Convert to a dummy node of the correct type.
+		return nil, false, dummyColumnItem{col.Type.ToDatumType()}
 	}
 
 	expr, err := parser.SimpleVisit(d.Expr, preFn)

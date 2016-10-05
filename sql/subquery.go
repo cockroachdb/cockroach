@@ -28,7 +28,7 @@ import (
 // in the expression tree from the point type checking occurs to
 // the point the query starts execution / evaluation.
 type subquery struct {
-	typ            parser.Datum
+	typ            parser.Type
 	subquery       *parser.Subquery
 	execMode       subqueryExecMode
 	wantNormalized bool
@@ -81,7 +81,7 @@ func (s *subquery) Walk(v parser.Visitor) parser.Expr {
 
 func (s *subquery) Variable() {}
 
-func (s *subquery) TypeCheck(_ *parser.SemaContext, desired parser.Datum) (parser.TypedExpr, error) {
+func (s *subquery) TypeCheck(_ *parser.SemaContext, desired parser.Type) (parser.TypedExpr, error) {
 	// TODO(knz): if/when type checking can be extracted from the
 	// newPlan recursion, we can propagate the desired type to the
 	// sub-query. For now, the type is simply derived during the subquery node
@@ -93,7 +93,7 @@ func (s *subquery) TypeCheck(_ *parser.SemaContext, desired parser.Datum) (parse
 	return s, nil
 }
 
-func (s *subquery) ReturnType() parser.Datum { return s.typ }
+func (s *subquery) ResolvedType() parser.Type { return s.typ }
 
 func (s *subquery) Eval(_ *parser.EvalContext) (parser.Datum, error) {
 	if s.err != nil {
@@ -367,11 +367,11 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 			// a single value against a tuple.
 			result.typ = cols[0].Typ
 		} else {
-			colTypes := make(parser.DTuple, wantedNumColumns)
+			colTypes := make(parser.TTuple, wantedNumColumns)
 			for i, col := range cols {
 				colTypes[i] = col.Typ
 			}
-			result.typ = &colTypes
+			result.typ = colTypes
 		}
 	}
 

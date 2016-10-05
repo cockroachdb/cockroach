@@ -398,7 +398,7 @@ func (src *dataSourceInfo) expandStar(
 		col := src.sourceColumns[idx]
 		if !col.hidden {
 			ivar := ivarHelper.IndexedVar(idx)
-			columns = append(columns, ResultColumn{Name: col.Name, Typ: ivar.ReturnType()})
+			columns = append(columns, ResultColumn{Name: col.Name, Typ: ivar.ResolvedType()})
 			exprs = append(exprs, ivar)
 		}
 	}

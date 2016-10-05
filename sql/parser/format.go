@@ -57,14 +57,14 @@ func FormatNode(buf *bytes.Buffer, f FmtFlags, n NodeFormatter) {
 			buf.WriteByte('(')
 			n.Format(buf, f)
 			buf.WriteString(")[")
-			if rt := te.ReturnType(); rt == nil {
+			if rt := te.ResolvedType(); rt == nil {
 				// An attempt is made to pretty-print an expression that was
 				// not assigned a type yet. This should not happen, so we make
 				// it clear in the output this needs to be investigated
 				// further.
 				buf.WriteString(fmt.Sprintf("??? %v", te))
 			} else {
-				buf.WriteString(rt.Type())
+				buf.WriteString(rt.String())
 			}
 			buf.WriteByte(']')
 			return

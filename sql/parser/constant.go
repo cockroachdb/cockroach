@@ -37,12 +37,12 @@ type Constant interface {
 	// AvailableTypes returns the ordered set of types that the Constant is able to
 	// be resolved into. The order of the type slice provides a notion of precedence,
 	// with the first element in the ordering being the Constant's "natural type".
-	AvailableTypes() []Datum
+	AvailableTypes() []Type
 	// ResolveAsType resolves the Constant as the Datum type specified, or returns an
 	// error if the Constant could not be resolved as that type. The method should only
 	// be passed a type returned from AvailableTypes and should never be called more than
 	// once for a given Constant.
-	ResolveAsType(*SemaContext, Datum) (Datum, error)
+	ResolveAsType(*SemaContext, Type) (Datum, error)
 }
 
 var _ Constant = &NumVal{}
@@ -58,11 +58,11 @@ func isNumericConstant(expr Expr) bool {
 	return ok
 }
 
-func typeCheckConstant(c Constant, ctx *SemaContext, desired Datum) (TypedExpr, error) {
+func typeCheckConstant(c Constant, ctx *SemaContext, desired Type) (TypedExpr, error) {
 	avail := c.AvailableTypes()
 	if desired != nil {
 		for _, typ := range avail {
-			if desired.TypeEqual(typ) {
+			if desired.Equal(typ) {
 				return c.ResolveAsType(ctx, desired)
 			}
 		}
@@ -72,16 +72,16 @@ func typeCheckConstant(c Constant, ctx *SemaContext, desired Datum) (TypedExpr, 
 	return c.ResolveAsType(ctx, natural)
 }
 
-func naturalConstantType(c Constant) Datum {
+func naturalConstantType(c Constant) Type {
 	return c.AvailableTypes()[0]
 }
 
 // canConstantBecome returns whether the provided Constant can become resolved
 // as the provided type.
-func canConstantBecome(c Constant, typ Datum) bool {
+func canConstantBecome(c Constant, typ Type) bool {
 	avail := c.AvailableTypes()
 	for _, availTyp := range avail {
-		if availTyp.TypeEqual(typ) {
+		if availTyp.Equal(typ) {
 			return true
 		}
 	}
@@ -95,9 +95,9 @@ func canConstantBecome(c Constant, typ Datum) bool {
 //
 // An example of this is resolving a floating point numeric constant without a value
 // past the decimal point as an DInt. This is possible, but it is not desirable.
-func shouldConstantBecome(c Constant, typ Datum) bool {
+func shouldConstantBecome(c Constant, typ Type) bool {
 	if num, ok := c.(*NumVal); ok {
-		if typ.TypeEqual(TypeInt) && num.Kind() == constant.Float {
+		if typ == TypeInt && num.Kind() == constant.Float {
 			return false
 		}
 	}
@@ -179,14 +179,14 @@ func (expr *NumVal) asConstantInt() (constant.Value, bool) {
 	return nil, false
 }
 
-var numValAvailIntFloatDec = []Datum{TypeInt, TypeDecimal, TypeFloat}
-var numValAvailDecFloatInt = []Datum{TypeDecimal, TypeFloat, TypeInt}
-var numValAvailDecFloat = []Datum{TypeDecimal, TypeFloat}
-
-// var numValAvailDec = []Datum{TypeDecimal}
+var (
+	numValAvailIntFloatDec = []Type{TypeInt, TypeDecimal, TypeFloat}
+	numValAvailDecFloatInt = []Type{TypeDecimal, TypeFloat, TypeInt}
+	numValAvailDecFloat    = []Type{TypeDecimal, TypeFloat}
+)
 
 // AvailableTypes implements the Constant interface.
-func (expr *NumVal) AvailableTypes() []Datum {
+func (expr *NumVal) AvailableTypes() []Type {
 	switch {
 	case expr.canBeInt64():
 		if expr.Kind() == constant.Int {
@@ -199,9 +199,9 @@ func (expr *NumVal) AvailableTypes() []Datum {
 }
 
 // ResolveAsType implements the Constant interface.
-func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ Datum) (Datum, error) {
-	switch {
-	case typ.TypeEqual(TypeInt):
+func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
+	switch typ {
+	case TypeInt:
 		// We may have already set expr.resInt in asInt64.
 		if expr.resInt == 0 {
 			if _, err := expr.asInt64(); err != nil {
@@ -209,11 +209,11 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ Datum) (Datum, error) {
 			}
 		}
 		return &expr.resInt, nil
-	case typ.TypeEqual(TypeFloat):
+	case TypeFloat:
 		f, _ := constant.Float64Val(expr.Value)
 		expr.resFloat = DFloat(f)
 		return &expr.resFloat, nil
-	case typ.TypeEqual(TypeDecimal):
+	case TypeDecimal:
 		dd := &expr.resDecimal
 		s := expr.OrigString
 		if s == "" {
@@ -268,7 +268,7 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ Datum) (Datum, error) {
 // The function takes a slice of indexedExprs, but expects all indexedExprs
 // to wrap a *NumVal. The reason it does no take a slice of *NumVals instead
 // is to avoid forcing callers to allocate separate slices of *NumVals.
-func commonNumericConstantType(vals []indexedExpr) Datum {
+func commonNumericConstantType(vals []indexedExpr) Type {
 	for _, c := range vals {
 		if !shouldConstantBecome(c.e.(*NumVal), TypeInt) {
 			return TypeDecimal
@@ -299,19 +299,21 @@ func (expr *StrVal) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
-var strValAvailAllParsable = []Datum{
-	TypeString,
-	TypeBytes,
-	TypeDate,
-	TypeTimestamp,
-	TypeTimestampTZ,
-	TypeInterval,
-}
-var strValAvailBytesString = []Datum{TypeBytes, TypeString}
-var strValAvailBytes = []Datum{TypeBytes}
+var (
+	strValAvailAllParsable = []Type{
+		TypeString,
+		TypeBytes,
+		TypeDate,
+		TypeTimestamp,
+		TypeTimestampTZ,
+		TypeInterval,
+	}
+	strValAvailBytesString = []Type{TypeBytes, TypeString}
+	strValAvailBytes       = []Type{TypeBytes}
+)
 
 // AvailableTypes implements the Constant interface.
-func (expr *StrVal) AvailableTypes() []Datum {
+func (expr *StrVal) AvailableTypes() []Type {
 	if !expr.bytesEsc {
 		return strValAvailAllParsable
 	}
@@ -322,7 +324,7 @@ func (expr *StrVal) AvailableTypes() []Datum {
 }
 
 // ResolveAsType implements the Constant interface.
-func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ Datum) (Datum, error) {
+func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 	switch typ {
 	case TypeString:
 		expr.resString = DString(expr.s)

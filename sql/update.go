@@ -74,7 +74,7 @@ type editNodeRun struct {
 }
 
 func (r *editNodeRun) initEditNode(
-	en *editNodeBase, rows planNode, re parser.ReturningExprs, desiredTypes []parser.Datum,
+	en *editNodeBase, rows planNode, re parser.ReturningExprs, desiredTypes []parser.Type,
 ) error {
 	r.rows = rows
 
@@ -134,7 +134,7 @@ type updateNode struct {
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
 // TODO(guanqun): need to support CHECK in UPDATE
 func (p *planner) Update(
-	n *parser.Update, desiredTypes []parser.Datum, autoCommit bool,
+	n *parser.Update, desiredTypes []parser.Type, autoCommit bool,
 ) (planNode, error) {
 	tracing.AnnotateTrace()
 
@@ -203,7 +203,7 @@ func (p *planner) Update(
 	i := 0
 	// Remember the index where the targets for exprs start.
 	exprTargetIdx := len(targets)
-	desiredTypesFromSelect := make([]parser.Datum, len(targets), len(targets)+len(exprs))
+	desiredTypesFromSelect := make([]parser.Type, len(targets), len(targets)+len(exprs))
 	for _, expr := range exprs {
 		if expr.Tuple {
 			switch t := expr.Expr.(type) {
@@ -252,7 +252,7 @@ func (p *planner) Update(
 		if err != nil {
 			return nil, err
 		}
-		err = sqlbase.CheckColumnType(updateCols[i], typedTarget.ReturnType(), p.semaCtx.Placeholders)
+		err = sqlbase.CheckColumnType(updateCols[i], typedTarget.ResolvedType(), p.semaCtx.Placeholders)
 		if err != nil {
 			return nil, err
 		}
@@ -361,20 +361,20 @@ func (u *updateNode) Next() (bool, error) {
 func (p *planner) namesForExprs(exprs parser.UpdateExprs) (parser.UnresolvedNames, error) {
 	var names parser.UnresolvedNames
 	for _, expr := range exprs {
-		newExpr := expr.Expr
-
 		if expr.Tuple {
-			n := 0
-			if s, ok := newExpr.(*subquery); ok {
-				newExpr = s.typ
-			}
-			switch t := newExpr.(type) {
+			n := -1
+			switch t := expr.Expr.(type) {
+			case *subquery:
+				if tup, ok := t.typ.(parser.TTuple); ok {
+					n = len(tup)
+				}
 			case *parser.Tuple:
 				n = len(t.Exprs)
 			case *parser.DTuple:
 				n = len(*t)
-			default:
-				return nil, errors.Errorf("unsupported tuple assignment: %T", newExpr)
+			}
+			if n < 0 {
+				return nil, errors.Errorf("unsupported tuple assignment: %T", expr.Expr)
 			}
 			if len(expr.Names) != n {
 				return nil, fmt.Errorf("number of columns (%d) does not match number of values (%d)",
@@ -387,7 +387,7 @@ func (p *planner) namesForExprs(exprs parser.UpdateExprs) (parser.UnresolvedName
 }
 
 func fillDefault(
-	expr parser.Expr, desired parser.Datum, index int, defaultExprs []parser.TypedExpr,
+	expr parser.Expr, desired parser.Type, index int, defaultExprs []parser.TypedExpr,
 ) parser.Expr {
 	switch expr.(type) {
 	case parser.DefaultVal:

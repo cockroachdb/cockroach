@@ -119,7 +119,7 @@ var Aggregates = map[string][]Builtin{
 	},
 }
 
-func makeAggBuiltin(in, ret Datum, f func() AggregateFunc) Builtin {
+func makeAggBuiltin(in, ret Type, f func() AggregateFunc) Builtin {
 	return Builtin{
 		// See the comment about aggregate functions in the definitions
 		// of the Builtins array above.
@@ -134,7 +134,7 @@ func makeAggBuiltin(in, ret Datum, f func() AggregateFunc) Builtin {
 	}
 }
 
-func makeAggBuiltins(f func() AggregateFunc, types ...Datum) []Builtin {
+func makeAggBuiltins(f func() AggregateFunc, types ...Type) []Builtin {
 	ret := make([]Builtin, len(types))
 	for i := range types {
 		ret[i] = makeAggBuiltin(types[i], types[i], f)
@@ -227,7 +227,7 @@ func (a *avgAggregate) Result() Datum {
 		t.QuoRound(&t.Dec, count, decimal.Precision, inf.RoundHalfUp)
 		return t
 	default:
-		panic(fmt.Sprintf("unexpected SUM result type: %s", t.Type()))
+		panic(fmt.Sprintf("unexpected SUM result type: %s", t))
 	}
 }
 
@@ -656,7 +656,7 @@ func (a *stddevAggregate) Result() Datum {
 		decimal.Sqrt(&t.Dec, &t.Dec, decimal.Precision)
 		return t
 	}
-	panic(fmt.Sprintf("unexpected variance result type: %s", variance.Type()))
+	panic(fmt.Sprintf("unexpected variance result type: %s", variance.ResolvedType()))
 }
 
 var _ Visitor = &IsAggregateVisitor{}

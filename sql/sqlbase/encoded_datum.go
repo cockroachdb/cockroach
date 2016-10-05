@@ -104,9 +104,9 @@ func (ed *EncDatum) SetDatum(typ ColumnType_Kind, d parser.Datum) {
 	if d == nil {
 		panic("nil datum given")
 	}
-	if d != parser.DNull && !typ.ToDatumType().TypeEqual(d) {
+	if d != parser.DNull && !typ.ToDatumType().Equal(d.ResolvedType()) {
 		panic(fmt.Sprintf("invalid datum type given: %s, expected %s",
-			d.Type(), typ.ToDatumType().Type()))
+			d.ResolvedType(), typ.ToDatumType()))
 	}
 	ed.Type = typ
 	ed.encoded = nil
