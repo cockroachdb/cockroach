@@ -295,6 +295,15 @@ def           pg_catalog          NULL                        NULL
 def           system              NULL                        NULL
 def           test                NULL                        NULL
 
+query TTTT colnames
+SELECT * FROM INFormaTION_SCHEMa.schemata
+----
+CATALOG_NAME  SCHEMA_NAME         DEFAULT_CHARACTER_SET_NAME  SQL_PATH
+def           information_schema  NULL                        NULL
+def           pg_catalog          NULL                        NULL
+def           system              NULL                        NULL
+def           test                NULL                        NULL
+
 statement ok
 CREATE DATABASE other_db
 
