@@ -35,7 +35,6 @@ TESTFLAGS    :=
 STRESSFLAGS  := -stderr -maxfails 1
 DUPLFLAGS    := -t 100
 BUILDMODE    := install
-CURRENTDIR   := $(realpath .)
 export GOPATH := $(realpath ../../../..)
 # Prefer tools from $GOPATH/bin over those elsewhere on the path.
 # This ensures that we get the versions pinned in the GLOCKFILE.
@@ -69,9 +68,6 @@ endif
 .PHONY: all
 all: build test check
 
-.PHONY: release
-release: build
-
 .PHONY: build
 build: GOFLAGS += -i -o cockroach
 build: BUILDMODE = build
@@ -96,47 +92,27 @@ testbuild:
 	'$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LDFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/{{.Name}}.test' $(PKG) | \
 	$(SHELL)
 
-# Similar to "testrace", we want to cache the build before running the
-# tests.
-.PHONY: test
-test:
+.PHONY: gotestdashi
+gotestdashi:
 	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -i $(PKG)
+
+.PHONY: test
+test: gotestdashi
 	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
+
+testrace: GOFLAGS += -race
+testrace: TESTTIMEOUT := $(RACETIMEOUT)
+testrace: test
 
 .PHONY: testslow
 testslow: TESTFLAGS += -v
-testslow:
-	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -i $(PKG)
+testslow: gotestdashi
 	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run "$(TESTS)" -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
 
 .PHONY: testraceslow
-testraceslow: TESTFLAGS += -v
-testraceslow:
-	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -race -i $(PKG)
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -race -run "$(TESTS)" -timeout $(RACETIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
-
-# "go test -i" builds dependencies and installs them into GOPATH/pkg, but does not run the
-# tests. Run it as a part of "testrace" since race-enabled builds are not covered by
-# "make build", and so they would be built from scratch every time (including the
-# slow-to-compile cgo packages).
-.PHONY: testrace
-testrace:
-	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -race -i $(PKG)
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -race -run "$(TESTS)" -timeout $(RACETIMEOUT) $(PKG) $(TESTFLAGS)
-
-.PHONY: bench
-bench:
-	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -i $(PKG)
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run - -bench "$(TESTS)" -timeout $(BENCHTIMEOUT) $(PKG) $(TESTFLAGS)
-
-.PHONY: coverage
-coverage:
-	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -i $(PKG)
-	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -cover -run "$(TESTS)" $(PKG) $(TESTFLAGS)
-
-.PHONY: upload-coverage
-upload-coverage:
-	@build/upload-coverage.sh
+testraceslow: GOFLAGS += -race
+testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
+testraceslow: testslow
 
 # "make stress PKG=./storage TESTS=TestBlah" will build the given test
 # and run it in a loop (the PKG argument is required; if TESTS is not
@@ -147,9 +123,21 @@ stress:
 	cd $(PKG) && stress $(STRESSFLAGS) ./stress.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 .PHONY: stressrace
-stressrace:
-	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -i -c $(PKG) -o $(PKG)/stress.test -race
-	cd $(PKG) && stress $(STRESSFLAGS) ./stress.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
+stressrace: GOFLAGS += -race
+stressrace: TESTTIMEOUT := $(RACETIMEOUT)
+stressrace: stress
+
+.PHONY: bench
+bench: gotestdashi
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -run - -bench "$(TESTS)" -timeout $(BENCHTIMEOUT) $(PKG) $(TESTFLAGS)
+
+.PHONY: coverage
+coverage: gotestdashi
+	$(GO) test $(GOFLAGS) -tags '$(TAGS)' -cover -run "$(TESTS)" $(PKG) $(TESTFLAGS)
+
+.PHONY: upload-coverage
+upload-coverage:
+	@build/upload-coverage.sh
 
 .PHONY: acceptance
 acceptance:
