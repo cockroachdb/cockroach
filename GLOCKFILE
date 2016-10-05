@@ -41,7 +41,7 @@ github.com/cockroachdb/c-rocksdb b5ca031b93fde49bfa2ba99aba423136aebf3c06
 github.com/cockroachdb/c-snappy d4e7b428fe7fc09e93573df3448567a62df8c9fa
 github.com/cockroachdb/cmux b64f5908f4945f4b11ed4a0a9d3cc1e23350866d
 github.com/cockroachdb/cockroach-go 31611c0501c812f437d4861d87d117053967c955
-github.com/cockroachdb/crlfmt 26a764d2a61998361ca51fa19e4b0d119a0892b2
+github.com/cockroachdb/crlfmt 652c0df7fb3088f7b761fbaa36ab8f50b8fb9ed4
 github.com/cockroachdb/pq 44a6473ebbc26e3af09fe57bbdf761475c2c9f7c
 github.com/cockroachdb/stress 029c9348806514969d1109a6ae36e521af411ca7
 github.com/cockroachdb/yacc 7c99dfd2164a5d23c3f495ffc2e0b72b6379d066
