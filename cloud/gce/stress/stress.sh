@@ -32,7 +32,7 @@ function run_one_test {
   popd
 }
 
-find cockroach/ -type f -name '*.test' | sort > all_tests
+find cockroach/ -type f -name '*.test*' | sort > all_tests
 
 for test in $(split -n "l/${SHARD_INDEX}"/"${SHARD_COUNT}" all_tests); do
   run_one_test ${test}
