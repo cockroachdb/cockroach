@@ -126,39 +126,39 @@ var windows = map[string][]Builtin{
 		makeWindowBuiltin(ArgTypes{TypeInt}, TypeInt, newNtileWindow),
 	},
 	"lag": mergeBuiltinSlices(
-		collectWindowBuiltins(func(t Datum) Builtin {
+		collectWindowBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{t}, t, makeLeadLagWindowConstructor(false, false, false))
 		}, anyElementTypes...),
-		collectWindowBuiltins(func(t Datum) Builtin {
+		collectWindowBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{t, TypeInt}, t, makeLeadLagWindowConstructor(false, true, false))
 		}, anyElementTypes...),
-		collectWindowBuiltins(func(t Datum) Builtin {
+		collectWindowBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{t, TypeInt, t}, t, makeLeadLagWindowConstructor(false, true, true))
 		}, anyElementTypes...),
 	),
 	"lead": mergeBuiltinSlices(
-		collectWindowBuiltins(func(t Datum) Builtin {
+		collectWindowBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{t}, t, makeLeadLagWindowConstructor(true, false, false))
 		}, anyElementTypes...),
-		collectWindowBuiltins(func(t Datum) Builtin {
+		collectWindowBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{t, TypeInt}, t, makeLeadLagWindowConstructor(true, true, false))
 		}, anyElementTypes...),
-		collectWindowBuiltins(func(t Datum) Builtin {
+		collectWindowBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{t, TypeInt, t}, t, makeLeadLagWindowConstructor(true, true, true))
 		}, anyElementTypes...),
 	),
-	"first_value": collectWindowBuiltins(func(t Datum) Builtin {
+	"first_value": collectWindowBuiltins(func(t Type) Builtin {
 		return makeWindowBuiltin(ArgTypes{t}, t, newFirstValueWindow)
 	}, anyElementTypes...),
-	"last_value": collectWindowBuiltins(func(t Datum) Builtin {
+	"last_value": collectWindowBuiltins(func(t Type) Builtin {
 		return makeWindowBuiltin(ArgTypes{t}, t, newLastValueWindow)
 	}, anyElementTypes...),
-	"nth_value": collectWindowBuiltins(func(t Datum) Builtin {
+	"nth_value": collectWindowBuiltins(func(t Type) Builtin {
 		return makeWindowBuiltin(ArgTypes{t, TypeInt}, t, newNthValueWindow)
 	}, anyElementTypes...),
 }
 
-var anyElementTypes = []Datum{
+var anyElementTypes = []Type{
 	TypeBool,
 	TypeInt,
 	TypeFloat,
@@ -171,7 +171,7 @@ var anyElementTypes = []Datum{
 	TypeTuple,
 }
 
-func makeWindowBuiltin(in ArgTypes, ret Datum, f func() WindowFunc) Builtin {
+func makeWindowBuiltin(in ArgTypes, ret Type, f func() WindowFunc) Builtin {
 	return Builtin{
 		impure:     true,
 		class:      WindowClass,
@@ -181,7 +181,7 @@ func makeWindowBuiltin(in ArgTypes, ret Datum, f func() WindowFunc) Builtin {
 	}
 }
 
-func collectWindowBuiltins(f func(Datum) Builtin, types ...Datum) []Builtin {
+func collectWindowBuiltins(f func(Type) Builtin, types ...Type) []Builtin {
 	r := make([]Builtin, len(types))
 	for i := range types {
 		r[i] = f(types[i])

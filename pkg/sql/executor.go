@@ -146,7 +146,7 @@ func (r *Result) Close() {
 // ResultColumn contains the name and type of a SQL "cell".
 type ResultColumn struct {
 	Name string
-	Typ  parser.Datum
+	Typ  parser.Type
 
 	// If set, this is an implicit column; used internally.
 	hidden bool
@@ -398,7 +398,7 @@ func (e *Executor) Prepare(
 	defer plan.Close()
 	cols := plan.Columns()
 	for _, c := range cols {
-		if err := checkResultDatum(c.Typ); err != nil {
+		if err := checkResultType(c.Typ); err != nil {
 			return nil, err
 		}
 	}
@@ -1183,7 +1183,7 @@ func (e *Executor) execStmt(
 	case parser.Rows:
 		result.Columns = plan.Columns()
 		for _, c := range result.Columns {
-			if err := checkResultDatum(c.Typ); err != nil {
+			if err := checkResultType(c.Typ); err != nil {
 				return result, err
 			}
 		}
@@ -1211,7 +1211,7 @@ func (e *Executor) execStmt(
 			valuesAlloc = valuesAlloc[n:]
 
 			for _, val := range values {
-				if err := checkResultDatum(val); err != nil {
+				if err := checkResultType(val.ResolvedType()); err != nil {
 					return result, err
 				}
 				row = append(row, val)
@@ -1318,26 +1318,23 @@ func golangFillQueryArguments(pinfo *parser.PlaceholderInfo, args []interface{})
 	}
 }
 
-func checkResultDatum(datum parser.Datum) error {
-	if datum == parser.DNull {
-		return nil
-	}
-
-	switch datum.(type) {
-	case *parser.DBool:
-	case *parser.DInt:
-	case *parser.DFloat:
-	case *parser.DDecimal:
-	case *parser.DBytes:
-	case *parser.DString:
-	case *parser.DDate:
-	case *parser.DTimestamp:
-	case *parser.DTimestampTZ:
-	case *parser.DInterval:
-	case *parser.DPlaceholder:
-		return fmt.Errorf("could not determine data type of %s %s", datum.Type(), datum)
+func checkResultType(typ parser.Type) error {
+	switch typ {
+	case parser.TypeNull:
+	case parser.TypeBool:
+	case parser.TypeInt:
+	case parser.TypeFloat:
+	case parser.TypeDecimal:
+	case parser.TypeBytes:
+	case parser.TypeString:
+	case parser.TypeDate:
+	case parser.TypeTimestamp:
+	case parser.TypeTimestampTZ:
+	case parser.TypeInterval:
+	case parser.TypePlaceholder:
+		return errors.Errorf("could not determine data type of %s", typ)
 	default:
-		return errors.Errorf("unsupported result type: %s", datum.Type())
+		return errors.Errorf("unsupported result type: %s", typ)
 	}
 	return nil
 }
@@ -1415,7 +1412,7 @@ func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.
 		ts.WallTime = nanos.Int64()
 		ts.Logical = int32(logical.Int64())
 	default:
-		return nil, fmt.Errorf("unexpected AS OF SYSTEM TIME argument: %s (%T)", d.Type(), d)
+		return nil, fmt.Errorf("unexpected AS OF SYSTEM TIME argument: %s (%T)", d.ResolvedType(), d)
 	}
 	if max.Less(ts) {
 		return nil, fmt.Errorf("cannot specify timestamp in the future")

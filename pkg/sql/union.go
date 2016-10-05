@@ -26,7 +26,7 @@ import (
 
 // UnionClause constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
 func (p *planner) UnionClause(
-	n *parser.UnionClause, desiredTypes []parser.Datum, autoCommit bool,
+	n *parser.UnionClause, desiredTypes []parser.Type, autoCommit bool,
 ) (planNode, error) {
 	var emitAll = false
 	var emit unionNodeEmit
@@ -73,8 +73,8 @@ func (p *planner) UnionClause(
 		// TODO(dan): This currently checks whether the types are exactly the same,
 		// but Postgres is more lenient:
 		// http://www.postgresql.org/docs/9.5/static/typeconv-union-case.html.
-		if !l.Typ.TypeEqual(r.Typ) {
-			return nil, fmt.Errorf("%v types %s and %s cannot be matched", n.Type, l.Typ.Type(), r.Typ.Type())
+		if !l.Typ.Equal(r.Typ) {
+			return nil, fmt.Errorf("%v types %s and %s cannot be matched", n.Type, l.Typ, r.Typ)
 		}
 		if l.hidden != r.hidden {
 			return nil, fmt.Errorf("%v types cannot be matched", n.Type)

@@ -402,7 +402,7 @@ func (c *v3Conn) handleParse(ctx context.Context, buf *readBuffer) error {
 		}
 		id, ok := datumToOid[reflect.TypeOf(t)]
 		if !ok {
-			return c.sendInternalError(fmt.Sprintf("unknown datum type: %s", t.Type()))
+			return c.sendInternalError(fmt.Sprintf("unknown datum type: %s", t))
 		}
 		inTypes[i] = id
 	}
@@ -830,7 +830,7 @@ func (c *v3Conn) sendRowDescription(columns []sql.ResultColumn, formatCodes []fo
 		}
 		c.writeBuf.writeTerminatedString(column.Name)
 
-		typ := typeForDatum(column.Typ)
+		typ := pgTypeForParserType(column.Typ)
 		c.writeBuf.putInt32(0) // Table OID (optional).
 		c.writeBuf.putInt16(0) // Column attribute ID (optional).
 		c.writeBuf.putInt32(int32(typ.oid))

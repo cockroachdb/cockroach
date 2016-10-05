@@ -113,7 +113,7 @@ func (p *planner) getStringVal(name string, values []parser.TypedExpr) (string, 
 	s, ok := val.(*parser.DString)
 	if !ok {
 		return "", fmt.Errorf("%s: requires a single string value: %s is a %s",
-			name, values[0], val.Type())
+			name, values[0], val.ResolvedType())
 	}
 	return string(*s), nil
 }
