@@ -17,6 +17,6 @@
 /cockroach-darwin*
 /certs
 # make stress, acceptance produce stress.test, acceptance.test
-*.test
+*.test*
 # Various `sed -i~` invocations in our scripts.
 *~

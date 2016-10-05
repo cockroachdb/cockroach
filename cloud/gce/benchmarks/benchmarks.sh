@@ -19,6 +19,6 @@ function run_one_test {
   ${test_binary} ${TEST_FLAGS} 2> ${log_dir}/${name}.stderr > ${log_dir}/${name}.stdout
 }
 
-for test in $(find cockroach/ -type f -name '*.test' | sort); do
+for test in $(find cockroach/ -type f -name '*.test*' | sort); do
   run_one_test ${test}
 done
