@@ -73,7 +73,7 @@ func (p *planner) NewRowContainer(h ResultColumns, rowCapacity int) *RowContaine
 	}
 
 	for i := 0; i < nCols; i++ {
-		sz, variable := h[i].Typ.Size()
+		sz, variable := h[i].Typ.Exemplar().Size()
 		if variable {
 			res.varSizedColumns = append(res.varSizedColumns, i)
 		} else {

@@ -155,7 +155,7 @@ func (p *onPredicate) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.D
 }
 
 // IndexedVarReturnType implements the parser.IndexedVarContainer interface.
-func (p *onPredicate) IndexedVarReturnType(idx int) parser.Datum {
+func (p *onPredicate) IndexedVarReturnType(idx int) parser.Type {
 	return p.info.sourceColumns[idx].Typ
 }
 
@@ -306,7 +306,7 @@ func (p *usingPredicate) prepareRow(result, leftRow, rightRow parser.DTuple) {
 // pickUsingColumn searches for a column whose name matches colName.
 // The column index and type are returned if found, otherwise an error
 // is reported.
-func pickUsingColumn(cols ResultColumns, colName string, context string) (int, parser.Datum, error) {
+func pickUsingColumn(cols ResultColumns, colName string, context string) (int, parser.Type, error) {
 	idx := invalidColIdx
 	for j, col := range cols {
 		if col.hidden {
@@ -372,7 +372,8 @@ func (p *planner) makeUsingPredicate(
 		// Memoize the comparison function.
 		fn, found := parser.FindEqualComparisonFunction(leftType, rightType)
 		if !found {
-			return nil, nil, fmt.Errorf("JOIN/USING types %s and %s for column %s cannot be matched", leftType.Type(), rightType.Type(), colName)
+			return nil, nil, fmt.Errorf("JOIN/USING types %s and %s for column %s cannot be matched",
+				leftType, rightType, colName)
 		}
 		cmpOps[i] = fn
 

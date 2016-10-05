@@ -48,16 +48,18 @@ func (s *StarDatum) String() string { return AsString(s) }
 func (s *StarDatum) Walk(v Visitor) Expr { return s }
 
 // TypeCheck implements the Expr interface.
-func (s *StarDatum) TypeCheck(_ *SemaContext, _ Datum) (TypedExpr, error) {
+func (s *StarDatum) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) {
 	return s, nil
 }
 
+var constDInt = DInt(0)
+
 // Eval implements the TypedExpr interface.
 func (*StarDatum) Eval(ctx *EvalContext) (Datum, error) {
-	return TypeInt.Eval(ctx)
+	return &constDInt, nil
 }
 
 // ReturnType implements the TypedExpr interface.
-func (*StarDatum) ReturnType() Datum {
-	return TypeInt.ReturnType()
+func (*StarDatum) ReturnType() Type {
+	return TypeInt
 }

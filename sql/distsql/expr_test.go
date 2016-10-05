@@ -27,7 +27,7 @@ import (
 
 type testVarContainer struct{}
 
-func (d testVarContainer) IndexedVarReturnType(idx int) parser.Datum {
+func (d testVarContainer) IndexedVarReturnType(idx int) parser.Type {
 	return parser.TypeInt
 }
 

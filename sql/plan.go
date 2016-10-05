@@ -34,7 +34,7 @@ type planMaker interface {
 	//
 	// This method should not be used directly; instead prefer makePlan()
 	// or prepare() below.
-	newPlan(stmt parser.Statement, desiredTypes []parser.Datum, autoCommit bool) (planNode, error)
+	newPlan(stmt parser.Statement, desiredTypes []parser.Type, autoCommit bool) (planNode, error)
 
 	// makePlan prepares the query plan for a single SQL statement.  it
 	// calls newPlan() then expandPlan() on the result.  Execution must
@@ -229,7 +229,7 @@ func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, er
 // newPlan constructs a planNode from a statement. This is used
 // recursively by the various node constructors.
 func (p *planner) newPlan(
-	stmt parser.Statement, desiredTypes []parser.Datum, autoCommit bool,
+	stmt parser.Statement, desiredTypes []parser.Type, autoCommit bool,
 ) (planNode, error) {
 	tracing.AnnotateTrace()
 

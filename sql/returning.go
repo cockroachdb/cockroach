@@ -48,7 +48,7 @@ type returningHelper struct {
 // insert/update node.
 func (p *planner) newReturningHelper(
 	r parser.ReturningExprs,
-	desiredTypes []parser.Datum,
+	desiredTypes []parser.Type,
 	alias string,
 	tablecols []sqlbase.ColumnDescriptor,
 ) (*returningHelper, error) {
@@ -147,7 +147,7 @@ func (rh *returningHelper) IndexedVarEval(idx int, ctx *parser.EvalContext) (par
 }
 
 // IndexedVarReturnType implements the parser.IndexedVarContainer interface.
-func (rh *returningHelper) IndexedVarReturnType(idx int) parser.Datum {
+func (rh *returningHelper) IndexedVarReturnType(idx int) parser.Type {
 	return rh.source.sourceColumns[idx].Typ
 }
 

@@ -49,16 +49,9 @@ var (
 	DNull Datum = dNull{}
 )
 
-// A Datum holds either a bool, int64, float64, string or []Datum.
+// Datum represents a SQL value.
 type Datum interface {
 	TypedExpr
-	// Type returns the (user-friendly) name of the type.
-	Type() string
-	// TypeEqual determines if the receiver and the other Datum have the same
-	// type or not. This method should be used for asserting the type of all
-	// Datum, with the exception of DNull, where it is safe/encouraged to perform
-	// a direct equivalence check.
-	TypeEqual(other Datum) bool
 	// Compare returns -1 if the receiver is less than other, 0 if receiver is
 	// equal to other and +1 if receiver is greater than other.
 	// TODO(nvanbenschoten) Should we look into merging this with cmpOps?
@@ -89,6 +82,8 @@ type Datum interface {
 	// Size returns a lower bound on the Datum's size, in bytes.  The
 	// second return value indicates whether the size is dependent on
 	// the particular value.
+	//
+	// TODO(eisen): move this method to Type.
 	Size() (uintptr, bool)
 }
 
@@ -104,14 +99,23 @@ func MakeDBool(d DBool) *DBool {
 	return DBoolFalse
 }
 
-// makeParseError returns a parse error using the provided string and type name.
-// An optional error can be provided, which will be appended to the end of the error string.
-func makeParseError(s, typ string, err error) error {
+// makeParseError returns a parse error using the provided string and type. An
+// optional error can be provided, which will be appended to the end of the
+// error string.
+func makeParseError(s string, typ Type, err error) error {
 	var suffix string
 	if err != nil {
 		suffix = fmt.Sprintf(": %v", err)
 	}
 	return fmt.Errorf("could not parse '%s' as type %s%s", s, typ, suffix)
+}
+
+func makeUnsupportedComparisonMessage(d1, d2 Datum) string {
+	return fmt.Sprintf("unsupported comparison: %s to %s", d1.ReturnType(), d2.ReturnType())
+}
+
+func makeUnsupportedMethodMessage(d Datum, methodName string) string {
+	return fmt.Sprintf("%s.%s not supported", d.ReturnType(), methodName)
 }
 
 // ParseDBool parses and returns the *DBool Datum value represented by the provided
@@ -121,7 +125,7 @@ func ParseDBool(s string) (*DBool, error) {
 	// spec. Is that ok?
 	b, err := strconv.ParseBool(s)
 	if err != nil {
-		return nil, makeParseError(s, TypeBool.Type(), err)
+		return nil, makeParseError(s, TypeBool, err)
 	}
 	return MakeDBool(DBool(b)), nil
 }
@@ -134,23 +138,12 @@ func GetBool(d Datum) (DBool, error) {
 	if d == DNull {
 		return DBool(false), nil
 	}
-	return false, fmt.Errorf("cannot convert %s to type %s", d.Type(), TypeBool.Type())
+	return false, fmt.Errorf("cannot convert %s to type %s", d.ReturnType(), TypeBool)
 }
 
 // ReturnType implements the TypedExpr interface.
-func (*DBool) ReturnType() Datum {
+func (*DBool) ReturnType() Type {
 	return TypeBool
-}
-
-// Type implements the Datum interface.
-func (*DBool) Type() string {
-	return "bool"
-}
-
-// TypeEqual implements the Datum interface.
-func (d *DBool) TypeEqual(other Datum) bool {
-	_, ok := other.(*DBool)
-	return ok
 }
 
 // Compare implements the Datum interface.
@@ -161,7 +154,7 @@ func (d *DBool) Compare(other Datum) int {
 	}
 	v, ok := other.(*DBool)
 	if !ok {
-		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+		panic(makeUnsupportedComparisonMessage(d, other))
 	}
 	if !*d && *v {
 		return -1
@@ -225,25 +218,14 @@ func NewDInt(d DInt) *DInt {
 func ParseDInt(s string) (*DInt, error) {
 	i, err := strconv.ParseInt(s, 0, 64)
 	if err != nil {
-		return nil, makeParseError(s, TypeInt.Type(), err)
+		return nil, makeParseError(s, TypeInt, err)
 	}
 	return NewDInt(DInt(i)), nil
 }
 
 // ReturnType implements the TypedExpr interface.
-func (*DInt) ReturnType() Datum {
+func (*DInt) ReturnType() Type {
 	return TypeInt
-}
-
-// Type implements the Datum interface.
-func (*DInt) Type() string {
-	return "int"
-}
-
-// TypeEqual implements the Datum interface.
-func (d *DInt) TypeEqual(other Datum) bool {
-	_, ok := other.(*DInt)
-	return ok
 }
 
 // Compare implements the Datum interface.
@@ -256,7 +238,7 @@ func (d *DInt) Compare(other Datum) int {
 	if !ok {
 		cmp, ok := mixedTypeCompare(d, other)
 		if !ok {
-			panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+			panic(makeUnsupportedComparisonMessage(d, other))
 		}
 		return cmp
 	}
@@ -323,25 +305,14 @@ func NewDFloat(d DFloat) *DFloat {
 func ParseDFloat(s string) (*DFloat, error) {
 	f, err := strconv.ParseFloat(s, 64)
 	if err != nil {
-		return nil, makeParseError(s, TypeFloat.Type(), err)
+		return nil, makeParseError(s, TypeFloat, err)
 	}
 	return NewDFloat(DFloat(f)), nil
 }
 
 // ReturnType implements the TypedExpr interface.
-func (*DFloat) ReturnType() Datum {
+func (*DFloat) ReturnType() Type {
 	return TypeFloat
-}
-
-// Type implements the Datum interface.
-func (*DFloat) Type() string {
-	return "float"
-}
-
-// TypeEqual implements the Datum interface.
-func (d *DFloat) TypeEqual(other Datum) bool {
-	_, ok := other.(*DFloat)
-	return ok
 }
 
 // Compare implements the Datum interface.
@@ -354,7 +325,7 @@ func (d *DFloat) Compare(other Datum) int {
 	if !ok {
 		cmp, ok := mixedTypeCompare(d, other)
 		if !ok {
-			panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+			panic(makeUnsupportedComparisonMessage(d, other))
 		}
 		return cmp
 	}
@@ -425,25 +396,14 @@ type DDecimal struct {
 func ParseDDecimal(s string) (*DDecimal, error) {
 	dd := &DDecimal{}
 	if _, ok := dd.SetString(s); !ok {
-		return nil, makeParseError(s, TypeDecimal.Type(), nil)
+		return nil, makeParseError(s, TypeDecimal, nil)
 	}
 	return dd, nil
 }
 
 // ReturnType implements the TypedExpr interface.
-func (d *DDecimal) ReturnType() Datum {
+func (*DDecimal) ReturnType() Type {
 	return TypeDecimal
-}
-
-// Type implements the Datum interface.
-func (*DDecimal) Type() string {
-	return "decimal"
-}
-
-// TypeEqual implements the Datum interface.
-func (d *DDecimal) TypeEqual(other Datum) bool {
-	_, ok := other.(*DDecimal)
-	return ok
 }
 
 // Compare implements the Datum interface.
@@ -456,7 +416,7 @@ func (d *DDecimal) Compare(other Datum) int {
 	if !ok {
 		cmp, ok := mixedTypeCompare(d, other)
 		if !ok {
-			panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+			panic(makeUnsupportedComparisonMessage(d, other))
 		}
 		return cmp
 	}
@@ -470,7 +430,7 @@ func (*DDecimal) HasPrev() bool {
 
 // Prev implements the Datum interface.
 func (d *DDecimal) Prev() Datum {
-	panic(d.Type() + ".Prev() not supported")
+	panic(makeUnsupportedMethodMessage(d, "Prev"))
 }
 
 // HasNext implements the Datum interface.
@@ -480,7 +440,7 @@ func (*DDecimal) HasNext() bool {
 
 // Next implements the Datum interface.
 func (d *DDecimal) Next() Datum {
-	panic(d.Type() + ".Next() not supported")
+	panic(makeUnsupportedMethodMessage(d, "Next"))
 }
 
 // IsMax implements the Datum interface.
@@ -515,19 +475,8 @@ func NewDString(d string) *DString {
 }
 
 // ReturnType implements the TypedExpr interface.
-func (*DString) ReturnType() Datum {
+func (*DString) ReturnType() Type {
 	return TypeString
-}
-
-// Type implements the Datum interface.
-func (*DString) Type() string {
-	return "string"
-}
-
-// TypeEqual implements the Datum interface.
-func (d *DString) TypeEqual(other Datum) bool {
-	_, ok := other.(*DString)
-	return ok
 }
 
 // Compare implements the Datum interface.
@@ -538,7 +487,7 @@ func (d *DString) Compare(other Datum) int {
 	}
 	v, ok := other.(*DString)
 	if !ok {
-		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+		panic(makeUnsupportedComparisonMessage(d, other))
 	}
 	if *d < *v {
 		return -1
@@ -556,7 +505,7 @@ func (*DString) HasPrev() bool {
 
 // Prev implements the Datum interface.
 func (d *DString) Prev() Datum {
-	panic(d.Type() + ".Prev() not supported")
+	panic(makeUnsupportedMethodMessage(d, "Prev"))
 }
 
 // HasNext implements the Datum interface.
@@ -600,19 +549,8 @@ func NewDBytes(d DBytes) *DBytes {
 }
 
 // ReturnType implements the TypedExpr interface.
-func (d *DBytes) ReturnType() Datum {
+func (*DBytes) ReturnType() Type {
 	return TypeBytes
-}
-
-// Type implements the Datum interface.
-func (*DBytes) Type() string {
-	return "bytes"
-}
-
-// TypeEqual implements the Datum interface.
-func (d *DBytes) TypeEqual(other Datum) bool {
-	_, ok := other.(*DBytes)
-	return ok
 }
 
 // Compare implements the Datum interface.
@@ -623,7 +561,7 @@ func (d *DBytes) Compare(other Datum) int {
 	}
 	v, ok := other.(*DBytes)
 	if !ok {
-		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+		panic(makeUnsupportedComparisonMessage(d, other))
 	}
 	if *d < *v {
 		return -1
@@ -641,7 +579,7 @@ func (*DBytes) HasPrev() bool {
 
 // Prev implements the Datum interface.
 func (d *DBytes) Prev() Datum {
-	panic(d.Type() + ".Prev() not supported")
+	panic(makeUnsupportedMethodMessage(d, "Prev"))
 }
 
 // HasNext implements the Datum interface.
@@ -722,23 +660,12 @@ func ParseDDate(s string, loc *time.Location) (*DDate, error) {
 		}
 	}
 
-	return nil, makeParseError(s, TypeDate.Type(), nil)
+	return nil, makeParseError(s, TypeDate, nil)
 }
 
 // ReturnType implements the TypedExpr interface.
-func (*DDate) ReturnType() Datum {
+func (*DDate) ReturnType() Type {
 	return TypeDate
-}
-
-// Type implements the Datum interface.
-func (*DDate) Type() string {
-	return "date"
-}
-
-// TypeEqual implements the Datum interface.
-func (d *DDate) TypeEqual(other Datum) bool {
-	_, ok := other.(*DDate)
-	return ok
 }
 
 // Compare implements the Datum interface.
@@ -749,7 +676,7 @@ func (d *DDate) Compare(other Datum) int {
 	}
 	v, ok := other.(*DDate)
 	if !ok {
-		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+		panic(makeUnsupportedComparisonMessage(d, other))
 	}
 	if *d < *v {
 		return -1
@@ -836,12 +763,12 @@ func parseTimestampInLocation(s string, loc *time.Location) (time.Time, error) {
 	for _, format := range timeFormats {
 		if t, err := time.ParseInLocation(format, s, loc); err == nil {
 			if err := checkForMissingZone(t, loc); err != nil {
-				return time.Time{}, makeParseError(s, TypeTimestamp.Type(), err)
+				return time.Time{}, makeParseError(s, TypeTimestamp, err)
 			}
 			return t, nil
 		}
 	}
-	return time.Time{}, makeParseError(s, TypeTimestamp.Type(), nil)
+	return time.Time{}, makeParseError(s, TypeTimestamp, nil)
 }
 
 // Unfortunately Go is very strict when parsing abbreviated zone names -- with
@@ -880,19 +807,8 @@ func ParseDTimestamp(s string, precision time.Duration) (*DTimestamp, error) {
 }
 
 // ReturnType implements the TypedExpr interface.
-func (*DTimestamp) ReturnType() Datum {
+func (*DTimestamp) ReturnType() Type {
 	return TypeTimestamp
-}
-
-// Type implements the Datum interface.
-func (*DTimestamp) Type() string {
-	return "timestamp"
-}
-
-// TypeEqual implements the Datum interface.
-func (d *DTimestamp) TypeEqual(other Datum) bool {
-	_, ok := other.(*DTimestamp)
-	return ok
 }
 
 // Compare implements the Datum interface.
@@ -903,7 +819,7 @@ func (d *DTimestamp) Compare(other Datum) int {
 	}
 	v, ok := other.(*DTimestamp)
 	if !ok {
-		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+		panic(makeUnsupportedComparisonMessage(d, other))
 	}
 	if d.Before(v.Time) {
 		return -1
@@ -979,19 +895,8 @@ func ParseDTimestampTZ(
 }
 
 // ReturnType implements the TypedExpr interface.
-func (*DTimestampTZ) ReturnType() Datum {
+func (*DTimestampTZ) ReturnType() Type {
 	return TypeTimestampTZ
-}
-
-// Type implements the Datum interface.
-func (d *DTimestampTZ) Type() string {
-	return "timestamptz"
-}
-
-// TypeEqual implements the Datum interface.
-func (d *DTimestampTZ) TypeEqual(other Datum) bool {
-	_, ok := other.(*DTimestampTZ)
-	return ok
 }
 
 // Compare implements the Datum interface.
@@ -1002,7 +907,7 @@ func (d *DTimestampTZ) Compare(other Datum) int {
 	}
 	v, ok := other.(*DTimestampTZ)
 	if !ok {
-		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+		panic(makeUnsupportedComparisonMessage(d, other))
 	}
 	if d.Before(v.Time) {
 		return -1
@@ -1071,7 +976,7 @@ func ParseDInterval(s string) (*DInterval, error) {
 
 	// If it's a blank string, exit early.
 	if len(s) == 0 {
-		return nil, makeParseError(s, TypeInterval.Type(), nil)
+		return nil, makeParseError(s, TypeInterval, nil)
 	}
 
 	if s[0] == 'P' {
@@ -1079,7 +984,7 @@ func ParseDInterval(s string) (*DInterval, error) {
 		// interval.
 		dur, err := iso8601ToDuration(s)
 		if err != nil {
-			return nil, makeParseError(s, TypeInterval.Type(), err)
+			return nil, makeParseError(s, TypeInterval, err)
 		}
 		return &DInterval{Duration: dur}, nil
 	} else if strings.ContainsRune(s, ' ') {
@@ -1087,7 +992,7 @@ func ParseDInterval(s string) (*DInterval, error) {
 		// as neither iso8601 nor golang permit spaces.
 		dur, err := postgresToDuration(s)
 		if err != nil {
-			return nil, makeParseError(s, TypeInterval.Type(), err)
+			return nil, makeParseError(s, TypeInterval, err)
 		}
 		return &DInterval{Duration: dur}, nil
 	} else if strings.ContainsRune(s, ':') {
@@ -1110,10 +1015,10 @@ func ParseDInterval(s string) (*DInterval, error) {
 		case 3:
 			dur, err = time.ParseDuration(parts[0] + "h" + parts[1] + "m" + parts[2] + "s")
 		default:
-			return nil, makeParseError(s, TypeInterval.Type(), fmt.Errorf("unknown format"))
+			return nil, makeParseError(s, TypeInterval, fmt.Errorf("unknown format"))
 		}
 		if err != nil {
-			return nil, makeParseError(s, TypeInterval.Type(), err)
+			return nil, makeParseError(s, TypeInterval, err)
 		}
 		return &DInterval{Duration: duration.Duration{Nanos: dur.Nanoseconds()}}, nil
 	}
@@ -1125,25 +1030,14 @@ func ParseDInterval(s string) (*DInterval, error) {
 	// Fallback to golang durations.
 	dur, err := time.ParseDuration(s)
 	if err != nil {
-		return nil, makeParseError(s, TypeInterval.Type(), err)
+		return nil, makeParseError(s, TypeInterval, err)
 	}
 	return &DInterval{Duration: duration.Duration{Nanos: dur.Nanoseconds()}}, nil
 }
 
 // ReturnType implements the TypedExpr interface.
-func (d *DInterval) ReturnType() Datum {
+func (*DInterval) ReturnType() Type {
 	return TypeInterval
-}
-
-// Type implements the Datum interface.
-func (*DInterval) Type() string {
-	return "interval"
-}
-
-// TypeEqual implements the Datum interface.
-func (d *DInterval) TypeEqual(other Datum) bool {
-	_, ok := other.(*DInterval)
-	return ok
 }
 
 // Compare implements the Datum interface.
@@ -1154,7 +1048,7 @@ func (d *DInterval) Compare(other Datum) int {
 	}
 	v, ok := other.(*DInterval)
 	if !ok {
-		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+		panic(makeUnsupportedComparisonMessage(d, other))
 	}
 	return d.Duration.Compare(v.Duration)
 }
@@ -1166,7 +1060,7 @@ func (*DInterval) HasPrev() bool {
 
 // Prev implements the Datum interface.
 func (d *DInterval) Prev() Datum {
-	panic(d.Type() + ".Prev() not supported")
+	panic(makeUnsupportedMethodMessage(d, "Prev"))
 }
 
 // HasNext implements the Datum interface.
@@ -1176,7 +1070,7 @@ func (*DInterval) HasNext() bool {
 
 // Next implements the Datum interface.
 func (d *DInterval) Next() Datum {
-	panic(d.Type() + ".Next() not supported")
+	panic(makeUnsupportedMethodMessage(d, "Next"))
 }
 
 // IsMax implements the Datum interface.
@@ -1207,30 +1101,12 @@ func (d *DInterval) Size() (uintptr, bool) {
 type DTuple []Datum
 
 // ReturnType implements the TypedExpr interface.
-func (d *DTuple) ReturnType() Datum {
-	return d
-}
-
-// Type implements the Datum interface.
-func (*DTuple) Type() string {
-	return "tuple"
-}
-
-// TypeEqual implements the Datum interface.
-func (d *DTuple) TypeEqual(other Datum) bool {
-	t, ok := other.(*DTuple)
-	if !ok {
-		return false
+func (d *DTuple) ReturnType() Type {
+	typ := TTuple{Types: make([]Type, len(*d))}
+	for i, v := range *d {
+		typ.Types[i] = v.ReturnType()
 	}
-	if len(*d) != len(*t) {
-		return false
-	}
-	for i := 0; i < len(*d); i++ {
-		if !(*d)[i].TypeEqual((*t)[i]) {
-			return false
-		}
-	}
-	return true
+	return typ
 }
 
 // Compare implements the Datum interface.
@@ -1241,7 +1117,7 @@ func (d *DTuple) Compare(other Datum) int {
 	}
 	v, ok := other.(*DTuple)
 	if !ok {
-		panic(fmt.Sprintf("unsupported comparison: %s to %s", d.Type(), other.Type()))
+		panic(makeUnsupportedComparisonMessage(d, other))
 	}
 	n := len(*d)
 	if n > len(*v) {
@@ -1402,19 +1278,8 @@ func (d *DTuple) SortedDifference(other *DTuple) *DTuple {
 type dNull struct{}
 
 // ReturnType implements the TypedExpr interface.
-func (dNull) ReturnType() Datum {
-	return DNull
-}
-
-// Type implements the Datum interface.
-func (d dNull) Type() string {
-	return "NULL"
-}
-
-// TypeEqual implements the Datum interface.
-func (d dNull) TypeEqual(other Datum) bool {
-	_, ok := other.(dNull)
-	return ok
+func (dNull) ReturnType() Type {
+	return TypeNull
 }
 
 // Compare implements the Datum interface.
@@ -1432,7 +1297,7 @@ func (dNull) HasPrev() bool {
 
 // Prev implements the Datum interface.
 func (d dNull) Prev() Datum {
-	panic(d.Type() + ".Prev not supported")
+	panic(makeUnsupportedMethodMessage(d, "Prev"))
 }
 
 // HasNext implements the Datum interface.
@@ -1442,7 +1307,7 @@ func (dNull) HasNext() bool {
 
 // Next implements the Datum interface.
 func (d dNull) Next() Datum {
-	panic(d.Type() + ".Next not supported")
+	panic(makeUnsupportedMethodMessage(d, "Next"))
 }
 
 // IsMax implements the Datum interface.
@@ -1465,93 +1330,14 @@ func (d dNull) Size() (uintptr, bool) {
 	return unsafe.Sizeof(d), false
 }
 
-var _ VariableExpr = &DPlaceholder{}
-
-// DPlaceholder is the named placeholder Datum.
-type DPlaceholder struct {
-	name string
-	pmap *PlaceholderInfo
-}
-
-// Name gives access to the placeholder's name to other packages.
-func (d *DPlaceholder) Name() string {
-	return d.name
-}
-
-// ReturnType implements the TypedExpr interface.
-func (d *DPlaceholder) ReturnType() Datum {
-	if typ, ok := d.pmap.Type(d.name); ok {
-		return typ
-	}
-	return d
-}
-
-// Variable implements the VariableExpr interface.
-func (*DPlaceholder) Variable() {}
-
-// Type implements the Datum interface.
-func (*DPlaceholder) Type() string {
-	return "placeholder"
-}
-
-// TypeEqual implements the Datum interface.
-func (d *DPlaceholder) TypeEqual(other Datum) bool {
-	_, ok := other.(*DPlaceholder)
-	return ok
-}
-
-// Compare implements the Datum interface.
-func (d *DPlaceholder) Compare(other Datum) int {
-	panic(d.Type() + ".Compare not supported")
-}
-
-// HasPrev implements the Datum interface.
-func (*DPlaceholder) HasPrev() bool {
-	return false
-}
-
-// Prev implements the Datum interface.
-func (d *DPlaceholder) Prev() Datum {
-	panic(d.Type() + ".Prev not supported")
-}
-
-// HasNext implements the Datum interface.
-func (*DPlaceholder) HasNext() bool {
-	return false
-}
-
-// Next implements the Datum interface.
-func (d *DPlaceholder) Next() Datum {
-	panic(d.Type() + ".Next not supported")
-}
-
-// IsMax implements the Datum interface.
-func (*DPlaceholder) IsMax() bool {
-	return true
-}
-
-// IsMin implements the Datum interface.
-func (*DPlaceholder) IsMin() bool {
-	return true
-}
-
-// Format implements the NodeFormatter interface.
-func (d *DPlaceholder) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteByte('$')
-	buf.WriteString(d.name)
-}
-
-// Size implements the Datum interface.
-func (d *DPlaceholder) Size() (uintptr, bool) {
-	return unsafe.Sizeof(*d) + uintptr(len(d.name)), true
-}
-
 // Temporary workaround for #3633, allowing comparisons between
 // heterogeneous types.
 // TODO(nvanbenschoten) Now that typing is improved, can we get rid of this?
 func mixedTypeCompare(l, r Datum) (int, bool) {
+	ltype := l.ReturnType()
+	rtype := r.ReturnType()
 	// Check equality.
-	eqOp, ok := CmpOps[EQ].lookupImpl(l, r)
+	eqOp, ok := CmpOps[EQ].lookupImpl(ltype, rtype)
 	if !ok {
 		return 0, false
 	}
@@ -1565,7 +1351,7 @@ func mixedTypeCompare(l, r Datum) (int, bool) {
 	}
 
 	// Check less than.
-	ltOp, ok := CmpOps[LT].lookupImpl(l, r)
+	ltOp, ok := CmpOps[LT].lookupImpl(ltype, rtype)
 	if !ok {
 		return 0, false
 	}

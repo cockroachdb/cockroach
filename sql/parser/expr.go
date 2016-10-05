@@ -38,7 +38,7 @@ type Expr interface {
 	// The ctx parameter defines the context in which to perform type checking.
 	// The desired parameter hints the desired type that the method's caller wants from
 	// the resulting TypedExpr.
-	TypeCheck(ctx *SemaContext, desired Datum) (TypedExpr, error)
+	TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error)
 }
 
 // TypedExpr represents a well-typed expression.
@@ -57,7 +57,7 @@ type TypedExpr interface {
 	Eval(*EvalContext) (Datum, error)
 	// ReturnType provides the type of the TypedExpr, which is the type of Datum that
 	// the TypedExpr will return when evaluated.
-	ReturnType() Datum
+	ReturnType() Type
 }
 
 // VariableExpr is an Expr that may change per row. It is used to
@@ -101,10 +101,10 @@ func exprFmtWithParen(buf *bytes.Buffer, f FmtFlags, e Expr) {
 // typeAnnotation is an embeddable struct to provide a TypedExpr with a dynamic
 // type annotation.
 type typeAnnotation struct {
-	typ Datum
+	typ Type
 }
 
-func (ta typeAnnotation) ReturnType() Datum {
+func (ta typeAnnotation) ReturnType() Type {
 	ta.assertTyped()
 	return ta.typ
 }
@@ -361,26 +361,26 @@ func (node *ComparisonExpr) IsMixedTypeComparison() bool {
 	case In, NotIn:
 		tuple := *node.Right.(*DTuple)
 		for _, expr := range tuple {
-			if !sameTypeExprs(node.TypedLeft(), expr.(TypedExpr)) {
+			if !sameTypeOrNull(node.TypedLeft(), expr.(TypedExpr)) {
 				return true
 			}
 		}
 		return false
 	default:
-		return !sameTypeExprs(node.TypedLeft(), node.TypedRight())
+		return !sameTypeOrNull(node.TypedLeft(), node.TypedRight())
 	}
 }
 
-func sameTypeExprs(left, right TypedExpr) bool {
+func sameTypeOrNull(left, right TypedExpr) bool {
 	leftType := left.ReturnType()
-	if leftType == DNull {
+	if leftType == TypeNull {
 		return true
 	}
 	rightType := right.ReturnType()
-	if rightType == DNull {
+	if rightType == TypeNull {
 		return true
 	}
-	return leftType.TypeEqual(rightType)
+	return leftType.Equal(rightType)
 }
 
 // RangeCond represents a BETWEEN or a NOT BETWEEN expression.
@@ -543,22 +543,37 @@ func (node DefaultVal) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 
 // ReturnType implements the TypedExpr interface.
-func (DefaultVal) ReturnType() Datum { return nil }
+func (DefaultVal) ReturnType() Type { return nil }
 
-var _ VariableExpr = Placeholder{}
+var _ VariableExpr = &Placeholder{}
 
 // Placeholder represents a named placeholder.
 type Placeholder struct {
 	Name string
+
+	typeAnnotation
+}
+
+// NewPlaceholder allocates a Placeholder.
+func NewPlaceholder(name string) *Placeholder {
+	return &Placeholder{Name: name}
 }
 
 // Variable implements the VariableExpr interface.
-func (Placeholder) Variable() {}
+func (*Placeholder) Variable() {}
 
 // Format implements the NodeFormatter interface.
-func (node Placeholder) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *Placeholder) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteByte('$')
 	buf.WriteString(node.Name)
+}
+
+// ReturnType implements the TypedExpr interface.
+func (node *Placeholder) ReturnType() Type {
+	if node.typ == nil {
+		node.typ = &TPlaceholder{Name: node.Name}
+	}
+	return node.typ
 }
 
 // Tuple represents a parenthesized list of expressions.
@@ -566,7 +581,7 @@ type Tuple struct {
 	Exprs Exprs
 
 	row   bool // indicates whether or not the tuple should be textually represented as a row.
-	types DTuple
+	types []Type
 }
 
 // Format implements the NodeFormatter interface.
@@ -580,8 +595,8 @@ func (node *Tuple) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 
 // ReturnType implements the TypedExpr interface.
-func (node *Tuple) ReturnType() Datum {
-	return &node.types
+func (node *Tuple) ReturnType() Type {
+	return TTuple{node.types}
 }
 
 // Array represents an array constructor.
@@ -638,8 +653,8 @@ func (node *Subquery) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 
 // ReturnType implements the TypedExpr interface.
-func (node *Subquery) ReturnType() Datum {
-	return DNull
+func (*Subquery) ReturnType() Type {
+	return TypeNull
 }
 
 // BinaryOperator represents a binary operator.
@@ -940,22 +955,22 @@ func (node *CastExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 
 var (
-	boolCastTypes = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
-	intCastTypes  = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString,
+	boolCastTypes = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString}
+	intCastTypes  = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString,
 		TypeTimestamp, TypeTimestampTZ, TypeDate, TypeInterval}
-	floatCastTypes = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString,
+	floatCastTypes = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString,
 		TypeTimestamp, TypeTimestampTZ, TypeDate, TypeInterval}
-	decimalCastTypes = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString,
+	decimalCastTypes = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString,
 		TypeTimestamp, TypeTimestampTZ, TypeDate, TypeInterval}
-	stringCastTypes = []Datum{DNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString,
+	stringCastTypes = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString,
 		TypeBytes, TypeTimestamp, TypeTimestampTZ, TypeInterval, TypeDate}
-	bytesCastTypes     = []Datum{DNull, TypeString, TypeBytes}
-	dateCastTypes      = []Datum{DNull, TypeString, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInt}
-	timestampCastTypes = []Datum{DNull, TypeString, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInt}
-	intervalCastTypes  = []Datum{DNull, TypeString, TypeInt, TypeInterval}
+	bytesCastTypes     = []Type{TypeNull, TypeString, TypeBytes}
+	dateCastTypes      = []Type{TypeNull, TypeString, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInt}
+	timestampCastTypes = []Type{TypeNull, TypeString, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInt}
+	intervalCastTypes  = []Type{TypeNull, TypeString, TypeInt, TypeInterval}
 )
 
-func colTypeToTypeAndValidArgTypes(t ColumnType) (Datum, []Datum) {
+func colTypeToTypeAndValidArgTypes(t ColumnType) (Type, []Type) {
 	switch t.(type) {
 	case *BoolColType:
 		return TypeBool, boolCastTypes
@@ -981,7 +996,7 @@ func colTypeToTypeAndValidArgTypes(t ColumnType) (Datum, []Datum) {
 	return nil, nil
 }
 
-func (node *CastExpr) castTypeAndValidArgTypes() (Datum, []Datum) {
+func (node *CastExpr) castTypeAndValidArgTypes() (Type, []Type) {
 	return colTypeToTypeAndValidArgTypes(node.Type)
 }
 
@@ -1022,7 +1037,7 @@ func (node *AnnotateTypeExpr) TypedInnerExpr() TypedExpr {
 	return node.Expr.(TypedExpr)
 }
 
-func (node *AnnotateTypeExpr) annotationType() Datum {
+func (node *AnnotateTypeExpr) annotationType() Type {
 	typ, _ := colTypeToTypeAndValidArgTypes(node.Type)
 	return typ
 }
@@ -1048,7 +1063,6 @@ func (node *DString) String() string          { return AsString(node) }
 func (node *DTimestamp) String() string       { return AsString(node) }
 func (node *DTimestampTZ) String() string     { return AsString(node) }
 func (node *DTuple) String() string           { return AsString(node) }
-func (node *DPlaceholder) String() string     { return AsString(node) }
 func (node *ExistsExpr) String() string       { return AsString(node) }
 func (node Exprs) String() string             { return AsString(node) }
 func (node *FuncExpr) String() string         { return AsString(node) }
@@ -1068,6 +1082,6 @@ func (node *Tuple) String() string            { return AsString(node) }
 func (node *AnnotateTypeExpr) String() string { return AsString(node) }
 func (node *UnaryExpr) String() string        { return AsString(node) }
 func (node DefaultVal) String() string        { return AsString(node) }
-func (node Placeholder) String() string       { return AsString(node) }
+func (node *Placeholder) String() string      { return AsString(node) }
 func (node dNull) String() string             { return AsString(node) }
 func (list NameList) String() string          { return AsString(list) }

@@ -198,47 +198,47 @@ func (n *copyNode) addRow(line []byte) error {
 			continue
 		}
 		var d parser.Datum
-		switch t := n.resultColumns[i].Typ.(type) {
-		case *parser.DBool:
+		switch t := n.resultColumns[i].Typ; t {
+		case parser.TypeBool:
 			d, err = parser.ParseDBool(s)
-		case *parser.DBytes:
+		case parser.TypeBytes:
 			s, err = decodeCopy(s)
 			d = parser.NewDBytes(parser.DBytes(s))
-		case *parser.DDate:
+		case parser.TypeDate:
 			s, err = decodeCopy(s)
 			if err != nil {
 				break
 			}
 			d, err = parser.ParseDDate(s, n.p.session.Location)
-		case *parser.DDecimal:
+		case parser.TypeDecimal:
 			d, err = parser.ParseDDecimal(s)
-		case *parser.DFloat:
+		case parser.TypeFloat:
 			d, err = parser.ParseDFloat(s)
-		case *parser.DInt:
+		case parser.TypeInt:
 			d, err = parser.ParseDInt(s)
-		case *parser.DInterval:
+		case parser.TypeInterval:
 			s, err = decodeCopy(s)
 			if err != nil {
 				break
 			}
 			d, err = parser.ParseDInterval(s)
-		case *parser.DString:
+		case parser.TypeString:
 			s, err = decodeCopy(s)
 			d = parser.NewDString(s)
-		case *parser.DTimestamp:
+		case parser.TypeTimestamp:
 			s, err = decodeCopy(s)
 			if err != nil {
 				break
 			}
 			d, err = parser.ParseDTimestamp(s, time.Microsecond)
-		case *parser.DTimestampTZ:
+		case parser.TypeTimestampTZ:
 			s, err = decodeCopy(s)
 			if err != nil {
 				break
 			}
 			d, err = parser.ParseDTimestampTZ(s, n.p.session.Location, time.Microsecond)
 		default:
-			return fmt.Errorf("unknown type %s (%T)", t.Type(), t)
+			return fmt.Errorf("unknown type %s", t)
 		}
 		if err != nil {
 			return err

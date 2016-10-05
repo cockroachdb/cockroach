@@ -64,7 +64,7 @@ func FormatNode(buf *bytes.Buffer, f FmtFlags, n NodeFormatter) {
 				// further.
 				buf.WriteString(fmt.Sprintf("??? %v", te))
 			} else {
-				buf.WriteString(rt.Type())
+				buf.WriteString(rt.String())
 			}
 			buf.WriteByte(']')
 			return

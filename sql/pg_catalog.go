@@ -327,8 +327,8 @@ CREATE TABLE pg_catalog.pg_tables (
 	},
 }
 
-func typLen(typ parser.Datum) parser.Datum {
-	if sz, variable := typ.Size(); !variable {
+func typLen(typ parser.Type) parser.Datum {
+	if sz, variable := typ.Exemplar().Size(); !variable {
 		return parser.NewDInt(parser.DInt(sz))
 	}
 	return negOneVal
@@ -402,8 +402,8 @@ func (h oidHasher) writeColumn(column *sqlbase.ColumnDescriptor) {
 	h.writeStr(column.Name)
 }
 
-func (h oidHasher) writeType(typ parser.Datum) {
-	h.writeStr(typ.Type())
+func (h oidHasher) writeType(typ parser.Type) {
+	h.writeStr(typ.String())
 }
 
 func (h oidHasher) DBOid(db *sqlbase.DatabaseDescriptor) *parser.DInt {
@@ -441,7 +441,7 @@ func (h oidHasher) ColumnOid(
 	return h.getOid()
 }
 
-func (h oidHasher) TypeOid(typ parser.Datum) *parser.DInt {
+func (h oidHasher) TypeOid(typ parser.Type) *parser.DInt {
 	h.writeTypeTag(typeTypeTag)
 	h.writeType(typ)
 	return h.getOid()

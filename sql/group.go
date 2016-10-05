@@ -641,7 +641,7 @@ func (a *aggregateFuncHolder) String() string { return parser.AsString(a) }
 func (a *aggregateFuncHolder) Walk(v parser.Visitor) parser.Expr { return a }
 
 func (a *aggregateFuncHolder) TypeCheck(
-	_ *parser.SemaContext, desired parser.Datum,
+	_ *parser.SemaContext, desired parser.Type,
 ) (parser.TypedExpr, error) {
 	return a, nil
 }
@@ -657,6 +657,6 @@ func (a *aggregateFuncHolder) Eval(ctx *parser.EvalContext) (parser.Datum, error
 	return datum, nil
 }
 
-func (a *aggregateFuncHolder) ReturnType() parser.Datum {
+func (a *aggregateFuncHolder) ReturnType() parser.Type {
 	return a.expr.ReturnType()
 }
