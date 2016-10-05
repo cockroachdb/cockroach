@@ -229,13 +229,13 @@ func (s *Stopper) RunAsyncTask(ctx context.Context, f func(context.Context)) err
 		return errUnavailable
 	}
 
-	ctx, doneFn := tracing.ForkCtxSpan(ctx, fmt.Sprintf("%s:%d", file, line))
+	ctx, span := tracing.ForkCtxSpan(ctx, fmt.Sprintf("%s:%d", file, line))
 
 	// Call f.
 	go func() {
 		defer s.Recover()
 		defer s.runPostlude(key)
-		defer doneFn()
+		defer tracing.FinishSpan(span)
 		f(ctx)
 	}()
 	return nil
@@ -273,13 +273,13 @@ func (s *Stopper) RunLimitedAsyncTask(
 		return errUnavailable
 	}
 
-	ctx, doneFn := tracing.ForkCtxSpan(ctx, fmt.Sprintf("%s:%d", file, line))
+	ctx, span := tracing.ForkCtxSpan(ctx, fmt.Sprintf("%s:%d", file, line))
 
 	go func() {
 		defer s.Recover()
 		defer s.runPostlude(key)
 		defer func() { <-sem }()
-		defer doneFn()
+		defer tracing.FinishSpan(span)
 		f(ctx)
 	}()
 	return nil

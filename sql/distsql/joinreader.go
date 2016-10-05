@@ -98,8 +98,8 @@ func (jr *joinReader) mainLoop() error {
 	var alloc sqlbase.DatumAlloc
 	spans := make(roachpb.Spans, 0, joinReaderBatchSize)
 
-	ctx, closeSpan := tracing.ChildSpan(jr.ctx, "join reader")
-	defer closeSpan()
+	ctx, span := tracing.ChildSpan(jr.ctx, "join reader")
+	defer tracing.FinishSpan(span)
 
 	log.VEventf(1, ctx, "starting (filter: %s)", &jr.filter)
 	if log.V(1) {
