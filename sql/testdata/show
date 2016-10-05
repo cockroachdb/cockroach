@@ -11,9 +11,8 @@ SERIALIZABLE
 query TTTT colnames
 HELP replace
 ----
-Function    Signature                           Category            Details
-replace     string, string, string -> string    String and Byte
-
+Function  Signature                                            Category         Details
+replace   (input: string, from: string, to: string) -> string  String and Byte  Replace all occurrences of 'from' with 'to' in 'input'
 
 query TTTT colnames
 HELP missing

@@ -133,6 +133,14 @@ func (b Builtin) Category() string {
 	return ""
 }
 
+// Signature returns a human-readable signature
+func (b Builtin) Signature() string {
+	if b.ReturnType == nil {
+		return "<T>... -> <T>" // Special-case for LEAST and GREATEST.
+	}
+	return fmt.Sprintf("(%s) -> %s", b.Types.String(), b.ReturnType.Type())
+}
+
 // Builtins contains the built-in functions indexed by name.
 var Builtins = map[string][]Builtin{
 	// Keep the list of functions sorted.
@@ -357,35 +365,42 @@ var Builtins = map[string][]Builtin{
 		return NewDString(string(runes)), nil
 	}, TypeString)},
 
-	"replace": {stringBuiltin3(func(s, from, to string) (Datum, error) {
-		return NewDString(strings.Replace(s, from, to, -1)), nil
-	}, TypeString)},
+	"replace": {stringBuiltin3(
+		"input", "from", "to",
+		func(input, from, to string) (Datum, error) {
+			return NewDString(strings.Replace(input, from, to, -1)), nil
+		},
+		TypeString,
+		"Replace all occurrences of 'from' with 'to' in 'input'",
+	)},
 
-	"translate": {stringBuiltin3(func(s, from, to string) (Datum, error) {
-		const deletionRune = utf8.MaxRune + 1
-		translation := make(map[rune]rune, len(from))
-		for _, fromRune := range from {
-			toRune, size := utf8.DecodeRuneInString(to)
-			if toRune == utf8.RuneError {
-				toRune = deletionRune
-			} else {
-				to = to[size:]
-			}
-			translation[fromRune] = toRune
-		}
-
-		runes := make([]rune, 0, len(s))
-		for _, c := range s {
-			if t, ok := translation[c]; ok {
-				if t != deletionRune {
-					runes = append(runes, t)
+	"translate": {stringBuiltin3(
+		"input", "from", "to",
+		func(s, from, to string) (Datum, error) {
+			const deletionRune = utf8.MaxRune + 1
+			translation := make(map[rune]rune, len(from))
+			for _, fromRune := range from {
+				toRune, size := utf8.DecodeRuneInString(to)
+				if toRune == utf8.RuneError {
+					toRune = deletionRune
+				} else {
+					to = to[size:]
 				}
-			} else {
-				runes = append(runes, c)
+				translation[fromRune] = toRune
 			}
-		}
-		return NewDString(string(runes)), nil
-	}, TypeString)},
+
+			runes := make([]rune, 0, len(s))
+			for _, c := range s {
+				if t, ok := translation[c]; ok {
+					if t != deletionRune {
+						runes = append(runes, t)
+					}
+				} else {
+					runes = append(runes, c)
+				}
+			}
+			return NewDString(string(runes)), nil
+		}, TypeString, "")},
 
 	"regexp_extract": {
 		Builtin{
@@ -1196,13 +1211,16 @@ func stringBuiltin2(f func(string, string) (Datum, error), returnType Datum) Bui
 	}
 }
 
-func stringBuiltin3(f func(string, string, string) (Datum, error), returnType Datum) Builtin {
+func stringBuiltin3(
+	a, b, c string, f func(string, string, string) (Datum, error), returnType Datum, info string,
+) Builtin {
 	return Builtin{
-		Types:      ArgTypes{TypeString, TypeString, TypeString},
+		Types:      NamedArgTypes{{a, TypeString}, {b, TypeString}, {c, TypeString}},
 		ReturnType: returnType,
 		fn: func(_ *EvalContext, args DTuple) (Datum, error) {
 			return f(string(*args[0].(*DString)), string(*args[1].(*DString)), string(*args[2].(*DString)))
 		},
+		Info: info,
 	}
 }
 
