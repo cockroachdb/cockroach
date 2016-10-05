@@ -42,7 +42,7 @@ func TestGossipFirstRange(t *testing.T) {
 
 	errors := make(chan error)
 	descs := make(chan *roachpb.RangeDescriptor)
-	tc.Servers[0].Gossip().RegisterCallback(gossip.KeyFirstRangeDescriptor,
+	unregister := tc.Servers[0].Gossip().RegisterCallback(gossip.KeyFirstRangeDescriptor,
 		func(_ string, content roachpb.Value) {
 			var desc roachpb.RangeDescriptor
 			if err := content.GetProto(&desc); err != nil {
@@ -50,7 +50,9 @@ func TestGossipFirstRange(t *testing.T) {
 			} else {
 				descs <- &desc
 			}
-		})
+		},
+	)
+	defer unregister()
 
 	// Wait for the specified descriptor to be gossiped for the first range. We
 	// loop because the timing of replica addition and lease transfer can cause
