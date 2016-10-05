@@ -60,7 +60,7 @@ func (uh *upsertHelper) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser
 }
 
 // IndexedVarReturnType implements the parser.IndexedVarContainer interface.
-func (uh *upsertHelper) IndexedVarReturnType(idx int) parser.Datum {
+func (uh *upsertHelper) IndexedVarReturnType(idx int) parser.Type {
 	numSourceColumns := len(uh.sourceInfo.sourceColumns)
 	if idx >= numSourceColumns {
 		return uh.excludedSourceInfo.sourceColumns[idx-numSourceColumns].Typ

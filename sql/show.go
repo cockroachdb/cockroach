@@ -282,7 +282,7 @@ func (p *planner) ShowCreateView(n *parser.ShowCreateView) (planNode, error) {
 	if !ok {
 		return nil, errors.Errorf("failed to parse underlying query from view %q as a select", tn)
 	}
-	sourcePlan, err := p.Select(sel, []parser.Datum{}, false)
+	sourcePlan, err := p.Select(sel, []parser.Type{}, false)
 	if err != nil {
 		return nil, err
 	}

@@ -74,7 +74,7 @@ type editNodeRun struct {
 }
 
 func (r *editNodeRun) initEditNode(
-	en *editNodeBase, rows planNode, re parser.ReturningExprs, desiredTypes []parser.Datum,
+	en *editNodeBase, rows planNode, re parser.ReturningExprs, desiredTypes []parser.Type,
 ) error {
 	r.rows = rows
 
@@ -134,7 +134,7 @@ type updateNode struct {
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
 // TODO(guanqun): need to support CHECK in UPDATE
 func (p *planner) Update(
-	n *parser.Update, desiredTypes []parser.Datum, autoCommit bool,
+	n *parser.Update, desiredTypes []parser.Type, autoCommit bool,
 ) (planNode, error) {
 	tracing.AnnotateTrace()
 
@@ -203,7 +203,7 @@ func (p *planner) Update(
 	i := 0
 	// Remember the index where the targets for exprs start.
 	exprTargetIdx := len(targets)
-	desiredTypesFromSelect := make([]parser.Datum, len(targets), len(targets)+len(exprs))
+	desiredTypesFromSelect := make([]parser.Type, len(targets), len(targets)+len(exprs))
 	for _, expr := range exprs {
 		if expr.Tuple {
 			switch t := expr.Expr.(type) {
@@ -366,7 +366,7 @@ func (p *planner) namesForExprs(exprs parser.UpdateExprs) (parser.UnresolvedName
 		if expr.Tuple {
 			n := 0
 			if s, ok := newExpr.(*subquery); ok {
-				newExpr = s.typ
+				newExpr = s.typ.Exemplar()
 			}
 			switch t := newExpr.(type) {
 			case *parser.Tuple:
@@ -387,7 +387,7 @@ func (p *planner) namesForExprs(exprs parser.UpdateExprs) (parser.UnresolvedName
 }
 
 func fillDefault(
-	expr parser.Expr, desired parser.Datum, index int, defaultExprs []parser.TypedExpr,
+	expr parser.Expr, desired parser.Type, index int, defaultExprs []parser.TypedExpr,
 ) parser.Expr {
 	switch expr.(type) {
 	case parser.DefaultVal:

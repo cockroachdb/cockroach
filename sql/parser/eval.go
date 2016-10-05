@@ -50,8 +50,8 @@ const secondsInDay = 24 * 60 * 60
 
 // UnaryOp is a unary operator.
 type UnaryOp struct {
-	Typ        Datum
-	ReturnType Datum
+	Typ        Type
+	ReturnType Type
 	fn         func(*EvalContext, Datum) (Datum, error)
 	types      typeList
 }
@@ -60,7 +60,7 @@ func (op UnaryOp) params() typeList {
 	return op.types
 }
 
-func (op UnaryOp) returnType() Datum {
+func (op UnaryOp) returnType() Type {
 	return op.ReturnType
 }
 
@@ -146,9 +146,9 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 
 // BinOp is a binary operator.
 type BinOp struct {
-	LeftType   Datum
-	RightType  Datum
-	ReturnType Datum
+	LeftType   Type
+	RightType  Type
+	ReturnType Type
 	fn         func(*EvalContext, Datum, Datum) (Datum, error)
 	types      typeList
 }
@@ -157,11 +157,11 @@ func (op BinOp) params() typeList {
 	return op.types
 }
 
-func (op BinOp) matchParams(l, r Datum) bool {
+func (op BinOp) matchParams(l, r Type) bool {
 	return op.params().matchAt(l, 0) && op.params().matchAt(r, 1)
 }
 
-func (op BinOp) returnType() Datum {
+func (op BinOp) returnType() Type {
 	return op.ReturnType
 }
 
@@ -181,7 +181,7 @@ func init() {
 // binOpOverload is an overloaded set of binary operator implementations.
 type binOpOverload []BinOp
 
-func (o binOpOverload) lookupImpl(left, right Datum) (BinOp, bool) {
+func (o binOpOverload) lookupImpl(left, right Type) (BinOp, bool) {
 	for _, fn := range o {
 		if fn.matchParams(left, right) {
 			return fn, true
@@ -830,8 +830,8 @@ func init() {
 
 // CmpOp is a comparison operator.
 type CmpOp struct {
-	LeftType  Datum
-	RightType Datum
+	LeftType  Type
+	RightType Type
 	fn        func(*EvalContext, Datum, Datum) (DBool, error)
 	types     typeList
 }
@@ -840,11 +840,11 @@ func (op CmpOp) params() typeList {
 	return op.types
 }
 
-func (op CmpOp) matchParams(l, r Datum) bool {
+func (op CmpOp) matchParams(l, r Type) bool {
 	return op.params().matchAt(l, 0) && op.params().matchAt(r, 1)
 }
 
-func (op CmpOp) returnType() Datum {
+func (op CmpOp) returnType() Type {
 	return TypeBool
 }
 
@@ -864,7 +864,7 @@ func init() {
 // cmpOpOverload is an overloaded set of comparison operator implementations.
 type cmpOpOverload []CmpOp
 
-func (o cmpOpOverload) lookupImpl(left, right Datum) (CmpOp, bool) {
+func (o cmpOpOverload) lookupImpl(left, right Type) (CmpOp, bool) {
 	for _, fn := range o {
 		if fn.matchParams(left, right) {
 			return fn, true
@@ -1403,9 +1403,9 @@ func cmpTuple(ldatum, rdatum Datum) (int, error) {
 	return 0, nil
 }
 
-func makeEvalTupleIn(d Datum) CmpOp {
+func makeEvalTupleIn(typ Type) CmpOp {
 	return CmpOp{
-		LeftType:  d,
+		LeftType:  typ,
 		RightType: TypeTuple,
 		fn: func(_ *EvalContext, arg, values Datum) (DBool, error) {
 			if arg == DNull {
@@ -1885,7 +1885,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("invalid cast: %s -> %s", d.Type(), expr.Type)
+	return nil, fmt.Errorf("invalid cast: %s -> %s", d.ReturnType(), expr.Type)
 }
 
 // Eval implements the TypedExpr interface.
@@ -1962,7 +1962,7 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 		args = append(args, arg)
 	}
 
-	if !expr.fn.Types.match(ArgTypes(args)) {
+	if !expr.fn.Types.match(ArgTypes(args.ReturnType().(TTuple))) {
 		// The argument types no longer match the memoized function. This happens
 		// when a non-NULL argument becomes NULL and the function does not support
 		// NULL arguments. For example, "SELECT LOWER(col) FROM TABLE" where col is
@@ -2278,22 +2278,21 @@ func (t *DTuple) Eval(_ *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
-func (t *DPlaceholder) Eval(_ *EvalContext) (Datum, error) {
-	return t, fmt.Errorf("no value provided for placeholder: $%s", t.name)
+func (node *Placeholder) Eval(_ *EvalContext) (Datum, error) {
+	return nil, fmt.Errorf("no value provided for placeholder: $%s", node.Name)
 }
 
 func evalComparison(ctx *EvalContext, op ComparisonOperator, left, right Datum) (Datum, error) {
 	if left == DNull || right == DNull {
 		return DNull, nil
 	}
-
-	if fn, ok := CmpOps[op].lookupImpl(left, right); ok {
+	ltype := left.ReturnType()
+	rtype := right.ReturnType()
+	if fn, ok := CmpOps[op].lookupImpl(ltype, rtype); ok {
 		v, err := fn.fn(ctx, left, right)
 		return MakeDBool(v), err
 	}
-
-	return nil, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>",
-		left.Type(), op, right.Type())
+	return nil, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>", ltype, op, rtype)
 }
 
 // foldComparisonExpr folds a given comparison operation and its expressions
@@ -2538,7 +2537,7 @@ func anchorPattern(pattern string, caseInsensitive bool) string {
 // FindEqualComparisonFunction looks up an overload of the "=" operator
 // for a given pair of input operand types.
 func FindEqualComparisonFunction(
-	leftType, rightType Datum,
+	leftType, rightType Type,
 ) (func(*EvalContext, Datum, Datum) (DBool, error), bool) {
 	fn, found := CmpOps[EQ].lookupImpl(leftType, rightType)
 	if found {

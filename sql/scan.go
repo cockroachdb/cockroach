@@ -377,8 +377,8 @@ func (n *scanNode) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datu
 	return n.row[idx].Eval(ctx)
 }
 
-func (n *scanNode) IndexedVarReturnType(idx int) parser.Datum {
-	return n.resultColumns[idx].Typ.ReturnType()
+func (n *scanNode) IndexedVarReturnType(idx int) parser.Type {
+	return n.resultColumns[idx].Typ
 }
 
 func (n *scanNode) IndexedVarFormat(buf *bytes.Buffer, _ parser.FmtFlags, idx int) {
