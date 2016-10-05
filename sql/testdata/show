@@ -19,3 +19,9 @@ query TTTT colnames
 HELP missing
 ----
 Function    Signature                           Category            Details
+
+query TTTT colnames
+HELP LEAST
+----
+Function    Signature                           Category            Details
+least       <T>... -> <T>                       Comparison
