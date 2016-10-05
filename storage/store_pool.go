@@ -56,8 +56,9 @@ const (
 	defaultDeclinedReservationsTimeout = 0 * time.Second
 
 	// defaultReserveRPCTimeout is used for the rpc calls to Reserve on other
-	// nodes. It should be short as this may block calls to ChangeReplicas.
-	defaultReserveRPCTimeout = 1 * time.Second
+	// nodes. It should be short as this may block calls to ChangeReplicas,
+	// but not too short (avoiding test flakiness).
+	defaultReserveRPCTimeout = 8 * time.Second
 )
 
 type storeDetail struct {
@@ -581,7 +582,7 @@ func (sp *StorePool) reserve(
 			log.Infof(sp.ctx, "reservation failed, store:%s will be throttled for %s until %s",
 				toStoreID, sp.failedReservationsTimeout, detail.throttledUntil)
 		}
-		return errors.Wrapf(err, "reservation failed:%+v", req)
+		return errors.Wrapf(err, "reservation failed: %+v", req)
 	}
 
 	detail.desc.Capacity.RangeCount = resp.RangeCount
