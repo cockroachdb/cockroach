@@ -1324,7 +1324,7 @@ var_value:
 | numeric_only
 | PLACEHOLDER
   {
-    $$.val = Placeholder{Name: $1}
+    $$.val = NewPlaceholder($1)
   }
 
 iso_level:
@@ -3649,7 +3649,7 @@ c_expr:
 | a_expr_const
 | PLACEHOLDER
   {
-    $$.val = Placeholder{Name: $1}
+    $$.val = NewPlaceholder($1)
   }
 | '(' a_expr ')'
   {

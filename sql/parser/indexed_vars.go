@@ -25,7 +25,7 @@ import (
 // String for IndexedVars.
 type IndexedVarContainer interface {
 	IndexedVarEval(idx int, ctx *EvalContext) (Datum, error)
-	IndexedVarReturnType(idx int) Datum
+	IndexedVarReturnType(idx int) Type
 	IndexedVarFormat(buf *bytes.Buffer, f FmtFlags, idx int)
 }
 
@@ -49,7 +49,7 @@ func (v *IndexedVar) Walk(_ Visitor) Expr {
 }
 
 // TypeCheck is part of the Expr interface.
-func (v *IndexedVar) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) {
+func (v *IndexedVar) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {
 	return v, nil
 }
 
@@ -59,7 +59,7 @@ func (v *IndexedVar) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // ReturnType is part of the TypedExpr interface.
-func (v *IndexedVar) ReturnType() Datum {
+func (v *IndexedVar) ReturnType() Type {
 	return v.container.IndexedVarReturnType(v.Idx)
 }
 

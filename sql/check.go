@@ -92,7 +92,7 @@ func (c *checkHelper) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.D
 }
 
 // IndexedVarReturnType implements the parser.IndexedVarContainer interface.
-func (c *checkHelper) IndexedVarReturnType(idx int) parser.Datum {
+func (c *checkHelper) IndexedVarReturnType(idx int) parser.Type {
 	return c.sourceInfo.sourceColumns[idx].Typ
 }
 

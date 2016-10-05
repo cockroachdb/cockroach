@@ -40,7 +40,7 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 
 	testCases := []struct {
 		str   string
-		avail []Datum
+		avail []Type
 	}{
 		{"1", wantInt},
 		{"0", wantInt},
@@ -79,12 +79,12 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 		for _, availType := range avail {
 			if res, err := c.ResolveAsType(&SemaContext{}, availType); err != nil {
 				t.Errorf("%d: expected resolving %v as available type %s would succeed, found %v",
-					i, c.Value.ExactString(), availType.Type(), err)
+					i, c.Value.ExactString(), availType, err)
 			} else {
 				resErr := func(parsed, resolved interface{}) {
 					t.Errorf("%d: expected resolving %v as available type %s would produce a Datum"+
 						" with the value %v, found %v",
-						i, c, availType.Type(), parsed, resolved)
+						i, c, availType, parsed, resolved)
 				}
 				switch typ := res.(type) {
 				case *DInt:
@@ -144,7 +144,7 @@ func TestStringConstantVerifyAvailableTypes(t *testing.T) {
 
 	testCases := []struct {
 		c     *StrVal
-		avail []Datum
+		avail []Type
 	}{
 		{&StrVal{s: "abc 世界", bytesEsc: false}, wantStringButCanBeAll},
 		{&StrVal{s: "2010-09-28", bytesEsc: false}, wantStringButCanBeAll},
@@ -174,7 +174,7 @@ func TestStringConstantVerifyAvailableTypes(t *testing.T) {
 					// throw a failure.
 					t.Errorf("%d: expected resolving %v as available type %s would either succeed"+
 						" or throw a parsing error, found %v",
-						i, test.c, availType.Type(), err)
+						i, test.c, availType, err)
 				}
 			}
 		}
@@ -280,7 +280,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 
 		// Make sure it can be resolved as each of those types or throws a parsing error.
 		for _, availType := range test.c.AvailableTypes() {
-			typeName := availType.Type()
+			typeName := availType.String()
 			res, err := test.c.ResolveAsType(&SemaContext{}, availType)
 			if err != nil {
 				if !strings.Contains(err.Error(), "could not parse") {
@@ -288,7 +288,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 					// parseable types will be verified. Any other error should throw a failure.
 					t.Errorf("%d: expected resolving %v as available type %s would either succeed"+
 						" or throw a parsing error, found %v",
-						i, test.c, availType.Type(), err)
+						i, test.c, typeName, err)
 				}
 				continue
 			}

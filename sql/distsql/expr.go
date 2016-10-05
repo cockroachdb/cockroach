@@ -35,7 +35,7 @@ type valArgsConvert struct {
 }
 
 func (v *valArgsConvert) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
-	if val, ok := expr.(parser.Placeholder); ok {
+	if val, ok := expr.(*parser.Placeholder); ok {
 		idx, err := strconv.Atoi(val.Name)
 		if err != nil || idx < 0 || idx >= v.h.NumVars() {
 			v.err = errors.Errorf("invalid variable index %s", val.Name)
@@ -104,7 +104,7 @@ func (eh *exprHelper) String() string {
 var _ parser.IndexedVarContainer = &exprHelper{}
 
 // IndexedVarReturnType is part of the parser.IndexedVarContainer interface.
-func (eh *exprHelper) IndexedVarReturnType(idx int) parser.Datum {
+func (eh *exprHelper) IndexedVarReturnType(idx int) parser.Type {
 	return eh.types[idx].ToDatumType()
 }
 

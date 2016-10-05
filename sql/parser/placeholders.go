@@ -19,7 +19,7 @@ package parser
 import "fmt"
 
 // PlaceholderTypes relates placeholder names to their resolved type.
-type PlaceholderTypes map[string]Datum
+type PlaceholderTypes map[string]Type
 
 // QueryArguments relates placeholder names to their provided query argument.
 type QueryArguments map[string]Datum
@@ -55,7 +55,7 @@ func (p *PlaceholderInfo) Assign(src *PlaceholderInfo) {
 
 // Type returns the known type of a placeholder.
 // Returns false in the 2nd value if the placeholder is not typed.
-func (p *PlaceholderInfo) Type(name string) (Datum, bool) {
+func (p *PlaceholderInfo) Type(name string) (Type, bool) {
 	if t, ok := p.Types[name]; ok {
 		return t, true
 	}
@@ -86,9 +86,9 @@ func (p *PlaceholderInfo) SetValue(name string, val Datum) {
 
 // SetType assignes a known type to a placeholder.
 // Reports an error if another type was previously assigned.
-func (p *PlaceholderInfo) SetType(name string, typ Datum) error {
-	if t, ok := p.Types[name]; ok && !typ.TypeEqual(t) {
-		return fmt.Errorf("placeholder %s already has type %s, cannot assign %s", name, t.Type(), typ.Type())
+func (p *PlaceholderInfo) SetType(name string, typ Type) error {
+	if t, ok := p.Types[name]; ok && !typ.Equal(t) {
+		return fmt.Errorf("placeholder %s already has type %s, cannot assign %s", name, t, typ)
 	}
 	p.Types[name] = typ
 	return nil
@@ -113,7 +113,7 @@ func (p *PlaceholderInfo) SetTypes(src PlaceholderTypes) {
 // expression or a placeholder expression within nested parentheses, and if so,
 // whether the placeholder's type remains unset in the PlaceholderInfo.
 func (p *PlaceholderInfo) IsUnresolvedPlaceholder(expr Expr) bool {
-	if t, ok := StripParens(expr).(Placeholder); ok {
+	if t, ok := StripParens(expr).(*Placeholder); ok {
 		_, res := p.Types[t.Name]
 		return !res
 	}
