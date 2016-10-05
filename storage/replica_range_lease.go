@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/protoutil"
 	"github.com/pkg/errors"
 )
@@ -118,12 +119,15 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			Lease: reqLease,
 		}
 	}
-	if replica.store.Stopper().RunAsyncTask(replica.store.Ctx(), func(ctx context.Context) {
+	if replica.store.Stopper().RunAsyncTask(replica.ctx, func(ctx context.Context) {
 		// Propose a RequestLease command and wait for it to apply.
 		ba := roachpb.BatchRequest{}
 		ba.Timestamp = replica.store.Clock().Now()
 		ba.RangeID = replica.RangeID
 		ba.Add(leaseReq)
+		if log.V(2) {
+			log.Infof(ctx, "sending lease request %v", leaseReq)
+		}
 		_, pErr := replica.Send(ctx, ba)
 
 		// Send result of lease to all waiter channels.
