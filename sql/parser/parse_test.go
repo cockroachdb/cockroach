@@ -327,6 +327,19 @@ func TestParse(t *testing.T) {
 		{`SELECT 'a' FROM t@{NO_INDEX_JOIN}`},
 		{`SELECT 'a' FROM t@{FORCE_INDEX=bar,NO_INDEX_JOIN}`},
 
+		{`SELECT '1':::INT`},
+
+		{`SELECT '1'::INT`},
+		{`SELECT BOOL 'foo'`},
+		{`SELECT INT 'foo'`},
+		{`SELECT REAL 'foo'`},
+		{`SELECT DECIMAL 'foo'`},
+		{`SELECT DATE 'foo'`},
+		{`SELECT TIMESTAMP 'foo'`},
+		{`SELECT TIMESTAMP WITH TIME ZONE 'foo'`},
+		{`SELECT INTERVAL 'foo'`},
+		{`SELECT CHAR 'foo'`},
+
 		{`SELECT 'a' AS "12345"`},
 		{`SELECT 'a' AS clnm`},
 
@@ -585,17 +598,8 @@ func TestParse2(t *testing.T) {
 			`CREATE TABLE a (b INT, CONSTRAINT foo UNIQUE (b) INTERLEAVE IN PARENT c (d))`},
 		{`CREATE INDEX ON a (b) COVERING (c)`, `CREATE INDEX ON a (b) STORING (c)`},
 
-		{`SELECT BOOL 'foo'`, `SELECT CAST('foo' AS BOOL)`},
-		{`SELECT INT 'foo'`, `SELECT CAST('foo' AS INT)`},
-		{`SELECT REAL 'foo'`, `SELECT CAST('foo' AS REAL)`},
-		{`SELECT DECIMAL 'foo'`, `SELECT CAST('foo' AS DECIMAL)`},
-		{`SELECT DATE 'foo'`, `SELECT CAST('foo' AS DATE)`},
-		{`SELECT TIMESTAMP 'foo'`, `SELECT CAST('foo' AS TIMESTAMP)`},
-		{`SELECT TIMESTAMP WITHOUT TIME ZONE 'foo'`, `SELECT CAST('foo' AS TIMESTAMP)`},
+		{`SELECT TIMESTAMP WITHOUT TIME ZONE 'foo'`, `SELECT TIMESTAMP 'foo'`},
 		{`SELECT CAST('foo' AS TIMESTAMP WITHOUT TIME ZONE)`, `SELECT CAST('foo' AS TIMESTAMP)`},
-		{`SELECT TIMESTAMP WITH TIME ZONE 'foo'`, `SELECT CAST('foo' AS TIMESTAMP WITH TIME ZONE)`},
-		{`SELECT INTERVAL 'foo'`, `SELECT CAST('foo' AS INTERVAL)`},
-		{`SELECT CHAR 'foo'`, `SELECT CAST('foo' AS CHAR)`},
 
 		{`SELECT 'a' FROM t@{FORCE_INDEX=bar}`, `SELECT 'a' FROM t@bar`},
 		{`SELECT 'a' FROM t@{NO_INDEX_JOIN,FORCE_INDEX=bar}`,
@@ -684,12 +688,6 @@ func TestParse2(t *testing.T) {
 		// We allow OFFSET before LIMIT, but always output LIMIT first.
 		{`SELECT a FROM t OFFSET a LIMIT b`,
 			`SELECT a FROM t LIMIT b OFFSET a`},
-		// Shorthand type cast.
-		{`SELECT '1'::INT`,
-			`SELECT CAST('1' AS INT)`},
-		// Shorthand type annotation.
-		{`SELECT '1':::INT`,
-			`SELECT ANNOTATE_TYPE('1', INT)`},
 		// Double negation. See #1800.
 		{`SELECT *,-/* comment */-5`,
 			`SELECT *, - (- 5)`},

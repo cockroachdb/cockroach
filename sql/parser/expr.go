@@ -896,21 +896,47 @@ func (node *When) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, node.Val)
 }
 
+type castSyntaxMode int
+
+const (
+	castExplicit castSyntaxMode = iota
+	castShort
+	castPrefix
+	castPrefixParens
+)
+
 // CastExpr represents a CAST(expr AS type) expression.
 type CastExpr struct {
 	Expr Expr
 	Type ColumnType
 
 	typeAnnotation
+	syntaxMode castSyntaxMode
 }
 
 // Format implements the NodeFormatter interface.
 func (node *CastExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("CAST(")
-	FormatNode(buf, f, node.Expr)
-	buf.WriteString(" AS ")
-	FormatNode(buf, f, node.Type)
-	buf.WriteByte(')')
+	switch node.syntaxMode {
+	case castShort:
+		FormatNode(buf, f, node.Expr)
+		buf.WriteString("::")
+		FormatNode(buf, f, node.Type)
+	case castPrefix:
+		FormatNode(buf, f, node.Type)
+		buf.WriteByte(' ')
+		FormatNode(buf, f, node.Expr)
+	case castPrefixParens:
+		FormatNode(buf, f, node.Type)
+		buf.WriteString(" (")
+		FormatNode(buf, f, node.Expr)
+		buf.WriteByte(')')
+	default:
+		buf.WriteString("CAST(")
+		FormatNode(buf, f, node.Expr)
+		buf.WriteString(" AS ")
+		FormatNode(buf, f, node.Type)
+		buf.WriteByte(')')
+	}
 }
 
 var (
@@ -955,21 +981,36 @@ func (node *CastExpr) castTypeAndValidArgTypes() (Datum, []Datum) {
 	return colTypeToTypeAndValidArgTypes(node.Type)
 }
 
+type annotateSyntaxMode int
+
+const (
+	annotateExplicit annotateSyntaxMode = iota
+	annotateShort
+)
+
 // AnnotateTypeExpr represents a ANNOTATE_TYPE(expr, type) expression.
 type AnnotateTypeExpr struct {
 	Expr Expr
 	Type ColumnType
 
 	typeAnnotation
+	syntaxMode annotateSyntaxMode
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AnnotateTypeExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ANNOTATE_TYPE(")
-	FormatNode(buf, f, node.Expr)
-	buf.WriteString(", ")
-	FormatNode(buf, f, node.Type)
-	buf.WriteByte(')')
+	switch node.syntaxMode {
+	case annotateShort:
+		FormatNode(buf, f, node.Expr)
+		buf.WriteString(":::")
+		FormatNode(buf, f, node.Type)
+	default:
+		buf.WriteString("ANNOTATE_TYPE(")
+		FormatNode(buf, f, node.Expr)
+		buf.WriteString(", ")
+		FormatNode(buf, f, node.Type)
+		buf.WriteByte(')')
+	}
 }
 
 // TypedInnerExpr returns the AnnotateTypeExpr's inner expression as a TypedExpr.
