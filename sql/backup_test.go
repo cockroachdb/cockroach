@@ -36,15 +36,14 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql"
 	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/randutil"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
@@ -53,12 +52,21 @@ import (
 )
 
 const (
+	backupRestoreClusterSize    = 3
 	backupRestoreDefaultRanges  = 10
 	backupRestoreRowPayloadSize = 100
+
+	bankCreateDatabase = `CREATE DATABASE bench`
+	bankCreateTable    = `CREATE TABLE bench.bank (
+		id INT PRIMARY KEY,
+		balance INT,
+		payload STRING,
+		FAMILY (id, balance, payload)
+	)`
 )
 
 func testingTempDir(t testing.TB, depth int) (string, func()) {
-	_, _, name := caller.Lookup(depth)
+	_, _, name := caller.Lookup(depth + 1)
 	dir, err := ioutil.TempDir("", name)
 	if err != nil {
 		t.Fatal(err)
@@ -117,26 +125,10 @@ func TestIntersectHalfOpen(t *testing.T) {
 	}
 }
 
-// setupBackupRestoreDB creates a table and inserts `count` rows. It then splits
-// the kv ranges for the table as evenly as possible into `rangeCount` ranges.
-func setupBackupRestoreDB(
-	t testing.TB, ctx context.Context, tc *testcluster.TestCluster, count int, rangeCount int,
-) []*roachpb.RangeDescriptor {
+func bankDataInsertStmts(count int) []string {
 	rng, _ := randutil.NewPseudoRand()
 
-	sqlDB := tc.Conns[0]
-	kvDB := tc.Server(0).KVClient().(*client.DB)
-	if _, err := sqlDB.Exec(`CREATE DATABASE bench`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := sqlDB.Exec(`CREATE TABLE bench.bank (
-		id INT PRIMARY KEY,
-		balance INT,
-		payload STRING,
-		FAMILY (id, balance, payload)
-	)`); err != nil {
-		t.Fatal(err)
-	}
+	var statements []string
 	var insert bytes.Buffer
 	for i := 0; i < count; i += 1000 {
 		insert.Reset()
@@ -148,131 +140,128 @@ func setupBackupRestoreDB(
 			payload := randutil.RandBytes(rng, backupRestoreRowPayloadSize)
 			fmt.Fprintf(&insert, `(%d, %d, '%s')`, j, 0, payload)
 		}
-		if _, err := sqlDB.Exec(insert.String()); err != nil {
-			t.Fatal(err)
-		}
+		statements = append(statements, insert.String())
 	}
-
-	if rangeCount > count {
-		t.Fatalf("cannot create %d ranges out of %d rows", rangeCount, count)
-	}
-
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "bench", "bank")
-	tablePrimaryKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
-	tableColMap := map[sqlbase.ColumnID]int{tableDesc.Columns[0].ID: 0}
-	row := make([]parser.Datum, 1)
-	ranges := make([]*roachpb.RangeDescriptor, rangeCount)
-	for i, incr := 1, count/rangeCount; i < rangeCount; i++ {
-		row[0] = parser.NewDInt(parser.DInt(i * incr))
-		splitKey, _, err := sqlbase.EncodeIndexKey(
-			tableDesc, &tableDesc.PrimaryIndex, tableColMap, row, tablePrimaryKeyPrefix)
-		if err != nil {
-			t.Fatal(err)
-		}
-		splitKey = keys.MakeRowSentinelKey(splitKey)
-		util.SucceedsSoon(t, func() error {
-			log.Infof(ctx, "splitting at %x %s", splitKey, roachpb.Key(splitKey))
-			ranges[i-1], ranges[i], err = tc.SplitRange(splitKey)
-			if err != nil {
-				log.Infof(ctx, "error splitting: %s", err)
-			}
-			return err
-		})
-	}
-	return ranges
+	return statements
 }
 
-func setupReplicationAndLeases(
-	t testing.TB, tc *testcluster.TestCluster, ranges []*roachpb.RangeDescriptor, clusterSize int,
+func bankSplitStmts(numAccounts int, numRanges int) []string {
+	var statements []string
+	for i, incr := 1, numAccounts/numRanges; i < numRanges; i++ {
+		s := fmt.Sprintf(`ALTER TABLE bench.bank SPLIT AT (%d)`, i*incr)
+		statements = append(statements, s)
+	}
+	return statements
+}
+
+func rebalanceLeases(t testing.TB, tc *testcluster.TestCluster) {
+	kvDB := tc.Server(0).KVClient().(*client.DB)
+	txn := client.NewTxn(context.Background(), *kvDB)
+	rangeDescs, err := sql.AllRangeDescriptors(txn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rangeDescs {
+		target := tc.Target(int(r.RangeID) % tc.NumServers())
+		if err := tc.TransferRangeLease(&r, target); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func backupRestoreTestSetup(
+	t testing.TB, numAccounts int,
+) (
+	ctx context.Context,
+	tempDir string,
+	tc *testcluster.TestCluster,
+	kvDB *client.DB,
+	sqlDB *sqlutils.SQLRunner,
+	cleanup func(),
 ) {
-	targets := make([]testcluster.ReplicationTarget, clusterSize-1)
-	for i := 1; i < clusterSize; i++ {
-		targets[i-1] = tc.Target(i)
+	ctx = context.Background()
+
+	dir, dirCleanupFn := testingTempDir(t, 1)
+
+	// Use ReplicationManual so we can force full replication, which is needed
+	// to later move the leases around.
+	tc = testcluster.StartTestCluster(t, backupRestoreClusterSize, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	sqlDB = sqlutils.MakeSQLRunner(t, tc.Conns[0])
+	kvDB = tc.Server(0).KVClient().(*client.DB)
+
+	sqlDB.Exec(bankCreateDatabase)
+	sqlDB.Exec(bankCreateTable)
+	for _, insert := range bankDataInsertStmts(numAccounts) {
+		sqlDB.Exec(insert)
+	}
+	for _, split := range bankSplitStmts(numAccounts, backupRestoreDefaultRanges) {
+		sqlDB.Exec(split)
 	}
 
-	for _, r := range ranges {
+	targets := make([]testcluster.ReplicationTarget, backupRestoreClusterSize-1)
+	for i := 1; i < backupRestoreClusterSize; i++ {
+		targets[i-1] = tc.Target(i)
+	}
+	txn := client.NewTxn(ctx, *kvDB)
+	rangeDescs, err := sql.AllRangeDescriptors(txn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rangeDescs {
 		if _, err := tc.AddReplicas(r.StartKey.AsRawKey(), targets...); err != nil {
 			t.Fatal(err)
 		}
-		if err := tc.TransferRangeLease(r, tc.Target(int(r.RangeID)%clusterSize)); err != nil {
-			t.Fatal(err)
-		}
 	}
+
+	cleanupFn := func() {
+		tc.Stopper().Stop()
+		dirCleanupFn()
+	}
+
+	return ctx, dir, tc, kvDB, sqlDB, cleanupFn
 }
 
 func TestBackupRestoreOnce(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
 	defer sql.TestDisableTableLeases()()
+	const numAccounts = 1000
 
-	dir, cleanupFn := testingTempDir(t, 1)
+	ctx, dir, tc, kvDB, _, cleanupFn := backupRestoreTestSetup(t, numAccounts)
 	defer cleanupFn()
 
-	const clusterSize = 3
-	const count = 1000
-
 	{
-		tc := testcluster.StartTestCluster(t, clusterSize, base.TestClusterArgs{
-			ReplicationMode: base.ReplicationAuto,
-			ServerArgs:      base.TestServerArgs{},
-		})
-		defer tc.Stopper().Stop()
-		sqlDB := tc.Conns[0]
-		kvDB := tc.Server(0).KVClient().(*client.DB)
-
-		_ = setupBackupRestoreDB(t, ctx, tc, count, backupRestoreDefaultRanges)
-
 		desc, err := sql.Backup(ctx, *kvDB, dir, tc.Server(0).Clock().Now())
 		if err != nil {
 			t.Fatal(err)
 		}
-		approxDataSize := int64(backupRestoreRowPayloadSize) * count
+		approxDataSize := int64(backupRestoreRowPayloadSize) * numAccounts
 		if max := approxDataSize * 2; desc.DataSize < approxDataSize || desc.DataSize > 2*max {
 			t.Errorf("expected data size in [%d,%d] but was %d", approxDataSize, max, desc.DataSize)
-		}
-
-		if _, err := sqlDB.Exec(`TRUNCATE bench.bank`); err != nil {
-			t.Fatal(err)
-		}
-
-		var rowCount int
-		if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount); err != nil {
-			t.Fatal(err)
-		}
-
-		if rowCount != 0 {
-			t.Fatalf("expected 0 rows but found %d", rowCount)
 		}
 	}
 
 	// Start a new cluster to restore into.
 	{
-		tc := testcluster.StartTestCluster(t, clusterSize, base.TestClusterArgs{
-			ReplicationMode: base.ReplicationAuto,
-			ServerArgs:      base.TestServerArgs{},
-		})
-		defer tc.Stopper().Stop()
-		sqlDB := tc.Conns[0]
-		kvDB := tc.Server(0).KVClient().(*client.DB)
+		tcRestore := testcluster.StartTestCluster(t, backupRestoreClusterSize, base.TestClusterArgs{})
+		defer tcRestore.Stopper().Stop()
+		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
+		kvDBRestore := tcRestore.Server(0).KVClient().(*client.DB)
 
-		// Force the Restore to rekey.
-		if _, err := sqlDB.Exec(`CREATE DATABASE bench; CREATE TABLE bench.bank (a INT);`); err != nil {
-			t.Fatal(err)
-		}
+		// Restore assumes the database exists.
+		sqlDBRestore.Exec(bankCreateDatabase)
 
 		table := parser.TableName{DatabaseName: "bench", TableName: "bank"}
-		if _, err := sql.Restore(ctx, *kvDB, dir, table); err != nil {
+		if _, err := sql.Restore(ctx, *kvDBRestore, dir, table); err != nil {
 			t.Fatal(err)
 		}
 
 		var rowCount int
-		if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount); err != nil {
-			t.Fatal(err)
-		}
-
-		if rowCount != count {
-			t.Fatalf("expected %d rows but found %d", count, rowCount)
+		sqlDBRestore.QueryRow(`SELECT COUNT(*) FROM bench.bank`).Scan(&rowCount)
+		if rowCount != numAccounts {
+			t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
 		}
 	}
 }
@@ -313,30 +302,18 @@ func startBankTransfers(t testing.TB, stopper *stop.Stopper, sqlDB *gosql.DB, nu
 
 func TestBackupRestoreBank(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
 	defer sql.TestDisableTableLeases()()
 
-	baseDir, cleanupFn := testingTempDir(t, 1)
-	defer cleanupFn()
-
-	const clusterSize = 3
 	const numAccounts = 10
 	const backupRestoreIterations = 10
 
-	tc := testcluster.StartTestCluster(t, clusterSize, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationAuto,
-		ServerArgs:      base.TestServerArgs{},
-	})
-	stopper := tc.Stopper()
-	defer stopper.Stop()
-	sqlDB := tc.Conns[0]
-	kvDB := tc.Server(0).KVClient().(*client.DB)
+	ctx, baseDir, tc, kvDB, sqlDB, cleanupFn := backupRestoreTestSetup(t, numAccounts)
+	defer cleanupFn()
 
-	_ = setupBackupRestoreDB(t, ctx, tc, numAccounts, backupRestoreDefaultRanges)
-
-	stopper.RunWorker(func() {
-		startBankTransfers(t, stopper, sqlDB, numAccounts)
+	tc.Stopper().RunWorker(func() {
+		// Use a different sql gateway to make sure leasing is right.
+		startBankTransfers(t, tc.Stopper(), tc.Conns[len(tc.Conns)-1], numAccounts)
 	})
 
 	// Loop continually doing backup and restores while the bank transfers are
@@ -357,10 +334,7 @@ func TestBackupRestoreBank(t *testing.T) {
 
 		var newSquaresSum int64
 		util.SucceedsSoon(t, func() error {
-			if err := sqlDB.QueryRow(`SELECT SUM(balance*balance) FROM bench.bank`).Scan(&newSquaresSum); err != nil {
-				return err
-			}
-
+			sqlDB.QueryRow(`SELECT SUM(balance*balance) FROM bench.bank`).Scan(&newSquaresSum)
 			if squaresSum == newSquaresSum {
 				return errors.Errorf("squared deviation didn't change, still %d", newSquaresSum)
 			}
@@ -373,10 +347,7 @@ func TestBackupRestoreBank(t *testing.T) {
 		}
 
 		util.SucceedsSoon(t, func() error {
-			if err := sqlDB.QueryRow(`SELECT SUM(balance*balance) FROM bench.bank`).Scan(&newSquaresSum); err != nil {
-				return err
-			}
-
+			sqlDB.QueryRow(`SELECT SUM(balance*balance) FROM bench.bank`).Scan(&newSquaresSum)
 			if squaresSum == newSquaresSum {
 				return errors.Errorf("squared deviation didn't change, still %d", newSquaresSum)
 			}
@@ -385,78 +356,62 @@ func TestBackupRestoreBank(t *testing.T) {
 		squaresSum = newSquaresSum
 
 		var sum int64
-		if err := sqlDB.QueryRow(`SELECT SUM(balance) FROM bench.bank`).Scan(&sum); err != nil {
-			t.Fatal(err)
-		}
+		sqlDB.QueryRow(`SELECT SUM(balance) FROM bench.bank`).Scan(&sum)
 		if sum != 0 {
 			t.Fatalf("The bank is not in good order. Total value: %d", sum)
 		}
 	}
 }
 
-// TODO(dan): count=10000 has some issues replicating. Investigate.
-func BenchmarkClusterBackup_10(b *testing.B)   { runBenchmarkClusterBackup(b, 3, 10) }
-func BenchmarkClusterBackup_100(b *testing.B)  { runBenchmarkClusterBackup(b, 3, 100) }
-func BenchmarkClusterBackup_1000(b *testing.B) { runBenchmarkClusterBackup(b, 3, 1000) }
-func runBenchmarkClusterBackup(b *testing.B, clusterSize int, count int) {
+func BenchmarkClusterBackup(b *testing.B) {
 	defer tracing.Disable()()
-	ctx := context.Background()
 
-	tc := testcluster.StartTestCluster(b, clusterSize, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationManual,
-	})
-	defer tc.Stopper().Stop()
-	kvDB := tc.Server(0).KVClient().(*client.DB)
+	for _, numAccounts := range []int{10, 100, 1000, 10000} {
+		b.Run(strconv.Itoa(numAccounts), func(b *testing.B) {
+			ctx, dir, tc, kvDB, _, cleanupFn := backupRestoreTestSetup(b, numAccounts)
+			defer cleanupFn()
+			rebalanceLeases(b, tc)
 
-	ranges := setupBackupRestoreDB(b, ctx, tc, count, backupRestoreDefaultRanges)
-	setupReplicationAndLeases(b, tc, ranges, clusterSize)
-
-	dir, cleanupFn := testingTempDir(b, 2)
-	defer cleanupFn()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		desc, err := sql.Backup(ctx, *kvDB, dir, tc.Server(0).Clock().Now())
-		if err != nil {
-			b.Fatal(err)
-		}
-		b.SetBytes(desc.DataSize)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				desc, err := sql.Backup(ctx, *kvDB, dir, tc.Server(0).Clock().Now())
+				if err != nil {
+					b.Fatal(err)
+				}
+				b.SetBytes(desc.DataSize)
+			}
+		})
 	}
 }
 
-func BenchmarkClusterRestore_10(b *testing.B)    { runBenchmarkClusterRestore(b, 3, 10) }
-func BenchmarkClusterRestore_100(b *testing.B)   { runBenchmarkClusterRestore(b, 3, 100) }
-func BenchmarkClusterRestore_1000(b *testing.B)  { runBenchmarkClusterRestore(b, 3, 1000) }
-func BenchmarkClusterRestore_10000(b *testing.B) { runBenchmarkClusterRestore(b, 3, 10000) }
-func runBenchmarkClusterRestore(b *testing.B, clusterSize int, count int) {
+func BenchmarkClusterRestore(b *testing.B) {
 	defer tracing.Disable()()
-	ctx := context.Background()
 
-	tc := testcluster.StartTestCluster(b, clusterSize, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationManual,
-	})
-	defer tc.Stopper().Stop()
-	kvDB := tc.Server(0).KVClient().(*client.DB)
+	// TODO(dan): count=10000 has some issues replicating. Investigate.
+	for _, numAccounts := range []int{10, 100, 1000} {
+		b.Run(strconv.Itoa(numAccounts), func(b *testing.B) {
+			ctx, dir, tc, kvDB, _, cleanupFn := backupRestoreTestSetup(b, numAccounts)
+			defer cleanupFn()
 
-	ranges := setupBackupRestoreDB(b, ctx, tc, count, backupRestoreDefaultRanges)
+			// TODO(dan): Once mjibson's sql -> kv function is committed, use it
+			// here on the output of bankDataInsert to generate the backup data
+			// instead of this call.
+			desc, err := sql.Backup(ctx, *kvDB, dir, tc.Server(0).Clock().Now())
+			if err != nil {
+				b.Fatal(err)
+			}
+			b.SetBytes(desc.DataSize)
 
-	dir, cleanupFn := testingTempDir(b, 1)
-	defer cleanupFn()
+			rebalanceLeases(b, tc)
 
-	desc, err := sql.Backup(ctx, *kvDB, dir, tc.Server(0).Clock().Now())
-	if err != nil {
-		b.Fatal(err)
-	}
-	b.SetBytes(desc.DataSize)
-
-	setupReplicationAndLeases(b, tc, ranges, clusterSize)
-
-	b.ResetTimer()
-	table := parser.TableName{DatabaseName: "bench", TableName: "bank"}
-	for i := 0; i < b.N; i++ {
-		if _, err := sql.Restore(ctx, *kvDB, dir, table); err != nil {
-			b.Fatal(err)
-		}
+			b.ResetTimer()
+			table := parser.TableName{DatabaseName: "bench", TableName: "bank"}
+			for i := 0; i < b.N; i++ {
+				if _, err := sql.Restore(ctx, *kvDB, dir, table); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }
 
