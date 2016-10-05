@@ -113,6 +113,7 @@ message SnapshotResponse {
   }
   optional Status status = 1 [(gogoproto.nullable) = false];
   optional string message = 2 [(gogoproto.nullable) = false];
+  optional roachpb.StoreCapacity store_capacity = 3;
 }
 
 // ConfChangeContext is encoded in the raftpb.ConfChange.Context field.

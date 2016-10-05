@@ -172,7 +172,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.gossip,
 		s.clock,
 		s.rpcContext,
-		cfg.ReservationsEnabled,
 		cfg.TimeUntilStoreDead,
 		s.stopper,
 	)
@@ -305,7 +304,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 	storage.RegisterConsistencyServer(s.grpc, s.node.storesServer)
 	storage.RegisterFreezeServer(s.grpc, s.node.storesServer)
-	storage.RegisterReservationServer(s.grpc, s.node.storesServer)
 
 	s.admin = makeAdminServer(s)
 	s.status = newStatusServer(

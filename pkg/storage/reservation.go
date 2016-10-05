@@ -36,6 +36,18 @@ const (
 	defaultMaxReservedBytes = 250 << 20 // 250 MiB
 )
 
+// ReservationRequest represents a request for a replica reservation.
+type ReservationRequest struct {
+	StoreRequestHeader
+	RangeID   roachpb.RangeID
+	RangeSize int64
+}
+
+// ReservationResponse represents a response from the reservation system.
+type ReservationResponse struct {
+	Reserved bool
+}
+
 // reservation is an item in both the reservationQ and the used in bookie's
 // reservation map.
 type reservation struct {
@@ -115,8 +127,6 @@ func (b *bookie) Reserve(
 
 	resp := ReservationResponse{
 		Reserved: false,
-		RangeCount: int32(b.metrics.ReplicaCount.Count()) +
-			int32(len(b.mu.reservationsByRangeID)),
 	}
 
 	if olderReservation, ok := b.mu.reservationsByRangeID[req.RangeID]; ok {
