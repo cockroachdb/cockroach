@@ -3275,11 +3275,11 @@ a_expr:
   c_expr
 | a_expr TYPECAST typename
   {
-    $$.val = &CastExpr{Expr: $1.expr(), Type: $3.colType()}
+    $$.val = &CastExpr{Expr: $1.expr(), Type: $3.colType(), syntaxMode: castShort}
   }
 | a_expr TYPEANNOTATE typename
   {
-    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType()}
+    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType(), syntaxMode: annotateShort}
   }
 | a_expr COLLATE any_name { unimplemented() }
 | a_expr AT TIME ZONE a_expr %prec AT { unimplemented() }
@@ -3522,11 +3522,11 @@ b_expr:
   c_expr
 | b_expr TYPECAST typename
   {
-    $$.val = &CastExpr{Expr: $1.expr(), Type: $3.colType()}
+    $$.val = &CastExpr{Expr: $1.expr(), Type: $3.colType(), syntaxMode: castShort}
   }
 | b_expr TYPEANNOTATE typename
   {
-    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType()}
+    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType(), syntaxMode: annotateShort}
   }
 | '+' b_expr %prec UMINUS
   {
@@ -3760,11 +3760,11 @@ func_expr_common_subexpr:
 | USER { unimplemented() }
 | CAST '(' a_expr AS typename ')'
   {
-    $$.val = &CastExpr{Expr: $3.expr(), Type: $5.colType()}
+    $$.val = &CastExpr{Expr: $3.expr(), Type: $5.colType(), syntaxMode: castExplicit}
   }
 | ANNOTATE_TYPE '(' a_expr ',' typename ')'
   {
-    $$.val = &AnnotateTypeExpr{Expr: $3.expr(), Type: $5.colType()}
+    $$.val = &AnnotateTypeExpr{Expr: $3.expr(), Type: $5.colType(), syntaxMode: annotateExplicit}
   }
 | EXTRACT '(' extract_list ')'
   {
@@ -4470,15 +4470,15 @@ a_expr_const:
 | func_name '(' expr_list opt_sort_clause ')' SCONST { unimplemented() }
 | const_typename SCONST
   {
-    $$.val = &CastExpr{Expr: &StrVal{s: $2}, Type: $1.colType()}
+    $$.val = &CastExpr{Expr: &StrVal{s: $2}, Type: $1.colType(), syntaxMode: castPrefix}
   }
 | const_interval SCONST opt_interval
   {
-    $$.val = &CastExpr{Expr: &StrVal{s: $2}, Type: $1.colType()}
+    $$.val = &CastExpr{Expr: &StrVal{s: $2}, Type: $1.colType(), syntaxMode: castPrefix}
   }
 | const_interval '(' ICONST ')' SCONST
   {
-    $$.val = &CastExpr{Expr: &StrVal{s: $5}, Type: $1.colType()}
+    $$.val = &CastExpr{Expr: &StrVal{s: $5}, Type: $1.colType(), syntaxMode: castPrefixParens}
   }
 | TRUE
   {
