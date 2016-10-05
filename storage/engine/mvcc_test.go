@@ -1800,6 +1800,94 @@ func TestMVCCUncommittedDeleteRangeVisible(t *testing.T) {
 	}
 }
 
+func TestMVCCDeleteRangeInline(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	engine := createTestEngine(stopper)
+
+	// Make five inline values (zero timestamp).
+	if err := MVCCPut(context.Background(), engine, nil, testKey1, makeTS(0, 0), value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, makeTS(0, 0), value2, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, makeTS(0, 0), value3, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey4, makeTS(0, 0), value4, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey5, makeTS(0, 0), value5, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create one non-inline value (non-zero timestamp).
+	if err := MVCCPut(context.Background(), engine, nil, testKey6, makeTS(1, 0), value6, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Attempt to delete two inline keys, should succeed.
+	deleted, resumeSpan, num, err := MVCCDeleteRange(
+		context.Background(), engine, nil, testKey2, testKey6, 2, makeTS(0, 0), nil, true,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deleted) != 2 {
+		t.Fatal("the value should not be empty")
+	}
+	if num != 2 {
+		t.Fatalf("incorrect number of keys deleted: %d", num)
+	}
+	if expected, actual := testKey2, deleted[0]; !expected.Equal(actual) {
+		t.Fatalf("wrong key deleted: expected %v found %v", expected, actual)
+	}
+	if expected, actual := testKey3, deleted[1]; !expected.Equal(actual) {
+		t.Fatalf("wrong key deleted: expected %v found %v", expected, actual)
+	}
+	if expected := (roachpb.Span{Key: testKey4, EndKey: testKey6}); !resumeSpan.Equal(expected) {
+		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
+	}
+
+	// Attempt to delete inline keys at a timestamp; should fail.
+	_, _, _, err = MVCCDeleteRange(
+		context.Background(), engine, nil, testKey1, testKey6, 1, makeTS(2, 0), nil, true,
+	)
+	if err == nil {
+		t.Fatal("expected error attempting to delete inline keys at non-zero timestamp")
+	}
+	if !testutils.IsError(err, "inline") {
+		t.Fatalf("got error %s, expected error with text 'inline'", err)
+	}
+
+	// Attempt to delete non-inline key at zero timestamp; should fail.
+	_, _, _, err = MVCCDeleteRange(
+		context.Background(), engine, nil, testKey6, keyMax, 1, makeTS(0, 0), nil, true,
+	)
+	if err == nil {
+		t.Fatal("expected error attempting to delete non-inline keys at zero timestamp")
+	}
+	if !testutils.IsError(err, "inline") {
+		t.Fatalf("got error %s, expected error with text 'inline'", err)
+	}
+
+	// Verify final state of the engine.
+	kvs, _, _, _ := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, makeTS(2, 0), true, nil)
+	if len(kvs) != 4 ||
+		!bytes.Equal(kvs[0].Key, testKey1) ||
+		!bytes.Equal(kvs[1].Key, testKey4) ||
+		!bytes.Equal(kvs[2].Key, testKey5) ||
+		!bytes.Equal(kvs[3].Key, testKey6) ||
+		!bytes.Equal(kvs[0].Value.RawBytes, value1.RawBytes) ||
+		!bytes.Equal(kvs[1].Value.RawBytes, value4.RawBytes) ||
+		!bytes.Equal(kvs[2].Value.RawBytes, value5.RawBytes) ||
+		!bytes.Equal(kvs[3].Value.RawBytes, value6.RawBytes) {
+		t.Fatal("expected key values were incorrect in the engine.")
+	}
+}
+
 func TestMVCCConditionalPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()

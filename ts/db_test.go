@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/ts/tspb"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/gogo/protobuf/proto"
@@ -210,6 +211,41 @@ func (tm *testModel) storeTimeSeriesData(r Resolution, data []tspb.TimeSeriesDat
 	// Store data in the model.
 	for _, d := range data {
 		tm.storeInModel(r, d)
+	}
+}
+
+// prune time series from the model. The timestamp represents the current time,
+// and is used to compute threshold ages. Only time series in the provided list
+// of time series/resolution pairs will be considered for deletion.
+func (tm *testModel) prune(timestamp int64, timeSeries ...timeSeriesResolutionInfo) {
+	// Prune data from
+	if err := pruneTimeSeries(
+		context.TODO(),
+		tm.LocalTestCluster.DB,
+		timeSeries,
+		hlc.Timestamp{
+			WallTime: timestamp,
+			Logical:  0,
+		},
+	); err != nil {
+		tm.t.Fatalf("error pruning time series data: %s", err.Error())
+	}
+
+	thresholds := computeThresholds(timestamp)
+	for k := range tm.modelData {
+		name, _, r, ts, err := DecodeDataKey(roachpb.Key(k))
+		if err != nil {
+			tm.t.Fatalf("corrupt key %s found in model data, error: %v", k, err)
+		}
+		for _, tsr := range timeSeries {
+			threshold, ok := thresholds[r]
+			if !ok {
+				threshold = timestamp
+			}
+			if name == tsr.Name && r == tsr.Resolution && ts < threshold {
+				delete(tm.modelData, k)
+			}
+		}
 	}
 }
 

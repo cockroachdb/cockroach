@@ -62,6 +62,14 @@ var slabDurationByResolution = map[Resolution]int64{
 	resolution1ns: 10, // 1ns resolution only for tests.
 }
 
+// pruneAgeByResolution maintains a suggested maximum age per resolution; data
+// which is older than the given threshold for a resolution is considered
+// eligible for deletion. Thresholds are specified in nanoseconds.
+var pruneThresholdByResolution = map[Resolution]int64{
+	Resolution10s: int64(30 * 24 * time.Hour),
+	resolution1ns: int64(time.Second),
+}
+
 // SampleDuration returns the sample duration corresponding to this resolution
 // value, expressed in nanoseconds.
 func (r Resolution) SampleDuration() int64 {
