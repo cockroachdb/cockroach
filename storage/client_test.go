@@ -709,7 +709,6 @@ func (m *multiTestContext) addStore(idx int) {
 	storesServer := storage.MakeServer(m.nodeDesc(nodeID), stores)
 	storage.RegisterConsistencyServer(grpcServer, storesServer)
 	storage.RegisterFreezeServer(grpcServer, storesServer)
-	storage.RegisterReservationServer(grpcServer, storesServer)
 
 	// Add newly created objects to the multiTestContext's collections.
 	// (these must be populated before the store is started so that

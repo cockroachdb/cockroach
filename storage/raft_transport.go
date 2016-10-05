@@ -594,16 +594,18 @@ func (c snapshotClientWithBreaker) Recv() (*SnapshotResponse, error) {
 	return m, err
 }
 
-// SendSnapshot streams the given outgoing snapshot. The caller is responsible for closing the
-// OutgoingSnapshot with snap.Close.
+// SendSnapshot streams the given outgoing snapshot. The caller is responsible
+// for closing the OutgoingSnapshot with snap.Close.
 func (t *RaftTransport) SendSnapshot(
 	ctx context.Context,
+	storePool *StorePool,
 	header SnapshotRequest_Header,
 	snap *OutgoingSnapshot,
 	newBatch func() engine.Batch,
 ) error {
 	var stream MultiRaft_RaftSnapshotClient
 	nodeID := header.RaftMessageRequest.ToReplica.NodeID
+	storeID := header.RaftMessageRequest.ToReplica.StoreID
 	breaker := t.GetCircuitBreaker(nodeID)
 	if err := breaker.Call(func() error {
 		addr, err := t.resolver(nodeID)
@@ -626,6 +628,40 @@ func (t *RaftTransport) SendSnapshot(
 			breaker.Fail()
 		}
 	}()
+	if err := stream.Send(&SnapshotRequest{Header: &header}); err != nil {
+		return err
+	}
+	// Wait until we get a response from the server.
+	resp, err := stream.Recv()
+	if err != nil {
+		storePool.throttle(false, storeID)
+		return err
+	}
+	if resp.StoreCapacity != nil {
+		storePool.updateRemoteCapacityEstimate(storeID, *resp.StoreCapacity)
+	}
+	switch resp.Status {
+	case SnapshotResponse_DECLINED:
+		if header.CanDecline {
+			storePool.throttle(true, storeID)
+			return errors.Errorf("range=%s: remote declined snapshot: %s",
+				header.RangeDescriptor.RangeID, resp.Message)
+		}
+		storePool.throttle(false, storeID)
+		return errors.Errorf("range=%s: programming error: remote declined required snapshot: %s",
+			header.RangeDescriptor.RangeID, resp.Message)
+	case SnapshotResponse_ERROR:
+		storePool.throttle(false, storeID)
+		return errors.Errorf("range=%s: remote couldn't accept snapshot with error: %s",
+			header.RangeDescriptor.RangeID, resp.Message)
+	case SnapshotResponse_ACCEPTED:
+	// This is the response we're expecting. Continue with snapshot sending.
+	default:
+		storePool.throttle(false, storeID)
+		return errors.Errorf("range=%s: server sent an invalid status during negotiation: %s",
+			header.RangeDescriptor.RangeID, resp.Status)
+	}
+
 	return sendSnapshot(snapshotClientWithBreaker{
 		MultiRaft_RaftSnapshotClient: stream,
 		breaker: breaker,

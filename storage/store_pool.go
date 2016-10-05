@@ -23,7 +23,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/config"
@@ -523,79 +522,48 @@ func (sp *StorePool) getStoreList(
 	return sl, aliveStoreCount, throttledStoreCount
 }
 
-// reserve send a reservation request rpc to the node and store
-// based on the toStoreID. It returns an error if the reservation was not
-// successfully booked. When unsuccessful, the store is marked as having a
-// declined reservation so it will not be considered for up-replication or
-// rebalancing until after the configured timeout period has passed.
-// TODO(bram): consider moving the nodeID to the store pool during
-// NewStorePool.
-func (sp *StorePool) reserve(
-	curIdent roachpb.StoreIdent, toStoreID roachpb.StoreID, rangeID roachpb.RangeID, rangeSize int64,
-) error {
-	if !sp.reservationsEnabled {
-		return nil
-	}
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
-	detail, ok := sp.mu.stores[toStoreID]
+// throttle informs the store pool that the given remote store declined a
+// snapshot or failed to apply one, ensuring that it will not be considered
+// for up-replication or rebalancing until after the configured timeout period
+// has elapsed.
+func (sp *StorePool) throttle(declined bool, toStoreID roachpb.StoreID) {
+	store, ok := sp.mu.stores[toStoreID]
 	if !ok {
-		return errors.Errorf("store %d does not exist in the store pool", toStoreID)
+		log.Warningf(sp.ctx, "store %d does not exist in the store pool", toStoreID)
+		return
 	}
-	addr, err := sp.resolver(detail.desc.Node.NodeID)
-	if err != nil {
-		return err
-	}
-	conn, err := sp.rpcContext.GRPCDial(addr.String())
-	if err != nil {
-		return errors.Wrapf(err, "failed to dial store %+v, addr %q, node %+v", toStoreID, addr, detail.desc.Node)
-	}
-
-	client := NewReservationClient(conn)
-	req := &ReservationRequest{
-		StoreRequestHeader: StoreRequestHeader{
-			NodeID:  detail.desc.Node.NodeID,
-			StoreID: toStoreID,
-		},
-		FromNodeID:  curIdent.NodeID,
-		FromStoreID: curIdent.StoreID,
-		RangeSize:   rangeSize,
-		RangeID:     rangeID,
-	}
-
-	if log.V(2) {
-		log.Infof(sp.ctx, "proposing new reservation:%+v", req)
-	}
-
-	ctxWithTimeout, cancel := context.WithTimeout(sp.ctx, sp.reserveRPCTimeout)
-	defer cancel()
-	resp, err := client.Reserve(ctxWithTimeout, req)
 
 	// If a reservation is declined, be it due to an error or because it was
 	// rejected, we mark the store detail as having been rejected so it won't
 	// be considered as a candidate for new replicas until after the configured
 	// timeout period has passed.
-	if err != nil {
-		detail.throttledUntil = sp.clock.Now().GoTime().Add(sp.failedReservationsTimeout)
+	if declined {
+		store.throttledUntil = sp.clock.Now().GoTime().Add(sp.declinedReservationsTimeout)
+		if log.V(2) {
+			log.Infof(sp.ctx, "reservation declined, store:%s will be throttled for %s until %s",
+				toStoreID, sp.declinedReservationsTimeout, store.throttledUntil)
+		}
+	} else {
+		store.throttledUntil = sp.clock.Now().GoTime().Add(sp.failedReservationsTimeout)
 		if log.V(2) {
 			log.Infof(sp.ctx, "reservation failed, store:%s will be throttled for %s until %s",
-				toStoreID, sp.failedReservationsTimeout, detail.throttledUntil)
+				toStoreID, sp.failedReservationsTimeout, store.throttledUntil)
 		}
-		return errors.Wrapf(err, "reservation failed:%+v", req)
+	}
+}
+
+// updateRemoteCapacityEstimate updates the StorePool's estimate of the given
+// remote store's capacity.
+func (sp *StorePool) updateRemoteCapacityEstimate(
+	toStoreID roachpb.StoreID, capacity roachpb.StoreCapacity,
+) {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	store, ok := sp.mu.stores[toStoreID]
+	if !ok {
+		log.Warningf(sp.ctx, "store %d does not exist in the store pool", toStoreID)
+		return
 	}
 
-	detail.desc.Capacity.RangeCount = resp.RangeCount
-	if !resp.Reserved {
-		detail.throttledUntil = sp.clock.Now().GoTime().Add(sp.declinedReservationsTimeout)
-		if log.V(2) {
-			log.Infof(sp.ctx, "reservation failed, store:%s will be throttled for %s until %s",
-				toStoreID, sp.declinedReservationsTimeout, detail.throttledUntil)
-		}
-		return errors.Errorf("reservation declined:%+v", req)
-	}
-
-	if log.V(2) {
-		log.Infof(sp.ctx, "reservation was approved:%+v", req)
-	}
-	return nil
+	store.desc.Capacity.RangeCount = capacity.RangeCount
 }
