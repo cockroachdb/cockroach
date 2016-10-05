@@ -527,7 +527,11 @@ func (p *planner) Help(n *parser.Help) (planNode, error) {
 
 	for _, f := range matches {
 		// TODO(dt): support naming args in signature
-		sig := fmt.Sprintf("%s -> %s", f.Types.String(), f.ReturnType.Type())
+		outputType := "?"
+		if f.ReturnType != nil {
+			outputType = f.ReturnType.Type()
+		}
+		sig := fmt.Sprintf("%s -> %s", f.Types.String(), outputType)
 		row := parser.DTuple{
 			parser.NewDString(name),
 			parser.NewDString(sig),
