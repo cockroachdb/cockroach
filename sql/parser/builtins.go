@@ -133,6 +133,14 @@ func (b Builtin) Category() string {
 	return ""
 }
 
+// Signature returns a human-readable signature
+func (b Builtin) Signature() string {
+	if b.ReturnType == nil {
+		return "<T>... -> <T>" // Special-case for LEAST and GREATEST.
+	}
+	return fmt.Sprintf("(%s) -> %s", b.Types.String(), b.ReturnType.Type())
+}
+
 // Builtins contains the built-in functions indexed by name.
 var Builtins = map[string][]Builtin{
 	// Keep the list of functions sorted.
@@ -357,9 +365,18 @@ var Builtins = map[string][]Builtin{
 		return NewDString(string(runes)), nil
 	}, TypeString)},
 
-	"replace": {stringBuiltin3(func(s, from, to string) (Datum, error) {
-		return NewDString(strings.Replace(s, from, to, -1)), nil
-	}, TypeString)},
+	"replace": {
+		{
+			Types:      NamedArgTypes{{"input", TypeString}, {"from", TypeString}, {"to", TypeString}},
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, args DTuple) (Datum, error) {
+				arg := func(i int) string { return string(*args[i].(*DString)) }
+				s := strings.Replace(arg(0), arg(1), arg(2), -1)
+				return NewDString(s), nil
+			},
+			Info: "Replace all occurrences of 'from' with 'to' in 'input'",
+		},
+	},
 
 	"translate": {stringBuiltin3(func(s, from, to string) (Datum, error) {
 		const deletionRune = utf8.MaxRune + 1

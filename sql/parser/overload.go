@@ -48,6 +48,60 @@ var _ typeList = AnyType{}
 var _ typeList = VariadicType{}
 var _ typeList = SingleType{}
 
+// NamedArgTypes is very similar to ArgTypes except it allows keeping a string
+// name for each argument as well and using those when printing the
+// human-readable signature.
+type NamedArgTypes []struct {
+	Name string
+	Typ  Datum
+}
+
+func (a NamedArgTypes) match(types ArgTypes) bool {
+	if len(types) != len(a) {
+		return false
+	}
+	for i := range types {
+		if !a.matchAt(types[i], i) {
+			return false
+		}
+	}
+	return true
+}
+
+func (a NamedArgTypes) matchAt(typ Datum, i int) bool {
+	if i >= len(a) {
+		return false
+	}
+	if _, ok := typ.(*DTuple); ok {
+		typ = TypeTuple
+	}
+	return a[i].Typ.TypeEqual(typ)
+}
+
+func (a NamedArgTypes) matchLen(l int) bool {
+	return len(a) == l
+}
+
+func (a NamedArgTypes) getAt(i int) Datum {
+	return a[i].Typ
+}
+
+func (a NamedArgTypes) String() string {
+	var s bytes.Buffer
+	first := true
+	for i := range a {
+		if first {
+			first = false
+		} else {
+			s.WriteString(", ")
+		}
+		s.WriteString(a[i].Name)
+		s.WriteString(": ")
+		s.WriteString(a[i].Typ.Type())
+	}
+	return s.String()
+}
+
 // ArgTypes is a typeList implementation that accepts a specific number of
 // argument types.
 type ArgTypes []Datum
