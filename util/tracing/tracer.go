@@ -22,12 +22,12 @@ import (
 	"fmt"
 
 	"golang.org/x/net/context"
+	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/util/caller"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/lightstep/lightstep-tracer-go"
 	basictracer "github.com/opentracing/basictracer-go"
-	"github.com/opentracing/basictracer-go/events"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 	otlog "github.com/opentracing/opentracing-go/log"
@@ -140,18 +140,52 @@ func ChildSpan(ctx context.Context, opName string) (context.Context, func()) {
 	return opentracing.ContextWithSpan(ctx, newSpan), func() { newSpan.Finish() }
 }
 
+// netTraceIntegrator is passed into basictracer as NewSpanEventListener
+// and causes all traces to be registered with the net/trace endpoint.
+func netTraceIntegrator() func(basictracer.SpanEvent) {
+	var tr trace.Trace
+	return func(e basictracer.SpanEvent) {
+		switch t := e.(type) {
+		case basictracer.EventCreate:
+			tr = trace.New("tracing", t.OperationName)
+			// TODO(radu): use maxLogsPerSpan here when #9748 is fixed.
+			tr.SetMaxEvents(20)
+		case basictracer.EventFinish:
+			tr.Finish()
+		case basictracer.EventTag:
+			tr.LazyPrintf("%s:%v", t.Key, t.Value)
+		case basictracer.EventLogFields:
+			var buf bytes.Buffer
+			for i, f := range t.Fields {
+				if i > 0 {
+					buf.WriteByte(' ')
+				}
+				fmt.Fprintf(&buf, "%s:%v", f.Key(), f.Value())
+			}
+
+			tr.LazyPrintf("%s", buf.String())
+		case basictracer.EventLog:
+			if t.Payload != nil {
+				tr.LazyPrintf("%s (payload %v)", t.Event, t.Payload)
+			} else {
+				tr.LazyPrintf("%s", t.Event)
+			}
+		}
+	}
+}
+
 // basicTracerOptions initializes options for basictracer.
 // The recorder should be nil if we don't need to record spans.
 func basictracerOptions(recorder func(basictracer.RawSpan)) basictracer.Options {
 	opts := basictracer.DefaultOptions()
 	opts.ShouldSample = func(traceID uint64) bool { return false }
 	opts.TrimUnsampledSpans = true
-	opts.NewSpanEventListener = events.NetTraceIntegrator
+	opts.NewSpanEventListener = netTraceIntegrator
 	opts.DebugAssertUseAfterFinish = true // provoke crash on use-after-Finish
 	if recorder == nil {
 		opts.Recorder = CallbackRecorder(func(_ basictracer.RawSpan) {})
 		// If we are not recording the spans, there is no need to keep them in
-		// memory. Events still get passed to the NetTraceIntegrator.
+		// memory. Events still get passed to netTraceIntegrator.
 		opts.DropAllLogs = true
 	} else {
 		opts.Recorder = CallbackRecorder(recorder)
