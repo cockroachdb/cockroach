@@ -1398,7 +1398,7 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
 
   // Use the rocksdb options builder to configure the base options
   // using our memtable budget.
-  rocksdb::Options options(rocksdb::GetOptions(db_opts.memtable_budget));
+  rocksdb::Options options;
   // Increase parallelism for compactions based on the number of
   // cpus. This will use 1 high priority thread for flushes and
   // num_cpu-1 low priority threads for compactions. Always use at
@@ -1418,16 +1418,48 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
   options.max_open_files = db_opts.max_open_files;
 
-  // Merge two memtables when flushing to L0.
-  options.min_write_buffer_number_to_merge = 2;
+  // The write buffer size is the size of the in memory structure that
+  // will be flushed to create L0 files. Note that 8 MB is larger than
+  // 4 MB (the target L0 file size), but that reflects the
+  // uncompressed nature of the MemTable vs SSTables.
+  options.write_buffer_size = 8 << 20; // 8 MB
+  // How much memory should be allotted to memtables? Note that this
+  // is a peak setting, steady state should be lower. We set this
+  // relatively high to account for bursts of writes (e.g. due to a
+  // range deletion). In particular, we want this to be somewhat
+  // larger than than typical range size so that deletion of a range
+  // does not cause write stalls.
+  //
+  // TODO(peter): Will deletion of a range that is larger than this
+  // cause write stalls?
+  const uint64_t memtable_budget = 128 << 20; // 128 MB
+  options.max_write_buffer_number =
+      std::max<int>(memtable_budget / options.write_buffer_size, 2);
+  // Number of files to trigger L0 compaction. We set this low so that
+  // we quickly move files out of L0 as each L0 file increases read
+  // amplification.
+  options.level0_file_num_compaction_trigger = 1;
+  // Soft limit on number of L0 files. Writes are slowed down when
+  // this number is reached.
+  //
+  // TODO(peter): untuned.
+  options.level0_slowdown_writes_trigger = 16;
+  // Maximum number of L0 files. Writes are stopped at this point.
+  //
+  // TODO(peter): untuned.
+  options.level0_stop_writes_trigger = 17;
+  // Flush write buffers to L0 as soon as they are full. A higher
+  // value could be beneficial if there are duplicate records in each
+  // of the individual write buffers, but perf testing hasn't shown
+  // any benefit so far.
+  options.min_write_buffer_number_to_merge = 1;
   // Enable dynamic level sizing which reduces both size and write
   // amplification. This causes RocksDB to pick the target size of
   // each level dynamically.
   options.level_compaction_dynamic_level_bytes = true;
   // Follow the RocksDB recommendation to configure the size of L1 to
   // be the same as the estimated size of L0.
-  options.max_bytes_for_level_base = options.write_buffer_size *
-      options.min_write_buffer_number_to_merge * options.level0_file_num_compaction_trigger;
+  options.max_bytes_for_level_base = 16 << 20; // 16 MB
   options.max_bytes_for_level_multiplier = 10;
   // Target the base file size as 1/4 of the base size which will give
   // us ~4 files in the base level (level 0). Each additional level
