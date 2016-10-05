@@ -105,8 +105,6 @@ func TestTypeCheckError(t *testing.T) {
 		{`lower(1, 2)`, `unknown signature for lower: lower(int, int)`},
 		{`lower(1)`, `unknown signature for lower: lower(int)`},
 		{`lower('FOO') OVER ()`, `OVER specified, but lower is not a window function nor an aggregate function`},
-		{`1::date`, `invalid cast: int -> DATE`},
-		{`1::timestamp`, `invalid cast: int -> TIMESTAMP`},
 		{`CASE 'one' WHEN 1 THEN 1 WHEN 'two' THEN 2 END`, `incompatible condition type`},
 		{`CASE 1 WHEN 1 THEN 'one' WHEN 2 THEN 2 END`, `incompatible value type`},
 		{`CASE 1 WHEN 1 THEN 'one' ELSE 2 END`, `incompatible value type`},
