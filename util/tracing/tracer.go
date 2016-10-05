@@ -107,37 +107,47 @@ func NewTracerAndSpanFor7881(
 	return sp, tr, err
 }
 
+// FinishSpan closes the given span (if not nil). It is a convenience wrapper
+// for span.Finish() which tolerates nil spans.
+func FinishSpan(span opentracing.Span) {
+	if span != nil {
+		span.Finish()
+	}
+}
+
 // ForkCtxSpan checks if ctx has a Span open; if it does, it creates a new Span
 // that follows from the original Span. This allows the resulting context to be
 // used in an async task that might outlive the original operation.
 //
-// Returns the new context and a function that closes the span.
-func ForkCtxSpan(ctx context.Context, opName string) (context.Context, func()) {
+// Returns the new context and the new span (if any). The span should be
+// closed via FinishSpan.
+func ForkCtxSpan(ctx context.Context, opName string) (context.Context, opentracing.Span) {
 	if span := opentracing.SpanFromContext(ctx); span != nil {
 		if span.BaggageItem(Snowball) == "1" {
 			// If we are doing snowball tracing, the span might outlive the snowball
 			// tracer (calling the record function when it is no longer legal to do
 			// so). Return a context with no span in this case.
-			return opentracing.ContextWithSpan(ctx, nil), func() {}
+			return opentracing.ContextWithSpan(ctx, nil), nil
 		}
 		tr := span.Tracer()
 		newSpan := tr.StartSpan(opName, opentracing.FollowsFrom(span.Context()))
-		return opentracing.ContextWithSpan(ctx, newSpan), func() { newSpan.Finish() }
+		return opentracing.ContextWithSpan(ctx, newSpan), newSpan
 	}
-	return ctx, func() {}
+	return ctx, nil
 }
 
 // ChildSpan opens a span as a child of the current span in the context (if
 // there is one).
 //
-// Returns the new context and a function that closes the span.
-func ChildSpan(ctx context.Context, opName string) (context.Context, func()) {
+// Returns the new context and the new span (if any). The span should be
+// closed via FinishSpan.
+func ChildSpan(ctx context.Context, opName string) (context.Context, opentracing.Span) {
 	span := opentracing.SpanFromContext(ctx)
 	if span == nil {
-		return ctx, func() {}
+		return ctx, nil
 	}
 	newSpan := span.Tracer().StartSpan(opName, opentracing.ChildOf(span.Context()))
-	return opentracing.ContextWithSpan(ctx, newSpan), func() { newSpan.Finish() }
+	return opentracing.ContextWithSpan(ctx, newSpan), newSpan
 }
 
 // netTraceIntegrator is passed into basictracer as NewSpanEventListener

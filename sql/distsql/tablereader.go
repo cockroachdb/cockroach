@@ -99,8 +99,8 @@ func (tr *tableReader) Run(wg *sync.WaitGroup) {
 		defer wg.Done()
 	}
 
-	ctx, closeSpan := tracing.ChildSpan(tr.ctx, "table reader")
-	defer closeSpan()
+	ctx, span := tracing.ChildSpan(tr.ctx, "table reader")
+	defer tracing.FinishSpan(span)
 
 	log.VEventf(1, ctx, "starting (filter: %s)", &tr.filter)
 	if log.V(1) {
