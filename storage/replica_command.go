@@ -336,8 +336,12 @@ func (r *Replica) DeleteRange(
 	args roachpb.DeleteRangeRequest,
 ) (roachpb.DeleteRangeResponse, *roachpb.Span, int64, error) {
 	var reply roachpb.DeleteRangeResponse
+	timestamp := hlc.ZeroTimestamp
+	if !args.Inline {
+		timestamp = h.Timestamp
+	}
 	deleted, resumeSpan, num, err := engine.MVCCDeleteRange(
-		ctx, batch, ms, args.Key, args.EndKey, maxKeys, h.Timestamp, h.Txn, args.ReturnKeys,
+		ctx, batch, ms, args.Key, args.EndKey, maxKeys, timestamp, h.Txn, args.ReturnKeys,
 	)
 	if err == nil {
 		reply.Keys = deleted
