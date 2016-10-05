@@ -119,12 +119,12 @@ func (ss *notifyingSender) Send(
 	return br, pErr
 }
 
-func createTestClient(t *testing.T, stopper *stop.Stopper, addr string) *client.DB {
+func createTestClient(t testing.TB, stopper *stop.Stopper, addr string) *client.DB {
 	return createTestClientForUser(t, stopper, addr, security.NodeUser, client.DefaultDBContext())
 }
 
 func createTestClientForUser(
-	t *testing.T, stopper *stop.Stopper, addr, user string, dbCtx client.DBContext,
+	t testing.TB, stopper *stop.Stopper, addr, user string, dbCtx client.DBContext,
 ) *client.DB {
 	rpcContext := rpc.NewContext(context.TODO(), &base.Context{
 		User:       user,
@@ -142,7 +142,7 @@ func createTestClientForUser(
 // createTestNotifyClient creates a new client which connects using an HTTP
 // sender to the server at addr. It contains a waitgroup to allow waiting.
 func createTestNotifyClient(
-	t *testing.T, stopper *stop.Stopper, addr string, priority roachpb.UserPriority,
+	t testing.TB, stopper *stop.Stopper, addr string, priority roachpb.UserPriority,
 ) (*client.DB, *notifyingSender) {
 	db := createTestClient(t, stopper, addr)
 	sender := &notifyingSender{wrapped: db.GetSender()}
