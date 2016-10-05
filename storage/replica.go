@@ -382,6 +382,8 @@ var _ KeyRange = &Replica{}
 // handleRaftReady for an instance of where this value varies. The
 // shouldCampaign argument indicates whether a new raft group should be
 // campaigned upon creation and is used to eagerly campaign idle replicas.
+//
+// Requires that Replica.raftMu is held.
 func (r *Replica) withRaftGroupLocked(
 	shouldCampaign bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
 ) error {
@@ -467,6 +469,8 @@ func (r *Replica) withRaftGroupLocked(
 // withRaftGroup calls the supplied function with the (lazily initialized)
 // Raft group. It acquires and releases the Replica lock, so r.mu must not be
 // held (or acquired by the supplied function).
+//
+// Requires that Replica.raftMu is held.
 func (r *Replica) withRaftGroup(
 	f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
 ) error {
@@ -1670,6 +1674,17 @@ func makeIDKey() storagebase.CmdIDKey {
 func (r *Replica) proposeRaftCommand(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (chan roachpb.ResponseWithError, func() bool, error) {
+	// proposePendingCmdLocked calls withRaftGroupLocked which requires that
+	// raftMu is held. In order to maintain our lock ordering we need to lock
+	// Replica.raftMu here before locking Replica.mu.
+	//
+	// TODO(peter): It appears that we only need to hold Replica.raftMu when
+	// calling raft.NewRawNode. We could get fancier with the locking here to
+	// optimize for the common case where Replica.mu.internalRaftGroup is
+	// non-nil, but that doesn't currently seem worth it. Always locking raftMu
+	// has a tiny (~1%) performance hit for single-node block_writer testing.
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.mu.destroyed != nil {
