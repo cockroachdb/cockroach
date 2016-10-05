@@ -173,7 +173,6 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		s.gossip,
 		s.clock,
 		s.rpcContext,
-		srvCtx.ReservationsEnabled,
 		srvCtx.TimeUntilStoreDead,
 		s.stopper,
 	)
@@ -292,7 +291,6 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 	storage.RegisterConsistencyServer(s.grpc, s.node.storesServer)
 	storage.RegisterFreezeServer(s.grpc, s.node.storesServer)
-	storage.RegisterReservationServer(s.grpc, s.node.storesServer)
 
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.MakeServer(s.Ctx(), s.tsDB)
