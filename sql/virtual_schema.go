@@ -213,7 +213,7 @@ func (e *Executor) IsVirtualDatabase(name string) bool {
 func (vs *virtualSchemaHolder) getVirtualTableEntry(
 	tn *parser.TableName,
 ) (virtualTableEntry, error) {
-	if db, ok := vs.getVirtualSchemaEntry(tn.Database()); ok {
+	if db, ok := vs.getVirtualSchemaEntry(sqlbase.NormalizeName(tn.DatabaseName)); ok {
 		if t, ok := db.tables[sqlbase.NormalizeName(tn.TableName)]; ok {
 			return t, nil
 		}
