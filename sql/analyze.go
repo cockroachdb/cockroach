@@ -387,10 +387,10 @@ func simplifyOneAndExpr(left, right parser.TypedExpr) (parser.TypedExpr, parser.
 	// to prefer a comparison between a column value and a datum of the same
 	// type is that it makes index constraint construction easier.
 	either := lcmp
-	if !ldatum.TypeEqual(rdatum) {
+	if !ldatum.ReturnType().Equal(rdatum.ReturnType()) {
 		switch ta := lcmpLeft.(type) {
 		case *parser.IndexedVar:
-			if ta.ReturnType().TypeEqual(rdatum) {
+			if ta.ReturnType().Equal(rdatum.ReturnType()) {
 				either = rcmp
 			}
 		}
@@ -922,10 +922,10 @@ func simplifyOneOrExpr(left, right parser.TypedExpr) (parser.TypedExpr, parser.T
 	// to prefer a comparison between a column value and a datum of the same
 	// type is that it makes index constraint construction easier.
 	either := lcmp
-	if !ldatum.TypeEqual(rdatum) {
+	if !ldatum.ReturnType().Equal(rdatum.ReturnType()) {
 		switch ta := lcmpLeft.(type) {
 		case *parser.IndexedVar:
-			if ta.ReturnType().TypeEqual(rdatum) {
+			if ta.ReturnType().Equal(rdatum.ReturnType()) {
 				either = rcmp
 			}
 		}
@@ -1605,7 +1605,7 @@ func (p *planner) analyzeExpr(
 	raw parser.Expr,
 	sources multiSourceInfo,
 	ivarHelper parser.IndexedVarHelper,
-	expectedType parser.Datum,
+	expectedType parser.Type,
 	requireType bool,
 	typingContext string,
 ) (parser.TypedExpr, error) {

@@ -95,7 +95,7 @@ func (expr *UnaryExpr) normalize(v *normalizeVisitor) TypedExpr {
 		return val
 	case UnaryMinus:
 		// -0 -> 0 (except for float which has negative zero)
-		if !val.ReturnType().TypeEqual(TypeFloat) && IsNumericZero(val) {
+		if val.ReturnType() != TypeFloat && IsNumericZero(val) {
 			return val
 		}
 		switch b := val.(type) {
@@ -721,8 +721,8 @@ func IsNumericOne(expr TypedExpr) bool {
 
 // ReType ensures that the given numeric expression evaluates
 // to the requested type, inserting a cast if necessary.
-func ReType(expr TypedExpr, wantedType Datum) (TypedExpr, error) {
-	if expr.ReturnType().TypeEqual(wantedType) {
+func ReType(expr TypedExpr, wantedType Type) (TypedExpr, error) {
+	if expr.ReturnType().Equal(wantedType) {
 		return expr, nil
 	}
 	reqType, err := DatumTypeToColumnType(wantedType)

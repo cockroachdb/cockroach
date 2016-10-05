@@ -89,7 +89,7 @@ var singletonStarName VarName = UnqualifiedStar{}
 func StarExpr() VarName { return singletonStarName }
 
 // ReturnType implements the TypedExpr interface.
-func (UnqualifiedStar) ReturnType() Datum {
+func (UnqualifiedStar) ReturnType() Type {
 	panic("unqualified stars ought to be replaced before this point")
 }
 
@@ -97,7 +97,7 @@ func (UnqualifiedStar) ReturnType() Datum {
 func (UnqualifiedStar) Variable() {}
 
 // ReturnType implements the TypedExpr interface.
-func (UnresolvedName) ReturnType() Datum {
+func (UnresolvedName) ReturnType() Type {
 	panic("unresolved names ought to be replaced before this point")
 }
 
@@ -133,7 +133,7 @@ func (a *AllColumnsSelector) NormalizeVarName() (VarName, error) { return a, nil
 func (a *AllColumnsSelector) Variable() {}
 
 // ReturnType implements the TypedExpr interface.
-func (*AllColumnsSelector) ReturnType() Datum {
+func (*AllColumnsSelector) ReturnType() Type {
 	panic("all-columns selectors ought to be replaced before this point")
 }
 
@@ -183,7 +183,7 @@ func (c *ColumnItem) Column() string {
 func (c *ColumnItem) Variable() {}
 
 // ReturnType implements the TypedExpr interface.
-func (c *ColumnItem) ReturnType() Datum {
+func (c *ColumnItem) ReturnType() Type {
 	if presetTypesForTesting == nil {
 		return nil
 	}

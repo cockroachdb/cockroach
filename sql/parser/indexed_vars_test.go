@@ -28,7 +28,7 @@ func (d testVarContainer) IndexedVarEval(idx int, ctx *EvalContext) (Datum, erro
 	return d[idx].Eval(ctx)
 }
 
-func (d testVarContainer) IndexedVarReturnType(idx int) Datum {
+func (d testVarContainer) IndexedVarReturnType(idx int) Type {
 	return d[idx].ReturnType()
 }
 
@@ -71,11 +71,11 @@ func TestIndexedVars(t *testing.T) {
 		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)
 	}
 
-	d := typedExpr.ReturnType()
-	if !d.TypeEqual(TypeInt) {
-		t.Errorf("invalid expression type %s", d.Type())
+	typ := typedExpr.ReturnType()
+	if !typ.Equal(TypeInt) {
+		t.Errorf("invalid expression type %s", typ)
 	}
-	d, err = typedExpr.Eval(&EvalContext{})
+	d, err := typedExpr.Eval(&EvalContext{})
 	if err != nil {
 		t.Fatal(err)
 	}

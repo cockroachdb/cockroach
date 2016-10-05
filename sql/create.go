@@ -253,7 +253,7 @@ func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
 		return nil, err
 	}
 
-	sourcePlan, err := p.Select(n.AsSource, []parser.Datum{}, false)
+	sourcePlan, err := p.Select(n.AsSource, []parser.Type{}, false)
 	if err != nil {
 		return nil, err
 	}
@@ -392,7 +392,7 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 		// to populate the new table descriptor in Start() below. We
 		// instantiate the sourcePlan as early as here so that EXPLAIN has
 		// something useful to show about CREATE TABLE .. AS ...
-		sourcePlan, err = p.Select(n.AsSource, []parser.Datum{}, false)
+		sourcePlan, err = p.Select(n.AsSource, []parser.Type{}, false)
 		if err != nil {
 			return nil, err
 		}
@@ -539,7 +539,7 @@ func (n *createTableNode) Start() error {
 		n.sourcePlan.Close()
 		n.sourcePlan = nil
 
-		desiredTypesFromSelect := make([]parser.Datum, len(resultColumns))
+		desiredTypesFromSelect := make([]parser.Type, len(resultColumns))
 		for i, col := range resultColumns {
 			desiredTypesFromSelect[i] = col.Typ
 		}
@@ -1170,7 +1170,7 @@ func makeCheckConstraint(
 			nameBuf.WriteString(col.Name)
 		}
 		// Convert to a dummy datum of the correct type.
-		return nil, false, col.Type.ToDatumType()
+		return nil, false, col.Type.ToDatumType().Exemplar()
 	}
 
 	expr, err := parser.SimpleVisit(d.Expr, preFn)

@@ -76,7 +76,7 @@ func (p *Parser) Parse(sql string, syntax Syntax) (stmts StatementList, err erro
 
 // NoTypePreference can be provided to TypeCheck's desired type parameter to indicate that
 // the caller of the function has no preference on the type of the resulting TypedExpr.
-var NoTypePreference = Datum(nil)
+var NoTypePreference = Type(nil)
 
 // TypeCheck performs type checking on the provided expression tree, returning
 // the new typed expression tree, which additionally permits evaluation and type
@@ -86,7 +86,7 @@ var NoTypePreference = Datum(nil)
 // their inferred types in the provided context. The optional desired parameter can
 // be used to hint the desired type for the root of the resulting typed expression
 // tree.
-func TypeCheck(expr Expr, ctx *SemaContext, desired Datum) (TypedExpr, error) {
+func TypeCheck(expr Expr, ctx *SemaContext, desired Type) (TypedExpr, error) {
 	expr, err := foldConstantLiterals(expr)
 	if err != nil {
 		return nil, err
@@ -98,14 +98,13 @@ func TypeCheck(expr Expr, ctx *SemaContext, desired Datum) (TypedExpr, error) {
 // an identical manner to TypeCheck. It then asserts that the resulting TypedExpr
 // has the provided return type, returning both the typed expression and an error
 // if it does not.
-func TypeCheckAndRequire(expr Expr, ctx *SemaContext, required Datum, op string) (TypedExpr, error) {
+func TypeCheckAndRequire(expr Expr, ctx *SemaContext, required Type, op string) (TypedExpr, error) {
 	typedExpr, err := TypeCheck(expr, ctx, required)
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedExpr.ReturnType(); !(typ.TypeEqual(required) || typ == DNull) {
-		return typedExpr, fmt.Errorf("argument of %s must be type %s, not type %s",
-			op, required.Type(), typ.Type())
+	if typ := typedExpr.ReturnType(); !(typ.Equal(required) || typ == TypeNull) {
+		return typedExpr, fmt.Errorf("argument of %s must be type %s, not type %s", op, required, typ)
 	}
 	return typedExpr, nil
 }

@@ -36,7 +36,7 @@ type valuesNode struct {
 	tuples   [][]parser.TypedExpr
 	rows     *RowContainer
 
-	desiredTypes []parser.Datum // This can be removed when we only type check once.
+	desiredTypes []parser.Type // This can be removed when we only type check once.
 
 	nextRow       int           // The index of the next row.
 	invertSorting bool          // Inverts the sorting predicate.
@@ -52,7 +52,7 @@ func (p *planner) newContainerValuesNode(columns ResultColumns, capacity int) *v
 }
 
 func (p *planner) ValuesClause(
-	n *parser.ValuesClause, desiredTypes []parser.Datum,
+	n *parser.ValuesClause, desiredTypes []parser.Type,
 ) (planNode, error) {
 	v := &valuesNode{
 		p:            p,
@@ -96,10 +96,10 @@ func (p *planner) ValuesClause(
 			typ := typedExpr.ReturnType()
 			if num == 0 {
 				v.columns = append(v.columns, ResultColumn{Name: "column" + strconv.Itoa(i+1), Typ: typ})
-			} else if v.columns[i].Typ == parser.DNull {
+			} else if v.columns[i].Typ == parser.TypeNull {
 				v.columns[i].Typ = typ
-			} else if typ != parser.DNull && !typ.TypeEqual(v.columns[i].Typ) {
-				return nil, fmt.Errorf("VALUES list type mismatch, %s for %s", typ.Type(), v.columns[i].Typ.Type())
+			} else if typ != parser.TypeNull && !typ.Equal(v.columns[i].Typ) {
+				return nil, fmt.Errorf("VALUES list type mismatch, %s for %s", typ, v.columns[i].Typ)
 			}
 
 			tupleRow[i] = typedExpr

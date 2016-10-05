@@ -370,7 +370,7 @@ func (expr *NumVal) Walk(_ Visitor) Expr { return expr }
 func (expr *StrVal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr Placeholder) Walk(_ Visitor) Expr { return expr }
+func (expr *Placeholder) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr *DBool) Walk(_ Visitor) Expr { return expr }
@@ -407,9 +407,6 @@ func (expr *DTimestampTZ) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr *DTuple) Walk(_ Visitor) Expr { return expr }
-
-// Walk implements the Expr interface.
-func (expr *DPlaceholder) Walk(_ Visitor) Expr { return expr }
 
 // WalkExpr traverses the nodes in an expression.
 func WalkExpr(v Visitor, expr Expr) (newExpr Expr, changed bool) {
