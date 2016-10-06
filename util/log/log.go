@@ -20,16 +20,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/cockroachdb/cockroach/util/syncutil"
-
 	"golang.org/x/net/context"
 )
-
-func init() {
-	// Make sure that if syncutil.TimedMutex is used, any warnings are printed
-	// using this package.
-	syncutil.SetLogger(Warningf)
-}
 
 const httpLogLevelPrefix = "/debug/vmodule/"
 
