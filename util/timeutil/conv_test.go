@@ -34,7 +34,9 @@ func TestTimeConversion(t *testing.T) {
 		{`20061012 01:03:02`, `%Y%m%d %H:%S:%M`, `2006-10-12T01:02:03Z`, ``, ``},
 		{`2018 10 4`, `%Y %W %w`, `2018-03-08T00:00:00Z`, ``, ``},
 		{`2018 10 4`, `%Y %U %w`, `2018-03-15T00:00:00Z`, ``, ``},
-		{`2016 100 PM 11`, `%Y %j %p %I`, `2016-04-09T23:00:00Z`, ``, ``},
+		// %j cannot be used reliably to parse a date from text; so test
+		// it only for rendering.
+		{`20161012 PM 11`, `%Y%m%d %p %I`, `2016-10-12T23:00:00Z`, `%j`, `286`},
 		{`Wed Oct 05 2016`, `%a %b %d %Y`, `2016-10-05T00:00:00Z`, ``, ``},
 		{`Wednesday October 05 2016`, `%A %B %d %Y`, `2016-10-05T00:00:00Z`, ``, ``},
 	}
