@@ -56,6 +56,13 @@ import (
 	"github.com/pkg/errors"
 )
 
+var defaultMuLogger = syncutil.ThresholdLogger(
+	context.Background(),
+	10*time.Second,
+	log.Warningf,
+	func(time.Duration) {},
+)
+
 var testIdent = roachpb.StoreIdent{
 	ClusterID: uuid.MakeV4(),
 	NodeID:    1,
@@ -662,7 +669,7 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 		store:      store,
 		abortCache: NewAbortCache(desc.RangeID),
 	}
-	r.mu.TimedMutex = syncutil.MakeTimedMutex(context.Background(), time.Hour)
+	r.mu.TimedMutex = syncutil.MakeTimedMutex(defaultMuLogger)
 	if err := r.init(desc, store.Clock(), 0); err != nil {
 		t.Fatal(err)
 	}

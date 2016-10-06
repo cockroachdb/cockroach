@@ -15,7 +15,9 @@
 package syncutil_test // because of log import
 
 import (
+	"fmt"
 	"math"
+	"regexp"
 	"testing"
 	"time"
 
@@ -27,31 +29,57 @@ import (
 
 func TestTimedMutex(t *testing.T) {
 	var msgs []string
-	syncutil.SetLogger(func(ctx context.Context, innerMsg string, args ...interface{}) {
-		msgs = append(msgs, innerMsg)
-	})
+
+	printf := func(ctx context.Context, innerMsg string, args ...interface{}) {
+		formatted := fmt.Sprintf(innerMsg, args...)
+		msgs = append(msgs, formatted)
+	}
+	var numMeasurements int
+	record := func(time.Duration) { numMeasurements++ }
 
 	{
+		cb := syncutil.ThresholdLogger(
+			context.Background(), time.Nanosecond, printf, record,
+		)
+
 		// Should fire.
-		tm := syncutil.MakeTimedMutex(context.Background(), time.Nanosecond)
+		tm := syncutil.MakeTimedMutex(cb)
 		tm.Lock()
 		time.Sleep(2 * time.Nanosecond)
 		tm.Unlock()
 
-		if len(msgs) != 1 {
-			t.Fatalf("mutex did not warn: %+v", msgs)
+		re := regexp.MustCompile(`mutex held by .*TestTimedMutex for .* \(\>1ns\):`)
+		if len(msgs) != 1 || !re.MatchString(msgs[0]) {
+			t.Fatalf("mutex did not warn as expected: %+v", msgs)
+		}
+		if numMeasurements != 1 {
+			t.Fatalf("expected one measurement, not %d", numMeasurements)
 		}
 	}
 
-	{
-		tm := syncutil.MakeTimedMutex(context.Background(), time.Duration(math.MaxInt64))
-		tm.Lock()
-		// Avoid staticcheck complaining about empty critical section.
-		time.Sleep(time.Nanosecond)
-		tm.Unlock()
+	numMeasurements = 0
+	msgs = nil
 
-		if len(msgs) != 1 {
-			t.Fatalf("mutex warned erroneously: %+v", msgs[1:])
+	{
+		cb := syncutil.ThresholdLogger(
+			context.Background(), time.Duration(math.MaxInt64), printf, record,
+		)
+		tm := syncutil.MakeTimedMutex(cb)
+
+		const num = 10
+		for i := 0; i < num; i++ {
+			tm.Lock()
+			// Avoid staticcheck complaining about empty critical section.
+			time.Sleep(time.Nanosecond)
+			tm.Unlock()
 		}
+
+		if len(msgs) != 0 {
+			t.Fatalf("mutex warned erroneously: %+v", msgs)
+		}
+		if numMeasurements != num {
+			t.Fatalf("expected %d measurements not %d", num, numMeasurements)
+		}
+
 	}
 }

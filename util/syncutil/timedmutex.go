@@ -15,73 +15,77 @@
 package syncutil
 
 import (
-	"fmt"
-	"os"
+	"runtime"
 	"runtime/debug"
 	"time"
 
 	"golang.org/x/net/context"
 )
 
-var opts struct {
-	mu  Mutex
-	log func(context.Context, string, ...interface{})
-}
-
-// SetLogger changes the function which will be used by TimedMutex when
-// warning about an above-threshold invocation.
-func SetLogger(fn func(context.Context, string, ...interface{})) {
-	opts.mu.Lock()
-	defer opts.mu.Unlock()
-	opts.log = fn
-}
-
-// TimedMutex is a mutex which dumps a stack trace whenever a lock is unlocked
-// after being held for longer than the supplied duration, which must be
-// strictly positive.
+// TimedMutex is a mutex which dumps a stack trace via the supplied callback
+// whenever a lock is unlocked after having been held for longer than the
+// supplied duration, which must be strictly positive.
 type TimedMutex struct {
 	mu       *Mutex    // intentionally pointer to make zero value unusable
 	lockedAt time.Time // protected by mu
 
 	// Non-mutable fields.
-	ctx       context.Context
-	threshold time.Duration
+	cb TimingFn
+}
+
+// TimingFn is a callback passed to MakeTimedMutex. It is invoked with the
+// measured duration of the critical section of the associated mutex after
+// each Unlock operation.
+type TimingFn func(heldFor time.Duration)
+
+// ThresholdLogger returns a timing function which calls 'record' for each
+// measured duration and, for measurements exceeding 'warnDuration', invokes
+// 'printf' with the passed context and a detailed stack trace.
+func ThresholdLogger(
+	ctx context.Context,
+	warnDuration time.Duration,
+	printf func(context.Context, string, ...interface{}),
+	record TimingFn,
+) TimingFn {
+	return func(heldFor time.Duration) {
+		record(heldFor)
+		if heldFor > warnDuration {
+			pc, _, _, ok := runtime.Caller(2)
+			fun := "?"
+			if ok {
+				if f := runtime.FuncForPC(pc); f != nil {
+					fun = f.Name()
+				}
+			}
+
+			printf(
+				ctx, "mutex held by %s for %s (>%s):\n%s",
+				fun, heldFor, warnDuration, debug.Stack(),
+			)
+		}
+	}
 }
 
 // MakeTimedMutex creates a TimedMutex which warns when an Unlock happens more
 // than warnDuration after the corresponding lock. It will use the supplied
-// context for the warning message; see SetLogger().
-func MakeTimedMutex(ctx context.Context, warnDuration time.Duration) TimedMutex {
-	if warnDuration <= 0 {
-		panic("duration must be positive")
+// context and logging callback for the warning message; a nil logger falls
+// back to Fprintf to os.Stderr.
+func MakeTimedMutex(cb TimingFn) TimedMutex {
+	return TimedMutex{
+		cb: cb,
+		mu: &Mutex{},
 	}
-	return TimedMutex{ctx: ctx, threshold: warnDuration, mu: &Mutex{}}
 }
 
-// Lock implements sync.Locker
+// Lock implements sync.Locker.
 func (tm *TimedMutex) Lock() {
 	tm.mu.Lock()
 	tm.lockedAt = time.Now()
 }
 
-// Unlock implements sync.Locker
+// Unlock implements sync.Locker.
 func (tm *TimedMutex) Unlock() {
 	lockedAt := tm.lockedAt
 	tm.mu.Unlock()
-
-	if heldFor := time.Since(lockedAt); heldFor >= tm.threshold {
-		opts.mu.Lock()
-		log := opts.log
-		opts.mu.Unlock()
-
-		if log == nil {
-			log = func(_ context.Context, msg string, args ...interface{}) {
-				fmt.Fprintf(os.Stderr, msg, args...)
-			}
-		}
-		log(
-			tm.ctx, "mutex held for %s (>%s):\n%s",
-			heldFor, tm.threshold, debug.Stack(),
-		)
-	}
+	tm.cb(time.Since(lockedAt))
 }
