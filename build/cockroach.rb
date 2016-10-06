@@ -4,8 +4,8 @@ class Cockroach < Formula
   desc "Distributed SQL database"
   homepage "https://www.cockroachlabs.com"
   url "https://github.com/cockroachdb/cockroach.git",
-      :tag => "beta-20160915",
-      :revision => "3fff05767cd3eda2197ce102391c0de447fef606"
+      :tag => "beta-20161006",
+      :revision => "72ee63f79c3c0670dc0500dda437b31e06ed81db"
   head "https://github.com/cockroachdb/cockroach.git"
 
   depends_on "go" => :build
