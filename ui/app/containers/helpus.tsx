@@ -3,7 +3,7 @@ import _ from "lodash";
 import { connect } from "react-redux";
 
 import { AdminUIState } from "../redux/state";
-import { KEY_HELPUS, OptInAttributes, loadUIData, saveUIData } from "../redux/uiData";
+import { KEY_HELPUS, KEY_REGISTRATION_SYNCHRONIZED, OptInAttributes, loadUIData, saveUIData } from "../redux/uiData";
 import { setUISetting } from "../redux/ui";
 import { HELPUS_BANNER_DISMISSED_KEY } from "./banner/helpusBanner";
 
@@ -48,7 +48,11 @@ export class HelpUs extends React.Component<HelpUsProps, OptInAttributes> {
     let target = e.target as HTMLFormElement;
     // TODO: add "saving..." text and show/hide the required text
     if (target.checkValidity()) {
-      this.props.saveUIData({ key: KEY_HELPUS, value: this.state });
+      this.props.saveUIData(
+        { key: KEY_HELPUS, value: this.state },
+       // Mark data as not synchronized to the Cockroach Labs server
+        { key: KEY_REGISTRATION_SYNCHRONIZED, value: false}
+      );
     }
     return false;
   }

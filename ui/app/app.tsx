@@ -12,7 +12,6 @@
  * - Node Page
  *    ! Logs Page
  * - Layout Footer
- * ! HelpUs communication with CRL server
  *
  *
  * NICE TO HAVE:
@@ -61,6 +60,9 @@ import NodeGraphs from "./containers/nodeGraphs";
 import NodeLogs from "./containers/nodeLogs";
 import Raft from "./containers/raft";
 import RaftRanges from "./containers/raftRanges";
+
+// Communicate with Cockroach Labs server
+import "./services/registrationService";
 
 // tslint:disable-next-line:variable-name
 const DOMNode = document.getElementById("react-layout");
