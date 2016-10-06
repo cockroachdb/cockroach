@@ -146,16 +146,16 @@ func handleUnset(args []string) {
 // a regular query.
 func handleInputLine(
 	ins *readline.Instance, stmt *[]string, line string, syntax parser.Syntax,
-) (status int, hasSet bool, isEmpty bool) {
+) (status int, hasSet, isEmpty, endsWithSemi bool) {
 	if len(*stmt) == 0 {
 		// Special case: first line of multi-line statement.
 		// In this case ignore empty lines, and recognize "help" specially.
 		switch line {
 		case "":
-			return cliNextLine, false, true
+			return cliNextLine, false, true, false
 		case "help":
 			printCliHelp()
-			return cliNextLine, false, true
+			return cliNextLine, false, true, false
 		}
 
 		if len(line) > 0 && line[0] == '\\' {
@@ -166,13 +166,13 @@ func handleInputLine(
 			cmd := strings.Fields(line)
 			switch cmd[0] {
 			case `\q`:
-				return cliExit, false, true
+				return cliExit, false, true, false
 			case `\!`:
-				return runSyscmd(line), false, true
+				return runSyscmd(line), false, true, false
 			case `\|`:
 				status = pipeSyscmd(stmt, line)
-				isEmpty, _, hasSet = isEndOfStatement(syntax, stmt)
-				return status, hasSet, isEmpty
+				isEmpty, endsWithSemi, hasSet = isEndOfStatement(syntax, stmt)
+				return status, hasSet, isEmpty, endsWithSemi
 			case `\`, `\?`:
 				printCliHelp()
 			case `\set`:
@@ -188,7 +188,7 @@ func handleInputLine(
 				fmt.Fprint(osStderr, "Suggestion: use the SQL SHOW statement to inspect your schema.\n")
 			}
 
-			return cliNextLine, false, true
+			return cliNextLine, false, true, false
 		}
 	}
 
@@ -199,7 +199,7 @@ func handleInputLine(
 	} else {
 		status = cliNextLine
 	}
-	return status, hasSet, isEmpty
+	return status, hasSet, isEmpty, isEnd
 }
 
 func isEndOfStatement(syntax parser.Syntax, stmt *[]string) (isEmpty, isEnd, hasSet bool) {
@@ -369,7 +369,7 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 
 		// Check if this is a request for help or a client-side command.
 		// If so, process it directly and skip query processing below.
-		status, hasSet, isEmpty := handleInputLine(ins, &stmt, l, syntax)
+		status, hasSet, isEmpty, endsWithSemi := handleInputLine(ins, &stmt, l, syntax)
 		if status == cliExit {
 			break
 		}
@@ -389,7 +389,7 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 		// Ensure the statement is terminated with a semicolon. This
 		// catches cases where the last line before EOF was not terminated
 		// properly.
-		if len(fullStmt) > 0 && !strings.HasSuffix(fullStmt, ";") {
+		if len(fullStmt) > 0 && !endsWithSemi {
 			if strings.TrimSpace(fullStmt) == "" {
 				// Only whitespace. Nothing to do really.
 				continue
