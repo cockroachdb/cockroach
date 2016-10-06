@@ -19,7 +19,7 @@ latency.
 
 Table descriptors are currently distributed to every node in the
 cluster via gossipping of the system config (see
-[schema_distribution](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/schema_gossip.md)). Unfortunately,
+[schema_gossip](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/schema_gossip.md)). Unfortunately,
 it is not safe to use these gossipped table descriptors in almost any
 circumstance. Consider the statements:
 
