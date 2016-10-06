@@ -280,6 +280,12 @@ type raftRequestInfo struct {
 
 type raftRequestQueue []raftRequestInfo
 
+// storeMu is an alias for TimedMutex to make it obvious from the stack trace
+// which mutex is being locked.
+type storeMu struct {
+	syncutil.TimedMutex
+}
+
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
 type Store struct {
@@ -415,7 +421,7 @@ type Store struct {
 
 	mu struct {
 		// TODO(peter): evaluate runtime overhead of the timed mutex.
-		syncutil.TimedMutex // Protects all variables in the mu struct.
+		storeMu // Protects all variables in the mu struct.
 		// Map of replicas by Range ID. This includes `uninitReplicas`.
 		replicas map[roachpb.RangeID]*Replica
 		// A btree key containing objects of type *Replica or
@@ -652,7 +658,16 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.drainLeases.Store(false)
 	s.scheduler = newRaftScheduler(cfg.Ctx, s, storeSchedulerConcurrency)
 
-	s.mu.TimedMutex = syncutil.MakeTimedMutex(s.Ctx(), defaultStoreMutexWarnThreshold)
+	storeMuLogger := syncutil.ThresholdLogger(
+		s.Ctx(),
+		defaultStoreMutexWarnThreshold,
+		log.Warningf,
+		func(t time.Duration) {
+			s.metrics.MuStoreNanos.RecordValue(t.Nanoseconds())
+		},
+	)
+	s.mu.TimedMutex = syncutil.MakeTimedMutex(storeMuLogger)
+
 	s.mu.Lock()
 	s.mu.replicas = map[roachpb.RangeID]*Replica{}
 	s.mu.replicaPlaceholders = map[roachpb.RangeID]*ReplicaPlaceholder{}

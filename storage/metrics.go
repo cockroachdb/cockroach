@@ -17,6 +17,9 @@
 package storage
 
 import (
+	"math"
+	"time"
+
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -234,6 +237,13 @@ var (
 		Help: "Total number of attempted intent resolutions"}
 	metaGCResolveSuccess = metric.Metadata{Name: "queue.gc.info.resolvesuccess",
 		Help: "Number of successful intent resolutions"}
+
+	metaMuReplicaNanos = metric.Metadata{Name: "mutex.replicananos",
+		Help: "Duration of Replica mutex critical sections"}
+	metaMuRaftNanos = metric.Metadata{Name: "mutex.raftnanos",
+		Help: "Duration of Replica Raft mutex critical sections"}
+	metaMuStoreNanos = metric.Metadata{Name: "mutex.storenanos",
+		Help: "Duration of Store mutex critical sections"}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -376,6 +386,11 @@ type StoreMetrics struct {
 	GCResolveTotal               *metric.Counter
 	GCResolveSuccess             *metric.Counter
 
+	// Mutex timing information.
+	MuStoreNanos   *metric.Histogram
+	MuRaftNanos    *metric.Histogram
+	MuReplicaNanos *metric.Histogram
+
 	// Stats for efficient merges.
 	mu struct {
 		syncutil.Mutex
@@ -513,6 +528,20 @@ func newStoreMetrics() *StoreMetrics {
 		GCPushTxn:                    metric.NewCounter(metaGCPushTxn),
 		GCResolveTotal:               metric.NewCounter(metaGCResolveTotal),
 		GCResolveSuccess:             metric.NewCounter(metaGCResolveSuccess),
+
+		// Mutex timing.
+		MuReplicaNanos: metric.NewHistogram(
+			metaMuReplicaNanos, time.Duration(math.MaxInt64),
+			int64(time.Second), 1,
+		),
+		MuRaftNanos: metric.NewHistogram(
+			metaMuRaftNanos, time.Duration(math.MaxInt64),
+			int64(time.Second), 1,
+		),
+		MuStoreNanos: metric.NewHistogram(
+			metaMuStoreNanos, time.Duration(math.MaxInt64),
+			int64(time.Second), 1,
+		),
 	}
 
 	sm.raftRcvdMessages[raftpb.MsgProp] = sm.RaftRcvdMsgProp
