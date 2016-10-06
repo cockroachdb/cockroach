@@ -578,7 +578,7 @@ var Builtins = map[string][]Builtin{
 
 	// Timestamp/Date functions.
 
-	"strftime": {
+	"experimental_strftime": {
 		Builtin{
 			Types:      ArgTypes{TypeTimestamp, TypeString},
 			ReturnType: TypeString,
@@ -620,7 +620,7 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
-	"strptime": {
+	"experimental_strptime": {
 		Builtin{
 			Types:      ArgTypes{TypeString, TypeString},
 			ReturnType: TypeTimestampTZ,
