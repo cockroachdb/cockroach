@@ -289,6 +289,12 @@ type raftRequestInfo struct {
 
 type raftRequestQueue []raftRequestInfo
 
+// storeMu is an alias for TimedMutex to make it obvious from the stack trace
+// which mutex is being locked.
+type storeMu struct {
+	syncutil.TimedMutex
+}
+
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
 type Store struct {
@@ -424,7 +430,7 @@ type Store struct {
 
 	mu struct {
 		// TODO(peter): evaluate runtime overhead of the timed mutex.
-		syncutil.TimedMutex // Protects all variables in the mu struct.
+		storeMu // Protects all variables in the mu struct.
 		// Map of replicas by Range ID. This includes `uninitReplicas`.
 		replicas map[roachpb.RangeID]*Replica
 		// A btree key containing objects of type *Replica or
