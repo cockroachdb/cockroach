@@ -18,12 +18,10 @@ package roachpb
 
 import (
 	"bytes"
-	"fmt"
 	"math"
 	"math/rand"
 	"reflect"
 	"sort"
-	"strings"
 	"testing"
 	"time"
 
@@ -210,15 +208,6 @@ func TestIsPrev(t *testing.T) {
 	}
 }
 
-func TestKeyString(t *testing.T) {
-	if Key("hello").String() != `"hello"` {
-		t.Errorf("expected key to display pretty version: %s", Key("hello"))
-	}
-	if RKeyMax.String() != `"\xff\xff"` {
-		t.Errorf("expected key max to display pretty version: %s", RKeyMax)
-	}
-}
-
 func TestValueChecksumEmpty(t *testing.T) {
 	k := []byte("key")
 	v := Value{}
@@ -360,44 +349,6 @@ func TestTxnIDEqual(t *testing.T) {
 		if eq := TxnIDEqual(test.a, test.b); eq != test.expEqual {
 			t.Errorf("%d: expected %q == %q: %t; got %t", i, test.a, test.b, test.expEqual, eq)
 		}
-	}
-}
-
-func TestTransactionString(t *testing.T) {
-	txnID, err := uuid.FromBytes([]byte("ת\x0f^\xe4-Fؽ\xf7\x16\xe4\xf9\xbe^\xbe"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	ts1 := makeTS(10, 11)
-	txn := Transaction{
-		TxnMeta: enginepb.TxnMeta{
-			Isolation: enginepb.SERIALIZABLE,
-			Key:       Key("foo"),
-			ID:        txnID,
-			Epoch:     2,
-			Timestamp: makeTS(20, 21),
-			Priority:  957356782,
-		},
-		Name:          "name",
-		Status:        COMMITTED,
-		LastHeartbeat: &ts1,
-		OrigTimestamp: makeTS(30, 31),
-		MaxTimestamp:  makeTS(40, 41),
-	}
-	expStr := `"name" id=d7aa0f5e key="foo" rw=false pri=44.58039917 iso=SERIALIZABLE stat=COMMITTED ` +
-		`epo=2 ts=0.000000020,21 orig=0.000000030,31 max=0.000000040,41 wto=false rop=false`
-
-	if str := txn.String(); str != expStr {
-		t.Errorf("expected txn %s; got %s", expStr, str)
-	}
-
-	var txnEmpty Transaction
-	_ = txnEmpty.String() // prevent regression of NPE
-
-	var cmd RaftCommand
-	cmd.Cmd.Txn = &txn
-	if actStr, idStr := fmt.Sprintf("%s", &cmd), txn.ID.String(); !strings.Contains(actStr, idStr) {
-		t.Fatalf("expected to find '%s' in '%s'", idStr, actStr)
 	}
 }
 
