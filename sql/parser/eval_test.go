@@ -529,6 +529,14 @@ func TestEval(t *testing.T) {
 		{`extract_duration(second from '10m20s30ms'::interval)`, `620`},
 		{`extract_duration(millisecond from '20s30ms40µs'::interval)`, `20030`},
 		{`extract_duration(microsecond from '12345ns'::interval)`, `12`},
+		// Time and date conversion
+		{`strftime('2016-09-28'::date, '%d@%Y/%m')`, `'28@2016/09'`},
+		{`strftime('2010-01-10 12:13:14.123456+00:00'::timestamp, '%a %A %w %d %b %B %m %y %Y %H %I %p %M %S %f %z %Z %j %U %W %c %x %X %%')`,
+			`'Sun Sunday 0 10 Jan January 01 10 2010 12 12 PM 13 14 123456 +0000 UTC 010 02 01 Sun Jan 10 12:13:14 2010 01/10/10 12:13:14 %'`},
+		{`strftime('2010-01-10 12:13:14.123456+00:00'::timestamptz, '%a %A %w %d %b %B %m %y %Y %H %I %p %M %S %f %z %Z %j %U %W %c %x %X %%')`,
+			`'Sun Sunday 0 10 Jan January 01 10 2010 12 12 PM 13 14 123456 +0000 UTC 010 02 01 Sun Jan 10 12:13:14 2010 01/10/10 12:13:14 %'`},
+		{`strptime('%d %Y %B', '03 2006 December')`, `2006-12-03 00:00:00+00:00`},
+		{`strptime('%y %m %d %z %M %S %H', '06 12 21 -0400 05 33 14')`, `2006-12-21 18:05:33+00:00`},
 		// TODO(nvanbenschoten) introduce a shorthand type annotation notation.
 		// {`123!int + 1`, `124`},
 		// {`123!float + 1`, `124.0`},
