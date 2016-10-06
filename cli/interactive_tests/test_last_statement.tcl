@@ -47,6 +47,13 @@ send "echo 'insert into t.foo(x) values (42)' | $argv sql\r"
 eexpect "missing semicolon at end of statement"
 eexpect ":/# "
 
+# Check that a final comment after a missing semicolon and without
+# newline is properly ignored when reasoning about the last
+# statement. #9482
+send "echo 'insert into t.foo(x) values (42)--;' | $argv sql\r"
+eexpect "missing semicolon at end of statement"
+eexpect ":/# "
+
 send "echo 'select * from t.foo;' | $argv sql\r"
 eexpect "0 rows"
 eexpect ":/# "
