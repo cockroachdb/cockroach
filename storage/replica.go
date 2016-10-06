@@ -618,8 +618,7 @@ func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor, destroyData bool) er
 	// Clear the map.
 	r.mu.pendingCmds = map[storagebase.CmdIDKey]*pendingCmd{}
 	r.mu.internalRaftGroup = nil
-	r.mu.destroyed = errors.Errorf("replica %d (range %d) was garbage collected",
-		r.mu.replicaID, r.RangeID)
+	r.mu.destroyed = roachpb.NewRangeNotFoundError(r.RangeID)
 	r.mu.Unlock()
 
 	if !destroyData {
