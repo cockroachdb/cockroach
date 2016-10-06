@@ -496,8 +496,12 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	// Add replica log tag - the value is rangeStr.String().
 	r.ctx = log.WithLogTag(store.Ctx(), "r", &r.rangeStr)
 
-	r.raftMu = syncutil.MakeTimedMutex(r.ctx, defaultReplicaRaftMuWarnThreshold)
-	r.mu.TimedMutex = syncutil.MakeTimedMutex(r.ctx, defaultReplicaMuWarnThreshold)
+	r.raftMu = syncutil.MakeTimedMutex(
+		r.ctx, "raftMu", defaultReplicaRaftMuWarnThreshold,
+	)
+	r.mu.TimedMutex = syncutil.MakeTimedMutex(
+		r.ctx, "replicaMu", defaultReplicaMuWarnThreshold,
+	)
 	r.mu.outSnapDone = initialOutSnapDone
 	return r
 }

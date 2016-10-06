@@ -15,7 +15,9 @@
 package syncutil_test // because of log import
 
 import (
+	"fmt"
 	"math"
+	"os"
 	"testing"
 	"time"
 
@@ -28,12 +30,13 @@ import (
 func TestTimedMutex(t *testing.T) {
 	var msgs []string
 	syncutil.SetLogger(func(ctx context.Context, innerMsg string, args ...interface{}) {
+		fmt.Fprintf(os.Stderr, innerMsg, args...)
 		msgs = append(msgs, innerMsg)
 	})
 
 	{
 		// Should fire.
-		tm := syncutil.MakeTimedMutex(context.Background(), time.Nanosecond)
+		tm := syncutil.MakeTimedMutex(context.Background(), "foo", time.Nanosecond)
 		tm.Lock()
 		time.Sleep(2 * time.Nanosecond)
 		tm.Unlock()
@@ -44,7 +47,7 @@ func TestTimedMutex(t *testing.T) {
 	}
 
 	{
-		tm := syncutil.MakeTimedMutex(context.Background(), time.Duration(math.MaxInt64))
+		tm := syncutil.MakeTimedMutex(context.Background(), "foo", time.Duration(math.MaxInt64))
 		tm.Lock()
 		// Avoid staticcheck complaining about empty critical section.
 		time.Sleep(time.Nanosecond)

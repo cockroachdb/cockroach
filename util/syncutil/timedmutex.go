@@ -17,6 +17,7 @@ package syncutil
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"runtime/debug"
 	"time"
 
@@ -46,16 +47,19 @@ type TimedMutex struct {
 	// Non-mutable fields.
 	ctx       context.Context
 	threshold time.Duration
+	name      string
 }
 
 // MakeTimedMutex creates a TimedMutex which warns when an Unlock happens more
 // than warnDuration after the corresponding lock. It will use the supplied
 // context for the warning message; see SetLogger().
-func MakeTimedMutex(ctx context.Context, warnDuration time.Duration) TimedMutex {
+func MakeTimedMutex(
+	ctx context.Context, name string, warnDuration time.Duration,
+) TimedMutex {
 	if warnDuration <= 0 {
 		panic("duration must be positive")
 	}
-	return TimedMutex{ctx: ctx, threshold: warnDuration, mu: &Mutex{}}
+	return TimedMutex{name: name, ctx: ctx, threshold: warnDuration, mu: &Mutex{}}
 }
 
 // Lock implements sync.Locker
@@ -79,9 +83,16 @@ func (tm *TimedMutex) Unlock() {
 				fmt.Fprintf(os.Stderr, msg, args...)
 			}
 		}
+		pc, _, _, ok := runtime.Caller(1)
+		fun := "?"
+		if ok {
+			if f := runtime.FuncForPC(pc); f != nil {
+				fun = f.Name()
+			}
+		}
 		log(
-			tm.ctx, "mutex held for %s (>%s):\n%s",
-			heldFor, tm.threshold, debug.Stack(),
+			tm.ctx, "%s held %s mutex for %s (>%s):\n%s",
+			fun, tm.name, heldFor, tm.threshold, debug.Stack(),
 		)
 	}
 }
