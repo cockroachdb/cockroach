@@ -177,21 +177,28 @@ runcheck() {
   # We need to set these options again due to the `parallel` magic.
   set -euo pipefail
 
-  local name="$1"
+  # These variables really ought to be local, but then they are not bound
+  # when the trap below fires.
+  start=$(date +%s)
+  name="$1"
   shift
+
+  function footer() {
+    local status=$?
+    local end=$(date +%s)
+    local runtime=$((end-start))
+    if [ $status -eq 0 ]; then
+      echo "--- PASS: $name ($runtime.00s)"
+    else
+      echo "--- FAIL: $name ($runtime.00s)"
+      echo "$output"
+    fi
+    return $status
+  }
+  trap footer EXIT
+
   echo "=== RUN $name"
-  local start=$(date +%s)
   output=$(eval "$name")
-  local status=$?
-  local end=$(date +%s)
-  local runtime=$((end-start))
-  if [ $status -eq 0 ]; then
-    echo "--- PASS: $name ($runtime.00s)"
-  else
-    echo "--- FAIL: $name ($runtime.00s)"
-    echo "$output"
-  fi
-  return $status
 }
 
 exit_status=0
