@@ -445,6 +445,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 	for _, scEntry := range scc.schemaChangers {
 		sc := &scEntry.sc
 		sc.db = *e.cfg.DB
+		sc.ctx = e.cfg.Context
 		sc.testingKnobs = e.cfg.SchemaChangerTestingKnobs
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 			if done, err := sc.IsDone(); err != nil {
