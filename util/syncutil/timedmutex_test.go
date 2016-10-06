@@ -15,7 +15,9 @@
 package syncutil_test // because of log import
 
 import (
+	"fmt"
 	"math"
+	"regexp"
 	"testing"
 	"time"
 
@@ -27,24 +29,30 @@ import (
 
 func TestTimedMutex(t *testing.T) {
 	var msgs []string
-	syncutil.SetLogger(func(ctx context.Context, innerMsg string, args ...interface{}) {
-		msgs = append(msgs, innerMsg)
-	})
+	log := func(ctx context.Context, innerMsg string, args ...interface{}) {
+		formatted := fmt.Sprintf(innerMsg, args...)
+		msgs = append(msgs, formatted)
+	}
 
 	{
 		// Should fire.
-		tm := syncutil.MakeTimedMutex(context.Background(), time.Nanosecond)
+		tm := syncutil.MakeTimedMutex(
+			context.Background(), time.Nanosecond, log,
+		)
 		tm.Lock()
 		time.Sleep(2 * time.Nanosecond)
 		tm.Unlock()
 
-		if len(msgs) != 1 {
-			t.Fatalf("mutex did not warn: %+v", msgs)
+		re := regexp.MustCompile(`mutex held by .*TestTimedMutex for .* \(\>1ns\):`)
+		if len(msgs) != 1 || !re.MatchString(msgs[0]) {
+			t.Fatalf("mutex did not warn as expected: %+v", msgs)
 		}
 	}
 
 	{
-		tm := syncutil.MakeTimedMutex(context.Background(), time.Duration(math.MaxInt64))
+		tm := syncutil.MakeTimedMutex(
+			context.Background(), time.Duration(math.MaxInt64), log,
+		)
 		tm.Lock()
 		// Avoid staticcheck complaining about empty critical section.
 		time.Sleep(time.Nanosecond)

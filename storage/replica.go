@@ -206,6 +206,17 @@ func (d *atomicDescString) String() string {
 	return *(*string)(atomic.LoadPointer(&d.strPtr))
 }
 
+// replicaMu and raftMu are aliases for TimedMutex to make it obvious from the
+// stack trace which mutex is being locked.
+
+type replicaMu struct {
+	syncutil.TimedMutex
+}
+
+type raftMu struct {
+	syncutil.TimedMutex
+}
+
 // A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are
@@ -246,13 +257,13 @@ type Replica struct {
 	// Locking notes: Replica.raftMu < Replica.mu
 	//
 	// TODO(peter): evaluate runtime overhead the timed mutex.
-	raftMu syncutil.TimedMutex
+	raftMu raftMu
 
 	mu struct {
 		// Protects all fields in the mu struct.
 		//
 		// TODO(peter): evaluate runtime overhead the timed mutex.
-		syncutil.TimedMutex
+		replicaMu
 		// Has the replica been destroyed.
 		destroyed error
 		// Corrupted persistently (across process restarts) indicates whether the
@@ -496,8 +507,21 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	// Add replica log tag - the value is rangeStr.String().
 	r.ctx = log.WithLogTag(store.Ctx(), "r", &r.rangeStr)
 
-	r.raftMu = syncutil.MakeTimedMutex(r.ctx, defaultReplicaRaftMuWarnThreshold)
-	r.mu.TimedMutex = syncutil.MakeTimedMutex(r.ctx, defaultReplicaMuWarnThreshold)
+	raftMuLogger := func(ctx context.Context, msg string, args ...interface{}) {
+		log.Warningf(ctx, "raftMu:"+msg, args...)
+		r.store.metrics.MuRaftNumLong.Inc(1)
+	}
+	r.raftMu.TimedMutex = syncutil.MakeTimedMutex(
+		r.ctx, defaultReplicaRaftMuWarnThreshold, raftMuLogger,
+	)
+	replicaMuLogger := func(ctx context.Context, msg string, args ...interface{}) {
+		log.Warningf(ctx, "replicaMu:"+msg, args...)
+		r.store.metrics.MuReplicaNumLong.Inc(1)
+	}
+
+	r.mu.TimedMutex = syncutil.MakeTimedMutex(
+		r.ctx, defaultReplicaMuWarnThreshold, replicaMuLogger,
+	)
 	r.mu.outSnapDone = initialOutSnapDone
 	return r
 }

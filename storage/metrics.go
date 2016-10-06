@@ -234,6 +234,13 @@ var (
 		Help: "Total number of attempted intent resolutions"}
 	metaGCResolveSuccess = metric.Metadata{Name: "queue.gc.info.resolvesuccess",
 		Help: "Number of successful intent resolutions"}
+
+	muReplicaNumLong = metric.Metadata{Name: "mutex.replica.long",
+		Help: "Number of long ReplicaMu critical sections"}
+	muRaftNumLong = metric.Metadata{Name: "mutex.raft.long",
+		Help: "Number of long RaftMu critical sections"}
+	muStoreNumLong = metric.Metadata{Name: "mutex.store.long",
+		Help: "Number of long StoreMu critical sections"}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -376,6 +383,11 @@ type StoreMetrics struct {
 	GCResolveTotal               *metric.Counter
 	GCResolveSuccess             *metric.Counter
 
+	// Mutex timing information.
+	MuStoreNumLong   *metric.Counter
+	MuRaftNumLong    *metric.Counter
+	MuReplicaNumLong *metric.Counter
+
 	// Stats for efficient merges.
 	mu struct {
 		syncutil.Mutex
@@ -513,6 +525,11 @@ func newStoreMetrics() *StoreMetrics {
 		GCPushTxn:                    metric.NewCounter(metaGCPushTxn),
 		GCResolveTotal:               metric.NewCounter(metaGCResolveTotal),
 		GCResolveSuccess:             metric.NewCounter(metaGCResolveSuccess),
+
+		// Mutex timing.
+		MuReplicaNumLong: metric.NewCounter(muReplicaNumLong),
+		MuRaftNumLong:    metric.NewCounter(muRaftNumLong),
+		MuStoreNumLong:   metric.NewCounter(muStoreNumLong),
 	}
 
 	sm.raftRcvdMessages[raftpb.MsgProp] = sm.RaftRcvdMsgProp

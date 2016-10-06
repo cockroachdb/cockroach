@@ -273,6 +273,18 @@ export default class extends React.Component<IInjectedProps, {}> {
               </Axis>
             </LineGraph>
 
+            <LineGraph title="Critical sections" sources={sources} tooltip={`The rate of exceptionally long critical sections per second ${specifier}.`}>
+              <Axis format={ d3.format("1.f") }>
+                <Metric name="cr.store.mutex.store.long" title="StoreMu" nonNegativeRate />
+              </Axis>
+              <Axis format={ d3.format("1.f") }>
+                <Metric name="cr.store.mutex.replica.long" title="ReplicaMu" nonNegativeRate />
+              </Axis>
+              <Axis format={ d3.format(".1f") }>
+                <Metric name="cr.store.mutex.raft.long" title="RaftMu" nonNegativeRate />
+              </Axis>
+            </LineGraph>
+
           </GraphGroup>
       </div>
     </div>;
