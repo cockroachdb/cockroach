@@ -102,19 +102,6 @@ func TestBatchRequestGetArg(t *testing.T) {
 	}
 }
 
-func TestBatchRequestString(t *testing.T) {
-	br := BatchRequest{}
-	for i := 0; i < 100; i++ {
-		br.Requests = append(br.Requests, RequestUnion{Get: &GetRequest{}})
-	}
-	br.Requests = append(br.Requests, RequestUnion{EndTransaction: &EndTransactionRequest{}})
-
-	e := `Get ["",""), Get ["",""), Get ["",""), Get ["",""), Get ["",""), Get ["",""), Get ["",""), Get ["",""), Get ["",""), Get ["",""), Get ["",""), Get ["",""), Get ["",""), Get ["",""), Get ["",""), Get ["",""), Get ["",""), Get ["",""), Get ["",""), Get ["",""), ... 76 skipped ..., Get ["",""), Get ["",""), Get ["",""), Get ["",""), EndTransaction ["","")`
-	if e != br.String() {
-		t.Fatalf("e = %s, v = %s", e, br.String())
-	}
-}
-
 func TestBatchRequestSummary(t *testing.T) {
 	// The Summary function is generated automatically, so the tests don't need to
 	// be exhaustive.
