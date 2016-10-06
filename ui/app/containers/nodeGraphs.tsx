@@ -273,6 +273,24 @@ export default class extends React.Component<IInjectedProps, {}> {
               </Axis>
             </LineGraph>
 
+            <LineGraph title="Critical Section Time"
+                       tooltip={`The maximum duration for which the corresponding mutex was held in the last minute ${specifier}.`}
+                       sources={sources}>
+              <Axis format={ (n: number) => d3.format(".1f")(NanoToMilli(n)) } label="Milliseconds">
+                <Metric name="cr.store.mutex.storenanos-max" title="StoreMu"
+                        aggregateMax downsampleMax />
+              </Axis>
+              <Axis format={ (n: number) => d3.format(".1f")(NanoToMilli(n)) } label="Milliseconds">
+                <Metric name="cr.store.mutex.replicananos-max" title="ReplicaMu"
+                        aggregateMax downsampleMax />
+              </Axis>
+              <Axis format={ (n: number) => d3.format(".1f")(NanoToMilli(n)) } label="Milliseconds">
+                <Metric name="cr.store.mutex.raftnanos-max" title="RaftMu"
+                        aggregateMax downsampleMax />
+              </Axis>
+
+            </LineGraph>
+
           </GraphGroup>
       </div>
     </div>;

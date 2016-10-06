@@ -370,7 +370,7 @@ func TestReplicaContains(t *testing.T) {
 
 	// This test really only needs a hollow shell of a Replica.
 	r := &Replica{}
-	r.mu.TimedMutex = syncutil.MakeTimedMutex(context.Background(), time.Hour)
+	r.mu.TimedMutex = syncutil.MakeTimedMutex(defaultMuLogger)
 	r.mu.state.Desc = desc
 	r.rangeStr.store(desc)
 
