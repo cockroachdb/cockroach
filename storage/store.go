@@ -206,54 +206,44 @@ func (e *NotBootstrappedError) Error() string {
 	return "store has not been bootstrapped"
 }
 
-// storeRangeSet is an implementation of rangeSet which
-// cycles through a store's replicasByKey btree.
-type storeRangeSet struct {
+// A storeReplicaVisitor calls a visitor function for each of a store's
+// initialized Replicas (in unspecified order).
+type storeReplicaVisitor struct {
 	store   *Store
 	repls   []*Replica // Replicas to be visited.
 	visited int        // Number of visited ranges, -1 before first call to Visit()
-	shuffle bool
 }
 
-func newStoreRangeSet(store *Store) *storeRangeSet {
-	return &storeRangeSet{
+func newStoreReplicaVisitor(store *Store) *storeReplicaVisitor {
+	return &storeReplicaVisitor{
 		store:   store,
 		visited: -1,
 	}
 }
 
-func newShuffledStoreRangeSet(store *Store) *storeRangeSet {
-	rs := newStoreRangeSet(store)
-	rs.shuffle = true
-	return rs
-}
-
 // Visit calls the visitor with each Replica until false is returned.
-func (rs *storeRangeSet) Visit(visitor func(*Replica) bool) {
+func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 	// Copy the  range IDs to a slice and iterate over the slice so
-	// that we can safely (e.g., no race, no range skip) iterate
-	// over ranges regardless of how BTree is implemented.
+	// that we iterate over some (possibly stale) consistent view of
+	// all Replicas without holding the Store lock.
 	rs.store.mu.Lock()
-	rs.repls = make([]*Replica, 0, rs.store.mu.replicasByKey.Len())
-	rs.store.visitReplicasLocked(
-		roachpb.RKeyMin, roachpb.RKeyMax, func(repl *Replica) bool {
-			rs.repls = append(rs.repls, repl)
-			return true // more
-		},
-	)
+	rs.repls = make([]*Replica, 0, len(rs.store.mu.replicas))
+	for _, repl := range rs.store.mu.replicas {
+		rs.repls = append(rs.repls, repl)
+	}
 	rs.store.mu.Unlock()
 
-	if rs.shuffle {
-		// Shuffle the replicas to prevent issues in tests where stores are
-		// scanning replicas in lock-step and one store is winning the race and
-		// getting a first crack at processing the replicas on its queues.
-		//
-		// TODO(peter): Re-evaluate whether this is necessary after we allow
-		// rebalancing away from the leaseholder. See TestRebalance_3To5Small.
-		for i := 1; i < len(rs.repls); i++ {
-			j := rand.Intn(i + 1)
-			rs.repls[i], rs.repls[j] = rs.repls[j], rs.repls[i]
-		}
+	// The Replicas are already in "unspecified order" due to map iteration,
+	// but we want to make sure it's completely random to prevent issues in
+	// tests where stores are scanning replicas in lock-step and one store is
+	// winning the race and getting a first crack at processing the replicas on
+	// its queues.
+	//
+	// TODO(peter): Re-evaluate whether this is necessary after we allow
+	// rebalancing away from the leaseholder. See TestRebalance_3To5Small.
+	for i := 1; i < len(rs.repls); i++ {
+		j := rand.Intn(i + 1)
+		rs.repls[i], rs.repls[j] = rs.repls[j], rs.repls[i]
 	}
 
 	rs.visited = 0
@@ -264,8 +254,9 @@ func (rs *storeRangeSet) Visit(visitor func(*Replica) bool) {
 		rs.visited++
 		repl.mu.Lock()
 		destroyed := repl.mu.destroyed
+		initialized := repl.isInitializedLocked()
 		repl.mu.Unlock()
-		if destroyed == nil && !visitor(repl) {
+		if initialized && destroyed == nil && !visitor(repl) {
 			break
 		}
 	}
@@ -273,11 +264,11 @@ func (rs *storeRangeSet) Visit(visitor func(*Replica) bool) {
 }
 
 // TODO(tschottdorf): this method has highly doubtful semantics.
-func (rs *storeRangeSet) EstimatedCount() int {
-	rs.store.mu.Lock()
-	defer rs.store.mu.Unlock()
+func (rs *storeReplicaVisitor) EstimatedCount() int {
 	if rs.visited <= 0 {
-		return rs.store.mu.replicasByKey.Len()
+		rs.store.mu.Lock()
+		defer rs.store.mu.Unlock()
+		return len(rs.store.mu.replicas)
 	}
 	return len(rs.repls) - rs.visited
 }
@@ -673,7 +664,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	if s.cfg.Gossip != nil {
 		// Add range scanner and configure with queues.
 		s.scanner = newReplicaScanner(
-			cfg.Ctx, cfg.ScanInterval, cfg.ScanMaxIdleTime, newShuffledStoreRangeSet(s),
+			cfg.Ctx, cfg.ScanInterval, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
 		)
 		s.gcQueue = newGCQueue(s, s.cfg.Gossip)
 		s.splitQueue = newSplitQueue(s, s.db, s.cfg.Gossip)
@@ -686,7 +677,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 
 		// Add consistency check scanner.
 		s.consistencyScanner = newReplicaScanner(
-			cfg.Ctx, cfg.ConsistencyCheckInterval, 0, newShuffledStoreRangeSet(s),
+			cfg.Ctx, cfg.ConsistencyCheckInterval, 0, newStoreReplicaVisitor(s),
 		)
 		s.replicaConsistencyQueue = newReplicaConsistencyQueue(s, s.cfg.Gossip)
 		s.consistencyScanner.AddQueues(s.replicaConsistencyQueue)
@@ -740,7 +731,7 @@ func (s *Store) DrainLeases(drain bool) error {
 	return util.RetryForDuration(10*s.cfg.rangeLeaseActiveDuration, func() error {
 		var drainingLease *roachpb.Lease
 		now := s.Clock().Now()
-		newStoreRangeSet(s).Visit(func(r *Replica) bool {
+		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 			lease, nextLease := r.getLease()
 			// If we own an active lease or we're trying to obtain a lease
 			// (and that request is fresh enough), wait.
@@ -934,7 +925,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		sem := make(chan struct{}, 512)
 		var wg sync.WaitGroup // wait for unfreeze goroutines
 		var unfrozen int64    // updated atomically
-		newStoreRangeSet(s).Visit(func(r *Replica) bool {
+		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 			r.mu.Lock()
 			frozen := r.mu.state.Frozen
 			r.mu.Unlock()
@@ -1149,7 +1140,7 @@ func (s *Store) maybeGossipSystemConfig() error {
 // the system config which affect range split boundaries.
 func (s *Store) systemGossipUpdate(cfg config.SystemConfig) {
 	// For every range, update its MaxBytes and check if it needs to be split.
-	newStoreRangeSet(s).Visit(func(repl *Replica) bool {
+	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		if zone, err := cfg.GetZoneConfigForKey(repl.Desc().StartKey); err == nil {
 			repl.SetMaxBytes(zone.RangeMaxBytes)
 		}
@@ -1909,7 +1900,7 @@ func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
 	sid := s.StoreID()
 
 	var deadReplicas []roachpb.ReplicaIdent
-	newStoreRangeSet(s).Visit(func(r *Replica) bool {
+	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		r.mu.Lock()
 		destroyed := r.mu.destroyed
 		r.mu.Unlock()
@@ -3084,7 +3075,7 @@ func (s *Store) updateReplicationGauges() error {
 
 	timestamp := s.cfg.Clock.Now()
 
-	newStoreRangeSet(s).Visit(func(rep *Replica) bool {
+	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
 		desc := rep.Desc()
 		zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey)
 		if err != nil {
@@ -3204,7 +3195,7 @@ func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (enginepb.
 	var output enginepb.MVCCStats
 	var count int
 
-	newStoreRangeSet(s).Visit(func(repl *Replica) bool {
+	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		desc := repl.Desc()
 		if bytes.Compare(startKey, desc.EndKey) >= 0 || bytes.Compare(desc.StartKey, endKey) >= 0 {
 			return true // continue
@@ -3225,7 +3216,7 @@ func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (enginepb.
 // new data being rebalanced to the Store, and thus does not guarantee that the
 // Store remains in the reported state.
 func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDescriptor) {
-	newStoreRangeSet(s).Visit(func(r *Replica) bool {
+	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		if !r.IsInitialized() {
 			return true
 		}

@@ -51,7 +51,7 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 	var totalStats enginepb.MVCCStats
 	var err error
 
-	visitor := newStoreRangeSet(s)
+	visitor := newStoreReplicaVisitor(s)
 	now := s.Clock().PhysicalNow()
 	visitor.Visit(func(r *Replica) bool {
 		var stats enginepb.MVCCStats
@@ -66,7 +66,7 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 }
 
 func forceScanAndProcess(s *Store, q *baseQueue) {
-	newStoreRangeSet(s).Visit(func(repl *Replica) bool {
+	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		q.MaybeAdd(repl, s.cfg.Clock.Now())
 		return true
 	})
