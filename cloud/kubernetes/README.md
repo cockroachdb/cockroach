@@ -130,7 +130,7 @@ database and ensuring the other replicas have all data that was written.
 Simply patch the PetSet by running
 
 ```shell
-kubectl patch petset cockroachdb -p '{"spec":{"replicas":6}}'
+kubectl patch petset cockroachdb -p '{"spec":{"replicas":4}}'
 ```
 
 Note that you may need to create a new persistent volume claim first. If you
