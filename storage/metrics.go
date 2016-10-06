@@ -17,6 +17,9 @@
 package storage
 
 import (
+	"math"
+	"time"
+
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/metric"
@@ -235,12 +238,12 @@ var (
 	metaGCResolveSuccess = metric.Metadata{Name: "queue.gc.info.resolvesuccess",
 		Help: "Number of successful intent resolutions"}
 
-	muReplicaNumLong = metric.Metadata{Name: "mutex.replica.long",
-		Help: "Number of long ReplicaMu critical sections"}
-	muRaftNumLong = metric.Metadata{Name: "mutex.raft.long",
-		Help: "Number of long RaftMu critical sections"}
-	muStoreNumLong = metric.Metadata{Name: "mutex.store.long",
-		Help: "Number of long StoreMu critical sections"}
+	metaMuReplicaTiming = metric.Metadata{Name: "mutex.replica",
+		Help: "Duration of ReplicaMu critical sections"}
+	metaMuRaftTiming = metric.Metadata{Name: "mutex.raft",
+		Help: "Duration of RaftMu critical sections"}
+	metaMuStoreTiming = metric.Metadata{Name: "mutex.store",
+		Help: "Duration of StoreMu critical sections"}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -384,9 +387,9 @@ type StoreMetrics struct {
 	GCResolveSuccess             *metric.Counter
 
 	// Mutex timing information.
-	MuStoreNumLong   *metric.Counter
-	MuRaftNumLong    *metric.Counter
-	MuReplicaNumLong *metric.Counter
+	MuStoreTiming   *metric.Histogram
+	MuRaftTiming    *metric.Histogram
+	MuReplicaTiming *metric.Histogram
 
 	// Stats for efficient merges.
 	mu struct {
@@ -527,9 +530,18 @@ func newStoreMetrics() *StoreMetrics {
 		GCResolveSuccess:             metric.NewCounter(metaGCResolveSuccess),
 
 		// Mutex timing.
-		MuReplicaNumLong: metric.NewCounter(muReplicaNumLong),
-		MuRaftNumLong:    metric.NewCounter(muRaftNumLong),
-		MuStoreNumLong:   metric.NewCounter(muStoreNumLong),
+		MuReplicaTiming: metric.NewHistogram(
+			metaMuReplicaTiming, time.Duration(math.MaxInt64),
+			int64(time.Second), 1,
+		),
+		MuRaftTiming: metric.NewHistogram(
+			metaMuRaftTiming, time.Duration(math.MaxInt64),
+			int64(time.Second), 1,
+		),
+		MuStoreTiming: metric.NewHistogram(
+			metaMuStoreTiming, time.Duration(math.MaxInt64),
+			int64(time.Second), 1,
+		),
 	}
 
 	sm.raftRcvdMessages[raftpb.MsgProp] = sm.RaftRcvdMsgProp

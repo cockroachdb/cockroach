@@ -667,13 +667,16 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.drainLeases.Store(false)
 	s.scheduler = newRaftScheduler(cfg.Ctx, s, storeSchedulerConcurrency)
 
-	storeMuLogger := func(ctx context.Context, msg string, args ...interface{}) {
-		log.Warningf(ctx, "storeMu:"+msg, args...)
-		s.metrics.MuStoreNumLong.Inc(1)
-	}
-	s.mu.TimedMutex = syncutil.MakeTimedMutex(
-		s.Ctx(), defaultStoreMutexWarnThreshold, storeMuLogger,
+	storeMuLogger := syncutil.ThresholdLogger(
+		s.Ctx(),
+		defaultStoreMutexWarnThreshold,
+		log.Warningf,
+		func(t time.Duration) {
+			s.metrics.MuStoreTiming.RecordValue(int64(t))
+		},
 	)
+	s.mu.TimedMutex = syncutil.MakeTimedMutex(storeMuLogger)
+
 	s.mu.Lock()
 	s.mu.replicas = map[roachpb.RangeID]*Replica{}
 	s.mu.replicaPlaceholders = map[roachpb.RangeID]*ReplicaPlaceholder{}

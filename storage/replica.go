@@ -507,21 +507,25 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	// Add replica log tag - the value is rangeStr.String().
 	r.ctx = log.WithLogTag(store.Ctx(), "r", &r.rangeStr)
 
-	raftMuLogger := func(ctx context.Context, msg string, args ...interface{}) {
-		log.Warningf(ctx, "raftMu:"+msg, args...)
-		r.store.metrics.MuRaftNumLong.Inc(1)
-	}
-	r.raftMu.TimedMutex = syncutil.MakeTimedMutex(
-		r.ctx, defaultReplicaRaftMuWarnThreshold, raftMuLogger,
+	raftMuLogger := syncutil.ThresholdLogger(
+		r.ctx,
+		defaultReplicaRaftMuWarnThreshold,
+		log.Warningf,
+		func(t time.Duration) {
+			r.store.metrics.MuRaftTiming.RecordValue(int64(t))
+		},
 	)
-	replicaMuLogger := func(ctx context.Context, msg string, args ...interface{}) {
-		log.Warningf(ctx, "replicaMu:"+msg, args...)
-		r.store.metrics.MuReplicaNumLong.Inc(1)
-	}
+	r.raftMu.TimedMutex = syncutil.MakeTimedMutex(raftMuLogger)
 
-	r.mu.TimedMutex = syncutil.MakeTimedMutex(
-		r.ctx, defaultReplicaMuWarnThreshold, replicaMuLogger,
+	replicaMuLogger := syncutil.ThresholdLogger(
+		r.ctx,
+		defaultReplicaMuWarnThreshold,
+		log.Warningf,
+		func(t time.Duration) {
+			r.store.metrics.MuReplicaTiming.RecordValue(int64(t))
+		},
 	)
+	r.mu.TimedMutex = syncutil.MakeTimedMutex(replicaMuLogger)
 	r.mu.outSnapDone = initialOutSnapDone
 	return r
 }

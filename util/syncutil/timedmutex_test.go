@@ -29,16 +29,20 @@ import (
 
 func TestTimedMutex(t *testing.T) {
 	var msgs []string
-	log := func(ctx context.Context, innerMsg string, args ...interface{}) {
+
+	print := func(ctx context.Context, innerMsg string, args ...interface{}) {
 		formatted := fmt.Sprintf(innerMsg, args...)
 		msgs = append(msgs, formatted)
 	}
+	measure := func(time.Duration) {}
 
 	{
-		// Should fire.
-		tm := syncutil.MakeTimedMutex(
-			context.Background(), time.Nanosecond, log,
+		cb := syncutil.ThresholdLogger(
+			context.Background(), time.Nanosecond, print, measure,
 		)
+
+		// Should fire.
+		tm := syncutil.MakeTimedMutex(context.Background(), cb)
 		tm.Lock()
 		time.Sleep(2 * time.Nanosecond)
 		tm.Unlock()
@@ -50,9 +54,10 @@ func TestTimedMutex(t *testing.T) {
 	}
 
 	{
-		tm := syncutil.MakeTimedMutex(
-			context.Background(), time.Duration(math.MaxInt64), log,
+		cb := syncutil.ThresholdLogger(
+			context.Background(), time.Duration(math.MaxInt64), print, measure,
 		)
+		tm := syncutil.MakeTimedMutex(context.Background(), cb)
 		tm.Lock()
 		// Avoid staticcheck complaining about empty critical section.
 		time.Sleep(time.Nanosecond)

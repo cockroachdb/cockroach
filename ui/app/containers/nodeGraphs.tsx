@@ -273,17 +273,24 @@ export default class extends React.Component<IInjectedProps, {}> {
               </Axis>
             </LineGraph>
 
-            <LineGraph title="Critical sections" sources={sources} tooltip={`The rate of exceptionally long critical sections per second ${specifier}.`}>
-              <Axis format={ d3.format("1.f") }>
-                <Metric name="cr.store.mutex.store.long" title="StoreMu" nonNegativeRate />
+            <LineGraph title="Critical Section Time"
+                       tooltip={`The maximum duration for which the corresponding mutex was held in the last minute ${specifier}.`}
+                       sources={sources}>
+              <Axis format={ (n: number) => d3.format(".1f")(NanoToMilli(n)) } label="Milliseconds">
+                <Metric name="cr.store.mutex.store-max" title="StoreMu"
+                        aggregateMax downsampleMax />
               </Axis>
-              <Axis format={ d3.format("1.f") }>
-                <Metric name="cr.store.mutex.replica.long" title="ReplicaMu" nonNegativeRate />
+              <Axis format={ (n: number) => d3.format(".1f")(NanoToMilli(n)) } label="Milliseconds">
+                <Metric name="cr.store.mutex.replica-max" title="ReplicaMu"
+                        aggregateMax downsampleMax />
               </Axis>
-              <Axis format={ d3.format(".1f") }>
-                <Metric name="cr.store.mutex.raft.long" title="RaftMu" nonNegativeRate />
+              <Axis format={ (n: number) => d3.format(".1f")(NanoToMilli(n)) } label="Milliseconds">
+                <Metric name="cr.store.mutex.raft-max" title="RaftMu"
+                        aggregateMax downsampleMax />
               </Axis>
+
             </LineGraph>
+
 
           </GraphGroup>
       </div>
