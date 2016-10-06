@@ -52,7 +52,7 @@ metadata:
   name: cockroachdb
 spec:
   serviceName: "cockroachdb"
-  replicas: 5
+  replicas: 3
   template:
     metadata:
       labels:
@@ -93,7 +93,7 @@ spec:
           - |
             # The use of qualified `hostname -f` is crucial:
             # Other nodes aren't able to look up the unqualified hostname.
-            CRARGS=("start" "--logtostderr" "--insecure" "--host" "$(hostname -f)")
+            CRARGS=("start" "--logtostderr" "--insecure" "--host" "$(hostname -f)" "--http-host" "0.0.0.0")
             # TODO(tschottdorf): really want to use an init container to do
             # the bootstrapping. The idea is that the container would know
             # whether it's on the first node and could check whether there's
