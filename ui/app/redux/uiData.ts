@@ -16,6 +16,10 @@ export const KEY_HELPUS: string = "helpus";
 // The "server." prefix denotes that this key is shared with the server, so
 // changes to this key must be synchronized with the server code.
 export const KEY_OPTIN: string = "server.optin-reporting";
+// Tracks whether the latest registration data has been synchronized with the
+// Cockroach Labs servers.
+export const KEY_REGISTRATION_SYNCHRONIZED = "registration_synchronized";
+
 /**
  * OptInAttributes tracks the values the user has provided when opting in to usage reporting
  */
