@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"reflect"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -508,7 +509,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	}
 }
 
-func TestStoreRangeSet(t *testing.T) {
+func TestStoreReplicaVisitor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
@@ -521,6 +522,7 @@ func TestStoreRangeSet(t *testing.T) {
 	if err := store.RemoveReplica(rng1, *rng1.Desc(), true); err != nil {
 		t.Error(err)
 	}
+
 	// Add 10 new ranges.
 	const newCount = 10
 	for i := 0; i < newCount; i++ {
@@ -531,85 +533,41 @@ func TestStoreRangeSet(t *testing.T) {
 	}
 
 	// Verify two passes of the visit.
-	ranges := newStoreRangeSet(store)
+	ranges := newStoreReplicaVisitor(store)
+	exp := make(map[roachpb.RangeID]struct{})
+	for i := 0; i < newCount; i++ {
+		exp[roachpb.RangeID(i+1)] = struct{}{}
+	}
+
 	for pass := 0; pass < 2; pass++ {
 		if ec := ranges.EstimatedCount(); ec != 10 {
-			t.Errorf("expected 10 remaining; got %d", ec)
+			t.Fatalf("expected 10 remaining; got %d", ec)
 		}
 		i := 1
+		seen := make(map[roachpb.RangeID]struct{})
 		ranges.Visit(func(rng *Replica) bool {
-			if rng.RangeID != roachpb.RangeID(i) {
-				t.Errorf("expected range with Range ID %d; got %v", i, rng)
+			_, ok := seen[rng.RangeID]
+			if ok {
+				t.Fatalf("already saw %d", rng.RangeID)
 			}
+
+			seen[rng.RangeID] = struct{}{}
 			if ec := ranges.EstimatedCount(); ec != 10-i {
-				t.Errorf("expected %d remaining; got %d", 10-i, ec)
+				t.Fatalf(
+					"expected %d remaining; got %d after seeing %+v",
+					10-i, ec, seen,
+				)
 			}
 			i++
 			return true
 		})
 		if ec := ranges.EstimatedCount(); ec != 10 {
-			t.Errorf("expected 10 remaining; got %d", ec)
+			t.Fatalf("expected 10 remaining; got %d", ec)
+		}
+		if !reflect.DeepEqual(exp, seen) {
+			t.Fatalf("got %v, expected %v", seen, exp)
 		}
 	}
-
-	// Try visiting with an addition and a removal.
-	visited := make(chan struct{})
-	updated := make(chan struct{})
-	done := make(chan struct{})
-	go func() {
-		i := 1
-		ranges.Visit(func(rng *Replica) bool {
-			if i == 1 {
-				if rng.RangeID != roachpb.RangeID(i) {
-					t.Errorf("expected range with Range ID %d; got %v", i, rng)
-				}
-				close(visited)
-				<-updated
-			} else {
-				// The second range will be removed and skipped.
-				if rng.RangeID != roachpb.RangeID(i+1) {
-					t.Errorf("expected range with Range ID %d; got %v", i+1, rng)
-				}
-			}
-			i++
-			return true
-		})
-		if i != 10 {
-			t.Errorf("expected visit of 9 ranges, but got %v", i-1)
-		}
-		close(done)
-	}()
-
-	<-visited
-	if ec := ranges.EstimatedCount(); ec != 9 {
-		t.Errorf("expected 9 remaining; got %d", ec)
-	}
-
-	// Split the first range to insert a new range as second range.
-	// The range is never visited with this iteration.
-	rng := createReplica(store, 11, roachpb.RKey("a000"), roachpb.RKey("a01"))
-	if err = store.SplitRange(store.LookupReplica(roachpb.RKey("a00"), nil), rng); err != nil {
-		t.Fatal(err)
-	}
-	// Estimated count will still be 9, as it's cached.
-	if ec := ranges.EstimatedCount(); ec != 9 {
-		t.Errorf("expected 9 remaining; got %d", ec)
-	}
-
-	// Now, remove the next range in the iteration and verify we skip the removed range.
-	rng = store.LookupReplica(roachpb.RKey("a01"), nil)
-	if rng.RangeID != 2 {
-		t.Errorf("expected fetch of rangeID=2; got %d", rng.RangeID)
-	}
-	if err := store.RemoveReplica(rng, *rng.Desc(), true); err != nil {
-		t.Error(err)
-	}
-	if ec := ranges.EstimatedCount(); ec != 9 {
-		t.Errorf("expected 9 remaining; got %d", ec)
-	}
-
-	close(updated)
-	<-done
 }
 
 func TestHasOverlappingReplica(t *testing.T) {
