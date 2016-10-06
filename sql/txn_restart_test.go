@@ -1110,6 +1110,7 @@ func TestNonRetryableErrorOnCommit(t *testing.T) {
 // the clock, so that the transaction timestamp exceeds the deadline of the EndTransactionRequest.
 func TestReacquireLeaseOnRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#9774")
 
 	var cmdFilters CommandFilters
 	cmdFilters.AppendFilter(checkEndTransactionTrigger, true)
