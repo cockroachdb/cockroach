@@ -206,6 +206,8 @@ func TestGetTruncatableIndexes(t *testing.T) {
 // log even when replica scanning is disabled.
 func TestProactiveRaftLogTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#9772")
+
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 
