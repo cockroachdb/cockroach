@@ -51,6 +51,14 @@ System.config({
           "loader": "ts"
         }
       }
+    },
+    "app/services": {
+      "defaultExtension": "ts",
+      "meta": {
+        "*.ts": {
+          "loader": "ts"
+        }
+      }
     }
   },
 

@@ -12,7 +12,6 @@
  * - Node Page
  *    ! Logs Page
  * - Layout Footer
- * ! HelpUs communication with CRL server
  *
  *
  * NICE TO HAVE:
@@ -61,6 +60,11 @@ import NodeGraphs from "./containers/nodeGraphs";
 import NodeLogs from "./containers/nodeLogs";
 import Raft from "./containers/raft";
 import RaftRanges from "./containers/raftRanges";
+
+// Subscribe the registration synchronization listener to the store so that
+// registration data will be synchronized appropriately as the store changes.
+import registrationSyncListener from "./services/registrationService";
+store.subscribe(registrationSyncListener);
 
 // tslint:disable-next-line:variable-name
 const DOMNode = document.getElementById("react-layout");
