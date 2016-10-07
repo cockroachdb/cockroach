@@ -30,11 +30,11 @@ func testInitDummySelectNode(desc *sqlbase.TableDescriptor) *selectNode {
 	scan.initDescDefaults(publicColumns)
 
 	sel := &selectNode{}
-	sel.qvals = make(qvalMap)
 	sel.source.plan = scan
 	testName := parser.TableName{TableName: parser.Name(desc.Name), DatabaseName: parser.Name("test")}
 	sel.source.info = newSourceInfoForSingleTable(testName, scan.Columns())
 	sel.sourceInfo = multiSourceInfo{sel.source.info}
+	sel.ivarHelper = parser.MakeIndexedVarHelper(sel, len(scan.Columns()))
 
 	return sel
 }
@@ -49,22 +49,34 @@ func TestRetryResolveNames(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	desc := testTableDesc()
+	s := testInitDummySelectNode(desc)
+	if err := desc.AllocateIDs(); err != nil {
+		t.Fatal(err)
+	}
+
 	for i := 0; i < 2; i++ {
-		desc := testTableDesc()
-		s := testInitDummySelectNode(desc)
-		if err := desc.AllocateIDs(); err != nil {
-			t.Fatal(err)
-		}
 
 		_, err := s.resolveNames(expr)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(s.qvals) != 1 {
-			t.Fatalf("%d: expected 1 qvalue, but found %d", i, len(s.qvals))
+		ivars := s.ivarHelper.GetIndexedVars()
+		count := 0
+		for iv := 0; iv < len(ivars); iv++ {
+			if ivars[iv].Idx != invalidColIdx {
+				count++
+			}
 		}
-		if _, ok := s.qvals[columnRef{s.source.info, 0}]; !ok {
-			t.Fatalf("%d: unable to find qvalue for column 0 (a)", i)
+		if count != 1 {
+			t.Fatalf("%d: expected 1 ivar, but found %d", i, count)
 		}
+		if ivars[0].Idx != 0 {
+			t.Fatalf("%d: ivar not properly initialized for column 0 (a)", i)
+		}
+		if ivars[0].String() != "a" {
+			t.Fatalf("%d: ivar name: got %s, expected 'a'", i, ivars[0].String())
+		}
+
 	}
 }

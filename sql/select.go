@@ -45,11 +45,11 @@ type selectNode struct {
 	// re-creating it every time analyzeExpr() is called in addRender().
 	sourceInfo multiSourceInfo
 
-	// Map of qvalues encountered in expressions.
-	// populated by addRender() / checkRenderStar()
-	// as invoked initially by initTargets() and initWhere()
-	// then extended by the groupNode and sortNode.
-	qvals qvalMap
+	// Helper for indexed vars. This holds
+	// the actual instances of IndexedVars replaced in Exprs.
+	// The indexed vars contain indices to the array
+	// of source columns.
+	ivarHelper parser.IndexedVarHelper
 
 	// Rendering expressions for rows and corresponding output columns.
 	// populated by addRender()
@@ -82,6 +82,10 @@ type selectNode struct {
 	// support attributes for EXPLAIN(DEBUG)
 	explain   explainMode
 	debugVals debugValues
+
+	// The current source row, with one value per source column.
+	// populated by Next(), used by renderRow().
+	curSourceRow parser.DTuple
 
 	// The rendered row, with one value for each render expression.
 	// populated by Next().
@@ -143,7 +147,7 @@ func (s *selectNode) Next() (bool, error) {
 			}
 		}
 		row := s.source.plan.Values()
-		s.qvals.populateQVals(s.source.info, row)
+		s.curSourceRow = row
 		passesFilter, err := sqlbase.RunFilter(s.filter, &s.planner.evalCtx)
 		if err != nil {
 			return false, err
@@ -214,6 +218,21 @@ func (s *selectNode) SetLimitHint(numRows int64, soft bool) {
 
 func (s *selectNode) Close() {
 	s.source.plan.Close()
+}
+
+// IndexedVarEval implements the parser.IndexedVarContainer interface.
+func (s *selectNode) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
+	return s.curSourceRow[idx].Eval(ctx)
+}
+
+// IndexedVarReturnType implements the parser.IndexedVarContainer interface.
+func (s *selectNode) IndexedVarReturnType(idx int) parser.Datum {
+	return s.sourceInfo[0].sourceColumns[idx].Typ
+}
+
+// IndexedVarString implements the parser.IndexedVarContainer interface.
+func (s *selectNode) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
+	s.sourceInfo[0].FormatVar(buf, f, idx)
 }
 
 // Select selects rows from a SELECT/UNION/VALUES, ordering and/or limiting them.
@@ -293,11 +312,11 @@ func (p *planner) SelectClause(
 ) (planNode, error) {
 	s := &selectNode{planner: p}
 
-	s.qvals = make(qvalMap)
-
 	if err := s.initFrom(parsed, scanVisibility); err != nil {
 		return nil, err
 	}
+
+	s.ivarHelper = parser.MakeIndexedVarHelper(s, len(s.sourceInfo[0].sourceColumns))
 
 	if err := s.initTargets(parsed.Exprs, desiredTypes); err != nil {
 		return nil, err
@@ -369,22 +388,18 @@ func (s *selectNode) expandPlan() error {
 		// Find the set of columns that we actually need values for. This is an
 		// optimization to avoid unmarshaling unnecessary values and is also
 		// used for index selection.
+		ivars := s.ivarHelper.GetIndexedVars()
 		neededCols := make([]bool, len(s.source.info.sourceColumns))
 		for i := range neededCols {
-			_, ok := s.qvals[columnRef{s.source.info, i}]
-			neededCols[i] = ok
+			neededCols[i] = (ivars[i].Idx != invalidColIdx)
 		}
 		scan.setNeededColumns(neededCols)
 
 		// Compute a filter expression for the scan node.
 		convFunc := func(expr parser.VariableExpr) (bool, parser.VariableExpr) {
-			qval := expr.(*qvalue)
-			if qval.colRef.source != s.source.info {
-				// TODO(radu): when we will support multiple tables, this
-				// will be a valid case.
-				panic("scan qvalue refers to unknown table")
-			}
-			return true, scan.filterVars.IndexedVar(qval.colRef.colIdx)
+			ivar := expr.(*parser.IndexedVar)
+			s.ivarHelper.AssertSameContainer(ivar)
+			return true, scan.filterVars.IndexedVar(ivar.Idx)
 		}
 
 		scan.filter, s.filter = splitFilter(s.filter, convFunc)
@@ -482,7 +497,7 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 	}
 
 	var err error
-	s.filter, err = s.planner.analyzeExpr(where.Expr, s.sourceInfo, s.qvals,
+	s.filter, err = s.planner.analyzeExpr(where.Expr, s.sourceInfo, s.ivarHelper,
 		parser.TypeBool, true, "WHERE")
 	if err != nil {
 		return err
@@ -500,11 +515,10 @@ func (s *selectNode) initWhere(where *parser.Where) error {
 // checkRenderStar checks if the SelectExpr is either an
 // UnqualifiedStar or an AllColumnsSelector. If so, we match the
 // prefix of the name to one of the tables in the query and then
-// expand the "*" into a list of columns. The qvalMap is updated to
-// include all the relevant columns. A ResultColumns and Expr pair is
-// returned for each column.
+// expand the "*" into a list of columns. A ResultColumns and Expr
+// pair is returned for each column.
 func checkRenderStar(
-	target parser.SelectExpr, src *dataSourceInfo, qvals qvalMap,
+	target parser.SelectExpr, src *dataSourceInfo, ivarHelper parser.IndexedVarHelper,
 ) (isStar bool, columns ResultColumns, exprs []parser.TypedExpr, err error) {
 	v, ok := target.Expr.(parser.VarName)
 	if !ok {
@@ -520,7 +534,7 @@ func checkRenderStar(
 		return false, nil, nil, fmt.Errorf("\"%s\" cannot be aliased", v)
 	}
 
-	columns, exprs, err = src.expandStar(v, qvals)
+	columns, exprs, err = src.expandStar(v, ivarHelper)
 	return true, columns, exprs, err
 }
 
@@ -549,7 +563,7 @@ func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datu
 		return err
 	}
 
-	if isStar, cols, typedExprs, err := checkRenderStar(target, s.source.info, s.qvals); err != nil {
+	if isStar, cols, typedExprs, err := checkRenderStar(target, s.source.info, s.ivarHelper); err != nil {
 		return err
 	} else if isStar {
 		s.columns = append(s.columns, cols...)
@@ -562,7 +576,7 @@ func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datu
 	// manipulations to the expression.
 	outputName := getRenderColName(target)
 
-	normalized, err := s.planner.analyzeExpr(target.Expr, s.sourceInfo, s.qvals, desiredType, false, "")
+	normalized, err := s.planner.analyzeExpr(target.Expr, s.sourceInfo, s.ivarHelper, desiredType, false, "")
 	if err != nil {
 		return err
 	}
@@ -572,8 +586,7 @@ func (s *selectNode) addRender(target parser.SelectExpr, desiredType parser.Datu
 	return nil
 }
 
-// renderRow renders the row by evaluating the render expressions. Assumes the qvals have been
-// populated with the current row.
+// renderRow renders the row by evaluating the render expressions.
 func (s *selectNode) renderRow() error {
 	if s.row == nil {
 		s.row = make([]parser.Datum, len(s.render))
@@ -589,13 +602,13 @@ func (s *selectNode) renderRow() error {
 }
 
 // Searches for a render target that matches the given column reference.
-func (s *selectNode) findRenderIndexForCol(colRef columnRef) (idx int, ok bool) {
+func (s *selectNode) findRenderIndexForCol(colIdx int) (idx int, ok bool) {
 	for i, r := range s.render {
-		if qval, ok := r.(*qvalue); ok && qval.colRef == colRef {
+		if ivar, ok := r.(*parser.IndexedVar); ok && ivar.Idx == colIdx {
 			return i, true
 		}
 	}
-	return -1, false
+	return invalidColIdx, false
 }
 
 // Computes ordering information for the select node, given ordering information for the "from"
@@ -631,8 +644,7 @@ func (s *selectNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
 	// The rows from the index are ordered by k then by v, but since k is an exact match
 	// column the results are also ordered just by v.
 	for colIdx := range fromOrder.exactMatchCols {
-		colRef := columnRef{s.source.info, colIdx}
-		if renderIdx, ok := s.findRenderIndexForCol(colRef); ok {
+		if renderIdx, ok := s.findRenderIndexForCol(colIdx); ok {
 			ordering.addExactMatchColumn(renderIdx)
 		}
 	}
@@ -646,8 +658,7 @@ func (s *selectNode) computeOrdering(fromOrder orderingInfo) orderingInfo {
 	// The rows from the index are ordered by k then by v. We cannot make any use of this
 	// ordering as an ordering on v.
 	for _, colOrder := range fromOrder.ordering {
-		colRef := columnRef{s.source.info, colOrder.ColIdx}
-		renderIdx, ok := s.findRenderIndexForCol(colRef)
+		renderIdx, ok := s.findRenderIndexForCol(colOrder.ColIdx)
 		if !ok {
 			return ordering
 		}

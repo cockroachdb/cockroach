@@ -34,7 +34,7 @@ import (
 // row-modifying statements.
 type editNodeBase struct {
 	p          *planner
-	rh         returningHelper
+	rh         *returningHelper
 	tableDesc  *sqlbase.TableDescriptor
 	autoCommit bool
 }

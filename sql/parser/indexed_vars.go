@@ -26,7 +26,7 @@ import (
 type IndexedVarContainer interface {
 	IndexedVarEval(idx int, ctx *EvalContext) (Datum, error)
 	IndexedVarReturnType(idx int) Datum
-	IndexedVarString(idx int) string
+	IndexedVarFormat(buf *bytes.Buffer, f FmtFlags, idx int)
 }
 
 // IndexedVar is a VariableExpr that can be used as a leaf in expressions; it
@@ -65,7 +65,7 @@ func (v *IndexedVar) ReturnType() Datum {
 
 // Format implements the NodeFormatter interface.
 func (v *IndexedVar) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString(v.container.IndexedVarString(v.Idx))
+	v.container.IndexedVarFormat(buf, f, v.Idx)
 }
 
 // IndexedVarHelper is a structure that helps with initialization of IndexVars.
@@ -77,6 +77,13 @@ type IndexedVarHelper struct {
 // MakeIndexedVarHelper initializes an IndexedVarHelper structure.
 func MakeIndexedVarHelper(container IndexedVarContainer, numVars int) IndexedVarHelper {
 	return IndexedVarHelper{vars: make([]IndexedVar, numVars), container: container}
+}
+
+// AssertSameContainer checks that the indexed var refers to the same container.
+func (h *IndexedVarHelper) AssertSameContainer(ivar *IndexedVar) {
+	if ivar.container != h.container {
+		panic(fmt.Sprintf("indexed var already resolved with different resolver: %q", ivar.container))
+	}
 }
 
 func (h *IndexedVarHelper) checkIndex(idx int) {
@@ -108,4 +115,15 @@ func (h *IndexedVarHelper) IndexedVar(idx int) *IndexedVar {
 func (h *IndexedVarHelper) IndexedVarUsed(idx int) bool {
 	h.checkIndex(idx)
 	return h.vars[idx].container != nil
+}
+
+// GetIndexedVars retrieves the array of initialized IndexedVars;
+// unused vars are guaranteed to have an invalid index.
+func (h *IndexedVarHelper) GetIndexedVars() []IndexedVar {
+	for i := range h.vars {
+		if h.vars[i].container == nil {
+			h.vars[i].Idx = -1
+		}
+	}
+	return h.vars
 }

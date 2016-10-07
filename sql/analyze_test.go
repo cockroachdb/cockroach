@@ -52,19 +52,29 @@ func testTableDesc() *sqlbase.TableDescriptor {
 	}
 }
 
-func parseAndNormalizeExpr(t *testing.T, sql string) (parser.TypedExpr, qvalMap) {
+func makeSelectNode(t *testing.T) *selectNode {
+	desc := testTableDesc()
+	sel := testInitDummySelectNode(desc)
+	if err := desc.AllocateIDs(); err != nil {
+		t.Fatal(err)
+	}
+	return sel
+}
+
+func resetForTest(sel *selectNode) {
+	numColumns := len(sel.sourceInfo[0].sourceColumns)
+	sel.ivarHelper = parser.MakeIndexedVarHelper(sel, numColumns)
+	sel.curSourceRow = make(parser.DTuple, numColumns)
+}
+
+func parseAndNormalizeExpr(t *testing.T, sql string, sel *selectNode) parser.TypedExpr {
 	expr, err := parser.ParseExprTraditional(sql)
 	if err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
 
 	// Perform name resolution because {analyze,simplify}Expr want
-	// expressions containing qvalues.
-	desc := testTableDesc()
-	sel := testInitDummySelectNode(desc)
-	if err = desc.AllocateIDs(); err != nil {
-		t.Fatal(err)
-	}
+	// expressions containing IndexedVars.
 	if expr, err = sel.resolveNames(expr); err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
@@ -76,10 +86,10 @@ func parseAndNormalizeExpr(t *testing.T, sql string) (parser.TypedExpr, qvalMap)
 	if typedExpr, err = ctx.NormalizeExpr(typedExpr); err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
-	return typedExpr, sel.qvals
+	return typedExpr
 }
 
-func checkEquivExpr(a, b parser.TypedExpr, qvals qvalMap) error {
+func checkEquivExpr(a, b parser.TypedExpr, sel *selectNode) error {
 	// The expressions above only use the values 1 and 2. Verify that the
 	// simplified expressions evaluate to the same value as the original
 	// expression for interesting values.
@@ -90,8 +100,8 @@ func checkEquivExpr(a, b parser.TypedExpr, qvals qvalMap) error {
 		parser.NewDInt(3),
 		parser.DNull,
 	} {
-		for _, q := range qvals {
-			q.datum = v
+		for i := range sel.curSourceRow {
+			sel.curSourceRow[i] = v
 		}
 		ctx := &parser.EvalContext{}
 		da, err := a.Eval(ctx)
@@ -114,6 +124,7 @@ func checkEquivExpr(a, b parser.TypedExpr, qvals qvalMap) error {
 
 func TestSplitOrExpr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	sel := makeSelectNode(t)
 
 	testData := []struct {
 		expr     string
@@ -125,16 +136,20 @@ func TestSplitOrExpr(t *testing.T) {
 		{`(f OR g) OR (c OR (d OR e))`, `f, g, c, d, e`},
 	}
 	for _, d := range testData {
-		expr, _ := parseAndNormalizeExpr(t, d.expr)
-		exprs := splitOrExpr(expr, nil)
-		if s := exprs.String(); d.expected != s {
-			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
-		}
+		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
+			resetForTest(sel)
+			expr := parseAndNormalizeExpr(t, d.expr, sel)
+			exprs := splitOrExpr(expr, nil)
+			if s := exprs.String(); d.expected != s {
+				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+			}
+		})
 	}
 }
 
 func TestSplitAndExpr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	sel := makeSelectNode(t)
 
 	testData := []struct {
 		expr     string
@@ -146,16 +161,20 @@ func TestSplitAndExpr(t *testing.T) {
 		{`(f AND g) AND (c AND (d AND e))`, `f, g, c, d, e`},
 	}
 	for _, d := range testData {
-		expr, _ := parseAndNormalizeExpr(t, d.expr)
-		exprs := splitAndExpr(expr, nil)
-		if s := exprs.String(); d.expected != s {
-			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
-		}
+		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
+			resetForTest(sel)
+			expr := parseAndNormalizeExpr(t, d.expr, sel)
+			exprs := splitAndExpr(expr, nil)
+			if s := exprs.String(); d.expected != s {
+				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+			}
+		})
 	}
 }
 
 func TestSimplifyExpr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	sel := makeSelectNode(t)
 
 	testData := []struct {
 		expr     string
@@ -253,19 +272,23 @@ func TestSimplifyExpr(t *testing.T) {
 			`((a < 0) OR (b > 0)) AND (a IS NOT NULL)`, true},
 	}
 	for _, d := range testData {
-		expr, _ := parseAndNormalizeExpr(t, d.expr)
-		expr, equiv := simplifyExpr(expr)
-		if s := expr.String(); d.expected != s {
-			t.Errorf("%s: structure: expected %s, but found %s", d.expr, d.expected, s)
-		}
-		if d.isEquiv != equiv {
-			t.Fatalf("%s: equivalence: expected %v, but found %v", d.expr, d.isEquiv, equiv)
-		}
+		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
+			resetForTest(sel)
+			expr := parseAndNormalizeExpr(t, d.expr, sel)
+			expr, equiv := simplifyExpr(expr)
+			if s := expr.String(); d.expected != s {
+				t.Errorf("%s: structure: expected %s, but found %s", d.expr, d.expected, s)
+			}
+			if d.isEquiv != equiv {
+				t.Fatalf("%s: equivalence: expected %v, but found %v", d.expr, d.isEquiv, equiv)
+			}
+		})
 	}
 }
 
 func TestSimplifyNotExpr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	sel := makeSelectNode(t)
 
 	testData := []struct {
 		expr       string
@@ -289,25 +312,28 @@ func TestSimplifyNotExpr(t *testing.T) {
 		{`NOT (a != 1 OR a < 1)`, `a = 1`, true, false},
 	}
 	for _, d := range testData {
-		expr1, qvals := parseAndNormalizeExpr(t, d.expr)
-		expr2, equiv := simplifyExpr(expr1)
-		if s := expr2.String(); d.expected != s {
-			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
-		}
-		if d.isEquiv != equiv {
-			t.Errorf("%s: expected %v, but found %v", d.expr, d.isEquiv, equiv)
-		}
-		if d.checkEquiv {
-			if err := checkEquivExpr(expr1, expr2, qvals); err != nil {
-				t.Error(err)
-				continue
+		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
+			resetForTest(sel)
+			expr1 := parseAndNormalizeExpr(t, d.expr, sel)
+			expr2, equiv := simplifyExpr(expr1)
+			if s := expr2.String(); d.expected != s {
+				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 			}
-		}
+			if d.isEquiv != equiv {
+				t.Errorf("%s: expected %v, but found %v", d.expr, d.isEquiv, equiv)
+			}
+			if d.checkEquiv {
+				if err := checkEquivExpr(expr1, expr2, sel); err != nil {
+					t.Error(err)
+				}
+			}
+		})
 	}
 }
 
 func TestSimplifyAndExpr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	sel := makeSelectNode(t)
 
 	testData := []struct {
 		expr     string
@@ -322,19 +348,23 @@ func TestSimplifyAndExpr(t *testing.T) {
 		{`a = 1 AND b = 1`, `(a = 1) AND (b = 1)`},
 	}
 	for _, d := range testData {
-		expr1, _ := parseAndNormalizeExpr(t, d.expr)
-		expr2, equiv := simplifyExpr(expr1)
-		if s := expr2.String(); d.expected != s {
-			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
-		}
-		if !equiv {
-			t.Errorf("%s: expected equivalent, but found %v", d.expr, equiv)
-		}
+		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
+			resetForTest(sel)
+			expr1 := parseAndNormalizeExpr(t, d.expr, sel)
+			expr2, equiv := simplifyExpr(expr1)
+			if s := expr2.String(); d.expected != s {
+				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+			}
+			if !equiv {
+				t.Errorf("%s: expected equivalent, but found %v", d.expr, equiv)
+			}
+		})
 	}
 }
 
 func TestSimplifyAndExprCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	sel := makeSelectNode(t)
 
 	testData := []struct {
 		expr       string
@@ -522,42 +552,46 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		{`a IS NULL AND a IS NOT NULL`, `false`, true},
 	}
 	for _, d := range testData {
-		expr1, qvals := parseAndNormalizeExpr(t, d.expr)
-		expr2, equiv := simplifyExpr(expr1)
-		if s := expr2.String(); d.expected != s {
-			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
-		}
-		if d.checkEquiv != equiv {
-			t.Errorf("%s: expected %v, but found %v", d.expr, d.checkEquiv, equiv)
-		}
-		err := checkEquivExpr(expr1, expr2, qvals)
-		if d.checkEquiv && err != nil {
-			t.Error(err)
-			continue
-		} else if !d.checkEquiv && err == nil {
-			t.Errorf("%s: expected not equivalent, but found equivalent", d.expr)
-			continue
-		}
-
-		if _, ok := expr2.(*parser.AndExpr); !ok {
-			// The result was not an AND expression. Re-parse to re-resolve names
-			// and verify that the analysis is commutative.
-			expr1, _ = parseAndNormalizeExpr(t, d.expr)
-			andExpr := expr1.(*parser.AndExpr)
-			andExpr.Left, andExpr.Right = andExpr.Right, andExpr.Left
-			expr3, equiv := simplifyExpr(andExpr)
-			if s := expr3.String(); d.expected != s {
-				t.Errorf("%s: expected %s, but found %s", expr1, d.expected, s)
+		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
+			resetForTest(sel)
+			expr1 := parseAndNormalizeExpr(t, d.expr, sel)
+			expr2, equiv := simplifyExpr(expr1)
+			if s := expr2.String(); d.expected != s {
+				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 			}
 			if d.checkEquiv != equiv {
 				t.Errorf("%s: expected %v, but found %v", d.expr, d.checkEquiv, equiv)
 			}
-		}
+			err := checkEquivExpr(expr1, expr2, sel)
+			if d.checkEquiv && err != nil {
+				t.Error(err)
+				return
+			} else if !d.checkEquiv && err == nil {
+				t.Errorf("%s: expected not equivalent, but found equivalent", d.expr)
+				return
+			}
+
+			if _, ok := expr2.(*parser.AndExpr); !ok {
+				// The result was not an AND expression. Re-parse to re-resolve names
+				// and verify that the analysis is commutative.
+				expr1 = parseAndNormalizeExpr(t, d.expr, sel)
+				andExpr := expr1.(*parser.AndExpr)
+				andExpr.Left, andExpr.Right = andExpr.Right, andExpr.Left
+				expr3, equiv := simplifyExpr(andExpr)
+				if s := expr3.String(); d.expected != s {
+					t.Errorf("%s: expected %s, but found %s", expr1, d.expected, s)
+				}
+				if d.checkEquiv != equiv {
+					t.Errorf("%s: expected %v, but found %v", d.expr, d.checkEquiv, equiv)
+				}
+			}
+		})
 	}
 }
 
 func TestSimplifyOrExpr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	sel := makeSelectNode(t)
 
 	testData := []struct {
 		expr     string
@@ -569,16 +603,19 @@ func TestSimplifyOrExpr(t *testing.T) {
 		{`a = 1 OR b = 1`, `(a = 1) OR (b = 1)`},
 	}
 	for _, d := range testData {
-		expr1, _ := parseAndNormalizeExpr(t, d.expr)
-		expr2, _ := simplifyExpr(expr1)
-		if s := expr2.String(); d.expected != s {
-			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
-		}
+		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
+			expr1 := parseAndNormalizeExpr(t, d.expr, sel)
+			expr2, _ := simplifyExpr(expr1)
+			if s := expr2.String(); d.expected != s {
+				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+			}
+		})
 	}
 }
 
 func TestSimplifyOrExprCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	sel := makeSelectNode(t)
 
 	testData := []struct {
 		expr     string
@@ -739,33 +776,36 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a IS NULL OR a IS NOT NULL`, `true`},
 	}
 	for _, d := range testData {
-		expr1, qvals := parseAndNormalizeExpr(t, d.expr)
-		expr2, equiv := simplifyExpr(expr1)
-		if s := expr2.String(); d.expected != s {
-			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
-		}
-		if !equiv {
-			t.Errorf("%s: expected equivalent, but found %v", d.expr, equiv)
-		}
-
-		if err := checkEquivExpr(expr1, expr2, qvals); err != nil {
-			t.Error(err)
-			continue
-		}
-
-		if _, ok := expr2.(*parser.OrExpr); !ok {
-			// The result was not an OR expression. Re-parse to re-resolve names
-			// and verify that the analysis is commutative.
-			expr1, _ = parseAndNormalizeExpr(t, d.expr)
-			orExpr := expr1.(*parser.OrExpr)
-			orExpr.Left, orExpr.Right = orExpr.Right, orExpr.Left
-			expr3, equiv := simplifyExpr(orExpr)
-			if s := expr3.String(); d.expected != s {
-				t.Errorf("%s: expected %s, but found %s", expr1, d.expected, s)
+		t.Run(d.expr+" === "+d.expected, func(t *testing.T) {
+			resetForTest(sel)
+			expr1 := parseAndNormalizeExpr(t, d.expr, sel)
+			expr2, equiv := simplifyExpr(expr1)
+			if s := expr2.String(); d.expected != s {
+				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 			}
 			if !equiv {
 				t.Errorf("%s: expected equivalent, but found %v", d.expr, equiv)
 			}
-		}
+
+			if err := checkEquivExpr(expr1, expr2, sel); err != nil {
+				t.Error(err)
+				return
+			}
+
+			if _, ok := expr2.(*parser.OrExpr); !ok {
+				// The result was not an OR expression. Re-parse to re-resolve names
+				// and verify that the analysis is commutative.
+				expr1 = parseAndNormalizeExpr(t, d.expr, sel)
+				orExpr := expr1.(*parser.OrExpr)
+				orExpr.Left, orExpr.Right = orExpr.Right, orExpr.Left
+				expr3, equiv := simplifyExpr(orExpr)
+				if s := expr3.String(); d.expected != s {
+					t.Errorf("%s: expected %s, but found %s", expr1, d.expected, s)
+				}
+				if !equiv {
+					t.Errorf("%s: expected equivalent, but found %v", d.expr, equiv)
+				}
+			}
+		})
 	}
 }

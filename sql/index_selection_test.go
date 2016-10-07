@@ -164,9 +164,9 @@ func makeTestIndexFromStr(
 }
 
 func makeConstraints(
-	t *testing.T, sql string, desc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
+	t *testing.T, sql string, desc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor, sel *selectNode,
 ) (orIndexConstraints, parser.TypedExpr) {
-	expr, _ := parseAndNormalizeExpr(t, sql)
+	expr := parseAndNormalizeExpr(t, sql, sel)
 	exprs, equiv := analyzeExpr(expr)
 
 	c := &indexInfo{
@@ -183,6 +183,7 @@ func makeConstraints(
 
 func TestMakeConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	sel := makeSelectNode(t)
 
 	testData := []struct {
 		expr     string
@@ -307,11 +308,14 @@ func TestMakeConstraints(t *testing.T) {
 		{`(b, a) >= (1, 4)`, `a,b`, ``},
 	}
 	for _, d := range testData {
-		desc, index := makeTestIndexFromStr(t, d.columns)
-		constraints, _ := makeConstraints(t, d.expr, desc, index)
-		if s := constraints.String(); d.expected != s {
-			t.Errorf("%s, columns: %s: expected %s, but found %s", d.expr, d.columns, d.expected, s)
-		}
+		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
+			resetForTest(sel)
+			desc, index := makeTestIndexFromStr(t, d.columns)
+			constraints, _ := makeConstraints(t, d.expr, desc, index, sel)
+			if s := constraints.String(); d.expected != s {
+				t.Errorf("%s, columns: %s: expected %s, but found %s", d.expr, d.columns, d.expected, s)
+			}
+		})
 	}
 }
 
@@ -329,6 +333,7 @@ func indexToDirs(index *sqlbase.IndexDescriptor) []encoding.Direction {
 
 func TestMakeSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	sel := makeSelectNode(t)
 
 	testData := []struct {
 		expr         string
@@ -492,25 +497,28 @@ func TestMakeSpans(t *testing.T) {
 	}
 	for _, d := range testData {
 		for _, dir := range []encoding.Direction{encoding.Ascending, encoding.Descending} {
-			columns := strings.Split(d.columns, ",")
-			dirs := make([]encoding.Direction, 0, len(columns))
-			for range columns {
-				dirs = append(dirs, dir)
-			}
-			desc, index := makeTestIndex(t, columns, dirs)
-			constraints, _ := makeConstraints(t, d.expr, desc, index)
-			spans := makeSpans(constraints, desc, index)
-			s := sqlbase.PrettySpans(spans, 2)
 			var expected string
 			if dir == encoding.Ascending {
 				expected = d.expectedAsc
 			} else {
 				expected = d.expectedDesc
 			}
-			s = keys.MassagePrettyPrintedSpanForTest(s, indexToDirs(index))
-			if expected != s {
-				t.Errorf("[index direction: %d] %s: expected %s, but found %s", dir, d.expr, expected, s)
-			}
+			t.Run(d.expr+"~"+expected, func(t *testing.T) {
+				resetForTest(sel)
+				columns := strings.Split(d.columns, ",")
+				dirs := make([]encoding.Direction, 0, len(columns))
+				for range columns {
+					dirs = append(dirs, dir)
+				}
+				desc, index := makeTestIndex(t, columns, dirs)
+				constraints, _ := makeConstraints(t, d.expr, desc, index, sel)
+				spans := makeSpans(constraints, desc, index)
+				s := sqlbase.PrettySpans(spans, 2)
+				s = keys.MassagePrettyPrintedSpanForTest(s, indexToDirs(index))
+				if expected != s {
+					t.Errorf("[index direction: %d] %s: expected %s, but found %s", dir, d.expr, expected, s)
+				}
+			})
 		}
 	}
 
@@ -539,35 +547,39 @@ func TestMakeSpans(t *testing.T) {
 		{`(a, b) >= (1, 4)`, `a,b-`, `-`},
 	}
 	for _, d := range testData2 {
-		desc, index := makeTestIndexFromStr(t, d.columns)
-		constraints, _ := makeConstraints(t, d.expr, desc, index)
-		spans := makeSpans(constraints, desc, index)
-		var got string
-		raw := false
-		if strings.HasPrefix(d.expected, "raw:") {
-			raw = true
-			span := spans[0]
-			d.expected = d.expected[4:]
-			// Trim the index prefix from the span.
-			prefix := string(sqlbase.MakeIndexKeyPrefix(desc, index.ID))
-			got = strings.TrimPrefix(string(span.Key), prefix) + "-" +
-				strings.TrimPrefix(string(span.EndKey), prefix)
-		} else {
-			got = keys.MassagePrettyPrintedSpanForTest(sqlbase.PrettySpans(spans, 2),
-				indexToDirs(index))
-		}
-		if d.expected != got {
-			if !raw {
-				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, got)
+		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
+			resetForTest(sel)
+			desc, index := makeTestIndexFromStr(t, d.columns)
+			constraints, _ := makeConstraints(t, d.expr, desc, index, sel)
+			spans := makeSpans(constraints, desc, index)
+			var got string
+			raw := false
+			if strings.HasPrefix(d.expected, "raw:") {
+				raw = true
+				span := spans[0]
+				d.expected = d.expected[4:]
+				// Trim the index prefix from the span.
+				prefix := string(sqlbase.MakeIndexKeyPrefix(desc, index.ID))
+				got = strings.TrimPrefix(string(span.Key), prefix) + "-" +
+					strings.TrimPrefix(string(span.EndKey), prefix)
 			} else {
-				t.Errorf("%s: expected %# x, but found %# x", d.expr, []byte(d.expected), got)
+				got = keys.MassagePrettyPrintedSpanForTest(sqlbase.PrettySpans(spans, 2),
+					indexToDirs(index))
 			}
-		}
+			if d.expected != got {
+				if !raw {
+					t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, got)
+				} else {
+					t.Errorf("%s: expected %# x, but found %# x", d.expr, []byte(d.expected), got)
+				}
+			}
+		})
 	}
 }
 
 func TestExactPrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	sel := makeSelectNode(t)
 
 	testData := []struct {
 		expr     string
@@ -611,17 +623,21 @@ func TestExactPrefix(t *testing.T) {
 		{`(a = 1 AND b > 4) OR (a = 1 AND b < 1)`, `a,b`, 1},
 	}
 	for _, d := range testData {
-		desc, index := makeTestIndexFromStr(t, d.columns)
-		constraints, _ := makeConstraints(t, d.expr, desc, index)
-		prefix := constraints.exactPrefix()
-		if d.expected != prefix {
-			t.Errorf("%s: expected %d, but found %d", d.expr, d.expected, prefix)
-		}
+		t.Run(fmt.Sprintf("%s~%d", d.expr, d.expected), func(t *testing.T) {
+			resetForTest(sel)
+			desc, index := makeTestIndexFromStr(t, d.columns)
+			constraints, _ := makeConstraints(t, d.expr, desc, index, sel)
+			prefix := constraints.exactPrefix()
+			if d.expected != prefix {
+				t.Errorf("%s: expected %d, but found %d", d.expr, d.expected, prefix)
+			}
+		})
 	}
 }
 
 func TestApplyConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	sel := makeSelectNode(t)
 
 	testData := []struct {
 		expr     string
@@ -655,11 +671,14 @@ func TestApplyConstraints(t *testing.T) {
 		// {`a < 1`, `a`, `<nil>`},
 	}
 	for _, d := range testData {
-		desc, index := makeTestIndexFromStr(t, d.columns)
-		constraints, expr := makeConstraints(t, d.expr, desc, index)
-		expr2 := applyIndexConstraints(expr, constraints)
-		if s := fmt.Sprint(expr2); d.expected != s {
-			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
-		}
+		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
+			resetForTest(sel)
+			desc, index := makeTestIndexFromStr(t, d.columns)
+			constraints, expr := makeConstraints(t, d.expr, desc, index, sel)
+			expr2 := applyIndexConstraints(expr, constraints)
+			if s := fmt.Sprint(expr2); d.expected != s {
+				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+			}
+		})
 	}
 }
