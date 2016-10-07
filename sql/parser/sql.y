@@ -1513,6 +1513,10 @@ show_stmt:
   {
     $$.val = &ShowCreateTable{Table: $4.normalizableTableName()}
   }
+| SHOW CREATE VIEW var_name
+  {
+    $$.val = &ShowCreateView{View: $4.normalizableTableName()}
+  }
 
 help_stmt:
   HELP unrestricted_name

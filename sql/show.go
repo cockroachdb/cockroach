@@ -245,6 +245,72 @@ func quoteNames(names ...string) string {
 	return parser.AsString(nameList)
 }
 
+// ShowCreateView returns a CREATE VIEW statement for the specified view in
+// Traditional syntax.
+// Privileges: Any privilege on view.
+func (p *planner) ShowCreateView(n *parser.ShowCreateView) (planNode, error) {
+	tn, err := n.View.NormalizeWithDatabaseName(p.session.Database)
+	if err != nil {
+		return nil, err
+	}
+
+	desc, err := p.mustGetViewDesc(tn)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.anyPrivilege(desc); err != nil {
+		return nil, err
+	}
+
+	columns := ResultColumns{
+		{Name: "View", Typ: parser.TypeString},
+		{Name: "CreateView", Typ: parser.TypeString},
+	}
+	v := p.newContainerValuesNode(columns, 0)
+
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "CREATE VIEW %s ", quoteNames(n.View.String()))
+
+	// Determine whether custom column names were specified when the view
+	// was created, and include them if so.
+	customColNames := false
+	stmt, err := parser.ParseOneTraditional(desc.ViewQuery)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to parse underlying query from view %q", tn)
+	}
+	sel, ok := stmt.(*parser.Select)
+	if !ok {
+		return nil, errors.Errorf("failed to parse underlying query from view %q as a select", tn)
+	}
+	sourcePlan, err := p.Select(sel, []parser.Datum{}, false)
+	if err != nil {
+		return nil, err
+	}
+	for i, col := range sourcePlan.Columns() {
+		if col.Name != desc.Columns[i].Name {
+			customColNames = true
+			break
+		}
+	}
+	if customColNames {
+		colNames := make([]string, 0, len(desc.Columns))
+		for _, col := range desc.Columns {
+			colNames = append(colNames, col.Name)
+		}
+		fmt.Fprintf(&buf, "(%s) ", strings.Join(colNames, ", "))
+	}
+
+	fmt.Fprintf(&buf, "AS %s", desc.ViewQuery)
+	if err := v.rows.AddRow(parser.DTuple{
+		parser.NewDString(n.View.String()),
+		parser.NewDString(buf.String()),
+	}); err != nil {
+		v.rows.Close()
+		return nil, err
+	}
+	return v, nil
+}
+
 // ShowDatabases returns all the databases.
 // Privileges: None.
 //   Notes: postgres does not have a "show databases"
