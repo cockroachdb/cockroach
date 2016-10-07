@@ -45,7 +45,8 @@ const (
 	backupDescriptorName = "BACKUP"
 )
 
-func allRangeDescriptors(txn *client.Txn) ([]roachpb.RangeDescriptor, error) {
+// AllRangeDescriptors fetches all meta2 RangeDescriptor using the given txn.
+func AllRangeDescriptors(txn *client.Txn) ([]roachpb.RangeDescriptor, error) {
 	// TODO(dan): Iterate with some batch size.
 	rows, err := txn.Scan(keys.Meta2Prefix, keys.MetaMax, 0)
 	if err != nil {
@@ -110,7 +111,7 @@ func Backup(
 			var err error
 			setTxnTimestamps(txn, endTime)
 
-			rangeDescs, err = allRangeDescriptors(txn)
+			rangeDescs, err = AllRangeDescriptors(txn)
 			if err != nil {
 				return err
 			}
