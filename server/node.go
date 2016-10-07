@@ -84,7 +84,7 @@ var errNeedsBootstrap = errors.New("node has no initialized stores and no instru
 var errCannotJoinSelf = errors.New("an uninitialized node cannot specify its own address to join a cluster")
 
 type nodeMetrics struct {
-	Latency metric.Histograms
+	Latency *metric.Histogram
 	Success metric.Rates
 	Err     metric.Rates
 }

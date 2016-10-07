@@ -155,6 +155,8 @@ func TestMetricsRecorder(t *testing.T) {
 	// Ensure the metric system's view of time does not advance during this test
 	// as the test expects time to not advance too far which would age the actual
 	// data (e.g. in histogram's) unexpectedly.
+	//
+	// TODO(tschottdorf): this can go when WindowedHistogram does.
 	defer metric.TestingSetNow(func() time.Time {
 		return time.Unix(0, manual.UnixNano()).UTC()
 	})()
@@ -290,14 +292,12 @@ func TestMetricsRecorder(t *testing.T) {
 				}
 			case "latency":
 				l := metric.NewLatency(metric.Metadata{Name: reg.prefix + data.name})
-				reg.reg.AddMetricGroup(l)
+				reg.reg.AddMetric(l)
 				l.RecordValue(data.val)
 				// Latency is simply three histograms (at different resolution
 				// time scales).
-				for _, scale := range metric.DefaultTimeScales {
-					for _, q := range recordHistogramQuantiles {
-						addExpected(reg.prefix, data.name+sep+scale.Name()+q.suffix, reg.source, 100, data.val, reg.isNode)
-					}
+				for _, q := range recordHistogramQuantiles {
+					addExpected(reg.prefix, data.name+q.suffix, reg.source, 100, data.val, reg.isNode)
 				}
 			}
 		}
@@ -350,7 +350,7 @@ func TestMetricsRecorder(t *testing.T) {
 
 	nodeSummary := recorder.GetStatusSummary()
 	if nodeSummary == nil {
-		t.Fatalf("recorder did not return nodeSummary.")
+		t.Fatalf("recorder did not return nodeSummary")
 	}
 
 	sort.Sort(byStoreDescID(nodeSummary.StoreStatuses))
