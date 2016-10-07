@@ -88,7 +88,7 @@ func (p *planner) ValuesClause(
 			if len(desiredTypes) > i {
 				desired = desiredTypes[i]
 			}
-			typedExpr, err := p.analyzeExpr(expr, nil, nil, desired, false, "")
+			typedExpr, err := p.analyzeExpr(expr, nil, parser.IndexedVarHelper{}, desired, false, "")
 			if err != nil {
 				return nil, err
 			}

@@ -58,7 +58,7 @@ import (
 // The common type in expression contexts is VarName. This extends
 // TypedExpr and VariableExpr so it can be used in expression trees
 // directly.  During parsing a name in expressions always begins as an
-// UnresolvedName instance.  During either qvalue substitution, type
+// UnresolvedName instance.  During either IndexedVar substitution, type
 // checking or render target expansion (select node) this is
 // normalized and replaced by either *ColumnItem, UnqualifiedStar or
 // AllColumnsSelector using the NormalizeVarName() method.
@@ -102,7 +102,7 @@ func (UnresolvedName) ReturnType() Datum {
 }
 
 // Variable implements the VariableExpr interface.  Although, the
-// UnresolvedName ought to be replaced to a qvalue before the points the
+// UnresolvedName ought to be replaced to an IndexedVar before the points the
 // VariableExpr interface is used.
 func (UnresolvedName) Variable() {}
 
@@ -128,7 +128,7 @@ func (a *AllColumnsSelector) String() string { return AsString(a) }
 func (a *AllColumnsSelector) NormalizeVarName() (VarName, error) { return a, nil }
 
 // Variable implements the VariableExpr interface.  Although, the
-// AllColumnsSelector ought to be replaced to a qvalue before the points the
+// AllColumnsSelector ought to be replaced to an IndexedVar before the points the
 // VariableExpr interface is used.
 func (a *AllColumnsSelector) Variable() {}
 
@@ -178,7 +178,7 @@ func (c *ColumnItem) Column() string {
 }
 
 // Variable implements the VariableExpr interface.  Although, the
-// ColumnItem ought to be replaced to a qvalue before the points the
+// ColumnItem ought to be replaced to an IndexedVar before the points the
 // VariableExpr interface is used.
 func (c *ColumnItem) Variable() {}
 

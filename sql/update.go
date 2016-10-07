@@ -34,7 +34,7 @@ import (
 // row-modifying statements.
 type editNodeBase struct {
 	p          *planner
-	rh         returningHelper
+	rh         *returningHelper
 	tableDesc  *sqlbase.TableDescriptor
 	autoCommit bool
 }
@@ -78,7 +78,7 @@ func (r *editNodeRun) initEditNode(
 ) error {
 	r.rows = rows
 
-	rh, err := en.p.makeReturningHelper(re, desiredTypes, en.tableDesc.Name, en.tableDesc.Columns)
+	rh, err := en.p.newReturningHelper(re, desiredTypes, en.tableDesc.Name, en.tableDesc.Columns)
 	if err != nil {
 		return err
 	}

@@ -17,10 +17,12 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // upsertExcludedTable is the name of a synthetic table used in an upsert's set
@@ -31,14 +33,50 @@ var upsertExcludedTable = parser.TableName{TableName: "excluded"}
 
 type upsertHelper struct {
 	p                  *planner
-	qvals              qvalMap
 	evalExprs          []parser.TypedExpr
 	sourceInfo         *dataSourceInfo
 	excludedSourceInfo *dataSourceInfo
 	allExprsIdentity   bool
+	curSourceRow       parser.DTuple
+	curExcludedRow     parser.DTuple
+
+	// This struct must be allocated on the heap and its location stay
+	// stable after construction because it implements
+	// IndexedVarContainer and the IndexedVar objects in sub-expressions
+	// will link to it by reference after checkRenderStar / analyzeExpr.
+	// Enforce this using NoCopy.
+	noCopy util.NoCopy
 }
 
 var _ tableUpsertEvaler = (*upsertHelper)(nil)
+
+// IndexedVarEval implements the parser.IndexedVarContainer interface.
+func (uh *upsertHelper) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
+	numSourceColumns := len(uh.sourceInfo.sourceColumns)
+	if idx >= numSourceColumns {
+		return uh.curExcludedRow[idx-numSourceColumns].Eval(ctx)
+	}
+	return uh.curSourceRow[idx].Eval(ctx)
+}
+
+// IndexedVarReturnType implements the parser.IndexedVarContainer interface.
+func (uh *upsertHelper) IndexedVarReturnType(idx int) parser.Datum {
+	numSourceColumns := len(uh.sourceInfo.sourceColumns)
+	if idx >= numSourceColumns {
+		return uh.excludedSourceInfo.sourceColumns[idx-numSourceColumns].Typ
+	}
+	return uh.sourceInfo.sourceColumns[idx].Typ
+}
+
+// IndexedVarFormat implements the parser.IndexedVarContainer interface.
+func (uh *upsertHelper) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
+	numSourceColumns := len(uh.sourceInfo.sourceColumns)
+	if idx >= numSourceColumns {
+		uh.excludedSourceInfo.FormatVar(buf, f, idx-numSourceColumns)
+	} else {
+		uh.sourceInfo.FormatVar(buf, f, idx)
+	}
+}
 
 func (p *planner) makeUpsertHelper(
 	tn *parser.TableName,
@@ -76,40 +114,38 @@ func (p *planner) makeUpsertHelper(
 	sourceInfo := newSourceInfoForSingleTable(*tn, makeResultColumns(tableDesc.Columns))
 	excludedSourceInfo := newSourceInfoForSingleTable(upsertExcludedTable, makeResultColumns(insertCols))
 
+	helper := &upsertHelper{
+		p:                  p,
+		sourceInfo:         sourceInfo,
+		excludedSourceInfo: excludedSourceInfo,
+	}
+
 	var evalExprs []parser.TypedExpr
-	qvals := make(qvalMap)
+	ivarHelper := parser.MakeIndexedVarHelper(helper, len(sourceInfo.sourceColumns)+len(excludedSourceInfo.sourceColumns))
 	sources := multiSourceInfo{sourceInfo, excludedSourceInfo}
 	for _, expr := range untupledExprs {
-		normExpr, err := p.analyzeExpr(expr, sources, qvals, parser.NoTypePreference, false, "")
+		normExpr, err := p.analyzeExpr(expr, sources, ivarHelper, parser.NoTypePreference, false, "")
 		if err != nil {
 			return nil, err
 		}
 		evalExprs = append(evalExprs, normExpr)
 	}
+	helper.evalExprs = evalExprs
 
-	allExprsIdentity := true
+	helper.allExprsIdentity = true
 	for i, expr := range evalExprs {
 		// analyzeExpr above has normalized all direct column names to ColumnItems.
 		c, ok := expr.(*parser.ColumnItem)
 		if !ok {
-			allExprsIdentity = false
+			helper.allExprsIdentity = false
 			break
 		}
 		if len(c.Selector) > 0 ||
 			!sqlbase.EqualName(c.TableName.TableName, upsertExcludedTable.TableName) ||
 			sqlbase.NormalizeName(c.ColumnName) != sqlbase.ReNormalizeName(updateCols[i].Name) {
-			allExprsIdentity = false
+			helper.allExprsIdentity = false
 			break
 		}
-	}
-
-	helper := &upsertHelper{
-		p:                  p,
-		qvals:              qvals,
-		evalExprs:          evalExprs,
-		sourceInfo:         sourceInfo,
-		excludedSourceInfo: excludedSourceInfo,
-		allExprsIdentity:   allExprsIdentity,
 	}
 
 	return helper, nil
@@ -138,8 +174,8 @@ func (uh *upsertHelper) start() error {
 func (uh *upsertHelper) eval(
 	insertRow parser.DTuple, existingRow parser.DTuple,
 ) (parser.DTuple, error) {
-	uh.qvals.populateQVals(uh.sourceInfo, existingRow)
-	uh.qvals.populateQVals(uh.excludedSourceInfo, insertRow)
+	uh.curSourceRow = existingRow
+	uh.curExcludedRow = insertRow
 
 	var err error
 	ret := make([]parser.Datum, len(uh.evalExprs))

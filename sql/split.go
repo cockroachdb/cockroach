@@ -85,7 +85,7 @@ func (p *planner) Split(n *parser.Split) (planNode, error) {
 			return nil, err
 		}
 		desired := c.Type.ToDatumType()
-		typedExpr, err := p.analyzeExpr(expr, nil, nil, desired, true, "SPLIT AT")
+		typedExpr, err := p.analyzeExpr(expr, nil, parser.IndexedVarHelper{}, desired, true, "SPLIT AT")
 		if err != nil {
 			return nil, err
 		}
