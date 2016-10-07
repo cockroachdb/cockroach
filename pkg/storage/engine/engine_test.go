@@ -60,7 +60,8 @@ var (
 func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	inMem := NewInMem(inMemAttrs, testCacheSize, stopper)
+	inMem := NewInMem(inMemAttrs, testCacheSize)
+	stopper.AddCloser(inMem)
 	test(inMem, t)
 }
 

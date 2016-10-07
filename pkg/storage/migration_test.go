@@ -33,7 +33,8 @@ func TestMigrate7310And6991(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<10, stopper)
+	eng := engine.NewInMem(roachpb.Attributes{}, 1<<10)
+	stopper.AddCloser(eng)
 
 	desc := *testRangeDescriptor()
 

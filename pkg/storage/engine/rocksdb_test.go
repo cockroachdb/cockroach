@@ -229,15 +229,18 @@ func openRocksDBWithVersion(t *testing.T, hasVersionFile bool, ver Version) erro
 		}
 	}
 
-	rocksdb := NewRocksDB(
+	rocksdb, err := NewRocksDB(
 		roachpb.Attributes{},
 		dir,
 		RocksDBCache{},
 		0,
 		DefaultMaxOpenFiles,
-		stopper,
 	)
-	return rocksdb.Open()
+	if err != nil {
+		return err
+	}
+	stopper.AddCloser(rocksdb)
+	return nil
 }
 
 func TestSSTableInfosString(t *testing.T) {
@@ -353,11 +356,12 @@ func TestConcurrentBatch(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 
-	db := NewRocksDB(roachpb.Attributes{}, dir, RocksDBCache{},
-		0, DefaultMaxOpenFiles, stopper)
-	if err := db.Open(); err != nil {
+	db, err := NewRocksDB(roachpb.Attributes{}, dir, RocksDBCache{},
+		0, DefaultMaxOpenFiles)
+	if err != nil {
 		t.Fatalf("could not create new rocksdb db instance at %s: %v", dir, err)
 	}
+	stopper.AddCloser(db)
 
 	// Prepare 16 4 MB batches containing non-overlapping contents.
 	var batches []Batch

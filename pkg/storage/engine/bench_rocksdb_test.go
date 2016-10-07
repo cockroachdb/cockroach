@@ -27,23 +27,25 @@ import (
 
 func setupMVCCRocksDB(b testing.TB, loc string) (Engine, *stop.Stopper) {
 	stopper := stop.NewStopper()
-	rocksdb := NewRocksDB(
+	rocksdb, err := NewRocksDB(
 		roachpb.Attributes{},
 		loc,
 		RocksDBCache{},
 		0,
 		DefaultMaxOpenFiles,
-		stopper,
 	)
-	if err := rocksdb.Open(); err != nil {
+	if err != nil {
 		b.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
 	}
+	stopper.AddCloser(rocksdb)
 	return rocksdb, stopper
 }
 
 func setupMVCCInMemRocksDB(_ testing.TB, loc string) (Engine, *stop.Stopper) {
 	stopper := stop.NewStopper()
-	return NewInMem(roachpb.Attributes{}, testCacheSize, stopper), stopper
+	eng := NewInMem(roachpb.Attributes{}, testCacheSize)
+	stopper.AddCloser(eng)
+	return eng, stopper
 }
 
 // Read benchmarks. All of them run with on-disk data.
