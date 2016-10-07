@@ -274,7 +274,7 @@ export default class extends React.Component<IInjectedProps, {}> {
             </LineGraph>
 
             <LineGraph title="Critical Section Time"
-                       tooltip={`The maximum duration for which the corresponding mutex was held in the last minute ${specifier}.`}
+                       tooltip={`The maximum duration (capped at 1s) for which the corresponding mutex was held in the last minute ${specifier}.`}
                        sources={sources}>
               <Axis format={ (n: number) => d3.format(".1f")(NanoToMilli(n)) } label="Milliseconds">
                 <Metric name="cr.store.mutex.storenanos-max" title="StoreMu"
