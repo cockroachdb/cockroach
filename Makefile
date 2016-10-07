@@ -114,13 +114,20 @@ testraceslow: GOFLAGS += -race
 testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
 testraceslow: testslow
 
-# "make stress PKG=./storage TESTS=TestBlah" will build the given test
-# and run it in a loop (the PKG argument is required; if TESTS is not
-# given all tests in the package will be run).
+# Beware! This target is complicated because it needs to handle complexity:
+# - PKG may be specified as relative (e.g. './gossip') or absolute (e.g.
+# github.com/cockroachdb/cockroach/gossip), and this target needs to create
+# the test binary in the correct location and `cd` to the correct directory.
+# This is handled by having `go list` produce the command line.
+# - PKG may also be recursive (e.g. './...'). This is also handled by piping
+# through `go list`.
+# - PKG may not contain any tests! This is handled with an `if` statement that
+# checks for the presence of a test binary before running `stress` on it.
 .PHONY: stress
 stress:
-	$(GO) test -v $(GOFLAGS) -tags '$(TAGS)' -i -c $(PKG) -o $(PKG)/stress.test
-	cd $(PKG) && stress $(STRESSFLAGS) ./stress.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
+	$(GO) list -tags '$(TAGS)' -f \
+	'$(GO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LDFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/stress.test && (cd {{.Dir}} && if [ -f stress.test ]; then stress $(STRESSFLAGS) ./stress.test -test.run $(TESTS) -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | \
+	$(SHELL)
 
 .PHONY: stressrace
 stressrace: GOFLAGS += -race
