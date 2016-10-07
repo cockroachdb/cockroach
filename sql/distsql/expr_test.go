@@ -17,6 +17,7 @@
 package distsql
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
 
@@ -34,8 +35,8 @@ func (d testVarContainer) IndexedVarEval(idx int, ctx *parser.EvalContext) (pars
 	return nil, nil
 }
 
-func (d testVarContainer) IndexedVarString(idx int) string {
-	return fmt.Sprintf("var%d", idx)
+func (d testVarContainer) IndexedVarFormat(buf *bytes.Buffer, _ parser.FmtFlags, idx int) {
+	fmt.Fprintf(buf, "var%d", idx)
 }
 
 func TestProcessExpression(t *testing.T) {

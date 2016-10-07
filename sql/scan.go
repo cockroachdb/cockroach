@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
@@ -74,6 +75,13 @@ type scanNode struct {
 	limitHint          int64
 	limitSoft          bool
 	disableBatchLimits bool
+
+	// Each scanNode must be allocated on the heap and its
+	// location stay stable after construction because it implements
+	// IndexedVarContainer and the IndexedVar objects in sub-expressions
+	// will link to it by reference after checkRenderStar / analyzeExpr.
+	// Enforce this using NoCopy.
+	noCopy util.NoCopy
 }
 
 func (p *planner) Scan() *scanNode {
@@ -373,8 +381,8 @@ func (n *scanNode) IndexedVarReturnType(idx int) parser.Datum {
 	return n.resultColumns[idx].Typ.ReturnType()
 }
 
-func (n *scanNode) IndexedVarString(idx int) string {
-	return n.resultColumns[idx].Name
+func (n *scanNode) IndexedVarFormat(buf *bytes.Buffer, _ parser.FmtFlags, idx int) {
+	buf.WriteString(n.resultColumns[idx].Name)
 }
 
 // scanVisibility represents which table columns should be included in a scan.
