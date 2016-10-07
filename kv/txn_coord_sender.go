@@ -109,7 +109,7 @@ type TxnMetrics struct {
 	Commits    metric.Rates
 	Commits1PC metric.Rates // Commits which finished in a single phase
 	Abandons   metric.Rates
-	Durations  metric.Histograms
+	Durations  *metric.Histogram
 
 	// Restarts is the number of times we had to restart the transaction.
 	Restarts *metric.Histogram
@@ -215,8 +215,8 @@ func (tc *TxnCoordSender) startStats() {
 			// Take a snapshot of metrics. There's some chance of skew, since the snapshots are
 			// not done atomically, but that should be fine for these debug stats.
 			metrics := tc.metrics
-			durations := metrics.Durations[scale].Current()
-			restarts := metrics.Restarts.Current()
+			durations := metrics.Durations.Windowed()
+			restarts := metrics.Restarts.Windowed()
 			commitRate := metrics.Commits.Rates[scale].Value()
 			commit1PCRate := metrics.Commits1PC.Rates[scale].Value()
 			abortRate := metrics.Aborts.Rates[scale].Value()

@@ -31,7 +31,17 @@ import (
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
-const histWrapNum = 4 // number of histograms to keep in rolling window
+const (
+	// MaxLatency is the maximum value tracked in latency histograms. Higher
+	// value will be recorded as this value instead.
+	MaxLatency = 10 * time.Second
+
+	// Data will leave a latency's windowed histogram after approximately this
+	// duration.
+	latencyRotationInterval = 20 * time.Second
+	// The number of histograms to keep in rolling window.
+	histWrapNum = 2
+)
 
 // Iterable provides a method for synchronized access to interior objects.
 type Iterable interface {
@@ -99,7 +109,6 @@ var _ Iterable = &Rate{}
 var _ json.Marshaler = &Gauge{}
 var _ json.Marshaler = &GaugeFloat64{}
 var _ json.Marshaler = &Counter{}
-var _ json.Marshaler = &Histogram{}
 var _ json.Marshaler = &Rate{}
 var _ json.Marshaler = &Registry{}
 
@@ -113,7 +122,6 @@ type periodic interface {
 	tick()
 }
 
-var _ periodic = &Histogram{}
 var _ periodic = &Rate{}
 
 var now = timeutil.Now
@@ -128,107 +136,153 @@ func TestingSetNow(f func() time.Time) func() {
 	}
 }
 
+// TODO(tschottdorf): remove this method when
+// https://github.com/codahale/hdrhistogram/pull/22 is merged and the
+// dependency bumped.
+func cloneHistogram(in *hdrhistogram.Histogram) *hdrhistogram.Histogram {
+	out := in.Export()
+	out.Counts = append([]int64(nil), out.Counts...)
+	return hdrhistogram.Import(out)
+}
+
 func maybeTick(m periodic) {
 	for m.nextTick().Before(now()) {
 		m.tick()
 	}
 }
 
-// A Histogram is a wrapper around an hdrhistogram.WindowedHistogram.
+// A Histogram collects observed values by keeping bucketed counts. For
+// convenience, internally two sets of buckets are kept: A cumulative set (i.e.
+// data is never evicted) and a windowed set (which keeps only recently
+// collected samples).
+//
+// Top-level methods generally apply to the cumulative buckets; the windowed
+// variant is exposed through the Windowed method.
 type Histogram struct {
 	Metadata
-	maxVal int64
+	mu         syncutil.Mutex
+	cumulative *hdrhistogram.Histogram
+	sliding    *slidingHistogram
 
-	mu       syncutil.Mutex
-	windowed *hdrhistogram.WindowedHistogram
-	nextT    time.Time
-	duration time.Duration
+	// Immutable fields.
+	maxVal int64
 }
 
-// NewHistogram creates a new windowed HDRHistogram with the given parameters.
-// Data is kept in the active window for approximately the given duration.
-// See the documentation for hdrhistogram.WindowedHistogram for details.
+// NewHistogram initializes a given Histogram. The contained windowed histogram
+// rotates every 'duration'; both the windowed and the cumulative histogram
+// track nonnegative values up to 'maxVal' with 'sigFigs' decimal points of
+// precision.
 func NewHistogram(metadata Metadata, duration time.Duration, maxVal int64, sigFigs int) *Histogram {
+	dHist := newSlidingHistogram(metadata, duration, maxVal, sigFigs)
 	return &Histogram{
-		Metadata: metadata,
-		maxVal:   maxVal,
-		nextT:    now(),
-		duration: duration,
-		windowed: hdrhistogram.NewWindowed(histWrapNum, 0, maxVal, sigFigs),
+		Metadata:   metadata,
+		maxVal:     maxVal,
+		cumulative: hdrhistogram.New(0, maxVal, sigFigs),
+		sliding:    dHist,
 	}
 }
 
-// GetType returns the prometheus type enum for this metric.
-func (h *Histogram) GetType() *prometheusgo.MetricType {
-	return prometheusgo.MetricType_SUMMARY.Enum()
+// NewLatency is a convenience function which returns a histograms with
+// suitable defaults for latency tracking. Values are expressed in ns,
+// are truncated into the interval [0, MaxLatency] and are recorded
+// with one digit of precision (i.e. errors of <10ms at 100ms, <6s at 60s).
+func NewLatency(metadata Metadata) *Histogram {
+	return NewHistogram(
+		Metadata{
+			Name:   metadata.Name,
+			Help:   metadata.Help,
+			labels: metadata.labels,
+		},
+		latencyRotationInterval, MaxLatency.Nanoseconds(), 1,
+	)
 }
 
-func (h *Histogram) tick() {
-	h.nextT = h.nextT.Add(h.duration / histWrapNum)
-	h.windowed.Rotate()
+// Windowed returns a copy of the current windowed histogram data.
+func (h *Histogram) Windowed() *hdrhistogram.Histogram {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return cloneHistogram(h.sliding.Current())
 }
 
-func (h *Histogram) nextTick() time.Time {
-	return h.nextT
+// Snapshot returns a copy of the cumulative (i.e. all-time samples) histogram
+// data.
+func (h *Histogram) Snapshot() *hdrhistogram.Histogram {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return cloneHistogram(h.cumulative)
 }
 
-// MarshalJSON outputs to JSON.
-func (h *Histogram) MarshalJSON() ([]byte, error) {
-	return json.Marshal(h.Current().CumulativeDistribution())
-}
-
-// RecordValue adds the given value to the histogram, truncating if necessary.
+// RecordValue adds the given value to the histogram. Recording a value in
+// excess of the configured maximum value for that histogram results in
+// recording the maximum value instead.
 func (h *Histogram) RecordValue(v int64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	maybeTick(h)
-	for h.windowed.Current.RecordValue(v) != nil {
-		v = h.maxVal
+
+	if h.sliding.RecordValue(v) != nil {
+		_ = h.sliding.RecordValue(h.maxVal)
+	}
+	if h.cumulative.RecordValue(v) != nil {
+		_ = h.cumulative.RecordValue(h.maxVal)
 	}
 }
 
-// Current returns a copy of the data currently in the window.
-func (h *Histogram) Current() *hdrhistogram.Histogram {
+// TotalCount returns the (cumulative) number of samples.
+func (h *Histogram) TotalCount() int64 {
 	h.mu.Lock()
-	maybeTick(h)
-	export := h.windowed.Merge().Export()
-	// Make a deep copy of export.Counts, because (*hdrhistogram.Histogram).Export() does
-	// a shallow copy of the histogram counts, which leads to data races when multiple goroutines
-	// call this method.
-	// TODO(cdo): Remove this when I've gotten a chance to submit a PR for the proper fix
-	// to hdrhistogram.
-	export.Counts = append([]int64(nil), export.Counts...)
-	h.mu.Unlock()
-	return hdrhistogram.Import(export)
+	defer h.mu.Unlock()
+	return h.cumulative.TotalCount()
+}
+
+// Min returns the minimum.
+func (h *Histogram) Min() int64 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.cumulative.Min()
 }
 
 // Inspect calls the closure with the empty string and the receiver.
 func (h *Histogram) Inspect(f func(interface{})) {
 	h.mu.Lock()
-	maybeTick(h)
+	maybeTick(h.sliding)
 	h.mu.Unlock()
 	f(h)
 }
 
+// GetType returns the prometheus type enum for this metric.
+func (h *Histogram) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_HISTOGRAM.Enum()
+}
+
 // ToPrometheusMetric returns a filled-in prometheus metric of the right type.
 func (h *Histogram) ToPrometheusMetric() *prometheusgo.Metric {
-	// TODO(mjibson): change to a Histogram once bucket counts are reasonable
-	sum := &prometheusgo.Summary{}
+	hist := &prometheusgo.Histogram{}
 
 	h.mu.Lock()
-	maybeTick(h)
-	merged := h.windowed.Merge()
-	for _, b := range merged.CumulativeDistribution() {
-		sum.Quantile = append(sum.Quantile, &prometheusgo.Quantile{
-			Quantile: proto.Float64(b.Quantile),
-			Value:    proto.Float64(float64(b.ValueAt)),
+	maybeTick(h.sliding)
+	bars := h.cumulative.Distribution()
+	buckets := make([]*prometheusgo.Bucket, 0, len(bars))
+	var cumCount uint64
+	var sum float64
+	for _, bar := range bars {
+		upperBound := float64(bar.To)
+		sum += upperBound * float64(bar.Count)
+
+		cumCount += uint64(bar.Count)
+		curCumCount := cumCount // need a new alloc thanks to bad proto code
+
+		buckets = append(buckets, &prometheusgo.Bucket{
+			CumulativeCount: &curCumCount,
+			UpperBound:      &upperBound,
 		})
 	}
-	sum.SampleCount = proto.Uint64(uint64(merged.TotalCount()))
+	hist.SampleCount = &cumCount
+	hist.SampleSum = &sum // can do better here; we approximate in the loop
+	hist.Bucket = buckets
 	h.mu.Unlock()
 
 	return &prometheusgo.Metric{
-		Summary: sum,
+		Histogram: hist,
 	}
 }
 
@@ -379,7 +433,9 @@ func (e *Rate) Add(v float64) {
 }
 
 // Inspect calls the given closure with the empty string and the Rate's current
-// value. TODO(mrtracy): Fix this to pass the Rate object itself to 'f', to
+// value.
+//
+// TODO(mrtracy): Fix this to pass the Rate object itself to 'f', to
 // match the 'visitor' behavior as the other metric types (currently, it passes
 // the current value of the Rate as a float64.)
 func (e *Rate) Inspect(f func(interface{})) {

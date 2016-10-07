@@ -78,7 +78,7 @@ func TestHistogramRotate(t *testing.T) {
 		h.RecordValue(v)
 		cur += time.Second
 		setNow(cur)
-		cur := h.Current()
+		cur := h.Windowed()
 
 		// When i == histWrapNum-1, we expect the entry from i==0 to move out
 		// of the window (since we rotated for the histWrapNum'th time).
@@ -95,15 +95,6 @@ func TestHistogramRotate(t *testing.T) {
 			t.Fatalf("%d: unexpected maximum %d, expected %d", i, max, expMax)
 		}
 	}
-}
-
-func TestHistogramJSON(t *testing.T) {
-	defer TestingSetNow(nil)()
-	setNow(0)
-	h := NewHistogram(emptyMetadata, 0, 1, 3)
-	testMarshal(t, h, `[{"Quantile":100,"Count":0,"ValueAt":0}]`)
-	h.RecordValue(1)
-	testMarshal(t, h, `[{"Quantile":0,"Count":1,"ValueAt":1},{"Quantile":100,"Count":1,"ValueAt":1}]`)
 }
 
 func TestRateRotate(t *testing.T) {
