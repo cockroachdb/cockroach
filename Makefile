@@ -207,7 +207,7 @@ GLOCK := ../../../../bin/glock
 #        |~ GOPATH/src/github.com/cockroachdb
 
 $(GLOCK):
-	$(GO) get github.com/robfig/glock
+	$(GO) get github.com/tamird/glock
 
 # Update the git hooks and run the bootstrap script whenever any
 # of them (or their dependencies) change.
