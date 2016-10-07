@@ -797,6 +797,28 @@ func TestPGPreparedExec(t *testing.T) {
 				baseTest,
 			},
 		},
+		// An empty string is valid in postgres.
+		{
+			"",
+			[]preparedExecTest{
+				baseTest,
+			},
+		},
+		// Empty statements are permitted.
+		{
+			";",
+			[]preparedExecTest{
+				baseTest,
+			},
+		},
+		// Any number of empty statements are permitted with a single statement
+		// anywhere.
+		{
+			"; ; SET DATABASE = system; ;",
+			[]preparedExecTest{
+				baseTest,
+			},
+		},
 	}
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -823,9 +845,7 @@ func TestPGPreparedExec(t *testing.T) {
 					t.Errorf("%s: %v: expected error: %s, got %s", query, test.qargs, test.error, err)
 				}
 			} else {
-				if rowsAffected, err := result.RowsAffected(); err != nil {
-					t.Errorf("%s: %v: unexpected error: %s", query, test.qargs, err)
-				} else if rowsAffected != test.rowsAffected {
+				if rowsAffected, _ := result.RowsAffected(); rowsAffected != test.rowsAffected {
 					t.Errorf("%s: %v: expected %v, got %v", query, test.qargs, test.rowsAffected, rowsAffected)
 				}
 			}
