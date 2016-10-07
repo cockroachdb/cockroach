@@ -1871,7 +1871,7 @@ create_view_stmt:
     }
   }
 
-// TODO(a-robinson): CREATE OR REPLACE and ALTER VIEW support (#2971).
+// TODO(a-robinson): CREATE OR REPLACE VIEW support (#2971).
 
 // CREATE INDEX
 create_index_stmt:
@@ -1956,11 +1956,19 @@ rename_stmt:
   }
 | ALTER TABLE relation_expr RENAME TO qualified_name
   {
-    $$.val = &RenameTable{Name: $3.normalizableTableName(), NewName: $6.normalizableTableName(), IfExists: false}
+    $$.val = &RenameTable{Name: $3.normalizableTableName(), NewName: $6.normalizableTableName(), IfExists: false, IsView: false}
   }
 | ALTER TABLE IF EXISTS relation_expr RENAME TO qualified_name
   {
-    $$.val = &RenameTable{Name: $5.normalizableTableName(), NewName: $8.normalizableTableName(), IfExists: true}
+    $$.val = &RenameTable{Name: $5.normalizableTableName(), NewName: $8.normalizableTableName(), IfExists: true, IsView: false}
+  }
+| ALTER VIEW relation_expr RENAME TO qualified_name
+  {
+    $$.val = &RenameTable{Name: $3.normalizableTableName(), NewName: $6.normalizableTableName(), IfExists: false, IsView: true}
+  }
+| ALTER VIEW IF EXISTS relation_expr RENAME TO qualified_name
+  {
+    $$.val = &RenameTable{Name: $5.normalizableTableName(), NewName: $8.normalizableTableName(), IfExists: true, IsView: true}
   }
 | ALTER INDEX table_name_with_index RENAME TO name
   {
