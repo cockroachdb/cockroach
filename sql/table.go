@@ -97,6 +97,10 @@ type SchemaAccessor interface {
 	// is not found.
 	mustGetTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error)
 
+	// mustGetViewDesc returns a table descriptor for a view, or an error if the
+	// descriptor is not found.
+	mustGetViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error)
+
 	// NB: one can use GetTableDescFromID() to retrieve a descriptor for
 	// a table from a transaction using its ID, assuming it was loaded
 	// in the transaction already.
@@ -174,6 +178,21 @@ func (p *planner) mustGetTableDesc(tn *parser.TableName) (*sqlbase.TableDescript
 	}
 	if desc == nil {
 		return nil, sqlbase.NewUndefinedTableError(tn.String())
+	}
+	if err := filterTableState(desc); err != nil {
+		return nil, err
+	}
+	return desc, nil
+}
+
+// mustGetViewDesc implements the SchemaAccessor interface.
+func (p *planner) mustGetViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
+	desc, err := p.getViewDesc(tn)
+	if err != nil {
+		return nil, err
+	}
+	if desc == nil {
+		return nil, sqlbase.NewUndefinedViewError(tn.String())
 	}
 	if err := filterTableState(desc); err != nil {
 		return nil, err
