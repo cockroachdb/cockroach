@@ -70,17 +70,17 @@ func openStore(cmd *cobra.Command, dir string, stopper *stop.Stopper) (*engine.R
 	if err != nil {
 		return nil, err
 	}
-	db := engine.NewRocksDB(
+	db, err := engine.NewRocksDB(
 		roachpb.Attributes{},
 		dir,
 		cache,
 		0,
 		maxOpenFiles,
-		stopper,
 	)
-	if err := db.Open(); err != nil {
+	if err != nil {
 		return nil, err
 	}
+	stopper.AddCloser(db)
 	return db, nil
 }
 

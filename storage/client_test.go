@@ -91,8 +91,10 @@ func createTestStoreWithConfig(
 ) (*storage.Store, *stop.Stopper, *hlc.ManualClock) {
 	stopper := stop.NewStopper()
 	manual := hlc.NewManualClock(123)
+	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
+	stopper.AddCloser(eng)
 	store := createTestStoreWithEngine(t,
-		engine.NewInMem(roachpb.Attributes{}, 10<<20, stopper),
+		eng,
 		hlc.NewClock(manual.UnixNano),
 		true,
 		storeCfg,
@@ -628,7 +630,8 @@ func (m *multiTestContext) addStore(idx int) {
 	} else {
 		engineStopper := stop.NewStopper()
 		m.engineStoppers = append(m.engineStoppers, engineStopper)
-		eng = engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
+		eng = engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		engineStopper.AddCloser(eng)
 		m.engines = append(m.engines, eng)
 		needBootstrap = true
 	}

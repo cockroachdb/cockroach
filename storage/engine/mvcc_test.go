@@ -85,7 +85,9 @@ var (
 // createTestEngine returns a new in-memory engine with 1MB of storage
 // capacity.
 func createTestEngine(stopper *stop.Stopper) Engine {
-	return NewInMem(roachpb.Attributes{}, 1<<20, stopper)
+	eng := NewInMem(roachpb.Attributes{}, 1<<20)
+	stopper.AddCloser(eng)
+	return eng
 }
 
 // makeTxn creates a new transaction using the specified base
@@ -807,7 +809,7 @@ func TestMVCCDeleteMissingKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	engine := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
+	engine := createTestEngine(stopper)
 
 	if err := MVCCDelete(context.Background(), engine, nil, testKey1, makeTS(1, 0), nil); err != nil {
 		t.Fatal(err)
@@ -2905,7 +2907,7 @@ func TestFindSplitKey(t *testing.T) {
 	rangeID := roachpb.RangeID(1)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	engine := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
+	engine := createTestEngine(stopper)
 
 	ms := &enginepb.MVCCStats{}
 	// Generate a series of KeyValues, each containing targetLength
@@ -3043,7 +3045,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 	for i, test := range testCases {
 		stopper := stop.NewStopper()
 		defer stopper.Stop()
-		engine := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
+		engine := createTestEngine(stopper)
 
 		ms := &enginepb.MVCCStats{}
 		val := roachpb.MakeValueFromString(strings.Repeat("X", 10))
@@ -3137,7 +3139,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 	for i, test := range testCases {
 		stopper := stop.NewStopper()
 		defer stopper.Stop()
-		engine := NewInMem(roachpb.Attributes{}, 1<<20, stopper)
+		engine := createTestEngine(stopper)
 
 		ms := &enginepb.MVCCStats{}
 		var expKey roachpb.Key
@@ -3868,7 +3870,8 @@ func TestWillOverflow(t *testing.T) {
 func BenchmarkMVCCStats(b *testing.B) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	rocksdb := NewInMem(roachpb.Attributes{Attrs: []string{"ssd"}}, testCacheSize, stopper)
+	rocksdb := NewInMem(roachpb.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
+	stopper.AddCloser(rocksdb)
 
 	ms := enginepb.MVCCStats{
 		LiveBytes:       1,

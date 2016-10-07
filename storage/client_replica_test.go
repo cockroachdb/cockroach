@@ -218,8 +218,10 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 			}
 			return nil
 		}
+	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
+	stopper.AddCloser(eng)
 	store := createTestStoreWithEngine(t,
-		engine.NewInMem(roachpb.Attributes{}, 10<<20, stopper),
+		eng,
 		clock,
 		true,
 		cfg,

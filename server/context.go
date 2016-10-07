@@ -35,10 +35,10 @@ import (
 	"github.com/cockroachdb/cockroach/gossip/resolver"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/envutil"
 	"github.com/cockroachdb/cockroach/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/stop"
 )
 
 // Context defaults.
@@ -89,6 +89,10 @@ type Context struct {
 	// Parsed values.
 
 	// Engines is the storage instances specified by Stores.
+	// TODO(andrei): remove the Engines from this Context struct. They're real
+	// meaty objects, as opposed to configuration structs, so they don't belong
+	// here. Moreover, they need to be Close()d, and it's easy to lose track of
+	// that fact when they're hid in this Context.
 	Engines []engine.Engine
 
 	// NodeAttributes is the parsed representation of Attrs.
@@ -343,8 +347,70 @@ func MakeContext() Context {
 	return ctx
 }
 
+// EnginesUniquePtr is a holder of engines, offering an easy way to close them,
+// or transfer ownership to someone else.
+// The intended use is:
+//
+//	engines := CreateEngines()
+// 	ep := NewEnginesUniquePtr(engines)
+// 	// We now have ownership, make sure we clean up.
+// 	defer ep.Close()
+//
+// 	if err := DoSomethingWithEnginesAndTakeOwnership(engines); err != nil {
+// 		return err;
+// 	}
+// 	// We've given away ownership. This will make the defer above a no-op.
+// 	ep.Release()
+//
+type EnginesUniquePtr struct {
+	// EnginesUniquePtr is not copiable, as that would leave two owning pointers
+	// wanting to Close the engines.
+	noCopy  util.NoCopy
+	engines []engine.Engine
+	closed  bool
+}
+
+// Close closes the engines. If Release() has been previously called, this is a
+// no-op.
+func (ep *EnginesUniquePtr) Close() {
+	if ep.closed {
+		panic("EnginesUniquePtr already closed")
+	}
+	ep.closed = true
+	for _, e := range ep.engines {
+		e.Close()
+	}
+}
+
+// Release makes a future call to Close() a no-op. It should be called after
+// ownership of the engines has been transferred away.
+func (ep *EnginesUniquePtr) Release() {
+	if ep.closed {
+		panic("EnginesUniquePtr already closed")
+	}
+	ep.engines = nil
+}
+
+// NewEnginesUniquePtr creates a holder for engines.
+func NewEnginesUniquePtr(engines []engine.Engine) *EnginesUniquePtr {
+	return &EnginesUniquePtr{engines: engines}
+}
+
 // InitStores initializes ctx.Engines based on ctx.Stores.
-func (ctx *Context) InitStores(stopper *stop.Stopper) error {
+// The caller is responsible for Close()ing all the engines in ctx.Engines.
+// EnginesUniquePtr can be used for conveniently managing that.
+func (ctx *Context) InitStores() (err error) {
+	defer func() {
+		// If returning an error, close all the engines so that the caller doesn't
+		// have to deal with them.
+		if err == nil {
+			return
+		}
+		for _, e := range ctx.Engines {
+			e.Close()
+		}
+		ctx.Engines = nil
+	}()
 	cache := engine.NewRocksDBCache(ctx.CacheSize)
 	defer cache.Release()
 
@@ -373,7 +439,7 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 				return fmt.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
-			ctx.Engines = append(ctx.Engines, engine.NewInMem(spec.Attributes, sizeInBytes, stopper))
+			ctx.Engines = append(ctx.Engines, engine.NewInMem(spec.Attributes, sizeInBytes))
 		} else {
 			if spec.SizePercent > 0 {
 				fileSystemUsage := gosigar.FileSystemUsage{}
@@ -386,17 +452,17 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 				return fmt.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
-			ctx.Engines = append(
-				ctx.Engines,
-				engine.NewRocksDB(
-					spec.Attributes,
-					spec.Path,
-					cache,
-					sizeInBytes,
-					openFileLimitPerStore,
-					stopper,
-				),
+			eng, err := engine.NewRocksDB(
+				spec.Attributes,
+				spec.Path,
+				cache,
+				sizeInBytes,
+				openFileLimitPerStore,
 			)
+			if err != nil {
+				return err
+			}
+			ctx.Engines = append(ctx.Engines, eng)
 		}
 	}
 
