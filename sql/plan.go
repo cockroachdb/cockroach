@@ -304,6 +304,8 @@ func (p *planner) newPlan(
 		return p.Show(n)
 	case *parser.ShowCreateTable:
 		return p.ShowCreateTable(n)
+	case *parser.ShowCreateView:
+		return p.ShowCreateView(n)
 	case *parser.ShowColumns:
 		return p.ShowColumns(n)
 	case *parser.ShowDatabases:
@@ -347,6 +349,8 @@ func (p *planner) prepare(stmt parser.Statement) (planNode, error) {
 		return p.Show(n)
 	case *parser.ShowCreateTable:
 		return p.ShowCreateTable(n)
+	case *parser.ShowCreateView:
+		return p.ShowCreateView(n)
 	case *parser.ShowColumns:
 		return p.ShowColumns(n)
 	case *parser.ShowDatabases:
