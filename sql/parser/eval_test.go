@@ -536,7 +536,7 @@ func TestEval(t *testing.T) {
 		{`experimental_strftime('2010-01-10 12:13:14.123456+00:00'::timestamptz, '%a %A %w %d %b %B %m %y %Y %H %I %p %M %S %f %z %Z %j %U %W %c %x %X %%')`,
 			`'Sun Sunday 0 10 Jan January 01 10 2010 12 12 PM 13 14 123456 +0000 UTC 010 02 01 Sun Jan 10 12:13:14 2010 01/10/10 12:13:14 %'`},
 		{`experimental_strptime('%d %Y %B', '03 2006 December')`, `2006-12-03 00:00:00+00:00`},
-		{`experimental_strptime('%y %m %d %z %M %S %H', '06 12 21 -0400 05 33 14')`, `2006-12-21 18:05:33+00:00`},
+		{`experimental_strptime('%y %m %d %M %S %H', '06 12 21 05 33 14')`, `2006-12-21 14:05:33+00:00`},
 		// TODO(nvanbenschoten) introduce a shorthand type annotation notation.
 		// {`123!int + 1`, `124`},
 		// {`123!float + 1`, `124.0`},
