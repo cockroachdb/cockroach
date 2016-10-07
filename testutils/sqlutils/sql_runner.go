@@ -63,3 +63,21 @@ func (sr *SQLRunner) Query(query string, args ...interface{}) *gosql.Rows {
 	}
 	return r
 }
+
+// Row is a wrapper around gosql.Row that kills the test on error.
+type Row struct {
+	testing.TB
+	row *gosql.Row
+}
+
+// Scan is a wrapper around (*gosql.Row).Scan that kills the test on error.
+func (r *Row) Scan(dest ...interface{}) {
+	if err := r.row.Scan(dest...); err != nil {
+		r.Fatalf("error scanning '%v': %s", r.row, err)
+	}
+}
+
+// QueryRow is a wrapper around gosql.QueryRow that kills the test on error.
+func (sr *SQLRunner) QueryRow(query string, args ...interface{}) *Row {
+	return &Row{sr.TB, sr.DB.QueryRow(query, args...)}
+}
