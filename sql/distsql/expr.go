@@ -17,6 +17,7 @@
 package distsql
 
 import (
+	"bytes"
 	"fmt"
 	"strconv"
 
@@ -116,8 +117,8 @@ func (eh *exprHelper) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.D
 }
 
 // IndexedVarString is part of the parser.IndexedVarContainer interface.
-func (eh *exprHelper) IndexedVarString(idx int) string {
-	return fmt.Sprintf("$%d", idx)
+func (eh *exprHelper) IndexedVarFormat(buf *bytes.Buffer, _ parser.FmtFlags, idx int) {
+	fmt.Fprintf(buf, "$%d", idx)
 }
 
 func (eh *exprHelper) init(
