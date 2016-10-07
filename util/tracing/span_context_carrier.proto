@@ -20,10 +20,10 @@ option go_package = "tracing";
 
 import "gogoproto/gogo.proto";
 
-// A Span message holds metadata of a (potentially ongoing) span of a
-// distributed trace as per the OpenTracing specification. See
+// A SpanContextCarrier message holds metadata of a (potentially ongoing) span
+// of a distributed trace as per the OpenTracing specification. See
 // http://opentracing.io/spec/ for details.
-message Span {
+message SpanContextCarrier {
   uint64 trace_id = 1 [(gogoproto.customname) = "TraceID"];
   uint64 span_id = 2 [(gogoproto.customname) = "SpanID"];
   bool sampled = 3;

@@ -18,22 +18,22 @@ package tracing
 
 import basictracer "github.com/opentracing/basictracer-go"
 
-var _ basictracer.DelegatingCarrier = &Span{}
+var _ basictracer.DelegatingCarrier = &SpanContextCarrier{}
 
 // SetState implements basictracer.DelegatingCarrier.
-func (sp *Span) SetState(traceID, spanID uint64, sampled bool) {
+func (sp *SpanContextCarrier) SetState(traceID, spanID uint64, sampled bool) {
 	sp.TraceID = traceID
 	sp.SpanID = spanID
 	sp.Sampled = sampled
 }
 
 // State implements basictracer.DelegatingCarrier.
-func (sp *Span) State() (traceID, spanID uint64, sampled bool) {
+func (sp *SpanContextCarrier) State() (traceID, spanID uint64, sampled bool) {
 	return sp.TraceID, sp.SpanID, sp.Sampled
 }
 
 // SetBaggageItem implements basictracer.DelegatingCarrier.
-func (sp *Span) SetBaggageItem(key, value string) {
+func (sp *SpanContextCarrier) SetBaggageItem(key, value string) {
 	if sp.Baggage == nil {
 		sp.Baggage = make(map[string]string)
 	}
@@ -41,7 +41,7 @@ func (sp *Span) SetBaggageItem(key, value string) {
 }
 
 // GetBaggage implements basictracer.DelegatingCarrier.
-func (sp *Span) GetBaggage(fn func(key, value string)) {
+func (sp *SpanContextCarrier) GetBaggage(fn func(key, value string)) {
 	for k, v := range sp.Baggage {
 		fn(k, v)
 	}

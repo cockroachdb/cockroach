@@ -49,7 +49,9 @@ func (cr CallbackRecorder) RecordSpan(sp basictracer.RawSpan) {
 
 // JoinOrNew creates a new Span joined to the provided DelegatingCarrier or
 // creates Span from the given tracer.
-func JoinOrNew(tr opentracing.Tracer, carrier *Span, opName string) (opentracing.Span, error) {
+func JoinOrNew(
+	tr opentracing.Tracer, carrier *SpanContextCarrier, opName string,
+) (opentracing.Span, error) {
 	if carrier != nil {
 		wireContext, err := tr.Extract(basictracer.Delegator, carrier)
 		switch err {
@@ -78,7 +80,7 @@ func JoinOrNew(tr opentracing.Tracer, carrier *Span, opName string) (opentracing
 // TODO(andrei): JoinOrNewSnowball creates a new tracer, which is not kosher.
 // Also this can't use the lightstep tracer.
 func JoinOrNewSnowball(
-	opName string, carrier *Span, recorder func(sp basictracer.RawSpan),
+	opName string, carrier *SpanContextCarrier, recorder func(sp basictracer.RawSpan),
 ) (opentracing.Span, error) {
 	tr := basictracer.NewWithOptions(basictracerOptions(recorder))
 	sp, err := JoinOrNew(tr, carrier, opName)
