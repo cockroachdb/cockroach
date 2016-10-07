@@ -67,12 +67,14 @@ github.com/google/btree 7364763242911ab6d418d2722e237194938ebad0
 github.com/gordonklaus/ineffassign 99762ed65232b1477364c8c53778f8b6503e868c
 github.com/grpc-ecosystem/grpc-gateway acebe0f9ff5993e130b141ee60e83e592839ca22
 github.com/inconshreveable/mousetrap 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
+github.com/jeffjen/datefmt 6688647cfa0439b86e09b097cac96ed328d5fa34
 github.com/jteeuwen/go-bindata a0ff2567cfb70903282db057e799fd826784d41d
 github.com/kisielk/errcheck 9c1292e1c962175f76516859f4a88aabd86dc495
 github.com/kisielk/gotool 5e136deb9b893bbe6c8f23236ff4378b7a8a0dbb
 github.com/kkaneda/returncheck bf081fa7155e3a27df1f056a49d50685edfa5b1b
 github.com/kr/pretty cfb55aafdaf3ec08f0db22699ab822c50091b1c4
 github.com/kr/text 7cafcd837844e784b526369c9bce262804aebc60
+github.com/leekchan/timeutil 28917288c48df3d2c1cfe468c273e0b2adda0aa5
 github.com/lib/pq 50761b0867bd1d9d069276790bcd4a3bccf2324a
 github.com/lightstep/lightstep-tracer-go 7ec5005048fddb1fc15627e1bf58796ce01d919e
 github.com/mattn/go-isatty 66b8e73f3f5cda9f96b69efd03dd3d7fc4a5cdb8
@@ -103,10 +105,8 @@ github.com/stretchr/testify 976c720a22c8eb4eb6a0b4348ad85ad12491a506
 github.com/tebeka/go2xunit cb8eb3dedfac9cf4cb1f2d8988f3390f2d0cf2e7
 github.com/termie/go-shutil bcacb06fecaeec8dc42af03c87c6949f4a05c74c
 github.com/wadey/gocovmerge b5bfa59ec0adc420475f97f89b58045c721d761c
-github.com/jeffjen/datefmt 6688647cfa0439b86e09b097cac96ed328d5fa34
-github.com/leekchan/timeutil 28917288c48df3d2c1cfe468c273e0b2adda0aa5
 golang.org/x/crypto 484eb34681af59703e639b971bc307019182c41f
-golang.org/x/net 0f2be02c5ddfa7c7936000ad519b04c6c795eab3
+golang.org/x/net f4b625ec9b21d620bb5ce57f2dfc3e08ca97fce6
 golang.org/x/oauth2 3c3a985cb79f52a3190fbc056984415ca6763d01
 golang.org/x/sys 8f0908ab3b2457e2e15403d3697c9ef5cb4b57a9
 golang.org/x/text 098f51fb687dbaba1f6efabeafbb6461203f9e21
