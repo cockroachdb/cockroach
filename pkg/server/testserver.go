@@ -243,22 +243,24 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 			if storeSpec.SizePercent > 0 {
 				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %s", storeSpec))
 			}
-			ts.Cfg.Engines = append(ts.Cfg.Engines, engine.NewInMem(
-				roachpb.Attributes{},
-				storeSpec.SizeInBytes,
-				params.Stopper,
-			))
+			ts.Cfg.Engines = append(ts.Cfg.Engines,
+				engine.NewInMem(roachpb.Attributes{}, storeSpec.SizeInBytes))
 		} else {
 			// TODO(bram): This will require some cleanup of on disk files.
 			panic(fmt.Sprintf("test server does not yet support on disk stores: %s", storeSpec))
 		}
 	}
+	engines := MakeEngines(ts.Cfg.Engines)
+	defer engines.Close()
 
 	var err error
 	ts.Server, err = NewServer(*ts.Cfg, params.Stopper)
 	if err != nil {
 		return err
 	}
+	// The server took ownership of the engines.
+	engines.Release()
+
 	// Our context must be shared with our server.
 	ts.Cfg = &ts.Server.cfg
 

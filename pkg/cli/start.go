@@ -303,9 +303,11 @@ func runStart(_ *cobra.Command, args []string) error {
 	stopper := initBacktrace(logDir)
 	log.Event(startCtx, "initialized profiles")
 
-	if err := serverCfg.InitStores(stopper); err != nil {
+	if err := serverCfg.InitStores(); err != nil {
 		return fmt.Errorf("failed to initialize stores: %s", err)
 	}
+	engines := server.MakeEngines(serverCfg.Engines)
+	defer engines.Close()
 
 	if err := serverCfg.InitNode(); err != nil {
 		return fmt.Errorf("failed to initialize node: %s", err)
@@ -319,6 +321,8 @@ func runStart(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to start Cockroach server: %s", err)
 	}
+	// The server took ownership of the engines.
+	engines.Release()
 
 	if err := s.Start(startCtx); err != nil {
 		return fmt.Errorf("cockroach server exited with error: %s", err)

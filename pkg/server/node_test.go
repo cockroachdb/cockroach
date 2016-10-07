@@ -155,7 +155,8 @@ func TestBootstrapCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
+	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	stopper.AddCloser(e)
 	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval)); err != nil {
 		t.Fatal(err)
 	}
@@ -194,9 +195,7 @@ func TestBootstrapCluster(t *testing.T) {
 // stores and verifies both stores are added and started.
 func TestBootstrapNewStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	engineStopper := stop.NewStopper()
-	defer engineStopper.Stop()
-	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
+	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval)); err != nil {
 		t.Fatal(err)
 	}
@@ -204,9 +203,11 @@ func TestBootstrapNewStore(t *testing.T) {
 	// Start a new node with two new stores which will require bootstrapping.
 	engines := []engine.Engine{
 		e,
-		engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper),
-		engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper),
+		engine.NewInMem(roachpb.Attributes{}, 1<<20),
+		engine.NewInMem(roachpb.Attributes{}, 1<<20),
 	}
+	enginesHolder := MakeEngines(engines)
+	defer enginesHolder.Close()
 	_, _, node, stopper := createAndStartTestNode(
 		util.TestAddr,
 		engines,
@@ -244,7 +245,8 @@ func TestNodeJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop()
-	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
+	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	engineStopper.AddCloser(e)
 	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval)); err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +263,9 @@ func TestNodeJoin(t *testing.T) {
 	defer stopper1.Stop()
 
 	// Create a new node.
-	engines2 := []engine.Engine{engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)}
+	e2 := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	engineStopper.AddCloser(e2)
+	engines2 := []engine.Engine{e2}
 	_, server2Addr, node2, stopper2 := createAndStartTestNode(
 		util.TestAddr,
 		engines2,
@@ -306,9 +310,9 @@ func TestNodeJoin(t *testing.T) {
 func TestNodeJoinSelf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	engineStopper := stop.NewStopper()
-	defer engineStopper.Stop()
-	engines := []engine.Engine{engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)}
+	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	defer e.Close()
+	engines := []engine.Engine{e}
 	_, addr, _, node, stopper := createTestNode(util.TestAddr, engines, util.TestAddr, t)
 	defer stopper.Stop()
 	err := node.start(context.Background(), addr, engines, roachpb.Attributes{}, roachpb.Locality{})
@@ -321,9 +325,9 @@ func TestNodeJoinSelf(t *testing.T) {
 // store's cluster ID is empty.
 func TestCorruptedClusterID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	engineStopper := stop.NewStopper()
-	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
-	defer engineStopper.Stop()
+
+	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	defer e.Close()
 	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval)); err != nil {
 		t.Fatal(err)
 	}
@@ -648,9 +652,8 @@ func TestStartNodeWithLocality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testLocalityWitNewNode := func(locality roachpb.Locality) {
-		engineStopper := stop.NewStopper()
-		defer engineStopper.Stop()
-		e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
+		e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		defer e.Close()
 		if _, err := bootstrapCluster(
 			[]engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
 		); err != nil {

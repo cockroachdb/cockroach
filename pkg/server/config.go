@@ -35,10 +35,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // Context defaults.
@@ -88,6 +88,10 @@ type Config struct {
 	// Parsed values.
 
 	// Engines is the storage instances specified by Stores.
+	// TODO(andrei): remove the Engines from this Context struct. They're real
+	// meaty objects, as opposed to configuration structs, so they don't belong
+	// here. Moreover, they need to be Close()d, and it's easy to lose track of
+	// that fact when they're hidden in this Config.
 	Engines []engine.Engine
 
 	// NodeAttributes is the parsed representation of Attrs.
@@ -341,8 +345,70 @@ func MakeConfig() Config {
 	return cfg
 }
 
-// InitStores initializes cfg.Engines based on cfg.Stores.
-func (cfg *Config) InitStores(stopper *stop.Stopper) error {
+// Engines is a holder of engines, offering an easy way to close them,
+// or transfer ownership to someone else.
+// The intended use is:
+//
+//  engines := CreateEngines()
+// 	ep := MakeEngines(engines)
+// 	// We now have ownership, make sure we clean up.
+// 	defer ep.Close()
+//
+// 	if err := DoSomethingWithEnginesAndTakeOwnership(engines); err != nil {
+// 	  return err;
+// 	}
+// 	// We've given away ownership. This will make the defer above a no-op.
+// 	ep.Release()
+//
+type Engines struct {
+	// Engines is not copyable, as that would leave two owning pointers
+	// wanting to Close the engines.
+	noCopy  util.NoCopy
+	engines []engine.Engine
+	closed  bool
+}
+
+// Close closes the engines. If Release() has been previously called, this is a
+// no-op.
+func (ep *Engines) Close() {
+	if ep.closed {
+		panic("Engines already closed")
+	}
+	ep.closed = true
+	for _, e := range ep.engines {
+		e.Close()
+	}
+}
+
+// Release makes a future call to Close() a no-op. It should be called after
+// ownership of the engines has been transferred away.
+func (ep *Engines) Release() {
+	if ep.closed {
+		panic("Engines already closed")
+	}
+	ep.engines = nil
+}
+
+// MakeEngines creates a holder for engines.
+func MakeEngines(engines []engine.Engine) Engines {
+	return Engines{engines: engines}
+}
+
+// InitStores initializes ctx.Engines based on ctx.Stores.
+// The caller is responsible for Close()ing all the engines in ctx.Engines.
+// Engines can be used for conveniently managing that.
+func (cfg *Config) InitStores() (err error) {
+	defer func() {
+		// If returning an error, close all the engines so that the caller doesn't
+		// have to deal with them.
+		if err == nil {
+			return
+		}
+		for _, e := range cfg.Engines {
+			e.Close()
+		}
+		cfg.Engines = nil
+	}()
 	cache := engine.NewRocksDBCache(cfg.CacheSize)
 	defer cache.Release()
 
@@ -371,7 +437,7 @@ func (cfg *Config) InitStores(stopper *stop.Stopper) error {
 				return fmt.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
-			cfg.Engines = append(cfg.Engines, engine.NewInMem(spec.Attributes, sizeInBytes, stopper))
+			cfg.Engines = append(cfg.Engines, engine.NewInMem(spec.Attributes, sizeInBytes))
 		} else {
 			if spec.SizePercent > 0 {
 				fileSystemUsage := gosigar.FileSystemUsage{}
@@ -384,17 +450,18 @@ func (cfg *Config) InitStores(stopper *stop.Stopper) error {
 				return fmt.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
-			cfg.Engines = append(
-				cfg.Engines,
-				engine.NewRocksDB(
-					spec.Attributes,
-					spec.Path,
-					cache,
-					sizeInBytes,
-					openFileLimitPerStore,
-					stopper,
-				),
+
+			eng, err := engine.NewRocksDB(
+				spec.Attributes,
+				spec.Path,
+				cache,
+				sizeInBytes,
+				openFileLimitPerStore,
 			)
+			if err != nil {
+				return err
+			}
+			cfg.Engines = append(cfg.Engines, eng)
 		}
 	}
 
