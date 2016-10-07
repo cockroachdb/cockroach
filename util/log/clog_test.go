@@ -359,36 +359,42 @@ func TestVmoduleGlob(t *testing.T) {
 func TestListLogFiles(t *testing.T) {
 	setFlags()
 
-	Info(context.Background(), "x")    // Be sure we have a file.
-	Warning(context.Background(), "x") // Be sure we have a file.
-	var info, warn *syncBuffer
-	var ok bool
-	info, ok = logging.file[Severity_INFO].(*syncBuffer)
-	if !ok {
-		t.Fatal("info wasn't created")
+	methods := map[Severity]func(context.Context, ...interface{}){
+		Severity_INFO:    Info,
+		Severity_WARNING: Warning,
 	}
-	infoName := filepath.Base(info.file.Name())
-	warn, ok = logging.file[Severity_WARNING].(*syncBuffer)
-	if !ok {
-		t.Fatal("warning wasn't created")
+	expectedNames := make(map[string]struct{}, len(methods))
+	for severity, method := range methods {
+		method(context.Background(), "x")
+
+		sb, ok := logging.file[severity].(*syncBuffer)
+		if !ok {
+			t.Fatalf("%s buffer wasn't created", severity)
+		}
+
+		expectedNames[filepath.Base(sb.file.Name())] = struct{}{}
 	}
-	warnName := filepath.Base(warn.file.Name())
+
 	results, err := ListLogFiles()
 	if err != nil {
 		t.Fatal(err)
 	}
-	var foundInfo, foundWarn bool
-	for _, r := range results {
-		fmt.Printf("Results: Name:%v\n", r.Name)
-		if r.Name == infoName {
-			foundInfo = true
-		}
-		if r.Name == warnName {
-			foundWarn = true
-		}
+
+	for _, result := range results {
+		delete(expectedNames, result.Name)
 	}
-	if !foundInfo || !foundWarn {
-		t.Errorf("expected to find %s, %s; got %d results", infoName, warnName, len(results))
+
+	if len(expectedNames) > 0 {
+		names := make([]string, len(results))
+		for i, result := range results {
+			names[i] = result.Name
+		}
+
+		t.Logf("found log files:\n%s", strings.Join(names, "\n"))
+
+		for expectedName := range expectedNames {
+			t.Errorf("did not find expected log file %s", expectedName)
+		}
 	}
 }
 
