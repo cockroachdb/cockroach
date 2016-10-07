@@ -320,7 +320,21 @@ func extractValue(mtr interface{}) (float64, error) {
 func eachRecordableValue(reg *metric.Registry, fn func(string, float64)) {
 	reg.Each(func(name string, mtr interface{}) {
 		if histogram, ok := mtr.(*metric.Histogram); ok {
-			curr := histogram.Current()
+			// TODO(mrtracy): Where should this comment go for better
+			// visibility?
+			//
+			// Proper support of Histograms for time series is difficult and
+			// likely not worth the trouble. Instead, we aggregate a windowed
+			// histogram at fixed quantiles. If the scraping window and the
+			// histogram's eviction duration are similar, this should give
+			// good results; if the two durations are very different, we either
+			// report stale results or report only the more recent data.
+			//
+			// Additionally, we can only aggregate max/min of the quantiles;
+			// roll-ups don't know that and so they will return mathematically
+			// nonsensical values, but that seems acceptable for the time
+			// being.
+			curr := histogram.Windowed()
 			for _, pt := range recordHistogramQuantiles {
 				fn(name+pt.suffix, float64(curr.ValueAtQuantile(pt.quantile)))
 			}
