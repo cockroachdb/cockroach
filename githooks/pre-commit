@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+
+TESTS=TestCrlfmt ./build/check-style.sh
