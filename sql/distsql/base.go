@@ -267,7 +267,7 @@ func SetFlowRequestTrace(ctx context.Context, req *SetupFlowRequest) error {
 	if sp == nil {
 		return nil
 	}
-	req.Trace = &tracing.Span{}
+	req.Trace = &tracing.SpanContextCarrier{}
 	tracer := sp.Tracer()
 	return tracer.Inject(sp.Context(), basictracer.Delegator, req.Trace)
 }

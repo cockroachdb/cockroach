@@ -388,12 +388,12 @@ func (tc *TxnCoordSender) Send(
 	// a buffer pool here since anything that goes into the RPC layer could be
 	// used by goroutines we didn't wait for.
 	if ba.Trace == nil {
-		ba.Trace = &tracing.Span{}
+		ba.Trace = &tracing.SpanContextCarrier{}
 	} else {
 		// We didn't make this object but are about to mutate it, so we
 		// have to take a copy - the original might already have been
 		// passed to the RPC layer.
-		ba.Trace = protoutil.Clone(ba.Trace).(*tracing.Span)
+		ba.Trace = protoutil.Clone(ba.Trace).(*tracing.SpanContextCarrier)
 	}
 	if err := tracer.Inject(sp.Context(), basictracer.Delegator, ba.Trace); err != nil {
 		return nil, roachpb.NewError(err)
