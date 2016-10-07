@@ -158,7 +158,7 @@ func netTraceIntegrator() func(basictracer.SpanEvent) {
 		switch t := e.(type) {
 		case basictracer.EventCreate:
 			tr = trace.New("tracing", t.OperationName)
-			// TODO(radu): call SetMaxEvents when #9748 is fixed.
+			tr.SetMaxEvents(maxLogsPerSpan)
 		case basictracer.EventFinish:
 			tr.Finish()
 		case basictracer.EventTag:
