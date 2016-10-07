@@ -54,14 +54,14 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 		// We do not need to fully analyze the GROUP BY expression here
 		// (as per analyzeExpr) because this is taken care of by addRender
 		// below.
-		resolved, err := resolveNames(groupBy[i], s.sourceInfo, s.qvals, &p.nameResolutionVisitor)
+		resolved, err := resolveNames(groupBy[i], s.sourceInfo, s.ivarHelper, &p.nameResolutionVisitor)
 		if err != nil {
 			return nil, err
 		}
 
 		// If a col index is specified, replace it with that expression first.
 		// NB: This is not a deep copy, and thus when extractAggregatesVisitor runs
-		// on s.render, the GroupBy expressions can contain wrapped qvalues.
+		// on s.render, the GroupBy expressions can contain wrapped IndexedVars.
 		// aggregateFuncHolder's Eval() method handles being called during grouping.
 		if col, err := colIndex(s.numOriginalCols, resolved); err != nil {
 			return nil, err
@@ -81,7 +81,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 	var typedHaving parser.TypedExpr
 	var err error
 	if n.Having != nil {
-		typedHaving, err = p.analyzeExpr(n.Having.Expr, s.sourceInfo, s.qvals,
+		typedHaving, err = p.analyzeExpr(n.Having.Expr, s.sourceInfo, s.ivarHelper,
 			parser.TypeBool, true, "HAVING")
 		if err != nil {
 			return nil, err
@@ -112,7 +112,7 @@ func (p *planner) groupBy(n *parser.SelectClause, s *selectNode) (*groupNode, er
 	visitor.groupedCopy.groupedCopy = nil
 
 	// Loop over the render expressions and extract any aggregate functions --
-	// qvalues are also replaced (with identAggregates, which just return the last
+	// IndexedVars are also replaced (with identAggregates, which just return the last
 	// value added to them for a bucket) to provide grouped-by values for each bucket.
 	// After extraction, group.render will be entirely rendered from aggregateFuncHolders,
 	// and group.funcs will contain all the functions which need to be fed values.
@@ -457,7 +457,7 @@ func desiredAggregateOrdering(funcs []*aggregateFuncHolder) sqlbase.ColumnOrderi
 				return nil
 			}
 			switch f.arg.(type) {
-			case *qvalue:
+			case *parser.IndexedVar:
 				limit = i
 				if _, ok := impl.(*parser.MaxAggregate); ok {
 					direction = encoding.Descending
@@ -494,7 +494,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 	}
 
 	// This expression is in the GROUP BY - switch to the visitor that will accept
-	// qvalues for this and any subtrees.
+	// IndexedVars for this and any subtrees.
 	if _, ok := v.groupStrs[expr.String()]; ok && v.groupedCopy != nil && v != v.groupedCopy {
 		expr, _ = parser.WalkExpr(v.groupedCopy, expr)
 		return false, expr
@@ -526,10 +526,10 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 			v.n.funcs = append(v.n.funcs, f)
 			return false, f
 		}
-	case *qvalue:
+	case *parser.IndexedVar:
 		if v.groupedCopy != nil {
 			v.err = fmt.Errorf("column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function",
-				t.colRef.get().Name)
+				t.String())
 			return true, expr
 		}
 		f := v.n.newAggregateFuncHolder(t, t, parser.NewIdentAggregate)
@@ -545,7 +545,7 @@ func (*extractAggregatesVisitor) VisitPost(expr parser.Expr) parser.Expr { retur
 // An expression is valid if:
 // - it is an aggregate expression, or
 // - it appears verbatim in groupBy, or
-// - it is not a qvalue, and all of its subexpressions (as defined by
+// - it is not an IndexedVar, and all of its subexpressions (as defined by
 // its Walk implementation) are valid
 // NB: "verbatim" above is defined using a string-equality comparison
 // as an approximation of a recursive tree-equality comparison.

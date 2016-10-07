@@ -303,7 +303,7 @@ type indexInfo struct {
 	index       *sqlbase.IndexDescriptor
 	constraints orIndexConstraints
 	cost        float64
-	covering    bool // Does the index cover the required qvalues?
+	covering    bool // Does the index cover the required IndexedVars?
 	reverse     bool
 	exactPrefix int
 }
@@ -414,15 +414,12 @@ func (v *indexInfo) analyzeOrdering(
 	}
 }
 
-// getQValColIdx detects whether an expression is a straightforward
+// getColVarIdx detects whether an expression is a straightforward
 // reference to a column or index variable. In this case it returns
 // the index of that column's in the descriptor's []Column array.
 // Used by indexInfo.makeIndexConstraints().
-func getQValColIdx(expr parser.Expr) (ok bool, colIdx int) {
+func getColVarIdx(expr parser.Expr) (ok bool, colIdx int) {
 	switch q := expr.(type) {
-	case *qvalue:
-		return true, q.colRef.colIdx
-
 	case *parser.IndexedVar:
 		return true, q.Idx
 	}
@@ -531,7 +528,7 @@ func (v *indexInfo) makeIndexConstraints(andExprs parser.TypedExprs) (indexConst
 			if c, ok := e.(*parser.ComparisonExpr); ok {
 				var tupleMap []int
 
-				if ok, colIdx := getQValColIdx(c.Left); ok && v.desc.Columns[colIdx].ID != colID {
+				if ok, colIdx := getColVarIdx(c.Left); ok && v.desc.Columns[colIdx].ID != colID {
 					// This expression refers to a column other than the one we're
 					// looking for.
 					continue
@@ -552,7 +549,7 @@ func (v *indexInfo) makeIndexConstraints(andExprs parser.TypedExprs) (indexConst
 					for _, colID := range v.index.ColumnIDs[i:] {
 						idx := -1
 						for i, val := range t.Exprs {
-							ok, colIdx := getQValColIdx(val)
+							ok, colIdx := getColVarIdx(val)
 							if ok && v.desc.Columns[colIdx].ID == colID {
 								idx = i
 								break

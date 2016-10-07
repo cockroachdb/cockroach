@@ -116,7 +116,7 @@ func joinExprs(
 }
 
 // simplifyExpr transforms an expression such that it contains only expressions
-// involving qvalues that can be used for index selection. If an expression is
+// involving IndexedVars that can be used for index selection. If an expression is
 // encountered that cannot be used for index selection (e.g. "func(val)") that
 // part of the expression tree is considered to evaluate to true, possibly
 // rendering the entire expression as true. Additionally, various
@@ -148,7 +148,7 @@ func simplifyExpr(e parser.TypedExpr) (simplified parser.TypedExpr, equivalent b
 		return simplifyOrExpr(t)
 	case *parser.ComparisonExpr:
 		return simplifyComparisonExpr(t)
-	case *qvalue, *parser.IndexedVar, *parser.DBool:
+	case *parser.IndexedVar, *parser.DBool:
 		return e, true
 	}
 	// We don't know how to simplify expressions that fall through to here, so
@@ -389,8 +389,8 @@ func simplifyOneAndExpr(left, right parser.TypedExpr) (parser.TypedExpr, parser.
 	either := lcmp
 	if !ldatum.TypeEqual(rdatum) {
 		switch ta := lcmpLeft.(type) {
-		case *qvalue:
-			if ta.datum.TypeEqual(rdatum) {
+		case *parser.IndexedVar:
+			if ta.ReturnType().TypeEqual(rdatum) {
 				either = rcmp
 			}
 		}
@@ -924,8 +924,8 @@ func simplifyOneOrExpr(left, right parser.TypedExpr) (parser.TypedExpr, parser.T
 	either := lcmp
 	if !ldatum.TypeEqual(rdatum) {
 		switch ta := lcmpLeft.(type) {
-		case *qvalue:
-			if ta.datum.TypeEqual(rdatum) {
+		case *parser.IndexedVar:
+			if ta.ReturnType().TypeEqual(rdatum) {
 				either = rcmp
 			}
 		}
@@ -1358,7 +1358,7 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.TypedExpr, bool) {
 			switch n.Operator {
 			case parser.IsNotDistinctFrom:
 				switch left.(type) {
-				case *qvalue, *parser.IndexedVar:
+				case *parser.IndexedVar:
 					// Transform "a IS NOT DISTINCT FROM NULL" into "a IS NULL".
 					return parser.NewTypedComparisonExpr(
 						parser.Is,
@@ -1368,7 +1368,7 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.TypedExpr, bool) {
 				}
 			case parser.IsDistinctFrom:
 				switch left.(type) {
-				case *qvalue, *parser.IndexedVar:
+				case *parser.IndexedVar:
 					// Transform "a IS DISTINCT FROM NULL" into "a IS NOT NULL".
 					return parser.NewTypedComparisonExpr(
 						parser.IsNot,
@@ -1378,7 +1378,7 @@ func simplifyComparisonExpr(n *parser.ComparisonExpr) (parser.TypedExpr, bool) {
 				}
 			case parser.Is, parser.IsNot:
 				switch left.(type) {
-				case *qvalue, *parser.IndexedVar:
+				case *parser.IndexedVar:
 					// "a IS {,NOT} NULL" can be used during index selection to restrict
 					// the range of scanned keys.
 					return n, true
@@ -1538,11 +1538,11 @@ func isDatum(e parser.TypedExpr) bool {
 	return ok
 }
 
-// isVar returns true if the expression is a qvalue or a tuple composed of
-// qvalues.
+// isVar returns true if the expression is an ivar or a tuple composed of
+// ivars.
 func isVar(e parser.TypedExpr) bool {
 	switch t := e.(type) {
-	case *qvalue, *parser.IndexedVar:
+	case *parser.IndexedVar:
 		return true
 
 	case *parser.Tuple:
@@ -1557,17 +1557,11 @@ func isVar(e parser.TypedExpr) bool {
 	return false
 }
 
-// varEqual returns true if the two expressions are both qvalues pointing to
-// the same column or are both tuples composed of qvalues pointing at the same
+// varEqual returns true if the two expressions are both IndexedVars pointing to
+// the same column or are both tuples composed of IndexedVars pointing at the same
 // columns.
 func varEqual(a, b parser.TypedExpr) bool {
 	switch ta := a.(type) {
-	case *qvalue:
-		switch tb := b.(type) {
-		case *qvalue:
-			return ta.colRef == tb.colRef
-		}
-
 	case *parser.IndexedVar:
 		switch tb := b.(type) {
 		case *parser.IndexedVar:
@@ -1604,13 +1598,13 @@ func makeIsNotNull(left parser.TypedExpr) parser.TypedExpr {
 // - resolving names (optional);
 // - type checking (with optional type enforcement);
 // - normalization.
-// The parameters sources and qvals, if both are non-nil, indicate
-// name resolution should be performed. The qvals map will be filled
+// The parameters sources and IndexedVars, if both are non-nil, indicate
+// name resolution should be performed. The IndexedVars map will be filled
 // as a result.
 func (p *planner) analyzeExpr(
 	raw parser.Expr,
 	sources multiSourceInfo,
-	qvals qvalMap,
+	ivarHelper parser.IndexedVarHelper,
 	expectedType parser.Datum,
 	requireType bool,
 	typingContext string,
@@ -1627,10 +1621,10 @@ func (p *planner) analyzeExpr(
 
 	// Perform optional name resolution.
 	var resolved parser.Expr
-	if sources == nil || qvals == nil {
+	if sources == nil {
 		resolved = replaced
 	} else {
-		resolved, err = resolveNames(replaced, sources, qvals, &p.nameResolutionVisitor)
+		resolved, err = resolveNames(replaced, sources, ivarHelper, &p.nameResolutionVisitor)
 		if err != nil {
 			return nil, err
 		}

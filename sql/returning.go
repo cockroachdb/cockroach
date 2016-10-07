@@ -17,6 +17,8 @@
 package sql
 
 import (
+	"bytes"
+
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
 )
@@ -28,19 +30,24 @@ type returningHelper struct {
 	// Expected columns.
 	columns ResultColumns
 	// Processed copies of expressions from ReturningExprs.
-	exprs    []parser.TypedExpr
-	qvals    qvalMap
-	rowCount int
-	source   *dataSourceInfo
+	exprs        []parser.TypedExpr
+	rowCount     int
+	source       *dataSourceInfo
+	curSourceRow parser.DTuple
 }
 
-func (p *planner) makeReturningHelper(
+// newReturningHelper creates a new returningHelper for use by an
+// insert/update node. The object must be allocated on the heap and
+// its location stay stable after construction because it implements
+// IndexedVarContainer and the IndexedVar objects in sub-expressions
+// will link to it by reference after checkRenderStar / analyzeExpr.
+func (p *planner) newReturningHelper(
 	r parser.ReturningExprs,
 	desiredTypes []parser.Datum,
 	alias string,
 	tablecols []sqlbase.ColumnDescriptor,
-) (returningHelper, error) {
-	rh := returningHelper{
+) (*returningHelper, error) {
+	rh := &returningHelper{
 		p: p,
 	}
 	if len(r) == 0 {
@@ -49,23 +56,23 @@ func (p *planner) makeReturningHelper(
 
 	for _, e := range r {
 		if err := p.parser.AssertNoAggregationOrWindowing(e.Expr, "RETURNING"); err != nil {
-			return rh, err
+			return nil, err
 		}
 	}
 
 	rh.columns = make(ResultColumns, 0, len(r))
 	aliasTableName := parser.TableName{TableName: parser.Name(alias)}
 	rh.source = newSourceInfoForSingleTable(aliasTableName, makeResultColumns(tablecols))
-	rh.qvals = make(qvalMap)
 	rh.exprs = make([]parser.TypedExpr, 0, len(r))
+	ivarHelper := parser.MakeIndexedVarHelper(rh, len(tablecols))
 	for i, target := range r {
 		// Pre-normalize VarNames at the top level so that checkRenderStar can see stars.
 		if err := target.NormalizeTopLevelVarName(); err != nil {
-			return returningHelper{}, err
+			return nil, err
 		}
 
-		if isStar, cols, typedExprs, err := checkRenderStar(target, rh.source, rh.qvals); err != nil {
-			return returningHelper{}, err
+		if isStar, cols, typedExprs, err := checkRenderStar(target, rh.source, ivarHelper); err != nil {
+			return nil, err
 		} else if isStar {
 			rh.exprs = append(rh.exprs, typedExprs...)
 			rh.columns = append(rh.columns, cols...)
@@ -82,9 +89,9 @@ func (p *planner) makeReturningHelper(
 			desired = desiredTypes[i]
 		}
 
-		typedExpr, err := rh.p.analyzeExpr(target.Expr, multiSourceInfo{rh.source}, rh.qvals, desired, false, "")
+		typedExpr, err := rh.p.analyzeExpr(target.Expr, multiSourceInfo{rh.source}, ivarHelper, desired, false, "")
 		if err != nil {
-			return returningHelper{}, err
+			return nil, err
 		}
 		rh.exprs = append(rh.exprs, typedExpr)
 		rh.columns = append(rh.columns, ResultColumn{Name: outputName, Typ: typedExpr.ReturnType()})
@@ -99,7 +106,7 @@ func (rh *returningHelper) cookResultRow(rowVals parser.DTuple) (parser.DTuple, 
 		rh.rowCount++
 		return rowVals, nil
 	}
-	rh.qvals.populateQVals(rh.source, rowVals)
+	rh.curSourceRow = rowVals
 	resRow := make(parser.DTuple, len(rh.exprs))
 	for i, e := range rh.exprs {
 		d, err := e.Eval(&rh.p.evalCtx)
@@ -127,4 +134,19 @@ func (rh *returningHelper) startPlans() error {
 		}
 	}
 	return nil
+}
+
+// IndexedVarEval implements the parser.IndexedVarContainer interface.
+func (rh *returningHelper) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
+	return rh.curSourceRow[idx].Eval(ctx)
+}
+
+// IndexedVarReturnType implements the parser.IndexedVarContainer interface.
+func (rh *returningHelper) IndexedVarReturnType(idx int) parser.Datum {
+	return rh.source.sourceColumns[idx].Typ
+}
+
+// IndexedVarFormat implements the parser.IndexedVarContainer interface.
+func (rh *returningHelper) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
+	rh.source.FormatVar(buf, f, idx)
 }
