@@ -532,15 +532,15 @@ func newStoreMetrics() *StoreMetrics {
 		// Mutex timing.
 		MuReplicaNanos: metric.NewHistogram(
 			metaMuReplicaNanos, time.Duration(math.MaxInt64),
-			int64(time.Second), 1,
+			time.Second.Nanoseconds(), 1,
 		),
 		MuRaftNanos: metric.NewHistogram(
 			metaMuRaftNanos, time.Duration(math.MaxInt64),
-			int64(time.Second), 1,
+			time.Second.Nanoseconds(), 1,
 		),
 		MuStoreNanos: metric.NewHistogram(
 			metaMuStoreNanos, time.Duration(math.MaxInt64),
-			int64(time.Second), 1,
+			time.Second.Nanoseconds(), 1,
 		),
 	}
 
