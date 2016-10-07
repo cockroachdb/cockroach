@@ -1,0 +1,68 @@
+statement error pgcode 42P01 view "foo" does not exist
+ALTER VIEW foo RENAME TO bar
+
+statement ok
+ALTER VIEW IF EXISTS foo RENAME TO bar
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+
+statement ok
+INSERT INTO kv VALUES (1, 2), (3, 4)
+
+statement ok
+CREATE VIEW v as SELECT * FROM kv;
+
+query II
+SELECT * FROM v
+----
+1 2
+3 4
+
+query T
+SHOW TABLES
+----
+kv
+v
+
+statement error pgcode 42809 "kv" is not a view
+ALTER VIEW kv RENAME TO new_kv
+
+statement error pgcode 42809 "v" is not a table
+ALTER TABLE v RENAME TO new_v
+
+statement ok
+ALTER VIEW v RENAME TO new_v
+
+statement error pgcode 42P01 table "v" does not exist
+SELECT * FROM v
+
+query II
+SELECT * FROM new_v
+----
+1 2
+3 4
+
+query T
+SHOW TABLES
+----
+kv
+new_v
+
+statement error empty table name
+ALTER VIEW "" RENAME TO foo
+
+statement error empty table name
+ALTER VIEW new_v RENAME TO ""
+
+statement ok
+ALTER VIEW new_v RENAME TO new_v
+
+statement ok
+CREATE VIEW v as SELECT * from kv
+
+statement error pgcode 42P07 relation "new_v" already exists
+ALTER VIEW v RENAME TO new_v

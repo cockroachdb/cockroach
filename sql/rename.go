@@ -67,8 +67,8 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 	return &emptyNode{}, nil
 }
 
-// RenameTable renames the table.
-// Privileges: DROP on source table, CREATE on destination database.
+// RenameTable renames the table or view.
+// Privileges: DROP on source table/view, CREATE on destination database.
 //   Notes: postgres requires the table owner.
 //          mysql requires ALTER, DROP on the original table, and CREATE, INSERT
 //          on the new table (and does not copy privileges over).
@@ -87,21 +87,44 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 		return nil, err
 	}
 
-	// Check if source table exists.
-	tableDesc, err := p.getTableDesc(oldTn)
-	if err != nil {
-		return nil, err
-	}
-	if tableDesc == nil {
-		if n.IfExists {
-			// Noop.
-			return &emptyNode{}, nil
+	// Check if source table or view exists.
+	// Note that Postgres's behavior here is a little lenient - it'll let you
+	// modify views by running ALTER TABLE, but won't let you modify tables
+	// by running ALTER VIEW. Our behavior is strict for now, but can be
+	// made more lenient down the road if needed.
+	var tableDesc *sqlbase.TableDescriptor
+	if n.IsView {
+		tableDesc, err = p.getViewDesc(oldTn)
+		if err != nil {
+			return nil, err
 		}
-		// Key does not exist, but we want it to: error out.
-		return nil, sqlbase.NewUndefinedTableError(oldTn.String())
-	}
-	if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
-		return nil, sqlbase.NewUndefinedTableError(oldTn.String())
+		if tableDesc == nil {
+			if n.IfExists {
+				// Noop.
+				return &emptyNode{}, nil
+			}
+			// Key does not exist, but we want it to: error out.
+			return nil, sqlbase.NewUndefinedViewError(oldTn.String())
+		}
+		if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
+			return nil, sqlbase.NewUndefinedViewError(oldTn.String())
+		}
+	} else {
+		tableDesc, err = p.getTableDesc(oldTn)
+		if err != nil {
+			return nil, err
+		}
+		if tableDesc == nil {
+			if n.IfExists {
+				// Noop.
+				return &emptyNode{}, nil
+			}
+			// Key does not exist, but we want it to: error out.
+			return nil, sqlbase.NewUndefinedTableError(oldTn.String())
+		}
+		if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
+			return nil, sqlbase.NewUndefinedTableError(oldTn.String())
+		}
 	}
 
 	if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
@@ -157,7 +180,7 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 
 	if err := p.txn.Run(b); err != nil {
 		if _, ok := err.(*roachpb.ConditionFailedError); ok {
-			return nil, fmt.Errorf("table name %q already exists", newTn.Table())
+			return nil, sqlbase.NewRelationAlreadyExistsError(newTn.Table())
 		}
 		return nil, err
 	}

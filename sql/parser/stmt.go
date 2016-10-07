@@ -228,7 +228,12 @@ func (*RenameIndex) StatementTag() string { return "RENAME INDEX" }
 func (*RenameTable) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*RenameTable) StatementTag() string { return "RENAME TABLE" }
+func (n *RenameTable) StatementTag() string {
+	if n.IsView {
+		return "RENAME VIEW"
+	}
+	return "RENAME TABLE"
+}
 
 // StatementType implements the Statement interface.
 func (*Revoke) StatementType() StatementType { return DDL }

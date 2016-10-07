@@ -65,7 +65,7 @@ CREATE TABLE t (
 statement ok
 INSERT INTO t VALUES (4, 16), (5, 25)
 
-statement error table name "new_kv" already exists
+statement error pgcode 42P07 relation "new_kv" already exists
 ALTER TABLE t RENAME TO new_kv
 
 user testuser
