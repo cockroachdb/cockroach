@@ -3,7 +3,6 @@ cmd github.com/cockroachdb/c-protobuf/cmd/protoc
 cmd github.com/cockroachdb/cockroach/cmd/protoc-gen-gogoroach
 cmd github.com/cockroachdb/crlfmt
 cmd github.com/cockroachdb/stress
-cmd github.com/cockroachdb/yacc
 cmd github.com/golang/lint/golint
 cmd github.com/gordonklaus/ineffassign
 cmd github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
@@ -17,6 +16,7 @@ cmd github.com/robfig/glock
 cmd github.com/tebeka/go2xunit
 cmd github.com/wadey/gocovmerge
 cmd golang.org/x/tools/cmd/goimports
+cmd golang.org/x/tools/cmd/goyacc
 cmd golang.org/x/tools/cmd/stringer
 cmd honnef.co/go/simple/cmd/gosimple
 cmd honnef.co/go/staticcheck/cmd/staticcheck
@@ -44,7 +44,6 @@ github.com/cockroachdb/cockroach-go 31611c0501c812f437d4861d87d117053967c955
 github.com/cockroachdb/crlfmt 652c0df7fb3088f7b761fbaa36ab8f50b8fb9ed4
 github.com/cockroachdb/pq 44a6473ebbc26e3af09fe57bbdf761475c2c9f7c
 github.com/cockroachdb/stress 029c9348806514969d1109a6ae36e521af411ca7
-github.com/cockroachdb/yacc 7c99dfd2164a5d23c3f495ffc2e0b72b6379d066
 github.com/codahale/hdrhistogram f8ad88b59a584afeee9d334eff879b104439117b
 github.com/coreos/etcd 33e4f2ea283c187cac459462994d084f44d7c9de
 github.com/cpuguy83/go-md2man a65d4d2de4d5f7c74868dfa9b202a3c8be315aaa
@@ -110,7 +109,7 @@ golang.org/x/net f4b625ec9b21d620bb5ce57f2dfc3e08ca97fce6
 golang.org/x/oauth2 3c3a985cb79f52a3190fbc056984415ca6763d01
 golang.org/x/sys 8f0908ab3b2457e2e15403d3697c9ef5cb4b57a9
 golang.org/x/text 098f51fb687dbaba1f6efabeafbb6461203f9e21
-golang.org/x/tools fc2b74b64ef08c618146ebc92062f6499db5314c
+golang.org/x/tools 4c4edc0becc8f904a613878ed3e4f970f40a83ce
 google.golang.org/appengine 926995697fa8241be2dc73eb318666e24f44ed51
 google.golang.org/grpc 79b7c349179cdd6efd8bac4a1ce7f01b98c16e9b
 gopkg.in/check.v1 4f90aeace3a26ad7021961c297b22c42160c7b25
