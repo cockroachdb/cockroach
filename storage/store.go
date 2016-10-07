@@ -223,9 +223,9 @@ func newStoreReplicaVisitor(store *Store) *storeReplicaVisitor {
 
 // Visit calls the visitor with each Replica until false is returned.
 func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
-	// Copy the  range IDs to a slice and iterate over the slice so
-	// that we iterate over some (possibly stale) consistent view of
-	// all Replicas without holding the Store lock.
+	// Copy the range IDs to a slice so that we iterate over some (possibly
+	// stale) consistent view of all Replicas without holding the Store lock.
+	// In particular, no locks are acquired during the copy process.
 	rs.store.mu.Lock()
 	rs.repls = make([]*Replica, 0, len(rs.store.mu.replicas))
 	for _, repl := range rs.store.mu.replicas {
