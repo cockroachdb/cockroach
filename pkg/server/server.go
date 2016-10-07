@@ -149,13 +149,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// components.
 	ctx = tracing.WithTracer(ctx, s.cfg.AmbientCtx.Tracer)
 
-	if cfg.Insecure {
+	if s.cfg.Insecure {
 		log.Warning(ctx, "running in insecure mode, this is strongly discouraged. See --insecure.")
 	}
 
 	s.clock.SetMaxOffset(cfg.MaxOffset)
 
-	s.rpcContext = rpc.NewContext(s.cfg.AmbientCtx, cfg.Config, s.clock, s.stopper)
+	s.rpcContext = rpc.NewContext(s.cfg.AmbientCtx, s.cfg.Config, s.clock, s.stopper)
 	s.rpcContext.HeartbeatCB = func() {
 		if err := s.rpcContext.RemoteClocks.VerifyClockOffset(); err != nil {
 			log.Fatal(ctx, err)
@@ -172,7 +172,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.gossip,
 		s.clock,
 		s.rpcContext,
-		cfg.TimeUntilStoreDead,
+		s.cfg.TimeUntilStoreDead,
 		s.stopper,
 	)
 
@@ -199,14 +199,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	txnMetrics := kv.MakeTxnMetrics(s.cfg.MetricsSampleInterval)
 	s.registry.AddMetricStruct(txnMetrics)
-	s.txnCoordSender = kv.NewTxnCoordSender(ctx, s.distSender, s.clock, cfg.Linearizable,
+	s.txnCoordSender = kv.NewTxnCoordSender(ctx, s.distSender, s.clock, s.cfg.Linearizable,
 		s.stopper, txnMetrics)
 	s.db = client.NewDB(s.txnCoordSender)
 
 	// Use the range lease expiration and renewal durations as the node
 	// liveness expiration and heartbeat interval.
 	active, renewal := storage.RangeLeaseDurations(
-		storage.RaftElectionTimeout(cfg.RaftTickInterval, cfg.RaftElectionTimeoutTicks))
+		storage.RaftElectionTimeout(s.cfg.RaftTickInterval, s.cfg.RaftElectionTimeoutTicks))
 	s.nodeLiveness = storage.NewNodeLiveness(s.clock, s.db, s.gossip, active, renewal)
 	s.registry.AddMetricStruct(s.nodeLiveness.Metrics())
 
@@ -219,7 +219,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// Set up Lease Manager
 	var lmKnobs sql.LeaseManagerTestingKnobs
 	if cfg.TestingKnobs.SQLLeaseManager != nil {
-		lmKnobs = *cfg.TestingKnobs.SQLLeaseManager.(*sql.LeaseManagerTestingKnobs)
+		lmKnobs = *s.cfg.TestingKnobs.SQLLeaseManager.(*sql.LeaseManagerTestingKnobs)
 	}
 	s.leaseMgr = sql.NewLeaseManager(0, *s.db, s.clock, lmKnobs, s.stopper)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
@@ -244,14 +244,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		DistSQLSrv:            s.distSQLServer,
 		MetricsSampleInterval: s.cfg.MetricsSampleInterval,
 	}
-	if cfg.TestingKnobs.SQLExecutor != nil {
-		execCfg.TestingKnobs = cfg.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
+	if s.cfg.TestingKnobs.SQLExecutor != nil {
+		execCfg.TestingKnobs = s.cfg.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
 	} else {
 		execCfg.TestingKnobs = &sql.ExecutorTestingKnobs{}
 	}
-	if cfg.TestingKnobs.SQLSchemaChanger != nil {
+	if s.cfg.TestingKnobs.SQLSchemaChanger != nil {
 		execCfg.SchemaChangerTestingKnobs =
-			cfg.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)
+			s.cfg.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)
 	} else {
 		execCfg.SchemaChangerTestingKnobs = &sql.SchemaChangerTestingKnobs{}
 	}
@@ -290,8 +290,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RangeLeaseRenewalDuration: renewal,
 		TimeSeriesDataStore:       s.tsDB,
 	}
-	if cfg.TestingKnobs.Store != nil {
-		storeCfg.TestingKnobs = *cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs)
+	if s.cfg.TestingKnobs.Store != nil {
+		storeCfg.TestingKnobs = *s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs)
 	}
 
 	s.recorder = status.NewMetricsRecorder(s.clock)
@@ -312,6 +312,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	for _, gw := range []grpcGatewayServer{&s.admin, s.status, &s.tsServer} {
 		gw.RegisterService(s.grpc)
 	}
+
+	// Take ownership of the engines.
+	engines := NewEngines(s.cfg.Engines)
+	stopper.AddCloser(engines)
 
 	return s, nil
 }

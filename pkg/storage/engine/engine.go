@@ -181,8 +181,6 @@ type Engine interface {
 	// by invoking Close(). Note that snapshots must not be used after the
 	// original engine has been stopped.
 	NewSnapshot() Reader
-	// Open initializes the engine.
-	Open() error
 }
 
 // Batch is the interface for batch specific operations.

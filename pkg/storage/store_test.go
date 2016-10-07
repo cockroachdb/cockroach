@@ -166,7 +166,8 @@ func createTestStoreWithoutStart(
 		TestTimeUntilStoreDeadOff,
 		stopper,
 	)
-	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20, stopper)
+	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
+	stopper.AddCloser(eng)
 	cfg.Transport = NewDummyRaftTransport()
 	sender := &testSender{}
 	cfg.DB = client.NewDB(sender)
@@ -227,7 +228,8 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	cfg.Clock = hlc.NewClock(manual.UnixNano)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
+	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	stopper.AddCloser(eng)
 	cfg.Transport = NewDummyRaftTransport()
 	store := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
@@ -288,7 +290,8 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
+	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	stopper.AddCloser(eng)
 
 	// Put some random garbage into the engine.
 	if err := eng.Put(engine.MakeMVCCMetadataKey(roachpb.Key("foo")), []byte("bar")); err != nil {
@@ -2547,9 +2550,8 @@ func (sp *fakeStorePool) updateRemoteCapacityEstimate(
 // various exceptional conditions and new capacity estimates.
 func TestSendSnapshotThrottling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-	e := engine.NewInMem(roachpb.Attributes{}, 1<<10, stopper)
+	e := engine.NewInMem(roachpb.Attributes{}, 1<<10)
+	defer e.Close()
 
 	ctx := context.Background()
 	header := SnapshotRequest_Header{CanDecline: true}
