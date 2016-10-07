@@ -103,6 +103,85 @@ query TTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
 
+# The same as above, but on a view
+
+statement ok
+CREATE VIEW v as SELECT * FROM t
+
+query TTT colnames
+SHOW GRANTS ON v
+----
+Table    User      Privileges
+v        readwrite ALL
+v        root      ALL
+
+query TTT colnames
+SHOW GRANTS ON a.v
+----
+Table    User      Privileges
+v        readwrite ALL
+v        root      ALL
+
+statement ok
+GRANT ALL ON v TO readwrite, "test-user"
+
+query TTT
+SHOW GRANTS ON v
+----
+v     readwrite ALL
+v     root      ALL
+v     test-user ALL
+
+query TTT
+SHOW GRANTS ON v FOR readwrite, "test-user"
+----
+v     readwrite ALL
+v     test-user ALL
+
+statement ok
+REVOKE INSERT,DELETE ON v FROM "test-user",readwrite
+
+query TTT
+SHOW GRANTS ON v
+----
+v     readwrite CREATE,DROP,GRANT,SELECT,UPDATE
+v     root      ALL
+v     test-user CREATE,DROP,GRANT,SELECT,UPDATE
+
+query TTT
+SHOW GRANTS ON v FOR readwrite, "test-user"
+----
+v     readwrite CREATE,DROP,GRANT,SELECT,UPDATE
+v     test-user CREATE,DROP,GRANT,SELECT,UPDATE
+
+statement ok
+REVOKE SELECT ON v FROM "test-user"
+
+query TTT
+SHOW GRANTS ON v
+----
+v     readwrite CREATE,DROP,GRANT,SELECT,UPDATE
+v     root      ALL
+v     test-user CREATE,DROP,GRANT,UPDATE
+
+query TTT
+SHOW GRANTS ON v FOR readwrite, "test-user"
+----
+v     readwrite CREATE,DROP,GRANT,SELECT,UPDATE
+v     test-user CREATE,DROP,GRANT,UPDATE
+
+statement ok
+REVOKE ALL ON v FROM readwrite,"test-user"
+
+query TTT
+SHOW GRANTS ON v
+----
+v     root      ALL
+
+query TTT
+SHOW GRANTS ON v FOR readwrite, "test-user"
+----
+
 # Verify that the DB privileges have not changed.
 query TTT colnames
 SHOW GRANTS ON DATABASE a
