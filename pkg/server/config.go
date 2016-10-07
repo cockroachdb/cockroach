@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // Context defaults.
@@ -88,6 +87,10 @@ type Config struct {
 	// Parsed values.
 
 	// Engines is the storage instances specified by Stores.
+	// TODO(andrei): remove the Engines from this Context struct. They're real
+	// meaty objects, as opposed to configuration structs, so they don't belong
+	// here. Moreover, they need to be Close()d, and it's easy to lose track of
+	// that fact when they're hidden in this Config.
 	Engines []engine.Engine
 
 	// NodeAttributes is the parsed representation of Attrs.
@@ -341,8 +344,29 @@ func MakeConfig() Config {
 	return cfg
 }
 
-// InitStores initializes cfg.Engines based on cfg.Stores.
-func (cfg *Config) InitStores(stopper *stop.Stopper) error {
+// Engines is a container of engines, allowing convenient closing.
+type Engines []engine.Engine
+
+// Close closes all the Engines.
+// This method has a pointer receiver so that the following pattern works:
+//	func f() {
+//		engines := Engines(engineSlice)
+//		defer engines.Close()  // make sure the engines are Closed if this
+//		                       // function returns early.
+//		... do something with engines, pass ownership away...
+//		engines = nil  // neutralize the preceding defer
+//	}
+func (e *Engines) Close() {
+	for _, eng := range *e {
+		eng.Close()
+	}
+	*e = nil
+}
+
+// InitStores initializes ctx.Engines based on ctx.Stores.
+// The caller is responsible for Close()ing all the engines in ctx.Engines.
+// Engines can be used for conveniently managing that.
+func (cfg *Config) InitStores() (err error) {
 	cache := engine.NewRocksDBCache(cfg.CacheSize)
 	defer cache.Release()
 
@@ -357,6 +381,8 @@ func (cfg *Config) InitStores(stopper *stop.Stopper) error {
 		return err
 	}
 
+	engines := Engines(nil)
+	defer engines.Close()
 	for _, spec := range cfg.Stores.Specs {
 		var sizeInBytes = spec.SizeInBytes
 		if spec.InMemory {
@@ -371,7 +397,7 @@ func (cfg *Config) InitStores(stopper *stop.Stopper) error {
 				return fmt.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
-			cfg.Engines = append(cfg.Engines, engine.NewInMem(spec.Attributes, sizeInBytes, stopper))
+			engines = append(engines, engine.NewInMem(spec.Attributes, sizeInBytes))
 		} else {
 			if spec.SizePercent > 0 {
 				fileSystemUsage := gosigar.FileSystemUsage{}
@@ -384,20 +410,23 @@ func (cfg *Config) InitStores(stopper *stop.Stopper) error {
 				return fmt.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
-			cfg.Engines = append(
-				cfg.Engines,
-				engine.NewRocksDB(
-					spec.Attributes,
-					spec.Path,
-					cache,
-					sizeInBytes,
-					openFileLimitPerStore,
-					stopper,
-				),
+
+			eng, err := engine.NewRocksDB(
+				spec.Attributes,
+				spec.Path,
+				cache,
+				sizeInBytes,
+				openFileLimitPerStore,
 			)
+			if err != nil {
+				return err
+			}
+			engines = append(engines, eng)
 		}
 	}
 
+	cfg.Engines = engines
+	engines = nil
 	if len(cfg.Engines) == 1 {
 		log.Infof(context.TODO(), "1 storage engine initialized")
 	} else {
