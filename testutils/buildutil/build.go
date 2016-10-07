@@ -38,7 +38,7 @@ func TransitiveImports(importPath string, cgo bool) (map[string]struct{}, error)
 		}
 
 		for _, imp := range pkg.Imports {
-			// https://github.com/golang/tools/blob/master/refactor/importgraph/graph.go#L115
+			// https: //github.com/golang/tools/blob/master/refactor/importgraph/graph.go#L159
 			if imp == "C" {
 				continue // "C" is fake
 			}
