@@ -17,7 +17,6 @@
 package storage
 
 import (
-	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -530,17 +529,23 @@ func newStoreMetrics() *StoreMetrics {
 		GCResolveSuccess:             metric.NewCounter(metaGCResolveSuccess),
 
 		// Mutex timing.
+		//
+		// TODO(tschottdorf): Histograms don't work very well as they were
+		// inherently built in a windowed (i.e. events-discarding) way, which
+		// is not at all the correct way. Discard at one-minute interval which
+		// gives sane (though mathematically nonsensical) results when exposed
+		// at the moment.
 		MuReplicaNanos: metric.NewHistogram(
-			metaMuReplicaNanos, time.Duration(math.MaxInt64),
-			int64(time.Second), 1,
+			metaMuReplicaNanos, time.Minute,
+			time.Second.Nanoseconds(), 1,
 		),
 		MuRaftNanos: metric.NewHistogram(
-			metaMuRaftNanos, time.Duration(math.MaxInt64),
-			int64(time.Second), 1,
+			metaMuRaftNanos, time.Minute,
+			time.Second.Nanoseconds(), 1,
 		),
 		MuStoreNanos: metric.NewHistogram(
-			metaMuStoreNanos, time.Duration(math.MaxInt64),
-			int64(time.Second), 1,
+			metaMuStoreNanos, time.Minute,
+			time.Second.Nanoseconds(), 1,
 		),
 	}
 
