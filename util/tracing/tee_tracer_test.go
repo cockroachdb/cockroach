@@ -18,10 +18,8 @@ package tracing
 
 import (
 	"bytes"
+	"reflect"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -44,7 +42,9 @@ func TestTeeTracer(t *testing.T) {
 	span.LogKV("k1", "v1", "k2", "v2")
 	span.SetTag("tag", "value")
 	span.SetBaggageItem("baggage", "baggage-value")
-	assert.Equal(t, "baggage-value", span.BaggageItem("baggage"))
+	if e, a := "baggage-value", span.BaggageItem("baggage"); a != e {
+		t.Errorf("expected %s, got %s", e, a)
+	}
 
 	spanCtx := span.Context()
 	var ctxBuffer bytes.Buffer
@@ -58,23 +58,45 @@ func TestTeeTracer(t *testing.T) {
 	}
 	span2 := tr.StartSpan("y", opentracing.FollowsFrom(decodedCtx))
 	span2.LogEvent("event2")
-	assert.Equal(t, "baggage-value", span2.BaggageItem("baggage"))
+	if e, a := "baggage-value", span2.BaggageItem("baggage"); a != e {
+		t.Errorf("expected %s, got %s", e, a)
+	}
 	span.Finish()
 	span2.Finish()
 
 	for _, spans := range [][]basictracer.RawSpan{r1.GetSpans(), r2.GetSpans()} {
-		require.Equal(t, 2, len(spans))
+		if e, a := 2, len(spans); a != e {
+			t.Fatalf("expected %d, got %d", e, a)
+		}
 
-		assert.Equal(t, "x", spans[0].Operation)
-		assert.Equal(t, opentracing.Tags{"tag": "value"}, spans[0].Tags)
-		assert.Equal(t, "k1:v1", spans[0].Logs[0].Fields[0].String())
-		assert.Equal(t, "k2:v2", spans[0].Logs[0].Fields[1].String())
-		assert.Equal(t, 1, len(spans[0].Context.Baggage))
+		if e, a := "x", spans[0].Operation; a != e {
+			t.Errorf("expected %s, got %s", e, a)
+		}
+		if e, a := (opentracing.Tags{"tag": "value"}), spans[0].Tags; !reflect.DeepEqual(a, e) {
+			t.Errorf("expected %s, got %s", e, a)
+		}
+		if e, a := "k1:v1", spans[0].Logs[0].Fields[0].String(); a != e {
+			t.Errorf("expected %s, got %s", e, a)
+		}
+		if e, a := "k2:v2", spans[0].Logs[0].Fields[1].String(); a != e {
+			t.Errorf("expected %s, got %s", e, a)
+		}
+		if e, a := 1, len(spans[0].Context.Baggage); a != e {
+			t.Errorf("expected %d, got %d", e, a)
+		}
 
-		assert.Equal(t, "y", spans[1].Operation)
-		assert.Equal(t, opentracing.Tags(nil), spans[1].Tags)
-		assert.Equal(t, "event:event2", spans[1].Logs[0].Fields[0].String())
-		assert.Equal(t, 1, len(spans[1].Context.Baggage))
+		if e, a := "y", spans[1].Operation; a != e {
+			t.Errorf("expected %s, got %s", e, a)
+		}
+		if e, a := opentracing.Tags(nil), spans[1].Tags; !reflect.DeepEqual(a, e) {
+			t.Errorf("expected %s, got %s", e, a)
+		}
+		if e, a := "event:event2", spans[1].Logs[0].Fields[0].String(); a != e {
+			t.Errorf("expected %s, got %s", e, a)
+		}
+		if e, a := 1, len(spans[1].Context.Baggage); a != e {
+			t.Errorf("expected %d, got %d", e, a)
+		}
 	}
 }
 
@@ -99,9 +121,15 @@ func TestTeeTracerSpanRefs(t *testing.T) {
 	root.Finish()
 
 	for _, spans := range [][]basictracer.RawSpan{r1.GetSpans(), r2.GetSpans()} {
-		require.Equal(t, 2, len(spans))
+		if e, a := 2, len(spans); a != e {
+			t.Fatalf("expected %d, got %d", e, a)
+		}
 
-		assert.Equal(t, spans[0].Context.TraceID, spans[1].Context.TraceID)
-		assert.Equal(t, spans[1].Context.SpanID, spans[0].ParentSpanID)
+		if e, a := spans[0].Context.TraceID, spans[1].Context.TraceID; a != e {
+			t.Errorf("expected %d, got %d", e, a)
+		}
+		if e, a := spans[1].Context.SpanID, spans[0].ParentSpanID; a != e {
+			t.Errorf("expected %d, got %d", e, a)
+		}
 	}
 }
