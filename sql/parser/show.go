@@ -125,6 +125,17 @@ func (node *ShowCreateTable) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, node.Table)
 }
 
+// ShowCreateView represents a SHOW CREATE VIEW statement.
+type ShowCreateView struct {
+	View NormalizableTableName
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowCreateView) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("SHOW CREATE VIEW ")
+	FormatNode(buf, f, node.View)
+}
+
 // Help represents a HELP statement.
 type Help struct {
 	Name Name

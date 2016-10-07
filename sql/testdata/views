@@ -78,6 +78,21 @@ SELECT * FROM v1 AS v1 INNER JOIN v2 AS v2 ON v1.a = v2.x;
 2 98 2 98
 3 97 3 97
 
+query TT
+SHOW CREATE VIEW v1;
+----
+v1 CREATE VIEW v1 AS SELECT * FROM t
+
+query TT
+SHOW CREATE VIEW v2;
+----
+v2 CREATE VIEW v2 (x, y) AS SELECT * FROM t
+
+query TT
+SHOW CREATE VIEW v6;
+----
+v6 CREATE VIEW v6 (x, y) AS SELECT * FROM v1
+
 statement error pgcode 42809 "v1" is not a table
 DROP TABLE v1;
 
