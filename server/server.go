@@ -105,6 +105,7 @@ type Server struct {
 }
 
 // NewServer creates a Server from a server.Context.
+// If no error is returned, the server takes ownership of the engines in srvCtx.
 func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	if _, err := net.ResolveTCPAddr("tcp", srvCtx.AdvertiseAddr); err != nil {
 		return nil, errors.Errorf("unable to resolve RPC address %q: %v", srvCtx.AdvertiseAddr, err)
@@ -302,6 +303,10 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	for _, gw := range []grpcGatewayServer{&s.admin, s.status, &s.tsServer} {
 		gw.RegisterService(s.grpc)
 	}
+
+	// Take ownership of the engines.
+	enginesUniquePtr := NewEnginesUniquePtr(srvCtx.Engines)
+	stopper.AddCloser(enginesUniquePtr)
 
 	return s, nil
 }

@@ -79,7 +79,8 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano)
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop()
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
+	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	engineStopper.AddCloser(eng)
 	var rangeID2 roachpb.RangeID
 
 	get := func(store *storage.Store, rangeID roachpb.RangeID, key roachpb.Key) int64 {
@@ -169,7 +170,8 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano)
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop()
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
+	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	engineStopper.AddCloser(eng)
 
 	numIncrements := 0
 

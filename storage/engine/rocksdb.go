@@ -47,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/timeutil"
 )
 
@@ -271,65 +270,37 @@ type RocksDB struct {
 	cache        RocksDBCache       // Shared cache.
 	maxSize      int64              // Used for calculating rebalancing and free space.
 	maxOpenFiles int                // The maximum number of open files this instance will use.
-	stopper      *stop.Stopper
-	deallocated  chan struct{} // Closed when the underlying handle is deallocated.
+	deallocated  chan struct{}      // Closed when the underlying handle is deallocated.
 }
 
 var _ Engine = &RocksDB{}
 
 // NewRocksDB allocates and returns a new RocksDB object.
+// This creates options and opens the database. If the database
+// doesn't yet exist at the specified directory, one is initialized
+// from scratch.
+// The caller must call Close() to close the database and releases resources.
 func NewRocksDB(
-	attrs roachpb.Attributes,
-	dir string,
-	cache RocksDBCache,
-	maxSize int64,
-	maxOpenFiles int,
-	stopper *stop.Stopper,
-) *RocksDB {
+	attrs roachpb.Attributes, dir string, cache RocksDBCache, maxSize int64, maxOpenFiles int,
+) (*RocksDB, error) {
 	if dir == "" {
 		panic("dir must be non-empty")
 	}
-	return &RocksDB{
+	r := &RocksDB{
 		attrs:        attrs,
 		dir:          dir,
 		cache:        cache.ref(),
 		maxSize:      maxSize,
 		maxOpenFiles: maxOpenFiles,
-		stopper:      stopper,
 		deallocated:  make(chan struct{}),
 	}
-}
-
-func newMemRocksDB(
-	attrs roachpb.Attributes, cache RocksDBCache, maxSize int64, stopper *stop.Stopper,
-) *RocksDB {
-	return &RocksDB{
-		attrs: attrs,
-		// dir: empty dir == "mem" RocksDB instance.
-		cache:       cache.ref(),
-		maxSize:     maxSize,
-		stopper:     stopper,
-		deallocated: make(chan struct{}),
+	if err := r.open(); err != nil {
+		return nil, err
 	}
+	return r, nil
 }
 
-// String formatter.
-func (r *RocksDB) String() string {
-	return fmt.Sprintf("%s=%s", r.attrs.Attrs, r.dir)
-}
-
-// Open creates options and opens the database. If the database
-// doesn't yet exist at the specified directory, one is initialized
-// from scratch. The RocksDB Open and Close methods are reference
-// counted such that subsequent Open calls to an already opened
-// RocksDB instance only bump the reference count. The RocksDB is only
-// closed when a sufficient number of Close calls are performed to
-// bring the reference count down to 0.
-func (r *RocksDB) Open() error {
-	if r.rdb != nil {
-		return nil
-	}
-
+func (r *RocksDB) open() error {
 	var ver storageVersion
 	if len(r.dir) != 0 {
 		log.Infof(context.TODO(), "opening rocksdb instance at %q", r.dir)
@@ -381,8 +352,26 @@ func (r *RocksDB) Open() error {
 	go func() {
 		<-r.deallocated
 	}()
-	r.stopper.AddCloser(r)
 	return nil
+}
+
+func newMemRocksDB(attrs roachpb.Attributes, cache RocksDBCache, maxSize int64) (*RocksDB, error) {
+	r := &RocksDB{
+		attrs: attrs,
+		// dir: empty dir == "mem" RocksDB instance.
+		cache:       cache.ref(),
+		maxSize:     maxSize,
+		deallocated: make(chan struct{}),
+	}
+	if err := r.open(); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// String formatter.
+func (r *RocksDB) String() string {
+	return fmt.Sprintf("%s=%s", r.attrs.Attrs, r.dir)
 }
 
 // Close closes the database by deallocating the underlying handle.
@@ -1468,8 +1457,6 @@ type RocksDBSstFileReader struct {
 // MakeRocksDBSstFileReader creates a RocksDBSstFileReader that uses a scratch
 // directory which is cleaned up by `Close`.
 func MakeRocksDBSstFileReader() (RocksDBSstFileReader, error) {
-	stopper := stop.NewStopper()
-
 	dir, err := ioutil.TempDir("", "RocksDBSstFileReader")
 	if err != nil {
 		return RocksDBSstFileReader{}, err
@@ -1478,9 +1465,9 @@ func MakeRocksDBSstFileReader() (RocksDBSstFileReader, error) {
 	// TODO(dan): I pulled all these magic numbers out of nowhere. Make them
 	// less magic.
 	cache := NewRocksDBCache(1 << 20)
-	rocksDB := NewRocksDB(
-		roachpb.Attributes{}, dir, cache, 512<<20, DefaultMaxOpenFiles, stopper)
-	if err := rocksDB.Open(); err != nil {
+	rocksDB, err := NewRocksDB(
+		roachpb.Attributes{}, dir, cache, 512<<20, DefaultMaxOpenFiles)
+	if err != nil {
 		return RocksDBSstFileReader{}, err
 	}
 	return RocksDBSstFileReader{dir, rocksDB}, nil

@@ -158,7 +158,8 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, cfg StoreConfig) {
 		tc.clock = hlc.NewClock(tc.manualClock.UnixNano)
 	}
 	if tc.engine == nil {
-		tc.engine = engine.NewInMem(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20, tc.stopper)
+		tc.engine = engine.NewInMem(roachpb.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
+		tc.stopper.AddCloser(tc.engine)
 	}
 	if tc.transport == nil {
 		tc.transport = NewDummyRaftTransport()

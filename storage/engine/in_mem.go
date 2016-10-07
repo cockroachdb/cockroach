@@ -16,10 +16,7 @@
 
 package engine
 
-import (
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util/stop"
-)
+import "github.com/cockroachdb/cockroach/roachpb"
 
 // InMem wraps RocksDB and configures it for in-memory only storage.
 type InMem struct {
@@ -27,17 +24,18 @@ type InMem struct {
 }
 
 // NewInMem allocates and returns a new, opened InMem engine.
-func NewInMem(attrs roachpb.Attributes, cacheSize int64, stopper *stop.Stopper) InMem {
+// The Engine returned needs to be Close()d.
+func NewInMem(attrs roachpb.Attributes, cacheSize int64) InMem {
 	cache := NewRocksDBCache(cacheSize)
 	// The cache starts out with a refcount of one, and creating the engine
 	// from it adds another refcount, at which point we release one of them.
 	defer cache.Release()
-	db := InMem{
-		RocksDB: newMemRocksDB(attrs, cache, 512<<20 /* 512 MB */, stopper),
-	}
-	if err := db.Open(); err != nil {
+
+	rdb, err := newMemRocksDB(attrs, cache, 512<<20 /* 512 MB */)
+	if err != nil {
 		panic(err)
 	}
+	db := InMem{RocksDB: rdb}
 	return db
 }
 

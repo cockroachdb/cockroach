@@ -35,7 +35,8 @@ func TestSynthesizeHardState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
+	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	stopper.AddCloser(eng)
 
 	tHS := raftpb.HardState{Term: 2, Vote: 3, Commit: 4}
 
