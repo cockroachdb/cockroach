@@ -33,16 +33,17 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"google.golang.org/grpc"
-
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -51,10 +52,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
-
-	"github.com/spf13/cobra"
 )
 
 var errMissingParams = errors.New("missing or invalid parameters")
@@ -237,39 +234,6 @@ func initBlockProfile() {
 	runtime.SetBlockProfileRate(int(d))
 }
 
-func initCheckpointing(engines []engine.Engine) {
-	checkpointInterval := envutil.EnvOrDefaultDuration("COCKROACH_CHECKPOINT_INTERVAL", -1)
-	if checkpointInterval < 0 {
-		return
-	}
-	if min := 10 * time.Second; checkpointInterval < min {
-		log.Infof(context.TODO(), "fixing excessively short checkpointing interval: %s -> %s",
-			checkpointInterval, min)
-		checkpointInterval = min
-	}
-
-	go func() {
-		t := time.NewTicker(checkpointInterval)
-		defer t.Stop()
-
-		for {
-			<-t.C
-
-			const format = "2006-01-02T15_04_05"
-			dir := timeutil.Now().Format(format)
-			start := timeutil.Now()
-			for _, e := range engines {
-				// Note that when dir is relative (as it is here) it is appended to the
-				// engine's data directory.
-				if err := e.Checkpoint(dir); err != nil {
-					log.Warning(context.TODO(), err)
-				}
-			}
-			log.Infof(context.TODO(), "created checkpoint %s: %.1fms", dir, timeutil.Since(start).Seconds()*1000)
-		}
-	}()
-}
-
 // ErrorCode is the value to be used by main() as exit code in case of
 // error. For most errors 1 is appropriate, but a signal termination
 // can change this.
@@ -366,8 +330,6 @@ func runStart(_ *cobra.Command, args []string) error {
 	if !envutil.EnvOrDefaultBool("COCKROACH_SKIP_UPDATE_CHECK", false) {
 		s.PeriodicallyCheckForUpdates()
 	}
-
-	initCheckpointing(serverCfg.Engines)
 
 	pgURL, err := serverCfg.PGURL(connUser)
 	if err != nil {
