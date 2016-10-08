@@ -19,10 +19,13 @@ package metric
 import (
 	"bytes"
 	"encoding/json"
+	"reflect"
 	"testing"
 	"time"
 
 	_ "github.com/cockroachdb/cockroach/util/log" // for flags
+	"github.com/kr/pretty"
+	prometheusgo "github.com/prometheus/client_model/go"
 )
 
 func testMarshal(t *testing.T, m json.Marshaler, exp string) {
@@ -68,6 +71,42 @@ func setNow(d time.Duration) {
 	}
 }
 
+func TestHistogramPrometheus(t *testing.T) {
+	u := func(v int) *uint64 {
+		n := uint64(v)
+		return &n
+	}
+
+	f := func(v int) *float64 {
+		n := float64(v)
+		return &n
+	}
+
+	h := NewHistogram(Metadata{}, time.Hour, 10, 1)
+	h.RecordValue(1)
+	h.RecordValue(5)
+	h.RecordValue(5)
+	h.RecordValue(10)
+	h.RecordValue(15000) // counts as 10
+	act := *h.ToPrometheusMetric().Histogram
+
+	expSum := float64(1*1 + 2*5 + 2*10)
+
+	exp := prometheusgo.Histogram{
+		SampleCount: u(5),
+		SampleSum:   &expSum,
+		Bucket: []*prometheusgo.Bucket{
+			{CumulativeCount: u(1), UpperBound: f(1)},
+			{CumulativeCount: u(3), UpperBound: f(5)},
+			{CumulativeCount: u(5), UpperBound: f(10)},
+		},
+	}
+
+	if !reflect.DeepEqual(act, exp) {
+		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
+	}
+}
+
 func TestHistogramRotate(t *testing.T) {
 	defer TestingSetNow(nil)()
 	setNow(0)
@@ -78,7 +117,7 @@ func TestHistogramRotate(t *testing.T) {
 		h.RecordValue(v)
 		cur += time.Second
 		setNow(cur)
-		cur := h.Current()
+		cur := h.Windowed()
 
 		// When i == histWrapNum-1, we expect the entry from i==0 to move out
 		// of the window (since we rotated for the histWrapNum'th time).
@@ -95,15 +134,6 @@ func TestHistogramRotate(t *testing.T) {
 			t.Fatalf("%d: unexpected maximum %d, expected %d", i, max, expMax)
 		}
 	}
-}
-
-func TestHistogramJSON(t *testing.T) {
-	defer TestingSetNow(nil)()
-	setNow(0)
-	h := NewHistogram(emptyMetadata, 0, 1, 3)
-	testMarshal(t, h, `[{"Quantile":100,"Count":0,"ValueAt":0}]`)
-	h.RecordValue(1)
-	testMarshal(t, h, `[{"Quantile":0,"Count":1,"ValueAt":1},{"Quantile":100,"Count":1,"ValueAt":1}]`)
 }
 
 func TestRateRotate(t *testing.T) {
