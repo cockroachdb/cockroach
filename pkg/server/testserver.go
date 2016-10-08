@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -256,19 +257,16 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 		return err
 	}
 
-	if err := ts.Cfg.InitStores(); err != nil {
-		return err
-	}
-	engines := MakeEngines(ts.Cfg.Engines)
-	defer engines.Close()
-
-	var err error
-	ts.Server, err = NewServer(*ts.Cfg, params.Stopper)
+	engines, err := ts.Cfg.CreateEngines()
 	if err != nil {
 		return err
 	}
-	// The server took ownership of the engines.
-	engines.Release()
+	defer engines.Close()
+
+	ts.Server, err = NewServer(*ts.Cfg, engines.Move(), params.Stopper)
+	if err != nil {
+		return err
+	}
 
 	// Our context must be shared with our server.
 	ts.Cfg = &ts.Server.cfg
@@ -329,6 +327,11 @@ func WaitForInitialSplits(db *client.DB) error {
 // Stores returns the collection of stores from this TestServer's node.
 func (ts *TestServer) Stores() *storage.Stores {
 	return ts.node.stores
+}
+
+// Engines returns the TestServer's engines.
+func (ts *TestServer) Engines() []engine.Engine {
+	return ts.engines
 }
 
 // ServingAddr returns the server's address. Should be used by clients.
