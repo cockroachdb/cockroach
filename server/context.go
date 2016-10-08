@@ -90,13 +90,6 @@ type Context struct {
 
 	// Parsed values.
 
-	// Engines is the storage instances specified by Stores.
-	// TODO(andrei): remove the Engines from this Context struct. They're real
-	// meaty objects, as opposed to configuration structs, so they don't belong
-	// here. Moreover, they need to be Close()d, and it's easy to lose track of
-	// that fact when they're hid in this Context.
-	Engines []engine.Engine
-
 	// NodeAttributes is the parsed representation of Attrs.
 	NodeAttributes roachpb.Attributes
 
@@ -169,6 +162,8 @@ type Context struct {
 	// to cluster metadata, such as DDL statements and range rebalancing
 	// actions.
 	EventLogEnabled bool
+
+	enginesCreated bool
 }
 
 // GetTotalMemory returns either the total system memory or if possible the
@@ -355,21 +350,32 @@ func MakeContext() Context {
 //
 //	engines := CreateEngines()
 // 	ep := NewEnginesUniquePtr(engines)
-// 	// We now have ownership, make sure we clean up.
+// 	// We now have ownership, make sure we clean up unless we've managed to pass
+// 	// ownership to someone else.
 // 	defer ep.Close()
 //
-// 	if err := DoSomethingWithEnginesAndTakeOwnership(engines); err != nil {
+// 	if err := DoSomethingWithEnginesAndTakeOwnership(engines.Move()); err != nil {
 // 		return err;
 // 	}
-// 	// We've given away ownership. This will make the defer above a no-op.
-// 	ep.Release()
 //
+//	func DoSomethingWithEnginesAndTakeOwnership(ep *EnginesUniquePtr) {
+//		defer ep.Close()
+//		stopper := stop.NewStopper()
+//		// EnginesUniquePtr conveniently implements the Closer interface, so it
+//		// can be passed to a closer.
+//		stopper.AddCloser(ep.Move())
+//	}
 type EnginesUniquePtr struct {
 	// EnginesUniquePtr is not copiable, as that would leave two owning pointers
 	// wanting to Close the engines.
 	noCopy  util.NoCopy
 	engines []engine.Engine
 	closed  bool
+}
+
+// NewEnginesUniquePtr creates a holder for engines.
+func NewEnginesUniquePtr(engines []engine.Engine) *EnginesUniquePtr {
+	return &EnginesUniquePtr{engines: engines}
 }
 
 // Close closes the engines. If Release() has been previously called, this is a
@@ -382,37 +388,39 @@ func (ep *EnginesUniquePtr) Close() {
 	for _, e := range ep.engines {
 		e.Close()
 	}
-}
-
-// Release makes a future call to Close() a no-op. It should be called after
-// ownership of the engines has been transferred away.
-func (ep *EnginesUniquePtr) Release() {
-	if ep.closed {
-		panic("EnginesUniquePtr already closed")
-	}
 	ep.engines = nil
 }
 
-// NewEnginesUniquePtr creates a holder for engines.
-func NewEnginesUniquePtr(engines []engine.Engine) *EnginesUniquePtr {
-	return &EnginesUniquePtr{engines: engines}
+// Move transfers ownership of the engines to another EnginesUniquePtr.
+// A future call to Close() on the original unique ptr will be a no-op.
+func (ep *EnginesUniquePtr) Move() *EnginesUniquePtr {
+	copy := NewEnginesUniquePtr(ep.GetEngines())
+	ep.engines = nil
+	return copy
 }
 
-// InitStores initializes ctx.Engines based on ctx.Stores.
-// The caller is responsible for Close()ing all the engines in ctx.Engines.
-// EnginesUniquePtr can be used for conveniently managing that.
-func (ctx *Context) InitStores() (err error) {
-	defer func() {
-		// If returning an error, close all the engines so that the caller doesn't
-		// have to deal with them.
-		if err == nil {
-			return
-		}
-		for _, e := range ctx.Engines {
-			e.Close()
-		}
-		ctx.Engines = nil
-	}()
+// AddEngine appends one more Engine to the list managed by this unique ptr.
+func (ep *EnginesUniquePtr) AddEngine(eng engine.Engine) {
+	ep.engines = append(ep.engines, eng)
+}
+
+// GetEngines returns the raw list of engines managed by this unique ptr.
+func (ep *EnginesUniquePtr) GetEngines() []engine.Engine {
+	return ep.engines
+}
+
+// CreateEngines creates Engines based on the specs in ctx.Stores.
+func (ctx *Context) CreateEngines() (*EnginesUniquePtr, error) {
+	engines := NewEnginesUniquePtr(nil)
+	// If we're returning engines to the called, they will have been Move()d.
+	// If that didn't happen and we still own the engines, clean them up.
+	defer engines.Close()
+
+	if ctx.enginesCreated {
+		return &EnginesUniquePtr{}, errors.Errorf("engines already created")
+	}
+	ctx.enginesCreated = true
+
 	cache := engine.NewRocksDBCache(ctx.CacheSize)
 	defer cache.Release()
 
@@ -424,7 +432,7 @@ func (ctx *Context) InitStores() (err error) {
 	}
 	openFileLimitPerStore, err := setOpenFileLimit(physicalStores)
 	if err != nil {
-		return err
+		return &EnginesUniquePtr{}, err
 	}
 
 	skipSizeCheck := ctx.TestingKnobs.Store != nil &&
@@ -435,25 +443,25 @@ func (ctx *Context) InitStores() (err error) {
 			if spec.SizePercent > 0 {
 				sysMem, err := GetTotalMemory()
 				if err != nil {
-					return errors.Errorf("could not retrieve system memory")
+					return &EnginesUniquePtr{}, errors.Errorf("could not retrieve system memory")
 				}
 				sizeInBytes = int64(float64(sysMem) * spec.SizePercent / 100)
 			}
 			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
-				return errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
+				return &EnginesUniquePtr{}, errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
-			ctx.Engines = append(ctx.Engines, engine.NewInMem(spec.Attributes, sizeInBytes))
+			engines.AddEngine(engine.NewInMem(spec.Attributes, sizeInBytes))
 		} else {
 			if spec.SizePercent > 0 {
 				fileSystemUsage := gosigar.FileSystemUsage{}
 				if err := fileSystemUsage.Get(spec.Path); err != nil {
-					return err
+					return &EnginesUniquePtr{}, err
 				}
 				sizeInBytes = int64(float64(fileSystemUsage.Total) * spec.SizePercent / 100)
 			}
 			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
-				return errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
+				return &EnginesUniquePtr{}, errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 			eng, err := engine.NewRocksDB(
@@ -464,18 +472,18 @@ func (ctx *Context) InitStores() (err error) {
 				openFileLimitPerStore,
 			)
 			if err != nil {
-				return err
+				return &EnginesUniquePtr{}, err
 			}
-			ctx.Engines = append(ctx.Engines, eng)
+			engines.AddEngine(eng)
 		}
 	}
 
-	if len(ctx.Engines) == 1 {
+	if len(engines.GetEngines()) == 1 {
 		log.Infof(context.TODO(), "1 storage engine initialized")
 	} else {
-		log.Infof(context.TODO(), "%d storage engines initialized", len(ctx.Engines))
+		log.Infof(context.TODO(), "%d storage engines initialized", len(engines.GetEngines()))
 	}
-	return nil
+	return engines.Move(), nil
 }
 
 // InitNode parses node attributes and initializes the gossip bootstrap
