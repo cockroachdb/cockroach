@@ -552,20 +552,6 @@ func (r *RocksDB) Flush() error {
 	return statusToError(C.DBFlush(r.rdb))
 }
 
-// Checkpoint creates a point-in-time snapshot of the on-disk state.
-func (r *RocksDB) Checkpoint(dir string) error {
-	if len(r.dir) == 0 {
-		return errors.Errorf("unable to checkpoint in-memory rocksdb instance")
-	}
-	if len(dir) == 0 {
-		return errors.Errorf("empty checkpoint directory")
-	}
-	if !filepath.IsAbs(dir) {
-		dir = filepath.Join(r.dir, dir)
-	}
-	return statusToError(C.DBCheckpoint(r.rdb, goToCSlice([]byte(dir))))
-}
-
 // NewIterator returns an iterator over this rocksdb engine.
 func (r *RocksDB) NewIterator(prefix bool) Iterator {
 	return newRocksDBIterator(r.rdb, prefix, r)

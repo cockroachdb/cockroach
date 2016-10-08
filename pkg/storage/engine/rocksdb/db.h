@@ -99,11 +99,6 @@ DBStatus DBFlush(DBEngine* db);
 // Forces an immediate compaction over all keys.
 DBStatus DBCompact(DBEngine* db);
 
-// Checkpoint creates a point-in-time snapshot of the database,
-// hard-linking sstable files and copying the manifest and other
-// files.
-DBStatus DBCheckpoint(DBEngine* db, DBSlice dir);
-
 // Sets the database entry for "key" to "value".
 DBStatus DBPut(DBEngine* db, DBKey key, DBSlice value);
 
