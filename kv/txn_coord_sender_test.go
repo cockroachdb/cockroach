@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -1127,7 +1126,7 @@ func checkTxnMetrics(
 			{"commits1PC", metrics.Commits1PC.Count(), commits1PC},
 			{"abandons", metrics.Abandons.Count(), abandons},
 			{"aborts", metrics.Aborts.Count(), aborts},
-			{"durations", metrics.Durations[metric.Scale1M].Current().TotalCount(),
+			{"durations", metrics.Durations.TotalCount(),
 				commits + abandons + aborts},
 		}
 
@@ -1137,9 +1136,10 @@ func checkTxnMetrics(
 			}
 		}
 
-		// Handle restarts separately, because that's a histogram. Though the histogram is approximate,
-		// we're recording so few distinct values that we should be okay.
-		dist := metrics.Restarts.Current().Distribution()
+		// Handle restarts separately, because that's a histogram. Though the
+		// histogram is approximate, we're recording so few distinct values
+		// that we should be okay.
+		dist := metrics.Restarts.Snapshot().Distribution()
 		var actualRestarts int64
 		for _, b := range dist {
 			if b.From == b.To {
@@ -1395,17 +1395,19 @@ func TestTxnDurations(t *testing.T) {
 	teardownHeartbeats(sender)
 	checkTxnMetrics(t, sender, "txn durations", puts, 0, 0, 0, 0)
 
-	hist := sender.metrics.Durations[metric.Scale1M].Current()
+	hist := sender.metrics.Durations
 
-	// The clock is a bit odd in these tests, so I can't test the mean without introducing
-	// spurious errors or being overly lax.
+	// The clock is a bit odd in these tests, so I can't test the mean without
+	// introducing spurious errors or being overly lax.
+	//
 	// TODO(cdo): look into cause of variance.
 	if a, e := hist.TotalCount(), int64(puts); a != e {
 		t.Fatalf("durations %d != expected %d", a, e)
 	}
 
-	if min := hist.Min(); min < incr {
-		t.Fatalf("min %d < %d", min, incr)
+	// Metrics lose fidelity, so we can't compare incr directly.
+	if min, thresh := hist.Min(), incr-10; min < thresh {
+		t.Fatalf("min %d < %d", min, thresh)
 	}
 }
 

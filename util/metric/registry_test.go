@@ -96,8 +96,7 @@ func TestRegistry(t *testing.T) {
 	r.AddMetric(topRate)
 
 	r.AddMetricGroup(NewRates(Metadata{Name: "top.rates"}))
-	r.AddMetric(NewHistogram(Metadata{Name: "top.hist"}, time.Minute, 1000, 3))
-	r.AddMetricGroup(NewLatency(Metadata{Name: "top.latency"}))
+	r.AddMetric(NewHistogram(Metadata{Name: "top.histogram"}, time.Minute, 1000, 3))
 
 	r.AddMetric(NewGauge(Metadata{Name: "bottom.gauge"}))
 	r.AddMetricGroup(NewRates(Metadata{Name: "bottom.rates"}))
@@ -107,7 +106,6 @@ func TestRegistry(t *testing.T) {
 		StructCounter   *Counter
 		StructHistogram *Histogram
 		StructRate      *Rate
-		StructLatency   Histograms
 		StructRates     Rates
 		// A few extra ones: either not exported, or not metric objects.
 		privateStructGauge   *Gauge
@@ -121,7 +119,6 @@ func TestRegistry(t *testing.T) {
 		StructCounter:        NewCounter(Metadata{Name: "struct.counter"}),
 		StructHistogram:      NewHistogram(Metadata{Name: "struct.histogram"}, time.Minute, 1000, 3),
 		StructRate:           NewRate(Metadata{Name: "struct.rate"}, time.Minute),
-		StructLatency:        NewLatency(Metadata{Name: "struct.latency"}),
 		StructRates:          NewRates(Metadata{Name: "struct.rates"}),
 		privateStructGauge:   NewGauge(Metadata{Name: "struct.private-gauge"}),
 		privateStructGauge64: NewGaugeFloat64(Metadata{Name: "struct.private-gauge64"}),
@@ -137,10 +134,7 @@ func TestRegistry(t *testing.T) {
 		"top.rates-1m":       {},
 		"top.rates-10m":      {},
 		"top.rates-1h":       {},
-		"top.hist":           {},
-		"top.latency-1m":     {},
-		"top.latency-10m":    {},
-		"top.latency-1h":     {},
+		"top.histogram":      {},
 		"top.gauge":          {},
 		"top.floatgauge":     {},
 		"top.counter":        {},
@@ -154,9 +148,6 @@ func TestRegistry(t *testing.T) {
 		"struct.counter":     {},
 		"struct.histogram":   {},
 		"struct.rate":        {},
-		"struct.latency-1m":  {},
-		"struct.latency-10m": {},
-		"struct.latency-1h":  {},
 		"struct.rates-count": {},
 		"struct.rates-1m":    {},
 		"struct.rates-10m":   {},
@@ -180,7 +171,7 @@ func TestRegistry(t *testing.T) {
 	if g := r.getGauge("bad"); g != nil {
 		t.Errorf("getGauge returned non-nil %v, expected nil", g)
 	}
-	if g := r.getGauge("top.hist"); g != nil {
+	if g := r.getGauge("top.histogram"); g != nil {
 		t.Errorf("getGauge returned non-nil %v of type %T when requesting non-gauge, expected nil", g, g)
 	}
 
@@ -190,7 +181,7 @@ func TestRegistry(t *testing.T) {
 	if c := r.getCounter("bad"); c != nil {
 		t.Errorf("getCounter returned non-nil %v, expected nil", c)
 	}
-	if c := r.getCounter("top.hist"); c != nil {
+	if c := r.getCounter("top.histogram"); c != nil {
 		t.Errorf("getCounter returned non-nil %v of type %T when requesting non-counter, expected nil", c, c)
 	}
 
@@ -200,7 +191,7 @@ func TestRegistry(t *testing.T) {
 	if r := r.getRate("bad"); r != nil {
 		t.Errorf("getRate returned non-nil %v, expected nil", r)
 	}
-	if r := r.getRate("top.hist"); r != nil {
+	if r := r.getRate("top.histogram"); r != nil {
 		t.Errorf("getRate returned non-nil %v of type %T when requesting non-rate, expected nil", r, r)
 	}
 }

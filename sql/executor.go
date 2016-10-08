@@ -162,7 +162,7 @@ type Executor struct {
 	virtualSchemas virtualSchemaHolder
 
 	// Transient stats.
-	Latency       metric.Histograms
+	Latency       *metric.Histogram
 	SelectCount   *metric.Counter
 	TxnBeginCount *metric.Counter
 

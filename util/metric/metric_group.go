@@ -25,7 +25,7 @@ type TimeScale struct {
 }
 
 // DefaultTimeScales are the durations used for helpers which create windowed
-// metrics in bulk (such as Latency or Rates).
+// metrics in bulk (such as Rates).
 var DefaultTimeScales = []TimeScale{Scale1M, Scale10M, Scale1H}
 
 // Name returns the name of the TimeScale.
@@ -44,52 +44,12 @@ var (
 	Scale1H = TimeScale{"1h", time.Hour}
 )
 
-// Histograms is a map of Histogram metrics.
-type Histograms map[TimeScale]*Histogram
-
 // metricGroup defines a metric that is composed of multiple metrics.
 // It can be used directly by the code updating metrics, and expands
 // to multiple individual metrics to add to a registry.
 type metricGroup interface {
 	// iterate will run the callback for every individual metric in the metric group.
 	iterate(func(Iterable))
-}
-
-// NewLatency is a convenience function which registers histograms with
-// suitable defaults for latency tracking. Values are expressed in ns,
-// are truncated into the interval [0, time.Minute] and are recorded
-// with two digits of precision (i.e. errors of <1ms at 100ms, <.6s at 1m).
-// The generated names of the metric will begin with the given prefix.
-//
-// TODO(mrtracy,tschottdorf): need to discuss roll-ups and generally how (and
-// which) information flows between metrics and time series.
-func NewLatency(metadata Metadata) Histograms {
-	windows := DefaultTimeScales
-	hs := make(Histograms)
-	for _, w := range windows {
-		hs[w] = NewHistogram(
-			Metadata{
-				Name:   metadata.Name + sep + w.name,
-				Help:   metadata.Help,
-				labels: metadata.labels,
-			},
-			w.d, int64(time.Minute), 2)
-	}
-	return hs
-}
-
-// RecordValue calls through to each individual Histogram.
-func (hs Histograms) RecordValue(v int64) {
-	for _, h := range hs {
-		h.RecordValue(v)
-	}
-}
-
-// iterate runs the callback function with individual histograms.
-func (hs Histograms) iterate(cb func(Iterable)) {
-	for _, h := range hs {
-		cb(h)
-	}
 }
 
 // Rates is a counter and associated EWMA backed rates at different time scales.
