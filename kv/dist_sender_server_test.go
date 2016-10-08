@@ -64,7 +64,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	now := s.Clock().Now()
 	txn := roachpb.NewTransaction("txn", roachpb.Key("foobar"), 0, enginepb.SERIALIZABLE, now, 0)
 	if err := engine.MVCCPutProto(
-		context.Background(), s.(*server.TestServer).Ctx.Engines[0],
+		context.Background(), s.(*server.TestServer).Engines()[0],
 		nil, key, now, txn, &roachpb.RangeDescriptor{}); err != nil {
 		t.Fatal(err)
 	}

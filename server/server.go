@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/sql/distsql"
 	"github.com/cockroachdb/cockroach/sql/pgwire"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/ui"
 	"github.com/cockroachdb/cockroach/util"
@@ -102,11 +103,13 @@ type Server struct {
 	stopper        *stop.Stopper
 	sqlExecutor    *sql.Executor
 	leaseMgr       *sql.LeaseManager
+	engines        []engine.Engine
 }
 
 // NewServer creates a Server from a server.Context.
-// If no error is returned, the server takes ownership of the engines in srvCtx.
-func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
+func NewServer(srvCtx Context, engines *EnginesUniquePtr, stopper *stop.Stopper) (*Server, error) {
+	defer engines.Close()
+
 	if _, err := net.ResolveTCPAddr("tcp", srvCtx.AdvertiseAddr); err != nil {
 		return nil, errors.Errorf("unable to resolve RPC address %q: %v", srvCtx.AdvertiseAddr, err)
 	}
@@ -138,6 +141,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	s := &Server{
 		mux:     http.NewServeMux(),
 		clock:   hlc.NewClock(hlc.UnixNano),
+		engines: engines.GetEngines(),
 		stopper: stopper,
 	}
 	// Add a dynamic log tag value for the node ID.
@@ -304,9 +308,8 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		gw.RegisterService(s.grpc)
 	}
 
-	// Take ownership of the engines.
-	enginesUniquePtr := NewEnginesUniquePtr(srvCtx.Engines)
-	stopper.AddCloser(enginesUniquePtr)
+	// Close the engines when the stopper is done.
+	stopper.AddCloser(engines.Move())
 
 	return s, nil
 }
@@ -496,7 +499,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.gossip.Start(unresolvedAdvertAddr)
 	log.Event(ctx, "started gossip")
 
-	err = s.node.start(ctx, unresolvedAdvertAddr, s.ctx.Engines, s.ctx.NodeAttributes)
+	err = s.node.start(ctx, unresolvedAdvertAddr, s.engines, s.ctx.NodeAttributes)
 	if err != nil {
 		return err
 	}

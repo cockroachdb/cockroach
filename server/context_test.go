@@ -36,11 +36,11 @@ func TestParseInitNodeAttributes(t *testing.T) {
 	ctx.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, SizeInBytes: base.MinimumStoreSize * 100}}}
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	if err := ctx.InitStores(); err != nil {
+	engines, err := ctx.InitStores()
+	if err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}
-	enginesUniquePtr := NewEnginesUniquePtr(ctx.Engines)
-	defer enginesUniquePtr.Close()
+	defer engines.Close()
 	if err := ctx.InitNode(); err != nil {
 		t.Fatalf("Failed to initialize node: %s", err)
 	}
@@ -59,11 +59,11 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 	ctx.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, SizeInBytes: base.MinimumStoreSize * 100}}}
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	if err := ctx.InitStores(); err != nil {
+	engines, err := ctx.InitStores()
+	if err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}
-	enginesUniquePtr := NewEnginesUniquePtr(ctx.Engines)
-	defer enginesUniquePtr.Close()
+	defer engines.Close()
 	if err := ctx.InitNode(); err != nil {
 		t.Fatalf("Failed to initialize node: %s", err)
 	}
