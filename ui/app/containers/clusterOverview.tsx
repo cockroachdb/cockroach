@@ -83,13 +83,13 @@ class ClusterMain extends React.Component<ClusterMainProps, {}> {
                                Percentiles are first calculated on each node.
                                For each percentile, the maximum latency across all nodes is then shown.`}>
             <Axis format={ (n: number) => d3.format(".1f")(NanoToMilli(n)) } label="Milliseconds">
-              <Metric name="cr.node.exec.latency-1m-max" title="Max Latency"
+              <Metric name="cr.node.exec.latency-max" title="Max Latency"
                       aggregateMax downsampleMax />
-              <Metric name="cr.node.exec.latency-1m-p99" title="99th percentile latency"
+              <Metric name="cr.node.exec.latency-p99" title="99th percentile latency"
                       aggregateMax downsampleMax />
-              <Metric name="cr.node.exec.latency-1m-p90" title="90th percentile latency"
+              <Metric name="cr.node.exec.latency-p90" title="90th percentile latency"
                       aggregateMax downsampleMax />
-              <Metric name="cr.node.exec.latency-1m-p50" title="50th percentile latency"
+              <Metric name="cr.node.exec.latency-p50" title="50th percentile latency"
                       aggregateMax downsampleMax />
             </Axis>
           </LineGraph>
