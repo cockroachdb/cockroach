@@ -88,13 +88,6 @@ type Config struct {
 
 	// Parsed values.
 
-	// Engines is the storage instances specified by Stores.
-	// TODO(andrei): remove the Engines from this Context struct. They're real
-	// meaty objects, as opposed to configuration structs, so they don't belong
-	// here. Moreover, they need to be Close()d, and it's easy to lose track of
-	// that fact when they're hidden in this Config.
-	Engines []engine.Engine
-
 	// NodeAttributes is the parsed representation of Attrs.
 	NodeAttributes roachpb.Attributes
 
@@ -167,6 +160,8 @@ type Config struct {
 	// to cluster metadata, such as DDL statements and range rebalancing
 	// actions.
 	EventLogEnabled bool
+
+	enginesCreated bool
 }
 
 // GetTotalMemory returns either the total system memory or if possible the
@@ -365,10 +360,16 @@ func (e *Engines) Close() {
 	*e = nil
 }
 
-// InitStores initializes ctx.Engines based on ctx.Stores.
-// The caller is responsible for Close()ing all the engines in ctx.Engines.
-// Engines can be used for conveniently managing that.
-func (cfg *Config) InitStores() (err error) {
+// CreateEngines creates Engines based on the specs in ctx.Stores.
+func (cfg *Config) CreateEngines() (Engines, error) {
+	engines := Engines(nil)
+	defer engines.Close()
+
+	if cfg.enginesCreated {
+		return nil, errors.Errorf("engines already created")
+	}
+	cfg.enginesCreated = true
+
 	cache := engine.NewRocksDBCache(cfg.CacheSize)
 	defer cache.Release()
 
@@ -380,25 +381,23 @@ func (cfg *Config) InitStores() (err error) {
 	}
 	openFileLimitPerStore, err := setOpenFileLimit(physicalStores)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	skipSizeCheck := cfg.TestingKnobs.Store != nil &&
 		cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs).SkipMinSizeCheck
-	engines := Engines(nil)
-	defer engines.Close()
 	for _, spec := range cfg.Stores.Specs {
 		var sizeInBytes = spec.SizeInBytes
 		if spec.InMemory {
 			if spec.SizePercent > 0 {
 				sysMem, err := GetTotalMemory()
 				if err != nil {
-					return errors.Errorf("could not retrieve system memory")
+					return nil, errors.Errorf("could not retrieve system memory")
 				}
 				sizeInBytes = int64(float64(sysMem) * spec.SizePercent / 100)
 			}
 			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
-				return errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
+				return nil, errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 			engines = append(engines, engine.NewInMem(spec.Attributes, sizeInBytes))
@@ -406,12 +405,12 @@ func (cfg *Config) InitStores() (err error) {
 			if spec.SizePercent > 0 {
 				fileSystemUsage := gosigar.FileSystemUsage{}
 				if err := fileSystemUsage.Get(spec.Path); err != nil {
-					return err
+					return nil, err
 				}
 				sizeInBytes = int64(float64(fileSystemUsage.Total) * spec.SizePercent / 100)
 			}
 			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
-				return errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
+				return nil, errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 
@@ -423,20 +422,20 @@ func (cfg *Config) InitStores() (err error) {
 				openFileLimitPerStore,
 			)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			engines = append(engines, eng)
 		}
 	}
 
-	cfg.Engines = engines
-	engines = nil
-	if len(cfg.Engines) == 1 {
+	if len(engines) == 1 {
 		log.Infof(context.TODO(), "1 storage engine initialized")
 	} else {
-		log.Infof(context.TODO(), "%d storage engines initialized", len(cfg.Engines))
+		log.Infof(context.TODO(), "%d storage engines initialized", len(engines))
 	}
-	return nil
+	enginesCopy := engines
+	engines = nil
+	return enginesCopy, nil
 }
 
 // InitNode parses node attributes and initializes the gossip bootstrap

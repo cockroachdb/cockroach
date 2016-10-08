@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -103,10 +104,13 @@ type Server struct {
 	stopper        *stop.Stopper
 	sqlExecutor    *sql.Executor
 	leaseMgr       *sql.LeaseManager
+	engines        []engine.Engine
 }
 
 // NewServer creates a Server from a server.Context.
-func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
+func NewServer(cfg Config, engines Engines, stopper *stop.Stopper) (*Server, error) {
+	defer engines.Close()
+
 	if _, err := net.ResolveTCPAddr("tcp", cfg.AdvertiseAddr); err != nil {
 		return nil, errors.Errorf("unable to resolve RPC address %q: %v", cfg.AdvertiseAddr, err)
 	}
@@ -126,6 +130,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s := &Server{
 		mux:     http.NewServeMux(),
 		clock:   hlc.NewClock(hlc.UnixNano),
+		engines: engines,
 		stopper: stopper,
 		cfg:     cfg,
 	}
@@ -328,9 +333,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		gw.RegisterService(s.grpc)
 	}
 
-	// Take ownership of the engines.
-	engines := Engines(s.cfg.Engines)
-	stopper.AddCloser(&engines)
+	// Close the engines when the stopper is done.
+	enginesCopy := engines
+	stopper.AddCloser(&enginesCopy)
+	engines = nil
 
 	return s, nil
 }
@@ -539,7 +545,7 @@ func (s *Server) Start(ctx context.Context) error {
 	err = s.node.start(
 		ctx,
 		unresolvedAdvertAddr,
-		s.cfg.Engines,
+		s.engines,
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
 	)
