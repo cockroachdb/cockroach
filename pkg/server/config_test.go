@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 func TestParseInitNodeAttributes(t *testing.T) {
@@ -34,12 +33,10 @@ func TestParseInitNodeAttributes(t *testing.T) {
 	cfg := MakeConfig()
 	cfg.Attrs = "attr1=val1::attr2=val2"
 	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, SizeInBytes: base.MinimumStoreSize * 100}}}
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-	if err := cfg.InitStores(); err != nil {
+	engines, err := cfg.CreateEngines()
+	if err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}
-	engines := NewEngines(cfg.Engines)
 	defer engines.Close()
 	if err := cfg.InitNode(); err != nil {
 		t.Fatalf("Failed to initialize node: %s", err)
@@ -57,12 +54,10 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 	cfg := MakeConfig()
 	cfg.JoinList = []string{"localhost:12345,,localhost:23456", "localhost:34567"}
 	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, SizeInBytes: base.MinimumStoreSize * 100}}}
-	stopper := stop.NewStopper()
-	defer stopper.Stop()
-	if err := cfg.InitStores(); err != nil {
+	engines, err := cfg.CreateEngines()
+	if err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}
-	engines := NewEngines(cfg.Engines)
 	defer engines.Close()
 	if err := cfg.InitNode(); err != nil {
 		t.Fatalf("Failed to initialize node: %s", err)

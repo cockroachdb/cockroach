@@ -89,13 +89,6 @@ type Config struct {
 
 	// Parsed values.
 
-	// Engines is the storage instances specified by Stores.
-	// TODO(andrei): remove the Engines from this Context struct. They're real
-	// meaty objects, as opposed to configuration structs, so they don't belong
-	// here. Moreover, they need to be Close()d, and it's easy to lose track of
-	// that fact when they're hidden in this Config.
-	Engines []engine.Engine
-
 	// NodeAttributes is the parsed representation of Attrs.
 	NodeAttributes roachpb.Attributes
 
@@ -168,6 +161,8 @@ type Config struct {
 	// to cluster metadata, such as DDL statements and range rebalancing
 	// actions.
 	EventLogEnabled bool
+
+	enginesCreated bool
 }
 
 // GetTotalMemory returns either the total system memory or if possible the
@@ -353,14 +348,21 @@ func MakeConfig() Config {
 //
 //  engines := CreateEngines()
 // 	ep := NewEngines(engines)
-// 	// We now have ownership, make sure we clean up.
+// 	// We now have ownership, make sure we clean up unless we've managed to pass
+// 	// ownership to someone else.
 // 	defer ep.Close()
 //
-// 	if err := DoSomethingWithEnginesAndTakeOwnership(engines); err != nil {
+// 	if err := DoSomethingWithEnginesAndTakeOwnership(engines.Move()); err != nil {
 // 	  return err;
 // 	}
-// 	// We've given away ownership. This will make the defer above a no-op.
-// 	ep.Release()
+//
+//  func DoSomethingWithEnginesAndTakeOwnership(ep *Engines) {
+//    defer ep.Close()
+//    stopper := stop.NewStopper()
+//    // Engines conveniently implements the Closer interface, so it
+//    // can be passed to a closer.
+//    stopper.AddCloser(ep.Move())
+//  }
 //
 type Engines struct {
 	// Engines is not copyable, as that would leave two owning pointers
@@ -368,6 +370,11 @@ type Engines struct {
 	noCopy  util.NoCopy
 	engines []engine.Engine
 	closed  bool
+}
+
+// NewEngines creates a holder for engines.
+func NewEngines(engines []engine.Engine) *Engines {
+	return &Engines{engines: engines}
 }
 
 // Close closes the engines. If Release() has been previously called, this is a
@@ -380,37 +387,39 @@ func (ep *Engines) Close() {
 	for _, e := range ep.engines {
 		e.Close()
 	}
-}
-
-// Release makes a future call to Close() a no-op. It should be called after
-// ownership of the engines has been transferred away.
-func (ep *Engines) Release() {
-	if ep.closed {
-		panic("Engines already closed")
-	}
 	ep.engines = nil
 }
 
-// NewEngines creates a holder for engines.
-func NewEngines(engines []engine.Engine) *Engines {
-	return &Engines{engines: engines}
+// Move transfers ownership of the engines to another Engines.
+// A future call to Close() on the original Engines will be a no-op.
+func (ep *Engines) Move() *Engines {
+	copy := NewEngines(ep.GetEngines())
+	ep.engines = nil
+	return copy
 }
 
-// InitStores initializes ctx.Engines based on ctx.Stores.
-// The caller is responsible for Close()ing all the engines in ctx.Engines.
-// Engines can be used for conveniently managing that.
-func (cfg *Config) InitStores() (err error) {
-	defer func() {
-		// If returning an error, close all the engines so that the caller doesn't
-		// have to deal with them.
-		if err == nil {
-			return
-		}
-		for _, e := range cfg.Engines {
-			e.Close()
-		}
-		cfg.Engines = nil
-	}()
+// AddEngine appends one more Engine to the list managed by this container.
+func (ep *Engines) AddEngine(eng engine.Engine) {
+	ep.engines = append(ep.engines, eng)
+}
+
+// GetEngines returns the raw list of engines managed by this container.
+func (ep *Engines) GetEngines() []engine.Engine {
+	return ep.engines
+}
+
+// CreateEngines creates Engines based on the specs in ctx.Stores.
+func (cfg *Config) CreateEngines() (*Engines, error) {
+	engines := NewEngines(nil)
+	// If we're returning engines to the called, they will have been Move()d.
+	// If that didn't happen and we still own the engines, clean them up.
+	defer engines.Close()
+
+	if cfg.enginesCreated {
+		return &Engines{}, errors.Errorf("engines already created")
+	}
+	cfg.enginesCreated = true
+
 	cache := engine.NewRocksDBCache(cfg.CacheSize)
 	defer cache.Release()
 
@@ -422,7 +431,7 @@ func (cfg *Config) InitStores() (err error) {
 	}
 	openFileLimitPerStore, err := setOpenFileLimit(physicalStores)
 	if err != nil {
-		return err
+		return &Engines{}, err
 	}
 
 	skipSizeCheck := cfg.TestingKnobs.Store != nil &&
@@ -433,25 +442,25 @@ func (cfg *Config) InitStores() (err error) {
 			if spec.SizePercent > 0 {
 				sysMem, err := GetTotalMemory()
 				if err != nil {
-					return errors.Errorf("could not retrieve system memory")
+					return &Engines{}, errors.Errorf("could not retrieve system memory")
 				}
 				sizeInBytes = int64(float64(sysMem) * spec.SizePercent / 100)
 			}
 			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
-				return errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
+				return &Engines{}, errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
-			cfg.Engines = append(cfg.Engines, engine.NewInMem(spec.Attributes, sizeInBytes))
+			engines.AddEngine(engine.NewInMem(spec.Attributes, sizeInBytes))
 		} else {
 			if spec.SizePercent > 0 {
 				fileSystemUsage := gosigar.FileSystemUsage{}
 				if err := fileSystemUsage.Get(spec.Path); err != nil {
-					return err
+					return &Engines{}, err
 				}
 				sizeInBytes = int64(float64(fileSystemUsage.Total) * spec.SizePercent / 100)
 			}
 			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
-				return errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
+				return &Engines{}, errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 
@@ -463,18 +472,18 @@ func (cfg *Config) InitStores() (err error) {
 				openFileLimitPerStore,
 			)
 			if err != nil {
-				return err
+				return &Engines{}, err
 			}
-			cfg.Engines = append(cfg.Engines, eng)
+			engines.AddEngine(eng)
 		}
 	}
 
-	if len(cfg.Engines) == 1 {
+	if len(engines.GetEngines()) == 1 {
 		log.Infof(context.TODO(), "1 storage engine initialized")
 	} else {
-		log.Infof(context.TODO(), "%d storage engines initialized", len(cfg.Engines))
+		log.Infof(context.TODO(), "%d storage engines initialized", len(engines.GetEngines()))
 	}
-	return nil
+	return engines.Move(), nil
 }
 
 // InitNode parses node attributes and initializes the gossip bootstrap
