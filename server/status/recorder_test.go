@@ -290,14 +290,12 @@ func TestMetricsRecorder(t *testing.T) {
 				}
 			case "latency":
 				l := metric.NewLatency(metric.Metadata{Name: reg.prefix + data.name})
-				reg.reg.AddMetricGroup(l)
+				reg.reg.AddMetric(l)
 				l.RecordValue(data.val)
 				// Latency is simply three histograms (at different resolution
 				// time scales).
-				for _, scale := range metric.DefaultTimeScales {
-					for _, q := range recordHistogramQuantiles {
-						addExpected(reg.prefix, data.name+sep+scale.Name()+q.suffix, reg.source, 100, data.val, reg.isNode)
-					}
+				for _, q := range recordHistogramQuantiles {
+					addExpected(reg.prefix, data.name+q.suffix, reg.source, 100, data.val, reg.isNode)
 				}
 			}
 		}
@@ -350,7 +348,7 @@ func TestMetricsRecorder(t *testing.T) {
 
 	nodeSummary := recorder.GetStatusSummary()
 	if nodeSummary == nil {
-		t.Fatalf("recorder did not return nodeSummary.")
+		t.Fatalf("recorder did not return nodeSummary")
 	}
 
 	sort.Sort(byStoreDescID(nodeSummary.StoreStatuses))
