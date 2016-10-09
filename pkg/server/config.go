@@ -30,10 +30,12 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -381,6 +383,8 @@ func (cfg *Config) InitStores() (err error) {
 		return err
 	}
 
+	skipSizeCheck := cfg.TestingKnobs.Store != nil &&
+		cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs).SkipMinSizeCheck
 	engines := Engines(nil)
 	defer engines.Close()
 	for _, spec := range cfg.Stores.Specs {
@@ -389,12 +393,12 @@ func (cfg *Config) InitStores() (err error) {
 			if spec.SizePercent > 0 {
 				sysMem, err := GetTotalMemory()
 				if err != nil {
-					return fmt.Errorf("could not retrieve system memory")
+					return errors.Errorf("could not retrieve system memory")
 				}
 				sizeInBytes = int64(float64(sysMem) * spec.SizePercent / 100)
 			}
-			if sizeInBytes != 0 && sizeInBytes < base.MinimumStoreSize {
-				return fmt.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
+			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
+				return errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 			engines = append(engines, engine.NewInMem(spec.Attributes, sizeInBytes))
@@ -406,8 +410,8 @@ func (cfg *Config) InitStores() (err error) {
 				}
 				sizeInBytes = int64(float64(fileSystemUsage.Total) * spec.SizePercent / 100)
 			}
-			if sizeInBytes != 0 && sizeInBytes < base.MinimumStoreSize {
-				return fmt.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
+			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
+				return errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 
