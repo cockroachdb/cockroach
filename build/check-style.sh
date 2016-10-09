@@ -45,7 +45,8 @@ TestMissingLeakTest() {
 }
 
 TestMisspell() {
-  local misspellings=$(git ls-files | xargs misspell)
+  local misspellings
+  misspellings=$(git ls-files | xargs misspell)
   echo "${misspellings}"
   [[ -z "${misspellings}" ]]
 }
@@ -57,31 +58,33 @@ TestTabsInShellScripts() {
 
 TestForbiddenImports() {
   echo "checking for forbidden imports"
-  local log=$(mktemp -t test-forbidden-imports.XXXXXX)
-  trap "rm -f ${log}" EXIT
+  local log
+  log=$(mktemp -t test-forbidden-imports.XXXXXX)
 
+  # shellcheck disable=SC2016
   go list -f '{{ $ip := .ImportPath }}{{ range .Imports}}{{ $ip }}: {{ println . }}{{end}}{{ range .TestImports}}{{ $ip }}: {{ println . }}{{end}}{{ range .XTestImports}}{{ $ip }}: {{ println . }}{{end}}' "$PKG" | \
-       grep -E ' (github.com/golang/protobuf/proto|github.com/satori/go\.uuid|log|path|context)$' | \
-       grep -vE 'cockroach/(base|security|util/(log|randutil|stop)): log$' | \
-       grep -vE 'cockroach/(server/serverpb|ts/tspb): github.com/golang/protobuf/proto$' | \
-       grep -vF 'util/uuid: github.com/satori/go.uuid' | tee ${log}; \
-    if grep -E ' path$' ${log} > /dev/null; then \
-       echo; echo "Please use 'path/filepath' instead of 'path'."; echo; \
-    fi; \
-    if grep -E ' log$' ${log} > /dev/null; then \
-       echo; echo "Please use 'util/log' instead of 'log'."; echo; \
-    fi; \
-    if grep -E ' github.com/golang/protobuf/proto$' ${log} > /dev/null; then \
-       echo; echo "Please use 'gogo/protobuf/proto' instead of 'golang/protobuf/proto'."; echo; \
-    fi; \
-    if grep -E ' github.com/satori/go\.uuid$' ${log} > /dev/null; then \
-       echo; echo "Please use 'util/uuid' instead of 'satori/go.uuid'."; echo; \
-    fi; \
-    if grep -E ' context$' ${log} > /dev/null; then \
-       echo; echo "Please use 'golang.org/x/net/context' instead of 'context'."; echo; \
-    fi; \
-    test ! -s ${log}
-  ret=$?
+    grep -E ' (github.com/golang/protobuf/proto|github.com/satori/go\.uuid|log|path|context)$' | \
+    grep -vE 'cockroach/(base|security|util/(log|randutil|stop)): log$' | \
+    grep -vE 'cockroach/(server/serverpb|ts/tspb): github.com/golang/protobuf/proto$' | \
+    grep -vF 'util/uuid: github.com/satori/go.uuid' | tee "${log}"
+  if grep -E ' path$' "${log}" > /dev/null; then
+     echo; echo "Please use 'path/filepath' instead of 'path'."; echo
+  fi
+  if grep -E ' log$' "${log}" > /dev/null; then
+     echo; echo "Please use 'util/log' instead of 'log'."; echo
+  fi
+  if grep -E ' github.com/golang/protobuf/proto$' "${log}" > /dev/null; then
+     echo; echo "Please use 'gogo/protobuf/proto' instead of 'golang/protobuf/proto'."; echo
+  fi
+  if grep -E ' github.com/satori/go\.uuid$' "${log}" > /dev/null; then
+     echo; echo "Please use 'util/uuid' instead of 'satori/go.uuid'."; echo
+  fi
+  if grep -E ' context$' "${log}" > /dev/null; then
+     echo; echo "Please use 'golang.org/x/net/context' instead of 'context'."; echo
+  fi
+  local ret=0
+  test ! -s "${log}" || ret=$?
+  rm -f "${log}"
   return $ret
 }
 
@@ -95,7 +98,9 @@ TestImportNames() {
 }
 
 TestIneffassign() {
-  ! ((ineffassign . || true) | grep -vF 'ineffectual assignment to sqlDollar' | grep -vF '.pb.go') # https://github.com/gogo/protobuf/issues/149
+  local ineffassign
+  ineffassign=$(ineffassign .)
+  ! echo "$ineffassign" | grep -vF 'ineffectual assignment to sqlDollar' | grep -vF '.pb.go' # https://github.com/gogo/protobuf/issues/149
 }
 
 TestErrcheck() {
@@ -130,38 +135,49 @@ TestVet() {
   local printFuncsStr=""
   # Concatenate the lines above with no spaces.
   for i in $printFuncs; do
-    printFuncsStr=$(echo $printFuncsStr$i)
+    printFuncsStr=$printFuncsStr$i
   done
-  local vet=$(go tool vet -all -shadow -printfuncs $printFuncsStr . 2>&1)
-  ! (echo "$vet" | grep -vE 'declaration of "?(pE|e)rr"? shadows' | grep -vE '\.pb\.gw\.go:[0-9]+: declaration of "?ctx"? shadows'
+  local vet
+  vet=$(go tool vet -all -shadow -printfuncs "$printFuncsStr" . 2>&1)
+  ! echo "$vet" | grep -vE 'declaration of "?(pE|e)rr"? shadows' | grep -vE '\.pb\.gw\.go:[0-9]+: declaration of "?ctx"? shadows'
 }
 
 TestGolint() {
-  ! ((golint "$PKG" || true) | grep -vE '((\.pb|\.pb\.gw|embedded|_string)\.go|sql/parser/(yaccpar|sql\.y):)')
+  local golint
+  golint=$(golint "$PKG")
+  ! echo "$golint" | grep -vE '((\.pb|\.pb\.gw|embedded|_string)\.go|sql/parser/(yaccpar|sql\.y):)'
 }
 
 TestGoSimple() {
-  ! ((gosimple "$PKG" || true) | grep -vF 'embedded.go')
+  local gosimple
+  gosimple=$(gosimple "$PKG")
+  ! echo "$gosimple" | grep -vF 'embedded.go'
 }
 
 TestGofmtSimplify() {
-  local badfmt=$(gofmt -s -d -l .)
+  local badfmt
+  badfmt=$(gofmt -s -d -l . 2>&1)
   echo "${badfmt}"
   [[ -z "${badfmt}" ]]
 }
 
 TestGoimports() {
-  local badimports=$(goimports -l .)
+  local badimports
+  badimports=$(goimports -l .)
   echo "${badimports}"
   [[ -z "${badimports}" ]]
 }
 
 TestUnconvert() {
-  ! ((unconvert "$PKG" || true) | grep -vF '.pb.go:')
+  local unconvert
+  unconvert=$(unconvert "$PKG")
+  ! echo "$unconvert" | grep -vF '.pb.go:'
 }
 
 TestUnused() {
-  ! ((unused -reflect=false -exported ./... || true) | grep -vE 'sql/(pgwire/pgerror/codes.go|parser/yacc(par|tab))|(field|type) noCopy ')
+  local unused
+  unused=$(unused -reflect=false -exported ./...)
+  ! echo "$unused" | grep -vE 'sql/(pgwire/pgerror/codes.go|parser/yacc(par|tab))|(field|type) noCopy '
 }
 
 TestStaticcheck() {
@@ -182,10 +198,13 @@ runcheck() {
   local name="$1"
   shift
   echo "=== RUN $name"
-  local start=$(date +%s)
+  local start
+  start=$(date +%s)
+  local output
   output=$(eval "$name")
   local status=$?
-  local end=$(date +%s)
+  local end
+  end=$(date +%s)
   local runtime=$((end-start))
   if [ $status -eq 0 ]; then
     echo "--- PASS: $name ($runtime.00s)"
@@ -203,13 +222,15 @@ exit_status=0
 # declare -f TestUnused
 tests=$(declare -F|cut -d' ' -f3|grep '^Test'|grep "${TESTS-.}")
 export -f runcheck
+# shellcheck disable=SC2163
 export -f $tests
 if hash parallel 2>/dev/null; then
+  # shellcheck disable=SC2086
   parallel -j4 runcheck {} ::: $tests || exit_status=$?
 else
   for i in $tests; do
     check_status=0
-    runcheck $i || check_status=$?
+    runcheck "$i" || check_status=$?
     if [ $exit_status -eq 0 ]; then
       exit_status=$check_status
     fi
