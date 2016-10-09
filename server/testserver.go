@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/ts"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -136,6 +135,30 @@ func makeTestContextFromParams(params base.TestServerArgs) Context {
 		ctx.AdvertiseAddr = util.TestAddr.String()
 		ctx.HTTPAddr = util.TestAddr.String()
 	}
+
+	// Ensure we have the correct number of engines. Add in-memory ones where
+	// needed. There must be at least one store/engine.
+	if len(params.StoreSpecs) == 0 {
+		params.StoreSpecs = []base.StoreSpec{base.DefaultTestStoreSpec}
+	}
+	// Validate the store specs.
+	for _, storeSpec := range params.StoreSpecs {
+		if storeSpec.InMemory {
+			if storeSpec.SizePercent > 0 {
+				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %s", storeSpec))
+			}
+		} else {
+			// TODO(bram): This will require some cleanup of on disk files.
+			panic(fmt.Sprintf("test server does not yet support on disk stores: %s", storeSpec))
+		}
+	}
+	// Copy over the store specs.
+	ctx.Stores = base.StoreSpecList{Specs: params.StoreSpecs}
+	if ctx.TestingKnobs.Store == nil {
+		ctx.TestingKnobs.Store = &storage.StoreTestingKnobs{}
+	}
+	ctx.TestingKnobs.Store.(*storage.StoreTestingKnobs).SkipMinSizeCheck = true
+
 	return ctx
 }
 
@@ -233,22 +256,8 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 		return err
 	}
 
-	// Ensure we have the correct number of engines. Add in-memory ones where
-	// needed. There must be at least one store/engine.
-	if len(params.StoreSpecs) == 0 {
-		params.StoreSpecs = []base.StoreSpec{base.DefaultTestStoreSpec}
-	}
-	for _, storeSpec := range params.StoreSpecs {
-		if storeSpec.InMemory {
-			if storeSpec.SizePercent > 0 {
-				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %s", storeSpec))
-			}
-			ts.Ctx.Engines = append(ts.Ctx.Engines,
-				engine.NewInMem(roachpb.Attributes{}, storeSpec.SizeInBytes))
-		} else {
-			// TODO(bram): This will require some cleanup of on disk files.
-			panic(fmt.Sprintf("test server does not yet support on disk stores: %s", storeSpec))
-		}
+	if err := ts.Ctx.InitStores(); err != nil {
+		return err
 	}
 	enginesUniquePtr := NewEnginesUniquePtr(ts.Ctx.Engines)
 	defer enginesUniquePtr.Close()

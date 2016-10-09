@@ -25,6 +25,7 @@ import (
 	"unicode"
 
 	"github.com/dustin/go-humanize"
+	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/humanizeutil"
@@ -220,6 +221,8 @@ type StoreSpecList struct {
 	Specs   []StoreSpec
 	updated bool // updated is used to determine if specs only contain the default value.
 }
+
+var _ pflag.Value = &StoreSpecList{}
 
 // String returns a string representation of all the StoreSpecs. This is part
 // of pflag's value interface.
