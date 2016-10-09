@@ -17,6 +17,7 @@ package storage
 import (
 	"container/list"
 	"fmt"
+	"sync"
 
 	"golang.org/x/net/context"
 
@@ -24,14 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 )
-
-// schedulerNoWait is a closed channel which can always proceed immediately as
-// a case in a select statement.
-var schedulerNoWait = func() chan struct{} {
-	ch := make(chan struct{})
-	close(ch)
-	return ch
-}()
 
 const rangeIDChunkSize = 1000
 
@@ -132,30 +125,40 @@ const (
 )
 
 type raftScheduler struct {
-	ctx       context.Context
-	processor raftProcessor
+	ctx        context.Context
+	processor  raftProcessor
+	numWorkers int
 
 	mu struct {
 		syncutil.Mutex
-		queue rangeIDQueue
-		state map[roachpb.RangeID]raftScheduleState
+		cond    *sync.Cond
+		queue   rangeIDQueue
+		state   map[roachpb.RangeID]raftScheduleState
+		stopped bool
 	}
-
-	notify chan struct{}
 }
 
 func newRaftScheduler(ctx context.Context, processor raftProcessor, numWorkers int) *raftScheduler {
 	s := &raftScheduler{
-		ctx:       ctx,
-		processor: processor,
-		notify:    make(chan struct{}, numWorkers),
+		ctx:        ctx,
+		processor:  processor,
+		numWorkers: numWorkers,
 	}
+	s.mu.cond = sync.NewCond(&s.mu.Mutex)
 	s.mu.state = make(map[roachpb.RangeID]raftScheduleState)
 	return s
 }
 
 func (s *raftScheduler) Start(stopper *stop.Stopper) {
-	for i := 0; i < cap(s.notify); i++ {
+	stopper.RunWorker(func() {
+		<-stopper.ShouldStop()
+		s.mu.Lock()
+		s.mu.stopped = true
+		s.mu.Unlock()
+		s.mu.cond.Broadcast()
+	})
+
+	for i := 0; i < s.numWorkers; i++ {
 		stopper.RunWorker(func() {
 			s.worker(stopper)
 		})
@@ -163,74 +166,68 @@ func (s *raftScheduler) Start(stopper *stop.Stopper) {
 }
 
 func (s *raftScheduler) worker(stopper *stop.Stopper) {
-	notify := s.notify
+	// We use a sync.Cond for worker notification instead of a buffered
+	// channel. Buffered channels have internal overhead for maintaining the
+	// buffer even when the elements are empty. And the buffer isn't necessary as
+	// the raftScheduler work is already buffered on the internal queue. Lastly,
+	// signaling a sync.Cond is significantly faster than selecting and sending
+	// on a buffered channel.
+
+	s.mu.Lock()
 	for {
-		select {
-		case <-notify:
-			s.mu.Lock()
-			id, ok := s.mu.queue.PopFront()
-			if !ok {
+		var id roachpb.RangeID
+		for {
+			if s.mu.stopped {
 				s.mu.Unlock()
-				// Nothing queued, wait for a notification.
-				notify = s.notify
-				continue
+				return
 			}
-			// Grab and clear the existing state for the range ID. Note that we leave
-			// the range ID marked as "queued" so that a concurrent Enqueue* will not
-			// queue the range ID again.
-			state := s.mu.state[id]
-			s.mu.state[id] = stateQueued
-			s.mu.Unlock()
+			var ok bool
+			if id, ok = s.mu.queue.PopFront(); ok {
+				break
+			}
+			s.mu.cond.Wait()
+		}
 
-			if state&stateRaftTick != 0 {
-				// processRaftTick returns true if the range should perform ready
-				// processing. Do not reorder this below the call to processReady.
-				if s.processor.processTick(id) {
-					state |= stateRaftReady
-				}
-			}
-			if state&stateRaftReady != 0 {
-				s.processor.processReady(id)
-			}
-			// Process requests last. This avoids a scenario where a tick and a
-			// "quiesce" message are processed in the same iteration and intervening
-			// raft ready processing unquiesced the replica. Note that request
-			// processing could also occur first, it just shouldn't occur in between
-			// ticking and ready processing. It is possible for a tick to be enqueued
-			// concurrently with the quiescing in which case the replica will
-			// unquiesce when the tick is processed, but we'll wake the leader in
-			// that case.
-			if state&stateRaftRequest != 0 {
-				s.processor.processRequestQueue(id)
-			}
+		// Grab and clear the existing state for the range ID. Note that we leave
+		// the range ID marked as "queued" so that a concurrent Enqueue* will not
+		// queue the range ID again.
+		state := s.mu.state[id]
+		s.mu.state[id] = stateQueued
+		s.mu.Unlock()
 
-			var queued bool
-			s.mu.Lock()
-			state = s.mu.state[id]
-			if state == stateQueued {
-				// No further processing required by the range ID, clear it from the
-				// state map.
-				delete(s.mu.state, id)
-			} else {
-				// There was a concurrent call to one of the Enqueue* methods. Queue the
-				// range ID for further processing.
-				queued = true
-				s.mu.queue.PushBack(id)
+		if state&stateRaftTick != 0 {
+			// processRaftTick returns true if the range should perform ready
+			// processing. Do not reorder this below the call to processReady.
+			if s.processor.processTick(id) {
+				state |= stateRaftReady
 			}
-			s.mu.Unlock()
+		}
+		if state&stateRaftReady != 0 {
+			s.processor.processReady(id)
+		}
+		// Process requests last. This avoids a scenario where a tick and a
+		// "quiesce" message are processed in the same iteration and intervening
+		// raft ready processing unquiesced the replica. Note that request
+		// processing could also occur first, it just shouldn't occur in between
+		// ticking and ready processing. It is possible for a tick to be enqueued
+		// concurrently with the quiescing in which case the replica will
+		// unquiesce when the tick is processed, but we'll wake the leader in
+		// that case.
+		if state&stateRaftRequest != 0 {
+			s.processor.processRequestQueue(id)
+		}
 
-			if queued {
-				select {
-				case s.notify <- struct{}{}:
-				default:
-				}
-			}
-
-			// Loop trying to process another replica.
-			notify = schedulerNoWait
-
-		case <-stopper.ShouldStop():
-			return
+		s.mu.Lock()
+		state = s.mu.state[id]
+		if state == stateQueued {
+			// No further processing required by the range ID, clear it from the
+			// state map.
+			delete(s.mu.state, id)
+		} else {
+			// There was a concurrent call to one of the Enqueue* methods. Queue the
+			// range ID for further processing.
+			s.mu.queue.PushBack(id)
+			s.mu.cond.Signal()
 		}
 	}
 }
@@ -259,20 +256,30 @@ func (s *raftScheduler) enqueue1(addState raftScheduleState, id roachpb.RangeID)
 }
 
 func (s *raftScheduler) enqueueN(addState raftScheduleState, ids ...roachpb.RangeID) int {
+	// Enqueue the ids in chunks to avoid hold raftScheduler.mu for too long.
+	const enqueueChunkSize = 100
+
 	var count int
-	s.mu.Lock()
-	for _, id := range ids {
-		count += s.enqueue1Locked(addState, id)
+	for i, j, n := 0, 0, len(ids); i < n; i = j {
+		j = i + enqueueChunkSize
+		if j > n {
+			j = n
+		}
+		s.mu.Lock()
+		for _, id := range ids[i:j] {
+			count += s.enqueue1Locked(addState, id)
+		}
+		s.mu.Unlock()
 	}
-	s.mu.Unlock()
 	return count
 }
 
 func (s *raftScheduler) signal(count int) {
-	for i := 0; i < count; i++ {
-		select {
-		case s.notify <- struct{}{}:
-		default:
+	if count >= s.numWorkers {
+		s.mu.cond.Broadcast()
+	} else {
+		for i := 0; i < count; i++ {
+			s.mu.cond.Signal()
 		}
 	}
 }
