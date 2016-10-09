@@ -366,7 +366,7 @@ func (cfg *Config) CreateEngines() (Engines, error) {
 	defer engines.Close()
 
 	if cfg.enginesCreated {
-		return nil, errors.Errorf("engines already created")
+		return Engines{}, errors.Errorf("engines already created")
 	}
 	cfg.enginesCreated = true
 
@@ -381,7 +381,7 @@ func (cfg *Config) CreateEngines() (Engines, error) {
 	}
 	openFileLimitPerStore, err := setOpenFileLimit(physicalStores)
 	if err != nil {
-		return nil, err
+		return Engines{}, err
 	}
 
 	skipSizeCheck := cfg.TestingKnobs.Store != nil &&
@@ -392,12 +392,12 @@ func (cfg *Config) CreateEngines() (Engines, error) {
 			if spec.SizePercent > 0 {
 				sysMem, err := GetTotalMemory()
 				if err != nil {
-					return nil, errors.Errorf("could not retrieve system memory")
+					return Engines{}, errors.Errorf("could not retrieve system memory")
 				}
 				sizeInBytes = int64(float64(sysMem) * spec.SizePercent / 100)
 			}
 			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
-				return nil, errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
+				return Engines{}, errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 			engines = append(engines, engine.NewInMem(spec.Attributes, sizeInBytes))
@@ -405,12 +405,12 @@ func (cfg *Config) CreateEngines() (Engines, error) {
 			if spec.SizePercent > 0 {
 				fileSystemUsage := gosigar.FileSystemUsage{}
 				if err := fileSystemUsage.Get(spec.Path); err != nil {
-					return nil, err
+					return Engines{}, err
 				}
 				sizeInBytes = int64(float64(fileSystemUsage.Total) * spec.SizePercent / 100)
 			}
 			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
-				return nil, errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
+				return Engines{}, errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 
@@ -422,7 +422,7 @@ func (cfg *Config) CreateEngines() (Engines, error) {
 				openFileLimitPerStore,
 			)
 			if err != nil {
-				return nil, err
+				return Engines{}, err
 			}
 			engines = append(engines, eng)
 		}
