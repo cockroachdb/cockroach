@@ -36,7 +36,7 @@ func TestParseInitNodeAttributes(t *testing.T) {
 	ctx.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, SizeInBytes: base.MinimumStoreSize * 100}}}
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	engines, err := ctx.InitStores()
+	engines, err := ctx.CreateEngines()
 	if err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}
@@ -59,7 +59,7 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 	ctx.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, SizeInBytes: base.MinimumStoreSize * 100}}}
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	engines, err := ctx.InitStores()
+	engines, err := ctx.CreateEngines()
 	if err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}

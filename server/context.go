@@ -409,17 +409,10 @@ func (ep *EnginesUniquePtr) GetEngines() []engine.Engine {
 	return ep.engines
 }
 
-// InitStores creates Engines based on the specs in ctx.Stores.
-func (ctx *Context) InitStores() (engines *EnginesUniquePtr, err error) {
+// CreateEngines creates Engines based on the specs in ctx.Stores.
+func (ctx *Context) CreateEngines() (engines *EnginesUniquePtr, err error) {
 	engines = NewEnginesUniquePtr(nil)
-	defer func() {
-		// If returning an error, close all the engines so that the caller doesn't
-		// have to deal with them.
-		if err == nil {
-			return
-		}
-		engines.Close()
-	}()
+	defer engines.Close()
 
 	if ctx.enginesCreated {
 		return engines, errors.Errorf("engines already created")
@@ -488,7 +481,7 @@ func (ctx *Context) InitStores() (engines *EnginesUniquePtr, err error) {
 	} else {
 		log.Infof(context.TODO(), "%d storage engines initialized", len(engines.GetEngines()))
 	}
-	return engines, nil
+	return engines.Move(), nil
 }
 
 // InitNode parses node attributes and initializes the gossip bootstrap

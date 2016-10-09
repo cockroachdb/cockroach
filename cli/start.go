@@ -328,12 +328,6 @@ func runStart(_ *cobra.Command, args []string) error {
 	stopper := initBacktrace(logDir)
 	log.Event(startCtx, "initialized profiles")
 
-	enginesUniquePtr, err := serverCtx.InitStores()
-	if err != nil {
-		return fmt.Errorf("failed to initialize stores: %s", err)
-	}
-	defer enginesUniquePtr.Close()
-
 	if err := serverCtx.InitNode(); err != nil {
 		return fmt.Errorf("failed to initialize node: %s", err)
 	}
@@ -342,7 +336,7 @@ func runStart(_ *cobra.Command, args []string) error {
 	if envVarsUsed := envutil.GetEnvVarsUsed(); len(envVarsUsed) > 0 {
 		log.Infof(startCtx, "using local environment variables: %s", strings.Join(envVarsUsed, ", "))
 	}
-	s, err := server.NewServer(serverCtx, enginesUniquePtr.Move(), stopper)
+	s, err := server.NewServer(serverCtx, stopper)
 	if err != nil {
 		return fmt.Errorf("failed to start Cockroach server: %s", err)
 	}
