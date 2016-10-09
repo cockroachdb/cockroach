@@ -615,6 +615,9 @@ type StoreTestingKnobs struct {
 	// NumKeysEvaluatedForRangeIntentResolution is set by the stores to the
 	// number of keys evaluated for range intent resolution.
 	NumKeysEvaluatedForRangeIntentResolution *int64
+	// SkipMinSizeCheck, if set, makes the store creation process skip the check
+	// for a minimum size.
+	SkipMinSizeCheck bool
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}
