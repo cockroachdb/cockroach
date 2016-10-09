@@ -133,7 +133,7 @@ TestVet() {
     printFuncsStr=$(echo $printFuncsStr$i)
   done
   local vet=$(go tool vet -all -shadow -printfuncs $printFuncsStr . 2>&1)
-  ! (echo "$vet" | grep -vE 'declaration of "?(pE|e)rr"? shadows' | grep -vE '\.pb\.gw\.go:[0-9]+: declaration of "?ctx"? shadows' | grep -vE '^vet: cannot process directory \.git')
+  ! (echo "$vet" | grep -vE 'declaration of "?(pE|e)rr"? shadows' | grep -vE '\.pb\.gw\.go:[0-9]+: declaration of "?ctx"? shadows'
 }
 
 TestGolint() {
@@ -145,7 +145,9 @@ TestGoSimple() {
 }
 
 TestGofmtSimplify() {
-  ! ((gofmt -s -d -l . 2>&1 || true) | grep -vE '^\.git/')
+  local badfmt=$(gofmt -s -d -l .)
+  echo "${badfmt}"
+  [[ -z "${badfmt}" ]]
 }
 
 TestGoimports() {
