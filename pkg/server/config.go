@@ -346,22 +346,26 @@ func MakeConfig() Config {
 // or transfer ownership to someone else.
 // The intended use is:
 //
-//	engines := CreateEngines()
-//	ep := MakeEngines(engines)
+//	engines := MakeEngines(engines)
 //	// We now have ownership, make sure we clean up unless we've managed to pass
 //	// ownership to someone else.
-//	defer ep.Close()
+//	defer engines.Close()
 //
-//	if err := DoSomethingWithEnginesAndTakeOwnership(engines.Move()); err != nil {
-//		return err;
-//	}
+//	server.engines = engines.GetEngines()
+//	// Engines conveniently implements the Closer interface, so it
+//	// can be passed to a closer.
+//	stopper := stop.NewStopper()
+//	stopper.AddCloser(engines)
 //
-//	func DoSomethingWithEnginesAndTakeOwnership(ep *Engines) {
-//		defer ep.Close()
-//		stopper := stop.NewStopper()
-//		// Engines conveniently implements the Closer interface, so it
-//		// can be passed to a closer.
-//		stopper.AddCloser(ep.Move())
+//	func CreateAndInitEngines() Engines {
+//		rawEngines = []engine.Engine{}
+//		engines := MakeEngines(rawEngines)
+//		// Make sure we clean up unless we've managed to
+//		// pass ownership to someone else.
+//		defer engines.Close()
+//
+//		... mock with engines ...
+//		return engines.Move()
 //	}
 //
 type Engines struct {
@@ -392,10 +396,12 @@ func (ep *Engines) Close() {
 
 // Move transfers ownership of the engines to another Engines.
 // A future call to Close() on the original Engines will be a no-op.
-func (ep *Engines) Move() *Engines {
-	copy := MakeEngines(ep.GetEngines())
-	ep.engines = nil
-	return &copy
+func (ep *Engines) Move() Engines {
+	// The defer is needed because we want to return by value, but the type is
+	// NoCopy. This is only permitted by `go vet` in return statements, so we
+	// can't create the ret val early.
+	defer func() { ep.engines = nil }()
+	return MakeEngines(ep.GetEngines())
 }
 
 // Add appends one more Engine to the list managed by this container.
@@ -409,14 +415,14 @@ func (ep *Engines) GetEngines() []engine.Engine {
 }
 
 // CreateEngines creates Engines based on the specs in ctx.Stores.
-func (cfg *Config) CreateEngines() (*Engines, error) {
+func (cfg *Config) CreateEngines() (Engines, error) {
 	engines := MakeEngines(nil)
 	// If we're returning engines to the caller, they will have been Move()d.
 	// If that didn't happen and we still own the engines, clean them up.
 	defer engines.Close()
 
 	if cfg.enginesCreated {
-		return nil, errors.Errorf("engines already created")
+		return Engines{}, errors.Errorf("engines already created")
 	}
 	cfg.enginesCreated = true
 
@@ -431,7 +437,7 @@ func (cfg *Config) CreateEngines() (*Engines, error) {
 	}
 	openFileLimitPerStore, err := setOpenFileLimit(physicalStores)
 	if err != nil {
-		return nil, err
+		return Engines{}, err
 	}
 
 	skipSizeCheck := cfg.TestingKnobs.Store != nil &&
@@ -442,12 +448,12 @@ func (cfg *Config) CreateEngines() (*Engines, error) {
 			if spec.SizePercent > 0 {
 				sysMem, err := GetTotalMemory()
 				if err != nil {
-					return nil, errors.Errorf("could not retrieve system memory")
+					return Engines{}, errors.Errorf("could not retrieve system memory")
 				}
 				sizeInBytes = int64(float64(sysMem) * spec.SizePercent / 100)
 			}
 			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
-				return nil, errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
+				return Engines{}, errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 			engines.Add(engine.NewInMem(spec.Attributes, sizeInBytes))
@@ -455,12 +461,12 @@ func (cfg *Config) CreateEngines() (*Engines, error) {
 			if spec.SizePercent > 0 {
 				fileSystemUsage := gosigar.FileSystemUsage{}
 				if err := fileSystemUsage.Get(spec.Path); err != nil {
-					return nil, err
+					return Engines{}, err
 				}
 				sizeInBytes = int64(float64(fileSystemUsage.Total) * spec.SizePercent / 100)
 			}
 			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
-				return nil, errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
+				return Engines{}, errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 
@@ -472,7 +478,7 @@ func (cfg *Config) CreateEngines() (*Engines, error) {
 				openFileLimitPerStore,
 			)
 			if err != nil {
-				return nil, err
+				return Engines{}, err
 			}
 			engines.Add(eng)
 		}

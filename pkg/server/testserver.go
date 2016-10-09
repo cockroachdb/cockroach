@@ -257,13 +257,8 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 		return err
 	}
 
-	engines, err := ts.Cfg.CreateEngines()
-	if err != nil {
-		return err
-	}
-	defer engines.Close()
-
-	ts.Server, err = NewServer(*ts.Cfg, engines.Move(), params.Stopper)
+	var err error
+	ts.Server, err = NewServer(*ts.Cfg, params.Stopper)
 	if err != nil {
 		return err
 	}
