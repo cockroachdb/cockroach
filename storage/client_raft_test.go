@@ -1193,7 +1193,8 @@ func TestReplicateRestartAfterTruncation(t *testing.T) {
 
 func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReAdd bool) {
 	sc := storage.TestStoreConfig()
-	// Don't timeout raft leaders or range leases. This test expects
+	// Don't timeout raft leaders or range leases (see the relation between
+	// RaftElectionTimeoutTicks and rangeLeaseActiveDuration). This test expects
 	// mtc.stores[0] to hold the range lease for range 1.
 	sc.RaftElectionTimeoutTicks = 1000000
 	mtc := &multiTestContext{
