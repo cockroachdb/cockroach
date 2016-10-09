@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
+	"sync"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -240,4 +241,85 @@ func TestSchedulerBuffering(t *testing.T) {
 			return nil
 		})
 	}
+}
+
+func BenchmarkChan(b *testing.B) {
+	waiters := 64
+	var mu sync.Mutex
+	c := make(chan struct{}, waiters+1)
+
+	broadcast := func() {
+		for i := 0; i < waiters+1; i++ {
+			select {
+			case c <- struct{}{}:
+			default:
+			}
+		}
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(waiters + 1)
+
+	id := 0
+	for i := 0; i < waiters+1; i++ {
+		go func() {
+			defer wg.Done()
+			for i := 0; i < b.N; i++ {
+				mu.Lock()
+				if id == -1 {
+					mu.Unlock()
+					break
+				}
+				id++
+				if id == waiters+1 {
+					id = 0
+					broadcast()
+				}
+				mu.Unlock()
+				select {
+				case <-c:
+				}
+			}
+
+			mu.Lock()
+			id = -1
+			broadcast()
+			mu.Unlock()
+		}()
+	}
+
+	wg.Wait()
+}
+
+func BenchmarkCond(b *testing.B) {
+	waiters := 64
+	c := sync.NewCond(&sync.Mutex{})
+	var wg sync.WaitGroup
+	wg.Add(waiters + 1)
+
+	id := 0
+	for i := 0; i < waiters+1; i++ {
+		go func() {
+			defer wg.Done()
+			c.L.Lock()
+			for i := 0; i < b.N; i++ {
+				if id == -1 {
+					break
+				}
+				id++
+				if id == waiters+1 {
+					id = 0
+					c.Broadcast()
+				} else {
+					c.Wait()
+				}
+			}
+
+			id = -1
+			c.Broadcast()
+			c.L.Unlock()
+		}()
+	}
+
+	wg.Wait()
 }

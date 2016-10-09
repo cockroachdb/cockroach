@@ -2331,9 +2331,9 @@ func (s *Store) HandleRaftRequest(
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	q := s.mu.replicaQueues[req.RangeID]
 	if len(q) >= replicaRequestQueueSize {
+		s.mu.Unlock()
 		// TODO(peter): Return an error indicating the request was dropped. Note
 		// that dropping the request is safe. Raft will retry.
 		s.metrics.RaftRcvdMsgDropped.Inc(1)
@@ -2343,6 +2343,7 @@ func (s *Store) HandleRaftRequest(
 		req:        req,
 		respStream: respStream,
 	})
+	s.mu.Unlock()
 
 	s.scheduler.EnqueueRaftRequest(req.RangeID)
 	return nil
