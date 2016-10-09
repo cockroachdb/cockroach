@@ -521,7 +521,7 @@ func (s *Server) Start(ctx context.Context) error {
 	if s.ctx.TestingKnobs.SQLSchemaChanger != nil {
 		testingKnobs = s.ctx.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)
 	}
-	sql.NewSchemaChangeManager(testingKnobs, *s.db, s.gossip, s.leaseMgr).Start(s.stopper)
+	sql.NewSchemaChangeManager(s.Ctx(), testingKnobs, *s.db, s.gossip, s.leaseMgr).Start(s.stopper)
 
 	log.Infof(s.Ctx(), "starting %s server at %s", s.ctx.HTTPRequestScheme(), unresolvedHTTPAddr)
 	log.Infof(s.Ctx(), "starting grpc/postgres server at %s", unresolvedListenAddr)

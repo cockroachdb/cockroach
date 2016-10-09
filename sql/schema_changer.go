@@ -53,6 +53,7 @@ type SchemaChanger struct {
 	nodeID     roachpb.NodeID
 	db         client.DB
 	leaseMgr   *LeaseManager
+	ctx        context.Context
 	evalCtx    parser.EvalContext
 	// The SchemaChangeManager can attempt to execute this schema
 	// changer after this time.
@@ -65,7 +66,6 @@ func (sc *SchemaChanger) truncateAndDropTable(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	tableDesc *sqlbase.TableDescriptor,
 ) error {
-
 	l, err := sc.ExtendLease(*lease)
 	if err != nil {
 		return err
@@ -87,7 +87,8 @@ func NewSchemaChangerForTesting(
 		mutationID: mutationID,
 		nodeID:     nodeID,
 		db:         db,
-		leaseMgr:   leaseMgr}
+		leaseMgr:   leaseMgr,
+		ctx:        context.TODO()}
 }
 
 func (sc *SchemaChanger) createSchemaChangeLease() sqlbase.TableDescriptor_SchemaChangeLease {
@@ -102,7 +103,7 @@ var errExistingSchemaChangeLease = errors.New(
 // an unexpired lease doesn't exist. It returns the lease.
 func (sc *SchemaChanger) AcquireLease() (sqlbase.TableDescriptor_SchemaChangeLease, error) {
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
-	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := sc.db.Txn(sc.ctx, func(txn *client.Txn) error {
 		txn.SetSystemConfigTrigger()
 		tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
 		if err != nil {
@@ -148,7 +149,7 @@ func (sc *SchemaChanger) findTableWithLease(
 // ReleaseLease the table lease if it is the one registered with
 // the table descriptor.
 func (sc *SchemaChanger) ReleaseLease(lease sqlbase.TableDescriptor_SchemaChangeLease) error {
-	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := sc.db.Txn(sc.ctx, func(txn *client.Txn) error {
 		tableDesc, err := sc.findTableWithLease(txn, lease)
 		if err != nil {
 			return err
@@ -173,7 +174,7 @@ func (sc *SchemaChanger) ExtendLease(
 	}
 	// Update lease.
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
-	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := sc.db.Txn(sc.ctx, func(txn *client.Txn) error {
 		tableDesc, err := sc.findTableWithLease(txn, existingLease)
 		if err != nil {
 			return err
@@ -213,7 +214,7 @@ func (sc SchemaChanger) exec() error {
 			return
 		}
 		if err := sc.ReleaseLease(*l); err != nil {
-			log.Warning(context.TODO(), err)
+			log.Warning(sc.ctx, err)
 		}
 	}(&lease)
 
@@ -237,7 +238,7 @@ func (sc SchemaChanger) exec() error {
 		}
 
 		// Truncate the table and delete the descriptor.
-		if err := sc.truncateAndDropTable(context.TODO(), &lease, table); err != nil {
+		if err := sc.truncateAndDropTable(sc.ctx, &lease, table); err != nil {
 			return err
 		}
 		needRelease = false
@@ -281,7 +282,7 @@ func (sc SchemaChanger) exec() error {
 			sc.testingKnobs.RenameOldNameNotInUseNotification()
 		}
 		// Free up the old name(s).
-		err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
+		err := sc.db.Txn(sc.ctx, func(txn *client.Txn) error {
 			b := txn.NewBatch()
 			for _, renameDetails := range table.Renames {
 				tbKey := tableKey{renameDetails.OldParentID, renameDetails.OldName}.Key()
@@ -308,7 +309,7 @@ func (sc SchemaChanger) exec() error {
 	// correctness but is done to make the UI experience/tests predictable.
 	defer func() {
 		if err := sc.waitToUpdateLeases(sc.tableID); err != nil {
-			log.Warning(context.TODO(), err)
+			log.Warning(sc.ctx, err)
 		}
 	}()
 
@@ -327,7 +328,7 @@ func (sc SchemaChanger) exec() error {
 	// an integrity constraint violation. All other errors are transient
 	// errors that are resolved by retrying the backfill.
 	if sqlbase.IsIntegrityConstraintError(err) {
-		log.Warningf(context.TODO(), "reversing schema change due to irrecoverable error: %s", err)
+		log.Warningf(sc.ctx, "reversing schema change due to irrecoverable error: %s", err)
 		if errReverse := sc.reverseMutations(err); errReverse != nil {
 			// Although the backfill did hit an integrity constraint violation
 			// and made a decision to reverse the mutations,
@@ -343,7 +344,7 @@ func (sc SchemaChanger) exec() error {
 			// that an integrity constraint was violated with the original
 			// schema change. The reversed schema change will be
 			// retried via the async schema change manager.
-			log.Warningf(context.TODO(), "error purging mutation: %s, after error: %s", errPurge, err)
+			log.Warningf(sc.ctx, "error purging mutation: %s, after error: %s", errPurge, err)
 		}
 	}
 
@@ -430,11 +431,11 @@ func (sc *SchemaChanger) waitToUpdateLeases(tableID sqlbase.ID) error {
 		Multiplier:     2,
 	}
 	if log.V(2) {
-		log.Infof(context.TODO(), "waiting for a single version of table %d...", tableID)
+		log.Infof(sc.ctx, "waiting for a single version of table %d...", tableID)
 	}
 	_, err := sc.leaseMgr.waitForOneVersion(tableID, retryOpts)
 	if log.V(2) {
-		log.Infof(context.TODO(), "waiting for a single version of table %d... done", tableID)
+		log.Infof(sc.ctx, "waiting for a single version of table %d... done", tableID)
 	}
 	return err
 }
@@ -521,7 +522,7 @@ func (sc *SchemaChanger) reverseMutations(causingError error) error {
 				// mutation ID we're looking for.
 				break
 			}
-			log.Warningf(context.TODO(), "reverse schema change mutation: %+v", mutation)
+			log.Warningf(sc.ctx, "reverse schema change mutation: %+v", mutation)
 			switch mutation.Direction {
 			case sqlbase.DescriptorMutation_ADD:
 				desc.Mutations[i].Direction = sqlbase.DescriptorMutation_DROP
@@ -581,7 +582,7 @@ func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 							mutation.State != sqlbase.DescriptorMutation_DELETE_ONLY {
 							panic(fmt.Sprintf("mutation in bad state: %+v", mutation))
 						}
-						log.Warningf(context.TODO(), "delete schema change mutation: %+v", mutation)
+						log.Warningf(sc.ctx, "delete schema change mutation: %+v", mutation)
 						deleteMutation = true
 						break
 					}
@@ -601,7 +602,7 @@ func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 // is complete.
 func (sc *SchemaChanger) IsDone() (bool, error) {
 	var done bool
-	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
+	err := sc.db.Txn(sc.ctx, func(txn *client.Txn) error {
 		done = true
 		tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
 		if err != nil {
@@ -684,6 +685,7 @@ func (*SchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 // processing the schema change this manager acts as a backup
 // execution mechanism.
 type SchemaChangeManager struct {
+	ctx          context.Context
 	db           client.DB
 	gossip       *gossip.Gossip
 	leaseMgr     *LeaseManager
@@ -694,12 +696,14 @@ type SchemaChangeManager struct {
 
 // NewSchemaChangeManager returns a new SchemaChangeManager.
 func NewSchemaChangeManager(
+	ctx context.Context,
 	testingKnobs *SchemaChangerTestingKnobs,
 	db client.DB,
 	gossip *gossip.Gossip,
 	leaseMgr *LeaseManager,
 ) *SchemaChangeManager {
 	return &SchemaChangeManager{
+		ctx:            ctx,
 		db:             db,
 		gossip:         gossip,
 		leaseMgr:       leaseMgr,
@@ -743,12 +747,13 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				cfg, _ := s.gossip.GetSystemConfig()
 				// Read all tables and their versions
 				if log.V(2) {
-					log.Info(context.TODO(), "received a new config")
+					log.Info(s.ctx, "received a new config")
 				}
 				schemaChanger := SchemaChanger{
 					nodeID:       roachpb.NodeID(s.leaseMgr.nodeID),
 					db:           s.db,
 					leaseMgr:     s.leaseMgr,
+					ctx:          s.ctx,
 					testingKnobs: s.testingKnobs,
 				}
 				// Keep track of existing schema changers.
@@ -765,7 +770,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					// Attempt to unmarshal config into a table/database descriptor.
 					var descriptor sqlbase.Descriptor
 					if err := kv.Value.GetProto(&descriptor); err != nil {
-						log.Warningf(context.TODO(), "%s: unable to unmarshal descriptor %v", kv.Key, kv.Value)
+						log.Warningf(s.ctx, "%s: unable to unmarshal descriptor %v", kv.Key, kv.Value)
 						continue
 					}
 					switch union := descriptor.Union.(type) {
@@ -773,7 +778,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						table := union.Table
 						table.MaybeUpgradeFormatVersion()
 						if err := table.ValidateTable(); err != nil {
-							log.Errorf(context.TODO(), "%s: received invalid table descriptor: %v", kv.Key, table)
+							log.Errorf(s.ctx, "%s: received invalid table descriptor: %v", kv.Key, table)
 							continue
 						}
 
@@ -786,7 +791,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						if table.UpVersion || table.Deleted() || table.Adding() ||
 							table.Renamed() || len(table.Mutations) > 0 {
 							if log.V(2) {
-								log.Infof(context.TODO(), "%s: queue up pending schema change; table: %d, version: %d",
+								log.Infof(s.ctx, "%s: queue up pending schema change; table: %d, version: %d",
 									kv.Key, table.ID, table.Version)
 							}
 
@@ -843,7 +848,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 								// constraints violations because exec()
 								// purges mutations that violate integrity
 								// constraints.
-								log.Warningf(context.TODO(), "Error executing schema change: %s", err)
+								log.Warningf(s.ctx, "Error executing schema change: %s", err)
 							}
 						}
 						// Advance the execAfter time so that this schema
