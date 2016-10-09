@@ -257,18 +257,11 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 		return err
 	}
 
-	engines, err := ts.Cfg.CreateEngines()
+	var err error
+	ts.Server, err = NewServer(*ts.Cfg, params.Stopper)
 	if err != nil {
 		return err
 	}
-	defer engines.Close()
-
-	ts.Server, err = NewServer(*ts.Cfg, engines, params.Stopper)
-	if err != nil {
-		return err
-	}
-	// The server took ownership of the engines.
-	engines = nil
 
 	// Our context must be shared with our server.
 	ts.Cfg = &ts.Server.cfg

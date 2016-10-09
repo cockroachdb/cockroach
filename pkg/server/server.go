@@ -109,9 +109,7 @@ type Server struct {
 }
 
 // NewServer creates a Server from a server.Context.
-func NewServer(cfg Config, engines Engines, stopper *stop.Stopper) (*Server, error) {
-	defer engines.Close()
-
+func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if _, err := net.ResolveTCPAddr("tcp", cfg.AdvertiseAddr); err != nil {
 		return nil, errors.Errorf("unable to resolve RPC address %q: %v", cfg.AdvertiseAddr, err)
 	}
@@ -131,7 +129,6 @@ func NewServer(cfg Config, engines Engines, stopper *stop.Stopper) (*Server, err
 	s := &Server{
 		mux:     http.NewServeMux(),
 		clock:   hlc.NewClock(hlc.UnixNano),
-		engines: engines,
 		stopper: stopper,
 		cfg:     cfg,
 	}
@@ -326,11 +323,6 @@ func NewServer(cfg Config, engines Engines, stopper *stop.Stopper) (*Server, err
 	for _, gw := range []grpcGatewayServer{&s.admin, s.status, &s.tsServer} {
 		gw.RegisterService(s.grpc)
 	}
-
-	// Close the engines when the stopper is done.
-	enginesCopy := engines
-	stopper.AddCloser(&enginesCopy)
-	engines = nil
 
 	return s, nil
 }
@@ -536,10 +528,17 @@ func (s *Server) Start(ctx context.Context) error {
 	s.gossip.Start(unresolvedAdvertAddr)
 	log.Event(ctx, "started gossip")
 
+	engines, err := s.cfg.CreateEngines()
+	if err != nil {
+		return errors.Wrap(err, "failed to initialize stores")
+	}
+	s.stopper.AddCloser(&engines)
+	s.engines = engines
+
 	err = s.node.start(
 		ctx,
 		unresolvedAdvertAddr,
-		s.engines,
+		engines,
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
 	)
