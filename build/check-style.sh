@@ -45,7 +45,7 @@ TestMissingLeakTest() {
 }
 
 TestMisspell() {
-  misspellings=$(git ls-files | xargs misspell)
+  local misspellings=$(git ls-files | xargs misspell)
   echo "${misspellings}"
   [[ -z "${misspellings}" ]]
 }
@@ -149,7 +149,7 @@ TestGofmtSimplify() {
 }
 
 TestGoimports() {
-  badimports=$(goimports -l .)
+  local badimports=$(goimports -l .)
   echo "${badimports}"
   [[ -z "${badimports}" ]]
 }
