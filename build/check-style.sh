@@ -95,7 +95,8 @@ TestImportNames() {
 }
 
 TestIneffassign() {
-  ! ((ineffassign . || true) | grep -vF 'ineffectual assignment to sqlDollar' | grep -vF '.pb.go') # https://github.com/gogo/protobuf/issues/149
+  local ineffassign=$(ineffassign .)
+  ! echo $ineffassign | grep -vF 'ineffectual assignment to sqlDollar' | grep -vF '.pb.go' # https://github.com/gogo/protobuf/issues/149
 }
 
 TestErrcheck() {
@@ -137,11 +138,13 @@ TestVet() {
 }
 
 TestGolint() {
-  ! ((golint "$PKG" || true) | grep -vE '((\.pb|\.pb\.gw|embedded|_string)\.go|sql/parser/(yaccpar|sql\.y):)')
+  local golint=$(golint "$PKG")
+  ! echo $golint | grep -vE '((\.pb|\.pb\.gw|embedded|_string)\.go|sql/parser/(yaccpar|sql\.y):)'
 }
 
 TestGoSimple() {
-  ! ((gosimple "$PKG" || true) | grep -vF 'embedded.go')
+  local gosimple=$(gosimple "$PKG")
+  ! echo $gosimple | grep -vF 'embedded.go'
 }
 
 TestGofmtSimplify() {
@@ -157,11 +160,13 @@ TestGoimports() {
 }
 
 TestUnconvert() {
-  ! ((unconvert "$PKG" || true) | grep -vF '.pb.go:')
+  local unconvert=$(unconvert "$PKG")
+  ! echo $unconvert | grep -vF '.pb.go:'
 }
 
 TestUnused() {
-  ! ((unused -reflect=false -exported ./... || true) | grep -vE 'sql/(pgwire/pgerror/codes.go|parser/yacc(par|tab))|(field|type) noCopy ')
+  local unused=$(unused -reflect=false -exported ./...)
+  ! echo $unused | grep -vE 'sql/(pgwire/pgerror/codes.go|parser/yacc(par|tab))|(field|type) noCopy '
 }
 
 TestStaticcheck() {
