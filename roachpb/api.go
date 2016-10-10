@@ -812,7 +812,7 @@ func (*TransferLeaseRequest) flags() int {
 	// holder.
 	return isWrite | isAlone | isNonKV | skipLeaseCheck
 }
-func (*ComputeChecksumRequest) flags() int          { return isWrite | isNonKV }
+func (*ComputeChecksumRequest) flags() int          { return isWrite | isNonKV | isRange }
 func (*DeprecatedVerifyChecksumRequest) flags() int { return isWrite }
 func (*CheckConsistencyRequest) flags() int         { return isAdmin | isRange }
 func (*ChangeFrozenRequest) flags() int             { return isWrite | isRange | isNonKV }
