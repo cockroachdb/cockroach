@@ -243,6 +243,8 @@ var (
 		Help: "Duration of Replica Raft mutex critical sections"}
 	metaMuStoreNanos = metric.Metadata{Name: "mutex.storenanos",
 		Help: "Duration of Store mutex critical sections"}
+	metaMuSchedulerNanos = metric.Metadata{Name: "mutex.schedulernanos",
+		Help: "Duration of Raft Scheduler mutex critical sections"}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -386,9 +388,10 @@ type StoreMetrics struct {
 	GCResolveSuccess             *metric.Counter
 
 	// Mutex timing information.
-	MuStoreNanos   *metric.Histogram
-	MuRaftNanos    *metric.Histogram
-	MuReplicaNanos *metric.Histogram
+	MuStoreNanos     *metric.Histogram
+	MuSchedulerNanos *metric.Histogram
+	MuRaftNanos      *metric.Histogram
+	MuReplicaNanos   *metric.Histogram
 
 	// Stats for efficient merges.
 	mu struct {
@@ -545,6 +548,10 @@ func newStoreMetrics() *StoreMetrics {
 		),
 		MuStoreNanos: metric.NewHistogram(
 			metaMuStoreNanos, time.Minute,
+			time.Second.Nanoseconds(), 1,
+		),
+		MuSchedulerNanos: metric.NewHistogram(
+			metaMuSchedulerNanos, time.Minute,
 			time.Second.Nanoseconds(), 1,
 		),
 	}
