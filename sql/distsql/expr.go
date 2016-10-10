@@ -17,11 +17,13 @@
 package distsql
 
 import (
+	"bytes"
 	"fmt"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/pkg/errors"
 )
 
@@ -77,7 +79,7 @@ func processExpression(exprSpec Expression, h *parser.IndexedVarHelper) (parser.
 // exprHelper implements the common logic around evaluating an expression that
 // depends on a set of values.
 type exprHelper struct {
-	noCopy noCopy
+	noCopy util.NoCopy
 
 	expr parser.TypedExpr
 	// vars is used to generate IndexedVars that are "backed" by
@@ -116,8 +118,8 @@ func (eh *exprHelper) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.D
 }
 
 // IndexedVarString is part of the parser.IndexedVarContainer interface.
-func (eh *exprHelper) IndexedVarString(idx int) string {
-	return fmt.Sprintf("$%d", idx)
+func (eh *exprHelper) IndexedVarFormat(buf *bytes.Buffer, _ parser.FmtFlags, idx int) {
+	fmt.Fprintf(buf, "$%d", idx)
 }
 
 func (eh *exprHelper) init(
@@ -140,13 +142,3 @@ func (eh *exprHelper) evalFilter(row sqlbase.EncDatumRow) (bool, error) {
 	eh.row = row
 	return sqlbase.RunFilter(eh.expr, eh.evalCtx)
 }
-
-// noCopy may be embedded into structs which must not be copied
-// after the first use.
-//
-// See https://github.com/golang/go/issues/8005#issuecomment-190753527
-// for details.
-type noCopy struct{}
-
-// Lock is a no-op used by -copylocks checker from `go vet`.
-func (*noCopy) Lock() {}

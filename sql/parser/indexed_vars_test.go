@@ -17,6 +17,7 @@
 package parser
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
 )
@@ -31,8 +32,8 @@ func (d testVarContainer) IndexedVarReturnType(idx int) Datum {
 	return d[idx].ReturnType()
 }
 
-func (d testVarContainer) IndexedVarString(idx int) string {
-	return fmt.Sprintf("var%d", idx)
+func (d testVarContainer) IndexedVarFormat(buf *bytes.Buffer, _ FmtFlags, idx int) {
+	fmt.Fprintf(buf, "var%d", idx)
 }
 
 func TestIndexedVars(t *testing.T) {
