@@ -79,10 +79,6 @@ func (r *Replica) executeCmd(
 		return nil, nil
 	}
 
-	if err := r.checkCmdHeader(args.Header()); err != nil {
-		return nil, roachpb.NewErrorWithTxn(err, h.Txn)
-	}
-
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
 	if filter := r.store.cfg.TestingKnobs.TestingCommandFilter; filter != nil {
 		filterArgs := storagebase.FilterArgs{Ctx: ctx, CmdID: raftCmdID, Index: index,

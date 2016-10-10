@@ -1094,26 +1094,32 @@ func (r *Replica) Send(
 	return br, pErr
 }
 
-func (r *Replica) checkCmdHeader(header roachpb.Span) error {
-	if !r.ContainsKeyRange(header.Key, header.EndKey) {
-		mismatchErr := roachpb.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
-		// Try to suggest the correct range on a key mismatch error where
-		// even the start key of the request went to the wrong range.
-		if !r.ContainsKey(header.Key) {
-			if keyAddr, err := keys.Addr(header.Key); err == nil {
-				if repl := r.store.LookupReplica(keyAddr, nil); repl != nil {
-					// Only return the correct range descriptor as a hint
-					// if we know the current lease holder for that range, which
-					// indicates that our knowledge is not stale.
-					if lease, _ := repl.getLease(); lease != nil && lease.Covers(r.store.Clock().Now()) {
-						mismatchErr.SuggestedRange = repl.Desc()
-					}
-				}
+func (r *Replica) checkBatchRange(ba roachpb.BatchRequest) error {
+	rspan, err := keys.Range(ba)
+	if err != nil {
+		return err
+	}
+
+	desc := r.Desc()
+	if desc.ContainsKeyRange(rspan.Key, rspan.EndKey) {
+		return nil
+	}
+
+	mismatchErr := roachpb.NewRangeKeyMismatchError(
+		rspan.Key.AsRawKey(), rspan.EndKey.AsRawKey(), desc)
+	// Try to suggest the correct range on a key mismatch error where
+	// even the start key of the request went to the wrong range.
+	if !desc.ContainsKey(rspan.Key) {
+		if repl := r.store.LookupReplica(rspan.Key, nil); repl != nil {
+			// Only return the correct range descriptor as a hint
+			// if we know the current lease holder for that range, which
+			// indicates that our knowledge is not stale.
+			if lease, _ := repl.getLease(); lease != nil && lease.Covers(r.store.Clock().Now()) {
+				mismatchErr.SuggestedRange = repl.Desc()
 			}
 		}
-		return mismatchErr
 	}
-	return nil
+	return mismatchErr
 }
 
 // checkBatchRequest verifies BatchRequest validity requirements. In
@@ -1364,12 +1370,12 @@ func (r *Replica) addAdminCmd(
 	if len(ba.Requests) != 1 {
 		return nil, roachpb.NewErrorf("only single-element admin batches allowed")
 	}
-	args := ba.Requests[0].GetInner()
 
-	if err := r.checkCmdHeader(args.Header()); err != nil {
+	if err := r.checkBatchRange(ba); err != nil {
 		return nil, roachpb.NewErrorWithTxn(err, ba.Txn)
 	}
 
+	args := ba.Requests[0].GetInner()
 	if sp := opentracing.SpanFromContext(ctx); sp != nil {
 		sp.SetOperationName(reflect.TypeOf(args).String())
 	}
@@ -3128,7 +3134,6 @@ func (r *Replica) executeBatch(
 	ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *PostCommitTrigger, *roachpb.Error) {
 	br := ba.CreateReply()
-	var trigger *PostCommitTrigger
 
 	r.mu.Lock()
 	threshold := r.mu.state.GCThreshold
@@ -3149,6 +3154,11 @@ func (r *Replica) executeBatch(
 		optimizePuts(batch, ba.Requests, ba.Header.DistinctSpans)
 	}
 
+	if err := r.checkBatchRange(ba); err != nil {
+		return nil, nil, roachpb.NewErrorWithTxn(err, ba.Header.Txn)
+	}
+
+	var trigger *PostCommitTrigger
 	for index, union := range ba.Requests {
 		// Execute the command.
 		args := union.GetInner()
