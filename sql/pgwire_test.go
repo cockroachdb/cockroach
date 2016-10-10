@@ -660,9 +660,10 @@ CREATE TABLE d.str (s STRING, b BYTES);`
 }
 
 type preparedExecTest struct {
-	qargs        []interface{}
-	rowsAffected int64
-	error        string
+	qargs           []interface{}
+	rowsAffected    int64
+	error           string
+	rowsAffectedErr bool
 }
 
 func (p preparedExecTest) SetArgs(v ...interface{}) preparedExecTest {
@@ -677,6 +678,11 @@ func (p preparedExecTest) RowsAffected(rowsAffected int64) preparedExecTest {
 
 func (p preparedExecTest) Error(err string) preparedExecTest {
 	p.error = err
+	return p
+}
+
+func (p preparedExecTest) RowsAffectedErr() preparedExecTest {
+	p.rowsAffectedErr = true
 	return p
 }
 
@@ -797,6 +803,28 @@ func TestPGPreparedExec(t *testing.T) {
 				baseTest,
 			},
 		},
+		// An empty string is valid in postgres.
+		{
+			"",
+			[]preparedExecTest{
+				baseTest.RowsAffectedErr(),
+			},
+		},
+		// Empty statements are permitted.
+		{
+			";",
+			[]preparedExecTest{
+				baseTest.RowsAffectedErr(),
+			},
+		},
+		// Any number of empty statements are permitted with a single statement
+		// anywhere.
+		{
+			"; ; SET DATABASE = system; ;",
+			[]preparedExecTest{
+				baseTest,
+			},
+		},
 	}
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -823,8 +851,10 @@ func TestPGPreparedExec(t *testing.T) {
 					t.Errorf("%s: %v: expected error: %s, got %s", query, test.qargs, test.error, err)
 				}
 			} else {
-				if rowsAffected, err := result.RowsAffected(); err != nil {
-					t.Errorf("%s: %v: unexpected error: %s", query, test.qargs, err)
+				rowsAffected, err := result.RowsAffected()
+				hasRAErr := err != nil
+				if hasRAErr != test.rowsAffectedErr {
+					t.Errorf("%s: expected rows affected error: %v, got %v (error %+v)", query, test.rowsAffectedErr, hasRAErr, err)
 				} else if rowsAffected != test.rowsAffected {
 					t.Errorf("%s: %v: expected %v, got %v", query, test.qargs, test.rowsAffected, rowsAffected)
 				}
@@ -939,11 +969,13 @@ func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() {
-		_ = recover()
-	}()
-	_, _ = empty.RowsAffected() // should panic if lib/pq returned a nil result as expected.
-	t.Fatal("should not get here -- empty result from empty query should panic first")
+	rows, err := empty.RowsAffected()
+	if rows != 0 {
+		t.Fatalf("expected 0 rows, got %d", rows)
+	}
+	if err == nil {
+		t.Fatal("expected error")
+	}
 }
 
 // Unfortunately lib/pq doesn't expose returned command tags directly, but we can test
