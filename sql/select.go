@@ -397,7 +397,7 @@ func (s *selectNode) expandPlan() error {
 		// used for index selection.
 		neededCols := make([]bool, len(s.source.info.sourceColumns))
 		for i := range neededCols {
-			neededCols[i] = s.ivarHelper.IsVarUsed(i)
+			neededCols[i] = s.ivarHelper.IndexedVarUsed(i)
 		}
 		scan.setNeededColumns(neededCols)
 

@@ -336,9 +336,8 @@ func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 func (e *Executor) Prepare(
 	query string, session *Session, pinfo parser.PlaceholderTypes,
 ) (ResultColumns, error) {
-	if log.V(2) {
-		log.Infof(session.Ctx(), "preparing: %s", query)
-	} else if traceSQL {
+	log.VEventf(2, session.Ctx(), "preparing: %s", query)
+	if traceSQL {
 		log.Eventf(session.Ctx(), "preparing: %s", query)
 	}
 	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
@@ -466,6 +465,11 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 	planMaker := &session.planner
 	var stmts parser.StatementList
 	var err error
+
+	log.VEventf(2, session.Ctx(), "execRequest: %s", sql)
+	if traceSQL {
+		log.Eventf(session.Ctx(), "execRequest: %s", sql)
+	}
 
 	if session.planner.copyFrom != nil {
 		stmts, err = session.planner.ProcessCopyData(sql, copymsg)
