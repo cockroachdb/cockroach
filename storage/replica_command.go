@@ -73,8 +73,6 @@ func (r *Replica) executeCmd(
 	args roachpb.Request,
 	reply roachpb.Response,
 ) (*PostCommitTrigger, *roachpb.Error) {
-	ts := h.Timestamp
-
 	if _, ok := args.(*roachpb.NoopRequest); ok {
 		return nil, nil
 	}
@@ -88,12 +86,6 @@ func (r *Replica) executeCmd(
 			return nil, pErr
 		}
 	}
-
-	// Update the node clock with the serviced request. This maintains a
-	// high water mark for all ops serviced, so that received ops
-	// without a timestamp specified are guaranteed one higher than any
-	// op already executed for overlapping keys.
-	r.store.Clock().Update(ts)
 
 	var err error
 	var trigger *PostCommitTrigger
@@ -185,6 +177,16 @@ func (r *Replica) executeCmd(
 	header.NumKeys = num
 	header.ResumeSpan = span
 	reply.SetHeader(header)
+
+	// TODO(peter): We'd like to assert that the hlc clock is always updated
+	// correctly, but various tests insert versioned data without going through
+	// the proper channels. See TestPushTxnUpgradeExistingTxn for an example.
+	//
+	// if header.Txn != nil && !header.Txn.Timestamp.Less(h.Timestamp) {
+	// 	if now := r.store.Clock().Now(); now.Less(header.Txn.Timestamp) {
+	// 		log.Fatalf(ctx, "hlc clock not updated: %s < %s", now, header.Txn.Timestamp)
+	// 	}
+	// }
 
 	if log.V(2) {
 		log.Infof(ctx, "executed %s command %+v: %+v, err=%v", args.Method(), args, reply, err)

@@ -3154,6 +3154,12 @@ func (r *Replica) executeBatch(
 		optimizePuts(batch, ba.Requests, ba.Header.DistinctSpans)
 	}
 
+	// Update the node clock with the serviced request. This maintains a high
+	// water mark for all ops serviced, so that received ops without a timestamp
+	// specified are guaranteed one higher than any op already executed for
+	// overlapping keys.
+	r.store.Clock().Update(ba.Timestamp)
+
 	if err := r.checkBatchRange(ba); err != nil {
 		return nil, nil, roachpb.NewErrorWithTxn(err, ba.Header.Txn)
 	}
