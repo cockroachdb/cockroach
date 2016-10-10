@@ -199,18 +199,19 @@ func (p *planner) getVirtualDataSource(tn *parser.TableName) (planDataSource, bo
 		return planDataSource{}, false, err
 	}
 	if virtual.desc != nil {
-		v, err := virtual.getValuesNode(p)
-		if err != nil {
-			return planDataSource{}, false, err
-		}
-
+		columns, constructor := virtual.getPlanInfo()
 		sourceName := parser.TableName{
 			TableName:    parser.Name(virtual.desc.Name),
 			DatabaseName: tn.DatabaseName,
 		}
 		return planDataSource{
-			info: newSourceInfoForSingleTable(sourceName, v.Columns()),
-			plan: v,
+			info: newSourceInfoForSingleTable(sourceName, columns),
+			plan: &delayedValuesNode{
+				p:           p,
+				name:        sourceName.String(),
+				columns:     columns,
+				constructor: constructor,
+			},
 		}, true, nil
 	}
 	return planDataSource{}, false, nil

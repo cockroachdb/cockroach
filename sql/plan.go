@@ -212,6 +212,7 @@ var _ planNode = &dropViewNode{}
 var _ planNode = &alterTableNode{}
 var _ planNode = &joinNode{}
 var _ planNode = &distSQLNode{}
+var _ planNode = &delayedValuesNode{}
 
 // makePlan implements the Planner interface.
 func (p *planner) makePlan(stmt parser.Statement, autoCommit bool) (planNode, error) {

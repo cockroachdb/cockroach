@@ -24,6 +24,11 @@ CREATE DATABASE pg_catalog
 statement ok
 DROP DATABASE other_db
 
+# the following query checks that the planDataSource instantiated from
+# a virtual table in the FROM clause is properly deallocated even when
+# query preparation causes an error. #9853
+query error unknown function
+SELECT * FROM pg_catalog.pg_class c WHERE nonexistent_function()
 
 # Verify pg_catalog can be used like a normal database.
 
