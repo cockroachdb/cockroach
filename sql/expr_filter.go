@@ -41,11 +41,11 @@ import (
 //  - optionally, it converts variables in the derived expression to a new type. If no conversion is
 //    necessary, the same variable can be returned.
 //
-// For example, to split a filter and get an expression that only refers to qvalues for column 0, we
+// For example, to split a filter and get an expression that only refers to IndexedVars for column 0, we
 // could use:
 //
 //    func(expr parser.VariableExpr) (bool, parser.VariableExpr) {
-//       q := expr.(*qvalue)
+//       q := expr.(*IndexedVar)
 //       if q.colRef.colIdx == 0 {
 //          return true, q
 //       } else {

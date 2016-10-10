@@ -48,7 +48,8 @@ func TestDesiredAggregateOrder(t *testing.T) {
 	}
 	p := makePlanner()
 	for _, d := range testData {
-		expr, _ := parseAndNormalizeExpr(t, d.expr)
+		sel := makeSelectNode(t)
+		expr := parseAndNormalizeExpr(t, d.expr, sel)
 		group := &groupNode{planner: p}
 		_, err := extractAggregatesVisitor{n: group}.extract(expr)
 		if err != nil {

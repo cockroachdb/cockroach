@@ -121,8 +121,9 @@ func (p *planner) orderBy(orderBy parser.OrderBy, n planNode) (*sortNode, error)
 				}
 				if colIdx != invalidColIdx {
 					for j, r := range s.render {
-						if qval, ok := r.(*qvalue); ok {
-							if qval.colRef.source == s.source.info && qval.colRef.colIdx == colIdx {
+						if ivar, ok := r.(*parser.IndexedVar); ok {
+							s.ivarHelper.AssertSameContainer(ivar)
+							if ivar.Idx == colIdx {
 								index = j
 								break
 							}

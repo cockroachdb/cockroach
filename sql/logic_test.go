@@ -1091,6 +1091,10 @@ func TestLogic(t *testing.T) {
 	}
 	for _, path := range paths {
 		t.Run(path, func(t *testing.T) {
+			// the `t` given to this anonymous function may be different
+			// from the t above, so re-bind it to `l` for the duration of
+			// the test.
+			l.T = t
 			defer l.close()
 			l.setup()
 			if err := l.processTestFile(path); err != nil {

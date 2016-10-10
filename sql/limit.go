@@ -63,7 +63,7 @@ func (p *planner) Limit(n *parser.Limit) (*limitNode, error) {
 				return nil, err
 			}
 
-			normalized, err := p.analyzeExpr(datum.src, nil, nil, parser.TypeInt, true, datum.name)
+			normalized, err := p.analyzeExpr(datum.src, nil, parser.IndexedVarHelper{}, parser.TypeInt, true, datum.name)
 			if err != nil {
 				return nil, err
 			}

@@ -466,7 +466,7 @@ func mockNameTypes(types map[string]Datum) func() {
 
 // TypeCheck implements the Expr interface.  This function has a valid
 // implementation only for testing within this package. During query
-// execution, ColumnItems are replaced to qvalues prior to type
+// execution, ColumnItems are replaced to IndexedVars prior to type
 // checking.
 func (expr *ColumnItem) TypeCheck(_ *SemaContext, desired Datum) (TypedExpr, error) {
 	name := expr.String()

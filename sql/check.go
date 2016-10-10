@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -23,9 +24,11 @@ import (
 )
 
 type checkHelper struct {
-	exprs []parser.TypedExpr
-	qvals qvalMap
-	cols  []sqlbase.ColumnDescriptor
+	exprs        []parser.TypedExpr
+	cols         []sqlbase.ColumnDescriptor
+	sourceInfo   *dataSourceInfo
+	ivars        []parser.IndexedVar
+	curSourceRow parser.DTuple
 }
 
 func (c *checkHelper) init(
@@ -35,9 +38,8 @@ func (c *checkHelper) init(
 		return nil
 	}
 
-	c.qvals = make(qvalMap)
 	c.cols = tableDesc.Columns
-	sourceInfo := newSourceInfoForSingleTable(*tn, makeResultColumns(tableDesc.Columns))
+	c.sourceInfo = newSourceInfoForSingleTable(*tn, makeResultColumns(tableDesc.Columns))
 
 	c.exprs = make([]parser.TypedExpr, len(tableDesc.Checks))
 	exprStrings := make([]string, len(tableDesc.Checks))
@@ -49,34 +51,54 @@ func (c *checkHelper) init(
 		return err
 	}
 
+	ivarHelper := parser.MakeIndexedVarHelper(c, len(c.cols))
 	for i, raw := range exprs {
-		typedExpr, err := p.analyzeExpr(raw, multiSourceInfo{sourceInfo}, c.qvals,
+		typedExpr, err := p.analyzeExpr(raw, multiSourceInfo{c.sourceInfo}, ivarHelper,
 			parser.TypeBool, false, "")
 		if err != nil {
 			return err
 		}
 		c.exprs[i] = typedExpr
 	}
+	c.ivars = ivarHelper.GetIndexedVars()
+	c.curSourceRow = make(parser.DTuple, len(c.cols))
 	return nil
 }
 
-// Set values in the qvalues used by the CHECK exprs.
+// Set values in the IndexedVars used by the CHECK exprs.
 // Any value not passed is set to NULL, unless `merge` is true, in which
 // case it is left unchanged (allowing updating a subset of a row's values).
 func (c *checkHelper) loadRow(colIdx map[sqlbase.ColumnID]int, row parser.DTuple, merge bool) {
 	if len(c.exprs) == 0 {
 		return
 	}
-
-	// Populate qvals.
-	for ref, qval := range c.qvals {
-		ri, has := colIdx[c.cols[ref.colIdx].ID]
+	// Populate IndexedVars.
+	for _, ivar := range c.ivars {
+		if ivar.Idx == invalidColIdx {
+			continue
+		}
+		ri, has := colIdx[c.cols[ivar.Idx].ID]
 		if has {
-			qval.datum = row[ri]
+			c.curSourceRow[ivar.Idx] = row[ri]
 		} else if !merge {
-			qval.datum = parser.DNull
+			c.curSourceRow[ivar.Idx] = parser.DNull
 		}
 	}
+}
+
+// IndexedVarEval implements the parser.IndexedVarContainer interface.
+func (c *checkHelper) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
+	return c.curSourceRow[idx].Eval(ctx)
+}
+
+// IndexedVarReturnType implements the parser.IndexedVarContainer interface.
+func (c *checkHelper) IndexedVarReturnType(idx int) parser.Datum {
+	return c.sourceInfo.sourceColumns[idx].Typ
+}
+
+// IndexedVarFormat implements the parser.IndexedVarContainer interface.
+func (c *checkHelper) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
+	c.sourceInfo.FormatVar(buf, f, idx)
 }
 
 func (c *checkHelper) check(ctx *parser.EvalContext) error {
