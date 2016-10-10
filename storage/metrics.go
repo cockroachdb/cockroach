@@ -397,7 +397,7 @@ type StoreMetrics struct {
 	}
 }
 
-func newStoreMetrics() *StoreMetrics {
+func newStoreMetrics(sampleInterval time.Duration) *StoreMetrics {
 	storeRegistry := metric.NewRegistry()
 	sm := &StoreMetrics{
 		registry: storeRegistry,
@@ -536,15 +536,15 @@ func newStoreMetrics() *StoreMetrics {
 		// gives sane (though mathematically nonsensical) results when exposed
 		// at the moment.
 		MuReplicaNanos: metric.NewHistogram(
-			metaMuReplicaNanos, time.Minute,
+			metaMuReplicaNanos, sampleInterval,
 			time.Second.Nanoseconds(), 1,
 		),
 		MuRaftNanos: metric.NewHistogram(
-			metaMuRaftNanos, time.Minute,
+			metaMuRaftNanos, sampleInterval,
 			time.Second.Nanoseconds(), 1,
 		),
 		MuStoreNanos: metric.NewHistogram(
-			metaMuStoreNanos, time.Minute,
+			metaMuStoreNanos, sampleInterval,
 			time.Second.Nanoseconds(), 1,
 		),
 	}

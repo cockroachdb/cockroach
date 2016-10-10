@@ -289,7 +289,7 @@ func TestMetricsRecorder(t *testing.T) {
 					addExpected(reg.prefix, data.name+q.suffix, reg.source, 100, data.val, reg.isNode)
 				}
 			case "latency":
-				l := metric.NewLatency(metric.Metadata{Name: reg.prefix + data.name})
+				l := metric.NewLatency(metric.Metadata{Name: reg.prefix + data.name}, time.Hour)
 				reg.reg.AddMetric(l)
 				l.RecordValue(data.val)
 				// Latency is simply three histograms (at different resolution

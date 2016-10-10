@@ -82,5 +82,5 @@ func InitSenderForLocalTestCluster(
 
 	ctx := tracing.WithTracer(context.Background(), tracer)
 	return NewTxnCoordSender(ctx, distSender, clock, false, /* !linearizable */
-		stopper, MakeTxnMetrics())
+		stopper, MakeTxnMetrics(time.Hour))
 }

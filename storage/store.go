@@ -108,6 +108,7 @@ func TestStoreConfig() StoreConfig {
 		ScanInterval:                   10 * time.Minute,
 		ConsistencyCheckInterval:       10 * time.Minute,
 		ConsistencyCheckPanicOnFailure: true,
+		MetricsSampleInterval:          time.Hour,
 	}
 }
 
@@ -532,6 +533,9 @@ type StoreConfig struct {
 
 	// Locality is a description of the topography of the store.
 	Locality roachpb.Locality
+
+	// MetricsSampleInterval is (server.Context).MetricsSampleInterval
+	MetricsSampleInterval time.Duration
 }
 
 // StoreTestingKnobs is a part of the context used to control parts of the system.
@@ -644,7 +648,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		engine:    eng,
 		allocator: MakeAllocator(cfg.StorePool, cfg.AllocatorOptions),
 		nodeDesc:  nodeDesc,
-		metrics:   newStoreMetrics(),
+		metrics:   newStoreMetrics(cfg.MetricsSampleInterval),
 	}
 
 	s.intentResolver = newIntentResolver(s)

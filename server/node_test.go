@@ -104,11 +104,12 @@ func createTestNode(
 	}, g)
 	cfg.Ctx = tracing.WithTracer(context.Background(), tracing.NewTracer())
 	sender := kv.NewTxnCoordSender(cfg.Ctx, distSender, cfg.Clock, false, stopper,
-		kv.MakeTxnMetrics())
+		kv.MakeTxnMetrics(time.Hour))
 	cfg.DB = client.NewDB(sender)
 	cfg.Transport = storage.NewDummyRaftTransport()
+	cfg.MetricsSampleInterval = time.Hour
 	node := NewNode(cfg, status.NewMetricsRecorder(cfg.Clock), metric.NewRegistry(), stopper,
-		kv.MakeTxnMetrics(), sql.MakeEventLogger(nil))
+		kv.MakeTxnMetrics(time.Hour), sql.MakeEventLogger(nil))
 	roachpb.RegisterInternalServer(grpcServer, node)
 	return grpcServer, ln.Addr(), cfg.Clock, node, stopper
 }
@@ -149,7 +150,7 @@ func TestBootstrapCluster(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics()); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -190,7 +191,7 @@ func TestBootstrapNewStore(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics()); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -232,7 +233,7 @@ func TestNodeJoin(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics()); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -299,7 +300,7 @@ func TestCorruptedClusterID(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
 	defer engineStopper.Stop()
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics()); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 

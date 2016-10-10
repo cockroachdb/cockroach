@@ -801,7 +801,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			}
 			return reply, test.pErr
 		}
-		ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics())
+		ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics(time.Hour))
 		db := client.NewDB(ts)
 		txn := client.NewTxn(context.Background(), *db)
 		txn.InternalSetPriority(1)
@@ -940,7 +940,7 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 		return br, nil
 	}
 	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
-	ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics())
+	ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics(time.Hour))
 
 	// Stop the stopper manually, prior to trying the transaction. This has the
 	// effect of returning a NodeUnavailableError for any attempts at launching
@@ -992,7 +992,7 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 				return nil, pErr
 			}
 			ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
-			ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics())
+			ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics(time.Hour))
 
 			var ba roachpb.BatchRequest
 			key := roachpb.Key("test")
@@ -1063,7 +1063,7 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 		return br, nil
 	}
 	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
-	ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics())
+	ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics(time.Hour))
 
 	defer stopper.Stop()
 	defer teardownHeartbeats(ts)
@@ -1161,7 +1161,7 @@ func checkTxnMetrics(
 // test.
 func setupMetricsTest(t *testing.T) (*hlc.ManualClock, *TxnCoordSender, func()) {
 	s, testSender := createTestDB(t)
-	txnMetrics := MakeTxnMetrics()
+	txnMetrics := MakeTxnMetrics(time.Hour)
 	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
 	sender := NewTxnCoordSender(ctx, testSender.wrapped, s.Clock, false, s.Stopper, txnMetrics)
 

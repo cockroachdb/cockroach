@@ -86,7 +86,7 @@ func makeTestContext() Context {
 	ctx.HTTPAddr = util.TestAddr.String()
 	// Set standard user for intra-cluster traffic.
 	ctx.User = security.NodeUser
-
+	ctx.MetricsSampleInterval = time.Hour
 	return ctx
 }
 
