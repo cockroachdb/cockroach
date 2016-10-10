@@ -159,8 +159,8 @@ func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
 	g.mu.Unlock()
 
 	bytesSent := int64(args.Size())
-	c.clientMetrics.BytesSent.Add(bytesSent)
-	c.nodeMetrics.BytesSent.Add(bytesSent)
+	c.clientMetrics.BytesSent.Inc(bytesSent)
+	c.nodeMetrics.BytesSent.Inc(bytesSent)
 
 	return stream.Send(args)
 }
@@ -179,10 +179,10 @@ func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient) error {
 
 		bytesSent := int64(args.Size())
 		infosSent := int64(len(delta))
-		c.clientMetrics.BytesSent.Add(bytesSent)
-		c.clientMetrics.InfosSent.Add(infosSent)
-		c.nodeMetrics.BytesSent.Add(bytesSent)
-		c.nodeMetrics.InfosSent.Add(infosSent)
+		c.clientMetrics.BytesSent.Inc(bytesSent)
+		c.clientMetrics.InfosSent.Inc(infosSent)
+		c.nodeMetrics.BytesSent.Inc(bytesSent)
+		c.nodeMetrics.InfosSent.Inc(infosSent)
 
 		if log.V(1) {
 			if c.peerID != 0 {
@@ -207,10 +207,10 @@ func (c *client) handleResponse(g *Gossip, reply *Response) error {
 
 	bytesReceived := int64(reply.Size())
 	infosReceived := int64(len(reply.Delta))
-	c.clientMetrics.BytesReceived.Add(bytesReceived)
-	c.clientMetrics.InfosReceived.Add(infosReceived)
-	c.nodeMetrics.BytesReceived.Add(bytesReceived)
-	c.nodeMetrics.InfosReceived.Add(infosReceived)
+	c.clientMetrics.BytesReceived.Inc(bytesReceived)
+	c.clientMetrics.InfosReceived.Inc(infosReceived)
+	c.nodeMetrics.BytesReceived.Inc(bytesReceived)
+	c.nodeMetrics.InfosReceived.Inc(infosReceived)
 
 	// Combine remote node's infostore delta with ours.
 	if reply.Delta != nil {

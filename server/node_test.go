@@ -414,8 +414,8 @@ func compareNodeStatus(
 	}
 
 	compareMetricMaps(nodeStatus.Metrics, expectedNodeStatus.Metrics, nil, []string{
-		"exec.success-count",
-		"exec.error-count",
+		"exec.success",
+		"exec.error",
 	})
 
 	for key := range actualStores {
@@ -493,8 +493,8 @@ func TestStatusSummaries(t *testing.T) {
 		StartedAt: 0,
 		UpdatedAt: 0,
 		Metrics: map[string]float64{
-			"exec.success-count": 0,
-			"exec.error-count":   0,
+			"exec.success": 0,
+			"exec.error":   0,
 		},
 	}
 
@@ -566,7 +566,7 @@ func TestStatusSummaries(t *testing.T) {
 	}
 
 	// Increment metrics on the node
-	expectedNodeStatus.Metrics["exec.success-count"] += 2
+	expectedNodeStatus.Metrics["exec.success"] += 2
 
 	// Increment metrics on the first store.
 	store1 := expectedStoreStatuses[roachpb.StoreID(1)].Metrics
@@ -602,7 +602,7 @@ func TestStatusSummaries(t *testing.T) {
 	}
 
 	// Increment metrics on the node
-	expectedNodeStatus.Metrics["exec.success-count"] += 2
+	expectedNodeStatus.Metrics["exec.success"] += 2
 
 	// Increment metrics on the first store.
 	store1 = expectedStoreStatuses[roachpb.StoreID(1)].Metrics
