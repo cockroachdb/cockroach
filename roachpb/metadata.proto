@@ -90,6 +90,7 @@ message NodeDescriptor {
       (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
   optional util.UnresolvedAddr address = 2 [(gogoproto.nullable) = false];
   optional Attributes attrs = 3 [(gogoproto.nullable) = false];
+  optional Locality locality = 4 [(gogoproto.nullable) = false];
 }
 
 // StoreDescriptor holds store information including store attributes, node
@@ -100,7 +101,6 @@ message StoreDescriptor {
   optional Attributes attrs = 2 [(gogoproto.nullable) = false];
   optional NodeDescriptor node = 3 [(gogoproto.nullable) = false];
   optional StoreCapacity capacity = 4 [(gogoproto.nullable) = false];
-  optional Locality locality = 5 [(gogoproto.nullable) = false];
 }
 
 // StoreDeadReplicas holds a storeID and a list of dead replicas on that store.
