@@ -448,6 +448,15 @@
                                     "options": {
                                         "(gogoproto.nullable)": false
                                     }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "Locality",
+                                    "name": "locality",
+                                    "id": 4,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
                                 }
                             ]
                         },
@@ -488,15 +497,6 @@
                                     "type": "StoreCapacity",
                                     "name": "capacity",
                                     "id": 4,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "Locality",
-                                    "name": "locality",
-                                    "id": 5,
                                     "options": {
                                         "(gogoproto.nullable)": false
                                     }
