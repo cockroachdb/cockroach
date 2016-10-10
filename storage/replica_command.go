@@ -73,8 +73,6 @@ func (r *Replica) executeCmd(
 	args roachpb.Request,
 	reply roachpb.Response,
 ) (*PostCommitTrigger, *roachpb.Error) {
-	ts := h.Timestamp
-
 	if _, ok := args.(*roachpb.NoopRequest); ok {
 		return nil, nil
 	}
@@ -92,12 +90,6 @@ func (r *Replica) executeCmd(
 			return nil, pErr
 		}
 	}
-
-	// Update the node clock with the serviced request. This maintains a
-	// high water mark for all ops serviced, so that received ops
-	// without a timestamp specified are guaranteed one higher than any
-	// op already executed for overlapping keys.
-	r.store.Clock().Update(ts)
 
 	var err error
 	var trigger *PostCommitTrigger

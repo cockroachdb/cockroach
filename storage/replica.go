@@ -3177,6 +3177,12 @@ func (r *Replica) executeBatch(
 		optimizePuts(batch, ba.Requests, ba.Header.DistinctSpans)
 	}
 
+	// Update the node clock with the serviced request. This maintains a high
+	// water mark for all ops serviced, so that received ops without a timestamp
+	// specified are guaranteed one higher than any op already executed for
+	// overlapping keys.
+	r.store.Clock().Update(ba.Timestamp)
+
 	for index, union := range ba.Requests {
 		// Execute the command.
 		args := union.GetInner()
@@ -3232,6 +3238,7 @@ func (r *Replica) executeBatch(
 				} else {
 					ba.Timestamp.Forward(tErr.ActualTimestamp)
 				}
+				r.store.Clock().Update(tErr.ActualTimestamp)
 				// Clear the WriteTooOldError; we're done processing it by having
 				// moved the batch or txn timestamps forward and set WriteTooOld
 				// if this is a transactional write.
