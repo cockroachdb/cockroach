@@ -135,13 +135,8 @@ func TestingSetNow(f func() time.Time) func() {
 	}
 }
 
-// TODO(tschottdorf): remove this method when
-// https://github.com/codahale/hdrhistogram/pull/22 is merged and the
-// dependency bumped.
 func cloneHistogram(in *hdrhistogram.Histogram) *hdrhistogram.Histogram {
-	out := in.Export()
-	out.Counts = append([]int64(nil), out.Counts...)
-	return hdrhistogram.Import(out)
+	return hdrhistogram.Import(in.Export())
 }
 
 func maybeTick(m periodic) {
