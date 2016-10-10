@@ -109,7 +109,12 @@ func TestRaftLogQueue(t *testing.T) {
 	})
 
 	// Force a truncation check again to ensure that attempting to truncate an
-	// already truncated log has no effect.
+	// already truncated log has no effect. This check, unlike in the last
+	// iteration, cannot use a succeedsSoon. This check is fragile in that the
+	// truncation triggered here may lose the race against the call to
+	// GetFirstIndex, giving a false negative. Fixing this requires additional
+	// instrumentation of the queues, which was deemed to require too much work
+	// at the time of this writing.
 	for _, store := range mtc.stores {
 		store.ForceRaftLogScanAndProcess()
 	}
