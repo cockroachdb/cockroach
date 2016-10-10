@@ -81,7 +81,7 @@ var defaultRE = func() *regexp.Regexp {
 	return regexp.MustCompile(regexp.QuoteMeta(path) + pkgStrip)
 }()
 
-var defaultCallResolver = NewCallResolver(0, defaultRE)
+var defaultCallResolver = NewCallResolver(defaultRE)
 
 // Lookup returns the (reduced) file, line and function of the caller at the
 // requested depth, using a default call resolver which drops the path of
@@ -97,7 +97,7 @@ func Lookup(depth int) (file string, line int, fun string) {
 // match at all are left unchanged.
 // TODO(bdarnell): don't strip paths at lookup time, but at display time;
 // need better handling for callers such as x/tools/something.
-func NewCallResolver(offset int, re *regexp.Regexp) *CallResolver {
+func NewCallResolver(re *regexp.Regexp) *CallResolver {
 	return &CallResolver{
 		cache: map[uintptr]*cachedLookup{},
 		re:    re,
