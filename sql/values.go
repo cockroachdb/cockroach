@@ -318,3 +318,50 @@ func (n *valuesNode) ExplainTypes(regTypes func(string, string)) {
 }
 
 func (*valuesNode) SetLimitHint(_ int64, _ bool) {}
+
+type delayedValuesNode struct {
+	p           *planner
+	name        string
+	columns     ResultColumns
+	constructor func(p *planner) (*valuesNode, error)
+	plan        *valuesNode
+}
+
+func (d *delayedValuesNode) SetLimitHint(_ int64, _ bool) {}
+func (d *delayedValuesNode) expandPlan() error {
+	v, err := d.constructor(d.p)
+	if err != nil {
+		return err
+	}
+	if err := v.expandPlan(); err != nil {
+		v.Close()
+		return err
+	}
+	d.plan = v
+	return nil
+}
+
+func (d *delayedValuesNode) Close() {
+	if d.plan != nil {
+		d.plan.Close()
+		d.plan = nil
+	}
+}
+
+func (d *delayedValuesNode) ExplainPlan(
+	verbose bool,
+) (name, description string, children []planNode) {
+	if d.plan != nil {
+		children = []planNode{d.plan}
+	}
+	return "virtual table", d.name, children
+}
+
+func (d *delayedValuesNode) ExplainTypes(rt func(string, string)) {}
+func (d *delayedValuesNode) Columns() ResultColumns               { return d.columns }
+func (d *delayedValuesNode) Ordering() orderingInfo               { return orderingInfo{} }
+func (d *delayedValuesNode) MarkDebug(_ explainMode)              {}
+func (d *delayedValuesNode) Start() error                         { return d.plan.Start() }
+func (d *delayedValuesNode) Next() (bool, error)                  { return d.plan.Next() }
+func (d *delayedValuesNode) Values() parser.DTuple                { return d.plan.Values() }
+func (d *delayedValuesNode) DebugValues() debugValues             { return d.plan.DebugValues() }
