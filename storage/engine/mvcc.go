@@ -824,6 +824,8 @@ type putBuffer struct {
 	meta    enginepb.MVCCMetadata
 	newMeta enginepb.MVCCMetadata
 	newTxn  enginepb.TxnMeta
+	ts      hlc.Timestamp
+	tmpbuf  []byte
 }
 
 var putBufferPool = sync.Pool{
@@ -837,8 +839,38 @@ func newPutBuffer() *putBuffer {
 }
 
 func (b *putBuffer) release() {
-	*b = putBuffer{}
+	*b = putBuffer{tmpbuf: b.tmpbuf[:0]}
 	putBufferPool.Put(b)
+}
+
+func (b *putBuffer) marshalMeta(meta *enginepb.MVCCMetadata) (_ []byte, err error) {
+	size := meta.Size()
+	data := b.tmpbuf
+	if cap(data) < size {
+		data = make([]byte, size)
+	} else {
+		data = data[:size]
+	}
+	protoutil.Interceptor(meta)
+	n, err := meta.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	b.tmpbuf = data
+	return data[:n], nil
+}
+
+func (b *putBuffer) putMeta(
+	engine Writer, key MVCCKey, meta *enginepb.MVCCMetadata,
+) (keyBytes, valBytes int64, err error) {
+	bytes, err := b.marshalMeta(meta)
+	if err != nil {
+		return 0, 0, err
+	}
+	if err := engine.Put(key, bytes); err != nil {
+		return 0, 0, err
+	}
+	return int64(key.EncodedSize()), int64(len(bytes)), nil
 }
 
 // MVCCPut sets the value for a specified key. It will save the value
@@ -1008,7 +1040,7 @@ func mvccPutInternal(
 			metaKeySize, metaValSize, err = 0, 0, engine.Clear(metaKey)
 		} else {
 			buf.meta = enginepb.MVCCMetadata{RawBytes: value}
-			metaKeySize, metaValSize, err = PutProto(engine, metaKey, &buf.meta)
+			metaKeySize, metaValSize, err = buf.putMeta(engine, metaKey, &buf.meta)
 		}
 		if ms != nil {
 			updateStatsForInline(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize)
@@ -1115,7 +1147,7 @@ func mvccPutInternal(
 
 	var metaKeySize, metaValSize int64
 	if newMeta.Txn != nil {
-		metaKeySize, metaValSize, err = PutProto(engine, metaKey, newMeta)
+		metaKeySize, metaValSize, err = buf.putMeta(engine, metaKey, newMeta)
 		if err != nil {
 			return err
 		}
@@ -1303,26 +1335,28 @@ func MVCCMerge(
 	}
 	metaKey := MakeMVCCMetadataKey(key)
 
+	buf := newPutBuffer()
+
 	// Every type flows through here, so we can't use the typed getters.
 	rawBytes := value.RawBytes
 
 	// Encode and merge the MVCC metadata with inlined value.
-	meta := &enginepb.MVCCMetadata{RawBytes: rawBytes}
+	meta := &buf.meta
+	*meta = enginepb.MVCCMetadata{RawBytes: rawBytes}
 	// If non-zero, set the merge timestamp to provide some replay protection.
 	if !timestamp.Equal(hlc.ZeroTimestamp) {
-		meta.MergeTimestamp = &timestamp
+		buf.ts = timestamp
+		meta.MergeTimestamp = &buf.ts
 	}
-	data, err := protoutil.Marshal(meta)
-	if err != nil {
-		return err
+	data, err := buf.marshalMeta(meta)
+	if err == nil {
+		if err = engine.Merge(metaKey, data); err == nil && ms != nil {
+			ms.Add(updateStatsOnMerge(
+				key, int64(len(rawBytes))+mvccVersionTimestampSize, timestamp.WallTime))
+		}
 	}
-	if err := engine.Merge(metaKey, data); err != nil {
-		return err
-	}
-	if ms != nil {
-		ms.Add(updateStatsOnMerge(key, int64(len(rawBytes))+mvccVersionTimestampSize, timestamp.WallTime))
-	}
-	return nil
+	buf.release()
+	return err
 }
 
 // MVCCDeleteRange deletes the range of key/value pairs specified by start and
@@ -1821,7 +1855,7 @@ func mvccResolveWriteIntent(
 			// Keep intent if we're pushing timestamp.
 			buf.newTxn = intent.Txn
 			buf.newMeta.Txn = &buf.newTxn
-			metaKeySize, metaValSize, err = PutProto(engine, metaKey, &buf.newMeta)
+			metaKeySize, metaValSize, err = buf.putMeta(engine, metaKey, &buf.newMeta)
 		} else {
 			metaKeySize = int64(metaKey.EncodedSize())
 			err = engine.Clear(metaKey)
