@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	"github.com/cockroachdb/cockroach/util/uuid"
@@ -801,7 +802,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			}
 			return reply, test.pErr
 		}
-		ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics())
+		ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics(metric.TestSampleInterval))
 		db := client.NewDB(ts)
 		txn := client.NewTxn(context.Background(), *db)
 		txn.InternalSetPriority(1)
@@ -940,7 +941,7 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 		return br, nil
 	}
 	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
-	ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics())
+	ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics(metric.TestSampleInterval))
 
 	// Stop the stopper manually, prior to trying the transaction. This has the
 	// effect of returning a NodeUnavailableError for any attempts at launching
@@ -992,7 +993,7 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 				return nil, pErr
 			}
 			ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
-			ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics())
+			ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics(metric.TestSampleInterval))
 
 			var ba roachpb.BatchRequest
 			key := roachpb.Key("test")
@@ -1063,7 +1064,7 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 		return br, nil
 	}
 	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
-	ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics())
+	ts := NewTxnCoordSender(ctx, senderFn(senderFunc), clock, false, stopper, MakeTxnMetrics(metric.TestSampleInterval))
 
 	defer stopper.Stop()
 	defer teardownHeartbeats(ts)
@@ -1161,7 +1162,7 @@ func checkTxnMetrics(
 // test.
 func setupMetricsTest(t *testing.T) (*hlc.ManualClock, *TxnCoordSender, func()) {
 	s, testSender := createTestDB(t)
-	txnMetrics := MakeTxnMetrics()
+	txnMetrics := MakeTxnMetrics(metric.TestSampleInterval)
 	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
 	sender := NewTxnCoordSender(ctx, testSender.wrapped, s.Clock, false, s.Stopper, txnMetrics)
 

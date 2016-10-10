@@ -202,6 +202,8 @@ type ExecutorConfig struct {
 
 	TestingKnobs              *ExecutorTestingKnobs
 	SchemaChangerTestingKnobs *SchemaChangerTestingKnobs
+	// MetricsSampleInterval is (server.Context).MetricsSampleInterval.
+	MetricsSampleInterval time.Duration
 }
 
 var _ base.ModuleTestingKnobs = &ExecutorTestingKnobs{}
@@ -253,7 +255,7 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 		cfg:     cfg,
 		reCache: parser.NewRegexpCache(512),
 
-		Latency:          metric.NewLatency(MetaLatency),
+		Latency:          metric.NewLatency(MetaLatency, cfg.MetricsSampleInterval),
 		TxnBeginCount:    metric.NewCounter(MetaTxnBegin),
 		TxnCommitCount:   metric.NewCounter(MetaTxnCommit),
 		TxnAbortCount:    metric.NewCounter(MetaTxnAbort),

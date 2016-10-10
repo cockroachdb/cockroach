@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
 
@@ -210,7 +211,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}, ts.Gossip())
 	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
 	tds := kv.NewTxnCoordSender(ctx, ds, s.Clock(), ts.Ctx.Linearizable,
-		ts.stopper, kv.MakeTxnMetrics())
+		ts.stopper, kv.MakeTxnMetrics(metric.TestSampleInterval))
 
 	if err := ts.node.storeCfg.DB.AdminSplit(context.TODO(), "m"); err != nil {
 		t.Fatal(err)
@@ -307,7 +308,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 		}, ts.Gossip())
 		ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
 		tds := kv.NewTxnCoordSender(ctx, ds, ts.Clock(), ts.Ctx.Linearizable,
-			ts.stopper, kv.MakeTxnMetrics())
+			ts.stopper, kv.MakeTxnMetrics(metric.TestSampleInterval))
 
 		for _, sk := range tc.splitKeys {
 			if err := ts.node.storeCfg.DB.AdminSplit(context.TODO(), sk); err != nil {

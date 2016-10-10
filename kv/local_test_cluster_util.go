@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/tracing"
 )
@@ -82,5 +83,5 @@ func InitSenderForLocalTestCluster(
 
 	ctx := tracing.WithTracer(context.Background(), tracer)
 	return NewTxnCoordSender(ctx, distSender, clock, false, /* !linearizable */
-		stopper, MakeTxnMetrics())
+		stopper, MakeTxnMetrics(metric.TestSampleInterval))
 }

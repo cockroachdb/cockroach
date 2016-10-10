@@ -199,7 +199,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	}
 	s.distSender = kv.NewDistSender(&distSenderCfg, s.gossip)
 
-	txnMetrics := kv.MakeTxnMetrics()
+	txnMetrics := kv.MakeTxnMetrics(s.ctx.MetricsSampleInterval)
 	s.registry.AddMetricStruct(txnMetrics)
 	s.txnCoordSender = kv.NewTxnCoordSender(s.Ctx(), s.distSender, s.clock, srvCtx.Linearizable,
 		s.stopper, txnMetrics)
@@ -232,12 +232,13 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 
 	// Set up Executor
 	execCfg := sql.ExecutorConfig{
-		Context:      s.Ctx(),
-		DB:           s.db,
-		Gossip:       s.gossip,
-		LeaseManager: s.leaseMgr,
-		Clock:        s.clock,
-		DistSQLSrv:   s.distSQLServer,
+		Context:               s.Ctx(),
+		DB:                    s.db,
+		Gossip:                s.gossip,
+		LeaseManager:          s.leaseMgr,
+		Clock:                 s.clock,
+		DistSQLSrv:            s.distSQLServer,
+		MetricsSampleInterval: s.ctx.MetricsSampleInterval,
 	}
 	if srvCtx.TestingKnobs.SQLExecutor != nil {
 		execCfg.TestingKnobs = srvCtx.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
@@ -268,6 +269,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		ScanMaxIdleTime:                s.ctx.ScanMaxIdleTime,
 		ConsistencyCheckInterval:       s.ctx.ConsistencyCheckInterval,
 		ConsistencyCheckPanicOnFailure: s.ctx.ConsistencyCheckPanicOnFailure,
+		MetricsSampleInterval:          s.ctx.MetricsSampleInterval,
 		StorePool:                      s.storePool,
 		SQLExecutor: sql.InternalExecutor{
 			LeaseManager: s.leaseMgr,
