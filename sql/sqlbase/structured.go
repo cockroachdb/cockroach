@@ -123,7 +123,7 @@ func (dir IndexDescriptor_Direction) ToEncodingDirection() (encoding.Direction, 
 var ErrDescriptorNotFound = errors.New("descriptor not found")
 
 // GetTableDescFromID retrieves the table descriptor for the table
-// ID passed in using an existing txn. Teturns an error if the
+// ID passed in using an existing txn. Returns an error if the
 // descriptor doesn't exist or if it exists and is not a table.
 func GetTableDescFromID(txn *client.Txn, id ID) (*TableDescriptor, error) {
 	desc := &Descriptor{}

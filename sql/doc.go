@@ -52,7 +52,7 @@ Similarly, tables have a TableDescriptor:
     optional PrivilegeDescriptor privileges;
   }
 
-Both the database ID and the table ID are allocate from the same "ID space" and
+Both the database ID and the table ID are allocated from the same "ID space" and
 IDs are never reused.
 
 The namespace in which databases and tables exist contains only two levels: the
@@ -73,7 +73,7 @@ database/table name to ID and from ID to descriptor:
   );
 
 The reserved ID of 0 is used for the "root" of the namespace in which the
-databases reside. In order to lookup the ID of a database given its name, the
+databases reside. In order to look up the ID of a database given its name, the
 system effectively does a query like:
 
   SELECT id FROM system.namespace WHERE parentID = 0 AND name = <database-name>
@@ -94,7 +94,7 @@ instead referring to the primary key for a SQL table.
 The primary key consists of one or more non-NULL columns from the table. For a
 given row of the table, the columns for the primary key are encoded into a
 single string using the routines in util/encoding. These routines allow for the
-encoding of NULL values, integers, floating pointer numbers and strings in such
+encoding of NULL values, integers, floating point numbers and strings in such
 a way that lexicographic ordering of the encoded strings corresponds to the
 same ordering of the unencoded data. Using "system.namespace" as an example,
 the primary key columns would be encoded as:

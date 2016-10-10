@@ -128,7 +128,7 @@ type SessionArgs struct {
 	User     string
 }
 
-// NewSession creates and initializes new Session object.
+// NewSession creates and initializes a new Session object.
 // remote can be nil.
 func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.Addr) *Session {
 	if tracing.TracerFromCtx(ctx) == nil {
@@ -214,10 +214,10 @@ const (
 	NoTxn TxnStateEnum = iota
 	// A txn is in scope.
 	Open
-	// The txn has encoutered a (non-retriable) error.
+	// The txn has encountered a (non-retriable) error.
 	// Statements will be rejected until a COMMIT/ROLLBACK is seen.
 	Aborted
-	// The txn has encoutered a retriable error.
+	// The txn has encountered a retriable error.
 	// Statements will be rejected until a RESTART_TRANSACTION is seen.
 	RestartWait
 	// The KV txn has been committed successfully through a RELEASE.
