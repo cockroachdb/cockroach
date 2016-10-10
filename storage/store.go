@@ -650,7 +650,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.intentResolver = newIntentResolver(s)
 	s.raftEntryCache = newRaftEntryCache(cfg.RaftEntryCacheSize)
 	s.drainLeases.Store(false)
-	s.scheduler = newRaftScheduler(cfg.Ctx, s, storeSchedulerConcurrency)
+	s.scheduler = newRaftScheduler(cfg.Ctx, s.metrics, s, storeSchedulerConcurrency)
 
 	storeMuLogger := syncutil.ThresholdLogger(
 		s.Ctx(),

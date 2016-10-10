@@ -18,10 +18,12 @@ import (
 	"container/list"
 	"fmt"
 	"sync"
+	"time"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/cockroachdb/cockroach/util/syncutil"
 )
@@ -130,7 +132,7 @@ type raftScheduler struct {
 	numWorkers int
 
 	mu struct {
-		syncutil.Mutex
+		syncutil.TimedMutex
 		cond    *sync.Cond
 		queue   rangeIDQueue
 		state   map[roachpb.RangeID]raftScheduleState
@@ -138,13 +140,28 @@ type raftScheduler struct {
 	}
 }
 
-func newRaftScheduler(ctx context.Context, processor raftProcessor, numWorkers int) *raftScheduler {
+func newRaftScheduler(
+	ctx context.Context, metrics *StoreMetrics, processor raftProcessor, numWorkers int,
+) *raftScheduler {
 	s := &raftScheduler{
 		ctx:        ctx,
 		processor:  processor,
 		numWorkers: numWorkers,
 	}
-	s.mu.cond = sync.NewCond(&s.mu.Mutex)
+	muLogger := syncutil.ThresholdLogger(
+		s.ctx,
+		defaultReplicaMuWarnThreshold,
+		func(ctx context.Context, msg string, args ...interface{}) {
+			log.Warningf(ctx, "raftScheduler.mu: "+msg, args...)
+		},
+		func(t time.Duration) {
+			if metrics != nil {
+				metrics.MuSchedulerNanos.RecordValue(t.Nanoseconds())
+			}
+		},
+	)
+	s.mu.TimedMutex = syncutil.MakeTimedMutex(muLogger)
+	s.mu.cond = sync.NewCond(&s.mu.TimedMutex)
 	s.mu.state = make(map[roachpb.RangeID]raftScheduleState)
 	return s
 }
@@ -257,20 +274,18 @@ func (s *raftScheduler) enqueue1(addState raftScheduleState, id roachpb.RangeID)
 
 func (s *raftScheduler) enqueueN(addState raftScheduleState, ids ...roachpb.RangeID) int {
 	// Enqueue the ids in chunks to avoid hold raftScheduler.mu for too long.
-	const enqueueChunkSize = 100
+	const enqueueChunkSize = 128
 
 	var count int
-	for i, j, n := 0, 0, len(ids); i < n; i = j {
-		j = i + enqueueChunkSize
-		if j > n {
-			j = n
+	s.mu.Lock()
+	for i, id := range ids {
+		count += s.enqueue1Locked(addState, id)
+		if (i+1)%enqueueChunkSize == 0 {
+			s.mu.Unlock()
+			s.mu.Lock()
 		}
-		s.mu.Lock()
-		for _, id := range ids[i:j] {
-			count += s.enqueue1Locked(addState, id)
-		}
-		s.mu.Unlock()
 	}
+	s.mu.Unlock()
 	return count
 }
 
