@@ -281,6 +281,10 @@ export default class extends React.Component<IInjectedProps, {}> {
                         aggregateMax downsampleMax />
               </Axis>
               <Axis format={ (n: number) => d3.format(".1f")(NanoToMilli(n)) } label="Milliseconds">
+                <Metric name="cr.store.mutex.schedulernanos-max" title="SchedulerMu"
+                        aggregateMax downsampleMax />
+              </Axis>
+              <Axis format={ (n: number) => d3.format(".1f")(NanoToMilli(n)) } label="Milliseconds">
                 <Metric name="cr.store.mutex.replicananos-max" title="ReplicaMu"
                         aggregateMax downsampleMax />
               </Axis>
