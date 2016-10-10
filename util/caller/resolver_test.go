@@ -24,7 +24,7 @@ import (
 )
 
 func TestCallResolver(t *testing.T) {
-	cr := NewCallResolver(0, regexp.MustCompile(`resolver_test\.go.*$`))
+	cr := NewCallResolver(regexp.MustCompile(`resolver_test\.go.*$`))
 	// Also test that caching doesn't have obvious hiccups.
 	for i := 0; i < 2; i++ {
 		if l := len(cr.cache); l != i {
