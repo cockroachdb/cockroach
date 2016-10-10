@@ -63,7 +63,7 @@ func TestRetryResolveNames(t *testing.T) {
 		}
 		count := 0
 		for iv := 0; iv < len(s.sourceInfo[0].sourceColumns); iv++ {
-			if s.ivarHelper.IsVarUsed(iv) {
+			if s.ivarHelper.IndexedVarUsed(iv) {
 				count++
 			}
 		}

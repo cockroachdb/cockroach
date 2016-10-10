@@ -44,11 +44,11 @@ type AlterTableCmds []AlterTableCmd
 
 // Format implements the NodeFormatter interface.
 func (node AlterTableCmds) Format(buf *bytes.Buffer, f FmtFlags) {
-	var prefix string
-	for _, n := range node {
-		buf.WriteString(prefix)
+	for i, n := range node {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
 		FormatNode(buf, f, n)
-		prefix = ", "
 	}
 }
 
@@ -67,6 +67,14 @@ func (*AlterTableDropConstraint) alterTableCmd()     {}
 func (*AlterTableDropNotNull) alterTableCmd()        {}
 func (*AlterTableSetDefault) alterTableCmd()         {}
 func (*AlterTableValidateConstraint) alterTableCmd() {}
+
+var _ AlterTableCmd = &AlterTableAddColumn{}
+var _ AlterTableCmd = &AlterTableAddConstraint{}
+var _ AlterTableCmd = &AlterTableDropColumn{}
+var _ AlterTableCmd = &AlterTableDropConstraint{}
+var _ AlterTableCmd = &AlterTableDropNotNull{}
+var _ AlterTableCmd = &AlterTableSetDefault{}
+var _ AlterTableCmd = &AlterTableValidateConstraint{}
 
 // ColumnMutationCmd is the subset of AlterTableCmds that modify an
 // existing column.
