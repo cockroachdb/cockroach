@@ -121,12 +121,6 @@ func (h *IndexedVarHelper) IndexedVarUsed(idx int) bool {
 // InvalidColIdx is the index value of a non-initialized IndexedVar.
 const InvalidColIdx = -1
 
-// IsVarUsed checks whether the var at the given index has been referred to
-// by name resolution so far.
-func (h *IndexedVarHelper) IsVarUsed(idx int) bool {
-	return h.vars[idx].container != nil
-}
-
 // GetIndexedVars transfers ownership of the array of initialized
 // IndexedVars to the caller; unused vars are guaranteed to have an
 // invalid index. The helper cannot be used any more after the
