@@ -23,11 +23,75 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/util/caller"
+	otlog "github.com/opentracing/opentracing-go/log"
 )
+
+// msgBuf extends bytes.Buffer and implements otlog.Encoder.
+type msgBuf struct {
+	bytes.Buffer
+}
+
+var _ otlog.Encoder = &msgBuf{}
+
+func (b *msgBuf) EmitString(key, value string) {
+	b.WriteString(key)
+	b.WriteString(value)
+}
+
+func (b *msgBuf) EmitBool(key string, value bool) {
+	b.WriteString(key)
+	fmt.Fprint(b, value)
+}
+
+func (b *msgBuf) EmitInt(key string, value int) {
+	b.WriteString(key)
+	fmt.Fprint(b, value)
+}
+
+func (b *msgBuf) EmitInt32(key string, value int32) {
+	b.WriteString(key)
+	fmt.Fprint(b, value)
+}
+
+func (b *msgBuf) EmitInt64(key string, value int64) {
+	b.WriteString(key)
+	fmt.Fprint(b, value)
+}
+
+func (b *msgBuf) EmitUint32(key string, value uint32) {
+	b.WriteString(key)
+	fmt.Fprint(b, value)
+}
+
+func (b *msgBuf) EmitUint64(key string, value uint64) {
+	b.WriteString(key)
+	fmt.Fprint(b, value)
+}
+
+func (b *msgBuf) EmitFloat32(key string, value float32) {
+	b.WriteString(key)
+	fmt.Fprint(b, value)
+}
+
+func (b *msgBuf) EmitFloat64(key string, value float64) {
+	b.WriteString(key)
+	fmt.Fprint(b, value)
+}
+
+func (b *msgBuf) EmitObject(key string, value interface{}) {
+	b.WriteString(key)
+	if value != nil {
+		fmt.Fprint(b, value)
+	}
+}
+
+func (b *msgBuf) EmitLazyLogger(value otlog.LazyLogger) {
+	panic("not implemented")
+}
 
 // formatTags appends the tags to a bytes.Buffer. If there are no tags,
 // returns false.
-func formatTags(buf *bytes.Buffer, ctx context.Context) bool {
+func formatTags(buf *msgBuf, ctx context.Context) bool {
 	tags := contextLogTags(ctx)
 	if len(tags) > 0 {
 		buf.WriteString("[")
@@ -35,10 +99,7 @@ func formatTags(buf *bytes.Buffer, ctx context.Context) bool {
 			if i > 0 {
 				buf.WriteString(",")
 			}
-			buf.WriteString(t.name)
-			if value := t.value(); value != nil {
-				fmt.Fprint(buf, value)
-			}
+			t.Marshal(buf)
 		}
 		buf.WriteString("] ")
 		return true
@@ -48,7 +109,7 @@ func formatTags(buf *bytes.Buffer, ctx context.Context) bool {
 
 // makeMessage creates a structured log entry.
 func makeMessage(ctx context.Context, format string, args []interface{}) string {
-	var buf bytes.Buffer
+	var buf msgBuf
 	formatTags(&buf, ctx)
 	if len(format) == 0 {
 		fmt.Fprint(&buf, args...)
