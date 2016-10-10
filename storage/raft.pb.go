@@ -177,7 +177,7 @@ func (*SnapshotResponse) Descriptor() ([]byte, []int) { return fileDescriptorRaf
 type ConfChangeContext struct {
 	CommandID string `protobuf:"bytes,1,opt,name=command_id,json=commandId" json:"command_id"`
 	// Payload is the application-level command (i.e. an encoded
-	// roachpb.EndTransactionRequest).
+	// roachpb.RaftCommand).
 	Payload []byte `protobuf:"bytes,2,opt,name=payload" json:"payload,omitempty"`
 	// Replica contains full details about the replica being added or removed.
 	Replica cockroach_roachpb.ReplicaDescriptor `protobuf:"bytes,3,opt,name=replica" json:"replica"`
