@@ -19,14 +19,20 @@ package sql
 import (
 	"math"
 
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/pkg/errors"
-	"golang.org/x/net/context"
+	"github.com/cockroachdb/cockroach/util/log"
 )
+
+// TableTruncateChunkSize is the maximum number of rows processed per chunk
+// during a table truncation.
+const TableTruncateChunkSize = IndexTruncateChunkSize
 
 // Truncate deletes all rows from a table.
 // Privileges: DROP on table.
@@ -112,19 +118,15 @@ func truncateTable(tableDesc *sqlbase.TableDescriptor, txn *client.Txn) error {
 	return err
 }
 
-// TableTruncateChunkSize is the size of a chunk during a table
-// truncation/drop operation. The chunk can be interpreted as the number of
-// keys or table rows to be deleted.
-const TableTruncateChunkSize = 1000
-
 // truncateTableInChunks truncates the data of a table in chunks. It deletes a
 // range of data for the table, which includes the PK and all indexes.
 func truncateTableInChunks(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *client.DB,
 ) error {
 	var resume roachpb.Span
-	for done := false; !done; {
+	for row, done := 0, false; !done; row += TableTruncateChunkSize {
 		resumeAt := resume
+		log.Infof(ctx, "table %s truncate at row: %d, span: %s", tableDesc.Name, row, resume)
 		if err := db.Txn(ctx, func(txn *client.Txn) error {
 			rd, err := makeRowDeleter(txn, tableDesc, nil, nil, false)
 			if err != nil {
