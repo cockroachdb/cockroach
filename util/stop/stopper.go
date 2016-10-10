@@ -167,7 +167,7 @@ func NewStopper(options ...Option) *Stopper {
 	return s
 }
 
-// Recover is used internally be Stopper to provide a hook for recovery of
+// Recover is used internally by Stopper to provide a hook for recovery of
 // panics on goroutines started by the Stopper. It can also be invoked
 // explicitly (via "defer s.Recover()") on goroutines that are created outside
 // of Stopper.

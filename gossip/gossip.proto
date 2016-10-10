@@ -24,10 +24,10 @@ import "cockroach/util/hlc/timestamp.proto";
 import "cockroach/util/unresolved_addr.proto";
 import "gogoproto/gogo.proto";
 
-// BootstrapInfo contains information necessary to bootstrapping the
+// BootstrapInfo contains information necessary to bootstrap the
 // gossip network from a cold start.
 message BootstrapInfo {
-  // A map from node ID to address.
+  // Addresses of other nodes in the cluster.
   repeated util.UnresolvedAddr addresses = 1 [(gogoproto.nullable) = false];
   // Timestamp at which the bootstrap info was written.
   util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];

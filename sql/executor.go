@@ -444,8 +444,8 @@ func (e *Executor) waitForConfigUpdate() {
 
 // execRequest executes the request using the provided planner.
 // It parses the sql into statements, iterates through the statements, creates
-// KV transactions and automatically retries them when possible, executes the
-// (synchronous attempt of) schema changes.
+// KV transactions and automatically retries them when possible, and executes
+// the (synchronous attempt of) schema changes.
 // It will accumulate a result in Response for each statement.
 // It will resume a SQL transaction, if one was previously open for this client.
 //
@@ -920,7 +920,7 @@ func (e *Executor) execStmtInOpenTxn(
 		panic("execStmtInOpenTxn called outside of an open txn")
 	}
 	if planMaker.txn == nil {
-		panic("execStmtInOpenTxn called with the a txn not set on the planner")
+		panic("execStmtInOpenTxn called with a txn not set on the planner")
 	}
 
 	planMaker.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
@@ -1133,7 +1133,7 @@ func commitSQLTransaction(
 	return result, err
 }
 
-// the current transaction might have been committed/rolled back when this returns.
+// The current transaction might have been committed/rolled back when this returns.
 func (e *Executor) execStmt(
 	stmt parser.Statement, planMaker *planner, autoCommit bool,
 ) (Result, error) {

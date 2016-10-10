@@ -46,7 +46,7 @@ type CallResolver struct {
 
 var reStripNothing = regexp.MustCompile(`^$`)
 
-// defaultPattern strips src/github.com/organization/project/module/submodule/file.go
+// defaultRE strips src/github.com/organization/project/module/submodule/file.go
 // down to module/submodule/file.go. It falls back to stripping nothing when
 // it's unable to look up its own location via runtime.Caller().
 var defaultRE = func() *regexp.Regexp {
