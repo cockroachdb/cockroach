@@ -106,11 +106,18 @@ func (e virtualTableEntry) getValuesNode(p *planner) (*valuesNode, error) {
 	}
 	v := p.newContainerValuesNode(columns, 0)
 
-	err := e.tableDef.populate(p, func(datum ...parser.Datum) error {
-		if r, c := len(datum), len(v.columns); r != c {
+	err := e.tableDef.populate(p, func(datums ...parser.Datum) error {
+		if r, c := len(datums), len(v.columns); r != c {
 			panic(fmt.Sprintf("datum row count and column count differ: %d vs %d", r, c))
 		}
-		return v.rows.AddRow(datum)
+		for i, col := range v.columns {
+			datum := datums[i]
+			if !(datum == parser.DNull || datum.TypeEqual(col.Typ)) {
+				panic(fmt.Sprintf("datum column %q expected to be type %s; found type %s",
+					col.Name, col.Typ.Type(), datum.Type()))
+			}
+		}
+		return v.rows.AddRow(datums)
 	})
 	if err != nil {
 		v.Close()
