@@ -112,7 +112,7 @@ func TestTraceWithTags(t *testing.T) {
 
 	sp.Finish()
 
-	expected := events{"start", "[tag1] test1", "[tag1] testerr", "[tag1] test2", "[tag1] log", "finish"}
+	expected := events{"start", "[tag=1] test1", "[tag=1] testerr", "[tag=1] test2", "[tag=1] log", "finish"}
 	if !compareTraces(expected, ev) {
 		t.Errorf("expected events '%s', got '%s'", expected, fmt.Sprint(ev))
 	}
