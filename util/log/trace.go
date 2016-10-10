@@ -17,7 +17,6 @@
 package log
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/util/syncutil"
@@ -101,7 +100,7 @@ func getSpanOrEventLog(ctx context.Context) (opentracing.Span, *ctxEventLog, boo
 // the format is treated as a pre-formatted string.
 func eventInternal(ctx context.Context, isErr, withTags bool, format string, args ...interface{}) {
 	if sp, el, ok := getSpanOrEventLog(ctx); ok {
-		var buf bytes.Buffer
+		var buf msgBuf
 		if withTags {
 			withTags = formatTags(&buf, ctx)
 		}

@@ -21,15 +21,9 @@ import (
 	"strconv"
 	"sync/atomic"
 
+	otlog "github.com/opentracing/opentracing-go/log"
+
 	"golang.org/x/net/context"
-)
-
-type valueType int
-
-const (
-	genericType valueType = iota
-	int64Type
-	stringType
 )
 
 // logTag contains a tag name and value.
@@ -43,25 +37,9 @@ const (
 // contexts can share pieces of the same chain, so once a logTag is associated
 // to a context, it is immutable.
 type logTag struct {
-	name string
-
-	valType    valueType
-	intVal     int64
-	strVal     string
-	genericVal interface{}
+	otlog.Field
 
 	parent *logTag
-}
-
-func (t *logTag) value() interface{} {
-	switch t.valType {
-	case int64Type:
-		return t.intVal
-	case stringType:
-		return t.strVal
-	default:
-		return t.genericVal
-	}
 }
 
 // contextTagKeyType is an empty type for the handle associated with the
@@ -107,25 +85,25 @@ func addLogTagChain(ctx context.Context, bottomTag *logTag) context.Context {
 //
 // If the value is nil, just the name shows up.
 func WithLogTag(ctx context.Context, name string, value interface{}) context.Context {
-	return addLogTagChain(ctx, &logTag{name: name, valType: genericType, genericVal: value})
+	return addLogTagChain(ctx, &logTag{Field: otlog.Object(name, value)})
 }
 
 // WithLogTagInt is a variant of WithLogTag that avoids the allocation
 // associated with boxing the value in an interface{}.
 func WithLogTagInt(ctx context.Context, name string, value int) context.Context {
-	return addLogTagChain(ctx, &logTag{name: name, valType: int64Type, intVal: int64(value)})
+	return addLogTagChain(ctx, &logTag{Field: otlog.Int(name, value)})
 }
 
 // WithLogTagInt64 is a variant of WithLogTag that avoids the allocation
 // associated with boxing the value in an interface{}.
 func WithLogTagInt64(ctx context.Context, name string, value int64) context.Context {
-	return addLogTagChain(ctx, &logTag{name: name, valType: int64Type, intVal: value})
+	return addLogTagChain(ctx, &logTag{Field: otlog.Int64(name, value)})
 }
 
 // WithLogTagStr is a variant of WithLogTag that avoids the allocation
 // associated with boxing the value in an interface{}.
 func WithLogTagStr(ctx context.Context, name string, value string) context.Context {
-	return addLogTagChain(ctx, &logTag{name: name, valType: stringType, strVal: value})
+	return addLogTagChain(ctx, &logTag{Field: otlog.String(name, value)})
 }
 
 // WithLogTagsFromCtx returns a context based on ctx with fromCtx's log tags
@@ -155,8 +133,9 @@ TopLoop:
 	for t := bottomTag; t != nil; t = t.parent {
 		// Look for the same tag in the existing chain. We expect only a few tags so
 		// going through the chain every time should be faster than allocating a map.
+		tName := t.Key()
 		for e := existingChain; e != nil; e = e.parent {
-			if e.name == t.name {
+			if e.Key() == tName {
 				continue TopLoop
 			}
 		}
