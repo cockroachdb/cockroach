@@ -626,8 +626,9 @@ func (t *RaftTransport) SendSnapshot(
 			breaker.Fail()
 		}
 	}()
-	return sendSnapshot(snapshotClientWithBreaker{
-		MultiRaft_RaftSnapshotClient: stream,
-		breaker: breaker,
-	}, header, snap, newBatch)
+	return sendSnapshot(ctx,
+		snapshotClientWithBreaker{
+			MultiRaft_RaftSnapshotClient: stream,
+			breaker: breaker,
+		}, header, snap, newBatch)
 }
