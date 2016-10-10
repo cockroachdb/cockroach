@@ -167,7 +167,7 @@ type Gossip struct {
 
 	disconnected chan *client  // Channel of disconnected clients
 	stalled      bool          // True if gossip is stalled (i.e. host doesn't have sentinel)
-	stalledCh    chan struct{} // Channel to wakeup stalled bootstrap
+	stalledCh    chan struct{} // Channel to wake up stalled bootstrap
 
 	stallInterval     time.Duration
 	bootstrapInterval time.Duration
