@@ -131,6 +131,9 @@ var _ SchemaAccessor = &planner{}
 func (p *planner) getTableOrViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
 	virtual, err := p.virtualSchemas().getVirtualTableDesc(tn)
 	if err != nil || virtual != nil {
+		if _, ok := err.(*sqlbase.ErrUndefinedTable); ok {
+			return nil, nil
+		}
 		return virtual, err
 	}
 
@@ -487,4 +490,33 @@ func (p *planner) expandTableGlob(pattern parser.TablePattern) (parser.TableName
 		return nil, err
 	}
 	return tableNames, nil
+}
+
+// databaseFromSearchPath returns the first database in the session's SearchPath
+// that contains the specified table. If the table can't be found, we return the
+// session database.
+func (p *planner) databaseFromSearchPath(tn *parser.TableName) (string, error) {
+	if len(p.session.SearchPath) == 0 {
+		return p.session.Database, nil
+	}
+	t := *tn
+	for _, database := range p.session.SearchPath {
+		t.DatabaseName = parser.Name(database)
+		desc, err := p.getTableOrViewDesc(&t)
+		if err != nil {
+			if _, ok := err.(*sqlbase.ErrUndefinedDatabase); ok {
+				// Keep iterating through search path if a database in the search path
+				// doesn't exist.
+				continue
+			}
+			return "", err
+		}
+		if desc != nil {
+			// The table or view exists in this database, so return it.
+			return t.Database(), nil
+		}
+	}
+	// If we couldn't find the table or view in the search path, default to the
+	// database set by the user.
+	return p.session.Database, nil
 }

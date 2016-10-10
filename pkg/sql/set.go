@@ -64,6 +64,9 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 			}
 		}
 		p.session.Database = dbName
+		// TODO(cuongdo): We may want to support user setting of SearchPath through
+		// SET at some point. For now, we hardcode pg_catalog as the first entry.
+		p.session.SearchPath = []string{"pg_catalog", dbName}
 
 	case `SYNTAX`:
 		s, err := p.getStringVal(name, typedValues)

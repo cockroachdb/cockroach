@@ -59,6 +59,7 @@ const keyFor7881Sample = "found#7881"
 // Create instances using NewSession().
 type Session struct {
 	Database    string
+	SearchPath  []string
 	User        string
 	Syntax      int32
 	DistSQLMode distSQLExecMode
@@ -136,9 +137,15 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 	}
 	s := &Session{
 		Database: args.Database,
-		User:     args.User,
-		Location: time.UTC,
-		executor: e,
+		// TODO(cuongdo): We may want to support user setting of SearchPath through
+		// SET at some point. For now, we hardcode pg_catalog as the first entry.
+		SearchPath: []string{"pg_catalog"},
+		User:       args.User,
+		Location:   time.UTC,
+		executor:   e,
+	}
+	if s.Database != "" {
+		s.SearchPath = append(s.SearchPath, s.Database)
 	}
 	cfg, cache := e.getSystemConfig()
 	s.planner = planner{
