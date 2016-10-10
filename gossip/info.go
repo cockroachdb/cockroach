@@ -16,7 +16,7 @@
 
 package gossip
 
-// expired returns true if the node's time to live (TTL) has expired.
+// expired returns true if the info's time to live (TTL) has expired.
 func (i *Info) expired(now int64) bool {
 	return i.TTLStamp <= now
 }

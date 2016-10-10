@@ -145,7 +145,7 @@ func (sc *SchemaChanger) findTableWithLease(
 	return tableDesc, nil
 }
 
-// ReleaseLease the table lease if it is the one registered with
+// ReleaseLease releases the table lease if it is the one registered with
 // the table descriptor.
 func (sc *SchemaChanger) ReleaseLease(lease sqlbase.TableDescriptor_SchemaChangeLease) error {
 	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
