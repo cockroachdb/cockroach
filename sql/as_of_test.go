@@ -59,13 +59,22 @@ func TestAsOfTime(t *testing.T) {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if _, err := db.Exec("CREATE DATABASE d"); err != nil {
+	var logicalTS int64
+	if err := db.QueryRow("CREATE DATABASE d; SELECT cluster_logical_timestamp()::int").Scan(&logicalTS); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
+	// Make sure we see the DB create by using a TS after its txn time.
+	logicalTime := time.Unix(0, logicalTS+1)
+	tsDBExists := logicalTime.Format(time.RFC3339Nano)
 	if err := db.QueryRow("SELECT now()").Scan(&tm); err != nil {
 		t.Fatal(err)
+	} else {
+		t.Logf("Now: %v", tm.UnixNano())
 	}
-	tsDBExists := tm.Format(time.RFC3339Nano)
+	// AS OF SYSTEM TIME requires now() to be after time timestamp. Since we
+	// got the timestamp from the HLC, need to wait until it is after now().
+	time.Sleep(logicalTime.Sub(tm))
+
 	if _, err := db.Query(fmt.Sprintf(query, tsDBExists), 0); !testutils.IsError(err, `pq: table "d.t" does not exist`) {
 		t.Fatal("unexpected error:", err)
 	}
