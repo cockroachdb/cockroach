@@ -200,7 +200,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	s.distSender = kv.NewDistSender(&distSenderCfg, s.gossip)
 
-	txnMetrics := kv.MakeTxnMetrics()
+	txnMetrics := kv.MakeTxnMetrics(s.cfg.MetricsSampleInterval)
 	s.registry.AddMetricStruct(txnMetrics)
 	s.txnCoordSender = kv.NewTxnCoordSender(s.Ctx(), s.distSender, s.clock, cfg.Linearizable,
 		s.stopper, txnMetrics)
@@ -239,12 +239,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Set up Executor
 	execCfg := sql.ExecutorConfig{
-		Context:      s.Ctx(),
-		DB:           s.db,
-		Gossip:       s.gossip,
-		LeaseManager: s.leaseMgr,
-		Clock:        s.clock,
-		DistSQLSrv:   s.distSQLServer,
+		Context:               s.Ctx(),
+		DB:                    s.db,
+		Gossip:                s.gossip,
+		LeaseManager:          s.leaseMgr,
+		Clock:                 s.clock,
+		DistSQLSrv:            s.distSQLServer,
+		MetricsSampleInterval: s.cfg.MetricsSampleInterval,
 	}
 	if cfg.TestingKnobs.SQLExecutor != nil {
 		execCfg.TestingKnobs = cfg.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
@@ -276,6 +277,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ScanMaxIdleTime:                s.cfg.ScanMaxIdleTime,
 		ConsistencyCheckInterval:       s.cfg.ConsistencyCheckInterval,
 		ConsistencyCheckPanicOnFailure: s.cfg.ConsistencyCheckPanicOnFailure,
+		MetricsSampleInterval:          s.cfg.MetricsSampleInterval,
 		StorePool:                      s.storePool,
 		SQLExecutor: sql.InternalExecutor{
 			LeaseManager: s.leaseMgr,

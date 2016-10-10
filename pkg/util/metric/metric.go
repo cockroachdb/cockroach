@@ -19,6 +19,7 @@ package metric
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/VividCortex/ewma"
@@ -36,8 +37,10 @@ const (
 	// values will be recorded as this value instead.
 	MaxLatency = 10 * time.Second
 
-	// Data will leave windowed histograms after approximately this duration.
-	latencyRotationInterval = 20 * time.Second
+	// TestSampleInterval is passed to histograms during tests which don't
+	// want to conern themselves with supplying a "correct" interval.
+	TestSampleInterval = time.Duration(math.MaxInt64)
+
 	// The number of histograms to keep in rolling window.
 	histWrapNum = 2
 )
@@ -177,21 +180,25 @@ func NewHistogram(metadata Metadata, duration time.Duration, maxVal int64, sigFi
 	return h
 }
 
-// NewLatency is a convenience function which returns a histograms with
+// NewLatency is a convenience function which returns a histogram with
 // suitable defaults for latency tracking. Values are expressed in ns,
 // are truncated into the interval [0, MaxLatency] and are recorded
 // with one digit of precision (i.e. errors of <10ms at 100ms, <6s at 60s).
-func NewLatency(metadata Metadata) *Histogram {
+//
+// The windowed portion of the Histogram retains values for approximately
+// sampleDuration.
+func NewLatency(metadata Metadata, sampleDuration time.Duration) *Histogram {
 	return NewHistogram(
-		metadata, latencyRotationInterval, MaxLatency.Nanoseconds(), 1,
+		metadata, sampleDuration, MaxLatency.Nanoseconds(), 1,
 	)
 }
 
-// Windowed returns a copy of the current windowed histogram data.
-func (h *Histogram) Windowed() *hdrhistogram.Histogram {
+// Windowed returns a copy of the current windowed histogram data and its
+// rotation interval.
+func (h *Histogram) Windowed() (*hdrhistogram.Histogram, time.Duration) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return cloneHistogram(h.mu.sliding.Current())
+	return cloneHistogram(h.mu.sliding.Current()), h.mu.sliding.duration
 }
 
 // Snapshot returns a copy of the cumulative (i.e. all-time samples) histogram

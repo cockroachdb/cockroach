@@ -117,7 +117,7 @@ func TestHistogramRotate(t *testing.T) {
 		h.RecordValue(v)
 		cur += time.Second
 		setNow(cur)
-		cur := h.Windowed()
+		cur, _ := h.Windowed()
 
 		// When i == histWrapNum-1, we expect the entry from i==0 to move out
 		// of the window (since we rotated for the histWrapNum'th time).
