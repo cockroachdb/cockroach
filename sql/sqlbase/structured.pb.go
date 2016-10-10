@@ -53,7 +53,7 @@ func (x *ConstraintValidity) UnmarshalJSON(data []byte) error {
 func (ConstraintValidity) EnumDescriptor() ([]byte, []int) { return fileDescriptorStructured, []int{0} }
 
 // These mirror the types supported by the sql/parser. See
-// sql/parser/types.go.
+// sql/parser/col_types.go.
 type ColumnType_Kind int32
 
 const (
