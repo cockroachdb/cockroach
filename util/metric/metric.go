@@ -106,12 +106,10 @@ var _ Iterable = &Gauge{}
 var _ Iterable = &GaugeFloat64{}
 var _ Iterable = &Counter{}
 var _ Iterable = &Histogram{}
-var _ Iterable = &Rate{}
 
 var _ json.Marshaler = &Gauge{}
 var _ json.Marshaler = &GaugeFloat64{}
 var _ json.Marshaler = &Counter{}
-var _ json.Marshaler = &Rate{}
 var _ json.Marshaler = &Registry{}
 
 var _ PrometheusExportable = &Gauge{}
@@ -382,7 +380,6 @@ func (g *GaugeFloat64) ToPrometheusMetric() *prometheusgo.Metric {
 
 // A Rate is a exponential weighted moving average.
 type Rate struct {
-	Metadata
 	mu       syncutil.Mutex // protects fields below
 	curSum   float64
 	wrapped  ewma.MovingAverage
@@ -392,7 +389,7 @@ type Rate struct {
 
 // NewRate creates an EWMA rate on the given timescale. Timescales at
 // or below 2s are illegal and will cause a panic.
-func NewRate(metadata Metadata, timescale time.Duration) *Rate {
+func NewRate(timescale time.Duration) *Rate {
 	const tickInterval = time.Second
 	if timescale <= 2*time.Second {
 		panic(fmt.Sprintf("EWMA with per-second ticks makes no sense on timescale %s", timescale))
@@ -400,7 +397,6 @@ func NewRate(metadata Metadata, timescale time.Duration) *Rate {
 	avgAge := float64(timescale) / float64(2*tickInterval)
 
 	return &Rate{
-		Metadata: metadata,
 		interval: tickInterval,
 		nextT:    now(),
 		wrapped:  ewma.NewMovingAverage(avgAge),
@@ -431,26 +427,4 @@ func (e *Rate) Add(v float64) {
 	maybeTick(e)
 	e.curSum += v
 	e.mu.Unlock()
-}
-
-// Inspect calls the given closure with the empty string and the Rate's current
-// value.
-//
-// TODO(mrtracy): Fix this to pass the Rate object itself to 'f', to
-// match the 'visitor' behavior as the other metric types (currently, it passes
-// the current value of the Rate as a float64.)
-func (e *Rate) Inspect(f func(interface{})) {
-	e.mu.Lock()
-	maybeTick(e)
-	v := e.wrapped.Value()
-	e.mu.Unlock()
-	f(v)
-}
-
-// MarshalJSON marshals to JSON.
-func (e *Rate) MarshalJSON() ([]byte, error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	maybeTick(e)
-	return json.Marshal(e.wrapped.Value())
 }
