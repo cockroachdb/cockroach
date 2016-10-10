@@ -33,54 +33,64 @@ type msgBuf struct {
 
 var _ otlog.Encoder = &msgBuf{}
 
-func (b *msgBuf) EmitString(key, value string) {
+func (b *msgBuf) writeKey(key string, hasValue bool) {
 	b.WriteString(key)
+	// For tags that have a value and are longer than a character, we output
+	// "tag=value". For one character tags we don't use a separator (e.g. "n1").
+	if hasValue && len(key) > 1 {
+		b.WriteByte('=')
+	}
+}
+
+func (b *msgBuf) EmitString(key, value string) {
+	b.writeKey(key, value != "")
 	b.WriteString(value)
 }
 
 func (b *msgBuf) EmitBool(key string, value bool) {
-	b.WriteString(key)
+	b.writeKey(key, true /* hasValue */)
 	fmt.Fprint(b, value)
 }
 
 func (b *msgBuf) EmitInt(key string, value int) {
-	b.WriteString(key)
+	b.writeKey(key, true /* hasValue */)
 	fmt.Fprint(b, value)
 }
 
 func (b *msgBuf) EmitInt32(key string, value int32) {
-	b.WriteString(key)
+	b.writeKey(key, true /* hasValue */)
 	fmt.Fprint(b, value)
 }
 
 func (b *msgBuf) EmitInt64(key string, value int64) {
-	b.WriteString(key)
+	b.writeKey(key, true /* hasValue */)
 	fmt.Fprint(b, value)
 }
 
 func (b *msgBuf) EmitUint32(key string, value uint32) {
-	b.WriteString(key)
+	b.writeKey(key, true /* hasValue */)
 	fmt.Fprint(b, value)
 }
 
 func (b *msgBuf) EmitUint64(key string, value uint64) {
-	b.WriteString(key)
+	b.writeKey(key, true /* hasValue */)
 	fmt.Fprint(b, value)
 }
 
 func (b *msgBuf) EmitFloat32(key string, value float32) {
-	b.WriteString(key)
+	b.writeKey(key, true /* hasValue */)
 	fmt.Fprint(b, value)
 }
 
 func (b *msgBuf) EmitFloat64(key string, value float64) {
-	b.WriteString(key)
+	b.writeKey(key, true /* hasValue */)
 	fmt.Fprint(b, value)
 }
 
 func (b *msgBuf) EmitObject(key string, value interface{}) {
-	b.WriteString(key)
-	if value != nil {
+	hasValue := (value != nil)
+	b.writeKey(key, hasValue)
+	if hasValue {
 		fmt.Fprint(b, value)
 	}
 }
