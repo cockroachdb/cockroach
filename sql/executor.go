@@ -340,10 +340,20 @@ func (e *Executor) Prepare(
 	if traceSQL {
 		log.Eventf(session.Ctx(), "preparing: %s", query)
 	}
-	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
+	var p parser.Parser
+	stmts, err := p.Parse(query, parser.Syntax(session.Syntax))
 	if err != nil {
 		return nil, err
 	}
+	switch len(stmts) {
+	case 0:
+		return nil, nil
+	case 1:
+		// ignore
+	default:
+		return nil, errors.Errorf("expected 1 statement, but found %d", len(stmts))
+	}
+	stmt := stmts[0]
 	if err = pinfo.ProcessPlaceholderAnnotations(stmt); err != nil {
 		return nil, err
 	}
