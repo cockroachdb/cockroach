@@ -65,7 +65,7 @@ github.com/kkaneda/returncheck bf081fa7155e3a27df1f056a49d50685edfa5b1b
 github.com/kr/pretty cfb55aafdaf3ec08f0db22699ab822c50091b1c4
 github.com/kr/text 7cafcd837844e784b526369c9bce262804aebc60
 github.com/leekchan/timeutil 28917288c48df3d2c1cfe468c273e0b2adda0aa5
-github.com/lib/pq 50761b0867bd1d9d069276790bcd4a3bccf2324a
+github.com/lib/pq fcb9ef54da7cae1ea08f0b5a92f236d83e59294a
 github.com/lightstep/lightstep-tracer-go 7ec5005048fddb1fc15627e1bf58796ce01d919e
 github.com/mattn/go-isatty 66b8e73f3f5cda9f96b69efd03dd3d7fc4a5cdb8
 github.com/mattn/go-runewidth d6bea18f789704b5f83375793155289da36a3c7f
