@@ -337,9 +337,6 @@ func (e *Executor) Prepare(
 	query string, session *Session, pinfo parser.PlaceholderTypes,
 ) (ResultColumns, error) {
 	log.VEventf(2, session.Ctx(), "preparing: %s", query)
-	if traceSQL {
-		log.Eventf(session.Ctx(), "preparing: %s", query)
-	}
 	var p parser.Parser
 	stmts, err := p.Parse(query, parser.Syntax(session.Syntax))
 	if err != nil {
@@ -477,9 +474,6 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 	var err error
 
 	log.VEventf(2, session.Ctx(), "execRequest: %s", sql)
-	if traceSQL {
-		log.Eventf(session.Ctx(), "execRequest: %s", sql)
-	}
 
 	if session.planner.copyFrom != nil {
 		stmts, err = session.planner.ProcessCopyData(sql, copymsg)
@@ -937,7 +931,7 @@ func (e *Executor) execStmtInOpenTxn(
 	planMaker.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
 
 	session := planMaker.session
-	log.Event(session.context, stmt.String())
+	log.Eventf(session.context, "%s", stmt)
 
 	// TODO(cdo): Figure out how to not double count on retries.
 	e.updateStmtCounts(stmt)
@@ -1063,7 +1057,7 @@ func (e *Executor) execStmtInOpenTxn(
 	if traceSQL {
 		log.Eventf(txnState.txn.Context, "%s done", tResult)
 	}
-	log.Event(session.context, tResult.String())
+	log.Eventf(session.context, "%s done", tResult)
 	return result, nil
 }
 
