@@ -170,6 +170,14 @@ TestCrlfmt() {
   crlfmt -ignore 'pb.*.go' -tab 2 .
 }
 
+always_fail() {
+  return 1
+}
+
+always_succeed() {
+  return 0
+}
+
 # Run all the tests, wrapped in a similar output format to "go test"
 # so we can use go2xunit to generate reports in CI.
 
@@ -183,23 +191,27 @@ runcheck() {
   name="$1"
   shift
 
-  function footer() {
-    local status=$?
-    local end=$(date +%s)
-    local runtime=$((end-start))
-    if [ $status -eq 0 ]; then
-      echo "--- PASS: $name ($runtime.00s)"
-    else
-      echo "--- FAIL: $name ($runtime.00s)"
-      echo "$output"
-    fi
-    return $status
-  }
-  trap footer EXIT
-
   echo "=== RUN $name"
+
+  set +e
   output=$(eval "$name")
+  local status=$?
+  set -e
+
+  local end=$(date +%s)
+  local runtime=$((end-start))
+  if [ $status -eq 0 ]; then
+    echo "--- PASS: $name ($runtime.00s)"
+  else
+    echo "--- FAIL: $name ($runtime.00s)"
+    echo "$output"
+  fi
+  return $status
 }
+
+runcheck "always_fail" &> /dev/null && (echo "script test 1 failed"; exit 1)
+runcheck "always_succeed" &> /dev/null || (echo "script test 2 failed"; exit 1)
+
 
 exit_status=0
 
