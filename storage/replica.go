@@ -156,9 +156,10 @@ func updatesTimestampCache(r roachpb.Request) bool {
 // via the done channel.
 type pendingCmd struct {
 	ctx context.Context
-	// TODO(tschottdorf): idKey is legacy at this point: We could easily key
+	// TODO(andreimatei): idKey is legacy at this point: We could easily key
 	// commands by their MaxLeaseIndex, and doing so should be ok with a stop-
-	// the-world migration. However, requires adapting tryAbandon.
+	// the-world migration. However, various test facilities depend on the
+	// command ID for e.g. replay protection.
 	idKey           storagebase.CmdIDKey
 	proposedAtTicks int
 	raftCmd         roachpb.RaftCommand
@@ -623,35 +624,6 @@ func (r *Replica) String() string {
 	return fmt.Sprintf("[n%d,s%d,r%s]", r.store.Ident.NodeID, r.store.Ident.StoreID, &r.rangeStr)
 }
 
-// Destroy clears pending command queue by sending each pending
-// command an error and cleans up all data associated with this range.
-func (r *Replica) Destroy(origDesc roachpb.RangeDescriptor, destroyData bool) error {
-	desc := r.Desc()
-	if repDesc, ok := desc.GetReplicaDescriptor(r.store.StoreID()); ok && repDesc.ReplicaID >= origDesc.NextReplicaID {
-		return errors.Errorf("cannot destroy replica %s; replica ID has changed (%s >= %s)",
-			r, repDesc.ReplicaID, origDesc.NextReplicaID)
-	}
-
-	r.mu.Lock()
-	// Clear the pending command queue.
-	for _, p := range r.mu.pendingCmds {
-		p.done <- roachpb.ResponseWithError{
-			Reply: &roachpb.BatchResponse{},
-			Err:   roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID)),
-		}
-	}
-	// Clear the map.
-	r.mu.pendingCmds = map[storagebase.CmdIDKey]*pendingCmd{}
-	r.mu.internalRaftGroup = nil
-	r.mu.destroyed = roachpb.NewRangeNotFoundError(r.RangeID)
-	r.mu.Unlock()
-
-	if !destroyData {
-		return nil
-	}
-	return r.destroyDataRaftMuLocked()
-}
-
 // destroyData deletes all data associated with a replica, leaving a
 // tombstone. Requires that Replica.raftMu is held.
 func (r *Replica) destroyDataRaftMuLocked() error {
@@ -918,12 +890,12 @@ func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
 	defer r.mu.Unlock()
 
 	if desc.RangeID != r.RangeID {
-		r.panicf("range descriptor ID (%d) does not match replica's range ID (%d)",
+		log.Fatalf(r.ctx, "range descriptor ID (%d) does not match replica's range ID (%d)",
 			desc.RangeID, r.RangeID)
 	}
 	if r.mu.state.Desc != nil && r.mu.state.Desc.IsInitialized() &&
 		(desc == nil || !desc.IsInitialized()) {
-		r.panicf("cannot replace initialized descriptor with uninitialized one: %+v -> %+v",
+		log.Fatalf(r.ctx, "cannot replace initialized descriptor with uninitialized one: %+v -> %+v",
 			r.mu.state.Desc, desc)
 	}
 
@@ -1064,7 +1036,7 @@ func (r *Replica) assertState(reader engine.Reader) {
 func (r *Replica) assertStateLocked(reader engine.Reader) {
 	diskState, err := loadState(r.ctx, reader, r.mu.state.Desc)
 	if err != nil {
-		r.panic(err)
+		log.Fatal(r.ctx, err)
 	}
 	if !reflect.DeepEqual(diskState, r.mu.state) {
 		log.Fatalf(r.ctx, "on-disk and in-memory state diverged:\n%+v\n%+v", diskState, r.mu.state)
@@ -1107,9 +1079,9 @@ func (r *Replica) Send(
 		// empty batch; shouldn't happen (we could handle it, but it hints
 		// at someone doing weird things, and once we drop the key range
 		// from the header it won't be clear how to route those requests).
-		r.panicf("empty batch")
+		log.Fatalf(ctx, "empty batch")
 	} else {
-		r.panicf("don't know how to handle command %s", ba)
+		log.Fatalf(ctx, "don't know how to handle command %s", ba)
 	}
 	if _, ok := pErr.GetDetail().(*roachpb.RaftGroupDeletedError); ok {
 		// This error needs to be converted appropriately so that
@@ -1690,9 +1662,9 @@ func (r *Replica) proposeRaftCommand(
 	if r.mu.destroyed != nil {
 		return nil, nil, r.mu.destroyed
 	}
-	repDesc, ok := r.mu.state.Desc.GetReplicaDescriptor(r.store.StoreID())
-	if !ok {
-		return nil, nil, roachpb.NewRangeNotFoundError(r.RangeID)
+	repDesc, err := r.getReplicaDescriptorLocked()
+	if err != nil {
+		return nil, nil, err
 	}
 	pCmd := r.prepareRaftCommandLocked(ctx, makeIDKey(), repDesc, ba)
 	r.insertRaftCommandLocked(pCmd)
@@ -1777,8 +1749,7 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 		// We're proposing a command so there is no need to wake the leader if we
 		// were quiesced.
 		r.unquiesceLocked()
-		return false, /* !unquiesceAndWakeLeader */
-			raftGroup.Propose(encodeRaftCommand(string(p.idKey), data))
+		return false /* !unquiesceAndWakeLeader */, raftGroup.Propose(encodeRaftCommand(p.idKey, data))
 	})
 }
 
@@ -1985,7 +1956,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 		switch e.Type {
 		case raftpb.EntryNormal:
 
-			var commandID string
+			var commandID storagebase.CmdIDKey
 			var command roachpb.RaftCommand
 
 			// Process committed entries. etcd raft occasionally adds a nil entry
@@ -2013,14 +1984,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(inSnap IncomingSnapshot) error {
 
 			// Discard errors from processRaftCommand. The error has been sent
 			// to the client that originated it, where it will be handled.
-			_ = r.processRaftCommand(storagebase.CmdIDKey(commandID), e.Index, command)
+			_ = r.processRaftCommand(commandID, e.Index, command)
 
 		case raftpb.EntryConfChange:
 			var cc raftpb.ConfChange
 			if err := cc.Unmarshal(e.Data); err != nil {
 				return err
 			}
-			ctx := ConfChangeContext{}
+			var ctx ConfChangeContext
 			if err := ctx.Unmarshal(cc.Context); err != nil {
 				return err
 			}
@@ -2466,7 +2437,7 @@ func (r *Replica) sendRaftMessage(msg raftpb.Message) {
 			raftGroup.ReportUnreachable(msg.To)
 			return true, nil
 		}); err != nil {
-			r.panic(err)
+			log.Fatal(r.ctx, err)
 		}
 	}
 }
@@ -2499,7 +2470,7 @@ func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
 		raftGroup.ReportSnapshot(to, snapStatus)
 		return true, nil
 	}); err != nil {
-		r.panic(err)
+		log.Fatal(r.ctx, err)
 	}
 }
 
@@ -2542,7 +2513,7 @@ func (r *Replica) processRaftCommand(
 	}
 
 	r.mu.Lock()
-	cmd := r.mu.pendingCmds[idKey]
+	cmd, cmdProposedLocally := r.mu.pendingCmds[idKey]
 
 	isLeaseError := func() bool {
 		l, ba, origin := r.mu.state.Lease, raftCmd.Cmd, raftCmd.OriginReplica
@@ -2570,12 +2541,13 @@ func (r *Replica) processRaftCommand(
 
 	// TODO(tschottdorf): consider the Trace situation here.
 	ctx := r.ctx
-	if cmd != nil {
+	if cmdProposedLocally {
 		// We initiated this command, so use the caller-supplied context.
 		ctx = cmd.ctx
 		delete(r.mu.pendingCmds, idKey)
 	}
 	leaseIndex := r.mu.state.LeaseAppliedIndex
+	sendToClient := cmdProposedLocally
 
 	var forcedErr *roachpb.Error
 	if idKey == "" {
@@ -2618,7 +2590,7 @@ func (r *Replica) processRaftCommand(
 			"command observed at lease index %d, but required < %d", leaseIndex, raftCmd.MaxLeaseIndex,
 		)
 
-		if cmd != nil {
+		if cmdProposedLocally {
 			// Only refurbish when no earlier incarnation of this command has
 			// already gone through the trouble of doing so (which would have
 			// changed our local copy of the pending command). We want to error
@@ -2649,7 +2621,7 @@ func (r *Replica) processRaftCommand(
 				// The client should get the actual execution, not this one. We
 				// keep the context (which is fine since the client will only
 				// finish it when the "real" incarnation applies).
-				cmd = nil
+				sendToClient = false
 			}
 		}
 	}
@@ -2702,7 +2674,7 @@ func (r *Replica) processRaftCommand(
 		}
 	}
 
-	if cmd != nil {
+	if sendToClient {
 		cmd.done <- roachpb.ResponseWithError{Reply: br, Err: pErr}
 		close(cmd.done)
 	} else if pErr != nil {
@@ -3141,7 +3113,7 @@ func optimizePuts(batch engine.ReadWriter, reqs []roachpb.RequestUnion, distinct
 			case *roachpb.ConditionalPutRequest:
 				t.Blind = true
 			default:
-				panic(fmt.Sprintf("unexpected non-put request: %s", t))
+				log.Fatalf(context.TODO(), "unexpected non-put request: %s", t)
 			}
 		}
 	}
@@ -3246,7 +3218,7 @@ func (r *Replica) executeBatch(
 		if maxKeys != math.MaxInt64 {
 			retResults := reply.Header().NumKeys
 			if retResults > maxKeys {
-				r.panicf("received %d results, limit was %d", retResults, maxKeys)
+				log.Fatalf(ctx, "received %d results, limit was %d", retResults, maxKeys)
 			}
 			maxKeys -= retResults
 		}
@@ -3544,12 +3516,4 @@ func (r *Replica) endKey() roachpb.RKey {
 // Less implements the btree.Item interface.
 func (r *Replica) Less(i btree.Item) bool {
 	return r.endKey().Less(i.(rangeKeyItem).endKey())
-}
-
-func (r *Replica) panic(err error) {
-	panic(r.String() + ": " + err.Error())
-}
-
-func (r *Replica) panicf(format string, vals ...interface{}) {
-	panic(r.String() + ": " + fmt.Sprintf(format, vals...))
 }
