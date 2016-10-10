@@ -18,6 +18,7 @@ package sql_test
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
@@ -59,13 +61,25 @@ func TestAsOfTime(t *testing.T) {
 		t.Fatal("unexpected error:", err)
 	}
 
-	if _, err := db.Exec("CREATE DATABASE d"); err != nil {
+	var logicalTS int64
+	if err := db.QueryRow("CREATE DATABASE d; SELECT cluster_logical_timestamp()::int").Scan(&logicalTS); err != nil {
 		t.Fatal("unexpected error:", err)
 	}
-	if err := db.QueryRow("SELECT now()").Scan(&tm); err != nil {
-		t.Fatal(err)
-	}
-	tsDBExists := tm.Format(time.RFC3339Nano)
+	// Make sure we see the DB create by using a TS after its txn time.
+	logicalTime := time.Unix(0, logicalTS+1)
+	tsDBExists := logicalTime.Format(time.RFC3339Nano)
+	// Wait until now() is after the above cluster_logical_timestamp() so the max check doesn't get hit.
+	util.SucceedsSoon(t, func() error {
+		var afterNow bool
+		if err := db.QueryRow("SELECT now() >= $1", tsDBExists).Scan(&afterNow); err != nil {
+			return err
+		}
+		if !afterNow {
+			return errors.New("timestamp not after now()")
+		}
+		return nil
+	})
+
 	if _, err := db.Query(fmt.Sprintf(query, tsDBExists), 0); !testutils.IsError(err, `pq: table "d.t" does not exist`) {
 		t.Fatal("unexpected error:", err)
 	}
@@ -178,19 +192,40 @@ func TestAsOfRetry(t *testing.T) {
 	const val1 = 1
 	const val2 = 2
 	const name = "boulanger"
+	var cls int64
+	var clss string
 
-	if _, err := sqlDB.Exec(fmt.Sprintf(`
+	if err := sqlDB.QueryRow(fmt.Sprintf(`
 			CREATE DATABASE d;
 			CREATE TABLE d.t (s STRING PRIMARY KEY, a INT);
-			INSERT INTO d.t (s, a) VALUES ('%v', %v);
-		`, name, val1)); err != nil {
+			INSERT INTO d.t (s, a) VALUES ('%v', %v)
+			RETURNING cluster_logical_timestamp()::int, cluster_logical_timestamp()::string;
+		`, name, val1)).Scan(&cls, &clss); err != nil {
 		t.Fatal(err)
 	}
+	t.Logf("CLS 1: %v", cls)
+	t.Logf("CLSS 1: %v", clss)
+	tsStart := time.Unix(0, cls+1).Format(time.RFC3339Nano)
+
+	// Wait until now() is after tsStart so that we can subtract 1 from tsVal1
+	// later on. This still isn't totally safe, but it prevents test flakiness.
+	util.SucceedsSoon(t, func() error {
+		var afterNow bool
+		if err := sqlDB.QueryRow("SELECT now() >= $1", tsStart).Scan(&afterNow); err != nil {
+			return err
+		}
+		if !afterNow {
+			return errors.New("timestamp not after now()")
+		}
+		return nil
+	})
 
 	var walltime int64
-	if err := sqlDB.QueryRow("UPDATE d.t SET a = $1 RETURNING cluster_logical_timestamp()::int", val2).Scan(&walltime); err != nil {
+	if err := sqlDB.QueryRow("UPDATE d.t SET a = $1 RETURNING cluster_logical_timestamp()::int, cluster_logical_timestamp()::string", val2).Scan(&walltime, &clss); err != nil {
 		t.Fatal(err)
 	}
+	t.Logf("CLS 2: %v", walltime)
+	t.Logf("CLSS 2: %v", clss)
 	tsVal2 := time.Unix(0, walltime).Format(time.RFC3339Nano)
 	tsVal1 := time.Unix(0, walltime-1).Format(time.RFC3339Nano)
 
