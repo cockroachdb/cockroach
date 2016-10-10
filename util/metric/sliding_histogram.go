@@ -54,7 +54,7 @@ func (h *slidingHistogram) nextTick() time.Time {
 
 func (h *slidingHistogram) Current() *hdrhistogram.Histogram {
 	maybeTick(h)
-	return cloneHistogram(h.windowed.Merge())
+	return h.windowed.Merge()
 }
 
 func (h *slidingHistogram) RecordValue(v int64) error {
