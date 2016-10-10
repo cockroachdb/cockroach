@@ -352,15 +352,38 @@ func (v *Value) SetInt(i int64) {
 // receiver and clears the checksum. If the proto message is an
 // InternalTimeSeriesData, the tag will be set to TIMESERIES rather than BYTES.
 func (v *Value) SetProto(msg proto.Message) error {
+	// Fast-path for when the proto implements MarshalTo and Size (i.e. all of
+	// our protos). The fast-path marshals directly into the Value.RawBytes field
+	// instead of allocating a separate []byte and copying.
+	type marshalTo interface {
+		MarshalTo(data []byte) (int, error)
+		Size() int
+	}
+	if m, ok := msg.(marshalTo); ok {
+		size := m.Size()
+		v.RawBytes = make([]byte, headerSize+size)
+		// NB: This call to protoutil.Interceptor would be more natural
+		// encapsulated in protoutil.MarshalTo, yet that approach imposes a
+		// significant (~30%) slowdown. It is unclear why. See
+		// BenchmarkValueSetProto.
+		protoutil.Interceptor(msg)
+		if _, err := m.MarshalTo(v.RawBytes[headerSize:]); err != nil {
+			return err
+		}
+		// Special handling for timeseries data.
+		if _, ok := msg.(*InternalTimeSeriesData); ok {
+			v.setTag(ValueType_TIMESERIES)
+		} else {
+			v.setTag(ValueType_BYTES)
+		}
+		return nil
+	}
+
 	data, err := protoutil.Marshal(msg)
 	if err != nil {
 		return err
 	}
 	v.SetBytes(data)
-	// Special handling for timeseries data.
-	if _, ok := msg.(*InternalTimeSeriesData); ok {
-		v.setTag(ValueType_TIMESERIES)
-	}
 	return nil
 }
 
