@@ -154,7 +154,7 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 	if remote != nil {
 		remoteStr = remote.String()
 	}
-	ctx = log.WithLogTagStr(ctx, "client=", remoteStr)
+	ctx = log.WithLogTagStr(ctx, "client", remoteStr)
 
 	// Set up an EventLog for session events.
 	ctx = log.WithEventLog(ctx, fmt.Sprintf("sql [%s]", args.User), remoteStr)
