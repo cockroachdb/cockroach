@@ -91,10 +91,7 @@ func (u *sqlSymUnion) tableWithIdxList() TableNameWithIndexList {
     return u.val.(TableNameWithIndexList)
 }
 func (u *sqlSymUnion) namePart() NamePart {
-    if namePart, ok := u.val.(NamePart); ok {
-        return namePart
-    }
-    return nil
+    return u.val.(NamePart)
 }
 func (u *sqlSymUnion) nameList() NameList {
     return u.val.(NameList)
@@ -136,46 +133,28 @@ func (u *sqlSymUnion) stmts() []Statement {
     return u.val.([]Statement)
 }
 func (u *sqlSymUnion) slct() *Select {
-    if selectStmt, ok := u.val.(*Select); ok {
-        return selectStmt
-    }
-    return nil
+    return u.val.(*Select)
 }
 func (u *sqlSymUnion) selectStmt() SelectStatement {
-    if selectStmt, ok := u.val.(SelectStatement); ok {
-        return selectStmt
-    }
-    return nil
+    return u.val.(SelectStatement)
 }
 func (u *sqlSymUnion) colDef() *ColumnTableDef {
     return u.val.(*ColumnTableDef)
 }
 func (u *sqlSymUnion) constraintDef() ConstraintTableDef {
-    if constraintDef, ok := u.val.(ConstraintTableDef); ok {
-        return constraintDef
-    }
-    return nil
+    return u.val.(ConstraintTableDef)
 }
 func (u *sqlSymUnion) tblDef() TableDef {
-    if tblDef, ok := u.val.(TableDef); ok {
-        return tblDef
-    }
-    return nil
+    return u.val.(TableDef)
 }
 func (u *sqlSymUnion) tblDefs() TableDefs {
     return u.val.(TableDefs)
 }
 func (u *sqlSymUnion) colQual() NamedColumnQualification {
-    if colQual, ok := u.val.(NamedColumnQualification); ok {
-        return colQual
-    }
-    return NamedColumnQualification{}
+    return u.val.(NamedColumnQualification)
 }
 func (u *sqlSymUnion) colQualElem() ColumnQualification {
-    if colQual, ok := u.val.(ColumnQualification); ok {
-        return colQual
-    }
-    return nil
+    return u.val.(ColumnQualification)
 }
 func (u *sqlSymUnion) colQuals() []NamedColumnQualification {
     return u.val.([]NamedColumnQualification)
@@ -190,10 +169,7 @@ func (u *sqlSymUnion) colTypes() []ColumnType {
     return u.val.([]ColumnType)
 }
 func (u *sqlSymUnion) expr() Expr {
-    if expr, ok := u.val.(Expr); ok {
-        return expr
-    }
-    return nil
+    return u.val.(Expr)
 }
 func (u *sqlSymUnion) exprs() Exprs {
     return u.val.(Exprs)
@@ -214,10 +190,7 @@ func (u *sqlSymUnion) asOfClause() AsOfClause {
     return u.val.(AsOfClause)
 }
 func (u *sqlSymUnion) tblExpr() TableExpr {
-    if tblExpr, ok := u.val.(TableExpr); ok {
-        return tblExpr
-    }
-    return nil
+    return u.val.(TableExpr)
 }
 func (u *sqlSymUnion) tblExprs() TableExprs {
     return u.val.(TableExprs)
@@ -226,10 +199,7 @@ func (u *sqlSymUnion) from() *From {
     return u.val.(*From)
 }
 func (u *sqlSymUnion) joinCond() JoinCond {
-    if joinCond, ok := u.val.(JoinCond); ok {
-        return joinCond
-    }
-    return nil
+    return u.val.(JoinCond)
 }
 func (u *sqlSymUnion) when() *When {
     return u.val.(*When)
@@ -277,10 +247,7 @@ func (u *sqlSymUnion) dir() Direction {
     return u.val.(Direction)
 }
 func (u *sqlSymUnion) alterTableCmd() AlterTableCmd {
-    if alterTableCmd, ok := u.val.(AlterTableCmd); ok {
-        return alterTableCmd
-    }
-    return nil
+    return u.val.(AlterTableCmd)
 }
 func (u *sqlSymUnion) alterTableCmds() AlterTableCmds {
     return u.val.(AlterTableCmds)
