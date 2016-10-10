@@ -54,6 +54,25 @@ The UI also supports live reload in debug mode. To take advantage of this, run
 `make livereload` from this directory - the UI will automatically reload files
 as you modify them, taking advantage of TypeScript's incremental compilation.
 
+## Proxying
+
+When prototyping changes to the CockroachDB Admin UI, it is desirable to see
+those changes with data from an existing cluster without the headache of having
+to redeploy a cluster. This is useful for rapidly visualizing local development
+changes against a consistent and realistic dataset.
+
+We have created a simple NodeJS reverse-proxy server to accomplish this; this
+server proxies all requests for web resources (javascript, HTML, CSS) to a local
+CockroachDB server, while proxying all requests for actual data to a remote
+CockroachDB server.
+
+To use this server, navigate to the `ui/proxy` directory and run `npm install`.
+Then run:
+`./proxy.js <existing-instance-ui-url> --local <development-instance-ui-url>`
+and navigate to `http://localhost:3000` to access the UI.
+
+Run `./proxy.js --help` for detailed information.
+
 ## Dependencies
 
 Our web console is compiled using a collection of tools that depends on
