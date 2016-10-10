@@ -1,6 +1,8 @@
 {
   "dependencies": {
     "chokidar-socket-emitter": "^0.5.4",
+    "express": "^4.14.0",
+    "http-proxy": "^1.15.1",
     "jspm": "^0.16.33",
     "karma": "^1.1.2",
     "karma-jspm": "^2.1.1",
@@ -14,7 +16,8 @@
     "stylus": "^0.54.5",
     "tslint": "^3.11.0",
     "typescript": "^2.0.2",
-    "typings": "^1.0.4"
+    "typings": "^1.0.4",
+    "yargs": "^6.0.0"
   },
   "jspm": {
     "dependencies": {

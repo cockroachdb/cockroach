@@ -54,6 +54,12 @@ The UI also supports live reload in debug mode. To take advantage of this, run
 `make livereload` from this directory - the UI will automatically reload files
 as you modify them, taking advantage of TypeScript's incremental compilation.
 
+## Proxying
+
+To test UI changes against an existing CockroachDB instance, you can use the
+`proxy.js` utility. Simply run
+`./proxy.js <existing-instance-ui-port> --local <development-instance-ui-port>`.
+
 ## Dependencies
 
 Our web console is compiled using a collection of tools that depends on
