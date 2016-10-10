@@ -412,6 +412,7 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 		// the user then stop processing if the `errexit` option is set.
 		// Otherwise, pretty-print the resulting AST to populate the
 		// history.
+		normalizedStmt := fullStmt
 		if doCheck, _ := options["check_syntax"]; doCheck {
 			var parser parser.Parser
 			stmts, err := parser.Parse(fullStmt, syntax)
@@ -423,7 +424,7 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 				}
 				skipStmt = true
 			} else if normalizeHistory, _ := options["normalize_history"]; normalizeHistory {
-				fullStmt = stmts.String() + ";"
+				normalizedStmt = stmts.String() + ";"
 			}
 		}
 
@@ -431,7 +432,7 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 			// We save the history between each statement, This enables
 			// reusing history in another SQL shell without closing the
 			// current shell.
-			addHistory(ins, fullStmt)
+			addHistory(ins, normalizedStmt)
 		}
 
 		if skipStmt {
