@@ -109,38 +109,35 @@ func TestComputeTruncatableIndex(t *testing.T) {
 // removed.
 func TestGetTruncatableIndexes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#9445 Skipped due to flakiness")
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
-	if _, err := store.GetReplica(0); err == nil {
-		t.Fatal("expected GetRange to fail on missing range")
-	}
-
 	store.SetRaftLogQueueActive(false)
-
-	// Test on a new range which should not have a raft group yet.
-	rngNew := createReplica(store, 100, roachpb.RKey("a"), roachpb.RKey("c"))
-	truncatableIndexes, oldestIndex, err := getTruncatableIndexes(context.TODO(), rngNew)
-	if err != nil {
-		t.Errorf("expected no error, got %s", err)
-	}
-	if truncatableIndexes != 0 {
-		t.Errorf("expected 0 for truncatable index, got %d", truncatableIndexes)
-	}
-	if oldestIndex != 0 {
-		t.Errorf("expected 0 for oldest index, got %d", oldestIndex)
-	}
 
 	r, err := store.GetReplica(1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	r.mu.Lock()
-	firstIndex, err := r.FirstIndex()
-	r.mu.Unlock()
+	getIndexes := func() (uint64, uint64, uint64, error) {
+		r.mu.Lock()
+		firstIndex, err := r.FirstIndex()
+		r.mu.Unlock()
+		if err != nil {
+			return 0, 0, 0, err
+		}
+		truncatableIndexes, oldestIndex, err := getTruncatableIndexes(context.Background(), r)
+		if err != nil {
+			return 0, 0, 0, err
+		}
+		return firstIndex, truncatableIndexes, oldestIndex, nil
+	}
+
+	aFirst, aTruncatable, aOldest, err := getIndexes()
 	if err != nil {
 		t.Fatal(err)
+	}
+	if aFirst == 0 {
+		t.Errorf("expected first index to be greater than 0, got %d", aFirst)
 	}
 
 	// Write a few keys to the range.
@@ -152,54 +149,71 @@ func TestGetTruncatableIndexes(t *testing.T) {
 		}
 	}
 
-	truncatableIndexes, oldestIndex, err = getTruncatableIndexes(context.TODO(), r)
+	bFirst, bTruncatable, bOldest, err := getIndexes()
 	if err != nil {
-		t.Errorf("expected no error, got %s", err)
+		t.Fatal(err)
 	}
-	if truncatableIndexes == 0 {
-		t.Errorf("expected a value for truncatable index, got 0")
+	if aFirst != bFirst {
+		t.Errorf("expected firstIndex to not change, instead it changed from %d -> %d", aFirst, bFirst)
 	}
-	if oldestIndex < firstIndex {
-		t.Errorf("expected oldest index (%d) to be greater than or equal to first index (%d)", oldestIndex,
-			firstIndex)
+	if aTruncatable >= bTruncatable {
+		t.Errorf("expected truncatableIndexes to increase, instead it changed from %d -> %d", aTruncatable, bTruncatable)
+	}
+	if aOldest >= bOldest {
+		t.Errorf("expected oldestIndex to increase, instead it changed from %d -> %d", aOldest, bOldest)
 	}
 
 	// Enable the raft log scanner and and force a truncation.
 	store.SetRaftLogQueueActive(true)
 	store.ForceRaftLogScanAndProcess()
-	// Wait for tasks to finish, in case the processLoop grabbed the event
-	// before ForceRaftLogScanAndProcess but is still working on it.
-	stopper.Quiesce()
+	store.SetRaftLogQueueActive(false)
 
-	r.mu.Lock()
-	newFirstIndex, err := r.FirstIndex()
-	r.mu.Unlock()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if newFirstIndex <= firstIndex {
-		t.Errorf("log was not correctly truncated, older first index:%d, current first index:%d", firstIndex,
-			newFirstIndex)
-	}
-
-	// Once truncated, we should have no truncatable indexes. If this turns out
-	// to be flaky, we can remove it as the same functionality is tested in
-	// client_raft_log_queue_test.
+	// There can be a delay from when the truncation command is issued and the
+	// indexes updating.
+	var cFirst, cTruncatable, cOldest uint64
 	util.SucceedsSoon(t, func() error {
-		store.ForceRaftLogScanAndProcess()
-		truncatableIndexes, oldestIndex, err := getTruncatableIndexes(context.TODO(), rngNew)
+		var err error
+		cFirst, cTruncatable, cOldest, err = getIndexes()
 		if err != nil {
-			return errors.Errorf("expected no error, got %s", err)
+			t.Fatal(err)
 		}
-		if truncatableIndexes != 0 {
-			return errors.Errorf("expected 0 for truncatable index, got %d", truncatableIndexes)
-		}
-		if oldestIndex != 0 {
-			return errors.Errorf("expected 0 for oldest index, got %d", oldestIndex)
+		if bFirst == cFirst {
+			return errors.Errorf("truncation did not occur, expected firstIndex to change, instead it remained at %d", cFirst)
 		}
 		return nil
 	})
+	if bTruncatable < cTruncatable {
+		t.Errorf("expected truncatableIndexes to decrease, instead it changed from %d -> %d", bTruncatable, cTruncatable)
+	}
+	if bOldest >= cOldest {
+		t.Errorf("expected oldestIndex to increase, instead it changed from %d -> %d", bOldest, cOldest)
+	}
+
+	// Again, enable the raft log scanner and and force a truncation. This time
+	// we expect no truncation to occur.
+	store.SetRaftLogQueueActive(true)
+	store.ForceRaftLogScanAndProcess()
+	store.SetRaftLogQueueActive(false)
+
+	// Unlike the last iteration, where we expect a truncation and can wait on
+	// it with succeedsSoon, we can't do that here. This check is fragile in
+	// that the truncation triggered here may lose the race against the call to
+	// GetFirstIndex or getTruncatableIndexes, giving a false negative. Fixing
+	// this requires additional instrumentation of the queues, which was deemed
+	// to require too much work at the time of this writing.
+	dFirst, dTruncatable, dOldest, err := getIndexes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cFirst != dFirst {
+		t.Errorf("truncation should not have occurred, but firstIndex changed from %d -> %d", cFirst, dFirst)
+	}
+	if cTruncatable != dTruncatable {
+		t.Errorf("truncation should not have occurred, but truncatableIndexes changed from %d -> %d", cTruncatable, dTruncatable)
+	}
+	if cOldest != dOldest {
+		t.Errorf("truncation should not have occurred, but oldestIndex changed from %d -> %d", cOldest, dOldest)
+	}
 }
 
 // TestProactiveRaftLogTruncate verifies that we proactively truncate the raft
