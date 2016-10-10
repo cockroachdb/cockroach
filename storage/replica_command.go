@@ -1532,8 +1532,6 @@ func (r *Replica) TruncateLog(
 	h roachpb.Header,
 	args roachpb.TruncateLogRequest,
 ) (roachpb.TruncateLogResponse, *PostCommitTrigger, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	var reply roachpb.TruncateLogResponse
 
 	// After a merge, it's possible that this request was sent to the wrong
@@ -1573,7 +1571,9 @@ func (r *Replica) TruncateLog(
 		hlc.ZeroTimestamp, nil /* txn */, false /* returnKeys */); err != nil {
 		return reply, nil, err
 	}
+	r.mu.Lock()
 	raftLogSize := r.mu.raftLogSize + diff.SysBytes
+	r.mu.Unlock()
 	// Check raftLogSize since it isn't persisted between server restarts.
 	if raftLogSize < 0 {
 		raftLogSize = 0
