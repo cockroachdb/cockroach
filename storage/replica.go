@@ -1122,6 +1122,17 @@ func (r *Replica) Send(
 	return br, pErr
 }
 
+func (r *Replica) checkBatchRange(ba roachpb.BatchRequest) error {
+	rspan, err := keys.Range(ba)
+	if err != nil {
+		return err
+	}
+	return r.checkCmdHeader(roachpb.Span{
+		Key:    rspan.Key.AsRawKey(),
+		EndKey: rspan.EndKey.AsRawKey(),
+	})
+}
+
 func (r *Replica) checkCmdHeader(header roachpb.Span) error {
 	if !r.ContainsKeyRange(header.Key, header.EndKey) {
 		mismatchErr := roachpb.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
@@ -3156,7 +3167,6 @@ func (r *Replica) executeBatch(
 	ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *PostCommitTrigger, *roachpb.Error) {
 	br := ba.CreateReply()
-	var trigger *PostCommitTrigger
 
 	r.mu.Lock()
 	threshold := r.mu.state.GCThreshold
@@ -3177,6 +3187,11 @@ func (r *Replica) executeBatch(
 		optimizePuts(batch, ba.Requests, ba.Header.DistinctSpans)
 	}
 
+	if err := r.checkBatchRange(ba); err != nil {
+		return nil, nil, roachpb.NewErrorWithTxn(err, ba.Header.Txn)
+	}
+
+	var trigger *PostCommitTrigger
 	for index, union := range ba.Requests {
 		// Execute the command.
 		args := union.GetInner()
