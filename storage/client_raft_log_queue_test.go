@@ -109,7 +109,13 @@ func TestRaftLogQueue(t *testing.T) {
 	})
 
 	// Force a truncation check again to ensure that attempting to truncate an
-	// already truncated log has no effect.
+	// already truncated log has no effect. Unlike the last iteration, where we
+	// expect a truncation and can wait on it with succeedsSoon, we can't do
+	// that here. So this check may be fragile in that the truncation my
+	// erroneously occur but getFirstIndex might not pick up that truncation
+	// right away. If this turns out to be fragile, more tooling into the
+	// raft_log_queue will be required to directly measure if a truncation
+	// command was sent or not.
 	for _, store := range mtc.stores {
 		store.ForceRaftLogScanAndProcess()
 	}
