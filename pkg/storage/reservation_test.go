@@ -37,7 +37,7 @@ func createTestBookie(
 	stopper := stop.NewStopper()
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	b := newBookie(clock, stopper, newStoreMetrics(), reservationTimeout)
+	b := newBookie(clock, stopper, newStoreMetrics(time.Hour), reservationTimeout)
 	// Lock the bookie to prevent the main loop from running as we change some
 	// of the bookie's state.
 	b.mu.Lock()

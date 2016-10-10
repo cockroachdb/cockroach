@@ -334,7 +334,7 @@ func eachRecordableValue(reg *metric.Registry, fn func(string, float64)) {
 			// roll-ups don't know that and so they will return mathematically
 			// nonsensical values, but that seems acceptable for the time
 			// being.
-			curr := histogram.Windowed()
+			curr, _ := histogram.Windowed()
 			for _, pt := range recordHistogramQuantiles {
 				fn(name+pt.suffix, float64(curr.ValueAtQuantile(pt.quantile)))
 			}

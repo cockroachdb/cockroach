@@ -19,6 +19,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"time"
 
@@ -89,9 +90,9 @@ type nodeMetrics struct {
 	Err     metric.Rates
 }
 
-func makeNodeMetrics(reg *metric.Registry) nodeMetrics {
+func makeNodeMetrics(reg *metric.Registry, sampleInterval time.Duration) nodeMetrics {
 	nm := nodeMetrics{
-		Latency: metric.NewLatency(metaExecLatency),
+		Latency: metric.NewLatency(metaExecLatency, sampleInterval),
 		Success: metric.NewRates(metaExecSuccess),
 		Err:     metric.NewRates(metaExecError),
 	}
@@ -176,6 +177,7 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics kv.TxnMetrics) (uuid.U
 
 	cfg := storage.StoreConfig{}
 	cfg.ScanInterval = 10 * time.Minute
+	cfg.MetricsSampleInterval = time.Duration(math.MaxInt64)
 	cfg.ConsistencyCheckInterval = 10 * time.Minute
 	cfg.Clock = hlc.NewClock(hlc.UnixNano)
 	tracer := tracing.NewTracer()
@@ -248,7 +250,7 @@ func NewNode(
 		storeCfg:    cfg,
 		stopper:     stopper,
 		recorder:    recorder,
-		metrics:     makeNodeMetrics(reg),
+		metrics:     makeNodeMetrics(reg, cfg.MetricsSampleInterval),
 		stores:      storage.NewStores(cfg.Ctx, cfg.Clock),
 		txnMetrics:  txnMetrics,
 		eventLogger: eventLogger,

@@ -36,6 +36,9 @@ type slidingHistogram struct {
 // duration. See the documentation for hdrhistogram.WindowedHistogram for
 // details.
 func newSlidingHistogram(duration time.Duration, maxVal int64, sigFigs int) *slidingHistogram {
+	if duration <= 0 {
+		panic("cannot create a sliding histogram with nonpositive duration")
+	}
 	return &slidingHistogram{
 		nextT:    now(),
 		duration: duration,
