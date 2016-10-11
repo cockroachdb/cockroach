@@ -376,7 +376,7 @@ func (ds *DistSender) CountRanges(rs roachpb.RSpan) (int64, error) {
 	var count int64
 	for {
 		desc, needAnother, _, err := ds.getDescriptors(
-			context.Background(), rs, nil, false /*useReverseScan*/)
+			context.TODO(), rs, nil, false /*useReverseScan*/)
 		if err != nil {
 			return -1, err
 		}
