@@ -20,23 +20,24 @@
 package parser
 
 import (
+    "fmt"
+
     "go/constant"
     "go/token"
 
-    "github.com/pkg/errors"
-
     "github.com/cockroachdb/cockroach/sql/privilege"
-    "github.com/cockroachdb/cockroach/util"
 )
 
-var errUnimplemented = errors.New("unimplemented")
-
-func unimplemented() {
-    panic(errUnimplemented)
+func unimplemented(sqllex sqlLexer) int {
+    sqllex.Error("unimplemented")
+    return 1
 }
 
-func unimplementedWithIssue(issue int) {
-    panic(util.UnimplementedWithIssueErrorf(issue, ""))
+func unimplementedWithIssue(sqllex sqlLexer, issue int) int {
+    sqllex.Error(fmt.Sprintf("unimplemented "+
+			     "(see issue https://github.com/cockroachdb/cockroach/issues/%d",
+			     issue))
+    return 1
 }
 %}
 
@@ -800,7 +801,7 @@ alter_table_cmd:
     $$.val = &AlterTableDropNotNull{columnKeyword: $2.bool(), Column: Name($3)}
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> SET NOT NULL
-| ALTER opt_column name SET NOT NULL { unimplemented() }
+| ALTER opt_column name SET NOT NULL { return unimplemented(sqllex) }
   // ALTER TABLE <name> DROP [COLUMN] IF EXISTS <colname> [RESTRICT|CASCADE]
 | DROP opt_column IF EXISTS name opt_drop_behavior
   {
@@ -818,7 +819,7 @@ alter_table_cmd:
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> [SET DATA] TYPE <typename>
   //     [ USING <expression> ]
-| ALTER opt_column name opt_set_data TYPE typename opt_collate_clause alter_using { unimplemented() }
+| ALTER opt_column name opt_set_data TYPE typename opt_collate_clause alter_using { return unimplemented(sqllex) }
   // ALTER TABLE <name> ADD CONSTRAINT ...
 | ADD table_constraint opt_validate_behavior
   {
@@ -828,7 +829,7 @@ alter_table_cmd:
     }
   }
   // ALTER TABLE <name> ALTER CONSTRAINT ...
-| ALTER CONSTRAINT name { unimplemented() }
+| ALTER CONSTRAINT name { return unimplemented(sqllex) }
   // ALTER TABLE <name> VALIDATE CONSTRAINT ...
 | VALIDATE CONSTRAINT name
   {
@@ -890,11 +891,11 @@ opt_validate_behavior:
   }
 
 opt_collate_clause:
-  COLLATE any_name { unimplementedWithIssue(2473) }
+  COLLATE any_name { return unimplementedWithIssue(sqllex, 2473) }
 | /* EMPTY */ {}
 
 alter_using:
-  USING a_expr { unimplemented() }
+  USING a_expr { return unimplemented(sqllex) }
 | /* EMPTY */ {}
 
 copy_from_stmt:
@@ -1076,7 +1077,7 @@ execute_stmt:
     }
   }
   // CREATE TABLE <name> AS EXECUTE <plan_name> [(params, ...)]
-// | CREATE opt_temp TABLE create_as_target AS EXECUTE name execute_param_clause opt_with_data { unimplemented() }
+// | CREATE opt_temp TABLE create_as_target AS EXECUTE name execute_param_clause opt_with_data { return unimplemented(sqllex) }
 
 execute_param_clause:
   '(' expr_list ')'
@@ -1283,13 +1284,13 @@ generic_set:
 set_rest_more:
   // Generic SET syntaxes:
   generic_set
-| var_name FROM CURRENT { unimplemented() }
+| var_name FROM CURRENT { return unimplemented(sqllex) }
   // Special syntaxes mandated by SQL standard:
 | TIME ZONE zone_value
   {
     $$.val = &SetTimeZone{Value: $3.expr()}
   }
-| NAMES opt_encoding { unimplemented() }
+| NAMES opt_encoding { return unimplemented(sqllex) }
 
 var_name:
   any_name
@@ -1400,8 +1401,8 @@ zone_value:
   }
 
 opt_encoding:
-  SCONST { unimplemented() }
-| DEFAULT { unimplemented() }
+  SCONST { return unimplemented(sqllex) }
+| DEFAULT { return unimplemented(sqllex) }
 | /* EMPTY */ {}
 
 non_reserved_word_or_sconst:
@@ -1636,7 +1637,7 @@ col_qualification:
   {
     $$.val = NamedColumnQualification{Qualification: $1.colQualElem()}
   }
-| COLLATE any_name { unimplemented() }
+| COLLATE any_name { return unimplemented(sqllex) }
 | FAMILY name
   {
     $$.val = NamedColumnQualification{Qualification: &ColumnFamilyConstraint{Family: Name($2)}}
@@ -1810,9 +1811,9 @@ opt_column_list:
   }
 
 key_match:
-  MATCH FULL { unimplemented() }
-| MATCH PARTIAL { unimplemented() }
-| MATCH SIMPLE { unimplemented() }
+  MATCH FULL { return unimplemented(sqllex) }
+| MATCH PARTIAL { return unimplemented(sqllex) }
+| MATCH SIMPLE { return unimplemented(sqllex) }
 | /* EMPTY */ {}
 
 // We combine the update and delete actions into one value temporarily for
@@ -1820,24 +1821,24 @@ key_match:
 // production. update is in the left 8 bits, delete in the right. Note that
 // NOACTION is the default.
 key_actions:
-  key_update { unimplemented() }
-| key_delete { unimplemented() }
-| key_update key_delete { unimplemented() }
-| key_delete key_update { unimplemented() }
+  key_update { return unimplemented(sqllex) }
+| key_delete { return unimplemented(sqllex) }
+| key_update key_delete { return unimplemented(sqllex) }
+| key_delete key_update { return unimplemented(sqllex) }
 | /* EMPTY */ {}
 
 key_update:
-  ON UPDATE key_action { unimplemented() }
+  ON UPDATE key_action { return unimplemented(sqllex) }
 
 key_delete:
-  ON DELETE key_action { unimplemented() }
+  ON DELETE key_action { return unimplemented(sqllex) }
 
 key_action:
-  NO ACTION { unimplemented() }
-| RESTRICT { unimplemented() }
-| CASCADE { unimplemented() }
-| SET NULL { unimplemented() }
-| SET DEFAULT { unimplemented() }
+  NO ACTION { return unimplemented(sqllex) }
+| RESTRICT { return unimplemented(sqllex) }
+| CASCADE { return unimplemented(sqllex) }
+| SET NULL { return unimplemented(sqllex) }
+| SET DEFAULT { return unimplemented(sqllex) }
 
 numeric_only:
   FCONST
@@ -1927,11 +1928,11 @@ index_elem:
   {
     $$.val = IndexElem{Column: Name($1), Direction: $3.dir()}
   }
-| func_expr_windowless opt_collate opt_asc_desc { unimplemented() }
-| '(' a_expr ')' opt_collate opt_asc_desc { unimplemented() }
+| func_expr_windowless opt_collate opt_asc_desc { return unimplemented(sqllex) }
+| '(' a_expr ')' opt_collate opt_asc_desc { return unimplemented(sqllex) }
 
 opt_collate:
-  COLLATE any_name { unimplemented() }
+  COLLATE any_name { return unimplemented(sqllex) }
 | /* EMPTY */ {}
 
 opt_asc_desc:
@@ -2136,14 +2137,14 @@ insert_stmt:
     $$.val.(*Insert).Table = $4.tblExpr()
     $$.val.(*Insert).OnConflict = $6.onConflict()
   }
-| opt_with_clause INSERT INTO insert_target insert_rest on_conflict RETURNING target_list { unimplementedWithIssue(6637) }
+| opt_with_clause INSERT INTO insert_target insert_rest on_conflict RETURNING target_list { return unimplementedWithIssue(sqllex, 6637) }
 | opt_with_clause UPSERT INTO insert_target insert_rest
   {
     $$.val = $5.stmt()
     $$.val.(*Insert).Table = $4.tblExpr()
     $$.val.(*Insert).OnConflict = &OnConflict{}
   }
-| opt_with_clause UPSERT INTO insert_target insert_rest RETURNING target_list { unimplementedWithIssue(6637) }
+| opt_with_clause UPSERT INTO insert_target insert_rest RETURNING target_list { return unimplementedWithIssue(sqllex, 6637) }
 
 // Can't easily make AS optional here, because VALUES in insert_rest would have
 // a shift/reduce conflict with VALUES as an optional alias. We could easily
@@ -2189,7 +2190,7 @@ opt_conf_expr:
     // TODO(dan): Support the where_clause.
     $$.val = $2.nameList()
   }
-| ON CONSTRAINT name { unimplemented() }
+| ON CONSTRAINT name { return unimplemented(sqllex) }
 | /* EMPTY */
   {
     $$.val = NameList(nil)
@@ -2214,7 +2215,7 @@ update_stmt:
 
 // Mark this as unimplemented until the normal from_clause is supported here.
 update_from_clause:
-  FROM from_list { unimplementedWithIssue(7841) }
+  FROM from_list { return unimplementedWithIssue(sqllex, 7841) }
 | /* EMPTY */ {}
 
 set_clause_list:
@@ -2442,19 +2443,19 @@ simple_select:
 //
 // Recognizing WITH_LA here allows a CTE to be named TIME or ORDINALITY.
 with_clause:
-WITH cte_list { unimplemented() }
-| WITH_LA cte_list { unimplemented() }
-| WITH RECURSIVE cte_list { unimplemented() }
+WITH cte_list { return unimplemented(sqllex) }
+| WITH_LA cte_list { return unimplemented(sqllex) }
+| WITH RECURSIVE cte_list { return unimplemented(sqllex) }
 
 cte_list:
-  common_table_expr { unimplemented() }
-| cte_list ',' common_table_expr { unimplemented() }
+  common_table_expr { return unimplemented(sqllex) }
+| cte_list ',' common_table_expr { return unimplemented(sqllex) }
 
 common_table_expr:
-  name opt_name_list AS '(' preparable_stmt ')' { unimplemented() }
+  name opt_name_list AS '(' preparable_stmt ')' { return unimplemented(sqllex) }
 
 opt_with_clause:
-  with_clause { unimplemented() }
+  with_clause { return unimplemented(sqllex) }
 | /* EMPTY */ {}
 
 opt_table:
@@ -2550,7 +2551,7 @@ limit_clause:
   }
 // SQL:2008 syntax
 // TODO(pmattis): Should we support this?
-// | FETCH first_or_next opt_select_fetch_first_value row_or_rows ONLY { unimplemented() }
+// | FETCH first_or_next opt_select_fetch_first_value row_or_rows ONLY { return unimplemented(sqllex) }
 
 offset_clause:
   OFFSET a_expr
@@ -2576,8 +2577,8 @@ select_limit_value:
 // problems with the trailing ROW/ROWS key words. SQL only calls for constants,
 // so we allow the rest only with parentheses. If omitted, default to 1.
 // opt_select_fetch_first_value:
-//   signed_iconst { unimplemented() }
-// | '(' a_expr ')' { unimplemented() }
+//   signed_iconst { return unimplemented(sqllex) }
+// | '(' a_expr ')' { return unimplemented(sqllex) }
 // | /* EMPTY */ {}
 
 // noise words
@@ -2586,8 +2587,8 @@ row_or_rows:
 | ROWS {}
 
 // first_or_next:
-//   FIRST { unimplemented() }
-// | NEXT { unimplemented() }
+//   FIRST { return unimplemented(sqllex) }
+// | NEXT { return unimplemented(sqllex) }
 
 // This syntax for group_clause tries to follow the spec quite closely.
 // However, the spec allows only column references, not expressions,
@@ -2918,12 +2919,12 @@ typename:
     $$.val = $1.colType()
   }
   // SQL standard syntax, currently only one-dimensional
-| simple_typename ARRAY '[' ICONST ']' { unimplementedWithIssue(2115) }
-| simple_typename ARRAY { unimplementedWithIssue(2115) }
+| simple_typename ARRAY '[' ICONST ']' { return unimplementedWithIssue(sqllex, 2115) }
+| simple_typename ARRAY { return unimplementedWithIssue(sqllex, 2115) }
 
 opt_array_bounds:
-  opt_array_bounds '[' ']' { unimplementedWithIssue(2115) }
-| opt_array_bounds '[' ICONST ']' { unimplementedWithIssue(2115) }
+  opt_array_bounds '[' ']' { return unimplementedWithIssue(sqllex, 2115) }
+| opt_array_bounds '[' ICONST ']' { return unimplementedWithIssue(sqllex, 2115) }
 | /* EMPTY */ {}
 
 simple_typename:
@@ -2932,7 +2933,7 @@ simple_typename:
 | character
 | const_datetime
 | const_interval opt_interval // TODO(pmattis): Support opt_interval?
-| const_interval '(' ICONST ')' { unimplemented() }
+| const_interval '(' ICONST ')' { return unimplemented(sqllex) }
 | BLOB
   {
     $$.val = bytesColTypeBlob
@@ -3212,24 +3213,24 @@ const_interval:
   }
 
 opt_interval:
-  YEAR { unimplemented() }
-| MONTH { unimplemented() }
-| DAY { unimplemented() }
-| HOUR { unimplemented() }
-| MINUTE { unimplemented() }
-| interval_second { unimplemented() }
-| YEAR TO MONTH { unimplemented() }
-| DAY TO HOUR { unimplemented() }
-| DAY TO MINUTE { unimplemented() }
-| DAY TO interval_second { unimplemented() }
-| HOUR TO MINUTE { unimplemented() }
-| HOUR TO interval_second { unimplemented() }
-| MINUTE TO interval_second { unimplemented() }
+  YEAR { return unimplemented(sqllex) }
+| MONTH { return unimplemented(sqllex) }
+| DAY { return unimplemented(sqllex) }
+| HOUR { return unimplemented(sqllex) }
+| MINUTE { return unimplemented(sqllex) }
+| interval_second { return unimplemented(sqllex) }
+| YEAR TO MONTH { return unimplemented(sqllex) }
+| DAY TO HOUR { return unimplemented(sqllex) }
+| DAY TO MINUTE { return unimplemented(sqllex) }
+| DAY TO interval_second { return unimplemented(sqllex) }
+| HOUR TO MINUTE { return unimplemented(sqllex) }
+| HOUR TO interval_second { return unimplemented(sqllex) }
+| MINUTE TO interval_second { return unimplemented(sqllex) }
 | /* EMPTY */ {}
 
 interval_second:
-  SECOND { unimplemented() }
-| SECOND '(' ICONST ')' { unimplemented() }
+  SECOND { return unimplemented(sqllex) }
+| SECOND '(' ICONST ')' { return unimplemented(sqllex) }
 
 // General expressions. This is the heart of the expression syntax.
 //
@@ -3260,8 +3261,8 @@ a_expr:
   {
     $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType(), syntaxMode: annotateShort}
   }
-| a_expr COLLATE any_name { unimplemented() }
-| a_expr AT TIME ZONE a_expr %prec AT { unimplemented() }
+| a_expr COLLATE any_name { return unimplemented(sqllex) }
+| a_expr AT TIME ZONE a_expr %prec AT { return unimplemented(sqllex) }
   // These operators must be called out explicitly in order to make use of
   // bison's automatic operator-precedence handling. All other operator names
   // are handled by the generic productions using "OP", below; and all those
@@ -3421,7 +3422,7 @@ a_expr:
   {
     $$.val = &ComparisonExpr{Operator: IsNot, Left: $1.expr(), Right: DNull}
   }
-| row OVERLAPS row { unimplemented() }
+| row OVERLAPS row { return unimplemented(sqllex) }
 | a_expr IS TRUE %prec IS
   {
     $$.val = &ComparisonExpr{Operator: Is, Left: $1.expr(), Right: MakeDBool(true)}
@@ -3486,9 +3487,9 @@ a_expr:
   {
     $$.val = &ComparisonExpr{Operator: NotIn, Left: $1.expr(), Right: $4.expr()}
   }
-// | a_expr subquery_op sub_type select_with_parens %prec CONCAT { unimplemented() }
-// | a_expr subquery_op sub_type '(' a_expr ')' %prec CONCAT { unimplemented() }
-// | UNIQUE select_with_parens { unimplemented() }
+// | a_expr subquery_op sub_type select_with_parens %prec CONCAT { return unimplemented(sqllex) }
+// | a_expr subquery_op sub_type '(' a_expr ')' %prec CONCAT { return unimplemented(sqllex) }
+// | UNIQUE select_with_parens { return unimplemented(sqllex) }
 
 // Restricted expressions
 //
@@ -3647,7 +3648,7 @@ c_expr:
     $$.val = &ExistsExpr{Subquery: &Subquery{Select: $2.selectStmt()}}
   }
 // TODO(pmattis): Support this notation?
-// | ARRAY select_with_parens { unimplemented() }
+// | ARRAY select_with_parens { return unimplemented(sqllex) }
 | ARRAY array_expr
   {
     $$.val = $2.expr()
@@ -3661,7 +3662,7 @@ c_expr:
     $$.val = $1.expr()
   }
 // TODO(pmattis): Support this notation?
-// | GROUPING '(' expr_list ')' { unimplemented() }
+// | GROUPING '(' expr_list ')' { return unimplemented(sqllex) }
 
 func_application:
   func_name '(' ')'
@@ -3672,8 +3673,8 @@ func_application:
   {
     $$.val = &FuncExpr{Name: $1.normalizableFunctionName(), Exprs: $3.exprs()}
   }
-| func_name '(' VARIADIC a_expr opt_sort_clause ')' { unimplemented() }
-| func_name '(' expr_list ',' VARIADIC a_expr opt_sort_clause ')' { unimplemented() }
+| func_name '(' VARIADIC a_expr opt_sort_clause ')' { return unimplemented(sqllex) }
+| func_name '(' expr_list ',' VARIADIC a_expr opt_sort_clause ')' { return unimplemented(sqllex) }
 | func_name '(' ALL expr_list opt_sort_clause ')'
   {
     $$.val = &FuncExpr{Name: $1.normalizableFunctionName(), Type: All, Exprs: $4.exprs()}
@@ -3711,12 +3712,12 @@ func_expr:
 // expressions are not allowed, where needed to disambiguate the grammar
 // (e.g. in CREATE INDEX).
 func_expr_windowless:
-  func_application { unimplemented() }
-| func_expr_common_subexpr { unimplemented() }
+  func_application { return unimplemented(sqllex) }
+| func_expr_common_subexpr { return unimplemented(sqllex) }
 
 // Special expressions that are considered to be functions.
 func_expr_common_subexpr:
-  COLLATION FOR '(' a_expr ')' { unimplemented() }
+  COLLATION FOR '(' a_expr ')' { return unimplemented(sqllex) }
 | CURRENT_DATE
   {
     $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1)}
@@ -3733,10 +3734,10 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1)}
   }
-| CURRENT_ROLE { unimplemented() }
-| CURRENT_USER { unimplemented() }
-| SESSION_USER { unimplemented() }
-| USER { unimplemented() }
+| CURRENT_ROLE { return unimplemented(sqllex) }
+| CURRENT_USER { return unimplemented(sqllex) }
+| SESSION_USER { return unimplemented(sqllex) }
+| USER { return unimplemented(sqllex) }
 | CAST '(' a_expr AS typename ')'
   {
     $$.val = &CastExpr{Expr: $3.expr(), Type: $5.colType(), syntaxMode: castExplicit}
@@ -3765,7 +3766,7 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Name: WrapQualifiedFunctionName($1), Exprs: $3.exprs()}
   }
-| TREAT '(' a_expr AS typename ')' { unimplemented() }
+| TREAT '(' a_expr AS typename ')' { return unimplemented(sqllex) }
 | TRIM '(' BOTH trim_list ')'
   {
     $$.val = &FuncExpr{Name: WrapQualifiedFunctionName("BTRIM"), Exprs: $4.exprs()}
@@ -3809,11 +3810,11 @@ func_expr_common_subexpr:
 
 // Aggregate decoration clauses
 within_group_clause:
-WITHIN GROUP '(' sort_clause ')' { unimplemented() }
+WITHIN GROUP '(' sort_clause ')' { return unimplemented(sqllex) }
 | /* EMPTY */ {}
 
 filter_clause:
-  FILTER '(' WHERE a_expr ')' { unimplemented() }
+  FILTER '(' WHERE a_expr ')' { return unimplemented(sqllex) }
 | /* EMPTY */ {}
 
 // Window Definitions
@@ -3901,23 +3902,23 @@ opt_partition_clause:
 // This is only a subset of the full SQL:2008 frame_clause grammar. We don't
 // support <window frame exclusion> yet.
 opt_frame_clause:
-  RANGE frame_extent { unimplemented() }
-| ROWS frame_extent { unimplemented() }
+  RANGE frame_extent { return unimplemented(sqllex) }
+| ROWS frame_extent { return unimplemented(sqllex) }
 | /* EMPTY */ {}
 
 frame_extent:
-  frame_bound { unimplemented() }
-| BETWEEN frame_bound AND frame_bound { unimplemented() }
+  frame_bound { return unimplemented(sqllex) }
+| BETWEEN frame_bound AND frame_bound { return unimplemented(sqllex) }
 
 // This is used for both frame start and frame end, with output set up on the
 // assumption it's frame start; the frame_extent productions must reject
 // invalid cases.
 frame_bound:
-  UNBOUNDED PRECEDING { unimplemented() }
-| UNBOUNDED FOLLOWING { unimplemented() }
-| CURRENT ROW { unimplemented() }
-| a_expr PRECEDING { unimplemented() }
-| a_expr FOLLOWING { unimplemented() }
+  UNBOUNDED PRECEDING { return unimplemented(sqllex) }
+| UNBOUNDED FOLLOWING { return unimplemented(sqllex) }
+| CURRENT ROW { return unimplemented(sqllex) }
+| a_expr PRECEDING { return unimplemented(sqllex) }
+| a_expr FOLLOWING { return unimplemented(sqllex) }
 
 // Supporting nonterminals for expressions.
 
@@ -3957,34 +3958,34 @@ implicit_row:
   }
 
 // sub_type:
-//   ANY { unimplemented() }
-// | SOME { unimplemented() }
-// | ALL { unimplemented() }
+//   ANY { return unimplemented(sqllex) }
+// | SOME { return unimplemented(sqllex) }
+// | ALL { return unimplemented(sqllex) }
 
 // math_op:
-//   '+' { unimplemented() }
-// | '-' { unimplemented() }
-// | '*' { unimplemented() }
-// | '/' { unimplemented() }
-// | '%' { unimplemented() }
-// | '&' { unimplemented() }
-// | '|' { unimplemented() }
-// | '^' { unimplemented() }
-// | '#' { unimplemented() }
-// | '<' { unimplemented() }
-// | '>' { unimplemented() }
-// | '=' { unimplemented() }
-// | CONCAT { unimplemented() }
-// | LESS_EQUALS { unimplemented() }
-// | GREATER_EQUALS { unimplemented() }
-// | NOT_EQUALS { unimplemented() }
+//   '+' { return unimplemented(sqllex) }
+// | '-' { return unimplemented(sqllex) }
+// | '*' { return unimplemented(sqllex) }
+// | '/' { return unimplemented(sqllex) }
+// | '%' { return unimplemented(sqllex) }
+// | '&' { return unimplemented(sqllex) }
+// | '|' { return unimplemented(sqllex) }
+// | '^' { return unimplemented(sqllex) }
+// | '#' { return unimplemented(sqllex) }
+// | '<' { return unimplemented(sqllex) }
+// | '>' { return unimplemented(sqllex) }
+// | '=' { return unimplemented(sqllex) }
+// | CONCAT { return unimplemented(sqllex) }
+// | LESS_EQUALS { return unimplemented(sqllex) }
+// | GREATER_EQUALS { return unimplemented(sqllex) }
+// | NOT_EQUALS { return unimplemented(sqllex) }
 
 // subquery_op:
-//   math_op { unimplemented() }
-// | LIKE { unimplemented() }
-// | NOT_LA LIKE { unimplemented() }
-// | ILIKE { unimplemented() }
-// | NOT_LA ILIKE { unimplemented() }
+//   math_op { return unimplemented(sqllex) }
+// | LIKE { return unimplemented(sqllex) }
+// | NOT_LA LIKE { return unimplemented(sqllex) }
+// | ILIKE { return unimplemented(sqllex) }
+// | NOT_LA ILIKE { return unimplemented(sqllex) }
   // cannot put SIMILAR TO here, because SIMILAR TO is a hack.
   // the regular expression is preprocessed by a function (similar_escape),
   // and the ~ operator for posix regular expressions is used.
@@ -4446,7 +4447,7 @@ a_expr_const:
   {
     $$.val = &StrVal{s: $1, bytesEsc: true}
   }
-| func_name '(' expr_list opt_sort_clause ')' SCONST { unimplemented() }
+| func_name '(' expr_list opt_sort_clause ')' SCONST { return unimplemented(sqllex) }
 | const_typename SCONST
   {
     $$.val = &CastExpr{Expr: &StrVal{s: $2}, Type: $1.colType(), syntaxMode: castPrefix}
