@@ -231,10 +231,16 @@ func newColumnTableDef(
 				ConstraintName: c.Name,
 			})
 		case *ColumnFKConstraint:
+			if d.HasFKConstraint() {
+				return nil, errors.Errorf("multiple foreign key constraints specified for column %q", name)
+			}
 			d.References.Table = t.Table
 			d.References.Col = t.Col
 			d.References.ConstraintName = c.Name
 		case *ColumnFamilyConstraint:
+			if d.HasColumnFamily() {
+				return nil, errors.Errorf("multiple column families specified for column %q", name)
+			}
 			d.Family.Name = t.Family
 			d.Family.Create = t.Create
 			d.Family.IfNotExists = t.IfNotExists
@@ -252,6 +258,16 @@ func (node *ColumnTableDef) setName(name Name) {
 // HasDefaultExpr returns if the ColumnTableDef has a default expression.
 func (node *ColumnTableDef) HasDefaultExpr() bool {
 	return node.DefaultExpr.Expr != nil
+}
+
+// HasFKConstraint returns if the ColumnTableDef has a foreign key constraint.
+func (node *ColumnTableDef) HasFKConstraint() bool {
+	return node.References.Table.TableNameReference != nil
+}
+
+// HasColumnFamily returns if the ColumnTableDef has a column family.
+func (node *ColumnTableDef) HasColumnFamily() bool {
+	return node.Family.Name != "" || node.Family.Create
 }
 
 // Format implements the NodeFormatter interface.
@@ -287,7 +303,7 @@ func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 		FormatNode(buf, f, checkExpr.Expr)
 		buf.WriteByte(')')
 	}
-	if node.References.Table.TableNameReference != nil {
+	if node.HasFKConstraint() {
 		if node.References.ConstraintName != "" {
 			fmt.Fprintf(buf, " CONSTRAINT %s", node.References.ConstraintName)
 		}
@@ -299,7 +315,7 @@ func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 			buf.WriteByte(')')
 		}
 	}
-	if node.Family.Name != "" || node.Family.Create {
+	if node.HasColumnFamily() {
 		if node.Family.Create {
 			buf.WriteString(" CREATE")
 		}

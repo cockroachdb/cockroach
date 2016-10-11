@@ -77,7 +77,7 @@ func (n *alterTableNode) Start() error {
 			if len(d.CheckExprs) > 0 {
 				return errors.Errorf("adding a CHECK constraint via ALTER not supported")
 			}
-			if d.References.Table.TableNameReference != nil {
+			if d.HasFKConstraint() {
 				return errors.Errorf("adding a REFERENCES constraint via ALTER not supported")
 			}
 			col, idx, err := sqlbase.MakeColumnDefDescs(d)
@@ -100,10 +100,10 @@ func (n *alterTableNode) Start() error {
 			if idx != nil {
 				n.tableDesc.AddIndexMutation(*idx, sqlbase.DescriptorMutation_ADD)
 			}
-			if t.ColumnDef.Family.Create || len(t.ColumnDef.Family.Name) > 0 {
+			if d.HasColumnFamily() {
 				err := n.tableDesc.AddColumnToFamilyMaybeCreate(
-					col.Name, string(t.ColumnDef.Family.Name), t.ColumnDef.Family.Create,
-					t.ColumnDef.Family.IfNotExists)
+					col.Name, string(d.Family.Name), d.Family.Create,
+					d.Family.IfNotExists)
 				if err != nil {
 					return err
 				}

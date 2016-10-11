@@ -132,7 +132,7 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		// Should never happen since `hoistConstraints` moves these to table level
 		return nil, nil, errors.New("unexpected column CHECK constraint")
 	}
-	if d.References.Table.TableNameReference != nil {
+	if d.HasFKConstraint() {
 		// Should never happen since `hoistConstraints` moves these to table level
 		return nil, nil, errors.New("unexpected column REFERENCED constraint")
 	}
