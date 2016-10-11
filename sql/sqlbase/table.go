@@ -128,7 +128,7 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		}
 	}
 
-	if d.CheckExpr.Expr != nil {
+	if len(d.CheckExprs) > 0 {
 		// Should never happen since `hoistConstraints` moves these to table level
 		return nil, nil, errors.New("unexpected column CHECK constraint")
 	}
