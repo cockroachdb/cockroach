@@ -207,7 +207,9 @@ func TestAsOfRetry(t *testing.T) {
 			switch req := args.Req.(type) {
 			case *roachpb.ScanRequest:
 				for key, count := range magicVals.restartCounts {
-					checkCorrectTxn(string(req.Key), magicVals, args.Hdr.Txn)
+					if err := checkCorrectTxn(string(req.Key), magicVals, args.Hdr.Txn); err != nil {
+						return roachpb.NewError(err)
+					}
 					if count > 0 && bytes.Contains(req.Key, []byte(key)) {
 						magicVals.restartCounts[key]--
 						err := roachpb.NewTransactionRetryError()
