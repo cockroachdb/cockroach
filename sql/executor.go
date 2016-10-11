@@ -374,9 +374,9 @@ func (e *Executor) Prepare(
 	defer session.planner.setTxn(nil)
 
 	if protoTS != nil {
-		session.planner.asOf = true
+		session.planner.avoidCachedDescriptors = true
 		defer func() {
-			session.planner.asOf = false
+			session.planner.avoidCachedDescriptors = false
 		}()
 
 		setTxnTimestamps(txn, *protoTS)
@@ -529,9 +529,9 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 					return res
 				}
 				if protoTS != nil {
-					planMaker.asOf = true
+					planMaker.avoidCachedDescriptors = true
 					defer func() {
-						planMaker.asOf = false
+						planMaker.avoidCachedDescriptors = false
 					}()
 				}
 			}
