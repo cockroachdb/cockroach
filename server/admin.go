@@ -979,7 +979,7 @@ func (s *adminServer) waitForStoreFrozen(
 					return err
 				}
 				client := storage.NewFreezeClient(conn)
-				resp, err = client.PollFrozen(context.Background(),
+				resp, err = client.PollFrozen(context.TODO(),
 					&storage.PollFrozenRequest{
 						StoreRequestHeader: storage.StoreRequestHeader{
 							NodeID:  nodeID,
@@ -994,7 +994,7 @@ func (s *adminServer) waitForStoreFrozen(
 			// Run a limited, non-blocking task. That means the task simply
 			// won't run if the semaphore is full (or the node is draining).
 			// Both are handled by the surrounding retry loop.
-			if err := s.server.stopper.RunLimitedAsyncTask(context.Background(), sem,
+			if err := s.server.stopper.RunLimitedAsyncTask(context.TODO(), sem,
 				func(_ context.Context) {
 					if err := action(); err != nil {
 						sendErr(err)

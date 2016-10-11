@@ -259,7 +259,7 @@ func (s *Stopper) RunLimitedAsyncTask(
 	case <-s.ShouldQuiesce():
 		return errUnavailable
 	default:
-		log.Infof(context.Background(), "stopper throttling task from %s:%d due to semaphore", file, line)
+		log.Infof(context.TODO(), "stopper throttling task from %s:%d due to semaphore", file, line)
 		// Retry the select without the default.
 		select {
 		case sem <- struct{}{}:
@@ -350,7 +350,7 @@ func (s *Stopper) Stop() {
 	defer s.Recover()
 	defer unregister(s)
 
-	log.Info(context.Background(), "stop has been called, stopping or quiescing all running tasks")
+	log.Info(context.TODO(), "stop has been called, stopping or quiescing all running tasks")
 	// Don't bother doing stuff cleanly if we're panicking, that would likely
 	// block. Instead, best effort only. This cleans up the stack traces,
 	// avoids stalls and helps some tests in `./cli` finish cleanly (where
@@ -422,7 +422,7 @@ func (s *Stopper) Quiesce() {
 		close(s.quiescer)
 	}
 	for s.mu.numTasks > 0 {
-		log.Infof(context.Background(), "quiescing; tasks left:\n%s", s.runningTasksLocked())
+		log.Infof(context.TODO(), "quiescing; tasks left:\n%s", s.runningTasksLocked())
 		// Unlock s.mu, wait for the signal, and lock s.mu.
 		s.mu.quiesce.Wait()
 	}

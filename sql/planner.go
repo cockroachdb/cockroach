@@ -76,7 +76,7 @@ type planner struct {
 func makePlanner() *planner {
 	// init with an empty session. We can't leave this nil because too much code
 	// looks in the session for the current database.
-	return &planner{session: &Session{Location: time.UTC, context: context.Background()}}
+	return &planner{session: &Session{Location: time.UTC, context: context.TODO()}}
 }
 
 // queryRunner abstracts the services provided by a planner object

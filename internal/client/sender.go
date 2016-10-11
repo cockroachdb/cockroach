@@ -47,7 +47,7 @@ func SendWrappedWith(
 	sender Sender, ctx context.Context, h roachpb.Header, args roachpb.Request,
 ) (roachpb.Response, *roachpb.Error) {
 	if ctx == nil {
-		ctx = context.Background()
+		ctx = context.TODO()
 	}
 	ba := roachpb.BatchRequest{}
 	ba.Header = h
