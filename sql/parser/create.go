@@ -25,6 +25,8 @@ package parser
 import (
 	"bytes"
 	"fmt"
+
+	"github.com/pkg/errors"
 )
 
 // CreateDatabase represents a CREATE DATABASE statement.
@@ -187,7 +189,7 @@ type ColumnTableDef struct {
 
 func newColumnTableDef(
 	name Name, typ ColumnType, qualifications []NamedColumnQualification,
-) *ColumnTableDef {
+) (*ColumnTableDef, error) {
 	d := &ColumnTableDef{
 		Name: name,
 		Type: typ,
@@ -196,6 +198,9 @@ func newColumnTableDef(
 	for _, c := range qualifications {
 		switch t := c.Qualification.(type) {
 		case *ColumnDefault:
+			if d.HasDefaultExpr() {
+				return nil, errors.Errorf("multiple default values specified for column %q", name)
+			}
 			d.DefaultExpr.Expr = t.Expr
 			d.DefaultExpr.ConstraintName = c.Name
 		case NotNullConstraint:
@@ -225,11 +230,16 @@ func newColumnTableDef(
 			panic(fmt.Sprintf("unexpected column qualification: %T", c))
 		}
 	}
-	return d
+	return d, nil
 }
 
 func (node *ColumnTableDef) setName(name Name) {
 	node.Name = name
+}
+
+// HasDefaultExpr returns if the ColumnTableDef has a default expression.
+func (node *ColumnTableDef) HasDefaultExpr() bool {
+	return node.DefaultExpr.Expr != nil
 }
 
 // Format implements the NodeFormatter interface.
@@ -250,7 +260,7 @@ func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	} else if node.Unique {
 		buf.WriteString(" UNIQUE")
 	}
-	if node.DefaultExpr.Expr != nil {
+	if node.HasDefaultExpr() {
 		if node.DefaultExpr.ConstraintName != "" {
 			fmt.Fprintf(buf, " CONSTRAINT %s", node.DefaultExpr.ConstraintName)
 		}

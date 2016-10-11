@@ -884,6 +884,14 @@ CREATE TABLE test (
   foo BIT(0)
            ^
 `},
+		{`CREATE TABLE test (
+  foo INT DEFAULT 1 DEFAULT 2
+)`, `multiple default values specified for column "foo" at or near ")"
+CREATE TABLE test (
+  foo INT DEFAULT 1 DEFAULT 2
+)
+^
+`},
 		{`CREATE DATABASE a b`,
 			`syntax error at or near "b"
 CREATE DATABASE a b
