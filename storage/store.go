@@ -2643,6 +2643,7 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
 func sendSnapshot(
+	ctx context.Context,
 	stream MultiRaft_RaftSnapshotClient,
 	header SnapshotRequest_Header,
 	snap *OutgoingSnapshot,
@@ -2720,7 +2721,7 @@ func sendSnapshot(
 
 	rangeID := header.RangeDescriptor.RangeID
 
-	truncState, err := loadTruncatedState(stream.Context(), snap.EngineSnap, rangeID)
+	truncState, err := loadTruncatedState(ctx, snap.EngineSnap, rangeID)
 	if err != nil {
 		return err
 	}
@@ -2737,13 +2738,13 @@ func sendSnapshot(
 		return false, err
 	}
 
-	if err := iterateEntries(stream.Context(), snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
+	if err := iterateEntries(ctx, snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
 		return err
 	}
 	if err := stream.Send(&SnapshotRequest{LogEntries: logEntries, Final: true}); err != nil {
 		return err
 	}
-	log.Infof(stream.Context(), "streamed snapshot: kv pairs: %d, log entries: %d",
+	log.Infof(ctx, "streamed snapshot: kv pairs: %d, log entries: %d",
 		n, len(logEntries))
 
 	resp, err = stream.Recv()
