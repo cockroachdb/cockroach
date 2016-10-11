@@ -197,40 +197,26 @@ func newColumnTableDef(
 		switch t := c.Qualification.(type) {
 		case *ColumnDefault:
 			d.DefaultExpr.Expr = t.Expr
-			if c.Name != "" {
-				d.DefaultExpr.ConstraintName = c.Name
-			}
+			d.DefaultExpr.ConstraintName = c.Name
 		case NotNullConstraint:
 			d.Nullable.Nullability = NotNull
-			if c.Name != "" {
-				d.Nullable.ConstraintName = c.Name
-			}
+			d.Nullable.ConstraintName = c.Name
 		case NullConstraint:
 			d.Nullable.Nullability = Null
-			if c.Name != "" {
-				d.Nullable.ConstraintName = c.Name
-			}
+			d.Nullable.ConstraintName = c.Name
 		case PrimaryKeyConstraint:
 			d.PrimaryKey = true
-			if c.Name != "" {
-				d.UniqueConstraintName = c.Name
-			}
+			d.UniqueConstraintName = c.Name
 		case UniqueConstraint:
 			d.Unique = true
-			if c.Name != "" {
-				d.UniqueConstraintName = c.Name
-			}
+			d.UniqueConstraintName = c.Name
 		case *ColumnCheckConstraint:
 			d.CheckExpr.Expr = t.Expr
-			if c.Name != "" {
-				d.CheckExpr.ConstraintName = c.Name
-			}
+			d.CheckExpr.ConstraintName = c.Name
 		case *ColumnFKConstraint:
 			d.References.Table = t.Table
 			d.References.Col = t.Col
-			if c.Name != "" {
-				d.References.ConstraintName = c.Name
-			}
+			d.References.ConstraintName = c.Name
 		case *ColumnFamilyConstraint:
 			d.Family.Name = t.Family
 			d.Family.Create = t.Create
