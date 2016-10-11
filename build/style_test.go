@@ -275,7 +275,7 @@ func TestStyle(t *testing.T) {
 
 		if err := stream.ForEach(stream.Sequence(
 			filter,
-			stream.GrepNot(`(json|yaml|protoutil)\.Marshal`),
+			stream.GrepNot(`(json|yaml|protoutil|Field)\.Marshal`),
 			stream.GrepNot(`^util/protoutil/marshal(_test)?\.go\b`),
 		), func(s string) {
 			t.Errorf(`%s <- forbidden; use "protoutil.Marshal" instead`, s)
