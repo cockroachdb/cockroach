@@ -791,8 +791,12 @@ func (*RangeLookupRequest) flags() int        { return isRead }
 func (*ResolveIntentRequest) flags() int      { return isWrite }
 func (*ResolveIntentRangeRequest) flags() int { return isWrite | isRange }
 func (*NoopRequest) flags() int               { return isRead } // slightly special
-func (*MergeRequest) flags() int              { return isWrite }
 func (*TruncateLogRequest) flags() int        { return isWrite | isNonKV }
+
+// MergeRequests are considered "non KV" because they do not need to be gated
+// by the command queue (reordering is ok) and they operate on non-MVCC data so
+// the timestamp cache is also unnecessary.
+func (*MergeRequest) flags() int { return isWrite | isNonKV }
 
 func (*RequestLeaseRequest) flags() int {
 	return isWrite | isAlone | isNonKV | skipLeaseCheck

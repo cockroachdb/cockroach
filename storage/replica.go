@@ -1430,7 +1430,7 @@ func (r *Replica) addReadOnlyCmd(
 	}
 
 	var endCmdsFunc func(*roachpb.BatchResponse, *roachpb.Error) *roachpb.Error
-	if !ba.IsSingleNonKVRequest() {
+	if !ba.IsNonKV() {
 		// Add the read to the command queue to gate subsequent
 		// overlapping commands until this command completes.
 		log.Event(ctx, "command queue")
@@ -1502,7 +1502,7 @@ func (r *Replica) assert5725(ba roachpb.BatchRequest) {
 func (r *Replica) addWriteCmd(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	isNonKV := ba.IsSingleNonKVRequest()
+	isNonKV := ba.IsNonKV()
 	if !isNonKV {
 		// Add the write to the command queue to gate subsequent overlapping
 		// commands until this command completes. Note that this must be
