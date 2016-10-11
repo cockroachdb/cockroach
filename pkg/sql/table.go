@@ -93,13 +93,13 @@ type SchemaAccessor interface {
 	// represents a table rather than a view.
 	getViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error)
 
+	// mustGetTableOrViewDesc returns a table descriptor for either a table or
+	// view, or an error if the descriptor is not found.
+	mustGetTableOrViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error)
+
 	// mustGetTableDesc returns a table descriptor for a table, or an error if
 	// the descriptor is not found.
 	mustGetTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error)
-
-	// mustGetTableOrViewDesc returns a table descriptor for a table or view, or
-	// an error if the descriptor is not found.
-	mustGetTableOrViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error)
 
 	// mustGetViewDesc returns a table descriptor for a view, or an error if the
 	// descriptor is not found.
@@ -177,9 +177,9 @@ func (p *planner) getViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, e
 	return desc, nil
 }
 
-// mustGetTableDesc implements the SchemaAccessor interface.
-func (p *planner) mustGetTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
-	desc, err := p.getTableDesc(tn)
+// mustGetTableOrViewDesc implements the SchemaAccessor interface.
+func (p *planner) mustGetTableOrViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
+	desc, err := p.getTableOrViewDesc(tn)
 	if err != nil {
 		return nil, err
 	}
@@ -192,9 +192,9 @@ func (p *planner) mustGetTableDesc(tn *parser.TableName) (*sqlbase.TableDescript
 	return desc, nil
 }
 
-// mustGetTableOrViewDesc implements the SchemaAccessor interface.
-func (p *planner) mustGetTableOrViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
-	desc, err := p.getTableOrViewDesc(tn)
+// mustGetTableDesc implements the SchemaAccessor interface.
+func (p *planner) mustGetTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
+	desc, err := p.getTableDesc(tn)
 	if err != nil {
 		return nil, err
 	}
