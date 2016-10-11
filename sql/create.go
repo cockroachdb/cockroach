@@ -412,16 +412,16 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 func hoistConstraints(n *parser.CreateTable) {
 	for _, d := range n.Defs {
 		if col, ok := d.(*parser.ColumnTableDef); ok {
-			if col.CheckExpr.Expr != nil {
+			for _, checkExpr := range col.CheckExprs {
 				n.Defs = append(n.Defs,
 					&parser.CheckConstraintTableDef{
-						Expr: col.CheckExpr.Expr,
-						Name: col.CheckExpr.ConstraintName,
+						Expr: checkExpr.Expr,
+						Name: checkExpr.ConstraintName,
 					},
 				)
-				col.CheckExpr.Expr = nil
 			}
-			if col.References.Table.TableNameReference != nil {
+			col.CheckExprs = nil
+			if col.HasFKConstraint() {
 				var targetCol parser.NameList
 				if col.References.Col != "" {
 					targetCol = append(targetCol, col.References.Col)
@@ -984,7 +984,7 @@ func (p *planner) makeTableDesc(
 					return desc, err
 				}
 			}
-			if d.Family.Create || len(d.Family.Name) > 0 {
+			if d.HasColumnFamily() {
 				// Pass true for `create` and `ifNotExists` because when we're creating
 				// a table, we always want to create the specified family if it doesn't
 				// exist.

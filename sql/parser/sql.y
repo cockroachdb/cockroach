@@ -1609,7 +1609,12 @@ opt_interleave_drop_behavior:
 column_def:
   name typename col_qual_list
   {
-    $$.val = newColumnTableDef(Name($1), $2.colType(), $3.colQuals())
+    tableDef, err := newColumnTableDef(Name($1), $2.colType(), $3.colQuals())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = tableDef
   }
 
 col_qual_list:

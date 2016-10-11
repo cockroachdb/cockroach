@@ -94,6 +94,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (a INT CONSTRAINT one DEFAULT 1 CHECK (a > 0))`},
 		{`CREATE TABLE a (a INT DEFAULT 1 CONSTRAINT positive CHECK (a > 0))`},
 		{`CREATE TABLE a (a INT CONSTRAINT one DEFAULT 1 CONSTRAINT positive CHECK (a > 0))`},
+		{`CREATE TABLE a (a INT CONSTRAINT one CHECK (a > 0) CONSTRAINT two CHECK (a < 10))`},
 		// "0" lost quotes previously.
 		{`CREATE TABLE a (b INT, c TEXT, PRIMARY KEY (b, c, "0"))`},
 		{`CREATE TABLE a (b INT, c TEXT, FOREIGN KEY (b) REFERENCES other)`},
@@ -883,6 +884,46 @@ CREATE TABLE test (
 CREATE TABLE test (
   foo BIT(0)
            ^
+`},
+		{`CREATE TABLE test (
+  foo INT DEFAULT 1 DEFAULT 2
+)`, `multiple default values specified for column "foo" at or near ")"
+CREATE TABLE test (
+  foo INT DEFAULT 1 DEFAULT 2
+)
+^
+`},
+		{`CREATE TABLE test (
+  foo INT REFERENCES t1 REFERENCES t2
+)`, `multiple foreign key constraints specified for column "foo" at or near ")"
+CREATE TABLE test (
+  foo INT REFERENCES t1 REFERENCES t2
+)
+^
+`},
+		{`CREATE TABLE test (
+  foo INT FAMILY a FAMILY b
+)`, `multiple column families specified for column "foo" at or near ")"
+CREATE TABLE test (
+  foo INT FAMILY a FAMILY b
+)
+^
+`},
+		{`CREATE TABLE test (
+  foo INT NOT NULL NULL
+)`, `conflicting NULL/NOT NULL declarations for column "foo" at or near ")"
+CREATE TABLE test (
+  foo INT NOT NULL NULL
+)
+^
+`},
+		{`CREATE TABLE test (
+  foo INT NULL NOT NULL
+)`, `conflicting NULL/NOT NULL declarations for column "foo" at or near ")"
+CREATE TABLE test (
+  foo INT NULL NOT NULL
+)
+^
 `},
 		{`CREATE DATABASE a b`,
 			`syntax error at or near "b"
