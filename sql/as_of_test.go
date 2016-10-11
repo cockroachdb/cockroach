@@ -18,6 +18,7 @@ package sql_test
 
 import (
 	"bytes"
+	gosql "database/sql"
 	"fmt"
 	"testing"
 	"time"
@@ -28,7 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/pkg/errors"
 )
 
 func TestAsOfTime(t *testing.T) {
@@ -56,39 +59,43 @@ func TestAsOfTime(t *testing.T) {
 	}
 	tsEmpty := tm.Format(time.RFC3339Nano)
 	if _, err := db.Query(fmt.Sprintf(query, tsEmpty), 0); !testutils.IsError(err, `pq: database "d" does not exist`) {
-		t.Fatal("unexpected error:", err)
-	}
-
-	if _, err := db.Exec("CREATE DATABASE d"); err != nil {
-		t.Fatal("unexpected error:", err)
-	}
-	if err := db.QueryRow("SELECT now()").Scan(&tm); err != nil {
 		t.Fatal(err)
 	}
-	tsDBExists := tm.Format(time.RFC3339Nano)
+
+	var logicalTS int64
+	if err := db.QueryRow("CREATE DATABASE d; SELECT cluster_logical_timestamp()::int").Scan(&logicalTS); err != nil {
+		t.Fatal(err)
+	}
+	// Make sure we see the DB create by using a TS after its txn time.
+	tsDBExists := time.Unix(0, logicalTS+1).Format(time.RFC3339Nano)
+	// Wait until now() is after the above cluster_logical_timestamp() so the max check doesn't get hit.
+	util.SucceedsSoon(t, func() error {
+		return waitForNow(t, db, tsDBExists)
+	})
+
 	if _, err := db.Query(fmt.Sprintf(query, tsDBExists), 0); !testutils.IsError(err, `pq: table "d.t" does not exist`) {
-		t.Fatal("unexpected error:", err)
+		t.Fatal(err)
 	}
 
 	if _, err := db.Exec(`
 		CREATE TABLE d.t (a INT, b INT);
 		CREATE TABLE d.j (c INT);
 	`); err != nil {
-		t.Fatal("unexpected error:", err)
+		t.Fatal(err)
 	}
 	if err := db.QueryRow("SELECT now()").Scan(&tm); err != nil {
 		t.Fatal(err)
 	}
 	tsTableExists := tm.Format(time.RFC3339Nano)
 	if err := db.QueryRow(fmt.Sprintf(query, tsTableExists), 0).Scan(&i); !testutils.IsError(err, "sql: no rows in result set") {
-		t.Fatal("unexpected error:", err)
+		t.Fatal(err)
 	}
 
 	if _, err := db.Exec("INSERT INTO d.t (a) VALUES ($1)", val1); err != nil {
-		t.Fatal("unexpected error:", err)
+		t.Fatal(err)
 	}
 	if _, err := db.Exec("INSERT INTO d.j (c) VALUES ($1)", val2); err != nil {
-		t.Fatal("unexpected error:", err)
+		t.Fatal(err)
 	}
 	if err := db.QueryRow("SELECT a, now() FROM d.t").Scan(&i, &tm); err != nil {
 		t.Fatal(err)
@@ -121,28 +128,28 @@ func TestAsOfTime(t *testing.T) {
 	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1"); err == nil {
 		t.Fatal("expected error")
 	} else if !testutils.IsError(err, `pq: syntax error at or near "1"`) {
-		t.Fatal("unexpected error:", err)
+		t.Fatal(err)
 	}
 
 	// Future queries shouldn't work.
 	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '2200-01-01'").Scan(&i); err == nil {
 		t.Fatal("expected error")
 	} else if !testutils.IsError(err, "pq: cannot specify timestamp in the future") {
-		t.Fatal("unexpected error:", err)
+		t.Fatal(err)
 	}
 
 	// Old queries shouldn't work.
 	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '1969-12-31'").Scan(&i); err == nil {
 		t.Fatal("expected error")
 	} else if !testutils.IsError(err, "pq: batch timestamp -86400.000000000,0 must be after replica GC threshold 0.000000000,0") {
-		t.Fatal("unexpected error:", err)
+		t.Fatal(err)
 	}
 
 	// Subqueries shouldn't work.
 	if _, err := db.Query(fmt.Sprintf("SELECT (SELECT a FROM d.t AS OF SYSTEM TIME '%s')", tsVal1)); err == nil {
 		t.Fatal("expected error")
 	} else if !testutils.IsError(err, "pq: unexpected AS OF SYSTEM TIME") {
-		t.Fatal("unexpected error:", err)
+		t.Fatal(err)
 	}
 
 	// Verify that we can read columns in the past that are dropped in the future.
@@ -159,7 +166,7 @@ func TestAsOfTime(t *testing.T) {
 	if _, err := db.Query(fmt.Sprintf("BEGIN; SELECT a FROM d.t AS OF SYSTEM TIME '%s'; COMMIT;", tsVal1)); err == nil {
 		t.Fatal("expected error")
 	} else if !testutils.IsError(err, "pq: unexpected AS OF SYSTEM TIME") {
-		t.Fatal("unexpected error:", err)
+		t.Fatal(err)
 	}
 }
 
@@ -178,16 +185,28 @@ func TestAsOfRetry(t *testing.T) {
 	const val1 = 1
 	const val2 = 2
 	const name = "boulanger"
+	var walltime int64
 
-	if _, err := sqlDB.Exec(fmt.Sprintf(`
+	if _, err := sqlDB.Exec(`
 			CREATE DATABASE d;
 			CREATE TABLE d.t (s STRING PRIMARY KEY, a INT);
-			INSERT INTO d.t (s, a) VALUES ('%v', %v);
-		`, name, val1)); err != nil {
+		`); err != nil {
 		t.Fatal(err)
 	}
+	if err := sqlDB.QueryRow(`
+			INSERT INTO d.t (s, a) VALUES ($1, $2)
+			RETURNING cluster_logical_timestamp()::int;
+		`, name, val1).Scan(&walltime); err != nil {
+		t.Fatal(err)
+	}
+	tsStart := time.Unix(0, walltime+1).Format(time.RFC3339Nano)
 
-	var walltime int64
+	// Wait until now() is after tsStart so that we can subtract 1 from tsVal1
+	// later on. This still isn't totally safe, but it prevents test flakiness.
+	util.SucceedsSoon(t, func() error {
+		return waitForNow(t, sqlDB, tsStart)
+	})
+
 	if err := sqlDB.QueryRow("UPDATE d.t SET a = $1 RETURNING cluster_logical_timestamp()::int", val2).Scan(&walltime); err != nil {
 		t.Fatal(err)
 	}
@@ -243,4 +262,15 @@ func TestAsOfRetry(t *testing.T) {
 	} else if i != val2 {
 		t.Fatalf("unexpected val: %v", i)
 	}
+}
+
+func waitForNow(t *testing.T, db *gosql.DB, ts string) error {
+	var afterNow bool
+	if err := db.QueryRow("SELECT now() >= $1", ts).Scan(&afterNow); err != nil {
+		return err
+	}
+	if !afterNow {
+		return errors.Errorf("timestamp not after now(): %s", ts)
+	}
+	return nil
 }
