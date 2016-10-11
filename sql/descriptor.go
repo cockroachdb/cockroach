@@ -293,7 +293,7 @@ func (p *planner) getDescriptorsFromTargetList(
 			return nil, err
 		}
 		for i := range tables {
-			descriptor, err := p.mustGetTableDesc(&tables[i])
+			descriptor, err := p.mustGetTableOrViewDesc(&tables[i])
 			if err != nil {
 				return nil, err
 			}
