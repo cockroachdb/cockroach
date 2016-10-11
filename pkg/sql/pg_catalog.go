@@ -38,6 +38,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogAttrDefTable,
 		pgCatalogAttributeTable,
 		pgCatalogClassTable,
+		pgCatalogIndexesTable,
 		pgCatalogNamespaceTable,
 		pgCatalogTablesTable,
 	},
@@ -269,6 +270,95 @@ CREATE TABLE pg_catalog.pg_class (
 			},
 		)
 	},
+}
+
+var pgCatalogIndexesTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_indexes (
+	schemaname STRING,
+	tablename STRING,
+	indexname STRING,
+	tablespace STRING,
+	indexdef STRING
+);
+`,
+	populate: func(p *planner, addRow func(...parser.Datum) error) error {
+		return forEachTableDesc(p,
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
+					def, err := indexDefFromDescriptor(p, db, table, index)
+					if err != nil {
+						return err
+					}
+					return addRow(
+						parser.NewDString(db.Name),    // schemaname
+						parser.NewDString(table.Name), // tablename
+						parser.NewDString(index.Name), // indexname
+						parser.DNull,                  // tablespace
+						parser.NewDString(def),        // indexdef
+					)
+				})
+			},
+		)
+	},
+}
+
+func indexDefFromDescriptor(
+	p *planner,
+	db *sqlbase.DatabaseDescriptor,
+	table *sqlbase.TableDescriptor,
+	index *sqlbase.IndexDescriptor,
+) (string, error) {
+	indexDef := parser.CreateIndex{
+		Name: parser.Name(index.Name),
+		Table: parser.NormalizableTableName{
+			TableNameReference: &parser.TableName{
+				DatabaseName: parser.Name(db.Name),
+				TableName:    parser.Name(table.Name),
+			},
+		},
+		Unique:  index.Unique,
+		Columns: make(parser.IndexElemList, len(index.ColumnNames)),
+		Storing: make(parser.NameList, len(index.StoreColumnNames)),
+	}
+	for i, name := range index.ColumnNames {
+		elem := parser.IndexElem{
+			Column:    parser.Name(name),
+			Direction: parser.Ascending,
+		}
+		if index.ColumnDirections[i] == sqlbase.IndexDescriptor_DESC {
+			elem.Direction = parser.Descending
+		}
+		indexDef.Columns[i] = elem
+	}
+	for i, name := range index.StoreColumnNames {
+		indexDef.Storing[i] = parser.Name(name)
+	}
+	if len(index.Interleave.Ancestors) > 0 {
+		intl := index.Interleave
+		parentTable, err := sqlbase.GetTableDescFromID(p.txn, intl.Ancestors[len(intl.Ancestors)-1].TableID)
+		if err != nil {
+			return "", err
+		}
+		var sharedPrefixLen int
+		for _, ancestor := range intl.Ancestors {
+			sharedPrefixLen += int(ancestor.SharedPrefixLen)
+		}
+		fields := index.ColumnNames[:sharedPrefixLen]
+		intlDef := &parser.InterleaveDef{
+			Parent: parser.NormalizableTableName{
+				TableNameReference: &parser.TableName{
+					TableName: parser.Name(parentTable.Name),
+				},
+			},
+			Fields: make(parser.NameList, len(fields)),
+		}
+		for i, field := range fields {
+			intlDef.Fields[i] = parser.Name(field)
+		}
+		indexDef.Interleave = intlDef
+	}
+	return indexDef.String(), nil
 }
 
 var pgCatalogNamespaceTable = virtualSchemaTable{
