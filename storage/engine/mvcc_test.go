@@ -3864,6 +3864,37 @@ func TestWillOverflow(t *testing.T) {
 	}
 }
 
+func TestMVCCStatsInit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	rocksdb := NewInMem(roachpb.Attributes{Attrs: []string{"ssd"}}, testCacheSize, stopper)
+
+	ms := enginepb.MVCCStats{
+		LiveBytes:       1,
+		KeyBytes:        2,
+		ValBytes:        3,
+		IntentBytes:     4,
+		LiveCount:       5,
+		KeyCount:        6,
+		ValCount:        7,
+		IntentCount:     8,
+		IntentAge:       9,
+		GCBytesAge:      10,
+		LastUpdateNanos: 11,
+	}
+	if err := MVCCSetRangeStats(context.Background(), rocksdb, 1, &ms); err != nil {
+		t.Fatal(err)
+	}
+	var loadedMS enginepb.MVCCStats
+	if err := MVCCGetRangeStats(context.Background(), rocksdb, 1, &loadedMS); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(ms, loadedMS) {
+		t.Errorf("mvcc stats mismatch %+v != %+v", ms, loadedMS)
+	}
+}
+
 // BenchmarkMVCCStats set MVCCStats values.
 func BenchmarkMVCCStats(b *testing.B) {
 	stopper := stop.NewStopper()
