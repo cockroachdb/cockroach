@@ -167,7 +167,13 @@ TestStaticcheck() {
 }
 
 TestCrlfmt() {
-  crlfmt -ignore 'pb.*.go' -tab 2 .
+  local cmd='crlfmt -ignore \.pb.*\.go -tab 2'
+  local status=0
+  ${cmd} . || status=$?
+  if [ $status -ne 0 ]; then
+    echo -e "run the following command:\n${cmd} -w .; git add -p"
+  fi
+  return $status
 }
 
 # Run all the tests, wrapped in a similar output format to "go test"
