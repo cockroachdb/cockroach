@@ -79,7 +79,7 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		col.Type.Width = int32(t.N)
 		colDatumType = parser.TypeInt
 		if t.IsSerial() {
-			if d.DefaultExpr.Expr != nil {
+			if d.HasDefaultExpr() {
 				return nil, nil, fmt.Errorf("SERIAL column %q cannot have a default value", col.Name)
 			}
 			s := "unique_rowid()"
@@ -137,7 +137,7 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 		return nil, nil, errors.New("unexpected column REFERENCED constraint")
 	}
 
-	if d.DefaultExpr.Expr != nil {
+	if d.HasDefaultExpr() {
 		// Verify the default expression type is compatible with the column type.
 		if err := SanitizeVarFreeExpr(d.DefaultExpr.Expr, colDatumType, "DEFAULT"); err != nil {
 			return nil, nil, err
