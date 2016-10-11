@@ -1,7 +1,7 @@
 #### column CHECK constraints
 
 statement ok
-CREATE TABLE t1 (a INT CHECK (a > 0), to_delete INT, b INT CHECK (b < 0))
+CREATE TABLE t1 (a INT CHECK (a > 0), to_delete INT, b INT CHECK (b < 0) CHECK (b > -100))
 
 statement ok
 INSERT INTO t1 VALUES (3, 0, -1)
@@ -17,6 +17,9 @@ INSERT INTO t1 VALUES (-3, -1)
 
 statement error pq: failed to satisfy CHECK constraint \(b < 0\)
 INSERT INTO t1 VALUES (3, 1)
+
+statement error pq: failed to satisfy CHECK constraint \(b > -100\)
+INSERT INTO t1 VALUES (3, -101)
 
 statement ok
 INSERT INTO t1 (b, a) VALUES (-2, 4)

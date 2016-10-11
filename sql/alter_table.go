@@ -74,7 +74,7 @@ func (n *alterTableNode) Start() error {
 		switch t := cmd.(type) {
 		case *parser.AlterTableAddColumn:
 			d := t.ColumnDef
-			if d.CheckExpr.Expr != nil {
+			if len(d.CheckExprs) > 0 {
 				return errors.Errorf("adding a CHECK constraint via ALTER not supported")
 			}
 			if d.References.Table.TableNameReference != nil {

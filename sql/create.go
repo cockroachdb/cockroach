@@ -412,15 +412,15 @@ func (p *planner) CreateTable(n *parser.CreateTable) (planNode, error) {
 func hoistConstraints(n *parser.CreateTable) {
 	for _, d := range n.Defs {
 		if col, ok := d.(*parser.ColumnTableDef); ok {
-			if col.CheckExpr.Expr != nil {
+			for _, checkExpr := range col.CheckExprs {
 				n.Defs = append(n.Defs,
 					&parser.CheckConstraintTableDef{
-						Expr: col.CheckExpr.Expr,
-						Name: col.CheckExpr.ConstraintName,
+						Expr: checkExpr.Expr,
+						Name: checkExpr.ConstraintName,
 					},
 				)
-				col.CheckExpr.Expr = nil
 			}
+			col.CheckExprs = nil
 			if col.References.Table.TableNameReference != nil {
 				var targetCol parser.NameList
 				if col.References.Col != "" {

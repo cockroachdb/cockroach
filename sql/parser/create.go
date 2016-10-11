@@ -171,10 +171,7 @@ type ColumnTableDef struct {
 		Expr           Expr
 		ConstraintName Name
 	}
-	CheckExpr struct {
-		Expr           Expr
-		ConstraintName Name
-	}
+	CheckExprs []ColumnTableDefCheckExpr
 	References struct {
 		Table          NormalizableTableName
 		Col            Name
@@ -185,6 +182,13 @@ type ColumnTableDef struct {
 		Create      bool
 		IfNotExists bool
 	}
+}
+
+// ColumnTableDefCheckExpr represents a check constraint on a column definition
+// within a CREATE TABLE statement.
+type ColumnTableDefCheckExpr struct {
+	Expr           Expr
+	ConstraintName Name
 }
 
 func newColumnTableDef(
@@ -222,8 +226,10 @@ func newColumnTableDef(
 			d.Unique = true
 			d.UniqueConstraintName = c.Name
 		case *ColumnCheckConstraint:
-			d.CheckExpr.Expr = t.Expr
-			d.CheckExpr.ConstraintName = c.Name
+			d.CheckExprs = append(d.CheckExprs, ColumnTableDefCheckExpr{
+				Expr:           t.Expr,
+				ConstraintName: c.Name,
+			})
 		case *ColumnFKConstraint:
 			d.References.Table = t.Table
 			d.References.Col = t.Col
@@ -273,12 +279,12 @@ func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteString(" DEFAULT ")
 		FormatNode(buf, f, node.DefaultExpr.Expr)
 	}
-	if node.CheckExpr.Expr != nil {
-		if node.CheckExpr.ConstraintName != "" {
-			fmt.Fprintf(buf, " CONSTRAINT %s", node.CheckExpr.ConstraintName)
+	for _, checkExpr := range node.CheckExprs {
+		if checkExpr.ConstraintName != "" {
+			fmt.Fprintf(buf, " CONSTRAINT %s", checkExpr.ConstraintName)
 		}
 		buf.WriteString(" CHECK (")
-		FormatNode(buf, f, node.CheckExpr.Expr)
+		FormatNode(buf, f, checkExpr.Expr)
 		buf.WriteByte(')')
 	}
 	if node.References.Table.TableNameReference != nil {
