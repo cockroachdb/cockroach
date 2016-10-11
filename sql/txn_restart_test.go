@@ -25,6 +25,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/lib/pq"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -43,8 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/syncutil"
-	"github.com/lib/pq"
-	"github.com/pkg/errors"
 )
 
 type failureRecord struct {
@@ -77,31 +77,27 @@ func createFilterVals(restartCounts map[string]int, abortCounts map[string]int) 
 
 // checkCorrectTxn checks that the current txn is the correct one, according to
 // the way the previous txn that tried to write value failed.
-func checkCorrectTxn(value string, magicVals *filterVals, txn *roachpb.Transaction) {
-	failureRec, found := magicVals.failedValues[value]
-	if !found {
-		return
-	}
-	switch failureRec.err.(type) {
-	case *roachpb.TransactionAbortedError:
-		// The previous txn should have been aborted, so check that we're running
-		// in a new one.
-		if failureRec.txn.Equal(txn) {
-			panic(fmt.Sprintf("new transaction for value \"%s\" is the same "+
-				"as the old one", value))
+func checkCorrectTxn(value string, magicVals *filterVals, txn *roachpb.Transaction) error {
+	if failureRec, found := magicVals.failedValues[value]; found {
+		switch failureRec.err.(type) {
+		case *roachpb.TransactionAbortedError:
+			// The previous txn should have been aborted, so check that we're running
+			// in a new one.
+			if failureRec.txn.Equal(txn) {
+				return errors.Errorf(`new transaction for value "%s" is the same as the old one`, value)
+			}
+		default:
+			// The previous txn should have been restarted, so we should be running in
+			// the same one.
+			if !failureRec.txn.Equal(txn) {
+				return errors.Errorf(`new transaction for value "%s" (%s) is not the same as the old one (%s)`, value, txn, failureRec.txn)
+			}
 		}
-	default:
-		// The previous txn should have been restarted, so we should be running in
-		// the same one.
-		if !failureRec.txn.Equal(txn) {
-			// panic and not t.Fatal because this runs on a different goroutine
-			panic(fmt.Sprintf("new transaction for value \"%s\" (%s) "+
-				"is not the same as the old one (%s)", value,
-				txn, failureRec.txn))
-		}
+		// Don't check this value in subsequent transactions.
+		delete(magicVals.failedValues, value)
 	}
-	// Don't check this value in subsequent transactions.
-	delete(magicVals.failedValues, value)
+
+	return nil
 }
 
 func injectErrors(req roachpb.Request, hdr roachpb.Header, magicVals *filterVals) error {
@@ -177,7 +173,7 @@ func checkRestarts(t *testing.T, magicVals *filterVals) {
 //
 // The aborter only works with INSERT statements operating on the table t.test
 // defined as:
-//    CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);`)
+//	`CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT)`
 // The TxnAborter runs transactions deleting the row for the `k` that the
 // trapped transactions were writing to.
 //
@@ -189,33 +185,44 @@ func checkRestarts(t *testing.T, magicVals *filterVals) {
 // Example usage:
 //
 //	func TestTxnAutoRetry(t *testing.T) {
-// 		defer leaktest.AfterTest(t)()
-//	 	aborter := MakeTxnAborter()
-// 		defer aborter.Close(t)
+//		defer leaktest.AfterTest(t)()
+//		aborter := NewTxnAborter()
+//		defer aborter.Close(t)
 //		params, cmdFilters := createTestServerParams()
-//		executorKnobs := sql.ExecutorTestingKnobs{
-//			FixTxnPriority: true,
-//			// We're going to abort txns using a TxnAborter, and that's
-//			// incompatible with AutoCommit.
-//			DisableAutoCommit: true,
-//		}
-//		params.Knobs.SQLExecutor = aborter.HookupToExecutor(executorKnobs)
+//		params.Knobs.SQLExecutor = aborter.executorKnobs()
 //		s, sqlDB, _ := serverutils.StartServer(t, params)
 //		defer s.Stopper().Stop()
-//		aborter.InitConn(t, s)
+// 		{
+// 			pgURL, cleanupDB := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestTxnAutoRetry")
+// 			defer cleanupDB()
+// 			abortDB, err := gosql.Open("postgres", pgURL.String())
+// 			if err != nil {
+// 				t.Fatal(err)
+// 			}
+//			defer abortDB.Close()
+// 			aborter.abortDB = abortDB
+// 		}
 //
-//  	sqlDB.Exec(`
-//    	CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);`)
-//		sentinelInsert := "INSERT INTO t.test(k, v) VALUES (0, 'sentinel')"
-//		aborter.QueueStmtForAbortion(t,
-//					sentinelInsert, 1 /* restartCount */, true /* willBeRetriedIbid */)
+// 		sqlDB.Exec(`CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT)`)
+//		const sentinelInsert = "INSERT INTO t.test(k, v) VALUES (0, 'sentinel')"
+//		if err := aborter.QueueStmtForAbortion(
+//			sentinelInsert, 1 /* restartCount */, true /* willBeRetriedIbid */,
+//		); err != nil {
+//			t.Fatal(err)
+//		}
 //		sqlDB.Exec(sentinelInsert)
 //	...
 type TxnAborter struct {
-	mu           syncutil.Mutex
-	stmtsToAbort map[string]*restartInfo
-	db           *gosql.DB
-	cleanupDB    func()
+	mu struct {
+		syncutil.Mutex
+		stmtsToAbort map[string]*restartInfo
+	}
+	// A second connection pool, to be used by aborts.
+	// This is needed because the main conn pool is going to be restricted to one
+	// connection.
+	// TODO(andrei): remove this if we ever move to using libpq conns directly.
+	// See TODOs around on SetMaxOpenConns.
+	abortDB *gosql.DB
 }
 
 type restartInfo struct {
@@ -229,45 +236,25 @@ type restartInfo struct {
 	execCount int
 }
 
-func MakeTxnAborter() *TxnAborter {
-	return &TxnAborter{
-		stmtsToAbort: make(map[string]*restartInfo),
-	}
+func NewTxnAborter() *TxnAborter {
+	ta := new(TxnAborter)
+	ta.mu.stmtsToAbort = make(map[string]*restartInfo)
+	return ta
 }
 
 // Close releases resources used by the TxnAborter and verifies that all
 // the statements were aborted the intended number of times.
 func (ta *TxnAborter) Close(t testing.TB) {
-	if ta.db != nil {
-		ta.db.Close()
-		ta.cleanupDB()
-		if r := recover(); r != nil {
-			// Don't `verify()` if the test is panicking down (presumably because of a
-			// Fatal or a timeout).
-			panic(r)
-		} else {
-			ta.verify(t)
-		}
+	if r := recover(); r != nil {
+		// Don't `verify()` if the test is panicking down (presumably because of a
+		// Fatal or a timeout).
+		panic(r)
+	} else {
+		ta.verify(t)
 	}
 }
 
-// InitConn opens a connection pool that the Aborter will use internally.
-func (ta *TxnAborter) InitConn(t testing.TB, s serverutils.TestServerInterface) {
-	// Open a second connection pool, to be used by aborts.
-	// This is needed because the main conn pool is going to be restricted to one
-	// connection.
-	// TODO(andrei): remove this if we ever move to using libpq conns directly.
-	// See TODOs around on SetMaxOpenConns.
-	pgURL, cleanupDB := sqlutils.PGUrl(
-		t, s.ServingAddr(), security.RootUser, "SecondConnPool")
-	db, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		cleanupDB()
-		t.Fatalf("error opening aborter connection: %s", err)
-	}
-	ta.db = db
-	ta.cleanupDB = cleanupDB
-}
+var valuesRE = regexp.MustCompile(`VALUES.*\((\d),`)
 
 // QueueStmtForAbortion registers a statement whose transaction will be aborted.
 //
@@ -290,33 +277,33 @@ func (ta *TxnAborter) InitConn(t testing.TB, s serverutils.TestServerInterface) 
 // Calling QueueStmtForAbortion repeatedly with the same stmt is allowed, and
 // each call checks that the previous one was satisfied.
 func (ta *TxnAborter) QueueStmtForAbortion(
-	t testing.TB, stmt string, restartCount int, willBeRetriedIbid bool,
-) {
+	stmt string, restartCount int, willBeRetriedIbid bool,
+) error {
 	ta.mu.Lock()
 	defer ta.mu.Unlock()
-	ri := ta.stmtsToAbort[stmt]
-	if ri != nil {
+	if ri, ok := ta.mu.stmtsToAbort[stmt]; ok {
 		// If we're overwriting a statement that was already queued, verify that it
 		// was satisfied.
-		if err := ta.checkStmtSatisfied(stmt); err != nil {
-			t.Errorf("%s: %s", testutils.Caller(1), err)
+		if err := checkStmtSatisfied(stmt, ri); err != nil {
+			return err
 		}
 	}
 	// Extract the "key" - the value of the first col, which will be trampled on.
-	re := regexp.MustCompile(`VALUES.*\((\d),`)
-	matches := re.FindStringSubmatch(stmt)
-	if matches == nil {
-		t.Fatalf("bad statement: key col not found")
-	}
-	key, err := strconv.Atoi(matches[1])
-	if err != nil {
-		t.Fatalf("bad statement: key col is not a number")
-	}
-	ta.stmtsToAbort[stmt] = &restartInfo{
-		key:            key,
-		restartCount:   restartCount,
-		satisfied:      false,
-		checkSatisfied: willBeRetriedIbid,
+	switch matches := valuesRE.FindStringSubmatch(stmt); len(matches) {
+	case 0, 1:
+		return errors.Errorf(`bad statement "%s": key col not found`, stmt)
+	default:
+		key, err := strconv.Atoi(matches[1])
+		if err != nil {
+			return errors.Wrapf(err, `bad statement "%s"`, stmt)
+		}
+		ta.mu.stmtsToAbort[stmt] = &restartInfo{
+			key:            key,
+			restartCount:   restartCount,
+			satisfied:      false,
+			checkSatisfied: willBeRetriedIbid,
+		}
+		return nil
 	}
 }
 
@@ -327,61 +314,49 @@ func (ta *TxnAborter) QueueStmtForAbortion(
 func (ta *TxnAborter) GetExecCount(stmt string) (int, bool) {
 	ta.mu.Lock()
 	defer ta.mu.Unlock()
-	ri, ok := ta.stmtsToAbort[stmt]
-	if ok {
-		return ri.execCount, ok
-	} else {
-		return 0, ok
+	if ri, ok := ta.mu.stmtsToAbort[stmt]; ok {
+		return ri.execCount, true
 	}
+	return 0, false
 }
 
-// HookupToExecutor returns a modified ExecutorTestingKnobs with the
-// StatementFilter hooked up to the TxnAborter.
-func (ta *TxnAborter) HookupToExecutor(knobs sql.ExecutorTestingKnobs) base.ModuleTestingKnobs {
-	if !knobs.FixTxnPriority || !knobs.DisableAutoCommit {
-		panic("TxnAborter can only be installed when " +
-			"FixTxnPriority and DisableAutoCommit are both specified")
-	}
-	if knobs.StatementFilter != nil {
-		panic("a StatementFilter is already installed")
-	}
-	knobs.StatementFilter = ta.statementFilter
-	return &knobs
-}
-
-// statementFilter should be invoked for each SQL statement being executed.
-// It's meant to be hooked up to an Executor by HookupToExecutor().
-func (ta *TxnAborter) statementFilter(stmt string, res *sql.Result) {
-	ta.mu.Lock()
-	ri := ta.stmtsToAbort[stmt]
-	shouldAbort := false
-	if ri != nil {
-		ri.execCount++
-		if ri.restartCount == 0 {
-			log.VEventf(1, context.TODO(), "TxnAborter sees satisfied statement %q", stmt)
-			ri.satisfied = true
-		}
-		if ri.restartCount > 0 && res.Err == nil {
-			log.Infof(context.TODO(), "TxnAborter aborting txn for statement %q", stmt)
-			ri.restartCount--
-			shouldAbort = true
-		}
-	}
-	ta.mu.Unlock()
-	if shouldAbort {
-		err := ta.abortTxn(ri.key)
-		if err != nil {
-			res.Err = errors.Wrap(err, "TxnAborter failed to abort")
-		}
+// executorKnobs are the bridge between the TxnAborter and the sql.Executor.
+func (ta *TxnAborter) executorKnobs() base.ModuleTestingKnobs {
+	return &sql.ExecutorTestingKnobs{
+		FixTxnPriority: true,
+		// We're going to abort txns using a TxnAborter, and that's incompatible
+		// with AutoCommit.
+		DisableAutoCommit: true,
+		StatementFilter: func(stmt string, res *sql.Result) {
+			ta.mu.Lock()
+			ri, ok := ta.mu.stmtsToAbort[stmt]
+			shouldAbort := false
+			if ok {
+				ri.execCount++
+				if ri.restartCount == 0 {
+					log.VEventf(1, context.TODO(), "TxnAborter sees satisfied statement %q", stmt)
+					ri.satisfied = true
+				}
+				if ri.restartCount > 0 && res.Err == nil {
+					log.Infof(context.TODO(), "TxnAborter aborting txn for statement %q", stmt)
+					ri.restartCount--
+					shouldAbort = true
+				}
+			}
+			ta.mu.Unlock()
+			if shouldAbort {
+				if err := ta.abortTxn(ri.key); err != nil {
+					res.Err = errors.Wrap(err, "TxnAborter failed to abort")
+				}
+			}
+		},
 	}
 }
 
 // abortTxn writes to a key and as a side effect aborts a txn that had an intent
 // on that key.
 func (ta *TxnAborter) abortTxn(key int) error {
-	var err error
-	var tx *gosql.Tx
-	tx, err = ta.db.Begin()
+	tx, err := ta.abortDB.Begin()
 	if err != nil {
 		return err
 	}
@@ -400,26 +375,19 @@ func (ta *TxnAborter) abortTxn(key int) error {
 func (ta *TxnAborter) verify(t testing.TB) {
 	ta.mu.Lock()
 	defer ta.mu.Unlock()
-	for stmt := range ta.stmtsToAbort {
-		if err := ta.checkStmtSatisfied(stmt); err != nil {
+	for stmt, ri := range ta.mu.stmtsToAbort {
+		if err := checkStmtSatisfied(stmt, ri); err != nil {
 			t.Error(err)
 		}
 	}
 }
 
-func (ta *TxnAborter) checkStmtSatisfied(stmt string) error {
-	ri := ta.stmtsToAbort[stmt]
-	if ri == nil {
-		return errors.Errorf("checkStmtSatisfied called for missing statement %q", stmt)
-	}
+func checkStmtSatisfied(stmt string, ri *restartInfo) error {
 	if ri.restartCount != 0 {
-		return errors.Errorf("Statement %q still needs to be aborted %d times.",
-			stmt, ri.restartCount)
-	} else {
-		if ri.checkSatisfied && !ri.satisfied {
-			return errors.Errorf("Statement %q was not retried after its txn was aborted "+
-				"the last time.", stmt)
-		}
+		return errors.Errorf("statement %q still needs to be aborted %d times", stmt, ri.restartCount)
+	}
+	if ri.checkSatisfied && !ri.satisfied {
+		return errors.Errorf("statement %q was not retried after its txn was aborted the last time", stmt)
 	}
 	return nil
 }
@@ -429,21 +397,24 @@ func (ta *TxnAborter) checkStmtSatisfied(stmt string) error {
 func TestTxnAutoRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	aborter := MakeTxnAborter()
+	aborter := NewTxnAborter()
 	defer aborter.Close(t)
 	params, cmdFilters := createTestServerParams()
-	executorKnobs := sql.ExecutorTestingKnobs{
-		FixTxnPriority: true,
-		// We're going to abort txns using a TxnAborter, and that's incompatible
-		// with AutoCommit.
-		DisableAutoCommit: true,
-	}
-	params.Knobs.SQLExecutor = aborter.HookupToExecutor(executorKnobs)
+	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	// Disable one phase commits because they cannot be restarted.
 	params.Knobs.Store.(*storage.StoreTestingKnobs).DisableOnePhaseCommits = true
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
-	aborter.InitConn(t, s)
+	{
+		pgURL, cleanupDB := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestTxnAutoRetry")
+		defer cleanupDB()
+		abortDB, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer abortDB.Close()
+		aborter.abortDB = abortDB
+	}
 
 	// Make sure all the commands we send in this test are sent over the same connection.
 	// This is a bit of a hack; in Go you're not supposed to have connection state
@@ -483,18 +454,26 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT, t DECIMAL);
 			return nil
 		}, false)
 
-	aborter.QueueStmtForAbortion(t,
-		"INSERT INTO t.test(k, v, t) VALUES (1, 'boulanger', cluster_logical_timestamp())",
-		2 /* restartCount */, true /* willBeRetriedIbid */)
-	aborter.QueueStmtForAbortion(t,
-		"INSERT INTO t.test(k, v, t) VALUES (2, 'dromedary', cluster_logical_timestamp())",
-		2 /* restartCount */, true /* willBeRetriedIbid */)
-	aborter.QueueStmtForAbortion(t,
-		"INSERT INTO t.test(k, v, t) VALUES (3, 'fajita', cluster_logical_timestamp())",
-		2 /* restartCount */, true /* willBeRetriedIbid */)
-	aborter.QueueStmtForAbortion(t,
-		"INSERT INTO t.test(k, v, t) VALUES (4, 'hooly', cluster_logical_timestamp())",
-		2 /* restartCount */, true /* willBeRetriedIbid */)
+	if err := aborter.QueueStmtForAbortion(
+		"INSERT INTO t.test(k, v, t) VALUES (1, 'boulanger', cluster_logical_timestamp())", 2 /* restartCount */, true, /* willBeRetriedIbid */
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := aborter.QueueStmtForAbortion(
+		"INSERT INTO t.test(k, v, t) VALUES (2, 'dromedary', cluster_logical_timestamp())", 2 /* restartCount */, true, /* willBeRetriedIbid */
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := aborter.QueueStmtForAbortion(
+		"INSERT INTO t.test(k, v, t) VALUES (3, 'fajita', cluster_logical_timestamp())", 2 /* restartCount */, true, /* willBeRetriedIbid */
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := aborter.QueueStmtForAbortion(
+		"INSERT INTO t.test(k, v, t) VALUES (4, 'hooly', cluster_logical_timestamp())", 2 /* restartCount */, true, /* willBeRetriedIbid */
+	); err != nil {
+		t.Fatal(err)
+	}
 
 	// Test that implicit txns - txns for which we see all the statements and prefixes
 	// of txns (statements batched together with the BEGIN stmt) - are retried.
@@ -517,7 +496,7 @@ INSERT INTO t.test(k, v, t) VALUES (6, 'laureal', cluster_logical_timestamp());
 
 	checkRestarts(t, magicVals)
 
-	if _, err := sqlDB.Exec("END;"); err != nil {
+	if _, err := sqlDB.Exec("END"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -567,25 +546,31 @@ BEGIN;
 func TestAbortedTxnOnlyRetriedOnce(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	aborter := MakeTxnAborter()
+	aborter := NewTxnAborter()
 	defer aborter.Close(t)
 	params, _ := createTestServerParams()
-	executorKnobs := sql.ExecutorTestingKnobs{
-		FixTxnPriority: true,
-		// We're going to abort txns using a TxnAborter, and that's incompatible
-		// with AutoCommit.
-		DisableAutoCommit: true,
-	}
-	params.Knobs.SQLExecutor = aborter.HookupToExecutor(executorKnobs)
+	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	// Disable one phase commits because they cannot be restarted.
 	params.Knobs.Store.(*storage.StoreTestingKnobs).DisableOnePhaseCommits = true
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
-	aborter.InitConn(t, s)
+	{
+		pgURL, cleanupDB := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestAbortedTxnOnlyRetriedOnce")
+		defer cleanupDB()
+		abortDB, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer abortDB.Close()
+		aborter.abortDB = abortDB
+	}
 
-	insertStmt := "INSERT INTO t.test(k, v) VALUES (1, 'boulanger')"
-	aborter.QueueStmtForAbortion(t, insertStmt,
-		1 /* restartCount */, true /* willBeRetriedIbid */)
+	const insertStmt = "INSERT INTO t.test(k, v) VALUES (1, 'boulanger')"
+	if err := aborter.QueueStmtForAbortion(
+		insertStmt, 1 /* restartCount */, true, /* willBeRetriedIbid */
+	); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -640,7 +625,7 @@ func exec(t *testing.T, sqlDB *gosql.DB, rs rollbackStrategy, fn func(*gosql.Tx)
 		t.Fatal(err)
 	}
 	if _, err := tx.Exec(
-		"SAVEPOINT cockroach_restart; SET TRANSACTION PRIORITY LOW;"); err != nil {
+		"SAVEPOINT cockroach_restart; SET TRANSACTION PRIORITY LOW"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -671,22 +656,21 @@ func runTestTxn(
 ) bool {
 	retriesNeeded :=
 		(magicVals.restartCounts["boulanger"] + magicVals.abortCounts["boulanger"]) > 0
-	var err error
 	if retriesNeeded {
-		_, err = tx.Exec("INSERT INTO t.test(k, v) VALUES (1, 'boulanger')")
+		_, err := tx.Exec("INSERT INTO t.test(k, v) VALUES (1, 'boulanger')")
 		if !testutils.IsError(err, expectedErr) {
-			t.Fatalf("expected to fail here. err: %v", err)
+			t.Fatalf("unexpected error: %v", err)
 		}
 		return isRetryableErr(err)
 	}
 	// Now the INSERT should succeed.
-	_, err = tx.Exec(fmt.Sprintf(
-		"DELETE FROM t.test WHERE true; %s;", sentinelInsert))
-	if err != nil {
+	if _, err := tx.Exec(
+		"DELETE FROM t.test WHERE true;" + sentinelInsert,
+	); err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = tx.Exec("RELEASE SAVEPOINT cockroach_restart")
+	_, err := tx.Exec("RELEASE SAVEPOINT cockroach_restart")
 	return isRetryableErr(err)
 }
 
@@ -696,19 +680,22 @@ func runTestTxn(
 func TestTxnUserRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	aborter := MakeTxnAborter()
+	aborter := NewTxnAborter()
 	defer aborter.Close(t)
 	params, cmdFilters := createTestServerParams()
-	executorKnobs := sql.ExecutorTestingKnobs{
-		FixTxnPriority: true,
-		// We're going to abort txns using a TxnAborter, and that's incompatible
-		// with AutoCommit.
-		DisableAutoCommit: true,
-	}
-	params.Knobs.SQLExecutor = aborter.HookupToExecutor(executorKnobs)
+	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
-	aborter.InitConn(t, s)
+	{
+		pgURL, cleanupDB := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestTxnUserRestart")
+		defer cleanupDB()
+		abortDB, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer abortDB.Close()
+		aborter.abortDB = abortDB
+	}
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -747,9 +734,12 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 				}, false)
 
 			// Also inject an error at RELEASE time, besides the error injected by magicVals.
-			sentinelInsert := "INSERT INTO t.test(k, v) VALUES (0, 'sentinel')"
-			aborter.QueueStmtForAbortion(t,
-				sentinelInsert, 1 /* restartCount */, true /* willBeRetriedIbid */)
+			const sentinelInsert = "INSERT INTO t.test(k, v) VALUES (0, 'sentinel')"
+			if err := aborter.QueueStmtForAbortion(
+				sentinelInsert, 1 /* restartCount */, true, /* willBeRetriedIbid */
+			); err != nil {
+				t.Fatal(err)
+			}
 
 			commitCount := s.MustGetSQLCounter(sql.MetaTxnCommit.Name)
 			// This is the magic. Run the txn closure until all the retries are exhausted.
@@ -807,17 +797,15 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 		t.Fatal(err)
 	}
 	if _, err := tx.Exec(
-		"SAVEPOINT cockroach_restart; RELEASE cockroach_restart;"); err != nil {
+		"SAVEPOINT cockroach_restart; RELEASE cockroach_restart"); err != nil {
 		t.Fatal(err)
 	}
-	_, err = tx.Exec("INSERT INTO t.test(k, v) VALUES (0, 'sentinel');")
-	if !testutils.IsError(err, "current transaction is committed") {
-		t.Fatal(err)
+	if _, err := tx.Exec("INSERT INTO t.test(k, v) VALUES (0, 'sentinel')"); !testutils.IsError(err, "current transaction is committed") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 	// Rollback should respond with a COMMIT command tag.
-	err = tx.Rollback()
-	if !testutils.IsError(err, "unexpected command tag COMMIT") {
-		t.Fatal(err)
+	if err := tx.Rollback(); !testutils.IsError(err, "unexpected command tag COMMIT") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -828,19 +816,22 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 func TestErrorOnCommitFinalizesTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	aborter := MakeTxnAborter()
+	aborter := NewTxnAborter()
 	defer aborter.Close(t)
 	params, _ := createTestServerParams()
-	executorKnobs := sql.ExecutorTestingKnobs{
-		FixTxnPriority: true,
-		// We're going to abort txns using a TxnAborter, and that's incompatible
-		// with AutoCommit.
-		DisableAutoCommit: true,
-	}
-	params.Knobs.SQLExecutor = aborter.HookupToExecutor(executorKnobs)
+	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
-	aborter.InitConn(t, s)
+	{
+		pgURL, cleanupDB := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestErrorOnCommitFinalizesTxn")
+		defer cleanupDB()
+		abortDB, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer abortDB.Close()
+		aborter.abortDB = abortDB
+	}
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
@@ -864,14 +855,17 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 		{true},
 	}
 	for _, tc := range testCases {
-		insertStmt := "INSERT INTO t.test(k, v) VALUES (0, 'boulanger')"
-		aborter.QueueStmtForAbortion(t, insertStmt,
-			1 /* restartCount */, false /* willBeRetriedIbid */)
-		if _, err := sqlDB.Exec("BEGIN;"); err != nil {
+		const insertStmt = "INSERT INTO t.test(k, v) VALUES (0, 'boulanger')"
+		if err := aborter.QueueStmtForAbortion(
+			insertStmt, 1 /* restartCount */, false, /* willBeRetriedIbid */
+		); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sqlDB.Exec("BEGIN"); err != nil {
 			t.Fatal(err)
 		}
 		if tc.retryIntent {
-			if _, err := sqlDB.Exec("SAVEPOINT cockroach_restart;"); err != nil {
+			if _, err := sqlDB.Exec("SAVEPOINT cockroach_restart"); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -917,12 +911,12 @@ func TestRollbackToSavepointStatement(t *testing.T) {
 	// ROLLBACK TO SAVEPOINT without a transaction
 	_, err := sqlDB.Exec("ROLLBACK TO SAVEPOINT cockroach_restart")
 	if !testutils.IsError(err, "the transaction is not in a retriable state") {
-		t.Fatalf("expected to fail here. err: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	// ROLLBACK TO SAVEPOINT with a wrong name
 	_, err = sqlDB.Exec("ROLLBACK TO SAVEPOINT foo")
 	if !testutils.IsError(err, "SAVEPOINT not supported except for COCKROACH_RESTART") {
-		t.Fatalf("expected to fail here. err: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 
 	// ROLLBACK TO SAVEPOINT in a non-retriable transaction
@@ -933,13 +927,13 @@ func TestRollbackToSavepointStatement(t *testing.T) {
 	if _, err := tx.Exec("SAVEPOINT cockroach_restart"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = tx.Exec("BOGUS SQL STATEMENT"); err == nil {
-		t.Fatalf("expected to fail here. err: %v", err)
+	if _, err := tx.Exec("BOGUS SQL STATEMENT"); !testutils.IsError(err, `syntax error at or near "BOGUS"`) {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	_, err = tx.Exec("ROLLBACK TO SAVEPOINT cockroach_restart")
-	if !testutils.IsError(err,
-		"SAVEPOINT COCKROACH_RESTART has not been used or a non-retriable error was encountered") {
-		t.Fatalf("expected to fail here. err: %v", err)
+	if _, err := tx.Exec("ROLLBACK TO SAVEPOINT cockroach_restart"); !testutils.IsError(
+		err, "SAVEPOINT COCKROACH_RESTART has not been used or a non-retriable error was encountered",
+	) {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -967,12 +961,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	if _, err := tx.Exec("SAVEPOINT cockroach_restart"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = tx.Exec("INSERT INTO t.test (k, v) VALUES (0, 'test')"); err != nil {
+	if _, err := tx.Exec("INSERT INTO t.test (k, v) VALUES (0, 'test')"); err != nil {
 		t.Fatal(err)
 	}
-	_, err = tx.Exec("INSERT INTO t.test (k, v) VALUES (0, 'test');")
-	if !testutils.IsError(err, "duplicate key value") {
-		t.Errorf("expected duplicate key error. Got: %v", err)
+	if _, err := tx.Exec("INSERT INTO t.test (k, v) VALUES (0, 'test')"); !testutils.IsError(err, "duplicate key value") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if _, err := tx.Exec("ROLLBACK TO SAVEPOINT cockroach_restart"); !testutils.IsError(
 		err, "current transaction is aborted, commands ignored until end of "+
@@ -990,19 +983,22 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 func TestRollbackInRestartWait(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	aborter := MakeTxnAborter()
+	aborter := NewTxnAborter()
 	defer aborter.Close(t)
 	params, _ := createTestServerParams()
-	executorKnobs := sql.ExecutorTestingKnobs{
-		FixTxnPriority: true,
-		// We're going to abort txns using a TxnAborter, and that's incompatible
-		// with AutoCommit.
-		DisableAutoCommit: true,
-	}
-	params.Knobs.SQLExecutor = aborter.HookupToExecutor(executorKnobs)
+	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
-	aborter.InitConn(t, s)
+	{
+		pgURL, cleanupDB := sqlutils.PGUrl(t, s.ServingAddr(), security.RootUser, "TestRollbackInRestartWait")
+		defer cleanupDB()
+		abortDB, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer abortDB.Close()
+		aborter.abortDB = abortDB
+	}
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1012,9 +1008,12 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	}
 
 	// Set up error injection that causes retries.
-	insertStmt := "INSERT INTO t.test(k, v) VALUES (0, 'boulanger')"
-	aborter.QueueStmtForAbortion(t, insertStmt,
-		1 /* restartCount */, false /* willBeRetriedIbid */)
+	const insertStmt = "INSERT INTO t.test(k, v) VALUES (0, 'boulanger')"
+	if err := aborter.QueueStmtForAbortion(
+		insertStmt, 1 /* restartCount */, false, /* willBeRetriedIbid */
+	); err != nil {
+		t.Fatal(err)
+	}
 
 	tx, err := sqlDB.Begin()
 	if err != nil {
@@ -1095,7 +1094,7 @@ func TestNonRetryableErrorOnCommit(t *testing.T) {
 		}, false)
 	defer cleanupFilter()
 
-	if _, err := sqlDB.Exec("CREATE DATABASE t;"); !testutils.IsError(err, "pq: testError") {
+	if _, err := sqlDB.Exec("CREATE DATABASE t"); !testutils.IsError(err, "pq: testError") {
 		t.Errorf("unexpected error %v", err)
 	}
 	if !hitError {
