@@ -25,6 +25,8 @@ package parser
 import (
 	"bytes"
 	"fmt"
+
+	"github.com/pkg/errors"
 )
 
 // CreateDatabase represents a CREATE DATABASE statement.
@@ -169,10 +171,7 @@ type ColumnTableDef struct {
 		Expr           Expr
 		ConstraintName Name
 	}
-	CheckExpr struct {
-		Expr           Expr
-		ConstraintName Name
-	}
+	CheckExprs []ColumnTableDefCheckExpr
 	References struct {
 		Table          NormalizableTableName
 		Col            Name
@@ -185,9 +184,16 @@ type ColumnTableDef struct {
 	}
 }
 
+// ColumnTableDefCheckExpr represents a check constraint on a column definition
+// within a CREATE TABLE statement.
+type ColumnTableDefCheckExpr struct {
+	Expr           Expr
+	ConstraintName Name
+}
+
 func newColumnTableDef(
 	name Name, typ ColumnType, qualifications []NamedColumnQualification,
-) *ColumnTableDef {
+) (*ColumnTableDef, error) {
 	d := &ColumnTableDef{
 		Name: name,
 		Type: typ,
@@ -196,42 +202,45 @@ func newColumnTableDef(
 	for _, c := range qualifications {
 		switch t := c.Qualification.(type) {
 		case *ColumnDefault:
+			if d.HasDefaultExpr() {
+				return nil, errors.Errorf("multiple default values specified for column %q", name)
+			}
 			d.DefaultExpr.Expr = t.Expr
-			if c.Name != "" {
-				d.DefaultExpr.ConstraintName = c.Name
-			}
+			d.DefaultExpr.ConstraintName = c.Name
 		case NotNullConstraint:
+			if d.Nullable.Nullability == Null {
+				return nil, errors.Errorf("conflicting NULL/NOT NULL declarations for column %q", name)
+			}
 			d.Nullable.Nullability = NotNull
-			if c.Name != "" {
-				d.Nullable.ConstraintName = c.Name
-			}
+			d.Nullable.ConstraintName = c.Name
 		case NullConstraint:
-			d.Nullable.Nullability = Null
-			if c.Name != "" {
-				d.Nullable.ConstraintName = c.Name
+			if d.Nullable.Nullability == NotNull {
+				return nil, errors.Errorf("conflicting NULL/NOT NULL declarations for column %q", name)
 			}
+			d.Nullable.Nullability = Null
+			d.Nullable.ConstraintName = c.Name
 		case PrimaryKeyConstraint:
 			d.PrimaryKey = true
-			if c.Name != "" {
-				d.UniqueConstraintName = c.Name
-			}
+			d.UniqueConstraintName = c.Name
 		case UniqueConstraint:
 			d.Unique = true
-			if c.Name != "" {
-				d.UniqueConstraintName = c.Name
-			}
+			d.UniqueConstraintName = c.Name
 		case *ColumnCheckConstraint:
-			d.CheckExpr.Expr = t.Expr
-			if c.Name != "" {
-				d.CheckExpr.ConstraintName = c.Name
-			}
+			d.CheckExprs = append(d.CheckExprs, ColumnTableDefCheckExpr{
+				Expr:           t.Expr,
+				ConstraintName: c.Name,
+			})
 		case *ColumnFKConstraint:
+			if d.HasFKConstraint() {
+				return nil, errors.Errorf("multiple foreign key constraints specified for column %q", name)
+			}
 			d.References.Table = t.Table
 			d.References.Col = t.Col
-			if c.Name != "" {
-				d.References.ConstraintName = c.Name
-			}
+			d.References.ConstraintName = c.Name
 		case *ColumnFamilyConstraint:
+			if d.HasColumnFamily() {
+				return nil, errors.Errorf("multiple column families specified for column %q", name)
+			}
 			d.Family.Name = t.Family
 			d.Family.Create = t.Create
 			d.Family.IfNotExists = t.IfNotExists
@@ -239,11 +248,26 @@ func newColumnTableDef(
 			panic(fmt.Sprintf("unexpected column qualification: %T", c))
 		}
 	}
-	return d
+	return d, nil
 }
 
 func (node *ColumnTableDef) setName(name Name) {
 	node.Name = name
+}
+
+// HasDefaultExpr returns if the ColumnTableDef has a default expression.
+func (node *ColumnTableDef) HasDefaultExpr() bool {
+	return node.DefaultExpr.Expr != nil
+}
+
+// HasFKConstraint returns if the ColumnTableDef has a foreign key constraint.
+func (node *ColumnTableDef) HasFKConstraint() bool {
+	return node.References.Table.TableNameReference != nil
+}
+
+// HasColumnFamily returns if the ColumnTableDef has a column family.
+func (node *ColumnTableDef) HasColumnFamily() bool {
+	return node.Family.Name != "" || node.Family.Create
 }
 
 // Format implements the NodeFormatter interface.
@@ -264,22 +288,22 @@ func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	} else if node.Unique {
 		buf.WriteString(" UNIQUE")
 	}
-	if node.DefaultExpr.Expr != nil {
+	if node.HasDefaultExpr() {
 		if node.DefaultExpr.ConstraintName != "" {
 			fmt.Fprintf(buf, " CONSTRAINT %s", node.DefaultExpr.ConstraintName)
 		}
 		buf.WriteString(" DEFAULT ")
 		FormatNode(buf, f, node.DefaultExpr.Expr)
 	}
-	if node.CheckExpr.Expr != nil {
-		if node.CheckExpr.ConstraintName != "" {
-			fmt.Fprintf(buf, " CONSTRAINT %s", node.CheckExpr.ConstraintName)
+	for _, checkExpr := range node.CheckExprs {
+		if checkExpr.ConstraintName != "" {
+			fmt.Fprintf(buf, " CONSTRAINT %s", checkExpr.ConstraintName)
 		}
 		buf.WriteString(" CHECK (")
-		FormatNode(buf, f, node.CheckExpr.Expr)
+		FormatNode(buf, f, checkExpr.Expr)
 		buf.WriteByte(')')
 	}
-	if node.References.Table.TableNameReference != nil {
+	if node.HasFKConstraint() {
 		if node.References.ConstraintName != "" {
 			fmt.Fprintf(buf, " CONSTRAINT %s", node.References.ConstraintName)
 		}
@@ -291,7 +315,7 @@ func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 			buf.WriteByte(')')
 		}
 	}
-	if node.Family.Name != "" || node.Family.Create {
+	if node.HasColumnFamily() {
 		if node.Family.Create {
 			buf.WriteString(" CREATE")
 		}
