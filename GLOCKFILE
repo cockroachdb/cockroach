@@ -49,6 +49,7 @@ github.com/dustin/go-humanize bd88f87ad3a420f7bcf05e90566fd1ceb351fa7f
 github.com/elastic/gosigar 2716c1fe855ee5c88eae707195e0688374458c92
 github.com/elazarl/go-bindata-assetfs 9a6736ed45b44bf3835afeebb3034b57ed329f3e
 github.com/facebookgo/clock 600d898af40aa09a7a93ecb9265d87b0504b6f03
+github.com/ghemawat/stream 78e682abcae4f96ac7ddbe39912967a5f7cbbaa6
 github.com/go-sql-driver/mysql 0b58b37b664c21f3010e836f1b931e1d0b0b0685
 github.com/gogo/protobuf fdc14ac22689d09f8639e603614593811bc1d81c
 github.com/golang/glog 23def4e6c14b4da8ac2ed8007337bc5eb5007998

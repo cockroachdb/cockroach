@@ -165,7 +165,7 @@ check:
 	# compile everything; go vet sometimes reports incorrect errors if
 	# the build artifacts are stale.
 	$(GO) test -i -tags '$(TAGS)' ./...
-	@build/check-style.sh
+	$(GO) test ./build -v -tags check
 
 .PHONY: clean
 clean:
