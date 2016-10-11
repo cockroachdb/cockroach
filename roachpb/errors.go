@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/uuid"
 )
 
-// RetryableTxnError represent a retryable transaction error - the transaction
+// RetryableTxnError represents a retryable transaction error - the transaction
 // that caused it should be re-run.
 type RetryableTxnError struct {
 	message string
