@@ -84,6 +84,15 @@ type Builtin struct {
 	Types      typeList
 	ReturnType Datum
 
+	// When multiple overloads are eligible based on types even after all of of
+	// the heuristics to pick one have been used, if one of the overloads is a
+	// Builtin with the `preferredOverload` flag set to true it can be selected
+	// rather than returning a no-such-method error.
+	// This should generally be avoided -- avoiding introducing ambiguous
+	// overloads in the first place is a much better solution -- and only done
+	// after consultation with @knz @nvanbenschoten.
+	preferredOverload bool
+
 	// Set to true when a function potentially returns a different value
 	// when called in the same statement with the same parameters.
 	// e.g.: random(), clock_timestamp(). Some functions like now()
