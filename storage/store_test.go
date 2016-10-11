@@ -2030,16 +2030,17 @@ func TestStoreChangeFrozen(t *testing.T) {
 			t.Fatal(err)
 		}
 		if pFrozen != frozen {
-			t.Fatal(errors.Errorf("persisted != in-memory frozen status: %t vs %t",
+			t.Fatal(errors.Errorf("persisted != in-memory frozen status: %v vs %v",
 				pFrozen, frozen))
 		}
-		if pFrozen != b {
-			t.Fatal(errors.Errorf("expected status %t, got %t", b, pFrozen))
+		if (pFrozen == storagebase.ReplicaState_FROZEN) != b {
+			t.Fatal(errors.Errorf("expected status %v, got %v", b, pFrozen))
 		}
-		results := store.FrozenStatus(!pFrozen)
+		collectFrozen := !(pFrozen == storagebase.ReplicaState_FROZEN)
+		results := store.FrozenStatus(collectFrozen)
 		if len(results) != 0 {
 			t.Fatal(errors.Errorf(
-				"expected frozen=%t, got %d mismatching replicas: %+v",
+				"expected frozen=%v, got %d mismatching replicas: %+v",
 				pFrozen, len(results), results))
 		}
 	}
