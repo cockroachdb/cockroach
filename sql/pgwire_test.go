@@ -663,7 +663,7 @@ type preparedExecTest struct {
 	qargs           []interface{}
 	rowsAffected    int64
 	error           string
-	rowsAffectedErr bool
+	rowsAffectedErr string
 }
 
 func (p preparedExecTest) SetArgs(v ...interface{}) preparedExecTest {
@@ -681,8 +681,8 @@ func (p preparedExecTest) Error(err string) preparedExecTest {
 	return p
 }
 
-func (p preparedExecTest) RowsAffectedErr() preparedExecTest {
-	p.rowsAffectedErr = true
+func (p preparedExecTest) RowsAffectedErr(err string) preparedExecTest {
+	p.rowsAffectedErr = err
 	return p
 }
 
@@ -807,14 +807,14 @@ func TestPGPreparedExec(t *testing.T) {
 		{
 			"",
 			[]preparedExecTest{
-				baseTest.RowsAffectedErr(),
+				baseTest.RowsAffectedErr("no RowsAffected available after the empty statement"),
 			},
 		},
 		// Empty statements are permitted.
 		{
 			";",
 			[]preparedExecTest{
-				baseTest.RowsAffectedErr(),
+				baseTest.RowsAffectedErr("no RowsAffected available after the empty statement"),
 			},
 		},
 		// Any number of empty statements are permitted with a single statement
@@ -851,10 +851,14 @@ func TestPGPreparedExec(t *testing.T) {
 					t.Errorf("%s: %v: expected error: %s, got %s", query, test.qargs, test.error, err)
 				}
 			} else {
-				rowsAffected, err := result.RowsAffected()
-				hasRAErr := err != nil
-				if hasRAErr != test.rowsAffectedErr {
-					t.Errorf("%s: expected rows affected error: %v, got %v (error %+v)", query, test.rowsAffectedErr, hasRAErr, err)
+				if rowsAffected, err := result.RowsAffected(); err != nil {
+					if test.rowsAffectedErr == "" {
+						t.Errorf("%s: %v: unexpected error: %s", query, test.qargs, err)
+					} else if !testutils.IsError(err, test.rowsAffectedErr) {
+						t.Errorf("%s: %v: expected %s, got %s", query, test.qargs, test.rowsAffectedErr, err)
+					}
+				} else if test.rowsAffectedErr != "" {
+					t.Errorf("%s: %v: expected error: %s", query, test.qargs, test.rowsAffectedErr)
 				} else if rowsAffected != test.rowsAffected {
 					t.Errorf("%s: %v: expected %v, got %v", query, test.qargs, test.rowsAffected, rowsAffected)
 				}
