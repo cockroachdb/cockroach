@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/ts/tspb"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // DB provides Cockroach's Time Series API.
@@ -106,7 +108,15 @@ func (p *poller) poll() {
 			return
 		}
 
-		if err := p.db.StoreData(p.ctx, p.r, data); err != nil {
+		ctx := p.ctx
+		tracer := tracing.TracerFromCtx(ctx)
+		if tracer != nil {
+			span := tracer.StartSpan("ts-poll")
+			defer span.Finish()
+			ctx = opentracing.ContextWithSpan(ctx, span)
+		}
+
+		if err := p.db.StoreData(ctx, p.r, data); err != nil {
 			log.Warningf(p.ctx, "error writing time series data: %s", err)
 		}
 	}); err != nil {
