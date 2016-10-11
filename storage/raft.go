@@ -177,13 +177,13 @@ func raftEntryFormatter(data []byte) string {
 	if len(data) == 0 {
 		return "[empty]"
 	}
+	commandID, encodedCmd := DecodeRaftCommand(data)
 	if len(data) >= 1024 {
 		// Don't try to unmarshal and stringify the command if it is large. Doing
 		// so is super expensive (multiple seconds for the call to String()) for
 		// large snapshot entries.
-		return fmt.Sprintf("[%d]", len(data))
+		return fmt.Sprintf("[%x] [%d]", commandID, len(data))
 	}
-	_, encodedCmd := DecodeRaftCommand(data)
 	var cmd roachpb.RaftCommand
 	if err := proto.Unmarshal(encodedCmd, &cmd); err != nil {
 		return fmt.Sprintf("[error parsing entry: %s]", err)
@@ -193,7 +193,7 @@ func raftEntryFormatter(data []byte) string {
 	if len(s) > maxLen {
 		s = s[:maxLen]
 	}
-	return s
+	return fmt.Sprintf("[%x] %s", commandID, s)
 }
 
 var _ security.RequestWithUser = &RaftMessageRequest{}
