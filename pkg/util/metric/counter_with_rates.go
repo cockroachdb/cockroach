@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Marc Berhault (marc@cockroachlabs.com)
 
 package metric
 
@@ -28,11 +26,6 @@ type TimeScale struct {
 // metrics in bulk (such as Rates).
 var DefaultTimeScales = []TimeScale{Scale1M, Scale10M, Scale1H}
 
-// Name returns the name of the TimeScale.
-func (ts TimeScale) Name() string {
-	return ts.name
-}
-
 var (
 	// Scale1M is a 1 minute window for windowed stats (e.g. Rates and Histograms).
 	Scale1M = TimeScale{"1m", 1 * time.Minute}
@@ -44,54 +37,37 @@ var (
 	Scale1H = TimeScale{"1h", time.Hour}
 )
 
-// metricGroup defines a metric that is composed of multiple metrics.
-// It can be used directly by the code updating metrics, and expands
-// to multiple individual metrics to add to a registry.
-type metricGroup interface {
-	// iterate will run the callback for every individual metric in the metric group.
-	iterate(func(Iterable))
-}
-
-// Rates is a counter and associated EWMA backed rates at different time scales.
-type Rates struct {
+// CounterWithRates is a counter and associated EWMA backed rates at different
+// time scales (which are ignored when visiting the object, and are thus not
+// exported).
+type CounterWithRates struct {
 	*Counter
 	Rates map[TimeScale]*Rate
 }
 
-// NewRates registers and returns a new Rates instance, which contains a set of EWMA-based rates
-// with generally useful time scales and a cumulative counter.
-func NewRates(metadata Metadata) Rates {
+// NewCounterWithRates registers and returns a new Counter along with some
+// a set of EWMA-based rates at time scales specified by DefaultTimeScales.
+// These rates are provided for convenience and are not exported to metrics
+// frameworks. If they are not required, a Counter should be used instead.
+func NewCounterWithRates(metadata Metadata) *CounterWithRates {
 	scales := DefaultTimeScales
 	es := make(map[TimeScale]*Rate)
 	for _, scale := range scales {
-		es[scale] = NewRate(
-			Metadata{
-				Name:   metadata.Name + sep + scale.name,
-				Help:   metadata.Help,
-				labels: metadata.labels,
-			}, scale.d)
+		es[scale] = NewRate(scale.d)
 	}
 	c := NewCounter(
 		Metadata{
-			Name:   metadata.Name + sep + "count",
+			Name:   metadata.Name,
 			Help:   metadata.Help,
 			labels: metadata.labels,
 		})
-	return Rates{Counter: c, Rates: es}
+	return &CounterWithRates{Counter: c, Rates: es}
 }
 
-// Add adds the given value to all contained objects.
-func (es Rates) Add(v int64) {
-	es.Counter.Inc(v)
-	for _, e := range es.Rates {
+// Inc increments the counter.
+func (c *CounterWithRates) Inc(v int64) {
+	c.Counter.Inc(v)
+	for _, e := range c.Rates {
 		e.Add(float64(v))
-	}
-}
-
-// iterate runs the callback function with the counter and the individual rates.
-func (es Rates) iterate(cb func(Iterable)) {
-	cb(es.Counter)
-	for _, e := range es.Rates {
-		cb(e)
 	}
 }

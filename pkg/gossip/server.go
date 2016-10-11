@@ -114,10 +114,10 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 
 			bytesSent := int64(reply.Size())
 			infoCount := int64(len(reply.Delta))
-			s.nodeMetrics.BytesSent.Add(bytesSent)
-			s.nodeMetrics.InfosSent.Add(infoCount)
-			s.serverMetrics.BytesSent.Add(bytesSent)
-			s.serverMetrics.InfosSent.Add(infoCount)
+			s.nodeMetrics.BytesSent.Inc(bytesSent)
+			s.nodeMetrics.InfosSent.Inc(infoCount)
+			s.serverMetrics.BytesSent.Inc(bytesSent)
+			s.serverMetrics.InfosSent.Inc(infoCount)
 
 			return stream.Send(reply)
 		}
@@ -278,10 +278,10 @@ func (s *server) gossipReceiver(
 
 		bytesReceived := int64(args.Size())
 		infosReceived := int64(len(args.Delta))
-		s.nodeMetrics.BytesReceived.Add(bytesReceived)
-		s.nodeMetrics.InfosReceived.Add(infosReceived)
-		s.serverMetrics.BytesReceived.Add(bytesReceived)
-		s.serverMetrics.InfosReceived.Add(infosReceived)
+		s.nodeMetrics.BytesReceived.Inc(bytesReceived)
+		s.nodeMetrics.InfosReceived.Inc(infosReceived)
+		s.serverMetrics.BytesReceived.Inc(bytesReceived)
+		s.serverMetrics.InfosReceived.Inc(infosReceived)
 
 		freshCount, err := s.mu.is.combine(args.Delta, args.NodeID)
 		if err != nil {

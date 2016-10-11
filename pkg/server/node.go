@@ -86,15 +86,15 @@ var errCannotJoinSelf = errors.New("an uninitialized node cannot specify its own
 
 type nodeMetrics struct {
 	Latency *metric.Histogram
-	Success metric.Rates
-	Err     metric.Rates
+	Success *metric.Counter
+	Err     *metric.Counter
 }
 
 func makeNodeMetrics(reg *metric.Registry, sampleInterval time.Duration) nodeMetrics {
 	nm := nodeMetrics{
 		Latency: metric.NewLatency(metaExecLatency, sampleInterval),
-		Success: metric.NewRates(metaExecSuccess),
-		Err:     metric.NewRates(metaExecError),
+		Success: metric.NewCounter(metaExecSuccess),
+		Err:     metric.NewCounter(metaExecError),
 	}
 	reg.AddMetricStruct(nm)
 	return nm
@@ -105,9 +105,9 @@ func makeNodeMetrics(reg *metric.Registry, sampleInterval time.Duration) nodeMet
 // level; stats on specific lower-level kv operations are not recorded.
 func (nm nodeMetrics) callComplete(d time.Duration, pErr *roachpb.Error) {
 	if pErr != nil && pErr.TransactionRestart == roachpb.TransactionRestart_NONE {
-		nm.Err.Add(1)
+		nm.Err.Inc(1)
 	} else {
-		nm.Success.Add(1)
+		nm.Success.Inc(1)
 	}
 	nm.Latency.RecordValue(d.Nanoseconds())
 }

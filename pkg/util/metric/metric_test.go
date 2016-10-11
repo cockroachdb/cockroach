@@ -110,14 +110,18 @@ func TestHistogramPrometheus(t *testing.T) {
 func TestHistogramRotate(t *testing.T) {
 	defer TestingSetNow(nil)()
 	setNow(0)
-	h := NewHistogram(emptyMetadata, histWrapNum*time.Second, 1000+10*histWrapNum, 3)
+	duration := histWrapNum * time.Second
+	h := NewHistogram(emptyMetadata, duration, 1000+10*histWrapNum, 3)
 	var cur time.Duration
 	for i := 0; i < 3*histWrapNum; i++ {
 		v := int64(10 * i)
 		h.RecordValue(v)
 		cur += time.Second
 		setNow(cur)
-		cur, _ := h.Windowed()
+		cur, windowDuration := h.Windowed()
+		if windowDuration != duration {
+			t.Fatalf("window changed: is %s, should be %s", windowDuration, duration)
+		}
 
 		// When i == histWrapNum-1, we expect the entry from i==0 to move out
 		// of the window (since we rotated for the histWrapNum'th time).
@@ -140,7 +144,7 @@ func TestRateRotate(t *testing.T) {
 	defer TestingSetNow(nil)()
 	setNow(0)
 	const interval = 10 * time.Second
-	r := NewRate(emptyMetadata, interval)
+	r := NewRate(interval)
 
 	// Skip the warmup phase of the wrapped EWMA for this test.
 	for i := 0; i < 100; i++ {
@@ -166,6 +170,4 @@ func TestRateRotate(t *testing.T) {
 	if v > .1 {
 		t.Fatalf("final value implausible: %v", v)
 	}
-	expBytes, _ := json.Marshal(v)
-	testMarshal(t, r, string(expBytes))
 }
