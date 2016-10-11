@@ -713,7 +713,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, repDesc, err := s.Stores().LookupReplica(rKey, nil)
+		_, repDesc, err := s.Stores().(server.TestStores).LookupReplica(rKey, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

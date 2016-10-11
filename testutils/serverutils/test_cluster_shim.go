@@ -29,6 +29,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -50,6 +51,47 @@ type TestClusterInterface interface {
 	// Stopper retrieves the stopper for this test cluster. Tests should call or
 	// defer the Stop() method on this stopper after starting a test cluster.
 	Stopper() *stop.Stopper
+
+	// AddReplicas adds replicas for a range on a set of stores.
+	// It's illegal to have multiple replicas of the same range on stores of a single
+	// node.
+	// The method blocks until a snapshot of the range has been copied to all the
+	// new replicas and the new replicas become part of the Raft group.
+	AddReplicas(
+		startKey roachpb.Key, targets ...base.ReplicationTarget,
+	) (*roachpb.RangeDescriptor, error)
+
+	// FindRangeLeaseHolder returns the current lease holder for the given range.
+	// In particular, it returns one particular node's (the hint, if specified)
+	// view of the current lease.
+	// An error is returned if there's no active lease.
+	//
+	// Note that not all nodes have necessarily applied the latest lease,
+	// particularly immediately after a TransferRangeLease() call. So specifying
+	// different hints can yield different results. The one server that's
+	// guaranteed to have applied the transfer is the previous lease holder.
+	FindRangeLeaseHolder(
+		rangeDesc *roachpb.RangeDescriptor,
+		hint *base.ReplicationTarget,
+	) (base.ReplicationTarget, error)
+
+	// TransferRangeLease transfers the lease for a range from whoever has it to
+	// a particular store. That store must already have a replica of the range. If
+	// that replica already has the (active) lease, this method is a no-op.
+	//
+	// When this method returns, it's guaranteed that the old lease holder has
+	// applied the new lease, but that's about it. It's not guaranteed that the new
+	// lease holder has applied it (so it might not know immediately that it is the
+	// new lease holder).
+	TransferRangeLease(
+		rangeDesc *roachpb.RangeDescriptor, dest base.ReplicationTarget,
+	) error
+
+	// LookupRange returns the descriptor of the range containing key.
+	LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error)
+
+	// Target returns a base.ReplicationTarget for the specified server.
+	Target(serverIdx int) base.ReplicationTarget
 }
 
 // TestClusterFactory encompasses the actual implementation of the shim

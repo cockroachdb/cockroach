@@ -1209,11 +1209,11 @@ func TestRequestToUninitializedRange(t *testing.T) {
 
 	// HACK: remove the second store from the node to generate a
 	// non-retryable error when we try to talk to it.
-	store2, err := s.Stores().GetStore(2)
+	ts, err := s.Stores().GetStore(2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.Stores().RemoveStore(store2)
+	s.Stores().GetStores().(*storage.Stores).RemoveStore(ts.(*storage.Store))
 
 	// Create the uninitialized range by sending an isolated raft
 	// message to the first store.
@@ -1251,7 +1251,7 @@ func TestRequestToUninitializedRange(t *testing.T) {
 		t.Fatal(err)
 	}
 	util.SucceedsSoon(t, func() error {
-		if replica, err := store1.GetReplica(rangeID); err != nil {
+		if replica, err := store1.(*storage.Store).GetReplica(rangeID); err != nil {
 			return errors.Errorf("failed to look up replica: %s", err)
 		} else if replica.IsInitialized() {
 			return errors.Errorf("expected replica to be uninitialized")

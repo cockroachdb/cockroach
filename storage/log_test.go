@@ -117,7 +117,8 @@ func TestLogSplits(t *testing.T) {
 	// StoreID 1 is present on the testserver. If this assumption changes in the
 	// future, *any* store will work, but a new method will need to be added to
 	// Stores (or a creative usage of VisitStores could suffice).
-	store, pErr := s.(*server.TestServer).Stores().GetStore(roachpb.StoreID(1))
+	testStore, pErr := s.(*server.TestServer).Stores().GetStore(roachpb.StoreID(1))
+	store := testStore.(*storage.Store)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -146,7 +147,8 @@ func TestLogRebalances(t *testing.T) {
 	// StoreID 1 is present on the testserver. If this assumption changes in the
 	// future, *any* store will work, but a new method will need to be added to
 	// Stores (or a creative usage of VisitStores could suffice).
-	store, err := s.(*server.TestServer).Stores().GetStore(roachpb.StoreID(1))
+	testStore, err := s.(*server.TestServer).Stores().GetStore(roachpb.StoreID(1))
+	store := testStore.(*storage.Store)
 	if err != nil {
 		t.Fatal(err)
 	}

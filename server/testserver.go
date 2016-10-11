@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/testserverutils"
 )
 
 const (
@@ -315,9 +316,26 @@ func WaitForInitialSplits(db *client.DB) error {
 	})
 }
 
-// Stores returns the collection of stores from this TestServer's node.
-func (ts *TestServer) Stores() *storage.Stores {
-	return ts.node.stores
+// TestStores is the implementation of TestStoresInterface.
+type TestStores struct {
+	*storage.Stores
+}
+
+var _ testserverutils.TestStoresInterface = TestStores{}
+
+// GetStore is part of TestStoresInterface.
+func (ts TestStores) GetStore(sid roachpb.StoreID) (testserverutils.TestStoreInterface, error) {
+	return ts.Stores.GetStore(sid)
+}
+
+// GetStores is part of TestStoresInterface.
+func (ts TestStores) GetStores() interface{} {
+	return ts.Stores
+}
+
+// Stores is part of TestServerInterface.
+func (ts *TestServer) Stores() testserverutils.TestStoresInterface {
+	return TestStores{ts.node.stores}
 }
 
 // ServingAddr returns the server's address. Should be used by clients.
@@ -409,11 +427,10 @@ func (ts *TestServer) DistSender() *kv.DistSender {
 	return ts.distSender
 }
 
-// GetFirstStoreID is a utility function returning the StoreID of the first
-// store on this node.
+// GetFirstStoreID is part of TestServerInterface.
 func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
 	firstStoreID := roachpb.StoreID(-1)
-	err := ts.Stores().VisitStores(func(s *storage.Store) error {
+	err := ts.Stores().(TestStores).VisitStores(func(s *storage.Store) error {
 		if firstStoreID == -1 {
 			firstStoreID = s.Ident.StoreID
 		}
