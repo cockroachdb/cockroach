@@ -170,6 +170,14 @@ TestCrlfmt() {
   crlfmt -ignore 'pb.*.go' -tab 2 .
 }
 
+always_fail() {
+  return 1
+}
+
+always_succeed() {
+  return 0
+}
+
 # Run all the tests, wrapped in a similar output format to "go test"
 # so we can use go2xunit to generate reports in CI.
 
@@ -177,12 +185,19 @@ runcheck() {
   # We need to set these options again due to the `parallel` magic.
   set -euo pipefail
 
-  local name="$1"
+  # These variables really ought to be local, but then they are not bound
+  # when the trap below fires.
+  start=$(date +%s)
+  name="$1"
   shift
+
   echo "=== RUN $name"
-  local start=$(date +%s)
+
+  set +e
   output=$(eval "$name")
   local status=$?
+  set -e
+
   local end=$(date +%s)
   local runtime=$((end-start))
   if [ $status -eq 0 ]; then
@@ -193,6 +208,10 @@ runcheck() {
   fi
   return $status
 }
+
+runcheck "always_fail" &> /dev/null && (echo "script test 1 failed"; exit 1)
+runcheck "always_succeed" &> /dev/null || (echo "script test 2 failed"; exit 1)
+
 
 exit_status=0
 
