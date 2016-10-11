@@ -142,7 +142,7 @@ distribute the processing on multiple nodes (parallelization for performance).
   3. Distributed sorting
 
     When ordering results, we want to be able to distribute the sorting effort.
-    Nodes would sort their own data sets and one ore more nodes would merge the
+    Nodes would sort their own data sets and one or more nodes would merge the
     results.
 
 # Detailed design
