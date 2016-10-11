@@ -1725,6 +1725,11 @@ func TestStoreScanIntents(t *testing.T) {
 	cfg.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.ScanRequest); ok {
+				if filterArgs.Req.Header().Overlaps(keys.SystemConfigSpan) {
+					// Ignore the SystemConfigSpan: there's random scans going on in the
+					// background for gossiping the system span.
+					return nil
+				}
 				atomic.AddInt32(countPtr, 1)
 			}
 			return nil
@@ -1782,16 +1787,17 @@ func TestStoreScanIntents(t *testing.T) {
 		if !test.consistent {
 			consistency = roachpb.INCONSISTENT
 		}
-		done := make(chan struct{})
+		done := make(chan error, 1)
 		go func() {
-			if reply, pErr := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{
+			reply, pErr := client.SendWrappedWith(store.testSender(), nil, roachpb.Header{
 				Timestamp:       ts,
 				ReadConsistency: consistency,
-			}, &sArgs); pErr != nil {
-				t.Fatal(pErr)
-			} else {
-				sReply = reply.(*roachpb.ScanResponse)
+			}, &sArgs)
+			if pErr != nil {
+				done <- pErr.GoError()
+				return
 			}
+			sReply = reply.(*roachpb.ScanResponse)
 			close(done)
 		}()
 
@@ -1800,7 +1806,10 @@ func TestStoreScanIntents(t *testing.T) {
 			wait = 10 * time.Millisecond
 		}
 		select {
-		case <-done:
+		case err := <-done:
+			if err != nil {
+				t.Fatal(err)
+			}
 			if len(sReply.Rows) != 0 {
 				t.Errorf("expected empty scan result; got %+v", sReply.Rows)
 			}
