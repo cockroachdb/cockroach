@@ -71,11 +71,11 @@ func (p *planner) changePrivileges(
 
 // Grant adds privileges to users.
 // Current status:
-// - Target: single database or table.
+// - Target: single database, table, or view.
 // TODO(marc): open questions:
 // - should we have root always allowed and not present in the permissions list?
 // - should we make users case-insensitive?
-// Privileges: GRANT on database/table.
+// Privileges: GRANT on database/table/view.
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Grant(n *parser.Grant) (planNode, error) {
@@ -86,11 +86,11 @@ func (p *planner) Grant(n *parser.Grant) (planNode, error) {
 
 // Revoke removes privileges from users.
 // Current status:
-// - Target: single database or table.
+// - Target: single database, table, or view.
 // TODO(marc): open questions:
 // - should we have root always allowed and not present in the permissions list?
 // - should we make users case-insensitive?
-// Privileges: GRANT on database/table.
+// Privileges: GRANT on database/table/view.
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Revoke(n *parser.Revoke) (planNode, error) {
