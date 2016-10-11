@@ -300,7 +300,7 @@ func extractValue(mtr interface{}) (float64, error) {
 	switch mtr := mtr.(type) {
 	case float64:
 		return mtr, nil
-	case *metric.Rates:
+	case *metric.CounterWithRates:
 		return float64(mtr.Count()), nil
 	case *metric.Counter:
 		return float64(mtr.Count()), nil

@@ -105,10 +105,10 @@ func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
 
 // TxnMetrics holds all metrics relating to KV transactions.
 type TxnMetrics struct {
-	Aborts     metric.Rates
-	Commits    metric.Rates
-	Commits1PC metric.Rates // Commits which finished in a single phase
-	Abandons   metric.Rates
+	Aborts     *metric.CounterWithRates
+	Commits    *metric.CounterWithRates
+	Commits1PC *metric.CounterWithRates // Commits which finished in a single phase
+	Abandons   *metric.CounterWithRates
 	Durations  *metric.Histogram
 
 	// Restarts is the number of times we had to restart the transaction.
@@ -128,10 +128,10 @@ var (
 // windowed portions retain data for approximately sampleInterval.
 func MakeTxnMetrics(sampleInterval time.Duration) TxnMetrics {
 	return TxnMetrics{
-		Aborts:     metric.NewRates(metaAbortsRates),
-		Commits:    metric.NewRates(metaCommitsRates),
-		Commits1PC: metric.NewRates(metaCommits1PCRates),
-		Abandons:   metric.NewRates(metaAbandonsRates),
+		Aborts:     metric.NewCounterWithRates(metaAbortsRates),
+		Commits:    metric.NewCounterWithRates(metaCommitsRates),
+		Commits1PC: metric.NewCounterWithRates(metaCommits1PCRates),
+		Abandons:   metric.NewCounterWithRates(metaAbandonsRates),
 		Durations:  metric.NewLatency(metaDurationsHistograms, sampleInterval),
 		Restarts:   metric.NewHistogram(metaRestartsHistogram, sampleInterval, 100, 3),
 	}
@@ -999,13 +999,13 @@ func (tc *TxnCoordSender) updateStats(
 	tc.metrics.Restarts.RecordValue(restarts)
 	switch status {
 	case roachpb.ABORTED:
-		tc.metrics.Aborts.Add(1)
+		tc.metrics.Aborts.Inc(1)
 	case roachpb.PENDING:
-		tc.metrics.Abandons.Add(1)
+		tc.metrics.Abandons.Inc(1)
 	case roachpb.COMMITTED:
-		tc.metrics.Commits.Add(1)
+		tc.metrics.Commits.Inc(1)
 		if onePC {
-			tc.metrics.Commits1PC.Add(1)
+			tc.metrics.Commits1PC.Inc(1)
 		}
 	}
 }

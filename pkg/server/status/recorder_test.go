@@ -18,7 +18,6 @@ package status
 
 import (
 	"reflect"
-	"regexp"
 	"sort"
 	"strconv"
 	"testing"
@@ -34,8 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
-
-const sep = "-"
 
 // byTimeAndName is a slice of tspb.TimeSeriesData.
 type byTimeAndName []tspb.TimeSeriesData
@@ -205,7 +202,7 @@ func TestMetricsRecorder(t *testing.T) {
 		{"testGauge", "gauge", 20},
 		{"testGaugeFloat64", "floatgauge", 20},
 		{"testCounter", "counter", 5},
-		{"testRate", "rate", 2},
+		{"testCounterWithRates", "counterwithrates", 2},
 		{"testHistogram", "histogram", 10},
 		{"testLatency", "latency", 10},
 
@@ -271,16 +268,11 @@ func TestMetricsRecorder(t *testing.T) {
 				reg.reg.AddMetric(c)
 				c.Inc((data.val))
 				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
-			case "rate":
-				r := metric.NewRates(metric.Metadata{Name: reg.prefix + data.name})
-				reg.reg.AddMetricGroup(r)
-				r.Add(data.val)
-				addExpected(reg.prefix, data.name+"-count", reg.source, 100, data.val, reg.isNode)
-				for _, scale := range metric.DefaultTimeScales {
-					// Rate data is subject to timing errors in tests. Zero out
-					// these values.
-					addExpected(reg.prefix, data.name+sep+scale.Name(), reg.source, 100, 0, reg.isNode)
-				}
+			case "counterwithrates":
+				r := metric.NewCounterWithRates(metric.Metadata{Name: reg.prefix + data.name})
+				reg.reg.AddMetric(r)
+				r.Inc(data.val)
+				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
 			case "histogram":
 				h := metric.NewHistogram(metric.Metadata{Name: reg.prefix + data.name}, time.Second, 1000, 2)
 				reg.reg.AddMetric(h)
@@ -297,6 +289,8 @@ func TestMetricsRecorder(t *testing.T) {
 				for _, q := range recordHistogramQuantiles {
 					addExpected(reg.prefix, data.name+q.suffix, reg.source, 100, data.val, reg.isNode)
 				}
+			default:
+				t.Fatalf("unexpected: %+v", data)
 			}
 		}
 	}
@@ -305,17 +299,6 @@ func TestMetricsRecorder(t *testing.T) {
 	// Verify time series data
 	// ========================================
 	actual := recorder.GetTimeSeriesData()
-
-	// Zero-out timing-sensitive rate values from actual data.
-	for _, act := range actual {
-		match, err := regexp.MatchString(`testRate-\d+m`, act.Name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if match {
-			act.Datapoints[0].Value = 0.0
-		}
-	}
 
 	// Actual comparison is simple: sort the resulting arrays by time and name,
 	// and use reflect.DeepEqual.

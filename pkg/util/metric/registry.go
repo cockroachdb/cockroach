@@ -29,8 +29,6 @@ import (
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
-const sep = "-"
-
 // A Registry is a list of metrics. It provides a simple way of iterating over
 // them, can marshal into JSON, and generate a prometheus format.
 //
@@ -77,19 +75,6 @@ func (r *Registry) AddMetric(metric Iterable) {
 	}
 }
 
-// AddMetricGroup expands the metric group and adds all of them
-// as individual metrics to the registry.
-func (r *Registry) AddMetricGroup(group metricGroup) {
-	r.Lock()
-	defer r.Unlock()
-	group.iterate(func(metric Iterable) {
-		r.tracked = append(r.tracked, metric)
-		if log.V(2) {
-			log.Infof(context.TODO(), "Added metric: %s (%T)", metric.GetName(), metric)
-		}
-	})
-}
-
 // AddMetricStruct examines all fields of metricStruct and adds
 // all Iterable or metricGroup objects to the registry.
 func (r *Registry) AddMetricStruct(metricStruct interface{}) {
@@ -109,8 +94,6 @@ func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 		}
 		val := vfield.Interface()
 		switch typ := val.(type) {
-		case metricGroup:
-			r.AddMetricGroup(typ)
 		case Iterable:
 			r.AddMetric(typ)
 		default:
