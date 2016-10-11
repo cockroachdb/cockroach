@@ -323,7 +323,7 @@ func (p *planner) getTableScanOrViewPlan(
 		// specified time, and never lease anything. The proto transaction already
 		// has its timestamps set correctly so mustGetTableDesc will fetch with the
 		// correct timestamp.
-		descFunc = p.mustGetTableDesc
+		descFunc = p.mustGetTableOrViewDesc
 	}
 	desc, err := descFunc(tn)
 	if err != nil {
