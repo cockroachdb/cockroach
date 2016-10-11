@@ -252,6 +252,11 @@ func (sc SchemaChanger) exec() error {
 				}
 			}
 		}
+		for _, id := range table.DependsOn {
+			if err := sc.waitToUpdateLeases(id); err != nil {
+				return err
+			}
+		}
 
 		if _, err := sc.leaseMgr.Publish(
 			table.ID,

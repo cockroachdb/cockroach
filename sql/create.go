@@ -914,6 +914,16 @@ func (n *createViewNode) makeViewTableDesc(
 
 	n.resolveViewDependencies(&desc, affected)
 
+	// Since this view is referencing another table/view, it must be created in
+	// a non-public "ADD" state and made public only after all leases on the
+	// other table(s) are updated to include the backref.
+	if len(affected) > 0 {
+		desc.State = sqlbase.TableDescriptor_ADD
+		if err := desc.SetUpVersion(); err != nil {
+			return desc, err
+		}
+	}
+
 	var buf bytes.Buffer
 	p.AsSource.Format(&buf, parser.FmtSimple)
 	desc.ViewQuery = buf.String()
