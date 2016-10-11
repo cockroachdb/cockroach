@@ -1,0 +1,153 @@
+statement ok
+CREATE TABLE a (k STRING PRIMARY KEY, v STRING)
+
+statement ok
+INSERT INTO a VALUES ('a', '1'), ('b', '2'), ('c', '3')
+
+statement ok
+CREATE VIEW b AS SELECT * from a
+
+statement ok
+CREATE VIEW c AS SELECT * from b
+
+query T
+SHOW TABLES FROM test
+----
+a
+b
+c
+
+statement error view "b" depends on table "a"
+DROP TABLE a
+
+statement error pgcode 42809 "b" is not a table
+DROP TABLE b
+
+statement error view "c" depends on view "b"
+DROP VIEW b
+
+statement ok
+CREATE VIEW d AS SELECT * FROM a
+
+statement ok
+CREATE VIEW diamond AS SELECT COUNT(*) FROM b AS b JOIN d AS d ON b.k = d.k
+
+statement error view "diamond" depends on view "d"
+DROP VIEW d
+
+statement ok
+GRANT ALL ON d TO testuser
+
+query T
+SHOW TABLES FROM test
+----
+a
+b
+c
+d
+diamond
+
+user testuser
+
+statement error user testuser does not have DROP privilege on view diamond
+DROP VIEW diamond
+
+statement error view "diamond" depends on view "d"
+DROP VIEW d
+
+user root
+
+statement ok
+CREATE VIEW testuser1 AS SELECT * FROM a
+
+statement ok
+CREATE VIEW testuser2 AS SELECT * FROM testuser1
+
+statement ok
+CREATE VIEW testuser3 AS SELECT * FROM testuser2
+
+statement ok
+GRANT ALL ON testuser1 to testuser
+
+statement ok
+GRANT ALL ON testuser2 to testuser
+
+statement ok
+GRANT ALL ON testuser3 to testuser
+
+query T
+SHOW TABLES FROM test
+----
+a
+b
+c
+d
+diamond
+testuser1
+testuser2
+testuser3
+
+user testuser
+
+statement ok
+DROP VIEW testuser3
+
+query T
+SHOW TABLES FROM test
+----
+a
+b
+c
+d
+diamond
+testuser1
+testuser2
+
+statement error view "testuser2" depends on view "testuser1"
+DROP VIEW testuser1
+
+statement error view "testuser2" depends on view "testuser1"
+DROP VIEW testuser1 RESTRICT
+
+statement ok
+DROP VIEW testuser1 CASCADE
+
+query T
+SHOW TABLES FROM test
+----
+a
+b
+c
+d
+diamond
+
+statement error pgcode 42P01 view "testuser2" does not exist
+DROP VIEW testuser2
+
+user root
+
+statement ok
+GRANT ALL ON a to testuser
+
+statement ok
+GRANT ALL ON b to testuser
+
+statement ok
+GRANT ALL ON c to testuser
+
+statement ok
+GRANT ALL ON d to testuser
+
+user testuser
+
+statement error user testuser does not have DROP privilege on view diamond
+DROP TABLE a CASCADE
+
+user root
+
+statement ok
+DROP TABLE a CASCADE
+
+query T
+SHOW TABLES FROM test
+----
