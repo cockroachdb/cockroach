@@ -65,7 +65,7 @@ func grpcTransportFactory(
 			defer func() {
 				atomic.StoreInt32(&running, 0)
 				log.Infof(
-					context.Background(),
+					context.TODO(),
 					"transport race promotion: ran %d iterations on up to %d requests",
 					iters, curIdx+1,
 				)
