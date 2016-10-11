@@ -27,7 +27,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/pkg/errors"
 )
 
@@ -68,15 +67,6 @@ type Parser struct {
 
 // Parse parses the sql and returns a list of statements.
 func (p *Parser) Parse(sql string, syntax Syntax) (stmts StatementList, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			// Panic on anything except unimplemented errors.
-			if _, ok := r.(util.UnimplementedWithIssueError); !ok && r != errUnimplemented {
-				panic(r)
-			}
-			err = r.(error)
-		}
-	}()
 	p.scanner.init(sql, syntax)
 	if p.parserImpl.Parse(&p.scanner) != 0 {
 		return nil, errors.New(p.scanner.lastError)
