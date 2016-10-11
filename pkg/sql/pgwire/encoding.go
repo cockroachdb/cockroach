@@ -23,7 +23,7 @@ import (
 	"io"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/pkg/errors"
 )
 

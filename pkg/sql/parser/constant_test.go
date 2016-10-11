@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/util/decimal"
+	"github.com/cockroachdb/cockroach/pkg/util/decimal"
 
 	"gopkg.in/inf.v0"
 )

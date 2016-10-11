@@ -23,8 +23,8 @@ import (
 	"math/rand"
 	"os"
 
-	"github.com/cockroachdb/cockroach/cli"
-	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func main() {

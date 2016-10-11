@@ -24,8 +24,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/testutils"
-	_ "github.com/cockroachdb/cockroach/util/log" // for flags
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 )
 
 // TestParse verifies that we can parse the supplied SQL and regenerate the SQL

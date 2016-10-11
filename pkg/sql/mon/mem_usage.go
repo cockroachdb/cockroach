@@ -20,10 +20,10 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/envutil"
-	"github.com/cockroachdb/cockroach/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )

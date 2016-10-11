@@ -18,7 +18,7 @@
 
 package cli
 
-import "github.com/cockroachdb/cockroach/util/stop"
+import "github.com/cockroachdb/cockroach/pkg/util/stop"
 
 func initBacktrace(logDir string) *stop.Stopper {
 	return stop.NewStopper()

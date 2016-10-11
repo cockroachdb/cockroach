@@ -26,8 +26,8 @@ import (
 
 	"github.com/dustin/go-humanize"
 
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 )
 
 // This file implements method receivers for members of server.Context struct

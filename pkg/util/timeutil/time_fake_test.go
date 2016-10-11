@@ -21,8 +21,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/util/envutil"
-	_ "github.com/cockroachdb/cockroach/util/log" // for flags
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 )
 
 func TestOffset(t *testing.T) {

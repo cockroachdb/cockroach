@@ -6,6 +6,6 @@ build/builder.sh /bin/bash -c '! git status --porcelain | read || (git status; g
 
 # If the code is new enough to have go generate not
 # run the ui tests, run the ui tests.
-if grep "make generate" ui/ui.go; then
-    build/builder.sh make -C ui
+if grep "make generate" pkg/ui/ui.go; then
+    build/builder.sh make -C pkg/ui
 fi

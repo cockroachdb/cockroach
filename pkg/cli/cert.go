@@ -19,7 +19,7 @@ package cli
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/pkg/security"
 
 	"github.com/spf13/cobra"
 )

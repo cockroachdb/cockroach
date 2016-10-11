@@ -19,7 +19,7 @@ package config
 import (
 	"errors"
 
-	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // MigrateZoneConfig migrates the legacy ZoneConfig format into the new one.

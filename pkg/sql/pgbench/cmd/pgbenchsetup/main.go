@@ -23,7 +23,7 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/cockroachdb/cockroach/sql/pgbench"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgbench"
 	_ "github.com/lib/pq"
 )
 

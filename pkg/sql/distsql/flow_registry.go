@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // flowEntry is a structure associated with a (potential) flow.

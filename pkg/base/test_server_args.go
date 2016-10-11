@@ -19,7 +19,7 @@ package base
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // TestServerArgs contains the parameters one can set when creating a test

@@ -16,7 +16,7 @@
 
 package keys
 
-import "github.com/cockroachdb/cockroach/roachpb"
+import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
 var (
 	// Meta1Span holds all first level addressing.

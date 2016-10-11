@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
 // limitNode represents a node that limits the number of rows

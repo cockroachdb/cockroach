@@ -18,8 +18,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/util/decimal"
-	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/decimal"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 // testAggregateResultDeepCopy verifies that Datum returned from AggregateFunc's

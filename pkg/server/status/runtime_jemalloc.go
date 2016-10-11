@@ -18,9 +18,9 @@
 
 package status
 
-// #cgo darwin CPPFLAGS: -I../../../c-jemalloc/darwin_includes/internal/include
-// #cgo freebsd CPPFLAGS: -I../../../c-jemalloc/freebsd_includes/internal/include
-// #cgo linux CPPFLAGS: -I../../../c-jemalloc/linux_includes/internal/include
+// #cgo darwin CPPFLAGS: -I../../../../c-jemalloc/darwin_includes/internal/include
+// #cgo freebsd CPPFLAGS: -I../../../../c-jemalloc/freebsd_includes/internal/include
+// #cgo linux CPPFLAGS: -I../../../../c-jemalloc/linux_includes/internal/include
 // #cgo darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
 // #cgo linux LDFLAGS: -Wl,-unresolved-symbols=ignore-all
 //
@@ -78,7 +78,7 @@ import (
 	// This is explicit because this Go library does not export any Go symbols.
 	_ "github.com/cockroachdb/c-jemalloc"
 
-	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 
 	"github.com/dustin/go-humanize"
 )

@@ -16,7 +16,7 @@
 
 package engine
 
-import "github.com/cockroachdb/cockroach/util/hlc"
+import "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 const (
 	batchTypeDeletion byte = 0x0

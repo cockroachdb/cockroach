@@ -23,7 +23,7 @@ package distsql
 import (
 	"hash/crc32"
 
-	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
 

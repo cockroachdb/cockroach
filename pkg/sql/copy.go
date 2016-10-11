@@ -22,8 +22,8 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 )
 
 // COPY FROM is not a usual planNode. After a COPY FROM is executed as a

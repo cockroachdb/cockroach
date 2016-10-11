@@ -23,7 +23,7 @@ import (
 	"github.com/facebookgo/clock"
 	"github.com/rubyist/circuitbreaker"
 
-	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // breakerClock is an implementation of clock.Clock that internally uses an

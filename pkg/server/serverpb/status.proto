@@ -18,13 +18,13 @@ syntax = "proto3";
 package cockroach.server.serverpb;
 option go_package = "serverpb";
 
-import "cockroach/build/info.proto";
-import "cockroach/gossip/gossip.proto";
-import "cockroach/server/status/status.proto";
-import "cockroach/storage/engine/enginepb/mvcc.proto";
-import "cockroach/storage/storagebase/state.proto";
-import "cockroach/util/log/log.proto";
-import "cockroach/util/unresolved_addr.proto";
+import "cockroach/pkg/build/info.proto";
+import "cockroach/pkg/gossip/gossip.proto";
+import "cockroach/pkg/server/status/status.proto";
+import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
+import "cockroach/pkg/storage/storagebase/state.proto";
+import "cockroach/pkg/util/log/log.proto";
+import "cockroach/pkg/util/unresolved_addr.proto";
 
 import "etcd/raft/raftpb/raft.proto";
 
@@ -43,7 +43,7 @@ message DetailsRequest {
 
 message DetailsResponse {
   int32 node_id = 1 [(gogoproto.customname) = "NodeID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.NodeID"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   util.UnresolvedAddr address = 2 [(gogoproto.nullable) = false];
   build.Info build_info = 3 [(gogoproto.nullable) = false];
 }
@@ -182,7 +182,7 @@ message MetricsRequest {
 
 message RaftRangeNode {
   int32 node_id = 1 [(gogoproto.customname) = "NodeID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.NodeID"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   RangeInfo range = 2 [(gogoproto.nullable) = false];
 }
 
@@ -192,7 +192,7 @@ message RaftRangeError {
 
 message RaftRangeStatus {
   int64 range_id = 1 [(gogoproto.customname) = "RangeID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
   repeated RaftRangeError errors = 2 [(gogoproto.nullable) = false];
   repeated RaftRangeNode nodes = 3 [(gogoproto.nullable) = false];
 }
@@ -202,14 +202,14 @@ message RaftDebugRequest {
 
 message RaftDebugResponse {
   map<int64, RaftRangeStatus> ranges = 1 [(gogoproto.nullable) = false,
-    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
   repeated RaftRangeError errors = 2 [(gogoproto.nullable) = false];
 }
 
 message SpanStatsRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
-  bytes start_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RKey"];
-  bytes end_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RKey"];
+  bytes start_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
+  bytes end_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
 }
 
 message SpanStatsResponse {

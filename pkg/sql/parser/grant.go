@@ -25,7 +25,7 @@ package parser
 import (
 	"bytes"
 
-	"github.com/cockroachdb/cockroach/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 )
 
 // Grant represents a GRANT statement.

@@ -22,7 +22,7 @@ package util
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func init() {

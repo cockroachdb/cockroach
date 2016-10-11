@@ -22,7 +22,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
 func TestScanner(t *testing.T) {

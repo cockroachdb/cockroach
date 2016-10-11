@@ -20,11 +20,11 @@ syntax = "proto2";
 package cockroach.sql.distsql;
 option go_package = "distsql";
 
-import "cockroach/roachpb/data.proto";
-import "cockroach/roachpb/errors.proto";
-import "cockroach/sql/distsql/data.proto";
-import "cockroach/sql/distsql/processors.proto";
-import "cockroach/util/tracing/span_context_carrier.proto";
+import "cockroach/pkg/roachpb/data.proto";
+import "cockroach/pkg/roachpb/errors.proto";
+import "cockroach/pkg/sql/distsql/data.proto";
+import "cockroach/pkg/sql/distsql/processors.proto";
+import "cockroach/pkg/util/tracing/span_context_carrier.proto";
 import "gogoproto/gogo.proto";
 
 message SetupFlowRequest {

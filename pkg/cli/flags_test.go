@@ -22,10 +22,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/cli/cliflags"
-	"github.com/cockroachdb/cockroach/testutils/buildutil"
-	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestStdFlagToPflag(t *testing.T) {
@@ -49,10 +49,10 @@ func TestNoLinkForbidden(t *testing.T) {
 		[]string{
 			"testing",  // defines flags
 			"go/build", // probably not something we want in the main binary
-			"github.com/cockroachdb/cockroach/security/securitytest", // contains certificates
+			"github.com/cockroachdb/cockroach/pkg/security/securitytest", // contains certificates
 		},
 		[]string{
-			"github.com/cockroachdb/cockroach/testutils", // meant for testing code only
+			"github.com/cockroachdb/cockroach/pkg/testutils", // meant for testing code only
 		})
 }
 

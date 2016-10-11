@@ -29,7 +29,7 @@ ifeq ($(SHELL),)
 $(error bash is required)
 endif
 
-REPO_ROOT   = $(realpath ..)
+REPO_ROOT   = $(realpath ../..)
 ORG_ROOT    = $(REPO_ROOT)/..
 GITHUB_ROOT = $(ORG_ROOT)/..
 

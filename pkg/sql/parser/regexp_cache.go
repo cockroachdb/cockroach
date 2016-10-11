@@ -19,8 +19,8 @@ package parser
 import (
 	"regexp"
 
-	"github.com/cockroachdb/cockroach/util/cache"
-	"github.com/cockroachdb/cockroach/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/cache"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // regexpCacheKey allows cache keys to take the form of different types,

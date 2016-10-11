@@ -17,7 +17,7 @@
 package storagebase
 
 import (
-	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"golang.org/x/net/context"
 )
 

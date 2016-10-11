@@ -22,7 +22,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/pkg/security"
 )
 
 var password string

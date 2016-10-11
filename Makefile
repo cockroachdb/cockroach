@@ -25,7 +25,7 @@ STATIC :=
 
 # Variables to be overridden on the command line, e.g.
 #   make test PKG=./storage TESTFLAGS=--vmodule=raft=1
-PKG          := ./...
+PKG          := ./pkg/...
 TAGS         :=
 TESTS        := .
 TESTTIMEOUT  := 2m
@@ -148,7 +148,7 @@ upload-coverage:
 
 .PHONY: acceptance
 acceptance:
-	@acceptance/run.sh
+	@pkg/acceptance/run.sh
 
 .PHONY: dupl
 dupl:
@@ -164,7 +164,7 @@ dupl:
 check:
 	# compile everything; go vet sometimes reports incorrect errors if
 	# the build artifacts are stale.
-	$(GO) test -i -tags '$(TAGS)' ./...
+	$(GO) test -i -tags '$(TAGS)' ./pkg/...
 	$(GO) test ./build -v -tags check -run 'TestStyle/$(TESTS)'
 
 .PHONY: clean

@@ -19,7 +19,7 @@ syntax = "proto2";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
-import "cockroach/util/unresolved_addr.proto";
+import "cockroach/pkg/util/unresolved_addr.proto";
 import "gogoproto/gogo.proto";
 
 // Attributes specifies a list of arbitrary strings describing

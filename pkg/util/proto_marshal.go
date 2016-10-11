@@ -24,7 +24,7 @@ import (
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 var _ gwruntime.Marshaler = (*ProtoPb)(nil)

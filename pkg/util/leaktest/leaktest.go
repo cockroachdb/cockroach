@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // interestingGoroutines returns all goroutines we care about for the purpose
@@ -33,7 +33,7 @@ func interestingGoroutines() (gs []string) {
 		}
 
 		if stack == "" ||
-			strings.Contains(stack, "github.com/cockroachdb/cockroach/util/log.init") ||
+			strings.Contains(stack, "github.com/cockroachdb/cockroach/pkg/util/log.init") ||
 			// Go1.7 added a goroutine to network dialing that doesn't shut down
 			// quickly.
 			strings.Contains(stack, "created by net.(*netFD).connect") ||

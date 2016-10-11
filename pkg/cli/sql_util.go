@@ -30,8 +30,8 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 
-	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pq"
 )
 

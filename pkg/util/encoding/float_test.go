@@ -21,7 +21,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestEncodeFloat(t *testing.T) {

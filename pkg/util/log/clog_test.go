@@ -33,7 +33,7 @@ import (
 
 	"github.com/kr/pretty"
 
-	"github.com/cockroachdb/cockroach/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/caller"
 )
 
 // Test that shortHostname works as advertised.

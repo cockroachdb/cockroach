@@ -19,8 +19,8 @@ package kv
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestLeaseHolderCache(t *testing.T) {

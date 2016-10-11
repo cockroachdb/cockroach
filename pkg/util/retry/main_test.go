@@ -16,4 +16,4 @@
 
 package retry_test
 
-import _ "github.com/cockroachdb/cockroach/util/log" // for flags
+import _ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags

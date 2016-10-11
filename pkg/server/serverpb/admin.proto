@@ -18,8 +18,8 @@ syntax = "proto3";
 package cockroach.server.serverpb;
 option go_package = "serverpb";
 
-import "cockroach/config/config.proto";
-import "cockroach/storage/engine/enginepb/mvcc.proto";
+import "cockroach/pkg/config/config.proto";
+import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
 

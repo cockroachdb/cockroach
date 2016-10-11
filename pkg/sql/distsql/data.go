@@ -17,8 +17,8 @@
 package distsql
 
 import (
-	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // convertToColumnOrdering converts an Ordering type (as defined in data.proto)

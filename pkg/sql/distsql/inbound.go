@@ -19,7 +19,7 @@ package distsql
 import (
 	"io"
 
-	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // ProcessInboundStream receives rows from a DistSQL_FlowStreamServer and sends

@@ -19,7 +19,7 @@ package client
 import (
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // Sender is the interface used to call into a Cockroach instance.

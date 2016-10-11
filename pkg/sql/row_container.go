@@ -19,7 +19,7 @@ package sql
 import (
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
 // RowContainer is a container for rows of DTuples which tracks the

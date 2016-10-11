@@ -19,7 +19,7 @@ package resolver
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/pkg/base"
 )
 
 func TestParseResolverAddress(t *testing.T) {

@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 //go:generate go run -tags gen-batch gen_batch.go

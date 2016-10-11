@@ -18,8 +18,8 @@ syntax = "proto3";
 package cockroach.sql.sqlbase;
 option go_package = "sqlbase";
 
-import "cockroach/sql/sqlbase/structured.proto";
-import "cockroach/util/hlc/timestamp.proto";
+import "cockroach/pkg/sql/sqlbase/structured.proto";
+import "cockroach/pkg/util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 // BackupRangeDescriptor represents a file that contains the diff for a key
@@ -30,8 +30,8 @@ message BackupRangeDescriptor {
 
   // An empty path means the range is empty.
   string path = 1;
-  bytes start_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.Key"];
-  bytes end_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.Key"];
+  bytes start_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+  bytes end_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
   util.hlc.Timestamp start_time = 4 [(gogoproto.nullable) = false];
   uint32 crc = 5 [(gogoproto.customname) = "CRC"];
 }

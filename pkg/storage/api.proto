@@ -18,16 +18,16 @@ syntax = "proto3";
 package cockroach.storage;
 option go_package = "storage";
 
-import "cockroach/roachpb/internal_raft.proto";
-import "cockroach/roachpb/metadata.proto";
+import "cockroach/pkg/roachpb/internal_raft.proto";
+import "cockroach/pkg/roachpb/metadata.proto";
 import "gogoproto/gogo.proto";
 
 // StoreRequestHeader locates a Store on a Node.
 message StoreRequestHeader {
   int32 node_id = 1 [(gogoproto.customname) = "NodeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.NodeID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   int32 store_id = 2 [(gogoproto.customname) = "StoreID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.StoreID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
 }
 
 // A PollFrozenRequest asks the addressed Store for its frozen or thawed
@@ -48,11 +48,11 @@ message PollFrozenResponse {
 message ReservationRequest {
   StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   int32 from_node_id = 2 [(gogoproto.customname) = "FromNodeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.NodeID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   int32 from_store_id = 3 [(gogoproto.customname) = "FromStoreID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.StoreID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
   int64 range_id = 4 [(gogoproto.customname) = "RangeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
   int64 range_size = 5;
 }
 
@@ -77,11 +77,11 @@ service Reservation {
 message CollectChecksumRequest {
   StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   int64 range_id = 2 [(gogoproto.customname) = "RangeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
   // checksum_id identifies the corresponding roachpb.ComputeChecksumRequest.
   bytes checksum_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ChecksumID",
-      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
   bytes checksum = 4;
 }
 

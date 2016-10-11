@@ -20,12 +20,12 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/security/securitytest"
-	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/testutils/buildutil"
-	"github.com/cockroachdb/cockroach/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go
@@ -38,12 +38,12 @@ func TestForbiddenDeps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Verify kv does not depend on storage (or any of its subpackages).
 	buildutil.VerifyNoImports(t,
-		"github.com/cockroachdb/cockroach/kv", true,
+		"github.com/cockroachdb/cockroach/pkg/kv", true,
 		// TODO(tschottdorf): should really disallow ./storage/... but at the
 		// time of writing there's a (legit) dependency on `enginepb`.
 		[]string{
-			"github.com/cockroachdb/cockroach/storage",
-			"github.com/cockroachdb/cockroach/storage/engine",
+			"github.com/cockroachdb/cockroach/pkg/storage",
+			"github.com/cockroachdb/cockroach/pkg/storage/engine",
 		},
 		[]string{})
 }

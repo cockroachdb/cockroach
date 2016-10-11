@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/base"
+	"github.com/cockroachdb/cockroach/pkg/base"
 )
 
 const chain = "partition_nemesis"

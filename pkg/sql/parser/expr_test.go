@@ -20,7 +20,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
 // TestUnresolvedNameString tests the string representation of UnresolvedName and thus Name.

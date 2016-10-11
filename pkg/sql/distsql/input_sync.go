@@ -22,7 +22,7 @@ package distsql
 import (
 	"container/heap"
 
-	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
 

@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-YACC="../../../../../../bin/goyacc"
+YACC="../../../../../../../bin/goyacc"
 
 # This step runs sql.y through the YACC compiler directly without
 # performing any type/token declaration modifications, throwing out

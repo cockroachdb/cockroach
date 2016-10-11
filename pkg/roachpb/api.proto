@@ -18,12 +18,12 @@ syntax = "proto2";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
-import "cockroach/roachpb/data.proto";
-import "cockroach/roachpb/errors.proto";
-import "cockroach/roachpb/metadata.proto";
-import "cockroach/storage/engine/enginepb/mvcc.proto";
-import "cockroach/util/tracing/span_context_carrier.proto";
-import "cockroach/util/hlc/timestamp.proto";
+import "cockroach/pkg/roachpb/data.proto";
+import "cockroach/pkg/roachpb/errors.proto";
+import "cockroach/pkg/roachpb/metadata.proto";
+import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
+import "cockroach/pkg/util/tracing/span_context_carrier.proto";
+import "cockroach/pkg/util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 // ReadConsistencyType specifies what type of consistency is observed
@@ -654,7 +654,7 @@ message ComputeChecksumRequest {
   // this request.
   optional bytes checksum_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ChecksumID",
-      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
   // Compute a checksum along with a snapshot of the entire range, that will be
   // used in logging a diff during checksum verification.
   optional bool snapshot = 4 [(gogoproto.nullable) = false];

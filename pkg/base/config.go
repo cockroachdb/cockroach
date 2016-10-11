@@ -28,9 +28,9 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/cli/cliflags"
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 // Base config defaults.

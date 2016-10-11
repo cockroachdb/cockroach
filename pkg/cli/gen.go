@@ -21,7 +21,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/build"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
 )

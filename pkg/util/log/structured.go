@@ -22,7 +22,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	otlog "github.com/opentracing/opentracing-go/log"
 )
 

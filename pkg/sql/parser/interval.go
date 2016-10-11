@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
 type intervalLexer struct {

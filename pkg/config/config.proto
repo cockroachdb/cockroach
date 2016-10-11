@@ -18,8 +18,8 @@ syntax = "proto2";
 package cockroach.config;
 option go_package = "config";
 
-import "cockroach/roachpb/data.proto";
-import "cockroach/roachpb/metadata.proto";
+import "cockroach/pkg/roachpb/data.proto";
+import "cockroach/pkg/roachpb/metadata.proto";
 import "gogoproto/gogo.proto";
 
 // GCPolicy defines garbage collection policies which apply to MVCC
