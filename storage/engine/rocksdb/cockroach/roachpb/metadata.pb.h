@@ -785,6 +785,15 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::roachpb::Attributes* release_attrs();
   void set_allocated_attrs(::cockroach::roachpb::Attributes* attrs);
 
+  // optional .cockroach.roachpb.Locality locality = 4;
+  bool has_locality() const;
+  void clear_locality();
+  static const int kLocalityFieldNumber = 4;
+  const ::cockroach::roachpb::Locality& locality() const;
+  ::cockroach::roachpb::Locality* mutable_locality();
+  ::cockroach::roachpb::Locality* release_locality();
+  void set_allocated_locality(::cockroach::roachpb::Locality* locality);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.NodeDescriptor)
  private:
   inline void set_has_node_id();
@@ -793,6 +802,8 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
   inline void clear_has_address();
   inline void set_has_attrs();
   inline void clear_has_attrs();
+  inline void set_has_locality();
+  inline void clear_has_locality();
 
   ::google::protobuf::internal::ArenaStringPtr _unknown_fields_;
   ::google::protobuf::Arena* _arena_ptr_;
@@ -801,6 +812,7 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
   mutable int _cached_size_;
   ::cockroach::util::UnresolvedAddr* address_;
   ::cockroach::roachpb::Attributes* attrs_;
+  ::cockroach::roachpb::Locality* locality_;
   ::google::protobuf::int32 node_id_;
   #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fmetadata_2eproto_impl();
@@ -923,15 +935,6 @@ class StoreDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::cockroach::roachpb::StoreCapacity* release_capacity();
   void set_allocated_capacity(::cockroach::roachpb::StoreCapacity* capacity);
 
-  // optional .cockroach.roachpb.Locality locality = 5;
-  bool has_locality() const;
-  void clear_locality();
-  static const int kLocalityFieldNumber = 5;
-  const ::cockroach::roachpb::Locality& locality() const;
-  ::cockroach::roachpb::Locality* mutable_locality();
-  ::cockroach::roachpb::Locality* release_locality();
-  void set_allocated_locality(::cockroach::roachpb::Locality* locality);
-
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.StoreDescriptor)
  private:
   inline void set_has_store_id();
@@ -942,8 +945,6 @@ class StoreDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   inline void clear_has_node();
   inline void set_has_capacity();
   inline void clear_has_capacity();
-  inline void set_has_locality();
-  inline void clear_has_locality();
 
   ::google::protobuf::internal::ArenaStringPtr _unknown_fields_;
   ::google::protobuf::Arena* _arena_ptr_;
@@ -953,7 +954,6 @@ class StoreDescriptor : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::cockroach::roachpb::Attributes* attrs_;
   ::cockroach::roachpb::NodeDescriptor* node_;
   ::cockroach::roachpb::StoreCapacity* capacity_;
-  ::cockroach::roachpb::Locality* locality_;
   ::google::protobuf::int32 store_id_;
   #ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
   friend void  protobuf_AddDesc_cockroach_2froachpb_2fmetadata_2eproto_impl();
@@ -1922,6 +1922,54 @@ inline void NodeDescriptor::set_allocated_attrs(::cockroach::roachpb::Attributes
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.NodeDescriptor.attrs)
 }
 
+// optional .cockroach.roachpb.Locality locality = 4;
+inline bool NodeDescriptor::has_locality() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void NodeDescriptor::set_has_locality() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void NodeDescriptor::clear_has_locality() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void NodeDescriptor::clear_locality() {
+  if (locality_ != NULL) locality_->::cockroach::roachpb::Locality::Clear();
+  clear_has_locality();
+}
+inline const ::cockroach::roachpb::Locality& NodeDescriptor::locality() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.NodeDescriptor.locality)
+#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
+  return locality_ != NULL ? *locality_ : *default_instance().locality_;
+#else
+  return locality_ != NULL ? *locality_ : *default_instance_->locality_;
+#endif
+}
+inline ::cockroach::roachpb::Locality* NodeDescriptor::mutable_locality() {
+  set_has_locality();
+  if (locality_ == NULL) {
+    locality_ = new ::cockroach::roachpb::Locality;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.NodeDescriptor.locality)
+  return locality_;
+}
+inline ::cockroach::roachpb::Locality* NodeDescriptor::release_locality() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.NodeDescriptor.locality)
+  clear_has_locality();
+  ::cockroach::roachpb::Locality* temp = locality_;
+  locality_ = NULL;
+  return temp;
+}
+inline void NodeDescriptor::set_allocated_locality(::cockroach::roachpb::Locality* locality) {
+  delete locality_;
+  locality_ = locality;
+  if (locality) {
+    set_has_locality();
+  } else {
+    clear_has_locality();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.NodeDescriptor.locality)
+}
+
 // -------------------------------------------------------------------
 
 // StoreDescriptor
@@ -2092,54 +2140,6 @@ inline void StoreDescriptor::set_allocated_capacity(::cockroach::roachpb::StoreC
     clear_has_capacity();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.StoreDescriptor.capacity)
-}
-
-// optional .cockroach.roachpb.Locality locality = 5;
-inline bool StoreDescriptor::has_locality() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
-}
-inline void StoreDescriptor::set_has_locality() {
-  _has_bits_[0] |= 0x00000010u;
-}
-inline void StoreDescriptor::clear_has_locality() {
-  _has_bits_[0] &= ~0x00000010u;
-}
-inline void StoreDescriptor::clear_locality() {
-  if (locality_ != NULL) locality_->::cockroach::roachpb::Locality::Clear();
-  clear_has_locality();
-}
-inline const ::cockroach::roachpb::Locality& StoreDescriptor::locality() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreDescriptor.locality)
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-  return locality_ != NULL ? *locality_ : *default_instance().locality_;
-#else
-  return locality_ != NULL ? *locality_ : *default_instance_->locality_;
-#endif
-}
-inline ::cockroach::roachpb::Locality* StoreDescriptor::mutable_locality() {
-  set_has_locality();
-  if (locality_ == NULL) {
-    locality_ = new ::cockroach::roachpb::Locality;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.StoreDescriptor.locality)
-  return locality_;
-}
-inline ::cockroach::roachpb::Locality* StoreDescriptor::release_locality() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.StoreDescriptor.locality)
-  clear_has_locality();
-  ::cockroach::roachpb::Locality* temp = locality_;
-  locality_ = NULL;
-  return temp;
-}
-inline void StoreDescriptor::set_allocated_locality(::cockroach::roachpb::Locality* locality) {
-  delete locality_;
-  locality_ = locality;
-  if (locality) {
-    set_has_locality();
-  } else {
-    clear_has_locality();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.StoreDescriptor.locality)
 }
 
 // -------------------------------------------------------------------

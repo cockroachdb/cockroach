@@ -115,10 +115,14 @@ func createTestNode(
 
 // createAndStartTestNode creates a new test node and starts it. The server and node are returned.
 func createAndStartTestNode(
-	addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T,
+	addr net.Addr,
+	engines []engine.Engine,
+	gossipBS net.Addr,
+	locality roachpb.Locality,
+	t *testing.T,
 ) (*grpc.Server, net.Addr, *Node, *stop.Stopper) {
 	grpcServer, addr, _, node, stopper := createTestNode(addr, engines, gossipBS, t)
-	if err := node.start(context.Background(), addr, engines, roachpb.Attributes{}); err != nil {
+	if err := node.start(context.Background(), addr, engines, roachpb.Attributes{}, locality); err != nil {
 		t.Fatal(err)
 	}
 	if err := WaitForInitialSplits(node.storeCfg.DB); err != nil {
@@ -200,7 +204,13 @@ func TestBootstrapNewStore(t *testing.T) {
 		engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper),
 		engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper),
 	}
-	_, _, node, stopper := createAndStartTestNode(util.TestAddr, engines, util.TestAddr, t)
+	_, _, node, stopper := createAndStartTestNode(
+		util.TestAddr,
+		engines,
+		util.TestAddr,
+		roachpb.Locality{},
+		t,
+	)
 	defer stopper.Stop()
 
 	// Non-initialized stores (in this case the new in-memory-based
@@ -238,12 +248,24 @@ func TestNodeJoin(t *testing.T) {
 
 	// Start the bootstrap node.
 	engines1 := []engine.Engine{e}
-	_, server1Addr, node1, stopper1 := createAndStartTestNode(util.TestAddr, engines1, util.TestAddr, t)
+	_, server1Addr, node1, stopper1 := createAndStartTestNode(
+		util.TestAddr,
+		engines1,
+		util.TestAddr,
+		roachpb.Locality{},
+		t,
+	)
 	defer stopper1.Stop()
 
 	// Create a new node.
 	engines2 := []engine.Engine{engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)}
-	_, server2Addr, node2, stopper2 := createAndStartTestNode(util.TestAddr, engines2, server1Addr, t)
+	_, server2Addr, node2, stopper2 := createAndStartTestNode(
+		util.TestAddr,
+		engines2,
+		server1Addr,
+		roachpb.Locality{},
+		t,
+	)
 	defer stopper2.Stop()
 
 	// Verify new node is able to bootstrap its store.
@@ -286,7 +308,7 @@ func TestNodeJoinSelf(t *testing.T) {
 	engines := []engine.Engine{engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)}
 	_, addr, _, node, stopper := createTestNode(util.TestAddr, engines, util.TestAddr, t)
 	defer stopper.Stop()
-	err := node.start(context.Background(), addr, engines, roachpb.Attributes{})
+	err := node.start(context.Background(), addr, engines, roachpb.Attributes{}, roachpb.Locality{})
 	if err != errCannotJoinSelf {
 		t.Fatalf("expected err %s; got %s", errCannotJoinSelf, err)
 	}
@@ -316,7 +338,7 @@ func TestCorruptedClusterID(t *testing.T) {
 	engines := []engine.Engine{e}
 	_, serverAddr, _, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
 	stopper.Stop()
-	if err := node.start(context.Background(), serverAddr, engines, roachpb.Attributes{}); !testutils.IsError(err, "unidentified store") {
+	if err := node.start(context.Background(), serverAddr, engines, roachpb.Attributes{}, roachpb.Locality{}); !testutils.IsError(err, "unidentified store") {
 		t.Errorf("unexpected error %v", err)
 	}
 }
@@ -614,5 +636,69 @@ func TestStatusSummaries(t *testing.T) {
 	expectedNodeStatus = compareNodeStatus(t, ts, expectedNodeStatus, 3)
 	for _, s := range expectedNodeStatus.StoreStatuses {
 		expectedStoreStatuses[s.Desc.StoreID] = s
+	}
+}
+
+// TestStartNodeWithLocality creates a new node and store and starts them with a
+// collection of different localities.
+func TestStartNodeWithLocality(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testLocalityWitNewNode := func(locality roachpb.Locality) {
+		engineStopper := stop.NewStopper()
+		defer engineStopper.Stop()
+		e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
+		if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics()); err != nil {
+			t.Fatal(err)
+		}
+		_, _, node, stopper := createAndStartTestNode(
+			util.TestAddr,
+			[]engine.Engine{e},
+			util.TestAddr,
+			locality,
+			t,
+		)
+		defer stopper.Stop()
+
+		// Check the node to make sure the locality was propagated to its
+		// nodeDescriptor.
+		if !reflect.DeepEqual(node.Descriptor.Locality, locality) {
+			t.Fatalf("expected node locality to be %s, but it was %s", locality, node.Descriptor.Locality)
+		}
+
+		// Check the store to make sure the locality was propagated to its
+		// nodeDescriptor.
+		if err := node.stores.VisitStores(func(store *storage.Store) error {
+			desc, err := store.Descriptor()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(desc.Node.Locality, locality) {
+				t.Fatalf("expected store's node locality to be %s, but it was %s", locality, desc.Node.Locality)
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	testCases := []roachpb.Locality{
+		{},
+		{
+			Tiers: []roachpb.Tier{
+				{Key: "a", Value: "b"},
+			},
+		},
+		{
+			Tiers: []roachpb.Tier{
+				{Key: "a", Value: "b"},
+				{Key: "c", Value: "d"},
+				{Key: "e", Value: "f"},
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		testLocalityWitNewNode(testCase)
 	}
 }

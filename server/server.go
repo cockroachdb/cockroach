@@ -276,7 +276,6 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		AllocatorOptions: storage.AllocatorOptions{
 			AllowRebalance: true,
 		},
-		Locality: srvCtx.Locality,
 	}
 	if srvCtx.TestingKnobs.Store != nil {
 		storeCfg.TestingKnobs = *srvCtx.TestingKnobs.Store.(*storage.StoreTestingKnobs)
@@ -491,7 +490,13 @@ func (s *Server) Start(ctx context.Context) error {
 	s.gossip.Start(unresolvedAdvertAddr)
 	log.Event(ctx, "started gossip")
 
-	err = s.node.start(ctx, unresolvedAdvertAddr, s.ctx.Engines, s.ctx.NodeAttributes)
+	err = s.node.start(
+		ctx,
+		unresolvedAdvertAddr,
+		s.ctx.Engines,
+		s.ctx.NodeAttributes,
+		s.ctx.Locality,
+	)
 	if err != nil {
 		return err
 	}
