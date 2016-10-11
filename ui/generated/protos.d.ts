@@ -853,6 +853,15 @@ getAttrs?() : Attributes;
 
 
 
+locality?: Locality;
+		
+
+getLocality?() : Locality;
+		setLocality?(locality : Locality): void;
+		
+
+
+
 }
 
 	export interface NodeDescriptorMessage extends NodeDescriptor {
@@ -912,15 +921,6 @@ capacity?: StoreCapacity;
 
 getCapacity?() : StoreCapacity;
 		setCapacity?(capacity : StoreCapacity): void;
-		
-
-
-
-locality?: Locality;
-		
-
-getLocality?() : Locality;
-		setLocality?(locality : Locality): void;
 		
 
 

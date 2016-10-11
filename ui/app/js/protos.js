@@ -449,6 +449,15 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "options": {
                                         "(gogoproto.nullable)": false
                                     }
+                                },
+                                {
+                                    "rule": "optional",
+                                    "type": "Locality",
+                                    "name": "locality",
+                                    "id": 4,
+                                    "options": {
+                                        "(gogoproto.nullable)": false
+                                    }
                                 }
                             ]
                         },
@@ -489,15 +498,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "type": "StoreCapacity",
                                     "name": "capacity",
                                     "id": 4,
-                                    "options": {
-                                        "(gogoproto.nullable)": false
-                                    }
-                                },
-                                {
-                                    "rule": "optional",
-                                    "type": "Locality",
-                                    "name": "locality",
-                                    "id": 5,
                                     "options": {
                                         "(gogoproto.nullable)": false
                                     }
