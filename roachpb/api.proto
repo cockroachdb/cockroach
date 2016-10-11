@@ -22,7 +22,7 @@ import "cockroach/roachpb/data.proto";
 import "cockroach/roachpb/errors.proto";
 import "cockroach/roachpb/metadata.proto";
 import "cockroach/storage/engine/enginepb/mvcc.proto";
-import "cockroach/util/tracing/span.proto";
+import "cockroach/util/tracing/span_context_carrier.proto";
 import "cockroach/util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
@@ -798,8 +798,8 @@ message Header {
   // operations. The default is CONSISTENT. This value is ignored for
   // write operations.
   optional ReadConsistencyType read_consistency = 6 [(gogoproto.nullable) = false];
-  // trace, if set, is the active span of an OpenTracing distributed trace.
-  optional util.tracing.Span trace = 7;
+  // If set, the active span context of a snowball trace.
+  optional util.tracing.SpanContextCarrier trace = 7;
   // If set to a non-zero value, it limits the total number of keys touched
   // by span requests in the batch. Span requests are requests like
   // Scan, ReverseScan, and DelRange. If two requests touch the
