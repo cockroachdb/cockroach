@@ -403,7 +403,7 @@ func TestGetLogReader(t *testing.T) {
 	Warning(context.Background(), "x")
 	warn, ok := logging.file[Severity_WARNING].(*syncBuffer)
 	if !ok {
-		t.Fatal("warning wasn't created")
+		t.Fatalf("%s buffer wasn't created", Severity_WARNING)
 	}
 	warnName := filepath.Base(warn.file.Name())
 
@@ -432,9 +432,9 @@ func TestGetLogReader(t *testing.T) {
 		// Absolute filename is specified.
 		{warn.file.Name(), "pathnames must be basenames", ""},
 		// Symlink to a log file.
-		{filepath.Join(logDir, "logtest.WARNING"), "pathnames must be basenames", ""},
+		{filepath.Join(logDir, removePeriods(program)+".WARNING"), "pathnames must be basenames", ""},
 		// Symlink relative to logDir.
-		{"logtest.WARNING", "malformed log filename", ""},
+		{removePeriods(program) + ".WARNING", "malformed log filename", ""},
 		// Non-log file.
 		{"other.txt", "malformed log filename", "malformed log filename"},
 		// Non-existent file matching RE.
