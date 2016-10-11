@@ -29,8 +29,8 @@ import "gogoproto/gogo.proto";
 
 message SetupFlowRequest {
   optional roachpb.Transaction txn = 1 [(gogoproto.nullable) = false];
-  // If set, the active span context of a snowball trace.
-  optional util.tracing.SpanContextCarrier trace = 2;
+  // If set, the context of an active tracing span.
+  optional util.tracing.SpanContextCarrier trace_context = 2;
   optional FlowSpec flow = 3 [(gogoproto.nullable) = false];
 }
 
