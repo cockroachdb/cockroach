@@ -822,7 +822,7 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) bool {
 		stmt, err := t.db.Prepare(sql)
 		if err != nil {
 			if *showSQL {
-				fmt.Printf("\t-- fails prepare: %s", err)
+				fmt.Printf("\t-- fails prepare: %s\n", err)
 			}
 			t.signalIgnoredError(err, pos, sql)
 			return true
@@ -837,7 +837,7 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) bool {
 
 func (t *logicTest) execStatement(stmt logicStatement) bool {
 	if *showSQL {
-		fmt.Printf("%s;", stmt.sql)
+		fmt.Printf("%s;\n", stmt.sql)
 	}
 	_, err := t.db.Exec(stmt.sql)
 
@@ -869,7 +869,7 @@ func (t *logicTest) hashResults(results []string) (string, error) {
 
 func (t *logicTest) execQuery(query logicQuery) error {
 	if *showSQL {
-		fmt.Printf("%s;", query.sql)
+		fmt.Printf("%s;\n", query.sql)
 	}
 	rows, err := t.db.Query(query.sql)
 	if ok := t.verifyError(query.sql, query.pos, query.expectErr, query.expectErrCode, err); !ok {
