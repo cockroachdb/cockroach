@@ -21,7 +21,6 @@
 package log
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -34,6 +33,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 // MaxSize is the maximum size of a log file in bytes.
@@ -190,7 +191,6 @@ func create(severity Severity, t time.Time) (f *os.File, filename string, err er
 		return nil, "", errDirectoryNotSet
 	}
 	name, link := logName(severity, t)
-	var lastErr error
 	fname := filepath.Join(logDir, name)
 
 	// Open the file os.O_APPEND|os.O_CREATE rather than use os.Create.
@@ -198,12 +198,10 @@ func create(severity Severity, t time.Time) (f *os.File, filename string, err er
 	f, err = os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
 	if err == nil {
 		symlink := filepath.Join(logDir, link)
-		_ = os.Remove(symlink)        // ignore err
-		_ = os.Symlink(name, symlink) // ignore err
-		return f, fname, nil
+		_ = os.Remove(symlink) // ignore err
+		err = os.Symlink(fname, symlink)
 	}
-	lastErr = err
-	return nil, "", fmt.Errorf("log: cannot create log: %v", lastErr)
+	return f, fname, errors.Wrapf(err, "log: cannot create log")
 }
 
 var errNotAFile = errors.New("not a regular file")
@@ -266,13 +264,6 @@ func ListLogFiles() ([]FileInfo, error) {
 // feature that relative paths will be searched in both the current
 // directory and this process's log directory.
 func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
-	if !restricted {
-		if resolved, err := filepath.EvalSymlinks(filename); err == nil {
-			if verifyFile(resolved) == nil {
-				return os.Open(resolved)
-			}
-		}
-	}
 	// Verify there are no path separators in a restricted-mode pathname.
 	if restricted && filepath.Base(filename) != filename {
 		return nil, fmt.Errorf("pathnames must be basenames only: %s", filename)
