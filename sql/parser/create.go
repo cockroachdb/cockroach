@@ -204,9 +204,15 @@ func newColumnTableDef(
 			d.DefaultExpr.Expr = t.Expr
 			d.DefaultExpr.ConstraintName = c.Name
 		case NotNullConstraint:
+			if d.Nullable.Nullability == Null {
+				return nil, errors.Errorf("conflicting NULL/NOT NULL declarations for column %q", name)
+			}
 			d.Nullable.Nullability = NotNull
 			d.Nullable.ConstraintName = c.Name
 		case NullConstraint:
+			if d.Nullable.Nullability == NotNull {
+				return nil, errors.Errorf("conflicting NULL/NOT NULL declarations for column %q", name)
+			}
 			d.Nullable.Nullability = Null
 			d.Nullable.ConstraintName = c.Name
 		case PrimaryKeyConstraint:

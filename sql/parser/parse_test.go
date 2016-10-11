@@ -892,6 +892,22 @@ CREATE TABLE test (
 )
 ^
 `},
+		{`CREATE TABLE test (
+  foo INT NOT NULL NULL
+)`, `conflicting NULL/NOT NULL declarations for column "foo" at or near ")"
+CREATE TABLE test (
+  foo INT NOT NULL NULL
+)
+^
+`},
+		{`CREATE TABLE test (
+  foo INT NULL NOT NULL
+)`, `conflicting NULL/NOT NULL declarations for column "foo" at or near ")"
+CREATE TABLE test (
+  foo INT NULL NOT NULL
+)
+^
+`},
 		{`CREATE DATABASE a b`,
 			`syntax error at or near "b"
 CREATE DATABASE a b
