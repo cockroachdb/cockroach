@@ -363,7 +363,7 @@ func (ts *txnState) finishSQLTxn() {
 		(traceSQLFor7881 && sampledFor7881) {
 		dump := tracing.FormatRawSpans(ts.CollectedSpans)
 		if len(dump) > 0 {
-			log.Infof(context.Background(), "SQL trace:\n%s", dump)
+			log.Infof(context.TODO(), "SQL trace:\n%s", dump)
 		}
 	}
 }

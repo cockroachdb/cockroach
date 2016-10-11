@@ -254,7 +254,7 @@ func (s *senderTransport) SendNext(done chan<- BatchCall) {
 	s.called = true
 	sp := s.tracer.StartSpan("node")
 	defer sp.Finish()
-	ctx := opentracing.ContextWithSpan(context.Background(), sp)
+	ctx := opentracing.ContextWithSpan(context.TODO(), sp)
 	log.Event(ctx, s.args.String())
 	br, pErr := s.sender.Send(ctx, s.args)
 	if br == nil {
