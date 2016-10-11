@@ -605,6 +605,15 @@ func (p *planner) canRemoveDependentView(
 	if behavior != parser.DropCascade {
 		return errors.Errorf("view %q depends on %s %q", viewDesc.Name, from.TypeName(), from.Name)
 	}
+	if err := p.checkPrivilege(viewDesc, privilege.DROP); err != nil {
+		return err
+	}
+	// If this view is depended on by other views, we have to check them as well.
+	for _, ref := range viewDesc.DependedOnBy {
+		if err := p.canRemoveDependentView(viewDesc, ref, behavior); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -642,6 +651,7 @@ func (p *planner) removeDependentView(tableDesc, viewDesc *sqlbase.TableDescript
 	// that refer to the view that's being removed.
 	tableDesc.DependedOnBy = removeMatchingReferences(tableDesc.DependedOnBy, viewDesc.ID)
 	// Then proceed to actually drop the view and log an event for it.
+	// TODO: Is it dangerous not to track cascaded drops?
 	_, err := p.dropViewImpl(viewDesc)
 	return err
 }
