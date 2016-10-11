@@ -363,6 +363,57 @@ func runMVCCBatchPut(emk engineMaker, valueSize, batchSize int, b *testing.B) {
 	b.StopTimer()
 }
 
+// Benchmark batch time series merge operations. This benchmark does not
+// perform any reads and is only used to measure the cost of the periodic time
+// series updates.
+func runMVCCBatchTimeSeries(emk engineMaker, batchSize int, b *testing.B) {
+	// Precompute keys so we don't waste time formatting them at each iteration.
+	numKeys := batchSize
+	keys := make([]roachpb.Key, numKeys)
+	for i := 0; i < numKeys; i++ {
+		keys[i] = roachpb.Key(fmt.Sprintf("key-%d", i))
+	}
+
+	// We always write the same time series data (containing a single unchanging
+	// sample). This isn't realistic but is fine because we're never reading the
+	// data.
+	var value roachpb.Value
+	if err := value.SetProto(&roachpb.InternalTimeSeriesData{
+		StartTimestampNanos: 0,
+		SampleDurationNanos: 1000,
+		Samples: []roachpb.InternalTimeSeriesSample{
+			{Offset: 0, Count: 1, Sum: 5.0},
+		},
+	}); err != nil {
+		b.Fatal(err)
+	}
+
+	stopper := stop.NewStopper()
+	eng, stopper := emk(b, fmt.Sprintf("batch_merge_%d", batchSize))
+	defer stopper.Stop()
+
+	b.ResetTimer()
+
+	ts := hlc.Timestamp{}
+	for i := 0; i < b.N; i++ {
+		batch := eng.NewBatch()
+
+		for j := 0; j < batchSize; j++ {
+			ts.Logical++
+			if err := MVCCMerge(context.Background(), batch, nil, keys[j], ts, value); err != nil {
+				b.Fatalf("failed put: %s", err)
+			}
+		}
+
+		if err := batch.Commit(); err != nil {
+			b.Fatal(err)
+		}
+		batch.Close()
+	}
+
+	b.StopTimer()
+}
+
 // runMVCCMerge merges value into numKeys separate keys.
 func runMVCCMerge(emk engineMaker, value *roachpb.Value, numKeys int, b *testing.B) {
 	eng, stopper := emk(b, fmt.Sprintf("merge_%d", numKeys))

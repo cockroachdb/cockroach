@@ -247,6 +247,10 @@ func BenchmarkMVCCBatch100000Put10_RocksDB(b *testing.B) {
 	runMVCCBatchPut(setupMVCCInMemRocksDB, 10, 100000, b)
 }
 
+func BenchmarkMVCCBatchTimeSeries282_RocksDB(b *testing.B) {
+	runMVCCBatchTimeSeries(setupMVCCInMemRocksDB, 282, b)
+}
+
 // DeleteRange benchmarks below (using on-disk data).
 
 func BenchmarkMVCCDeleteRange1Version8Bytes_RocksDB(b *testing.B) {
