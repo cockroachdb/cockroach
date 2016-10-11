@@ -42,6 +42,7 @@ SHOW TABLES FROM pg_catalog
 pg_attrdef
 pg_attribute
 pg_class
+pg_indexes
 pg_namespace
 pg_tables
 
@@ -109,7 +110,7 @@ CREATE TABLE constraint_db.t3 (
     b INT CHECK (b > 11),
     c STRING DEFAULT 'FOO',
     CONSTRAINT fk FOREIGN KEY (a, b) REFERENCES constraint_db.t1(b, c),
-    INDEX (a, b)
+    INDEX (a, b DESC) STORING (c)
 )
 
 statement ok
@@ -321,3 +322,33 @@ WHERE n.nspname = 'constraint_db'
 oid         relname  adrelid     adnum  adbin  adsrc
 1889966686  t1       2265044713  4      12     12
 390509283   t3       2064007441  3      'FOO'  'FOO'
+
+## pg_catalog.pg_indexes
+
+query TTTT colnames
+SELECT schemaname, tablename, indexname, tablespace
+FROM pg_catalog.pg_indexes
+WHERE schemaname = 'constraint_db'
+----
+schemaname     tablename  indexname     tablespace
+constraint_db  t1         primary       NULL
+constraint_db  t1         t1_a_key      NULL
+constraint_db  t1         index_key     NULL
+constraint_db  t2         primary       NULL
+constraint_db  t2         t2_t1_ID_idx  NULL
+constraint_db  t3         primary       NULL
+constraint_db  t3         t3_a_b_idx    NULL
+
+query TTT colnames
+SELECT tablename, indexname, indexdef
+FROM pg_catalog.pg_indexes
+WHERE schemaname = 'constraint_db'
+----
+tablename  indexname     indexdef
+t1         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.t1 (p ASC)
+t1         t1_a_key      CREATE UNIQUE INDEX t1_a_key ON constraint_db.t1 (a ASC)
+t1         index_key     CREATE UNIQUE INDEX index_key ON constraint_db.t1 (b ASC, c ASC)
+t2         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.t2 (rowid ASC)
+t2         t2_t1_ID_idx  CREATE INDEX t2_t1_ID_idx ON constraint_db.t2 (t1_ID ASC)
+t3         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.t3 (rowid ASC)
+t3         t3_a_b_idx    CREATE INDEX t3_a_b_idx ON constraint_db.t3 (a ASC, b DESC) STORING (c)
