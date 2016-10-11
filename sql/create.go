@@ -421,7 +421,7 @@ func hoistConstraints(n *parser.CreateTable) {
 				)
 			}
 			col.CheckExprs = nil
-			if col.References.Table.TableNameReference != nil {
+			if col.HasFKConstraint() {
 				var targetCol parser.NameList
 				if col.References.Col != "" {
 					targetCol = append(targetCol, col.References.Col)
@@ -984,7 +984,7 @@ func (p *planner) makeTableDesc(
 					return desc, err
 				}
 			}
-			if d.Family.Create || len(d.Family.Name) > 0 {
+			if d.HasColumnFamily() {
 				// Pass true for `create` and `ifNotExists` because when we're creating
 				// a table, we always want to create the specified family if it doesn't
 				// exist.

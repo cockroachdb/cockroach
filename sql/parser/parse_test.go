@@ -894,6 +894,22 @@ CREATE TABLE test (
 ^
 `},
 		{`CREATE TABLE test (
+  foo INT REFERENCES t1 REFERENCES t2
+)`, `multiple foreign key constraints specified for column "foo" at or near ")"
+CREATE TABLE test (
+  foo INT REFERENCES t1 REFERENCES t2
+)
+^
+`},
+		{`CREATE TABLE test (
+  foo INT FAMILY a FAMILY b
+)`, `multiple column families specified for column "foo" at or near ")"
+CREATE TABLE test (
+  foo INT FAMILY a FAMILY b
+)
+^
+`},
+		{`CREATE TABLE test (
   foo INT NOT NULL NULL
 )`, `conflicting NULL/NOT NULL declarations for column "foo" at or near ")"
 CREATE TABLE test (
