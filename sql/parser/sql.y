@@ -65,14 +65,28 @@ type sqlSymUnion struct {
     val interface{}
 }
 
-// The following accessor methods come in two forms, depending on the
-// type of the value being accessed. Values and pointers are directly
-// type asserted from the empty interface, meaning that they will panic
-// if the type assertion is incorrect. Interfaces are handled differently
-// because a nil instance of an interface inserted into the empty interface
-// becomes a nil instance of the empty interface and therefore will fail a
-// direct type assertion. Instead, a guarded type assertion must be used,
-// which returns nil if the type assertion fails.
+// The following accessor methods come in three forms, depending on the
+// type of the value being accessed and whether a nil value is admissible
+// for the corresponding grammar rule.
+// - Values and pointers are directly type asserted from the empty
+//   interface, regardless of whether a nil value is admissible or
+//   not. A panic occurs if the type assertion is incorrect; no panic occurs
+//   if a nil is not expected but present. (TODO(knz): split this category of
+//   accessor in two; with one checking for unexpected nils.)
+//   Examples: bool(), tableWithIdx().
+//
+// - Interfaces where a nil is admissible are handled differently
+//   because a nil instance of an interface inserted into the empty interface
+//   becomes a nil instance of the empty interface and therefore will fail a
+//   direct type assertion. Instead, a guarded type assertion must be used,
+//   which returns nil if the type assertion fails.
+//   Examples: expr(), stmt().
+//
+// - Interfaces where a nil is not admissible are implemented as a direct
+//   type assertion, which causes a panic to occur if an unexpected nil
+//   is encountered.
+//   Examples: namePart(), tblDef().
+//
 func (u *sqlSymUnion) numVal() *NumVal {
     return u.val.(*NumVal)
 }
@@ -162,7 +176,7 @@ func (u *sqlSymUnion) colQuals() []NamedColumnQualification {
 }
 func (u *sqlSymUnion) colType() ColumnType {
     if colType, ok := u.val.(ColumnType); ok {
-	return colType
+        return colType
     }
     return nil
 }
@@ -171,7 +185,7 @@ func (u *sqlSymUnion) colTypes() []ColumnType {
 }
 func (u *sqlSymUnion) expr() Expr {
     if expr, ok := u.val.(Expr); ok {
-	return expr
+        return expr
     }
     return nil
 }
