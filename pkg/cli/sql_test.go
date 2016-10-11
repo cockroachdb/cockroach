@@ -21,11 +21,11 @@ import (
 	"testing"
 
 	"github.com/chzyer/readline"
-	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 // TestSQLLex tests the usage of the lexer in the sql subcommand.

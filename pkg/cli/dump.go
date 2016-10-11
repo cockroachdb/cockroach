@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )

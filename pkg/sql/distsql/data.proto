@@ -22,10 +22,10 @@ syntax = "proto2";
 package cockroach.sql.distsql;
 option go_package = "distsql";
 
-import "cockroach/roachpb/data.proto";
-import "cockroach/roachpb/errors.proto";
-import "cockroach/sql/sqlbase/structured.proto";
-import "cockroach/sql/sqlbase/encoded_datum.proto";
+import "cockroach/pkg/roachpb/data.proto";
+import "cockroach/pkg/roachpb/errors.proto";
+import "cockroach/pkg/sql/sqlbase/structured.proto";
+import "cockroach/pkg/sql/sqlbase/encoded_datum.proto";
 import "gogoproto/gogo.proto";
 
 message Expression {

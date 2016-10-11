@@ -20,8 +20,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/acceptance/cluster"
-	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 const testGlob = "../cli/interactive_tests/test*.tcl"

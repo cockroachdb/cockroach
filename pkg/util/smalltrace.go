@@ -31,7 +31,7 @@ func GetSmallTrace(skip int) string {
 	for i := range callers {
 		callers[i] = strings.TrimPrefix(
 			runtime.FuncForPC(pc[i]).Name(),
-			"github.com/cockroachdb/cockroach/",
+			"github.com/cockroachdb/cockroach/pkg/",
 		)
 	}
 

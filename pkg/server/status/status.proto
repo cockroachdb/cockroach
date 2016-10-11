@@ -18,8 +18,8 @@ syntax = "proto2";
 package cockroach.server.status;
 option go_package = "status";
 
-import "cockroach/roachpb/metadata.proto";
-import "cockroach/build/info.proto";
+import "cockroach/pkg/roachpb/metadata.proto";
+import "cockroach/pkg/build/info.proto";
 import "gogoproto/gogo.proto";
 
 // StoreStatus records the most recent values of metrics for a store.

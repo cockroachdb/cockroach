@@ -17,9 +17,9 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/pkg/errors"
 )
 

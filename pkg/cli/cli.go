@@ -22,7 +22,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/cockroachdb/cockroach/build"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )

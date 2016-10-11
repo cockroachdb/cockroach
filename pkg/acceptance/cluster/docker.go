@@ -39,7 +39,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 const matchNone = "^$"

@@ -25,7 +25,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/transport"
 
-	"github.com/cockroachdb/cockroach/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 )
 
 // IsClosedConnection returns true if err is an error produced by gRPC on closed connections.

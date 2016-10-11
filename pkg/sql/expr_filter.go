@@ -22,7 +22,7 @@ package sql
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
 // varConvertFunc is a callback that is used when splitting filtering expressions (see splitFilter).

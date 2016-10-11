@@ -24,11 +24,11 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/internal/client"
-	"github.com/cockroachdb/cockroach/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/util/caller"
-	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func setup(t *testing.T) (serverutils.TestServerInterface, *client.DB) {

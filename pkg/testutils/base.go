@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security"
 )
 
 // NewNodeTestBaseContext creates a base context for testing. This uses

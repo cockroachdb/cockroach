@@ -21,9 +21,9 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // sorter sorts the input rows according to the column ordering specified by ordering. Note

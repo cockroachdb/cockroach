@@ -24,10 +24,10 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/acceptance/cluster"
-	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/randutil"
-	"github.com/cockroachdb/cockroach/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // TestPut starts up an N node cluster and runs N workers that write

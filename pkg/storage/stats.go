@@ -17,9 +17,9 @@
 package storage
 
 import (
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 )
 
 // ComputeStatsForRange computes the stats for a given range by

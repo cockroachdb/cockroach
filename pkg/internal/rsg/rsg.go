@@ -21,8 +21,8 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/internal/rsg/yacc"
-	"github.com/cockroachdb/cockroach/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/internal/rsg/yacc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // RSG is a random syntax generator.

@@ -22,11 +22,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/gossip/resolver"
-	"github.com/cockroachdb/cockroach/util/envutil"
-	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 func TestParseInitNodeAttributes(t *testing.T) {

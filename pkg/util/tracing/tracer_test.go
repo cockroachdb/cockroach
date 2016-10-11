@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"

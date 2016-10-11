@@ -16,7 +16,7 @@
 
 package sql
 
-import "github.com/cockroachdb/cockroach/util/syncutil"
+import "github.com/cockroachdb/cockroach/pkg/util/syncutil"
 
 // LeaseRemovalTracker can be used to wait for leases to be removed from the
 // store (leases are removed from the store async w.r.t. LeaseManager

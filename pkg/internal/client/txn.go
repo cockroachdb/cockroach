@@ -24,13 +24,13 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/util/caller"
-	"github.com/cockroachdb/cockroach/util/hlc"
-	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/retry"
-	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // Txn is an in-progress distributed database transaction. A Txn is not safe for

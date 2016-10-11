@@ -28,12 +28,12 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/sql"
-	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 //go:generate stringer -type=clientMessageType

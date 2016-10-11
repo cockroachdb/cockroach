@@ -20,7 +20,7 @@ package sdnotify
 import (
 	"testing"
 
-	_ "github.com/cockroachdb/cockroach/util/log" // for flags
+	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 )
 
 func TestSDNotify(t *testing.T) {

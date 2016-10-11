@@ -24,8 +24,8 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/util/hlc"
-	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestRemoteOffsetString(t *testing.T) {

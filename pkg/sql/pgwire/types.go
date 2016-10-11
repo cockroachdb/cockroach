@@ -31,9 +31,9 @@ import (
 	"golang.org/x/net/context"
 	"gopkg.in/inf.v0"
 
-	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util/duration"
-	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq"
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"

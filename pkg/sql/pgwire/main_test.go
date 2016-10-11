@@ -17,8 +17,8 @@
 package pgwire
 
 import (
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/security/securitytest"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 )
 
 func init() {

@@ -17,13 +17,13 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/internal/client"
-	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
 
 // InternalExecutor can be used internally by cockroach to execute SQL

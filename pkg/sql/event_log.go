@@ -21,9 +21,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/cockroachdb/cockroach/internal/client"
-	"github.com/cockroachdb/cockroach/util/hlc"
-	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 

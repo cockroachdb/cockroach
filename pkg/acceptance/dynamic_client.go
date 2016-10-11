@@ -22,12 +22,12 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/acceptance/cluster"
-	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/cockroach/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // dynamicClient should be used in acceptance tests when connecting to a

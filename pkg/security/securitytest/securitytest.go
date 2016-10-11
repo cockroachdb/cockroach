@@ -18,12 +18,12 @@
 package securitytest
 
 import (
-	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"golang.org/x/net/context"
 )
 
-//go:generate go-bindata -pkg securitytest -mode 0644 -modtime 1400000000 -o ./embedded.go -ignore README.md -prefix ../../resource ../../resource/test_certs/...
+//go:generate go-bindata -pkg securitytest -mode 0644 -modtime 1400000000 -o ./embedded.go -ignore README.md -prefix ../../../resource ../../../resource/test_certs/...
 //go:generate gofmt -s -w embedded.go
 //go:generate goimports -w embedded.go
 

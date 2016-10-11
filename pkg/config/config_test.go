@@ -24,13 +24,13 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"gopkg.in/yaml.v2"
 
-	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/util/encoding"
-	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func plainKV(k, v string) roachpb.KeyValue {

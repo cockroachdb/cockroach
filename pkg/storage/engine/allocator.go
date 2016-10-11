@@ -16,7 +16,7 @@
 
 package engine
 
-import "github.com/cockroachdb/cockroach/util/bufalloc"
+import "github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 
 // AllocIterKeyValue returns iter.Key() and iter.Value() with the underlying
 // storage allocated from the passed ChunkAllocator.

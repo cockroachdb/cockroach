@@ -27,12 +27,12 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/acceptance/cluster"
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/server/serverpb"
-	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 var retryOptions = retry.Options{

@@ -22,7 +22,7 @@ import (
 	"regexp"
 	"runtime"
 
-	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // IsError returns true if err is non-nil and the error string matches the

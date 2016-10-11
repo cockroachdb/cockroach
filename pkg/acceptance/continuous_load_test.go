@@ -25,11 +25,11 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/acceptance/terrafarm"
-	"github.com/cockroachdb/cockroach/server/status"
-	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/cockroachdb/cockroach/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/acceptance/terrafarm"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // Run tests in this file as follows:

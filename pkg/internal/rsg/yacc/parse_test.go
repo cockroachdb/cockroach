@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	// Needed for the -verbosity flag on circleci tests.
-	_ "github.com/cockroachdb/cockroach/util/log"
+	_ "github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // TODO(mjibson): unskip these tests when we move to TeamCity (they fail on CircleCI)

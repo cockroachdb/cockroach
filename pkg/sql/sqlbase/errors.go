@@ -22,9 +22,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/caller"
 )
 
 // SrcCtx contains contextual information about the source of an error.

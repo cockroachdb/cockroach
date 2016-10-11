@@ -19,9 +19,9 @@ syntax = "proto2";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
-import "cockroach/roachpb/metadata.proto";
-import "cockroach/storage/engine/enginepb/mvcc.proto";
-import "cockroach/util/hlc/timestamp.proto";
+import "cockroach/pkg/roachpb/metadata.proto";
+import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
+import "cockroach/pkg/util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 // Span is supplied with every storage node request.
@@ -99,7 +99,7 @@ message KeyValue {
 message StoreIdent {
   optional bytes cluster_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ClusterID",
-      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
   optional int32 node_id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
   optional int32 store_id = 3 [(gogoproto.nullable) = false,

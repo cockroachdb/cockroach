@@ -27,7 +27,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/util/decimal"
+	"github.com/cockroachdb/cockroach/pkg/util/decimal"
 	"gopkg.in/inf.v0"
 )
 

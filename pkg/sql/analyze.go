@@ -23,8 +23,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
 // analyzeExpr analyzes and simplifies an expression, returning a list of

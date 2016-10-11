@@ -21,8 +21,8 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/cockroachdb/cockroach/util/log" // for flags
-	"github.com/cockroachdb/cockroach/util/syncutil"
+	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 
 	"golang.org/x/net/context"
 )

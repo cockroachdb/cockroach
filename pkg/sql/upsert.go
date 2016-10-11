@@ -20,9 +20,9 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // upsertExcludedTable is the name of a synthetic table used in an upsert's set

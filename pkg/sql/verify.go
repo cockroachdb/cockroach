@@ -19,9 +19,9 @@ package sql
 import (
 	"github.com/gogo/protobuf/proto"
 
-	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 func expectDescriptorID(systemConfig config.SystemConfig, idKey roachpb.Key, id sqlbase.ID) error {

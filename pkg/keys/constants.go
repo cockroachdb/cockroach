@@ -19,8 +19,8 @@ package keys
 import (
 	"math"
 
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // These constants are single bytes for performance. They allow single-byte

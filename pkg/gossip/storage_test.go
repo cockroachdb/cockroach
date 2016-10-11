@@ -25,14 +25,14 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/gossip/resolver"
-	"github.com/cockroachdb/cockroach/gossip/simulation"
-	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/protoutil"
-	"github.com/cockroachdb/cockroach/util/stop"
-	"github.com/cockroachdb/cockroach/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
+	"github.com/cockroachdb/cockroach/pkg/gossip/simulation"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 type testStorage struct {

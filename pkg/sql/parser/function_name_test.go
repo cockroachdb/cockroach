@@ -19,7 +19,7 @@ package parser
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
 func TestNormalizeFunctionName(t *testing.T) {

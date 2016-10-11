@@ -19,7 +19,7 @@ package sql
 import (
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/sql/mon"
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 )
 
 // OpenAccount interfaces between Session and mon.MemoryUsageMonitor.

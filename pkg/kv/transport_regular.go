@@ -20,8 +20,8 @@
 package kv
 
 import (
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 )
 
 func grpcTransportFactory(

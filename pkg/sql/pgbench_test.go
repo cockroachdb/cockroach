@@ -24,13 +24,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/sql/pgbench"
-	"github.com/cockroachdb/cockroach/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/util/retry"
-	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgbench"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // Tests a batch of queries very similar to those that that PGBench runs

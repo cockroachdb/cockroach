@@ -29,14 +29,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/cli/cliflags"
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/server"
-	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/util/envutil"
-	"github.com/cockroachdb/cockroach/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/util/log/logflags"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 )
 
 var maxResults int64

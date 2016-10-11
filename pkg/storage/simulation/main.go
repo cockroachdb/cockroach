@@ -23,8 +23,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/cockroachdb/cockroach/util/randutil"
-	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 var maxEpoch = flag.Int("maxEpoch", 10000, "Maximum epoch to simulate.")

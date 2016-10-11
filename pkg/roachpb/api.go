@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/util/uuid"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/gogo/protobuf/proto"
 )
 

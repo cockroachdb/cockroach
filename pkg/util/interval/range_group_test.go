@@ -22,7 +22,7 @@ import (
 	"reflect"
 	"testing"
 
-	_ "github.com/cockroachdb/cockroach/util/log" // for flags
+	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 )
 
 func TestRangeListAddSingleRangeAndClear(t *testing.T) {

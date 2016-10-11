@@ -19,7 +19,7 @@ package timeutil
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
 var (

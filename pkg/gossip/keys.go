@@ -20,7 +20,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // separator is used to separate the non-prefix components of a

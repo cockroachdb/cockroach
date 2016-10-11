@@ -19,7 +19,7 @@ package log
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 	"golang.org/x/net/trace"

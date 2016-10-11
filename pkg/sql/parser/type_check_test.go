@@ -23,8 +23,8 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/util/decimal"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/decimal"
 )
 
 func TestTypeCheck(t *testing.T) {

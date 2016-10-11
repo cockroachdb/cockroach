@@ -19,7 +19,7 @@ package distsql
 import (
 	"container/heap"
 
-	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // sorterValues is the internal wrapper around the collection of rows added to

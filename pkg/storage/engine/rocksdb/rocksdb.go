@@ -23,7 +23,7 @@ import (
 	_ "github.com/cockroachdb/c-rocksdb"
 )
 
-// #cgo CPPFLAGS: -I ../../../../c-protobuf/internal/src -I ../../../../c-rocksdb/internal/include
+// #cgo CPPFLAGS: -I ../../../../../c-protobuf/internal/src -I ../../../../../c-rocksdb/internal/include
 // #cgo CXXFLAGS: -std=c++11
 // #cgo darwin LDFLAGS: -Wl,-undefined -Wl,dynamic_lookup
 // #cgo !darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all

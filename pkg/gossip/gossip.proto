@@ -18,10 +18,10 @@ syntax = "proto3";
 package cockroach.gossip;
 option go_package = "gossip";
 
-import "cockroach/roachpb/data.proto";
-import "cockroach/roachpb/metadata.proto";
-import "cockroach/util/hlc/timestamp.proto";
-import "cockroach/util/unresolved_addr.proto";
+import "cockroach/pkg/roachpb/data.proto";
+import "cockroach/pkg/roachpb/metadata.proto";
+import "cockroach/pkg/util/hlc/timestamp.proto";
+import "cockroach/pkg/util/unresolved_addr.proto";
 import "gogoproto/gogo.proto";
 
 // BootstrapInfo contains information necessary to bootstrap the
@@ -37,12 +37,12 @@ message BootstrapInfo {
 message Request {
   // Requesting node's ID.
   int32 node_id = 1 [(gogoproto.customname) = "NodeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.NodeID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   // Address of the requesting client.
   util.UnresolvedAddr addr = 2 [(gogoproto.nullable) = false];
   // Map of high water timestamps from infos originating at other
   // nodes, as seen by the requester.
-  map<int32, int64> high_water_stamps = 3 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/roachpb.NodeID", (gogoproto.nullable) = false];
+  map<int32, int64> high_water_stamps = 3 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID", (gogoproto.nullable) = false];
   // Delta of Infos originating at sender.
   map<string, Info> delta = 4;
 }
@@ -52,20 +52,20 @@ message Request {
 message Response {
   // Responding Node's ID.
   int32 node_id = 1 [(gogoproto.customname) = "NodeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.NodeID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   // Address of the responding client.
   util.UnresolvedAddr addr = 2 [(gogoproto.nullable) = false];
   // Non-nil means client should retry with this address.
   util.UnresolvedAddr alternate_addr = 3;
   // Node ID of the alternate address, if alternate_addr is not nil.
   int32 alternate_node_id = 4 [(gogoproto.customname) = "AlternateNodeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.NodeID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   // Delta of Infos which are fresh according to the map of Node info messages
   // passed with the request.
   map<string, Info> delta = 5;
   // Map of high water timestamps from infos originating at other
   // nodes, as seen by the responder.
-  map<int32, int64> high_water_stamps = 6 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/roachpb.NodeID", (gogoproto.nullable) = false];
+  map<int32, int64> high_water_stamps = 6 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID", (gogoproto.nullable) = false];
 }
 
 // InfoStatus contains information about the current status of the infoStore.
@@ -85,10 +85,10 @@ message Info {
   uint32 hops = 4;
   // Originating node's ID.
   int32 node_id = 5 [(gogoproto.customname) = "NodeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.NodeID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   // Peer node ID which passed this info.
   int32 peer_id = 6 [(gogoproto.customname) = "PeerID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.NodeID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 }
 
 service Gossip {

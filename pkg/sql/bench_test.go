@@ -27,10 +27,10 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	_ "github.com/lib/pq"
 )
 

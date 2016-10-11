@@ -22,10 +22,10 @@ import (
 
 	"golang.org/x/text/unicode/norm"
 
-	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // Special case normalization rules for Turkish/Azeri lowercase dotless-i and

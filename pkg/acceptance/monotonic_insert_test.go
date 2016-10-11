@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
-	"github.com/cockroachdb/cockroach/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 )
 
 // TestMonotonicInserts replicates the 'monotonic' test from the Jepsen

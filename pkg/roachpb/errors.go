@@ -19,9 +19,9 @@ package roachpb
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/util/caller"
-	"github.com/cockroachdb/cockroach/util/hlc"
-	"github.com/cockroachdb/cockroach/util/uuid"
+	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // RetryableTxnError represents a retryable transaction error - the transaction

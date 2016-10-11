@@ -25,8 +25,8 @@ import (
 	"testing"
 	"text/tabwriter"
 
-	"github.com/cockroachdb/cockroach/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func rowsToStrings(rows *gosql.Rows) [][]string {

@@ -19,10 +19,10 @@ package sqlbase
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/sql/privilege"
-	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestPrivilege(t *testing.T) {

@@ -29,12 +29,12 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/internal/client"
-	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/util/retry"
-	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/pkg/errors"
 )
 

@@ -25,7 +25,7 @@ import (
 
 	"github.com/biogo/store/llrb"
 
-	_ "github.com/cockroachdb/cockroach/util/log" // for flags
+	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 )
 
 type testKey string

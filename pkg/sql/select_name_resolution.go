@@ -22,7 +22,7 @@ package sql
 import (
 	"strings"
 
-	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
 // invalidSrcIdx is the srcIdx value returned by findColumn() when there is no match.

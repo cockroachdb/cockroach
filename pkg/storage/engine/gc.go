@@ -17,9 +17,9 @@
 package engine
 
 import (
-	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/util/hlc"
-	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"golang.org/x/net/context"
 )
 

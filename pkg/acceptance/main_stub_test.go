@@ -31,7 +31,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestMain(m *testing.M) {

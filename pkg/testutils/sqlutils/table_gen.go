@@ -24,7 +24,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
 const rowsPerInsert = 100

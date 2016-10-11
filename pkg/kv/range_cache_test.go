@@ -27,10 +27,10 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/biogo/store/llrb"
-	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func mustMeta(k roachpb.RKey) roachpb.RKey {

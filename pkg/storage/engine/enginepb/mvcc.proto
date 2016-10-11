@@ -19,7 +19,7 @@ syntax = "proto2";
 package cockroach.storage.engine.enginepb;
 option go_package = "enginepb";
 
-import "cockroach/util/hlc/timestamp.proto";
+import "cockroach/pkg/util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 // TODO(tschottdorf): Should not live in enginepb (but can't live in roachpb
@@ -37,7 +37,7 @@ message TxnMeta {
 
   // id is a unique UUID value which identifies the transaction.
   optional bytes id = 1 [(gogoproto.customname) = "ID",
-      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/util/uuid.UUID"];
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
   optional IsolationType isolation = 2 [(gogoproto.nullable) = false];
   // key is the key which anchors the transaction. This is typically
   // the first key read or written during the transaction and determines which

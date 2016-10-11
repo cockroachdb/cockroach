@@ -21,10 +21,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func fillCertPaths(cfg *base.Config, user string) {

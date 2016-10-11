@@ -22,8 +22,8 @@ import (
 	"net"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/sql"
-	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func makeTestV3Conn(c net.Conn) v3Conn {

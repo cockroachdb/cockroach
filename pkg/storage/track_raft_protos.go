@@ -24,9 +24,9 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
-	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/util/protoutil"
-	"github.com/cockroachdb/cockroach/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // TrackRaftProtos instruments proto marshalling to track protos which are

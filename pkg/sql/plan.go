@@ -17,8 +17,8 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/sql/parser"
-	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 

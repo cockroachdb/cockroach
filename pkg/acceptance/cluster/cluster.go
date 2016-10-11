@@ -22,9 +22,9 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/internal/client"
-	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // A Cluster is an abstraction away from a concrete cluster deployment (i.e.

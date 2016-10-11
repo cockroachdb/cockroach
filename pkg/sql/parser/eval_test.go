@@ -21,8 +21,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 func TestEval(t *testing.T) {

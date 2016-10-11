@@ -20,9 +20,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/acceptance/cluster"
-	"github.com/cockroachdb/cockroach/server/serverpb"
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 func TestBuildInfo(t *testing.T) {

@@ -21,9 +21,9 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/roachpb"
-	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
 // replica holds the results from calling the allocator as to what the range

@@ -19,7 +19,7 @@ package keys
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // InvalidRangeMetaKeyError indicates that a Range Metadata key is somehow

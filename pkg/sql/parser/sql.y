@@ -25,8 +25,8 @@ import (
     "go/constant"
     "go/token"
 
-    "github.com/cockroachdb/cockroach/sql/privilege"
-)
+    "github.com/cockroachdb/cockroach/pkg/sql/privilege"
+ )
 
 func unimplemented(sqllex sqlLexer) int {
     sqllex.Error("unimplemented")

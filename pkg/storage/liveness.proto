@@ -18,13 +18,13 @@ syntax = "proto3";
 package cockroach.storage;
 option go_package = "storage";
 
-import "cockroach/util/hlc/timestamp.proto";
+import "cockroach/pkg/util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 // Liveness holds information about a node's latest heartbeat and epoch.
 message Liveness {
   int32 node_id = 1 [(gogoproto.customname) = "NodeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.NodeID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   // Epoch is a monotonically-increasing value for node liveness. It
   // may be incremented if the liveness record expires (current time
   // is later than the expiration timestamp).

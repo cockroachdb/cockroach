@@ -27,13 +27,13 @@ import (
 
 	"gopkg.in/inf.v0"
 
-	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/duration"
-	"github.com/cockroachdb/cockroach/util/encoding"
-	"github.com/cockroachdb/cockroach/util/hlc"
-	"github.com/cockroachdb/cockroach/util/randutil"
-	"github.com/cockroachdb/cockroach/util/uuid"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func makeTS(walltime int64, logical int32) hlc.Timestamp {

@@ -28,8 +28,8 @@ import (
 	gosql "database/sql"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // TestClusterInterface defines TestCluster functionality used by tests.

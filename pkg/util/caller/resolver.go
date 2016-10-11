@@ -23,7 +23,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 type cachedLookup struct {
@@ -62,7 +62,7 @@ var defaultRE = func() *regexp.Regexp {
 		path = filepath.Dir(filepath.Clean(path))
 	}
 	// Strip to $GOPATH/src.
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 6; i++ {
 		path = filepath.Dir(filepath.Clean(path))
 	}
 	qSep := regexp.QuoteMeta(sep)

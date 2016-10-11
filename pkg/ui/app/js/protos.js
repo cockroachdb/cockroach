@@ -652,7 +652,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "options": {
                                         "(gogoproto.nullable)": false,
                                         "(gogoproto.customname)": "ClusterID",
-                                        "(gogoproto.customtype)": "github.com/cockroachdb/cockroach/util/uuid.UUID"
+                                        "(gogoproto.customtype)": "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
                                     }
                                 },
                                 {
@@ -1262,7 +1262,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                                     "id": 1,
                                                     "options": {
                                                         "(gogoproto.customname)": "ID",
-                                                        "(gogoproto.customtype)": "github.com/cockroachdb/cockroach/util/uuid.UUID"
+                                                        "(gogoproto.customtype)": "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
                                                     }
                                                 },
                                                 {
@@ -2518,7 +2518,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "id": 1,
                                             "options": {
                                                 "(gogoproto.customname)": "NodeID",
-                                                "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.NodeID"
+                                                "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
                                             }
                                         },
                                         {
@@ -2866,7 +2866,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "id": 1,
                                             "options": {
                                                 "(gogoproto.customname)": "NodeID",
-                                                "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.NodeID"
+                                                "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
                                             }
                                         },
                                         {
@@ -2901,7 +2901,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "id": 1,
                                             "options": {
                                                 "(gogoproto.customname)": "RangeID",
-                                                "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.RangeID"
+                                                "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
                                             }
                                         },
                                         {
@@ -2939,7 +2939,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "id": 1,
                                             "options": {
                                                 "(gogoproto.nullable)": false,
-                                                "(gogoproto.castkey)": "github.com/cockroachdb/cockroach/roachpb.RangeID"
+                                                "(gogoproto.castkey)": "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
                                             }
                                         },
                                         {
@@ -2971,7 +2971,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "name": "start_key",
                                             "id": 2,
                                             "options": {
-                                                "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.RKey"
+                                                "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"
                                             }
                                         },
                                         {
@@ -2980,7 +2980,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                             "name": "end_key",
                                             "id": 3,
                                             "options": {
-                                                "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.RKey"
+                                                "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"
                                             }
                                         }
                                     ]
@@ -3444,7 +3444,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "id": 1,
                                     "options": {
                                         "(gogoproto.customname)": "NodeID",
-                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.NodeID"
+                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
                                     }
                                 },
                                 {
@@ -3463,7 +3463,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "name": "high_water_stamps",
                                     "id": 3,
                                     "options": {
-                                        "(gogoproto.castkey)": "github.com/cockroachdb/cockroach/roachpb.NodeID",
+                                        "(gogoproto.castkey)": "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
                                         "(gogoproto.nullable)": false
                                     }
                                 },
@@ -3486,7 +3486,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "id": 1,
                                     "options": {
                                         "(gogoproto.customname)": "NodeID",
-                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.NodeID"
+                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
                                     }
                                 },
                                 {
@@ -3511,7 +3511,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "id": 4,
                                     "options": {
                                         "(gogoproto.customname)": "AlternateNodeID",
-                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.NodeID"
+                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
                                     }
                                 },
                                 {
@@ -3528,7 +3528,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "name": "high_water_stamps",
                                     "id": 6,
                                     "options": {
-                                        "(gogoproto.castkey)": "github.com/cockroachdb/cockroach/roachpb.NodeID",
+                                        "(gogoproto.castkey)": "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
                                         "(gogoproto.nullable)": false
                                     }
                                 }
@@ -3589,7 +3589,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "id": 5,
                                     "options": {
                                         "(gogoproto.customname)": "NodeID",
-                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.NodeID"
+                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
                                     }
                                 },
                                 {
@@ -3599,7 +3599,7 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                     "id": 6,
                                     "options": {
                                         "(gogoproto.customname)": "PeerID",
-                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/roachpb.NodeID"
+                                        "(gogoproto.casttype)": "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
                                     }
                                 }
                             ]

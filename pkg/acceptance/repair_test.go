@@ -19,8 +19,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/acceptance/cluster"
-	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // RepairTest kills and starts new nodes systematically to ensure we do

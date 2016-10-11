@@ -20,7 +20,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
 // subquery represents a subquery expression in an expression tree

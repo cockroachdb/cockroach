@@ -21,7 +21,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
 // PreparedStatement is a SQL statement that has been parsed and the types

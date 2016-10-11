@@ -19,8 +19,8 @@ package cli
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/testutils"
-	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestInitInsecure(t *testing.T) {

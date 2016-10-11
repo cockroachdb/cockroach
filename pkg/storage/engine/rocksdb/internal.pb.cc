@@ -1,1 +1,1 @@
-./cockroach/roachpb/internal.pb.cc
+./cockroach/pkg/roachpb/internal.pb.cc

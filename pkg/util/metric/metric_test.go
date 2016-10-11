@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/cockroachdb/cockroach/util/log" // for flags
+	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 	"github.com/kr/pretty"
 	prometheusgo "github.com/prometheus/client_model/go"
 )

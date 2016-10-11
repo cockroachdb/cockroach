@@ -17,9 +17,9 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/config"
-	"github.com/cockroachdb/cockroach/keys"
-	"github.com/cockroachdb/cockroach/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 func init() {

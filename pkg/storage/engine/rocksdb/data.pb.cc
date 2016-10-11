@@ -1,1 +1,1 @@
-./cockroach/roachpb/data.pb.cc
+./cockroach/pkg/roachpb/data.pb.cc

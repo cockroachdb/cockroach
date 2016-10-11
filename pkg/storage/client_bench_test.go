@@ -21,7 +21,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func BenchmarkReplicaSnapshot(b *testing.B) {

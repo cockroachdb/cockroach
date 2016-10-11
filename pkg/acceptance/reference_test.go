@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 )
 
 func runReferenceTestWithScript(t *testing.T, script string) {

@@ -19,10 +19,10 @@ package storage
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/util/metric"
-	"github.com/cockroachdb/cockroach/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/coreos/etcd/raft/raftpb"
 )
 

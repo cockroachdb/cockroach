@@ -18,8 +18,8 @@ syntax = "proto2";
 package cockroach.storage;
 option go_package = "storage";
 
-import "cockroach/roachpb/errors.proto";
-import "cockroach/roachpb/metadata.proto";
+import "cockroach/pkg/roachpb/errors.proto";
+import "cockroach/pkg/roachpb/metadata.proto";
 import "etcd/raft/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
 
@@ -28,7 +28,7 @@ import "gogoproto/gogo.proto";
 message RaftMessageRequest {
   optional uint64 range_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
 
   optional roachpb.ReplicaDescriptor from_replica = 2 [(gogoproto.nullable) = false];
   optional roachpb.ReplicaDescriptor to_replica = 3 [(gogoproto.nullable) = false];
@@ -65,7 +65,7 @@ message RaftMessageResponseUnion {
 message RaftMessageResponse {
   optional uint64 range_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/roachpb.RangeID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
 
   optional roachpb.ReplicaDescriptor from_replica = 2 [(gogoproto.nullable) = false];
   optional roachpb.ReplicaDescriptor to_replica = 3 [(gogoproto.nullable) = false];

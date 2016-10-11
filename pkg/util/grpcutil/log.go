@@ -21,7 +21,7 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/grpclog"
 
-	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func init() {

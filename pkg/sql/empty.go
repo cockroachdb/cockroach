@@ -16,7 +16,7 @@
 
 package sql
 
-import "github.com/cockroachdb/cockroach/sql/parser"
+import "github.com/cockroachdb/cockroach/pkg/sql/parser"
 
 // emptyNode is a planNode with no columns and either no rows (default) or a single row with empty
 // results (if results is initialized to true). The former is used for nodes that have no results

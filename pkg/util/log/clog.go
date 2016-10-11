@@ -35,9 +35,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/build"
-	"github.com/cockroachdb/cockroach/util/caller"
-	"github.com/cockroachdb/cockroach/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/petermattis/goid"
 )
 

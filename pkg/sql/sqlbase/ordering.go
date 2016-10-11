@@ -16,7 +16,7 @@
 
 package sqlbase
 
-import "github.com/cockroachdb/cockroach/util/encoding"
+import "github.com/cockroachdb/cockroach/pkg/util/encoding"
 
 // ColumnOrderInfo describes a column (as an index) and a desired order
 // direction.

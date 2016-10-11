@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/cockroachdb/cockroach/util/log"
+	_ "github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type durationTest struct {
