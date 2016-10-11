@@ -25,7 +25,7 @@ import "gogoproto/gogo.proto";
 
 message ColumnType {
   // These mirror the types supported by the sql/parser. See
-  // sql/parser/types.go.
+  // sql/parser/col_types.go.
   enum Kind {
     BOOL = 0;
     INT = 1;        // INT(width)

@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/sql/parser"
@@ -26,7 +27,7 @@ import (
 )
 
 // To understand dataSourceInfo below it is crucial to understand the
-// meaning of a "data source" and its relationship to names/qvalues.
+// meaning of a "data source" and its relationship to names/IndexedVars.
 //
 // A data source is an object that can deliver rows of column data,
 // where each row is implemented in CockroachDB as an array of values.
@@ -47,29 +48,30 @@ import (
 // the original row data in the table for the conflicting (already
 // existing) rows.
 //
-// Meanwhile, qvalues in CockroachDB provide the interface between
+// Meanwhile, IndexedVars in CockroachDB provide the interface between
 // symbolic names in expressions (e.g. "f.x", called VarNames,
-// or names) and data sources. During evaluation, a qvalue must
+// or names) and data sources. During evaluation, an IndexedVar must
 // resolve to a column value. For a given name there are thus two
 // subsequent questions that must be answered:
 //
 // - which data source is the name referring to? (when there is more than 1 source)
 // - which 0-indexed column in that data source is the name referring to?
 //
-// The qvalue must distinguish data sources because the same column index
+// The IndexedVar must distinguish data sources because the same column index
 // may refer to different columns in different data sources. For
-// example in an UPSERT statement the qvalue for "excluded.x" could refer
+// example in an UPSERT statement the IndexedVar for "excluded.x" could refer
 // to column 0 in the (already existing) table row, whereas "src.x" could
 // refer to column 0 in the valueNode that provides values to insert.
 //
-// Within this context, the infrastructure for data sources and qvalues
+// Within this context, the infrastructure for data sources and IndexedVars
 // is implemented as follows:
 //
 // - dataSourceInfo provides column metadata for exactly one data source;
-// - the columnRef in qvalues contains a link (pointer) to the
-//   dataSourceInfo for its data source, and the column index;
-// - qvalResolver (select_qvalue.go) is tasked with linking back qvalues with
-//   their data source and column index.
+// - multiSourceInfo is an array of one ore more dataSourceInfo
+// - the index in IndexedVars points to one of the columns in the
+//   logical concatenation of all items in the multiSourceInfo;
+// - IndexedVarResolver (select_name_resolution.go) is tasked with
+//   linking back IndexedVars with their data source and column index.
 //
 // This being said, there is a misunderstanding one should be careful
 // to avoid: *there is no direct relationship between data sources and
@@ -197,18 +199,19 @@ func (p *planner) getVirtualDataSource(tn *parser.TableName) (planDataSource, bo
 		return planDataSource{}, false, err
 	}
 	if virtual.desc != nil {
-		v, err := virtual.getValuesNode(p)
-		if err != nil {
-			return planDataSource{}, false, err
-		}
-
+		columns, constructor := virtual.getPlanInfo()
 		sourceName := parser.TableName{
 			TableName:    parser.Name(virtual.desc.Name),
 			DatabaseName: tn.DatabaseName,
 		}
 		return planDataSource{
-			info: newSourceInfoForSingleTable(sourceName, v.Columns()),
-			plan: v,
+			info: newSourceInfoForSingleTable(sourceName, columns),
+			plan: &delayedValuesNode{
+				p:           p,
+				name:        sourceName.String(),
+				columns:     columns,
+				constructor: constructor,
+			},
 		}, true, nil
 	}
 	return planDataSource{}, false, nil
@@ -385,7 +388,7 @@ func (p *planner) getSubqueryPlan(
 // expandStar returns the array of column metadata and name
 // expressions that correspond to the expansion of a star.
 func (src *dataSourceInfo) expandStar(
-	v parser.VarName, qvals qvalMap,
+	v parser.VarName, ivarHelper parser.IndexedVarHelper,
 ) (columns ResultColumns, exprs []parser.TypedExpr, err error) {
 	if len(src.sourceColumns) == 0 {
 		return nil, nil, fmt.Errorf("cannot use %q without a FROM clause", v)
@@ -394,9 +397,9 @@ func (src *dataSourceInfo) expandStar(
 	colSel := func(idx int) {
 		col := src.sourceColumns[idx]
 		if !col.hidden {
-			qval := qvals.getQVal(columnRef{src, idx})
-			columns = append(columns, ResultColumn{Name: col.Name, Typ: qval.datum})
-			exprs = append(exprs, qval)
+			ivar := ivarHelper.IndexedVar(idx)
+			columns = append(columns, ResultColumn{Name: col.Name, Typ: ivar.ReturnType()})
+			exprs = append(exprs, ivar)
 		}
 	}
 
@@ -567,13 +570,14 @@ func (src *dataSourceInfo) checkDatabaseName(tn parser.TableName) (parser.TableN
 	return tn, nil
 }
 
-// findColumn looks up the column specified by a VarName. The normalized VarName
-// is returned.
-func (sources multiSourceInfo) findColumn(
-	c *parser.ColumnItem,
-) (info *dataSourceInfo, colIdx int, err error) {
+// findColumn looks up the column specified by a ColumnItem. The
+// function returns the index of the source in the multiSourceInfo
+// array and the column index for the column array of that
+// source. Returns invalid indices and an error if the source is not
+// found or the name is ambiguous.
+func (sources multiSourceInfo) findColumn(c *parser.ColumnItem) (srcIdx int, colIdx int, err error) {
 	if len(c.Selector) > 0 {
-		return nil, invalidColIdx, util.UnimplementedWithIssueErrorf(8318, "compound types not supported yet: %q", c)
+		return invalidSrcIdx, invalidColIdx, util.UnimplementedWithIssueErrorf(8318, "compound types not supported yet: %q", c)
 	}
 
 	colName := sqlbase.NormalizeName(c.ColumnName)
@@ -583,7 +587,7 @@ func (sources multiSourceInfo) findColumn(
 
 		tn, err := sources.checkDatabaseName(tableName)
 		if err != nil {
-			return nil, invalidColIdx, err
+			return invalidSrcIdx, invalidColIdx, err
 		}
 		tableName = tn
 
@@ -593,24 +597,24 @@ func (sources multiSourceInfo) findColumn(
 	}
 
 	colIdx = invalidColIdx
-	for _, src := range sources {
-		findCol := func(src, info *dataSourceInfo, colIdx int, idx int) (*dataSourceInfo, int, error) {
+	for iSrc, src := range sources {
+		findColHelper := func(src *dataSourceInfo, iSrc, srcIdx, colIdx int, idx int) (int, int, error) {
 			col := src.sourceColumns[idx]
 			if sqlbase.ReNormalizeName(col.Name) == colName {
 				if colIdx != invalidColIdx {
-					return nil, invalidColIdx, fmt.Errorf("column reference %q is ambiguous", c)
+					return invalidSrcIdx, invalidColIdx, fmt.Errorf("column reference %q is ambiguous", c)
 				}
-				info = src
+				srcIdx = iSrc
 				colIdx = idx
 			}
-			return info, colIdx, nil
+			return srcIdx, colIdx, nil
 		}
 
 		if tableName.Table() == "" {
 			for idx := 0; idx < len(src.sourceColumns); idx++ {
-				info, colIdx, err = findCol(src, info, colIdx, idx)
+				srcIdx, colIdx, err = findColHelper(src, iSrc, srcIdx, colIdx, idx)
 				if err != nil {
-					return info, colIdx, err
+					return srcIdx, colIdx, err
 				}
 			}
 		} else {
@@ -621,19 +625,19 @@ func (sources multiSourceInfo) findColumn(
 				continue
 			}
 			for _, idx := range colRange {
-				info, colIdx, err = findCol(src, info, colIdx, idx)
+				srcIdx, colIdx, err = findColHelper(src, iSrc, srcIdx, colIdx, idx)
 				if err != nil {
-					return info, colIdx, err
+					return srcIdx, colIdx, err
 				}
 			}
 		}
 	}
 
 	if colIdx == invalidColIdx {
-		return nil, invalidColIdx, fmt.Errorf("column name %q not found", c)
+		return invalidSrcIdx, invalidColIdx, fmt.Errorf("column name %q not found", c)
 	}
 
-	return info, colIdx, nil
+	return srcIdx, colIdx, nil
 }
 
 // concatDataSourceInfos creates a new dataSourceInfo that represents
@@ -672,4 +676,19 @@ func (src *dataSourceInfo) findTableAlias(colIdx int) parser.TableName {
 		}
 	}
 	panic(fmt.Sprintf("no alias for position %d in %q", colIdx, src.sourceAliases))
+}
+
+func (src *dataSourceInfo) FormatVar(buf *bytes.Buffer, f parser.FmtFlags, colIdx int) {
+	if f == parser.FmtQualify {
+		tableAlias := src.findTableAlias(colIdx)
+		if tableAlias.TableName != "" {
+			if tableAlias.DatabaseName != "" {
+				parser.FormatNode(buf, f, tableAlias.DatabaseName)
+				buf.WriteByte('.')
+			}
+			parser.FormatNode(buf, f, tableAlias.TableName)
+			buf.WriteByte('.')
+		}
+	}
+	buf.WriteString(src.sourceColumns[colIdx].Name)
 }

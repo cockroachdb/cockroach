@@ -94,9 +94,13 @@ type virtualTableEntry struct {
 	desc     *sqlbase.TableDescriptor
 }
 
-// getValuesNode returns a new valuesNode for the virtual table using the
-// provided planner.
-func (e virtualTableEntry) getValuesNode(p *planner) (*valuesNode, error) {
+type valuesNodeConstructor func(p *planner) (*valuesNode, error)
+
+// getPlanInfo returns the column metadata and a constructor for a new
+// valuesNode for the virtual table. We use deferred construction here
+// so as to avoid populating a RowContainer during query preparation,
+// where we can't guarantee it will be Close()d in case of error.
+func (e virtualTableEntry) getPlanInfo() (ResultColumns, valuesNodeConstructor) {
 	var columns ResultColumns
 	for _, col := range e.desc.Columns {
 		columns = append(columns, ResultColumn{
@@ -104,19 +108,31 @@ func (e virtualTableEntry) getValuesNode(p *planner) (*valuesNode, error) {
 			Typ:  col.Type.ToDatumType(),
 		})
 	}
-	v := p.newContainerValuesNode(columns, 0)
 
-	err := e.tableDef.populate(p, func(datum ...parser.Datum) error {
-		if r, c := len(datum), len(v.columns); r != c {
-			panic(fmt.Sprintf("datum row count and column count differ: %d vs %d", r, c))
+	constructor := func(p *planner) (*valuesNode, error) {
+		v := p.newContainerValuesNode(columns, 0)
+
+		err := e.tableDef.populate(p, func(datums ...parser.Datum) error {
+			if r, c := len(datums), len(v.columns); r != c {
+				panic(fmt.Sprintf("datum row count and column count differ: %d vs %d", r, c))
+			}
+			for i, col := range v.columns {
+				datum := datums[i]
+				if !(datum == parser.DNull || datum.TypeEqual(col.Typ)) {
+					panic(fmt.Sprintf("datum column %q expected to be type %s; found type %s",
+						col.Name, col.Typ.Type(), datum.Type()))
+				}
+			}
+			return v.rows.AddRow(datums)
+		})
+		if err != nil {
+			v.Close()
+			return nil, err
 		}
-		return v.rows.AddRow(datum)
-	})
-	if err != nil {
-		v.Close()
-		return nil, err
+		return v, nil
 	}
-	return v, nil
+
+	return columns, constructor
 }
 
 func (vs *virtualSchemaHolder) init(p *planner) error {

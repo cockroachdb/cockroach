@@ -38,7 +38,7 @@ github.com/cockroachdb/cockroach-go 31611c0501c812f437d4861d87d117053967c955
 github.com/cockroachdb/crlfmt 652c0df7fb3088f7b761fbaa36ab8f50b8fb9ed4
 github.com/cockroachdb/pq 44a6473ebbc26e3af09fe57bbdf761475c2c9f7c
 github.com/cockroachdb/stress 029c9348806514969d1109a6ae36e521af411ca7
-github.com/codahale/hdrhistogram f8ad88b59a584afeee9d334eff879b104439117b
+github.com/codahale/hdrhistogram 3a0bb77429bd3a61596f5e8a3172445844342120
 github.com/coreos/etcd 33e4f2ea283c187cac459462994d084f44d7c9de
 github.com/cpuguy83/go-md2man a65d4d2de4d5f7c74868dfa9b202a3c8be315aaa
 github.com/docker/distribution 99cb7c0946d2f5a38015443e515dc916295064d7
@@ -65,7 +65,7 @@ github.com/kkaneda/returncheck bf081fa7155e3a27df1f056a49d50685edfa5b1b
 github.com/kr/pretty cfb55aafdaf3ec08f0db22699ab822c50091b1c4
 github.com/kr/text 7cafcd837844e784b526369c9bce262804aebc60
 github.com/leekchan/timeutil 28917288c48df3d2c1cfe468c273e0b2adda0aa5
-github.com/lib/pq 50761b0867bd1d9d069276790bcd4a3bccf2324a
+github.com/lib/pq fcb9ef54da7cae1ea08f0b5a92f236d83e59294a
 github.com/lightstep/lightstep-tracer-go 7ec5005048fddb1fc15627e1bf58796ce01d919e
 github.com/mattn/go-isatty 66b8e73f3f5cda9f96b69efd03dd3d7fc4a5cdb8
 github.com/mattn/go-runewidth d6bea18f789704b5f83375793155289da36a3c7f

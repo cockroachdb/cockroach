@@ -194,7 +194,7 @@ func TestSchedulerLoop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	p := newTestProcessor()
-	s := newRaftScheduler(context.Background(), p, 1)
+	s := newRaftScheduler(context.Background(), nil, p, 1)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	s.Start(stopper)
@@ -215,7 +215,7 @@ func TestSchedulerBuffering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	p := newTestProcessor()
-	s := newRaftScheduler(context.Background(), p, 1)
+	s := newRaftScheduler(context.Background(), nil, p, 1)
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	s.Start(stopper)

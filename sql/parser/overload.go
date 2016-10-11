@@ -44,9 +44,58 @@ type typeList interface {
 }
 
 var _ typeList = ArgTypes{}
+var _ typeList = NamedArgTypes{}
 var _ typeList = AnyType{}
 var _ typeList = VariadicType{}
 var _ typeList = SingleType{}
+
+// ArgTypes is a typeList implementation that accepts a specific number of
+// argument types.
+type ArgTypes []Datum
+
+func (a ArgTypes) match(types ArgTypes) bool {
+	if len(types) != len(a) {
+		return false
+	}
+	for i := range types {
+		if !a.matchAt(types[i], i) {
+			return false
+		}
+	}
+	return true
+}
+
+func (a ArgTypes) matchAt(typ Datum, i int) bool {
+	if i >= len(a) {
+		return false
+	}
+	if _, ok := typ.(*DTuple); ok {
+		typ = TypeTuple
+	}
+	return a[i].TypeEqual(typ)
+}
+
+func (a ArgTypes) matchLen(l int) bool {
+	return len(a) == l
+}
+
+func (a ArgTypes) getAt(i int) Datum {
+	return a[i]
+}
+
+func (a ArgTypes) String() string {
+	var s bytes.Buffer
+	first := true
+	for i := range a {
+		if first {
+			first = false
+		} else {
+			s.WriteString(", ")
+		}
+		s.WriteString(a[i].Type())
+	}
+	return s.String()
+}
 
 // NamedArgTypes is very similar to ArgTypes except it allows keeping a string
 // name for each argument as well and using those when printing the
@@ -95,54 +144,6 @@ func (a NamedArgTypes) String() string {
 		s.WriteString(arg.Name)
 		s.WriteString(": ")
 		s.WriteString(arg.Typ.Type())
-	}
-	return s.String()
-}
-
-// ArgTypes is a typeList implementation that accepts a specific number of
-// argument types.
-type ArgTypes []Datum
-
-func (a ArgTypes) match(types ArgTypes) bool {
-	if len(types) != len(a) {
-		return false
-	}
-	for i := range types {
-		if !a.matchAt(types[i], i) {
-			return false
-		}
-	}
-	return true
-}
-
-func (a ArgTypes) matchAt(typ Datum, i int) bool {
-	if i >= len(a) {
-		return false
-	}
-	if _, ok := typ.(*DTuple); ok {
-		typ = TypeTuple
-	}
-	return a[i].TypeEqual(typ)
-}
-
-func (a ArgTypes) matchLen(l int) bool {
-	return len(a) == l
-}
-
-func (a ArgTypes) getAt(i int) Datum {
-	return a[i]
-}
-
-func (a ArgTypes) String() string {
-	var s bytes.Buffer
-	first := true
-	for i := range a {
-		if first {
-			first = false
-		} else {
-			s.WriteString(", ")
-		}
-		s.WriteString(a[i].Type())
 	}
 	return s.String()
 }

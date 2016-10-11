@@ -89,12 +89,13 @@ type joinNode struct {
 
 type joinPredicate interface {
 	// eval tests whether the current combination of rows passes the
-	// predicate.
-	eval(leftRow parser.DTuple, rightRow parser.DTuple) (bool, error)
+	// predicate. The result argument is an array pre-allocated to the
+	// right size, which can be used as intermediate buffer.
+	eval(result, leftRow, rightRow parser.DTuple) (bool, error)
 
 	// prepareRow prepares the output row by combining values from the
 	// input data sources.
-	prepareRow(result parser.DTuple, leftRow parser.DTuple, rightRow parser.DTuple)
+	prepareRow(result, leftRow, rightRow parser.DTuple)
 
 	// expand and start propagate to embedded sub-queries.
 	expand() error
@@ -122,12 +123,10 @@ func prepareRowConcat(result parser.DTuple, leftRow parser.DTuple, rightRow pars
 // predicate is always true, the work done here is thus minimal.
 type crossPredicate struct{}
 
-func (p *crossPredicate) eval(_, _ parser.DTuple) (bool, error) {
+func (p *crossPredicate) eval(_, _, _ parser.DTuple) (bool, error) {
 	return true, nil
 }
-func (p *crossPredicate) prepareRow(
-	result parser.DTuple, leftRow parser.DTuple, rightRow parser.DTuple,
-) {
+func (p *crossPredicate) prepareRow(result, leftRow, rightRow parser.DTuple) {
 	prepareRowConcat(result, leftRow, rightRow)
 }
 func (p *crossPredicate) start() error                        { return nil }
@@ -137,31 +136,43 @@ func (p *crossPredicate) explainTypes(_ func(string, string)) {}
 
 // onPredicate implements the predicate logic for joins with an ON clause.
 type onPredicate struct {
-	p *planner
-
-	// leftInfo/rightInfo contain the column metadata for the left and
-	// right data sources.
-	leftInfo  *dataSourceInfo
-	rightInfo *dataSourceInfo
-
-	// qvals is needed to resolve qvalues in the filter expression.
-	// TODO(knz) perhaps this is not needed if this node ends up
-	// using IndexedVar (like scanNode) instead of qvalues.
-	qvals  qvalMap
+	p      *planner
 	filter parser.TypedExpr
+	info   *dataSourceInfo
+	curRow parser.DTuple
+
+	// This struct must be allocated on the heap and its location stay
+	// stable after construction because it implements
+	// IndexedVarContainer and the IndexedVar objects in sub-expressions
+	// will link to it by reference after checkRenderStar / analyzeExpr.
+	// Enforce this using NoCopy.
+	noCopy util.NoCopy
+}
+
+// IndexedVarEval implements the parser.IndexedVarContainer interface.
+func (p *onPredicate) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
+	return p.curRow[idx].Eval(ctx)
+}
+
+// IndexedVarReturnType implements the parser.IndexedVarContainer interface.
+func (p *onPredicate) IndexedVarReturnType(idx int) parser.Datum {
+	return p.info.sourceColumns[idx].Typ
+}
+
+// IndexedVarFormat implements the parser.IndexedVarContainer interface.
+func (p *onPredicate) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
+	p.info.FormatVar(buf, f, idx)
 }
 
 // eval for onPredicate uses an arbitrary SQL expression to determine
 // whether the left and right input row can join.
-func (p *onPredicate) eval(leftRow parser.DTuple, rightRow parser.DTuple) (bool, error) {
-	p.qvals.populateQVals(p.leftInfo, leftRow)
-	p.qvals.populateQVals(p.rightInfo, rightRow)
+func (p *onPredicate) eval(result, leftRow, rightRow parser.DTuple) (bool, error) {
+	p.curRow = result
+	prepareRowConcat(p.curRow, leftRow, rightRow)
 	return sqlbase.RunFilter(p.filter, &p.p.evalCtx)
 }
 
-func (p *onPredicate) prepareRow(
-	result parser.DTuple, leftRow parser.DTuple, rightRow parser.DTuple,
-) {
+func (p *onPredicate) prepareRow(result, leftRow, rightRow parser.DTuple) {
 	prepareRowConcat(result, leftRow, rightRow)
 }
 
@@ -195,21 +206,21 @@ func (p *planner) makeOnPredicate(
 		return nil, nil, err
 	}
 
+	pred := &onPredicate{
+		p:    p,
+		info: info,
+	}
+
 	// Determine the filter expression.
-	qvals := make(qvalMap)
 	colInfo := multiSourceInfo{left, right}
-	filter, err := p.analyzeExpr(expr, colInfo, qvals, parser.TypeBool, true, "ON")
+	iVarHelper := parser.MakeIndexedVarHelper(pred, len(info.sourceColumns))
+	filter, err := p.analyzeExpr(expr, colInfo, iVarHelper, parser.TypeBool, true, "ON")
 	if err != nil {
 		return nil, nil, err
 	}
+	pred.filter = filter
 
-	return &onPredicate{
-		p:         p,
-		leftInfo:  left,
-		rightInfo: right,
-		qvals:     qvals,
-		filter:    filter,
-	}, info, nil
+	return pred, info, nil
 }
 
 // usingPredicate implements the predicate logic for joins with a USING clause.
@@ -246,7 +257,7 @@ func (p *usingPredicate) explainTypes(_ func(string, string)) {}
 
 // eval for usingPredicate compares the USING columns, returning true
 // if and only if all USING columns are equal on both sides.
-func (p *usingPredicate) eval(leftRow parser.DTuple, rightRow parser.DTuple) (bool, error) {
+func (p *usingPredicate) eval(_, leftRow, rightRow parser.DTuple) (bool, error) {
 	eq := true
 	for i := range p.colNames {
 		leftVal := leftRow[p.leftUsingIndices[i]]
@@ -271,9 +282,7 @@ func (p *usingPredicate) eval(leftRow parser.DTuple, rightRow parser.DTuple) (bo
 // clauses and CROSS JOIN: a result row contains first the values for
 // the USING columns; then the non-USING values from the left input
 // row, then the non-USING values from the right input row.
-func (p *usingPredicate) prepareRow(
-	result parser.DTuple, leftRow parser.DTuple, rightRow parser.DTuple,
-) {
+func (p *usingPredicate) prepareRow(result, leftRow, rightRow parser.DTuple) {
 	d := 0
 	for k, j := range p.leftUsingIndices {
 		// The result for USING columns must be computed as per COALESCE().
@@ -748,7 +757,7 @@ func (n *joinNode) Next() (bool, error) {
 		if n.swapped {
 			leftRow, rightRow = rightRow, leftRow
 		}
-		passesFilter, err := n.pred.eval(leftRow, rightRow)
+		passesFilter, err := n.pred.eval(n.output, leftRow, rightRow)
 		if err != nil {
 			return false, err
 		}

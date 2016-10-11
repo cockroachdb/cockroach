@@ -650,7 +650,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.intentResolver = newIntentResolver(s)
 	s.raftEntryCache = newRaftEntryCache(cfg.RaftEntryCacheSize)
 	s.drainLeases.Store(false)
-	s.scheduler = newRaftScheduler(cfg.Ctx, s, storeSchedulerConcurrency)
+	s.scheduler = newRaftScheduler(cfg.Ctx, s.metrics, s, storeSchedulerConcurrency)
 
 	storeMuLogger := syncutil.ThresholdLogger(
 		s.Ctx(),
@@ -1590,16 +1590,16 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 
 	// Replace the end key of the original range with the start key of
 	// the new range. Reinsert the range since the btree is keyed by range end keys.
-	if s.mu.replicasByKey.Delete(origRng) == nil {
-		return errors.Errorf("couldn't find range %s in replicasByKey btree", origRng)
+	if kr := s.mu.replicasByKey.Delete(origRng); kr != origRng {
+		return errors.Errorf("replicasByKey unexpectedly contains %v instead of replica %s", kr, origRng)
 	}
 
 	copyDesc := *origDesc
 	copyDesc.EndKey = append([]byte(nil), newDesc.StartKey...)
 	origRng.setDescWithoutProcessUpdate(&copyDesc)
 
-	if s.mu.replicasByKey.ReplaceOrInsert(origRng) != nil {
-		return errors.Errorf("couldn't insert range %v in replicasByKey btree", origRng)
+	if kr := s.mu.replicasByKey.ReplaceOrInsert(origRng); kr != nil {
+		return errors.Errorf("replicasByKey unexpectedly contains %s when inserting replica %s", kr, origRng)
 	}
 
 	if err := s.addReplicaInternalLocked(newRng); err != nil {
@@ -1760,17 +1760,12 @@ func (s *Store) removeReplicaImpl(
 		s.mu.Unlock()
 		return errors.New("replica not found")
 	}
-	if s.getOverlappingKeyRangeLocked(desc) != rep {
-		// This is a fatal error because returning at this point will
-		// leave the Store in an inconsistent state (we've already deleted
-		// from s.mu.replicas), and uninitialized replicas shouldn't make
-		// it this far anyway. This method will need some changes when we
-		// introduce GC of uninitialized replicas.
-		//
-		// TODO(peter): The above comment is out of date: we could return an error
-		// here but are not doing so yet in the name of conservatism.
+	if kr := s.getOverlappingKeyRangeLocked(desc); kr != rep {
+		// This is a fatal error because uninitialized replicas shouldn't make it
+		// this far. This method will need some changes when we introduce GC of
+		// uninitialized replicas.
 		s.mu.Unlock()
-		log.Fatalf(s.Ctx(), "replica %s found by id but not by key", rep)
+		log.Fatalf(s.Ctx(), "replica %s unexpectedly overlapped by %v", rep, kr)
 	}
 	// Adjust stats before calling Destroy. This can be called before or after
 	// Destroy, but this configuration helps avoid races in stat verification
@@ -1783,8 +1778,28 @@ func (s *Store) removeReplicaImpl(
 	// while not holding Store.mu. This is safe because we're holding
 	// Replica.raftMu and the replica is present in Store.mu.replicasByKey
 	// (preventing any concurrent access to the replica's key range).
-	if err := rep.Destroy(origDesc, destroyData); err != nil {
-		return err
+
+	rep.mu.Lock()
+	// Clear the pending command queue.
+	if len(rep.mu.pendingCmds) > 0 {
+		resp := roachpb.ResponseWithError{
+			Reply: &roachpb.BatchResponse{},
+			Err:   roachpb.NewError(roachpb.NewRangeNotFoundError(rep.RangeID)),
+		}
+		for _, p := range rep.mu.pendingCmds {
+			p.done <- resp
+		}
+	}
+	// Clear the map.
+	rep.mu.pendingCmds = map[storagebase.CmdIDKey]*pendingCmd{}
+	rep.mu.internalRaftGroup = nil
+	rep.mu.destroyed = roachpb.NewRangeNotFoundError(rep.RangeID)
+	rep.mu.Unlock()
+
+	if destroyData {
+		if err := rep.destroyDataRaftMuLocked(); err != nil {
+			return err
+		}
 	}
 
 	s.mu.Lock()
@@ -1793,10 +1808,10 @@ func (s *Store) removeReplicaImpl(
 	delete(s.mu.replicaPlaceholders, rep.RangeID)
 	delete(s.mu.replicaQueues, rep.RangeID)
 	delete(s.mu.uninitReplicas, rep.RangeID)
-	if s.mu.replicasByKey.Delete(rep) == nil {
+	if kr := s.mu.replicasByKey.Delete(rep); kr != rep {
 		// We already checked that our replica was present in replicasByKey
 		// above. Nothing should have been able to change that.
-		log.Fatalf(s.Ctx(), "replica %s found by id but not by key", rep)
+		log.Fatalf(s.Ctx(), "replica %s unexpectedly overlapped by %v", rep, kr)
 	}
 	s.scanner.RemoveReplica(rep)
 	s.consistencyScanner.RemoveReplica(rep)
@@ -2331,9 +2346,9 @@ func (s *Store) HandleRaftRequest(
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	q := s.mu.replicaQueues[req.RangeID]
 	if len(q) >= replicaRequestQueueSize {
+		s.mu.Unlock()
 		// TODO(peter): Return an error indicating the request was dropped. Note
 		// that dropping the request is safe. Raft will retry.
 		s.metrics.RaftRcvdMsgDropped.Inc(1)
@@ -2343,6 +2358,7 @@ func (s *Store) HandleRaftRequest(
 		req:        req,
 		respStream: respStream,
 	})
+	s.mu.Unlock()
 
 	s.scheduler.EnqueueRaftRequest(req.RangeID)
 	return nil
@@ -2611,15 +2627,9 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 				repl, replicaGCPriorityRemoved,
 			)
 			if err != nil {
-				log.Errorf(
-					ctx, "%s: unable to add replica %d to GC queue: %s",
-					repl, resp.ToReplica, err,
-				)
+				log.Errorf(ctx, "%s: unable to add to replica GC queue: %s", repl, err)
 			} else if added {
-				log.Infof(
-					ctx, "%s: added to replica GC queue (peer suggestion)",
-					repl,
-				)
+				log.Infof(ctx, "%s: added to replica GC queue (peer suggestion)", repl)
 			}
 		default:
 			log.Warningf(ctx, "got error from range %d, replica %s: %s",
@@ -2633,6 +2643,7 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
 func sendSnapshot(
+	ctx context.Context,
 	stream MultiRaft_RaftSnapshotClient,
 	header SnapshotRequest_Header,
 	snap *OutgoingSnapshot,
@@ -2710,7 +2721,7 @@ func sendSnapshot(
 
 	rangeID := header.RangeDescriptor.RangeID
 
-	truncState, err := loadTruncatedState(stream.Context(), snap.EngineSnap, rangeID)
+	truncState, err := loadTruncatedState(ctx, snap.EngineSnap, rangeID)
 	if err != nil {
 		return err
 	}
@@ -2727,13 +2738,13 @@ func sendSnapshot(
 		return false, err
 	}
 
-	if err := iterateEntries(stream.Context(), snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
+	if err := iterateEntries(ctx, snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
 		return err
 	}
 	if err := stream.Send(&SnapshotRequest{LogEntries: logEntries, Final: true}); err != nil {
 		return err
 	}
-	log.Infof(stream.Context(), "streamed snapshot: kv pairs: %d, log entries: %d",
+	log.Infof(ctx, "streamed snapshot: kv pairs: %d, log entries: %d",
 		n, len(logEntries))
 
 	resp, err = stream.Recv()

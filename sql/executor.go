@@ -336,15 +336,21 @@ func (e *Executor) getSystemConfig() (config.SystemConfig, *databaseCache) {
 func (e *Executor) Prepare(
 	query string, session *Session, pinfo parser.PlaceholderTypes,
 ) (ResultColumns, error) {
-	if log.V(2) {
-		log.Infof(session.Ctx(), "preparing: %s", query)
-	} else if traceSQL {
-		log.Eventf(session.Ctx(), "preparing: %s", query)
-	}
-	stmt, err := parser.ParseOne(query, parser.Syntax(session.Syntax))
+	log.VEventf(2, session.Ctx(), "preparing: %s", query)
+	var p parser.Parser
+	stmts, err := p.Parse(query, parser.Syntax(session.Syntax))
 	if err != nil {
 		return nil, err
 	}
+	switch len(stmts) {
+	case 0:
+		return nil, nil
+	case 1:
+		// ignore
+	default:
+		return nil, errors.Errorf("expected 1 statement, but found %d", len(stmts))
+	}
+	stmt := stmts[0]
 	if err = pinfo.ProcessPlaceholderAnnotations(stmt); err != nil {
 		return nil, err
 	}
@@ -445,8 +451,8 @@ func (e *Executor) waitForConfigUpdate() {
 
 // execRequest executes the request using the provided planner.
 // It parses the sql into statements, iterates through the statements, creates
-// KV transactions and automatically retries them when possible, executes the
-// (synchronous attempt of) schema changes.
+// KV transactions and automatically retries them when possible, and executes
+// the (synchronous attempt of) schema changes.
 // It will accumulate a result in Response for each statement.
 // It will resume a SQL transaction, if one was previously open for this client.
 //
@@ -466,6 +472,8 @@ func (e *Executor) execRequest(session *Session, sql string, copymsg copyMsg) St
 	planMaker := &session.planner
 	var stmts parser.StatementList
 	var err error
+
+	log.VEventf(2, session.Ctx(), "execRequest: %s", sql)
 
 	if session.planner.copyFrom != nil {
 		stmts, err = session.planner.ProcessCopyData(sql, copymsg)
@@ -916,14 +924,14 @@ func (e *Executor) execStmtInOpenTxn(
 		panic("execStmtInOpenTxn called outside of an open txn")
 	}
 	if planMaker.txn == nil {
-		panic("execStmtInOpenTxn called with the a txn not set on the planner")
+		panic("execStmtInOpenTxn called with a txn not set on the planner")
 	}
 
 	planMaker.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
 	planMaker.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
 
 	session := planMaker.session
-	log.Event(session.context, stmt.String())
+	log.Eventf(session.context, "%s", stmt)
 
 	// TODO(cdo): Figure out how to not double count on retries.
 	e.updateStmtCounts(stmt)
@@ -1049,7 +1057,7 @@ func (e *Executor) execStmtInOpenTxn(
 	if traceSQL {
 		log.Eventf(txnState.txn.Context, "%s done", tResult)
 	}
-	log.Event(session.context, tResult.String())
+	log.Eventf(session.context, "%s done", tResult)
 	return result, nil
 }
 
@@ -1129,7 +1137,7 @@ func commitSQLTransaction(
 	return result, err
 }
 
-// the current transaction might have been committed/rolled back when this returns.
+// The current transaction might have been committed/rolled back when this returns.
 func (e *Executor) execStmt(
 	stmt parser.Statement, planMaker *planner, autoCommit bool,
 ) (Result, error) {

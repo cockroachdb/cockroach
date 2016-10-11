@@ -230,7 +230,7 @@ For example:
       prepare a as select (3 + $1) + ($1 + 3.5)
    ```
 
-   PostgreSQL resolves #1 as `decimal`. CockroachDB can't infer.
+   PostgreSQL resolves $1 as `decimal`. CockroachDB can't infer.
    Arguably both "int" and "float" may come to mind as well.
 
 

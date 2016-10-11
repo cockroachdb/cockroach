@@ -47,10 +47,10 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
-// BootstrapInfo contains information necessary to bootstrapping the
+// BootstrapInfo contains information necessary to bootstrap the
 // gossip network from a cold start.
 type BootstrapInfo struct {
-	// A map from node ID to address.
+	// Addresses of other nodes in the cluster.
 	Addresses []cockroach_util.UnresolvedAddr `protobuf:"bytes,1,rep,name=addresses" json:"addresses"`
 	// Timestamp at which the bootstrap info was written.
 	Timestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`

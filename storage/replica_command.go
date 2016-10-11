@@ -79,10 +79,6 @@ func (r *Replica) executeCmd(
 		return nil, nil
 	}
 
-	if err := r.checkCmdHeader(args.Header()); err != nil {
-		return nil, roachpb.NewErrorWithTxn(err, h.Txn)
-	}
-
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
 	if filter := r.store.cfg.TestingKnobs.TestingCommandFilter; filter != nil {
 		filterArgs := storagebase.FilterArgs{Ctx: ctx, CmdID: raftCmdID, Index: index,
@@ -336,8 +332,12 @@ func (r *Replica) DeleteRange(
 	args roachpb.DeleteRangeRequest,
 ) (roachpb.DeleteRangeResponse, *roachpb.Span, int64, error) {
 	var reply roachpb.DeleteRangeResponse
+	timestamp := hlc.ZeroTimestamp
+	if !args.Inline {
+		timestamp = h.Timestamp
+	}
 	deleted, resumeSpan, num, err := engine.MVCCDeleteRange(
-		ctx, batch, ms, args.Key, args.EndKey, maxKeys, h.Timestamp, h.Txn, args.ReturnKeys,
+		ctx, batch, ms, args.Key, args.EndKey, maxKeys, timestamp, h.Txn, args.ReturnKeys,
 	)
 	if err == nil {
 		reply.Keys = deleted
@@ -1532,8 +1532,6 @@ func (r *Replica) TruncateLog(
 	h roachpb.Header,
 	args roachpb.TruncateLogRequest,
 ) (roachpb.TruncateLogResponse, *PostCommitTrigger, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	var reply roachpb.TruncateLogResponse
 
 	// After a merge, it's possible that this request was sent to the wrong
@@ -1573,7 +1571,9 @@ func (r *Replica) TruncateLog(
 		hlc.ZeroTimestamp, nil /* txn */, false /* returnKeys */); err != nil {
 		return reply, nil, err
 	}
+	r.mu.Lock()
 	raftLogSize := r.mu.raftLogSize + diff.SysBytes
+	r.mu.Unlock()
 	// Check raftLogSize since it isn't persisted between server restarts.
 	if raftLogSize < 0 {
 		raftLogSize = 0
