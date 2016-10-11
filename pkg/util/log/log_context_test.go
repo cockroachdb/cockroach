@@ -63,7 +63,7 @@ func TestLogContext(t *testing.T) {
 
 	for i, tc := range testCases {
 		if value := makeMessage(tc.ctx, "test", nil); value != tc.expected {
-			t.Errorf("Test case %d failed: expected '%s', got '%s'", i, tc.expected, value)
+			t.Errorf("test case %d failed: expected '%s', got '%s'", i, tc.expected, value)
 		}
 	}
 }
@@ -129,7 +129,7 @@ func TestWithLogTagsFromCtx(t *testing.T) {
 
 	for i, tc := range testCases {
 		if value := makeMessage(tc.ctx, "test", nil); value != tc.expected {
-			t.Errorf("Test case %d failed: expected '%s', got '%s'", i, tc.expected, value)
+			t.Errorf("test case %d failed: expected '%s', got '%s'", i, tc.expected, value)
 		}
 	}
 }

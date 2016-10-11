@@ -35,14 +35,18 @@ func testingTracer(ev *events) opentracing.Tracer {
 	opts := basictracer.DefaultOptions()
 	opts.ShouldSample = func(_ uint64) bool { return true }
 	opts.NewSpanEventListener = func() func(basictracer.SpanEvent) {
+		// The op variable is used in the returned function and is associated with
+		// a span; it lives for as long as the span is open.
+		var op string
 		return func(e basictracer.SpanEvent) {
 			switch t := e.(type) {
 			case basictracer.EventCreate:
-				*ev = append(*ev, "start")
+				op = t.OperationName
+				*ev = append(*ev, fmt.Sprintf("%s:start", op))
 			case basictracer.EventFinish:
-				*ev = append(*ev, "finish")
+				*ev = append(*ev, fmt.Sprintf("%s:finish", op))
 			case basictracer.EventLog:
-				*ev = append(*ev, t.Event)
+				*ev = append(*ev, fmt.Sprintf("%s:%s", op, t.Event))
 			}
 		}
 	}
@@ -60,11 +64,23 @@ func compareTraces(expected, actual events) bool {
 		if ev == actual[i] {
 			continue
 		}
-		// Try to strip file:line from the actual event.
-		groups := regexp.MustCompile(`.*:[0-9]* (.*)`).FindStringSubmatch(actual[i])
-		if len(groups) != 2 || groups[0] != actual[i] || groups[1] != ev {
-			return false
+		// Try to strip file:line from a span event, e.g. from:
+		//   span:path/file:line msg
+		// to:
+		//   span:msg
+		groups := regexp.MustCompile(`^(.*):.*:[0-9]* (.*)$`).FindStringSubmatch(actual[i])
+		if len(groups) == 3 && fmt.Sprintf("%s:%s", groups[1], groups[2]) == ev {
+			continue
 		}
+		// Try to strip file:line from a non-span event, e.g. from:
+		//   path/file:line msg
+		// to:
+		//   msg
+		groups = regexp.MustCompile(`^.*:[0-9]* (.*)$`).FindStringSubmatch(actual[i])
+		if len(groups) == 2 && groups[1] == ev {
+			continue
+		}
+		return false
 	}
 	return true
 }
@@ -78,7 +94,7 @@ func TestTrace(t *testing.T) {
 	var ev events
 
 	tracer := testingTracer(&ev)
-	sp := tracer.StartSpan("")
+	sp := tracer.StartSpan("s")
 	ctxWithSpan := opentracing.ContextWithSpan(ctx, sp)
 	Event(ctxWithSpan, "test1")
 	ErrEvent(ctxWithSpan, "testerr")
@@ -90,9 +106,9 @@ func TestTrace(t *testing.T) {
 
 	sp.Finish()
 
-	expected := events{"start", "test1", "testerr", "test2", "log", "finish"}
+	expected := events{"s:start", "s:test1", "s:testerr", "s:test2", "s:log", "s:finish"}
 	if !compareTraces(expected, ev) {
-		t.Errorf("expected events '%s', got '%s'", expected, fmt.Sprint(ev))
+		t.Errorf("expected events '%s', got '%v'", expected, ev)
 	}
 }
 
@@ -103,7 +119,7 @@ func TestTraceWithTags(t *testing.T) {
 	var ev events
 
 	tracer := testingTracer(&ev)
-	sp := tracer.StartSpan("")
+	sp := tracer.StartSpan("s")
 	ctxWithSpan := opentracing.ContextWithSpan(ctx, sp)
 	Event(ctxWithSpan, "test1")
 	ErrEvent(ctxWithSpan, "testerr")
@@ -112,9 +128,12 @@ func TestTraceWithTags(t *testing.T) {
 
 	sp.Finish()
 
-	expected := events{"start", "[tag=1] test1", "[tag=1] testerr", "[tag=1] test2", "[tag=1] log", "finish"}
+	expected := events{
+		"s:start", "s:[tag=1] test1", "s:[tag=1] testerr", "s:[tag=1] test2", "s:[tag=1] log",
+		"s:finish",
+	}
 	if !compareTraces(expected, ev) {
-		t.Errorf("expected events '%s', got '%s'", expected, fmt.Sprint(ev))
+		t.Errorf("expected events '%s', got '%v'", expected, ev)
 	}
 }
 
@@ -165,7 +184,7 @@ func TestEventLog(t *testing.T) {
 
 	expected := events{"test1", "testerr(err)", "test2", "log", "errlog1(err)", "finish"}
 	if !compareTraces(expected, el.ev) {
-		t.Errorf("expected events '%s', got '%s'", expected, fmt.Sprint(el.ev))
+		t.Errorf("expected events '%s', got '%v'", expected, el.ev)
 	}
 }
 
@@ -183,7 +202,7 @@ func TestEventLogAndTrace(t *testing.T) {
 
 	var traceEv events
 	tracer := testingTracer(&traceEv)
-	sp := tracer.StartSpan("")
+	sp := tracer.StartSpan("s")
 	ctxWithBoth := opentracing.ContextWithSpan(ctxWithEventLog, sp)
 	// Events should only go to the trace.
 	Event(ctxWithBoth, "test3")
@@ -195,7 +214,7 @@ func TestEventLogAndTrace(t *testing.T) {
 	sp.Finish()
 	el.Finish()
 
-	trExpected := "[start test3 test3err finish]"
+	trExpected := "[s:start s:test3 s:test3err s:finish]"
 	if evStr := fmt.Sprint(traceEv); evStr != trExpected {
 		t.Errorf("expected events '%s', got '%s'", trExpected, evStr)
 	}
