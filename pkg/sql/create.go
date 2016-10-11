@@ -253,6 +253,10 @@ func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
 		return nil, err
 	}
 
+	// To avoid races with ongoing schema changes to tables that the view
+	// depends on, make sure we use the most recent versions of table
+	// descriptors rather than the copies in the lease cache.
+	p.avoidCachedDescriptors = true
 	sourcePlan, err := p.Select(n.AsSource, []parser.Datum{}, false)
 	if err != nil {
 		return nil, err

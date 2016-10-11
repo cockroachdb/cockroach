@@ -327,7 +327,7 @@ func (p *planner) getTableScanOrViewPlan(
 	tn *parser.TableName, hints *parser.IndexHints, scanVisibility scanVisibility,
 ) (planDataSource, error) {
 	descFunc := p.getTableLease
-	if p.asOf {
+	if p.avoidCachedDescriptors {
 		// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
 		// specified time, and never lease anything. The proto transaction already
 		// has its timestamps set correctly so mustGetTableDesc will fetch with the

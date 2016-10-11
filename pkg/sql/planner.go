@@ -54,10 +54,11 @@ type planner struct {
 
 	parser parser.Parser
 
-	// If set, this is an AS OF SYSTEM TIME query. This flag is used in layers
-	// below the executor to modify the behavior of the SELECT. For example the
-	// table descriptor is not leased, only fetched at the correct time.
-	asOf bool
+	// If set, table descriptors will only be fetched at the time of the
+	// transaction, not leased. This is used for things like AS OF SYSTEM TIME
+	// queries and building query plans for views when they're created.
+	// It's used in layers below the executor to modify the behavior of SELECT.
+	avoidCachedDescriptors bool
 
 	// If set, contains the in progress COPY FROM columns.
 	copyFrom *copyNode
