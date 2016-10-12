@@ -204,13 +204,23 @@ GLOCK := ../../../../bin/glock
 #        |  |~ GOPATH/src/github.com
 #        |~ GOPATH/src/github.com/cockroachdb
 
+GVT := ../../../../bin/gvt
+#      ^  ^  ^  ^~ GOPATH
+#      |  |  |~ GOPATH/src
+#      |  |~ GOPATH/src/github.com
+#      |~ GOPATH/src/github.com/cockroachdb
+
 $(GLOCK):
 	$(GO) get github.com/tamird/glock
 
+$(GVT):
+	$(GO) get github.com/dt/gvt
+
 # Update the git hooks and run the bootstrap script whenever any
 # of them (or their dependencies) change.
-.bootstrap: $(GITHOOKS) $(GLOCK) GLOCKFILE
-	@unset GIT_WORK_TREE; $(GLOCK) sync github.com/cockroachdb/cockroach
+.bootstrap: $(GITHOOKS) $(GLOCK) $(GVT) GLOCKFILE
+	git submodule update --init
+	@unset GIT_WORK_TREE; $(GLOCK) sync -n < GLOCKFILE
 	touch $@
 
 include .bootstrap
