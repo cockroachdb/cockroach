@@ -2444,8 +2444,10 @@ func TestEndTransactionDeadline(t *testing.T) {
 				}
 			case 1:
 				// Past deadline.
-				if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
-					t.Errorf("expected TransactionAbortedError but got %T: %s", pErr, pErr)
+				if statusError, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); !ok {
+					t.Errorf("expected TransactionStatusError but got %T: %s", pErr, pErr)
+				} else if e := "transaction deadline exceeded"; statusError.Msg != e {
+					t.Errorf("expected %s, got %s", e, statusError.Msg)
 				}
 			case 2:
 				// Equal deadline.
@@ -2571,8 +2573,10 @@ func TestEndTransactionDeadline_1PC(t *testing.T) {
 	ba.Header = etH
 	ba.Add(&bt, &put, &et)
 	_, pErr := tc.Sender().Send(context.Background(), ba)
-	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
-		t.Errorf("expected TransactionAbortedError but got %T: %s", pErr, pErr)
+	if statusError, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); !ok {
+		t.Errorf("expected TransactionStatusError but got %T: %s", pErr, pErr)
+	} else if e := "transaction deadline exceeded"; statusError.Msg != e {
+		t.Errorf("expected %s, got %s", e, statusError.Msg)
 	}
 }
 

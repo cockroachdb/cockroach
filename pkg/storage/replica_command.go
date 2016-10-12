@@ -580,16 +580,16 @@ func (r *Replica) EndTransaction(
 	reply.Txn.Timestamp.Forward(h.Txn.Timestamp)
 
 	if isEndTransactionExceedingDeadline(reply.Txn.Timestamp, args) {
-		reply.Txn.Status = roachpb.ABORTED
-		// FIXME(#3037):
-		// If the deadline has lapsed, return all the intents for
-		// resolution. Unfortunately, since we're (a) returning an error,
-		// and (b) not able to write on error (see #1989), we can't write
-		// ABORTED into the master transaction record, which remains
-		// PENDING, and that's pretty bad.
+		// If the deadline has lapsed return an error and depend on the client
+		// issuing a Rollback() to abort the transaction and cleanup intents.
+		// Unfortunately, we're returning an error and unable to write on
+		// error (see #1989): we can't write ABORTED into the master
+		// transaction record which remains PENDING, and rely on the client to
+		// issue a Rollback() for cleanup.
 		return reply,
+			// TODO(vivek): returning nil here is not breaking any of the tests.
 			intentsToProposalData(roachpb.AsIntents(args.IntentSpans, reply.Txn), &args),
-			roachpb.NewTransactionAbortedError()
+			roachpb.NewTransactionStatusError("transaction deadline exceeded")
 	}
 
 	// Set transaction status to COMMITTED or ABORTED as per the
