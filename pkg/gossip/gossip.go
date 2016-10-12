@@ -1146,10 +1146,10 @@ func (*Request) GetUser() string {
 
 // Metrics contains gossip metrics used per node and server.
 type Metrics struct {
-	BytesReceived metric.Rates
-	BytesSent     metric.Rates
-	InfosReceived metric.Rates
-	InfosSent     metric.Rates
+	BytesReceived *metric.Counter
+	BytesSent     *metric.Counter
+	InfosReceived *metric.Counter
+	InfosSent     *metric.Counter
 }
 
 func (m Metrics) String() string {
@@ -1160,9 +1160,9 @@ func (m Metrics) String() string {
 // makeMetrics makes a new metrics object with rates.
 func makeMetrics() Metrics {
 	return Metrics{
-		BytesReceived: metric.NewRates(MetaBytesReceivedRates),
-		BytesSent:     metric.NewRates(MetaBytesSentRates),
-		InfosReceived: metric.NewRates(MetaInfosReceivedRates),
-		InfosSent:     metric.NewRates(MetaInfosSentRates),
+		BytesReceived: metric.NewCounter(MetaBytesReceivedRates),
+		BytesSent:     metric.NewCounter(MetaBytesSentRates),
+		InfosReceived: metric.NewCounter(MetaInfosReceivedRates),
+		InfosSent:     metric.NewCounter(MetaInfosSentRates),
 	}
 }

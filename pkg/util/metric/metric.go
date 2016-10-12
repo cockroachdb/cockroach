@@ -19,6 +19,7 @@ package metric
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/VividCortex/ewma"
@@ -36,8 +37,10 @@ const (
 	// values will be recorded as this value instead.
 	MaxLatency = 10 * time.Second
 
-	// Data will leave windowed histograms after approximately this duration.
-	latencyRotationInterval = 20 * time.Second
+	// TestSampleInterval is passed to histograms during tests which don't
+	// want to concern themselves with supplying a "correct" interval.
+	TestSampleInterval = time.Duration(math.MaxInt64)
+
 	// The number of histograms to keep in rolling window.
 	histWrapNum = 2
 )
@@ -103,12 +106,10 @@ var _ Iterable = &Gauge{}
 var _ Iterable = &GaugeFloat64{}
 var _ Iterable = &Counter{}
 var _ Iterable = &Histogram{}
-var _ Iterable = &Rate{}
 
 var _ json.Marshaler = &Gauge{}
 var _ json.Marshaler = &GaugeFloat64{}
 var _ json.Marshaler = &Counter{}
-var _ json.Marshaler = &Rate{}
 var _ json.Marshaler = &Registry{}
 
 var _ PrometheusExportable = &Gauge{}
@@ -177,21 +178,25 @@ func NewHistogram(metadata Metadata, duration time.Duration, maxVal int64, sigFi
 	return h
 }
 
-// NewLatency is a convenience function which returns a histograms with
+// NewLatency is a convenience function which returns a histogram with
 // suitable defaults for latency tracking. Values are expressed in ns,
 // are truncated into the interval [0, MaxLatency] and are recorded
 // with one digit of precision (i.e. errors of <10ms at 100ms, <6s at 60s).
-func NewLatency(metadata Metadata) *Histogram {
+//
+// The windowed portion of the Histogram retains values for approximately
+// sampleDuration.
+func NewLatency(metadata Metadata, sampleDuration time.Duration) *Histogram {
 	return NewHistogram(
-		metadata, latencyRotationInterval, MaxLatency.Nanoseconds(), 1,
+		metadata, sampleDuration, MaxLatency.Nanoseconds(), 1,
 	)
 }
 
-// Windowed returns a copy of the current windowed histogram data.
-func (h *Histogram) Windowed() *hdrhistogram.Histogram {
+// Windowed returns a copy of the current windowed histogram data and its
+// rotation interval.
+func (h *Histogram) Windowed() (*hdrhistogram.Histogram, time.Duration) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return cloneHistogram(h.mu.sliding.Current())
+	return cloneHistogram(h.mu.sliding.Current()), h.mu.sliding.duration
 }
 
 // Snapshot returns a copy of the cumulative (i.e. all-time samples) histogram
@@ -375,7 +380,6 @@ func (g *GaugeFloat64) ToPrometheusMetric() *prometheusgo.Metric {
 
 // A Rate is a exponential weighted moving average.
 type Rate struct {
-	Metadata
 	mu       syncutil.Mutex // protects fields below
 	curSum   float64
 	wrapped  ewma.MovingAverage
@@ -385,7 +389,7 @@ type Rate struct {
 
 // NewRate creates an EWMA rate on the given timescale. Timescales at
 // or below 2s are illegal and will cause a panic.
-func NewRate(metadata Metadata, timescale time.Duration) *Rate {
+func NewRate(timescale time.Duration) *Rate {
 	const tickInterval = time.Second
 	if timescale <= 2*time.Second {
 		panic(fmt.Sprintf("EWMA with per-second ticks makes no sense on timescale %s", timescale))
@@ -393,7 +397,6 @@ func NewRate(metadata Metadata, timescale time.Duration) *Rate {
 	avgAge := float64(timescale) / float64(2*tickInterval)
 
 	return &Rate{
-		Metadata: metadata,
 		interval: tickInterval,
 		nextT:    now(),
 		wrapped:  ewma.NewMovingAverage(avgAge),
@@ -424,26 +427,4 @@ func (e *Rate) Add(v float64) {
 	maybeTick(e)
 	e.curSum += v
 	e.mu.Unlock()
-}
-
-// Inspect calls the given closure with the empty string and the Rate's current
-// value.
-//
-// TODO(mrtracy): Fix this to pass the Rate object itself to 'f', to
-// match the 'visitor' behavior as the other metric types (currently, it passes
-// the current value of the Rate as a float64.)
-func (e *Rate) Inspect(f func(interface{})) {
-	e.mu.Lock()
-	maybeTick(e)
-	v := e.wrapped.Value()
-	e.mu.Unlock()
-	f(v)
-}
-
-// MarshalJSON marshals to JSON.
-func (e *Rate) MarshalJSON() ([]byte, error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	maybeTick(e)
-	return json.Marshal(e.wrapped.Value())
 }

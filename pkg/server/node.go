@@ -19,6 +19,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"time"
 
@@ -85,15 +86,15 @@ var errCannotJoinSelf = errors.New("an uninitialized node cannot specify its own
 
 type nodeMetrics struct {
 	Latency *metric.Histogram
-	Success metric.Rates
-	Err     metric.Rates
+	Success *metric.Counter
+	Err     *metric.Counter
 }
 
-func makeNodeMetrics(reg *metric.Registry) nodeMetrics {
+func makeNodeMetrics(reg *metric.Registry, sampleInterval time.Duration) nodeMetrics {
 	nm := nodeMetrics{
-		Latency: metric.NewLatency(metaExecLatency),
-		Success: metric.NewRates(metaExecSuccess),
-		Err:     metric.NewRates(metaExecError),
+		Latency: metric.NewLatency(metaExecLatency, sampleInterval),
+		Success: metric.NewCounter(metaExecSuccess),
+		Err:     metric.NewCounter(metaExecError),
 	}
 	reg.AddMetricStruct(nm)
 	return nm
@@ -104,9 +105,9 @@ func makeNodeMetrics(reg *metric.Registry) nodeMetrics {
 // level; stats on specific lower-level kv operations are not recorded.
 func (nm nodeMetrics) callComplete(d time.Duration, pErr *roachpb.Error) {
 	if pErr != nil && pErr.TransactionRestart == roachpb.TransactionRestart_NONE {
-		nm.Err.Add(1)
+		nm.Err.Inc(1)
 	} else {
-		nm.Success.Add(1)
+		nm.Success.Inc(1)
 	}
 	nm.Latency.RecordValue(d.Nanoseconds())
 }
@@ -176,6 +177,7 @@ func bootstrapCluster(engines []engine.Engine, txnMetrics kv.TxnMetrics) (uuid.U
 
 	cfg := storage.StoreConfig{}
 	cfg.ScanInterval = 10 * time.Minute
+	cfg.MetricsSampleInterval = time.Duration(math.MaxInt64)
 	cfg.ConsistencyCheckInterval = 10 * time.Minute
 	cfg.Clock = hlc.NewClock(hlc.UnixNano)
 	tracer := tracing.NewTracer()
@@ -248,7 +250,7 @@ func NewNode(
 		storeCfg:    cfg,
 		stopper:     stopper,
 		recorder:    recorder,
-		metrics:     makeNodeMetrics(reg),
+		metrics:     makeNodeMetrics(reg, cfg.MetricsSampleInterval),
 		stores:      storage.NewStores(cfg.Ctx, cfg.Clock),
 		txnMetrics:  txnMetrics,
 		eventLogger: eventLogger,
