@@ -19,14 +19,14 @@
 
 ORG_ROOT       := .
 REPO_ROOT      := $(ORG_ROOT)/cockroach
-GITHUB_ROOT    := $(ORG_ROOT)/..
+GITHUB_ROOT    := $(REPO_ROOT)/vendor/github.com
 GOGOPROTO_ROOT := $(GITHUB_ROOT)/gogo/protobuf
 PROTOBUF_ROOT  := $(GOGOPROTO_ROOT)/protobuf
 
 NATIVE_ROOT := $(REPO_ROOT)/pkg/storage/engine/rocksdb
 
 # Ensure we have an unambiguous GOPATH
-GOPATH := $(realpath $(GITHUB_ROOT)/../..)
+GOPATH := $(realpath $(ORG_ROOT)/../../..)
 #                                   ^  ^~ GOPATH
 #                                   |~ GOPATH/src
 
