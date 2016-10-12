@@ -154,11 +154,6 @@ func (nl *NodeLiveness) ManualHeartbeat() error {
 	return nl.heartbeat(context.Background())
 }
 
-// StopHeartbeat ends the heartbeat loop. Used for unittesting.
-func (nl *NodeLiveness) StopHeartbeat() {
-	close(nl.stopHeartbeat)
-}
-
 // heartbeat is called to update a node's expiration timestamp. This
 // method does a conditional put on the node liveness record, and if
 // successful, stores the updated liveness record in the nodes map.
@@ -310,7 +305,7 @@ func (nl *NodeLiveness) updateLiveness(
 		if cErr, ok := err.(*roachpb.ConditionFailedError); ok && handleCondFailed != nil {
 			var actualLiveness Liveness
 			if err := cErr.ActualValue.GetProto(&actualLiveness); err != nil {
-				return errors.Errorf("couldn't update node liveness from CPut actual value: %s", err)
+				return errors.Wrapf(err, "couldn't update node liveness from CPut actual value")
 			}
 			handleCondFailed(actualLiveness)
 			return nil
@@ -325,7 +320,7 @@ func (nl *NodeLiveness) updateLiveness(
 func (nl *NodeLiveness) livenessGossipUpdate(key string, content roachpb.Value) {
 	var liveness Liveness
 	if err := content.GetProto(&liveness); err != nil {
-		log.Error(context.Background(), err)
+		log.Error(context.TODO(), err)
 		return
 	}
 

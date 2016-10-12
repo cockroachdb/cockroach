@@ -115,7 +115,8 @@ type Context struct {
 	RaftTickInterval time.Duration
 
 	// RaftElectionTimeoutTicks is the number of raft ticks before the
-	// previous election expires.
+	// previous election expires. This value is inherited by individual
+	// stores unless overridden.
 	RaftElectionTimeoutTicks int
 
 	// MetricsSamplePeriod determines the time between records of
