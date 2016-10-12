@@ -66,8 +66,8 @@ func TestCacheFlagValue(t *testing.T) {
 	}
 
 	const expectedCacheSize = 100 * 1000 * 1000
-	if expectedCacheSize != serverCtx.CacheSize {
-		t.Errorf("expected %d, but got %d", expectedCacheSize, serverCtx.CacheSize)
+	if expectedCacheSize != serverCfg.CacheSize {
+		t.Errorf("expected %d, but got %d", expectedCacheSize, serverCfg.CacheSize)
 	}
 }
 
@@ -87,8 +87,8 @@ func TestRaftTickIntervalFlagValue(t *testing.T) {
 		if err := f.Parse(td.args); err != nil {
 			t.Fatal(err)
 		}
-		if td.expected != serverCtx.RaftTickInterval {
-			t.Errorf("%d. RaftTickInterval expected %d, but got %d", i, td.expected, serverCtx.RaftTickInterval)
+		if td.expected != serverCfg.RaftTickInterval {
+			t.Errorf("%d. RaftTickInterval expected %d, but got %d", i, td.expected, serverCfg.RaftTickInterval)
 		}
 	}
 }
@@ -120,8 +120,8 @@ func TestHttpHostFlagValue(t *testing.T) {
 		}
 
 		extraFlagInit()
-		if td.expected != serverCtx.HTTPAddr {
-			t.Errorf("%d. serverCtx.HTTPAddr expected '%s', but got '%s'. td.args was '%#v'.", i, td.expected, serverCtx.HTTPAddr, td.args)
+		if td.expected != serverCfg.HTTPAddr {
+			t.Errorf("%d. serverCfg.HTTPAddr expected '%s', but got '%s'. td.args was '%#v'.", i, td.expected, serverCfg.HTTPAddr, td.args)
 		}
 	}
 }

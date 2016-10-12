@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/retry"
 )
 
-// Base context defaults.
+// Base config defaults.
 const (
 	defaultInsecure = false
 	defaultUser     = security.RootUser
@@ -70,9 +70,9 @@ type lazyHTTPClient struct {
 	err        error
 }
 
-// Context is embedded by server.Context. A base context is not meant to be
-// used directly, but embedding contexts should call ctx.InitDefaults().
-type Context struct {
+// Config is embedded by server.Config. A base config is not meant to be used
+// directly, but embedding configs should call cfg.InitDefaults().
+type Config struct {
 	// Insecure specifies whether to use SSL or not.
 	// This is really not recommended.
 	Insecure bool
@@ -113,30 +113,30 @@ type Context struct {
 	httpClient lazyHTTPClient
 }
 
-// InitDefaults sets up the default values for a context.
-func (ctx *Context) InitDefaults() {
-	ctx.Insecure = defaultInsecure
-	ctx.User = defaultUser
-	ctx.Addr = defaultAddr
-	ctx.AdvertiseAddr = ctx.Addr
-	ctx.HTTPAddr = defaultHTTPAddr
+// InitDefaults sets up the default values for a config.
+func (cfg *Config) InitDefaults() {
+	cfg.Insecure = defaultInsecure
+	cfg.User = defaultUser
+	cfg.Addr = defaultAddr
+	cfg.AdvertiseAddr = cfg.Addr
+	cfg.HTTPAddr = defaultHTTPAddr
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of Insecure.
-func (ctx *Context) HTTPRequestScheme() string {
-	if ctx.Insecure {
+func (cfg *Config) HTTPRequestScheme() string {
+	if cfg.Insecure {
 		return httpScheme
 	}
 	return httpsScheme
 }
 
 // AdminURL returns the URL for the admin UI.
-func (ctx *Context) AdminURL() string {
-	return fmt.Sprintf("%s://%s", ctx.HTTPRequestScheme(), ctx.HTTPAddr)
+func (cfg *Config) AdminURL() string {
+	return fmt.Sprintf("%s://%s", cfg.HTTPRequestScheme(), cfg.HTTPAddr)
 }
 
 // PGURL returns the URL for the postgres endpoint.
-func (ctx *Context) PGURL(user string) (*url.URL, error) {
+func (cfg *Config) PGURL(user string) (*url.URL, error) {
 	// Try to convert path to an absolute path. Failing to do so return path
 	// unchanged.
 	absPath := func(path string) string {
@@ -148,7 +148,7 @@ func (ctx *Context) PGURL(user string) (*url.URL, error) {
 	}
 
 	options := url.Values{}
-	if ctx.Insecure {
+	if cfg.Insecure {
 		options.Add("sslmode", "disable")
 	} else {
 		options.Add("sslmode", "verify-full")
@@ -157,9 +157,9 @@ func (ctx *Context) PGURL(user string) (*url.URL, error) {
 			value    string
 			flagName string
 		}{
-			{"sslcert", ctx.SSLCert, cliflags.Cert.Name},
-			{"sslkey", ctx.SSLCertKey, cliflags.Key.Name},
-			{"sslrootcert", ctx.SSLCA, cliflags.CACert.Name},
+			{"sslcert", cfg.SSLCert, cliflags.Cert.Name},
+			{"sslkey", cfg.SSLCertKey, cliflags.Key.Name},
+			{"sslrootcert", cfg.SSLCA, cliflags.CACert.Name},
 		}
 		for _, c := range requiredFlags {
 			if c.value == "" {
@@ -175,68 +175,68 @@ func (ctx *Context) PGURL(user string) (*url.URL, error) {
 	return &url.URL{
 		Scheme:   "postgresql",
 		User:     url.User(user),
-		Host:     ctx.AdvertiseAddr,
+		Host:     cfg.AdvertiseAddr,
 		RawQuery: options.Encode(),
 	}, nil
 }
 
-// GetClientTLSConfig returns the context client TLS config, initializing it if needed.
+// GetClientTLSConfig returns the client TLS config, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise load a config based
 // on the SSLCert file. If SSLCert is empty, use a very permissive config.
 // TODO(marc): empty SSLCert should fail when client certificates are required.
-func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
+func (cfg *Config) GetClientTLSConfig() (*tls.Config, error) {
 	// Early out.
-	if ctx.Insecure {
+	if cfg.Insecure {
 		return nil, nil
 	}
 
-	ctx.clientTLSConfig.once.Do(func() {
-		ctx.clientTLSConfig.tlsConfig, ctx.clientTLSConfig.err = security.LoadClientTLSConfig(
-			ctx.SSLCA, ctx.SSLCert, ctx.SSLCertKey)
-		if ctx.clientTLSConfig.err != nil {
-			ctx.clientTLSConfig.err = errors.Errorf("error setting up client TLS config: %s", ctx.clientTLSConfig.err)
+	cfg.clientTLSConfig.once.Do(func() {
+		cfg.clientTLSConfig.tlsConfig, cfg.clientTLSConfig.err = security.LoadClientTLSConfig(
+			cfg.SSLCA, cfg.SSLCert, cfg.SSLCertKey)
+		if cfg.clientTLSConfig.err != nil {
+			cfg.clientTLSConfig.err = errors.Errorf("error setting up client TLS config: %s", cfg.clientTLSConfig.err)
 		}
 	})
 
-	return ctx.clientTLSConfig.tlsConfig, ctx.clientTLSConfig.err
+	return cfg.clientTLSConfig.tlsConfig, cfg.clientTLSConfig.err
 }
 
-// GetServerTLSConfig returns the context server TLS config, initializing it if needed.
+// GetServerTLSConfig returns the server TLS config, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise load a config based
 // on the SSLCert file. Fails if Insecure=false and SSLCert="".
-func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
+func (cfg *Config) GetServerTLSConfig() (*tls.Config, error) {
 	// Early out.
-	if ctx.Insecure {
+	if cfg.Insecure {
 		return nil, nil
 	}
 
-	ctx.serverTLSConfig.once.Do(func() {
-		if ctx.SSLCert != "" {
-			ctx.serverTLSConfig.tlsConfig, ctx.serverTLSConfig.err = security.LoadServerTLSConfig(
-				ctx.SSLCA, ctx.SSLCert, ctx.SSLCertKey)
-			if ctx.serverTLSConfig.err != nil {
-				ctx.serverTLSConfig.err = errors.Errorf("error setting up server TLS config: %s", ctx.serverTLSConfig.err)
+	cfg.serverTLSConfig.once.Do(func() {
+		if cfg.SSLCert != "" {
+			cfg.serverTLSConfig.tlsConfig, cfg.serverTLSConfig.err = security.LoadServerTLSConfig(
+				cfg.SSLCA, cfg.SSLCert, cfg.SSLCertKey)
+			if cfg.serverTLSConfig.err != nil {
+				cfg.serverTLSConfig.err = errors.Errorf("error setting up server TLS config: %s", cfg.serverTLSConfig.err)
 			}
 		} else {
-			ctx.serverTLSConfig.err = errors.Errorf("--%s=false, but --%s is empty. Certificates must be specified.",
+			cfg.serverTLSConfig.err = errors.Errorf("--%s=false, but --%s is empty. Certificates must be specified.",
 				cliflags.Insecure.Name, cliflags.Cert.Name)
 		}
 	})
 
-	return ctx.serverTLSConfig.tlsConfig, ctx.serverTLSConfig.err
+	return cfg.serverTLSConfig.tlsConfig, cfg.serverTLSConfig.err
 }
 
-// GetHTTPClient returns the context http client, initializing it
-// if needed. It uses the context client TLS config.
-func (ctx *Context) GetHTTPClient() (http.Client, error) {
-	ctx.httpClient.once.Do(func() {
-		ctx.httpClient.httpClient.Timeout = NetworkTimeout
+// GetHTTPClient returns the http client, initializing it
+// if needed. It uses the client TLS config.
+func (cfg *Config) GetHTTPClient() (http.Client, error) {
+	cfg.httpClient.once.Do(func() {
+		cfg.httpClient.httpClient.Timeout = NetworkTimeout
 		var transport http.Transport
-		ctx.httpClient.httpClient.Transport = &transport
-		transport.TLSClientConfig, ctx.httpClient.err = ctx.GetClientTLSConfig()
+		cfg.httpClient.httpClient.Transport = &transport
+		transport.TLSClientConfig, cfg.httpClient.err = cfg.GetClientTLSConfig()
 	})
 
-	return ctx.httpClient.httpClient, ctx.httpClient.err
+	return cfg.httpClient.httpClient, cfg.httpClient.err
 }
 
 // DefaultRetryOptions should be used for retrying most

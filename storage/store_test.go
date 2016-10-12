@@ -145,7 +145,7 @@ func createTestStoreWithoutStart(
 	stopper := stop.NewStopper()
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(stopper)
-	rpcContext := rpc.NewContext(context.TODO(), &base.Context{Insecure: true}, nil, stopper)
+	rpcContext := rpc.NewContext(context.TODO(), &base.Config{Insecure: true}, nil, stopper)
 	server := rpc.NewServer(rpcContext) // never started
 	cfg.Gossip = gossip.New(context.TODO(), rpcContext, server, nil, stopper, metric.NewRegistry())
 	cfg.Gossip.SetNodeID(1)

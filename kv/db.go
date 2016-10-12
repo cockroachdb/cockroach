@@ -52,13 +52,13 @@ var allExternalMethods = [...]roachpb.Request{
 // A DBServer provides an HTTP server endpoint serving the key-value API.
 // It accepts either JSON or serialized protobuf content types.
 type DBServer struct {
-	context *base.Context
+	context *base.Config
 	sender  client.Sender
 	stopper *stop.Stopper
 }
 
 // NewDBServer allocates and returns a new DBServer.
-func NewDBServer(ctx *base.Context, sender client.Sender, stopper *stop.Stopper) *DBServer {
+func NewDBServer(ctx *base.Config, sender client.Sender, stopper *stop.Stopper) *DBServer {
 	return &DBServer{
 		context: ctx,
 		sender:  sender,

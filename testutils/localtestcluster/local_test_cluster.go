@@ -81,7 +81,7 @@ type InitSenderFn func(
 // node RPC server and all HTTP endpoints. Use the value of
 // TestServer.Addr after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
-func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Context, initSender InitSenderFn) {
+func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Config, initSender InitSenderFn) {
 	clusterCtx := context.TODO()
 
 	nodeID := roachpb.NodeID(1)

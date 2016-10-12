@@ -27,13 +27,13 @@ import (
 // NewNodeTestBaseContext creates a base context for testing. This uses
 // embedded certs and the default node user. The default node user has both
 // server and client certificates.
-func NewNodeTestBaseContext() *base.Context {
+func NewNodeTestBaseContext() *base.Config {
 	return NewTestBaseContext(security.NodeUser)
 }
 
 // NewTestBaseContext creates a secure base context for user.
-func NewTestBaseContext(user string) *base.Context {
-	return &base.Context{
+func NewTestBaseContext(user string) *base.Config {
+	return &base.Config{
 		Insecure:   false,
 		SSLCA:      filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
 		SSLCert:    filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user)),
