@@ -165,7 +165,7 @@ func TestServerQuery(t *testing.T) {
 		},
 	}
 
-	conn, err := tsrv.RPCContext().GRPCDial(tsrv.Ctx.Addr)
+	conn, err := tsrv.RPCContext().GRPCDial(tsrv.Cfg.Addr)
 	if err != nil {
 		t.Fatal(err)
 	}

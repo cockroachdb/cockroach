@@ -493,7 +493,7 @@ func (t *logicTest) processTestFile(path string) error {
 
 	t.lastProgress = timeutil.Now()
 
-	execKnobs := t.srv.(*server.TestServer).Ctx.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
+	execKnobs := t.srv.(*server.TestServer).Cfg.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
 
 	repeat := 1
 	s := newLineScanner(file)

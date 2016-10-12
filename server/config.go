@@ -61,8 +61,8 @@ const (
 	productionSettingsWebpage = "please see https://www.cockroachlabs.com/docs/recommended-production-settings.html for more details"
 )
 
-// Context holds parameters needed to setup a server.
-type Context struct {
+// Config holds parameters needed to setup a server.
+type Config struct {
 	// Embed the base context.
 	*base.Context
 
@@ -327,9 +327,9 @@ func SetOpenFileLimitForOneStore() (int, error) {
 	return setOpenFileLimit(1)
 }
 
-// MakeContext returns a Context with default values.
-func MakeContext() Context {
-	ctx := Context{
+// MakeConfig returns a Context with default values.
+func MakeConfig() Config {
+	cfg := Config{
 		Context:                  new(base.Context),
 		MaxOffset:                defaultMaxOffset,
 		CacheSize:                defaultCacheSize,
@@ -344,17 +344,17 @@ func MakeContext() Context {
 			Specs: []base.StoreSpec{{Path: defaultStorePath}},
 		},
 	}
-	ctx.Context.InitDefaults()
-	return ctx
+	cfg.Context.InitDefaults()
+	return cfg
 }
 
-// InitStores initializes ctx.Engines based on ctx.Stores.
-func (ctx *Context) InitStores(stopper *stop.Stopper) error {
-	cache := engine.NewRocksDBCache(ctx.CacheSize)
+// InitStores initializes cfg.Engines based on cfg.Stores.
+func (cfg *Config) InitStores(stopper *stop.Stopper) error {
+	cache := engine.NewRocksDBCache(cfg.CacheSize)
 	defer cache.Release()
 
 	var physicalStores int
-	for _, spec := range ctx.Stores.Specs {
+	for _, spec := range cfg.Stores.Specs {
 		if !spec.InMemory {
 			physicalStores++
 		}
@@ -364,7 +364,7 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 		return err
 	}
 
-	for _, spec := range ctx.Stores.Specs {
+	for _, spec := range cfg.Stores.Specs {
 		var sizeInBytes = spec.SizeInBytes
 		if spec.InMemory {
 			if spec.SizePercent > 0 {
@@ -378,7 +378,7 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 				return fmt.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
-			ctx.Engines = append(ctx.Engines, engine.NewInMem(spec.Attributes, sizeInBytes, stopper))
+			cfg.Engines = append(cfg.Engines, engine.NewInMem(spec.Attributes, sizeInBytes, stopper))
 		} else {
 			if spec.SizePercent > 0 {
 				fileSystemUsage := gosigar.FileSystemUsage{}
@@ -391,8 +391,8 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 				return fmt.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
 					spec.SizePercent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
-			ctx.Engines = append(
-				ctx.Engines,
+			cfg.Engines = append(
+				cfg.Engines,
 				engine.NewRocksDB(
 					spec.Attributes,
 					spec.Path,
@@ -405,29 +405,29 @@ func (ctx *Context) InitStores(stopper *stop.Stopper) error {
 		}
 	}
 
-	if len(ctx.Engines) == 1 {
+	if len(cfg.Engines) == 1 {
 		log.Infof(context.TODO(), "1 storage engine initialized")
 	} else {
-		log.Infof(context.TODO(), "%d storage engines initialized", len(ctx.Engines))
+		log.Infof(context.TODO(), "%d storage engines initialized", len(cfg.Engines))
 	}
 	return nil
 }
 
 // InitNode parses node attributes and initializes the gossip bootstrap
 // resolvers.
-func (ctx *Context) InitNode() error {
-	ctx.readEnvironmentVariables()
+func (cfg *Config) InitNode() error {
+	cfg.readEnvironmentVariables()
 
 	// Initialize attributes.
-	ctx.NodeAttributes = parseAttributes(ctx.Attrs)
+	cfg.NodeAttributes = parseAttributes(cfg.Attrs)
 
 	// Get the gossip bootstrap resolvers.
-	resolvers, err := ctx.parseGossipBootstrapResolvers()
+	resolvers, err := cfg.parseGossipBootstrapResolvers()
 	if err != nil {
 		return err
 	}
 	if len(resolvers) > 0 {
-		ctx.GossipBootstrapResolvers = resolvers
+		cfg.GossipBootstrapResolvers = resolvers
 	}
 
 	return nil
@@ -436,25 +436,25 @@ func (ctx *Context) InitNode() error {
 // readEnvironmentVariables populates all context values that are environment
 // variable based. Note that this only happens when initializing a node and not
 // when NewContext is called.
-func (ctx *Context) readEnvironmentVariables() {
+func (cfg *Config) readEnvironmentVariables() {
 	// cockroach-linearizable
-	ctx.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_LINEARIZABLE", ctx.Linearizable)
-	ctx.ConsistencyCheckPanicOnFailure = envutil.EnvOrDefaultBool("COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE", ctx.ConsistencyCheckPanicOnFailure)
-	ctx.MaxOffset = envutil.EnvOrDefaultDuration("COCKROACH_MAX_OFFSET", ctx.MaxOffset)
-	ctx.MetricsSampleInterval = envutil.EnvOrDefaultDuration("COCKROACH_METRICS_SAMPLE_INTERVAL", ctx.MetricsSampleInterval)
-	ctx.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", ctx.ScanInterval)
-	ctx.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", ctx.ScanMaxIdleTime)
-	ctx.TimeUntilStoreDead = envutil.EnvOrDefaultDuration("COCKROACH_TIME_UNTIL_STORE_DEAD", ctx.TimeUntilStoreDead)
-	ctx.ConsistencyCheckInterval = envutil.EnvOrDefaultDuration("COCKROACH_CONSISTENCY_CHECK_INTERVAL", ctx.ConsistencyCheckInterval)
+	cfg.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_LINEARIZABLE", cfg.Linearizable)
+	cfg.ConsistencyCheckPanicOnFailure = envutil.EnvOrDefaultBool("COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE", cfg.ConsistencyCheckPanicOnFailure)
+	cfg.MaxOffset = envutil.EnvOrDefaultDuration("COCKROACH_MAX_OFFSET", cfg.MaxOffset)
+	cfg.MetricsSampleInterval = envutil.EnvOrDefaultDuration("COCKROACH_METRICS_SAMPLE_INTERVAL", cfg.MetricsSampleInterval)
+	cfg.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", cfg.ScanInterval)
+	cfg.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", cfg.ScanMaxIdleTime)
+	cfg.TimeUntilStoreDead = envutil.EnvOrDefaultDuration("COCKROACH_TIME_UNTIL_STORE_DEAD", cfg.TimeUntilStoreDead)
+	cfg.ConsistencyCheckInterval = envutil.EnvOrDefaultDuration("COCKROACH_CONSISTENCY_CHECK_INTERVAL", cfg.ConsistencyCheckInterval)
 	// TODO(bram): remove ReservationsEnabled once we've completed testing the
 	// feature.
-	ctx.ReservationsEnabled = envutil.EnvOrDefaultBool("COCKROACH_RESERVATIONS_ENABLED", ctx.ReservationsEnabled)
+	cfg.ReservationsEnabled = envutil.EnvOrDefaultBool("COCKROACH_RESERVATIONS_ENABLED", cfg.ReservationsEnabled)
 }
 
 // parseGossipBootstrapResolvers parses list of gossip bootstrap resolvers.
-func (ctx *Context) parseGossipBootstrapResolvers() ([]resolver.Resolver, error) {
+func (cfg *Config) parseGossipBootstrapResolvers() ([]resolver.Resolver, error) {
 	var bootstrapResolvers []resolver.Resolver
-	for _, commaSeparatedAddresses := range ctx.JoinList {
+	for _, commaSeparatedAddresses := range cfg.JoinList {
 		addresses := strings.Split(commaSeparatedAddresses, ",")
 		for _, address := range addresses {
 			if len(address) == 0 {

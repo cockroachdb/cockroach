@@ -163,7 +163,7 @@ func (s *adminServer) firstNotFoundError(results []sql.Result) error {
 func (s *adminServer) NewSessionForRPC(ctx context.Context, args sql.SessionArgs) *sql.Session {
 	// TODO(radu): figure out a general way to merge the RPC context with the
 	// server's context.
-	ctx = tracing.WithTracer(ctx, tracing.TracerFromCtx(s.server.ctx.Ctx))
+	ctx = tracing.WithTracer(ctx, tracing.TracerFromCtx(s.server.cfg.Ctx))
 	return sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
 }
 

@@ -54,89 +54,89 @@ const (
 	initialSplitsTimeout = 10 * time.Second
 )
 
-// makeTestContext returns a context for testing. It overrides the
+// makeTestConfig returns a config for testing. It overrides the
 // Certs with the test certs directory.
 // We need to override the certs loader.
-func makeTestContext() Context {
-	ctx := MakeContext()
+func makeTestConfig() Config {
+	cfg := MakeConfig()
 
 	// MaxOffset is the maximum offset for clocks in the cluster.
 	// This is mostly irrelevant except when testing reads within
 	// uncertainty intervals.
-	ctx.MaxOffset = 50 * time.Millisecond
+	cfg.MaxOffset = 50 * time.Millisecond
 
 	// Test servers start in secure mode by default.
-	ctx.Insecure = false
+	cfg.Insecure = false
 
 	// Load test certs. In addition, the tests requiring certs
 	// need to call security.SetReadFileFn(securitytest.Asset)
 	// in their init to mock out the file system calls for calls to AssetFS,
 	// which has the test certs compiled in. Typically this is done
 	// once per package, in main_test.go.
-	ctx.SSLCA = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
-	ctx.SSLCert = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert)
-	ctx.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey)
+	cfg.SSLCA = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
+	cfg.SSLCert = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert)
+	cfg.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey)
 
 	// Addr defaults to localhost with port set at time of call to
 	// Start() to an available port. May be overridden later (as in
-	// makeTestContextFromParams). Call TestServer.ServingAddr() for the
+	// makeTestConfigFromParams). Call TestServer.ServingAddr() for the
 	// full address (including bound port).
-	ctx.Addr = util.TestAddr.String()
-	ctx.AdvertiseAddr = util.TestAddr.String()
-	ctx.HTTPAddr = util.TestAddr.String()
+	cfg.Addr = util.TestAddr.String()
+	cfg.AdvertiseAddr = util.TestAddr.String()
+	cfg.HTTPAddr = util.TestAddr.String()
 	// Set standard user for intra-cluster traffic.
-	ctx.User = security.NodeUser
+	cfg.User = security.NodeUser
 
-	return ctx
+	return cfg
 }
 
-// makeTestContextFromParams creates a Context from a TestServerParams.
-func makeTestContextFromParams(params base.TestServerArgs) Context {
-	ctx := makeTestContext()
-	ctx.TestingKnobs = params.Knobs
+// makeTestConfigtFromParams creates a Config from a TestServerParams.
+func makeTestConfigFromParams(params base.TestServerArgs) Config {
+	cfg := makeTestConfig()
+	cfg.TestingKnobs = params.Knobs
 	if params.JoinAddr != "" {
-		ctx.JoinList = []string{params.JoinAddr}
+		cfg.JoinList = []string{params.JoinAddr}
 	}
-	ctx.Insecure = params.Insecure
-	ctx.SocketFile = params.SocketFile
+	cfg.Insecure = params.Insecure
+	cfg.SocketFile = params.SocketFile
 	if params.MetricsSampleInterval != time.Duration(0) {
-		ctx.MetricsSampleInterval = params.MetricsSampleInterval
+		cfg.MetricsSampleInterval = params.MetricsSampleInterval
 	}
 	if params.MaxOffset != time.Duration(0) {
-		ctx.MaxOffset = params.MaxOffset
+		cfg.MaxOffset = params.MaxOffset
 	}
 	if params.ScanInterval != time.Duration(0) {
-		ctx.ScanInterval = params.ScanInterval
+		cfg.ScanInterval = params.ScanInterval
 	}
 	if params.ScanMaxIdleTime != time.Duration(0) {
-		ctx.ScanMaxIdleTime = params.ScanMaxIdleTime
+		cfg.ScanMaxIdleTime = params.ScanMaxIdleTime
 	}
 	if params.SSLCA != "" {
-		ctx.SSLCA = params.SSLCA
+		cfg.SSLCA = params.SSLCA
 	}
 	if params.SSLCert != "" {
-		ctx.SSLCert = params.SSLCert
+		cfg.SSLCert = params.SSLCert
 	}
 	if params.SSLCertKey != "" {
-		ctx.SSLCertKey = params.SSLCertKey
+		cfg.SSLCertKey = params.SSLCertKey
 	}
 	if params.DisableEventLog {
-		ctx.EventLogEnabled = false
+		cfg.EventLogEnabled = false
 	}
-	ctx.JoinList = []string{params.JoinAddr}
-	if ctx.Insecure {
+	cfg.JoinList = []string{params.JoinAddr}
+	if cfg.Insecure {
 		// Whenever we can (i.e. in insecure mode), use IsolatedTestAddr
 		// to prevent issues that can occur when running a test under
 		// stress.
-		ctx.Addr = util.IsolatedTestAddr.String()
-		ctx.AdvertiseAddr = util.IsolatedTestAddr.String()
-		ctx.HTTPAddr = util.IsolatedTestAddr.String()
+		cfg.Addr = util.IsolatedTestAddr.String()
+		cfg.AdvertiseAddr = util.IsolatedTestAddr.String()
+		cfg.HTTPAddr = util.IsolatedTestAddr.String()
 	} else {
-		ctx.Addr = util.TestAddr.String()
-		ctx.AdvertiseAddr = util.TestAddr.String()
-		ctx.HTTPAddr = util.TestAddr.String()
+		cfg.Addr = util.TestAddr.String()
+		cfg.AdvertiseAddr = util.TestAddr.String()
+		cfg.HTTPAddr = util.TestAddr.String()
 	}
-	return ctx
+	return cfg
 }
 
 // A TestServer encapsulates an in-memory instantiation of a cockroach node with
@@ -153,8 +153,7 @@ func makeTestContextFromParams(params base.TestServerArgs) Context {
 //   ts := s.(*server.TestServer)
 //
 type TestServer struct {
-	// Ctx is the context used by this server.
-	Ctx *Context
+	Cfg *Config
 	// server is the embedded Cockroach server struct.
 	*Server
 }
@@ -211,8 +210,8 @@ func (ts *TestServer) DB() *client.DB {
 // Use TestServer.Stopper().Stop() to shutdown the server after the test
 // completes.
 func (ts *TestServer) Start(params base.TestServerArgs) error {
-	if ts.Ctx == nil {
-		panic("Ctx not set")
+	if ts.Cfg == nil {
+		panic("Cfg not set")
 	}
 
 	if params.Stopper == nil {
@@ -229,7 +228,7 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	}
 
 	// Needs to be called before NewServer to ensure resolvers are initialized.
-	if err := ts.Ctx.InitNode(); err != nil {
+	if err := ts.Cfg.InitNode(); err != nil {
 		return err
 	}
 
@@ -243,7 +242,7 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 			if storeSpec.SizePercent > 0 {
 				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %s", storeSpec))
 			}
-			ts.Ctx.Engines = append(ts.Ctx.Engines, engine.NewInMem(
+			ts.Cfg.Engines = append(ts.Cfg.Engines, engine.NewInMem(
 				roachpb.Attributes{},
 				storeSpec.SizeInBytes,
 				params.Stopper,
@@ -255,12 +254,12 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	}
 
 	var err error
-	ts.Server, err = NewServer(*ts.Ctx, params.Stopper)
+	ts.Server, err = NewServer(*ts.Cfg, params.Stopper)
 	if err != nil {
 		return err
 	}
 	// Our context must be shared with our server.
-	ts.Ctx = &ts.Server.ctx
+	ts.Cfg = &ts.Server.cfg
 
 	if err := ts.Server.Start(context.Background()); err != nil {
 		return err
@@ -269,7 +268,7 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	// If enabled, wait for initial splits to complete before returning control.
 	// If initial splits do not complete, the server is stopped before
 	// returning.
-	if stk, ok := ts.ctx.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok &&
+	if stk, ok := ts.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok &&
 		stk.DisableSplitQueue {
 		return nil
 	}
@@ -322,7 +321,7 @@ func (ts *TestServer) Stores() *storage.Stores {
 
 // ServingAddr returns the server's address. Should be used by clients.
 func (ts *TestServer) ServingAddr() string {
-	return ts.ctx.AdvertiseAddr
+	return ts.cfg.AdvertiseAddr
 }
 
 // ServingHost returns the host portion of the rpc server's address.
@@ -344,12 +343,12 @@ func (ts *TestServer) WriteSummaries() error {
 
 // AdminURL implements TestServerInterface.
 func (ts *TestServer) AdminURL() string {
-	return ts.Ctx.AdminURL()
+	return ts.Cfg.AdminURL()
 }
 
 // GetHTTPClient implements TestServerInterface.
 func (ts *TestServer) GetHTTPClient() (http.Client, error) {
-	return ts.Ctx.GetHTTPClient()
+	return ts.Cfg.GetHTTPClient()
 }
 
 // MustGetSQLCounter implements TestServerInterface.
@@ -432,6 +431,6 @@ var TestServerFactory = testServerFactoryImpl{}
 
 // New is part of TestServerFactory interface.
 func (testServerFactoryImpl) New(params base.TestServerArgs) interface{} {
-	ctx := makeTestContextFromParams(params)
-	return &TestServer{Ctx: &ctx}
+	cfg := makeTestConfigFromParams(params)
+	return &TestServer{Cfg: &cfg}
 }

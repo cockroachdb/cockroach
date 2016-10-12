@@ -107,8 +107,8 @@ func TestSecureHTTPRedirect(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	origURL := "http://" + ts.Ctx.HTTPAddr
-	expURL := url.URL{Scheme: "https", Host: ts.Ctx.HTTPAddr, Path: "/"}
+	origURL := "http://" + ts.Cfg.HTTPAddr
+	expURL := url.URL{Scheme: "https", Host: ts.Cfg.HTTPAddr, Path: "/"}
 
 	if resp, err := httpClient.Get(origURL); err != nil {
 		t.Fatal(err)
@@ -209,7 +209,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		RPCRetryOptions: &retryOpts,
 	}, ts.Gossip())
 	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
-	tds := kv.NewTxnCoordSender(ctx, ds, s.Clock(), ts.Ctx.Linearizable,
+	tds := kv.NewTxnCoordSender(ctx, ds, s.Clock(), ts.Cfg.Linearizable,
 		ts.stopper, kv.MakeTxnMetrics())
 
 	if err := ts.node.storeCfg.DB.AdminSplit(context.TODO(), "m"); err != nil {
@@ -306,7 +306,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 			RPCRetryOptions: &retryOpts,
 		}, ts.Gossip())
 		ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
-		tds := kv.NewTxnCoordSender(ctx, ds, ts.Clock(), ts.Ctx.Linearizable,
+		tds := kv.NewTxnCoordSender(ctx, ds, ts.Clock(), ts.Cfg.Linearizable,
 			ts.stopper, kv.MakeTxnMetrics())
 
 		for _, sk := range tc.splitKeys {

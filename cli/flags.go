@@ -47,7 +47,7 @@ var zoneDisableReplication bool
 var startBackground bool
 var undoFreezeCluster bool
 
-var serverCtx = server.MakeContext()
+var serverCtx = server.MakeConfig()
 var baseCtx = serverCtx.Context
 var cliCtx = cliContext{Context: baseCtx}
 var sqlCtx = sqlContext{cliContext: &cliCtx}
