@@ -802,10 +802,9 @@ func (tc *TxnCoordSender) updateState(
 	switch t := pErr.GetDetail().(type) {
 	case *roachpb.TransactionStatusError:
 		// Likely already committed or more obscure errors such as epoch or
-		// timestamp regressions; consider txn dead.
-		if txn := pErr.GetTxn(); txn != nil {
-			defer tc.cleanupTxnLocked(ctx, *txn)
-		}
+		// timestamp regressions; consider txn dead. Do not cleaup txn because
+		// a higher layer will call Rollback() on the txn, and the Rollback()
+		// needs to cleanup dangling intents.
 	case *roachpb.OpRequiresTxnError:
 		panic("OpRequiresTxnError must not happen at this level")
 	case *roachpb.ReadWithinUncertaintyIntervalError:

@@ -589,7 +589,6 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 // to use a table descriptor with an expired lease.
 func TestTxnObeysLeaseExpiration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(vivek): #7031")
 	// Set the lease duration such that it expires quickly.
 	savedLeaseDuration, savedMinLeaseDuration := csql.LeaseDuration, csql.MinLeaseDuration
 	defer func() {
@@ -599,6 +598,9 @@ func TestTxnObeysLeaseExpiration(t *testing.T) {
 	csql.LeaseDuration = 2 * csql.MinLeaseDuration
 
 	params, _ := createTestServerParams()
+	// Increase the MaxOffset so that the clock can be updated to expire the
+	// table leases without triggering any offset exceeded errors.
+	params.MaxOffset = 10 * csql.LeaseDuration
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop()
 
@@ -612,10 +614,6 @@ INSERT INTO t.kv VALUES ('a', 'b');
 
 	clock := s.Clock()
 
-	// Increase the MaxOffset so that the clock can be updated to expire the
-	// table leases.
-	clock.SetMaxOffset(10 * csql.LeaseDuration)
-
 	// Run a number of sql operations and expire the lease they acquire.
 	runCommandAndExpireLease(t, clock, sqlDB, `INSERT INTO t.kv VALUES ('c', 'd')`)
 	runCommandAndExpireLease(t, clock, sqlDB, `UPDATE t.kv SET v = 'd' WHERE k = 'a'`)
@@ -624,6 +622,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 }
 
 func runCommandAndExpireLease(t *testing.T, clock *hlc.Clock, sqlDB *gosql.DB, sql string) {
+	t.Logf("now: %s, execute sql: %s", clock.Now(), sql)
 	// Run a transaction that lets its table lease expire.
 	txn, err := sqlDB.Begin()
 	if err != nil {
@@ -647,7 +646,7 @@ func runCommandAndExpireLease(t *testing.T, clock *hlc.Clock, sqlDB *gosql.DB, s
 	}
 
 	// Commit and see the aborted txn.
-	if err := txn.Commit(); !testutils.IsError(err, "pq: restart transaction: txn aborted") {
+	if err := txn.Commit(); !testutils.IsError(err, "pq: transaction deadline exceeded") {
 		t.Fatalf("%s, err = %v", sql, err)
 	}
 }
