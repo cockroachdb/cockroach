@@ -32,7 +32,7 @@ package acceptance
 //
 // build/builder.sh make build && make test \
 //	 TESTTIMEOUT=48h \
-//	 PKG=./acceptance \
+//	 PKG=./pkg/acceptance \
 //	 TESTS=Rebalance_3To5Small \
 //	 TESTFLAGS='-v -remote -key-name google_compute_engine -cwd terraform -tf.keep-cluster=failed -tf.cockroach-binary=../../cockroach'
 //

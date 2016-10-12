@@ -24,7 +24,7 @@ GOFLAGS :=
 STATIC :=
 
 # Variables to be overridden on the command line, e.g.
-#   make test PKG=./storage TESTFLAGS=--vmodule=raft=1
+#   make test PKG=./pkg/storage TESTFLAGS=--vmodule=raft=1
 PKG          := ./pkg/...
 TAGS         :=
 TESTS        := .
@@ -85,7 +85,7 @@ install:
 # PKG is expanded and all packages are built and moved to their directory.
 # If STATIC=1, tests are statically linked.
 # eg: to statically build the sql tests, run:
-#   make STATIC=1 testbuild PKG=./sql
+#   make STATIC=1 testbuild PKG=./pkg/sql
 .PHONY: testbuild
 testbuild:
 	$(GO) list -tags '$(TAGS)' -f \

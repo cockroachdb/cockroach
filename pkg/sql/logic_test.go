@@ -113,7 +113,7 @@ import (
 // The parameters are typically set using the TESTFLAGS `make`
 // parameter, as in:
 //
-//   make test PKG=./sql TESTS=TestLogic TESTFLAGS='....'
+//   make test PKG=./pkg/sql TESTS=TestLogic TESTFLAGS='....'
 //
 // Input file selection:
 //

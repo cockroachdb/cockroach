@@ -69,10 +69,10 @@ To add or update a go dependency:
 
   ```bash
   make test
-  # Run all tests in ./storage
-  make test PKG=./storage
+  # Run all tests in ./pkg/storage
+  make test PKG=./pkg/storage
   # Run all kv tests matching `^TestFoo` with a timeout of 10s
-  make test PKG=./kv TESTS='^TestFoo' TESTTIMEOUT=10s
+  make test PKG=./pkg/kv TESTS='^TestFoo' TESTTIMEOUT=10s
   ```
 
   When you're ready to commit, be sure to write a Good Commit Message™. Consult
