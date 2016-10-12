@@ -1,6 +1,6 @@
 cmd github.com/client9/misspell/cmd/misspell
 cmd github.com/cockroachdb/c-protobuf/cmd/protoc
-cmd github.com/cockroachdb/cockroach/cmd/protoc-gen-gogoroach
+cmd github.com/cockroachdb/cockroach/pkg/cmd/protoc-gen-gogoroach
 cmd github.com/cockroachdb/crlfmt
 cmd github.com/cockroachdb/stress
 cmd github.com/golang/lint/golint

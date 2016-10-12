@@ -1,1 +1,0 @@
-./cockroach/storage/engine/enginepb/mvcc.pb.cc

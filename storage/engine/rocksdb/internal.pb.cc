@@ -1,1 +1,0 @@
-./cockroach/roachpb/internal.pb.cc

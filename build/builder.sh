@@ -8,7 +8,7 @@ image="cockroachdb/builder"
 # variable named builderTag, splitting the line on double quotes (")
 # and taking the second component.
 version=$(awk -F\" '/builderTag *=/ {print $2}' \
-            "$(dirname "${0}")"/../acceptance/cluster/localcluster.go)
+            "$(dirname "${0}")"/../pkg/acceptance/cluster/localcluster.go)
 if [ -z "${version}" ]; then
   echo "unable to determine builder tag"
   exit 1
