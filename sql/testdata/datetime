@@ -127,7 +127,7 @@ SELECT now() - timestamp '2015-06-13' > interval '100h'
 true
 
 query B
-SELECT now() - current_date()::timestamp < interval '24h10s'
+SELECT now() - current_date()::timestamptz < interval '24h10s'
 ----
 true
 
