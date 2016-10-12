@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -425,7 +426,9 @@ func TestStyle(t *testing.T) {
 
 	t.Run("TestCrlfmt", func(t *testing.T) {
 		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(pkg.Dir, "crlfmt", "-ignore", `\.pb(\.gw)?\.go`, "-tab", "2", ".")
+		invocation := []string{"crlfmt", "-ignore", `\.pb(\.gw)?\.go`, "-tab", "2"}
+		args := append(invocation[1:], ".")
+		cmd, stderr, filter, err := dirCmd(pkg.Dir, invocation[0], args...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -444,6 +447,16 @@ func TestStyle(t *testing.T) {
 			if out := stderr.String(); len(out) > 0 {
 				t.Fatalf("err=%s, stderr=%s", err, out)
 			}
+		}
+
+		if t.Failed() {
+			invocation = append(invocation, "-w", ".")
+			for i := 1; i < len(invocation); i++ {
+				invocation[i] = strconv.Quote(invocation[i])
+			}
+			t.Logf("run the following to fix your formatting:\n%s",
+				strings.Join(invocation, " "),
+			)
 		}
 	})
 
