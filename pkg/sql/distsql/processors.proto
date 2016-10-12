@@ -13,6 +13,7 @@
 // permissions and limitations under the License.
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
+// Author: Irfan Sharif (irfansharif@cockroachlabs.com)
 //
 // Processor definitions for distributed SQL APIs. See
 // docs/RFCS/distributed_sql.md.
@@ -110,6 +111,23 @@ message SorterSpec {
   optional int64 limit = 3 [(gogoproto.nullable) = false];
 }
 
+// EvaluatorSpec is the specification for an "evaluator", a fully
+// programmable no-grouping aggregator. It runs a 'program' on each individual
+// row and is restricted to operating on one row of data at a time.
+// The 'program' is a set of expressions evaluated in order, the output
+// schema therefore consists of the results of evaluating each of these
+// expressions on the input row.
+//
+// TODO(irfansharif): Add support for an optional output filter expression.
+// The filter expression would reference the columns in the row via $0, $1,
+// etc., possibly optimizing if filtering on expressions common to the
+// 'program'.
+message EvaluatorSpec {
+  repeated sqlbase.ColumnType.Kind types = 1;
+
+  repeated Expression exprs = 2 [(gogoproto.nullable) = false];
+}
+
 message ProcessorCoreUnion {
   option (gogoproto.onlyone) = true;
 
@@ -117,8 +135,9 @@ message ProcessorCoreUnion {
   optional TableReaderSpec tableReader = 2;
   optional JoinReaderSpec joinReader = 3;
   optional SorterSpec sorter = 4;
+  optional EvaluatorSpec evaluator = 5;
   // TODO(radu): other "processor core" types will go here.
-  // TODO(irfansharif): add aggregation, join, etc. from #7587
+  // TODO(irfansharif): add aggregation, join, set operations, etc. from #7587
 }
 
 message ProcessorSpec {

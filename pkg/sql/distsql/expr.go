@@ -13,6 +13,7 @@
 // permissions and limitations under the License.
 //
 // Author: Radu Berinde (radu@cockroachlabs.com)
+// Author: Irfan Sharif (irfansharif@cockroachlabs.com)
 
 package distsql
 
@@ -27,8 +28,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-// valArgsConvert is a parser.Visitor that converts Placeholders ($0, $1, etc.) to
-// IndexedVars.
+// valArgsConvert is a parser.Visitor that converts Placeholders ($0, $1, etc.)
+// to IndexedVars.
 type valArgsConvert struct {
 	h   *parser.IndexedVarHelper
 	err error
@@ -82,8 +83,8 @@ type exprHelper struct {
 	noCopy util.NoCopy
 
 	expr parser.TypedExpr
-	// vars is used to generate IndexedVars that are "backed" by
-	// the values in `row`.
+	// vars is used to generate IndexedVars that are "backed" by the values in
+	// `row`.
 	vars parser.IndexedVarHelper
 
 	evalCtx *parser.EvalContext
@@ -141,4 +142,32 @@ func (eh *exprHelper) init(
 func (eh *exprHelper) evalFilter(row sqlbase.EncDatumRow) (bool, error) {
 	eh.row = row
 	return sqlbase.RunFilter(eh.expr, eh.evalCtx)
+}
+
+// Given a row, eval evaluates the wrapped expression and returns the
+// resulting datum needed for rendering for eg. given a row (1, 2, 3, 4, 5):
+//  '$1' would return '2'
+//  '$1 + $4' would return '7'
+//  '$0' would return '1'
+//  '$1 + 10' would return '12'
+func (eh *exprHelper) eval(row sqlbase.EncDatumRow) (parser.Datum, error) {
+	eh.row = row
+
+	//  TODO(irfansharif): eval here is very permissive, if expr is of type
+	//  *parser.FuncExpr for example expr.Eval doesn't make sense therefore is
+	//  explicitly tested for. There may very well be other expression types
+	//  where the same holds true but are not yet checked for.  The set of
+	//  verified parser expressions are:
+	//  ComparisonExpr, FuncExpr, AndExpr, BinaryExpr, NotExpr, OrExpr,
+	//  ParenExpr, UnaryExpr.
+	//
+	//  The list of unverified parser expressions are:
+	//  IsOfTypeExpr, AnnotateTypeExpr, CaseExpr, CastExpr, CoalesceExpr,
+	//  ExistsExpr, IfExpr, NullIfExpr.
+	switch eh.expr.(type) {
+	case *parser.FuncExpr:
+		return nil, errors.Errorf("aggregate functions not allowed")
+	default:
+		return eh.expr.Eval(eh.evalCtx)
+	}
 }
