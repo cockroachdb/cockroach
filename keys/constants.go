@@ -194,7 +194,7 @@ var (
 	// keyspace in order to limit the number of ranges which must use
 	// expiration-based range leases instead of the more efficient
 	// node-liveness epoch-based range leases (see
-	// https://github.com/cockroachdb/cockroach/blob/develop/docs/RFCS/range_leases.md)
+	// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/range_leases.md)
 	NodeLivenessPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("\x00liveness-")))
 
 	// NodeLivenessKeyMax is the maximum value for any node liveness key.
