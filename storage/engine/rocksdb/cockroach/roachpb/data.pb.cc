@@ -2900,6 +2900,7 @@ static ::std::string* MutableUnknownFieldsForModifiedSpanTrigger(
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ModifiedSpanTrigger::kSystemConfigSpanFieldNumber;
+const int ModifiedSpanTrigger::kNodeLivenessSpanFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ModifiedSpanTrigger::ModifiedSpanTrigger()
@@ -2909,6 +2910,12 @@ ModifiedSpanTrigger::ModifiedSpanTrigger()
 }
 
 void ModifiedSpanTrigger::InitAsDefaultInstance() {
+#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
+  node_liveness_span_ = const_cast< ::cockroach::roachpb::Span*>(
+      ::cockroach::roachpb::Span::internal_default_instance());
+#else
+  node_liveness_span_ = const_cast< ::cockroach::roachpb::Span*>(&::cockroach::roachpb::Span::default_instance());
+#endif
 }
 
 ModifiedSpanTrigger::ModifiedSpanTrigger(const ModifiedSpanTrigger& from)
@@ -2925,6 +2932,7 @@ void ModifiedSpanTrigger::SharedCtor() {
   _unknown_fields_.UnsafeSetDefault(
       &::google::protobuf::internal::GetEmptyStringAlreadyInited());
   system_config_span_ = false;
+  node_liveness_span_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -2941,6 +2949,7 @@ void ModifiedSpanTrigger::SharedDtor() {
   #else
   if (this != default_instance_) {
   #endif
+    delete node_liveness_span_;
   }
 }
 
@@ -2970,7 +2979,12 @@ ModifiedSpanTrigger* ModifiedSpanTrigger::New(::google::protobuf::Arena* arena) 
 
 void ModifiedSpanTrigger::Clear() {
 // @@protoc_insertion_point(message_clear_start:cockroach.roachpb.ModifiedSpanTrigger)
-  system_config_span_ = false;
+  if (_has_bits_[0 / 32] & 3u) {
+    system_config_span_ = false;
+    if (has_node_liveness_span()) {
+      if (node_liveness_span_ != NULL) node_liveness_span_->::cockroach::roachpb::Span::Clear();
+    }
+  }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   _unknown_fields_.ClearToEmptyNoArena(
       &::google::protobuf::internal::GetEmptyStringAlreadyInited());
@@ -2998,6 +3012,19 @@ bool ModifiedSpanTrigger::MergePartialFromCodedStream(
                    bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
                  input, &system_config_span_)));
           set_has_system_config_span();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(18)) goto parse_node_liveness_span;
+        break;
+      }
+
+      // optional .cockroach.roachpb.Span node_liveness_span = 2;
+      case 2: {
+        if (tag == 18) {
+         parse_node_liveness_span:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_node_liveness_span()));
         } else {
           goto handle_unusual;
         }
@@ -3035,6 +3062,12 @@ void ModifiedSpanTrigger::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(1, this->system_config_span(), output);
   }
 
+  // optional .cockroach.roachpb.Span node_liveness_span = 2;
+  if (has_node_liveness_span()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      2, *this->node_liveness_span_, output);
+  }
+
   output->WriteRaw(unknown_fields().data(),
                    static_cast<int>(unknown_fields().size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ModifiedSpanTrigger)
@@ -3044,11 +3077,20 @@ int ModifiedSpanTrigger::ByteSize() const {
 // @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.ModifiedSpanTrigger)
   int total_size = 0;
 
-  // optional bool system_config_span = 1;
-  if (has_system_config_span()) {
-    total_size += 1 + 1;
-  }
+  if (_has_bits_[0 / 32] & 3u) {
+    // optional bool system_config_span = 1;
+    if (has_system_config_span()) {
+      total_size += 1 + 1;
+    }
 
+    // optional .cockroach.roachpb.Span node_liveness_span = 2;
+    if (has_node_liveness_span()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->node_liveness_span_);
+    }
+
+  }
   total_size += unknown_fields().size();
 
   GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
@@ -3070,6 +3112,9 @@ void ModifiedSpanTrigger::MergeFrom(const ModifiedSpanTrigger& from) {
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_system_config_span()) {
       set_system_config_span(from.system_config_span());
+    }
+    if (from.has_node_liveness_span()) {
+      mutable_node_liveness_span()->::cockroach::roachpb::Span::MergeFrom(from.node_liveness_span());
     }
   }
   if (!from.unknown_fields().empty()) {
@@ -3095,6 +3140,7 @@ void ModifiedSpanTrigger::Swap(ModifiedSpanTrigger* other) {
 }
 void ModifiedSpanTrigger::InternalSwap(ModifiedSpanTrigger* other) {
   std::swap(system_config_span_, other->system_config_span_);
+  std::swap(node_liveness_span_, other->node_liveness_span_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _unknown_fields_.Swap(&other->_unknown_fields_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -3129,6 +3175,54 @@ void ModifiedSpanTrigger::clear_system_config_span() {
   set_has_system_config_span();
   system_config_span_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ModifiedSpanTrigger.system_config_span)
+}
+
+// optional .cockroach.roachpb.Span node_liveness_span = 2;
+bool ModifiedSpanTrigger::has_node_liveness_span() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+void ModifiedSpanTrigger::set_has_node_liveness_span() {
+  _has_bits_[0] |= 0x00000002u;
+}
+void ModifiedSpanTrigger::clear_has_node_liveness_span() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+void ModifiedSpanTrigger::clear_node_liveness_span() {
+  if (node_liveness_span_ != NULL) node_liveness_span_->::cockroach::roachpb::Span::Clear();
+  clear_has_node_liveness_span();
+}
+const ::cockroach::roachpb::Span& ModifiedSpanTrigger::node_liveness_span() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ModifiedSpanTrigger.node_liveness_span)
+#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
+  return node_liveness_span_ != NULL ? *node_liveness_span_ : *default_instance().node_liveness_span_;
+#else
+  return node_liveness_span_ != NULL ? *node_liveness_span_ : *default_instance_->node_liveness_span_;
+#endif
+}
+::cockroach::roachpb::Span* ModifiedSpanTrigger::mutable_node_liveness_span() {
+  set_has_node_liveness_span();
+  if (node_liveness_span_ == NULL) {
+    node_liveness_span_ = new ::cockroach::roachpb::Span;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ModifiedSpanTrigger.node_liveness_span)
+  return node_liveness_span_;
+}
+::cockroach::roachpb::Span* ModifiedSpanTrigger::release_node_liveness_span() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ModifiedSpanTrigger.node_liveness_span)
+  clear_has_node_liveness_span();
+  ::cockroach::roachpb::Span* temp = node_liveness_span_;
+  node_liveness_span_ = NULL;
+  return temp;
+}
+void ModifiedSpanTrigger::set_allocated_node_liveness_span(::cockroach::roachpb::Span* node_liveness_span) {
+  delete node_liveness_span_;
+  node_liveness_span_ = node_liveness_span;
+  if (node_liveness_span) {
+    set_has_node_liveness_span();
+  } else {
+    clear_has_node_liveness_span();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ModifiedSpanTrigger.node_liveness_span)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

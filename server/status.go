@@ -403,7 +403,7 @@ func (s *statusServer) Node(
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
 	}
 
-	key := keys.NodeStatusKey(int32(nodeID))
+	key := keys.NodeStatusKey(nodeID)
 	b := &client.Batch{}
 	b.Get(key)
 	if err := s.db.Run(s.ctx, b); err != nil {

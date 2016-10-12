@@ -152,6 +152,13 @@ message ChangeReplicasTrigger {
 // This can be used to trigger scan-and-gossip for the given span.
 message ModifiedSpanTrigger {
   optional bool system_config_span = 1 [(gogoproto.nullable) = false];
+  // node_liveness_span is set to indicate that node liveness records
+  // need re-gossiping after modification or range lease updates. The
+  // span is set to a single key when nodes update their liveness records
+  // with heartbeats to extend the expiration timestamp. Changes to the
+  // range lease for the range containing node liveness triggers re-gossip
+  // of the entire node liveness key range.
+  optional Span node_liveness_span = 2;
 }
 
 // InternalCommitTrigger encapsulates all of the internal-only commit triggers.

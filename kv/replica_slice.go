@@ -43,7 +43,7 @@ type ReplicaSlice []ReplicaInfo
 
 // newReplicaSlice creates a ReplicaSlice from the replicas listed in the range
 // descriptor and using gossip to lookup node descriptors. Replicas on nodes
-// that are not gossipped are omitted from the result.
+// that are not gossiped are omitted from the result.
 func newReplicaSlice(gossip *gossip.Gossip, desc *roachpb.RangeDescriptor) ReplicaSlice {
 	if gossip == nil {
 		return nil

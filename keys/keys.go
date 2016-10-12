@@ -52,9 +52,17 @@ func StoreGossipKey() roachpb.Key {
 	return MakeStoreKey(localStoreGossipSuffix, nil)
 }
 
+// NodeLivenessKey returns the key for the node liveness record.
+func NodeLivenessKey(nodeID roachpb.NodeID) roachpb.Key {
+	key := make(roachpb.Key, 0, len(NodeLivenessPrefix)+9)
+	key = append(key, NodeLivenessPrefix...)
+	key = encoding.EncodeUvarintAscending(key, uint64(nodeID))
+	return key
+}
+
 // NodeStatusKey returns the key for accessing the node status for the
 // specified node ID.
-func NodeStatusKey(nodeID int32) roachpb.Key {
+func NodeStatusKey(nodeID roachpb.NodeID) roachpb.Key {
 	key := make(roachpb.Key, 0, len(StatusNodePrefix)+9)
 	key = append(key, StatusNodePrefix...)
 	key = encoding.EncodeUvarintAscending(key, uint64(nodeID))
@@ -63,7 +71,7 @@ func NodeStatusKey(nodeID int32) roachpb.Key {
 
 // NodeLastUsageReportKey returns the key for accessing the node last update check
 // time (when version check or usage reporting was done).
-func NodeLastUsageReportKey(nodeID int32) roachpb.Key {
+func NodeLastUsageReportKey(nodeID roachpb.NodeID) roachpb.Key {
 	prefix := append([]byte(nil), UpdateCheckPrefix...)
 	return encoding.EncodeUvarintAscending(prefix, uint64(nodeID))
 }
