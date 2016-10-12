@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/stop"
+	"github.com/cockroachdb/cockroach/util/testserverutils"
 )
 
 // TestServerInterface defines test server functionality that tests need; it is
@@ -94,6 +95,13 @@ type TestServerInterface interface {
 	// WriteSummaries records summaries of time-series data, which is required for
 	// any tests that query server stats.
 	WriteSummaries() error
+
+	// GetFirstStoreID is a utility function returning the StoreID of the first
+	// store on this node.
+	GetFirstStoreID() roachpb.StoreID
+
+	// Stores returns the collection of stores from this TestServer's node.
+	Stores() testserverutils.TestStoresInterface
 }
 
 // TestServerFactory encompasses the actual implementation of the shim

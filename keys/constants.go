@@ -102,18 +102,20 @@ var (
 	// abort cache protects a transaction from re-reading its own intents
 	// after it's been aborted.
 	LocalAbortCacheSuffix = []byte("abc-")
-	// localRangeFrozenStatusSuffix is the suffix for a frozen status.
+	// LocalRangeFrozenStatusSuffix is the suffix for a frozen status.
 	LocalRangeFrozenStatusSuffix = []byte("fzn-")
 	// localRangeLastGCSuffix is the suffix for the last GC.
 	LocalRangeLastGCSuffix = []byte("lgc-")
-	// LocalRaftAppliedIndexSuffix is the suffix for the raft applied index.
+	// localRaftAppliedIndexSuffix is the suffix for the raft applied index.
 	LocalRaftAppliedIndexSuffix = []byte("rfta")
-	// localRaftTombstoneSuffix is the suffix for the raft tombstone.
+	// LocalRaftTombstoneSuffix is the suffix for the raft tombstone.
 	LocalRaftTombstoneSuffix = []byte("rftb")
-	// localRaftTruncatedStateSuffix is the suffix for the RaftTruncatedState.
+	// LocalRaftTruncatedStateSuffix is the suffix for the RaftTruncatedState.
 	LocalRaftTruncatedStateSuffix = []byte("rftt")
-	// localRangeLeaseSuffix is the suffix for a range lease.
+	// LocalRangeLeaseSuffix is the suffix for a range lease.
 	LocalRangeLeaseSuffix = []byte("rll-")
+	// LocalNextLeaseSuffix is the suffix for a range's "next lease".
+	LocalNextLeaseSuffix = []byte("rnl-")
 	// LocalLeaseAppliedIndexSuffix is the suffix for the applied lease index.
 	LocalLeaseAppliedIndexSuffix = []byte("rlla")
 	// localRangeStatsSuffix is the suffix for range statistics.

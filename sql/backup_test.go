@@ -200,7 +200,7 @@ func backupRestoreTestSetup(
 		sqlDB.Exec(split)
 	}
 
-	targets := make([]testcluster.ReplicationTarget, backupRestoreClusterSize-1)
+	targets := make([]base.ReplicationTarget, backupRestoreClusterSize-1)
 	for i := 1; i < backupRestoreClusterSize; i++ {
 		targets[i-1] = tc.Target(i)
 	}

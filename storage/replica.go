@@ -282,7 +282,7 @@ type Replica struct {
 		// process have been truncated.
 		raftLogSize int64
 		// pendingLeaseRequest is used to coalesce RequestLease requests.
-		pendingLeaseRequest pendingLeaseRequest
+		pendingLeaseRequest *pendingLeaseRequest
 		// Max bytes before split.
 		maxBytes int64
 		// pendingCmds stores the Raft in-flight commands which
@@ -579,6 +579,11 @@ func (r *Replica) initLocked(
 	}
 	r.rangeStr.store(r.mu.state.Desc)
 
+	r.mu.pendingLeaseRequest, err = newPendingLeaseRequest(r.ctx, r)
+	if err != nil {
+		return err
+	}
+
 	r.mu.lastIndex, err = loadLastIndex(r.ctx, r.store.Engine(), r.RangeID)
 	if err != nil {
 		return err
@@ -764,7 +769,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 	// lease holder. Returns also on context.Done() (timeout or cancellation).
 	for attempt := 1; ; attempt++ {
 		timestamp := r.store.Clock().Now()
-		llChan, pErr := func() (<-chan *roachpb.Error, *roachpb.Error) {
+		loeChan, pErr := func() (<-chan leaseOrErr, *roachpb.Error) {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 			lease := r.mu.state.Lease
@@ -800,7 +805,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 					// a lease extension. We don't need to wait for that extension
 					// to go through and simply ignore the returned channel (which
 					// is buffered).
-					_ = r.requestLeaseLocked(timestamp)
+					_ = r.requestLeaseLocked(ctx, timestamp)
 				}
 				// Return a nil chan to signal that we have a valid lease.
 				return nil, nil
@@ -808,33 +813,33 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 			log.Eventf(ctx, "request range lease (attempt #%d)", attempt)
 
 			// No active lease: Request renewal if a renewal is not already pending.
-			return r.requestLeaseLocked(timestamp), nil
+			return r.requestLeaseLocked(ctx, timestamp), nil
 		}()
 		if pErr != nil {
 			return pErr
 		}
-		if llChan == nil {
+		if loeChan == nil {
 			// We own a covering lease.
 			return nil
 		}
 
 		// Wait for the range lease to finish, or the context to expire.
 		select {
-		case pErr := <-llChan:
-			if pErr != nil {
+		case loe := <-loeChan:
+			if loe.pErr != nil {
 				// Getting a LeaseRejectedError back means someone else got there
 				// first, or the lease request was somehow invalid due to a
 				// concurrent change. Convert the error to a NotLeaseHolderError.
-				if _, ok := pErr.GetDetail().(*roachpb.LeaseRejectedError); ok {
+				if _, ok := loe.pErr.GetDetail().(*roachpb.LeaseRejectedError); ok {
 					lease, _ := r.getLease()
 					if !lease.Covers(r.store.Clock().Now()) {
 						lease = nil
 					}
 					return roachpb.NewError(newNotLeaseHolderError(lease, r.store.StoreID(), r.Desc()))
 				}
-				return pErr
+				return loe.pErr
 			}
-			log.Event(ctx, "lease acquisition succeeded")
+			log.Eventf(ctx, "a new lease has been applied: %s", loe.lease)
 			continue
 		case <-ctx.Done():
 			log.ErrEventf(ctx, "lease acquisition failed: %s", ctx.Err())
@@ -1397,7 +1402,7 @@ func (r *Replica) addAdminCmd(
 		reply, pErr = r.AdminMerge(ctx, *tArgs, r.Desc())
 		resp = &reply
 	case *roachpb.AdminTransferLeaseRequest:
-		pErr = roachpb.NewError(r.AdminTransferLease(tArgs.Target))
+		pErr = roachpb.NewError(r.AdminTransferLease(ctx, tArgs.Target))
 		resp = &roachpb.AdminTransferLeaseResponse{}
 	case *roachpb.CheckConsistencyRequest:
 		var reply roachpb.CheckConsistencyResponse

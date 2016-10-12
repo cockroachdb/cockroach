@@ -189,6 +189,12 @@ func RangeLeaseKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDReplicatedKey(rangeID, LocalRangeLeaseSuffix, nil)
 }
 
+// ReplicaNextLeaseKey returns a system-local key for info on the last lease
+// that was proposed, but not yet applied, by the local replica.
+func ReplicaNextLeaseKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDUnreplicatedKey(rangeID, LocalNextLeaseSuffix, nil)
+}
+
 // RangeStatsKey returns the key for accessing the MVCCStats struct
 // for the specified Range ID.
 func RangeStatsKey(rangeID roachpb.RangeID) roachpb.Key {

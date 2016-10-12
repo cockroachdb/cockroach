@@ -875,10 +875,11 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 
 // runSetupSplitSnapshotRace engineers a situation in which a range has
 // been split but node 3 hasn't processed it yet. There is a race
-// depending on whether node 3 learns of the split from its left or
-// right side. When this function returns most of the nodes will be
-// stopped, and depending on the order in which they are restarted, we
-// can arrange for both possible outcomes of the race.
+// on this follower node  between learning about the split through the regular
+// way (applying the split command on the lhs range) and receiving a snapshot
+// from the rhs. When this function returns most of the nodes will be stopped,
+// and depending on the order in which they are restarted, we can arrange for
+// both possible outcomes of the race.
 //
 // Range 1 is the system keyspace, located on node 0.
 //

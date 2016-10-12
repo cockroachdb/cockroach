@@ -20,9 +20,6 @@ import (
 	"reflect"
 	"testing"
 
-	"golang.org/x/net/context"
-
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -47,35 +44,5 @@ func TestRangeStatsEmpty(t *testing.T) {
 	ms := tc.rng.GetMVCCStats()
 	if exp := initialStats(); !reflect.DeepEqual(ms, exp) {
 		t.Errorf("expected stats %+v; got %+v", exp, ms)
-	}
-}
-
-func TestRangeStatsInit(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
-	ms := enginepb.MVCCStats{
-		LiveBytes:       1,
-		KeyBytes:        2,
-		ValBytes:        3,
-		IntentBytes:     4,
-		LiveCount:       5,
-		KeyCount:        6,
-		ValCount:        7,
-		IntentCount:     8,
-		IntentAge:       9,
-		GCBytesAge:      10,
-		LastUpdateNanos: 11,
-	}
-	if err := engine.MVCCSetRangeStats(context.Background(), tc.engine, 1, &ms); err != nil {
-		t.Fatal(err)
-	}
-	loadMS, err := loadMVCCStats(context.Background(), tc.engine, tc.rng.RangeID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(ms, loadMS) {
-		t.Errorf("mvcc stats mismatch %+v != %+v", ms, loadMS)
 	}
 }

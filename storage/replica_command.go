@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -1739,6 +1740,14 @@ func (r *Replica) applyNewLeaseLocked(
 	}
 
 	var reply roachpb.RequestLeaseResponse
+	// Protect against replays. Lease requests are exempt from the "MaxLeaseIndex"
+	// replay protection mechanism, so we also need to protect against their
+	// replays.
+	// TODO(andrei): I've seen replays of a LeaseRequest in a test, happening very
+	// predictably. Is this expected?
+	if proto.Equal(prevLease, &lease) {
+		return reply, nil, nil
+	}
 	// Store the lease to disk & in-memory.
 	if err := setLease(ctx, batch, ms, r.RangeID, &lease); err != nil {
 		return reply, newFailedLeaseTrigger(), err

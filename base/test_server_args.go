@@ -19,6 +19,7 @@ package base
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -76,9 +77,10 @@ type TestServerArgs struct {
 // cluster. It contains a TestServerArgs instance which will be copied over to
 // every server.
 //
-// The zero value means "full replication".
+// The zero value means "ReplicationAuto".
 type TestClusterArgs struct {
-	// ServerArgs will be copied to each constituent TestServer.
+	// ServerArgs will be copied to each constituent TestServer. Used for all the
+	// servers not overridden in ServerArgsPerNode.
 	ServerArgs TestServerArgs
 	// ReplicationMode controls how replication is to be done in the cluster.
 	ReplicationMode TestClusterReplicationMode
@@ -112,3 +114,9 @@ const (
 	// replication through the TestServer.
 	ReplicationManual
 )
+
+// ReplicationTarget identifies a node/store pair.
+type ReplicationTarget struct {
+	NodeID  roachpb.NodeID
+	StoreID roachpb.StoreID
+}

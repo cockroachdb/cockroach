@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/storage/storagebase"
 	"github.com/cockroachdb/cockroach/testutils"
+	"github.com/cockroachdb/cockroach/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/bufalloc"
 	"github.com/cockroachdb/cockroach/util/caller"
@@ -1028,11 +1029,11 @@ func TestReplicaDrainLease(t *testing.T) {
 		t.Fatal("DrainLeases returned with active lease")
 	}
 	tc.rng.mu.Lock()
-	pErr := <-tc.rng.requestLeaseLocked(tc.clock.Now())
+	loe := <-tc.rng.requestLeaseLocked(context.Background(), tc.clock.Now())
 	tc.rng.mu.Unlock()
-	_, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
+	_, ok := loe.pErr.GetDetail().(*roachpb.NotLeaseHolderError)
 	if !ok {
-		t.Fatalf("expected NotLeaseHolderError, not %v", pErr)
+		t.Fatalf("expected NotLeaseHolderError, not %v", loe.pErr)
 	}
 	if err := tc.store.DrainLeases(false); err != nil {
 		t.Fatal(err)
@@ -1664,15 +1665,15 @@ func TestLeaseConcurrent(t *testing.T) {
 			for i := 0; i < num; i++ {
 				if err := tc.stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
 					tc.rng.mu.Lock()
-					leaseCh := tc.rng.requestLeaseLocked(ts)
+					leaseCh := tc.rng.requestLeaseLocked(context.Background(), ts)
 					tc.rng.mu.Unlock()
 					wg.Done()
-					pErr := <-leaseCh
+					loe := <-leaseCh
 					// Mutate the errors as we receive them to expose races.
-					if pErr != nil {
-						pErr.OriginNode = 0
+					if loe.pErr != nil {
+						loe.pErr.OriginNode = 0
 					}
-					pErrCh <- pErr
+					pErrCh <- loe.pErr
 				}); err != nil {
 					t.Fatal(err)
 				}
@@ -6437,5 +6438,143 @@ func TestDeprecatedRequests(t *testing.T) {
 		t.Fatal(err)
 	} else if _, ok := reply.(*roachpb.DeprecatedVerifyChecksumResponse); !ok {
 		t.Fatalf("expected %T but got %T", &roachpb.DeprecatedVerifyChecksumResponse{}, reply)
+	}
+}
+
+// LeaseInfo runs a LeaseInfoRequest using the specified sender.
+func LeaseInfo(
+	t *testing.T,
+	db *client.DB,
+	rangeDesc roachpb.RangeDescriptor,
+	readConsistency roachpb.ReadConsistencyType,
+) roachpb.LeaseInfoResponse {
+	leaseInfoReq := &roachpb.LeaseInfoRequest{
+		Span: roachpb.Span{
+			Key: rangeDesc.StartKey.AsRawKey(),
+		},
+	}
+	reply, pErr := client.SendWrappedWith(db.GetSender(), nil, roachpb.Header{
+		ReadConsistency: readConsistency,
+	}, leaseInfoReq)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	return *(reply.(*roachpb.LeaseInfoResponse))
+}
+
+// Test that, we persist range lease transfers to disk.
+func TestLeaseTransferIsPersisted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	filterCh := make(chan struct{})
+	filter := func(args storagebase.FilterArgs) *roachpb.Error {
+		_, ok := args.Req.(*roachpb.TransferLeaseRequest)
+		if !ok {
+			return nil
+		}
+		// Signal the test.
+		filterCh <- struct{}{}
+		// Wait for the test to unblock the command.
+		<-filterCh
+		return nil
+	}
+	tc := serverutils.StartTestCluster(t, 3,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgsPerNode: map[int]base.TestServerArgs{
+				// The first node gets the filter so that its execution of the lease
+				// transfer is blocked.
+				0: {
+					Knobs: base.TestingKnobs{
+						Store: &StoreTestingKnobs{
+							TestingCommandFilter: filter,
+						},
+					},
+				},
+			},
+		})
+	defer tc.Stopper().Stop()
+
+	key := []byte("a")
+	rangeDesc := new(roachpb.RangeDescriptor)
+	var err error
+	*rangeDesc, err = tc.LookupRange(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rangeDesc, err = tc.AddReplicas(
+		rangeDesc.StartKey.AsRawKey(), tc.Target(1), tc.Target(2),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rangeDesc.Replicas) != 3 {
+		t.Fatalf("expected 3 replicas, got %+v", rangeDesc.Replicas)
+	}
+	replicas := make([]roachpb.ReplicaDescriptor, 3)
+	for i := 0; i < 3; i++ {
+		var ok bool
+		replicas[i], ok = rangeDesc.GetReplicaDescriptor(tc.Server(i).GetFirstStoreID())
+		if !ok {
+			t.Fatalf("expected to find replica on server %d", i)
+		}
+	}
+
+	// Run a LeaseInfoRequest to get the stasis, so we can assert it in the read
+	// value below.
+	lease := LeaseInfo(
+		t, tc.Server(0).KVClient().(*client.DB), *rangeDesc, roachpb.CONSISTENT).Lease
+	if lease == nil || !lease.Covers(tc.Server(0).Clock().Now()) {
+		t.Fatalf("no active lease")
+	}
+
+	args := roachpb.AdminTransferLeaseRequest{
+		Span: roachpb.Span{
+			Key: key,
+		},
+		Target: tc.Server(1).GetFirstStoreID(),
+	}
+	store0ID := tc.Server(0).GetFirstStoreID()
+	repDesc, ok := rangeDesc.GetReplicaDescriptor(store0ID)
+	if !ok {
+		t.Fatalf("failed to find replica on server 0")
+	}
+	hdr := roachpb.Header{Replica: repDesc}
+	// Send directly through the store (as opposed to going through a DistSender)
+	// so we get an error if this store is not the lease holder. We need to assert
+	// in this way that server 0 is the lease holder, since we'll read directly
+	// from its engine below.
+	errCh := make(chan error)
+	go func() {
+		_, pErr := client.SendWrappedWith(
+			tc.Server(0).Stores(), context.Background(), hdr, &args)
+		errCh <- pErr.GoError()
+	}()
+
+	// Wait for the command to be applied. We need to test the disk state while
+	// the transfer is blocked because it's wiped when the proposing node applies
+	// it.
+	<-filterCh
+
+	store0, err := tc.Server(0).Stores().GetStore(store0ID)
+	if err != nil {
+		close(filterCh)
+		t.Fatal(err)
+	}
+
+	leaseTransfer, err := loadNextLease(
+		context.Background(), store0.Engine(), rangeDesc.RangeID)
+	if err != nil {
+		close(filterCh)
+		t.Fatal(err)
+	}
+	if leaseTransfer.Start.Less(lease.Start) {
+		close(filterCh)
+		t.Fatalf("expected disk state to have a lease starting after: %s, found lease: %s",
+			lease.StartStasis, leaseTransfer)
+	}
+	close(filterCh)
+	if err := <-errCh; err != nil {
+		t.Fatal(err)
 	}
 }
