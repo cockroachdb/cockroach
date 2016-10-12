@@ -153,7 +153,7 @@ func TestSSLEnforcement(t *testing.T) {
 		}
 		url := fmt.Sprintf(
 			"%s://%s%s", tc.ctx.HTTPRequestScheme(),
-			s.(*TestServer).Ctx.HTTPAddr, tc.path)
+			s.(*TestServer).Cfg.HTTPAddr, tc.path)
 		resp, err := doHTTPReq(t, client, tc.method, url, tc.body)
 		if (err == nil) != tc.success {
 			t.Errorf("[%d]: expected success=%t, got err=%v", tcNum, tc.success, err)
