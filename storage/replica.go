@@ -443,7 +443,7 @@ func (r *Replica) withRaftGroupLocked(
 			// done when proposing a command (see defaultProposeRaftCommandLocked).
 			// Unfortunately, we enqueue the right hand side of a split for Raft
 			// ready processing if the range only has a single replica (see
-			// splitTriggerPostCommit). Doing so implies we need to be campaigning
+			// splitPostApply). Doing so implies we need to be campaigning
 			// that right hand side range when raft ready processing is
 			// performed. Perhaps we should move the logic for campaigning single
 			// replica ranges there so that normally we only eagerly campaign when
@@ -1040,7 +1040,11 @@ func (r *Replica) assertStateLocked(reader engine.Reader) {
 		log.Fatal(r.ctx, err)
 	}
 	if !reflect.DeepEqual(diskState, r.mu.state) {
-		log.Fatalf(r.ctx, "on-disk and in-memory state diverged:\n%+v\n%+v", diskState, r.mu.state)
+		log.Fatalf(
+			r.ctx,
+			"on-disk and in-memory state diverged:\n%s",
+			pretty.Diff(diskState, r.mu.state),
+		)
 	}
 }
 
@@ -1463,8 +1467,8 @@ func (r *Replica) addReadOnlyCmd(
 	// Execute read-only batch command. It checks for matching key range; note
 	// that holding readMu throughout is important to avoid reads from the
 	// "wrong" key range being served after the range has been split.
-	var trigger *PostCommitTrigger
-	br, trigger, pErr = r.executeBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba)
+	var pd ProposalData
+	br, pd, pErr = r.executeBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba)
 
 	if pErr == nil && ba.Txn != nil {
 		r.assert5725(ba)
@@ -1473,9 +1477,9 @@ func (r *Replica) addReadOnlyCmd(
 		// described in #2231.
 		pErr = r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn)
 	}
-	if trigger != nil && len(trigger.intents) > 0 {
-		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(trigger.intents))
-		r.store.intentResolver.processIntentsAsync(r, trigger.intents)
+	if len(pd.intents) > 0 {
+		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(pd.intents))
+		r.store.intentResolver.processIntentsAsync(r, pd.intents)
 	}
 	if pErr != nil {
 		log.ErrEvent(ctx, pErr.String())
@@ -2648,7 +2652,7 @@ func (r *Replica) processRaftCommand(
 	} else {
 		log.Event(ctx, "applying command")
 	}
-	br, propResult, pErr := r.applyRaftCommand(idKey, ctx, index, leaseIndex,
+	br, pd, pErr := r.applyRaftCommand(idKey, ctx, index, leaseIndex,
 		raftCmd.OriginReplica, raftCmd.Cmd, forcedErr)
 	pErr = r.maybeSetCorrupt(ctx, pErr)
 
@@ -2656,18 +2660,15 @@ func (r *Replica) processRaftCommand(
 	// before returning to the client.
 
 	// Update store-level MVCC stats with merged range stats.
-	r.store.metrics.addMVCCStats(propResult.delta)
+	r.store.metrics.addMVCCStats(pd.delta)
+	pd.delta = enginepb.MVCCStats{}
 
-	// Handle commit triggers.
-	//
-	// TODO(tschottdorf): we currently propagate *PostCommitTrigger. Consider
-	// using PostCommitTrigger instead.
-	if trigger := propResult.PostCommitTrigger; trigger != nil {
-		r.handleTrigger(ctx, raftCmd.OriginReplica, *trigger)
-		// Assert that the on-disk state doesn't diverge from the in-memory
-		// state as a result of the trigger.
-		r.assertState(r.store.Engine())
-	}
+	// Handle the ProposalData, executing any side effects of the last
+	// state machine transition.
+	r.handleProposalData(ctx, raftCmd.OriginReplica, pd)
+	// Assert that the on-disk state doesn't diverge from the in-memory
+	// state as a result of the side effects.
+	r.assertState(r.store.Engine())
 
 	// On successful write commands handle write-related triggers including
 	// splitting and raft log truncation.
@@ -2774,7 +2775,7 @@ func (r *Replica) applyRaftCommand(
 	originReplica roachpb.ReplicaDescriptor,
 	ba roachpb.BatchRequest,
 	forcedError *roachpb.Error,
-) (*roachpb.BatchResponse, proposalResult, *roachpb.Error) {
+) (*roachpb.BatchResponse, ProposalData, *roachpb.Error) {
 	if index <= 0 {
 		log.Fatalf(ctx, "raft command index is <= 0")
 	}
@@ -2783,7 +2784,7 @@ func (r *Replica) applyRaftCommand(
 	oldIndex := r.mu.state.RaftAppliedIndex
 	// When frozen, the Range only applies freeze- and consistency-related
 	// requests. Overrides any forcedError.
-	if mayApply := !r.mu.state.Frozen || ba.IsFreeze() || ba.IsConsistencyRelated(); !mayApply {
+	if mayApply := !r.mu.state.IsFrozen() || ba.IsFreeze() || ba.IsConsistencyRelated(); !mayApply {
 		forcedError = roachpb.NewError(roachpb.NewRangeFrozenError(*r.mu.state.Desc))
 	}
 	r.mu.Unlock()
@@ -2792,7 +2793,7 @@ func (r *Replica) applyRaftCommand(
 		// If we have an out of order index, there's corruption. No sense in
 		// trying to update anything or running the command. Simply return
 		// a corruption error.
-		return nil, proposalResult{}, roachpb.NewError(NewReplicaCorruptionError(errors.Errorf("applied index jumped from %d to %d", oldIndex, index)))
+		return nil, ProposalData{}, roachpb.NewError(NewReplicaCorruptionError(errors.Errorf("applied index jumped from %d to %d", oldIndex, index)))
 	}
 
 	// Call the helper, which returns a batch containing data written
@@ -2802,17 +2803,16 @@ func (r *Replica) applyRaftCommand(
 	// TODO(tschottdorf): With proposer-eval'ed KV, this will be returned
 	// along with the batch representation and, together with it, must
 	// contain everything necessary for Replicas to apply the command.
-	var propResult proposalResult
+	var pd ProposalData
 	var rErr *roachpb.Error
 
 	if forcedError != nil {
 		batch = r.store.Engine().NewBatch()
 		br, rErr = nil, forcedError
 	} else {
-		batch, propResult.delta, br, propResult.PostCommitTrigger, rErr =
+		batch, br, pd, rErr =
 			r.applyRaftCommandInBatch(ctx, idKey, originReplica, ba)
 	}
-
 	// TODO(tschottdorf): remove when #7224 is cleared.
 	if ba.Txn != nil && ba.Txn.Name == replicaChangeTxnName && log.V(1) {
 		log.Infof(ctx, "applied part of replica change txn: %s, pErr=%v",
@@ -2828,19 +2828,22 @@ func (r *Replica) applyRaftCommand(
 	writer := batch.Distinct()
 
 	// Advance the last applied index.
-	if err := setAppliedIndex(ctx, writer, &propResult.delta, r.RangeID, index, leaseIndex); err != nil {
+	if err := setAppliedIndex(ctx, writer, &pd.delta, r.RangeID, index, leaseIndex); err != nil {
 		log.Fatalf(ctx, "setting applied index in a batch should never fail: %s", err)
 	}
 
 	// Flush the MVCC stats to the batch. Note that we need to grab the previous
-	// stats now, for they might've been changed during triggers due to side
-	// effects.
-	// TODO(tschottdorf): refactor that for clarity.
+	// stats now, for they might've been changed due to side effects.
+	// TODO(tschottdorf): refactor that for clarity. Also doesn't seem true
+	// any more?.
 	newMS := r.GetMVCCStats()
-	newMS.Add(propResult.delta)
+	newMS.Add(pd.delta)
 	if err := setMVCCStats(ctx, writer, r.RangeID, newMS); err != nil {
 		log.Fatalf(ctx, "setting mvcc stats in a batch should never fail: %s", err)
 	}
+	pd.State.Stats = newMS
+	// TODO(tschottdorf): return delta up the stack as separate variable.
+	// It's used by the caller.
 
 	// TODO(peter): We did not close the writer in an earlier version of
 	// the code, which went undetected even though we used the batch after
@@ -2862,19 +2865,15 @@ func (r *Replica) applyRaftCommand(
 		// TODO(tschottdorf): with proposer-eval'ed KV, the lease applied index
 		// can be read from the WriteBatch, but there may be reasons to pass
 		// it with propResult. We'll see.
-		r.mu.state.RaftAppliedIndex = index
-		r.mu.state.LeaseAppliedIndex = leaseIndex
-		r.mu.state.Stats = newMS
-		if forcedError != nil {
-			// We only assert when there's a forced error since it might be
-			// a little expensive to do on *every* Raft command, seeing that
-			// disk i/o could be involved.
-			r.assertStateLocked(r.store.Engine())
+		if (pd.State == storagebase.ReplicaState{}) {
+			pd.State = r.mu.state
 		}
+		pd.State.RaftAppliedIndex = index
+		pd.State.LeaseAppliedIndex = leaseIndex
 		r.mu.Unlock()
 	}
 
-	return br, propResult, rErr
+	return br, pd, rErr
 }
 
 // applyRaftCommandInBatch executes the command in a batch engine and
@@ -2885,14 +2884,14 @@ func (r *Replica) applyRaftCommandInBatch(
 	idKey storagebase.CmdIDKey,
 	originReplica roachpb.ReplicaDescriptor,
 	ba roachpb.BatchRequest,
-) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, *PostCommitTrigger, *roachpb.Error) {
+) (engine.Batch, *roachpb.BatchResponse, ProposalData, *roachpb.Error) {
 	// Check whether this txn has been aborted. Only applies to transactional
 	// requests which write intents (for example HeartbeatTxn does not get
 	// hindered by this).
 	if ba.Txn != nil && ba.IsTransactionWrite() {
 		r.assert5725(ba)
 		if pErr := r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn); pErr != nil {
-			return r.store.Engine().NewBatch(), enginepb.MVCCStats{}, nil, nil, pErr
+			return r.store.Engine().NewBatch(), nil, ProposalData{}, pErr
 		}
 	}
 
@@ -2902,7 +2901,7 @@ func (r *Replica) applyRaftCommandInBatch(
 
 	// Execute the commands. If this returns without an error, the batch should
 	// be committed.
-	btch, ms, br, trigger, pErr := r.executeWriteBatch(ctx, idKey, ba)
+	btch, ms, br, pd, pErr := r.executeWriteBatch(ctx, idKey, ba)
 
 	if ba.IsWrite() {
 		if pErr != nil {
@@ -2927,7 +2926,10 @@ func (r *Replica) applyRaftCommandInBatch(
 		}
 	}
 
-	return btch, ms, br, trigger, pErr
+	// TODO(tschottdorf): assert that this has zero delta at this point
+	pd.delta = ms
+
+	return btch, br, pd, pErr
 }
 
 // checkIfTxnAborted checks the txn abort cache for the given
@@ -2976,14 +2978,14 @@ type intentsWithArg struct {
 // txn is restored and it's re-executed as transactional.
 func (r *Replica) executeWriteBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest,
-) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, *PostCommitTrigger, *roachpb.Error) {
+) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, ProposalData, *roachpb.Error) {
 	batch := r.store.Engine().NewBatch()
 	ms := enginepb.MVCCStats{}
 	// If not transactional or there are indications that the batch's txn
 	// will require restart or retry, execute as normal.
 	if r.store.TestingKnobs().DisableOnePhaseCommits || !isOnePhaseCommit(ba) {
-		br, trigger, pErr := r.executeBatch(ctx, idKey, batch, &ms, ba)
-		return batch, ms, br, trigger, pErr
+		br, pd, pErr := r.executeBatch(ctx, idKey, batch, &ms, ba)
+		return batch, ms, br, pd, pErr
 	}
 
 	// Try executing with transaction stripped.
@@ -2992,7 +2994,7 @@ func (r *Replica) executeWriteBatch(
 	strippedBa.Requests = ba.Requests[1 : len(ba.Requests)-1] // strip begin/end txn reqs
 
 	// If all writes occurred at the intended timestamp, we've succeeded on the fast path.
-	br, trigger, pErr := r.executeBatch(ctx, idKey, batch, &ms, strippedBa)
+	br, pd, pErr := r.executeBatch(ctx, idKey, batch, &ms, strippedBa)
 	if pErr == nil && ba.Timestamp == br.Timestamp {
 		clonedTxn := ba.Txn.Clone()
 		clonedTxn.Writing = true
@@ -3009,8 +3011,8 @@ func (r *Replica) executeWriteBatch(
 		} else {
 			// Run commit trigger manually.
 			var err error
-			if trigger, err = r.runCommitTrigger(ctx, batch, &ms, *etArg, &clonedTxn); err != nil {
-				return batch, ms, br, trigger, roachpb.NewErrorf("failed to run commit trigger: %s", err)
+			if pd, err = r.runCommitTrigger(ctx, batch, &ms, *etArg, &clonedTxn); err != nil {
+				return batch, ms, br, pd, roachpb.NewErrorf("failed to run commit trigger: %s", err)
 			}
 		}
 
@@ -3018,15 +3020,15 @@ func (r *Replica) executeWriteBatch(
 		// Add placeholder responses for begin & end transaction requests.
 		br.Responses = append([]roachpb.ResponseUnion{{BeginTransaction: &roachpb.BeginTransactionResponse{}}}, br.Responses...)
 		br.Responses = append(br.Responses, roachpb.ResponseUnion{EndTransaction: &roachpb.EndTransactionResponse{OnePhaseCommit: true}})
-		return batch, ms, br, trigger, nil
+		return batch, ms, br, pd, nil
 	}
 
 	// Otherwise, re-execute with the original, transactional batch.
 	batch.Close()
 	batch = r.store.Engine().NewBatch()
 	ms = enginepb.MVCCStats{}
-	br, trigger, pErr = r.executeBatch(ctx, idKey, batch, &ms, ba)
-	return batch, ms, br, trigger, pErr
+	br, pd, pErr = r.executeBatch(ctx, idKey, batch, &ms, ba)
+	return batch, ms, br, pd, pErr
 }
 
 // isOnePhaseCommit returns true iff the BatchRequest contains all
@@ -3133,14 +3135,14 @@ func (r *Replica) executeBatch(
 	batch engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *PostCommitTrigger, *roachpb.Error) {
+) (*roachpb.BatchResponse, ProposalData, *roachpb.Error) {
 	br := ba.CreateReply()
 
 	r.mu.Lock()
 	threshold := r.mu.state.GCThreshold
 	r.mu.Unlock()
 	if !threshold.Less(ba.Timestamp) {
-		return nil, nil, roachpb.NewError(fmt.Errorf("batch timestamp %v must be after replica GC threshold %v", ba.Timestamp, threshold))
+		return nil, ProposalData{}, roachpb.NewError(fmt.Errorf("batch timestamp %v must be after replica GC threshold %v", ba.Timestamp, threshold))
 	}
 
 	maxKeys := int64(math.MaxInt64)
@@ -3162,10 +3164,10 @@ func (r *Replica) executeBatch(
 	r.store.Clock().Update(ba.Timestamp)
 
 	if err := r.checkBatchRange(ba); err != nil {
-		return nil, nil, roachpb.NewErrorWithTxn(err, ba.Header.Txn)
+		return nil, ProposalData{}, roachpb.NewErrorWithTxn(err, ba.Header.Txn)
 	}
 
-	var trigger *PostCommitTrigger
+	var pd ProposalData
 	for index, union := range ba.Requests {
 		// Execute the command.
 		args := union.GetInner()
@@ -3173,9 +3175,17 @@ func (r *Replica) executeBatch(
 			ba.Txn.BatchIndex = int32(index)
 		}
 		reply := br.Responses[index].GetInner()
-		curTrigger, pErr := r.executeCmd(ctx, idKey, index, batch, ms, ba.Header, maxKeys, args, reply)
+		curPD, pErr := r.executeCmd(ctx, idKey, index, batch, ms, ba.Header, maxKeys, args, reply)
 
-		trigger = updateTrigger(trigger, curTrigger)
+		if err := pd.Absorb(curPD); err != nil {
+			// TODO(tschottdorf): see whether we really need to pass nontrivial
+			// ProposalData up on error and if so, formalize that.
+			log.Fatalf(
+				ctx,
+				"unable to absorb ProposalData: %s\ndiff(new, old): %s",
+				err, pretty.Diff(curPD, pd),
+			)
+		}
 
 		if pErr != nil {
 			switch tErr := pErr.GetDetail().(type) {
@@ -3194,7 +3204,7 @@ func (r *Replica) executeBatch(
 					// a txn, intents from earlier commands in the same batch
 					// won't return a WriteTooOldError.
 					if ba.Txn != nil {
-						return nil, trigger, pErr
+						return nil, pd, pErr
 					}
 					// If not in a txn, need to make sure we don't propagate the
 					// error unless there are no earlier commands in the batch
@@ -3209,7 +3219,7 @@ func (r *Replica) executeBatch(
 						}
 					}
 					if !overlap {
-						return nil, trigger, pErr
+						return nil, pd, pErr
 					}
 				}
 				// On WriteTooOldError, we've written a new value or an intent
@@ -3228,7 +3238,7 @@ func (r *Replica) executeBatch(
 			default:
 				// Initialize the error index.
 				pErr.SetErrorIndex(int32(index))
-				return nil, trigger, pErr
+				return nil, pd, pErr
 			}
 		}
 
@@ -3259,7 +3269,7 @@ func (r *Replica) executeBatch(
 		br.Timestamp.Forward(ba.Timestamp)
 	}
 
-	return br, trigger, nil
+	return br, pd, nil
 }
 
 // getLeaseForGossip tries to obtain a range lease. Only one of the replicas
@@ -3448,14 +3458,14 @@ func (r *Replica) maybeGossipNodeLiveness(span roachpb.Span) {
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{Span: span})
 	// Call executeBatch instead of Send to avoid command queue reentrance.
-	br, trigger, pErr :=
+	br, pd, pErr :=
 		r.executeBatch(r.ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba)
 	if pErr != nil {
 		log.Errorf(r.ctx, "couldn't scan node liveness records in span %s: %s", span, pErr.GoError())
 		return
 	}
-	if trigger != nil && len(trigger.intents) > 0 {
-		log.Errorf(r.ctx, "unexpected intents on node liveness span %s: %+v", span, trigger.intents)
+	if len(pd.intents) > 0 {
+		log.Errorf(r.ctx, "unexpected intents on node liveness span %s: %+v", span, pd.intents)
 		return
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
@@ -3531,16 +3541,17 @@ func (r *Replica) loadSystemConfigSpan() ([]roachpb.KeyValue, []byte, error) {
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{Span: keys.SystemConfigSpan})
 	// Call executeBatch instead of Send to avoid command queue reentrance.
-	br, trigger, pErr :=
-		r.executeBatch(r.ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba)
+	br, pd, pErr := r.executeBatch(
+		r.ctx, storagebase.CmdIDKey(""), r.store.Engine(), nil, ba,
+	)
 	if pErr != nil {
 		return nil, nil, pErr.GoError()
 	}
-	if trigger != nil && len(trigger.intents) > 0 {
+	if len(pd.intents) > 0 {
 		// There were intents, so what we read may not be consistent. Attempt
 		// to nudge the intents in case they're expired; next time around we'll
 		// hopefully have more luck.
-		r.store.intentResolver.processIntentsAsync(r, trigger.intents)
+		r.store.intentResolver.processIntentsAsync(r, pd.intents)
 		return nil, nil, errSystemConfigIntent
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows

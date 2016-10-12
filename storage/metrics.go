@@ -268,7 +268,9 @@ type StoreMetrics struct {
 	ReplicaAllocatorAddCount        *metric.Gauge
 	ReplicaAllocatorRemoveDeadCount *metric.Gauge
 
-	// Lease request metrics.
+	// Lease request metrics for successful and failed lease requests. These
+	// count proposals (i.e. it does not matter how many Replicas apply the
+	// lease).
 	LeaseRequestSuccessCount *metric.Counter
 	LeaseRequestErrorCount   *metric.Counter
 

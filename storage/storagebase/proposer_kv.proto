@@ -1,0 +1,66 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+syntax = "proto2";
+package cockroach.storage.storagebase;
+option go_package = "storagebase";
+
+import "cockroach/roachpb/api.proto";
+import "cockroach/roachpb/data.proto";
+import "cockroach/storage/engine/enginepb/mvcc.proto";
+import "cockroach/storage/storagebase/state.proto";
+
+import "gogoproto/gogo.proto";
+
+// Split is emitted when a Replica commits a split trigger. It signals that the
+// Replica has prepared the on-disk state for both the left and right hand
+// sides of the split, and that the left hand side Replica should be updated as
+// well as the right hand side created.
+message Split {
+  optional roachpb.SplitTrigger trigger = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // RHSDelta holds the statistics for what was written to what is now the
+  // right-hand side of the split during the batch which executed it.
+  // The on-disk state of the right-hand side is already correct, but the
+  // Store must learn about this delta to update its counters appropriately.
+  optional storage.engine.enginepb.MVCCStats rhs_delta = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "RHSDelta"];
+}
+
+// Merge is emitted by a Replica which commits a transaction with
+// a MergeTrigger (i.e. absorbs its right neighbor).
+message Merge {
+  optional roachpb.MergeTrigger trigger = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// ReplicaProposalData is the structured information which together with
+// a RocksDB WriteBatch constitutes the proposal payload in proposer-evaluated
+// KV. For the majority of proposals, we expect ReplicatedProposalData to be
+// trivial; only changes to the metadata state (splits, merges, rebalances,
+// leases, log truncation, ...) of the Replica or certain special commands must
+// sideline information here based on which all Replicas must take action.
+//
+// TODO(tschottdorf): We may need to add a lease identifier to allow the
+// followers to reliably produce errors for proposals which apply after a
+// lease change.
+message ReplicatedProposalData {
+  // Whether to block concurrent readers while processing the proposal data.
+  optional bool block_reads = 1 [(gogoproto.nullable) = false];
+  // Updates to the Replica's ReplicaState. By convention and as outlined on
+  // the comment on the ReplicaState message, this field is sparsely populated
+  // and any field set overwrites the corresponding field in the state, perhaps
+  // which additional side effects (for instance on a descriptor update).
+  optional storage.storagebase.ReplicaState state = 2 [(gogoproto.nullable) = false];
+  optional Split split = 3;
+  optional Merge merge = 4;
+  optional roachpb.ComputeChecksumRequest compute_checksum = 5;
+}

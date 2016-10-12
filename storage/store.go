@@ -967,7 +967,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		var unfrozen int64    // updated atomically
 		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 			r.mu.Lock()
-			frozen := r.mu.state.Frozen
+			frozen := r.mu.state.IsFrozen()
 			r.mu.Unlock()
 			if !frozen {
 				return true
@@ -1545,7 +1545,7 @@ func (s *Store) NewRangeDescriptor(
 //
 // TODO(tschottdorf): Want to merge this with SplitRange, but some legacy
 // testing code calls SplitRange directly.
-func splitTriggerPostCommit(
+func splitPostApply(
 	ctx context.Context, deltaMS enginepb.MVCCStats, split *roachpb.SplitTrigger, r *Replica,
 ) {
 	// The right hand side of the split was already created (and its raftMu
@@ -1569,6 +1569,7 @@ func splitTriggerPostCommit(
 	// Add the RHS replica to the store. This step atomically updates
 	// the EndKey of the LHS replica and also adds the RHS replica
 	// to the store's replica map.
+	log.Warningf(context.TODO(), "rightRng = %s", rightRng)
 	if err := r.store.SplitRange(r, rightRng); err != nil {
 		// Our in-memory state has diverged from the on-disk state.
 		log.Fatalf(ctx, "%s: failed to update Store after split: %s", r, err)
@@ -1649,7 +1650,12 @@ func (s *Store) SplitRange(origRng, newRng *Replica) error {
 	}
 
 	s.metrics.ReplicaCount.Inc(1)
-	return s.processRangeDescriptorUpdateLocked(origRng)
+	log.Warningf(context.TODO(), "updating %s", origRng)
+	if err := s.processRangeDescriptorUpdateLocked(origRng); err != nil {
+		return err
+	}
+	log.Warningf(context.TODO(), "done")
+	return nil
 }
 
 // MergeRange expands the subsuming range to absorb the subsumed range. This
@@ -3283,7 +3289,7 @@ func (s *Store) FrozenStatus(collectFrozen bool) (repDescs []roachpb.ReplicaDesc
 			log.Fatalf(s.Ctx(), "unexpected error: %s", err)
 		}
 		r.mu.Lock()
-		if r.mu.state.Frozen == collectFrozen {
+		if r.mu.state.IsFrozen() == collectFrozen {
 			repDescs = append(repDescs, repDesc)
 		}
 		r.mu.Unlock()

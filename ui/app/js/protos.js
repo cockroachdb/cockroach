@@ -1607,12 +1607,6 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                         },
                                         {
                                             "rule": "optional",
-                                            "type": "bool",
-                                            "name": "frozen",
-                                            "id": 8
-                                        },
-                                        {
-                                            "rule": "optional",
                                             "type": "util.hlc.Timestamp",
                                             "name": "txn_span_gc_threshold",
                                             "id": 9,
@@ -1620,6 +1614,31 @@ module.exports = require("protobufjs").newBuilder({})['import']({
                                                 "(gogoproto.nullable)": false,
                                                 "(gogoproto.customname)": "TxnSpanGCThreshold"
                                             }
+                                        },
+                                        {
+                                            "rule": "optional",
+                                            "type": "FrozenEnum",
+                                            "name": "frozen",
+                                            "id": 10
+                                        }
+                                    ],
+                                    "enums": [
+                                        {
+                                            "name": "FrozenEnum",
+                                            "values": [
+                                                {
+                                                    "name": "FROZEN_UNSPECIFIED",
+                                                    "id": 0
+                                                },
+                                                {
+                                                    "name": "FROZEN",
+                                                    "id": 1
+                                                },
+                                                {
+                                                    "name": "UNFROZEN",
+                                                    "id": 2
+                                                }
+                                            ]
                                         }
                                     ]
                                 },
