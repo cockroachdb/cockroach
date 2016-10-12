@@ -35,7 +35,7 @@ import (
 // Run tests in this file as follows:
 //
 // make test \
-//   PKG=./acceptance \
+//   PKG=./pkg/acceptance \
 //   TESTTIMEOUT=6h \
 //   TESTS=ContinuousLoad_BlockWriter \
 //   TESTFLAGS='-v -remote -key-name google_compute_engine -cwd terraform -nodes 4 -tf.keep-cluster=failed'
