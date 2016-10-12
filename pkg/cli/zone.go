@@ -209,15 +209,14 @@ Fetches and displays the zone configuration for the specified database or
 table.
 `,
 	SilenceUsage: true,
-	RunE:         runGetZone,
+	RunE:         maybeDecorateGRPCError(runGetZone),
 }
 
 // runGetZone retrieves the zone config for a given object id,
 // and if present, outputs its YAML representation.
 func runGetZone(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		mustUsage(cmd)
-		return nil
+		return cmd.Usage()
 	}
 
 	names, err := parseZoneName(args[0])
@@ -272,13 +271,12 @@ var lsZonesCmd = &cobra.Command{
 List zone configs.
 `,
 	SilenceUsage: true,
-	RunE:         runLsZones,
+	RunE:         maybeDecorateGRPCError(runLsZones),
 }
 
 func runLsZones(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
-		mustUsage(cmd)
-		return nil
+		return cmd.Usage()
 	}
 	conn, err := makeSQLClient()
 	if err != nil {
@@ -347,13 +345,12 @@ var rmZoneCmd = &cobra.Command{
 Remove an existing zone config for the specified database or table.
 `,
 	SilenceUsage: true,
-	RunE:         runRmZone,
+	RunE:         maybeDecorateGRPCError(runRmZone),
 }
 
 func runRmZone(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		mustUsage(cmd)
-		return nil
+		return cmd.Usage()
 	}
 
 	names, err := parseZoneName(args[0])
@@ -418,7 +415,7 @@ Note that the specified zone config is merged with the existing zone config for
 the database or table.
 `,
 	SilenceUsage: true,
-	RunE:         runSetZone,
+	RunE:         maybeDecorateGRPCError(runSetZone),
 }
 
 func readZoneConfig() (conf []byte, err error) {
@@ -444,8 +441,7 @@ func readZoneConfig() (conf []byte, err error) {
 // in the system.zones table.
 func runSetZone(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		mustUsage(cmd)
-		return nil
+		return cmd.Usage()
 	}
 
 	conn, err := makeSQLClient()
@@ -527,8 +523,8 @@ var zoneCmds = []*cobra.Command{
 var zoneCmd = &cobra.Command{
 	Use:   "zone",
 	Short: "get, set, list and remove zones",
-	Run: func(cmd *cobra.Command, args []string) {
-		mustUsage(cmd)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return cmd.Usage()
 	},
 }
 

@@ -49,7 +49,7 @@ var debugKeysCmd = &cobra.Command{
 	Long: `
 Pretty-prints all keys in a store.
 `,
-	RunE: runDebugKeys,
+	RunE: maybeDecorateGRPCError(runDebugKeys),
 }
 
 func parseRangeID(arg string) (roachpb.RangeID, error) {
@@ -140,11 +140,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		printer = printKeyValue
 	}
 
-	if err := db.Iterate(debugCtx.startKey, debugCtx.endKey, printer); err != nil {
-		return err
-	}
-
-	return nil
+	return db.Iterate(debugCtx.startKey, debugCtx.endKey, printer)
 }
 
 var debugRangeDataCmd = &cobra.Command{
@@ -155,7 +151,7 @@ Pretty-prints all keys and values in a range. By default, includes unreplicated
 state like the raft HardState. With --replicated, only includes data covered by
  the consistency checker.
 `,
-	RunE: runDebugRangeData,
+	RunE: maybeDecorateGRPCError(runDebugRangeData),
 }
 
 func runDebugRangeData(cmd *cobra.Command, args []string) error {
@@ -199,7 +195,7 @@ var debugRangeDescriptorsCmd = &cobra.Command{
 	Long: `
 Prints all range descriptors in a store with a history of changes.
 `,
-	RunE: runDebugRangeDescriptors,
+	RunE: maybeDecorateGRPCError(runDebugRangeDescriptors),
 }
 
 func descStr(desc roachpb.RangeDescriptor) string {
@@ -416,7 +412,7 @@ var debugRaftLogCmd = &cobra.Command{
 	Long: `
 Prints all log entries in a store for the given range.
 `,
-	RunE: runDebugRaftLog,
+	RunE: maybeDecorateGRPCError(runDebugRaftLog),
 }
 
 func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
@@ -499,7 +495,7 @@ ranges individually.
 
 Uses a hard-coded GC policy with a 24 hour TTL for old versions.
 `,
-	RunE: runDebugGCCmd,
+	RunE: maybeDecorateGRPCError(runDebugGCCmd),
 }
 
 func runDebugGCCmd(cmd *cobra.Command, args []string) error {
@@ -578,7 +574,7 @@ Perform local consistency checks of a single store.
 Capable of detecting the following errors:
 * Raft logs that are inconsistent with their metadata
 `,
-	RunE: runDebugCheckStoreCmd,
+	RunE: maybeDecorateGRPCError(runDebugCheckStoreCmd),
 }
 
 type replicaCheckInfo struct {
@@ -690,7 +686,7 @@ var debugCompactCmd = &cobra.Command{
 	Long: `
 Compact the sstables in a store.
 `,
-	RunE: runDebugCompact,
+	RunE: maybeDecorateGRPCError(runDebugCompact),
 }
 
 func runDebugCompact(cmd *cobra.Command, args []string) error {
@@ -733,7 +729,7 @@ total files and 14 files that are 129 MiB in size.
 The suffixes K, M, G and T are used for terseness to represent KiB, MiB, GiB
 and TiB.
 `,
-	RunE: runDebugSSTables,
+	RunE: maybeDecorateGRPCError(runDebugSSTables),
 }
 
 func runDebugSSTables(cmd *cobra.Command, args []string) error {
@@ -781,7 +777,7 @@ var debugCmd = &cobra.Command{
 These commands are useful for extracting data from the data files of a
 process that has failed and cannot restart.
 `,
-	Run: func(cmd *cobra.Command, args []string) {
-		mustUsage(cmd)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return cmd.Usage()
 	},
 }

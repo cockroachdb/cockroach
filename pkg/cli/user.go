@@ -18,6 +18,7 @@ package cli
 
 import (
 	"bufio"
+	"errors"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -35,24 +36,20 @@ var getUserCmd = &cobra.Command{
 Fetches and displays the user for <username>.
 `,
 	SilenceUsage: true,
-	RunE:         panicGuard(runGetUser),
+	RunE:         maybeDecorateGRPCError(runGetUser),
 }
 
-func runGetUser(cmd *cobra.Command, args []string) {
+func runGetUser(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		mustUsage(cmd)
-		return
+		return cmd.Usage()
 	}
 	conn, err := makeSQLClient()
 	if err != nil {
-		panic(err)
+		return err
 	}
 	defer conn.Close()
-	err = runQueryAndFormatResults(conn, os.Stdout,
+	return runQueryAndFormatResults(conn, os.Stdout,
 		makeQuery(`SELECT * FROM system.users WHERE username=$1`, args[0]), cliCtx.prettyFmt)
-	if err != nil {
-		panic(err)
-	}
 }
 
 // A lsUsersCmd command displays a list of users.
@@ -63,24 +60,20 @@ var lsUsersCmd = &cobra.Command{
 List all users.
 `,
 	SilenceUsage: true,
-	RunE:         panicGuard(runLsUsers),
+	RunE:         maybeDecorateGRPCError(runLsUsers),
 }
 
-func runLsUsers(cmd *cobra.Command, args []string) {
+func runLsUsers(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
-		mustUsage(cmd)
-		return
+		return cmd.Usage()
 	}
 	conn, err := makeSQLClient()
 	if err != nil {
 		panic(err)
 	}
 	defer conn.Close()
-	err = runQueryAndFormatResults(conn, os.Stdout,
+	return runQueryAndFormatResults(conn, os.Stdout,
 		makeQuery(`SELECT username FROM system.users`), cliCtx.prettyFmt)
-	if err != nil {
-		panic(err)
-	}
 }
 
 // A rmUserCmd command removes the user for the specified username.
@@ -91,24 +84,20 @@ var rmUserCmd = &cobra.Command{
 Remove an existing user by username.
 `,
 	SilenceUsage: true,
-	RunE:         panicGuard(runRmUser),
+	RunE:         maybeDecorateGRPCError(runRmUser),
 }
 
-func runRmUser(cmd *cobra.Command, args []string) {
+func runRmUser(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		mustUsage(cmd)
-		return
+		return cmd.Usage()
 	}
 	conn, err := makeSQLClient()
 	if err != nil {
-		panic(err)
+		return err
 	}
 	defer conn.Close()
-	err = runQueryAndFormatResults(conn, os.Stdout,
+	return runQueryAndFormatResults(conn, os.Stdout,
 		makeQuery(`DELETE FROM system.users WHERE username=$1`, args[0]), cliCtx.prettyFmt)
-	if err != nil {
-		panic(err)
-	}
 }
 
 // A setUserCmd command creates a new or updates an existing user.
@@ -120,17 +109,16 @@ Create or update a user for the specified username, prompting
 for the password.
 `,
 	SilenceUsage: true,
-	RunE:         panicGuard(runSetUser),
+	RunE:         maybeDecorateGRPCError(runSetUser),
 }
 
 // runSetUser prompts for a password, then inserts the user and hash
 // into the system.users table.
 // TODO(marc): once we have more fields in the user, we will need
 // to allow changing just some of them (eg: change email, but leave password).
-func runSetUser(cmd *cobra.Command, args []string) {
+func runSetUser(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		mustUsage(cmd)
-		return
+		return cmd.Usage()
 	}
 	var err error
 	var hashed []byte
@@ -138,7 +126,7 @@ func runSetUser(cmd *cobra.Command, args []string) {
 	case "":
 		hashed, err = security.PromptForPasswordAndHash()
 		if err != nil {
-			panic(err)
+			return err
 		}
 	case "-":
 		scanner := bufio.NewScanner(os.Stdin)
@@ -146,20 +134,20 @@ func runSetUser(cmd *cobra.Command, args []string) {
 			if b := scanner.Bytes(); len(b) > 0 {
 				hashed, err = security.HashPassword(b)
 				if err != nil {
-					panic(err)
+					return err
 				}
 				if scanner.Scan() {
-					panic("multiline passwords are not permitted")
+					return errors.New("multiline passwords are not permitted")
 				}
 				if err := scanner.Err(); err != nil {
-					panic(err)
+					return err
 				}
 
 				break // Success.
 			}
 		} else {
 			if err := scanner.Err(); err != nil {
-				panic(err)
+				return err
 			}
 		}
 
@@ -167,20 +155,17 @@ func runSetUser(cmd *cobra.Command, args []string) {
 	default:
 		hashed, err = security.HashPassword([]byte(password))
 		if err != nil {
-			panic(err)
+			return err
 		}
 	}
 	conn, err := makeSQLClient()
 	if err != nil {
-		panic(err)
+		return err
 	}
 	defer conn.Close()
 	// TODO(marc): switch to UPSERT.
-	err = runQueryAndFormatResults(conn, os.Stdout,
+	return runQueryAndFormatResults(conn, os.Stdout,
 		makeQuery(`INSERT INTO system.users VALUES ($1, $2)`, args[0], hashed), cliCtx.prettyFmt)
-	if err != nil {
-		panic(err)
-	}
 }
 
 var userCmds = []*cobra.Command{
@@ -193,8 +178,8 @@ var userCmds = []*cobra.Command{
 var userCmd = &cobra.Command{
 	Use:   "user",
 	Short: "get, set, list and remove users",
-	Run: func(cmd *cobra.Command, args []string) {
-		mustUsage(cmd)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return cmd.Usage()
 	},
 }
 
