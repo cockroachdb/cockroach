@@ -43,7 +43,7 @@ func TestBuildBabyCluster(t *testing.T) {
 // Run this as follows:
 // make test \
 //	 TESTTIMEOUT=30m \
-//	 PKG=./acceptance \
+//	 PKG=./pkg/acceptance \
 //	 TESTS=FiveNodesAndWriters \
 //	 TESTFLAGS='-v -remote -key-name google_compute_engine -cwd terraform'
 func TestFiveNodesAndWriters(t *testing.T) {
