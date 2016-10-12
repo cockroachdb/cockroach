@@ -123,8 +123,11 @@ func (s *Server) maybeCheckForUpdates() time.Duration {
 func (s *Server) maybeRunPeriodicCheck(
 	op string, key roachpb.Key, f func(context.Context),
 ) time.Duration {
+	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "op")
+	defer span.Finish()
+
 	// Add the op name to the log context.
-	ctx := log.WithLogTag(s.Ctx(), op, nil)
+	ctx = log.WithLogTag(ctx, op, nil)
 
 	resp, err := s.db.Get(ctx, key)
 	if err != nil {
@@ -212,11 +215,14 @@ func (s *Server) checkForUpdates(ctx context.Context) {
 }
 
 func (s *Server) usageReportingEnabled() bool {
+	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "usage-reporting")
+	defer span.Finish()
+
 	// Grab the optin value from the database.
 	req := &serverpb.GetUIDataRequest{Keys: []string{optinKey}}
-	resp, err := s.admin.GetUIData(s.Ctx(), req)
+	resp, err := s.admin.GetUIData(ctx, req)
 	if err != nil {
-		log.Warning(s.Ctx(), err)
+		log.Warning(ctx, err)
 		return false
 	}
 
@@ -227,7 +233,7 @@ func (s *Server) usageReportingEnabled() bool {
 	}
 	optin, err := strconv.ParseBool(string(val.Value))
 	if err != nil {
-		log.Warningf(s.Ctx(), "could not parse optin value (%q): %v", val.Value, err)
+		log.Warningf(ctx, "could not parse optin value (%q): %v", val.Value, err)
 		return false
 	}
 	return optin
