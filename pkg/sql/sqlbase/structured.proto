@@ -1,0 +1,416 @@
+// Copyright 2015 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+// Author: Tamir Duberstein (tamird@gmail.com)
+
+// Cannot be proto3 because we use nullable primitives.
+syntax = "proto2";
+package cockroach.sql.sqlbase;
+option go_package = "sqlbase";
+
+import "cockroach/pkg/util/hlc/timestamp.proto";
+import "cockroach/pkg/sql/sqlbase/privilege.proto";
+import "gogoproto/gogo.proto";
+
+message ColumnType {
+  // These mirror the types supported by the sql/parser. See
+  // sql/parser/col_types.go.
+  enum Kind {
+    BOOL = 0;
+    INT = 1;        // INT(width)
+    FLOAT = 2;      // FLOAT(precision)
+    DECIMAL = 3;    // DECIMAL(precision, width /* scale */)
+    DATE = 4;
+    TIMESTAMP = 5;
+    INTERVAL = 6;
+    STRING = 7;     // STRING(width)
+    BYTES = 8;
+    TIMESTAMPTZ = 9;
+  }
+
+  optional Kind kind = 1 [(gogoproto.nullable) = false];
+  // BIT, INT, FLOAT, DECIMAL, CHAR and BINARY
+  optional int32 width = 2 [(gogoproto.nullable) = false];
+  // FLOAT and DECIMAL.
+  optional int32 precision = 3 [(gogoproto.nullable) = false];
+}
+
+enum ConstraintValidity {
+  Validated = 0;
+  Unvalidated = 1;
+}
+
+message ForeignKeyReference {
+  optional uint32 table = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ID"];
+  optional uint32 index = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
+  optional string name = 3 [(gogoproto.nullable) = false];
+  optional ConstraintValidity validity = 4 [(gogoproto.nullable) = false];
+}
+
+message ColumnDescriptor {
+  optional string name = 1 [(gogoproto.nullable) = false];
+  optional uint32 id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ID", (gogoproto.casttype) = "ColumnID"];
+  optional ColumnType type = 3 [(gogoproto.nullable) = false];
+  optional bool nullable = 4 [(gogoproto.nullable) = false];
+  reserved 8;
+  // Default expression to use to populate the column on insert if no
+  // value is provided.
+  optional string default_expr = 5;
+  reserved 9;
+  optional bool hidden = 6 [(gogoproto.nullable) = false];
+  reserved 7;
+}
+
+// ColumnFamilyDescriptor is set of columns stored together in one kv entry.
+message ColumnFamilyDescriptor {
+  optional string name = 1 [(gogoproto.nullable) = false];
+  optional uint32 id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ID", (gogoproto.casttype) = "FamilyID"];
+
+  // A list of column names of which the family is comprised. This list
+  // parallels the column_ids list. If duplicating the storage of the column
+  // names here proves to be prohibitive, we could clear this field before
+  // saving and reconstruct it after loading.
+  repeated string column_names = 3;
+  // A list of column ids of which the family is comprised. This list parallels
+  // the column_names list.
+  repeated uint32 column_ids = 4 [(gogoproto.customname) = "ColumnIDs",
+      (gogoproto.casttype) = "ColumnID"];
+
+  // If nonzero, the column involved in the single column optimization.
+  //
+  // Families store colums in a ValueType_TUPLE as repeated <colid><data>
+  // entries. As a space optimization and for backward compatibility, a single
+  // column is written without the columnid prefix. Because more columns could
+  // be added, it would be ambiguous which column was stored when read back in,
+  // so this field supplies it.
+  optional uint32 default_column_id = 5 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "DefaultColumnID", (gogoproto.casttype) = "ColumnID"];
+}
+
+// InterleaveDescriptor represents an index (either primary or secondary) that
+// is interleaved into another table's data.
+//
+// Example:
+// Table 1 -> /a/b
+// Table 2 -> /a/b/c
+// Table 3 -> /a/b/c/d
+//
+// There are two components (table 2 is the parent and table 1 is the
+// grandparent) with shared lengths 2 and 1.
+message InterleaveDescriptor {
+  message Ancestor {
+    // TableID the ID of the table being interleaved into.
+    optional uint32 table_id = 1 [(gogoproto.nullable) = false,
+        (gogoproto.customname) = "TableID", (gogoproto.casttype) = "ID"];
+    // IndexID is the ID of the parent index being interleaved into.
+    optional uint32 index_id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "IndexID", (gogoproto.casttype) = "IndexID"];
+    // SharedPrefixLen is how many fields are shared between a parent and child
+    // being interleaved, excluding any fields shared between parent and
+    // grandparent. Thus, the sum of SharedPrefixLens in the components of an
+    // InterleaveDescriptor is always strictly less than the number of fields
+    // in the index being interleaved.
+    optional uint32 shared_prefix_len = 3 [(gogoproto.nullable) = false,
+        (gogoproto.customname) = "SharedPrefixLen"];
+  }
+
+  // Ancestors contains the nesting of interleaves in the order they appear in
+  // an encoded key. This means they are always in the far-to-near ancestor
+  // order (e.g. grand-grand-parent, grand-parent, parent).
+  repeated Ancestor ancestors = 1 [(gogoproto.nullable) = false];
+}
+
+message IndexDescriptor {
+  // The direction of a column in the index.
+  enum Direction {
+    ASC = 0;
+    DESC = 1;
+  }
+
+  optional string name = 1 [(gogoproto.nullable) = false];
+  optional uint32 id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ID", (gogoproto.casttype) = "IndexID"];
+  optional bool unique = 3 [(gogoproto.nullable) = false];
+  // An ordered list of column names of which the index is comprised. This list
+  // parallels the column_ids list. If duplicating the storage of the column
+  // names here proves to be prohibitive, we could clear this field before
+  // saving and reconstruct it after loading.
+  repeated string column_names = 4;
+  // Parallel with column_names - the sort direction of each column.
+  repeated Direction column_directions = 8;
+
+  // An ordered list of column names which the index stores in
+  // addition to the columns which are explicitly part of the index.
+  repeated string store_column_names = 5;
+  // An ordered list of column ids of which the index is comprised. This list
+  // parallels the column_names list.
+  repeated uint32 column_ids = 6 [(gogoproto.customname) = "ColumnIDs",
+      (gogoproto.casttype) = "ColumnID"];
+  // An ordered list of implicit column ids associated with the index. For
+  // non-unique indexes, these columns will be appended to the key. For unique
+  // indexes these columns will be stored in the value. The extra column IDs is
+  // computed as PrimaryIndex.column_ids - column_ids. For the primary index
+  // the list will be empty.
+  // The distinction about whether the columns are written in the key or the value
+  // comes because we want to always do writes using a single operation - this
+  // way for unique indexes we can do a conditional put on the key.
+  repeated uint32 implicit_column_ids = 7 [(gogoproto.customname) = "ImplicitColumnIDs",
+      (gogoproto.casttype) = "ColumnID"];
+
+  optional ForeignKeyReference foreign_key = 9 [(gogoproto.nullable) = false];
+  repeated ForeignKeyReference referenced_by = 10 [(gogoproto.nullable) = false];
+
+  // Interleave, if it's not the zero value, describes how this index's data is
+  // interleaved into another index's data.
+  optional InterleaveDescriptor interleave = 11 [(gogoproto.nullable) = false];
+  // InterleavedBy contains a reference to every table/index that is interleaved
+  // into this one.
+  repeated ForeignKeyReference interleaved_by = 12  [(gogoproto.nullable) = false];
+}
+
+// A DescriptorMutation represents a column or an index that
+// has either been added or dropped and hasn't yet transitioned
+// into a stable state: completely backfilled and visible, or
+// completely deleted. A table descriptor in the middle of a
+// schema change will have a DescriptorMutation FIFO queue
+// containing each column/index descriptor being added or dropped.
+message DescriptorMutation {
+  oneof descriptor {
+    ColumnDescriptor column = 1;
+    IndexDescriptor index = 2;
+  }
+  // A descriptor within a mutation is unavailable for reads, writes
+  // and deletes. It is only available for implicit (internal to
+  // the database) writes and deletes depending on the state of the mutation.
+  enum State {
+    // Not used.
+    UNKNOWN = 0;
+    // Operations can use this invisible descriptor to implicitly
+    // delete entries.
+    // Column: A descriptor in this state is invisible to
+    // INSERT and UPDATE. DELETE must delete a column in this state.
+    // Index: A descriptor in this state is invisible to an INSERT.
+    // UPDATE must delete the old value of the index but doesn't write
+    // the new value. DELETE must delete the index.
+    //
+    // When deleting a descriptor, all descriptor related data
+    // (column or index data) can only be mass deleted once
+    // all the nodes have transitioned to the DELETE_ONLY state.
+    DELETE_ONLY = 1;
+    // Operations can use this invisible descriptor to implicitly
+    // write and delete entries.
+    // Column: INSERT will populate this column with the default
+    // value. UPDATE ignores this descriptor. DELETE must delete
+    // the column.
+    // Index: INSERT, UPDATE and DELETE treat this index like any
+    // other index.
+    //
+    // When adding a descriptor, all descriptor related data
+    // (column default or index data) can only be backfilled once
+    // all nodes have transitioned into the WRITE_ONLY state.
+    WRITE_ONLY = 2;
+  }
+  optional State state = 3 [(gogoproto.nullable) = false];
+
+  // Direction of mutation.
+  enum Direction {
+    // Not used.
+    NONE = 0;
+    // Descriptor is being added.
+    ADD = 1;
+    // Descriptor is being dropped.
+    DROP = 2;
+  }
+  optional Direction direction = 4 [(gogoproto.nullable) = false];
+
+  // The mutation id used to group mutations that should be applied together.
+  // This is used for situations like creating a unique column, which
+  // involve adding two mutations: one for the column, and another for the
+  // unique constraint index.
+  optional uint32 mutation_id = 5 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "MutationID", (gogoproto.casttype) = "MutationID"];
+}
+
+// A TableDescriptor represents a table or view and is stored in a
+// structured metadata key. The TableDescriptor has a globally-unique ID,
+// while its member {Column,Index}Descriptors have locally-unique IDs.
+message TableDescriptor {
+  // Needed for the descriptorProto interface.
+  option (gogoproto.goproto_getters) = true;
+
+  // The table name. It should be normalized using sqlbase.NormalizeName()
+  // before comparing it.
+  optional string name = 1 [(gogoproto.nullable) = false];
+  optional uint32 id = 3 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+  // ID of the parent database.
+  optional uint32 parent_id = 4 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+  // Monotonically increasing version of the table descriptor.
+  //
+  // Invariants:
+  // 1. not more than two subsequent versions of the table
+  // descriptor can be leased. This is to make the system
+  // easy to reason about, by permiting mutation state
+  // changes (reflected in the next version), only when the existing
+  // state (reflected in the current version) is present on all
+  // outstanding unexpired leases.
+  // 2. A schema change command (ALTER, RENAME, etc) never directly
+  // increments the version. This allows the command to execute without
+  // waiting for the entire cluster to converge to a single version
+  // preventing weird deadlock situations. For instance, a transaction
+  // with a schema change command might use a descriptor lease that is
+  // at version: v - 1, and therefore deadlock when it tries to wait
+  // for version: v, in the process of incrementing it to v + 1.
+  // Therefore, a schema change command never increments the version,
+  // and instead, sets the up_version boolean to notify the schema
+  // changer execution engine that runs a future transaction to
+  // increment the version.
+  //
+  // The schema change commands must therefore make *safe* modifications
+  // to the table descriptor, such as scheduling long running schema
+  // changes through mutations for future execution, or making simple
+  // schema changes like RENAME that only modify the table descriptor in a
+  // single transaction.
+  //
+  // Multiple schema changes in the same transaction set up_version.
+  // The actual schema change execution that follows a schema change
+  // command sees the up_version boolean set, and increments the
+  // table version after ensuring that there are no unexpired leases
+  // for version - 1. The schema change execution must increment
+  // the version before executing future state changes, to ensure
+  // that the scheduled mutations made by the original commands are
+  // visible on all leases. Multiple schema change mutations can be
+  // grouped together on a particular version increment.
+  //
+  // If schema change commands are safe to run without incrementing
+  // the version, why do it later on? We increment the version
+  // to ensure that all the nodes renew their leases with the new version
+  // and get to see what the schema change command has done quickly.
+  optional uint32 version = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
+  // See comment above.
+  optional bool up_version = 6 [(gogoproto.nullable) = false];
+  // Last modification time of the table descriptor.
+  optional util.hlc.Timestamp modification_time = 7 [(gogoproto.nullable) = false];
+  repeated ColumnDescriptor columns = 8 [(gogoproto.nullable) = false];
+  // next_column_id is used to ensure that deleted column ids are not reused.
+  optional uint32 next_column_id = 9 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NextColumnID", (gogoproto.casttype) = "ColumnID"];
+  repeated ColumnFamilyDescriptor families = 22 [(gogoproto.nullable) = false];
+  // next_family_id is used to ensure that deleted family ids are not reused.
+  optional uint32 next_family_id = 23 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NextFamilyID", (gogoproto.casttype) = "FamilyID"];
+  optional IndexDescriptor primary_index = 10 [(gogoproto.nullable) = false];
+  // indexes are all the secondary indexes.
+  repeated IndexDescriptor indexes = 11 [(gogoproto.nullable) = false];
+  // next_index_id is used to ensure that deleted index ids are not reused.
+  optional uint32 next_index_id = 12 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NextIndexID", (gogoproto.casttype) = "IndexID"];
+  optional PrivilegeDescriptor privileges = 13;
+  // Columns or indexes being added or deleted in a FIFO order.
+  repeated DescriptorMutation mutations = 14 [(gogoproto.nullable) = false];
+  // The schema update lease. A single goroutine across a cockroach cluster
+  // can own it, and will execute pending schema changes for this table.
+  // Since the execution of a pending schema change is through transactions,
+  // it is legal for more than one goroutine to attempt to execute it. This
+  // lease reduces write contention on the schema change.
+  message SchemaChangeLease {
+    optional uint32 node_id = 1 [(gogoproto.nullable) = false,
+        (gogoproto.customname) = "NodeID",
+        (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    // Nanoseconds since the Unix epoch.
+    optional int64 expiration_time = 2 [(gogoproto.nullable) = false];
+  }
+  optional SchemaChangeLease lease = 15;
+  // An id for the next group of mutations to be applied together.
+  optional uint32 next_mutation_id = 16 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NextMutationID", (gogoproto.casttype) = "MutationID"];
+
+  // format_version declares which sql to key:value mapping is being used to
+  // represent the data in this table.
+  optional uint32 format_version = 17 [(gogoproto.nullable) = false,
+      (gogoproto.casttype) = "FormatVersion"];
+
+  reserved 18;
+
+  // State is set if this TableDescriptor is in the process of being added or deleted.
+  // A non-public table descriptor cannot be leased.
+  // A schema changer observing DROP set will truncate the table and delete the
+  // descriptor.
+  // It is illegal to transition DROP to any other state.
+  enum State {
+    // Not used.
+    PUBLIC = 0;
+    // Descriptor is being added.
+    ADD = 1;
+    // Descriptor is being dropped.
+    DROP = 2;
+  }
+  optional State state = 19 [(gogoproto.nullable) = false];
+
+  message CheckConstraint {
+    optional string expr = 1 [(gogoproto.nullable) = false];
+    optional string name = 2 [(gogoproto.nullable) = false];
+    optional ConstraintValidity validity = 3 [(gogoproto.nullable) = false];
+  }
+
+  repeated CheckConstraint checks = 20;
+
+  message RenameInfo{
+    // The database that the table belonged to before the rename (tables can be
+    // renamed from one db to another).
+    optional uint32 old_parent_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "OldParentID", (gogoproto.casttype) = "ID"];
+    optional string old_name = 2 [(gogoproto.nullable) = false];
+  }
+
+  // This array is populated if the descriptor was renamed. If the descriptor is
+  // renamed multiple times before the schema chage is processed, there will be
+  // one element for each rename.
+  // When this is detected in a schema change, the records for the old names are
+  // deleted and this field is cleared.
+  repeated RenameInfo renames = 21 [(gogoproto.nullable) = false];
+
+  // The TableDescriptor is used for views in addition to tables. Views
+  // use mostly the same fields as tables, but need to track the actual
+  // query from the view definition as well.
+  //
+  // Note: The presence of this field is used to determine whether or not
+  // a TableDescriptor represents a view.
+  optional string view_query = 24 [(gogoproto.nullable) = false];
+}
+
+// DatabaseDescriptor represents a namespace (aka database) and is stored
+// in a structured metadata key. The DatabaseDescriptor has a globally-unique
+// ID shared with the TableDescriptor ID.
+// Permissions are applied to all tables in the namespace.
+message DatabaseDescriptor {
+  // Needed for the descriptorProto interface.
+  option (gogoproto.goproto_getters) = true;
+
+  optional string name = 1 [(gogoproto.nullable) = false];
+  optional uint32 id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+  optional PrivilegeDescriptor privileges = 3;
+}
+
+// Descriptor is a union type holding either a table or database descriptor.
+message Descriptor {
+  oneof union {
+    TableDescriptor table = 1;
+    DatabaseDescriptor database = 2;
+  }
+}

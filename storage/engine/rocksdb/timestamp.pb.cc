@@ -1,1 +1,0 @@
-./cockroach/util/hlc/timestamp.pb.cc
