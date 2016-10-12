@@ -300,7 +300,7 @@ func extractValue(mtr interface{}) (float64, error) {
 	switch mtr := mtr.(type) {
 	case float64:
 		return mtr, nil
-	case *metric.Rates:
+	case *metric.CounterWithRates:
 		return float64(mtr.Count()), nil
 	case *metric.Counter:
 		return float64(mtr.Count()), nil
@@ -334,7 +334,7 @@ func eachRecordableValue(reg *metric.Registry, fn func(string, float64)) {
 			// roll-ups don't know that and so they will return mathematically
 			// nonsensical values, but that seems acceptable for the time
 			// being.
-			curr := histogram.Windowed()
+			curr, _ := histogram.Windowed()
 			for _, pt := range recordHistogramQuantiles {
 				fn(name+pt.suffix, float64(curr.ValueAtQuantile(pt.quantile)))
 			}

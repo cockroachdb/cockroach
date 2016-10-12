@@ -21,16 +21,16 @@ import (
 
 	"golang.org/x/net/context"
 
-	opentracing "github.com/opentracing/opentracing-go"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // localTestClusterTransport augments senderTransport with an optional
@@ -82,5 +82,5 @@ func InitSenderForLocalTestCluster(
 
 	ctx := tracing.WithTracer(context.Background(), tracer)
 	return NewTxnCoordSender(ctx, distSender, clock, false, /* !linearizable */
-		stopper, MakeTxnMetrics())
+		stopper, MakeTxnMetrics(metric.TestSampleInterval))
 }

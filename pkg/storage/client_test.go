@@ -135,7 +135,7 @@ func createTestStoreWithEngine(
 	}, storeCfg.Gossip)
 
 	sender := kv.NewTxnCoordSender(storeCfg.Ctx, distSender, clock, false, stopper,
-		kv.MakeTxnMetrics())
+		kv.MakeTxnMetrics(metric.TestSampleInterval))
 	storeCfg.Clock = clock
 	storeCfg.DB = client.NewDB(sender)
 	storeCfg.StorePool = storage.NewStorePool(
@@ -603,7 +603,7 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 	}, m.gossips[idx])
 	ctx := tracing.WithTracer(context.Background(), tracing.NewTracer())
 	sender := kv.NewTxnCoordSender(ctx, m.distSenders[idx], m.clock, false,
-		stopper, kv.MakeTxnMetrics())
+		stopper, kv.MakeTxnMetrics(metric.TestSampleInterval))
 	m.dbs[idx] = client.NewDB(sender)
 }
 

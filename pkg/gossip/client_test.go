@@ -221,13 +221,12 @@ func TestClientGossipMetrics(t *testing.T) {
 		func() error {
 			// Infos/Bytes Sent/Received should not be zero.
 			for i, s := range []*server{local.server, remote.server} {
-				for _, rate := range []metric.Rates{
+				for _, counter := range []*metric.Counter{
 					s.nodeMetrics.InfosSent,
 					s.nodeMetrics.InfosReceived,
 					s.nodeMetrics.BytesSent,
 					s.nodeMetrics.BytesReceived,
 				} {
-					counter := rate.Counter
 					if count := counter.Count(); count <= 0 {
 						return errors.Errorf("%d: expected metrics counter %q > 0; = %d", i, counter.GetName(), count)
 					}

@@ -104,11 +104,12 @@ func createTestNode(
 	}, g)
 	cfg.Ctx = tracing.WithTracer(context.Background(), tracing.NewTracer())
 	sender := kv.NewTxnCoordSender(cfg.Ctx, distSender, cfg.Clock, false, stopper,
-		kv.MakeTxnMetrics())
+		kv.MakeTxnMetrics(metric.TestSampleInterval))
 	cfg.DB = client.NewDB(sender)
 	cfg.Transport = storage.NewDummyRaftTransport()
+	cfg.MetricsSampleInterval = metric.TestSampleInterval
 	node := NewNode(cfg, status.NewMetricsRecorder(cfg.Clock), metric.NewRegistry(), stopper,
-		kv.MakeTxnMetrics(), sql.MakeEventLogger(nil))
+		kv.MakeTxnMetrics(metric.TestSampleInterval), sql.MakeEventLogger(nil))
 	roachpb.RegisterInternalServer(grpcServer, node)
 	return grpcServer, ln.Addr(), cfg.Clock, node, stopper
 }
@@ -153,7 +154,7 @@ func TestBootstrapCluster(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, stopper)
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics()); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -194,7 +195,7 @@ func TestBootstrapNewStore(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics()); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -242,7 +243,7 @@ func TestNodeJoin(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	defer engineStopper.Stop()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics()); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -321,7 +322,7 @@ func TestCorruptedClusterID(t *testing.T) {
 	engineStopper := stop.NewStopper()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
 	defer engineStopper.Stop()
-	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics()); err != nil {
+	if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -435,8 +436,8 @@ func compareNodeStatus(
 	}
 
 	compareMetricMaps(nodeStatus.Metrics, expectedNodeStatus.Metrics, nil, []string{
-		"exec.success-count",
-		"exec.error-count",
+		"exec.success",
+		"exec.error",
 	})
 
 	for key := range actualStores {
@@ -514,8 +515,8 @@ func TestStatusSummaries(t *testing.T) {
 		StartedAt: 0,
 		UpdatedAt: 0,
 		Metrics: map[string]float64{
-			"exec.success-count": 0,
-			"exec.error-count":   0,
+			"exec.success": 0,
+			"exec.error":   0,
 		},
 	}
 
@@ -587,7 +588,7 @@ func TestStatusSummaries(t *testing.T) {
 	}
 
 	// Increment metrics on the node
-	expectedNodeStatus.Metrics["exec.success-count"] += 2
+	expectedNodeStatus.Metrics["exec.success"] += 2
 
 	// Increment metrics on the first store.
 	store1 := expectedStoreStatuses[roachpb.StoreID(1)].Metrics
@@ -623,7 +624,7 @@ func TestStatusSummaries(t *testing.T) {
 	}
 
 	// Increment metrics on the node
-	expectedNodeStatus.Metrics["exec.success-count"] += 2
+	expectedNodeStatus.Metrics["exec.success"] += 2
 
 	// Increment metrics on the first store.
 	store1 = expectedStoreStatuses[roachpb.StoreID(1)].Metrics
@@ -648,7 +649,9 @@ func TestStartNodeWithLocality(t *testing.T) {
 		engineStopper := stop.NewStopper()
 		defer engineStopper.Stop()
 		e := engine.NewInMem(roachpb.Attributes{}, 1<<20, engineStopper)
-		if _, err := bootstrapCluster([]engine.Engine{e}, kv.MakeTxnMetrics()); err != nil {
+		if _, err := bootstrapCluster(
+			[]engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+		); err != nil {
 			t.Fatal(err)
 		}
 		_, _, node, stopper := createAndStartTestNode(

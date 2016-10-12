@@ -105,10 +105,10 @@ func (tm *txnMetadata) hasClientAbandonedCoord(nowNanos int64) bool {
 
 // TxnMetrics holds all metrics relating to KV transactions.
 type TxnMetrics struct {
-	Aborts     metric.Rates
-	Commits    metric.Rates
-	Commits1PC metric.Rates // Commits which finished in a single phase
-	Abandons   metric.Rates
+	Aborts     *metric.CounterWithRates
+	Commits    *metric.CounterWithRates
+	Commits1PC *metric.CounterWithRates // Commits which finished in a single phase
+	Abandons   *metric.CounterWithRates
 	Durations  *metric.Histogram
 
 	// Restarts is the number of times we had to restart the transaction.
@@ -124,15 +124,16 @@ var (
 	metaRestartsHistogram   = metric.Metadata{Name: "txn.restarts"}
 )
 
-// MakeTxnMetrics returns a TxnMetrics struct that contains metrics.
-func MakeTxnMetrics() TxnMetrics {
+// MakeTxnMetrics returns a TxnMetrics struct that contains metrics whose
+// windowed portions retain data for approximately sampleInterval.
+func MakeTxnMetrics(sampleInterval time.Duration) TxnMetrics {
 	return TxnMetrics{
-		Aborts:     metric.NewRates(metaAbortsRates),
-		Commits:    metric.NewRates(metaCommitsRates),
-		Commits1PC: metric.NewRates(metaCommits1PCRates),
-		Abandons:   metric.NewRates(metaAbandonsRates),
-		Durations:  metric.NewLatency(metaDurationsHistograms),
-		Restarts:   metric.NewHistogram(metaRestartsHistogram, 60*time.Second, 100, 3),
+		Aborts:     metric.NewCounterWithRates(metaAbortsRates),
+		Commits:    metric.NewCounterWithRates(metaCommitsRates),
+		Commits1PC: metric.NewCounterWithRates(metaCommits1PCRates),
+		Abandons:   metric.NewCounterWithRates(metaAbandonsRates),
+		Durations:  metric.NewLatency(metaDurationsHistograms, sampleInterval),
+		Restarts:   metric.NewHistogram(metaRestartsHistogram, sampleInterval, 100, 3),
 	}
 }
 
@@ -190,15 +191,15 @@ func NewTxnCoordSender(
 		metrics:           txnMetrics,
 	}
 
-	tc.stopper.RunWorker(tc.startStats)
+	tc.stopper.RunWorker(tc.printStatsLoop)
 	return tc
 }
 
-// startStats blocks and periodically logs transaction statistics (throughput,
-// success rates, durations, ...). Note that this only captures write txns,
-// since read-only txns are stateless as far as TxnCoordSender is concerned.
-// stats).
-func (tc *TxnCoordSender) startStats() {
+// printStatsLoop blocks and periodically logs transaction statistics
+// (throughput, success rates, durations, ...). Note that this only captures
+// write txns, since read-only txns are stateless as far as TxnCoordSender is
+// concerned. stats).
+func (tc *TxnCoordSender) printStatsLoop() {
 	res := time.Millisecond // for duration logging resolution
 	var statusLogTimer timeutil.Timer
 	defer statusLogTimer.Stop()
@@ -208,22 +209,26 @@ func (tc *TxnCoordSender) startStats() {
 		select {
 		case <-statusLogTimer.C:
 			statusLogTimer.Read = true
-			if !log.V(1) {
-				continue
-			}
-
 			// Take a snapshot of metrics. There's some chance of skew, since the snapshots are
 			// not done atomically, but that should be fine for these debug stats.
 			metrics := tc.metrics
-			durations := metrics.Durations.Windowed()
-			restarts := metrics.Restarts.Windowed()
+			durations, durationsWindow := metrics.Durations.Windowed()
+			restarts, restartsWindow := metrics.Restarts.Windowed()
+			if restartsWindow != durationsWindow {
+				log.Fatalf(context.TODO(),
+					"misconfigured windowed histograms: %s != %s",
+					restartsWindow,
+					durationsWindow,
+				)
+			}
 			commitRate := metrics.Commits.Rates[scale].Value()
 			commit1PCRate := metrics.Commits1PC.Rates[scale].Value()
 			abortRate := metrics.Aborts.Rates[scale].Value()
 			abandonRate := metrics.Abandons.Rates[scale].Value()
 
-			// Show transaction stats over the last minute. Maybe this should be shorter in the future.
-			// We'll revisit if we get sufficient feedback.
+			// Show transaction stats over the last minute. Maybe this should
+			// be shorter in the future. We'll revisit if we get sufficient
+			// feedback.
 			totalRate := commitRate + abortRate + abandonRate
 			var pCommitted, pCommitted1PC, pAbandoned, pAborted float64
 			if totalRate > 0 {
@@ -241,14 +246,16 @@ func (tc *TxnCoordSender) startStats() {
 			rMax := restarts.Max()
 			num := durations.TotalCount()
 
-			log.Infof(tc.ctx,
-				"txn coordinator: %.2f txn/sec, %.2f/%.2f/%.2f/%.2f %%cmmt/cmmt1pc/abrt/abnd, %s/%s/%s avg/σ/max duration, %.1f/%.1f/%d avg/σ/max restarts (%d samples)",
-				totalRate, pCommitted, pCommitted1PC, pAborted, pAbandoned,
-				util.TruncateDuration(time.Duration(dMean), res),
-				util.TruncateDuration(time.Duration(dDev), res),
-				util.TruncateDuration(time.Duration(dMax), res),
-				rMean, rDev, rMax, num,
-			)
+			if log.V(1) {
+				log.Infof(tc.ctx,
+					"txn coordinator: %.2f txn/sec, %.2f/%.2f/%.2f/%.2f %%cmmt/cmmt1pc/abrt/abnd, %s/%s/%s avg/σ/max duration, %.1f/%.1f/%d avg/σ/max restarts (%d samples over %s)",
+					totalRate, pCommitted, pCommitted1PC, pAborted, pAbandoned,
+					util.TruncateDuration(time.Duration(dMean), res),
+					util.TruncateDuration(time.Duration(dDev), res),
+					util.TruncateDuration(time.Duration(dMax), res),
+					rMean, rDev, rMax, num, restartsWindow,
+				)
+			}
 
 		case <-tc.stopper.ShouldStop():
 			return
@@ -992,13 +999,13 @@ func (tc *TxnCoordSender) updateStats(
 	tc.metrics.Restarts.RecordValue(restarts)
 	switch status {
 	case roachpb.ABORTED:
-		tc.metrics.Aborts.Add(1)
+		tc.metrics.Aborts.Inc(1)
 	case roachpb.PENDING:
-		tc.metrics.Abandons.Add(1)
+		tc.metrics.Abandons.Inc(1)
 	case roachpb.COMMITTED:
-		tc.metrics.Commits.Add(1)
+		tc.metrics.Commits.Inc(1)
 		if onePC {
-			tc.metrics.Commits1PC.Add(1)
+			tc.metrics.Commits1PC.Inc(1)
 		}
 	}
 }

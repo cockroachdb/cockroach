@@ -33,6 +33,7 @@ func (r *Registry) findMetricByName(name string) Iterable {
 // getCounter returns the Counter in this registry with the given name. If a
 // Counter with this name is not present (including if a non-Counter Iterable is
 // registered with the name), nil is returned.
+// For the purpose of this method, a CounterWithRate is a Counter.
 func (r *Registry) getCounter(name string) *Counter {
 	r.Lock()
 	defer r.Unlock()
@@ -40,11 +41,15 @@ func (r *Registry) getCounter(name string) *Counter {
 	if iterable == nil {
 		return nil
 	}
-	counter, ok := iterable.(*Counter)
-	if !ok {
-		return nil
+
+	switch t := iterable.(type) {
+	case *Counter:
+		return t
+	case *CounterWithRates:
+		return t.Counter
+	default:
 	}
-	return counter
+	return nil
 }
 
 // getGauge returns the Gauge in this registry with the given name. If a Gauge
@@ -64,23 +69,6 @@ func (r *Registry) getGauge(name string) *Gauge {
 	return gauge
 }
 
-// getRate returns the Rate in this registry with the given name. If a Rate with
-// this name is not present (including if a non-Rate Iterable is registered with
-// the name), nil is returned.
-func (r *Registry) getRate(name string) *Rate {
-	r.Lock()
-	defer r.Unlock()
-	iterable := r.findMetricByName(name)
-	if iterable == nil {
-		return nil
-	}
-	rate, ok := iterable.(*Rate)
-	if !ok {
-		return nil
-	}
-	return rate
-}
-
 func TestRegistry(t *testing.T) {
 	r := NewRegistry()
 
@@ -92,21 +80,18 @@ func TestRegistry(t *testing.T) {
 	topCounter := NewCounter(Metadata{Name: "top.counter"})
 	r.AddMetric(topCounter)
 
-	topRate := NewRate(Metadata{Name: "top.rate"}, time.Minute)
-	r.AddMetric(topRate)
+	topCounterWithRates := NewCounterWithRates(Metadata{Name: "top.counterwithrates"})
+	r.AddMetric(topCounterWithRates)
 
-	r.AddMetricGroup(NewRates(Metadata{Name: "top.rates"}))
 	r.AddMetric(NewHistogram(Metadata{Name: "top.histogram"}, time.Minute, 1000, 3))
 
 	r.AddMetric(NewGauge(Metadata{Name: "bottom.gauge"}))
-	r.AddMetricGroup(NewRates(Metadata{Name: "bottom.rates"}))
 	ms := &struct {
-		StructGauge     *Gauge
-		StructGauge64   *GaugeFloat64
-		StructCounter   *Counter
-		StructHistogram *Histogram
-		StructRate      *Rate
-		StructRates     Rates
+		StructGauge            *Gauge
+		StructGauge64          *GaugeFloat64
+		StructCounter          *Counter
+		StructHistogram        *Histogram
+		StructCounterWithRates *CounterWithRates
 		// A few extra ones: either not exported, or not metric objects.
 		privateStructGauge   *Gauge
 		privateStructGauge64 *GaugeFloat64
@@ -114,44 +99,31 @@ func TestRegistry(t *testing.T) {
 		AlsoNotAMetric       string
 		ReallyNotAMetric     *Registry
 	}{
-		StructGauge:          NewGauge(Metadata{Name: "struct.gauge"}),
-		StructGauge64:        NewGaugeFloat64(Metadata{Name: "struct.gauge64"}),
-		StructCounter:        NewCounter(Metadata{Name: "struct.counter"}),
-		StructHistogram:      NewHistogram(Metadata{Name: "struct.histogram"}, time.Minute, 1000, 3),
-		StructRate:           NewRate(Metadata{Name: "struct.rate"}, time.Minute),
-		StructRates:          NewRates(Metadata{Name: "struct.rates"}),
-		privateStructGauge:   NewGauge(Metadata{Name: "struct.private-gauge"}),
-		privateStructGauge64: NewGaugeFloat64(Metadata{Name: "struct.private-gauge64"}),
-		NotAMetric:           0,
-		AlsoNotAMetric:       "foo",
-		ReallyNotAMetric:     NewRegistry(),
+		StructGauge:            NewGauge(Metadata{Name: "struct.gauge"}),
+		StructGauge64:          NewGaugeFloat64(Metadata{Name: "struct.gauge64"}),
+		StructCounter:          NewCounter(Metadata{Name: "struct.counter"}),
+		StructHistogram:        NewHistogram(Metadata{Name: "struct.histogram"}, time.Minute, 1000, 3),
+		StructCounterWithRates: NewCounterWithRates(Metadata{Name: "struct.counterwithrates"}),
+		privateStructGauge:     NewGauge(Metadata{Name: "struct.private-gauge"}),
+		privateStructGauge64:   NewGaugeFloat64(Metadata{Name: "struct.private-gauge64"}),
+		NotAMetric:             0,
+		AlsoNotAMetric:         "foo",
+		ReallyNotAMetric:       NewRegistry(),
 	}
 	r.AddMetricStruct(ms)
 
 	expNames := map[string]struct{}{
-		"top.rate":           {},
-		"top.rates-count":    {},
-		"top.rates-1m":       {},
-		"top.rates-10m":      {},
-		"top.rates-1h":       {},
-		"top.histogram":      {},
-		"top.gauge":          {},
-		"top.floatgauge":     {},
-		"top.counter":        {},
-		"bottom.gauge":       {},
-		"bottom.rates-count": {},
-		"bottom.rates-1m":    {},
-		"bottom.rates-10m":   {},
-		"bottom.rates-1h":    {},
-		"struct.gauge":       {},
-		"struct.gauge64":     {},
-		"struct.counter":     {},
-		"struct.histogram":   {},
-		"struct.rate":        {},
-		"struct.rates-count": {},
-		"struct.rates-1m":    {},
-		"struct.rates-10m":   {},
-		"struct.rates-1h":    {},
+		"top.counterwithrates":    {},
+		"top.histogram":           {},
+		"top.gauge":               {},
+		"top.floatgauge":          {},
+		"top.counter":             {},
+		"bottom.gauge":            {},
+		"struct.gauge":            {},
+		"struct.gauge64":          {},
+		"struct.counter":          {},
+		"struct.histogram":        {},
+		"struct.counterwithrates": {},
 	}
 
 	r.Each(func(name string, _ interface{}) {
@@ -178,20 +150,13 @@ func TestRegistry(t *testing.T) {
 	if c := r.getCounter("top.counter"); c != topCounter {
 		t.Errorf("getCounter returned %v, expected %v", c, topCounter)
 	}
+	if c, e := r.getCounter("top.counterwithrates"), topCounterWithRates.Counter; c != e {
+		t.Errorf("getCounter returned %v, expected %v", c, e)
+	}
 	if c := r.getCounter("bad"); c != nil {
 		t.Errorf("getCounter returned non-nil %v, expected nil", c)
 	}
 	if c := r.getCounter("top.histogram"); c != nil {
 		t.Errorf("getCounter returned non-nil %v of type %T when requesting non-counter, expected nil", c, c)
-	}
-
-	if r := r.getRate("top.rate"); r != topRate {
-		t.Errorf("getRate returned %v, expected %v", r, topRate)
-	}
-	if r := r.getRate("bad"); r != nil {
-		t.Errorf("getRate returned non-nil %v, expected nil", r)
-	}
-	if r := r.getRate("top.histogram"); r != nil {
-		t.Errorf("getRate returned non-nil %v of type %T when requesting non-rate, expected nil", r, r)
 	}
 }
