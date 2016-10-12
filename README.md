@@ -1,4 +1,4 @@
-![logo](/resource/doc/cockroach_db.png?raw=true "Cockroach Labs logo")
+![logo](docs/media/cockroach_db.png?raw=true "Cockroach Labs logo")
 
 
 [![Circle CI](https://circleci.com/gh/cockroachdb/cockroach.svg?style=svg)](https://circleci.com/gh/cockroachdb/cockroach) [![GoDoc](https://godoc.org/github.com/cockroachdb/cockroach?status.svg)](https://godoc.org/github.com/cockroachdb/cockroach) ![Project Status](https://img.shields.io/badge/status-beta-yellow.svg) [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/cockroachdb/cockroach?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
@@ -172,7 +172,7 @@ groups.
 
 #### SQL - NoSQL - NewSQL Capabilities
 
-![SQL - NoSQL - NewSQL Capabilities](/resource/doc/sql-nosql-newsql.png?raw=true)
+![SQL - NoSQL - NewSQL Capabilities](docs/media/sql-nosql-newsql.png?raw=true)
 
 
 [0]: http://rocksdb.org/
