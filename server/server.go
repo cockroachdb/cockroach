@@ -77,7 +77,7 @@ type Server struct {
 	// Must align to 8-bytes for atomic int64 updates.
 	nodeLogTagVal log.DynamicIntValue
 
-	ctx            Context
+	cfg            Config
 	mux            *http.ServeMux
 	clock          *hlc.Clock
 	rpcContext     *rpc.Context
@@ -106,32 +106,32 @@ type Server struct {
 }
 
 // NewServer creates a Server from a server.Context.
-func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
-	if _, err := net.ResolveTCPAddr("tcp", srvCtx.AdvertiseAddr); err != nil {
-		return nil, errors.Errorf("unable to resolve RPC address %q: %v", srvCtx.AdvertiseAddr, err)
+func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
+	if _, err := net.ResolveTCPAddr("tcp", cfg.AdvertiseAddr); err != nil {
+		return nil, errors.Errorf("unable to resolve RPC address %q: %v", cfg.AdvertiseAddr, err)
 	}
 
-	if srvCtx.Ctx == nil {
-		srvCtx.Ctx = context.Background()
+	if cfg.Ctx == nil {
+		cfg.Ctx = context.Background()
 	}
-	if srvCtx.Ctx.Done() != nil {
+	if cfg.Ctx.Done() != nil {
 		panic("context with cancel or deadline")
 	}
-	if tracing.TracerFromCtx(srvCtx.Ctx) == nil {
+	if tracing.TracerFromCtx(cfg.Ctx) == nil {
 		// TODO(radu): instead of modifying srvCtx.Ctx, we should have a separate
 		// context.Context inside Server. We will need to rename server.Context
 		// though.
-		srvCtx.Ctx = tracing.WithTracer(srvCtx.Ctx, tracing.NewTracer())
+		cfg.Ctx = tracing.WithTracer(cfg.Ctx, tracing.NewTracer())
 	}
 
-	if srvCtx.Insecure {
-		log.Warning(srvCtx.Ctx, "running in insecure mode, this is strongly discouraged. See --insecure.")
+	if cfg.Insecure {
+		log.Warning(cfg.Ctx, "running in insecure mode, this is strongly discouraged. See --insecure.")
 	}
 	// Try loading the TLS configs before anything else.
-	if _, err := srvCtx.GetServerTLSConfig(); err != nil {
+	if _, err := cfg.GetServerTLSConfig(); err != nil {
 		return nil, err
 	}
-	if _, err := srvCtx.GetClientTLSConfig(); err != nil {
+	if _, err := cfg.GetClientTLSConfig(); err != nil {
 		return nil, err
 	}
 
@@ -152,12 +152,12 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 	// a regular tag since it's just doing an (atomic) load when a log/trace
 	// message is constructed.
 	s.nodeLogTagVal.Set(log.DynamicIntValueUnknown)
-	srvCtx.Ctx = log.WithLogTag(srvCtx.Ctx, "n", &s.nodeLogTagVal)
-	s.ctx = srvCtx
+	cfg.Ctx = log.WithLogTag(cfg.Ctx, "n", &s.nodeLogTagVal)
+	s.cfg = cfg
 
-	s.clock.SetMaxOffset(srvCtx.MaxOffset)
+	s.clock.SetMaxOffset(cfg.MaxOffset)
 
-	s.rpcContext = rpc.NewContext(s.Ctx(), srvCtx.Context, s.clock, s.stopper)
+	s.rpcContext = rpc.NewContext(s.Ctx(), cfg.Config, s.clock, s.stopper)
 	s.rpcContext.HeartbeatCB = func() {
 		if err := s.rpcContext.RemoteClocks.VerifyClockOffset(); err != nil {
 			log.Fatal(s.Ctx(), err)
@@ -167,15 +167,15 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 
 	s.registry = metric.NewRegistry()
 	s.gossip = gossip.New(
-		s.Ctx(), s.rpcContext, s.grpc, s.ctx.GossipBootstrapResolvers, s.stopper, s.registry,
+		s.Ctx(), s.rpcContext, s.grpc, s.cfg.GossipBootstrapResolvers, s.stopper, s.registry,
 	)
 	s.storePool = storage.NewStorePool(
 		s.Ctx(),
 		s.gossip,
 		s.clock,
 		s.rpcContext,
-		srvCtx.ReservationsEnabled,
-		srvCtx.TimeUntilStoreDead,
+		cfg.ReservationsEnabled,
+		cfg.TimeUntilStoreDead,
 		s.stopper,
 	)
 
@@ -202,27 +202,27 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 
 	txnMetrics := kv.MakeTxnMetrics()
 	s.registry.AddMetricStruct(txnMetrics)
-	s.txnCoordSender = kv.NewTxnCoordSender(s.Ctx(), s.distSender, s.clock, srvCtx.Linearizable,
+	s.txnCoordSender = kv.NewTxnCoordSender(s.Ctx(), s.distSender, s.clock, cfg.Linearizable,
 		s.stopper, txnMetrics)
 	s.db = client.NewDB(s.txnCoordSender)
 
 	// Use the range lease expiration and renewal durations as the node
 	// liveness expiration and heartbeat interval.
 	active, renewal := storage.RangeLeaseDurations(
-		storage.RaftElectionTimeout(srvCtx.RaftTickInterval, srvCtx.RaftElectionTimeoutTicks))
+		storage.RaftElectionTimeout(cfg.RaftTickInterval, cfg.RaftElectionTimeoutTicks))
 	s.nodeLiveness = storage.NewNodeLiveness(s.clock, s.db, s.gossip, active, renewal)
 	s.registry.AddMetricStruct(s.nodeLiveness.Metrics())
 
 	s.raftTransport = storage.NewRaftTransport(
 		s.Ctx(), storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext)
 
-	s.kvDB = kv.NewDBServer(s.ctx.Context, s.txnCoordSender, s.stopper)
+	s.kvDB = kv.NewDBServer(s.cfg.Config, s.txnCoordSender, s.stopper)
 	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
 
 	// Set up Lease Manager
 	var lmKnobs sql.LeaseManagerTestingKnobs
-	if srvCtx.TestingKnobs.SQLLeaseManager != nil {
-		lmKnobs = *srvCtx.TestingKnobs.SQLLeaseManager.(*sql.LeaseManagerTestingKnobs)
+	if cfg.TestingKnobs.SQLLeaseManager != nil {
+		lmKnobs = *cfg.TestingKnobs.SQLLeaseManager.(*sql.LeaseManagerTestingKnobs)
 	}
 	s.leaseMgr = sql.NewLeaseManager(0, *s.db, s.clock, lmKnobs, s.stopper)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
@@ -246,21 +246,21 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		Clock:        s.clock,
 		DistSQLSrv:   s.distSQLServer,
 	}
-	if srvCtx.TestingKnobs.SQLExecutor != nil {
-		execCfg.TestingKnobs = srvCtx.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
+	if cfg.TestingKnobs.SQLExecutor != nil {
+		execCfg.TestingKnobs = cfg.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs)
 	} else {
 		execCfg.TestingKnobs = &sql.ExecutorTestingKnobs{}
 	}
-	if srvCtx.TestingKnobs.SQLSchemaChanger != nil {
+	if cfg.TestingKnobs.SQLSchemaChanger != nil {
 		execCfg.SchemaChangerTestingKnobs =
-			srvCtx.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)
+			cfg.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)
 	} else {
 		execCfg.SchemaChangerTestingKnobs = &sql.SchemaChangerTestingKnobs{}
 	}
 	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper)
 	s.registry.AddMetricStruct(s.sqlExecutor)
 
-	s.pgServer = pgwire.MakeServer(s.ctx.Context, s.sqlExecutor)
+	s.pgServer = pgwire.MakeServer(s.cfg.Config, s.sqlExecutor)
 	s.registry.AddMetricStruct(s.pgServer.Metrics())
 
 	// TODO(bdarnell): make StoreConfig configurable.
@@ -271,24 +271,24 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 		Gossip:                         s.gossip,
 		NodeLiveness:                   s.nodeLiveness,
 		Transport:                      s.raftTransport,
-		RaftTickInterval:               s.ctx.RaftTickInterval,
-		ScanInterval:                   s.ctx.ScanInterval,
-		ScanMaxIdleTime:                s.ctx.ScanMaxIdleTime,
-		ConsistencyCheckInterval:       s.ctx.ConsistencyCheckInterval,
-		ConsistencyCheckPanicOnFailure: s.ctx.ConsistencyCheckPanicOnFailure,
+		RaftTickInterval:               s.cfg.RaftTickInterval,
+		ScanInterval:                   s.cfg.ScanInterval,
+		ScanMaxIdleTime:                s.cfg.ScanMaxIdleTime,
+		ConsistencyCheckInterval:       s.cfg.ConsistencyCheckInterval,
+		ConsistencyCheckPanicOnFailure: s.cfg.ConsistencyCheckPanicOnFailure,
 		StorePool:                      s.storePool,
 		SQLExecutor: sql.InternalExecutor{
 			LeaseManager: s.leaseMgr,
 		},
-		LogRangeEvents: s.ctx.EventLogEnabled,
+		LogRangeEvents: s.cfg.EventLogEnabled,
 		AllocatorOptions: storage.AllocatorOptions{
 			AllowRebalance: true,
 		},
 		RangeLeaseActiveDuration:  active,
 		RangeLeaseRenewalDuration: renewal,
 	}
-	if srvCtx.TestingKnobs.Store != nil {
-		storeCfg.TestingKnobs = *srvCtx.TestingKnobs.Store.(*storage.StoreTestingKnobs)
+	if cfg.TestingKnobs.Store != nil {
+		storeCfg.TestingKnobs = *cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs)
 	}
 
 	s.recorder = status.NewMetricsRecorder(s.clock)
@@ -317,7 +317,7 @@ func NewServer(srvCtx Context, stopper *stop.Stopper) (*Server, error) {
 
 // Ctx returns the base context for the server.
 func (s *Server) Ctx() context.Context {
-	return s.ctx.Ctx
+	return s.cfg.Ctx
 }
 
 // ClusterID returns the ID of the cluster this server is a part of.
@@ -357,7 +357,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// Copy log tags from s.Ctx()
 	ctx = log.WithLogTagsFromCtx(ctx, s.Ctx())
 
-	tlsConfig, err := s.ctx.GetServerTLSConfig()
+	tlsConfig, err := s.cfg.GetServerTLSConfig()
 	if err != nil {
 		return err
 	}
@@ -388,21 +388,21 @@ func (s *Server) Start(ctx context.Context) error {
 	// in util.ListenAndServe for an explanation of how h2c is implemented there
 	// and here.
 
-	ln, err := net.Listen("tcp", s.ctx.Addr)
+	ln, err := net.Listen("tcp", s.cfg.Addr)
 	if err != nil {
 		return err
 	}
-	log.Eventf(ctx, "listening on port %s", s.ctx.Addr)
-	unresolvedListenAddr, err := officialAddr(s.ctx.Addr, ln.Addr())
+	log.Eventf(ctx, "listening on port %s", s.cfg.Addr)
+	unresolvedListenAddr, err := officialAddr(s.cfg.Addr, ln.Addr())
 	if err != nil {
 		return err
 	}
-	s.ctx.Addr = unresolvedListenAddr.String()
-	unresolvedAdvertAddr, err := officialAddr(s.ctx.AdvertiseAddr, ln.Addr())
+	s.cfg.Addr = unresolvedListenAddr.String()
+	unresolvedAdvertAddr, err := officialAddr(s.cfg.AdvertiseAddr, ln.Addr())
 	if err != nil {
 		return err
 	}
-	s.ctx.AdvertiseAddr = unresolvedAdvertAddr.String()
+	s.cfg.AdvertiseAddr = unresolvedAdvertAddr.String()
 
 	s.rpcContext.SetLocalInternalServer(s.node)
 
@@ -410,15 +410,15 @@ func (s *Server) Start(ctx context.Context) error {
 	pgL := m.Match(pgwire.Match)
 	anyL := m.Match(cmux.Any())
 
-	httpLn, err := net.Listen("tcp", s.ctx.HTTPAddr)
+	httpLn, err := net.Listen("tcp", s.cfg.HTTPAddr)
 	if err != nil {
 		return err
 	}
-	unresolvedHTTPAddr, err := officialAddr(s.ctx.HTTPAddr, httpLn.Addr())
+	unresolvedHTTPAddr, err := officialAddr(s.cfg.HTTPAddr, httpLn.Addr())
 	if err != nil {
 		return err
 	}
-	s.ctx.HTTPAddr = unresolvedHTTPAddr.String()
+	s.cfg.HTTPAddr = unresolvedHTTPAddr.String()
 
 	s.stopper.RunWorker(func() {
 		<-s.stopper.ShouldQuiesce()
@@ -466,9 +466,9 @@ func (s *Server) Start(ctx context.Context) error {
 		}))
 	})
 
-	if len(s.ctx.SocketFile) != 0 {
+	if len(s.cfg.SocketFile) != 0 {
 		// Unix socket enabled: postgres protocol only.
-		unixLn, err := net.Listen("unix", s.ctx.SocketFile)
+		unixLn, err := net.Listen("unix", s.cfg.SocketFile)
 		if err != nil {
 			return err
 		}
@@ -503,9 +503,9 @@ func (s *Server) Start(ctx context.Context) error {
 	err = s.node.start(
 		ctx,
 		unresolvedAdvertAddr,
-		s.ctx.Engines,
-		s.ctx.NodeAttributes,
-		s.ctx.Locality,
+		s.cfg.Engines,
+		s.cfg.NodeAttributes,
+		s.cfg.Locality,
 	)
 	if err != nil {
 		return err
@@ -522,29 +522,29 @@ func (s *Server) Start(ctx context.Context) error {
 	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt)
 
 	// Begin recording runtime statistics.
-	s.startSampleEnvironment(s.ctx.MetricsSampleInterval)
+	s.startSampleEnvironment(s.cfg.MetricsSampleInterval)
 
 	// Begin recording time series data collected by the status monitor.
-	s.tsDB.PollSource(s.Ctx(), s.recorder, s.ctx.MetricsSampleInterval, ts.Resolution10s, s.stopper)
+	s.tsDB.PollSource(s.Ctx(), s.recorder, s.cfg.MetricsSampleInterval, ts.Resolution10s, s.stopper)
 
 	// Begin recording status summaries.
-	s.node.startWriteSummaries(s.ctx.MetricsSampleInterval)
+	s.node.startWriteSummaries(s.cfg.MetricsSampleInterval)
 
 	s.sqlExecutor.SetNodeID(s.node.Descriptor.NodeID)
 
 	// Create and start the schema change manager only after a NodeID
 	// has been assigned.
 	testingKnobs := &sql.SchemaChangerTestingKnobs{}
-	if s.ctx.TestingKnobs.SQLSchemaChanger != nil {
-		testingKnobs = s.ctx.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)
+	if s.cfg.TestingKnobs.SQLSchemaChanger != nil {
+		testingKnobs = s.cfg.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)
 	}
 	sql.NewSchemaChangeManager(testingKnobs, *s.db, s.gossip, s.leaseMgr).Start(s.stopper)
 
-	log.Infof(s.Ctx(), "starting %s server at %s", s.ctx.HTTPRequestScheme(), unresolvedHTTPAddr)
+	log.Infof(s.Ctx(), "starting %s server at %s", s.cfg.HTTPRequestScheme(), unresolvedHTTPAddr)
 	log.Infof(s.Ctx(), "starting grpc/postgres server at %s", unresolvedListenAddr)
 	log.Infof(s.Ctx(), "advertising CockroachDB node at %s", unresolvedAdvertAddr)
-	if len(s.ctx.SocketFile) != 0 {
-		log.Infof(s.Ctx(), "starting postgres server at unix:%s", s.ctx.SocketFile)
+	if len(s.cfg.SocketFile) != 0 {
+		log.Infof(s.Ctx(), "starting postgres server at unix:%s", s.cfg.SocketFile)
 	}
 
 	s.stopper.RunWorker(func() {
@@ -570,7 +570,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.stopper.AddCloser(stop.CloserFn(gwCancel))
 
 	// Setup HTTP<->gRPC handlers.
-	conn, err := s.rpcContext.GRPCDial(s.ctx.Addr)
+	conn, err := s.rpcContext.GRPCDial(s.cfg.Addr)
 	if err != nil {
 		return errors.Errorf("error constructing grpc-gateway: %s; are your certificates valid?", err)
 	}

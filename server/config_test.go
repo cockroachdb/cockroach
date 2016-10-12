@@ -31,19 +31,19 @@ import (
 
 func TestParseInitNodeAttributes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := MakeContext()
-	ctx.Attrs = "attr1=val1::attr2=val2"
-	ctx.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, SizeInBytes: base.MinimumStoreSize * 100}}}
+	cfg := MakeConfig()
+	cfg.Attrs = "attr1=val1::attr2=val2"
+	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, SizeInBytes: base.MinimumStoreSize * 100}}}
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	if err := ctx.InitStores(stopper); err != nil {
+	if err := cfg.InitStores(stopper); err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}
-	if err := ctx.InitNode(); err != nil {
+	if err := cfg.InitNode(); err != nil {
 		t.Fatalf("Failed to initialize node: %s", err)
 	}
 
-	if a, e := ctx.NodeAttributes.Attrs, []string{"attr1=val1", "attr2=val2"}; !reflect.DeepEqual(a, e) {
+	if a, e := cfg.NodeAttributes.Attrs, []string{"attr1=val1", "attr2=val2"}; !reflect.DeepEqual(a, e) {
 		t.Fatalf("expected attributes: %v, found: %v", e, a)
 	}
 }
@@ -52,15 +52,15 @@ func TestParseInitNodeAttributes(t *testing.T) {
 // correctly.
 func TestParseJoinUsingAddrs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := MakeContext()
-	ctx.JoinList = []string{"localhost:12345,,localhost:23456", "localhost:34567"}
-	ctx.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, SizeInBytes: base.MinimumStoreSize * 100}}}
+	cfg := MakeConfig()
+	cfg.JoinList = []string{"localhost:12345,,localhost:23456", "localhost:34567"}
+	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, SizeInBytes: base.MinimumStoreSize * 100}}}
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
-	if err := ctx.InitStores(stopper); err != nil {
+	if err := cfg.InitStores(stopper); err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}
-	if err := ctx.InitNode(); err != nil {
+	if err := cfg.InitNode(); err != nil {
 		t.Fatalf("Failed to initialize node: %s", err)
 	}
 	r1, err := resolver.NewResolver("localhost:12345")
@@ -76,8 +76,8 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 		t.Fatal(err)
 	}
 	expected := []resolver.Resolver{r1, r2, r3}
-	if !reflect.DeepEqual(ctx.GossipBootstrapResolvers, expected) {
-		t.Fatalf("Unexpected bootstrap addresses: %v, expected: %v", ctx.GossipBootstrapResolvers, expected)
+	if !reflect.DeepEqual(cfg.GossipBootstrapResolvers, expected) {
+		t.Fatalf("Unexpected bootstrap addresses: %v, expected: %v", cfg.GossipBootstrapResolvers, expected)
 	}
 }
 
@@ -123,13 +123,13 @@ func TestReadEnvironmentVariables(t *testing.T) {
 	defer resetEnvVar()
 
 	// Makes sure no values are set when no environment variables are set.
-	ctx := MakeContext()
-	ctxExpected := MakeContext()
+	cfg := MakeConfig()
+	cfgExpected := MakeConfig()
 
 	resetEnvVar()
-	ctx.readEnvironmentVariables()
-	if !reflect.DeepEqual(ctx, ctxExpected) {
-		t.Fatalf("actual context does not match expected:\nactual:%+v\nexpected:%+v", ctx, ctxExpected)
+	cfg.readEnvironmentVariables()
+	if !reflect.DeepEqual(cfg, cfgExpected) {
+		t.Fatalf("actual context does not match expected:\nactual:%+v\nexpected:%+v", cfg, cfgExpected)
 	}
 
 	// Set all the environment variables to valid values and ensure they are set
@@ -137,54 +137,54 @@ func TestReadEnvironmentVariables(t *testing.T) {
 	if err := os.Setenv("COCKROACH_LINEARIZABLE", "true"); err != nil {
 		t.Fatal(err)
 	}
-	ctxExpected.Linearizable = true
+	cfgExpected.Linearizable = true
 	if err := os.Setenv("COCKROACH_MAX_OFFSET", "1s"); err != nil {
 		t.Fatal(err)
 	}
-	ctxExpected.MaxOffset = time.Second
+	cfgExpected.MaxOffset = time.Second
 	if err := os.Setenv("COCKROACH_METRICS_SAMPLE_INTERVAL", "1h10m"); err != nil {
 		t.Fatal(err)
 	}
-	ctxExpected.MetricsSampleInterval = time.Hour + time.Minute*10
+	cfgExpected.MetricsSampleInterval = time.Hour + time.Minute*10
 	if err := os.Setenv("COCKROACH_SCAN_INTERVAL", "48h"); err != nil {
 		t.Fatal(err)
 	}
-	ctxExpected.ScanInterval = time.Hour * 48
+	cfgExpected.ScanInterval = time.Hour * 48
 	if err := os.Setenv("COCKROACH_SCAN_MAX_IDLE_TIME", "100ns"); err != nil {
 		t.Fatal(err)
 	}
-	ctxExpected.ScanMaxIdleTime = time.Nanosecond * 100
+	cfgExpected.ScanMaxIdleTime = time.Nanosecond * 100
 	if err := os.Setenv("COCKROACH_CONSISTENCY_CHECK_INTERVAL", "48h"); err != nil {
 		t.Fatal(err)
 	}
-	ctxExpected.ConsistencyCheckInterval = time.Hour * 48
+	cfgExpected.ConsistencyCheckInterval = time.Hour * 48
 	if err := os.Setenv("COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE", "true"); err != nil {
 		t.Fatal(err)
 	}
-	ctxExpected.ConsistencyCheckPanicOnFailure = true
+	cfgExpected.ConsistencyCheckPanicOnFailure = true
 	if err := os.Setenv("COCKROACH_TIME_UNTIL_STORE_DEAD", "10ms"); err != nil {
 		t.Fatal(err)
 	}
-	ctxExpected.TimeUntilStoreDead = time.Millisecond * 10
+	cfgExpected.TimeUntilStoreDead = time.Millisecond * 10
 	if err := os.Setenv("COCKROACH_CONSISTENCY_CHECK_INTERVAL", "10ms"); err != nil {
 		t.Fatal(err)
 	}
-	ctxExpected.ConsistencyCheckInterval = time.Millisecond * 10
+	cfgExpected.ConsistencyCheckInterval = time.Millisecond * 10
 	if err := os.Setenv("COCKROACH_RESERVATIONS_ENABLED", "false"); err != nil {
 		t.Fatal(err)
 	}
-	ctxExpected.ReservationsEnabled = false
+	cfgExpected.ReservationsEnabled = false
 
 	envutil.ClearEnvCache()
-	ctx.readEnvironmentVariables()
-	if !reflect.DeepEqual(ctx, ctxExpected) {
-		t.Fatalf("actual context does not match expected:\nactual:%+v\nexpected:%+v", ctx, ctxExpected)
+	cfg.readEnvironmentVariables()
+	if !reflect.DeepEqual(cfg, cfgExpected) {
+		t.Fatalf("actual context does not match expected:\nactual:%+v\nexpected:%+v", cfg, cfgExpected)
 	}
 
 	// Set all the environment variables to invalid values and test that the
 	// defaults are still set.
-	ctx = MakeContext()
-	ctxExpected = MakeContext()
+	cfg = MakeConfig()
+	cfgExpected = MakeConfig()
 
 	if err := os.Setenv("COCKROACH_LINEARIZABLE", "abcd"); err != nil {
 		t.Fatal(err)
@@ -218,8 +218,8 @@ func TestReadEnvironmentVariables(t *testing.T) {
 	}
 
 	envutil.ClearEnvCache()
-	ctx.readEnvironmentVariables()
-	if !reflect.DeepEqual(ctx, ctxExpected) {
-		t.Fatalf("actual context does not match expected:\nactual:%+v\nexpected:%+v", ctx, ctxExpected)
+	cfg.readEnvironmentVariables()
+	if !reflect.DeepEqual(cfg, cfgExpected) {
+		t.Fatalf("actual context does not match expected:\nactual:%+v\nexpected:%+v", cfg, cfgExpected)
 	}
 }

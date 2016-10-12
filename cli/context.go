@@ -45,7 +45,7 @@ func (s *statementsValue) Set(value string) error {
 
 type cliContext struct {
 	// Embed the base context.
-	*base.Context
+	*base.Config
 
 	// prettyFmt indicates whether tables should be pretty-formatted in
 	// the output during non-interactive execution.

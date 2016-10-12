@@ -87,7 +87,7 @@ type connMeta struct {
 
 // Context contains the fields required by the rpc framework.
 type Context struct {
-	*base.Context
+	*base.Config
 
 	localClock   *hlc.Clock
 	breakerClock breakerClock
@@ -112,10 +112,10 @@ type Context struct {
 
 // NewContext creates an rpc Context with the supplied values.
 func NewContext(
-	masterCtx context.Context, baseCtx *base.Context, hlcClock *hlc.Clock, stopper *stop.Stopper,
+	masterCtx context.Context, baseCtx *base.Config, hlcClock *hlc.Clock, stopper *stop.Stopper,
 ) *Context {
 	ctx := &Context{
-		Context: baseCtx,
+		Config: baseCtx,
 	}
 	if hlcClock != nil {
 		ctx.localClock = hlcClock
