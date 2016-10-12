@@ -626,10 +626,10 @@ func (sc *StoreConfig) Valid() bool {
 		sc.Ctx != nil && sc.Ctx.Done() == nil && tracing.TracerFromCtx(sc.Ctx) != nil
 }
 
-// setDefaults initializes unset fields in StoreConfig to values
+// SetDefaults initializes unset fields in StoreConfig to values
 // suitable for use on a local network.
 // TODO(tschottdorf) see if this ought to be configurable via flags.
-func (sc *StoreConfig) setDefaults() {
+func (sc *StoreConfig) SetDefaults() {
 	if (sc.RangeRetryOptions == retry.Options{}) {
 		sc.RangeRetryOptions = base.DefaultRetryOptions()
 	}
@@ -663,7 +663,7 @@ func (sc *StoreConfig) setDefaults() {
 // NewStore returns a new instance of a store.
 func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescriptor) *Store {
 	// TODO(tschottdorf) find better place to set these defaults.
-	cfg.setDefaults()
+	cfg.SetDefaults()
 
 	if !cfg.Valid() {
 		panic(fmt.Sprintf("invalid store configuration: %+v", &cfg))
