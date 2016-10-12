@@ -882,10 +882,12 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		return err
 	}
 
-	if req.Shutdown {
-		s.server.grpc.Stop()
-		go s.server.stopper.Stop()
+	if !req.Shutdown {
+		return nil
 	}
+
+	s.server.grpc.Stop()
+	go s.server.stopper.Stop()
 
 	ctx := stream.Context()
 

@@ -46,12 +46,12 @@ var lsNodesCmd = &cobra.Command{
 	commands.
 	`,
 	SilenceUsage: true,
-	RunE:         runLsNodes,
+	RunE:         maybeDecorateGRPCError(runLsNodes),
 }
 
 func runLsNodes(cmd *cobra.Command, args []string) error {
 	if len(args) != 0 {
-		mustUsage(cmd)
+		return cmd.Usage()
 	}
 
 	c, stopper, err := getStatusClient()
@@ -100,7 +100,7 @@ var statusNodeCmd = &cobra.Command{
 	is specified, this will display the status for all nodes in the cluster.
 	`,
 	SilenceUsage: true,
-	RunE:         runStatusNode,
+	RunE:         maybeDecorateGRPCError(runStatusNode),
 }
 
 func runStatusNode(cmd *cobra.Command, args []string) error {
@@ -137,7 +137,6 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 		nodeStatuses = []status.NodeStatus{*nodeStatus}
 
 	default:
-		mustUsage(cmd)
 		return errors.Errorf("expected no arguments or a single node ID")
 	}
 
@@ -194,8 +193,8 @@ var nodeCmd = &cobra.Command{
 	Use:   "node [command]",
 	Short: "list nodes and show their status",
 	Long:  "List nodes and show their status.",
-	Run: func(cmd *cobra.Command, args []string) {
-		mustUsage(cmd)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return cmd.Usage()
 	},
 }
 

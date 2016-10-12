@@ -37,14 +37,13 @@ var dumpCmd = &cobra.Command{
 	Long: `
 Dump SQL tables of a cockroach database.
 `,
-	RunE:         runDump,
+	RunE:         maybeDecorateGRPCError(runDump),
 	SilenceUsage: true,
 }
 
 func runDump(cmd *cobra.Command, args []string) error {
 	if len(args) != 2 {
-		mustUsage(cmd)
-		return errMissingParams
+		return cmd.Usage()
 	}
 
 	conn, err := makeSQLClient()
