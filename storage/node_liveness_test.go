@@ -40,10 +40,10 @@ func verifyLiveness(t *testing.T, mtc *multiTestContext) {
 		for _, nl := range mtc.nodeLivenesses {
 			for _, g := range mtc.gossips {
 				live, err := nl.IsLive(g.GetNodeID())
-				if !live {
-					return errors.Errorf("node %d not live", g.GetNodeID())
-				} else if err != nil {
+				if err != nil {
 					return err
+				} else if !live {
+					return errors.Errorf("node %d not live", g.GetNodeID())
 				}
 			}
 		}
@@ -73,10 +73,10 @@ func TestNodeLiveness(t *testing.T) {
 	for idx, nl := range mtc.nodeLivenesses {
 		nodeID := mtc.gossips[idx].GetNodeID()
 		live, err := nl.IsLive(nodeID)
-		if live {
-			t.Errorf("expected node %d to be considered not-live after advancing node clock", nodeID)
-		} else if err != nil {
+		if err != nil {
 			t.Error(err)
+		} else if live {
+			t.Errorf("expected node %d to be considered not-live after advancing node clock", nodeID)
 		}
 	}
 	// Trigger a manual heartbeat and verify liveness is reestablished.
@@ -111,7 +111,7 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 	deadNodeID := mtc.gossips[1].GetNodeID()
 	if err := mtc.nodeLivenesses[0].IncrementEpoch(
 		context.Background(), deadNodeID); !testutils.IsError(err, "cannot increment epoch on live node") {
-		t.Fatalf("expected error incrementing a live node")
+		t.Fatalf("expected error incrementing a live node: %v", err)
 	}
 
 	// Advance clock past liveness threshold & increment epoch.
@@ -139,7 +139,7 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 			return errors.Errorf("expected expiration to remain unchanged")
 		}
 		if live, err := mtc.nodeLivenesses[0].IsLive(deadNodeID); live || err != nil {
-			return errors.Errorf("expected dead node to remain dead after epoch increment %t: %s", live, err)
+			return errors.Errorf("expected dead node to remain dead after epoch increment %t: %v", live, err)
 		}
 		return nil
 	})
