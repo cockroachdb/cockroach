@@ -157,7 +157,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.clock.SetMaxOffset(cfg.MaxOffset)
 
-	s.rpcContext = rpc.NewContext(s.Ctx(), cfg.Context, s.clock, s.stopper)
+	s.rpcContext = rpc.NewContext(s.Ctx(), cfg.Config, s.clock, s.stopper)
 	s.rpcContext.HeartbeatCB = func() {
 		if err := s.rpcContext.RemoteClocks.VerifyClockOffset(); err != nil {
 			log.Fatal(s.Ctx(), err)
@@ -216,7 +216,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.raftTransport = storage.NewRaftTransport(
 		s.Ctx(), storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext)
 
-	s.kvDB = kv.NewDBServer(s.cfg.Context, s.txnCoordSender, s.stopper)
+	s.kvDB = kv.NewDBServer(s.cfg.Config, s.txnCoordSender, s.stopper)
 	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
 
 	// Set up Lease Manager
@@ -260,7 +260,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper)
 	s.registry.AddMetricStruct(s.sqlExecutor)
 
-	s.pgServer = pgwire.MakeServer(s.cfg.Context, s.sqlExecutor)
+	s.pgServer = pgwire.MakeServer(s.cfg.Config, s.sqlExecutor)
 	s.registry.AddMetricStruct(s.pgServer.Metrics())
 
 	// TODO(bdarnell): make StoreConfig configurable.

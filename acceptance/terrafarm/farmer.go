@@ -213,7 +213,7 @@ func (f *Farmer) Exec(i int, cmd string) error {
 // NewClient implements the Cluster interface.
 func (f *Farmer) NewClient(t *testing.T, i int) (*client.DB, *stop.Stopper) {
 	stopper := stop.NewStopper()
-	rpcContext := rpc.NewContext(context.TODO(), &base.Context{
+	rpcContext := rpc.NewContext(context.TODO(), &base.Config{
 		Insecure: true,
 		User:     security.NodeUser,
 	}, nil, stopper)

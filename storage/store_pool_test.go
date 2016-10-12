@@ -65,7 +65,7 @@ func createTestStorePool(
 	stopper := stop.NewStopper()
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	rpcContext := rpc.NewContext(context.TODO(), &base.Context{Insecure: true}, clock, stopper)
+	rpcContext := rpc.NewContext(context.TODO(), &base.Config{Insecure: true}, clock, stopper)
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.New(context.TODO(), rpcContext, server, nil, stopper, metric.NewRegistry())
 	// Have to call g.SetNodeID before call g.AddInfo

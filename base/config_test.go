@@ -27,11 +27,11 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-func fillCertPaths(context *base.Context, user string) {
-	context.SSLCA = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
-	context.SSLCAKey = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCAKey)
-	context.SSLCert = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user))
-	context.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user))
+func fillCertPaths(cfg *base.Config, user string) {
+	cfg.SSLCA = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
+	cfg.SSLCAKey = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCAKey)
+	cfg.SSLCert = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.crt", user))
+	cfg.SSLCertKey = filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("%s.key", user))
 }
 
 func TestClientSSLSettings(t *testing.T) {
@@ -59,14 +59,14 @@ func TestClientSSLSettings(t *testing.T) {
 	}
 
 	for tcNum, tc := range testCases {
-		ctx := &base.Context{Insecure: tc.insecure, User: tc.user}
+		cfg := &base.Config{Insecure: tc.insecure, User: tc.user}
 		if tc.hasCerts {
-			fillCertPaths(ctx, tc.user)
+			fillCertPaths(cfg, tc.user)
 		}
-		if ctx.HTTPRequestScheme() != tc.requestScheme {
-			t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, ctx.HTTPRequestScheme())
+		if cfg.HTTPRequestScheme() != tc.requestScheme {
+			t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, cfg.HTTPRequestScheme())
 		}
-		tlsConfig, err := ctx.GetClientTLSConfig()
+		tlsConfig, err := cfg.GetClientTLSConfig()
 		if !(tc.configErr == "" && err == nil || testutils.IsError(err, tc.configErr)) {
 			t.Fatalf("#%d: expected err=%s, got err=%v", tcNum, tc.configErr, err)
 		}
@@ -104,14 +104,14 @@ func TestServerSSLSettings(t *testing.T) {
 	}
 
 	for tcNum, tc := range testCases {
-		ctx := &base.Context{Insecure: tc.insecure, User: security.NodeUser}
+		cfg := &base.Config{Insecure: tc.insecure, User: security.NodeUser}
 		if tc.hasCerts {
-			fillCertPaths(ctx, security.NodeUser)
+			fillCertPaths(cfg, security.NodeUser)
 		}
-		if ctx.HTTPRequestScheme() != tc.requestScheme {
-			t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, ctx.HTTPRequestScheme())
+		if cfg.HTTPRequestScheme() != tc.requestScheme {
+			t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, cfg.HTTPRequestScheme())
 		}
-		tlsConfig, err := ctx.GetServerTLSConfig()
+		tlsConfig, err := cfg.GetServerTLSConfig()
 		if (err == nil) != tc.configSuccess {
 			t.Fatalf("#%d: expected GetServerTLSConfig success=%t, got err=%v", tcNum, tc.configSuccess, err)
 		}

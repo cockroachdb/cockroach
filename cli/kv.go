@@ -37,14 +37,14 @@ import (
 
 func makeDBClient() (*client.DB, *stop.Stopper) {
 	stopper := stop.NewStopper()
-	ctx := &base.Context{
+	cfg := &base.Config{
 		User:       security.NodeUser,
-		SSLCA:      baseCtx.SSLCA,
-		SSLCert:    baseCtx.SSLCert,
-		SSLCertKey: baseCtx.SSLCertKey,
-		Insecure:   baseCtx.Insecure,
+		SSLCA:      baseCfg.SSLCA,
+		SSLCert:    baseCfg.SSLCert,
+		SSLCertKey: baseCfg.SSLCertKey,
+		Insecure:   baseCfg.Insecure,
 	}
-	sender, err := client.NewSender(rpc.NewContext(context.TODO(), ctx, nil, stopper), baseCtx.Addr)
+	sender, err := client.NewSender(rpc.NewContext(context.TODO(), cfg, nil, stopper), baseCfg.Addr)
 	if err != nil {
 		stopper.Stop()
 		panicf("failed to initialize KV client: %s", err)

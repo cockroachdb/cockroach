@@ -64,7 +64,7 @@ const (
 // Config holds parameters needed to setup a server.
 type Config struct {
 	// Embed the base context.
-	*base.Context
+	*base.Config
 
 	// Unix socket: for postgres only.
 	SocketFile string
@@ -330,7 +330,7 @@ func SetOpenFileLimitForOneStore() (int, error) {
 // MakeConfig returns a Context with default values.
 func MakeConfig() Config {
 	cfg := Config{
-		Context:                  new(base.Context),
+		Config:                   new(base.Config),
 		MaxOffset:                defaultMaxOffset,
 		CacheSize:                defaultCacheSize,
 		ScanInterval:             defaultScanInterval,
@@ -344,7 +344,7 @@ func MakeConfig() Config {
 			Specs: []base.StoreSpec{{Path: defaultStorePath}},
 		},
 	}
-	cfg.Context.InitDefaults()
+	cfg.Config.InitDefaults()
 	return cfg
 }
 

@@ -61,7 +61,7 @@ func newKVNative(b *testing.B) kvInterface {
 	// a fair comparison with SQL as we want these client requests to be sent
 	// over the network.
 	sender, err := client.NewSender(
-		rpc.NewContext(context.TODO(), &base.Context{
+		rpc.NewContext(context.TODO(), &base.Config{
 			User:       security.NodeUser,
 			SSLCA:      filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
 			SSLCert:    filepath.Join(security.EmbeddedCertsDir, "node.crt"),

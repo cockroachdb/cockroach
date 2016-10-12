@@ -580,7 +580,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 }
 
 func makeGossip(t *testing.T, stopper *stop.Stopper) *gossip.Gossip {
-	rpcContext := rpc.NewContext(context.TODO(), &base.Context{Insecure: true}, nil, stopper)
+	rpcContext := rpc.NewContext(context.TODO(), &base.Config{Insecure: true}, nil, stopper)
 	server := rpc.NewServer(rpcContext)
 
 	g := gossip.New(context.Background(), rpcContext, server, nil, stopper, metric.NewRegistry())

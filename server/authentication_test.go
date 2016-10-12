@@ -64,7 +64,7 @@ type ctxI interface {
 }
 
 var _ ctxI = insecureCtx{}
-var _ ctxI = (*base.Context)(nil)
+var _ ctxI = (*base.Config)(nil)
 
 type insecureCtx struct{}
 

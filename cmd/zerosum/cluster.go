@@ -80,7 +80,7 @@ func newCluster(size int) *cluster {
 func (c *cluster) start(db string, numWorkers int, args []string) {
 	c.started = timeutil.Now()
 
-	baseCtx := &base.Context{
+	baseCtx := &base.Config{
 		User:     security.NodeUser,
 		Insecure: true,
 	}

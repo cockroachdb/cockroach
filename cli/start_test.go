@@ -27,7 +27,7 @@ func TestInitInsecure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	f := startCmd.Flags()
-	ctx := serverCtx
+	ctx := serverCfg
 
 	testCases := []struct {
 		args     []string
