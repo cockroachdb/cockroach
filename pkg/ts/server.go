@@ -35,17 +35,17 @@ const (
 
 // Server handles incoming external requests related to time series data.
 type Server struct {
-	ctx context.Context
-	db  *DB
+	log.AmbientContext
+	db *DB
 }
 
 // MakeServer instantiates a new Server which services requests with data from
 // the supplied DB.
-func MakeServer(ctx context.Context, db *DB) Server {
-	ctx = log.WithLogTag(ctx, "ts-srv", nil)
+func MakeServer(ambient log.AmbientContext, db *DB) Server {
+	ambient.AddLogTag("ts-srv", nil)
 	return Server{
-		ctx: ctx,
-		db:  db,
+		AmbientContext: ambient,
+		db:             db,
 	}
 }
 
@@ -62,18 +62,12 @@ func (s *Server) RegisterGateway(
 	return tspb.RegisterTimeSeriesHandler(ctx, mux, conn)
 }
 
-// logContext applies the log tags from the Server's context to the given
-// context.
-func (s *Server) logContext(ctx context.Context) context.Context {
-	return log.WithLogTagsFromCtx(ctx, s.ctx)
-}
-
 // Query is an endpoint that returns data for one or more metrics over a
 // specific time span.
 func (s *Server) Query(
 	ctx context.Context, request *tspb.TimeSeriesQueryRequest,
 ) (*tspb.TimeSeriesQueryResponse, error) {
-	ctx = s.logContext(ctx)
+	ctx = s.AnnotateCtx(ctx)
 	if len(request.Queries) == 0 {
 		return nil, grpc.Errorf(codes.InvalidArgument, "Queries cannot be empty")
 	}
