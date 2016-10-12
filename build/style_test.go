@@ -482,7 +482,7 @@ func TestStyle(t *testing.T) {
 		switch err := cmd.Run(); err.(type) {
 		case nil:
 		case *exec.ExitError:
-			t.Log(err) // Non-zero exit is expected.
+			// Non-zero exit is expected.
 		default:
 			t.Fatal(err)
 		}
