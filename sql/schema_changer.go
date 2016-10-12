@@ -65,7 +65,6 @@ func (sc *SchemaChanger) truncateAndDropTable(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	tableDesc *sqlbase.TableDescriptor,
 ) error {
-
 	l, err := sc.ExtendLease(*lease)
 	if err != nil {
 		return err
