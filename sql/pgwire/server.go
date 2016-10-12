@@ -63,7 +63,7 @@ var (
 
 // Server implements the server side of the PostgreSQL wire protocol.
 type Server struct {
-	context  *base.Context
+	context  *base.Config
 	executor *sql.Executor
 
 	metrics ServerMetrics
@@ -90,7 +90,7 @@ func makeServerMetrics() ServerMetrics {
 }
 
 // MakeServer creates a Server.
-func MakeServer(context *base.Context, executor *sql.Executor) *Server {
+func MakeServer(context *base.Config, executor *sql.Executor) *Server {
 	return &Server{
 		context:  context,
 		executor: executor,

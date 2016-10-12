@@ -70,12 +70,12 @@ func createTestNode(
 	cfg.ScanInterval = 10 * time.Hour
 	cfg.ConsistencyCheckInterval = 10 * time.Hour
 	grpcServer := rpc.NewServer(nodeRPCContext)
-	serverCtx := makeTestContext()
+	serverCfg := makeTestConfig()
 	g := gossip.New(
 		context.Background(),
 		nodeRPCContext,
 		grpcServer,
-		serverCtx.GossipBootstrapResolvers,
+		serverCfg.GossipBootstrapResolvers,
 		stopper,
 		metric.NewRegistry())
 	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)

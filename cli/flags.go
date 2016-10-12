@@ -47,9 +47,9 @@ var zoneDisableReplication bool
 var startBackground bool
 var undoFreezeCluster bool
 
-var serverCtx = server.MakeContext()
-var baseCtx = serverCtx.Context
-var cliCtx = cliContext{Context: baseCtx}
+var serverCfg = server.MakeConfig()
+var baseCfg = serverCfg.Config
+var cliCtx = cliContext{Config: baseCfg}
 var sqlCtx = sqlContext{cliContext: &cliCtx}
 var debugCtx = debugContext{
 	startKey:   engine.NilKey,
@@ -146,11 +146,11 @@ func (b *bytesValue) String() string {
 }
 
 type insecureValue struct {
-	ctx   *base.Context
+	ctx   *base.Config
 	isSet bool
 }
 
-func newInsecureValue(ctx *base.Context) *insecureValue {
+func newInsecureValue(ctx *base.Config) *insecureValue {
 	return &insecureValue{ctx: ctx}
 }
 
@@ -282,8 +282,8 @@ func init() {
 	pf.Lookup(logflags.AlsoLogToStderrName).NoOptDefVal = "INFO"
 
 	// Security flags.
-	baseCtx.Insecure = true
-	insecure = newInsecureValue(baseCtx)
+	baseCfg.Insecure = true
+	insecure = newInsecureValue(baseCfg)
 
 	{
 		f := startCmd.Flags()
@@ -294,18 +294,18 @@ func init() {
 		stringFlag(f, &advertiseHost, cliflags.AdvertiseHost, "")
 		stringFlag(f, &httpHost, cliflags.ServerHTTPHost, "")
 		stringFlag(f, &httpPort, cliflags.ServerHTTPPort, base.DefaultHTTPPort)
-		stringFlag(f, &serverCtx.Attrs, cliflags.Attrs, serverCtx.Attrs)
-		varFlag(f, &serverCtx.Locality, cliflags.Locality)
+		stringFlag(f, &serverCfg.Attrs, cliflags.Attrs, serverCfg.Attrs)
+		varFlag(f, &serverCfg.Locality, cliflags.Locality)
 
-		varFlag(f, &serverCtx.Stores, cliflags.Store)
-		durationFlag(f, &serverCtx.RaftTickInterval, cliflags.RaftTickInterval, base.DefaultRaftTickInterval)
+		varFlag(f, &serverCfg.Stores, cliflags.Store)
+		durationFlag(f, &serverCfg.RaftTickInterval, cliflags.RaftTickInterval, base.DefaultRaftTickInterval)
 		boolFlag(f, &startBackground, cliflags.Background, false)
 
 		// Usage for the unix socket is odd as we use a real file, whereas
 		// postgresql and clients consider it a directory and build a filename
 		// inside it using the port.
 		// Thus, we keep it hidden and use it for testing only.
-		stringFlag(f, &serverCtx.SocketFile, cliflags.Socket, "")
+		stringFlag(f, &serverCfg.SocketFile, cliflags.Socket, "")
 		_ = f.MarkHidden(cliflags.Socket.Name)
 
 		varFlag(f, insecure, cliflags.Insecure)
@@ -313,26 +313,26 @@ func init() {
 		f.Lookup(cliflags.Insecure.Name).NoOptDefVal = "true"
 
 		// Certificate flags.
-		stringFlag(f, &baseCtx.SSLCA, cliflags.CACert, baseCtx.SSLCA)
-		stringFlag(f, &baseCtx.SSLCert, cliflags.Cert, baseCtx.SSLCert)
-		stringFlag(f, &baseCtx.SSLCertKey, cliflags.Key, baseCtx.SSLCertKey)
+		stringFlag(f, &baseCfg.SSLCA, cliflags.CACert, baseCfg.SSLCA)
+		stringFlag(f, &baseCfg.SSLCert, cliflags.Cert, baseCfg.SSLCert)
+		stringFlag(f, &baseCfg.SSLCertKey, cliflags.Key, baseCfg.SSLCertKey)
 
 		// Cluster joining flags.
-		varFlag(f, &serverCtx.JoinList, cliflags.Join)
+		varFlag(f, &serverCfg.JoinList, cliflags.Join)
 
 		// Engine flags.
-		setDefaultCacheSize(&serverCtx)
-		cacheSize = newBytesValue(&serverCtx.CacheSize)
+		setDefaultCacheSize(&serverCfg)
+		cacheSize = newBytesValue(&serverCfg.CacheSize)
 		varFlag(f, cacheSize, cliflags.Cache)
 	}
 
 	for _, cmd := range certCmds {
 		f := cmd.Flags()
 		// Certificate flags.
-		stringFlag(f, &baseCtx.SSLCA, cliflags.CACert, baseCtx.SSLCA)
-		stringFlag(f, &baseCtx.SSLCAKey, cliflags.CAKey, baseCtx.SSLCAKey)
-		stringFlag(f, &baseCtx.SSLCert, cliflags.Cert, baseCtx.SSLCert)
-		stringFlag(f, &baseCtx.SSLCertKey, cliflags.Key, baseCtx.SSLCertKey)
+		stringFlag(f, &baseCfg.SSLCA, cliflags.CACert, baseCfg.SSLCA)
+		stringFlag(f, &baseCfg.SSLCAKey, cliflags.CAKey, baseCfg.SSLCAKey)
+		stringFlag(f, &baseCfg.SSLCert, cliflags.Cert, baseCfg.SSLCert)
+		stringFlag(f, &baseCfg.SSLCertKey, cliflags.Key, baseCfg.SSLCertKey)
 		intFlag(f, &keySize, cliflags.KeySize, defaultKeySize)
 	}
 
@@ -356,9 +356,9 @@ func init() {
 		f.Lookup(cliflags.Insecure.Name).NoOptDefVal = "true"
 
 		// Certificate flags.
-		stringFlag(f, &baseCtx.SSLCA, cliflags.CACert, baseCtx.SSLCA)
-		stringFlag(f, &baseCtx.SSLCert, cliflags.Cert, baseCtx.SSLCert)
-		stringFlag(f, &baseCtx.SSLCertKey, cliflags.Key, baseCtx.SSLCertKey)
+		stringFlag(f, &baseCfg.SSLCA, cliflags.CACert, baseCfg.SSLCA)
+		stringFlag(f, &baseCfg.SSLCert, cliflags.Cert, baseCfg.SSLCert)
+		stringFlag(f, &baseCfg.SSLCertKey, cliflags.Key, baseCfg.SSLCertKey)
 
 		// By default, client commands print their output as
 		// pretty-formatted tables on terminals, and TSV when redirected
@@ -425,20 +425,20 @@ func extraFlagInit() {
 	// If any of the security flags have been set, clear the insecure
 	// setting. Note that we do the inverse when the --insecure flag is
 	// set. See insecureValue.Set().
-	if baseCtx.SSLCA != "" || baseCtx.SSLCAKey != "" ||
-		baseCtx.SSLCert != "" || baseCtx.SSLCertKey != "" {
-		baseCtx.Insecure = false
+	if baseCfg.SSLCA != "" || baseCfg.SSLCAKey != "" ||
+		baseCfg.SSLCert != "" || baseCfg.SSLCertKey != "" {
+		baseCfg.Insecure = false
 	}
 
-	serverCtx.Addr = net.JoinHostPort(connHost, connPort)
+	serverCfg.Addr = net.JoinHostPort(connHost, connPort)
 
 	if advertiseHost == "" {
 		advertiseHost = connHost
 	}
-	serverCtx.AdvertiseAddr = net.JoinHostPort(advertiseHost, connPort)
+	serverCfg.AdvertiseAddr = net.JoinHostPort(advertiseHost, connPort)
 
 	if httpHost == "" {
 		httpHost = connHost
 	}
-	serverCtx.HTTPAddr = net.JoinHostPort(httpHost, httpPort)
+	serverCfg.HTTPAddr = net.JoinHostPort(httpHost, httpPort)
 }

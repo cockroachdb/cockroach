@@ -759,7 +759,7 @@ func (l *LocalCluster) stop() {
 // NewClient implements the Cluster interface.
 func (l *LocalCluster) NewClient(t *testing.T, i int) (*roachClient.DB, *stop.Stopper) {
 	stopper := stop.NewStopper()
-	rpcContext := rpc.NewContext(context.Background(), &base.Context{
+	rpcContext := rpc.NewContext(context.Background(), &base.Config{
 		User:       security.NodeUser,
 		SSLCA:      filepath.Join(l.CertsDir, security.EmbeddedCACert),
 		SSLCert:    filepath.Join(l.CertsDir, security.EmbeddedNodeCert),

@@ -45,7 +45,7 @@ func createTestClient(t *testing.T, stopper *stop.Stopper, addr string) *client.
 }
 
 func createTestClientForUser(t *testing.T, stopper *stop.Stopper, addr, user string) *client.DB {
-	var ctx base.Context
+	var ctx base.Config
 	ctx.InitDefaults()
 	ctx.User = user
 	ctx.SSLCA = filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
