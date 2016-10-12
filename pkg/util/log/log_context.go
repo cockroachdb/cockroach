@@ -106,19 +106,9 @@ func WithLogTagStr(ctx context.Context, name string, value string) context.Conte
 	return addLogTagChain(ctx, &logTag{Field: otlog.String(name, value)})
 }
 
-// WithLogTagsFromCtx returns a context based on ctx with fromCtx's log tags
-// added on.
-//
-// The result is equivalent to replicating the WithLogTag* calls that were
-// used to obtain fromCtx and applying them to ctx in the same order - but
-// skipping those for which ctx already has a tag with the same name.
-func WithLogTagsFromCtx(ctx, fromCtx context.Context) context.Context {
-	bottomTag := contextBottomTag(fromCtx)
-	if bottomTag == nil {
-		// Nothing to do.
-		return ctx
-	}
-
+// copyTagChain appends the tags in a given chain to the tags already in the
+// context, skipping any duplicates.
+func copyTagChain(ctx context.Context, bottomTag *logTag) context.Context {
 	existingChain := contextBottomTag(ctx)
 	if existingChain == nil {
 		// Special fast path: reuse the same log tag list directly.
@@ -154,6 +144,19 @@ TopLoop:
 	}
 
 	return addLogTagChain(ctx, chainBottom)
+}
+
+// WithLogTagsFromCtx returns a context based on ctx with fromCtx's log tags
+// added on.
+//
+// The result is equivalent to replicating the WithLogTag* calls that were
+// used to obtain fromCtx and applying them to ctx in the same order - but
+// skipping those for which ctx already has a tag with the same name.
+func WithLogTagsFromCtx(ctx, fromCtx context.Context) context.Context {
+	if bottomTag := contextBottomTag(fromCtx); bottomTag != nil {
+		return copyTagChain(ctx, bottomTag)
+	}
+	return ctx
 }
 
 // DynamicIntValue is a helper type that allows using a "dynamic" int32 value
