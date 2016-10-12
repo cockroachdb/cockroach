@@ -233,11 +233,13 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, cfg StoreConfig) {
 }
 
 func (tc *testContext) Sender() client.Sender {
-	return client.Wrap(tc.rng, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
-		if ba.RangeID != 0 {
+	return client.Wrap(tc.store, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
+		if ba.RangeID == 0 {
 			ba.RangeID = 1
 		}
-		if ba.Timestamp == hlc.ZeroTimestamp {
+		// TODO(tschottdorf): Store should do this, need this only when talking
+		// directly to a Replica, which should be nearly never.
+		if ba.Timestamp == hlc.ZeroTimestamp && ba.Txn == nil {
 			if err := ba.SetActiveTimestamp(tc.clock.Now); err != nil {
 				tc.Fatal(err)
 			}
@@ -2145,7 +2147,8 @@ func TestReplicaNoTSCacheUpdateOnFailure(t *testing.T) {
 		args := readOrWriteArgs(key, read)
 		ts := tc.clock.Now() // later timestamp
 
-		if _, pErr := tc.SendWrappedWith(roachpb.Header{
+		// Intentionally talk directly to replica to avoid conflict resolution.
+		if _, pErr := client.SendWrappedWith(tc.rng, context.TODO(), roachpb.Header{
 			Timestamp: ts,
 		}, args); pErr == nil {
 			t.Errorf("test %d: expected failure", i)
@@ -2359,8 +2362,9 @@ func TestTransactionRetryLeavesIntents(t *testing.T) {
 		t.Fatalf("expected retry error; got %s", pErr)
 	}
 
-	// Now verify that the intent was still written for key.
-	_, pErr = tc.SendWrapped(&gArgs)
+	// Now verify that the intent was still written for key. Send directly
+	// to Replica to avoid intent resolution.
+	_, pErr = client.SendWrapped(tc.rng, context.TODO(), &gArgs)
 	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
 		t.Fatalf("expected write intent error; got %s", pErr)
 	}
@@ -2499,7 +2503,7 @@ func TestEndTransactionTxnSpanGCThreshold(t *testing.T) {
 	}
 
 	gcSpan := roachpb.Span{
-		Key:    desc.StartKey.AsRawKey(),
+		Key:    keys.LocalMax,
 		EndKey: desc.EndKey.AsRawKey(),
 	}
 
@@ -2920,7 +2924,8 @@ func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 	if err := ba.SetActiveTimestamp(tc.clock.Now); err != nil {
 		t.Fatal(err)
 	}
-	_, pErr := tc.Sender().Send(context.Background(), ba)
+	// Send intentionally directly to the replica to avoid intent resolution.
+	_, pErr := tc.rng.Send(context.Background(), ba)
 	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
 		t.Errorf("expected write intent error, but got %s", pErr)
 	}
@@ -3131,7 +3136,7 @@ func TestReplicaLaziness(t *testing.T) {
 	})
 
 	testWithAction(func() roachpb.Request {
-		scan := scanArgs(roachpb.KeyMin, roachpb.KeyMax)
+		scan := scanArgs(keys.LocalMax, roachpb.KeyMax)
 		return &scan
 	})
 }
@@ -3158,9 +3163,6 @@ func TestReplayProtection(t *testing.T) {
 		ba.Header = btH
 		ba.Add(&bt)
 		ba.Add(&put)
-		if err := ba.SetActiveTimestamp(tc.clock.Now); err != nil {
-			t.Fatal(err)
-		}
 		br, pErr := tc.Sender().Send(context.Background(), ba)
 		if pErr != nil {
 			t.Fatalf("%d: unexpected error: %s", i, pErr)
@@ -3895,7 +3897,6 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 			pushee.LastHeartbeat = &test.heartbeat
 		}
 		_, btH := beginTxnArgs(key, pushee)
-		btH.Timestamp = tc.rng.store.Clock().Now()
 		put := putArgs(key, key)
 		if _, pErr := maybeWrapWithBeginTransaction(tc.Sender(), context.Background(), btH, &put); pErr != nil {
 			t.Fatalf("%d: %s", i, pErr)
@@ -4642,11 +4643,13 @@ func TestAppliedIndex(t *testing.T) {
 func TestReplicaCorruption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	cErr := NewReplicaCorruptionError(errors.New("boom"))
+
 	tsc := TestStoreConfig()
 	tsc.TestingKnobs.TestingCommandFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Header().Key.Equal(roachpb.Key("boom")) {
-				return roachpb.NewError(NewReplicaCorruptionError(errors.New("boom")))
+				return roachpb.NewError(cErr)
 			}
 			return nil
 		}
@@ -4666,32 +4669,42 @@ func TestReplicaCorruption(t *testing.T) {
 	// maybeSetCorrupt should have been called.
 	args = putArgs(key, []byte("value"))
 	_, pErr := tc.SendWrapped(&args)
-	if !testutils.IsPError(pErr, "replica corruption \\(processed=true\\)") {
+	if !testutils.IsPError(pErr, "replica corruption") {
 		t.Fatalf("unexpected error: %s", pErr)
 	}
 
-	// Verify replica destroyed was set.
-	rkey, err := keys.Addr(key)
-	if err != nil {
-		t.Fatal(err)
-	}
-	r := tc.store.LookupReplica(rkey, rkey)
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.mu.destroyed.Error() != pErr.GetDetail().Error() {
-		t.Fatalf("expected r.mu.destroyed == pErr.GetDetail(), instead %q != %q", r.mu.destroyed, pErr.GetDetail())
-	}
+	rkey := keys.MustAddr(key)
+	repl := tc.store.LookupReplica(rkey, rkey)
+	// The command may have returned to us slightly before the end of the
+	// Raft Ready handling, so we need to allow a few microseconds until
+	// the Replica marks itself corrupt.
+	util.SucceedsSoon(t, func() error {
+		repl.mu.Lock()
+		destroyed := repl.mu.destroyed
+		corrupt := repl.mu.corrupted
+		repl.mu.Unlock()
+
+		// Verify replica destroyed was set.
+		if _, ok := destroyed.(*roachpb.ReplicaCorruptionError); !ok || !corrupt {
+			return errors.Errorf(
+				"expected replica corruption on acquisition, got %T (%v), corrupt=%t",
+				destroyed, destroyed, corrupt,
+			)
+		}
+		return nil
+	})
 
 	// Verify destroyed error was persisted.
-	pErr, err = loadReplicaDestroyedError(context.Background(), r.store.Engine(), r.RangeID)
+	pErr, err := loadReplicaDestroyedError(context.Background(), tc.store.Engine(), repl.RangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.mu.destroyed.Error() != pErr.GetDetail().Error() {
-		t.Fatalf("expected r.mu.destroyed == pErr.GetDetail(), instead %q != %q", r.mu.destroyed, pErr.GetDetail())
+	detail := pErr.GetDetail()
+	if cErr, ok := detail.(*roachpb.ReplicaCorruptionError); !ok {
+		t.Fatalf("no replica corruption persisted, instead: %v", pErr)
+	} else if detail.Error() != cErr.Error() {
+		t.Fatalf("unexpected persisted error: %T (%s)", detail, detail)
 	}
-
-	// TODO(bdarnell): when maybeSetCorrupt is finished verify that future commands fail too.
 }
 
 // TestChangeReplicasDuplicateError tests that a replica change that would
@@ -4799,8 +4812,10 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 		t.Errorf("expected original descriptor %s; got %s", &origDesc, &rlReply.Ranges[0])
 	}
 
-	// Switch to consistent lookups, which should run into the intent.
-	_, pErr = tc.SendWrappedWith(roachpb.Header{
+	// Switch to consistent lookups, which should run into the intent. We
+	// intentionally send directly to the Replica; the Store would do intent
+	// resolution for us.
+	_, pErr = client.SendWrappedWith(tc.rng, context.TODO(), roachpb.Header{
 		ReadConsistency: roachpb.CONSISTENT,
 	}, rlArgs)
 	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
@@ -6312,6 +6327,10 @@ func TestCommandTimeThreshold(t *testing.T) {
 
 	// Do a GC.
 	gcr := roachpb.GCRequest{
+		Span: roachpb.Span{
+			Key:    keys.LocalMax,
+			EndKey: roachpb.KeyMax,
+		},
 		Threshold: ts2,
 	}
 	if _, err := tc.SendWrapped(&gcr); err != nil {
