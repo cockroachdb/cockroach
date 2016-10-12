@@ -2613,7 +2613,20 @@ func TestRaftBlockedReplica(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rep.RaftLock()
+
+	// NB: We perform the actual locking on a different goroutine in order to
+	// workaround a spurious inconsistent lock order warning when running with
+	// TAGS=deadlock. The issue is that we're grabbing Replica 2's raftMu and
+	// then later Replica 1's from the same goroutine due to the direct calling
+	// of client.SendWrapped down the callstack into the Replica code (via the
+	// local RPC optimization).
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		rep.RaftLock()
+		wg.Done()
+	}()
+	wg.Wait()
 	defer rep.RaftUnlock()
 
 	// Verify that we're still ticking the non-blocked replica.
