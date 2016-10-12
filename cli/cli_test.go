@@ -265,7 +265,7 @@ func Example_basic() {
 	// "b"	"2"
 	// 2 result(s)
 	// debug kv inc c b
-	// invalid increment: b: strconv.ParseInt: parsing "b": invalid syntax
+	// invalid increment: b does not contain an integer value
 }
 
 func Example_quoted() {

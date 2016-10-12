@@ -18,7 +18,6 @@
 package cli
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -53,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/timeutil"
 	"github.com/cockroachdb/cockroach/util/tracing"
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 
 	"github.com/spf13/cobra"
 )
@@ -63,29 +63,6 @@ var errMissingParams = errors.New("missing or invalid parameters")
 // This will be non-nil when jemalloc is linked in with profiling enabled.
 // The function takes a filename to write the profile to.
 var jemallocHeapDump func(string) error
-
-// panicGuard wraps an errorless command into one wrapping panics into errors.
-// This simplifies error handling for many commands for which more elaborate
-// error handling isn't needed and would otherwise bloat the code.
-//
-// Deprecated: When introducing a new cobra.Command, simply return an error.
-func panicGuard(cmdFn func(*cobra.Command, []string)) func(*cobra.Command, []string) error {
-	return func(c *cobra.Command, args []string) (err error) {
-		defer func() {
-			if r := recover(); r != nil {
-				err = fmt.Errorf("%v", r)
-			}
-		}()
-		cmdFn(c, args)
-		return nil
-	}
-}
-
-// panicf is only to be used when wrapped through panicGuard, since the
-// stack trace doesn't matter then.
-func panicf(format string, args ...interface{}) {
-	panic(fmt.Sprintf(format, args...))
-}
 
 // startCmd starts a node by initializing the stores and joining
 // the cluster.
@@ -103,7 +80,7 @@ uninitialized, specify the --join flag to point to any healthy node
 `,
 	Example:      `  cockroach start --insecure --store=attrs=ssd,path=/mnt/ssd1 [--join=host:port,[host:port]]`,
 	SilenceUsage: true,
-	RunE:         runStart,
+	RunE:         maybeDecorateGRPCError(runStart),
 }
 
 func setDefaultCacheSize(ctx *server.Context) {
@@ -551,36 +528,67 @@ will be ignored by the server. When all extant requests have been
 completed, the server exits.
 `,
 	SilenceUsage: true,
-	RunE:         runQuit,
+	RunE:         maybeDecorateGRPCError(runQuit),
 }
 
-// doShutdown attempts to trigger server shutdown. The string return
-// value, if non-empty, indicates a reason why the state may be
-// uncertain and thus that it may make sense to retry the shutdown.
-func doShutdown(c serverpb.AdminClient, ctx context.Context, onModes []int32) (string, error) {
-	stream, err := c.Drain(ctx, &serverpb.DrainRequest{
-		On:       onModes,
-		Shutdown: true,
-	})
-	if err != nil {
-		return "", err
-	}
-	_, err = stream.Recv()
-	if err == nil {
-		for {
-			if _, err := stream.Recv(); !grpcutil.IsClosedConnection(err) {
-				return "", err
-			}
-			break
+// doShutdown attempts to trigger a server shutdown. When given an empty
+// onModes slice, it's a hard shutdown.
+func doShutdown(c serverpb.AdminClient, ctx context.Context, onModes []int32) error {
+	// This is kind of hairy, but should work well in practice. We want to
+	// distinguish between the case in which we can't even connect to the
+	// server (in which case we don't want our caller to try to come back
+	// with a hard retry) and the case in which an attempt to shut down
+	// fails (times out, or perhaps
+	for i, modes := range [][]int32{nil, onModes} {
+		stream, err := c.Drain(ctx, &serverpb.DrainRequest{
+			On:       modes,
+			Shutdown: i > 0,
+		})
+		if err != nil {
+			return err
 		}
-		fmt.Println("ok")
-		return "", nil
+		// Only signal the caller to try again with a hard shutdown if we're
+		// not already trying to do that, and if the initial connection attempt
+		// (without shutdown) has succeeded.
+		tryHard := i > 0 && len(onModes) > 0
+		var hasResp bool
+		for {
+			if _, err := stream.Recv(); err != nil {
+				if hasResp && grpcutil.IsClosedConnection(err) {
+					// We're trying to shut down, and we already got a response
+					// and now the connection is closed. This means we shut
+					// down successfully.
+					return nil
+				}
+				if tryHard {
+					// Either we hadn't seen a response yet (in which case it's
+					// likely that our connection broke while waiting for the
+					// shutdown to happen); try again (and harder).
+					return errTryHardShutdown{err}
+				}
+				// Case in which we don't even know whether the server is
+				// running. No point in trying again.
+				return err
+			}
+			if i == 0 {
+				// Our liveness probe succeeded.
+				break
+			}
+			hasResp = true
+		}
 	}
-	return fmt.Sprintf("%v", err), nil
+	return nil
 }
+
+type errTryHardShutdown struct{ error }
 
 // runQuit accesses the quit shutdown path.
-func runQuit(_ *cobra.Command, _ []string) error {
+func runQuit(_ *cobra.Command, _ []string) (err error) {
+	defer func() {
+		if err == nil {
+			fmt.Println("ok")
+		}
+	}()
 	onModes := make([]int32, len(server.GracefulDrainModes))
 	for i, m := range server.GracefulDrainModes {
 		onModes[i] = int32(m)
@@ -594,21 +602,20 @@ func runQuit(_ *cobra.Command, _ []string) error {
 
 	ctx := stopperContext(stopper)
 
-	retry, err := doShutdown(c, ctx, onModes)
-	if err != nil {
-		return err
-	}
-	if retry != "" {
-		fmt.Fprintf(os.Stderr, "graceful shutdown failed, proceeding with hard shutdown: %s\n", retry)
-
-		// Not passing drain modes tells the server to not bother and go
-		// straight to shutdown.
-		_, err := doShutdown(c, ctx, nil)
-		if err != nil {
-			return fmt.Errorf("hard shutdown failed: %v", err)
+	if err := doShutdown(c, ctx, onModes); err != nil {
+		if _, ok := err.(*errTryHardShutdown); ok {
+			fmt.Fprintf(
+				os.Stderr, "graceful shutdown failed: %s\nproceeding with hard shutdown\n", err,
+			)
+		} else {
+			return err
 		}
+	} else {
+		return nil
 	}
-	return nil
+	// Not passing drain modes tells the server to not bother and go
+	// straight to shutdown.
+	return errors.Wrap(doShutdown(c, ctx, nil), "hard shutdown failed")
 }
 
 // freezeClusterCmd command issues a cluster-wide freeze.
@@ -623,7 +630,7 @@ restarted. A failed or incomplete invocation of this command can be rolled back
 using the --undo flag, or by restarting all the nodes in the cluster.
 `,
 	SilenceUsage: true,
-	RunE:         runFreezeCluster,
+	RunE:         maybeDecorateGRPCError(runFreezeCluster),
 }
 
 func runFreezeCluster(_ *cobra.Command, _ []string) error {

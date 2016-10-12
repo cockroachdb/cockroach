@@ -24,6 +24,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/base"
@@ -35,8 +36,9 @@ import (
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
-func makeDBClient() (*client.DB, *stop.Stopper) {
+func makeDBClient() (*client.DB, *stop.Stopper, error) {
 	stopper := stop.NewStopper()
+
 	ctx := &base.Context{
 		User:       security.NodeUser,
 		SSLCA:      baseCtx.SSLCA,
@@ -44,25 +46,26 @@ func makeDBClient() (*client.DB, *stop.Stopper) {
 		SSLCertKey: baseCtx.SSLCertKey,
 		Insecure:   baseCtx.Insecure,
 	}
+
 	sender, err := client.NewSender(rpc.NewContext(context.TODO(), ctx, nil, stopper), baseCtx.Addr)
 	if err != nil {
 		stopper.Stop()
-		panicf("failed to initialize KV client: %s", err)
+		return nil, nil, errors.Wrap(err, "failed to initialize KV client")
 	}
-	return client.NewDB(sender), stopper
+	return client.NewDB(sender), stopper, nil
 }
 
 // unquoteArg unquotes the provided argument using Go double-quoted
 // string literal rules.
-func unquoteArg(arg string, disallowSystem bool) string {
+func unquoteArg(arg string, disallowSystem bool) (string, error) {
 	s, err := strconv.Unquote(`"` + arg + `"`)
 	if err != nil {
-		panicf("invalid argument %q: %s", arg, err)
+		return "", errors.Wrapf(err, "invalid argument %q", arg)
 	}
 	if disallowSystem && strings.HasPrefix(s, "\x00") {
-		panicf("cannot specify system key %q", s)
+		return "", errors.Errorf("cannot specify system key %q", s)
 	}
-	return s
+	return s, nil
 }
 
 // A getCmd gets the value for the specified key.
@@ -73,26 +76,33 @@ var getCmd = &cobra.Command{
 Fetches and displays the value for <key>.
 `,
 	SilenceUsage: true,
-	RunE:         panicGuard(runGet),
+	RunE:         maybeDecorateGRPCError(runGet),
 }
 
-func runGet(cmd *cobra.Command, args []string) {
+func runGet(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		mustUsage(cmd)
-		return
+		return cmd.Usage()
 	}
-	kvDB, stopper := makeDBClient()
+	kvDB, stopper, err := makeDBClient()
+	if err != nil {
+		return err
+	}
 	defer stopper.Stop()
 
-	key := roachpb.Key(unquoteArg(args[0], false))
+	unquoted, err := unquoteArg(args[0], false)
+	if err != nil {
+		return err
+	}
+	key := roachpb.Key(unquoted)
 	r, err := kvDB.Get(context.Background(), key)
 	if err != nil {
-		panicf("get failed: %s", err)
+		return err
 	}
 	if !r.Exists() {
-		panicf("%s not found", key)
+		return errors.Errorf("%s not found", key)
 	}
 	fmt.Printf("%s\n", r.PrettyValue())
+	return nil
 }
 
 // A putCmd sets the value for one or more keys.
@@ -106,29 +116,34 @@ in pairs on the command line.
 WARNING: Modifying system or table keys can corrupt your cluster.
 `,
 	SilenceUsage: true,
-	RunE:         panicGuard(runPut),
+	RunE:         maybeDecorateGRPCError(runPut),
 }
 
-func runPut(cmd *cobra.Command, args []string) {
+func runPut(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 || len(args)%2 == 1 {
-		mustUsage(cmd)
-		return
+		return cmd.Usage()
 	}
 
 	b := &client.Batch{}
 	for i := 0; i < len(args); i += 2 {
-		b.Put(
-			unquoteArg(args[i], true /* disallow system keys */),
-			unquoteArg(args[i+1], false),
-		)
+		k, err := unquoteArg(args[i], true /* disallow system keys */)
+		if err != nil {
+			return err
+		}
+		v, err := unquoteArg(args[i+1], false)
+		if err != nil {
+			return err
+		}
+		b.Put(k, v)
 	}
 
-	kvDB, stopper := makeDBClient()
+	kvDB, stopper, err := makeDBClient()
+	if err != nil {
+		return err
+	}
 	defer stopper.Stop()
 
-	if err := kvDB.Run(context.Background(), b); err != nil {
-		panicf("put failed: %s", err)
-	}
+	return kvDB.Run(context.Background(), b)
 }
 
 // A cPutCmd conditionally sets a value for a key.
@@ -143,30 +158,36 @@ pass nil for expValue. The expValue defaults to 1 if not specified.
 WARNING: Modifying system or table keys can corrupt your cluster.
 `,
 	SilenceUsage: true,
-	RunE:         panicGuard(runCPut),
+	RunE:         maybeDecorateGRPCError(runCPut),
 }
 
-func runCPut(cmd *cobra.Command, args []string) {
+func runCPut(cmd *cobra.Command, args []string) error {
 	if len(args) != 2 && len(args) != 3 {
-		mustUsage(cmd)
-		return
+		return cmd.Usage()
 	}
 
-	kvDB, stopper := makeDBClient()
+	kvDB, stopper, err := makeDBClient()
+	if err != nil {
+		return err
+	}
 	defer stopper.Stop()
 
-	key := unquoteArg(args[0], true /* disallow system keys */)
-	value := unquoteArg(args[1], false)
-	var err error
-	if len(args) == 3 {
-		err = kvDB.CPut(context.Background(), key, value, unquoteArg(args[2], false))
-	} else {
-		err = kvDB.CPut(context.Background(), key, value, nil)
-	}
-
+	key, err := unquoteArg(args[0], true /* disallow system keys */)
 	if err != nil {
-		panicf("conditional put failed: %s", err)
+		return err
 	}
+	value, err := unquoteArg(args[1], false)
+	if err != nil {
+		return err
+	}
+	if len(args) == 3 {
+		existing, err := unquoteArg(args[2], false)
+		if err != nil {
+			return err
+		}
+		return kvDB.CPut(context.Background(), key, value, existing)
+	}
+	return kvDB.CPut(context.Background(), key, value, nil)
 }
 
 // A incCmd command increments the value for a key.
@@ -182,32 +203,41 @@ flags.
 WARNING: Modifying system or table keys can corrupt your cluster.
 `,
 	SilenceUsage: true,
-	RunE:         panicGuard(runInc),
+	RunE:         maybeDecorateGRPCError(runInc),
 }
 
-func runInc(cmd *cobra.Command, args []string) {
+func runInc(cmd *cobra.Command, args []string) error {
 	if len(args) > 2 {
-		mustUsage(cmd)
-		return
+		return cmd.Usage()
 	}
 
-	kvDB, stopper := makeDBClient()
+	kvDB, stopper, err := makeDBClient()
+	if err != nil {
+		return err
+	}
 	defer stopper.Stop()
 
 	amount := 1
 	if len(args) >= 2 {
 		var err error
 		if amount, err = strconv.Atoi(args[1]); err != nil {
-			panicf("invalid increment: %s: %s", args[1], err)
+			return errors.Errorf(
+				"invalid increment: %s does not contain an integer value", args[1],
+			)
 		}
 	}
 
-	key := roachpb.Key(unquoteArg(args[0], true /* disallow system keys */))
-	if r, err := kvDB.Inc(context.TODO(), key, int64(amount)); err != nil {
-		panicf("increment failed: %s", err)
-	} else {
-		fmt.Printf("%d\n", r.ValueInt())
+	unquoted, err := unquoteArg(args[0], true /* disallow system keys */)
+	if err != nil {
+		return err
 	}
+	key := roachpb.Key(unquoted)
+	r, err := kvDB.Inc(context.TODO(), key, int64(amount))
+	if err != nil {
+		return errors.Wrap(err, "increment failed")
+	}
+	fmt.Printf("%d\n", r.ValueInt())
+	return nil
 }
 
 // A delCmd deletes the values of one or more keys.
@@ -220,26 +250,30 @@ Deletes the values of one or more keys.
 WARNING: Modifying system or table keys can corrupt your cluster.
 `,
 	SilenceUsage: true,
-	RunE:         panicGuard(runDel),
+	RunE:         maybeDecorateGRPCError(runDel),
 }
 
-func runDel(cmd *cobra.Command, args []string) {
+func runDel(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
-		mustUsage(cmd)
-		return
+		return cmd.Usage()
 	}
 
 	b := &client.Batch{}
 	for _, arg := range args {
-		b.Del(unquoteArg(arg, true /* disallow system keys */))
+		key, err := unquoteArg(arg, true /* disallow system keys */)
+		if err != nil {
+			return err
+		}
+		b.Del(key)
 	}
 
-	kvDB, stopper := makeDBClient()
+	kvDB, stopper, err := makeDBClient()
+	if err != nil {
+		return err
+	}
 	defer stopper.Stop()
 
-	if err := kvDB.Run(context.Background(), b); err != nil {
-		panicf("delete failed: %s", err)
-	}
+	return kvDB.Run(context.Background(), b)
 }
 
 // A delRangeCmd deletes the values for a range of keys.
@@ -253,25 +287,32 @@ Deletes the values for the range of keys [startKey, endKey).
 WARNING: Modifying system or table keys can corrupt your cluster.
 `,
 	SilenceUsage: true,
-	RunE:         panicGuard(runDelRange),
+	RunE:         maybeDecorateGRPCError(runDelRange),
 }
 
-func runDelRange(cmd *cobra.Command, args []string) {
+func runDelRange(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
-		mustUsage(cmd)
-		return
+		return cmd.Usage()
 	}
 
-	kvDB, stopper := makeDBClient()
+	kvDB, stopper, err := makeDBClient()
+	if err != nil {
+		return err
+	}
 	defer stopper.Stop()
 
-	if err := kvDB.DelRange(
-		context.TODO(),
-		unquoteArg(args[0], true /* disallow system keys */),
-		unquoteArg(args[1], true /* disallow system keys */),
-	); err != nil {
-		panicf("delrange failed: %s", err)
+	uqFrom, err := unquoteArg(args[0], true /* disallow system keys */)
+	if err != nil {
+		return err
 	}
+	uqTo, err := unquoteArg(args[1], true /* disallow system keys */)
+	if err != nil {
+		return err
+	}
+
+	return kvDB.DelRange(
+		context.TODO(), roachpb.Key(uqFrom), roachpb.Key(uqTo),
+	)
 }
 
 // A scanCmd fetches the key/value pairs for a specified
@@ -286,24 +327,30 @@ is specified then all (non-system) key/value pairs are retrieved. If no
 are retrieved.
 `,
 	SilenceUsage: true,
-	RunE:         panicGuard(runScan),
+	RunE:         maybeDecorateGRPCError(runScan),
 }
 
-func runScan(cmd *cobra.Command, args []string) {
+func runScan(cmd *cobra.Command, args []string) error {
 	if len(args) > 2 {
-		mustUsage(cmd)
-		return
+		return cmd.Usage()
 	}
-	startKey, endKey := initScanArgs(args)
+	startKey, endKey, err := initScanArgs(args)
+	if err != nil {
+		return err
+	}
 
-	kvDB, stopper := makeDBClient()
+	kvDB, stopper, err := makeDBClient()
+	if err != nil {
+		return err
+	}
 	defer stopper.Stop()
 
 	rows, err := kvDB.Scan(context.Background(), startKey, endKey, maxResults)
 	if err != nil {
-		panicf("scan failed: %s", err)
+		return err
 	}
 	showResult(rows)
+	return nil
 }
 
 // A reverseScanCmd fetches the key/value pairs for a specified
@@ -318,40 +365,54 @@ is specified then all (non-system) key/value pairs are retrieved. If no
 are retrieved.
 `,
 	SilenceUsage: true,
-	RunE:         panicGuard(runReverseScan),
+	RunE:         maybeDecorateGRPCError(runReverseScan),
 }
 
-func runReverseScan(cmd *cobra.Command, args []string) {
+func runReverseScan(cmd *cobra.Command, args []string) error {
 	if len(args) > 2 {
-		mustUsage(cmd)
-		return
+		return cmd.Usage()
 	}
-	startKey, endKey := initScanArgs(args)
-	kvDB, stopper := makeDBClient()
+	startKey, endKey, err := initScanArgs(args)
+	if err != nil {
+		return err
+	}
+	kvDB, stopper, err := makeDBClient()
+	if err != nil {
+		return err
+	}
 	defer stopper.Stop()
 
 	rows, err := kvDB.ReverseScan(context.TODO(), startKey, endKey, maxResults)
 	if err != nil {
-		panicf("reverse scan failed: %s", err)
+		return err
 	}
 	showResult(rows)
+	return nil
 }
 
-func initScanArgs(args []string) (startKey, endKey roachpb.Key) {
+func initScanArgs(args []string) (startKey, endKey roachpb.Key, _ error) {
 	if len(args) >= 1 {
-		startKey = roachpb.Key(unquoteArg(args[0], false))
+		unquoted, err := unquoteArg(args[0], false)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "invalid start key")
+		}
+		startKey = roachpb.Key(unquoted)
 	} else {
 		// Start with the first key after the system key range.
 		startKey = keys.UserDataSpan.Key
 	}
 	if len(args) >= 2 {
-		endKey = roachpb.Key(unquoteArg(args[1], false))
+		unquoted, err := unquoteArg(args[1], false)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "invalid end key")
+		}
+		endKey = roachpb.Key(unquoted)
 	} else {
 		// Exclude table data keys by default. The user can explicitly request them
 		// by passing \xff\xff for the end key.
 		endKey = keys.UserDataSpan.EndKey
 	}
-	return startKey, endKey
+	return startKey, endKey, nil
 }
 
 func showResult(rows []client.KeyValue) {
@@ -385,8 +446,8 @@ Special characters in keys or values should be specified according to
 the double-quoted Go string literal rules (see
 https://golang.org/ref/spec#String_literals).
 `,
-	Run: func(cmd *cobra.Command, args []string) {
-		mustUsage(cmd)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return cmd.Usage()
 	},
 }
 

@@ -26,10 +26,13 @@ import (
 	"google.golang.org/grpc/transport"
 
 	"github.com/cockroachdb/cockroach/util/netutil"
+	"github.com/pkg/errors"
 )
 
-// IsClosedConnection returns true if err is an error produced by gRPC on closed connections.
+// IsClosedConnection returns true if err's Cause is an error produced by gRPC
+// on closed connections.
 func IsClosedConnection(err error) bool {
+	err = errors.Cause(err)
 	if err == context.Canceled ||
 		grpc.Code(err) == codes.Canceled ||
 		grpc.Code(err) == codes.Unavailable ||
