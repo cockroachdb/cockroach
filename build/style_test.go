@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -444,6 +445,19 @@ func TestStyle(t *testing.T) {
 			if out := stderr.String(); len(out) > 0 {
 				t.Fatalf("err=%s, stderr=%s", err, out)
 			}
+		}
+
+		if t.Failed() {
+			args := append([]string(nil), cmd.Args[1:len(cmd.Args)-1]...)
+			args = append(args, "-w", ".")
+			for i := range args {
+				args[i] = strconv.Quote(args[i])
+			}
+			t.Logf("run the following to fix your formatting:\n"+
+				"\n%s %s\n\n"+
+				"Don't forget to add amend the result to the correct commits.",
+				cmd.Args[0], strings.Join(args, " "),
+			)
 		}
 	})
 
