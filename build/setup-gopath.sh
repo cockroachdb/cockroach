@@ -1,0 +1,1 @@
+gvt list | while read -a i; do echo ${i[0]} ${i[3]}; done | glock sync -n
