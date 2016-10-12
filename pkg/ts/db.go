@@ -26,9 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // DB provides Cockroach's Time Series API.
@@ -43,29 +40,6 @@ func NewDB(db *client.DB) *DB {
 	}
 }
 
-// PollSource begins a Goroutine which periodically queries the supplied
-// DataSource for time series data, storing the returned data in the server.
-// Stored data will be sampled using the provided Resolution. The polling
-// process will continue until the provided stop.Stopper is stopped.
-func (db *DB) PollSource(
-	ctx context.Context,
-	source DataSource,
-	frequency time.Duration,
-	r Resolution,
-	stopper *stop.Stopper,
-) {
-	ctx = log.WithLogTag(ctx, "ts-poll", nil)
-	p := &poller{
-		ctx:       ctx,
-		db:        db,
-		source:    source,
-		frequency: frequency,
-		r:         r,
-		stopper:   stopper,
-	}
-	p.start()
-}
-
 // A DataSource can be queryied for a slice of time series data.
 type DataSource interface {
 	GetTimeSeriesData() []tspb.TimeSeriesData
@@ -73,12 +47,35 @@ type DataSource interface {
 
 // poller maintains information for a polling process started by PollSource().
 type poller struct {
-	ctx       context.Context
+	log.AmbientContext
 	db        *DB
 	source    DataSource
 	frequency time.Duration
 	r         Resolution
 	stopper   *stop.Stopper
+}
+
+// PollSource begins a Goroutine which periodically queries the supplied
+// DataSource for time series data, storing the returned data in the server.
+// Stored data will be sampled using the provided Resolution. The polling
+// process will continue until the provided stop.Stopper is stopped.
+func (db *DB) PollSource(
+	ambient log.AmbientContext,
+	source DataSource,
+	frequency time.Duration,
+	r Resolution,
+	stopper *stop.Stopper,
+) {
+	ambient.AddLogTag("ts-poll", nil)
+	p := &poller{
+		AmbientContext: ambient,
+		db:             db,
+		source:         source,
+		frequency:      frequency,
+		r:              r,
+		stopper:        stopper,
+	}
+	p.start()
 }
 
 // start begins the goroutine for this poller, which will periodically request
@@ -109,19 +106,14 @@ func (p *poller) poll() {
 			return
 		}
 
-		ctx := p.ctx
-		tracer := tracing.TracerFromCtx(ctx)
-		if tracer != nil {
-			span := tracer.StartSpan("ts-poll")
-			defer span.Finish()
-			ctx = opentracing.ContextWithSpan(ctx, span)
-		}
+		ctx, span := p.AnnotateCtxWithSpan(context.Background(), "ts-poll")
+		defer span.Finish()
 
 		if err := p.db.StoreData(ctx, p.r, data); err != nil {
-			log.Warningf(p.ctx, "error writing time series data: %s", err)
+			log.Warningf(ctx, "error writing time series data: %s", err)
 		}
 	}); err != nil {
-		log.Warning(p.ctx, err)
+		log.Warning(p.AnnotateCtx(context.TODO()), err)
 	}
 }
 

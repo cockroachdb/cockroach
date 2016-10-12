@@ -24,19 +24,35 @@ import (
 )
 
 // AmbientContext is a helper type used to "annotate" context.Contexts with log
-// tags and a Tracer or EventLog.
+// tags and a Tracer or EventLog. It is intended to be embedded into various
+// serer components.
 //
 // Example:
+//   type SomeServer struct {
+//     log.AmbientContext
+//     ...
+//   }
 //
 //   ac := AmbientContext{Tracer: tracing.NewTracer()}
 //   ac.AddLogTag("n", 1)
 //
+//   s := &SomeServer{
+//     AmbientContext: ac
+//     ...
+//   }
+//
 //   // on an operation with context ctx
-//   ctx = ac.AnnotateCtx(ctx)
+//   ctx = s.AnnotateCtx(ctx)
 //   ...
 //
+//   // run a worker
+//   s.stopper.RunWorker(func() {
+//     ctx := s.AnnotateCtx(context.Background())
+//     ...
+//   })
+//
 //   // start a background operation
-//   ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "some-op")
+//   ctx, span := s.AnnotateCtxWithSpan(context.Background(), "some-op")
 //   defer span.Finish()
 //   ...
 type AmbientContext struct {
