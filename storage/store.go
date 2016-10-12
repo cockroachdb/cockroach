@@ -588,6 +588,8 @@ type StoreTestingKnobs struct {
 	DisableSplitQueue bool
 	// DisableScanner disables the replica scanner.
 	DisableScanner bool
+	// DisablePeriodicGossips disables periodic gossiping.
+	DisablePeriodicGossips bool
 	// DisableRefreshReasonTicks disables refreshing pending commands when a new
 	// leader is discovered.
 	DisableRefreshReasonNewLeader bool
@@ -1022,27 +1024,29 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// Gossip is only ever nil while bootstrapping a cluster and
 	// in unittests.
 	if s.cfg.Gossip != nil {
-		// Register update channel for any changes to the system config.
-		// This may trigger splits along structured boundaries,
-		// and update max range bytes.
-		gossipUpdateC := s.cfg.Gossip.RegisterSystemConfigChannel()
-		s.stopper.RunWorker(func() {
-			for {
-				select {
-				case <-gossipUpdateC:
-					cfg, _ := s.cfg.Gossip.GetSystemConfig()
-					s.systemGossipUpdate(cfg)
-				case <-s.stopper.ShouldStop():
-					return
+		if !s.cfg.TestingKnobs.DisablePeriodicGossips {
+			// Register update channel for any changes to the system config.
+			// This may trigger splits along structured boundaries,
+			// and update max range bytes.
+			gossipUpdateC := s.cfg.Gossip.RegisterSystemConfigChannel()
+			s.stopper.RunWorker(func() {
+				for {
+					select {
+					case <-gossipUpdateC:
+						cfg, _ := s.cfg.Gossip.GetSystemConfig()
+						s.systemGossipUpdate(cfg)
+					case <-s.stopper.ShouldStop():
+						return
+					}
 				}
-			}
-		})
+			})
 
-		// Start a single goroutine in charge of periodically gossiping the
-		// sentinel and first range metadata if we have a first range.
-		// This may wake up ranges and requires everything to be set up and
-		// running.
-		s.startGossip()
+			// Start a single goroutine in charge of periodically gossiping the
+			// sentinel and first range metadata if we have a first range.
+			// This may wake up ranges and requires everything to be set up and
+			// running.
+			s.startGossip()
+		}
 
 		// Start the scanner. The construction here makes sure that the scanner
 		// only starts after Gossip has connected, and that it does not block Start

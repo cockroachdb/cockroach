@@ -2205,6 +2205,7 @@ func TestReplicaLazyLoad(t *testing.T) {
 	sc := storage.TestStoreConfig()
 	sc.RaftTickInterval = time.Millisecond
 	sc.TestingKnobs.DisableScanner = true
+	sc.TestingKnobs.DisablePeriodicGossips = true
 	mtc := multiTestContext{storeConfig: &sc}
 	mtc.Start(t, 1)
 	defer mtc.Stop()
