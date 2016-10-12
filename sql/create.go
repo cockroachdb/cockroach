@@ -1260,17 +1260,23 @@ func populateViewBackrefs(
 		// We instead prefer to track the dependency on the view itself rather
 		// than on its indirect dependencies.
 		if sel.source.info.viewDesc != nil {
-			desc, ok := backrefs[sel.source.info.viewDesc.ID]
-			if !ok {
-				desc = sel.source.info.viewDesc
-				backrefs[desc.ID] = desc
-			}
-			ref := sqlbase.TableDescriptor_Reference{ID: tbl.ID}
-			desc.DependedOnBy = append(desc.DependedOnBy, ref)
-
+			populateViewBackrefFromViewDesc(sel.source.info.viewDesc, tbl, backrefs)
 			// Return early to avoid processing the view's underlying query.
 			return
 		}
+	} else if join, ok := plan.(*joinNode); ok {
+		if join.left.info.viewDesc != nil {
+			populateViewBackrefFromViewDesc(join.left.info.viewDesc, tbl, backrefs)
+		} else {
+			populateViewBackrefs(join.left.plan, tbl, backrefs)
+		}
+		if join.right.info.viewDesc != nil {
+			populateViewBackrefFromViewDesc(join.right.info.viewDesc, tbl, backrefs)
+		} else {
+			populateViewBackrefs(join.right.plan, tbl, backrefs)
+		}
+		// Return early to avoid re-processing the children.
+		return
 	} else if scan, ok := plan.(*scanNode); ok {
 		desc, ok := backrefs[scan.desc.ID]
 		if !ok {
@@ -1296,4 +1302,18 @@ func populateViewBackrefs(
 	for _, child := range children {
 		populateViewBackrefs(child, tbl, backrefs)
 	}
+}
+
+func populateViewBackrefFromViewDesc(
+	dependency *sqlbase.TableDescriptor,
+	tbl *sqlbase.TableDescriptor,
+	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
+) {
+	desc, ok := backrefs[dependency.ID]
+	if !ok {
+		desc = dependency
+		backrefs[desc.ID] = desc
+	}
+	ref := sqlbase.TableDescriptor_Reference{ID: tbl.ID}
+	desc.DependedOnBy = append(desc.DependedOnBy, ref)
 }
