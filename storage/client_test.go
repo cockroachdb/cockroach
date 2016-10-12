@@ -498,7 +498,6 @@ func (t *multiTestContextKVTransport) SendNext(done chan<- kv.BatchCall) {
 		done <- kv.BatchCall{Reply: br, Err: nil}
 	}) != nil {
 		done <- kv.BatchCall{Err: roachpb.NewSendError("store is stopped")}
-		t.mtc.expireLeases()
 	}
 }
 
@@ -674,14 +673,11 @@ func (m *multiTestContext) addStore(idx int) {
 	m.populateStorePool(idx, stopper)
 	m.populateDB(idx, stopper)
 
-	active, renewal := storage.RangeLeaseDurations(
-		storage.RaftElectionTimeout(base.DefaultRaftTickInterval, 0 /* use default */))
-	m.nodeLivenesses[idx] = storage.NewNodeLiveness(m.clocks[idx], m.dbs[idx], m.gossips[idx], active, renewal)
-
 	nodeID := roachpb.NodeID(idx + 1)
 	cfg := m.makeStoreConfig(idx)
-	cfg.RangeLeaseActiveDuration = active
-	cfg.RangeLeaseRenewalDuration = renewal
+	cfg.SetDefaults()
+	m.nodeLivenesses[idx] = storage.NewNodeLiveness(m.clocks[idx], m.dbs[idx], m.gossips[idx],
+		cfg.RangeLeaseActiveDuration, cfg.RangeLeaseRenewalDuration)
 	store := storage.NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
 	if needBootstrap {
 		err := store.Bootstrap(roachpb.StoreIdent{
