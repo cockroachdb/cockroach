@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/keys"
 	"github.com/cockroachdb/cockroach/roachpb"
+	"github.com/pkg/errors"
 
 	"github.com/spf13/cobra"
 )
@@ -35,13 +36,12 @@ var lsRangesCmd = &cobra.Command{
 Lists the ranges in a cluster.
 `,
 	SilenceUsage: true,
-	RunE:         panicGuard(runLsRanges),
+	RunE:         maybeDecorateGRPCError(runLsRanges),
 }
 
-func runLsRanges(cmd *cobra.Command, args []string) {
+func runLsRanges(cmd *cobra.Command, args []string) error {
 	if len(args) > 1 {
-		mustUsage(cmd)
-		return
+		return cmd.Usage()
 	}
 
 	var startKey roachpb.Key
@@ -58,18 +58,21 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 	}
 	endKey := keys.Meta2Prefix.PrefixEnd()
 
-	kvDB, stopper := makeDBClient()
+	kvDB, stopper, err := makeDBClient()
+	if err != nil {
+		return err
+	}
 	defer stopper.Stop()
+
 	rows, err := kvDB.Scan(context.Background(), startKey, endKey, maxResults)
 	if err != nil {
-		panicf("scan failed: %s\n", err)
+		return err
 	}
 
 	for _, row := range rows {
 		desc := &roachpb.RangeDescriptor{}
 		if err := row.ValueProto(desc); err != nil {
-			panicf("%s: unable to unmarshal range descriptor\n", row.Key)
-			continue
+			return errors.Wrapf(err, "unable to unmarshal range descriptor at %s", row.Key)
 		}
 		fmt.Printf("%s-%s [%d]\n", desc.StartKey, desc.EndKey, desc.RangeID)
 		for i, replica := range desc.Replicas {
@@ -78,6 +81,7 @@ func runLsRanges(cmd *cobra.Command, args []string) {
 		}
 	}
 	fmt.Printf("%d result(s)\n", len(rows))
+	return nil
 }
 
 // A splitRangeCmd command splits a range.
@@ -88,21 +92,22 @@ var splitRangeCmd = &cobra.Command{
 Splits the range containing <key> at <key>.
 `,
 	SilenceUsage: true,
-	RunE:         panicGuard(runSplitRange),
+	RunE:         maybeDecorateGRPCError(runSplitRange),
 }
 
-func runSplitRange(cmd *cobra.Command, args []string) {
+func runSplitRange(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		mustUsage(cmd)
-		return
+		return cmd.Usage()
 	}
 
 	key := roachpb.Key(args[0])
-	kvDB, stopper := makeDBClient()
-	defer stopper.Stop()
-	if err := kvDB.AdminSplit(context.Background(), key); err != nil {
-		panicf("split failed: %s\n", err)
+
+	kvDB, stopper, err := makeDBClient()
+	if err != nil {
+		return err
 	}
+	defer stopper.Stop()
+	return errors.Wrap(kvDB.AdminSplit(context.Background(), key), "split failed")
 }
 
 var rangeCmds = []*cobra.Command{
@@ -113,8 +118,8 @@ var rangeCmds = []*cobra.Command{
 var rangeCmd = &cobra.Command{
 	Use:   "range",
 	Short: "list and split ranges",
-	Run: func(cmd *cobra.Command, args []string) {
-		mustUsage(cmd)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return cmd.Usage()
 	},
 }
 

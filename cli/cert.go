@@ -17,9 +17,8 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/pkg/errors"
 
 	"github.com/spf13/cobra"
 )
@@ -37,20 +36,16 @@ var createCACertCmd = &cobra.Command{
 Generates CA certificate and key, writing them to --ca-cert and --ca-key.
 `,
 	SilenceUsage: true,
-	RunE:         runCreateCACert,
+	RunE:         maybeDecorateGRPCError(runCreateCACert),
 }
 
 // runCreateCACert generates key pair and CA certificate and writes them
 // to their corresponding files.
 func runCreateCACert(cmd *cobra.Command, args []string) error {
 	if len(baseCfg.SSLCA) == 0 || len(baseCfg.SSLCAKey) == 0 {
-		mustUsage(cmd)
 		return errMissingParams
 	}
-	if err := security.RunCreateCACert(baseCfg.SSLCA, baseCfg.SSLCAKey, keySize); err != nil {
-		return fmt.Errorf("failed to generate CA certificate: %s", err)
-	}
-	return nil
+	return errors.Wrap(security.RunCreateCACert(baseCfg.SSLCA, baseCfg.SSLCAKey, keySize), "failed to generate CA certificate")
 }
 
 // A createNodeCert command generates a node certificate and stores it
@@ -64,7 +59,7 @@ Generates node certificate and keys for a given node, writing them to
 At least one host should be passed in (either IP address or dns name).
 `,
 	SilenceUsage: true,
-	RunE:         runCreateNodeCert,
+	RunE:         maybeDecorateGRPCError(runCreateNodeCert),
 }
 
 // runCreateNodeCert generates key pair and CA certificate and writes them
@@ -72,14 +67,12 @@ At least one host should be passed in (either IP address or dns name).
 func runCreateNodeCert(cmd *cobra.Command, args []string) error {
 	if len(baseCfg.SSLCA) == 0 || len(baseCfg.SSLCAKey) == 0 ||
 		len(baseCfg.SSLCert) == 0 || len(baseCfg.SSLCertKey) == 0 {
-		mustUsage(cmd)
 		return errMissingParams
 	}
-	if err := security.RunCreateNodeCert(baseCfg.SSLCA, baseCfg.SSLCAKey,
-		baseCfg.SSLCert, baseCfg.SSLCertKey, keySize, args); err != nil {
-		return fmt.Errorf("failed to generate node certificate: %s", err)
-	}
-	return nil
+	return errors.Wrap(security.RunCreateNodeCert(baseCfg.SSLCA, baseCfg.SSLCAKey,
+		baseCfg.SSLCert, baseCfg.SSLCertKey, keySize, args),
+		"failed to generate node certificate",
+	)
 }
 
 // A createClientCert command generates a client certificate and stores it
@@ -93,27 +86,24 @@ Generates a client certificate and key, writing them to --cert and --key.
 The certs directory should contain a CA cert and key.
 `,
 	SilenceUsage: true,
-	RunE:         runCreateClientCert,
+	RunE:         maybeDecorateGRPCError(runCreateClientCert),
 }
 
 // runCreateClientCert generates key pair and CA certificate and writes them
 // to their corresponding files.
 func runCreateClientCert(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		mustUsage(cmd)
-		return errMissingParams
+		return cmd.Usage()
 	}
 	if len(baseCfg.SSLCA) == 0 || len(baseCfg.SSLCAKey) == 0 ||
 		len(baseCfg.SSLCert) == 0 || len(baseCfg.SSLCertKey) == 0 {
-		mustUsage(cmd)
 		return errMissingParams
 	}
 
-	if err := security.RunCreateClientCert(baseCfg.SSLCA, baseCfg.SSLCAKey,
-		baseCfg.SSLCert, baseCfg.SSLCertKey, keySize, args[0]); err != nil {
-		return fmt.Errorf("failed to generate clent certificate: %s", err)
-	}
-	return nil
+	return errors.Wrap(security.RunCreateClientCert(baseCfg.SSLCA, baseCfg.SSLCAKey,
+		baseCfg.SSLCert, baseCfg.SSLCertKey, keySize, args[0]),
+		"failed to generate clent certificate",
+	)
 }
 
 var certCmds = []*cobra.Command{
@@ -125,8 +115,8 @@ var certCmds = []*cobra.Command{
 var certCmd = &cobra.Command{
 	Use:   "cert",
 	Short: "create ca, node, and client certs",
-	Run: func(cmd *cobra.Command, args []string) {
-		mustUsage(cmd)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return cmd.Usage()
 	},
 }
 
