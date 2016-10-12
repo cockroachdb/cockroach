@@ -36,7 +36,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -397,7 +399,8 @@ func TestPollSource(t *testing.T) {
 		},
 	}
 
-	tm.DB.PollSource(context.TODO(), &testSource, time.Millisecond, Resolution10s, testSource.stopper)
+	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+	tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper)
 	<-testSource.stopper.IsStopped()
 	if a, e := testSource.calledCount, 2; a != e {
 		t.Errorf("testSource was called %d times, expected %d", a, e)
