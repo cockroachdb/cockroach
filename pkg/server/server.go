@@ -77,6 +77,8 @@ type Server struct {
 	// Must align to 8-bytes for atomic int64 updates.
 	nodeLogTagVal log.DynamicIntValue
 
+	log.AmbientContext
+
 	cfg            Config
 	mux            *http.ServeMux
 	clock          *hlc.Clock
@@ -111,22 +113,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		return nil, errors.Errorf("unable to resolve RPC address %q: %v", cfg.AdvertiseAddr, err)
 	}
 
-	if cfg.Ctx == nil {
-		cfg.Ctx = context.Background()
-	}
-	if cfg.Ctx.Done() != nil {
-		panic("context with cancel or deadline")
-	}
-	if tracing.TracerFromCtx(cfg.Ctx) == nil {
-		// TODO(radu): instead of modifying srvCtx.Ctx, we should have a separate
-		// context.Context inside Server. We will need to rename server.Context
-		// though.
-		cfg.Ctx = tracing.WithTracer(cfg.Ctx, tracing.NewTracer())
+	if cfg.AmbientCtx.Tracer == nil {
+		cfg.AmbientCtx.Tracer = tracing.NewTracer()
 	}
 
-	if cfg.Insecure {
-		log.Warning(cfg.Ctx, "running in insecure mode, this is strongly discouraged. See --insecure.")
-	}
 	// Try loading the TLS configs before anything else.
 	if _, err := cfg.GetServerTLSConfig(); err != nil {
 		return nil, err
@@ -136,9 +126,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	s := &Server{
-		mux:     http.NewServeMux(),
-		clock:   hlc.NewClock(hlc.UnixNano),
-		stopper: stopper,
+		AmbientContext: cfg.AmbientCtx,
+		mux:            http.NewServeMux(),
+		clock:          hlc.NewClock(hlc.UnixNano),
+		stopper:        stopper,
+		cfg:            cfg,
 	}
 	// Add a dynamic log tag value for the node ID.
 	//
@@ -152,25 +144,33 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// a regular tag since it's just doing an (atomic) load when a log/trace
 	// message is constructed.
 	s.nodeLogTagVal.Set(log.DynamicIntValueUnknown)
-	cfg.Ctx = log.WithLogTag(cfg.Ctx, "n", &s.nodeLogTagVal)
-	s.cfg = cfg
+	s.AmbientContext.AddLogTag("n", &s.nodeLogTagVal)
+
+	ctx := s.AnnotateCtx(context.Background())
+	// TODO(radu): this will go away when we pass AmbientContext into all
+	// components.
+	ctx = tracing.WithTracer(ctx, s.AmbientContext.Tracer)
+
+	if cfg.Insecure {
+		log.Warning(ctx, "running in insecure mode, this is strongly discouraged. See --insecure.")
+	}
 
 	s.clock.SetMaxOffset(cfg.MaxOffset)
 
-	s.rpcContext = rpc.NewContext(s.Ctx(), cfg.Config, s.clock, s.stopper)
+	s.rpcContext = rpc.NewContext(ctx, cfg.Config, s.clock, s.stopper)
 	s.rpcContext.HeartbeatCB = func() {
 		if err := s.rpcContext.RemoteClocks.VerifyClockOffset(); err != nil {
-			log.Fatal(s.Ctx(), err)
+			log.Fatal(ctx, err)
 		}
 	}
 	s.grpc = rpc.NewServer(s.rpcContext)
 
 	s.registry = metric.NewRegistry()
 	s.gossip = gossip.New(
-		s.Ctx(), s.rpcContext, s.grpc, s.cfg.GossipBootstrapResolvers, s.stopper, s.registry,
+		ctx, s.rpcContext, s.grpc, s.cfg.GossipBootstrapResolvers, s.stopper, s.registry,
 	)
 	s.storePool = storage.NewStorePool(
-		s.Ctx(),
+		ctx,
 		s.gossip,
 		s.clock,
 		s.rpcContext,
@@ -193,7 +193,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = s.stopper.ShouldQuiesce()
 	distSenderCfg := kv.DistSenderConfig{
-		Ctx:             s.Ctx(),
+		Ctx:             ctx,
 		Clock:           s.clock,
 		RPCContext:      s.rpcContext,
 		RPCRetryOptions: &retryOpts,
@@ -202,7 +202,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	txnMetrics := kv.MakeTxnMetrics(s.cfg.MetricsSampleInterval)
 	s.registry.AddMetricStruct(txnMetrics)
-	s.txnCoordSender = kv.NewTxnCoordSender(s.Ctx(), s.distSender, s.clock, cfg.Linearizable,
+	s.txnCoordSender = kv.NewTxnCoordSender(ctx, s.distSender, s.clock, cfg.Linearizable,
 		s.stopper, txnMetrics)
 	s.db = client.NewDB(s.txnCoordSender)
 
@@ -214,7 +214,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.registry.AddMetricStruct(s.nodeLiveness.Metrics())
 
 	s.raftTransport = storage.NewRaftTransport(
-		s.Ctx(), storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext)
+		ctx, storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext)
 
 	s.kvDB = kv.NewDBServer(s.cfg.Config, s.txnCoordSender, s.stopper)
 	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
@@ -229,7 +229,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Set up the DistSQL server
 	distSQLCfg := distsql.ServerConfig{
-		Context:    s.Ctx(),
+		Context:    ctx,
 		DB:         s.db,
 		RPCContext: s.rpcContext,
 		Stopper:    s.stopper,
@@ -239,7 +239,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Set up Executor
 	execCfg := sql.ExecutorConfig{
-		Context:               s.Ctx(),
+		Context:               ctx,
 		DB:                    s.db,
 		Gossip:                s.gossip,
 		LeaseManager:          s.leaseMgr,
@@ -266,7 +266,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	storeCfg := storage.StoreConfig{
-		Ctx:                            s.Ctx(),
+		Ctx:                            ctx,
 		Clock:                          s.clock,
 		DB:                             s.db,
 		Gossip:                         s.gossip,
@@ -306,20 +306,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	storage.RegisterReservationServer(s.grpc, s.node.storesServer)
 
 	s.tsDB = ts.NewDB(s.db)
-	s.tsServer = ts.MakeServer(s.Ctx(), s.tsDB)
+	s.tsServer = ts.MakeServer(ctx, s.tsDB)
 
 	s.admin = makeAdminServer(s)
-	s.status = newStatusServer(s.Ctx(), s.db, s.gossip, s.recorder, s.rpcContext, s.node.stores)
+	s.status = newStatusServer(ctx, s.db, s.gossip, s.recorder, s.rpcContext, s.node.stores)
 	for _, gw := range []grpcGatewayServer{&s.admin, s.status, &s.tsServer} {
 		gw.RegisterService(s.grpc)
 	}
 
 	return s, nil
-}
-
-// Ctx returns the base context for the server.
-func (s *Server) Ctx() context.Context {
-	return s.cfg.Ctx
 }
 
 // ClusterID returns the ID of the cluster this server is a part of.
@@ -353,11 +348,9 @@ type grpcGatewayServer interface {
 // the node using the engines from the server's context.
 //
 // The passed context can be used to trace the server startup. The context
-// should represent the general startup operation, and is different from
-// contexts used at runtime for server's background work (like `s.Ctx()`).
+// should represent the general startup operation.
 func (s *Server) Start(ctx context.Context) error {
-	// Copy log tags from s.Ctx()
-	ctx = log.WithLogTagsFromCtx(ctx, s.Ctx())
+	ctx = s.AnnotateCtx(ctx)
 
 	tlsConfig, err := s.cfg.GetServerTLSConfig()
 	if err != nil {
@@ -422,10 +415,12 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.cfg.HTTPAddr = unresolvedHTTPAddr.String()
 
+	workersCtx := s.AnnotateCtx(context.Background())
+
 	s.stopper.RunWorker(func() {
 		<-s.stopper.ShouldQuiesce()
 		if err := httpLn.Close(); err != nil {
-			log.Fatal(s.Ctx(), err)
+			log.Fatal(workersCtx, err)
 		}
 	})
 
@@ -463,7 +458,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.stopper.RunWorker(func() {
 		netutil.FatalIfUnexpected(httpServer.ServeWith(s.stopper, pgL, func(conn net.Conn) {
 			if err := s.pgServer.ServeConn(conn); err != nil && !netutil.IsClosedConnection(err) {
-				log.Error(s.Ctx(), err)
+				log.Error(workersCtx, err)
 			}
 		}))
 	})
@@ -478,7 +473,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.stopper.RunWorker(func() {
 			<-s.stopper.ShouldQuiesce()
 			if err := unixLn.Close(); err != nil {
-				log.Fatal(s.Ctx(), err)
+				log.Fatal(workersCtx, err)
 			}
 		})
 
@@ -486,7 +481,7 @@ func (s *Server) Start(ctx context.Context) error {
 			netutil.FatalIfUnexpected(httpServer.ServeWith(s.stopper, unixLn, func(conn net.Conn) {
 				if err := s.pgServer.ServeConn(conn); err != nil &&
 					!netutil.IsClosedConnection(err) {
-					log.Error(s.Ctx(), err)
+					log.Error(workersCtx, err)
 				}
 			}))
 		})
@@ -527,7 +522,10 @@ func (s *Server) Start(ctx context.Context) error {
 	s.startSampleEnvironment(s.cfg.MetricsSampleInterval)
 
 	// Begin recording time series data collected by the status monitor.
-	s.tsDB.PollSource(s.Ctx(), s.recorder, s.cfg.MetricsSampleInterval, ts.Resolution10s, s.stopper)
+	s.tsDB.PollSource(
+		s.AnnotateCtx(context.Background()), s.recorder,
+		s.cfg.MetricsSampleInterval, ts.Resolution10s, s.stopper,
+	)
 
 	// Begin recording status summaries.
 	s.node.startWriteSummaries(s.cfg.MetricsSampleInterval)
@@ -542,11 +540,11 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	sql.NewSchemaChangeManager(testingKnobs, *s.db, s.gossip, s.leaseMgr).Start(s.stopper)
 
-	log.Infof(s.Ctx(), "starting %s server at %s", s.cfg.HTTPRequestScheme(), unresolvedHTTPAddr)
-	log.Infof(s.Ctx(), "starting grpc/postgres server at %s", unresolvedListenAddr)
-	log.Infof(s.Ctx(), "advertising CockroachDB node at %s", unresolvedAdvertAddr)
+	log.Infof(ctx, "starting %s server at %s", s.cfg.HTTPRequestScheme(), unresolvedHTTPAddr)
+	log.Infof(ctx, "starting grpc/postgres server at %s", unresolvedListenAddr)
+	log.Infof(ctx, "advertising CockroachDB node at %s", unresolvedAdvertAddr)
 	if len(s.cfg.SocketFile) != 0 {
-		log.Infof(s.Ctx(), "starting postgres server at unix:%s", s.cfg.SocketFile)
+		log.Infof(ctx, "starting postgres server at unix:%s", s.cfg.SocketFile)
 	}
 
 	s.stopper.RunWorker(func() {
@@ -568,7 +566,7 @@ func (s *Server) Start(ctx context.Context) error {
 		gwruntime.WithMarshalerOption(util.ProtoContentType, protopb),
 		gwruntime.WithMarshalerOption(util.AltProtoContentType, protopb),
 	)
-	gwCtx, gwCancel := context.WithCancel(s.Ctx())
+	gwCtx, gwCancel := context.WithCancel(s.AnnotateCtx(context.Background()))
 	s.stopper.AddCloser(stop.CloserFn(gwCancel))
 
 	// Setup HTTP<->gRPC handlers.
@@ -617,7 +615,7 @@ func (s *Server) Start(ctx context.Context) error {
 	log.Event(ctx, "added http endpoints")
 
 	if err := sdnotify.Ready(); err != nil {
-		log.Errorf(s.Ctx(), "failed to signal readiness using systemd protocol: %s", err)
+		log.Errorf(ctx, "failed to signal readiness using systemd protocol: %s", err)
 	}
 	log.Event(ctx, "server ready")
 

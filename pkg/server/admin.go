@@ -161,9 +161,8 @@ func (s *adminServer) firstNotFoundError(results []sql.Result) error {
 // NewSessionForRPC creates a SQL session on behalf of an RPC request.
 // It copies the Server's tracer into the Session's context.
 func (s *adminServer) NewSessionForRPC(ctx context.Context, args sql.SessionArgs) *sql.Session {
-	// TODO(radu): figure out a general way to merge the RPC context with the
-	// server's context.
-	ctx = tracing.WithTracer(ctx, tracing.TracerFromCtx(s.server.cfg.Ctx))
+	ctx = s.server.AnnotateCtx(ctx)
+	ctx = tracing.WithTracer(ctx, s.server.AmbientContext.Tracer)
 	return sql.NewSession(ctx, args, s.server.sqlExecutor, nil)
 }
 
