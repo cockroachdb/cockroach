@@ -30,6 +30,29 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	// TODO(vivek): Replace these constants with a runtime budget for the
+	// operation chunk involved.
+
+	// ColumnTruncateAndBackfillChunkSize is the maximum number of columns
+	// processed per chunk during column truncate or backfill.
+	ColumnTruncateAndBackfillChunkSize = 200
+
+	// IndexTruncateChunkSize is the maximum number of index entries truncated
+	// per chunk during an index truncation. This value is larger than the
+	// other chunk constants because the operation involves only running a
+	// DeleteRange().
+	IndexTruncateChunkSize = 600
+
+	// IndexBackfillChunkSize is the maximum number index entries backfilled
+	// per chunk during an index backfill. The index backfill involves a table
+	// scan, and a number of individual ops presented in a batch. This value
+	// is smaller than ColumnTruncateAndBackfillChunkSize, because it involves
+	// a number of individual index row updates that can be scattered over
+	// many ranges.
+	IndexBackfillChunkSize = 100
+)
+
 func makeColIDtoRowIndex(
 	row planNode, desc *sqlbase.TableDescriptor,
 ) (map[sqlbase.ColumnID]int, error) {
@@ -188,14 +211,6 @@ func (sc *SchemaChanger) getTableSpan() (roachpb.Span, error) {
 	}, nil
 }
 
-// ColumnTruncateAndBackfillChunkSize is the maximum number of rows of keys
-// processed per chunk during the column truncate or backfill.
-//
-// TODO(vivek): Run some experiments to set this value to something sensible
-// or adjust it dynamically. Also add in a sleep after every chunk is
-// processed to slow down the backfill and reduce its CPU usage.
-const ColumnTruncateAndBackfillChunkSize = 600
-
 func (sc *SchemaChanger) truncateAndBackfillColumns(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	added []sqlbase.ColumnDescriptor,
@@ -229,18 +244,42 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 		}
 
 		// Run through the entire table key space adding and deleting columns.
-		for done := false; !done; {
+		const chunkSize = ColumnTruncateAndBackfillChunkSize
+		// Evaluate default values.
+		updateCols := append(added, dropped...)
+		updateValues := make(parser.DTuple, len(updateCols))
+		var nonNullViolationColumnName string
+		for j, col := range added {
+			if defaultExprs == nil || defaultExprs[j] == nil {
+				updateValues[j] = parser.DNull
+			} else {
+				updateValues[j], err = defaultExprs[j].Eval(&sc.evalCtx)
+				if err != nil {
+					return err
+				}
+			}
+			if !col.Nullable && updateValues[j].Compare(parser.DNull) == 0 {
+				nonNullViolationColumnName = col.Name
+			}
+		}
+		for j := range dropped {
+			updateValues[j+len(added)] = parser.DNull
+		}
+		for row, done := int64(0), false; !done; row += chunkSize {
 			// First extend the schema change lease.
 			l, err := sc.ExtendLease(*lease)
 			if err != nil {
 				return err
 			}
 			*lease = l
-
+			if log.V(2) {
+				log.Infof(context.TODO(), "column schema change (%d, %d) at row: %d, span: %s",
+					sc.tableID, sc.mutationID, row, sp)
+			}
 			// Add and delete columns for a chunk of the key space.
 			sp.Key, done, err = sc.truncateAndBackfillColumnsChunk(
-				added, dropped, defaultExprs, &sc.evalCtx, sp,
-			)
+				added, dropped, defaultExprs, sp,
+				updateValues, nonNullViolationColumnName, chunkSize)
 			if err != nil {
 				return err
 			}
@@ -253,13 +292,18 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 	added []sqlbase.ColumnDescriptor,
 	dropped []sqlbase.ColumnDescriptor,
 	defaultExprs []parser.TypedExpr,
-	evalCtx *parser.EvalContext,
 	sp roachpb.Span,
+	updateValues parser.DTuple,
+	nonNullViolationColumnName string,
+	chunkSize int64,
 ) (roachpb.Key, bool, error) {
-	var curIndexKey roachpb.Key
 	done := false
+	var lastRowSeen parser.DTuple
+	var tableDesc *sqlbase.TableDescriptor
+	var colIDtoRowIndex map[sqlbase.ColumnID]int
 	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
-		tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
+		var err error
+		tableDesc, err = sqlbase.GetTableDescFromID(txn, sc.tableID)
 		if err != nil {
 			return err
 		}
@@ -303,28 +347,28 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 		// handle intermediate OLTP commands which delete and add
 		// values during the scan.
 		var rf sqlbase.RowFetcher
-		colIDtoRowIndex := colIDtoRowIndexFromCols(tableDesc.Columns)
+		colIDtoRowIndex = colIDtoRowIndexFromCols(tableDesc.Columns)
 		valNeededForCol := make([]bool, len(tableDesc.Columns))
 		for i := range valNeededForCol {
 			_, valNeededForCol[i] = ru.fetchColIDtoRowIndex[tableDesc.Columns[i].ID]
 		}
-		err = rf.Init(tableDesc, colIDtoRowIndex, &tableDesc.PrimaryIndex, false, false,
-			tableDesc.Columns, valNeededForCol)
-		if err != nil {
+		if err := rf.Init(
+			tableDesc, colIDtoRowIndex, &tableDesc.PrimaryIndex, false, false,
+			tableDesc.Columns, valNeededForCol,
+		); err != nil {
 			return err
 		}
-		err = rf.StartScan(txn, roachpb.Spans{sp}, true /* limit batches */, 0 /* no limit hint */)
-		if err != nil {
+		if err := rf.StartScan(
+			txn, roachpb.Spans{sp}, true /* limit batches */, chunkSize,
+		); err != nil {
 			return err
 		}
 
-		indexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
 		oldValues := make(parser.DTuple, len(ru.fetchCols))
-		updateValues := make(parser.DTuple, len(updateCols))
-
-		writeBatch := &client.Batch{}
-		var i int
-		for ; i < ColumnTruncateAndBackfillChunkSize; i++ {
+		writeBatch := txn.NewBatch()
+		var i int64
+		rowLength := 0
+		for ; i < chunkSize; i++ {
 			row, err := rf.NextRow()
 			if err != nil {
 				return err
@@ -332,56 +376,48 @@ func (sc *SchemaChanger) truncateAndBackfillColumnsChunk(
 			if row == nil {
 				break // Done
 			}
-
-			curIndexKey, _, err = sqlbase.EncodeIndexKey(
-				tableDesc, &tableDesc.PrimaryIndex, colIDtoRowIndex, row, indexKeyPrefix)
-			if err != nil {
-				return err
-			}
-
-			for j, col := range added {
-				if defaultExprs == nil || defaultExprs[j] == nil {
-					updateValues[j] = parser.DNull
-				} else {
-					updateValues[j], err = defaultExprs[j].Eval(evalCtx)
-					if err != nil {
-						return err
-					}
-				}
-				if !col.Nullable && updateValues[j].Compare(parser.DNull) == 0 {
-					return sqlbase.NewNonNullViolationError(col.Name)
-				}
-			}
-			for j := range dropped {
-				updateValues[j+len(added)] = parser.DNull
+			lastRowSeen = row
+			if nonNullViolationColumnName != "" {
+				return sqlbase.NewNonNullViolationError(nonNullViolationColumnName)
 			}
 
 			copy(oldValues, row)
-			for j := len(row); j < len(oldValues); j++ {
-				oldValues[j] = parser.DNull
+			// Update oldValues with NULL values where values weren't found;
+			// only update when necessary.
+			if rowLength != len(row) {
+				rowLength = len(row)
+				for j := rowLength; j < len(oldValues); j++ {
+					oldValues[j] = parser.DNull
+				}
 			}
 			if _, err := ru.updateRow(txn.Context, writeBatch, oldValues, updateValues); err != nil {
 				return err
 			}
 		}
-		if i < ColumnTruncateAndBackfillChunkSize {
+		if i < chunkSize {
 			done = true
 		}
-
 		if err := txn.Run(writeBatch); err != nil {
 			return convertBackfillError(tableDesc, writeBatch)
 		}
 		return nil
 	})
-	return curIndexKey.PrefixEnd(), done, err
+	if err != nil || lastRowSeen == nil {
+		return nil, done, err
+	}
+	indexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+	curIndexKey, _, err := sqlbase.EncodeIndexKey(
+		tableDesc, &tableDesc.PrimaryIndex, colIDtoRowIndex, lastRowSeen, indexKeyPrefix)
+	return roachpb.Key(curIndexKey).PrefixEnd(), done, err
 }
 
 func (sc *SchemaChanger) truncateIndexes(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease, dropped []sqlbase.IndexDescriptor,
 ) error {
+	const chunkSize = IndexTruncateChunkSize
 	for _, desc := range dropped {
 		var resume roachpb.Span
-		for done := false; !done; {
+		for row, done := int64(0), false; !done; row += chunkSize {
 			// First extend the schema change lease.
 			l, err := sc.ExtendLease(*lease)
 			if err != nil {
@@ -390,6 +426,10 @@ func (sc *SchemaChanger) truncateIndexes(
 			*lease = l
 
 			resumeAt := resume
+			if log.V(2) {
+				log.Infof(context.TODO(), "drop index (%d, %d) at row: %d, span: %s",
+					sc.tableID, sc.mutationID, row, resume)
+			}
 			if err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
 				tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
 				if err != nil {
@@ -410,7 +450,7 @@ func (sc *SchemaChanger) truncateIndexes(
 					return err
 				}
 				resume, err = td.deleteIndex(
-					txn.Context, &desc, resumeAt, IndexBackfillChunkSize,
+					txn.Context, &desc, resumeAt, chunkSize,
 				)
 				done = resume.Key == nil
 				return err
@@ -421,14 +461,6 @@ func (sc *SchemaChanger) truncateIndexes(
 	}
 	return nil
 }
-
-// IndexBackfillChunkSize is the maximum number of rows processed per chunk
-// during the index backfill.
-//
-// TODO(vivek) Run some experiments to set this value to something sensible or
-// adjust it dynamically. Also add in a sleep after every chunk is processed,
-// to slow down the backfill and not have it interfere with OLTP commands.
-const IndexBackfillChunkSize = 100
 
 func (sc *SchemaChanger) backfillIndexes(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease, added []sqlbase.IndexDescriptor,
@@ -444,15 +476,19 @@ func (sc *SchemaChanger) backfillIndexes(
 	}
 
 	// Backfill the index entries for all the rows.
-	for done := false; !done; {
+	const chunkSize = IndexBackfillChunkSize
+	for row, done := int64(0), false; !done; row += chunkSize {
 		// First extend the schema change lease.
 		l, err := sc.ExtendLease(*lease)
 		if err != nil {
 			return err
 		}
 		*lease = l
-
-		sp.Key, done, err = sc.backfillIndexesChunk(added, sp)
+		if log.V(2) {
+			log.Infof(context.TODO(), "index add (%d, %d) at row: %d, span: %s",
+				sc.tableID, sc.mutationID, row, sp)
+		}
+		sp.Key, done, err = sc.backfillIndexesChunk(added, sp, chunkSize)
 		if err != nil {
 			return err
 		}
@@ -461,10 +497,11 @@ func (sc *SchemaChanger) backfillIndexes(
 }
 
 func (sc *SchemaChanger) backfillIndexesChunk(
-	added []sqlbase.IndexDescriptor, sp roachpb.Span,
+	added []sqlbase.IndexDescriptor, sp roachpb.Span, chunkSize int64,
 ) (roachpb.Key, bool, error) {
 	var nextKey roachpb.Key
 	done := false
+	secondaryIndexEntries := make([]sqlbase.IndexEntry, len(added))
 	err := sc.db.Txn(context.TODO(), func(txn *client.Txn) error {
 		tableDesc, err := sqlbase.GetTableDescFromID(txn, sc.tableID)
 		if err != nil {
@@ -491,6 +528,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 		scan := planner.Scan()
 		scan.desc = *tableDesc
 		scan.spans = []roachpb.Span{sp}
+		scan.SetLimitHint(chunkSize, false)
 		scan.initDescDefaults(publicAndNonPublicColumns)
 		rows, err := selectIndex(scan, nil, false)
 		if err != nil {
@@ -508,8 +546,8 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 			return err
 		}
 		b := &client.Batch{}
-		numRows := 0
-		for ; numRows < IndexBackfillChunkSize; numRows++ {
+		numRows := int64(0)
+		for ; numRows < chunkSize; numRows++ {
 			if next, err := rows.Next(); !next {
 				if err != nil {
 					return err
@@ -518,21 +556,18 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 			}
 			rowVals := rows.Values()
 
-			for _, desc := range added {
-				secondaryIndexEntries := make([]sqlbase.IndexEntry, 1)
-				err := sqlbase.EncodeSecondaryIndexes(
-					tableDesc, []sqlbase.IndexDescriptor{desc}, colIDtoRowIndex,
-					rowVals, secondaryIndexEntries)
-				if err != nil {
-					return err
+			err := sqlbase.EncodeSecondaryIndexes(
+				tableDesc, added, colIDtoRowIndex,
+				rowVals, secondaryIndexEntries)
+			if err != nil {
+				return err
+			}
+			for _, secondaryIndexEntry := range secondaryIndexEntries {
+				if log.V(2) {
+					log.Infof(txn.Context, "InitPut %s -> %v", secondaryIndexEntry.Key,
+						secondaryIndexEntry.Value)
 				}
-				for _, secondaryIndexEntry := range secondaryIndexEntries {
-					if log.V(2) {
-						log.Infof(txn.Context, "InitPut %s -> %v", secondaryIndexEntry.Key,
-							secondaryIndexEntry.Value)
-					}
-					b.InitPut(secondaryIndexEntry.Key, &secondaryIndexEntry.Value)
-				}
+				b.InitPut(secondaryIndexEntry.Key, &secondaryIndexEntry.Value)
 			}
 		}
 		// Write the new index values.
@@ -540,7 +575,7 @@ func (sc *SchemaChanger) backfillIndexesChunk(
 			return convertBackfillError(tableDesc, b)
 		}
 		// Have we processed all the table rows?
-		if numRows < IndexBackfillChunkSize {
+		if numRows < chunkSize {
 			done = true
 			return nil
 		}
