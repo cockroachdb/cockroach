@@ -810,7 +810,7 @@ func (n *Node) Batch(
 	}
 
 	f := func() {
-		sp, err := tracing.JoinOrNew(tracing.TracerFromCtx(n.Ctx()), args.Trace, opName)
+		sp, err := tracing.JoinOrNew(tracing.TracerFromCtx(n.Ctx()), args.TraceContext, opName)
 		if err != nil {
 			fail(err)
 			return
@@ -822,7 +822,7 @@ func (n *Node) Batch(
 		if sp.BaggageItem(tracing.Snowball) != "" {
 			sp.LogEvent("delegating to snowball tracing")
 			sp.Finish()
-			if sp, err = tracing.JoinOrNewSnowball(opName, args.Trace, func(rawSpan basictracer.RawSpan) {
+			if sp, err = tracing.JoinOrNewSnowball(opName, args.TraceContext, func(rawSpan basictracer.RawSpan) {
 				encSp, err := tracing.EncodeRawSpan(&rawSpan, nil)
 				if err != nil {
 					log.Warning(ctx, err)

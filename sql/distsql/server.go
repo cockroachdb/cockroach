@@ -84,7 +84,7 @@ func (ds *ServerImpl) logContext(ctx context.Context) context.Context {
 func (ds *ServerImpl) setupFlow(
 	ctx context.Context, req *SetupFlowRequest, simpleFlowConsumer RowReceiver,
 ) (*Flow, error) {
-	sp, err := tracing.JoinOrNew(tracing.TracerFromCtx(ctx), req.Trace, "flow")
+	sp, err := tracing.JoinOrNew(tracing.TracerFromCtx(ctx), req.TraceContext, "flow")
 	if err != nil {
 		return nil, err
 	}
