@@ -206,3 +206,8 @@ func (r *Replica) IsQuiescent() bool {
 func GetGCQueueTxnCleanupThreshold() time.Duration {
 	return txnCleanupThreshold
 }
+
+// StopHeartbeat ends the heartbeat loop.
+func (nl *NodeLiveness) StopHeartbeat() {
+	close(nl.stopHeartbeat)
+}
