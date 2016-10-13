@@ -161,11 +161,9 @@ dupl:
 	| dupl -files $(DUPLFLAGS)
 
 .PHONY: check
+check: TAGS += check
 check:
-	# compile everything; go vet sometimes reports incorrect errors if
-	# the build artifacts are stale.
-	$(GO) test -i -tags '$(TAGS)' ./pkg/...
-	$(GO) test ./build -v -tags check -run 'TestStyle/$(TESTS)'
+	$(GO) test ./build -v -tags '$(TAGS)' -run 'TestStyle/$(TESTS)'
 
 .PHONY: clean
 clean:
