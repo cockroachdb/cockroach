@@ -63,7 +63,8 @@ type callback struct {
 //
 // infoStores are not thread safe.
 type infoStore struct {
-	ctx     context.Context
+	log.AmbientContext
+
 	stopper *stop.Stopper
 
 	Infos           infoMap                  `json:"infos,omitempty"` // Map from key to info
@@ -113,22 +114,25 @@ func (is *infoStore) String() string {
 
 	prepend := ""
 
-	if err := is.visitInfos(func(key string, i *Info) error {
+	// It's safe to ignore the returned error because the function we provide
+	// never errors out.
+	_ = is.visitInfos(func(key string, i *Info) error {
 		fmt.Fprintf(&buf, "%sinfo %q: %+v", prepend, key, i.Value)
 		prepend = ", "
 		return nil
-	}); err != nil {
-		log.Errorf(is.ctx, "failed to properly construct string representation of infoStore: %s", err)
-	}
+	})
 	return buf.String()
 }
 
 // newInfoStore allocates and returns a new infoStore.
 func newInfoStore(
-	ctx context.Context, nodeID roachpb.NodeID, nodeAddr util.UnresolvedAddr, stopper *stop.Stopper,
+	ambient log.AmbientContext,
+	nodeID roachpb.NodeID,
+	nodeAddr util.UnresolvedAddr,
+	stopper *stop.Stopper,
 ) *infoStore {
 	return &infoStore{
-		ctx:             ctx,
+		AmbientContext:  ambient,
 		stopper:         stopper,
 		Infos:           make(infoMap),
 		NodeID:          nodeID,
@@ -277,7 +281,7 @@ func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks .
 	// Run callbacks in a goroutine to avoid mutex reentry. We also guarantee
 	// callbacks are run in order such that if a key is updated twice in
 	// succession, the second callback will never be run before the first.
-	if err := is.stopper.RunAsyncTask(is.ctx, func(_ context.Context) {
+	if err := is.stopper.RunAsyncTask(context.Background(), func(_ context.Context) {
 		// Grab the callback mutex to serialize execution of the callbacks.
 		is.callbackMu.Lock()
 		defer is.callbackMu.Unlock()
@@ -292,7 +296,8 @@ func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks .
 			w()
 		}
 	}); err != nil {
-		log.Warning(is.ctx, err)
+		ctx := is.AnnotateCtx(context.TODO())
+		log.Warning(ctx, err)
 	}
 }
 

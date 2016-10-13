@@ -115,7 +115,9 @@ func createTestStoreWithEngine(
 	rpcContext := rpc.NewContext(context.TODO(), &base.Config{Insecure: true}, clock, stopper)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 	server := rpc.NewServer(rpcContext) // never started
-	storeCfg.Gossip = gossip.New(context.TODO(), rpcContext, server, nil, stopper, metric.NewRegistry())
+	storeCfg.Gossip = gossip.New(
+		log.AmbientContext{}, rpcContext, server, nil, stopper, metric.NewRegistry(),
+	)
 	storeCfg.Gossip.SetNodeID(nodeDesc.NodeID)
 	storeCfg.ScanMaxIdleTime = 1 * time.Second
 	tracer := tracing.NewTracer()
@@ -664,7 +666,9 @@ func (m *multiTestContext) addStore(idx int) {
 		return []resolver.Resolver{r}
 	}()
 	m.gossips[idx] = gossip.New(
-		context.TODO(), m.rpcContext, grpcServer, resolvers, m.transportStopper, metric.NewRegistry())
+		log.AmbientContext{}, m.rpcContext, grpcServer,
+		resolvers, m.transportStopper, metric.NewRegistry(),
+	)
 	m.gossips[idx].SetNodeID(roachpb.NodeID(idx + 1))
 	if m.timeUntilStoreDead == 0 {
 		m.timeUntilStoreDead = storage.TestTimeUntilStoreDeadOff
