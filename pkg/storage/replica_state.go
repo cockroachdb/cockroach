@@ -86,8 +86,9 @@ func loadState(
 // in that it's a full MVCC value and updated transactionally) is only used for
 // its RangeID.
 //
-// TODO(tschottdorf): consolidate direct permutation and persistence of
-// state throughout the Raft path in favor of a more organized approach.
+// TODO(tschottdorf): test and assert that none of the optional values are
+// missing when- ever saveState is called. Optional values should be reserved
+// strictly for use in ProposalData. Do before merge.
 func saveState(
 	ctx context.Context, eng engine.ReadWriter, state storagebase.ReplicaState,
 ) (enginepb.MVCCStats, error) {
@@ -292,26 +293,35 @@ func setFrozenStatus(
 	eng engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	rangeID roachpb.RangeID,
-	frozen bool,
+	frozen storagebase.ReplicaState_FrozenEnum,
 ) error {
+	if frozen == storagebase.ReplicaState_FROZEN_UNSPECIFIED {
+		panic("assertion failed")
+	}
 	var val roachpb.Value
-	val.SetBool(frozen)
+	val.SetBool(frozen == storagebase.ReplicaState_FROZEN)
 	return engine.MVCCPut(ctx, eng, ms,
 		keys.RangeFrozenStatusKey(rangeID), hlc.ZeroTimestamp, val, nil)
 }
 
 func loadFrozenStatus(
 	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
-) (bool, error) {
+) (storagebase.ReplicaState_FrozenEnum, error) {
+	var zero storagebase.ReplicaState_FrozenEnum
 	val, _, err := engine.MVCCGet(ctx, reader, keys.RangeFrozenStatusKey(rangeID),
 		hlc.ZeroTimestamp, true, nil)
 	if err != nil {
-		return false, err
+		return zero, err
 	}
 	if val == nil {
-		return false, nil
+		return storagebase.ReplicaState_UNFROZEN, nil
 	}
-	return val.GetBool()
+	if frozen, err := val.GetBool(); err != nil {
+		return zero, err
+	} else if frozen {
+		return storagebase.ReplicaState_FROZEN, nil
+	}
+	return storagebase.ReplicaState_UNFROZEN, nil
 }
 
 // The rest is not technically part of ReplicaState.
@@ -467,6 +477,7 @@ func writeInitialState(
 	s.Desc = &roachpb.RangeDescriptor{
 		RangeID: desc.RangeID,
 	}
+	s.Frozen = storagebase.ReplicaState_UNFROZEN
 	s.Stats = ms
 
 	newMS, err := saveState(ctx, eng, s)
