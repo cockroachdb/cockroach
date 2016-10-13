@@ -80,7 +80,7 @@ Fetches and displays the value for <key>.
 
 func runGet(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		return cmd.Usage()
+		return usageAndError(cmd)
 	}
 	kvDB, stopper, err := makeDBClient()
 	if err != nil {
@@ -120,7 +120,7 @@ WARNING: Modifying system or table keys can corrupt your cluster.
 
 func runPut(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 || len(args)%2 == 1 {
-		return cmd.Usage()
+		return usageAndError(cmd)
 	}
 
 	b := &client.Batch{}
@@ -162,7 +162,7 @@ WARNING: Modifying system or table keys can corrupt your cluster.
 
 func runCPut(cmd *cobra.Command, args []string) error {
 	if len(args) != 2 && len(args) != 3 {
-		return cmd.Usage()
+		return usageAndError(cmd)
 	}
 
 	kvDB, stopper, err := makeDBClient()
@@ -207,7 +207,7 @@ WARNING: Modifying system or table keys can corrupt your cluster.
 
 func runInc(cmd *cobra.Command, args []string) error {
 	if len(args) < 1 || len(args) > 2 {
-		return cmd.Usage()
+		return usageAndError(cmd)
 	}
 
 	kvDB, stopper, err := makeDBClient()
@@ -252,7 +252,7 @@ WARNING: Modifying system or table keys can corrupt your cluster.
 
 func runDel(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
-		return cmd.Usage()
+		return usageAndError(cmd)
 	}
 
 	b := &client.Batch{}
@@ -289,7 +289,7 @@ WARNING: Modifying system or table keys can corrupt your cluster.
 
 func runDelRange(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
-		return cmd.Usage()
+		return usageAndError(cmd)
 	}
 
 	kvDB, stopper, err := makeDBClient()
@@ -329,7 +329,7 @@ are retrieved.
 
 func runScan(cmd *cobra.Command, args []string) error {
 	if len(args) > 2 {
-		return cmd.Usage()
+		return usageAndError(cmd)
 	}
 	startKey, endKey, err := initScanArgs(args)
 	if err != nil {
@@ -367,7 +367,7 @@ are retrieved.
 
 func runReverseScan(cmd *cobra.Command, args []string) error {
 	if len(args) > 2 {
-		return cmd.Usage()
+		return usageAndError(cmd)
 	}
 	startKey, endKey, err := initScanArgs(args)
 	if err != nil {
@@ -408,6 +408,9 @@ func initScanArgs(args []string) (startKey, endKey roachpb.Key, _ error) {
 		// Exclude table data keys by default. The user can explicitly request them
 		// by passing \xff\xff for the end key.
 		endKey = keys.UserDataSpan.EndKey
+	}
+	if bytes.Compare(startKey, endKey) >= 0 {
+		return nil, nil, errors.New("start key must be smaller than end key")
 	}
 	return startKey, endKey, nil
 }
