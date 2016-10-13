@@ -94,3 +94,31 @@ pg_catalog
 system
 t
 u
+
+user root
+
+# Test that renames aren't allowed while views refer to any of a DB's tables,
+# both for views in that database and for views in a different database.
+
+statement ok
+CREATE VIEW t.v AS SELECT * FROM u.kv
+
+query T
+SHOW TABLES FROM u
+----
+kv
+
+statement error cannot rename database because table "kv" is depended on by view "t.v"
+ALTER DATABASE u RENAME TO v
+
+statement ok
+DROP VIEW t.v
+
+statement ok
+ALTER DATABASE u RENAME TO v
+
+statement ok
+CREATE VIEW v.v AS SELECT * FROM v.kv
+
+statement error cannot rename database because table "kv" is depended on by view "v.v"
+ALTER DATABASE v RENAME TO u

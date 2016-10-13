@@ -162,3 +162,18 @@ SELECT * FROM test2.v2
 ----
 4 16
 5 25
+
+statement ok
+CREATE VIEW v3 AS SELECT COUNT(*) FROM test2.v AS v JOIN test2.v2 AS v2 ON v.k > v2.c1
+
+statement error cannot rename view "test2.v" because it is depended on by view "test.v3"
+ALTER VIEW test2.v RENAME TO test2.v3
+
+statement error cannot rename view "test2.v2" because it is depended on by view "test.v3"
+ALTER VIEW test2.v2 RENAME TO v4
+
+statement ok
+ALTER VIEW v3 RENAME TO v4
+
+statement error cannot rename view "test2.v2" because it is depended on by view "test.v4"
+ALTER VIEW test2.v2 RENAME TO v5
