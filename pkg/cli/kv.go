@@ -409,6 +409,9 @@ func initScanArgs(args []string) (startKey, endKey roachpb.Key, _ error) {
 		// by passing \xff\xff for the end key.
 		endKey = keys.UserDataSpan.EndKey
 	}
+	if bytes.Compare(startKey, endKey) >= 0 {
+		return nil, nil, errors.New("start key must be smaller than end key")
+	}
 	return startKey, endKey, nil
 }
 
