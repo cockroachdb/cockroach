@@ -43,7 +43,13 @@ var MaxSize uint64 = 1024 * 1024 * 10
 // If non-empty, overrides the choice of directory in which to write logs. See
 // createLogDirs for the full list of possible destinations. Note that the
 // default is to log to stderr independent of this setting. See --logtostderr.
-var logDir = os.TempDir()
+var logDir = func() string {
+	name, err := ioutil.TempDir("", "cockroach")
+	if err != nil {
+		panic(err)
+	}
+	return name
+}()
 var logDirSet bool
 
 // DirSet returns true of the log directory has been changed from its default.
