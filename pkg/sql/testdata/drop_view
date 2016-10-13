@@ -151,3 +151,27 @@ DROP TABLE a CASCADE
 query T
 SHOW TABLES FROM test
 ----
+
+statement ok
+CREATE VIEW x AS VALUES (1, 2), (3, 4)
+
+statement ok
+CREATE VIEW y AS SELECT * FROM x
+
+statement error view "y" depends on view "x"
+DROP VIEW x
+
+statement ok
+DROP VIEW x, y
+
+statement ok
+CREATE VIEW x AS VALUES (1, 2), (3, 4)
+
+statement ok
+CREATE VIEW y AS SELECT * FROM x
+
+statement error view "y" depends on view "x"
+DROP VIEW x
+
+statement ok
+DROP VIEW y, x
