@@ -689,6 +689,7 @@ func (l *loggingT) putBuffer(b *buffer) {
 // the data to the log files. If a trace location is set, stack traces
 // are added to the entry before marshaling.
 func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string) {
+	// TODO(tschottdorf): this is a pretty horrible critical section.
 	l.mu.Lock()
 
 	// Set additional details in log entry.
@@ -727,7 +728,9 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 			if err := l.createFiles(s); err != nil {
 				// Make sure the message appears somewhere.
 				l.outputToStderr(entry, stacks)
+				l.mu.Unlock()
 				l.exit(err)
+				return
 			}
 		}
 
