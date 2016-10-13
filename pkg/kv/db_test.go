@@ -288,15 +288,19 @@ func TestAuthentication(t *testing.T) {
 func TestTxnDelRangeIntentResolutionCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var intentResolutionCount int64
-	var resolveIntentCount int64
 	params := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &storage.StoreTestingKnobs{
 				NumKeysEvaluatedForRangeIntentResolution: &intentResolutionCount,
 				TestingCommandFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-					_, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest)
+					req, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest)
 					if ok {
-						atomic.AddInt64(&resolveIntentCount, 1)
+						key := req.Header().Key.String()
+						// Check if the intent is from the range being
+						// scanned below.
+						if key >= "a" && key < "d" {
+							t.Errorf("resolving intent on key %s", key)
+						}
 					}
 					return nil
 				},
@@ -346,14 +350,11 @@ func TestTxnDelRangeIntentResolutionCounts(t *testing.T) {
 		}
 
 		// Ensure no intents are left behind. Scan the entire span to resolve
-		// any intents that were left behind.
-		atomic.StoreInt64(&resolveIntentCount, 0)
+		// any intents that were left behind; intents are resolved internally
+		// through ResolveIntentRequest(s).
 		kvs, err := db.Scan(context.TODO(), "a", "d", totalNumKeys)
 		if err != nil {
 			t.Fatal(err)
-		}
-		if c := atomic.LoadInt64(&resolveIntentCount); c != 0 {
-			t.Errorf("abortTxn: %v, %d intents left over", abortTxn, c)
 		}
 		expectedNumKeys := totalNumKeys / 2
 		if abortTxn {
