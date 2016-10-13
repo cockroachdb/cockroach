@@ -35,6 +35,7 @@
 #include "rocksdb/utilities/write_batch_with_index.h"
 #include "cockroach/pkg/roachpb/data.pb.h"
 #include "cockroach/pkg/roachpb/internal.pb.h"
+#include "cockroach/pkg/storage/engine/enginepb/rocksdb.pb.h"
 #include "cockroach/pkg/storage/engine/enginepb/mvcc.pb.h"
 #include "db.h"
 #include "encoding.h"
@@ -68,6 +69,7 @@ struct DBEngine {
   virtual DBStatus GetStats(DBStatsResult* stats) = 0;
 
   DBSSTable* GetSSTables(int* n);
+  DBString GetUserProperties();
 };
 
 struct DBImpl : public DBEngine {
@@ -1355,6 +1357,27 @@ DBSSTable* DBEngine::GetSSTables(int* n) {
   return tables;
 }
 
+DBString DBEngine::GetUserProperties() {
+  rocksdb::TablePropertiesCollection props;
+  rocksdb::Status status = rep->GetPropertiesOfAllTables(&props);
+
+  cockroach::storage::engine::enginepb::SSTUserPropertiesCollection all;
+  if (!status.ok()) {
+    all.set_error(status.ToString());
+    return ToDBString(all.SerializeAsString());
+  }
+
+  for(auto i = props.begin(); i != props.end(); i++) {
+    cockroach::storage::engine::enginepb::SSTUserProperties* sst = all.add_sst();
+    sst->set_path(i->first);
+    auto userprops = i->second->user_collected_properties;
+    for (auto j = userprops.begin(); j != userprops.end(); j++) {
+      (*sst->mutable_entries())[j->first] = j->second;
+    }
+  }
+  return ToDBString(all.SerializeAsString());
+}
+
 DBBatch::DBBatch(DBEngine* db)
     : DBEngine(db->rep),
       batch(&kComparator),
@@ -1377,6 +1400,63 @@ DBCache* DBRefCache(DBCache *cache) {
 void DBReleaseCache(DBCache *cache) {
   delete cache;
 }
+
+
+class TimeBoundTblPropCollector : public rocksdb::TablePropertiesCollector {
+ public:
+  const char* Name() const override { return "TimeBoundTblPropCollector"; }
+
+  rocksdb::Status Finish(rocksdb::UserCollectedProperties* properties) override {
+    *properties = rocksdb::UserCollectedProperties{
+        {"crdb.ts.min", ts_min_.ToString()},
+        {"crdb.ts.max", ts_max_.ToString()},
+    };
+    return rocksdb::Status::OK();
+  }
+
+  rocksdb::Status AddUserKey(const rocksdb::Slice& user_key, const rocksdb::Slice& value, rocksdb::EntryType type,
+                    rocksdb::SequenceNumber seq, uint64_t file_size) override {
+    if (SplitKey(user_key, &unused_, &ts_) && ts_.size() > 0) {
+      ts_.remove_prefix(1);  // The NUL prefix.
+      if (ts_max_.size() == 0 || ts_.compare(ts_max_) > 0) {
+        // TODO(dan): This memory is leaked, don't.
+        char* data = static_cast<char*>(malloc(ts_.size()));
+        memcpy(data, ts_.data(), ts_.size());
+        ts_max_ = rocksdb::Slice(data, ts_.size());
+      }
+      if (ts_min_.size() == 0 || ts_.compare(ts_min_) < 0) {
+        // TODO(dan): This memory is leaked, don't.
+        char* data = static_cast<char*>(malloc(ts_.size()));
+        memcpy(data, ts_.data(), ts_.size());
+        ts_min_ = rocksdb::Slice(data, ts_.size());
+      }
+    }
+    return rocksdb::Status::OK();
+  }
+
+  virtual rocksdb::UserCollectedProperties GetReadableProperties() const override {
+    return rocksdb::UserCollectedProperties{};
+  }
+
+ private:
+  rocksdb::Slice ts_min_;
+  rocksdb::Slice ts_max_;
+  rocksdb::Slice unused_;
+  rocksdb::Slice ts_;
+  uint32_t count_ = 0;
+};
+
+class TimeBoundTblPropCollectorFactory : public rocksdb::TablePropertiesCollectorFactory {
+ public:
+  explicit TimeBoundTblPropCollectorFactory() {}
+  virtual rocksdb::TablePropertiesCollector* CreateTablePropertiesCollector(
+      rocksdb::TablePropertiesCollectorFactory::Context context) override {
+    return new TimeBoundTblPropCollector();
+  }
+  const char* Name() const override {
+    return "TimeBoundTblPropCollectorFactory";
+  }
+};
 
 DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   rocksdb::BlockBasedTableOptions table_options;
@@ -1434,6 +1514,11 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   // the benefit of having bloom filters on every level for only 10%
   // of the memory cost.
   options.optimize_filters_for_hits = true;
+
+  // Use the TablePropertiesCollector hook to store the min and max MVCC
+  // timestamps present in each sstable in the metadata for that sstable.
+  std::shared_ptr<rocksdb::TablePropertiesCollectorFactory> time_bound_prop_collector(new TimeBoundTblPropCollectorFactory());
+  options.table_properties_collector_factories.push_back(time_bound_prop_collector);
 
   // The write buffer size is the size of the in memory structure that
   // will be flushed to create L0 files. Note that 8 MB is larger than
@@ -2022,6 +2107,10 @@ DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats) {
 
 DBSSTable* DBGetSSTables(DBEngine* db, int* n) {
   return db->GetSSTables(n);
+}
+
+DBString DBGetUserProperties(DBEngine* db) {
+  return db->GetUserProperties();
 }
 
 DBStatus DBEngineAddFile(DBEngine* db, DBSlice path) {
