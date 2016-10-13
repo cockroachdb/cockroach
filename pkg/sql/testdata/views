@@ -99,17 +99,20 @@ DROP TABLE v1;
 statement error pgcode 42809 "t" is not a view
 DROP VIEW t;
 
-statement ok
+statement error view "v6" depends on view "v1"
 DROP VIEW v1;
 
-statement error pgcode 42P01 view "v1" does not exist
-DROP VIEW v1;
+statement ok
+DROP VIEW v6;
 
 statement ok
 DROP VIEW v2;
 
 statement ok
-DROP VIEW v6;
+DROP VIEW v1;
+
+statement error pgcode 42P01 view "v1" does not exist
+DROP VIEW v1;
 
 statement ok
 DROP TABLE t;

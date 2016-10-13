@@ -253,6 +253,10 @@ func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
 		return nil, err
 	}
 
+	// To avoid races with ongoing schema changes to tables that the view
+	// depends on, make sure we use the most recent versions of table
+	// descriptors rather than the copies in the lease cache.
+	p.avoidCachedDescriptors = true
 	sourcePlan, err := p.Select(n.AsSource, []parser.Datum{}, false)
 	if err != nil {
 		return nil, err
@@ -271,7 +275,7 @@ func (p *planner) CreateView(n *parser.CreateView) (planNode, error) {
 }
 
 func (n *createViewNode) expandPlan() error {
-	return nil
+	return n.sourcePlan.expandPlan()
 }
 
 func (n *createViewNode) Start() error {
@@ -292,15 +296,11 @@ func (n *createViewNode) Start() error {
 	// Inherit permissions from the database descriptor.
 	privs := n.dbDesc.GetPrivileges()
 
-	desc, err := makeViewTableDesc(n.n, n.dbDesc.ID, id, n.sourcePlan.Columns(), privs)
+	affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+	desc, err := n.makeViewTableDesc(n.n, n.dbDesc.ID, id, n.sourcePlan.Columns(), privs, affected)
 	if err != nil {
 		return err
 	}
-
-	// Bookkeeping references are made after the descriptor is otherwise
-	// complete and IDs have been allocated since the IDs are needed in the
-	// references.
-	// TODO(a-robinson): Create and validate bookkeeping references.
 
 	err = desc.ValidateTable()
 	if err != nil {
@@ -312,6 +312,12 @@ func (n *createViewNode) Start() error {
 		return err
 	}
 
+	// Persist the back-references in all referenced table descriptors.
+	for _, updated := range affected {
+		if err := n.p.saveNonmutationAndNotify(updated); err != nil {
+			return err
+		}
+	}
 	if desc.Adding() {
 		n.p.notifySchemaChange(desc.ID, sqlbase.InvalidMutationID)
 	}
@@ -877,12 +883,19 @@ func (p *planner) finalizeInterleave(
 }
 
 // makeViewTableDesc returns the table descriptor for a new view.
-func makeViewTableDesc(
+//
+// It creates the descriptor directly in the PUBLIC state rather than
+// the ADDING state because back-references are added to the view's
+// dependencies in the same transaction that the view is created and it
+// doesn't matter if reads/writes use a cached descriptor that doesn't
+// include the back-references.
+func (n *createViewNode) makeViewTableDesc(
 	p *parser.CreateView,
 	parentID sqlbase.ID,
 	id sqlbase.ID,
 	resultColumns []ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
+	affected map[sqlbase.ID]*sqlbase.TableDescriptor,
 ) (sqlbase.TableDescriptor, error) {
 	desc := sqlbase.TableDescriptor{
 		ID:            id,
@@ -908,6 +921,8 @@ func makeViewTableDesc(
 		}
 		desc.AddColumn(*col)
 	}
+
+	n.resolveViewDependencies(&desc, affected)
 
 	var buf bytes.Buffer
 	p.AsSource.Format(&buf, parser.FmtSimple)
@@ -1222,4 +1237,93 @@ func CreateTestTableDescriptor(
 	}
 	var p planner
 	return p.makeTableDesc(stmt.(*parser.CreateTable), parentID, id, privileges, nil)
+}
+
+// resolveViewDependencies looks up the tables included in a view's query
+// and adds metadata representing those dependencies to both the new view's
+// descriptor and the dependend-upon tables' descriptors. The modified table
+// descriptors are put into the backrefs map of other tables so that they can
+// be updated when this view is created.
+func (n *createViewNode) resolveViewDependencies(
+	tbl *sqlbase.TableDescriptor, backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
+) {
+	// Add the necessary back-references to the descriptor for each referenced
+	// table / view.
+	populateViewBackrefs(n.sourcePlan, tbl, backrefs)
+
+	// Also create the forward references in the new view's descriptor.
+	tbl.DependsOn = make([]sqlbase.ID, 0, len(backrefs))
+	for _, backref := range backrefs {
+		tbl.DependsOn = append(tbl.DependsOn, backref.ID)
+	}
+}
+
+func populateViewBackrefs(
+	plan planNode, tbl *sqlbase.TableDescriptor, backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
+) {
+	// I was initially concerned about doing type assertions on every node in
+	// the tree, but it's actually faster than a string comparison on the name
+	// returned by ExplainPlan, judging by a mini-benchmark run on my laptop
+	// with go 1.7.1.
+	if sel, ok := plan.(*selectNode); ok {
+		// If this is a view, we don't want to resolve the underlying scan(s).
+		// We instead prefer to track the dependency on the view itself rather
+		// than on its indirect dependencies.
+		if sel.source.info.viewDesc != nil {
+			populateViewBackrefFromViewDesc(sel.source.info.viewDesc, tbl, backrefs)
+			// Return early to avoid processing the view's underlying query.
+			return
+		}
+	} else if join, ok := plan.(*joinNode); ok {
+		if join.left.info.viewDesc != nil {
+			populateViewBackrefFromViewDesc(join.left.info.viewDesc, tbl, backrefs)
+		} else {
+			populateViewBackrefs(join.left.plan, tbl, backrefs)
+		}
+		if join.right.info.viewDesc != nil {
+			populateViewBackrefFromViewDesc(join.right.info.viewDesc, tbl, backrefs)
+		} else {
+			populateViewBackrefs(join.right.plan, tbl, backrefs)
+		}
+		// Return early to avoid re-processing the children.
+		return
+	} else if scan, ok := plan.(*scanNode); ok {
+		desc, ok := backrefs[scan.desc.ID]
+		if !ok {
+			desc = &scan.desc
+			backrefs[desc.ID] = desc
+		}
+		ref := sqlbase.TableDescriptor_Reference{
+			ID:        tbl.ID,
+			ColumnIDs: make([]sqlbase.ColumnID, len(scan.cols)),
+		}
+		if scan.specifiedIndex != nil {
+			ref.IndexID = scan.specifiedIndex.ID
+		}
+		for i := range scan.cols {
+			ref.ColumnIDs[i] = scan.cols[i].ID
+		}
+		desc.DependedOnBy = append(desc.DependedOnBy, ref)
+	}
+
+	// We have to use the verbose version of ExplainPlan because the non-verbose
+	// form skips over some layers of the tree (e.g. selectTopNode, selectNode).
+	_, _, children := plan.ExplainPlan(true)
+	for _, child := range children {
+		populateViewBackrefs(child, tbl, backrefs)
+	}
+}
+
+func populateViewBackrefFromViewDesc(
+	dependency *sqlbase.TableDescriptor,
+	tbl *sqlbase.TableDescriptor,
+	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
+) {
+	desc, ok := backrefs[dependency.ID]
+	if !ok {
+		desc = dependency
+		backrefs[desc.ID] = desc
+	}
+	ref := sqlbase.TableDescriptor_Reference{ID: tbl.ID}
+	desc.DependedOnBy = append(desc.DependedOnBy, ref)
 }

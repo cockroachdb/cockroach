@@ -40,8 +40,8 @@ type joinNode struct {
 	joinType joinType
 
 	// The data sources.
-	left    planNode
-	right   planNode
+	left    planDataSource
+	right   planDataSource
 	swapped bool
 
 	// pred represents the join predicate.
@@ -516,8 +516,8 @@ func (p *planner) makeJoin(
 		info: info,
 		plan: &joinNode{
 			joinType:  typ,
-			left:      left.plan,
-			right:     right.plan,
+			left:      left,
+			right:     right,
 			pred:      pred,
 			columns:   info.sourceColumns,
 			swapped:   swapped,
@@ -539,10 +539,10 @@ func (n *joinNode) expandPlan() error {
 	if err := n.pred.expand(); err != nil {
 		return err
 	}
-	if err := n.left.expandPlan(); err != nil {
+	if err := n.left.plan.expandPlan(); err != nil {
 		return err
 	}
-	return n.right.expandPlan()
+	return n.right.plan.expandPlan()
 }
 
 // ExplainPlan implements the planNode interface.
@@ -567,7 +567,7 @@ func (n *joinNode) ExplainPlan(v bool) (name, description string, children []pla
 
 	n.pred.format(&buf)
 
-	subplans := []planNode{n.left, n.right}
+	subplans := []planNode{n.left.plan, n.right.plan}
 	if n.swapped {
 		subplans[0], subplans[1] = subplans[1], subplans[0]
 	}
@@ -582,7 +582,7 @@ func (n *joinNode) ExplainPlan(v bool) (name, description string, children []pla
 func (n *joinNode) Columns() ResultColumns { return n.columns }
 
 // Ordering implements the planNode interface.
-func (n *joinNode) Ordering() orderingInfo { return n.left.Ordering() }
+func (n *joinNode) Ordering() orderingInfo { return n.left.plan.Ordering() }
 
 // MarkDebug implements the planNode interface.
 func (n *joinNode) MarkDebug(mode explainMode) {
@@ -590,8 +590,8 @@ func (n *joinNode) MarkDebug(mode explainMode) {
 		panic(fmt.Sprintf("unknown debug mode %d", mode))
 	}
 	n.explain = mode
-	n.left.MarkDebug(mode)
-	n.right.MarkDebug(mode)
+	n.left.plan.MarkDebug(mode)
+	n.right.plan.MarkDebug(mode)
 }
 
 // Start implements the planNode interface.
@@ -600,24 +600,24 @@ func (n *joinNode) Start() error {
 		return err
 	}
 
-	if err := n.left.Start(); err != nil {
+	if err := n.left.plan.Start(); err != nil {
 		return err
 	}
-	if err := n.right.Start(); err != nil {
+	if err := n.right.plan.Start(); err != nil {
 		return err
 	}
 
 	if n.explain != explainDebug {
 		// Load all the rows from the right side in memory.
 		for {
-			hasRow, err := n.right.Next()
+			hasRow, err := n.right.plan.Next()
 			if err != nil {
 				return err
 			}
 			if !hasRow {
 				break
 			}
-			row := n.right.Values()
+			row := n.right.plan.Values()
 			newRow := make([]parser.Datum, len(row))
 			copy(newRow, row)
 			if err := n.rightRows.rows.AddRow(newRow); err != nil {
@@ -636,7 +636,7 @@ func (n *joinNode) Start() error {
 	// If needed, pre-allocate a left row of NULL tuples for when the
 	// join predicate fails to match.
 	if n.joinType == joinTypeOuterLeft || n.joinType == joinTypeOuterFull {
-		n.emptyRight = make(parser.DTuple, len(n.right.Columns()))
+		n.emptyRight = make(parser.DTuple, len(n.right.plan.Columns()))
 		for i := range n.emptyRight {
 			n.emptyRight[i] = parser.DNull
 		}
@@ -645,7 +645,7 @@ func (n *joinNode) Start() error {
 	// right rows have matched.
 	if n.joinType == joinTypeOuterFull && n.rightRows != nil {
 		n.rightMatched = make([]bool, n.rightRows.rows.Len())
-		n.emptyLeft = make(parser.DTuple, len(n.left.Columns()))
+		n.emptyLeft = make(parser.DTuple, len(n.left.plan.Columns()))
 		for i := range n.emptyLeft {
 			n.emptyLeft[i] = parser.DNull
 		}
@@ -656,7 +656,7 @@ func (n *joinNode) Start() error {
 
 func (n *joinNode) debugNext() (bool, error) {
 	if !n.doneReadingRight {
-		hasRightRow, err := n.right.Next()
+		hasRightRow, err := n.right.plan.Next()
 		if err != nil {
 			return false, err
 		}
@@ -666,7 +666,7 @@ func (n *joinNode) debugNext() (bool, error) {
 		n.doneReadingRight = true
 	}
 
-	return n.left.Next()
+	return n.left.plan.Next()
 }
 
 // Next implements the planNode interface.
@@ -710,14 +710,14 @@ func (n *joinNode) Next() (bool, error) {
 		}
 
 		if curRightIdx == 0 {
-			leftHasRow, err := n.left.Next()
+			leftHasRow, err := n.left.plan.Next()
 			if err != nil {
 				return false, err
 			}
 
 			if !leftHasRow && n.rightMatched != nil {
 				// Go through the remaining right rows.
-				n.left.Close()
+				n.left.plan.Close()
 				n.rightIdx = -1
 				continue
 			}
@@ -728,7 +728,7 @@ func (n *joinNode) Next() (bool, error) {
 			}
 		}
 
-		leftRow = n.left.Values()
+		leftRow = n.left.plan.Values()
 
 		if curRightIdx >= nRightRows {
 			n.rightIdx = 0
@@ -786,9 +786,9 @@ func (n *joinNode) Values() parser.DTuple {
 func (n *joinNode) DebugValues() debugValues {
 	var res debugValues
 	if !n.doneReadingRight {
-		res = n.right.DebugValues()
+		res = n.right.plan.DebugValues()
 	} else {
-		res = n.left.DebugValues()
+		res = n.left.plan.DebugValues()
 	}
 	if res.output == debugValueRow {
 		res.output = debugValueBuffered
@@ -803,6 +803,6 @@ func (n *joinNode) Close() {
 		n.rightRows = nil
 	}
 	n.rightMatched = nil
-	n.right.Close()
-	n.left.Close()
+	n.right.plan.Close()
+	n.left.plan.Close()
 }

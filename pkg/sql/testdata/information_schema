@@ -389,7 +389,7 @@ def            information_schema  table_constraints  SYSTEM VIEW  1
 def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
 def            other_db            abc                VIEW         1
-def            other_db            xyz                BASE TABLE   1
+def            other_db            xyz                BASE TABLE   2
 def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
 def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
@@ -411,7 +411,7 @@ query TTI colnames
 SELECT TABLE_SCHEMA, TABLE_NAME, VERSION FROM information_schema.tables WHERE version > 1
 ----
 TABLE_SCHEMA  TABLE_NAME  VERSION
-other_db      xyz         4
+other_db      xyz         5
 
 user testuser
 
@@ -450,7 +450,7 @@ def            information_schema  schemata           SYSTEM VIEW  1
 def            information_schema  table_constraints  SYSTEM VIEW  1
 def            information_schema  table_privileges   SYSTEM VIEW  1
 def            information_schema  tables             SYSTEM VIEW  1
-def            other_db            xyz                BASE TABLE   5
+def            other_db            xyz                BASE TABLE   6
 def            pg_catalog          pg_attrdef         SYSTEM VIEW  1
 def            pg_catalog          pg_attribute       SYSTEM VIEW  1
 def            pg_catalog          pg_class           SYSTEM VIEW  1
