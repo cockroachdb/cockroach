@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -42,7 +43,7 @@ func TestGossipInfoStore(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop()
 	rpcContext := rpc.NewContext(context.TODO(), &base.Config{Insecure: true}, nil, stopper)
-	g := New(context.TODO(), rpcContext, rpc.NewServer(rpcContext), nil, stopper, metric.NewRegistry())
+	g := New(log.AmbientContext{}, rpcContext, rpc.NewServer(rpcContext), nil, stopper, metric.NewRegistry())
 	// Have to call g.SetNodeID before call g.AddInfo
 	g.SetNodeID(roachpb.NodeID(1))
 	slice := []byte("b")
@@ -79,7 +80,7 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 		t.Errorf("expected 3 resolvers; got %d", len(resolvers))
 	}
 	server := rpc.NewServer(rpc.NewContext(context.TODO(), &base.Config{Insecure: true}, nil, stopper))
-	g := New(context.TODO(), nil, server, resolvers, stop.NewStopper(), metric.NewRegistry())
+	g := New(log.AmbientContext{}, nil, server, resolvers, stop.NewStopper(), metric.NewRegistry())
 
 	// Using specified resolvers, fetch bootstrap addresses 3 times
 	// and verify the results match expected addresses.
@@ -166,7 +167,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 	}
 
 	for _, peer := range peers {
-		c := newClient(context.TODO(), local.GetNodeAddr(), makeMetrics())
+		c := newClient(log.AmbientContext{}, local.GetNodeAddr(), makeMetrics())
 
 		util.SucceedsSoon(t, func() error {
 			conn, err := peer.rpcContext.GRPCDial(c.addr.String(), grpc.WithBlock())
@@ -202,7 +203,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 
 		for {
 			localAddr := local.GetNodeAddr()
-			c := newClient(context.TODO(), localAddr, makeMetrics())
+			c := newClient(log.AmbientContext{}, localAddr, makeMetrics())
 			c.start(peer, disconnectedCh, peer.rpcContext, stopper, peer.GetNodeID(), peer.rpcContext.NewBreaker())
 
 			disconnectedClient := <-disconnectedCh

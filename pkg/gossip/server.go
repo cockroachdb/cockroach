@@ -44,7 +44,8 @@ type serverInfo struct {
 // server maintains an array of connected peers to which it gossips
 // newly arrived information on a periodic basis.
 type server struct {
-	ctx     context.Context
+	log.AmbientContext
+
 	stopper *stop.Stopper
 
 	mu struct {
@@ -68,16 +69,18 @@ type server struct {
 }
 
 // newServer creates and returns a server struct.
-func newServer(ctx context.Context, stopper *stop.Stopper, registry *metric.Registry) *server {
+func newServer(
+	ambient log.AmbientContext, stopper *stop.Stopper, registry *metric.Registry,
+) *server {
 	s := &server{
-		ctx:           ctx,
-		stopper:       stopper,
-		tighten:       make(chan roachpb.NodeID, 1),
-		nodeMetrics:   makeMetrics(),
-		serverMetrics: makeMetrics(),
+		AmbientContext: ambient,
+		stopper:        stopper,
+		tighten:        make(chan roachpb.NodeID, 1),
+		nodeMetrics:    makeMetrics(),
+		serverMetrics:  makeMetrics(),
 	}
 
-	s.mu.is = newInfoStore(ctx, 0, util.UnresolvedAddr{}, stopper)
+	s.mu.is = newInfoStore(s.AmbientContext, 0, util.UnresolvedAddr{}, stopper)
 	s.mu.incoming = makeNodeSet(minPeers, metric.NewGauge(MetaConnectionsIncomingGauge))
 	s.mu.nodeMap = make(map[util.UnresolvedAddr]serverInfo)
 	s.mu.ready = make(chan struct{})
@@ -102,7 +105,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 		return err
 	}
 
-	ctx, cancel := context.WithCancel(stream.Context())
+	ctx, cancel := context.WithCancel(s.AnnotateCtx(stream.Context()))
 	defer cancel()
 	syncChan := make(chan struct{}, 1)
 	send := func(reply *Response) error {
@@ -140,7 +143,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 	// Starting workers in a task prevents data races during shutdown.
 	if err := s.stopper.RunTask(func() {
 		s.stopper.RunWorker(func() {
-			errCh <- s.gossipReceiver(&args, send, stream.Recv)
+			errCh <- s.gossipReceiver(ctx, &args, send, stream.Recv)
 		})
 	}); err != nil {
 		return err
@@ -158,7 +161,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 
 		if infoCount := len(delta); infoCount > 0 {
 			if log.V(1) {
-				log.Infof(s.ctx, "node %d: returning %d info(s) to node %d: %s",
+				log.Infof(ctx, "node %d: returning %d info(s) to node %d: %s",
 					s.mu.is.NodeID, infoCount, args.NodeID, extractKeys(delta))
 			}
 
@@ -188,7 +191,10 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 }
 
 func (s *server) gossipReceiver(
-	argsPtr **Request, senderFn func(*Response) error, receiverFn func() (*Request, error),
+	ctx context.Context,
+	argsPtr **Request,
+	senderFn func(*Response) error,
+	receiverFn func() (*Request, error),
 ) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -206,18 +212,18 @@ func (s *server) gossipReceiver(
 				// This is an incoming loopback connection which should be closed by
 				// the client.
 				if log.V(2) {
-					log.Infof(s.ctx, "node %d: ignoring gossip from node %d (loopback)",
+					log.Infof(ctx, "node %d: ignoring gossip from node %d (loopback)",
 						s.mu.is.NodeID, args.NodeID)
 				}
 			} else if s.mu.incoming.hasNode(args.NodeID) {
 				// Do nothing.
 				if log.V(2) {
-					log.Infof(s.ctx, "node %d: gossip received from node %d",
+					log.Infof(ctx, "node %d: gossip received from node %d",
 						s.mu.is.NodeID, args.NodeID)
 				}
 			} else if s.mu.incoming.hasSpace() {
 				if log.V(2) {
-					log.Infof(s.ctx, "node %d: adding node %d to incoming set",
+					log.Infof(ctx, "node %d: adding node %d to incoming set",
 						s.mu.is.NodeID, args.NodeID)
 				}
 
@@ -229,7 +235,7 @@ func (s *server) gossipReceiver(
 
 				defer func(nodeID roachpb.NodeID, addr util.UnresolvedAddr) {
 					if log.V(2) {
-						log.Infof(s.ctx, "node %d: removing node %d from incoming set",
+						log.Infof(ctx, "node %d: removing node %d from incoming set",
 							s.mu.is.NodeID, args.NodeID)
 					}
 
@@ -250,7 +256,7 @@ func (s *server) gossipReceiver(
 					altIdx--
 				}
 
-				log.Infof(s.ctx, "node %d: refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
+				log.Infof(ctx, "node %d: refusing gossip from node %d (max %d conns); forwarding to %d (%s)",
 					s.mu.is.NodeID, args.NodeID, s.mu.incoming.maxSize, alternateNodeID, alternateAddr)
 
 				*reply = Response{
@@ -273,7 +279,7 @@ func (s *server) gossipReceiver(
 				}
 			}
 		} else {
-			log.Infof(s.ctx, "node %d: received gossip from unknown node", s.mu.is.NodeID)
+			log.Infof(ctx, "node %d: received gossip from unknown node", s.mu.is.NodeID)
 		}
 
 		bytesReceived := int64(args.Size())
@@ -285,10 +291,10 @@ func (s *server) gossipReceiver(
 
 		freshCount, err := s.mu.is.combine(args.Delta, args.NodeID)
 		if err != nil {
-			log.Warningf(s.ctx, "node %d: failed to fully combine gossip delta from node %d: %s", s.mu.is.NodeID, args.NodeID, err)
+			log.Warningf(ctx, "node %d: failed to fully combine gossip delta from node %d: %s", s.mu.is.NodeID, args.NodeID, err)
 		}
 		if log.V(1) {
-			log.Infof(s.ctx, "node %d: received %s from node %d (%d fresh)", s.mu.is.NodeID, extractKeys(args.Delta), args.NodeID, freshCount)
+			log.Infof(ctx, "node %d: received %s from node %d (%d fresh)", s.mu.is.NodeID, extractKeys(args.Delta), args.NodeID, freshCount)
 		}
 		s.maybeTightenLocked()
 
@@ -327,16 +333,17 @@ func (s *server) gossipReceiver(
 // if more distant than MaxHops, sends on the tightenNetwork channel
 // to start a new client connection. The mutex must be held by the caller.
 func (s *server) maybeTightenLocked() {
+	ctx := s.AnnotateCtx(context.TODO())
 	distantNodeID, distantHops := s.mu.is.mostDistant()
 	if log.V(2) {
-		log.Infof(s.ctx, "node %d: distantHops: %d from %d",
+		log.Infof(ctx, "node %d: distantHops: %d from %d",
 			s.mu.is.NodeID, distantHops, distantNodeID)
 	}
 	if distantHops > MaxHops {
 		select {
 		case s.tighten <- distantNodeID:
 			if log.V(1) {
-				log.Infof(s.ctx, "node %d: if possible, tightening network to node %d (%d > %d)",
+				log.Infof(ctx, "node %d: if possible, tightening network to node %d (%d > %d)",
 					s.mu.is.NodeID, distantNodeID, distantHops, MaxHops)
 			}
 		default:

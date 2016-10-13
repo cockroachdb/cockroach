@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -94,7 +95,7 @@ func (ltc *LocalTestCluster) Start(t util.Tester, baseCtx *base.Config, initSend
 	rpcContext := rpc.NewContext(clusterCtx, baseCtx, ltc.Clock, ltc.Stopper)
 	server := rpc.NewServer(rpcContext) // never started
 	ltc.Gossip = gossip.New(
-		context.Background(), rpcContext, server, nil, ltc.Stopper, metric.NewRegistry())
+		log.AmbientContext{}, rpcContext, server, nil, ltc.Stopper, metric.NewRegistry())
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20, ltc.Stopper)
 
 	ltc.Stores = storage.NewStores(clusterCtx, ltc.Clock)
