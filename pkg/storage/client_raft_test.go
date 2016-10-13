@@ -129,7 +129,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 		}
 		rangeID2 = store.LookupReplica(roachpb.RKey(key2), nil).RangeID
 		if rangeID2 == rangeID {
-			t.Errorf("got same range id after split")
+			t.Fatal("got same range id after split")
 		}
 		if _, err := increment(rangeID, key1, 11); err != nil {
 			t.Fatal(err)
@@ -1463,7 +1463,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 
 	rangeID2 := store0.LookupReplica(roachpb.RKey(key), nil).RangeID
 	if rangeID2 == rangeID {
-		t.Errorf("got same range id after split")
+		t.Fatal("got same range id after split")
 	}
 	// Issue an increment for later check.
 	incArgs := incrementArgs(key, 11)

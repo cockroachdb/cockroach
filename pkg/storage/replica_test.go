@@ -35,6 +35,7 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -4258,7 +4259,7 @@ func verifyRangeStats(
 	}
 	if !reflect.DeepEqual(expMS, ms) {
 		f, l, _ := caller.Lookup(1)
-		t.Errorf("%s:%d: expected stats \n  %+v;\ngot \n  %+v", f, l, expMS, ms)
+		t.Fatalf("%s:%d: expected and actual stats differ:\n%s", f, l, pretty.Diff(expMS, ms))
 	}
 }
 
@@ -5604,14 +5605,14 @@ func TestComputeChecksumVersioning(t *testing.T) {
 
 	if _, pct, _ := rng.ComputeChecksum(context.TODO(), nil, nil, roachpb.Header{},
 		roachpb.ComputeChecksumRequest{ChecksumID: uuid.MakeV4(), Version: replicaChecksumVersion},
-	); pct == nil || pct.computeChecksum == nil {
+	); pct.ComputeChecksum == nil {
 		t.Error("right checksum version: expected post-commit trigger")
 	}
 
 	if _, pct, _ := rng.ComputeChecksum(context.TODO(), nil, nil, roachpb.Header{},
 		roachpb.ComputeChecksumRequest{ChecksumID: uuid.MakeV4(), Version: replicaChecksumVersion + 1},
-	); pct != nil && pct.computeChecksum != nil {
-		t.Errorf("wrong checksum version: expected no post-commit trigger: %s", pct.computeChecksum)
+	); pct.ComputeChecksum != nil {
+		t.Errorf("wrong checksum version: expected no post-commit trigger: %s", pct.ComputeChecksum)
 	}
 }
 
