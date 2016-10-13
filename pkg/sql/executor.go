@@ -213,7 +213,7 @@ func (*ExecutorTestingKnobs) ModuleTestingKnobs() {}
 
 // StatementFilter is the type of callback that
 // ExecutorTestingKnobs.StatementFilter takes.
-type StatementFilter func(stms string, res *Result)
+type StatementFilter func(context.Context, string, *Result)
 
 // ExecutorTestingKnobs is part of the context used to control parts of the
 // system during testing.
@@ -798,8 +798,8 @@ func (e *Executor) execStmtsInCurrentTxn(
 			}
 		}
 		res.Err = convertToErrWithPGCode(res.Err)
-		if e.cfg.TestingKnobs.StatementFilter != nil {
-			e.cfg.TestingKnobs.StatementFilter(stmt.String(), &res)
+		if filter := e.cfg.TestingKnobs.StatementFilter; filter != nil {
+			filter(ctx, stmt.String(), &res)
 		}
 		results = append(results, res)
 		if err != nil {
