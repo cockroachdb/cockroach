@@ -5,7 +5,13 @@
 # perform our recursive make invocation. Lastly, we take care to make
 # any PKG specification relative to "./pkg".
 
-.DEFAULT:
+# Any file/directory in the current directory needs to be explicitly
+# marked as .PHONY, otherwise make tries to bring it up to date. This
+# is needed for the "acceptance" and "build" targets.
+DIRS=$(filter-out Makefile,$(wildcard *))
+
+.PHONY: $(DIRS)
+.DEFAULT $(DIRS):
 	@make -C .. $(MAKECMDGOALS) \
 	  $(patsubst PKG=%,PKG=./pkg/%,$(filter PKG=%,$(MAKEFLAGS))) \
 	  $(filter-out PKG=%,$(MAKEFLAGS))
