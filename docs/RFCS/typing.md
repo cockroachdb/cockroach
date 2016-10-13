@@ -1175,7 +1175,7 @@ Third pass, type inference and soundness analysis:
    that position, and *also* there is only one candidate that accepts
    a numeric type T at that position, then the expression E is
    automatically substituted by `TYPEASSERT_NUMERIC(E,T)[T]` and
-   typing continues assuming E[T] (see rule 11 below for a definition of `TYPEASSERT_NUMERIC`).
+   typing continues assuming `E[T]` (see rule 11 below for a definition of `TYPEASSERT_NUMERIC`).
 3. If, during overload resolution, a *literal* `string` E is
    found at some argument position and no candidate accepts `string`
    at that position, and *also* there is only one candidate left based
