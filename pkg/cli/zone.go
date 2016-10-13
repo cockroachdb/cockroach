@@ -216,7 +216,7 @@ table.
 // and if present, outputs its YAML representation.
 func runGetZone(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		return cmd.Usage()
+		return usageAndError(cmd)
 	}
 
 	names, err := parseZoneName(args[0])
@@ -276,7 +276,7 @@ List zone configs.
 
 func runLsZones(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
-		return cmd.Usage()
+		return usageAndError(cmd)
 	}
 	conn, err := makeSQLClient()
 	if err != nil {
@@ -350,7 +350,7 @@ Remove an existing zone config for the specified database or table.
 
 func runRmZone(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		return cmd.Usage()
+		return usageAndError(cmd)
 	}
 
 	names, err := parseZoneName(args[0])
@@ -441,7 +441,7 @@ func readZoneConfig() (conf []byte, err error) {
 // in the system.zones table.
 func runSetZone(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		return cmd.Usage()
+		return usageAndError(cmd)
 	}
 
 	conn, err := makeSQLClient()

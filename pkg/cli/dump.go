@@ -43,7 +43,7 @@ Dump SQL tables of a cockroach database.
 
 func runDump(cmd *cobra.Command, args []string) error {
 	if len(args) != 2 {
-		return cmd.Usage()
+		return usageAndError(cmd)
 	}
 
 	conn, err := makeSQLClient()

@@ -51,7 +51,7 @@ var lsNodesCmd = &cobra.Command{
 
 func runLsNodes(cmd *cobra.Command, args []string) error {
 	if len(args) != 0 {
-		return cmd.Usage()
+		return usageAndError(cmd)
 	}
 
 	c, stopper, err := getStatusClient()
