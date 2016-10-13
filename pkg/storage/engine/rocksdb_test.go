@@ -17,6 +17,7 @@
 package engine
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -619,5 +620,71 @@ func BenchmarkRocksDBSstFileReader(b *testing.B) {
 		if count >= b.N {
 			break
 		}
+	}
+}
+
+func decodeTimestamp(buf []byte) ([]byte, hlc.Timestamp) {
+	ts := hlc.ZeroTimestamp
+	if len(buf) >= 8 {
+		ts.WallTime = int64(binary.BigEndian.Uint64(buf[:8]))
+		buf = buf[8:]
+	}
+	if len(buf) >= 4 {
+		ts.Logical = int32(binary.BigEndian.Uint32(buf[:4]))
+		buf = buf[4:]
+	}
+	return buf, ts
+}
+
+func TestRocksDBTimeBound(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	dir, dirCleanup := testutils.TempDir(t, 0)
+	defer dirCleanup()
+
+	const (
+		minTimestampKey = "crdb.ts.min"
+		maxTimestampKey = "crdb.ts.max"
+	)
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop()
+	rocksdb := NewRocksDB(roachpb.Attributes{}, dir, RocksDBCache{}, 0, DefaultMaxOpenFiles, stopper)
+	if err := rocksdb.Open(); err != nil {
+		t.Fatalf("could not create new rocksdb db instance at %s: %v", dir, err)
+	}
+
+	var minTimestamp = hlc.Timestamp{WallTime: 1, Logical: 0}
+	var maxTimestamp = hlc.Timestamp{WallTime: 3, Logical: 0}
+	times := []hlc.Timestamp{
+		{WallTime: 2, Logical: 0},
+		minTimestamp,
+		maxTimestamp,
+		{WallTime: 2, Logical: 0},
+	}
+
+	for i, time := range times {
+		s := fmt.Sprintf("%02d", i)
+		key := MVCCKey{Key: roachpb.Key(s), Timestamp: time}
+		if err := rocksdb.Put(key, []byte(s)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := rocksdb.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	ssts, err := rocksdb.GetUserProperties()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ssts.Sst) != 1 {
+		t.Fatalf("expected 1 sstable got %d", len(ssts.Sst))
+	}
+	sst := ssts.Sst[0]
+	if _, ts := decodeTimestamp([]byte(sst.Entries[minTimestampKey])); ts != minTimestamp {
+		t.Fatalf("expected min %v got %v", minTimestamp, ts)
+	}
+	if _, ts := decodeTimestamp([]byte(sst.Entries[maxTimestampKey])); ts != maxTimestamp {
+		t.Fatalf("expected max %v got %v", maxTimestamp, ts)
 	}
 }
