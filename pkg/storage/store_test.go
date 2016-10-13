@@ -2017,7 +2017,7 @@ func TestStoreChangeFrozen(t *testing.T) {
 	defer tc.Stop()
 	store := tc.store
 
-	assertFrozen := func(b bool) {
+	assertFrozen := func(b storagebase.ReplicaState_FrozenEnum) {
 		repl, err := store.GetReplica(1)
 		if err != nil {
 			t.Fatal(err)
@@ -2030,22 +2030,26 @@ func TestStoreChangeFrozen(t *testing.T) {
 			t.Fatal(err)
 		}
 		if pFrozen != frozen {
-			t.Fatal(errors.Errorf("persisted != in-memory frozen status: %t vs %t",
+			t.Fatal(errors.Errorf("persisted != in-memory frozen status: %v vs %v",
 				pFrozen, frozen))
 		}
 		if pFrozen != b {
-			t.Fatal(errors.Errorf("expected status %t, got %t", b, pFrozen))
+			t.Fatal(errors.Errorf("expected status %v, got %v", b, pFrozen))
 		}
-		results := store.FrozenStatus(!pFrozen)
+		collectFrozen := pFrozen == storagebase.ReplicaState_UNFROZEN
+		results := store.FrozenStatus(collectFrozen)
 		if len(results) != 0 {
 			t.Fatal(errors.Errorf(
-				"expected frozen=%t, got %d mismatching replicas: %+v",
+				"expected frozen=%v, got %d mismatching replicas: %+v",
 				pFrozen, len(results), results))
 		}
 	}
 
 	fReqVersMismatch := roachpb.NewChangeFrozen(keys.LocalMax, keys.LocalMax.Next(),
 		true /* frozen */, "notvalidversion").(*roachpb.ChangeFrozenRequest)
+
+	yes := storagebase.ReplicaState_FROZEN
+	no := storagebase.ReplicaState_UNFROZEN
 
 	// When processing a freeze from a different version, we log a message (not
 	// tested here) but otherwise keep going. We may want to indicate replica
@@ -2057,7 +2061,7 @@ func TestStoreChangeFrozen(t *testing.T) {
 		if _, _, err := tc.rng.ChangeFrozen(context.Background(), b, nil, h, *fReqVersMismatch); err != nil {
 			t.Fatal(err)
 		}
-		assertFrozen(false) // since we do not commit the above batch
+		assertFrozen(no) // since we do not commit the above batch
 	}
 
 	fReqValid := roachpb.NewChangeFrozen(keys.LocalMax, keys.LocalMax.Next(),
@@ -2067,7 +2071,7 @@ func TestStoreChangeFrozen(t *testing.T) {
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
-		assertFrozen(true)
+		assertFrozen(yes)
 		resp := fResp.(*roachpb.ChangeFrozenResponse)
 		if resp.RangesAffected != 1 {
 			t.Fatalf("expected one affected range, got %d", resp.RangesAffected)
@@ -2094,13 +2098,13 @@ func TestStoreChangeFrozen(t *testing.T) {
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
-		assertFrozen(true)
+		assertFrozen(yes)
 
 		resp := fResp.(*roachpb.ChangeFrozenResponse)
 		if resp.RangesAffected != 0 {
 			t.Fatalf("expected no affected ranges, got %d", resp.RangesAffected)
 		}
-		assertFrozen(true)
+		assertFrozen(yes)
 	}
 
 	// Still frozen.
@@ -2117,7 +2121,7 @@ func TestStoreChangeFrozen(t *testing.T) {
 		if _, pErr := client.SendWrapped(store.testSender(), nil, uReq); pErr != nil {
 			t.Fatal(pErr)
 		}
-		assertFrozen(false)
+		assertFrozen(no)
 	}
 
 	// Not frozen.
