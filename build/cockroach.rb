@@ -5,7 +5,7 @@ class Cockroach < Formula
   homepage "https://www.cockroachlabs.com"
   url "https://github.com/cockroachdb/cockroach.git",
       :tag => "beta-20161013",
-      :revision => "bac856881f7653e12df3bad9b12ed841278d4db8"
+      :revision => "8f6cd21c1123d0e77332a591df5b22a83dc558f5"
   head "https://github.com/cockroachdb/cockroach.git"
 
   depends_on "go" => :build
