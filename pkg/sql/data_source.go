@@ -225,9 +225,18 @@ func (p *planner) getDataSource(
 	switch t := src.(type) {
 	case *parser.NormalizableTableName:
 		// Usual case: a table.
-		tn, err := t.NormalizeWithDatabaseName(p.session.Database)
+		tn, err := t.Normalize()
 		if err != nil {
 			return planDataSource{}, err
+		}
+		if tn.DatabaseName == "" {
+			database, err := p.databaseFromSearchPath(tn)
+			if err != nil {
+				return planDataSource{}, err
+			}
+			if err := tn.QualifyWithDatabase(database); err != nil {
+				return planDataSource{}, err
+			}
 		}
 
 		// Is this perhaps a name for a virtual table?
