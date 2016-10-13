@@ -35,6 +35,7 @@
 #include "rocksdb/utilities/write_batch_with_index.h"
 #include "cockroach/pkg/roachpb/data.pb.h"
 #include "cockroach/pkg/roachpb/internal.pb.h"
+#include "cockroach/pkg/storage/engine/enginepb/rocksdb.pb.h"
 #include "cockroach/pkg/storage/engine/enginepb/mvcc.pb.h"
 #include "db.h"
 #include "encoding.h"
@@ -68,6 +69,7 @@ struct DBEngine {
   virtual DBStatus GetStats(DBStatsResult* stats) = 0;
 
   DBSSTable* GetSSTables(int* n);
+  DBString GetUserProperties();
 };
 
 struct DBImpl : public DBEngine {
@@ -235,6 +237,24 @@ bool SplitKey(rocksdb::Slice buf, rocksdb::Slice *key, rocksdb::Slice *timestamp
   return true;
 }
 
+bool DecodeTimestamp(rocksdb::Slice *timestamp, int64_t *wall_time, int32_t *logical) {
+  uint64_t w;
+  if (!DecodeUint64(timestamp, &w)) {
+    return false;
+  }
+  *wall_time = int64_t(w);
+  *logical = 0;
+  if (timestamp->size() > 0) {
+    // TODO(peter): Use varint decoding here.
+    uint32_t l;
+    if (!DecodeUint32(timestamp, &l)) {
+      return false;
+    }
+    *logical = int32_t(l);
+  }
+  return true;
+}
+
 bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice *key, int64_t *wall_time, int32_t *logical) {
   key->clear();
 
@@ -244,19 +264,8 @@ bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice *key, int64_t *wall_time, int3
   }
   if (timestamp.size() > 0) {
     timestamp.remove_prefix(1);  // The NUL prefix.
-    uint64_t w;
-    if (!DecodeUint64(&timestamp, &w)) {
+    if (!DecodeTimestamp(&timestamp, wall_time, logical)) {
       return false;
-    }
-    *wall_time = int64_t(w);
-    *logical = 0;
-    if (timestamp.size() > 0) {
-      // TODO(peter): Use varint decoding here.
-      uint32_t l;
-      if (!DecodeUint32(&timestamp, &l)) {
-        return false;
-      }
-      *logical = int32_t(l);
     }
   }
   return timestamp.empty();
@@ -1355,6 +1364,46 @@ DBSSTable* DBEngine::GetSSTables(int* n) {
   return tables;
 }
 
+DBString DBEngine::GetUserProperties() {
+  rocksdb::TablePropertiesCollection props;
+  rocksdb::Status status = rep->GetPropertiesOfAllTables(&props);
+
+  cockroach::storage::engine::enginepb::SSTUserPropertiesCollection all;
+  if (!status.ok()) {
+    all.set_error(status.ToString());
+    return ToDBString(all.SerializeAsString());
+  }
+
+  for (auto i = props.begin(); i != props.end(); i++) {
+    cockroach::storage::engine::enginepb::SSTUserProperties* sst = all.add_sst();
+    sst->set_path(i->first);
+    auto userprops = i->second->user_collected_properties;
+
+    auto ts_min = userprops.find("crdb.ts.min");
+    if (ts_min != userprops.end()) {
+      int64_t wall_time;
+      int32_t logical;
+      rocksdb::Slice ts(ts_min->second);
+      if (DecodeTimestamp(&ts, &wall_time, &logical)) {
+        sst->mutable_ts_min()->set_wall_time(wall_time);
+        sst->mutable_ts_min()->set_logical(logical);
+      }
+    }
+
+    auto ts_max = userprops.find("crdb.ts.max");
+    if (ts_max != userprops.end()) {
+      int64_t wall_time;
+      int32_t logical;
+      rocksdb::Slice ts(ts_max->second);
+      if (DecodeTimestamp(&ts, &wall_time, &logical)) {
+        sst->mutable_ts_max()->set_wall_time(wall_time);
+        sst->mutable_ts_max()->set_logical(logical);
+      }
+    }
+  }
+  return ToDBString(all.SerializeAsString());
+}
+
 DBBatch::DBBatch(DBEngine* db)
     : DBEngine(db->rep),
       batch(&kComparator),
@@ -1377,6 +1426,57 @@ DBCache* DBRefCache(DBCache *cache) {
 void DBReleaseCache(DBCache *cache) {
   delete cache;
 }
+
+
+class TimeBoundTblPropCollector : public rocksdb::TablePropertiesCollector {
+ public:
+  const char* Name() const override { return "TimeBoundTblPropCollector"; }
+
+  rocksdb::Status Finish(rocksdb::UserCollectedProperties* properties) override {
+    *properties = rocksdb::UserCollectedProperties{
+        {"crdb.ts.min", ts_min_},
+        {"crdb.ts.max", ts_max_},
+    };
+    return rocksdb::Status::OK();
+  }
+
+  rocksdb::Status AddUserKey(const rocksdb::Slice& user_key, const rocksdb::Slice& value, rocksdb::EntryType type,
+                    rocksdb::SequenceNumber seq, uint64_t file_size) override {
+    rocksdb::Slice unused;
+    rocksdb::Slice ts;
+    if (SplitKey(user_key, &unused, &ts) && !ts.empty()) {
+      ts.remove_prefix(1);  // The NUL prefix.
+      if (ts_max_.empty() || ts.compare(ts_max_) > 0) {
+        ts_max_.assign(ts.data(), ts.size());
+      }
+      if (ts_min_.empty() || ts.compare(ts_min_) < 0) {
+        ts_min_.assign(ts.data(), ts.size());
+      }
+    }
+    return rocksdb::Status::OK();
+  }
+
+  virtual rocksdb::UserCollectedProperties GetReadableProperties() const override {
+    return rocksdb::UserCollectedProperties{};
+  }
+
+ private:
+  std::string ts_min_;
+  std::string ts_max_;
+  uint32_t count_ = 0;
+};
+
+class TimeBoundTblPropCollectorFactory : public rocksdb::TablePropertiesCollectorFactory {
+ public:
+  explicit TimeBoundTblPropCollectorFactory() {}
+  virtual rocksdb::TablePropertiesCollector* CreateTablePropertiesCollector(
+      rocksdb::TablePropertiesCollectorFactory::Context context) override {
+    return new TimeBoundTblPropCollector();
+  }
+  const char* Name() const override {
+    return "TimeBoundTblPropCollectorFactory";
+  }
+};
 
 DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   rocksdb::BlockBasedTableOptions table_options;
@@ -1434,6 +1534,11 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   // the benefit of having bloom filters on every level for only 10%
   // of the memory cost.
   options.optimize_filters_for_hits = true;
+
+  // Use the TablePropertiesCollector hook to store the min and max MVCC
+  // timestamps present in each sstable in the metadata for that sstable.
+  std::shared_ptr<rocksdb::TablePropertiesCollectorFactory> time_bound_prop_collector(new TimeBoundTblPropCollectorFactory());
+  options.table_properties_collector_factories.push_back(time_bound_prop_collector);
 
   // The write buffer size is the size of the in memory structure that
   // will be flushed to create L0 files. Note that 8 MB is larger than
@@ -2022,6 +2127,10 @@ DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats) {
 
 DBSSTable* DBGetSSTables(DBEngine* db, int* n) {
   return db->GetSSTables(n);
+}
+
+DBString DBGetUserProperties(DBEngine* db) {
+  return db->GetUserProperties();
 }
 
 DBStatus DBEngineAddFile(DBEngine* db, DBSlice path) {
