@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/pkg/errors"
 )
 
 type sender struct {
@@ -31,6 +30,9 @@ type sender struct {
 // NewSender returns an implementation of Sender which exposes the Key-Value
 // database provided by a Cockroach cluster by connecting via RPC to a
 // Cockroach node.
+//
+// This must not be used by server.Server or any of its components, only by
+// clients talking to a Cockroach cluster through the external interface.
 func NewSender(ctx *rpc.Context, target string) (Sender, error) {
 	conn, err := ctx.GRPCDial(target)
 	if err != nil {
@@ -45,7 +47,7 @@ func (s sender) Send(
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	br, err := s.Batch(ctx, &ba)
 	if err != nil {
-		return nil, roachpb.NewError(errors.Wrap(err, "roachpb.Batch RPC failed"))
+		return nil, roachpb.NewError(roachpb.NewSendError(err.Error()))
 	}
 	pErr := br.Error
 	br.Error = nil

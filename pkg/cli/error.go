@@ -15,10 +15,12 @@
 package cli
 
 import (
+	"net"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"google.golang.org/grpc"
 )
 
 type cmdFn func(*cobra.Command, []string) error
@@ -27,20 +29,33 @@ func maybeDecorateGRPCError(wrapped cmdFn) cmdFn {
 	return func(cmd *cobra.Command, args []string) error {
 		err := wrapped(cmd, args)
 
-		if unwrappedErr := errors.Cause(err); unwrappedErr == nil || !grpcutil.IsClosedConnection(unwrappedErr) {
-			return err // intentionally return original to keep wrapping
+		{
+			unwrappedErr := errors.Cause(err)
+			if unwrappedErr == nil {
+				return err
+			}
+			_, isSendError := unwrappedErr.(*roachpb.SendError)
+			isGRPCError := grpcutil.IsClosedConnection(unwrappedErr)
+			_, isNetError := unwrappedErr.(*net.OpError)
+			if !(isSendError || isGRPCError || isNetError) {
+				return err // intentionally return original to keep wrapping
+			}
 		}
-
-		errCode := grpc.Code(err)
-		errMsg := grpc.ErrorDesc(err)
 
 		format := `unable to connect or connection lost.
 
 Please check the address and credentials such as certificates (if attempting to
 communicate with a secure cluster).
 
-(error code %d: %s)`
+%s`
 
-		return errors.Errorf(format, errCode, errMsg)
+		return errors.Errorf(format, err)
 	}
+}
+
+func usageAndError(cmd *cobra.Command) error {
+	if err := cmd.Usage(); err != nil {
+		return err
+	}
+	return errors.New("invalid arguments")
 }
