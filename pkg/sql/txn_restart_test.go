@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -375,15 +376,38 @@ func (ta *TxnAborter) abortTxn(key int) error {
 	return nil
 }
 
-func (ta *TxnAborter) Close(t testing.TB) {
-	ta.abortDB.Close()
+type TxnAborterVerifierError struct {
+	errs []error
+}
 
+func (e *TxnAborterVerifierError) Error() string {
+	strs := make([]string, 0)
+	for _, err := range e.errs {
+		strs = append(strs, err.Error())
+	}
+	return strings.Join(strs, "\n")
+}
+
+func (ta *TxnAborter) VerifyAndClear() error {
 	ta.mu.Lock()
 	defer ta.mu.Unlock()
+	allErr := TxnAborterVerifierError{}
 	for stmt, ri := range ta.mu.stmtsToAbort {
 		if err := ri.Verify(); err != nil {
-			t.Error(errors.Wrapf(err, `statement "%s" error`, stmt))
+			allErr.errs = append(allErr.errs, errors.Wrapf(err, `statement "%s" error`, stmt))
 		}
+	}
+	ta.mu.stmtsToAbort = make(map[string]*restartInfo)
+	if len(allErr.errs) != 0 {
+		return &allErr
+	}
+	return nil
+}
+
+func (ta *TxnAborter) Close(t testing.TB) {
+	ta.abortDB.Close()
+	if err := ta.VerifyAndClear(); err != nil {
+		t.Error(err)
 	}
 }
 
