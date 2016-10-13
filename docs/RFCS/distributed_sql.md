@@ -398,7 +398,7 @@ case 1 above, regardless of the ordering of `src`.
 
 ### Back propagation of ordering requirements
 
-In the previous example we saw how we we could use an ordering on a table reader
+In the previous example we saw how we could use an ordering on a table reader
 stream along with an order preservation guarantee to avoid sorting. The
 preliminary logical plan will try to preserve ordering as much as possible to
 minimize any additional sorting.
