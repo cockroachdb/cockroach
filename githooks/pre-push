@@ -1,3 +1,0 @@
-#!/usr/bin/env sh
-
-make check TESTS=TestCrlfmt
