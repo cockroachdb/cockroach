@@ -211,22 +211,35 @@ func TestQuit(t *testing.T) {
 	// One way of getting that is:
 	//	c.TestServer.Cfg.AdvertiseAddr = "127.0.0.1:0"
 
-	for i, test := range []struct {
-		cmd, expOutPattern string
-	}{
-		{`debug kv inc a`,
-			`increment failed: roachpb.Batch RPC failed: rpc error: code = 14 desc = grpc: the connection is unavailable`},
-		{`quit`,
-			`unable to connect or connection lost.
+	styled := func(s string) string {
+		const preamble = `unable to connect or connection lost.
 
 Please check the address and credentials such as certificates \(if attempting to
 communicate with a secure cluster\).
 
-\(error code 14: grpc: the connection is unavailable\)
-`},
-		{`zone ls`,
-			`dial tcp .*: getsockopt: connection refused`,
+`
+		return preamble + s
+	}
+
+	for i, test := range []struct {
+		cmd, expOutPattern string
+	}{
+		// Error returned directly from GRPC.
+		{`debug kv inc a`, styled(
+			`increment failed: failed to send RPC: rpc error: code = 14 desc = grpc: the connection is unavailable`),
 		},
+		// Error returned from GRPC to internal/client (which has to pass it
+		// up the stack as a roachpb.NewError(roachpb.NewSendError(.)).
+		{`quit`, styled(
+			`rpc error: code = 14 desc = grpc: the connection is unavailable`),
+		},
+		// Going through the SQL client libraries gives a *net.OpError which
+		// we also handle.
+		{`zone ls`, styled(
+			`dial tcp .*: getsockopt: connection refused`),
+		},
+		// A real error before we hit any networking ones.
+		{`debug kv scan b a`, `start key must be smaller than end key`},
 	} {
 		out, err := c.RunWithCapture(test.cmd)
 		if err != nil {
