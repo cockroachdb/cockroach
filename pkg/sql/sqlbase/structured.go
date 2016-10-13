@@ -122,6 +122,23 @@ func (dir IndexDescriptor_Direction) ToEncodingDirection() (encoding.Direction, 
 // descriptor could not be found with the given id.
 var ErrDescriptorNotFound = errors.New("descriptor not found")
 
+// GetDatabaseDescFromID retrieves the database descriptor for the database
+// ID passed in using an existing txn. Returns an error if the descriptor
+// doesn't exist or if it exists and is not a database.
+func GetDatabaseDescFromID(txn *client.Txn, id ID) (*DatabaseDescriptor, error) {
+	desc := &Descriptor{}
+	descKey := MakeDescMetadataKey(id)
+
+	if err := txn.GetProto(descKey, desc); err != nil {
+		return nil, err
+	}
+	db := desc.GetDatabase()
+	if db == nil {
+		return nil, ErrDescriptorNotFound
+	}
+	return db, nil
+}
+
 // GetTableDescFromID retrieves the table descriptor for the table
 // ID passed in using an existing txn. Returns an error if the
 // descriptor doesn't exist or if it exists and is not a table.
