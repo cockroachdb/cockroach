@@ -25,6 +25,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"golang.org/x/net/context"
 
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -315,70 +317,124 @@ func IntersectHalfOpen(start1, end1, start2, end2 []byte) ([]byte, []byte) {
 	return nil, nil
 }
 
+func getDescriptorID(txn *client.Txn, key sqlbase.DescriptorKey) (sqlbase.ID, error) {
+	// TODO(dan): Share this with (*planner).getDescriptor.
+	idValue, err := txn.Get(key.Key())
+	if err != nil {
+		return 0, err
+	}
+	if !idValue.Exists() {
+		return 0, errors.Errorf("no descriptor for key: %s", key)
+	}
+	return sqlbase.ID(idValue.ValueInt()), nil
+}
+
 // restoreTable inserts the given DatabaseDescriptor. If the name conflicts with
 // an existing table, the one being restored is rekeyed with a new ID and the
 // old data is deleted.
 func restoreTable(
 	ctx context.Context,
-	txn *client.Txn,
+	db client.DB,
 	database sqlbase.DatabaseDescriptor,
 	table *sqlbase.TableDescriptor,
 	ranges []sqlbase.BackupRangeDescriptor,
 ) error {
-	log.Infof(ctx, "Restoring Table %q", table.Name)
+	if log.V(1) {
+		log.Infof(ctx, "Restoring Table %q", table.Name)
+	}
 
-	// Make sure there's a database with a name that matches the original.
-	existingDatabaseID, err := txn.Get(tableKey{name: database.Name}.Key())
-	if err != nil {
+	var newTableID sqlbase.ID
+	if err := db.Txn(ctx, func(txn *client.Txn) error {
+		// Make sure there's a database with a name that matches the original.
+		if _, err := getDescriptorID(txn, tableKey{name: database.Name}); err != nil {
+			return errors.Wrapf(err, "a database named %q needs to exist to restore table %q",
+				database.Name, table.Name)
+		}
+
+		// Assign a new ID for the table. TODO(dan): For now, we're always
+		// generating a new ID, but varints get longer as they get bigger and so
+		// our keys will, too. We should someday figure out how to overwrite an
+		// existing table and steal its ID.
+		var err error
+		newTableID, err = generateUniqueDescID(txn)
+		return err
+	}); err != nil {
 		return err
 	}
-	if existingDatabaseID.Value == nil {
-		// TODO(dan): Add the ability to restore the database from backups.
-		return errors.Errorf("a database named %q needs to exist to restore table %q",
-			database.Name, table.Name)
-	}
-	newParentID, err := existingDatabaseID.Value.GetInt()
-	if err != nil {
-		return err
-	}
-	table.ParentID = sqlbase.ID(newParentID)
 
 	// Create the iteration keys before we give the table its new ID.
 	tableStartKeyOld := roachpb.Key(sqlbase.MakeIndexKeyPrefix(table, table.PrimaryIndex.ID))
 	tableEndKeyOld := tableStartKeyOld.PrefixEnd()
 
-	// Assign a new ID for the table.
-	// TODO(dan): For now, we're always generating a new ID, but varints get
-	// longer as they get bigger and so our keys will, too. We should someday
-	// figure out how to overwrite an existing table and steal its ID.
-	table.ID, err = generateUniqueDescID(txn)
-	if err != nil {
-		return err
-	}
-	tableIDKey := tableKey{parentID: table.ParentID, name: table.Name}.Key()
-	tableDescKey := sqlbase.MakeDescMetadataKey(table.ID)
-
 	// This loop makes restoring multiple tables O(N*M), where N is the number
 	// of tables and M is the number of ranges. We could reduce this using an
 	// interval tree if necessary.
-	for _, r := range ranges {
-		if len(r.Path) == 0 {
+	var wg sync.WaitGroup
+	result := struct {
+		syncutil.Mutex
+		firstErr error
+		numErrs  int
+	}{}
+	for _, rangeDesc := range ranges {
+		if len(rangeDesc.Path) == 0 {
 			// Empty path means empty range.
 			continue
 		}
 
 		intersectBegin, intersectEnd := IntersectHalfOpen(
-			r.StartKey, r.EndKey, tableStartKeyOld, tableEndKeyOld)
+			rangeDesc.StartKey, rangeDesc.EndKey, tableStartKeyOld, tableEndKeyOld)
 		if intersectBegin != nil && intersectEnd != nil {
 			// Write the data under the new ID.
 			// TODO(dan): There's no SQL descriptors that point at this yet, so it
 			// should be possible to remove it from the one txn this is all currently
 			// run under. If we do that, make sure this data gets cleaned up on errors.
-			if err := Ingest(ctx, txn, r.Path, r.CRC, intersectBegin, intersectEnd, table.ID); err != nil {
-				return err
-			}
+			wg.Add(1)
+			go func(r sqlbase.BackupRangeDescriptor) {
+				if err := db.Txn(ctx, func(txn *client.Txn) error {
+					return Ingest(ctx, txn, r.Path, r.CRC, intersectBegin, intersectEnd, newTableID)
+				}); err != nil {
+					log.Error(ctx, err)
+					result.Lock()
+					defer result.Unlock()
+					if result.firstErr != nil {
+						result.firstErr = err
+					}
+					result.numErrs++
+				}
+				wg.Done()
+			}(rangeDesc)
 		}
 	}
+	wg.Wait()
+	// All concurrent accesses have finished, we don't need the lock anymore.
+	if result.firstErr != nil {
+		// This leaves the data that did get imported in case the user wants to
+		// retry.
+		// TODO(dan): Build tooling to allow a user to restart a failed restore.
+		return errors.Wrapf(result.firstErr, "ingest encountered %d errors", result.numErrs)
+	}
+
+	table.ID = newTableID
+	return db.Txn(ctx, func(txn *client.Txn) error {
+		// Pass the descriptors by value to keep this idempotent.
+		return restoreTableDesc(ctx, txn, database, *table)
+	})
+}
+
+func restoreTableDesc(
+	ctx context.Context,
+	txn *client.Txn,
+	database sqlbase.DatabaseDescriptor,
+	table sqlbase.TableDescriptor,
+) error {
+	// Run getDescriptorID again to make sure the database hasn't been dropped
+	// while we were importing.
+	var err error
+	if table.ParentID, err = getDescriptorID(txn, tableKey{name: database.Name}); err != nil {
+		return err
+	}
+	tableIDKey := tableKey{parentID: table.ParentID, name: table.Name}.Key()
+	tableDescKey := sqlbase.MakeDescMetadataKey(table.ID)
 
 	// Check for an existing table.
 	var existingDesc sqlbase.Descriptor
@@ -402,10 +458,10 @@ func restoreTable(
 
 	// Write the new descriptors. First the ID -> TableDescriptor for the new
 	// table, then flip (or initialize) the name -> ID entry so any new queries
-	// will use the new one. If there was an exiting table, it can now be
+	// will use the new one. If there was an existing table, it can now be
 	// cleaned up.
 	b := txn.NewBatch()
-	b.CPut(tableDescKey, sqlbase.WrapDescriptor(table), nil)
+	b.CPut(tableDescKey, sqlbase.WrapDescriptor(&table), nil)
 	if existingTable := existingDesc.GetTable(); existingTable == nil {
 		b.CPut(tableIDKey, table.ID, nil)
 	} else {
@@ -488,25 +544,20 @@ func Restore(
 		}
 	}
 
-	// TODO(dan): This uses one giant transaction for the entire restore, which
-	// works for small datasets, but not for big ones.
 	var restored []sqlbase.TableDescriptor
-	err = db.Txn(ctx, func(txn *client.Txn) error {
-		for _, desc := range matches {
-			if tableOld := desc.GetTable(); tableOld != nil {
-				table := *tableOld
-				database, ok := databasesByID[table.ParentID]
-				if !ok {
-					return errors.Wrapf(err, "no database with ID %d", table.ParentID)
-				}
-				if err := restoreTable(ctx, txn, *database, &table, backupDesc.Ranges); err != nil {
-					return err
-				}
-				restored = append(restored, table)
+	for _, desc := range matches {
+		if tableOld := desc.GetTable(); tableOld != nil {
+			table := *tableOld
+			database, ok := databasesByID[table.ParentID]
+			if !ok {
+				return nil, errors.Wrapf(err, "no database with ID %d", table.ParentID)
 			}
+			if err := restoreTable(ctx, db, *database, &table, backupDesc.Ranges); err != nil {
+				return nil, err
+			}
+			restored = append(restored, table)
 		}
-		return nil
-	})
+	}
 	return restored, err
 }
 
