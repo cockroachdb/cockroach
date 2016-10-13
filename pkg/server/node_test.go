@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -72,7 +73,7 @@ func createTestNode(
 	grpcServer := rpc.NewServer(nodeRPCContext)
 	serverCfg := makeTestConfig()
 	g := gossip.New(
-		context.Background(),
+		log.AmbientContext{},
 		nodeRPCContext,
 		grpcServer,
 		serverCfg.GossipBootstrapResolvers,
