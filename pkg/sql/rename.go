@@ -17,7 +17,6 @@
 package sql
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -27,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -59,6 +60,35 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 	if n.Name == n.NewName {
 		// Noop.
 		return &emptyNode{}, nil
+	}
+
+	// Check if any views depend on tables in the database. Because our views
+	// are currently just stored as strings, they explicitly specify the database
+	// name. Rather than trying to rewrite them with the changed DB name, we
+	// simply disallow such renames for now.
+	tbNames, err := p.getTableNames(dbDesc)
+	if err != nil {
+		return nil, err
+	}
+	for i := range tbNames {
+		tbDesc, err := p.getTableOrViewDesc(&tbNames[i])
+		if err != nil {
+			return nil, err
+		}
+		if tbDesc == nil {
+			continue
+		}
+		if len(tbDesc.DependedOnBy) > 0 {
+			viewName, err := p.getQualifiedTableName(tbDesc.DependedOnBy[0].ID)
+			if err != nil {
+				log.Warningf(p.ctx(), "Unable to retrieve name of view %d: %v",
+					tbDesc.DependedOnBy[0].ID, err)
+				return nil, errors.Errorf(
+					"cannot rename database because table %q is depended on by a view", tbDesc.Name)
+			}
+			return nil, errors.Errorf("cannot rename database because table %q is depended on by view %q",
+				tbDesc.Name, viewName)
+		}
 	}
 
 	if err := p.renameDatabase(dbDesc, string(n.NewName)); err != nil {
@@ -129,6 +159,15 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 
 	if err := p.checkPrivilege(tableDesc, privilege.DROP); err != nil {
 		return nil, err
+	}
+
+	// Check if any views depend on this table/view. Because our views
+	// are currently just stored as strings, they explicitly specify the name
+	// of everything they depend on. Rather than trying to rewrite the view's
+	// query with the new name, we simply disallow such renames for now.
+	if len(tableDesc.DependedOnBy) > 0 {
+		return nil, p.dependentViewError(
+			"rename", tableDesc.TypeName(), oldTn.String(), tableDesc.DependedOnBy[0].ID)
 	}
 
 	// Check if target database exists.
@@ -229,6 +268,13 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		return nil, err
 	}
 
+	for _, tableRef := range tableDesc.DependedOnBy {
+		if tableRef.IndexID != tableDesc.Indexes[i].ID {
+			continue
+		}
+		return nil, p.dependentViewError("rename", "index", n.Index.Index.String(), tableRef.ID)
+	}
+
 	if n.NewName == "" {
 		return nil, errEmptyIndexName
 	}
@@ -308,6 +354,18 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 		column = tableDesc.Mutations[i].GetColumn()
 	}
 
+	for _, tableRef := range tableDesc.DependedOnBy {
+		found := false
+		for _, colID := range tableRef.ColumnIDs {
+			if colID == column.ID {
+				found = true
+			}
+		}
+		if found {
+			return nil, p.dependentViewError("rename", "column", n.Name.String(), tableRef.ID)
+		}
+	}
+
 	if normColName == normNewColName {
 		// Noop.
 		return &emptyNode{}, nil
@@ -367,4 +425,17 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 	}
 	p.notifySchemaChange(tableDesc.ID, sqlbase.InvalidMutationID)
 	return &emptyNode{}, nil
+}
+
+// TODO(a-robinson): Support renaming objects depended on by views once we have
+// a better encoding for view queries (#10083).
+func (p *planner) dependentViewError(action, typeName, objName string, viewID sqlbase.ID) error {
+	viewName, err := p.getQualifiedTableName(viewID)
+	if err != nil {
+		log.Warningf(p.ctx(), "Unable to retrieve name of view %d: %v", viewID, err)
+		return errors.Errorf("cannot %s %s %q because it is depended on by a view",
+			action, typeName, objName)
+	}
+	return errors.Errorf("cannot %s %s %q because it is depended on by view %q",
+		action, typeName, objName, viewName)
 }

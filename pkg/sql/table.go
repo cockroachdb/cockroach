@@ -517,3 +517,20 @@ func (p *planner) databaseFromSearchPath(tn *parser.TableName) (string, error) {
 	// database set by the user.
 	return p.session.Database, nil
 }
+
+// getQualifiedTableName returns
+func (p *planner) getQualifiedTableName(id sqlbase.ID) (string, error) {
+	desc, err := sqlbase.GetTableDescFromID(p.txn, id)
+	if err != nil {
+		return "", err
+	}
+	dbDesc, err := sqlbase.GetDatabaseDescFromID(p.txn, desc.ParentID)
+	if err != nil {
+		return "", err
+	}
+	tbName := parser.TableName{
+		DatabaseName: parser.Name(dbDesc.Name),
+		TableName:    parser.Name(desc.Name),
+	}
+	return tbName.String(), nil
+}
