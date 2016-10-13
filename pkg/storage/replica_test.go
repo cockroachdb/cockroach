@@ -373,7 +373,7 @@ func TestReplicaContains(t *testing.T) {
 	r := &Replica{}
 	r.mu.TimedMutex = syncutil.MakeTimedMutex(defaultMuLogger)
 	r.mu.state.Desc = desc
-	r.rangeStr.store(desc)
+	r.rangeStr.store(0, desc)
 
 	if statsKey := keys.RangeStatsKey(desc.RangeID); !r.ContainsKey(statsKey) {
 		t.Errorf("expected range to contain range stats key %q", statsKey)
