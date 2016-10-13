@@ -41,7 +41,7 @@ Fetches and displays the user for <username>.
 
 func runGetUser(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		return cmd.Usage()
+		return usageAndError(cmd)
 	}
 	conn, err := makeSQLClient()
 	if err != nil {
@@ -65,7 +65,7 @@ List all users.
 
 func runLsUsers(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
-		return cmd.Usage()
+		return usageAndError(cmd)
 	}
 	conn, err := makeSQLClient()
 	if err != nil {
@@ -89,7 +89,7 @@ Remove an existing user by username.
 
 func runRmUser(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		return cmd.Usage()
+		return usageAndError(cmd)
 	}
 	conn, err := makeSQLClient()
 	if err != nil {
@@ -118,7 +118,7 @@ for the password.
 // to allow changing just some of them (eg: change email, but leave password).
 func runSetUser(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		return cmd.Usage()
+		return usageAndError(cmd)
 	}
 	var err error
 	var hashed []byte
