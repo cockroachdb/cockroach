@@ -58,7 +58,13 @@ const keyFor7881Sample = "found#7881"
 // Session contains the state of a SQL client connection.
 // Create instances using NewSession().
 type Session struct {
-	Database    string
+	Database string
+	// SearchPath is a list of databases that will be searched for a table name
+	// before the database. Currently, this is used only for SELECTs.
+	//
+	// NOTE: If we allow the user to set this, we'll need to handle the case where
+	// the session database or pg_catalog are in this path.
+	SearchPath  []string
 	User        string
 	Syntax      int32
 	DistSQLMode distSQLExecMode
@@ -135,10 +141,11 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 		panic("Session's context must have a tracer in it")
 	}
 	s := &Session{
-		Database: args.Database,
-		User:     args.User,
-		Location: time.UTC,
-		executor: e,
+		Database:   args.Database,
+		SearchPath: []string{"pg_catalog"},
+		User:       args.User,
+		Location:   time.UTC,
+		executor:   e,
 	}
 	cfg, cache := e.getSystemConfig()
 	s.planner = planner{
