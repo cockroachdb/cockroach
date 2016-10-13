@@ -145,6 +145,14 @@ func createTestStoreWithoutStart(
 	stopper := stop.NewStopper()
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(stopper)
+
+	var ranToCompletion bool
+	defer func() {
+		if !ranToCompletion {
+			stopper.Stop()
+		}
+	}()
+
 	rpcContext := rpc.NewContext(context.TODO(), &base.Config{Insecure: true}, nil, stopper)
 	server := rpc.NewServer(rpcContext) // never started
 	cfg.Gossip = gossip.New(context.TODO(), rpcContext, server, nil, stopper, metric.NewRegistry())
@@ -174,6 +182,7 @@ func createTestStoreWithoutStart(
 	}
 	// Have to call g.SetNodeID before call g.AddInfo
 	store.Gossip().SetNodeID(roachpb.NodeID(1))
+	ranToCompletion = true
 	return store, manual, stopper
 }
 
@@ -1033,8 +1042,10 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 	}
 	// Minimal amount of work to keep this deprecated machinery working: Write
 	// some required Raft keys.
-	if _, err := writeInitialState(context.Background(), store.engine,
-		enginepb.MVCCStats{}, *desc, raftpb.HardState{}); err != nil {
+	if _, err := writeInitialState(
+		context.Background(), store.engine, enginepb.MVCCStats{}, *desc,
+		raftpb.HardState{}, &roachpb.Lease{},
+	); err != nil {
 		t.Fatal(err)
 	}
 	newRng, err := NewReplica(desc, store, 0)
@@ -2390,8 +2401,10 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := writeInitialState(ctx, s.Engine(),
-		enginepb.MVCCStats{}, *rng1.Desc(), raftpb.HardState{}); err != nil {
+	if _, err := writeInitialState(
+		ctx, s.Engine(), enginepb.MVCCStats{}, *rng1.Desc(),
+		raftpb.HardState{}, &roachpb.Lease{},
+	); err != nil {
 		t.Fatal(err)
 	}
 

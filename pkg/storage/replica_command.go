@@ -2642,44 +2642,6 @@ func (r *Replica) splitTrigger(
 	}
 	log.Eventf(ctx, "copied abort cache (%d entries)", seqCount)
 
-	// Initialize the right-hand lease to be the same as the left-hand lease.
-	// This looks like an innocuous performance improvement, but it's more than
-	// that - it ensures that we properly initialize the timestamp cache, which
-	// is only populated on the lease holder, from that of the original Range.
-	// We found out about a regression here the hard way in #7899. Prior to
-	// this block, the following could happen:
-	// - a client reads key 'd', leaving an entry in the timestamp cache on the
-	//   lease holder of [a,e) at the time, node one.
-	// - the range [a,e) splits at key 'c'. [c,e) starts out without a lease.
-	// - the replicas of [a,e) on nodes one and two both process the split
-	//   trigger and thus copy their timestamp caches to the new right-hand side
-	//   Replica. However, only node one's timestamp cache contains information
-	//   about the read of key 'd' in the first place.
-	// - node two becomes the lease holder for [c,e). Its timestamp cache does
-	//   know about the read at 'd' which happened at the beginning.
-	// - node two can illegally propose a write to 'd' at a lower timestamp.
-	{
-		leftLease, err := loadLease(ctx, r.store.Engine(), r.RangeID)
-		if err != nil {
-			return enginepb.MVCCStats{}, ProposalData{}, errors.Wrap(err, "unable to load lease")
-		}
-
-		replica, found := split.RightDesc.GetReplicaDescriptor(leftLease.Replica.StoreID)
-		if !found {
-			return enginepb.MVCCStats{}, ProposalData{}, errors.Errorf(
-				"pre-split lease holder %+v not found in post-split descriptor %+v",
-				leftLease.Replica, split.RightDesc,
-			)
-		}
-		rightLease := leftLease
-		rightLease.Replica = replica
-		if err := setLease(
-			ctx, batch, &bothDeltaMS, split.RightDesc.RangeID, rightLease,
-		); err != nil {
-			return enginepb.MVCCStats{}, ProposalData{}, errors.Wrap(err, "unable to seed right-hand side lease")
-		}
-	}
-
 	// Compute (absolute) stats for RHS range.
 	var rightMS enginepb.MVCCStats
 	if origBothMS.ContainsEstimates || bothDeltaMS.ContainsEstimates {
@@ -2754,7 +2716,46 @@ func (r *Replica) splitTrigger(
 		if err != nil {
 			return enginepb.MVCCStats{}, ProposalData{}, errors.Wrap(err, "unable to load hard state")
 		}
-		rightMS, err = writeInitialState(ctx, batch, rightMS, split.RightDesc, oldHS)
+		// Initialize the right-hand lease to be the same as the left-hand lease.
+		// This looks like an innocuous performance improvement, but it's more than
+		// that - it ensures that we properly initialize the timestamp cache, which
+		// is only populated on the lease holder, from that of the original Range.
+		// We found out about a regression here the hard way in #7899. Prior to
+		// this block, the following could happen:
+		// - a client reads key 'd', leaving an entry in the timestamp cache on the
+		//   lease holder of [a,e) at the time, node one.
+		// - the range [a,e) splits at key 'c'. [c,e) starts out without a lease.
+		// - the replicas of [a,e) on nodes one and two both process the split
+		//   trigger and thus copy their timestamp caches to the new right-hand side
+		//   Replica. However, only node one's timestamp cache contains information
+		//   about the read of key 'd' in the first place.
+		// - node two becomes the lease holder for [c,e). Its timestamp cache does
+		//   know about the read at 'd' which happened at the beginning.
+		// - node two can illegally propose a write to 'd' at a lower timestamp.
+		//
+		// TODO(tschottdorf): why would this use r.store.Engine() an not the
+		// batch?
+		leftLease, err := loadLease(ctx, r.store.Engine(), r.RangeID)
+		if err != nil {
+			return enginepb.MVCCStats{}, ProposalData{}, errors.Wrap(err, "unable to load lease")
+		}
+		if (*leftLease == roachpb.Lease{}) {
+			panic(leftLease)
+		}
+
+		replica, found := split.RightDesc.GetReplicaDescriptor(leftLease.Replica.StoreID)
+		if !found {
+			return enginepb.MVCCStats{}, ProposalData{}, errors.Errorf(
+				"pre-split lease holder %+v not found in post-split descriptor %+v",
+				leftLease.Replica, split.RightDesc,
+			)
+		}
+		rightLease := leftLease
+		rightLease.Replica = replica
+
+		rightMS, err = writeInitialState(
+			ctx, batch, rightMS, split.RightDesc, oldHS, rightLease,
+		)
 		if err != nil {
 			return enginepb.MVCCStats{}, ProposalData{}, errors.Wrap(err, "unable to write initial state")
 		}
