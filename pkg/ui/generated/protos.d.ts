@@ -2579,20 +2579,20 @@ getStats?() : engine.enginepb.MVCCStats;
 
 
 
-frozen?: boolean;
-		
-
-getFrozen?() : boolean;
-		setFrozen?(frozen : boolean): void;
-		
-
-
-
 txn_span_gc_threshold?: util.hlc.Timestamp;
 		
 
 getTxnSpanGcThreshold?() : util.hlc.Timestamp;
 		setTxnSpanGcThreshold?(txnSpanGcThreshold : util.hlc.Timestamp): void;
+		
+
+
+
+frozen?: ReplicaState.FrozenEnum;
+		
+
+getFrozen?() : ReplicaState.FrozenEnum;
+		setFrozen?(frozen : ReplicaState.FrozenEnum): void;
 		
 
 
@@ -2612,9 +2612,19 @@ export interface ReplicaStateBuilder {
 	decode(buffer: ArrayBuffer) : ReplicaStateMessage;
 	decode(buffer: ByteBuffer) : ReplicaStateMessage;
 	decode64(buffer: string) : ReplicaStateMessage;
+	FrozenEnum: ReplicaState.FrozenEnum;
 	
 }
 
+}
+
+declare module Proto2TypeScript.cockroach.storage.storagebase.ReplicaState {
+	export const enum FrozenEnum {
+		FROZEN_UNSPECIFIED = 0,
+		FROZEN = 1,
+		UNFROZEN = 2,
+		
+}
 }
 
 
