@@ -59,7 +59,7 @@ CockroachDB achieves survivability:
 - range replicas can be located in datacenters spanning increasingly
   disparate geographies to survive ever-greater failure scenarios from
   datacenter power or networking loss to regional power failures
-  (e.g. `{ US-East-1a, US-East-1b, US-East-1c }, `{ US-East, US-West,
+  (e.g. `{ US-East-1a, US-East-1b, US-East-1c }`, `{ US-East, US-West,
   Japan }`, `{ Ireland, US-East, US-West}`, `{ Ireland, US-East,
   US-West, Japan, Australia }`).
 
@@ -264,7 +264,7 @@ Transactions are executed in two phases:
    of the transaction. These are normal MVCC values, with the addition of
    a special flag (i.e. “intent”) indicating that the value may be
    committed after the transaction itself commits. In addition,
-   the transaction id (unique and chosen at tx start time by client)
+   the transaction id (unique and chosen at txn start time by client)
    is stored with intent values. The txn id is used to refer to the
    transaction record when there are conflicts and to make
    tie-breaking decisions on ordering between identical timestamps.
@@ -315,7 +315,7 @@ encounter data that necessitate conflict resolution
 
 When a transaction restarts, it changes its priority and/or moves its
 timestamp forward depending on data tied to the conflict, and
-begins anew reusing the same txn id. The prior run of the transaction might
+begins a new reusing the same txn id. The prior run of the transaction might
 have written some write intents, which need to be deleted before the
 transaction commits, so as to not be included as part of the transaction.
 These stale write intent deletions are done during the reexecution of the
