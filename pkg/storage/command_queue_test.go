@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -58,6 +57,18 @@ func testCmdDone(chans []<-chan struct{}, wait time.Duration) bool {
 	return true
 }
 
+// assertCmdDoesNotFinish asserts that the command waiting on the provided channels
+// does not finish, returning false if this assertion fails.
+func assertCmdDoesNotFinish(t *testing.T, chans []<-chan struct{}) bool {
+	return !testCmdDone(chans, 3*time.Millisecond)
+}
+
+// assertCmdFinishes asserts that the command waiting on the provided channels
+// finishes, returning false if this assertion fails.
+func assertCmdFinishes(t *testing.T, chans []<-chan struct{}) bool {
+	return testCmdDone(chans, 15*time.Millisecond)
+}
+
 func TestCommandQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	cq := NewCommandQueue()
@@ -69,11 +80,11 @@ func TestCommandQueue(t *testing.T) {
 	// Add a command and verify dependency on it.
 	wk := add(cq, roachpb.Key("a"), nil, false)
 	chans := getWait(cq, roachpb.Key("a"), nil, false)
-	if testCmdDone(chans, 1*time.Millisecond) {
+	if !assertCmdDoesNotFinish(t, chans) {
 		t.Fatal("command should not finish with command outstanding")
 	}
 	cq.remove(wk)
-	if !testCmdDone(chans, 5*time.Millisecond) {
+	if !assertCmdFinishes(t, chans) {
 		t.Fatal("command should finish with no commands outstanding")
 	}
 }
@@ -95,35 +106,26 @@ func TestCommandQueueWriteWaitForNonAdjacentRead(t *testing.T) {
 	// one.
 	chans := getWait(cq, key, nil, false /* !readOnly */)
 
-	assert := func(blocked bool) {
-		d := time.Millisecond
-		if !blocked {
-			d *= 5
-		}
-		f, l, _ := caller.Lookup(1)
-		if testCmdDone(chans, d) {
-			if blocked {
-				t.Fatalf("%s:%d: command should not finish with command outstanding", f, l)
-			}
-		} else if !blocked {
-			t.Fatalf("%s:%d: command should not have been blocked", f, l)
-		}
-	}
-
 	// Certainly blocks now.
-	assert(true)
+	if !assertCmdDoesNotFinish(t, chans) {
+		t.Fatal("command should not finish with command outstanding")
+	}
 
 	// The second read returns, but the first one remains.
 	cq.remove(wk2)
 
 	// Should still block. This being broken is why this test exists.
-	assert(true)
+	if !assertCmdDoesNotFinish(t, chans) {
+		t.Fatal("command should not finish with command outstanding")
+	}
 
 	// First read returns.
 	cq.remove(wk1)
 
 	// Now it goes through.
-	assert(false)
+	if !assertCmdFinishes(t, chans) {
+		t.Fatal("command should finish with no commands outstanding")
+	}
 }
 
 func TestCommandQueueNoWaitOnReadOnly(t *testing.T) {
@@ -135,11 +137,11 @@ func TestCommandQueueNoWaitOnReadOnly(t *testing.T) {
 	waitCmdDone(chans1)
 	// Verify wait with a read-write command.
 	chans2 := getWait(cq, roachpb.Key("a"), nil, false)
-	if testCmdDone(chans2, 1*time.Millisecond) {
+	if !assertCmdDoesNotFinish(t, chans2) {
 		t.Fatal("command should not finish with command outstanding")
 	}
 	cq.remove(wk)
-	if !testCmdDone(chans2, 5*time.Millisecond) {
+	if !assertCmdFinishes(t, chans2) {
 		t.Fatal("command should finish with no commands outstanding")
 	}
 }
@@ -154,15 +156,15 @@ func TestCommandQueueMultipleExecutingCommands(t *testing.T) {
 	wk3 := add(cq, roachpb.Key("0"), roachpb.Key("d"), false)
 	chans := getWait(cq, roachpb.Key("a"), roachpb.Key("cc"), false)
 	cq.remove(wk1)
-	if testCmdDone(chans, 1*time.Millisecond) {
+	if !assertCmdDoesNotFinish(t, chans) {
 		t.Fatal("command should not finish with two commands outstanding")
 	}
 	cq.remove(wk2)
-	if testCmdDone(chans, 1*time.Millisecond) {
+	if !assertCmdDoesNotFinish(t, chans) {
 		t.Fatal("command should not finish with one command outstanding")
 	}
 	cq.remove(wk3)
-	if !testCmdDone(chans, 5*time.Millisecond) {
+	if !assertCmdFinishes(t, chans) {
 		t.Fatal("command should finish with no commands outstanding")
 	}
 }
@@ -178,23 +180,23 @@ func TestCommandQueueMultiplePendingCommands(t *testing.T) {
 	chans3 := getWait(cq, roachpb.Key("c"), nil, false)
 
 	for i, chans := range [][]<-chan struct{}{chans1, chans2, chans3} {
-		if testCmdDone(chans, 1*time.Millisecond) {
+		if !assertCmdDoesNotFinish(t, chans) {
 			t.Fatalf("command %d should not finish with command 0 outstanding", i+1)
 		}
 	}
 
 	cq.remove(wk0)
-	if !testCmdDone(chans1, 5*time.Millisecond) {
+	if !assertCmdFinishes(t, chans1) {
 		t.Fatal("command 1 should finish")
 	}
-	if !testCmdDone(chans3, 5*time.Millisecond) {
+	if !assertCmdFinishes(t, chans3) {
 		t.Fatal("command 3 should finish")
 	}
-	if testCmdDone(chans2, 5*time.Millisecond) {
+	if !assertCmdDoesNotFinish(t, chans2) {
 		t.Fatal("command 2 should remain outstanding")
 	}
 	cq.remove(wk1)
-	if !testCmdDone(chans2, 5*time.Millisecond) {
+	if !assertCmdFinishes(t, chans2) {
 		t.Fatal("command 2 should finish with no commands outstanding")
 	}
 }
@@ -214,7 +216,7 @@ func TestCommandQueueRemove(t *testing.T) {
 	cq.remove(wk2)
 
 	for i, chans := range [][]<-chan struct{}{chans1, chans2} {
-		if !testCmdDone(chans, 5*time.Millisecond) {
+		if !assertCmdFinishes(t, chans) {
 			t.Fatalf("command %d should finish with clearing queue", i+1)
 		}
 	}
