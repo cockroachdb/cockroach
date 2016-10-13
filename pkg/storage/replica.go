@@ -186,18 +186,23 @@ type atomicDescString struct {
 }
 
 // store atomically updates d.strPtr with the string representation of desc.
-func (d *atomicDescString) store(desc *roachpb.RangeDescriptor) {
-	const maxRangeChars = 30
-	var str string
-	if !desc.IsInitialized() {
-		str = fmt.Sprintf("%d:{-}", desc.RangeID)
+func (d *atomicDescString) store(replicaID roachpb.ReplicaID, desc *roachpb.RangeDescriptor) {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "%d/", desc.RangeID)
+	if replicaID == 0 {
+		fmt.Fprintf(&buf, "?:")
 	} else {
-		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "%d:", desc.RangeID)
-		keys.PrettyPrintRange(&buf, roachpb.Key(desc.StartKey), roachpb.Key(desc.EndKey), maxRangeChars)
-		str = buf.String()
+		fmt.Fprintf(&buf, "%d:", replicaID)
 	}
 
+	if !desc.IsInitialized() {
+		buf.WriteString("{-}")
+	} else {
+		const maxRangeChars = 30
+		keys.PrettyPrintRange(&buf, roachpb.Key(desc.StartKey), roachpb.Key(desc.EndKey), maxRangeChars)
+	}
+
+	str := buf.String()
 	atomic.StorePointer(&d.strPtr, unsafe.Pointer(&str))
 }
 
@@ -496,7 +501,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	}
 
 	// Init rangeStr with the range ID.
-	r.rangeStr.store(&roachpb.RangeDescriptor{RangeID: rangeID})
+	r.rangeStr.store(0, &roachpb.RangeDescriptor{RangeID: rangeID})
 
 	// Add replica log tag - the value is rangeStr.String().
 	r.ctx = log.WithLogTag(store.Ctx(), "r", &r.rangeStr)
@@ -578,7 +583,7 @@ func (r *Replica) initLocked(
 	if r.mu.state, err = loadState(r.ctx, r.store.Engine(), desc); err != nil {
 		return err
 	}
-	r.rangeStr.store(r.mu.state.Desc)
+	r.rangeStr.store(0, r.mu.state.Desc)
 
 	r.mu.lastIndex, err = loadLastIndex(r.ctx, r.store.Engine(), r.RangeID)
 	if err != nil {
@@ -602,6 +607,7 @@ func (r *Replica) initLocked(
 		}
 		replicaID = repDesc.ReplicaID
 	}
+	r.rangeStr.store(replicaID, r.mu.state.Desc)
 	if err := r.setReplicaIDLocked(replicaID); err != nil {
 		return err
 	}
@@ -900,7 +906,7 @@ func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
 			r.mu.state.Desc, desc)
 	}
 
-	r.rangeStr.store(desc)
+	r.rangeStr.store(r.mu.replicaID, desc)
 	r.mu.state.Desc = desc
 }
 
