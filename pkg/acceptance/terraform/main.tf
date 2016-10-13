@@ -75,7 +75,7 @@ resource "null_resource" "cockroach-runner" {
   }
 
   provisioner "file" {
-    source = "../../cloud/gce/download_binary.sh"
+    source = "../../../cloud/gce/download_binary.sh"
     destination = "/home/ubuntu/download_binary.sh"
   }
 
