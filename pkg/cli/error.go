@@ -52,3 +52,8 @@ communicate with a secure cluster).
 		return errors.Errorf(format, err)
 	}
 }
+
+func invalidArgs(cmd *cobra.Command) error {
+	_ = cmd.Usage()
+	return errors.New("invalid arguments")
+}

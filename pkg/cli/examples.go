@@ -38,7 +38,7 @@ Available examples:
 
 func runGenExamplesCmd(cmd *cobra.Command, args []string) error {
 	if len(args) > 1 {
-		return cmd.Usage()
+		return invalidArgs(cmd)
 	}
 
 	example := "startrek"

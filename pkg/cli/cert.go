@@ -92,7 +92,7 @@ The certs directory should contain a CA cert and key.
 // to their corresponding files.
 func runCreateClientCert(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		return cmd.Usage()
+		return invalidArgs(cmd)
 	}
 	if len(baseCfg.SSLCA) == 0 || len(baseCfg.SSLCAKey) == 0 ||
 		len(baseCfg.SSLCert) == 0 || len(baseCfg.SSLCertKey) == 0 {

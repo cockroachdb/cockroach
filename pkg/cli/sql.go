@@ -489,7 +489,7 @@ func runStatements(conn *sqlConn, stmts []string, pretty bool) error {
 
 func runTerm(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
-		return cmd.Usage()
+		return invalidArgs(cmd)
 	}
 
 	conn, err := makeSQLClient()

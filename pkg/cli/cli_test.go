@@ -240,6 +240,7 @@ communicate with a secure cluster\).
 		},
 		// A real error before we hit any networking ones.
 		{`debug kv scan b a`, `start key must be smaller than end key`},
+		{`debug kv inc`, `invalid arguments`},
 	} {
 		out, err := c.RunWithCapture(test.cmd)
 		if err != nil {

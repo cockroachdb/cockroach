@@ -40,7 +40,7 @@ Lists the ranges in a cluster.
 
 func runLsRanges(cmd *cobra.Command, args []string) error {
 	if len(args) > 1 {
-		return cmd.Usage()
+		return invalidArgs(cmd)
 	}
 
 	var startKey roachpb.Key
@@ -96,7 +96,7 @@ Splits the range containing <key> at <key>.
 
 func runSplitRange(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		return cmd.Usage()
+		return invalidArgs(cmd)
 	}
 
 	key := roachpb.Key(args[0])
