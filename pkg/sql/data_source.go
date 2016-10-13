@@ -122,6 +122,10 @@ type dataSourceInfo struct {
 	// column but might be different if the statement renames
 	// them using AS.
 	sourceAliases sourceAliases
+
+	// viewDesc is nothing more than an annotation used to indicate that the
+	// columns are defined as part of a view.
+	viewDesc *sqlbase.TableDescriptor
 }
 
 // planDataSource contains the data source information for data
@@ -323,12 +327,12 @@ func (p *planner) getTableScanOrViewPlan(
 	tn *parser.TableName, hints *parser.IndexHints, scanVisibility scanVisibility,
 ) (planDataSource, error) {
 	descFunc := p.getTableLease
-	if p.asOf {
+	if p.avoidCachedDescriptors {
 		// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
 		// specified time, and never lease anything. The proto transaction already
 		// has its timestamps set correctly so mustGetTableDesc will fetch with the
 		// correct timestamp.
-		descFunc = p.mustGetTableDesc
+		descFunc = p.mustGetTableOrViewDesc
 	}
 	desc, err := descFunc(tn)
 	if err != nil {
@@ -373,7 +377,12 @@ func (p *planner) getViewPlan(
 	// TODO(a-robinson): Support ORDER BY and LIMIT in views. Is it as simple as
 	// just passing the entire select here or will inserting an ORDER BY in the
 	// middle of a query plan break things?
-	return p.getSubqueryPlan(sel.Select, makeResultColumns(desc.Columns))
+	plan, err := p.getSubqueryPlan(sel.Select, makeResultColumns(desc.Columns))
+	if err != nil {
+		return plan, err
+	}
+	plan.info.viewDesc = desc
+	return plan, nil
 }
 
 // getSubqueryPlan builds a planDataSource for a select statement, including
