@@ -156,9 +156,8 @@ type Config struct {
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
 
-	// Ctx is the base context.Context for the server. If nil,
-	// context.Background() will be used.
-	Ctx context.Context
+	// AmbientCtx is used to annotate contexts used inside the server.
+	AmbientCtx log.AmbientContext
 
 	// Locality is a description of the topography of the server.
 	Locality roachpb.Locality
