@@ -41,23 +41,23 @@ func (tsdb *DB) ContainsTimeSeries(start, end roachpb.RKey) bool {
 // PruneTimeSeries prunes old data for any time series found in the supplied
 // key range.
 //
-// The Engine should be supplied by a local store, and is used only to discover
-// the names of time series which are store in that Engine. The KV client is
-// then used to prune old data from the discovered series.
+// The snapshot should be supplied by a local store, and is used only to
+// discover the names of time series which are store in that snapshot. The KV
+// client is then used to prune old data from the discovered series.
 //
-// The engine is used for key discovery (as opposed to the KV client) because
+// The snapshot is used for key discovery (as opposed to the KV client) because
 // the task of pruning time series is distributed across the cluster to the
 // individual ranges which contain that time series data. Because replicas of
 // those ranges are guaranteed to have time series data locally, we can use the
-// engine to quickly obtain a set of keys to be pruned with no network calls.
+// snapshot to quickly obtain a set of keys to be pruned with no network calls.
 func (tsdb *DB) PruneTimeSeries(
 	ctx context.Context,
-	e engine.Engine,
+	snapshot engine.Reader,
 	start, end roachpb.RKey,
 	db *client.DB,
 	timestamp hlc.Timestamp,
 ) error {
-	series, err := findTimeSeries(e, start, end)
+	series, err := findTimeSeries(snapshot, start, end)
 	if err != nil {
 		return err
 	}
@@ -78,18 +78,15 @@ type timeSeriesResolutionInfo struct {
 // pair will only be identified once, even if the range contains keys for that
 // name/resolution pair at multiple timestamps or from multiple sources.
 //
-// An Engine is used, rather than a client, because this function is intended
-// to be called by a storage queue which can inspect the local data for a single
-// range without the need for expensive network calls.
+// An engine snapshot is used, rather than a client, because this function is
+// intended to be called by a storage queue which can inspect the local data for
+// a single range without the need for expensive network calls.
 func findTimeSeries(
-	e engine.Engine, startKey, endKey roachpb.RKey,
+	snapshot engine.Reader, startKey, endKey roachpb.RKey,
 ) ([]timeSeriesResolutionInfo, error) {
 	var results []timeSeriesResolutionInfo
 
-	snap := e.NewSnapshot()
-	defer snap.Close()
-
-	iter := snap.NewIterator(false)
+	iter := snapshot.NewIterator(false)
 	defer iter.Close()
 
 	// Set start boundary for the search, which is the lesser of the range start

@@ -86,7 +86,18 @@ func (r Resolution) SampleDuration() int64 {
 func (r Resolution) SlabDuration() int64 {
 	duration, ok := slabDurationByResolution[r]
 	if !ok {
-		panic(fmt.Sprintf("no key duration found for resolution value %v", r))
+		panic(fmt.Sprintf("no slab duration found for resolution value %v", r))
 	}
 	return duration
+}
+
+// PruneThreshold returns the pruning threshold duration for this resolution,
+// expressed in nanoseconds. This duration determines how old time series data
+// must be before it is eligible for pruning.
+func (r Resolution) PruneThreshold() int64 {
+	threshold, ok := pruneThresholdByResolution[r]
+	if !ok {
+		panic(fmt.Sprintf("no prune threshold found for resolution value %v", r))
+	}
+	return threshold
 }

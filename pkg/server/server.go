@@ -262,6 +262,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.pgServer = pgwire.MakeServer(s.cfg.Config, s.sqlExecutor)
 	s.registry.AddMetricStruct(s.pgServer.Metrics())
 
+	s.tsDB = ts.NewDB(s.db)
+	s.tsServer = ts.MakeServer(s.cfg.AmbientCtx, s.tsDB)
+
 	// TODO(bdarnell): make StoreConfig configurable.
 	storeCfg := storage.StoreConfig{
 		Ctx:                            ctx,
@@ -286,6 +289,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		},
 		RangeLeaseActiveDuration:  active,
 		RangeLeaseRenewalDuration: renewal,
+		TimeSeriesDataStore:       s.tsDB,
 	}
 	if cfg.TestingKnobs.Store != nil {
 		storeCfg.TestingKnobs = *cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs)
@@ -302,9 +306,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	storage.RegisterConsistencyServer(s.grpc, s.node.storesServer)
 	storage.RegisterFreezeServer(s.grpc, s.node.storesServer)
 	storage.RegisterReservationServer(s.grpc, s.node.storesServer)
-
-	s.tsDB = ts.NewDB(s.db)
-	s.tsServer = ts.MakeServer(s.cfg.AmbientCtx, s.tsDB)
 
 	s.admin = makeAdminServer(s)
 	s.status = newStatusServer(

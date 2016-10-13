@@ -92,6 +92,13 @@ func (s *Store) ForceRaftLogScanAndProcess() {
 	forceScanAndProcess(s, s.raftLogQueue.baseQueue)
 }
 
+// ForceTimeSeriesMaintenanceQueueProcess iterates over all ranges, enqueuing
+// any that need time series maintenance, then processes the time series
+// maintenance queue.
+func (s *Store) ForceTimeSeriesMaintenanceQueueProcess() {
+	forceScanAndProcess(s, s.tsMaintenanceQueue.baseQueue)
+}
+
 // GetDeadReplicas exports s.deadReplicas for tests.
 func (s *Store) GetDeadReplicas() roachpb.StoreDeadReplicas {
 	return s.deadReplicas()
