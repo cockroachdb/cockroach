@@ -2203,7 +2203,7 @@ func TestReplicaLazyLoad(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	sc := storage.TestStoreConfig()
-	sc.RaftTickInterval = time.Millisecond
+	sc.RaftTickInterval = time.Millisecond // safe because there is only a single node
 	sc.TestingKnobs.DisableScanner = true
 	sc.TestingKnobs.DisablePeriodicGossips = true
 	mtc := multiTestContext{storeConfig: &sc}
@@ -2215,7 +2215,7 @@ func TestReplicaLazyLoad(t *testing.T) {
 
 	// Wait for a bunch of raft ticks.
 	ticks := mtc.stores[0].Metrics().RaftTicks.Count
-	for targetTicks := ticks() + 5; ticks() < targetTicks; {
+	for targetTicks := ticks() + 3; ticks() < targetTicks; {
 		time.Sleep(time.Millisecond)
 	}
 
@@ -2593,7 +2593,6 @@ func TestRaftBlockedReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	sc := storage.TestStoreConfig()
-	sc.RaftTickInterval = time.Millisecond
 	sc.TestingKnobs.DisableScanner = true
 	mtc := multiTestContext{storeConfig: &sc}
 	mtc.Start(t, 3)
@@ -2605,7 +2604,7 @@ func TestRaftBlockedReplica(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Replica range 1 to all 3 nodes. This ensures the usage of the network.
+	// Replicate range 1 to all 3 nodes. This ensures the usage of the network.
 	mtc.replicateRange(1, 1, 2)
 
 	// Lock range 2 for raft processing.
@@ -2631,7 +2630,7 @@ func TestRaftBlockedReplica(t *testing.T) {
 
 	// Verify that we're still ticking the non-blocked replica.
 	ticks := mtc.stores[0].Metrics().RaftTicks.Count
-	for targetTicks := ticks() + 5; ticks() < targetTicks; {
+	for targetTicks := ticks() + 3; ticks() < targetTicks; {
 		time.Sleep(time.Millisecond)
 	}
 
