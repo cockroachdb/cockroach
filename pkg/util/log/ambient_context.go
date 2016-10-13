@@ -59,9 +59,9 @@ type AmbientContext struct {
 	// Tracer is used to open spans (see AnnotateCtxWithSpan).
 	Tracer opentracing.Tracer
 
-	// EventLog will be embedded into contexts that don't already have an event
+	// eventLog will be embedded into contexts that don't already have an event
 	// log or an open span (if not nil).
-	EventLog trace.EventLog
+	eventLog *ctxEventLog
 
 	tags *logTag
 }
@@ -90,6 +90,19 @@ func (ac *AmbientContext) AddLogTagStr(name string, value string) {
 	ac.addTag(otlog.String(name, value))
 }
 
+// SetEventLog sets up an event log. Annotated contexts log into this event log
+// (unless there's an open Span).
+func (ac *AmbientContext) SetEventLog(family, title string) {
+	ac.eventLog = &ctxEventLog{eventLog: trace.NewEventLog(family, title)}
+}
+
+// FinishEventLog closes the event log. Concurrent and subsequent calls to
+// record events from contexts that use this event log embedded are allowed.
+func (ac *AmbientContext) FinishEventLog() {
+	ac.eventLog.finish()
+	ac.eventLog = nil
+}
+
 // AnnotateCtx annotates a given context with the information in AmbientContext:
 //  - the EventLog is embedded in the context if the context doesn't already
 //    have en event log or an open trace.
@@ -101,8 +114,8 @@ func (ac *AmbientContext) AddLogTagStr(name string, value string) {
 func (ac *AmbientContext) AnnotateCtx(ctx context.Context) context.Context {
 	// TODO(radu): We could keep a cached context based off of
 	// context.Background() to avoid allocations in that case.
-	if ac.EventLog != nil && opentracing.SpanFromContext(ctx) == nil && eventLogFromCtx(ctx) == nil {
-		ctx = withEventLogInternal(ctx, ac.EventLog)
+	if ac.eventLog != nil && opentracing.SpanFromContext(ctx) == nil && eventLogFromCtx(ctx) == nil {
+		ctx = embedCtxEventLog(ctx, ac.eventLog)
 	}
 	if ac.tags != nil {
 		ctx = copyTagChain(ctx, ac.tags)
