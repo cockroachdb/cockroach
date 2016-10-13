@@ -2821,9 +2821,9 @@ opt_alias_clause:
   }
 
 opt_as_of_clause:
-  AS_LA OF SYSTEM TIME SCONST
+  AS_LA OF SYSTEM TIME a_expr_const
   {
-    $$.val = AsOfClause{Expr: &StrVal{s: $5}}
+    $$.val = AsOfClause{Expr: $5.expr()}
   }
 | /* EMPTY */
   {

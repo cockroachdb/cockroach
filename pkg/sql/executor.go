@@ -19,6 +19,8 @@ package sql
 
 import (
 	"fmt"
+	"math"
+	"math/big"
 	"reflect"
 	"sync"
 	"time"
@@ -35,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/decimal"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1379,18 +1382,37 @@ func isAsOf(planMaker *planner, stmt parser.Statement, max hlc.Timestamp) (*hlc.
 	if err != nil {
 		return nil, err
 	}
-	ds, ok := d.(*parser.DString)
-	if !ok {
-		return nil, fmt.Errorf("AS OF SYSTEM TIME expected string, got %s", ds.Type())
-	}
-	// Allow nanosecond precision because the timestamp is only used by the
-	// system and won't be returned to the user over pgwire.
-	dt, err := parser.ParseDTimestamp(string(*ds), time.Nanosecond)
-	if err != nil {
-		return nil, err
-	}
-	ts := hlc.Timestamp{
-		WallTime: dt.Time.UnixNano(),
+	var ts hlc.Timestamp
+	switch d := d.(type) {
+	case *parser.DString:
+		// Allow nanosecond precision because the timestamp is only used by the
+		// system and won't be returned to the user over pgwire.
+		dt, err := parser.ParseDTimestamp(string(*d), time.Nanosecond)
+		if err != nil {
+			return nil, err
+		}
+		ts.WallTime = dt.Time.UnixNano()
+	case *parser.DInt:
+		ts.WallTime = int64(*d)
+	case *parser.DDecimal:
+		logicalScale := 10 - int(d.Scale())
+		if logicalScale < 0 {
+			return nil, errors.Errorf("bad AS OF SYSTEM TIME argument: logical part has too many digits")
+		}
+		nanos := new(big.Int)
+		logical := new(big.Int)
+		nanos.QuoRem(d.UnscaledBig(), decimal.PowerOfTenInt(int(d.Scale())), logical)
+		logical.Mul(logical, decimal.PowerOfTenInt(logicalScale))
+		if nanos.Cmp(big.NewInt(math.MaxInt64)) > 0 {
+			return nil, errors.Errorf("bad AS OF SYSTEM TIME argument: nanoseconds part too large: %s > %d", nanos, math.MaxInt64)
+		}
+		if logical.Cmp(big.NewInt(math.MaxInt32)) > 0 {
+			return nil, errors.Errorf("bad AS OF SYSTEM TIME argument: logical part too large: %s > %d", logical, math.MaxInt32)
+		}
+		ts.WallTime = nanos.Int64()
+		ts.Logical = int32(logical.Int64())
+	default:
+		return nil, fmt.Errorf("unexpected AS OF SYSTEM TIME argument: %s (%T)", d.Type(), d)
 	}
 	if max.Less(ts) {
 		return nil, fmt.Errorf("cannot specify timestamp in the future")
