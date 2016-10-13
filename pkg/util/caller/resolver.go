@@ -46,7 +46,7 @@ type CallResolver struct {
 
 var reStripNothing = regexp.MustCompile(`^$`)
 
-// defaultRE strips src/github.com/organization/project/module/submodule/file.go
+// defaultRE strips src/github.com/org/project/(pkg/)module/submodule/file.go
 // down to module/submodule/file.go. It falls back to stripping nothing when
 // it's unable to look up its own location via runtime.Caller().
 var defaultRE = func() *regexp.Regexp {
@@ -66,8 +66,8 @@ var defaultRE = func() *regexp.Regexp {
 		path = filepath.Dir(filepath.Clean(path))
 	}
 	qSep := regexp.QuoteMeta(sep)
-	// Part of the regexp that matches `/github.com/username/reponame/`.
-	pkgStrip := qSep + strings.Repeat(strings.Join([]string{"[^", "]+", ""}, qSep), 3) + "(.*)"
+	// Part of the regexp that matches `/github.com/username/reponame/(pkg/)`.
+	pkgStrip := qSep + strings.Repeat(strings.Join([]string{"[^", "]+", ""}, qSep), 3) + "(?:pkg/)?(.*)"
 	if !strings.Contains(path, sep) {
 		// This is again the unusual case above. The actual callsites will have
 		// a "real" caller, so now we don't exactly know what to strip; going

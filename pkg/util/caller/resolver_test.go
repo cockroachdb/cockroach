@@ -54,7 +54,7 @@ func TestDefaultCallResolver(t *testing.T) {
 			t.Fatalf("unexpected caller reported: %s", fun)
 		}
 
-		if file != filepath.Join("pkg", "util", "caller", "resolver_test.go") {
+		if file != filepath.Join("util", "caller", "resolver_test.go") {
 			t.Fatalf("wrong file '%s'", file)
 		}
 	}
