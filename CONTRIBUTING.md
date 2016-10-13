@@ -35,7 +35,7 @@ root to get the intended result.
 If you want to run it outside of Docker, `go generate` requires a collection of
 Node.js modules which are installed via npm.
 
-If you plan on working on the UI, check out [the ui readme](ui).
+If you plan on working on the UI, check out [the ui readme](pkg/ui).
 
 To add or update a go dependency:
 
