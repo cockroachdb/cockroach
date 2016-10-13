@@ -205,7 +205,41 @@ func TestQuit(t *testing.T) {
 	c.Run("quit")
 	// Wait until this async command stops the server.
 	<-c.Stopper().IsStopped()
-	// Manually run the cleanup functions.
+
+	// NB: if this test is ever flaky due to port reuse, we could run against
+	// :0 (which however changes some of the errors we get).
+	// One way of getting that is:
+	//	c.TestServer.Cfg.AdvertiseAddr = "127.0.0.1:0"
+
+	for i, test := range []struct {
+		cmd, expOutPattern string
+	}{
+		{`debug kv inc a`,
+			`increment failed: roachpb.Batch RPC failed: rpc error: code = 14 desc = grpc: the connection is unavailable`},
+		{`quit`,
+			`unable to connect or connection lost.
+
+Please check the address and credentials such as certificates \(if attempting to
+communicate with a secure cluster\).
+
+\(error code 14: grpc: the connection is unavailable\)
+`},
+		{`zone ls`,
+			`dial tcp .*: getsockopt: connection refused`,
+		},
+	} {
+		out, err := c.RunWithCapture(test.cmd)
+		if err != nil {
+			t.Fatal(errors.Wrap(err, strconv.Itoa(i)))
+		}
+		exp := test.cmd + "\n" + test.expOutPattern
+		re := regexp.MustCompile(exp)
+		if !re.MatchString(out) {
+			t.Errorf("expected '%s' to match pattern\n%s\ngot:\n%s", test.cmd, exp, out)
+		}
+	}
+	// Manually run the cleanup functions (intentionally only on success,
+	// preserving the logs on failure).
 	c.cleanupFunc()
 	security.SetReadFileFn(securitytest.Asset)
 }
