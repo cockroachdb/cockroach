@@ -209,6 +209,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, cfg StoreConfig) {
 				enginepb.MVCCStats{},
 				*testDesc,
 				raftpb.HardState{},
+				&roachpb.Lease{},
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -4277,10 +4278,10 @@ func TestReplicaStatsComputation(t *testing.T) {
 	defer tc.Stop()
 
 	baseStats := initialStats()
-	// Add in the contribution for the range lease request.
+	// The initial stats contain an empty lease, but there will be an initial
+	// nontrivial lease requested with the first write below.
 	baseStats.Add(enginepb.MVCCStats{
-		SysCount: 1,
-		SysBytes: 62,
+		SysBytes: 8,
 	})
 
 	// Put a value.

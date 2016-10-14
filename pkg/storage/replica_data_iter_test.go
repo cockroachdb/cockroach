@@ -74,6 +74,7 @@ func createRangeData(t *testing.T, r *Replica) []engine.MVCCKey {
 		{keys.RangeLastGCKey(r.RangeID), ts0},
 		{keys.RaftAppliedIndexKey(r.RangeID), ts0},
 		{keys.RaftTruncatedStateKey(r.RangeID), ts0},
+		{keys.RangeLeaseKey(r.RangeID), ts0},
 		{keys.LeaseAppliedIndexKey(r.RangeID), ts0},
 		{keys.RangeStatsKey(r.RangeID), ts0},
 		{keys.RangeTxnSpanGCThresholdKey(r.RangeID), ts0},
