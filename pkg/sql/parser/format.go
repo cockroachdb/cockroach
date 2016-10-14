@@ -24,6 +24,10 @@ import (
 type fmtFlags struct {
 	showTypes        bool
 	showTableAliases bool
+	// tableNameNormalizer will be called on all NormalizableTableNames if it is
+	// non-nil. Its results will be used if they are non-nil, or ignored if they
+	// are nil.
+	tableNameNormalizer func(*NormalizableTableName) *TableName
 }
 
 // FmtFlags enables conditional formatting in the pretty-printer.
@@ -41,6 +45,12 @@ var FmtQualify FmtFlags = &fmtFlags{showTableAliases: true}
 // FmtShowTypes instructs the pretty-printer to
 // annotate expressions with their resolved types.
 var FmtShowTypes FmtFlags = &fmtFlags{showTypes: true}
+
+// FmtNormalizeTableNames returns FmtFlags that instructs the pretty-printer
+// to normalize all table names using the provided function.
+func FmtNormalizeTableNames(fn func(*NormalizableTableName) *TableName) FmtFlags {
+	return &fmtFlags{tableNameNormalizer: fn}
+}
 
 // NodeFormatter is implemented by nodes that can be pretty-printed.
 type NodeFormatter interface {
