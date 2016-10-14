@@ -566,6 +566,6 @@ func (r *Replica) handleProposalData(
 	if shouldAssert {
 		// Assert that the on-disk state doesn't diverge from the in-memory
 		// state as a result of the side effects.
-		r.assertState(r.store.Engine())
+		// r.assertState(r.store.Engine())
 	}
 }
