@@ -118,7 +118,19 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 					i -= r.Int63()
 					v = i
 				case *parser.DFloat, *parser.DDecimal:
-					v = r.Float64()
+					f := r.Float64()
+					switch r.Int63() % 3 {
+					case 0:
+						f *= r.Float64()
+					case 1:
+						f /= r.Float64()
+					default:
+						// ignore
+					}
+					if r.Int63() % 3 == 0 {
+						f = -f
+					}
+					v = f
 				case *parser.DString:
 					v = `'string'`
 				case *parser.DBytes:
