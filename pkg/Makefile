@@ -12,6 +12,5 @@ DIRS=$(filter-out Makefile,$(wildcard *))
 
 .PHONY: $(DIRS)
 .DEFAULT $(DIRS):
-	@make -C .. $(MAKECMDGOALS) \
-	  $(patsubst PKG=%,PKG=./pkg/%,$(filter PKG=%,$(MAKEFLAGS))) \
-	  $(filter-out PKG=%,$(MAKEFLAGS))
+	@$(MAKE) -C .. $(MAKECMDGOALS) \
+	  $(patsubst PKG=%,PKG=./pkg/%,$(filter PKG=%,$(MAKEFLAGS)))
