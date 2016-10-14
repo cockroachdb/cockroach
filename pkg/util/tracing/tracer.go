@@ -50,30 +50,6 @@ func (cr CallbackRecorder) RecordSpan(sp basictracer.RawSpan) {
 	cr(sp)
 }
 
-// JoinOrNew creates a new Span joined to the provided DelegatingCarrier or
-// creates Span from the given tracer.
-func JoinOrNew(
-	tr opentracing.Tracer, carrier *SpanContextCarrier, opName string,
-) (opentracing.Span, error) {
-	if carrier != nil {
-		wireContext, err := tr.Extract(basictracer.Delegator, carrier)
-		switch err {
-		case nil:
-			sp := tr.StartSpan(opName, opentracing.FollowsFrom(wireContext))
-
-			// Copy baggage items to tags so they show up in the Lightstep UI.
-			sp.Context().ForeachBaggageItem(func(k, v string) bool { sp.SetTag(k, v); return true })
-
-			sp.LogFields(otlog.String("event", opName))
-			return sp, nil
-		case opentracing.ErrSpanContextNotFound:
-		default:
-			return nil, err
-		}
-	}
-	return tr.StartSpan(opName), nil
-}
-
 // NewTracerAndSpanFor7881 creates a new tracer and a root span. The tracer is
 // to be used for tracking down #7881.
 // Note that this is not a "snowball" trace; otherwise this function mirrors
@@ -518,6 +494,7 @@ func JoinRemoteTrace(
 	default:
 		return ctx, err
 	}
+
 	if sp.BaggageItem(Snowball) == "" {
 		return opentracing.ContextWithSpan(ctx, sp), nil
 	}
