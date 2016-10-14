@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
 set -exuo pipefail
-build/builder.sh make check 2>&1 | go-test-teamcity
+# All packages need to be installed before we can run (some) of the checks
+# and code generators reliably. More precisely, anything that using
+# x/tools/go/loader is fragile (this includes stringer, vet and others).
+#
+# The blocking issue is https://github.com/golang/go/issues/14120; see
+# https://github.com/golang/go/issues/10249 for some more concrete discussion
+# on `stringer` and https://github.com/golang/go/issues/16086 for `vet`.
 build/builder.sh make gotestdashi 2>&1
+
+build/builder.sh make check 2>&1 | go-test-teamcity
 build/builder.sh go generate ./... 2>&1
 build/builder.sh /bin/bash -c '! git status --porcelain | read || (git status; git diff -a; exit 1)' 2>&1
 
