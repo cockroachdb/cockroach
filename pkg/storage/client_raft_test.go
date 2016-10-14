@@ -2648,10 +2648,8 @@ func TestRangeQuiescence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	sc := storage.TestStoreConfig()
-	sc.RaftTickInterval = 10 * time.Millisecond
-	sc.RaftHeartbeatIntervalTicks = 2
-	sc.RaftElectionTimeoutTicks = 10
 	sc.TestingKnobs.DisableScanner = true
+	sc.TestingKnobs.DisablePeriodicGossips = true
 	mtc := multiTestContext{storeConfig: &sc}
 	mtc.Start(t, 3)
 	defer mtc.Stop()
