@@ -313,17 +313,18 @@ type Store struct {
 	Ident                   roachpb.StoreIdent
 	cfg                     StoreConfig
 	db                      *client.DB
-	engine                  engine.Engine            // The underlying key-value store
-	allocator               Allocator                // Makes allocation decisions
-	rangeIDAlloc            *idAllocator             // Range ID allocator
-	gcQueue                 *gcQueue                 // Garbage collection queue
-	splitQueue              *splitQueue              // Range splitting queue
-	replicateQueue          *replicateQueue          // Replication queue
-	replicaGCQueue          *replicaGCQueue          // Replica GC queue
-	raftLogQueue            *raftLogQueue            // Raft Log Truncation queue
-	scanner                 *replicaScanner          // Replica scanner
-	replicaConsistencyQueue *replicaConsistencyQueue // Replica consistency check queue
-	consistencyScanner      *replicaScanner          // Consistency checker scanner
+	engine                  engine.Engine               // The underlying key-value store
+	allocator               Allocator                   // Makes allocation decisions
+	rangeIDAlloc            *idAllocator                // Range ID allocator
+	gcQueue                 *gcQueue                    // Garbage collection queue
+	splitQueue              *splitQueue                 // Range splitting queue
+	replicateQueue          *replicateQueue             // Replication queue
+	replicaGCQueue          *replicaGCQueue             // Replica GC queue
+	raftLogQueue            *raftLogQueue               // Raft Log Truncation queue
+	tsMaintenanceQueue      *timeSeriesMaintenanceQueue // Time series maintenance queue
+	scanner                 *replicaScanner             // Replica scanner
+	replicaConsistencyQueue *replicaConsistencyQueue    // Replica consistency check queue
+	consistencyScanner      *replicaScanner             // Consistency checker scanner
 	metrics                 *StoreMetrics
 	intentResolver          *intentResolver
 	raftEntryCache          *raftEntryCache
@@ -495,6 +496,10 @@ type StoreConfig struct {
 	// SQLExecutor is used by the store to execute SQL statements in a way that
 	// is more direct than using a sql.Executor.
 	SQLExecutor sqlutil.InternalExecutor
+
+	// TimeSeriesDataStore is an interface used by the store's time series
+	// maintenance queue to dispatch individual maintenance tasks.
+	TimeSeriesDataStore TimeSeriesDataStore
 
 	// RangeRetryOptions are the retry options when retryable errors are
 	// encountered sending commands to ranges.
@@ -727,6 +732,13 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		)
 		s.replicaConsistencyQueue = newReplicaConsistencyQueue(s, s.cfg.Gossip)
 		s.consistencyScanner.AddQueues(s.replicaConsistencyQueue)
+
+		if s.cfg.TimeSeriesDataStore != nil {
+			s.tsMaintenanceQueue = newTimeSeriesMaintenanceQueue(
+				s, s.db, s.cfg.Gossip, s.cfg.TimeSeriesDataStore,
+			)
+			s.scanner.AddQueues(s.tsMaintenanceQueue)
+		}
 	}
 
 	if cfg.TestingKnobs.DisableReplicaGCQueue {
