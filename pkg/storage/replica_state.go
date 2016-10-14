@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
@@ -140,7 +141,7 @@ func setLease(
 	lease *roachpb.Lease,
 ) error {
 	if lease == nil {
-		return nil
+		return errors.New("cannot persist nil Lease")
 	}
 	return engine.MVCCPutProto(
 		ctx, eng, ms,
@@ -228,6 +229,9 @@ func setTruncatedState(
 	rangeID roachpb.RangeID,
 	truncState roachpb.RaftTruncatedState,
 ) error {
+	if (truncState == roachpb.RaftTruncatedState{}) {
+		return errors.New("cannot persist empty RaftTruncatedState")
+	}
 	return engine.MVCCPutProto(ctx, eng, ms,
 		keys.RaftTruncatedStateKey(rangeID), hlc.ZeroTimestamp, nil, &truncState)
 }
@@ -248,6 +252,9 @@ func setGCThreshold(
 	rangeID roachpb.RangeID,
 	threshold *hlc.Timestamp,
 ) error {
+	if threshold == nil {
+		return errors.New("cannot persist nil GCThreshold")
+	}
 	return engine.MVCCPutProto(ctx, eng, ms,
 		keys.RangeLastGCKey(rangeID), hlc.ZeroTimestamp, nil, threshold)
 }
@@ -268,6 +275,10 @@ func setTxnSpanGCThreshold(
 	rangeID roachpb.RangeID,
 	threshold *hlc.Timestamp,
 ) error {
+	if threshold == nil {
+		return errors.New("cannot persist nil TxnSpanGCThreshold")
+	}
+
 	return engine.MVCCPutProto(ctx, eng, ms,
 		keys.RangeTxnSpanGCThresholdKey(rangeID), hlc.ZeroTimestamp, nil, threshold)
 }
@@ -295,6 +306,9 @@ func setFrozenStatus(
 	rangeID roachpb.RangeID,
 	frozen storagebase.ReplicaState_FrozenEnum,
 ) error {
+	if frozen == storagebase.ReplicaState_FROZEN_UNSPECIFIED {
+		return errors.New("cannot persist unspecified FrozenStatus")
+	}
 	var val roachpb.Value
 	val.SetBool(frozen == storagebase.ReplicaState_FROZEN)
 	return engine.MVCCPut(ctx, eng, ms,
@@ -463,6 +477,7 @@ func writeInitialState(
 	ms enginepb.MVCCStats,
 	desc roachpb.RangeDescriptor,
 	oldHS raftpb.HardState,
+	lease *roachpb.Lease,
 ) (enginepb.MVCCStats, error) {
 	var s storagebase.ReplicaState
 
@@ -476,6 +491,13 @@ func writeInitialState(
 	}
 	s.Frozen = storagebase.ReplicaState_UNFROZEN
 	s.Stats = ms
+	s.Lease = lease
+
+	if existingLease, err := loadLease(ctx, eng, desc.RangeID); err != nil {
+		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading lease")
+	} else if (existingLease != nil && *existingLease != roachpb.Lease{}) {
+		log.Fatalf(ctx, "expected trivial lease, but found %+v", existingLease)
+	}
 
 	newMS, err := saveState(ctx, eng, s)
 	if err != nil {
