@@ -677,3 +677,19 @@ SELECT a FROM tz WHERE b = c::timestamp
 # reset for what follows.
 statement ok
 SET TIME ZONE 'UTC'
+
+statement ok
+SET TIME ZONE -5
+
+query T
+SHOW TIME ZONE
+----
+-5
+
+statement ok
+SET TIME ZONE 0
+
+query T
+SHOW TIME ZONE
+----
+0
