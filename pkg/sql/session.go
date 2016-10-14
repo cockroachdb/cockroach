@@ -80,7 +80,8 @@ type Session struct {
 	Location              *time.Location
 	DefaultIsolationLevel enginepb.IsolationType
 	// context is the Session's base context. See Ctx().
-	context context.Context
+	context       context.Context
+	eventLogInCtx bool
 	// TODO(andrei): We need to either get rid of this cancel field, or it needs
 	// to move to the TxnState and become a per-txn cancel. Right now, we're
 	// cancelling all the txns that have ever run on this session when the session
@@ -163,8 +164,11 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 	}
 	ctx = log.WithLogTagStr(ctx, "client", remoteStr)
 
-	// Set up an EventLog for session events.
-	ctx = log.WithEventLog(ctx, fmt.Sprintf("sql [%s]", args.User), remoteStr)
+	if opentracing.SpanFromContext(ctx) == nil {
+		// Set up an EventLog for session events.
+		ctx = log.WithEventLog(ctx, fmt.Sprintf("sql [%s]", args.User), remoteStr)
+		s.eventLogInCtx = true
+	}
 	s.context, s.cancel = context.WithCancel(ctx)
 
 	s.mon.StartMonitor()
@@ -177,7 +181,9 @@ func (s *Session) Finish() {
 	// session abruptly in the middle of a transaction, or, until #7648 is
 	// addressed, there might be leases accumulated by preparing statements.
 	s.planner.releaseLeases()
-	log.FinishEventLog(s.context)
+	if s.eventLogInCtx {
+		log.FinishEventLog(s.context)
+	}
 
 	// If we're inside a txn, roll it back.
 	if s.TxnState.State != NoTxn && s.TxnState.State != Aborted {
