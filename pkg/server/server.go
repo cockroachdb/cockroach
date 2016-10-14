@@ -304,7 +304,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	storage.RegisterReservationServer(s.grpc, s.node.storesServer)
 
 	s.tsDB = ts.NewDB(s.db)
-	s.tsServer = ts.MakeServer(ctx, s.tsDB)
+	s.tsServer = ts.MakeServer(s.cfg.AmbientCtx, s.tsDB)
 
 	s.admin = makeAdminServer(s)
 	s.status = newStatusServer(ctx, s.db, s.gossip, s.recorder, s.rpcContext, s.node.stores)
@@ -533,8 +533,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Begin recording time series data collected by the status monitor.
 	s.tsDB.PollSource(
-		s.AnnotateCtx(context.Background()), s.recorder,
-		s.cfg.MetricsSampleInterval, ts.Resolution10s, s.stopper,
+		s.cfg.AmbientCtx, s.recorder, s.cfg.MetricsSampleInterval, ts.Resolution10s, s.stopper,
 	)
 
 	// Begin recording status summaries.
