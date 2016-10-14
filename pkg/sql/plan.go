@@ -143,6 +143,9 @@ type planNode interface {
 	DebugValues() debugValues
 
 	// Close terminates the planNode execution and releases its resources.
+	// This method should be called if the node has been used in any way (any
+	// methods on it have been called) after it was constructed. Note that this
+	// doesn't imply that Start() has been necessarily called.
 	Close()
 }
 

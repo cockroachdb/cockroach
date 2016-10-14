@@ -20,26 +20,35 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	basictracer "github.com/opentracing/basictracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"golang.org/x/net/context"
 )
 
 // explainTraceNode is a planNode that wraps another node and converts DebugValues() results to a
 // row of Values(). It is used as the top-level node for EXPLAIN (TRACE) statements.
 type explainTraceNode struct {
 	plan planNode
-	txn  *client.Txn
 	// Internal state, not to be initialized.
-	earliest  time.Time
-	exhausted bool
-	rows      []parser.DTuple
-	lastTS    time.Time
-	lastPos   int
+	earliest     time.Time
+	exhausted    bool
+	rows         []parser.DTuple
+	lastTS       time.Time
+	lastPos      int
+	trace        *tracing.RecordedTrace
+	p            *planner
+	spanFinished bool
+
+	// Initialized at Start() time. When called, restores the planner's context to
+	// what it was before this node hijacked it.
+	restorePlannerCtx func()
+	tracingCtx        context.Context
 }
 
 var traceColumns = append(ResultColumns{
@@ -61,20 +70,12 @@ var traceOrdering = sqlbase.ColumnOrdering{
 	{ColIdx: 2, Direction: encoding.Ascending},                 /* Span pos */
 }
 
-func (p *planner) makeTraceNode(plan planNode, txn *client.Txn) planNode {
+func (p *planner) makeTraceNode(plan planNode) planNode {
 	return &sortNode{
 		plan: &explainTraceNode{
 			plan: plan,
-			txn:  txn,
+			p:    p,
 		},
-		// Generally, sortNode uses its ctx field to log sorting
-		// details.  However the user of EXPLAIN(TRACE) only wants
-		// details about the traced statement, not about the sortNode
-		// that does work on behalf of the EXPLAIN statement itself.  So
-		// we connect this sortNode to a different context, so its log
-		// messages do not go to the planner's context which will be
-		// responsible to collect the trace.
-
 		p:        p,
 		ordering: traceOrdering,
 		// These are the columns that the sortNode (and thus the selectTopNode)
@@ -85,34 +86,89 @@ func (p *planner) makeTraceNode(plan planNode, txn *client.Txn) planNode {
 
 func (*explainTraceNode) Columns() ResultColumns { return traceColumnsWithTS }
 func (*explainTraceNode) Ordering() orderingInfo { return orderingInfo{} }
-func (n *explainTraceNode) Start() error         { return n.plan.Start() }
-func (n *explainTraceNode) Close()               { n.plan.Close() }
+
+func (n *explainTraceNode) Start() error {
+	return n.plan.Start()
+}
+
+// hijackTxnContext hijacks the session's/txn's context, causing everything
+// happening in the current txn before explainTraceNode.Close() to happen inside
+// a recorded trace.
+//
+// TODO(andrei): This is currently called from Next(), which means that
+// `n.plan.Start()` is not traced. That's a shame, but unfortunately we can't
+// hijack in explainTraceNode.Start() because we need to only hijack after the
+// sortNode wrapping the explainTraceNode has started execution. This is because
+// the sortNode creates a BoundMemoryAccount that is destroyed after the
+// explainTraceNode.Next() has returned all the results (i.e. the point where
+// the context is unhijacked). We could hijack in Start() and unhijack in
+// Close() instead of doing it in Next(), but then we'd also be tracing that
+// sortNode, which is not part of the user's query.
+// This is caused by the fact that BoundMemoryAccount binds the session's
+// context when it's created, which is bad. Rework this once that is fixed.
+func (n *explainTraceNode) hijackTxnContext() error {
+	tracingCtx, recorder, err := tracing.StartSnowballTrace(n.p.ctx(), "explain trace")
+	if err != nil {
+		return err
+	}
+	n.trace = recorder
+	n.tracingCtx = tracingCtx
+	// Everything running on the planner/session until Close() will be done with
+	// the tracingCtx. More exactly, the inner n.plan will run with this hijacked
+	// context.
+	n.restorePlannerCtx = n.p.hijackCtx(tracingCtx)
+	return nil
+}
+
+func (n *explainTraceNode) Close() {
+	// tracingCtx can be nil if hijackTxnContext() hasn't been called (in
+	// particular, if this node is wrapped in an EXPLAIN(PLAN)).
+	if n.tracingCtx == nil {
+		return
+	}
+	sp := opentracing.SpanFromContext(n.tracingCtx)
+	if sp != nil && !n.spanFinished {
+		n.unhijackCtx()
+		sp.Finish()
+	}
+	n.plan.Close()
+}
+
+func (n *explainTraceNode) unhijackCtx() {
+	// Restore the hijacked context on the planner.
+	n.restorePlannerCtx()
+	n.restorePlannerCtx = nil
+}
 
 func (n *explainTraceNode) Next() (bool, error) {
 	first := n.rows == nil
 	if first {
 		n.rows = []parser.DTuple{}
+		if err := n.hijackTxnContext(); err != nil {
+			return false, err
+		}
 	}
 	for !n.exhausted && len(n.rows) <= 1 {
 		var vals debugValues
 		if next, err := n.plan.Next(); !next {
+			sp := opentracing.SpanFromContext(n.tracingCtx)
 			n.exhausted = true
-			sp := opentracing.SpanFromContext(n.txn.Context)
+			// Finish the tracing span that we began in Start().
 			if err != nil {
 				sp.LogFields(otlog.String("event", err.Error()))
 				return false, err
 			}
 			sp.LogFields(otlog.String("event", "tracing completed"))
+			n.unhijackCtx()
 			sp.Finish()
-			sp = nil
-			n.txn.Context = opentracing.ContextWithSpan(n.txn.Context, nil)
+			n.spanFinished = true
 		} else {
 			vals = n.plan.DebugValues()
 		}
 		var basePos int
-		if len(n.txn.CollectedSpans) == 0 {
+		if len(n.trace.GetSpans()) == 0 {
 			if !n.exhausted {
-				n.txn.CollectedSpans = append(n.txn.CollectedSpans, basictracer.RawSpan{
+				n.trace.AddDummySpan(basictracer.RawSpan{
 					Logs: []opentracing.LogRecord{{Timestamp: n.lastTS}},
 				})
 			}
@@ -121,7 +177,7 @@ func (n *explainTraceNode) Next() (bool, error) {
 
 		// Iterate through once to determine earliest timestamp.
 		var earliest time.Time
-		for _, sp := range n.txn.CollectedSpans {
+		for _, sp := range n.trace.GetSpans() {
 			for _, entry := range sp.Logs {
 				if n.earliest.IsZero() || entry.Timestamp.Before(earliest) {
 					n.earliest = entry.Timestamp
@@ -129,7 +185,7 @@ func (n *explainTraceNode) Next() (bool, error) {
 			}
 		}
 
-		for _, sp := range n.txn.CollectedSpans {
+		for _, sp := range n.trace.GetSpans() {
 			for i, entry := range sp.Logs {
 				commulativeDuration := fmt.Sprintf("%.3fms", entry.Timestamp.Sub(n.earliest).Seconds()*1000)
 				var duration string
@@ -163,7 +219,9 @@ func (n *explainTraceNode) Next() (bool, error) {
 				n.lastTS, n.lastPos = entry.Timestamp, i
 			}
 		}
-		n.txn.CollectedSpans = nil
+		// Clear the spans that have been accumulated so far, so that we'll
+		// associate new spans with the next "debug values".
+		n.trace.ClearSpans()
 	}
 
 	if first {

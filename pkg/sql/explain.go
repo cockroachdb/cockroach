@@ -21,9 +21,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	basictracer "github.com/opentracing/basictracer-go"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 type explainMode int
@@ -105,21 +102,6 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 		mode = explainPlan
 	}
 
-	if mode == explainTrace {
-		sp, err := tracing.JoinOrNewSnowball("coordinator", nil, func(sp basictracer.RawSpan) {
-			// Some things are done async wrt running the statement (e.g. the
-			// TxnCoordSender heartbeat loop), and these things might finish spans
-			// after the txn is completed. We ignore them.
-			if p.txn != nil {
-				p.txn.CollectedSpans = append(p.txn.CollectedSpans, sp)
-			}
-		})
-		if err != nil {
-			return nil, err
-		}
-		p.txn.Context = opentracing.ContextWithSpan(p.txn.Context, sp)
-	}
-
 	p.evalCtx.SkipNormalize = !normalizeExprs
 
 	plan, err := p.newPlan(n.Statement, nil, autoCommit)
@@ -137,7 +119,7 @@ func (p *planner) Explain(n *parser.Explain, autoCommit bool) (planNode, error) 
 		return p.makeExplainPlanNode(explainer, expanded, optimized, plan), nil
 
 	case explainTrace:
-		return p.makeTraceNode(plan, p.txn), nil
+		return p.makeTraceNode(plan), nil
 
 	default:
 		return nil, fmt.Errorf("unsupported EXPLAIN mode: %d", mode)

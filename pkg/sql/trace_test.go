@@ -89,11 +89,11 @@ func TestExplainTrace(t *testing.T) {
 	if _, err := sqlDB.Exec(`CREATE DATABASE test; CREATE TABLE test.foo (id INT PRIMARY KEY)`); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := sqlDB.Query(`EXPLAIN (TRACE) INSERT INTO test.foo VALUES (1)`)
+	rows, err := sqlDB.Query(`EXPLAIN (TRACE) SELECT * FROM test.foo`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	expParts := []string{"grpcTransport SendNext", "node.Batch"}
+	expParts := []string{"explain trace", "grpcTransport SendNext", "node.Batch"}
 	var parts []string
 
 	pretty := rowsToStrings(rows)
