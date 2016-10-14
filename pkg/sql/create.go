@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -925,7 +926,20 @@ func (n *createViewNode) makeViewTableDesc(
 	n.resolveViewDependencies(&desc, affected)
 
 	var buf bytes.Buffer
-	p.AsSource.Format(&buf, parser.FmtSimple)
+	var fmtErr error
+	p.AsSource.Format(&buf, parser.FmtNormalizeTableNames(
+		func(t *parser.NormalizableTableName) *parser.TableName {
+			tn, err := n.p.QualifyWithDatabase(t)
+			if err != nil {
+				log.Warningf(n.p.ctx(), "failed to qualify table name %q with database name: %v", t, err)
+				fmtErr = err
+				return nil
+			}
+			return tn
+		}))
+	if fmtErr != nil {
+		return desc, fmtErr
+	}
 	desc.ViewQuery = buf.String()
 
 	return desc, desc.AllocateIDs()
