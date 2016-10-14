@@ -183,6 +183,8 @@ func loadAppliedIndex(
 	return appliedIndex, leaseAppliedIndex, nil
 }
 
+// setAppliedIndex sets the {raft,lease} applied index values, properly
+// accounting for existing keys in the returned stats.
 func setAppliedIndex(
 	ctx context.Context,
 	eng engine.ReadWriter,
@@ -191,22 +193,80 @@ func setAppliedIndex(
 	appliedIndex,
 	leaseAppliedIndex uint64,
 ) error {
+	return setAppliedIndexCommon(
+		ctx, eng, ms, rangeID, appliedIndex, leaseAppliedIndex, false /* blind */)
+}
+
+// setAppliedIndexBlind sets the {raft,lease} applied index values using a
+// "blind" put which ignores any existing keys. This is identical to
+// setAppliedIndex but is used to optimize the writing of the applied index
+// values during write operations where we definitively know the size of the
+// previous values.
+func setAppliedIndexBlind(
+	ctx context.Context,
+	eng engine.ReadWriter,
+	ms *enginepb.MVCCStats,
+	rangeID roachpb.RangeID,
+	appliedIndex,
+	leaseAppliedIndex uint64,
+) error {
+	return setAppliedIndexCommon(
+		ctx, eng, ms, rangeID, appliedIndex, leaseAppliedIndex, true /* blind */)
+}
+
+func setAppliedIndexCommon(
+	ctx context.Context,
+	eng engine.ReadWriter,
+	ms *enginepb.MVCCStats,
+	rangeID roachpb.RangeID,
+	appliedIndex,
+	leaseAppliedIndex uint64,
+	blind bool,
+) error {
 	var value roachpb.Value
 	value.SetInt(int64(appliedIndex))
 
-	if err := engine.MVCCPut(ctx, eng, ms,
-		keys.RaftAppliedIndexKey(rangeID),
-		hlc.ZeroTimestamp,
-		value,
-		nil /* txn */); err != nil {
-		return err
+	if blind {
+		if err := engine.MVCCBlindPut(ctx, eng, ms,
+			keys.RaftAppliedIndexKey(rangeID),
+			hlc.ZeroTimestamp,
+			value,
+			nil /* txn */); err != nil {
+			return err
+		}
+	} else {
+		if err := engine.MVCCPut(ctx, eng, ms,
+			keys.RaftAppliedIndexKey(rangeID),
+			hlc.ZeroTimestamp,
+			value,
+			nil /* txn */); err != nil {
+			return err
+		}
 	}
 	value.SetInt(int64(leaseAppliedIndex))
-	return engine.MVCCPut(ctx, eng, ms,
+	return engine.MVCCBlindPut(ctx, eng, ms,
 		keys.LeaseAppliedIndexKey(rangeID),
 		hlc.ZeroTimestamp,
 		value,
 		nil /* txn */)
+}
+
+func inlineValueIntEncodedSize(v int64) int {
+	var value roachpb.Value
+	value.SetInt(v)
+	meta := enginepb.MVCCMetadata{RawBytes: value.RawBytes}
+	return meta.Size()
+}
+
+// Calculate the size (MVCCStats.SysBytes) of the {raft,lease} applied index
+// keys/values.
+func calcAppliedIndexSysBytes(
+	rangeID roachpb.RangeID, appliedIndex, leaseAppliedIndex uint64,
+) int64 {
+	return int64(engine.MakeMVCCMetadataKey(keys.RaftAppliedIndexKey(rangeID)).EncodedSize() +
+		engine.MakeMVCCMetadataKey(keys.LeaseAppliedIndexKey(rangeID)).EncodedSize() +
+		inlineValueIntEncodedSize(int64(appliedIndex)) +
+		inlineValueIntEncodedSize(int64(leaseAppliedIndex)))
 }
 
 func loadTruncatedState(
