@@ -229,18 +229,9 @@ func (p *planner) getDataSource(
 	switch t := src.(type) {
 	case *parser.NormalizableTableName:
 		// Usual case: a table.
-		tn, err := t.Normalize()
+		tn, err := p.QualifyWithDatabase(t)
 		if err != nil {
 			return planDataSource{}, err
-		}
-		if tn.DatabaseName == "" {
-			database, err := p.databaseFromSearchPath(tn)
-			if err != nil {
-				return planDataSource{}, err
-			}
-			if err := tn.QualifyWithDatabase(database); err != nil {
-				return planDataSource{}, err
-			}
 		}
 
 		// Is this perhaps a name for a virtual table?
@@ -318,6 +309,23 @@ func (p *planner) getDataSource(
 	default:
 		return planDataSource{}, errors.Errorf("unsupported FROM type %T", src)
 	}
+}
+
+func (p *planner) QualifyWithDatabase(t *parser.NormalizableTableName) (*parser.TableName, error) {
+	tn, err := t.Normalize()
+	if err != nil {
+		return nil, err
+	}
+	if tn.DatabaseName == "" {
+		database, err := p.databaseFromSearchPath(tn)
+		if err != nil {
+			return nil, err
+		}
+		if err := tn.QualifyWithDatabase(database); err != nil {
+			return nil, err
+		}
+	}
+	return tn, nil
 }
 
 // getTableScanOrViewPlan builds a planDataSource from a single data source
