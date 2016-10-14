@@ -210,6 +210,47 @@ func setAppliedIndex(
 		nil /* txn */)
 }
 
+func setAppliedIndexBlind(
+	ctx context.Context,
+	eng engine.ReadWriter,
+	ms *enginepb.MVCCStats,
+	rangeID roachpb.RangeID,
+	appliedIndex,
+	leaseAppliedIndex uint64,
+) error {
+	var value roachpb.Value
+	value.SetInt(int64(appliedIndex))
+
+	if err := engine.MVCCBlindPut(ctx, eng, ms,
+		keys.RaftAppliedIndexKey(rangeID),
+		hlc.ZeroTimestamp,
+		value,
+		nil /* txn */); err != nil {
+		return err
+	}
+	value.SetInt(int64(leaseAppliedIndex))
+	return engine.MVCCBlindPut(ctx, eng, ms,
+		keys.LeaseAppliedIndexKey(rangeID),
+		hlc.ZeroTimestamp,
+		value,
+		nil /* txn */)
+}
+
+func calcAppliedIndexSysBytes(
+	ctx context.Context,
+	eng engine.ReadWriter,
+	rangeID roachpb.RangeID,
+	appliedIndex,
+	leaseAppliedIndex uint64,
+) (int64, error) {
+	var ms enginepb.MVCCStats
+	if err := setAppliedIndexBlind(ctx, eng, &ms, rangeID,
+		appliedIndex, leaseAppliedIndex); err != nil {
+		return 0, err
+	}
+	return ms.SysBytes, nil
+}
+
 func loadTruncatedState(
 	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
 ) (roachpb.RaftTruncatedState, error) {

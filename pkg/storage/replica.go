@@ -306,6 +306,8 @@ type Replica struct {
 		// The ID of the leader replica within the Raft group. Used to determine
 		// when the leadership changes.
 		leaderID roachpb.ReplicaID
+		// Cached applied index byte size.
+		appliedIndexSysBytes int64
 
 		// The last seen replica descriptors from incoming Raft messages. These are
 		// stored so that the replica still knows the replica descriptors for itself
@@ -584,6 +586,16 @@ func (r *Replica) initLocked(
 		return err
 	}
 	r.rangeStr.store(0, r.mu.state.Desc)
+
+	{
+		batch := r.store.Engine().NewBatch()
+		r.mu.appliedIndexSysBytes, err = calcAppliedIndexSysBytes(
+			r.ctx, batch, r.RangeID, r.mu.state.RaftAppliedIndex, r.mu.state.LeaseAppliedIndex)
+		batch.Close()
+		if err != nil {
+			return err
+		}
+	}
 
 	r.mu.lastIndex, err = loadLastIndex(r.ctx, r.store.Engine(), r.RangeID)
 	if err != nil {
@@ -2796,6 +2808,7 @@ func (r *Replica) applyRaftCommand(
 		forcedError = roachpb.NewError(roachpb.NewRangeFrozenError(*r.mu.state.Desc))
 	}
 	ms := r.mu.state.Stats
+	appliedIndexOldBytes := r.mu.appliedIndexSysBytes
 	r.mu.Unlock()
 
 	if index != oldIndex+1 {
@@ -2837,9 +2850,11 @@ func (r *Replica) applyRaftCommand(
 	writer := batch.Distinct()
 
 	// Advance the last applied index.
-	if err := setAppliedIndex(ctx, writer, &pd.delta, r.RangeID, index, leaseIndex); err != nil {
+	var appliedIndexNewMs enginepb.MVCCStats
+	if err := setAppliedIndexBlind(ctx, writer, &appliedIndexNewMs, r.RangeID, index, leaseIndex); err != nil {
 		log.Fatalf(ctx, "setting applied index in a batch should never fail: %s", err)
 	}
+	pd.delta.SysBytes += appliedIndexNewMs.SysBytes - appliedIndexOldBytes
 
 	// Flush the MVCC stats to the batch. Note that they must not have changed
 	// since we only evaluated a command but did not update in-memory state
@@ -2892,6 +2907,7 @@ func (r *Replica) applyRaftCommand(
 		// it with propResult. We'll see.
 		pd.State.RaftAppliedIndex = index
 		pd.State.LeaseAppliedIndex = leaseIndex
+		r.mu.appliedIndexSysBytes = appliedIndexNewMs.SysBytes
 		r.mu.Unlock()
 	}
 

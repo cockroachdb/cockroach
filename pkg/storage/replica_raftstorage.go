@@ -653,6 +653,12 @@ func (r *Replica) applySnapshot(
 			r, s.RaftAppliedIndex, snap.Metadata.Index)
 	}
 
+	appliedIndexSysBytes, err := calcAppliedIndexSysBytes(ctx, batch,
+		r.RangeID, s.RaftAppliedIndex, s.LeaseAppliedIndex)
+	if err != nil {
+		log.Fatalf(ctx, "%s: unable to compute applied index size", r)
+	}
+
 	if err := batch.Commit(); err != nil {
 		return err
 	}
@@ -667,6 +673,7 @@ func (r *Replica) applySnapshot(
 	// raftpb.SnapshotMetadata.
 	r.mu.lastIndex = s.RaftAppliedIndex
 	r.mu.raftLogSize = raftLogSize
+	r.mu.appliedIndexSysBytes = appliedIndexSysBytes
 	// Update the range and store stats.
 	r.store.metrics.subtractMVCCStats(r.mu.state.Stats)
 	r.store.metrics.addMVCCStats(s.Stats)
