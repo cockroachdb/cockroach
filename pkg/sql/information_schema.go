@@ -456,8 +456,15 @@ func forEachTableDesc(
 	})
 }
 
+// tableLookupFn can be used to retrieve a table descriptor and its corresponding
+// database descriptor using the table's ID. Both descriptors will be nil if a
+// table with the provided ID was not found.
 type tableLookupFn func(tableID sqlbase.ID) (*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor)
 
+// forEachTableDescWithTableLookup acts like forEachTableDesc, except it also provides a
+// tableLookupFn when calling fn to allow callers to lookup fetched table descriptors
+// on demand. This is important for callers dealing with objects like foreign keys, where
+// the metadata for each object must be augmented by looking at the referenced table.
 func forEachTableDescWithTableLookup(
 	p *planner, fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor, tableLookupFn) error,
 ) error {
