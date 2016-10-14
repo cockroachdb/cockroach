@@ -35,6 +35,19 @@ type ctxEventLog struct {
 	eventLog trace.EventLog
 }
 
+func (el *ctxEventLog) finish() {
+	el.Lock()
+	if el.eventLog != nil {
+		el.eventLog.Finish()
+		el.eventLog = nil
+	}
+	el.Unlock()
+}
+
+func embedCtxEventLog(ctx context.Context, el *ctxEventLog) context.Context {
+	return context.WithValue(ctx, ctxEventLogKey{}, el)
+}
+
 // withEventLogInternal embeds a trace.EventLog in the context, causing future
 // logging and event calls to go to the EventLog. The current context must not
 // have an existing open span.
@@ -42,8 +55,7 @@ func withEventLogInternal(ctx context.Context, eventLog trace.EventLog) context.
 	if opentracing.SpanFromContext(ctx) != nil {
 		panic("event log under span")
 	}
-	val := &ctxEventLog{eventLog: eventLog}
-	return context.WithValue(ctx, ctxEventLogKey{}, val)
+	return embedCtxEventLog(ctx, &ctxEventLog{eventLog: eventLog})
 }
 
 // WithEventLog creates and embeds a trace.EventLog in the context, causing
@@ -69,12 +81,7 @@ func eventLogFromCtx(ctx context.Context) *ctxEventLog {
 // Concurrent and subsequent calls to record events are allowed.
 func FinishEventLog(ctx context.Context) {
 	if el := eventLogFromCtx(ctx); el != nil {
-		el.Lock()
-		if el.eventLog != nil {
-			el.eventLog.Finish()
-			el.eventLog = nil
-		}
-		el.Unlock()
+		el.finish()
 	}
 }
 
