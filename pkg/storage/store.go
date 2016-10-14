@@ -1483,7 +1483,7 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 		return err
 	}
 
-	updatedMS, err := writeInitialState(ctx, batch, *ms, *desc, raftpb.HardState{})
+	updatedMS, err := writeInitialState(ctx, batch, *ms, *desc, raftpb.HardState{}, &roachpb.Lease{})
 	if err != nil {
 		return err
 	}
