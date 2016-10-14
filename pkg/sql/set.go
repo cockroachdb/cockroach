@@ -139,15 +139,16 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	var loc *time.Location
 	var offset int64
 	switch v := d.(type) {
 	case *parser.DString:
 		location := string(*v)
-		loc, err := timeutil.LoadLocation(location)
+		loc, err = timeutil.LoadLocation(location)
 		if err != nil {
 			return nil, fmt.Errorf("cannot find time zone %q: %v", location, err)
 		}
-		p.session.Location = loc
 
 	case *parser.DInterval:
 		offset, _, _, err = v.Duration.Div(time.Second.Nanoseconds()).Encode()
@@ -173,8 +174,9 @@ func (p *planner) SetTimeZone(n *parser.SetTimeZone) (planNode, error) {
 	default:
 		return nil, fmt.Errorf("bad time zone value: %v", n.Value)
 	}
-	if offset != 0 {
-		p.session.Location = time.FixedZone("", int(offset))
+	if loc == nil {
+		loc = time.FixedZone(d.String(), int(offset))
 	}
+	p.session.Location = loc
 	return &emptyNode{}, nil
 }
