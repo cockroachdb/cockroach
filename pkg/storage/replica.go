@@ -2674,9 +2674,6 @@ func (r *Replica) processRaftCommand(
 	// TODO(tschottdorf): make that more formal and then remove the ~4 copies
 	// of this TODO which are scattered across the code.
 	r.handleProposalData(ctx, raftCmd.OriginReplica, pd)
-	// Assert that the on-disk state doesn't diverge from the in-memory
-	// state as a result of the side effects.
-	r.assertState(r.store.Engine())
 
 	// On successful write commands handle write-related triggers including
 	// splitting and raft log truncation.

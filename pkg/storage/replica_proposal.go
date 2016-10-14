@@ -492,7 +492,7 @@ func (r *Replica) handleProposalData(
 
 	// The above are present too often, so we assert only if there are
 	// "nontrivial" actions below.
-	shouldAssert = shouldAssert || (pd.LocalProposalData == LocalProposalData{})
+	shouldAssert = shouldAssert || (pd.LocalProposalData != LocalProposalData{})
 
 	if pd.raftLogSize != nil {
 		r.mu.Lock()
