@@ -35,6 +35,8 @@ var (
 )
 
 // pgCatalog contains a set of system tables mirroring PostgreSQL's pg_catalog schema.
+// This code attempts to comply as closely as possible to the system catalogs documented
+// in https://www.postgresql.org/docs/9.6/static/catalogs.html.
 var pgCatalog = virtualSchema{
 	name: "pg_catalog",
 	tables: []virtualSchemaTable{
@@ -48,6 +50,7 @@ var pgCatalog = virtualSchema{
 	},
 }
 
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-attrdef.html.
 var pgCatalogAttrDefTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_attrdef (
@@ -66,6 +69,7 @@ CREATE TABLE pg_catalog.pg_attrdef (
 				return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
 					colNum++
 					if column.DefaultExpr == nil {
+						// pg_attrdef only expects rows for columns with default values.
 						return nil
 					}
 					defSrc := parser.NewDString(*column.DefaultExpr)
@@ -82,6 +86,7 @@ CREATE TABLE pg_catalog.pg_attrdef (
 	},
 }
 
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-attribute.html.
 var pgCatalogAttributeTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_attribute (
@@ -111,6 +116,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 		h := makeOidHasher()
 		return forEachTableDesc(p,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				// addColumn adds adds either a table or a index column to the pg_attribute table.
 				addColumn := func(column *sqlbase.ColumnDescriptor, attRelID parser.Datum, colNum int) error {
 					colTyp := column.Type.ToDatumType()
 					return addRow(
@@ -169,6 +175,7 @@ var (
 	relKindView  = parser.NewDString("v")
 )
 
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-class.html.
 var pgCatalogClassTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_class (
@@ -207,6 +214,7 @@ CREATE TABLE pg_catalog.pg_class (
 				// Table.
 				relKind := relKindTable
 				if table.IsView() {
+					// The only difference between tables and views is the relkind column.
 					relKind = relKindView
 				}
 				if err := addRow(
@@ -289,6 +297,7 @@ var (
 	_ = conTypeExclusion
 )
 
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-constraint.html.
 var pgCatalogConstraintTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_constraint (
@@ -360,6 +369,8 @@ func colIDArrayToDatum(arr []sqlbase.ColumnID) parser.Datum {
 	return parser.NewDString(buf.String())
 }
 
+// addCheckConstraintsForTable populates all check constraint rows to pg_constraint
+// for the provided table.
 func addCheckConstraintsForTable(
 	db *sqlbase.DatabaseDescriptor,
 	table *sqlbase.TableDescriptor,
@@ -426,6 +437,9 @@ var (
 	_ = fkMatchTypePartial
 )
 
+// addFKConstraintsForTable populates all foreign key constraint rows to pg_constraint
+// for the provided table. This function requires a tableLookupFn, because it needs to
+// match foreign keys references with their referenced tables and indexes.
 func addFKConstraintsForTable(
 	db *sqlbase.DatabaseDescriptor,
 	table *sqlbase.TableDescriptor,
@@ -475,6 +489,8 @@ func addFKConstraintsForTable(
 		})
 }
 
+// addPKeyAndUniqueConstraintsForTable populates all primary key constraint and
+// unique constraint rows to pg_constraint for the provided table.
 func addPKeyAndUniqueConstraintsForTable(
 	db *sqlbase.DatabaseDescriptor,
 	table *sqlbase.TableDescriptor,
@@ -485,9 +501,13 @@ func addPKeyAndUniqueConstraintsForTable(
 		oidFunc := h.UniqueConstraintOid
 		conType := conTypeUnique
 		if index == &table.PrimaryIndex {
+			// The only differences between unique constraints and primary key
+			// constraints for the pg_constraint table is the OID generation scheme
+			// for the oid column and the contype column.
 			oidFunc = h.PrimaryKeyConstraintOid
 			conType = conTypePKey
 		} else if !index.Unique {
+			// If this index is neither a pkey or unique, don't add a row.
 			return nil
 		}
 		return addRow(
@@ -520,6 +540,7 @@ func addPKeyAndUniqueConstraintsForTable(
 	})
 }
 
+// See: https://www.postgresql.org/docs/9.6/static/view-pg-indexes.html.
 var pgCatalogIndexesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_indexes (
@@ -551,6 +572,9 @@ CREATE TABLE pg_catalog.pg_indexes (
 	},
 }
 
+// indexDefFromDescriptor creates an index definition (`CREATE INDEX ... ON (...)`) from
+// and index descriptor by reconstructing a CreateIndex parser node and calling its
+// String method.
 func indexDefFromDescriptor(
 	p *planner,
 	db *sqlbase.DatabaseDescriptor,
@@ -609,6 +633,7 @@ func indexDefFromDescriptor(
 	return indexDef.String(), nil
 }
 
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-namespace.html.
 var pgCatalogNamespaceTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_namespace (
@@ -631,6 +656,7 @@ CREATE TABLE pg_catalog.pg_namespace (
 	},
 }
 
+// See: https://www.postgresql.org/docs/9.6/static/view-pg-tables.html.
 var pgCatalogTablesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_tables (
@@ -674,6 +700,18 @@ func typLen(typ parser.Datum) parser.Datum {
 
 // oidHasher provides a consistent hashing mechanism for object identifiers in
 // pg_catalog tables, allowing for reliable joins across tables.
+//
+// The type has a few layers of methods:
+// - write<go_type> methods write concreate types to the underlying running hash
+// - write<db_object> methods account for single database objects like TableDescriptors
+//   or IndexDescriptors in the running hash. These methods aim to write information
+//   that would uniquely fingerprint the object to the hash using the first layer of
+//   methods
+// - <DB_Object>Oid methods use the second layer of methods to construct a unique
+//   object identifier for the provided database object. This object identifier will
+//   be returned as a *parser.DInt, and the running hash will be reset. These are the
+//   only methods that are part of the oidHasher's external facing interface
+//
 type oidHasher struct {
 	h hash.Hash32
 }
