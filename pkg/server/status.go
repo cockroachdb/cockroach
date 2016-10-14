@@ -74,7 +74,8 @@ type metricMarshaler interface {
 
 // A statusServer provides a RESTful status API.
 type statusServer struct {
-	ctx          context.Context
+	log.AmbientContext
+
 	db           *client.DB
 	gossip       *gossip.Gossip
 	metricSource metricMarshaler
@@ -84,21 +85,21 @@ type statusServer struct {
 
 // newStatusServer allocates and returns a statusServer.
 func newStatusServer(
-	ctx context.Context,
+	ambient log.AmbientContext,
 	db *client.DB,
 	gossip *gossip.Gossip,
 	metricSource metricMarshaler,
 	rpcCtx *rpc.Context,
 	stores *storage.Stores,
 ) *statusServer {
-	ctx = log.WithLogTag(ctx, "status", nil)
+	ambient.AddLogTag("status", nil)
 	server := &statusServer{
-		ctx:          ctx,
-		db:           db,
-		gossip:       gossip,
-		metricSource: metricSource,
-		rpcCtx:       rpcCtx,
-		stores:       stores,
+		AmbientContext: ambient,
+		db:             db,
+		gossip:         gossip,
+		metricSource:   metricSource,
+		rpcCtx:         rpcCtx,
+		stores:         stores,
 	}
 
 	return server
@@ -114,6 +115,7 @@ func (s *statusServer) RegisterService(g *grpc.Server) {
 func (s *statusServer) RegisterGateway(
 	ctx context.Context, mux *gwruntime.ServeMux, conn *grpc.ClientConn,
 ) error {
+	ctx = s.AnnotateCtx(ctx)
 	return serverpb.RegisterStatusHandler(ctx, mux, conn)
 }
 
@@ -147,6 +149,7 @@ func (s *statusServer) dialNode(nodeID roachpb.NodeID) (serverpb.StatusClient, e
 func (s *statusServer) Gossip(
 	ctx context.Context, req *serverpb.GossipRequest,
 ) (*gossip.InfoStatus, error) {
+	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -167,6 +170,7 @@ func (s *statusServer) Gossip(
 func (s *statusServer) Details(
 	ctx context.Context, req *serverpb.DetailsRequest,
 ) (*serverpb.DetailsResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -192,6 +196,7 @@ func (s *statusServer) Details(
 func (s *statusServer) LogFilesList(
 	ctx context.Context, req *serverpb.LogFilesListRequest,
 ) (*serverpb.LogFilesListResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -215,6 +220,7 @@ func (s *statusServer) LogFilesList(
 func (s *statusServer) LogFile(
 	ctx context.Context, req *serverpb.LogFileRequest,
 ) (*serverpb.LogEntriesResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -279,7 +285,7 @@ func parseInt64WithDefault(s string, defaultValue int64) (int64, error) {
 // * "level" query parameter filters the log entries to be those of the
 //   corresponding severity level or worse. Defaults to "info".
 func (s *statusServer) Logs(
-	ctx context.Context, req *serverpb.LogsRequest,
+	_ context.Context, req *serverpb.LogsRequest,
 ) (*serverpb.LogEntriesResponse, error) {
 	log.Flush()
 
@@ -340,6 +346,7 @@ func (s *statusServer) Logs(
 func (s *statusServer) Stacks(
 	ctx context.Context, req *serverpb.StacksRequest,
 ) (*serverpb.JSONResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -371,12 +378,13 @@ func (s *statusServer) Stacks(
 func (s *statusServer) Nodes(
 	ctx context.Context, req *serverpb.NodesRequest,
 ) (*serverpb.NodesResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
 	b := &client.Batch{}
 	b.Scan(startKey, endKey)
-	if err := s.db.Run(s.ctx, b); err != nil {
+	if err := s.db.Run(ctx, b); err != nil {
 		log.Error(ctx, err)
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
@@ -398,6 +406,7 @@ func (s *statusServer) Nodes(
 func (s *statusServer) Node(
 	ctx context.Context, req *serverpb.NodeRequest,
 ) (*status.NodeStatus, error) {
+	ctx = s.AnnotateCtx(ctx)
 	nodeID, _, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -406,7 +415,7 @@ func (s *statusServer) Node(
 	key := keys.NodeStatusKey(nodeID)
 	b := &client.Batch{}
 	b.Get(key)
-	if err := s.db.Run(s.ctx, b); err != nil {
+	if err := s.db.Run(ctx, b); err != nil {
 		log.Error(ctx, err)
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
@@ -424,6 +433,7 @@ func (s *statusServer) Node(
 func (s *statusServer) Metrics(
 	ctx context.Context, req *serverpb.MetricsRequest,
 ) (*serverpb.JSONResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -443,6 +453,7 @@ func (s *statusServer) Metrics(
 func (s *statusServer) RaftDebug(
 	ctx context.Context, _ *serverpb.RaftDebugRequest,
 ) (*serverpb.RaftDebugResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
 	nodes, err := s.Nodes(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -548,6 +559,7 @@ func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request) {
 func (s *statusServer) Ranges(
 	ctx context.Context, req *serverpb.RangesRequest,
 ) (*serverpb.RangesResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
@@ -626,6 +638,7 @@ func (s *statusServer) Ranges(
 func (s *statusServer) SpanStats(
 	ctx context.Context, req *serverpb.SpanStatsRequest,
 ) (*serverpb.SpanStatsResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeID)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
