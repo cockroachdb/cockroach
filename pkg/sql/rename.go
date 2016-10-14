@@ -79,7 +79,7 @@ func (p *planner) RenameDatabase(n *parser.RenameDatabase) (planNode, error) {
 			continue
 		}
 		if len(tbDesc.DependedOnBy) > 0 {
-			viewName, err := p.getQualifiedTableName(tbDesc.DependedOnBy[0].ID)
+			viewName, err := p.getQualifiedTableNameFromID(tbDesc.DependedOnBy[0].ID)
 			if err != nil {
 				log.Warningf(p.ctx(), "Unable to retrieve name of view %d: %v",
 					tbDesc.DependedOnBy[0].ID, err)
@@ -166,8 +166,8 @@ func (p *planner) RenameTable(n *parser.RenameTable) (planNode, error) {
 	// of everything they depend on. Rather than trying to rewrite the view's
 	// query with the new name, we simply disallow such renames for now.
 	if len(tableDesc.DependedOnBy) > 0 {
-		return nil, p.dependentViewError(
-			"rename", tableDesc.TypeName(), oldTn.String(), tableDesc.DependedOnBy[0].ID)
+		return nil, p.dependentViewRenameError(
+			tableDesc.TypeName(), oldTn.String(), tableDesc.DependedOnBy[0].ID)
 	}
 
 	// Check if target database exists.
@@ -272,7 +272,7 @@ func (p *planner) RenameIndex(n *parser.RenameIndex) (planNode, error) {
 		if tableRef.IndexID != tableDesc.Indexes[i].ID {
 			continue
 		}
-		return nil, p.dependentViewError("rename", "index", n.Index.Index.String(), tableRef.ID)
+		return nil, p.dependentViewRenameError("index", n.Index.Index.String(), tableRef.ID)
 	}
 
 	if n.NewName == "" {
@@ -362,7 +362,7 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 			}
 		}
 		if found {
-			return nil, p.dependentViewError("rename", "column", n.Name.String(), tableRef.ID)
+			return nil, p.dependentViewRenameError("column", n.Name.String(), tableRef.ID)
 		}
 	}
 
@@ -429,13 +429,13 @@ func (p *planner) RenameColumn(n *parser.RenameColumn) (planNode, error) {
 
 // TODO(a-robinson): Support renaming objects depended on by views once we have
 // a better encoding for view queries (#10083).
-func (p *planner) dependentViewError(action, typeName, objName string, viewID sqlbase.ID) error {
-	viewName, err := p.getQualifiedTableName(viewID)
+func (p *planner) dependentViewRenameError(typeName, objName string, viewID sqlbase.ID) error {
+	viewName, err := p.getQualifiedTableNameFromID(viewID)
 	if err != nil {
-		log.Warningf(p.ctx(), "Unable to retrieve name of view %d: %v", viewID, err)
-		return errors.Errorf("cannot %s %s %q because it is depended on by a view",
-			action, typeName, objName)
+		log.Warningf(p.ctx(), "unable to retrieve name of view %d: %v", viewID, err)
+		return errors.Errorf("cannot rename %s %q because it is depended on by a view",
+			typeName, objName)
 	}
-	return errors.Errorf("cannot %s %s %q because it is depended on by view %q",
-		action, typeName, objName, viewName)
+	return errors.Errorf("cannot rename %s %q because it is depended on by view %q",
+		typeName, objName, viewName)
 }
