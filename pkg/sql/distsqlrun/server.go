@@ -72,11 +72,23 @@ func (ds *ServerImpl) Start() {
 func (ds *ServerImpl) setupFlow(
 	ctx context.Context, req *SetupFlowRequest, syncFlowConsumer RowReceiver,
 ) (*Flow, error) {
-	sp, err := tracing.JoinOrNew(ds.AmbientContext.Tracer, req.TraceContext, "flow")
-	if err != nil {
-		return nil, err
+	const opName = "flow"
+	var sp opentracing.Span
+	if req.TraceContext == nil {
+		sp = ds.Tracer.StartSpan(opName)
+		ctx = opentracing.ContextWithSpan(ctx, sp)
+	} else {
+		var err error
+		// TODO(andrei): in the following call we're ignoring the returned
+		// recordedTrace. Figure out how to return the recording to the remote
+		// caller after the flow is done.
+		ctx, _, err = tracing.JoinRemoteTrace(ctx, ds.Tracer, *req.TraceContext, opName)
+		if err != nil {
+			sp = ds.Tracer.StartSpan(opName)
+			ctx = opentracing.ContextWithSpan(ctx, sp)
+			log.Warningf(ctx, "failed to join a remote trace: %s", err)
+		}
 	}
-	ctx = opentracing.ContextWithSpan(ctx, sp)
 
 	// TODO(radu): we should sanity check some of these fields (especially
 	// txnProto).
