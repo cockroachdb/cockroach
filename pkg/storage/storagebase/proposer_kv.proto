@@ -92,6 +92,7 @@ message ReplicatedEvalResult {
   optional storage.engine.enginepb.MVCCStats delta = 10010 [(gogoproto.nullable) = false];
   optional ChangeReplicas change_replicas = 10012;
   optional int64 raft_log_delta = 10013;
+  optional int64 applied_index_sys_bytes_delta = 10014 [(gogoproto.nullable) = false];
 }
 
 // WriteBatch is the serialized representation of a RocksDB write
