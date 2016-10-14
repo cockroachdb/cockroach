@@ -533,8 +533,8 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Begin recording time series data collected by the status monitor.
 	s.tsDB.PollSource(
-		s.AnnotateCtx(context.Background()), s.recorder,
-		s.cfg.MetricsSampleInterval, ts.Resolution10s, s.stopper,
+		tracing.WithTracer(s.AnnotateCtx(context.Background()), s.cfg.AmbientCtx.Tracer),
+		s.recorder, s.cfg.MetricsSampleInterval, ts.Resolution10s, s.stopper,
 	)
 
 	// Begin recording status summaries.
