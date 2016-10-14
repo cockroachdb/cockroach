@@ -80,7 +80,8 @@ type Session struct {
 	Location              *time.Location
 	DefaultIsolationLevel enginepb.IsolationType
 	// context is the Session's base context. See Ctx().
-	context context.Context
+	context        context.Context
+	finishEventLog bool
 	// TODO(andrei): We need to either get rid of this cancel field, or it needs
 	// to move to the TxnState and become a per-txn cancel. Right now, we're
 	// cancelling all the txns that have ever run on this session when the session
@@ -137,8 +138,8 @@ type SessionArgs struct {
 // NewSession creates and initializes a new Session object.
 // remote can be nil.
 func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.Addr) *Session {
-	if tracing.TracerFromCtx(ctx) == nil {
-		panic("Session's context must have a tracer in it")
+	if tracing.TracerFromCtx(ctx) == nil && opentracing.SpanFromContext(ctx) == nil {
+		panic("Session's context must have a tracer or a span")
 	}
 	s := &Session{
 		Database:   args.Database,
@@ -163,8 +164,11 @@ func NewSession(ctx context.Context, args SessionArgs, e *Executor, remote net.A
 	}
 	ctx = log.WithLogTagStr(ctx, "client", remoteStr)
 
-	// Set up an EventLog for session events.
-	ctx = log.WithEventLog(ctx, fmt.Sprintf("sql [%s]", args.User), remoteStr)
+	if opentracing.SpanFromContext(ctx) == nil {
+		// Set up an EventLog for session events.
+		ctx = log.WithEventLog(ctx, fmt.Sprintf("sql [%s]", args.User), remoteStr)
+		s.finishEventLog = true
+	}
 	s.context, s.cancel = context.WithCancel(ctx)
 
 	s.mon.StartMonitor()
@@ -177,7 +181,9 @@ func (s *Session) Finish() {
 	// session abruptly in the middle of a transaction, or, until #7648 is
 	// addressed, there might be leases accumulated by preparing statements.
 	s.planner.releaseLeases()
-	log.FinishEventLog(s.context)
+	if s.finishEventLog {
+		log.FinishEventLog(s.context)
+	}
 
 	// If we're inside a txn, roll it back.
 	if s.TxnState.State != NoTxn && s.TxnState.State != Aborted {
@@ -315,9 +321,17 @@ func (ts *txnState) resetForNewSQLTxn(e *Executor, s *Session) {
 		ctx = tracing.WithTracer(
 			opentracing.ContextWithSpan(ctx, sp), tr)
 	} else {
-		// Create a root span for this SQL txn.
-		tracer := tracing.TracerFromCtx(ctx)
-		ctx = opentracing.ContextWithSpan(ctx, tracer.StartSpan("sql txn"))
+		var sp opentracing.Span
+		if parentSp := opentracing.SpanFromContext(ctx); parentSp != nil {
+			// Create a child span for this SQL txn.
+			tracer := parentSp.Tracer()
+			sp = tracer.StartSpan("sql txn", opentracing.ChildOf(parentSp.Context()))
+		} else {
+			// Create a root span for this SQL txn.
+			tracer := tracing.TracerFromCtx(ctx)
+			sp = tracer.StartSpan("sql txn")
+		}
+		ctx = opentracing.ContextWithSpan(ctx, sp)
 	}
 	ts.Ctx = ctx
 
