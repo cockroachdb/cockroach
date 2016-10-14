@@ -59,6 +59,7 @@ func stopHeartbeats(mtc *multiTestContext) {
 
 func TestNodeLiveness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#9973")
 	mtc := startMultiTestContext(t, 3)
 	defer mtc.Stop()
 
